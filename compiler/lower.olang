@@ -3224,6 +3224,19 @@ fn (ln mut lowering&) readOut(p typed.Lvalue&, ty types.TypeId) {
     }
 }
 
+# B3i: the types of the program's mutable globals (check.mutStorage), and whether there are any (true until the program
+# has checked), read through the table of facts, so the record of the module whose code the judgement goes into holds
+# what it was judged by
+fn (ln mut lowering&) mutGlobals() Vec<I64>& {
+    try ln.L.P.Facts.Read(ln.B.File, typed.MutGlobalsFact) catch { }
+    return ln.L.P.L.MutGlobals
+}
+
+fn (ln mut lowering&) mutStorage() Bool {
+    try ln.L.P.Facts.Read(ln.B.File, typed.MutGlobalsFact) catch { }
+    return ln.L.P.L.MutStorage
+}
+
 # D9h by evaluation order: whether nothing evaluated while view call c's value is alive may write storage it views -
 # its consumer k's arguments and k itself (a call given the view read-only, whose result holds no reference: the view
 # is dead once k returns), or the indices of place p read out of it. Judged per argument c may view, as a local's block
@@ -3246,7 +3259,7 @@ fn (ln mut lowering&) windowFor(of types.TypeId, k typed.Call?&, p typed.Lvalue?
     ln.coverAdd(of, 0)
     ln.qRoot = of
     ok := true
-    for g in ln.L.P.L.MutGlobals {
+    for g in ln.mutGlobals() {
         gt := types.TypeId(I32(g))
         if ln.objHits(gt) or ln.writesCover(gt, 0): ok = false
     }
@@ -3322,7 +3335,7 @@ fn (ln mut lowering&) localRooted(p typed.Lvalue&) Bool {
 # so has none of - check.mutStorage)
 fn (ln mut lowering&) quiet() Bool {
     n := ln.stmtSafe.Len()
-    if n == 0 or ln.L.P.L.MutStorage: return false
+    if n == 0 or ln.mutStorage(): return false
     if ln.stmtSafe[n - 1] < 0: ln.stmtSafe[n - 1] = 1 if ln.quietStmt(ln.stmts[n - 1]) else 0
     return ln.stmtSafe[n - 1] == 1
 }
@@ -3886,7 +3899,7 @@ fn (ln mut lowering&) quietLife(of types.TypeId) Bool {
     ln.qRoot = of
     # (any call may write a mutable global, and what it reaches writably)
     ok := true
-    for g in ln.L.P.L.MutGlobals {
+    for g in ln.mutGlobals() {
         gt := types.TypeId(I32(g))
         if ln.objHits(gt) or ln.writesCover(gt, 0): ok = false
     }

@@ -20,7 +20,7 @@ OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcar
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
 	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang \
-	compiler/tools/diaggold.olang
+	compiler/tools/diaggold.olang fuzz/editgen.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/olang, which make bootstrap installs (made by it when
 # missing) - "make test OLANG=build/stage1" names another. What it runs - checks/checks.olang, fuzz/, bench/, the tools -
 # reads it from the environment, as an absolute path; unset, each falls back to build/olang
@@ -344,7 +344,7 @@ runner: FORCE
 	@./build/tests_runner || $(NOTE_FAILED)
 
 # the port's diffs against the goldens, each named in build/failed.txt when it fails
-DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff consistency dumptool
+DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff consistency dumptool editfuzzcheck
 
 # the compiler's dump tools still check (docs/sec8.md decision 19): scopedump's own module compiled - the whole program
 # checked and judged by section 8, ~12 s - which an option kept from a parameter's array once refused (O25i)
@@ -516,6 +516,18 @@ scopefuzz: $(OLANG)
 	nice -n 19 $(OLANG) build -debug fuzz/fuzz.olang
 	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz.debug scope $(SEED) $(COUNT) $(JOBS) $(SCENARIOS)
 
+# the edit fuzzer (fuzz/editgen.olang, B3i, docs/wholeprog.md 10.3 T5): programs of several modules edited step by step,
+# each step built in the directory of the builds before it and in a clean one, which must agree. "make editfuzz SEED=1
+# COUNT=20 STEPS=8 MODULES=3"; the suite runs a fixed set (editfuzzcheck), the long run is part of scopefuzz's gate
+STEPS ?= 8
+MODULES ?= 3
+editfuzz: $(OLANG)
+	nice -n 19 $(OLANG) build fuzz/fuzz.olang
+	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz edit $(SEED) $(COUNT) $(STEPS) $(MODULES)
+editfuzzcheck: $(OLANG)
+	@$(OLANG) build fuzz/fuzz.olang > /dev/null || $(NOTE_FAILED)
+	@$(OLANG_ENV) ./build/fuzz_fuzz edit 1 2 6 3 || $(NOTE_FAILED)
+
 # M2 of the port (compiler/DESIGN.md section 6): the self-hosted compiler's diagnostics - msgs.olang's and diag.olang's own
 # tests, and compiler/tools/diaggold.olang rendering stage 0's diagnostics on every failing checks/cases program again,
 # byte for byte, and its -e on every rule a message names. Part of "make test"; "make diaggold" captures the goldens
@@ -538,4 +550,4 @@ install: build/olang
 	@echo "install: $(PREFIX)/bin/olang is build/olang - put $(PREFIX)/bin on PATH if it is not"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build prereq install bootstrap boot seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
+.PHONY: consistency dumptool all build prereq install bootstrap boot seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean

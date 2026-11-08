@@ -640,7 +640,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   module's object keyed by the facts it read; an object is reused unless its module, its imports or a fact it read
   changed, and stays shared between programs where no program fact reaches it. Early freeing in every module through
   the constants; field sets of two scopes; the front end incremental on the same records, tested against clean builds
-  in the suite. **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
+  in the suite. **Built (W1)**: the table of facts (`compiler/facts.olang`: G42's, E31b's, D9h's mutable globals),
+  each module's record taken only where every fact it read holds, and the harness - checks scenarios `incremental`
+  (each edit kind against a clean build), `records` (damaged, foreign and side-by-side records), `reuseall` (every run
+  case under `OLANG_CHECKREUSE` in one directory, two orders), and the edit fuzzer (`make editfuzz`, a fixed set in
+  verify). **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
   code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
   declined.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); `-debug` is

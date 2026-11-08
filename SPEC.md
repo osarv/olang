@@ -7925,11 +7925,14 @@ first to name them in the program's order of modules (the root's own last), name
 files their embeds read (E38), the
 compiler and the build's modes, target and build constants (B3d), and what the program decided that its code or an
 import's reads - the value of each function fact read (G42), which may depend on the whole program (whether C may call
-it back), and the calls through `x[i]` not made in place (E31b) - `build` and `test` keep what each module's object is
+it back), the calls through `x[i]` not made in place (E31b), and the program's globals through which a call may write
+what a value result handed back as a view reads (D9h) - `build` and `test` keep what each module's object is
 made from - its IR - under a hash of exactly those inputs (`build/rec/`), with the instantiations it names. A later
 build whose module has the same inputs takes that IR as the module's and does not make it again: the module is still
 checked, as every module is, but nothing of it is lowered or emitted, and the instantiations its object names are made
-in the root's as before (B3d). What is built is the same program either way.
+in the root's as before (B3d). What is built is the same program either way. A kept record that is not whole, or whose
+contents do not match the hash it carries, or that names a fact this build does not decide alike, is never taken; the
+module is made again. A build with `-memory` (B18) makes every module again, so what it reports covers all of them.
 
 A module whose object is made apart from the program that uses it - by `compile`, or kept as a library of objects - is
 a **precompiled module**, and at its boundary **the defining module decides**. Every decision its object carries is made

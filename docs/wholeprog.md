@@ -495,6 +495,10 @@ adds its edit kind to T2 and editgen (named in its gates above).
 T3 and T4 roughly double the suite's front end and emission in the verify target that runs them; W1 measures it, and the
 target runs beside the others (the suite is already split per file).
 
+**Built in W1 (2026-11-08, HISTORY "Facts with readers and the incremental build's harness"):** T1 (`facts.olang`), T2
+(`incremental`), T3 (`reuseall`, over the checks' run cases; it found D9h's mutable globals read around the table), T5
+(`make editfuzz`, `editfuzzcheck` in the suite), T6 (`records`), and T7 run once.
+
 ### 10.4 genrefs in the order
 
 Every genrefs question was answered on 2026-11-08 (genrefs section 0.1). Its rounds in this order: **G1** at step 4,

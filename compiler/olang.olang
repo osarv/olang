@@ -581,9 +581,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
     # B3i: a module whose object a build with the same inputs made already is not lowered or written again
     keys Array<String&>& = Array<String&>(0)
+    irs Map<String, String&>      # a reused module's parts' IR, "MODULE PART", read and checked against their hashes
     if kind != build.Kind.Module {
-        keys = moduleKeys(l, c, cfg, tests)
-        e.Reuse = reusable(l, cfg, keys)
+        keys = moduleKeys(l, cfg, tests)
+        # -memory reports what lowering decided in every module, so it lowers every one (records still kept)
+        if not cfg.Memory: e.Reuse = reusable(l, c, cfg, keys, irs)
+        build.Phase("facts")
     }
     objs := e.Objects()
     if e.Redo {
@@ -599,7 +602,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.FuzzCorpus = $e.FuzzCorpus
     }
     for w in e.TestWords { prog.TestWords.Push($w) }
-    # D9h: value results handed over as views (of what this build lowered)
+    # D9h: value results handed over as views (a -memory build lowers every module)
     if cfg.Memory {
         for line in lw.CopyLog { try io.Println(line) catch io.Error { } }
         try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgViews " by-value arguments are read where they are, " $lw.Moves " copies are moves at a last use") catch io.Error { }
@@ -618,10 +621,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         if o.From >= 0 {
             # B3i: a reused module's parts, as its record keeps them, each with its IR's hash
             r := e.Reuse.Ref(o.From)
-            base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
             for k, id in r.Parts {
-                pir String& = try os.ReadFile($base ".p" $k ".ll") catch os.Error {
-                    build.Unbuildable($"its record " $base " was lost while it was read")
+                pir String& = try irs.Get($r.Module " " $k) catch {
+                    build.Unbuildable($"the record of " $l.Mods[r.Module].Identity " lost a part while it was read")
                     error build.Failed.Unbuilt
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
@@ -650,7 +652,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         hashes.Push($u.Hash)
         prog.Units.Push(u)
     }
-    if kind != build.Kind.Module { keep(l, cfg, keys, e.Made, objs, hashes) }
+    # (the reader records again: lowering read facts of its own)
+    if kind != build.Kind.Module { keep(l, cfg, keys, readerRecords(l, c), e.Made, objs, hashes) }
     # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
     for m in l.Mods {
         if m.CUnit == "" { continue }
@@ -666,6 +669,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(build.Unit($"c_" $m.Identity, build.UnitKind.Module, cir))
     }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
+    if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
     if e.Library {
@@ -741,10 +745,9 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
 }
 
 # each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
-# paths and those of every module its imports reach, in their order, and the prelude's - and what the whole program
-# decided of their code (check's ProgramReads: G42 facts read, x[i] calls refused the in-place form), the one input of
-# a module's object that is no text
-fn moduleKeys(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, tests Bool) Array<String&>& {
+# paths and those of every module its imports reach, in their order, and the prelude's. The key says which record a
+# module may take; its reader record (readerRecords), which of the records under that key holds for this program
+fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>& {
     mods Vec<mut load.Module&>& = l.Mods
     n := mods.Len()
     keys mut Array<String&>& = Array<String&>(n, "")     # "" for none
@@ -754,14 +757,8 @@ fn moduleKeys(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, t
     if base == "" { return keys }
     inputs := $base $("\nroot " $mods[l.Root].Identity " " $mods[l.Root].Path if cfg.Debug else "")
     hashOf := Array<String&>(n, "")
-    readOf := Array<String&>(n, "")     # the facts read in each module's file, for its importers
-    ownOf := Array<String&>(n, "")      # and, for its own key, with the in-place calls refused there
     for m in range n {
         md := mods[m]
-        if md.File >= 0 {
-            readOf[m] = c.ProgramReads(md.File, false)
-            ownOf[m] = c.ProgramReads(md.File, true)
-        }
         parts Vec<String&>
         parts.Push(md.Identity)
         parts.Push(md.Path)
@@ -773,83 +770,148 @@ fn moduleKeys(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, t
     }
     for m in range n {
         if m == l.Root { continue }
-        seen := Array<Bool>(n)
-        order Vec<I64>
-        work Vec<I64>
-        work.Push(m)
-        for p in range n {
-            if mods[p].Prelude { work.Push(p) }
-        }
-        for work.Len() > 0 {
-            x := try work.Pop() catch { break }
-            if seen[x] { continue }
-            seen[x] = true
-            order.Push(x)
-            for im in mods[x].Imports {
-                if im.Target >= 0 and not seen[im.Target] { work.Push(im.Target) }
-            }
-        }
-        order.Sort(fn(a I64, b I64) Bool { return a < b })
         parts Vec<String&>
         parts.Push(inputs)
         parts.Push(hashOf[m])
-        for x in order {
-            parts.Push($mods[x].Identity " " $hashOf[x])
-            reads := ownOf[x] if x == m else readOf[x]
-            if reads != "": parts.Push($"read " $reads)
-        }
+        for x in reached(mods, m) { parts.Push($mods[x].Identity " " $hashOf[x]) }
         keys[m] = build.HashOf(parts)
     }
     return keys
 }
 
-# where module m's record is kept, its key's first 20 hex digits naming it
-fn recordPath(cfg build.Config&, identity String&, key String&) String {
-    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20]
+# each module's reader record (B3i, facts.olang), "" for the root's and for none: the whole-program facts its code read
+# - the checker's and lowering's (lower.mutGlobals) - and those its imports' code read that an importer's code may carry
+# (a G42 fact baked into a global, K2), each "read VALUE NAME", sorted - asked once lowering is done
+fn readerRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
+    mods Vec<mut load.Module&>& = l.Mods
+    reads mut Array<String&>& = Array<String&>(mods.Len(), "")
+    for m in range mods.Len() {
+        if m == l.Root { continue }
+        lines Vec<String&>
+        for x in reached(mods, m) {
+            if mods[x].File < 0: continue
+            rec := c.P.Facts.Record(mods[x].File, x == m)
+            if rec != "": lines.Push(rec)
+        }
+        reads[m] = sortedLines(lines.Join("\n"))
+    }
+    return reads
 }
 
-# the modules whose records are here, read: each one's parts' IR, its size, whether it was cut, its instances
-fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Vec<emit.Reused> {
+# the modules m reaches through its imports, itself and the prelude's included, in the loader's order
+fn reached(mods Vec<mut load.Module&>&, m I64) Vec<I64> {
+    n := mods.Len()
+    seen := Array<Bool>(n)
+    order Vec<I64>
+    work Vec<I64>
+    work.Push(m)
+    for p in range n {
+        if mods[p].Prelude { work.Push(p) }
+    }
+    for work.Len() > 0 {
+        x := try work.Pop() catch { break }
+        if seen[x] { continue }
+        seen[x] = true
+        order.Push(x)
+        for im in mods[x].Imports {
+            if im.Target >= 0 and not seen[im.Target] { work.Push(im.Target) }
+        }
+    }
+    order.Sort(fn(a I64, b I64) Bool { return a < b })
+    return order
+}
+
+# text's lines sorted, each once
+fn sortedLines(text String&) String {
+    if text == "": return ""
+    lines := text.Lines().ToVec()
+    lines.Sort(fn(a String&, b String&) Bool { return a < b })
+    out Vec<String&>
+    for x in lines {
+        if out.Len() == 0 or out[out.Len() - 1] != x: out.Push(x)
+    }
+    return out.Join("\n")
+}
+
+# where module m's record is kept for this reader record: its key's first 20 hex digits and the hash of what its code
+# read naming it - each program reading the module's facts otherwise keeping a record of its own beside it
+fn recordPath(cfg build.Config&, identity String&, key String&, reads String&) String {
+    return $recordStem(cfg, identity, key) $build.IrHash(reads)[:16]
+}
+
+fn recordStem(cfg build.Config&, identity String&, key String&) String {
+    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20] ".v"
+}
+
+# the modules whose records are here and hold for this program: under each module's key, a record whose every fact read
+# has the value this program decided (facts.Table.Holds), written whole (its "sum" line the hash of the lines before
+# it), each part's IR there with the hash the record names - else the record is passed over, never read in part. The
+# parts' IR is kept in irs ("MODULE PART") for the build
+fn reusable(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, keys Array<String&>&
+    irs mut Map<String, String&>&) Vec<emit.Reused> {
     out Vec<emit.Reused>
+    names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return out }
     for m in range keys.Len() {
         if keys[m] == "" { continue }
-        base := recordPath(cfg, l.Mods[m].Identity, keys[m])
-        text := try os.ReadFile(base) catch os.Error { continue }
-        r := emit.Reused(m)
-        whole := false
-        for line in text.Lines() {
-            if line == "end" {
-                whole = true
-            } else if line.StartsWith("size ") {
-                r.Size = try line[5:].ParseInt() catch default 0
-            } else if line.StartsWith("split ") {
-                r.Split = line[6:] == "1"
-            } else if line.StartsWith("inst ") {
-                r.Inst.Push($line[5:])
-            } else if line.StartsWith("part ") or line.StartsWith("locs ") {
-                # "part HASH IDENTITY": the part's IR's SHA-256, then its name; "locs ..." its Locations object (B3l)
-                if line.Len() < 71 or line[69] != ' ' or not os.Exists($base ".p" $r.Parts.Len() ".ll") { break }
-                r.Hashes.Push($line[5:69])
-                r.Parts.Push($line[70:])
-                r.Locs.Push(line.StartsWith("locs "))
-            }
+        stem := recordStem(cfg, l.Mods[m].Identity, keys[m])
+        lead := stem[cfg.Dir.Len() + 5:]
+        for name in names {
+            if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
+            r := try takeRecord(c, $cfg.Dir "/rec/" $name, m, irs) catch Stale { continue }
+            out.Push(r)
+            break
         }
-        if whole and r.Parts.Len() > 0 { out.Push(r) }
     }
     return out
 }
 
-# the records of the modules this emission wrote: each part's IR, then the record, each written under a temporary
-# name and renamed into place, so a record that is there is whole and so is every file it names, whatever build ran
-# beside this one
-fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made Vec<emit.Reused>&
+# the record at path, as module m's, where it holds for this program
+fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, String&>&) emit.Reused ? Stale {
+    text := try os.ReadFile(path) catch os.Error { error Stale }
+    sumAt := try text.Find("\nsum ") catch { error Stale }
+    if text[sumAt + 5:].Trim() != build.IrHash(text[:sumAt + 1]): error Stale
+    r := emit.Reused(m)
+    read Vec<String&>
+    whole := false
+    for line in text[:sumAt].Lines() {
+        if line == "end" {
+            whole = true
+        } else if line.StartsWith("size ") {
+            r.Size = try line[5:].ParseInt() catch default 0
+        } else if line.StartsWith("split ") {
+            r.Split = line[6:] == "1"
+        } else if line.StartsWith("inst ") {
+            r.Inst.Push($line[5:])
+        } else if line.StartsWith("read ") {
+            read.Push(line)
+        } else if line.StartsWith("part ") or line.StartsWith("locs ") {
+            # "part HASH IDENTITY": the part's IR's SHA-256, then its name; "locs ..." its Locations object (B3l)
+            if line.Len() < 71 or line[69] != ' ' { error Stale }
+            r.Hashes.Push($line[5:69])
+            r.Parts.Push($line[70:])
+            r.Locs.Push(line.StartsWith("locs "))
+        }
+    }
+    if not whole or r.Parts.Len() == 0 or not c.P.Facts.Holds(read.ToArray()): error Stale
+    for k in range r.Parts.Len() {
+        pir := try os.ReadFile($path ".p" $k ".ll") catch os.Error { error Stale }
+        if build.IrHash(pir) != r.Hashes[k]: error Stale
+        irs.Put($m " " $k, pir)
+    }
+    return r
+}
+
+# the records of the modules this emission wrote: each part's IR, then the record with what the module's code read,
+# each written under a temporary name and renamed into place, so a record that is there is whole and so is every file
+# it names, whatever build ran beside this one
+fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads Array<String&>&, made Vec<emit.Reused>&
     objs Vec<emit.Object>&, hashes Vec<String&>&) {
     if made.Len() == 0 { return }
     try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
     pid := build.Pid()
     for r in made {
         if r.Module >= keys.Len() or keys[r.Module] == "" { continue }
-        base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
+        base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module], reads[r.Module])
         b := StringBuilder()
         b.Push($"olang module record\nsize " $r.Size "\nsplit " $("1" if r.Split else "0") "\n")
         seen Map<String&, Bool>
@@ -858,6 +920,7 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made Ve
             seen.Put(sym, true)
             b.Push($"inst " $sym "\n")
         }
+        if reads[r.Module] != "": b.Push($reads[r.Module] "\n")
         ok := true
         for k in range r.Parts.Len() {
             if not putFile($base ".p" $k ".ll", objs[r.From + k].Ir, pid) { ok = false }
@@ -865,8 +928,27 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made Ve
         }
         if not ok { continue }
         b.Push("end\n")
-        putFile(base, b.ToString(), pid)
+        body := b.ToString()
+        putFile(base, $body "sum " $build.IrHash(body) "\n", pid)
     }
+}
+
+# OLANG_FACTSTATS: what the program decided and its modules read (facts.olang), and which modules were reused and which
+# written again (a module with no code of its own is neither), and each object, a line each on the standard error - what
+# the incremental build's checks compare
+fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Array<String&>&, prog build.Program&) {
+    made Map<I64, Bool>
+    for r in e.Made { made.Put(r.Module, true) }
+    b := StringBuilder()
+    b.Push($"olang: facts " $c.P.Facts.Decided " decided, " $c.P.Facts.Reads " read\n")
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0: continue
+        what := "reused " if e.ReusedAt.Has(m) else "lowered " if made.Has(m) else ""
+        if what != "": b.Push($"olang: " $what $l.Mods[m].Identity "\n")
+    }
+    # each object by its IR's hash: equal objects have equal names (B3j)
+    for u in prog.Units { b.Push($"olang: unit " $u.Identity " " $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) "\n") }
+    try io.PrintErr(b.ToString()) catch io.Error { }
 }
 
 # text written at path by way of a temporary renamed into place: whether it is there
@@ -880,15 +962,26 @@ fn putFile(path String&, text String&, pid I32) Bool {
     return true
 }
 
+# how many units the program's C files (X20) add after its objects
+fn cUnits(c typecheck.Checker&) I64 {
+    n := 0
+    for m in c.P.L.Mods {
+        if m.CUnit != "": n++
+    }
+    return n
+}
+
 # OLANG_CHECKREUSE: the program emitted again with nothing reused, every object compared with the units this build has
 fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Checker&, lw mut lower.Lowerer&
     d mut diag.Diagnostics&, cfg mut build.Config&, kind build.Kind, baked mut Map<I64, eval.Image>&) {
     if e.ReusedAt.Len() == 0 { return }
     f mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
     fresh := f.Objects()
-    bad := fresh.Len() != prog.Units.Len()
+    # (the units of the program's C files, X20, come after its objects)
+    units := prog.Units.Len() - cUnits(c)
+    bad := fresh.Len() != units
     for i in range fresh.Len() {
-        if i >= prog.Units.Len() { break }
+        if i >= units { break }
         u := prog.Units[i]
         if fresh[i].Identity != u.Identity or fresh[i].Ir != u.Ir {
             try io.PrintErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.Error { }
@@ -896,7 +989,7 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
         }
     }
     if bad {
-        try io.PrintErr($"olang: reuse check: " $prog.Units.Len() " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
+        try io.PrintErr($"olang: reuse check: " $units " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
         os.Exit(3)
     }
     try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }

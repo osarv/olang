@@ -145,6 +145,7 @@ emit changes what a bootstrap needs, `make seed`); `docs/optsurvey.md` / `bench/
 | `seed/*.ll.xz` | `make seed` (`compiler/tools/seed.olang`); read by `make bootstrap` | regenerate only when `compiler/` needs something the seed's compiler cannot build (QAQ); `seed/README.md` |
 | `olang.lock` | `compiler/fetch.olang` (M23b) | SPEC M23; `-update` |
 | `build/rec`, object names | `build.olang` (B3i hashes everything compiled against) | a new input to a module's key must be added to the hash |
+| a whole-program fact code reads (B3i) | decided and read through `compiler/facts.olang`'s table only (`Decide` before any read, `Read` naming the reading module's file, from the checker or lowering) | its edit kind added to the checks scenario `incremental` and to `fuzz/editgen.olang`; `reuseall` (every run case under `OLANG_CHECKREUSE`) finds a read around the table |
 | `testdata/fuzz/SLUG/` | `std/fuzz`, `std/prop` | saved failures, replayed by plain runs |
 | the cimport cache | `compiler/bindgen.olang` | key: import, clang, compiler, flags |
 | `OBJ.listing.yaml`, `build/listing/NAME/` | `compiler/build.olang` (clang's `-fsave-optimization-record`, the LTO plugin's `emit-asm`/`emit-llvm`/`opt-remarks-filename`) for explain -asm/-ir (B11d); read by `compiler/listing.olang` (remark YAML, `.loc`, `!dbg`) | LLVM's formats, not ours: a new LLVM is checked with the checks scenario `listing` (18, 19, 20 pass) |

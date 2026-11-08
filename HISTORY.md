@@ -35254,3 +35254,50 @@ reads its text so D3b does not fire. Still refused: o12spawntarget (a task's res
 C2d instance cases, O25i reads of storage that may be gone, O23's field bindings. Messages reworded to say a local
 makes the scope findable. Found on the way: in the scope pass, `s.foundRoot, s.foundTerm = null, Term.None` was refused
 with O20 where the two assignments written apart are not - a parallel assignment giving `null` to a `?&` field (queued as its own task).
+## Facts with readers and the incremental build's harness (B3i, D9h, B18; 2026-11-08, wt-facts, round W1 of docs/wholeprog.md)
+
+W0 keyed a module's record on the fact values its own file and its imports read. W1 makes that the table of section 4.2:
+`compiler/facts.olang` holds each whole-program fact by a stable name (`G42 IDENT@OFFSET FACT FN`, `E31b IDENT@OFFSET`)
+and its value; the pass deciding it calls `Decide`, code reading it calls `Read`, which records the read against the
+reading module's file, and the values are private to the module, so a read around the table does not compile (T1). A
+module's record now holds its reader record ("read VALUE NAME" lines, under a record name carrying their hash, several
+variants per key) and is taken only where this build's table gives every name the value read (`Holds`); a line of any
+other shape never holds. An extern's G42 fact (`getuid.WritesGlobals`) was folded unrecorded in check's extern branch,
+stale under `OLANG_CHECKREUSE` after a program handing an export fn to C: recorded as a fact.
+
+The harness of section 10.3, built in the suite:
+
+- **T2, the checks scenario `incremental`** (`checks/fixtures/incremental`: a root, a library with a struct, a deep
+  module with a C call's fact, a call through `x[i]`, a baked global, an inferred error set, an obligation and an
+  embedded file, a generic, a C file): twelve edits (a body, a signature, an error set grown, an obligation removed, the
+  C callback input, a baked global, a build constant, an embedded file, a generic instance, an import, a renamed module,
+  a diagnostic), each built in place and clean and compared - objects by their IR's hashes (`OLANG_FACTSTATS` now prints
+  each unit), output, explain of the edited item, `-memory` and the diagnostics - the modules lowered named per edit,
+  and each edit undone lowering nothing. It found that `-memory`'s D9h counts covered only what the build lowered: a
+  `-memory` build now lowers every module (its records still kept).
+- **T6, `records`**: a truncated record, a garbled part, and a record another compiler wrote (its sum right, a read line
+  this build decides otherwise) are made again, never read; two builds at once in one directory, then a third takes
+  their records, every object the same.
+- **T3, `reuseall`**: every run case (508) built under `OLANG_CHECKREUSE` in one directory, forwards and backwards, four
+  at a time in each (eight parts). Its first run found a stale object at once: `std/prelude/text`'s `padNumber` was
+  lowered handing its result back as a view in programs with no mutable reference global and copying it in programs with
+  one - lowering's D9h judgements (`quietLife`, `windowQuiet`, `quiet`) read `load.MutGlobals` and `MutStorage`, a
+  whole-program list, directly. Fixed as a fact: check's `mutStorage` decides `D9h mutable globals` ("none", or the
+  globals' types and the text of every module the globals' modules reach, where those types and all they hold are
+  declared), lowering reads it through the table for the body's file, and the reader records are taken after lowering
+  (`readerRecords`), so a read lowering makes is in the record it writes. The record of a module none of whose code
+  judged a view reads no such fact and stays shared. With that, both orders build clean.
+- **T5, the edit fuzzer** (`fuzz/editgen.olang`, `fuzz edit`, `make editfuzz`; `editfuzzcheck` in the suite, two seeds
+  of six steps): a chain of modules each holding one of scopegen's scenarios, edited by random kinds (a scenario written
+  again, a mutable reference global, a G42 fact read, the C callback in the root, a number, an undo), each step built in
+  place and clean and compared; a scenario the clean build refuses is left out of its module.
+
+**T7, run once**: the last 100 commits touching compiler/ built one after another in one directory by this compiler under
+`OLANG_CHECKREUSE` (an object reused only where emitted afresh it is the same, which stands in for a clean build without
+clang): 47 build in today's language (the older use retired spellings), every reused object the same, 555 modules lowered
+again in all - 11.8 a commit, none in 22 of them (edits to the root, never reused) - out of about 90.
+
+T4 and T8 belong to W3a/W3b. Measured: the compiler's leaf edit (a comment in `lsp.olang`) rebuilds in 6.3 s against 6.3
+s for master's compiler on the same tree (the round-8 figure of 3.5 s was on another machine state); `OLANG_TIMES`'s
+`facts` row is ~0.4 s for the compiler, almost all of it reading and hashing the reused records' IR, which was counted in
+`lower+emit` before; the keys take 30 ms.

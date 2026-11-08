@@ -1,0 +1,141 @@
+# facts - whole-program facts with readers (B3i; docs/wholeprog.md sections 4.2 and 10.3).
+#
+# A whole-program fact is something the program decided as a whole that a module's code may read: today G42's facts,
+# whose value hangs on whether C may call the program back (effects.cMayCallBack), and the calls through x[i] E31b
+# refuses the in-place form by the same facts. Each is named by something stable across programs - the place in a
+# module's text where it is read, by the module's identity - and holds its value as text.
+#
+# The pass deciding a fact puts it here (Decide); a module's code reads it only through Read, which records the read
+# against the reader, a module's file. The decided values are private to this module (M6), so a read that does not
+# record itself does not compile. A module's record (build/rec) holds its reader record - each fact its code read and
+# the value read - and a later build reuses that record only where its own table gives every one of those names the
+# same value (Holds). A fact that a module's code or a baked global (K2) may carry to the module's importers (a G42
+# fact read in a global's initializer, say) is read by every importer too ("carried": Record without own).
+
+import sha "std/sha256"
+
+# a pass's facts, under the names of its kind ("G42 ", "E31b "), and what each reader read of them
+type Table struct() {
+    values Map<String, String>               # by name: the value decided
+    carried Map<String, Bool>                # the names whose value an importer's code may carry
+    reads Map<String, Bool>                  # "READER NAME": reader (a file) read name
+    Decided I64 = 0                          # how many facts were decided, and how many reads made (OLANG_TIMES's facts row)
+    Reads I64 = 0
+}
+
+# the fact name decided as value - by the pass that decides it, before any reader reads it. A name decided twice in
+# one round with different values (a site read in two instances of a generic) holds both, so a reader of it is kept
+# apart from a program deciding either alone
+fn (t mut Table&) Decide(name String&, value String&, carried Bool) {
+    t.Decided++
+    if carried: t.carried.Put(name, true)
+    had := try t.values.Get(name) catch {
+        t.values.Put(name, value)
+        return
+    }
+    if had == value or had.Split(",").Some(fn(v String&) Bool { return v == value }): return
+    vs := had.Split(",").ToVec()
+    vs.Push(value)
+    vs.Sort(fn(a String&, b String&) Bool { return a < b })
+    t.values.Put(name, vs.Join(","))
+}
+
+# the value of fact name as reader reads it, the read recorded; failing with Undecided where no pass decided it
+fn (t mut Table&) Read(reader I64, name String&) String ? Undecided {
+    v := try t.values.Get(name) catch { error Undecided }
+    t.Reads++
+    t.reads.Put($reader " " $name, true)
+    return v
+}
+
+# every fact of a kind forgotten, with the reads of it - a pass deciding them again (the checker's next attempt)
+fn (t mut Table&) Forget(kind String&) {
+    gone Vec<String&>
+    for k in t.values.Keys() {
+        if k.StartsWith(kind): gone.Push($k)
+    }
+    for k in gone {
+        t.values.Remove(k)
+        t.carried.Remove(k)
+    }
+    read Vec<String&>
+    for k in t.reads.Keys() { read.Push($k) }
+    for k in read {
+        at := try k.Find(" ") catch { continue }
+        if k[at + 1:].StartsWith(kind): t.reads.Remove(k)
+    }
+}
+
+# reader's record: a "read VALUE NAME" line for each fact it read (only those an importer carries, without own),
+# sorted - "" for none. VALUE is the value where it is short and a word, else "#" and its hash
+fn (t Table&) Record(reader I64, own Bool) String {
+    at := $reader " "
+    lines Vec<String&>
+    for rk in t.reads.Keys() {
+        if not rk.StartsWith(at): continue
+        k := rk[at.Len():]
+        if not own and not t.carried.Has(k): continue
+        lines.Push($"read " $Token(try t.values.Get(k) catch default "") " " $k)
+    }
+    lines.Sort(fn(a String&, b String&) Bool { return a < b })
+    return lines.Join("\n")
+}
+
+# whether every "read VALUE NAME" line of a record holds in this table: each name decided, with that value. A line of
+# another shape does not hold, so a record damaged or written by another compiler is never taken
+fn (t Table&) Holds(lines Array<String&>&) Bool {
+    for line in lines {
+        if not line.StartsWith("read "): return false
+        sp := try line[5:].Find(" ") catch { return false }
+        name := line[5 + sp + 1:]
+        v := try t.values.Get(name) catch { return false }
+        if Token(v) != line[5:5 + sp]: return false
+    }
+    return true
+}
+
+# a value as a record writes it: itself where it is short and holds no space, else "#" and the start of its hash
+fn Token(v String&) String {
+    if v.Len() > 0 and v.Len() <= 40 and not v.Contains(" ") and not v.Contains("\n") and not v.StartsWith("#"): return $v
+    return $"#" $sha.Hex(v)[:32]
+}
+
+test Table "records only what was read, and holds a record only where every value read is the same" {
+    t := Table()
+    t.Decide("G42 a@3 Allocates", "true", true)
+    t.Decide("E31b a@9", "copy", false)
+    t.Decide("G42 b@1 Pure", "false", true)
+    assert t.Read(7, "G42 a@3 Allocates")! == "true"
+    assert t.Read(7, "E31b a@9")! == "copy"
+    assert t.Record(7, true) == "read copy E31b a@9\nread true G42 a@3 Allocates"
+    assert t.Record(7, false) == "read true G42 a@3 Allocates"
+    assert t.Record(8, true) == ""
+    assert t.Reads == 2 and t.Decided == 3
+    other := Table()
+    other.Decide("G42 a@3 Allocates", "true", true)
+    other.Decide("E31b a@9", "place", false)
+    assert other.Holds(t.Record(7, false).Lines().ToVec().ToArray())
+    assert not other.Holds(t.Record(7, true).Lines().ToVec().ToArray())
+    assert not other.Holds(Array<String&>["read true G42 z@1 Pure"])
+    assert not other.Holds(Array<String&>["garbled"])
+    try t.Read(7, "G42 none") catch Undecided { return }
+    unreachable "an undecided fact read"
+}
+
+test Table.Decide "a name decided twice with different values holds both" {
+    t := Table()
+    t.Decide("G42 g@5 Blocks", "true", true)
+    t.Decide("G42 g@5 Blocks", "false", true)
+    t.Decide("G42 g@5 Blocks", "true", true)
+    assert t.Read(1, "G42 g@5 Blocks")! == "false,true"
+    t.Forget("G42 ")
+    assert t.Record(1, true) == ""
+    try t.Read(1, "G42 g@5 Blocks") catch Undecided { return }
+    unreachable "a forgotten fact read"
+}
+
+test Token "a long value is written as its hash" {
+    assert Token("true") == "true"
+    assert Token("a b").StartsWith("#") and Token("a b").Len() == 33
+    assert Token("#x") != "#x"
+}
