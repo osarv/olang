@@ -6586,7 +6586,7 @@ reference, or across a call that may make it let go (condition 6) - makes the pl
 condition is the compiler's to prove, over the whole program: where a fact it needs cannot be shown - a body not known
 (a function value, an `extern` - which, in a program C may call back (condition 3), may call any export fn C may call,
 X12, but the C library's input and output, text, memory and time functions, which call nothing back - so a place one
-may let go of is let go of across it), code in a module compiled on its own (B3i), a cycle of calls not settled - the place keeps, as O8c says;
+may let go of is let go of across it), a cycle of calls not settled - the place keeps, as O8c says;
 nothing is reclaimed on a guess, and no fact is taken from a fixed point not run to its end. A generator (D18) lets go
 as a function does, its `yield` giving a value as a `return` does - and a `yield` is a call that may make any place let
 go, for what its frame holds across it: its consumer runs what it likes before the next `Next()`. What the
@@ -6594,7 +6594,10 @@ generator was given is held by it for as long as it can be resumed (D18b); what 
 way is reclaimed with the scopes the frame holds.
 An error leaving a block reclaims what was made in it as its other ways out do, after its `errdefer` code (S19e). Which places keep, and why, `-memory` reports (B18). Reclaiming
 early changes no value a program can read, runs no destructor (O15), and is not otherwise observable: a program's
-memory use is the only way to see it.
+memory use is the only way to see it. Which places are sole is the whole program's decision, and it holds in the code
+of every module alike: a module's object (B3i) carries each of its sites both ways - the value built in a region of
+its own and released at the let-go, or built and kept as any value is - and reads the decision as a constant the
+program defines when it is linked, so the object is the same in every program that uses it.
 
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
 below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above - and at least as its element type is, where that is
@@ -7936,8 +7939,9 @@ module is made again. A build with `-memory` (B18) makes every module again, so 
 
 A module whose object is made apart from the program that uses it - by `compile`, or kept as a library of objects - is
 a **precompiled module**, and at its boundary **the defining module decides**. Every decision its object carries is made
-from that module and the inputs above alone: where the storage its code builds is placed and what that code frees early,
-and which scopes a field it declares may be given. What a program using it reads of it is what an importer reads of any
+from that module and the inputs above alone: where the storage its code builds is placed, and which scopes a field it
+declares may be given. What its code frees early is not among them: each place's decision is read where the program is
+linked (O8d), so a precompiled module frees what the program using it decides. What a program using it reads of it is what an importer reads of any
 module (its declarations and the facts of its own code). Nothing a program using it does changes what its object does:
 where code of the program would need one of its decisions to be otherwise - a store giving a field the module declares
 storage of a scope the module's own code does not give that field - the error is in the program's code, at that store,

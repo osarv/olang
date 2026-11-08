@@ -578,7 +578,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   it").** Storage a place lets go of while it was its only holder may be reclaimed then rather than at the scope's
   close - the compiler's optimization, unobservable but in memory, never running a destructor early (O15). `own`,
   `take`, loans and borrowed copies are removed. Early freeing keeps wherever a fact is missing (function values,
-  externs, a module compiled on its own, tasks, destructors); `-memory` (B18) lists what keeps and why.
+  externs, tasks, destructors); `-memory` (B18) lists what keeps and why. **In every module (W2, wholeprog 2.1,
+  2026-11-08):** the decisions are the whole program's, and each module's code reads its places' as link-time constants
+  (weak `false` where read, `true` defined by the root's decisions object, folded by LTO), so objects stay the same in
+  every program; code in the root's object has them written in.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

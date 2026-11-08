@@ -1113,7 +1113,7 @@ test "a damaged or foreign record is written again, never read; builds side by s
 fn records(r mut report&) ? Failed {
     dir := fresh("records")
     os.Run("cp checks/fixtures/incremental/* " $os.Quote(dir))
-    run := "48 12 1 true 14 data one 8"
+    run := "48 12 1 true 14 data one 8 note 2"
     build := "OLANG_FACTSTATS=1 OLANG_CHECKREUSE=1 \"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > run.txt"
     try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1") == 0, "the first build", dir)
     damages := Array<String&>["for f in build/rec/deep.*; do case $f in *.ll) ;; *) truncate -s 100 $f ;; esac; done"

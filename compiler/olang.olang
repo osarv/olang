@@ -654,12 +654,6 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         hashes.Push($u.Hash)
         prog.Units.Push(u)
     }
-    # O8d (wholeprog 2.1): the root's decisions - every place decided sole, its link-time constant defined true - in an
-    # object of their own beside the root's, which the objects reading them (weak, false) meet only at the link
-    if kind != build.Kind.Module {
-        sole := e.SoleUnit()
-        if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if e.Library else sole)) }
-    }
     # (the reader records again: lowering read facts of its own)
     if kind != build.Kind.Module { keep(l, cfg, keys, readerRecords(l, c), e.Made, objs, hashes) }
     # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
@@ -677,6 +671,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(build.Unit($"c_" $m.Identity, build.UnitKind.Module, cir))
     }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
+    # O8d (wholeprog 2.1): the root's decisions - every place decided sole, its link-time constant defined true - in an
+    # object of their own beside the root's (after the objects a reuse check writes afresh), which the objects reading them (weak, false) meet only at the link
+    if kind != build.Kind.Module {
+        sole := e.SoleUnit()
+        if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if e.Library else sole)) }
+    }
     if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
