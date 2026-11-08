@@ -1,0 +1,33 @@
+start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
+2026-11-07T13:05	Section-8 round 2: O27 placement	opus	xhigh	completed	386	341	112	?	?	
+2026-11-07T13:05	Literals round: type in front, FromIter	opus	high	completed	835	350	94	?	?	
+2026-11-07T13:05	Tidy round: small fixes	opus	high	completed	650	340	88	?	?	
+2026-11-07T15:00	Section-8 round 3: T22a relations	opus	high	completed	758	205	62	?	?	
+2026-11-07T15:00	Unique hand-on move round	opus	xhigh	completed	752	263	73	?	?	
+2026-11-07T16:16	Bulk review 8: section 8 and memory	opus	high	completed	467	144	18	?	?	
+2026-11-07T16:16	Bulk review 8: language features	opus	high	completed	448	138	16	?	?	
+2026-11-07T16:16	Bulk review 8: tools and runtime	opus	high	completed	475	154	22	?	?	
+2026-11-07T16:39	Bulk 8 fixes: payloads and tests	opus	high	completed	669	213	23	?	?	
+2026-11-07T17:59	Trim CLAUDE.md settled decisions	sonnet	medium	completed	281	16	78	?	?	
+2026-11-08T08:02	Design note: function values	opus	xhigh	completed	717	128	46	?	?	
+2026-11-08T09:02	Design note: generational back-pointers	opus	xhigh	completed	569	61	36	?	?	
+2026-11-08T09:03	Audit every refusal by cause	opus	high	completed	539	105	29	?	?	
+2026-11-08T09:12	Round 1: one tier of keywords	sonnet	medium	completed	409	68	22	?	?	
+2026-11-08T09:18	Trim CLAUDE.md and the memory files	sonnet	medium	completed	238	27	11	?	?	
+2026-11-08T09:30	Saturating arithmetic, continued	opus	high	completed	315	66	21	?	?	
+2026-11-08T09:30	Benchmarks, continued	opus	high	completed	324	88	44	?	?	
+2026-11-08T11:21	fnvalues round 2: Destroy removed	sonnet	medium	completed	296	124	62	?	?	
+2026-11-08T12:40	fnvalues round 3: dtor follows storage	opus	high	completed	322	148	71	?	?	
+2026-11-08T12:40	std/net constructors by value	sonnet	medium	completed	131	18	32	?	?	
+2026-11-08T14:06	fnvalues round 4: promise words	opus	xhigh	completed	645	286	104	?	?	
+2026-11-08T14:07	refusal round R5: become tail scope	opus	high	completed	554	287	98	?	?	
+2026-11-08T16:09	many ifs: compile memory fix	opus	high	completed	435	192	80	?	?	
+2026-11-08T16:10	fnvalues round 5: effect words	opus	high	completed	555	204	169	?	?	
+2026-11-08T17:17	Scope whole-program compilation	opus	high	completed	289	54	8	?	?	
+2026-11-08T17:26	Fix G42 reuse-key bug	opus	high	completed	275	74	9	?	?	
+2026-11-08T17:43	Plan and record wholeprog+genrefs	opus	high	completed	276	51	17	?	?	
+2026-11-08T17:57	Build std/pool	sonnet	medium	completed	164	31	43	?	?	
+2026-11-08T18:26	Read paper 2006.04439	sonnet	high	completed	165	5	1	?	?	
+2026-11-08T18:26	Read paper 2610.14162	sonnet	high	completed	201	9	3	?	?	
+2026-11-08T18:26	Read paper 2512.24695	sonnet	high	completed	220	15	3	?	?	
+2026-11-08T19:38	Slim the always-loaded context	sonnet	medium	completed	164	19	4	?	?	

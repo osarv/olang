@@ -32,3 +32,9 @@ Running: F6 scopes at run time (opus xhigh, /home/user/wt/scopefind, wt-scopefin
 (opus high, /home/user/wt/facts, wt-facts); E1 settling experiment (opus high, oagent main, experiments/e1-state-tracking,
 compiler copy /home/user/expbin/olang). Next after F6+W1: step 2 (R1 beside W2), A1 after W1.
 oann: decided (direction.md "oann and oagent, redefined"); no open ledger questions. Usage ~0.53+ at 19:06.
+
+## 2026-11-08 late (CET)
+- wt-slim merged and pushed: Settled decisions are now in docs/settled.md (CLAUDE.md has an index), rules and direction slimmed with full text in the archive. The loaded context went from ~151 KB to ~33 KB. Worktree removed.
+- F6 (wt-scopefind) and W1 (wt-facts) restarted on Opus at high; each commits its WIP, merges master, then continues from PROGRESS.md. E1 (oagent) restarted on Sonnet at high from 0d93a53.
+- Token rules: briefs say be resourceful, reports are at most 10 lines.
+- Agent log started: /home/user/review/agents.tsv (32 rows backfilled, outcomes to fill). Current A/B: F6/W1 at opus medium vs earlier rounds at high/xhigh; E1 sonnet medium.
