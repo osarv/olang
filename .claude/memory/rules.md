@@ -199,6 +199,16 @@ side by side and merge without their own full verify, gates or review (agents de
 gates (scopesan, scopefuzz, fuzz free, dead regions) and one bulk review with its fixes. Rules for agents:
 /home/user/review/rounds/finish-rules.md.
 
+## Keep the loaded context small, always (the user, 2026-11-08)
+"the token context is kind of the biggest cost ... make sure to continuously keep it down so we don't pay extra usage
+unnecessarily. Usage is really something we are kind of low on."
+**How to apply:** what every session and agent loads (CLAUDE.md, PRINCIPLES.md, the imported memory files) stays
+small, continuously, not in occasional trims: an answered ledger entry moves to archive/decisions_log.md in the same
+commit that records the answer (the ledger holds open questions only); a finished plan.md log entry moves to
+archive/next_steps_log.md; a superseded rule moves to archive/rules_log.md; CLAUDE.md entries stay terse, detail
+going to HISTORY.md. Agents get short briefs pointing at files rather than restating them, the cheapest model that
+fits, and no speculative work; my own replies stay short; remind the user to /compact this session when it grows.
+
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
 out"; earlier: "So I don't have to start you manually"): whenever work is left that the window will not cover - the
