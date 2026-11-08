@@ -11,3 +11,9 @@ per the note's section 14 (12 = constructor-fixed fields followed + promise word
 the refusal audit's fixes after the fnvalues rounds; genrefs' build after its note is approved; REPL + Jupyter,
 coverage, platforms, olang get after bench/satarith. oann holds until version 1 is mature.
 Usage is the main resource: one agent per round, short briefs, propose /compact to the user with a prompt.
+
+2026-11-08 ~12:25 CET: merged and pushed refusals, genrefs (questions pending; user settles "in a couple of hours", no
+dependent agent before), bench, satarith, kw (round 1) - master 5ec9f2f9. Round 2 (Destroy, sonnet) running in
+/home/user/wt/destroy. Known: the "many local ifs" check needs ~5 GB (pre-existing, not a regression) and is killed
+under a full verify's load - a fix to queue (memory of interpreting 20000 ifs). Refusal answers: 1,2,3,6 yes; 4 to
+discuss; 5 open.
