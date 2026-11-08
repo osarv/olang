@@ -912,7 +912,7 @@ fn declWord(k token.Tok) ast.DeclWord {
 # what may follow a type declaration's word (T13a) - so "type X immut" alone is X declared over a type named immut
 fn declWordBody(k token.Tok) Bool {
     return k == token.Tok.Struct or k == token.Tok.Enum or k == token.Tok.Extends or k == token.Tok.Trait or k == token.Tok.Error or
-           k == token.Tok.Iden or k == token.Tok.Fn
+           k == token.Tok.Iden or k == token.Tok.Fn or k == token.Tok.Unique or k == token.Tok.Immut or k == token.Tok.Packed
 }
 
 fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
@@ -1273,7 +1273,7 @@ fn (p mut Parser&) contract() ast.ContractBlock& ? Fail {
 fn (p Parser&) startsResult() Bool {
     k := p.peek()
     return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.LParen or
-           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait
+           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait or k == token.Tok.Any
 }
 
 # "[? [A, B.c]]" - a list on one line; one item where the function type or lambda it ends is an item of a list (one),
@@ -1592,7 +1592,8 @@ fn (p Parser&) typeArgsShape(n I64) I64 {
             if parens == 0 { return 0 }
             parens--
         } else if k != token.Tok.Iden and k != token.Tok.Dot and k != token.Tok.Comma and k != token.Tok.Amp and
-                  k != token.Tok.Question and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.Return {
+                  k != token.Tok.Question and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.Return and
+                  k != token.Tok.Any {
             return 0
         }
         if depth < 0 { return 0 }

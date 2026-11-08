@@ -1,0 +1,6 @@
+# check: fail is a keyword, not a name
+# L9: the promise words are reserved everywhere; a local, parameter, function, type or global may not be named by one
+fn main() {
+    keeps := 0
+    keeps++
+}

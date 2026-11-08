@@ -232,7 +232,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
   breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
-  keywords may name fields. `_` discards and is never a name.
+  keywords may name fields. `_` discards and is never a name. **One tier of keywords (L9, the user's decision
+  2026-11-08, docs/fnvalues.md section 5; built 2026-11-08):** `any`, `unique`, `immut`, `packed`, `commutes` (once
+  "words of one place", L9b/L9c, now gaps) and the promise words later rounds give meaning to - `returns`, `noalloc`,
+  `noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow` - are ordinary reserved
+  words; each may name a field or a method (L9a) and nothing else. `tools/keyword_rename.olang` (in `olang fix`)
+  appends `_` to other people's names spelled like one.
 - **Numeric literals (L10-L12b).** `_` only between digits; a decimal above `I64`'s max is `U64`, beyond 128 bits an
   error; a hex/binary pattern adapting to an unsigned type is its bits (L10a); a float literal beyond its target's
   range is an error (L12b). Escapes include `\0` and `\r`; a literal never crosses its line (L13).
