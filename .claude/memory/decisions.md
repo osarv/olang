@@ -21,10 +21,13 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-- oann's design (asked 2026-11-08; building waits for olang v1). Answered the same day (direction.md, "oann and oagent,
-  redefined"): purpose, redesign, N-d tensor, kernels in olang, CPU+FPGA+GPU, the number types. Still open:
-  1. Models built and planned while compiling by default, a run-time graph as fallback? Recommended: yes.
-  2. The GPU split between olang and oann. Default: undecided. Recommended: one device subset in the language shared
-     by GPU and FPGA kernels, compiled through LLVM's NVPTX/AMDGPU back ends after v1 as an addition, std reaching the
-     driver; oann writes its kernels in it.
-  3. The element type a tensor's type parameter (`Tensor<BF16>`) rather than a run-time tag. Recommended: parameter.
+- oann's design (asked 2026-11-08; building waits for olang v1). Answered so far (direction.md, "oann and oagent,
+  redefined"): purpose, redesign, N-d tensor, kernels in olang, CPU+FPGA+GPU, number types; the GPU split as
+  recommended (one device subset in the language for GPU and FPGA kernels, LLVM's NVPTX/AMDGPU back ends, after v1 as
+  an addition; std over the driver API; oann's kernels in it); the element type a type parameter constrained by a
+  tensor-element trait (the user: "so we don't put anything in there"; closed, mine). Still open:
+  1. cuBLAS/cuDNN: our own kernels by default, NVIDIA's libraries as an optional back end and the yardstick, used
+     where they measurably win? Recommended: yes.
+  2. The model graph: one model description, run either as a run-time graph (for experiments whose structure
+     changes) or planned while compiling into specialized code (fixed models, GPU and FPGA)? Recommended: both, the
+     run-time graph built first.
