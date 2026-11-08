@@ -26,8 +26,8 @@ syntax, names, types, errors, generics and the like (counted, not classified). T
 | class | cases | what becomes of them |
 |---|---|---|
 | (a) gone by docs/fnvalues.md | 78 | `Destroy()` removed (18), a `Str` building where its receiver is found (34 + 5 others found at run time), destructors following storage (4), derived scopes passed (3), function values followed into calls (10) and read by E31b (4) |
-| (b) becomes a program | 105 | storage built further out, a scope found at run time, an end reordered, or a sharper judgment - compile time only, every one listed by `-memory` where it moves storage |
-| (c) stays an error | 154 | the program is wrong as written, or the user decided the rule: permissions (39), stale views (37), `unique`/`immut` (35), writes that would land in a copy and be lost (26), a collection growing under a write to its element (6), function types as contracts (3), holders in a cycle (2), others (6) |
+| (b) becomes a program | 106 | storage built further out, a scope found at run time, an end reordered, or a sharper judgment - compile time only, every one listed by `-memory` where it moves storage |
+| (c) stays an error | 153 | the program is wrong as written, or the user decided the rule: permissions (40), stale views (37), `unique`/`immut` (36), writes that would land in a copy and be lost (20), a collection growing under a write to its element (6), a stored function value whose type is the contract (6), which write wins (3), holders in a cycle (2), others (3) |
 | (d) needs a decision | 18 | seven questions (section 7, 12) |
 
 The scope rules proper - O10c, O10d, O17, O17a, O25i, O26, C2d, T17c, P2, S21's arena half and the rest of section 8 -
@@ -44,7 +44,7 @@ std/csv).
 
 The build (section 10): eight rounds after docs/fnvalues.md's round 6, the largest the split values (44 cases, O17
 generalized), then values kept through an obligation (28), by-value parameters and match bindings (15), tasks (9),
-`become` (10), generators (2), ends ordered (4) and a precision round (8).
+`become` (10), generators (2), ends ordered (4) and a precision round (9).
 
 ## 1. How this was done
 
@@ -86,7 +86,7 @@ Per rule (the first diagnostic's rule), cases in each class:
 | C2d | 4 | 4 | | | an instance holding a reference to an argument it would outlive |
 | T22a, T22a+E31 | 9 | 1 | 3 | | a function value whose relations exceed its written type |
 | T32a+T22a, T32a+T22 | | | | 3 | an `any`'s method relating scopes |
-| E31b, E31+O17, E31b+P2 | 4 | 4 | 31 | | a call through `x[i]`, whose element is a copy |
+| E31b, E31+O17, E31b+P2 | 4 | 5 | 30 | | a call through `x[i]`, whose element is a copy |
 | T25c, T25b, T25d, E11c+T25c | 1 | 1 | 41 | | a write through what is read-only |
 | O17, O17a | | 38 | | | a split value (storage here, references elsewhere) lent or held |
 | O10c | | 13 | | | a callee's obligation no scope here meets |
@@ -105,10 +105,10 @@ Per rule (the first diagnostic's rule), cases in each class:
 | E28 | | | 3 | | a conditional's copy written and dropped |
 | M19g | | | 37 | | a view or `Ref` used after its Vec may have grown |
 | T13b (+E31d, G18), T13a (+E31d, T29c) | | | 35 | | `unique` and `immut` |
-| **total** | **78** | **105** | **154** | **18** | |
+| **total** | **78** | **106** | **153** | **18** | |
 
 Within (b): split values 44, kept through an obligation or a store 15, by-value parameters 12, tasks at the join's
-level 9, `become` 9, ends ordered 4, match bindings 3, a sharper judgment 5, generator frames 2, a copy 1, the prelude 1.
+level 9, `become` 9, ends ordered 4, match bindings 3, a sharper judgment 6, generator frames 2, a copy 1, the prelude 1.
 
 ## 4. (a) gone by docs/fnvalues.md
 
@@ -242,7 +242,7 @@ becomedtorresult, becomedtortemp), a by-value destructor parameter handed on (s2
   block; QCZ's order (holders first, last declared first) then ends `gs` before `l`. The temporary of o15registeredtemp
   becomes a hidden holder of the statement's block. Nothing moves; the order is computed.
 
-### 5.7 A sharper judgment, a copy, the prelude (7)
+### 5.7 A sharper judgment, a copy, the prelude (8)
 
 - **Defaults naming existing storage** (p4adefaultexisting, p4adefaultholds, r11defaultexisting): `catch default
   fallback` where `fallback` already outlives the target - judged as an argument to the target is (P2's borrows), not
@@ -250,6 +250,7 @@ becomedtorresult, becomedtortemp), a by-value destructor parameter handed on (s2
 - **A loop-carried version** (t22alatelambda): `op` is given a keeping lambda after its call in the loop, so the next
   turn's call reaches it. Judging the loop body to a fixed point over the versions (O25i) makes that call a direct call
   of `setv` or the lambda, and `N(i)` is then built where `kr` lives. Needs fnvalues' round 7 (records in locals).
+- **A match on an enum value field** (e31bviewenumfield, a recorded over-rejection): the callee reads the field to match it and writes nothing of the copy's own storage, so it is a view of the element and the call compiles.
 - **A yielded place** (d18yieldown: `yield l` of a `Vec<I64>` the generator goes on pushing to): the yielded value is a
   copy built where it goes - what a value flowing out of a place means (E31d: every copy calls `Copy`), and what the
   message tells the program to write. The cost is the copy the program would have written.
@@ -260,13 +261,14 @@ becomedtorresult, becomedtortemp), a by-value destructor parameter handed on (s2
 
 | why | cases | |
 |---|---|---|
-| a write through what is read-only - the user's T25b/T25c decisions ("knowing whether a function you pass things into mutates what you passed is valuable") | 38 T25b/T25c/T25d, t25ccopycallvalue | no placement makes a read-only promise true; t25ccopycallvalue writes through a copy of an immutable global even when the call is followed |
+| a write through what is read-only - the user's T25b/T25c decisions ("knowing whether a function you pass things into mutates what you passed is valuable") | 40: T25b, T25c, T25d (vec95globalkeeps and t25ccopycallvalue among them) | no placement makes a read-only promise true; t25ccopycallvalue writes through a copy of an immutable global even when the call is followed |
 | a stale view - the user's M19g rule | 37 M19g | memory-safe today (the retired buffer stays until the scope closes), so it is not a placement question at all: the view shows old elements and a write through it is lost |
-| `unique` and `immut` - the user's decisions of 2026-11-03 | 35 T13b, T13a, c11vecofdtorcopy, c11destructnotunique | a second copy of a unique value, a use after a hand-on, a write to an immut value, a destructor without `unique` written |
-| a write that lands in a copy and is lost | 21 (`e31bview*` but the two followed ones, `e31btrydefault*`, rv3roat, s5atnosetat, e31bviewrepoint, s5handlerepointfn, e31bcallargsowned) and 3 E28 | `x[i]` of a collection with no in-place form, `try a.Get(i) catch default v`, a conditional's value: written, then dropped |
-| the collection may grow while the call writes its element | e31bdtor, e31bexportback, e31binplaceclosure, e31binplacector, e31binplaceglobal, e31binplacehome | in place, the write may land in a retired buffer; two-phase, the write-back would undo what the call did through the other route and may index past a shrunk end (unchecked) |
-| which write wins is the program's to say | s5e31bargs, s5e31bspawn, lanethroughatop | the written-out form says it |
-| a stored function value, its type the contract - the user, 2026-11-08 ("if we want a type that can hold a function value, we make that type very explicit") | t22apushed, t22alambdakeeps, t22areturncycle; e31bfnelem, e31bfnfield, e31bfnhandle | after fnvalues' round 4 the error names the word to write (`keeps b in a`, `keeps k`, `pure`); with it, they compile |
+| `unique` and `immut` - the user's decisions of 2026-11-03 | 36: T13b, T13a (c11vecofdtorcopy among them), c11destructnotunique | a second copy of a unique value, a use after a hand-on, a write to an immut value, a destructor without `unique` written |
+| a write that lands in a copy and is lost | 20: 10 `e31bview*` (all but the six that are (a) or (b)), s5handlerepointfn, the four `e31btrydefault*`, rv3roat, s5atnosetat, and E28's three | `x[i]` of a collection with no in-place form, `try a.Get(i) catch default v`, a conditional's value: written, then dropped |
+| the collection may grow while the call writes its element | 6: e31bdtor, e31bexportback, e31binplaceclosure, e31binplacector, e31binplaceglobal, e31binplacehome | in place, the write may land in a retired buffer; two-phase, the write-back would undo what the call did through the other route and may index past a shrunk end (unchecked) |
+| which write wins is the program's to say | 3: s5e31bargs, s5e31bspawn, lanethroughatop | the written-out form says it |
+| an argument owning storage evaluated before the write-back | e31bcallargsowned | |
+| a stored function value, its type the contract - the user, 2026-11-08 ("if we want a type that can hold a function value, we make that type very explicit") | 6: t22apushed, t22alambdakeeps, t22areturncycle; e31bfnelem, e31bfnfield, e31bfnhandle | after fnvalues' round 4 the error names the word to write (`keeps b in a`, `keeps k`, `pure`); with it, they compile |
 | two holders referring to each other - the user's QCZ | o15dropcycle, o15dropcyclestep | |
 | a List is a handle - its copies share, so no holder ends its elements | c11dtortypearg | |
 | the case's own read-only write | t22aobligation | its T22a half goes with fnvalues' round 7 |
@@ -344,7 +346,7 @@ byte-identical before and after (every round only accepts more: a program accept
 | R5 `become` | 5.5: the tail scope | 10 | S21's `BecomeBorrows`, `BecomeDestructor` | opus, high | fnvalues round 3 (destructors follow storage) |
 | R6 generators | 5.6: destructor values in a coroutine frame; question 2's deferred code if yes | 2 (+2) | `YieldPastHeld`, C11's `DestructGenParam` (+ `YieldPastDefer`, `YieldInDefer`) | opus, high | fnvalues round 3 |
 | R7 ends ordered | 5.6: registered values as holders (call 8) | 4 | `DropRegistered`, `DropTempRegistered` | opus, high | none - check.olang and lowering's drop order; beside R1 |
-| R8 precision and the rest | 5.7; question 3's arrays, globals and generic destructors if yes; question 1 if yes; the dead messages; a case (or removal) for each untested kind (section 8); the `$x` copies section 9 shows unneeded; std's stale comments | 8 (+7) | P4a's and R11's default-existing messages, the five dead messages | opus, high (sonnet, medium for the copies and comments) | fnvalues round 7 (t22alatelambda) |
+| R8 precision and the rest | 5.7; question 3's arrays, globals and generic destructors if yes; question 1 if yes; the dead messages; a case (or removal) for each untested kind (section 8); the `$x` copies section 9 shows unneeded; std's stale comments | 9 (+7) | P4a's and R11's default-existing messages, the five dead messages | opus, high (sonnet, medium for the copies and comments) | fnvalues round 7 (t22alatelambda) |
 
 R1-R4 change scope.olang's call judgment and placement and run one after another; R5-R7 touch lower.olang, the
 coroutine lowering and check.olang's drop order and can run beside them by files. fnvalues' rounds 1-3 (keywords,
@@ -528,6 +530,7 @@ are no placement question (shapes, types, clause rules) are not listed.
 | o15registeredinner | O15, O16 | b | order | a registered value made a holder (decided 2026-11-08, call 8) and ordered by QCZ |
 | o15registeredlater | O15, O16 | b | order | a registered value made a holder (decided 2026-11-08, call 8) and ordered by QCZ |
 | o15registeredtemp | O15, O16 | b | order | a registered value made a holder (decided 2026-11-08, call 8) and ordered by QCZ |
+| e31bviewenumfield | E31b | b | precision | a match on an enum value field read as a write of the copy: a recorded over-rejection (D3), judged precisely |
 | p4adefaultexisting | P4a | b | precision | existing storage outliving the target given as the default |
 | p4adefaultholds | P4a | b | precision | existing storage outliving the target held by the default |
 | r11defaultexisting | R11 | b | precision | existing storage outliving the result given as the default |
@@ -602,7 +605,6 @@ are no placement question (shapes, types, clause rules) are not listed.
 | e31btrydefaultrecv | E31b | c |  | the write would land in a copy and be lost |
 | e31bviewalias | E31b | c |  | the write would land in the copy and be lost |
 | e31bviewcycle | E31b | c |  | the write would land in the copy and be lost |
-| e31bviewenumfield | E31b | c |  | the write would land in the copy and be lost |
 | e31bviewfield | E31b | c |  | the write would land in the copy and be lost |
 | e31bviewinc | E31b | c |  | the write would land in the copy and be lost |
 | e31bviewmut | E31b | c |  | the write would land in the copy and be lost |
