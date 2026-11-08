@@ -178,3 +178,220 @@ So at the place such a lambda reaches a type with `keeps x`, every capture it ke
 the lambda does - true of every lambda capturing from one scope, and said as the error otherwise (3.10). A named function
 keeping `x` in a global is covered (it lives in the program's scope); a lambda doing so is covered only where it captures
 nothing.
+
+## 3. Promises: the rules as SPEC would state them
+
+### 3.1 What the brackets hold (D17, revised)
+
+**D17 (contracts).** A function, a method, a constructor or a function type (T21) may state, in one bracketed block
+written right after its parameter list - before its results, its error set or its body - what its body is held to and
+its callers rely on:
+
+```
+fn name(params) [conditions and promises] Result ? Errors { body }
+
+fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { return y - x }
+fn link(a mut N&, b N&) [a keeps b, noalloc, returns] { a.next = b }
+fn Exit(code I32) [noreturn] { ... }
+onEvict fn?&(k String&) [keeps k] = null
+```
+
+```
+contract       ::= "[" list(contract-item) "]"                                    (L18a)
+contract-item  ::= promise | expr
+promise        ::= "noreturn" | "returns" | "noalloc" | "noblock" | "nospawn" | "norecurse" | "noextern"
+                 | "pure" | "noborrow" | "borrows" IDEN | [ IDEN [ "." IDEN ] ] "keeps" IDEN
+```
+
+Everything in the brackets is checked and nothing is trusted. An item is a **condition** (D17a), an expression of type
+`Bool` over the arguments, checked on entry in every build; or a **promise** (D17d), a statement about the body, checked
+against it while compiling (D17h). An item is a promise where it begins with one of the promise words or is `NAME keeps
+NAME` or `NAME.NAME keeps NAME`; every other item is a condition. The promise words are keywords (L9), so no condition
+is spelled like one. Items follow the listing rule (L18a): `,` between items on one line, a line's end between lines.
+
+The words of a declaration are no items: they say what a type or a method **is**, not what a body is held to - `unique`,
+`immut` and `packed` before a type's body say how its values are laid out, copied and changed (T13a-T13c), and
+`commutes` after an operator method's result says how a call finds the method (it defines what `2.0 * v` means and
+claims nothing to check, E31c) - so they stay where they are. `noreturn` is a promise about the body (D8e checks it
+there), so it is written in the brackets.
+
+Promises add nothing to a function's error set: only a condition makes a call able to fail with `ArgumentError`
+(D17b). A function type's brackets hold promises only - a function type requires nothing of its callers, so a condition
+there is a compile-time error naming D17a (a condition is written on the function it belongs to).
+
+### 3.2 Where the brackets stand (D7, D8, T21)
+
+`func-sig ::= "(" param-list ")" [ contract ] [ ret-type ] [ "?" [ error-list ] ]` - for a declaration as today, and now
+for a function type too (`func-type ::= "fn" reference-marker func-sig`, T21; a declared function type's base, T21b).
+The `"noreturn"` alternative of D8 leaves the signature: `noreturn` is an item. The brackets stand on the line of the
+parameter list's `)` (as a declaration's contract does today, `contractHere`). A lambda writes none: its promises are
+read off its body and checked where it is held (D16, D17i). A function type written as an item of a list (L18c) keeps
+its brackets inside its one item: `f (fn&(I64) [noalloc] I64 ? ParseError, io.Error)`.
+
+### 3.3 The promises (D17d, replacing "a contract states no scope relation")
+
+**D17d (promises).** A promise says what the function's body does not do, or does only as far as it says. Its words
+are worded by what the function does with its parameters, never by a scope (T23): no scope is written, and a promise is
+only ever checked. The promises:
+
+| item | the body ... | a call through a type writing it relies on |
+|---|---|---|
+| `noreturn` | never returns to its caller (D8e: no path reaches a `return` or the body's end) | the call leaves (D10a), and fits where any value is wanted |
+| `returns` | always comes back to its caller, with a value or an error: every loop of it is counted (G42's `Terminates`), it is not recursive, it waits for nothing, calls no C not known to return, and reaches no ending it writes - no `noreturn` call, no `unreachable`, no `!`, no `assert` not decided true while compiling (S18c); the language's own checks aside (a slice or an array length out of range, running out of memory or stack: E16b, D14b, D14c), which stand beside every function | `f.Returns` (G42) |
+| `noalloc` | asks the runtime for no storage (G42's `Allocates` false) | no allocation |
+| `noblock` | waits for nothing (`Blocks` false) | no wait |
+| `nospawn` | starts no task (`Spawns` false) | no task |
+| `norecurse` | never calls itself, directly or through others (`Recursive` false) | no re-entry |
+| `noextern` | calls no C - no `extern fn`, no C import's function, a library's included - but C's math functions (X8) and the runtime's own (`CallsC` false) | no C |
+| `pure` | writes nothing but through its `mut` parameters (the receiver among them): it stores only into storage it builds itself and storage reached through a `mut` reference parameter; reads and writes no mutable global; calls only what is pure - a body that is, a value whose type promises `pure` or whose functions are followed and are, C's math functions and the runtime's own; runs only pure destructors. It may allocate, wait and start tasks whose calls are pure | the call changes nothing it was not given writably (`f.Pure`, G42) |
+| `borrows a` | gives a result that refers only into what `a` refers to (whole, or a view of it), or into what it builds or the program's scope holds; one item per such parameter | the result outlives nothing but the arguments named |
+| `noborrow` | gives a result that refers into nothing its parameters refer to | the result needs nothing of the arguments |
+| `a keeps b` | may keep `b` - what it refers to, the references it holds, or, for a by-value unique `b`, the value itself handed on (T13b) - in what `a` refers to, beyond the call | `b` outlives `a` (3.4) |
+| `a.f keeps b` | may keep `b` in what `a`'s field `f` refers to, where that field has a binding of its own (O23a) | `b` outlives where that field refers |
+| `keeps x` | may keep `x` in what the function value itself holds: what a lambda captured, an adapter's receiver (E31), or, for a function that captures nothing, the program's scope (a global) | `x` outlives where the function value lives (2.2.1) |
+
+Without `borrows` or `noborrow`, a result holding references may refer into what every reference parameter refers to,
+as T22 says today. Without a `keeps` item, the function keeps nothing of its arguments beyond the call but what its
+result refers to. Without an effect item, it may do anything of that kind.
+
+It is a compile-time error naming D17d: an item naming no parameter of the signature (an unnamed parameter, `fn&(I32)`,
+is named by none); `a keeps a`; a `keeps` item whose kept parameter holds no reference and is not unique (a copy is
+kept, which needs no item); `a keeps b` where nothing can be stored through `a` (a parameter holding no reference);
+`a.f keeps b` where `f` is no field of `a`'s type with a binding of its own, or names a path of more than one field;
+`borrows a` or `noborrow` where the result holds no reference, `borrows a` where `a` holds none, and the two together;
+`noreturn` beside `returns` or a result; an item written twice. `a keeps b, b keeps a` keeps each in the other (their
+arguments from one scope - O10c's equality).
+
+### 3.4 The relation items in section 8's terms
+
+Each relation item stands for obligations (O10b) between the positions of the signature (2.1) - what a body may
+require of its callers and a caller of the type discharges (O10c):
+
+| item | the obligations it allows the body (O10b) |
+|---|---|
+| `borrows a` (and every reference parameter by default) | `a` outlives the result scope; the result scope outlives `a` where something can be stored through both (O25g) |
+| `a keeps b` | `b` outlives `a`; `a` outlives `b` where something can be stored through `b` (O25g) |
+| `a.f keeps b` | `b` outlives `Derived(a, f)` (O23a); the reverse where something can be stored through `b` |
+| `keeps x` | `x` outlives the value's home: a capture's scope variable for each capture `x` may be kept into (2.2.1), the program's scope for a function capturing nothing, the receiver's for an adapter; the reverse where something can be stored through `x` |
+
+A body's obligations are within its items where each is one of these or follows from them (its set is transitively
+closed, O10b). A by-value parameter holding references takes part through its own scope variable (O4b); a unique one
+handed on is `b` of `a keeps b` with its storage (T13b's move: callers build the argument where it is stored).
+
+### 3.5 `noreturn` in the brackets (D8e, revised)
+
+**D8e** keeps every rule but its spelling: a function whose contract holds `noreturn` - `fn Exit(code I32)
+[noreturn]`, `fn (q Q&) Stop() [noreturn]`, `extern fn exit(code I32) [noreturn]`, a function type
+`fn&(I32) [noreturn]` - never returns to its caller; it writes no result and no `?`. "A function type may write it too"
+becomes "a function type's brackets may hold it". The old spelling after the parameter list is gone (it is an unknown
+word there, PRINCIPLES "a spelling that is removed is simply gone"); `tools/noreturn_migrate.olang` moves it (5.3).
+
+### 3.6 Checking and relying (D17h, new)
+
+**D17h (promises checked and relied on).** A declaration's promises are checked against its body once the program has
+checked: the relation items by section 8 - an obligation of the body beyond them is a compile-time error at the item,
+with a note at the statement that requires it (as O10c's error names one) and the item that would allow it; the effect
+items and `pure` by the facts (G42) - a note naming the statement or call that does what the item says it does not; and
+`noreturn` by D8e. A function type's promises are checked at every place a value comes to be held as one (T22a, T22b).
+Nothing is trusted: a promise holds of every body a call through it can reach. A call relies on them: a call through a
+value whose functions are not followed is judged by its type's bound (T22b) - the relations it allows are the callee's
+obligations (O10c), what it may keep is what the callee keeps (O17), its effect items are the callee's facts (G42) - and
+a call of a declared function is judged by its body as always, its promises adding a check and nothing else. An
+`extern fn` may hold `noreturn` and nothing else - its body is C's, so it is trusted as its prototype is (X1a), and a C
+function's effects are what G42 knows of C.
+
+### 3.7 Where promises stand (D17i, new)
+
+**D17i (where promises stand).** A function, a method (its receiver named as a parameter is), a builder (D19), an
+operator method (E31) and `main` may write every promise; a generator's promises are about the call that makes its walk
+and the walk's own steps both (D18: its body is the walk's). A constructor writes effect items and `pure` only: what it
+keeps is its instance's (C2d). A function type - written, a declared one's base (T21b), a parameter's, a field's, an
+element's, a type argument's - writes promises only. A trait's method signature writes the effect items, `pure`, and the
+relation items over its named parameters, its `keeps x` keeping `x` in the instance (T31, T32b) [round 9]. An
+`extern fn` writes `noreturn` only (D17h). A lambda, a destructor and a test write none: a lambda's promises are read
+off its body (D16a, D16b) and checked where it is held.
+
+### 3.8 Function types: identity, fit and bound (T22, T22b)
+
+**T22** (revised, the first sentence): "Two function types are the same type (§2.10) only if they agree on parameter
+count, each parameter's type, permission included (T25b), in order, presence and identity of a return type, their
+error lists ... and their promises (D17d), each by the position it names - so `fn&(a mut N&, b N&) [a keeps b]` and
+`fn&(x mut N&, y N&) [x keeps y]` are one type." Its later sentences gain: "A function value **fits** a function type
+that differs from its own only in promises where everything its functions do is within that type's bound (T22b) -
+decided where it comes to be held (T22a), not by its type alone." And the sentence "A function type says nothing more
+of where its references live (QCB): every parameter its own scope, and a result holding references may hand back what
+its reference parameters refer to" becomes "... unless its promises say otherwise (T22b)".
+
+**T22b (a function type's bound).** A function type's promises are a **bound** on every call through a value of it:
+its relation items (with their defaults, D17d) are the obligations a call may require (§8 O10c) and all it may keep of
+its arguments (O17); its effect items and `pure` are facts every call has (G42); `noreturn` is part of its identity
+(D8e). Where a value comes to be held as a function type - an argument, a store, an initializer, a `return`, a
+conversion - each function it may call fits only if what it does is within the bound: its obligations, what it keeps
+and what its result refers to (section 8, its summary), and its facts (G42); a value whose functions are not followed
+fits only if its own type's bound is within this one's. So a function promising more (keeping less, borrowing less,
+allocating nothing) fits a type allowing more, and a type writing `a keeps b` holds functions that keep `b` in `a`.
+Nothing in a bound is written as a scope; nothing at run time changes: a value is two words whatever its type promises.
+
+The checker accepts a function value for a function type that differs only in promises (E12, at the outermost level, as
+it accepts one differing in permission where safe); whether it fits is said by the pass that owns each fact - section 8
+for the relation items, the facts (effects.olang) for the rest - at the place it is held. Inside a type argument
+(`Vec<fn&(x I64) [noalloc] I64>`) promises are part of the instance's identity (G16a) and no fit crosses them, as no
+other conversion does there (E12).
+
+### 3.9 The boundary (T22a, revised)
+
+**T22a** keeps its first half (records follow a value through locals, conditionals, `match`es, `catch` defaults,
+conversions and call results; a call through a value carrying them is judged as the direct calls they are), and gains
+T22c's: an argument for a parameter of a function type, a capture, and a `return` the caller follows are no
+boundaries - the value is followed (T22c). A **boundary** is what is left: a store into anything but a whole local (a
+field, an element, a payload, a global, a constructor's field), a value an array, a tuple or an enum case is made of, a
+task's function, argument or result, an `any` (T32a), a `yield`, a binding of a pattern, a `return` of a function in a
+cycle of calls (O13c), a call a cursor's version reaches before it is given (O25i), an argument for an `extern fn`
+(C, X1), and every place where T22c stops following (its caps). At a boundary every function the value may call must
+fit the place's type (T22b) - else a compile-time error naming the function (a lambda by the parameter it keeps), what it
+does that the type does not say, the place, and **the item to write on the place's type**:
+
+```
+p.olang:9:5: error[T22a]: 'link' keeps 'b' in 'a', and this field's type says nothing of that - write [a keeps b] on it
+p.olang:12:16: error[T22b]: this argument's type promises noalloc, and 'logTo' may allocate
+    note: p.olang:4:5: its call of 'io.Println' allocates
+```
+
+An item that cannot be written - a relation to a capture the lambda does not keep `x` into (2.2.1), a result that
+refers into what the lambda captured, a store into a global from a lambda that captures - is said with its fix (hold the
+value in a local, or call the function directly), as today. `olang explain` says of each function the promises a type
+must write to hold it (B11b, section 9).
+
+### 3.10 Function facts (G42, revised)
+
+G42's table gains two facts, so every promise word is a fact read through a name: `Pure` (the body is `pure`, D17d) and
+`Returns` (it `returns`). Its last paragraph changes: "A call through a function value or an `any` may do anything" becomes
+
+> A call through a function value does what the functions it may call do, where they are followed (T22a, T22c) -
+> through a parameter, what the functions given for it at each call do (4.5) - and otherwise what its type promises: an
+> effect item makes its fact false (`Returns` true), `pure` makes `Pure` true; anything else it may do. A call through an
+> `any` does what its trait's method signature promises (D17i), and otherwise anything. A function's facts read through
+> its name (`apply.Allocates`) take each function parameter's calls by its written type; a call of it takes them by the
+> functions the call gives.
+
+`WritesGlobals` and `Terminates` stay facts with no promise word (`pure` and `returns` say more; 11, decision 9).
+
+### 3.11 Why it is sound
+
+- *Every promise is checked where a body meets it.* A declaration's against its own body (D17h); a function type's at
+  every place a value comes to be held as one (T22b) - an argument, a store, an initializer, a return, a conversion, the
+  places check's E12 fits a function value - by the functions the value may call where they are followed (their exact
+  summaries and facts), and by the source type's bound otherwise, which was itself checked where its value came to be
+  held. By induction over the places a value passes through, every function a call through a type can reach is within
+  its bound. `extern fn`'s `noreturn` is the one trusted item, as before (D8e, X1a).
+- *The bound is what a call relies on, and only that.* A call through an unfollowed value discharges exactly the
+  relations the bound allows (O10c) - every relation any reachable body requires is among them, so each holds at the
+  call; it lends as though the callee keeps what the bound says (O17), which over-approximates every reachable body;
+  its facts are the bound's, which over-approximate every reachable body's (true facts are only promised where checked).
+- *Relation items are obligations, which section 8 already judges.* An item adds no new kind of relation: `borrows`
+  narrows T22's default to some of its own relations, `a keeps b` and `a.f keeps b` are relations between a parameter
+  and a parameter or a derived scope (O10b, O23a), and `keeps x` a relation to the value's home - a term the caller knows
+  (where the value lives, D16d), required at the boundary to be where every capture `x` is kept into lives (2.2.1). So
+  run-time invariants I1 and I2 (docs/scope-model.md) follow from O10c's argument unchanged.
+- *Nothing at run time.* Promises change no code and no representation; a program's meaning is the same with every
+  promise removed (it is then refused or accepted, never different).
