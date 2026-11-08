@@ -34613,3 +34613,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reference manual (rules numbered `<prefix><n>`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md,
   Claude, or the design process. A language change is made spec-first: write the rule in `SPEC.md`, implement so the
   code conforms, then record the *why* here (and in HISTORY.md).
+
+### The refusal audit's first three answers (2026-11-08)
+
+docs/refusals.md sorted the 355 memory, placement and permission refusals of `checks/cases` by cause and asked six
+direction questions. The user answered three the same day. (1) Yes: what a global keeps is built in the program's
+scope - "if the global holds something, the global never goes out of scope, therefore it's held in the global scope";
+a scope the global needs, not the fallback the user ruled out ("Never do program scope callbacks"). (2) Yes: deferred
+code pending at a `yield` runs when an unfinished generator is let go, so S20's ban on `defer`/`errdefer` around a
+`yield` can be lifted. (3) Yes, on the audit's soundness argument ("if they can be made memory safe ... allow them"):
+C11 accepts a run-time-length `Array<T>(n)` of destructor values (ended last first), a program's own generic struct
+with a conditional destructor, and a global holding a destructor value by value (ended at exit after main's). Built in
+rounds R8 (1, 3) and R6 (2). Question 4 (a field slot holding two scopes) the user wants to discuss; 5 (`any`
+copyable) is recorded; 6 (`become` and a tail scope) was explained again. Nothing is built yet.

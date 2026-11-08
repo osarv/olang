@@ -3688,3 +3688,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   superseded rules moved to archive/, CLAUDE.md detail to HISTORY.md - all verbatim). Saturating arithmetic (mine,
   stated): no new base types - `arith.Saturating<T>` beside `arith.Checked<T>`, LLVM's saturating intrinsics, vector
   forms under lane operators.
+
+- 2026-11-08, the user on the refusal audit's questions 1-3 (docs/refusals.md): 1. yes - "if the global holds
+  something, the global never goes out of scope, therefore it's held in the global scope"; 2. yes, deferred code
+  pending at a `yield` runs when an unfinished generator is let go; 3. "yes, if they can be made memory safe ... so
+  yes, allow them" - C11 accepts run-time-length arrays ending their elements, a program's own conditional destructor,
+  a global holding a destructor value by value. Built in rounds R8 (1, 3) and R6 (2).
