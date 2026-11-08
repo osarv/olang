@@ -35301,3 +35301,43 @@ T4 and T8 belong to W3a/W3b. Measured: the compiler's leaf edit (a comment in `l
 s for master's compiler on the same tree (the round-8 figure of 3.5 s was on another machine state); `OLANG_TIMES`'s
 `facts` row is ~0.4 s for the compiler, almost all of it reading and hashing the reused records' IR, which was counted in
 `lower+emit` before; the keys take 30 ms.
+
+## Early freeing in every module (O8d, B3i; 2026-11-08, wt-freeall, round W2 of docs/wholeprog.md)
+
+Until now only code emitted in the root's object (the root module and every instance) freed early: free.olang marked
+every other body's store "built in a module compiled on its own" and kept, because a module's object may not depend on
+its callers' decisions (B3i). wholeprog 2.1 measured what that cost: `session` 12.6 MB as one module, 260 MB with its
+type in a module of its own. memory.md 3.5 had the answer, built now:
+
+- **A link-time constant per place.** A non-root body's plan has every candidate place's sites written, each guarded by
+  its place (typed.Plan's `RegionGuard`, `RootGuard`); lowering reads the decision with a new MIR rvalue `Sole(k)` and
+  branches: a region made, or (`Handle(parent)`, also new) the parent's scope, so allocations land where they would have
+  without a region; a let-go's `Release`, an owner's `Settle` and the left-out `retire()` sit under the same test. Emission
+  writes `@olang.sole.<place>` - named by the struct's canonical text and the field's position, an owner local by its
+  function's symbol (a lambda's by its parent's and position) - as `weak hidden constant i1 false` in every object reading
+  it, and the root's **decisions object** (`<root>~~sole`, an Instances unit of its own, after the objects a reuse check
+  writes afresh) defines each place decided sole as `true`. LTO folds the prevailing definition; without LTO a byte is
+  loaded per site. A module's object is therefore the same in every program: its record (B3i) needs no new fact.
+- **The root's object keeps its decisions written in.** Its bodies are lowered by every build (the root has no record),
+  so their plans carry only sole places' sites, unguarded, as before. Writing every place's sites there cost real
+  memory: a region's presence turns off placement shortcuts chosen while lowering (stackArg, copyInPlace, D9i's moves),
+  and `frames` went from 1.7 MB to 8.3 MB with them guarded. So free.olang's `rootEmitted` became `decided` - which
+  bodies have the decisions as they are - and no longer limits what frees.
+- **Nesting.** With every place's sites written, a value made for one place can be part of another's (a `Rec` whose text
+  is `Rec.text`'s value, put into a Map entry): stores are now given regions outer value first (`outerFirst`), a part
+  already holding a region of its own becomes a kid of the outer one (`redirect`), and a call's arguments count as built
+  where their region's parent is (`builtAt`, in varsFit and orVars). Before, the inner store claimed its site first, the
+  Map entry's constructor call lost its region, and the split `mapremove` grew to 128 MB. Two places' stores at one site
+  in a module's body: the later one keeps.
+- **`compile`** now judges its module as a program (`Free.Alone`: nothing decided written in, no decisions object), so
+  its sites are written as a build writes them; the object `compile` leaves is the one a build of a program using the
+  module makes and reuses, and frees what that program's decisions say.
+
+SPEC O8d drops "code in a module compiled on its own" from what keeps and says the decisions are read at the link; B3i's
+precompiled module no longer decides what its code frees. Tests: `earlyfree` builds each of its 15 programs again as a
+module of its own (`splitlib`, written by the check: its main named `Run`, a `Peak` reading VmHWM) under a root that
+only calls it, and as one module with the same `Peak` (`whole`), each reading its own peak - the split's within 1 MB of
+the whole's (all 15 within 0.1 MB here; `session` 1.7 MB against 260 MB before). `incremental` gains the edit kind "a
+sole place's decision flipped": the root keeps a view of a place the library lets go of, and nothing but the root is
+lowered again. `fuzz free` builds each passing program again as a module of its own under a calling root, -d -s and in
+the dead-region evaluator.
