@@ -5286,9 +5286,12 @@ fn (s mut Scoper&) isHandle(t types.TypeId) Bool {
 
 # how a body may use a reference parameter (E31b, O17b): only through its reference field (UseThru, a handle's); or
 # writing nothing of the instance's own storage (UseView) - its references followed, its numbers, Bools and function values
-# read, it or a struct it holds handed on read-only, by value, or to a callee using it so
+# read, it or a struct it holds handed on read-only, by value, or to a callee using it so; or keeping nothing of the
+# instance's own storage past the call (UseOwn, R1's split values) - its parts read, written and built through, but the
+# reference itself, or one to a part of it, never stored, captured, returned or handed to a callee keeping it
 UseThru I64 = 1
 UseView I64 = 2
+UseOwn I64 = 3
 
 # whether body b uses its parameter j only as mode says - a body not checked does not; one whose answer is being asked
 # is taken to (a greatest fixed point)
@@ -5325,7 +5328,10 @@ fn (s mut Scoper&) ueStmt(b typed.Body&, st typed.Stmt?&, l I64, mode I64) Bool 
     if st is null { return true }
     match st {
         case typed.Stmt.Let(_, _, x) { return s.ueExpr(b, x, l, mode) }
-        case typed.Stmt.Assign(_, p, x) { return s.uePlace(b, p, l, mode) and s.ueExpr(b, x, l, mode) }
+        case typed.Stmt.Assign(_, p, x) {
+            if mode == UseOwn: return s.ueTarget(b, p, l, mode) and s.ueExpr(b, x, l, mode)
+            return s.uePlace(b, p, l, mode) and s.ueExpr(b, x, l, mode)
+        }
         case typed.Stmt.Eval(_, x) { return s.ueExpr(b, x, l, mode) }
         case typed.Stmt.If(_, i) {
             return s.ueExpr(b, i.Test, l, mode) and s.ueBlock(b, i.Then, l, mode) and s.ueBlock(b, i.Else, l, mode)
@@ -5408,10 +5414,12 @@ fn (s mut Scoper&) ueExpr(b typed.Body&, x typed.Expr?&, l I64, mode I64) Bool {
             if ownField(p, l) >= 0 {
                 # a field read through it: its reference (a handle's), or for a view a number, a Bool, a function value
                 # or a reference
-                if mode == UseThru { return true }
+                if mode == UseThru or mode == UseOwn { return true }
                 k := s.P.T.KindOf(ty)
                 return k == types.Kind.Ref or k == types.Kind.Func or s.isNumberLike(ty)
             }
+            # (a part of its own storage read is a copy, which keeps nothing of it)
+            if mode == UseOwn: return s.ueTarget(b, p, l, mode)
             return s.uePlace(b, p, l, mode)
         }
         case typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return s.uePlace(b, p, l, mode) }
@@ -5495,6 +5503,8 @@ fn (s mut Scoper&) ueCall(b typed.Body&, c typed.Call&, l I64, mode I64) Bool {
 # whether l, handed on (handedOn's answer handed) to parameter k of body callee, of type pt, is used there as mode asks
 fn (s mut Scoper&) ueHanded(callee I64, k I64, pt types.TypeId, handed I64, mode I64) Bool {
     if mode == UseView and (not s.isRef(pt) or (s.P.T.PermOf(pt) & types.Writable) == 0) { return true }
+    if mode == UseOwn and (not s.isRef(pt) or handed == 3) { return true }
+    if mode == UseOwn { return s.uses(callee, k, UseOwn) }
     if handed == 1 { return s.uses(callee, k, mode) }
     if handed != 2 { return false }
     # a struct the parameter holds by value: a handle used only through its reference (a handle holding one, as
@@ -5550,6 +5560,20 @@ fn (s mut Scoper&) uePlace(b typed.Body&, p typed.Lvalue&, l I64, mode I64) Bool
         case typed.Lvalue.Field(_, _, base, _) { return s.uePlace(b, base, l, mode) }
         case typed.Lvalue.Elem(_, _, e) { return s.uePlace(b, e.Base, l, mode) and s.ueExpr(b, e.Index, l, mode) }
         case typed.Lvalue.Payload(_, _, pl) { return s.uePlace(b, pl.Base, l, mode) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.ueExpr(b, v, l, mode) }
+        case _ { return true }
+    }
+}
+
+# UseOwn's place written or read: a part of the parameter's own storage, reached through its fields, elements and
+# payloads, is (its indexes used as asked); the parameter's reference itself is not
+fn (s mut Scoper&) ueTarget(b typed.Body&, p typed.Lvalue&, l I64, mode I64) Bool {
+    match p {
+        case typed.Lvalue.Local(_, _, id) { return I64(id) != l }
+        case typed.Lvalue.Deref(_, _, r) { return isParamRead(r, l) or s.ueExpr(b, r, l, mode) }
+        case typed.Lvalue.Field(_, _, base, _) { return s.ueTarget(b, base, l, mode) }
+        case typed.Lvalue.Elem(_, _, e) { return s.ueTarget(b, e.Base, l, mode) and s.ueExpr(b, e.Index, l, mode) }
+        case typed.Lvalue.Payload(_, _, pl) { return s.ueTarget(b, pl.Base, l, mode) }
         case typed.Lvalue.Temp(_, _, v, _) { return s.ueExpr(b, v, l, mode) }
         case _ { return true }
     }
@@ -9146,7 +9170,7 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         s.build(pr.Site, s.here())
         landed[i] = true
         if v.K == ValKind.Fresh { v = Val.existing(v.T) }
-        if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) { v = s.keptCopy(c, i, a, pr.X, v) }
+        if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) { v = s.keptCopy(c, i, a, pr, v) }
         return v
     }
     if pr is not null and s.oldValue(pr.X) {
@@ -9166,7 +9190,7 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         v := s.val(pr.X, Term.None)
         s.build(pr.Site, s.here())
         landed[i] = true
-        if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
+        if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and not s.splitLent(c, i, pr, v) {
             s.wantPromotion(pr.X)
             if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
         }
@@ -9185,13 +9209,25 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
     return s.argExisting(c, i, owner, beta, ev, dest)
 }
 
-# x[i]'s copy (or another call's value, x) lent to a callee keeping something in it, v its value
-fn (s mut Scoper&) keptCopy(c typed.Call&, i I64, a typed.Expr&, x typed.Expr&, v Val) Val {
+# R1 (refusals 5.1): a copy pr makes, its references living at v's term, lent to a callee keeping something in it - its
+# variable bound where they live, so what the callee builds through them is built there; the copy itself built there
+# too where the callee keeps its own storage. Whether it is lent so
+fn (s mut Scoper&) splitLent(c typed.Call&, i I64, pr typed.Promote&, v Val) Bool {
+    if s.Trace { s.TraceLog.Push($"splitLent " $v.T " " $(v.K == ValKind.Existing) " keepsSelf " $s.calleeKeepsSelf(c, i)) }
+    if v.K != ValKind.Existing or not v.T.Runs() { return false }
+    if s.calleeKeepsSelf(c, i) { s.build(pr.Site, v.T) }
+    return true
+}
+
+# x[i]'s copy (or another call's value, pr's) lent to a callee keeping something in it, v its value
+fn (s mut Scoper&) keptCopy(c typed.Call&, i I64, a typed.Expr&, pr typed.Promote&, v Val) Val {
+    x := pr.X
     if s.atCall(x) and not s.calleeStoresArg(c, i) {
         # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the callee's
         # obligations then judge (O10c), as stage 0 binds it
         return Val.existing(s.here())
     }
+    if s.splitLent(c, i, pr, v) { return v }
     if s.fieldGather and s.finalQuiet {
         s.wantHits++   # a refusal not said, so this judging cannot be the reporting one (inferFields)
         s.wantPromotion(x)
@@ -9233,6 +9269,13 @@ fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Arr
         # stored into it, as a walk of a Map value is made - is lent as the storage it is, so what keeps it lives no
         # longer than that storage: a loop turn's local's, one slot every turn reuses, refused where kept past the turn)
         if owns or s.P.T.OwnsParts(at) and not s.calleeStoresArg(c, i) and not s.calleePutsArg(c, i): return v
+        # R1 (refusals 5.1): lent where its references live, so what the callee builds through them is built there -
+        # its own storage lifted there too where the callee keeps it (a value local's, built there each time its
+        # declaration runs); refused only where nothing can be lifted
+        # (where they live is one of several, O12: found at run time from the one reference the value holds, O29)
+        if (rf.Runs() or s.argRoot(a) is not null) and not s.calleeKeepsSelf(c, i) { return Val.existing(rf) }
+        if rf.Runs() and s.liftSplit(a, rf) { return Val.existing(rf) }
+        if s.Trace { s.TraceLog.Push($"split refused " $rf " " $v.T " keepsSelf " $s.calleeKeepsSelf(c, i) " | " $s.traceAt(a.Span().Start)) }
         s.wantPromotion(a)
         if s.report { s.splitRefused(a) }
         return v
@@ -9511,6 +9554,89 @@ fn (s mut Scoper&) ownCall(t types.TypeId, x typed.Expr&) Bool {
 
 # whether a value of type t owns storage (types.OwnsParts) and shares no reference (SharesRefs): all it holds is its own
 fn (s mut Scoper&) ownsUnshared(t types.TypeId) Bool { return not s.isRef(t) and s.P.T.OwnsParts(t) and not s.P.T.SharesRefs(t) }
+
+# R1 (refusals 5.1): a split value lent to a callee keeping its own storage - that storage lifted where its references
+# live, rf: the local it is (or a part of), or each a choice of places may be, in the inference's gathering. Whether it
+# is lent there: every such local's storage there already, or (gathering) a lift proposed
+fn (s mut Scoper&) liftSplit(a typed.Expr&, rf Term) Bool {
+    r := s.claimRoot(a)
+    if r < 0 { r = s.splitRoot(a) }
+    roots := Vec<I64>[r] if r >= 0 else s.choiceRoots(a)
+    if roots.Len() == 0: return false
+    there := true
+    for l in roots {
+        if not s.liftable(l) or s.genResult(rf) { return false }
+        if s.stors[l] == rf: continue
+        there = false
+        if s.liftGather { s.liftStorage(l, rf) }
+    }
+    return there or s.liftGather
+}
+
+# the locals a choice of places (E28) may be, none where it is no such choice
+fn (s mut Scoper&) choiceRoots(a typed.Expr&) Vec<I64> {
+    roots Vec<I64>
+    xs Vec<typed.Expr&>
+    match s.unAway(a) {
+        case typed.Expr.Cond(_, _, c) {
+            if c.A is null: return roots
+            xs.Push(c.A!)
+            xs.Push(c.B)
+        }
+        case typed.Expr.Match(_, _, m) {
+            if not m.IsValue or m.NoMatch is not null and m.NoMatch!.Value is not null: return roots
+            for arm in m.Arms {
+                if arm.Value is not null { xs.Push(arm.Value!) }
+            }
+        }
+        case _ { return roots }
+    }
+    for x in xs {
+        l := s.splitRoot(x)
+        if l < 0: return Vec<I64>()
+        roots.Push(l)
+    }
+    return roots
+}
+
+# local l's own storage lifted to t (its references already live there, a claim the inference does not lift - O25h's)
+fn (s mut Scoper&) liftStorage(l I64, t Term) {
+    key := pair.Pair<I64, I64>(s.Id, l)
+    cur := try s.lifts.Get(key) catch default s.terms[l]
+    nt := s.joinTerm(cur, t) if cur.Runs() else t
+    if nt == cur and s.liftStor.Has(key) { return }
+    s.lifts.Put(key, nt)
+    s.liftStor.Put(key, true)
+    s.liftGrew = true
+    s.realGrew = true
+    if s.Trace { s.TraceLog.Push($"lift split " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $nt " | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+}
+
+# the place a borrow reads, read as a value
+fn (s mut Scoper&) borrowedRead(a typed.Expr&) typed.Expr& {
+    return match s.unAway(a) {
+        case typed.Expr.Borrow(sp, _, p): typed.Expr.Read(sp, p.Type(), p, typed.SiteId(-1))
+        case _: a
+    }
+}
+
+# the local a borrow of a value's own storage, whole or a part, is (part of), -1 for none
+fn (s mut Scoper&) splitRoot(a typed.Expr&) I64 {
+    return match s.unAway(a) {
+        case typed.Expr.Borrow(_, _, p): -1 if flThroughRef(p) else flRoot(p)
+        case _: -1
+    }
+}
+
+# whether a callee may keep the lent value's own storage past the call (R1, refusals 5.1): store its reference, capture it,
+# return it, hand it to a callee that may - not only read, write and build through its parts
+fn (s mut Scoper&) calleeKeepsSelf(c typed.Call&, k I64) Bool {
+    return match c.Target {
+        case typed.Callee.Body(id): not s.uses(I64(id), k, UseOwn)
+        case typed.Callee.Extern(_), typed.Callee.Helper(_, _): false
+        case _: true
+    }
+}
 
 # whether a call's argument i is a handle its callee uses only through its reference (O17b): lent as that reference
 fn (s mut Scoper&) handleLent(c typed.Call&, i I64, a typed.Expr&) Bool {
@@ -11900,6 +12026,9 @@ fn (s mut Scoper&) passedScope(c typed.Call&, owner Array<I64>&, v I64, t Term) 
 
 # O29: an argument as the root a scope is found from - a reference whose evaluating has no effect; null for none
 fn (s mut Scoper&) argRoot(a typed.Expr&) typed.Expr?& {
+    # (a value's own storage lent: where its references live is found from them, R1)
+    sr := s.splitRoot(a)
+    if sr >= 0: return s.valueRoot(s.borrowedRead(a))
     if s.isRef(a.Type()): return a
     return s.valueRoot(a)
 }
