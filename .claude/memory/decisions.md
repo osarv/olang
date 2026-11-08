@@ -1051,3 +1051,17 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   just make things better with very little cost, I can see them" - relaxing their 2026-11-01 rule): (a) a word per
   allocation or (b) scope found from an address (aligned chunks); rec (b), only where no call knows the scope at
   compile time; it makes C1/derived/"not known here" builds possible, not the dangling proof. Both sent to the note.
+- DECIDED 2026-11-08 (the user: "Yeah, remove dot destroy. Yeah, do runtime building scope findings with just looking
+  up the base address"): `x.Destroy()` (C9b) is removed - blocks end values early; the scope of storage is found at run
+  time from its address (aligned chunks, a lookup for large allocations), nothing stored per object (sizes, T.Size, C
+  layouts unchanged), only where no call knows it while compiling - relaxing the user's 2026-11-01 "no run-time scope
+  word" rule as they allowed ("if they just make things better with very little cost"). Both in the design note.
+- QCR (2) REOPENED 2026-11-08 (the user: "I think doing ref counting is a bad idea. But we can't do lists without them,
+  right? We should revisit this question"). Answered: lists, doubly linked lists and graphs work today with plain
+  references - nodes live where the structure lives; what counting was for is freeing a removed node before that scope
+  closes, in long-lived structures that churn (ledger QF). Options: (1) no counting - removed nodes held until the
+  structure's scope closes, `-memory` says so; (2) the counting carve-out as decided (counts kept outside the struct, so
+  sizes and C layout unchanged, the allocation bigger); (3) a std pool with generational handles (slotmap: index +
+  generation, `try pool.Get(h)` fails on a stale handle - a named call, no hidden cost; nodes freed and reused at once)
+  for structures that churn, plain references for those that live and die together. Rec (1)+(3), counting dropped.
+  ASKED.
