@@ -359,8 +359,8 @@ fn (v mut Viewer&) passes(w view) {
 fn (v mut Viewer&) str(t String&) I64 {
     k := try v.strIds.Get(t) catch default -1
     if k >= 0 { return k }
-    v.strs.Push($t)
-    v.strIds.Put($t, v.strs.Len() - 1)
+    v.strs.Push(t)
+    v.strIds.Put(t, v.strs.Len() - 1)
     return v.strs.Len() - 1
 }
 
@@ -1694,7 +1694,7 @@ fn (v mut Viewer&) moduleWord(m I64) String ? Unwritable {
 fn (v mut Viewer&) fileWord(file I64) String ? Unwritable {
     if file < 0: return "-"
     for m in v.P.L.Mods {
-        if m.File == file: return $m.Identity
+        if m.File == file: return m.Identity
     }
     error Unwritable.Here
 }

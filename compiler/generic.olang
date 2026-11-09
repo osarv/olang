@@ -5670,7 +5670,7 @@ fn testLoad(dir String&, text String&) load.Loader {
 fn saidRules(l mut load.Loader&) String {
     b := StringBuilder()
     for s in l.Diags.AllSaid() {
-        b.Push($s.Rule)
+        b.Push(s.Rule)
         b.PushChar(' ')
     }
     return b.ToString()

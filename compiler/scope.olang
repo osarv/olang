@@ -2848,7 +2848,7 @@ fn keepRel(rs mut Vec<rel>&, r rel) {
     rs.Push(r)
 }
 
-fn (s mut Scoper&) gap(file I64, sp source.Span, what String&) { s.Gaps.Push(Gap(file, sp, $what)) }
+fn (s mut Scoper&) gap(file I64, sp source.Span, what String&) { s.Gaps.Push(Gap(file, sp, what)) }
 
 # ---- types ----
 
@@ -10314,7 +10314,7 @@ fn (s mut Scoper&) tailRows(c typed.Call&, sp source.Span) {
         if name == "": continue
         at := s.nameSpan(sp)
         text := $name " is built in " $scope ", a new one each time it is made, for the become here, kept until its chain's first caller lets go of the result"
-        p := Placement(b.File, I64(at.Start), I64(at.End), I64(a.Span().Start), $text)
+        p := Placement(b.File, I64(at.Start), I64(at.End), I64(a.Span().Start), text)
         p.Tail = true
         s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(a.Span().Start)), p)
     }
@@ -10324,7 +10324,7 @@ fn (s mut Scoper&) tailRows(c typed.Call&, sp source.Span) {
 fn (s mut Scoper&) tailDtorRow(sp source.Span) {
     if not s.report: return
     text := $"a temporary is built in " $s.placedScope(s.Id, Term.Var(s.resultVar)) ", a new one each time it is made, for a become closing its block, kept until the chain's first caller lets go of the result - its destructor runs as that scope closes, not at the end of its block"
-    p := Placement(s.B!.File, I64(sp.Start), I64(sp.End), I64(sp.Start), $text)
+    p := Placement(s.B!.File, I64(sp.Start), I64(sp.End), I64(sp.Start), text)
     p.Tail = true
     s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(sp.Start)), p)
 }
@@ -12794,7 +12794,7 @@ fn (s mut Scoper&) promoteDecl(d I64) Bool {
             q := s.bindingParam(body, f)
             if q < 0 {
                 note := $"field " $i " of " $s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(d)))) ": no constructor parameter to bind to"
-                if not s.Unplaced.Has(note) { s.Unplaced.Push($note) }
+                if not s.Unplaced.Has(note) { s.Unplaced.Push(note) }
                 continue
             }
             body.Locals[f].Marked = typed.Mark.Of(typed.LocalId(I32(q)))
@@ -13199,7 +13199,7 @@ fn (s Scoper&) Placements() Vec<Placement> {
             t = try s.siteLifts.Get(pair.Pair<I64, I64>(b, site)) catch default Term.None
         }
         text := $name " is built in " $s.placedScope(b, t) ", a new one each time it is made, " $what $ends
-        p := Placement(body.File, I64(row.At.Start), I64(row.At.End), I64(at.Start), $text)
+        p := Placement(body.File, I64(row.At.Start), I64(row.At.End), I64(at.Start), text)
         p.Tail = row.Kind == PlaceTail
         if not rows.View().Some(fn(r): return r.File == p.File and r.Start == p.Start and r.Text == p.Text) { rows.Push(p) }
     }
@@ -13707,7 +13707,7 @@ if TestBuild {
                 case _ { assert s.Plans[b].Built[i] == typed.Scope.Block, $s.Plans[b].Built[i] }
             }
         }
-        assert promotes == 1, $promotes
+        assert promotes == 1, promotes
         # each P(i) pushed is built where the list lives: its parameter's scope variable
         k := bodyAt(l, c.Bodies, 10)
         assert k >= 0

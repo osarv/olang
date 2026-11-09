@@ -181,12 +181,12 @@ fn (l mut Loader&) LoadPrelude() {
     files Vec<String&>
     for n in names {
         p := filepath.Join(dir, n)
-        if n.EndsWith(".olang") { files.Push($p) }
+        if n.EndsWith(".olang") { files.Push(p) }
     }
     for f in files {
         text := try os.ReadFile(f) catch os.Error { continue }
         ts := scan.Tokens.Scan(text)
-        for name in typeNames(text, ts) { l.preludeTypes.Push($name) }
+        for name in typeNames(text, ts) { l.preludeTypes.Push(name) }
     }
     for f in files { l.load(f, l.rootIdentity(f), true) }
 }
@@ -221,10 +221,10 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = f
         if l.Mods[i].Real == real { return i }
     }
     i := l.Mods.Len()
-    l.Mods.Push(Module($path, $real, $identity, prelude))
+    l.Mods.Push(Module(path, real, identity, prelude))
     m := l.Mods[i]
     if real in l.Overlay {
-        m.Src = source.Source($m.Path, l.Overlay.Get(real)!)
+        m.Src = source.Source(m.Path, l.Overlay.Get(real)!)
     } else {
         m.Src = try source.Source.Read(m.Path) catch os.Error {
             f := l.Diags.AddFile(m.Path, "")
@@ -251,8 +251,8 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = f
 # ---- the pre-scan ----
 
 fn (l mut Loader&) prescan(m mut Module&) {
-    for t in typeNames(m.Src!.Text, m.Toks!) { m.Types.Push($t) }
-    for t in parse.GenericFnNames(m.Src!.Text, m.Toks!) { m.Generics.Push($t) }
+    for t in typeNames(m.Src!.Text, m.Toks!) { m.Types.Push(t) }
+    for t in parse.GenericFnNames(m.Src!.Text, m.Toks!) { m.Generics.Push(t) }
     l.region(m, 0, m.Toks!.Toks.Len() - 1, -1)
 }
 
@@ -308,7 +308,7 @@ fn (l mut Loader&) importAt(m mut Module&, i I64, parent I64) {
         alias = $DeriveAlias(spec)
         aliasSp = sp
     }
-    imp mut Import& = Import(sp, aliasSp, $alias, $spec, parent)
+    imp mut Import& = Import(sp, aliasSp, alias, spec, parent)
     # X9, X17: "link "name"" after the path
     if toks[j + 1].Kind == token.Tok.Iden and m.Src!.Text[toks[j + 1].Start:toks[j + 1].End] == "link" and
        toks[j + 2].Kind == token.Tok.StrLit {
@@ -504,7 +504,7 @@ fn (l mut Loader&) CondParser(m mut Module&) {
         after := toks[m.cparser!.Pos()].Kind
         whole := after == token.Tok.StmtEnd or after == token.Tok.Eof
         sp := source.Span(toks[at].Start, toks[at].End)
-        m.Scope!.Add(cond.Global($m.Src!.Text[sp.Start:sp.End], sp, mutable, $declared, init, whole))
+        m.Scope!.Add(cond.Global($m.Src!.Text[sp.Start:sp.End], sp, mutable, declared, init, whole))
     }
 }
 
@@ -802,10 +802,10 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
     if root != "" and os.Exists(path) {
         top := ""
         if root == "std" {
-            top = $l.stdReal
+            top = l.stdReal
         } else {
             rest := m.Identity[root.Len() + 1:]
-            dir := $m.Path
+            dir := m.Path
             for _ in range rest.CountOf("/") + 1 { dir = $filepath.Dir(dir) }
             top = $(try os.RealPath(dir) catch default dir)
         }
@@ -818,13 +818,13 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
         text := try os.ReadFile(path) catch os.Error { return none, $path " cannot be read" }
         bytes := Array<U8>(text.Len())
         for i, ch in text { bytes[i] = U8(ch) }
-        l.embedded.Put($path, bytes)
+        l.embedded.Put(path, bytes)
     }
     known := false
     for e in m.Embeds {
         if e == path { known = true }
     }
-    if not known { m.Embeds.Push($path) }
+    if not known { m.Embeds.Push(path) }
     return (try l.embedded.Get(path) catch default none), ""
 }
 
@@ -1065,8 +1065,8 @@ fn (l mut Loader&) addLink(mi I64, path source.Span, out mut Vec<String&>&, seen
         return
     }
     if seen.Has(arg) { return }
-    seen.Put($arg, true)
-    out.Push($arg)
+    seen.Put(arg, true)
+    out.Push(arg)
 }
 
 fn (l mut Loader&) linksIf(mi I64, ti ast.TopIf&, chosen I64, index I64, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
@@ -1174,7 +1174,7 @@ fn write(dir String&, name String&, text String&) {
 fn rules(l mut Loader&) String {
     b := StringBuilder()
     for s in l.Diags.AllSaid() {
-        b.Push($s.Rule)
+        b.Push(s.Rule)
         b.PushChar(' ')
     }
     return b.ToString()

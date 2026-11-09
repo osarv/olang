@@ -56,9 +56,9 @@ fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&
     f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
-    l.Clang = $cfg.Clang
-    for x in cfg.CFlags() { l.CFlags.Push($x) }
-    for e in overlay { l.Overlay.Put($e.Key, $e.Value) }
+    l.Clang = cfg.Clang
+    for x in cfg.CFlags() { l.CFlags.Push(x) }
+    for e in overlay { l.Overlay.Put(e.Key, e.Value) }
     t0 := time.Now()
     l.Load(root)
     Log($"loaded " $root " (" $l.Mods.Len() " modules) in " $(time.Since(t0) / 1000000) " ms")
@@ -178,7 +178,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
             sp := r.LocalSpan(ref.Index)
             tl := a.localAt(file, I64(sp.Start))
             if tl.First >= 0 { return Target.Local(tl.First, tl.Second) }
-            return Target.Decl(mi, I64(sp.Start), "", $name)
+            return Target.Decl(mi, I64(sp.Start), "", name)
         }
         case _ { }
     }
@@ -187,7 +187,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
         if e.Sp.Start == w.Start and e.Kind != names.What.Import {
             f := c!.P.FnNamed(mi, e.Name)
             if e.Kind == names.What.Func and (f < 0 or c!.P.FnDecl(f).Recv is not null) { break }   # a method's, a builder's
-            return Target.Item(mi, $name)
+            return Target.Item(mi, name)
         }
     }
     tl := a.localAt(file, I64(w.Start))
@@ -263,7 +263,7 @@ fn (a Analysis&) describe(tg Target) Found ? Nothing {
         case Target.Decl(mi, at, docText, line) { return Found(hover(line, docText), $a.L.Mods[mi].Real, at) }
         case Target.Module(mi) {
             m := a.L.Mods[mi]
-            return Found(hover($"import \"" $m.Identity "\"", doc.ModuleDoc(m.Src!.Text)), $m.Real, 0)
+            return Found(hover($"import \"" $m.Identity "\"", doc.ModuleDoc(m.Src!.Text)), m.Real, 0)
         }
         case Target.None { error Nothing.Here }
     }
@@ -401,7 +401,7 @@ fn (f mut finder&) place(p typed.Lvalue?&) {
     if p is null { return }
     match p {
         case typed.Lvalue.Global(sp, _, mi, n) {
-            if I64(sp.End) == f.e and f.c.P.L.Names.Text(n) == f.name { f.take(sp, Target.Item(mi, $f.name)) }
+            if I64(sp.End) == f.e and f.c.P.L.Names.Text(n) == f.name { f.take(sp, Target.Item(mi, f.name)) }
         }
         case typed.Lvalue.Deref(_, _, r) { f.expr(r) }
         case typed.Lvalue.Field(sp, _, base, index) {
@@ -517,12 +517,12 @@ fn (f mut finder&) bodyCallee(sp source.Span, of typed.BodyOf) {
                 return
             }
             if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) != f.name { return }
-            if f.c.P.FnDecl(fi).Recv is not null { f.take(sp, Target.Method(fi)) } else { f.take(sp, Target.Item(f.c.P.FnModule(fi), $f.name)) }
+            if f.c.P.FnDecl(fi).Recv is not null { f.take(sp, Target.Method(fi)) } else { f.take(sp, Target.Item(f.c.P.FnModule(fi), f.name)) }
         }
         case typed.BodyOf.Ctor(ct, _) {
             if f.c.P.T.KindOf(ct) != types.Kind.Named { return }
             d := f.c.P.T.DeclOf(ct)
-            if f.c.P.L.Names.Text(f.c.P.T.DeclName(d)) == f.name { f.take(sp, Target.Item(f.c.P.DeclModule(d), $f.name)) }
+            if f.c.P.L.Names.Text(f.c.P.T.DeclName(d)) == f.name { f.take(sp, Target.Item(f.c.P.DeclModule(d), f.name)) }
         }
         case _ { }
     }
@@ -802,7 +802,7 @@ fn (it mut Items&) AddDep(label String&, kind I64, detail String&, dep Bool) {
     for s in it.seen {
         if s == label { return }
     }
-    it.seen.Push($label)
+    it.seen.Push(label)
     if it.n > 0 { it.B.PushChar(',') }
     it.n++
     it.B.Push("{\"label\":")
@@ -1173,7 +1173,7 @@ Keywords Array<String&> = Array<String&>["fn", "type", "struct", "enum", "trait"
 fn Format(path String&, text String&) String ? fmt.Unparsable {
     said := StringBuilder()
     std := load.StdDir()
-    return try fmt.FileLayout(source.Source($path, text), std, fmt.PreludeTypes(std), false, said)
+    return try fmt.FileLayout(source.Source(path, text), std, fmt.PreludeTypes(std), false, said)
 }
 
 # ---- explain -caps (B11c) ----
@@ -1219,7 +1219,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
         return 0
     }
     roots Vec<String&>
-    for f in files { roots.Push($f) }
+    for f in files { roots.Push(f) }
     if roots.Len() == 0 { stdModules(roots) }
     try os.MkDirAll(html) catch os.Error {
         say($"olang: " $html ": cannot be made\n")
@@ -1235,7 +1235,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
             continue
         }
         text := try os.ReadFile(root) catch os.Error { continue }
-        mods.Push(doc.Module(IdentityOf(root), $root, doc.ModuleDoc(text)))
+        mods.Push(doc.Module(IdentityOf(root), root, doc.ModuleDoc(text)))
     }
     mods.Sort(fn(x doc.Module, y doc.Module) Bool { return x.Identity < y.Identity })
     index := filepath.Join(html, "index.html")

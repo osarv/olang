@@ -60,7 +60,7 @@ fn (n mut Nearest&) Offer(cand String&) {
     if cand == n.Word or cand.Len() == 0 { return }
     d := Distance(n.Word, cand)
     if Near(n.Word, d) and d < n.Far {
-        n.Best = $cand
+        n.Best = cand
         n.Far = d
     }
 }
@@ -78,7 +78,7 @@ fn (n mut Nearest&) OfferBuilder(cand String&) {
     before := at == 0 or n.Word[at - 1].IsLower() or n.Word[at - 1].IsDigit()
     after := end == n.Word.Len() or n.Word[end].IsUpper()
     if not before or not after or $n.Word[:at] $n.Word[end:] != member { return }
-    n.Best = $cand
+    n.Best = cand
     n.Far = 0
 }
 

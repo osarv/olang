@@ -85,8 +85,8 @@ fn say(text String&) { try io.Print(text) catch io.Error { } }
 # samples as it ends (prof.ll) - so this process waits on and reports what it gathered
 fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&) I32 {
     av Vec<String&>
-    av.Push($file)
-    for a in args { av.Push($a) }
+    av.Push(file)
+    for a in args { av.Push(a) }
     stdlib.setenv("OLANG_PROFILE\0", $samples "\0", 1)
     pid := unistd.fork()
     if pid == 0 {
@@ -200,8 +200,8 @@ type Places struct() {
 fn (pl mut Places&) name(text String&) I64 {
     n := try pl.named.Get(text) catch default -1
     if n >= 0 { return n }
-    pl.Names.Push($text)
-    pl.named.Put($text, pl.Names.Len() - 1)
+    pl.Names.Push(text)
+    pl.named.Put(text, pl.Names.Len() - 1)
     return pl.Names.Len() - 1
 }
 
@@ -221,7 +221,7 @@ fn mappings(maps String&) Vec<mapping> {
     for line in maps.Lines() {
         parts Vec<String&>
         for f in line.Split(" ") {
-            if f != "" { parts.Push($f) }
+            if f != "" { parts.Push(f) }
         }
         if parts.Len() < 6 { continue }
         dash := try parts[0].Find("-") catch default -1
@@ -363,10 +363,10 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         r I64 = -1
         for m in maps {
             if a < m.Start or a >= m.End { continue }
-            path = $m.Path
+            path = m.Path
             off := a - m.Start + m.Offset
             if path.StartsWith("/") {
-                if not segs.Has(path) { segs.Put($path, segments(path)) }
+                if not segs.Has(path) { segs.Put(path, segments(path)) }
                 ss := try segs.Ref(path) catch default Vec<I64>()
                 for j in range 0, ss.Len(), 3 {
                     if off >= ss[j] and off < ss[j] + ss[j + 1] { r = off - ss[j] + ss[j + 2] }
@@ -374,7 +374,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
             }
             break
         }
-        files.Push($path)
+        files.Push(path)
         rel.Push(r)
     }
     # what the symbolizer says, an address's frames then a blank line, for each line asked
@@ -388,10 +388,10 @@ fn Places.Resolve(p Profile&, tool String&) Places {
             asked++
         }
         if asked > 0 {
-            out := try os.Output.Exec($tool, "--inlining", "--functions=short", input = ask.ToString())
+            out := try os.Output.Exec(tool, "--inlining", "--functions=short", input = ask.ToString())
                 catch os.Error default os.Output(1, "", "")
             if out.Status == 0 {
-                for l in out.Stdout.Lines() { said.Push($l) }
+                for l in out.Stdout.Lines() { said.Push(l) }
             }
         }
     }
@@ -445,10 +445,10 @@ fn Places.Resolve(p Profile&, tool String&) Places {
 # a symbolizer's place line, "FILE:LINE:COLUMN": its file ("??" for none) and line (0)
 fn fileLine(place String&) String, I64 {
     c2 := try place.FindLast(":") catch default -1
-    if c2 < 0 { return $place, 0 }
+    if c2 < 0 { return place, 0 }
     head := place[:c2]
     c1 := try head.FindLast(":") catch default -1
-    if c1 < 0 { return $head, 0 }
+    if c1 < 0 { return head, 0 }
     return $head[:c1], try head[c1 + 1:].ParseInt(10) catch default 0
 }
 
@@ -652,7 +652,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
 fn shortPath(place String&) String {
     cwd := try os.Cwd() catch default ""
     if cwd != "" and place.StartsWith($cwd "/") { return $place[cwd.Len() + 1:] }
-    return $place
+    return place
 }
 
 # ---- the flame graph ----

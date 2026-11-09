@@ -4408,7 +4408,7 @@ fn (c mut Checker&) comptimeFor(sp source.Span, f ast.ForIn&) {
         return
     }
     vals := try c.P.Unrolls.Get(key) catch {
-        c.UnrollAsks.Push(UnrollAsk($key, args.ToArray(), src, et))
+        c.UnrollAsks.Push(UnrollAsk(key, args.ToArray(), src, et))
         return
     }
     if vals.Len() > MaxUnroll {
@@ -4688,7 +4688,7 @@ fn (c mut Checker&) attrCallee(g ast.Expr&) ast.Expr&, String, source.Span {
     match g {
         case ast.Expr.Member(msp, x, n) {
             name := c.text(n)
-            if name == "Attr" or name == "HasAttr" { return x, $name, memberSpan(msp, name.Len()) }
+            if name == "Attr" or name == "HasAttr" { return x, name, memberSpan(msp, name.Len()) }
             return g, "", msp
         }
         case _ { return g, "", g.Span() }
@@ -5465,7 +5465,7 @@ fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, 
     cw, ct := c.P.L.Diags.TopContext()
     for i in range info.Reqs.Len() {
         ask := c.askBody(mi, sp, old, info.Reqs[i], args)
-        c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, $ct))
+        c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, ct))
         c.contractCallers.Push(old)
     }
     return out
@@ -5716,7 +5716,7 @@ fn (c mut Checker&) conversionAt(sp source.Span, argSp source.Span, x typed.Expr
     c.pop()
     c.state[id] = 2
     cw, ct := c.P.L.Diags.TopContext()
-    c.ContractAsks.Push(ContractAsk(id, file, sp, file, argSp, "", text, cw, $ct, $c.ty(t)))
+    c.ContractAsks.Push(ContractAsk(id, file, sp, file, argSp, "", text, cw, ct, $c.ty(t)))
     c.contractCallers.Push(-1)
 }
 
@@ -6240,7 +6240,7 @@ fn (c mut Checker&) gap(sp source.Span, what String&) {
         f = c.fr().File
         c.fr().Gapped = true
     }
-    c.Gaps.Push(Gap(f, sp, $what))
+    c.Gaps.Push(Gap(f, sp, what))
 }
 
 # the source text a span covers, in the current body's module
@@ -8265,7 +8265,7 @@ fn bangOf(t String&) String {
         if ch == ')' or ch == ']' { depth-- }
         if ch == ' ' and depth == 0 { return "(" $t ")" }
     }
-    return $t
+    return t
 }
 
 # ---- expressions ----
@@ -11230,7 +11230,7 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
             near.Offer(t)
         }
     }
-    return $near.Best
+    return near.Best
 }
 
 # E41: "_" where a value is wanted - an error naming the type wanted and what in scope fits it, locals and parameters
@@ -18221,7 +18221,7 @@ fn (c mut Checker&) assertStmt(sp source.Span, k ast.Expr&, msg ast.Expr?&) {
         if use == diag.Where.Nowhere and inLib: use = c.P.L.Diags.UseOf(c.at(opAt))
         if use == c.at(opAt): use = diag.Where.Nowhere
     }
-    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, opAt, cb, mb, fixed.ToArray(), cw, $ct, saidOk, $said, $written, use))
+    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, opAt, cb, mb, fixed.ToArray(), cw, ct, saidOk, said, written, use))
 }
 
 # S3: an expression standing alone is a call, "++" or "--"
@@ -25610,7 +25610,7 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
         # (whether C may call the program back, decided over the whole program, says what a C call may do: settled as a
         # body's facts are)
         xv := try c.factPresets.Get($"extern " $f ":" $name) catch default c.Effects().OfExtern(f).Holds(k)
-        xr := factRead(-1, f, $name, xv, c.fr().File, sp, $c.src(sp))
+        xr := factRead(-1, f, name, xv, c.fr().File, sp, $c.src(sp))
         c.factReads.Push(xr)
         return c.lit(sp, types.BoolT, 1 if c.readFact(xr) else 0)
     }
@@ -25622,7 +25622,7 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
     c.fnBody(inst)    # checked in this attempt, so its facts are found once it ends
     key := $inst ":" $name
     v := try c.factPresets.Get(key) catch default effects.Conservative(k)
-    r := factRead(inst, -1, $name, v, c.fr().File, sp, $c.src(sp))
+    r := factRead(inst, -1, name, v, c.fr().File, sp, $c.src(sp))
     c.factReads.Push(r)
     return c.lit(sp, types.BoolT, 1 if c.readFact(r) else 0)
 }
@@ -26196,7 +26196,7 @@ fn rootRules(l mut load.Loader&) String {
     f := l.Mods[l.Root].File
     for s in l.Diags.AllSaid() {
         if s.File == f {
-            b.Push($s.Rule)
+            b.Push(s.Rule)
             b.PushChar(' ')
         }
     }
@@ -26391,7 +26391,7 @@ test "errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (
     c.RootOnly = true
     c.CheckProgram()
     assert rootRules(l) == "", rootRules(l)
-    assert c.Attempts == 2, $c.Attempts
+    assert c.Attempts == 2, c.Attempts
 }
 
 test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)" {

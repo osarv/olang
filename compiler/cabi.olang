@@ -74,7 +74,7 @@ fn Flatten(t mut types.Table&, ty types.TypeId, base I64, out mut Vec<Scalar>&) 
     }
     sz := t.Size(r)
     ll := "i8" if r == types.BoolT else $t.Llvm(r)
-    out.Push(Scalar(base, sz, $ll, t.IsFloat(r)))
+    out.Push(Scalar(base, sz, ll, t.IsFloat(r)))
 }
 
 # whether a type crosses as a struct - by its classification - rather than as a scalar
@@ -180,7 +180,7 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
         }
         if not found { continue }
         part, n := sseAt(sc, lo) if sse else intAt(sc, lo, size)
-        parts.Push($part)
+        parts.Push(part)
         offs.Push(lo)
         sizes.Push(n)
     }
@@ -232,7 +232,7 @@ fn intAt(sc Vec<Scalar>&, off I64, size I64) String, I64 {
     i := at(sc, off)
     if i >= 0 and not sc[i].IsFloat {
         s := sc[i]
-        if s.Llvm == "ptr" or s.Size == 8 { return $s.Llvm, 8 }
+        if s.Llvm == "ptr" or s.Size == 8 { return s.Llvm, 8 }
         if not data(sc, off + s.Size, off + 8) { return $"i" $(s.Size * 8), s.Size }
     }
     n := (size - off).Min(8)
@@ -249,15 +249,15 @@ fn sseAt(sc Vec<Scalar>&, off I64) String, I64 {
     }
     if not data(sc, off + 4, off + 8) {
         if t0 == "half" or t0 == "bfloat" {
-            if not data(sc, off + 2, off + 4) { return $t0, 2 }
+            if not data(sc, off + 2, off + 4) { return t0, 2 }
             return $"<2 x " $t0 ">", 4
         }
-        return $t0, 4
+        return t0, 4
     }
     if half != "" { return $"<4 x " $half ">", 8 }
     j := at(sc, off + 4)
     if t0 == "float" and j >= 0 and sc[j].Llvm == "float" { return "<2 x float>", 8 }
-    return $t0, 8
+    return t0, 8
 }
 
 # the bytes a classification's parts span from the start, for the temporary they are loaded from or stored to

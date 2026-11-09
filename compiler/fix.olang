@@ -51,17 +51,17 @@ fn Order() Array<I64> {
 # the arguments a tool is run with: its program, what stands before the files, and the files
 fn arguments(program String&, kind I64, exe String&, std String&, files Array<String&>&) Array<String&> {
     out Vec<String&>
-    out.Push($program)
+    out.Push(program)
     if kind == StdTool {
         out.Push("--std")
-        out.Push($std)
+        out.Push(std)
     } else if kind == DrivenOpt {
         out.Push("--olang")
-        out.Push($exe)
+        out.Push(exe)
     } else if kind == DrivenArg {
-        out.Push($exe)
+        out.Push(exe)
     }
-    for f in files { out.Push($f) }
+    for f in files { out.Push(f) }
     return out.ToArray()
 }
 
@@ -74,7 +74,7 @@ fn walk(dir String&, out mut Vec<String&>&) {
         if os.IsDir(p) {
             walk(p, out)
         } else if n.EndsWith(".olang") {
-            out.Push($p)
+            out.Push(p)
         }
     }
 }
@@ -83,7 +83,7 @@ fn walk(dir String&, out mut Vec<String&>&) {
 fn expand(paths Array<String&>&) Vec<String&> {
     out Vec<String&>
     for p in paths {
-        if os.IsDir(p) { walk(p, out) } else { out.Push($p) }
+        if os.IsDir(p) { walk(p, out) } else { out.Push(p) }
     }
     return out
 }
@@ -124,8 +124,8 @@ fn BinDir(exe String&, tools String&) String {
     real := try os.RealPath(exe) catch default $exe
     rt := try os.RealPath(tools) catch default $tools
     parts Vec<String&>
-    parts.Push($real)
-    parts.Push($rt)
+    parts.Push(real)
+    parts.Push(rt)
     return filepath.Join(filepath.Join(fetch.CacheDir(), "fix"), build.HashOf(parts)[0:16])
 }
 
@@ -178,7 +178,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
             try said.Flush() catch io.Error { }
             return 2
         }
-        before.Push($text)
+        before.Push(text)
     }
     tools := ToolsDir(exe)
     if not os.IsDir(tools) {

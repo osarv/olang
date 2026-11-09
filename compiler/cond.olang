@@ -62,7 +62,7 @@ type Consts struct() {
 }
 
 fn (c mut Consts&) add(name String&, v Value, builtin Bool, big Bool, known Bool) {
-    c.names.Push($name)
+    c.names.Push(name)
     c.values.Push(v)
     c.builtin.Push(builtin)
     c.big.Push(big)
@@ -71,7 +71,7 @@ fn (c mut Consts&) add(name String&, v Value, builtin Bool, big Bool, known Bool
 }
 
 fn (c mut Consts&) text(t String&) I64 {
-    c.Texts.Push($t)
+    c.Texts.Push(t)
     return c.Texts.Len() - 1
 }
 
@@ -163,7 +163,7 @@ fn (c mut Consts&) define(flag String&) ? DefineError {
     }
     v := try c.literal(value)
     c.add(name, v, false, v.Big, true)
-    c.raws[c.raws.Len() - 1] = $value
+    c.raws[c.raws.Len() - 1] = value
 }
 
 # a build constant's value - Big where it is an integer above I64's maximum (a U64); a miss where there is none
@@ -326,7 +326,7 @@ type Eval struct(text String&, names source.Names&, scope Scope&, consts Consts&
 }
 
 fn (e mut Eval&) addText(t String&) I64 {
-    e.texts.Push($t)
+    e.texts.Push(t)
     return e.texts.Len() - 1
 }
 

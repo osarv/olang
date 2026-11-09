@@ -627,7 +627,7 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Arr
         t.shapes.Push(kept)
         t.shapeCases.Push(payloads)
         t.shapeFields.Push(Array<source.NameId>(0))
-        t.shapeKeys.Put($k, s)
+        t.shapeKeys.Put(k, s)
     }
     if fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
         fs mut Array<source.NameId>& = Array<source.NameId>(fields.Len())
@@ -653,7 +653,7 @@ fn (t mut Table&) ConstExpr(key String&) TypeId {
     p := try t.patternKeys.Get(key) catch default -1
     if p < 0 {
         p = t.patterns.Len()
-        t.patterns.Push($key)
+        t.patterns.Push(key)
         t.patternKeys.Put(t.patterns[p], p)
     }
     return t.intern(data(Kind.ConstExpr, p, 0, 0), 1)
@@ -1526,7 +1526,7 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
 
 # registers a module's identity; its index
 fn (t mut Table&) AddModule(identity String&) I64 {
-    t.Modules.Push($identity)
+    t.Modules.Push(identity)
     return t.Modules.Len() - 1
 }
 
@@ -2258,7 +2258,7 @@ fn Demangle(sym String&) String {
             continue
         }
         if cut and i + 2 >= s.Len() { break }      # an escape the cut went through
-        return $sym
+        return sym
     }
     text := b.ToString()
     if not text.Contains(".") { return $sym }

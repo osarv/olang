@@ -188,13 +188,13 @@ fn (s mut Server&) opened(uri String&, text String&) {
             }
         }
         if k < 0 {
-            d mut Doc& = Doc($uri, $path, session.RealOf(path))
+            d mut Doc& = Doc(uri, path, session.RealOf(path))
             s.Docs.Push(d)
             k = s.Docs.Len() - 1
         } else {
             d := s.Docs[k]
-            d.Uri = $uri
-            d.Path = $path
+            d.Uri = uri
+            d.Path = path
             d.Real = session.RealOf(path)
             d.Open = true
             d.Deps.Clear()
@@ -420,7 +420,7 @@ fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis
 # checks what is pending, then answers requests until the server closes the pipe
 fn (w mut worker&) Run() {
     for d in w.s.Docs {
-        if d.Open { w.overlay.Put($d.Real, d.Text.ToString()) }
+        if d.Open { w.overlay.Put(d.Real, d.Text.ToString()) }
     }
     for k in w.s.Pending { w.check(k) }
     r := session.Reader(w.In)
@@ -490,7 +490,7 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
             if files[j] == real { at = j }
         }
         if at < 0 {
-            files.Push($real)
+            files.Push(real)
             lists.Push(StringBuilder())
             at = files.Len() - 1
         }
@@ -510,7 +510,7 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
         if files[j] == doc.Real or w.slotPending(files[j]) { continue }
         uri := w.uriOf(files[j])
         w.send(publish(uri, $"[" $lists[j].ToString() "]"))
-        foreign.Push($uri)
+        foreign.Push(uri)
     }
     for f in before {
         if f not in foreign { w.send(publish(f, "[]")) }
@@ -708,8 +708,8 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
         for end < text.Len() and session.WordChar(text[end]) { end++ }
         cut := $text[:dot] $text[end:]
         overlay := Map<String&, String&>()
-        for e in w.overlay { overlay.Put($e.Key, $e.Value) }
-        overlay.Put($doc.Real, cut)
+        for e in w.overlay { overlay.Put(e.Key, e.Value) }
+        overlay.Put(doc.Real, cut)
         a := session.Analysis.Analyze(doc.Path, cfg, d, overlay)
         a.Members(it, doc.Real, dot)
     } else {
@@ -863,7 +863,7 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
         msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
         if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
         id := idOf(msg)
-        if id != "" { got.Put($id, $m) }
+        if id != "" { got.Put(id, m) }
     }
     assert got.Has("1") and (got.Get("1")!).Contains("\"positionEncoding\":\"utf-8\"")
     assert diags.Contains("\"code\":\"E12\"") and diags.Contains("\"start\":{\"line\":16,\"character\":14}"), diags
@@ -960,7 +960,7 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
     for m in frames(out.Stdout) {
         msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
         if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
-        if idOf(msg) != "" { got.Put(idOf(msg), $m) }
+        if idOf(msg) != "" { got.Put(idOf(msg), m) }
     }
     assert (got.Get("2")!).Contains("Deprecated: use New"), got.Get("2")!
     comp := got.Get("3")!

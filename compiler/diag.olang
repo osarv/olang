@@ -93,7 +93,7 @@ Cut I64 = 3          # dropped because a branch before it in its chain was taken
 # (an error met in that, while it is checked for one of the program's uses of it, is reported at that use). The number
 # names it in a Where
 fn (d mut Diagnostics&) AddFile(path String&, text String&, library Bool = false) I64 {
-    d.paths.Push($path)
+    d.paths.Push(path)
     d.texts.Push(text)
     d.library.Push(library)
     d.startsFrom.Push(-1)
@@ -163,7 +163,7 @@ fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
     use := d.programUse(at)
     where Where = at if use < 0 else d.contexts[use].at
     group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
-    d.records.Push(record(where, $m.Rule, $m.Text, m.Kind, group, oncePerLine))
+    d.records.Push(record(where, m.Rule, m.Text, m.Kind, group, oncePerLine))
     rec := d.records.Len() - 1
     top := d.contexts.Len()
     if use >= 0 {
@@ -206,14 +206,14 @@ fn (d mut Diagnostics&) ErrorAlone(at Where, m diagmsg.Msg) I64 {
 fn (d mut Diagnostics&) ErrorBare(at Where, m diagmsg.Msg) I64 {
     if d.Quiet { return -1 }
     group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
-    d.records.Push(record(at, $m.Rule, $m.Text, m.Kind, group, false))
+    d.records.Push(record(at, m.Rule, m.Text, m.Kind, group, false))
     return d.records.Len() - 1
 }
 
 # a note on the error numbered rec - nothing when that error was not reported
 fn (d mut Diagnostics&) Note(rec I64, at Where, m diagmsg.Msg) {
     if rec < 0 { return }
-    d.notes.Push(note(rec, at, $m.Text))
+    d.notes.Push(note(rec, at, m.Text))
 }
 
 # G16b: the error numbered rec yields to a later one of the same text at the same place - one an instance of a generic
@@ -226,8 +226,8 @@ fn (d mut Diagnostics&) Yield(rec I64) {
 fn (d mut Diagnostics&) Fatal(at Where, m diagmsg.Msg) {
     d.fatal = true
     d.fatalAt = at
-    d.fatalRule = $m.Rule
-    d.fatalText = $m.Text
+    d.fatalRule = m.Rule
+    d.fatalText = m.Text
 }
 
 # the rules about where something lives: a statement reports the first error of these (B11) - a scope found wrong is
@@ -254,7 +254,7 @@ fn (d mut Diagnostics&) ScopeGroupEnd(saved I64) {
 # ---- contexts ----
 
 # every error reported until the matching PopContext carries a note at at saying text - "instantiated here" (G16)
-fn (d mut Diagnostics&) PushContext(at Where, text String&) { d.contexts.Push(context(at, $text)) }
+fn (d mut Diagnostics&) PushContext(at Where, text String&) { d.contexts.Push(context(at, text)) }
 
 fn (d mut Diagnostics&) PopContext() { try d.contexts.Pop() catch { } }
 
@@ -618,10 +618,10 @@ fn (d mut Diagnostics&) AllSaid() Vec<Said> {
     for r in d.written() {
         rec := d.records[r]
         match rec.at {
-            case Where.Span(f, s, _) { l.Push(Said($rec.rule, f, s, $rec.text)) }
-            case Where.Line(f, _) { l.Push(Said($rec.rule, f, -1, $rec.text)) }
-            case Where.File(f) { l.Push(Said($rec.rule, f, -1, $rec.text)) }
-            case _ { l.Push(Said($rec.rule, -1, -1, $rec.text)) }
+            case Where.Span(f, s, _) { l.Push(Said(rec.rule, f, s, rec.text)) }
+            case Where.Line(f, _) { l.Push(Said(rec.rule, f, -1, rec.text)) }
+            case Where.File(f) { l.Push(Said(rec.rule, f, -1, rec.text)) }
+            case _ { l.Push(Said(rec.rule, -1, -1, rec.text)) }
         }
     }
     return l
@@ -642,10 +642,10 @@ type Item struct(Error Bool, Rule String&, File I64, Start I64, End I64, Line I6
 
 fn Item.item(isError Bool, rule String&, at Where, text String&) Item {
     return match at {
-        case Where.Span(f, s, e): Item(isError, $rule, f, s, e, 0, $text)
-        case Where.Line(f, l): Item(isError, $rule, f, -1, -1, l, $text)
-        case Where.File(f): Item(isError, $rule, f, -1, -1, 0, $text)
-        case Where.Nowhere: Item(isError, $rule, -1, -1, -1, 0, $text)
+        case Where.Span(f, s, e): Item(isError, rule, f, s, e, 0, text)
+        case Where.Line(f, l): Item(isError, rule, f, -1, -1, l, text)
+        case Where.File(f): Item(isError, rule, f, -1, -1, 0, text)
+        case Where.Nowhere: Item(isError, rule, -1, -1, -1, 0, text)
     }
 }
 

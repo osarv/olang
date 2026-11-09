@@ -650,7 +650,7 @@ type Unparsable error { Syntax }
 # the file src in the layout - or, where it does not scan or parse, nothing, its diagnostics rendered into said (in
 # colour where color says)
 fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, said mut StringBuilder&) String ? Unparsable {
-    src := source.Source($given.Path, $given.Text)  # here, with the names and the diagnostics the unparser holds together
+    src := source.Source(given.Path, given.Text)  # here, with the names and the diagnostics the unparser holds together
     names := source.Names()
     d := diag.Diagnostics(color)
     o := OracleFor(src.Path, std, prelude, names)
@@ -771,7 +771,7 @@ fn (l mut loader&) load(path String&) I64 {
     src := try source.Source.Read(real) catch os.Error { return -1 }
     ts := scan.Tokens.Scan(src.Text)
     m := l.paths.Len()
-    l.paths.Push($real)
+    l.paths.Push(real)
     b := StringBuilder()
     b.PushChar(' ')
     aliases Vec<String&>
@@ -801,8 +801,8 @@ fn (l mut loader&) load(path String&) I64 {
             if j < n and toks[j].Kind == token.Tok.StrLit {
                 ip := scan.LiteralText(src.Text[toks[j].Start:toks[j].End])
                 if alias == "" { alias = $filepath.Base(ip) }
-                aliases.Push($alias)
-                paths.Push($ip)
+                aliases.Push(alias)
+                paths.Push(ip)
             }
         }
     }
