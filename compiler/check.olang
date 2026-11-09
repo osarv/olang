@@ -22740,7 +22740,22 @@ fn (c mut Checker&) yieldStmt(sp source.Span, x ast.Expr&) {
     c.nullDecl = wasNull
     if rt == c.textType() and c.isRef(typeOf(v)) { v = c.read(sp, typed.Lvalue.Deref(sp, rt, v)) }
     if not c.isRef(rt) { c.roStore(v, x.Span(), RoReturned) }   # T25c: the caller holds it writably
+    # (D18b: a value the walk goes on with, yielded from one of its own variables, flows out as a copy built where it
+    # goes - a value read out of a place is one, E31d; refusals 5.7)
+    if not c.isRef(rt) and c.ownVar(v) { v = c.ownCopy(v) }
     c.emit(typed.Stmt.Suspend(sp, v))
+}
+
+# whether x reads a variable of the body's own whole, its value owning storage it may change - an array of a run-time
+# length held by value, in it or in its parts (a Vec): not immut, not a parameter
+fn (c mut Checker&) ownVar(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Read(_, ty, typed.Lvalue.Local(_, _, id), _) {
+            if c.cur().Local(id).Kind != typed.LocalKind.Var or c.P.Immut(ty): return false
+            return c.P.T.OwnedPart(ty) or c.P.T.OwnsParts(ty)
+        }
+        case _ { return false }
+    }
 }
 
 # where a generator's body ends (D18a): its Next fails with Exhausted, now and whenever it is asked after

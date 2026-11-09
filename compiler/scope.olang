@@ -6316,13 +6316,14 @@ fn (s mut Scoper&) ueTarget(b typed.Body&, p typed.Lvalue&, l I64, mode I64) Boo
     }
 }
 
-# whether t is a number or a Bool (a declared type over one counts)
+# whether t is a number, a Bool or an enum with no payload (a declared type over one counts)
 fn (s mut Scoper&) isNumberLike(t types.TypeId) Bool {
     if s.P.T.IsNumber(t) or s.P.T.KindOf(t) == types.Kind.Bool { return true }
-    if s.P.T.KindOf(t) == types.Kind.Named and s.P.T.HasBody(t) and s.P.T.DeclKindOf(s.P.T.DeclOf(t)) == types.DeclKind.Over {
-        return s.isNumberLike(s.P.T.Base(t))
-    }
-    return false
+    if s.P.T.KindOf(t) != types.Kind.Named or not s.P.T.HasBody(t): return false
+    dk := s.P.T.DeclKindOf(s.P.T.DeclOf(t))
+    if dk == types.DeclKind.Over { return s.isNumberLike(s.P.T.Base(t)) }
+    # (an enum with no payload is its ordinal - matched or compared, a number read: refusals 5.7, e31bviewenumfield)
+    return dk == types.DeclKind.Enum and not s.P.T.HasPayload(s.P.T.Cases(t))
 }
 
 # ---- lambdas that never leave the frame (D16c) ----

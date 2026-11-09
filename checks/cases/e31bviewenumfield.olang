@@ -1,7 +1,8 @@
-# check: fail x[i] gives a copy of the element, which this call would write
-# also: the callee is no view of the element because of this statement
-# E31b (r3, a recorded over-rejection; D3): a "match" on an enum value field makes the callee no view - and the note
-# points at the statement in the callee that did
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals 5.7): compiles now - a "match" on an enum value field with no payload reads its ordinal, as a number
+# field is read, so the callee is a view of the element (E31b) and its write lands in the array the element refers to.
+# It was refused ("x[i] gives a copy of the element, which this call would write" - r3, a recorded over-rejection)
 import "std/io"
 type K enum {
     A
@@ -27,8 +28,15 @@ fn f(c mut V&) {
         case K.B { }
     }
 }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
 fn main() ? {
     s := Vs(Array<I64>(4))
     f(s[1])
+    churn()
     try io.Println($s.d)
 }
