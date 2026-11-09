@@ -36069,3 +36069,41 @@ Review A sent four correct programs the compiler refused or miscompiled (`/home/
   so its end stays the callee's. So the refusal stands; its message now names the parameter and says what to write:
   take the value at its last mention, `w Vec<Logged> = v` (T13b's hand-on), which runs as review A meant
   (o17aparamhandon; o17aparamref keeps the error, a new diagnostic BorrowSplitParam).
+
+## R4: tasks' storage at the join's level (O28, P2, P4a, D16e, E31b; 2026-11-09, wt-r4, docs/refusals.md 5.4)
+
+Round R4 of docs/wholeprog.md section 10. P2 refused a task's argument, function value or capture whose storage was
+declared inside the join, since a loop turn's block closes - and the next turn reuses its chunk - while the task still
+runs. Moving that storage to the join block's level, a new one each time its declaration runs, makes P2's condition
+hold by construction, as O28 already did for a local kept by a store; R2 had reached two of the section's nine
+(p2fieldofresult, p2spawncallee) through obligations. The seven left each had a judgment that refused with no proposal
+behind it, and each now proposes the join block in the inference (scope.olang):
+
+- **A function value a task calls through, a spawned lambda** (`spawn w(s)`, `spawn h.f()`, `spawn fn() { ... }`, one
+  called where it is spawned): `calleeValue` proposes the value at the join - a closure local built there with what it
+  captured (R2's path), a lambda's captures built there (O27's view placement), an instance holding the closure built
+  there with it (d16espawn, p2spawnfieldclosure, p2spawnlambda, p2spawncalled).
+- **A clause's captures** (`spawn try work(i) catch E { note(n) }`): the clause's lambda proposed likewise
+  (p4aclausecapture).
+- **A temporary a task is handed holding what is too short** (`apply(fn() { return a[0] })`, `first(Box.Has(a))`):
+  `argTemp` proposes it. A capturing lambda made for a callee keeping nothing of it lived in the caller's frame (D16c);
+  a task's never does now - the spawner's frame moves on while the task runs - so it lives where its captures do, at
+  the join's level (p2spawnenum).
+- **A task's copy of a call's value, `x[i]` of a handle** (`spawn users[i].Push(i)`): the copy is proposed at the
+  join; a handle copy built there is lent as the unspawned call's is (O17b) and refused only for what the unspawned
+  call is, with its message (s5spawnhandle runs; s5spawnhandlekept, a callee keeping the copy, says E31b's error).
+
+**A bug found on the way:** the same copy for a read-only reference parameter (`spawn out[i] = see(b[i])`, an `At`
+giving a value holding a reference) was built in the loop turn's block and never judged against the join - taskArgsLast
+skips an argument the call itself built. Each task read the last turn's copy (the scope sanitizer: use after scope
+closed). The proposal above builds it at the join (p2spawncallcopy).
+
+Kept refused: a for-in's copy of an element lent to a task - the loop's own slot, made again by the next turn (R1's
+recorded limit for for-in copies; p2forincopy keeps P2's SpawnArgTooShort tested; `f(xs[i])` lends the element in
+place). A value with a destructor a task's lambda captured is now placed at the join's level and ends as that block
+closes (p2spawndtorcapture), as one a task is lent already did.
+
+Each case is a run case reading back each turn's own storage after the spawner's turns moved on (the tasks sleep
+before reading), passing under the scope sanitizer, `-race` (d16espawn was rewritten so its tasks no longer all write
+one field - a race the program owned) and `interpret`. Only refused programs place differently: compiler/'s IR (the
+round's sources built by both compilers) and bench's are byte-identical to before.

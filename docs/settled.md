@@ -641,6 +641,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   has its copy made where it is kept, as a local. A generator's parameter and one holding a destructor value keep their
   frame. compiler/'s and bench's IR are unchanged. The caller building a fresh argument there directly (the copy
   left out) is not built: an optimization.
+- **Tasks' storage at the join's level (O28, P2, P4a, D16e, E31b; R4 of docs/refusals.md, 2026-11-09, mine within the
+  user's decisions).** Storage declared inside a join that a task is handed, calls through or captured (an argument, a
+  lambda and its captures, a clause's captures, a closure held in an instance, an enum payload) is built at the join
+  block's level, a new one each turn, as is a call's value copy lent to a task and a handle `x[i]`'s copy a task calls
+  on (refused then only for what the unspawned call is). A destructor value placed so ends as the join's block closes.
+  A for-in's copy of an element stays refused (the loop's own slot). Found on the way: a call's value copy lent by
+  reference to a task was built in the loop turn's block (a use after scope). compiler/'s and bench's IR are unchanged.
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter lives where what it captured does.
@@ -690,7 +697,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 ### Concurrency
 
 - **`join { }` with `spawn` calls inside (P1-P1b).** Binding is lexical, one level; the join waits on every way out; a
-  task's arguments must outlive the join block (P2). P3/P5 (no shared writes) were withdrawn - a spawning program owns
+  task's arguments must outlive the join block (P2), storage declared inside it built at its level (R4). P3/P5 (no shared writes) were withdrawn - a spawning program owns
   its races, which `-race` (ThreadSanitizer, P7) detects - Go's position.
 - **`spawn x = f()` binds a result (P1g)**; parallel map is `spawn out[i] = f(i)`.
 - **A spawned call may fail (P4-P4d, decision 50, the user approved).** `spawn try f()`, clauses run on the task's

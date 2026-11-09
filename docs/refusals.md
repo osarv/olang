@@ -45,6 +45,12 @@ is built and what this note proposes is built after it.
   `bind`); all 15 run, under the scope sanitizer and `interpret` alike, and the evaluator's stand-in placement copies a
   parameter flowing out into the program's scope. Not built: the caller building a fresh argument where the callee
   keeps it (5.3's "the copy left out") - an optimization. HISTORY.md, "R3: by-value parameters and match bindings".
+- Built: R4 (5.4, 2026-11-09, wt-r4) - what a task is handed, calls through or captured, and a clause's captures,
+  built at the join block's level, one per turn (the inference proposes the join where P2 refused); a task's capturing
+  lambda never on the spawner's frame; a task's copy of a call's value or of a handle `x[i]` built there (the copy for a
+  read-only parameter had been built in the turn's block - a use after scope, fixed). The seven left of the nine run
+  (p2fieldofresult and p2spawncallee ran with R2); a for-in's copy lent to a task stays refused (p2forincopy).
+  HISTORY.md, "R4: tasks' storage at the join's level".
 
 ## 0. Summary
 
@@ -239,6 +245,8 @@ copy for `x[i].M()` spawned (s5spawnhandle).
 - **Memory.** Each turn's storage is held until the join's scope closes; the tasks hold it until then anyway.
 - **Why it is sound.** P2's condition - an argument outlives the join - holds by construction. Wrong would be a task
   still reading a turn's array after the turn's block closed and the next turn reused its chunk.
+- **Built (R4).** As above; a for-in's copy of an element is not placed elsewhere (the loop's own slot, 5.1's recorded
+  limit) and stays refused.
 
 ### 5.5 `become` (10)
 

@@ -5752,10 +5752,15 @@ The target's address is taken **at the `spawn`**, not when the task runs, which 
 leave the `join` block until every task started in it has finished, so it provably outlives them all, and
 §8's containment check applies unchanged. What that leaves to check is one thing the block form got for
 free — an argument must live at least as long as the `join` block itself, which an argument declared in a
-block *inside* the join does not. Such a spawn is rejected. The same holds for a function value a task is a
-call through: a lambda made inside the join block lives in the block it was made in, and spawning a call
-through it is rejected. A spawned lambda (D16e), called where it is written or not, is instead built to last until the join, and the
-references it captured must outlive the join block on the same terms as an argument. A function value computed for the
+block *inside* the join does not. Such an argument's storage is **built at the level of the join block** instead (§8
+O28): a value local, or the storage a reference local names, is built there, a new one each time its declaration runs,
+so each task is handed its own turn's and every one lasts until the join; so is a copy the call makes of a value it
+lends a task (a call's value result, `x[i]` of a handle, E31b). Only storage that cannot be placed so is rejected: a
+for-in's copy of an element is the loop's own slot, made again by the next turn - lend the element in place
+(`f(xs[i])`). The same holds for a function value a task is a call through: a lambda made inside the join block, and
+what it captured, are built at the join block's level likewise. A spawned lambda (D16e), called where it is written or
+not, is built to last until the join, and the references it captured must outlive the join block on the same terms as
+an argument - what it captured built at the join block's level where it was declared inside it. A function value computed for the
 call (`spawn id(f)()`, E13b) holds what it was made from, which must last until the join likewise, and one read out of
 storage (`spawn h.f()`, `spawn fs[i]()`) is held there - its closure lives no shorter than that storage (D16d) - so the
 storage must last until the join, as an argument's would. The same holds for everything an argument
@@ -7210,7 +7215,8 @@ of them allow, and every judgment of this section is then made of it. So:
   (O18c), the call then landing where the part is kept and a local declared from the part built there with its own
   storage; an argument an instance holds when a store keeps the instance (C2d); a closure a function-valued local is
   given, built where the local is kept with what it captured (D16c); the array a copy into an `any` reads (T32a), with
-  what its elements refer to;
+  what its elements refer to; what a task is handed, calls through or captured, and a clause's captures (P2, P4a), at
+  the join block's level;
 - a **by-value parameter** kept past the call - returned or handed back as borrowed (`fn bor(p Pt) Pt& { return p }`),
   given as a function value through its `Call` (E31), held by the instance a constructor builds (`keep P& = p`) or by
   what a reference parameter reaches (`out.Push(holder(v))`) - has the callee's copy (D9) made at entry where it is
