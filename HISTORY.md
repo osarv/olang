@@ -35616,6 +35616,9 @@ replaced and removed: under 8 MB, interpreted at a smaller size, and split into 
 churn), and fuzz/scopegen's free scenarios gain a Vec global given a Vec built in a local, a node global, and views of
 both kept across their let-goes.
 
+Gates: `fuzz free` 300 programs (1,800 scenarios, 2,965 places freeing at once), no finding; `make scopefuzz SEED=7
+COUNT=300` no finding; `make scopesan` passes.
+
 **Found on the way and fixed:** a `Map<String, Vec<I64>>`'s Put replacing a value released the entry's key text with
 it - under `-sanitize` the next Put's comparison read it freed, in master too, local Map or global. `add` stores
 `MapEntry(key, value)`, a constructor viewing what it is given, so its caller's copy (D9h) was taken as the one owner
