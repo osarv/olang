@@ -2066,6 +2066,9 @@
 | status 0
 === run d16dtwoscopes.olang
 | status 0
+=== run d16espawn.olang
+| status 0
+| 1 2 3 4
 === run d17entrycheck.olang
 | status 0
 === run d17reqcaught.olang
@@ -2686,8 +2689,30 @@
 | 0
 === run p2reassignedcallback.olang
 | status 0
+=== run p2spawncallcopy.olang
+| status 0
+| 0 11 22 33
+=== run p2spawncalled.olang
+| status 0
+| 1 11 21 31
 === run p2spawncallee.olang
 | status 0
+=== run p2spawndtorcapture.olang
+| status 0
+| end 3
+| end 2
+| end 1
+| end 0
+| 3
+=== run p2spawnenum.olang
+| status 0
+| 1 2 3 4 1 4 true
+=== run p2spawnfieldclosure.olang
+| status 0
+| 1 2 3 4
+=== run p2spawnlambda.olang
+| status 0
+| 0 10 20 30
 === run p2spawntemp.olang
 | status 0
 === run p2spawnvalue.olang
@@ -2697,6 +2722,9 @@
 === run p2viewtask.olang
 | status 0
 | Array<String&>["0", "1", "2", "3"]
+=== run p4aclausecapture.olang
+| status 0
+| 0 10 0 0
 === run parkedpool.olang
 | status 0
 === run preludekv.olang
@@ -2999,6 +3027,9 @@
 | status 0
 === run s5projectionelem.olang
 | status 0
+=== run s5spawnhandle.olang
+| status 0
+| 46 1000
 === run s5spawnhandlerun.olang
 | status 0
 === run s6handleloop.olang

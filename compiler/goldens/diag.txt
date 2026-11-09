@@ -827,11 +827,6 @@ d16cshadow.olang:7:19: error: 'x' is already declared here
     7 |     n := apply(fn(x) { return x }, 2)
       |                   ^
 compilation failed with 1 error
-=== d16espawn.olang
-d16espawn.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
-   11 |             spawn w(s)
-      |                   ^
-compilation failed with 1 error
 === d16return.olang
 d16return.olang:6:26: error[S3]: this computes a value and discards it - only a call, '++' or '--' stands alone
     6 |     n := apply(fn(x) { x + 1 })
@@ -3445,35 +3440,15 @@ p1gtargetsfields.olang:20:13: error[P1g]: these targets live in different scopes
    20 |             spawn h.n, k.n = two(i + 5)
       |             ^~~~~
 compilation failed with 1 error
-=== p2spawncalled.olang
-p2spawncalled.olang:12:19: error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
-   12 |             spawn fn(k I32) { total[i] = n.v + k }(1)
-      |                   ^~
-compilation failed with 1 error
-=== p2spawnenum.olang
-p2spawnenum.olang:15:34: error[P2]: this argument refers to storage that closes before the join does - declare that at the join's level or wider
-   15 |             spawn out[i] = apply(fn() { return a[0] })
-      |                                  ^~
-compilation failed with 1 error
-=== p2spawnfieldclosure.olang
-p2spawnfieldclosure.olang:16:21: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
-   16 |             spawn h.f()
-      |                     ^
-compilation failed with 1 error
-=== p2spawnlambda.olang
-p2spawnlambda.olang:12:19: error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
-   12 |             spawn fn() { total[i] = n.v }
-      |                   ^~
+=== p2forincopy.olang
+p2forincopy.olang:17:32: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
+   17 |             spawn out[i] = see(n)
+      |                                ^
 compilation failed with 1 error
 === p4aclausebreak.olang
 p4aclausebreak.olang:12:50: error[P4a]: 'break' may not leave a task's clause - it runs on the task, outside the spawner's loops
    12 |             spawn try work(I32(i) - 2) catch E { break }
       |                                                  ^~~~~
-compilation failed with 1 error
-=== p4aclausecapture.olang
-p4aclausecapture.olang:17:35: error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
-   17 |             spawn try work(i - 2) catch E { note(n) }
-      |                                   ^~~~~
 compilation failed with 1 error
 === p4aclauseerror.olang
 p4aclauseerror.olang:12:42: error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
@@ -4544,16 +4519,19 @@ compilation failed with 1 error
 s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    12 |         spawn l[0].Add()
       |                ^
+s5e31bspawn.olang:6:25: note: the callee is no view of the element because of this statement
+    6 | fn (a mut Acc&) Add() { a.N++ }
+      |                         ^~~~~
 compilation failed with 1 error
 === s5handlerepointfn.olang
 s5handlerepointfn.olang:13:17: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    13 |     resetFn(bags[0])
       |                 ^
 compilation failed with 1 error
-=== s5spawnhandle.olang
-s5spawnhandle.olang:10:43: error[E31b, P2]: a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself
-   10 |         for i in range 4 { spawn users[i].Push(i) }
-      |                                           ^~~~
+=== s5spawnhandlekept.olang
+s5spawnhandlekept.olang:14:49: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |         for i in range 4 { spawn put(keep, users[i]) }
+      |                                                 ^
 compilation failed with 1 error
 === s6immutableglobalfield.olang
 s6immutableglobalfield.olang:6:7: error[S6]: G cannot be written - only a local, a parameter or a 'mut' global can
