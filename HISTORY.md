@@ -35707,3 +35707,51 @@ always did. The probe runs in 1.8 MB. In compiler/ two bodies changed (scope.Pla
 Tests: the earlyfree fixture `getread` (Map.Get and Vec.Get read through `!` and through a clause, under 8 MB,
 interpreted, split into a module); the run case `d9htryview` (-debug -sanitize, interpreted: an index that replaces
 the entry read, through `!` and a clause, still reads the value the call gave; a clause's default).
+## `weak` references and generational types, round 1 (T2d, T13d, O8e; 2026-11-09, wt-weakrefs, genrefs G1)
+
+The first round of docs/genrefs.md as the user decided it on the evening of 2026-11-08 (its section 0.1): the keyword,
+the grammar, the rules and their errors, with a weak place represented as an ordinary `?&` reference - it never reads
+`null` early, which the contract of genrefs 2.5 allows, so the round is complete and safe on its own; the header, the
+weak word and the count are G2+G3.
+
+**Syntax.** `weak` is an ordinary keyword (L9), a field's name too (L9a). `type-expr ::= [ "weak" ] [ "mut" ] ...`; the
+parser takes `weak` before any type and marks the outermost reference (under a `mut`) weak - a fourth payload field of
+`ast.TypeRef.Ref`, so every pass that reads a reference reads a weak one as an ordinary one with no case of its own (the
+round's whole representation). `weak` before no `?&` is said by the parser (T2d, naming `weak T?&`). The formatter
+writes `weak mut Node?&`, `weak` before the `mut` the reference's permission sits under.
+
+**Where `weak` may stand.** The checker's written-type walk (`writtenMet`) carries a flag for "a stored position":
+set by a constructor's field, a payload field, a global and each type argument, cleared for everything under it but a
+reference's `mut`. A weak reference outside one is T2d's error at its `weak`; one naming an array, a function type, an
+`any`, an extern type or anything else not a struct or enum is the other; a type variable's is left to its instance
+(not built: a `weak T?&` in a generic makes nothing generational yet - nothing in the repository writes one).
+
+**Generational over the whole program.** Before any body is checked, `genScan` walks every module's type declarations
+(each struct field, each payload field) and globals, top-level `if` branches included: each weak reference marks the
+type it names generational (`Program.Gens`, by declaration, with the places naming it), each top-level weak field is
+recorded (`WeakSlots`, for explain and the fresh-store error), and every other reference to a struct or enum - or one by
+value - in such a position is an owning place holding it (`GenOwners` for the names). Type arguments written anywhere
+else (a local's `Vec<mut Node&>`, a call's) add owning holders as the checker meets them. So the decision is an
+acceptance fact of the front end, which reads the whole program from source anyway (wholeprog kind A); it changes no
+module's code in this round, so no reader of W1's facts is needed yet - G2+G3's header makes it one (kind D).
+
+**The rules.** A generational type held by value - a local `x Node`, a field, a parameter, a result, `Vec<Node>` - is
+T13d's error naming `Node&`, at the slot, or at the `weak` with a note at the slot where the `weak` is in another module
+(0.1 item 4: the code that widened the decision). `n := Node(1)` (and a `:=` of several) fits the value to a `mut Node&`
+(read-only for an immut type), so a second name is the same instance - built where O28 places it, as a written
+`n mut Node& = Node(1)` always was. `unique` on one is an error; a destructor does not ask for `unique` (C11 gains the
+exception); `x.Copy()` of one declaring a destructor is an error. Two T2d errors from the decision: a constructor
+called straight into a weak place (`n.prev = Node(0)`, a field's `prev weak Node?& = Node(0)`) - the "only into weak
+places" error in the form a body shows without a flow analysis; and, once the program is checked, a type no owning
+place holds, at its first weak reference (`settleWeak`).
+
+**Tools.** explain/doc/hover print `# generational: held by reference; weak from 'prev', 'tail'` under the type and
+`weak` before a weak field; `-memory` gives a row per weak place naming the owning places; the language server's
+keywords, nvim's syntax, and tools/keyword_rename (which renames a `weak` used as a name in other code, as for the
+promise words). The probes of genrefs section 1 are rewritten with `weak` (dlist: `prev`, `tail`; tree: `parent`; lru:
+the Map owning and the four list links weak) and compile, run and keep as before (stack 17.5 MB, dlist 88.7 MB, tree
+97.0 MB, lru 43.5 MB). Tests: tests/weak.olang (a list, a tree, an LRU, aliasing; read after a churn, the evaluator
+deciding the same in top-level asserts and a baked global), 19 checks cases (t2d*, t13d*, the run case t13dalias:
+aliasing and a destructor running once per instance), the scenario `weakmods` (three modules: the weak reference, the
+owning place and the type apart; the unheld error and the by-value slot said at the weak), and the incremental
+scenario's edit kind "the first weak to a type".

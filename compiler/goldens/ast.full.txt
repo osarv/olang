@@ -470,6 +470,10 @@
 | TYPE 7:1-10:2
 | -- diagnostics
 | error  20:21
+=== checks/cases/t2dnotnull.olang
+| FN 8:1-8:14
+| -- diagnostics
+| error T2d 6:10
 === checks/cases/t30sep.olang
 | FN 4:1-4:16
 | -- diagnostics

@@ -267,6 +267,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its value on once at its last mention (a move). A unique type declares no Copy; a holder of a unique part is unique
   unless it declares a Copy; unique and immut are never one type's. Generics copying a unique T are refused at the
   program's call (G18a).
+- **`weak` references and generational types (T2d, T13d, O8e; docs/genrefs.md, the user's decisions 2026-11-08
+  evening; round 1 built 2026-11-09).** `prev weak mut Node?& = null`: `weak` before a `?&` reference in a stored
+  position (a field, a payload, a global, an element or type argument a type stores) makes a weak place - it reads
+  `null` once its referent is gone, which no build does early yet (round 1: an ordinary reference). Errors: on a local,
+  parameter, result or function type; before a never-null reference, an array, a function type, an `any` or an extern
+  type; a constructor's new instance stored straight into a weak place; a weak reference to a type no owning place of
+  the program holds. The type it names is **generational** over the whole program (any module's `weak`): held only by
+  reference (`n := Node(1)` is a `mut Node&`; a by-value slot is an error, said at the `weak` when that is in another
+  module), never `unique`, a destructor not making it unique, no Copy where it declares one. explain/doc/hover say
+  `# generational: held by reference; weak from 'prev', 'tail'`; `-memory` gives a row per weak place.
 - **Destructors run where the holder lets go - Rust's drop (O15, O16, C9, C11, T13b, the user's decision 2026-11-03
   "unique DECIDED"; `x.Destroy()` removed by the user 2026-11-08: "Yeah, remove dot destroy").** A value with a
   destructor is held by value in a variable, parameter, result, field or payload, and its destructors run once where

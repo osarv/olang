@@ -1,0 +1,14 @@
+# the weak reference in one module and a by-value slot in another: said at the weak, with a note at the slot
+import "node"
+import "back"
+import "keep"
+import "byval"
+
+fn main() {
+    k := keep.Keep()
+    b := back.Back()
+    n := node.Node(2)
+    k.N = n
+    b.Point(n)
+    assert byval.Value(node.Node(1)) == 1
+}

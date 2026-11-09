@@ -1,0 +1,10 @@
+# check: fail error[T2d]: a weak reference names an instance of a struct or an enum
+# also: is an any
+# T2d: an any is no weak reference's target
+type Shape trait {
+    Area() F64
+}
+type Box struct() {
+    s weak any Shape?& = null
+}
+fn main() { assert Box().s is null }

@@ -1,0 +1,12 @@
+# check: fail error[T13d, E31d]: Node is generational and declares a destructor, so it has no Copy - each instance's destructor runs once: make a new one with its constructor
+# T13d: a generational type with a destructor has no Copy (a destructor does not make it unique, C11)
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak Node?& = null
+} destruct { assert v >= 0 }
+fn main() {
+    n := Node(1)
+    m := n.Copy()
+    assert m.v == 1
+}

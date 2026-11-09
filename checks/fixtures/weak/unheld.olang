@@ -1,0 +1,9 @@
+# the weak reference with no owning place anywhere in the program
+import "node"
+import "back"
+
+fn main() {
+    b := back.Back()
+    b.Point(node.Node(1))
+    assert b.At is not null
+}

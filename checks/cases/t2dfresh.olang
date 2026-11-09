@@ -1,0 +1,13 @@
+# check: fail error[T2d]: a new Node stored only into a weak place is held by nothing owning, so the place would read null at once - store it into an owning place first, then here
+# T2d: a fresh instance stored straight into a weak place
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+fn main() {
+    n := Node(1)
+    n.next = Node(2)
+    n.prev = Node(0)
+    assert n.v == 1
+}

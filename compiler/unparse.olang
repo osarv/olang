@@ -536,7 +536,8 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
         }
         case ast.TypeRef.Func(_, s) { w.funcType(s, "") }
         case ast.TypeRef.Shape(_, body) { w.typeBody(body) }
-        case ast.TypeRef.Ref(_, of, nullable) {
+        case ast.TypeRef.Ref(_, of, nullable, isWeak) {
+            if isWeak { w.put("weak ") }   # T2d
             # T21: a function type's marker is on its "fn"
             s := of.FuncSig()
             if s is not null {
@@ -562,6 +563,12 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
             }
         }
         case ast.TypeRef.Perm(_, of, writable) {
+            # T2d: "weak" is written before the "mut" of the reference it marks
+            if of is not null and of.IsWeak() {
+                w.put("weak mut " if writable else "weak ")
+                w.ty(of.Unweak())
+                return
+            }
             if writable { w.put("mut") }
             if of is not null {
                 w.put(" ")

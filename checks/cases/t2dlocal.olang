@@ -1,0 +1,13 @@
+# check: fail error[T2d]: 'weak' is written only where a value is stored
+# also: write 'Node?&' here
+# T2d: a local is no weak place
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak Node?& = null
+}
+fn main() {
+    n := Node(1)
+    p weak Node?& = n
+    assert p is not null
+}

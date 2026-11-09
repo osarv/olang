@@ -5142,6 +5142,36 @@ t13cslice.olang:9:10: error[T13c]: 'h.lanes' is a field of a packed struct, at a
     9 |     s := h.lanes[0:2]
       |          ^~~~~~~~~~~~
 compilation failed with 1 error
+=== t13dcopy.olang
+t13dcopy.olang:10:12: error[T13d, E31d]: Node is generational and declares a destructor, so it has no Copy - each instance's destructor runs once: make a new one with its constructor
+   10 |     m := n.Copy()
+      |            ^~~~
+compilation failed with 1 error
+=== t13delem.olang
+t13delem.olang:9:11: error[T13d]: Node is generational - a weak reference names it - so its values are held only by reference: write 'Node&' here
+    9 |     v Vec<Node>
+      |           ^~~~
+compilation failed with 1 error
+=== t13dfield.olang
+t13dfield.olang:9:7: error[T13d]: Node is generational - a weak reference names it - so its values are held only by reference: write 'Node&' here
+    9 |     n Node = Node(1)
+      |       ^~~~
+compilation failed with 1 error
+=== t13dlocal.olang
+t13dlocal.olang:9:7: error[T13d]: Node is generational - a weak reference names it - so its values are held only by reference: write 'Node&' here
+    9 |     n Node = Node(1)
+      |       ^~~~
+compilation failed with 1 error
+=== t13dparam.olang
+t13dparam.olang:8:12: error[T13d]: Node is generational - a weak reference names it - so its values are held only by reference: write 'Node&' here
+    8 | fn value(n Node) I64 { return n.v }
+      |            ^~~~
+compilation failed with 1 error
+=== t13dunique.olang
+t13dunique.olang:3:11: error[T13d]: Node is generational - a weak reference names it - and its values are never copied, only referenced: drop 'unique'
+    3 | type Node unique struct(v I64) {
+      |           ^~~~~~
+compilation failed with 1 error
 === t13holdsitself.olang
 t13holdsitself.olang:4:7: error[T16]: E cannot hold itself by value - hold it through a reference ('&')
     4 |     A(e E)
@@ -5950,6 +5980,66 @@ compilation failed with 1 error
 t2creadmaybenull.olang:4:28: error[T2c]: 'm' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'm!'
     4 | fn get(m N?&) I64 { return m.v }
       |                            ^
+compilation failed with 1 error
+=== t2dany.olang
+t2dany.olang:8:7: error[T2d]: a weak reference names an instance of a struct or an enum, and any Shape is an any - hold it by an ordinary reference
+    8 |     s weak any Shape?& = null
+      |       ^~~~
+compilation failed with 1 error
+=== t2darray.olang
+t2darray.olang:4:8: error[T2d]: a weak reference names an instance of a struct or an enum, and Array<I64> is an array - hold it by an ordinary reference
+    4 |     xs weak Array<I64>?& = null
+      |        ^~~~
+compilation failed with 1 error
+=== t2dextern.olang
+t2dextern.olang:7:7: error[T2d]: a weak reference names an instance of a struct or an enum, and Db is an extern type - hold it by an ordinary reference
+    7 |     d weak Db?& = null
+      |       ^~~~
+compilation failed with 1 error
+=== t2dfntype.olang
+t2dfntype.olang:7:18: error[T2d]: 'weak' is written only where a value is stored - a field, a payload, an element or a type argument a type stores, or a global - never on a local, a parameter, a result or a function type's: write 'Node?&' here
+    7 |     visit fn?&(n weak Node?&) = null
+      |                  ^~~~
+compilation failed with 1 error
+=== t2dfresh.olang
+t2dfresh.olang:11:14: error[T2d]: a new Node stored only into a weak place is held by nothing owning, so the place would read null at once - store it into an owning place first, then here
+   11 |     n.prev = Node(0)
+      |              ^~~~~~~
+compilation failed with 1 error
+=== t2dfreshfield.olang
+t2dfreshfield.olang:6:28: error[T2d]: a new Node stored only into a weak place is held by nothing owning, so the place would read null at once - store it into an owning place first, then here
+    6 |     prev weak mut Node?& = Node(0)
+      |                            ^~~~~~~
+compilation failed with 1 error
+=== t2dfunc.olang
+t2dfunc.olang:5:7: error[T2d]: a weak reference names an instance of a struct or an enum, and fn?&(x I64) I64 is a function type - hold it by an ordinary reference
+    5 |     f weak fn?&(x I64) I64 = null
+      |       ^~~~
+compilation failed with 1 error
+=== t2dlocal.olang
+t2dlocal.olang:11:7: error[T2d]: 'weak' is written only where a value is stored - a field, a payload, an element or a type argument a type stores, or a global - never on a local, a parameter, a result or a function type's: write 'Node?&' here
+   11 |     p weak Node?& = n
+      |       ^~~~
+compilation failed with 1 error
+=== t2dnotnull.olang
+t2dnotnull.olang:6:10: error[T2d]: a weak place reads null once nothing owning holds what it names, so 'weak' is written before a reference that may be null - write 'weak mut Node?&'
+    6 |     prev weak mut Node& = next!
+      |          ^~~~
+compilation failed with 1 error
+=== t2dparam.olang
+t2dparam.olang:8:12: error[T2d]: 'weak' is written only where a value is stored - a field, a payload, an element or a type argument a type stores, or a global - never on a local, a parameter, a result or a function type's: write 'Node?&' here
+    8 | fn first(n weak Node?&) I64 { return 0 if n is null else n.v }
+      |            ^~~~
+compilation failed with 1 error
+=== t2dresult.olang
+t2dresult.olang:8:18: error[T2d]: 'weak' is written only where a value is stored - a field, a payload, an element or a type argument a type stores, or a global - never on a local, a parameter, a result or a function type's: write 'Node?&' here
+    8 | fn back(n Node&) weak Node?& { return n.prev }
+      |                  ^~~~
+compilation failed with 1 error
+=== t2dunheld.olang
+t2dunheld.olang:5:10: error[T2d]: no owning place of the program holds a Node - a field, an element, a payload or a global holding it other than weakly - so every weak reference to one would read null: hold it somewhere owning, or drop 'weak'
+    5 |     prev weak Node?& = null
+      |          ^~~~
 compilation failed with 1 error
 === t30aextendedmethod.olang
 t30aextendedmethod.olang:14:10: error[G19]: eaSq does not satisfy the constraint eaDwelling on T: it has no method Rooms (eaHouse's) that fits

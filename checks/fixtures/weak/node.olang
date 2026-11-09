@@ -1,0 +1,4 @@
+# T2d, T13d across modules: a type its own module never names weakly
+type Node struct(V I64) {
+    V
+}

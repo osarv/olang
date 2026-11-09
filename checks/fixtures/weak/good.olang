@@ -1,0 +1,15 @@
+# the weak reference, the owning place and the type in three modules: the program builds, and a weak place reads back
+import "std/io"
+import "node"
+import "back"
+import "keep"
+
+fn main() ? io.Error {
+    k := keep.Keep()
+    n := node.Node(4)
+    k.N = n
+    b := back.Back()
+    b.Point(n)
+    at := b.At
+    try io.Println($(at.V if at is not null else -1) " " $(k.N == b.At))
+}

@@ -29,6 +29,7 @@ is no B3e limit.
 | `compiler/goldens/tokens*.txt`, `ast*.txt`, `layout.txt` (`make tokgold astgold layoutgold`) | stored scanner/parser output; stale files are reported |
 | `fuzz/gen.olang`, `fuzz/scopegen.olang` | the generators, if the form can occur in a program they write |
 | `tools/*_migrate.olang` + `compiler/fix.olang` | when old code must be rewritten (see "A migration") |
+| `tools/keyword_rename.olang` `Words` | a new word other people's code may use as a name: renamed with a `_`, its own place left |
 | `tests/`, `checks/cases/` | a run test, an evaluator-decided test, a must-fail case naming the diagnostic |
 | `docs/README.md` / `std/README.md` | only if a doc teaches the form |
 

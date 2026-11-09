@@ -1,0 +1,7 @@
+# check: fail error[T2d]: a weak reference names an instance of a struct or an enum
+# also: is a function type
+# T2d: a function value is no weak reference's target
+type Box struct() {
+    f weak fn?&(x I64) I64 = null
+}
+fn main() { assert Box().f is null }

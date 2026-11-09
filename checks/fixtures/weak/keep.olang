@@ -1,0 +1,6 @@
+# T2d: an owning place holding the type, in a third module
+import "node"
+
+type Keep struct() {
+    N mut node.Node?& = null
+}

@@ -1,0 +1,4 @@
+# T13d: a by-value slot of the type, in a module of its own
+import "node"
+
+fn Value(n node.Node) I64 { return n.V }

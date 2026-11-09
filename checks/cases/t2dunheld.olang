@@ -1,0 +1,10 @@
+# check: fail error[T2d]: no owning place of the program holds a Node - a field, an element, a payload or a global holding it other than weakly - so every weak reference to one would read null: hold it somewhere owning, or drop 'weak'
+# T2d: a weak reference to a type nothing owning holds (judged over the whole program)
+type Node struct(v I64) {
+    v
+    prev weak Node?& = null
+}
+fn main() {
+    n := Node(1)
+    assert n.prev is null
+}

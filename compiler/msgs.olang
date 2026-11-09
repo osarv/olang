@@ -383,6 +383,16 @@ type Diag enum {
     UniqueKind
     UniqueNeedsCopy
     DestructNotUnique
+    WeakNotNullable
+    WeakPlace
+    WeakTarget
+    WeakFresh
+    WeakUnheld
+    GenByValue
+    GenByValueAway
+    NoteGenSlot
+    GenUnique
+    GenCopyDestruct
     StrShape
     EqStrWrites
     ProtocolBothSpellings
@@ -1370,6 +1380,21 @@ fn DropCycle(a String&, b String&) r.Msg { return r.Msg(Diag.DropCycle, "O15", "
 fn UniqueKind(what String&) r.Msg { return r.Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
 fn UniqueNeedsCopy(text String&, ty String&) r.Msg { return r.Msg(Diag.UniqueNeedsCopy, "T13b, G18", $text " needs a copy, and " $ty " is unique - its values are never copied: call " $text " with a reference ('" $ty "&') or with a type that copies") }
 fn DestructNotUnique(ty String&) r.Msg { return r.Msg(Diag.DestructNotUnique, "C11, T13b", "a destructor releases what one value holds, so " $ty " is unique - declare it 'type " $ty " unique struct(...)'") }
+# T2d, T13d: weak references and the generational types they name
+fn WeakNotNullable(rest String&) r.Msg { return r.Msg(Diag.WeakNotNullable, "T2d", "a weak place reads null once nothing owning holds what it names, so 'weak' is written before a reference that may be null - write 'weak " $weakFix(rest) "'") }
+fn weakFix(rest String&) String {
+    if rest.EndsWith("&") and not rest.EndsWith("?&"): return $rest[:rest.Len() - 1] "?&"
+    return $rest "?&"
+}
+fn WeakPlace(ty String&) r.Msg { return r.Msg(Diag.WeakPlace, "T2d", "'weak' is written only where a value is stored - a field, a payload, an element or a type argument a type stores, or a global - never on a local, a parameter, a result or a function type's: write '" $ty "' here") }
+fn WeakTarget(ty String&, what String&) r.Msg { return r.Msg(Diag.WeakTarget, "T2d", "a weak reference names an instance of a struct or an enum, and " $ty " is " $what " - hold it by an ordinary reference") }
+fn WeakFresh(ty String&) r.Msg { return r.Msg(Diag.WeakFresh, "T2d", "a new " $ty " stored only into a weak place is held by nothing owning, so the place would read null at once - store it into an owning place first, then here") }
+fn WeakUnheld(ty String&) r.Msg { return r.Msg(Diag.WeakUnheld, "T2d", "no owning place of the program holds a " $ty " - a field, an element, a payload or a global holding it other than weakly - so every weak reference to one would read null: hold it somewhere owning, or drop 'weak'") }
+fn GenByValue(ty String&) r.Msg { return r.Msg(Diag.GenByValue, "T13d", $ty " is generational - a weak reference names it - so its values are held only by reference: write '" $ty "&' here") }
+fn GenByValueAway(ty String&) r.Msg { return r.Msg(Diag.GenByValueAway, "T13d", "this weak reference makes " $ty " generational - its values held only by reference - and another module holds one by value: write '" $ty "&' there, or drop 'weak'") }
+fn NoteGenSlot(ty String&) r.Msg { return r.Msg(Diag.NoteGenSlot, "", "a " $ty " held by value here") }
+fn GenUnique(ty String&) r.Msg { return r.Msg(Diag.GenUnique, "T13d", $ty " is generational - a weak reference names it - and its values are never copied, only referenced: drop 'unique'") }
+fn GenCopyDestruct(ty String&) r.Msg { return r.Msg(Diag.GenCopyDestruct, "T13d, E31d", $ty " is generational and declares a destructor, so it has no Copy - each instance's destructor runs once: make a new one with its constructor") }
 fn StrShape() r.Msg { return r.Msg(Diag.StrShape, "E11c", "Str gives a String") }
 fn EqStrWrites(text String&) r.Msg { return r.Msg(Diag.EqStrWrites, "E10a, E11c", $text " takes what it is given read-only - neither its receiver nor a parameter may be 'mut'") }
 fn ProtocolBothSpellings(ty String&, text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ProtocolBothSpellings, "M6b", $ty " declares " $text1 " twice, public and private - keep one: " $text2 ", or " $text3 " for its own module only") }

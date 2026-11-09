@@ -944,7 +944,7 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
         case ast.TypeRef.Named(_, _, args) {
             for a in args { r.receiverArg(a) }
         }
-        case ast.TypeRef.Ref(_, of, _) { r.receiverVars(of, inArgs) }
+        case ast.TypeRef.Ref(_, of, _, _) { r.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _) { r.receiverVars(of, inArgs) }
         case _ { }
     }
@@ -1663,7 +1663,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
             for p in s.Params { r.typeRef(p.Ty) }
         }
         case ast.TypeRef.Shape(_, _) { }
-        case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Perm(_, of, _) { r.typeRef(of) }
+        case ast.TypeRef.Ref(_, of, _, _), ast.TypeRef.Perm(_, of, _) { r.typeRef(of) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { r.typeRef(of) }
         case ast.TypeRef.Errs(_, items) {
             for e in items { r.path(e) }
