@@ -16785,11 +16785,6 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<
                 ps := c.P.T.Items(c.P.T.Parts(t))
                 if i < ps.Len() { pt = ps[i] }
             }
-            # R11: a default for a value holding references builds all it holds - nothing existing in it
-            # (a declared function named - made once for the program, T21 - holds nothing either)
-            if value and not c.isRef(pt) and c.P.T.HoldsRefs(pt) and not builtAst(cl.Defaults[i]) and not c.namedFn(cl.Defaults[i]) {
-                c.err(cl.Defaults[i].Span(), msgs.DefaultHoldsReferences())
-            }
             c.exprs.Push(c.exprTo(cl.Defaults[i], pt))
         }
     }
@@ -16817,76 +16812,10 @@ fn (c mut Checker&) caughtPayload(sp source.Span, bind I64) {
     c.emit(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrTaken, c.readLocal(sp, bind), null)))
 }
 
-# a task's default (P4a): built where the call's result lands, so one holding references builds all it holds - a part
-# naming existing storage that holds a reference is said where it is written
+# a task's default (P4a): the targets' value, judged by the scope pass as what the task's clause returns - existing
+# storage it names outlives where the result lands, or is refused there
 fn (c mut Checker&) taskDefault(x ast.Expr&, t types.TypeId) typed.Expr& {
-    e := c.expr(x, t)
-    if c.isRef(t) or c.P.T.HoldsRefs(t) {
-        at := c.existingIn(e)
-        if at.Start >= 0 {
-            c.err(at, msgs.TaskDefaultExisting())
-            return c.unknown(x.Span())
-        }
-    }
-    return c.fit(e, t, c.argSpan(x))
-}
-
-# the first part of a value that names existing storage holding a reference rather than building it (P4a); Start -1
-# for none
-fn (c mut Checker&) existingIn(x typed.Expr?&) source.Span {
-    if x is null { return source.Span(-1, -1) }
-    match x {
-        case typed.Expr.Read(sp, ty, _, _) {
-            if c.isRef(ty) or c.P.T.HoldsRefs(ty) { return sp }
-        }
-        case typed.Expr.Borrow(sp, _, _) { return sp }
-        case typed.Expr.Promote(_, _, pr) { return c.existingIn(pr.X) }
-        case typed.Expr.Call(_, _, cl) {
-            for a in cl.Args {
-                e := c.existingIn(a)
-                if e.Start >= 0 { return e }
-            }
-        }
-        case typed.Expr.Make(_, _, m) {
-            for a in m.Items {
-                e := c.existingIn(a)
-                if e.Start >= 0 { return e }
-            }
-        }
-        case typed.Expr.Prim(_, _, op, _, args) {
-            if typed.PassesRefs(op) and args.Len() > 0 { return c.existingIn(args[0]) }
-        }
-        case _ { }
-    }
-    return source.Span(-1, -1)
-}
-
-# whether an expression builds all it holds (R11): literals, written text, calls and array literals of such, a case
-# whether an expression names a declared function (or an import's) as a value: its environment none (T21)
-fn (c mut Checker&) namedFn(x ast.Expr&) Bool {
-    return match x {
-        case ast.Expr.Name(sp, _): c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Func
-        case ast.Expr.Paren(_, y): c.namedFn(y)
-        case _: false
-    }
-}
-
-fn builtAst(x ast.Expr&) Bool {
-    return match x {
-        case ast.Expr.Lit(_, _), ast.Expr.Join(_, _), ast.Expr.Member(_, _, _): true
-        case ast.Expr.Paren(_, y): builtAst(y)
-        case ast.Expr.Unary(_, op, y): op == token.Tok.Minus and builtAst(y)
-        case ast.Expr.Call(_, _, args), ast.Expr.ArrayLit(_, _, args): allBuilt(args)
-        case _: false
-    }
-}
-
-fn allBuilt(xs Array<ast.Expr&>&) Bool {
-    if xs.Len() == 0 { return true }
-    for x in xs {
-        if not builtAst(x) { return false }
-    }
-    return true
+    return c.fit(c.expr(x, t), t, c.argSpan(x))
 }
 
 # whether an expression may stand as a statement (S3): a call, a try of one, an increment, a take - else a value

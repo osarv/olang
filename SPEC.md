@@ -5907,10 +5907,10 @@ clause through are compile-time errors. `unreachable` and a `noreturn` call end 
 - With targets (P1g) they are in value position (R9a): each gives the targets' values with `default v` - one default
   per target, as a destructuring's `try` takes one per result: `spawn q, r = try divmod(a, b) catch default 0, 0` - or
   its block provably ends the process. A default is stored into the targets as the call's result would be, so it fits
-  the call's result type, and one holding references is built where the call's result lands (P1g, §8 O18a): it builds
-  all it holds - `null`, text written in the program, a temporary such as a constructor call, a lambda capturing no
-  reference (built where it lands, D16d) or capturing nothing (static, as a named function is) - and never names
-  existing storage, whose scope a task cannot match against the targets'.
+  the call's result type, and one holding references is judged as the call's result is (P1g, §8 O18a): what it builds
+  is built where the call's result lands, and existing storage it names - captured by the clause as above - must
+  outlive each target as an assigned value must (O25): `spawn r = try mk(n) catch default fallback` with `fallback`
+  living at least as long as `r`.
 
 **P4b.** What no clause of a task takes **reaches its join**. The error ends the task, leaving its targets as they
 were, and is carried to the task's `join` block - as its code (R6), written before the task is reported finished, so
@@ -6364,13 +6364,9 @@ written would be kept by neither.
   outcomes have one scope, and whatever receives the value treats it exactly as it would the call alone.
   `null` has no scope and always fits; a temporary has none of its own and is built in the result's scope
   (E12c). A by-value result that holds
-  references (a struct or payload carrying scope variables) takes a default that **builds all it holds**: a
-  constructor call whose every argument is a number, a `Bool`, `null`, text written in the program (static, T25d) or
-  such a call again - `try validate(t) catch default List<String&>()` - or a declared function named as a value (T21:
-  made once for the program, it holds nothing). It is built where the call's result is, so its
-  references are where the result's are, and what is later put into it lands there too. A default naming existing
-  storage, or built from it, is a compile-time error: its references would have to agree with every scope the
-  result's live in.
+  references (a struct or payload carrying scope variables) takes any default of its type: one built there is built
+  where the call's result is, and one naming existing storage - `try validate(t) catch default empty` - is a copy whose
+  references are judged where the result lands, as an assigned value's are (O25h): what it refers to outlives that.
 - A checked index `a.Get(i)` and a slice `a.SliceOf(lo, hi)` can fail only with `ArrayError.OutOfRange`
   (§7.6), which a clause names or takes with an item-less `catch`: `try a.Get(i) catch default -1`. The
   expression is then a value, never an lvalue.

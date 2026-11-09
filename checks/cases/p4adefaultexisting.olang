@@ -1,5 +1,9 @@
-# check: fail error[P4a]: a task's default is built where its result lands, and this names existing storage - build the value here, or give null
-# P4a: a default holding references is built where the call's result lands, so it builds all it holds
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals 5.7): compiles now - a task's default naming existing storage is the targets' value, judged as the
+# task's own result is: 'fallback' outlives 'r', so the default may name it. It was refused ("a task's default is built
+# where its result lands, and this names existing storage"); read back after a churn
+import "std/io"
 type E error {
     Bad
 }
@@ -10,10 +14,20 @@ fn Node.mk(n I64) Node& ? E {
     if n < 0 { error E.Bad }
     return Node(n)
 }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
 fn main() ? {
-    fallback Node& = Node(0)
+    fallback Node& = Node(40)
     r Node?& = null
+    s Node?& = null
     join {
         spawn r = try Node.mk(-1) catch default fallback
+        spawn s = try Node.mk(2) catch default fallback
     }
+    churn()
+    try io.Println($r!.v " " $s!.v " " $(r! == fallback))
 }

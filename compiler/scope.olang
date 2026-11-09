@@ -1262,7 +1262,8 @@ fn (s mut Scoper&) bndStmt(st typed.Stmt?&) {
                 if s.isFunc(p.Type()) and not s.bndCollect { s.boundary(sw.Task, BndTask) }
             }
             s.bndTask(sw.Task)
-            for c in sw.Clauses { s.bndExpr(c.Handler, BndOther) }
+            # (a clause's lambda is called by its task alone, its default given to the targets - followed, P4a)
+            for c in sw.Clauses { s.bndExpr(c.Handler, BndNone) }
         }
         case typed.Stmt.Yield(_, x) { s.bndExpr(x, BndStore) }
         case _ { }
@@ -8512,24 +8513,47 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         if s.report { s.err(s.firstToken(s.B!.File, sp), msgs.SpawnResultsDisagree()) }
     }
     # each target is assigned its result as an assignment's value is (P1g, O25): said at the spawn
-    if v.K == ValKind.Existing {
-        for p in sw.Targets {
-            if p is null or not s.holds(p.Type()) { continue }
-            sl := s.slotOf(p)
-            slot, exact, kind := sl.T, sl.Exact, sl.Kind
-            if s.bindingUnknown(p, slot) {
-                # existing storage stored into a field viewing p's referent of an instance whose binding is not known here (O23, O11)
-                s.giveBackPlace(p)
-                if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
-                continue
-            }
-            savedAt, savedSp := s.fitAt, s.fitSp
-            s.fitAt, s.fitSp = true, s.firstToken(s.B!.File, sp)
-            s.fit(v.T, slot, exact, sw.Task, kind)
-            s.fitAt, s.fitSp = savedAt, savedSp
-        }
-    }
+    if v.K == ValKind.Existing { s.giveTargets(sp, sw, v.T, sw.Task) }
+    # P4a: a clause's default naming existing storage it captured is given to the targets as the task's result is
+    for c in sw.Clauses { s.clauseGives(sp, sw, c) }
     if sw.Site >= typed.SiteId(0) { s.build(sw.Site, j if j.Runs() else s.here()) }
+}
+
+# existing storage of term t given to each target of task sw, as an assignment's value is (P1g, O25): said at the spawn
+fn (s mut Scoper&) giveTargets(sp source.Span, sw typed.Spawn&, t Term, x typed.Expr&) {
+    for p in sw.Targets {
+        if p is null or not s.holds(p.Type()) { continue }
+        sl := s.slotOf(p)
+        if s.bindingUnknown(p, sl.T) {
+            # existing storage stored into a field viewing p's referent of an instance whose binding is not known here (O23, O11)
+            s.giveBackPlace(p)
+            if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
+            continue
+        }
+        savedAt, savedSp := s.fitAt, s.fitSp
+        s.fitAt, s.fitSp = true, s.firstToken(s.B!.File, sp)
+        s.fit(t, sl.T, sl.Exact, x, sl.Kind)
+        s.fitAt, s.fitSp = savedAt, savedSp
+    }
+}
+
+# P4a, R11: a task clause's default is the targets' value - what it gives back of what the clause captured (its body's
+# relation "capture outlives result") outlives where each target keeps it, judged as the task's own result is
+fn (s mut Scoper&) clauseGives(sp source.Span, sw typed.Spawn&, c typed.TaskClause&) {
+    if c.Handler is null: return
+    match c.Handler {
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(id, _, site)) {
+            lb := I64(id)
+            rc := try s.lamCaps.Get(I64(site)) catch default Vec<Term>()
+            vs := s.Bodies[lb].Vars
+            for rl in s.sums[lb].Rels {
+                hi, lo := varOf(rl.Hi), varOf(rl.Lo)
+                if hi < 0 or hi >= rc.Len() or lo < 0 or lo >= vs.Len() or rc[hi] == Term.None: continue
+                if vs[lo] == typed.ScopeVar.Result: s.giveTargets(sp, sw, rc[hi], c.Handler!)
+            }
+        }
+        case _ { }
+    }
 }
 
 # the assignment operator after a place written at sp: "=", or a compound one ("+=", "<<=") - the place's own span where
