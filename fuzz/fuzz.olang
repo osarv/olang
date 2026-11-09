@@ -35,7 +35,8 @@
 # Its early-free mode (docs/memory.md 3.6) runs scopegen's FreeProgram instead - scenarios replacing and removing in
 # long-lived places, views kept across the let-goes and stored elsewhere, resources taken out of a Map
 # (O15) - built -d -s -memory, and interpreted in the
-# evaluator's dead-region mode (OLANG_DEADREGIONS), which stops at a read of a region a release reclaimed:
+# evaluator's dead-region mode (OLANG_DEADREGIONS), which stops at a read of a region a release reclaimed - and each
+# program that passes again as a module of its own, a root calling it (wholeprog 2.1):
 #
 #     fuzz free START COUNT [JOBS [SCENARIOS]]    seeds START.., the places the -memory reports free at once counted
 #     fuzz freeshow SEED [SCENARIOS]              prints an early-free program
@@ -408,7 +409,10 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
             try scopeFinding(dir, seed, -1, "-i failed", read(dir, "ierr.txt"))
             return
         }
-        if st == 0 and sOut == read(dir, "i.txt") { return }
+        if st == 0 and sOut == read(dir, "i.txt") {
+            if FreeMode { try splitSeed(seed, dir, sOut) }
+            return
+        }
     }
     iOut := read(dir, "i.txt")
     # the first scenario whose line differs or is missing is the one to blame; with none, the run ended early
@@ -426,6 +430,38 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
         return
     }
     try scopeFinding(dir, seed, -1, "-d -s run failed", read(dir, "serr.txt"))
+}
+
+# wholeprog 2.1 (W2): the early-free program as a module of its own (q.olang, its main called through SplitRun), the
+# root only calling it (r.olang) - its sites reading the decisions as link-time constants - built -d -s and interpreted
+# in the dead-region mode, each printing what the one-module form did
+fn splitSeed(seed I64, dir String&, want String&) ? io.Error {
+    src := String(read(dir, "p.olang").Replace("fn main() ? {", "fn splitMain() ? {"))
+    try os.WriteFile($dir "/q.olang", $src "\nfn SplitRun() { splitMain()! }\n") catch {
+        try scopeFinding(dir, seed, -1, "cannot write the split program", "")
+        return
+    }
+    try os.WriteFile($dir "/r.olang", "import \"q\"\n\nfn main() { q.SplitRun() }\n") catch {
+        try scopeFinding(dir, seed, -1, "cannot write the split program", "")
+        return
+    }
+    built := sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build -debug -sanitize r.olang > c.txt 2>&1") == 0
+    # (a main whose inferred error set is empty is called bare)
+    if not built and read(dir, "c.txt").Contains("nothing here can fail") {
+        try os.WriteFile($dir "/q.olang", $src "\nfn SplitRun() { splitMain() }\n") catch { }
+        built = sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build -debug -sanitize r.olang > c.txt 2>&1") == 0
+    }
+    if not built {
+        try scopeFinding(dir, seed, -1, "the split form does not compile", read(dir, "c.txt"))
+        return
+    }
+    if sh(dir, "timeout 120 ./build/r.debug.san > s.txt 2> serr.txt") != 0 or read(dir, "s.txt") != want {
+        try scopeFinding(dir, seed, -1, "the split form disagrees with the one-module form (a use after a scope closed)", read(dir, "serr.txt"))
+        return
+    }
+    if sh(dir, "timeout 600 nice -n 19 env OLANG_DEADREGIONS=1 \"$OLANG\" interpret r.olang > i.txt 2> ierr.txt") != 0 or read(dir, "i.txt") != want {
+        try scopeFinding(dir, seed, -1, "the split form interpreted disagrees, or read a freed region", read(dir, "ierr.txt"))
+    }
 }
 
 # the number of places a build's -memory report says free at once: "... - N free(s) it at once, ..."

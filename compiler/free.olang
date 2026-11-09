@@ -15,8 +15,9 @@
 # Vec's buffer, a Map's slots - is an array place (arrayCand), what a collection's growth replaces released as it grows.
 # Owners win: an array an owner held in a sole place holds keeps, its owner's one region reclaiming it.
 # Every fact the analysis does not have means keep: a call through a function value, an extern, a body the scope pass
-# did not judge, code in a module compiled on its own (B3i: only code emitted in the root's object - its own module's,
-# every instance's - makes regions and releases them).
+# did not judge. The decisions are the whole program's, but no module's code depends on them (B3i): every candidate
+# place's sites are written in every module, each guarded by its place's decision, a link-time constant the root's
+# decisions object defines (mir.Rvalue.Sole; docs/memory.md 3.5, docs/wholeprog.md 2.1) - LTO folds it.
 #
 # The analysis is conservative, and each step past it is a relaxation for a soundness review (5.5's gate). Origins are
 # flow-insensitive within a body; views are judged structurally, by statement order and loops; summaries are fixed
@@ -187,7 +188,8 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     passes I64 = 0
     holdsOf Vec<I64>          # by type: 0 not asked, 1 holds no reference, 2 holds one (HoldsRefs, asked once)
     wk mut walker?&             # the one walker, made again for each walk (newWalker) - its lists reused, not grown
-    Root I64 = -1              # the root module; -1 for a module compiled on its own, where nothing is freed early
+    Root I64 = -1              # the root module; -1 where nothing is decided (the evaluator's own lowering)
+    Alone Bool = false         # a module compiled on its own (B3): judged as a program, its decisions emitted nowhere
     # the candidate places: keys (a plain type, a field's position or -1 for an array's elements), whether each holds
     # a handle (its one field the reference), its value's type
     keyTy Vec<types.TypeId>
@@ -202,9 +204,11 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     safeAsked Map<types.TypeId, I64>             # contents asked: 1 being asked, 2 no, 3 yes
     leafAsked Map<types.TypeId, Vec<leaf>>
     ownersAsked Map<types.TypeId, Vec<I64>>    # heldPlaces, by type
-    # by body: its module, whether its code is emitted in the root's object, whether it is the program's own (not std)
+    # by body: its module, whether its code is emitted in the root's object - lowered by every build, so the decisions are
+    # written into it as they are, where every other body's code reads them as link-time constants - whether it is the
+    # program's own (not std)
     module Vec<I64>
-    rootEmitted Vec<Bool>
+    decided Vec<Bool>
     programCode Vec<Bool>
     prelude Vec<Bool>         # whether its code is the prelude's (std/prelude), whose fills are trusted (makeStores)
     # summaries, by body: the origins its result may carry (no New); the places each parameter's value is stored into
@@ -259,6 +263,8 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # owner locals (keyField -3): a local holding an owner by value (ownerCand) - a Vec, a Map - given another value
     # somewhere in its body, a place of its own: by (body, local), and by body whether it has one
     ownLocalOf Map<pair.Pair<I64, I64>, I64>
+    olBody Vec<I64>           # by place: an owner local's body and local, -1 for any other place
+    olLocal Vec<I64>
     olIn Vec<Bool>
     # D9h: the constructor calls whose instance views only storage made for it (typed.FreshViews), by (body, site), as
     # this analysis judged them before its regions were written into the plans - lowering leaves out their copy here
@@ -495,6 +501,8 @@ fn (f mut Free&) newPlace(ty types.TypeId, field I64, hd Bool, vt types.TypeId, 
     f.libTaken.Push(false)
     f.why.Push(reason(RNone, -1, source.Span(0, 0), ""))
     f.dtorVal.Push(dt)
+    f.olBody.Push(-1)
+    f.olLocal.Push(-1)
     return n
 }
 
@@ -636,7 +644,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     for b in range n {
         m := f.bodyModule(b)
         f.module.Push(m)
-        f.rootEmitted.Push(root >= 0 and (m == -3 or m == root))
+        f.decided.Push(not f.Alone and (m == -3 or m == root))
         f.programCode.Push(f.ownCode(b))
         f.prelude.Push(f.preludeCode(b))
         f.resFrom.Push(Vec<I64>())
@@ -992,6 +1000,8 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
             if not f.ownerCand(ty): return
             k := f.newPlace(ty, -3, false, ty, false)
             f.owner[k] = true
+            f.olBody[k] = f.curBody
+            f.olLocal[k] = I64(l)
             f.ownLocalOf.Put(key, k)
             f.olIn[f.curBody] = true
         }
@@ -1649,7 +1659,7 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
         if f.IsOwner(lf.PlaceId) or f.arr[lf.PlaceId]: owners.Push(lf.PlaceId)
     }
     site := ownCopySite(cm)
-    one := owners.Len() == 1 and site >= 0 and f.rootEmitted[w.Id]
+    one := owners.Len() == 1 and site >= 0
     for lf in lvs {
         k := lf.PlaceId
         if owners.Has(k) {
@@ -1680,7 +1690,7 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
         }
     }
     if owners.Len() == 0 { return }
-    one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.rootEmitted[w.Id]
+    one := owners.Len() == 1 and c.Site >= typed.SiteId(0)
     for k in owners {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, I64(c.Site) if one else -1, x, null))
         if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" $w.text(x.Span()) "'")
@@ -2843,10 +2853,6 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         kind = SFail
         why = "its new value is kept in another place too"
     }
-    if kind == SFresh and not f.rootEmitted[w.Id] {
-        kind = SFail
-        why = "its new value is built in a module compiled on its own"
-    }
     f.stores.Push(store(k, w.Id, file, sp, kind, of, site, x, null))
     if kind == SFail {
         rf, rsp := file, sp
@@ -3438,7 +3444,7 @@ fn pureBase(p typed.Lvalue&) Bool {
 # a call one of whose arguments is reached through a value of a sole place: what the callee builds where that
 # argument lives is built in that value's region, if the place is decided sole (writePlans)
 fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
-    if not w.F.rootEmitted[w.Id] or c.Site < typed.SiteId(0) { return }
+    if c.Site < typed.SiteId(0) { return }
     for j in range c.Args.Len() {
         r := w.rootOf(c.Args[j])
         if r is null: continue
@@ -3451,7 +3457,6 @@ fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
 
 # a store into a field reached through a value of a sole place: the value's parts built where that value is
 fn (w mut walker&) orStoreOf(p typed.Lvalue&, x typed.Expr&) {
-    if not w.F.rootEmitted[w.Id] { return }
     r := derefRoot(p)
     if r is null { return }
     q := w.rootPlace(r)
@@ -3469,7 +3474,7 @@ fn (f mut Free&) decide() {
     # a struct overwritten in the prelude's collections overwrites a slot its removals vacated first (add's reuse of a
     # removed key's slot): no let-go that frees anything, so not one a region is made for
     for g in f.goes {
-        if g.Kind != LCall and g.PlaceId >= 0 and f.rootEmitted[g.Body] and not (g.Kind == LLeaf and f.prelude[g.Body]) { letsHere[g.PlaceId] = true }
+        if g.Kind != LCall and g.PlaceId >= 0 and not (g.Kind == LLeaf and f.prelude[g.Body]) { letsHere[g.PlaceId] = true }
     }
     for k in range n {
         if f.tasks { f.keep(k, RTask, -1, source.Span(0, 0), "a task can reach it: nothing is freed early where a program has tasks") }
@@ -3502,6 +3507,22 @@ fn (f mut Free&) decide() {
             f.keep(st.PlaceId, RMade, st.File, st.Sp, "its new value cannot be built in a region of its own here")
         }
     }
+    # a site writePlans gives another place's region first (a module's every place's sites are written, each guarded by
+    # its own decision): this place's value built there is in a region only where that place is sole
+    claim Map<pair.Pair<I64, I64>, I64>
+    for i in f.outerFirst() {
+        st := f.stores[i]
+        if st.Kind != SFresh or f.decided[st.Body] or not f.placeable(st): continue
+        top := f.topSite(st.X!)
+        if top < 0 or f.siteScope(st.Body, st.X!) == typed.Scope.Found: continue
+        key := pair.Pair(st.Body, top)
+        had := try claim.Get(key) catch default -1
+        if had < 0 {
+            claim.Put(key, st.PlaceId)
+        } else if had != st.PlaceId {
+            f.keep(st.PlaceId, RMade, st.File, st.Sp, "its new value is built where another place's is")
+        }
+    }
     for k in range n {
         if f.dtorVal[k] {
             f.keep(k, RDtor, -1, source.Span(0, 0), "what it holds has a destructor still to run when it lets go (O15): its holder ends it")
@@ -3531,6 +3552,24 @@ fn (f mut Free&) decide() {
         }
         if not found: break
     }
+}
+
+# the stores, by index, in the order writePlans gives their sites regions: a body's in the order of their values'
+# starts, a value before the values inside it - so a value built as part of another's is judged once that one's region
+# took it in, a region of its own inside that one
+fn (f Free&) outerFirst() Vec<I64> {
+    out Vec<I64>
+    for i in range f.stores.Len() { out.Push(i) }
+    out.Sort(fn(a I64, b I64) Bool {
+        x, y := f.stores[a], f.stores[b]
+        if x.Body != y.Body: return x.Body < y.Body
+        if x.X is null or y.X is null: return a < b
+        p, q := x.X!.Span(), y.X!.Span()
+        if p.Start != q.Start: return p.Start < q.Start
+        if p.End != q.End: return p.End > q.End
+        return a < b
+    })
+    return out
 }
 
 # the scope a site is built in, as the plan says: a temporary's, an array's, a text's, a comprehension's (Built) - a
@@ -3620,12 +3659,21 @@ fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I6
     for j in range c.Args.Len() {
         u := f.paramVar(b2, j)
         if u < 0 or u >= 63: continue
-        if pl.Passed(c.Site, u) == at and f.siteScope(b, c.Args[j]) == at { set = set | (I64(1) << u) }
+        if pl.Passed(c.Site, u) == at and f.builtAt(b, c.Args[j]) == at { set = set | (I64(1) << u) }
     }
     rels := f.Sc.VarRels(b2)
     if f.relsFit(rels, set) { return set }
     set = I64(1) << v
     return set if f.relsFit(rels, set) else -1
+}
+
+# the scope a value is built in, as the plan says - where it has a region of its own (another place's value, a kid of
+# whatever region takes it in), the scope that region is made in
+fn (f mut Free&) builtAt(b I64, x typed.Expr&) typed.Scope {
+    top := f.topSite(x)
+    pl := f.Plans.Ref(b)
+    if top >= 0 and pl.RegionKind[top] == 1 { return pl.RegionParent[top] }
+    return f.siteScope(b, x)
 }
 
 fn (f mut Free&) relsFit(rels Array<I64>&, set I64) Bool {
@@ -3641,13 +3689,21 @@ fn (f mut Free&) relsFit(rels Array<I64>&, set I64) Bool {
 
 # ---- the regions written into the plans ----
 
+# A body whose code is emitted in the root's object - lowered again by every build, its record never reused - has the
+# sole places' sites written, as they are. Every other body has every candidate place's sites written, each guarded by
+# its place's decision (RegionGuard, RootGuard), so that a module's code is the same whatever the program decides, every
+# decision a link-time constant (wholeprog 2.1)
 fn (f mut Free&) writePlans() {
-    # each value made for a sole place: a region of its own at its site, its parts built with it
-    for st in f.stores {
-        if st.Kind != SFresh: continue
+    # each value made for a place: a region of its own at its site where the place is sole, its parts built with it
+    # (whether a store can be built in a region is judged before any is written: a value whose site an earlier store's
+    # region took in has a region of its own inside that one - a place's value built as part of another's)
+    ok Vec<Bool>
+    for st in f.stores { ok.Push(st.Kind == SFresh and f.placeable(st)) }
+    for i in f.outerFirst() {
+        if not ok[i]: continue
+        st := f.stores[i]
         k := st.PlaceId
-        # a sole place's values
-        if not (f.Sole[k] and f.rootEmitted[st.Body]): continue
+        if f.decided[st.Body] and not f.Sole[k]: continue
         x := st.X!
         top := f.topSite(x)
         if top < 0: continue
@@ -3658,30 +3714,36 @@ fn (f mut Free&) writePlans() {
         if at == typed.Scope.Found: continue
         pl.RegionKind[top] = 1
         pl.RegionParent[top] = at
+        pl.RegionGuard[top] = f.guard(st.Body, k)
         f.redirect(st.Body, x, top, at, true)
     }
     # a store through a value of a sole place: a region made there has that value's region for its parent; parts not
     # made for a sole place are built in that region
     for os in f.orStores {
-        if not f.Sole[os.PlaceId]: continue
+        if f.decided[os.Body] and not f.Sole[os.PlaceId]: continue
         top := f.topSite(os.X)
         if top < 0: continue
         pl := f.Plans.Ref(os.Body)
         at := f.siteScope(os.Body, os.X)
         if not runs(at) and pl.RegionKind[top] == 0: continue
         if pl.RegionKind[top] == 1 {
-            if pl.RegionRoot[top] is null { pl.RegionRoot[top] = os.Root }
+            if pl.RegionRoot[top] is null {
+                pl.RegionRoot[top] = os.Root
+                pl.RootGuard[top] = f.guard(os.Body, os.PlaceId)
+            }
             continue
         }
         if pl.RegionKind[top] != 0: continue
         pl.RegionKind[top] = 2
         pl.RegionParent[top] = at
         pl.RegionRoot[top] = os.Root
+        pl.RegionGuard[top] = f.guard(os.Body, os.PlaceId)
+        pl.RootGuard[top] = f.guard(os.Body, os.PlaceId)
         f.redirect(os.Body, os.X, top, at, true)
     }
     # a call given a value of a sole place: what it builds where that value lives is built in its region
     for oc in f.ors {
-        if not f.Sole[oc.PlaceId]: continue
+        if f.decided[oc.Body] and not f.Sole[oc.PlaceId]: continue
         pl := f.Plans.RefMut(oc.Body)
         if pl.RegionKind[oc.Site] != 0: continue
         v := f.paramVar(oc.Callee, oc.Param)
@@ -3696,6 +3758,8 @@ fn (f mut Free&) writePlans() {
         pl.RegionKind[oc.Site] = 2
         pl.RegionParent[oc.Site] = at
         pl.RegionRoot[oc.Site] = oc.Root
+        pl.RegionGuard[oc.Site] = f.guard(oc.Body, oc.PlaceId)
+        pl.RootGuard[oc.Site] = f.guard(oc.Body, oc.PlaceId)
         for u in range 63 {
             if (set & (I64(1) << u)) != 0 { pl.SetPassed(site, u, typed.Scope.Region(site)) }
         }
@@ -3723,7 +3787,7 @@ fn (f mut Free&) orVars(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64
     for j in range c.Args.Len() {
         u := f.paramVar(b2, j)
         if u < 0 or u >= 63 or u == v: continue
-        if pl.Passed(c.Site, u) == at and f.topSite(c.Args[j]) >= 0 and f.siteScope(b, c.Args[j]) == at {
+        if pl.Passed(c.Site, u) == at and f.topSite(c.Args[j]) >= 0 and f.builtAt(b, c.Args[j]) == at {
             set = set | (I64(1) << u)
         }
     }
@@ -3857,6 +3921,12 @@ fn (f mut Free&) topSite(x typed.Expr&) I64 {
 fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bool, copied Bool = false) {
     pl := f.Plans.RefMut(b)
     region := typed.Scope.Region(typed.SiteId(I32(top)))
+    # a part with a region of its own (another place's value, written first) is a kid of this one
+    ps := f.topSite(x)
+    if not self and ps >= 0 and ps != top and pl.RegionKind[ps] == 1 {
+        if pl.RegionParent[ps] == at { pl.RegionParent[ps] = region }
+        return
+    }
     match x {
         case typed.Expr.Promote(_, _, pr) {
             if self or pl.Built[I64(pr.Site)] == at { pl.Built[I64(pr.Site)] = region }
@@ -3901,67 +3971,95 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
 
 # ---- what lowering asks ----
 
+NotSole I64 = -2
+
 # whether place k is decided sole: what it lets go of is freed at once
 fn (f Free&) IsSole(k I64) Bool { return f.Done and k >= 0 and k < f.Sole.Len() and f.Sole[k] }
 
-# whether a body's code frees early: emitted in the root's object (B3i)
-fn (f Free&) Frees(b I64) Bool { return f.Done and b >= 0 and b < f.rootEmitted.Len() and f.rootEmitted[b] }
+# whether a body's code frees early where its places are decided sole: every body's, once the analysis ran - its sites
+# read each decision as a link-time constant (mir.Rvalue.Sole), so a module's code is the same in every program
+fn (f Free&) Frees(b I64) Bool { return f.Done and b >= 0 and b < f.Bodies.Len() }
 
-# the sole place a place is, -1 for none
-fn (f mut Free&) SolePlace(p typed.Lvalue&) I64 {
+# the guard of place k's sites in body b: -1 where the body's code has the decisions as they are, else k (Guard)
+fn (f Free&) guard(b I64, k I64) I64 { return -1 if f.decided[b] else k }
+
+# what body b's code reads of place k's decision: NotSole where it is decided not sole in code that has the decisions
+# as they are, -1 where it is decided sole there, else k - read as a link-time constant (mir.Rvalue.Sole)
+fn (f Free&) Guard(b I64, k I64) I64 {
+    if k < 0 or b < 0 or b >= f.decided.Len() or not f.decided[b] { return k }
+    return -1 if f.IsSole(k) else NotSole
+}
+
+# the candidate place a place is, -1 for none: what its let-go releases where it is decided sole
+fn (f mut Free&) PlaceOf(p typed.Lvalue&) I64 {
     if not f.Done { return -1 }
-    k := f.placeOfPlace(p)
-    return k if f.IsSole(k) else -1
+    return f.placeOfPlace(p)
+}
+
+# the places decided sole, for the root's decisions object
+fn (f Free&) SoleNow() Vec<I64> {
+    out Vec<I64>
+    if not f.Done { return out }
+    for k in range f.Sole.Len() {
+        if f.Sole[k]: out.Push(k)
+    }
+    return out
+}
+
+# a place's key, which names its constant: the struct type and field position (an array type's elements: -1)
+fn (f Free&) PlaceKey(k I64) types.TypeId, I64 { return f.keyTy[k], f.keyField[k] }
+
+# an owner local place's body and local, -1 and -1 for any other place
+fn (f Free&) LocalPlace(k I64) I64, I64 {
+    if not f.isOwnLocal(k) { return -1, -1 }
+    return f.olBody[k], f.olLocal[k]
 }
 
 # D9h: whether the constructor call at site of body b is one whose copy is left out (freshAt)
 fn (f Free&) FreshCtorAt(b I64, site I64) Bool { return f.freshAt.Has(pair.Pair(b, site)) }
 
-# the sole owner local place local l of body b is, -1 for none
-fn (f mut Free&) SoleLocal(b I64, l I64) I64 {
+# the owner local place local l of body b is, -1 for none
+fn (f mut Free&) LocalPlaceOf(b I64, l I64) I64 {
     if not f.Done or b < 0 or b >= f.olIn.Len() or not f.olIn[b] { return -1 }
-    k := try f.ownLocalOf.Get(pair.Pair(b, l)) catch default -1
-    return k if f.IsSole(k) else -1
+    return try f.ownLocalOf.Get(pair.Pair(b, l)) catch default -1
 }
 
-# the sole places inside a value of type ty held in place, by the fields that reach them - and for a handle the
+# the candidate places inside a value of type ty held in place, by the fields that reach them - and for a handle the
 # reference it holds, field 0
-fn (f mut Free&) SoleLeaves(ty types.TypeId) Vec<leaf> {
+fn (f mut Free&) Leaves(ty types.TypeId) Vec<leaf> {
     out Vec<leaf>
     if not f.Done { return out }
-    for l in f.leaves(ty) {
-        if f.IsSole(l.PlaceId) { out.Push(l) }
-    }
-    return out
+    return f.leaves(ty)
 }
 
 fn (f Free&) IsHandle(k I64) Bool { return k >= 0 and k < f.handle.Len() and f.handle[k] }
 
-# whether a retire() (M19d) in body b at sp is left out: its array is the old value of a sole array place, released as
-# it was replaced - no view of it is used after (condition 6)
-fn (f mut Free&) RetireDropped(b I64, sp source.Span) Bool {
-    if not f.Done { return false }
+# the array places a retire() (M19d) in body b at sp is left out for, where one of them is decided sole: its array is
+# the old value of that place, released as it was replaced - no view of it is used after (condition 6)
+fn (f mut Free&) RetirePlaces(b I64, sp source.Span) Vec<I64> {
+    out Vec<I64>
+    if not f.Done { return out }
     for r in f.retires {
         if r.Body != b or r.Sp != sp: continue
         for y in r.Orig {
-            if okind(y) == OPl and f.arr[oval(y)] and f.Sole[oval(y)]: return true
+            if okind(y) == OPl and f.arr[oval(y)]: addTo(out, oval(y))
         }
     }
-    return false
+    return out
 }
 
 # whether a candidate place holds an owner (types.Anchors): its let-go releases the region its anchors name
 fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.owner[k] }
 
-# the sole place a dropped call's result is a value moved out of - what lowering releases after the statement - -1
-# for none
+# the place a dropped call's result is a value moved out of - what lowering releases after the statement where it is
+# decided sole - -1 for none
 fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
     if not f.Done { return -1 }
     b2 := typed.CalleeBody(c)
     if b2 < 0 or f.Bodies[b2].Root is null { return -1 }
     m := f.mustRes[b2]
     if m < MovBase { return -1 }
-    return m - MovBase if f.IsSole(m - MovBase) else -1
+    return m - MovBase
 }
 
 # ---- the report (B18): the places that keep what they let go of, and why ----
@@ -4020,7 +4118,7 @@ fn (f mut Free&) Report() String {
         }
         r := f.why[k]
         why := r.Text
-        if f.whyKind[k] == RNone { why = "it lets go only in a module compiled on its own, where nothing is freed early" }
+        if f.whyKind[k] == RNone { why = "it is let go of only inside calls that may let go of any place" }
         where := $d.Locate(r.File, I64(r.Sp.Start)) if r.File >= 0 else $d.Locate(g.File, at)
         # one row a cause: places let go of together, kept for one reason, are one row
         text := $d.Locate(g.File, at) ": memory: " $what "\n" $where ": note: " $why "\n"
@@ -4052,7 +4150,7 @@ fn (f mut Free&) isContents(k I64) Bool {
 fn (f mut Free&) reported(k I64) Bool {
     owns := false
     for st in f.stores {
-        if st.PlaceId == k and f.rootEmitted[st.Body] and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
+        if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
     }
     if not owns { return false }
     if f.isContents(k) { return true }

@@ -337,8 +337,10 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # O29: the reference arguments lowered, and their operands - a scope found from one is found from its operand
     argExprs Vec<typed.Expr&>
     argOps Vec<mir.Operand>
+    retiring Bool = false            # a retire() being lowered past its O8d guard (retire)
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
-                                    # 0 the value, 1 the handle's state (free.IsHandle)
+                                    # else 1 + the place's guard (free.Guard) << 1, and 0 the value or 1 the handle's
+                                    # state (free.IsHandle)
     walkSite typed.SiteId = typed.SiteId(-1)    # D18e: the generator call whose walk a for-in makes and finishes here
     # D9h: the call sites whose array value result is read where it stands - its consumer only reads it before
     # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
@@ -678,7 +680,7 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
     if root is not null {
         o := ln.val(root)
         h0 := ln.temp(mir.I64T, sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h0), mir.Rvalue.RegionOr(o, parent)))
+        ln.guarded(h0, ln.plan.RootGuard[site], mir.Rvalue.RegionOr(o, parent), parent, sp)
         if kind == 2 {
             ln.regions.Put(site, h0)
             return mir.ScopeRef.Held(h0)
@@ -686,9 +688,39 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
         parent = mir.ScopeRef.Held(h0)
     }
     h := ln.temp(mir.I64T, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Region(parent)))
+    ln.guarded(h, ln.plan.RegionGuard[site], mir.Rvalue.Region(parent), parent, sp)
     ln.regions.Put(site, h)
     return mir.ScopeRef.Held(h)
+}
+
+# h given rv where place k is decided sole (a link-time constant, wholeprog 2.1), else the handle of parent - every
+# place's sites are written, so a module's code is the same in every program; k -1: rv
+fn (ln mut lowering&) guarded(h mir.LocalId, k I64, rv mir.Rvalue, parent mir.ScopeRef, sp source.Span) {
+    if k < 0 {
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), rv))
+        return
+    }
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Handle(parent)))
+    after := ln.whenSole(k, true, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), rv))
+    ln.joinAt(after)
+}
+
+# code that runs only where place k is decided sole (yes) or not (O8d, mir.Rvalue.Sole): the block it starts in is
+# entered, the block it ends in returned, which joinAt enters once that code is lowered
+fn (ln mut lowering&) whenSole(k I64, yes Bool, sp source.Span) mir.BlockId {
+    g := ln.temp(types.BoolT, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(g), mir.Rvalue.Sole(k)))
+    body, after := ln.F.NewBlock(), ln.F.NewBlock()
+    c := mir.Operand.Copy(mir.Lvalue.L(g))
+    ln.end(mir.Term.Branch(c, body, after) if yes else mir.Term.Branch(c, after, body))
+    ln.start(body)
+    return after
+}
+
+fn (ln mut lowering&) joinAt(after mir.BlockId) {
+    if not ln.dead: ln.goto(after)
+    ln.start(after)
 }
 
 # the site whose value an expression is, where a region is to be made for it, -1 for none
@@ -706,10 +738,17 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
     return s
 }
 
-# the sole places a place's let-go releases: the place itself, or the leaves of a struct held in it - each by the
-# fields that reach it from the place, and a handle's reference, field 0
-fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I64>> {
-    out Vec<Array<I64>>
+# what a let-go releases where a place is decided sole: by the fields that reach it from the holder, and a handle's
+# reference, field 0
+type relPath struct(At I64, Path Array<I64>) {
+    At
+    Path
+}
+
+# the candidate places a place's let-go releases where each is decided sole: the place itself, or the leaves of a
+# struct held in it - each by the fields that reach it from the place, and a handle's reference, field 0
+fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath> {
+    out Vec<relPath>
     if not ln.freeing { return out }
     # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
     # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does
@@ -720,50 +759,47 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I
         }
     }
     fr := ln.L.Free!
-    k := fr.SolePlace(p)
+    k := fr.PlaceOf(p)
     # (an owner local given another value: its place's old value, held whole)
-    if p == typed.Lvalue.Local and assign { k = fr.SoleLocal(I64(ln.B.Id), I64(p.id)) }
-    if k >= 0 {
-        out.Push(Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0))
+    if p == typed.Lvalue.Local and assign { k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id)) }
+    g := fr.Guard(I64(ln.B.Id), k)
+    if k >= 0 and g != free.NotSole {
+        out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0)))
         return out
     }
-    for lf in fr.SoleLeaves(p.Type()) {
-        if fr.IsHandle(lf.PlaceId) {
-            path := Array<I64>(lf.Path.Len() + 1)
-            for i in range lf.Path.Len() { path[i] = lf.Path[i] }
-            path[lf.Path.Len()] = 0
-            out.Push(path)
-        } else {
-            out.Push(lf.Path)
-        }
-    }
-    return out
+    return ln.leafPaths(p.Type())
 }
 
-# the release paths of a value of type ty's sole leaves: each by the fields that reach it, and a handle's reference,
-# field 0
-fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<Array<I64>> {
-    out Vec<Array<I64>>
+# the release paths of a value of type ty's candidate leaves: each by the fields that reach it, and a handle's
+# reference, field 0
+fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<relPath> {
+    out Vec<relPath>
     fr := ln.L.Free!
-    for lf in fr.SoleLeaves(ty) {
+    for lf in fr.Leaves(ty) {
+        g := fr.Guard(I64(ln.B.Id), lf.PlaceId)
+        if g == free.NotSole: continue
         if not fr.IsHandle(lf.PlaceId) {
-            out.Push(lf.Path)
+            out.Push(relPath(g, lf.Path))
             continue
         }
         path := Array<I64>(lf.Path.Len() + 1)
         for i in range lf.Path.Len() { path[i] = lf.Path[i] }
         path[lf.Path.Len()] = 0
-        out.Push(path)
+        out.Push(relPath(g, path))
     }
     return out
 }
 
-# what local l holds released, at each of the paths: a sole place's old value let go of
-fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<Array<I64>>&, sp source.Span) {
-    for path in paths {
+# what local l holds released, at each of the paths whose place is decided sole (a path's place -1: decided here):
+# a sole place's old value let go of
+fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<relPath>&, sp source.Span) {
+    for r in paths {
+        if ln.dead: return
+        after := ln.whenSole(r.At, true, sp) if r.At >= 0 else mir.NoBlock
         q := pl(mir.Base.Local(l))
-        for i in path { q = ln.with(q, mir.Proj.Field(i)) }
+        for i in r.Path { q = ln.with(q, mir.Proj.Field(i)) }
         ln.emit(mir.Stmt.Release(sp, ln.mk(q)))
+        if after != mir.NoBlock: ln.joinAt(after)
     }
 }
 
@@ -2387,8 +2423,8 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     if not ln.dead and slot != mir.NoLocal and v != mir.Operand.None {
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
         if relK >= 0 {
-            rel Vec<Array<I64>>
-            rel.Push(Array<I64>[0] if relK == 1 else Array<I64>(0))
+            rel Vec<relPath>
+            rel.Push(relPath((relK >> 1) - 1, Array<I64>[0] if (relK & 1) == 1 else Array<I64>(0)))
             ln.releaseAt(slot, rel, sp)
         }
     }
@@ -2450,7 +2486,11 @@ fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types
     }
     if h == mir.NoLocal { return v }
     l := ln.local(v, ty, sp)
+    # (where the place is not decided sole, h is the parent's scope: nothing to settle)
+    g := ln.plan.RegionGuard[rs]
+    after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
     ln.emit(mir.Stmt.Settle(sp, h, mir.Lvalue.L(l)))
+    if after != mir.NoBlock: ln.joinAt(after)
     return mir.Operand.Copy(mir.Lvalue.L(l))
 }
 
@@ -2629,22 +2669,24 @@ fn (ln mut lowering&) take(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir
 # a statement's value dropped (S3): a vacate of a sole place releases what it held, and so does a call's result that is
 # a value moved out of one (Pop, TakeAt, Take), once the statement has it (O8d)
 fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
-    rel Vec<Array<I64>>
+    rel Vec<relPath>
     match x {
         case typed.Expr.Take(_, _, p) { rel = ln.releases(p) }
         case _ {
             c := typed.Call.Of(x)
             if ln.freeing and c is not null {
                 k := ln.L.Free!.DroppedMove(c)
+                g := ln.L.Free!.Guard(I64(ln.B.Id), k)
+                if g == free.NotSole: k = -1
                 handle := k >= 0 and ln.L.Free!.IsHandle(k)
                 # a try statement with clauses has its value only on its success path - where a clause takes the
                 # error there is nothing to release - so the try releases it there, before the paths join
                 if k >= 0 and clausedTry(x) {
-                    ln.tryRel = 1 if handle else 0
+                    ln.tryRel = ((g + 1) << 1) | (1 if handle else 0)
                     ln.val(x)
                     return
                 }
-                if k >= 0 { rel.Push(Array<I64>[0] if handle else Array<I64>(0)) }
+                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0))) }
             }
         }
     }
@@ -4579,12 +4621,35 @@ fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
 
 # ---- operations ----
 
+# O8d: a retire() (M19d) of the array an array place let go of, left out where that place is decided sole - the array
+# was released as it was replaced
+fn (ln mut lowering&) retire(chk typed.Check, args Array<typed.Expr&>&, ty types.TypeId, sp source.Span) mir.Operand {
+    fr := ln.L.Free!
+    ks Vec<I64>
+    for k in fr.RetirePlaces(I64(ln.B.Id), sp) {
+        g := fr.Guard(I64(ln.B.Id), k)
+        if g == -1: return mir.Operand.None    # (decided sole, in code that has the decisions as they are)
+        if g >= 0: ks.Push(g)
+    }
+    ln.retiring = true
+    defer { ln.retiring = false }
+    if ks.Len() == 0 { return ln.primExpr(typed.PrimOp.Retire, chk, args, ty, sp) }
+    afters Vec<mir.BlockId>
+    for k in ks {
+        if ln.dead: break
+        afters.Push(ln.whenSole(k, false, sp))
+    }
+    if not ln.dead { ln.primExpr(typed.PrimOp.Retire, chk, args, ty, sp) }
+    for i in range afters.Len() { ln.joinAt(afters[afters.Len() - 1 - i]) }
+    return mir.Operand.None
+}
+
 fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<typed.Expr&>&, ty types.TypeId
                               sp source.Span) mir.Operand {
     t := ln.T
     if op == typed.PrimOp.AnyMake { return ln.anyMake(args, ty, sp) }
     # O8d: the array a sole place let go of, released as it was replaced - nothing left to retire
-    if op == typed.PrimOp.Retire and ln.freeing and ln.L.Free!.RetireDropped(I64(ln.B.Id), sp) { return mir.Operand.None }
+    if op == typed.PrimOp.Retire and ln.freeing and not ln.retiring { return ln.retire(chk, args, ty, sp) }
     if op == typed.PrimOp.AnyIs {
         x := ln.val(args[0])
         if ln.dead { return mir.Operand.None }

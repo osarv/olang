@@ -38,7 +38,8 @@ hands unique values owning storage on through by-value parameters (T13b's move) 
 constructor's field - into a Map and a Vec held by value, replaces, removes and takes them out to holders, and in half
 of them keeps views across those let-goes. Each is built
 `-d -s -memory` and interpreted in the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`), which stops at a read of
-a region a release reclaimed. Scenarios the compiler refuses are left out and counted; the summary counts the places
+a region a release reclaimed; a program that passes is built and interpreted again as a module of its own under a root
+that only calls it, where its sites read the decisions as link-time constants (W2). Scenarios the compiler refuses are left out and counted; the summary counts the places
 the builds' `-memory` reports free at once, so a run that frees nothing is seen to.
 
 ```

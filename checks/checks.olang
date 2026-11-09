@@ -528,7 +528,47 @@ fn earlyfree(r mut report&) ? Failed {
         try r.expect(outOf(dir) == full[i], $p " output", dir)
         try r.expect(sh(dir, $"\"$OLANG\" interpret -define N=" $small[i] " " $p ".olang > out.txt 2>&1") == 0, $p " interpreted", dir)
         try r.expect(outOf(dir) == part[i], $p " interpreted output", dir)
+        try split(r, dir, p, full[i])
     }
+}
+
+# wholeprog 2.1: an earlyfree program's code as a module of its own (splitlib, its main named Run), the root only
+# calling it (split.olang), frees what it lets go of as the one-module form (whole) does - each reading its own peak,
+# the split's within 1 MB of the whole's
+fn split(r mut report&, dir String&, p String&, want String&) ? Failed {
+    text := try os.ReadFile($dir "/" $p ".olang") catch default ""
+    peak := try os.ReadFile($dir "/peak.txt") catch default ""
+    imports StringBuilder
+    rest StringBuilder
+    fallible := false
+    for line in text.Lines() {
+        if line.StartsWith("import ") {
+            imports.Push($line "\n")
+        } else if line == "fn main() ? {" {
+            fallible = true
+            rest.Push("fn run() ? {\n")
+        } else {
+            rest.Push($(line if line != "fn main() {" else "fn Run() {") "\n")
+        }
+    }
+    lib := $imports.ToString() "import \"std/os\"\n" $rest.ToString() $("\nfn Run() { run()! }\n" if fallible else "") $peak
+    main := try os.ReadFile($dir "/wholemain.txt") catch default ""
+    wrote := true
+    try os.WriteFile($dir "/splitlib.olang", lib) catch os.Error { wrote = false }
+    try os.WriteFile($dir "/whole.olang", $lib $main) catch os.Error { wrote = false }
+    try r.expect(wrote, $p " split written", dir)
+    peaks Vec<I64>
+    for form in Array<String&>["whole", "split"] {
+        try r.expect(sh(dir, $"\"$OLANG\" build " $form ".olang > out.txt 2>&1") == 0, $p " " $form " build", dir)
+        try r.expect(sh(dir, $"(ulimit -n 64 && ./build/" $form ") > out.txt 2> peak.out") == 0, $p " " $form, dir)
+        try r.expect(outOf(dir) == want, $p " " $form " output", dir)
+        got := try os.ReadFile($dir "/peak.out") catch default ""
+        t := got.Trim()
+        n := try t[5:].ParseInt() catch default -1
+        peaks.Push(n if t.StartsWith("peak ") else -1)
+    }
+    try r.expect(peaks[0] > 0 and peaks[1] > 0 and peaks[1] <= peaks[0] + 1024
+                 $p " split peak " $peaks[1] " KB, one module " $peaks[0] " KB", dir)
 }
 
 test "where a value lands, as whole builds" { assert passed("landing") }
@@ -987,6 +1027,11 @@ Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/
          "gen.Max(c.n, 0) + deep.Baked/' lib.olang", "", "lib", "lib.olang", "Total")
     Edit("a module renamed", "mv gen.olang gen2.olang && sed -i 's/^import \"gen\"/import gen \"gen2\"/' main.olang", "", ""
          "main.olang", "main")
+    # W2: a place the library lets go of kept once the root keeps a view of it - the library's code reads the decision
+    # as a link-time constant, so only the root's decisions change
+    Edit("a sole place's decision flipped (W2)", "sed -i 's/for i in range 3 { g.Note(i) }/held Vec<String\\&>\\n    for i in " $
+         "range 3 {\\n        g.Note(i)\\n        held.Push(g.Last())\\n    }\\n    assert held.Len() == 3/' main.olang", "", ""
+         "main.olang", "main")
     Edit("a diagnostic introduced", "sed -i 's/deep.Baked/deep.Bakd/' lib.olang", "", "", "lib.olang", "Kept")]
 
 fn incremental(r mut report&) ? Failed {
@@ -994,7 +1039,7 @@ fn incremental(r mut report&) ? Failed {
     os.Run("mkdir " $os.Quote($dir "/inc") " " $os.Quote($dir "/orig") " && cp checks/fixtures/incremental/* " $os.Quote($dir "/inc") $
            " && cp checks/fixtures/incremental/* " $os.Quote($dir "/orig"))
     try r.expect(incBuild(dir, "inc", "", "base", "main.olang", "main") == 0, "the first build", dir)
-    try r.expect(sh(dir, "grep -qx '48 12 1 true 14 data one 8' base") == 0, "the first build's run: expected '48 12 1 true 14 data one 8'", dir)
+    try r.expect(sh(dir, "grep -qx '48 12 1 true 14 data one 8 note 2' base") == 0, "the first build's run: expected '48 12 1 true 14 data one 8 note 2'", dir)
     for e in Edits { try incEdit(r, dir, e) }
 }
 
@@ -1068,7 +1113,7 @@ test "a damaged or foreign record is written again, never read; builds side by s
 fn records(r mut report&) ? Failed {
     dir := fresh("records")
     os.Run("cp checks/fixtures/incremental/* " $os.Quote(dir))
-    run := "48 12 1 true 14 data one 8"
+    run := "48 12 1 true 14 data one 8 note 2"
     build := "OLANG_FACTSTATS=1 OLANG_CHECKREUSE=1 \"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > run.txt"
     try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1") == 0, "the first build", dir)
     damages := Array<String&>["for f in build/rec/deep.*; do case $f in *.ll) ;; *) truncate -s 100 $f ;; esac; done"

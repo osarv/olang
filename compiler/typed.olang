@@ -1739,6 +1739,12 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     RegionKind mut Array<I64>& = Array<I64>(Sites)
     RegionParent mut Array<Scope>& = Array<Scope>(Sites)
     RegionRoot mut Array<Expr?&>& = Array<Expr?&>(Sites)
+    # ...and the candidate places whose decisions they wait on (wholeprog 2.1): a region is made only where RegionGuard's
+    # place is decided sole, RegionRoot's value's region looked for only where RootGuard's is - each a link-time constant
+    # (mir.Rvalue.Sole), so a module's code is the same in every program; where it is not, the site's value is built
+    # where RegionParent says (-1: no place's, as for a site with no region)
+    RegionGuard mut Array<I64>& = Array<I64>(Sites, -1)
+    RootGuard mut Array<I64>& = Array<I64>(Sites, -1)
     # O29: the references whose referents' scopes Found builds go into, found at run time - each one evaluating has no
     # effect of (a local, a field read, a conditional of those)
     Roots Vec<Expr&>

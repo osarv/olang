@@ -1758,6 +1758,54 @@ fn (e Emitter&) itemNamed(name String&) I64 {
 
 fn (e mut Emitter&) define(symbol String&, text String&) { e.item(symbol, HomeShared, $text "\n") }
 
+# O8d (docs/memory.md 3.5, wholeprog 2.1): the link-time constant saying whether candidate place k is decided sole -
+# named by the place, the same in every program: weak and false in every object reading it (a place the program does
+# not decide sole keeps), the root's decisions object (SoleUnit) defining those decided sole strongly, as true. LTO
+# folds the one prevailing definition; a build without it loads a byte
+fn (e mut Emitter&) sole(k I64) String {
+    s := e.soleName(k)
+    e.item(s, HomeShared, $"@" $s " = weak hidden constant i1 false\n")
+    return s
+}
+
+# the root's decisions object (O8d): every candidate place decided sole, its constant defined true - "" for none
+fn (e mut Emitter&) SoleUnit() String {
+    fr := e.Lw.Free
+    if fr is null { return "" }
+    names Vec<String&>
+    for k in fr.SoleNow() { names.Push(e.soleName(k)) }
+    if names.Len() == 0 { return "" }
+    names.Sort(fn(a String&, b String&) Bool { return a < b })
+    b := StringBuilder()
+    b.Push(e.head())
+    prev := ""
+    for n in names {
+        if n == prev: continue
+        prev = n
+        b.Push($"@" $n " = hidden constant i1 true\n")
+    }
+    return b.ToString()
+}
+
+# a body's symbol where it names the body in every program: a lambda's by its parent's and where it is written (its
+# own symbol is numbered per program)
+fn (e mut Emitter&) stableSym(b I64) String {
+    return match e.Lw.Bodies[b].Of {
+        case typed.BodyOf.Lambda(parent): $e.stableSym(I64(parent)) ".lambda." $e.Lw.Bodies[b].Sp.Start
+        case _: e.bodySym(b)
+    }
+}
+
+# place k's constant: a field's by its struct's canonical text and position, an array's elements by the array's, an
+# owner local by its function's symbol and its number there
+fn (e mut Emitter&) soleName(k I64) String {
+    fr := e.Lw.Free!
+    b, l := fr.LocalPlace(k)
+    if b >= 0 { return types.Symbol($"olang.sole." $e.stableSym(b) ".local." $l) }
+    ty, field := fr.PlaceKey(k)
+    return types.Symbol($"olang.sole." $e.T.Canon(ty) "." $field)
+}
+
 # text copied out of a builder (E11b): a short one - the commonest, a number or a word - by two overlapping moves of
 # its own width rather than a call of memcpy, so that a join costs what stage 0's measured write does
 fn (e mut Emitter&) textCopy() {
@@ -4174,6 +4222,8 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             r := fe.let("call ptr @__olang_scope_of(ptr " $o ", ptr null)")
             return fe.let("ptrtoint ptr " $r " to i64")
         }
+        case mir.Rvalue.Sole(k) { return fe.load("i1", "@" $fe.E.sole(k)) }
+        case mir.Rvalue.Handle(s) { return fe.let("ptrtoint ptr " $fe.scope(s) " to i64") }
         case mir.Rvalue.ErrPush {
             fe.E.runtime("__olang_errpay_push")
             r := fe.let("call ptr @__olang_errpay_push()")

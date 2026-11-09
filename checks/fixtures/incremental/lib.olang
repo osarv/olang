@@ -17,4 +17,13 @@ fn Kept() I64 {
     return a.Len()
 }
 
+# W2 (wholeprog 2.1): a place let go of in this module, its decision the program's
+type Log struct() {
+    last String& = ""
+}
+
+fn (l mut Log&) Note(n I64) { l.last = "note " $n }
+
+fn (l Log&) Last() String& { return l.last }
+
 fn Said() String { return $deep.Quiet() " " $deep.Run() " " $deep.Data.Trim() }

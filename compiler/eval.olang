@@ -352,6 +352,7 @@ type Machine struct(T mut types.Table&, When Mode) {
     T
     When
     StepBudget I64 = 20000000
+    Soles Vec<Bool>             # O8d: by candidate place, whether it is decided sole (mir.Rvalue.Sole) - none while compiling
     MemBudget I64 = 1 << 28
     DepthBudget I64 = 2000
     eqDepth I64 = 0             # how many Equal helpers' frames are live (E10)
@@ -2184,6 +2185,8 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             m.wr(dst, 8, id)
         }
         case mir.Rvalue.ScopeOf(x) { m.wr(dst, 8, m.foundScope(m.objectOf(fi, x))) }
+        case mir.Rvalue.Handle(s) { m.wr(dst, 8, m.scopeOf(fi, s)) }
+        case mir.Rvalue.Sole(k) { m.wr(dst, 1, 1 if k >= 0 and k < m.Soles.Len() and m.Soles[k] else 0) }
         case mir.Rvalue.ErrPush {
             id := m.newScope(sRegion)
             m.payScopes.Push(id)

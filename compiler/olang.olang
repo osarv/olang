@@ -570,8 +570,10 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.AssertsTrue = asserts
     lw.Tests = tests
     lw.ViewDump = (try os.Env("OLANG_VIEWDUMP") catch default "") != ""
-    # O8d: early freeing is decided for a program at its root - a module compiled on its own frees nothing early (B3i)
-    fr := try placement(c, cfg, -1 if kind == build.Kind.Module else l.Root)
+    # O8d: early freeing is decided for a program at its root, every module's sites reading the decisions as link-time
+    # constants (wholeprog 2.1) - a module compiled on its own is judged as a program of its own, so its sites are
+    # written as any build writes them, but no decision of it is emitted: what it reads is the link's
+    fr := try placement(c, cfg, l.Root, kind == build.Kind.Module)
     lw.Plans = fr.Plans
     lw.Free = fr
     build.Phase("scope")
@@ -669,6 +671,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(build.Unit($"c_" $m.Identity, build.UnitKind.Module, cir))
     }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
+    # O8d (wholeprog 2.1): the root's decisions - every place decided sole, its link-time constant defined true - in an
+    # object of their own beside the root's (after the objects a reuse check writes afresh), which the objects reading them (weak, false) meet only at the link
+    if kind != build.Kind.Module {
+        sole := e.SoleUnit()
+        if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if e.Library else sole)) }
+    }
     if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
@@ -1020,7 +1028,7 @@ fn inferStats(sc mut scope.Scoper&) {
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1) mut free.Free& ? build.Failed {
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false) mut free.Free& ? build.Failed {
     sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
@@ -1040,6 +1048,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1) mut
     fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
     fr.Tests = cfg.Tests
+    fr.Alone = alone
     fr.Decide(sc.Plans, root)
     return fr
 }
@@ -1106,6 +1115,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     if d.Errors() > 0 { error build.Failed.Reported }
     x.Lw.Plans = fr.Plans
     x.Lw.Free = fr
+    x.M.Soles = fr.Sole
     os.OnCrash(eval.InterpCrash)
     status I32 = 0
     if tests {
