@@ -2167,14 +2167,14 @@ db5319c37eb798b9 42ee183a18695dc2 compiler/fmt.olang
 ba37c1662a41bde6 2b1ae3710e65fa18 compiler/interp.olang
 a60d3ef1c94e04ef 8c13020a89e52588 compiler/listing.olang
 8613922735c561a6 952e78f6e48dd4d4 compiler/load.olang
-763e5ca8dd1285ed 3ebb448c46b48e4a compiler/lower.olang
+1402e13beebca53c 992cb275ae6bf6e8 compiler/lower.olang
 3879802f0148397c 5dd6f84508da5a8e compiler/lsp.olang
 a9fdbee6672ba31e 89e29d0fd7116d29 compiler/mcp.olang
-00af15d9f52e1dc0 a78da1e819365556 compiler/mir.olang
+20a66c3328393d84 4b970bb2ec7adc05 compiler/mir.olang
 0128257efa585e39 f00ba89bdb716afe compiler/msgs.olang
 59f5f54bcf770981 82b68291274b3324 compiler/names.olang
 7c26532e02e3a52a d163820d8fcd30a9 compiler/needs.olang
-3af599f9a77eb4a1 4ebf321d6acd33d7 compiler/olang.olang
+a9b956e231a99a35 e178f2e6f7c5e425 compiler/olang.olang
 6948a774c3e03d0a 07a6af319ad91556 compiler/parse.olang
 de87a76ebcdd4f4f 36bf5cfa366d300c compiler/profile.olang
 cd6dc04fc51a289c 717b2d1c1d7ae607 compiler/runtime.olang
