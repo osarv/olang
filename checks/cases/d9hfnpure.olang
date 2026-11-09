@@ -1,0 +1,23 @@
+# check: build
+# flags: -memory
+# also: 5 calls read one where it stands, 15 calls copy one
+# D9h (docs/fnvalues.md 4.6): a view Map.Get hands back read where it stands across a call given a "pure" callback - a
+# lambda written there and a value held as "pure" - and across a call through a "pure" value: each writes only through
+# the "mut" arguments it is given, none here, so the view is read as it is, never copied
+fn twice(f fn&(x I64) I64 pure, x I64) I64 { return f(f(x)) }
+fn main() {
+    m := Map<I64, Vec<I64>>()
+    for k in range 16 {
+        a := Vec<I64>()
+        for j in range 64 { a.Push(k + j) }
+        m.Put(k, a)
+    }
+    g fn&(x I64) I64 pure = fn(x): return x + 1
+    s I64 = 0
+    for i in range 100000 {
+        s += m.Get(i % 16)![twice(fn(x): return x * 2, i) % 64]
+        s += m.Get(i % 16)![twice(g, i) % 64]
+        s += m.Get(i % 16)![g(i) % 64]
+    }
+    assert s > 0
+}

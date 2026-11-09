@@ -1,0 +1,33 @@
+# check: build
+# flags: -memory
+# also: memory: removed elements of 'it.frames' are kept until the Interp's scope closes
+# also: which may let go of anything: it is given a function value not followed whose type does not promise 'pure', and calls through it; read what you need from 'f' before the call
+# O8d (docs/fnvalues.md 4.6): a function value held in a field, its type promising nothing, given a higher-order call:
+# not followed, it may let go of anything - and -memory's note says so, and what to promise
+type Frame struct(d I64) {
+    depth I64 = d
+}
+type Interp struct(s fn&(x I64) I64) {
+    frames Vec<mut Frame&>
+    scale fn&(x I64) I64 = s
+}
+fn sum(xs Array<I64>&, f fn&(x I64) I64) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
+    it.frames.Push(Frame(d))
+    f := try it.frames.Last() catch { unreachable }
+    r := sum(xs, it.scale)
+    r += f.depth
+    try it.frames.Pop() catch { unreachable }
+    return r
+}
+fn main() {
+    it := Interp(fn(x): return x + 1)
+    xs := Array<I64>[1, 2, 3]
+    s I64 = 0
+    for i in range 1000 { s += it.step(i, xs) }
+    assert s > 0
+}

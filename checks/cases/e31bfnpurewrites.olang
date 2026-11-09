@@ -1,0 +1,15 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (docs/fnvalues.md 4.6): a function value whose type promises nothing, given a call made through x[i], may change
+# the collection - the call stays the copy's, which the write would be lost to
+type Acc struct() {
+    n I64 = 0
+}
+fn (a mut Acc&) Add(x I64, f fn&(x I64) I64) { a.n += f(x) }
+fn main() ? {
+    accs := Vec<Acc>()
+    accs.Push(Acc())
+    accs[0].Add(1, fn(x) {
+        accs.Push(Acc())
+        return x
+    })
+}

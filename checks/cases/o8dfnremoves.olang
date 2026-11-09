@@ -1,0 +1,38 @@
+# check: build
+# flags: -memory
+# also: memory: removed elements of 'it.frames' are kept until the function's scope closes
+# also: note: 'f' (line 23) is used here, after 'twice(xs, fn(x) {
+# also: which removes frames; read what you need from 'f' before the call
+# O8d (docs/fnvalues.md 4.6): a lambda given a higher-order call, through two of them, lets go of what its body lets go
+# of (letsVia, composed at each call): one that pops 'it.frames' keeps it where a view of it is used after the call
+type Frame struct(d I64) {
+    depth I64 = d
+}
+type Interp struct() {
+    frames Vec<mut Frame&>
+}
+fn sum(xs Array<I64>&, f fn&(x I64) I64) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn twice(xs Array<I64>&, f fn&(x I64) I64) I64 { return sum(xs, f) + sum(xs, f) }
+fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
+    it.frames.Push(Frame(d))
+    it.frames.Push(Frame(d))
+    f := try it.frames.Last() catch { unreachable }
+    r := twice(xs, fn(x) {
+        if it.frames.Len() > 1 { try it.frames.Pop() catch { } }
+        return x
+    })
+    r += f.depth
+    for it.frames.Len() > 0 { try it.frames.Pop() catch { } }
+    return r
+}
+fn main() {
+    it := Interp()
+    xs := Array<I64>[1, 2, 3]
+    s I64 = 0
+    for i in range 1000 { s += it.step(i, xs) }
+    assert s > 0
+}

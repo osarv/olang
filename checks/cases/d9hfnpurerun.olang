@@ -1,0 +1,27 @@
+# check: run
+# D9h (docs/fnvalues.md 4.6): d9hfnpure's views read where they stand across "pure" callbacks - what they read checked,
+# the arena churned between turns
+fn twice(f fn&(x I64) I64 pure, x I64) I64 { return f(f(x)) }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+fn main() {
+    m := Map<I64, Vec<I64>>()
+    for k in range 16 {
+        a := Vec<I64>()
+        for j in range 64 { a.Push(k * 100 + j) }
+        m.Put(k, a)
+    }
+    g fn&(x I64) I64 pure = fn(x): return x + 1
+    for i in range 1000 {
+        assert m.Get(i % 16)![twice(fn(x): return x * 2, i) % 64] == (i % 16) * 100 + (4 * i) % 64
+        assert m.Get(i % 16)![twice(g, i) % 64] == (i % 16) * 100 + (i + 2) % 64
+        assert m.Get(i % 16)![g(i) % 64] == (i % 16) * 100 + (i + 1) % 64
+        if i % 100 == 0 { assert churn() > 0 }
+    }
+}
