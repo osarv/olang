@@ -61,3 +61,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - regionkeep merged, pushed. Gap: s += m.Get(k)![5] in a loop keeps each turn copy (266MB), pre-existing.
 - Usage 0.65 at 11:00 CET Mon (0.56 Sun 21:25, ~10 agents): ~0.01/agent incl. coordination. ~25 agents of room to 0.92.
 - getcopy merged, pushed. G1 running.
+- G1 merged, verified, pushed. Next: G2+G3 (wt-genheader) beside W3a (wt-frontrec).
