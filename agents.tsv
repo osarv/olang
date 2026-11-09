@@ -53,3 +53,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09T13:30	Design note: systems view	sonnet	medium	completed	156	7	2	n/a	n/a	abstract level; classics from memory
 2026-11-09T11:30	G1 weak and generational types	opus	medium	completed	395	199	93	yes	?	19 checks cases; 4 items left for G2+G3
 2026-11-09T13:00	G2+G3 generational header and count	opus	medium	completed	599	303	117	no (reuse bug real, fixed; goldens)	?	found stale-record bug (facts decided in lowering)
+2026-11-09T13:00	W3a incremental front end part 1	opus	medium	completed	403	164	120	yes	?	front end 5.6->4.5s; caught stale embed key; fixed W1 record cut bug
