@@ -7664,7 +7664,9 @@ something when its instance's scope closes, and an empty one releases nothing.
 **C9.** A destructor runs, for a given instance, exactly once: where its holder lets go of it (O15) - the scope it was
 registered in closing (O16), the block of the variable or parameter holding it by value left, a store over the place
 holding it, a collection's removal of it - regardless of which function made it or which function happens to
-be executing at that point. The scope being closed (C9a) is, for a by-value holder's, the block it is left from.
+be executing at that point. The scope being closed (C9a) is, for a by-value holder's, the block it is left from; for a
+collection's removal or end of an element, the scope the element lives in - the collection's storage's - never the block
+of the collection's code that ends it.
 
 **C9a.** A destructor runs as part of closing its instance's scope, and that scope is its own: what its body
 allocates at its top level is allocated in the scope being closed, where the instance lives, which stays alive until

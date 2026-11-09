@@ -1,0 +1,79 @@
+# check: run
+# flags: -debug -sanitize
+# C9a, C11, O15: a Vec of values whose destructors build through their reference field, lent to a function that pushes
+# into it - the Vec's storage placed where its elements' references live, its elements ended as that scope closes - each
+# element's destructor run in the scope its value lives in, never in the block of the Vec's destructor that ends it, so
+# what it builds into the Tally (its log growing) outlives that block; read back after an arena churn
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn fill(v mut Vec<Logged>&, t mut Tally&, n I64) {
+    for k in range n { v.Push(Logged(k, t)) }
+}
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+# the Vec in an inner block, the Tally in the frame: the Vec's elements end as the frame closes, after the result
+fn inner() I64 {
+    t := Tally()
+    {
+        v := Vec<Logged>()
+        fill(v, t, 10)
+        assert v.Len() == 10
+    }
+    return t.seen.Len()
+}
+
+# a Tally logging into a Vec of its caller's
+type Sink struct(out mut Vec<I64>&) {
+    out
+}
+
+fn (k mut Sink&) Saw(id I64) { k.out.Push(id) }
+
+type Sent unique struct(id I64, log mut Sink&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn send(v mut Vec<Sent>&, k mut Sink&, n I64) {
+    for i in range n { v.Push(Sent(i, k)) }
+}
+
+# the Sink the caller's: its Vec's elements end as the caller's scope holding the Sink closes, building into the Vec the
+# Sink logs into, which outlives it
+fn lent(k mut Sink&) {
+    v := Vec<Sent>()
+    send(v, k, 20)
+    assert v.Len() == 20
+}
+
+fn main() ? {
+    assert inner() == 0
+    out := Vec<I64>()
+    {
+        k := Sink(out)
+        lent(k)
+    }
+    churn()
+    s := 0
+    for x in out { s += x }
+    assert out.Len() == 20 and s == 190 and out[0] == 19 and out[19] == 0
+    try io.Println($out.Len() "/" $s)
+}

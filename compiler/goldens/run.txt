@@ -3336,6 +3336,9 @@
 === run vec91fieldcopygrows.olang
 | status 0
 | 0
+=== run vecdropbuilds.olang
+| status 0
+| 20/190
 === run x10handles.olang
 | status 0
 === run x13qsort.olang

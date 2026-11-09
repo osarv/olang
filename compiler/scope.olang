@@ -2697,6 +2697,20 @@ fn (s mut Scoper&) dropDerived(a typed.Expr&) {
     s.plan.DropDerived(a, xs)
 }
 
+# C9a, C11: a drop of a place that is no local - an element a collection vacates, a field - runs its value's destructor
+# in the scope that value lives in (a destructor's instance lives in its closing scope), not in the block the drop is
+# written in: what the destructor builds through its instance's fields goes where its plan says the instance is
+fn (s mut Scoper&) dropHome(a typed.Expr&) {
+    match a {
+        case typed.Expr.Borrow(_, _, p) {
+            if p == typed.Lvalue.Local: return
+            t := s.peekPlace(p, false)
+            if t.Runs(): s.plan.DropHome(a, s.scopeOf(t))
+        }
+        case _ { }
+    }
+}
+
 # whether a body is a Str that "$" calls (E11c): a method named Str or str, of no parameter but its receiver
 fn (s mut Scoper&) isStr(b typed.Body&) Bool {
     match b.Of {
@@ -8737,7 +8751,10 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                 s.anyBox = false
                 return v
             }
-            if op == typed.PrimOp.Drop and args.Len() == 1 and not s.inSpawn { s.dropDerived(args[0]) }
+            if op == typed.PrimOp.Drop and args.Len() == 1 and not s.inSpawn {
+                s.dropDerived(args[0])
+                s.dropHome(args[0])
+            }
             for a in args { s.val(a, Term.None) }
             return Val.plain()
         }

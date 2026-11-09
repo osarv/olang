@@ -35543,3 +35543,20 @@ it). **B3i:** the count of a body's derived scopes is a whole-program fact (the 
 decided for every function and destructor (`O23a NAME`) and read by each module calling it, holding its code, taking
 it as a value or registering its destructor - so a module is reused only where the counts it was compiled against
 hold.
+
+### C9a, C11: a collection's element ended in the scope it lives in (bug, 2026-11-09, wt-vecdrop)
+
+The bug round 8 found (above): a `Vec<Logged>` lent to a function that pushes into it, `Logged`'s destructor building
+through its reference field (`log.Saw(id)`, a Push into the Tally's Vec), aborted the `-debug -sanitize` build with a
+use after the scope closed, and `interpret` the same; the seed's build too. **Cause:** the prelude's Vec destructor ends
+its elements with `data[i].vacate()` inside its `for` loop, and lowering ran each element's destructor (`PrimOp.Drop`)
+in `innermost()` - the loop turn's scope - as it does for a by-value holder, whose block is where its value lives. The
+scope pass judges a destructor with its instance in its closing scope (C9a); where the field inference found a
+`Logged`'s Tally living with the instance (both in the frame), the destructor took no derived scope and built through
+`log` into its closing scope - here the loop turn's, closed after each element, so the Tally's grown buffer was handed
+back while it held it. **Fix:** the scope pass records, for a drop of a place that is no local (`typed.Plan.DropHome`),
+the scope that place's value lives in (`peekPlace`'s storage term - the Vec destructor's own closing scope, a removing
+method's receiver variable), and lowering runs the destructor there; a drop of a local, and one whose place lives in no
+scope that exists at run time, keep the innermost block. SPEC C9 now says it (a collection's element's scope is its
+storage's). Run case `vecdropbuilds` (`-debug -sanitize`, interpreted by the suite): the Vec in an inner block of the
+frame holding the Tally, and a Vec of `Sent`s logging through a Sink into a caller's Vec, read back after an arena churn.

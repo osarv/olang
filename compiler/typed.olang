@@ -1774,6 +1774,10 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # ... and by holder's drop (O15, a PrimOp.Drop), what it passes its value's destructor for its derived scopes
     DropAt Vec<Expr&>
     DropArgs Vec<Vec<DerivedArg>>
+    # ... and by a drop of a place reached through a reference or a value (a collection's vacate, C11): the scope its
+    # value lives in, which its destructor is run in (C9a) - not the block the drop is written in
+    DropInAt Vec<Expr&>
+    DropIn Vec<Scope>
 }
 
 fn Plan.New(b Body&) Plan { return Plan(b.Sites.Len(), b.Locals.Len(), b.Vars.Len()) }
@@ -1840,6 +1844,26 @@ fn (pl mut Plan&) DropDerived(x Expr&, xs Vec<DerivedArg>) {
     }
     pl.DropAt.Push(x)
     pl.DropArgs.Push(xs)
+}
+
+# C9a: the scope the value a drop of no local ends lives in
+fn (pl mut Plan&) DropHome(x Expr&, sc Scope) {
+    for i in range pl.DropInAt.Len() {
+        if pl.DropInAt[i] == x {
+            pl.DropIn[i] = sc
+            return
+        }
+    }
+    pl.DropInAt.Push(x)
+    pl.DropIn.Push(sc)
+}
+
+# ...the drop x's, Unset for none
+fn (pl Plan&) DropHomeOf(x Expr&) Scope {
+    for i in range pl.DropInAt.Len() {
+        if pl.DropInAt[i] == x: return pl.DropIn[i]
+    }
+    return Scope.Unset
 }
 
 # ...the drop x's, empty for none

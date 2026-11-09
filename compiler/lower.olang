@@ -4827,7 +4827,10 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
                 home := ln.escapedHome(p)
                 if home == mir.ScopeRef.Frame {
                     das := ln.plan.DropDerivedOf(args[0]) if ln.planned else Vec<typed.DerivedArg>()
-                    ln.dropAt(a, p.Type(), ln.innermost(), sp, das.Len() > 0, das)
+                    # (C9a: a place that is no local - a collection's element it vacates - ended in the scope its value
+                    # lives in, as the scope pass judged its destructor's builds)
+                    held := ln.plan.DropHomeOf(args[0]) if ln.planned and p != typed.Lvalue.Local else typed.Scope.Unset
+                    ln.dropAt(a, p.Type(), ln.innermost() if held == typed.Scope.Unset else ln.scopeRef(held), sp, das.Len() > 0, das)
                     # Part C (O8d): a holder letting go as its block is left releases what its sole leaves hold, once
                     # its destructors ran (free.olang's LHeld)
                     if ln.heldDrop and ln.freeing and p == typed.Lvalue.Local and not ln.dead {
