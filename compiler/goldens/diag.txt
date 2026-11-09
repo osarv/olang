@@ -592,16 +592,6 @@ callrecvreadonly.olang:12:38: error[T25c]: a read-only reference cannot become w
    12 | fn peek(c Counter&) I32 { return run(c) }
       |                                      ^
 compilation failed with 1 error
-=== callvaluekeeps.olang
-callvaluekeeps.olang:20:13: error[T22b]: Keeper's Call keeps 'x' in its instance, and the function type of this argument says nothing of that - write 'keeps x' after its signature
-   20 |     keepVia(kp, fn() I64 { return n.v + k })
-      |             ^~
-compilation failed with 1 error
-=== callvaluekeepsframe.olang
-callvaluekeepsframe.olang:22:13: error[T22b]: Keeper's Call keeps 'x' in its instance, and the function type of this argument says nothing of that - write 'keeps x' after its signature
-   22 |     keepVia(kp, c)
-      |             ^~
-compilation failed with 1 error
 === cascadee14.olang
 cascadee14.olang:27:14: error[E14]: expected 1 argument, found 2
    27 |     r := try R.make("u", 3) catch { return "none" }
@@ -1649,13 +1639,10 @@ e31bfnfield.olang:14:11: error[E31b]: x[i] gives a copy of the element, which th
       |           ^
 compilation failed with 1 error
 === e31bfnhandle.olang
-e31bfnhandle.olang:11:11: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   11 |     h.fv(l[0])
-      |           ^
 e31bfnhandle.olang:11:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    11 |     h.fv(l[0])
       |           ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === e31bfnlambda.olang
 e31bfnlambda.olang:9:31: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
     9 |     fn(c mut Acc&) { c.N++ }(l[0])
@@ -1770,16 +1757,13 @@ e31bviewfield.olang:12:18: note: the callee is no view of the element because of
       |                  ^~~~~~~
 compilation failed with 1 error
 === e31bviewfnvalue.olang
-e31bviewfnvalue.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   15 |     f(s[0], fn(x mut V&) { })
-      |        ^
 e31bviewfnvalue.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     f(s[0], fn(x mut V&) { })
       |        ^
 e31bviewfnvalue.olang:11:35: note: the callee is no view of the element because of this statement
    11 | fn f(v mut V&, h fn&(x mut V&)) { h(v) }
       |                                   ^~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === e31bviewinc.olang
 e31bviewinc.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     f(s[0])
@@ -1832,16 +1816,13 @@ e31bviewpass.olang:16:18: note: the callee is no view of the element because of 
       |                  ^~~~
 compilation failed with 1 error
 === e31bviewrepoint.olang
-e31bviewrepoint.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   15 |     f(s[0])
-      |        ^
 e31bviewrepoint.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     f(s[0])
       |        ^
 e31bviewrepoint.olang:11:18: note: the callee is no view of the element because of this statement
    11 | fn f(v mut V&) { v.d = Array<I64>(3) }
       |                  ^~~~~~~~~~~~~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === e31bviewvalue.olang
 e31bviewvalue.olang:19:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    19 |     f(s[0])
@@ -3458,10 +3439,7 @@ o15registeredtemp.olang:27:10: error[O15, O16]: this value is held where its cal
       |          ^~~~~~~
 compilation failed with 1 error
 === o17permute5.olang
-o17permute5.olang:27:16: error[T22a]: this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and this argument holds only what its written function type says of every call - hold it in a local and call it there
-   27 |     each(recs, fn(x mut Rec&) { x.name = s })
-      |                ^~
-compilation failed with 1 error
+built ./build/o17permute5
 === o17permute6.olang
 o17permute6.olang:27:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
    27 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
@@ -4770,13 +4748,10 @@ s5handlenote.olang:10:23: note: this text lives in a block that closes first - p
       |                       ^
 compilation failed with 1 error
 === s5handlerepointfn.olang
-s5handlerepointfn.olang:13:17: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   13 |     resetFn(bags[0])
-      |                 ^
 s5handlerepointfn.olang:13:17: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    13 |     resetFn(bags[0])
       |                 ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === s5heldindexnote.olang
 s5heldindexnote.olang:21:37: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    21 |     for k in range 3 { m[$k "-key"] += 100 }
@@ -5561,10 +5536,7 @@ t21cborrowsvalue.olang:4:30: error[T21c]: 'x' holds no reference, so no result c
 t21cborrowsvalue.olang:5:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
     5 | fn main() { _ := use(fn(x I64, y N&) N& { return y }) }
       |             ^
-t21cborrowsvalue.olang:5:22: error[T22b]: this lambda gives back what 'y' refers to, and the function type of this argument says nothing of that - write 'borrows y' after its signature
-    5 | fn main() { _ := use(fn(x I64, y N&) N& { return y }) }
-      |                      ^~
-compilation failed with 3 errors
+compilation failed with 2 errors
 === t21ckeepsfield.olang
 t21ckeepsfield.olang:4:31: error[T21c]: 'q' is no field of what 'y' refers to
     4 | fn use(f fn&(x String&, y H&) keeps x in y.q) { }
@@ -5644,30 +5616,10 @@ t21nullnever.olang:4:9: note: the type is written here - write '?&' for '&' wher
     4 |     f fn&(x I64) I64 = null
       |         ^
 compilation failed with 1 error
-=== t22acapture.olang
-t22acapture.olang:11:17: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this capture says nothing of that - write 'keeps b in a' after its signature
-   11 |     f := fn() { g(x, N(2)) }
-      |                 ^
-compilation failed with 1 error
 === t22afallible.olang
 t22afallible.olang:10:16: error[E12]: expected fn&(n I32) I32, found fn&(n I32) I32 ? E
    10 |     k := apply(bad, 5)
       |                ^~~
-compilation failed with 1 error
-=== t22agivenvalue.olang
-t22agivenvalue.olang:16:9: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-   16 |     put(get, x)
-      |         ^~~
-compilation failed with 1 error
-=== t22agivesarg.olang
-t22agivesarg.olang:10:9: error[T22b]: this lambda keeps 'k' in what it captured, and the function type of this argument says nothing of that - write 'keeps k' after its signature
-   10 |     use(adder(gone))
-      |         ^~~~~
-compilation failed with 1 error
-=== t22ainstancename.olang
-t22ainstancename.olang:19:9: error[T22b]: 'keepIt<Blob>' keeps 'x' in 'v', and the function type of this argument says nothing of that - write 'keeps x in v' after its signature
-   19 |     use(keepIt<Blob>, v)
-      |         ^~~~~~~~~~~~
 compilation failed with 1 error
 === t22alambdakeeps.olang
 t22alambdakeeps.olang:12:15: error[T22b]: this lambda keeps 'k' in what it captured, and the function type of this store says nothing of that - write 'keeps k' after its signature
@@ -5679,18 +5631,19 @@ t22alatelambda.olang:15:9: error[T22b]: this lambda keeps 'b' in what it capture
    15 |         op(x, N(i))
       |         ^~
 compilation failed with 1 error
-=== t22aobligation.olang
-t22aobligation.olang:8:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    8 |     a.next = b
-      |            ^
-t22aobligation.olang:17:11: error[T22b]: 'hang' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-   17 |     apply(hang, a, b)
-      |           ^~~~
-compilation failed with 2 errors
 === t22apushed.olang
-t22apushed.olang:11:13: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
+t22apushed.olang:11:8: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
    11 |     fs.Push(g)
-      |             ^
+      |        ^~~~
+$ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
+   68 |     v.data[v.n].occupy(x)
+      |                        ^
+t22apushed.olang:11:8: note: the functions given here followed into it (T22c)
+   11 |     fs.Push(g)
+      |        ^~~~
+t22apushed.olang:11:8: note: instantiated here, with T = fn&(mut N&, N&)
+   11 |     fs.Push(g)
+      |        ^~~~
 compilation failed with 1 error
 === t22areturncycle.olang
 t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this return (from a function calling itself, or among several results) says nothing of that - write 'keeps b in a' after its signature
@@ -5701,10 +5654,7 @@ compilation failed with 1 error
 t22bborrows.olang:9:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
     9 | fn main() { _ := use(second, N(1)) }
       |             ^
-t22bborrows.olang:9:22: error[T22b]: 'second' gives back what 'b' refers to, and the function type of this argument says nothing of that - write 'borrows b' after its signature
-    9 | fn main() { _ := use(second, N(1)) }
-      |                      ^~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === t22bglobalkeep.olang
 t22bglobalkeep.olang:11:15: error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back, and this store holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
    11 |     c.onEvict = keepIt
@@ -5745,15 +5695,9 @@ t22bpure.olang:11:9: note: it may write through what it was not given writably h
       |         ^~~~~~~
 compilation failed with 1 error
 === t22breadonlyresult.olang
-t22breadonlyresult.olang:15:10: error[T22a]: 'self' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
-   15 |     keep(self, x, 42)
-      |          ^~~~
-compilation failed with 1 error
+built ./build/t22breadonlyresult
 === t22bresultkept.olang
-t22bresultkept.olang:21:9: error[T22a]: 'put' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
-   21 |     use(put, v)
-      |         ^~~
-compilation failed with 1 error
+built ./build/t22bresultkept
 === t22breturns.olang
 t22breturns.olang:7:14: error[T22b]: this lambda may end the program, and 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns' - give a function that does not, or hold it as a type without 'returns'
     7 |     k := Run(fn(x I64) I64 {
@@ -5783,20 +5727,26 @@ t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
       |                                                ^~~~
 compilation failed with 2 errors
-=== t22sharedscope.olang
-t22sharedscope.olang:13:9: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-   13 |     put(link, x, 42)
-      |         ^~~~
+=== t22cbuildcapture.olang
+t22cbuildcapture.olang:13:26: error[T22c]: the function given for this call's callee keeps this argument in what it captured, where this call cannot build - make the argument in the caller and pass it in
+   13 |     for i in range 3 { s(N(base + i)) }
+      |                          ^
+t22cbuildcapture.olang:17:5: note: the functions given here followed into it (T22c)
+   17 |     feed(k, 20)
+      |     ^~~~
 compilation failed with 1 error
-=== t22sharedscopegeneric.olang
-t22sharedscopegeneric.olang:14:15: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-   14 |     f := keep(link)
-      |               ^~~~
+=== t22climit.olang
+t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a', and the function type of this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) - says nothing of that - write 'keeps b in a' after its signature
+   43 |     put(link16, x, 16)
+      |         ^~~~~~
 compilation failed with 1 error
-=== t22sharedscopetype.olang
-t22sharedscopetype.olang:15:9: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-   15 |     put(link, x)
-      |         ^~~~
+=== t22cstorefollowed.olang
+t22cstorefollowed.olang:13:55: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
+   13 | fn stash(h mut Holder&, f fn&(a mut N&, b N&)) { h.cb = f }
+      |                                                       ^
+t22cstorefollowed.olang:16:5: note: the functions given here followed into it (T22c)
+   16 |     stash(h, link)
+      |     ^~~~~
 compilation failed with 1 error
 === t24primref.olang
 t24primref.olang:4:10: error[T24]: I32 cannot be a reference - only a struct, an enum or an array can

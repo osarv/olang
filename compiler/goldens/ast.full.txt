@@ -459,17 +459,17 @@
 | -- diagnostics
 | error T21c 4:16
 === checks/cases/t22ainstancename.olang
-| EXPR 11:36-11:45
-| EXPR 14:24-14:41
-| FIELD 7:5-7:6
-| FIELD 8:5-8:40
-| FN 11:1-11:47
-| FN 13:1-15:2
-| FORIN 14:5-14:43
-| IMPORT 4:1-4:16
-| TYPE 6:1-9:2
+| EXPR 12:36-12:45
+| EXPR 15:24-15:41
+| FIELD 8:5-8:6
+| FIELD 9:5-9:40
+| FN 12:1-12:47
+| FN 14:1-16:2
+| FORIN 15:5-15:43
+| IMPORT 5:1-5:16
+| TYPE 7:1-10:2
 | -- diagnostics
-| error  19:21
+| error  20:21
 === checks/cases/t30sep.olang
 | FN 4:1-4:16
 | -- diagnostics

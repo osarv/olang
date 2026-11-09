@@ -233,6 +233,16 @@
 | ok - a result handed back through a value lands where its argument lives
 | ok - text made in a loop, picked through a value and read in the turn
 | ok - a value of a type whose result is built is unchanged
+=== test tests/follow.olang
+| status 0
+| ok - a walk given a lambda keeping what it is given in what it captured
+| ok - a function followed through a chain three deep
+| ok - a recursive callee handing on the function it was given
+| ok - a captured function value followed into the lambda's body
+| ok - a function given back by what it was given to holds what it was given
+| ok - a twin building where the followed function needs it
+| ok - an adapter keeping what it is handed, followed
+| ok - a global baked and an assert decided through a twin
 === test tests/genenums.olang
 | status 0
 | ok - G6b: generic enums - built, matched, compared, rendered - baked, decided while compiling and run
@@ -1936,7 +1946,13 @@
 | status 0
 === run callcond.olang
 | status 0
+=== run callvaluekeeps.olang
+| status 0
+| 20 0
 === run callvaluekeepsblock.olang
+| status 0
+| 11 0
+=== run callvaluekeepsframe.olang
 | status 0
 | 11 0
 === run callvaluekeepsword.olang
@@ -3066,12 +3082,23 @@
 | null
 === run t21bconvert.olang
 | status 0
+=== run t22acapture.olang
+| status 0
 === run t22acursorfn.olang
 | status 0
 | 10 12
+=== run t22agivenvalue.olang
+| status 0
+=== run t22agivesarg.olang
+| status 0
+=== run t22ainstancename.olang
+| status 0
+| 12345
 === run t22alocal.olang
 | status 0
 | 5 true
+=== run t22aobligation.olang
+| status 0
 === run t22aresult.olang
 | status 0
 | 0!,1!,2!,3! true
@@ -3093,6 +3120,12 @@
 === run t22breturncycle.olang
 | status 0
 | 7
+=== run t22sharedscope.olang
+| status 0
+=== run t22sharedscopegeneric.olang
+| status 0
+=== run t22sharedscopetype.olang
+| status 0
 === run t25ccopydecl.olang
 | status 0
 | 2
