@@ -212,10 +212,23 @@ type Viewer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     reported Map<I64, Bool>      # (file << 32) | offset: an error said there
     reportedHolds Map<I64, Bool> # (file << 40) | (local << 24) | growth offset: one error a holder for each growth
     reportedViews Map<I64, Bool> # (file << 48) | (view site << 24) | growth offset: one error a view for each growth
+    # B3i, the incremental front end: the summaries records give (Kept), by body - such a body is not walked
+    given Map<I64, Bool>
+    Keys Array<String&>& = Array<String&>(0)   # each body's key in its module's record (BodyKey), "" for none
+    Summed Bool = false          # whether summaries were found (some body may hold a view): only then are they kept
 }
 
 # every body's summary found, callees first, and every body walked against them
 fn (v mut Viewer&) Run() {
+    k := Kept()
+    v.RunKept(k)
+}
+
+# M19g with the summaries kept (B3i): a body a record of its module gives (k.Given, by "FILE KEY") is not walked, its
+# summary taken from the record - a record holds only for a module that checked cleanly, from the same text and the
+# same facts read, so its walks would say nothing and find what it says. Under k.Afresh every body is walked and each
+# summary given compared with the one found, a difference named in k.Stale
+fn (v mut Viewer&) RunKept(k mut Kept&) {
     for m in v.P.L.Mods {
         if m.File < 0 { continue }
         if m.Src is not null { v.texts.Put(m.File, m.Src!.Text) }
@@ -232,18 +245,23 @@ fn (v mut Viewer&) Run() {
         for _ in v.Bodies[i].Params { v.sums[i].Passes.Push(false) }
         v.sums[i].Known = v.walkable(i)
     }
+    v.Keys = v.BodyKeys()
+    if not k.Afresh { v.take(k) }
     v.components()
     if not v.viewsHeld() { return }
-    for k in range v.compFrom.Len() {
-        end := v.compFrom[k + 1] if k + 1 < v.compFrom.Len() else v.compNodes.Len()
-        cyclic := end - v.compFrom[k] > 1 or v.callsItself(v.compNodes[v.compFrom[k]])
+    v.Summed = true
+    for c in range v.compFrom.Len() {
+        end := v.compFrom[c + 1] if c + 1 < v.compFrom.Len() else v.compNodes.Len()
+        cyclic := end - v.compFrom[c] > 1 or v.callsItself(v.compNodes[v.compFrom[c]])
         for _ in range 100 {
             v.changed = false
-            for i in range v.compFrom[k], end { v.walk(v.compNodes[i], false) }
+            for i in range v.compFrom[c], end { v.walk(v.compNodes[i], false) }
             if not v.changed or not cyclic { break }
         }
-        for i in range v.compFrom[k], end { v.walk(v.compNodes[i], true) }
+        for i in range v.compFrom[c], end { v.walk(v.compNodes[i], true) }
     }
+    if k.Afresh { v.compare(k) }
+    v.Gather(k)
 }
 
 # whether any body may hold a view, which is all M19g speaks of. A view is made only in the prelude's Vec and Map
@@ -286,7 +304,7 @@ fn (v mut Viewer&) walkable(b I64) Bool {
 
 # body b walked: its summary found, or its errors said
 fn (v mut Viewer&) walk(b I64, check Bool) {
-    if not v.sums[b].Known { return }
+    if not v.sums[b].Known or v.given.Has(b) { return }
     body := v.Bodies[b]
     v.B = body
     v.Id = b
@@ -1525,6 +1543,235 @@ fn (v mut Viewer&) calleeType(c typed.Call&) types.TypeId {
         case typed.Callee.Value(f): f.Type()
         case typed.Callee.Body(id): v.Bodies[I64(id)].Ty
         case _: types.UnknownT
+    }
+}
+
+# ---- summaries kept in records (B3i, the incremental front end) ----
+
+# what a build's records give the pass, and what it found against them: Given each body's summary a record of its
+# module gives, by "FILE KEY" (FILE the module's file, KEY the body's BodyKey); Afresh (OLANG_CHECKINCR) every body
+# walked all the same, each summary given compared with the one found - Stale a line for each difference
+type Kept struct() {
+    Cands Vec<Cand>             # the records found for the program's modules, each taken where its reads hold
+    Given Map<String, String&>
+    Afresh Bool = false
+    Taken I64 = 0               # how many bodies' summaries were taken (compared, under Afresh)
+    Files Map<I64, Bool>        # the files whose record was taken
+    Stale Vec<String&>
+    Lines Map<I64, Vec<String&>>  # by file: the summaries found for a module no record was taken for (Summaries)
+}
+
+# a record found for the module of File: what its checking read of the program's facts (facts.Table.Holds), and its
+# bodies' summaries ("KEY\tTEXT")
+type Cand struct(File I64) {
+    File
+    Reads Vec<String&>
+    Bodies Vec<String&>
+}
+
+# the candidates taken whose reads hold (holds says which), one for each file, their summaries given
+fn (k mut Kept&) TakeHolding(holds fn&(reads Array<String&>&) Bool) {
+    for c in k.Cands {
+        if k.Files.Has(c.File) or not holds(c.Reads.ToArray()): continue
+        k.Files.Put(c.File, true)
+        for line in c.Bodies {
+            tab := try line.Find("\t") catch { continue }
+            k.Given.Put($c.File " " $line[:tab], $line[tab + 1:])
+        }
+    }
+}
+
+# after the walk: the summaries of every file some keyed body of which was walked, for its record
+fn (v mut Viewer&) Gather(k mut Kept&) {
+    if not v.Summed: return
+    for b in range v.Bodies.Len() {
+        f := v.Bodies[b].File
+        if v.Keys[b] == "" or v.given.Has(b) or k.Lines.Has(f) or k.Files.Has(f): continue
+        k.Lines.Put(f, v.Summaries(f))
+    }
+}
+
+# each body's key in its module's record, "" for a body no record keeps: a body of its module's own code alone - a
+# function or method of no type variable, a constructor or destructor of a type of none, a lambda or a contract item
+# of such a body, a global's initializer - named by its kind and where it is written. A key two bodies of one file
+# share (whatever made it) is no key: such bodies are always walked
+fn (v mut Viewer&) BodyKeys() Array<String&>& {
+    n := v.Bodies.Len()
+    keys mut Array<String&>& = Array<String&>(n, "")
+    for b in range n { keys[b] = v.bodyKey(b, keys) }
+    seen Map<String, I64>
+    for b in range n {
+        if keys[b] == "": continue
+        k := $v.Bodies[b].File " " $keys[b]
+        had := try seen.Get(k) catch {
+            seen.Put(k, b)
+            continue
+        }
+        keys[had] = ""
+        keys[b] = ""
+    }
+    return keys
+}
+
+fn (v mut Viewer&) bodyKey(b I64, keys Array<String&>&) String {
+    body := v.Bodies[b]
+    at := $body.Sp.Start "-" $body.Sp.End
+    return match body.Of {
+        case typed.BodyOf.Fn(inst): $"fn " $at if v.P.InstanceArgs(inst) == types.ListId(0) else ""
+        case typed.BodyOf.Ctor(t, twin): $"ctor " $at if twin == types.ListId(0) and v.plainType(t) else ""
+        case typed.BodyOf.Dtor(t): $"dtor " $at if v.plainType(t) else ""
+        case typed.BodyOf.Lambda(parent): $"lambda " $at if v.keyedBefore(I64(parent), b, keys) else ""
+        case typed.BodyOf.Global(_, name): $"global " $v.text(name)
+        case typed.BodyOf.Contract(of, _, index): $"contract " $at " " $index if v.keyedBefore(I64(of), b, keys) else ""
+        case _: ""
+    }
+}
+
+# whether body p, numbered before b, has a key
+fn (v mut Viewer&) keyedBefore(p I64, b I64, keys Array<String&>&) Bool { return p >= 0 and p < b and keys[p] != "" }
+
+# a declared type no type variable binds: no instance of a generic type
+fn (v mut Viewer&) plainType(t types.TypeId) Bool {
+    return v.P.T.KindOf(t) == types.Kind.Named and v.P.T.DeclParams(v.P.T.DeclOf(t)) == 0
+}
+
+# the summaries a module's record keeps: "KEY\tTEXT" for each keyed body of file whose summary can be written, sorted -
+# none where no summary was found (no body may hold a view, so nothing was walked)
+fn (v mut Viewer&) Summaries(file I64) Vec<String&> {
+    out Vec<String&>
+    if not v.Summed: return out
+    for b in range v.Bodies.Len() {
+        if v.Keys[b] == "" or v.Bodies[b].File != file: continue
+        text := try v.SummaryText(b) catch Unwritable { continue }
+        out.Push($v.Keys[b] "\t" $text)
+    }
+    out.Sort(fn(a String&, b String&) Bool { return a < b })
+    return out
+}
+
+type Unwritable error { Here }
+
+# body b's summary as one line of words: "known" or "unknown", the parameters it passes on ("p" and the indexes), then
+# each fact as "grows", "views" or "keeps" and its fields - a module and a file by their identity. A word holding a
+# space, a tab or a line break cannot be written
+fn (v mut Viewer&) SummaryText(b I64) String ? Unwritable {
+    sm := v.sums[b]
+    w Vec<String&>
+    w.Push("known" if sm.Known else "unknown")
+    passes := StringBuilder()
+    passes.Push("p")
+    for i, p in sm.Passes {
+        if p: passes.Push($"," $i)
+    }
+    w.Push(passes.ToString())
+    for f in sm.Grows { w.Push(try v.factText("grows", f)) }
+    for f in sm.Views { w.Push(try v.factText("views", f)) }
+    for f in sm.Keeps { w.Push(try v.factText("keeps", f)) }
+    return w.Join(" ")
+}
+
+fn (v mut Viewer&) factText(kind String&, f fact) String ? Unwritable {
+    module := try v.moduleWord(f.Module)
+    file := try v.fileWord(f.File)
+    name := "-" if f.Name == source.NameId(0) else $v.text(f.Name)
+    words := Array<String&>[kind, $f.Param, module, name, $"." $v.strs[f.Path], $f.Show, "1" if f.Any else "0", file
+        $f.At.Start, $f.At.End, $f.Into]
+    for x in words {
+        if x == "" or x.Contains(" ") or x.Contains("\t") or x.Contains("\n") or x.Contains("|"): error Unwritable.Here
+    }
+    return words.Join("|")
+}
+
+fn (v mut Viewer&) moduleWord(m I64) String ? Unwritable {
+    if m < 0: return "-"
+    if m >= v.P.L.Mods.Len(): error Unwritable.Here
+    return $v.P.L.Mods[m].Identity
+}
+
+fn (v mut Viewer&) fileWord(file I64) String ? Unwritable {
+    if file < 0: return "-"
+    for m in v.P.L.Mods {
+        if m.File == file: return $m.Identity
+    }
+    error Unwritable.Here
+}
+
+# the summaries k gives taken for their bodies: a summary that cannot be read is not taken, its body walked
+fn (v mut Viewer&) take(k mut Kept&) {
+    if k.Given.Len() == 0: return
+    for b in range v.Bodies.Len() {
+        if v.Keys[b] == "": continue
+        text := try k.Given.Get($v.Bodies[b].File " " $v.Keys[b]) catch { continue }
+        sm := try v.readSummary(b, text) catch Unwritable { continue }
+        v.sums[b] = sm
+        v.given.Put(b, true)
+        k.Taken++
+    }
+}
+
+fn (v mut Viewer&) readSummary(b I64, text String&) summary ? Unwritable {
+    words := text.Split(" ").ToVec()
+    if words.Len() < 2 or not words[1].StartsWith("p"): error Unwritable.Here
+    sm := summary()
+    sm.Known = words[0] == "known"
+    if sm.Known != v.walkable(b): error Unwritable.Here
+    for _ in v.Bodies[b].Params { sm.Passes.Push(false) }
+    for x in words[1][1:].Split(",") {
+        if x == "": continue
+        i := try x.ParseInt() catch { error Unwritable.Here }
+        if i < 0 or i >= sm.Passes.Len(): error Unwritable.Here
+        sm.Passes[i] = true
+    }
+    for i in range 2, words.Len() {
+        parts := words[i].Split("|").ToVec()
+        if parts.Len() != 11: error Unwritable.Here
+        f := try v.readFact(parts)
+        match parts[0] {
+            case "grows": sm.Grows.Push(f)
+            case "views": sm.Views.Push(f)
+            case "keeps": sm.Keeps.Push(f)
+            case _: error Unwritable.Here
+        }
+    }
+    return sm
+}
+
+fn (v mut Viewer&) readFact(p Vec<String&>&) fact ? Unwritable {
+    param := try p[1].ParseInt() catch { error Unwritable.Here }
+    module := try v.moduleOf(p[2])
+    name := source.NameId(0) if p[3] == "-" else v.P.L.Names.Intern(p[3])
+    if not p[4].StartsWith("."): error Unwritable.Here
+    path := v.str(p[4][1:])
+    show := try p[5].ParseInt() catch { error Unwritable.Here }
+    file := -1 if p[7] == "-" else v.P.L.Mods[try v.moduleOf(p[7])].File
+    start := try p[8].ParseInt() catch { error Unwritable.Here }
+    end := try p[9].ParseInt() catch { error Unwritable.Here }
+    into := try p[10].ParseInt() catch { error Unwritable.Here }
+    f := fact(param, module, name, path, show, p[6] == "1", file, source.Span(I32(start), I32(end)))
+    f.Into = into
+    return f
+}
+
+fn (v mut Viewer&) moduleOf(identity String&) I64 ? Unwritable {
+    if identity == "-": return -1
+    for i, m in v.P.L.Mods {
+        if m.Identity == identity: return i
+    }
+    error Unwritable.Here
+}
+
+# OLANG_CHECKINCR: each summary given, against the one this walk found
+fn (v mut Viewer&) compare(k mut Kept&) {
+    if not v.Summed: return
+    for b in range v.Bodies.Len() {
+        if v.Keys[b] == "": continue
+        key := $v.Bodies[b].File " " $v.Keys[b]
+        given := try k.Given.Get(key) catch { continue }
+        k.Taken++
+        found := try v.SummaryText(b) catch Unwritable default "(unwritable)"
+        if found == given: continue
+        file := try v.fileWord(v.Bodies[b].File) catch Unwritable default "?"
+        k.Stale.Push($"M19g summary of " $file " " $v.Keys[b] " was '" $given "', is '" $found "'")
     }
 }
 
