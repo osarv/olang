@@ -609,14 +609,22 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     irs Map<String, String&>      # a reused module's parts' IR, "MODULE PART", read and checked against their hashes
     if kind != build.Kind.Module {
         # -memory reports what lowering decided in every module, so it lowers every one (records still kept)
-        if not cfg.Memory: e.Reuse = reusable(l, c, cfg, keys, irs)
+        if not cfg.Memory: e.Reuse = reusable(l, c, cfg, keys, irs, -1)
         build.Phase("facts")
     }
     objs := e.Objects()
     if e.Redo {
-        # a reused module's objects were cut otherwise than this program's now are: every module written afresh
+        # a reused module's objects were cut otherwise than this program's now are (a record another program made, cut
+        # as that one's are): only the records cut as this program's are taken, else every module written afresh
+        cut := e.Cut
+        irs.Clear()
         e = emitter(c, lw, d, cfg, kind, baked)
+        e.Reuse = reusable(l, c, cfg, keys, irs, 1 if cut else 0)
         objs = e.Objects()
+        if e.Redo {
+            e = emitter(c, lw, d, cfg, kind, baked)
+            objs = e.Objects()
+        }
     }
     build.Phase("lower+emit")
     if e.Fuzz != "" {
@@ -871,9 +879,10 @@ fn sortedLines(text String&) String {
 }
 
 # where module m's record is kept for this reader record: its key's first 20 hex digits and the hash of what its code
-# read naming it - each program reading the module's facts otherwise keeping a record of its own beside it
-fn recordPath(cfg build.Config&, identity String&, key String&, reads String&) String {
-    return $recordStem(cfg, identity, key) $build.IrHash(reads)[:16]
+# read naming it - each program reading the module's facts otherwise keeping a record of its own beside it - and "s"
+# where its objects are cut (B3d), so a program cut otherwise keeps its own beside it too
+fn recordPath(cfg build.Config&, identity String&, key String&, reads String&, cut Bool) String {
+    return $recordStem(cfg, identity, key) $("s" if cut else "") $build.IrHash(reads)[:16]
 }
 
 fn recordStem(cfg build.Config&, identity String&, key String&) String {
@@ -882,10 +891,10 @@ fn recordStem(cfg build.Config&, identity String&, key String&) String {
 
 # the modules whose records are here and hold for this program: under each module's key, a record whose every fact read
 # has the value this program decided (facts.Table.Holds), written whole (its "sum" line the hash of the lines before
-# it), each part's IR there with the hash the record names - else the record is passed over, never read in part. The
-# parts' IR is kept in irs ("MODULE PART") for the build
+# it), each part's IR there with the hash the record names - else the record is passed over, never read in part - and,
+# where cut is 0 or 1, cut as that says (B3d). The parts' IR is kept in irs ("MODULE PART") for the build
 fn reusable(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, keys Array<String&>&
-    irs mut Map<String, String&>&) Vec<emit.Reused> {
+    irs mut Map<String, String&>&, cut I64) Vec<emit.Reused> {
     out Vec<emit.Reused>
     names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return out }
     for m in range keys.Len() {
@@ -894,7 +903,7 @@ fn reusable(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, key
         lead := stem[cfg.Dir.Len() + 5:]
         for name in names {
             if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
-            r := try takeRecord(c, $cfg.Dir "/rec/" $name, m, irs) catch Stale { continue }
+            r := try takeRecord(c, $cfg.Dir "/rec/" $name, m, irs, cut) catch Stale { continue }
             out.Push(r)
             break
         }
@@ -903,7 +912,7 @@ fn reusable(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, key
 }
 
 # the record at path, as module m's, where it holds for this program
-fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, String&>&) emit.Reused ? Stale {
+fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, String&>&, cut I64) emit.Reused ? Stale {
     text := try os.ReadFile(path) catch os.Error { error Stale }
     sumAt := try text.Find("\nsum ") catch { error Stale }
     if text[sumAt + 5:].Trim() != build.IrHash(text[:sumAt + 1]): error Stale
@@ -930,6 +939,7 @@ fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, Str
         }
     }
     if not whole or r.Parts.Len() == 0 or not c.P.Facts.Holds(read.ToArray()): error Stale
+    if cut >= 0 and r.Split != (cut == 1): error Stale
     for k in range r.Parts.Len() {
         pir := try os.ReadFile($path ".p" $k ".ll") catch os.Error { error Stale }
         if build.IrHash(pir) != r.Hashes[k]: error Stale
@@ -948,7 +958,7 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
     pid := build.Pid()
     for r in made {
         if r.Module >= keys.Len() or keys[r.Module] == "" { continue }
-        base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module], reads[r.Module])
+        base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module], reads[r.Module], r.Split)
         b := StringBuilder()
         b.Push($"olang module record\nsize " $r.Size "\nsplit " $("1" if r.Split else "0") "\n")
         seen Map<String&, Bool>

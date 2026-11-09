@@ -130,6 +130,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     ReusedAt Map<I64, I64>          # a reused module's index in Reuse
     Made Vec<Reused>
     Redo Bool = false               # Objects found a reused module cut otherwise than it would now be: emit again without
+    Cut Bool = false                # whether Objects cut the program's objects (B3d): what a reused module's must be too
     testSyms Map<I64, String&>      # each test's symbol, by its body (testSym)
     # B3l: a failed check's place kept out of the code naming it - each "FILE:LINE: ..." text an item HomeLoc, named by
     # where it is in its top-level item rather than by its line, defined in an object of its home's own compiled
@@ -230,6 +231,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
         if e.ReusedAt.Has(r.Module) { total += r.Size }
     }
     split := e.Debug or total >= e.SplitFrom
+    e.Cut = split
     for r in e.Reuse {
         if e.ReusedAt.Has(r.Module) and r.Split != split {
             e.Redo = true
