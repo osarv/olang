@@ -1655,6 +1655,14 @@ fn freeHolder(k I64) String& {
             "    h.n = Node(i * 3)\n"
             "}\n"
             "fn grow" $k "(h mut " $h "&, i I64) { h.n.next = Node.mkChain(i, 2) }\n"
+            "# the scenario's globals (O8d: a global is a place like any other): a Vec given a Vec built in a local, a node\n"
+            "GV" $k " mut Vec<I64> = Vec<I64>[1, 2]\n"
+            "GN" $k " mut Node?& = null\n"
+            "fn setv" $k "(i I64) {\n"
+            "    x := Vec<I64>()\n"
+            "    for j in range 2 + i % 3 { x.Push(i * 3 + j) }\n"
+            "    GV" $k " = x\n"
+            "}\n"
             "fn sum" $k "(h " $h "&) I64 {\n"
             "    t I64 = chain(h.n) * 7 + h.t.Hash() * 3 + h.kt.Len() + chain(h.keep)\n"
             "    for x in h.l { t = t * 5 + chain(x) }\n"
@@ -1662,7 +1670,8 @@ fn freeHolder(k I64) String& {
             "    for x in h.v { t = t * 3 + x }\n"
             "    for e in h.rm { t = t * 3 + e.Value.n + e.Value.t.Len() }\n"
             "    if h.keepR is not null { t = t * 5 + h.keepR!.t.Len() }\n"
-            "    return t * 11 + Ends\n"
+            "    for x in GV" $k " { t = t * 3 + x }\n"
+            "    return t * 11 + Ends + chain(GN" $k ")\n"
             "}\n")
 }
 
@@ -1765,15 +1774,15 @@ fn (g mut SG&) handScenario(k I64) String& {
 }
 
 # the statements that keep (views across a let-go, views stored elsewhere): a clean scenario writes none
-FreeKeeps Array<I64> = Array<I64>[10, 11, 12, 13, 14, 15, 16, 23, 25, 26]
+FreeKeeps Array<I64> = Array<I64>[10, 11, 12, 13, 14, 15, 16, 23, 25, 26, 29, 30]
 
 # one statement on holder h in turn i: a let-go, a view kept across one, a store of a view elsewhere, a move out
 fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
     v := g.val()
     x := g.name("x")
     kk := g.k
-    k := g.r(27)
-    for clean and k in FreeKeeps { k = g.r(27) }
+    k := g.r(31)
+    for clean and k in FreeKeeps { k = g.r(31) }
     if k == 0 { return $ind $h ".t = \"t\" $i \"-" $v "\"\n" }
     if k == 1 { return $ind $h ".n = Node(i + " $v ")\n" }
     if k == 2 { return $ind $h ".n = Node.mkChain(i, " $(1 + g.r(3)) ")\n" }
@@ -1839,6 +1848,14 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
         f := g.name("f")
         return ($ind "{\n" $ind "    " $r " := Res(i)\n" $ind "    " $f " := fn() I64 { return " $r ".n }\n" $ind "    acc += " $f "()\n" $ind "}\n")
     }
+    # O8d: the scenario's globals given new values, by a call and here, and views of them kept across a let-go (keep)
+    if k == 27 { return $ind "setv" $kk "(i + " $v ")\n" }
+    if k == 28 { return $ind "GN" $kk " = Node.mkChain(i, " $(1 + g.r(3)) ")\n" }
+    if k == 29 {
+        return ($ind $x " := GV" $kk ".View()\n" $ind "setv" $kk "(i)\n" $ind "churn()\n" $ind "acc = acc * 31 + "
+                $x "[" $x ".Len() - 1]\n")
+    }
+    if k == 30 { return $ind $x " := GN" $kk "\n" $ind "GN" $kk " = Node(i + " $v ")\n" $ind "acc = acc * 31 + chain(" $x ")\n" }
     return $ind "if " $h ".v.Len() > 2 { try " $h ".v.Pop() catch { } }\n"
 }
 

@@ -2567,6 +2567,12 @@
 | status 0
 === run o4bvalueparamgeneric.olang
 | status 0
+=== run o8dglobal.olang
+| status 0
+| 3007 450 126 1378
+=== run o8dmapkeytext.olang
+| status 0
+| 1143 7023
 === run o8dremovedelemref.olang
 | status 0
 | 0 0 15150
