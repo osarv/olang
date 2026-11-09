@@ -100,24 +100,22 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     ViewLog Vec<String&>
     gen mir.GenInfo = mir.GenInfo()   # the program's generational types and weak fields (Gen), once read
     genRead Bool = false
-    genDecided Bool = false
 }
 
-# T13d, B3i (docs/wholeprog.md kind D): which types are generational and which fields weak - a whole-program fact,
-# every module's weak references read before any body is checked - decided once as the canonical text of both, by
-# declaration identity
-GenFact String& = "T13d"
-
-fn (lw mut Lowerer&) genText() String {
-    rows Vec<String&>
-    for k in lw.P.Gens.Keys() { rows.Push($"gen " $lw.declName(k)) }
+# T13d, B3i (docs/wholeprog.md kind D): whether a type is generational and which of its fields are weak - a
+# whole-program fact, every module's weak references read before any body is checked - one fact a declaration, named
+# by its identity: "gen" or "plain", then its weak fields' positions
+fn (lw mut Lowerer&) genValue(d I64) String {
+    b := StringBuilder()
+    b.Push("gen" if lw.P.Gens.Has(d) else "plain")
+    at := $d " "
+    ks Vec<String&>
     for k in lw.P.WeakSlots.Keys() {
-        at := try k.Find(" ") catch { continue }
-        d := try k[:at].ParseInt() catch { continue }
-        rows.Push($"weak " $lw.declName(d) " " $k[at + 1:])
+        if k.StartsWith(at): ks.Push($k[at.Len():])
     }
-    rows.Sort(fn(a String&, b String&) Bool { return a < b })
-    return rows.Join("; ")
+    ks.Sort(fn(x String&, y String&) Bool { return x < y })
+    for k in ks { b.Push($" weak " $k) }
+    return b.ToString()
 }
 
 # a declaration as other programs name it: its module's identity and its name
@@ -127,16 +125,21 @@ fn (lw mut Lowerer&) declName(d I64) String {
     return $mod "." $lw.P.T.Names.Text(lw.P.T.DeclName(types.DeclId(I32(d))))
 }
 
-# ...read by the module of file, whose code allocates and stores by it: a module's record is reused only where no type
-# became generational or stopped being, and no field weak, since it was written - a "weak" added or removed lowers every
-# module again, the cost stated in HISTORY (rounds 2 and 3)
+# ...of each declaration lowering asked about (GenInfo.Asked) since the last call, read by the module of file, whose code
+# allocates and stores by them: its record is reused only where none of those became generational or stopped being, nor
+# gained or lost a weak field, since it was written
 fn (lw mut Lowerer&) ReadGen(file I64) {
-    if file < 0: return
-    if not lw.genDecided {
-        lw.genDecided = true
-        lw.P.Facts.Decide(GenFact, lw.genText(), true)
+    g := lw.Gen()
+    if file < 0 or g.Asked.Len() == 0 {
+        g.Asked.Clear()
+        return
     }
-    try lw.P.Facts.Read(file, GenFact) catch { }
+    for d in g.Asked.Keys() {
+        name := $"T13d " $lw.declName(d)
+        lw.P.Facts.Decide(name, lw.genValue(d), true)
+        try lw.P.Facts.Read(file, name) catch { }
+    }
+    g.Asked.Clear()
 }
 
 # the program's generational types and weak fields (T13d, T2d), read from the checker's whole-program scan once it has
@@ -231,7 +234,9 @@ fn (lw mut Lowerer&) lowerAs(id I64, t I64) mir.Fn& {
         ln.plan = lw.Plans[id]
     }
     ln.freeing = t < 0 and lw.Free is not null and lw.Free!.Frees(id)
+    lw.ReadGen(-1)   # (what a helper lowered before asked is not this body's)
     ln.run()
+    lw.ReadGen(b.File)
     lw.Gapped = ln.gapped
     return ln.F
 }
@@ -547,7 +552,6 @@ fn (ln mut lowering&) run() {
     # O23a, C1: its derived scopes, passed after its type's (a body with any has no captures)
     if ln.planned { for k in range ln.plan.DerivedP.Len() { ln.F.Vars.Push(mir.VarKind.Derived(k)) } }
     ln.L.ReadDerived(b.File, ln.F.Of)
-    ln.L.ReadGen(b.File)
     if ln.gapped {
         ln.L.Gaps.Push(Gap(ln.file, b.Sp, "an unknown type (a check error or gap): a local"))
         return
@@ -629,7 +633,7 @@ fn (ln mut lowering&) instance() mir.ScopeRef {
 
 fn (ln mut lowering&) emit(s mir.Stmt&) {
     if ln.dead: return
-    if ln.L.Gen().Decls.Len() > 0 and ln.counted(s): return
+    if ln.counted(s): return
     ln.F.Add(ln.cur, s)
     # (O23a, B3i: a value registered with a scope is ended by its destructor's thunk, which passes its derived scopes
     # null - their count read as a fact)
