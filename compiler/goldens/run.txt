@@ -1818,6 +1818,8 @@
 | status 0
 === run b6elemrows.olang
 | status 0
+=== run b6elemvalue.olang
+| status 0
 === run b6matchfield.olang
 | status 0
 | w1
@@ -1905,6 +1907,9 @@
 === run c2dctorbuilds.olang
 | status 0
 | ok
+=== run c2de25once.olang
+| status 0
+| 102
 === run c2dexactobliged.olang
 | status 0
 === run c2dfieldentry.olang
@@ -2009,6 +2014,8 @@
 === run d16cstore.olang
 | status 0
 | 42
+=== run d16dcomposeshort.olang
+| status 0
 === run d16dlambdaown.olang
 | status 0
 === run d16dtwoscopes.olang
@@ -2143,6 +2150,9 @@
 | status 0
 === run e31bviewnested.olang
 | status 0
+=== run e31bviewnoindexnote.olang
+| status 0
+| 55035 100
 === run e31bviewotherslot.olang
 | status 0
 === run e31bviewreplaced.olang
@@ -2396,6 +2406,11 @@
 | status 0
 === run o18cnestedwhole.olang
 | status 0
+=== run o18cprojectionborrow.olang
+| status 0
+| t
+=== run o18cprojectionfresh.olang
+| status 0
 === run o18cstorage.olang
 | status 0
 === run o1bglobalarg.olang
@@ -2544,6 +2559,9 @@
 === run p1gtargetsnarrow.olang
 | status 0
 | 42 1
+=== run p1gtargetstwoblocks.olang
+| status 0
+| 6
 === run p2blocklocal.olang
 | status 0
 | node7
@@ -2551,7 +2569,12 @@
 | status 0
 === run p2cycledeps.olang
 | status 0
+=== run p2fieldofresult.olang
+| status 0
+| 0
 === run p2reassignedcallback.olang
+| status 0
+=== run p2spawncallee.olang
 | status 0
 === run p2spawntemp.olang
 | status 0
@@ -2800,7 +2823,11 @@
 | 3
 === run s5e31bfield.olang
 | status 0
+=== run s5handlenote.olang
+| status 0
 === run s5handlerepoint.olang
+| status 0
+=== run s5heldindexnote.olang
 | status 0
 === run s5helperlist.olang
 | status 0
@@ -2823,9 +2850,15 @@
 | status 0
 === run s5nestedhandlemap.olang
 | status 0
+=== run s5projection.olang
+| status 0
+=== run s5projectionelem.olang
+| status 0
 === run s5spawnhandlerun.olang
 | status 0
 === run s6handleloop.olang
+| status 0
+=== run s6handlestore.olang
 | status 0
 === run s6nestedhandlerun.olang
 | status 0
@@ -3159,6 +3192,8 @@
 === run t32anyarrcopy.olang
 | status 0
 === run t32anyarrcopyassign.olang
+| status 0
+=== run t32anyarrofany.olang
 | status 0
 === run t32anyconvcopy.olang
 | status 0

@@ -265,11 +265,6 @@ b5aself.olang:3:1: error[B5a]: C's initializer reads C, which is not set until t
     3 | C I32 = C + 1
       | ^
 compilation failed with 1 error
-=== b6elemvalue.olang
-b6elemvalue.olang:15:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Copy()')
-   15 |         wv := W(x)
-      |                 ^
-compilation failed with 1 error
 === b7atargetelsewhere.olang
 b7atargetelsewhere.olang:3:6: error[B7a]: 'String.Trim' is declared in another file - a test is an example of its own file's code, written beside it
     3 | test String.Trim "trims" { assert " a ".Trim() == "a" }
@@ -520,11 +515,6 @@ c2afieldparam.olang:6:5: error[C2a]: field 'n' has a parameter's name - write it
 c2afieldparam.olang:5:15: note: 'n' is declared here
     5 | type T struct(n I32) {
       |               ^~~~~
-compilation failed with 1 error
-=== c2de25once.olang
-c2de25once.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-   16 |         x := Env(local)
-      |                  ^~~~~
 compilation failed with 1 error
 === c2dheldregistered.olang
 c2dheldregistered.olang:22:39: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
@@ -858,14 +848,6 @@ compilation failed with 1 error
 d16cshadow.olang:7:19: error: 'x' is already declared here
     7 |     n := apply(fn(x) { return x }, 2)
       |                   ^
-compilation failed with 1 error
-=== d16dcomposeshort.olang
-d16dcomposeshort.olang:19:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   19 |         keep = compose(id, g)
-      |                ^~~~~~~
-d16dcomposeshort.olang:8:5: note: the callee requires it because of this statement
-    8 |     return fn(x I64) I64 { return g(f(x)) }
-      |     ^~~~~~
 compilation failed with 1 error
 === d16espawn.olang
 d16espawn.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
@@ -1795,17 +1777,6 @@ e31bviewnestedwrite.olang:27:11: error[E31b]: x[i] gives a copy of the element, 
 e31bviewnestedwrite.olang:23:5: note: the callee is no view of the element because of this statement
    23 |     c.w.Fill(3)
       |     ^~~~~~~~~~~
-compilation failed with 1 error
-=== e31bviewnoindexnote.olang
-e31bviewnoindexnote.olang:39:24: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   39 |     for k in range 3 { f(s[k], out) }
-      |                        ^
-e31bviewnoindexnote.olang:35:37: note: the callee requires it because of this statement
-   35 | fn f(c mut V&, out mut Vec<Pt&>&) { out.Push(id(c.p)) }
-      |                                     ^~~
-e31bviewnoindexnote.olang:37:5: note: 's' is declared here, in a block that closes first - declare it where 'out' lives, 's mut Vs&', and assign it here
-   37 |     s := Vs(Array<I64>(4))
-      |     ^
 compilation failed with 1 error
 === e31bviewpass.olang
 e31bviewpass.olang:14:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -3448,28 +3419,6 @@ o17permute6b.olang:31:12: error[T25c]: this lambda writes through or keeps its b
    31 |     run(h, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
       |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
-=== o18cprojectionborrow.olang
-o18cprojectionborrow.olang:21:20: error[O25i]: this reads 'held', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
-   21 |     try io.Println(held!.s)
-      |                    ^~~~
-o18cprojectionborrow.olang:19:9: note: 'held' is given a value here
-   19 |         held = x
-      |         ^~~~~~~~
-compilation failed with 1 error
-=== o18cprojectionfresh.olang
-o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   15 |         keep.Push(t)
-      |              ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-o18cprojectionfresh.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'keep' lives, 't String&', and assign it here
-   14 |         t := p.mk().text
-      |         ^
-o18cprojectionfresh.olang:15:19: note: this text lives in a block that closes first - pass a copy, which is made where 'keep' lives: write '$' before it
-   15 |         keep.Push(t)
-      |                   ^
-compilation failed with 1 error
 === o1blambdaglobal.olang
 o1blambdaglobal.olang:14:30: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
    14 |         case Box.Has(n) { GF = fn() { return n.v } }
@@ -3564,24 +3513,14 @@ p1gresultref.olang:13:39: error[P1g]: a spawn target has exactly the call's type
    13 |         for t in range 2 { spawn parts[t] = part(t * 4, t * 4 + 4) }
       |                                       ^
 compilation failed with 1 error
-=== p1gtargetstwoblocks.olang
-p1gtargetstwoblocks.olang:18:13: error[P1g]: these targets live in different scopes, and the results are built in one
-   18 |             spawn a, b = two(i + 5)
+=== p1gtargetsfields.olang
+p1gtargetsfields.olang:20:13: error[P1g]: these targets live in different scopes, and the results are built in one
+   20 |             spawn h.n, k.n = two(i + 5)
       |             ^~~~~
-compilation failed with 1 error
-=== p2fieldofresult.olang
-p2fieldofresult.olang:18:47: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
-   18 |             spawn out[i] = sum(local.params().Data)
-      |                                               ^~~~
 compilation failed with 1 error
 === p2spawncalled.olang
 p2spawncalled.olang:12:19: error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
    12 |             spawn fn(k I32) { total[i] = n.v + k }(1)
-      |                   ^~
-compilation failed with 1 error
-=== p2spawncallee.olang
-p2spawncallee.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
-   11 |             spawn id(f)()
       |                   ^~
 compilation failed with 1 error
 === p2spawnenum.olang
@@ -4731,73 +4670,15 @@ s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which th
    12 |         spawn l[0].Add()
       |                ^
 compilation failed with 1 error
-=== s5handlenote.olang
-s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   10 |         names[0][0] = t
-      |                     ^
-$ROOT/std/prelude/vec.olang:134:40: note: the callee requires it because of this statement
-  134 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
-      |                                        ^
-s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
-    9 |         t := $k "-loop-text-of-moderate-length"
-      |         ^
-s5handlenote.olang:10:23: note: this text lives in a block that closes first - pass a copy, which is made where 'names' lives: write '$' before it
-   10 |         names[0][0] = t
-      |                       ^
-compilation failed with 1 error
 === s5handlerepointfn.olang
 s5handlerepointfn.olang:13:17: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    13 |     resetFn(bags[0])
       |                 ^
 compilation failed with 1 error
-=== s5heldindexnote.olang
-s5heldindexnote.olang:21:37: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   21 |     for k in range 3 { m[$k "-key"] += 100 }
-      |                                     ^~
-s5heldindexnote.olang:15:5: note: the callee requires it because of this statement
-   15 |     m.keys.Push(k)
-      |     ^
-s5heldindexnote.olang:21:37: note: the index is held here, for both the read and the write, in a block that closes first - make it where 'm' lives first, then index with it
-   21 |     for k in range 3 { m[$k "-key"] += 100 }
-      |                                     ^~
-compilation failed with 1 error
-=== s5projection.olang
-s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   16 |         bs.Push(Pairish.pairish(t).a)
-      |            ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives, 't mut String&', and assign it here
-   15 |         t := $k "-text"
-      |         ^
-compilation failed with 1 error
-=== s5projectionelem.olang
-s5projectionelem.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   10 |         bs.Push(boxes(t)[0])
-      |            ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-compilation failed with 1 error
 === s5spawnhandle.olang
 s5spawnhandle.olang:10:43: error[E31b, P2]: a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself
    10 |         for i in range 4 { spawn users[i].Push(i) }
       |                                           ^~~~
-compilation failed with 1 error
-=== s6handlestore.olang
-s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         names[i][0] = t
-      |                     ^
-$ROOT/std/prelude/vec.olang:134:40: note: the callee requires it because of this statement
-  134 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
-      |                                        ^
-s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
-   11 |         t := $i "-loop-text"
-      |         ^
-s6handlestore.olang:12:23: note: this text lives in a block that closes first - pass a copy, which is made where 'names' lives: write '$' before it
-   12 |         names[i][0] = t
-      |                       ^
 compilation failed with 1 error
 === s6immutableglobalfield.olang
 s6immutableglobalfield.olang:6:7: error[S6]: G cannot be written - only a local, a parameter or a 'mut' global can
@@ -6138,11 +6019,6 @@ t31noreturnmeets.olang:12:10: error[G19]: Q does not satisfy the constraint Quit
 t31noreturnmeets.olang:8:11: note: 'Quit' is declared here, with another signature
     8 | fn (q Q&) Quit() { os.Exit(1) }
       |           ^~~~
-compilation failed with 1 error
-=== t32anyarrofany.olang
-t32anyarrofany.olang:17:18: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
-   17 |         xs.Push(a[0:2])
-      |                  ^
 compilation failed with 1 error
 === t32anybaretrait.olang
 t32anybaretrait.olang:9:8: error[T30, T32]: aShape& is a trait - a constraint on a type variable; a value of any type meeting it is an 'any aShape&'
