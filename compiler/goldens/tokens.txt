@@ -2208,7 +2208,7 @@ d9cdc7db47faa601 e2ed6a548f907e29 docs/values-study/findings/lastuse.olang
 c6e91cb5b420e7e4 d1bd3322a4df816a docs/values-study/settle/vals.olang
 f2bbc73f9f9154db 614fb5e8ae9733d3 docs/values-study/split/split.olang
 55e403157630cded 4859f44830ada7e1 fuzz/editgen.olang
-daea335f7efb0ae3 03b6d2d6f85cf0a3 fuzz/fuzz.olang
+192433f3cff898ae 0edce550ccb6275c fuzz/fuzz.olang
 8c661a5bfa623fcc 5de9f5a01eb7d2bd fuzz/gen.olang
 98268a56f6fe3c77 fed36841ad906999 fuzz/repro/bf16bitcastfold.olang
 e1324bd8ffc95b55 31c460a35ad62d26 fuzz/repro/bf16fastisel.olang
