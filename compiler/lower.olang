@@ -7342,31 +7342,35 @@ fn LoopDepths(f mir.Fn&) Array<I64> {
     }
     backU, backH := backEdges(n, at, dsts)
     seen := Array<I64>(n, -1)
-    work Vec<I64>
     for i in range backH.Len() {
         h := backH[i]
         if seen[h] == h: continue   # a header's loop is walked once, from all its back edges
-        seen[h] = h
-        for j in range i, backH.Len() {
-            if backH[j] == h and seen[backU[j]] != h {
-                seen[backU[j]] = h
-                work.Push(backU[j])
-            }
-        }
-        for work.Len() > 0 {
-            x := try work.Pop() catch { break }
-            for e in range cnt[x], cnt[x + 1] {
-                p := pred[e]
-                if seen[p] == h: continue
-                seen[p] = h
-                work.Push(p)
-            }
-        }
+        markLoop(h, i, backU, backH, cnt, pred, seen)
         for x in range n {
             if seen[x] == h: depth[x] += 1
         }
     }
     return depth
+}
+
+# the loop of header h marked h in seen: h, and every block reaching a source of one of its back edges (backH from i on)
+# without passing h, walked backwards through pred (each block's predecessors from cnt[block])
+fn markLoop(h I64, i I64, backU Vec<I64>&, backH Vec<I64>&, cnt Array<I64>&, pred Array<I64>&, seen mut Array<I64>&) {
+    seen[h] = h
+    work Vec<I64>
+    for j in range i, backH.Len() {
+        if backH[j] != h or seen[backU[j]] == h: continue
+        seen[backU[j]] = h
+        work.Push(backU[j])
+    }
+    for work.Len() > 0 {
+        x := try work.Pop() catch { break }
+        for e in range cnt[x], cnt[x + 1] {
+            if seen[pred[e]] == h: continue
+            seen[pred[e]] = h
+            work.Push(pred[e])
+        }
+    }
 }
 
 # the back edges of a walk depth-first from block 0: their sources and their targets
@@ -7680,4 +7684,46 @@ test "helpers: == on a struct, its Hash, its rendering; a comprehension; a join 
              "    join {\n        for i in range 3 { spawn out[i] = sq(i) }\n    }\n    assert a.Len() == 2 and out[2] == 4 and t.Len() > 0\n}\n")
     problems, _ := lowerText(text, Array<String&>[])
     assert problems == "", problems
+}
+
+# 4.4: what a clone reads of a body, each function of names by its CloneSumText
+fn readCloneSums(text String&, fns Array<String&>&) String {
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                     source.Names(), diag.Diagnostics(false))
+    l.Load($dir "/main.olang")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := check.Checker(p, false)
+    c.CheckProgram()
+    lw := Lowerer(p, c.Bodies)
+    out := StringBuilder()
+    for name in fns {
+        for b in range c.Bodies.Len() {
+            if c.Bodies[b].File != l.Mods[l.Root].File or not lw.HasCode(b): continue
+            match c.Bodies[b].Of {
+                case typed.BodyOf.Fn(inst) {
+                    if p.L.Names.Text(p.FnDecl(p.InstanceFn(inst)).Name) == name: out.Push($name ": " $lw.CloneSumText(mir.FnKey.Body(typed.BodyId(I32(b)))) "\n")
+                }
+                case _ { }
+            }
+        }
+    }
+    return out.ToString()
+}
+
+test "a clone reads the loops a call through a parameter is in, and the calls handing it on" {
+    text := ("fn apply(xs Array<I64>&, f fn&(x I64) I64) I64 {\n    t I64 = 0\n    for x in xs {\n        for k in range 2 { t += f(x + k) }\n    }\n    return t\n}\n"
+             "fn pass(xs Array<I64>&, f fn&(x I64) I64) I64 { return apply(xs, f) }\n"
+             "fn reset(f fn&(x I64) I64, g fn&(x I64) I64) I64 {\n    f = g\n    return f(1)\n}\n"
+             "fn main() {\n    a := Array<I64>[1, 2]\n    assert pass(a, fn(x I64) I64: return x * 2) == reset(fn(x I64) I64: return x, fn(x I64) I64: return x)\n}\n")
+    got := readCloneSums(text, Array<String&>["apply", "pass", "reset"])
+    assert got.Contains("apply: ok true size ") and got.Contains(" loop 0 2\n"), got
+    assert got.Contains("pass: ok true") and got.Contains(" loop 0 0 hand 0->mir.FnKey.Body(") and got.Contains("@1 d0\n"), got
+    assert got.Contains("reset: ok true") and got.Contains(" loop -1 0\n"), got
 }
