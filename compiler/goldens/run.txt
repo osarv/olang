@@ -2126,6 +2126,8 @@
 === run d9apayloadstring.olang
 | status 0
 | 1-payload
+=== run d9hfnpurerun.olang
+| status 0
 === run d9hheldwrite.olang
 | status 0
 === run d9htryview.olang
@@ -2183,6 +2185,8 @@
 === run e31bfieldviewmethod.olang
 | status 0
 | 12
+=== run e31bfnpure.olang
+| status 0
 === run e31bhandlefieldloop.olang
 | status 0
 === run e31bhandlefieldnested.olang
@@ -2288,6 +2292,8 @@
 === run listscopetext.olang
 | status 0
 === run m19g20allowed.olang
+| status 0
+=== run m19gfnpure.olang
 | status 0
 === run m19grefok.olang
 | status 0
@@ -2655,6 +2661,8 @@
 === run o8dfeed.olang
 | status 0
 | 6555 n33 87 29
+=== run o8dfnpurerun.olang
+| status 0
 === run o8dglobal.olang
 | status 0
 | 3007 450 126 1378
