@@ -1,0 +1,11 @@
+# check: fail error[T25c]: a copy of a read-only Box cannot be returned as a writable value
+# T25c (refusals section 8: a kind with no case): a by-value result is the caller's to write - a copy of a read-only
+# parameter's value shares its references read-only
+type Box struct(d mut Array<I64>&) {
+    d
+}
+fn give(r Box&) Box { return r }
+fn main() {
+    b := Box(Array<I64>(2))
+    assert give(b).d.Len() == 2
+}

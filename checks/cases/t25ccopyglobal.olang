@@ -1,0 +1,11 @@
+# check: fail error[T25c]: a mutable global holds no copy of a read-only Box
+# T25c (refusals section 8: a kind with no case): a mutable global given a copy of an immutable one's value would
+# write through the references that value shares read-only
+type Box struct(d mut Array<I64>&) {
+    d
+}
+R Box = Box(Array<I64>(1))
+G mut Box = R
+fn main() {
+    assert G.d.Len() == 1
+}

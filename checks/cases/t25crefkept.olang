@@ -1,0 +1,15 @@
+# check: fail error[T25c]: 'put' keeps what its parameter 'x' reaches where it can be written, and this Box is read-only
+# T25c (refusals section 8: a kind with no case): an instance's read-only reference parameter whose referent's copy it
+# keeps where it can be written - a read-only argument is refused at the call
+type Box struct(d mut Array<I64>&) {
+    d
+}
+fn put<T>(v mut Vec<T>&, x T&) { v.Push(x) }
+fn main() {
+    v := Vec<Box>()
+    h := Box(Array<I64>(1))
+    r Box& = h
+    put(v, r)
+    v[0].d[0] = 3
+    assert h.d[0] == 3
+}
