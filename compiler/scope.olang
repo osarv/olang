@@ -1627,6 +1627,45 @@ fn (s mut Scoper&) capturedAt(p I64, w I64, c typed.Call&) Term {
     return out if out != Term.None else Term.Untraced
 }
 
+# T22c, O29: the reference capture k of the ri-th function (capCode w) the argument for parameter p is made of, where
+# the argument is a function value written right there - an adapter's instance, a lambda's captured reference - and
+# reading it again has no effect: where that capture lives is found from it at run time. Null for anything else
+fn (s mut Scoper&) capRoot(c typed.Call&, p I64, w I64) typed.Expr?& {
+    code := -2 - w
+    ri, k := code / 4096, code % 4096
+    if p < 0 or p >= c.Args.Len(): return null
+    keys := sortedRecs(s.recsOf(c.Args[p]).Recs)
+    if keys.Len() != 1 or ri != 0: return null
+    b := s.Bodies[keys[0].Body]
+    if k >= b.Vars.Len(): return null
+    x := s.unAway(c.Args[p])
+    for _ in range 8 {
+        match x {
+            case typed.Expr.Promote(_, _, pr) { x = s.unAway(pr.X) }
+            case _ { break }
+        }
+    }
+    root := match x {
+        case typed.Expr.Fn(_, _, typed.FnVal.Adapter(_, recv, _)): recv if keys[0].Adapter and capVarOf(b, k, true) else null
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(_, caps, _)): s.capOuter(b, k, caps)
+        case _: null
+    }
+    if root is null or not s.isRef(root.Type()) or not typed.Pure(root): return null
+    return root
+}
+
+# the value lambda body b's capture whose referent its scope variable k is copied from where the lambda is made
+fn (s Scoper&) capOuter(b typed.Body&, k I64, caps Array<typed.Capture&>&) typed.Expr?& {
+    l := match b.Vars[k] {
+        case typed.ScopeVar.Capture(local): local
+        case _: typed.LocalId(-1)
+    }
+    for cp in caps {
+        if cp.Inner == l: return cp.Outer
+    }
+    return null
+}
+
 # twin t judged: its body judged as a component of its own by a copy of this pass, its followed parameters holding
 # their records, its errors said with the call at sp that asked for it - its summary, and where this judging reports
 # its plan, kept for the calls that reach it
@@ -2631,10 +2670,45 @@ fn (s mut Scoper&) takesDerived(b I64) Bool {
 # Unset where t is no such scope or the body takes none
 fn (s mut Scoper&) derivedScope(t Term, i I64) typed.Scope {
     if not s.derivedOk: return typed.Scope.Unset
-    return match t {
-        case Term.Derived(p, w): typed.Scope.Passed(s.plan.DerivedSlot(p, w), i) if p >= 0 else typed.Scope.Unset
-        case _: typed.Scope.Unset
+    match t {
+        case Term.Derived(p, w) {
+            if p < 0: return typed.Scope.Unset
+            # (O29: with no root of its own, found from the field itself - never the program's)
+            if i < 0 {
+                r := s.derivedRoot(p, w)
+                if r is not null {
+                    match s.plan.Find(r) {
+                        case typed.Scope.Found(k) { i = k }
+                        case _ { }
+                    }
+                }
+            }
+            return typed.Scope.Passed(s.plan.DerivedSlot(p, w), i)
+        }
+        case _ { return typed.Scope.Unset }
     }
+}
+
+# O23a, O29: the field of reference parameter p its constructor bound to its parameter w, read through p - the reference
+# whose referent is where the derived scope (p, w) is, found from it at run time where no caller passed it. Null where p
+# is assigned in the body (p's field would then be another instance's), the field is no reference, or w is a capture's
+fn (s mut Scoper&) derivedRoot(p I64, w I64) typed.Expr?& {
+    if isCapCode(w) or p >= s.B!.Params.Len(): return null
+    y := I64(s.B!.Params[p])
+    loc := s.B!.Locals[y]
+    if not s.isRef(loc.Ty) or s.reassigned(y): return null
+    bt := s.P.T.Referent(loc.Ty)
+    if not s.isStruct(bt): return null
+    fs := s.P.T.Items(s.P.T.Fields(bt))
+    for k in range fs.Len() {
+        fm := s.fieldMark(bt, k)
+        if fm != typed.Mark.Of or s.ctorParamIndex(bt, fm.local) != w: continue
+        if not s.isRef(fs[k]): return null
+        sp := loc.Sp
+        base := typed.Lvalue.Deref(sp, bt, typed.Expr.Read(sp, loc.Ty, typed.Lvalue.Local(sp, loc.Ty, typed.LocalId(y)), typed.SiteId(-1)))
+        return typed.Expr.Read(sp, fs[k], typed.Lvalue.Field(sp, fs[k], base, k), typed.SiteId(-1))
+    }
+    return null
 }
 
 # T22c, O23a: whether t is a capture of a function value followed into this body that the body takes as a derived scope
@@ -2665,6 +2739,12 @@ fn (s mut Scoper&) passDerived(c typed.Call&, callee I64, beta Array<Term>&) {
             sc = s.scopeOf(t)
         } else {
             sc = s.derivedScope(t, -1)
+        }
+        # (T22c, O29: a capture no one term stands for here - the argument's records disagree - is found while the
+        # program runs from the reference the function value is made of, never left to the program's scope)
+        if sc == typed.Scope.Unset and isCapCode(w) {
+            r := s.capRoot(c, p, w)
+            if r is not null: sc = s.plan.Find(r)
         }
         xs.Push(typed.DerivedArg(p, w, sc))
     }
@@ -3536,8 +3616,9 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     rv := s.resultVarOf(s.calleeType(c!))
     if rv < 0 { return }
     # it lands there where that costs nothing (the callee builds nothing there), where an obligation needs it, or where
-    # the local is kept beyond its block
-    if not s.sumBuilds(callee, rv) or s.forced(callee, rv) {
+    # the local is kept beyond its block - a generator's walk is built at its call (its frame, S20), never nothing: held,
+    # it lives where it is held, its arguments outliving it (D18b), so it is let go as that block is left
+    if (not s.sumBuilds(callee, rv) and not s.genBody(callee)) or s.forced(callee, rv) {
         s.landOK = true
         return
     }
@@ -3545,6 +3626,13 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     s.flowRun(ss, from)
     s.landOK = s.flKept
     s.flMode = 0
+}
+
+# S20: whether body b is a generator's - a call of it builds the walk, its frame, where the call's result goes
+fn (s Scoper&) genBody(b I64) Bool {
+    of := s.Bodies[b].Of
+    if of != typed.BodyOf.Fn: return false
+    return s.P.IsGenerator(s.P.InstanceFn(of.instance))
 }
 
 # D18e: whether local l is a for-in's own walk of a generator it makes right there (typed.Body.Walks)
@@ -8333,14 +8421,21 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
             case _ { }
         }
     }
+    # O29: a result whose one target's slot is not known here (O12's set, a derived scope) is built where that target's
+    # storage is found at run time, as the plain assignment's would be - the lookup made on the spawning thread, the
+    # scope handed to the task as any scope argument is (P2)
+    found := unknownAt >= 0 and not dest.Runs() and s.findInto(sw.Targets[unknownAt]!, s.slotOf(sw.Targets[unknownAt]!).T)
+    if found { dest = s.foundTerm }
     s.inSpawn = true
     s.taskJoin = j
     v := s.val(sw.Task, dest)
     s.inSpawn = false
     s.taskJoin = Term.None
+    s.foundRoot = null
+    s.foundTerm = Term.None
     # a result built - the task's, or a clause's default - lands where the targets are: one scope, run-time, for all
     built := v.K == ValKind.Fresh or clauseBuilt
-    if built and unknownAt >= 0 {
+    if built and unknownAt >= 0 and (not found or clauseBuilt) {
         p := sw.Targets[unknownAt]
         slot := s.slotOf(p!).T
         s.freshIntoUnknown(sp, p!, slot)

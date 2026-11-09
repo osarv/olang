@@ -1,0 +1,39 @@
+# check: run
+# flags: -debug -sanitize
+# S20, D18b, O28: a generator given a reference parameter has its walk built where the walk is held, not where the
+# reference's referent lives - so a walk held in a block and left part way is let go (its deferred code run) as that
+# block is left, not when the referent's scope closes (found by the R6+R7 round)
+import "std/io"
+
+type Box struct(v I64) { v }
+
+fn gen(b Box&) Iterator<I64> {
+    defer { io.Println("let go") ! }
+    yield b.v
+    yield b.v + 1
+}
+
+fn part(b Box&) I64 {
+    t := 0
+    {
+        g := gen(b)
+        t = (try g.Next() catch { return 0 })
+    }
+    io.Println("block left")!
+    return t
+}
+
+fn main() {
+    b := Box(4)
+    io.Println($part(b))!
+    {
+        c := Box(5)
+        {
+            g := gen(c)
+            u := try g.Next() catch { return }
+            io.Println($u)!
+        }
+        io.Println("inner left")!
+    }
+    io.Println("outer left")!
+}
