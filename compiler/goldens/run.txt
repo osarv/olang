@@ -1912,11 +1912,23 @@
 | 102
 === run c2dexactobliged.olang
 | status 0
+=== run c2dfielddrain.olang
+| status 0
+| 200 900
 === run c2dfieldentry.olang
 | status 0
 | 20 0 10 20
+=== run c2dfieldmap.olang
+| status 0
+| holder 3 1
+=== run c2dfieldmapput.olang
+| status 0
+| 65 29044
 === run c2dfieldoutlives.olang
 | status 0
+=== run c2dfieldvec.olang
+| status 0
+| pool 2 4
 === run c2dheldpush.olang
 | status 0
 === run c2dheldreturned.olang

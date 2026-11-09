@@ -35560,3 +35560,27 @@ method's receiver variable), and lowering runs the destructor there; a drop of a
 scope that exists at run time, keep the innermost block. SPEC C9 now says it (a collection's element's scope is its
 storage's). Run case `vecdropbuilds` (`-debug -sanitize`, interpreted by the suite): the Vec in an inner block of the
 frame holding the Tally, and a Vec of `Sent`s logging through a Sink into a caller's Vec, read back after an arena churn.
+
+### C2d, O16: a `:=` field given a call's value with destructors is the instance's slot (bug, 2026-11-09, wt-ctorfield)
+
+Review A found `type Pool struct(n I64) { n  items := Vec<File>() }` (`File` unique) built to invalid IR - clang:
+`'%t7' defined with type 'ptr' but expected Vec` - and, with a `Map<I64, File>` there, `interpret` aborting in
+`Map.Put` ("indexes outside the array"); and `p.items.Push(File(4))` on a value local `p := Pool(3)` refused with
+T25c's "a read-only reference cannot become writable" while `p.Fill()` through `mut Pool&` was accepted. **One cause,
+two places.** A call's value with a destructor to run is held where the call lands (O16), so `x := mk()` declares its
+reference - right for a local, wrong for a constructor's field, which is the instance's slot (C2d). The type table's
+field inference (`generic.Program.fields`, through `held`) gave such a `:=` field the type `Vec<File>&`, read-only - so
+every read of `p.items` was a read-only reference (the T25c refusal) - while the constructor's body declared the field
+local as the held reference, `mut Vec<File>&`, placed in the instance scope with its destructor registered there, and
+lowering stored that pointer into the field laid out by value. **Fix:** the field inference takes the value itself for
+a `:=` field made by a call (`slotOf`, through parentheses and `try`), and the checker's `varDecl` lands a held call's
+value in a `:=` field as it is (`heldValue`), the field local then a value whose destructors the instance runs. SPEC D15
+says it. Run cases `c2dfieldvec`, `c2dfieldmap`, `c2dfielddrain`, `c2dfieldmapput` (`-debug -sanitize`, interpreted by
+the suite, read back after an arena churn). The layout golden's `tests/shared:OrderedHolder` now holds its
+`OrderedRes` by value.
+
+**Found on the way, not fixed here:** a holder whose method stores its own reference field into its collection
+(`fn (h mut Holder&) Set(k, id) { h.m.Put(k, Logged(id, h.t)) }`, `t mut Tally&`) has its storage placed where the
+Tally lives - the caller's scope even from a function of its own - so its last elements end there rather than at the
+holder's block (the same calls written inline end at the block). Destructors still run once; only where is later
+than the block. Reported for the scope pass (`c2dfieldmapput` bounds its count accordingly).

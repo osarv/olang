@@ -2450,7 +2450,7 @@ fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
             ft := types.UnknownT
             if v.Infer {
                 x := v.Values[i] if i < v.Values.Len() else null
-                ft = p.Infer(c, known, x)
+                ft = p.slotOf(x, p.Infer(c, known, x))
             } else if v.Ty is not null {
                 # T7d, C2e: a value array field given a known length by its initializer is held in the instance
                 ft = p.StorageOf(c, p.Resolve(c, v.Ty), v.Values[i] if i < v.Values.Len() else null)
@@ -2462,6 +2462,21 @@ fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
         }
     }
     return p.T.List(out.ToArray())
+}
+
+# C2d, O16: a ":=" field given a call's value with destructors to run is the instance's slot - the value itself, never
+# the reference held gives a ":=" local (check's varDecl lands it alike)
+fn (p mut Program&) slotOf(x ast.Expr?&, t types.TypeId) types.TypeId {
+    if x is null or p.T.KindOf(t) != types.Kind.Ref or not p.T.NeedsDrop(p.T.Referent(t)): return t
+    return p.T.Referent(t) if madeByCall(x) else t
+}
+
+fn madeByCall(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Call(_, _, _): true
+        case ast.Expr.Paren(_, y), ast.Expr.Try(_, y, _): madeByCall(y)
+        case _: false
+    }
 }
 
 # a struct's field declarations, in their order (C2a)
