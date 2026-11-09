@@ -1,6 +1,10 @@
-# check: fail error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
+# check: run
+# R4 (refusals 5.4): compiles now - what the task's lambda captured is built at the join's level, one per turn, and
+# read after the spawner's turns moved on; it was refused, as what follows says
 # P2/D16e: a spawned lambda capturing a loop body's reference - the advice names the captured variable, not a reference
 # to the join's own storage
+import "std/io"
+extern fn usleep(us U32) I32
 type Node struct(v I32) {
     v
 }
@@ -8,8 +12,12 @@ fn main() ? {
     total mut Array<I32>& = Array<I32>(4)
     join {
         for i in range 4 {
-            n Node& = Node(I32(i))
-            spawn fn() { total[i] = n.v }
+            n Node& = Node(I32(i * 10))
+            spawn fn() {
+                usleep(20000)
+                total[i] = n.v
+            }
         }
     }
+    try io.Println($total[0] " " $total[1] " " $total[2] " " $total[3])
 }

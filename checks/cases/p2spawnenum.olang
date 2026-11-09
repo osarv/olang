@@ -1,19 +1,40 @@
-# check: fail error[P2]: this argument refers to storage that closes before the join does
+# check: run
+# R4 (refusals 5.4): compiles now - the loop body's array a task's lambda and enum value hold is built at the join's
+# level, one per turn, and each task reads its own turn's after the spawner's turns moved on; it was refused, as what
+# follows says
 # P2: an enum value and a lambda handed to a task, each holding the loop body's array
+import "std/io"
+extern fn usleep(us U32) I32
 type Box enum {
     Has(a Array<I64>&)
     No
 }
 fn apply(f fn&() I64) I64 { return f() }
-fn first(b Box) I64 { return (b as Box.Has)![0] }
+fn first(b Box) I64 {
+    usleep(20000)
+    return (b as Box.Has)![999]
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
 fn main() ? {
     out := Array<I64>(4)
     out2 := Array<I64>(4)
     join {
         for i in range 4 {
             a := Array<I64>(1000, i + 1)
-            spawn out[i] = apply(fn() { return a[0] })
+            spawn out[i] = apply(fn() {
+                usleep(20000)
+                return a[0]
+            })
             spawn out2[i] = first(Box.Has(a))
         }
     }
+    n := churn()
+    try io.Println($out[0] " " $out[1] " " $out[2] " " $out[3] " " $out2[0] " " $out2[3] " " $(n > 0))
 }

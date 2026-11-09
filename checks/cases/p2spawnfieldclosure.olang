@@ -1,4 +1,6 @@
-# check: fail error[P2, D16e]: this function value closes before the join does
+# check: run
+# R4 (refusals 5.4): compiles now - the instance holding the closure, the closure and the array it captured are built
+# at the join's level, one per turn; it was refused, as what follows says
 # P2/E13b: a task calling a function value read out of a field ("spawn h.f()") is held to P2 as an argument is: the
 # closure lives no shorter than the storage it was read from, here a loop body's, which closes while the task runs
 import "std/io"

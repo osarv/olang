@@ -1,0 +1,21 @@
+# check: fail error[P2]: this argument's storage closes before the join does
+# P2: a for-in's copy of an element is the loop's own slot, made again by the next turn - lent to a task it would be
+# read after that (a recorded limit, R4: a for-in copy is not built elsewhere); 'see(ns[i])' lends the element in place
+import "std/io"
+extern fn usleep(us U32) I32
+type Node struct(v I64, a Array<I64>&) { v
+ a }
+fn see(n Node&) I64 {
+    usleep(10000)
+    return n.v + n.a[0]
+}
+fn main() ? {
+    ns := Array<Node>[Node(1, Array<I64>[5]), Node(2, Array<I64>[6])]
+    out := Array<I64>(2)
+    join {
+        for i, n in ns {
+            spawn out[i] = see(n)
+        }
+    }
+    try io.Println($out[0] " " $out[1])
+}

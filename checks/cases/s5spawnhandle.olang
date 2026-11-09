@@ -1,7 +1,10 @@
-# check: fail a task is not handed x[i]: the element is copied here, and the copy would not last until the join
+# check: run
+# R4 (refusals 5.4): compiles now - the copy of the handle x[i] a task calls on is built at the join's level, one per
+# turn, a second name for the inner list as the unspawned call's is (O17b); it was refused, as what follows says
 # E31b/P2: a call on a handle element runs on a copy of the handle held in the spawner's block - which closes, or is
-# made again by the next turn of a loop, before the join; a function taking the collection does "x[i].Push(v)" itself
+# made again by the next turn of a loop, before the join
 # (std/list's List, a handle; a Vec element is a value since 2026-11-01, taken in place with RefMut)
+import "std/io"
 import "std/list"
 fn main() ? {
     users := list.List<list.List<I64>>()
@@ -9,4 +12,9 @@ fn main() ? {
     join {
         for i in range 4 { spawn users[i].Push(i) }
     }
+    churn := Vec<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    t I64 = 0
+    for k in range 4 { t += users[k].Len() * 10 + (try users[k].Get(0) catch default -1) }
+    try io.Println($t " " $churn.Len())
 }

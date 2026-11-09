@@ -1,0 +1,17 @@
+# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way
+# E31b/P2: a task's copy of a handle element is built at the join's level (R4), and is refused for what the same call
+# unspawned is - here the callee keeps the copy
+import "std/list"
+fn put(dst mut list.List<list.List<I64>>&, l mut list.List<I64>&) {
+    l.Push(1)
+    dst.Push(l)
+}
+fn main() ? {
+    users := list.List<list.List<I64>>()
+    keep := list.List<list.List<I64>>()
+    for _ in range 4 { users.Push(list.List<I64>()) }
+    join {
+        for i in range 4 { spawn put(keep, users[i]) }
+    }
+    assert keep.Len() == 4
+}

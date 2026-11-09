@@ -1,0 +1,17 @@
+# check: run
+# R4 (refusals 5.4): a value with a destructor a task's lambda captured is built at the join's level, one per turn, and
+# its destructor runs where that storage's scope closes - the join's block, after every task - last made first
+import "std/io"
+type Res unique struct(n I64) {
+    n
+} destruct { io.Println("end " $n)! }
+fn main() ? {
+    out mut Array<I64>& = Array<I64>(4)
+    join {
+        for i in range 4 {
+            r := Res(i)
+            spawn fn() { out[i] = r.n }
+        }
+    }
+    try io.Println($out[3])
+}
