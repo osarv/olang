@@ -1484,7 +1484,10 @@ judged as the direct calls it is (O10c, O17, O18b), a `return` of it gives those
 an argument of it for another such parameter follows them on, and every other place it reaches - a store, a capture,
 a task - is a boundary (T22a) judged by that place's type; a capture of one of those functions' is where the caller's
 value had it, and a temporary the callee builds there is built where that capture lives - a derived scope of the twin
-(O23a), passed by its caller - except in a lambda's body (below), where it is a compile-time error naming T22c. Likewise a
+(O23a), passed by its caller; a caller whose argument's functions disagree on where the capture is passes the scope
+found while the program runs (O29) from the reference the value is made of, where it is written at the call (an
+adapter's instance, a lambda's captured reference) - except in a lambda's body (below), where it is a compile-time
+error naming T22c. Likewise a
 lambda capturing a local of the body making it, given one value and never assigned again, whose functions capture
 nothing (named functions, lambdas capturing nothing) and do more than the capture's type allows, has that capture
 followed into its body (D16c's copy is never repointed). An argument whose functions its parameter's type covers takes
@@ -2608,7 +2611,8 @@ leaving its body ends it the same way: that `Next()` fails with the error, every
 
 **D18b (where a generator's storage is).** A generator's storage - its locals, what its body builds in its blocks, the
 scopes it has open while it is stopped - is made where the generator lands, as a function value's environment is
-(D16d): `for x in evens(10)` makes it in the loop's block. Its arguments must outlive it (O14a): they are held in it for
+(D16d): `for x in evens(10)` makes it in the loop's block, and `g := evens(r)` in the block declaring `g` - never where
+an argument's referent lives, which only outlives it. Its arguments must outlive it (O14a): they are held in it for
 as long as it is walked. A walk stopped part way and never finished is let go with the scope it lives in: it leaves every
 block it holds open as S20 says, innermost first, their deferred code and destructors running (S19, O15). The value a `yield` gives is built where
 that `Next()`'s result goes, which no local of the generator outlives - but where its elements are kept by its walk
@@ -5733,7 +5737,9 @@ the join closes first and is rejected. Otherwise the result is stored as an assi
 thread: a result built where it lands (§8 O18a) is built where the target is; several targets sharing one result scope
 are given one scope - a target local's is lengthened to the longest of them, the results built there (O28) - and only
 targets that cannot be placed so (a field's, an element's) in different scopes are a compile-time error - and one that already lives somewhere must suit the target as an
-assignment's value would (§8 O25, O1b). A target holding a run-time-length array by value takes it as that assignment
+assignment's value would (§8 O25, O1b). A result whose one target is a place whose scope is not known while compiling
+(one of several, O12; a derived one, O23a) is built where that place's storage is found to live (§8 O29), as the plain
+assignment's would be - looked up in the spawner at the `spawn` and handed to the task as any scope it is given (P2). A target holding a run-time-length array by value takes it as that assignment
 does (T11b): its elements written into the storage the target holds where the length is unchanged, else the result's
 storage - or, where the assignment copies, a copy made where the target's storage is. With several targets each is judged as the assignment of its own result, as a
 destructuring's are (S4b), and each is a store into what its target is in (§8 O17).
@@ -6961,9 +6967,11 @@ passes that scope: the binding the argument's value carries for `V` (O13c, a loc
 element's), or, for an argument that is itself a parameter of the caller, the caller's own derived scope passed on; so
 does a holder letting go of its value (O15), for its destructor, from the bindings of the value it holds. A call that
 knows none - through a function value or an `any`, a task's, the runtime ending a value registered with a scope (O16)
-- passes none, and the body builds where the field's referent is found to live while the program runs (O29); where
-there is nothing to find it from with no effect, in the program's scope, which outlives the referent wherever that
-lives (never the scope the field was read through, which the referent may outlive). A generator's `Next`, a lambda, an
+- passes none, and the body builds where the field's referent is found to live while the program runs (O29): from the
+reference it builds through, else the field itself read through the parameter. Only where the body assigns that
+parameter (the field would then be another instance's) and nothing else gives a reference to find it from is it built in
+the program's scope, which outlives the referent wherever that lives (never the scope the field was read through, which
+the referent may outlive). A generator's `Next`, a lambda, an
 `export fn` and the bodies of a `become` chain take none: they always find it. For judging, a derived scope is
 resolved at each call from the argument as above; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it

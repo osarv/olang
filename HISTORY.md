@@ -35991,3 +35991,40 @@ refuses what a build refuses) kept a slice of a binding's copy in a list outside
 binding's copy is built where the view is kept, as a local's is, and runs (5 6 7 read back after a churn, built and
 interpreted alike); the fixture is now o1blambdaglobal's shape (O1b, refusals question 1). Every lift only moves storage of a program refused before:
 compiler/'s IR (master's sources built by both compilers) and bench's are byte-identical to master's.
+
+## The program-scope fallbacks closed; a held walk built where held (O29, O23a, T22c, P1g, D18b; 2026-11-09, wt-fallbacks)
+
+The user's O29 decision (2026-11-08): "Never do program scope callbacks". Rounds 6 and 8 left three places a build
+could still go to the program's scope, and R6+R7 found a generator placed too long.
+
+- **A task's result into a place of several scopes (o12spawntarget, P1g).** It was refused (O12) where the plain
+  assignment `arr[0] = Node.mkNode(i)` is placed `Found`. `spawn` now does what `assign` does: where its one target's
+  slot is not known (`unknownAt`) and no other target gives a run-time scope, `findInto` names the target's root, the
+  task's call is judged with that slot as its destination, and the callee's result scope is passed `Found` - looked up
+  in the spawner before the task starts and handed to it as any scope argument (P2's stand-ins fold it at the join).
+  A clause's built default into such a place stays refused (the clause runs on the task's thread). o12spawntarget is
+  a run case; o29spawnfound reads the inner array's node back after a churn under -debug -sanitize, -race and
+  interpret alike.
+- **A derived scope with no root (O23a, C1).** `derivedScope(t, -1)` - a build into, or a pass of, a body's derived
+  scope where nothing gave a root (a value argument holding two references, `valueRoot` refusing it) - was
+  `Passed(k, -1)`: the caller's scope, else the program's. Now `derivedRoot(p, w)` reads the field of reference
+  parameter `p` its constructor bound to `w` through `p` (pure: a parameter, a field) and registers it as the root, so
+  a call passing none finds it there. Not where the body assigns `p` (`reassigned`: the field would be another
+  instance's) or the field is no reference; those keep the program's. No case in the suite reaches it (every build
+  there already had a root of its own), so it changes no IR.
+- **A twin's capture its caller does not know (T22c).** `capturedAt` gives Untraced where the argument's records
+  disagree (`f mut Keeper& = k if j == 1 else k2; feed(f, 20)`), and the call passed null - the twin built its
+  temporaries in the program's scope (found from nothing). `capRoot` now takes, where the argument is a function value
+  written at the call with one record, the adapter's instance or the lambda's captured reference (`capOuter`) as the
+  root, read again with no effect, and passes it `Found` (t22ccapturefound). A capture reached through a stored
+  function value still passes null.
+- **A held walk (D18b, S20).** `decide` lands a `:=` from a call where its obligations say when the callee builds
+  nothing in its result scope (`not sumBuilds`). A generator's summary builds nothing there - its walk, the coroutine
+  frame, is built at the call - so `g := gen(r)` landed where `r`'s referent lives (the obligation "r outlives the
+  walk", D18b), and a walk held in a block and left part way was let go, its deferred code run, only as that scope
+  closed. `genBody` now keeps a generator's call out of that early landing: it lands where it is held, or, kept beyond
+  its block, by the flow as any call (s20walkheldref: "let go" before "block left").
+
+Seen and left: `Scope.Inert` reaches lowering's `scopeRef` as the program's for a `$` rendering in a generator's body
+(nothing is built there, by Inert's definition). Gates: compiler/'s and bench's IR byte-identical to master's; every
+must-fail case's diagnostic unchanged but o12spawntarget's.

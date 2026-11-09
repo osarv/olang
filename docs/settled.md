@@ -578,9 +578,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   destructor building into a derived scope takes it as a hidden scope parameter after its type's (`typed.Scope.Passed`,
   `VarKind.Derived`); a call that knows the argument's binding, or a holder's drop knowing its value's, passes it, any
   other call null, and the body then finds it (`__olang_scope_or`). Generators, lambdas, `export fn`s and become chains
-  take none. The measured loop (docs/fnvalues.md 11.1): 183 MB to 1.7 MB. Left: a value argument holding two
-  references and a task's result into such a place (o12spawntarget) are refused, or given the program's scope where
-  nothing passes or finds it.
+  take none. The measured loop (docs/fnvalues.md 11.1): 183 MB to 1.7 MB. **The fallbacks closed (2026-11-09, wt-fallbacks,
+  mine within the user's decision):** a derived scope with no root of its own is found from its field read through the
+  parameter (a value argument holding two references included); a twin's capture its caller's records disagree on, from
+  the adapter's instance or lambda capture written at the call; a task's result into a place of several scopes
+  (o12spawntarget) is placed `Found` as the plain assignment is, looked up in the spawner. Left: a parameter the body
+  assigns, and a capture reached through a stored function value, still take the program's scope where nothing passes.
+- **A generator's walk is built where it is held (D18b, S20; 2026-11-09, found by R6+R7).** `g := gen(r)` lands in
+  `g`'s block, never in `r`'s referent's scope by the call's obligations, so a walk left part way is let go as that
+  block is left.
 - **A reference never narrows (O25, the user's decision).** A local's type says where it lives (O25a); `:=` takes its
   initializer's scope; exactness is required only where something can be stored through (O25g). Copies of
   reference-holding values keep their references where the source's are (O25h).
