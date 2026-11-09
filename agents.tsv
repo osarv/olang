@@ -46,3 +46,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09T09:00	Early freeing for global stores	opus	medium	completed	343	133	61	yes	?	705->13MB; found Map key-text early-free UAF
 2026-11-09T10:00	Survey: small strong reasoning LLMs	sonnet	medium	completed	151	11	2	n/a	n/a	abstracts only; some ids unverified
 2026-11-09T10:30	Build kept locals in the place region	opus	medium	completed	397	164	78	yes	?	field 586->2.2MB, map keys 266->2.4MB; fuzz caught own bug
+2026-11-09T11:30	Design note: settling niche	sonnet	medium	completed	150	9	2	n/a	n/a	abstracts only; 8 ids from memory
