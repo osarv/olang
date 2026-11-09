@@ -1,9 +1,10 @@
 # Weak references and generational types (T2d, T13d): a doubly linked list whose back links are weak, a tree whose
 # parent links are, an LRU cache whose Map owns the nodes while its list's four links point at them weakly, and a
-# generational value held by reference ("n := Node(1)" names a new instance, aliasing read back). As built so far a
-# weak place is an ordinary "?&" reference that never reads null early (genrefs round 1), so each reads back what was
-# stored. Each test reads its values back after an arena churn, and the evaluator decides the same values while
-# compiling (a baked global, top-level asserts).
+# generational value held by reference ("n := Node(1)" names a new instance, aliasing read back). A weak place reads
+# its node while some owning place holds it and null from the moment none does (the count in the node's header word,
+# genrefs 2.4 (b), 4.2) - nothing is reclaimed yet, so a node let go of is still there, only no longer named through a
+# weak place. Each test reads its values back after an arena churn; the evaluator decides the same values while
+# compiling where every node read is held (a baked global, top-level asserts), and interpret runs the rest as built.
 
 type Node struct(v I64) {
     v
@@ -222,6 +223,108 @@ fn aliased() I64 {
     return a.v * 100 + l.Forward() * 10 + (1 if a == b else 0)
 }
 
+# ---- removals: a weak place gives null once no owning place holds its node ----
+
+# the node after p taken out of the list - p's 'next' let go of it - and the one after it pointed back to p
+fn (l mut DList&) RemoveAfter(p mut Node&) {
+    n := p.next!
+    q := n.next
+    p.next = q
+    if q is null { l.tail = p } else { q.prev = p }
+}
+
+# a weak place naming each of five nodes, then the second and the fourth taken out, the head given up and the tail
+# moved in front: which of the five the weak places still name, as digits (0 for null)
+type Seen struct(n mut Node?&) {
+    w weak mut Node?& = n
+}
+
+fn digits(xs Array<Seen>&) I64 {
+    s := 0
+    for x in xs {
+        at := x.w
+        s = s * 10 + (at.v if at is not null else 0)
+    }
+    return s
+}
+
+fn removed() I64 {
+    l := DList()
+    for i in range 1, 6 { l.PushBack(i) }
+    a := l.head!
+    seen := Array<Seen>[Seen(a), Seen(a.next), Seen(a.next!.next), Seen(a.next!.next!.next), Seen(l.tail)]
+    l.RemoveAfter(a)                  # 2 out
+    l.RemoveAfter(a.next!)            # 4 out
+    churn()
+    first := digits(seen)
+    l.head = a.next                   # 1 out: the head let go of it (an owning place of a struct that is no node)
+    churn()
+    return first * 1000000 + digits(seen) * 10 + (1 if l.Backward() == 53 else 0)
+}
+
+# a tree's subtree cut off: the nodes under the cut are held by nothing the tree reaches from its root, but what they
+# hold of each other is still held (nothing is reclaimed, so nothing they own is let go of) - their parent links up
+# to the cut read null at the cut
+fn cutPath() I64 {
+    t := Tree()
+    t.Insert(5)
+    t.Insert(3)
+    t.Insert(8)
+    t.Insert(4)
+    leaf := t.Insert(1)
+    root := t.root!
+    root.left = null                  # 3 cut off, with 1 and 4 below it
+    churn()
+    return pathUp(leaf) * 10 + (1 if leaf.parent is not null else 0)
+}
+
+# an LRU cache's evicted entry, named by a weak place outside it: null once the cache's Map gave it up
+type Recent struct() {
+    last weak mut Entry?& = null
+}
+
+fn evicted() I64 {
+    c := Lru(2)
+    r := Recent()
+    c.Get("a", 1)
+    r.last = c.head
+    c.Get("b", 2)
+    held := r.last is not null
+    c.Get("c", 3)                     # "a" evicted: the Map removed it
+    churn()
+    return (10 if held else 0) + (1 if r.last is null else 0)
+}
+
+# ...and one whose Map grows as it fills (its entries moved into new slots, still held once each): the first entry
+# evicted reads null, the newest still its entry
+fn grownEvicted() I64 {
+    c := Lru(40)
+    first, newest := Recent(), Recent()
+    for i in range 100 {
+        c.Get($i, i)
+        if i == 0: first.last = c.head
+    }
+    newest.last = c.head
+    churn()
+    f := first.last
+    n := newest.last
+    return (10 if f is null else 0) + (n.v if n is not null else -1)
+}
+
+# a Vec of nodes: a node popped is held by nothing owning, and held again once pushed back - the count follows the
+# program's own stores
+fn popped() I64 {
+    v := Vec<mut Node&>()
+    for i in range 1, 4 { v.Push(Node(i)) }
+    r := Seen(v[2])
+    x := v.Pop()!
+    churn()
+    gone := r.w is null
+    v.Push(x)
+    back := r.w is not null
+    return (10 if gone else 0) + (1 if back else 0)
+}
+
 # the evaluator decides the same while compiling
 Listed := listed(5, 2)
 assert Listed == 345054312
@@ -247,4 +350,24 @@ test "an LRU cache whose Map owns its entries and whose list links are weak" {
 
 test "a generational value is held by reference" {
     assert aliased() == 741
+}
+
+test "a weak place reads null once no owning place holds its node" {
+    assert removed() == 10305003051
+}
+
+test "a subtree cut off: its nodes' weak parent links read null at the cut" {
+    assert cutPath() == 10
+}
+
+test "an LRU cache's evicted entry reads null through a weak place outside it" {
+    assert evicted() == 11
+}
+
+test "an LRU cache whose Map grows: an entry evicted reads null, the newest its entry" {
+    assert grownEvicted() == 109
+}
+
+test "a node popped from a Vec reads null through a weak place, and its node again once pushed back" {
+    assert popped() == 11
 }
