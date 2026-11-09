@@ -5361,8 +5361,8 @@ matched by a pattern of that type in the position - `case Shape.Round(Circle(r))
 by name matches, is one of:
 - a **name**: a fresh local bound to a copy of that field, visible to the clause's guard and body only, and
   assignable as any local is (D11) - an identifier there is always a binding, never a value read, so the form never
-  means "compare against a variable". Its storage is the clause's, as a local of the clause body is: a borrow of it does
-  not leave the clause. A field of a unique type (T13b), never copied, is bound as a reference to it where the payload
+  means "compare against a variable". Its storage is the clause's, as a local of the clause body is - unless a borrow of it
+  is kept past the clause: then the copy is made where it is kept, a new one each time it binds (O28). A field of a unique type (T13b), never copied, is bound as a reference to it where the payload
   holds it - writable where the matched place may be written;
 - `_`: the field, ignored;
 - a nested **pattern**, naming a case of the enum that field holds (S13d);
@@ -7004,9 +7004,9 @@ storage of the program's scope (a global's, constant data, T25d), which outlives
 function's own scope or of one of its blocks, which closes at the return - a compile-time error naming a copy to return
 instead (`$x`, `x.Copy()`); a view of storage the function builds has that storage built in the result scope, as a
 returned local is (O26a, O27). A by-value parameter's own storage is
-the call's copy, in the function's own scope: a reference into it, or to a part of it reached without a reference, is
-one into the function's own storage - and a by-value parameter whose type holds no reference has no scope (O4b), so
-only what lives in the program's scope is handed back from it.
+the call's copy: a reference into it, or to a part of it reached without a reference, handed back has that copy made in
+the result scope at entry (O28) - a by-value parameter whose type holds no reference has no scope of its own (O4b) - and
+is an error only for a generator's parameter or one holding a value with a destructor, which stay in the frame.
 
 **O14a.** A **function value** (T21) returned - a parameter's, or one reached through a parameter's data - needs only
 that what it captured outlive the result scope (nothing is written through a function value, D16d); it is an
@@ -7191,6 +7191,15 @@ of them allow, and every judgment of this section is then made of it. So:
   storage; an argument an instance holds when a store keeps the instance (C2d); a closure a function-valued local is
   given, built where the local is kept with what it captured (D16c); the array a copy into an `any` reads (T32a), with
   what its elements refer to;
+- a **by-value parameter** kept past the call - returned or handed back as borrowed (`fn bor(p Pt) Pt& { return p }`),
+  given as a function value through its `Call` (E31), held by the instance a constructor builds (`keep P& = p`) or by
+  what a reference parameter reaches (`out.Push(holder(v))`) - has the callee's copy (D9) made at entry where it is
+  kept: the result scope, the instance's, a reference parameter's, the program's - deep through what it owns (T7a), a
+  new one each call - rather than in its frame. Each is a scope the callee is passed or holds already, so a call is
+  made as before, through a function value too. A parameter of a generator, or one holding a value with a destructor
+  (O15), keeps its frame;
+- a **match binding** (S13b) kept past its clause has its copy made where it is kept, as a local is, a new one each
+  time it binds;
 - a call's result is built where it is put (O18a), where its callee's obligations need it (O18c) or, handed back from
   what the callee was given, lives where that does (O13);
 - a constructor field is its instance's, unless the field holds a view of what a reference parameter refers to and an
@@ -7649,9 +7658,9 @@ growing a `List` the instance holds - a use-after-free once, the list's chunk le
 own storage where a reference to it or a slice of it (E16a) is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
 but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
 instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
-its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
-given a borrow of one (`keep P& = p`, or a call's result handed back from `p`) - a field punning one, or copying one (`q := p`),
-is a copy into the instance, which a reference field may be given. Storage a stack frame would hold but for its size (§2
+its return - unless a reference field is given a borrow of one (`keep P& = p`, or a call's result handed back from
+`p`): then the constructor's copy is made in the instance's scope at entry (O28). A field punning one, or copying one
+(`q := p`), is a copy into the instance, which a reference field may be given. Storage a stack frame would hold but for its size (§2
 T7d, over 64KB) is the frame's, not the instance's: it comes from the constructor's own scope, the instance copied out
 before it closes - and so does a temporary made at its top level, so a field keeping a slice of one
 (`r Array<I64>& = Big(n).a[0:2]`) is a compile-time error (E16a).

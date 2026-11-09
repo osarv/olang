@@ -610,6 +610,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   into an `any` (T32a), and two target locals of one `spawn` (P1g: lengthened to the longer). Only what was refused moves;
   compiler/'s and bench's IR are unchanged. rv3roclone stays refused: a read-only list's elements pushed into a new
   writable list is what T25c refuses outside a generic, and the instance's lower side is untraced, not too short.
+- **By-value parameters and match bindings kept longer (O28, O14, C2g, S13b; R3 of docs/refusals.md, 2026-11-09, mine
+  within the user's decisions).** A by-value parameter kept past the call - returned as borrowed, given as a function
+  value through its Call, held by the instance or by what a reference parameter reaches - has the callee's copy made at
+  entry where it is kept (the result scope, the instance's, a parameter's, the program's), deep through what it owns:
+  one body, no change to how it is called, so it works through function values. A match binding kept past its clause
+  has its copy made where it is kept, as a local. A generator's parameter and one holding a destructor value keep their
+  frame. compiler/'s and bench's IR are unchanged. The caller building a fresh argument there directly (the copy
+  left out) is not built: an optimization.
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter lives where what it captured does.
