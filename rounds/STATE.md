@@ -50,3 +50,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - R2 merged (ff, verified), pushed. rv3roclone = permission case (T25c), agreed.
 - Usage 0.61 at 04:45 CET (0.60 at 02:25): R2 (313k) + tail of the fix agent cost ~0.01. Earlier 0.04 likely included W2+my own turns. Recalibrate: ~0.01-0.02 per agent.
 - F8 started (wt-derived, opus medium), alone.
+- F8 merged (ff, verified), pushed. Open bug: Vec<Logged> lent to a pushing fn placed in frame scope -> dtors build into closing scope (sanitizer abort; seed too). Disk 9.1G free; scratchpad 7.7G (gate/t7/prof dirs) - delete needs the user OK (/tmp rule).
