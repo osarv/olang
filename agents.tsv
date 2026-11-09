@@ -49,3 +49,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09T11:30	Design note: settling niche	sonnet	medium	completed	150	9	2	n/a	n/a	abstracts only; 8 ids from memory
 2026-11-09T12:00	Read 4 settling-niche papers	sonnet	medium	completed	268	16	2	n/a	n/a	all ids verified; numbers from papers
 2026-11-09T13:00	Read EBT paper 2507.02092	sonnet	medium	completed	189	7	2	n/a	n/a	id verified; figures not extracted
+2026-11-09T11:30	Fix Map.Get copy kept per turn	opus	medium	completed	281	135	74	yes	?	readHere looked through no try; 535->1.8MB
+2026-11-09T13:30	Design note: systems view	sonnet	medium	completed	156	7	2	n/a	n/a	abstract level; classics from memory

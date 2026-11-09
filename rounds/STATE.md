@@ -60,3 +60,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - Survey done: oagent/papers/survey-reasoning.md (f10857d).
 - regionkeep merged, pushed. Gap: s += m.Get(k)![5] in a loop keeps each turn copy (266MB), pre-existing.
 - Usage 0.65 at 11:00 CET Mon (0.56 Sun 21:25, ~10 agents): ~0.01/agent incl. coordination. ~25 agents of room to 0.92.
+- getcopy merged, pushed. G1 running.
