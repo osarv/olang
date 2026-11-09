@@ -276,6 +276,9 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # D9h: the constructor calls whose instance views only storage made for it (typed.FreshViews), by (body, site), as
     # this analysis judged them before its regions were written into the plans - lowering leaves out their copy here
     freshAt Map<pair.Pair<I64, I64>, Bool>
+    # the copies made for an owner leaf whose value owns storage beside it (splitLeaf), by (body, site): the leaf's path -
+    # lowering builds that part in the site's region and every other owned part where the region's parent is
+    splitAt Map<pair.Pair<I64, I64>, Array<I64>>
     dtorVal Vec<Bool>         # by place: what it holds has a destructor - never Sole (O15)
     curBody I64 = -1           # the body the pre-pass is in
     Done Bool = false          # whether Decide ran with a root (else every decision is "keep")
@@ -1712,7 +1715,7 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
         if f.IsOwner(lf.PlaceId) or f.arr[lf.PlaceId]: owners.Push(lf.PlaceId)
     }
     site := ownCopySite(cm)
-    one := owners.Len() == 1 and site >= 0 and f.onlyLeaf(cm.Type(), lvs, owners[0])
+    one := owners.Len() == 1 and site >= 0 and f.splitLeaf(w.Id, site, cm.Type(), lvs, owners[0])
     for lf in lvs {
         k := lf.PlaceId
         if owners.Has(k) {
@@ -1733,6 +1736,32 @@ fn (f mut Free&) onlyLeaf(ty types.TypeId, lvs Vec<leaf>&, k I64) Bool {
         if lf.PlaceId == k: return f.onlyPath(ty, lf.Path, 0)
     }
     return false
+}
+
+# whether a copy of a value of struct type ty made at site of body b can be the new value of owner leaf k (one of lvs):
+# where the leaf is all the storage the value owns (onlyLeaf), the copy is built in the leaf's region whole; else, where
+# the structs on the leaf's path declare no Copy, the copy is split (SplitPath) - the leaf's part built in the region,
+# every other part owning storage where the region's parent is, so a Map entry's key text is never released with the
+# value beside it, and the value is
+fn (f mut Free&) splitLeaf(b I64, site I64, ty types.TypeId, lvs Vec<leaf>&, k I64) Bool {
+    if f.onlyLeaf(ty, lvs, k): return true
+    for lf in lvs {
+        if lf.PlaceId != k: continue
+        if not f.splitPath(ty, lf.Path, 0): return false
+        f.splitAt.Put(pair.Pair(b, site), lf.Path)
+        return true
+    }
+    return false
+}
+
+fn (f mut Free&) splitPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if depth >= path.Len() or t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
+    if t.DeclaresCopy(r): return false
+    fs := t.Items(t.Fields(r))
+    if path[depth] >= fs.Len(): return false
+    return depth + 1 >= path.Len() or f.splitPath(fs[path[depth]], path, depth + 1)
 }
 
 fn (f mut Free&) onlyPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
@@ -1769,7 +1798,7 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
         }
     }
     if owners.Len() == 0 { return }
-    one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.onlyLeaf(x.Type(), lvs, owners[0])
+    one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.splitLeaf(w.Id, I64(c.Site), x.Type(), lvs, owners[0])
     for k in owners {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, I64(c.Site) if one else -1, x, null))
         if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" $w.text(x.Span()) "'")
@@ -4102,6 +4131,13 @@ fn (f Free&) LocalPlace(k I64) I64, I64 {
 
 # D9h: whether the constructor call at site of body b is one whose copy is left out (freshAt)
 fn (f Free&) FreshCtorAt(b I64, site I64) Bool { return f.freshAt.Has(pair.Pair(b, site)) }
+
+# the path of the owner leaf a copy made at site of body b is split for (splitLeaf): its part built in the site's
+# region, the rest where the region's parent is - empty for none
+fn (f Free&) SplitPath(b I64, site I64) Array<I64> {
+    if not f.Done: return Array<I64>(0)
+    return try f.splitAt.Get(pair.Pair(b, site)) catch default Array<I64>(0)
+}
 
 # the owner local place local l of body b is, -1 for none
 fn (f mut Free&) LocalPlaceOf(b I64, l I64) I64 {

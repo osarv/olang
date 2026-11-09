@@ -394,6 +394,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     plan typed.Plan = typed.Plan(0, 0, 0)
     freeing Bool = false            # whether this body frees early what sole places let go of (O8d, free.Frees)
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
+    regionPar Map<I64, mir.ScopeRef> # ... and the scope each is a kid of (a split copy's other parts go there)
     # O29: the reference arguments lowered, and their operands - a scope found from one is found from its operand
     argExprs Vec<typed.Expr&>
     argOps Vec<mir.Operand>
@@ -816,7 +817,36 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
     h := ln.temp(mir.I64T, sp)
     ln.guarded(h, ln.plan.RegionGuard[site], mir.Rvalue.Region(parent), parent, sp)
     ln.regions.Put(site, h)
+    ln.regionPar.Put(site, parent)
     return mir.ScopeRef.Held(h)
+}
+
+# a copy of v made at site where early freeing split it (free.SplitPath): its bytes, the owner leaf's part copied into
+# at - the site's region - and every other part owning storage into the region's parent, so that releasing the leaf's
+# old value releases nothing beside it (a Map entry's key text); None where the copy is not split
+fn (ln mut lowering&) splitCopy(site I64, v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    if not ln.freeing or site < 0 or site >= ln.plan.RegionKind.Len() or ln.plan.RegionKind[site] != 1: return mir.Operand.None
+    path := ln.L.Free!.SplitPath(I64(ln.B.Id), site)
+    if path.Len() == 0: return mir.Operand.None
+    rest := try ln.regionPar.Get(site) catch { return mir.Operand.None }
+    d := ln.local(ln.into(ty, mir.Rvalue.Use(v), sp), ty, sp)
+    ln.splitParts(pl(mir.Base.Local(d)), ty, path, 0, at, rest, sp)
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
+fn (ln mut lowering&) splitParts(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
+                                 sp source.Span) {
+    fs := ln.partsOf(ty)
+    for i in range fs.Len() {
+        q := ln.with(p, mir.Proj.Field(i))
+        if i != path[depth] {
+            ln.copyPart(q, fs[i], rest, sp)
+        } else if depth + 1 == path.Len() {
+            ln.copyPart(q, fs[i], at, sp)
+        } else {
+            ln.splitParts(q, fs[i], path, depth + 1, at, rest, sp)
+        }
+    }
 }
 
 # h given rv where place k is decided sole (a link-time constant, wholeprog 2.1), else the handle of parent - every
@@ -2606,6 +2636,8 @@ fn (ln mut lowering&) val(x typed.Expr?&) mir.Operand {
 fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
     if ln.dead or v == mir.Operand.None or ln.plan.RegionKind[rs] != 1 { return v }
     if ln.T.Anchors(ty).Len() == 0 and not ln.T.OwnedPart(ty) { return v }
+    # (a split copy - free.SplitPath - has parts outside the region whose anchors name another scope: it stays made)
+    if ln.L.Free is not null and ln.L.Free!.SplitPath(I64(ln.B.Id), rs).Len() > 0 { return v }
     h := match held {
         case mir.ScopeRef.Held(l): l
         case _: mir.NoLocal
@@ -3251,7 +3283,10 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             ln.L.ViewReads++
         } else {
             ln.L.ViewCopies++
-            return ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(dest)), ty, sp, ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes)), true)
+            at := ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes))
+            sv := ln.splitCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
+            if sv != mir.Operand.None: return sv
+            return ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(dest)), ty, sp, at, true)
         }
     }
     return mir.Operand.Copy(mir.Lvalue.L(dest))
@@ -4513,6 +4548,8 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             # (a view kept in place of this copy, where nothing could tell the two apart - never one running a declared
             # Copy, E31d, which may make what the value refers to anew)
             if ln.noCopy.Has(I64(m.Site)) and not t.RunsCopy(ty) { return v }
+            sv := ln.splitCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            if sv != mir.Operand.None: return sv
             return ln.ownCopyOf(v, ty, ln.madeAt(m.Site), sp)
         }
     }
