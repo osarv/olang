@@ -61,7 +61,10 @@ one rule that composes over special cases; fix rough edges found while building.
 - **The agent's architecture (the user, 2026-11-09):** "we are going to build a more traditional LLM with a very
   strong reasoning kernel of a small number of GB with a lot of external tooling and RAG. I want to scale reasoning, not
   size. I also know about methods where LLMs become good at directly updating model parameters. We can go that
-  direction as well. I want strong reasoning." Settling networks become a research arm, measured head-to-head; oann is
+  direction as well. I want strong reasoning." Then (the same day): "We are very far behind on the normal gradient descent transformer path, so we need a new
+  niche. Settling networks could be this. Keep going in this direction." So settling is the niche and the main research
+  line: amortized settling, exact fixed-point gradients (implicit / holomorphic EP), adaptive depth as reasoning budget,
+  sparse event-driven updates, a hybrid core with delta-rule fast weights (oagent/papers/settling-niche.md); oann is
   general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md. Trained from scratch, no open weights (the user, 2026-11-09).
 
 ## Reading the user
