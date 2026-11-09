@@ -5691,7 +5691,8 @@ there is no caller frame left in which a conversion or a promotion could run. An
 the `join` block, on precisely the terms P2 states for an argument: one declared in a block nested inside
 the join closes first and is rejected. Otherwise the result is stored as an assignment's value is (§6.2), on the task's
 thread: a result built where it lands (§8 O18a) is built where the target is; several targets sharing one result scope
-must all be in one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an
+are given one scope - a target local's is lengthened to the longest of them, the results built there (O28) - and only
+targets that cannot be placed so (a field's, an element's) in different scopes are a compile-time error - and one that already lives somewhere must suit the target as an
 assignment's value would (§8 O25, O1b). A target holding a run-time-length array by value takes it as that assignment
 does (T11b): its elements written into the storage the target holds where the length is unchanged, else the result's
 storage - or, where the assignment copies, a copy made where the target's storage is. With several targets each is judged as the assignment of its own result, as a
@@ -7113,6 +7114,13 @@ of them allow, and every judgment of this section is then made of it. So:
   whole at its last mention into storage that outlives its block (moved there, D9i), is built where it is kept - a new
   value each time its declaration runs, so a loop's turns never share one; its memory is the kept scope's on every
   turn, kept or not (the placement is the program's, not a turn's);
+- what is kept by any other way is placed the same: a value kept through a call's obligation (O10c) - one a statement
+  holds for itself too, as `m[$k "-key"] += v` holds its index for `At` and `SetAt` and `names[i][0] = t` its borrow
+  of `t` (E31b), and the copy of a call's value a callee keeps a view of; a field or an element read off a call's result
+  (O18c), the call then landing where the part is kept and a local declared from the part built there with its own
+  storage; an argument an instance holds when a store keeps the instance (C2d); a closure a function-valued local is
+  given, built where the local is kept with what it captured (D16c); the array a copy into an `any` reads (T32a), with
+  what its elements refer to;
 - a call's result is built where it is put (O18a), where its callee's obligations need it (O18c) or, handed back from
   what the callee was given, lives where that does (O13);
 - a constructor field is its instance's, unless the field holds a view of what a reference parameter refers to and an

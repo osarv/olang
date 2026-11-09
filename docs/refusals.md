@@ -27,6 +27,12 @@ is built and what this note proposes is built after it.
   T22a and o17permute6/6b keep T25c (fnvalues round 7). t17payloadscopes (5.2) runs too: a written reference local's case
   proposes its claim as `:=`'s did; e31bcallargsowned and e31binplacehome keep E31b alone (section 6). HISTORY.md, "R1: split values lent where their references live".
 
+- Built: R2 (5.2, 2026-11-09, wt-refusals2) - O28's placement reached through obligations, a held temporary, a part
+  read off a call's result, C2d at a store, a closure local, T32a's copy and P1g's two target locals; 13 of the 15 run
+  (t17payloadscopes ran with R1), and p2fieldofresult and p2spawncallee (5.4) with them. rv3roclone stays refused (its
+  failing side is untraced, and what it builds is T25c's read-only-copy refusal reached through a generic - section 6's
+  kind, not a placement). HISTORY.md, "R2: kept through an obligation, a store or a payload".
+
 ## 0. Summary
 
 Of 1,246 must-fail cases, 355 are refused by a memory, placement, ownership or permission rule; the other 891 are

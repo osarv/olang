@@ -35458,3 +35458,41 @@ construction was used (the counter was marked read before the value was replaced
 could pick a loop's name, which nothing then read, so it was written `_` and the assignment named nothing - the
 counter is now read only where the value reads it, and a whole struct is assigned only to an assignable local. After
 the fix the 100 programs (3000 cases) run with no finding.
+
+## R2: kept through an obligation, a store or a payload (O28, O10c, O18c, C2d, T32a, P1g; 2026-11-09, wt-refusals2, docs/refusals.md 5.2)
+
+Round R2 of docs/wholeprog.md section 10. O28 built a value local where it is kept when the keeping was a store or a
+reference past its block; fifteen cases were refused because the same keeping came another way, and the inference
+(scope.olang's proposals) had no path from the failing judgment back to what to place. Each path added proposes only
+where a judgment failed, so a program that compiled places as before - compiler/'s IR (master's sources built by both
+compilers) and bench's are byte-identical to master's:
+
+- **A held borrow** (`names[i][0] = t`, E31b's elaboration holding `t`'s borrow for the inner list's SetAt):
+  `keepsStorage` follows held locals to the borrow they hold, so `t`'s storage is lifted with its claim
+  (s5handlenote, s6handlestore).
+- **A held temporary of a value** (`m[$k "-key"] += v`, the rendered index held for At and SetAt): proposed at its
+  promote site (`heldTemp`), and a promotion's build honours the site's lift (s5heldindexnote).
+- **A part read off a call's result** (`bs.Push(Pairish.pairish(t).a)`, `boxes(t)[0]`, `t := p.mk().text`, `x :=
+  st.get(0).inner; held = x`): `projectedCall` finds the call under a field or element of a temporary; the call is
+  landed where the part is kept, and a local declared from the part (origin none) proposes the same, its own storage
+  lifted with it where kept whole (s5projection, s5projectionelem, o18cprojectionfresh, o18cprojectionborrow).
+- **C2d at a store** (`x := Env(local); c.e = x`, `cells[i].w = wv`): the error the store reports at the instance's
+  argument now first proposes that argument where the slot is (c2de25once, b6elemvalue).
+- **A closure local** (`g fn&(...) = fn ...` kept by `compose`'s obligation): in the second phase the local's storage is
+  lifted (`liftStorage`) and its captures proposed as a closure's are (d16dcomposeshort).
+- **E31b's kept copy** (`f(s[k], out)` keeping a view of the copy of At's value): once the call already lands where the
+  view is kept, the copy's promote site is lifted too, and `copyHere` builds it there (e31bviewnoindexnote).
+- **T32a** (`xs.Push(a[0:2])` into `any`s): `copiedView` reads the slice under a copy of its contents and proposes the
+  sliced array's storage, as a view kept too long is (t32anyarrofany).
+- **P1g** (`spawn a, b = two(i)` with `a` and `b` in two blocks): each target local's claim is proposed at the longest
+  target's scope; two targets that cannot be placed (fields of instances in two blocks) keep the error - a new case,
+  p1gtargetsfields, so the message stays tested.
+
+p2fieldofresult and p2spawncallee (refusals 5.4) compile with the same paths: the call whose field a task is handed
+lands at the join's level, and a closure handed through `id(f)` is built there with its capture. All fifteen are `check:
+run` cases with read-backs after the loop, each run under the scope sanitizer and agreeing with `interpret`.
+
+rv3roclone stays refused: the failing relation is inside `List.FromIter`'s instance, whose lower side (the new list's
+derived binding) is untraced rather than too short, and what it would build - a writable list of a read-only list's
+inner lists - is what T25c refuses where written directly (`out.Push(x)` for `x` of a read-only list's walk). It belongs
+with section 6's permission cases, not a placement.

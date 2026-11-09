@@ -1,0 +1,25 @@
+# check: fail error[P1g]: these targets live in different scopes, and the results are built in one
+# P1g: a task's built results go into fields of instances in two blocks - unlike two target locals (p1gtargetstwoblocks),
+# a field's scope is its instance's, which nothing lengthens
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+type Holder struct() {
+    n mut Node?& = null
+}
+fn two(i I64) mut Node&, mut Node& {
+    n := Node(i)
+    return n, n
+}
+fn main() {
+    h mut Holder& = Holder()
+    for i in range 2 {
+        k mut Holder& = Holder()
+        join {
+            spawn h.n, k.n = two(i + 5)
+        }
+        assert k.n!.v == i + 5
+    }
+    assert h.n!.v == 6
+}

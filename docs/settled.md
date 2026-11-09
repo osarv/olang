@@ -581,6 +581,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parameter itself), a local built there each time its declaration runs - not "always lift", which would hold a copy's
   header per call. Held by reference or sliced (O17a), its local is lifted likewise. Refused only where nothing can be
   placed (a by-value parameter's storage); where its references live is one of several, O29 finds it.
+- **Kept through an obligation, a store or a payload (O28; R2 of docs/refusals.md, 2026-11-09, mine within the user's
+  decisions).** O28's "built where it is kept" is reached through every way a statement keeps a value, not only a
+  store: a callee's obligation (O10c) - a value the statement holds for itself included (E31b's held index, a borrow
+  held for an inner list's SetAt, a call's value copy a callee keeps a view of) - a part read off a call's result (the
+  call lands where the part is kept, O18c), an instance's argument a store keeps (C2d), a closure local, an array copied
+  into an `any` (T32a), and two target locals of one `spawn` (P1g: lengthened to the longer). Only what was refused moves;
+  compiler/'s and bench's IR are unchanged. rv3roclone stays refused: a read-only list's elements pushed into a new
+  writable list is what T25c refuses outside a generic, and the instance's lower side is untraced, not too short.
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter lives where what it captured does.
