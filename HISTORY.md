@@ -35384,3 +35384,49 @@ compiler's own `-quick` build has 4,160 guarded sites over 1,209 places (none so
 larger, and its front end and lowering of itself (`build -memory`) as fast as before within noise (14.6-16.0 s both);
 bench's binarytrees, knucleotide, text, regex and Vec push built `-quick` run within noise of before. Under the default
 `-O3` and LTO the constants fold.
+
+## Function values followed into calls: twins (T22c, T22a, O13c, D16c, O17, B2c; 2026-11-09, wt-lending, round 7 of docs/fnvalues.md)
+
+T22a judged a function value at every argument by its parameter's type, so `put(link, x, 42)`, `apply(hang, a, b)`,
+`keep(link)`, a `Count` given a lambda keeping its argument in a captured Vec, a Call adapter keeping what it is
+handed, and a lambda calling a captured `link` were all refused (ten cases in checks/cases). Round 7 follows such
+values into the callee.
+
+What was built, and where it departs from fnvalues.md section 4:
+
+- **Keyed by bodies, not by patterns.** A twin's key is the callee and, per followed parameter, the sorted bodies its
+  argument may call. fnvalues.md 4.3 keys by the pattern's canonical text so that two functions of one pattern share a
+  judgment; keying by body is a refinement of that (more twins, the same meaning), needs no projection of summaries
+  into a type's positions, and judges each twin with the real bodies - so the `-debug` pattern check of 4.7 has nothing
+  to check. A move to patterns stays open if twins ever press on the limits.
+- **A twin is judged by a copy of the pass.** `judgeTwin` copies the Scoper (`sub Scoper = s`), seeds the followed
+  parameters' records, replaces the callee's summary with a fresh one, drops its lifts and judges its component; the
+  call reads the twin's summary in the callee's place while it is judged (`call` swaps it in). The copy costs a deep copy
+  of the pass's maps per twin per round - nothing for programs that make none. A component that asked for a twin is
+  never taken again by the field inference's reuse (`compRun.Twinned`). A callee in a cycle with its caller gets no
+  twin; a twin calling its own body with the same functions handed on is judged to its fixed point.
+- **Captures as derived scopes.** In a twin, capture k of the ri-th followed function is `Term.Derived(p, -2 - (ri *
+  4096 + k))` - relatable, outliving the twin's blocks - and the caller resolves it from the argument's records
+  (`capturedAt`). No hidden scope parameter is passed (that is round 8's derived-scope passing), so a temporary the twin
+  would have to build where a capture lives is refused (T22c's own error, `BuildIntoCapture`) - found by the follow
+  test's first form (`feed(k, 20)` building `N(base + i)` for a Keeper's Call), which built the node in the callee's frame
+  and read it back freed under the sanitizer before the refusal was added.
+- **Captures of lambdas** are followed in the lambda's one judging rather than by a twin: a lambda is made at one place,
+  so where its captured local is given one value whose functions need no term (named functions, capture-less lambdas)
+  and is never assigned again, its records are the same in every judging (`capturedRecs`).
+- **Pass-through results** need no special case: `keep(link)` makes a twin of `keep` whose `return f` gives `link` back
+  (its ResFn), with the ordinary code (no plan of its own).
+- **Code.** `typed.Plan.TwinAt` routes each call; after the pass a twin whose plan differs from the ordinary one (a call
+  of itself counted as ordinary) has `Own` set, and lowering calls `mir.FnKey.Twin(body, t)`, emitted in the root object
+  as `<symbol>_twin<t>`, without early freeing (its plan has no regions; free.olang's analysis of the body's callers
+  stays the ordinary one, whose unknown calls through the parameter already over-approximate the twin). interpret runs the
+  same MIR, so it follows twins with no change of its own.
+- **Limits** (decision 5) - 16 twins a body, 4 deep, 2% of the bodies or 256 - and a callee in a cycle: the argument is
+  a boundary and the error's place says "not followed into its callee (one of its cycle of calls, or past T22c's
+  limits)".
+
+Gates: the ten refused cases are run cases (`-debug -sanitize`, read back after a churn), tests/follow.olang (the Count
+shape, a chain three deep, a recursive callee, a captured value, `keep(link)`, a twin with its own plan, an adapter, a
+global baked and asserts decided through a twin - built, sanitized and interpreted), fail cases t22cstorefollowed,
+t22climit, t22cbuildcapture, the checks scenario `twins` (put's twin's code) and the incremental edit "a twin added".
+The compiler's own IR built by the new compiler is byte-identical to the old one's. OLANG_SCOPESTATS gains a twins row.

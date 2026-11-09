@@ -1391,9 +1391,11 @@ A call through such a value is held to each relation its value may carry as a di
 obligations (O10c) - its temporaries built where they say (O18b), what a lambda captured taken where it lived when the
 lambda was made, what the callee may keep of an argument counted as a direct call's is (O17) - and a value whose
 relations are not followed (a parameter's, a field's, an element's) by what its type says of every call (T22). A
-**boundary** is a place where the value meets code judged once for many values: an argument for a parameter, a store
+**boundary** is a place where the value meets code judged once for many values: an argument for a parameter that is
+not followed into its callee (T22c), a store
 into anything but a whole local (a field, an element, a payload, a global, a constructor's field), a value an array, a
-tuple or an enum case is made of, a capture, a task's function, argument or result, an `any` (T32a), a `yield`, a
+tuple or an enum case is made of, a capture that is not followed into the lambda's body (T22c), a task's function,
+argument or result, an `any` (T32a), a `yield`, a
 binding of a pattern, a `return` of a function whose result is not one function value or that calls itself (O13c), and
 a call a cursor's version reaches before it is given (a loop's next turn, O25i); a type variable's binding is an
 argument. At a boundary a value may carry only what the place's function type says of every call - its bound (T22b):
@@ -1438,6 +1440,26 @@ holds functions keeping `b` in `a`. A lambda held as a type writing `keeps x` ke
 where the lambda does - one capturing from a longer-lived scope than its own is a compile-time error naming T22b. A
 named function keeping an argument in a global is held by no promise: the program's scope outlives every place a value
 lives. Nothing at run time changes: a value is two words whatever its type promises.
+
+**T22c (function values followed into calls).** An argument whose functions are followed (T22a: every one of them
+known, and judged before the call) given for a parameter of a function type - written (`fn&`, `fn?&`, a declared
+function type, T21b) or a type variable bound to one (G16) - where some of its functions do more than that type's bound
+allows (T22b), is **followed into the callee**: the callee is judged again as though the parameter held those very
+functions (a **twin** of it, one for each set of functions its arguments bring). There, a call through the parameter is
+judged as the direct calls it is (O10c, O17, O18b), a `return` of it gives those functions back to the caller (O13c),
+an argument of it for another such parameter follows them on, and every other place it reaches - a store, a capture,
+a task - is a boundary (T22a) judged by that place's type; a capture of one of those functions' is where the caller's
+value had it, and a temporary the callee would have to build there is a compile-time error naming T22c. Likewise a
+lambda capturing a local of the body making it, given one value and never assigned again, whose functions capture
+nothing (named functions, lambdas capturing nothing) and do more than the capture's type allows, has that capture
+followed into its body (D16c's copy is never repointed). An argument whose functions its parameter's type covers takes
+no part: the callee's one judgment serves it, as before. An error found in a twin is said with a note at the call that
+asked for it. Following stops - the argument then a boundary, its error naming the stop - at a callee in a cycle of
+calls with its caller (but a twin calling its own body with what it was given, judged to its fixed point), at sixteen
+twins of one function, at twins judged inside one another four deep, and at twins numbering 2% of the program's
+functions (and at least 256). Generators and lambdas have no twins. Nothing is written for any of it, and nothing
+changes at run time but which compiled code a call reaches (B2c): a program means the same whichever functions are
+followed.
 
 ### 2.8 Scopes
 
@@ -2470,6 +2492,9 @@ own type:
   parameter holding references has one (O4b) - carried with the copy: the references in the copy still name what
   they named, and the lambda lives no longer than that (D16d). Only reading it is ever possible, so nothing is built
   through it: `x := Reading(name, 1.5); m.Update(k, 0.0, fn(v F64) F64 { return v + x.Value })`.
+
+A captured function value is followed into the lambda's body where T22c says - its copy never repointed, what it
+calls is what it called where the lambda was made.
 
 A lambda's parameters and locals may not reuse the name of a variable it could capture.
 
@@ -7142,7 +7167,8 @@ result where every `return` agrees:
   gave a value in: the call's result then lives where that resolves to - the referent of the argument's own field -
   rather than where the argument does, which it outlives;
 - for a result that is a function value, the functions every `return` may give and where what each captured lives
-  (T22a), resolved through the call: `f := mk(gone)` knows `f` keeps what it is given where `gone` lives.
+  (T22a), resolved through the call: `f := mk(gone)` knows `f` keeps what it is given where `gone` lives - and, in a
+  twin (T22c), the functions given for a followed parameter it returns: `f := keep(link)` holds `link`.
 
 A function whose body is not wholly checked (in a cycle of calls, O10c) adds nothing, and a call falls back to its
 signature - its returns of a function value are T22a's boundaries.
@@ -7151,7 +7177,9 @@ signature - its returns of a function value are T22a's boundaries.
 
 **O17.** *Determination by arguments.* An argument that is **already reference-shaped** carries a scope tag
 of its own, and binds the scope variable of the parameter it is passed for to that scope. Every argument
-binding the same variable must agree on one scope, or the call is a compile-time error.
+binding the same variable must agree on one scope, or the call is a compile-time error. A call whose arguments' functions
+are followed into its callee (T22c) is judged by the callee's twin - what it keeps of each argument, and where, is the
+twin's.
 
 A **value** lvalue passed for a reference parameter is borrowed (E12c): the callee receives that very storage,
 so it binds the variable to where that storage is - a value local's block, wherever its references were built, or
@@ -7740,7 +7768,8 @@ machine's own CPU unless `-target` names another (B12). `-debug` is the single e
 it disables optimization so that the emitted code corresponds to the program as written — nothing is
 inlined, nothing is reordered, and values live in memory rather than in registers, so a backtrace names the
 functions actually called and the state is inspectable. It is an option of the modes that build (B1), and composes
-with `-race`.
+with `-race`. A function a call gives functions to follow (T22c) may be compiled once more for them, where what it
+builds differs - unobservable but in speed and size.
 
 **B2g.** `-quick` is a **development build**: optimized at LLVM's level 2 with no link-time optimization (B2d), each
 module compiled to native code of its own, so a build - and above all a rebuild after an edit to code many modules

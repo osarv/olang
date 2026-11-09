@@ -375,7 +375,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   function type (E31). **A function value carries its relations (T22a, QCR (1), the user's "build them all"
   2026-11-03)**: a function or lambda whose inferred obligations are more than its type says is a value wherever the
   inference follows it whole, judged as the direct call; at a boundary (argument, store, capture, task, `any`,
-  `yield`, return no caller follows) only what the written type says may come, else T22a's error. The function-values
+  `yield`, return no caller follows) only what the written type says may come, else T22a's error. **Followed into
+  calls (T22c, round 7, built 2026-11-09, mine within the user's decision):** an argument whose known functions do more
+  than its parameter's type allows is followed into a twin of the callee, keyed by callee and the functions' bodies,
+  judged by a copy of the scope pass; captures of those functions are derived scopes of the parameter, resolved at the
+  call (nothing built there - T22c's error); a lambda's captured local given one capture-less function value is followed
+  into its one judging; limits 16 twins a body, 4 deep, 2%/256; twins with a plan of their own get code of their own
+  (`_twinN`, the root object) and no early freeing; programs accepted before make no twin, their IR byte-identical. The
+  function-values
   work of 2026-11-08 (docs/fnvalues.md: function values followed and specialized where it pays) is decided and being
   built. **Promises (T21c, T22b; the user's decision 2026-11-08; built 2026-11-08, round 4):** words after a function
   type's signature - `keeps b in a`, `keeps b in a.f`, `keeps x`, `borrows a`, `noborrow` and the effect words `returns

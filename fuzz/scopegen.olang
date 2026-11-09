@@ -1422,7 +1422,8 @@ fn (g mut SG&) viewLeaf(k I64, ind String&) String& {
 
 # a relations scenario (T22a): functions and closures whose obligations are more than their type says - link, a lambda
 # pushing into a captured list, one a helper hands back - held in locals, chosen by conditionals, given again in loops,
-# and called with nodes made in blocks and turns; each argument must be built where the function keeps it (or refused),
+# and called with nodes made in blocks and turns, directly and through higher-order helpers they are followed into
+# (T22c); each argument must be built where the function keeps it (or refused),
 # so the chain and the kept nodes, after a churn, are the checksum. Now and then a value carrying one reaches a place a
 # written function type is all that holds - a list's element, a capture - which must be refused
 fn (g mut SG&) relScenario(k I64) String& {
@@ -1430,6 +1431,10 @@ fn (g mut SG&) relScenario(k I64) String& {
     body := $g.relStmts(k, 2, "    ") $g.relStmts(k, 2, "    ")
     return ("fn rk" $k "(l mut Vec<Node&>&) fn&(n Node&) {\n    return fn(n Node&) { l.Push(n) }\n}\n"
             "fn rs" $k "(a mut Node&, b mut Node?&) { a.v += 1 }\n"
+            # T22c: higher-order helpers the functions are followed into - a call, a chain, a keeping callback
+            "fn rh" $k "(f fn&(a mut Node&, b mut Node?&), a mut Node&, v I64) { f(a, Node(v)) }\n"
+            "fn rd" $k "(f fn&(a mut Node&, b mut Node?&), a mut Node&, v I64) { rh" $k "(f, a, v + 1) }\n"
+            "fn rc" $k "(f fn&(n Node&), n Node&) { f(n) }\n"
             "fn s" $k "() I64 {\n    root mut Node& = Node(" $g.val() ")\n    kept := Vec<Node&>()\n"
             "    kr mut Vec<Node&>& = kept\n    op := link\n    add := fn(n Node&) { kr.Push(n) }\n    give := rk" $k
             "(kept)\n" $body "    add(Node(1))\n    give(Node(2))\n    op(root, root.next)\n    churn()\n    acc I64 = chain(root)\n"
@@ -1459,7 +1464,12 @@ fn (g mut SG&) relLeaf(k I64, ind String&) String& {
     # (refused, now and then: a written function type is all that holds a list's element or a capture)
     if g.r(400) == 0 { return $ind $q " := Vec<fn&(a mut Node&, b mut Node?&)>()\n" $ind $q ".Push(op)\n" }
     if g.r(400) == 0 { return $ind $q " := fn() { add(Node(" $v ")) }\n" $ind $q "()\n" }
-    w := g.r(10)
+    w := g.r(15)
+    if w == 10 { return $ind "rh" $k "(link, root, " $v ")\n" }
+    if w == 11 { return $ind "rd" $k "(op, root, " $v ")\n" }
+    if w == 12 { return $ind $q " := Node(" $v ")\n" $ind "rc" $k "(add, " $q ")\n" }
+    if w == 13 { return $ind $q " := Node(" $v ")\n" $ind "rc" $k "(give, " $q ")\n" }
+    if w == 14 { return $ind $q " := link\n" $ind $q "f := fn() { " $q "(root, Node(" $v ")) }\n" $ind $q "f()\n" }
     if w == 0 { return $ind "op(root, Node(" $v "))\n" }
     if w == 1 { return $ind $q " mut Node& = Node(" $v ")\n" $ind "op(root, " $q ")\n" }
     if w == 2 { return $ind "add(Node(" $v "))\n" }
