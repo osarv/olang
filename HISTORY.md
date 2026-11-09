@@ -35952,4 +35952,5 @@ Where the scope pass places such a holder's storage elsewhere (O28) its drop is 
 is no plan, so lowering registers a landed holder's drop with its block (`Local.Landed`), which K1 refuses as it refused
 the registration such a value had before - no computation that was evaluated before is refused now, and none gives a
 value the run time does not. tests/drops.olang's `viewsKept` changed its expected order: each turn's two holders are
-registered where `keep` lives as the turn ends, last declared first.
+registered where `keep` lives as the turn ends, last declared first. checks/fixtures/strheld/g9dorder ends `r := Res(1)` as main's block
+is left (`d1`), before the temporaries registered with main's scope (`d4 d3`), which ended first before.
