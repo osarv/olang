@@ -1,0 +1,48 @@
+# check: run
+# flags: -debug -sanitize
+# O8d: a Map whose keys own storage (text) and whose values are owners (a Vec): the entry its add builds - a copy the
+# caller makes of what the constructor views (D9h) - holds the key's text beside the value, so it is no value made for
+# the value's place alone, and a Put replacing the value releases nothing of the key (the key's text was released with
+# the old value before, and the next Put's comparison read it freed)
+import "std/io"
+
+table mut Map<String, Vec<I64>> = Map<String, Vec<I64>>()
+
+fn churn() I64 {
+    t := 0
+    for _ in range 20 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+fn local(n I64) I64 {
+    words := Map<String, Vec<I64>>()
+    s := 0
+    for i in range n {
+        v := Vec<I64>()
+        for j in range 10 { v.Push(j + i) }
+        words.Put("k" $(i % 3), v)
+        churn()
+        s += words.Get("k" $(i % 3))![9]
+    }
+    return s + words.Len()
+}
+
+fn global(n I64) I64 {
+    s := 0
+    for i in range n {
+        v := Vec<I64>()
+        for j in range 10 { v.Push(j * i) }
+        table.Put("g" $(i % 4), v)
+        if i % 4 == 3: table.Remove("g1")
+        churn()
+        s += table.Get("g" $(i % 4))![9]
+    }
+    return s + table.Len()
+}
+
+fn main() {
+    io.Println($local(40) " " $global(40))!
+}

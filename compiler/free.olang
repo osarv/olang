@@ -1712,7 +1712,7 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
         if f.IsOwner(lf.PlaceId) or f.arr[lf.PlaceId]: owners.Push(lf.PlaceId)
     }
     site := ownCopySite(cm)
-    one := owners.Len() == 1 and site >= 0
+    one := owners.Len() == 1 and site >= 0 and f.onlyLeaf(cm.Type(), lvs, owners[0])
     for lf in lvs {
         k := lf.PlaceId
         if owners.Has(k) {
@@ -1723,6 +1723,32 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, cm, null))
         f.keep(k, RMade, w.body().File, sp, $"its new value is existing storage a copy shares: '" $w.text(cm.Span()) "'")
     }
+}
+
+# whether owner leaf k (one of lvs) is all the storage a value of struct type ty owns: no other part it holds by value
+# owns any - a copy of the value builds every owned part where the leaf's region is, so a part owning storage beside
+# it (a Map entry's key text beside its Vec value) would be released with the leaf's old value
+fn (f mut Free&) onlyLeaf(ty types.TypeId, lvs Vec<leaf>&, k I64) Bool {
+    for lf in lvs {
+        if lf.PlaceId == k: return f.onlyPath(ty, lf.Path, 0)
+    }
+    return false
+}
+
+fn (f mut Free&) onlyPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if depth >= path.Len() or t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
+    fs := t.Items(t.Fields(r))
+    for i in range fs.Len() {
+        if i == path[depth] {
+            if depth + 1 < path.Len() and not f.onlyPath(fs[i], path, depth + 1): return false
+            continue
+        }
+        if t.IsRef(fs[i]): continue
+        if t.OwnedPart(fs[i]) or t.OwnsParts(fs[i]): return false
+    }
+    return true
 }
 
 # a constructor handing back views of what it is given, its instance stored into a struct held in place: the copy its
@@ -1743,7 +1769,7 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
         }
     }
     if owners.Len() == 0 { return }
-    one := owners.Len() == 1 and c.Site >= typed.SiteId(0)
+    one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.onlyLeaf(x.Type(), lvs, owners[0])
     for k in owners {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, I64(c.Site) if one else -1, x, null))
         if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" $w.text(x.Span()) "'")
