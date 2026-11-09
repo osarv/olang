@@ -1556,24 +1556,26 @@ type Kept struct() {
     Given Map<String, String&>
     Afresh Bool = false
     Taken I64 = 0               # how many bodies' summaries were taken (compared, under Afresh)
-    Files Map<I64, Bool>        # the files whose record was taken
+    Files Map<I64, I64>         # the files whose record was taken, each with its candidate's number
     Stale Vec<String&>
     Lines Map<I64, Vec<String&>>  # by file: the summaries found for a module no record was taken for (Summaries)
 }
 
-# a record found for the module of File: what its checking read of the program's facts (facts.Table.Holds), and its
-# bodies' summaries ("KEY\tTEXT")
+# a record found for the module of File: what its checking read of the program's facts (facts.Table.Holds), its
+# bodies' summaries ("KEY\tTEXT"), and what the driver keeps beside them (its functions' signatures and its globals'
+# baked values, compared under OLANG_CHECKINCR)
 type Cand struct(File I64) {
     File
     Reads Vec<String&>
     Bodies Vec<String&>
+    Others Vec<String&>
 }
 
 # the candidates taken whose reads hold (holds says which), one for each file, their summaries given
 fn (k mut Kept&) TakeHolding(holds fn&(reads Array<String&>&) Bool) {
-    for c in k.Cands {
+    for i, c in k.Cands {
         if k.Files.Has(c.File) or not holds(c.Reads.ToArray()): continue
-        k.Files.Put(c.File, true)
+        k.Files.Put(c.File, i)
         for line in c.Bodies {
             tab := try line.Find("\t") catch { continue }
             k.Given.Put($c.File " " $line[:tab], $line[tab + 1:])
