@@ -1,0 +1,3 @@
+G2+G3 (genrefs rounds 2+3) on wt-genheader
+- done: mir Holders/Weak/WeakWord + GenInfo; lower counting (owning stores, New, NewArray fill, CopyElems, vacate as Take, params, call results, Ref of temps), weak reads/words; emit header/weak/counts; runtime gen_count/weak_read/weak_word + top-bits check; eval same + Image pinned headers + dead-region holder check; free genKeeps + one-holder classification rows; tests/weak.olang removals; t13dalias fixed
+- todo: checks cases (k1 weak refused, -memory rows?), SPEC/HISTORY/settled/genrefs progress, G1 leftovers (weak T in generic; local stored only weakly), goldens, consistency, verify
