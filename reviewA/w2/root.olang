@@ -1,0 +1,9 @@
+import "std/io"
+import "boxlib"
+
+fn main() ? {
+    b := boxlib.Box.New()
+    for k in range 50 { b.Set(k + 1000) }
+    boxlib.Churn()
+    try io.Println($b.Items()[7])
+}

@@ -1,0 +1,44 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next Node?& = null
+}
+
+type Pair struct(a Node&, n I64) {
+    a, n
+}
+
+type Keeper struct() {
+    held := Vec<Pair&>()
+}
+
+fn keep(k mut Keeper&, p Pair&) { k.held.Push(p) }
+
+fn churn() I64 {
+    t I64 = 0
+    for _ in range 300 {
+        a := Array<I64>(64, -7)
+        s := $t "x"
+        t += a[3] + s.Len()
+    }
+    return t
+}
+
+fn main() ? {
+    k := Keeper()
+    src := Vec<Pair>()
+    for i in range 8 { src.Push(Pair(Node(i), i * 10)) }
+    for p in src { keep(k, p) }
+    {
+        q := src[3]
+        keep(k, q)
+        b := src[5]
+        for _ in range 3 { keep(k, b) }
+    }
+    churn()
+    s := 0
+    for p in k.held { s += p.n + p.a.v }
+    assert k.held.Len() == 12 and s == 308 + 33 + 165
+    try io.Println($k.held.Len() " " $s)
+}

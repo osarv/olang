@@ -1,0 +1,36 @@
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.seen.Push(id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn main() ? {
+    out := Tally()
+    {
+        inner := Tally()
+        for k in range 100 {
+            lg := Logged(k, inner)
+            lg.log = out
+        }
+        inner.seen.Push(1)
+    }
+    churn()
+    s := 0
+    for x in out.seen { s += x }
+    assert out.seen.Len() == 100 and s == 4950
+    try io.Println($out.seen.Len() " " $s)
+}

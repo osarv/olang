@@ -52,3 +52,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - F8 started (wt-derived, opus medium), alone.
 - F8 merged (ff, verified), pushed. Open bug: Vec<Logged> lent to a pushing fn placed in frame scope -> dtors build into closing scope (sanitizer abort; seed too). Disk 9.1G free; scratchpad 7.7G (gate/t7/prof dirs) - delete needs the user OK (/tmp rule).
 - vecdrop merged (ff), pushed.
+- Review A done: rounds clean. Bug: ctor default field Vec<File>/Map<I64,File> (bad IR / interp abort). Over-rejections r1,r2 (O25h/O25), p7/p9 (T13b return Vec<Logged>), T25c on p.items.Push for value local. Repros: review/reviewA/.

@@ -1,0 +1,27 @@
+import "std/io"
+import "tally"
+import "mid"
+
+fn churn() I64 {
+    t I64 = 0
+    for _ in range 300 {
+        a := Array<I64>(64, -7)
+        s := $t "x"
+        t += a[3] + s.Len()
+    }
+    return t
+}
+
+fn run(t mut tally.Tally&) {
+    lg := tally.Logger(t)
+    mid.Feed(lg, 100)
+}
+
+fn main() ? {
+    t := tally.Tally()
+    for _ in range 20 { run(t) }
+    churn()
+    s := 0
+    for x in t.Seen { s += x }
+    try io.Println($t.N " " $t.Seen.Len() " " $s)
+}

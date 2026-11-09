@@ -1,0 +1,39 @@
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn sum(t Tally&) I64 {
+    s := 0
+    for x in t.seen { s += x }
+    return s
+}
+type Holder unique struct(l Logged) {
+    l
+}
+
+fn main() ? {
+    t := Tally()
+    h := Holder(Logged(0, t))
+    for k in range 40 { h.l = Logged(k + 1, t) }
+    churn()
+    assert t.seen.Len() == 40 and sum(t) == 780
+    try io.Println($t.seen.Len() " " $sum(t))
+}

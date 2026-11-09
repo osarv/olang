@@ -1,0 +1,5 @@
+fuzz free: 600 programs, 3600 scenarios run, 0 refused, 3652 places freeing at once, 0 findings
+
+real	7m48.806s
+user	13m10.330s
+sys	5m11.500s

@@ -1,0 +1,32 @@
+import "std/io"
+
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+
+fn link(a mut N&, b N&) { a.next = b }
+fn noop(a mut N&, b N&) { }
+
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+fn apply(f fn&(a mut N&, b N&), a mut N&, v I64) {
+    for i in range 3 { f(a, N(v + i)) }
+}
+
+fn pick(c Bool) fn&(a mut N&, b N&) { return link if c else noop }
+
+fn main() ? {
+    x mut N& = N(0)
+    apply(pick(churn(1) >= 0), x, 9)
+    churn(200)
+    assert x.next!.v == 11
+    try io.Println($x.next!.v)
+}

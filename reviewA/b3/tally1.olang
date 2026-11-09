@@ -1,0 +1,10 @@
+type Tally struct() {
+    Seen := Vec<I64>()
+    N := 0
+}
+
+type Logger struct(log mut Tally&) {
+    log
+}
+
+fn (l mut Logger&) Note(id I64) { l.log.N += id }

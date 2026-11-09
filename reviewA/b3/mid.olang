@@ -1,0 +1,5 @@
+import "tally"
+
+fn Feed(lg mut tally.Logger&, n I64) {
+    for k in range n { lg.Note(k) }
+}
