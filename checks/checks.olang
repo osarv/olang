@@ -46,7 +46,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods"]
+                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -417,6 +417,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "earlyfree" { try earlyfree(r) }
         case "fix" { try fixing(r) }
         case "twolists" { try twolists(r) }
+        case "clones" { try clones(r) }
         case "sidebyside" { try sidebyside(r) }
         case "remote" { try remote(r) }
         case "remotebad" { try remotebad(r) }
@@ -1594,6 +1595,31 @@ fn twins(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build t22sharedscope.olang > out.txt 2>&1 && ./build/t22sharedscope") == 0, "twins", dir)
     try r.expect(irHas(dir, "build/*.ll", "^define .*@t22sharedscope_2eput_twin0\\("), "no put twin", dir)
     try r.expect(irHas(dir, "build/*.ll", "call .*@t22sharedscope_2eput_twin0\\("), "main does not call put's twin", dir)
+}
+
+# fnvalues 4.4: a callee given one known body's code has a clone with the calls through it direct - the prelude's Sort
+# and its chain for a lambda, a recursive msort for a named function. Optimized as -O3 does the root's object, the
+# clone's merge loop calls nothing through a value (the comparison inlined) and msort's clone recurses into itself
+test "a sort given a lambda has a clone, its merge loop calling nothing through a value" { assert passed("clones") }
+
+fn clones(r mut report&) ? Failed {
+    dir := fresh("clones")
+    os.Run("cp checks/fixtures/clones/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build clones.olang > out.txt 2>&1 && ./build/clones > out.txt") == 0 and
+                 outOf(dir) == "-1073716420 1073739769\n", "clones", dir)
+    ll String& = "build/clones.main.ll"
+    try r.expect(irHas(dir, ll, "call void @std_2fprelude_2farray_2eArray_3cI64_3e_2eSort_3cI64_2c_20_3f_3e_clone1_"), "main does not call Sort's clone", dir)
+    msort String& = "awk '/^define .*@clones_2emsort_clone4_clones_2ebefore\\(/,/^}/' " $ll
+    try r.expect(sh(dir, $msort " | grep -c 'call void @clones_2emsort_clone4_clones_2ebefore(' | grep -qx 2") == 0, "msort's clone does not recurse into itself", dir)
+    try r.expect(sh(dir, $msort " | grep -q 'call i1 @clones_2ebefore'") == 0, "msort's clone calls before through its value", dir)
+    try r.expect(sh(dir, "clang -O3 -S -emit-llvm -Wno-override-module -o opt.ll " $ll " > out.txt 2>&1") == 0, "clang -O3", dir)
+    merge String& = "awk '/^define .*sortMergeForward_3cI64_2c_20_3f_3e_clone5_/,/^}/' opt.ll"
+    try r.expect(sh(dir, $merge " | grep -q '^define'") == 0, "no clone of sortMergeForward", dir)
+    try r.expect(sh(dir, $merge " | grep -qE 'call [^@(]*%[A-Za-z0-9._]+\\('") != 0, "an indirect call in the clone's merge loop", dir)
+    try r.expect(sh(dir, "awk '/^define .*sortMergeForward_3cI64_2c_20_3f_3e\\(/,/^}/' opt.ll | grep -qE 'call [^@(]*%[A-Za-z0-9._]+\\('") == 0
+                 "the original merge loop calls through the value (the check sees an indirect call)", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug clones.olang > out.txt 2>&1 && ! grep -q '^define .*_clone[0-9]' build/*.debug*.ll") == 0
+                 "a -debug build has clones", dir)
 }
 
 # T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is
