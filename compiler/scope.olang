@@ -11660,12 +11660,8 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     }
     if k == Holds { return }
     if s.Trace and s.report and k != Obliged { s.TraceLog.Push($"fit fails " $t " into " $slot " exact " $exact " kind " $kind " | " $s.traceAt(x.Span().Start)) }
-    # a global holds only what lives as long as the program: what lives where a scope variable says is no obligation
-    # on the callers - stored into a global, it is O1b's error at the value, as stage 0 has it
-    if k == Obliged and kind == FitGlobal {
-        s.fitError(x, kind, exact)
-        return
-    }
+    # (a global holds what lives as long as the program: what lives where a scope variable says is the callers'
+    # obligation that it live in the program's scope - built there where they build it, refusals question 1)
     if k == Obliged {
         # what the slot keeps is a view of storage, never lifted at a call (O27)
         s.obligeView = s.viewRoot(x) >= 0
