@@ -728,6 +728,7 @@ fn (g mut GenInfo&) HoldsGen(t types.Table&, ty types.TypeId) Bool {
 }
 
 fn (g mut GenInfo&) holdsGen(t types.Table&, r types.TypeId) Bool {
+    g.note(t, r)   # (a struct of no fields asked too: whether it is generational decides its header)
     k := t.KindOf(r)
     if k == types.Kind.Ref: return g.IsGen(t, t.Referent(r))
     if k == types.Kind.Array: return g.HoldsGen(t, t.Elem(r))
@@ -740,7 +741,6 @@ fn (g mut GenInfo&) holdsGen(t types.Table&, r types.TypeId) Bool {
         return out
     }
     if not HasCases(t, r): return false
-    g.note(t, r)
     for c in t.Items(CasesOf(t, r)) {
         if c == types.TypeId(0): continue
         for f in t.Items(t.Parts(c)) {
