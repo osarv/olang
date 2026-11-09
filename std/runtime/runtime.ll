@@ -110,6 +110,7 @@ declare void @longjmp(ptr, i32) noreturn
 ; two that are not assertions. NUL-terminated, which the old one was not: it was exactly 17 bytes
 ; for 16 characters plus a newline, so fputs/printf read past the end of the array looking for one.
 @__olang_msg_oom = unnamed_addr constant [15 x i8] c"out of memory\0A\00"
+@__olang_msg_high = unnamed_addr constant [57 x i8] c"memory mapped above 2^48, which a weak word cannot name\0A\00"
 @__olang_msg_spawn = unnamed_addr constant [22 x i8] c"could not start task\0A\00"
 @__olang_msg_stack = unnamed_addr constant [42 x i8] c"could not start a thread with that stack\0A\00"
 
@@ -358,15 +359,104 @@ soft:
 ; the call inline instead would look like graceful degradation and is not: two tasks that talk to
 ; each other through a channel deadlock the moment one of them runs to completion before the other
 ; starts. The cost is one compare per spawn, against ~51us to create the thread.
+; T13d (genrefs 4.2): a weak word holds the generation it saw in a reference's top 16 bits, so every chunk lies
+; below 2^48 - user space on x86-64 and AArch64 without a high hint, which the runtime never gives: checked here, once
+; per chunk on its slow path, a machine where it fails not being one olang targets
 define void @__olang_alloc_check(ptr %p) {
 entry:
   %ok = icmp ne ptr %p, null
-  br i1 %ok, label %done, label %bad
+  br i1 %ok, label %low, label %bad
 bad:
   call void @__olang_check_failed(ptr @__olang_msg_oom)
   br label %done
+low:
+  %pi = ptrtoint ptr %p to i64
+  %top = lshr i64 %pi, 48
+  %fits = icmp eq i64 %top, 0
+  br i1 %fits, label %done, label %high
+high:
+  call void @__olang_check_failed(ptr @__olang_msg_high)
+  br label %done
 done:
   ret void
+}
+
+; ---- generational instances (T13d, T2d; docs/genrefs.md 4.1, 4.2) ----
+;
+; An instance of a generational type has one word before it: its generation in bits 0-15 (1 when made, 0 for
+; constant data), and in bits 16-17 the count of the owning places holding it, saturating at 3 - pinned, which nothing
+; changes after. A weak place holds a weak word: the reference, the generation it saw in bits 48-63. The count is
+; updated with relaxed atomics, so that ThreadSanitizer sees no race on a word no program reads (4.6): on x86-64 and
+; AArch64 they are plain loads and stores
+
+; the count of the instance p (null: none) changed by by - more owning places (by >= 1) or one fewer (-1), kept within
+; 0 to 3, a pinned one left as it is
+define void @__olang_gen_count(ptr %p, i64 %by) alwaysinline {
+entry:
+  %none = icmp eq ptr %p, null
+  br i1 %none, label %done, label %go
+go:
+  %h = getelementptr i8, ptr %p, i64 -8
+  %w = load atomic i64, ptr %h monotonic, align 8
+  %c0 = lshr i64 %w, 16
+  %c = and i64 %c0, 3
+  %pinned = icmp eq i64 %c, 3
+  br i1 %pinned, label %done, label %update
+update:
+  %n0 = add i64 %c, %by
+  %neg = icmp slt i64 %n0, 0
+  %n1 = select i1 %neg, i64 0, i64 %n0
+  %big = icmp ugt i64 %n1, 3
+  %n2 = select i1 %big, i64 3, i64 %n1
+  %clear = and i64 %w, -196609
+  %n3 = shl i64 %n2, 16
+  %w2 = or i64 %clear, %n3
+  store atomic i64 %w2, ptr %h monotonic, align 8
+  br label %done
+done:
+  ret void
+}
+
+; what a weak place's word w names: the instance where its generation is the one w saw and some owning place holds it,
+; else null (genrefs 4.2: one load, two compares and a select)
+define ptr @__olang_weak_read(ptr %w) alwaysinline {
+entry:
+  %wi = ptrtoint ptr %w to i64
+  %pi = and i64 %wi, 281474976710655
+  %none = icmp eq i64 %pi, 0
+  br i1 %none, label %null, label %go
+go:
+  %p = inttoptr i64 %pi to ptr
+  %h = getelementptr i8, ptr %p, i64 -8
+  %hw = load atomic i64, ptr %h monotonic, align 8
+  %g = and i64 %hw, 65535
+  %wg = lshr i64 %wi, 48
+  %same = icmp eq i64 %g, %wg
+  %held = and i64 %hw, 196608
+  %some = icmp ne i64 %held, 0
+  %ok = and i1 %same, %some
+  %r = select i1 %ok, ptr %p, ptr null
+  ret ptr %r
+null:
+  ret ptr null
+}
+
+; the word a weak place is given for the instance p: p with its generation in the top 16 bits, null as null
+define ptr @__olang_weak_word(ptr %p) alwaysinline {
+entry:
+  %none = icmp eq ptr %p, null
+  br i1 %none, label %null, label %go
+go:
+  %h = getelementptr i8, ptr %p, i64 -8
+  %hw = load atomic i64, ptr %h monotonic, align 8
+  %g = and i64 %hw, 65535
+  %gs = shl i64 %g, 48
+  %pi = ptrtoint ptr %p to i64
+  %wi = or i64 %pi, %gs
+  %r = inttoptr i64 %wi to ptr
+  ret ptr %r
+null:
+  ret ptr null
 }
 
 define void @__olang_task_started(i32 %rc) {

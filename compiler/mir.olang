@@ -271,6 +271,12 @@ type Rvalue enum {
     ErrPush
     # T19b: the payload of the error in flight, the top record's - a reference of type ty to it
     ErrTop(ty types.TypeId)
+    # T2d, genrefs 4.2: what the weak place p holds, as a reference of type ty - its referent where some owning place
+    # holds it (the count in the word before it is not 0) and its generation is the one the weak word saw, else null
+    Weak(p Lvalue, ty types.TypeId)
+    # ...and what a weak place is given of the reference x (genrefs 4.2): its word - the reference with its referent's
+    # generation beside it, null as null
+    WeakWord(x Operand)
 }
 
 # what a Write appends to a builder: an array of U8 or Char as bytes, a Char as itself, a number as E11a writes it
@@ -311,6 +317,11 @@ type Stmt enum {
     Raised(sp source.Span)    # S18d: an error raised at sp that a "!" takes in this body - its trace's first place
     ErrSet(sp source.Span, x Operand)   # T19b: the top payload record's payload: what reference x names, in its region
     ErrPop(sp source.Span)              # T19b: the top payload record popped, its region reclaimed
+    # T13d, genrefs 2.4 (b): the generational instances x's owning references name - x itself where it is one, else
+    # those x holds in place (fields, payloads, a fixed array's elements; not a weak field, nor a run-time-length
+    # array's storage, which is counted where its elements are stored) - each held by `by` more owning places (an I64,
+    # at least 1), or by one fewer for -1; a count saturates at 3, pinned, which nothing changes after
+    Holders(sp source.Span, x Operand, by Operand)
     # B3e: deferred code registered at s, its cleanup at entry - blocks reached by nothing but this, a copy of the
     # deferred code ending in Resume, which interpret runs for each block a stop leaves (S19's "on every way out", as
     # the built program, going on, would run it); with entry NoBlock, the newest registered at s about to run on this
@@ -644,6 +655,71 @@ fn CasesOf(t types.Table&, ty types.TypeId) types.ListId {
     if not HasCases(t, ty) { return types.ListId(0) }
     r := t.Repr(ty)
     return t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
+}
+
+# ---- generational types (T13d) and weak places (T2d) ----
+
+# what lowering, emit and the evaluator read of the whole program's weak references (genrefs 0.1 item 4, a fact of the
+# front end's): the declarations of the generational types - every heap instance of one has a header word before it
+# (genrefs 4.1) - and the weak fields of struct declarations ("D K", the declaration and the field's index)
+type GenInfo struct() {
+    Decls Map<I64, Bool>
+    Weak Map<String, Bool>
+    holds Map<types.TypeId, Bool>   # HoldsGen, settled
+}
+
+# whether ty is a generational type
+fn (g GenInfo&) IsGen(t types.Table&, ty types.TypeId) Bool {
+    if g.Decls.Len() == 0: return false
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Named and g.Decls.Has(I64(t.DeclOf(r)))
+}
+
+# whether field k of ty (a struct) is a weak place
+fn (g GenInfo&) WeakField(t types.Table&, ty types.TypeId, k I64) Bool {
+    if g.Weak.Len() == 0: return false
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Named and g.Weak.Has($I64(t.DeclOf(r)) " " $k)
+}
+
+# whether ty is a reference to a generational type
+fn (g GenInfo&) GenRef(t types.Table&, ty types.TypeId) Bool {
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Ref and g.IsGen(t, t.Referent(r))
+}
+
+# whether a value of ty holds an owning reference to a generational instance (genrefs 2.4): it is one, or holds one in
+# place - in a field that is not weak, a payload, an element of an array (a run-time-length one's storage is counted
+# where its elements are stored, Stmt.Holders)
+fn (g mut GenInfo&) HoldsGen(t types.Table&, ty types.TypeId) Bool {
+    if g.Decls.Len() == 0: return false
+    r := t.Repr(ty)
+    if g.holds.Has(r): return try g.holds.Get(r) catch default false
+    g.holds.Put(r, false)   # (a type reaching itself in place is no type, T16: what is in progress holds nothing)
+    v := g.holdsGen(t, r)
+    g.holds.Put(r, v)
+    return v
+}
+
+fn (g mut GenInfo&) holdsGen(t types.Table&, r types.TypeId) Bool {
+    k := t.KindOf(r)
+    if k == types.Kind.Ref: return g.IsGen(t, t.Referent(r))
+    if k == types.Kind.Array: return g.HoldsGen(t, t.Elem(r))
+    if HasFields(t, r) {
+        fs := t.Items(FieldsOf(t, r))
+        for i in range fs.Len() {
+            if not g.WeakField(t, r, i) and g.HoldsGen(t, fs[i]): return true
+        }
+        return false
+    }
+    if not HasCases(t, r): return false
+    for c in t.Items(CasesOf(t, r)) {
+        if c == types.TypeId(0): continue
+        for f in t.Items(t.Parts(c)) {
+            if g.HoldsGen(t, f): return true
+        }
+    }
+    return false
 }
 
 # a place: a local, or a base and its projections
@@ -1076,6 +1152,10 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
         }
         case Stmt.Raised(_), Stmt.ErrPop(_) { }
         case Stmt.ErrSet(_, x) { v.operand(x) }
+        case Stmt.Holders(_, x, by) {
+            v.operand(x)
+            v.operand(by)
+        }
         case Stmt.Deferred(_, s, e) {
             v.scope(s)
             if e != NoBlock { v.block(e) }
@@ -1086,7 +1166,7 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
 fn (v mut verifier&) rvalueShape(rv Rvalue) {
     match rv {
         case Rvalue.Use(x) { v.operand(x) }
-        case Rvalue.Ref(p, _), Rvalue.Take(p), Rvalue.Tag(p) { v.place(p) }
+        case Rvalue.Ref(p, _), Rvalue.Take(p), Rvalue.Tag(p), Rvalue.Weak(p, _) { v.place(p) }
         case Rvalue.Prim(_, _, r), Rvalue.Overflows(_, _, r), Rvalue.Aggregate(_, _, r) { v.ops(r) }
         case Rvalue.New(s, x, _) {
             v.ref(s)
@@ -1107,7 +1187,7 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
             v.ops(r)
             v.refs(cs)
         }
-        case Rvalue.Recode(x, _, _) { v.operand(x) }
+        case Rvalue.Recode(x, _, _), Rvalue.WeakWord(x) { v.operand(x) }
         case Rvalue.Text(b, into, _) {
             v.ref(b)
             v.ref(into)
@@ -1492,7 +1572,7 @@ fn (v mut verifier&) builder(b ScopeRef) {
 
 fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
     return match rv {
-        case Rvalue.Use(x): v.operandType(x)
+        case Rvalue.Use(x), Rvalue.WeakWord(x): v.operandType(x)
         case Rvalue.Ref(p, ty): v.refType(v.placeType(p), ty)
         case Rvalue.Take(p): v.takeType(v.placeType(p))
         case Rvalue.Prim(op, ty, r): v.primType(op, ty, r)
@@ -1510,7 +1590,7 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.ScopeOf(x): v.regionOrType(v.operandType(x))
         case Rvalue.ScopeOr(_, x): I64T if x == Operand.None else v.regionOrType(v.operandType(x))
         case Rvalue.ErrPush: I64T
-        case Rvalue.ErrTop(ty): ty
+        case Rvalue.ErrTop(ty), Rvalue.Weak(_, ty): ty
         case Rvalue.Sole(_): types.BoolT
         case Rvalue.Handle(_): I64T
     }
@@ -2175,6 +2255,10 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
         }
         case Stmt.Raised(_), Stmt.ErrPop(_) { }
         case Stmt.ErrSet(_, x) { v.reads(x) }
+        case Stmt.Holders(_, x, by) {
+            v.reads(x)
+            v.reads(by)
+        }
         # a cleanup entered with the state where its deferred code is registered, inside the scope registering it
         case Stmt.Deferred(_, x, e) {
             if not v.open(x) { v.bad("deferred code registered at S" $x ", which is not open") }
@@ -2206,8 +2290,8 @@ fn (v mut verifier&) calleeReads(c Callee) {
 
 fn (v mut verifier&) rvalueFlow(rv Rvalue) {
     match rv {
-        case Rvalue.Use(x), Rvalue.Recode(x, _, _) { v.reads(x) }
-        case Rvalue.Ref(p, _), Rvalue.Take(p), Rvalue.Tag(p) { v.readPlace(p) }
+        case Rvalue.Use(x), Rvalue.Recode(x, _, _), Rvalue.WeakWord(x) { v.reads(x) }
+        case Rvalue.Ref(p, _), Rvalue.Take(p), Rvalue.Tag(p), Rvalue.Weak(p, _) { v.readPlace(p) }
         case Rvalue.Prim(_, _, r), Rvalue.Overflows(_, _, r), Rvalue.Aggregate(_, _, r) { v.readArgs(r) }
         case Rvalue.New(s, x, _) {
             v.reads(x)
@@ -2482,6 +2566,8 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
         case Rvalue.Sole(k): "sole place " $k
         case Rvalue.Handle(s): "handle of " $w.ref(s)
         case Rvalue.ErrTop(ty): "payload top: " $t.Canon(ty)
+        case Rvalue.Weak(p, ty): "weak " $w.place(p) ": " $t.Canon(ty)
+        case Rvalue.WeakWord(x): "weak word " $w.operand(x)
     }
 }
 
@@ -2501,6 +2587,7 @@ fn (w mut dumper&) stmt(s Stmt&) String {
         case Stmt.Raised(_): "raised"
         case Stmt.ErrSet(_, x): "payload set " $w.operand(x)
         case Stmt.ErrPop(_): "payload pop"
+        case Stmt.Holders(_, x, by): "holders " $w.operand(x) " by " $w.operand(by)
         case Stmt.Deferred(_, x, e): "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
     }
 }

@@ -882,6 +882,7 @@ type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&, When eval
 fn (x mut Exec&) start() {
     if x.started { return }
     x.started = true
+    x.M.Gen = x.Lw.Gen()   # T13d, T2d: the whole program's, read once checking has scanned every module
     # M19g: the library's files - where the program grew a collection is the innermost frame outside them
     for mo in x.P.L.Mods {
         if mo.Identity.StartsWith("std/") { x.M.Library.Put(mo.File, true) }

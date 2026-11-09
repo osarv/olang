@@ -110,6 +110,8 @@ WhyFfiPass String& = "it calls an external function with a parameter or result i
 WhyForeign String& = "it reads through a pointer C gave, which only C may read"
 WhyNoClause String& = "a task's error has no clause to take it"
 WhyWaits String& = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other"
+WhyWeakUnheld String& = "it reads a weak place whose referent no owning place holds, which the running program may read as null"
+WhyHolderMissed String& = "an owning place holds an instance its count of holders says none holds (genrefs 2.4) - a store that recorded no holder: a compiler bug"
 
 # ---- pointers ----
 
@@ -145,6 +147,12 @@ type alloc struct() {
     Next I64 = 0
     Owner I64 = -1       # K1: the global whose storage it is, -1 for none
     Retired I64 = -1     # M19g: its collection no longer uses it - where the program grew it, in retiredAt; -1 for none
+    # T13d: a generational instance's header word's size before it (genrefs 4.1), 0 for none; and for an instance or an
+    # array's storage made by New or NewArray, its type (an array's: its element's) and how many (-1: one value) -
+    # what dead-region mode's holder check walks for owning places (genrefs 7)
+    Hdr I64 = 0
+    Ty types.TypeId = types.TypeId(0)
+    Count I64 = -1
     ReadOnly Bool = false
     Code I64 = -1        # a code allocation's function: its index in codeKeys, or an extern's in its own numbering
     Extern Bool = false
@@ -353,6 +361,8 @@ type Machine struct(T mut types.Table&, When Mode) {
     When
     StepBudget I64 = 20000000
     Soles Vec<Bool>             # O8d: by candidate place, whether it is decided sole (mir.Rvalue.Sole) - none while compiling
+    Gen mir.GenInfo = mir.GenInfo()    # T13d, T2d: the program's generational types and weak fields
+    holderHit Bool = false             # holderCheck's walk met the instance
     MemBudget I64 = 1 << 28
     DepthBudget I64 = 2000
     eqDepth I64 = 0             # how many Equal helpers' frames are live (E10)
@@ -1088,6 +1098,7 @@ fn (m mut Machine&) allocate(n I64, kind I64, s I64) Ptr {
     a.Base, a.Size, a.Class, a.Kind, a.Scope = base, n, c, kind, s
     a.Owner, a.ReadOnly, a.Code, a.Extern = -1, false, -1, false
     a.Retired = -1
+    a.Hdr, a.Ty, a.Count = 0, types.TypeId(0), -1
     a.Prev, a.Next = 0, 0
     if s != 0 {
         sc := s & slotMask
@@ -2206,7 +2217,104 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             }
             m.wrPtr(dst, m.payPtrs[m.payPtrs.Len() - 1])
         }
+        case mir.Rvalue.Weak(q, _) { m.weakRead(fi, dst, q) }
+        case mir.Rvalue.WeakWord(x) { m.put(fi, dst, dt, x) }
     }
+}
+
+# ---- generational instances (T13d, T2d; genrefs 2.4 (b), 4.2, section 7) ----
+
+# T2d: what the weak place q holds, stored at dst: its referent while an owning place holds it, else null - which while
+# compiling is refused, left to the run time (K1: the evaluator never guesses which of the two the run time gives)
+fn (m mut Machine&) weakRead(fi I64, dst Ptr, q mir.Lvalue) {
+    src, _ := m.place(fi, q)
+    if m.halted { return }
+    p := m.rdPtr(src)
+    if p.Id != 0 and m.genHeld(p) == 0 {
+        if m.When == Mode.Compile {
+            m.refuse(WhyWeakUnheld)
+            return
+        }
+        p = NullPtr
+    }
+    m.wrPtr(dst, p)
+}
+
+# how many owning places hold the generational instance at p (3: pinned)
+fn (m mut Machine&) genHeld(p Ptr) I64 { return (m.rd(Ptr(p.Id, p.Off - 8), 8) >> 16) & 3 }
+
+# mir.Stmt.Holders: the count of each generational instance the value at p (of type ty) names through an owning
+# reference changed by by - more holders, or one fewer for -1, within 0 to 3, a pinned one left as it is
+fn (m mut Machine&) holders(p Ptr, ty types.TypeId, by I64) {
+    m.genWalk(p, ty, true, fn(q Ptr) {
+        if q.Id == 0: return
+        h := Ptr(q.Id, q.Off - 8)
+        w := m.rd(h, 8)
+        c := (w >> 16) & 3
+        if c == 3 or m.halted: return
+        n := c + by
+        n = 0 if n < 0 else 3 if n > 3 else n
+        m.wr(h, 8, (w & -196609) | (n << 16))
+        if n == 0 and c > 0 and m.deadMode: m.holderCheck(q)
+    })
+}
+
+# each owning reference to a generational instance the value at p of type ty holds (as emit's holdersAt walks it): the
+# value itself where it is one, what it holds in place - a field not weak, a payload, a fixed array's elements - and at
+# the top an array of a run-time length's elements
+fn (m mut Machine&) genWalk(p Ptr, ty types.TypeId, top Bool, each fn&(q Ptr)) {
+    t := m.T
+    r := t.Repr(ty)
+    if m.halted or not m.Gen.HoldsGen(t, r): return
+    k := t.KindOf(r)
+    if k == types.Kind.Ref {
+        each(m.rdPtr(p))
+        return
+    }
+    if k == types.Kind.Array {
+        if t.Length(r) == types.TypeId(0) and not top: return
+        data, n := m.arrayView(p, r)
+        es := m.size(t.Elem(r))
+        for i in range n { m.genWalk(Ptr(data.Id, data.Off + i * es), t.Elem(r), false, each) }
+        return
+    }
+    if mir.HasFields(t, r) {
+        fs := t.Items(m.partList(r))
+        for i in range fs.Len() {
+            if not m.Gen.WeakField(t, r, i): m.genWalk(Ptr(p.Id, p.Off + m.partOffset(r, i)), fs[i], false, each)
+        }
+        return
+    }
+    if not mir.HasCases(t, r): return
+    rec := m.payloadType(r, m.rd(p, 8))
+    if rec != types.TypeId(0): m.genWalk(Ptr(p.Id, p.Off + 8), rec, false, each)
+}
+
+# dead-region mode (genrefs 7): the instance at q is let go of by its last owning place as its count says - what
+# reclaiming it there would assume, checked against the evaluator's own heap: an owning place of an instance or array a
+# New or NewArray made, or of a global, still naming it is a store that recorded no holder (2.4's under-statement)
+fn (m mut Machine&) holderCheck(q Ptr) {
+    m.holderHit = false
+    look := fn(x Ptr) {
+        if x.Id == q.Id and x.Off == q.Off: m.holderHit = true
+    }
+    for slot in range 1, m.nAl {
+        a := m.al[slot]
+        if a.Kind != aValue or a.Ty == types.TypeId(0) or a.Retired >= 0: continue
+        at := Ptr(a.Gen << slotBits | slot, a.Hdr)
+        if a.Count < 0 {
+            m.genWalk(at, a.Ty, false, look)
+            continue
+        }
+        es := m.size(a.Ty)
+        for i in range a.Count { m.genWalk(Ptr(at.Id, i * es), a.Ty, false, look) }
+    }
+    for g in m.globals {
+        if g.State == 2 and g.Store != 0: m.genWalk(Ptr(g.Store, 0), types.TypeId(I32(g.Ty)), false, look)
+    }
+    if not m.holderHit: return
+    try io.PrintErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyHolderMissed "\n") catch io.Error { }
+    os.Exit(70)
 }
 
 # the object a reference operand names: what it points at, the pointer half of a run-time-length array's pair
@@ -2450,9 +2558,28 @@ fn (m mut Machine&) newRef(fi I64, dst Ptr, s mir.ScopeRef, x mir.Operand, ty ty
     }
     sc := m.buildScope(fi, s)
     if m.halted { return }
+    if m.Gen.IsGen(m.T, r) {
+        m.wrPtr(dst, m.genNew(fi, sc, r, x))
+        return
+    }
     p := m.allocate(m.size(r), aValue, sc)
+    if m.Gen.Decls.Len() > 0 { m.al[p.Id & slotMask].Ty = r }
     m.put(fi, p, r, x)
     m.wrPtr(dst, p)
+}
+
+# T13d: an instance of the generational type r made in scope sc, x its value, with its header word before it (genrefs
+# 4.1, laid out as emit lays it out): generation 1, held by no owning place yet - pinned on the stack (a frame's storage)
+fn (m mut Machine&) genNew(fi I64, sc I64, r types.TypeId, x mir.Operand) Ptr {
+    al := m.T.Align(r)
+    h := 8 if al <= 8 else al
+    raw := m.allocate(m.size(r) + h, aValue, sc)
+    if m.halted { return NullPtr }
+    m.al[raw.Id & slotMask].Hdr, m.al[raw.Id & slotMask].Ty = h, r
+    m.wr(Ptr(raw.Id, h - 8), 8, 1 | (3 << 16) if m.scopes[sc & slotMask].Kind == sStore else 1)
+    p := Ptr(raw.Id, h)
+    m.put(fi, p, r, x)
+    return p
 }
 
 fn (m mut Machine&) newArray(fi I64, dst Ptr, s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill mir.Operand) {
@@ -2467,6 +2594,7 @@ fn (m mut Machine&) newArray(fi I64, dst Ptr, s mir.ScopeRef, ty types.TypeId, n
     if m.halted { return }
     p := m.allocate(count * es, aValue, sc)
     if m.halted { return }
+    if m.Gen.Decls.Len() > 0 { m.al[p.Id & slotMask].Ty, m.al[p.Id & slotMask].Count = e, count }
     if fill != mir.Operand.None and count > 0 {
         m.put(fi, p, e, fill)
         for i in range 1, count { m.copy(Ptr(p.Id, i * es), p, es) }
@@ -3794,6 +3922,12 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
                 return
             }
             m.payPtrs[m.payPtrs.Len() - 1] = m.rdPtr(m.addr(fi, x, 1))
+        }
+        case mir.Stmt.Holders(sp, x, by) {
+            m.atK(fk, sp)
+            n := m.intValue(m.scalar(fi, by), mir.I64T)
+            p := m.addr(fi, x, 1)
+            if not m.halted: m.holders(p, m.opType(fi, x), n)
         }
         case mir.Stmt.ErrPop(sp) {
             m.atK(fk, sp)
@@ -5689,6 +5823,13 @@ fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) 
             if al > b.Align { b.Align = al }
         }
         for i in range a.Size { b.Bytes.Push(U8(m.rdRaw(a.Base + i, 1))) }
+        if a.Hdr > 0 {
+            # T13d: a generational instance's header in constant data - generation 0, pinned (genrefs 4.1), so nothing
+            # writes its count and a weak word naming it (written with no generation) matches it forever
+            for i in range a.Hdr - 8, a.Hdr { b.Bytes[i] = U8(0) }
+            b.Bytes[a.Hdr - 6] = U8(3)
+            if a.Hdr > b.Align { b.Align = a.Hdr }
+        }
         for w in range a.Size / 8 {
             id := m.prov[a.Base / 8 + w]
             if id == 0 { continue }

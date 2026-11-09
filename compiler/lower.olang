@@ -98,6 +98,18 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     CopyLog Vec<String&>         # each of those two, by place, for -memory
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
     ViewLog Vec<String&>
+    gen mir.GenInfo = mir.GenInfo()   # the program's generational types and weak fields (Gen), once read
+    genRead Bool = false
+}
+
+# the program's generational types and weak fields (T13d, T2d), read from the checker's whole-program scan once it has
+# been made
+fn (lw mut Lowerer&) Gen() mut mir.GenInfo& {
+    if lw.genRead or lw.P.Gens.Len() == 0: return lw.gen
+    lw.genRead = true
+    for k in lw.P.Gens.Keys() { lw.gen.Decls.Put(k, true) }
+    for k in lw.P.WeakSlots.Keys() { lw.gen.Weak.Put(k, true) }
+    return lw.gen
 }
 
 # what a check failing as written fails with (E15a, R20): a word of a prelude error type
@@ -366,6 +378,10 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     B
     T
     F mir.Fn = made        # its own copy (D9c: a by-value parameter holds at most 128 bytes)
+    # T13d, genrefs 2.4 (b): a call's result stored into a value local counted as an owning place, held once the call's
+    # block after it starts (the local, and that block)
+    holdAt mir.BlockId = mir.NoBlock
+    holdDest mir.LocalId = mir.NoLocal
     file I64 = 0
     rdepth mir.Operand = mir.Operand.None   # in a Render helper, how many references were followed to reach it (E11a)
     cur mir.BlockId = mir.BlockId(0)
@@ -503,6 +519,7 @@ fn (ln mut lowering&) run() {
     frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, root!.Id, b.Sp)
     ln.emit(mir.Stmt.Open(b.Sp, frame))
     ln.levels.Push(level(frame, root!.Id, mir.ScopeKind.Frame))
+    ln.holdParams()
     ln.settleViews()
     for s in root!.Stmts { ln.stmt(s) }
     if ln.dead { return }
@@ -574,6 +591,7 @@ fn (ln mut lowering&) instance() mir.ScopeRef {
 
 fn (ln mut lowering&) emit(s mir.Stmt&) {
     if ln.dead: return
+    if ln.L.Gen().Decls.Len() > 0 and ln.counted(s): return
     ln.F.Add(ln.cur, s)
     # (O23a, B3i: a value registered with a scope is ended by its destructor's thunk, which passes its derived scopes
     # null - their count read as a fact)
@@ -588,6 +606,10 @@ fn (ln mut lowering&) readDtor(ty types.TypeId) {
 
 fn (ln mut lowering&) end(t mir.Term) {
     if ln.dead { return }
+    match t {
+        case mir.Term.Call(_, c) { ln.holdResult(ln.F.Calls[I64(c)]) }
+        case _ { }
+    }
     ln.F.End(ln.cur, t)
     ln.dead = true
 }
@@ -595,6 +617,9 @@ fn (ln mut lowering&) end(t mir.Term) {
 fn (ln mut lowering&) start(b mir.BlockId) {
     ln.cur = b
     ln.dead = false
+    if b != ln.holdAt: return
+    ln.holdAt = mir.NoBlock
+    ln.holders(mir.Lvalue.L(ln.holdDest), 1, ln.B.Sp)
 }
 
 fn (ln mut lowering&) goto(b mir.BlockId) { ln.end(mir.Term.Goto(b)) }
@@ -2054,6 +2079,216 @@ fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
     return q
 }
 
+# ---- owning places of generational instances (T13d, genrefs 2.4 (b), 5.1) ----
+
+# Every heap instance of a generational type carries the count of the owning places holding it (genrefs 4.1), which
+# a weak read tests (mir.Rvalue.Weak). Lowering keeps it: a store into an owning place - a field or an element reached
+# through a reference, a global, a part of a value local - holds what the new value names (mir.Stmt.Holders) and, where
+# the place surely held a value before (no element on the way, which may be room never written: a Vec's past its
+# count), lets go of what the old one named; a vacate lets go of what it moves out; an instance made (New), an array's
+# fill and an array's elements copied hold what they name. A value local is an owning place too - held where it is
+# set, never let go of - so that a store through a reference to it lets go only of what was held; a temporary is not,
+# until a writable reference to it is made. Whatever this cannot follow it over-states, never under-states (2.4): a
+# weak read then gives the node longer, never null while an owning place holds it.
+
+# a place's projections
+fn (ln mut lowering&) projsOf(p mir.Lvalue) Array<mir.Proj> {
+    out := Array<mir.Proj>(I64(p.Path.N))
+    for i in range out.Len() { out[i] = ln.F.Projs[I64(p.Path.At) + i] }
+    return out
+}
+
+# place p with one more step
+fn (ln mut lowering&) extended(p mir.Lvalue, x mir.Proj) mir.Lvalue {
+    ps := ln.projsOf(p)
+    q := Array<mir.Proj>(ps.Len() + 1)
+    for i in range ps.Len() { q[i] = ps[i] }
+    q[ps.Len()] = x
+    return ln.F.Place(p.B, q)
+}
+
+# the type place p has after its first k steps (k = Path.N: its own)
+fn (ln mut lowering&) stepType(p mir.Lvalue, k I64) types.TypeId {
+    t := ln.T
+    ty := match p.B {
+        case mir.Base.Local(l): ln.F.Locals[I64(l)].Ty
+        case mir.Base.Global(_, _, gt): gt
+        case mir.Base.None: types.UnknownT
+    }
+    for i in range k {
+        r := t.Repr(ty)
+        ty = match ln.F.Projs[I64(p.Path.At) + i] {
+            case mir.Proj.Field(j): t.Items(mir.FieldsOf(t, r))[j]
+            case mir.Proj.Index(_), mir.Proj.At(_): t.Elem(ln.arrayOf(r))
+            case mir.Proj.Deref: t.Referent(r)
+            case mir.Proj.Payload(tag): t.Items(mir.CasesOf(t, r))[tag]
+        }
+    }
+    return ty
+}
+
+# whether p is a weak place: a struct's field declared weak (T2d)
+fn (ln mut lowering&) weakPlace(p mir.Lvalue) Bool {
+    n := I64(p.Path.N)
+    if n == 0: return false
+    pr := ln.F.Projs[I64(p.Path.At) + n - 1]
+    if pr != mir.Proj.Field: return false
+    return ln.L.Gen().WeakField(ln.T, ln.stepType(p, n - 1), pr.i)
+}
+
+# whether a value of ty is counted where it is stored: it holds an owning reference to a generational instance in
+# place (an array of a run-time length is its storage, counted where its elements are stored)
+fn (ln mut lowering&) counts(ty types.TypeId) Bool {
+    r := ln.T.Repr(ty)
+    if ln.T.KindOf(r) == types.Kind.Array and ln.T.Length(r) == types.TypeId(0): return false
+    return ln.L.Gen().HoldsGen(ln.T, ty)
+}
+
+# whether p is a temporary's storage or a part of it, reached through no reference - nor through an array of a
+# run-time length, whose elements are storage of their own (a buffer a comprehension fills)
+fn (ln mut lowering&) tempPart(p mir.Lvalue) Bool {
+    l := baseLocal(p)
+    if l < 0 or ln.F.Locals[l].Kind != mir.LocalKind.Temp: return false
+    ps := ln.projsOf(p)
+    for i in range ps.Len() {
+        if ps[i] == mir.Proj.Deref: return false
+        if ps[i] != mir.Proj.Index and ps[i] != mir.Proj.At: continue
+        if ln.fixedLen(ln.arrayOf(ln.stepType(p, i))) < 0: return false
+    }
+    return true
+}
+
+# how a store into p counts: 0 not (a temporary, a reference local - no owning place), 1 the new value held (a value
+# local, an element reached through a reference - where the old one may be no value yet), 2 the new held and the old
+# let go (a field reached through a reference, a global, a part of a value local)
+fn (ln mut lowering&) placeCount(p mir.Lvalue) I64 {
+    if ln.tempPart(p): return 0
+    ps := ln.projsOf(p)
+    l := baseLocal(p)
+    if ps.Len() == 0 and l >= 0: return 0 if ln.T.IsRef(ln.T.Repr(ln.F.Locals[l].Ty)) else 1
+    from I64 = 0
+    for i in range ps.Len() {
+        if ps[i] == mir.Proj.Deref: from = i + 1
+    }
+    for i in range from, ps.Len() {
+        if ps[i] == mir.Proj.Index or ps[i] == mir.Proj.At: return 1
+    }
+    return 2
+}
+
+# what place p holds, held by one more owning place (by 1) or one fewer (by -1)
+fn (ln mut lowering&) holders(p mir.Lvalue, by I64, sp source.Span) {
+    ln.F.Add(ln.cur, mir.Stmt.Holders(sp, mir.Operand.Copy(p), ln.constI64(by)))
+}
+
+# s emitted with the counts its store changes (the section's head): whether it was
+fn (ln mut lowering&) counted(s mir.Stmt&) Bool {
+    match s {
+        case mir.Stmt.Assign(sp, p, rv) { return ln.countedAssign(sp, p, rv) }
+        case mir.Stmt.CopyElems(sp, d, _, n) {
+            if not ln.L.Gen().HoldsGen(ln.T, ln.T.Elem(ln.arrayOf(ln.stepType(d, I64(d.Path.N))))): return false
+            ln.F.Add(ln.cur, s)
+            ln.eachIndex(n, sp, fn(i mir.LocalId) { ln.holders(ln.extended(d, mir.Proj.Index(i)), 1, sp) })
+            return true
+        }
+        case _ { return false }
+    }
+}
+
+fn (ln mut lowering&) countedAssign(sp source.Span, p mir.Lvalue, rv mir.Rvalue) Bool {
+    t := ln.T
+    if rv == mir.Rvalue.Use(mir.Operand.None): return false
+    if rv == mir.Rvalue.Ref and (t.PermOf(t.Repr(rv.ty)) & types.Writable) != 0 and ln.tempPart(rv.p) {
+        # a temporary written through a reference from here on: an owning place, what it holds held
+        if ln.counts(ln.stepType(rv.p, I64(rv.p.Path.N))): ln.holders(rv.p, 1, sp)
+    }
+    pt := ln.stepType(p, I64(p.Path.N))
+    isWeak := ln.weakPlace(p)
+    rv = ln.weakWords(rv, isWeak, sp)
+    k := 0 if isWeak or not ln.counts(pt) else ln.placeCount(p)
+    old := mir.NoLocal
+    if k == 2 {
+        old = ln.temp(pt, sp)
+        ln.F.Add(ln.cur, mir.Stmt.Assign(sp, mir.Lvalue.L(old), mir.Rvalue.Use(mir.Operand.Copy(p))))
+    }
+    ln.F.Add(ln.cur, mir.Stmt.Assign(sp, p, rv))
+    match rv {
+        case mir.Rvalue.New(_, _, rty) {
+            if ln.L.Gen().HoldsGen(t, t.Referent(t.Repr(rty))): ln.holders(ln.extended(p, mir.Proj.Deref), 1, sp)
+        }
+        case mir.Rvalue.NewArray(_, aty, n, fill) {
+            zero := match fill {
+                case mir.Operand.None: true
+                case mir.Operand.Const(_, bits): bits == 0
+                case _: false
+            }
+            if not zero and ln.L.Gen().HoldsGen(t, t.Elem(ln.arrayOf(aty))): ln.F.Add(ln.cur, mir.Stmt.Holders(sp, fill, n))
+        }
+        case mir.Rvalue.Take(_) {
+            if ln.counts(pt): ln.holders(p, -1, sp)    # (vacate: what it moved out let go of)
+        }
+        case _ { }
+    }
+    if k >= 1: ln.holders(p, 1, sp)
+    if k == 2: ln.holders(mir.Lvalue.L(old), -1, sp)
+    return true
+}
+
+# T2d: rv as stored into a weak place (weak) - the reference's word (genrefs 4.2) - or, a struct made with weak fields,
+# with each of those its argument's word
+fn (ln mut lowering&) weakWords(rv mir.Rvalue, isWeak Bool, sp source.Span) mir.Rvalue {
+    if isWeak {
+        if rv != mir.Rvalue.Use: return rv
+        return mir.Rvalue.WeakWord(rv.x)
+    }
+    if rv != mir.Rvalue.Aggregate or not mir.HasFields(ln.T, rv.ty): return rv
+    fs := ln.partsOf(rv.ty)
+    args := Array<mir.Operand>(I64(rv.args.N))
+    some := false
+    for i in range args.Len() {
+        args[i] = ln.F.Ops[I64(rv.args.At) + i]
+        if i >= fs.Len() or not ln.L.Gen().WeakField(ln.T, rv.ty, i): continue
+        some = true
+        args[i] = ln.into(fs[i], mir.Rvalue.WeakWord(args[i]), sp)
+    }
+    return mir.Rvalue.Aggregate(rv.ty, rv.tag, ln.F.Args(args)) if some else rv
+}
+
+# a call's result stored into a value local, held once the call returns (its Ok block starts)
+fn (ln mut lowering&) holdResult(c mir.Call) {
+    l := baseLocal(c.Dest)
+    if not c.HasDest or c.Dest.Path.N != I32(0) or l < 0 or ln.L.Gen().Decls.Len() == 0: return
+    loc := ln.F.Locals[l]
+    if loc.Kind == mir.LocalKind.Temp or ln.T.IsRef(ln.T.Repr(loc.Ty)) or not ln.counts(loc.Ty): return
+    ln.holdAt, ln.holdDest = c.Ok, mir.LocalId(I32(l))
+}
+
+# the local a place starts from, -1 for a global's
+fn baseLocal(p mir.Lvalue) I64 {
+    return match p.B {
+        case mir.Base.Local(l): I64(l)
+        case _: -1
+    }
+}
+
+# a by-value parameter holding owning references, an owning place from the entry (as any value local)
+fn (ln mut lowering&) holdParams() {
+    if ln.L.Gen().Decls.Len() == 0: return
+    for l in ln.F.Params {
+        ty := ln.F.Locals[I64(l)].Ty
+        if not ln.T.IsRef(ln.T.Repr(ty)) and ln.counts(ty): ln.holders(mir.Lvalue.L(l), 1, ln.B.Sp)
+    }
+}
+
+# T2d: field i of a struct place a of type ty as a helper reads it - a weak one's referent read through its word
+# (mir.Rvalue.Weak), held in a temporary
+fn (ln mut lowering&) partAt(a pl, ty types.TypeId, i I64, sp source.Span) pl {
+    q := ln.packedField(a, ty, i)
+    if not ln.L.Gen().WeakField(ln.T, ty, i): return q
+    ft := ln.partsOf(ty)[i]
+    return pl(mir.Base.Local(ln.local(ln.into(ft, mir.Rvalue.Weak(ln.mk(q), ft), sp), ft, sp)))
+}
+
 # ---- packed fields (T13c) ----
 
 # a reference to a place: a packed field's (T13c - a read-only reference the compiler takes, the program never lending
@@ -2825,6 +3060,8 @@ fn (ln mut lowering&) read(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir
     q := ln.place(p)
     if ln.dead { return mir.Operand.None }
     if q.Pk >= 0 { return ln.packedRead(q, ty, sp) }
+    # T2d: a weak place's referent read through its word (genrefs 4.2)
+    if p == typed.Lvalue.Field and ln.L.Gen().WeakField(ln.T, p.base.Type(), p.index) { return ln.into(ty, mir.Rvalue.Weak(ln.mk(q), ty), sp) }
     return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
 }
 
@@ -2836,7 +3073,8 @@ fn (ln mut lowering&) take(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir
     # it releases nothing twice
     # QCE: a value owning storage moved out leaves its place's bytes zero (an empty array where the parts were), so a
     # copy of the whole that holds the place - a Vec's buffer past its count - copies nothing it no longer holds
-    if ln.releases(p).Len() > 0 or ln.ownsStorage(ty) {
+    # T13d: a value naming generational instances moved out, its place left empty (what it held let go of: counted)
+    if ln.releases(p).Len() > 0 or ln.ownsStorage(ty) or ln.counts(ty) {
         q := ln.place(p)
         if ln.dead { return mir.Operand.None }
         return ln.into(ty, mir.Rvalue.Take(ln.mk(q)), sp)
@@ -4759,7 +4997,8 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
         # no fill: every element is yielded before anything reads it, and a loop left early leaves the array unread -
         # but where an element owns storage (QCE) the array is cleared, so that a copy of the whole (a grown buffer's
         # room past a Vec's count, M19d) copies empty parts rather than whatever the bytes held
-        fill0 := mir.Operand.Const(el, 0) if ln.ownsStorage(el) else mir.Operand.None
+        # (a grown buffer's room naming generational instances cleared too: copied, it is counted - T13d)
+        fill0 := mir.Operand.Const(el, 0) if ln.ownsStorage(el) or ln.L.Gen().HoldsGen(t, el) else mir.Operand.None
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(out0), mir.Rvalue.NewArray(s0, ty, cap, fill0)))
         n0 := ln.temp(mir.I64T, sp)
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(n0), mir.Rvalue.Use(ln.constI64(0))))
@@ -4792,7 +5031,16 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     # no fill: every element is copied in at once
     ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(out), mir.Rvalue.NewArray(ln.madeAt(c.Site), ty, mir.Operand.Copy(mir.Lvalue.L(n)), mir.Operand.None)))
     dst := ln.F.Place(mir.Base.Local(out), Array<mir.Proj>[mir.Proj.Deref] if t.IsRef(t.Repr(ty)) else Array<mir.Proj>[])
-    ln.emit(mir.Stmt.CopyElems(sp, dst, ln.F.Place(mir.Base.Local(buf), Array<mir.Proj>[mir.Proj.Deref]), mir.Operand.Copy(mir.Lvalue.L(n))))
+    src := ln.F.Place(mir.Base.Local(buf), Array<mir.Proj>[mir.Proj.Deref])
+    if ln.L.Gen().HoldsGen(t, el) {
+        # T13d: elements naming generational instances moved out one by one, the buffer left empty - held where they
+        # land, let go of where they were (2.4)
+        ln.eachIndex(mir.Operand.Copy(mir.Lvalue.L(n)), sp, fn(i mir.LocalId) {
+            ln.emit(mir.Stmt.Assign(sp, ln.extended(dst, mir.Proj.Index(i)), mir.Rvalue.Take(ln.extended(src, mir.Proj.Index(i)))))
+        })
+        return mir.Operand.Copy(mir.Lvalue.L(out))
+    }
+    ln.emit(mir.Stmt.CopyElems(sp, dst, src, mir.Operand.Copy(mir.Lvalue.L(n))))
     return mir.Operand.Copy(mir.Lvalue.L(out))
 }
 
@@ -5413,6 +5661,7 @@ fn (ln mut lowering&) prologue(vars Array<mir.VarKind>&) {
     frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), ln.B.Sp)
     ln.emit(mir.Stmt.Open(ln.B.Sp, frame))
     ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
+    ln.holdParams()
 }
 
 fn (ln mut lowering&) epilogue(x mir.Operand) {
@@ -5873,7 +6122,7 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
     cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
         for i in range parts.Len() {
-            e := ln.equalAt(ln.packedField(a, ty, i), ln.packedField(b, ty, i), parts[i], sp)
+            e := ln.equalAt(ln.partAt(a, ty, i, sp), ln.partAt(b, ty, i, sp), parts[i], sp)
             next := ln.F.NewBlock()
             ln.end(mir.Term.Branch(e, next, no))
             ln.start(next)
@@ -6031,7 +6280,7 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
     parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
     cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
-        for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.packedField(a, ty, i), parts[i], sp), sp) }
+        for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.partAt(a, ty, i, sp), parts[i], sp), sp) }
     } else if isEnum {
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
         ln.combine(h, ln.mix(tag, sp), sp)
@@ -6396,7 +6645,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, "(", sp)
         for i in range parts.Len() {
             if i > 0 { ln.word(b, ", ", sp) }
-            ln.inner(ln.packedField(a, ty, i), parts[i], b, sp)
+            ln.inner(ln.partAt(a, ty, i, sp), parts[i], b, sp)
         }
         ln.word(b, ")", sp)
     } else if isEnum {
