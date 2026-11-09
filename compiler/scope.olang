@@ -8193,6 +8193,14 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         slot := s.slotOf(p!).T
         s.freshIntoUnknown(sp, p!, slot)
     } else if built and not agree {
+        # (the inference: each target local's claim lengthened to the longest, where the results are built - R2, P1g)
+        if s.liftGather and dest.Runs() {
+            for p in sw.Targets {
+                if p is null or not s.holds(p.Type()) { continue }
+                tl := wholeLocal(p)
+                if tl >= 0 { s.proposeLocal(tl, dest, false) }
+            }
+        }
         if s.report { s.err(s.firstToken(s.B!.File, sp), msgs.SpawnResultsDisagree()) }
     }
     # each target is assigned its result as an assignment's value is (P1g, O25): said at the spawn
@@ -9665,7 +9673,7 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         s.landing = true
         v := s.val(pr.X, Term.None)
         s.landing = false
-        s.build(pr.Site, s.here())
+        s.build(pr.Site, s.copyHere(pr))
         landed[i] = true
         if v.K == ValKind.Fresh { v = Val.existing(v.T) }
         if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) { v = s.keptCopy(c, i, a, pr, v) }
@@ -9707,6 +9715,14 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
     return s.argExisting(c, i, owner, beta, ev, dest)
 }
 
+# where the copy pr makes of a call's value lent by reference is built: this block, or where the inference landed it
+# (R2: kept by the callee past the block - E31b's hidden copy a view of which is kept)
+fn (s mut Scoper&) copyHere(pr typed.Promote&) Term {
+    h := s.here()
+    l := s.siteLift(I64(pr.Site))
+    return s.joinTerm(h, l) if l.Runs() else h
+}
+
 # R1 (refusals 5.1): a copy pr makes, its references living at v's term, lent to a callee keeping something in it - its
 # variable bound where they live, so what the callee builds through them is built there; the copy itself built there
 # too where the callee keeps its own storage. Whether it is lent so
@@ -9722,7 +9738,7 @@ fn (s mut Scoper&) keptCopy(c typed.Call&, i I64, a typed.Expr&, pr typed.Promot
     if s.atCall(x) and not s.calleeStoresArg(c, i) {
         # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the callee's
         # obligations then judge (O10c), as stage 0 binds it
-        return Val.existing(s.here())
+        return Val.existing(s.copyHere(pr))
     }
     if s.splitLent(c, i, pr, v) { return v }
     if s.fieldGather and s.finalQuiet {
@@ -11670,6 +11686,10 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
         }
         case typed.Expr.Promote(_, _, pr) {
             if s.wholeRoot(pr.X) < 0 {
+                # (a call already landed there and still too short: what is kept is the temporary's own storage - a
+                # view of it, E31b's hidden copy - built there too, R2)
+                pc := typed.Call.Of(pr.X)
+                if pc is not null and t.Runs() and s.siteLift(I64(pc.Site)) == s.joinTerm(s.siteLift(I64(pc.Site)), t) { s.proposeSite(I64(pr.Site), t) }
                 s.proposeCall(pr.X, t)
                 return
             }
@@ -11686,6 +11706,10 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
     r := s.claimRoot(x)
     if r < 0 {
         if s.proposeView(u, t) { return }
+        # (a copy of what a view shows - an array's elements copied into an any, T32a: their references are where the
+        # viewed storage's are, which is built where the copy is kept - R2)
+        cv := copiedView(u)
+        if cv is not null and s.proposeView(s.unAway(cv), t) { return }
         # (a part of a call's value result read off it - a field, an element: the call lands where the part is kept,
         # what it builds built there - R2, O18c)
         pc := projectedCall(u)
@@ -11699,6 +11723,22 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
     s.partFlow = partRead(u)
     s.proposeLocal(r, t, s.keepsStorage(x) or s.convertsStorage(x))
     s.partFlow = false
+}
+
+# the view x copies the contents of, where x reads through a slice; null for none
+fn copiedView(x typed.Expr&) typed.Expr?& {
+    return match x {
+        case typed.Expr.Read(_, _, typed.Lvalue.Deref(_, _, r), _): r if r == typed.Expr.Slice else null
+        case _: null
+    }
+}
+
+# whether x makes a closure
+fn isLambda(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Fn(_, _, f): f == typed.FnVal.Lambda
+        case _: false
+    }
 }
 
 # the site of the temporary a held local holds where x reads it whole and it is made of a value, not a call; -1 for none
@@ -12013,6 +12053,16 @@ fn (s mut Scoper&) proposeFrom(l I64, t Term, stor Bool, key I64, first Bool) {
     # (a part read off a call's value result: that call landed where the local is kept - R2, O18c)
     if l >= 0 and l < s.origin.Len() and s.origin[l] == -2 {
         init := try s.inits.Get(l) catch default null
+        # (a closure a function-valued local is declared as: built where it is kept, what it captured with it - R2)
+        if init is not null and isLambda(unPassed(s.unAway(init))) and s.liftable(l) and t.Runs() and not s.genResult(t) {
+            if not s.viewPhase {
+                s.viewWanted = true
+                return
+            }
+            s.liftStorage(l, t)
+            s.proposeIn(init, t)
+            return
+        }
         if init is not null and projectedCall(unPassed(s.unAway(init))) is not null {
             s.proposeIn(init, t)
             # (its own storage with it, where kept whole: 'x := st.get(0).inner; held = x')
