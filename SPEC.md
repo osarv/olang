@@ -2616,9 +2616,11 @@ an argument's referent lives, which only outlives it. Its arguments must outlive
 as long as it is walked. A walk stopped part way and never finished is let go with the scope it lives in: it leaves every
 block it holds open as S20 says, innermost first, their deferred code and destructors running (S19, O15). The value a `yield` gives is built where
 that `Next()`'s result goes, which no local of the generator outlives - but where its elements are kept by its walk
-(D18c) - and no local is moved into the result scope (O26a) - a yielded
-local whose references are the generator's own storage is O26's error, and the value to yield is a copy built where it
-goes (`$x`, `x.Copy()`). A value array yielded is copied there (T7b).
+(D18c) - and no local is moved into the result scope (O26a). A value read out of a variable of the generator's own
+whose value owns storage it may change (an array of a run-time length held by value, in it or its parts - a `Vec`) is
+yielded as a copy built where it goes, as a value read out of a place is (E31d): `yield l` of a list the walk goes on
+pushing to gives the list as it was. Any other yielded local whose references are the generator's own storage is
+O26's error, and the value to yield is a copy (`$x`, `x.Copy()`). A value array yielded is copied there (T7b).
 
 **D18c (what a generator may yield).** Where a generator's elements live is inferred from what its `yield`s give -
 read off its body before it is checked, nothing written (QCB) - and a `yield` is judged as a `return` of that kind (O13,
@@ -4597,14 +4599,16 @@ reach what the old element referred to, not the new element (from a built-in arr
 itself, they reach the new one). That is memory-safe - the old storage lives where the collection's elements live -
 and is what a handle's copy does too (below). Whether a callee qualifies is read off its checked body: the parameter is
 used only through its references (a reference field read out, and anything done through it - an element of `c.Data`
-written, a field of what a reference names assigned), its numeric and `Bool` fields and function values read, and the
+written, a field of what a reference names assigned), its numeric and `Bool` fields, its fields of an enum with no
+payload (matched or compared - its ordinal) and function values read, and the
 parameter, or a struct it holds by value (`c.w`), handed on to a read-only reference parameter, to a by-value one (a
 copy), or to a writable one of a callee that itself qualifies (a fixed point over the program's calls, cycles
 included); a handle it holds by value may be handed to a writable parameter using it only through its reference
 (O17b). Any other use says no: a field of the instance's own storage assigned or incremented at any value depth, a
 reference field repointed, the parameter repointed, a value field lent to a writable parameter of a callee that does
-not qualify, sliced or walked, a value field that is neither a number, a `Bool`, a function value nor a reference read
-at all (an enum matched or compared, an inline array's element, a struct rendered), the parameter read into a local,
+not qualify, sliced or walked, a value field that is neither a number, a `Bool`, an enum with no payload, a function
+value nor a reference read at all (an enum with a payload matched, an inline array's element, a struct rendered), the
+parameter read into a local,
 captured, compared or handed to a function value, an extern or a lambda; a callee whose body is not checked says no
 too. A callee whose body has errors is no view either, and its own error is what is said. What such a callee builds
 into what the copy holds is judged as for any copy (O17, below).
@@ -6511,10 +6515,14 @@ already living somewhere that is stored there must live there too: a global's, o
 value copied into a global value holds what lives there when its references do: a parallel assignment's value, built
 there and held before it is stored (`GV, k = VH(Node(i)), k`, S4c), as `GV = VH(Node(i))` is. Storing
 anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
-or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
+or is a lambda capturing nothing, being made once for the whole program (T21). What lives where a scope variable says
+(a parameter's referent, what a by-value parameter's payload refers to) stored there is the callers' obligation that it
+live in the program's scope (O10b), so what they build for it is built there: a global keeps it, and a global never
+lets go. A global passed as an argument
 determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
-there. Each thread reaches the program's scope through a part of it of its own (§6.8 P2). Destructors registered in it do
-not run at exit.
+there. Each thread reaches the program's scope through a part of it of its own (§6.8 P2). The destructors registered in
+it run as the program ends normally - `main` returning, or an error escaping it once it is printed (B5) - the last
+registered first; not at `os.Exit`, an abort or a signal (B5b). Its storage goes with the process.
 
 **O2.** Every **block** (§6.1 S1) implicitly opens a scope on entry and closes it when the block ends — a
 function or test body included, that being its outermost block. The outermost block's scope is the
@@ -7557,9 +7565,9 @@ variable holding a value with destructors to run, or a value registered after it
 declaration that holds it by value (`gs Vec<Grip> = Vec<Grip>()`), which its block then ends in the order above - one
 holding a value registered before it, in its block or an enclosing one, is ended first and needs nothing. A test ended
 by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
-before its constructor's arguments were built, is not observable. A global holds such a value by
-reference, and a type argument holds it by value only where its instance ends it (C11): the program's scope and an array
-of a run-time length outside a collection have no holder that lets go. A generator's variables and by-value parameters
+before its constructor's arguments were built, is not observable. A global holds such a value by value or by
+reference, ended as the program ends (O1b), and an array of a run-time length ends its elements, the last first, as its
+holder lets go (C11). A generator's variables and by-value parameters
 holding one across a `yield` are ended where its walk is let go part way (S20).
 
 **O16.** A value with a destructor that no place written for its value takes (O15) is registered with the scope its
@@ -7796,23 +7804,23 @@ value holds. The one exception is a **collection of the
 library's** - a generic struct of the prelude or std, not declared unique, declaring a destructor (`Vec`, `Map`, std's
 `Deque`): its destructor ends the elements it holds, and exists only in its instances holding, by value through their
 parts (the elements of an array of a run-time length included), a value with a destructor to run - which are unique by
-T13b, as their elements are; every other instance (`Vec<I64>`) has no destructor, is no unique type and copies. A value
-with a destructor to run (O15) is held by value only in a place written for it whose holder lets go of it - a variable,
+T13b, as their elements are; every other instance (`Vec<I64>`) has no destructor, is no unique type and copies. Such a
+collection's buffer (a field that is an array of a run-time length) is no holder of its elements - they are room past
+its count, its destructor's to end - so a store over the buffer ends nothing. A value
+with a destructor to run (O15) is held by value in a place written for it whose holder lets go of it - a variable,
 a parameter (a constructor's included), a result, a struct field, an enum payload, an element of an array held by
-value, an element of such a collection - and its destructors run there (O15). So a **type argument** may hold one by
-value (`Vec<Res>`, `Map<String, Res>`, `Box<Res>` of `type Box<T> struct(v T)`, a holder of one alike, `Vec<Pool>`)
-where the instance holds every such value in one of those places - but not where an **array of a run-time length**
-holds it outside such a collection, anywhere the instance reaches through its parts or its references: such an array
-has no count of live elements, so nothing could end them - a written `Array<Res>`, a type's own buffer (`type Buf<T>
-struct() { a Array<T> }` as `Buf<Res>`), std/list's `List<Res>`, whose chunks a reference names (its copies are second
-holders of them). That is a compile-time error at the argument, naming the reference form and a `Vec`: `Res has a
-destructor to run, and List<Res> keeps values of it where no holder ends them - write Res&, or keep them in a
-Vec<Res>`. Such an array is not made either: `Array<T>(n)` of a length known only at run time, a comprehension not of a
-count known while compiling (T7c) and a copy of an array (E31d) whose elements have a destructor to run are each a
-compile-time error naming a `Vec` (a length known while compiling makes a fixed array, which ends its elements). And a
-collection holds such values by value only where they are unique: a copy of one copies its whole buffer, the positions
-it vacated too, so one whose elements copy (a holder declaring Copy, E31d) is an error naming the reference form. A **global's** type holds it by reference: a bare `type-ref` naming it there is a compile-time error naming
-the reference form - the program's scope has no holder that lets go. A **generator's parameter** holds it by value as
+value (of a length known while compiling or not: an array of a run-time length ends its elements, the last first, its
+length being in it), an element of such a collection, a global - and its destructors run there (O15). So `Array<Res>(n)`
+(its zero values, each ended where a store replaces it), a comprehension, a copy of an array (each element by its own
+Copy, E31d), a type of the program holding a run-time-length array of a type argument (`type Buf<T> struct() { a
+Array<T> }` as `Buf<Res>`) and a by-value parameter `Array<Res>` each end what they hold. Not where such an array is
+reached only through a **reference**: std/list's `List<Res>`, whose chunks a reference names (its copies are second
+holders of them), has no holder that lets go of them - a compile-time error at the argument, naming the reference form
+and a `Vec`: `Res has a destructor to run, and List<Res> keeps values of it where no holder ends them - write Res&, or
+keep them in a Vec<Res>`. And a collection holds such values by value only where they are unique: a copy of one copies
+its whole buffer, the positions it vacated too, so one whose elements copy (a holder declaring Copy, E31d) is an error
+naming the reference form. A **global** holding one by value has its destructors registered with the program's scope as
+its initializer stores it, run as the program ends (O1b); a store over a mutable one ends the old value (O15). A **generator's parameter** holds it by value as
 its walk's: ended where the walk ends, is let go part way, or, never started, as the generator is let go (S20). The type named where an expression is - a constructor called (`Res(1)`, `Box<Res>(r)`
 naming its own arguments), a case of it - holds no value there; a call's value no place written for it takes is held
 where the call lands (O16, D15).
