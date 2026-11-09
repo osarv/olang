@@ -1273,6 +1273,12 @@
 | ok - pieces: keeps a generator's views of a local it made
 | ok - stash: keeps a closure over a turn's local
 | ok - partAfter: keeps a part of an instance past its turn
+=== test tests/weak.olang
+| status 0
+| ok - a doubly linked list read forward through its owning links and back through its weak ones
+| ok - a tree's weak parent links read back up to its root
+| ok - an LRU cache whose Map owns its entries and whose list links are weak
+| ok - a generational value is held by reference
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -3122,6 +3128,9 @@
 === run t13bmovedvalue.olang
 | status 0
 | 1 41000 5250 5050
+=== run t13dalias.olang
+| status 0
+| 591 3
 === run t17ccaselocallifted.olang
 | status 0
 | 110 0
