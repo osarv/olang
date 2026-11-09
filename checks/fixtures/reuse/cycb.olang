@@ -1,0 +1,6 @@
+# B3i: the other end of cyca's import cycle
+import ca "cyca"
+
+fn Ask(n I64) I64 { return ca.Twice(n) }
+
+test "cyca's Twice reached from cycb" { assert Ask(5) == 10 }

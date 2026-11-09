@@ -1,0 +1,7 @@
+# B3i: one end of an import cycle through the root - cycb, reused from the record cyca's own test build left, calls
+# Twice, which only cycb's lowering asked for
+import cb "cycb"
+
+fn Twice(n I64) I64 { return n * 2 }
+
+test "the reused cycb reaches the root's Twice" { assert cb.Ask(4) == 8 }

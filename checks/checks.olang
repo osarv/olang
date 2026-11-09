@@ -969,6 +969,11 @@ fn reuse(r mut report&) ? Failed {
                     "catch { }\\n}/' anyapp.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build anyapp.olang > out.txt 2>&1 && " $
                     "./build/anyapp > run.txt") == 0, "anyapp's build calling Count through the any", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'count 3' run.txt") == 0, "anyapp's run calling Count", dir)
+    # an import cycle through the root, its two ends tested in turn: the second test of cyca reuses cycb's record, whose
+    # object calls cyca's Twice - written in cyca's object though no lowering here asks for it (it failed to link)
+    for f in Array<String&>["cyca", "cycb", "cyca", "cycb", "cyca"] {
+        try r.expect(sh(dir, $"\"$OLANG\" test " $f ".olang > out.txt 2>&1") == 0, $"the test of " $f " in the cycle's sequence", dir)
+    }
 }
 
 # B3i, G42, E31b: a module's code a fact of the whole program decides (whether C may call the program back) - its record

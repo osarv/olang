@@ -491,6 +491,7 @@ fn (e mut Emitter&) emitAll() {
     e.index()
     p := e.P
     instKeys := e.reusing()
+    rootCalled := e.reusedReachRoot()
     inits := e.initOrder()
     tests Vec<I64>
     mainBody I64 = -1
@@ -527,6 +528,10 @@ fn (e mut Emitter&) emitAll() {
                     # initializer by its symbol)
                     e.declared(k)
                 } else if (h == p.L.Root) == e.Module and h >= 0 {
+                    e.want(k)
+                } else if h == p.L.Root and rootCalled {
+                    # a reused module importing the root may call any of its functions, and no lowering of it here
+                    # asks for them: every one is written (B3i)
                     e.want(k)
                 }
             }
@@ -617,6 +622,25 @@ fn (e mut Emitter&) reusing() Vec<mir.FnKey> {
         for k in keys { out.Push(k) }
     }
     return out
+}
+
+# whether a reused module reaches the root through its imports (an import cycle through the root): its object may call
+# root functions that only its lowering would have asked for
+fn (e Emitter&) reusedReachRoot() Bool {
+    if e.Module or e.ReusedAt.Len() == 0 { return false }
+    seen := Array<Bool>(e.P.L.Mods.Len())
+    work Vec<I64>
+    for m in e.ReusedAt.Keys() { work.Push(m) }
+    for work.Len() > 0 {
+        x := try work.Pop() catch { break }
+        if x == e.P.L.Root { return true }
+        if seen[x] { continue }
+        seen[x] = true
+        for im in e.P.L.Mods[x].Imports {
+            if im.Target >= 0 and not seen[im.Target]: work.Push(im.Target)
+        }
+    }
+    return false
 }
 
 # a function of a reused module named by another object: its declaration alone

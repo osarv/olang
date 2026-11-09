@@ -35436,3 +35436,15 @@ t22apushed is now refused at Vec.Push's store into its buffer (followed into Pus
 scopefuzz (300 programs, the relations scenario now calling higher-order helpers) found nothing. Seen on the way and
 left: a test build of tests/runner.olang in a build/ directory other builds had used failed to link
 (`tests_2frunner_2eDoubleIt` undefined) while it passed in a clean directory - a B3i reuse question, not T22c's.
+
+### B3i: a reused module in an import cycle through the root (bug, 2026-11-09)
+
+The stale-link seen while T22c was built: `olang test tests/worker.olang` then `olang test tests/runner.olang` twice in
+one build directory failed the second runner build's link with `tests_2frunner_2eDoubleIt` undefined. Not a stale
+object - every object is named by its IR's hash - but a function missing from the root's IR. The root's object holds
+only the root functions something lowered in the build asks for, while every other module's object holds all its
+functions; worker imports runner (an import cycle through the root) and calls `DoubleIt`, so `DoubleIt` was written
+only while worker was lowered. Once worker's record from the first runner build was reused, nothing asked for it. Fix
+(emit.olang, `reusedReachRoot`): when a reused module reaches the root through its imports, every root function is
+written, as a non-root module's are. Checked by the `reuse` scenario's new step: an import cycle cyca/cycb, each end
+tested in turn in one directory (checks/fixtures/reuse/cyca.olang, cycb.olang).
