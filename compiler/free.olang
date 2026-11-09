@@ -253,6 +253,13 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     parWhole Vec<mut Vec<I64>&>
     lets Vec<mut Vec<I64>&>
     letsAll Vec<Bool>
+    # docs/fnvalues.md 4.6, item (3): by body, its calls through a function parameter it never assigns, composed at each
+    # call by the argument given - the parameters (bit p) a call through which may let go (letsVia), those of them given
+    # an argument that may write (viaMut: a "pure" value may let go only through those), and (escVia) each argument
+    # parameter j's value is given as, (p << 40) | (q << 20) | j, kept where what p is given keeps its parameter q
+    letsVia Vec<I64>
+    viaMut Vec<I64>
+    escVia Vec<mut Vec<I64>&>
     mustRes Vec<I64>
     resFresh Vec<Bool>
     # by body: whether it may register a destructor in one of its scope variables - its result, its instance, a
@@ -709,6 +716,9 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
         f.parWhole.Push(Vec<I64>())
         f.lets.Push(Vec<I64>())
         f.letsAll.Push(false)
+        f.letsVia.Push(0)
+        f.viaMut.Push(0)
+        f.escVia.Push(Vec<I64>())
         f.mustRes.Push(MustTop)
         f.resFresh.Push(true)
         f.regOut.Push(false)
@@ -796,12 +806,12 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     if f.Debug { try io.PrintErr($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n") catch io.Error { } }
     # destructors, Str, Eq and Hash run where no call is written: one that lets go of a place keeps everything
     for b in range n {
-        if f.lets[b].Len() > 0 or f.letsAll[b] {
+        if f.lets[b].Len() > 0 or f.letsAll[b] or f.letsVia[b] != 0 {
             # what it may let go of keeps: it runs where no call is written, so no view can be judged across it - every
             # place, where it may let go of any
             # (Part C: a destructor running only where a value's holder lets go of it is a call there - dtorCalls)
             if f.implicit(b) and not f.modelled(b) {
-                if f.letsAll[b] { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
+                if f.letsAll[b] or f.letsVia[b] != 0 { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
                 if f.Debug { try io.PrintErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
             }
         }
@@ -994,7 +1004,7 @@ fn (w mut walker&) dtorCallsOf(sp source.Span, ty types.TypeId) {
         b2 := try f.dtorOf.Get(I64(p)) catch default -1
         if b2 < 0: continue
         if not w.Final { addTo(f.callers[b2], w.Id) }
-        if f.letsAll[b2] {
+        if f.letsAll[b2] or f.letsVia[b2] != 0 {
             if not w.Final and not f.letsAll[w.Id] {
                 f.letsAll[w.Id] = true
                 f.changed = true
@@ -2834,6 +2844,8 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         } else {
             for k in f.lets[b2] { w.go(k, LCall, sp, receiverSpan(c), b2) }
         }
+        # (its calls through the function values it is given, judged by what this call gives it)
+        w.viaCall(c, b2, 0, args, sp)
         if w.Final and w.quiet == 0 { w.orCallOf(c, b2) }
         # a view in the result counts as read here
         rv Vec<I64>
@@ -2842,6 +2854,14 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         }
         w.viewRead(rv)
         return out
+    }
+    # a call through a function value: judged by what is followed of it, else by its type (docs/fnvalues.md 4.6)
+    match c.Target {
+        case typed.Callee.Value(v) {
+            w.valueCall(c, v, args, sp, out)
+            return out
+        }
+        case _ { }
     }
     # a callee whose body is not known: it may keep what it is given, and - through a function value - let go of
     # anything; a helper only reads (Equal, Hash, Render) or builds (Zero)
@@ -2860,7 +2880,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         for e in f.exports {
             if not calls: break
             if not w.Final { addTo(f.callers[e], w.Id) }
-            if f.lets[e].Len() > 0 or f.letsAll[e]: lets = true
+            if f.lets[e].Len() > 0 or f.letsAll[e] or f.letsVia[e] != 0: lets = true
         }
         if lets { w.goAll(sp, c, -1) }
     } else if not helper {
@@ -3023,6 +3043,287 @@ fn (f mut Free&) placeMayRegister(p typed.Lvalue&) Bool {
         case typed.Lvalue.Payload(_, _, pl): f.placeMayRegister(pl.Base)
         case typed.Lvalue.Temp(_, _, x, _): f.mayRegister(x)
     }
+}
+
+# ---- calls through function values (docs/fnvalues.md 4.6) ----
+
+# a let-go's callee where no body is: a call through a function value not followed, a call given one (the report's)
+CalleeValue I64 = -2
+CalleeGiven I64 = -3
+
+# a call through function value v (args its arguments' origins): (1) judged as direct calls of the bodies the scope
+# pass followed it to; (2) else one through a function parameter its body never assigns composed at each call of the
+# body (letsVia, escVia); (3) else by its type - what its "keeps" promises name, or anything where an argument can be
+# stored into, is kept; where it promises "pure" and no argument may write, nothing is let go of. Its result may be any
+# argument's (out)
+fn (w mut walker&) valueCall(c typed.Call&, v typed.Expr&, args Vec<Vec<I64>>&, sp source.Span, out mut Vec<I64>&) {
+    f := w.F
+    for a in args { addAllTo(out, a) }
+    addTo(out, orig(OUnk, 0))
+    recs := f.Sc.ValueRecsAt(w.Id, I64(c.Site)) if c.Site >= typed.SiteId(0) else Array<I64>(0)
+    for r in recs { w.asRecord(c, r >> 1, r & 1, args, sp) }
+    if recs.Len() > 0: return
+    fty := w.T().Repr(v.Type())
+    p := w.fixedParam(v)
+    if p >= 0 {
+        w.throughParam(c, fty, p, args, sp)
+        return
+    }
+    for q in range args.Len() {
+        if w.typeKeeps(fty, c, q): w.escape(args[q], sp, "", false)
+    }
+    if not (w.T().PromisesPure(fty) and not w.mayWrite(c)): w.goAll(sp, c, CalleeValue)
+}
+
+# a call through a value judged as a direct call of body rb (an adapter's Call where shift is 1: its instance the first
+# parameter, no argument of the call) - what it stores, keeps and lets go of; its result is any argument's (valueCall)
+fn (w mut walker&) asRecord(c typed.Call&, rb I64, shift I64, args Vec<Vec<I64>>&, sp source.Span) {
+    f := w.F
+    if rb < 0 or rb >= f.Bodies.Len(): return
+    if not w.Final { addTo(f.callers[rb], w.Id) }
+    for e in f.parStored[rb] {
+        j := (e >> 32) - shift
+        if j >= 0 and j < args.Len(): w.storeAs(e & ((I64(1) << 32) - 1), c.Args[j], args[j], sp, "", true)
+    }
+    for q in f.parWhole[rb] {
+        if q - shift >= 0 and q - shift < args.Len(): w.wholeArg(c.Args[q - shift], args[q - shift], sp)
+    }
+    for q in f.parEsc[rb] {
+        if q - shift >= 0 and q - shift < args.Len(): w.escape(args[q - shift], sp, "", false)
+    }
+    for q in f.parEscC[rb] {
+        if q - shift >= 0 and q - shift < args.Len(): w.escape(f.unowned(args[q - shift]), sp, "", false)
+    }
+    if f.letsAll[rb] {
+        w.goAll(sp, c, rb)
+    } else {
+        for k in f.lets[rb] { w.go(k, LCall, sp, receiverSpan(c), rb) }
+    }
+    w.viaCall(c, rb, shift, args, sp)
+}
+
+# the parameter a call's function value is - read whole, its body never assigning it (one of the first 62) - -1 for
+# any other value
+fn (w mut walker&) fixedParam(v typed.Expr&) I64 {
+    l := readLocalOf(pastAway(v))
+    if l < 0 or w.body().Gen: return -1
+    j := try w.params.Get(l) catch default -1
+    if j < 0 or j >= 62 or w.T().KindOf(w.T().Repr(v.Type())) != types.Kind.Func or w.F.Sc.AssignedLocal(w.Id, l): return -1
+    return j
+}
+
+fn pastAway(x typed.Expr&) typed.Expr& {
+    return match x {
+        case typed.Expr.Away(_, _, y): pastAway(y)
+        case _: x
+    }
+}
+
+# a call through function parameter p of type fty: what an argument a parameter's value is given as is kept where what
+# each call gives p keeps it (escVia), anything else as the type says; it lets go of what each call's p lets go of
+# (letsVia) - in the body's own walk, of anything, where it lets go at all
+fn (w mut walker&) throughParam(c typed.Call&, fty types.TypeId, p I64, args Vec<Vec<I64>>&, sp source.Span) {
+    f := w.F
+    for q in range args.Len() {
+        if not w.typeKeeps(fty, c, q): continue
+        for y in args[q] {
+            k := okind(y)
+            if (k == OPar or k == OParC) and q < (I64(1) << 20) and oval(y) < (I64(1) << 20) {
+                if not w.Final and addTo(f.escVia[w.Id], (p << 40) | (q << 20) | oval(y)) > 0: f.changed = true
+                continue
+            }
+            one Vec<I64>
+            one.Push(y)
+            w.escape(one, sp, "", false)
+        }
+    }
+    writes := w.mayWrite(c)
+    if w.T().PromisesPure(fty) and not writes: return
+    if w.Final {
+        w.go(AnyPlace, LCall, sp, receiverSpan(c), CalleeValue)
+        return
+    }
+    w.via(p, writes)
+}
+
+# this body's parameter p given a call through it that may let go (writes: given an argument that may write)
+fn (w mut walker&) via(p I64, writes Bool) {
+    f := w.F
+    bit := I64(1) << p
+    if (f.letsVia[w.Id] & bit) == 0 {
+        f.letsVia[w.Id] = f.letsVia[w.Id] | bit
+        f.changed = true
+    }
+    if writes and (f.viaMut[w.Id] & bit) == 0 {
+        f.viaMut[w.Id] = f.viaMut[w.Id] | bit
+        f.changed = true
+    }
+}
+
+# a call of body b2 (shift 1: an adapter's Call, its first parameter no argument): its calls through the function
+# parameters it is given, each judged by the function value this call gives it
+fn (w mut walker&) viaCall(c typed.Call&, b2 I64, shift I64, args Vec<Vec<I64>>&, sp source.Span) {
+    f := w.F
+    lv := f.letsVia[b2]
+    if lv == 0 and f.escVia[b2].Len() == 0: return
+    ps := w.T().Items(w.T().Params(f.Bodies[b2].Ty))
+    for p in range shift, 62 {
+        if (lv & (I64(1) << p)) == 0 or p - shift >= c.Args.Len(): continue
+        pty := ps[p] if p < ps.Len() else types.UnknownT
+        w.letsThrough(c, c.Args[p - shift], pty, (f.viaMut[b2] & (I64(1) << p)) != 0, sp)
+    }
+    m := (I64(1) << 20) - 1
+    for e in f.escVia[b2] {
+        jp := (e >> 40) - shift
+        jj := (e & m) - shift
+        # (an adapter's instance, its first parameter, was kept where the adapter was made)
+        if jp < 0 or jp >= c.Args.Len() or jj < 0 or jj >= args.Len(): continue
+        w.escThrough(c.Args[jp], (e >> 20) & m, args[jj], sp)
+    }
+}
+
+# the bodies a function value given a call is - a function or a lambda written there, a conditional of those - each
+# 2 * body, + 1 for an adapter's Call; never empty. NotWritten where any is not
+fn writtenRecs(a typed.Expr&) Vec<I64> ? NotWritten {
+    match a {
+        case typed.Expr.Away(_, _, y) { return try writtenRecs(y) }
+        case typed.Expr.Cond(_, _, k) {
+            if k.A is null: error NotWritten
+            out := try writtenRecs(k.A!)
+            for r in try writtenRecs(k.B) { addTo(out, r) }
+            return out
+        }
+        case typed.Expr.Fn(_, _, fv) {
+            out Vec<I64>
+            out.Push(fnRecOf(fv))
+            return out
+        }
+        # (converted to the function type wanted, T22: the same function)
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op != typed.PrimOp.Convert or args.Len() != 1: error NotWritten
+            return try writtenRecs(args[0])
+        }
+        case _ { error NotWritten }
+    }
+}
+
+fn fnRecOf(fv typed.FnVal&) I64 {
+    return match fv {
+        case typed.FnVal.Named(b): 2 * I64(b)
+        case typed.FnVal.Lambda(b, _, _): 2 * I64(b)
+        case typed.FnVal.Adapter(b, _, _): 2 * I64(b) + 1
+    }
+}
+
+# a call through function value a, given a callee's parameter of type pty, that may let go (writes: given an argument
+# that may write): by the bodies it is, where written at the call; composed into this body's own where it is one of
+# its parameters; else by its type - nothing where it promises "pure" and no argument may write
+fn (w mut walker&) letsThrough(c typed.Call&, a typed.Expr&, pty types.TypeId, writes Bool, sp source.Span) {
+    f := w.F
+    recs := try writtenRecs(a) catch default Vec<I64>()
+    if recs.Len() > 0 {
+        for r in recs {
+            rb := r >> 1
+            if not w.Final { addTo(f.callers[rb], w.Id) }
+            if f.letsAll[rb] or f.letsVia[rb] != 0 {
+                w.goAll(sp, c, rb)
+                continue
+            }
+            for k in f.lets[rb] { w.go(k, LCall, sp, receiverSpan(c), rb) }
+        }
+        return
+    }
+    p := w.fixedParam(a)
+    if p >= 0 {
+        if w.Final {
+            w.go(AnyPlace, LCall, sp, receiverSpan(c), CalleeGiven)
+            return
+        }
+        w.via(p, writes)
+        return
+    }
+    if not writes and (w.T().PromisesPure(w.T().Repr(pty)) or w.pureValue(a)): return
+    w.goAll(sp, c, CalleeGiven)
+}
+
+# whether a function value's type promises "pure" - before a conversion to a type promising less (T22)
+fn (w mut walker&) pureValue(a typed.Expr&) Bool {
+    t := w.T()
+    if t.PromisesPure(t.Repr(a.Type())): return true
+    return match a {
+        case typed.Expr.Away(_, _, y): w.pureValue(y)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and w.pureValue(args[0])
+        case _: false
+    }
+}
+
+# what a function value a given a call keeps of its parameter q given value o: by the bodies it is, where written at
+# the call; composed into this body's own where it is one of its parameters; else kept, as its type says (the callee
+# judged that before it composed)
+fn (w mut walker&) escThrough(a typed.Expr&, q I64, o Vec<I64>&, sp source.Span) {
+    f := w.F
+    recs := try writtenRecs(a) catch default Vec<I64>()
+    if recs.Len() > 0 {
+        for r in recs {
+            rb := r >> 1
+            if not w.Final { addTo(f.callers[rb], w.Id) }
+            if f.recKeeps(rb, q + (r & 1)): w.escape(o, sp, "", false)
+        }
+        return
+    }
+    p := w.fixedParam(a)
+    if p < 0 {
+        w.escape(o, sp, "", false)
+        return
+    }
+    for y in o {
+        k := okind(y)
+        if (k == OPar or k == OParC) and oval(y) < (I64(1) << 20) {
+            if not w.Final and addTo(f.escVia[w.Id], (p << 40) | (q << 20) | oval(y)) > 0: f.changed = true
+            continue
+        }
+        one Vec<I64>
+        one.Push(y)
+        w.escape(one, sp, "", false)
+    }
+}
+
+# whether body rb may keep what its parameter q is given beyond the call: keeps it, stores it into a place, moves it
+# whole, or hands it on to a function value it is given
+fn (f mut Free&) recKeeps(rb I64, q I64) Bool {
+    if has(f.parEsc[rb], q) or has(f.parEscC[rb], q) or has(f.parWhole[rb], q) or f.escVia[rb].Len() > 0: return true
+    for e in f.parStored[rb] {
+        if e >> 32 == q: return true
+    }
+    return false
+}
+
+# whether a call through a function value of type fty keeps argument q beyond the call (T22): its "keeps" promises name
+# it, or something can be stored into what an argument names
+fn (w mut walker&) typeKeeps(fty types.TypeId, c typed.Call&, q I64) Bool {
+    t := w.T()
+    if t.KindOf(fty) != types.Kind.Func: return true
+    ks := t.KeepsOf(fty)
+    for i in range ks.Len() / 3 {
+        if ks[3 * i] == q: return true
+    }
+    for a in c.Args {
+        ty := t.Repr(a.Type())
+        if t.IsRef(ty) and ((t.PermOf(ty) & types.Writable) != 0 or t.HoldsRefs(t.Referent(ty))): return true
+        if not t.IsRef(ty) and t.HoldsRefs(ty): return true
+    }
+    return false
+}
+
+# whether a call gives an argument that may write: a writable reference, or a value holding a reference
+fn (w mut walker&) mayWrite(c typed.Call&) Bool {
+    t := w.T()
+    for a in c.Args {
+        ty := t.Repr(a.Type())
+        if t.IsRef(ty) and (t.PermOf(ty) & types.Writable) != 0: return true
+        if not t.IsRef(ty) and t.HoldsRefs(ty): return true
+    }
+    return false
 }
 
 # a call that may let go of any place
@@ -3396,7 +3697,7 @@ fn (w mut walker&) views() {
             if kind == LYield {
                 after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), where the generator's caller may let go of it; read what you need" $from " before the yield"
             } else if kind == LCall {
-                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), which " $w.removes(k) "; read what you need" $from " before the call"
+                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), which " $w.removes(k, g) "; read what you need" $from " before the call"
             } else {
                 after = $"after it lets go of it (line " $gl "); read what you need" $from " before"
             }
@@ -3441,13 +3742,19 @@ fn (w mut walker&) localName(l I64) String { return $w.F.P.L.Names.Text(w.body()
 
 # what a call that lets go of place k does to it, as the note says: "removes frames" - the name of the collection a
 # removal in this body is called on - or "lets go of it"
-fn (w mut walker&) removes(k I64) String {
+fn (w mut walker&) removes(k I64, g I64) String {
+    if k < 0 and w.goCallee[g] == CalleeValue {
+        return "may let go of anything: it calls through a function value not followed whose type does not promise 'pure'"
+    }
+    if k < 0 and w.goCallee[g] == CalleeGiven {
+        return "may let go of anything: it is given a function value not followed whose type does not promise 'pure', and calls through it"
+    }
     if k < 0 { return "may let go of anything" }
-    for g in range w.goPlace.Len() {
+    for e in range w.goPlace.Len() {
         # the collection a removal of the library's is called on - not the receiver of the program's own call
-        c := w.goCallee[g]
-        if w.goPlace[g] != k or w.goRecv[g].Start >= w.goRecv[g].End or c < 0 or w.F.programCode[c]: continue
-        r := w.F.textOf(w.body().File, w.goRecv[g])
+        c := w.goCallee[e]
+        if w.goPlace[e] != k or w.goRecv[e].Start >= w.goRecv[e].End or c < 0 or w.F.programCode[c]: continue
+        r := w.F.textOf(w.body().File, w.goRecv[e])
         at := r.Len() - 1
         for at >= 0 and (r[at].IsLetter() or r[at].IsDigit() or r[at] == '_') { at-- }
         nm := r[at + 1:]

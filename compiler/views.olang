@@ -1403,6 +1403,9 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
         case typed.Callee.Value(f) {
             value = true
             v.expr(f, st, fnRefs)
+            # (a function written where it is called - a named one, a lambda - is followed: it grows what its body grows,
+            # docs/fnvalues.md 4.6)
+            callee = writtenFn(f)
         }
         case _ { }
     }
@@ -1437,12 +1440,17 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
             }
         }
     } else if value {
-        # a body not known: it may grow whatever it is given writably - by value, or through a writable reference
-        ps := v.P.T.Items(v.P.T.Params(v.calleeType(c)))
+        # a body not known: it may grow whatever it is given writably - by value, or through a writable reference; one
+        # whose type promises "pure" (T21c) only what its "mut" arguments reach - a value given it is its own, unless it
+        # holds a writable reference (docs/fnvalues.md 4.6)
+        fty := v.calleeType(c)
+        ps := v.P.T.Items(v.P.T.Params(fty))
+        clean := v.P.T.PromisesPure(v.P.T.Repr(fty))
         for i in range n {
             a := c.Args[i]
             if not v.structish(a.Type()) { continue }
             if i < ps.Len() and v.P.T.IsRef(ps[i]) and (v.P.T.PermOf(ps[i]) & types.Writable) == 0 { continue }
+            if clean and i < ps.Len() and not v.P.T.IsRef(ps[i]) and not v.P.T.ReachesWrite(ps[i], clean = true) { continue }
             at Vec<place>
             v.exprPlaces(a, st, at)
             for p in at {
@@ -1535,6 +1543,21 @@ fn (v mut Viewer&) givenGrowing(at source.Span, p place, of I64, name I64, file 
     rec := v.P.L.Diags.Error(v.at(at), msgs.VecViewGivenGrowing(w, v.strs[name], w, copyHint(of, w)))
     if file < 0 or v.library.Has(file) { return }
     v.P.L.Diags.Note(rec, diag.Where.Span(file, I64(inner.Start), I64(inner.End)), msgs.NoteVecGrowsInside(v.strs[name]))
+}
+
+# the body a function value written where it is called names - a named function, a lambda - -1 for any other value
+# (an adapter's Call takes its instance first, as no call of it written does)
+fn writtenFn(f typed.Expr&) I64 {
+    return match f {
+        case typed.Expr.Fn(_, _, fv): match fv {
+            case typed.FnVal.Named(b): I64(b)
+            case typed.FnVal.Lambda(b, _, _): I64(b)
+            case _: -1
+        }
+        case typed.Expr.Away(_, _, y): writtenFn(y)
+        case typed.Expr.Prim(_, _, op, _, args): writtenFn(args[0]) if op == typed.PrimOp.Convert and args.Len() == 1 else -1
+        case _: -1
+    }
 }
 
 # the function type a call is made through

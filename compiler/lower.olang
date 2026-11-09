@@ -4008,9 +4008,9 @@ fn (ln mut lowering&) quietX(x typed.Expr?&) Bool {
         case typed.Expr.Try(_, _, tr): ln.quietX(tr.X) and (ln.selfTry(tr) or ln.quietClauses(tr))
         case typed.Expr.Text(_, _, tx): ln.quietPieces(tx)
         case typed.Expr.Away(_, _, y): ln.quietX(y)
-        # (a function value made whose type promises "pure": making it writes only its own environment, and what it runs
-        # where it is called writes only through the "mut" arguments given it there)
-        case typed.Expr.Fn(_, ty, _): ln.T.PromisesPure(ln.T.Repr(ty))
+        # (a function value made: making it writes only its own environment - what its code writes is judged where it is
+        # called, or where it is given a call, by the type it is given as, docs/fnvalues.md 4.6)
+        case typed.Expr.Fn(_, _, _): true
         case _: false
     }
 }
@@ -4075,6 +4075,9 @@ fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
     ps := t.Items(t.Params(ty)) if ty != types.UnknownT else Array<types.TypeId>(0)
     for k in range c.Args.Len() {
         a := c.Args[k].Type()
+        # (a function value given a parameter whose type promises "pure" is one, whatever type it was written with - the
+        # promise is judged where it is given, T21c)
+        if k < ps.Len() and t.PromisesPure(t.Repr(ps[k])): a = ps[k]
         writable := k < ps.Len() and t.IsRef(ps[k]) and (t.PermOf(ps[k]) & types.Writable) != 0
         # (quietLife: a callee given what reaches none of the view's storage writably leaves it as it is - a value or a
         # read-only reference holding a writable reference to such storage, at any depth, is a way to write it; in a

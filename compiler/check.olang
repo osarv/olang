@@ -13786,7 +13786,7 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     hold mut Array<Bool>& = Array<Bool>(cl.Args.Len(), false)
     held := false
     for j in range 1, cl.Args.Len() {
-        if c.plainArg(cl.Args[j]): continue
+        if c.plainArg(cl.Args[j]) or c.pureFnArg(cl, j): continue
         if not c.holdable(cl.Args[j]) or c.P.T.SharesRefs(el): return call
         hold[j] = true
         held = true
@@ -13866,7 +13866,9 @@ fn (w mut collWalk&) reaches(t types.TypeId) Bool {
     if tt.ForeignRef(r) or w.seen.Has(r): return false
     w.seen.Push(r)
     return match tt.KindOf(r) {
-        case types.Kind.Func, types.Kind.Var, types.Kind.Any: true
+        # (a "pure" function value writes only through the "mut" arguments it is given, docs/fnvalues.md 4.6)
+        case types.Kind.Func: not tt.PromisesPure(r)
+        case types.Kind.Var, types.Kind.Any: true
         case types.Kind.Ref: ((tt.PermOf(r) & types.Writable) != 0 and w.holds(tt.Referent(r), 0)) or w.reaches(tt.Referent(r))
         case types.Kind.Array: w.reaches(tt.Elem(r))
         case types.Kind.Tuple, types.Kind.Record: w.some(tt.Items(tt.Parts(r)))
@@ -13932,7 +13934,8 @@ fn (c mut Checker&) ctorBodies(x typed.Expr&, into mut Vec<I64>&) {
 }
 
 # E31b, once an attempt has checked every body: a call made in place whose method, or a constructor an argument calls,
-# may write a global, call through a function value or an any, or reach a body that did not check - any of which could
+# may write a global, call through a function value (but one whose type promises "pure") or an any, or reach a body
+# that did not check - any of which could
 # grow or replace the collection, leaving the element's reference naming storage it no longer uses - is refused the
 # in-place form, so the program is checked again with the copy's (and its error). Whether any was
 fn (c mut Checker&) settleInPlace() Bool {
@@ -13943,7 +13946,9 @@ fn (c mut Checker&) settleInPlace() Bool {
         if c.inPlaceRefused.Has(r.Key): continue
         for b in r.Bodies {
             f := c.Effects().Of(b)
-            if not (f.WritesGlobals or f.Unknown or f.Through or f.Unchecked): continue
+            # (a call through a value whose type promises "pure" - Through with nothing Impure - writes only through
+            # the "mut" arguments it is given: the element, what the method gives it, docs/fnvalues.md 4.6)
+            if not (f.WritesGlobals or f.Unknown or (f.Through and f.Impure) or f.Unchecked): continue
             c.inPlaceRefused.Put(r.Key, true)
             moved = true
             break
@@ -14069,14 +14074,40 @@ fn (c mut Checker&) atCallee(x typed.Expr&) Bool {
 # an any
 fn (c mut Checker&) plainArg(x typed.Expr&) Bool {
     # (nothing reaching a writable reference, a function value or an any: through one a callee could change the
-    # collection - the collection itself lent, a closure over it)
-    if c.P.T.ReachesWrite(typeOf(x)): return false
+    # collection - the collection itself lent, a closure over it. A function value whose type promises "pure" writes
+    # only through the "mut" arguments it is given - the element, what the method gives it (docs/fnvalues.md 4.6) -,
+    # and making one, a lambda written here, runs nothing)
+    if c.P.T.ReachesWrite(typeOf(x), clean = true): return false
     return match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Fn(_, ty, _): c.P.T.PromisesPure(c.P.T.Repr(ty))
         case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): plainPlace(q)
         case typed.Expr.Prim(_, _, op, _, args): op != typed.PrimOp.Retire and c.plainArgs(args)
         case typed.Expr.Call(_, _, k): c.ctorCall(k) and c.plainArgs(k.Args)
         case typed.Expr.Away(_, _, y): c.plainArg(y)
+        case _: false
+    }
+}
+
+# E31b: argument j of a call made in place a function written there (a lambda, a named function) given a parameter
+# whose type promises "pure" (T21c): making it runs nothing, and the promise, judged where it is given, says it writes
+# only through the "mut" arguments the method gives it (docs/fnvalues.md 4.6)
+fn (c mut Checker&) pureFnArg(cl typed.Call&, j I64) Bool {
+    id := match cl.Target {
+        case typed.Callee.Body(b): I64(b)
+        case _: -1
+    }
+    if id < 0: return false
+    ps := c.P.T.Items(c.P.T.Params(c.Bodies[id].Ty))
+    if j >= ps.Len() or not c.P.T.PromisesPure(c.P.T.Repr(ps[j])): return false
+    return fnWritten(cl.Args[j])
+}
+
+# whether a value is a function written where it stands - a lambda, a named function - converted to the type wanted
+fn fnWritten(x typed.Expr&) Bool {
+    return match pastAway(x) {
+        case typed.Expr.Fn(_, _, _): true
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and fnWritten(args[0])
         case _: false
     }
 }

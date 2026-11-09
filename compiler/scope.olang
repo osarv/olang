@@ -312,6 +312,10 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # compNodes from compFrom[k]
     edgeFrom Vec<I64>
     edgeTo Vec<I64>
+    # O8d (docs/fnvalues.md 4.6): by (body, site), the bodies a call through a value was judged as, where its records
+    # are all known - each 2 * body, + 1 for an adapter's Call (its instance its first argument) - for early freeing,
+    # which judges the call as direct calls of them (ValueRecsAt)
+    valueRecs Map<pair.Pair<I64, I64>, Array<I64>>
     # each body's locals assigned after their declaration (walkBody), in assignedTo from assignedFrom[b]
     assignedFrom Vec<I64>
     assignedTo Vec<I64>
@@ -2652,7 +2656,34 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     for k in range s.buildsVar.Len() {
         if k < s.plan.MayBuild.Len() { s.plan.MayBuild[k] = s.buildsVar[k] }
     }
-    if report { s.Plans[b] = s.plan }
+    if report {
+        s.Plans[b] = s.plan
+        s.keepValueRecs(b)
+    }
+}
+
+# O8d: the records of each call through a value of body b, as its reporting judging found them - all known only
+fn (s mut Scoper&) keepValueRecs(b I64) {
+    for site in s.callRecs.Keys() {
+        rs := s.callRecs.Get(site)!
+        if not rs.Full or rs.Late.Len() > 0 or rs.Loose.Len() > 0 or rs.Recs.Len() == 0: continue
+        out := Array<I64>(rs.Recs.Len())
+        for i in range out.Len() { out[i] = 2 * rs.Recs[i].Body + (1 if rs.Recs[i].Adapter else 0) }
+        s.valueRecs.Put(pair.Pair(b, site), out)
+    }
+}
+
+# O8d (docs/fnvalues.md 4.6): the bodies the call through a value at site of body b was judged as - each 2 * body, + 1
+# for an adapter's Call - empty where any is not known (a value not followed: its type's bound)
+fn (s Scoper&) ValueRecsAt(b I64, site I64) Array<I64> { return try s.valueRecs.Get(pair.Pair(b, site)) catch default Array<I64>(0) }
+
+# whether local l of body b is assigned after its declaration (a parameter: anywhere in the body)
+fn (s Scoper&) AssignedLocal(b I64, l I64) Bool {
+    if b < 0 or b + 1 >= s.assignedFrom.Len(): return true
+    for k in range s.assignedFrom[b], s.assignedFrom[b + 1] {
+        if s.assignedTo[k] == l: return true
+    }
+    return false
 }
 
 # O23a, C1: whether body b takes its derived scopes as hidden scope parameters - a function or method called directly
