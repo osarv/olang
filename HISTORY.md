@@ -35675,6 +35675,11 @@ scope. The same holds for copyLeaves' copies stored into a part. The churn runs 
 keys, values replaced and removed, under 8 MB); a first form that settled split copies released the new Value's
 region at once and read it freed - found by the fixture under -sanitize.
 
+Gates: `fuzz free` 300 programs (1,800 scenarios, 2,965 places freeing at once), no finding - a first run had 83: a
+feeder of a global was moved in a body of the root's object where the global keeps, which has no region written, its
+storage then its block's (the move now waits on the plan's region); `make scopefuzz SEED=7 COUNT=300` no finding;
+`make scopesan` passes.
+
 **Found on the way, not fixed here:** `s += m.Get(k)![5]` in a loop over a local `Map<String, Vec<I64>>` keeps each
 turn's copy of the value Get hands back (266 MB over 2,000 turns of 10,000 elements, in master too - with or without
 early freeing): the D9h copy of a view call read once lands outside the turn.

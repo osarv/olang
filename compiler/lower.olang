@@ -4051,7 +4051,11 @@ fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
     }
     # (a feeder - built in the region of the place its copy goes to, from its declaration on - is moved there, its region
     # with it: early freeing judged where it lives and where the copy goes, free.FeedCopy)
-    if ln.freeing and ln.L.Free!.FeedCopy(I64(ln.B.Id), l) == site: return true
+    # (where the plan has that region: in a body the root's object holds, a place not decided sole has none written)
+    if ln.freeing and ln.L.Free!.FeedCopy(I64(ln.B.Id), l) == site {
+        fs := ln.L.Free!.FeedSite(I64(ln.B.Id), l)
+        if fs >= 0 and fs < ln.plan.RegionKind.Len() and ln.plan.RegionKind[fs] == 1: return true
+    }
     if site >= ln.plan.Built.Len() or ln.plan.RegionKind[site] != 0: return false
     init := typed.Call.Of(u.Init[l])
     if init is not null and init.Site >= typed.SiteId(0) and ln.plan.RegionKind[I64(init.Site)] != 0: return false
