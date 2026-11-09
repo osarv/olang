@@ -52,6 +52,9 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
 # runs what is left of it. A scenario passes when all of it does
 Checks Array<String&>& = withParts(Scenarios) if Target == "" and Only == "" else Array<String&>(0)
 
+# CHECKS_SCENARIO: while developing, only the scenario of this name (and its parts), and no case
+OneScenario String& = try os.Env("CHECKS_SCENARIO") catch default ""
+
 # CHECKS_ONLY: while developing, only the cases whose file names hold this text (or one of several, comma-separated), and no scenario - a run that passes
 # says nothing of the rest
 Only String& = try os.Env("CHECKS_ONLY") catch default ""
@@ -68,6 +71,7 @@ CrossSkip := Array<String&>["externruntime2.olang"]
 fn withParts(names Array<String&>&) Array<String&>& {
     all Vec<String&>
     for n in names {
+        if OneScenario != "" and n != OneScenario: continue
         if n == "strheld" { for p in StrheldPrograms { all.Push($"strheld/" $p) } }
         if n == "reuseall" { for k in range 2 * ReuseWays { all.Push($"reuseall/" $k) } }
         all.Push($n)
@@ -76,7 +80,7 @@ fn withParts(names Array<String&>&) Array<String&>& {
 }
 
 # the files in checks/cases
-Cases Array<String&>& = only(try os.ReadDir("checks/cases") catch default Array<String&>(0))
+Cases Array<String&>& = only(try os.ReadDir("checks/cases") catch default Array<String&>(0)) if OneScenario == "" else Array<String&>(0)
 
 # a case CHECKS_ONLY names: its file name holds one of the comma-separated texts
 fn wanted(name String&) Bool { return Only.Split(",").Some(fn(w String&) Bool { return name.Contains(w) }) }
@@ -174,6 +178,7 @@ fn runCheck(k I64) String& {
 # whether the scenario named "name" passed, printing what went wrong when it did not
 fn passed(name String&) Bool {
     if Target != "" or Only != "" { return true } # not run for another architecture, or while developing
+    if OneScenario != "" and name != OneScenario: return true
     found := false
     ok := true
     for i, s in Checks {
@@ -393,7 +398,7 @@ test "every case in checks/cases does what its header says" {
             if not reported(Outcomes[Checks.Len() + i]) { bad++ }
         }
     }
-    assert count > 0
+    assert count > 0 or OneScenario != ""
     assert bad == 0
 }
 
@@ -1038,7 +1043,7 @@ type Edit struct(name String&, cmd String&, flags String&, lowered String&, file
     item
 }
 
-# (a module importing an edited one is lowered with it while a module's key holds its imports' - W3a narrows that)
+# (a module importing an edited one is lowered and checked with it while a module's key holds its imports' texts)
 Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/' deep.olang", "", "deep lib", "deep.olang", "Run")
     Edit("a signature", "sed -i 's/s String&)/s String\\&, k I64 = 0)/' deep.olang", "", "deep lib", "deep.olang", "Keep")
     Edit("an inferred error set grown", "sed -i 's/{ return try t.ParseInt(10) }/{\\n    if t == \"\": error Empty\\n    return " $
@@ -1066,7 +1071,16 @@ Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/
     # genrefs G1: the first weak reference to a type makes it generational, a whole-program fact (T13d)
     Edit("the first weak to a type", "printf 'type Link struct() {\\n    next mut Link?& = null\\n    back weak Link?& = " $
          "null\\n}\\n' >> lib.olang", "", "lib", "lib.olang", "Link")
+    # W3a: an inferred error set shrunk, and a summary of checking changed - deep's Touch made to grow the Vec lib's Viewed
+    # holds a view of (M19g), the error said in lib, whose text did not change
+    Edit("an inferred error set shrunk", "sed -i 's/{ return try t.ParseInt(10) }/{\\n    if t.Len() == 0: error " $
+         "ParseError.Empty\\n    return t.Len()\\n}/' deep.olang", "", "deep lib", "deep.olang", "Parse")
+    Edit("a summary of checking changed (M19g)", "sed -i 's/{ a\\[0\\] = 2 }/{ a.Push(2) }/' deep.olang", "", "", "lib.olang", "Viewed")
     Edit("a diagnostic introduced", "sed -i 's/deep.Baked/deep.Bakd/' lib.olang", "", "", "lib.olang", "Kept")]
+
+# what an incremental build says that a clean one need not: what was reused or lowered again, the front end's records
+# taken or checked (W3a), how many facts were read, and OLANG_CHECKINCR's line saying every record taken holds
+Varying := "'^olang: \\(reused\\|lowered\\|facts\\|front\\|incremental check:.*every one the same\\)'"
 
 fn incremental(r mut report&) ? Failed {
     dir := fresh("incremental")
@@ -1081,7 +1095,8 @@ fn incremental(r mut report&) ? Failed {
 # printed when run, explain of item in file, and -memory (a build of its own, lowering every module) - 0 where the build
 # and the run both went
 fn incBuild(dir String&, sub String&, flags String&, to String&, file String&, item String&) I32 {
-    return sh($dir "/" $sub, "rm -f build/main && OLANG_FACTSTATS=1 \"$OLANG\" build " $flags "main.olang > ../" $to " 2>&1; b=$?; " $
+    return sh($dir "/" $sub, "rm -f build/main && OLANG_FACTSTATS=1 OLANG_CHECKINCR=1 \"$OLANG\" build " $flags "main.olang > ../" $to $
+              " 2>&1; b=$?; " $
               "./build/main >> ../" $to " 2>&1; x=$?; \"$OLANG\" explain " $flags $file " " $item " >> ../" $to " 2>&1; " $
               "\"$OLANG\" build -memory " $flags "main.olang >> ../" $to " 2>&1; test $b = 0 -a $x = 0")
 }
@@ -1094,15 +1109,22 @@ fn incEdit(r mut report&, dir String&, e Edit&) ? Failed {
     incBuild(dir, "inc", e.flags, "here", e.file, e.item)
     os.Run("cd " $os.Quote(dir) " && rm -rf clean && mkdir clean && cp inc/*.olang inc/*.c inc/*.txt clean/")
     incBuild(dir, "clean", e.flags, "there", e.file, e.item)
-    try r.expect(sh(dir, "grep -v '^olang: \\(reused\\|lowered\\|facts\\) ' here | sort > a && grep -v '^olang: \\(reused\\|lowered\\|facts\\) ' " $
-                    "there | sort > b && cmp -s a b") == 0, $"the build " $what " is not the clean one's (here, there)", dir)
+    try r.expect(sh(dir, $"grep -v " $Varying " here | sort > a && grep -v " $Varying " there | sort > b && cmp -s a b") == 0
+                 $"the build " $what " is not the clean one's (here, there)", dir)
     sh(dir, "grep '^olang: lowered ' here | grep -v 'lowered std/' | grep -v 'lowered <' | cut -d' ' -f3 | sort | tr '\\n' ' ' > low")
     low := (try os.ReadFile($dir "/low") catch default "").Trim()
     try r.expect(low == e.lowered, $"the modules lowered " $what ": expected '" $e.lowered "', not '" $low "'", dir)
+    # W3a: the program's own modules whose bodies' M19g summaries were found afresh, not taken from their front records -
+    # keyed as the IR's records are, by the texts a module reaches, so the modules lowered again
+    sh(dir, "grep '^olang: front checked ' here | grep -v 'checked std/' | grep -v 'checked <' | cut -d' ' -f4 | sort | " $
+       "tr '\\n' ' ' > checked")
+    checked := (try os.ReadFile($dir "/checked") catch default "").Trim()
+    try r.expect(checked == e.lowered, $"the modules checked afresh " $what ": expected '" $e.lowered "', not '" $checked "'", dir)
     try r.expect(sh($dir "/inc", "rm -f *.olang *.c *.txt && cp ../orig/* .") == 0, $"undoing " $what, dir)
     try r.expect(incBuild(dir, "inc", "", "undone", "main.olang", "main") == 0, $"the build undoing " $what, dir)
-    try r.expect(sh(dir, "! grep -q '^olang: lowered ' undone && grep -v '^olang: \\(reused\\|facts\\) ' undone > a && grep -v " $
-                    "'^olang: \\(reused\\|lowered\\|facts\\) ' base > b && cmp -s a b") == 0, $"the build undoing " $what " lowered something or differs (undone, base)", dir)
+    try r.expect(sh(dir, $"! grep -q '^olang: \\(lowered\\|front checked\\) ' undone && grep -v " $Varying " undone > a && " $
+                    "grep -v " $Varying " base > b && cmp -s a b") == 0
+                 $"the build undoing " $what " lowered or checked something again, or differs (undone, base)", dir)
 }
 
 # B3i, docs/wholeprog.md 10.3 (T3): every run case built under OLANG_CHECKREUSE in one shared directory, in two orders
@@ -1132,7 +1154,7 @@ fn reuseAll(r mut report&, k I64) ? Failed {
         name := names[names.Len() - 1 - i] if back else names[i]
         flags := lineAfter(try os.ReadFile("checks/cases/" $name) catch default "", "# flags: ")
         out := $"out-" $name ".txt"
-        status := sh(dir, $"OLANG_CHECKREUSE=1 \"$OLANG\" build " $flags " " $os.Quote($root() "/checks/cases/" $name) " > " $out " 2>&1")
+        status := sh(dir, $"OLANG_CHECKREUSE=1 OLANG_CHECKINCR=1 \"$OLANG\" build " $flags " " $os.Quote($root() "/checks/cases/" $name) " > " $out " 2>&1")
         if status == 0: continue
         os.Run($"cp " $os.Quote($dir "/" $out) " " $os.Quote($rep "/out.txt"))
         try r.expect(false, $name " built under OLANG_CHECKREUSE in " $dir, rep)

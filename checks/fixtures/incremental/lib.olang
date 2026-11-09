@@ -11,6 +11,15 @@ fn (c Counter&) Total() I64 { return c.n + deep.Baked }
 
 fn Num(t String&) I64 ? { return try deep.Parse(t) }
 
+# M19g: a view of a Vec held across a call of deep's Touch - an error where Touch may grow it
+fn Viewed() I64 {
+    a Vec<I64>
+    a.Push(1)
+    v := a.View()
+    deep.Touch(a)
+    return v[0]
+}
+
 fn Kept() I64 {
     a Vec<String&>
     deep.Keep(a, "kept")

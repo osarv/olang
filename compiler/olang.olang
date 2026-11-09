@@ -11,6 +11,7 @@
 
 import "std/os"
 import "std/io"
+import "std/time"
 import "build"
 import "target"
 import "cond"
@@ -537,15 +538,20 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     build.Phase("start")
     l mut load.Loader& = try p.load(root, cfg, d)
     build.Phase("load")
-    # B3i: each module's key, and the front end's records under it (the incremental front end)
+    # B3i: the front end's records (the incremental front end), under each module's key - made once checking has read
+    # the files the program embeds (E38), which are part of it
     keys Array<String&>& = Array<String&>(0)
     kept mut views.Kept& = views.Kept()
-    if kind != build.Kind.Module {
-        keys = moduleKeys(l, cfg, tests)
-        kept.Afresh = (try os.Env("OLANG_CHECKINCR") catch default "") != ""
-        frontRecords(l, cfg, keys, kept)
-    }
+    kept.Later = kind != build.Kind.Module
+    kept.Afresh = (try os.Env("OLANG_CHECKINCR") catch default "") != ""
     c mut typecheck.Checker& = interp.Analyze(l, tests, kept)
+    if kind != build.Kind.Module { keys = moduleKeys(l, cfg, tests) }
+    if c.ViewsDue {
+        frontRecords(l, cfg, keys, kept)
+        vt := time.Now()
+        interp.JudgeViews(c, kept)
+        c.ViewsMs = (time.Now() - vt) / 1000000
+    }
     if kept.Stale.Len() > 0 { checkIncrFailed(kept) }
     if kept.Afresh and kept.Taken > 0 {
         try io.PrintErr($"olang: incremental check: " $kept.Taken " kept summaries, every one the same\n") catch io.Error { }

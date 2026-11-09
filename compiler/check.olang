@@ -266,6 +266,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     copyWanted Map<types.TypeId, Bool>     # ... the types wantCopy has walked
     inPlaceRefused Map<String&, Bool>
     Attempts I64 = 0
+    ViewsDue Bool = false          # M19g is to be judged by interp.Analyze's caller (views.Kept.Later)
     ViewsMs I64 = 0                # how long M19g's judgment of views took (OLANG_TIMES)
     Rounds I64 = 0                 # how many checks of the program interp.Analyze made, each deciding conditions for the next
     viewsGrew Bool = false  # D9h: a body's views grew - settleAllViews goes round again (growViews)

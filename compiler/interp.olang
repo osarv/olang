@@ -95,7 +95,8 @@ fn Analyze(l mut load.Loader&, tests Bool, kept mut views.Kept& = views.Kept()) 
         if decide(l, c, decided, dead, lengths, embeds, unrolls, unrollWhy, condErrs) == 0 {
             for e in condErrs { l.Diags.Error(e.At, e.M) }
             vt := time.Now()
-            if l.Diags.Firm() - firm == 0 { judgeViews(c, kept) }
+            # (where kept is Later, its caller judges them, once the records the program's keys name are found)
+            if l.Diags.Firm() - firm == 0 { if kept.Later: c.ViewsDue = true else: judgeViews(c, kept) }
             c.ViewsMs = (time.Now() - vt) / 1000000
             c.Rounds = rounds
             return c
@@ -106,6 +107,8 @@ fn Analyze(l mut load.Loader&, tests Bool, kept mut views.Kept& = views.Kept()) 
 
 # M19g (compiler/views.olang), on a program that checked cleanly: a Vec's view used after the Vec may have grown
 # - the summaries of modules whose records hold for this program taken from them (B3i, kept)
+fn JudgeViews(c mut typecheck.Checker&, kept mut views.Kept&) { judgeViews(c, kept) }
+
 fn judgeViews(c mut typecheck.Checker&, kept mut views.Kept&) {
     p := c.P
     kept.TakeHolding(fn(reads Array<String&>&) Bool { return p.Facts.Holds(reads) })

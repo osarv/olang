@@ -5,7 +5,8 @@
 # fact), a G42 fact read added, the root handing an export fn to C and taking it back (the C callback input), a number
 # in a module's code changed, and the last edit undone. After each step the program is built in the directory of every
 # build before it and in a clean one: the objects (by their IR's hashes), what the builds said and what the program
-# printed must be the same, and an undone edit must lower nothing. A scenario the compiler refuses is left out of its
+# printed must be the same, and an undone edit must lower and check nothing again (its front records taken, every one
+# compared with checking afresh under OLANG_CHECKINCR). A scenario the compiler refuses is left out of its
 # module (a clean build's diagnostics name the module), as the scope fuzzer leaves refused scenarios out.
 
 import "std/os"
@@ -125,8 +126,8 @@ fn (u Run&) read(name String&) String { return try os.ReadFile($u.dir "/" $name)
 
 # the program built in sub (OLANG_FACTSTATS's lines with what the build said) and run, into to - whether it built
 fn (u Run&) build(sub String&, to String&) Bool {
-    return u.sh($"cd " $sub " && rm -f build/main && OLANG_FACTSTATS=1 timeout 600 \"$OLANG\" build main.olang > ../" $to $
-                " 2>&1 && timeout 120 ./build/main >> ../" $to " 2>&1") == 0
+    return u.sh($"cd " $sub " && rm -f build/main && OLANG_FACTSTATS=1 OLANG_CHECKINCR=1 timeout 600 \"$OLANG\" build " $
+                "main.olang > ../" $to " 2>&1 && timeout 120 ./build/main >> ../" $to " 2>&1") == 0
 }
 
 # p written and built clean; a scenario the clean build refuses left out, its module named by the diagnostics, until
@@ -147,10 +148,13 @@ fn (u Run&) step(p mut Prog&, undo Bool) String ? os.Error {
     }
     try Write(p, $u.dir "/inc")
     u.build("inc", "here")
-    # (what was reused or lowered again, and how many facts were read, differ by design)
-    u.sh("grep -v '^olang: \\(reused\\|lowered\\|facts\\) ' here | sort > a; grep -v '^olang: \\(reused\\|lowered\\|facts\\) ' there | sort > b")
+    # (what was reused or lowered again, the front end's records taken or checked, and how many facts were read differ
+    # by design; OLANG_CHECKINCR ends a build whose records give what checking afresh does not)
+    u.sh("grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|incremental check:.*every one the same\\)' here | sort > a; " $
+         "grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|incremental check:.*every one the same\\)' there | sort > b")
     if u.sh("diff a b > d") != 0: return $"the build in place (<) differs from the clean one (>):\n" $u.read("d")
     if undo and u.read("here").Contains("olang: lowered "): return $"undoing lowered again:\n" $u.read("here")
+    if undo and u.read("here").Contains("olang: front checked "): return $"undoing checked again:\n" $u.read("here")
     return ""
 }
 

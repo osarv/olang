@@ -1555,6 +1555,7 @@ type Kept struct() {
     Cands Vec<Cand>             # the records found for the program's modules, each taken where its reads hold
     Given Map<String, String&>
     Afresh Bool = false
+    Later Bool = false          # M19g judged by interp.Analyze's caller (interp.JudgeViews), not by it
     Taken I64 = 0               # how many bodies' summaries were taken (compared, under Afresh)
     Files Map<I64, I64>         # the files whose record was taken, each with its candidate's number
     Stale Vec<String&>
