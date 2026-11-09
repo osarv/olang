@@ -75,6 +75,13 @@ one rule that composes over special cases; fix rough edges found while building.
   optimizing backprop energy models (a backprop EBR/EBT stays only as the yardstick). Credit assignment as in the brain
   (the user): the global signal (dopamine) "knows how it went, but not what happened", the local update "knows what
   happened" - three-factor rules (eligibility traces x global neuromodulators), with EP's nudge as the global signal.
+- **oann's design (agreed by the user, 2026-11-09: "If you think this is the best, let's do it"):** Tensor<T> stays the
+  storage; the central abstraction is a dynamical system - modules/populations with named state at several timescales
+  (Columns<T>), connections as objects (dense, block-sparse, event-driven, symmetric), update rules run in place (settle,
+  local learning, homeostasis), free and nudged phases side by side, a tree of modules with their own signals, low
+  precision from the start; energy gradients derived at compile time where the energy is a sum of known terms. A lean
+  backprop path (reverse-mode autodiff, transformer block, attention, AdamW, mixed precision, kernels for 10M-300M
+  baselines on the 4060) as the yardstick; no distributed training, sharding or serving.
 - **Roles (the user, 2026-11-09):** "I'm only going to be able to kind of do the high level stuff and reason with you
   there and try to give you ideas. Any kind of experimentation is going to be on you. You are responsible for a lot of
   this project and grow into that." I own the research program: design, experiments, measurement, the log of results. oann is
