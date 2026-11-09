@@ -1,0 +1,143 @@
+olang front record
+body global FP_ILOGB0	known p
+body global FP_ILOGBNAN	known p
+body global FP_INFINITE	known p
+body global FP_INT_DOWNWARD	known p
+body global FP_INT_TONEAREST	known p
+body global FP_INT_TONEARESTFROMZERO	known p
+body global FP_INT_TOWARDZERO	known p
+body global FP_INT_UPWARD	known p
+body global FP_LLOGB0	known p
+body global FP_LLOGBNAN	known p
+body global FP_NAN	known p
+body global FP_NORMAL	known p
+body global FP_SUBNORMAL	known p
+body global FP_ZERO	known p
+body global MATH_ERREXCEPT	known p
+body global MATH_ERRNO	known p
+body global MAXFLOAT	known p
+body global M_1_PI	known p
+body global M_1_PIf	known p
+body global M_1_PIf32x	known p
+body global M_1_PIf64	known p
+body global M_2_PI	known p
+body global M_2_PIf	known p
+body global M_2_PIf32x	known p
+body global M_2_PIf64	known p
+body global M_2_SQRTPI	known p
+body global M_2_SQRTPIf	known p
+body global M_2_SQRTPIf32x	known p
+body global M_2_SQRTPIf64	known p
+body global M_E	known p
+body global M_Ef	known p
+body global M_Ef32x	known p
+body global M_Ef64	known p
+body global M_LN10	known p
+body global M_LN10f	known p
+body global M_LN10f32x	known p
+body global M_LN10f64	known p
+body global M_LN2	known p
+body global M_LN2f	known p
+body global M_LN2f32x	known p
+body global M_LN2f64	known p
+body global M_LOG10E	known p
+body global M_LOG10Ef	known p
+body global M_LOG10Ef32x	known p
+body global M_LOG10Ef64	known p
+body global M_LOG2E	known p
+body global M_LOG2Ef	known p
+body global M_LOG2Ef32x	known p
+body global M_LOG2Ef64	known p
+body global M_PI	known p
+body global M_PI_2	known p
+body global M_PI_2f	known p
+body global M_PI_2f32x	known p
+body global M_PI_2f64	known p
+body global M_PI_4	known p
+body global M_PI_4f	known p
+body global M_PI_4f32x	known p
+body global M_PI_4f64	known p
+body global M_PIf	known p
+body global M_PIf32x	known p
+body global M_PIf64	known p
+body global M_SQRT1_2	known p
+body global M_SQRT1_2f	known p
+body global M_SQRT1_2f32x	known p
+body global M_SQRT1_2f64	known p
+body global M_SQRT2	known p
+body global M_SQRT2f	known p
+body global M_SQRT2f32x	known p
+body global M_SQRT2f64	known p
+body global math_errhandling	known p
+baked FP_ILOGB0 [8 00000080]
+baked FP_ILOGBNAN [8 00000080]
+baked FP_INFINITE [8 01000000]
+baked FP_INT_DOWNWARD [8 01000000]
+baked FP_INT_TONEAREST [8 04000000]
+baked FP_INT_TONEARESTFROMZERO [8 03000000]
+baked FP_INT_TOWARDZERO [8 02000000]
+baked FP_INT_UPWARD [8 00000000]
+baked FP_LLOGB0 [8 0000000000000080]
+baked FP_LLOGBNAN [8 0000000000000080]
+baked FP_NAN [8 00000000]
+baked FP_NORMAL [8 04000000]
+baked FP_SUBNORMAL [8 03000000]
+baked FP_ZERO [8 02000000]
+baked MATH_ERREXCEPT [8 02000000]
+baked MATH_ERRNO [8 01000000]
+baked MAXFLOAT [8 ffff7f7f]
+baked M_1_PI [8 83c8c96d305fd43f]
+baked M_1_PIf [8 83f9a23e]
+baked M_1_PIf32x [8 83c8c96d305fd43f]
+baked M_1_PIf64 [8 83c8c96d305fd43f]
+baked M_2_PI [8 83c8c96d305fe43f]
+baked M_2_PIf [8 83f9223f]
+baked M_2_PIf32x [8 83c8c96d305fe43f]
+baked M_2_PIf64 [8 83c8c96d305fe43f]
+baked M_2_SQRTPI [8 6d9b4250d70df23f]
+baked M_2_SQRTPIf [8 bb6e903f]
+baked M_2_SQRTPIf32x [8 6d9b4250d70df23f]
+baked M_2_SQRTPIf64 [8 6d9b4250d70df23f]
+baked M_E [8 6957148b0abf0540]
+baked M_Ef [8 54f82d40]
+baked M_Ef32x [8 6957148b0abf0540]
+baked M_Ef64 [8 6957148b0abf0540]
+baked M_LN10 [8 1655b5bbb16b0240]
+baked M_LN10f [8 8e5d1340]
+baked M_LN10f32x [8 1655b5bbb16b0240]
+baked M_LN10f64 [8 1655b5bbb16b0240]
+baked M_LN2 [8 ef39fafe422ee63f]
+baked M_LN2f [8 1872313f]
+baked M_LN2f32x [8 ef39fafe422ee63f]
+baked M_LN2f64 [8 ef39fafe422ee63f]
+baked M_LOG10E [8 0ee526157bcbdb3f]
+baked M_LOG10Ef [8 d95bde3e]
+baked M_LOG10Ef32x [8 0ee526157bcbdb3f]
+baked M_LOG10Ef64 [8 0ee526157bcbdb3f]
+baked M_LOG2E [8 fe822b654715f73f]
+baked M_LOG2Ef [8 3baab83f]
+baked M_LOG2Ef32x [8 fe822b654715f73f]
+baked M_LOG2Ef64 [8 fe822b654715f73f]
+baked M_PI [8 182d4454fb210940]
+baked M_PI_2 [8 182d4454fb21f93f]
+baked M_PI_2f [8 db0fc93f]
+baked M_PI_2f32x [8 182d4454fb21f93f]
+baked M_PI_2f64 [8 182d4454fb21f93f]
+baked M_PI_4 [8 182d4454fb21e93f]
+baked M_PI_4f [8 db0f493f]
+baked M_PI_4f32x [8 182d4454fb21e93f]
+baked M_PI_4f64 [8 182d4454fb21e93f]
+baked M_PIf [8 db0f4940]
+baked M_PIf32x [8 182d4454fb210940]
+baked M_PIf64 [8 182d4454fb210940]
+baked M_SQRT1_2 [8 cd3b7f669ea0e63f]
+baked M_SQRT1_2f [8 f304353f]
+baked M_SQRT1_2f32x [8 cd3b7f669ea0e63f]
+baked M_SQRT1_2f64 [8 cd3b7f669ea0e63f]
+baked M_SQRT2 [8 cd3b7f669ea0f63f]
+baked M_SQRT2f [8 f304b53f]
+baked M_SQRT2f32x [8 cd3b7f669ea0f63f]
+baked M_SQRT2f64 [8 cd3b7f669ea0f63f]
+baked math_errhandling [8 03000000]
+end
+sum ace45491b8fd0e15ca99d791700a407f305fded8f532e5393e00caf526c26ea7

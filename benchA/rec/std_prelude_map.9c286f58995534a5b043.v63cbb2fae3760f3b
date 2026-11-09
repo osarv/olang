@@ -1,0 +1,20 @@
+olang module record
+size 252
+split 0
+read 0 O23a std_2fprelude_2fmap_2efreeLink
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part 39bc98611e91c281f07ea67264b7677c30ee31925c7f335db00bbfcc22861968 std/prelude/map
+end
+sum 555f908b6104d80cb0c8deec85cfaa9dfdd041704f9bdfdd7e919d45c5ea7876

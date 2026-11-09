@@ -1,0 +1,31 @@
+olang front record
+body fn 1097-1233	known p
+body fn 1688-1766	known p
+body fn 1859-1915	known p
+body fn 1980-2038	known p
+body fn 2137-2284	known p
+body fn 2347-2458	known p
+body fn 2858-3350	known p
+body fn 4707-4793	known p
+body fn 5844-5945	known p
+body fn 5946-6150	known p
+body fn 961-997	known p
+body global ClockMonotonic	known p
+body global ClockRealtime	known p
+body global PollNs	known p
+baked ClockMonotonic [8 01000000]
+baked ClockRealtime [8 00000000]
+baked PollNs [8 8096980000000000]
+sig Cancel@1859 fn&(mut Token&)
+sig Cancelled@1980 fn&(Token&) Bool
+sig NowNs@961 fn&() I64
+sig Reason@2347 fn&(Token&) ? Stopped
+sig Token.After@1688 fn&(I64) mut Token&
+sig WakeAt@2858 fn&(Token&, mut Array<I64>&)
+sig Why@2137 fn&(Token&) I32
+sig cancelOnExit@5946 fn&(Bool, mut stopCount&) ? stepFailed
+sig spin@4707 fn&(Token&, mut spinCount&)
+sig spinRecord@5844 fn&(Token&, mut stopCount&)
+sig wallNs@1097 fn&() I64
+end
+sum 4bec703f15595b94f93e31c4bcaf55c69c0d978dc05b26a774e24ba6c21f4049

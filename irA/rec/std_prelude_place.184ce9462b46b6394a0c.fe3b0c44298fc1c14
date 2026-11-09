@@ -1,0 +1,6 @@
+olang front record
+body ctor 0-0	known p,0
+body fn 622-692	known p
+sig Str@622 fn&(Place) String
+end
+sum a7458a04fa185362712caf17bd073f63b3e1fd8d281413910115d94ad536465c

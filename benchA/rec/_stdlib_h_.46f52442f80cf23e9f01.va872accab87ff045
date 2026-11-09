@@ -1,0 +1,41 @@
+olang module record
+size 17149
+split 0
+read plain T13d <stdlib.h>.c___atomic_wide_counter
+read plain T13d <stdlib.h>.c___locale_struct
+read plain T13d <stdlib.h>.c___pthread_internal_list
+read plain T13d <stdlib.h>.c___pthread_internal_slist
+read plain T13d <stdlib.h>.c___sigset_t
+read plain T13d <stdlib.h>.div_t
+read plain T13d <stdlib.h>.drand48_data
+read plain T13d <stdlib.h>.fd_set
+read plain T13d <stdlib.h>.ldiv_t
+read plain T13d <stdlib.h>.lldiv_t
+read plain T13d <stdlib.h>.pthread_attr_t
+read plain T13d <stdlib.h>.pthread_barrier_t
+read plain T13d <stdlib.h>.pthread_barrierattr_t
+read plain T13d <stdlib.h>.pthread_cond_t
+read plain T13d <stdlib.h>.pthread_condattr_t
+read plain T13d <stdlib.h>.pthread_mutex_t
+read plain T13d <stdlib.h>.pthread_mutexattr_t
+read plain T13d <stdlib.h>.pthread_rwlock_t
+read plain T13d <stdlib.h>.pthread_rwlockattr_t
+read plain T13d <stdlib.h>.random_data
+read plain T13d <stdlib.h>.timespec
+read plain T13d <stdlib.h>.timeval
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part 7dd3074a91af7939b3e70376264143cf7088c812ebc2000640162a833d5095bf <stdlib.h>
+end
+sum 8f1004676ba9c6c32a531241dd447588816b9af4512209546dc374f020a67bfd

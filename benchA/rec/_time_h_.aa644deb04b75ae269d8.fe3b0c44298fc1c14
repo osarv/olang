@@ -1,0 +1,113 @@
+olang front record
+body global ADJ_ESTERROR	known p
+body global ADJ_FREQUENCY	known p
+body global ADJ_MAXERROR	known p
+body global ADJ_MICRO	known p
+body global ADJ_NANO	known p
+body global ADJ_OFFSET	known p
+body global ADJ_OFFSET_SINGLESHOT	known p
+body global ADJ_OFFSET_SS_READ	known p
+body global ADJ_SETOFFSET	known p
+body global ADJ_STATUS	known p
+body global ADJ_TAI	known p
+body global ADJ_TICK	known p
+body global ADJ_TIMECONST	known p
+body global CLOCKS_PER_SEC	known p
+body global CLOCK_BOOTTIME	known p
+body global CLOCK_BOOTTIME_ALARM	known p
+body global CLOCK_MONOTONIC	known p
+body global CLOCK_MONOTONIC_COARSE	known p
+body global CLOCK_MONOTONIC_RAW	known p
+body global CLOCK_PROCESS_CPUTIME_ID	known p
+body global CLOCK_REALTIME	known p
+body global CLOCK_REALTIME_ALARM	known p
+body global CLOCK_REALTIME_COARSE	known p
+body global CLOCK_TAI	known p
+body global CLOCK_THREAD_CPUTIME_ID	known p
+body global MOD_CLKA	known p
+body global MOD_CLKB	known p
+body global MOD_ESTERROR	known p
+body global MOD_FREQUENCY	known p
+body global MOD_MAXERROR	known p
+body global MOD_MICRO	known p
+body global MOD_NANO	known p
+body global MOD_OFFSET	known p
+body global MOD_STATUS	known p
+body global MOD_TAI	known p
+body global MOD_TIMECONST	known p
+body global STA_CLK	known p
+body global STA_CLOCKERR	known p
+body global STA_DEL	known p
+body global STA_FLL	known p
+body global STA_FREQHOLD	known p
+body global STA_INS	known p
+body global STA_MODE	known p
+body global STA_NANO	known p
+body global STA_PLL	known p
+body global STA_PPSERROR	known p
+body global STA_PPSFREQ	known p
+body global STA_PPSJITTER	known p
+body global STA_PPSSIGNAL	known p
+body global STA_PPSTIME	known p
+body global STA_PPSWANDER	known p
+body global STA_RONLY	known p
+body global STA_UNSYNC	known p
+body global TIMER_ABSTIME	known p
+body global TIME_UTC	known p
+baked ADJ_ESTERROR [8 08000000]
+baked ADJ_FREQUENCY [8 02000000]
+baked ADJ_MAXERROR [8 04000000]
+baked ADJ_MICRO [8 00100000]
+baked ADJ_NANO [8 00200000]
+baked ADJ_OFFSET [8 01000000]
+baked ADJ_OFFSET_SINGLESHOT [8 01800000]
+baked ADJ_OFFSET_SS_READ [8 01a00000]
+baked ADJ_SETOFFSET [8 00010000]
+baked ADJ_STATUS [8 10000000]
+baked ADJ_TAI [8 80000000]
+baked ADJ_TICK [8 00400000]
+baked ADJ_TIMECONST [8 20000000]
+baked CLOCKS_PER_SEC [8 40420f00]
+baked CLOCK_BOOTTIME [8 07000000]
+baked CLOCK_BOOTTIME_ALARM [8 09000000]
+baked CLOCK_MONOTONIC [8 01000000]
+baked CLOCK_MONOTONIC_COARSE [8 06000000]
+baked CLOCK_MONOTONIC_RAW [8 04000000]
+baked CLOCK_PROCESS_CPUTIME_ID [8 02000000]
+baked CLOCK_REALTIME [8 00000000]
+baked CLOCK_REALTIME_ALARM [8 08000000]
+baked CLOCK_REALTIME_COARSE [8 05000000]
+baked CLOCK_TAI [8 0b000000]
+baked CLOCK_THREAD_CPUTIME_ID [8 03000000]
+baked MOD_CLKA [8 01800000]
+baked MOD_CLKB [8 00400000]
+baked MOD_ESTERROR [8 08000000]
+baked MOD_FREQUENCY [8 02000000]
+baked MOD_MAXERROR [8 04000000]
+baked MOD_MICRO [8 00100000]
+baked MOD_NANO [8 00200000]
+baked MOD_OFFSET [8 01000000]
+baked MOD_STATUS [8 10000000]
+baked MOD_TAI [8 80000000]
+baked MOD_TIMECONST [8 20000000]
+baked STA_CLK [8 00800000]
+baked STA_CLOCKERR [8 00100000]
+baked STA_DEL [8 20000000]
+baked STA_FLL [8 08000000]
+baked STA_FREQHOLD [8 80000000]
+baked STA_INS [8 10000000]
+baked STA_MODE [8 00400000]
+baked STA_NANO [8 00200000]
+baked STA_PLL [8 01000000]
+baked STA_PPSERROR [8 00080000]
+baked STA_PPSFREQ [8 02000000]
+baked STA_PPSJITTER [8 00020000]
+baked STA_PPSSIGNAL [8 00010000]
+baked STA_PPSTIME [8 04000000]
+baked STA_PPSWANDER [8 00040000]
+baked STA_RONLY [8 00ff0000]
+baked STA_UNSYNC [8 40000000]
+baked TIMER_ABSTIME [8 01000000]
+baked TIME_UTC [8 01000000]
+end
+sum 53956682ee9c7aab35189abf4e1221a14a92a0d879cf5e055141e46028624bc6

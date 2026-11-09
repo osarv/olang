@@ -1,0 +1,9 @@
+olang front record
+body fn 12129-12208	known p
+body fn 12247-12684	known p
+body fn 14172-14447	known p
+sig Join@12129 fn&(Vec<String&>&, String&) String
+sig Join@12247 fn&(Vec<String>&, String&) String
+sig vecCharLiteral@14172 fn&(Char) String
+end
+sum b9ffe0278c4370c69362d42fcad8a359baccd35b730e9fa9f53e92e9807cbb76

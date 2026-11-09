@@ -1,0 +1,11 @@
+olang module record
+size 14113
+split 0
+read 0 O23a std_2fhex_2eDecode
+read 0 O23a std_2fhex_2eEncode
+read 0 O23a std_2fhex_2edigit
+read plain T13d std/prelude/vec.Vec
+part 733386e7684af4bfee18d95cbaf468bcdf76074a3e039bdfb3c8512f732d8a17 std/hex
+locs 9eb5de4b8b3c1929b2ac5b5735cdd6b2058d9a97f908d07254317952ff38a630 std/hex
+end
+sum 05bbb6d358d7240582d6eccb209e0bdb2f8332b5440c8e647bd74740537069e6

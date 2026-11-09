@@ -1,0 +1,19 @@
+olang module record
+size 2111
+split 0
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part fc329d6b26fff2aa5e6814ade3c88d413fa16f1d6e250f042c306bc8f103d286 <unistd.h>
+end
+sum d576f0918d51ffb6c16c6f55a4cce5142bd41f2de64cca3a798d6e0dbd160a36

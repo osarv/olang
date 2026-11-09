@@ -1,0 +1,78 @@
+olang module record
+size 283263
+split 0
+inst std_2fprelude_2farray_2eArray_3cstd_2fprelude_2ftext_3aChar_3e_2eContains_3cstd_2fprelude_2ftext_3aChar_3e
+inst std_2fprelude_2farray_2eArray_3cstd_2fprelude_2ftext_3aString_26_3e_2eSort_3cstd_2fprelu_H425a408f665c1f34766f6a10dd38435a
+read #2fd879736f46985463431147d16cfdc8 D9h mutable globals
+read 0 O23a std_2fcancel_2estd_2fcancel_3aToken_2eCancelled
+read 0 O23a std_2fcancel_2estd_2fcancel_3aToken_2eReason
+read 0 O23a std_2fio_2eWrite
+read 0 O23a std_2fos_2eArgs
+read 0 O23a std_2fos_2eClose
+read 0 O23a std_2fos_2eCreate
+read 0 O23a std_2fos_2eCwd
+read 0 O23a std_2fos_2eEnv
+read 0 O23a std_2fos_2eExecInPlace
+read 0 O23a std_2fos_2eExists
+read 0 O23a std_2fos_2eExit
+read 0 O23a std_2fos_2eFileInfo_2eStat
+read 0 O23a std_2fos_2eIsDir
+read 0 O23a std_2fos_2eIsTerminal
+read 0 O23a std_2fos_2eLink
+read 0 O23a std_2fos_2eMkDir
+read 0 O23a std_2fos_2eMkDirAll
+read 0 O23a std_2fos_2eMkTemp
+read 0 O23a std_2fos_2eOnCrash
+read 0 O23a std_2fos_2eOpen
+read 0 O23a std_2fos_2eOutput_2eExec
+read 0 O23a std_2fos_2eOutput_2eExecUntil
+read 0 O23a std_2fos_2eOutput_2eechoed
+read 0 O23a std_2fos_2eProcess_2eStart
+read 0 O23a std_2fos_2eQuote
+read 0 O23a std_2fos_2eReadDir
+read 0 O23a std_2fos_2eReadFile
+read 0 O23a std_2fos_2eReadLink
+read 0 O23a std_2fos_2eRealPath
+read 0 O23a std_2fos_2eRemove
+read 0 O23a std_2fos_2eRemoveAll
+read 0 O23a std_2fos_2eRename
+read 0 O23a std_2fos_2eRun
+read 0 O23a std_2fos_2eRunOnStack
+read 0 O23a std_2fos_2eWriteFile
+read 0 O23a std_2fos_2echeck
+read 0 O23a std_2fos_2echurn
+read 0 O23a std_2fos_2ecloseAndRaise
+read 0 O23a std_2fos_2ecopyOut
+read 0 O23a std_2fos_2ememFile
+read 0 O23a std_2fos_2eraise
+read 0 O23a std_2fos_2ereadBack
+read 0 O23a std_2fos_2eremoveTree
+read 0 O23a std_2fos_2estd_2fos_3aProcess_2eKill
+read 0 O23a std_2fos_2estd_2fos_3aProcess_2ePid
+read 0 O23a std_2fos_2estd_2fos_3aProcess_2eWait
+read 0 O23a std_2fos_2estd_2fos_3aProcess_2eWaitUntil
+read 0 O23a std_2fos_2estd_2fos_3aProcess_2eended
+read 0 O23a std_2fos_2estd_2fos_3aProcess_2elost
+read 0 O23a std_2fos_2etempDir
+read 0 O23a std_2fprelude_2farray_2eArray_3cstd_2fprelude_2ftext_3aChar_3e_2eContains_3cstd_2fprelude_2ftext_3aChar_3e
+read 0 O23a std_2fprelude_2farray_2eArray_3cstd_2fprelude_2ftext_3aString_26_3e_2eSort_3cstd_2fprelu_H425a408f665c1f34766f6a10dd38435a
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eCompare
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eEndsWith
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eEq
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eFindByte
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eSplit
+read plain T13d <time.h>.timespec
+read plain T13d std/cancel.Token
+read plain T13d std/os.FileInfo
+read plain T13d std/os.FileKind
+read plain T13d std/os.Output
+read plain T13d std/os.Process
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part a0482249739348ab65715ed23805093b0cef057b3a83dc4ac7318279f2557223 std/os
+locs e3489356ca18acd9733c8b00c7fdc9c44100413d3a552d126605f28570e5080c std/os
+end
+sum 4ba8fa9579d6fa6501892825407bbc758f1b0882745c1609cda71d28e2614e23

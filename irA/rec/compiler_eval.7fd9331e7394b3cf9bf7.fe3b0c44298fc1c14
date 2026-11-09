@@ -1,0 +1,842 @@
+olang front record
+body fn 100156-101047	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|100453|100457|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|100797|100807|-1
+body fn 101129-101753	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|101445|101449|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|101666|101676|-1
+body fn 101877-102246	known p
+body fn 102248-103245	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|102529|102533|-1 grows|0|-|-|..offs|5|0|compiler/eval|102529|102533|-1 grows|0|-|-|..offAt|6|0|compiler/eval|102529|102533|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|102529|102533|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|102529|102533|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|102529|102533|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|102529|102533|-1 grows|0|-|-|..datas|6|0|compiler/eval|102529|102533|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|103014|103019|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|103014|103019|-1
+body fn 103487-103928	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|103644|103648|-1 grows|0|-|-|..offs|5|0|compiler/eval|103897|103900|-1 grows|0|-|-|..offAt|6|0|compiler/eval|103897|103900|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|103897|103900|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|103897|103900|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|103897|103900|-1 grows|0|-|-|..datas|6|0|compiler/eval|103897|103900|-1
+body fn 103930-104694	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|104092|104098|-1 grows|0|-|-|..offs|5|0|compiler/eval|104092|104098|-1 grows|0|-|-|..offAt|6|0|compiler/eval|104092|104098|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|104092|104098|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|104092|104098|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|104092|104098|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|104092|104098|-1 grows|0|-|-|..datas|6|0|compiler/eval|104092|104098|-1
+body fn 104696-105541	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|104821|104826|-1 grows|0|-|-|..offs|5|0|compiler/eval|104821|104826|-1 grows|0|-|-|..offAt|6|0|compiler/eval|104821|104826|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|104919|104925|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|104919|104925|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|104919|104925|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|104919|104925|-1 grows|0|-|-|..datas|6|0|compiler/eval|104919|104925|-1
+body fn 105620-105878	known p grows|0|-|-|..codeOf|7|0|compiler/eval|105678|105687|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|105678|105687|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|105678|105687|-1
+body fn 106036-107313	known p grows|0|-|-|..codeOf|7|0|compiler/eval|106143|106150|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|106143|106150|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|106143|106150|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|106253|106263|-1 grows|0|-|-|..offs|5|0|compiler/eval|106253|106263|-1 grows|0|-|-|..offAt|6|0|compiler/eval|106253|106263|-1 grows|0|-|-|..datas|6|0|compiler/eval|106253|106263|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|106253|106263|-1 grows|0|-|-|..gens|5|0|compiler/eval|106253|106263|-1 grows|0|-|-|..regs|5|0|compiler/eval|106253|106263|-1
+body fn 107563-109124	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|107828|107832|-1 grows|0|-|-|..offs|5|0|compiler/eval|108033|108036|-1 grows|0|-|-|..offAt|6|0|compiler/eval|108033|108036|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|108033|108036|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|108033|108036|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|108033|108036|-1 grows|0|-|-|..datas|6|0|compiler/eval|108033|108036|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|108712|108715|-1 grows|0|-|-|..gens|5|0|compiler/eval|108870|108874|-1 grows|0|-|-|..regs|5|0|compiler/eval|109029|109035|-1
+body fn 109195-109481	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|109398|109402|-1
+body fn 109592-110741	known p grows|0|-|-|..defF|5|0|compiler/eval|110631|110635|-1 grows|0|-|-|..defS|5|0|compiler/eval|110662|110666|-1 grows|0|-|-|..defB|5|0|compiler/eval|110695|110699|-1
+body fn 110929-112166	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|111131|111138|-1 grows|0|-|-|..offs|5|0|compiler/eval|111131|111138|-1 grows|0|-|-|..offAt|6|0|compiler/eval|111131|111138|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|111131|111138|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|111131|111138|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|111131|111138|-1 grows|0|-|-|..datas|6|0|compiler/eval|111131|111138|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|111131|111138|-1 grows|0|-|-|..genWords|9|0|compiler/eval|111407|111411|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|112152|112160|-1 grows|0|-|-|..closing|8|0|compiler/eval|112152|112160|-1 grows|0|-|-|..scopes|7|0|compiler/eval|112152|112160|-1 grows|0|-|-|..trace|6|0|compiler/eval|112152|112160|-1
+body fn 112382-113315	known p grows|0|-|-|..freeGens|9|0|compiler/eval|112778|112781|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|112826|112836|-1 grows|0|-|-|..scopes|7|0|compiler/eval|112826|112836|-1 grows|0|-|-|..defF|5|0|compiler/eval|113136|113146|-1 grows|0|-|-|..defS|5|0|compiler/eval|113136|113146|-1 grows|0|-|-|..defB|5|0|compiler/eval|113136|113146|-1
+body fn 113763-114075	known p
+body fn 114186-114401	known p
+body fn 114500-115023	known p
+body fn 115271-115790	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|115561|115565|-1 grows|0|-|-|..scopes|7|0|compiler/eval|115687|115694|-1
+body fn 115919-116311	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|116079|116082|-1
+body fn 116386-116774	known p
+body fn 116776-117191	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|116867|116874|-1
+body fn 117235-117352	known p
+body fn 117354-120769	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|117553|117558|-1 grows|0|-|-|..offs|5|0|compiler/eval|117553|117558|-1 grows|0|-|-|..offAt|6|0|compiler/eval|117553|117558|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|117553|117558|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|117553|117558|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|117553|117558|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|117553|117558|-1 grows|0|-|-|..datas|6|0|compiler/eval|117553|117558|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|118643|118649|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|118753|118759|-1
+body fn 120990-121949	known p
+body fn 122031-122799	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|122235|122240|-1
+body fn 122801-122884	known p
+body fn 122950-123121	known p
+body fn 123123-123396	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|123376|123380|-1 grows|0|-|-|..offs|5|0|compiler/eval|123376|123380|-1 grows|0|-|-|..offAt|6|0|compiler/eval|123376|123380|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|123376|123380|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|123376|123380|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|123376|123380|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|123376|123380|-1 grows|0|-|-|..datas|6|0|compiler/eval|123376|123380|-1
+body fn 123398-123721	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|123490|123495|-1
+body fn 123723-125797	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|123831|123836|-1
+body fn 125866-126216	known p
+body fn 126287-126565	known p
+body fn 126790-127801	known p
+body fn 127803-128352	known p
+body fn 128542-129455	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|128638|128643|-1
+body fn 129457-130050	known p
+body fn 130226-131028	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|130298|130303|-1
+body fn 131102-131866	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|131212|131216|-1 grows|0|-|-|..offs|5|0|compiler/eval|131212|131216|-1 grows|0|-|-|..offAt|6|0|compiler/eval|131212|131216|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|131212|131216|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|131212|131216|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|131212|131216|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|131212|131216|-1 grows|0|-|-|..datas|6|0|compiler/eval|131212|131216|-1
+body fn 131939-133559	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|132099|132105|-1 grows|0|-|-|..offs|5|0|compiler/eval|132099|132105|-1 grows|0|-|-|..offAt|6|0|compiler/eval|132099|132105|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|132099|132105|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|132099|132105|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|132099|132105|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|132099|132105|-1 grows|0|-|-|..datas|6|0|compiler/eval|132099|132105|-1
+body fn 133674-134043	known p
+body fn 134105-134199	known p
+body fn 134283-134525	known p
+body fn 134993-135218	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|135147|135152|-1
+body fn 135297-135461	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|135377|135382|-1
+body fn 135563-135699	known p
+body fn 135789-136222	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|135885|135890|-1 grows|0|-|-|..offs|5|0|compiler/eval|136041|136045|-1 grows|0|-|-|..offAt|6|0|compiler/eval|136041|136045|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|136041|136045|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|136041|136045|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|136041|136045|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|136041|136045|-1 grows|0|-|-|..datas|6|0|compiler/eval|136041|136045|-1
+body fn 136340-136727	known p
+body fn 136729-136783	known p
+body fn 136785-136919	known p
+body fn 136921-137043	known p
+body fn 137045-137111	known p
+body fn 137169-137575	known p
+body fn 137577-137707	known p
+body fn 137709-137890	known p
+body fn 137956-138293	known p
+body fn 138363-138622	known p
+body fn 138724-139355	known p
+body fn 139432-139840	known p
+body fn 139918-140049	known p
+body fn 140125-140296	known p
+body fn 140392-140703	known p
+body fn 140776-141005	known p
+body fn 141077-141636	known p
+body fn 141731-141980	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|141815|141820|-1
+body fn 142067-142325	known p
+body fn 142430-147455	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|142595|142600|-1 grows|0|-|-|..offs|5|0|compiler/eval|142770|142776|-1 grows|0|-|-|..offAt|6|0|compiler/eval|142770|142776|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|142770|142776|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|142770|142776|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|142770|142776|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|142770|142776|-1 grows|0|-|-|..datas|6|0|compiler/eval|142770|142776|-1
+body fn 147500-147686	known p
+body fn 147894-149413	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|148003|148008|-1 grows|0|-|-|..offs|5|0|compiler/eval|148078|148084|-1 grows|0|-|-|..offAt|6|0|compiler/eval|148078|148084|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|148078|148084|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|148078|148084|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|148078|148084|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|148078|148084|-1 grows|0|-|-|..datas|6|0|compiler/eval|148078|148084|-1
+body fn 149479-149786	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|149624|149630|-1
+body fn 149895-152251	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|150059|150064|-1 grows|0|-|-|..offs|5|0|compiler/eval|150218|150224|-1 grows|0|-|-|..offAt|6|0|compiler/eval|150218|150224|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|150218|150224|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|150218|150224|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|150218|150224|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|150218|150224|-1 grows|0|-|-|..datas|6|0|compiler/eval|150218|150224|-1
+body fn 152342-152553	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|152422|152427|-1
+body fn 152647-153129	known p
+body fn 153402-153909	known p
+body fn 153935-159090	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|154060|154064|-1 grows|0|-|-|..scopes|7|0|compiler/eval|154310|154322|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|154310|154322|-1 grows|0|-|-|..offs|5|0|compiler/eval|154359|154365|-1 grows|0|-|-|..offAt|6|0|compiler/eval|154359|154365|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|154359|154365|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|154359|154365|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|154359|154365|-1 grows|0|-|-|..datas|6|0|compiler/eval|154359|154365|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|154359|154365|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|154359|154365|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|154359|154365|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|154359|154365|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|154359|154365|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|154359|154365|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|154359|154365|-1 grows|0|-|-|..gens|5|0|compiler/eval|154359|154365|-1 grows|0|-|-|..regs|5|0|compiler/eval|154359|154365|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|154359|154365|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|154359|154365|-1 grows|0|-|-|..closing|8|0|compiler/eval|155822|155826|-1 grows|0|-|-|..trace|6|0|compiler/eval|155955|155961|-1 grows|0|-|-|..whats|6|0|compiler/eval|155955|155961|-1 grows|0|-|-|..defF|5|0|compiler/eval|156173|156177|-1 grows|0|-|-|..defS|5|0|compiler/eval|156205|156209|-1 grows|0|-|-|..defB|5|0|compiler/eval|156241|156245|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|156919|156930|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|157949|157956|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|157949|157956|-1 grows|0|-|-|..tasks|6|0|compiler/eval|159014|159019|-1
+body fn 159092-159190	known p
+body fn 159255-160902	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|159353|159360|-1 grows|0|-|-|..offs|5|0|compiler/eval|159537|159541|-1 grows|0|-|-|..offAt|6|0|compiler/eval|159537|159541|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|159537|159541|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|159537|159541|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|159537|159541|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|159537|159541|-1 grows|0|-|-|..datas|6|0|compiler/eval|159537|159541|-1
+body fn 160961-161307	known p
+body fn 161491-161844	known p grows|0|-|-|..freeAllocs|11|0|compiler/eval|161755|161765|-1
+body fn 161846-161943	known p grows|0|-|-|..freeAllocs|11|0|compiler/eval|161917|161927|-1
+body fn 161945-162373	known p grows|0|-|-|..freeAllocs|11|0|compiler/eval|162229|162236|-1
+body fn 162749-163572	known p grows|0|-|-|..scopes|7|0|compiler/eval|163040|163052|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|163040|163052|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|163040|163052|-1
+body fn 163574-163765	known p grows|0|-|-|..scopes|7|0|compiler/eval|163686|163698|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|163686|163698|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|163686|163698|-1
+body fn 163767-163933	known p grows|0|-|-|..scopes|7|0|compiler/eval|163887|163897|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|163887|163897|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|163887|163897|-1
+body fn 164026-164404	known p
+body fn 164406-165697	known p grows|0|-|-|..scopes|7|0|compiler/eval|165066|165077|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|165066|165077|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|165314|165329|-1
+body fn 165963-166732	known p
+body fn 167262-167584	known p
+body fn 167586-168023	known p grows|0|-|-|..scopes|7|0|compiler/eval|167817|167826|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|167817|167826|-1
+body fn 168044-170011	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|168531|168535|-1 grows|0|-|-|..offs|5|0|compiler/eval|168531|168535|-1 grows|0|-|-|..offAt|6|0|compiler/eval|168531|168535|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|168531|168535|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|168531|168535|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|168531|168535|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|168531|168535|-1 grows|0|-|-|..datas|6|0|compiler/eval|168531|168535|-1
+body fn 170013-170264	known p
+body fn 170466-174061	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|170626|170632|-1 grows|0|-|-|..offs|5|0|compiler/eval|170626|170632|-1 grows|0|-|-|..offAt|6|0|compiler/eval|170626|170632|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|170626|170632|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|170626|170632|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|170626|170632|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|170626|170632|-1 grows|0|-|-|..datas|6|0|compiler/eval|170626|170632|-1 grows|0|-|-|..defF|5|0|compiler/eval|171461|171471|-1 grows|0|-|-|..defS|5|0|compiler/eval|171461|171471|-1 grows|0|-|-|..defB|5|0|compiler/eval|171461|171471|-1 grows|0|-|-|..scopes|7|0|compiler/eval|171508|171517|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|172602|172613|-1
+body fn 174169-174691	known p
+body fn 175249-180398	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|175926|175935|-1 grows|0|-|-|..offs|5|0|compiler/eval|175926|175935|-1 grows|0|-|-|..offAt|6|0|compiler/eval|175926|175935|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|175926|175935|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|175926|175935|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|175926|175935|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|175926|175935|-1 grows|0|-|-|..datas|6|0|compiler/eval|175926|175935|-1
+body fn 180652-180925	known p
+body fn 181055-181386	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|181169|181174|-1
+body fn 181435-181604	known p
+body fn 182729-187794	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|183067|183073|-1 grows|0|-|-|..offs|5|0|compiler/eval|183067|183073|-1 grows|0|-|-|..offAt|6|0|compiler/eval|183067|183073|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|183067|183073|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|183067|183073|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|183067|183073|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|183067|183073|-1 grows|0|-|-|..datas|6|0|compiler/eval|183067|183073|-1
+body fn 188147-188256	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|188223|188229|-1 grows|0|-|-|..offs|5|0|compiler/eval|188223|188229|-1 grows|0|-|-|..offAt|6|0|compiler/eval|188223|188229|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|188223|188229|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|188223|188229|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|188223|188229|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|188223|188229|-1 grows|0|-|-|..datas|6|0|compiler/eval|188223|188229|-1
+body fn 188312-188644	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|188430|188434|-1 grows|0|-|-|..offs|5|0|compiler/eval|188430|188434|-1 grows|0|-|-|..offAt|6|0|compiler/eval|188430|188434|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|188430|188434|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|188430|188434|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|188430|188434|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|188430|188434|-1 grows|0|-|-|..datas|6|0|compiler/eval|188430|188434|-1
+body fn 188735-189134	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|188867|188871|-1 grows|0|-|-|..offs|5|0|compiler/eval|188867|188871|-1 grows|0|-|-|..offAt|6|0|compiler/eval|188867|188871|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|188867|188871|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|188867|188871|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|188867|188871|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|188867|188871|-1 grows|0|-|-|..datas|6|0|compiler/eval|188867|188871|-1
+body fn 189251-189447	known p
+body fn 189449-190088	known p
+body fn 190222-190824	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|190346|190352|-1 grows|0|-|-|..offs|5|0|compiler/eval|190346|190352|-1 grows|0|-|-|..offAt|6|0|compiler/eval|190346|190352|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|190346|190352|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|190346|190352|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|190346|190352|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|190346|190352|-1 grows|0|-|-|..datas|6|0|compiler/eval|190346|190352|-1
+body fn 190918-191130	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|191013|191018|-1
+body fn 191132-194276	known p grows|0|-|-|..scopes|7|0|compiler/eval|191393|191405|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|191393|191405|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|191393|191405|-1 grows|0|-|-|..offs|5|0|compiler/eval|191456|191462|-1 grows|0|-|-|..offAt|6|0|compiler/eval|191456|191462|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|191456|191462|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|191456|191462|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|191456|191462|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|191456|191462|-1 grows|0|-|-|..datas|6|0|compiler/eval|191456|191462|-1 grows|0|-|-|..defF|5|0|compiler/eval|191979|191989|-1 grows|0|-|-|..defS|5|0|compiler/eval|191979|191989|-1 grows|0|-|-|..defB|5|0|compiler/eval|191979|191989|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|191979|191989|-1 grows|0|-|-|..closing|8|0|compiler/eval|192575|192580|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|192575|192580|-1 grows|0|-|-|..trace|6|0|compiler/eval|192575|192580|-1 grows|0|-|-|..genWords|9|0|compiler/eval|192982|192989|-1 grows|0|-|-|..whats|6|0|compiler/eval|193550|193556|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|193921|193925|-1
+body fn 194586-195158	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|194664|194669|-1 grows|0|-|-|..offs|5|0|compiler/eval|194664|194669|-1 grows|0|-|-|..offAt|6|0|compiler/eval|194664|194669|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|194664|194669|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|194664|194669|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|194664|194669|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|194664|194669|-1 grows|0|-|-|..datas|6|0|compiler/eval|194664|194669|-1 grows|0|-|-|..defF|5|0|compiler/eval|194664|194669|-1 grows|0|-|-|..defS|5|0|compiler/eval|194664|194669|-1 grows|0|-|-|..defB|5|0|compiler/eval|194664|194669|-1 grows|0|-|-|..scopes|7|0|compiler/eval|194664|194669|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|194664|194669|-1 grows|0|-|-|..closing|8|0|compiler/eval|195140|195144|-1
+body fn 195160-195481	known p
+body fn 195483-196082	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|195807|195812|-1 grows|0|-|-|..offs|5|0|compiler/eval|195807|195812|-1 grows|0|-|-|..offAt|6|0|compiler/eval|195807|195812|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|195807|195812|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|195807|195812|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|195807|195812|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|195807|195812|-1 grows|0|-|-|..datas|6|0|compiler/eval|195807|195812|-1 grows|0|-|-|..defF|5|0|compiler/eval|195807|195812|-1 grows|0|-|-|..defS|5|0|compiler/eval|195807|195812|-1 grows|0|-|-|..defB|5|0|compiler/eval|195807|195812|-1 grows|0|-|-|..scopes|7|0|compiler/eval|195807|195812|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|195807|195812|-1
+body fn 196213-196440	known p
+body fn 196442-197016	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|196749|196753|-1 grows|0|-|-|..offs|5|0|compiler/eval|196749|196753|-1 grows|0|-|-|..offAt|6|0|compiler/eval|196749|196753|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|196749|196753|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|196749|196753|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|196749|196753|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|196749|196753|-1 grows|0|-|-|..datas|6|0|compiler/eval|196749|196753|-1
+body fn 197181-197655	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|197321|197328|-1 grows|0|-|-|..offs|5|0|compiler/eval|197321|197328|-1 grows|0|-|-|..offAt|6|0|compiler/eval|197321|197328|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|197321|197328|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|197321|197328|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|197321|197328|-1 grows|0|-|-|..datas|6|0|compiler/eval|197321|197328|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|197321|197328|-1 grows|0|-|-|..closing|8|0|compiler/eval|197516|197520|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|197641|197649|-1 grows|0|-|-|..scopes|7|0|compiler/eval|197641|197649|-1 grows|0|-|-|..trace|6|0|compiler/eval|197641|197649|-1
+body fn 197795-198611	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|198112|198117|-1 grows|0|-|-|..offs|5|0|compiler/eval|198112|198117|-1 grows|0|-|-|..offAt|6|0|compiler/eval|198112|198117|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|198152|198155|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|198152|198155|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|198152|198155|-1 grows|0|-|-|..datas|6|0|compiler/eval|198152|198155|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|198551|198560|-1
+body fn 198806-199595	known p
+body fn 199597-201034	known p grows|0|-|-|..freeTasks|10|0|compiler/eval|200573|200582|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|200573|200582|-1 grows|0|-|-|..closing|8|0|compiler/eval|200573|200582|-1 grows|0|-|-|..scopes|7|0|compiler/eval|200573|200582|-1 grows|0|-|-|..offs|5|0|compiler/eval|200573|200582|-1 grows|0|-|-|..offAt|6|0|compiler/eval|200573|200582|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|200573|200582|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|200573|200582|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|200573|200582|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|200573|200582|-1 grows|0|-|-|..datas|6|0|compiler/eval|200573|200582|-1 grows|0|-|-|..trace|6|0|compiler/eval|200856|200860|-1
+body fn 201503-202339	known p
+body fn 202493-202767	known p
+body fn 202932-203743	known p grows|0|-|-|..trace|6|0|compiler/eval|203462|203466|-1 grows|0|-|-|..whats|6|0|compiler/eval|203687|203691|-1
+body fn 203845-203904	known p
+body fn 203905-204015	known p
+body fn 204079-204191	known p
+body fn 204468-204730	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|204696|204700|-1
+body fn 204732-206607	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|204977|204987|-1 grows|0|-|-|..offs|5|0|compiler/eval|205257|205260|-1 grows|0|-|-|..offAt|6|0|compiler/eval|205257|205260|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|205257|205260|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|205257|205260|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|205257|205260|-1 grows|0|-|-|..datas|6|0|compiler/eval|205257|205260|-1 grows|0|-|-|..tasks|6|0|compiler/eval|206308|206319|-1
+body fn 206609-206704	known p grows|0|-|-|..tasks|6|0|compiler/eval|206661|206665|-1
+body fn 206706-206771	known p grows|0|-|-|..freeTasks|10|0|compiler/eval|206759|206763|-1
+body fn 206892-207920	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|207307|207316|-1 grows|0|-|-|..scopes|7|0|compiler/eval|207307|207316|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|207307|207316|-1 grows|0|-|-|..closing|8|0|compiler/eval|207681|207688|-1
+body fn 207922-209816	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|208114|208124|-1 grows|0|-|-|..scopes|7|0|compiler/eval|208872|208881|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|209037|209041|-1
+body fn 209818-210885	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|210156|210160|-1
+body fn 210975-211826	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|211150|211160|-1 grows|0|-|-|..offs|5|0|compiler/eval|211241|211245|-1 grows|0|-|-|..offAt|6|0|compiler/eval|211241|211245|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|211241|211245|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|211241|211245|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|211241|211245|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|211241|211245|-1 grows|0|-|-|..datas|6|0|compiler/eval|211241|211245|-1
+body fn 212107-212581	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|212266|212270|-1
+body fn 212665-212793	known p
+body fn 212988-216555	known p grows|0|-|-|..freeTasks|10|0|compiler/eval|213063|213071|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|213612|213622|-1 grows|0|-|-|..closing|8|0|compiler/eval|213969|213976|-1 grows|0|-|-|..scopes|7|0|compiler/eval|214577|214586|-1 grows|0|-|-|..offs|5|0|compiler/eval|215539|215543|-1 grows|0|-|-|..offAt|6|0|compiler/eval|215539|215543|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|215539|215543|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|215539|215543|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|215539|215543|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|215539|215543|-1 grows|0|-|-|..datas|6|0|compiler/eval|215539|215543|-1
+body fn 216668-216876	known p grows|0|-|-|..closing|8|0|compiler/eval|216859|216870|-1
+body fn 216962-218507	known p grows|0|-|-|..freeRegs|9|0|compiler/eval|217261|217270|-1 grows|0|-|-|..scopes|7|0|compiler/eval|217261|217270|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|217261|217270|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|217261|217270|-1 grows|0|-|-|..defF|5|0|compiler/eval|217261|217270|-1 grows|0|-|-|..defS|5|0|compiler/eval|217261|217270|-1 grows|0|-|-|..defB|5|0|compiler/eval|217261|217270|-1 grows|0|-|-|..closing|8|0|compiler/eval|217261|217270|-1 grows|0|-|-|..early|6|0|compiler/eval|217261|217270|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|217261|217270|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|217261|217270|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|217577|217581|-1 grows|0|-|-|..offs|5|0|compiler/eval|217577|217581|-1 grows|0|-|-|..offAt|6|0|compiler/eval|217577|217581|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|217577|217581|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|217577|217581|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|217577|217581|-1 grows|0|-|-|..datas|6|0|compiler/eval|217577|217581|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|217577|217581|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|217577|217581|-1 grows|0|-|-|..trace|6|0|compiler/eval|217577|217581|-1 grows|0|-|-|..genWords|9|0|compiler/eval|217577|217581|-1 grows|0|-|-|..whats|6|0|compiler/eval|217577|217581|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|217577|217581|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|218392|218398|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|218392|218398|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|218392|218398|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|218392|218398|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|218392|218398|-1 grows|0|-|-|..gens|5|0|compiler/eval|218392|218398|-1 grows|0|-|-|..regs|5|0|compiler/eval|218392|218398|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|218392|218398|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|218392|218398|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|218392|218398|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|218392|218398|-1 grows|0|-|-|..tasks|6|0|compiler/eval|218392|218398|-1
+body fn 218794-219886	known p,0 grows|0|-|-|..freeAllocs|11|0|compiler/eval|219112|219119|-1 grows|0|-|-|..scopes|7|0|compiler/eval|219489|219498|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|219489|219498|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|219834|219838|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|219834|219838|-1 grows|0|-|-|..defF|5|0|compiler/eval|219834|219838|-1 grows|0|-|-|..defS|5|0|compiler/eval|219834|219838|-1 grows|0|-|-|..defB|5|0|compiler/eval|219834|219838|-1 grows|0|-|-|..closing|8|0|compiler/eval|219834|219838|-1 grows|0|-|-|..early|6|0|compiler/eval|219834|219838|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|219834|219838|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|219834|219838|-1 grows|0|-|-|..offs|5|0|compiler/eval|219834|219838|-1 grows|0|-|-|..offAt|6|0|compiler/eval|219834|219838|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|219834|219838|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|219834|219838|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|219834|219838|-1 grows|0|-|-|..datas|6|0|compiler/eval|219834|219838|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|219834|219838|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|219834|219838|-1 grows|0|-|-|..trace|6|0|compiler/eval|219834|219838|-1 grows|0|-|-|..genWords|9|0|compiler/eval|219834|219838|-1 grows|0|-|-|..whats|6|0|compiler/eval|219834|219838|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|219834|219838|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|219834|219838|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|219834|219838|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|219834|219838|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|219834|219838|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|219834|219838|-1 grows|0|-|-|..gens|5|0|compiler/eval|219834|219838|-1 grows|0|-|-|..regs|5|0|compiler/eval|219834|219838|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|219834|219838|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|219834|219838|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|219834|219838|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|219834|219838|-1 grows|0|-|-|..tasks|6|0|compiler/eval|219834|219838|-1
+body fn 220140-220585	known p,0 grows|0|-|-|..scopes|7|0|compiler/eval|220323|220332|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|220323|220332|-1 grows|0|-|-|..closing|8|0|compiler/eval|220427|220431|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|220503|220512|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|220503|220512|-1 grows|0|-|-|..defF|5|0|compiler/eval|220503|220512|-1 grows|0|-|-|..defS|5|0|compiler/eval|220503|220512|-1 grows|0|-|-|..defB|5|0|compiler/eval|220503|220512|-1 grows|0|-|-|..early|6|0|compiler/eval|220503|220512|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|220503|220512|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|220503|220512|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|220525|220529|-1 grows|0|-|-|..offs|5|0|compiler/eval|220525|220529|-1 grows|0|-|-|..offAt|6|0|compiler/eval|220525|220529|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|220525|220529|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|220525|220529|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|220525|220529|-1 grows|0|-|-|..datas|6|0|compiler/eval|220525|220529|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|220525|220529|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|220525|220529|-1 grows|0|-|-|..trace|6|0|compiler/eval|220525|220529|-1 grows|0|-|-|..genWords|9|0|compiler/eval|220525|220529|-1 grows|0|-|-|..whats|6|0|compiler/eval|220525|220529|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|220525|220529|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|220525|220529|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|220525|220529|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|220525|220529|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|220525|220529|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|220525|220529|-1 grows|0|-|-|..gens|5|0|compiler/eval|220525|220529|-1 grows|0|-|-|..regs|5|0|compiler/eval|220525|220529|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|220525|220529|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|220525|220529|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|220525|220529|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|220525|220529|-1 grows|0|-|-|..tasks|6|0|compiler/eval|220525|220529|-1
+body fn 221114-222842	known p,0 grows|0|-|-|..freeAllocs|11|0|compiler/eval|221361|221368|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|222090|222105|-1 grows|0|-|-|..scopes|7|0|compiler/eval|222258|222269|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|222258|222269|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|222283|222287|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|222283|222287|-1 grows|0|-|-|..defF|5|0|compiler/eval|222283|222287|-1 grows|0|-|-|..defS|5|0|compiler/eval|222283|222287|-1 grows|0|-|-|..defB|5|0|compiler/eval|222283|222287|-1 grows|0|-|-|..closing|8|0|compiler/eval|222283|222287|-1 grows|0|-|-|..early|6|0|compiler/eval|222283|222287|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|222283|222287|-1 grows|0|-|-|..offs|5|0|compiler/eval|222283|222287|-1 grows|0|-|-|..offAt|6|0|compiler/eval|222283|222287|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|222283|222287|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|222283|222287|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|222283|222287|-1 grows|0|-|-|..datas|6|0|compiler/eval|222283|222287|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|222283|222287|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|222283|222287|-1 grows|0|-|-|..trace|6|0|compiler/eval|222283|222287|-1 grows|0|-|-|..genWords|9|0|compiler/eval|222283|222287|-1 grows|0|-|-|..whats|6|0|compiler/eval|222283|222287|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|222283|222287|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|222283|222287|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|222283|222287|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|222283|222287|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|222283|222287|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|222283|222287|-1 grows|0|-|-|..gens|5|0|compiler/eval|222283|222287|-1 grows|0|-|-|..regs|5|0|compiler/eval|222283|222287|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|222283|222287|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|222283|222287|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|222283|222287|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|222283|222287|-1 grows|0|-|-|..tasks|6|0|compiler/eval|222283|222287|-1
+body fn 222957-223357	known p,0 grows|0|-|-|..scopes|7|0|compiler/eval|223270|223281|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|223270|223281|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|223295|223299|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|223295|223299|-1 grows|0|-|-|..defF|5|0|compiler/eval|223295|223299|-1 grows|0|-|-|..defS|5|0|compiler/eval|223295|223299|-1 grows|0|-|-|..defB|5|0|compiler/eval|223295|223299|-1 grows|0|-|-|..closing|8|0|compiler/eval|223295|223299|-1 grows|0|-|-|..early|6|0|compiler/eval|223295|223299|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|223295|223299|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|223295|223299|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|223295|223299|-1 grows|0|-|-|..offs|5|0|compiler/eval|223295|223299|-1 grows|0|-|-|..offAt|6|0|compiler/eval|223295|223299|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|223295|223299|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|223295|223299|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|223295|223299|-1 grows|0|-|-|..datas|6|0|compiler/eval|223295|223299|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|223295|223299|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|223295|223299|-1 grows|0|-|-|..trace|6|0|compiler/eval|223295|223299|-1 grows|0|-|-|..genWords|9|0|compiler/eval|223295|223299|-1 grows|0|-|-|..whats|6|0|compiler/eval|223295|223299|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|223295|223299|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|223295|223299|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|223295|223299|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|223295|223299|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|223295|223299|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|223295|223299|-1 grows|0|-|-|..gens|5|0|compiler/eval|223295|223299|-1 grows|0|-|-|..regs|5|0|compiler/eval|223295|223299|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|223295|223299|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|223295|223299|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|223295|223299|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|223295|223299|-1 grows|0|-|-|..tasks|6|0|compiler/eval|223295|223299|-1
+body fn 223560-224292	known p grows|0|-|-|..freeRegs|9|0|compiler/eval|223726|223737|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|223726|223737|-1 grows|0|-|-|..early|6|0|compiler/eval|223726|223737|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|223726|223737|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|223726|223737|-1 grows|0|-|-|..scopes|7|0|compiler/eval|223726|223737|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|223726|223737|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|223726|223737|-1 grows|0|-|-|..defF|5|0|compiler/eval|223726|223737|-1 grows|0|-|-|..defS|5|0|compiler/eval|223726|223737|-1 grows|0|-|-|..defB|5|0|compiler/eval|223726|223737|-1 grows|0|-|-|..closing|8|0|compiler/eval|223726|223737|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|223726|223737|-1 grows|0|-|-|..offs|5|0|compiler/eval|223726|223737|-1 grows|0|-|-|..offAt|6|0|compiler/eval|223726|223737|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|223726|223737|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|223726|223737|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|223726|223737|-1 grows|0|-|-|..datas|6|0|compiler/eval|223726|223737|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|223726|223737|-1 grows|0|-|-|..trace|6|0|compiler/eval|223726|223737|-1 grows|0|-|-|..genWords|9|0|compiler/eval|223726|223737|-1 grows|0|-|-|..whats|6|0|compiler/eval|223726|223737|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|223726|223737|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|223726|223737|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|223726|223737|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|223726|223737|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|223726|223737|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|223726|223737|-1 grows|0|-|-|..gens|5|0|compiler/eval|223726|223737|-1 grows|0|-|-|..regs|5|0|compiler/eval|223726|223737|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|223726|223737|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|223726|223737|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|223726|223737|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|223726|223737|-1 grows|0|-|-|..tasks|6|0|compiler/eval|223726|223737|-1
+body fn 224361-224660	known p grows|0|-|-|..freeRegs|9|0|compiler/eval|224535|224544|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|224535|224544|-1 grows|0|-|-|..early|6|0|compiler/eval|224535|224544|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|224535|224544|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|224535|224544|-1
+body fn 224796-225292	known p
+body fn 225381-225563	known p
+body fn 226026-227121	known p grows|0|-|-|..freeRegs|9|0|compiler/eval|226284|226293|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|226284|226293|-1 grows|0|-|-|..early|6|0|compiler/eval|226284|226293|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|226284|226293|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|226284|226293|-1 grows|0|-|-|..scopes|7|0|compiler/eval|226641|226645|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|226641|226645|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|226641|226645|-1 grows|0|-|-|..defF|5|0|compiler/eval|226641|226645|-1 grows|0|-|-|..defS|5|0|compiler/eval|226641|226645|-1 grows|0|-|-|..defB|5|0|compiler/eval|226641|226645|-1 grows|0|-|-|..closing|8|0|compiler/eval|226641|226645|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|226641|226645|-1 grows|0|-|-|..offs|5|0|compiler/eval|226641|226645|-1 grows|0|-|-|..offAt|6|0|compiler/eval|226641|226645|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|226641|226645|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|226641|226645|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|226641|226645|-1 grows|0|-|-|..datas|6|0|compiler/eval|226641|226645|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|226641|226645|-1 grows|0|-|-|..trace|6|0|compiler/eval|226641|226645|-1 grows|0|-|-|..genWords|9|0|compiler/eval|226641|226645|-1 grows|0|-|-|..whats|6|0|compiler/eval|226641|226645|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|226641|226645|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|226641|226645|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|226641|226645|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|226641|226645|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|226641|226645|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|226641|226645|-1 grows|0|-|-|..gens|5|0|compiler/eval|226641|226645|-1 grows|0|-|-|..regs|5|0|compiler/eval|226641|226645|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|226641|226645|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|226641|226645|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|226641|226645|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|226641|226645|-1 grows|0|-|-|..tasks|6|0|compiler/eval|226641|226645|-1
+body fn 227521-228149	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|227943|227951|-1 grows|0|-|-|..scopes|7|0|compiler/eval|227943|227951|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|227943|227951|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|227943|227951|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|227943|227951|-1 grows|0|-|-|..defF|5|0|compiler/eval|227943|227951|-1 grows|0|-|-|..defS|5|0|compiler/eval|227943|227951|-1 grows|0|-|-|..defB|5|0|compiler/eval|227943|227951|-1 grows|0|-|-|..closing|8|0|compiler/eval|227943|227951|-1 grows|0|-|-|..early|6|0|compiler/eval|227943|227951|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|227943|227951|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|227943|227951|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|227943|227951|-1 grows|0|-|-|..offs|5|0|compiler/eval|227943|227951|-1 grows|0|-|-|..offAt|6|0|compiler/eval|227943|227951|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|227943|227951|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|227943|227951|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|227943|227951|-1 grows|0|-|-|..datas|6|0|compiler/eval|227943|227951|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|227943|227951|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|227943|227951|-1 grows|0|-|-|..trace|6|0|compiler/eval|227943|227951|-1 grows|0|-|-|..genWords|9|0|compiler/eval|227943|227951|-1 grows|0|-|-|..whats|6|0|compiler/eval|227943|227951|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|227943|227951|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|227943|227951|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|227943|227951|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|227943|227951|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|227943|227951|-1 grows|0|-|-|..gens|5|0|compiler/eval|227943|227951|-1 grows|0|-|-|..regs|5|0|compiler/eval|227943|227951|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|227943|227951|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|227943|227951|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|227943|227951|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|227943|227951|-1 grows|0|-|-|..tasks|6|0|compiler/eval|227943|227951|-1
+body fn 228307-228835	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|228587|228596|-1 grows|0|-|-|..scopes|7|0|compiler/eval|228587|228596|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|228587|228596|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|228636|228640|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|228636|228640|-1 grows|0|-|-|..defF|5|0|compiler/eval|228636|228640|-1 grows|0|-|-|..defS|5|0|compiler/eval|228636|228640|-1 grows|0|-|-|..defB|5|0|compiler/eval|228636|228640|-1 grows|0|-|-|..closing|8|0|compiler/eval|228636|228640|-1 grows|0|-|-|..early|6|0|compiler/eval|228636|228640|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|228636|228640|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|228636|228640|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|228636|228640|-1 grows|0|-|-|..offs|5|0|compiler/eval|228636|228640|-1 grows|0|-|-|..offAt|6|0|compiler/eval|228636|228640|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|228636|228640|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|228636|228640|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|228636|228640|-1 grows|0|-|-|..datas|6|0|compiler/eval|228636|228640|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|228636|228640|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|228636|228640|-1 grows|0|-|-|..trace|6|0|compiler/eval|228636|228640|-1 grows|0|-|-|..genWords|9|0|compiler/eval|228636|228640|-1 grows|0|-|-|..whats|6|0|compiler/eval|228636|228640|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|228636|228640|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|228636|228640|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|228636|228640|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|228636|228640|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|228636|228640|-1 grows|0|-|-|..gens|5|0|compiler/eval|228636|228640|-1 grows|0|-|-|..regs|5|0|compiler/eval|228636|228640|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|228636|228640|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|228636|228640|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|228636|228640|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|228636|228640|-1 grows|0|-|-|..tasks|6|0|compiler/eval|228636|228640|-1
+body fn 228837-229588	known p grows|0|-|-|..freeRegs|9|0|compiler/eval|229027|229031|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|229172|229176|-1 grows|0|-|-|..early|6|0|compiler/eval|229302|229305|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|229386|229393|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|229578|229582|-1
+body fn 229687-229912	known p,0 grows|0|-|-|..freeAllocs|11|0|compiler/eval|229822|229826|-1 grows|0|-|-|..scopes|7|0|compiler/eval|229822|229826|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|229822|229826|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|229822|229826|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|229822|229826|-1 grows|0|-|-|..defF|5|0|compiler/eval|229822|229826|-1 grows|0|-|-|..defS|5|0|compiler/eval|229822|229826|-1 grows|0|-|-|..defB|5|0|compiler/eval|229822|229826|-1 grows|0|-|-|..closing|8|0|compiler/eval|229822|229826|-1 grows|0|-|-|..early|6|0|compiler/eval|229822|229826|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|229822|229826|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|229822|229826|-1 grows|0|-|-|..offs|5|0|compiler/eval|229822|229826|-1 grows|0|-|-|..offAt|6|0|compiler/eval|229822|229826|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|229822|229826|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|229822|229826|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|229822|229826|-1 grows|0|-|-|..datas|6|0|compiler/eval|229822|229826|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|229822|229826|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|229822|229826|-1 grows|0|-|-|..trace|6|0|compiler/eval|229822|229826|-1 grows|0|-|-|..genWords|9|0|compiler/eval|229822|229826|-1 grows|0|-|-|..whats|6|0|compiler/eval|229822|229826|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|229822|229826|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|229822|229826|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|229822|229826|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|229822|229826|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|229822|229826|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|229822|229826|-1 grows|0|-|-|..gens|5|0|compiler/eval|229822|229826|-1 grows|0|-|-|..regs|5|0|compiler/eval|229822|229826|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|229822|229826|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|229822|229826|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|229822|229826|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|229822|229826|-1 grows|0|-|-|..tasks|6|0|compiler/eval|229822|229826|-1
+body fn 231431-234500	known p grows|0|-|-|..freeAllocs|11|0|compiler/eval|231539|231545|-1 grows|0|-|-|..writableOf|11|0|compiler/eval|231539|231545|-1 grows|0|-|-|..scopes|7|0|compiler/eval|231539|231545|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|231539|231545|-1 grows|0|-|-|..freeRegs|9|0|compiler/eval|231539|231545|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|231539|231545|-1 grows|0|-|-|..defF|5|0|compiler/eval|231539|231545|-1 grows|0|-|-|..defS|5|0|compiler/eval|231539|231545|-1 grows|0|-|-|..defB|5|0|compiler/eval|231539|231545|-1 grows|0|-|-|..closing|8|0|compiler/eval|231539|231545|-1 grows|0|-|-|..early|6|0|compiler/eval|231539|231545|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|231539|231545|-1 grows|0|-|-|..offs|5|0|compiler/eval|231539|231545|-1 grows|0|-|-|..offAt|6|0|compiler/eval|231539|231545|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|231539|231545|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|231539|231545|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|231539|231545|-1 grows|0|-|-|..datas|6|0|compiler/eval|231539|231545|-1 grows|0|-|-|..T.refHolds|11|0|compiler/eval|231539|231545|-1 grows|0|-|-|..freeTasks|10|0|compiler/eval|231539|231545|-1 grows|0|-|-|..trace|6|0|compiler/eval|231539|231545|-1 grows|0|-|-|..genWords|9|0|compiler/eval|231539|231545|-1 grows|0|-|-|..whats|6|0|compiler/eval|231539|231545|-1 grows|0|-|-|..traceStack|11|0|compiler/eval|231539|231545|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|231539|231545|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|231539|231545|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|231539|231545|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|231539|231545|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|231539|231545|-1 grows|0|-|-|..gens|5|0|compiler/eval|231539|231545|-1 grows|0|-|-|..regs|5|0|compiler/eval|231539|231545|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|231539|231545|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|231539|231545|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|231539|231545|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|231539|231545|-1 grows|0|-|-|..tasks|6|0|compiler/eval|231539|231545|-1
+body fn 234724-235059	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|234904|234908|-1
+body fn 235124-235223	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|235206|235211|-1
+body fn 235273-235337	known p
+body fn 235367-235425	known p
+body fn 235583-235850	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|235715|235719|-1
+body fn 235915-236140	known p
+body fn 236229-236277	known p
+body fn 236278-236328	known p
+body fn 236329-236387	known p
+body fn 236662-237380	known p
+body fn 237463-237934	known p
+body fn 238072-238527	known p grows|3|-|-|.|0|0|compiler/eval|238418|238425|-1 grows|4|-|-|.|0|0|compiler/eval|238418|238425|-1
+body fn 238696-239401	known p grows|3|-|-|.|0|0|compiler/eval|239276|239279|-1 grows|4|-|-|.|0|0|compiler/eval|239310|239314|-1
+body fn 239403-239649	known p
+body fn 239651-239941	known p
+body fn 239943-240235	known p
+body fn 240357-240425	known p
+body fn 240426-240488	known p
+body fn 240598-240943	known p
+body fn 240945-241019	known p
+body fn 241068-241192	known p grows|1|-|-|..fnOf|5|0|compiler/eval|241181|241187|-1 grows|1|-|-|..fns|4|0|compiler/eval|241181|241187|-1 grows|1|-|-|..T.offsets|10|0|compiler/eval|241181|241187|-1 keeps|2|-|-|.|0|0|compiler/eval|241115|241115|1
+body fn 241275-241848	known p grows|0|-|-|..lists|6|0|compiler/eval|241393|241397|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|241393|241397|-1 grows|0|-|-|..types|6|0|compiler/eval|241473|241477|-1 grows|0|-|-|..keys|5|0|compiler/eval|241473|241477|-1 grows|0|-|-|..depths|7|0|compiler/eval|241473|241477|-1 grows|0|-|-|..state|6|0|compiler/eval|241473|241477|-1 grows|0|-|-|..sizes|6|0|compiler/eval|241473|241477|-1 grows|0|-|-|..aligns|7|0|compiler/eval|241473|241477|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|241473|241477|-1 grows|0|-|-|..payloads|9|0|compiler/eval|241473|241477|-1 grows|0|-|-|..llvm|5|0|compiler/eval|241473|241477|-1 grows|0|-|-|..plains|7|0|compiler/eval|241473|241477|-1
+body fn 241903-242369	known p grows|0|-|-|..lists|6|0|compiler/eval|242011|242015|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|242011|242015|-1 grows|0|-|-|..types|6|0|compiler/eval|242004|242008|-1 grows|0|-|-|..keys|5|0|compiler/eval|242004|242008|-1 grows|0|-|-|..depths|7|0|compiler/eval|242004|242008|-1 grows|0|-|-|..state|6|0|compiler/eval|242004|242008|-1 grows|0|-|-|..sizes|6|0|compiler/eval|242004|242008|-1 grows|0|-|-|..aligns|7|0|compiler/eval|242004|242008|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|242004|242008|-1 grows|0|-|-|..payloads|9|0|compiler/eval|242004|242008|-1 grows|0|-|-|..llvm|5|0|compiler/eval|242004|242008|-1 grows|0|-|-|..plains|7|0|compiler/eval|242004|242008|-1
+body fn 247134-247536	known p
+body fn 247720-248416	known p
+body fn 251619-251955	known p
+body fn 256508-256726	known p grows|0|-|-|..Ops|4|0|compiler/eval|256691|256695|-1
+body fn 256918-258512	known p grows|0|-|-|..types|6|0|compiler/eval|257019|257024|-1 grows|0|-|-|..keys|5|0|compiler/eval|257019|257024|-1 grows|0|-|-|..depths|7|0|compiler/eval|257019|257024|-1 grows|0|-|-|..state|6|0|compiler/eval|257019|257024|-1 grows|0|-|-|..sizes|6|0|compiler/eval|257019|257024|-1 grows|0|-|-|..aligns|7|0|compiler/eval|257019|257024|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|257019|257024|-1 grows|0|-|-|..payloads|9|0|compiler/eval|257019|257024|-1 grows|0|-|-|..llvm|5|0|compiler/eval|257019|257024|-1 grows|0|-|-|..plains|7|0|compiler/eval|257019|257024|-1 grows|0|-|-|..lists|6|0|compiler/eval|257076|257081|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|257076|257081|-1
+body fn 258603-260195	known p grows|0|-|-|..lists|6|0|compiler/eval|258693|258698|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|258693|258698|-1 grows|0|-|-|..types|6|0|compiler/eval|258686|258690|-1 grows|0|-|-|..keys|5|0|compiler/eval|258686|258690|-1 grows|0|-|-|..depths|7|0|compiler/eval|258686|258690|-1 grows|0|-|-|..state|6|0|compiler/eval|258686|258690|-1 grows|0|-|-|..sizes|6|0|compiler/eval|258686|258690|-1 grows|0|-|-|..aligns|7|0|compiler/eval|258686|258690|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|258686|258690|-1 grows|0|-|-|..payloads|9|0|compiler/eval|258686|258690|-1 grows|0|-|-|..llvm|5|0|compiler/eval|258686|258690|-1 grows|0|-|-|..plains|7|0|compiler/eval|258686|258690|-1
+body fn 260197-260277	known p
+body fn 261516-261739	known p grows|0|-|-|..Modules|8|0|compiler/eval|261611|261620|-1 grows|1|-|-|..texts|6|0|compiler/eval|261681|261687|-1 grows|1|-|-|..ids|4|0|compiler/eval|261681|261687|-1 grows|0|-|-|..decls|6|0|compiler/eval|261662|261669|-1 grows|0|-|-|..declKeys|9|0|compiler/eval|261662|261669|-1 grows|0|-|-|..lists|6|0|compiler/eval|261654|261659|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|261654|261659|-1 grows|0|-|-|..types|6|0|compiler/eval|261654|261659|-1 grows|0|-|-|..keys|5|0|compiler/eval|261654|261659|-1 grows|0|-|-|..depths|7|0|compiler/eval|261654|261659|-1 grows|0|-|-|..state|6|0|compiler/eval|261654|261659|-1 grows|0|-|-|..sizes|6|0|compiler/eval|261654|261659|-1 grows|0|-|-|..aligns|7|0|compiler/eval|261654|261659|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|261654|261659|-1 grows|0|-|-|..payloads|9|0|compiler/eval|261654|261659|-1 grows|0|-|-|..llvm|5|0|compiler/eval|261654|261659|-1 grows|0|-|-|..plains|7|0|compiler/eval|261654|261659|-1
+body fn 261822-262440	known p grows|0|-|-|..lists|6|0|compiler/eval|261952|261957|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|261952|261957|-1 grows|0|-|-|..types|6|0|compiler/eval|261945|261949|-1 grows|0|-|-|..keys|5|0|compiler/eval|261945|261949|-1 grows|0|-|-|..depths|7|0|compiler/eval|261945|261949|-1 grows|0|-|-|..state|6|0|compiler/eval|261945|261949|-1 grows|0|-|-|..sizes|6|0|compiler/eval|261945|261949|-1 grows|0|-|-|..aligns|7|0|compiler/eval|261945|261949|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|261945|261949|-1 grows|0|-|-|..payloads|9|0|compiler/eval|261945|261949|-1 grows|0|-|-|..llvm|5|0|compiler/eval|261945|261949|-1 grows|0|-|-|..plains|7|0|compiler/eval|261945|261949|-1
+body fn 262549-263540	known p grows|0|-|-|..lists|6|0|compiler/eval|262687|262692|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|262687|262692|-1 grows|0|-|-|..types|6|0|compiler/eval|262680|262684|-1 grows|0|-|-|..keys|5|0|compiler/eval|262680|262684|-1 grows|0|-|-|..depths|7|0|compiler/eval|262680|262684|-1 grows|0|-|-|..state|6|0|compiler/eval|262680|262684|-1 grows|0|-|-|..sizes|6|0|compiler/eval|262680|262684|-1 grows|0|-|-|..aligns|7|0|compiler/eval|262680|262684|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|262680|262684|-1 grows|0|-|-|..payloads|9|0|compiler/eval|262680|262684|-1 grows|0|-|-|..llvm|5|0|compiler/eval|262680|262684|-1 grows|0|-|-|..plains|7|0|compiler/eval|262680|262684|-1
+body fn 263639-264529	known p grows|0|-|-|..lists|6|0|compiler/eval|263801|263806|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|263801|263806|-1 grows|0|-|-|..types|6|0|compiler/eval|263794|263798|-1 grows|0|-|-|..keys|5|0|compiler/eval|263794|263798|-1 grows|0|-|-|..depths|7|0|compiler/eval|263794|263798|-1 grows|0|-|-|..state|6|0|compiler/eval|263794|263798|-1 grows|0|-|-|..sizes|6|0|compiler/eval|263794|263798|-1 grows|0|-|-|..aligns|7|0|compiler/eval|263794|263798|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|263794|263798|-1 grows|0|-|-|..payloads|9|0|compiler/eval|263794|263798|-1 grows|0|-|-|..llvm|5|0|compiler/eval|263794|263798|-1 grows|0|-|-|..plains|7|0|compiler/eval|263794|263798|-1
+body fn 26597-27074	known p,0
+body fn 266239-266359	known p grows|0|-|-|..types|6|0|compiler/eval|266303|266307|-1 grows|0|-|-|..keys|5|0|compiler/eval|266303|266307|-1 grows|0|-|-|..depths|7|0|compiler/eval|266303|266307|-1 grows|0|-|-|..state|6|0|compiler/eval|266303|266307|-1 grows|0|-|-|..sizes|6|0|compiler/eval|266303|266307|-1 grows|0|-|-|..aligns|7|0|compiler/eval|266303|266307|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|266303|266307|-1 grows|0|-|-|..payloads|9|0|compiler/eval|266303|266307|-1 grows|0|-|-|..llvm|5|0|compiler/eval|266303|266307|-1 grows|0|-|-|..plains|7|0|compiler/eval|266303|266307|-1 grows|0|-|-|..lists|6|0|compiler/eval|266303|266307|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|266303|266307|-1
+body fn 266361-266431	known p
+body fn 27139-27585	known p grows|0|-|-|..fnOf|5|0|compiler/eval|27211|27214|-1 grows|0|-|-|..fns|4|0|compiler/eval|27234|27238|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|27404|27410|-1 keeps|1|-|-|.|0|0|compiler/eval|27166|27166|0
+body fn 272587-272816	known p grows|0|-|-|..Modules|8|0|compiler/eval|272704|272713|-1 grows|1|-|-|..texts|6|0|compiler/eval|272774|272780|-1 grows|1|-|-|..ids|4|0|compiler/eval|272774|272780|-1 grows|0|-|-|..decls|6|0|compiler/eval|272755|272762|-1 grows|0|-|-|..declKeys|9|0|compiler/eval|272755|272762|-1 grows|0|-|-|..lists|6|0|compiler/eval|272747|272752|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|272747|272752|-1 grows|0|-|-|..types|6|0|compiler/eval|272747|272752|-1 grows|0|-|-|..keys|5|0|compiler/eval|272747|272752|-1 grows|0|-|-|..depths|7|0|compiler/eval|272747|272752|-1 grows|0|-|-|..state|6|0|compiler/eval|272747|272752|-1 grows|0|-|-|..sizes|6|0|compiler/eval|272747|272752|-1 grows|0|-|-|..aligns|7|0|compiler/eval|272747|272752|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|272747|272752|-1 grows|0|-|-|..payloads|9|0|compiler/eval|272747|272752|-1 grows|0|-|-|..llvm|5|0|compiler/eval|272747|272752|-1 grows|0|-|-|..plains|7|0|compiler/eval|272747|272752|-1
+body fn 27605-28922	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|28568|28575|-1
+body fn 279607-279923	known p grows|0|-|-|..types|6|0|compiler/eval|279677|279680|-1 grows|0|-|-|..keys|5|0|compiler/eval|279677|279680|-1 grows|0|-|-|..depths|7|0|compiler/eval|279677|279680|-1 grows|0|-|-|..state|6|0|compiler/eval|279677|279680|-1 grows|0|-|-|..sizes|6|0|compiler/eval|279677|279680|-1 grows|0|-|-|..aligns|7|0|compiler/eval|279677|279680|-1 grows|0|-|-|..offsetsAt|10|0|compiler/eval|279677|279680|-1 grows|0|-|-|..payloads|9|0|compiler/eval|279677|279680|-1 grows|0|-|-|..llvm|5|0|compiler/eval|279677|279680|-1 grows|0|-|-|..plains|7|0|compiler/eval|279677|279680|-1 grows|0|-|-|..lists|6|0|compiler/eval|279677|279680|-1 grows|0|-|-|..listKeys|9|0|compiler/eval|279677|279680|-1
+body fn 279925-280063	known p
+body fn 29005-29322	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|29195|29209|-1
+body fn 29421-29920	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|29562|29568|-1
+body fn 30003-30692	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|30166|30172|-1
+body fn 30805-31281	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|31035|31041|-1
+body fn 31398-32159	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|31532|31538|-1
+body fn 32280-33101	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|32560|32566|-1
+body fn 33284-33941	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|33465|33471|-1
+body fn 33943-34065	known p
+body fn 34158-34644	known p
+body fn 34837-34935	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|34894|34899|-1
+body fn 35033-35378	known p
+body fn 35457-35599	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|35520|35525|-1
+body fn 35666-35828	known p
+body fn 35830-35967	known p
+body fn 35969-36112	known p
+body fn 36114-36277	known p
+body fn 36360-37159	known p
+body fn 37244-37638	known p
+body fn 37718-37866	known p grows|0|-|-|..externs|8|0|compiler/eval|37804|37807|-1 grows|0|-|-|..variadic|9|0|compiler/eval|37849|37852|-1
+body fn 37985-38072	known p grows|0|-|-|..dtors|6|0|compiler/eval|38061|38064|-1
+body fn 38191-38381	known p grows|0|-|-|..tableTy|8|0|compiler/eval|38332|38335|-1 grows|0|-|-|..tableKeys|10|0|compiler/eval|38366|38369|-1 keeps|3|-|-|.|0|0|compiler/eval|38254|38254|0
+body fn 38481-38729	known p grows|0|-|-|..typeidAt|9|0|compiler/eval|38701|38704|-1
+body fn 38836-39358	known p grows|0|-|-|..typeidAt|9|0|compiler/eval|39212|39218|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|39296|39303|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|39296|39303|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|39296|39303|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|39330|39333|-1
+body fn 3927-4520	known p
+body fn 39634-40054	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|39754|39757|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|39838|39847|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|39838|39847|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|39838|39847|-1 grows|0|-|-|..globalOf|9|0|compiler/eval|39940|39943|-1 grows|0|-|-|..globals|8|0|compiler/eval|40045|40049|-1
+body fn 40147-40323	known p
+body fn 40325-40566	known p grows|0|-|-|..codeOf|7|0|compiler/eval|40460|40463|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|40500|40504|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|40525|40529|-1
+body fn 40590-40691	known p keeps|1|-|-|.|0|0|compiler/eval|40615|40615|0
+body fn 40693-40785	known p
+body fn 40903-41096	known p
+body fn 41336-41832	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|41733|41746|-1
+body fn 41929-42127	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|42116|42119|-1
+body fn 42318-42606	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|42525|42528|-1
+body fn 42671-43254	known p
+body fn 43256-43413	known p
+body fn 43415-43633	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|43565|43572|-1
+body fn 43635-44652	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|43705|43708|-1
+body fn 44654-44953	known p
+body fn 45005-45273	known p
+body fn 45275-45380	known p
+body fn 45450-45749	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|45605|45608|-1 grows|0|-|-|..offs|5|0|compiler/eval|45679|45683|-1 grows|0|-|-|..offAt|6|0|compiler/eval|45705|45708|-1
+body fn 45801-46081	known p
+body fn 46128-46346	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|46278|46285|-1
+body fn 46348-46625	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|46411|46416|-1
+body fn 46667-46768	known p
+body fn 46770-46951	known p
+body fn 47116-48257	known p grows|0|-|-|..writableOf|11|0|compiler/eval|47288|47291|-1
+body fn 48346-48427	known p
+body fn 48429-48770	known p
+body fn 48880-50327	known p
+body fn 50329-50547	known p
+body fn 50664-51269	known p grows|0|-|-|..freeAllocs|11|0|compiler/eval|51257|51261|-1
+body fn 51493-52235	known p grows|0|-|-|..retiredAt|10|0|compiler/eval|52161|52165|-1
+body fn 52344-52543	known p
+body fn 52674-54481	known p
+body fn 54568-54866	known p
+body fn 54868-55345	known p
+body fn 55423-55565	known p
+body fn 55621-55743	known p
+body fn 55745-55882	known p
+body fn 55912-56197	known p
+body fn 56199-56480	known p
+body fn 56564-56752	known p
+body fn 56754-57840	known p
+body fn 57842-58194	known p
+body fn 58196-58268	known p
+body fn 58376-58829	known p grows|0|-|-|..freeAllocs|11|0|compiler/eval|58541|58548|-1
+body fn 58851-59251	known p grows|0|-|-|..scopes|7|0|compiler/eval|58947|58959|-1
+body fn 59253-59352	known p grows|0|-|-|..scopes|7|0|compiler/eval|59307|59311|-1
+body fn 59400-59577	known p
+body fn 59579-60500	known p grows|0|-|-|..regs|5|0|compiler/eval|59761|59771|-1
+body fn 60556-60814	known p
+body fn 60816-60907	known p grows|0|-|-|..regs|5|0|compiler/eval|60866|60870|-1
+body fn 61023-61291	known p
+body fn 61293-61876	known p
+body fn 62090-63725	known p grows|0|-|-|..freeRegs|9|0|compiler/eval|62605|62609|-1 grows|0|-|-|..scopes|7|0|compiler/eval|62644|62651|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|62644|62651|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|63049|63057|-1 grows|0|-|-|..defF|5|0|compiler/eval|63049|63057|-1 grows|0|-|-|..defS|5|0|compiler/eval|63049|63057|-1 grows|0|-|-|..defB|5|0|compiler/eval|63049|63057|-1 grows|0|-|-|..closing|8|0|compiler/eval|63278|63282|-1 grows|0|-|-|..early|6|0|compiler/eval|63425|63428|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|63509|63516|-1 grows|0|-|-|..freeScopes|11|0|compiler/eval|63681|63685|-1
+body fn 64001-64284	known p grows|0|-|-|..T.refHolds|11|0|compiler/eval|64154|64166|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|64154|64166|-1 grows|0|-|-|..offs|5|0|compiler/eval|64154|64166|-1 grows|0|-|-|..offAt|6|0|compiler/eval|64154|64166|-1 grows|0|-|-|..closing|8|0|compiler/eval|64263|64274|-1
+body fn 64400-64909	known p grows|0|-|-|..T.refHolds|11|0|compiler/eval|64482|64489|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|64718|64728|-1 grows|0|-|-|..offs|5|0|compiler/eval|64718|64728|-1 grows|0|-|-|..offAt|6|0|compiler/eval|64718|64728|-1
+body fn 65031-65254	known p grows|0|-|-|..T.refHolds|11|0|compiler/eval|65184|65196|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|65184|65196|-1 grows|0|-|-|..offs|5|0|compiler/eval|65184|65196|-1 grows|0|-|-|..offAt|6|0|compiler/eval|65184|65196|-1 grows|0|-|-|..closing|8|0|compiler/eval|65238|65249|-1
+body fn 65256-65396	known p grows|0|-|-|..closing|8|0|compiler/eval|65382|65386|-1
+body fn 65398-65990	known p grows|0|-|-|..scopes|7|0|compiler/eval|65646|65655|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|65646|65655|-1
+body fn 66185-68313	known p grows|0|-|-|..scopes|7|0|compiler/eval|67595|67603|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|67951|67955|-1
+body fn 68315-68498	known p
+body fn 68500-68696	known p
+body fn 68698-68772	known p
+body fn 68982-69569	known p
+body fn 69571-70917	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|69895|69904|-1
+body fn 71050-71650	known p
+body fn 71740-71985	known p
+body fn 72039-72242	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|72225|72230|-1
+body fn 72285-72644	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|72620|72629|-1
+body fn 72754-72874	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|72826|72834|-1
+body fn 72943-73118	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|73015|73022|-1
+body fn 73238-73763	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|73591|73595|-1
+body fn 73831-75847	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|75013|75023|-1 grows|0|-|-|..offs|5|0|compiler/eval|75013|75023|-1 grows|0|-|-|..offAt|6|0|compiler/eval|75013|75023|-1
+body fn 75879-76192	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|76179|76183|-1
+body fn 76364-76834	known p
+body fn 76858-77120	known p
+body fn 77185-77812	known p
+body fn 77880-78870	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|78063|78068|-1 grows|0|-|-|..offs|5|0|compiler/eval|78063|78068|-1 grows|0|-|-|..offAt|6|0|compiler/eval|78063|78068|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|78827|78834|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|78827|78834|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|78827|78834|-1 grows|0|-|-|..datas|6|0|compiler/eval|78827|78834|-1
+body fn 78955-79266	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|79089|79094|-1 grows|0|-|-|..offs|5|0|compiler/eval|79089|79094|-1 grows|0|-|-|..offAt|6|0|compiler/eval|79089|79094|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|79197|79207|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|79234|79237|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|79234|79237|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|79234|79237|-1 grows|0|-|-|..datas|6|0|compiler/eval|79234|79237|-1
+body fn 79324-79969	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|79489|79498|-1 grows|0|-|-|..offs|5|0|compiler/eval|79824|79829|-1 grows|0|-|-|..offAt|6|0|compiler/eval|79824|79829|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|79919|79923|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|79919|79923|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|79919|79923|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|79919|79923|-1 grows|0|-|-|..datas|6|0|compiler/eval|79919|79923|-1
+body fn 79971-80054	known p
+body fn 80155-80254	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|80217|80222|-1
+body fn 80358-80490	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|80479|80484|-1
+body fn 80560-80627	known p
+body fn 80845-81074	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|80920|80925|-1
+body fn 81175-81410	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|81248|81253|-1
+body fn 81591-82514	known p grows|0|-|-|..codeOf|7|0|compiler/eval|81930|81939|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|81930|81939|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|81930|81939|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|82178|82182|-1 grows|0|-|-|..datas|6|0|compiler/eval|82469|82472|-1
+body fn 82516-82721	known p
+body fn 82776-83368	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|82875|82879|-1
+body fn 83574-84190	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|83682|83687|-1
+body fn 84192-84830	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|84421|84426|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|84503|84510|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|84503|84510|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|84503|84510|-1 grows|0|-|-|..datas|6|0|compiler/eval|84503|84510|-1
+body fn 84972-90159	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|85055|85060|-1 grows|0|-|-|..offs|5|0|compiler/eval|85055|85060|-1 grows|0|-|-|..offAt|6|0|compiler/eval|85055|85060|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|85145|85148|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|85145|85148|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|85145|85148|-1 grows|0|-|-|..datas|6|0|compiler/eval|85145|85148|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|85347|85357|-1 grows|0|-|-|..typeidAt|9|0|compiler/eval|87154|87159|-1 grows|0|-|-|..tableAt|8|0|compiler/eval|87154|87159|-1 grows|0|-|-|..retiredAt|10|0|compiler/eval|87638|87642|-1 grows|0|-|-|..Gen.Asked|10|0|compiler/eval|88143|88149|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|88143|88149|-1 grows|0|-|-|..freeGens|9|0|compiler/eval|88398|88405|-1 grows|0|-|-|..gens|5|0|compiler/eval|88398|88405|-1 grows|0|-|-|..regs|5|0|compiler/eval|88398|88405|-1 grows|0|-|-|..scopes|7|0|compiler/eval|88775|88783|-1 grows|0|-|-|..payScopes|10|0|compiler/eval|89725|89729|-1 grows|0|-|-|..payPtrs|8|0|compiler/eval|89756|89760|-1
+body fn 90477-90806	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|90555|90560|-1 grows|0|-|-|..offs|5|0|compiler/eval|90555|90560|-1 grows|0|-|-|..offAt|6|0|compiler/eval|90555|90560|-1
+body fn 90881-90972	known p
+body fn 91191-91625	known p grows|0|-|-|..Gen.Asked|10|0|compiler/eval|91259|91266|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|91259|91266|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|91259|91266|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|91259|91266|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|91259|91266|-1 grows|0|-|-|..offs|5|0|compiler/eval|91259|91266|-1 grows|0|-|-|..offAt|6|0|compiler/eval|91259|91266|-1
+body fn 91917-92863	known p grows|0|-|-|..Gen.Asked|10|0|compiler/eval|92060|92068|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|92060|92068|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|92060|92068|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|92060|92068|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|92325|92329|-1 grows|0|-|-|..offs|5|0|compiler/eval|92633|92643|-1 grows|0|-|-|..offAt|6|0|compiler/eval|92633|92643|-1
+body fn 93213-94109	known p grows|0|-|-|..Gen.Asked|10|0|compiler/eval|93601|93608|-1 grows|0|-|-|..Gen.walking|12|0|compiler/eval|93601|93608|-1 grows|0|-|-|..Gen.holds|10|0|compiler/eval|93601|93608|-1 grows|0|-|-|..Gen.deps|9|0|compiler/eval|93601|93608|-1 grows|0|-|-|..T.offsets|10|0|compiler/eval|93601|93608|-1 grows|0|-|-|..offs|5|0|compiler/eval|93601|93608|-1 grows|0|-|-|..offAt|6|0|compiler/eval|93601|93608|-1
+body fn 94221-94348	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|94290|94294|-1 grows|0|-|-|..offs|5|0|compiler/eval|94290|94294|-1 grows|0|-|-|..offAt|6|0|compiler/eval|94290|94294|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|94290|94294|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|94290|94294|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|94290|94294|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|94290|94294|-1 grows|0|-|-|..datas|6|0|compiler/eval|94290|94294|-1
+body fn 94350-94560	known p
+body fn 94733-95031	known p
+body fn 95261-95725	known p
+body fn 95793-95919	known p
+body fn 95984-96213	known p
+body fn 96523-97468	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|96704|96708|-1 grows|0|-|-|..offs|5|0|compiler/eval|96704|96708|-1 grows|0|-|-|..offAt|6|0|compiler/eval|96704|96708|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|96704|96708|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|96704|96708|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|96704|96708|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|96704|96708|-1 grows|0|-|-|..datas|6|0|compiler/eval|96704|96708|-1
+body fn 97470-97620	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|97535|97540|-1
+body fn 97806-98171	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|97897|97902|-1 grows|0|-|-|..offs|5|0|compiler/eval|97897|97902|-1 grows|0|-|-|..offAt|6|0|compiler/eval|97897|97902|-1
+body fn 98173-99230	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|98275|98279|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|98295|98305|-1 grows|0|-|-|..offs|5|0|compiler/eval|98593|98597|-1 grows|0|-|-|..offAt|6|0|compiler/eval|98593|98597|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|98593|98597|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|98593|98597|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|98593|98597|-1 grows|0|-|-|..datas|6|0|compiler/eval|98593|98597|-1
+body fn 99450-100076	known p grows|0|-|-|..T.offsets|10|0|compiler/eval|99606|99612|-1 grows|0|-|-|..offs|5|0|compiler/eval|99606|99612|-1 grows|0|-|-|..offAt|6|0|compiler/eval|99606|99612|-1 grows|0|-|-|..freeAllocs|11|0|compiler/eval|99606|99612|-1 grows|0|-|-|..codeOf|7|0|compiler/eval|99606|99612|-1 grows|0|-|-|..codeKeys|9|0|compiler/eval|99606|99612|-1 grows|0|-|-|..codeAllocs|11|0|compiler/eval|99606|99612|-1 grows|0|-|-|..datas|6|0|compiler/eval|99606|99612|-1
+body global B0	known p
+body global CmpOps	known p
+body global FloatOps	known p
+body global ForeignId	known p
+body global IntOps	known p
+body global InterpCrash	known p
+body global NullPtr	known p
+body global NumNames	known p
+body global S0	known p
+body global Sp0	known p
+body global WhyBeyond	known p
+body global WhyChangeable	known p
+body global WhyClosed	known p
+body global WhyConvert	known p
+body global WhyCycle	known p
+body global WhyDepth	known p
+body global WhyDestructor	known p
+body global WhyDivMin	known p
+body global WhyDivZero	known p
+body global WhyEnds	known p
+body global WhyEqDepth	known p
+body global WhyExtern	known p
+body global WhyFfiFind	known p
+body global WhyFfiPass	known p
+body global WhyForeign	known p
+body global WhyFreedEarly	known p
+body global WhyHolderMissed	known p
+body global WhyLong	known p
+body global WhyMemory	known p
+body global WhyMutableGlobal	known p
+body global WhyNaNOp	known p
+body global WhyNaNSignal	known p
+body global WhyNoBody	known p
+body global WhyNoClause	known p
+body global WhyNoGlobal	known p
+body global WhyNoValue	known p
+body global WhyNotModelled	known p
+body global WhyNull	known p
+body global WhyNullCall	known p
+body global WhyOutside	known p
+body global WhyPayload	known p
+body global WhyReadOnly	known p
+body global WhyRunDepth	known p
+body global WhyRunEqDepth	known p
+body global WhyShift	known p
+body global WhyStale	known p
+body global WhySteps	known p
+body global WhyWaits	known p
+body global WhyWalkLetGo	known p
+body global WhyWeakUnheld	known p
+body global WhyWritesGlobal	known p
+body global WhyWritesGlobalVar	known p
+body global aCode	known p
+body global aData	known p
+body global aFree	known p
+body global aGlobal	known p
+body global aValue	known p
+body global fBin	known p
+body global fConst	known p
+body global fCopy	known p
+body global fLoad	known p
+body global fStore	known p
+body global fUn	known p
+body global fastStride	known p
+body global gDtor	known p
+body global gGen	known p
+body global rCall	known p
+body global rClause	known p
+body global rDtor	known p
+body global rGlobal	known p
+body global rRequest	known p
+body global rTask	known p
+body global sBlock	known p
+body global sBuilder	known p
+body global sInert	known p
+body global sJoin	known p
+body global sProgram	known p
+body global sRegion	known p
+body global sStore	known p
+body global slotBits	known p
+body global slotMask	known p
+body global tCall	known p
+body global tJoin	known p
+body global tRaised	known p
+body global traceKept	known p
+body global vAgg	known p
+body global vBool	known p
+body global vEnum	known p
+body global vFixed	known p
+body global vFloat	known p
+body global vFunc	known p
+body global vInt	known p
+body global vNone	known p
+body global vOrd	known p
+body global vPair	known p
+body global vPtr	known p
+body global vUint	known p
+body global vVoid	known p
+body global vWide	known p
+body lambda 182877-182933	known p
+body lambda 91280-91622	known p
+body lambda 93290-93370	known p
+baked B0 [8 00000000]
+baked CmpOps [8 06000000000000000000000000000000 @8>1+0][8c 0d0000000e0000000f000000100000001100000012000000]
+baked FloatOps [8 04000000000000000000000000000000 @8>1+0][8c 03000000040000000500000006000000]
+baked ForeignId [8 ffffff0000000000]
+baked IntOps [8 08000000000000000000000000000000 @8>1+0][32c 03000000040000000500000006000000070000000a0000000b0000000c000000]
+baked InterpCrash [8 bb000000000000000000000000000000 @8>1+0][64c 6f6c616e673a20696e7465726e616c20636f6d70696c6572206572726f723a2074686520636f6d70696c65722063726173686564207768696c6520696e74657270726574696e67202d20696e206120666f726569676e2066756e6374696f6e207468652070726f6772616d2063616c6c732c206966206974732065787465726e206465636c61726174696f6e2069732077726f6e672028583161292c206f7220656c736520612062756720696e2074686520636f6d70696c65720a]
+baked NullPtr [8 00000000000000000000000000000000]
+baked NumNames [8 0c000000000000000000000000000000 @8>1+0][64c 020000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000200000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000040000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000 @8>2+0 @24>3+0 @40>4+0 @56>5+0 @72>6+0 @88>7+0 @104>8+0 @120>9+0 @136>10+0 @152>11+0 @168>12+0 @184>13+0][8c 4938][8c 493136][8c 493332][8c 493634][8c 5538][8c 553136][8c 553332][8c 553634][8c 463136][8c 42463136][8c 463332][8c 463634]
+baked S0 [8 00000000]
+baked Sp0 [8 0000000000000000]
+baked WhyBeyond [8 2b000000000000000000000000000000 @8>1+0][32c 69742072656163686573206f757473696465207468652073746f726167652069742072656665727320746f]
+baked WhyChangeable [8 64000000000000000000000000000000 @8>1+0][64c 6974207265616473206120676c6f62616c20686f6c64696e672073746f726167652061207772697461626c65207265666572656e636520726561636865732c207768696368207468652072756e6e696e672070726f6772616d2063616e206368616e6765]
+baked WhyClosed [8 35000000000000000000000000000000 @8>1+0][32c 697420757365732073746f72616765206166746572207468652073636f706520697420776173206d61646520696e20636c6f736564]
+baked WhyConvert [8 34000000000000000000000000000000 @8>1+0][32c 697420636f6e7665727473206120666c6f6174207468652074617267657420747970652063616e6e6f7420726570726573656e74]
+baked WhyCycle [8 30000000000000000000000000000000 @8>1+0][32c 746865736520676c6f62616c732061726520646566696e656420696e207465726d73206f662065616368206f74686572]
+baked WhyDepth [8 43000000000000000000000000000000 @8>1+0][64c 74686520636f6d7075746174696f6e20726563757273657320646565706572207468616e20636f6d70696c652d74696d65206576616c756174696f6e20616c6c6f7773]
+baked WhyDestructor [8 3d000000000000000000000000000000 @8>1+0][32c 6974206275696c647320612076616c75652077686f73652064657374727563746f722072756e73207768656e206974732073636f706520636c6f736573]
+baked WhyDivMin [8 39000000000000000000000000000000 @8>1+0][32c 6974206469766964657320746865206d6f7374206e656761746976652076616c7565206279202d312c207768696368206f766572666c6f7773]
+baked WhyDivZero [8 12000000000000000000000000000000 @8>1+0][8c 69742064697669646573206279207a65726f]
+baked WhyEnds [8 1f000000000000000000000000000000 @8>1+0][8c 697420656e6473207468652074657374206f72207468652070726f63657373]
+baked WhyEqDepth [8 42000000000000000000000000000000 @8>1+0][64c 74686520636f6d70617269736f6e20726563757273657320646565706572207468616e20636f6d70696c652d74696d65206576616c756174696f6e20616c6c6f7773]
+baked WhyExtern [8 1d000000000000000000000000000000 @8>1+0][8c 69742063616c6c7320616e2065787465726e616c2066756e6374696f6e]
+baked WhyFfiFind [8 43000000000000000000000000000000 @8>1+0][64c 69742063616c6c7320616e2065787465726e616c2066756e6374696f6e20696e746572707265742063616e6e6f742066696e6420696e20746869732070726f63657373]
+baked WhyFfiPass [8 98000000000000000000000000000000 @8>1+0][64c 69742063616c6c7320616e2065787465726e616c2066756e6374696f6e2077697468206120706172616d65746572206f7220726573756c7420696e746572707265742063616e6e6f742070617373202d206f6e6c79206e756d626572732c20426f6f6c732c2061727261797320616e642073747275637473206f66206e756d626572732c20616e6420706f696e7465727320432067617665]
+baked WhyForeign [8 38000000000000000000000000000000 @8>1+0][32c 6974207265616473207468726f756768206120706f696e746572204320676176652c207768696368206f6e6c792043206d61792072656164]
+baked WhyFreedEarly [8 5c000000000000000000000000000000 @8>1+0][64c 697420757365732073746f72616765206561726c792066726565696e67207265636c61696d656420284f386429202d206120706c616365206465636964656420736f6c6520776173206e6f743a206120636f6d70696c657220627567]
+baked WhyHolderMissed [8 86000000000000000000000000000000 @8>1+0][64c 616e206f776e696e6720706c61636520686f6c647320616e20696e7374616e63652069747320636f756e74206f6620686f6c646572732073617973206e6f6e6520686f6c6473202867656e7265667320322e3429202d20612073746f72652074686174207265636f72646564206e6f20686f6c6465723a206120636f6d70696c657220627567]
+baked WhyLong [8 31000000000000000000000000000000 @8>1+0][32c 6974206d616b657320616e206172726179206c6f6e676572207468616e20746865206576616c7561746f7220686f6c6473]
+baked WhyMemory [8 45000000000000000000000000000000 @8>1+0][64c 74686520636f6d7075746174696f6e2074616b6573206d6f7265206d656d6f7279207468616e20636f6d70696c652d74696d65206576616c756174696f6e20616c6c6f7773]
+baked WhyMutableGlobal [8 3f000000000000000000000000000000 @8>1+0][32c 69742072656164732061206d757461626c6520676c6f62616c2c2077686f73652076616c7565206973207468652072756e6e696e672070726f6772616d2773]
+baked WhyNaNOp [8 54000000000000000000000000000000 @8>1+0][64c 6974207265616473207468652062697473206f662061204e614e20616e206f7065726174696f6e206d6164652c2077686f7365207369676e20616e64207061796c6f61642061726520756e737065636966696564]
+baked WhyNaNSignal [8 47000000000000000000000000000000 @8>1+0][64c 6974207265616473207468652062697473206f662061207369676e616c6c696e67204e614e2c207768696368206d6f76696e67206974206d617920686176652071756965746564]
+baked WhyNoBody [8 2f000000000000000000000000000000 @8>1+0][32c 69742063616c6c7320612066756e6374696f6e2077686f736520626f6479206973206e6f7420617661696c61626c65]
+baked WhyNoClause [8 27000000000000000000000000000000 @8>1+0][32c 61207461736b2773206572726f7220686173206e6f20636c6175736520746f2074616b65206974]
+baked WhyNoGlobal [8 4e000000000000000000000000000000 @8>1+0][64c 6974207265616473206120676c6f62616c2077686f736520696e697469616c697a657220686173206e6f742072756e202d206f6e65207769746820616e206572726f72206e6576657220646f6573]
+baked WhyNoValue [8 28000000000000000000000000000000 @8>1+0][32c 69747320696e697469616c697a657220646f6573206e6f742070726f6475636520612076616c7565]
+baked WhyNotModelled [8 36000000000000000000000000000000 @8>1+0][32c 6974207573657320612076616c756520636f6d70696c652d74696d65206576616c756174696f6e20646f6573206e6f74206d6f64656c]
+baked WhyNull [8 21000000000000000000000000000000 @8>1+0][32c 6974207265616473207468726f7567682061206e756c6c207265666572656e6365]
+baked WhyNullCall [8 26000000000000000000000000000000 @8>1+0][32c 69742063616c6c73207468726f7567682061206e756c6c2066756e6374696f6e2076616c7565]
+baked WhyOutside [8 3c000000000000000000000000000000 @8>1+0][32c 697420696e6465786573206f757473696465207468652061727261792c20776869636820697320756e646566696e65642061742072756e2074696d65]
+baked WhyPayload [8 36000000000000000000000000000000 @8>1+0][32c 697420726561647320746865207061796c6f6164206f6620612063617365207468652076616c756520646f6573206e6f7420686f6c64]
+baked WhyReadOnly [8 17000000000000000000000000000000 @8>1+0][8c 69742077726974657320636f6e7374616e742064617461]
+baked WhyRunDepth [8 28000000000000000000000000000000 @8>1+0][32c 697420726563757273657320646565706572207468616e20696e7465727072657420616c6c6f7773]
+baked WhyRunEqDepth [8 34000000000000000000000000000000 @8>1+0][32c 74686520636f6d70617269736f6e20726563757273657320646565706572207468616e20696e7465727072657420616c6c6f7773]
+baked WhyShift [8 2d000000000000000000000000000000 @8>1+0][32c 697420736869667473206279206120636f756e74206f7574736964652074686520747970652773207769647468]
+baked WhyStale [8 90000000000000000000000000000000 @8>1+0][64c 6974207573657320612076696577206f66206120636f6c6c656374696f6e277320656c656d656e74732074616b656e206265666f72652074686520636f6c6c656374696f6e20677265772c2077686963682073686f777320746865207265746972656420627566666572202d2069747320656c656d656e7473206f776e696e672073746f7261676520656d7074696564]
+baked WhySteps [8 3f000000000000000000000000000000 @8>1+0][32c 74686520636f6d7075746174696f6e2072756e73206c6f6e676572207468616e20636f6d70696c652d74696d65206576616c756174696f6e20616c6c6f7773]
+baked WhyWaits [8 67000000000000000000000000000000 @8>1+0][64c 697420776169747320666f7220616e6f74686572207461736b2c20616e6420696e746572707265742072756e732061206a6f696e2773207461736b73206f6e6520616674657220616e6f746865722c206e65766572206265736964652065616368206f74686572]
+baked WhyWalkLetGo [8 51000000000000000000000000000000 @8>1+0][64c 6974206c65747320676f206f6620612067656e657261746f722070617274207761792c2077686f73652077616c6b207468656e2072756e7320636f6465206173206974732073636f706520636c6f736573]
+baked WhyWeakUnheld [8 66000000000000000000000000000000 @8>1+0][64c 69742072656164732061207765616b20706c6163652077686f7365207265666572656e74206e6f206f776e696e6720706c61636520686f6c64732c207768696368207468652072756e6e696e672070726f6772616d206d61792072656164206173206e756c6c]
+baked WhyWritesGlobal [8 5a000000000000000000000000000000 @8>1+0][64c 697420777269746573206120676c6f62616c206f722077686174206f6e6520686f6c64732c207768696368207468652072756e6e696e672070726f6772616d20776f756c64207468656e206e6f7420736565207772697474656e]
+baked WhyWritesGlobalVar [8 48000000000000000000000000000000 @8>1+0][64c 697420777269746573206120676c6f62616c2c207768696368207468652072756e6e696e672070726f6772616d20776f756c64207468656e206e6f7420736565207772697474656e]
+baked aCode [8 0400000000000000]
+baked aData [8 0200000000000000]
+baked aFree [8 0000000000000000]
+baked aGlobal [8 0300000000000000]
+baked aValue [8 0100000000000000]
+baked fBin [8 0300000000000000]
+baked fConst [8 0200000000000000]
+baked fCopy [8 0100000000000000]
+baked fLoad [8 0500000000000000]
+baked fStore [8 0600000000000000]
+baked fUn [8 0400000000000000]
+baked fastStride [8 0b00000000000000]
+baked gDtor [8 0000000000000000]
+baked gGen [8 0200000000000000]
+baked rCall [8 0100000000000000]
+baked rClause [8 0400000000000000]
+baked rDtor [8 0200000000000000]
+baked rGlobal [8 0500000000000000]
+baked rRequest [8 0000000000000000]
+baked rTask [8 0300000000000000]
+baked sBlock [8 0000000000000000]
+baked sBuilder [8 0400000000000000]
+baked sInert [8 0300000000000000]
+baked sJoin [8 0600000000000000]
+baked sProgram [8 0200000000000000]
+baked sRegion [8 0500000000000000]
+baked sStore [8 0100000000000000]
+baked slotBits [8 1800000000000000]
+baked slotMask [8 ffffff0000000000]
+baked tCall [8 0100000000000000]
+baked tJoin [8 0200000000000000]
+baked tRaised [8 0000000000000000]
+baked traceKept [8 2000000000000000]
+baked vAgg [8 0a00000000000000]
+baked vBool [8 0100000000000000]
+baked vEnum [8 0800000000000000]
+baked vFixed [8 0b00000000000000]
+baked vFloat [8 0400000000000000]
+baked vFunc [8 0700000000000000]
+baked vInt [8 0200000000000000]
+baked vNone [8 0c00000000000000]
+baked vOrd [8 0900000000000000]
+baked vPair [8 0600000000000000]
+baked vPtr [8 0500000000000000]
+baked vUint [8 0300000000000000]
+baked vVoid [8 0000000000000000]
+baked vWide [8 0d00000000000000]
+sig Allocations@236278 fn&(Machine&) I64
+sig Bits@235273 fn&(mut Machine&, Ptr, I64) I64
+sig BuildGlobal@40147 fn&(mut Machine&, I64, NameId)
+sig Define@27139 fn&(mut Machine&, Fn&)
+sig DefineDestructor@37985 fn&(mut Machine&, TypeId, FnKey)
+sig DefineExtern@37718 fn&(mut Machine&, I64, String&, I64)
+sig DefineGlobal@39634 fn&(mut Machine&, I64, NameId, TypeId, Bool, FnKey)
+sig DefineTable@38191 fn&(mut Machine&, I64, TypeId, Array<FnKey>&)
+sig Elems@235583 fn&(mut Machine&, Ptr, TypeId, TypeId) Array<I64>
+sig EndProgram@220140 fn&(mut Machine&, FnKey) Stop
+sig Eval@218794 fn&(mut Machine&, FnKey, Array<I64>&) Stop
+sig Global@221114 fn&(mut Machine&, I64, NameId, Bool, Bool) Stop
+sig HeapBytes@236229 fn&(Machine&) I64
+sig Image@231431 fn&(mut Machine&, I64, NameId, Bool) Image ? NotBaked
+sig InitGlobal@222957 fn&(mut Machine&, I64, NameId) Stop
+sig Int@235124 fn&(mut Machine&, Ptr, TypeId) I64
+sig Machine.New@26597 fn&(mut Table&, Mode) Machine
+sig Main@229687 fn&(mut Machine&, Array<FnKey>&, FnKey) Stop
+sig RefAt@235367 fn&(mut Machine&, Ptr) Ptr
+sig ResultHoldsAddress@234724 fn&(mut Machine&) Bool
+sig ScopeSlots@236329 fn&(Machine&) I64
+sig StaleGrewAt@52344 fn&(Machine&) I64, Span
+sig Text@235915 fn&(mut Machine&, Ptr, TypeId) String
+sig Text@3927 fn&(Stop, Source&) String
+sig TraceAt@203905 fn&(Machine&, I64) I64, I64, I64
+sig TraceLen@203845 fn&(Machine&) I64
+sig TraceWhat@204079 fn&(Machine&, I64) String&
+sig Why@236662 fn&(mut Machine&, FnKey) String, I64, Span
+sig add128@136785 fn&(I64, I64, I64, I64) I64, I64
+sig addReg@59579 fn&(mut Machine&, I64, I64, I64, Ptr)
+sig addr@78955 fn&(mut Machine&, I64, Operand, I64) Ptr
+sig adopt@61023 fn&(mut Machine&, I64, I64)
+sig aggregate@98173 fn&(mut Machine&, I64, Ptr, TypeId, I64, Range)
+sig allocOf@58196 fn&(mut Machine&, I64) alloc
+sig allocate@48880 fn&(mut Machine&, I64, I64, I64) Ptr
+sig anchorRegion@64400 fn&(mut Machine&, Ptr, TypeId) I64
+sig appendByte@161945 fn&(mut Machine&, I64, I64)
+sig appendEscaped@161491 fn&(mut Machine&, I64, I64, I64)
+sig appendText@161846 fn&(mut Machine&, I64, String&)
+sig arg@117235 fn&(mut Machine&, I64, Range, I64) Operand
+sig arrayOf@95984 fn&(mut Machine&, TypeId) TypeId
+sig arrayTarget@212107 fn&(mut Machine&, Ptr, Ptr, TypeId, I64)
+sig arrayView@76364 fn&(mut Machine&, Ptr, TypeId) Ptr, I64
+sig assign@84972 fn&(mut Machine&, I64, Lvalue, Rvalue)
+sig at@52674 fn&(mut Machine&, Ptr, I64, Bool) I64
+sig atK@159092 fn&(mut Machine&, I64, Span)
+sig atomic@131102 fn&(mut Machine&, I64, PrimOp, Range, TypeId) I64
+sig bitOp@120990 fn&(PrimOp, U64, I64, I64) I64
+sig bitcast@130226 fn&(mut Machine&, I64, TypeId) I64
+sig bmask@80560 fn&(I64) I64
+sig buildScope@72943 fn&(mut Machine&, I64, ScopeRef) I64
+sig bytesOf@188312 fn&(mut Machine&, I64, Operand) Array<U8>
+sig callExtern@175249 fn&(mut Machine&, I64, I64, TypeId, Range, Ptr, Bool) Bool
+sig callIndex@196213 fn&(mut Machine&, I64, Call) I64 ? NotACall
+sig callReturned@198806 fn&(mut Machine&, frame)
+sig callee@168044 fn&(mut Machine&, I64, Callee) I64, Ptr, I64
+sig calleeType@170013 fn&(mut Machine&, I64, Callee) TypeId
+sig canonBits@80845 fn&(mut Machine&, TypeId, I64) I64
+sig caseHolds@190918 fn&(mut Machine&, TypeId, I64, I64, I64, I64) Bool
+sig catchFn@262549 fn&(mut Table&, I64, I64, TypeId, I64) Fn
+sig classOf@48346 fn&(I64) I64
+sig closeGen@112382 fn&(mut Machine&, I64, I64)
+sig closeNow@228307 fn&(mut Machine&, I64, I64)
+sig closeOpen@227521 fn&(mut Machine&, I64)
+sig closeRegion@65256 fn&(mut Machine&, I64)
+sig closure@106036 fn&(mut Machine&, I64, Ptr, FnKey, ScopeRef, Range)
+sig cmp128@138363 fn&(I64, I64, I64, I64, Bool) I64
+sig codeIndex@40325 fn&(mut Machine&, FnKey) I64
+sig codePtr@105620 fn&(mut Machine&, FnKey) Ptr
+sig constLen@82516 fn&(mut Machine&, Fn&, ConstNode) I64
+sig convert@128542 fn&(mut Machine&, I64, TypeId, TypeId) I64
+sig convertArray@96523 fn&(mut Machine&, I64, Ptr, Operand, TypeId)
+sig copy@56564 fn&(mut Machine&, Ptr, Ptr, I64)
+sig copyBits@101877 fn&(mut Machine&, Ptr, I64, Ptr, I64, I64)
+sig countBits128@142067 fn&(Bool, I64, I64, I64) I64
+sig dataFor@81591 fn&(mut Machine&, Fn&, TypeId, I32, I64, Span) Ptr, I64
+sig decode@27605 fn&(mut Machine&, Fn&) cfn
+sig deliver@197795 fn&(mut Machine&, I64, Operand)
+sig disown@61293 fn&(mut Machine&, I64)
+sig dropDefers@224796 fn&(mut Machine&, I64, I64, Bool)
+sig dropFrame@224361 fn&(mut Machine&)
+sig dropOwnDefers@225381 fn&(mut Machine&, I64)
+sig dropScope@228837 fn&(mut Machine&, I64)
+sig dropWork@114500 fn&(Machine&, I64, I64) Bool
+sig elemOf@46770 fn&(mut Machine&, TypeId) TypeId
+sig element@75879 fn&(mut Machine&, Ptr, TypeId, I64) Ptr, TypeId
+sig endsProgram@212665 fn&(Machine&, I64) Bool
+sig enter@170466 fn&(mut Machine&, I64, Callee, Range, Range, I64, I64) I64
+sig exit@196442 fn&(mut Machine&, I64, I64, Span, ExitKind, Operand)
+sig extend128@136340 fn&(I64, I64, I64, Bool) I64, I64
+sig externCall@195483 fn&(mut Machine&, I64, Call, I64, TypeId)
+sig failFn@261822 fn&(mut Table&, I64, ListId, I64) Fn
+sig failedHere@202493 fn&(mut Machine&, I64, I64)
+sig ffiKind@189449 fn&(mut Machine&, TypeId) Kind
+sig ffiScalar@189251 fn&(mut Machine&, TypeId, Bool) Bool
+sig fibFn@258603 fn&(mut Table&, I64) Fn
+sig fibHost@260197 fn&(I64) I64
+sig fits128@140392 fn&(I64, I64, Bool, I64, Bool) Bool
+sig fitsBits@134283 fn&(I64, Bool, I64, Bool) Bool
+sig fixedLen@46667 fn&(mut Machine&, TypeId) I64
+sig flat@69571 fn&(mut Machine&, I64, I64, I64, I64)
+sig flatIndex@72039 fn&(mut Machine&, I64, Array<I64>&, I64) I64
+sig flatOp@34158 fn&(PrimOp) Bool
+sig flatOperand@33284 fn&(mut Machine&, Fn&, Operand, mut cfn&, I64, I64) ? NotFlat
+sig flatValue@71740 fn&(mut Machine&, I64, Array<I64>&, I64) I64
+sig flatten@29005 fn&(mut Machine&, Fn&, Stmt&, mut cfn&, I64)
+sig flattenLoad@30805 fn&(mut Machine&, Fn&, Lvalue, I64, I64, mut cfn&, I64)
+sig flattenPrim@31398 fn&(mut Machine&, Fn&, PrimOp, TypeId, Range, I64, mut cfn&, I64)
+sig flattenToElem@32280 fn&(mut Machine&, Fn&, Lvalue, Rvalue, mut cfn&, I64)
+sig flattenToLocal@29421 fn&(mut Machine&, Fn&, Lvalue, Rvalue, mut cfn&, I64)
+sig flattenUse@30003 fn&(mut Machine&, Fn&, Operand, I64, mut cfn&, I64)
+sig floatCompare@127803 fn&(mut Machine&, PrimOp, F64, F64) I64
+sig floatFits@133674 fn&(F64, I64, Bool) Bool
+sig floatOp@126790 fn&(mut Machine&, PrimOp, I64, I64, TypeId) I64
+sig floatText@160961 fn&(mut Machine&, I64, TypeId) String
+sig floatToWide@152647 fn&(F64) I64, I64
+sig fnOfFrame@68698 fn&(Machine&, I64) Fn&
+sig foreignRef@180652 fn&(mut Machine&, TypeId) Bool
+sig foundScope@95261 fn&(mut Machine&, Ptr) I64
+sig freeTask@206706 fn&(mut Machine&, I64)
+sig freedEarly@40903 fn&(mut Machine&)
+sig freshDrops@115271 fn&(mut Machine&, I64, genRec)
+sig freshWork@114186 fn&(Machine&, genRec) Bool
+sig fromF64@126287 fn&(mut Machine&, F64, TypeId) I64
+sig genClosure@107563 fn&(mut Machine&, I64, Ptr, Ptr, I64, ScopeRef, Range)
+sig genHeld@90881 fn&(mut Machine&, Ptr) I64
+sig genIndex@109195 fn&(mut Machine&, Fn&, Ptr) I64
+sig genNew@103487 fn&(mut Machine&, I64, I64, TypeId, Operand) Ptr
+sig genOver@174169 fn&(mut Machine&, I64, I64, Callee, I64, I64)
+sig genWalk@91917 fn&(mut Machine&, Ptr, TypeId, Bool, fn&(q Ptr))
+sig globalWritten@164026 fn&(mut Machine&, Lvalue) Bool
+sig globalsReady@162749 fn&(mut Machine&, I64, Lvalue, Rvalue) Bool
+sig gplace@279925 fn&(mut Table&, NameId) Lvalue
+sig grow@48429 fn&(mut Machine&, I64)
+sig heldScope@72754 fn&(mut Machine&, I64, LocalId) I64
+sig holderCheck@93213 fn&(mut Machine&, Ptr)
+sig holders@91191 fn&(mut Machine&, Ptr, TypeId, I64)
+sig i64@34837 fn&(mut Machine&, TypeId) Bool
+sig ibits@80358 fn&(mut Machine&, TypeId) I64
+sig initFrame@167262 fn&(Machine&, I64) Bool
+sig intArg@188147 fn&(mut Machine&, I64, Operand) I64
+sig intOp@123723 fn&(mut Machine&, PrimOp, I64, I64, TypeId, TypeId) I64
+sig intToFloat@129457 fn&(mut Machine&, I64, Bool, TypeId) I64
+sig intValue@81175 fn&(mut Machine&, I64, TypeId) I64
+sig isNaNBits@251619 fn&(I64, String&) Bool
+sig jump@195160 fn&(mut Machine&, I64, BlockId)
+sig kindWidth@181435 fn&(mut Machine&, U8) I64
+sig lay@41336 fn&(mut Machine&, TypeId) Bool
+sig layRepr@41929 fn&(mut Machine&, TypeId)
+sig leave@197181 fn&(mut Machine&, I64, Bool, Operand, I64)
+sig lenOf@123123 fn&(mut Machine&, I64, Operand, TypeId) I64
+sig live@59400 fn&(mut Machine&, I64) Bool
+sig loadCaptures@209818 fn&(mut Machine&, I64, Fn&, Ptr, I64)
+sig localAt@71050 fn&(mut Machine&, I64, I64, I64, Bool) I64
+sig localPtr@68500 fn&(mut Machine&, I64, LocalId) Ptr
+sig loop@216962 fn&(mut Machine&, I64)
+sig lz128@140776 fn&(I64, I64, I64) I64
+sig mask@79971 fn&(mut Machine&, I64) I64
+sig minBits@134105 fn&(I64) I64
+sig move@56754 fn&(mut Machine&, I64, I64, I64)
+sig mul128@137577 fn&(I64, I64, I64, I64) I64, I64
+sig mul64@137169 fn&(I64, I64) I64, I64
+sig mutableGlobal@239943 fn&(mut Machine&, Lvalue) Bool
+sig namedShape@44654 fn&(mut Machine&, TypeId) I64
+sig neg128@137045 fn&(I64, I64) I64, I64
+sig newArray@103930 fn&(mut Machine&, I64, Ptr, ScopeRef, TypeId, Operand, Operand)
+sig newRef@102248 fn&(mut Machine&, I64, Ptr, ScopeRef, Operand, TypeId)
+sig newRegSlot@60816 fn&(mut Machine&) I64
+sig newScope@58851 fn&(mut Machine&, I64) I64
+sig newScopeSlot@59253 fn&(mut Machine&) I64
+sig newSlot@50329 fn&(mut Machine&) I64
+sig newTaskSlot@206609 fn&(mut Machine&) I64
+sig nfn@266239 fn&(mut Table&, I64) Fn
+sig notModelled@122801 fn&(mut Machine&) I64
+sig numOp@122031 fn&(mut Machine&, PrimOp, I64, I64, TypeId, TypeId, I64) I64
+sig number@35457 fn&(mut Machine&, TypeId) Bool
+sig numbersOnly@181055 fn&(mut Machine&, TypeId) Bool
+sig objectAt@94350 fn&(mut Machine&, Ptr, TypeId) Ptr
+sig objectOf@94221 fn&(mut Machine&, I64, Operand) Ptr
+sig opFn@241275 fn&(mut Table&, I64, PrimOp, TypeId, TypeId, Bool) Fn
+sig opNamesGlobal@35969 fn&(Operand) Bool
+sig opType@76858 fn&(mut Machine&, I64, Operand) TypeId
+sig operandReady@163767 fn&(mut Machine&, I64, Operand) Bool
+sig ovFn@241903 fn&(mut Table&, I64, PrimOp, TypeId) Fn
+sig overflows64@247720 fn&(PrimOp, I64, I64, Bool) Bool
+sig overflows@131939 fn&(mut Machine&, I64, PrimOp, TypeId, Range) Bool
+sig overflowsWide@149895 fn&(mut Machine&, I64, PrimOp, TypeId, Range) Bool
+sig ownParams@73238 fn&(mut Machine&, I64, I64)
+sig pack@115919 fn&(mut Machine&, Array<TypeId>&) Array<I64>, I64
+sig packInto@101129 fn&(mut Machine&, Ptr, I64, TypeId, Ptr)
+sig packedOp@99450 fn&(mut Machine&, I64, Ptr, PrimOp, Range)
+sig partList@45005 fn&(mut Machine&, TypeId) ListId
+sig partOffset@45450 fn&(mut Machine&, TypeId, I64) I64
+sig partType@45275 fn&(mut Machine&, TypeId, I64) TypeId
+sig passFn@263639 fn&(mut Table&, I64, I64, TypeId, ListId, ListId) Fn
+sig payDrop@216668 fn&(mut Machine&, I64)
+sig payloadType@45801 fn&(mut Machine&, TypeId, I64) TypeId
+sig place@73831 fn&(mut Machine&, I64, Lvalue) Ptr, TypeId
+sig placeNamesGlobal@35830 fn&(Lvalue) Bool
+sig placeReady@164406 fn&(mut Machine&, I64, Lvalue) Bool
+sig placeType@77185 fn&(mut Machine&, I64, Lvalue) TypeId
+sig plainLocal@33943 fn&(Lvalue) I64
+sig popFrame@68315 fn&(mut Machine&)
+sig prim@117354 fn&(mut Machine&, I64, PrimOp, TypeId, Range) I64
+sig primWide@142430 fn&(mut Machine&, I64, Ptr, PrimOp, TypeId, Range)
+sig pushFrame@66185 fn&(mut Machine&, I64, I64, I64) I64
+sig put@77880 fn&(mut Machine&, I64, Ptr, TypeId, Operand)
+sig putBytes@188735 fn&(mut Machine&, I64, Operand, Array<U8>&, I64)
+sig putData@84192 fn&(mut Machine&, I64, Ptr, TypeId, I32, I64, Span)
+sig putInt@152342 fn&(mut Machine&, Ptr, TypeId, I64, I64)
+sig putLimit@149479 fn&(mut Machine&, Ptr, TypeId, I64, Bool, Bool)
+sig rangeMutable@239651 fn&(mut Machine&, Fn&, Range) Bool
+sig rangeNamesGlobal@36114 fn&(Fn&, Range) Bool
+sig rangeReady@163574 fn&(mut Machine&, I64, Fn&, Range) Bool
+sig rd@55621 fn&(mut Machine&, Ptr, I64) I64
+sig rdPtr@55912 fn&(mut Machine&, Ptr) Ptr
+sig rdPtrOrBits@122950 fn&(mut Machine&, Ptr) Ptr
+sig rdRaw@54568 fn&(mut Machine&, I64, I64) I64
+sig rdWide@134993 fn&(mut Machine&, Ptr, TypeId) I64, I64
+sig reachesWritable@47116 fn&(mut Machine&, TypeId) Bool
+sig readsMutable@239403 fn&(mut Machine&, Fn&, Rvalue) Bool
+sig recode@116386 fn&(mut Machine&, I64, ListId, ListId) I64
+sig ref@97806 fn&(mut Machine&, I64, Ptr, Lvalue, TypeId)
+sig refuse@40693 fn&(mut Machine&, String&)
+sig regionHome@95793 fn&(mut Machine&, I64) I64
+sig regionOfObject@94733 fn&(mut Machine&, Ptr) I64
+sig release@50664 fn&(mut Machine&, I64)
+sig releaseHeld@64001 fn&(mut Machine&, Ptr, TypeId)
+sig restoreGen@109592 fn&(mut Machine&, I64, I64, I64) I64
+sig retFn@279607 fn&(mut Table&, I64, Operand) Fn
+sig retire@51493 fn&(mut Machine&, I64, Ptr, TypeId)
+sig returned@199597 fn&(mut Machine&, frame)
+sig rtArray@43256 fn&(mut Machine&, TypeId) Bool
+sig rtArrayValue@35666 fn&(mut Machine&, TypeId) Bool
+sig runCleanups@226026 fn&(mut Machine&, I64)
+sig runDtor@65398 fn&(mut Machine&, I64, TypeId, Ptr)
+sig runtimeFn@182729 fn&(mut Machine&, I64, String&, Range, TypeId, Ptr, Bool) Bool
+sig satOp@147500 fn&(PrimOp) Bool
+sig saturate@147894 fn&(mut Machine&, I64, Ptr, PrimOp, TypeId, Range)
+sig scalar@79324 fn&(mut Machine&, I64, Operand) I64
+sig scopeOf@72285 fn&(mut Machine&, I64, ScopeRef) I64
+sig scratchFor@58376 fn&(mut Machine&, I64, I64) Ptr
+sig sdivmod128@139432 fn&(I64, I64, I64, I64) I64, I64, I64, I64
+sig settle@65031 fn&(mut Machine&, I64, Ptr, TypeId)
+sig settled@42671 fn&(mut Machine&, TypeId) Bool
+sig shape@43415 fn&(mut Machine&, TypeId) I64
+sig shapeOf@43635 fn&(mut Machine&, TypeId) I64
+sig shl128@137709 fn&(I64, I64, I64) I64, I64
+sig shr128@137956 fn&(I64, I64, I64, Bool) I64, I64
+sig size@42318 fn&(mut Machine&, TypeId) I64
+sig slice@104696 fn&(mut Machine&, I64, Ptr, Lvalue, Operand, Operand, TypeId)
+sig spawn@204732 fn&(mut Machine&, I64, ScopeId, I32)
+sig startGlobal@167586 fn&(mut Machine&, I64)
+sig startTask@207922 fn&(mut Machine&, I64, I64)
+sig stepClose@62090 fn&(mut Machine&)
+sig stmtAt@153935 fn&(mut Machine&, I64, I64, I64)
+sig stmtNamesGlobal@36360 fn&(Fn&, Stmt&) Bool
+sig stop@40590 fn&(mut Machine&, Stop)
+sig sub128@136921 fn&(I64, I64, I64, I64) I64, I64
+sig sumFn@256918 fn&(mut Table&, I64, Bool) Fn
+sig suspend@110929 fn&(mut Machine&, I64, Operand, BlockId, Range, BlockId)
+sig switchTo@190222 fn&(mut Machine&, I64, I64, Operand, Range, BlockId) BlockId
+sig table@38836 fn&(mut Machine&, I64) Ptr
+sig tagOf@97470 fn&(mut Machine&, Ptr, TypeId) I64
+sig tail@194586 fn&(mut Machine&, I64, Call)
+sig taskEnded@212988 fn&(mut Machine&, frame)
+sig taskLayout@204468 fn&(mut Machine&, Fn&, Task, I64) Array<I64>, I64
+sig tcopy@240426 fn&(I64) Operand
+sig tdecl@272587 fn&(mut Table&, mut Names&, DeclKind, String&) TypeId
+sig tdefine@241068 fn&(mut Table&, mut Machine&, mut Fn&)
+sig term@191132 fn&(mut Machine&, I64, Term, Bool)
+sig termNamesGlobal@37244 fn&(Fn&, Term) Bool
+sig terr@261516 fn&(mut Table&, mut Names&, String&) TypeId
+sig text@116776 fn&(mut Machine&, I64, Ptr, ScopeRef, ScopeRef)
+sig tfn@240598 fn&(mut Table&, I64, TypeId) Fn
+sig tkey@240945 fn&(I64) FnKey
+sig tl@240357 fn&(I64) Lvalue
+sig toF64@125866 fn&(mut Machine&, I64, TypeId) F64
+sig toTargets@210975 fn&(mut Machine&, I64, I64, Operand, TypeId)
+sig tprim@256508 fn&(mut Fn&, BlockId, I64, PrimOp, TypeId, Operand, Operand)
+sig traced@202932 fn&(mut Machine&, I64, I64, Span)
+sig trueOverflows@247134 fn&(PrimOp, I64, I64, I64, Bool) Bool
+sig tspan@266361 fn&(I64) Span
+sig typeid@38481 fn&(mut Machine&, TypeId) Ptr
+sig udivmod128@138724 fn&(I64, I64, I64, I64) I64, I64, I64, I64
+sig ult64@136729 fn&(I64, I64) Bool
+sig unary@123398 fn&(mut Machine&, PrimOp, I64, TypeId, I64) I64
+sig unlinkReg@60556 fn&(mut Machine&, I64)
+sig unmark@55423 fn&(mut Machine&, I64, I64)
+sig unpackInto@100156 fn&(mut Machine&, Ptr, TypeId, Ptr, I64)
+sig unwind@223560 fn&(mut Machine&, I64)
+sig wait@206892 fn&(mut Machine&, I64, ScopeId, BlockId, LocalId, BlockId)
+sig waitsForTask@201503 fn&(mut Machine&, String&) Bool
+sig walksLetGo@113763 fn&(mut Machine&) Bool
+sig weakRead@90477 fn&(mut Machine&, I64, Ptr, Lvalue)
+sig whyCall@238696 fn&(mut Machine&, Callee, Span, mut Map<I64, Bool>&, mut Vec<I64>&) String, Span
+sig whyStmt@237463 fn&(mut Machine&, Fn&, Stmt) String, Span
+sig whyTerm@238072 fn&(mut Machine&, Fn&, Term, mut Map<I64, Bool>&, mut Vec<I64>&) String, Span
+sig wideConst@135563 fn&(mut Machine&, TypeId, I64) I64, I64
+sig wideMax@140125 fn&(I64, Bool) I64, I64
+sig wideMin@139918 fn&(I64) I64, I64
+sig wideOf@135789 fn&(mut Machine&, I64, Operand) I64, I64
+sig wideOp@141731 fn&(mut Machine&, I64, TypeId, Range) Bool
+sig wideText@141077 fn&(I64, I64, Bool) String
+sig wideToFloat@153402 fn&(mut Machine&, I64, I64, Bool, TypeId) I64
+sig width@46128 fn&(mut Machine&, TypeId) I64
+sig widthOf@46348 fn&(mut Machine&, TypeId) I64
+sig word@80155 fn&(mut Machine&, TypeId) I64
+sig wordOp@35033 fn&(PrimOp) Bool
+sig wordValue@68982 fn&(PrimOp, I64, I64) I64
+sig wr@55745 fn&(mut Machine&, Ptr, I64, I64)
+sig wrPtr@56199 fn&(mut Machine&, Ptr, Ptr)
+sig wrRaw@54868 fn&(mut Machine&, I64, I64, I64)
+sig wrWide@135297 fn&(mut Machine&, Ptr, TypeId, I64, I64)
+sig write@159255 fn&(mut Machine&, I64, ScopeRef, WriteKind, Operand)
+sig writeElems@82776 fn&(mut Machine&, Fn&, Ptr, TypeId, ConstNode)
+sig writeItem@83574 fn&(mut Machine&, Fn&, Ptr, TypeId, ConstNode) ? Halted
+sig writesAfter@165963 fn&(Machine&, I64, I64, NameId) Bool
+sig zero@57842 fn&(mut Machine&, Ptr, I64)
+end
+sum 531176cb4f6c8a25f53ab5e5672861ca207a892e23a21abb0ed1063f99f2322c

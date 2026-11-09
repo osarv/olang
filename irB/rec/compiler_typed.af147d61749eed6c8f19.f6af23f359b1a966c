@@ -1,0 +1,586 @@
+olang front record
+read place E31b compiler/typed@117245
+read place E31b compiler/typed@120441
+body fn 100125-100305	known p
+body fn 100307-100434	known p
+body fn 100476-100672	known p
+body fn 100947-101380	known p grows|0|-|-|..Run|4|0|compiler/typed|101088|101093|-1
+body fn 101492-101712	known p grows|0|-|-|..Run|4|0|compiler/typed|101680|101683|-1
+body fn 101714-101981	known p grows|0|-|-|..Run|4|0|compiler/typed|101844|101848|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|101844|101848|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|101844|101848|-1 grows|0|-|-|..brk|4|0|compiler/typed|101844|101848|-1 grows|0|-|-|..cont|5|0|compiler/typed|101844|101848|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|101844|101848|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|101844|101848|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|101844|101848|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|101844|101848|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|101844|101848|-1
+body fn 102089-102253	known p
+body fn 102255-104434	known p grows|0|-|-|..Run|4|0|compiler/typed|102375|102379|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|102375|102379|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|102375|102379|-1 grows|0|-|-|..brk|4|0|compiler/typed|102375|102379|-1 grows|0|-|-|..cont|5|0|compiler/typed|102375|102379|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|102375|102379|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|102375|102379|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|102375|102379|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|103934|103938|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|103967|103971|-1
+body fn 104592-105282	known p grows|0|-|-|..loopBody|9|0|compiler/typed|104710|104714|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|104737|104741|-1 grows|0|-|-|..brk|4|0|compiler/typed|104793|104797|-1 grows|0|-|-|..cont|5|0|compiler/typed|104820|104824|-1 grows|0|-|-|..Run|4|0|compiler/typed|105010|105015|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|105010|105015|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|105010|105015|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|105010|105015|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|105010|105015|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|105010|105015|-1
+body fn 105359-105549	known p
+body fn 105641-105928	known p
+body fn 106062-106320	known p grows|0|-|-|..Run|4|0|compiler/typed|106217|106222|-1
+body fn 106408-106703	known p
+body fn 106705-106783	known p grows|0|-|-|..Run|4|0|compiler/typed|106772|106776|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|106772|106776|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|106772|106776|-1 grows|0|-|-|..brk|4|0|compiler/typed|106772|106776|-1 grows|0|-|-|..cont|5|0|compiler/typed|106772|106776|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|106772|106776|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|106772|106776|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|106772|106776|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|106772|106776|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|106772|106776|-1
+body fn 106785-108438	known p grows|0|-|-|..Run|4|0|compiler/typed|107104|107108|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|107295|107299|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|107295|107299|-1 grows|0|-|-|..brk|4|0|compiler/typed|107295|107299|-1 grows|0|-|-|..cont|5|0|compiler/typed|107295|107299|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|107968|107971|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|107968|107971|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|107968|107971|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|107104|107108|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|107104|107108|-1
+body fn 108558-108976	known p grows|0|-|-|..Run|4|0|compiler/typed|108959|108967|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|108649|108653|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|108649|108653|-1 grows|0|-|-|..brk|4|0|compiler/typed|108649|108653|-1 grows|0|-|-|..cont|5|0|compiler/typed|108649|108653|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|108649|108653|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|108649|108653|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|108649|108653|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|108942|108946|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|108942|108946|-1
+body fn 108978-109577	known p grows|0|-|-|..Run|4|0|compiler/typed|109042|109046|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|109042|109046|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|109042|109046|-1 grows|0|-|-|..brk|4|0|compiler/typed|109042|109046|-1 grows|0|-|-|..cont|5|0|compiler/typed|109042|109046|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|109042|109046|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|109042|109046|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|109042|109046|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|109042|109046|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|109042|109046|-1
+body fn 109753-110395	known p grows|0|-|-|..tryLeaves|10|0|compiler/typed|109853|109857|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|109896|109900|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|109944|109948|-1 grows|0|-|-|..Run|4|0|compiler/typed|109989|109993|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|109989|109993|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|109989|109993|-1 grows|0|-|-|..brk|4|0|compiler/typed|109989|109993|-1 grows|0|-|-|..cont|5|0|compiler/typed|109989|109993|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|110328|110333|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|110328|110333|-1
+body fn 110397-110811	known p grows|0|-|-|..Run|4|0|compiler/typed|110515|110519|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|110515|110519|-1 grows|0|-|-|..loopAt|7|0|compiler/typed|110515|110519|-1 grows|0|-|-|..brk|4|0|compiler/typed|110515|110519|-1 grows|0|-|-|..cont|5|0|compiler/typed|110515|110519|-1 grows|0|-|-|..tryLeaves|10|0|compiler/typed|110515|110519|-1 grows|0|-|-|..tryDepth|9|0|compiler/typed|110515|110519|-1 grows|0|-|-|..tryFail|8|0|compiler/typed|110515|110519|-1 grows|0|-|-|..pendFlag|9|0|compiler/typed|110515|110519|-1 grows|0|-|-|..pendAt|7|0|compiler/typed|110515|110519|-1
+body fn 110993-111431	known p
+body fn 113116-113278	known p
+body fn 113280-113385	known p
+body fn 113498-113599	known p
+body fn 113601-114648	known p
+body fn 114726-115526	known p grows|2|-|-|..Holders|8|0|compiler/typed|114961|114965|-1 grows|2|-|-|..Blocks|7|0|compiler/typed|115000|115004|-1
+body fn 115585-115773	known p
+body fn 117157-117286	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|117245|117246|-1
+body fn 117372-117583	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|117500|117504|-1 grows|0|-|-|..temps|6|0|compiler/typed|117500|117504|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|117500|117504|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|117500|117504|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|117500|117504|-1 grows|0|-|-|..yields|7|0|compiler/typed|117500|117504|-1 grows|0|-|-|..blocks|7|0|compiler/typed|117500|117504|-1 grows|0|-|-|..regAt|6|0|compiler/typed|117500|117504|-1 grows|0|-|-|..regOf|6|0|compiler/typed|117500|117504|-1 grows|0|-|-|..regIn|6|0|compiler/typed|117500|117504|-1 grows|0|-|-|..regs|5|0|compiler/typed|117500|117504|-1 grows|0|-|-|..targets|8|0|compiler/typed|117500|117504|-1
+body fn 117700-117872	known p
+body fn 117983-118159	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|118132|118135|-1
+body fn 118248-118531	known p
+body fn 118533-118607	known p
+body fn 118609-118720	known p grows|0|-|-|.|0|0|compiler/typed|118705|118709|-1
+body fn 118924-119243	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|119221|119226|-1 grows|0|-|-|..temps|6|0|compiler/typed|119082|119087|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|119082|119087|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|119082|119087|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|119082|119087|-1 grows|0|-|-|..yields|7|0|compiler/typed|119082|119087|-1 grows|0|-|-|..blocks|7|0|compiler/typed|119082|119087|-1 grows|0|-|-|..regAt|6|0|compiler/typed|119082|119087|-1 grows|0|-|-|..regOf|6|0|compiler/typed|119082|119087|-1 grows|0|-|-|..regIn|6|0|compiler/typed|119082|119087|-1 grows|0|-|-|..regs|5|0|compiler/typed|119082|119087|-1 grows|0|-|-|..targets|8|0|compiler/typed|119082|119087|-1
+body fn 119245-119394	known p grows|0|-|-|..blocks|7|0|compiler/typed|119325|119329|-1 grows|0|-|-|..regAt|6|0|compiler/typed|119363|119367|-1 grows|0|-|-|..regOf|6|0|compiler/typed|119363|119367|-1 grows|0|-|-|..regIn|6|0|compiler/typed|119363|119367|-1 grows|0|-|-|..regs|5|0|compiler/typed|119363|119367|-1 grows|0|-|-|..reach[...]|11|0|compiler/typed|119363|119367|-1 grows|0|-|-|..temps|6|0|compiler/typed|119363|119367|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|119363|119367|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|119363|119367|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|119363|119367|-1 grows|0|-|-|..yields|7|0|compiler/typed|119363|119367|-1 grows|0|-|-|..targets|8|0|compiler/typed|119363|119367|-1
+body fn 119396-119509	known p
+body fn 119716-120008	known p
+body fn 120116-120482	known p grows|0|-|-|..regAt|6|0|compiler/typed|120304|120308|-1 grows|0|-|-|..regOf|6|0|compiler/typed|120325|120329|-1 grows|0|-|-|..regIn|6|0|compiler/typed|120345|120349|-1 grows|0|-|-|..regs|5|0|compiler/typed|120396|120400|-1 grows|0|-|-|..reach[...]|11|0|compiler/typed|120441|120442|-1
+body fn 120484-122111	known p grows|0|-|-|..regAt|6|0|compiler/typed|120609|120617|-1 grows|0|-|-|..regOf|6|0|compiler/typed|120609|120617|-1 grows|0|-|-|..regIn|6|0|compiler/typed|120609|120617|-1 grows|0|-|-|..regs|5|0|compiler/typed|120609|120617|-1 grows|0|-|-|..reach[...]|11|0|compiler/typed|120609|120617|-1 grows|0|-|-|..temps|6|0|compiler/typed|120665|120670|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|120665|120670|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|120665|120670|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|120665|120670|-1 grows|0|-|-|..yields|7|0|compiler/typed|120665|120670|-1 grows|0|-|-|..targets|8|0|compiler/typed|120888|120892|-1 grows|0|-|-|..blocks|7|0|compiler/typed|120665|120670|-1
+body fn 122113-122255	known p grows|0|-|-|..blocks|7|0|compiler/typed|122192|122197|-1 grows|0|-|-|..regAt|6|0|compiler/typed|122192|122197|-1 grows|0|-|-|..regOf|6|0|compiler/typed|122192|122197|-1 grows|0|-|-|..regIn|6|0|compiler/typed|122192|122197|-1 grows|0|-|-|..regs|5|0|compiler/typed|122192|122197|-1 grows|0|-|-|..reach[...]|11|0|compiler/typed|122192|122197|-1 grows|0|-|-|..temps|6|0|compiler/typed|122192|122197|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|122192|122197|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|122192|122197|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|122192|122197|-1 grows|0|-|-|..yields|7|0|compiler/typed|122192|122197|-1 grows|0|-|-|..targets|8|0|compiler/typed|122192|122197|-1
+body fn 122365-122835	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|122525|122529|-1 grows|0|-|-|..temps|6|0|compiler/typed|122525|122529|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|122525|122529|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|122525|122529|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|122525|122529|-1 grows|0|-|-|..yields|7|0|compiler/typed|122525|122529|-1 grows|0|-|-|..blocks|7|0|compiler/typed|122525|122529|-1 grows|0|-|-|..regAt|6|0|compiler/typed|122525|122529|-1 grows|0|-|-|..regOf|6|0|compiler/typed|122525|122529|-1 grows|0|-|-|..regIn|6|0|compiler/typed|122525|122529|-1 grows|0|-|-|..regs|5|0|compiler/typed|122525|122529|-1 grows|0|-|-|..targets|8|0|compiler/typed|122525|122529|-1
+body fn 122837-122940	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|122896|122900|-1 grows|0|-|-|..temps|6|0|compiler/typed|122896|122900|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|122896|122900|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|122896|122900|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|122896|122900|-1 grows|0|-|-|..yields|7|0|compiler/typed|122896|122900|-1 grows|0|-|-|..blocks|7|0|compiler/typed|122896|122900|-1 grows|0|-|-|..regAt|6|0|compiler/typed|122896|122900|-1 grows|0|-|-|..regOf|6|0|compiler/typed|122896|122900|-1 grows|0|-|-|..regIn|6|0|compiler/typed|122896|122900|-1 grows|0|-|-|..regs|5|0|compiler/typed|122896|122900|-1 grows|0|-|-|..targets|8|0|compiler/typed|122896|122900|-1
+body fn 123033-123104	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|123095|123099|-1 grows|0|-|-|..temps|6|0|compiler/typed|123095|123099|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|123095|123099|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|123095|123099|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|123095|123099|-1 grows|0|-|-|..yields|7|0|compiler/typed|123095|123099|-1 grows|0|-|-|..blocks|7|0|compiler/typed|123095|123099|-1 grows|0|-|-|..regAt|6|0|compiler/typed|123095|123099|-1 grows|0|-|-|..regOf|6|0|compiler/typed|123095|123099|-1 grows|0|-|-|..regIn|6|0|compiler/typed|123095|123099|-1 grows|0|-|-|..regs|5|0|compiler/typed|123095|123099|-1 grows|0|-|-|..targets|8|0|compiler/typed|123095|123099|-1
+body fn 123106-123279	known p
+body fn 123324-123503	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|123406|123413|-1 grows|0|-|-|..temps|6|0|compiler/typed|123406|123413|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|123406|123413|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|123406|123413|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|123406|123413|-1 grows|0|-|-|..yields|7|0|compiler/typed|123406|123413|-1 grows|0|-|-|..blocks|7|0|compiler/typed|123406|123413|-1 grows|0|-|-|..regAt|6|0|compiler/typed|123406|123413|-1 grows|0|-|-|..regOf|6|0|compiler/typed|123406|123413|-1 grows|0|-|-|..regIn|6|0|compiler/typed|123406|123413|-1 grows|0|-|-|..regs|5|0|compiler/typed|123406|123413|-1 grows|0|-|-|..targets|8|0|compiler/typed|123406|123413|-1
+body fn 123620-125480	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|124072|124076|-1 grows|0|-|-|..temps|6|0|compiler/typed|124072|124076|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|124072|124076|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|124072|124076|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|124072|124076|-1 grows|0|-|-|..yields|7|0|compiler/typed|124296|124300|-1 grows|0|-|-|..blocks|7|0|compiler/typed|124327|124332|-1 grows|0|-|-|..regAt|6|0|compiler/typed|124327|124332|-1 grows|0|-|-|..regOf|6|0|compiler/typed|124327|124332|-1 grows|0|-|-|..regIn|6|0|compiler/typed|124327|124332|-1 grows|0|-|-|..regs|5|0|compiler/typed|124327|124332|-1 grows|0|-|-|..targets|8|0|compiler/typed|124327|124332|-1
+body fn 125582-126019	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|125848|125851|-1 grows|0|-|-|..temps|6|0|compiler/typed|125977|125986|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|125977|125986|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|125977|125986|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|125977|125986|-1 grows|0|-|-|..yields|7|0|compiler/typed|125831|125835|-1 grows|0|-|-|..blocks|7|0|compiler/typed|125831|125835|-1 grows|0|-|-|..regAt|6|0|compiler/typed|125831|125835|-1 grows|0|-|-|..regOf|6|0|compiler/typed|125831|125835|-1 grows|0|-|-|..regIn|6|0|compiler/typed|125831|125835|-1 grows|0|-|-|..regs|5|0|compiler/typed|125831|125835|-1 grows|0|-|-|..targets|8|0|compiler/typed|125831|125835|-1
+body fn 126172-126710	known p grows|0|-|-|..temps|6|0|compiler/typed|126550|126554|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|126587|126591|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|126611|126615|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|126642|126646|-1 grows|0|-|-|..reach[...]|11|0|compiler/typed|126365|126370|-1 grows|0|-|-|..yields|7|0|compiler/typed|126365|126370|-1 grows|0|-|-|..blocks|7|0|compiler/typed|126365|126370|-1 grows|0|-|-|..regAt|6|0|compiler/typed|126365|126370|-1 grows|0|-|-|..regOf|6|0|compiler/typed|126365|126370|-1 grows|0|-|-|..regIn|6|0|compiler/typed|126365|126370|-1 grows|0|-|-|..regs|5|0|compiler/typed|126365|126370|-1 grows|0|-|-|..targets|8|0|compiler/typed|126365|126370|-1
+body fn 127052-127570	known p grows|1|-|-|..Refused|8|0|compiler/typed|127204|127208|-1 grows|1|-|-|..RefusedSp|10|0|compiler/typed|127234|127238|-1 grows|1|-|-|..RefusedHeld|12|0|compiler/typed|127281|127285|-1 grows|1|-|-|..RefusedTy|10|0|compiler/typed|127311|127315|-1
+body fn 127845-128088	known p
+body fn 128326-128762	known p
+body fn 128818-129075	known p
+body fn 129251-129468	known p
+body fn 129470-129690	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|129604|129607|-1 grows|0|-|-|..regAt|6|0|compiler/typed|129559|129563|-1 grows|0|-|-|..regOf|6|0|compiler/typed|129559|129563|-1 grows|0|-|-|..regIn|6|0|compiler/typed|129559|129563|-1 grows|0|-|-|..regs|5|0|compiler/typed|129559|129563|-1 grows|0|-|-|..temps|6|0|compiler/typed|129559|129563|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|129559|129563|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|129559|129563|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|129559|129563|-1 grows|0|-|-|..yields|7|0|compiler/typed|129559|129563|-1 grows|0|-|-|..targets|8|0|compiler/typed|129559|129563|-1 grows|0|-|-|..blocks|7|0|compiler/typed|129604|129607|-1
+body fn 129692-129934	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|129817|129822|-1 grows|0|-|-|..temps|6|0|compiler/typed|129770|129774|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|129770|129774|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|129770|129774|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|129770|129774|-1 grows|0|-|-|..yields|7|0|compiler/typed|129770|129774|-1 grows|0|-|-|..blocks|7|0|compiler/typed|129892|129897|-1 grows|0|-|-|..regAt|6|0|compiler/typed|129892|129897|-1 grows|0|-|-|..regOf|6|0|compiler/typed|129892|129897|-1 grows|0|-|-|..regIn|6|0|compiler/typed|129892|129897|-1 grows|0|-|-|..regs|5|0|compiler/typed|129892|129897|-1 grows|0|-|-|..targets|8|0|compiler/typed|129892|129897|-1
+body fn 130035-130427	known p grows|0|-|-|..reach[...]|11|0|compiler/typed|130277|130281|-1 grows|0|-|-|..temps|6|0|compiler/typed|130277|130281|-1 grows|0|-|-|..tempHeld|9|0|compiler/typed|130277|130281|-1 grows|0|-|-|..tempIn|7|0|compiler/typed|130277|130281|-1 grows|0|-|-|..tempTy|7|0|compiler/typed|130277|130281|-1 grows|0|-|-|..yields|7|0|compiler/typed|130277|130281|-1 grows|0|-|-|..blocks|7|0|compiler/typed|130277|130281|-1 grows|0|-|-|..regAt|6|0|compiler/typed|130277|130281|-1 grows|0|-|-|..regOf|6|0|compiler/typed|130277|130281|-1 grows|0|-|-|..regIn|6|0|compiler/typed|130277|130281|-1 grows|0|-|-|..regs|5|0|compiler/typed|130277|130281|-1 grows|0|-|-|..targets|8|0|compiler/typed|130277|130281|-1
+body fn 130457-130994	known p
+body fn 130996-131539	known p
+body fn 131541-131838	known p
+body fn 131840-132136	known p
+body fn 132138-132624	known p
+body fn 133107-133224	known p
+body fn 133226-133406	known p
+body fn 133408-134478	known p
+body fn 134480-134684	known p
+body fn 134686-134866	known p
+body fn 134868-136265	known p
+body fn 136267-136493	known p
+body fn 136495-136849	known p
+body fn 136851-137121	known p
+body fn 137123-137624	known p
+body fn 137626-137846	known p
+body fn 137848-138031	known p
+body fn 138033-138379	known p
+body fn 139202-139281	known p
+body fn 139446-139814	known p
+body fn 139816-139993	known p
+body fn 140108-140303	known p,0
+body fn 140383-140582	known p
+body fn 140913-141830	known p grows|0|-|-|..inner|6|0|compiler/typed|141205|141215|-1
+body fn 141832-141952	known p grows|0|-|-|..inner|6|0|compiler/typed|141912|141922|-1
+body fn 142241-142430	known p grows|0|-|-|..inner|6|0|compiler/typed|142338|142342|-1
+body fn 142432-142552	known p grows|0|-|-|..inner|6|0|compiler/typed|142531|142541|-1
+body fn 142554-142735	known p grows|0|-|-|..inner|6|0|compiler/typed|142681|142691|-1
+body fn 142737-142918	known p grows|0|-|-|..inner|6|0|compiler/typed|142864|142874|-1
+body fn 142920-144523	known p grows|0|-|-|..inner|6|0|compiler/typed|143579|143589|-1
+body fn 144525-144752	known p grows|0|-|-|..inner|6|0|compiler/typed|144631|144641|-1
+body fn 144754-145025	known p grows|0|-|-|..inner|6|0|compiler/typed|144928|144938|-1
+body fn 145027-145509	known p grows|0|-|-|..inner|6|0|compiler/typed|145228|145238|-1
+body fn 145511-145669	known p
+body fn 145671-145890	known p grows|0|-|-|..inner|6|0|compiler/typed|145827|145837|-1
+body fn 145892-146076	known p grows|0|-|-|..inner|6|0|compiler/typed|146023|146032|-1
+body fn 146078-146411	known p grows|0|-|-|..inner|6|0|compiler/typed|146134|146144|-1
+body fn 146627-146887	known p
+body fn 146962-147107	known p grows|0|-|-|..out.chars|10|0|compiler/typed|147047|147051|-1
+body fn 147109-147237	known p grows|0|-|-|..out.chars|10|0|compiler/typed|147165|147169|-1
+body fn 147239-149017	known p grows|0|-|-|..out.chars|10|0|compiler/typed|147331|147335|-1
+body fn 149019-149225	known p
+body fn 149227-150894	known p
+body fn 150990-151172	known p
+body fn 151174-151412	known p
+body fn 151455-151557	known p,0
+body fn 151559-151892	known p
+body fn 151894-152448	known p
+body fn 158761-158942	known p
+body fn 159226-159299	known p
+body fn 160518-160837	known p
+body fn 160839-161061	known p
+body fn 164525-164688	known p
+body fn 164690-164814	known p
+body fn 164886-165080	known p
+body fn 165082-165192	known p
+body fn 165257-165524	known p grows|0|-|-|..saidL|6|0|compiler/typed|165301|165306|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|165301|165306|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|165301|165306|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|165301|165306|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|165301|165306|-1 grows|0|-|-|..lastL|6|0|compiler/typed|165301|165306|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|165301|165306|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|165301|165306|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|165301|165306|-1 grows|0|-|-|..holder|7|0|compiler/typed|165301|165306|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|165301|165306|-1 grows|0|-|-|..loops|6|0|compiler/typed|165301|165306|-1
+body fn 165637-165818	known p
+body fn 166041-166292	known p
+body fn 166294-167447	known p grows|0|-|-|..saidL|6|0|compiler/typed|166385|166389|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|166406|166410|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|166430|166434|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|166456|166460|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|166512|166516|-1 grows|0|-|-|..lastL|6|0|compiler/typed|166973|166977|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|167002|167006|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|167062|167065|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|167109|167112|-1
+body fn 167449-167550	known p grows|0|-|-|..saidL|6|0|compiler/typed|167539|167543|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|167539|167543|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|167539|167543|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|167539|167543|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|167539|167543|-1 grows|0|-|-|..lastL|6|0|compiler/typed|167539|167543|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|167539|167543|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|167539|167543|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|167539|167543|-1 grows|0|-|-|..holder|7|0|compiler/typed|167539|167543|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|167539|167543|-1 grows|0|-|-|..loops|6|0|compiler/typed|167539|167543|-1
+body fn 167552-169515	known p grows|0|-|-|..saidL|6|0|compiler/typed|167682|167686|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|167682|167686|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|167682|167686|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|167682|167686|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|167682|167686|-1 grows|0|-|-|..lastL|6|0|compiler/typed|167682|167686|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|167682|167686|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|167682|167686|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|167682|167686|-1 grows|0|-|-|..holder|7|0|compiler/typed|167682|167686|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|167682|167686|-1 grows|0|-|-|..loops|6|0|compiler/typed|167682|167686|-1
+body fn 169856-170151	known p grows|0|-|-|..holder|7|0|compiler/typed|170109|170113|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|170136|170140|-1
+body fn 170443-170855	known p grows|0|-|-|..holder|7|0|compiler/typed|170790|170794|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|170821|170825|-1
+body fn 170968-171133	known p
+body fn 171135-171253	known p
+body fn 171484-171867	known p
+body fn 171869-172077	known p
+body fn 172079-172168	known p grows|0|-|-|..saidL|6|0|compiler/typed|172144|172149|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|172144|172149|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|172144|172149|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|172144|172149|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|172144|172149|-1 grows|0|-|-|..lastL|6|0|compiler/typed|172144|172149|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|172144|172149|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|172144|172149|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|172144|172149|-1 grows|0|-|-|..holder|7|0|compiler/typed|172144|172149|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|172144|172149|-1 grows|0|-|-|..loops|6|0|compiler/typed|172144|172149|-1
+body fn 172170-172338	known p grows|0|-|-|..saidL|6|0|compiler/typed|172213|172217|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|172213|172217|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|172213|172217|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|172213|172217|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|172213|172217|-1 grows|0|-|-|..lastL|6|0|compiler/typed|172213|172217|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|172213|172217|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|172213|172217|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|172213|172217|-1 grows|0|-|-|..holder|7|0|compiler/typed|172213|172217|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|172213|172217|-1 grows|0|-|-|..loops|6|0|compiler/typed|172213|172217|-1
+body fn 172548-173235	known p grows|0|-|-|..loops|6|0|compiler/typed|172627|172631|-1 grows|0|-|-|..saidL|6|0|compiler/typed|172696|172701|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|172696|172701|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|172696|172701|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|172696|172701|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|172696|172701|-1 grows|0|-|-|..lastL|6|0|compiler/typed|172696|172701|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|172696|172701|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|172696|172701|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|172696|172701|-1 grows|0|-|-|..holder|7|0|compiler/typed|172696|172701|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|172696|172701|-1
+body fn 173237-173691	known p
+body fn 173693-173821	known p grows|0|-|-|..saidL|6|0|compiler/typed|173772|173777|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|173772|173777|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|173772|173777|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|173772|173777|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|173772|173777|-1 grows|0|-|-|..lastL|6|0|compiler/typed|173772|173777|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|173772|173777|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|173772|173777|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|173772|173777|-1 grows|0|-|-|..holder|7|0|compiler/typed|173772|173777|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|173772|173777|-1 grows|0|-|-|..loops|6|0|compiler/typed|173772|173777|-1
+body fn 173823-173901	known p grows|0|-|-|..saidL|6|0|compiler/typed|173890|173894|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|173890|173894|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|173890|173894|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|173890|173894|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|173890|173894|-1 grows|0|-|-|..lastL|6|0|compiler/typed|173890|173894|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|173890|173894|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|173890|173894|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|173890|173894|-1 grows|0|-|-|..holder|7|0|compiler/typed|173890|173894|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|173890|173894|-1 grows|0|-|-|..loops|6|0|compiler/typed|173890|173894|-1
+body fn 173903-176662	known p grows|0|-|-|..saidL|6|0|compiler/typed|174113|174120|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|174113|174120|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|174113|174120|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|174113|174120|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|174113|174120|-1 grows|0|-|-|..lastL|6|0|compiler/typed|174113|174120|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|174113|174120|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|174113|174120|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|174113|174120|-1 grows|0|-|-|..holder|7|0|compiler/typed|174620|174626|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|174620|174626|-1 grows|0|-|-|..loops|6|0|compiler/typed|174880|174884|-1
+body fn 176664-177097	known p grows|0|-|-|..holder|7|0|compiler/typed|176878|176881|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|176878|176881|-1 grows|0|-|-|..saidL|6|0|compiler/typed|176731|176735|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|176731|176735|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|176731|176735|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|176731|176735|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|176731|176735|-1 grows|0|-|-|..lastL|6|0|compiler/typed|176731|176735|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|176731|176735|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|176731|176735|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|176731|176735|-1 grows|0|-|-|..loops|6|0|compiler/typed|176731|176735|-1
+body fn 177099-177386	known p grows|0|-|-|..holder|7|0|compiler/typed|177287|177292|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|177287|177292|-1 grows|0|-|-|..saidL|6|0|compiler/typed|177168|177172|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|177168|177172|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|177168|177172|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|177168|177172|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|177168|177172|-1 grows|0|-|-|..lastL|6|0|compiler/typed|177168|177172|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|177168|177172|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|177168|177172|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|177168|177172|-1 grows|0|-|-|..loops|6|0|compiler/typed|177168|177172|-1
+body fn 177388-177980	known p grows|0|-|-|..saidL|6|0|compiler/typed|177482|177489|-1 grows|0|-|-|..saidAt|7|0|compiler/typed|177482|177489|-1 grows|0|-|-|..saidRead|9|0|compiler/typed|177482|177489|-1 grows|0|-|-|..saidLend|9|0|compiler/typed|177482|177489|-1 grows|0|-|-|..saidRef|8|0|compiler/typed|177482|177489|-1 grows|0|-|-|..lastL|6|0|compiler/typed|177482|177489|-1 grows|0|-|-|..lastAt|7|0|compiler/typed|177482|177489|-1 grows|0|-|-|..laterLocals|12|0|compiler/typed|177482|177489|-1 grows|0|-|-|..laterVia|9|0|compiler/typed|177482|177489|-1 grows|0|-|-|..holder|7|0|compiler/typed|177554|177558|-1 grows|0|-|-|..holderOf|9|0|compiler/typed|177554|177558|-1 grows|0|-|-|..loops|6|0|compiler/typed|177554|177558|-1
+body fn 181090-181153	known p
+body fn 181277-181832	known p,0,1
+body fn 181929-182341	known p grows|0|-|-|..sig|4|0|compiler/typed|182296|182300|-1
+body fn 182463-182539	known p
+body fn 182654-183231	known p grows|0|-|-|..defKey|7|0|compiler/typed|182971|182977|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|182971|182977|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|182971|182977|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|182971|182977|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|182971|182977|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|182971|182977|-1 grows|0|-|-|..ofLocal|8|0|compiler/typed|183136|183139|-1
+body fn 183233-183581	known p grows|0|-|-|..defKey|7|0|compiler/typed|183426|183429|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|183479|183483|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|183499|183503|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|183520|183524|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|183545|183549|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|183568|183572|-1 keeps|4|-|-|.|0|0|compiler/typed|183297|183297|0
+body fn 183700-183815	known p
+body fn 183867-183965	known p grows|3|-|-|.|0|0|compiler/typed|183933|183941|-1
+body fn 184077-184161	known p
+body fn 184198-184440	known p grows|3|-|-|.|0|0|compiler/typed|184425|184429|-1
+body fn 184585-184774	known p
+body fn 184854-184918	known p
+body fn 184997-185099	known p
+body fn 185101-185189	known p
+body fn 185191-185319	known p
+body fn 185321-185441	known p
+body fn 185641-185859	known p
+body fn 185901-186140	known p
+body fn 186170-186248	known p
+body fn 186386-186594	known p
+body fn 186693-187129	known p grows|0|-|-|..defKey|7|0|compiler/typed|186861|186867|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|186861|186867|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|186861|186867|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|186861|186867|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|186861|186867|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|186861|186867|-1 grows|0|-|-|..gens|5|0|compiler/typed|187120|187124|-1 keeps|3|-|-|.|0|0|compiler/typed|186744|186744|0
+body fn 187238-187714	known p grows|0|-|-|..rowOf|6|0|compiler/typed|187444|187447|-1 grows|0|-|-|..reach|6|0|compiler/typed|187493|187497|-1
+body fn 187716-187861	known p grows|0|-|-|..blocks|7|0|compiler/typed|187794|187798|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|187830|187834|-1 grows|0|-|-|..brk|4|0|compiler/typed|187830|187834|-1 grows|0|-|-|..cont|5|0|compiler/typed|187830|187834|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|187830|187834|-1 grows|0|-|-|..reach|6|0|compiler/typed|187830|187834|-1 grows|0|-|-|..defKey|7|0|compiler/typed|187830|187834|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|187830|187834|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|187830|187834|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|187830|187834|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|187830|187834|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|187830|187834|-1 grows|0|-|-|..gens|5|0|compiler/typed|187830|187834|-1
+body fn 187958-188063	known p grows|0|-|-|..blocks|7|0|compiler/typed|188035|188040|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|188035|188040|-1 grows|0|-|-|..brk|4|0|compiler/typed|188035|188040|-1 grows|0|-|-|..cont|5|0|compiler/typed|188035|188040|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|188035|188040|-1 grows|0|-|-|..reach|6|0|compiler/typed|188035|188040|-1 grows|0|-|-|..defKey|7|0|compiler/typed|188035|188040|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|188035|188040|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|188035|188040|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|188035|188040|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|188035|188040|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|188035|188040|-1 grows|0|-|-|..gens|5|0|compiler/typed|188035|188040|-1
+body fn 188065-190370	known p grows|0|-|-|..loopBody|9|0|compiler/typed|188359|188363|-1 grows|0|-|-|..brk|4|0|compiler/typed|188359|188363|-1 grows|0|-|-|..cont|5|0|compiler/typed|188359|188363|-1 grows|0|-|-|..blocks|7|0|compiler/typed|188359|188363|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|188390|188396|-1 grows|0|-|-|..reach|6|0|compiler/typed|188390|188396|-1 grows|0|-|-|..defKey|7|0|compiler/typed|188497|188503|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|188497|188503|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|188497|188503|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|188497|188503|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|188497|188503|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|188497|188503|-1 grows|0|-|-|..gens|5|0|compiler/typed|188497|188503|-1 keeps|1|-|-|.|0|0|compiler/typed|188091|188091|0
+body fn 190560-191324	known p grows|0|-|-|..loopBody|9|0|compiler/typed|190785|190789|-1 grows|0|-|-|..brk|4|0|compiler/typed|190840|190844|-1 grows|0|-|-|..cont|5|0|compiler/typed|190881|190885|-1 grows|0|-|-|..blocks|7|0|compiler/typed|190654|190659|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|190654|190659|-1 grows|0|-|-|..reach|6|0|compiler/typed|190654|190659|-1 grows|0|-|-|..defKey|7|0|compiler/typed|190654|190659|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|190654|190659|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|190654|190659|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|190654|190659|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|190654|190659|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|190654|190659|-1 grows|0|-|-|..gens|5|0|compiler/typed|190654|190659|-1
+body fn 191401-191599	known p
+body fn 191748-192114	known p
+body fn 192227-192797	known p
+body fn 192998-193325	known p grows|0|-|-|..blocks|7|0|compiler/typed|193214|193219|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|193214|193219|-1 grows|0|-|-|..brk|4|0|compiler/typed|193214|193219|-1 grows|0|-|-|..cont|5|0|compiler/typed|193214|193219|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|193214|193219|-1 grows|0|-|-|..reach|6|0|compiler/typed|193214|193219|-1 grows|0|-|-|..defKey|7|0|compiler/typed|193214|193219|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|193214|193219|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|193214|193219|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|193214|193219|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|193214|193219|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|193214|193219|-1 grows|0|-|-|..gens|5|0|compiler/typed|193214|193219|-1
+body fn 193327-193405	known p grows|0|-|-|..loopBody|9|0|compiler/typed|193394|193398|-1 grows|0|-|-|..brk|4|0|compiler/typed|193394|193398|-1 grows|0|-|-|..cont|5|0|compiler/typed|193394|193398|-1 grows|0|-|-|..blocks|7|0|compiler/typed|193394|193398|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|193394|193398|-1 grows|0|-|-|..reach|6|0|compiler/typed|193394|193398|-1 grows|0|-|-|..defKey|7|0|compiler/typed|193394|193398|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|193394|193398|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|193394|193398|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|193394|193398|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|193394|193398|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|193394|193398|-1 grows|0|-|-|..gens|5|0|compiler/typed|193394|193398|-1
+body fn 193407-195833	known p grows|0|-|-|..loopBody|9|0|compiler/typed|194063|194067|-1 grows|0|-|-|..brk|4|0|compiler/typed|194063|194067|-1 grows|0|-|-|..cont|5|0|compiler/typed|194063|194067|-1 grows|0|-|-|..blocks|7|0|compiler/typed|194749|194754|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|194063|194067|-1 grows|0|-|-|..reach|6|0|compiler/typed|194063|194067|-1 grows|0|-|-|..defKey|7|0|compiler/typed|194063|194067|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|194063|194067|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|194063|194067|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|194063|194067|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|194063|194067|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|194063|194067|-1 grows|0|-|-|..gens|5|0|compiler/typed|194063|194067|-1
+body fn 195835-196253	known p grows|0|-|-|..blocks|7|0|compiler/typed|196049|196052|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|195899|195903|-1 grows|0|-|-|..brk|4|0|compiler/typed|195899|195903|-1 grows|0|-|-|..cont|5|0|compiler/typed|195899|195903|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|195899|195903|-1 grows|0|-|-|..reach|6|0|compiler/typed|195899|195903|-1 grows|0|-|-|..defKey|7|0|compiler/typed|195899|195903|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|195899|195903|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|195899|195903|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|195899|195903|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|195899|195903|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|195899|195903|-1 grows|0|-|-|..gens|5|0|compiler/typed|195899|195903|-1
+body fn 196348-196687	known p grows|0|-|-|..blocks|7|0|compiler/typed|196588|196592|-1 grows|0|-|-|..loopBody|9|0|compiler/typed|196417|196421|-1 grows|0|-|-|..brk|4|0|compiler/typed|196417|196421|-1 grows|0|-|-|..cont|5|0|compiler/typed|196417|196421|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|196636|196640|-1 grows|0|-|-|..reach|6|0|compiler/typed|196636|196640|-1 grows|0|-|-|..defKey|7|0|compiler/typed|196636|196640|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|196636|196640|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|196636|196640|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|196636|196640|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|196636|196640|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|196636|196640|-1 grows|0|-|-|..gens|5|0|compiler/typed|196636|196640|-1
+body fn 196689-197145	known p grows|0|-|-|..loopBody|9|0|compiler/typed|196781|196785|-1 grows|0|-|-|..brk|4|0|compiler/typed|196781|196785|-1 grows|0|-|-|..cont|5|0|compiler/typed|196781|196785|-1 grows|0|-|-|..blocks|7|0|compiler/typed|196781|196785|-1 grows|0|-|-|..rowOf|6|0|compiler/typed|196781|196785|-1 grows|0|-|-|..reach|6|0|compiler/typed|196781|196785|-1 grows|0|-|-|..defKey|7|0|compiler/typed|196781|196785|-1 grows|0|-|-|..DefLocal|9|0|compiler/typed|196781|196785|-1 grows|0|-|-|..DefSp|6|0|compiler/typed|196781|196785|-1 grows|0|-|-|..DefIn|6|0|compiler/typed|196781|196785|-1 grows|0|-|-|..DefValue|9|0|compiler/typed|196781|196785|-1 grows|0|-|-|..DefFirst|9|0|compiler/typed|196781|196785|-1 grows|0|-|-|..gens|5|0|compiler/typed|196781|196785|-1
+body fn 21020-21281	known p
+body fn 21363-21596	known p,0
+body fn 21693-21814	known p
+body fn 21946-22115	known p
+body fn 22727-23927	known p
+body fn 25779-26533	known p
+body fn 26631-26704	known p
+body fn 26706-26914	known p
+body fn 26916-27087	known p
+body fn 27302-27622	known p
+body fn 27799-27934	known p
+body fn 28134-28508	known p
+body fn 28721-29420	known p
+body fn 29541-29917	known p
+body fn 30029-30184	known p
+body fn 30456-30697	known p
+body fn 31450-31839	known p grows|2|-|-|.|0|0|compiler/typed|31819|31822|-1
+body fn 31841-32396	known p
+body fn 32629-32800	known p
+body fn 32984-33056	known p
+body fn 33116-33183	known p,1
+body fn 33652-34597	known p
+body fn 34796-35110	known p
+body fn 35223-35477	known p
+body fn 35598-35788	known p
+body fn 35885-36165	known p,0
+body fn 36436-36727	known p,1
+body fn 36836-37045	known p
+body fn 37162-37566	known p
+body fn 37959-38042	known p
+body fn 38044-38843	known p
+body fn 38845-39077	known p
+body fn 39181-39548	known p
+body fn 41826-42382	known p,0,1
+body fn 42482-42678	known p grows|0|-|-|..RefAt|6|0|compiler/typed|42651|42660|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|42651|42660|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|42651|42660|-1 grows|0|-|-|..LendAt|7|0|compiler/typed|42651|42660|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|42651|42660|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|42651|42660|-1
+body fn 42680-43481	known p grows|0|-|-|..RefAt|6|0|compiler/typed|43012|43016|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|43038|43042|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|43076|43080|-1 grows|0|-|-|..LendAt|7|0|compiler/typed|43293|43297|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|43320|43324|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|43360|43364|-1
+body fn 43483-43638	known p grows|0|-|-|..LendAt|7|0|compiler/typed|43611|43615|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|43611|43615|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|43611|43615|-1 grows|0|-|-|..TempX|6|0|compiler/typed|43611|43615|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|43611|43615|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|43611|43615|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|43611|43615|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|43611|43615|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|43611|43615|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|43611|43615|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|43611|43615|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|43611|43615|-1 grows|0|-|-|..Rets|5|0|compiler/typed|43611|43615|-1
+body fn 43640-43721	known p grows|0|-|-|..LendAt|7|0|compiler/typed|43709|43713|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|43709|43713|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|43709|43713|-1 grows|0|-|-|..TempX|6|0|compiler/typed|43709|43713|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|43709|43713|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|43709|43713|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|43709|43713|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|43709|43713|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|43709|43713|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|43709|43713|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|43709|43713|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|43709|43713|-1 grows|0|-|-|..Rets|5|0|compiler/typed|43709|43713|-1
+body fn 43723-45135	known p grows|0|-|-|..LendAt|7|0|compiler/typed|43812|43815|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|43812|43815|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|43812|43815|-1 grows|0|-|-|..TempX|6|0|compiler/typed|43812|43815|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|43812|43815|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|43812|43815|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|43812|43815|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|43812|43815|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|43812|43815|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|43812|43815|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|43874|43880|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|43874|43880|-1 grows|0|-|-|..Rets|5|0|compiler/typed|44110|44114|-1 keeps|1|-|-|.|0|0|compiler/typed|43750|43750|0
+body fn 45171-45293	known p grows|0|-|-|..LendAt|7|0|compiler/typed|45270|45275|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|45270|45275|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|45270|45275|-1 grows|0|-|-|..TempX|6|0|compiler/typed|45270|45275|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|45270|45275|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|45270|45275|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|45270|45275|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|45270|45275|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|45270|45275|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|45270|45275|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|45270|45275|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|45270|45275|-1 grows|0|-|-|..Rets|5|0|compiler/typed|45270|45275|-1
+body fn 45498-45738	known p grows|0|-|-|..LendAt|7|0|compiler/typed|45691|45695|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|45691|45695|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|45691|45695|-1 grows|0|-|-|..TempX|6|0|compiler/typed|45691|45695|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|45691|45695|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|45691|45695|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|45691|45695|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|45691|45695|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|45691|45695|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|45691|45695|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|45691|45695|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|45691|45695|-1 grows|0|-|-|..Rets|5|0|compiler/typed|45691|45695|-1 keeps|2|-|-|.|0|0|compiler/typed|45535|45535|0
+body fn 45903-46284	known p grows|0|-|-|..StoreAt|8|0|compiler/typed|46204|46208|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|46232|46236|-1 grows|0|-|-|..LendAt|7|0|compiler/typed|45960|45970|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|45960|45970|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|45960|45970|-1 grows|0|-|-|..TempX|6|0|compiler/typed|45960|45970|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|45960|45970|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|45960|45970|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|45960|45970|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|45960|45970|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|45960|45970|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|45960|45970|-1 grows|0|-|-|..Rets|5|0|compiler/typed|45960|45970|-1 keeps|2|-|-|.|0|0|compiler/typed|45943|45943|0
+body fn 46397-46678	known p grows|0|-|-|..LendAt|7|0|compiler/typed|46455|46465|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|46455|46465|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|46455|46465|-1 grows|0|-|-|..TempX|6|0|compiler/typed|46455|46465|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|46455|46465|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|46455|46465|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|46455|46465|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|46455|46465|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|46455|46465|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|46455|46465|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|46455|46465|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|46455|46465|-1 grows|0|-|-|..Rets|5|0|compiler/typed|46455|46465|-1
+body fn 46793-47007	known p
+body fn 47009-47286	known p
+body fn 47385-47789	known p
+body fn 47872-48188	known p
+body fn 48363-48717	known p
+body fn 48833-49216	known p
+body fn 49305-49737	known p
+body fn 49841-50308	known p grows|0|-|-|..LendAt|7|0|compiler/typed|50048|50052|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|50048|50052|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|50048|50052|-1 grows|0|-|-|..TempX|6|0|compiler/typed|50048|50052|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|50048|50052|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|50048|50052|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|50048|50052|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|50048|50052|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|50048|50052|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|50048|50052|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|50048|50052|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|50048|50052|-1 grows|0|-|-|..Rets|5|0|compiler/typed|50048|50052|-1
+body fn 50422-51130	known p grows|0|-|-|..LendAt|7|0|compiler/typed|50486|50496|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|50486|50496|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|50486|50496|-1 grows|0|-|-|..TempX|6|0|compiler/typed|50486|50496|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|50486|50496|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|50486|50496|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|50486|50496|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|50486|50496|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|50486|50496|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|50486|50496|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|50486|50496|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|50486|50496|-1 grows|0|-|-|..Rets|5|0|compiler/typed|50486|50496|-1
+body fn 51132-51224	known p
+body fn 51226-52882	known p grows|0|-|-|..LendAt|7|0|compiler/typed|51676|51680|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|51676|51680|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|51676|51680|-1 grows|0|-|-|..TempX|6|0|compiler/typed|51676|51680|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|51676|51680|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|51676|51680|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|51676|51680|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|51676|51680|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|51676|51680|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|51676|51680|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|51949|51954|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|51949|51954|-1 grows|0|-|-|..Rets|5|0|compiler/typed|51949|51954|-1
+body fn 53100-53395	known p grows|0|-|-|..LendAt|7|0|compiler/typed|53226|53231|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|53226|53231|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|53226|53231|-1 grows|0|-|-|..TempX|6|0|compiler/typed|53226|53231|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|53226|53231|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|53226|53231|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|53226|53231|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|53226|53231|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|53226|53231|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|53226|53231|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|53226|53231|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|53226|53231|-1 grows|0|-|-|..Rets|5|0|compiler/typed|53226|53231|-1
+body fn 53446-53629	known p grows|0|-|-|..LendAt|7|0|compiler/typed|53571|53575|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|53571|53575|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|53571|53575|-1 grows|0|-|-|..TempX|6|0|compiler/typed|53571|53575|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|53571|53575|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|53571|53575|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|53571|53575|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|53571|53575|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|53571|53575|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|53571|53575|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|53571|53575|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|53571|53575|-1 grows|0|-|-|..Rets|5|0|compiler/typed|53571|53575|-1
+body fn 53631-53879	known p grows|0|-|-|..LendAt|7|0|compiler/typed|53710|53714|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|53710|53714|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|53710|53714|-1 grows|0|-|-|..TempX|6|0|compiler/typed|53710|53714|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|53710|53714|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|53710|53714|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|53710|53714|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|53710|53714|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|53710|53714|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|53710|53714|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|53839|53844|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|53839|53844|-1 grows|0|-|-|..Rets|5|0|compiler/typed|53839|53844|-1
+body fn 53881-54038	known p grows|0|-|-|..LendAt|7|0|compiler/typed|53970|53975|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|53970|53975|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|53970|53975|-1 grows|0|-|-|..TempX|6|0|compiler/typed|53970|53975|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|53970|53975|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|53970|53975|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|53970|53975|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|53970|53975|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|53970|53975|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|53970|53975|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|53970|53975|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|53970|53975|-1 grows|0|-|-|..Rets|5|0|compiler/typed|53970|53975|-1
+body fn 54278-55281	known p grows|0|-|-|..LendAt|7|0|compiler/typed|54710|54714|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|54744|54748|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|54779|54783|-1 grows|0|-|-|..TempX|6|0|compiler/typed|54973|54977|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|55005|55009|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|55040|55044|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|55069|55073|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|55197|55203|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|55197|55203|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|55197|55203|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|54453|54457|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|54453|54457|-1 grows|0|-|-|..Rets|5|0|compiler/typed|54453|54457|-1
+body fn 55466-55999	known p grows|0|-|-|..RefAt|6|0|compiler/typed|55923|55927|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|55948|55952|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|55974|55978|-1 grows|0|-|-|..LendAt|7|0|compiler/typed|55874|55884|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|55874|55884|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|55874|55884|-1 grows|0|-|-|..TempX|6|0|compiler/typed|55874|55884|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|55874|55884|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|55874|55884|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|55874|55884|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|55874|55884|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|55874|55884|-1 grows|0|-|-|..Rets|5|0|compiler/typed|55874|55884|-1
+body fn 56115-56481	known p,1
+body fn 56583-57345	known p
+body fn 57347-57787	known p grows|0|-|-|..LendAt|7|0|compiler/typed|57491|57495|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|57491|57495|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|57491|57495|-1 grows|0|-|-|..TempX|6|0|compiler/typed|57491|57495|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|57491|57495|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|57491|57495|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|57491|57495|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|57491|57495|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|57491|57495|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|57491|57495|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|57491|57495|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|57491|57495|-1 grows|0|-|-|..Rets|5|0|compiler/typed|57491|57495|-1
+body fn 57789-58054	known p grows|0|-|-|..LendAt|7|0|compiler/typed|57914|57918|-1 grows|0|-|-|..LendBody|9|0|compiler/typed|57914|57918|-1 grows|0|-|-|..LendParam|10|0|compiler/typed|57914|57918|-1 grows|0|-|-|..TempX|6|0|compiler/typed|57914|57918|-1 grows|0|-|-|..TempBody|9|0|compiler/typed|57914|57918|-1 grows|0|-|-|..TempParam|10|0|compiler/typed|57914|57918|-1 grows|0|-|-|..TempIn|7|0|compiler/typed|57914|57918|-1 grows|0|-|-|..RefAt|6|0|compiler/typed|57914|57918|-1 grows|0|-|-|..RefBody|8|0|compiler/typed|57914|57918|-1 grows|0|-|-|..RefParam|9|0|compiler/typed|57914|57918|-1 grows|0|-|-|..StoreAt|8|0|compiler/typed|57914|57918|-1 grows|0|-|-|..StoreX|7|0|compiler/typed|57914|57918|-1 grows|0|-|-|..Rets|5|0|compiler/typed|57914|57918|-1
+body fn 58056-58169	known p
+body fn 73170-73281	known p grows|0|-|-|..Locals|7|0|compiler/typed|73228|73232|-1
+body fn 73283-73459	known p grows|0|-|-|..Blocks|7|0|compiler/typed|73380|73384|-1
+body fn 73461-73606	known p grows|0|-|-|..Sites|6|0|compiler/typed|73538|73542|-1
+body fn 73608-73673	known p
+body fn 73781-73892	known p
+body fn 74241-74724	known p grows|0|-|-|..Vars|5|0|compiler/typed|74360|74364|-1
+body fn 74881-75084	known p
+body fn 75223-75430	known p
+body fn 75432-76051	known p
+body fn 76158-76663	known p
+body fn 76665-76845	known p
+body fn 76891-77073	known p
+body fn 82895-82981	known p
+body fn 83192-83616	known p
+body fn 83844-84260	known p
+body fn 84318-84429	known p grows|0|-|-|..Roots|6|0|compiler/typed|84374|84378|-1 keeps|1|-|-|.|0|0|compiler/typed|84341|84341|0
+body fn 84431-84624	known p grows|0|-|-|..passed|7|0|compiler/typed|84613|84617|-1
+body fn 84713-84955	known p grows|0|-|-|..DerivedP|9|0|compiler/typed|84889|84893|-1 grows|0|-|-|..DerivedW|9|0|compiler/typed|84913|84917|-1
+body fn 85028-85128	known p grows|0|-|-|..derivedArgs|12|0|compiler/typed|85108|85111|-1 keeps|2|-|-|.|0|0|compiler/typed|85071|85071|0
+body fn 85212-85456	known p grows|0|-|-|..DropAt|7|0|compiler/typed|85422|85426|-1 grows|0|-|-|..DropArgs|9|0|compiler/typed|85446|85450|-1 keeps|2|-|-|.|0|0|compiler/typed|85251|85251|0 keeps|1|-|-|.|0|0|compiler/typed|85242|85242|0
+body fn 85518-85751	known p grows|0|-|-|..DropInAt|9|0|compiler/typed|85719|85723|-1 grows|0|-|-|..DropIn|7|0|compiler/typed|85741|85745|-1 keeps|1|-|-|.|0|0|compiler/typed|85545|85545|0
+body fn 85787-85950	known p
+body fn 85986-86166	known p
+body fn 86238-86467	known p
+body fn 86526-86600	known p
+body fn 86679-86814	known p
+body fn 86920-87101	known p
+body fn 87200-87384	known p
+body fn 88808-88998	known p grows|0|-|-|..Said|5|0|compiler/typed|88924|88928|-1
+body fn 89000-89135	known p
+body fn 89137-89238	known p grows|0|-|-|..Said|5|0|compiler/typed|89227|89231|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|89227|89231|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|89227|89231|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|89227|89231|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|89227|89231|-1
+body fn 89240-89318	known p grows|0|-|-|..Said|5|0|compiler/typed|89307|89311|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|89307|89311|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|89307|89311|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|89307|89311|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|89307|89311|-1
+body fn 89320-89409	known p grows|0|-|-|..Said|5|0|compiler/typed|89385|89390|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|89385|89390|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|89385|89390|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|89385|89390|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|89385|89390|-1
+body fn 89411-90892	known p grows|0|-|-|..Said|5|0|compiler/typed|89534|89538|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|89534|89538|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|89534|89538|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|89534|89538|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|89747|89750|-1
+body fn 90894-91022	known p grows|0|-|-|..Said|5|0|compiler/typed|90973|90978|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|90973|90978|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|90973|90978|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|90973|90978|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|90973|90978|-1
+body fn 91024-91102	known p grows|0|-|-|..Said|5|0|compiler/typed|91091|91095|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|91091|91095|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|91091|91095|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|91091|91095|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|91091|91095|-1
+body fn 91104-92902	known p grows|0|-|-|..Said|5|0|compiler/typed|91319|91324|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|91739|91745|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|91739|91745|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|91739|91745|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|91948|91953|-1
+body fn 92904-93130	known p grows|0|-|-|..Said|5|0|compiler/typed|93016|93020|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|93016|93020|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|93016|93020|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|93016|93020|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|93016|93020|-1
+body fn 93132-93409	known p grows|0|-|-|..Said|5|0|compiler/typed|93317|93324|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|93201|93205|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|93201|93205|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|93201|93205|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|93374|93379|-1
+body fn 93411-93895	known p grows|0|-|-|..Said|5|0|compiler/typed|93504|93511|-1 grows|0|-|-|..CopySite|9|0|compiler/typed|93554|93558|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|93554|93558|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|93554|93558|-1 grows|0|-|-|..OverGlobal|11|0|compiler/typed|93554|93558|-1
+body fn 94240-94518	known p
+body fn 94654-95014	known p grows|0|-|-|..CopySite|9|0|compiler/typed|94856|94860|-1 grows|0|-|-|..CopyLocal|10|0|compiler/typed|94890|94894|-1 grows|0|-|-|..CopyAt|7|0|compiler/typed|94981|94985|-1
+body fn 95091-95345	known p
+body fn 95415-95613	known p
+body fn 96129-96535	known p
+body fn 97601-97763	known p,0
+body fn 98866-99387	known p grows|0|-|-|..flags|6|0|compiler/typed|99008|99014|-1 grows|0|-|-|..may|4|0|compiler/typed|99008|99014|-1
+body fn 99389-99458	known p
+body fn 99520-99651	known p grows|0|-|-|..flags|6|0|compiler/typed|99608|99611|-1 grows|0|-|-|..may|4|0|compiler/typed|99638|99642|-1
+body fn 99764-100123	known p
+body global MutGlobalsFact	known p
+body global ViewBits	known p
+body global ViewOther	known p
+body global mathArity	known p
+body global mathNames	known p
+body global noCallbackNames	known p
+body lambda 84119-84140	known p
+baked MutGlobalsFact [8 13000000000000000000000000000000 @8>1+0][8 443968206d757461626c6520676c6f62616c73]
+baked ViewBits [8 3e00000000000000]
+baked ViewOther [8 0000000000000040]
+baked mathArity [64 0100000000000000030000000000000001000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000002000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000002000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000200000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000200000000000000]
+baked mathNames [64 04000000000000000000000000000000030000000000000000000000000000000500000000000000000000000000000004000000000000000000000000000000050000000000000000000000000000000500000000000000000000000000000009000000000000000000000000000000040000000000000000000000000000000800000000000000000000000000000004000000000000000000000000000000030000000000000000000000000000000400000000000000000000000000000005000000000000000000000000000000030000000000000000000000000000000400000000000000000000000000000005000000000000000000000000000000050000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000300000000000000000000000000000004000000000000000000000000000000040000000000000000000000000000000400000000000000000000000000000005000000000000000000000000000000040000000000000000000000000000000400000000000000000000000000000004000000000000000000000000000000030000000000000000000000000000000400000000000000000000000000000005000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0 @248>16+0 @264>17+0 @280>18+0 @296>19+0 @312>20+0 @328>21+0 @344>22+0 @360>23+0 @376>24+0 @392>25+0 @408>26+0 @424>27+0 @440>28+0 @456>29+0 @472>30+0 @488>31+0][8c 73717274][8c 666d61][8c 666c6f6f72][8c 6365696c][8c 7472756e63][8c 726f756e64][8c 726f756e646576656e][8c 66616273][8c 636f70797369676e][8c 63627274][8c 657870][8c 65787032][8c 6578706d31][8c 6c6f67][8c 6c6f6732][8c 6c6f673130][8c 6c6f673170][8c 706f77][8c 73696e][8c 636f73][8c 74616e][8c 6173696e][8c 61636f73][8c 6174616e][8c 6174616e32][8c 73696e68][8c 636f7368][8c 74616e68][8c 657266][8c 65726663][8c 6879706f74]
+baked noCallbackNames [64 04000000000000000000000000000000050000000000000000000000000000000500000000000000000000000000000006000000000000000000000000000000050000000000000000000000000000000600000000000000000000000000000004000000000000000000000000000000060000000000000000000000000000000500000000000000000000000000000005000000000000000000000000000000050000000000000000000000000000000500000000000000000000000000000009000000000000000000000000000000090000000000000000000000000000000500000000000000000000000000000004000000000000000000000000000000050000000000000000000000000000000700000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000000600000000000000000000000000000005000000000000000000000000000000050000000000000000000000000000000700000000000000000000000000000007000000000000000000000000000000080000000000000000000000000000000600000000000000000000000000000005000000000000000000000000000000030000000000000000000000000000000400000000000000000000000000000004000000000000000000000000000000040000000000000000000000000000000600000000000000000000000000000005000000000000000000000000000000060000000000000000000000000000000500000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000000500000000000000000000000000000005000000000000000000000000000000040000000000000000000000000000000700000000000000000000000000000007000000000000000000000000000000060000000000000000000000000000000700000000000000000000000000000008000000000000000000000000000000070000000000000000000000000000000600000000000000000000000000000006000000000000000000000000000000070000000000000000000000000000000600000000000000000000000000000007000000000000000000000000000000060000000000000000000000000000000700000000000000000000000000000006000000000000000000000000000000070000000000000000000000000000000600000000000000000000000000000007000000000000000000000000000000060000000000000000000000000000000600000000000000000000000000000007000000000000000000000000000000060000000000000000000000000000000700000000000000000000000000000007000000000000000000000000000000080000000000000000000000000000000600000000000000000000000000000006000000000000000000000000000000080000000000000000000000000000000600000000000000000000000000000007000000000000000000000000000000060000000000000000000000000000000600000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000000600000000000000000000000000000007000000000000000000000000000000040000000000000000000000000000000d0000000000000000000000000000000e00000000000000000000000000000004000000000000000000000000000000060000000000000000000000000000000800000000000000000000000000000007000000000000000000000000000000040000000000000000000000000000000d0000000000000000000000000000000c0000000000000000000000000000000c0000000000000000000000000000000900000000000000000000000000000006000000000000000000000000000000050000000000000000000000000000000b00000000000000000000000000000008000000000000000000000000000000060000000000000000000000000000000600000000000000000000000000000008000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0 @248>16+0 @264>17+0 @280>18+0 @296>19+0 @312>20+0 @328>21+0 @344>22+0 @360>23+0 @376>24+0 @392>25+0 @408>26+0 @424>27+0 @440>28+0 @456>29+0 @472>30+0 @488>31+0 @504>32+0 @520>33+0 @536>34+0 @552>35+0 @568>36+0 @584>37+0 @600>38+0 @616>39+0 @632>40+0 @648>41+0 @664>42+0 @680>43+0 @696>44+0 @712>45+0 @728>46+0 @744>47+0 @760>48+0 @776>49+0 @792>50+0 @808>51+0 @824>52+0 @840>53+0 @856>54+0 @872>55+0 @888>56+0 @904>57+0 @920>58+0 @936>59+0 @952>60+0 @968>61+0 @984>62+0 @1000>63+0 @1016>64+0 @1032>65+0 @1048>66+0 @1064>67+0 @1080>68+0 @1096>69+0 @1112>70+0 @1128>71+0 @1144>72+0 @1160>73+0 @1176>74+0 @1192>75+0 @1208>76+0 @1224>77+0 @1240>78+0 @1256>79+0 @1272>80+0 @1288>81+0 @1304>82+0 @1320>83+0 @1336>84+0 @1352>85+0 @1368>86+0 @1384>87+0 @1400>88+0 @1416>89+0 @1432>90+0 @1448>91+0 @1464>92+0 @1480>93+0 @1496>94+0 @1512>95+0][8c 72656164][8c 7772697465][8c 7072656164][8c 707772697465][8c 7265616476][8c 777269746576][8c 6f70656e][8c 6f70656e6174][8c 6372656174][8c 636c6f7365][8c 6c7365656b][8c 6673796e63][8c 666461746173796e63][8c 667472756e63617465][8c 6673746174][8c 73746174][8c 6c73746174][8c 66737461746174][8c 616363657373][8c 756e6c696e6b][8c 72656e616d65][8c 6d6b646972][8c 726d646972][8c 6f70656e646972][8c 72656164646972][8c 636c6f7365646972][8c 676574637764][8c 6368646972][8c 647570][8c 64757032][8c 70697065][8c 706f6c6c][8c 697361747479][8c 666f70656e][8c 66636c6f7365][8c 6672656164][8c 667772697465][8c 66666c757368][8c 6670757473][8c 6667657473][8c 70757473][8c 70757463686172][8c 67657463686172][8c 7072696e7466][8c 667072696e7466][8c 736e7072696e7466][8c 737072696e7466][8c 706572726f72][8c 7374726c656e][8c 7374726e6c656e][8c 737472636d70][8c 7374726e636d70][8c 737472637079][8c 7374726e637079][8c 737472636174][8c 7374726e636174][8c 737472636872][8c 73747272636872][8c 737472737472][8c 737472647570][8c 7374726e647570][8c 737472746f6c][8c 737472746f6c6c][8c 737472746f756c][8c 737472746f756c6c][8c 737472746f64][8c 737472746f66][8c 7374726572726f72][8c 6d656d637079][8c 6d656d6d6f7665][8c 6d656d736574][8c 6d656d636d70][8c 6d656d636872][8c 6d616c6c6f63][8c 63616c6c6f63][8c 7265616c6c6f63][8c 66726565][8c 616c69676e65645f616c6c6f63][8c 706f7369785f6d656d616c69676e][8c 6d6d6170][8c 6d756e6d6170][8c 6d70726f74656374][8c 6d616476697365][8c 74696d65][8c 636c6f636b5f67657474696d65][8c 636c6f636b5f676574726573][8c 67657474696d656f66646179][8c 6e616e6f736c656570][8c 75736c656570][8c 736c656570][8c 6c6f63616c74696d655f72][8c 676d74696d655f72][8c 6d6b74696d65][8c 74696d65676d][8c 7374726674696d65]
+sig Across@184585 fn&(Versions&, I64, I64) BlockId
+sig AddBlock@73283 fn&(mut Body&, BlockId, BlockKind, Span) BlockId
+sig AddLocal@73170 fn&(mut Body&, Local) LocalId
+sig AddSite@73461 fn&(mut Body&, SiteKind, Span) SiteId
+sig AlwaysReached@139202 fn&(Block?&, Span) Bool
+sig AnyItemNew@22727 fn&(Table&, Expr?&) Bool
+sig Block.within@140108 fn&(Stmt&) Block?&
+sig Block@89137 fn&(mut LastUses&, Block?&)
+sig Body@165257 fn&(mut Landings&, Block&)
+sig BreaksOut@133107 fn&(Block?&, BlockId) Bool
+sig Call.Of@21363 fn&(Expr?&) Call?&
+sig Call.fresh@35885 fn&(Expr&, I64) Call?&
+sig CallRoots@27302 fn&(ViewWalk&, Call&) I64
+sig CallViews@27799 fn&(ViewWalk&, Call&) I64
+sig CalledBody@21020 fn&(Expr&) I64
+sig CalleeBody@21693 fn&(Call&) I64
+sig CopiedOf@33116 fn&(Table&, Expr&) Expr?&
+sig DefOf@184997 fn&(Versions&, I64, I64) I64
+sig DerivedArgAt@86238 fn&(Plan&, SiteId, I64, I64) Scope
+sig DerivedSlot@84713 fn&(mut Plan&, I64, I64) I64
+sig DropDerived@85212 fn&(mut Plan&, Expr&, Vec<DerivedArg>)
+sig DropDerivedOf@85986 fn&(Plan&, Expr&) Vec<DerivedArg>
+sig DropFlag@99764 fn&(Body&, Block&) I64
+sig DropHolder@110993 fn&(Body&, Block&) I64
+sig DropHolding.DropHolds@113280 fn&(Table&, Body&) DropHolding
+sig DropHolding.Judged@113498 fn&(Table&, Body&) DropHolding
+sig DropHolding.holding@113601 fn&(Table&, Body&, Bool) DropHolding
+sig DropHome@85518 fn&(mut Plan&, Expr&, Scope)
+sig DropHomeOf@85787 fn&(Plan&, Expr&) Scope
+sig DropsRun@97601 fn&(Body&) Map<I64, Bool>
+sig ElidedCopy@32984 fn&(ViewWalk&, Expr?&) Bool
+sig Encloses@76891 fn&(Body&, BlockId, BlockId) Bool
+sig Find@84318 fn&(mut Plan&, Expr&) Scope
+sig FreshTemp@160518 fn&(Expr&) Bool
+sig FreshViews@33652 fn&(Plan&, Call&, I64, fn&(id BodyId) I64, fn&(id BodyId) Array<I64>) Bool
+sig Holds@113116 fn&(DropHolding&, I64, I64) Bool
+sig HoldsOwned@37959 fn&(Table&, TypeId) Bool
+sig Inst@73781 fn&(Body&) I64
+sig LastCopies@96129 fn&(Body&, Bool) Map<I64, I64>
+sig Local@73608 fn&(Body&, LocalId) Local
+sig LocalUses.Uses@41826 fn&(Table&, Body&) LocalUses
+sig MathExtern@158761 fn&(String&, I64) Bool
+sig MovedArg@34796 fn&(Expr&) Bool
+sig Named@184854 fn&(Versions&, I64) Bool
+sig NoCallbackExtern@159226 fn&(String&) Bool
+sig ParamMark@74881 fn&(Body&, Table&, I64) Mark
+sig PartOf@21946 fn&(Lvalue&) Bool
+sig Pass@84431 fn&(mut Plan&, SiteId, Array<Scope>&)
+sig PassDerived@85028 fn&(mut Plan&, SiteId, Vec<DerivedArg>)
+sig Passed@87200 fn&(Plan&, SiteId, I64) Scope
+sig PassesRefs@58056 fn&(PrimOp) Bool
+sig Plan.New@82895 fn&(Body&) Plan
+sig Print@146627 fn&(Body&, mut Table&) String
+sig Pure@83844 fn&(Expr&) Bool
+sig PurePlace@83192 fn&(Lvalue&) Bool
+sig ReachInto@183867 fn&(Versions&, I64, I64, mut Vec<I64>&)
+sig ReachRow@184198 fn&(Versions&, I64, I64, mut Vec<I64>&)
+sig Reaching@183700 fn&(Versions&, I64, I64) Vec<I64>
+sig ResultMark@75223 fn&(Body&, Table&, I64) Mark
+sig Roots@25779 fn&(ViewWalk&, Expr?&) I64
+sig RowOf@184077 fn&(Versions&, I64) I64
+sig Scope.result@35598 fn&(Plan&, SiteId, Array<I64>&) Scope
+sig SetPassed@86920 fn&(mut Plan&, SiteId, I64, Scope)
+sig SetTwin@86526 fn&(mut Plan&, SiteId, I64)
+sig SetVars@74241 fn&(mut Body&, Array<I64>&)
+sig Settle@31450 fn&(ViewWalk&, LocalUses&, mut Map<I64, I64>&)
+sig SigOf@182463 fn&(Versions&, I64) I64
+sig Span@130457 fn&(Expr&) Span
+sig Span@131840 fn&(Lvalue&) Span
+sig Span@132138 fn&(Stmt&) Span
+sig Twin@86679 fn&(Plan&, SiteId) I64
+sig Type@130996 fn&(Expr&) TypeId
+sig Type@131541 fn&(Lvalue&) TypeId
+sig Versions.New@181277 fn&(Body&, Array<Bool>&) Versions?&
+sig ViewsMoved@35223 fn&(Call&, I64) Bool
+sig add@117157 fn&(mut holdWalk&, I64, I64)
+sig addDef@183233 fn&(mut Versions&, Span, I64, BlockId, Expr?&, Bool)
+sig aliasInto@42680 fn&(mut LocalUses&, I64, I64)
+sig all@186386 fn&(mut Versions&)
+sig apart@171484 fn&(mut Landings&, I64)
+sig apart@94240 fn&(mut LastUses&, I64, I64)
+sig arenaArray@37162 fn&(Table&, TypeId) Bool
+sig arm@129692 fn&(mut holdWalk&, Arm&) Vec<I64>
+sig arm@177099 fn&(mut Landings&, Arm&)
+sig arm@196348 fn&(mut Versions&, Arm&)
+sig arm@53631 fn&(mut LocalUses&, Arm&, Ctx)
+sig arm@93132 fn&(mut LastUses&, Arm&)
+sig armBreaks@138033 fn&(Arm&, BlockId) Bool
+sig armLeaves@146078 fn&(mut leaveWalk&, Arm&) Bool
+sig armsBreak@137848 fn&(Array<Arm&>&, BlockId) Bool
+sig armsLeave@145892 fn&(mut leaveWalk&, Array<Arm&>&) Bool
+sig arrayValue@30029 fn&(ViewWalk&, Expr&) Bool
+sig assign@45903 fn&(mut LocalUses&, Lvalue&, Expr&)
+sig block@101714 fn&(mut dropWalk&, Block?&)
+sig block@119245 fn&(mut holdWalk&, Block?&)
+sig block@147109 fn&(mut printer&, Block&, I64)
+sig block@167449 fn&(mut Landings&, Block?&)
+sig block@187716 fn&(mut Versions&, Block?&)
+sig block@43483 fn&(mut LocalUses&, Block?&)
+sig blockLeaves@142432 fn&(mut leaveWalk&, Block?&) Bool
+sig borrow@53100 fn&(mut LocalUses&, Lvalue&, TypeId, Ctx)
+sig call@108558 fn&(mut dropWalk&, Call&)
+sig call@125582 fn&(mut holdWalk&, Call&) Vec<I64>
+sig call@54278 fn&(mut LocalUses&, Call&)
+sig callee@151559 fn&(mut printer&, Callee&) String
+sig calleeBreaks@136267 fn&(Callee&, BlockId) Bool
+sig calleeLeaves@144525 fn&(mut leaveWalk&, Callee&) Bool
+sig classify@181929 fn&(mut Versions&)
+sig clauses@122113 fn&(mut holdWalk&, Array<Clause&>&)
+sig clauses@173693 fn&(mut Landings&, Array<Clause&>&)
+sig clauses@192998 fn&(mut Versions&, Array<Clause&>&, Vec<I64>&, Bool)
+sig clauses@53881 fn&(mut LocalUses&, Array<Clause&>&, Ctx)
+sig clauses@90894 fn&(mut LastUses&, Array<Clause&>&)
+sig clausesBreak@137626 fn&(Array<Clause&>&, BlockId) Bool
+sig clausesLeave@145671 fn&(mut leaveWalk&, Array<Clause&>&) Bool
+sig clausesTakeAll@145511 fn&(Array<Clause&>&) Bool
+sig closeAliases@42482 fn&(mut LocalUses&)
+sig closure@118248 fn&(mut holdWalk&, Array<I64>&) Vec<I64>
+sig constItems@151174 fn&(Array<Const&>&) String
+sig constText@150990 fn&(Const&) String
+sig copied@36436 fn&(Table&, Expr&) Expr?&
+sig copyOf@94654 fn&(mut LastUses&, Make&)
+sig copySite@95091 fn&(Expr&) I64
+sig copyViews@32629 fn&(ViewWalk&, Expr?&) I64
+sig dead@185101 fn&(mut Versions&) Bool
+sig declare@89000 fn&(mut LastUses&, LocalId)
+sig defName@181090 fn&(I64, I64) I64
+sig deferredLanding@166041 fn&(Landings&, I64, I64) Bool
+sig define@186693 fn&(mut Versions&, Span, I64, Expr?&, Bool)
+sig elemStorage@122837 fn&(mut holdWalk&, Elem&) Vec<I64>
+sig encloses@128818 fn&(holdWalk&, BlockId, BlockId) Bool
+sig end@186170 fn&(mut Versions&)
+sig escape@51132 fn&(mut LocalUses&, I64)
+sig expr@106785 fn&(mut dropWalk&, Expr?&)
+sig expr@149227 fn&(mut printer&, Expr?&) String
+sig expr@173903 fn&(mut Landings&, Expr?&)
+sig expr@193407 fn&(mut Versions&, Expr?&)
+sig expr@51226 fn&(mut LocalUses&, Expr?&, Ctx)
+sig expr@91104 fn&(mut LastUses&, Expr?&)
+sig exprBreaks@134868 fn&(Expr?&, BlockId) Bool
+sig exprLeaves@142920 fn&(mut leaveWalk&, Expr?&) Bool
+sig exprRoot@49305 fn&(mut LocalUses&, Expr&) I64
+sig exprs@106705 fn&(mut dropWalk&, Array<Expr&>&)
+sig exprs@149019 fn&(mut printer&, Array<Expr&>&) String
+sig exprs@173823 fn&(mut Landings&, Array<Expr&>&)
+sig exprs@193327 fn&(mut Versions&, Array<Expr&>&)
+sig exprs@91024 fn&(mut LastUses&, Array<Expr&>&)
+sig exprsBreak@134686 fn&(Array<Expr&>&, BlockId) Bool
+sig exprsLeave@142737 fn&(mut leaveWalk&, Array<Expr&>&) Bool
+sig failHere@100947 fn&(mut dropWalk&, Bool)
+sig fieldsOnly@47009 fn&(mut LocalUses&, Lvalue&) Bool
+sig find@98866 fn&(mut dropWalk&, Block?&)
+sig findHolders@114726 fn&(Body&, Block&, mut DropHolding&)
+sig flagOf@99389 fn&(mut dropWalk&, Block&) I64
+sig fnBreaks@136495 fn&(FnVal&, BlockId) Bool
+sig fnVal@130035 fn&(mut holdWalk&, FnVal&) Vec<I64>
+sig fnVal@57789 fn&(mut LocalUses&, FnVal&)
+sig fnVal@92904 fn&(mut LastUses&, FnVal&)
+sig freshValue@160839 fn&(Expr&) Bool
+sig held@123324 fn&(mut holdWalk&, Lvalue&) Vec<I64>
+sig heldBefore@127845 fn&(mut holdWalk&, I64) I64
+sig holderRoots@29541 fn&(ViewWalk&, Lvalue&) I64
+sig holds@140383 fn&(Block?&, Span) Bool
+sig holds@169856 fn&(mut Landings&, I64, I64)
+sig holdsOwned@38044 fn&(Table&, TypeId, I64) Bool
+sig holdsWritableRef@75432 fn&(Table&, TypeId, I64) Bool
+sig ifStmt@172170 fn&(mut Landings&, If&)
+sig inBlock@119396 fn&(holdWalk&) BlockId
+sig isAssertAt@139816 fn&(Stmt&, Span) Bool
+sig join@100476 fn&(mut dropWalk&, Array<Bool>&)
+sig jump@106062 fn&(mut dropWalk&, JumpKind, BlockId)
+sig jump@173237 fn&(mut Landings&, JumpKind, BlockId)
+sig jump@192227 fn&(mut Versions&, JumpKind, BlockId)
+sig keepFor@106408 fn&(mut dropWalk&, Bool, I64)
+sig keptBy@170443 fn&(mut Landings&, I64)
+sig lastAfter@165637 fn&(Landings&, I64) Bool
+sig later@187958 fn&(mut Versions&, Block?&)
+sig laterBlock@172079 fn&(mut Landings&, Block?&)
+sig laterBlock@89320 fn&(mut LastUses&, Block?&)
+sig leave@101492 fn&(mut dropWalk&, I64)
+sig lendOf@56583 fn&(mut LocalUses&, Expr&) I64
+sig let@45498 fn&(mut LocalUses&, LocalId, Expr&)
+sig line@146962 fn&(mut printer&, I64, String&)
+sig listHoldsWritable@76665 fn&(Table&, Array<TypeId>&, I64) Bool
+sig listOwned@38845 fn&(Table&, ListId, I64) Bool
+sig localRoots@30456 fn&(ViewWalk&, LocalId) I64
+sig loop@104592 fn&(mut dropWalk&, Block&, Block?&)
+sig loop@172548 fn&(mut Landings&, BlockId, Block&, Block?&)
+sig loop@190560 fn&(mut Versions&, Block&, Block?&) Vec<I64>
+sig loopLeaves@141832 fn&(mut leaveWalk&, Block&, Block?&) Bool
+sig loopState@105359 fn&(mut dropWalk&, Bool, I64) Array<Bool>
+sig match@108978 fn&(mut dropWalk&, Match&)
+sig match@129470 fn&(mut holdWalk&, Match&) Vec<I64>
+sig match@195835 fn&(mut Versions&, Match&)
+sig matchExpr@176664 fn&(mut Landings&, Match&)
+sig matchRoots@26706 fn&(ViewWalk&, Match&) I64
+sig meet@164886 fn&(mut Landings&, landState&)
+sig meet@185901 fn&(mut Versions&, Vec<I64>&)
+sig meetRoots@26631 fn&(I64, I64) I64
+sig mention@166294 fn&(mut Landings&, LocalId, I64, Bool)
+sig mention@88808 fn&(mut LastUses&, LocalId)
+sig mix@118924 fn&(mut holdWalk&, Array<Expr&>&)
+sig namedHoldsWritable@76158 fn&(Table&, TypeId, I64) Bool
+sig number@99520 fn&(mut dropWalk&, I64)
+sig one@118533 fn&(I64) Vec<I64>
+sig openLeaves@142241 fn&(mut leaveWalk&, Block?&) Bool
+sig orInto@165082 fn&(mut Array<Bool>&, Array<Bool>&)
+sig outer@185641 fn&(mut Versions&, I64, I64) I64
+sig paramBit@36836 fn&(ViewWalk&, LocalId) I64
+sig pieces@53446 fn&(mut LocalUses&, Array<Piece&>&)
+sig piecesBreak@136851 fn&(Array<Piece&>&, BlockId) Bool
+sig piecesLeave@144754 fn&(mut leaveWalk&, Array<Piece&>&) Bool
+sig place@110397 fn&(mut dropWalk&, Lvalue?&)
+sig place@151894 fn&(mut printer&, Lvalue&) String
+sig place@177388 fn&(mut Landings&, Lvalue&)
+sig place@196689 fn&(mut Versions&, Lvalue&)
+sig place@93411 fn&(mut LastUses&, Lvalue&)
+sig placeBreaks@137123 fn&(Lvalue&, BlockId) Bool
+sig placeExprs@49841 fn&(mut LocalUses&, Lvalue&)
+sig placeLeaves@145027 fn&(mut leaveWalk&, Lvalue&) Bool
+sig placeRoots@28134 fn&(ViewWalk&, Lvalue&) I64
+sig prim@57347 fn&(mut LocalUses&, PrimOp, Array<Expr&>&, Ctx)
+sig reached@139446 fn&(Block?&, Span) I64
+sig readIn@171869 fn&(Landings&, I64, I64) Bool
+sig record@187238 fn&(mut Versions&, I64, Vec<I64>&, I64)
+sig refArg@55466 fn&(mut LocalUses&, Expr&, I64, I64) Bool
+sig refLocal@48833 fn&(mut LocalUses&, Expr&) I64
+sig refRoots@28721 fn&(ViewWalk&, Expr&) I64
+sig refs@123620 fn&(mut holdWalk&, Expr?&) Vec<I64>
+sig refusals@127052 fn&(mut holdWalk&, mut DropHolding&)
+sig register@120116 fn&(mut holdWalk&, I64, Span)
+sig registered@119716 fn&(holdWalk&, Expr?&) Bool
+sig registeredBefore@128326 fn&(holdWalk&, I64, I64) Bool
+sig renewed@170968 fn&(mut Landings&, I64)
+sig restore@100307 fn&(mut dropWalk&, Array<Bool>&)
+sig restore@164690 fn&(mut Landings&, landState&)
+sig restore@185321 fn&(mut Versions&, Vec<I64>&)
+sig resultLocal@31841 fn&(ViewWalk&, LocalUses&, I64, Bool) Bool
+sig rootOf@48363 fn&(mut LocalUses&, Lvalue&) I64
+sig row@191401 fn&(mut Versions&, Bool, I64) Vec<I64>
+sig save@100125 fn&(mut dropWalk&) Array<Bool>
+sig save@164525 fn&(mut Landings&) landState
+sig save@185191 fn&(mut Versions&) Vec<I64>
+sig scalarField@46793 fn&(mut LocalUses&, Lvalue&) Bool
+sig scalarType@39181 fn&(Table&, TypeId) Bool
+sig setLocal@102089 fn&(mut dropWalk&, I64, Expr?&)
+sig settle@182654 fn&(mut Versions&) Bool
+sig sharedBlock@115585 fn&(Vec<BlockId>&) Bool
+sig short@151455 fn&(String&) String&
+sig stTy@117700 fn&(holdWalk&, I64) TypeId
+sig stmt@102255 fn&(mut dropWalk&, Stmt&)
+sig stmt@120484 fn&(mut holdWalk&, Stmt&)
+sig stmt@147239 fn&(mut printer&, Stmt&, I64)
+sig stmt@167552 fn&(mut Landings&, Stmt&)
+sig stmt@188065 fn&(mut Versions&, Stmt&)
+sig stmt@43723 fn&(mut LocalUses&, Stmt&)
+sig stmt@89411 fn&(mut LastUses&, Stmt&)
+sig stmtBreaks@133408 fn&(Stmt&, BlockId) Bool
+sig stmtLeaves@140913 fn&(mut leaveWalk&, Stmt&) Bool
+sig stmts@43640 fn&(mut LocalUses&, Array<Stmt&>&)
+sig stmts@89240 fn&(mut LastUses&, Array<Stmt&>&)
+sig stmtsBreak@133226 fn&(Array<Stmt&>&, BlockId) Bool
+sig stmtsLeave@142554 fn&(mut leaveWalk&, Array<Stmt&>&) Bool
+sig storage@122365 fn&(mut holdWalk&, Lvalue&) Vec<I64>
+sig store@117983 fn&(mut holdWalk&, Vec<I64>&, Vec<I64>&)
+sig target@123106 fn&(mut holdWalk&) Vec<I64>
+sig targets@45171 fn&(mut LocalUses&, Array<Lvalue?&>&)
+sig targetsBreak@134480 fn&(Array<Lvalue?&>&, BlockId) Bool
+sig tempGiven@126172 fn&(mut holdWalk&, I64, Vec<Expr&>&)
+sig tempHolds@129251 fn&(holdWalk&, I64) I64
+sig tempLent@56115 fn&(LocalUses&, Expr&) Expr?&
+sig tempStorage@123033 fn&(mut holdWalk&, Expr&) Vec<I64>
+sig tempsWritten@47385 fn&(mut LocalUses&, Lvalue&)
+sig try@109753 fn&(mut dropWalk&, Try&)
+sig tryRoots@26916 fn&(ViewWalk&, Try&) I64
+sig typed@117372 fn&(mut holdWalk&, Expr?&) Vec<I64>
+sig union@118609 fn&(mut Vec<I64>&, Vec<I64>&)
+sig use@50422 fn&(mut LocalUses&, Lvalue&, Ctx, Bool)
+sig valueRoot@47872 fn&(mut LocalUses&, Lvalue&) I64
+sig watched@171135 fn&(Landings&, I64) Bool
+sig wholeLocal@95415 fn&(Expr&) I64
+sig widen@105641 fn&(mut dropWalk&, mut Array<Bool>&) I64
+sig widen@191748 fn&(mut Versions&, mut Vec<I64>&, BlockId) I64
+sig write@46397 fn&(mut LocalUses&, Lvalue&, Bool)
+end
+sum 37d3670b5c14f38245ba0e4f31875dc718f77c555c58b449c8841c84c29f798b

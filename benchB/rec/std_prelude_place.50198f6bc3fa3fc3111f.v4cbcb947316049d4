@@ -1,0 +1,20 @@
+olang module record
+size 2783
+split 0
+read 0 O23a std_2fprelude_2fplace_2estd_2fprelude_2fplace_3aPlace_2eStr
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part 0f1ef39e74eb6265644819f36af193e4cfcfc5d2a9bb602691abe9f7f833325b std/prelude/place
+end
+sum 170e37ca201f4b0dbfcc35bcc2a2cdcf31dc57991bc6e18b1337d5b1daa8efb3

@@ -1,0 +1,27 @@
+olang module record
+size 37588
+split 0
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2ePush
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2eToString
+read 0 O23a std_2futf8_2eCount
+read 0 O23a std_2futf8_2eDecode
+read 0 O23a std_2futf8_2eEncode
+read 0 O23a std_2futf8_2eFromRunes
+read 0 O23a std_2futf8_2eRuneIter_2eRunes
+read 0 O23a std_2futf8_2eToRunes
+read 0 O23a std_2futf8_2eValid
+read 0 O23a std_2futf8_2estd_2futf8_3aRuneIter_2eNext
+read 0 O23a std_2futf8_2estd_2futf8_3aRune_2eIsValid
+read 0 O23a std_2futf8_2estd_2futf8_3aRune_2eLen
+read none D9h mutable globals
+read plain T13d std/prelude/map.Map
+read plain T13d std/prelude/map.MapEntry
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/vec.Vec
+read plain T13d std/regex.Match
+read plain T13d std/regex.node
+read plain T13d std/utf8.RuneIter
+part f121f3a28f96bd9142bed584c20d48b0ad9e9679b510f3151f219b161fffe8a3 std/utf8
+locs 0856420200ffb6bf5cdd121194a4a8a0b2c0c5354d087ac356513409d05cc65a std/utf8
+end
+sum 236df16fc4ba134434e053d95244071f8cdf367250abe81f5b38d3c7825e6665

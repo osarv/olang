@@ -1,0 +1,93 @@
+olang front record
+body fn 1002-1147	known p
+body fn 11121-11432	known p
+body fn 11492-11570	known p
+body fn 11571-11714	known p
+body fn 11907-12650	known p
+body fn 1212-1252	known p
+body fn 12833-13032	known p
+body fn 13080-13233	known p
+body fn 13267-13376	known p
+body fn 13378-13434	known p
+body fn 13810-14488	known p
+body fn 1429-1574	known p
+body fn 14594-14675	known p
+body fn 14764-15051	known p
+body fn 15053-15170	known p
+body fn 15522-17023	known p
+body fn 18870-18967	known p
+body fn 2533-2589	known p
+body fn 2590-2654	known p
+body fn 2655-2722	known p
+body fn 2723-2794	known p
+body fn 2795-2867	known p
+body fn 2868-2940	known p
+body fn 3031-3076	known p
+body fn 3077-3130	known p
+body fn 3131-3187	known p
+body fn 3188-3246	known p
+body fn 3309-3375	known p
+body fn 3628-4209	known p
+body fn 4308-4629	known p
+body fn 4967-5397	known p
+body fn 695-830	known p
+body fn 7074-7169	known p
+body fn 7358-7587	known p
+body fn 7938-8003	known p
+body fn 8075-8186	known p
+body fn 8224-8263	known p
+body global Billion	known p
+body global EpochText	known p
+body global VirtualStart	known p
+body global WhyBaked	known p
+body global clockMonotonic	known p
+body global clockRealtime	known p
+body global virtualDepth	known p
+body global virtualNs	known p
+baked Billion [8 14000000000000000000000000000000 @8>1+0][8 323030312d30392d30395430313a34363a34305a]
+baked EpochText [8 14000000000000000000000000000000 @8>1+0][8 313937302d30312d30315430303a30303a30305a]
+baked VirtualStart [8 00004352cf4c230d]
+baked WhyBaked [8 15000000000000000000000000000000 @8>1+0][8 74696d652e4572726f722e53796e74617828323229]
+baked clockMonotonic [8 01000000]
+baked clockRealtime [8 00000000]
+baked virtualDepth [8 0000000000000000] mutable
+baked virtualNs [8 0000000000000000] mutable
+sig Date.Of@11907 fn&(I64, I64) Date
+sig Date.Parse@15522 fn&(String&) Date ? Error
+sig Due@8224 fn&(Timer&) I64
+sig Duration.Elapsed@3309 fn&(I64) Duration
+sig Duration.Hours@2868 fn&(I64) Duration
+sig Duration.Micros@2590 fn&(I64) Duration
+sig Duration.Millis@2655 fn&(I64) Duration
+sig Duration.Minutes@2795 fn&(I64) Duration
+sig Duration.Nanos@2533 fn&(I64) Duration
+sig Duration.Seconds@2723 fn&(I64) Duration
+sig Format@14594 fn&(I64, I64) String
+sig IsVirtual@7074 fn&() Bool
+sig Micros@3077 fn&(Duration) I64
+sig Millis@3131 fn&(Duration) I64
+sig Nanos@3031 fn&(Duration) I64
+sig Now@1002 fn&() I64
+sig Reach@7358 fn&(I64)
+sig Seconds@3188 fn&(Duration) F64
+sig Since@1212 fn&(I64) I64
+sig Sleep@4967 fn&(Duration)
+sig Str@13810 fn&(Date&) String
+sig Str@3628 fn&(Duration) String
+sig Timer.After@7938 fn&(Duration) Timer
+sig TryNow@8075 fn&(mut Timer&) I64 ? Exhausted
+sig Wall@12833 fn&(Date&) I64
+sig Wall@1429 fn&() I64
+sig Weekday@13080 fn&(Date&) I64
+sig YearDay@13267 fn&(Date&) I64
+sig daysFromCivil@11121 fn&(I64, I64, I64) I64
+sig daysIn@11571 fn&(I64, I64) I64
+sig digitsAt@14764 fn&(String&, I64, I64) I64 ? Error.Syntax
+sig expect@15053 fn&(String&, I64, Char) ? Error.Syntax
+sig fraction@4308 fn&(U64, U64) String
+sig isLeap@11492 fn&(I64) Bool
+sig read@695 fn&(I32) I64
+sig twoDigits@13378 fn&(I64) String
+sig whyNot@18870 fn&(String&) String
+end
+sum 8c7dea37991c2270e161d9695de057cb0617aa0aeae686a6ad9d3bb9619ba070

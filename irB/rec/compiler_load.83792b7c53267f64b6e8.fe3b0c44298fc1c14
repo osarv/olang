@@ -1,0 +1,135 @@
+olang front record
+body fn 10230-11389	known p grows|0|-|-|..Mods|5|0|compiler/load|10527|10531|-1 grows|0|-|-|..Diags.paths|12|0|compiler/load|10783|10790|-1 grows|0|-|-|..Diags.texts|12|0|compiler/load|10783|10790|-1 grows|0|-|-|..Diags.library|14|0|compiler/load|10783|10790|-1 grows|0|-|-|..Diags.startsFrom|17|0|compiler/load|10783|10790|-1 grows|0|-|-|..Diags.startsLen|16|0|compiler/load|10783|10790|-1 grows|0|-|-|..Diags.records|14|0|compiler/load|10823|10828|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|10823|10828|-1 grows|0|-|-|..Names.texts|12|0|compiler/load|11327|11335|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|11327|11335|-1 grows|0|-|-|..CFlags|7|0|compiler/load|11345|11356|-1 grows|0|-|-|..Fetch.keys|11|0|compiler/load|11345|11356|-1 grows|0|-|-|..Fetch.commits|14|0|compiler/load|11345|11356|-1 grows|0|-|-|..Fetch.updated|14|0|compiler/load|11345|11356|-1 grows|0|-|-|..Fetch.Said|11|0|compiler/load|11345|11356|-1
+body fn 11417-11655	known p grows|1|-|-|..Types|6|0|compiler/load|11516|11520|-1 grows|1|-|-|..Generics|9|0|compiler/load|11596|11600|-1 grows|1|-|-|..chainAt|8|0|compiler/load|11613|11619|-1 grows|1|-|-|..chainParent|12|0|compiler/load|11613|11619|-1 grows|1|-|-|..chainChosen|12|0|compiler/load|11613|11619|-1 grows|1|-|-|..chainElse|10|0|compiler/load|11613|11619|-1 grows|1|-|-|..chainCondFrom|14|0|compiler/load|11613|11619|-1 grows|1|-|-|..conds|6|0|compiler/load|11613|11619|-1 grows|1|-|-|..branchChain|12|0|compiler/load|11613|11619|-1 grows|1|-|-|..branchIndex|12|0|compiler/load|11613|11619|-1 grows|1|-|-|..Imports|8|0|compiler/load|11613|11619|-1 grows|1|-|-|..globalsAt|10|0|compiler/load|11613|11619|-1
+body fn 11828-12903	known p grows|1|-|-|..chainAt|8|0|compiler/load|12659|12664|-1 grows|1|-|-|..chainParent|12|0|compiler/load|12659|12664|-1 grows|1|-|-|..chainChosen|12|0|compiler/load|12659|12664|-1 grows|1|-|-|..chainElse|10|0|compiler/load|12659|12664|-1 grows|1|-|-|..chainCondFrom|14|0|compiler/load|12659|12664|-1 grows|1|-|-|..conds|6|0|compiler/load|12659|12664|-1 grows|1|-|-|..branchChain|12|0|compiler/load|12659|12664|-1 grows|1|-|-|..branchIndex|12|0|compiler/load|12659|12664|-1 grows|1|-|-|..Imports|8|0|compiler/load|12777|12785|-1 grows|1|-|-|..globalsAt|10|0|compiler/load|12874|12878|-1
+body fn 13003-14042	known p grows|1|-|-|..Imports|8|0|compiler/load|14031|14035|-1
+body fn 14177-14476	known p,0
+body fn 14567-14790	known p
+body fn 14896-15985	known p grows|1|-|-|..chainAt|8|0|compiler/load|15037|15041|-1 grows|1|-|-|..chainParent|12|0|compiler/load|15082|15086|-1 grows|1|-|-|..chainChosen|12|0|compiler/load|15113|15117|-1 grows|1|-|-|..chainElse|10|0|compiler/load|15142|15146|-1 grows|1|-|-|..chainCondFrom|14|0|compiler/load|15174|15178|-1 grows|1|-|-|..conds|6|0|compiler/load|15332|15336|-1 grows|1|-|-|..branchChain|12|0|compiler/load|15443|15449|-1 grows|1|-|-|..branchIndex|12|0|compiler/load|15443|15449|-1 grows|1|-|-|..Imports|8|0|compiler/load|15473|15479|-1 grows|1|-|-|..globalsAt|10|0|compiler/load|15473|15479|-1
+body fn 15987-16144	known p grows|1|-|-|..branchChain|12|0|compiler/load|16070|16074|-1 grows|1|-|-|..branchIndex|12|0|compiler/load|16096|16100|-1
+body fn 16340-17143	known p
+body fn 17298-17557	known p grows|0|-|-|..Diags.records|14|0|compiler/load|17422|17428|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|17422|17428|-1
+body fn 17743-18539	known p grows|0|-|-|..Diags.records|14|0|compiler/load|18208|18216|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|18208|18216|-1
+body fn 18634-19187	known p grows|0|-|-|..Diags.records|14|0|compiler/load|19143|19148|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|19143|19148|-1
+body fn 19389-21107	known p grows|1|-|-|..cdiags.paths|13|0|compiler/load|19537|19544|-1 grows|1|-|-|..cdiags.texts|13|0|compiler/load|19537|19544|-1 grows|1|-|-|..cdiags.library|15|0|compiler/load|19537|19544|-1 grows|1|-|-|..cdiags.startsFrom|18|0|compiler/load|19537|19544|-1 grows|1|-|-|..cdiags.startsLen|17|0|compiler/load|19537|19544|-1 grows|1|-|-|..cparser.names.texts|20|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.names.ids|18|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.diags.records|22|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.diags.notes|20|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.diags.held|19|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.SaidIn|15|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.ids|12|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.TypeGroups|19|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.ArgAngles|18|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.tys|12|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.attrGlobals|20|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.prms|13|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.stmts|14|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.BareFuncs|18|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.vars|13|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.CloseAngles|20|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.exprs|14|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.diags.groupParent|26|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.diags.groupState|25|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.reflNames|18|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.pats|13|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.Operators|18|0|compiler/load|20794|20800|-1 grows|1|-|-|..cparser.Mixed|14|0|compiler/load|20794|20800|-1 grows|1|-|-|..Scope.globals|14|0|compiler/load|21015|21018|-1 keeps|0|-|-|.|0|0|compiler/load|19393|19393|1
+body fn 21319-22662	known p grows|0|-|-|..Diags.records|14|0|compiler/load|21518|21523|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|21518|21523|-1 grows|0|-|-|..CFlags|7|0|compiler/load|21893|21900|-1 grows|0|-|-|..Fetch.keys|11|0|compiler/load|22177|22184|-1 grows|0|-|-|..Fetch.commits|14|0|compiler/load|22177|22184|-1 grows|0|-|-|..Fetch.updated|14|0|compiler/load|22177|22184|-1 grows|0|-|-|..Fetch.Said|11|0|compiler/load|22177|22184|-1 grows|0|-|-|..Mods|5|0|compiler/load|21893|21900|-1 grows|0|-|-|..Diags.paths|12|0|compiler/load|21893|21900|-1 grows|0|-|-|..Diags.texts|12|0|compiler/load|21893|21900|-1 grows|0|-|-|..Diags.library|14|0|compiler/load|21893|21900|-1 grows|0|-|-|..Diags.startsFrom|17|0|compiler/load|21893|21900|-1 grows|0|-|-|..Diags.startsLen|16|0|compiler/load|21893|21900|-1 grows|0|-|-|..Names.texts|12|0|compiler/load|21893|21900|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|21893|21900|-1
+body fn 22882-26141	known p grows|0|-|-|..Diags.records|14|0|compiler/load|23059|23064|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|23059|23064|-1 grows|0|-|-|..Fetch.keys|11|0|compiler/load|24034|24039|-1 grows|0|-|-|..Fetch.commits|14|0|compiler/load|24034|24039|-1 grows|0|-|-|..Fetch.updated|14|0|compiler/load|24034|24039|-1 grows|0|-|-|..Fetch.Said|11|0|compiler/load|24034|24039|-1
+body fn 26925-30476	known p grows|0|-|-|..Diags.records|14|0|compiler/load|27738|27743|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|27738|27743|-1 grows|0|-|-|..CFlags|7|0|compiler/load|28102|28106|-1 grows|0|-|-|..Mods|5|0|compiler/load|29733|29737|-1 grows|0|-|-|..Diags.paths|12|0|compiler/load|29733|29737|-1 grows|0|-|-|..Diags.texts|12|0|compiler/load|29733|29737|-1 grows|0|-|-|..Diags.library|14|0|compiler/load|29733|29737|-1 grows|0|-|-|..Diags.startsFrom|17|0|compiler/load|29733|29737|-1 grows|0|-|-|..Diags.startsLen|16|0|compiler/load|29733|29737|-1 grows|0|-|-|..Names.texts|12|0|compiler/load|29733|29737|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|29733|29737|-1 grows|0|-|-|..Fetch.keys|11|0|compiler/load|29733|29737|-1 grows|0|-|-|..Fetch.commits|14|0|compiler/load|29733|29737|-1 grows|0|-|-|..Fetch.updated|14|0|compiler/load|29733|29737|-1 grows|0|-|-|..Fetch.Said|11|0|compiler/load|29733|29737|-1
+body fn 30578-30771	known p
+body fn 30873-31535	known p
+body fn 31633-31992	known p
+body fn 32106-32402	known p
+body fn 32841-35167	known p grows|0|-|-|..embedded|9|0|compiler/load|34952|34955|-1
+body fn 35268-35379	known p
+body fn 35432-35517	known p
+body fn 35519-35717	known p,0
+body fn 35787-35939	known p
+body fn 36048-36249	known p
+body fn 36361-36885	known p
+body fn 36961-37040	known p
+body fn 37183-37782	known p grows|0|-|-|..Diags.records|14|0|compiler/load|37487|37492|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|37487|37492|-1
+body fn 37883-38395	known p grows|0|-|-|..Diags.records|14|0|compiler/load|38086|38093|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|38086|38093|-1
+body fn 38530-38827	known p grows|0|-|-|..Names.texts|12|0|compiler/load|38608|38611|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|38608|38611|-1 grows|1|-|-|..Oracle.bare|12|0|compiler/load|38608|38611|-1 grows|1|-|-|..Oracle.qualified|17|0|compiler/load|38608|38611|-1 grows|1|-|-|..Oracle.fns|11|0|compiler/load|38666|38671|-1 grows|1|-|-|..Oracle.fnsQualified|20|0|compiler/load|38666|38671|-1
+body fn 38898-39331	known p grows|0|-|-|..Names.texts|12|0|compiler/load|39168|39171|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|39168|39171|-1 grows|1|-|-|..bare|5|0|compiler/load|39168|39171|-1 grows|1|-|-|..qualified|10|0|compiler/load|39168|39171|-1 grows|1|-|-|..fns|4|0|compiler/load|39242|39247|-1 grows|1|-|-|..fnsQualified|13|0|compiler/load|39242|39247|-1
+body fn 39417-39647	known p grows|0|-|-|..Names.texts|12|0|compiler/load|39478|39484|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|39478|39484|-1 grows|0|-|-|..Diags.records|14|0|compiler/load|39626|39632|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|39626|39632|-1
+body fn 39729-40032	known p grows|0|-|-|..Diags.records|14|0|compiler/load|39895|39901|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|39895|39901|-1
+body fn 40034-40321	known p grows|0|-|-|..Diags.records|14|0|compiler/load|40119|40130|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|40119|40130|-1
+body fn 40323-40603	known p grows|0|-|-|..Diags.records|14|0|compiler/load|40531|40537|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|40531|40537|-1
+body fn 40892-41153	known p
+body fn 41155-41446	known p
+body fn 41448-41679	known p
+body fn 42073-42466	known p grows|0|-|-|..Diags.records|14|0|compiler/load|42357|42364|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|42357|42364|-1
+body fn 42468-42903	known p grows|0|-|-|..Diags.records|14|0|compiler/load|42709|42716|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|42709|42716|-1 grows|4|-|-|.|0|0|compiler/load|42709|42716|-1 grows|3|-|-|.|0|0|compiler/load|42709|42716|-1
+body fn 43030-43632	known p grows|0|-|-|..Diags.records|14|0|compiler/load|43440|43445|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|43440|43445|-1 grows|4|-|-|.|0|0|compiler/load|43596|43599|-1 grows|3|-|-|.|0|0|compiler/load|43620|43624|-1
+body fn 43634-44074	known p grows|0|-|-|..Diags.records|14|0|compiler/load|43818|43825|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|43818|43825|-1 grows|6|-|-|.|0|0|compiler/load|43818|43825|-1 grows|5|-|-|.|0|0|compiler/load|43818|43825|-1
+body fn 44188-44349	known p
+body fn 44463-44722	known p
+body fn 44851-45102	known p grows|0|-|-|..Diags.records|14|0|compiler/load|45016|45022|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|45016|45022|-1
+body fn 45265-45641	known p grows|0|-|-|..Diags.records|14|0|compiler/load|45471|45477|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|45471|45477|-1
+body fn 45847-46447	known p grows|0|-|-|..Diags.records|14|0|compiler/load|46356|46367|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|46356|46367|-1 grows|0|-|-|..CFlags|7|0|compiler/load|46356|46367|-1 grows|0|-|-|..Fetch.keys|11|0|compiler/load|46356|46367|-1 grows|0|-|-|..Fetch.commits|14|0|compiler/load|46356|46367|-1 grows|0|-|-|..Fetch.updated|14|0|compiler/load|46356|46367|-1 grows|0|-|-|..Fetch.Said|11|0|compiler/load|46356|46367|-1 grows|0|-|-|..Mods|5|0|compiler/load|46356|46367|-1 grows|0|-|-|..Diags.paths|12|0|compiler/load|46356|46367|-1 grows|0|-|-|..Diags.texts|12|0|compiler/load|46356|46367|-1 grows|0|-|-|..Diags.library|14|0|compiler/load|46356|46367|-1 grows|0|-|-|..Diags.startsFrom|17|0|compiler/load|46356|46367|-1 grows|0|-|-|..Diags.startsLen|16|0|compiler/load|46356|46367|-1 grows|0|-|-|..Names.texts|12|0|compiler/load|46356|46367|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|46356|46367|-1
+body fn 46619-47242	known p
+body fn 47333-47639	known p,0
+body fn 47641-47823	known p
+body fn 47825-47995	known p grows|0|-|-|..Diags.starts|13|0|compiler/load|47904|47911|-1
+body fn 51333-51492	known p
+body fn 6854-7078	known p
+body fn 7130-7221	known p
+body fn 7223-7345	known p
+body fn 7486-7893	known p grows|0|-|-|..preludeTypes|13|0|compiler/load|7676|7687|-1 grows|0|-|-|..Mods|5|0|compiler/load|7676|7687|-1 grows|0|-|-|..Diags.paths|12|0|compiler/load|7676|7687|-1 grows|0|-|-|..Diags.texts|12|0|compiler/load|7676|7687|-1 grows|0|-|-|..Diags.library|14|0|compiler/load|7676|7687|-1 grows|0|-|-|..Diags.startsFrom|17|0|compiler/load|7676|7687|-1 grows|0|-|-|..Diags.startsLen|16|0|compiler/load|7676|7687|-1 grows|0|-|-|..Diags.records|14|0|compiler/load|7676|7687|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|7676|7687|-1 grows|0|-|-|..Names.texts|12|0|compiler/load|7676|7687|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|7676|7687|-1 grows|0|-|-|..CFlags|7|0|compiler/load|7676|7687|-1 grows|0|-|-|..Fetch.keys|11|0|compiler/load|7676|7687|-1 grows|0|-|-|..Fetch.commits|14|0|compiler/load|7676|7687|-1 grows|0|-|-|..Fetch.updated|14|0|compiler/load|7676|7687|-1 grows|0|-|-|..Fetch.Said|11|0|compiler/load|7676|7687|-1
+body fn 8059-8557	known p
+body fn 8699-9229	known p grows|0|-|-|..preludeTypes|13|0|compiler/load|9150|9154|-1 grows|0|-|-|..Mods|5|0|compiler/load|9193|9197|-1 grows|0|-|-|..Diags.paths|12|0|compiler/load|9193|9197|-1 grows|0|-|-|..Diags.texts|12|0|compiler/load|9193|9197|-1 grows|0|-|-|..Diags.library|14|0|compiler/load|9193|9197|-1 grows|0|-|-|..Diags.startsFrom|17|0|compiler/load|9193|9197|-1 grows|0|-|-|..Diags.startsLen|16|0|compiler/load|9193|9197|-1 grows|0|-|-|..Diags.records|14|0|compiler/load|9193|9197|-1 grows|0|-|-|..Diags.notes|12|0|compiler/load|9193|9197|-1 grows|0|-|-|..Names.texts|12|0|compiler/load|9193|9197|-1 grows|0|-|-|..Names.ids|10|0|compiler/load|9193|9197|-1 grows|0|-|-|..CFlags|7|0|compiler/load|9193|9197|-1 grows|0|-|-|..Fetch.keys|11|0|compiler/load|9193|9197|-1 grows|0|-|-|..Fetch.commits|14|0|compiler/load|9193|9197|-1 grows|0|-|-|..Fetch.updated|14|0|compiler/load|9193|9197|-1 grows|0|-|-|..Fetch.Said|11|0|compiler/load|9193|9197|-1
+body fn 9466-9675	known p
+body fn 9760-10131	known p,0
+body global CImportFormat	known p
+body global NoBranch	known p
+body global NotYet	known p
+body global Pending	known p
+body lambda 46752-46824	known p
+body lambda 47126-47172	known p
+baked CImportFormat [8 10000000000000000000000000000000 @8>1+0][8c 6f6c616e67204320696d706f72742031]
+baked NoBranch [8 ffffffffffffffff]
+baked NotYet [8 feffffffffffffff]
+baked Pending [8 fdffffffffffffff]
+sig AliasShape@14567 fn&(String&) Bool
+sig CSymbol@30578 fn&(Loader&, I64, String&) String
+sig Chosen@44851 fn&(mut Loader&, I64, I32) I64
+sig CondParser@19389 fn&(mut Loader&, mut Module&)
+sig Decide@45847 fn&(mut Loader&, I64, I32, I64)
+sig DeriveAlias@14177 fn&(String&) String&
+sig Embed@32841 fn&(mut Loader&, I64, String&) Array<U8>&, String
+sig Embedded@35268 fn&(Loader&, String&) Array<U8>&
+sig ErrQualifier@9466 fn&(String&, Bool) String
+sig Graph@46619 fn&(Loader&) String
+sig LinkIsFile@44188 fn&(String&) Bool
+sig LinkName@44463 fn&(String&) Bool
+sig Links@42073 fn&(mut Loader&) Vec<String&>
+sig LinksOwnC@40892 fn&(Loader&) Bool
+sig Load@7486 fn&(mut Loader&, String&) I64
+sig LoadPrelude@8699 fn&(mut Loader&)
+sig Loader.test@47333 fn&(String&) Loader
+sig LockPath@7130 fn&(String&) String
+sig Normalize@36361 fn&(String&) String
+sig PendingIfs@45265 fn&(mut Loader&) Vec<Pair<I64, I32>>
+sig Public@36961 fn&(String&) Bool
+sig StdDir@6854 fn&() String
+sig addLink@43030 fn&(mut Loader&, I64, Span, mut Vec<String&>&, mut Map<String&, Bool>&)
+sig at@7223 fn&(mut Loader&, Module&, Span) Where
+sig branch@15987 fn&(mut Loader&, mut Module&, I64, I64) I64
+sig branchGroup@40323 fn&(mut Loader&, I64, TopBranch&, I64, I64)
+sig cImport@26925 fn&(mut Loader&, I64, Import) I64
+sig cachedTranslation@30873 fn&(String&) String
+sig chainGroups@40034 fn&(mut Loader&, I64, TopIf&, I64, I64)
+sig chains@38898 fn&(mut Loader&, mut Oracle&, I64, String&, I64)
+sig checkReach@37883 fn&(mut Loader&)
+sig closure@37183 fn&(mut Loader&, I64)
+sig condEnd@16340 fn&(Loader&, Module&, I64, I64) I64
+sig decide@17743 fn&(mut Loader&, I64, I64)
+sig declsLink@41155 fn&(Array<Decl&>&) Bool
+sig evalCond@18634 fn&(mut Loader&, I64, I64) Decision
+sig fileStamp@32106 fn&(String&) String
+sig firstElems@35519 fn&(String&, I64) String&
+sig git@51333 fn&(String&, Array<String&>&) Bool
+sig groups@39729 fn&(mut Loader&, I64, Array<Decl&>&)
+sig ifLinks@41448 fn&(TopIf&) Bool
+sig importAt@13003 fn&(mut Loader&, mut Module&, I64, I64)
+sig keepFile@31633 fn&(String&, String&, String&) Bool
+sig key@35432 fn&(Array<String&>&) String
+sig linksIf@43634 fn&(mut Loader&, I64, TopIf&, I64, I64, mut Vec<String&>&, mut Map<String&, Bool>&)
+sig linksIn@42468 fn&(mut Loader&, I64, Array<Decl&>&, mut Vec<String&>&, mut Map<String&, Bool>&)
+sig load@10230 fn&(mut Loader&, String&, String&, Bool, Bool) I64
+sig loadImports@21319 fn&(mut Loader&, I64)
+sig moduleDir@35787 fn&(String&) String
+sig ownNames@38530 fn&(mut Loader&, mut Module&)
+sig parse@39417 fn&(mut Loader&, I64)
+sig prescan@11417 fn&(mut Loader&, mut Module&)
+sig region@11828 fn&(mut Loader&, mut Module&, I64, I64, I64)
+sig relativeIdentity@36048 fn&(String&, String&) String
+sig resolve@22882 fn&(mut Loader&, I64, Import) String, String ? ? unresolved
+sig rootIdentity@8059 fn&(Loader&, String&) String
+sig rules@47825 fn&(mut Loader&) String
+sig taken@17298 fn&(mut Loader&, I64, I64) I64
+sig topIf@14896 fn&(mut Loader&, mut Module&, I64, I64, I64) I64
+sig typeNames@9760 fn&(String&, Tokens&) Vec<String&>&
+sig write@47641 fn&(String&, String&, String&)
+end
+sum 7432bc0ff6cad4698f94bacf075b52b9074668d8bed30d3b1e82d6a8a453d3a9

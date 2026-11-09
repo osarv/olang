@@ -1,0 +1,31 @@
+olang module record
+size 25050
+split 0
+read 0 O23a std_2fprelude_2ff8_2ef8Decode
+read 0 O23a std_2fprelude_2ff8_2ef8E4M3Bits
+read 0 O23a std_2fprelude_2ff8_2ef8E5M2Bits
+read 0 O23a std_2fprelude_2ff8_2ef8Encode
+read 0 O23a std_2fprelude_2ff8_2ef8Pow2
+read 0 O23a std_2fprelude_2ff8_2ef8Sign
+read 0 O23a std_2fprelude_2ff8_2estd_2fprelude_2ff8_3aF8E4M3_2eEq
+read 0 O23a std_2fprelude_2ff8_2estd_2fprelude_2ff8_3aF8E4M3_2eF64
+read 0 O23a std_2fprelude_2ff8_2estd_2fprelude_2ff8_3aF8E4M3_2eStr
+read 0 O23a std_2fprelude_2ff8_2estd_2fprelude_2ff8_3aF8E5M2_2eEq
+read 0 O23a std_2fprelude_2ff8_2estd_2fprelude_2ff8_3aF8E5M2_2eF64
+read 0 O23a std_2fprelude_2ff8_2estd_2fprelude_2ff8_3aF8E5M2_2eStr
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part 88811f46f8fe012f428c3f3969a5b9101e73ad4610aa283a4004615cebf2dd9d std/prelude/f8
+end
+sum 2ac5c9afa56a2acd9f98a8cce8e806fefbf39084c80d2fcad4916033bb97aa3c

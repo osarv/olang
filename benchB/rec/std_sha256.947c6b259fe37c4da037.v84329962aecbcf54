@@ -1,0 +1,15 @@
+olang module record
+size 41590
+split 0
+read 0 O23a std_2fhex_2eEncode
+read 0 O23a std_2fsha256_2eHex
+read 0 O23a std_2fsha256_2eSum
+read 0 O23a std_2fsha256_2erotr
+read 0 O23a std_2fsha256_2estd_2fsha256_3aHasher_2ePush
+read 0 O23a std_2fsha256_2estd_2fsha256_3aHasher_2eSum
+read 0 O23a std_2fsha256_2estd_2fsha256_3aHasher_2eblock
+read plain T13d std/prelude/vec.Vec
+read plain T13d std/sha256.Hasher
+part d1222a3091383096324737d6dedd7857876a8ab43e410412e4c76c78933b4e10 std/sha256
+end
+sum 859eff771ee8a82a61f4f9d783c9e6c1eb80a5195f52daeb82d83190db87da0e

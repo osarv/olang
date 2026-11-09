@@ -1,0 +1,23 @@
+olang front record
+body fn 1061-1198	known p grows|0|-|-|..texts|6|0|compiler/source|1136|1139|-1 grows|0|-|-|..ids|4|0|compiler/source|1136|1139|-1
+body fn 1200-1361	known p grows|0|-|-|..texts|6|0|compiler/source|1291|1295|-1 grows|0|-|-|..ids|4|0|compiler/source|1310|1313|-1
+body fn 1387-1452	known p
+body fn 1767-1957	known p,0
+body fn 2054-2330	known p
+body fn 2438-2489	known p
+body fn 2527-2753	known p
+body fn 2832-2942	known p
+body fn 2986-3053	known p
+body fn 3076-3149	known p,0
+sig Intern@1061 fn&(mut Names&, String&) NameId
+sig Line@2527 fn&(Source&, I32) I32
+sig LineCol@2832 fn&(Source&, I32) I32, I32
+sig LineStart@2986 fn&(Source&, I32) I32
+sig LineStarts@2054 fn&(String&) Array<I32>&
+sig Lines@2438 fn&(Source&) I64
+sig Source.Read@1767 fn&(String&) Source ? Error
+sig Text@1387 fn&(Names&, NameId) String&
+sig TextOf@3076 fn&(Source&, Span) String&
+sig add@1200 fn&(mut Names&, String&) NameId
+end
+sum 1df5f9001908233caed30049a30316d05a392d28bc397db91a51d3fa824b74f1

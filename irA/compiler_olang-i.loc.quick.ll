@@ -1,0 +1,15 @@
+source_filename = "compiler_olang-i.loc.quick.ll"
+; olang - emitted by the self-hosted compiler (compiler/emit.olang)
+target triple = "x86_64-pc-linux-gnu"
+
+@olang_loc_2308270aeb54ce5f_1121c256bef46e33 = weak_odr constant [54 x i8] c"compiler/profile.olang:51: slice bounds out of range\0A\00"
+@olang_loc_251e830707558b33_b2bdace7e2a71047 = weak_odr constant [48 x i8] c"compiler/build.olang:1030: unreachable reached\0A\00"
+@olang_loc_42020986585537b2_4c4b240152eb3e56 = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_44996bcc7c9bda8_515f8c8db8b0565c = weak_odr constant [47 x i8] c"compiler/build.olang:863: unreachable reached\0A\00"
+@olang_loc_4cd8465f442ebc46_73c7e9f900a2458a = weak_odr constant [47 x i8] c"compiler/build.olang:792: unreachable reached\0A\00"
+@olang_loc_4ce37e8669e18741_b51ffe42b73135c5 = weak_odr constant [48 x i8] c"compiler/listing.olang:27: unreachable reached\0A\00"
+@olang_loc_539f96ece49ac99_8ec4d6c22ed03845 = weak_odr constant [47 x i8] c"compiler/build.olang:769: unreachable reached\0A\00"
+@olang_loc_6ff5f1cbdf8b017d_cabbfa25d1d462b1 = weak_odr constant [48 x i8] c"compiler/build.olang:1025: unreachable reached\0A\00"
+@olang_loc_82d7e3816727b7d6_2185186449dccf1a = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_ac43697cc5f2dca0_4dfd3d6081b857d4 = weak_odr constant [48 x i8] c"compiler/build.olang:1015: unreachable reached\0A\00"
+@olang_loc_e43b1413a2a1997d_89f9fa2bec5137e9 = weak_odr constant [47 x i8] c"compiler/build.olang:854: unreachable reached\0A\00"

@@ -1,0 +1,69 @@
+olang module record
+size 110965
+split 0
+read 0 O23a std_2fprelude_2ftext_2eI64_2ePadStart
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aChar_2eIsDigit
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2ePush
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2ePushChar
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2eToString
+read 0 O23a std_2ftime_2eDate_2eOf
+read 0 O23a std_2ftime_2eDate_2eParse
+read 0 O23a std_2ftime_2eDuration_2eElapsed
+read 0 O23a std_2ftime_2eDuration_2eHours
+read 0 O23a std_2ftime_2eDuration_2eMicros
+read 0 O23a std_2ftime_2eDuration_2eMillis
+read 0 O23a std_2ftime_2eDuration_2eMinutes
+read 0 O23a std_2ftime_2eDuration_2eNanos
+read 0 O23a std_2ftime_2eDuration_2eSeconds
+read 0 O23a std_2ftime_2eFormat
+read 0 O23a std_2ftime_2eIsVirtual
+read 0 O23a std_2ftime_2eNow
+read 0 O23a std_2ftime_2eReach
+read 0 O23a std_2ftime_2eSince
+read 0 O23a std_2ftime_2eSleep
+read 0 O23a std_2ftime_2eTimer_2eAfter
+read 0 O23a std_2ftime_2eWall
+read 0 O23a std_2ftime_2edaysFromCivil
+read 0 O23a std_2ftime_2edaysIn
+read 0 O23a std_2ftime_2edigitsAt
+read 0 O23a std_2ftime_2eexpect
+read 0 O23a std_2ftime_2efraction
+read 0 O23a std_2ftime_2eisLeap
+read 0 O23a std_2ftime_2eread
+read 0 O23a std_2ftime_2estd_2ftime_3aDate_2eStr
+read 0 O23a std_2ftime_2estd_2ftime_3aDate_2eWall
+read 0 O23a std_2ftime_2estd_2ftime_3aDate_2eWeekday
+read 0 O23a std_2ftime_2estd_2ftime_3aDate_2eYearDay
+read 0 O23a std_2ftime_2estd_2ftime_3aDuration_2eMicros
+read 0 O23a std_2ftime_2estd_2ftime_3aDuration_2eMillis
+read 0 O23a std_2ftime_2estd_2ftime_3aDuration_2eNanos
+read 0 O23a std_2ftime_2estd_2ftime_3aDuration_2eSeconds
+read 0 O23a std_2ftime_2estd_2ftime_3aDuration_2eStr
+read 0 O23a std_2ftime_2estd_2ftime_3aTimer_2eDue
+read 0 O23a std_2ftime_2estd_2ftime_3aTimer_2eTryNow
+read 0 O23a std_2ftime_2etwoDigits
+read 0 O23a std_2ftime_2ewhyNot
+read plain T13d <string.h>.c___locale_struct
+read plain T13d <time.h>.c___locale_struct
+read plain T13d <time.h>.itimerspec
+read plain T13d <time.h>.timespec
+read plain T13d <time.h>.timeval
+read plain T13d <time.h>.timex
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+read plain T13d std/time.Date
+read plain T13d std/time.Timer
+part d34db7347c74cb0c9497630259ce216d80c7d071e488af07ba10956539c9edb6 std/time
+locs fcb80540a70a75626c968f17580753eb262cc36a1870ed86e4c43ab6d78dbc1d std/time
+end
+sum c5f9e70203ce3d593a42801bf377a8e221d33c281d94c31e6893c45331c22aa2

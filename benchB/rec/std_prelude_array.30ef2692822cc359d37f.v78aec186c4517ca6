@@ -1,0 +1,34 @@
+olang module record
+size 232
+split 0
+read 0 O23a std_2fprelude_2farray_2eArray_3cstd_2fprelude_2ftext_3aChar_3e_2eContains_3cstd_2fprelude_2ftext_3aChar_3e
+read 0 O23a std_2fprelude_2farray_2eArray_3cstd_2fprelude_2ftext_3aString_26_3e_2eSort_3cstd_2fprelu_H425a408f665c1f34766f6a10dd38435a
+read 0 O23a std_2fprelude_2farray_2esortByPositions_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortInsert_3cI64_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortInsert_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortInsertion_3cI64_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortInsertion_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortMergeBackward_3cI64_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortMergeBuffered_3cI64_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortMergeForward_3cI64_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortMergeRuns_3cI64_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortMerge_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e
+read 0 O23a std_2fprelude_2farray_2esortPermute_3cstd_2fprelude_2ftext_3aString_26_3e
+read 0 O23a std_2fprelude_2farray_2esortRotate_3cstd_2fprelude_2ftext_3aString_26_3e
+read 0 O23a std_2fprelude_2farray_2esortSwap_3cstd_2fprelude_2ftext_3aString_26_3e
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part 34c4547a598ddbf16cc9e4b3c2fc7b0f91ec7f06347e38285c072e6100bfd968 std/prelude/array
+end
+sum 5d546c1eedba0f36be160f94522cc17a73e1286b06398ae8e6f19b7b7c5216a3

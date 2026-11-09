@@ -1,0 +1,53 @@
+olang module record
+size 61868
+split 0
+read plain T13d <string.h>.c___locale_struct
+read plain T13d <sys/wait.h>._fpreg
+read plain T13d <sys/wait.h>._fpstate
+read plain T13d <sys/wait.h>._fpx_sw_bytes
+read plain T13d <sys/wait.h>._fpxreg
+read plain T13d <sys/wait.h>._libc_fpstate
+read plain T13d <sys/wait.h>._libc_fpxreg
+read plain T13d <sys/wait.h>._libc_xmmreg
+read plain T13d <sys/wait.h>._xmmreg
+read plain T13d <sys/wait.h>._xsave_hdr
+read plain T13d <sys/wait.h>._xstate
+read plain T13d <sys/wait.h>._ymmh_state
+read plain T13d <sys/wait.h>.c___atomic_wide_counter
+read plain T13d <sys/wait.h>.c___pthread_internal_list
+read plain T13d <sys/wait.h>.c___pthread_internal_slist
+read plain T13d <sys/wait.h>.c___sigset_t
+read plain T13d <sys/wait.h>.mcontext_t
+read plain T13d <sys/wait.h>.pthread_attr_t
+read plain T13d <sys/wait.h>.pthread_barrier_t
+read plain T13d <sys/wait.h>.pthread_barrierattr_t
+read plain T13d <sys/wait.h>.pthread_cond_t
+read plain T13d <sys/wait.h>.pthread_condattr_t
+read plain T13d <sys/wait.h>.pthread_mutex_t
+read plain T13d <sys/wait.h>.pthread_mutexattr_t
+read plain T13d <sys/wait.h>.pthread_rwlock_t
+read plain T13d <sys/wait.h>.pthread_rwlockattr_t
+read plain T13d <sys/wait.h>.sigaction_t
+read plain T13d <sys/wait.h>.sigcontext
+read plain T13d <sys/wait.h>.sigevent_t
+read plain T13d <sys/wait.h>.siginfo_t
+read plain T13d <sys/wait.h>.sigstack_t
+read plain T13d <sys/wait.h>.sigval
+read plain T13d <sys/wait.h>.stack_t
+read plain T13d <sys/wait.h>.timespec
+read plain T13d <sys/wait.h>.ucontext_t
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part 3b34d19c2588934b92d8d033c02d2afdce29fce78622f6060c8cacddd397d408 <sys/wait.h>
+end
+sum b4c9fba877026076a43f9c28266bdb5fb6335b08260bd140555c1e2c3232badf

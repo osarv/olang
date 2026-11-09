@@ -1,0 +1,15 @@
+source_filename = "compiler_olang_compiler_emit-i.loc.quick.ll"
+; olang - emitted by the self-hosted compiler (compiler/emit.olang)
+target triple = "x86_64-pc-linux-gnu"
+
+@olang_loc_107ea1d5f6b7ae7e_97e8142bbca38122 = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_24917fff6b0dbf12_3e480d1ddf3b6c6 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:122: array length out of range\0A\00"
+@olang_loc_249e23eadaba076d_eee6d65447202aa1 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:122: array length out of range\0A\00"
+@olang_loc_57be641a3add5a07_268bdd2689f05f43 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:102: slice bounds out of range\0A\00"
+@olang_loc_770927d2495b2877_f8495f0b6d3874b3 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:111: array length out of range\0A\00"
+@olang_loc_906564ebb31e0b29_26cecf4a5aa4c335 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:111: array length out of range\0A\00"
+@olang_loc_965034e81055f42a_393c3a88a69cf1e6 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:105: slice bounds out of range\0A\00"
+@olang_loc_b0a182e5ba72b608_8bd4b05b5ee8ea4c = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_cd1a6553288b106c_15d27d0457903e90 = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_d237bb9e874b3ab6_6bb8184ac63deaca = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:105: slice bounds out of range\0A\00"
+@olang_loc_d248b1b9dfce9f13_1c47f247d0c46da7 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:102: slice bounds out of range\0A\00"

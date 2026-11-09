@@ -1,0 +1,51 @@
+olang front record
+body fn 10536-10981	known p
+body fn 11042-11515	known p
+body fn 11517-11653	known p
+body fn 11704-11819	known p
+body fn 1493-2805	known p
+body fn 2807-2869	known p
+body fn 2871-2944	known p grows|0|-|-|..starts|7|0|compiler/api|2920|2926|-1
+body fn 2946-3289	known p
+body fn 3411-4078	known p grows|2|-|-|..records|8|0|compiler/api|3643|3648|-1 grows|2|-|-|..notes|6|0|compiler/api|3643|3648|-1
+body fn 4154-4337	known p
+body fn 4507-4964	known p
+body fn 4966-5231	known p
+body fn 5428-6082	known p
+body fn 6196-6712	known p
+body fn 6714-7184	known p grows|0|-|-|..chars|6|0|compiler/api|6827|6831|-1
+body fn 7273-7370	known p
+body fn 7456-7660	known p
+body fn 7662-8096	known p
+body fn 8098-8367	known p
+body fn 8500-9164	known p
+body fn 9222-9343	known p
+body fn 9576-9671	known p
+body fn 9865-10400	known p
+body lambda 5156-5213	known p
+body lambda 5645-5694	known p
+sig Mode@1493 fn&(String&, String&, String&, mut Config&) I32
+sig addBreaks@9576 fn&(String&) Bool
+sig change.changed@9865 fn&(sig, sig) change
+sig change.deprecation@9222 fn&(sig) change
+sig compare@8500 fn&(Vec<sig>&, Vec<sig>&) Vec<change>
+sig depMark@7273 fn&(Entry&) String
+sig entries@5428 fn&(String&, String&, String&, mut Config&) Vec<sig> ? Unread
+sig git@4154 fn&(...String&) String ? Unread
+sig itemKind@7662 fn&(String&) String
+sig itemSigs@6714 fn&(mut StringBuilder&, Entry&)
+sig items@11042 fn&(String&) Array<String&>
+sig memberKind@8098 fn&(String&, String&, Bool) String
+sig rowOf@2946 fn&(change&) String
+sig said@2871 fn&(mut Diagnostics&) I32
+sig say@2807 fn&(String&)
+sig side@3411 fn&(String&, String&, mut Diagnostics&) String ? Unread
+sig sigLine@7456 fn&(String&) String
+sig sources@4507 fn&(String&, String&) Vec<String&>
+sig splitErrors@10536 fn&(String&) String, Array<String&>
+sig subset@11517 fn&(Array<String&>&, Array<String&>&) Bool
+sig union@4966 fn&(Vec<String&>&, Vec<String&>&) Vec<String&>
+sig valueless@11704 fn&(String&) String
+sig writeSigs@6196 fn&(String&, String&, mut Config&) I32
+end
+sum 28b27aaf7d99571ef955ec22341c80c74dcb978ce3bc94a10ab3c0fcea05663b

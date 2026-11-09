@@ -1,0 +1,27 @@
+olang front record
+body fn 1132-1269	known p
+body fn 1499-2384	known p
+body fn 2428-2644	known p
+body fn 2809-2874	known p
+body fn 2876-3298	known p
+body fn 3321-3483	known p
+body fn 3485-3531	known p
+body fn 3636-3697	known p
+body fn 3766-4141	known p
+body fn 4246-4311	known p
+body fn 4313-4359	known p
+body fn 4360-4421	known p
+sig Eq@3636 fn&(F8E4M3, F8E4M3) Bool
+sig Eq@4360 fn&(F8E5M2, F8E5M2) Bool
+sig F64@3321 fn&(F8E4M3) F64
+sig F64@4246 fn&(F8E5M2) F64
+sig Str@3485 fn&(F8E4M3) String
+sig Str@4313 fn&(F8E5M2) String
+sig f8Decode@2428 fn&(I32, I32, I32) F64
+sig f8E4M3Bits@2876 fn&(F64) U8
+sig f8E5M2Bits@3766 fn&(F64) U8
+sig f8Encode@1499 fn&(F64, I32, I32, I32) I32
+sig f8Pow2@1132 fn&(I32) F64
+sig f8Sign@2809 fn&(F64) I32
+end
+sum d3610c6f066d3d917ce03621660aa60fd95826d7f102c6446c7cb0a7476180c3

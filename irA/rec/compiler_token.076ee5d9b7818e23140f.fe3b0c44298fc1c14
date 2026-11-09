@@ -1,0 +1,22 @@
+olang front record
+body ctor 0-0	known p
+body fn 12593-12750	known p
+body fn 2576-2639	known p
+body fn 2703-3257	known p
+body fn 3421-6758	known p
+body fn 6850-7277	known p
+body fn 7472-12530	known p
+body global LineBreak	known p
+body global LineStart	known p
+body global Space	known p
+baked LineBreak [8 01]
+baked LineStart [8 04]
+baked Space [8 02]
+sig Describe@6850 fn&(Tok) String
+sig EndsStatement@2703 fn&(Tok) Bool
+sig Has@2576 fn&(Token, U8) Bool
+sig Text@3421 fn&(Tok) String&
+sig Tok.Keyword@7472 fn&(String&, I64, I64) Tok
+sig spells@12593 fn&(String&, I64, String&) Bool
+end
+sum 7478bd8a5c569a73f00b5f63c5940ee5a6dd7b6e6bb4f44e3968d3b11a0ef0ba

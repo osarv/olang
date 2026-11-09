@@ -1,0 +1,214 @@
+; olang - emitted by the self-hosted compiler (compiler/emit.olang)
+target triple = "x86_64-pc-linux-gnu"
+
+%olang.chunk = type { ptr, i64, i64, i64, i64, i64, ptr, i64 }
+%olang.pool = type { [128 x ptr], i128, i64, i64, i64 }
+%olang.dtornode = type { ptr, ptr, ptr, ptr, ptr }
+%olang.unwind = type { ptr, ptr, ptr }
+%olang.task = type { ptr, i64, ptr, i64, ptr }
+%olang.worker = type { ptr, ptr, ptr, i64, ptr, [40 x i8], [48 x i8] }
+%olang.merge = type { ptr, ptr }
+%olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr, ptr }
+%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr, ptr, ptr }
+%olang.stackrun = type { ptr, ptr, i32, i32, ptr, ptr }
+%olang.builder = type { ptr, i64, i64, ptr, ptr }
+%"<stdio.h>:c__G_fpos64_t" = type { i64, %"<stdio.h>:c___mbstate_t" }
+%"<stdio.h>:c___mbstate_t" = type { [2 x i32] }
+%"<stdio.h>:c__G_fpos_t" = type { i64, %"<stdio.h>:c___mbstate_t" }
+%"<stdio.h>:cookie_io_functions_t" = type { ptr, ptr, ptr, ptr }
+@G_2e_3cstdio_2eh_3e_2eBUFSIZ = constant <{ [4 x i8] }> <{ [4 x i8] c"\00\20\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eEOF = constant <{ [4 x i8] }> <{ [4 x i8] c"\FF\FF\FF\FF" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eFILENAME__MAX = constant <{ [4 x i8] }> <{ [4 x i8] c"\00\10\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eFOPEN__MAX = constant <{ [4 x i8] }> <{ [4 x i8] c"\10\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eL__ctermid = constant <{ [4 x i8] }> <{ [4 x i8] c"\09\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eL__cuserid = constant <{ [4 x i8] }> <{ [4 x i8] c"\09\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eL__tmpnam = constant <{ [4 x i8] }> <{ [4 x i8] c"\14\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eP__tmpdir = constant <{ [8 x i8], ptr }> <{ [8 x i8] c"\04\00\00\00\00\00\00\00", ptr @G_2e_3cstdio_2eh_3e_2eP__tmpdir.k1 }>, align 8
+@G_2e_3cstdio_2eh_3e_2eP__tmpdir.k1 = internal global <{ [4 x i8] }> <{ [4 x i8] c"\2F\74\6D\70" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eRENAME__EXCHANGE = constant <{ [4 x i8] }> <{ [4 x i8] c"\02\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eRENAME__NOREPLACE = constant <{ [4 x i8] }> <{ [4 x i8] c"\01\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eRENAME__WHITEOUT = constant <{ [4 x i8] }> <{ [4 x i8] c"\04\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eSEEK__CUR = constant <{ [4 x i8] }> <{ [4 x i8] c"\01\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eSEEK__DATA = constant <{ [4 x i8] }> <{ [4 x i8] c"\03\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eSEEK__END = constant <{ [4 x i8] }> <{ [4 x i8] c"\02\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eSEEK__HOLE = constant <{ [4 x i8] }> <{ [4 x i8] c"\04\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eSEEK__SET = constant <{ [4 x i8] }> <{ [4 x i8] c"\00\00\00\00" }>, align 8
+@G_2e_3cstdio_2eh_3e_2eTMP__MAX = constant <{ [4 x i8] }> <{ [4 x i8] c"\F8\A2\03\00" }>, align 8
+define dso_local %"<stdio.h>:c__G_fpos64_t" @_3cstdio_2eh_3e_3ac____G__fpos64__t_2ector(ptr %v0) #0 {
+entry:
+  %l0 = alloca i64
+  %l2 = alloca %"<stdio.h>:c___mbstate_t"
+  %rv = alloca %"<stdio.h>:c__G_fpos64_t"
+  br label %start
+start:
+  br label %bb0
+bb0:
+  store i64 0, ptr %l0, !tbaa !24
+  %t1 = call %"<stdio.h>:c___mbstate_t" @olang_2emir_2eHelperKind_2eZero_2e_3cstdio_2eh_3e_3ac______mbstate__t()
+  store %"<stdio.h>:c___mbstate_t" %t1, ptr %l2
+  br label %bb1
+bb1:
+  %t2 = load %"<stdio.h>:c___mbstate_t", ptr %l2
+  %t3 = load i64, ptr %l0, !tbaa !24
+  %t4 = insertvalue %"<stdio.h>:c__G_fpos64_t" undef, i64 %t3, 0
+  %t6 = insertvalue %"<stdio.h>:c__G_fpos64_t" %t4, %"<stdio.h>:c___mbstate_t" %t2, 1
+  store %"<stdio.h>:c__G_fpos64_t" %t6, ptr %rv
+  br label %ret
+ret:
+  %rr = load %"<stdio.h>:c__G_fpos64_t", ptr %rv
+  ret %"<stdio.h>:c__G_fpos64_t" %rr
+}
+
+define dso_local %"<stdio.h>:c__G_fpos_t" @_3cstdio_2eh_3e_3ac____G__fpos__t_2ector(ptr %v0) #0 {
+entry:
+  %l0 = alloca i64
+  %l2 = alloca %"<stdio.h>:c___mbstate_t"
+  %rv = alloca %"<stdio.h>:c__G_fpos_t"
+  br label %start
+start:
+  br label %bb0
+bb0:
+  store i64 0, ptr %l0, !tbaa !24
+  %t1 = call %"<stdio.h>:c___mbstate_t" @olang_2emir_2eHelperKind_2eZero_2e_3cstdio_2eh_3e_3ac______mbstate__t()
+  store %"<stdio.h>:c___mbstate_t" %t1, ptr %l2
+  br label %bb1
+bb1:
+  %t2 = load %"<stdio.h>:c___mbstate_t", ptr %l2
+  %t3 = load i64, ptr %l0, !tbaa !24
+  %t4 = insertvalue %"<stdio.h>:c__G_fpos_t" undef, i64 %t3, 0
+  %t6 = insertvalue %"<stdio.h>:c__G_fpos_t" %t4, %"<stdio.h>:c___mbstate_t" %t2, 1
+  store %"<stdio.h>:c__G_fpos_t" %t6, ptr %rv
+  br label %ret
+ret:
+  %rr = load %"<stdio.h>:c__G_fpos_t", ptr %rv
+  ret %"<stdio.h>:c__G_fpos_t" %rr
+}
+
+define dso_local %"<stdio.h>:c___mbstate_t" @_3cstdio_2eh_3e_3ac______mbstate__t_2ector(ptr %v0) #0 {
+entry:
+  %rv = alloca %"<stdio.h>:c___mbstate_t"
+  br label %start
+start:
+  br label %bb0
+bb0:
+  %t1 = insertvalue [2 x i32] undef, i32 0, 0
+  %t2 = insertvalue [2 x i32] %t1, i32 0, 1
+  %t5 = insertvalue %"<stdio.h>:c___mbstate_t" undef, [2 x i32] %t2, 0
+  store %"<stdio.h>:c___mbstate_t" %t5, ptr %rv
+  br label %ret
+ret:
+  %rr = load %"<stdio.h>:c___mbstate_t", ptr %rv
+  ret %"<stdio.h>:c___mbstate_t" %rr
+}
+
+define dso_local %"<stdio.h>:cookie_io_functions_t" @_3cstdio_2eh_3e_3acookie__io__functions__t_2ector(ptr %v0) #0 {
+entry:
+  %rv = alloca %"<stdio.h>:cookie_io_functions_t"
+  br label %start
+start:
+  br label %bb0
+bb0:
+  %t2 = insertvalue %"<stdio.h>:cookie_io_functions_t" undef, ptr null, 0
+  %t4 = insertvalue %"<stdio.h>:cookie_io_functions_t" %t2, ptr null, 1
+  %t6 = insertvalue %"<stdio.h>:cookie_io_functions_t" %t4, ptr null, 2
+  %t8 = insertvalue %"<stdio.h>:cookie_io_functions_t" %t6, ptr null, 3
+  store %"<stdio.h>:cookie_io_functions_t" %t8, ptr %rv
+  br label %ret
+ret:
+  %rr = load %"<stdio.h>:cookie_io_functions_t", ptr %rv
+  ret %"<stdio.h>:cookie_io_functions_t" %rr
+}
+
+define linkonce_odr %"<stdio.h>:c___mbstate_t" @olang_2emir_2eHelperKind_2eZero_2e_3cstdio_2eh_3e_3ac______mbstate__t() #0 {
+entry:
+  %l0 = alloca %"<stdio.h>:c___mbstate_t"
+  %rv = alloca %"<stdio.h>:c___mbstate_t"
+  br label %start
+start:
+  br label %bb0
+bb0:
+  %t1 = load ptr, ptr @__olang_prog_scope
+  %t2 = call %"<stdio.h>:c___mbstate_t" @_3cstdio_2eh_3e_3ac______mbstate__t_2ector(ptr %t1)
+  store %"<stdio.h>:c___mbstate_t" %t2, ptr %l0
+  br label %bb1
+bb1:
+  %t3 = load %"<stdio.h>:c___mbstate_t", ptr %l0
+  store %"<stdio.h>:c___mbstate_t" %t3, ptr %rv
+  br label %ret
+ret:
+  %rr = load %"<stdio.h>:c___mbstate_t", ptr %rv
+  ret %"<stdio.h>:c___mbstate_t" %rr
+}
+
+@__olang_prog_scope = external thread_local(initialexec) global ptr
+
+!20 = !{!"olang"}
+!99 = !{!"branch_weights", i32 1, i32 2000}
+!49 = !{!"scopehdr", !20, i64 0}
+!50 = !{!"chunkhdr", !20, i64 0}
+!59 = !{!49, !49, i64 0}
+!60 = !{!50, !50, i64 0}
+!17 = !{!"arraydesc", !20, i64 0}
+!18 = !{!"closure", !20, i64 0}
+!47 = !{!"arraydesc[]", !20, i64 0}
+!19 = !{!"ref", !20, i64 0}
+!48 = !{!"ref[]", !20, i64 0}
+!29 = !{!19, !19, i64 0}
+!39 = !{!48, !48, i64 0}
+!27 = !{!17, !17, i64 0}
+!28 = !{!18, !18, i64 0}
+!37 = !{!47, !47, i64 0}
+!11 = !{!"bool", !20, i64 0}
+!21 = !{!11, !11, i64 0}
+!41 = !{!"bool[]", !20, i64 0}
+!31 = !{!41, !41, i64 0}
+!51 = !{!"i8", !20, i64 0}
+!61 = !{!51, !51, i64 0}
+!91 = !{!"i8[]", !20, i64 0}
+!81 = !{!91, !91, i64 0}
+!52 = !{!"i16", !20, i64 0}
+!62 = !{!52, !52, i64 0}
+!92 = !{!"i16[]", !20, i64 0}
+!82 = !{!92, !92, i64 0}
+!13 = !{!"int32", !20, i64 0}
+!23 = !{!13, !13, i64 0}
+!43 = !{!"int32[]", !20, i64 0}
+!33 = !{!43, !43, i64 0}
+!14 = !{!"int64", !20, i64 0}
+!24 = !{!14, !14, i64 0}
+!44 = !{!"int64[]", !20, i64 0}
+!34 = !{!44, !44, i64 0}
+!12 = !{!"byte", !20, i64 0}
+!22 = !{!12, !12, i64 0}
+!42 = !{!"byte[]", !20, i64 0}
+!32 = !{!42, !42, i64 0}
+!53 = !{!"u16", !20, i64 0}
+!63 = !{!53, !53, i64 0}
+!93 = !{!"u16[]", !20, i64 0}
+!83 = !{!93, !93, i64 0}
+!54 = !{!"u32", !20, i64 0}
+!64 = !{!54, !54, i64 0}
+!94 = !{!"u32[]", !20, i64 0}
+!84 = !{!94, !94, i64 0}
+!55 = !{!"u64", !20, i64 0}
+!65 = !{!55, !55, i64 0}
+!95 = !{!"u64[]", !20, i64 0}
+!85 = !{!95, !95, i64 0}
+!56 = !{!"f16", !20, i64 0}
+!66 = !{!56, !56, i64 0}
+!96 = !{!"f16[]", !20, i64 0}
+!86 = !{!96, !96, i64 0}
+!57 = !{!"bf16", !20, i64 0}
+!67 = !{!57, !57, i64 0}
+!97 = !{!"bf16[]", !20, i64 0}
+!87 = !{!97, !97, i64 0}
+!15 = !{!"float32", !20, i64 0}
+!25 = !{!15, !15, i64 0}
+!45 = !{!"float32[]", !20, i64 0}
+!35 = !{!45, !45, i64 0}
+!16 = !{!"float64", !20, i64 0}
+!26 = !{!16, !16, i64 0}
+!46 = !{!"float64[]", !20, i64 0}
+!36 = !{!46, !46, i64 0}
+
+attributes #0 = { null_pointer_is_valid "target-cpu"="sapphirerapids" "target-features"="+64bit,+adx,+aes,+amx-bf16,+amx-int8,+amx-tile,+avx,+avx2,-avx512bf16,+avx512bitalg,+avx512bw,+avx512cd,+avx512dq,+avx512f,+avx512fp16,+avx512ifma,+avx512vbmi,+avx512vbmi2,+avx512vl,+avx512vnni,+avx512vpopcntdq,+avxvnni,+bmi,+bmi2,+cldemote,+clflushopt,+clwb,+cmov,+crc32,+cx16,+cx8,+evex512,+f16c,+fma,+fsgsbase,+fxsr,+gfni,+invpcid,+lzcnt,+mmx,+movbe,+movdir64b,+movdiri,+pclmul,+popcnt,+prfchw,+rdpid,+rdrnd,+rdseed,+rtm,+sahf,+serialize,+sha,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+tsxldtrk,+vaes,+vpclmulqdq,+wbnoinvd,+x87,+xsave,+xsavec,+xsaveopt,+xsaves,-amx-complex,-amx-fp16,-avx10.1-256,-avx10.1-512,-avx512er,-avx512pf,-avx512vp2intersect,-avxifma,-avxneconvert,-avxvnniint16,-avxvnniint8,-clzero,-cmpccxadd,-enqcmd,-fma4,-hreset,-kl,-lwp,-mwaitx,-pconfig,-pku,-prefetchi,-prefetchwt1,-ptwrite,-raoint,-rdpru,-sgx,-sha512,-shstk,-sm3,-sm4,-sse4a,-tbm,-uintr,-usermsr,-waitpkg,-widekl,-xop" "prefer-vector-width"="512" nounwind }

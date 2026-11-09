@@ -1,0 +1,18 @@
+olang front record
+body ctor 0-0	known p
+body fn 1471-1534	known p
+body fn 2142-3268	known p
+body fn 3314-3801	known p
+body fn 3927-4558	known p
+body fn 4591-4682	known p
+body fn 4756-4819	known p
+body global k	known p
+baked k [64 982f8a4291443771cffbc0b5a5dbb5e95bc25639f111f159a4823f92d55e1cab98aa07d8015b8312be853124c37d0c55745dbe72feb1de80a706dc9b74f19bc1c1699be48647beefc69dc10fcca10c246f2ce92daa84744adca9b05cda88f97652513e986dc631a8c82703b0c77f59bff30be0c64791a7d55163ca0667292914850ab72738211b2efc6d2c4d130d385354730a65bb0a6a762ec9c281852c7292a1e8bfa24b661aa8708b4bc2a3516cc719e892d1240699d685350ef470a06a1016c1a419086c371e4c774827b5bcb034b30c1c394aaad84e4fca9c5bf36f2e68ee828f746f63a5781478c8840802c78cfaffbe90eb6c50a4f7a3f9bef27871c6]
+sig Hex@4756 fn&(Array<U8>&) String
+sig Push@3314 fn&(mut Hasher&, Array<U8>&)
+sig Sum@3927 fn&(Hasher&) Array<U8>
+sig Sum@4591 fn&(Array<U8>&) Array<U8>
+sig block@2142 fn&(mut Hasher&, Array<U8>&, I64)
+sig rotr@1471 fn&(U32, U32) U32
+end
+sum 3fb71f54f3d0414ffef18f1796bb3d9a00fdf479e757edcc371cd1ef38193c91

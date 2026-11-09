@@ -1,0 +1,35 @@
+olang front record
+body ctor 0-0	known p,0,1,2
+body fn 10016-10645	known p
+body fn 10647-11040	known p
+body fn 1942-2197	known p
+body fn 2294-2497	known p
+body fn 2499-2629	known p grows|0|-|-|..Said|5|0|compiler/fetch|2550|2554|-1
+body fn 2631-3155	known p grows|0|-|-|..keys|5|0|compiler/fetch|3112|3116|-1 grows|0|-|-|..commits|8|0|compiler/fetch|3139|3143|-1
+body fn 3297-3478	known p grows|0|-|-|..keys|5|0|compiler/fetch|3355|3359|-1 grows|0|-|-|..commits|8|0|compiler/fetch|3355|3359|-1
+body fn 3650-4583	known p grows|0|-|-|..keys|5|0|compiler/fetch|3712|3716|-1 grows|0|-|-|..commits|8|0|compiler/fetch|3712|3716|-1
+body fn 4670-4854	known p grows|0|-|-|..updated|8|0|compiler/fetch|4823|4827|-1
+body fn 4897-5032	known p
+body fn 5108-5350	known p
+body fn 5501-5688	known p
+body fn 5690-5809	known p
+body fn 5994-9654	known p grows|0|-|-|..keys|5|0|compiler/fetch|6606|6612|-1 grows|0|-|-|..commits|8|0|compiler/fetch|6606|6612|-1 grows|0|-|-|..updated|8|0|compiler/fetch|6820|6830|-1 grows|0|-|-|..Said|5|0|compiler/fetch|7305|7308|-1
+body fn 9749-9907	known p
+body lambda 4095-4149	known p
+sig CacheDir@5501 fn&() String
+sig Fetch@5994 fn&(mut Fetcher&, String&, String&, String&) String ? FetchError
+sig GitBase@5690 fn&() String
+sig IsCommit@2294 fn&(String&) Bool
+sig Locked@3297 fn&(mut Fetcher&, String&) String& ? ? unlocked.Key
+sig NamePart@1942 fn&(String&) Bool
+sig commitAgain@10647 fn&(String&, String&, String&) String
+sig git@4897 fn&(Array<String&>&) Bool
+sig head@5108 fn&(String&) String
+sig load@2631 fn&(mut Fetcher&)
+sig lock@3650 fn&(mut Fetcher&, String&, String&)
+sig makeRepo@10016 fn&(String&, String&, String&) String
+sig say@2499 fn&(mut Fetcher&, String&)
+sig sh@9749 fn&(String&, Array<String&>&) Bool
+sig updatedNow@4670 fn&(mut Fetcher&, String&, Bool) Bool
+end
+sum 4b07760a1f93be50ac1bae9c8deb137f0a951c31610e8ac0101a3fa2496aefae

@@ -1,0 +1,28 @@
+olang front record
+body ctor 0-0	known p,0
+body fn 1177-1265	known p
+body fn 1368-1533	known p
+body fn 1655-2500	known p
+body fn 2562-3228	known p
+body fn 3283-3524	known p
+body fn 3600-3854	known p
+body fn 4263-4580	known p
+body fn 4582-4642	known p,0
+body fn 4727-4953	known p
+body fn 5044-5189	known p
+body global MaxRune	known p
+body global Replacement	known p
+baked MaxRune [8 ffff1000]
+baked Replacement [8 fdff0000]
+sig Count@3600 fn&(String&) I64 ? Error.Invalid
+sig Decode@1655 fn&(String&, I64) Rune, I64 ? Error.Invalid
+sig Encode@2562 fn&(Rune) String ? Error.Invalid
+sig FromRunes@5044 fn&(Array<Rune>&) String ? Error.Invalid
+sig IsValid@1177 fn&(Rune) Bool
+sig Len@1368 fn&(Rune) I64
+sig Next@4263 fn&(mut RuneIter&) Rune ? Exhausted
+sig RuneIter.Runes@4582 fn&(String&) RuneIter
+sig ToRunes@4727 fn&(String&) Array<Rune> ? Error.Invalid
+sig Valid@3283 fn&(String&) Bool
+end
+sum 6048d667b52bc65ab911d73c0f627d19c390becfd3619130aff026194cbac528

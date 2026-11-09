@@ -1,0 +1,18 @@
+source_filename = "std_filepath.loc.quick.ll"
+; olang - emitted by the self-hosted compiler (compiler/emit.olang)
+target triple = "x86_64-pc-linux-gnu"
+
+@olang_loc_1fc14433466d7ed9_4c0c0b85aca7f45d = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:178: array length out of range\0A\00"
+@olang_loc_25fb20074e4b49ae_c59224b0534d5022 = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:171: slice bounds out of range\0A\00"
+@olang_loc_3fc5cad3648832ab_e217ea960297dd9f = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:172: slice bounds out of range\0A\00"
+@olang_loc_5863906a03a0a60_f582400c809d7edc = weak_odr constant [70 x i8] c"/home/user/wt/r8pre/std/filepath.olang:44: slice bounds out of range\0A\00"
+@olang_loc_668000db62bcfe0d_fbc758d8da0c96a1 = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:165: slice bounds out of range\0A\00"
+@olang_loc_6975e58e775568a4_668b7bdd2238b9c0 = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:177: slice bounds out of range\0A\00"
+@olang_loc_71a6929ab52159a_17fdf02a3251bece = weak_odr constant [70 x i8] c"/home/user/wt/r8pre/std/filepath.olang:56: array length out of range\0A\00"
+@olang_loc_88514958f43ac5a5_71c1ca98982dfa9 = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:125: array length out of range\0A\00"
+@olang_loc_8ad80b95f11637d2_e96efe0cac33c966 = weak_odr constant [70 x i8] c"/home/user/wt/r8pre/std/filepath.olang:22: slice bounds out of range\0A\00"
+@olang_loc_a602995b964ddbcf_b078a441454e17cb = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:107: slice bounds out of range\0A\00"
+@olang_loc_a7ca1e4a4409b00c_ac64874c39ec6a0 = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:108: array length out of range\0A\00"
+@olang_loc_b73a8112ea9a7cf_d6bea0aa8f8736c3 = weak_odr constant [70 x i8] c"/home/user/wt/r8pre/std/filepath.olang:25: slice bounds out of range\0A\00"
+@olang_loc_d061c7e25d631130_ed41ebaf937312b4 = weak_odr constant [71 x i8] c"/home/user/wt/r8pre/std/filepath.olang:154: slice bounds out of range\0A\00"
+@olang_loc_e2acb5ec38c923e0_e54a547ca8982b04 = weak_odr constant [70 x i8] c"/home/user/wt/r8pre/std/filepath.olang:33: slice bounds out of range\0A\00"

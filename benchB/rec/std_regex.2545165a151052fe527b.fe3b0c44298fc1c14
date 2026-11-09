@@ -1,0 +1,181 @@
+olang front record
+body fn 11408-12961	known p grows|0|-|-|..p.ranges|9|0|std/regex|11912|11922|-1 grows|0|-|-|..nodes|6|0|std/regex|12939|12948|-1
+body fn 13042-13494	known p grows|0|-|-|..p.ranges|9|0|std/regex|13324|13332|-1
+body fn 13552-14857	known p grows|0|-|-|..p.names|8|0|std/regex|13670|13675|-1 grows|0|-|-|..nodes|6|0|std/regex|13670|13675|-1 grows|0|-|-|..p.ranges|9|0|std/regex|13738|13743|-1 grows|0|-|-|..kids|5|0|std/regex|13670|13675|-1
+body fn 14859-15034	known p grows|0|-|-|..nodes|6|0|std/regex|15026|15029|-1
+body fn 15096-15325	known p
+body fn 15365-16750	known p grows|0|-|-|..p.names|8|0|std/regex|15430|15434|-1 grows|0|-|-|..nodes|6|0|std/regex|15430|15434|-1 grows|0|-|-|..p.ranges|9|0|std/regex|15430|15434|-1 grows|0|-|-|..kids|5|0|std/regex|15430|15434|-1
+body fn 16796-17241	known p grows|0|-|-|..p.names|8|0|std/regex|17098|17106|-1 grows|0|-|-|..nodes|6|0|std/regex|17098|17106|-1 grows|0|-|-|..p.ranges|9|0|std/regex|17098|17106|-1 grows|0|-|-|..kids|5|0|std/regex|17222|17228|-1
+body fn 17282-17590	known p grows|0|-|-|..p.names|8|0|std/regex|17354|17362|-1 grows|0|-|-|..nodes|6|0|std/regex|17354|17362|-1 grows|0|-|-|..p.ranges|9|0|std/regex|17354|17362|-1 grows|0|-|-|..kids|5|0|std/regex|17354|17362|-1
+body fn 17724-18577	known p
+body fn 18620-20591	known p grows|0|-|-|..p.names|8|0|std/regex|19614|19618|-1 grows|0|-|-|..nodes|6|0|std/regex|20583|20586|-1 grows|0|-|-|..p.ranges|9|0|std/regex|20349|20360|-1 grows|0|-|-|..kids|5|0|std/regex|20349|20360|-1
+body fn 20616-23766	known p grows|0|-|-|..p.ranges|9|0|std/regex|20955|20962|-1 grows|0|-|-|..p.op|5|0|std/regex|21051|21055|-1 grows|0|-|-|..p.x|4|0|std/regex|21051|21055|-1 grows|0|-|-|..p.y|4|0|std/regex|21051|21055|-1 grows|0|-|-|..p.z|4|0|std/regex|21051|21055|-1
+body fn 23887-24297	known p
+body fn 24350-24617	known p
+body fn 24702-25474	known p,0
+body fn 25511-25563	known p
+body fn 25636-25695	known p
+body fn 26010-26108	known p
+body fn 26110-26236	known p
+body fn 26325-26516	known p
+body fn 26518-26858	known p
+body fn 27590-28071	known p
+body fn 28298-29567	known p
+body fn 29740-31553	known p
+body fn 33934-34579	known p grows|0|-|-|..work|5|0|std/regex|34517|34521|-1
+body fn 34672-35547	known p grows|0|-|-|..from|5|0|std/regex|35345|35349|-1 grows|0|-|-|..count|6|0|std/regex|35375|35379|-1 grows|0|-|-|..pcs|4|0|std/regex|35399|35406|-1 grows|0|-|-|..flags|6|0|std/regex|35429|35433|-1 grows|0|-|-|..trans|6|0|std/regex|35470|35474|-1 grows|0|-|-|..nextSame|9|0|std/regex|35496|35500|-1 grows|0|-|-|..byHash|7|0|std/regex|35521|35524|-1
+body fn 35645-35897	known p grows|0|-|-|..work|5|0|std/regex|35736|35743|-1 grows|0|-|-|..from|5|0|std/regex|35886|35892|-1 grows|0|-|-|..count|6|0|std/regex|35886|35892|-1 grows|0|-|-|..pcs|4|0|std/regex|35886|35892|-1 grows|0|-|-|..flags|6|0|std/regex|35886|35892|-1 grows|0|-|-|..trans|6|0|std/regex|35886|35892|-1 grows|0|-|-|..nextSame|9|0|std/regex|35886|35892|-1 grows|0|-|-|..byHash|7|0|std/regex|35886|35892|-1
+body fn 35899-36393	known p
+body fn 36612-37487	known p grows|0|-|-|..work|5|0|std/regex|37192|37199|-1 grows|0|-|-|..from|5|0|std/regex|37378|37384|-1 grows|0|-|-|..count|6|0|std/regex|37378|37384|-1 grows|0|-|-|..pcs|4|0|std/regex|37378|37384|-1 grows|0|-|-|..flags|6|0|std/regex|37378|37384|-1 grows|0|-|-|..trans|6|0|std/regex|37378|37384|-1 grows|0|-|-|..nextSame|9|0|std/regex|37378|37384|-1 grows|0|-|-|..byHash|7|0|std/regex|37378|37384|-1 grows|0|-|-|..wide|5|0|std/regex|37446|37449|-1
+body fn 37489-37544	known p
+body fn 37690-38028	known p
+body fn 38229-39012	known p grows|0|-|-|..work|5|0|std/regex|38303|38310|-1 grows|0|-|-|..from|5|0|std/regex|38303|38310|-1 grows|0|-|-|..count|6|0|std/regex|38303|38310|-1 grows|0|-|-|..pcs|4|0|std/regex|38303|38310|-1 grows|0|-|-|..flags|6|0|std/regex|38303|38310|-1 grows|0|-|-|..trans|6|0|std/regex|38303|38310|-1 grows|0|-|-|..nextSame|9|0|std/regex|38303|38310|-1 grows|0|-|-|..byHash|7|0|std/regex|38303|38310|-1 grows|0|-|-|..wide|5|0|std/regex|38817|38821|-1
+body fn 39175-39513	known p grows|0|-|-|..work|5|0|std/regex|39242|39249|-1 grows|0|-|-|..from|5|0|std/regex|39242|39249|-1 grows|0|-|-|..count|6|0|std/regex|39242|39249|-1 grows|0|-|-|..pcs|4|0|std/regex|39242|39249|-1 grows|0|-|-|..flags|6|0|std/regex|39242|39249|-1 grows|0|-|-|..trans|6|0|std/regex|39242|39249|-1 grows|0|-|-|..nextSame|9|0|std/regex|39242|39249|-1 grows|0|-|-|..byHash|7|0|std/regex|39242|39249|-1 grows|0|-|-|..wide|5|0|std/regex|39432|39436|-1
+body fn 39624-39800	known p grows|0|-|-|..work|5|0|std/regex|39704|39707|-1 grows|0|-|-|..from|5|0|std/regex|39704|39707|-1 grows|0|-|-|..count|6|0|std/regex|39704|39707|-1 grows|0|-|-|..pcs|4|0|std/regex|39704|39707|-1 grows|0|-|-|..flags|6|0|std/regex|39704|39707|-1 grows|0|-|-|..trans|6|0|std/regex|39704|39707|-1 grows|0|-|-|..nextSame|9|0|std/regex|39704|39707|-1 grows|0|-|-|..byHash|7|0|std/regex|39704|39707|-1 grows|0|-|-|..wide|5|0|std/regex|39704|39707|-1 grows|1|-|-|..work|5|0|std/regex|39765|39770|-1 grows|1|-|-|..from|5|0|std/regex|39765|39770|-1 grows|1|-|-|..count|6|0|std/regex|39765|39770|-1 grows|1|-|-|..pcs|4|0|std/regex|39765|39770|-1 grows|1|-|-|..flags|6|0|std/regex|39765|39770|-1 grows|1|-|-|..trans|6|0|std/regex|39765|39770|-1 grows|1|-|-|..nextSame|9|0|std/regex|39765|39770|-1 grows|1|-|-|..byHash|7|0|std/regex|39765|39770|-1 grows|1|-|-|..wide|5|0|std/regex|39765|39770|-1
+body fn 39846-40106	known p
+body fn 40349-40499	known p
+body fn 40520-40578	known p,0
+body fn 40737-40916	known p,0
+body fn 40989-41164	known p
+body fn 41279-41492	known p
+body fn 42039-42588	known p grows|0|-|-|..fw.work|8|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.from|8|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.count|9|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.pcs|7|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.flags|9|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.trans|9|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.nextSame|12|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.byHash|10|0|std/regex|42165|42171|-1 grows|0|-|-|..fw.wide|8|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.work|8|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.from|8|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.count|9|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.pcs|7|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.flags|9|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.trans|9|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.nextSame|12|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.byHash|10|0|std/regex|42165|42171|-1 grows|0|-|-|..bw.wide|8|0|std/regex|42165|42171|-1
+body fn 42590-42833	known p,1
+body fn 42835-42915	known p,1
+body fn 43036-43211	known p
+body fn 43321-43824	known p,1
+body fn 43864-44218	known p
+body fn 44497-44761	known p
+body fn 44816-45083	known p
+body fn 45085-46367	known p grows|0|-|-|..chars|6|0|std/regex|45273|45281|-1
+body fn 46514-46810	known p,1
+body fn 4950-5100	known p grows|0|-|-|..op|3|0|std/regex|5016|5020|-1 grows|0|-|-|..x|2|0|std/regex|5033|5037|-1 grows|0|-|-|..y|2|0|std/regex|5049|5053|-1 grows|0|-|-|..z|2|0|std/regex|5065|5069|-1
+body fn 6322-6409	known p grows|0|-|-|..nodes|6|0|std/regex|6371|6375|-1
+body fn 6456-6631	known p grows|0|-|-|..kids|5|0|std/regex|6589|6596|-1 grows|0|-|-|..nodes|6|0|std/regex|6623|6626|-1
+body fn 6633-6687	known p
+body fn 6688-6735	known p
+body fn 6786-7033	known p
+body fn 7035-7121	known p grows|0|-|-|..p.ranges|9|0|std/regex|7092|7099|-1
+body fn 7173-7342	known p grows|0|-|-|..nodes|6|0|std/regex|7334|7337|-1
+body fn 7344-7790	known p grows|0|-|-|..p.ranges|9|0|std/regex|7423|7431|-1
+body fn 7856-8279	known p grows|0|-|-|..p.ranges|9|0|std/regex|7932|7941|-1
+body fn 8281-8481	known p
+body fn 8572-9857	known p
+body fn 9915-11365	known p grows|0|-|-|..p.ranges|9|0|std/regex|10201|10209|-1
+body global atLineEnd	known p
+body global atLineStart	known p
+body global atNotWord	known p
+body global atTextEnd	known p
+body global atTextStart	known p
+body global atWord	known p
+body global dfaMaxStates	known p
+body global dfaMinText	known p
+body global maxProgram	known p
+body global maxRepeat	known p
+body global nAlt	known p
+body global nAny	known p
+body global nAssert	known p
+body global nCat	known p
+body global nClass	known p
+body global nEmpty	known p
+body global nGroup	known p
+body global nLit	known p
+body global nRepeat	known p
+body global opAny	known p
+body global opAssert	known p
+body global opChar	known p
+body global opClass	known p
+body global opJmp	known p
+body global opMatch	known p
+body global opSave	known p
+body global opSplit	known p
+baked atLineEnd [8 0300000000000000]
+baked atLineStart [8 0200000000000000]
+baked atNotWord [8 0500000000000000]
+baked atTextEnd [8 0100000000000000]
+baked atTextStart [8 0000000000000000]
+baked atWord [8 0400000000000000]
+baked dfaMaxStates [8 8813000000000000]
+baked dfaMinText [8 4000000000000000]
+baked maxProgram [8 a086010000000000]
+baked maxRepeat [8 e803000000000000]
+baked nAlt [8 0500000000000000]
+baked nAny [8 0300000000000000]
+baked nAssert [8 0800000000000000]
+baked nCat [8 0400000000000000]
+baked nClass [8 0200000000000000]
+baked nEmpty [8 0000000000000000]
+baked nGroup [8 0700000000000000]
+baked nLit [8 0100000000000000]
+baked nRepeat [8 0600000000000000]
+baked opAny [8 0200000000000000]
+baked opAssert [8 0600000000000000]
+baked opChar [8 0000000000000000]
+baked opClass [8 0100000000000000]
+baked opJmp [8 0400000000000000]
+baked opMatch [8 0700000000000000]
+baked opSave [8 0500000000000000]
+baked opSplit [8 0300000000000000]
+sig Count@43864 fn&(Regex&, String&) I64
+sig Find@42835 fn&(Regex&, String&) Match ? NotFound
+sig FindAll@43321 fn&(Regex&, String&) Vec<Match>
+sig FindFrom@42590 fn&(Regex&, String&, I64) Match ? NotFound
+sig Group@40737 fn&(Match&, I64) String& ? NotFound
+sig GroupNamed@41279 fn&(Regex&, String&) I64 ? NotFound
+sig Groups@25636 fn&(Regex&) I64
+sig Matches@39846 fn&(Regex&, String&) Bool
+sig Regex.Compile@24702 fn&(String&) Regex ? SyntaxError
+sig Replace@44497 fn&(Regex&, String&, String&) String
+sig ReplaceFunc@44816 fn&(Regex&, String&, fn&(m Match) String) String
+sig Span@40989 fn&(Match&, I64) I64, I64 ? NotFound
+sig Split@46514 fn&(Regex&, String&) mut Array<String&>&
+sig Str@25511 fn&(Regex&) String
+sig Text@40520 fn&(Match&) String&
+sig add@28298 fn&(mut machine&, mut threads&, I64, I64)
+sig add@6322 fn&(mut parser&, node) I64
+sig addRange@7035 fn&(mut parser&, U32, U32)
+sig alternation@17282 fn&(mut parser&) I64 ? SyntaxError
+sig atom@13552 fn&(mut parser&) I64 ? SyntaxError
+sig begin@39175 fn&(mut dfa&, String&, I64, I64) I64
+sig class@11408 fn&(mut parser&) I64 ? SyntaxError
+sig classNode@7173 fn&(mut parser&, I64, Bool) I64
+sig closure@33934 fn&(mut dfa&, I64)
+sig copyOf@40349 fn&(Array<I64>&) mut Array<I64>&
+sig count@15096 fn&(mut parser&) I64
+sig dead@37489 fn&(dfa&, I64) Bool
+sig emit@4950 fn&(mut prog&, I64, I64, I64, I64) I64
+sig emitNode@20616 fn&(mut parser&, I64) ? SyntaxError.TooBig
+sig end@38229 fn&(mut dfa&, String&, I64, Bool) I64
+sig escapedRune@8572 fn&(mut parser&, Char) U32 ? SyntaxError.BadEscape
+sig expand@45085 fn&(mut StringBuilder&, Regex&, Match&, String&)
+sig findPrefix@23887 fn&(mut prog&)
+sig flags@17724 fn&(mut parser&) Bool ? SyntaxError.BadFlag
+sig foldRanges@13042 fn&(mut parser&, I64)
+sig group@18620 fn&(mut parser&) I64 ? SyntaxError
+sig has@26010 fn&(threads&, I64) Bool
+sig hexValue@8281 fn&(Char) I64
+sig holds@27590 fn&(machine&, I64, I64) Bool
+sig inClass@26518 fn&(prog&, I64, I64) Bool
+sig initial@35645 fn&(mut dfa&, Bool) I64
+sig intern@34672 fn&(mut dfa&, I64) I64
+sig isWord@26110 fn&(I64) Bool
+sig literal@14859 fn&(mut parser&, U32) I64
+sig locate@39624 fn&(mut dfa&, mut dfa&, String&, I64) I64, I64
+sig more@6633 fn&(parser&) Bool
+sig negatedPerl@7856 fn&(mut parser&, Char)
+sig next@42039 fn&(mut searcher&, I64) Bool
+sig onFrom@43036 fn&(String&, I64, I64) I64
+sig pack@24350 fn&(prog&) mut Array<I64>&
+sig parent@6456 fn&(mut parser&, I64, Vec<I64>&) I64
+sig peek@6688 fn&(parser&) Char
+sig perlClass@7344 fn&(mut parser&, Char) Bool
+sig posixClass@9915 fn&(mut parser&) ? SyntaxError.UnclosedClass, SyntaxError.BadRange
+sig repeated@15365 fn&(mut parser&) I64 ? SyntaxError
+sig run@29740 fn&(mut machine&, I64, Bool) Bool
+sig rune@6786 fn&(mut parser&) U32
+sig runeAt@26325 fn&(String&, I64) I64, I64
+sig runeBefore@37690 fn&(String&, I64) I64, I64
+sig sequence@16796 fn&(mut parser&) I64 ? SyntaxError
+sig step@36612 fn&(mut dfa&, I64, I64) I64
+sig takes@35899 fn&(dfa&, I64, I64) Bool
+end
+sum d266f5ea3677df291c29732beb9d005f99b4d43fe4f8e6447839daa5cf63c72f

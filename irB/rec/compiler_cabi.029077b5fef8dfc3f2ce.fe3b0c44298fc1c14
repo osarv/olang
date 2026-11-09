@@ -1,0 +1,35 @@
+olang front record
+body fn 10010-10209	known p
+body fn 10293-10638	known p grows|1|-|-|..texts|6|0|compiler/cabi|10443|10449|-1 grows|1|-|-|..ids|4|0|compiler/cabi|10443|10449|-1 grows|0|-|-|..decls|6|0|compiler/cabi|10426|10433|-1 grows|0|-|-|..declKeys|9|0|compiler/cabi|10426|10433|-1 grows|0|-|-|..lists|6|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..listKeys|9|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..types|6|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..keys|5|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..depths|7|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..state|6|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..sizes|6|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..aligns|7|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..offsetsAt|10|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..payloads|9|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..llvm|5|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..plains|7|0|compiler/cabi|10418|10423|-1 grows|0|-|-|..bodies|7|0|compiler/cabi|10504|10517|-1 grows|0|-|-|..offsets|8|0|compiler/cabi|10575|10588|-1
+body fn 10725-11369	known p
+body fn 2414-3485	known p grows|3|-|-|.|0|0|compiler/cabi|2567|2571|-1
+body fn 3574-3745	known p
+body fn 3935-4212	known p
+body fn 4296-4972	known p
+body fn 5020-5248	known p
+body fn 5305-5459	known p
+body fn 5526-7614	known p
+body fn 7699-7946	known p
+body fn 7989-8153	known p
+body fn 8208-8364	known p
+body fn 8415-8532	known p
+body fn 8773-9123	known p
+body fn 9244-9898	known p
+sig Ext@3935 fn&(Table&, String&, TypeId) String
+sig Flatten@2414 fn&(mut Table&, TypeId, I64, mut Vec<Scalar>&)
+sig IsStruct@3574 fn&(Table&, TypeId) Bool
+sig PartsList@7989 fn&(Way&) String
+sig PartsType@7699 fn&(Way&) String
+sig Span@10010 fn&(Table&, Way&, TypeId) I64
+sig Way.Classify@5526 fn&(mut Table&, String&, TypeId, Bool) Way
+sig Way.Param@4296 fn&(mut Table&, String&, TypeId, mut Regs&) Way
+sig Way.Result@5020 fn&(mut Table&, String&, TypeId) Way
+sig at@8415 fn&(Vec<Scalar>&, I64) I64
+sig data@8208 fn&(Vec<Scalar>&, I64, I64) Bool
+sig inSse@5305 fn&(String&) Bool
+sig intAt@8773 fn&(Vec<Scalar>&, I64, I64) String, I64
+sig sseAt@9244 fn&(Vec<Scalar>&, I64) String, I64
+sig testDecl@10725 fn&(mut Table&, String&, TypeId) String
+sig testStruct@10293 fn&(mut Table&, mut Names&, String&, Array<TypeId>&) TypeId
+end
+sum f3764889374d4391c0a2d48a11fb281c6b0dcdde5e3dbebe6f7b602aaa661653

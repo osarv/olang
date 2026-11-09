@@ -1,0 +1,96 @@
+olang front record
+body ctor 0-0	known p,0,1,2
+body fn 10206-10798	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|10305|10308|-1 grows|0|-|-|..held|5|0|compiler/unparse|10660|10662|-1
+body fn 1037-1162	known p
+body fn 10800-13403	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|10951|10954|-1 grows|0|-|-|..held|5|0|compiler/unparse|11180|11185|-1
+body fn 1237-1369	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|1314|1317|-1 grows|0|-|-|..held|5|0|compiler/unparse|1333|1337|-1
+body fn 13424-14002	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|13698|13701|-1 grows|0|-|-|..held|5|0|compiler/unparse|13972|13974|-1
+body fn 14168-14474	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|14332|14335|-1 grows|0|-|-|..held|5|0|compiler/unparse|14422|14425|-1
+body fn 14476-16194	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|14638|14641|-1 grows|0|-|-|..held|5|0|compiler/unparse|14931|14939|-1
+body fn 1490-1710	known p
+body fn 16220-16517	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|16306|16309|-1 grows|0|-|-|..held|5|0|compiler/unparse|16447|16451|-1
+body fn 16634-16985	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|16878|16881|-1 grows|0|-|-|..held|5|0|compiler/unparse|16902|16906|-1
+body fn 16987-17453	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|17100|17103|-1 grows|0|-|-|..held|5|0|compiler/unparse|17038|17043|-1
+body fn 17455-17952	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|17535|17538|-1 grows|0|-|-|..held|5|0|compiler/unparse|17814|17819|-1
+body fn 17954-21418	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|18091|18098|-1 grows|0|-|-|..held|5|0|compiler/unparse|18621|18627|-1
+body fn 21603-22099	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|21676|21682|-1 grows|0|-|-|..held|5|0|compiler/unparse|21676|21682|-1
+body fn 2187-2236	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|2227|2231|-1
+body fn 22194-22435	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|22336|22339|-1 grows|0|-|-|..held|5|0|compiler/unparse|22383|22387|-1
+body fn 2238-2308	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|2285|2289|-1
+body fn 22437-22972	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|22484|22487|-1 grows|0|-|-|..held|5|0|compiler/unparse|22504|22508|-1
+body fn 22974-23132	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|23056|23059|-1 grows|0|-|-|..held|5|0|compiler/unparse|23076|23080|-1
+body fn 2310-2387	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|2356|2360|-1
+body fn 23134-24105	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|23230|23233|-1 grows|0|-|-|..held|5|0|compiler/unparse|23281|23285|-1
+body fn 24132-24260	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|24223|24226|-1 grows|0|-|-|..held|5|0|compiler/unparse|24245|24249|-1
+body fn 24351-24470	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|24442|24447|-1 grows|0|-|-|..held|5|0|compiler/unparse|24442|24447|-1
+body fn 24472-29581	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|24562|24566|-1 grows|0|-|-|..held|5|0|compiler/unparse|26270|26272|-1
+body fn 2658-2769	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|2692|2700|-1
+body fn 2797-4430	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|2882|2886|-1 grows|0|-|-|..held|5|0|compiler/unparse|2882|2886|-1
+body fn 29648-29821	known p
+body fn 29904-30407	known p
+body fn 4514-5029	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|4593|4596|-1 grows|0|-|-|..held|5|0|compiler/unparse|4822|4830|-1
+body fn 5133-5717	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|5275|5278|-1 grows|0|-|-|..held|5|0|compiler/unparse|5628|5634|-1
+body fn 5719-6013	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|5766|5769|-1 grows|0|-|-|..held|5|0|compiler/unparse|5783|5787|-1
+body fn 6015-6326	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|6106|6110|-1 grows|0|-|-|..held|5|0|compiler/unparse|6132|6136|-1
+body fn 6328-6790	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|6373|6378|-1 grows|0|-|-|..held|5|0|compiler/unparse|6373|6378|-1
+body fn 644-918	known p
+body fn 7052-7147	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|7101|7104|-1 grows|0|-|-|..held|5|0|compiler/unparse|7137|7140|-1
+body fn 7149-7698	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|7192|7195|-1 grows|0|-|-|..held|5|0|compiler/unparse|7207|7213|-1
+body fn 7798-8054	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|7881|7884|-1
+body fn 8108-8374	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|8214|8217|-1 grows|0|-|-|..held|5|0|compiler/unparse|8335|8347|-1
+body fn 8376-8517	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|8481|8485|-1 grows|0|-|-|..held|5|0|compiler/unparse|8481|8485|-1
+body fn 8647-8777	known p
+body fn 8779-8959	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|8859|8862|-1
+body fn 8961-9145	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|9090|9093|-1 grows|0|-|-|..held|5|0|compiler/unparse|9112|9117|-1
+body fn 9147-9447	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|9247|9251|-1 grows|0|-|-|..held|5|0|compiler/unparse|9194|9199|-1
+body fn 9449-9571	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|9535|9538|-1
+body fn 9573-10106	known p grows|0|-|-|..b.chars|8|0|compiler/unparse|9626|9631|-1 grows|0|-|-|..held|5|0|compiler/unparse|9626|9631|-1
+body global MaxIndent	known p
+baked MaxIndent [8 4000000000000000]
+sig HeldBranches@1490 fn&(Array<Decl&>&, Names&, String&, Diagnostics&) Array<Span>
+sig Unparse@644 fn&(Array<Decl&>&, Names&, String&, Diagnostics&) String
+sig attrs@1237 fn&(mut writer&, Array<Attr&>&)
+sig bareSpread@29648 fn&(Expr&, Names&) Bool
+sig block@16220 fn&(mut writer&, Array<Stmt&>&)
+sig body@16634 fn&(mut writer&, Array<Stmt&>&)
+sig branch@22194 fn&(mut writer&, Branch&)
+sig caseBody@22974 fn&(mut writer&, Case&)
+sig clauses@17455 fn&(mut writer&, Array<Catch&>&)
+sig contract@8108 fn&(mut writer&, Sig&)
+sig contractItem@8376 fn&(mut writer&, Stmt&)
+sig decl@2797 fn&(mut writer&, Decl&)
+sig errorDecl@5133 fn&(mut writer&, NameId, Array<NameId>&, Array<Path&>&, Array<CaseDecl&>&)
+sig errors@8779 fn&(mut writer&, Sig&)
+sig expr@24472 fn&(mut writer&, Expr&)
+sig exprs@24132 fn&(mut writer&, Array<Expr&>&)
+sig externBlock@4514 fn&(mut writer&, Span, Array<Decl&>&)
+sig externFn@7052 fn&(mut writer&, Func&)
+sig func@6328 fn&(mut writer&, Func&)
+sig funcType@14168 fn&(mut writer&, Sig&, String&)
+sig hidden@1037 fn&(Decl&) Bool
+sig ifStmt@21603 fn&(mut writer&, If&)
+sig items@24351 fn&(mut writer&, Array<Expr&>&)
+sig match@22437 fn&(mut writer&, Match&)
+sig name@2238 fn&(mut writer&, NameId)
+sig nl@2658 fn&(mut writer&)
+sig noErrorsOf@8647 fn&(TypeRef&) Bool
+sig param@9147 fn&(mut writer&, Param&)
+sig params@8961 fn&(mut writer&, Array<Param&>&)
+sig path@9449 fn&(mut writer&, Path&)
+sig pattern@23134 fn&(mut writer&, Pattern&)
+sig promises@7798 fn&(mut writer&, Array<Promise&>&)
+sig put@2187 fn&(mut writer&, String&)
+sig sig@7149 fn&(mut writer&, Sig&)
+sig span@2310 fn&(mut writer&, Span)
+sig startsWithMinus@29904 fn&(Expr&) Bool
+sig stmt@17954 fn&(mut writer&, Stmt&)
+sig topBranch@6015 fn&(mut writer&, TopBranch&)
+sig topIf@5719 fn&(mut writer&, TopIf&)
+sig ty@14476 fn&(mut writer&, TypeRef&)
+sig typeBody@10800 fn&(mut writer&, TypeBody&)
+sig typeDecl@9573 fn&(mut writer&, TypeDecl&)
+sig typeParams@10206 fn&(mut writer&, Array<TypeParam&>&)
+sig types@13424 fn&(mut writer&, Array<TypeRef&>&)
+sig varDecl@16987 fn&(mut writer&, VarDecl&)
+end
+sum c30cdc955ac6c1fa0114f21af26eda1a043730e2bdd3b9ffd6ab513abc2c4234

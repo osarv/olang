@@ -1,0 +1,89 @@
+olang front record
+body fn 10013-10141	known p
+body fn 10143-10255	known p
+body fn 10549-11048	known p
+body fn 11092-11249	known p
+body fn 11251-12179	known p grows|0|-|-|..lKind|6|0|compiler/fmt|11765|11769|-1 grows|0|-|-|..lIndent|8|0|compiler/fmt|11795|11799|-1 grows|0|-|-|..lCodeS|7|0|compiler/fmt|11824|11828|-1 grows|0|-|-|..lCodeE|7|0|compiler/fmt|11853|11857|-1 grows|0|-|-|..lComS|6|0|compiler/fmt|11881|11885|-1 grows|0|-|-|..lComE|6|0|compiler/fmt|11910|11914|-1 grows|0|-|-|..lMulti|7|0|compiler/fmt|11940|11944|-1
+body fn 12247-12592	known p grows|0|-|-|..lComS|6|0|compiler/fmt|12292|12296|-1 grows|0|-|-|..lComE|6|0|compiler/fmt|12320|12324|-1 grows|0|-|-|..lKind|6|0|compiler/fmt|12348|12352|-1 grows|0|-|-|..lIndent|8|0|compiler/fmt|12370|12374|-1 grows|0|-|-|..lCodeS|7|0|compiler/fmt|12421|12425|-1 grows|0|-|-|..lCodeE|7|0|compiler/fmt|12451|12455|-1 grows|0|-|-|..lMulti|7|0|compiler/fmt|12484|12488|-1
+body fn 12594-12706	known p
+body fn 12811-13544	known p grows|0|-|-|..lKind|6|0|compiler/fmt|12922|12927|-1 grows|0|-|-|..lIndent|8|0|compiler/fmt|12922|12927|-1 grows|0|-|-|..lCodeS|7|0|compiler/fmt|12922|12927|-1 grows|0|-|-|..lCodeE|7|0|compiler/fmt|12922|12927|-1 grows|0|-|-|..lComS|6|0|compiler/fmt|12922|12927|-1 grows|0|-|-|..lComE|6|0|compiler/fmt|12922|12927|-1 grows|0|-|-|..lMulti|7|0|compiler/fmt|12922|12927|-1 grows|0|-|-|..codes.chars|12|0|compiler/fmt|13080|13088|-1 grows|0|-|-|..stKind|7|0|compiler/fmt|13534|13539|-1 grows|0|-|-|..stChild|8|0|compiler/fmt|13534|13539|-1 grows|0|-|-|..stClose|8|0|compiler/fmt|13534|13539|-1
+body fn 13546-13633	known p
+body fn 13928-14361	known p
+body fn 14414-15171	known p grows|0|-|-|..stKind|7|0|compiler/fmt|14845|14849|-1 grows|0|-|-|..stChild|8|0|compiler/fmt|14845|14849|-1 grows|0|-|-|..stClose|8|0|compiler/fmt|14845|14849|-1
+body fn 15173-15311	known p grows|0|-|-|..stKind|7|0|compiler/fmt|15247|15251|-1 grows|0|-|-|..stChild|8|0|compiler/fmt|15272|15276|-1 grows|0|-|-|..stClose|8|0|compiler/fmt|15298|15302|-1
+body fn 15355-15664	known p
+body fn 15776-16263	known p
+body fn 16322-16485	known p
+body fn 16672-17006	known p
+body fn 17083-17334	known p
+body fn 17515-17825	known p
+body fn 17827-17926	known p
+body fn 18033-19043	known p
+body fn 19244-19969	known p
+body fn 20043-23379	known p
+body fn 23454-24165	known p
+body fn 24264-24880	known p grows|1|-|-|..chars|6|0|compiler/fmt|24386|24394|-1
+body fn 25163-26089	known p grows|4|-|-|..chars|6|0|compiler/fmt|25893|25897|-1
+body fn 26482-27602	known p
+body fn 2687-3199	known p
+body fn 27884-28111	known p grows|3|-|-|..texts|6|0|compiler/fmt|28066|28072|-1 grows|3|-|-|..ids|4|0|compiler/fmt|28066|28072|-1
+body fn 28113-28196	known p
+body fn 28640-29018	known p grows|0|-|-|..paths|6|0|compiler/fmt|28914|28918|-1 grows|0|-|-|..types|6|0|compiler/fmt|28914|28918|-1 grows|0|-|-|..impMod|7|0|compiler/fmt|28914|28918|-1 grows|0|-|-|..impAlias|9|0|compiler/fmt|28914|28918|-1 grows|0|-|-|..impTarget|10|0|compiler/fmt|28914|28918|-1
+body fn 29141-29552	known p
+body fn 29641-31584	known p grows|0|-|-|..paths|6|0|compiler/fmt|29973|29977|-1 grows|0|-|-|..types|6|0|compiler/fmt|31311|31315|-1 grows|0|-|-|..impMod|7|0|compiler/fmt|31486|31490|-1 grows|0|-|-|..impAlias|9|0|compiler/fmt|31513|31517|-1 grows|0|-|-|..impTarget|10|0|compiler/fmt|31551|31555|-1
+body fn 31721-32022	known p grows|2|-|-|..texts|6|0|compiler/fmt|31821|31829|-1 grows|2|-|-|..ids|4|0|compiler/fmt|31821|31829|-1 grows|1|-|-|..fns|4|0|compiler/fmt|31821|31829|-1 grows|1|-|-|..fnsQualified|13|0|compiler/fmt|31821|31829|-1 grows|1|-|-|..bare|5|0|compiler/fmt|31821|31829|-1 grows|1|-|-|..qualified|10|0|compiler/fmt|31821|31829|-1
+body fn 32024-32310	known p grows|2|-|-|..texts|6|0|compiler/fmt|32203|32208|-1 grows|2|-|-|..ids|4|0|compiler/fmt|32203|32208|-1 grows|1|-|-|..fns|4|0|compiler/fmt|32203|32208|-1 grows|1|-|-|..fnsQualified|13|0|compiler/fmt|32203|32208|-1 grows|1|-|-|..bare|5|0|compiler/fmt|32272|32275|-1 grows|1|-|-|..qualified|10|0|compiler/fmt|32272|32275|-1
+body fn 32312-32718	known p grows|2|-|-|..texts|6|0|compiler/fmt|32594|32602|-1 grows|2|-|-|..ids|4|0|compiler/fmt|32594|32602|-1 grows|1|-|-|..fns|4|0|compiler/fmt|32594|32602|-1 grows|1|-|-|..fnsQualified|13|0|compiler/fmt|32594|32602|-1 grows|1|-|-|..bare|5|0|compiler/fmt|32594|32602|-1 grows|1|-|-|..qualified|10|0|compiler/fmt|32594|32602|-1
+body fn 32931-33898	known p
+body fn 3300-3409	known p
+body fn 3411-3537	known p
+body fn 5684-5749	known p
+body fn 5750-5839	known p,0
+body fn 5841-8399	known p grows|0|-|-|..real|5|0|compiler/fmt|6073|6077|-1 grows|0|-|-|..ended|6|0|compiler/fmt|6101|6105|-1 grows|0|-|-|..lComS|6|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..lComE|6|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..lKind|6|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..lIndent|8|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..lCodeS|7|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..lCodeE|7|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..lMulti|7|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..codes.chars|12|0|compiler/fmt|7471|7474|-1 grows|0|-|-|..stKind|7|0|compiler/fmt|8001|8006|-1 grows|0|-|-|..stChild|8|0|compiler/fmt|8001|8006|-1 grows|0|-|-|..stClose|8|0|compiler/fmt|8001|8006|-1
+body fn 8561-9287	known p grows|0|-|-|..lComS|6|0|compiler/fmt|8739|8745|-1 grows|0|-|-|..lComE|6|0|compiler/fmt|8739|8745|-1 grows|0|-|-|..lKind|6|0|compiler/fmt|8739|8745|-1 grows|0|-|-|..lIndent|8|0|compiler/fmt|8739|8745|-1 grows|0|-|-|..lCodeS|7|0|compiler/fmt|8739|8745|-1 grows|0|-|-|..lCodeE|7|0|compiler/fmt|8739|8745|-1 grows|0|-|-|..lMulti|7|0|compiler/fmt|8739|8745|-1 grows|0|-|-|..codes.chars|12|0|compiler/fmt|9192|9199|-1
+body fn 9324-9896	known p grows|0|-|-|..lKind|6|0|compiler/fmt|9560|9565|-1 grows|0|-|-|..lIndent|8|0|compiler/fmt|9560|9565|-1 grows|0|-|-|..lCodeS|7|0|compiler/fmt|9560|9565|-1 grows|0|-|-|..lCodeE|7|0|compiler/fmt|9560|9565|-1 grows|0|-|-|..lComS|6|0|compiler/fmt|9560|9565|-1 grows|0|-|-|..lComE|6|0|compiler/fmt|9560|9565|-1 grows|0|-|-|..lMulti|7|0|compiler/fmt|9560|9565|-1 grows|0|-|-|..codes.chars|12|0|compiler/fmt|9747|9755|-1
+sig FileLayout@25163 fn&(Source&, String&, String&, Bool, mut StringBuilder&) String ? Unparsable
+sig Files@26482 fn&(String&, Array<String&>&, String&) I32
+sig Format@2687 fn&(String&, Tokens&, Vec<I64>&, Vec<I64>&, Array<Span>&, Vec<I64>&) String
+sig OracleFor@27884 fn&(String&, String&, String&, mut Names&) Oracle
+sig PreludeTypes@28113 fn&(String&) String
+sig addNames@32024 fn&(loader&, mut Oracle&, mut Names&, String&, String&)
+sig asWritten@17827 fn&(formatter&, I64) String&
+sig before@16322 fn&(formatter&, I64) I64
+sig begin@11251 fn&(mut formatter&, I64)
+sig chains@32312 fn&(loader&, mut Oracle&, mut Names&, I64, String&, I64)
+sig child@10143 fn&(formatter&) I64
+sig closing@13546 fn&(formatter&, I64) Bool
+sig comment@9324 fn&(mut formatter&, I64, I64, Bool, I64)
+sig cont@10549 fn&(formatter&, I64) I64
+sig dropBlank@15355 fn&(mut formatter&)
+sig ellipsisAt@17515 fn&(formatter&, I64) Bool
+sig finish@12247 fn&(mut formatter&)
+sig gap@8561 fn&(mut formatter&, I64, I64, I64)
+sig heldAt@11092 fn&(formatter&, I64) I64
+sig isCloser@12594 fn&(Tok) Bool
+sig keyword@17083 fn&(formatter&, I64) Bool
+sig kind@5684 fn&(formatter&, I64) Tok
+sig level@13928 fn&(mut formatter&, I64) I64
+sig levelAt@10013 fn&(formatter&, I64) I64
+sig lineEndOf@3411 fn&(String&, I64) I64
+sig lineStartOf@3300 fn&(String&, I64) I64
+sig load@29641 fn&(mut loader&, String&) I64
+sig markEntries@32931 fn&(mut formatter&)
+sig operandEnd@15776 fn&(formatter&, I64) Bool
+sig oracle@31721 fn&(loader&, mut Oracle&, mut Names&, I64, String&)
+sig params@19244 fn&(formatter&, I64) I64
+sig prefix@16672 fn&(formatter&, I64, I64) Bool
+sig prelude@28640 fn&(mut loader&) String
+sig push@15173 fn&(mut formatter&, I64, I64, I64)
+sig receiver@18033 fn&(formatter&, I64, I64) Bool
+sig run@5841 fn&(mut formatter&)
+sig space@20043 fn&(formatter&, I64, I64, I64) String&
+sig target@29141 fn&(loader&, String&, String&) String
+sig tokText@5750 fn&(formatter&, I64) String&
+sig token@12811 fn&(mut formatter&, I64)
+sig track@14414 fn&(mut formatter&, I64)
+sig write@23454 fn&(formatter&) String
+sig writeLine@24264 fn&(formatter&, mut StringBuilder&, String&, I64, I64)
+end
+sum 3940e735222e1a2f739ca4fed392a5561d39acae0583c1c34b091b7d00bb86ca

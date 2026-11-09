@@ -1,0 +1,30 @@
+olang module record
+size 10494
+split 0
+read 0 O23a std_2fprelude_2fnumber_2eI16_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2eI32_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2eI64_2eMax_3cI64_3e
+read 0 O23a std_2fprelude_2fnumber_2eI64_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2eI8_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2eU16_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2eU32_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2eU64_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2eU8_2eSqrt
+read 0 O23a std_2fprelude_2fnumber_2esqrtU128
+read 0 O23a std_2fprelude_2fnumber_2esqrtU64
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part dbf7b76ca191f533bbdc178f709e963c6b8c1b20a48f1b09630605ad143b926f std/prelude/number
+end
+sum 7c9c68454cc844da2f949974c9d28c2ab3622551c6e35d13436a2809c6d22c01

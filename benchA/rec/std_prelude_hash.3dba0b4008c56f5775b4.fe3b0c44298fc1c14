@@ -1,0 +1,23 @@
+olang front record
+body fn 1030-1073	known p
+body fn 1074-1117	known p
+body fn 1118-1166	known p
+body fn 1243-1322	known p
+body fn 723-810	known p
+body fn 812-855	known p
+body fn 856-899	known p
+body fn 900-942	known p
+body fn 943-985	known p
+body fn 986-1029	known p
+sig Hash@1030 fn&(U16) I64
+sig Hash@1074 fn&(U32) I64
+sig Hash@1118 fn&(U64) I64
+sig Hash@1243 fn&(Bool) I64
+sig Hash@812 fn&(I64) I64
+sig Hash@856 fn&(I32) I64
+sig Hash@900 fn&(U8) I64
+sig Hash@943 fn&(I8) I64
+sig Hash@986 fn&(I16) I64
+sig mixHash@723 fn&(I64) I64
+end
+sum 53964087e75528ed70492f950ae9bc60478f59522335107a752b6f0082318467

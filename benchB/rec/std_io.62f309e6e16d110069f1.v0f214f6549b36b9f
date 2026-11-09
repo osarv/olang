@@ -1,0 +1,55 @@
+olang module record
+size 107632
+split 0
+read 0 O23a std_2fio_2eFormatInt
+read 0 O23a std_2fio_2ePrint
+read 0 O23a std_2fio_2ePrintErr
+read 0 O23a std_2fio_2ePrintErrln
+read 0 O23a std_2fio_2ePrintln
+read 0 O23a std_2fio_2eRead
+read 0 O23a std_2fio_2eWrite
+read 0 O23a std_2fio_2eafterTheEnd
+read 0 O23a std_2fio_2ebracketed
+read 0 O23a std_2fio_2echeckReadIsEmpty
+read 0 O23a std_2fio_2ecloseFd
+read 0 O23a std_2fio_2edrained
+read 0 O23a std_2fio_2efailedFlushes
+read 0 O23a std_2fio_2eioChurn
+read 0 O23a std_2fio_2eopenReadOnly
+read 0 O23a std_2fio_2ereading
+read 0 O23a std_2fio_2ereportTo
+read 0 O23a std_2fio_2estd_2fio_3aLines_2eNext
+read 0 O23a std_2fio_2estd_2fio_3aLines_2eline
+read 0 O23a std_2fio_2estd_2fio_3aWriter_2eFlush
+read 0 O23a std_2fio_2estd_2fio_3aWriter_2eWrite
+read 0 O23a std_2fio_2estd_2fio_3aWriter_2eWriteChar
+read 0 O23a std_2fio_2estd_2fio_3aWriter_2edrain
+read 0 O23a std_2fio_2estd_2fio_3aWriter_2esend
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eEq
+read plain T13d <fcntl.h>.f_owner_ex
+read plain T13d <fcntl.h>.file_handle
+read plain T13d <fcntl.h>.flock
+read plain T13d <fcntl.h>.flock64
+read plain T13d <fcntl.h>.iovec
+read plain T13d <fcntl.h>.stat
+read plain T13d <fcntl.h>.stat64
+read plain T13d <fcntl.h>.timespec
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/io.Lines
+read plain T13d std/io.Writer
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part 49ca4ebb9bd51250f8de8f71287b944e9d27981232cf272d106a74343b5dd211 std/io
+locs 007f7749a93b0a33f153cfa32f0805058c27579610115ef1fafb907a55453c14 std/io
+end
+sum 49e6a4d5eb4a1d60bf8a5c348580f5fd5f136a0d6f4c9429e4555120a2ab4cad

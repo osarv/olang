@@ -1,0 +1,357 @@
+olang front record
+body global BUS_ADRALN	known p
+body global BUS_ADRERR	known p
+body global BUS_MCEERR_AO	known p
+body global BUS_MCEERR_AR	known p
+body global BUS_OBJERR	known p
+body global CLD_CONTINUED	known p
+body global CLD_DUMPED	known p
+body global CLD_EXITED	known p
+body global CLD_KILLED	known p
+body global CLD_STOPPED	known p
+body global CLD_TRAPPED	known p
+body global CLOSE_RANGE_CLOEXEC	known p
+body global CLOSE_RANGE_UNSHARE	known p
+body global FPE_CONDTRAP	known p
+body global FPE_FLTDIV	known p
+body global FPE_FLTINV	known p
+body global FPE_FLTOVF	known p
+body global FPE_FLTRES	known p
+body global FPE_FLTSUB	known p
+body global FPE_FLTUND	known p
+body global FPE_FLTUNK	known p
+body global FPE_INTDIV	known p
+body global FPE_INTOVF	known p
+body global FP_XSTATE_MAGIC1	known p
+body global FP_XSTATE_MAGIC2	known p
+body global FP_XSTATE_MAGIC2_SIZE	known p
+body global F_LOCK	known p
+body global F_OK	known p
+body global F_TEST	known p
+body global F_TLOCK	known p
+body global F_ULOCK	known p
+body global ILL_BADIADDR	known p
+body global ILL_BADSTK	known p
+body global ILL_COPROC	known p
+body global ILL_ILLADR	known p
+body global ILL_ILLOPC	known p
+body global ILL_ILLOPN	known p
+body global ILL_ILLTRP	known p
+body global ILL_PRVOPC	known p
+body global ILL_PRVREG	known p
+body global L_INCR	known p
+body global L_SET	known p
+body global L_XTND	known p
+body global NGREG	known p
+body global NSIG	known p
+body global POLL_ERR	known p
+body global POLL_HUP	known p
+body global POLL_IN	known p
+body global POLL_MSG	known p
+body global POLL_OUT	known p
+body global POLL_PRI	known p
+body global P_ALL	known p
+body global P_PGID	known p
+body global P_PID	known p
+body global P_PIDFD	known p
+body global REG_CR2	known p
+body global REG_CSGSFS	known p
+body global REG_EFL	known p
+body global REG_ERR	known p
+body global REG_OLDMASK	known p
+body global REG_R10	known p
+body global REG_R11	known p
+body global REG_R12	known p
+body global REG_R13	known p
+body global REG_R14	known p
+body global REG_R15	known p
+body global REG_R8	known p
+body global REG_R9	known p
+body global REG_RAX	known p
+body global REG_RBP	known p
+body global REG_RBX	known p
+body global REG_RCX	known p
+body global REG_RDI	known p
+body global REG_RDX	known p
+body global REG_RIP	known p
+body global REG_RSI	known p
+body global REG_RSP	known p
+body global REG_TRAPNO	known p
+body global R_OK	known p
+body global SA_INTERRUPT	known p
+body global SA_NOCLDSTOP	known p
+body global SA_NOCLDWAIT	known p
+body global SA_NODEFER	known p
+body global SA_NOMASK	known p
+body global SA_ONESHOT	known p
+body global SA_ONSTACK	known p
+body global SA_RESETHAND	known p
+body global SA_RESTART	known p
+body global SA_SIGINFO	known p
+body global SA_STACK	known p
+body global SEEK_CUR	known p
+body global SEEK_DATA	known p
+body global SEEK_END	known p
+body global SEEK_HOLE	known p
+body global SEEK_SET	known p
+body global SEGV_ACCADI	known p
+body global SEGV_ACCERR	known p
+body global SEGV_ADIDERR	known p
+body global SEGV_ADIPERR	known p
+body global SEGV_BNDERR	known p
+body global SEGV_CPERR	known p
+body global SEGV_MAPERR	known p
+body global SEGV_MTEAERR	known p
+body global SEGV_MTESERR	known p
+body global SEGV_PKUERR	known p
+body global SIGABRT	known p
+body global SIGALRM	known p
+body global SIGBUS	known p
+body global SIGCHLD	known p
+body global SIGCLD	known p
+body global SIGCONT	known p
+body global SIGEV_NONE	known p
+body global SIGEV_SIGNAL	known p
+body global SIGEV_THREAD	known p
+body global SIGEV_THREAD_ID	known p
+body global SIGFPE	known p
+body global SIGHUP	known p
+body global SIGILL	known p
+body global SIGINT	known p
+body global SIGIO	known p
+body global SIGIOT	known p
+body global SIGKILL	known p
+body global SIGPIPE	known p
+body global SIGPOLL	known p
+body global SIGPROF	known p
+body global SIGPWR	known p
+body global SIGQUIT	known p
+body global SIGSEGV	known p
+body global SIGSTKFLT	known p
+body global SIGSTOP	known p
+body global SIGSYS	known p
+body global SIGTERM	known p
+body global SIGTRAP	known p
+body global SIGTSTP	known p
+body global SIGTTIN	known p
+body global SIGTTOU	known p
+body global SIGURG	known p
+body global SIGUSR1	known p
+body global SIGUSR2	known p
+body global SIGVTALRM	known p
+body global SIGWINCH	known p
+body global SIGXCPU	known p
+body global SIGXFSZ	known p
+body global SIG_BLOCK	known p
+body global SIG_SETMASK	known p
+body global SIG_UNBLOCK	known p
+body global SI_ASYNCIO	known p
+body global SI_ASYNCNL	known p
+body global SI_DETHREAD	known p
+body global SI_KERNEL	known p
+body global SI_MESGQ	known p
+body global SI_QUEUE	known p
+body global SI_SIGIO	known p
+body global SI_TIMER	known p
+body global SI_TKILL	known p
+body global SI_USER	known p
+body global SS_DISABLE	known p
+body global SS_ONSTACK	known p
+body global STDERR_FILENO	known p
+body global STDIN_FILENO	known p
+body global STDOUT_FILENO	known p
+body global TRAP_BRANCH	known p
+body global TRAP_BRKPT	known p
+body global TRAP_HWBKPT	known p
+body global TRAP_TRACE	known p
+body global TRAP_UNK	known p
+body global WAIT_ANY	known p
+body global WAIT_MYPGRP	known p
+body global WCONTINUED	known p
+body global WCOREFLAG	known p
+body global WEXITED	known p
+body global WNOHANG	known p
+body global WNOWAIT	known p
+body global WSTOPPED	known p
+body global WUNTRACED	known p
+body global W_OK	known p
+body global X_OK	known p
+baked BUS_ADRALN [8 01000000]
+baked BUS_ADRERR [8 02000000]
+baked BUS_MCEERR_AO [8 05000000]
+baked BUS_MCEERR_AR [8 04000000]
+baked BUS_OBJERR [8 03000000]
+baked CLD_CONTINUED [8 06000000]
+baked CLD_DUMPED [8 03000000]
+baked CLD_EXITED [8 01000000]
+baked CLD_KILLED [8 02000000]
+baked CLD_STOPPED [8 05000000]
+baked CLD_TRAPPED [8 04000000]
+baked CLOSE_RANGE_CLOEXEC [8 04000000]
+baked CLOSE_RANGE_UNSHARE [8 02000000]
+baked FPE_CONDTRAP [8 0f000000]
+baked FPE_FLTDIV [8 03000000]
+baked FPE_FLTINV [8 07000000]
+baked FPE_FLTOVF [8 04000000]
+baked FPE_FLTRES [8 06000000]
+baked FPE_FLTSUB [8 08000000]
+baked FPE_FLTUND [8 05000000]
+baked FPE_FLTUNK [8 0e000000]
+baked FPE_INTDIV [8 01000000]
+baked FPE_INTOVF [8 02000000]
+baked FP_XSTATE_MAGIC1 [8 53585046]
+baked FP_XSTATE_MAGIC2 [8 45585046]
+baked FP_XSTATE_MAGIC2_SIZE [8 04000000]
+baked F_LOCK [8 01000000]
+baked F_OK [8 00000000]
+baked F_TEST [8 03000000]
+baked F_TLOCK [8 02000000]
+baked F_ULOCK [8 00000000]
+baked ILL_BADIADDR [8 09000000]
+baked ILL_BADSTK [8 08000000]
+baked ILL_COPROC [8 07000000]
+baked ILL_ILLADR [8 03000000]
+baked ILL_ILLOPC [8 01000000]
+baked ILL_ILLOPN [8 02000000]
+baked ILL_ILLTRP [8 04000000]
+baked ILL_PRVOPC [8 05000000]
+baked ILL_PRVREG [8 06000000]
+baked L_INCR [8 01000000]
+baked L_SET [8 00000000]
+baked L_XTND [8 02000000]
+baked NGREG [8 17000000]
+baked NSIG [8 41000000]
+baked POLL_ERR [8 04000000]
+baked POLL_HUP [8 06000000]
+baked POLL_IN [8 01000000]
+baked POLL_MSG [8 03000000]
+baked POLL_OUT [8 02000000]
+baked POLL_PRI [8 05000000]
+baked P_ALL [8 00000000]
+baked P_PGID [8 02000000]
+baked P_PID [8 01000000]
+baked P_PIDFD [8 03000000]
+baked REG_CR2 [8 16000000]
+baked REG_CSGSFS [8 12000000]
+baked REG_EFL [8 11000000]
+baked REG_ERR [8 13000000]
+baked REG_OLDMASK [8 15000000]
+baked REG_R10 [8 02000000]
+baked REG_R11 [8 03000000]
+baked REG_R12 [8 04000000]
+baked REG_R13 [8 05000000]
+baked REG_R14 [8 06000000]
+baked REG_R15 [8 07000000]
+baked REG_R8 [8 00000000]
+baked REG_R9 [8 01000000]
+baked REG_RAX [8 0d000000]
+baked REG_RBP [8 0a000000]
+baked REG_RBX [8 0b000000]
+baked REG_RCX [8 0e000000]
+baked REG_RDI [8 08000000]
+baked REG_RDX [8 0c000000]
+baked REG_RIP [8 10000000]
+baked REG_RSI [8 09000000]
+baked REG_RSP [8 0f000000]
+baked REG_TRAPNO [8 14000000]
+baked R_OK [8 04000000]
+baked SA_INTERRUPT [8 00000020]
+baked SA_NOCLDSTOP [8 01000000]
+baked SA_NOCLDWAIT [8 02000000]
+baked SA_NODEFER [8 00000040]
+baked SA_NOMASK [8 00000040]
+baked SA_ONESHOT [8 0000008000000000]
+baked SA_ONSTACK [8 00000008]
+baked SA_RESETHAND [8 0000008000000000]
+baked SA_RESTART [8 00000010]
+baked SA_SIGINFO [8 04000000]
+baked SA_STACK [8 00000008]
+baked SEEK_CUR [8 01000000]
+baked SEEK_DATA [8 03000000]
+baked SEEK_END [8 02000000]
+baked SEEK_HOLE [8 04000000]
+baked SEEK_SET [8 00000000]
+baked SEGV_ACCADI [8 05000000]
+baked SEGV_ACCERR [8 02000000]
+baked SEGV_ADIDERR [8 06000000]
+baked SEGV_ADIPERR [8 07000000]
+baked SEGV_BNDERR [8 03000000]
+baked SEGV_CPERR [8 0a000000]
+baked SEGV_MAPERR [8 01000000]
+baked SEGV_MTEAERR [8 08000000]
+baked SEGV_MTESERR [8 09000000]
+baked SEGV_PKUERR [8 04000000]
+baked SIGABRT [8 06000000]
+baked SIGALRM [8 0e000000]
+baked SIGBUS [8 07000000]
+baked SIGCHLD [8 11000000]
+baked SIGCLD [8 11000000]
+baked SIGCONT [8 12000000]
+baked SIGEV_NONE [8 01000000]
+baked SIGEV_SIGNAL [8 00000000]
+baked SIGEV_THREAD [8 02000000]
+baked SIGEV_THREAD_ID [8 04000000]
+baked SIGFPE [8 08000000]
+baked SIGHUP [8 01000000]
+baked SIGILL [8 04000000]
+baked SIGINT [8 02000000]
+baked SIGIO [8 1d000000]
+baked SIGIOT [8 06000000]
+baked SIGKILL [8 09000000]
+baked SIGPIPE [8 0d000000]
+baked SIGPOLL [8 1d000000]
+baked SIGPROF [8 1b000000]
+baked SIGPWR [8 1e000000]
+baked SIGQUIT [8 03000000]
+baked SIGSEGV [8 0b000000]
+baked SIGSTKFLT [8 10000000]
+baked SIGSTOP [8 13000000]
+baked SIGSYS [8 1f000000]
+baked SIGTERM [8 0f000000]
+baked SIGTRAP [8 05000000]
+baked SIGTSTP [8 14000000]
+baked SIGTTIN [8 15000000]
+baked SIGTTOU [8 16000000]
+baked SIGURG [8 17000000]
+baked SIGUSR1 [8 0a000000]
+baked SIGUSR2 [8 0c000000]
+baked SIGVTALRM [8 1a000000]
+baked SIGWINCH [8 1c000000]
+baked SIGXCPU [8 18000000]
+baked SIGXFSZ [8 19000000]
+baked SIG_BLOCK [8 00000000]
+baked SIG_SETMASK [8 02000000]
+baked SIG_UNBLOCK [8 01000000]
+baked SI_ASYNCIO [8 fcffffff]
+baked SI_ASYNCNL [8 c4ffffff]
+baked SI_DETHREAD [8 f9ffffff]
+baked SI_KERNEL [8 80000000]
+baked SI_MESGQ [8 fdffffff]
+baked SI_QUEUE [8 ffffffff]
+baked SI_SIGIO [8 fbffffff]
+baked SI_TIMER [8 feffffff]
+baked SI_TKILL [8 faffffff]
+baked SI_USER [8 00000000]
+baked SS_DISABLE [8 02000000]
+baked SS_ONSTACK [8 01000000]
+baked STDERR_FILENO [8 02000000]
+baked STDIN_FILENO [8 00000000]
+baked STDOUT_FILENO [8 01000000]
+baked TRAP_BRANCH [8 03000000]
+baked TRAP_BRKPT [8 01000000]
+baked TRAP_HWBKPT [8 04000000]
+baked TRAP_TRACE [8 02000000]
+baked TRAP_UNK [8 05000000]
+baked WAIT_ANY [8 ffffffff]
+baked WAIT_MYPGRP [8 00000000]
+baked WCONTINUED [8 08000000]
+baked WCOREFLAG [8 80000000]
+baked WEXITED [8 04000000]
+baked WNOHANG [8 01000000]
+baked WNOWAIT [8 00000001]
+baked WSTOPPED [8 02000000]
+baked WUNTRACED [8 02000000]
+baked W_OK [8 02000000]
+baked X_OK [8 01000000]
+end
+sum 6d654c2c5c18577b7f64eafe5373932af4c820ffd0bdea6715cde2a57dbc9a53

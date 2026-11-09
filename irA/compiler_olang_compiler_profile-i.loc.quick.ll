@@ -1,0 +1,17 @@
+source_filename = "compiler_olang_compiler_profile-i.loc.quick.ll"
+; olang - emitted by the self-hosted compiler (compiler/emit.olang)
+target triple = "x86_64-pc-linux-gnu"
+
+@olang_loc_1581096c65d7c1ce_1cdb912209d3199a = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:111: array length out of range\0A\00"
+@olang_loc_1a27118dfdabb4e0_1050090344eac5e4 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:122: array length out of range\0A\00"
+@olang_loc_233a93dc1fef0f55_caff5c35e8739a59 = weak_odr constant [77 x i8] c"/home/user/wt/r8base/std/prelude/array.olang:248: slice bounds out of range\0A\00"
+@olang_loc_277622d1fcaf0836_affa1a20e72cd03a = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_4efbd26ae2e7b2b2_58a754449509bcd6 = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_808721726138229e_e338ffc3609b7422 = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_9c560a48d8752dae_752fe2b5d5314d62 = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_b75ecb829e35d332_65f60af307a2f016 = weak_odr constant [74 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:61: slice bounds out of range\0A\00"
+@olang_loc_c1f1e329ebb7c352_d224fbf370d92b06 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/vec.olang:230: slice bounds out of range\0A\00"
+@olang_loc_d38b1f3c1bd593f8_6cb2c2e5d0b397c4 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:102: slice bounds out of range\0A\00"
+@olang_loc_e98171df147b2e20_1387c2a426642f24 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:122: array length out of range\0A\00"
+@olang_loc_efbd93d927e307c8_518766935672dd34 = weak_odr constant [77 x i8] c"/home/user/wt/r8base/std/prelude/array.olang:243: array length out of range\0A\00"
+@olang_loc_f583f09f7112b3d5_92766cb71d56e931 = weak_odr constant [75 x i8] c"/home/user/wt/r8base/std/prelude/map.olang:105: slice bounds out of range\0A\00"

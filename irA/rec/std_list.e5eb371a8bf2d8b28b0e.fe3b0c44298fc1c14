@@ -1,0 +1,13 @@
+olang front record
+body fn 21702-22128	known p
+body fn 25896-26168	known p
+body fn 7409-7786	known p
+body global firstChunk	known p
+body global firstChunkLog	known p
+baked firstChunk [8 0800000000000000]
+baked firstChunkLog [8 0300000000000000]
+sig Join@21702 fn&(List<String&>&, String&) String
+sig charLiteral@25896 fn&(Char) String
+sig highBit@7409 fn&(I64) I64
+end
+sum 1619ad410887189320e1982622dd1c5a90ca8107483416795ceafb9940b7df30

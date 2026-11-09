@@ -1,0 +1,67 @@
+olang front record
+body fn 15263-15323	known p
+body fn 15443-15677	known p
+body fn 20365-21193	known p
+body fn 21361-21515	known p
+body fn 21516-21647	known p
+body fn 21648-21780	known p
+body fn 21929-22239	known p,0
+body fn 22241-22305	known p
+body fn 22384-22574	known p
+body fn 22646-22920	known p,0
+body fn 22922-23217	known p
+body fn 23219-23811	known p
+body fn 24198-24402	known p
+body fn 24404-25809	known p
+body fn 25811-25904	known p
+body fn 25906-26089	known p
+body fn 26091-26235	known p
+body fn 26237-26368	known p
+body fn 26370-26614	known p
+body fn 26616-26818	known p
+body fn 26889-28135	known p
+body fn 28137-28454	known p
+body fn 28579-28976	known p
+body fn 28978-29341	known p
+body fn 29417-29817	known p
+body fn 30106-30528	known p
+body fn 30817-30979	known p
+body fn 31181-31517	known p
+body fn 31567-31853	known p
+body fn 31935-32119	known p
+body fn 3704-3869	known p,0,1
+body global NoYield	known p
+baked NoYield [8 ffffffffffffffff]
+sig Decl.findTestIf@28978 fn&(TopIf?&, Span) Decl?&
+sig FindTest@28579 fn&(Array<Decl&>&, Span) Decl?&
+sig FirstYield@24198 fn&(Array<Stmt&>&) Span
+sig FuncSig@21929 fn&(TypeRef&) Sig?&
+sig IsBuilder@15263 fn&(Func&) Bool
+sig IsFunc@22241 fn&(TypeRef&) Bool
+sig IsGathered@21361 fn&(Expr&) Bool
+sig IsNamed@21648 fn&(Expr&) Bool
+sig IsSpread@21516 fn&(Expr&) Bool
+sig IsWeak@22384 fn&(TypeRef&) Bool
+sig OwnerName@15443 fn&(Func&) NameId
+sig OwnerTarget@30817 fn&(Func&, Names&) String
+sig RecvTarget@30106 fn&(Func&, Names&) String
+sig Span@20365 fn&(Expr&) Span
+sig Span@22922 fn&(TypeRef&) Span
+sig Span@23219 fn&(Stmt&) Span
+sig Span@28137 fn&(Pattern&) Span
+sig TestDesc@31567 fn&(Decl&, String&) String
+sig TestLabel@31935 fn&(Decl&, String&, Names&) String
+sig TestTarget@29417 fn&(Decl&, Names&) String
+sig Unweak@22646 fn&(TypeRef&) TypeRef&
+sig WithPromises@3704 fn&(Sig&, Array<Promise&>&) Sig&
+sig nameOrConstraint@31181 fn&(Func&, NameId, Names&) String
+sig yieldIn@24404 fn&(Stmt?&) Span
+sig yieldInCase@26237 fn&(Case&) Span
+sig yieldInCatches@26370 fn&(Array<Catch&>&) Span
+sig yieldInExpr@26889 fn&(Expr?&) Span
+sig yieldInExprs@26616 fn&(Array<Expr&>&) Span
+sig yieldInIf@25906 fn&(If&) Span
+sig yieldInMatch@26091 fn&(Match&) Span
+sig yieldOr@25811 fn&(Span, Span) Span
+end
+sum 8cbf380747a7d839a9dfe91b93e0fd070f1137d4732a0e325280931b89134256

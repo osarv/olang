@@ -1,0 +1,43 @@
+olang module record
+size 16405
+split 0
+read 0 O23a std_2fcancel_2eNowNs
+read 0 O23a std_2fcancel_2eToken_2eAfter
+read 0 O23a std_2fcancel_2ecancelOnExit
+read 0 O23a std_2fcancel_2espin
+read 0 O23a std_2fcancel_2espinRecord
+read 0 O23a std_2fcancel_2estd_2fcancel_3aToken_2eCancel
+read 0 O23a std_2fcancel_2estd_2fcancel_3aToken_2eCancelled
+read 0 O23a std_2fcancel_2estd_2fcancel_3aToken_2eReason
+read 0 O23a std_2fcancel_2estd_2fcancel_3aToken_2eWakeAt
+read 0 O23a std_2fcancel_2estd_2fcancel_3aToken_2eWhy
+read 0 O23a std_2fcancel_2ewallNs
+read 0 O23a std_2ftime_2eIsVirtual
+read 0 O23a std_2ftime_2eNow
+read 0 O23a std_2ftime_2eReach
+read plain T13d <string.h>.c___locale_struct
+read plain T13d <time.h>.c___locale_struct
+read plain T13d <time.h>.itimerspec
+read plain T13d <time.h>.timespec
+read plain T13d <time.h>.timeval
+read plain T13d <time.h>.timex
+read plain T13d std/cancel.Token
+read plain T13d std/cancel.spinCount
+read plain T13d std/cancel.stopCount
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+read plain T13d std/time.Date
+read plain T13d std/time.Timer
+part 6fcfbeaaae67c616335ba510a30d520ee0a6370ddae971bfba95e3ddb8eb4bfa std/cancel
+end
+sum 13180559b228d0f56242547d545b879c71810eff74d245b26c6d1e337ff69ca2

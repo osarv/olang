@@ -1,0 +1,57 @@
+olang front record
+body fn 10382-10769	known p
+body fn 10818-10976	known p
+body fn 11083-11205	known p
+body fn 11291-11403	known p
+body fn 11405-11501	known p
+body fn 1313-1817	known p
+body fn 13407-13521	known p
+body fn 14803-14961	known p
+body fn 15053-15287	known p
+body fn 16975-17180	known p
+body fn 17445-17624	known p
+body fn 18158-18320	known p
+body fn 19673-19914	known p
+body fn 20305-20491	known p
+body fn 2282-2456	known p,1
+body fn 2921-2973	known p
+body fn 3051-3116	known p
+body fn 3160-3215	known p
+body fn 3260-3328	known p
+body fn 4494-5046	known p
+body fn 676-747	known p
+body fn 6966-8218	known p
+body fn 749-803	known p
+body fn 8288-8522	known p
+body global Stderr	known p
+body global Stdin	known p
+body global Stdout	known p
+baked Stderr [8 02000000]
+baked Stdin [8 00000000]
+baked Stdout [8 01000000]
+sig Flush@11083 fn&(mut Writer&) ? Error
+sig FormatInt@4494 fn&(I64, mut Array<U8>&) I32
+sig Next@6966 fn&(mut Lines&) String& ? Error, Exhausted
+sig Print@2921 fn&(String&) ? Error
+sig PrintErr@3160 fn&(String&) ? Error
+sig PrintErrln@3260 fn&(String&) ? Error
+sig Println@3051 fn&(String&) ? Error
+sig Read@2282 fn&(I32, mut Array<U8>&) Array<U8>& ? Error
+sig Write@10382 fn&(mut Writer&, Array<U8>&)
+sig Write@1313 fn&(I32, Array<U8>&) ? Error
+sig WriteChar@10818 fn&(mut Writer&, Char)
+sig afterTheEnd@16975 fn&(I32) ? Error
+sig bracketed@15053 fn&(String&, I64) String&
+sig checkReadIsEmpty@13407 fn&(I32, mut Array<U8>&) ? Error
+sig closeFd@749 fn&(I32) I32
+sig drain@11291 fn&(mut Writer&)
+sig drained@18158 fn&(I32) String&
+sig failedFlushes@19673 fn&(I32) I64
+sig ioChurn@17445 fn&() I64
+sig line@8288 fn&(Lines&, I64, I64) String&
+sig openReadOnly@676 fn&(Array<U8>&) I32
+sig reading@14803 fn&(String&) I32
+sig reportTo@20305 fn&(I32, I64) ? Error
+sig send@11405 fn&(mut Writer&, Array<U8>&)
+end
+sum 2e088a56dadd40e05319a601955b4892fccfaf9cb70e99915b4f6f0e43a85b24

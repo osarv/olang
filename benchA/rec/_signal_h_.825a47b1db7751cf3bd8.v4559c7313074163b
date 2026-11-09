@@ -1,0 +1,53 @@
+olang module record
+size 58816
+split 0
+read plain T13d <signal.h>._fpreg
+read plain T13d <signal.h>._fpstate
+read plain T13d <signal.h>._fpx_sw_bytes
+read plain T13d <signal.h>._fpxreg
+read plain T13d <signal.h>._libc_fpstate
+read plain T13d <signal.h>._libc_fpxreg
+read plain T13d <signal.h>._libc_xmmreg
+read plain T13d <signal.h>._xmmreg
+read plain T13d <signal.h>._xsave_hdr
+read plain T13d <signal.h>._xstate
+read plain T13d <signal.h>._ymmh_state
+read plain T13d <signal.h>.c___atomic_wide_counter
+read plain T13d <signal.h>.c___pthread_internal_list
+read plain T13d <signal.h>.c___pthread_internal_slist
+read plain T13d <signal.h>.c___sigset_t
+read plain T13d <signal.h>.mcontext_t
+read plain T13d <signal.h>.pthread_attr_t
+read plain T13d <signal.h>.pthread_barrier_t
+read plain T13d <signal.h>.pthread_barrierattr_t
+read plain T13d <signal.h>.pthread_cond_t
+read plain T13d <signal.h>.pthread_condattr_t
+read plain T13d <signal.h>.pthread_mutex_t
+read plain T13d <signal.h>.pthread_mutexattr_t
+read plain T13d <signal.h>.pthread_rwlock_t
+read plain T13d <signal.h>.pthread_rwlockattr_t
+read plain T13d <signal.h>.sigaction_t
+read plain T13d <signal.h>.sigcontext
+read plain T13d <signal.h>.sigevent_t
+read plain T13d <signal.h>.siginfo_t
+read plain T13d <signal.h>.sigstack_t
+read plain T13d <signal.h>.sigval
+read plain T13d <signal.h>.stack_t
+read plain T13d <signal.h>.timespec
+read plain T13d <signal.h>.ucontext_t
+read plain T13d <string.h>.c___locale_struct
+read plain T13d std/prelude/complex.C16
+read plain T13d std/prelude/complex.C32
+read plain T13d std/prelude/complex.C64
+read plain T13d std/prelude/f8.F8E4M3
+read plain T13d std/prelude/f8.F8E5M2
+read plain T13d std/prelude/place.Place
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.CVoid
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+part e0f75c4ff54ce424a2e6e826a73caaf568381f78e7c54ba382df39f3fb32e44d <signal.h>
+end
+sum b54365c26b3994f2b8860998ec76492b327faecea9766d6aafcebf0af2ded836
