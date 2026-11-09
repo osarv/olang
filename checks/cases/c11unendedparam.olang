@@ -1,11 +1,25 @@
-# check: fail error[C11]: Conn has a destructor to run, and Array<Conn> keeps values of it where no holder ends them - write Conn&, or keep them in a Vec<Conn>
-# C11: a bare array of a run-time length holding values with destructors has no count of live elements, so nothing ends
-# them - a parameter takes a Vec<Conn> (or Conn& elements)
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals question 3, the user's yes of 2026-11-08): a by-value parameter of a run-time length holding values with
+# destructors is handed a fresh one (T13b: a unique array lands where it is put) and ends its elements at the callee's
+# end. It was refused ("Array<Conn> keeps values of it where no holder ends them")
+import "std/io"
+import "std/os"
 Closed mut I64 = 0
 type Conn unique struct(fd I32) {
     fd
 } destruct { Closed++ }
-fn count(a Array<Conn>) I64 { return a.Len() }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn count(a Array<Conn>) I64 {
+    churn()
+    return a.Len() * 10 + I64(a[1].fd)
+}
 fn main() {
-    assert Closed == 0
+    assert count(Array<Conn>[Conn(I32(i)) for i in range os.Args().Len() + 2]) == 31
+    io.Println($Closed)!
 }

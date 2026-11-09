@@ -1060,7 +1060,8 @@ fn (t Table&) needsDrop(id TypeId, depth I64) Bool {
                 case _: false
             }
         }
-        case Kind.Array { return t.Length(r) != TypeId(0) and t.needsDrop(t.Elem(r), depth + 1) }
+        # (C11: an array of a run-time length ends its elements too - its length is in it)
+        case Kind.Array { return t.needsDrop(t.Elem(r), depth + 1) }
         case Kind.Record, Kind.Tuple { return t.partsDrop(t.Parts(r), depth) }
         case Kind.AnonEnum { return t.partsDrop(t.ShapeCases(r), depth) }
         case _ { return false }
@@ -1590,6 +1591,15 @@ fn (t Table&) DtorWritten(id TypeId) Bool { return t.bodyOf(id).Destructs }
 fn (t mut Table&) MarkEnds(d DeclId) { t.endsDecls.Put(I64(d), true) }
 
 fn (t Table&) Ends(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.endsDecls.Has(I64(t.DeclOf(id))) }
+
+# C11: whether field f (its type) of a value of type owner is a holder of what it holds by value - all but the buffer
+# of a collection whose destructor ends the live elements of it (Ends): an array of a run-time length there is room past
+# its count, its elements the collection's to end
+fn (t Table&) FieldHolds(owner TypeId, f TypeId) Bool {
+    if t.IsRef(f) or not t.NeedsDrop(f): return false
+    r := t.Repr(f)
+    return not (t.KindOf(r) == Kind.Array and t.Length(r) == TypeId(0) and t.Ends(t.Repr(owner)))
+}
 
 # whether an instance of such a collection holds, by value - through its fields and the elements of the arrays they
 # are, a run-time length's included (the elements its own code says are live) - a value with destructors to run

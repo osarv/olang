@@ -1,13 +1,34 @@
-# check: fail error[C11]: Kept has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<Kept>, or hold Kept& ones
-# C11: a copy of an array of a run-time length makes its own values with destructors - an array no holder ends
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals question 3, the user's yes of 2026-11-08): a copy of an array of a run-time length makes its own values,
+# each by its Copy (E31d), and ends them as its holder lets go - the source's are its own holder's. It was refused ("an
+# array of a run-time length ends none of its elements")
+import "std/io"
+import "std/os"
 Ended mut I64 = 0
 type R unique struct(id I64) {
     id
 } destruct { Ended++ }
 type Kept struct(r R) { r }
 fn (k Kept&) Copy() Kept { return Kept(R(k.r.id + 1)) }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
 fn cp(a Array<Kept>&) I64 {
     c := a.Copy()
-    return c.Len()
+    churn()
+    return c[0].r.id + c.Len()
 }
-fn main() { assert Ended == 0 }
+fn main() {
+    {
+        ks := Array<Kept>[Kept(R(i)) for i in range os.Args().Len() + 2]
+        assert cp(ks) == 4
+        io.Println("the copy " $Ended)!
+        churn()
+        assert ks[2].r.id == 2
+    }
+    io.Println("and its source " $Ended)!
+}

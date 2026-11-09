@@ -1,11 +1,32 @@
-# check: fail error[C11]: R has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<R>, or hold R& ones
-# C11: Array<T>(n) of a run-time length made zero values with destructors no holder ended (found 2026-11-07)
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals question 3, the user's yes of 2026-11-08): an array of a run-time length holding values with destructors
+# ends its elements as its holder lets go, the last first - its length is in it. Array<R>(n) makes n zero values, each
+# ended where a store replaces it (O15). It was refused ("an array of a run-time length ends none of its elements")
+import "std/io"
+import "std/os"
 Ended mut I64 = 0
+Order mut I64 = 0
 type R unique struct(id I64 = 0) {
     id
-} destruct { Ended++ }
+} destruct {
+    Ended++
+    Order = Order * 10 + id
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
 fn mk(n I64) I64 {
     b := Array<R>(n)
-    return b.Len()
+    for i in range n { b[i] = R(i + 1) }
+    churn()
+    return b[0].id + b[2].id
 }
-fn main() { assert mk(3) == 3 }
+fn main() {
+    n := os.Args().Len() + 2
+    assert mk(n) == 4
+    io.Println($Ended " " $Order)!
+}

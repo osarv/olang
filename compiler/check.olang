@@ -4238,12 +4238,6 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         # T13a: a "mut" global holding what never changes (text - "Name mut String&") is a binding that may be
         # assigned: nothing is ever written through it, so it takes any reference to one, read-only or not
         if c.isRef(want) and c.P.Immut(c.deref(want)) { want = c.P.T.Ref(c.P.T.Referent(want), c.P.T.PermOf(want) & ~types.Writable) }
-        # C11, O15: the program's scope has no holder that lets go - a global holds a value with destructors by reference,
-        # its destructors run as the program ends
-        if want != types.UnknownT and not c.isRef(want) and c.P.T.NeedsDrop(want) {
-            c.err(v.Ty!.Span(), msgs.DestructGlobal(c.src(v.Ty!.Span())))
-            want = c.P.T.Ref(want, types.ReadOnly)
-        }
     }
     from := c.stmts.Len()
     x typed.Expr?& = null
@@ -11644,24 +11638,12 @@ fn (c mut Checker&) unendedArgs(args Array<ast.TypeRef&>&, rt types.TypeId) Bool
     for a in args {
         if generic.IsErrsArgOf(a): continue
         ra := c.P.Resolve(c.fr().Ctx, a)
-        if not c.isRef(ra) and c.P.UnendedDrop(c.P.T.Array(ra, types.TypeId(0))) != types.UnknownT {
+        if not c.isRef(ra) and c.P.UnendedDrop(c.P.T.Ref(c.P.T.Array(ra, types.TypeId(0)), types.ReadOnly)) != types.UnknownT {
             at = a
             break
         }
     }
     c.err(at.Span(), msgs.DestructTypeByValue(c.ty(u), c.ty(rt)) if c.P.Unique(u) else msgs.DestructCopiedHeld(c.ty(u), c.ty(rt)))
-    return false
-}
-
-# C11: a value made an array of a run-time length - Array<T>(n), a comprehension, a copy of one - whose elements have a
-# destructor to run: nothing would end them (an array has no holder of its elements; a library collection's buffer is
-# its destructor's) - said at sp; whether it is none
-fn (c mut Checker&) runArrayEnds(t types.TypeId, sp source.Span) Bool {
-    r := c.P.T.Repr(c.deref(t))
-    if c.P.T.KindOf(r) != types.Kind.Array or c.P.T.Length(r) != types.TypeId(0): return true
-    el := c.P.T.Elem(r)
-    if c.isRef(el) or not c.P.T.NeedsDrop(el): return true
-    c.err(sp, msgs.DestructRunArray(c.ty(el)))
     return false
 }
 
@@ -12137,8 +12119,6 @@ fn (c mut Checker&) leadWord(sp source.Span) source.Span {
 }
 
 # Array<T>(n[, fill]), T written tr: its arguments, then the array made (QP1)
-# Array<T>(n) made: of a run-time length, its elements with no destructor to run (C11)
-fn (c mut Checker&) arrayMade(sp source.Span, x typed.Expr&) typed.Expr& { return x if c.runArrayEnds(typeOf(x), sp) else c.unknown(sp) }
 
 fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
     if args.Len() < 1 or args.Len() > 2 {
@@ -12155,7 +12135,7 @@ fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Ex
         c.dropArgs(args)
         return c.unknown(sp)
     }
-    if not c.runArrayValue(el) or args.Len() != 2 { return c.arrayMade(sp, c.arrayMake(sp, el, args, want)) }
+    if not c.runArrayValue(el) or args.Len() != 2 { return c.arrayMake(sp, el, args, want) }
     # T7d: elements held by value take their length from the fill, where it has one known while compiling
     fx := c.expr(args[1], types.UnknownT)
     ft := typeOf(fx)
@@ -12163,7 +12143,7 @@ fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Ex
         return c.arrayMake(sp, ft, args, want, fx)
     }
     # QCE: else run-time elements, each its own copy of the fill
-    if ft != types.UnknownT { return c.arrayMade(sp, c.arrayMake(sp, el, args, want, c.fit(fx, el, args[1].Span()))) }
+    if ft != types.UnknownT { return c.arrayMake(sp, el, args, want, c.fit(fx, el, args[1].Span())) }
     c.exprTo(args[0], c.i64())
     return c.unknown(sp)
 }
@@ -14415,7 +14395,6 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
         if not existingValue(v) { return v }
-        if not c.runArrayEnds(typeOf(v), nsp) { return c.unknown(sp) }   # C11
         c.wantCopy(typeOf(v), 0)
         sp0 := v.Span()
         from := c.exprs.Len()
@@ -20326,8 +20305,6 @@ fn (c mut Checker&) comprArray(sp source.Span, cm ast.Compr&, elem types.TypeId)
         c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprNeedsTry())
     }
     c.fr().LoopFails = fails
-    # C11: elements with destructors in an array of a run-time length - ended by nothing
-    if state != 3 and not c.runArrayEnds(at, sp) { return c.unknown(sp) }
     if state == 3 {
         # T7c: no if, a count known while compiling - a fixed array, each element written once in place
         r := c.readLocal(sp, out)
@@ -22326,11 +22303,20 @@ fn (c mut Checker&) retLand(x typed.Expr&) typed.Expr& {
     return c.handOn(x, l) if l >= 0 else x
 }
 
+# C11: whether place p is a collection's buffer (types.Table.FieldHolds): its elements the collection's own code ends,
+# so a store over it ends nothing
+fn (c mut Checker&) bufferField(p typed.Lvalue&) Bool {
+    match p {
+        case typed.Lvalue.Field(_, ty, base, _) { return not c.P.T.FieldHolds(base.Type(), ty) }
+        case _ { return false }
+    }
+}
+
 # x stored into p (S4): where p holds a value with destructors to run by value, x made first, then the old value's run
 # (a variable's only while it holds one), then the store - Rust's order
 fn (c mut Checker&) storeOver(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     t := p.Type()
-    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t) {
+    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t) or c.bufferField(p) {
         c.emit(typed.Stmt.Assign(sp, p, x))
         return
     }
@@ -22429,7 +22415,6 @@ fn (c mut Checker&) partCopy(x typed.Expr&) typed.Expr& {
 # site, as any value made is)
 fn (c mut Checker&) ownCopy(x typed.Expr&) typed.Expr& {
     if not existingValue(x) { return x }
-    if not c.runArrayEnds(typeOf(x), x.Span()) { return x }   # C11
     c.wantCopy(typeOf(x), 0)
     sp := x.Span()
     from := c.exprs.Len()

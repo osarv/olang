@@ -1217,11 +1217,14 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
     x.Need(k)
     s := x.InitGlobals()
     if s == eval.Stop.None { s = x.M.Eval(k, Array<I64>(0)) }
+    # O1b, C11: the program's scope's destructors run as it ends normally - main returned, or (below) an error escaped it
+    if s == eval.Stop.None: s = x.M.EndProgram(k)
     match s {
         case eval.Stop.None { return 0 }
         case eval.Stop.Raised(_) {
             sayErr($x.StopText(s, entry, d) "\n")
             sayErr(x.TraceText(d))
+            x.M.EndProgram(k)
             return 1
         }
         case eval.Stop.Refused(why, _, _) {

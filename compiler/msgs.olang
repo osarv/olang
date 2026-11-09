@@ -274,8 +274,6 @@ type Diag enum {
     DoubleReferenceMarker
     DestructTypeByValue
     DestructCopiedHeld
-    DestructRunArray
-    DestructGlobal
     TraitNotAType
     AnyNotTrait
     AnyNeedsMarker
@@ -1261,9 +1259,7 @@ fn NoteInstanceRef() r.Msg { return r.Msg(Diag.NoteInstanceRef, "", "the referen
 fn InvalidReferenceTarget(ty String&) r.Msg { return r.Msg(Diag.InvalidReferenceTarget, "T24", $ty " cannot be a reference - only a struct, an enum or an array can") }
 fn DoubleReferenceMarker() r.Msg { return r.Msg(Diag.DoubleReferenceMarker, "T24", "a type takes at most one reference marker") }
 fn DestructCopiedHeld(ty String&, held String&) r.Msg { return r.Msg(Diag.DestructCopiedHeld, "C11", $ty " has a destructor to run and copies (its Copy), and a copy of " $held " would copy what it holds past its count - hold them by reference, " $ty "&") }
-fn DestructRunArray(ty String&) r.Msg { return r.Msg(Diag.DestructRunArray, "C11", $ty " has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<" $ty ">, or hold " $ty "& ones") }
 fn DestructTypeByValue(ty String&, held String&) r.Msg { return r.Msg(Diag.DestructTypeByValue, "C11", $ty " has a destructor to run, and " $held " keeps values of it where no holder ends them - write " $ty "&, or keep them in a Vec<" $ty ">") }
-fn DestructGlobal(ty String&) r.Msg { return r.Msg(Diag.DestructGlobal, "C11", $ty " has a destructor to run, so a global holds it by reference - write " $ty "&, its destructor run as the program ends") }
 fn TraitNotAType(ty String&) r.Msg { return r.Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty $("" if ty.EndsWith("&") else "&") "'") }
 fn AnyNotTrait(ty String&) r.Msg { return r.Msg(Diag.AnyNotTrait, "T32", "'any' takes a trait, and " $ty " is none") }
 fn AnyNeedsMarker(ty String&) r.Msg { return r.Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }

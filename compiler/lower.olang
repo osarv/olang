@@ -1400,6 +1400,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
                 if old != mir.NoLocal { ln.releaseAt(old, rel, sp) }
             }
+            if ln.B.Of == typed.BodyOf.Global and not ln.dead: ln.globalHeld(sp, target)
         }
         case typed.Stmt.Eval(sp, x) { ln.evalStmt(sp, x) }
         case typed.Stmt.Suspend(sp, x) { ln.suspend(sp, x!) }
@@ -6000,7 +6001,9 @@ fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
     r := t.Repr(ty)
     if mir.HasFields(t, ty) {
         parts := ln.partsOf(ty)
-        for i := parts.Len() - 1, i >= 0, i-- { ln.dropAt(ln.with(a, mir.Proj.Field(i)), parts[i], at, sp) }
+        for i := parts.Len() - 1, i >= 0, i-- {
+            if t.FieldHolds(ty, parts[i]): ln.dropAt(ln.with(a, mir.Proj.Field(i)), parts[i], at, sp)
+        }
     } else if mir.HasCases(t, ty) {
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
         ln.payloads(ln.casesOf(ty), tag, sp, fn(c I64, rec types.TypeId) {
@@ -6011,6 +6014,14 @@ fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         el := t.Elem(r)
         n := t.ConstValue(t.Length(r))
         for i := n - 1, i >= 0, i-- { ln.dropAt(ln.with(a, mir.Proj.Index(ln.local(ln.constI64(i), mir.I64T, sp))), el, at, sp) }
+    } else if t.KindOf(r) == types.Kind.Array {
+        # C11: a run-time length's elements, the last first - its length is in it
+        el := t.Elem(r)
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(a))], sp)
+        ln.eachIndex(n, sp, fn(i mir.LocalId) {
+            k := ln.prim(typed.PrimOp.Sub, mir.I64T, Array<mir.Operand>[ln.prim(typed.PrimOp.Sub, mir.I64T, Array<mir.Operand>[n, mir.Operand.Copy(mir.Lvalue.L(i))], sp), ln.constI64(1)], sp)
+            ln.dropAt(ln.with(a, mir.Proj.Index(ln.local(k, mir.I64T, sp))), el, at, sp)
+        })
     }
 }
 
@@ -6703,6 +6714,21 @@ fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
     ln.epilogue(mir.Operand.None)
     lw.Gapped = ln.gapped
     return ln.F
+}
+
+# C11, O15: a global initialized by value with a value with destructors to run (target, its initializer's store) - its
+# destructors registered with the program's scope, so they run as the program ends (O1b); a store over a mutable one
+# later ends the old value (O15)
+fn (ln mut lowering&) globalHeld(sp source.Span, target typed.Lvalue&) {
+    match target {
+        case typed.Lvalue.Global(_, ty, m, n) {
+            if ln.T.IsRef(ty) or not ln.T.NeedsDrop(ty): return
+            rt := ln.T.Ref(ty, types.Writable)
+            r := ln.into(rt, mir.Rvalue.Ref(ln.mk(pl(mir.Base.Global(m, n, ty))), rt), sp)
+            ln.emit(mir.Stmt.RegisterDtor(sp, mir.ScopeRef.Program, ty, r))
+        }
+        case _ { }
+    }
 }
 
 # "$x" of a value of the type, at the top of its rendering, written into builder b (E11a): a type declaring Str by what

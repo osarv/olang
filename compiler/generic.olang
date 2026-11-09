@@ -278,50 +278,51 @@ fn (p Program&) EndsHeld(mi I64, td ast.TypeDecl&) Bool {
 }
 
 # C11: where a type holds a value with destructors to run that no holder ends - an array of a run-time length of such
-# values (nothing knows which of its elements are live) anywhere it reaches, through its parts and through references
-# alike, but one that is a field of a collection whose destructor ends what it holds (Ends): the element type of the
-# first found, else types.UnknownT. So Vec<File>, Map<K, File>, Box<File> are held where their holders let go of them, and
-# std/list's List<File>, whose chunks are reached through a reference, is not
+# values reached through a reference (no holder of it ends what it holds; one held by value ends its elements, its
+# length in it), through its parts and through further references alike, but one that is a field of a collection whose
+# destructor ends what it holds (Ends): the element type of the first found, else types.UnknownT. So Vec<File>,
+# Map<K, File>, Box<File>, Array<File> are held where their holders let go of them, and std/list's List<File>, whose
+# chunks are reached through a reference, is not
 fn (p mut Program&) UnendedDrop(id types.TypeId) types.TypeId {
     seen Map<types.TypeId, Bool>
-    return p.unended(id, seen, 0)
+    return p.unended(id, seen, 0, false)
 }
 
 # ...the named types the walk went through added to seen
-fn (p mut Program&) Unended(id types.TypeId, seen mut Map<types.TypeId, Bool>&) types.TypeId { return p.unended(id, seen, 0) }
+fn (p mut Program&) Unended(id types.TypeId, seen mut Map<types.TypeId, Bool>&) types.TypeId { return p.unended(id, seen, 0, false) }
 
-fn (p mut Program&) unended(id types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+fn (p mut Program&) unended(id types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64, byRef Bool) types.TypeId {
     if depth > 32: return types.UnknownT
     r := p.T.Repr(id)
     return match p.T.KindOf(r) {
-        case types.Kind.Ref: p.unended(p.T.Referent(r), seen, depth + 1)
-        case types.Kind.Array: p.T.Elem(r) if p.T.Length(r) == types.TypeId(0) and p.T.NeedsDrop(p.T.Elem(r)) else p.unended(p.T.Elem(r), seen, depth + 1)
-        case types.Kind.Record, types.Kind.Tuple: p.unendedIn(p.T.Items(p.T.Parts(r)), seen, depth)
-        case types.Kind.AnonEnum: p.unendedIn(p.T.Items(p.T.ShapeCases(r)), seen, depth)
-        case types.Kind.Named: p.unendedNamed(r, seen, depth)
+        case types.Kind.Ref: p.unended(p.T.Referent(r), seen, depth + 1, true)
+        case types.Kind.Array: p.T.Elem(r) if byRef and p.T.Length(r) == types.TypeId(0) and p.T.NeedsDrop(p.T.Elem(r)) else p.unended(p.T.Elem(r), seen, depth + 1, byRef)
+        case types.Kind.Record, types.Kind.Tuple: p.unendedIn(p.T.Items(p.T.Parts(r)), seen, depth, byRef)
+        case types.Kind.AnonEnum: p.unendedIn(p.T.Items(p.T.ShapeCases(r)), seen, depth, byRef)
+        case types.Kind.Named: p.unendedNamed(r, seen, depth, byRef)
         case _: types.UnknownT
     }
 }
 
-fn (p mut Program&) unendedNamed(r types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+fn (p mut Program&) unendedNamed(r types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64, byRef Bool) types.TypeId {
     if seen.Has(r) or not p.Body(r): return types.UnknownT
     seen.Put(r, true)
     return match p.T.DeclKindOf(p.T.DeclOf(r)) {
-        case types.DeclKind.Struct: p.unendedFields(r, seen, depth)
-        case types.DeclKind.Enum: p.unendedIn(p.T.Items(p.T.Cases(r)), seen, depth)
-        case types.DeclKind.Over: p.unended(p.T.Base(r), seen, depth + 1)
+        case types.DeclKind.Struct: p.unendedFields(r, seen, depth, byRef)
+        case types.DeclKind.Enum: p.unendedIn(p.T.Items(p.T.Cases(r)), seen, depth, byRef)
+        case types.DeclKind.Over: p.unended(p.T.Base(r), seen, depth + 1, byRef)
         case _: types.UnknownT
     }
 }
 
 # a struct's fields - a collection's own buffer (Ends) judged by its elements alone: its destructor ends the live ones,
 # and what they hold in turn is judged as anything held
-fn (p mut Program&) unendedFields(r types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+fn (p mut Program&) unendedFields(r types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64, byRef Bool) types.TypeId {
     ends := p.T.Ends(r)
     for x in p.T.Items(p.T.Fields(r)) {
         if x == types.TypeId(0): continue
         xr := p.T.Repr(x)
-        u := p.bufferUnended(p.T.Elem(xr), seen, depth) if ends and p.T.KindOf(xr) == types.Kind.Array else p.unended(x, seen, depth + 1)
+        u := p.bufferUnended(p.T.Elem(xr), seen, depth) if ends and p.T.KindOf(xr) == types.Kind.Array else p.unended(x, seen, depth + 1, byRef)
         if u != types.UnknownT: return u
     }
     return types.UnknownT
@@ -332,13 +333,13 @@ fn (p mut Program&) unendedFields(r types.TypeId, seen mut Map<types.TypeId, Boo
 # held (a unique element is never copied, T13b)
 fn (p mut Program&) bufferUnended(el types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
     if not p.T.IsRef(el) and p.T.NeedsDrop(el) and not p.T.Unique(el): return el
-    return p.unended(el, seen, depth + 1)
+    return p.unended(el, seen, depth + 1, false)
 }
 
-fn (p mut Program&) unendedIn(xs Array<types.TypeId>&, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+fn (p mut Program&) unendedIn(xs Array<types.TypeId>&, seen mut Map<types.TypeId, Bool>&, depth I64, byRef Bool) types.TypeId {
     for x in xs {
         if x == types.TypeId(0): continue
-        u := p.unended(x, seen, depth + 1)
+        u := p.unended(x, seen, depth + 1, byRef)
         if u != types.UnknownT: return u
     }
     return types.UnknownT
