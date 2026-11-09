@@ -3313,11 +3313,6 @@ numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constrain
     7 |     r := nsRoot(n)
       |          ^~~~~~
 compilation failed with 1 error
-=== o12spawntarget.olang
-o12spawntarget.olang:12:29: error[O12]: where this place's references live is not known here, so nothing new is built into it - reach the place through a local, so its scope is found from it while the program runs (O29), or store what already lives there
-   12 |         join { spawn arr[0] = Node.mkNode(i + 50) }
-      |                             ^
-compilation failed with 1 error
 === o14returnglobal.olang
 o14returnglobal.olang:8:26: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     8 |     x mut Array<Char>& = Show()

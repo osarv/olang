@@ -824,7 +824,7 @@ e4622c2bb871392a 39ee4f62030706b1 checks/cases/o10cnotethroughcall.olang
 99187f1516aa9029 9476ac9b17d9aeee checks/cases/o10cresultlanding.olang
 f32f4ca9d02219e8 987400e01be21685 checks/cases/o10dd9bslice.olang
 1c1e03a4d0fcaa06 e334f41865949167 checks/cases/o10delementfield.olang
-5c564385059bf918 c11f6bf6ec8b6f0d checks/cases/o12spawntarget.olang
+d2f7ba92ae5275ab 1a9df2d70b3d489e checks/cases/o12spawntarget.olang
 cc996bb81119a5f3 0c5f1eadf3735e65 checks/cases/o13acopywrap.olang
 43e1e99119a1efc3 16dfa9a4cb6e8dca checks/cases/o13afieldstore.olang
 43ed6f1275c2eaf3 d6f79ee6c9186b65 checks/cases/o13afieldstorewrap.olang
@@ -952,6 +952,7 @@ d9adb6de053f793c f63b907f818edec4 checks/cases/o26aviewflow.olang
 bd049c2376edce42 b032df7ea5e0ce36 checks/cases/o27destructorgen.olang
 2d55c0b532701398 08e72ac5a67664bd checks/cases/o27destructorview.olang
 3a60d7a7d27e8524 a04cd09a844060a3 checks/cases/o27genborrow.olang
+172b4f85912e6254 1cd405af01f605d3 checks/cases/o29spawnfound.olang
 445aa4a3d5a95d71 326830bfcb161e2c checks/cases/o4bblock.olang
 0065fa805d3b499f b66b34a85e7eda96 checks/cases/o4bbyvaluebuild.olang
 478c293058eabaeb b1ed690308e591b1 checks/cases/o4bmapvalueblock.olang
@@ -1290,6 +1291,7 @@ d46023e412df6c24 4072bafb460488f2 checks/cases/s19eyield.olang
 4a36da5c29d2a822 803f4a9e55fa7fb8 checks/cases/s1bnested.olang
 669db0507a1009d1 3b1729ee86f20876 checks/cases/s1bparallel.olang
 d4e2190baab6f4c8 802aea9e55e9338e checks/cases/s1bsameline.olang
+cf496e4c4f06fbf3 e4fe040d432b0b9d checks/cases/s20walkheldref.olang
 7170810fecd4421a 9a6333bde63a34e5 checks/cases/s20yieldheld.olang
 172a4e5781c44ceb e52a83a95486ef4b checks/cases/s21becomeheld.olang
 98297a11c66880ed 8044a80b33d32c55 checks/cases/s3busy.olang
@@ -1594,6 +1596,7 @@ d8b83bf11746bebb ae1a43e2da664030 checks/cases/t22bresultkept.olang
 dbcdabccc2ccf176 cb1b46e9dba2a43b checks/cases/t22bwordsfit.olang
 483eed5c12cc4524 f8843eb2c1298ff1 checks/cases/t22callunsafe.olang
 d11bd5140006f0f6 9b6db8a77326a3ce checks/cases/t22cbuildcapture.olang
+ec175ca822dd2ac1 8458c2f92edc68bc checks/cases/t22ccapturefound.olang
 b2ba128df2e64b19 18985e5da161a303 checks/cases/t22climit.olang
 b64de0543bdae585 2e3b4200f86d9eda checks/cases/t22cstorefollowed.olang
 ff96d76f6ef3992a 28424458be2ea22c checks/cases/t22sharedscope.olang
@@ -2181,7 +2184,7 @@ a9dca7239e2bed75 89e39786ca0015a2 compiler/msgs.olang
 de87a76ebcdd4f4f 36bf5cfa366d300c compiler/profile.olang
 cd6dc04fc51a289c 717b2d1c1d7ae607 compiler/runtime.olang
 1cd1dca247f6cfbd 65a9cc0be9512004 compiler/scan.olang
-d155a83e9665df47 38a25ce4ad9e5473 compiler/scope.olang
+8a1a4366b30c1435 19a5b90fd5174c17 compiler/scope.olang
 1516ae61a747b080 a2856ec30c49812c compiler/session.olang
 a846754911a07a9e 65d90941d2eb0321 compiler/source.olang
 bae5395316494bb3 77e39f1f8417f545 compiler/target.olang

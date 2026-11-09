@@ -2335,6 +2335,9 @@
 | ttt
 === run o10delementfield.olang
 | status 0
+=== run o12spawntarget.olang
+| status 0
+| 52
 === run o13acopywrap.olang
 | status 0
 === run o13afieldstore.olang
@@ -2622,6 +2625,9 @@
 === run o27genborrow.olang
 | status 0
 | Vec<String&>["0", "a", "b", "1", "a", "b", "2", "a", "b", "3", "a", "b", "4", "a", "b"] Vec<String&>["0", "c", "d", "1", "c", "d", "2", "c", "d"] 50
+=== run o29spawnfound.olang
+| status 0
+| 51 105 0
 === run o4bblock.olang
 | status 0
 === run o4bbyvaluebuild.olang
@@ -2902,6 +2908,15 @@
 | status 0
 === run s1bparallel.olang
 | status 0
+=== run s20walkheldref.olang
+| status 0
+| let go
+| block left
+| 4
+| 5
+| let go
+| inner left
+| outer left
 === run s20yieldheld.olang
 | status 0
 | closed 3
@@ -3290,6 +3305,9 @@
 === run t22cbuildcapture.olang
 | status 0
 | 3 63 0
+=== run t22ccapturefound.olang
+| status 0
+| 3 63 6
 === run t22sharedscope.olang
 | status 0
 === run t22sharedscopegeneric.olang
