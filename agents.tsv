@@ -35,3 +35,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-08T20:00	F6 fnvalues round 6: scopes found at run time	opus	medium	completed	352	184	52	no (stale goldens + PROGRESS.md only)	?	41 refusals now run; found+fixed early-free UAF; 2 program-scope fallbacks remain
 2026-11-08T20:00	W1 facts with readers + incremental harness	opus	medium	completed	342	162	104	no (stale goldens + README only)	?	found 2 bugs (stale object via lowering read, -memory counts)
 2026-11-08T21:30	R1 refusals 5.1	opus	medium	completed	342	169	110	yes	?	41/44 compile; IR identical; scopesan+scopefuzz pass
+2026-11-08T21:30	W2 early freeing in every module	opus	medium	completed	454	243	130	no (stale goldens only)	?	found+fixed nested-region bug; session peak 260->1.7MB
