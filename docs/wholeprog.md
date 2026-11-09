@@ -499,6 +499,13 @@ target runs beside the others (the suite is already split per file).
 (`incremental`), T3 (`reuseall`, over the checks' run cases; it found D9h's mutable globals read around the table), T5
 (`make editfuzz`, `editfuzzcheck` in the suite), T6 (`records`), and T7 run once.
 
+**Built in W3a (2026-11-09, HISTORY "The front end's records, part 1"):** front records per module (each body's M19g
+summary, signatures with inferred error sets, baked values) under the IR's key and facts read; a taken body's views walk
+skipped (a no-op build's front end 5.6 s to 4.5 s on the compiler). T4 (`OLANG_CHECKINCR`) in `incremental`, `reuseall`,
+`records` and the edit fuzzer; T2's error set shrunk and M19g summary kinds; T7 run once (97 of 100 commits, nothing
+stale). Bodies are all still checked and keys are still the texts a module reaches: section 8 and early freeing read
+every typed body, and what a module reads of its imports is a summary of every pass - both W3b's.
+
 ### 10.4 genrefs in the order
 
 Every genrefs question was answered on 2026-11-08 (genrefs section 0.1). Its rounds in this order: **G1** at step 4,

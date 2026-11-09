@@ -689,7 +689,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   each module's record taken only where every fact it read holds, and the harness - checks scenarios `incremental`
   (each edit kind against a clean build), `records` (damaged, foreign and side-by-side records), `reuseall` (every run
   case under `OLANG_CHECKREUSE` in one directory, two orders), and the edit fuzzer (`make editfuzz`, a fixed set in
-  verify). **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
+  verify). **Built (W3a)**: front records beside the IR's, under the same key and facts read - each body's M19g
+  summary (a taken body is not walked again), signatures with inferred error sets and baked values - written from a
+  program that checked cleanly; `OLANG_CHECKINCR` compares every record taken with checking afresh (in `incremental`,
+  `reuseall`, `records` and the edit fuzzer). Keyed by the texts a module reaches; narrowing to what it reads of its
+  imports waits for W3b's summaries. **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
   code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
   declined.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); `-debug` is
