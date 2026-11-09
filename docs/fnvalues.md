@@ -581,9 +581,10 @@ never assigns (`fixedParam`, the first 62) records `letsVia`/`viaMut` bits and `
 letting go of anything and keeping a parameter's value, and each call of the body resolves them by its argument
 (`viaCall`: a function or a lambda written there - through a conversion to the parameter's type - by its body's summary,
 the caller's own fixed parameter composed again, else by the type); in the body's own final walk the call is still an
-event for any place, so views it holds across it are judged as before. Anything else is judged by its type: an argument
-is kept where its `keeps` words name it or where any argument can be stored into (a writable reference, a value holding
-a reference), and a `pure` value given nothing that may write lets go of nothing. `-memory`'s note at such a let-go
+event for any place, so views it holds across it are judged as before. Anything else keeps every argument, as before -
+item (2)'s `keeps` words are not relied on: a value followed into a twin (T22c) may keep more than its parameter's type
+says, and a body's analysis is its twins' too - and lets go of nothing where its type is `pure` and it is given nothing
+that may write (effects are never followed past a type's words: T22b refuses an impure value held as `pure`). `-memory`'s note at such a let-go
 says "it calls through a function value not followed whose type does not promise 'pure'" or "it is given ..., and calls
 through it". D9h (lower.olang's `quietCall`), E31b (check.olang's `plainArg`, `pureFnArg`, `collWalk`, `settleInPlace`:
 `Through` only with `Impure`) and M19g (views.olang's value calls) read `pure` through `types.ReachesImpure`,

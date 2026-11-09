@@ -36159,8 +36159,8 @@ is composed as effects' are: bits per parameter (`letsVia`, `viaMut`) and triple
 resolved at each call by the argument - a function or a lambda written there by its body's summary, the caller's own
 parameter composed again (so `twice(xs, fn ...)` calling `sum(xs, f)` twice is judged by the lambda), else by its type.
 In the body's own final walk the call stays an event for any place, so a view the body itself holds across it is judged
-as before. By type: an argument is kept where `keeps` names it or any argument can be stored into, and a `pure` value
-given nothing that may write lets go of nothing. D9h, E31b and M19g read `pure` as writing only through `mut`
+as before. By type: a `pure` value given nothing that may write lets go of nothing; any other keeps every argument and
+may let go of anything, as before. D9h, E31b and M19g read `pure` as writing only through `mut`
 arguments (`types.ReachesImpure`, `ReachesWrite(t, clean = true)`, `PromisesPure`); M19g also follows a function or
 lambda written where it is called.
 
@@ -36173,7 +36173,11 @@ a local's records are not there - a call through a local stays judged by its typ
 by its type only (no records in lowering either). A body called through records whose own calls go through its
 parameters lets go of anything at that call (its arguments' values are the inner call's, not known there). The
 callee's final walk keeps today's event, rather than a set of what its callers give - the gain is at the callers, where
-the views that kept were.
+the views that kept were. The section's "keeps what its type's `keeps` words name" for a value not followed is not
+built: a body's analysis serves its twins too (they share it), and a twin's parameter holds functions keeping more than
+the parameter's type says (T22c follows them exactly there) - a callee judging a call through its parameter, or through
+a local copy of it, by the type would miss what the twin's functions keep. `pure` is safe to read so: T22b refuses an
+impure function held as `pure`, followed or not.
 
 **Tests.** checks/cases o8dfnpure (-memory: the place frees at once across a `pure` callback, a lambda through two
 higher-order calls, a `pure` field given a parameter promising nothing, a local lambda), o8dfnremoves (a lambda that pops

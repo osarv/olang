@@ -409,8 +409,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   only: no meaning changes. **What is followed and promised, read by the other analyses (round 10, built 2026-11-09,
   mine within the user's decision; docs/fnvalues.md 4.6):** early freeing judges a call through a value whose records
   the scope pass followed as direct calls of them, composes a call through a function parameter its body never
-  assigns at each call by the argument (`letsVia`, `escVia`), and judges any other by its type (`keeps` words, `pure`
-  given nothing writable lets go of nothing); D9h's quiet statements, E31b's in-place calls and M19g take a `pure`
+  assigns at each call by the argument (`letsVia`, `escVia`), and takes any other as keeping every argument and
+  letting go of anything - but a `pure` value given nothing writable, which lets go of nothing; D9h's quiet statements, E31b's in-place calls and M19g take a `pure`
   value (or a function written for a `pure` parameter) as writing only through its `mut` arguments, and M19g follows a
   function written where it is called; `-memory`'s note names a value nothing is known of. The
   function-values

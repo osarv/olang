@@ -3053,9 +3053,10 @@ CalleeGiven I64 = -3
 
 # a call through function value v (args its arguments' origins): (1) judged as direct calls of the bodies the scope
 # pass followed it to; (2) else one through a function parameter its body never assigns composed at each call of the
-# body (letsVia, escVia); (3) else by its type - what its "keeps" promises name, or anything where an argument can be
-# stored into, is kept; where it promises "pure" and no argument may write, nothing is let go of. Its result may be any
-# argument's (out)
+# body (letsVia, escVia); (3) else it may keep any argument - a value followed into a twin (T22c) may keep more than
+# its type's "keeps" words say, and this body's analysis is its twins' too - and lets go of anything, but where its type
+# promises "pure" and no argument may write: nothing (effects are never followed past a type's words, T22b). Its
+# result may be any argument's (out)
 fn (w mut walker&) valueCall(c typed.Call&, v typed.Expr&, args Vec<Vec<I64>>&, sp source.Span, out mut Vec<I64>&) {
     f := w.F
     for a in args { addAllTo(out, a) }
@@ -3069,9 +3070,7 @@ fn (w mut walker&) valueCall(c typed.Call&, v typed.Expr&, args Vec<Vec<I64>>&, 
         w.throughParam(c, fty, p, args, sp)
         return
     }
-    for q in range args.Len() {
-        if w.typeKeeps(fty, c, q): w.escape(args[q], sp, "", false)
-    }
+    for a in args { w.escape(a, sp, "", false) }
     if not (w.T().PromisesPure(fty) and not w.mayWrite(c)): w.goAll(sp, c, CalleeValue)
 }
 
@@ -3120,12 +3119,11 @@ fn pastAway(x typed.Expr&) typed.Expr& {
 }
 
 # a call through function parameter p of type fty: what an argument a parameter's value is given as is kept where what
-# each call gives p keeps it (escVia), anything else as the type says; it lets go of what each call's p lets go of
-# (letsVia) - in the body's own walk, of anything, where it lets go at all
+# each call gives p keeps it (escVia), anything else is kept; it lets go of what each call's p lets go of (letsVia) - in
+# the body's own walk, of anything, where it lets go at all
 fn (w mut walker&) throughParam(c typed.Call&, fty types.TypeId, p I64, args Vec<Vec<I64>>&, sp source.Span) {
     f := w.F
     for q in range args.Len() {
-        if not w.typeKeeps(fty, c, q): continue
         for y in args[q] {
             k := okind(y)
             if (k == OPar or k == OParC) and q < (I64(1) << 20) and oval(y) < (I64(1) << 20) {
@@ -3258,8 +3256,7 @@ fn (w mut walker&) pureValue(a typed.Expr&) Bool {
 }
 
 # what a function value a given a call keeps of its parameter q given value o: by the bodies it is, where written at
-# the call; composed into this body's own where it is one of its parameters; else kept, as its type says (the callee
-# judged that before it composed)
+# the call; composed into this body's own where it is one of its parameters; else kept
 fn (w mut walker&) escThrough(a typed.Expr&, q I64, o Vec<I64>&, sp source.Span) {
     f := w.F
     recs := try writtenRecs(a) catch default Vec<I64>()
@@ -3298,23 +3295,6 @@ fn (f mut Free&) recKeeps(rb I64, q I64) Bool {
     return false
 }
 
-# whether a call through a function value of type fty keeps argument q beyond the call (T22): its "keeps" promises name
-# it, or something can be stored into what an argument names
-fn (w mut walker&) typeKeeps(fty types.TypeId, c typed.Call&, q I64) Bool {
-    t := w.T()
-    if t.KindOf(fty) != types.Kind.Func: return true
-    ks := t.KeepsOf(fty)
-    for i in range ks.Len() / 3 {
-        if ks[3 * i] == q: return true
-    }
-    for a in c.Args {
-        ty := t.Repr(a.Type())
-        if t.IsRef(ty) and ((t.PermOf(ty) & types.Writable) != 0 or t.HoldsRefs(t.Referent(ty))): return true
-        if not t.IsRef(ty) and t.HoldsRefs(ty): return true
-    }
-    return false
-}
-
 # whether a call gives an argument that may write: a writable reference, or a value holding a reference
 fn (w mut walker&) mayWrite(c typed.Call&) Bool {
     t := w.T()
@@ -3346,6 +3326,10 @@ fn (f mut Free&) storedMore(b I64, j I64) Bool {
         if e >> 32 == j: n++
     }
     if n > 1 or has(f.parEsc[b], j) or has(f.resFrom[b], orig(OPar, j)) or has(f.resFrom[b], orig(OParC, j)) { return true }
+    # (handed to a call through a function parameter that may keep it, escVia)
+    for e in f.escVia[b] {
+        if e & ((I64(1) << 20) - 1) == j: return true
+    }
     return has(f.parMulti[b], j)
 }
 

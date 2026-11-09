@@ -6690,9 +6690,9 @@ nothing is reclaimed on a guess, and no fact is taken from a fixed point not run
 value is judged by what is known of it (T21c, T22): where every function it may be is followed (T22a) - a value made in
 the function, a lambda or a function written as an argument - as direct calls of those; through a parameter the body
 never assigns, as each call of the body gives it (`apply(xs, fn(x): return x * 2)` lets go of what the lambda does,
-through any number of such calls); else by its type - it keeps what its `keeps` promises name (and, where an argument
-can be stored into, every argument), and where it promises `pure` and is given nothing that may write (a writable
-reference, a value holding a reference) it lets go of nothing. A generator (D18) lets go
+through any number of such calls); else it may keep any argument and let go of anything - but where its type promises
+`pure` and it is given nothing that may write (a writable reference, a value holding a reference), it lets go of
+nothing. A generator (D18) lets go
 as a function does, its `yield` giving a value as a `return` does - and a `yield` is a call that may make any place let
 go, for what its frame holds across it: its consumer runs what it likes before the next `Next()`. What the
 generator was given is held by it for as long as it can be resumed (D18b); what its frame holds when a walk stops part
