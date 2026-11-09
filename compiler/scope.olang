@@ -7582,6 +7582,9 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
         # only existing storage of one of this function's blocks that closes first, given as the argument: anything else -
         # a temporary built for the call included - the store's own fit judges
         if not t.Runs() or s.order(t, slot) != FailsBlock or s.isFresh(c.Args[ai]) or s.madeLocal(c.Args[ai], 0) < 0 { continue }
+        # (the inference: the argument built where the slot is, its storage with it - R2, O28 reached through the
+        # instance)
+        if s.liftGather { s.propose(c.Args[ai], slot) }
         if s.report { s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg(s.copyHint(c.Args[ai]))) }
         return true
     }
@@ -8541,6 +8544,9 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                 d = Term.Var(s.resultVar)
                 s.tailDtorRow(pr.X.Span())
             }
+            # (the inference's landing for it, where a held temporary is kept longer than its first use - R2)
+            psl := s.siteLift(I64(pr.Site))
+            if psl.Runs() { d = s.joinTerm(d, psl) if d.Runs() else psl }
             s.buildSite(pr.Site, d, pr.X.Span())
             s.anyItems = box and anyArrayBox(pr.X)
             # (an enum case a reference local is declared with: its payload judged as the local's - R1, T17c)
@@ -11670,6 +11676,13 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
         }
         case _ { }
     }
+    # (a temporary made of a value held for a statement - a rendered index held for At and SetAt: built where it is
+    # kept, R2)
+    ht := s.heldTemp(u)
+    if ht >= 0 {
+        s.proposeSite(ht, t)
+        return
+    }
     r := s.claimRoot(x)
     if r < 0 {
         if s.proposeView(u, t) { return }
@@ -11686,6 +11699,21 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
     s.partFlow = partRead(u)
     s.proposeLocal(r, t, s.keepsStorage(x) or s.convertsStorage(x))
     s.partFlow = false
+}
+
+# the site of the temporary a held local holds where x reads it whole and it is made of a value, not a call; -1 for none
+fn (s mut Scoper&) heldTemp(x typed.Expr&) I64 {
+    l := match x {
+        case typed.Expr.Read(_, _, p, _): wholeLocal(p)
+        case _: -1
+    }
+    if l < 0 or s.B!.Locals[l].Kind != typed.LocalKind.Held: return -1
+    hi := try s.inits.Get(l) catch { return -1 }
+    if typed.Call.Of(hi) is not null: return -1
+    return match hi {
+        case typed.Expr.Promote(_, _, pr): I64(pr.Site)
+        case _: -1
+    }
 }
 
 # the value a part read off is, where x reads a field or an element of a value with no storage (a call's result,
