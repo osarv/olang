@@ -391,6 +391,7 @@ c2d38dc63dedcc98 0b4b83e1b2a4a949 checks/cases/d8gtwo.olang
 4d151bf595988280 3d41e9dcca16b0ea checks/cases/d9apayloadstring.olang
 5f5c4bc9ded2c962 29c87d000f3baea6 checks/cases/d9cgrowing.olang
 6f3224dde3f2adb9 915059bc77760500 checks/cases/d9hheldwrite.olang
+c7b2b038bf899a22 498f9fe657610c7c checks/cases/d9htryview.olang
 5d6af342835df25d 776e4ef9c072c7d3 checks/cases/d9mutvalueparam.olang
 991017b5091e1dc6 fdf5eb4f059d41e8 checks/cases/d9mutvaluerecv.olang
 bacfb3f2e1444b4d 14c13b41b3b42802 checks/cases/deeparray.olang
@@ -1842,7 +1843,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 244020b30fdf2de1 b897660d40972e4d checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-2aee2f8d7887ec17 80b5b4c50c8cd288 checks/checks.olang
+28f0f66381cef6f3 0c3740bb43dee33a checks/checks.olang
 a9e28b3dd92156ad 622c84cf954c843d checks/fixtures/agree/agree.olang
 93a0581f17cca83e 855092106b73d871 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 20676fbca43683b2 checks/fixtures/agree/math.olang
@@ -1904,6 +1905,7 @@ f3f66eb4e22348be 2a1f2ab3bd58383c checks/fixtures/earlyfree/exportquiet.olang
 746d7ad1478e4e7d 589247482d8df387 checks/fixtures/earlyfree/fieldfeed.olang
 bd4cf6dd64ade68f 2464f52499944834 checks/fixtures/earlyfree/fixedconv.olang
 4a692290c7a4139b d9f5a32df5b761cd checks/fixtures/earlyfree/frames.olang
+bcc56a12fe1d40c7 9be4db325c954f0b checks/fixtures/earlyfree/getread.olang
 aa1d6670db934145 b4fa833147963982 checks/fixtures/earlyfree/globals.olang
 e585e7fc7e3385f4 05f848af5a005b03 checks/fixtures/earlyfree/mapdrop.olang
 0302336946d69de9 bf555b28024ebe8c checks/fixtures/earlyfree/mapkeys.olang
@@ -2137,7 +2139,7 @@ d8f42880f6311ede 8ff4e41dc4710c29 compiler/generic.olang
 d37fd1089d3515a3 454f6967856dcc02 compiler/interp.olang
 a60d3ef1c94e04ef 8c13020a89e52588 compiler/listing.olang
 8613922735c561a6 952e78f6e48dd4d4 compiler/load.olang
-2b727273e0b1aeb1 c334f20836a08c00 compiler/lower.olang
+5ec89224d1833bb7 6094808866ff99a0 compiler/lower.olang
 3879802f0148397c 5dd6f84508da5a8e compiler/lsp.olang
 a9fdbee6672ba31e 89e29d0fd7116d29 compiler/mcp.olang
 ac3d46c3eacc38c5 35fce09e0d68aefe compiler/mir.olang

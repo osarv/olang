@@ -1,0 +1,29 @@
+# check: run
+# flags: -debug -sanitize
+# D9h: a view call's value passed on by a try and read where it stands (`m.Get(k)![i]`, a clause's
+# `catch { return }` too) is read as it is only where nothing evaluated while it is alive writes what it views: an
+# index that replaces the entry it reads (bump) reads the value the call gave, a copy of the entry as it was
+fn bump(m mut Map<I64, Vec<I64>>&) I64 {
+    v := Vec<I64>()
+    for j in range 8 { v.Push(100 + j) }
+    m.Put(0, v)
+    return 5
+}
+
+fn first() Vec<I64> {
+    v := Vec<I64>()
+    for j in range 8 { v.Push(j) }
+    return v
+}
+
+fn main() ? {
+    m := Map<I64, Vec<I64>>()
+    m.Put(0, first())
+    a := m.Get(0)![bump(m)]
+    b := (try m.Get(0) catch { return })[5]
+    c := m.Get(0)!.Len()
+    m.Put(0, first())
+    d := (try m.Get(0) catch { return })[bump(m)]
+    e := (try m.Get(9) catch default first())[1]
+    assert a == 5 and b == 105 and c == 8 and d == 5 and e == 1
+}

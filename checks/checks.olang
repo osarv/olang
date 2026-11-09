@@ -512,21 +512,22 @@ fn earlyfree(r mut report&) ? Failed {
     # globals: Vec globals given a Vec built in a local and one a call builds, a Map global's values replaced and removed
     # fieldfeed: Vec locals filled and stored into a long-lived holder's fields, built in the fields' regions (feeders)
     # mapkeys: a Map with text keys whose Vec values are replaced and removed, each entry's copy split (the key outside)
+    # getread (D9h): a Vec Map.Get and Vec.Get hand back read where it stands through a try, never copied each turn
     progs := Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec", "vecreassign"
                      "dropvec", "exportquiet", "maptake", "mapput", "mapdrop", "globals", "mapkeys"
-                     "fieldfeed"]
+                     "fieldfeed", "getread"]
     small := Array<String&>["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000", "300", "2000", "300", "2000", "2000"
-                     "2000", "30", "2000", "30"]
+                     "2000", "30", "2000", "30", "2000"]
     full := Array<String&>["example.com\n", "3000000\n", "100\n"
                     "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
                     "3071\n", "12000000000000\n", "999936 64\n", "16\n", "63 504\n", "2000980000000 2000980000000\n"
                     "1000000 499999500000\n", "40039400000\n", "999968 250000000000 32\n", "999936 499999500000 64\n"
                     "999968 32\n", "119990000000 10000 3\n", "50 5000\n"
-                    "22197000 name 2098\n"]
+                    "22197000 name 2098\n", "33250000 64000000\n"]
     part := Array<String&>["example.com\n", "3000\n", "100\n"
                     "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
                     "3071\n", "270000\n", "1936 64\n", "16\n", "64 512\n", "5970000 5970000\n", "2000 1999000\n"
-                    "149100\n", "1968 1000000 32\n", "1936 1999000 64\n", "1968 32\n", "1504350000 10000 2\n", "50 5000\n", "303405 name 128\n"]
+                    "149100\n", "1968 1000000 32\n", "1936 1999000 64\n", "1968 32\n", "1504350000 10000 2\n", "50 5000\n", "303405 name 128\n", "66616 128000\n"]
     for i in range progs.Len() {
         p := progs[i]
         try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)
