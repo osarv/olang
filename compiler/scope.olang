@@ -195,6 +195,9 @@ type summary struct() {
     # parameters, in the constructor's terms - from FieldFrom[i] in FieldTerms, -1 for none (O23a)
     FieldFrom Vec<I64>
     FieldTerms Vec<Term>
+    # O23a, C1: its derived scopes (typed.Plan's DerivedP/W), each a hidden scope parameter a call passes
+    DerivedP Vec<I64>
+    DerivedW Vec<I64>
     # T22a (docs/sec8.md 5.2): what every return gives, where the result is a function value - in the body's terms; not
     # Full for a body in a cycle or one not judged (its returns are boundaries)
     ResFn fnRecs
@@ -299,6 +302,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     Spell fn?&(t types.TypeId) String = null # a type as source writes it, for a message (the checker's)
     sums Vec<mut summary&>
     ctorOf Map<types.TypeId, I64>  # a type's constructor's body (twin 0)
+    dtorOf Map<types.TypeId, I64>  # a type's destructor's body, by its representation
     stTypes Map<types.TypeId, I64> # storeThrough, once asked: 1 being asked, 2 no, 3 yes
     asTypes Map<pair.Pair<I64, I64>, I64> # admitsAt, by (type, writable): 1 being asked, 2 no, 3 yes
     texts Map<I64, String&>        # a diag file's text, by file
@@ -374,6 +378,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     buildFile Vec<I64>                    # ... and that build's innermost site (a callee's, through a call)
     buildAt Vec<source.Span>
     noBuild Vec<Bool>                     # by scope variable: where nothing may be built - a Str's receiver's (E11c)
+    derivedOk Bool = false                # O23a: the body being judged takes its derived scopes as hidden parameters
+    noDerived Map<I64, Bool>              # ... the bodies that never do: a become chain's (S21's one signature)
     homeVar I64 = -1                      # D18c: a generator's Next whose elements live where it does - its capture of that
     walkElem Map<I64, Term>               # D18e, D18c: a for-in's own walk of a generator borrowing parameter p - where p's argument lives
     lastGenArg Term = Term.None           # ... the last such call's, for the walk's local it initializes
@@ -608,6 +614,7 @@ fn (s mut Scoper&) Run() {
             case typed.BodyOf.Ctor(t, twin) {
                 if twin == types.ListId(0) { s.ctorOf.Put(t, i) }
             }
+            case typed.BodyOf.Dtor(t) { s.dtorOf.Put(s.P.T.Repr(t), i) }
             case _ { }
         }
     }
@@ -2505,6 +2512,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.lastGenArg = Term.None
     s.report = report
     s.plan = typed.Plan.New(body)
+    s.derivedOk = s.takesDerived(b)
     s.buildsVar.Clear()
     s.realVar.Clear()
     s.buildSp.Clear()
@@ -2577,6 +2585,12 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         for t in s.resBind { sm.ResBind.Push(t) }
     }
     sm.ResFn = s.resFns if s.resFnOk else fnRecs()
+    sm.DerivedP.Clear()
+    sm.DerivedW.Clear()
+    for k in range s.plan.DerivedP.Len() {
+        sm.DerivedP.Push(s.plan.DerivedP[k])
+        sm.DerivedW.Push(s.plan.DerivedW[k])
+    }
     sm.Builds.Clear()
     sm.Real.Clear()
     sm.BuildFile.Clear()
@@ -2594,6 +2608,90 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         if k < s.plan.MayBuild.Len() { s.plan.MayBuild[k] = s.buildsVar[k] }
     }
     if report { s.Plans[b] = s.plan }
+}
+
+# O23a, C1: whether body b takes its derived scopes as hidden scope parameters - a function or method called directly
+# (an export fn's caller is C, a become chain's bodies share one signature, a generator's Next and a lambda are called
+# through values) or a destructor
+fn (s mut Scoper&) takesDerived(b I64) Bool {
+    body := s.Bodies[b]
+    if body.Gen or s.noDerived.Has(b): return false
+    return match body.Of {
+        case typed.BodyOf.Fn(inst): not s.P.FnDecl(s.P.InstanceFn(inst)).Export
+        case typed.BodyOf.Dtor(_): true
+        case _: false
+    }
+}
+
+# O23a, C1: the plan's scope for a build into, or a pass of, term t where t is a derived scope of this body's (a field of
+# one of its parameters with a binding of its own): its hidden scope parameter, else found from Roots[i] (none: -1) -
+# Unset where t is no such scope or the body takes none
+fn (s mut Scoper&) derivedScope(t Term, i I64) typed.Scope {
+    if not s.derivedOk: return typed.Scope.Unset
+    return match t {
+        case Term.Derived(p, w): typed.Scope.Passed(s.plan.DerivedSlot(p, w), i) if p >= 0 and not isCapCode(w) else typed.Scope.Unset
+        case _: typed.Scope.Unset
+    }
+}
+
+# ...the same where a root's scope is to be found at run time: Found(i) as derivedScope gives it, else as it is
+fn (s mut Scoper&) foundOr(t Term, found typed.Scope) typed.Scope {
+    i := match found {
+        case typed.Scope.Found(k): k
+        case _: -1
+    }
+    d := s.derivedScope(t, i)
+    return found if d == typed.Scope.Unset else d
+}
+
+# what a call passes for its callee's derived scopes (O23a): where its argument's field refers - the binding the
+# argument's value carries, or the caller's own derived scope passed on - Unset where the call knows none
+fn (s mut Scoper&) passDerived(c typed.Call&, callee I64, beta Array<Term>&) {
+    if callee < 0 or c.Tail: return
+    sm := s.sums[callee]
+    if sm.DerivedP.Len() == 0: return
+    xs Vec<typed.DerivedArg>
+    for k in range sm.DerivedP.Len() {
+        p, w := sm.DerivedP[k], sm.DerivedW[k]
+        t := s.derivedAt(p, w, c, false, beta)
+        sc := typed.Scope.Unset
+        if t.Runs() and not s.finds(t) {
+            sc = s.scopeOf(t)
+        } else {
+            sc = s.derivedScope(t, -1)
+        }
+        xs.Push(typed.DerivedArg(p, w, sc))
+    }
+    s.plan.PassDerived(c.Site, xs)
+}
+
+# the body of a value type's own destructor, -1 for none
+fn (s mut Scoper&) dtorBody(ty types.TypeId) I64 {
+    r := s.P.T.Repr(ty)
+    if s.isRef(r): r = s.P.T.Repr(s.P.T.Referent(r))
+    return try s.dtorOf.Get(r) catch default -1
+}
+
+# O23a, C1: a holder letting go of its value (drop, its place borrowed in a) passes its destructor the derived scopes
+# it knows: where the value's construction bound each field the destructor builds through
+fn (s mut Scoper&) dropDerived(a typed.Expr&) {
+    d := s.dtorBody(a.Type())
+    if d < 0 or not s.summed(d): return
+    sm := s.sums[d]
+    if sm.DerivedP.Len() == 0: return
+    rec := s.argRec(a)
+    xs Vec<typed.DerivedArg>
+    for k in range sm.DerivedP.Len() {
+        t := s.recAt(rec, sm.DerivedW[k]) if sm.DerivedP[k] == 0 else Term.None
+        sc := typed.Scope.Unset
+        if t.Runs() and not s.finds(t) {
+            sc = s.scopeOf(t)
+        } else {
+            sc = s.derivedScope(t, -1)
+        }
+        xs.Push(typed.DerivedArg(sm.DerivedP[k], sm.DerivedW[k], sc))
+    }
+    s.plan.DropDerived(a, xs)
 }
 
 # whether a body is a Str that "$" calls (E11c): a method named Str or str, of no parameter but its receiver
@@ -2815,6 +2913,7 @@ fn (s mut Scoper&) fieldMark(t types.TypeId, i I64) typed.Mark {
 # after their declaration - a store into the local itself, a task's target
 type walked struct() {
     Callees Vec<I64>
+    Dropped Vec<types.TypeId>    # the types of the values its holders let go of (O15): their destructors are called
     Assigned Vec<I64>
     Borrowed Vec<I64>            # the locals whose own storage a borrow or a slice names, reached through no reference
     BorrowedTy Vec<types.TypeId> # ... each such borrow's type, in order - 0 for a slice
@@ -2967,7 +3066,8 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
             collectExpr(c.Reserve, out)
             collectBlock(c.Loop, out)
         }
-        case typed.Expr.Prim(_, _, _, _, args) {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Drop and args.Len() == 1 { out.Dropped.Push(args[0].Type()) }
             for a in args { collectExpr(a, out) }
         }
         case typed.Expr.Slice(_, _, sl) {
@@ -3048,12 +3148,21 @@ fn (s mut Scoper&) components() {
         s.edgeFrom.Push(s.edgeTo.Len())
         w := walked.walkBody(s, i)
         for c in w.Callees { s.edgeTo.Push(c) }
+        # (a holder's drop calls its value's destructor, judged first so the drop knows its derived scopes, O23a)
+        for ty in w.Dropped {
+            d := s.dtorBody(ty)
+            if d >= 0: s.edgeTo.Push(d)
+        }
         for k in range w.LamIds.Len() { s.lamOf.Put(w.LamIds[k], w.LamCaps[k]) }
         for x in w.Tails {
             tailFrom.Push(i)
             tailTo.Push(typed.CalledBody(x))
         }
         if w.Tails.Len() > 0: s.tailBlocks.Put(i, w.TailBlocks.ToArray())
+        for x in w.Tails {
+            s.noDerived.Put(i, true)
+            s.noDerived.Put(typed.CalledBody(x), true)
+        }
         if w.Tails.Len() > 0 and s.tailNeeds(i, w): needs.Push(i)
         s.assignedFrom.Push(s.assignedTo.Len())
         for l in w.Assigned { s.assignedTo.Push(l) }
@@ -8625,6 +8734,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                 s.anyBox = false
                 return v
             }
+            if op == typed.PrimOp.Drop and args.Len() == 1 and not s.inSpawn { s.dropDerived(args[0]) }
             for a in args { s.val(a, Term.None) }
             return Val.plain()
         }
@@ -9458,6 +9568,7 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     scopes := Array<typed.Scope>(vars.Len())
     for v in range vars.Len() { scopes[v] = s.passedScope(c, owner, v, beta[v]) }
     s.plan.Pass(c.Site, scopes)
+    if not spawned { s.passDerived(c, callee, beta) }
     # what the callee may build into, recorded as this body's building there (O18c, E11c); a task is handed a stand-in for
     # every scope it binds, made where that scope is (P2)
     at := s.nameSpan(sp)
@@ -12568,7 +12679,7 @@ fn (s mut Scoper&) build(site typed.SiteId, t Term) {
 fn (s mut Scoper&) buildSite(site typed.SiteId, t Term, sp source.Span) {
     if site < typed.SiteId(0) or I64(site) >= s.plan.Built.Len() { return }
     if s.finds(t) {
-        s.plan.Built[I64(site)] = s.plan.Find(s.foundRoot!)
+        s.plan.Built[I64(site)] = s.foundOr(t, s.plan.Find(s.foundRoot!))
         return
     }
     u := t if t.Runs() else s.here()
@@ -12623,7 +12734,9 @@ fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
 # a term as the plan says it: Found where it is the slot a value is being placed into whose scope is found at run time
 # (O29), Inert for any other one nothing exists for at run time
 fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
-    if s.finds(t): return s.plan.Find(s.foundRoot!)
+    if s.finds(t): return s.foundOr(t, s.plan.Find(s.foundRoot!))
+    d := s.derivedScope(t, -1)
+    if d != typed.Scope.Unset: return d
     return match t {
         case Term.Block(b): typed.Scope.Block(b)
         case Term.Var(i): typed.Scope.Var(i)
@@ -12640,7 +12753,7 @@ fn (s mut Scoper&) passedScope(c typed.Call&, owner Array<I64>&, v I64, t Term) 
     for i in range owner.Len() {
         if owner[i] != v: continue
         root := s.argRoot(c.Args[i])
-        if root is not null: return s.plan.Find(root)
+        if root is not null: return s.foundOr(t, s.plan.Find(root))
     }
     return s.scopeOf(t)
 }

@@ -187,6 +187,25 @@ fn (lw mut Lowerer&) lowerAs(id I64, t I64) mir.Fn& {
     return ln.F
 }
 
+# the plan the code a key names was lowered with (a twin's own, else its body's) - an empty one for anything else
+fn (lw Lowerer&) planOf(k mir.FnKey) typed.Plan& {
+    match k {
+        case mir.FnKey.Body(id) { if I64(id) < lw.Plans.Len(): return lw.Plans[I64(id)] }
+        case mir.FnKey.Twin(_, t) { if t < lw.TwinPlans.Len(): return lw.TwinPlans[t] }
+        case _ { }
+    }
+    return typed.Plan(0, 0, 0)
+}
+
+# O23a, C1: how many derived scopes the code a key names takes after its type's (typed.Plan's DerivedP)
+fn (lw Lowerer&) DerivedN(k mir.FnKey) I64 {
+    return match k {
+        case mir.FnKey.Body(id): lw.Plans[I64(id)].DerivedP.Len() if I64(id) < lw.Plans.Len() else 0
+        case mir.FnKey.Twin(_, t): lw.TwinPlans[t].DerivedP.Len() if t < lw.TwinPlans.Len() else 0
+        case _: 0
+    }
+}
+
 # a function lowering refers to, to be made by LowerKey
 fn (lw mut Lowerer&) Want(k mir.FnKey) {
     if lw.wanted.Has(k) { return }
@@ -439,6 +458,8 @@ fn (ln mut lowering&) run() {
         }
         ln.F.Vars.Push(k)
     }
+    # O23a, C1: its derived scopes, passed after its type's (a body with any has no captures)
+    if ln.planned { for k in range ln.plan.DerivedP.Len() { ln.F.Vars.Push(mir.VarKind.Derived(k)) } }
     if ln.gapped {
         ln.L.Gaps.Push(Gap(ln.file, b.Sp, "an unknown type (a check error or gap): a local"))
         return
@@ -638,6 +659,57 @@ fn (ln mut lowering&) passed(n I64, site typed.SiteId = typed.SiteId(-1)) mir.Ra
     return ln.F.ScopeRefs(xs)
 }
 
+# what a call passes (passed), and after it, for a callee that is a body taking derived scopes, what the call knows of
+# each (O23a, C1): the scope its argument's field refers into, or null where it knows none
+fn (ln mut lowering&) passedFor(callee mir.Callee, fty types.TypeId, site typed.SiteId) mir.Range {
+    n := mir.PassedCount(ln.T, callee, fty)
+    key := match callee {
+        case mir.Callee.Fn(k, _): k
+        case _: mir.FnKey.Init(0)
+    }
+    m := ln.L.DerivedN(key)
+    if m == 0 or not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len(): return ln.passed(n, site)
+    cp := ln.L.planOf(key)
+    xs := Array<mir.ScopeRef>(n + m)
+    for i in range n { xs[i] = ln.scopeRef(ln.plan.Passed(site, i)) }
+    for j in range m { xs[n + j] = ln.derivedRef(ln.plan.DerivedArgAt(site, cp.DerivedP[j], cp.DerivedW[j])) }
+    return ln.F.ScopeRefs(xs)
+}
+
+# O23a: a scope passed for a callee's derived scope - this body's own passed on as it came (null included), null for one
+# the call knows none of
+fn (ln mut lowering&) derivedRef(sc typed.Scope) mir.ScopeRef {
+    return match sc {
+        case typed.Scope.Passed(k, _): mir.ScopeRef.Var(ln.B.Vars.Len() + k)
+        case typed.Scope.Block(_), typed.Scope.Var(_), typed.Scope.Program, typed.Scope.Found(_): ln.scopeRef(sc)
+        case _: ln.nullScope()
+    }
+}
+
+# a scope handle that is null: a derived scope a call knows none of (O23a)
+fn (ln mut lowering&) nullScope() mir.ScopeRef {
+    h := ln.temp(mir.I64T, ln.B.Sp)
+    ln.emit(mir.Stmt.Assign(ln.B.Sp, mir.Lvalue.L(h), mir.Rvalue.Use(mir.Operand.Const(mir.I64T, 0))))
+    return mir.ScopeRef.Held(h)
+}
+
+# O23a, C1: where a build into this body's derived scope k goes - the scope passed for it, else the one found at run
+# time from the plan's root i (the program's for none)
+fn (ln mut lowering&) passedOr(k I64, i I64) mir.ScopeRef {
+    sp := ln.B.Sp
+    o := mir.Operand.None
+    if i >= 0 and i < ln.plan.Roots.Len() {
+        root := ln.plan.Roots[i]
+        for j := ln.argExprs.Len() - 1, j >= 0 and o == mir.Operand.None, j-- {
+            if ln.argExprs[j] == root: o = ln.argOps[j]
+        }
+        if o == mir.Operand.None and typed.Pure(root): o = ln.val(root)
+    }
+    h := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.ScopeOr(mir.ScopeRef.Var(ln.B.Vars.Len() + k), o)))
+    return mir.ScopeRef.Held(h)
+}
+
 # a plan's scope as MIR names it: a block the scope its typed block opened - the innermost open level standing for it,
 # else the innermost enclosing it (a block check reuses its parent's id for) - a scope variable, the program's
 fn (ln mut lowering&) scopeRef(sc typed.Scope) mir.ScopeRef {
@@ -656,6 +728,7 @@ fn (ln mut lowering&) scopeRef(sc typed.Scope) mir.ScopeRef {
         case typed.Scope.Frame { return mir.ScopeRef.Frame }
         case typed.Scope.Region(site) { return ln.regionOf(I64(site)) }
         case typed.Scope.Found(i) { return ln.foundOf(i) }
+        case typed.Scope.Passed(k, i) { return ln.passedOr(k, i) }
         case _ { return mir.ScopeRef.Program }
     }
 }
@@ -1501,7 +1574,7 @@ fn (ln mut lowering&) tail(sp source.Span, c typed.Call&, ty types.TypeId) {
         ops[i] = ln.into(ps[i], mir.Rvalue.Use(op), sp) if i < ps.Len() else op
     }
     args := ln.F.Args(ops)
-    scopes := ln.passed(mir.PassedCount(t, callee, fty), c.Site)
+    scopes := ln.passedFor(callee, fty, c.Site)
     ln.leave(0)
     k := ln.F.AddCall(mir.Call(callee, args, scopes, mir.NoPlace, false, mir.NoBlock, mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Tail(sp, k))
@@ -3101,7 +3174,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         case _ { }
     }
     res := t.Result(fty)
-    scopes := ln.passed(mir.PassedCount(t, callee, fty), c.Site)
+    scopes := ln.passedFor(callee, fty, c.Site)
     ok := ln.F.NewBlock()
     dest := mir.NoLocal
     if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(ty if ty != types.VoidT else res, sp) }
@@ -4711,7 +4784,8 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
                 if ln.dead { return mir.Operand.None }
                 home := ln.escapedHome(p)
                 if home == mir.ScopeRef.Frame {
-                    ln.dropAt(a, p.Type(), ln.innermost(), sp)
+                    das := ln.plan.DropDerivedOf(args[0]) if ln.planned else Vec<typed.DerivedArg>()
+                    ln.dropAt(a, p.Type(), ln.innermost(), sp, das.Len() > 0, das)
                     # Part C (O8d): a holder letting go as its block is left releases what its sole leaves hold, once
                     # its destructors ran (free.olang's LHeld)
                     if ln.heldDrop and ln.freeing and p == typed.Lvalue.Local and not ln.dead {
@@ -5354,7 +5428,8 @@ fn readLocalPlace(x typed.Expr&) typed.Lvalue?& {
 # the destructors a value of type ty in place a has to run, run in scope at (C9a: the scope being closed): its type's own
 # first, then each part's held by value, last first (O15's reverse construction) - a part's through its type's Drop
 # helper, so a type that comes round to itself is one function; top: in that helper, its own parts
-fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span, top Bool = false) {
+fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span, top Bool = false
+                             das Vec<typed.DerivedArg> = Vec<typed.DerivedArg>()) {
     t := ln.T
     if t.IsRef(ty) or not t.NeedsDrop(ty) { return }
     if not top {
@@ -5369,7 +5444,12 @@ fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         p0 := t.Items(t.Params(fty))[0]
         recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp)
         vs := t.ScopeVarsOf(fty)
-        xs := Array<mir.ScopeRef>(vs.Len(), at)
+        xs := Array<mir.ScopeRef>(vs.Len() + (ln.L.DerivedN(mir.FnKey.Body(typed.BodyId(I32(id)))) if das.Len() > 0 else 0), at)
+        # (O23a: the derived scopes the holder's drop knows - where its value's construction bound each field)
+        if das.Len() > 0 {
+            dp := ln.L.planOf(mir.FnKey.Body(typed.BodyId(I32(id))))
+            for j in range vs.Len(), xs.Len() { xs[j] = ln.derivedRef(dropArgAt(das, dp.DerivedP[j - vs.Len()], dp.DerivedW[j - vs.Len()])) }
+        }
         ok := ln.F.NewBlock()
         k := ln.F.AddCall(mir.Call(callee, ln.F.Args(Array<mir.Operand>[recv]), ln.F.ScopeRefs(xs), mir.NoPlace, false, ok, mir.NoLocal
                                    mir.NoBlock))
@@ -5391,6 +5471,14 @@ fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         n := t.ConstValue(t.Length(r))
         for i := n - 1, i >= 0, i-- { ln.dropAt(ln.with(a, mir.Proj.Index(ln.local(ln.constI64(i), mir.I64T, sp))), el, at, sp) }
     }
+}
+
+# O23a: what a holder's drop passes for its value's destructor's derived scope (p, w), Unset for none
+fn dropArgAt(das Vec<typed.DerivedArg>&, p I64, w I64) typed.Scope {
+    for x in das {
+        if x.P == p and x.W == w: return x.Sc
+    }
+    return typed.Scope.Unset
 }
 
 # ---- owned copies (QCE: T7a relaxed) ----

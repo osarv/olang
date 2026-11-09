@@ -1365,6 +1365,19 @@ prog:
   ret ptr %pg
 }
 
+; O23a, C1: the derived scope s a caller passed - else, where it passed none (null), the scope the storage at p lives
+; in, found as __olang_scope_of finds it (the program's for p null)
+define ptr @__olang_scope_or(ptr %s, ptr %p) {
+entry:
+  %none = icmp eq ptr %s, null
+  br i1 %none, label %find, label %have
+have:
+  ret ptr %s
+find:
+  %f = call ptr @__olang_scope_of(ptr %p, ptr null)
+  ret ptr %f
+}
+
 ; the storage an array made with no elements names where that is known while compiling (an Array<T>(0), a Vec's first
 ; buffer): nothing is ever read or written there, and arrays compare by what they hold (E10), so one address serves
 ; them all, made with no allocation (emit's newArray gives its offset 64). Its first words are the zero word a region's

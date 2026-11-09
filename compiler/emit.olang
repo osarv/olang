@@ -2322,7 +2322,8 @@ fn fnTypeOf(decl String&) String {
     return b.ToString()
 }
 
-fn (e mut Emitter&) passedOf(k mir.FnKey, ty types.TypeId) I64 { return mir.PassedCount(e.T, mir.Callee.Fn(k, ty), ty) }
+# (O23a: a body's derived scopes after its type's - none for a call that knows none, passed null)
+fn (e mut Emitter&) passedOf(k mir.FnKey, ty types.TypeId) I64 { return mir.PassedCount(e.T, mir.Callee.Fn(k, ty), ty) + e.Lw.DerivedN(k) }
 
 # one function lowered and written
 fn (e mut Emitter&) function(k mir.FnKey) {
@@ -4248,6 +4249,12 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             r := fe.let("call ptr @__olang_scope_of(ptr " $o ", ptr null)")
             return fe.let("ptrtoint ptr " $r " to i64")
         }
+        case mir.Rvalue.ScopeOr(sc, x) {
+            fe.E.runtime("__olang_scope_or")
+            o := "null" if x == mir.Operand.None else fe.objectPtr(fe.val(x), fe.otype(x))
+            r := fe.let("call ptr @__olang_scope_or(ptr " $fe.scope(sc) ", ptr " $o ")")
+            return fe.let("ptrtoint ptr " $r " to i64")
+        }
         case mir.Rvalue.Sole(k) { return fe.load("i1", "@" $fe.E.sole(k)) }
         case mir.Rvalue.Handle(s) { return fe.let("ptrtoint ptr " $fe.scope(s) " to i64") }
         case mir.Rvalue.ErrPush {
@@ -5380,6 +5387,9 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
             args.Push("ptr %v" $i)
         } else if tail and i == cp - 1 {
             args.Push("ptr %tail")
+        } else if i >= mir.PassedCount(t, mir.Callee.Fn(code, mine), mine) {
+            # (O23a: a derived scope, which a function value's call knows nothing of - found where it is built)
+            args.Push("ptr null")
         } else {
             e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
             b.Push("  %g" $i " = load ptr, ptr @__olang_prog_scope\n")
@@ -5533,9 +5543,11 @@ fn (e mut Emitter&) dtorThunk(k mir.FnKey) {
     b := StringBuilder()
     b.Push("define linkonce_odr void @" $s "_rt(ptr %inst, ptr %scope) #0 {\nentry:\n  call " $t.RetLlvm(ty) " @" $s "(")
     n := e.passedOf(k, ty)
+    own := mir.PassedCount(t, mir.Callee.Fn(k, ty), ty)
     for i in range n {
         if i > 0 { b.Push(", ") }
-        b.Push("ptr %scope")
+        # (O23a: its derived scopes found where it builds there - the runtime knows none)
+        b.Push("ptr %scope" if i < own else "ptr null")
     }
     if n > 0 { b.Push(", ") }
     b.Push("ptr %inst)\n  ret void\n}\n\n")
@@ -5756,6 +5768,22 @@ fn (fe mut fnEm&) textPair(msg mir.Operand) String {
     return fe.pair(n, data)
 }
 
+# O23a: how many scopes a call of a body passes, its derived ones included (0 for anything else: what it passes)
+fn (fe mut fnEm&) padTo(c mir.Callee) I64 {
+    return match c {
+        case mir.Callee.Fn(k, fty): fe.E.passedOf(k, fty)
+        case _: 0
+    }
+}
+
+# the code a task's call reaches, where it is a function's (Init(0) for a function value's)
+fn (fe mut fnEm&) taskKey(k mir.Task) mir.FnKey {
+    return match k.Target {
+        case mir.Callee.Fn(key, _): key
+        case _: mir.FnKey.Init(0)
+    }
+}
+
 # a call (MIR's Call terminator): its arguments as its callee takes them, its result stored on its ok edge, its error
 # code on its error edge
 fn (fe mut fnEm&) call(c mir.Call) {
@@ -5825,6 +5853,12 @@ fn (fe mut fnEm&) call(c mir.Call) {
         if not first { args.Push(", ") }
         first = false
         args.Push("ptr " $fe.scope(fe.F.Refs[I64(c.Scopes.At) + i]))
+    }
+    # (O23a: a body's derived scopes a call passes none of, null - found where the body builds there)
+    for _ in range I64(c.Scopes.N), fe.padTo(c.Target) {
+        if not first { args.Push(", ") }
+        first = false
+        args.Push("ptr null")
     }
     ps := t.Items(t.Params(ty))
     pass := t.Passing(ty)
@@ -6450,6 +6484,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
         args.Push($"ptr " $out)
     }
     for _ in range mir.PassedCount(t, mir.Callee.Fn(k, ty), ty) { args.Push($"ptr " $sc) }
+    for _ in range e.Lw.DerivedN(k) { args.Push("ptr null") }
     for a in olang { args.Push(a) }
     rt := t.RetLlvm(ty)
     r := ""
@@ -7479,6 +7514,12 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
         b.Push("  %sg" $i " = load ptr, ptr @__olang_prog_scope\n  %ss" $i " = select i1 %sn" $i ", ptr %sg" $i ", ptr %sc" $i "\n")
         if not first { args.Push(", ") }
         args.Push("ptr %ss" $i)
+        first = false
+    }
+    # (O23a: a body's derived scopes, which a task is passed none of - found where it builds there)
+    for _ in range nscopes, (e.passedOf(fe.taskKey(k), ty) if not isValue else 0) {
+        if not first { args.Push(", ") }
+        args.Push("ptr null")
         first = false
     }
     for i in range ps.Len() {

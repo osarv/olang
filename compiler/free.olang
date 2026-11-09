@@ -3514,7 +3514,7 @@ fn (f mut Free&) decide() {
         st := f.stores[i]
         if st.Kind != SFresh or f.decided[st.Body] or not f.placeable(st): continue
         top := f.topSite(st.X!)
-        if top < 0 or f.siteScope(st.Body, st.X!) == typed.Scope.Found: continue
+        if top < 0 or f.siteScope(st.Body, st.X!) == typed.Scope.Found or f.siteScope(st.Body, st.X!) == typed.Scope.Passed: continue
         key := pair.Pair(st.Body, top)
         had := try claim.Get(key) catch default -1
         if had < 0 {
@@ -3711,7 +3711,7 @@ fn (f mut Free&) writePlans() {
         if pl.RegionKind[top] != 0: continue
         at := f.siteScope(st.Body, x)
         # O29: a value built where its place's storage is found at run time is built there, never in a region of its own
-        if at == typed.Scope.Found: continue
+        if at == typed.Scope.Found or at == typed.Scope.Passed: continue
         pl.RegionKind[top] = 1
         pl.RegionParent[top] = at
         pl.RegionGuard[top] = f.guard(st.Body, k)

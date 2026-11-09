@@ -170,6 +170,9 @@ type VarKind enum {
     Instance           # a constructor's: where its instance lands (C2d)
     Closing            # a destructor's: the scope being closed (C9a)
     Capture(i I64)     # where capture i's referent lives (D16c)
+    # O23a, C1: the body's derived scope k (typed.Plan's DerivedP/W), passed after the type's - null where a call knew
+    # none, and then found (Rvalue.ScopeOr)
+    Derived(k I64)
     Builder            # a Render helper's: the text builder it writes into
 }
 
@@ -254,6 +257,9 @@ type Rvalue enum {
     # program's for storage in no chunk (a stack, a global, constant data, C's), a region read as the scope it lives in -
     # as a scope handle (an I64), which ScopeRef.Held names: where what is built through x goes
     ScopeOf(x Operand)
+    # O23a, C1: the derived scope s a caller passed (a scope variable, VarKind.Derived) - else, where it passed none
+    # (null), the scope the storage reference x names lives in, found as ScopeOf finds it; the program's where x is None
+    ScopeOr(s ScopeRef, x Operand)
     # O8d (docs/memory.md 3.5): whether candidate place k (free.olang's numbering) is decided sole - a link-time
     # constant every module's object reads and the root's object defines (a Bool): its let-go sites release what it
     # held and its build sites make regions only where it is
@@ -1112,6 +1118,10 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
             v.ref(s)
         }
         case Rvalue.ScopeOf(x) { v.operand(x) }
+        case Rvalue.ScopeOr(s, x) {
+            v.ref(s)
+            if x != Operand.None { v.operand(x) }
+        }
         case Rvalue.ErrPush, Rvalue.ErrTop(_), Rvalue.Sole(_) { }
         case Rvalue.Handle(s) { v.ref(s) }
     }
@@ -1498,6 +1508,7 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.Region(_): I64T
         case Rvalue.RegionOr(x, _): v.regionOrType(v.operandType(x))
         case Rvalue.ScopeOf(x): v.regionOrType(v.operandType(x))
+        case Rvalue.ScopeOr(_, x): I64T if x == Operand.None else v.regionOrType(v.operandType(x))
         case Rvalue.ErrPush: I64T
         case Rvalue.ErrTop(ty): ty
         case Rvalue.Sole(_): types.BoolT
@@ -1811,7 +1822,12 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
         }
     }
     want := PassedCount(t, c, ty)
-    if want != I64(scopes.N) { v.bad("a call passing " $scopes.N " scopes for its callee's " $want) }
+    # (O23a: a body's derived scopes come after its type's - those a call knows, the rest passed null)
+    extra := match c {
+        case Callee.Fn(FnKey.Body(_), _), Callee.Fn(FnKey.Twin(_, _), _): I64(scopes.N) > want
+        case _: false
+    }
+    if want != I64(scopes.N) and not extra { v.bad("a call passing " $scopes.N " scopes for its callee's " $want) }
     for i in range scopes.N {
         if v.F.Refs[I64(scopes.At) + i] == ScopeRef.Frame { v.bad("a call passing the frame for a scope variable") }
     }
@@ -2222,6 +2238,10 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
             v.usesScope(s)
         }
         case Rvalue.ScopeOf(x) { v.reads(x) }
+        case Rvalue.ScopeOr(s, x) {
+            v.usesScope(s)
+            if x != Operand.None { v.reads(x) }
+        }
         case Rvalue.ErrPush, Rvalue.ErrTop(_), Rvalue.Sole(_) { }
         case Rvalue.Handle(s) { v.usesScope(s) }
     }
@@ -2364,6 +2384,7 @@ fn (w mut dumper&) varKind(k VarKind) String {
     return match k {
         case VarKind.Param(i): "param " $i
         case VarKind.Capture(i): "capture " $i
+        case VarKind.Derived(i): "derived " $i
         case _: $short($k)
     }
 }
@@ -2456,6 +2477,7 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
         case Rvalue.Region(s): "region in " $w.ref(s)
         case Rvalue.RegionOr(x, s): "region of " $w.operand(x) " or " $w.ref(s)
         case Rvalue.ScopeOf(x): "scope of " $w.operand(x)
+        case Rvalue.ScopeOr(s, x): "scope " $w.ref(s) " or of " $w.operand(x)
         case Rvalue.ErrPush: "payload push"
         case Rvalue.Sole(k): "sole place " $k
         case Rvalue.Handle(s): "handle of " $w.ref(s)

@@ -1568,7 +1568,8 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
     if fr < 0 { return }
     f := m.fns.At(fi)
     if f.Params.Len() > 0 { m.wrPtr(m.localPtr(fr, f.Params[0]), p) }
-    for i in range f.Vars.Len() { m.ws[m.fs[fr].Vars + i] = closing }
+    # (O23a: its derived scopes found where it builds there - a scope's walk knows none)
+    for i in range f.Vars.Len() { m.ws[m.fs[fr].Vars + i] = 0 if f.Vars[i] == mir.VarKind.Derived else closing }
 }
 
 # ---- frames ----
@@ -2185,6 +2186,11 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             m.wr(dst, 8, id)
         }
         case mir.Rvalue.ScopeOf(x) { m.wr(dst, 8, m.foundScope(m.objectOf(fi, x))) }
+        case mir.Rvalue.ScopeOr(sc, x) {
+            id := m.scopeOf(fi, sc)
+            if id == 0 { id = m.program if x == mir.Operand.None else m.foundScope(m.objectOf(fi, x)) }
+            m.wr(dst, 8, id)
+        }
         case mir.Rvalue.Handle(s) { m.wr(dst, 8, m.scopeOf(fi, s)) }
         case mir.Rvalue.Sole(k) { m.wr(dst, 1, 1 if k >= 0 and k < m.Soles.Len() and m.Soles[k] else 0) }
         case mir.Rvalue.ErrPush {
@@ -4192,7 +4198,8 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     }
     vvars := m.T.ScopeVarsOf(vty)
     for i in range passed {
-        s := m.program
+        # (O23a: a derived scope no call passes is null, found where the body builds there)
+        s := 0 if g.Vars[i] == mir.VarKind.Derived else m.program
         if direct or vvars.Len() == passed {
             if i < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + i]) }
         } else {
@@ -5113,7 +5120,7 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
         }
     }
     for i in range passed {
-        m.ws[m.fs[nf].Vars + i] = m.rd(Ptr(tk.Buf, sat + 8 * i), 8) if i < ns else m.program
+        m.ws[m.fs[nf].Vars + i] = m.rd(Ptr(tk.Buf, sat + 8 * i), 8) if i < ns else (0 if g.Vars[i] == mir.VarKind.Derived else m.program)
     }
     m.loadCaptures(nf, g, env, passed)
 }

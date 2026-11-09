@@ -1714,6 +1714,18 @@ type Scope enum {
     # O29: a scope no call knows while compiling, found while the program runs from the address of the storage built
     # through or into - the reference the plan's Roots holds at i
     Found(i I64)
+    # O23a, C1: the body's derived scope k (Plan.Derived) - "where the argument for parameter p bound its field's
+    # scope", a hidden scope parameter a call that knows it passes (O4b) - else, where the call passed none, the scope
+    # found at run time from Roots[i] (O29); i < 0 where there is no root, the program's then
+    Passed(k I64, i I64)
+}
+
+# O23a: what a call passes for one of its callee's derived scopes (Plan.Derived): the callee's parameter p and its
+# type's scope variable w, and the scope the caller knows it as - Unset where it knows none (the callee then finds it)
+type DerivedArg struct(P I64, W I64, Sc Scope) {
+    P
+    W
+    Sc
 }
 
 # the scope pass's decisions for one body: where each site builds (Built), where each local's storage is (Stored: a
@@ -1754,6 +1766,14 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed Vec<Scope>
+    # O23a, C1: the body's derived scopes it takes as hidden scope parameters, after its type's (types.ScopeVarsOf):
+    # by (parameter, its type's scope variable) - and by call site, what each call passes for its callee's
+    DerivedP Vec<I64>
+    DerivedW Vec<I64>
+    derivedArgs Map<I64, Vec<DerivedArg>>
+    # ... and by holder's drop (O15, a PrimOp.Drop), what it passes its value's destructor for its derived scopes
+    DropAt Vec<Expr&>
+    DropArgs Vec<Vec<DerivedArg>>
 }
 
 fn Plan.New(b Body&) Plan { return Plan(b.Sites.Len(), b.Locals.Len(), b.Vars.Len()) }
@@ -1795,6 +1815,48 @@ fn (pl mut Plan&) Pass(site SiteId, scopes Array<Scope>&) {
     pl.passedAt[I64(site)] = pl.passed.Len() + 1
     pl.passedN[I64(site)] = scopes.Len()
     for s in scopes { pl.passed.Push(s) }
+}
+
+# O23a: the index of the body's derived scope (p, w), made now where it is not yet one
+fn (pl mut Plan&) DerivedSlot(p I64, w I64) I64 {
+    for k in range pl.DerivedP.Len() {
+        if pl.DerivedP[k] == p and pl.DerivedW[k] == w: return k
+    }
+    pl.DerivedP.Push(p)
+    pl.DerivedW.Push(w)
+    return pl.DerivedP.Len() - 1
+}
+
+# O23a: what the call at a site passes for its callee's derived scopes
+fn (pl mut Plan&) PassDerived(site SiteId, xs Vec<DerivedArg>) { pl.derivedArgs.Put(I64(site), xs) }
+
+# O23a: what a holder's drop passes its value's destructor for its derived scopes
+fn (pl mut Plan&) DropDerived(x Expr&, xs Vec<DerivedArg>) {
+    for i in range pl.DropAt.Len() {
+        if pl.DropAt[i] == x {
+            pl.DropArgs[i] = xs
+            return
+        }
+    }
+    pl.DropAt.Push(x)
+    pl.DropArgs.Push(xs)
+}
+
+# ...the drop x's, empty for none
+fn (pl Plan&) DropDerivedOf(x Expr&) Vec<DerivedArg> {
+    for i in range pl.DropAt.Len() {
+        if pl.DropAt[i] == x: return pl.DropArgs[i]
+    }
+    return Vec<DerivedArg>()
+}
+
+# ...for its callee's derived scope (p, w): Unset where it knows none
+fn (pl Plan&) DerivedArgAt(site SiteId, p I64, w I64) Scope {
+    xs := try pl.derivedArgs.Get(I64(site)) catch { return Scope.Unset }
+    for x in xs {
+        if x.P == p and x.W == w: return x.Sc
+    }
+    return Scope.Unset
 }
 
 # T22c: the call at a site reaching twin t of its callee
