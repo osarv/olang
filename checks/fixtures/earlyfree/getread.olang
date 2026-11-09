@@ -1,0 +1,26 @@
+import "std/io"
+
+# D9h: a value a call hands back as a view of what it is given - Map.Get's and Vec.Get's, of a Vec - read where it
+# stands through a try (`m.Get(k)![5]`, a clause's `catch { continue }` too) is read as it is, never copied: each turn
+# copied the Vec into the function's scope before, which kept every copy (266 MB over 1,000,000 turns of 64 elements)
+N I64 = 1000000
+
+fn main() {
+    m := Map<I64, Vec<I64>>()
+    vv := Vec<Vec<I64>>()
+    for k in range 16 {
+        a := Vec<I64>()
+        for j in range 64 { a.Push(k + j) }
+        m.Put(k, a.Copy())
+        vv.Push(a)
+    }
+    s I64 = 0
+    n I64 = 0
+    for i in range N {
+        s += m.Get(i % 16)![5]
+        n += m.Get(i % 16)!.Len()
+        s += (try vv.Get(i % 16) catch { continue })[6]
+        s += (try m.Get(i % 32) catch { continue })[7]
+    }
+    io.Println($s " " $n)!
+}

@@ -422,6 +422,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     noCopy Map<I64, Bool>
     qCover Map<I64, Bool>      # quietLife: the types whose storage the view held covers (its by-value parts)
     qRoot types.TypeId = types.TypeId(0)   # ... and the type of the object it is a view into
+    qSelf I64 = -1             # ... and windowQuiet's view call: its own try's clauses run only where it gave no view
     qWrites Map<I64, Bool>     # ... and writesCover's answers for it, by type (false while a type is being walked)
     noLetCopy Map<I64, Bool>
     vlSites Map<I64, Bool>
@@ -3428,6 +3429,9 @@ fn (ln mut lowering&) readHere(x typed.Expr&, k typed.Call?& = null, p typed.Lva
         case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: ln.readHere(args[0], k, p) }
         case typed.Expr.Away(_, _, y) { ln.readHere(y, k, p) }
         case typed.Expr.Seq(_, _, q) { if q.X is not null and q.Stmts.Len() == 0: ln.readHere(q.X!, k, p) }
+        # (a try passes its call's value on as it is - `m.Get(k)![5]`: a clause runs only where the call gave none, so
+        # what it evaluates is outside the view's window)
+        case typed.Expr.Try(_, _, tr) { if tr.X is not null: ln.readHere(tr.X!, k, p) }
         case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q) { ln.readPlace(q, k, p) }
         case _ { }
     }
@@ -3475,6 +3479,8 @@ fn (ln mut lowering&) mutStorage() Bool {
 fn (ln mut lowering&) windowQuiet(c typed.Call&, k typed.Call?&, p typed.Lvalue?&) Bool {
     v := ln.L.ViewsOf(typed.BodyId(I32(typed.CalleeBody(c))))
     if v <= 0 or (v & typed.ViewOther) != 0: return false
+    ln.qSelf = I64(c.Site)
+    defer ln.qSelf = -1
     for j in range c.Args.Len().Min(typed.ViewBits) {
         if (v & (I64(1) << j)) == 0: continue
         a := c.Args[j].Type()
@@ -3593,7 +3599,7 @@ fn (ln mut lowering&) quietX(x typed.Expr?&) Bool {
         case typed.Expr.Slice(_, _, sl): ln.quietPlace(sl.Base) and ln.quietX(sl.Lo) and ln.quietX(sl.Hi)
         case typed.Expr.Cond(_, _, k): ln.quietX(k.C) and ln.quietX(k.A) and ln.quietX(k.B)
         case typed.Expr.Seq(_, _, q): q.Stmts.Len() == 0 and ln.quietX(q.X)
-        case typed.Expr.Try(_, _, tr): ln.quietX(tr.X) and ln.quietClauses(tr)
+        case typed.Expr.Try(_, _, tr): ln.quietX(tr.X) and (ln.selfTry(tr) or ln.quietClauses(tr))
         case typed.Expr.Text(_, _, tx): ln.quietPieces(tx)
         case typed.Expr.Away(_, _, y): ln.quietX(y)
         case _: false
@@ -3605,6 +3611,14 @@ fn (ln mut lowering&) quietAll(xs Array<typed.Expr&>&) Bool {
         if not ln.quietX(x): return false
     }
     return true
+}
+
+# whether a try passes on the very view call whose window is judged (windowQuiet): its clauses run only where that call
+# failed, with no view alive (`(try m.Get(k) catch { continue })[5]`)
+fn (ln mut lowering&) selfTry(tr typed.Try&) Bool {
+    if ln.qSelf < 0 or tr.X is null: return false
+    c := viewCallIn(tr.X!)
+    return c is not null and I64(c.Site) == ln.qSelf
 }
 
 fn (ln mut lowering&) quietClauses(tr typed.Try&) Bool {
