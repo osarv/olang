@@ -42,3 +42,5 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - W1 merged, verified, pushed (goldens recaptured incl. modgraph).
 - Step 2 started: R1 (wt-refusals1) and W2 (wt-freeall), both opus medium (table said xhigh/high - A/B). Note: local master ref is stale; branch worktrees from wt-merge.
 - R1 merged (tree == its verified tip), pushed.
+- W2 merged, verified, pushed. Step 2 done.
+- Usage: seven_day 0.56 at 2026-11-08 21:25 CET (resets Sat 11-14 05:00 CET). One agent at a time now, to calibrate %/agent. F7 started (wt-lending, opus medium).
