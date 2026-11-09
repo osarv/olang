@@ -521,23 +521,6 @@ c2dheldregistered.olang:22:39: error[C2d]: this instance holds a reference to an
    22 |     h Pin = Pin(Res(1, t), Res(2, t), w)
       |                                       ^
 compilation failed with 1 error
-=== c2dnoclone.olang
-c2dnoclone.olang:8:63: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-    8 | fn keepIn(out mut Vec<holder>&, v Vec<I64>) { out.Push(holder(v)) }
-      |                                                               ^
-compilation failed with 1 error
-=== c2dreturn.olang
-c2dreturn.olang:10:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Copy()')
-   10 |     return NB(p)
-      |            ^~
-c2dreturn.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 2 errors
-=== c2dunnamed.olang
-c2dunnamed.olang:12:15: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Copy()')
-   12 |     return NB.wrap(q)
-      |               ^~~~
-c2dunnamed.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 2 errors
 === c3fieldthroughreadonly.olang
 c3fieldthroughreadonly.olang:4:18: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
     4 | fn set(p P&) { p.x = 5 }
@@ -1811,11 +1794,6 @@ compilation failed with 1 error
 e31callerrs2.olang:9:17: error[T22, E31]: Gate's Call fails with nothing where the function type says E - the same errors in the same order: pass a lambda calling it
     9 |     assert run2(Gate(5), 1) == 101
       |                 ^~~~~~~
-compilation failed with 1 error
-=== e31calllocal.olang
-e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
-   13 |     return c
-      |            ^
 compilation failed with 1 error
 === e31ccommutesbothways.olang
 e31ccommutesbothways.olang:6:10: error[E31c]: with 'commutes' here, '+' between B and A would call this method or A.Plus - remove 'commutes'
@@ -3345,34 +3323,10 @@ numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constrain
     7 |     r := nsRoot(n)
       |          ^~~~~~
 compilation failed with 1 error
-=== o10dd9bslice.olang
-o10dd9bslice.olang:5:41: error[O10d]: this value lives in this function's own scope, which closes first
-    5 | fn headOf<T>(x T) Array<Char>& { return x[0:3] }
-      |                                         ^
-o10dd9bslice.olang:8:10: note: instantiated here, with T = String
-    8 |     h := headOf(t)
-      |          ^~~~~~
-compilation failed with 1 error
 === o12spawntarget.olang
 o12spawntarget.olang:12:29: error[O12]: where this place's references live is not known here, so nothing new is built into it - reach the place through a local, so its scope is found from it while the program runs (O29), or store what already lives there
    12 |         join { spawn arr[0] = Node.mkNode(i + 50) }
       |                             ^
-compilation failed with 1 error
-=== o14byvalborrow.olang
-o14byvalborrow.olang:9:29: error[O10d]: this value lives in this function's own scope, which closes first
-    9 | fn bor(p aPt) aPt& { return p }
-      |                             ^
-o14byvalborrow.olang:9:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
-    9 | fn bor(p aPt) aPt& { return p }
-      |        ^
-compilation failed with 1 error
-=== o14byvalborrowany.olang
-o14byvalborrowany.olang:12:36: error[O10d]: this value lives in this function's own scope, which closes first
-   12 | fn bor(p aPt) any aNamed& { return p }
-      |                                    ^
-o14byvalborrowany.olang:12:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
-   12 | fn bor(p aPt) any aNamed& { return p }
-      |        ^
 compilation failed with 1 error
 === o14returnglobal.olang
 o14returnglobal.olang:8:26: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
@@ -3444,14 +3398,6 @@ compilation failed with 1 error
 o25gfieldbinding.olang:17:15: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    17 |         c.cur = g
       |               ^
-compilation failed with 1 error
-=== o26own.olang
-o26own.olang:8:12: error[O10d]: this value lives in this function's own scope, which closes first
-    8 |     return n
-      |            ^
-o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'n N&'
-    7 | fn f(n N) N& {
-      |      ^
 compilation failed with 1 error
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
@@ -3966,11 +3912,6 @@ r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'tr
     4 | fn main() ? { x := try inc(1) }
       |                    ^~~
 compilation failed with 1 error
-=== r9adefaultlocal.olang
-r9adefaultlocal.olang:15:12: error[O10d]: this value lives in this function's own scope, which closes first
-   15 |     return try Node.mk(1) catch default seed
-      |            ^~~
-compilation failed with 1 error
 === r9arithpartial.olang
 r9arithpartial.olang:5:13: error[R1d]: arith.Error.Overflow can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
     5 |     r I32 = try arith.Div(a, b) catch arith.Error.DivideByZero default 0
@@ -4229,43 +4170,6 @@ compilation failed with 1 error
 rv3strreceiver.olang:11:10: error[E11c, T25c]: '$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only
    11 | fn (a B) Str() String { return $peek(a.c) }
       |          ^~~
-compilation failed with 1 error
-=== rv5ctormatch.olang
-rv5ctormatch.olang:19:30: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   19 |         case E.A(y) { keep = borrow(y) }
-      |                              ^~~~~~
-rv5ctormatch.olang:9:22: note: the callee requires it because of this statement
-    9 | fn borrow(b P&) P& { return b }
-      |                      ^~~~~~
-compilation failed with 1 error
-=== rv5ctorparam.olang
-rv5ctorparam.olang:6:15: error[O10]: this reference lives in a scope that may not outlive where it is put
-    6 |     keep P& = p
-      |               ^
-compilation failed with 1 error
-=== rv5ctorparamcall.olang
-rv5ctorparamcall.olang:13:15: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |     keep P& = borrow(p)
-      |               ^~~~~~
-rv5ctorparamcall.olang:5:22: note: the callee requires it because of this statement
-    5 | fn borrow(b P&) P& { return b }
-      |                      ^~~~~~
-compilation failed with 1 error
-=== rv5matchborrow.olang
-rv5matchborrow.olang:15:46: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   15 |             case E.A(y) { if i == 0 { keep = borrow(y) } }
-      |                                              ^~~~~~
-rv5matchborrow.olang:9:22: note: the callee requires it because of this statement
-    9 | fn borrow(b P&) P& { return b }
-      |                      ^~~~~~
-compilation failed with 1 error
-=== rv5matchkeep.olang
-rv5matchkeep.olang:21:21: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
-   21 |     try io.Println($keep.v)
-      |                     ^~~~~~
-rv5matchkeep.olang:17:39: note: 'keep' is given a value here
-   17 |             case E.A(y) { if i == 0 { keep = y } }
-      |                                       ^~~~~~~~
 compilation failed with 1 error
 === s12bexhaustive.olang
 s12bexhaustive.olang:8:18: error[S13a]: case A of S is not covered - add it, or 'case _ { }'
@@ -5202,11 +5106,6 @@ compilation failed with 1 error
 t17casemeant.olang:6:22: error[T17]: FileKind has no case 'Other' - did you mean 'OTHER'?
     6 |     k := os.FileKind.Other
       |                      ^~~~~
-compilation failed with 1 error
-=== t17ccaseparamcopy.olang
-t17ccaseparamcopy.olang:17:23: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-   17 |     m = Opt.Some(W(1, n))
-      |                       ^
 compilation failed with 1 error
 === t17eanonymous.olang
 t17eanonymous.olang:2:16: error[T17e]: only a declared enum has raw values - declare the enum with 'type'

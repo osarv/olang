@@ -209,12 +209,12 @@ e4ccf91e31045e09 af35c1ca8bdd6e04 checks/cases/c2dfieldvec.olang
 c5ec54d340de24e1 2af4dca12fa4d64d checks/cases/c2dheldreturned.olang
 97e8c40df8964806 04758d81b8453b8c checks/cases/c2dmatchfield.olang
 422188e9bc53235d fb0d2ec4140f74cc checks/cases/c2dmixedscopes.olang
-ac65ec8ca3210fc6 24cb6f6a7aed0452 checks/cases/c2dnoclone.olang
+501b1e3153c9d53f 231a2606c9d905eb checks/cases/c2dnoclone.olang
 4ba19b96f67c3175 1b2fe4b224743b3d checks/cases/c2downarr.olang
 f0dffa9458fbdd8a a684d08d189f09f4 checks/cases/c2downfield.olang
 e17e1ad910010e15 206763defaae2754 checks/cases/c2downfieldread.olang
-75b5ff802378febc c1154592e14dabef checks/cases/c2dreturn.olang
-ce1e0050dcb4b522 f9857e2b28f1db38 checks/cases/c2dunnamed.olang
+cb276f2ac0a17f4d bd518a1ceab7be7e checks/cases/c2dreturn.olang
+bb334d0d4a17f887 845df9fc0f3d39cb checks/cases/c2dunnamed.olang
 56f79bd32b5e134e 42df49f8dffd4d20 checks/cases/c2swap.olang
 87c562f5f7c059cf 6b900059ff26a37c checks/cases/c3fieldthroughreadonly.olang
 83db1b3b35873cae 57062eb5b5cc6902 checks/cases/c3mutinferredfield.olang
@@ -515,7 +515,7 @@ c5c9c0d1f87f40d7 547507ba110d77c7 checks/cases/e31bviewrepoint.olang
 15ba2e7f46ef393c 31241f63c0e96e8b checks/cases/e31bviewvalue.olang
 2b176a57361a4fc5 c23a395beded7be7 checks/cases/e31callerrs.olang
 a89b2319fa5852fc b06fa6b19958e11a checks/cases/e31callerrs2.olang
-64065990fcd2442c 2cfcd409c64ad76e checks/cases/e31calllocal.olang
+38f8ff81b57d3db6 3a5ead1d37857ada checks/cases/e31calllocal.olang
 d5d6fd438b139095 6c6fbac0e99f95a8 checks/cases/e31ccommutesbothways.olang
 e58695528c20ee13 2e55446201e99834 checks/cases/e31ccommutesclash.olang
 0a6edb8ff3f327e4 98219e8710b8c74f checks/cases/e31ccommutesfree.olang
@@ -822,7 +822,7 @@ e84576aa66db8376 eb5354fb3c1b923c checks/cases/o10cloopcopy.olang
 76fdc1cfc417f722 9d3ae6ebd809a681 checks/cases/o10cnoteprovenance.olang
 e4622c2bb871392a 6190c31c08d6a4b0 checks/cases/o10cnotethroughcall.olang
 99187f1516aa9029 8e8ed382bd11d7a9 checks/cases/o10cresultlanding.olang
-a2f24df4f1252791 612436ad32cebd2b checks/cases/o10dd9bslice.olang
+f32f4ca9d02219e8 968543f34de175ef checks/cases/o10dd9bslice.olang
 1c1e03a4d0fcaa06 194b134f78e04230 checks/cases/o10delementfield.olang
 5c564385059bf918 18e3b2f7f73a92a5 checks/cases/o12spawntarget.olang
 cc996bb81119a5f3 ec1e696de354b261 checks/cases/o13acopywrap.olang
@@ -833,8 +833,8 @@ f39e691ce358ab5a 213291d3a9f2d59b checks/cases/o13aloopreturnwrap.olang
 2494e1c8cd68ede3 352a668394dfe387 checks/cases/o14afn.olang
 7cdee1b81dbbedc9 b3d5313fdf203ffc checks/cases/o14bfoldshort.olang
 0c7ccc045766d817 0934f90a070a7bd9 checks/cases/o14btypevar.olang
-05dc285bed2c07b0 4a093efd6f7f301f checks/cases/o14byvalborrow.olang
-bb37aa87aad7dd94 f23e0a79adf28d1e checks/cases/o14byvalborrowany.olang
+fc11fc6d162a5959 146a141d02300fea checks/cases/o14byvalborrow.olang
+213749653026295c d65d486dae7deac5 checks/cases/o14byvalborrowany.olang
 ebb273f31bf90801 71c6385aeee00355 checks/cases/o14ccopyslice.olang
 3f6bc700e5e92240 797ffb0add7c1a40 checks/cases/o14returnglobal.olang
 5a02512a2a6a1617 9bfcd72d058efb84 checks/cases/o14returnglobalvalue.olang
@@ -943,7 +943,7 @@ d21db343d5391113 25190314b5ae47d2 checks/cases/o26ainlinearray.olang
 4a4febfb45aa2354 dd49c888732c25f1 checks/cases/o26anumberstorefix.olang
 8bc1658a0393531b f0cf705785260e08 checks/cases/o26areflocal.olang
 d9adb6de053f793c 464b2c01a21ec3d4 checks/cases/o26aviewflow.olang
-37abbf12da5c79de 9beaaefb26feb874 checks/cases/o26own.olang
+060e751971f70ff6 7a15b916d66b8959 checks/cases/o26own.olang
 53703de20c474477 2481f5440ec750a3 checks/cases/o27callplaced.olang
 3c85b9f76f0aa6be f374341193023eaf checks/cases/o27destructorcall.olang
 6bb924db036c729d 97065864d221781e checks/cases/o27destructorfiles.olang
@@ -1093,7 +1093,7 @@ a100b2927dc5bf35 95cec748b1a154c7 checks/cases/r3bpayloadunnamed.olang
 7056f05fb36e65d5 408bb5cda6895880 checks/cases/r8tryinner.olang
 c7dd300e43bbb455 8aea4b9389b8d350 checks/cases/r8trynothing.olang
 9130db533cb3be68 8dbc7ae7527510b4 checks/cases/r9adefaultinner.olang
-aaeaa2108f7de42f dba5b68beeaaa314 checks/cases/r9adefaultlocal.olang
+8423fd98bc072acd e4eb7bb9bf69ce80 checks/cases/r9adefaultlocal.olang
 4c43eef722ddc2ff 7cdd0377e7f5872c checks/cases/r9arithpartial.olang
 3fe0a92237d990ab 51d8956771f612ec checks/cases/r9atrydefaultassign.olang
 f842b6af667ac619 1d9736260c096756 checks/cases/r9bafterall.olang
@@ -1160,14 +1160,14 @@ f64d5ac4bba5963e 49518526512b5f90 checks/cases/rv5condas.olang
 1d0e865dc49259be 004274470b10f39b checks/cases/rv5condmember.olang
 b13f3018932b4c1e 5167b3585c70c674 checks/cases/rv5ctorblock.olang
 9495ac6a30dae38a 4b4418366fdfc1f7 checks/cases/rv5ctorfieldcopy.olang
-c75a83a3bfa187a5 8fb8fe94791692a5 checks/cases/rv5ctormatch.olang
-657cedf05788a97b 877d1e2e1adbc8f2 checks/cases/rv5ctorparam.olang
-cd1c3434d02a792c 72bc0abbe5f2b88a checks/cases/rv5ctorparamcall.olang
+4ba31358033c4a39 85a4a90ea2f843c3 checks/cases/rv5ctormatch.olang
+025819d1ebdc6618 e0779d5a0d96be56 checks/cases/rv5ctorparam.olang
+b079666114296a2e 2992a47c0120ff11 checks/cases/rv5ctorparamcall.olang
 bcf0a5ab6a8d8dff 7f34737b65f34a6b checks/cases/rv5derivedbyvalue.olang
 0228dede4d9bcadc c61f5199f544bab3 checks/cases/rv5foldforward.olang
 d2b2be0988abda1a fcf721c67ee0b4cb checks/cases/rv5foldforwardstack.olang
-a65007feb8d025d7 a5eaf58c365847ff checks/cases/rv5matchborrow.olang
-42ff130a7e3ca851 82cbd60e778145db checks/cases/rv5matchkeep.olang
+269d09e73eeae003 8d646fa0dc392ea3 checks/cases/rv5matchborrow.olang
+6db18722c0a94d7e a18422e585927924 checks/cases/rv5matchkeep.olang
 c7df051ac4b28578 9a2fc700e0dea7a7 checks/cases/rv5strlambda.olang
 77c7137195e669ad d8eb60d2ddfc7456 checks/cases/rv5strlambdaalias.olang
 68d06e991678a11d bf75ad9f358e65d4 checks/cases/rv5taskclosure.olang
@@ -1489,7 +1489,7 @@ f35f108f5e5c762c e55ee88b915f64bf checks/cases/t16inlineenum.olang
 a74df0bc73f36eb0 c1f6acfccb1e1b4f checks/cases/t16inlinelate.olang
 4ce723e3be0bf207 956b0d8917e7bbea checks/cases/t17casemeant.olang
 901335d5d51a15d1 c12271682debb7b1 checks/cases/t17ccaselocallifted.olang
-5aaed0b9f79a8700 e100d95dd21ff23b checks/cases/t17ccaseparamcopy.olang
+5bdfc4551e3d81e6 00e96048288d4a78 checks/cases/t17ccaseparamcopy.olang
 d549f6305c675d53 1e983406ccaa7a85 checks/cases/t17cheadline.olang
 7822b28a2b9b9866 6d446b8527f12c89 checks/cases/t17cparamas.olang
 4067a2c114587ead af214a03deb67afd checks/cases/t17cparambinding.olang
@@ -2167,7 +2167,7 @@ db5319c37eb798b9 26f2c23983bf9439 compiler/fmt.olang
 7c9ae0cd8331f69d f99291aa3624d141 compiler/interp.olang
 a60d3ef1c94e04ef 3210ecd7559b4af9 compiler/listing.olang
 8613922735c561a6 2c2c5da5fed8aa69 compiler/load.olang
-4740602188da208a e474d4fe3725a06b compiler/lower.olang
+76f4892bb8437afb 4a2371ee610a8cfb compiler/lower.olang
 3879802f0148397c 30a4a1749140521e compiler/lsp.olang
 a9fdbee6672ba31e 66c773708ec0132b compiler/mcp.olang
 20a66c3328393d84 adfc5e7b0124d26e compiler/mir.olang
@@ -2179,7 +2179,7 @@ a9fdbee6672ba31e 66c773708ec0132b compiler/mcp.olang
 de87a76ebcdd4f4f 65b051d7d865884b compiler/profile.olang
 cd6dc04fc51a289c b9ae6c193e932c8d compiler/runtime.olang
 1cd1dca247f6cfbd d236a0d4563f5d62 compiler/scan.olang
-f98934c53f92946d e88066aff86576b8 compiler/scope.olang
+d155a83e9665df47 01332307064d5b50 compiler/scope.olang
 1516ae61a747b080 3b406c78f5cae8ce compiler/session.olang
 a846754911a07a9e a10b92acabcbf1b6 compiler/source.olang
 bae5395316494bb3 4d4bea4fef2bf596 compiler/target.olang
@@ -2376,6 +2376,7 @@ b177c6f5742efe8b 83dae0bbfe0f91b8 tests/inplace.olang
 8462a4d37509c4bd 5861f011e35adf7c tests/intsweep.olang
 72dcbe9c0db73b6a f581cfd59c6f9e85 tests/intwidths.olang
 5f7176c1a2cea735 86399d18e4519c2a tests/kept.olang
+58c159309a331d9f b2b22d2d4211315a tests/keptparams.olang
 a624a56db2943ef6 c74f807b2e3fbcff tests/lanes.olang
 a389fbc71e14c582 e812c58013643e9a tests/literals.olang
 0c1027a2bb1d90c2 99795a450023938c tests/match.olang
