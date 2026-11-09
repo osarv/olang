@@ -1,0 +1,12 @@
+import "std/io"
+fn sum(a Array<I64>&) I64 { return a[0] + a[999] }
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            spawn out[i] = sum(a)
+        }
+    }
+    try io.Println($out[0] " " $out[3])
+}

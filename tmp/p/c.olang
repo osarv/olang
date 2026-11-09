@@ -1,0 +1,14 @@
+import "std/io"
+type Res unique struct(n I64) {
+    n
+} destruct { io.Println("end " $n)! }
+fn main() ? {
+    out mut Array<I64>& = Array<I64>(4)
+    join {
+        for i in range 4 {
+            r := Res(i)
+            spawn fn() { out[i] = r.n }
+        }
+    }
+    try io.Println($out[3])
+}

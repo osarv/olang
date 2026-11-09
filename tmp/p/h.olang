@@ -1,0 +1,22 @@
+import "std/io"
+extern fn usleep(us U32) I32
+type Node struct(v I64) { v }
+fn see(n Node&) I64 {
+    usleep(10000)
+    return n.v
+}
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            match i {
+                case 0 { }
+                case _ {
+                    n := Node(i)
+                    spawn out[i] = see(n)
+                }
+            }
+        }
+    }
+    try io.Println($out[1] " " $out[3])
+}

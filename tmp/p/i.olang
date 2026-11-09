@@ -1,0 +1,26 @@
+import "std/io"
+extern fn usleep(us U32) I32
+type P struct(x I64, y I64) { x
+ y }
+fn see(p P&) I64 {
+    usleep(10000)
+    return p.x + p.y
+}
+fn sum(a Array<I64>&) I64 {
+    usleep(10000)
+    return a[0] + a[2]
+}
+type H struct(n I64) { p P = P(n, n)
+ arr Array<I64> = Array<I64>[n, n, n] }
+fn main() ? {
+    out := Array<I64>(4)
+    out2 := Array<I64>(4)
+    join {
+        for i in range 4 {
+            h := H(i)
+            spawn out[i] = see(h.p)
+            spawn out2[i] = sum(h.arr[0:3])
+        }
+    }
+    try io.Println($out[3] " " $out2[3])
+}

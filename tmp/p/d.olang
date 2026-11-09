@@ -1,0 +1,17 @@
+import "std/io"
+type Node struct(v I64) { v }
+fn see(n Node&) I64 { return n.v }
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            n Node& = Node(i)
+            for k in range 3 {
+                m Node& = Node(k)
+                if k == 1 { n = m }
+            }
+            spawn out[i] = see(n)
+        }
+    }
+    try io.Println($out[3])
+}

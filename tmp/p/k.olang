@@ -1,0 +1,14 @@
+import "std/list"
+fn put(dst mut list.List<list.List<I64>>&, l mut list.List<I64>&) {
+    l.Push(1)
+    dst.Push(l)
+}
+fn main() ? {
+    users := list.List<list.List<I64>>()
+    keep := list.List<list.List<I64>>()
+    for _ in range 4 { users.Push(list.List<I64>()) }
+    join {
+        for i in range 4 { spawn put(keep, users[i]) }
+    }
+    assert keep.Len() == 4
+}

@@ -1,0 +1,18 @@
+import "std/io"
+extern fn usleep(us U32) I32
+type Node struct(v I64) { v }
+type Bag struct() { xs Vec<Node> = Vec<Node>() }
+fn (b Bag&) At(i I64) Node { return b.xs.View()[i] }
+fn see(n Node&) I64 {
+    usleep(20000)
+    return n.v
+}
+fn main() ? {
+    b mut Bag& = Bag()
+    for i in range 4 { b.xs.Push(Node(i * 10)) }
+    out := Array<I64>(4)
+    join {
+        for i in range 4 { spawn out[i] = see(b[i]) }
+    }
+    try io.Println($out[0] " " $out[1] " " $out[2] " " $out[3])
+}
