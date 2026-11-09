@@ -48,3 +48,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09T10:30	Build kept locals in the place region	opus	medium	completed	397	164	78	yes	?	field 586->2.2MB, map keys 266->2.4MB; fuzz caught own bug
 2026-11-09T11:30	Design note: settling niche	sonnet	medium	completed	150	9	2	n/a	n/a	abstracts only; 8 ids from memory
 2026-11-09T12:00	Read 4 settling-niche papers	sonnet	medium	completed	268	16	2	n/a	n/a	all ids verified; numbers from papers
+2026-11-09T13:00	Read EBT paper 2507.02092	sonnet	medium	completed	189	7	2	n/a	n/a	id verified; figures not extracted
