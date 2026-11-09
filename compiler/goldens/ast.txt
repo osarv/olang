@@ -955,6 +955,7 @@ bd049c2376edce42 b032df7ea5e0ce36 checks/cases/o27destructorgen.olang
 d4175c811e6bf044 8bd6206b980d9e69 checks/cases/o4bvalueparam.olang
 40d720f19c5299af e898fa3cbcdae33a checks/cases/o4bvalueparamgeneric.olang
 e7a41d115ae64a62 41f8a727cf1e0cb4 checks/cases/o8ddtortemp.olang
+3adac3cdca2b274d fb999c7f013cd1d5 checks/cases/o8dfeed.olang
 9ba71057c3c9f76e c496738357990975 checks/cases/o8dglobal.olang
 a7a5a2ded7a7d9fb e208fbc6bcd3e10f checks/cases/o8dmapkeytext.olang
 87b23e284a4592b6 b3a5ac92994ab3c1 checks/cases/o8dmapvalues.olang
@@ -1841,7 +1842,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 244020b30fdf2de1 b897660d40972e4d checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-7fc26f17620b5624 0dea7bfe5b9674a8 checks/checks.olang
+2aee2f8d7887ec17 80b5b4c50c8cd288 checks/checks.olang
 a9e28b3dd92156ad 622c84cf954c843d checks/fixtures/agree/agree.olang
 93a0581f17cca83e 855092106b73d871 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 20676fbca43683b2 checks/fixtures/agree/math.olang
@@ -1900,10 +1901,12 @@ f8046479cc849d15 737f18a928e50787 checks/fixtures/crash/crash.olang
 b67c2c633626097e 0e239353863a156b checks/fixtures/earlyfree/conns.olang
 0f5c5544c18fb787 8e899682f8a812af checks/fixtures/earlyfree/dropvec.olang
 f3f66eb4e22348be 2a1f2ab3bd58383c checks/fixtures/earlyfree/exportquiet.olang
+746d7ad1478e4e7d 589247482d8df387 checks/fixtures/earlyfree/fieldfeed.olang
 bd4cf6dd64ade68f 2464f52499944834 checks/fixtures/earlyfree/fixedconv.olang
 4a692290c7a4139b d9f5a32df5b761cd checks/fixtures/earlyfree/frames.olang
 aa1d6670db934145 b4fa833147963982 checks/fixtures/earlyfree/globals.olang
 e585e7fc7e3385f4 05f848af5a005b03 checks/fixtures/earlyfree/mapdrop.olang
+0302336946d69de9 bf555b28024ebe8c checks/fixtures/earlyfree/mapkeys.olang
 a543871319eb7872 f70bccb2bdd9ea3f checks/fixtures/earlyfree/mapput.olang
 8440bacdab06ecb0 f56e3b459b0b1ef3 checks/fixtures/earlyfree/mapremove.olang
 831587e583b21401 e8c5eb4bf1ed0a4e checks/fixtures/earlyfree/maptake.olang
@@ -2129,12 +2132,12 @@ fb5073cfda2ee8c8 2a39e1840cf3941c compiler/eval.olang
 9b7a0b42d346bf49 1db7b17357fd28aa compiler/fetch.olang
 1131c7ea2dadf259 9021e4c95322f690 compiler/fix.olang
 db5319c37eb798b9 42ee183a18695dc2 compiler/fmt.olang
-9d79d2235b7361cb 112b7f2b5e060e2a compiler/free.olang
+e0e0e449b79e8aa6 f4efd959d5d5c466 compiler/free.olang
 d8f42880f6311ede 8ff4e41dc4710c29 compiler/generic.olang
 d37fd1089d3515a3 454f6967856dcc02 compiler/interp.olang
 a60d3ef1c94e04ef 8c13020a89e52588 compiler/listing.olang
 8613922735c561a6 952e78f6e48dd4d4 compiler/load.olang
-3232092f6f3b24bf 7edfd949ce0cdf21 compiler/lower.olang
+2b727273e0b1aeb1 c334f20836a08c00 compiler/lower.olang
 3879802f0148397c 5dd6f84508da5a8e compiler/lsp.olang
 a9fdbee6672ba31e 89e29d0fd7116d29 compiler/mcp.olang
 ac3d46c3eacc38c5 35fce09e0d68aefe compiler/mir.olang
@@ -2187,7 +2190,7 @@ d19ca4c6f3ef58cd a168df0c0c02ad56 compiler/tools/namesdiff.olang
 3eeaef21e68f3823 32fe7ce6f8de60bc compiler/tools/seed.olang
 5f8e74923332b3f9 3daf7f4ba96547cd compiler/tools/tokdiff.olang
 0bfae04e3fc7eb91 0d1f554dfe82d263 compiler/tools/toolkit.olang
-90f82613f19007be 3843dc488c4c8a95 compiler/typed.olang
+988428112bc01047 5373d56871fe7c9c compiler/typed.olang
 795955675c985005 96b2aee9dfe04b1e compiler/types.olang
 95bec89e4fc7aa49 e802727fc498915c compiler/unparse.olang
 668dce190a000ed8 357f2cb493eddc9f compiler/views.olang

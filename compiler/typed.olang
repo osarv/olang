@@ -2165,14 +2165,16 @@ fn wholeLocal(x Expr&) I64 {
 # the copies of a whole value local body b's check made where it is mentioned last (D9i's candidates), by site: the
 # local each copies - lowering moves such a copy where nothing could tell (movable), and the scope pass builds the
 # local where a copy kept beyond its block goes (item 17)
-fn LastCopies(b Body&) Map<I64, I64> {
+# (globals: the copies a global is given whole too - early freeing builds such a local in the global's region from its
+# declaration where it can, free.findFeeds, though the scope pass never builds it where the global lives)
+fn LastCopies(b Body&, globals Bool = false) Map<I64, I64> {
     out Map<I64, I64>
     if b.Root is null or b.Gen: return out
     w := LastUses(b.Locals.Len())
     w.Block(b.Root!)
     for k in range w.CopySite.Len() {
         l := w.CopyLocal[k]
-        if w.CopyAt[k] >= 0 and w.Last[l] == w.CopyAt[k] and not w.OverGlobal.Has(w.CopySite[k]): out.Put(w.CopySite[k], l)
+        if w.CopyAt[k] >= 0 and w.Last[l] == w.CopyAt[k] and (globals or not w.OverGlobal.Has(w.CopySite[k])): out.Put(w.CopySite[k], l)
     }
     return out
 }

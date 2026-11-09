@@ -609,7 +609,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   every program; code in the root's object has them written in **A global is a place like any other (2026-11-09):** a mutable
   global holding an owner or a reference, given another value in a function, builds each value in a region of its own,
   released as it is given another; a local copied whole into one at its last mention stays in its block (no O28 lift
-  into the program's scope, which never closes).
+  into the program's scope, which never closes). **Feeders (2026-11-09):** a local stored whole at its last mention
+  into an owner field or global by a statement of its own block is built in that place's next region from its
+  declaration, its calls' growth there too, and moved in - no copy; elsewhere (a conditional store) as before. A copy
+  made for an owner part beside other owned parts (a `Map` entry's value beside its text key) is split: the part in
+  its region, the rest where the region's parent is.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

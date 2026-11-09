@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8d: a Map whose keys own storage (text) and whose values are Vecs: the entry its add builds - a copy the caller makes
+# of what MapEntry's constructor views (D9h) - is split, its value built in a region of its own and its key's text
+# where the region's parent is, so a Put replacing a value and a removal free the value at once and never the key (the
+# whole entry in one region released the key's text with the old value; kept whole, the Map grew to 266 MB over 2,000
+# turns of 10,000 elements)
+N I64 = 100000
+
+fn mk(i I64) Vec<I64> {
+    v := Vec<I64>()
+    for j in range 100 { v.Push(i + j) }
+    return v
+}
+
+fn main() {
+    m := Map<String, Vec<I64>>()
+    for i in range N {
+        m.Put("key " $(i % 50), mk(i))
+        if i % 7 == 0 { m.Remove("key " $((i + 3) % 50)) }
+    }
+    t I64 = 0
+    for k in range 50 { t += (try m.Get("key " $k) catch { continue }).Len() }
+    io.Println($m.Len() " " $t)!
+}
