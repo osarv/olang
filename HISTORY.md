@@ -35631,3 +35631,50 @@ where `h` lives (O28 item 17, the user's decision), copies it into the field's r
 "frees it at once" while `v`'s growth stays in the caller's scope (572 MB for 2,000 turns of 10,000 elements). Fixing
 it means either the copy for a field too (a copy where item 17 moves) or building `v` in the field's region from its
 declaration; left for a decision.
+
+## Feeders, and split copies (O8d, O28, D9i; 2026-11-09, wt-regionkeep)
+
+Two follow-ups of the global places round.
+
+**A local built for the place it is stored into.** `v := Vec<I64>(); for ... v.Push(i); h.d = v` (h a long-lived
+holder, called in a loop) reached 586 MB though `-memory` said the field "frees it at once": item 17 (O28) built `v`
+where `h` lives, so that lowering could move it, and the region early freeing made at the copy's site (O8d) turned the
+move off - the copy went into the field's region and `v` with all its growth stayed in the caller's scope. Globals had
+been given the other answer the round before (the copy kept, the local left in its block). Decided (mine): build such
+a local in the target place's region from its declaration, for fields and globals both, so no copy is paid.
+free.olang's findFeeds finds a **feeder**: a value local whose copy at its last mention (typed.LastCopies, now with the
+copies a global is given too) is the whole new value of an owner place - a field place or a global place - by an
+assignment that is a statement of the very block declaring it, named no other way (assigned whole, escaping, a second
+name), its declaration's value built where the local lives, the copy going there or to the program's scope. Its
+declaration is a store into the place (made for it: built at its site in a region of its own, whose parent is where the
+copy would have gone); its reads are values of the place (OPl), so a view of it kept elsewhere keeps the place
+(condition 2) and one in use across a later let-go too (condition 6); every call given it (a reference to it or a part,
+through fields) has the scope variable passed the local's scope passed the region instead, with the temporaries built
+with it (writeFeedCalls, as for a call given a value of a sole place) - and a writable one that cannot (another scope
+passed, or the callee's obligations not met: feedFits) keeps the place, as a value changed in place does. Lowering
+keeps the region made at the declaration for those calls (feedRegions; no settle there - an empty Vec's buffer comes
+later), moves the copy (movable trusts free.FeedCopy; the copy's own region is never made), and homes the local's own
+storage in the region where item 17 had put it in an arena. Where the place's region is not known at the declaration -
+the store in a branch or a loop of its own, or a place not decided sole - nothing changes: a store copies as before,
+the region made at the declaration is then its parent's scope, and the local and its copy are what they were.
+
+The field probe runs in 2.2 MB (was 586 MB), the global probe (review/global_letgo_probe.olang) in 2.2 MB with no copy
+made. Tests: the earlyfree fixture `fieldfeed` (a Vec<I64> and a Vec<String> feeder of a holder's fields, under 8 MB,
+interpreted, split into a module), the run case `o8dfeed` (-debug -sanitize, interpreted: feeders of a field, a global
+and of texts; one with a view in use across a later let-go and one with a view kept in another field - both keep -
+and a store on some turns only, a copy; read after a churn).
+
+**Split copies.** The previous round's key-text fix made a `Map<String, Vec<I64>>` keep its values (a Put churn of
+2,000 values of 10,000 elements: 266 MB): the entry its add builds - D9h's copy of what MapEntry's constructor views -
+was built whole in the Value place's region, so it was no longer taken as made for it. Now such a copy is **split**
+(free.splitLeaf, SplitPath; lower.splitCopy): where the structs on the leaf's path declare no Copy, its bytes are copied,
+the leaf's part into the region and every other part owning storage into the region's parent - so the key's text lives
+where the entry would have, and the Value's old region is released at a Put or a removal without it. The region's
+settle (which releases an empty value's region at once) is skipped for a split copy: its other anchors name another
+scope. The same holds for copyLeaves' copies stored into a part. The churn runs in 2.4 MB. Fixture `mapkeys` (text
+keys, values replaced and removed, under 8 MB); a first form that settled split copies released the new Value's
+region at once and read it freed - found by the fixture under -sanitize.
+
+**Found on the way, not fixed here:** `s += m.Get(k)![5]` in a loop over a local `Map<String, Vec<I64>>` keeps each
+turn's copy of the value Get hands back (266 MB over 2,000 turns of 10,000 elements, in master too - with or without
+early freeing): the D9h copy of a view call read once lands outside the turn.

@@ -2438,7 +2438,9 @@ freeing made (O8d), and lives at least as long as where the copy would be built 
 mention goes into storage outliving its block is built there (O28), so `rows.Push(rec)` in a loop moves each turn's
 `rec` into `rows` rather than copying it out of the turn - but not one whose copy is a global's whole new value
 (`cache = v`), which the global lets go of again (O8d): the copy is built for the global, the local reclaimed with
-its block, rather than built in the program's scope, which never closes; a constructor's instance viewing only
+its block, rather than built in the program's scope, which never closes. A local whose copy at its last mention is the
+whole new value of a place that lets go (O8d) - a field or a global - by a statement of the very block declaring it is
+built for that place from its declaration, and moved there; a constructor's instance viewing only
 such moved locals - or unique values a by-value parameter hands on (T13b), moved too - is its own (no D9h copy where
 it is kept). Unobservable: the evaluator copies and agrees. Neither
 D9h's left-out copies nor D9i's moves apply to a value whose copy runs a declared Copy (E31d), which may make what the
@@ -6606,7 +6608,14 @@ nothing else is built into it while the place holds it - so a value of it change
 reference to it handed to a call) makes the place keep, and so does a value holding it made with no store into the place
 (a copy of a struct, a `Map` or an array holding it; a value a call hands back as a view, copied where it is kept, D9h -
 but not a constructor's instance viewing only storage made for the call, or unique values moved into it, which it
-owns), and a local's value handed back.
+owns), and a local's value handed back. A local whose copy at its last mention is such a place's whole new value, by
+a statement of the very block declaring it (`v := Vec<I64>()`, pushes, `h.d = v`), is built for the place from its
+declaration - its value, and what the calls given it build where it lives, built where the place's next value is - and
+moved into it (D9i): that is the place's value made for it, and the local's reads are reads of the place's value, so a
+view of it kept or in use across a let-go makes the place keep, and so does a call changing it that cannot build where
+it is built. A value made for an owner held in a part of a struct - a `Map` entry's `Vec` value beside its text key -
+is that part alone: what the struct's other parts own is built where the struct would have been, never reclaimed
+with the part's old value.
 A collection's **own storage** - a `Vec`'s buffer, a `Map`'s slot arrays, any array of a run-time length a struct holds
 by value - is a place too: what the collection's growth replaces is reclaimed as it grows, where the conditions hold -
 no view of the old storage in use across the growth (`View()`, `Ref()`, an element's reference, condition 6), every
@@ -7121,7 +7130,8 @@ of them allow, and every judgment of this section is then made of it. So:
   built there from the start, not copied there. The same holds for the local itself: one kept by reference past its
   block or loop turn (lent to a callee keeping a reference to it, O17; borrowed by a reference kept longer), or copied
   whole at its last mention into storage that outlives its block (moved there, D9i) - but a global's whole new value,
-  which the global lets go of again (O8d), is a copy and the local stays in its block - is built where it is kept - a new
+  which the global lets go of again (O8d), is a copy and the local stays in its block, unless the local is built for
+  the global from its declaration (O8d) - is built where it is kept - a new
   value each time its declaration runs, so a loop's turns never share one; its memory is the kept scope's on every
   turn, kept or not (the placement is the program's, not a turn's);
 - what is kept by any other way is placed the same: a value kept through a call's obligation (O10c) - one a statement
