@@ -1805,6 +1805,7 @@ e82368ac5dea88c3 026a3d0e9b55f1de checks/cases/vec91fieldcopygrows.olang
 39fe9e19364c769c ff12633c101d2e1d checks/cases/vec95globalkeeps.olang
 19d4994d3676e3d6 f2da2458ebbcdb60 checks/cases/vec96taskkeeps.olang
 44a91b5fbaeeb657 1630a7158aa7031d checks/cases/vec97globalfieldgrows.olang
+dbaa02368238f12a 84bd0893745f3964 checks/cases/vecdropbuilds.olang
 50cb965706c73ef1 d6f517874b744a17 checks/cases/x10built.olang
 ea43f54189d1a3f0 90ab4001615bb3f6 checks/cases/x10byvalue.olang
 ba74b538dd932f02 467cd5fc66b9f63d checks/cases/x10handles.olang
