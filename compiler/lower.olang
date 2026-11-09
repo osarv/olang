@@ -4008,6 +4008,9 @@ fn (ln mut lowering&) quietX(x typed.Expr?&) Bool {
         case typed.Expr.Try(_, _, tr): ln.quietX(tr.X) and (ln.selfTry(tr) or ln.quietClauses(tr))
         case typed.Expr.Text(_, _, tx): ln.quietPieces(tx)
         case typed.Expr.Away(_, _, y): ln.quietX(y)
+        # (a function value made whose type promises "pure": making it writes only its own environment, and what it runs
+        # where it is called writes only through the "mut" arguments given it there)
+        case typed.Expr.Fn(_, ty, _): ln.T.PromisesPure(ln.T.Repr(ty))
         case _: false
     }
 }
@@ -4055,14 +4058,17 @@ fn (ln mut lowering&) quietPlace(p typed.Lvalue&) Bool {
     }
 }
 
-# a call writing nothing it is not given writably: a body's, an extern's or a helper's, every argument read-only or a value
-# reaching no code that could write anything (types.ReachesCode: a closure holding a "mut" reference, an "any")
+# a call writing nothing it is not given writably: a body's, an extern's or a helper's - or one through a function value
+# whose type promises "pure" (T21c), judged by that type as a body's is (docs/fnvalues.md 4.6) -, every argument
+# read-only or a value reaching no code that could write anything (types.ReachesImpure: a closure holding a "mut"
+# reference, an "any"; a "pure" function value writes only through the "mut" arguments it is given, judged here)
 fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
     t := ln.T
     ty := match c.Target {
         case typed.Callee.Body(id): ln.L.Bodies[I64(id)].Ty
         case typed.Callee.Extern(f): ln.L.P.Sig(f)
         case typed.Callee.Helper(_, _): types.UnknownT
+        case typed.Callee.Value(x): t.Repr(x.Type()) if t.PromisesPure(t.Repr(x.Type())) and ln.quietX(x) else types.TypeId(-1)
         case _: types.TypeId(-1)
     }
     if ty == types.TypeId(-1): return false
@@ -4074,9 +4080,9 @@ fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
         # read-only reference holding a writable reference to such storage, at any depth, is a way to write it; in a
         # statement judged alone, with no view's storage known, any writable reference it holds is)
         if writable and (ln.qCover.Len() == 0 or ln.writesCover(a, 0)): return false
-        if not writable and ln.qCover.Len() == 0 and t.ReachesWrite(a): return false
+        if not writable and ln.qCover.Len() == 0 and t.ReachesWrite(a, clean = true): return false
         if not writable and ln.qCover.Len() > 0 and ln.writesCover(t.Referent(a) if t.IsRef(a) else a, 0): return false
-        if t.ReachesCode(a) or not ln.quietX(c.Args[k]): return false
+        if t.ReachesImpure(a) or not ln.quietX(c.Args[k]): return false
     }
     return true
 }
@@ -4624,7 +4630,9 @@ fn (ln mut lowering&) writesCover(t types.TypeId, depth I64) Bool {
 fn (ln mut lowering&) writesOf(r types.TypeId, depth I64) Bool {
     tt := ln.T
     return match tt.KindOf(r) {
-        case types.Kind.Func, types.Kind.Var, types.Kind.Any: true
+        # (a "pure" function value writes only through the "mut" arguments it is given - judged where it is called)
+        case types.Kind.Func: not tt.PromisesPure(r)
+        case types.Kind.Var, types.Kind.Any: true
         # (a writable reference: its object may be the view's, else what it holds writably)
         case types.Kind.Ref: (tt.PermOf(r) & types.Writable) != 0 and (ln.objHits(tt.Referent(r)) or ln.writesCover(tt.Referent(r), depth + 1))
         case types.Kind.Array: ln.writesCover(tt.Elem(r), depth + 1)

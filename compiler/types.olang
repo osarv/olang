@@ -1333,15 +1333,27 @@ fn (t Table&) ReachesCode(id TypeId) Bool {
     return w.reaches(id)
 }
 
-# ... or a writable reference: what a global's value may let a call write (check.mutStorage)
-fn (t Table&) ReachesWrite(id TypeId) Bool {
-    w := codeWalk(t, true)
+# ... or a writable reference: what a global's value may let a call write (check.mutStorage) - a "pure" function
+# value no such code where clean, as ReachesImpure says
+fn (t Table&) ReachesWrite(id TypeId, clean Bool = false) Bool {
+    w := codeWalk(t, true, clean)
     return w.reaches(id)
 }
 
-type codeWalk struct(T Table&, Writes Bool = false) {
+# ... where a function value whose type promises "pure" (T21c) is no such code: it writes only through the "mut"
+# arguments its caller gives it (D9h's quiet calls, E31b's in-place calls, docs/fnvalues.md 4.6)
+fn (t Table&) ReachesImpure(id TypeId) Bool {
+    w := codeWalk(t, false, true)
+    return w.reaches(id)
+}
+
+# whether a function type promises "pure" (T21c)
+fn (t Table&) PromisesPure(id TypeId) Bool { return t.KindOf(id) == Kind.Func and (t.PromiseWords(id) & PromPure) != 0 }
+
+type codeWalk struct(T Table&, Writes Bool = false, Pure Bool = false) {
     T
     Writes
+    Pure
     walking Vec<TypeId>
 }
 
@@ -1349,6 +1361,7 @@ fn (w mut codeWalk&) reaches(id TypeId) Bool {
     t := w.T
     if t.ForeignRef(id) or w.walking.Has(id): return false
     k := t.KindOf(id)
+    if k == Kind.Func and w.Pure and t.PromisesPure(id): return false
     if k == Kind.Func or k == Kind.Var or k == Kind.Any: return true
     if w.Writes and k == Kind.Ref and (t.PermOf(id) & Writable) != 0: return true
     w.walking.Push(id)
