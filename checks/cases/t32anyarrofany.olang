@@ -1,4 +1,6 @@
-# check: fail the 'any' outlives what this array's elements refer to
+# check: run
+# R2 (refusals 5.2): compiles now - the array and its temporaries built where 'xs' lives (O28 through T32a); it was
+# refused, as what follows says
 # T32a (the any review, finding 1): an array of anys of a loop body's temporaries, copied into an any kept outside the
 # loop - the slice of it too
 type aSized trait {
@@ -16,4 +18,5 @@ fn main() {
         a[1] = aBtn("b" $i)
         xs.Push(a[0:2])
     }
+    assert xs.Len() == 3 and xs[2].Len() == 2
 }

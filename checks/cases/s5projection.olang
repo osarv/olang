@@ -1,4 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
+# check: run
+# R2 (refusals 5.2): compiles now - the call whose field is pushed lands where 'bs' lives, its argument's text with it
+# (O28 through O18c); it was refused, as what follows says
 # O18c (the review of study 5's fixes, F5): a field or an element of a call's value result passed on is a copy out of
 # it - its references are where that call's result landed, which its argument's block decides; pushed into a list that
 # outlives the block, they would be read after it closed
@@ -15,4 +17,5 @@ fn main() ? {
         t := $k "-text"
         bs.Push(Pairish.pairish(t).a)
     }
+    assert bs[0].s == "0-text" and bs[3].s == "3-text"
 }

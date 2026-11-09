@@ -1,4 +1,6 @@
-# check: fail error[P1g]: these targets live in different scopes, and the results are built in one
+# check: run
+# R2 (refusals 5.2): compiles now - the inner target's claim lengthened to the outer one's, where the results are built
+# (O28 through P1g); it was refused, as what follows says
 # P1g: a task's built results go into targets in two blocks - built in one, the other's would refer to it from where it
 # closes first (the port fitted only an existing result, so its built one went unchecked: review port1 l01)
 import "std/io"

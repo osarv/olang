@@ -1,4 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
+# check: run
+# R2 (refusals 5.2): compiles now - the text built where 'names' lives, which the inner list's SetAt keeps (O28 through
+# O10c); it was refused, as what follows says
 # E31b/O17b: a store into an element of a handle element - "names[i][0] = t" - is the inner list's SetAt on a copy of
 # the handle lent as its reference: what it keeps lives where the inner list's state does, which a loop's text does not
 fn main() ? {
@@ -11,4 +13,5 @@ fn main() ? {
         t := $i "-loop-text"
         names[i][0] = t
     }
+    assert names[2][0] == "2-loop-text" and names[0][0] == "0-loop-text"
 }

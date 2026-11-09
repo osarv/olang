@@ -1,4 +1,6 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# check: run
+# R2 (refusals 5.2): compiles now - the call whose field is kept lands where 'keep' lives (O28 through O18c); it was
+# refused, as what follows says
 # O18c: a field read off a call's result lands by the callee's obligations, as ':=' from the call does - and a call
 # whose result holds new text has none, so it is the loop body's: kept in a longer-lived list it is refused
 type Token struct(kind I32, text String&) {
@@ -19,4 +21,5 @@ fn main() ? {
     p := P()
     keep := Vec<String&>()
     grab(p, keep)
+    assert keep.Len() == 3 and keep[2] == "t0"
 }

@@ -1,4 +1,6 @@
-# check: fail error[O25i]: this reads 'held', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+# check: run
+# R2 (refusals 5.2): compiles now - x's own storage built where 'held' lives, the call it reads a part of landed there
+# (O28 through O18c); it was refused, as what follows says
 # O18c/O17: a part read off a call's result keeps its references where the call landed, but its own storage is its
 # block - a reference to it that outlives the block is refused (the relaxation of study 6's r05 must not reach it)
 # (O25i: 'held' is typed per assignment now, so the error is at the read after the loop, which the version

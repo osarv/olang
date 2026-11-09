@@ -1,4 +1,6 @@
-# check: fail error[P2, D16e]: this function value closes before the join does
+# check: run
+# R2 (refusals 5.2, with 5.4's shape): compiles now - the closure and the array it captured built where the task's
+# function value is kept, at the join's level (O28 through P2); it was refused, as what follows says
 # P2/E13b: a function value computed for the task holds what it was made from - passed through a call it is the very
 # value passed, here a closure over a loop body's array, which closes while the task runs
 fn id(g fn&()) fn&() { return g }
@@ -11,4 +13,5 @@ fn main() ? {
             spawn id(f)()
         }
     }
+    assert c[3] == 3 and c[1] == 1
 }

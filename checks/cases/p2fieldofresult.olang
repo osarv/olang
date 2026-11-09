@@ -1,4 +1,6 @@
-# check: fail error[P2]: this argument's storage closes before the join does
+# check: run
+# R2 (refusals 5.2, with 5.4's shape): compiles now - the call whose field the task is handed lands at the join's level,
+# where the task's argument is kept (O28 through O18c); it was refused, as what follows says
 # P2/O18c: a task's argument read off a call's value result, the call's result landing where a local of a loop body
 # inside the join lives - which closes before the join
 import "std/io"

@@ -1,4 +1,6 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# check: run
+# R2 (refusals 5.2): compiles now - the value's text built where the cells' elements live, as a store keeps it (O28
+# through C2d); it was refused, as what follows says
 # O18c (the batch 6 review): ...a value holding a loop body's text stored into an element's field - the value is kept
 # where the list lives, which its text does not
 type W struct(s String&) {
@@ -15,4 +17,5 @@ fn main() ? {
         wv := W(x)
         cells[i].w = wv
     }
+    assert cells[0].w.s == "w0" and cells[2].w.s == "w2"
 }

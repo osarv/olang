@@ -1,5 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
-# never: the index is held here
+# check: run
+# R2 (refusals 5.2): compiles now - the hidden copy a view of which f keeps built where 'out' lives (O28 through O10c);
+# it was refused, as what follows says
 # B11 (the review of the view lend, D1): refused by O10c - the callee keeps a borrow of the view's hidden copy in an
 # outer list - but no index is held and nothing is written back, so the held-index note is not said
 import "std/io"

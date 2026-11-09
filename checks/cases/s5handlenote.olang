@@ -1,4 +1,6 @@
-# check: fail which is made where 'names' lives
+# check: run
+# R2 (refusals 5.2): compiles now - the text built where 'names' lives, which the inner list's SetAt keeps (O28 through
+# O10c); it was refused, as what follows says
 # B11 (G4): the note on a store into an element of a handle element names the collection as written, never the copy
 # the compiler held for it
 fn main() ? {
@@ -9,4 +11,5 @@ fn main() ? {
         t := $k "-loop-text-of-moderate-length"
         names[0][0] = t
     }
+    assert names[0][0] == "2-loop-text-of-moderate-length"
 }

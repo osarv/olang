@@ -1,4 +1,6 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# check: run
+# R2 (refusals 5.2): compiles now - the closure and what it captured built where 'keep' lives, a new one each turn (O28
+# through O10c); it was refused, as what follows says
 # D16d/O10c: compose builds its lambda in its result scope, so each function it captures must outlive where the result
 # lands - a closure made in a loop body does not outlive a variable declared before the loop
 type Counter struct() {
