@@ -55,3 +55,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - Review A done: rounds clean. Bug: ctor default field Vec<File>/Map<I64,File> (bad IR / interp abort). Over-rejections r1,r2 (O25h/O25), p7/p9 (T13b return Vec<Logged>), T25c on p.items.Push for value local. Repros: review/reviewA/.
 - User 11-09: no more experiments unless they teach the compiler; order compiler -> oann -> experiments. /tmp deletions allowed freely.
 - Probe review/global_letgo_probe.olang: a mut global Vec replaced 2000x keeps everything (peak 705 MB; -memory: "no place lets go"). Global stores are not let-go places yet, though memory.md says they are. Queue fix.
+- ctorfield merged, pushed.
