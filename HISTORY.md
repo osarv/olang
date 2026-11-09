@@ -35683,3 +35683,27 @@ storage then its block's (the move now waits on the plan's region); `make scopef
 **Found on the way, not fixed here:** `s += m.Get(k)![5]` in a loop over a local `Map<String, Vec<I64>>` keeps each
 turn's copy of the value Get hands back (266 MB over 2,000 turns of 10,000 elements, in master too - with or without
 early freeing): the D9h copy of a view call read once lands outside the turn.
+
+### D9h: a view call's value passed on by a try is read where it stands (bug, 2026-11-09, wt-getcopy)
+
+The gap found in wt-regionkeep: `s += m.Get(k)![5]` in a loop over a local `Map<K, Vec<I64>>` kept each turn's copy of
+the value Get hands back (535 MB over 1,000,000 turns of 64 elements; `m.Get(k)!.Len()`, `ident(m.Get(k)!)` and
+`(try m.Get(k) catch { continue })[5]` alike). Get hands back a view of the Map's storage (D9h), which its caller
+copies unless the value is only read where it stands (lower's `reads`, marked by readHere for a consumer's
+argument). readHere looked through a conversion, a promotion and a statement-less sequence but not through a try,
+so a view passed on by `!` or by `try ... catch` was never marked read - and the copy, made where the callee's result
+scope lands (the function's own scope: the scope pass places nothing for a view call, so no turn block was opened),
+kept every turn's. Not early freeing, and not the scope pass's placement: with `v := m.Get(k)!` the copy went with the
+turn.
+
+Fixed in lowering only: readHere passes through a try to its call (lower.readHere), and the window judged for such a
+view (windowQuiet) leaves out the clauses of the view's own try (selfTry): they run only where the call failed and no
+view exists - a `catch { continue }` there made the window look unquiet. Everything else is as it was: what the
+consumer evaluates while the view is alive is judged as before, so `m.Get(0)![bump(m)]`, whose index replaces the
+entry, still copies; a by-value parameter the callee keeps copies it where it stores it, as a direct view call's
+always did. The probe runs in 1.8 MB. In compiler/ two bodies changed (scope.Placements' `rows.Push(try ... catch
+{ continue })`, one in facts), each a copy left out.
+
+Tests: the earlyfree fixture `getread` (Map.Get and Vec.Get read through `!` and through a clause, under 8 MB,
+interpreted, split into a module); the run case `d9htryview` (-debug -sanitize, interpreted: an index that replaces
+the entry read, through `!` and a clause, still reads the value the call gave; a clause's default).
