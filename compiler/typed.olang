@@ -1748,6 +1748,9 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # O29: the references whose referents' scopes Found builds go into, found at run time - each one evaluating has no
     # effect of (a local, a field read, a conditional of those)
     Roots Vec<Expr&>
+    # T22c: by site, the twin of its callee a call reaches - judged with the function values it is given followed into
+    # it (scope.twinTab) - -1 for the callee's ordinary judgment
+    TwinAt mut Array<I64>& = Array<I64>(Sites, -1)
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed Vec<Scope>
@@ -1792,6 +1795,15 @@ fn (pl mut Plan&) Pass(site SiteId, scopes Array<Scope>&) {
     pl.passedAt[I64(site)] = pl.passed.Len() + 1
     pl.passedN[I64(site)] = scopes.Len()
     for s in scopes { pl.passed.Push(s) }
+}
+
+# T22c: the call at a site reaching twin t of its callee
+fn (pl mut Plan&) SetTwin(site SiteId, t I64) { pl.TwinAt[I64(site)] = t }
+
+# the twin the call at a site reaches, -1 for its callee's ordinary judgment
+fn (pl Plan&) Twin(site SiteId) I64 {
+    if I64(site) < 0 or I64(site) >= pl.TwinAt.Len(): return -1
+    return pl.TwinAt[I64(site)]
 }
 
 # a call at a site passing another scope for its callee's i-th variable (compiler/free.olang's regions)

@@ -60,6 +60,8 @@ type FnKey enum {
     # $ of an "any"'s instance (T33), a table's rendering slot: as a Render helper, fn(x Stored&, depth) with its builder -
     # rendered at the top of a piece (top), or inside another value's rendering, text and a Char quoted there (E11a)
     AnyRender(table I64, top Bool)
+    # T22c: a body's twin with a plan of its own - its code read with that plan (scope.twinTab), in the root object
+    Twin(body typed.BodyId, twin I64)
 }
 
 # the helpers lowering makes for a type (DESIGN.md 1.8). Their ABI is fixed by their kind (HelperType, PassedCount),
@@ -2351,6 +2353,7 @@ fn (w mut dumper&) key(k FnKey) String {
         case FnKey.Body(b): "B" $b
         case FnKey.Adapter(b): "adapter B" $b
         case FnKey.Copied(b): "copied B" $b
+        case FnKey.Twin(b, t): "B" $b " twin " $t
         case FnKey.Helper(kind, ty): $short($kind) " " $w.T.Canon(ty)
         case FnKey.Init(m): "init " $m
         case FnKey.AnyRender(ti, top): "any render table " $ti $(" top" if top else "")

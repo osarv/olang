@@ -55,6 +55,9 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     P
     Bodies
     Plans Vec<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
+    # T22c: by twin (scope.twinTab), its plan, and whether it has code of its own (else a call of it reaches the body's)
+    TwinPlans Vec<typed.Plan>
+    TwinOwn Vec<Bool>
     Free mut free.Free?& = null # the early-free analysis's decisions (O8d), null for none: nothing freed early
     Gaps Vec<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
@@ -152,9 +155,13 @@ fn (lw mut Lowerer&) HasCode(id I64) Bool {
 
 # body id lowered: its MIR function. Gapped says whether lowering met a construct it does not lower yet (a gap, in Gaps)
 # or a type check left unknown (a body with errors) - either way the function is not one to verify
-fn (lw mut Lowerer&) Lower(id I64) mir.Fn& {
+fn (lw mut Lowerer&) Lower(id I64) mir.Fn& { return lw.lowerAs(id, -1) }
+
+# body id lowered with its plan, or with twin t's (T22c) - never freeing early, its plan having no regions written in
+fn (lw mut Lowerer&) lowerAs(id I64, t I64) mir.Fn& {
     b := lw.Bodies[id]
-    f := mir.Fn(mir.FnKey.Body(typed.BodyId(I32(id))), b.Ty, b.File, b.Sp)
+    key := mir.FnKey.Twin(typed.BodyId(I32(id)), t) if t >= 0 else mir.FnKey.Body(typed.BodyId(I32(id)))
+    f := mir.Fn(key, b.Ty, b.File, b.Sp)
     for i in range b.RaiseAt.Len() {
         f.RaiseAt.Push(b.RaiseAt[i])
         f.RaiseWhat.Push(b.RaiseWhat[i])
@@ -167,11 +174,14 @@ fn (lw mut Lowerer&) Lower(id I64) mir.Fn& {
     }
     ln mut lowering& = lowering(lw, b, lw.P.T, f)
     ln.file = b.File
-    if id < lw.Plans.Len() {
+    if t >= 0 {
+        ln.planned = true
+        ln.plan = lw.TwinPlans[t]
+    } else if id < lw.Plans.Len() {
         ln.planned = true
         ln.plan = lw.Plans[id]
     }
-    ln.freeing = lw.Free is not null and lw.Free!.Frees(id)
+    ln.freeing = t < 0 and lw.Free is not null and lw.Free!.Frees(id)
     ln.run()
     lw.Gapped = ln.gapped
     return ln.F
@@ -191,6 +201,7 @@ fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn& {
         case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
         case mir.FnKey.Adapter(call) { return lw.adapterFn(call) }
         case mir.FnKey.Copied(body) { return lw.copiedFn(body) }
+        case mir.FnKey.Twin(body, t) { return lw.lowerAs(I64(body), t) }
         case mir.FnKey.Init(m) { return lw.initFn(m) }
         case mir.FnKey.AnyRender(ti, top) { return lw.anyRender(ti, top) }
     }
@@ -2931,9 +2942,17 @@ fn (ln mut lowering&) arm(a typed.Arm&, slot mir.LocalId) {
 # ---- calls ----
 
 # what a call reaches, and its function type
-fn (ln mut lowering&) callee(c typed.Callee&, sp source.Span) mir.Callee, types.TypeId {
+fn (ln mut lowering&) callee(c typed.Callee&, sp source.Span, site typed.SiteId = typed.SiteId(-1)) mir.Callee, types.TypeId {
     match c {
-        case typed.Callee.Body(id) { return ln.bodyCallee(id) }
+        case typed.Callee.Body(id) {
+            # T22c: a call the plan routes to a twin with a plan of its own reaches the twin's code
+            t := ln.plan.Twin(site) if ln.planned else -1
+            if t >= 0 and t < ln.L.TwinOwn.Len() and ln.L.TwinOwn[t] {
+                ty := ln.L.Bodies[I64(id)].Ty
+                return mir.Callee.Fn(mir.FnKey.Twin(id, t), ty), ty
+            }
+            return ln.bodyCallee(id)
+        }
         case typed.Callee.Extern(f) {
             ty := ln.L.P.Sig(f)
             return mir.Callee.Extern(f, ty), ty
@@ -3073,7 +3092,7 @@ fn (ln mut lowering&) argView(a typed.Expr&, body I64, i I64) {
 fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
     if c.Zero and c.Args.Len() == 0 { return ln.zero(ty, sp, c.Site) }
-    callee, fty := ln.callee(c.Target, sp)
+    callee, fty := ln.callee(c.Target, sp, c.Site)
     if ln.dead { return mir.Operand.None }
     args := ln.args(c, callee, fty)
     if ln.dead { return mir.Operand.None }

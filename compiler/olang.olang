@@ -575,6 +575,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # written as any build writes them, but no decision of it is emitted: what it reads is the link's
     fr := try placement(c, cfg, l.Root, kind == build.Kind.Module)
     lw.Plans = fr.Plans
+    twinsTo(lw, fr)
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0 { try io.Print($fr.Report() $fr.Sc.PlacedReport()) catch io.Error { } }
@@ -1014,6 +1015,7 @@ fn inferStats(sc mut scope.Scoper&) {
     b.Push($"olang: " $sc.RunStats() "\n")
     b.Push($"olang: " $sc.VerStats() "\n")
     b.Push($"olang: field rounds " $sc.FieldRounds ", components reused " $sc.Reused " of " $sc.Components() " a round, lone bodies judged again " $sc.Redone "\n")
+    b.Push($"olang: " $sc.TwinStats() "\n")
     for f in sc.PromotedFields() { b.Push($"olang: promoted " $f "\n") }
     for f in sc.Unplaced { b.Push($"olang: unplaced " $f "\n") }
     if to[0] != '/' {
@@ -1028,6 +1030,14 @@ fn inferStats(sc mut scope.Scoper&) {
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
+# T22c: the scope pass's twins, each one's plan and whether it has code of its own, for lowering
+fn twinsTo(lw mut lower.Lowerer&, fr free.Free&) {
+    for t in range fr.Sc.TwinCount() {
+        lw.TwinPlans.Push(fr.Sc.TwinPlan(t))
+        lw.TwinOwn.Push(fr.Sc.TwinOwn(t))
+    }
+}
+
 fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false) mut free.Free& ? build.Failed {
     sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
@@ -1114,6 +1124,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     fr := try placement(c, cfg, l.Root)
     if d.Errors() > 0 { error build.Failed.Reported }
     x.Lw.Plans = fr.Plans
+    twinsTo(x.Lw, fr)
     x.Lw.Free = fr
     x.M.Soles = fr.Sole
     os.OnCrash(eval.InterpCrash)

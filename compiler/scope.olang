@@ -225,6 +225,7 @@ type compRun struct() {
     WantHits I64 = 0
     Marks Vec<markRead>
     Read Vec<sumRead>
+    Twinned Bool = false   # T22c: a call of it reached a twin, judged again in every round (judgeTwin)
 }
 
 type markRead struct(Ctor I64, Field I64, Mark typed.Mark) {
@@ -563,6 +564,23 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # a round of the field inference taking again the judging of every component whose inputs are as they were
     # (judgeAll): by component, its judgings so far, the latest last; markReads, sumReads, wantsDecl and wantsField
     # what the component being judged reads and asks
+    # T22c: the twins asked for, shared with the judgings made of them (judgeTwin); the twin a judging is of, its depth,
+    # and the records its body's parameters hold (seedBody, seedRecs: by local); by call site of the body being judged,
+    # the arguments followed into a twin (bits, read by the boundary walk); by (lambda, capture local), the captured
+    # function values followed into a lambda's body (D16c); by lambda body, its captures; by body, its component's size
+    Twins mut twinTab& = twinTab()
+    twinKey String = ""
+    twinDepth I64 = 0
+    seedBody I64 = -1
+    seedRecs Map<I64, fnRecs>
+    followed Map<I64, I64>
+    capFollowed Map<pair.Pair<I64, I64>, Bool>
+    lamOf Map<I64, Array<typed.Capture&>>
+    compSize Vec<I64>
+    twinAsked Bool = false
+    twinAt Gap = Gap(-1, source.Span(0, 0), "")  # the call the twin being judged was asked for at
+    capSeeds Map<pair.Pair<I64, I64>, fnRecs>       # by (lambda, capture local): the records followed into its body
+    capSeen Map<pair.Pair<I64, I64>, Bool>
     covered Map<I64, Bool>                 # the bodies whose obligations are what a call through a value holds (valueCovered)
     gives Map<I64, I64>                    # by body: a function its returns give that its result's type does not hold (GivesHeld)
     reuse Bool = false
@@ -595,7 +613,9 @@ fn (s mut Scoper&) Run() {
         if m.Src is not null and m.File >= 0 { s.texts.Put(m.File, m.Src!.Text) }
     }
     s.components()
+    s.sizeComponents()
     if not s.inferFields() { s.judgeAll(true) }
+    s.twinsOwn()
     for b in range s.sums.Len() {
         if s.sums[b].Rels.Len() > 0 and s.valueCovered(b, s.sums[b].Rels, s.Bodies[b].Ty) { s.covered.Put(b, true) }
         if s.sums[b].ResFn.Recs.Len() == 0 or not s.isFunc(s.Bodies[b].Ty) { continue }
@@ -619,6 +639,7 @@ fn (s mut Scoper&) Run() {
 # judgings so far - a constructor field's mark, a callee's summary, a constructor's - else that judging is taken again
 fn (s mut Scoper&) judgeAll(report Bool) {
     reusing := s.reuse and s.runs.Len() == s.compFrom.Len()
+    s.Twins.Round++
     s.Plans.Clear()
     s.sums.Clear()
     s.judged.Clear()
@@ -688,8 +709,10 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     s.sumReads.Clear()
     s.wantsDecl.Clear()
     s.wantsField.Clear()
+    s.twinAsked = false
     s.component(comp, report)
     run mut compRun& = compRun()
+    run.Twinned = s.twinAsked
     for b in comp {
         run.Plans.Push(s.Plans[b])
         run.Sums.Push(s.sums[b])
@@ -742,6 +765,7 @@ fn (s mut Scoper&) takeable(k I64) mut compRun?& {
 }
 
 fn (s mut Scoper&) asItWas(run compRun&) Bool {
+    if run.Twinned { return false }
     if run.WantHits > 0 and not s.fieldGather { return false }
     for m in run.Marks {
         if s.fieldMarkOf(m.Ctor, m.Field) != m.Mark { return false }
@@ -1121,12 +1145,18 @@ fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
             l := wholeLocal(p)
             if l < 0 or s.bndSeen.Has(l) { return }
             s.bndSeen.Put(l, true)
+            # (T22c: a parameter or a capture whose functions are followed into this body holds them)
+            sd := s.seededRecs(l)
+            for r in sd.Recs { out.Push(fnRec(r.Body, Vec<Term>(), r.Adapter)) }
             ds := try s.bndDefs.Ref(l) catch default Vec<typed.Expr&>()
             for d in ds { s.bndRecs(d, out) }
         }
         case typed.Expr.Call(_, _, c) {
             match c.Target {
-                case typed.Callee.Body(id) { for r in s.sums[I64(id)].ResFn.Recs { out.Push(r) } }
+                case typed.Callee.Body(id) {
+                    tw := s.plan.Twin(c.Site)
+                    for r in (s.Twins.Sums[tw] if tw >= 0 else s.sums[I64(id)]).ResFn.Recs { out.Push(r) }
+                }
                 case typed.Callee.Value(v) {
                     rs Vec<fnRec>
                     s.bndRecs(v, rs)
@@ -1267,7 +1297,9 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
                 case typed.Callee.Value(v) { s.bndExpr(v, BndNone) }
                 case _ { }
             }
-            for a in c.Args { s.bndExpr(a, BndArg) }
+            # (T22c: an argument followed into a twin is no boundary - the twin judges where its functions go)
+            fw := try s.followed.Get(I64(c.Site)) catch default 0
+            for i in range c.Args.Len() { s.bndExpr(c.Args[i], BndNone if i < 62 and (fw >> i) & 1 == 1 else BndArg) }
         }
         case typed.Expr.Make(_, _, m) {
             for a in m.Items { s.bndExpr(a, BndStore) }
@@ -1313,8 +1345,8 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
         }
         case typed.Expr.Fn(_, _, f) {
             match f {
-                case typed.FnVal.Lambda(_, caps, _) {
-                    for c in caps { s.bndExpr(c.Outer, BndCapture) }
+                case typed.FnVal.Lambda(lb, caps, _) {
+                    for c in caps { s.bndExpr(c.Outer, BndNone if s.capFollowed.Has(pair.Pair<I64, I64>(I64(lb), I64(c.Inner))) else BndCapture) }
                 }
                 case typed.FnVal.Adapter(_, r, _) { s.bndExpr(r, BndOther) }
                 case _ { }
@@ -1360,6 +1392,389 @@ fn (s mut Scoper&) bndPlace(p typed.Lvalue?&) {
     }
 }
 
+# ---- T22c: function values followed into calls - twins (docs/fnvalues.md 4.1-4.3) ----
+
+# the twins asked for in a program: by key - a body, and for each parameter followed into it the functions its argument
+# carries - an index; by index the body, the key, the records each followed parameter holds (by its local; a capture as
+# a derived scope of that parameter, capCode), the summary and plan its last judging gave, whether a judging that
+# reports made the plan, whether the plan is one of its own (Own: else a call of it reaches the ordinary code) and the
+# round it was judged in
+type twinTab struct() {
+    Keys Map<String, I64>
+    Body Vec<I64>
+    Key Vec<String>
+    Seeds Vec<Map<I64, fnRecs>>
+    Sums Vec<mut summary&>
+    Plans Vec<typed.Plan>
+    Planned Vec<Bool>
+    Own Vec<Bool>
+    Gen Vec<I64>
+    Round I64 = 0
+    PerBody Map<I64, I64>
+}
+
+TwinsPerBody I64 = 16   # 15, decision 5: at most this many twins of one body,
+TwinDepth I64 = 4       # ... judged inside one another at most this deep,
+TwinsLeast I64 = 256    # ... and in all at most 2% of the program's bodies, and at least this many
+
+# capture k of the ri-th function (in key order) the value given for a parameter carries, as the second word of a derived
+# scope of that parameter: Term.Derived(p, capCode(ri, k)), always below -1
+fn capCode(ri I64, k I64) I64 { return -2 - (ri * 4096 + k) }
+
+fn isCapCode(w I64) Bool { return w <= -2 }
+
+fn capTerm(t Term) Bool {
+    return match t {
+        case Term.Derived(_, w): isCapCode(w)
+        case _: false
+    }
+}
+
+# a value's functions, each once by body (and adapter), ordered: a twin's key
+fn sortedRecs(rs Vec<fnRec>&) Vec<fnRec> {
+    out Vec<fnRec>
+    for r in rs {
+        if out.View().Some(fn(q): return q.Body == r.Body and q.Adapter == r.Adapter): continue
+        out.Push(fnRec(r.Body, Vec<Term>(), r.Adapter))
+    }
+    for i in range 1, out.Len() {
+        j := i
+        for j > 0 and recLess(out[j], out[j - 1]) {
+            out[j], out[j - 1] = out[j - 1], out[j]
+            j--
+        }
+    }
+    return out
+}
+
+fn recLess(a fnRec, b fnRec) Bool { return a.Body < b.Body or (a.Body == b.Body and not a.Adapter and b.Adapter) }
+
+# the twin of body b that call c (at sp) reaches - where an argument given for a parameter of a function type carries
+# functions all known, some of which that type does not cover (T22b) - judged now if this round has not; -1 for b's
+# ordinary judgment: nothing followed, or a limit reached (the argument a boundary, as before). The arguments followed
+# are marked for the boundary walk (followed)
+fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
+    if b >= s.Bodies.Len() or s.Bodies[b].Root is null or not s.twinnable(b): return -1
+    body := s.Bodies[b]
+    ps := s.P.T.Items(s.P.T.Params(body.Ty))
+    key := StringBuilder()
+    key.Push($b)
+    seeds Map<I64, fnRecs>
+    mask I64 = 0
+    for i in range c.Args.Len() {
+        if i >= ps.Len() or i >= body.Params.Len() or i >= 62: break
+        if not s.isFunc(ps[i]) or not s.followable(c.Args[i], ps[i]): continue
+        rs := sortedRecs(s.keyRecs(c.Args[i]).Recs)
+        key.Push($" " $i ":")
+        for r in rs { key.Push($r.Body $("a" if r.Adapter else "") ",") }
+        seeds.Put(I64(body.Params[i]), s.seedOf(rs, i))
+        mask |= 1 << i
+    }
+    if mask == 0: return -1
+    k := key.ToString()
+    t := try s.Twins.Keys.Get(k) catch default -1
+    # (its own body calling itself with what it was given handed on: the judging under way, to its fixed point)
+    if k == s.twinKey and t >= 0: return s.twinMarked(c, t, mask)
+    if not s.sums[b].Done or s.sums[b].Judging or b >= s.compSize.Len() or s.compSize[b] > 1: return -1
+    if t < 0 {
+        if not s.twinRoom(b): return -1
+        t = s.newTwin(b, k, seeds)
+    }
+    if s.Twins.Gen[t] != s.Twins.Round or s.report: s.judgeTwin(t, sp)
+    return s.twinMarked(c, t, mask)
+}
+
+# whether body b may have twins: a function's or a method's, not a generator's (a lambda's captures are followed into
+# its one judging, capturedRecs)
+fn (s mut Scoper&) twinnable(b I64) Bool {
+    body := s.Bodies[b]
+    if body.Gen: return false
+    return match body.Of {
+        case typed.BodyOf.Fn(inst): not s.P.IsGenerator(s.P.InstanceFn(inst))
+        case _: false
+    }
+}
+
+fn (s mut Scoper&) twinMarked(c typed.Call&, t I64, mask I64) I64 {
+    s.followed.Put(I64(c.Site), (try s.followed.Get(I64(c.Site)) catch default 0) | mask)
+    s.plan.SetTwin(c.Site, t)
+    s.twinAsked = true
+    return t
+}
+
+# whether argument a, given for a parameter of function type pty, is followed: every function it may carry known and
+# judged, and some of them doing what pty does not say (T22b) - else it is judged by pty, as before
+fn (s mut Scoper&) followable(a typed.Expr&, pty types.TypeId) Bool {
+    recs := s.keyRecs(a)
+    if not recs.Full or recs.Recs.Len() == 0 or recs.Late.Len() > 0 or recs.Loose.Len() > 0: return false
+    for r in recs.Recs {
+        if r.Body < 0 or r.Body >= s.sums.Len() or not s.sums[r.Body].Done or s.sums[r.Body].Judging: return false
+    }
+    return s.someUncovered(recs, pty)
+}
+
+# the functions argument a carries, before the call judges it: its records where they are known, else - a call not
+# judged yet - what its callee's returns give (ResFn), each by its body
+fn (s mut Scoper&) keyRecs(a typed.Expr&) fnRecs {
+    recs := s.recsOf(a)
+    if recs.Full: return recs
+    c := typed.Call.Of(s.unAway(a))
+    if c is null: return recs
+    b := s.bodyOf(c.Target)
+    if b < 0 or not s.sums[b].Done: return recs
+    out := fnRecs()
+    out.Full = s.sums[b].ResFn.Full
+    for r in s.sums[b].ResFn.Recs { addRec(out, fnRec(r.Body, Vec<Term>(), r.Adapter)) }
+    return out
+}
+
+# whether some of a value's functions do what function type ty does not say (T22b)
+fn (s mut Scoper&) someUncovered(recs fnRecs&, ty types.TypeId) Bool {
+    seen Map<I64, Bool>
+    for r in recs.Recs {
+        if s.uncovered(r.Body, r.Adapter, ty, seen) >= 0: return true
+    }
+    return false
+}
+
+# whether body b may have another twin (15, decision 5)
+fn (s mut Scoper&) twinRoom(b I64) Bool {
+    if s.twinDepth >= TwinDepth: return false
+    if (try s.Twins.PerBody.Get(b) catch default 0) >= TwinsPerBody: return false
+    most := s.Bodies.Len() / 50
+    return s.Twins.Body.Len() < (most if most > TwinsLeast else TwinsLeast)
+}
+
+fn (s mut Scoper&) newTwin(b I64, k String&, seeds Map<I64, fnRecs>&) I64 {
+    tw := s.Twins
+    t := tw.Body.Len()
+    tw.Keys.Put(k, t)
+    tw.Body.Push(b)
+    tw.Key.Push(k)
+    tw.Seeds.Push(seeds)
+    tw.Sums.Push(summary())
+    tw.Plans.Push(typed.Plan.New(s.Bodies[b]))
+    tw.Planned.Push(false)
+    tw.Own.Push(false)
+    tw.Gen.Push(-1)
+    tw.PerBody.Put(b, (try tw.PerBody.Get(b) catch default 0) + 1)
+    return t
+}
+
+# the records a followed parameter p holds in its twin: each function by its body, a capture of a lambda (an adapter's
+# receiver) a derived scope of p (capCode) - where it lived where the value was made being the caller's to say
+fn (s mut Scoper&) seedOf(rs Vec<fnRec>&, p I64) fnRecs {
+    out := fnRecs()
+    out.Full = true
+    for ri in range rs.Len() {
+        r := rs[ri]
+        b := s.Bodies[r.Body]
+        caps Vec<Term>
+        for k in range b.Vars.Len() { caps.Push(Term.Derived(p, capCode(ri, k)) if capVarOf(b, k, r.Adapter) else Term.None) }
+        out.Recs.Push(fnRec(r.Body, caps, r.Adapter))
+    }
+    return out
+}
+
+fn capVarOf(b typed.Body&, k I64, adapter Bool) Bool {
+    return match b.Vars[k] {
+        case typed.ScopeVar.Capture(_): true
+        case typed.ScopeVar.Param(l): adapter and paramPos(b, l) == 0
+        case _: false
+    }
+}
+
+# where capture k of the ri-th function the argument for parameter p carries lived where it was made (capCode w), in
+# this body's terms: one term all its records agree on, else not traced
+fn (s mut Scoper&) capturedAt(p I64, w I64, c typed.Call&) Term {
+    code := -2 - w
+    ri, k := code / 4096, code % 4096
+    recs := s.recsOf(c.Args[p])
+    if not recs.Full: return Term.Untraced
+    keys := sortedRecs(recs.Recs)
+    if ri >= keys.Len(): return Term.Untraced
+    out := Term.None
+    for r in recs.Recs {
+        if r.Body != keys[ri].Body or r.Adapter != keys[ri].Adapter: continue
+        t := r.Caps[k] if k < r.Caps.Len() else Term.None
+        if t == Term.None: return Term.Untraced
+        if out == Term.None: out = t
+        if out != t: return Term.Untraced
+    }
+    return out if out != Term.None else Term.Untraced
+}
+
+# twin t judged: its body judged as a component of its own by a copy of this pass, its followed parameters holding
+# their records, its errors said with the call at sp that asked for it - its summary, and where this judging reports
+# its plan, kept for the calls that reach it
+fn (s mut Scoper&) judgeTwin(t I64, sp source.Span) {
+    tw := s.Twins
+    b := tw.Body[t]
+    sub Scoper = s
+    sub.twinKey = tw.Key[t]
+    sub.twinDepth = s.twinDepth + 1
+    sub.seedBody = b
+    sub.seedRecs = tw.Seeds[t]
+    at := s.nameSpan(sp)
+    sub.twinAt = Gap(s.B!.File, at, "")
+    sub.sums[b] = summary()
+    sub.dropLifts(Array<I64>[b])
+    sub.liftGather = false
+    sub.liftGrew = false
+    sub.lateGather = false
+    sub.finalQuiet = false
+    sub.inSpawn = false
+    sub.landing = false
+    sub.component(Array<I64>[b], s.report)
+    tw.Sums[t] = sub.sums[b]
+    tw.Gen[t] = tw.Round
+    if s.report {
+        tw.Plans[t] = sub.Plans[b]
+        tw.Planned[t] = true
+    }
+    # (what the twin's judging found of lambdas' captures holds for every judging)
+    for key in sub.capFollowed.Keys() { s.capFollowed.Put(key, true) }
+}
+
+# the records a parameter or a capture of the body being judged holds where they are followed into it (T22c, D16c):
+# none for any other local
+fn (s mut Scoper&) seededRecs(l I64) fnRecs {
+    if s.Id == s.seedBody and s.seedRecs.Has(l): return try s.seedRecs.Get(l) catch default fnRecs()
+    return try s.capSeeds.Get(pair.Pair<I64, I64>(s.Id, l)) catch default fnRecs()
+}
+
+# a judging begun: the records followed into the body put where its parameters' and captures' reads find them
+fn (s mut Scoper&) seedFollowed() {
+    if s.Id == s.seedBody {
+        for l in s.seedRecs.Keys() { s.localRecs.Put(l, try s.seedRecs.Get(l) catch default fnRecs()) }
+    }
+    caps := try s.lamOf.Get(s.Id) catch { return }
+    for cp in caps {
+        l := I64(cp.Inner)
+        if l >= s.B!.Locals.Len() or not s.isFunc(s.B!.Locals[l].Ty): continue
+        key := pair.Pair<I64, I64>(s.Id, l)
+        if not s.capSeeds.Has(key) and not s.capSeen.Has(key) {
+            s.capSeen.Put(key, true)
+            rs := s.capturedRecs(cp)
+            if rs.Recs.Len() > 0 { s.capSeeds.Put(key, rs) }
+        }
+        rs := try s.capSeeds.Get(key) catch { continue }
+        s.localRecs.Put(l, rs)
+        s.capFollowed.Put(key, true)
+    }
+}
+
+# D16c, T22c: what a lambda's capture of a function value carries, followed into the lambda's body - where the value it
+# copies is a local of the body making it given one value, never assigned again, whose functions need no term of that
+# body (named functions, lambdas capturing nothing) and some of which the capture's type does not cover; none else
+fn (s mut Scoper&) capturedRecs(cp typed.Capture&) fnRecs {
+    parent := match s.B!.Of {
+        case typed.BodyOf.Lambda(pb): I64(pb)
+        case _: -1
+    }
+    l := match s.unAway(cp.Outer) {
+        case typed.Expr.Read(_, _, p, _): wholeLocal(p)
+        case _: -1
+    }
+    if parent < 0 or l < 0 or parent >= s.Bodies.Len(): return fnRecs()
+    pb := s.Bodies[parent]
+    if pb.Locals[l].Kind == typed.LocalKind.Param or pb.Root is null: return fnRecs()
+    for k in range s.assignedFrom[parent], s.assignedFrom[parent + 1] {
+        if s.assignedTo[k] == l: return fnRecs()
+    }
+    init := letOf(pb.Root, l)
+    if init is null: return fnRecs()
+    rs Vec<fnRec>
+    try s.namedRecs(init, rs) catch NeedsTerm { return fnRecs() }
+    out := fnRecs()
+    out.Full = true
+    for r in rs { addRec(out, r) }
+    ty := s.B!.Locals[I64(cp.Inner)].Ty
+    for r in out.Recs {
+        if not s.sums[r.Body].Done or s.sums[r.Body].Judging: return fnRecs()
+    }
+    return out if s.someUncovered(out, ty) else fnRecs()
+}
+
+# the value local l is declared with in a block, its statements' blocks searched; null for none found
+fn letOf(bl typed.Block?&, l I64) typed.Expr?& {
+    if bl is null: return null
+    for st in bl.Stmts {
+        x := letIn(st, l)
+        if x is not null: return x
+    }
+    return null
+}
+
+fn letIn(st typed.Stmt?&, l I64) typed.Expr?& {
+    if st is null: return null
+    match st {
+        case typed.Stmt.Let(_, id, x) {
+            if I64(id) == l: return x
+        }
+        case typed.Stmt.If(_, i) {
+            x := letOf(i.Then, l)
+            return x if x is not null else letOf(i.Else, l)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            x := letOf(body, l)
+            return x if x is not null else letOf(post, l)
+        }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b): return letOf(b, l)
+        case _ { }
+    }
+    return null
+}
+
+# by body, the size of its component of the call graph: a twin is made only of a body alone in its own
+fn (s mut Scoper&) sizeComponents() {
+    for _ in range s.Bodies.Len() { s.compSize.Push(1) }
+    for k in range s.compFrom.Len() {
+        end := s.compFrom[k + 1] if k + 1 < s.compFrom.Len() else s.compNodes.Len()
+        for i in range s.compFrom[k], end { s.compSize[s.compNodes[i]] = end - s.compFrom[k] }
+    }
+}
+
+# once every body is judged: which twins have a plan of their own - any placement or call other than the ordinary
+# plan's, a call of the body itself handed what it was given counting as the ordinary's
+fn (s mut Scoper&) twinsOwn() {
+    tw := s.Twins
+    for t in range tw.Body.Len() {
+        b := tw.Body[t]
+        if not tw.Planned[t] or b >= s.Plans.Len() { continue }
+        pl := tw.Plans[t]
+        self Vec<I64>
+        for i in range pl.TwinAt.Len() {
+            if pl.TwinAt[i] == t {
+                self.Push(i)
+                pl.TwinAt[i] = -1
+            }
+        }
+        tw.Own[t] = not (pl == s.Plans[b])
+        for i in self { pl.TwinAt[i] = t }
+    }
+}
+
+# T22c, for lowering and interpret: how many twins there are, the body each is of, its plan, and whether it has code of
+# its own
+fn (s Scoper&) TwinCount() I64 { return s.Twins.Body.Len() }
+
+# OLANG_SCOPESTATS: the twins made, those with code of their own, and the captures followed into lambdas
+fn (s Scoper&) TwinStats() String {
+    own := s.Twins.Own.View().Count(fn(o): return o)
+    keys := StringBuilder()
+    for k in s.Twins.Key { keys.Push($" [" $k "]") }
+    return $"twins " $s.Twins.Body.Len() ", with code of their own " $own ", captures followed " $s.capSeeds.Len() $keys.ToString()
+}
+
+fn (s Scoper&) TwinBody(t I64) I64 { return s.Twins.Body[t] }
+
+fn (s Scoper&) TwinPlan(t I64) typed.Plan { return s.Twins.Plans[t] }
+
+fn (s Scoper&) TwinOwn(t I64) Bool { return s.Twins.Own[t] }
+
+fn (s Scoper&) TwinKey(t I64) String { return s.Twins.Key[t] }
+
 # ---- T22a: records in the judging (docs/sec8.md 5.2, 5.3) ----
 
 # a judging begun: no record known yet; the body's returns carry where it gives one function value outside a cycle
@@ -1370,6 +1785,8 @@ fn (s mut Scoper&) recStart() {
     s.siteRecs.Clear()
     s.callRecs.Clear()
     s.valRelsAt.Clear()
+    s.followed.Clear()
+    s.seedFollowed()
     s.resFns = fnRecs()
     s.resFns.Full = true
     s.suspending = false
@@ -2112,6 +2529,11 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     if report {
         base = s.P.L.Diags.ContextBase(s.P.L.Diags.ContextDepth())
         pushed = s.instContexts(s.instanceOf(b))
+        if b == s.seedBody and s.twinAt.File >= 0 {
+            # T22c: what is said in a twin is said with the call that asked for it
+            s.P.L.Diags.PushContext(diag.Where.Span(s.twinAt.File, I64(s.twinAt.Sp.Start), I64(s.twinAt.Sp.End)), "the functions given here followed into it (T22c)")
+            pushed++
+        }
     }
     s.tailSp = source.Span(-1, -1)
     s.dtorAt = source.Span(-1, -1)
@@ -2390,6 +2812,8 @@ type walked struct() {
     Cur typed.BlockId = typed.BlockId(-1)
     Typed Bool = false           # S21: whether Built is gathered - a become's body only, walked again (tailNeeds)
     Built Vec<types.TypeId>      # ... the type of each call and value it makes
+    LamIds Vec<I64>              # T22c: the lambdas it makes, and what each captures
+    LamCaps Vec<Array<typed.Capture&>>
 }
 
 fn walked.walkBody(s mut Scoper&, b I64) walked {
@@ -2567,6 +2991,8 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
                 case typed.FnVal.Named(id) { out.Callees.Push(I64(id)) }
                 case typed.FnVal.Lambda(id, caps, _) {
                     out.Callees.Push(I64(id))
+                    out.LamIds.Push(I64(id))
+                    out.LamCaps.Push(caps)
                     for c in caps { collectExpr(c.Outer, out) }
                 }
                 case typed.FnVal.Adapter(id, r, _) {
@@ -2608,6 +3034,7 @@ fn (s mut Scoper&) components() {
         s.edgeFrom.Push(s.edgeTo.Len())
         w := walked.walkBody(s, i)
         for c in w.Callees { s.edgeTo.Push(c) }
+        for k in range w.LamIds.Len() { s.lamOf.Put(w.LamIds[k], w.LamCaps[k]) }
         for x in w.Tails {
             tailFrom.Push(i)
             tailTo.Push(typed.CalledBody(x))
@@ -8803,6 +9230,19 @@ fn (s mut Scoper&) inner(a Term, b Term) Term {
 # a call judged: each of its callee's scope variables bound (O17, O18a, O18b, E25), its temporaries built where those
 # say, its callee's obligations judged through the bindings (O10c); what its result is to section 8
 fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Term) Val {
+    # T22c: a call whose arguments' functions are followed into its callee is judged as a call of the twin they ask for -
+    # its summary read in the callee's place while the call is judged
+    b := s.bodyOf(c.Target)
+    t := s.twinFor(c, b, sp) if b >= 0 and not s.inSpawn else -1
+    if t < 0 { return s.callAs(sp, ty, c, dest) }
+    saved := s.sums[b]
+    s.sums[b] = s.Twins.Sums[t]
+    v := s.callAs(sp, ty, c, dest)
+    s.sums[b] = saved
+    return v
+}
+
+fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest Term) Val {
     land := s.landing
     s.landing = false
     # the inference's landing for it (2.4): where its uses need its result
@@ -9850,7 +10290,12 @@ fn (s mut Scoper&) requiredIn(rels Vec<rel>&, v I64, beta Array<Term>&) Term {
     for r in rels {
         if r.Hi != Term.Var(v) { continue }
         match r.Lo {
-            case Term.Var(k) { if k < beta.Len() and beta[k] != Term.None and beta[k].Runs(): return beta[k] }
+            case Term.Var(k) {
+                if k < beta.Len() and beta[k] != Term.None and beta[k].Runs(): return beta[k]
+                # (T22c: a capture of a function value followed into this body - where nothing is built, as a constant
+                # given for it)
+                if k < beta.Len() and capTerm(beta[k]): return beta[k]
+            }
             case Term.Program { return Term.Program }
             case _ { }
         }
@@ -10485,6 +10930,7 @@ fn (s mut Scoper&) through(t Term, beta Array<Term>&, c typed.Call&, hi Bool) Te
 # on the other
 fn (s mut Scoper&) derivedAt(p I64, w I64, c typed.Call&, hi Bool, beta Array<Term>&) Term {
     if p < 0 or p >= c.Args.Len() { return Term.Untraced }
+    if isCapCode(w) { return s.capturedAt(p, w, c) }
     a := c.Args[p]
     y := regionLocal(a)
     if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param and s.isRef(s.B!.Locals[y].Ty) {
