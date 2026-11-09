@@ -102,6 +102,14 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     gen mir.GenInfo = mir.GenInfo()   # the program's generational types and weak fields (Gen), once read
     genRead Bool = false
     genDecided Map<I64, Bool>         # the declarations whose T13d fact is decided (DecideGen)
+    # 4.4 of docs/fnvalues.md: the clones decided (DecideClones), each by its key, and how many of each callee; what
+    # each body's code is as a clone reads it; the clones' size so far, in estimated bytes of IR
+    Clones Vec<Clone>
+    cloneAt Map<String&, I64>
+    clonesOf Map<mir.FnKey, I64>
+    cloneSums Vec<CloneSum>
+    cloneSumAt Map<mir.FnKey, I64>
+    cloneBytes I64 = 0
 }
 
 # T13d, B3i (docs/wholeprog.md kind D): whether a type is generational and which of its fields are weak - a
@@ -7151,6 +7159,435 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
     ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.Lvalue.L(dest))))
     ln.emit(mir.Stmt.Close(sp, rs))
     return true
+}
+
+# ---- clones (docs/fnvalues.md 4.4) ----
+
+# what a local is known to hold of a function value, read off its function's own statements: nothing known, the
+# function's parameter k unchanged (a parameter nothing assigns, or a local one copy of such sets), or the code of one
+# body made at type ty (a local one closure sets: a named function, a lambda, a type's Call)
+type FnVal enum {
+    Unknown
+    Param(k I64)
+    Code(key mir.FnKey, ty types.TypeId)
+}
+
+# a body's code as a clone reads it: its size in MIR instructions; by parameter, the deepest loop a call through it is
+# in (0: in none; -1: no value the body keeps unchanged); its calls handing a parameter on unchanged, at the callee's
+# parameter of the very same type
+type CloneSum struct() {
+    Ok Bool = false
+    Size I64 = 0
+    Loop Vec<I64>
+    Hands Vec<CloneHand>
+}
+
+type CloneHand struct(From I64, To mir.FnKey, At I64, Depth I64) {
+    From, To, At, Depth
+}
+
+# a call giving a function parameter of the callee (its At-th) the code of one known body, made at type Ty
+type CloneSite struct(Callee mir.FnKey, At I64, Code mir.FnKey, Ty types.TypeId) {
+    Callee, At, Code, Ty
+}
+
+# a clone: Base's code with every call through its parameter Param a direct call of Code's (as a value of type Ty)
+type Clone struct(Base mir.FnKey, Param I64, Code mir.FnKey, Ty types.TypeId) {
+    Base, Param, Code, Ty
+}
+
+# the limits (4.4): clones of one callee; a hand-on chain's depth; the clones' size, in percent of the program's IR
+# (but CloneFloor bytes in any program: a small one's 3% would not hold one sort's chain, ~43 KB), a MIR instruction
+# estimated at CloneBytes of it (the prelude's measured 63); a callee below CloneSmall instructions calling through the value
+# only itself (LLVM inlines it whole, the call then direct); a body of more than CloneBlocks blocks is never cloned
+CloneMax I64 = 8
+CloneDepth I64 = 4
+ClonePct I64 = 3
+CloneBytes I64 = 64
+CloneFloor I64 = 64 << 10
+CloneSmall I64 = 32
+CloneBlocks I64 = 4000
+
+# the function values f's locals are known to hold, by local
+fn KnownValues(f mir.Fn&) Array<FnVal> {
+    n := f.Locals.Len()
+    writes := Array<I64>(n)
+    from := Array<I64>(n, -1)
+    made := Array<FnVal>(n, FnVal.Unknown)
+    for b in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(b)
+        for s in bb.Stmts { noteWrite(s, writes, from, made) }
+        match bb.T {
+            case mir.Term.Call(_, c), mir.Term.Tail(_, c) {
+                call := f.Calls[I64(c)]
+                if call.HasDest: countWrite(call.Dest, writes)
+            }
+            case _ { }
+        }
+    }
+    for task in f.Tasks {
+        for i in range I64(task.Targets.N) { countWrite(f.Places[I64(task.Targets.At) + i], writes) }
+    }
+    out := Array<FnVal>(n, FnVal.Unknown)
+    for i in range f.Params.Len() {
+        p := I64(f.Params[i])
+        if writes[p] == 0: out[p] = FnVal.Param(i)
+    }
+    for l in range n {
+        if writes[l] == 1: out[l] = made[l]
+    }
+    # a copy's value is its source's, the sources found in a few rounds (a temporary is set after what it copies)
+    for _ in range 8 {
+        changed := false
+        for l in range n {
+            if writes[l] != 1 or from[l] < 0 or out[l] != FnVal.Unknown or out[from[l]] == FnVal.Unknown: continue
+            out[l] = out[from[l]]
+            changed = true
+        }
+        if not changed: break
+    }
+    return out
+}
+
+fn noteWrite(s mir.Stmt, writes mut Array<I64>&, from mut Array<I64>&, made mut Array<FnVal>&) {
+    match s {
+        case mir.Stmt.Assign(_, p, v) {
+            l := baseLocal(p)
+            if l < 0: return
+            writes[l] += 1
+            if p.Path.N != I32(0): return
+            match v {
+                case mir.Rvalue.Use(mir.Operand.Copy(q)) { if q.Path.N == I32(0): from[l] = baseLocal(q) }
+                case mir.Rvalue.Closure(code, ty, _, _, _) { made[l] = FnVal.Code(code, ty) }
+                case _ { }
+            }
+        }
+        case mir.Stmt.CopyElems(_, dst, _, _) { countWrite(dst, writes) }
+        case _ { }
+    }
+}
+
+fn countWrite(p mir.Lvalue, writes mut Array<I64>&) {
+    l := baseLocal(p)
+    if l >= 0: writes[l] += 1
+}
+
+# the local an operand reads whole, -1 for none
+fn wholeLocal(x mir.Operand) I64 {
+    return match x {
+        case mir.Operand.Copy(p): baseLocal(p) if p.Path.N == I32(0) else -1
+        case _: -1
+    }
+}
+
+# what an operand is known to hold, by known (KnownValues)
+fn KnownOf(x mir.Operand, known Array<FnVal>&) FnVal {
+    l := wholeLocal(x)
+    return known[l] if l >= 0 else FnVal.Unknown
+}
+
+# the blocks a block's terminator may go to
+fn succs(f mir.Fn&, b I64, out mut Vec<I64>&) {
+    match f.Blocks.Ref(b).T {
+        case mir.Term.Goto(x) { out.Push(I64(x)) }
+        case mir.Term.Branch(_, y, n) {
+            out.Push(I64(y))
+            out.Push(I64(n))
+        }
+        case mir.Term.Switch(_, cases, other) {
+            for i in range I64(cases.N) { out.Push(I64(f.Cases[I64(cases.At) + i].To)) }
+            out.Push(I64(other))
+        }
+        case mir.Term.Call(_, c) {
+            call := f.Calls[I64(c)]
+            out.Push(I64(call.Ok))
+            if call.Err != mir.NoBlock: out.Push(I64(call.Err))
+        }
+        case mir.Term.Wait(_, _, ok, _, failed) {
+            out.Push(I64(ok))
+            if failed != mir.NoBlock: out.Push(I64(failed))
+        }
+        case mir.Term.Suspend(_, _, resume, _, drop) {
+            out.Push(I64(resume))
+            out.Push(I64(drop))
+        }
+        case _ { }
+    }
+}
+
+# each block's loop depth: how many of f's loops hold it - a loop the blocks reaching a back edge's source without
+# passing its target, the back edges those a walk depth-first from the entry meets to a block on its path (MIR's loops
+# are structured, so the target of each dominates its source)
+fn LoopDepths(f mir.Fn&) Array<I64> {
+    n := f.Blocks.Len()
+    depth := Array<I64>(n)
+    if n == 0: return depth
+    dsts Vec<I64>
+    at := Array<I64>(n + 1)
+    for b in range n {
+        succs(f, b, dsts)
+        at[b + 1] = dsts.Len()
+    }
+    cnt := Array<I64>(n + 1)
+    for d in dsts { cnt[d + 1] += 1 }
+    for i in range n { cnt[i + 1] += cnt[i] }
+    pred := Array<I64>(dsts.Len())
+    fill := Array<I64>(n)
+    for b in range n {
+        for e in range at[b], at[b + 1] {
+            d := dsts[e]
+            pred[cnt[d] + fill[d]] = b
+            fill[d] += 1
+        }
+    }
+    backU, backH := backEdges(n, at, dsts)
+    seen := Array<I64>(n, -1)
+    work Vec<I64>
+    for i in range backH.Len() {
+        h := backH[i]
+        if seen[h] == h: continue   # a header's loop is walked once, from all its back edges
+        seen[h] = h
+        for j in range i, backH.Len() {
+            if backH[j] == h and seen[backU[j]] != h {
+                seen[backU[j]] = h
+                work.Push(backU[j])
+            }
+        }
+        for work.Len() > 0 {
+            x := try work.Pop() catch { break }
+            for e in range cnt[x], cnt[x + 1] {
+                p := pred[e]
+                if seen[p] == h: continue
+                seen[p] = h
+                work.Push(p)
+            }
+        }
+        for x in range n {
+            if seen[x] == h: depth[x] += 1
+        }
+    }
+    return depth
+}
+
+# the back edges of a walk depth-first from block 0: their sources and their targets
+fn backEdges(n I64, at Array<I64>&, dsts Vec<I64>&) Vec<I64>, Vec<I64> {
+    us Vec<I64>
+    hs Vec<I64>
+    state := Array<I64>(n)    # 0 not reached, 1 on the walk's path, 2 left
+    stack := Array<I64>(n)
+    pos := Array<I64>(n)
+    sp I64 = 1
+    pos[0] = at[0]
+    state[0] = 1
+    for sp > 0 {
+        u := stack[sp - 1]
+        e := pos[sp - 1]
+        if e == at[u + 1] {
+            state[u] = 2
+            sp--
+            continue
+        }
+        pos[sp - 1] = e + 1
+        v := dsts[e]
+        if state[v] == 1 {
+            us.Push(u)
+            hs.Push(v)
+        } else if state[v] == 0 {
+            state[v] = 1
+            stack[sp] = v
+            pos[sp] = at[v]
+            sp++
+        }
+    }
+    return us, hs
+}
+
+# whether a function's code may be cloned: a function's body (an instance's, a plain function's) with code, no generator
+fn (lw mut Lowerer&) Clonable(k mir.FnKey) Bool {
+    id := match k {
+        case mir.FnKey.Body(b): I64(b)
+        case _: -1
+    }
+    if id < 0 or not lw.HasCode(id): return false
+    return match lw.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): not lw.P.IsGenerator(lw.P.InstanceFn(inst)) and not lw.Bodies[id].Gen
+        case _: false
+    }
+}
+
+# k's code as a clone reads it, once: its index in cloneSums
+fn (lw mut Lowerer&) cloneSum(k mir.FnKey) I64 {
+    i := try lw.cloneSumAt.Get(k) catch default -1
+    if i >= 0: return i
+    s := lw.readSum(k)
+    lw.cloneSumAt.Put(k, lw.cloneSums.Len())
+    lw.cloneSums.Push(s)
+    return lw.cloneSums.Len() - 1
+}
+
+fn (lw Lowerer&) CloneSumKeys() Vec<mir.FnKey> {
+    out Vec<mir.FnKey>
+    for k in lw.cloneSumAt.Keys() { out.Push(k) }
+    return out
+}
+
+# OLANG_CLONES: k's code as a clone reads it, as text
+fn (lw mut Lowerer&) CloneSumText(k mir.FnKey) String {
+    s := lw.cloneSums[lw.cloneSum(k)]
+    b := StringBuilder()
+    b.Push($"ok " $s.Ok " size " $s.Size " loop")
+    for x in s.Loop { b.Push($" " $x) }
+    for h in s.Hands { b.Push($" hand " $h.From "->" $h.To "@" $h.At " d" $h.Depth) }
+    return b.ToString()
+}
+
+# k's code's size, in MIR instructions
+fn (lw mut Lowerer&) cloneSize(k mir.FnKey) I64 { return lw.cloneSums[lw.cloneSum(k)].Size }
+
+fn (lw mut Lowerer&) readSum(k mir.FnKey) CloneSum {
+    s := CloneSum()
+    if not lw.Clonable(k): return s
+    t mut types.Table& = lw.P.T
+    saved := lw.Gapped
+    f mir.Fn& = lw.LowerKey(k)
+    gapped := lw.Gapped
+    lw.Gapped = saved
+    ps := t.Items(t.Params(f.Ty))
+    if gapped or f.Gen or f.Blocks.Len() > CloneBlocks or f.Params.Len() != ps.Len(): return s
+    known := KnownValues(f)
+    depth := LoopDepths(f)
+    for i in range ps.Len() { s.Loop.Push(0 if known[I64(f.Params[i])] == FnVal.Param(i) else -1) }
+    for b in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(b)
+        s.Size += bb.Stmts.Len() + 1
+        match bb.T {
+            case mir.Term.Call(_, c) { lw.noteCloneCall(s, f, f.Calls[I64(c)], known, depth[b]) }
+            case _ { }
+        }
+    }
+    s.Ok = true
+    return s
+}
+
+# a call of a clone's base: through a parameter's value, the deepest loop it is in; handing one on, the hand
+fn (lw mut Lowerer&) noteCloneCall(s mut CloneSum&, f mir.Fn&, call mir.Call, known Array<FnVal>&, d I64) {
+    t mut types.Table& = lw.P.T
+    match call.Target {
+        case mir.Callee.Value(x) {
+            match KnownOf(x, known) {
+                case FnVal.Param(k) { if s.Loop[k] >= 0 and d > s.Loop[k]: s.Loop[k] = d }
+                case _ { }
+            }
+        }
+        case mir.Callee.Fn(mir.FnKey.Body(to), fty) {
+            ps := t.Items(t.Params(fty))
+            for j in range I64(call.Args.N) {
+                x := f.Ops[I64(call.Args.At) + j]
+                k := match KnownOf(x, known) {
+                    case FnVal.Param(k): k
+                    case _: -1
+                }
+                if k < 0 or s.Loop[k] < 0 or j >= ps.Len() or f.Locals[wholeLocal(x)].Ty != ps[j]: continue
+                s.Hands.Push(CloneHand(k, mir.FnKey.Body(to), j, d))
+            }
+        }
+        case _ { }
+    }
+}
+
+# a clone's key: its base, parameter, code and type
+fn cloneKey(base mir.FnKey, param I64, code mir.FnKey, ty types.TypeId) String {
+    return $base " " $param " " $code " " $ty
+}
+
+# the clone of base for code given at its parameter param, -1 for none
+fn (lw mut Lowerer&) CloneOf(base mir.FnKey, param I64, code mir.FnKey, ty types.TypeId) I64 {
+    return try lw.cloneAt.Get(cloneKey(base, param, code, ty)) catch default -1
+}
+
+# what cloning k for its parameter p pays (4.4): the bodies cloned with it - k for p, and the callees it hands p on to
+# unchanged that pay, at most CloneDepth deep - pushed onto out, and how deep in loops the calls made direct are (the
+# loops of each hand on the way added); -1 where nothing pays, out then as it was
+fn (lw mut Lowerer&) payPlan(k mir.FnKey, p I64, d I64, out mut Vec<pair.Pair<mir.FnKey, I64>>&) I64 {
+    si := lw.cloneSum(k)
+    ok := lw.cloneSums[si].Ok
+    if not ok or p >= lw.cloneSums[si].Loop.Len() or lw.cloneSums[si].Loop[p] < 0: return -1
+    best := lw.cloneSums[si].Loop[p]
+    size := lw.cloneSums[si].Size
+    hands := lw.cloneSums[si].Hands.ToArray()
+    mark := out.Len()
+    out.Push(pair.Pair<mir.FnKey, I64>(k, p))
+    for h in hands {
+        if h.From != p or d >= CloneDepth or planHas(out, h.To, h.At): continue
+        sub := lw.payPlan(h.To, h.At, d + 1, out)
+        if sub > 0 and sub + h.Depth > best: best = sub + h.Depth
+    }
+    if best <= 0 {
+        out.Truncate(mark)
+        return -1
+    }
+    # a small callee calling through the value itself only: LLVM inlines it whole, and the call is direct there
+    if d == 0 and out.Len() == mark + 1 and size < CloneSmall {
+        out.Truncate(mark)
+        return -1
+    }
+    return best
+}
+
+fn planHas(out Vec<pair.Pair<mir.FnKey, I64>>&, k mir.FnKey, p I64) Bool {
+    for x in out {
+        if x.First == k and x.Second == p: return true
+    }
+    return false
+}
+
+# the clones the sites pay for, within the limits - at most CloneMax of one callee, all of them at most ClonePct percent
+# of program (the program's IR, in bytes) - the deepest loops first: by site, the clone its call reaches, -1 for none
+fn (lw mut Lowerer&) DecideClones(sites Vec<CloneSite>&, program I64) Array<I64> {
+    n := sites.Len()
+    out := Array<I64>(n, -1)
+    ben := Array<I64>(n, -1)
+    plans Vec<pair.Pair<mir.FnKey, I64>>
+    from := Array<I64>(n + 1)
+    for i in range n {
+        st := sites[i]
+        ben[i] = lw.payPlan(st.Callee, st.At, 0, plans)
+        from[i + 1] = plans.Len()
+    }
+    order Vec<I64>
+    for i in range n {
+        if ben[i] > 0: order.Push(i)
+    }
+    order.Sort(fn(a I64, b I64) Bool { return ben[a] > ben[b] or (ben[a] == ben[b] and a < b) })
+    budget := program * ClonePct / 100
+    if budget < CloneFloor: budget = CloneFloor
+    for i in order {
+        st := sites[i]
+        if not lw.fits(st, plans, from[i], from[i + 1], budget): continue
+        for j in range from[i], from[i + 1] {
+            pr := plans[j]
+            key := cloneKey(pr.First, pr.Second, st.Code, st.Ty)
+            if lw.cloneAt.Has(key): continue
+            lw.cloneAt.Put(key, lw.Clones.Len())
+            lw.Clones.Push(Clone(pr.First, pr.Second, st.Code, st.Ty))
+            lw.cloneBytes += lw.cloneSize(pr.First) * CloneBytes
+            lw.clonesOf.Put(pr.First, (try lw.clonesOf.Get(pr.First) catch default 0) + 1)
+        }
+        out[i] = lw.CloneOf(st.Callee, st.At, st.Code, st.Ty)
+    }
+    return out
+}
+
+# whether the clones a site's plan (plans[lo:hi]) adds stay within the limits
+fn (lw mut Lowerer&) fits(st CloneSite, plans Vec<pair.Pair<mir.FnKey, I64>>&, lo I64, hi I64, budget I64) Bool {
+    bytes := lw.cloneBytes
+    for j in range lo, hi {
+        pr := plans[j]
+        if lw.cloneAt.Has(cloneKey(pr.First, pr.Second, st.Code, st.Ty)): continue
+        if (try lw.clonesOf.Get(pr.First) catch default 0) >= CloneMax: return false
+        bytes += lw.cloneSize(pr.First) * CloneBytes
+    }
+    return bytes <= budget
 }
 
 # ---- tests ----
