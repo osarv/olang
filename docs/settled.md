@@ -399,7 +399,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   call (a temporary built there goes where the capture lives, a derived scope its caller passes - round 8; in a
   lambda's body still T22c's error); a lambda's captured local given one capture-less function value is followed
   into its one judging; limits 16 twins a body, 4 deep, 2%/256; twins with a plan of their own get code of their own
-  (`_twinN`, the root object) and no early freeing; programs accepted before make no twin, their IR byte-identical. The
+  (`_twinN`, the root object) and no early freeing; programs accepted before make no twin, their IR byte-identical.
+  **Clones (round 9, built 2026-11-09, mine within the user's decision):** a call in the root's object (its code, the
+  instances) giving a function parameter one known body's code - a named function, a lambda, a type's `Call`, at the
+  parameter's very type - gets a clone of the callee with the calls through it direct (`_cloneK_CODE`), where the
+  callee calls through it in a loop or hands it on unchanged to one that does (4 deep; the chain cloned with it, a
+  self-call reaching the clone); limits 8 a callee, 3% of the program's IR but 256 KB in any program, deepest loops
+  first; not for a callee under 32 MIR instructions calling it only itself; none under `-debug` or `compile`. Code
+  only: no meaning changes. The
   function-values
   work of 2026-11-08 (docs/fnvalues.md: function values followed and specialized where it pays) is decided and being
   built. **Promises (T21c, T22b; the user's decision 2026-11-08; built 2026-11-08, round 4):** words after a function

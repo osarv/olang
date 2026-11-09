@@ -90,6 +90,17 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     SplitFrom I64 = 1 << 62         # the IR from which an object larger than PartLimit is cut into parts (Objects)
     PartLimit I64 = PartSize        # the IR of one part at most: PartSize, or PartSizeDev in a -quick or -debug build
     emitted Bool = false
+    # 4.4 of docs/fnvalues.md: the calls of the root's object (its own code's and the instances') giving a function
+    # parameter one known body's code, collected while writing - each site, the function calling, the call - then the
+    # clone DecideClones chose for each call, by the calling function's symbol and the call; the symbol whose item is
+    # written again (its calls reaching clones); the clone being written (-1: none)
+    cloneSites Vec<lower.CloneSite>
+    siteKey Vec<mir.FnKey>
+    siteCall Vec<I64>
+    siteClone Map<String&, I64>
+    clonesDecided Bool = false
+    replaceSym String& = ""
+    cloning I64 = -1
     tyDef Vec<String&>             # each type spelled by name, defined: "%\"NAME\" = type BODY"
     tyAt Map<String&, I64>          # a type's definition by its name (between the quotes)
     # K2: the immutable globals evaluated while compiling, by their initializer's body - each written as its value,
@@ -557,14 +568,8 @@ fn (e mut Emitter&) emitAll() {
     } else if mainBody >= 0 {
         e.want(mir.FnKey.Body(typed.BodyId(I32(mainBody))))
     }
-    k I64 = 0
-    for k < e.queue.Len() {
-        key := e.queue[k]
-        e.cur = k
-        k++
-        e.function(key)
-    }
-    e.cur = -1
+    e.drain()
+    e.clones()
     for i in range e.thunkKeys.Len() { e.thunk(e.thunkKeys[i], e.thunkTys[i]) }
     for i in range e.adaptFrom.Len() { e.fvAdapter(e.adaptFrom[i], e.adaptTo[i]) }
     for d in e.dtorKeys { e.dtorThunk(d) }
@@ -1055,6 +1060,96 @@ fn (e mut Emitter&) index() {
             case _ { }
         }
     }
+}
+
+# every function queued and not yet written, written
+fn (e mut Emitter&) drain() {
+    for e.cur + 1 < e.queue.Len() {
+        e.cur++
+        e.function(e.queue[e.cur])
+    }
+}
+
+# ---- clones (docs/fnvalues.md 4.4) ----
+
+# the clones the sites collected pay for decided (lower.DecideClones), the functions calling them written again with
+# those calls made to them, and each clone written - in the root's object, never in a -debug build or one module's
+fn (e mut Emitter&) clones() {
+    if e.cloneSites.Len() == 0: return
+    chosen := e.Lw.DecideClones(e.cloneSites, e.programBytes())
+    if (try os.Env("OLANG_CLONES") catch default "") != "" {
+        for i in range chosen.Len() {
+            st := e.cloneSites[i]
+            try io.PrintErrln($"site " $e.sym(e.siteKey[i]) " call " $e.siteCall[i] " -> " $e.sym(st.Callee) " at " $st.At " code " $e.sym(st.Code) ": clone " $chosen[i]) catch io.Error { }
+        }
+        try io.PrintErrln($"clones " $e.Lw.Clones.Len() " program " $e.programBytes()) catch io.Error { }
+        for k in e.Lw.CloneSumKeys() { try io.PrintErrln($"sum " $e.sym(k) ": " $e.Lw.CloneSumText(k)) catch io.Error { } }
+    }
+    e.clonesDecided = true
+    again Vec<mir.FnKey>
+    seen Map<String&, Bool>
+    for i in range chosen.Len() {
+        if chosen[i] < 0: continue
+        caller := e.sym(e.siteKey[i])
+        at := $caller "|" $e.siteCall[i]
+        if not e.siteClone.Has(at): e.siteClone.Put(at, chosen[i])
+        if seen.Has(caller): continue
+        seen.Put(caller, true)
+        again.Push(e.siteKey[i])
+    }
+    for k in again {
+        e.replaceSym = e.sym(k)
+        e.function(k)
+    }
+    e.replaceSym = ""
+    for i in range e.Lw.Clones.Len() { e.cloneFn(i) }
+    e.drain()
+}
+
+# the program's IR, in bytes: its modules' and instances' items, a reused module's as it was written (as Objects counts)
+fn (e mut Emitter&) programBytes() I64 {
+    total I64 = 0
+    for i in range e.itemSym.Len() {
+        h := e.itemHome[i]
+        if (h >= 0 or h == HomeInst) and not e.ReusedAt.Has(h) { total += e.itemText[i].Len() }
+    }
+    for r in e.Reuse {
+        if e.ReusedAt.Has(r.Module) { total += r.Size }
+    }
+    return total
+}
+
+# clone i's symbol: its base's and its code's, with the parameter
+fn (e mut Emitter&) cloneSym(i I64) String {
+    cl := e.Lw.Clones[i]
+    return $e.sym(cl.Base) "_clone" $cl.Param "_" $e.sym(cl.Code)
+}
+
+# clone i written: its base's MIR, with the calls through its parameter direct (fnEm.call), an instance's item
+fn (e mut Emitter&) cloneFn(i I64) {
+    cl := e.Lw.Clones[i]
+    k := cl.Base
+    f mir.Fn& = e.Lw.LowerKey(k)
+    symbol := e.cloneSym(i)
+    env := e.hasEnv(k)
+    passed := e.passedOf(k, f.Ty)
+    hdr := e.header(k, f.Ty, symbol, passed, env, linkFor(HomeInst))
+    e.cloning = i
+    defer e.cloning = -1
+    if e.Lw.Gapped {
+        e.runtime("__olang_check_failed")
+        e.fnItem(k, f.Ty, symbol, passed, env, $hdr $e.stub("not lowered", symbol))
+        return
+    }
+    e.writeBody(k, f, symbol, passed, env, hdr, false)
+}
+
+# whether a call the function being written makes may reach a clone: a function of the root's object (its own code, an
+# instance), in a build that is neither -debug nor one module's
+fn (e mut Emitter&) siteable(fe fnEm&) Bool {
+    if e.Debug or e.Module or fe.walkForm or fe.gen: return false
+    h := e.homeOf(fe.Key)
+    return h == HomeInst or h == e.P.L.Root
 }
 
 fn (e mut Emitter&) want(k mir.FnKey) {
@@ -1755,7 +1850,14 @@ HomeLoc I64 = -4        # a failed check's place (B3l): declared in every object
 # an item: its symbol, text (whole lines), home and how another object declares it; the first one made of a symbol
 # stands
 fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = "") {
-    if e.itemAt.Has(symbol) { return }
+    if e.itemAt.Has(symbol) {
+        # a function written again, its calls reaching clones (4.4)
+        if symbol != e.replaceSym: return
+        i := try e.itemAt.Get(symbol) catch default -1
+        e.itemText[i] = e.dbgFunctions(text) if e.Lines and not e.Debug else $text
+        e.itemRefs[i] = Array<I64>(0)
+        return
+    }
     e.itemAt.Put($symbol, e.itemSym.Len())
     e.itemSym.Push($symbol)
     e.itemText.Push(e.dbgFunctions(text) if e.Lines and not e.Debug else $text)
@@ -2085,6 +2187,10 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     curBlock I64 = 0        # the block and statement being written, and the call
     curStmt I64 = 0
     curCall I64 = -1
+    # 4.4: the clone being written (-1: none), and what the function's locals are known to hold of function values
+    clone I64 = -1
+    known Array<lower.FnVal>
+    knownRead Bool = false
 }
 
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
@@ -2294,10 +2400,10 @@ fn (e mut Emitter&) typeHome(ty types.TypeId) I64 {
 
 # a function's item: its text, and its declaration for another object
 fn (e mut Emitter&) fnItem(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, text String&) {
-    home := e.homeOf(k)
-    if e.itemAt.Has(symbol) { return }
+    home := HomeInst if e.cloning >= 0 else e.homeOf(k)
+    if e.itemAt.Has(symbol) and symbol != e.replaceSym { return }
     decl := e.header(k, ty, symbol, passed, env, "declare")
-    e.itemFnTy.Put(e.itemSym.Len(), fnTypeOf(decl))
+    if not e.itemAt.Has(symbol): e.itemFnTy.Put(e.itemSym.Len(), fnTypeOf(decl))
     e.item(symbol, home, text, decl)
 }
 
@@ -2392,6 +2498,7 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
     fe.env = env
     fe.gen = f.Gen
     fe.walkForm = walkForm
+    fe.clone = e.cloning
     e.badType = false
     if e.dbg() { fe.subprogram() }
     fe.run()
@@ -5922,6 +6029,71 @@ fn (fe mut fnEm&) taskKey(k mir.Task) mir.FnKey {
     }
 }
 
+# 4.4: what an operand of the function being written is known to hold of a function value
+fn (fe mut fnEm&) knownOf(x mir.Operand) lower.FnVal {
+    if not fe.knownRead {
+        fe.known = lower.KnownValues(fe.F)
+        fe.knownRead = true
+    }
+    return lower.KnownOf(x, fe.known)
+}
+
+# 4.4: the symbol a call of k reaches - in a clone, the clone of k for the same code where the call hands the clone's
+# parameter on unchanged at k's parameter of the same type; in the root's object, the clone decided for the call (the
+# sites collected while nothing is decided); else k's own
+fn (fe mut fnEm&) callSym(k mir.FnKey, fty types.TypeId, c mir.Call) String {
+    e := fe.E
+    t := e.T
+    if fe.clone >= 0 {
+        cl := e.Lw.Clones[fe.clone]
+        ps := t.Items(t.Params(fty))
+        for j in range I64(c.Args.N) {
+            x := fe.arg(c.Args, j)
+            if j >= ps.Len() or ps[j] != cl.Ty or fe.otype(x) != cl.Ty or fe.knownOf(x) != lower.FnVal.Param(cl.Param): continue
+            i := e.Lw.CloneOf(k, j, cl.Code, cl.Ty)
+            if i >= 0: return e.cloneSym(i)
+        }
+        return e.sym(k)
+    }
+    if not e.siteable(fe): return e.sym(k)
+    if e.clonesDecided {
+        i := try e.siteClone.Get($e.sym(fe.Key) "|" $fe.curCall) catch default -1
+        return e.cloneSym(i) if i >= 0 else e.sym(k)
+    }
+    fe.noteSites(k, fty, c)
+    return e.sym(k)
+}
+
+# 4.4: each argument of a call of k that is one known body's code made at the very type of k's parameter, a site
+fn (fe mut fnEm&) noteSites(k mir.FnKey, fty types.TypeId, c mir.Call) {
+    e := fe.E
+    t := e.T
+    ps := t.Items(t.Params(fty))
+    if not ps.Some(fn(p types.TypeId) Bool: return t.KindOf(p) == types.Kind.Func): return
+    for j in range I64(c.Args.N) {
+        x := fe.arg(c.Args, j)
+        match fe.knownOf(x) {
+            case lower.FnVal.Code(code, ty) {
+                if j >= ps.Len() or ty != ps[j] or fe.otype(x) != ty or e.isGen(code) or not e.Lw.Clonable(k): continue
+                e.cloneSites.Push(lower.CloneSite(k, j, code, ty))
+                e.siteKey.Push(fe.Key)
+                e.siteCall.Push(fe.curCall)
+            }
+            case _ { }
+        }
+    }
+}
+
+# 4.4: in a clone, the code a call through its parameter reaches, by its symbol ("" for any other call): its value's
+# code, known - the very code the value's first word holds (closure)
+fn (fe mut fnEm&) cloneCode(x mir.Operand, ty types.TypeId) String {
+    if fe.clone < 0: return ""
+    cl := fe.E.Lw.Clones[fe.clone]
+    if ty != cl.Ty or fe.knownOf(x) != lower.FnVal.Param(cl.Param): return ""
+    fe.E.want(cl.Code)
+    return "@" $fe.E.codeFor(cl.Code, cl.Ty)
+}
+
 # a call (MIR's Call terminator): its arguments as its callee takes them, its result stored on its ok edge, its error
 # code on its error edge
 fn (fe mut fnEm&) call(c mir.Call) {
@@ -5941,7 +6113,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
         case mir.Callee.Fn(k, fty) {
             fe.E.want(k)
             ty = fty
-            target = "@" $fe.E.sym(k) $(".walk" if walkSc >= 0 else "")
+            target = "@" $(fe.callSym(k, fty, c) if walkSc < 0 else $fe.E.sym(k) ".walk")
             if fe.E.hasEnv(k) { env = "null" }
         }
         case mir.Callee.Extern(f, fty) {
@@ -5953,7 +6125,8 @@ fn (fe mut fnEm&) call(c mir.Call) {
         case mir.Callee.Value(x) {
             ty = fe.otype(x)
             v := fe.val(x, ty)
-            target = fe.let("extractvalue { ptr, ptr } " $v ", 0")
+            direct := fe.cloneCode(x, ty)
+            target = direct if direct != "" else fe.let("extractvalue { ptr, ptr } " $v ", 0")
             env = fe.let("extractvalue { ptr, ptr } " $v ", 1")
         }
         case mir.Callee.Dispatch(x, slot, dty) {

@@ -331,6 +331,25 @@ Every budget of docs/memory.md 4.6 is met now; the store and two-field loops vec
 alike (the Array store loop through a reference parameter was held back by the same scope header). Every row prints the
 same before and after.
 
+## Clones: a sort given a lambda (fnvalues 4.4, 2026-11-09)
+
+A callee given one known body's code is compiled again with its calls through it direct (docs/fnvalues.md 4.4): `Sort`
+and its whole chain for the lambda, which LLVM then inlines. Two rows beside "Array Sort" (`vec.olang sort KIND`):
+"through an unknown value" sorts with a mutable global's function value (no clone: what every Sort paid before), "<
+written in" is the same merge sort with the comparison written (`sortWritten`) - what a clone should reach. Medians of
+7 interleaved runs, whole runs in seconds at 1M elements (load 5-8), the compiler before (602b4c2) and after:
+
+| row | before | after | C (qsort) |
+|---|---:|---:|---:|
+| Array Sort | 0.102 | 0.081 | 0.167 |
+| Array Sort, through an unknown value | 0.102 | 0.102 | 0.169 |
+| Array Sort, < written in | 0.080 | 0.079 | 0.166 |
+| Vec Sort | 0.086 | 0.085 | 0.166 |
+
+Array Sort is now the written sort's speed, 1.26x faster than before (the C measurement of fnvalues 1 put the
+comparator's indirect call at 1.4x); Vec Sort was at that speed already. Rows with no clone stayed within the noise (sum's folds 0.064/0.062 and 0.063/0.061,
+Vec walk 0.041/0.041, nbody 5M 0.300/0.300, gen filter 0.165/0.167).
+
 ## Machine
 
 Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;

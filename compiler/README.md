@@ -38,7 +38,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `free.olang` | early freeing (O8d, docs/memory.md): which places are the only holders of what they hold, so a let-go frees at once; the `-memory` report |
 | `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement (M6, in progress); placements and field bindings inferred, no scope written (O28; docs/rework.md 9, 20 and 21; `OLANG_SCOPESTATS`, `OLANG_INFERDUMP`; a component's judging taken again by later rounds, `OLANG_SCOPECHECK` checking it, `OLANG_NOREUSE` turning it off) |
 | `views.olang` | M19g: a Vec's view used after the same Vec may have grown, from summaries over the call graph's components and a dataflow walk of each body, once a program has checked cleanly |
-| `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |
+| `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress); which clones pay (docs/fnvalues.md 4.4: `KnownValues`, `LoopDepths`, `DecideClones`) |
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
 | `explain.olang` | `olang explain FILE NAME` (B11b): one top-level item as the compiler sees it - signature, inferred errors, obligations, effects, needs, a type's members, a global's baked value; `explain -caps` (B11c); `Codes`, the function `explain -asm` and `-ir` show (B11d) |
@@ -51,7 +51,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `session.olang` | the front end held for a tool: an analysis with an editor's unsaved text standing in for files, what a name at an offset is, symbols, completion, the processes and message framing the servers share |
 | `lsp.olang` | `olang lsp` (B15): the Language Server Protocol, each analysis in a forked worker |
 | `mcp.olang` | `olang mcp` (B16): the Model Context Protocol - check, explain, doc, format, test as tools |
-| `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress) |
+| `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress); clones in the root's object, their sites and choice printed by `OLANG_CLONES` |
 | `cabi.olang` | the C calling conventions (X11): how a plain-data struct crosses to C by value on x86-64 (System V) and AArch64 (AAPCS64), as clang passes it |
 | `bindgen.olang` | a C import translated (X17-X19: the declarations clang reads, macros, the C to compile beside), and `olang bindgen HEADER.h` (X16) writing them down |
 | `fix.olang` | `olang fix` (B17): the migration tools of `tools/`, built into the cache and run over the files in the order the changes were made |

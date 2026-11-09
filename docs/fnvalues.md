@@ -501,6 +501,18 @@ what the call through the value computes (the same body with the same environmen
 whose type is `pure` may also carry LLVM's memory attributes (argument memory and the runtime's only) - measured, kept
 only where they move a row (15, decision 7).
 
+**As built (round 9, 2026-11-09).** Lowering's `KnownValues` reads what a MIR function's locals hold of function values
+(a closure, or a parameter nothing assigns, through single copies), `LoopDepths` the loops each block is in, and a
+callee's `CloneSum` its calls through each parameter and its hand-ons (at the callee's parameter of the very same type,
+so no adapter stands between); emit collects the sites while it writes the root's object, `DecideClones` chooses, the
+calling functions are written again with their calls to the clones, and each clone is the base's MIR written with
+`fnEm.clone` set. A site is only in the root's object (its own code, the instances), so no module's object depends on
+which clones a program makes (B3i). The 3% limit has a floor of 256 KB of IR: a small program's 3% (the prelude's
+~0.75 MB) would not hold one sort's chain (~43 KB, a MIR instruction ~64 bytes of IR measured). LLVM's memory attributes
+on calls through `pure` values were not added (no row asked for them). `OLANG_CLONES` prints the sites, the choice and
+each callee's summary. compiler/'s self-build makes 50 clones, +0.35% of its IR (its root's sorts and the prelude's sorts by positions);
+its IR differs only by them, the calls reaching them and the lambdas copied beside them.
+
 ### 4.5 Effects through parameters, with no instances
 
 effects.olang's `Facts` gain:

@@ -36107,3 +36107,39 @@ Each case is a run case reading back each turn's own storage after the spawner's
 before reading), passing under the scope sanitizer, `-race` (d16espawn was rewritten so its tasks no longer all write
 one field - a race the program owned) and `interpret`. Only refused programs place differently: compiler/'s IR (the
 round's sources built by both compilers) and bench's are byte-identical to before.
+## Clones: a callee given one known body's code, its calls through it direct (fnvalues 4.4, round 9; 2026-11-09, wt-f9)
+
+**What.** `v.Sort(fn(x I64, y I64) Bool: return x < y)` called the comparison through the value in every merge loop of
+the prelude's sort - clang 18 does not specialize a recursive or chained function for a constant function pointer
+(fnvalues 1: 1.4x on the C equivalent). Now a call giving a function parameter the code of one known body gets a clone
+of the callee in which every call through that parameter is a direct call of the body's code with the value's
+environment, and a call handing the parameter on unchanged reaches the callee's clone for the same code - so `Sort`,
+`sortMergeBuffered`, `sortMergeRuns`, `sortMergeForward`/`Backward`, `sortInsertion` and `sortInsert` are cloned as one
+chain, and LLVM inlines the lambda. A recursive function's clone calls itself.
+
+**How (lower.olang, emit.olang).** Lowering reads a MIR function's locals (`KnownValues`: a local one closure sets holds
+that code at that type; a parameter nothing assigns is itself; a local one copy sets holds what it copies), each
+block's loop depth (`LoopDepths`: back edges of a depth-first walk, their natural loops), and per callee a `CloneSum`
+(size; per parameter the deepest loop a call through it is in; hand-ons at a callee parameter of the same type).
+Emit collects the sites while it writes - only in functions of the root's object (its code and the instances), so a
+module's object never depends on the clones a program makes (B3i) - then `DecideClones` plans each site (the callee
+pays where it calls through the value in a loop or hands it to one that pays, 4 deep), orders them deepest loops first
+and takes them within the limits; the calling functions are written again (their items replaced) and each clone is the
+base's MIR written under `NAME_cloneK_CODE` with `fnEm.clone` set. Only values made at the parameter's very type are
+taken, so no R6 adapter can stand between the value and its code. Not for generators, lambdas' own bodies, `-debug`, or
+`compile` of one module.
+
+**Decided (mine).** The doc's 3% of the program's IR has a floor of 256 KB: the prelude alone is ~0.75 MB of IR, so a
+small program's 3% would not hold one sort's chain (~43 KB, measured at ~64 bytes of IR a MIR instruction) - the first
+version cloned nothing in `bench/vec.olang`'s second sort. A plan is judged by its own pairs only (a first version
+shared the pairs of earlier sites and found nothing new to pay). The estimate "a body LLVM inlines whole" is a callee
+under 32 MIR instructions that calls through the value itself only (no hand-on). LLVM memory attributes on calls
+through `pure` values were not added (no row moved to ask for them). `OLANG_CLONES` prints the sites and the choice.
+
+**Measured.** `checks` scenario `clones`: main calls Sort's clone; msort's clone recurses into itself; optimized at
+-O3, the clone of `sortMergeForward` calls nothing through a value where the original does; a -debug build has none.
+bench (1M elements, medians of 7 interleaved): Array Sort 0.102 -> 0.081 s, level with the same sort written with `<`
+(new row, 0.079) and against a Sort through an unknown value (new row, 0.102 both); other rows within noise.
+compiler/'s self-build: 50 clones, IR +0.35% (85.2 -> 85.5 MB), differing only by the clones, the calls reaching
+them and the lambdas copied beside them; peak memory 2860 -> 2870 MB (+0.35%), the front end's lower+emit within noise
+(cold 3.2-3.4 s both), the whole build's CPU 83.3 -> 83.5 s.
