@@ -16,6 +16,9 @@ fn Parse(t String&) I64 ? { return try t.ParseInt(10) }
 
 fn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }
 
+# M19g: a body's summary of checking - whether it may grow the Vec it is given
+fn Touch(a mut Vec<I64>&) { a[0] = 2 }
+
 type Box struct(n I64) { n }
 
 fn (b mut Box&) Peek() I64 {

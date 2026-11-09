@@ -721,6 +721,27 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module tests/fnvalues
+===  tests/follow.olang
+| module <math.h>
+| module <string.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/follow
 ===  tests/genenums.olang
 | module <math.h>
 | module <string.h>
@@ -1525,6 +1546,27 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module tests/viewplace
+===  tests/weak.olang
+| module <math.h>
+| module <string.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/weak
 ===  tests/worker.olang
 | module <math.h>
 | module <string.h>
@@ -2667,6 +2709,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -3676,6 +3719,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -4454,6 +4498,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -5341,6 +5386,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -6155,6 +6201,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -6518,6 +6565,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -7338,6 +7386,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -7439,6 +7488,7 @@
 |   fix compiler/fix
 |   fmt compiler/fmt
 |   free compiler/free
+|   generic compiler/generic
 |   interp compiler/interp
 |   io std/io
 |   listing compiler/listing
@@ -7457,8 +7507,11 @@
 |   sha std/sha256
 |   source compiler/source
 |   target compiler/target
+|   time std/time
 |   typecheck compiler/check
+|   typed compiler/typed
 |   types compiler/types
+|   views compiler/views
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -8279,6 +8332,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -9822,6 +9876,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -11076,6 +11131,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -11177,6 +11233,7 @@
 |   fix compiler/fix
 |   fmt compiler/fmt
 |   free compiler/free
+|   generic compiler/generic
 |   interp compiler/interp
 |   io std/io
 |   listing compiler/listing
@@ -11195,8 +11252,11 @@
 |   sha std/sha256
 |   source compiler/source
 |   target compiler/target
+|   time std/time
 |   typecheck compiler/check
+|   typed compiler/typed
 |   types compiler/types
+|   views compiler/views
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -13435,6 +13495,27 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module tests/fnvalues
+=== -t tests/follow.olang
+| module <math.h>
+| module <string.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/follow
 === -t tests/genenums.olang
 | module <math.h>
 | module <string.h>
@@ -14277,6 +14358,27 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module tests/viewplace
+=== -t tests/weak.olang
+| module <math.h>
+| module <string.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/weak
 === -t tests/worker.olang
 | module <math.h>
 | module <string.h>
@@ -15464,6 +15566,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -16492,6 +16595,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -17294,6 +17398,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -18234,6 +18339,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -19074,6 +19180,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -19451,6 +19558,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -20289,6 +20397,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -20390,6 +20499,7 @@
 |   fix compiler/fix
 |   fmt compiler/fmt
 |   free compiler/free
+|   generic compiler/generic
 |   interp compiler/interp
 |   io std/io
 |   listing compiler/listing
@@ -20408,8 +20518,11 @@
 |   sha std/sha256
 |   source compiler/source
 |   target compiler/target
+|   time std/time
 |   typecheck compiler/check
+|   typed compiler/typed
 |   types compiler/types
+|   views compiler/views
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -21283,6 +21396,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -22887,6 +23001,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -24171,6 +24286,7 @@
 |   os std/os
 |   pair std/pair
 |   source compiler/source
+|   time std/time
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
@@ -24272,6 +24388,7 @@
 |   fix compiler/fix
 |   fmt compiler/fmt
 |   free compiler/free
+|   generic compiler/generic
 |   interp compiler/interp
 |   io std/io
 |   listing compiler/listing
@@ -24290,8 +24407,11 @@
 |   sha std/sha256
 |   source compiler/source
 |   target compiler/target
+|   time std/time
 |   typecheck compiler/check
+|   typed compiler/typed
 |   types compiler/types
+|   views compiler/views
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag

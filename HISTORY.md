@@ -35849,3 +35849,57 @@ holds its node in an owning place, and reads `null` once that lets go.
 **Left** (genrefs Progress): a `weak T?&` in a generic is still an ordinary owning reference - judging it per instance
 needs a hook where generic.olang makes an instance; the "stored only into weak places" error still covers only a
 constructor called straight into one, not a local only ever stored weakly (which now reads `null` at run time).
+## The front end's records, part 1 (B3i; 2026-11-09, wt-frontrec, round W3a of docs/wholeprog.md)
+
+W3a makes the front end keep what it found per module, as W1 keeps the IR. Measured first, on the compiler building
+itself (a no-op build): load 0.24 s, check 2.3 s, scope 2.8 s; of the check, the bodies themselves took 0.6 s and
+M19g's judgment of views (views.olang: summaries over the call graph's components, then a dataflow walk of every body)
+1.3-1.5 s; the R1a fixed point took one attempt and one round. So the part of checking worth keeping is the views
+walk, and that is what is kept:
+
+- **Front records** (`build/rec/NAME.KEY.f<HASH>`, compiler/olang.olang `keepFront`/`frontRecords`): under the
+  module's B3i key (its text, the texts of every module it reaches, embeds, the build's inputs) and named, as the IR's
+  records are, by the hash of the facts its checking read ("read VALUE NAME" of facts.olang, taken only where they
+  Hold). Each holds every keyed body's M19g summary (`views.Viewer.SummaryText`: what it may grow, view and keep of its
+  parameters and globals, which arguments its result may hold - modules and files by identity, names and paths as
+  text), its functions' signatures with their inferred error sets, and its globals' baked values. Written only from a
+  program that checked cleanly, right after evaluation (before section 8 and lowering), so a record holding means its
+  walks would say nothing.
+- **A body's key** (`views.BodyKeys`): its kind and span - a function or method of no type variable, a constructor or
+  destructor of a type of none, a lambda or contract item of such a body, a global's initializer; an instance's body,
+  a table's thunk and a condition have none, and a key two bodies of one file share is none. A taken body is not walked
+  (its summary given, `walk` skips it); its component's other bodies converge from it as from below (the recorded
+  summary is the least fixed point's, so starting there gives it again).
+- **When.** The keys are made once checking has read the files the program embeds (E38): the first version computed
+  them before checking and the edit "an embedded file" took a stale record - found at once by T4. So `interp.Analyze`
+  leaves M19g to its caller (`views.Kept.Later`, `interp.JudgeViews`), which finds the records then.
+- **Keyed by texts, not interfaces, for now.** Narrowing a module's key to what it reads of its imports (signatures,
+  error sets, summaries) is the next step, but a module's typed bodies also hang on its imports' bodies through the
+  evaluator (lengths, conditions, `comptime for`), through settled facts and through instances, and W3b makes every
+  pass's summaries records; the narrowing is designed there, once, over all of them. Every body is still checked
+  (section 8 and early freeing read every typed body); bodies checked only on demand need W3b's summaries too.
+
+Testing (docs/wholeprog.md 10.3): **T4**, `OLANG_CHECKINCR` - every body walked afresh and each taken summary,
+signature and baked value compared with the record, a difference said and the build ending with 3 - in `incremental`
+(every build), `reuseall` (every run case, two orders, beside `OLANG_CHECKREUSE`), `records` and the edit fuzzer. **T2**
+gains "an inferred error set shrunk" and "a summary of checking changed (M19g)" (deep's `Touch` made to grow the Vec lib
+holds a view of; the error said in lib), and asserts the modules checked afresh (the program's own, as `olang: front
+checked` names them) are those lowered again, and that undoing an edit checks nothing again. **T6**: the records
+scenario's damages reach the front records too. **T5**: the edit fuzzer builds under `OLANG_CHECKINCR` and an undone
+step must check nothing again. **T7**, once: the last 100 commits touching compiler/ built one after another in one
+directory (`-quick`, `OLANG_CHECKINCR`): 97 build in today's language, no record stale, 10.3 of 82 modules checked
+afresh a commit on average, none in 41 of them. `CHECKS_SCENARIO=NAME` runs one scenario of checks/checks.olang.
+
+Measured (the compiler, beside another agent's builds): a no-op build's front end 5.6 s before, 4.5 s now (check 2.3 s
+to 1.3 s, the views walk 1.4 s to 0.16 s - the root's bodies); a leaf edit (a comment in lsp.olang) the same, 5.7 s to
+4.6 s. Section 8 (2.8 s) is W3b's.
+
+Bugs found on the way:
+- **Every module lowered again after another program's build** (W1's records). A record is named by the hash of the
+  facts it read, so a small program (`fuzz/fuzz.olang`) and the compiler, reading the same facts of a prelude module,
+  share a record's name or take each other's - but a small program's objects are not cut (B3d) and the compiler's are,
+  so the compiler took the small program's record, found it cut otherwise and emitted every module afresh, every build
+  (82 modules, 4 s of lowering on a no-op). Now a record's name carries its cut ("s"), and on such a mismatch only the
+  records cut as this program's are taken again.
+- **The reader records** (`readerRecords`) asked the fact table for each module's record once per module reaching it
+  (about 2,500 times for the compiler); now once each.
