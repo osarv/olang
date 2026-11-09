@@ -1,0 +1,36 @@
+# check: run
+# flags: -debug -sanitize
+# C2d, O16, T25c (review A): a ":=" field given a call's value with destructors to run - a Vec of unique values - is the
+# instance's slot, the value by value: its type is no reference (the IR stored a pointer into the by-value field), and a
+# value local of the struct writes the field's collection directly as a method through "mut Pool&" does
+import "std/io"
+
+type File unique struct(fd I64) {
+    fd
+} destruct { assert fd >= 0 }
+
+type Pool struct(n I64) {
+    n
+    items := Vec<File>()
+}
+
+fn (p mut Pool&) Fill() { p.items.Push(File(p.n)) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn main() {
+    p := Pool(3)
+    p.Fill()
+    p.items.Push(File(4))
+    churn()
+    assert p.items.Len() == 2 and p.items[0].fd == 3 and p.items[1].fd == 4
+    io.Println("pool " $p.items.Len() " " $p.items[1].fd)!
+}

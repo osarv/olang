@@ -18491,6 +18491,13 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             c.nullDecl = wasNull
             if v.Ty is null or v.Infer {
                 t = c.inferred(v.Values[i], x!, keep)
+                # C2d, O16: a ":=" field given a call's value with destructors to run is the instance's slot - the
+                # value lands in it as it is, held by the instance, never a reference to storage the call's landing made
+                hv := heldValue(x!) if v.Field else null
+                if hv is not null and c.P.T.NeedsDrop(typeOf(hv)) {
+                    x = hv
+                    t = typeOf(hv)
+                }
                 if v.Field and v.Ty is not null {
                     # C3: a ":=" field's "mut" says what its inferred reference permits
                     msp := c.mutBefore(v.Ty!, t)

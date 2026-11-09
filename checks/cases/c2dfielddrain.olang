@@ -1,0 +1,57 @@
+# check: run
+# flags: -debug -sanitize
+# C2d, O15 (review A): a ":=" field holding a Vec of values with destructors, filled and drained through methods - each
+# removed element ended once, read back after the arena churned
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn sum(t Tally&) I64 {
+    s := 0
+    for x in t.seen { s += x }
+    return s
+}
+type Pool struct(t mut Tally&) {
+    t
+    items := Vec<Logged>()
+}
+
+fn (p mut Pool&) Fill(n I64) {
+    for k in range n { p.items.Push(Logged(k, p.t)) }
+}
+
+fn (p mut Pool&) Drain() {
+    for p.items.Len() > 0 {
+        try p.items.RemoveAt(p.items.Len() - 1) catch { return }
+    }
+}
+
+fn main() ? {
+    t := Tally()
+    p := Pool(t)
+    for _ in range 20 {
+        p.Fill(10)
+        p.Drain()
+    }
+    churn()
+    assert t.seen.Len() == 200 and sum(t) == 900
+    try io.Println($t.seen.Len() " " $sum(t))
+}
