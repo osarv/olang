@@ -30,12 +30,12 @@ cdd11912c2d8f808 c203b83bcd16a765 bench/repro/map_count.olang
 a8670163dc421d7e c7e08474bd2cc37b bench/repro/text_local_copy.olang
 64b1c1b12ae810d3 f413d4f65bd91f22 bench/repro/turn_temporaries.olang
 357fe9de63544360 14a3e43282f57e8f bench/repro/wrapping_div.olang
-eeac6fddbc6ce7f0 db335b0f479d7971 bench/run.olang
+dcbc4f152b1cc6af d035eb01a8e39066 bench/run.olang
 54aa0d21efa7dc79 9fd22e3966c29df2 bench/sha256.olang
 76a8addf5ee1440a acfe19a86e5ee692 bench/spectral.olang
 05240bd8e915822a d994c6577c9efb33 bench/sum.olang
 5e244668ce84c0a9 c8ea67de09ca62c5 bench/text.olang
-86ef66d48cf9656b 9774dba0a6038337 bench/vec.olang
+4c894039d28d41ac 215ef7c58f3ad270 bench/vec.olang
 e7088668f6c07e15 fb09e6bb4740d875 checks/cases/2digitname.olang
 091ba8bf13c10a2e 57cf7fc67f660b48 checks/cases/anyenumpayload.olang
 54b8858e6c5b49d7 455e44c7f3a78572 checks/cases/anynocopy.olang
@@ -1874,7 +1874,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 244020b30fdf2de1 0f06288b2bb8f361 checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-16a79f20651d54bb bb4ecda9e2bcda8a checks/checks.olang
+49fd097dba45adf1 d0acdf21eee22801 checks/checks.olang
 a9e28b3dd92156ad ab5a1081715b6588 checks/fixtures/agree/agree.olang
 93a0581f17cca83e 1f1000aa84a5a1d5 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang
@@ -1924,6 +1924,7 @@ f3b28080dac57027 e96017970d9e95e7 checks/fixtures/cinterop/fastuse.olang
 02c067b6d1e67437 58a3eb367f6057fd checks/fixtures/cinterop/mylib.olang
 72c7d8348f93f268 771da9f66384bd28 checks/fixtures/cinterop/zimport.olang
 eb41ea87205f82f5 03f9efedf3170648 checks/fixtures/cinterop/zinterp.olang
+489e1b79cb0a58af 2629c5d64103ad1c checks/fixtures/clones/clones.olang
 51f443492e3acb0e d14e4c9e2fdc5781 checks/fixtures/crash/chanclosed.olang
 f8046479cc849d15 2c7ed3d0140e892b checks/fixtures/crash/crash.olang
 4004cc3e6401a2c0 c7d93e8df3ebd0b6 checks/fixtures/crash/foreign.olang
@@ -2165,7 +2166,7 @@ c0e3bc3682aca0fc d6ed352a19f28c01 compiler/check.olang
 5f082e242ba93794 7f771c54233db1e4 compiler/diagmsg.olang
 2c927dec1c99c409 7870348a7cc1f9c8 compiler/doc.olang
 019a366a3edc3139 7b9758dca564d95a compiler/effects.olang
-8834439673a2fb6e 12c0586030f155d1 compiler/emit.olang
+ff5755739e6e385c 97743599bbd7c92b compiler/emit.olang
 902ead7036576141 89fd6d0057b755a0 compiler/eval.olang
 d8b757ca2165d9b2 7af62c78e2cc1a25 compiler/explain.olang
 6769a2477bc5ad1a 0ff903596bedb23f compiler/facts.olang
@@ -2177,7 +2178,7 @@ db5319c37eb798b9 26f2c23983bf9439 compiler/fmt.olang
 b88b64055365c825 70e0a5f6737d742c compiler/interp.olang
 a60d3ef1c94e04ef 3210ecd7559b4af9 compiler/listing.olang
 8613922735c561a6 2c2c5da5fed8aa69 compiler/load.olang
-68a04c9e907e35ec 758b8080736b37b2 compiler/lower.olang
+115ab32fe71689cf 9f1aa8ca8df91c2a compiler/lower.olang
 3879802f0148397c 30a4a1749140521e compiler/lsp.olang
 a9fdbee6672ba31e 66c773708ec0132b compiler/mcp.olang
 6cfe0de9775f5232 972d5e201247de09 compiler/mir.olang
