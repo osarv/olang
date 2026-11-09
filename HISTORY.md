@@ -35536,4 +35536,10 @@ the frame's scope, so its elements end at the function's end; where their destru
 scope, the sanitized build reports a use after the scope closed as it closes (the seed's too). Raised as a task.
 
 **Left.** A value argument holding two references bound to an unknown scope, and a task's result into such a place,
-still get the program's scope where nothing passes or finds it; no bench row (the run case measures it).
+still get the program's scope where nothing passes or finds it; a collection ending its elements passes none (each
+destructor finds its own - `derivedfoundmixed`), where section 11.2 would pass the element claim's one known scope;
+twins' derived counts are not B3i facts (twin code lives in the root's object); no bench row (the run case measures
+it). **B3i:** the count of a body's derived scopes is a whole-program fact (the field inference reads every module),
+decided for every function and destructor (`O23a NAME`) and read by each module calling it, holding its code, taking
+it as a value or registering its destructor - so a module is reused only where the counts it was compiled against
+hold.

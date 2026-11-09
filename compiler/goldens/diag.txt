@@ -5597,14 +5597,6 @@ t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
       |                                                ^~~~
 compilation failed with 2 errors
-=== t22cbuildcapture.olang
-t22cbuildcapture.olang:13:26: error[T22c]: the function given for this call's callee keeps this argument in what it captured, where this call cannot build - make the argument in the caller and pass it in
-   13 |     for i in range 3 { s(N(base + i)) }
-      |                          ^
-t22cbuildcapture.olang:17:5: note: the functions given here followed into it (T22c)
-   17 |     feed(k, 20)
-      |     ^~~~
-compilation failed with 1 error
 === t22climit.olang
 t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a', and the function type of this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) - says nothing of that - write 'keeps b in a' after its signature
    43 |     put(link16, x, 16)

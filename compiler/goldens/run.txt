@@ -2091,12 +2091,21 @@
 === run derivedcopycapture.olang
 | status 0
 | 203
+=== run derivedfoundmixed.olang
+| status 0
+| 10 90 10 100 0
 === run derivedhelpercount.olang
 | status 0
 | 1
 === run derivedhelpercountvec.olang
 | status 0
 | 
+=== run derivedpassedloop.olang
+| status 0
+| flat
+=== run derivedpassedtemp.olang
+| status 0
+| 103 103 0
 === run e11ctwolevelfield.olang
 | status 0
 === run e13cfloat.olang
@@ -3162,6 +3171,9 @@
 === run t22breturncycle.olang
 | status 0
 | 7
+=== run t22cbuildcapture.olang
+| status 0
+| 3 63 0
 === run t22sharedscope.olang
 | status 0
 === run t22sharedscopegeneric.olang
