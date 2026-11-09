@@ -847,6 +847,8 @@ a6caa579504d07cb 045b7e74ccf17538 checks/cases/o15registeredinner.olang
 75733ae8a01d0b55 24a24858677c07a2 checks/cases/o15registeredref.olang
 3436321cd62919eb 88dae0135bc8ec81 checks/cases/o15registeredtemp.olang
 ee247e81799ddb0a de9981fdfe816a59 checks/cases/o15registeredtempafter.olang
+abd5007cf286accb 7c715077f937b24c checks/cases/o17aparamhandon.olang
+81f8d185e8fbc318 648965fa66beee9c checks/cases/o17aparamref.olang
 ce61d986c82ffccc f5833379bc2fad20 checks/cases/o17bbitand.olang
 dc3cc6b1047f0cff b9b7b2cfbdd2cd95 checks/cases/o17bhandleout.olang
 acef4d479ecf7e59 d42ec1523ac6dbd3 checks/cases/o17bkeeps.olang
@@ -882,6 +884,7 @@ b9d860ba78f2685c f92836faf6d36c3a checks/cases/o17permute6b.olang
 82e5d9c60a7e93ac 795bc68b8ecaf97f checks/cases/o17selfview.olang
 9b217dd620f5eaef 6dd2eae1b9434c2a checks/cases/o17settlestale.olang
 508af7f9e6fae396 1fd7323cc8c9ced0 checks/cases/o17spawntargets.olang
+191b5c35e1db7fa2 2f9b3cb60a2214ca checks/cases/o17splitvecdtor.olang
 fbd8c77ef1e20a28 a020b7083cb555e1 checks/cases/o17tempcallresult.olang
 097ce9a8945fee76 6355ded9de83f310 checks/cases/o17tempcond.olang
 2ef0868cab05e814 87b61d95d4b2d004 checks/cases/o17tempcondarray.olang
@@ -921,6 +924,8 @@ f2041338ed319511 20c68c0a5836d176 checks/cases/o25atypevar.olang
 eb3abd5f83c5d5f1 8a9ed5c65727838f checks/cases/o25derived.olang
 a86650f700944345 1af1a65b9aeaa16a checks/cases/o25enote.olang
 ce32fd829e8447ec 5a25b692390a4e7c checks/cases/o25gfieldbinding.olang
+400321f94cfd34eb f4108613cd9b9714 checks/cases/o25gfieldreassign.olang
+8a419c1276ed0650 4fe7f41c3ec86b0d checks/cases/o25gfieldreassigndtor.olang
 a08d24f4bcb5316a e325293e4d7a2e13 checks/cases/o25harrayreturn.olang
 a5435d710b3d2a50 f80139570ee6bde7 checks/cases/o25harrayslice.olang
 43d5287f2f2cdc3d f51410d4f851cb21 checks/cases/o25hcopyelem.olang
