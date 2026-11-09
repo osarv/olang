@@ -22,7 +22,8 @@
 # Where a field lives: each row Next gives is an array built where its caller puts it (§8.5) - in "for row in", the
 # loop body's own scope, reclaimed as each turn ends. A field that is the text as written - unquoted, or quoted with
 # no doubled quote in it - is a slice of the text, copying nothing; one holding a doubled quote is new text built where
-# the row is. To keep a field past its turn, put a copy where it is to be kept: kept.Push($row[0]) (O8c).
+# the row is. A field kept past its turn - kept.Push(row[0]) - is built where it is kept, in the list's scope (O27,
+# O28): nothing is copied to keep it.
 #
 # A file is read whole with os.ReadFile and its text handed to Rows - fields can then borrow it. Records are written by
 # Record, one line of text each, to wherever text goes (an io.Writer, a StringBuilder).
