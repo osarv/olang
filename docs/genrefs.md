@@ -40,7 +40,12 @@ Hand-off for a fresh agent after a restart. Output: this file, one line in docs/
   program (docs/wholeprog.md's facts with readers); every module's let-go sites (round 7, folded into wholeprog's W2);
   the one-holder rule; `std/pool`. Where the text below still describes (a) or a per-module decision, sections 0.1 and
   15 govern.
-- next: the build, in docs/wholeprog.md section 10's order
+- [x] G1 (round 1, 2026-11-09, wt-weakrefs; HISTORY "`weak` references and generational types, round 1"): `weak`, T2d
+  and T13d with their errors, generational status over the whole program, explain's line, `-memory`'s rows; the probes
+  above rewritten with `weak`. Left to G2+G3: a `weak T?&` in a generic (judged per instance) makes nothing generational
+  yet; the "stored only into weak places" error covers a constructor called straight into one, not a local only ever
+  stored weakly
+- next: G2+G3, in docs/wholeprog.md section 10's order
 
 ## 0.1 Decided (the user, 2026-11-08 evening)
 
