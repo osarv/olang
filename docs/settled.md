@@ -406,7 +406,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   callee calls through it in a loop or hands it on unchanged to one that does (4 deep; the chain cloned with it, a
   self-call reaching the clone); limits 8 a callee, 3% of the program's IR but 256 KB in any program, deepest loops
   first; not for a callee under 32 MIR instructions calling it only itself; none under `-debug` or `compile`. Code
-  only: no meaning changes. The
+  only: no meaning changes. **What is followed and promised, read by the other analyses (round 10, built 2026-11-09,
+  mine within the user's decision; docs/fnvalues.md 4.6):** early freeing judges a call through a value whose records
+  the scope pass followed as direct calls of them, composes a call through a function parameter its body never
+  assigns at each call by the argument (`letsVia`, `escVia`), and judges any other by its type (`keeps` words, `pure`
+  given nothing writable lets go of nothing); D9h's quiet statements, E31b's in-place calls and M19g take a `pure`
+  value (or a function written for a `pure` parameter) as writing only through its `mut` arguments, and M19g follows a
+  function written where it is called; `-memory`'s note names a value nothing is known of. The
   function-values
   work of 2026-11-08 (docs/fnvalues.md: function values followed and specialized where it pays) is decided and being
   built. **Promises (T21c, T22b; the user's decision 2026-11-08; built 2026-11-08, round 4):** words after a function
@@ -663,7 +669,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   it").** Storage a place lets go of while it was its only holder may be reclaimed then rather than at the scope's
   close - the compiler's optimization, unobservable but in memory, never running a destructor early (O15). `own`,
   `take`, loans and borrowed copies are removed. Early freeing keeps wherever a fact is missing (function values,
-  externs, tasks, destructors); `-memory` (B18) lists what keeps and why. **In every module (W2, wholeprog 2.1,
+  externs, tasks, destructors - a function value only where nothing of it is followed or promised, fnvalues round 10);
+  `-memory` (B18) lists what keeps and why. **In every module (W2, wholeprog 2.1,
   2026-11-08):** the decisions are the whole program's, and each module's code reads its places' as link-time constants
   (weak `false` where read, `true` defined by the root's decisions object, folded by LTO), so objects stay the same in
   every program; code in the root's object has them written in **A global is a place like any other (2026-11-09):** a mutable

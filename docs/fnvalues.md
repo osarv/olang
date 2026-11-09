@@ -573,6 +573,24 @@ functions are followed, by the composition of 4.5 where it is a parameter, and b
 - **M19g (views.olang).** A call through a `pure` value grows only what its `mut` arguments reach; a call through
   followed functions grows what their bodies grow.
 
+**As built (round 10, 2026-11-09).** The scope pass keeps, by (body, site), the bodies a call through a value was judged
+as where its records are all known (`Scoper.ValueRecsAt`, written by its reporting judging), and says whether a local is
+ever assigned (`AssignedLocal`). free.olang's `valueCall` judges such a call as direct calls of each record (`asRecord`:
+its stores, keeps, whole moves and let-goes, shifted one for an adapter's instance); a call through a parameter its body
+never assigns (`fixedParam`, the first 62) records `letsVia`/`viaMut` bits and `escVia` triples (p, q, j) instead of
+letting go of anything and keeping a parameter's value, and each call of the body resolves them by its argument
+(`viaCall`: a function or a lambda written there - through a conversion to the parameter's type - by its body's summary,
+the caller's own fixed parameter composed again, else by the type); in the body's own final walk the call is still an
+event for any place, so views it holds across it are judged as before. Anything else is judged by its type: an argument
+is kept where its `keeps` words name it or where any argument can be stored into (a writable reference, a value holding
+a reference), and a `pure` value given nothing that may write lets go of nothing. `-memory`'s note at such a let-go
+says "it calls through a function value not followed whose type does not promise 'pure'" or "it is given ..., and calls
+through it". D9h (lower.olang's `quietCall`), E31b (check.olang's `plainArg`, `pureFnArg`, `collWalk`, `settleInPlace`:
+`Through` only with `Impure`) and M19g (views.olang's value calls) read `pure` through `types.ReachesImpure`,
+`ReachesWrite(t, clean = true)` and `PromisesPure`; a lambda written for a `pure` parameter arrives as a conversion to
+that type, read through. M19g follows only a function written where it is called (views.olang runs before the scope
+pass, with no records); D9h judges a call through a value only by its type. Twins share the ordinary body's analysis.
+
 ### 4.7 Why it is sound
 
 - *Patterns are complete.* Everything scope.olang's `call` reads of a callee for a direct call - the relations it

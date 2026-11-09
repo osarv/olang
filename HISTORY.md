@@ -36143,3 +36143,41 @@ bench (1M elements, medians of 7 interleaved): Array Sort 0.102 -> 0.081 s, leve
 compiler/'s self-build: 50 clones, IR +0.35% (85.2 -> 85.5 MB), differing only by the clones, the calls reaching
 them and the lambdas copied beside them; peak memory 2860 -> 2870 MB (+0.35%), the front end's lower+emit within noise
 (cold 3.2-3.4 s both), the whole build's CPU 83.3 -> 83.5 s.
+
+## What is followed and promised, read by early freeing, D9h, E31b and M19g (fnvalues 4.6, round 10; 2026-11-09, wt-f10)
+
+**What.** Every analysis that gave up at a call through a function value now reads what is known of it. Early freeing
+(O8d) took any call through a value, and any call of a body making one, for a let-go of every place: `f`, a view of an
+element of `it.frames` used after `total(xs, fn(x): return x * 2)`, kept `it.frames` (-memory: "which may let go of
+anything"). D9h copied a view read across any call given a function value; E31b refused the in-place form to a call
+given one, or whose method called through one; M19g took a call through a value as growing whatever it was given by value
+or writably.
+
+**How.** The scope pass keeps the records it judged each call through a value by (`ValueRecsAt`, where all are known),
+and free.olang judges such a call as direct calls of them. A call through a function parameter the body never assigns
+is composed as effects' are: bits per parameter (`letsVia`, `viaMut`) and triples (`escVia`) in the body's summary,
+resolved at each call by the argument - a function or a lambda written there by its body's summary, the caller's own
+parameter composed again (so `twice(xs, fn ...)` calling `sum(xs, f)` twice is judged by the lambda), else by its type.
+In the body's own final walk the call stays an event for any place, so a view the body itself holds across it is judged
+as before. By type: an argument is kept where `keeps` names it or any argument can be stored into, and a `pure` value
+given nothing that may write lets go of nothing. D9h, E31b and M19g read `pure` as writing only through `mut`
+arguments (`types.ReachesImpure`, `ReachesWrite(t, clean = true)`, `PromisesPure`); M19g also follows a function or
+lambda written where it is called.
+
+**Found on the way.** A lambda written for a parameter whose type promises `pure` reaches the call as a conversion
+(`Prim.Convert`) to that type, its own type promising nothing: each analysis reads through it (`fnWritten`,
+`writtenRecs`, `writtenFn`, `pureValue`), else the lambda counted as a value nothing is known of.
+
+**Decided (mine).** M19g follows only functions written where they are called: views.olang runs before the scope pass, so
+a local's records are not there - a call through a local stays judged by its type. D9h judges a call through a value
+by its type only (no records in lowering either). A body called through records whose own calls go through its
+parameters lets go of anything at that call (its arguments' values are the inner call's, not known there). The
+callee's final walk keeps today's event, rather than a set of what its callers give - the gain is at the callers, where
+the views that kept were.
+
+**Tests.** checks/cases o8dfnpure (-memory: the place frees at once across a `pure` callback, a lambda through two
+higher-order calls, a `pure` field given a parameter promising nothing, a local lambda), o8dfnremoves (a lambda that pops
+keeps it, the note naming "removes frames"), o8dfngiven (an unfollowed value: the new note), o8dfnpurerun (run, read back
+after a churn, interpreted and under -sanitize alike), d9hfnpure (5 calls read a view where it stands, 2 before) and
+d9hfnpurerun, e31bfnpure (run) and e31bfnpurewrites (a value promising nothing still refused), m19gfnpure (run) and
+m19gfnpuregrows (a `pure` value given the Vec writably still grows it).
