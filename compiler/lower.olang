@@ -424,6 +424,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # block after it starts (the local, and that block)
     holdAt mir.BlockId = mir.NoBlock
     holdDest mir.LocalId = mir.NoLocal
+    holdOld mir.LocalId = mir.NoLocal
     file I64 = 0
     rdepth mir.Operand = mir.Operand.None   # in a Render helper, how many references were followed to reach it (E11a)
     cur mir.BlockId = mir.BlockId(0)
@@ -662,6 +663,7 @@ fn (ln mut lowering&) start(b mir.BlockId) {
     if b != ln.holdAt: return
     ln.holdAt = mir.NoBlock
     ln.holders(mir.Lvalue.L(ln.holdDest), 1, ln.B.Sp)
+    ln.holders(mir.Lvalue.L(ln.holdOld), -1, ln.B.Sp)
 }
 
 fn (ln mut lowering&) goto(b mir.BlockId) { ln.end(mir.Term.Goto(b)) }
@@ -2200,14 +2202,15 @@ fn (ln mut lowering&) tempPart(p mir.Lvalue) Bool {
     return true
 }
 
-# how a store into p counts: 0 not (a temporary, a reference local - no owning place), 1 the new value held (a value
-# local, an element reached through a reference - where the old one may be no value yet), 2 the new held and the old
-# let go (a field reached through a reference, a global, a part of a value local)
+# how a store into p counts: 0 not (a temporary, a reference local - no owning place), 1 the new value held (an element
+# reached through a reference - where the old one may be no value yet), 2 the new held and the old let go (a field
+# reached through a reference, a global, a value local - zero from its function's entry or its storage's making, or a
+# parameter, held from the entry - or a part of one)
 fn (ln mut lowering&) placeCount(p mir.Lvalue) I64 {
     if ln.tempPart(p): return 0
     ps := ln.projsOf(p)
     l := baseLocal(p)
-    if ps.Len() == 0 and l >= 0: return 0 if ln.T.IsRef(ln.T.Repr(ln.F.Locals[l].Ty)) else 1
+    if ps.Len() == 0 and l >= 0 and ln.T.IsRef(ln.T.Repr(ln.F.Locals[l].Ty)): return 0
     from I64 = 0
     for i in range ps.Len() {
         if ps[i] == mir.Proj.Deref: from = i + 1
@@ -2227,6 +2230,12 @@ fn (ln mut lowering&) holders(p mir.Lvalue, by I64, sp source.Span) {
 fn (ln mut lowering&) counted(s mir.Stmt&) Bool {
     match s {
         case mir.Stmt.Assign(sp, p, rv) { return ln.countedAssign(sp, p, rv) }
+        case mir.Stmt.Live(sp, l) {
+            if not ln.countedLocal(I64(l)): return false
+            ln.F.Add(ln.cur, s)
+            ln.zeroLocal(I64(l), sp)
+            return true
+        }
         case mir.Stmt.CopyElems(sp, d, _, n) {
             if not ln.L.Gen().HoldsGen(ln.T, ln.T.Elem(ln.arrayOf(ln.stepType(d, I64(d.Path.N))))): return false
             ln.F.Add(ln.cur, s)
@@ -2296,13 +2305,16 @@ fn (ln mut lowering&) weakWords(rv mir.Rvalue, isWeak Bool, sp source.Span) mir.
     return mir.Rvalue.Aggregate(rv.ty, rv.tag, ln.F.Args(args)) if some else rv
 }
 
-# a call's result stored into a value local, held once the call returns (its Ok block starts)
+# a call's result stored into a value local, held once the call returns (its Ok block starts) and what it held before
+# let go of
 fn (ln mut lowering&) holdResult(c mir.Call) {
     l := baseLocal(c.Dest)
     if not c.HasDest or c.Dest.Path.N != I32(0) or l < 0 or ln.L.Gen().Decls.Len() == 0: return
     loc := ln.F.Locals[l]
-    if loc.Kind == mir.LocalKind.Temp or ln.T.IsRef(ln.T.Repr(loc.Ty)) or not ln.counts(loc.Ty): return
+    if not ln.countedLocal(l) and not (loc.Kind == mir.LocalKind.Param and not ln.T.IsRef(ln.T.Repr(loc.Ty)) and ln.counts(loc.Ty)): return
     ln.holdAt, ln.holdDest = c.Ok, mir.LocalId(I32(l))
+    ln.holdOld = ln.temp(loc.Ty, ln.B.Sp)
+    ln.F.Add(ln.cur, mir.Stmt.Assign(ln.B.Sp, mir.Lvalue.L(ln.holdOld), mir.Rvalue.Use(mir.Operand.Copy(c.Dest))))
 }
 
 # the local a place starts from, -1 for a global's
@@ -2313,13 +2325,29 @@ fn baseLocal(p mir.Lvalue) I64 {
     }
 }
 
-# a by-value parameter holding owning references, an owning place from the entry (as any value local)
+# a by-value parameter holding owning references, an owning place from the entry (as any value local); every other value
+# local holding some, zero from the entry (one whose storage is made later, from its making), so that a store into it
+# lets go of what the one before it held
 fn (ln mut lowering&) holdParams() {
     if ln.L.Gen().Decls.Len() == 0: return
     for l in ln.F.Params {
         ty := ln.F.Locals[I64(l)].Ty
         if not ln.T.IsRef(ln.T.Repr(ty)) and ln.counts(ty): ln.holders(mir.Lvalue.L(l), 1, ln.B.Sp)
     }
+    for i in range ln.F.Locals.Len() {
+        if ln.countedLocal(i) and ln.F.Locals[i].Home == mir.ScopeRef.Frame: ln.zeroLocal(i, ln.B.Sp)
+    }
+}
+
+# whether local i is a value local an owning place is counted in: a variable holding owning references in place
+fn (ln mut lowering&) countedLocal(i I64) Bool {
+    loc := ln.F.Locals[i]
+    return loc.Kind == mir.LocalKind.Var and not ln.T.IsRef(ln.T.Repr(loc.Ty)) and ln.counts(loc.Ty)
+}
+
+fn (ln mut lowering&) zeroLocal(i I64, sp source.Span) {
+    ty := ln.F.Locals[i].Ty
+    ln.F.Add(ln.cur, mir.Stmt.Assign(sp, mir.Lvalue.L(mir.LocalId(I32(i))), mir.Rvalue.Use(mir.Operand.Const(ty, 0))))
 }
 
 # T2d: field i of a struct place a of type ty as a helper reads it - a weak one's referent read through its word

@@ -35787,16 +35787,18 @@ value names and lets go of what the old one named; a store into an element reach
 one only, since the element may be room never written (a Vec's past its count); a vacate (now a `Take` for such types)
 lets go of what it moves out; a new instance's own owning places (New), an array's fill and elements copied
 (CopyElems) hold what they name. Temporaries are no owning places - until a writable reference to one is made; value
-locals and by-value parameters are (held where set and at the entry, never let go of), so that a store through a
-reference to one lets go only of what was held - a cursor struct moved along a list would otherwise let go of a node
-the list still holds. References in locals, parameters and results are never counted. The prelude's collections need
+locals and by-value parameters are - a local zero from its function's entry (or its storage's making), a parameter held
+from the entry, a call's result stored into one held as the call returns - so that a store into one, directly or through
+a reference to it, lets go only of what was held: a cursor struct moved along a list would otherwise let go of a node
+the list still holds, and one reassigned in a loop would pin every node it named. References in locals, parameters and results are never counted. The prelude's collections need
 nothing of their own: occupy holds, vacate lets go, and growth is a move - a grown buffer's room is cleared where its
 elements name generational instances (so a copy of a whole buffer counts nothing stale), and a comprehension's copy out
 of its buffer moves each element (Take) rather than copying. Whatever this does not follow it over-states, never
 under-states: the count keeps a node held - its weak places reading it - longer, never `null` while an owning place
 holds it. The known over-statements, for round 4: what a node no owning place holds still holds itself (no cascade
 before reclaiming), an element overwritten in place (`v[i] = x`, a Map's Put over a key), a value local's parts once it
-is gone, the double count of a constructor's value-typed field locals, and one node held by three places at once.
+is gone (its last value is never let go of), a constructor's value-typed field locals beside the instance they make,
+and one node held by three places at once.
 
 Found while measuring: the first version counted nothing for an element of a temporary's array - a comprehension's
 buffer - so a Map that grew moved its entries out (vacate, a let-go) and into the new slots without holding them, and
