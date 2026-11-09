@@ -269,6 +269,9 @@
 | ok - D18e: a walk a for-in makes is dropped as the loop's block is left, whatever it was given
 | ok - D18e: a generator held in a local and walked once there is dropped as the local's block closes
 | ok - D18: a lambda's environment and a lent array held across yields stay in the generator's frame
+| ok - S20: a walk let go part way ends what it holds and runs its deferred code, an errdefer's not
+| ok - S20, C11: walks that end, computed while compiling and at run time alike
+| ok - C11, S20: a generator's by-value parameter is its walk's, ended once however the walk ends
 === test tests/globalstart.olang
 | status 0
 | ok - a mutable global starts at the value its initializer gives, and is written as any
@@ -1884,6 +1887,9 @@
 | closed 2
 === run c11dtorbyvalue.olang
 | status 0
+=== run c11dtorgenparam.olang
+| status 0
+| closed 111
 === run c2dargnote.olang
 | status 0
 | 1
@@ -2083,6 +2089,9 @@
 | status 0
 === run d18yieldborrow.olang
 | status 0
+=== run d18yielddefer.olang
+| status 0
+| tidied 3
 === run d3bread.olang
 | status 0
 === run d8cdestructinner.olang
@@ -2326,6 +2335,18 @@
 | Zonstant text constant text
 === run o15deepchain.olang
 | status 0
+=== run o15registeredholds.olang
+| status 0
+| n 22
+=== run o15registeredinner.olang
+| status 0
+| n 110
+=== run o15registeredlater.olang
+| status 0
+| n 44
+=== run o15registeredtemp.olang
+| status 0
+| n 22
 === run o17bhandleout.olang
 | status 0
 | 41
@@ -2822,12 +2843,18 @@
 | status 0
 === run s18cnoreturn.olang
 | status 0
+=== run s19eyield.olang
+| status 0
+| tidied 2 failed 11
 === run s1ablock.olang
 | status 0
 === run s1bline.olang
 | status 0
 === run s1bparallel.olang
 | status 0
+=== run s20yieldheld.olang
+| status 0
+| closed 3
 === run s21becomeheld.olang
 | status 0
 | closed 1

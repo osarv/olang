@@ -473,11 +473,6 @@ c11destructnotunique.olang:6:3: error[C11, T13b]: a destructor releases what one
     6 | } destruct { Closed++ }
       |   ^~~~~~~~
 compilation failed with 1 error
-=== c11dtorgenparam.olang
-c11dtorgenparam.olang:7:8: error[C11, S20]: Conn has a destructor to run, so a generator takes it by reference - write Conn&: a walk left part way runs no code of its body to end it
-    7 | fn ids(c Conn) Iterator<I64> { yield c.fd }
-      |        ^~~~~~
-compilation failed with 1 error
 === c11dtorglobal.olang
 c11dtorglobal.olang:7:3: error[C11]: Conn has a destructor to run, so a global holds it by reference - write Conn&, its destructor run as the program ends
     7 | G Conn = Conn(3)
@@ -945,11 +940,6 @@ compilation failed with 1 error
 d18returnvalue.olang:5:5: error[D18a]: a generator gives its values by 'yield' - 'return' ends it and takes none
     5 |     return 2
       |     ^~~~~~
-compilation failed with 1 error
-=== d18yielddefer.olang
-d18yielddefer.olang:8:5: error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
-    8 |     yield 2
-      |     ^~~~~
 compilation failed with 1 error
 === d18yieldjoin.olang
 d18yieldjoin.olang:9:9: error[S20]: a join block may not yield - its tasks are waited for before it is left
@@ -3389,25 +3379,21 @@ o15dropcyclestep.olang:18:5: error[O15]: 'h' and 'g' may each hold a reference t
    18 |     g Hold = Hold(2)
       |     ^
 compilation failed with 1 error
-=== o15registeredholds.olang
-o15registeredholds.olang:25:5: error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'l', which it may hold a reference to, so its destructors could read 'l' already ended: declare it by value, 'gs Vec<Grip> = ...', and its block ends it first
-   25 |     gs := Vec<Grip>()
-      |     ^~
-compilation failed with 1 error
-=== o15registeredinner.olang
-o15registeredinner.olang:25:9: error[O15, O16]: 'g' holds a value where its call landed, ended as that scope closes - after 'l', which it may hold a reference to, so its destructors could read 'l' already ended: declare it by value, 'g Grip = ...', and its block ends it first
-   25 |         g := Grip(9)
+=== o15registeredref.olang
+o15registeredref.olang:30:9: error[O15, O16]: 'g' holds a value where its call landed, ended as that scope closes - after 'l', which it may hold a reference to, so its destructors could read 'l' already ended: declare it by value, 'g Grip = ...', and its block ends it first
+   30 |         g Grip& = Grip(9)
       |         ^
-compilation failed with 1 error
-=== o15registeredlater.olang
-o15registeredlater.olang:24:5: error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'ls', which it may hold a reference to, so its destructors could read 'ls' already ended: declare it by value, 'gs Vec<Grip> = ...', and its block ends it first
-   24 |     gs := Vec<Grip>()
-      |     ^~
-compilation failed with 1 error
-=== o15registeredtemp.olang
-o15registeredtemp.olang:27:10: error[O15, O16]: this value is held where its call lands, ended as that scope closes - after 'l', which the call may make it hold a reference to, so its destructors could read 'l' already ended: declare it by value first, 'x Grip = ...', and give the call that
-   27 |     hold(Grip(1), l)
-      |          ^~~~~~~
+o15registeredref.olang:31:11: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+   31 |         g.held = l
+      |           ^~~~
+o15registeredref.olang:30:9: note: 'g' is declared read-only here - declare it 'g mut Grip&' to write through it
+   30 |         g Grip& = Grip(9)
+      |         ^
+compilation failed with 2 errors
+=== o15registeredtempafter.olang
+o15registeredtempafter.olang:31:17: error[O15, O16]: this value is held where its call lands, ended as that scope closes - after 'l', which the call may make it hold a reference to, so its destructors could read 'l' already ended: declare it by value first, 'x Grip = ...', and give the call that
+   31 |     hold(one(), Grip(1), l)
+      |                 ^~~~~~~
 compilation failed with 1 error
 === o17permute6.olang
 o17permute6.olang:27:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
@@ -4551,11 +4537,6 @@ s19error.olang:8:20: error[S19b]: an error may not leave deferred code - catch i
     8 |         if n > 1 { error E.Bad }
       |                    ^~~~~
 compilation failed with 1 error
-=== s19eyield.olang
-s19eyield.olang:8:5: error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
-    8 |     yield 2
-      |     ^~~~~
-compilation failed with 1 error
 === s19later.olang
 s19later.olang:4:16: error: unknown name 'later'
     4 |     defer z := later
@@ -4625,11 +4606,6 @@ s1bsameline.olang:5:10: error[S8a]: this condition is the same on every build, s
     5 |     if x > 0:
       |          ^
 compilation failed with 2 errors
-=== s20yieldheld.olang
-s20yieldheld.olang:9:5: error[S20, O15]: a yield while a variable around it holds a value with a destructor - a walk stopped there would never run it; hold the value in a block that ends before the yield, or by reference
-    9 |     yield c.fd
-      |     ^~~~~
-compilation failed with 1 error
 === s3idle.olang
 s3idle.olang:11:5: error[S3]: 'x.Abs()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
    11 |     x.Abs()
