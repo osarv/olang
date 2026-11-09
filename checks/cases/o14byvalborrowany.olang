@@ -1,6 +1,16 @@
-# check: fail this value lives in this function's own scope, which closes first
-# also: take it by reference to give back what the caller passed: 'p aPt&'
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # O14, T32a (the any review, pre-existing): an any borrowing a by-value parameter's own storage, returned as borrowed
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
 type aNamed trait {
     Name() String
 }
@@ -10,4 +20,10 @@ type aPt struct(x I64, y I64) {
 }
 fn (p aPt&) Name() String { return "pt " $p.x }
 fn bor(p aPt) any aNamed& { return p }
-fn main() { }
+fn main() ? {
+    q := aPt(5, 6)
+    n := bor(q)
+    q.x = 0
+    churn()
+    try io.Println(n.Name())
+}

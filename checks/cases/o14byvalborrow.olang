@@ -1,13 +1,26 @@
-# check: fail this value lives in this function's own scope, which closes first
-# also: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # O14 (the any review, pre-existing): a by-value parameter's own storage returned as borrowed from it was its frame's
 # copy - a stack use after return
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
 type aPt struct(x I64, y I64) {
     x
     y
 }
 fn bor(p aPt) aPt& { return p }
-fn main() {
+fn main() ? {
     q := aPt(3, 4)
     w := bor(q)
+    q.x = 9
+    churn()
+    try io.Println($w.x " " $w.y " " $q.x)
 }

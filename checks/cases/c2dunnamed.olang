@@ -1,14 +1,28 @@
-# check: fail error[O26]: this value refers to this function's own storage
-# never: error[O10c]
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # a function may return something built from a bare "&" parameter into its result scope: the parameter's
 # scope is passed with it (O4b), and the relation becomes an obligation its callers discharge (O10b).
 # This caller cannot - its argument is its own by-value parameter, and the result would outlive it: one error for the one
 # cause (B11), the returned instance's binding (O13a) found before the obligation. (A local built here and passed on
 # lives in the result scope instead, O26a.)
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
 type P struct(x I32) { x }
 type NB struct(inner P&) { inner }
 fn NB.wrap(p P&) NB& { return NB(p) }
 fn NB.bad(q P) NB& {
     return NB.wrap(q)
 }
-test "never runs" { }
+fn main() ? {
+    b := NB.bad(P(2))
+    churn()
+    try io.Println($b.inner.x)
+}
