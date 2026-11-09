@@ -11512,15 +11512,23 @@ fn (s mut Scoper&) claimRoot(x typed.Expr&) I64 {
     return r
 }
 
-# whether what value x keeps is a local's own storage: a value local borrowed whole (E12c)
+# whether what value x keeps is a local's own storage: a value local borrowed whole (E12c) - directly, or through the
+# held locals a statement keeps it in (R2: 'names[i][0] = t' holds its borrow of t for the inner list's SetAt)
 fn (s mut Scoper&) keepsStorage(x typed.Expr&) Bool {
-    match unPassed(s.unAway(x)) {
-        case typed.Expr.Borrow(_, _, p) {
-            l := wholeLocal(p)
-            return l >= 0 and not s.isRef(s.B!.Locals[l].Ty)
+    r := -1
+    for _ in range 16 {
+        match unPassed(s.unAway(x)) {
+            case typed.Expr.Borrow(_, _, p) {
+                l := wholeLocal(p)
+                return l >= 0 and not s.isRef(s.B!.Locals[l].Ty)
+            }
+            case typed.Expr.Read(_, _, p, _) { r = wholeLocal(p) }
+            case _ { return false }
         }
-        case _ { return false }
+        if r < 0 or s.B!.Locals[r].Kind != typed.LocalKind.Held or s.heldCall(r) >= 0 { return false }
+        x = try s.inits.Get(r) catch { return false }
     }
+    return false
 }
 
 # the local whose storage value x is a view of (O27): a slice of a place rooted at it, a borrow of a part of it; -1 none
@@ -11665,12 +11673,38 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
     r := s.claimRoot(x)
     if r < 0 {
         if s.proposeView(u, t) { return }
+        # (a part of a call's value result read off it - a field, an element: the call lands where the part is kept,
+        # what it builds built there - R2, O18c)
+        pc := projectedCall(u)
+        if pc is not null {
+            s.proposeIn(pc, t)
+            return
+        }
         s.proposeCall(u, t)
         return
     }
     s.partFlow = partRead(u)
     s.proposeLocal(r, t, s.keepsStorage(x) or s.convertsStorage(x))
     s.partFlow = false
+}
+
+# the value a part read off is, where x reads a field or an element of a value with no storage (a call's result,
+# O18c), null for none
+fn projectedCall(x typed.Expr&) typed.Expr?& {
+    p := match x {
+        case typed.Expr.Read(_, _, p, _): p
+        case _: null
+    }
+    if p is null { return null }
+    for _ in range 64 {
+        match p! {
+            case typed.Lvalue.Field(_, _, b, _) { p = b }
+            case typed.Lvalue.Elem(_, _, e) { p = e.Base }
+            case typed.Lvalue.Temp(_, _, v, _): return v
+            case _: return null
+        }
+    }
+    return null
 }
 
 # O27 as placement (docs/sec8.md 4.2): a lift proposed for value x where it is a view of storage kept too long - a slice
@@ -11945,6 +11979,16 @@ fn (s mut Scoper&) proposeFrom(l I64, t Term, stor Bool, key I64, first Bool) {
                 return
             }
             s.proposeIn(init, t)
+            return
+        }
+    }
+    # (a part read off a call's value result: that call landed where the local is kept - R2, O18c)
+    if l >= 0 and l < s.origin.Len() and s.origin[l] == -2 {
+        init := try s.inits.Get(l) catch default null
+        if init is not null and projectedCall(unPassed(s.unAway(init))) is not null {
+            s.proposeIn(init, t)
+            # (its own storage with it, where kept whole: 'x := st.get(0).inner; held = x')
+            if stor and t.Runs() and s.liftable(l) and not s.isRef(s.B!.Locals[l].Ty) and not s.genResult(t) { s.liftStorage(l, t) }
             return
         }
     }
