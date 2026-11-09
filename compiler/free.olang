@@ -234,6 +234,11 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     module Vec<I64>
     decided Vec<Bool>
     programCode Vec<Bool>
+    # T13d, genrefs 0.1 item 5: by declared type, why two owning places may hold one instance at once - "" for none, the
+    # one-holder rule - with the types in order and the first store into an owning place of each (-memory's row)
+    OneHolder Map<types.TypeId, String>
+    holderTypes Vec<types.TypeId>
+    holderAt Vec<store>
     prelude Vec<Bool>         # whether its code is the prelude's (std/prelude), whose fills are trusted (makeStores)
     # summaries, by body: the origins its result may carry (no New); the places each parameter's value is stored into
     # directly, (param << 32) | place; the parameters whose values it may keep elsewhere; the places it may let go of,
@@ -805,11 +810,83 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     for b in range n { f.walk(b, true) }
     t4 := time.Now()
     f.tasks = f.reachedTasks()
+    f.genKeeps()
     f.decide()
+    f.classifyHolders()
     f.Done = true
     f.writePlans()
     t5 := time.Now()
     if f.Debug { try io.PrintErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
+}
+
+# ---- generational types and the one-holder rule (T13d, genrefs 0.1 item 5, 4.1) ----
+
+# whether a candidate place's values are references to a generational type, or it is a weak place
+fn (f mut Free&) genPlace(k I64) Bool {
+    t := f.T()
+    vt := f.valTy[k]
+    if f.keyField[k] >= 0 and f.P.WeakField(f.keyTy[k], f.keyField[k]): return true
+    return t.IsRef(vt) and f.P.Generational(t.Repr(t.Referent(vt)))
+}
+
+# a generational instance is never built in a region (genrefs 4.1): its owning places' counts are what lets it go -
+# nor is a weak place a holder of what it names
+fn (f mut Free&) genKeeps() {
+    if f.P.Gens.Len() == 0: return
+    for k in range f.keyTy.Len() {
+        if f.genPlace(k): f.keep(k, RMade, -1, source.Span(0, 0), "what it holds is generational - a weak reference names its type - and is let go of by the count of its owning places (T13d)")
+    }
+}
+
+# the one-holder rule (genrefs 0.1 item 5), a whole-program fact: a struct or enum type the program declares, held by
+# reference in owning places, whose every store into one of them hands it a new instance (built there, null, constant
+# data, or moved out of the same place) - so no instance is ever held by two owning places at once, and each can be
+# reclaimed where its owning place lets go of it (genrefs round 4), with no count read. A store of an existing instance
+# - a transfer genrefs 5.2 names included, recognized from round 4 on - is the type's reason not to; a weak place is no
+# owning place. OneHolder holds the reason by type ("" where it qualifies), and -memory's rows say it
+fn (f mut Free&) classifyHolders() {
+    t := f.T()
+    for st in f.stores {
+        k := st.PlaceId
+        if k < 0 or k >= f.keyTy.Len() or f.handle[k] or f.owner[k] or f.arr[k]: continue
+        if f.keyField[k] >= 0 and f.P.WeakField(f.keyTy[k], f.keyField[k]): continue
+        vt := f.valTy[k]
+        if not t.IsRef(vt): continue
+        r := t.Repr(t.Referent(vt))
+        if t.KindOf(r) != types.Kind.Named or not f.declaredHere(r): continue
+        if not f.OneHolder.Has(r) {
+            f.OneHolder.Put(r, "")
+            f.holderTypes.Push(r)
+            f.holderAt.Push(store(k, st.Body, st.File, st.Sp, st.Kind, st.Of, st.Site, null, null))
+        }
+        if st.Kind != SFail or (try f.OneHolder.Get(r) catch default "") != "": continue
+        f.OneHolder.Put(r, $f.P.L.Diags.Locate(st.File, I64(st.Sp.Start)) ": note: an existing one is stored into an owning place here, which another may still hold")
+    }
+}
+
+# whether a type is declared by the program, not std
+fn (f mut Free&) declaredHere(r types.TypeId) Bool {
+    m := f.T().DeclModule(f.T().DeclOf(r))
+    return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
+}
+
+# B18: -memory's rows of the one-holder rule, one a type, at its first store into an owning place
+fn (f mut Free&) holderRows() String {
+    b := StringBuilder()
+    d := f.P.L.Diags
+    for i in range f.holderTypes.Len() {
+        r := f.holderTypes[i]
+        st := f.holderAt[i]
+        at := $d.Locate(st.File, f.lineStart(st.File, I64(st.Sp.Start)))
+        why := try f.OneHolder.Get(r) catch default ""
+        name := f.T().Names.Text(f.T().DeclName(f.T().DeclOf(r)))
+        if why == "" {
+            b.Push($at ": memory: " $name " has one holder: every instance stored into an owning place is a new one\n")
+            continue
+        }
+        b.Push($at ": memory: " $name " may be held by two owning places at once, so it has no one holder\n" $why "\n")
+    }
+    return b.ToString()
 }
 
 # whether the program may start a task (condition 3): a body that starts one, or gives C a function value, reached from
@@ -4476,6 +4553,7 @@ fn (f mut Free&) Report() String {
             b.Push(text)
         }
     }
+    b.Push(f.holderRows())
     if places == 0 {
         b.Push("memory: no place lets go of storage in code that runs again\n")
         return b.ToString()
