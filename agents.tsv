@@ -36,3 +36,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-08T20:00	W1 facts with readers + incremental harness	opus	medium	completed	342	162	104	no (stale goldens + README only)	?	found 2 bugs (stale object via lowering read, -memory counts)
 2026-11-08T21:30	R1 refusals 5.1	opus	medium	completed	342	169	110	yes	?	41/44 compile; IR identical; scopesan+scopefuzz pass
 2026-11-08T21:30	W2 early freeing in every module	opus	medium	completed	454	243	130	no (stale goldens only)	?	found+fixed nested-region bug; session peak 260->1.7MB
+2026-11-09T00:30	F7 following into calls (twins)	opus	medium	completed	455	185	70	no (checks+diaggold from newly compiling cases)	?	14 shapes now run; sanitizer caught a wrong-frame build -> refused T22c
