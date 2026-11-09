@@ -577,6 +577,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
+    lw.DecideGen()
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0 { try io.Print($fr.Report() $weakRows(c) $fr.Sc.PlacedReport()) catch io.Error { } }

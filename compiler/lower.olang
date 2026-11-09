@@ -31,6 +31,7 @@
 import "std/os"
 import "std/pair"
 import "source"
+import "ast"
 import "diag"
 import "cond"
 import "fetch"
@@ -123,6 +124,30 @@ fn (lw mut Lowerer&) declName(d I64) String {
     m := lw.P.T.DeclModule(types.DeclId(I32(d)))
     mod := lw.P.L.Mods[m].Identity if m >= 0 and m < lw.P.L.Mods.Len() else "?"
     return $mod "." $lw.P.T.Names.Text(lw.P.T.DeclName(types.DeclId(I32(d))))
+}
+
+# ...decided for every struct and enum the program declares, before any module's record is read: a record reused names
+# facts no lowering of this build may ask about
+fn (lw mut Lowerer&) DecideGen() {
+    for mi in range lw.P.L.Mods.Len() { lw.decideGen(mi, lw.P.L.Mods[mi].Decls) }
+}
+
+fn (lw mut Lowerer&) decideGen(mi I64, ds Array<ast.Decl&>&) {
+    for d in ds {
+        match d {
+            case ast.Decl.Type(_, td) {
+                ei := lw.P.TypeEntry(mi, td.Name)
+                if ei < 0: continue
+                k := I64(lw.P.DeclFor(mi, ei))
+                lw.P.Facts.Decide($"T13d " $lw.declName(k), lw.genValue(k), true)
+            }
+            case ast.Decl.If(_, ti) {
+                if ti.Then is not null: lw.decideGen(mi, ti.Then!.Decls)
+                if ti.Else is not null: lw.decideGen(mi, ti.Else!.Decls)
+            }
+            case _ { }
+        }
+    }
 }
 
 # ...of each declaration lowering asked about (GenInfo.Asked) since the last call, read by the module of file, whose code
