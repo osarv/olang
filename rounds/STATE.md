@@ -66,3 +66,5 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - Usage 0.69 at 15:00 CET Mon. ~0.05/day available to Sat. Effort log review (~20 agents at medium): verify fails were goldens/new-case rows only; review A found no bugs in medium rounds; fuzzers clean. Medium is enough for compiler rounds.
 - R6+R7 merged. Gap: generator given a reference param placed in that ref scope -> walk let go late (scope.olang).
 - R3 merged, verified, pushed.
+
+- 2026-11-09: fallbacks merged (ed3c06d5), verified, pushed. Left: reference parameter assigned in body; capture via stored fn value; `$` in a generator maps Inert to program scope (nothing built).
