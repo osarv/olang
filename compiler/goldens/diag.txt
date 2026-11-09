@@ -5991,6 +5991,11 @@ t2darray.olang:4:8: error[T2d]: a weak reference names an instance of a struct o
     4 |     xs weak Array<I64>?& = null
       |        ^~~~
 compilation failed with 1 error
+=== t2dcompile.olang
+t2dcompile.olang:25:8: error[S17a]: a top-level assert is decided while compiling, and this one cannot be: it reads a weak place whose referent no owning place holds, which the running program may read as null (t2dcompile.olang:22) - assert it in a function or a test, where it is checked at run time
+   25 | assert gone()
+      |        ^~~~~~
+compilation failed with 1 error
 === t2dextern.olang
 t2dextern.olang:7:7: error[T2d]: a weak reference names an instance of a struct or an enum, and Db is an extern type - hold it by an ordinary reference
     7 |     d weak Db?& = null

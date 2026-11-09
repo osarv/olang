@@ -1279,6 +1279,11 @@
 | ok - a tree's weak parent links read back up to its root
 | ok - an LRU cache whose Map owns its entries and whose list links are weak
 | ok - a generational value is held by reference
+| ok - a weak place reads null once no owning place holds its node
+| ok - a subtree cut off: its nodes' weak parent links read null at the cut
+| ok - an LRU cache's evicted entry reads null through a weak place outside it
+| ok - an LRU cache whose Map grows: an entry evicted reads null, the newest its entry
+| ok - a node popped from a Vec reads null through a weak place, and its node again once pushed back
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -3132,7 +3137,7 @@
 | 1 41000 5250 5050
 === run t13dalias.olang
 | status 0
-| 591 3
+| 593 3
 === run t17ccaselocallifted.olang
 | status 0
 | 110 0
@@ -3233,6 +3238,11 @@
 | status 0
 === run t2cnarrow.olang
 | status 0
+=== run t2dnull.olang
+| status 0
+| 1
+| true
+| 1
 === run t32anyarrcopy.olang
 | status 0
 === run t32anyarrcopyassign.olang
