@@ -46,7 +46,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps", "listing", "memoryplaced", "scopefind"]
+                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -426,6 +426,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "reuse" { try reuse(r) }
         case "reusefact" { try reusefact(r) }
         case "incremental" { try incremental(r) }
+        case "twins" { try twins(r) }
         case "reuseall" { }
         case "records" { try records(r) }
         case "embed" { try embedded(r) }
@@ -1032,6 +1033,9 @@ Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/
     Edit("a sole place's decision flipped (W2)", "sed -i 's/for i in range 3 { g.Note(i) }/held Vec<String\\&>\\n    for i in " $
          "range 3 {\\n        g.Note(i)\\n        held.Push(g.Last())\\n    }\\n    assert held.Len() == 3/' main.olang", "", ""
          "main.olang", "main")
+    # T22c: a call of a library function given a function it does not cover - the twin made in the root's object
+    Edit("a twin added", "sed -i 's/^    g := lib.Log()$/    held Vec<String\\&>\\n    lib.Apply(lib.KeepIt, held)\\n    " $
+         "assert held.Len() == 1\\n    g := lib.Log()/' main.olang", "", "", "main.olang", "main")
     Edit("a diagnostic introduced", "sed -i 's/deep.Baked/deep.Bakd/' lib.olang", "", "", "lib.olang", "Kept")]
 
 fn incremental(r mut report&) ? Failed {
@@ -1523,6 +1527,18 @@ fn s18c(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/s18c/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build s18c.olang > out.txt 2>&1 && ./build/s18c") == 0, "s18c", dir)
     try r.expect(sh(dir, "grep -q assert.fail build/s18c.main.ll") != 0, "a proven assert left a run-time check", dir)
+}
+
+# T22c: a function value followed into a callee whose twin has a plan of its own - put's twin builds N(i) where a lives -
+# has code of its own, which main calls
+test "a twin with a plan of its own has code of its own" { assert passed("twins") }
+
+fn twins(r mut report&) ? Failed {
+    dir := fresh("twins")
+    os.Run("cp checks/cases/t22sharedscope.olang " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build t22sharedscope.olang > out.txt 2>&1 && ./build/t22sharedscope") == 0, "twins", dir)
+    try r.expect(irHas(dir, "build/*.ll", "^define .*@t22sharedscope_2eput_twin0\\("), "no put twin", dir)
+    try r.expect(irHas(dir, "build/*.ll", "call .*@t22sharedscope_2eput_twin0\\("), "main does not call put's twin", dir)
 }
 
 # T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is
