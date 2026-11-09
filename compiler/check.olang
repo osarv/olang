@@ -26391,7 +26391,7 @@ test "errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (
     c.RootOnly = true
     c.CheckProgram()
     assert rootRules(l) == "", rootRules(l)
-    assert c.Attempts == 2, c.Attempts
+    assert c.Attempts == 2, $c.Attempts
 }
 
 test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)" {

@@ -6661,7 +6661,7 @@ test "errors: raised under the function's own list, dispatched by a switch, re-e
     named := t.List(Array<types.TypeId>[e])
     tdefine(t, m, passFn(t, 5, 1, gty, el, named))
     s5 := m.Eval(tkey(5), Array<I64>[-1])
-    assert s5 == Stop.Raised(65538), s5
+    assert s5 == Stop.Raised(65538), $s5
     def := t.List1(types.DefaultErrT)
     tdefine(t, m, passFn(t, 6, 1, gty, el, def))
     assert m.Eval(tkey(6), Array<I64>[-1]) == Stop.Raised(1 << 16)
@@ -6776,7 +6776,7 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
         tdefine(t, m, g)
         tdefine(t, m, h)
         s := m.Eval(tkey(1), Array<I64>[])
-        assert s == Stop.Exited(mir.ExitKind.Assert, 0, source.Span(4, 9), "boom"), s
+        assert s == Stop.Exited(mir.ExitKind.Assert, 0, source.Span(4, 9), "boom"), $s
         assert s.Text(src) == "a.olang:2: assertion failed: boom", s.Text(src)
         assert m.Eval(tkey(2), Array<I64>[]).Text(src) == "a.olang:1: unreachable reached"
         ended := m.Eval(tkey(3), Array<I64>[])

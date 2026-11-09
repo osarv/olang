@@ -1886,7 +1886,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 244020b30fdf2de1 0f06288b2bb8f361 checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-16a79f20651d54bb bb4ecda9e2bcda8a checks/checks.olang
+3c1670efa1dd97ef 79170bce60bd212b checks/checks.olang
 a9e28b3dd92156ad ab5a1081715b6588 checks/fixtures/agree/agree.olang
 93a0581f17cca83e 1f1000aa84a5a1d5 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang
@@ -1995,7 +1995,7 @@ ffdde4db985e473e 52018eb8d0cf1c7b checks/fixtures/interp/cyclic.olang
 334dab265fdc399c 41c700cd94dcf60a checks/fixtures/interp/exec.olang
 0379ff4630aeaccf a79955cdafd68416 checks/fixtures/interp/gap.olang
 213dac0e328d13ad b9151fcf775b3a83 checks/fixtures/interp/prog.olang
-e7499ed055d8fba9 2e4ca647471c9544 checks/fixtures/interp/refused.olang
+4582fb3d758527b0 af935980dd5dccbd checks/fixtures/interp/refused.olang
 cfedd2acd90e0c40 9a222c5937cf23c4 checks/fixtures/interp/tasks.olang
 3635a1df29668b81 7d07fb0be5f90b6e checks/fixtures/interp/tests.olang
 cc2d9cb569bd1d13 85e3670ac3db13a2 checks/fixtures/interp/ub.olang
@@ -2170,7 +2170,7 @@ c9ac6a4f683c0c9c af17b37aa6d64f6e checks/fixtures/weak/good.olang
 bad46d0ab3fa6dca f4355fed3b7a720f compiler/bindgen.olang
 62ce059dbc0fdaf1 bda1c54e531c35b9 compiler/build.olang
 a3ca35f7e618cd35 250f530abd62bee2 compiler/cabi.olang
-d37732441a23307e 034bf066da33fe49 compiler/check.olang
+7c41dc5fdcec6f04 0c2714505723f9e3 compiler/check.olang
 41408ddbab722ebf b4782e4676c2df78 compiler/cond.olang
 08c016b6fa677234 38b6caca809cf49b compiler/definit.olang
 bc6f2855afa050c8 302425c334b1a69b compiler/diag.olang
@@ -2178,7 +2178,7 @@ bc6f2855afa050c8 302425c334b1a69b compiler/diag.olang
 cdb2fbc7d83fc6a5 ee444280d4cdd13f compiler/doc.olang
 019a366a3edc3139 7b9758dca564d95a compiler/effects.olang
 420e2403303675b2 7bf39d8f7dcab866 compiler/emit.olang
-94192d859db916f8 17c6652ab4f087cd compiler/eval.olang
+256d7e281677f39c c2be90cf9ea11d2a compiler/eval.olang
 8c31f3a8e86b2448 2615803a56817110 compiler/explain.olang
 cfbae2c024604f26 2d8745fa79b2007f compiler/facts.olang
 8fd1ed08b8d69841 ff304d5cfbc4af70 compiler/fetch.olang
@@ -2201,7 +2201,7 @@ d99ef647e0edae45 659beb2b7d25f003 compiler/olang.olang
 10f9bb5b20744b5f d7e6f720d606e42a compiler/profile.olang
 cd6dc04fc51a289c b9ae6c193e932c8d compiler/runtime.olang
 1cd1dca247f6cfbd d236a0d4563f5d62 compiler/scan.olang
-0e974608d5ca79e7 33e8ef9819fe72c7 compiler/scope.olang
+ee656baa7d705a31 b40a87f47f95a445 compiler/scope.olang
 914c88f1a308b0fc 5498c4288cff46a0 compiler/session.olang
 a846754911a07a9e a10b92acabcbf1b6 compiler/source.olang
 dc92112e41e19da5 e31c7d608aaf7a68 compiler/target.olang

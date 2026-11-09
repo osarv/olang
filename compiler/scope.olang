@@ -13707,7 +13707,7 @@ if TestBuild {
                 case _ { assert s.Plans[b].Built[i] == typed.Scope.Block, $s.Plans[b].Built[i] }
             }
         }
-        assert promotes == 1, promotes
+        assert promotes == 1, $promotes
         # each P(i) pushed is built where the list lives: its parameter's scope variable
         k := bodyAt(l, c.Bodies, 10)
         assert k >= 0
