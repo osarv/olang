@@ -1,18 +1,33 @@
-# check: fail error[T22b]: 'hang' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-# T22a: hang requires b to outlive a, which a call through a function value would never check
-type Node struct(v I32) {
+# check: run
+# flags: -debug -sanitize
+# T22c (was a T22b refusal): hang requires b to outlive a, which a call through a value of apply's parameter's type
+# never says - apply is judged as a twin with 'hang' followed into it, so main is held to what hang requires
+type N struct(v I64) {
     v
-    next mut Node?& = null
+    next N?& = null
 }
-fn hang(a mut Node&, b Node&) {
+fn hang(a mut N&, b N&) {
     a.next = b
 }
-fn apply(f fn&(a mut Node&, b Node&), a mut Node&, b Node&) {
+fn apply(f fn&(a mut N&, b N&), a mut N&, b N&) {
     f(a, b)
 }
-type E error { X }
-fn main() ? E {
-    a mut Node& = Node(1)
-    b Node& = Node(2)
+
+# storage made and let go many times, so a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
+fn main() {
+    a mut N& = N(1)
+    b N& = N(2)
     apply(hang, a, b)
+    t := churn(200)
+    assert a.next!.v == 2 and t > 0
 }

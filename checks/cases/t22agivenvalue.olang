@@ -1,6 +1,7 @@
-# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-# T22a, O13c: a function giving a function with relations, handed on as a value - every function a call of it may give
-# is held to what a written function type says too
+# check: run
+# flags: -debug -sanitize
+# T22c (was a T22b refusal), O13c: a function giving a function with relations, handed on as a value - followed into
+# put, mk() gives 'link' there, and N(5) is built where x lives
 type N struct(v I64) {
     v
     next N?& = null
@@ -11,7 +12,21 @@ fn get() fn&(a mut N&, b N&) {
     return g
 }
 fn put(mk fn&() fn&(a mut N&, b N&), x mut N&) { mk()(x, N(5)) }
+
+# storage made and let go many times, so a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
 fn main() {
     x mut N& = N(1)
     put(get, x)
+    t := churn(200)
+    assert x.next!.v == 5 and t > 0
 }

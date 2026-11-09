@@ -286,6 +286,7 @@ BndAny I64 = 6
 BndReturn I64 = 7
 BndOther I64 = 8
 BndLate I64 = 9
+BndLimit I64 = 10   # T22c: an argument a limit kept from being followed into its callee
 
 # the scope pass over a checked program: P the program, Bodies check's typed bodies. Run judges every body and fills
 # Plans, one per body (an empty plan for a body with no code)
@@ -574,6 +575,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     seedBody I64 = -1
     seedRecs Map<I64, fnRecs>
     followed Map<I64, I64>
+    limited Map<I64, I64>                 # ... and those a limit kept from being followed (bits)
     capFollowed Map<pair.Pair<I64, I64>, Bool>
     lamOf Map<I64, Array<typed.Capture&>>
     compSize Vec<I64>
@@ -1104,6 +1106,7 @@ fn bndText(place I64) String {
         case BndAny: "this 'any'"
         case BndReturn: "this return (from a function calling itself, or among several results)"
         case BndLate: "this call - reached in a loop's next turn by a value assigned after it -"
+        case BndLimit: "this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) -"
         case _: "this use"
     }
 }
@@ -1299,7 +1302,11 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
             }
             # (T22c: an argument followed into a twin is no boundary - the twin judges where its functions go)
             fw := try s.followed.Get(I64(c.Site)) catch default 0
-            for i in range c.Args.Len() { s.bndExpr(c.Args[i], BndNone if i < 62 and (fw >> i) & 1 == 1 else BndArg) }
+            lm := try s.limited.Get(I64(c.Site)) catch default 0
+            for i in range c.Args.Len() {
+                bit := (1 << i) if i < 62 else 0
+                s.bndExpr(c.Args[i], BndNone if fw & bit != 0 else (BndLimit if lm & bit != 0 else BndArg))
+            }
         }
         case typed.Expr.Make(_, _, m) {
             for a in m.Items { s.bndExpr(a, BndStore) }
@@ -1475,9 +1482,9 @@ fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
     t := try s.Twins.Keys.Get(k) catch default -1
     # (its own body calling itself with what it was given handed on: the judging under way, to its fixed point)
     if k == s.twinKey and t >= 0: return s.twinMarked(c, t, mask)
-    if not s.sums[b].Done or s.sums[b].Judging or b >= s.compSize.Len() or s.compSize[b] > 1: return -1
+    if not s.sums[b].Done or s.sums[b].Judging or b >= s.compSize.Len() or s.compSize[b] > 1: return s.twinLimited(c, mask)
     if t < 0 {
-        if not s.twinRoom(b): return -1
+        if not s.twinRoom(b): return s.twinLimited(c, mask)
         t = s.newTwin(b, k, seeds)
     }
     if s.Twins.Gen[t] != s.Twins.Round or s.report: s.judgeTwin(t, sp)
@@ -1493,6 +1500,12 @@ fn (s mut Scoper&) twinnable(b I64) Bool {
         case typed.BodyOf.Fn(inst): not s.P.IsGenerator(s.P.InstanceFn(inst))
         case _: false
     }
+}
+
+# a call whose arguments would be followed but for a limit: each a boundary, its error naming the limit
+fn (s mut Scoper&) twinLimited(c typed.Call&, mask I64) I64 {
+    s.limited.Put(I64(c.Site), mask)
+    return -1
 }
 
 fn (s mut Scoper&) twinMarked(c typed.Call&, t I64, mask I64) I64 {
@@ -1786,6 +1799,7 @@ fn (s mut Scoper&) recStart() {
     s.callRecs.Clear()
     s.valRelsAt.Clear()
     s.followed.Clear()
+    s.limited.Clear()
     s.seedFollowed()
     s.resFns = fnRecs()
     s.resFns.Full = true
@@ -9390,7 +9404,12 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     for i in range n {
         a := c.Args[i]
         if landed[i] { continue }
-        if owner[i] >= 0 and (s.isFresh(a) or s.isHeldFresh(a)) {
+        if owner[i] >= 0 and capTerm(beta[owner[i]]) and (s.isFresh(a) or s.isHeldFresh(a)) {
+            # (T22c: a capture of a function value followed into this body is no scope this call has - nothing is
+            # built there)
+            if s.report { s.err(s.opTok(a), msgs.BuildIntoCapture()) }
+            vals[i] = s.val(a, Term.None)
+        } else if owner[i] >= 0 and (s.isFresh(a) or s.isHeldFresh(a)) {
             # (an enum case built where another argument's local decides - `ms.Push(Maybe.Some(r))` - may lift that local
             # for its payload, as one it is declared as does: T17c, C2)
             fa := s.bindingArg(callee, owner[i], firstArg)

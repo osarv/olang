@@ -1,0 +1,134 @@
+# T22c: function values followed into calls - a callee judged again (a twin) for the functions an argument carries where
+# its parameter's type does not cover them, a captured function value followed into a lambda's body, a function given
+# back followed to the caller. Each test reads what it kept back after storage was made and let go many times.
+
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+
+fn link(a mut N&, b N&) { a.next = b }
+
+# storage made and let go many times: a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
+# the Count shape: a std walk given a lambda that keeps its argument in a captured collection
+fn longWords(words Array<String&>&, out mut Vec<String&>&) I64 {
+    o mut Vec<String&>& = out
+    return words.Count(fn(w String&) Bool {
+        o.Push(w)
+        return w.Len() > 1
+    })
+}
+
+test "a walk given a lambda keeping what it is given in what it captured" {
+    words := Array<String&>["a", "bb", "ccc"]
+    kept := Vec<String&>()
+    n := longWords(words, kept)
+    churn(100)
+    assert n == 2 and kept.Len() == 3 and kept[2] == "ccc"
+}
+
+# a chain three deep: each hands the function on to the next, the last calls it
+fn deep3(f fn&(a mut N&, b N&), a mut N&, v I64) { f(a, N(v)) }
+fn deep2(f fn&(a mut N&, b N&), a mut N&, v I64) { deep3(f, a, v + 1) }
+fn deep1(f fn&(a mut N&, b N&), a mut N&, v I64) { deep2(f, a, v + 1) }
+
+test "a function followed through a chain three deep" {
+    x mut N& = N(0)
+    deep1(link, x, 10)
+    churn(100)
+    assert x.next!.v == 12
+}
+
+# a recursive callee handing its parameter on unchanged
+fn chainN(f fn&(a mut N&, b N&), a mut N&, n I64) {
+    if n == 0 { return }
+    f(a, N(n))
+    chainN(f, a, n - 1)
+}
+
+test "a recursive callee handing on the function it was given" {
+    x mut N& = N(0)
+    chainN(link, x, 4)
+    churn(100)
+    assert x.next!.v == 1
+}
+
+test "a captured function value followed into the lambda's body" {
+    x mut N& = N(1)
+    g := link
+    f := fn() { g(x, N(7)) }
+    f()
+    churn(100)
+    assert x.next!.v == 7
+}
+
+fn keep<F>(f F) F { return f }
+
+test "a function given back by what it was given to holds what it was given" {
+    f := keep(link)
+    x mut N& = N(1)
+    f(x, N(5))
+    churn(100)
+    assert x.next!.v == 5
+}
+
+# a twin with a plan of its own: N(i) built where a lives
+fn put(f fn&(a mut N&, b N&), a mut N&, i I64) { f(a, N(i)) }
+
+test "a twin building where the followed function needs it" {
+    x mut N& = N(1)
+    put(link, x, 42)
+    y mut N& = N(2)
+    put(fn(a mut N&, b N&) { a.next = b }, y, 43)
+    churn(100)
+    assert x.next!.v == 42 and y.next!.v == 43
+}
+
+# an adapter's Call keeping what it is handed in its instance, followed into the callee calling it
+type Keeper struct() {
+    kept Vec<N&>
+}
+fn (k mut Keeper&) Call(n N&) { k.kept.Push(n) }
+fn feed(s fn&(n N&), ns Array<N&>&) {
+    for n in ns { s(n) }
+}
+
+test "an adapter keeping what it is handed, followed" {
+    k := Keeper()
+    feed(k, Array<N&>[N(20), N(21), N(22)])
+    churn(100)
+    assert k.kept.Len() == 3 and k.kept[2].v == 22
+}
+
+# K2, S18c: the evaluator computes what a call into a twin computes
+fn countKept(words Array<String&>&) I64 {
+    out := Vec<String&>()
+    n := longWords(words, out)
+    return n * 10 + out.Len()
+}
+
+Baked I64 = countKept(Array<String&>["x", "yy", "zzz", "w"])
+
+fn linkedValue(v I64) I64 {
+    x mut N& = N(0)
+    put(link, x, v)
+    assert x.next!.v == v
+    return x.next!.v
+}
+
+assert Baked == 24
+assert linkedValue(9) == 9
+
+test "a global baked and an assert decided through a twin" {
+    assert Baked == 24 and linkedValue(3) == 3
+}

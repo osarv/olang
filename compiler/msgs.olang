@@ -453,6 +453,7 @@ type Diag enum {
     DeclFromNull
     ScopeArgProgram
     BuildIntoUnknownScope
+    BuildIntoCapture
     StoreIntoUnknownScope
     TagUnknownScope
     BuildThroughUnknownScope
@@ -1440,6 +1441,7 @@ fn NoteReadOnlyCopyOf(text1 String&, text2 String&, text3 String&, text4 String&
 fn TypeNotInferable() r.Msg { return r.Msg(Diag.TypeNotInferable, "D15", "':=' takes its type from the initializer, and a call returning nothing has none") }
 fn DeclFromNull() r.Msg { return r.Msg(Diag.DeclFromNull, "D15", "':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'") }
 fn ScopeArgProgram(tok String&) r.Msg { return r.Msg(Diag.ScopeArgProgram, "E25, O1b", $tok " lives in the program's scope, which a result reaches by being stored there, not by a scope argument") }
+fn BuildIntoCapture() r.Msg { return r.Msg(Diag.BuildIntoCapture, "T22c", "the function given for this call's callee keeps this argument in what it captured, where this call cannot build - make the argument in the caller and pass it in") }
 fn BuildIntoUnknownScope() r.Msg { return r.Msg(Diag.BuildIntoUnknownScope, "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - put it in a local first, so its scope is found from it while the program runs (O29), or give it one known scope") }
 fn StoreIntoUnknownScope() r.Msg { return r.Msg(Diag.StoreIntoUnknownScope, "O12", "where this place's references live is not known here, so nothing new is built into it - reach the place through a local, so its scope is found from it while the program runs (O29), or store what already lives there") }
 fn TagUnknownScope(tok1 String&, tok2 String&) r.Msg { return r.Msg(Diag.TagUnknownScope, "O12", "where " $tok1 " lives is not known here, so nothing is declared to live there - read it through " $tok2 ", or declare the local with ':='") }

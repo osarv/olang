@@ -1,14 +1,29 @@
-# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-# T22: where a function's references live is part of its type - 'link' says b's argument lives where a's does, which a
-# call through a value of type fn(a mut N&, b N&) never establishes (it stored b where a lives with nothing checked, and
-# passed one hidden scope argument where link expected another: a segfault)
+# check: run
+# flags: -debug -sanitize
+# T22c (was a T22b refusal): 'link' says b's argument lives where a's does, which a call through a value of type
+# fn(a mut N&, b N&) never establishes - put is judged as a twin with link followed into it, which builds N(i) where
+# a lives (a plan of its own, so code of its own)
 type N struct(v I64) {
     v
     next N?& = null
 }
 fn link(a mut N&, b N&) { a.next = b }
 fn put(f fn&(a mut N&, b N&), a mut N&, i I64) { f(a, N(i)) }
+
+# storage made and let go many times, so a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
 fn main() {
     x mut N& = N(1)
     put(link, x, 42)
+    t := churn(200)
+    assert x.next!.v == 42 and t > 0
 }

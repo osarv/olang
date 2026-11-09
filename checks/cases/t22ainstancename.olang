@@ -1,6 +1,7 @@
-# check: fail error[T22b]: 'keepIt<Blob>' keeps 'x' in 'v', and the function type of this argument says nothing of that - write 'keeps x in v' after its signature
-# T22a (bulk review 8, F5): an instance named as a value is named as written - the function with its type arguments,
-# the caret on all of it - not by its last name, the type argument
+# check: run
+# flags: -debug -sanitize
+# T22c (was a T22b refusal, bulk review 8 F5 naming the instance): keepIt<Blob> keeps x in v - followed into use,
+# each Blob(k + 1) is built where v lives (use's twin, code of its own); "other" churns the arena after
 import "std/io"
 
 type Blob unique struct(n I64) {

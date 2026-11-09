@@ -1,6 +1,7 @@
-# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
-# T22: a function type may say its parameters share a scope ('b N&a'), and a call through a value of it is held to that
-# as a direct call is
+# check: run
+# flags: -debug -sanitize
+# T22c (was a T22b refusal): a call through a value is held to what the function it holds requires as a direct call
+# is - put's local t, handed to link through f, is built where a lives in put's twin
 type N struct(v I64) {
     v
     next N?& = null
@@ -10,7 +11,21 @@ fn put(f fn&(a mut N&, b N&), a mut N&) {
     t := N(5)
     f(a, t)
 }
+
+# storage made and let go many times, so a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
 fn main() {
     x mut N& = N(1)
     put(link, x)
+    t := churn(200)
+    assert x.next!.v == 5 and t > 0
 }

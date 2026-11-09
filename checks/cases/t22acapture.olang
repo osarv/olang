@@ -1,13 +1,29 @@
-# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this capture says nothing of that - write 'keeps b in a' after its signature
-# T22a (decision 15): a capture is a boundary - inside the lambda's body the captured value is judged by its type alone
+# check: run
+# flags: -debug -sanitize
+# T22c, D16c (was a T22b refusal: a capture was a boundary): a captured function value is followed into the lambda's
+# body - g(x, N(2)) is judged as link's direct call, N(2) built where x lives
 type N struct(v I64) {
     v
     next N?& = null
 }
 fn link(a mut N&, b N&) { a.next = b }
+
+# storage made and let go many times, so a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
 fn main() {
     x mut N& = N(1)
     g := link
     f := fn() { g(x, N(2)) }
     f()
+    t := churn(200)
+    assert x.next!.v == 2 and t > 0
 }

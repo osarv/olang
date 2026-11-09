@@ -1,0 +1,44 @@
+# check: fail error[T22b]: 'link16' keeps 'b' in 'a', and the function type of this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) - says nothing of that - write 'keeps b in a' after its signature
+# T22c: at most 16 twins of one body - the seventeenth function needing one is a boundary, its error naming the limit
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link0(a mut N&, b N&) { a.next = b }
+fn link1(a mut N&, b N&) { a.next = b }
+fn link2(a mut N&, b N&) { a.next = b }
+fn link3(a mut N&, b N&) { a.next = b }
+fn link4(a mut N&, b N&) { a.next = b }
+fn link5(a mut N&, b N&) { a.next = b }
+fn link6(a mut N&, b N&) { a.next = b }
+fn link7(a mut N&, b N&) { a.next = b }
+fn link8(a mut N&, b N&) { a.next = b }
+fn link9(a mut N&, b N&) { a.next = b }
+fn link10(a mut N&, b N&) { a.next = b }
+fn link11(a mut N&, b N&) { a.next = b }
+fn link12(a mut N&, b N&) { a.next = b }
+fn link13(a mut N&, b N&) { a.next = b }
+fn link14(a mut N&, b N&) { a.next = b }
+fn link15(a mut N&, b N&) { a.next = b }
+fn link16(a mut N&, b N&) { a.next = b }
+fn put(f fn&(a mut N&, b N&), a mut N&, i I64) { f(a, N(i)) }
+fn main() {
+    x mut N& = N(1)
+    put(link0, x, 0)
+    put(link1, x, 1)
+    put(link2, x, 2)
+    put(link3, x, 3)
+    put(link4, x, 4)
+    put(link5, x, 5)
+    put(link6, x, 6)
+    put(link7, x, 7)
+    put(link8, x, 8)
+    put(link9, x, 9)
+    put(link10, x, 10)
+    put(link11, x, 11)
+    put(link12, x, 12)
+    put(link13, x, 13)
+    put(link14, x, 14)
+    put(link15, x, 15)
+    put(link16, x, 16)
+}

@@ -1,0 +1,17 @@
+# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
+# also: note: the functions given here followed into it (T22c)
+# T22c: a function value followed into a callee that stores it into a field - the store is a boundary in the twin, said
+# there with the call that asked for the twin
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+type Holder struct() {
+    cb fn?&(a mut N&, b N&) = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn stash(h mut Holder&, f fn&(a mut N&, b N&)) { h.cb = f }
+fn main() {
+    h := Holder()
+    stash(h, link)
+}
