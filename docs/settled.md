@@ -268,9 +268,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   unless it declares a Copy; unique and immut are never one type's. Generics copying a unique T are refused at the
   program's call (G18a).
 - **`weak` references and generational types (T2d, T13d, O8e; docs/genrefs.md, the user's decisions 2026-11-08
-  evening; round 1 built 2026-11-09).** `prev weak mut Node?& = null`: `weak` before a `?&` reference in a stored
-  position (a field, a payload, a global, an element or type argument a type stores) makes a weak place - it reads
-  `null` once its referent is gone, which no build does early yet (round 1: an ordinary reference). Errors: on a local,
+  evening; round 1 built 2026-11-09, rounds 2-3 2026-11-09).** `prev weak mut Node?& = null`: `weak` before a `?&`
+  reference in a stored position (a field, a payload, a global, an element or type argument a type stores) makes a weak
+  place - it reads `null` from the moment no owning place holds its node, by the count of owning places in the word
+  before every instance (generation 16 bits, count 2 bits saturating at 3; constant data and stack instances pinned);
+  a weak place holds the reference with the generation it saw in its top 16 bits. Owning places counted: fields,
+  elements, globals, a value local's parts; a let-go not followed (an element overwritten in place, a dead value local)
+  only puts the `null` later. While compiling such a read is refused, left to the run time (K1). Nothing is reclaimed
+  yet (round 4). `-memory` adds the one-holder rule's classification per type (a whole-program fact). Errors: on a local,
   parameter, result or function type; before a never-null reference, an array, a function type, an `any` or an extern
   type; a constructor's new instance stored straight into a weak place; a weak reference to a type no owning place of
   the program holds. The type it names is **generational** over the whole program (any module's `weak`): held only by

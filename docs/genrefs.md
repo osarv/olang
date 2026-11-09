@@ -45,7 +45,16 @@ Hand-off for a fresh agent after a restart. Output: this file, one line in docs/
   above rewritten with `weak`. Left to G2+G3: a `weak T?&` in a generic (judged per instance) makes nothing generational
   yet; the "stored only into weak places" error covers a constructor called straight into one, not a local only ever
   stored weakly
-- next: G2+G3, in docs/wholeprog.md section 10's order
+- [x] G2+G3 (rounds 2 and 3, 2026-11-09, wt-genheader; HISTORY "`weak` references and generational types, rounds 2 and
+  3"): the header word at every allocation of a generational type (arena, stack pinned, constant data pinned with
+  generation 0), the weak word and read with the count's test, the top-bits check at chunk allocation, the count at
+  owning stores (direct, whole values, the prelude's collections through occupy/vacate and growth as moves), the same
+  in the evaluator with dead-region mode's holder check, and the one-holder rule's classification with `-memory` rows
+  (conservative: no transfer of 5.2 recognized yet). Measured: the probes' time within noise of G1, their peak +8 bytes
+  a node (dlist 88.7 -> 97.0 MB, tree 97.0 -> 104.3 MB, lru 43.5 -> 49.3 MB, stack unchanged - no `weak`). Left: a `weak
+  T?&` in a generic is still an ordinary owning reference (judging it per instance needs generic.olang's instance
+  hook); the "stored only into weak places" error still covers only a constructor called straight into one
+- next: G4, in docs/wholeprog.md section 10's order
 
 ## 0.1 Decided (the user, 2026-11-08 evening)
 

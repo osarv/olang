@@ -35755,3 +35755,85 @@ deciding the same in top-level asserts and a baked global), 19 checks cases (t2d
 aliasing and a destructor running once per instance), the scenario `weakmods` (three modules: the weak reference, the
 owning place and the type apart; the unheld error and the by-value slot said at the weak), and the incremental
 scenario's edit kind "the first weak to a type".
+
+## `weak` references and generational types, rounds 2 and 3 (T2d, T13d, O8e, K1, B18; 2026-11-09, wt-genheader, genrefs G2+G3)
+
+Rounds 2 and 3 of docs/genrefs.md in one, as docs/wholeprog.md section 10 orders them: the header word, the weak word
+and its read with the count's test, and the count of owning places kept at every store - so a weak read gives `null`
+from the moment no owning place holds its node, the user's decision of 2026-11-08 (genrefs 0.1 item 2). Nothing is
+reclaimed yet (round 4): a node let go of is still there, only no longer named through a weak place.
+
+**The header (genrefs 4.1).** Every instance of a generational type is allocated with one word before it - its
+generation in bits 0-15 (1 when made) and the count of owning places in bits 16-17, saturating at 3, pinned - padded to
+the type's alignment where that is above 8. An instance on the stack is written pinned (never reclaimed early); one in
+constant data (a baked global's image, K2) is written generation 0 and pinned, so nothing ever writes a constant's
+header and a weak word naming it, baked with no generation, matches it forever. `T.Size`, the layout and C's view are
+unchanged. Emit decides from the whole program's generational types (`mir.GenInfo`, read from the checker's scan), the
+evaluator from the same table copied into its machine. The runtime checks once per chunk, on its slow path, that the
+chunk lies below 2^48 (`__olang_alloc_check`), as 4.2 asks.
+
+**The weak word and read (4.2).** A weak place holds the reference with its referent's generation in the top 16 bits
+(`mir.Rvalue.WeakWord`, `__olang_weak_word`); reading one (`mir.Rvalue.Weak`, `__olang_weak_read`) gives the referent
+where the generation matches and the count is not 0, else `null` - one load of the header, two compares and a select.
+Lowering makes both explicit, so emit and the evaluator only execute them: a read of a weak field (`read`), a store
+into one and a struct made with weak fields (each argument's word), and the Render, Equal and Hash helpers, which read a
+weak field through its word (`partAt`). A copy of a whole value copies the word as it is. In the evaluator the word is
+the reference itself (nothing is reclaimed, so no generation can differ).
+
+**The count (2.4 (b), 5.1).** Lowering emits `mir.Stmt.Holders` - the generational instances a value's owning
+references name, each held by one more owning place or one fewer - around every store it makes (`counted`, in
+`emit`): a store into a field reached through a reference, a global, or a part of a value local holds what the new
+value names and lets go of what the old one named; a store into an element reached through a reference holds the new
+one only, since the element may be room never written (a Vec's past its count); a vacate (now a `Take` for such types)
+lets go of what it moves out; a new instance's own owning places (New), an array's fill and elements copied
+(CopyElems) hold what they name. Temporaries are no owning places - until a writable reference to one is made; value
+locals and by-value parameters are (held where set and at the entry, never let go of), so that a store through a
+reference to one lets go only of what was held - a cursor struct moved along a list would otherwise let go of a node
+the list still holds. References in locals, parameters and results are never counted. The prelude's collections need
+nothing of their own: occupy holds, vacate lets go, and growth is a move - a grown buffer's room is cleared where its
+elements name generational instances (so a copy of a whole buffer counts nothing stale), and a comprehension's copy out
+of its buffer moves each element (Take) rather than copying. Whatever this does not follow it over-states, never
+under-states: the count keeps a node held - its weak places reading it - longer, never `null` while an owning place
+holds it. The known over-statements, for round 4: what a node no owning place holds still holds itself (no cascade
+before reclaiming), an element overwritten in place (`v[i] = x`, a Map's Put over a key), a value local's parts once it
+is gone, the double count of a constructor's value-typed field locals, and one node held by three places at once.
+
+Found while measuring: the first version counted nothing for an element of a temporary's array - a comprehension's
+buffer - so a Map that grew moved its entries out (vacate, a let-go) and into the new slots without holding them, and
+the LRU probe's tail read `null` at once ("null reached"); an element of a run-time-length array is the buffer's, never
+the temporary's (`tempPart`), and the tests gained a Map that grows.
+
+**The evaluator and K1.** The evaluator keeps the same header and counts and executes the same statements, so
+`interpret` reads what the build reads. While compiling, a weak read whose referent no owning place holds is refused
+(K1, `WhyWeakUnheld`) - the run time reads `null` there, and evaluation never guesses which of the two a run gives - so
+a top-level assert reading a removed back link is S17a's error, and an assert in a function stays a run-time check
+(checks case t2dcompile). Dead-region mode (`OLANG_DEADREGIONS`) checks the count against the evaluator's own heap at
+every let-go that empties it - where round 4 would reclaim: an owning place of an instance or array a New or NewArray
+made, or of a global, still naming the instance is a store that recorded no holder, reported as an internal error
+(genrefs section 7).
+
+**Early freeing and the one-holder rule.** free.olang keeps every candidate place holding generational instances, and
+every weak place, out of O8d's regions (`genKeeps`: a generational instance is never built in a region, 4.1). The
+one-holder rule's classification (0.1 item 5) is a whole-program fact read off free.olang's records of every store into
+an owning place: a type the program declares whose every such store hands a new instance (built there, null, constant
+data, moved out of the same place) has one holder; `-memory` gives a row per type, with a note at the first store
+handing an existing instance. It is conservative: 5.2's transfers are not recognized yet, nor a fresh node reaching an
+owning place through a local or a parameter, so the four probes all say "may be held by two owning places at once" -
+round 4, which acts on the rule, recognizes them.
+
+**Measured** (the probes of genrefs section 1, built -O3 by this compiler against G1's, best of a few runs): stack 17.5
+MB and 9 ms either way (no `weak`); dlist 88.7 -> 97.0 MB, 42 -> 46-53 ms; tree 97.0 -> 104.3 MB, 78-86 ms either way;
+lru 43.5 -> 49.3 MB, 139 -> 132 ms. The peaks grow by the header's 8 bytes a node (a million nodes made, none
+reclaimed); the times are within the runs' noise. No program without `weak` changes: lowering emits nothing and
+emit allocates no header where no type is generational.
+
+**Tests.** tests/weak.olang: a list whose middle and head nodes are taken out (their weak places read `null`, the
+others their nodes), a subtree cut off (its parent links read `null` at the cut), an LRU cache's evicted entry, one
+whose Map grows, and a node popped from a Vec and pushed back (`null`, then its node again) - each read back after an
+arena churn, run built, under `interpret` and in dead-region mode, and under `-sanitize`, `-race` and `-debug`. Checks
+cases t2dnull (a run case: a global letting go and taking a node back) and t2dcompile (K1's refusal); t13dalias now
+holds its node in an owning place, and reads `null` once that lets go.
+
+**Left** (genrefs Progress): a `weak T?&` in a generic is still an ordinary owning reference - judging it per instance
+needs a hook where generic.olang makes an instance; the "stored only into weak places" error still covers only a
+constructor called straight into one, not a local only ever stored weakly (which now reads `null` at run time).

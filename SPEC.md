@@ -525,14 +525,15 @@ not covered, and reading it through null is undefined as an index out of range i
 array is out of range already, its length being 0. While compiling (K1) and under `interpret` (§10 B3e), a read through
 null is reported where it is written. This is the cost of `null`: §8 continues to guarantee that a reference
 never outlives what it points at, and no longer guarantees that it points at anything. A weak place (T2d) also reads
-`null` once its referent is gone (O8e), with no store to it: read it into a local and test that (S8e).
+`null` once no owning place holds its referent (O8e), with no store to it: read it into a local and test that (S8e).
 
 **T2d (weak references).** A reference type written with `weak` before it - `weak Node?&`, `weak mut Node?&` - is a
 **weak reference**, written only where a value is stored: a struct's field (C2a), a payload field of an enum case, a
 global, or an element or type argument a type stores (`Array<weak Node?&>`, `Vec<weak Node?&>`, `Map<String, weak mut
 Node?&>`) - at any depth of a type argument, wherever the type it is an argument of is written. A place of that type is
 a **weak place**: it holds its referent without keeping it - it is no owning place (O8e). Reading it gives an ordinary
-`T?&`: the referent, or `null` once the referent is gone (O8e) - narrowed by a test of a local (S8e) as any other. In
+`T?&`: the referent while some owning place holds it, `null` from the moment none does (O8e) - narrowed by a test of a
+local (S8e) as any other; while compiling, a read that would give `null` is not evaluated (K1). In
 everything else it is a `T?&`: it is given any `T&` or `T?&`, compared by `==` (E10), rendered by `$`, its permission
 the reference's (T25b). The referent's type becomes generational (T13d). Compile-time errors: `weak` before a reference
 that is never null (`weak Node&`) or before no reference, naming `?&`; on a local, a parameter, a receiver, a result or
@@ -6703,11 +6704,19 @@ retires (P1f) returns what it holds to the operating system instead.
 
 **O8e (instances of a generational type).** An instance of a generational type (T13d) is held by its **owning
 places** - every place holding a reference to it but a weak place (T2d): a field of an instance, an element of a
-collection or of an array held in a scope, a global - and reached by the references in use to it (locals, parameters,
-values being computed). Its storage is reclaimed as its scope closes (O8), as any storage's is; reclaiming it earlier,
-where its last owning place lets go of it, is the compiler's (O8d), unobservable but through weak places. A weak place
-reads `null` once its referent is reclaimed, and a program may not rely on when that is - only that a referent an
-owning place still holds, or a reference in use still reaches, is never `null`. Nothing else a program reads changes.
+collection or of an array, a global, a part of a local's or a parameter's value - and reached by the references in use
+to it (locals and parameters that are references, values being computed), which are no owning places. A weak place
+reads its referent while some owning place holds it and `null` from the moment none does: a store into an owning
+place holds what the new value names and lets go of what the old one named, a removal (a `Pop`, a `Remove`, a vacate)
+lets go of what it moves out, and a new instance's own owning places hold what it is built with. Where a let-go cannot
+be followed the referent stays held until the place's scope closes, which only puts the `null` later, never earlier:
+what an instance no owning place holds still holds itself, an element overwritten in place, a value local's parts
+once the local is gone, and one instance held by three owning places at once, which stays held. Its storage is
+reclaimed as its scope closes (O8), as any storage's is; reclaiming it earlier, where it is held by no owning place
+and reached by no reference in use, is the compiler's (O8d), unobservable. Nothing else a program reads changes. The
+**one-holder rule**: a type the program declares, held by reference in owning places, whose every store into one hands
+it a new instance (built there, `null`, constant data, or moved out of that same place) has one holder - no instance of
+it is ever held by two owning places at once - a fact of the whole program, which `-memory` reports (B18).
 
 **O9.** Wherever a value already known to be reference-shaped (not a temporary being allocated, O6) flows
 into a reference-shaped target of the same type (T27) — an assignment, a variable declaration's initializer, a
@@ -8500,7 +8509,10 @@ scope`). Places that free at once are counted, not listed; rows for one cause ar
 values have destructors keeps what it lets go of (condition 4). Then a row for each weak place the program declares (T2d), in the order it declares them - `path:line:column: memory:
 'prev' is weak: a Node is held by its owning places - 'next', 'head' - and kept until its scope closes; 'prev' reads
 null once none holds it`, at its `weak`, the owning places named those fields, payloads and globals declared holding the
-type. Then a line for D9h: how many returns hand a view back, and how many calls read one where it
+type. Before the count of places, a row for each type the program declares that its owning places hold by reference
+(O8e's one-holder rule), at the first store into one of them: `path:line:column: memory: Node has one holder: every
+instance stored into an owning place is a new one`, or `... Node may be held by two owning places at once, so it has no
+one holder` and a `note:` row at the first store handing an owning place an existing instance. Then a line for D9h: how many returns hand a view back, and how many calls read one where it
 stands or copy it. After early freeing's rows, a row for each placement made for a view, a part or a capture (O27), in
 source order - `path:line:column: memory:
 'X' is built in SCOPE, a new one each time it is made, for a view of it kept here` at the view (`for a part of it kept
@@ -9739,6 +9751,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   which is known only when the call is reached; the runtime's `__olang_run_on_stack(bytes, f)` (X6) is evaluated as
   the call `f()` is;
 - let an error escape that no clause handles;
+- read a weak place (T2d) whose referent no owning place holds (O8e) - the running program reads `null` there, and
+  evaluation never guesses which of the two a run gives; a weak read of a referent an owning place holds is evaluated;
 - do anything this specification leaves undefined - divide by zero, divide the most negative value by
   `-1`, shift by a count outside the type's width, convert a float the target cannot represent, or index
   outside an array - which evaluation refuses rather than giving a value the program never had (each is

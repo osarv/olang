@@ -1,0 +1,22 @@
+# check: run
+# T2d, T13d: a weak place reads its node while an owning place holds it and null from the moment none does - each
+# store into an owning place counted in the node's header word (genrefs 2.4, 4.2), nothing reclaimed; the node is
+# still there, read through the owning place that takes it back
+import "std/io"
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    back weak mut Node?& = null
+}
+Head mut Node?& = null
+fn main() ? io.Error {
+    a := Node(1)
+    Head = a
+    b := Node(2)
+    b.back = a
+    try io.Println($b.back!.v)
+    Head = null
+    try io.Println($(b.back is null))
+    b.next = a
+    try io.Println($b.back!.v)
+}
