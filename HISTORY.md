@@ -36162,3 +36162,7 @@ be made memory safe ... so yes, allow them").
   its own text - doc.olang's `Module(...)`, source.olang's `Names.add`) restored: 355 removed, in every file but
   emit.olang and lower.olang (another round's then), with load.olang's `dir := $m.Path`. std/io.olang's and
   std/csv.olang's guidance now says a kept line or field is built where it is kept.
+- **IR.** The pre-strip source (every semantic change of the round, no `$` removed) built by the round's base compiler
+  and by its own: compiler/'s IR is byte-identical but for `main` calling `__olang_prog_end` (the location strings
+  naming the checkout aside), and so is bench's, every benchmark's `main` alike. The strip then changes compiler/'s IR
+  where the copies went: 9,705 fewer IR lines and 2,658 fewer calls over its modules.
