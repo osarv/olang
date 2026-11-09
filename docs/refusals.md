@@ -40,6 +40,11 @@ is built and what this note proposes is built after it.
   cases run (`YieldPastHeld`, `YieldPastDefer`, `DestructGenParam` gone); `DropRegistered` and `DropTempRegistered` stay
   for a written reference local (o15registeredref) and a temporary after an argument with an effect
   (o15registeredtempafter). HISTORY.md, "R6+R7: a walk let go runs what it holds; registered values as holders".
+- Built: R3 (5.3, 2026-11-09, wt-refusals3) - a by-value parameter kept past the call copied at entry where it is kept
+  (`ownLifts`, lowering's `copyParams`), a match binding's copy made where it is kept (`liftBinding`, lowering's
+  `bind`); all 15 run, under the scope sanitizer and `interpret` alike, and the evaluator's stand-in placement copies a
+  parameter flowing out into the program's scope. Not built: the caller building a fresh argument where the callee
+  keeps it (5.3's "the copy left out") - an optimization. HISTORY.md, "R3: by-value parameters and match bindings".
 
 ## 0. Summary
 

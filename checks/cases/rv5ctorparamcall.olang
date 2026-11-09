@@ -1,4 +1,6 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # C2g (review of rv3fix, #6): nor a borrowed result of a call given it
 import "std/io"
 type P struct(v I64) { v }

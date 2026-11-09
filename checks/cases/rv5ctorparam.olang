@@ -1,4 +1,6 @@
-# check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # C2g (review of rv3fix, #6): a constructor's by-value parameter is a slot of its frame - a reference field does not keep a borrow of it
 import "std/io"
 type P struct(v I64) { v }

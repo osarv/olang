@@ -35954,3 +35954,40 @@ the registration such a value had before - no computation that was evaluated bef
 value the run time does not. tests/drops.olang's `viewsKept` changed its expected order: each turn's two holders are
 registered where `keep` lives as the turn ends, last declared first. checks/fixtures/strheld/g9dorder ends `r := Res(1)` as main's block
 is left (`d1`), before the temporaries registered with main's scope (`d4 d3`), which ended first before.
+## R3: by-value parameters and match bindings (O28, O14, C2g, S13b; 2026-11-09, wt-refusals3, docs/refusals.md 5.3)
+
+Round R3 of docs/wholeprog.md section 10. Fifteen cases were refused because a by-value parameter's own storage - the
+callee's copy of its argument (D9), a slot of its frame - or a match binding's copy - a local of its clause (S13b) -
+was kept longer than its frame or clause: returned as borrowed (o14byvalborrow, o14byvalborrowany, o26own,
+r9adefaultlocal's default), sliced and handed back (o10dd9bslice), given as a function value through its Call
+(e31calllocal), held by a returned instance (c2dreturn, c2dunnamed), by what a reference parameter reaches
+(c2dnoclone), by a lifted enum case (t17ccaseparamcopy), by a constructor's reference field (rv5ctorparam,
+rv5ctorparamcall), and a binding kept past its clause (rv5matchkeep, rv5matchborrow, rv5ctormatch). docs/sec8.md 4.3
+had left them refused: "the call's copy, made by the caller where the call stands".
+
+**Built.** The inference (scope.olang) now proposes for these as it does for a local (O28): a proposal reaching a
+by-value parameter's storage (`liftLocal` -> `liftParam`) records, in `ownLifts`, the longest scope it must live in -
+a scope variable or the program's, never a block of the body - and the body's judging starts with the parameter's
+storage term there and the plan's `Stored` saying so (a build into that variable is recorded for the summary). An
+instance given as a function value (E31's adapter) proposes its receiver. A binding's storage proposal
+(`proposeFrom` -> `liftBinding`) does the same with the binding's clause block as the start, its references still
+following its subject. Lowering makes the copy: a parameter whose storage moved becomes a local homed in that scope and
+the argument arrives in a MIR parameter of its own (`paramIn`), copied in at entry (`copyParams`, a `Live` and an
+assignment through `ownCopyOf` - deep through what it owns, so nothing of it is where the caller's argument was); a
+run-time array parameter keeps its slot and has its elements copied there. A binding moved is homed (`homeKept`) and
+given a new object each time it binds (`bind`). Nothing about a call changes: the scope is one the callee is passed or
+holds already, so it works through function values. The evaluator's stand-in placement (`standInAway`) gives a
+parameter or a binding flowing out the program's scope the same way - without it a top-level assert over `bor(...)`
+read its closed frame, and a binding kept in a loop shared one slot across turns (bindings(3) baked 12042 against the
+run time's 11036, found by tests/keptparams.olang's asserts).
+
+Left out: a generator's parameter (its frame lives where the walk does) and one holding a destructor value (handed on
+or ended where its holder lets go, O15) stay in the frame. Not built: the caller building a fresh argument where the
+callee keeps it, the entry copy left out (5.3's "the copy left out") - an optimization.
+
+All 15 are `check: run` programs reading back after an arena churn, under the scope sanitizer and `interpret` alike;
+no other must-fail case changed its diagnostic. One fixture did: checks/fixtures/interp/refused.olang (B3e, interpret
+refuses what a build refuses) kept a slice of a binding's copy in a list outside its clause, refused by O27 - now the
+binding's copy is built where the view is kept, as a local's is, and runs (5 6 7 read back after a churn, built and
+interpreted alike); the fixture is now o1blambdaglobal's shape (O1b, refusals question 1). Every lift only moves storage of a program refused before:
+compiler/'s IR (master's sources built by both compilers) and bench's are byte-identical to master's.

@@ -1,10 +1,27 @@
-# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # O14: a built result cannot be storage of this function's own, which closes at the return - a by-value parameter is
 # the function's own copy. (A local built here and returned lives in the result scope instead, O26a.)
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
 type N struct(v I32) {
     v
 }
 fn f(n N) N& {
     return n
 }
-fn main() ? { }
+fn main() ? {
+    a := N(5)
+    r := f(a)
+    a.v = 6
+    churn()
+    try io.Println($r.v " " $a.v)
+}

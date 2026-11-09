@@ -1,7 +1,18 @@
-# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # E31/O14: an instance whose type declares Call, given as a function value, is the instance itself - returning one in
 # the function's own storage (a by-value parameter, its own copy) hands out storage its scope reclaims. (A local built
 # here and returned lives in the result scope instead, O26a.)
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
 type Counter struct(start I64) {
     n I64 = start
 }
@@ -14,4 +25,8 @@ fn mkF(c Counter) fn&() I64 {
 }
 fn main() ? {
     g := mkF(Counter(41))
+    churn()
+    a := g()
+    b := g()
+    try io.Println($a " " $b)
 }

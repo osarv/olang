@@ -332,6 +332,14 @@
 | ok - rows: moves a whole local into what outlives its turn
 | ok - texts: builds text where the result keeps it
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
+=== test tests/keptparams.olang
+| status 0
+| ok - borrowed: hands back the parameter's own copy, made in the result scope
+| ok - counted: keeps an instance given as a function value
+| ok - heads: hands back a slice of a parameter's copy
+| ok - instances: keeps a constructor parameter in the instance
+| ok - vecs: keeps a parameter where a reference parameter reaches
+| ok - bindings: keeps a match binding past its clause
 === test tests/lanes.olang
 | status 0
 | ok - E39: lane operators - built, fused, totalled, compared and chosen - baked, decided while compiling and run
@@ -1956,6 +1964,9 @@
 === run c2dmixedscopes.olang
 | status 0
 | 8
+=== run c2dnoclone.olang
+| status 0
+| 5 5 3
 === run c2downarr.olang
 | status 0
 | 5abc
@@ -1965,6 +1976,12 @@
 === run c2downfieldread.olang
 | status 0
 | 5abc 9
+=== run c2dreturn.olang
+| status 0
+| 1
+=== run c2dunnamed.olang
+| status 0
+| 2
 === run c2swap.olang
 | status 0
 === run c3secondname.olang
@@ -2200,6 +2217,9 @@
 | status 0
 === run e31bviewreplaced.olang
 | status 0
+=== run e31calllocal.olang
+| status 0
+| 42 43
 === run e32marker.olang
 | status 0
 === run e35bangrun.olang
@@ -2310,6 +2330,9 @@
 === run o10cresultlanding.olang
 | status 0
 | 2
+=== run o10dd9bslice.olang
+| status 0
+| ttt
 === run o10delementfield.olang
 | status 0
 === run o13acopywrap.olang
@@ -2328,6 +2351,12 @@
 | status 0
 === run o14btypevar.olang
 | status 0
+=== run o14byvalborrow.olang
+| status 0
+| 3 4 9
+=== run o14byvalborrowany.olang
+| status 0
+| pt 5
 === run o14ccopyslice.olang
 | status 0
 === run o14returnglobalvalue.olang
@@ -2558,6 +2587,9 @@
 === run o26aviewflow.olang
 | status 0
 | 3 2 4
+=== run o26own.olang
+| status 0
+| 5 6
 === run o27callplaced.olang
 | status 0
 | 1275 35
@@ -2686,6 +2718,9 @@
 | 1 2
 === run r9adefaultinner.olang
 | status 0
+=== run r9adefaultlocal.olang
+| status 0
+| 3 4
 === run reflfnoneself.olang
 | status 0
 === run rendercopyc2d.olang
@@ -2734,6 +2769,15 @@
 | 42
 === run rv5ctorfieldcopy.olang
 | status 0
+=== run rv5ctormatch.olang
+| status 0
+| 42
+=== run rv5ctorparam.olang
+| status 0
+| 42 7
+=== run rv5ctorparamcall.olang
+| status 0
+| 42
 === run rv5derivedbyvalue.olang
 | status 0
 | 44
@@ -2741,6 +2785,12 @@
 | status 0
 === run rv5foldforwardstack.olang
 | status 0
+=== run rv5matchborrow.olang
+| status 0
+| 10
+=== run rv5matchkeep.olang
+| status 0
+| 10
 === run rv5strlambda.olang
 | status 0
 === run rv5strlambdaalias.olang
@@ -3168,6 +3218,8 @@
 === run t17ccaselocallifted.olang
 | status 0
 | 110 0
+=== run t17ccaseparamcopy.olang
+| status 0
 === run t17cheadline.olang
 | status 0
 | 1

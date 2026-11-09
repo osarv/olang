@@ -1,6 +1,17 @@
-# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # R9a: a returned call lands in the result scope, which the function's own by-value parameter does not live in. (A local
 # built here and returned as the default lives in the result scope instead, O26a.)
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
 type Stop error {
     Here
 }
@@ -15,4 +26,9 @@ fn get(seed Node) Node& {
     return try Node.mk(1) catch default seed
 }
 fn main() ? {
+    s := Node(3)
+    r := get(s)
+    s.v = 4
+    churn()
+    try io.Println($r.v " " $s.v)
 }

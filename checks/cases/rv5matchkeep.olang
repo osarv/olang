@@ -1,4 +1,6 @@
-# check: fail error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+# check: run
+# R3 (refusals 5.3): compiles now - a match binding kept past its clause has its copy made where it is kept, as a local is (O28), read
+# back after an arena churn; it was refused, as what follows says
 # S13/O25a (review of rv3fix, #3, pre-existing root): a value match binding kept directly in an outer reference
 # (O25i: 'keep' is typed per assignment now, so the error is at the read after the loop, which the version
 # 'keep = y' reaches - the match binding's copy, the clause's)

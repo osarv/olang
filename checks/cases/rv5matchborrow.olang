@@ -1,4 +1,6 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# check: run
+# R3 (refusals 5.3): compiles now - a match binding kept past its clause has its copy made where it is kept, as a local is (O28), read
+# back after an arena churn; it was refused, as what follows says
 # S13/O25a (review of rv3fix, #3): a value match binding is a local of its clause - a borrow of it does not leave the clause
 import "std/io"
 type P struct(v I64) { v }

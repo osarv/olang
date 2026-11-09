@@ -1,0 +1,124 @@
+# A by-value parameter kept past the call has the callee's copy made at entry where it is kept (O28, O14, C2g - R3 of
+# docs/refusals.md): the result scope, the instance's, a reference parameter's; and a match binding kept past its
+# clause has its copy made where it is kept (S13b). Each test reads them back after an arena churn (what a closed frame
+# or clause left would be written over), and the evaluator decides the same values while compiling.
+
+type P struct(x I64, y I64) {
+    x, y
+}
+
+type Counter struct(start I64) {
+    n I64 = start
+}
+
+fn (c mut Counter&) Call() I64 {
+    c.n++
+    return c.n
+}
+
+type Keep struct(p P) {
+    k P& = p
+}
+
+type Held struct(v Vec<I64>&) {
+    v
+}
+
+type E enum {
+    A(p P)
+    Z
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+
+# the parameter's own storage handed back
+fn bor(p P) P& { return p }
+
+# given as a function value through its Call
+fn counter(c Counter) fn&() I64 { return c }
+
+# a generic's String parameter sliced and handed back
+fn headOf<T>(x T) Array<Char>& { return x[0:3] }
+
+# kept by what a reference parameter reaches
+fn keepIn(out mut Vec<Held>&, v Vec<I64>) { out.Push(Held(v)) }
+
+fn borrowed() I64 {
+    a := P(3, 4)
+    r := bor(a)
+    a.x = 9
+    churn()
+    return r.x * 100 + r.y * 10 + a.x
+}
+
+fn counted() I64 {
+    g := counter(Counter(41))
+    churn()
+    a := g()
+    return a * 100 + g()
+}
+
+fn heads() I64 {
+    t String = "abcdef"
+    h := headOf(t)
+    t = "zzzzzz"
+    churn()
+    return h.Len() * 1000 + I64(h[0]) + I64(h[2])
+}
+
+fn instances() I64 {
+    a := Keep(P(42, 1))
+    b := Keep(P(7, 2))
+    churn()
+    return a.k.x * 1000 + b.k.x * 10 + a.k.y + b.k.y
+}
+
+fn vecs(n I64) I64 {
+    out := Vec<Held>()
+    for i in range 1, n + 1 {
+        v := Vec<I64>()
+        for j in range i { v.Push(j * 10) }
+        keepIn(out, v)
+    }
+    churn()
+    t I64 = 0
+    for h in out { t = t * 10 + h.v.Len() }
+    return t * 1000 + out[n - 1].v[n - 1]
+}
+
+# a binding kept past its clause, each turn's its own
+fn bindings(n I64) I64 {
+    keep P& = P(0, 0)
+    kept Vec<P&>
+    for i in range n {
+        e := E.A(P(i + 10, i))
+        match e {
+            case E.A(y) {
+                if i == 1 { keep = y }
+                kept.Push(y)
+            }
+            case _ { }
+        }
+    }
+    churn()
+    t I64 = keep.x * 1000
+    for p in kept { t += p.x + p.y }
+    return t
+}
+
+test borrowed "hands back the parameter's own copy, made in the result scope" { assert borrowed() == 349 }
+test counted "keeps an instance given as a function value" { assert counted() == 4243 }
+test heads "hands back a slice of a parameter's copy" { assert heads() == 3196 }
+test instances "keeps a constructor parameter in the instance" { assert instances() == 42073 }
+test vecs "keeps a parameter where a reference parameter reaches" { assert vecs(4) == 1234030 }
+test bindings "keeps a match binding past its clause" { assert bindings(3) == 11036 }
+
+assert borrowed() == 349 and counted() == 4243 and heads() == 3196 and instances() == 42073
+assert vecs(4) == 1234030 and bindings(3) == 11036

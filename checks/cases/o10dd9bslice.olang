@@ -1,4 +1,6 @@
-# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # O10d/D9b: a generic's by-value parameter bound to a String and sliced is the callee's own copy - a slice of it returned
 # would outlive the call (review port1 s01)
 import "std/io"
@@ -6,5 +8,6 @@ fn headOf<T>(x T) Array<Char>& { return x[0:3] }
 fn main() ? io.Error {
     t String = "tttttttttt"
     h := headOf(t)
+    t = "uuuuuuuuuu"
     try io.Println(String(h))
 }

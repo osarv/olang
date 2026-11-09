@@ -1,5 +1,6 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-# never: x.Copy()
+# check: run
+# R3 (refusals 5.3): compiles now - a by-value parameter kept past the call has its copy made at entry where it must live (the result scope, the
+# instance's, a reference parameter's), read back after an arena churn; it was refused, as what follows says
 # C2d, B11 (review 6b F6): an argument of a type with no Clone - a Vec, a value copied by assignment - is not told to
 # give a copy by 'x.Copy()' or '$x'. The argument a by-value parameter, which nothing can build where the instance goes
 # (a loop turn's local is built where it is kept since item 17 - o17ownturnvec)
@@ -13,5 +14,5 @@ fn main() {
         for j in range i { v.Push(j) }
         keepIn(out, v)
     }
-    io.Println($out.Len())!
+    io.Println($out.Len() " " $out[4].v.Len() " " $out[4].v[3])!
 }

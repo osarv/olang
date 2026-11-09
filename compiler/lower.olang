@@ -463,6 +463,9 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # a constructor's field holding an array of a run-time length that the scope pass keeps in a scope variable (its
     # instance's, QCE): where its elements are made (storageOf), its slot - the pair naming them - staying in the frame
     fieldStor Map<I64, mir.ScopeRef>
+    # R3: the by-value parameters whose copy is made at entry where the scope pass placed it - by the typed local, the
+    # MIR parameter the argument arrives in (the local itself where its storage stays in the frame: a run-time array's)
+    entryCopies Map<I64, mir.LocalId>
     # deferred code registered (S19), each with the scope of the level it was registered at, in order
     defers Vec<typed.Block&>
     deferAt Vec<mir.ScopeId>
@@ -559,9 +562,20 @@ fn (ln mut lowering&) run() {
             ln.fieldStor.Put(i, home)
             home = mir.ScopeRef.Frame
         }
+        # (R3: a by-value parameter kept past the call - a local homed where its copy is made, the argument arriving in
+        # a parameter of its own; a run-time array's slot stays, its elements copied there)
+        if home != mir.ScopeRef.Frame and l.Kind == typed.LocalKind.Param {
+            ln.fieldStor.Put(i, home)
+            if ln.runArrayLocal(l.Ty) {
+                ln.entryCopies.Put(i, mir.LocalId(I32(i)))
+                home = mir.ScopeRef.Frame
+            } else {
+                k = mir.LocalKind.Var
+            }
+        }
         ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
     }
-    for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
+    for p in b.Params { ln.F.Params.Push(ln.paramIn(p)) }
     caps Vec<typed.LocalId>
     for i in range b.Locals.Len() {
         if b.Locals[i].Kind == typed.LocalKind.Capture {
@@ -591,6 +605,7 @@ fn (ln mut lowering&) run() {
     frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, root!.Id, b.Sp)
     ln.emit(mir.Stmt.Open(b.Sp, frame))
     ln.levels.Push(level(frame, root!.Id, mir.ScopeKind.Frame))
+    ln.copyParams()
     ln.holdParams()
     ln.settleViews()
     for s in root!.Stmts { ln.stmt(s) }
@@ -608,6 +623,32 @@ fn (ln mut lowering&) run() {
         ln.end(mir.Term.Return(b.Sp, mir.Operand.None))
     } else {
         ln.end(mir.Term.Exit(b.Sp, mir.ExitKind.Unreachable, mir.Operand.None))
+    }
+}
+
+# the MIR parameter typed parameter p's argument arrives in: its own local, or - where R3 homed that local where its copy
+# is made - a parameter of its own, copied in at entry
+fn (ln mut lowering&) paramIn(p typed.LocalId) mir.LocalId {
+    l := ln.F.Locals[I64(p)]
+    if l.Kind == mir.LocalKind.Param: return mir.LocalId(I32(p))
+    a := ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, mir.LocalKind.Param, mir.ScopeRef.Frame))
+    ln.entryCopies.Put(I64(p), a)
+    return a
+}
+
+# R3 (refusals 5.3): each by-value parameter kept past the call copied, at entry, where the scope pass placed it - the
+# callee's own copy (D9) made there rather than in the frame: deep through what it owns (QCE), so nothing of it is
+# where the caller's argument was
+fn (ln mut lowering&) copyParams() {
+    for p in ln.B.Params {
+        a := try ln.entryCopies.Get(I64(p)) catch { continue }
+        home := try ln.fieldStor.Get(I64(p)) catch { continue }
+        l := mir.LocalId(I32(p))
+        ty := ln.B.Locals[I64(p)].Ty
+        sp := ln.B.Locals[I64(p)].Sp
+        if a != l { ln.emit(mir.Stmt.Live(sp, l)) }
+        v := ln.ownCopyOf(mir.Operand.Copy(mir.Lvalue.L(a)), ty, home, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(v)))
     }
 }
 
@@ -1591,7 +1632,10 @@ fn (ln mut lowering&) standInAway() Array<Bool> {
         l := b.Locals[i]
         # (a holder of a value with destructors keeps its frame: one flowing out is refused while compiling all the
         # same, K2c, and a task's borrow of one in a join block - EscHard - must not move its drop)
-        if l.Kind != typed.LocalKind.Var or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty): continue
+        # (R3: a by-value parameter and a match binding too - each copy made there, as the scope pass places one kept
+        # past its call or clause)
+        own := (l.Kind == typed.LocalKind.Param or l.Kind == typed.LocalKind.Binding) and not b.Gen and ln.T.KindOf(ln.T.Repr(l.Ty)) != types.Kind.Func
+        if l.Kind != typed.LocalKind.Var and not own or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty): continue
         out[i] = ln.escapes(u, i) or not ln.lendsKeep(u, i) or (u.Ret[i] and refs)
     }
     return out
@@ -3368,6 +3412,19 @@ fn (ln mut lowering&) cond(c typed.Cond&, ty types.TypeId, sp source.Span) mir.O
     return mir.Operand.Copy(mir.Lvalue.L(slot))
 }
 
+# a match binding given its value - where the scope pass placed its copy elsewhere than its clause (R3), a new one made
+# there each time it binds, deep through what it owns (QCE)
+fn (ln mut lowering&) bind(to typed.LocalId, v mir.Operand, sp source.Span) {
+    l := mir.LocalId(I32(to))
+    moved := ln.planned and I64(to) < ln.plan.Stored.Len() and ln.plan.Stored[I64(to)] != typed.Scope.Frame
+    if moved { ln.homeKept(to) }
+    # (the stand-in placement's: one flowing out, in the program's scope - standInAway)
+    homed := ln.F.Locals[I64(to)].Home != mir.ScopeRef.Frame
+    if homed { ln.emit(mir.Stmt.Live(sp, l)) }
+    if moved or homed { v = ln.ownCopyOf(v, ln.B.Locals[I64(to)].Ty, ln.storageOf(to), sp) }
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(v)))
+}
+
 # a match (S12, S13): the subject held, then each arm's alternatives tested in order; the first that holds binds, then
 # the guard; a value match's arms each give the one slot
 fn (ln mut lowering&) match(m typed.Match&, ty types.TypeId, sp source.Span) mir.Operand {
@@ -3388,10 +3445,7 @@ fn (ln mut lowering&) match(m typed.Match&, ty types.TypeId, sp source.Span) mir
             yes, no := ln.F.NewBlock(), ln.F.NewBlock()
             ln.end(mir.Term.Branch(c, yes, no))
             ln.start(yes)
-            for bd in alt.Binds {
-                v := ln.val(bd.From)
-                ln.emit(mir.Stmt.Assign(a.Sp, mir.Lvalue.L(mir.LocalId(I32(bd.To))), mir.Rvalue.Use(v)))
-            }
+            for bd in alt.Binds { ln.bind(bd.To, ln.val(bd.From), a.Sp) }
             ln.leaveOpen(hit)
             ln.start(no)
         }
