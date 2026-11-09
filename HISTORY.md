@@ -36028,3 +36028,44 @@ could still go to the program's scope, and R6+R7 found a generator placed too lo
 Seen and left: `Scope.Inert` reaches lowering's `scopeRef` as the program's for a `$` rendering in a generator's body
 (nothing is built there, by Inert's definition). Gates: compiler/'s and bench's IR byte-identical to master's; every
 must-fail case's diagnostic unchanged but o12spawntarget's.
+
+## Review A's over-rejections: binding halves, moved field bindings, a parameter's split borrow (O17, O17a, O25g, O25h, O28, O15, T13b; 2026-11-09, wt-overrej)
+
+Review A sent four correct programs the compiler refused or miscompiled (`/home/user/review/reviewA`: r1, r2, p7, p9).
+
+- **p7: destructors run as main closed, not as their block did.** `vv := Vec<Vec<Logged>>()` in a block,
+  `vv.Push(mkv(i, t))` with `mkv` returning a Vec of destructor values referring to `t` in main: the count read after
+  the block was 30 of 40. Not a refusal any more (the T13b refusal review A saw was gone) but a placement: `Push` of a
+  value holding a writable reference has two obligations, the value outlives the Vec (what it stores) and the Vec
+  outlives the value - the slot's half of an exact store (O25g), recorded as a plain relation. At the call the second
+  half failed against `mkv`'s result (where `t` is), and `liftAtCall` proposed `vv` with its storage (keepsStorage: a
+  whole value local), then `liftSplit` lifted its storage again where its references were, since `calleeKeepsSelf`
+  said Push keeps its receiver: Vec's `room` holds `old Array<T>& = v.data`, and the inlined `grown` and `vacate`
+  read and end elements through it. So `vv` was built in main's scope and, by O15's placement rule, ended there.
+  Fixed in two parts. (1) The slot's half of an exact fit is marked (`rel.Bind`, carried up through callers' obligations
+  as `View` is, a plain relation of the same pair winning): at a call it proposes the argument's claim only
+  (`claimOnly`), never its storage, and starts no `liftSplit`. (2) UseOwn (R1's "keeps nothing of its own storage")
+  accepts a reference local viewing a part of its own storage when that local is itself used so (checked recursively),
+  a slice of a part handed to a callee keeping nothing, an element moved out (`Take`) or ended in place (`Drop`), and
+  its storage retired or its length read - so Vec's `Push`, `room`, `RemoveAt`, `Truncate` and the like keep nothing of
+  the receiver. `vv` stays in its block, its buffer built where its references live, its elements ended as the block
+  closes: 40 again, under -debug -sanitize and interpret alike (o17splitvecdtor). A callee storing the receiver itself
+  still records a plain relation and still lifts.
+- **r1, r2: a field reassigned a longer-lived reference (O25h, O25).** `lg := Logger(inner); lg.log = out` with `inner`
+  in the block and `out` in main: the field is Mark.Of, its binding where `inner` lives, exact since the field is
+  `mut Tally&`; refused. The refusal audit filed this shape (o25gfieldbinding) as question 4, "a field slot holding
+  storage of two scopes", needing a set of scopes per field. For a value local whose constructor call is in the same
+  function there is a placement instead: the store proposes the constructor's argument where `out` lives (O28 - `inner`
+  built in main, a new value each time its declaration runs) and the instance's site bound there, and, in the field
+  inference's first phase where the slot is the local's own (FitValue), the local's claim, never its storage. The
+  local's own storage and its destructors stay in its block (r2's `Logged` ended each turn). Memory: the argument lives
+  as long as the new referent's scope - what the program asked for. o25gfieldbinding (`t mut N& = N(); c := C(t);
+  c.cur = g`) becomes a run case, its `N` built where `g`'s is; o23aliaswrite and o23aliasmethod (aliases through an
+  element) stay refused, question 4's remaining cases. New run cases o25gfieldreassign and o25gfieldreassigndtor.
+- **p9: `w := v` of a unique by-value parameter (O17a), kept.** `v` is the caller's value (its references live where
+  the caller's do) in the callee's storage; `w := v` declares a writable reference to it (T13b), and a reference has
+  one scope: through `w` something could be stored where `v`'s storage is and then handed on with `v`. Lifting the
+  parameter's storage is what R3 does for parameters holding no destructor - one holding a destructor keeps its frame,
+  so its end stays the callee's. So the refusal stands; its message now names the parameter and says what to write:
+  take the value at its last mention, `w Vec<Logged> = v` (T13b's hand-on), which runs as review A meant
+  (o17aparamhandon; o17aparamref keeps the error, a new diagnostic BorrowSplitParam).

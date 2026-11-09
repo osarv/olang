@@ -474,6 +474,7 @@ type Diag enum {
     BorrowSplitScopes
     SliceSplitValue
     BorrowSplitValue
+    BorrowSplitParam
     FieldBindingUnknown
     ScopeObligationUnmet
     ReferenceNarrowed
@@ -1475,6 +1476,7 @@ fn ScopeArgsDisagree() r.Msg { return r.Msg(Diag.ScopeArgsDisagree, "O25e", "the
 fn BorrowSplitScopes() r.Msg { return r.Msg(Diag.BorrowSplitScopes, "O17", "this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')") }
 fn SliceSplitValue() r.Msg { return r.Msg(Diag.SliceSplitValue, "O17a", "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") }
 fn BorrowSplitValue() r.Msg { return r.Msg(Diag.BorrowSplitValue, "O17a", "this value's references live where its own storage does not, so it is not held by reference - use the value itself") }
+fn BorrowSplitParam(name String&) r.Msg { return r.Msg(Diag.BorrowSplitParam, "O17a, T13b", "'" $name "' holds references to the caller's storage while its own storage is this call's, so it is not held by reference - use '" $name "' itself, or take its value where it is mentioned last, declaring its type ('w T = " $name "')") }
 fn FieldBindingUnknown() r.Msg { return r.Msg(Diag.FieldBindingUnknown, "O23, O11", "this stores into a field whose binding is not known through this path - store through a variable holding the instance") }
 fn ScopeObligationUnmet() r.Msg { return r.Msg(Diag.ScopeObligationUnmet, "O10c", "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") }
 fn ReferenceNarrowed() r.Msg { return r.Msg(Diag.ReferenceNarrowed, "O25", "a reference never narrows - declare it with ':=' from what it is given") }

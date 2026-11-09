@@ -6908,7 +6908,13 @@ value where it dangles. Accordingly:
   target's - a copy's being where its claim says - and to be exactly in its scope where something can be stored through
   one of them (O25g), which between two of the function's scope variables is an equality its callers show (O10c:
   `List.Push` of a value holding such a reference asks the list and the value's references be one scope); a temporary
-  assigned to it, or into a field or element of it, is built where its references are.
+  assigned to it, or into a field or element of it, is built where its references are. A field viewing its
+  constructor argument's referent (C2d, O23a), of a value local a constructor call of this function made, given a
+  reference living longer than that binding where something can be stored through it, moves the binding there: the
+  argument is placed where the new referent lives (O28 - a value local built there, a new value each time its
+  declaration runs) and the instance bound there, while the local's own storage stays its block and its destructors run
+  as that block closes (O15) - `lg := Logger(inner); lg.log = out` builds `inner` where `out` is. Where the argument
+  cannot be placed so (a parameter's referent), it stays this error.
   So a value built in a loop body is reclaimed with the iteration, keeping it past the body means building it where it
   is kept, and `t := a[i]; a[i] = a[j]; a[j] = t` swaps two elements of a parameter's array. Returning such a value (O14c)
   whose references live in one of the function's own blocks is a compile-time error - a copy, an array or anything read
@@ -7331,7 +7337,14 @@ through them is built there, while its own copy is a temporary of the block the 
 be stored through the parameter and the callee keeps something in the value (its body, as above), the variable is bound
 where the references live and the copy itself is built there where the callee may keep its own storage, as for a local -
 `addRef(idBox(seed), v)` building through `b.head` builds the node where `seed`'s nodes are; only where they live in one
-of several scopes is it the error. A callee **capturing the parameter itself** in a lambda that can outlive the call - returned,
+of several scopes is it the error. A callee keeps the lent value's **own storage** only where it stores, returns or
+captures a reference to it or to a part of it, or hands one to a callee that may keep it: a reference local or a slice
+of a part of it used only so (`Vec`'s growth viewing the buffer it replaces), an element moved out of it or ended in
+place (O15) keeps nothing. And where all the callee asks is that what it stores into the value live exactly where the
+value's references do - the slot's half of a store where something can be stored through (O25g), as `Push` of a value
+holding a writable reference asks - the variable is bound where the references live and nothing of the value's own
+storage is kept: a local lent so stays in its block, and its destructors run as that block closes (O15).
+A callee **capturing the parameter itself** in a lambda that can outlive the call - returned,
 stored, handed to a callee that may keep it - keeps the lent value's own storage in the closure, which counts as keeping
 something in it (through a call cycle too); a lambda only called in the callee's frame (held in a local every use of
 which is a call), or made for a callee keeping nothing of it (D16c), keeps nothing. A read-only parameter is no exception: a shallow `mut` field is stored through as surely.

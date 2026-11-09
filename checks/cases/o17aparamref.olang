@@ -1,0 +1,54 @@
+# check: fail error[O17a, T13b]: 'v' holds references to the caller's storage while its own storage is this call's
+# O17a, T13b: 'w := v' of a unique by-value parameter is a reference to it, and its references are the caller's while its
+# storage is the call's - the value is taken at its last mention instead, 'w Vec<Logged> = v' (review A, p9;
+# o17aparamhandon runs that)
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn sum(t Tally&) I64 {
+    s := 0
+    for x in t.seen { s += x }
+    return s
+}
+fn mkv(n I64, t mut Tally&) Vec<Logged> {
+    v := Vec<Logged>()
+    for k in range n { v.Push(Logged(k, t)) }
+    return v
+}
+
+fn consume(v Vec<Logged>, rounds I64) I64 {
+    w := v
+    for r in range rounds {
+        if w.Len() > 0 { w.Truncate(w.Len() - 1 - r % 2) }
+    }
+    return w.Len()
+}
+
+fn main() {
+    t := Tally()
+    for i in range 10 {
+        left := consume(mkv(10 + i, t), 4)
+        assert left >= 0
+    }
+    churn()
+    assert t.seen.Len() == 145
+    assert sum(t) == 1020
+}

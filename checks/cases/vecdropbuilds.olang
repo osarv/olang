@@ -1,8 +1,9 @@
 # check: run
 # flags: -debug -sanitize
-# C9a, C11, O15: a Vec of values whose destructors build through their reference field, lent to a function that pushes
-# into it - the Vec's storage placed where its elements' references live, its elements ended as that scope closes - each
-# element's destructor run in the scope its value lives in, never in the block of the Vec's destructor that ends it, so
+# C9a, C11, O15, O17: a Vec of values whose destructors build through their reference field, lent to a function that
+# pushes into it - lent where its elements' references live, its own storage staying its block's (the push keeps nothing
+# of it, O17), its elements ended as that block closes (until 2026-11-09 the Vec was placed where the references live
+# and ended there) - each element's destructor run in the scope its value lives in, never in the block of the Vec's destructor that ends it, so
 # what it builds into the Tally (its log growing) outlives that block; read back after an arena churn
 import "std/io"
 
@@ -30,7 +31,7 @@ fn churn() I64 {
     return n
 }
 
-# the Vec in an inner block, the Tally in the frame: the Vec's elements end as the frame closes, after the result
+# the Vec in an inner block, the Tally in the frame: the Vec's elements end as its block closes, before the result
 fn inner() I64 {
     t := Tally()
     {
@@ -65,7 +66,7 @@ fn lent(k mut Sink&) {
 }
 
 fn main() ? {
-    assert inner() == 0
+    assert inner() == 10
     out := Vec<I64>()
     {
         k := Sink(out)

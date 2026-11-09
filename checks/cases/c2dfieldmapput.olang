@@ -1,8 +1,9 @@
 # check: run
 # flags: -debug -sanitize
 # C2d, O15 (review A): a ":=" field holding a Map of values with destructors - a Put over a key ends the value it
-# replaces, read back after the arena churned. (The holder is placed where the Tally its elements write lives, so its
-# last two elements end where that scope closes - after the count is read.)
+# replaces, read back after the arena churned. (Until 2026-11-09 the holder was placed where the Tally its elements write
+# lives, so its last two elements ended where that scope closed, after the count; it stays in its block now, O17, and
+# ends them there.)
 import "std/io"
 
 type Tally struct() {

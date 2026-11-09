@@ -1,0 +1,53 @@
+# check: run
+# T13b, O15: a unique by-value parameter handed on at its last mention into a local declared with its type - its
+# destructors run as that local's block is left; read back after an arena churn (review A, p9 as written to compile)
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn sum(t Tally&) I64 {
+    s := 0
+    for x in t.seen { s += x }
+    return s
+}
+fn mkv(n I64, t mut Tally&) Vec<Logged> {
+    v := Vec<Logged>()
+    for k in range n { v.Push(Logged(k, t)) }
+    return v
+}
+
+fn consume(v Vec<Logged>, rounds I64) I64 {
+    w Vec<Logged> = v
+    for r in range rounds {
+        if w.Len() > 0 { w.Truncate(w.Len() - 1 - r % 2) }
+    }
+    return w.Len()
+}
+
+fn main() {
+    t := Tally()
+    for i in range 10 {
+        left := consume(mkv(10 + i, t), 4)
+        assert left >= 0
+    }
+    churn()
+    assert t.seen.Len() == 145
+    assert sum(t) == 1020
+}

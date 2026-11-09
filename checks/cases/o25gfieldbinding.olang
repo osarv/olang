@@ -1,7 +1,8 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-# O25g/O23a: a field written "&of" lives where its constructor's argument for of lived, exactly where something can be
-# stored through it - storing a longer-lived node there would make a node built through c.cur below, which is built
-# where the binding says, hang from storage that outlives it
+# check: run
+# O25g/O23a, O28: a field written "&of" lives where its constructor's argument for of lived, exactly where something can be
+# stored through it - storing a longer-lived node there moves that binding: the argument's node (t's, made in the inner
+# block) is built where g's is, so a node built through c.cur below is built there too and outlives the block (it was
+# refused as O25h until 2026-11-09; the refusal audit's question 4 asked for a set of scopes per field instead)
 type N struct() {
     next mut N?& = null
     v I64 = 0

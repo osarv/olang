@@ -613,6 +613,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parameter itself), a local built there each time its declaration runs - not "always lift", which would hold a copy's
   header per call. Held by reference or sliced (O17a), its local is lifted likewise. Refused only where nothing can be
   placed (a by-value parameter's storage); where its references live is one of several, O29 finds it.
+- **Binding halves and moved field bindings (O17, O25g, O25h, O28, O15; review A's over-rejections, 2026-11-09, mine
+  within the user's decisions).** A callee keeps a lent value's own storage only by storing, returning, capturing or
+  handing on a reference to it or a part of it - a reference local or slice of a part used only so (Vec's room), an
+  element moved out or ended in place keeps nothing. The slot's half of an exact store (`Push` of a value holding a
+  writable reference) is a binding (a relation marked Bind): it moves where the lent local's references live, never its
+  storage, so `vv.Push(mkv(i, t))` leaves `vv` in its block and its destructors run as the block closes (they ran as
+  main closed). A Mark.Of field of a value local this function's constructor made, given a longer-lived reference
+  (`lg.log = out`), moves its binding: the constructor's argument is placed where the new referent lives (O28) and the
+  instance bound there, the local's storage and end staying put - which answers the refusal audit's question 4 for
+  locals by placement, o25gfieldbinding now a program; aliases through elements (o23aliaswrite, o23aliasmethod) stay
+  refused. `w := v` of a unique by-value parameter stays O17a's error (its storage is the call's), now saying to take
+  the value at its last mention (`w T = v`, T13b).
 - **Kept through an obligation, a store or a payload (O28; R2 of docs/refusals.md, 2026-11-09, mine within the user's
   decisions).** O28's "built where it is kept" is reached through every way a statement keeps a value, not only a
   store: a callee's obligation (O10c) - a value the statement holds for itself included (E31b's held index, a borrow

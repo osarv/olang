@@ -201,7 +201,7 @@ ad7cd4183abb741f 08c18b6e8cf0ffc6 checks/cases/c2dcondfieldok.olang
 d36425cca45c75f5 72a35ed7c48d951a checks/cases/c2dfielddrain.olang
 76553e631eab47ed ddd0078fb2a53fe3 checks/cases/c2dfieldentry.olang
 ec18b717960f0cf7 1956b7374de76226 checks/cases/c2dfieldmap.olang
-ef77fbf99e7a64e5 03b62177626d7497 checks/cases/c2dfieldmapput.olang
+13d6714ca4f9025d ea7b178c5070b34b checks/cases/c2dfieldmapput.olang
 eece66212d0a29be 469504cca8492516 checks/cases/c2dfieldoutlives.olang
 e4ccf91e31045e09 1dcb63c5684ec863 checks/cases/c2dfieldvec.olang
 7203f402fab43d8a c5a61901a5a4656e checks/cases/c2dheldpush.olang
@@ -920,7 +920,7 @@ f2041338ed319511 20c68c0a5836d176 checks/cases/o25atypevar.olang
 64d650d52bb2b700 ae27d98b206b9278 checks/cases/o25carrayelem.olang
 eb3abd5f83c5d5f1 8a9ed5c65727838f checks/cases/o25derived.olang
 a86650f700944345 1af1a65b9aeaa16a checks/cases/o25enote.olang
-ace8f74e62f06f67 512a18a793a057b4 checks/cases/o25gfieldbinding.olang
+ce32fd829e8447ec 5a25b692390a4e7c checks/cases/o25gfieldbinding.olang
 a08d24f4bcb5316a e325293e4d7a2e13 checks/cases/o25harrayreturn.olang
 a5435d710b3d2a50 f80139570ee6bde7 checks/cases/o25harrayslice.olang
 43d5287f2f2cdc3d f51410d4f851cb21 checks/cases/o25hcopyelem.olang
@@ -1839,7 +1839,7 @@ e82368ac5dea88c3 026a3d0e9b55f1de checks/cases/vec91fieldcopygrows.olang
 39fe9e19364c769c ff12633c101d2e1d checks/cases/vec95globalkeeps.olang
 19d4994d3676e3d6 f2da2458ebbcdb60 checks/cases/vec96taskkeeps.olang
 44a91b5fbaeeb657 1630a7158aa7031d checks/cases/vec97globalfieldgrows.olang
-dbaa02368238f12a 84bd0893745f3964 checks/cases/vecdropbuilds.olang
+4338912cae8e570b 5f915906fcd364c1 checks/cases/vecdropbuilds.olang
 50cb965706c73ef1 d6f517874b744a17 checks/cases/x10built.olang
 ea43f54189d1a3f0 90ab4001615bb3f6 checks/cases/x10byvalue.olang
 ba74b538dd932f02 467cd5fc66b9f63d checks/cases/x10handles.olang
@@ -2176,7 +2176,7 @@ a60d3ef1c94e04ef 8c13020a89e52588 compiler/listing.olang
 3879802f0148397c 5dd6f84508da5a8e compiler/lsp.olang
 a9fdbee6672ba31e 89e29d0fd7116d29 compiler/mcp.olang
 6cfe0de9775f5232 cd896aed2d41aa42 compiler/mir.olang
-a9dca7239e2bed75 89e39786ca0015a2 compiler/msgs.olang
+d32a71be7712564b 665fa1099d94b9be compiler/msgs.olang
 59f5f54bcf770981 82b68291274b3324 compiler/names.olang
 7c26532e02e3a52a d163820d8fcd30a9 compiler/needs.olang
 5530ad7108af66d5 3f1c8517b439ae7c compiler/olang.olang
@@ -2184,7 +2184,7 @@ a9dca7239e2bed75 89e39786ca0015a2 compiler/msgs.olang
 de87a76ebcdd4f4f 36bf5cfa366d300c compiler/profile.olang
 cd6dc04fc51a289c 717b2d1c1d7ae607 compiler/runtime.olang
 1cd1dca247f6cfbd 65a9cc0be9512004 compiler/scan.olang
-8a1a4366b30c1435 19a5b90fd5174c17 compiler/scope.olang
+468993bcaae2e82d 3768ea79c5774fa9 compiler/scope.olang
 1516ae61a747b080 a2856ec30c49812c compiler/session.olang
 a846754911a07a9e 65d90941d2eb0321 compiler/source.olang
 bae5395316494bb3 77e39f1f8417f545 compiler/target.olang

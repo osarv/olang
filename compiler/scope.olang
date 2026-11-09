@@ -98,13 +98,14 @@ fn (t Term) Relatable() Bool {
 
 # a relation of a body's obligations (O10b): Hi outlives Lo, both relatable terms of the body; Exact where it is one half
 # of an equality (O25b, O25c); At the statement of the body that required it, for the note O10c's error gives
-type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64, View Bool = false) {
+type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64, View Bool = false, Bind Bool = false) {
     Hi
     Lo
     Exact
     At
     Why      # a constructor's: WhyHolds where its instance holds an argument (C2d), WhyField where a field viewing q's referent names one
     View     # the inference's: what Lo's slot keeps of Hi is a view of storage, lifted only in its second phase (O27)
+    Bind     # the slot's half of an exact fit (O25g): where Hi's references are bound, never that its own storage is kept
 }
 
 WhyHolds I64 = 1
@@ -542,6 +543,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     fitPart Bool = false
     slotCall I64 = -1                      # the call whose value a by-value holder's slot takes as it is (O15), -1 none
     obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
+    obligeBind Bool = false                # ... is the slot's half of an exact fit: a binding, keeping no storage (O25g)
+    claimOnly Bool = false                 # the proposal being made is for where a local's references live, not its storage
     # O27 as placement (docs/sec8.md 4.2): a view, a part or a capture kept longer than the storage it shows proposes that
     # storage built where it is kept - in a second phase of a body's gathering, once whole lifts have settled
     # (viewPhase), part lifts only once the field inference has settled (partsOn); a phase that left such a proposal
@@ -2838,6 +2841,7 @@ fn keepRel(rs mut Vec<rel>&, r rel) {
     for k in range rs.Len() {
         if rs[k].Hi != r.Hi or rs[k].Lo != r.Lo or rs[k].Exact != r.Exact { continue }
         if not r.View: rs[k].View = false
+        if not r.Bind: rs[k].Bind = false
         return
     }
     rs.Push(r)
@@ -5994,7 +5998,12 @@ fn (s mut Scoper&) ueBlock(b typed.Body&, bl typed.Block?&, l I64, mode I64) Boo
 fn (s mut Scoper&) ueStmt(b typed.Body&, st typed.Stmt?&, l I64, mode I64) Bool {
     if st is null { return true }
     match st {
-        case typed.Stmt.Let(_, _, x) { return s.ueExpr(b, x, l, mode) }
+        case typed.Stmt.Let(_, d, x) {
+            # (UseOwn: a reference local viewing a part of its own storage - Vec's room viewing the buffer it replaces -
+            # keeps nothing past the call where that local is used as UseOwn asks too)
+            if mode == UseOwn and s.isRef(b.Locals[I64(d)].Ty) and ownView(x, l): return s.ueBlock(b, b.Root, I64(d), mode)
+            return s.ueExpr(b, x, l, mode)
+        }
         case typed.Stmt.Assign(_, p, x) {
             if mode == UseOwn: return s.ueTarget(b, p, l, mode) and s.ueExpr(b, x, l, mode)
             return s.uePlace(b, p, l, mode) and s.ueExpr(b, x, l, mode)
@@ -6089,12 +6098,20 @@ fn (s mut Scoper&) ueExpr(b typed.Body&, x typed.Expr?&, l I64, mode I64) Bool {
             if mode == UseOwn: return s.ueTarget(b, p, l, mode)
             return s.uePlace(b, p, l, mode)
         }
-        case typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return s.uePlace(b, p, l, mode) }
+        case typed.Expr.Borrow(_, _, p) { return s.uePlace(b, p, l, mode) }
+        # (UseOwn: an element moved out of its own storage, as a read copies one, keeps nothing of it)
+        case typed.Expr.Take(_, _, p) { return s.ueTarget(b, p, l, mode) if mode == UseOwn else s.uePlace(b, p, l, mode) }
         case typed.Expr.Promote(_, _, pr) { return s.ueExpr(b, pr.X, l, mode) }
         case typed.Expr.Call(_, _, c) { return s.ueCall(b, c, l, mode) }
         case typed.Expr.Make(_, _, m) { return s.ueExprs(b, m.Items, l, mode) and s.ueExpr(b, m.Length, l, mode) }
         case typed.Expr.Collect(_, _, c) { return s.ueExpr(b, c.Reserve, l, mode) and s.ueBlock(b, c.Loop, l, mode) }
-        case typed.Expr.Prim(_, _, _, _, args) { return s.ueExprs(b, args, l, mode) }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            # (UseOwn: its storage retired, M19g, or its length read keeps nothing of it)
+            if mode == UseOwn and (op == typed.PrimOp.Retire or op == typed.PrimOp.Len) and args.Len() == 1 and isParamRead(s.unAway(args[0]), l): return true
+            # (UseOwn: nor what a part of it holds ended there, O15)
+            if mode == UseOwn and op == typed.PrimOp.Drop and args.Len() == 1 and ownView(args[0], l): return s.ueSliceBounds(b, args[0], l, mode)
+            return s.ueExprs(b, args, l, mode)
+        }
         case typed.Expr.Slice(_, _, sl) {
             return s.uePlace(b, sl.Base, l, mode) and s.ueExpr(b, sl.Lo, l, mode) and s.ueExpr(b, sl.Hi, l, mode)
         }
@@ -6160,6 +6177,12 @@ fn (s mut Scoper&) ueCall(b typed.Body&, c typed.Call&, l I64, mode I64) Bool {
     for k in range c.Args.Len() {
         a := s.unAway(c.Args[k])
         handed := s.handedOn(a, l)
+        # (UseOwn: a slice of its own storage handed to a callee keeping nothing of it past the call)
+        if handed == 0 and mode == UseOwn and ownView(a, l) {
+            if callee < 0 or k >= ps.Len() or not s.uses(callee, k, UseOwn) { return false }
+            if not s.ueSliceBounds(b, a, l, mode) { return false }
+            continue
+        }
         if handed == 0 {
             if not s.ueExpr(b, a, l, mode) { return false }
             continue
@@ -6231,6 +6254,37 @@ fn (s mut Scoper&) uePlace(b typed.Body&, p typed.Lvalue&, l I64, mode I64) Bool
         case typed.Lvalue.Payload(_, _, pl) { return s.uePlace(b, pl.Base, l, mode) }
         case typed.Lvalue.Temp(_, _, v, _) { return s.ueExpr(b, v, l, mode) }
         case _ { return true }
+    }
+}
+
+# whether x is a borrow or a slice of a part of l's own storage - reached from l's reference through fields, elements
+# and payloads, never through a reference read out of one
+fn ownView(x typed.Expr&, l I64) Bool {
+    return match x {
+        case typed.Expr.Borrow(_, _, p): ownRooted(p, l)
+        case typed.Expr.Slice(_, _, sl): ownRooted(sl.Base, l)
+        case typed.Expr.Away(_, _, y): ownView(y, l)
+        case _: false
+    }
+}
+
+fn ownRooted(p typed.Lvalue&, l I64) Bool {
+    return match p {
+        case typed.Lvalue.Deref(_, _, r): isParamRead(r, l)
+        case typed.Lvalue.Field(_, _, base, _): ownRooted(base, l)
+        case typed.Lvalue.Elem(_, _, e): ownRooted(e.Base, l)
+        case typed.Lvalue.Payload(_, _, pl): ownRooted(pl.Base, l)
+        case _: false
+    }
+}
+
+# a slice's bounds, and the indexes on its way to l, used as mode asks
+fn (s mut Scoper&) ueSliceBounds(b typed.Body&, a typed.Expr&, l I64, mode I64) Bool {
+    return match a {
+        case typed.Expr.Slice(_, _, sl): s.ueTarget(b, sl.Base, l, mode) and s.ueExpr(b, sl.Lo, l, mode) and s.ueExpr(b, sl.Hi, l, mode)
+        case typed.Expr.Borrow(_, _, p): s.ueTarget(b, p, l, mode)
+        case typed.Expr.Away(_, _, y): s.ueSliceBounds(b, y, l, mode)
+        case _: false
     }
 }
 
@@ -7788,11 +7842,12 @@ fn (s mut Scoper&) throughLocal(p typed.Lvalue&, slot Term) I64 {
                 case _ { }
             }
         }
+        case typed.Lvalue.Local(_, _, _) { q = wholeLocal(base) }
         case _ { }
     }
     if q < 0 or s.isCursorLocal(q) { return -1 }
     loc := s.B!.Locals[q]
-    if loc.Kind != typed.LocalKind.Var or not s.isRef(loc.Ty) or s.terms[q] != slot { return -1 }
+    if loc.Kind != typed.LocalKind.Var or s.terms[q] != slot { return -1 }
     return q
 }
 
@@ -8519,7 +8574,14 @@ fn (s mut Scoper&) derivedBuilds(fty types.TypeId, vars Array<I64>&, v I64, beta
 fn (s mut Scoper&) splitBorrow(x typed.Expr&) {
     match s.unAway(x) {
         case typed.Expr.Borrow(sp, _, p) {
-            if s.splitPlace(p) and not s.liftSplitPlace(p) and s.report { s.err(s.firstToken(s.B!.File, sp), msgs.BorrowSplitValue()) }
+            if not s.splitPlace(p) or s.liftSplitPlace(p) or not s.report: return
+            l := wholeLocal(p)
+            # (a by-value parameter's value whole: its hand-on at its last mention, T13b, is the way to hold it elsewhere)
+            if l >= 0 and s.B!.Locals[l].Kind == typed.LocalKind.Param {
+                s.err(s.firstToken(s.B!.File, sp), msgs.BorrowSplitParam(s.P.L.Names.Text(s.B!.Locals[l].Name)))
+                return
+            }
+            s.err(s.firstToken(s.B!.File, sp), msgs.BorrowSplitValue())
         }
         case _ { }
     }
@@ -10660,6 +10722,7 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
             # where it is called as such
             saved := s.why
             s.obligeView = r.View
+            s.obligeBind = r.Bind
             if r.Why != 0 and s.instanceRel(hi, lo) {
                 s.why = r.Why
             } else if r.Why != 0 and s.resultVar >= 0 and lo == Term.Var(s.resultVar) and not s.isCtor() {
@@ -10669,6 +10732,7 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
             s.oblige(hi, lo, r.Exact)
             s.why = saved
             s.obligeView = false
+            s.obligeBind = false
             continue
         }
         if not s.report { continue }
@@ -11472,14 +11536,35 @@ fn (s mut Scoper&) oblige(hi Term, lo Term, exact Bool) {
 
 fn (s mut Scoper&) addRel(r rel) {
     r.View = s.obligeView
+    r.Bind = s.obligeBind
     for k in range s.gamma.Len() {
         g := s.gamma[k]
         if g.Hi != r.Hi or g.Lo != r.Lo or g.Exact != r.Exact { continue }
-        # one keeping the whole value as well as a view of it keeps the whole (2.5): a caller may lift it
+        # one keeping the whole value as well as a view of it keeps the whole (2.5): a caller may lift it - and one
+        # keeping it as well as binding to it keeps it
         if not r.View: s.gamma[k].View = false
+        if not r.Bind: s.gamma[k].Bind = false
         return
     }
     s.gamma.Push(r)
+}
+
+# O25g, C2d: a field viewing its constructor argument's referent, of a value local a constructor call made here, given
+# storage living at t: the argument proposed there (a value local's storage built there, O28) and the instance bound
+# there - the local's own storage, and what ends it, left where they are
+fn (s mut Scoper&) proposeFieldArg(p typed.Lvalue&, t Term) {
+    if p != typed.Lvalue.Field: return
+    base := p.base
+    q := wholeLocal(base)
+    if base != typed.Lvalue.Local or q < 0 or s.isRef(base.Type()) or not s.isStruct(base.Type()) or not s.buildsOwn(q): return
+    fm := s.fieldMark(base.Type(), p.index)
+    if fm != typed.Mark.Of: return
+    w := s.ctorParamIndex(base.Type(), fm.local)
+    init := try s.inits.Get(q) catch { return }
+    c := typed.Call.Of(init)
+    if c is null or w < 0 or w >= c.Args.Len(): return
+    s.propose(c.Args[w], t)
+    s.proposeCall(init, t)
 }
 
 # a value of existing storage living at t put into a slot of term slot (FIT, 3.1): it must outlive the slot, and be
@@ -11514,6 +11599,13 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     if s.liftGather and k == Holds and exact and t != slot and s.order(slot, t) == FailsBlock {
         s.partFlow = s.fitPart
         if s.isCursorLocal(s.fitTarget) { s.liftLocal(s.fitTarget, t, s.fitStor) } else { s.proposeLocal(s.fitTarget, t, s.fitStor) }
+        # (a value local's field given a longer-lived reference: the instance its constructor made bound there too, its
+        # own storage left where it is - O25g, C2d)
+        if not s.fitStor and s.fitTarget >= 0 and not s.isRef(s.B!.Locals[s.fitTarget].Ty) and s.buildsOwn(s.fitTarget) {
+            init := try s.inits.Get(s.fitTarget) catch default null
+            if init is not null { s.proposeCall(init, t) }
+        }
+        if s.fitTarget < 0 and kind == FitField and s.targets.Len() > 0 { s.proposeFieldArg(s.targets[s.targets.Len() - 1], t) }
         s.partFlow = false
     }
     if k == Holds and exact and t != slot {
@@ -11540,7 +11632,9 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         s.oblige(t, slot, false)
         if exact and t != slot {
             o := s.order(slot, t)
+            s.obligeBind = true
             if o == Obliged { s.oblige(slot, t, false) }
+            s.obligeBind = false
         }
         s.obligeView = false
         return
@@ -11991,7 +12085,7 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
         return
     }
     s.partFlow = partRead(u)
-    s.proposeLocal(r, t, s.keepsStorage(x) or s.convertsStorage(x))
+    s.proposeLocal(r, t, not s.claimOnly and (s.keepsStorage(x) or s.convertsStorage(x)))
     s.partFlow = false
 }
 
@@ -12483,8 +12577,13 @@ fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
     if ai >= 0 {
         # (R1: a split value - a for-in's copy of an element - whose references outlive lo: its storage lifted there)
         rf := s.splitRefs(c.Args[ai])
-        if rf.Runs() and s.joinTerm(rf, lo) == rf { s.liftSplit(c.Args[ai], rf) }
+        if rf.Runs() and s.joinTerm(rf, lo) == rf and not r.Bind { s.liftSplit(c.Args[ai], rf) }
+        # (the slot's half of an exact fit - a writable reference's binding, O25g - asks where the argument's references
+        # live, never that its own storage be kept: a value local lent there is a split value, its storage left in its
+        # block and what it holds ended there, O15)
+        s.claimOnly = r.Bind
         s.propose(c.Args[ai], lo)
+        s.claimOnly = false
         return
     }
     rv := s.resultVarOf(s.calleeType(c))

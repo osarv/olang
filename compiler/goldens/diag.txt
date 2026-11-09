@@ -3344,6 +3344,11 @@ o15registeredtempafter.olang:31:17: error[O15, O16]: this value is held where it
    31 |     hold(one(), Grip(1), l)
       |                 ^~~~~~~
 compilation failed with 1 error
+=== o17aparamref.olang
+o17aparamref.olang:38:10: error[O17a, T13b]: 'v' holds references to the caller's storage while its own storage is this call's, so it is not held by reference - use 'v' itself, or take its value where it is mentioned last, declaring its type ('w T = v')
+   38 |     w := v
+      |          ^
+compilation failed with 1 error
 === o17permute6.olang
 o17permute6.olang:27:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
    27 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
@@ -3374,11 +3379,6 @@ o23aliaswrite.olang:24:13: error[O25i]: this reads 'keep', which an assignment m
 o23aliaswrite.olang:22:9: note: 'keep' is given a value here
    22 |         keep = c.at
       |         ^~~~~~~~~~~
-compilation failed with 1 error
-=== o25gfieldbinding.olang
-o25gfieldbinding.olang:17:15: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   17 |         c.cur = g
-      |               ^
 compilation failed with 1 error
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one

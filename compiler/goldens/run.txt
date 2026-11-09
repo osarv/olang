@@ -1948,7 +1948,7 @@
 | holder 3 1
 === run c2dfieldmapput.olang
 | status 0
-| 65 29044
+| 67 31101
 === run c2dfieldoutlives.olang
 | status 0
 === run c2dfieldvec.olang
@@ -2379,6 +2379,8 @@
 === run o15registeredtemp.olang
 | status 0
 | n 22
+=== run o17aparamhandon.olang
+| status 0
 === run o17bhandleout.olang
 | status 0
 | 41
@@ -2453,6 +2455,8 @@
 === run o17spawntargets.olang
 | status 0
 | 42
+=== run o17splitvecdtor.olang
+| status 0
 === run o17tempcallresult.olang
 | status 0
 | chain 321
@@ -2533,6 +2537,12 @@
 === run o25enote.olang
 | status 0
 | Vec<String&>["4", "x"]
+=== run o25gfieldbinding.olang
+| status 0
+=== run o25gfieldreassign.olang
+| status 0
+=== run o25gfieldreassigndtor.olang
+| status 0
 === run o25harrayreturn.olang
 | status 0
 === run o25harrayslice.olang
