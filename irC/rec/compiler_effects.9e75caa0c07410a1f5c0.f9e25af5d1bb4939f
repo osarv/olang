@@ -1,0 +1,244 @@
+olang front record
+read place E31b compiler/effects@23095
+body fn 10238-10639	known p
+body fn 1607-1816	known p
+body fn 16677-17462	known p grows|0|-|-|..own|4|0|compiler/effects|16761|16765|-1 grows|0|-|-|..calls|6|0|compiler/effects|16791|16795|-1 grows|0|-|-|..links|6|0|compiler/effects|16824|16828|-1 grows|0|-|-|..whole|6|0|compiler/effects|16858|16862|-1 grows|0|-|-|..callsOf|8|0|compiler/effects|16890|16894|-1 grows|0|-|-|..fnSlots|8|0|compiler/effects|16916|16920|-1 grows|0|-|-|..merged|7|0|compiler/effects|16942|16946|-1 grows|0|-|-|..gives|6|0|compiler/effects|16967|16971|-1 grows|0|-|-|..state|6|0|compiler/effects|16995|16999|-1 grows|0|-|-|..tIndex|7|0|compiler/effects|17020|17024|-1 grows|0|-|-|..tLow|5|0|compiler/effects|17044|17048|-1 grows|0|-|-|..tOn|4|0|compiler/effects|17066|17070|-1 grows|0|-|-|..dtorOf|7|0|compiler/effects|17260|17263|-1 grows|0|-|-|..fileMod|8|0|compiler/effects|17414|17417|-1
+body fn 17702-17909	known p
+body fn 17911-18116	known p
+body fn 18272-18536	known p grows|0|-|-|..own|4|0|compiler/effects|18425|18429|-1 grows|0|-|-|..calls|6|0|compiler/effects|18425|18429|-1 grows|0|-|-|..links|6|0|compiler/effects|18425|18429|-1 grows|0|-|-|..whole|6|0|compiler/effects|18425|18429|-1 grows|0|-|-|..callsOf|8|0|compiler/effects|18425|18429|-1 grows|0|-|-|..fnSlots|8|0|compiler/effects|18425|18429|-1 grows|0|-|-|..merged|7|0|compiler/effects|18425|18429|-1 grows|0|-|-|..gives|6|0|compiler/effects|18425|18429|-1 grows|0|-|-|..state|6|0|compiler/effects|18425|18429|-1 grows|0|-|-|..tIndex|7|0|compiler/effects|18425|18429|-1 grows|0|-|-|..tLow|5|0|compiler/effects|18425|18429|-1 grows|0|-|-|..tOn|4|0|compiler/effects|18425|18429|-1 grows|0|-|-|..dtorOf|7|0|compiler/effects|18425|18429|-1 grows|0|-|-|..fileMod|8|0|compiler/effects|18425|18429|-1 grows|0|-|-|..paramAt|8|0|compiler/effects|18458|18463|-1 grows|0|-|-|..bounded|8|0|compiler/effects|18458|18463|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|18458|18463|-1 grows|0|-|-|..outs|5|0|compiler/effects|18458|18463|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|18458|18463|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|18458|18463|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|18458|18463|-1 grows|0|-|-|..pends|6|0|compiler/effects|18458|18463|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|18458|18463|-1 grows|0|-|-|..derived|8|0|compiler/effects|18458|18463|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|18458|18463|-1 grows|0|-|-|..curRets|8|0|compiler/effects|18458|18463|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|18458|18463|-1 grows|0|-|-|..parts|6|0|compiler/effects|18458|18463|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|18458|18463|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|18458|18463|-1 grows|0|-|-|..givs|5|0|compiler/effects|18458|18463|-1 grows|0|-|-|..rets|5|0|compiler/effects|18458|18463|-1 grows|0|-|-|..tStack|7|0|compiler/effects|18458|18463|-1 grows|0|-|-|..calls[...]|11|0|compiler/effects|18458|18463|-1
+body fn 18638-18865	known p
+body fn 18914-19034	known p grows|0|-|-|..own|4|0|compiler/effects|18962|18966|-1 grows|0|-|-|..calls|6|0|compiler/effects|18962|18966|-1 grows|0|-|-|..links|6|0|compiler/effects|18962|18966|-1 grows|0|-|-|..whole|6|0|compiler/effects|18962|18966|-1 grows|0|-|-|..callsOf|8|0|compiler/effects|18962|18966|-1 grows|0|-|-|..fnSlots|8|0|compiler/effects|18962|18966|-1 grows|0|-|-|..merged|7|0|compiler/effects|18962|18966|-1 grows|0|-|-|..gives|6|0|compiler/effects|18962|18966|-1 grows|0|-|-|..state|6|0|compiler/effects|18962|18966|-1 grows|0|-|-|..tIndex|7|0|compiler/effects|18962|18966|-1 grows|0|-|-|..tLow|5|0|compiler/effects|18962|18966|-1 grows|0|-|-|..tOn|4|0|compiler/effects|18962|18966|-1 grows|0|-|-|..dtorOf|7|0|compiler/effects|18962|18966|-1 grows|0|-|-|..fileMod|8|0|compiler/effects|18962|18966|-1
+body fn 19117-19294	known p grows|0|-|-|..own|4|0|compiler/effects|19167|19171|-1 grows|0|-|-|..calls|6|0|compiler/effects|19167|19171|-1 grows|0|-|-|..links|6|0|compiler/effects|19167|19171|-1 grows|0|-|-|..whole|6|0|compiler/effects|19167|19171|-1 grows|0|-|-|..callsOf|8|0|compiler/effects|19167|19171|-1 grows|0|-|-|..fnSlots|8|0|compiler/effects|19167|19171|-1 grows|0|-|-|..merged|7|0|compiler/effects|19167|19171|-1 grows|0|-|-|..gives|6|0|compiler/effects|19167|19171|-1 grows|0|-|-|..state|6|0|compiler/effects|19167|19171|-1 grows|0|-|-|..tIndex|7|0|compiler/effects|19167|19171|-1 grows|0|-|-|..tLow|5|0|compiler/effects|19167|19171|-1 grows|0|-|-|..tOn|4|0|compiler/effects|19167|19171|-1 grows|0|-|-|..dtorOf|7|0|compiler/effects|19167|19171|-1 grows|0|-|-|..fileMod|8|0|compiler/effects|19167|19171|-1
+body fn 19380-19754	known p
+body fn 19806-20019	known p
+body fn 20138-20522	known p
+body fn 20524-20611	known p
+body fn 20697-21008	known p
+body fn 21038-21468	known p grows|0|-|-|..paramAt|8|0|compiler/effects|21079|21083|-1 grows|0|-|-|..bounded|8|0|compiler/effects|21079|21083|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|21079|21083|-1 grows|0|-|-|..outs|5|0|compiler/effects|21079|21083|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|21079|21083|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|21079|21083|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|21079|21083|-1 grows|0|-|-|..pends|6|0|compiler/effects|21079|21083|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|21079|21083|-1 grows|0|-|-|..derived|8|0|compiler/effects|21079|21083|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|21079|21083|-1 grows|0|-|-|..curRets|8|0|compiler/effects|21079|21083|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|21079|21083|-1 grows|0|-|-|..parts|6|0|compiler/effects|21079|21083|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|21079|21083|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|21079|21083|-1 grows|0|-|-|..givs|5|0|compiler/effects|21079|21083|-1 grows|0|-|-|..rets|5|0|compiler/effects|21079|21083|-1 grows|0|-|-|..tStack|7|0|compiler/effects|21164|21168|-1 grows|0|-|-|..calls[...]|11|0|compiler/effects|21239|21245|-1
+body fn 21470-21772	known p grows|0|-|-|..paramAt|8|0|compiler/effects|21612|21617|-1 grows|0|-|-|..bounded|8|0|compiler/effects|21612|21617|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|21612|21617|-1 grows|0|-|-|..outs|5|0|compiler/effects|21612|21617|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|21612|21617|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|21612|21617|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|21612|21617|-1 grows|0|-|-|..pends|6|0|compiler/effects|21612|21617|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|21612|21617|-1 grows|0|-|-|..derived|8|0|compiler/effects|21612|21617|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|21612|21617|-1 grows|0|-|-|..curRets|8|0|compiler/effects|21612|21617|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|21612|21617|-1 grows|0|-|-|..parts|6|0|compiler/effects|21612|21617|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|21612|21617|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|21612|21617|-1 grows|0|-|-|..givs|5|0|compiler/effects|21612|21617|-1 grows|0|-|-|..rets|5|0|compiler/effects|21612|21617|-1 grows|0|-|-|..tStack|7|0|compiler/effects|21612|21617|-1 grows|0|-|-|..calls[...]|11|0|compiler/effects|21612|21617|-1
+body fn 22002-22745	known p grows|0|-|-|..calls[...]|11|0|compiler/effects|22451|22459|-1 grows|0|-|-|..paramAt|8|0|compiler/effects|22451|22459|-1 grows|0|-|-|..bounded|8|0|compiler/effects|22451|22459|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|22451|22459|-1 grows|0|-|-|..outs|5|0|compiler/effects|22451|22459|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|22451|22459|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|22451|22459|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|22451|22459|-1 grows|0|-|-|..pends|6|0|compiler/effects|22451|22459|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|22451|22459|-1 grows|0|-|-|..derived|8|0|compiler/effects|22451|22459|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|22451|22459|-1 grows|0|-|-|..curRets|8|0|compiler/effects|22451|22459|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|22451|22459|-1 grows|0|-|-|..parts|6|0|compiler/effects|22451|22459|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|22451|22459|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|22451|22459|-1 grows|0|-|-|..givs|5|0|compiler/effects|22451|22459|-1 grows|0|-|-|..rets|5|0|compiler/effects|22451|22459|-1 grows|0|-|-|..tStack|7|0|compiler/effects|22451|22459|-1
+body fn 22828-22920	known p
+body fn 22922-23132	known p grows|0|-|-|..calls[...]|11|0|compiler/effects|23095|23096|-1 grows|0|-|-|..paramAt|8|0|compiler/effects|23120|23124|-1 grows|0|-|-|..bounded|8|0|compiler/effects|23120|23124|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|23120|23124|-1 grows|0|-|-|..outs|5|0|compiler/effects|23120|23124|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|23120|23124|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|23120|23124|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|23120|23124|-1 grows|0|-|-|..pends|6|0|compiler/effects|23120|23124|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|23120|23124|-1 grows|0|-|-|..derived|8|0|compiler/effects|23120|23124|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|23120|23124|-1 grows|0|-|-|..curRets|8|0|compiler/effects|23120|23124|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|23120|23124|-1 grows|0|-|-|..parts|6|0|compiler/effects|23120|23124|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|23120|23124|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|23120|23124|-1 grows|0|-|-|..givs|5|0|compiler/effects|23120|23124|-1 grows|0|-|-|..rets|5|0|compiler/effects|23120|23124|-1 grows|0|-|-|..tStack|7|0|compiler/effects|23120|23124|-1
+body fn 23457-24908	known p
+body fn 25060-26067	known p
+body fn 26172-26753	known p
+body fn 26847-27048	known p
+body fn 27114-27322	known p
+body fn 27557-28273	known p
+body fn 28662-28732	known p
+body fn 28734-28798	known p
+body fn 28874-29959	known p
+body fn 29995-30619	known p grows|0|-|-|..paramAt|8|0|compiler/effects|30054|30062|-1 grows|0|-|-|..bounded|8|0|compiler/effects|30054|30062|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|30054|30062|-1 grows|0|-|-|..outs|5|0|compiler/effects|30054|30062|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|30054|30062|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|30054|30062|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|30054|30062|-1 grows|0|-|-|..pends|6|0|compiler/effects|30054|30062|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|30054|30062|-1 grows|0|-|-|..derived|8|0|compiler/effects|30054|30062|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|30054|30062|-1 grows|0|-|-|..curRets|8|0|compiler/effects|30054|30062|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|30054|30062|-1 grows|0|-|-|..parts|6|0|compiler/effects|30054|30062|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|30054|30062|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|30054|30062|-1 grows|0|-|-|..givs|5|0|compiler/effects|30473|30476|-1 grows|0|-|-|..rets|5|0|compiler/effects|30590|30593|-1
+body fn 30782-32499	known p grows|0|-|-|..paramAt|8|0|compiler/effects|31555|31558|-1 grows|0|-|-|..bounded|8|0|compiler/effects|32008|32011|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|32460|32465|-1 grows|0|-|-|..outs|5|0|compiler/effects|32460|32465|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|32460|32465|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|32460|32465|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|32460|32465|-1 grows|0|-|-|..pends|6|0|compiler/effects|32460|32465|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|32460|32465|-1 grows|0|-|-|..derived|8|0|compiler/effects|32460|32465|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|32460|32465|-1 grows|0|-|-|..curRets|8|0|compiler/effects|32460|32465|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|32460|32465|-1 grows|0|-|-|..parts|6|0|compiler/effects|32489|32495|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|32489|32495|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|32489|32495|-1
+body fn 32681-33201	known p grows|0|-|-|..parts|6|0|compiler/effects|32737|32744|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|32737|32744|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|33116|33120|-1
+body fn 33331-34504	known p grows|0|-|-|..parts|6|0|compiler/effects|33396|33404|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|33676|33680|-1 keeps|1|-|-|.|0|0|compiler/effects|33359|33359|0
+body fn 34564-36488	known p grows|0|-|-|..parts|6|0|compiler/effects|34683|34687|-1 keeps|1|-|-|.|0|0|compiler/effects|34593|34593|0
+body fn 36490-36836	known p,2
+body fn 36921-37387	known p grows|0|-|-|..parts|6|0|compiler/effects|37070|37074|-1
+body fn 37569-38027	known p grows|0|-|-|..fnDefs|7|0|compiler/effects|37700|37703|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|37822|37831|-1 grows|0|-|-|..derived|8|0|compiler/effects|37901|37904|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|37986|37990|-1
+body fn 38193-38723	known p
+body fn 38859-39241	known p
+body fn 39243-39440	known p
+body fn 39442-39610	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|39569|39573|-1 grows|0|-|-|..outs|5|0|compiler/effects|39569|39573|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|39569|39573|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|39569|39573|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|39569|39573|-1 grows|0|-|-|..pends|6|0|compiler/effects|39569|39573|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|39569|39573|-1 grows|0|-|-|..derived|8|0|compiler/effects|39569|39573|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|39569|39573|-1 grows|0|-|-|..curRets|8|0|compiler/effects|39569|39573|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|39569|39573|-1
+body fn 39730-40264	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|39833|39837|-1 grows|0|-|-|..outs|5|0|compiler/effects|39833|39837|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|39833|39837|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|39833|39837|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|39833|39837|-1 grows|0|-|-|..pends|6|0|compiler/effects|39833|39837|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|39833|39837|-1 grows|0|-|-|..derived|8|0|compiler/effects|39833|39837|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|39833|39837|-1 grows|0|-|-|..curRets|8|0|compiler/effects|39833|39837|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|39833|39837|-1 keeps|1|-|-|.|0|0|compiler/effects|39758|39758|0
+body fn 40266-43025	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|40378|40382|-1 grows|0|-|-|..outs|5|0|compiler/effects|40378|40382|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|40378|40382|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|40378|40382|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|40378|40382|-1 grows|0|-|-|..pends|6|0|compiler/effects|40378|40382|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|40378|40382|-1 grows|0|-|-|..derived|8|0|compiler/effects|40378|40382|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|40378|40382|-1 grows|0|-|-|..curRets|8|0|compiler/effects|41315|41319|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|42755|42758|-1 keeps|1|-|-|.|0|0|compiler/effects|40291|40291|0
+body fn 4203-4334	known p
+body fn 43027-43178	known p
+body fn 43207-43804	known p
+body fn 43806-43914	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|43859|43864|-1 grows|0|-|-|..outs|5|0|compiler/effects|43859|43864|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|43859|43864|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|43859|43864|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|43859|43864|-1 grows|0|-|-|..pends|6|0|compiler/effects|43859|43864|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|43859|43864|-1 grows|0|-|-|..derived|8|0|compiler/effects|43859|43864|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|43859|43864|-1 grows|0|-|-|..curRets|8|0|compiler/effects|43859|43864|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|43859|43864|-1
+body fn 43916-46142	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|44170|44175|-1 grows|0|-|-|..outs|5|0|compiler/effects|44170|44175|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|44170|44175|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|44402|44413|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|45002|45006|-1 grows|0|-|-|..pends|6|0|compiler/effects|45002|45006|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|45772|45775|-1 grows|0|-|-|..derived|8|0|compiler/effects|45772|45775|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|45772|45775|-1 grows|0|-|-|..curRets|8|0|compiler/effects|44865|44870|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|44865|44870|-1 keeps|1|-|-|.|0|0|compiler/effects|43941|43941|0
+body fn 4507-4589	known p
+body fn 46144-46410	known p grows|0|-|-|..fnDefs|7|0|compiler/effects|46305|46311|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|46305|46311|-1 grows|0|-|-|..derived|8|0|compiler/effects|46305|46311|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|46305|46311|-1 grows|0|-|-|..outs|5|0|compiler/effects|46218|46222|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|46218|46222|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|46218|46222|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|46218|46222|-1 grows|0|-|-|..pends|6|0|compiler/effects|46218|46222|-1 grows|0|-|-|..curRets|8|0|compiler/effects|46375|46380|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|46375|46380|-1 keeps|1|-|-|.|0|0|compiler/effects|46168|46168|0
+body fn 46581-47398	known p grows|0|-|-|..curCalls|9|0|compiler/effects|46891|46895|-1 grows|0|-|-|..pends|6|0|compiler/effects|47112|47116|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|46814|46818|-1 grows|0|-|-|..outs|5|0|compiler/effects|46814|46818|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|46814|46818|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|46814|46818|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|46814|46818|-1 grows|0|-|-|..derived|8|0|compiler/effects|46814|46818|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|46814|46818|-1 grows|0|-|-|..curRets|8|0|compiler/effects|46814|46818|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|46814|46818|-1 keeps|1|-|-|.|0|0|compiler/effects|46607|46607|0
+body fn 47400-48022	known p grows|0|-|-|..curCalls|9|0|compiler/effects|47675|47686|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|47935|47942|-1 grows|0|-|-|..outs|5|0|compiler/effects|47935|47942|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|48011|48015|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|48011|48015|-1 grows|0|-|-|..pends|6|0|compiler/effects|48011|48015|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|48011|48015|-1 grows|0|-|-|..derived|8|0|compiler/effects|48011|48015|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|48011|48015|-1 grows|0|-|-|..curRets|8|0|compiler/effects|48011|48015|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|48011|48015|-1
+body fn 48101-48699	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|48204|48209|-1 grows|0|-|-|..outs|5|0|compiler/effects|48204|48209|-1
+body fn 4836-5034	known p
+body fn 48701-49843	known p grows|0|-|-|..curCalls|9|0|compiler/effects|48863|48867|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|48938|48945|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|48938|48945|-1 grows|0|-|-|..pends|6|0|compiler/effects|49068|49072|-1 grows|0|-|-|..outs|5|0|compiler/effects|49601|49608|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|49469|49473|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|49469|49473|-1 grows|0|-|-|..derived|8|0|compiler/effects|49469|49473|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|49469|49473|-1 grows|0|-|-|..curRets|8|0|compiler/effects|49469|49473|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|49469|49473|-1 keeps|1|-|-|.|0|0|compiler/effects|48726|48726|0
+body fn 49929-50131	known p grows|0|-|-|..curCalls|9|0|compiler/effects|50121|50125|-1
+body fn 50253-51103	known p grows|0|-|-|..curCalls|9|0|compiler/effects|50504|50514|-1
+body fn 51149-51255	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|51223|51228|-1 grows|0|-|-|..outs|5|0|compiler/effects|51223|51228|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|51240|51250|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|51240|51250|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|51240|51250|-1 grows|0|-|-|..pends|6|0|compiler/effects|51240|51250|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|51240|51250|-1 grows|0|-|-|..derived|8|0|compiler/effects|51240|51250|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|51240|51250|-1 grows|0|-|-|..curRets|8|0|compiler/effects|51240|51250|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|51240|51250|-1 keeps|1|-|-|.|0|0|compiler/effects|51175|51175|0
+body fn 51322-51955	known p grows|0|-|-|..mutGlobals|11|0|compiler/effects|51523|51532|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|51625|51629|-1 grows|0|-|-|..outs|5|0|compiler/effects|51625|51629|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|51625|51629|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|51625|51629|-1 grows|0|-|-|..pends|6|0|compiler/effects|51625|51629|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|51625|51629|-1 grows|0|-|-|..derived|8|0|compiler/effects|51625|51629|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|51625|51629|-1 grows|0|-|-|..curRets|8|0|compiler/effects|51625|51629|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|51625|51629|-1 keeps|1|-|-|.|0|0|compiler/effects|51353|51353|0
+body fn 52072-52330	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|52126|52139|-1 grows|0|-|-|..outs|5|0|compiler/effects|52278|52285|-1
+body fn 5212-5348	known p
+body fn 52439-53096	known p
+body fn 53284-53575	known p grows|0|-|-|..outs|5|0|compiler/effects|53562|53566|-1
+body fn 53663-54086	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|54044|54053|-1
+body fn 5399-5632	known p
+body fn 54199-54522	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|54382|54391|-1
+body fn 54625-55251	known p
+body fn 55253-55625	known p
+body fn 55803-56339	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|55936|55945|-1
+body fn 56509-56839	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|56580|56588|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|56627|56631|-1
+body fn 57103-57647	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|57235|57244|-1
+body fn 57649-57891	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|57757|57770|-1
+body fn 57893-58284	known p grows|0|-|-|..mutGlobals|11|0|compiler/effects|58258|58261|-1
+body fn 58301-58457	known p
+body fn 58459-58577	known p
+body fn 5876-6318	known p
+body fn 59019-60299	known p
+body fn 60356-60751	known p
+body fn 61544-61662	known p
+body fn 62236-63817	known p
+body fn 63819-63948	known p
+body fn 64049-64377	known p
+body fn 64379-64558	known p
+body fn 6460-7065	known p
+body fn 65052-66558	known p grows|0|-|-|..own|4|0|compiler/effects|65266|65268|-1 grows|0|-|-|..calls|6|0|compiler/effects|65266|65268|-1 grows|0|-|-|..links|6|0|compiler/effects|65266|65268|-1 grows|0|-|-|..whole|6|0|compiler/effects|65266|65268|-1 grows|0|-|-|..callsOf|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..fnSlots|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..merged|7|0|compiler/effects|65266|65268|-1 grows|0|-|-|..gives|6|0|compiler/effects|65266|65268|-1 grows|0|-|-|..state|6|0|compiler/effects|65266|65268|-1 grows|0|-|-|..tIndex|7|0|compiler/effects|65266|65268|-1 grows|0|-|-|..tLow|5|0|compiler/effects|65266|65268|-1 grows|0|-|-|..tOn|4|0|compiler/effects|65266|65268|-1 grows|0|-|-|..dtorOf|7|0|compiler/effects|65266|65268|-1 grows|0|-|-|..fileMod|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..paramAt|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..bounded|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|65266|65268|-1 grows|0|-|-|..outs|5|0|compiler/effects|65266|65268|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|65266|65268|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|65266|65268|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|65266|65268|-1 grows|0|-|-|..pends|6|0|compiler/effects|65266|65268|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|65266|65268|-1 grows|0|-|-|..derived|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..curRets|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|65266|65268|-1 grows|0|-|-|..parts|6|0|compiler/effects|65266|65268|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|65266|65268|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|65266|65268|-1 grows|0|-|-|..givs|5|0|compiler/effects|65266|65268|-1 grows|0|-|-|..rets|5|0|compiler/effects|65266|65268|-1 grows|0|-|-|..tStack|7|0|compiler/effects|65266|65268|-1 grows|0|-|-|..calls[...]|11|0|compiler/effects|65266|65268|-1 keeps|2|-|-|.|0|0|compiler/effects|65085|65085|0
+body fn 66740-67489	known p grows|0|-|-|..own|4|0|compiler/effects|66815|66817|-1 grows|0|-|-|..calls|6|0|compiler/effects|66815|66817|-1 grows|0|-|-|..links|6|0|compiler/effects|66815|66817|-1 grows|0|-|-|..whole|6|0|compiler/effects|66815|66817|-1 grows|0|-|-|..callsOf|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..fnSlots|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..merged|7|0|compiler/effects|66815|66817|-1 grows|0|-|-|..gives|6|0|compiler/effects|66815|66817|-1 grows|0|-|-|..state|6|0|compiler/effects|66815|66817|-1 grows|0|-|-|..tIndex|7|0|compiler/effects|66815|66817|-1 grows|0|-|-|..tLow|5|0|compiler/effects|66815|66817|-1 grows|0|-|-|..tOn|4|0|compiler/effects|66815|66817|-1 grows|0|-|-|..dtorOf|7|0|compiler/effects|66815|66817|-1 grows|0|-|-|..fileMod|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..paramAt|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..bounded|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|66815|66817|-1 grows|0|-|-|..outs|5|0|compiler/effects|66815|66817|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|66815|66817|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|66815|66817|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|66815|66817|-1 grows|0|-|-|..pends|6|0|compiler/effects|66815|66817|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|66815|66817|-1 grows|0|-|-|..derived|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..curRets|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|66815|66817|-1 grows|0|-|-|..parts|6|0|compiler/effects|66815|66817|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|66815|66817|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|66815|66817|-1 grows|0|-|-|..givs|5|0|compiler/effects|66815|66817|-1 grows|0|-|-|..rets|5|0|compiler/effects|66815|66817|-1 grows|0|-|-|..tStack|7|0|compiler/effects|66815|66817|-1 grows|0|-|-|..calls[...]|11|0|compiler/effects|66815|66817|-1
+body fn 67584-68113	known p grows|0|-|-|..own|4|0|compiler/effects|67676|67678|-1 grows|0|-|-|..calls|6|0|compiler/effects|67676|67678|-1 grows|0|-|-|..links|6|0|compiler/effects|67676|67678|-1 grows|0|-|-|..whole|6|0|compiler/effects|67676|67678|-1 grows|0|-|-|..callsOf|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..fnSlots|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..merged|7|0|compiler/effects|67676|67678|-1 grows|0|-|-|..gives|6|0|compiler/effects|67676|67678|-1 grows|0|-|-|..state|6|0|compiler/effects|67676|67678|-1 grows|0|-|-|..tIndex|7|0|compiler/effects|67676|67678|-1 grows|0|-|-|..tLow|5|0|compiler/effects|67676|67678|-1 grows|0|-|-|..tOn|4|0|compiler/effects|67676|67678|-1 grows|0|-|-|..dtorOf|7|0|compiler/effects|67676|67678|-1 grows|0|-|-|..fileMod|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..paramAt|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..bounded|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|67676|67678|-1 grows|0|-|-|..outs|5|0|compiler/effects|67676|67678|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|67676|67678|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|67676|67678|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|67676|67678|-1 grows|0|-|-|..pends|6|0|compiler/effects|67676|67678|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|67676|67678|-1 grows|0|-|-|..derived|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..curRets|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|67676|67678|-1 grows|0|-|-|..parts|6|0|compiler/effects|67676|67678|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|67676|67678|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|67676|67678|-1 grows|0|-|-|..givs|5|0|compiler/effects|67676|67678|-1 grows|0|-|-|..rets|5|0|compiler/effects|67676|67678|-1 grows|0|-|-|..tStack|7|0|compiler/effects|67676|67678|-1 grows|0|-|-|..calls[...]|11|0|compiler/effects|67676|67678|-1
+body fn 68170-68484	known p
+body fn 68713-69088	known p
+body fn 69153-69624	known p,1 grows|0|-|-|..paramAt|8|0|compiler/effects|69458|69466|-1 grows|0|-|-|..bounded|8|0|compiler/effects|69458|69466|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/effects|69458|69466|-1 grows|0|-|-|..outs|5|0|compiler/effects|69458|69466|-1 grows|0|-|-|..mutGlobals|11|0|compiler/effects|69458|69466|-1 grows|0|-|-|..curCalls|9|0|compiler/effects|69458|69466|-1 grows|0|-|-|..curLinks|9|0|compiler/effects|69458|69466|-1 grows|0|-|-|..pends|6|0|compiler/effects|69458|69466|-1 grows|0|-|-|..fnDefs|7|0|compiler/effects|69458|69466|-1 grows|0|-|-|..derived|8|0|compiler/effects|69458|69466|-1 grows|0|-|-|..refDefs|8|0|compiler/effects|69458|69466|-1 grows|0|-|-|..curRets|8|0|compiler/effects|69458|69466|-1 grows|0|-|-|..fnSome|7|0|compiler/effects|69458|69466|-1 grows|0|-|-|..parts|6|0|compiler/effects|69458|69466|-1 grows|0|-|-|..curGivs|8|0|compiler/effects|69458|69466|-1 grows|0|-|-|..curRetNamed|12|0|compiler/effects|69458|69466|-1
+body fn 69716-69785	known p
+body fn 69787-69935	known p
+body fn 69937-70084	known p
+body fn 70169-70530	known p
+body fn 7132-7237	known p
+body fn 7740-8717	known p
+body fn 9101-9847	known p
+body fn 9849-10236	known p
+body global CapC	known p
+body global CapCount	known p
+body global CapEnvironment	known p
+body global CapFiles	known p
+body global CapNetwork	known p
+body global CapProcesses	known p
+body global CapThreads	known p
+body global EffectWords	known p
+body global GivBound	known p
+body global GivMade	known p
+body global GivNamed	known p
+body global GivResult	known p
+body global GivSlot	known p
+body global PartAdapter	known p
+body global PartLambda	known p
+body global envNames	known p
+body global fileNames	known p
+body global globalParam	known p
+body global netNames	known p
+body global outLocal	known p
+body global outParam	known p
+body global procNames	known p
+body global quickNames	known p
+baked CapC [8 1000000000000000]
+baked CapCount [8 0600000000000000]
+baked CapEnvironment [8 0800000000000000]
+baked CapFiles [8 0100000000000000]
+baked CapNetwork [8 0200000000000000]
+baked CapProcesses [8 0400000000000000]
+baked CapThreads [8 2000000000000000]
+baked EffectWords [8 7f00000000000000]
+baked GivBound [8 0200000000000000]
+baked GivMade [8 0300000000000000]
+baked GivNamed [8 0000000000000000]
+baked GivResult [8 0400000000000000]
+baked GivSlot [8 0100000000000000]
+baked PartAdapter [8 0600000000000000]
+baked PartLambda [8 0500000000000000]
+baked envNames [64 060000000000000000000000000000000600000000000000000000000000000008000000000000000000000000000000060000000000000000000000000000000b000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0][8c 676574656e76][8c 736574656e76][8c 756e736574656e76][8c 707574656e76][8c 5f5f6f6c616e675f656e76]
+baked fileNames [64 0400000000000000000000000000000006000000000000000000000000000000050000000000000000000000000000000500000000000000000000000000000005000000000000000000000000000000050000000000000000000000000000000600000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000000400000000000000000000000000000007000000000000000000000000000000080000000000000000000000000000000800000000000000000000000000000007000000000000000000000000000000050000000000000000000000000000000600000000000000000000000000000008000000000000000000000000000000050000000000000000000000000000000600000000000000000000000000000007000000000000000000000000000000070000000000000000000000000000000c0000000000000000000000000000000b000000000000000000000000000000100000000000000000000000000000000f000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0 @248>16+0 @264>17+0 @280>18+0 @296>19+0 @312>20+0 @328>21+0 @344>22+0 @360>23+0 @376>24+0 @392>25+0][8c 6f70656e][8c 6f70656e6174][8c 6372656174][8c 666f70656e][8c 6d6b646972][8c 726d646972][8c 72656d6f7665][8c 756e6c696e6b][8c 72656e616d65][8c 6c696e6b][8c 73796d6c696e6b][8c 726561646c696e6b][8c 7265616c70617468][8c 6f70656e646972][8c 6368646972][8c 676574637764][8c 7472756e63617465][8c 63686d6f64][8c 616363657373][8c 6d6b7374656d70][8c 6d6b6474656d70][8c 5f5f6f6c616e675f73746174][8c 5f5f6f6c616e675f646972][8c 5f5f6f6c616e675f7265616c70617468][8c 5f5f6f6c616e675f6d6b6474656d70]
+baked globalParam [8 feffffffffffffff]
+baked netNames [64 0600000000000000000000000000000007000000000000000000000000000000040000000000000000000000000000000600000000000000000000000000000006000000000000000000000000000000070000000000000000000000000000000b000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0][8c 736f636b6574][8c 636f6e6e656374][8c 62696e64][8c 6c697374656e][8c 616363657074][8c 61636365707434][8c 67657461646472696e666f]
+baked outLocal [8 18fcffffffffffff]
+baked outParam [8 fdffffffffffffff]
+baked procNames [64 04000000000000000000000000000000050000000000000000000000000000000500000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000000b0000000000000000000000000000000c0000000000000000000000000000000600000000000000000000000000000004000000000000000000000000000000070000000000000000000000000000000d0000000000000000000000000000000c000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0][8c 666f726b][8c 76666f726b][8c 6578656376][8c 657865637665][8c 657865637670][8c 706f7369785f737061776e][8c 706f7369785f737061776e70][8c 73797374656d][8c 6b696c6c][8c 77616974706964][8c 5f5f6f6c616e675f737061776e][8c 5f5f6f6c616e675f65786563]
+baked quickNames [64 0b000000000000000000000000000000110000000000000000000000000000000b0000000000000000000000000000000b000000000000000000000000000000060000000000000000000000000000000700000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000000600000000000000000000000000000006000000000000000000000000000000070000000000000000000000000000000d000000000000000000000000000000040000000000000000000000000000000600000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000001400000000000000000000000000000015000000000000000000000000000000130000000000000000000000000000001600000000000000000000000000000012000000000000000000000000000000110000000000000000000000000000000c0000000000000000000000000000000b0000000000000000000000000000000b0000000000000000000000000000000a000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0 @248>16+0 @264>17+0 @280>18+0 @296>19+0 @312>20+0 @328>21+0 @344>22+0 @360>23+0 @376>24+0 @392>25+0 @408>26+0][8c 5f5f6f6c616e675f657272][8c 5f5f6f6c616e675f6172675f636f756e74][8c 5f5f6f6c616e675f617267][8c 5f5f6f6c616e675f656e76][8c 6d656d637079][8c 6d656d6d6f7665][8c 6d656d736574][8c 6d656d636d70][8c 7374726c656e][8c 737472636d70][8c 7374726e636d70][8c 636c6f636b5f67657474696d65][8c 74696d65][8c 676574656e76][8c 697361747479][8c 676574706964][8c 707468726561645f6d757465785f756e6c6f636b][8c 707468726561645f72776c6f636b5f756e6c6f636b][8c 707468726561645f636f6e645f7369676e616c][8c 707468726561645f636f6e645f62726f616463617374][8c 707468726561645f6d757465785f696e6974][8c 707468726561645f636f6e645f696e6974][8c 6672656561646472696e666f][8c 676574736f636b6e616d65][8c 676574706565726e616d65][8c 736574736f636b6f7074]
+sig Breaks@9101 fn&(Facts&, I64) String
+sig CapName@1607 fn&(I64) String
+sig CapText@64049 fn&(Facts&, Array<String&>&) String
+sig Conservative@7132 fn&(Fact) Bool
+sig Describe@62236 fn&(Facts&, Array<String&>&) String
+sig Evaluable@5212 fn&(Facts&) Bool
+sig Fact.Named@5876 fn&(String&) Fact
+sig Facts.Bound@7740 fn&(Table&, TypeId) Facts
+sig Holds@6460 fn&(Facts&, Fact) Bool
+sig Idle@5399 fn&(Facts&) Bool
+sig Judge@65052 fn&(mut Effects&, I64, Expr&, TypeId) Verdict
+sig Merge@28874 fn&(mut Facts&, Facts&)
+sig ModuleOf@18914 fn&(mut Effects&, I64) I64
+sig Of@18272 fn&(mut Effects&, I64) Facts
+sig OfExtern@19117 fn&(mut Effects&, I64) Facts
+sig Pure@4836 fn&(Facts&) Bool
+sig Returns@4507 fn&(Facts&) Bool
+sig Terminates@4203 fn&(Facts&) Bool
+sig argGlobal@54199 fn&(mut Effects&, Expr&) Bool
+sig argLink@56509 fn&(mut Effects&, I64, I64, Expr&)
+sig argOut@57103 fn&(mut Effects&, Expr&) I64
+sig argParam@55803 fn&(mut Effects&, Expr&) I64
+sig arm@46144 fn&(mut Effects&, Arm&)
+sig because@69937 fn&(mut Effects&, Span, String&)
+sig blame@69153 fn&(mut Effects&, Verdict, I64, String&) Verdict
+sig block@39442 fn&(mut Effects&, Block?&)
+sig bodyName@70169 fn&(Effects&, I64) String
+sig bounds@27557 fn&(mut Effects&, I64) Facts
+sig built@38859 fn&(Effects&, Expr&) Bool
+sig cMayCallBack@17702 fn&(mut Effects&) Bool
+sig call@48701 fn&(mut Effects&, Call&)
+sig callEdge@22922 fn&(mut Effects&, I64, I64)
+sig callsThrough@27114 fn&(Effects&, I64) Bool
+sig cap@58301 fn&(mut Effects&, I64)
+sig capIndex@58459 fn&(I64) I64
+sig capOf@60356 fn&(String&) I64
+sig capText@64379 fn&(Facts&) String
+sig captureSlot@19806 fn&(Effects&, I64, I64) I64
+sig classify@34564 fn&(mut Effects&, Expr?&, I64)
+sig classifyLocal@36921 fn&(mut Effects&, I64, TypeId, I64)
+sig clause@43806 fn&(mut Effects&, Clause&)
+sig ctorCall@39243 fn&(Effects&, Call&) Bool
+sig define@37569 fn&(mut Effects&, I64, Expr&)
+sig dropsCalled@50253 fn&(mut Effects&, TypeId, I64)
+sig dtorCalled@49929 fn&(mut Effects&, TypeId)
+sig edge@21470 fn&(mut Effects&, I64, I64)
+sig endsNote@63819 fn&(Facts&) String
+sig expand@22002 fn&(mut Effects&, I64)
+sig expr@43916 fn&(mut Effects&, Expr?&)
+sig exprRoot@55253 fn&(mut Effects&, Expr&) I64
+sig extern@59019 fn&(mut Effects&, I64)
+sig finish@32681 fn&(mut Effects&)
+sig fnPart@36490 fn&(Effects&, FnVal&, Expr&) part
+sig fnVal@46581 fn&(mut Effects&, FnVal&)
+sig globalReached@53663 fn&(mut Effects&, Lvalue&) Bool
+sig grow@16677 fn&(mut Effects&)
+sig hasBit@28734 fn&(I64, I64) Bool
+sig hasExport@17911 fn&(Effects&) Bool
+sig impure@10238 fn&(Facts&) String
+sig isFn@20524 fn&(Effects&, TypeId) Bool
+sig judgeFacts@68170 fn&(Effects&, Facts&, I64, mut Verdict&)
+sig judgeType@68713 fn&(Effects&, TypeId, I64, mut Verdict&)
+sig lambdaFacts@66740 fn&(mut Effects&, I64, I64, Expr&) Facts
+sig litTrue@43027 fn&(Expr&) Bool
+sig mutGlobal@57893 fn&(mut Effects&, I64, NameId) Bool
+sig named@18638 fn&(mut Effects&, I64) Facts
+sig notReturning@9849 fn&(Facts&) String
+sig outOf@57649 fn&(mut Effects&, Lvalue&) I64
+sig outsJudged@38193 fn&(mut Effects&)
+sig paramBit@28662 fn&(I64) I64
+sig partFacts@67584 fn&(mut Effects&, I64, part&) Facts
+sig passCalls@26172 fn&(mut Effects&, I64, Map<I64, Bool>&) I64
+sig passWrites@25060 fn&(mut Effects&, I64, Vec<I64>&, Map<I64, Bool>&) I64
+sig place@51149 fn&(mut Effects&, Lvalue&, Bool)
+sig placeParts@51322 fn&(mut Effects&, Lvalue&)
+sig placeRoot@54625 fn&(mut Effects&, Lvalue&) root
+sig prim@47400 fn&(mut Effects&, PrimOp, Array<Expr&>&)
+sig quickC@61544 fn&(String&) Bool
+sig resolve@33331 fn&(mut Effects&, pend&)
+sig retsOf@22828 fn&(Effects&, I64) Vec<I64>
+sig rootBits@52439 fn&(mut Effects&, Expr&, I64) I64
+sig settle@23457 fn&(mut Effects&, Vec<I64>&)
+sig slotType@19380 fn&(Effects&, I64, I64) TypeId
+sig stmt@40266 fn&(mut Effects&, Stmt&)
+sig stmtSpan@43207 fn&(Stmt&) Span
+sig store@52072 fn&(mut Effects&, Lvalue&)
+sig takesFn@20697 fn&(mut Effects&, I64) Bool
+sig through@53284 fn&(mut Effects&, I64)
+sig throughBounds@26847 fn&(mut Effects&, Vec<I64>&)
+sig visit@21038 fn&(mut Effects&, I64)
+sig walk@29995 fn&(mut Effects&, I64)
+sig walkBody@30782 fn&(mut Effects&, I64)
+sig whyDoes@69787 fn&(mut Effects&) String
+sig whyNow@69716 fn&(mut Effects&) Bool
+sig whyStmt@39730 fn&(mut Effects&, Stmt&)
+sig writesUnowned@20138 fn&(Effects&, I64, I64) Bool
+sig written@48101 fn&(mut Effects&, Expr&)
+end
+sum d72ac91a5e443ae2bab2a78ad70b222a5d4c21f64365d49de280e821881dae2b

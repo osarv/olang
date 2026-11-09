@@ -1,0 +1,101 @@
+olang front record
+body fn 10112-10334	known p
+body fn 10336-10467	known p
+body fn 10618-10985	known p
+body fn 10987-11350	known p
+body fn 11417-11679	known p grows|0|-|-|..Waiting|8|0|compiler/lsp|11599|11603|-1
+body fn 11781-12732	known p grows|0|-|-|..W.From.buf|11|0|compiler/lsp|11836|11840|-1
+body fn 12834-13427	known p
+body fn 13535-14004	known p grows|0|-|-|..W.From.buf|11|0|compiler/lsp|13982|13992|-1
+body fn 14484-14754	known p,0,2 grows|2|-|-|..starts|7|0|compiler/lsp|14642|14649|-1 keeps|2|-|-|.|0|0|compiler/lsp|14519|14519|0
+body fn 14837-15172	known p grows|0|-|-|..overlay|8|0|compiler/lsp|14918|14921|-1
+body fn 15174-15248	known p
+body fn 15434-16638	known p
+body fn 16973-18525	known p grows|3|-|-|..starts|7|0|compiler/lsp|17256|17261|-1 grows|2|-|-|..C.P.fnsOf|10|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.fns|8|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.T.Modules|14|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.identity|13|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.T.decls|12|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.T.declKeys|15|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.T.uniqueDecls|18|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.T.packedDecls|18|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.T.endsDecls|16|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.declAt|11|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.declMi|11|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.declEi|11|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.builders|13|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.sameKey|12|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.defaultBuilders|20|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.defaultBuilderTraits|25|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.fnByName|13|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.T.copyDecls|16|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.methods|12|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.defaultFns|15|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.defaultTraits|18|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.L.Diags.records|20|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.L.Diags.notes|18|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.L.Names.texts|18|0|compiler/lsp|18102|18114|-1 grows|2|-|-|..C.P.L.Names.ids|16|0|compiler/lsp|18102|18114|-1
+body fn 18733-19574	known p grows|2|-|-|..C.P.fnsOf|10|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.fns|8|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.T.Modules|14|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.identity|13|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.T.decls|12|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.T.declKeys|15|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.T.uniqueDecls|18|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.T.packedDecls|18|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.T.endsDecls|16|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.declAt|11|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.declMi|11|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.declEi|11|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.builders|13|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.sameKey|12|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.defaultBuilders|20|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.defaultBuilderTraits|25|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.fnByName|13|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.T.copyDecls|16|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.methods|12|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.defaultFns|15|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.defaultTraits|18|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.L.Diags.records|20|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.L.Diags.notes|18|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.L.Names.texts|18|0|compiler/lsp|18891|18905|-1 grows|2|-|-|..C.P.L.Names.ids|16|0|compiler/lsp|18891|18905|-1 grows|1|-|-|..chars|6|0|compiler/lsp|18941|18949|-1
+body fn 19655-19806	known p
+body fn 19892-20045	known p
+body fn 20134-20351	known p
+body fn 20481-21613	known p grows|1|-|-|..chars|6|0|compiler/lsp|20709|20713|-1
+body fn 21694-22050	known p grows|1|-|-|..chars|6|0|compiler/lsp|21811|21816|-1
+body fn 22073-24733	known p
+body fn 24955-25912	known p grows|6|-|-|..starts|7|0|compiler/lsp|25618|25625|-1
+body fn 25997-26100	known p
+body fn 26167-26281	known p
+body fn 26283-26400	known p
+body fn 26402-26657	known p
+body fn 26659-26945	known p
+body fn 2676-4087	known p
+body fn 27053-27527	known p
+body fn 27605-27971	known p
+body fn 28321-28444	known p
+body fn 28482-28572	known p
+body fn 28620-29067	known p,0
+body fn 4089-4159	known p
+body fn 4191-5876	known p grows|0|-|-|..W.From.buf|11|0|compiler/lsp|4703|4708|-1 grows|0|-|-|..Docs|5|0|compiler/lsp|4989|4995|-1 grows|0|-|-|..Pending|8|0|compiler/lsp|4989|4995|-1 grows|0|-|-|..Waiting|8|0|compiler/lsp|5775|5778|-1
+body fn 6091-6863	known p
+body fn 6888-7048	known p
+body fn 7050-7811	known p grows|0|-|-|..Docs|5|0|compiler/lsp|7511|7515|-1 grows|0|-|-|..Pending|8|0|compiler/lsp|7793|7800|-1 keeps|1|-|-|.|0|0|compiler/lsp|7076|7076|0
+body fn 7813-7980	known p grows|0|-|-|..Docs|5|0|compiler/lsp|7917|7923|-1 grows|0|-|-|..Pending|8|0|compiler/lsp|7917|7923|-1 keeps|1|-|-|.|0|0|compiler/lsp|7840|7840|0
+body fn 7982-8106	known p grows|0|-|-|..Pending|8|0|compiler/lsp|8098|8101|-1
+body fn 8108-8517	known p
+body fn 8672-8901	known p grows|0|-|-|..Pending|8|0|compiler/lsp|8729|8739|-1
+body fn 8903-9101	known p grows|0|-|-|..Pending|8|0|compiler/lsp|9059|9065|-1
+body fn 9194-10007	known p
+body global DeprecatedSrc	known p
+body global ExamplesSrc	known p
+body global Requests	known p
+body global SessionSrc	known p
+body global SettleNs	known p
+body global StuckNs	known p
+baked DeprecatedSrc [8 7f000000000000000000000000000000 @8>1+0][64c 2320446570726563617465643a20757365204e65770a666e204f6c64282920493634207b2072657475726e2031207d0a666e204e6577282920493634207b2072657475726e2032207d0a666e206d61696e2829207b0a2020202078203a3d204f6c642829202b204e657728290a202020206173736572742078203e20300a7d]
+baked ExamplesSrc [8 a9000000000000000000000000000000 @8>1+0][64c 666e205477696365286e204936342920493634207b2072657475726e206e202a2032207d0a746573742054776963652022646f75626c657322207b20617373657274205477696365283229203d3d2034207d0a746573742054776963652022646f75626c65732061206e6567617469766522207b20617373657274205477696365282d3329203d3d202d36207d0a666e206d61696e2829207b2078203a3d205477696365283129207d]
+baked Requests [64 12000000000000000000000000000000170000000000000000000000000000001b0000000000000000000000000000001700000000000000000000000000000017000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0][8c 74657874446f63756d656e742f686f766572][8c 74657874446f63756d656e742f646566696e6974696f6e][8c 74657874446f63756d656e742f646f63756d656e7453796d626f6c][8c 74657874446f63756d656e742f636f6d706c6574696f6e][8c 74657874446f63756d656e742f666f726d617474696e67]
+baked SessionSrc [8 f4000000000000000000000000000000 @8>1+0][64c 696d706f727420227374642f696f220a0a23206120706f696e74206f6e206120706c616e650a7479706520506f696e74207374727563742858204936342c20592049363429207b0a20202020580a20202020590a7d0a0a23207468652073756d206f66206120706f696e74277320636f6f7264696e617465730a666e2073756d287020506f696e742920493634207b0a2020202072657475726e20702e582b702e590a7d0a0a666e206d61696e2829207b0a2020202071203a3d20506f696e7428312c2032290a20202020696f2e5072696e746c6e282473756d28712929210a2020202062616420493332203d202278220a7d0a]
+baked SettleNs [8 005a620200000000]
+baked StuckNs [8 005847f80d000000]
+sig PathOf@27053 fn&(String&) String
+sig Run@14837 fn&(mut worker&)
+sig Serve@2676 fn&(mut Config&) I32
+sig UriOf@27605 fn&(String&) String
+sig addPending@8903 fn&(mut Server&, I64)
+sig analysis@14484 fn&(mut worker&, I64, mut Diagnostics&) mut Analysis&
+sig answer@22073 fn&(mut worker&, String&)
+sig ask@11417 fn&(mut Server&, String&, String&)
+sig changed@7813 fn&(mut Server&, String&, String&)
+sig check@15434 fn&(mut worker&, I64)
+sig closeWorker@10336 fn&(mut Server&)
+sig closed@8108 fn&(mut Server&, String&)
+sig compilerUnderTest@28321 fn&() String
+sig complete@24955 fn&(mut worker&, String&, Doc&, String&, I64, mut Config&, mut Diagnostics&)
+sig deprecations@18733 fn&(worker&, mut StringBuilder&, Analysis&, String&)
+sig diagnostic@20481 fn&(mut worker&, mut StringBuilder&, Analysis&, mut Diagnostics&, Vec<Item>&, I64, String&)
+sig drain@13535 fn&(mut Server&)
+sig due@8672 fn&(mut Server&, I64)
+sig errorReply@26402 fn&(String&, I64, String&) String
+sig framed@28482 fn&(String&) String
+sig frames@28620 fn&(String&) Vec<String&>&
+sig fromWorker@11781 fn&(mut Server&)
+sig handle@4191 fn&(mut Server&, String&)
+sig idOf@26167 fn&(Json&) String
+sig initialize@6091 fn&(mut Server&, Json&, String&)
+sig lostDiagnostic@10987 fn&(String&) String
+sig note@12834 fn&(mut Server&, String&)
+sig opened@7050 fn&(mut Server&, String&, String&)
+sig publish@26659 fn&(String&, String&) String
+sig publishAll@16973 fn&(mut worker&, I64, Analysis&, mut Diagnostics&, Vec<String&>&) Vec<String&>
+sig rangeOf@21694 fn&(worker&, mut StringBuilder&, Positions&, Item&)
+sig reply@26283 fn&(String&, String&) String
+sig send@15174 fn&(mut worker&, String&)
+sig send@4089 fn&(mut Server&, String&)
+sig setText@7982 fn&(mut Server&, I64, String&)
+sig slotOf@6888 fn&(Server&, String&) I64
+sig slotPending@19655 fn&(worker&, String&) Bool
+sig startWorker@9194 fn&(mut Server&)
+sig stopWorker@10112 fn&(mut Server&)
+sig str@25997 fn&(Json&, String&) String&
+sig textOf@20134 fn&(worker&, Analysis&, String&) String
+sig uriOf@19892 fn&(worker&, String&) String
+sig workerLost@10618 fn&(mut Server&, String&)
+end
+sum 6026896c60b740cb82c7e269b94f85178bd899d758d98f2297411d3827eb4e02

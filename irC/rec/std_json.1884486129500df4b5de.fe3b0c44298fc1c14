@@ -1,0 +1,104 @@
+olang front record
+body contract 32331-32345 0	known p
+body fn 10660-12131	known p
+body fn 12223-12670	known p
+body fn 12788-13877	known p
+body fn 14167-14282	known p
+body fn 15133-15272	known p
+body fn 15355-15588	known p
+body fn 15590-15823	known p keeps|1|-|-|.|0|0|std/json|15614|15614|0
+body fn 15825-16069	known p keeps|1|-|-|.|0|0|std/json|15853|15853|0
+body fn 16071-16603	known p
+body fn 16697-17304	known p
+body fn 17306-17371	known p
+body fn 17592-17795	known p
+body fn 17920-18119	known p
+body fn 18121-18193	known p
+body fn 18345-19943	known p
+body fn 19992-20406	known p
+body fn 20462-21011	known p
+body fn 21013-21268	known p
+body fn 21395-22608	known p
+body fn 22815-24277	known p
+body fn 24371-24989	known p
+body fn 25086-25874	known p
+body fn 26045-26889	known p
+body fn 27335-28650	known p
+body fn 28652-28736	known p
+body fn 28959-29579	known p
+body fn 29785-29845	known p grows|0|-|-|..chars|6|0|std/json|29835|29839|-1
+body fn 32769-32936	known p
+body fn 32938-33880	known p grows|0|-|-|..chars|6|0|std/json|33040|33044|-1
+body fn 40944-40990	known p
+body fn 41201-41355	known p grows|0|-|-|..out.chars|10|0|std/json|41289|41297|-1
+body fn 41357-42951	known p grows|0|-|-|..out.chars|10|0|std/json|41449|41453|-1
+body fn 47137-47215	known p grows|0|-|-|..out.chars|10|0|std/json|47172|47176|-1
+body fn 47502-48250	known p grows|0|-|-|..out.chars|10|0|std/json|47549|47557|-1
+body fn 5610-5747	known p
+body fn 5749-5801	known p
+body fn 5923-6145	known p
+body fn 6302-6451	known p
+body fn 6548-6665	known p
+body fn 6804-7340	known p
+body fn 7342-7480	known p
+body fn 7546-7685	known p,0
+body fn 7773-7926	known p,0
+body fn 7991-8130	known p,0
+body fn 8158-8206	known p
+body fn 8315-8435	known p
+body fn 8482-8581	known p
+body fn 9901-10355	known p
+body global MaxDepth	known p
+body global hexDigits	known p
+baked MaxDepth [8 e803000000000000]
+baked hexDigits [8 10000000000000000000000000000000 @8>1+0][8 30313233343536373839616263646566]
+sig AsArr@7773 fn&(Json&) Array<Json&>& ? Error
+sig AsBool@7342 fn&(Json&) Bool ? Error
+sig AsInt@6302 fn&(Json&) I64 ? Error
+sig AsNum@5923 fn&(Json&) F64 ? Error
+sig AsObj@7991 fn&(Json&) Object& ? Error
+sig AsStr@7546 fn&(Json&) String& ? Error
+sig AsUint@6548 fn&(Json&) U64 ? Error
+sig At@8315 fn&(Object&, String&) Json& ? Error
+sig Eq@10660 fn&(Json&, Json&) Bool
+sig Has@5610 fn&(Json&, String&) Bool
+sig Has@8482 fn&(Object&, String&) Bool
+sig Hash@12788 fn&(Json&) I64
+sig IsNull@5749 fn&(Json&) Bool
+sig Json.Parse@14167 fn&(String&) Json& ? Error
+sig KeyOf@32769 fn&(String&, Naming) String
+sig Len@8158 fn&(Object&) I64
+sig Str@40944 fn&(Json&) String
+sig close@16697 fn&(mut reader&)
+sig col@15355 fn&(reader&) I64
+sig colon@47137 fn&(mut writer&)
+sig digitAt@28652 fn&(reader&, I64) Bool
+sig escape@22815 fn&(mut reader&, I64, mut Array<Char>&) I64 ? Error
+sig exact@28959 fn&(reader&, I64, F64) mut Json&
+sig hex4@24371 fn&(mut reader&, I64) I64 ? Error
+sig inObject@18121 fn&(reader&) Bool
+sig keyInto@32938 fn&(mut StringBuilder&, String&, Naming)
+sig line@15133 fn&(reader&) I64
+sig name@19992 fn&(mut reader&) ? Error
+sig nameIndex@9901 fn&(Array<String&>&) Array<I32>&
+sig newline@41201 fn&(mut writer&, I64)
+sig numEq@12223 fn&(Json&, Json&) Bool
+sig number@27335 fn&(mut reader&) F64 ? Error
+sig open@16071 fn&(mut reader&, Bool) ? Error
+sig plainEnd@17920 fn&(String&, I64) I64
+sig push@15590 fn&(mut reader&, mut Json&)
+sig pushName@15825 fn&(mut reader&, String&)
+sig putUtf8@25086 fn&(I64, I64, mut Array<Char>&) I64
+sig run@18345 fn&(mut reader&) ? Error
+sig scalar@20462 fn&(mut reader&, Char) ? Error
+sig skipSpace@17306 fn&(mut reader&)
+sig spaceEnd@17592 fn&(String&, I64) I64
+sig string@21395 fn&(mut reader&) String& ? Error
+sig text@47502 fn&(mut writer&, String&)
+sig utf8@26045 fn&(reader&) I64 ? Error
+sig value@41357 fn&(mut writer&, Json&, I64)
+sig whole@6804 fn&(Json&) I128 ? Error
+sig word@21013 fn&(mut reader&, String&) ? Error
+sig writeNumber@29785 fn&(mut StringBuilder&, F64)
+end
+sum a42fbcd54d95e0d445590bc4ca0bdb42c2ee70095b4a8bd047e42b071a6fb0cd

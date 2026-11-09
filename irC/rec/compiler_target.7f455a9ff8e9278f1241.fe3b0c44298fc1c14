@@ -1,0 +1,76 @@
+olang front record
+body ctor 0-0	known p
+body fn 11349-11464	known p grows|0|-|-|..records|8|0|compiler/target|11413|11418|-1 grows|0|-|-|..notes|6|0|compiler/target|11413|11418|-1 keeps|1|-|-|.|0|0|compiler/target|11384|11384|0
+body fn 11842-13927	known p keeps|1|-|-|.|0|0|compiler/target|11871|11871|0
+body fn 13969-14144	known p,0
+body fn 14205-14307	known p,0
+body fn 14375-14565	known p
+body fn 14629-15025	known p
+body fn 15128-15589	known p
+body fn 16406-17195	known p
+body fn 17197-17399	known p
+body fn 17585-18117	known p
+body fn 18200-18407	known p
+body fn 18536-18850	known p
+body fn 19183-19421	known p
+body fn 19655-20362	known p
+body fn 20825-20887	known p
+body fn 21743-21955	known p
+body fn 23043-23282	known p
+body fn 2590-2696	known p
+body fn 2841-3010	known p
+body fn 3065-3253	known p
+body fn 3591-4090	known p
+body fn 4323-4379	known p
+body fn 4401-4440	known p
+body fn 4531-4594	known p
+body fn 4734-5161	known p
+body fn 5419-5494	known p
+body fn 5853-6774	known p
+body fn 7276-7526	known p,0 grows|3|-|-|..records|8|0|compiler/target|7447|7453|-1 grows|3|-|-|..notes|6|0|compiler/target|7447|7453|-1
+body fn 7579-11347	known p,0 grows|5|-|-|..records|8|0|compiler/target|8462|8468|-1 grows|5|-|-|..notes|6|0|compiler/target|8462|8468|-1
+body global ArchCpuFlags	known p
+body global ArchDefaultCpus	known p
+body global Archs	known p
+body global Clangs	known p
+body global IeeeUnsafe	known p
+body global LevelFlags	known p
+body global SkylakeProbe	known p
+baked ArchCpuFlags [32 0700000000000000000000000000000006000000000000000000000000000000 @8>1+0 @24>2+0][8c 2d6d617263683d][8c 2d6d6370753d]
+baked ArchDefaultCpus [32 0600000000000000000000000000000007000000000000000000000000000000 @8>1+0 @24>2+0][8c 7838362d3634][8c 67656e65726963]
+baked Archs [32 0600000000000000000000000000000007000000000000000000000000000000 @8>1+0 @24>2+0][8c 7838365f3634][8c 61617263683634]
+baked Clangs [64 08000000000000000000000000000000080000000000000000000000000000000800000000000000000000000000000005000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0][8c 636c616e672d3230][8c 636c616e672d3139][8c 636c616e672d3138][8c 636c616e67]
+baked IeeeUnsafe [32 0a0000000000000000000000000000000c000000000000000000000000000000 @8>1+0 @24>2+0][8c 61767835313262663136][8c 6176786e65636f6e76657274]
+baked LevelFlags [32 270000000000000000000000000000002b0000000000000000000000000000002b000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0][32c 63783136206c6168665f6c6d20706f70636e7420737365345f3120737365345f32207373736533][32c 617678206176783220626d693120626d6932206631366320666d612061626d206d6f766265207873617665][32c 6176783531326620617678353132627720617678353132636420617678353132647120617678353132766c]
+baked SkylakeProbe [8 2c010000000000000000000000000000 @8>1+0][64 74617267657420646174616c61796f7574203d2022652d6d3a652d703237303a33323a33322d703237313a33323a33322d703237323a36343a36342d6936343a36342d693132383a3132382d6638303a3132382d6e383a31363a33323a36342d53313238220a74617267657420747269706c65203d20227838365f36342d70632d6c696e75782d676e75220a61747472696275746573202330203d207b206e6f696e6c696e65206e6f756e77696e6420227461726765742d637075223d22736b796c616b652d6176783531322220227461726765742d6665617475726573223d222b6176782c2b617678353132626631362c2b617678353132662c2b666d612c2d6176786e65636f6e766572742c2b7373653222202274756e652d637075223d2267656e6572696322207d0a]
+sig ClangSays@16406 fn&(Array<String&>&, String&, Bool) Output ? Error
+sig FindClang@3591 fn&() String
+sig FromProbe@11842 fn&(mut Target&, String&) ? Probe
+sig HasFeature@14375 fn&(String&, String&) Bool
+sig Host@2841 fn&() String, String
+sig Pid@4401 fn&() I32
+sig Runner@5853 fn&(Target&) Array<String&> ? Bad
+sig StripUnsafe@14629 fn&(String&) String
+sig Sysroot@5419 fn&() String
+sig Target.Resolve@7276 fn&(String&, String&, Bool, mut Diagnostics&, String&) Target ? Bad
+sig Target.ResolveOn@7579 fn&(String&, String&, Bool, String&, String&, mut Diagnostics&, String&) Target ? Bad
+sig WhereIs@4323 fn&(String&) String
+sig X86Level@19183 fn&(String&) I64
+sig archIndex@2590 fn&(String&) I64
+sig attrValue@14205 fn&(String&, String&) String& ? ? TextError.NotFound
+sig cField@3065 fn&(Array<U8>&) String
+sig canCompileBf16@15128 fn&(String&, String&) Bool
+sig cpuFlags@18536 fn&() String
+sig cpuModel@18200 fn&() String
+sig executable@4531 fn&(String&) Bool
+sig field@13969 fn&(String&, String&) String& ? ? TextError.NotFound
+sig mistake@23043 fn&(String&, String&, Bool, String&, String&) String
+sig probeDir@17197 fn&() String
+sig probeKey@17585 fn&(Array<String&>&, String&) String
+sig probeOutcome@21743 fn&(String&) String
+sig quiet@20825 fn&() Diagnostics
+sig refuse@11349 fn&(mut Diagnostics&, Msg) ? Bad
+sig whereIs@4734 fn&(String&) String
+sig withoutClang@19655 fn&(mut Target&, String&, String&) Bool
+end
+sum c4bc1dda4ef35c3d1eb83e7e3ced1691b9284c14da328a472ce1b5cfa635636d

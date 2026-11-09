@@ -1,0 +1,8 @@
+olang front record
+body ctor 0-0	known p
+body global sortBlock	known p
+body global sortRun	known p
+baked sortBlock [8 0030000000000000]
+baked sortRun [8 1800000000000000]
+end
+sum 4854605fbb71747cc34b82f20a97413a8ceb052e810c7e2fa9e876a750c119b7

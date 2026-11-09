@@ -1,0 +1,162 @@
+olang front record
+body fn 10149-10265	known p
+body fn 10403-10501	known p grows|0|-|-|..contexts|9|0|compiler/diag|10476|10480|-1 keeps|2|-|-|.|0|0|compiler/diag|10449|10449|0
+body fn 10503-10574	known p
+body fn 10774-10884	known p
+body fn 10886-10952	known p
+body fn 10954-11018	known p
+body fn 11162-11555	known p
+body fn 11738-11938	known p
+body fn 12168-12381	known p
+body fn 12537-12804	known p
+body fn 12911-13033	known p
+body fn 13107-13348	known p
+body fn 13366-13435	known p
+body fn 13553-13624	known p
+body fn 13626-13901	known p
+body fn 14150-14386	known p grows|0|-|-|..groupParent|12|0|compiler/diag|14276|14280|-1 grows|0|-|-|..groupState|11|0|compiler/diag|14306|14310|-1 grows|0|-|-|..held|5|0|compiler/diag|14364|14368|-1
+body fn 14419-14483	known p
+body fn 14577-14635	known p
+body fn 14709-14782	known p
+body fn 14932-15582	known p
+body fn 16011-16425	known p
+body fn 16427-16718	known p grows|0|-|-|..records|8|0|compiler/diag|16533|16537|-1 grows|0|-|-|..notes|6|0|compiler/diag|16574|16578|-1 grows|0|-|-|..yielding|9|0|compiler/diag|16652|16656|-1 grows|0|-|-|..alone|6|0|compiler/diag|16700|16704|-1
+body fn 16720-16772	known p
+body fn 16859-17172	known p
+body fn 17344-17400	known p grows|0|-|-|..held|5|0|compiler/diag|17391|17395|-1
+body fn 17578-17782	known p grows|0|-|-|..records|8|0|compiler/diag|17707|17713|-1 grows|0|-|-|..notes|6|0|compiler/diag|17707|17713|-1 grows|0|-|-|..held|5|0|compiler/diag|17756|17760|-1 keeps|2|-|-|.|0|0|compiler/diag|17624|17624|0
+body fn 17851-17917	known p
+body fn 17996-18061	known p
+body fn 18166-18272	known p
+body fn 18381-18444	known p
+body fn 18502-18651	known p
+body fn 18785-18894	known p
+body fn 18989-19106	known p
+body fn 19203-19402	known p
+body fn 19490-19673	known p
+body fn 19823-19972	known p
+body fn 19974-20083	known p
+body fn 20138-20342	known p
+body fn 20636-23135	known p grows|0|-|-|..starts|7|0|compiler/diag|21143|21149|-1
+body fn 23451-23918	known p grows|0|-|-|..starts|7|0|compiler/diag|23528|23535|-1
+body fn 24374-24755	known p,1,3
+body fn 24856-25245	known p,0 grows|0|-|-|..starts|7|0|compiler/diag|24931|24938|-1
+body fn 25284-25373	known p grows|0|-|-|..starts|7|0|compiler/diag|25332|25339|-1
+body fn 25447-25501	known p
+body fn 25617-26089	known p grows|0|-|-|..starts|7|0|compiler/diag|25699|25706|-1
+body fn 26171-26421	known p grows|0|-|-|..starts|7|0|compiler/diag|26225|26231|-1
+body fn 26507-26719	known p grows|0|-|-|..starts|7|0|compiler/diag|26592|26603|-1
+body fn 26749-26939	known p
+body fn 27035-27363	known p grows|1|-|-|..chars|6|0|compiler/diag|27148|27159|-1 grows|0|-|-|..starts|7|0|compiler/diag|27148|27159|-1
+body fn 27462-27913	known p grows|1|-|-|..chars|6|0|compiler/diag|27538|27542|-1 grows|0|-|-|..starts|7|0|compiler/diag|27786|27792|-1
+body fn 28072-28193	known p
+body fn 28285-28350	known p
+body fn 28636-30169	known p grows|0|-|-|..starts|7|0|compiler/diag|28940|28946|-1 grows|1|-|-|..chars|6|0|compiler/diag|29569|29573|-1
+body fn 30319-30516	known p
+body fn 30599-30723	known p
+body fn 30829-31245	known p,0
+body fn 31646-33144	known p
+body fn 3933-4175	known p grows|0|-|-|..paths|6|0|compiler/diag|4033|4037|-1 grows|0|-|-|..texts|6|0|compiler/diag|4056|4060|-1 grows|0|-|-|..library|8|0|compiler/diag|4081|4085|-1 grows|0|-|-|..startsFrom|11|0|compiler/diag|4112|4116|-1 grows|0|-|-|..startsLen|10|0|compiler/diag|4137|4141|-1 keeps|1|-|-|.|0|0|compiler/diag|3965|3965|0 keeps|2|-|-|.|0|0|compiler/diag|3979|3979|0
+body fn 4259-4871	known p grows|0|-|-|..starts|7|0|compiler/diag|4477|4481|-1
+body fn 4912-5028	known p
+body fn 5106-5266	known p grows|0|-|-|..starts|7|0|compiler/diag|5232|5238|-1
+body fn 5333-5506	known p grows|0|-|-|..starts|7|0|compiler/diag|5462|5468|-1
+body fn 5576-5787	known p grows|0|-|-|..starts|7|0|compiler/diag|5711|5717|-1
+body fn 6003-6095	known p grows|0|-|-|..records|8|0|compiler/diag|6073|6079|-1 grows|0|-|-|..notes|6|0|compiler/diag|6073|6079|-1 keeps|2|-|-|.|0|0|compiler/diag|6043|6043|0
+body fn 6212-6314	known p grows|0|-|-|..records|8|0|compiler/diag|6293|6299|-1 grows|0|-|-|..notes|6|0|compiler/diag|6293|6299|-1 keeps|2|-|-|.|0|0|compiler/diag|6263|6263|0
+body fn 6316-7835	known p grows|0|-|-|..records|8|0|compiler/diag|6872|6876|-1 grows|0|-|-|..notes|6|0|compiler/diag|7029|7033|-1 keeps|2|-|-|.|0|0|compiler/diag|6357|6357|0
+body fn 8233-8357	known p grows|0|-|-|..records|8|0|compiler/diag|8310|8315|-1 grows|0|-|-|..notes|6|0|compiler/diag|8310|8315|-1 grows|0|-|-|..alone|6|0|compiler/diag|8335|8339|-1 keeps|2|-|-|.|0|0|compiler/diag|8278|8278|0
+body fn 8359-8624	known p grows|0|-|-|..records|8|0|compiler/diag|8537|8541|-1 keeps|2|-|-|.|0|0|compiler/diag|8403|8403|0
+body fn 8704-8836	known p grows|0|-|-|..notes|6|0|compiler/diag|8807|8811|-1 keeps|3|-|-|.|0|0|compiler/diag|8752|8752|0
+body fn 9064-9147	known p grows|0|-|-|..yielding|9|0|compiler/diag|9134|9138|-1
+body fn 9260-9406	known p keeps|2|-|-|.|0|0|compiler/diag|9300|9300|0
+body fn 9608-9786	known p
+body fn 9968-10147	known p
+body global Chosen	known p
+body global Cut	known p
+body global Dropped	known p
+body global ExcerptAround	known p
+body global ExcerptMax	known p
+body global Pending	known p
+body lambda 22907-23115	known p
+baked Chosen [8 0100000000000000]
+baked Cut [8 0300000000000000]
+baked Dropped [8 0200000000000000]
+baked ExcerptAround [8 4600000000000000]
+baked ExcerptMax [8 a000000000000000]
+baked Pending [8 0000000000000000]
+sig AddFile@3933 fn&(mut Diagnostics&, String&, String&, Bool) I64
+sig AllSaid@23451 fn&(mut Diagnostics&) Vec<Said>
+sig Choose@17851 fn&(mut Diagnostics&, I64)
+sig ChooseAll@18166 fn&(mut Diagnostics&)
+sig ColorWanted@19823 fn&() Bool
+sig ColumnAt@5333 fn&(mut Diagnostics&, I64, I64) I64
+sig ContextBase@10774 fn&(mut Diagnostics&, I64) I64
+sig ContextDepth@10886 fn&(Diagnostics&) I64
+sig Count@14577 fn&(Diagnostics&) I64
+sig Count@16720 fn&(Taken&) I64
+sig CutOff@18381 fn&(mut Diagnostics&, I64)
+sig Drop@17996 fn&(mut Diagnostics&, I64)
+sig EndHold@14419 fn&(mut Diagnostics&)
+sig Error@6003 fn&(mut Diagnostics&, Where, Msg) I64
+sig ErrorAlone@8233 fn&(mut Diagnostics&, Where, Msg) I64
+sig ErrorBare@8359 fn&(mut Diagnostics&, Where, Msg) I64
+sig ErrorBefore@11738 fn&(Diagnostics&, I64) Bool
+sig ErrorOncePerLine@6212 fn&(mut Diagnostics&, Where, Msg) I64
+sig ErrorUnheld@17578 fn&(mut Diagnostics&, Where, Msg) I64
+sig ErrorWithin@11162 fn&(Diagnostics&, I64, I64, I64, I64) Bool
+sig Errors@25284 fn&(mut Diagnostics&) I64
+sig Explain@31646 fn&(String&, String&) String ? ? RuleError.NotFound
+sig Fatal@9260 fn&(mut Diagnostics&, Where, Msg)
+sig Firm@14709 fn&(Diagnostics&) I64
+sig Forget@14932 fn&(mut Diagnostics&, I64)
+sig HasFatal@25447 fn&(Diagnostics&) Bool
+sig Hold@14150 fn&(mut Diagnostics&) I64
+sig Holds@19203 fn&(Diagnostics&, I64) Bool
+sig IsCut@18785 fn&(Diagnostics&, I64) Bool
+sig IsDropped@18502 fn&(Diagnostics&, I64) Bool
+sig IsLibrary@13553 fn&(Diagnostics&, Where) Bool
+sig IsPending@18989 fn&(Diagnostics&, I64) Bool
+sig Item.item@24374 fn&(Bool, String&, Where, String&) Item
+sig Items@24856 fn&(mut Diagnostics&) Vec<Item>
+sig LineAt@5106 fn&(mut Diagnostics&, I64, I64) I64
+sig Locate@5576 fn&(mut Diagnostics&, I64, I64) String
+sig Note@8704 fn&(mut Diagnostics&, I64, Where, Msg)
+sig PathOf@4912 fn&(Diagnostics&, I64) String
+sig PopContext@10503 fn&(mut Diagnostics&)
+sig PushContext@10403 fn&(mut Diagnostics&, Where, String&)
+sig RecordCount@10954 fn&(Diagnostics&) I64
+sig Render@25617 fn&(mut Diagnostics&) String
+sig Reopen@17344 fn&(mut Diagnostics&, I64)
+sig Replay@16427 fn&(mut Diagnostics&, Taken&)
+sig Same@16859 fn&(Taken&, Taken&) Bool
+sig ScopeGroupEnd@10149 fn&(mut Diagnostics&, I64)
+sig ScopeGroupStart@9968 fn&(mut Diagnostics&) I64
+sig Since@16011 fn&(Diagnostics&, I64) Taken
+sig SpecPath@30319 fn&() String&
+sig Summary@26171 fn&(mut Diagnostics&) String
+sig TextOf@13366 fn&(Diagnostics&, I64) String&
+sig TopContext@13107 fn&(Diagnostics&) Where, String
+sig Usage@26507 fn&(mut Diagnostics&, Msg) String
+sig UseOf@12911 fn&(Diagnostics&, Where) Where
+sig Yield@9064 fn&(mut Diagnostics&, I64)
+sig chosen@19490 fn&(Diagnostics&, I64) Bool
+sig continues@28285 fn&(Char) Bool
+sig errorWord@26749 fn&(Diagnostics&, String&) String
+sig isLibrary@13626 fn&(Diagnostics&, Where) Bool
+sig isScopeRule@9608 fn&(String&) Bool
+sig lineOf@4259 fn&(mut Diagnostics&, I64, I64) I64, I64
+sig mayReport@12168 fn&(Diagnostics&, I64) Bool
+sig printable@28072 fn&(Char) Char
+sig programUse@12537 fn&(Diagnostics&, Where) I64
+sig putExcerpt@28636 fn&(mut Diagnostics&, mut StringBuilder&, Where)
+sig putLocation@27462 fn&(mut Diagnostics&, mut StringBuilder&, Where)
+sig putRow@27035 fn&(mut Diagnostics&, mut StringBuilder&, Where, String&, String&, String&)
+sig report@6316 fn&(mut Diagnostics&, Where, Msg, Bool) I64
+sig ruleIdAt@30829 fn&(String&) String&
+sig section@30599 fn&() String
+sig sgr@20138 fn&(Diagnostics&, String&) String
+sig termAllowsColor@19974 fn&() Bool
+sig written@20636 fn&(mut Diagnostics&) Array<I64>
+end
+sum f172dc82e952b9a5a4d7544f73b89f5d3a54460db455412c08bee3fa1842f9bb

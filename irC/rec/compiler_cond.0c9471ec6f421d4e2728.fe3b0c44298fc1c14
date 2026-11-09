@@ -1,0 +1,121 @@
+olang front record
+body fn 10507-10653	known p
+body fn 11758-11886	known p grows|0|-|-|..globals|8|0|compiler/cond|11877|11881|-1 keeps|1|-|-|.|0|0|compiler/cond|11780|11780|0
+body fn 11888-12027	known p
+body fn 12956-13048	known p grows|0|-|-|..texts|6|0|compiler/cond|13010|13014|-1 keeps|1|-|-|.|0|0|compiler/cond|12981|12981|0
+body fn 13117-13316	known p grows|0|-|-|..texts|6|0|compiler/cond|13270|13277|-1
+body fn 13318-13406	known p
+body fn 13513-14089	known p
+body fn 14091-14268	known p keeps|2|-|-|.|0|0|compiler/cond|14129|14129|0
+body fn 14382-14568	known p
+body fn 14673-14873	known p keeps|2|-|-|.|0|0|compiler/cond|14719|14719|0
+body fn 15046-15117	known p
+body fn 15215-15540	known p grows|0|-|-|..texts|6|0|compiler/cond|15271|15275|-1
+body fn 15765-16228	known p grows|0|-|-|..texts|6|0|compiler/cond|15823|15827|-1
+body fn 16230-16400	known p
+body fn 16539-17967	known p
+body fn 1699-1774	known p
+body fn 1775-1868	known p
+body fn 17969-18108	known p
+body fn 18152-18684	known p
+body fn 18686-19080	known p grows|0|-|-|..texts|6|0|compiler/cond|18786|18793|-1
+body fn 19082-20152	known p grows|0|-|-|..texts|6|0|compiler/cond|20065|20072|-1
+body fn 20154-20286	known p
+body fn 20288-20965	known p grows|0|-|-|..texts|6|0|compiler/cond|20689|20695|-1
+body fn 21039-21302	known p
+body fn 21405-22384	known p
+body fn 22419-22514	known p
+body fn 22516-24961	known p grows|0|-|-|..texts|6|0|compiler/cond|23039|23051|-1
+body fn 25037-25289	known p grows|0|-|-|..texts|6|0|compiler/cond|25224|25234|-1
+body fn 2529-2750	known p grows|0|-|-|..names|6|0|compiler/cond|2625|2629|-1 grows|0|-|-|..values|7|0|compiler/cond|2649|2653|-1 grows|0|-|-|..builtin|8|0|compiler/cond|2671|2675|-1 grows|0|-|-|..big|4|0|compiler/cond|2695|2699|-1 grows|0|-|-|..known|6|0|compiler/cond|2717|2721|-1 grows|0|-|-|..raws|5|0|compiler/cond|2740|2744|-1 keeps|1|-|-|.|0|0|compiler/cond|2552|2552|0
+body fn 25380-26194	known p
+body fn 26196-26417	known p
+body fn 26419-26850	known p
+body fn 26960-27205	known p
+body fn 27325-27492	known p
+body fn 2752-2843	known p grows|0|-|-|..Texts|6|0|compiler/cond|2805|2809|-1 keeps|1|-|-|.|0|0|compiler/cond|2776|2776|0
+body fn 27632-28543	known p
+body fn 28716-28865	known p
+body fn 28867-28955	known p
+body fn 28957-29893	known p grows|0|-|-|..texts|6|0|compiler/cond|29155|29159|-1
+body fn 29895-30541	known p grows|0|-|-|..texts|6|0|compiler/cond|30086|30091|-1
+body fn 3005-3155	known p
+body fn 30729-31433	known p grows|0|-|-|..texts|6|0|compiler/cond|30829|30833|-1
+body fn 31435-33685	known p
+body fn 3225-3314	known p
+body fn 3315-3440	known p
+body fn 33739-35475	known p
+body fn 3541-3668	known p
+body fn 35526-35597	known p,0
+body fn 3769-4625	known p grows|0|-|-|..Texts|6|0|compiler/cond|3987|3991|-1 grows|0|-|-|..names|6|0|compiler/cond|3939|3942|-1 grows|0|-|-|..values|7|0|compiler/cond|3939|3942|-1 grows|0|-|-|..builtin|8|0|compiler/cond|3939|3942|-1 grows|0|-|-|..big|4|0|compiler/cond|3939|3942|-1 grows|0|-|-|..known|6|0|compiler/cond|3939|3942|-1 grows|0|-|-|..raws|5|0|compiler/cond|3939|3942|-1 keeps|1|-|-|.|0|0|compiler/cond|3797|3797|0 keeps|2|-|-|.|0|0|compiler/cond|3809|3809|0 keeps|3|-|-|.|0|0|compiler/cond|3823|3823|0
+body fn 5069-6011	known p grows|0|-|-|..Texts|6|0|compiler/cond|5301|5307|-1 grows|0|-|-|..names|6|0|compiler/cond|5301|5307|-1 grows|0|-|-|..values|7|0|compiler/cond|5301|5307|-1 grows|0|-|-|..builtin|8|0|compiler/cond|5301|5307|-1 grows|0|-|-|..big|4|0|compiler/cond|5301|5307|-1 grows|0|-|-|..known|6|0|compiler/cond|5301|5307|-1 grows|0|-|-|..raws|5|0|compiler/cond|5301|5307|-1 grows|2|-|-|..records|8|0|compiler/cond|5352|5361|-1 grows|2|-|-|..notes|6|0|compiler/cond|5352|5361|-1 keeps|1|-|-|.|0|0|compiler/cond|5095|5095|0
+body fn 6074-6190	known p grows|0|-|-|..records|8|0|compiler/cond|6141|6146|-1 grows|0|-|-|..notes|6|0|compiler/cond|6141|6146|-1 keeps|1|-|-|.|0|0|compiler/cond|6112|6112|0
+body fn 6192-6676	known p grows|0|-|-|..Texts|6|0|compiler/cond|6584|6591|-1 grows|0|-|-|..names|6|0|compiler/cond|6605|6608|-1 grows|0|-|-|..values|7|0|compiler/cond|6605|6608|-1 grows|0|-|-|..builtin|8|0|compiler/cond|6605|6608|-1 grows|0|-|-|..big|4|0|compiler/cond|6605|6608|-1 grows|0|-|-|..known|6|0|compiler/cond|6605|6608|-1 grows|0|-|-|..raws|5|0|compiler/cond|6605|6608|-1 keeps|1|-|-|.|0|0|compiler/cond|6218|6218|0
+body fn 6790-6950	known p
+body fn 7064-7396	known p
+body fn 7446-7557	known p
+body fn 7697-8275	known p
+body fn 8277-8549	known p
+body fn 8769-10505	known p grows|0|-|-|..Texts|6|0|compiler/cond|9042|9046|-1 keeps|1|-|-|.|0|0|compiler/cond|8796|8796|0
+body global LiteralIntBits	known p
+baked LiteralIntBits [8 4000000000000000]
+sig Add@11758 fn&(mut Scope&, Global&)
+sig Builtins@3769 fn&(mut Consts&, String&, String&, String&, I64, I64, Bool, Bool, Bool)
+sig Decision.undecided@15046 fn&(Outcome) Decision
+sig Define@5069 fn&(mut Consts&, String&, mut Diagnostics&) ? Bad
+sig Defined@3541 fn&(Consts&, String&) Bool
+sig Error@35526 fn&(Eval&) Span, Msg
+sig Fingerprint@7064 fn&(Consts&) String
+sig Fits@7697 fn&(Consts&, String&, String&) Bool
+sig Has@3225 fn&(Consts&, String&) Bool
+sig IsBuiltin@3315 fn&(Consts&, String&) Bool
+sig Local@15765 fn&(mut Eval&, Expr&) Decision
+sig Raw@7446 fn&(Consts&, String&) String
+sig Top@15215 fn&(mut Eval&, Expr&) Decision
+sig Value.bool@1775 fn&(Bool) Value
+sig Value.declaredKind@21405 fn&(String&) Value
+sig Value.none@1699 fn&() Value
+sig Value.shape@22419 fn&(ValueKind, I64, Bool) Value
+sig ValueOf@6790 fn&(Consts&, String&) Value ? ? missing
+sig add@2529 fn&(mut Consts&, String&, Value, Bool, Bool, Bool)
+sig addText@12956 fn&(mut Eval&, String&) I64
+sig anyLocal@17969 fn&(Eval&, Array<Expr&>&) Bool
+sig arith@31435 fn&(mut Eval&, Span, Tok, Value, Value) Value
+sig asDeclared@25380 fn&(mut Eval&, Span, Global&, Value) Value
+sig asFloat@28716 fn&(Value) F64 ? NotFloat
+sig badDefine@6074 fn&(mut Diagnostics&, Msg) ? Bad
+sig binary@29895 fn&(mut Eval&, Span, Tok, Expr&, Expr&) Value
+sig buildType@21039 fn&(Value) Bool
+sig compare@33739 fn&(mut Eval&, Span, Tok, Value, Value) Value
+sig constValue@13117 fn&(mut Eval&, I64) Value
+sig defer@14382 fn&(mut Eval&, Span) Value
+sig define@6192 fn&(mut Consts&, String&) ? DefineError
+sig definedValue@25037 fn&(mut Eval&, Span, String&) Value
+sig expr@18686 fn&(mut Eval&, Expr&) Value
+sig fail@14091 fn&(mut Eval&, Span, Msg) Value
+sig find@11888 fn&(Scope&, String&) Global& ? ? missing.Name
+sig find@3005 fn&(Consts&, String&) I64 ? ? missing.Name
+sig first@18152 fn&(Eval&, Expr&) Span
+sig fits@26960 fn&(I64, I64, Bool) Bool
+sig floatDeclared@26419 fn&(mut Eval&, Span, Value, I64) Value
+sig flows@27325 fn&(I64, Bool, I64, Bool) Bool
+sig global@22516 fn&(mut Eval&, Span, Global&) Value
+sig intDeclared@26196 fn&(mut Eval&, Span, Value, I64, Bool) Value
+sig isFixed@20154 fn&(Eval&, NameId) Bool
+sig isLocal@16230 fn&(Eval&, NameId) Bool
+sig isName@8277 fn&(String&) Bool
+sig literal@19082 fn&(mut Eval&, Span, Tok) Value
+sig literal@8769 fn&(mut Consts&, String&) Value ? DefineError
+sig logic@30729 fn&(mut Eval&, Span, Tok, Expr&, Expr&) Value
+sig meet@27632 fn&(Value, Value) Value ? NoMeet
+sig mentionsLocal@16539 fn&(Eval&, Expr?&) Bool
+sig name@20288 fn&(mut Eval&, Span, NameId) Value
+sig numeric@28867 fn&(Value) Bool
+sig runtimeValue@14673 fn&(mut Eval&, Span, Msg, Bool) Value
+sig stripped@10507 fn&(String&) String
+sig text@2752 fn&(mut Consts&, String&) I64
+sig tokText@13318 fn&(Eval&, Span) String
+sig tokenAt@13513 fn&(Eval&, I32) Span
+sig unary@28957 fn&(mut Eval&, Span, Tok, Expr&) Value
+end
+sum 9b1eacea7d44d21f6e9512313c14ebd0aef46caa60dba70532d3169b5f891162

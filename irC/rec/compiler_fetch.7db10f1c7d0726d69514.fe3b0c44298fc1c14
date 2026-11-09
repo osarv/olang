@@ -1,0 +1,35 @@
+olang front record
+body ctor 0-0	known p,0,1,2
+body fn 10009-10638	known p
+body fn 10640-11033	known p
+body fn 1942-2197	known p
+body fn 2294-2497	known p
+body fn 2499-2628	known p grows|0|-|-|..Said|5|0|compiler/fetch|2550|2554|-1 keeps|1|-|-|.|0|0|compiler/fetch|2523|2523|0
+body fn 2630-3152	known p grows|0|-|-|..keys|5|0|compiler/fetch|3111|3115|-1 grows|0|-|-|..commits|8|0|compiler/fetch|3137|3141|-1
+body fn 3294-3475	known p grows|0|-|-|..keys|5|0|compiler/fetch|3352|3356|-1 grows|0|-|-|..commits|8|0|compiler/fetch|3352|3356|-1
+body fn 3647-4577	known p grows|0|-|-|..keys|5|0|compiler/fetch|3709|3713|-1 grows|0|-|-|..commits|8|0|compiler/fetch|3709|3713|-1 keeps|2|-|-|.|0|0|compiler/fetch|3685|3685|0 keeps|1|-|-|.|0|0|compiler/fetch|3672|3672|0
+body fn 4664-4847	known p grows|0|-|-|..updated|8|0|compiler/fetch|4817|4821|-1 keeps|1|-|-|.|0|0|compiler/fetch|4695|4695|0
+body fn 4890-5025	known p
+body fn 5101-5343	known p
+body fn 5494-5681	known p
+body fn 5683-5802	known p
+body fn 5987-9647	known p grows|0|-|-|..keys|5|0|compiler/fetch|6599|6605|-1 grows|0|-|-|..commits|8|0|compiler/fetch|6599|6605|-1 grows|0|-|-|..updated|8|0|compiler/fetch|6813|6823|-1 grows|0|-|-|..Said|5|0|compiler/fetch|7298|7301|-1
+body fn 9742-9900	known p
+body lambda 4089-4143	known p
+sig CacheDir@5494 fn&() String
+sig Fetch@5987 fn&(mut Fetcher&, String&, String&, String&) String ? FetchError
+sig GitBase@5683 fn&() String
+sig IsCommit@2294 fn&(String&) Bool
+sig Locked@3294 fn&(mut Fetcher&, String&) String& ? ? unlocked.Key
+sig NamePart@1942 fn&(String&) Bool
+sig commitAgain@10640 fn&(String&, String&, String&) String
+sig git@4890 fn&(Array<String&>&) Bool
+sig head@5101 fn&(String&) String
+sig load@2630 fn&(mut Fetcher&)
+sig lock@3647 fn&(mut Fetcher&, String&, String&)
+sig makeRepo@10009 fn&(String&, String&, String&) String
+sig say@2499 fn&(mut Fetcher&, String&)
+sig sh@9742 fn&(String&, Array<String&>&) Bool
+sig updatedNow@4664 fn&(mut Fetcher&, String&, Bool) Bool
+end
+sum 6a047aef8cce586ce1b42594df5e61ab8b8ec7fc6fcbed67b7aaee46e7f62a17

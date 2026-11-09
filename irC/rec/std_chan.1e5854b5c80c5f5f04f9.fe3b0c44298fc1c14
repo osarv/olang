@@ -1,0 +1,39 @@
+olang front record
+body fn 11236-11397	known p
+body fn 12035-12348	known p
+body fn 13258-13386	known p
+body fn 13388-13542	known p
+body fn 14241-14381	known p
+body fn 16019-16134	known p
+body fn 16136-16228	known p
+body fn 16667-16758	known p
+body fn 17317-17555	known p
+body fn 19016-19084	known p
+body fn 19085-19120	known p
+body fn 21924-22034	known p
+body fn 22214-22699	known p
+body fn 22784-22984	known p
+body fn 22986-23075	known p
+body fn 23938-24036	known p
+body fn 9781-9889	known p
+body fn 9891-10017	known p
+sig Due@19085 fn&(idle&) I64
+sig TryNow@19016 fn&(mut idle&) unused ? Exhausted
+sig consume@9891 fn&(mut Chan<I32>&, I32, mut sumBox&)
+sig earliest@21924 fn&(I64, I64) I64
+sig fill@22986 fn&(mut Chan<I64>&, I64)
+sig pause@22214 fn&(I64, I64)
+sig produce@9781 fn&(mut Chan<I32>&, I32)
+sig realSleep@22784 fn&(I64)
+sig recvOrStop@12035 fn&(mut Chan<I32>&, mut Token&) I32
+sig sendCounting@14241 fn&(mut Chan<I32>&, I32, mut sumBox&)
+sig sendReadings@13258 fn&(mut Chan<reading>&, I32)
+sig sendThenClose@16019 fn&(mut Chan<I32>&, I32)
+sig sumReadings@13388 fn&(mut Chan<reading>&, I32, mut sumBox&)
+sig take@23938 fn&(mut Chan<I64>&, mut sumBox&)
+sig waitClosed@17317 fn&(mut Chan<I32>&, Token&, mut sumBox&, mut sumBox&)
+sig waitFor@11236 fn&(mut Chan<I32>&, Token&, mut sumBox&)
+sig walkCount@16667 fn&(mut Chan<I32>&, mut sumBox&)
+sig walkSum@16136 fn&(mut Chan<I32>&, mut sumBox&)
+end
+sum 4de90e2059ea603f3f2a5890e9f32a09af7d77703eca5d2b7c8bcdd627ba7da9

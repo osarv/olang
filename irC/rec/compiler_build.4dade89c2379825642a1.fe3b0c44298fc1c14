@@ -1,0 +1,145 @@
+olang front record
+body fn 10247-11244	known p,0
+body fn 11566-12467	known p,0
+body fn 12707-12883	known p
+body fn 12997-13239	known p,0
+body fn 13320-13466	known p
+body fn 14609-14672	known p
+body fn 14674-15138	known p
+body fn 15174-16247	known p
+body fn 16330-16686	known p
+body fn 16784-16938	known p
+body fn 17180-17379	known p
+body fn 17381-17631	known p
+body fn 17878-18196	known p
+body fn 18666-19435	known p
+body fn 19437-19833	known p
+body fn 20605-24052	known p grows|1|-|-|..locks|6|0|compiler/build|21780|21785|-1 grows|1|-|-|..waits|6|0|compiler/build|21810|21814|-1 grows|5|-|-|..paths|6|0|compiler/build|23278|23287|-1 grows|5|-|-|..texts|6|0|compiler/build|23278|23287|-1 grows|5|-|-|..library|8|0|compiler/build|23278|23287|-1 grows|5|-|-|..startsFrom|11|0|compiler/build|23278|23287|-1 grows|5|-|-|..startsLen|10|0|compiler/build|23278|23287|-1 grows|1|-|-|..cmds|5|0|compiler/build|23840|23844|-1 grows|1|-|-|..temps|6|0|compiler/build|23873|23877|-1 grows|1|-|-|..records|8|0|compiler/build|23897|23901|-1 grows|1|-|-|..finals|7|0|compiler/build|23948|23952|-1 grows|1|-|-|..irs|4|0|compiler/build|23969|23973|-1 grows|1|-|-|..irTemps|8|0|compiler/build|23996|24000|-1 grows|1|-|-|..sizes|6|0|compiler/build|24020|24024|-1
+body fn 2096-2181	known p
+body fn 24157-24229	known p
+body fn 24438-24935	known p grows|0|-|-|..locks|6|0|compiler/build|24771|24775|-1
+body fn 25202-25681	known p
+body fn 25739-25873	known p grows|2|-|-|..paths|6|0|compiler/build|25819|25826|-1 grows|2|-|-|..texts|6|0|compiler/build|25819|25826|-1 grows|2|-|-|..library|8|0|compiler/build|25819|25826|-1 grows|2|-|-|..startsFrom|11|0|compiler/build|25819|25826|-1 grows|2|-|-|..startsLen|10|0|compiler/build|25819|25826|-1 keeps|0|-|-|.|0|0|compiler/build|25752|25752|2 keeps|1|-|-|.|0|0|compiler/build|25766|25766|2
+body fn 26084-27599	known p grows|2|-|-|..paths|6|0|compiler/build|26405|26409|-1 grows|2|-|-|..texts|6|0|compiler/build|26405|26409|-1 grows|2|-|-|..library|8|0|compiler/build|26405|26409|-1 grows|2|-|-|..startsFrom|11|0|compiler/build|26405|26409|-1 grows|2|-|-|..startsLen|10|0|compiler/build|26405|26409|-1
+body fn 27744-29186	known p grows|2|-|-|..paths|6|0|compiler/build|28671|28680|-1 grows|2|-|-|..texts|6|0|compiler/build|28671|28680|-1 grows|2|-|-|..library|8|0|compiler/build|28671|28680|-1 grows|2|-|-|..startsFrom|11|0|compiler/build|28671|28680|-1 grows|2|-|-|..startsLen|10|0|compiler/build|28671|28680|-1
+body fn 29419-29807	known p
+body fn 30137-32409	known p
+body fn 32494-32753	known p
+body fn 32845-32920	known p
+body fn 33009-33071	known p
+body fn 33072-33138	known p
+body fn 33139-33207	known p
+body fn 33294-33390	known p grows|0|-|-|..starts|7|0|compiler/build|33345|33351|-1
+body fn 33434-33493	known p grows|0|-|-|..starts|7|0|compiler/build|33482|33488|-1
+body fn 33726-33835	known p
+body fn 33899-33928	known p
+body fn 33978-34017	known p
+body fn 34019-34208	known p grows|1|-|-|..paths|6|0|compiler/build|34132|34141|-1 grows|1|-|-|..texts|6|0|compiler/build|34132|34141|-1 grows|1|-|-|..library|8|0|compiler/build|34132|34141|-1 grows|1|-|-|..startsFrom|11|0|compiler/build|34132|34141|-1 grows|1|-|-|..startsLen|10|0|compiler/build|34132|34141|-1 keeps|0|-|-|.|0|0|compiler/build|34023|34023|1
+body fn 34306-34526	known p
+body fn 36665-37412	known p grows|4|-|-|..starts|7|0|compiler/build|37120|37126|-1 grows|4|-|-|..paths|6|0|compiler/build|37218|37227|-1 grows|4|-|-|..texts|6|0|compiler/build|37218|37227|-1 grows|4|-|-|..library|8|0|compiler/build|37218|37227|-1 grows|4|-|-|..startsFrom|11|0|compiler/build|37218|37227|-1 grows|4|-|-|..startsLen|10|0|compiler/build|37218|37227|-1
+body fn 37523-37796	known p
+body fn 40920-41454	known p
+body fn 41650-41952	known p
+body fn 42214-42790	known p grows|1|-|-|.|0|0|compiler/build|42309|42313|-1
+body fn 42939-43175	known p
+body fn 43256-43462	known p grows|3|-|-|..paths|6|0|compiler/build|43344|43353|-1 grows|3|-|-|..texts|6|0|compiler/build|43344|43353|-1 grows|3|-|-|..library|8|0|compiler/build|43344|43353|-1 grows|3|-|-|..startsFrom|11|0|compiler/build|43344|43353|-1 grows|3|-|-|..startsLen|10|0|compiler/build|43344|43353|-1 grows|3|-|-|..records|8|0|compiler/build|43344|43353|-1 grows|3|-|-|..notes|6|0|compiler/build|43344|43353|-1 grows|3|-|-|..starts|7|0|compiler/build|43376|43382|-1 keeps|1|-|-|.|0|0|compiler/build|43280|43280|3 keeps|2|-|-|.|0|0|compiler/build|43294|43294|3
+body fn 43464-43598	known p grows|2|-|-|..paths|6|0|compiler/build|43544|43551|-1 grows|2|-|-|..texts|6|0|compiler/build|43544|43551|-1 grows|2|-|-|..library|8|0|compiler/build|43544|43551|-1 grows|2|-|-|..startsFrom|11|0|compiler/build|43544|43551|-1 grows|2|-|-|..startsLen|10|0|compiler/build|43544|43551|-1 grows|2|-|-|..records|8|0|compiler/build|43568|43573|-1 grows|2|-|-|..notes|6|0|compiler/build|43568|43573|-1 keeps|0|-|-|.|0|0|compiler/build|43477|43477|2 keeps|1|-|-|.|0|0|compiler/build|43491|43491|2
+body fn 43600-43764	known p grows|2|-|-|..starts|7|0|compiler/build|43678|43684|-1
+body fn 44117-45319	known p
+body fn 45397-45504	known p
+body fn 49056-49178	known p
+body fn 49211-49439	known p grows|1|-|-|..paths|6|0|compiler/build|49365|49374|-1 grows|1|-|-|..texts|6|0|compiler/build|49365|49374|-1 grows|1|-|-|..library|8|0|compiler/build|49365|49374|-1 grows|1|-|-|..startsFrom|11|0|compiler/build|49365|49374|-1 grows|1|-|-|..startsLen|10|0|compiler/build|49365|49374|-1 keeps|0|-|-|.|0|0|compiler/build|49221|49221|1
+body fn 49665-50207	known p grows|2|-|-|..Remarks|8|0|compiler/build|50030|50034|-1 grows|2|-|-|..Parts|6|0|compiler/build|50180|50184|-1
+body fn 50551-52022	known p grows|5|-|-|..Remarks|8|0|compiler/build|51526|51535|-1 grows|5|-|-|..Parts|6|0|compiler/build|51526|51535|-1 grows|6|-|-|..paths|6|0|compiler/build|51579|51585|-1 grows|6|-|-|..texts|6|0|compiler/build|51579|51585|-1 grows|6|-|-|..library|8|0|compiler/build|51579|51585|-1 grows|6|-|-|..startsFrom|11|0|compiler/build|51579|51585|-1 grows|6|-|-|..startsLen|10|0|compiler/build|51579|51585|-1 keeps|3|-|-|.|0|0|compiler/build|50614|50614|6
+body fn 52181-53054	known p
+body fn 53276-55160	known p grows|4|-|-|..Remarks|8|0|compiler/build|53913|53922|-1 grows|4|-|-|..Parts|6|0|compiler/build|53913|53922|-1 grows|5|-|-|..paths|6|0|compiler/build|53966|53972|-1 grows|5|-|-|..texts|6|0|compiler/build|53966|53972|-1 grows|5|-|-|..library|8|0|compiler/build|53966|53972|-1 grows|5|-|-|..startsFrom|11|0|compiler/build|53966|53972|-1 grows|5|-|-|..startsLen|10|0|compiler/build|53966|53972|-1 keeps|2|-|-|.|0|0|compiler/build|53320|53320|5
+body fn 55211-55719	known p
+body fn 55740-55828	known p
+body fn 59378-60609	known p grows|4|-|-|..Units|6|0|compiler/build|59732|59736|-1
+body fn 60611-60770	known p
+body fn 60772-60925	known p
+body fn 60968-61086	known p
+body fn 8042-8319	known p
+body fn 8382-8638	known p
+body fn 8770-9101	known p
+body fn 9301-9416	known p
+body fn 9650-9986	known p,0
+body global ImportLimit	known p
+body global PhaseAt	known p
+body global RemarkPasses	known p
+body global ShaK	known p
+body global ThinFrom	known p
+body lambda 19040-19096	known p
+body lambda 49870-49962	known p
+baked ImportLimit [8 4600000000000000]
+baked PhaseAt [8 0000000000000000] mutable
+baked RemarkPasses [8 bb000000000000000000000000000000 @8>1+0][64c 5e28696e6c696e657c6c6f6f702d766563746f72697a657c736c702d766563746f72697a65727c6c6f6f702d756e726f6c6c7c6c6f6f702d756e726f6c6c2d616e642d6a616d7c6c69636d7c67766e7c6c6f6f702d6964696f6d7c6c6f6f702d64656c6574657c7461696c63616c6c656c696d7c6c6f6f702d646973747269627574657c6c6f6f702d696e7465726368616e67657c6c6f6f702d6c6f61642d656c696d7c726567616c6c6f637c70726f6c6f676570696c6f672924]
+baked ShaK [64 982f8a4291443771cffbc0b5a5dbb5e95bc25639f111f159a4823f92d55e1cab98aa07d8015b8312be853124c37d0c55745dbe72feb1de80a706dc9b74f19bc1c1699be48647beefc69dc10fcca10c246f2ce92daa84744adca9b05cda88f97652513e986dc631a8c82703b0c77f59bff30be0c64791a7d55163ca0667292914850ab72738211b2efc6d2c4d130d385354730a65bb0a6a762ec9c281852c7292a1e8bfa24b661aa8708b4bc2a3516cc719e892d1240699d685350ef470a06a1016c1a419086c371e4c774827b5bcb034b30c1c394aaad84e4fca9c5bf36f2e68ee828f746f63a5781478c8840802c78cfaffbe90eb6c50a4f7a3f9bef27871c6]
+baked ThinFrom [8 0000800000000000]
+sig Analyze@59378 fn&(mut stubFrontend&, String&, Kind, mut Config&, mut Program&, mut Diagnostics&) ? Failed
+sig CFlags@9650 fn&(Config&) Vec<String&>
+sig CompileFlags@11566 fn&(Config&, String&) Vec<String&>
+sig DataFlags@12707 fn&(Config&) Vec<String&>
+sig Explain@60772 fn&(mut stubFrontend&, String&, String&, mut Config&, mut Diagnostics&) String ? Failed
+sig Finish@33434 fn&(mut Diagnostics&) I32
+sig FnAttrs@9301 fn&(Config&) String
+sig HashOf@16784 fn&(Vec<String&>&) String
+sig Interpret@60611 fn&(mut stubFrontend&, String&, Array<String&>&, mut Config&, mut Diagnostics&) I32 ? Failed
+sig IrHash@2096 fn&(String&) String
+sig LibName@37523 fn&(String&) String
+sig Link@30137 fn&(mut Config&, Vec<String&>&, String&, Bool, Vec<String&>&, Vec<String&>?&) ? Failed
+sig ModeFlags@10247 fn&(Config&) Vec<String&>
+sig ObjectPath@17878 fn&(mut Config&, String&, UnitKind, String&, Vec<String&>&) String
+sig Objects@26084 fn&(mut Config&, Program&, mut Diagnostics&) Vec<String&> ? Failed
+sig Phase@8042 fn&(String&)
+sig Pid@33978 fn&() I32
+sig Readable@17180 fn&(String&) String
+sig RemarksOf@24157 fn&(String&) String
+sig RunAll@18666 fn&(Array<Array<String&>&>&, I64, Array<I64>&) Array<I32>, Array<String&>
+sig Shown@32845 fn&(String&) String
+sig SignalName@55211 fn&(I32) String
+sig Sum@16330 fn&(mut Sha256&) String
+sig TestFiles@44117 fn&(Config&, String&, Array<String&>&, Array<String&>&, Array<String&>&) I32
+sig TestHeader@45397 fn&(Config&, String&)
+sig Unbuildable@33726 fn&(String&)
+sig Write@14674 fn&(mut Sha256&, Array<U8>&)
+sig afresh@49211 fn&(String&, mut Diagnostics&) ? Failed
+sig bitcodeText@52181 fn&(Config&, String&, mut Diagnostics&) ? Failed
+sig claim@24438 fn&(mut compiles&, String&) Bool
+sig clangVersion@12997 fn&(mut Config&) String&
+sig closeness@41650 fn&(String&, String&) I64
+sig compile@27744 fn&(mut Config&, mut compiles&, mut Diagnostics&) ? Failed
+sig compress@15174 fn&(mut Sha256&, Array<U8>&, I64)
+sig ensureDir@34019 fn&(Config&, mut Diagnostics&) ? Failed
+sig fileError@43464 fn&(String&, Msg, mut Diagnostics&)
+sig fileFatal@25739 fn&(String&, Msg, mut Diagnostics&)
+sig finish@33294 fn&(mut Diagnostics&) I32
+sig fuzzRun@42214 fn&(Config&, mut Vec<String&>&, Program&) I32
+sig hexOf@55740 fn&(String&) String
+sig holderAlive@25202 fn&(String&) Bool
+sig keep@29419 fn&(Config&, String&)
+sig kindSuffix@17381 fn&(UnitKind) String
+sig library@36665 fn&(mut Config&, Program&, Vec<String&>&, String&, mut Diagnostics&) I32
+sig linkCurrent@32494 fn&(String&, String&, String&) Bool
+sig listFiles@49665 fn&(String&, Bool, mut Listed&)
+sig listLink@50551 fn&(mut Config&, Vec<String&>&, Program&, String&, Bool, mut Listed&, mut Diagnostics&) ? Failed
+sig listQuick@53276 fn&(mut Config&, Program&, String&, Bool, mut Listed&, mut Diagnostics&) ? Failed
+sig madeBefore@49056 fn&(String&, String&) Bool
+sig modeSuffix@8770 fn&(Config&) String
+sig noTestNamed@40920 fn&(String&, Array<String&>&, Vec<String&>&) String
+sig paint@8382 fn&(Config&, String&, String&) String
+sig rootIdentity@34306 fn&(Program&) String
+sig rotr@14609 fn&(U32, U32) U32
+sig runner@19437 fn&(mut Chan<I64>&, Array<Array<String&>&>&, mut Array<I32>&, mut Array<String&>&)
+sig runner@42939 fn&(Config&, mut Diagnostics&) Array<String&> ? Failed
+sig say@33009 fn&(String&)
+sig sayErr@33139 fn&(String&)
+sig sayln@33072 fn&(String&)
+sig skipped@43600 fn&(Config&, String&, mut Diagnostics&) I32
+sig statusOf@60968 fn&(String&) I32
+sig unbuilt@33899 fn&() I32
+sig unusable@43256 fn&(Config&, String&, Msg, mut Diagnostics&) I32
+sig want@20605 fn&(mut Config&, mut compiles&, String&, UnitKind, String&, mut Diagnostics&, String&, I64) String ? Failed
+sig width@13320 fn&(Config&) I64
+end
+sum 2664ecb9224442bf4ea44aaf51022032b856226a1467b6d2dfd17782c16b2395

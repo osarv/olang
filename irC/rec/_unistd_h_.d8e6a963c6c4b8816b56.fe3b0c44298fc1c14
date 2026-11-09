@@ -1,0 +1,45 @@
+olang front record
+body global CLOSE_RANGE_CLOEXEC	known p
+body global CLOSE_RANGE_UNSHARE	known p
+body global F_LOCK	known p
+body global F_OK	known p
+body global F_TEST	known p
+body global F_TLOCK	known p
+body global F_ULOCK	known p
+body global L_INCR	known p
+body global L_SET	known p
+body global L_XTND	known p
+body global R_OK	known p
+body global SEEK_CUR	known p
+body global SEEK_DATA	known p
+body global SEEK_END	known p
+body global SEEK_HOLE	known p
+body global SEEK_SET	known p
+body global STDERR_FILENO	known p
+body global STDIN_FILENO	known p
+body global STDOUT_FILENO	known p
+body global W_OK	known p
+body global X_OK	known p
+baked CLOSE_RANGE_CLOEXEC [8 04000000]
+baked CLOSE_RANGE_UNSHARE [8 02000000]
+baked F_LOCK [8 01000000]
+baked F_OK [8 00000000]
+baked F_TEST [8 03000000]
+baked F_TLOCK [8 02000000]
+baked F_ULOCK [8 00000000]
+baked L_INCR [8 01000000]
+baked L_SET [8 00000000]
+baked L_XTND [8 02000000]
+baked R_OK [8 04000000]
+baked SEEK_CUR [8 01000000]
+baked SEEK_DATA [8 03000000]
+baked SEEK_END [8 02000000]
+baked SEEK_HOLE [8 04000000]
+baked SEEK_SET [8 00000000]
+baked STDERR_FILENO [8 02000000]
+baked STDIN_FILENO [8 00000000]
+baked STDOUT_FILENO [8 01000000]
+baked W_OK [8 02000000]
+baked X_OK [8 01000000]
+end
+sum 960219f8be997adcc9816db8020e9ea5da6d1188fc9fc1b5f8f0ff51a45cac87

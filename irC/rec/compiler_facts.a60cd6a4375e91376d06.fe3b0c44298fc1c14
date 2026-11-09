@@ -1,0 +1,19 @@
+olang front record
+body ctor 0-0	known p
+body fn 2051-2519	known p grows|0|-|-|..carried|8|0|compiler/facts|2163|2166|-1 grows|0|-|-|..values|7|0|compiler/facts|2238|2241|-1
+body fn 2633-2830	known p grows|0|-|-|..reads|6|0|compiler/facts|2787|2790|-1
+body fn 2945-3371	known p
+body fn 3581-4012	known p
+body fn 4229-4585	known p
+body fn 4700-4885	known p
+body lambda 2319-2359	known p
+body lambda 2433-2479	known p
+body lambda 3935-3981	known p
+sig Decide@2051 fn&(mut Table&, String&, String&, Bool)
+sig Forget@2945 fn&(mut Table&, String&)
+sig Holds@4229 fn&(Table&, Array<String&>&) Bool
+sig Read@2633 fn&(mut Table&, I64, String&) String ? Undecided
+sig Record@3581 fn&(Table&, I64, Bool) String
+sig Token@4700 fn&(String&) String
+end
+sum 4407f405e61d379fb261c5190d71164158629934fb826d8b34a0674eb8dbf47b

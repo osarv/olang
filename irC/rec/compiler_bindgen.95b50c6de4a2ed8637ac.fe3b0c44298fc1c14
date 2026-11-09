@@ -1,0 +1,185 @@
+olang front record
+body fn 10008-10133	known p
+body fn 10218-12922	known p grows|0|-|-|..typedefs|9|0|compiler/bindgen|10707|10710|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|11143|11146|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|11379|11389|-1 grows|0|-|-|..unnamed|8|0|compiler/bindgen|11379|11389|-1 grows|0|-|-|..recs[...].Widths|17|0|compiler/bindgen|11379|11389|-1 grows|0|-|-|..recs[...].Names|16|0|compiler/bindgen|11379|11389|-1 grows|0|-|-|..recs[...].Types|16|0|compiler/bindgen|11379|11389|-1 grows|0|-|-|..enumVals|9|0|compiler/bindgen|11780|11783|-1 grows|0|-|-|..consts|7|0|compiler/bindgen|11833|11841|-1 grows|0|-|-|..constNames|11|0|compiler/bindgen|11833|11841|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|11833|11841|-1 grows|0|-|-|..ownFile|8|0|compiler/bindgen|12440|12443|-1 grows|0|-|-|..funcs|6|0|compiler/bindgen|12602|12606|-1 grows|0|-|-|..skipped|8|0|compiler/bindgen|12834|12838|-1
+body fn 13030-14127	known p grows|0|-|-|..recs|5|0|compiler/bindgen|13189|13193|-1 grows|0|-|-|..unnamed|8|0|compiler/bindgen|13253|13256|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|13302|13310|-1 grows|0|-|-|..recs[...].Widths|17|0|compiler/bindgen|13979|13983|-1 grows|0|-|-|..recs[...].Names|16|0|compiler/bindgen|14051|14055|-1 grows|0|-|-|..recs[...].Types|16|0|compiler/bindgen|14104|14108|-1
+body fn 14246-14441	known p
+body fn 14443-14715	known p grows|0|-|-|..consts|7|0|compiler/bindgen|14630|14634|-1 grows|0|-|-|..constNames|11|0|compiler/bindgen|14676|14679|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|14701|14704|-1 keeps|1|-|-|.|0|0|compiler/bindgen|14468|14468|0
+body fn 14803-14999	known p grows|0|-|-|..consts|7|0|compiler/bindgen|14932|14936|-1 grows|0|-|-|..constNames|11|0|compiler/bindgen|14960|14963|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|14985|14988|-1 keeps|2|-|-|.|0|0|compiler/bindgen|14844|14844|0 keeps|1|-|-|.|0|0|compiler/bindgen|14830|14830|0
+body fn 15193-15542	known p
+body fn 15644-16153	known p
+body fn 16252-16357	known p
+body fn 16359-16532	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|16466|16470|-1 keeps|2|-|-|.|0|0|compiler/bindgen|16392|16392|0
+body fn 16534-16604	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|16582|16586|-1 keeps|1|-|-|.|0|0|compiler/bindgen|16554|16554|0
+body fn 16679-16960	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|16766|16769|-1 grows|0|-|-|..params|7|0|compiler/bindgen|16839|16847|-1
+body fn 17055-18875	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|18229|18233|-1 grows|0|-|-|..params|7|0|compiler/bindgen|18843|18853|-1
+body fn 18877-19741	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|18977|18981|-1
+body fn 19950-22180	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|20092|20096|-1 grows|0|-|-|..params|7|0|compiler/bindgen|21471|21475|-1
+body fn 22217-22422	known p grows|0|-|-|..recs|5|0|compiler/bindgen|22269|22277|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|22269|22277|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|22353|22363|-1 keeps|1|-|-|.|0|0|compiler/bindgen|22239|22239|0
+body fn 22514-23612	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|22904|22916|-1 grows|0|-|-|..params|7|0|compiler/bindgen|22904|22916|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|23455|23464|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|23455|23464|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|23455|23464|-1
+body fn 23954-25407	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|24283|24292|-1 grows|0|-|-|..params|7|0|compiler/bindgen|24283|24292|-1
+body fn 25502-25734	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|25599|25608|-1 grows|0|-|-|..params|7|0|compiler/bindgen|25599|25608|-1
+body fn 25867-26021	known p
+body fn 26118-26309	known p
+body fn 26493-26841	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|26710|26715|-1 grows|0|-|-|..params|7|0|compiler/bindgen|26710|26715|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|26710|26715|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|26710|26715|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|26710|26715|-1
+body fn 26912-26985	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|26960|26965|-1 grows|0|-|-|..params|7|0|compiler/bindgen|26960|26965|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|26960|26965|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|26960|26965|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|26960|26965|-1
+body fn 26987-27048	known p
+body fn 27050-27122	known p
+body fn 27124-27203	known p keeps|1|-|-|.|0|0|compiler/bindgen|27145|27145|0
+body fn 27326-27426	known p
+body fn 27427-27555	known p
+body fn 27736-28542	known p grows|0|-|-|..recs|5|0|compiler/bindgen|27940|27945|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|27940|27945|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|27940|27945|-1 grows|0|-|-|..nodes|6|0|compiler/bindgen|27975|27983|-1 grows|0|-|-|..params|7|0|compiler/bindgen|27975|27983|-1
+body fn 28737-29894	known p grows|0|-|-|..recs|5|0|compiler/bindgen|28956|28961|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|28956|28961|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|28956|28961|-1 grows|0|-|-|..nodes|6|0|compiler/bindgen|28991|28996|-1 grows|0|-|-|..params|7|0|compiler/bindgen|28991|28996|-1
+body fn 29931-30474	known p grows|0|-|-|..recs|5|0|compiler/bindgen|30151|30159|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|30151|30159|-1 grows|0|-|-|..nodes|6|0|compiler/bindgen|30258|30267|-1 grows|0|-|-|..params|7|0|compiler/bindgen|30258|30267|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|30339|30351|-1
+body fn 30476-32141	known p grows|0|-|-|..recs|5|0|compiler/bindgen|30777|30782|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|30777|30782|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|30777|30782|-1 grows|0|-|-|..nodes|6|0|compiler/bindgen|30830|30838|-1 grows|0|-|-|..params|7|0|compiler/bindgen|30830|30838|-1
+body fn 32321-32810	known p grows|0|-|-|..byKey|6|0|compiler/bindgen|32546|32549|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|32721|32731|-1
+body fn 32922-33337	known p grows|0|-|-|..taken|6|0|compiler/bindgen|33326|33329|-1
+body fn 33678-33737	known p
+body fn 33825-33945	known p
+body fn 33947-34294	known p grows|3|-|-|.|0|0|compiler/bindgen|34270|34273|-1
+body fn 34403-35357	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|34537|34546|-1 grows|0|-|-|..params|7|0|compiler/bindgen|34537|34546|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|34946|34955|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|34946|34955|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|34946|34955|-1 grows|0|-|-|..fnResults|10|0|compiler/bindgen|35259|35262|-1 keeps|1|-|-|.|0|0|compiler/bindgen|34428|34428|0
+body fn 35463-35673	known p
+body fn 35768-36624	known p grows|0|-|-|..wrappers.chars|15|0|compiler/bindgen|36126|36130|-1
+body fn 36741-37128	known p
+body fn 37130-38441	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|37319|37324|-1 grows|0|-|-|..params|7|0|compiler/bindgen|37319|37324|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|37319|37324|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|37319|37324|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|37319|37324|-1
+body fn 38585-41473	known p grows|0|-|-|..taken|6|0|compiler/bindgen|38661|38664|-1 grows|0|-|-|..nodes|6|0|compiler/bindgen|38843|38852|-1 grows|0|-|-|..params|7|0|compiler/bindgen|38843|38852|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|39023|39031|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|39023|39031|-1 grows|0|-|-|..byKey|6|0|compiler/bindgen|39083|39094|-1 grows|0|-|-|..skipped|8|0|compiler/bindgen|39315|39319|-1 grows|0|-|-|..fnResults|10|0|compiler/bindgen|39912|39920|-1 grows|0|-|-|..wrappers.chars|15|0|compiler/bindgen|40150|40157|-1 grows|0|-|-|..symbols|8|0|compiler/bindgen|40313|40317|-1 grows|0|-|-|..macroDecls|11|0|compiler/bindgen|40395|40403|-1
+body fn 41621-41815	known p
+body fn 41936-43790	known p,0
+body fn 43995-46132	known p grows|4|-|-|.|0|0|compiler/bindgen|44622|44626|-1 grows|0|-|-|..macros|7|0|compiler/bindgen|46057|46061|-1 grows|0|-|-|..macroAt|8|0|compiler/bindgen|46087|46090|-1 keeps|1|-|-|.|0|0|compiler/bindgen|44022|44022|0
+body fn 46367-48718	known p grows|2|-|-|.|0|0|compiler/bindgen|46966|46970|-1
+body fn 49267-49351	known p
+body fn 49353-49411	known p,0
+body fn 49463-49786	known p
+body fn 49788-50312	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|49852|49859|-1 grows|0|-|-|..params|7|0|compiler/bindgen|49852|49859|-1
+body fn 50314-51181	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|50389|50395|-1 grows|0|-|-|..params|7|0|compiler/bindgen|50389|50395|-1
+body fn 51293-51539	known p,1,2
+body fn 51541-51659	known p,1
+body fn 51661-51780	known p,1
+body fn 51782-52706	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|52457|52465|-1 grows|0|-|-|..params|7|0|compiler/bindgen|52457|52465|-1
+body fn 52799-53257	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|53126|53135|-1 grows|0|-|-|..params|7|0|compiler/bindgen|53126|53135|-1
+body fn 53259-54769	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|53457|53462|-1 grows|0|-|-|..params|7|0|compiler/bindgen|53457|53462|-1
+body fn 54879-55896	known p
+body fn 55970-56594	known p
+body fn 56703-58542	known p
+body fn 58645-58994	known p
+body fn 59114-59530	known p
+body fn 59716-61170	known p grows|0|-|-|..skipped|8|0|compiler/bindgen|60145|60157|-1 grows|0|-|-|..consts|7|0|compiler/bindgen|60437|60447|-1 grows|0|-|-|..constNames|11|0|compiler/bindgen|60437|60447|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|60437|60447|-1 grows|0|-|-|..nodes|6|0|compiler/bindgen|60628|60633|-1 grows|0|-|-|..params|7|0|compiler/bindgen|60628|60633|-1
+body fn 61172-61395	known p grows|0|-|-|..skipped|8|0|compiler/bindgen|61362|61366|-1
+body fn 61588-62085	known p grows|0|-|-|..skipped|8|0|compiler/bindgen|61807|61819|-1 grows|0|-|-|..nodes|6|0|compiler/bindgen|61921|61928|-1 grows|0|-|-|..params|7|0|compiler/bindgen|61921|61928|-1 grows|0|-|-|..macroDecls|11|0|compiler/bindgen|62039|62043|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|62063|62066|-1
+body fn 62087-63009	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|62345|62350|-1 grows|0|-|-|..params|7|0|compiler/bindgen|62345|62350|-1
+body fn 63092-63235	known p
+body fn 63320-63517	known p
+body fn 64147-66956	known p,0,4
+body fn 66990-67622	known p
+body fn 67743-69509	known p grows|0|-|-|..nodes|6|0|compiler/bindgen|67915|67924|-1 grows|0|-|-|..params|7|0|compiler/bindgen|67915|67924|-1 grows|0|-|-|..recs|5|0|compiler/bindgen|68095|68103|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|68095|68103|-1 grows|0|-|-|..taken|6|0|compiler/bindgen|68294|68299|-1
+body fn 69634-69821	known p
+body fn 69823-72963	known p
+body fn 7315-7574	known p
+body fn 7576-7769	known p
+body fn 7771-7968	known p
+body fn 8043-8166	known p
+body fn 8188-8427	known p
+body fn 8593-9182	known p
+body fn 9256-9443	known p
+body fn 9578-9660	known p
+body fn 9662-9883	known p grows|0|-|-|..recs|5|0|compiler/bindgen|9794|9798|-1 grows|0|-|-|..recIndex|9|0|compiler/bindgen|9827|9830|-1 keeps|1|-|-|.|0|0|compiler/bindgen|9687|9687|0
+body global KBool	known p
+body global KFloat	known p
+body global KInt	known p
+body global KType	known p
+body global KVar	known p
+body global NoReturnAttr	known p
+body global preludeNames	known p
+body lambda 48248-48284	known p
+body lambda 53805-53841	known p
+baked KBool [8 0200000000000000]
+baked KFloat [8 0100000000000000]
+baked KInt [8 0000000000000000]
+baked KType [8 0400000000000000]
+baked KVar [8 0300000000000000]
+baked NoReturnAttr [8 1a000000000000000000000000000000 @8>1+0][8 205f5f6174747269627574655f5f28286e6f72657475726e2929]
+baked preludeNames [64 0600000000000000000000000000000005000000000000000000000000000000040000000000000000000000000000000400000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000d000000000000000000000000000000040000000000000000000000000000000500000000000000000000000000000008000000000000000000000000000000090000000000000000000000000000000200000000000000000000000000000005000000000000000000000000000000030000000000000000000000000000000300000000000000000000000000000005000000000000000000000000000000070000000000000000000000000000000600000000000000000000000000000009000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0 @248>16+0 @264>17+0 @280>18+0 @296>19+0][8c 537472696e67][8c 4172726179][8c 426f6f6c][8c 43686172][8c 566563][8c 4d6170][8c 537472696e674275696c646572][8c 43537472][8c 43566f6964][8c 4974657261746f72][8c 457868617573746564][8c 5069][8c 45756c6572][8c 496e66][8c 4e614e][8c 466c6f6174][8c 496e7465676572][8c 4e756d626572][8c 47656e657261746f72]
+sig Run@69634 fn&(String&, String&, String&) I32
+sig Translation.Translate@64147 fn&(String&, String&, String&, Array<String&>&, String&, String&) Translation
+sig at@16252 fn&(ctp&, I64) String
+sig at@49267 fn&(cparse&) String
+sig bad@16534 fn&(mut gen&, String&) I64
+sig bitfieldType@25867 fn&(String&, I64) String
+sig bodyKind@58645 fn&(Vec<String&>&) I64
+sig cBinary@50314 fn&(mut gen&, mut cparse&, I64) cx ? Skip
+sig cBool@51541 fn&(gen&, cx) cx
+sig cExpr@49788 fn&(mut gen&, mut cparse&) cx ? Skip
+sig cLead@51293 fn&(gen&, cx, cx) cx
+sig cLex@41936 fn&(String&) Vec<String&>&
+sig cNum@51661 fn&(gen&, cx) cx
+sig cNumber@54879 fn&(mut gen&, String&) cx ? Skip
+sig cPrec@49463 fn&(String&) I64
+sig cPrimary@53259 fn&(mut gen&, mut cparse&) cx ? Skip
+sig cUnary@51782 fn&(mut gen&, mut cparse&) cx ? Skip
+sig castType@52799 fn&(mut gen&, String&) String
+sig charValue@55970 fn&(String&) I64 ? Skip
+sig clangSays@63092 fn&(Array<String&>&) Output ? Skip
+sig constValue@14246 fn&(Json&) String
+sig constant@14443 fn&(mut gen&, String&, I64)
+sig ctokens@15644 fn&(String&) Array<String&>
+sig cx.lit@49353 fn&(String&, I64) cx
+sig declarator@19950 fn&(mut gen&, mut ctp&, I64, Bool, I64) I64
+sig dump@66990 fn&(mut gen&, String&, Array<String&>&, String&) Json& ? Skip
+sig expand@46367 fn&(mut gen&, Array<String&>&, mut Vec<String&>&, I64) Vec<String&> ? Skip
+sig fieldType@27736 fn&(mut gen&, I64) String ? Skip
+sig firstError@63320 fn&(String&) String
+sig flag@7771 fn&(Json&, String&) Bool
+sig function@34403 fn&(mut gen&, cFunc&) String ? Skip
+sig holdable@26912 fn&(mut gen&, I64) Bool
+sig inner@8188 fn&(Json&) Array<Json&>
+sig intMacros@59114 fn&(mut gen&) Vec<I64>
+sig isByte@27427 fn&(gen&, I64) Bool
+sig isChar@27326 fn&(gen&, I64) Bool
+sig macroFn@62087 fn&(mut gen&, cMacro&) String ? Skip
+sig macroFns@61588 fn&(mut gen&)
+sig member@7315 fn&(Json&, String&) Json?&
+sig name@26987 fn&(mut gen&, I64) String
+sig nameRecord@32922 fn&(mut gen&, I64, String&)
+sig nameRecords@32321 fn&(mut gen&)
+sig namedConst@14803 fn&(mut gen&, String&, String&)
+sig noReturnOf@10008 fn&(String&) String
+sig node@16359 fn&(mut gen&, CKind, String&, I64, Bool, I64) I64
+sig numBits@26118 fn&(String&) I64
+sig numType@18877 fn&(mut gen&, String&, I64, I64) I64
+sig numbersOnly@35463 fn&(gen&, ctype) Bool
+sig opaque@26493 fn&(mut gen&, I64) Bool
+sig otherConsts@59716 fn&(mut gen&)
+sig packedFields@23954 fn&(mut gen&, I64) Vec<String&>
+sig packedFloat@25502 fn&(mut gen&, I64) Bool
+sig paramName@33947 fn&(mut gen&, String&, I64, mut Map<String&, I64>&) String
+sig paramType@29931 fn&(mut gen&, I64) String ? Skip
+sig parseType@16679 fn&(mut gen&, String&, I64) I64
+sig plain@22514 fn&(mut gen&, I64) Bool
+sig pointerParam@30476 fn&(mut gen&, I64, Bool) String ? Skip
+sig preludeName@33678 fn&(String&) Bool
+sig read@10218 fn&(mut gen&, Json&, String&)
+sig readMacros@43995 fn&(mut gen&, String&, String&, String&, mut Vec<String&>&)
+sig recOf@22217 fn&(mut gen&, String&) I64
+sig recordAt@9662 fn&(mut gen&, String&) I64
+sig recordDecl@13030 fn&(mut gen&, Json&, String&, Bool)
+sig resultText@36741 fn&(String&) String
+sig run@69823 fn&(String&, String&, String&, mut Writer&) I32
+sig sizes@67743 fn&(mut gen&, String&, Array<String&>&, String&, String&) ? Skip
+sig skip@27124 fn&(mut gen&, String&) ? Skip
+sig skippedMacro@61172 fn&(mut gen&, String&, String&)
+sig spell@33825 fn&(gen&, I64) String
+sig structDecl@37130 fn&(mut gen&, I64) String
+sig text@7576 fn&(Json&, String&) String
+sig textLiteral@56703 fn&(Array<String&>&) String
+sig track@8593 fn&(mut gen&, Json&, String&)
+sig trackFile@9256 fn&(mut gen&, Json&, String&)
+sig typeName@17055 fn&(mut gen&, mut ctp&, I64) I64
+sig typeOf@8043 fn&(Json&) String
+sig usable@15193 fn&(String&) Bool
+sig valueType@28737 fn&(mut gen&, I64, Bool) String ? Skip
+sig voidRef@27050 fn&(Bool) String
+sig wantRecord@41621 fn&(gen&, I64) Bool
+sig wanted@9578 fn&(gen&, I64) Bool
+sig wrapper@35768 fn&(mut gen&, cFunc&) String ? Skip
+sig write@38585 fn&(mut gen&, String&) String
+end
+sum 732f626465bb37ca03b581201f20c752aa6bc65c85c12801ed35de1c8c5a4e47
