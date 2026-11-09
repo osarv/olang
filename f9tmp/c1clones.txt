@@ -1,0 +1,10 @@
+2farray_2esortMergeForward_3cI64_2c_20_3f_3e: ok true size 159 loop 0 0 0 0 0 1
+sum std_2fprelude_2farray_2esortMergeBackward_3cI64_2c_20_3f_3e: ok true size 161 loop 0 0 0 0 0 1
+sum std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eSort_3cI64_2c_20_3f_3e: ok true size 20 loop 0 0 hand 1->mir.FnKey.Body(9556)@1 d0
+sum std_2fprelude_2farray_2eArray_3cI64_3e_2eSort_3cI64_2c_20_3f_3e: ok true size 18 loop 0 0 hand 0->mir.FnKey.Body(13140)@0 d0 hand 1->mir.FnKey.Body(13140)@1 d0
+sum std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2e_H1642129570dad448bb7dcc47c334de83: ok true size 20 loop 0 0 hand 1->mir.FnKey.Body(9549)@1 d0
+sum std_2fprelude_2farray_2eArray_3cstd_2fprelude_2ftext_3aString_26_3e_2eSort_3cstd_2fprelu_H425a408f665c1f34766f6a10dd38435a: ok true size 18 loop 0 0 hand 0->mir.FnKey.Body(13139)@0 d0 hand 1->mir.FnKey.Body(13139)@1 d0
+sum std_2fprelude_2farray_2esortByPositions_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e: ok true size 216 loop 0 0 hand 0->mir.FnKey.Body(13785)@0 d0 hand 1->mir.FnKey.Body(13785)@3 d0 hand 0->mir.FnKey.Body(13787)@0 d1 hand 0->mir.FnKey.Body(13788)@0 d2 hand 1->mir.FnKey.Body(13788)@4 d2
+sum std_2fprelude_2farray_2esortInsertion_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e: ok true size 66 loop 0 0 0 0 hand 0->mir.FnKey.Body(14093)@0 d1 hand 1->mir.FnKey.Body(14093)@1 d1 hand 3->mir.FnKey.Body(14093)@3 d1
+sum std_2fprelude_2farray_2esortInsert_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e: ok true size 50 loop 0 0 0 1
+sum std_2fprelude_2farray_2esortMerge_3cstd_2fprelude_2ftext_3aString_26_2c_20_3f_3e: ok true size 341 loop 0 0 0 0 1 hand 0->mir.FnKey.Body(14094)@0 d1 hand 0->mir.FnKey.Body(14094)@0 d1 hand 0->mir.FnKey.Body(14095)@0 d0 hand 2->mir.FnKey.Body(14095)@2 d0 hand 0->mir.FnKey.Body(13788)@0 d0 hand 1->mir.FnKey.Body(13788)@1 d0 hand 4->mir.FnKey.Body(13788)@4 d0 hand 0->mir.FnKey.Body(13788)@0 d0 hand 3->mir.FnKey.Body(13788)@3 d0 hand 4->mir.FnKey.Body(13788)@4 d0

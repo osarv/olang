@@ -1,0 +1,5 @@
+import "std/io"
+
+fn main() ? {
+    try io.Println("hi 8")
+}

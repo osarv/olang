@@ -1,0 +1,9 @@
+import "std/io"
+
+fn main() ? {
+    n I64 = 1000
+    a := Array<I64>(n)
+    for i in range n { a[i] = (i * 7919) % 1000 }
+    a.Sort(fn(x I64, y I64) Bool: return x < y)
+    try io.Println($a[0] " " $a[n - 1])
+}

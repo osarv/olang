@@ -1,0 +1,106 @@
+}
+
+# what "sort value" sorts with: through a mutable global, so the comparison is no known body (no clone)
+fn lessI64(x I64, y I64) Bool { return x < y }
+Less mut fn&(x I64, y I64) Bool = lessI64
+
+# "sort written": the prelude's merge sort for elements a scratch array holds (sortMergeBuffered and what it calls),
+# its comparison written "<" - what Sort's clone for a lambda comparing with "<" should be
+fn sortWritten(a mut Array<I64>&) {
+    n I64 = a.Len()
+    run I64 = 24
+    for lo := I64(0), lo < n, lo += run { insertWritten(a, lo, lo + run if lo + run < n else n) }
+    if n <= run: return
+    scratch := Array<I64>((n + 1) / 2)
+    block I64 = run << 9
+    for lo := I64(0), lo < n, lo += block { runsWritten(a, scratch, lo, lo + block if lo + block < n else n, run) }
+    runsWritten(a, scratch, 0, n, block)
+}
+
+fn insertWritten(a mut Array<I64>&, lo I64, hi I64) {
+    for i in range lo + 1, hi {
+        x := a[i]
+        j := i
+        for j > lo and x < a[j - 1] {
+            a[j] = a[j - 1]
+            j--
+        }
+        a[j] = x
+    }
+}
+
+fn runsWritten(a mut Array<I64>&, scratch mut Array<I64>&, from I64, to I64, first I64) {
+    for run := first, run < to - from, run *= 2 {
+        for lo := from, lo + run < to, lo += 2 * run {
+            m := lo + run
+            hi := m + run if m + run < to else to
+            if not (a[m] < a[m - 1]): continue
+            if m - lo <= hi - m {
+                forwardWritten(a, scratch, lo, m, hi)
+            } else {
+                backwardWritten(a, scratch, lo, m, hi)
+            }
+        }
+    }
+}
+
+fn forwardWritten(a mut Array<I64>&, scratch mut Array<I64>&, lo I64, m I64, hi I64) {
+    nl := m - lo
+    for k in range nl { scratch[k] = a[lo + k] }
+    i, j, k := I64(0), m, lo
+    for i < nl and j < hi {
+        if a[j] < scratch[i] {
+            a[k] = a[j]
+            j++
+        } else {
+            a[k] = scratch[i]
+            i++
+        }
+        k++
+    }
+    for i < nl {
+        a[k] = scratch[i]
+        i++
+        k++
+    }
+}
+
+fn backwardWritten(a mut Array<I64>&, scratch mut Array<I64>&, lo I64, m I64, hi I64) {
+    nr := hi - m
+    for k in range nr { scratch[k] = a[m + k] }
+    i, j, k := m - 1, nr - 1, hi - 1
+    for i >= lo and j >= 0 {
+        if scratch[j] < a[i] {
+            a[k] = a[i]
+            i--
+        } else {
+            a[k] = scratch[j]
+            j--
+        }
+        k--
+    }
+    for j >= 0 {
+        a[k] = scratch[j]
+        j--
+        k--
+    }
+}
+
+    args := os.Args()
+    if args.Len() < 5 { error Usage.Args }
+    mode := args[1]
+    kind := args[2]
+    n := try args[3].ParseInt()
+    passes := try args[4].ParseInt()
+    if not (kind == "vec" or kind == "array" or kind == "list") { error Usage.Kind }
+    a := values(n)
+    v := Vec<I64>()
+    l := list.List<I64>()
+    if mode != "push" and mode != "fields" {
+        if kind == "vec" { v.PushAll(a) }
+        if kind == "list" { l.PushAll(a) }
+    }
+    total I64 = 0
+    if mode == "walk" {
+        total = walkVec(v, passes) if kind == "vec" else walkList(l, passes) if kind == "list" else walkArray(a, passes)
+fn main() { }
