@@ -67,7 +67,8 @@ one rule that composes over special cases; fix rough edges found while building.
   sparse event-driven updates, a hybrid core with delta-rule fast weights (oagent/papers/settling-niche.md). Long term (the user, 2026-11-09): "I want to go in the biology direction down the
   line, our networks should blend naturally with brains eventually, working in similar ways, optimizing in similar
   ways" - prefer mechanisms with a biological counterpart (local plasticity, spikes, neuromodulation, sleep replay) when
-  measurements tie; oann is
+  measurements tie. Starting point (the user, 2026-11-09, agreed): energy-based reasoners (oagent/papers/2611.08977.md) -
+  reproduce, make stronger (cheaper settles), then train them with local rules (EP needs an energy, EBR has one); oann is
   general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md. Trained from scratch, no open weights (the user, 2026-11-09).
 
 ## Reading the user
