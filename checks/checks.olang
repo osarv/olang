@@ -46,7 +46,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins"]
+                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -458,6 +458,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "manyifs" { try manyifs(r) }
         case "cgreview" { try cgreview(r) }
         case "typereview" { try typereview(r) }
+        case "weakmods" { try weakmods(r) }
         case "agree" { try agree(r) }
         case "fuzz" { try fuzz(r) }
         case "latermodule" { try latermodule(r) }
@@ -981,6 +982,21 @@ fn reuse(r mut report&) ? Failed {
     }
 }
 
+# T2d, T13d over the whole program: a weak reference in one module makes another module's type generational; an owning
+# place in a third holds it; with none anywhere the weak reference is an error, and a by-value slot in a module of its
+# own is one said at the weak, with a note at the slot
+test "weak references are judged over the whole program" { assert passed("weakmods") }
+
+fn weakmods(r mut report&) ? Failed {
+    dir := fresh("weakmods")
+    os.Run("cp checks/fixtures/weak/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
+    try r.expect(outOf(dir) == "4 true\n", "good's output", dir)
+    try oneError(r, dir, "unheld", "back.olang:5:8: error[T2d]: no owning place of the program holds a Node")
+    try oneError(r, dir, "away", "back.olang:5:8: error[T13d]: this weak reference makes node.Node generational")
+    try r.expect(outOf(dir).Contains("byval.olang:4:12: note: a node.Node held by value here"), "away's note at the slot", dir)
+}
+
 # B3i, G42, E31b: a module's code a fact of the whole program decides (whether C may call the program back) - its record
 # is kept per answer, so a second program built in the same directory gives the answer its own clean build gives, and
 # OLANG_CHECKREUSE finds every reused object the one written afresh (docs/wholeprog.md section 8)
@@ -1046,6 +1062,9 @@ Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/
     # T22c: a call of a library function given a function it does not cover - the twin made in the root's object
     Edit("a twin added", "sed -i 's/^    g := lib.Log()$/    held Vec<String\\&>\\n    lib.Apply(lib.KeepIt, held)\\n    " $
          "assert held.Len() == 1\\n    g := lib.Log()/' main.olang", "", "", "main.olang", "main")
+    # genrefs G1: the first weak reference to a type makes it generational, a whole-program fact (T13d)
+    Edit("the first weak to a type", "printf 'type Link struct() {\\n    next mut Link?& = null\\n    back weak Link?& = " $
+         "null\\n}\\n' >> lib.olang", "", "lib", "lib.olang", "Link")
     Edit("a diagnostic introduced", "sed -i 's/deep.Baked/deep.Bakd/' lib.olang", "", "", "lib.olang", "Kept")]
 
 fn incremental(r mut report&) ? Failed {

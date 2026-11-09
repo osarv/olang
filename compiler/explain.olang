@@ -466,6 +466,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
         }
         case types.DeclKind.Enum {
             b.Push($"type " $name $declWord(c, self) " enum\n")
+            genLine(b, c, d)
             cases := c.P.T.Items(c.P.T.Cases(self))
             ns := c.P.T.CaseNames(self)
             for k in range ns.Len() {
@@ -502,6 +503,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
                 }
                 case _ { }
             }
+            genLine(b, c, d)
             fields(b, c, self)
         }
     }
@@ -598,6 +600,12 @@ fn errorsAfter(rest String&) String {
     return ""
 }
 
+# T13d: a generational type's line - held by reference, and the weak places naming it
+fn genLine(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
+    from := try c.P.Gens.Get(I64(d)) catch { return }
+    b.Push($"    # generational: held by reference; weak from " $from "\n")
+}
+
 # a struct's fields, as its constructor assembles them (C2a)
 fn fields(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
     for body in c.Bodies {
@@ -612,7 +620,8 @@ fn fields(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
                     ty := tys[k] if k < tys.Len() else loc.Ty
                     # a bare field (C2a) is named where it is written
                     n := src[I64(loc.Sp.Start):I64(loc.Sp.End)] if loc.Name == source.NameId(0) else c.P.L.Names.Text(loc.Name)
-                    b.Push($"    " $attrsBefore(c, c.P.Descriptor(generic.DescField, self, 0, k)) $n " " $c.Ty(ty) "\n")
+                    wk := "weak " if c.P.WeakField(self, k) else ""   # T2d
+                    b.Push($"    " $attrsBefore(c, c.P.Descriptor(generic.DescField, self, 0, k)) $n " " $wk $c.Ty(ty) "\n")
                 }
                 return
             }

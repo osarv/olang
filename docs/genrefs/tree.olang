@@ -6,7 +6,7 @@ import "peak"
 
 type Node struct(key I64, up mut Node?&) {
     key
-    parent weak mut Node?& = up      # points back (T2d): the tree holds each node through 'root', 'left' and 'right'
+    parent weak mut Node?& = up # points back (T2d): the tree holds each node through 'root', 'left' and 'right'
     pad Array<I64> = Array<I64>(8, 0)
     left mut Node?& = null
     right mut Node?& = null

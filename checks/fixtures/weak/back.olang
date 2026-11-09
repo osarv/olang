@@ -1,0 +1,8 @@
+# T2d: a weak reference to another module's type - which makes it generational in every program importing this
+import "node"
+
+type Back struct() {
+    At weak mut node.Node?& = null
+}
+
+fn (b mut Back&) Point(n mut node.Node&) { b.At = n }
