@@ -2436,7 +2436,9 @@ in it, `t.Peek(t)` is its receiver: those stay alive for the very call the copy 
 held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole, in no region early
 freeing made (O8d), and lives at least as long as where the copy would be built - a local whose copy at its last
 mention goes into storage outliving its block is built there (O28), so `rows.Push(rec)` in a loop moves each turn's
-`rec` into `rows` rather than copying it out of the turn; a constructor's instance viewing only
+`rec` into `rows` rather than copying it out of the turn - but not one whose copy is a global's whole new value
+(`cache = v`), which the global lets go of again (O8d): the copy is built for the global, the local reclaimed with
+its block, rather than built in the program's scope, which never closes; a constructor's instance viewing only
 such moved locals - or unique values a by-value parameter hands on (T13b), moved too - is its own (no D9h copy where
 it is kept). Unobservable: the evaluator copies and agrees. Neither
 D9h's left-out copies nor D9i's moves apply to a value whose copy runs a declared Copy (E31d), which may make what the
@@ -6596,7 +6598,8 @@ holder**:
 6. no reference read from what the place holds is in use across a call that may make the place let go.
 
 A **value owning storage held in place** - a `Vec`, a `Map`, a `StringBuilder` held by value in a field, a `Map`'s
-value, or a local of the function given another value somewhere in its body (`v = mk(k)` each turn) - is a place's
+value, a local of the function given another value somewhere in its body (`v = mk(k)` each turn), or a mutable
+global given another value in a function (`cache = v`; its initializer's value is one of its values) - is a place's
 value as a referent is: what it owns (its arrays, and what is built where they are) is reclaimed when
 the place lets go of it, under the same conditions, made for the place meaning all of its storage built for it, and
 nothing else is built into it while the place holds it - so a value of it changed in place (a store into it, a writable
@@ -7117,7 +7120,8 @@ of them allow, and every judgment of this section is then made of it. So:
   handed to a task (P2), given to a call whose obligations need it to outlive an argument - and then where it is kept,
   built there from the start, not copied there. The same holds for the local itself: one kept by reference past its
   block or loop turn (lent to a callee keeping a reference to it, O17; borrowed by a reference kept longer), or copied
-  whole at its last mention into storage that outlives its block (moved there, D9i), is built where it is kept - a new
+  whole at its last mention into storage that outlives its block (moved there, D9i) - but a global's whole new value,
+  which the global lets go of again (O8d), is a copy and the local stays in its block - is built where it is kept - a new
   value each time its declaration runs, so a loop's turns never share one; its memory is the kept scope's on every
   turn, kept or not (the placement is the program's, not a turn's);
 - what is kept by any other way is placed the same: a value kept through a call's obligation (O10c) - one a statement

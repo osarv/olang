@@ -35584,3 +35584,47 @@ the suite, read back after an arena churn). The layout golden's `tests/shared:Or
 Tally lives - the caller's scope even from a function of its own - so its last elements end there rather than at the
 holder's block (the same calls written inline end at the block). Destructors still run once; only where is later
 than the block. Reported for the scope pass (`c2dfieldmapput` bounds its count accordingly).
+
+## A global is a place that lets go (O8d, D9i, O28; 2026-11-09, wt-globalfree)
+
+docs/memory.md says a global is a place like any other, but free.olang had no global places: a `cache mut Vec<I64>`
+given a fresh 10,000-element Vec 2,000 times (review/global_letgo_probe.olang) peaked at 705 MB, and `-memory` said
+"no place lets go of storage in code that runs again". Two things kept it:
+
+- **No place.** free.olang's candidates were fields, array elements and owner locals. A **global place** (keyField -4)
+  is now made for a mutable global holding an owner by value (ownerCand), a handle or a reference refCand admits, where a
+  body other than its own initializer assigns it (globalCand). Every assignment - the initializer's included, which
+  lets go of the zeroed storage it starts as - is a store judged by condition 1 and a let-go; a read is a view of the
+  place, so the conditions apply as to a field: a view held across a call that gives the global another value keeps
+  (condition 6), a view stored elsewhere keeps (condition 2), a task keeps (condition 3). Lowering's `releases` finds it
+  through `PlaceOf`; its link-time constant (W2) is `olang.sole.<module>.global.<name>`; the report names "the
+  program's scope". A Map or Vec global's removals were places already (their entries', keyed by type), and free once
+  the values are made for them.
+- **The lift into the program's scope.** `v := Vec<I64>()`, pushes, `cache = v`: the store's value is QCE's copy of
+  `v` at its last mention, and item 17 (O28, D9i) built `v` where that copy goes - the program's scope, which never
+  closes - so that lowering could move it there. With a region at the copy's site the move is off (a region's
+  presence turns it off), so the copy was made anyway and `v` with all its growth stayed in the program's scope.
+  typed.LastUses now marks a copy that is a global's whole new value (`OverGlobal`), and LastCopies leaves it out:
+  `v` stays in its block, reclaimed as it closes, and the copy is the value built in the global's region. Where the
+  global keeps, this costs a copy where there was a move - but the move's local had been built in the program's scope
+  for good, so even then nothing grows without bound. SPEC D9i and O28 say so.
+
+The probe runs in 12.8 MB (its whole-program form and as a library module under a calling root alike). Tests: the
+earlyfree fixture `globals` (a Vec global given a Vec built in a local and one a call builds, a Map global's Vec values
+replaced and removed: under 8 MB, interpreted at a smaller size, and split into a module of its own), the run case
+`o8dglobal` (-debug -sanitize, interpreted: a view across a let-go and one stored in another global keep, read after a
+churn), and fuzz/scopegen's free scenarios gain a Vec global given a Vec built in a local, a node global, and views of
+both kept across their let-goes.
+
+**Found on the way and fixed:** a `Map<String, Vec<I64>>`'s Put replacing a value released the entry's key text with
+it - under `-sanitize` the next Put's comparison read it freed, in master too, local Map or global. `add` stores
+`MapEntry(key, value)`, a constructor viewing what it is given, so its caller's copy (D9h) was taken as the one owner
+leaf's (`Value`'s) new value (viewCtor; copyLeaves likewise for a copy stored into a part): its region held the whole
+copy, the key's text included. Such a copy is now made for the leaf only where no other part of the value owns storage
+(`onlyLeaf`); a Map with text keys keeps its values (it freed them unsoundly before). Run case `o8dmapkeytext`.
+
+**Found on the way, not fixed here:** the same lift happens for a field: `v := ...; h.d = v` (h a parameter) builds `v`
+where `h` lives (O28 item 17, the user's decision), copies it into the field's region, and `-memory` says the field
+"frees it at once" while `v`'s growth stays in the caller's scope (572 MB for 2,000 turns of 10,000 elements). Fixing
+it means either the copy for a field too (a copy where item 17 moves) or building `v` in the field's region from its
+declaration; left for a decision.
