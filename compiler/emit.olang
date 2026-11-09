@@ -1822,11 +1822,13 @@ fn (e mut Emitter&) stableSym(b I64) String {
 }
 
 # place k's constant: a field's by its struct's canonical text and position, an array's elements by the array's, an
-# owner local by its function's symbol and its number there
+# owner local by its function's symbol and its number there, a global by its module's identity and its name
 fn (e mut Emitter&) soleName(k I64) String {
     fr := e.Lw.Free!
     b, l := fr.LocalPlace(k)
     if b >= 0 { return types.Symbol($"olang.sole." $e.stableSym(b) ".local." $l) }
+    gm, gn := fr.GlobalPlace(k)
+    if gm >= 0 { return types.Symbol($"olang.sole." $e.P.L.Mods[gm].Identity ".global." $e.P.L.Names.Text(source.NameId(I32(gn)))) }
     ty, field := fr.PlaceKey(k)
     return types.Symbol($"olang.sole." $e.T.Canon(ty) "." $field)
 }

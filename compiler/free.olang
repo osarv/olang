@@ -266,6 +266,13 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     olBody Vec<I64>           # by place: an owner local's body and local, -1 for any other place
     olLocal Vec<I64>
     olIn Vec<Bool>
+    # global places (keyField -4): a mutable global holding an owner by value or a reference refCand or handleCand
+    # admits, given another value in some body other than its initializer - its every value, its initializer's
+    # included, built in a region of its own where it is sole (O8d: a global is a place like any other). By (module,
+    # name), and by place its module and name (-1 for any other place)
+    globalOf Map<pair.Pair<I64, I64>, I64>
+    glModule Vec<I64>
+    glName Vec<I64>
     # D9h: the constructor calls whose instance views only storage made for it (typed.FreshViews), by (body, site), as
     # this analysis judged them before its regions were written into the plans - lowering leaves out their copy here
     freshAt Map<pair.Pair<I64, I64>, Bool>
@@ -503,11 +510,20 @@ fn (f mut Free&) newPlace(ty types.TypeId, field I64, hd Bool, vt types.TypeId, 
     f.dtorVal.Push(dt)
     f.olBody.Push(-1)
     f.olLocal.Push(-1)
+    f.glModule.Push(-1)
+    f.glName.Push(-1)
     return n
 }
 
 # whether a candidate place is an owner local
 fn (f Free&) isOwnLocal(k I64) Bool { return k >= 0 and k < f.keyField.Len() and f.keyField[k] == -3 }
+
+# whether a candidate place is a global
+fn (f Free&) isGlobal(k I64) Bool { return k >= 0 and k < f.keyField.Len() and f.keyField[k] == -4 }
+
+# whether a candidate place is a value of its own, named by the program - an owner local or a global - rather than a
+# field or an array's elements, keyed by a type
+fn (f Free&) isNamed(k I64) Bool { return f.isOwnLocal(k) or f.isGlobal(k) }
 
 # whether a field or element type is a reference to a struct whose own destructor is all freeing cannot meet: a dtor
 # place's values, never freed by a let-go (O15)
@@ -529,6 +545,7 @@ fn (f mut Free&) placeOfPlace(p typed.Lvalue&) I64 {
     return match p {
         case typed.Lvalue.Field(_, _, base, i): f.placeKey(base.Type(), i)
         case typed.Lvalue.Elem(_, _, e): f.placeKey(f.arrayOf(e.Base.Type()), -1)
+        case typed.Lvalue.Global(_, _, m, n): try f.globalOf.Get(pair.Pair(m, I64(n))) catch default -1
         case _: -1
     }
 }
@@ -964,6 +981,7 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
         case typed.Stmt.Assign(_, p, x) {
             f.candTarget(p)
             f.ownLocalCand(p)
+            f.globalCand(p)
             f.findExpr(x)
         }
         case typed.Stmt.Let(_, _, x) { f.findExpr(x) }
@@ -1004,6 +1022,32 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
             f.olLocal[k] = I64(l)
             f.ownLocalOf.Put(key, k)
             f.olIn[f.curBody] = true
+        }
+        case _ { }
+    }
+}
+
+# an assignment's target that is a mutable global holding an owner by value or a reference freeing can meet, assigned
+# in a body other than its own initializer: a global place (keyField -4), every value it is given - its initializer's
+# too, a store and a let-go of the zeroed storage it starts as - built in a region of its own where it is sole, the one
+# it held released as it is given another (O8d: a global is a place like any other)
+fn (f mut Free&) globalCand(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Global(_, ty, m, n) {
+            key := pair.Pair(m, I64(n))
+            if f.globalOf.Has(key): return
+            match f.Bodies[f.curBody].Of {
+                case typed.BodyOf.Global(_, _) { return }
+                case _ { }
+            }
+            ow := f.ownerCand(ty)
+            hd := not ow and f.handleCand(ty)
+            if not ow and not hd and not f.refCand(ty): return
+            k := f.newPlace(ty, -4, hd, ty, false)
+            f.owner[k] = ow
+            f.glModule[k] = m
+            f.glName[k] = I64(n)
+            f.globalOf.Put(key, k)
         }
         case _ { }
     }
@@ -1531,6 +1575,15 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             lvs := w.F.leaves(p.Type())
             for lf in lvs { w.go(lf.PlaceId, LLeaf, p.Span(), source.Span(0, 0), -1) }
             if lvs.Len() > 0 and not w.storedWhole(x, cm) { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
+        }
+        case typed.Lvalue.Global(_, _, _, _) {
+            if k >= 0 {
+                w.store(k, x, o, sp, w.text(p.Span()))
+                w.storeWithin = -1
+                w.storeInside = -1
+                w.go(k, LAssign, p.Span(), source.Span(0, 0), -1)
+                return
+            }
         }
         case typed.Lvalue.Elem(_, _, _) {
             # an element given a value: never a let-go - the program's own copies between elements are not known
@@ -4010,6 +4063,12 @@ fn (f Free&) SoleNow() Vec<I64> {
 fn (f Free&) PlaceKey(k I64) types.TypeId, I64 { return f.keyTy[k], f.keyField[k] }
 
 # an owner local place's body and local, -1 and -1 for any other place
+# a global place's module and name, -1, -1 for any other place
+fn (f Free&) GlobalPlace(k I64) I64, I64 {
+    if not f.isGlobal(k) { return -1, -1 }
+    return f.glModule[k], f.glName[k]
+}
+
 fn (f Free&) LocalPlace(k I64) I64, I64 {
     if not f.isOwnLocal(k) { return -1, -1 }
     return f.olBody[k], f.olLocal[k]
@@ -4111,7 +4170,7 @@ fn (f mut Free&) Report() String {
         # a row at a call - one that may let go of anything too - says the place as its own let-go writes it
         if g.Kind == LCall and f.goes[first].Kind != LCall { g = f.goes[first] }
         what := ""
-        if (f.keyField[k] < 0 and not f.isOwnLocal(k)) or f.isContents(k) {
+        if (f.keyField[k] < 0 and not f.isNamed(k)) or f.isContents(k) {
             what = $"removed elements of '" $f.collection(k, g.Body, g) "' are kept until " $f.scopeName(g, k) " closes"
         } else {
             what = $"'" $f.placeName(g) "' keeps what it lets go of until " $f.scopeName(g, k) " closes"
@@ -4155,6 +4214,10 @@ fn (f mut Free&) reported(k I64) Bool {
     if not owns { return false }
     if f.isContents(k) { return true }
     if f.isOwnLocal(k) { return true }
+    if f.isGlobal(k) {
+        m := f.glModule[k]
+        return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
+    }
     if f.keyField[k] < 0 { return false }
     t := f.T()
     r := t.Repr(f.keyTy[k])
@@ -4205,8 +4268,9 @@ fn (f mut Free&) collection(k I64, b I64, row letGo) String {
 # its type names it ("the Server's scope"), or a local's function's ("main's scope")
 fn (f mut Free&) scopeName(g letGo, k I64) String {
     rv := f.recvOf(g)
-    text := rv if f.keyField[k] < 0 and rv != "" and not f.isOwnLocal(k) else f.placeName(g)
-    if f.keyField[k] < 0 and not f.isOwnLocal(k) {
+    if f.isGlobal(k) { return "the program's scope" }
+    text := rv if f.keyField[k] < 0 and rv != "" and not f.isNamed(k) else f.placeName(g)
+    if f.keyField[k] < 0 and not f.isNamed(k) {
         for g2 in f.goes {
             if g2.PlaceId == k and g2.Body == g.Body {
                 r2 := f.recvOf(g2)

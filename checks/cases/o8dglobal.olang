@@ -1,0 +1,86 @@
+# check: run
+# flags: -debug -sanitize
+# O8d: a global is a place like any other. A Vec global given a Vec built in a local each turn - its first value data
+# its initializer built - releases what it held as it is given another; a view of it taken before a call that gives it
+# another keeps what it showed (condition 6), and a view of it kept in another global keeps it altogether (condition 2);
+# a Map global's values replaced and removed. Read after the arena churned and other storage reused, under the scope
+# sanitizer and interpreted alike
+import "std/io"
+
+cache mut Vec<I64> = Vec<I64>[7, 8, 9]
+held mut Vec<I64> = Vec<I64>()
+kept mut Array<I64>& = Array<I64>[0]
+table mut Map<I64, Vec<I64>> = Map<I64, Vec<I64>>()
+
+fn fill(n I64, k I64) {
+    v := Vec<I64>()
+    for i in range n { v.Push(i * k) }
+    cache = v
+}
+
+fn give(n I64) {
+    v := Vec<I64>()
+    for i in range n { v.Push(i + 1) }
+    held = v
+}
+
+fn churn() I64 {
+    t := 0
+    for _ in range 20 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+fn freed(n I64) I64 {
+    s := cache[1]
+    for k in range n {
+        fill(10 + k.Mod(3), k)
+        churn()
+        s += cache[2] + cache.Len()
+    }
+    return s
+}
+
+fn viewed(n I64) I64 {
+    give(4)
+    v := held.View()
+    s := 0
+    for k in range n {
+        give(5 + k.Mod(2))
+        churn()
+        s += v[3] + held[4]
+    }
+    return s
+}
+
+fn keeper(n I64) I64 {
+    s := 0
+    for k in range n {
+        give(6 + k)
+        kept = held.ViewMut()
+        churn()
+        s += kept[5]
+    }
+    give(2)
+    churn()
+    return s + kept[5]
+}
+
+fn values(n I64) I64 {
+    s := 0
+    for k in range n {
+        v := Vec<I64>()
+        for i in range 4 { v.Push(i + k) }
+        table.Put(k.Mod(3), v)
+        if k.Mod(3) == 2: table.Remove(0)
+        churn()
+        s += table.Get(k.Mod(3))![3]
+    }
+    return s + table.Len()
+}
+
+fn main() {
+    io.Println($freed(50) " " $viewed(50) " " $keeper(20) " " $values(50))!
+}

@@ -1923,6 +1923,10 @@ type LastUses struct(N I64) {
     CopyLocal Vec<I64>
     CopyAt Vec<I64>       # the copy's position, -1 where it is in a loop the local is declared outside, or in later code
     Said Vec<I64>         # the local each mention named, by its position (seq - 1)
+    # the copies that are the whole value given a global: the place lets go of what it held there (O8d), so the copy is
+    # what a region of its own holds, the local's storage freed where its own block closes - never built in the
+    # program's scope, which never closes (item 17's lift left out: LastCopies)
+    OverGlobal Map<I64, Bool>
 }
 
 fn (w mut LastUses&) mention(id LocalId) {
@@ -1961,6 +1965,10 @@ fn (w mut LastUses&) stmt(s Stmt&) {
         }
         case Stmt.Assign(_, p, x) {
             w.place(p)
+            if p == Lvalue.Global {
+                cs := copySite(x)
+                if cs >= 0: w.OverGlobal.Put(cs, true)
+            }
             w.expr(x)
         }
         case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
@@ -2136,6 +2144,15 @@ fn (w mut LastUses&) copyOf(m Make&) {
     w.CopyAt.Push(-1 if late else w.seq + 1)
 }
 
+# the site of the copy of a whole local an expression is, -1 for any other
+fn copySite(x Expr&) I64 {
+    return match x {
+        case Expr.Make(_, _, m): I64(m.Site) if m.Kind == MakeKind.Copy and m.Items.Len() == 1 and wholeLocal(m.Items[0]) >= 0 else -1
+        case Expr.Away(_, _, y): copySite(y)
+        case _: -1
+    }
+}
+
 # the local whose whole value an expression reads, -1 for any other
 fn wholeLocal(x Expr&) I64 {
     return match x {
@@ -2155,7 +2172,7 @@ fn LastCopies(b Body&) Map<I64, I64> {
     w.Block(b.Root!)
     for k in range w.CopySite.Len() {
         l := w.CopyLocal[k]
-        if w.CopyAt[k] >= 0 and w.Last[l] == w.CopyAt[k]: out.Put(w.CopySite[k], l)
+        if w.CopyAt[k] >= 0 and w.Last[l] == w.CopyAt[k] and not w.OverGlobal.Has(w.CopySite[k]): out.Put(w.CopySite[k], l)
     }
     return out
 }
