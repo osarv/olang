@@ -40,3 +40,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09T02:30	Fix stale-object link + fuzz gen	opus	medium	completed	224	72	39	yes	?	root fns not emitted when reused importer reaches root
 2026-11-09T02:40	R2 refusals 5.2	opus	medium	completed	313	162	60	yes	?	13/15 + 2 of 5.4; IR identical
 2026-11-09T04:00	F8 derived scopes passed	opus	medium	completed	427	276	86	yes	?	Logged/Tally 183->1.7MB; found Vec<Logged> lent+push use-after-close (pre-existing)
+2026-11-09T06:00	Fix Vec<Logged> lent+push drop	opus	medium	completed	231	75	31	no (golden capture missed new file)	?	drop of non-local place runs in its home scope (Plan.DropHome)
