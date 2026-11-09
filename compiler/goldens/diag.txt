@@ -3438,8 +3438,6 @@ o15registeredtemp.olang:27:10: error[O15, O16]: this value is held where its cal
    27 |     hold(Grip(1), l)
       |          ^~~~~~~
 compilation failed with 1 error
-=== o17permute5.olang
-built ./build/o17permute5
 === o17permute6.olang
 o17permute6.olang:27:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
    27 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
@@ -5632,28 +5630,23 @@ t22alatelambda.olang:15:9: error[T22b]: this lambda keeps 'b' in what it capture
       |         ^~
 compilation failed with 1 error
 === t22apushed.olang
-t22apushed.olang:11:8: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
-   11 |     fs.Push(g)
+t22apushed.olang:12:8: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
+   12 |     fs.Push(g)
       |        ^~~~
 $ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
    68 |     v.data[v.n].occupy(x)
       |                        ^
-t22apushed.olang:11:8: note: the functions given here followed into it (T22c)
-   11 |     fs.Push(g)
+t22apushed.olang:12:8: note: the functions given here followed into it (T22c)
+   12 |     fs.Push(g)
       |        ^~~~
-t22apushed.olang:11:8: note: instantiated here, with T = fn&(mut N&, N&)
-   11 |     fs.Push(g)
+t22apushed.olang:12:8: note: instantiated here, with T = fn&(mut N&, N&)
+   12 |     fs.Push(g)
       |        ^~~~
 compilation failed with 1 error
 === t22areturncycle.olang
 t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this return (from a function calling itself, or among several results) says nothing of that - write 'keeps b in a' after its signature
    10 |     if n == 0 { return link }
       |                        ^~~~
-compilation failed with 1 error
-=== t22bborrows.olang
-t22bborrows.olang:9:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
-    9 | fn main() { _ := use(second, N(1)) }
-      |             ^
 compilation failed with 1 error
 === t22bglobalkeep.olang
 t22bglobalkeep.olang:11:15: error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back, and this store holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
@@ -5694,10 +5687,6 @@ t22bpure.olang:11:9: note: it may write through what it was not given writably h
    11 |         n.v = x
       |         ^~~~~~~
 compilation failed with 1 error
-=== t22breadonlyresult.olang
-built ./build/t22breadonlyresult
-=== t22bresultkept.olang
-built ./build/t22bresultkept
 === t22breturns.olang
 t22breturns.olang:7:14: error[T22b]: this lambda may end the program, and 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns' - give a function that does not, or hold it as a type without 'returns'
     7 |     k := Run(fn(x I64) I64 {

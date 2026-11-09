@@ -2339,6 +2339,8 @@
 | status 0
 === run o17permute4.olang
 | status 0
+=== run o17permute5.olang
+| status 0
 === run o17readonlycapture.olang
 | status 0
 | 7
@@ -3108,6 +3110,8 @@
 === run t22aviewkept.olang
 | status 0
 | 2
+=== run t22bborrows.olang
+| status 0
 === run t22blambdakeeps.olang
 | status 0
 | key0,key1,key2
@@ -3117,6 +3121,11 @@
 === run t22bpushedkeeps.olang
 | status 0
 | 3
+=== run t22breadonlyresult.olang
+| status 0
+=== run t22bresultkept.olang
+| status 0
+| 5
 === run t22breturncycle.olang
 | status 0
 | 7

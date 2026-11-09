@@ -1,4 +1,7 @@
-# check: fail error[T22a]: 'self' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# check: run
+# flags: -debug -sanitize
+# T22c (was a T22a refusal): self hands back its writable argument as a writable result - followed into keep, t is
+# built where out lives, as self's direct call would hold it
 # T22, T22b: a function handing back its writable argument as a writable result holds the result exactly where the
 # argument lives, which a type whose result is read-only does not say (t22borrowedresult writes 'mut N&')
 type N struct(v I64) {
@@ -10,7 +13,20 @@ fn keep(f fn&(a mut N&) N&, out mut N&, i I64) {
     t := N(i)
     out.next = f(t)
 }
+
+# storage made and let go many times, so a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
 fn main() {
     x mut N& = N(1)
     keep(self, x, 42)
+    churn(100)
+    assert x.next!.v == 42
 }

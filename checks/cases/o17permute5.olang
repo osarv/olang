@@ -1,5 +1,7 @@
-# check: fail error[T22a]: this lambda ties where what it is given lives
-# never: error[O17]
+# check: run
+# flags: -debug -sanitize
+# T22c (was refused by T22a, as R1 left it for round 7): the lambda is followed into each, its store of s into a
+# split value's element judged as the direct call it is
 # R1 (refusals 5.1): the split lend is no longer refused; T22a stays (docs/fnvalues.md, round 7)
 # O17 (Vec phase 1): a callee lent a split value only permutes its elements - a function value whose parameter can be stored through, called on elements is a store from outside
 type N2 struct(v I64) {
@@ -22,11 +24,15 @@ fn setName(r mut Rec&, s String&) { r.name = s }
 fn each(a mut Array<Rec>&, g fn&(x mut Rec&)) {
     for i in range a.Len() { g(a[i]) }
 }
-fn run(h mut H&, s String&) {
+fn run(h mut H&, s String&) String {
     recs := h.arr
     each(recs, fn(x mut Rec&) { x.name = s })
+    junk := Vec<String&>()
+    for i in range 50 { junk.Push(mkText(i)) }
+    assert junk.Len() == 50
+    return $recs[2].name
 }
 fn main() ? {
     h mut H& = H()
-    run(h, mkText(4))
+    assert run(h, mkText(4)) == "t4"
 }

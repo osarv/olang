@@ -1,4 +1,7 @@
-# check: fail error[T22a]: 'put' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# check: run
+# flags: -debug -sanitize
+# T22c (was a T22a refusal; once a hole, the scope sanitizer reading the node after its scope closed): put keeps its
+# result in its argument - followed into use, the node is built where the list lives, and read after a churn
 # T22, T22b: a function keeping its result in its argument requires the result scope to outlive the argument's, which a
 # function type says only where something can be stored through both the parameter and the result (O25g) - 'put's
 # result is read-only, so a call through the type would not build the node where the list lives (a hole: it compiled,
@@ -10,6 +13,16 @@ fn put(a mut Vec<N&>&) N& {
     a.Push(n)
     return n
 }
+# storage made and let go many times, so a value kept in a scope already closed would read another's
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
 fn use(f fn&(a mut Vec<N&>&) N&, a mut Vec<N&>&) {
     {
         r := f(a)
@@ -19,5 +32,6 @@ fn use(f fn&(a mut Vec<N&>&) N&, a mut Vec<N&>&) {
 fn main() ? {
     v := Vec<N&>()
     use(put, v)
+    churn(100)
     try io.Println($v[0].v)
 }

@@ -864,7 +864,7 @@ d0947f057d44b9f4 42fc08b197afd60b checks/cases/o17ownturnwalk.olang
 f3fcb765f240f950 c2d1d3736de83a6a checks/cases/o17permute15.olang
 1efeec467fb3545c 52508e916458f3f5 checks/cases/o17permute3.olang
 c3268c6f111ce5a8 4b2f7d12359210ea checks/cases/o17permute4.olang
-b48fd48c30ef503a 77867bd940e49e20 checks/cases/o17permute5.olang
+fb3e1eb9de1b392a 5255f26c577b9634 checks/cases/o17permute5.olang
 62baba31756a743f 724c3d280e682628 checks/cases/o17permute6.olang
 b9d860ba78f2685c f92836faf6d36c3a checks/cases/o17permute6b.olang
 65bbb929596be403 be4381acfb4848c4 checks/cases/o17readonlycapture.olang
@@ -1549,12 +1549,12 @@ f212c49728471702 364f86b21ad4353d checks/cases/t22alambdakeeps.olang
 d339a7e02ca2b01f 1973e5e7e86214b9 checks/cases/t22alatelambda.olang
 7c489917326e0318 4ba8c042c463ac4c checks/cases/t22alocal.olang
 79b25a9d76a132c6 31de67153feb8c14 checks/cases/t22aobligation.olang
-d5f4524e5bf3ea68 f0eb4219cd18dafc checks/cases/t22apushed.olang
+fece4b4ae4ffbf46 e60847b153a166a2 checks/cases/t22apushed.olang
 22c7f05c4df9c68b e34ea38de07ede99 checks/cases/t22aresult.olang
 5c9cb22af979dd1a ebea1c6a28b2569a checks/cases/t22areturncycle.olang
 bdc52b2e55fa04ce 58ccc49888ae3e0c checks/cases/t22avalueexact.olang
 0c4a1a5a1c9d3dab 9a69206db9fe439d checks/cases/t22aviewkept.olang
-116bca994fa7f49a a800f8052d995ff9 checks/cases/t22bborrows.olang
+b1c0e563b866159e 455582ea4b7b6729 checks/cases/t22bborrows.olang
 7ad67bcab584f284 aa9bdbefc344ff2e checks/cases/t22bglobalkeep.olang
 8340f2a92f8c34d8 a5bc38cf4540ee88 checks/cases/t22bkeepsouter.olang
 36ab5b1898ac9c3d ddc6f0a0f3c9f81a checks/cases/t22blambdakeeps.olang
@@ -1564,8 +1564,8 @@ af996f4f91cbd185 80348b9e159ee7cb checks/cases/t22bnorecurse.olang
 dc765b778e01b051 cdc8a8f8520b8f87 checks/cases/t22borrowedresult.olang
 73d8dcb43c51d96c b569098000c3936d checks/cases/t22bpure.olang
 c3c290be1edb5786 3eec3fe6fed44f8b checks/cases/t22bpushedkeeps.olang
-ea38ba2b5d8d94d3 081e396f6ade1a8d checks/cases/t22breadonlyresult.olang
-a0f3bcb6edc3709e f4ce1bef4ab4a41d checks/cases/t22bresultkept.olang
+cb24d1410e589ab9 6896eaa1238c1d2c checks/cases/t22breadonlyresult.olang
+d8b83bf11746bebb ae1a43e2da664030 checks/cases/t22bresultkept.olang
 3f7e2c3cbf0a639f 369c37efa9949de5 checks/cases/t22breturncycle.olang
 1fd95432c87b4db1 133399f48b4356fd checks/cases/t22breturns.olang
 947201546e8458b9 4b566dccddcc23ed checks/cases/t22breturnscycle.olang
