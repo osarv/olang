@@ -5795,9 +5795,12 @@ fn regionLocal(r typed.Expr&) I64 {
 # a call's argument i, for a writable reference parameter: a copy of an element no one holds - x[i] read through At, a
 # field or an element of it, a "try ... catch default" value, a conditional or a match choosing places - is written
 # where the write is lost, an error; but a handle element lent as its reference to a callee using it only through it
-# (O17b), and a view element lent to one writing nothing of its own storage, are lent as copies (not spawned)
-fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source.Span) {
+# (O17b), and a view element lent to one writing nothing of its own storage, are lent as copies (a task's where the copy
+# is built at its join's level, R4)
+fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, j Term, callSp source.Span) {
     a := c.Args[i]
+    spawned := j != Term.None
+    lasts := false   # a copy built where it lasts until the task's join (R4)
     how := 0
     et := types.UnknownT
     at := a.Span()
@@ -5812,6 +5815,7 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
             }
             et = v.Type()
             at = s.elemAt(v)
+            lasts = spawned and s.lastsUntil(s.copyHere(pr), j)
         }
         case typed.Expr.Borrow(_, _, p) {
             v := tempOf(p)
@@ -5831,9 +5835,9 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
         case _ { }
     }
     handle := s.isHandle(et)
-    if spawned and handle and how == 1 { at = s.nameSpan(callSp) }
+    if spawned and not lasts and handle and how == 1 { at = s.nameSpan(callSp) }
     if how == 0 { return }
-    if not spawned {
+    if not spawned or lasts {
         match c.Target {
             case typed.Callee.Body(id) {
                 # a handle - x[i]'s, or a try's element or default ("(try m.Get(k) catch default L()).Push(v)") - is a
@@ -5844,9 +5848,10 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
             case _ { }
         }
     }
-    rec := s.err(at, msgs.SpawnAtElement() if spawned and handle and how == 1 else msgs.WriteThroughAtCall())
+    # (a task's copy built where it lasts is refused for what the same call unspawned is - R4)
+    rec := s.err(at, msgs.SpawnAtElement() if spawned and not lasts and handle and how == 1 else msgs.WriteThroughAtCall())
     # E31b: with the callee's statement that made it no view of the element, where there is one
-    if not spawned and how == 1 and not handle and s.isStruct(et) {
+    if (not spawned or lasts) and how == 1 and not handle and s.isStruct(et) {
         match c.Target {
             case typed.Callee.Body(id) {
                 why := try s.useWhy.Get(pair.Pair(I64(id) * 4 + UseView, i)) catch default source.Span(0, 0)
@@ -8468,9 +8473,10 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         s.inSpawn = true
         v := s.val(c.Handler, j)
         s.inSpawn = false
-        if v.K == ValKind.Existing and not s.lastsUntil(v.T, j) and s.report {
-            s.err(s.firstToken(s.B!.File, c.Sp), msgs.SpawnCaptureTooShort())
-        }
+        short := v.K == ValKind.Existing and not s.lastsUntil(v.T, j)
+        # (the inference: what the clause captured built at the join's level - R4)
+        if short and s.liftGather { s.propose(c.Handler!, j) }
+        if short and s.report { s.err(s.firstToken(s.B!.File, c.Sp), msgs.SpawnCaptureTooShort()) }
         match c.Handler {
             case typed.Expr.Fn(_, _, typed.FnVal.Lambda(id, _, _)) { if s.clauseBuilds(I64(id), dest, c.Sp): clauseBuilt = true }
             case _ { }
@@ -9660,7 +9666,7 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
         vals[i] = Val.plain()
         a := c.Args[i]
         if owner[i] < 0 { continue }
-        v := s.argVal(c, i, fty, owner, beta, ev, dest, landed)
+        v := s.argVal(c, i, fty, owner, beta, ev, dest, landed, j)
         vals[i] = v
         if v.K != ValKind.Existing { continue }
         # an argument whose scope is one of several (O12): read through, never built into
@@ -9763,7 +9769,7 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     # a copy of an element no one holds, for a writable reference parameter, is written and lost (E31b)
     if s.report {
         for i in range n {
-            if i < ps.Len() and s.isRef(ps[i]) and (s.P.T.PermOf(ps[i]) & types.Writable) != 0 { s.writtenCopy(c, i, spawned, sp) }
+            if i < ps.Len() and s.isRef(ps[i]) and (s.P.T.PermOf(ps[i]) & types.Writable) != 0 { s.writtenCopy(c, i, j, sp) }
         }
     }
     # S21: a become's call is made once every scope of the function is closed - it binds none of them, only what the
@@ -9973,7 +9979,10 @@ fn (s mut Scoper&) calleeValue(x typed.Expr&, spawned Bool, j Term) Term {
     fv := s.val(x, j)
     s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc = savedTemp, savedAt, savedSlot, savedFunc
     s.inSpawn = false
-    if not spawned or fv.K != ValKind.Existing or s.lastsUntil(fv.T, j) or not s.report { return fv.T }
+    if not spawned or fv.K != ValKind.Existing or s.lastsUntil(fv.T, j) { return fv.T }
+    # (the inference: what the task calls through, or what its lambda captured, built at the join's level - R4)
+    if s.liftGather { s.propose(x, j) }
+    if not s.report { return fv.T }
     if lambda {
         s.err(s.firstToken(s.B!.File, x.Span()), msgs.SpawnCaptureTooShort())
     } else {
@@ -9986,7 +9995,7 @@ fn (s mut Scoper&) calleeValue(x typed.Expr&, spawned Bool, j Term) Term {
 # variable (O17, O25e), as does a call's result passed on that lands where its own obligations say (O18c); plain for a
 # temporary built later where the variable is bound. landed[i] where it was built here
 fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I64>&, beta Array<Term>&, ev I64, dest Term
-                           landed mut Array<Bool>&) Val {
+                           landed mut Array<Bool>&, j Term) Val {
     a := c.Args[i]
     pr := s.promoted(a)
     # a constructor's arguments are what its instance holds: C2d judges them where the instance lands, not O17
@@ -9999,6 +10008,8 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         v := s.val(pr.X, Term.None)
         s.landing = false
         s.build(pr.Site, s.copyHere(pr))
+        # (a task's copy - a handle x[i] the task uses only through: built at the join's level, R4)
+        if s.liftGather and not s.lastsUntil(s.copyHere(pr), j) { s.proposeSite(I64(pr.Site), j) }
         landed[i] = true
         if v.K == ValKind.Fresh { v = Val.existing(v.T) }
         if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) { v = s.keptCopy(c, i, a, pr, v) }
@@ -10037,7 +10048,7 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         return v
     }
     if s.isFresh(a) or s.isHeldFresh(a) { return Val.plain() }
-    return s.argExisting(c, i, owner, beta, ev, dest)
+    return s.argExisting(c, i, owner, beta, ev, dest, j != Term.None)
 }
 
 # where the copy pr makes of a call's value lent by reference is built: this block, or where the inference landed it
@@ -10078,10 +10089,11 @@ fn (s mut Scoper&) keptCopy(c typed.Call&, i I64, a typed.Expr&, pr typed.Promot
 
 # argument i of call c naming existing storage (argVal): where it lives, or where its references do for a value lent
 # where they are (O17)
-fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Array<Term>&, ev I64, dest Term) Val {
+fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Array<Term>&, ev I64, dest Term, spawned Bool) Val {
     a := c.Args[i]
-    # a capturing lambda made for a callee keeping nothing of it lives in this frame (D16c)
-    if s.capturingLambda(a) and s.transient(s.bodyOf(c.Target), i) { s.onFrame = true }
+    # a capturing lambda made for a callee keeping nothing of it lives in this frame (D16c) - a task's not: the task runs
+    # on after the spawner's frame moves on, so it lives where what it captured does, at the join's level (P2, R4)
+    if not spawned and s.capturingLambda(a) and s.transient(s.bodyOf(c.Target), i) { s.onFrame = true }
     pk := s.landArgPart(c, i, owner, beta, ev, dest)
     v := s.val(a, Term.None)
     if pk >= 0 { s.partDest.Remove(pk) }
@@ -10172,7 +10184,10 @@ fn (s mut Scoper&) argTemp(a typed.Expr&, beta mut Array<Term>&, k I64, here Ter
     # a call the inference landed elsewhere than its variable was bound: the variable bound where it is, which the
     # callee's obligations then judge - a callee building into the variable builds where the argument lives (O25e, 2.4)
     if v.K == ValKind.Existing and v.T.Runs() and s.liftedCall(a) { beta[k] = v.T }
-    if spawned and v.K == ValKind.Existing and not s.lastsUntil(v.T, j) and s.report { s.err(s.opTok(a), msgs.SpawnArgHoldsShort()) }
+    if not spawned or v.K != ValKind.Existing or s.lastsUntil(v.T, j) { return v }
+    # (the inference: what the temporary holds built at the join's level - R4)
+    if s.liftGather { s.propose(a, j) }
+    if s.report { s.err(s.opTok(a), msgs.SpawnArgHoldsShort()) }
     return v
 }
 
