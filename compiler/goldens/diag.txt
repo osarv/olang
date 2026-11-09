@@ -453,50 +453,20 @@ builtinmethod.olang:2:12: error[M19d]: only the prelude declares methods of I32 
     2 | fn (n I32) Tw() I32 { return n * 2 }
       |            ^~
 compilation failed with 1 error
-=== c11arraydtor.olang
-c11arraydtor.olang:8:10: error[C11]: R has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<R>, or hold R& ones
-    8 |     b := Array<R>(n)
-      |          ^~~~~~~~~~~
-compilation failed with 1 error
-=== c11comprdtor.olang
-c11comprdtor.olang:9:17: error[C11]: R has a destructor to run, and Array<R> keeps values of it where no holder ends them - write R&, or keep them in a Vec<R>
-    9 |     xs := Array<R>[R(i) for i in range n]
-      |                 ^
-compilation failed with 1 error
-=== c11copyrunarray.olang
-c11copyrunarray.olang:10:12: error[C11]: Kept has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<Kept>, or hold Kept& ones
-   10 |     c := a.Copy()
-      |            ^~~~
-compilation failed with 1 error
 === c11destructnotunique.olang
 c11destructnotunique.olang:6:3: error[C11, T13b]: a destructor releases what one value holds, so Conn is unique - declare it 'type Conn unique struct(...)'
     6 | } destruct { Closed++ }
       |   ^~~~~~~~
-compilation failed with 1 error
-=== c11dtorglobal.olang
-c11dtorglobal.olang:7:3: error[C11]: Conn has a destructor to run, so a global holds it by reference - write Conn&, its destructor run as the program ends
-    7 | G Conn = Conn(3)
-      |   ^~~~
 compilation failed with 1 error
 === c11dtortypearg.olang
 c11dtortypearg.olang:10:20: error[C11]: Conn has a destructor to run, and List<Conn> keeps values of it where no holder ends them - write Conn&, or keep them in a Vec<Conn>
    10 |     v := list.List<Conn>()
       |                    ^~~~
 compilation failed with 1 error
-=== c11holdertypearg.olang
-c11holdertypearg.olang:13:14: error[C11]: Pool has a destructor to run, and Buf<Pool> keeps values of it where no holder ends them - write Pool&, or keep them in a Vec<Pool>
-   13 |     v := Buf<Pool>()
-      |              ^~~~
-compilation failed with 1 error
 === c11keptvec.olang
 c11keptvec.olang:11:14: error[C11]: Kept has a destructor to run and copies (its Copy), and a copy of Vec<Kept> would copy what it holds past its count - hold them by reference, Kept&
    11 |     v := Vec<Kept>()
       |              ^~~~
-compilation failed with 1 error
-=== c11unendedparam.olang
-c11unendedparam.olang:8:18: error[C11]: Conn has a destructor to run, and Array<Conn> keeps values of it where no holder ends them - write Conn&, or keep them in a Vec<Conn>
-    8 | fn count(a Array<Conn>) I64 { return a.Len() }
-      |                  ^~~~
 compilation failed with 1 error
 === c11vecofdtorcopy.olang
 c11vecofdtorcopy.olang:10:19: error[T13b]: Vec<Conn> is unique: this value is held elsewhere, and 'c' holds one of its own - write a reference ('Vec<Conn>&'), or make a new Vec<Conn> here
@@ -933,11 +903,6 @@ compilation failed with 1 error
 d18yieldoutside.olang:4:5: error[D18, S20]: 'yield' is a generator's - a function whose result is written 'Iterator<T>'
     4 |     yield 1
       |     ^~~~~
-compilation failed with 1 error
-=== d18yieldown.olang
-d18yieldown.olang:7:15: error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Copy()', '$x')
-    7 |         yield l
-      |               ^
 compilation failed with 1 error
 === d19aexpected.olang
 d19aexpected.olang:4:4: error[D19a]: 'gray' makes a Color its module declares and takes none - declare it as the type's builder, 'fn Color.gray(...)', and call it 'Color.gray(...)'
@@ -1689,14 +1654,6 @@ e31bviewcycle.olang:13:11: error[E31b]: x[i] gives a copy of the element, which 
 e31bviewcycle.olang:16:16: note: the callee is no view of the element because of this statement
    16 |     if k > 0 { up(v, k - 1) }
       |                ^~~~~~~~~~~~
-compilation failed with 1 error
-=== e31bviewenumfield.olang
-e31bviewenumfield.olang:32:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   32 |     f(s[1])
-      |        ^
-e31bviewenumfield.olang:25:5: note: the callee is no view of the element because of this statement
-   25 |     match c.kind {
-      |     ^~~~~~~~~~~~~~
 compilation failed with 1 error
 === e31bviewfield.olang
 e31bviewfield.olang:16:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -3354,10 +3311,10 @@ o17permute6b.olang:31:12: error[T25c]: this lambda writes through or keeps its b
    31 |     run(h, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
       |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
-=== o1blambdaglobal.olang
-o1blambdaglobal.olang:14:30: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
-   14 |         case Box.Has(n) { GF = fn() { return n.v } }
-      |                              ^
+=== o20storedrefoutlived.olang
+o20storedrefoutlived.olang:19:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
+   19 |     b.n = r
+      |         ^
 compilation failed with 1 error
 === o23aliasmethod.olang
 o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
@@ -3464,16 +3421,6 @@ compilation failed with 1 error
 p4aclausetry.olang:14:38: error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
    14 |         spawn try work(-1) catch E { try log(10) }
       |                                      ^~~
-compilation failed with 1 error
-=== p4adefaultexisting.olang
-p4adefaultexisting.olang:17:49: error[P4a]: a task's default is built where its result lands, and this names existing storage - build the value here, or give null
-   17 |         spawn r = try Node.mk(-1) catch default fallback
-      |                                                 ^~~~~~~~
-compilation failed with 1 error
-=== p4adefaultholds.olang
-p4adefaultholds.olang:18:58: error[P4a]: a task's default is built where its result lands, and this names existing storage - build the value here, or give null
-   18 |         spawn r = try Node.mk(-1) catch default Node(-1, anchor)
-      |                                                          ^~~~~~
 compilation failed with 1 error
 === p4adefaultstatement.olang
 p4adefaultstatement.olang:12:32: error[P4a]: a spawn without targets gives no value, so its clauses take no default
@@ -3687,10 +3634,10 @@ r11clausevalue.olang:20:30: error[R11]: a block's last value is not the clause's
    20 |     b := try half(5) catch { 0 }
       |                              ^
 compilation failed with 2 errors
-=== r11defaultexisting.olang
-r11defaultexisting.olang:12:43: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
-   12 |     n := (try validate("x") catch default empty).Len()
-      |                                           ^~~~~
+=== r11defaultscope.olang
+r11defaultscope.olang:22:49: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
+   22 |         m := try Node.make(n - 5) catch default d
+      |                                                 ^
 compilation failed with 1 error
 === r14setnotproduced.olang
 r14setnotproduced.olang:8:19: error[R14]: the call does not fail with Q
@@ -4390,6 +4337,11 @@ compilation failed with 1 error
 s19break.olang:10:24: error[S19b]: 'break' may not leave deferred code - it runs while its block is left
    10 |             if t > 1 { break }
       |                        ^~~~~
+compilation failed with 1 error
+=== s19byieldindefer.olang
+s19byieldindefer.olang:6:17: error[S19b, S20]: deferred code may not yield - it runs while its block is left
+    6 |         defer { yield i }
+      |                 ^~~~~
 compilation failed with 1 error
 === s19eescape.olang
 s19eescape.olang:6:14: error[S19b]: an error may not leave deferred code - catch it here
@@ -5610,6 +5562,19 @@ t25ccopyfuncvalue.olang:9:10: error[T25c]: this lambda writes through or keeps i
     9 |     f := fn(b Box) { b.P[0] = 1 }
       |          ^~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== t25ccopyglobal.olang
+t25ccopyglobal.olang:8:13: error[T25c]: a mutable global holds no copy of a read-only Box - give it one of its own, made from its parts, or drop its 'mut'
+    8 | G mut Box = R
+      |             ^
+compilation failed with 1 error
+=== t25ccopylent.olang
+t25ccopylent.olang:15:10: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made from its parts
+   15 |     bump(c)
+      |          ^
+t25ccopylent.olang:14:5: note: 'c' copies a place reached read-only, so it is read-only
+   14 |     c := r.b
+      |     ^
+compilation failed with 1 error
 === t25ccopylit.olang
 t25ccopylit.olang:9:21: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
     9 |     a := Array<Box>[GB]
@@ -5641,6 +5606,11 @@ t25ccopypun.olang:8:18: note: 'b' is declared here
     8 | type Wrap struct(b Box) {
       |                  ^~~~~
 compilation failed with 1 error
+=== t25ccopyreturned.olang
+t25ccopyreturned.olang:7:30: error[T25c]: a copy of a read-only Box cannot be returned as a writable value - return one of its own, made from its parts, or a read-only reference
+    7 | fn give(r Box&) Box { return r }
+      |                              ^
+compilation failed with 1 error
 === t25ccopystore.olang
 t25ccopystore.olang:10:10: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
    10 |     GW = GB
@@ -5650,6 +5620,14 @@ compilation failed with 1 error
 t25cforinwrites.olang:19:5: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    19 |     for x in hs[0].ring { t += x }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t25crefkept.olang
+t25crefkept.olang:12:12: error[T25c]: 'put' keeps what its parameter 'x' reaches where it can be written, and this Box is read-only - pass a writable one
+   12 |     put(v, r)
+      |            ^
+t25crefkept.olang:7:26: note: 'x' is declared here
+    7 | fn put<T>(v mut Vec<T>&, x T&) { v.Push(x) }
+      |                          ^~~~
 compilation failed with 1 error
 === t25dconstmut.olang
 t25dconstmut.olang:13:22: error[T25d]: this hands data written in the program where it may be written - pass a copy of its own: '$"abc"'
