@@ -44,3 +44,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09T07:00	Review A section-8 soundness	opus	medium	completed	233	75	16	n/a	n/a	0 bugs in rounds; 1 pre-existing ctor-field bug; 3 over-rejections; fuzzers 1000+600 clean
 2026-11-09T07:30	Fix ctor field collection bug	opus	medium	completed	239	124	81	no (run golden missed new cases)	?	one cause for IR bug + T25c over-rejection
 2026-11-09T09:00	Early freeing for global stores	opus	medium	completed	343	133	61	yes	?	705->13MB; found Map key-text early-free UAF
+2026-11-09T10:00	Survey: small strong reasoning LLMs	sonnet	medium	completed	151	11	2	n/a	n/a	abstracts only; some ids unverified
+2026-11-09T10:30	Build kept locals in the place region	opus	medium	completed	397	164	78	yes	?	field 586->2.2MB, map keys 266->2.4MB; fuzz caught own bug

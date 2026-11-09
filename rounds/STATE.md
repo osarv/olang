@@ -57,3 +57,6 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - Probe review/global_letgo_probe.olang: a mut global Vec replaced 2000x keeps everything (peak 705 MB; -memory: "no place lets go"). Global stores are not let-go places yet, though memory.md says they are. Queue fix.
 - ctorfield merged, pushed.
 - globalfree merged, pushed. Follow-ups: (a) field store lift: v built where h lives, 572MB - build v in the field region from its declaration (option b, my call; also replace the global copy with it); (b) Maps with text keys no longer free values early after the key-text fix - recover.
+- Survey done: oagent/papers/survey-reasoning.md (f10857d).
+- regionkeep merged, pushed. Gap: s += m.Get(k)![5] in a loop keeps each turn copy (266MB), pre-existing.
+- Usage 0.65 at 11:00 CET Mon (0.56 Sun 21:25, ~10 agents): ~0.01/agent incl. coordination. ~25 agents of room to 0.92.
