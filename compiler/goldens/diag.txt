@@ -1598,6 +1598,14 @@ e31bfnlambda.olang:9:31: error[E31b]: x[i] gives a copy of the element, which th
     9 |     fn(c mut Acc&) { c.N++ }(l[0])
       |                               ^
 compilation failed with 1 error
+=== e31bfnpurewrites.olang
+e31bfnpurewrites.olang:12:9: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   12 |     accs[0].Add(1, fn(x) {
+      |         ^
+e31bfnpurewrites.olang:7:48: note: the callee is no view of the element because of this statement
+    7 | fn (a mut Acc&) Add(x I64, f fn&(x I64) I64) { a.n += f(x) }
+      |                                                ^~~~~~~~~~~
+compilation failed with 1 error
 === e31bfnresult.olang
 e31bfnresult.olang:10:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    10 |     bumper()(l[0])
@@ -3113,6 +3121,14 @@ m19gelemroutemap.olang:16:5: note: 'ss[...].m' may grow here, in 'fill' - take t
 m19gelemroutemap.olang:6:60: note: 'fill' may grow it here
     6 | fn fill(m mut Map<I64, blk>&) { for i in range 2, 5000 { m.Put(i, blk(i, i)) } }
       |                                                            ^~~
+compilation failed with 1 error
+=== m19gfnpuregrows.olang
+m19gfnpuregrows.olang:11:12: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   11 |     assert d[0] == 1
+      |            ^
+m19gfnpuregrows.olang:10:5: note: 'v' may grow here, in a call through a function value - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   10 |     f(v)
+      |     ^
 compilation failed with 1 error
 === m19gmapnote.olang
 m19gmapnote.olang:12:22: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown

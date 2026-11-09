@@ -6,7 +6,8 @@ type Acc struct() {
 }
 fn (a mut Acc&) Add(x I64, f fn&(x I64) I64) { a.n += f(x) }
 fn main() ? {
-    accs := Vec<Acc>()
+    v := Vec<Acc>()
+    accs mut Vec<Acc>& = v
     accs.Push(Acc())
     accs[0].Add(1, fn(x) {
         accs.Push(Acc())
