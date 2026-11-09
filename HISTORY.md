@@ -35430,3 +35430,9 @@ shape, a chain three deep, a recursive callee, a captured value, `keep(link)`, a
 global baked and asserts decided through a twin - built, sanitized and interpreted), fail cases t22cstorefollowed,
 t22climit, t22cbuildcapture, the checks scenario `twins` (put's twin's code) and the incremental edit "a twin added".
 The compiler's own IR built by the new compiler is byte-identical to the old one's. OLANG_SCOPESTATS gains a twins row.
+Four more refused cases compile once followed and became run cases read back after a churn (o17permute5, t22bborrows,
+t22breadonlyresult, t22bresultkept - the last once a hole the sanitizer caught, now built where the list lives);
+t22apushed is now refused at Vec.Push's store into its buffer (followed into Push, as 4.2 says), the note at the call.
+scopefuzz (300 programs, the relations scenario now calling higher-order helpers) found nothing. Seen on the way and
+left: a test build of tests/runner.olang in a build/ directory other builds had used failed to link
+(`tests_2frunner_2eDoubleIt` undefined) while it passed in a clean directory - a B3i reuse question, not T22c's.
