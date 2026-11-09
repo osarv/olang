@@ -71,7 +71,13 @@ one rule that composes over special cases; fix rough edges found while building.
   reproduce, make stronger (cheaper settles), then train them with local rules (EP needs an energy, EBR has one). Language early, as a gate (the user: "If it doesn't
   work with language, it's pretty useless"). Frame (the user, 2026-11-09): an entropy-reducing, self-sustaining
   system, like a creature or a society - draw on systems science (free energy, cybernetics, criticality, homeostasis,
-  multi-timescale hierarchy, growth and pruning), not only computer structures; oann is
+  multi-timescale hierarchy, growth and pruning), not only computer structures; cybernetics especially. Local before
+  optimizing backprop energy models (a backprop EBR/EBT stays only as the yardstick). Credit assignment as in the brain
+  (the user): the global signal (dopamine) "knows how it went, but not what happened", the local update "knows what
+  happened" - three-factor rules (eligibility traces x global neuromodulators), with EP's nudge as the global signal.
+- **Roles (the user, 2026-11-09):** "I'm only going to be able to kind of do the high level stuff and reason with you
+  there and try to give you ideas. Any kind of experimentation is going to be on you. You are responsible for a lot of
+  this project and grow into that." I own the research program: design, experiments, measurement, the log of results. oann is
   general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md. Trained from scratch, no open weights (the user, 2026-11-09).
 
 ## Reading the user
