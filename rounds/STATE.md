@@ -56,3 +56,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - User 11-09: no more experiments unless they teach the compiler; order compiler -> oann -> experiments. /tmp deletions allowed freely.
 - Probe review/global_letgo_probe.olang: a mut global Vec replaced 2000x keeps everything (peak 705 MB; -memory: "no place lets go"). Global stores are not let-go places yet, though memory.md says they are. Queue fix.
 - ctorfield merged, pushed.
+- globalfree merged, pushed. Follow-ups: (a) field store lift: v built where h lives, 572MB - build v in the field region from its declaration (option b, my call; also replace the global copy with it); (b) Maps with text keys no longer free values early after the key-text fix - recover.
