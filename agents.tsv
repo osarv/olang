@@ -58,3 +58,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09T15:10	R3 refusals 5.3	opus	medium	completed	342	187	120	no (one fixture now compiles)	?	15/15 run; IR identical
 2026-11-09	fallbacks	opus	medium	done	293	141	65	pass		program-scope fallbacks via lookup/derivedRoot/capRoot; gen walk placement; found T22c null-scope fallback
 2026-11-09	overrej	opus	medium	done	360	225	79	goldens		p7 wrong count (dtor late) fixed; r1/r2 relaxed; p9 sound, message only
+2026-11-09	R4	opus	medium	done	287	123	55	pass		7 task refusals accepted; found spawn call-copy built per turn (use after scope)
