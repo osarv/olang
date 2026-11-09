@@ -35834,7 +35834,9 @@ weak, is a whole-program fact per declaration (`T13d MODULE.Name`, valued `gen` 
 positions), read by the module whose body's lowering asked about it - `mir.GenInfo` keeps every declaration a question
 touched, a `HoldsGen` answer remembering the declarations it was read from - so a module's record, its IR reused by a
 later build, is kept only where none of the types its code allocates or stores became generational, stopped being, or
-gained or lost a weak field. A program with no `weak` asks too (the questions are made whatever the answer), so the
+gained or lost a weak field. Every declaration a module's source declares has its fact decided once checking is done,
+before any record is read (`DecideGen`) - a fact first decided while lowering would leave every record reading it
+stale, as the reuse scenarios found; a C header's struct, never named weakly, has none. A program with no `weak` asks too (the questions are made whatever the answer), so the
 incremental scenario's edit "the first weak to a type" lowers only the module whose code uses the type.
 
 **Tests.** tests/weak.olang: a list whose middle and head nodes are taken out (their weak places read `null`, the
