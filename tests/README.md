@@ -21,8 +21,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `geom/` - `rect.olang` and `measure.olang`, two modules that import each other,
   imported by `runner`.
 - `any.olang` - run-time trait values (`any Trait&`, T32-T34).
-- `weak.olang` - weak references and generational types (T2d, T13d): a list, a tree and an LRU cache with weak
-  links, a generational value held by reference.
+- `weak.olang` - weak references and generational types (T2d, T13d, O8e): a list, a tree and an LRU cache with weak
+  links, a generational value held by reference, and weak places reading `null` once no owning place holds their node
+  (removals, a subtree cut off, an eviction, a Map that grows, a Vec's pop).
 - `bench.olang` - benchmarks (std/bench, B19b): run once here, measured by `olang test -bench tests/bench.olang`.
 - `errsets.olang` - error types declared as types, named error sets and the error a catch clause names (T19, T19a,
   R11b, R3a), each computation baked while compiling beside the same one at run time.
