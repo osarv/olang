@@ -69,7 +69,9 @@ one rule that composes over special cases; fix rough edges found while building.
   ways" - prefer mechanisms with a biological counterpart (local plasticity, spikes, neuromodulation, sleep replay) when
   measurements tie. Starting point (the user, 2026-11-09, agreed): energy-based reasoners (oagent/papers/2611.08977.md) -
   reproduce, make stronger (cheaper settles), then train them with local rules (EP needs an energy, EBR has one). Language early, as a gate (the user: "If it doesn't
-  work with language, it's pretty useless"); oann is
+  work with language, it's pretty useless"). Frame (the user, 2026-11-09): an entropy-reducing, self-sustaining
+  system, like a creature or a society - draw on systems science (free energy, cybernetics, criticality, homeostasis,
+  multi-timescale hierarchy, growth and pruning), not only computer structures; oann is
   general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md. Trained from scratch, no open weights (the user, 2026-11-09).
 
 ## Reading the user
