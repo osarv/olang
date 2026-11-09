@@ -8050,6 +8050,16 @@ in the root's as before (B3d). What is built is the same program either way. A k
 contents do not match the hash it carries, or that names a fact this build does not decide alike, is never taken; the
 module is made again. A build with `-memory` (B18) makes every module again, so what it reports covers all of them.
 
+The same holds for what checking a module finds that is judged over its code alone. Beside the IR, `build` and `test`
+keep, for a program that checked cleanly, a **front record** of each module under the same inputs and the facts its
+checking read (`build/rec/NAME.KEY.f...`): its bodies' summaries for M19g (what each may grow, view, keep and hand
+back of its parameters and the globals), its functions' signatures with their inferred error sets (R1a), and its
+globals' baked values (K2). A later build whose module has the same inputs and reads the same facts takes the summaries
+and does not judge that module's own bodies for M19g again; a body of a generic's instance, and the root's, are judged in
+every build. Every body is still checked otherwise (the scope rules of section 8 and early freeing read every body),
+and what is built and reported is the same either way. A front record that is not whole, does not match its hash or
+names a fact this build decides otherwise is never taken.
+
 A module whose object is made apart from the program that uses it - by `compile`, or kept as a library of objects - is
 a **precompiled module**, and at its boundary **the defining module decides**. Every decision its object carries is made
 from that module and the inputs above alone: where the storage its code builds is placed, and which scopes a field it

@@ -1162,7 +1162,8 @@ fn reuseAll(r mut report&, k I64) ? Failed {
 }
 
 # B3i, docs/wholeprog.md 10.3 (T6): a record truncated, a part's IR garbled, or a record another compiler wrote (its sum
-# right, a read line this one does not decide) is found by its own hash or its reads and written again, never read; two
+# right, a read line this one does not decide) is found by its own hash or its reads and written again, never read - the
+# front records (W3a) as the IR's; two
 # builds at once in one directory write records side by side, and a third build takes them, every object the same
 test "a damaged or foreign record is written again, never read; builds side by side keep whole records" { assert passed("records") }
 
@@ -1170,7 +1171,7 @@ fn records(r mut report&) ? Failed {
     dir := fresh("records")
     os.Run("cp checks/fixtures/incremental/* " $os.Quote(dir))
     run := "48 12 1 true 14 data one 8 note 2"
-    build := "OLANG_FACTSTATS=1 OLANG_CHECKREUSE=1 \"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > run.txt"
+    build := "OLANG_FACTSTATS=1 OLANG_CHECKREUSE=1 OLANG_CHECKINCR=1 \"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > run.txt"
     try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1") == 0, "the first build", dir)
     damages := Array<String&>["for f in build/rec/deep.*; do case $f in *.ll) ;; *) truncate -s 100 $f ;; esac; done"
         "sed -i 's/ret /rett /' build/rec/deep.*.p0.ll"
@@ -1180,6 +1181,8 @@ fn records(r mut report&) ? Failed {
         try r.expect(sh(dir, $damage " && " $build) == 0, $"the build after damage " $k, dir)
         try r.expect(outOf(dir).Contains("olang: lowered deep\n") and outOf(dir).Contains("modules reused, every object the same")
                      $"damage " $k ": deep's record read, or another object differs", dir)
+        # (W3a: its front record - beside the IR's, under the same key - truncated or foreign alike)
+        try r.expect(k == 1 or outOf(dir).Contains("olang: front checked deep\n"), $"damage " $k ": deep's front record read", dir)
         try r.expect(sh(dir, $"grep -qx '" $run "' run.txt") == 0, $"the run after damage " $k, dir)
     }
     try r.expect(sh(dir, "rm -rf build && (\"$OLANG\" build main.olang > o1 2>&1 & \"$OLANG\" build main.olang > o2 2>&1 & " $
