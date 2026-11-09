@@ -1631,9 +1631,10 @@ fn (ln mut lowering&) standInAway() Array<Bool> {
         l := b.Locals[i]
         # (a holder of a value with destructors keeps its frame: one flowing out is refused while compiling all the
         # same, K2c, and a task's borrow of one in a join block - EscHard - must not move its drop)
-        # (R3: a by-value parameter too - its copy made there at entry, as the scope pass places one kept past the call)
-        param := l.Kind == typed.LocalKind.Param and not b.Gen and ln.T.KindOf(ln.T.Repr(l.Ty)) != types.Kind.Func
-        if l.Kind != typed.LocalKind.Var and not param or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty): continue
+        # (R3: a by-value parameter and a match binding too - each copy made there, as the scope pass places one kept
+        # past its call or clause)
+        own := (l.Kind == typed.LocalKind.Param or l.Kind == typed.LocalKind.Binding) and not b.Gen and ln.T.KindOf(ln.T.Repr(l.Ty)) != types.Kind.Func
+        if l.Kind != typed.LocalKind.Var and not own or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty): continue
         out[i] = ln.escapes(u, i) or not ln.lendsKeep(u, i) or (u.Ret[i] and refs)
     }
     return out
@@ -3408,11 +3409,12 @@ fn (ln mut lowering&) cond(c typed.Cond&, ty types.TypeId, sp source.Span) mir.O
 # there each time it binds, deep through what it owns (QCE)
 fn (ln mut lowering&) bind(to typed.LocalId, v mir.Operand, sp source.Span) {
     l := mir.LocalId(I32(to))
-    if ln.planned and I64(to) < ln.plan.Stored.Len() and ln.plan.Stored[I64(to)] != typed.Scope.Frame {
-        ln.homeKept(to)
-        if ln.F.Locals[I64(to)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, l)) }
-        v = ln.ownCopyOf(v, ln.B.Locals[I64(to)].Ty, ln.storageOf(to), sp)
-    }
+    moved := ln.planned and I64(to) < ln.plan.Stored.Len() and ln.plan.Stored[I64(to)] != typed.Scope.Frame
+    if moved { ln.homeKept(to) }
+    # (the stand-in placement's: one flowing out, in the program's scope - standInAway)
+    homed := ln.F.Locals[I64(to)].Home != mir.ScopeRef.Frame
+    if homed { ln.emit(mir.Stmt.Live(sp, l)) }
+    if moved or homed { v = ln.ownCopyOf(v, ln.B.Locals[I64(to)].Ty, ln.storageOf(to), sp) }
     ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(v)))
 }
 

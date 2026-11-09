@@ -50,6 +50,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   whole order decided while compiling beside the run time.
 - `kept.olang` - a local kept past its block or loop turn is built where it is kept (O28, O17, D9i): each turn's value its
   own, read back after an arena churn; decided while compiling beside the run time.
+- `keptparams.olang` - a by-value parameter kept past the call copied at entry where it is kept (O28, O14, C2g): handed
+  back, given as a function value, held by the instance or a reference parameter's Vec; a match binding kept past its
+  clause (S13b); read back after an arena churn, decided while compiling beside the run time.
 - `nll.olang` - a reference local typed per assignment (O25i): a cursor walking a widget's parents, a list's tail
   appended through one, an option kept from a parameter's array, an element of a constant literal (T25d), versions given
   in a catch clause, read in deferred code, captured by a lambda, given in a loop and read after it; read back after an
