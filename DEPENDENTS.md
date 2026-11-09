@@ -43,7 +43,10 @@ bits, identity, `Canon` and `PromiseText`), `generic.olang` (`promisesOf`'s misu
 `scope.olang` (a relation word: `boundEdges`) or `effects.olang` (an effect word: its fact in `Fact.Named`, its row in
 `Facts.Bound` and `Breaks`, SPEC G42's table; judged at the places `check.olang`'s E12 fit records, `judgeEffects`); `explain.olang`'s
 `# fits:`; `msgs.olang` and `diag.txt`; `tools/keyword_rename.olang` (the word joins its list so other people's code is
-renamed); `checks/cases`.
+renamed); `checks/cases`. `pure` and `keeps` are read beyond their own pass (docs/fnvalues.md 4.6): `types.olang`'s
+`PromisesPure`, `ReachesImpure` and `ReachesWrite(t, clean)`, by `free.olang` (`valueCall`, `typeKeeps`), `lower.olang`
+(D9h's `quietCall`), `check.olang` (E31b's `plainArg`, `pureFnArg`, `collWalk`, `settleInPlace`) and `views.olang` (M19g's
+value calls) - a word that changes what `pure` or `keeps` lets a value do changes them too.
 
 ## An operator or punctuation
 
