@@ -2880,10 +2880,10 @@ call, a field or a conditional of arrays alike: a length is never part of a type
 `x Array<U8> = Array<U8>(4)` declare the same local, and whether its storage is fixed is T7d's, decided by every value
 stored in it. A reference-shaped result writes
 no scope tag into the declaration: the local takes its
-initializer's exact scope (§8 O25a). A call's value with a destructor to run (O15), held where the call lands (O16,
-C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
-destructed when that scope closes; `x T = expr` takes the value itself, and its holder ends it (O15). A constructor's `:=` field takes the value
-itself as `x T = expr` does: the field is the instance's slot (C2d), and the instance its holder. An existing value of a unique type (T13b) - a place's, read where the initializer
+initializer's exact scope (§8 O25a). A call's value with a destructor to run (O15) declares its value, as `x T = expr`
+does: the local is its holder, ending it as its block is left in its block's order (O15) - and a constructor's `:=`
+field so given is the instance's slot (C2d), the instance its holder. A reference written for it, `x T& = expr`, names
+the value registered where the call lands instead (O16), destructed when that scope closes. An existing value of a unique type (T13b) - a place's, read where the initializer
 names it - declares a reference to that place, writable where the place may be written (`w := f` is `w mut File& =
 f`); a fresh one (a constructor's or a call's) its value. In a generic, a `:=` copying a value of a type its binding
 made unique is the generic's need, said at the call (T13b).
@@ -7514,9 +7514,13 @@ value of the type stored can hold - through its parts and the references it reac
 other's type or a part of it (a function value, an `any` or a type variable can hold any). Two variables of a block each holding the other
 - a cycle of such references - is a compile-time error naming both: whichever were ended first, the other's destructor
 could read it; ending one before the other refers to it (a block of its own) or holding one by reference
-removes it. A value **registered with a scope** (O16) - a call's value a `:=` names (`gs := Vec<Grip>()`) or a
-temporary given to a reference parameter - is ended as that scope closes, after the variables of its block, and values
-registered with one scope end the last registered first; so one that may hold (as above, through any number of steps) a
+removes it. A `:=` naming a call's value with
+destructors to run (`gs := Vec<Grip>()`) declares a variable holding it by value, ordered with its block's others as
+above; so does, hidden, a temporary given to a `mut T&` parameter of a call standing as a statement, made where the
+argument is when every argument before it is a literal or a local's. A value **registered with a scope** (O16) - a
+reference local written for such a value (`g Grip& = Grip(9)`), another temporary given to a reference parameter - is
+ended as that scope closes, after the variables of its block, and values registered with one scope end the last
+registered first; so one that may hold (as above, through any number of steps) a
 variable holding a value with destructors to run, or a value registered after it, is a compile-time error naming the
 declaration that holds it by value (`gs Vec<Grip> = Vec<Grip>()`), which its block then ends in the order above - one
 holding a value registered before it, in its block or an enclosing one, is ended first and needs nothing. A test ended

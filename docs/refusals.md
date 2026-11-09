@@ -33,6 +33,14 @@ is built and what this note proposes is built after it.
   failing side is untraced, and what it builds is T25c's read-only-copy refusal reached through a generic - section 6's
   kind, not a placement). HISTORY.md, "R2: kept through an obligation, a store or a payload".
 
+- Built: R6+R7 (5.6, 2026-11-09, wt-gens) - a walk let go part way runs its suspend's drop path (lowering's: the
+  blocks open there left as a return leaves them - deferred code, not errdefers, holders' drops); a generator's by-value
+  parameter is its walk's, ended at its end, its drop, or - never started - with its captures; `:=` from a call of a
+  destructor type is a holder (call 8), and a temporary a statement's call is given writably a hidden holder. The eight
+  cases run (`YieldPastHeld`, `YieldPastDefer`, `DestructGenParam` gone); `DropRegistered` and `DropTempRegistered` stay
+  for a written reference local (o15registeredref) and a temporary after an argument with an effect
+  (o15registeredtempafter). HISTORY.md, "R6+R7: a walk let go runs what it holds; registered values as holders".
+
 ## 0. Summary
 
 Of 1,246 must-fail cases, 355 are refused by a memory, placement, ownership or permission rule; the other 891 are

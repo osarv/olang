@@ -1,8 +1,10 @@
-# check: fail error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'l'
-# also: declare it by value, 'gs Vec<Grip> = ...', and its block ends it first
-# O15, O16 (bulk review 8, F2): a value registered with a scope - a call's value a ":=" names - is ended as that scope
-# closes, after the variables of its block; this Vec's element holds a reference to the Lamp, a variable of the block,
-# so its destructor would read the Lamp ended - its storage released. Written by value, it is ended first (O15's order)
+# check: run
+# flags: -debug -sanitize
+# O15, O16 (docs/refusals.md 5.6, R7; refused - "'gs' holds a value where its call landed, ended as that scope closes" -
+# until call 8 of 2026-11-08): a ":=" from a call of a destructor type is a holder of its block, so QCZ's order ends it
+# before the variable its element holds a reference to - the Grip's destructor reads the Lamp before it ends, after a
+# churn
+import "std/io"
 type Tally struct() {
     n I64 = 0
 }
@@ -10,15 +12,29 @@ type Tally struct() {
 type Lamp unique struct(id I64, log mut Tally&) {
     id, log
     data := Array<I64>(16 + id.Mod(2), id)
+    alive := true
 } destruct {
     log.n += id
+    alive = false
 }
 
 type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held is not null: held!.log.n += held!.data[3]
+    if held is not null {
+        assert held!.alive, "a Grip read its Lamp ended"
+        held!.log.n += held!.data[3] * 10
+    }
+}
+
+fn churn() I64 {
+    n := 0
+    for i in range 200 {
+        s := $i "-" $(i * 7)
+        n += s.Len()
+    }
+    return n
 }
 
 fn hold(t mut Tally&) {
@@ -26,9 +42,12 @@ fn hold(t mut Tally&) {
     gs.Push(Grip(1))
     l Lamp = Lamp(2, t)
     gs[0].held = l
+    churn()
 }
 
-fn main() {
+fn main() ? {
     t := Tally()
     hold(t)
+    assert t.n == 22
+    try io.Println("n " $t.n)
 }

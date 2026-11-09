@@ -35903,3 +35903,53 @@ Bugs found on the way:
   records cut as this program's are taken again.
 - **The reader records** (`readerRecords`) asked the fact table for each module's record once per module reaching it
   (about 2,500 times for the compiler); now once each.
+
+## R6+R7: a walk let go runs what it holds; registered values as holders (S20, C11, O15, O16, K1; 2026-11-09, wt-gens)
+
+docs/refusals.md 5.6, rounds R6 and R7 of docs/wholeprog.md section 10. Refusals question 2 (deferred code pending at
+a `yield`, run when an unfinished generator is let go) was answered yes on 2026-11-08; call 8 of the same day made a
+`:=` from a call of a destructor type a holder.
+
+**R6, the drop path.** A `yield` is lowered to `Term.Suspend` with a new `drop` block beside `resume`: lowering leaves
+every level open there as a `return` leaves them (`leave(0)`: each block's deferred code, its holders' drops in QCZ's
+order, its close) and ends in a new terminator, `Term.Dropped`. Every analysis reads a suspend as a branch to both. The
+built program's coroutine goes to that block where it is destroyed at that suspend (its home scope closing, the walk's
+`.drop` registered there) instead of closing the held scopes itself; `Dropped` goes to `gen.free`. In a test build the
+held scopes are put back on the unwind chain on the destroy branch as on the resume one, so the drop path's closes pop
+them alike. D18e's walk ends (a for-in's own walk destroyed at its scope's close) now see the drop path's closes as
+closes, so the suspend's special case went. The evaluator restores a suspended walk's frame at its drop block, as a
+destructor's frame (`closeGen`), its record detached so a generator made while it runs may take it.
+
+Decided (mine): **an errdefer does not run where a walk is let go, nor where a walk ends** - neither is an error leaving
+(S19e); an error the body raises runs them. The second was a latent bug the old rule hid (no errdefer could be pending
+around a `yield`, so none was reached by the generator's end): the end is `Raise Exhausted.End`, which lowered as an
+error leaving. `raise` now takes whether it is one.
+
+**C11's generator parameter.** genLambda's local for a by-value parameter with destructors gets `dropOnExit`, so the
+walk ends it at its body's end or on the drop path. A walk never started holds the value only in its captures (copied
+into the coroutine's frame by the ramp): the initial suspend's destroy branch ends them, last first, in the home scope
+(emit's `freshDrops`, eval's `freshDrops` from the record's environment, interp queueing their drop functions).
+
+**K1.** While compiling nothing is placed, so every generator lives in the program's scope and none is let go before the
+value is made - a computation leaving a walk part way whose drop path does something (or an unstarted one with
+parameters to end) would give a value the run time does not. The evaluator now asks, as a request or a global's
+initializer ends, whether a walk made since was so left (`walksLetGo`: a suspended record whose drop path holds more
+than closes, an unstarted one with such captures) and refuses it (`WhyWalkLetGo`). Walks that end are computed:
+tests/generators.olang bakes `WalkFullBaked` beside the run time's value.
+
+Found on the way, not fixed (scope.olang is another round's): a generator given a reference parameter is placed in that
+reference's scope at its call (`part(s)` calling `g := gen(s)` builds `g` in the caller's frame), so a walk held in a
+block is let go only as the referent's scope closes - its deferred code runs later than the block's end. The tests give
+the reference inside a by-value struct.
+
+**R7, registered values as holders.** A `:=` local given a call's value with destructors to run (`heldValue`) now takes
+the value as its own, a holder of its block (`dropOnExit`), as a `:=` field did (C2d); QCZ's order then ends `gs`
+before `l` (o15registeredholds, -inner, -later). A statement's call given such a temporary for a `mut T&` parameter,
+every argument before it a literal or a local's, holds it in a hidden holder made just before the call
+(`heldArgs`, o15registeredtemp). The two messages stay for what is still registered: a written reference local
+(`g Grip& = Grip(9)`, o15registeredref) and a temporary after an argument with an effect (o15registeredtempafter).
+Where the scope pass places such a holder's storage elsewhere (O28) its drop is registered there; while compiling there
+is no plan, so lowering registers a landed holder's drop with its block (`Local.Landed`), which K1 refuses as it refused
+the registration such a value had before - no computation that was evaluated before is refused now, and none gives a
+value the run time does not. tests/drops.olang's `viewsKept` changed its expected order: each turn's two holders are
+registered where `keep` lives as the turn ends, last declared first.

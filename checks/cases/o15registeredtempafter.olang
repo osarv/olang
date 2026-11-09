@@ -1,0 +1,39 @@
+# check: fail error[O15, O16]: this value is held where its call lands, ended as that scope closes - after 'l'
+# O15, O16: a temporary given writably after an argument with an effect stays registered where its call lands (a hidden
+# holder made first would reorder the effect), ended after the block's variables - one of which the call may make it hold
+type Tally struct() {
+    n I64 = 0
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    alive := true
+} destruct {
+    log.n += id
+    alive = false
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null {
+        assert held!.alive, "a Grip read its Lamp ended"
+        held!.log.n += held!.id * 10
+    }
+}
+
+fn one() I64 { return 1 }
+fn hold(k I64, g mut Grip&, l Lamp&) { g.held = l }
+
+fn run(t mut Tally&) {
+    l Lamp = Lamp(2, t)
+    hold(one(), Grip(1), l)
+    assert t.n == 0
+}
+
+fn main() ? {
+    t := Tally()
+    run(t)
+    assert t.n == 22
+}

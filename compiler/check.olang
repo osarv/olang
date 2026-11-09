@@ -12994,6 +12994,59 @@ fn (c mut Checker&) held(sp source.Span, call typed.Expr&) typed.Expr& {
     return typed.Expr.Promote(sp, c.P.T.Ref(r, types.Writable), typed.Promote(call, c.site(typed.SiteKind.Promote, sp)))
 }
 
+# O15, O16 (call 8 of 2026-11-08): a call standing as a statement given, writably, a call's value with destructors to
+# run - a temporary the call may make hold a variable of the block - holds it in a hidden holder of the statement's
+# block, made as the argument is, so its block ends it in its order (QCZ) rather than its scope after its variables.
+# Only where every argument before it is a literal or a local's (no effect to reorder)
+fn (c mut Checker&) heldArgs(e typed.Expr&) typed.Expr& {
+    if e != typed.Expr.Call: return e
+    call := e.c
+    tg := call.Target
+    if tg != typed.Callee.Body: return e
+    ps := c.P.T.Items(c.P.T.Params(c.Bodies[I64(tg.id)].Ty))
+    if ps.Len() != call.Args.Len(): return e
+    args := Array<typed.Expr&>(call.Args.Len(), call.Args[0] if call.Args.Len() > 0 else e)
+    changed := false
+    plain := true
+    for i in range call.Args.Len() {
+        a := call.Args[i]
+        args[i] = a
+        # (only a parameter written "mut T&" can be made to hold what the call is given beside it)
+        given := plain and c.isRef(ps[i]) and (c.P.T.PermOf(ps[i]) & types.Writable) != 0
+        h := c.heldTemp(a) if given else typed.Expr.Lit(a.Span(), types.VoidT, 0)
+        if h != typed.Expr.Lit {
+            args[i] = h
+            changed = true
+        }
+        plain = plain and plainArg(a)
+    }
+    if not changed: return e
+    return typed.Expr.Call(e.sp, e.ty, typed.Call(call.Target, args, call.Site, call.Zero, call.Tail))
+}
+
+# a temporary given writably held by a hidden holder (heldArgs): a borrow of the holder, else a Lit standing for none
+fn (c mut Checker&) heldTemp(a typed.Expr&) typed.Expr& {
+    none := typed.Expr.Lit(a.Span(), types.VoidT, 0)
+    if a != typed.Expr.Promote: return none
+    rt := a.ty
+    vt := typeOf(a.pr.X)
+    if (c.P.T.PermOf(rt) & types.Writable) == 0 or not c.P.T.NeedsDrop(vt): return none
+    sp := a.Span()
+    h := c.hidden(sp, vt)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), a.pr.X))
+    c.dropOnExit(h, sp, true)
+    return typed.Expr.Borrow(sp, rt, typed.Lvalue.Local(sp, vt, typed.LocalId(I32(h))))
+}
+
+# whether an argument has no effect its evaluation could reorder: a literal, or a local read or lent
+fn plainArg(a typed.Expr&) Bool {
+    return match a {
+        case typed.Expr.Lit(_, _, _): true
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): p == typed.Lvalue.Local
+        case _: false
+    }
+}
+
 # the value a temporary was given storage for (held's, E12c's), else null - under a try or a "!" too, its defaults each
 # such a value (bulk review 7, F14: "x = try mk()" is as fresh as "x = mk()")
 fn heldValue(x typed.Expr&) typed.Expr?& {
@@ -18303,7 +18356,7 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
             if t != types.VoidT and t != types.NoreturnT and t != types.UnknownT and not c.copiesDiffer() {
                 c.idle.Push(idleCall(c.fr().Body, c.fr().File, x.Span(), c.src(x.Span()), e))
             }
-            c.emit(typed.Stmt.Eval(sp, e))
+            c.emit(typed.Stmt.Eval(sp, c.heldArgs(e)))
             return
         }
         case ast.Expr.Try(_, _, _) {
@@ -18723,6 +18776,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         t := declared
         x typed.Expr?& = null
+        landed := false
         pend := unsetCand(-1, -1, -1, false, -1, nsp, types.UnknownT, false)
         # T7d: a field's storage is its type's (C2e: held in the instance where its declaration gives it a length); a
         # local's fixed where its initializer's length is known and nothing assigns it as a whole afterwards
@@ -18755,11 +18809,13 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             if v.Ty is null or v.Infer {
                 t = c.inferred(v.Values[i], x!, keep)
                 # C2d, O16: a ":=" field given a call's value with destructors to run is the instance's slot - the
-                # value lands in it as it is, held by the instance, never a reference to storage the call's landing made
-                hv := heldValue(x!) if v.Field else null
+                # value lands in it as it is, held by the instance, never a reference to storage the call's landing made;
+                # a ":=" local so given is a holder of its block (O15), ended in its order (QCZ) as it is left
+                hv := heldValue(x!)
                 if hv is not null and c.P.T.NeedsDrop(typeOf(hv)) {
                     x = hv
                     t = typeOf(hv)
+                    landed = not v.Field
                 }
                 if v.Field and v.Ty is not null {
                     # C3: a ":=" field's "mut" says what its inferred reference permits
@@ -18815,6 +18871,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         id := c.local(v.Names[i], nsp, t, kind, mark)
+        if landed { c.cur().Locals[id].Landed = true }
         # D14d: a fixed array so filled is not written before the loop (its value is never seen)
         if i < v.Values.Len() and not v.Field and v.Names.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(t)) == types.Kind.Array and
            c.P.T.Length(c.P.T.Repr(t)) != types.TypeId(0) and c.noClearMade(x) { c.cur().Locals[id].Unset = true }

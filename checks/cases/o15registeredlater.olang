@@ -1,7 +1,9 @@
-# check: fail error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'ls'
-# also: declare it by value, 'gs Vec<Grip> = ...'
-# O15, O16 (bulk review 8, F2): values registered with one scope end the last registered first, so a registered value
-# holding one registered after it is ended after it - the Grip's destructor would read a Lamp already ended
+# check: run
+# flags: -debug -sanitize
+# O15, O16 (docs/refusals.md 5.6, R7; refused until call 8 of 2026-11-08): two ":=" holders of one block, the first
+# made to hold an element of the second - QCZ's order ends the first before the second, whatever their order, so the
+# Grip's destructor reads its Lamp alive, after a churn
+import "std/io"
 type Tally struct() {
     n I64 = 0
 }
@@ -9,15 +11,29 @@ type Tally struct() {
 type Lamp unique struct(id I64, log mut Tally&) {
     id, log
     data := Array<I64>(16 + id.Mod(2), id)
+    alive := true
 } destruct {
     log.n += id
+    alive = false
 }
 
 type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held is not null: held!.log.n += held!.data[3]
+    if held is not null {
+        assert held!.alive, "a Grip read its Lamp ended"
+        held!.log.n += held!.data[3] * 10
+    }
+}
+
+fn churn() I64 {
+    n := 0
+    for i in range 200 {
+        s := $i "-" $(i * 7)
+        n += s.Len()
+    }
+    return n
 }
 
 fn twoVecs(t mut Tally&, k I64) {
@@ -26,9 +42,12 @@ fn twoVecs(t mut Tally&, k I64) {
     ls := Vec<Lamp>()
     ls.Push(Lamp(k, t))
     gs[0].held = ls[0]
+    churn()
 }
 
-fn main() {
+fn main() ? {
     t := Tally()
     twoVecs(t, 4)
+    assert t.n == 44
+    try io.Println("n " $t.n)
 }

@@ -137,6 +137,10 @@ type Local struct(Name source.NameId, Sp source.Span, Ty types.TypeId, In BlockI
     # D13d: declared with no value and assigned on every path before any read - its Let's value is never seen, and
     # lowering writes nothing for it (check.settleUnset decides it once the body is checked)
     Unset Bool = false
+    # O15, O16: a ":=" holder given a call's value with destructors to run - where the scope pass places it (O28) its
+    # drop is registered there, which while compiling, with no plan, is not known: lowering then registers it with its
+    # block, which K1 refuses (K2c) as it refused the registration such a value had before it was a holder
+    Landed Bool = false
 }
 
 type BlockKind enum {

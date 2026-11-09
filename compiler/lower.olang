@@ -5256,6 +5256,9 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
                 a := ln.place(p)
                 if ln.dead { return mir.Operand.None }
                 home := ln.escapedHome(p)
+                # (K1, K2c: with no plan a landed holder's drop is not known here - registered with its block, which
+                # the evaluator refuses)
+                if not ln.planned and p == typed.Lvalue.Local and ln.B.Locals[I64(p.id)].Landed { home = ln.innermost() }
                 if home == mir.ScopeRef.Frame {
                     das := ln.plan.DropDerivedOf(args[0]) if ln.planned else Vec<typed.DerivedArg>()
                     # (C9a: a place that is no local - a collection's element it vacates - ended in the scope its value

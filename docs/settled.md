@@ -286,9 +286,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   "unique DECIDED"; `x.Destroy()` removed by the user 2026-11-08: "Yeah, remove dot destroy").** A value with a
   destructor is held by value in a variable, parameter, result, field or payload, and its destructors run once where
   that holder lets go (block exit, callee's end unless handed on, a store over a place after the new value is made);
-  parts last first. A call's value no place takes is held where the call lands (O16). A global and a generator's
-  parameter hold one by reference (C11); none is held across a `yield`; one in a block a `become` closes is kept in its
-  chain's tail scope (S21). C9b is gone: the one-path early
+  parts last first. A call's value no place takes is held where the call lands (O16); a `:=` from such a call is a
+  holder of its block, and so is a temporary a statement's call is given writably (a hidden one; call 8 of 2026-11-08,
+  refusals R7). A global holds one by reference (C11); a generator's variables and by-value parameters hold one across
+  a `yield`, ended where the walk is let go (S20); one in a block a `become` closes is kept in its chain's tail scope
+  (S21). C9b is gone: the one-path early
   end is written with a block or a helper function, `Destroy` is an ordinary method name, and `tools/destroy_migrate.olang`
   (in `olang fix`) deletes `defer x.Destroy()` and a last-in-block `x.Destroy()` and lists the rest.
 - **Collections hold values with destructors by value (C11 relaxed, O15, M19d, the user's "Collections DECIDED"
@@ -459,7 +461,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Generators (D18-D18d, S20, QAG revised, the user's decision 2026-10-18).** A `fn` whose result is `Iterator<T ? E>`
   and whose body holds a `yield` is a generator - no keyword; a bare `return` or an error ends the walk. **Borrowed
   elements (D18c, QBB, 2026-10-26)**: `Iterator<String&>` yields read-only views. Not allowed: `yield` in a lambda,
-  deferred code or a join block.
+  deferred code or a join block. **A walk let go part way (S20, refusals question 2, the user's yes 2026-11-08; built
+  2026-11-09)** leaves its open blocks as a `return` would - deferred code (not errdefers: no error leaves, nor at the
+  walk's end), holders' and by-value parameters' destructors - where its storage is let go; one never started ends
+  its by-value parameters (C11). Python's `close()` running a `finally`.
 - **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18).** A type's structure
   read through its name while compiling: `T.Name`, `T.Kind`, `T.Base`, `T.Element`, `T.Length`, `T.Target`,
   `T.Nullable`, `T.Size`, `T.Align`, and the lists `T.Fields`, `T.Cases`, `T.Params`, `T.Results`, `T.Errors`. A list

@@ -260,6 +260,9 @@ type genRec struct() {
     Drop I64 = -1
     Env Ptr = NullPtr    # its Next's environment: the captures a walk let go unstarted ends (C11, S20)
     Judged Bool = false  # (K1, S20: whether a computation's end has asked if its walk was let go with code to run)
+    # B3e: the cleanups its frame had registered when it suspended (scope, entry), registered again as it goes on
+    DefS Vec<I64> = Vec<I64>()
+    DefB Vec<I64> = Vec<I64>()
     At I64 = -1
     WsN I64 = 0
     HeldN I64 = 0
@@ -2759,6 +2762,11 @@ fn (m mut Machine&) restoreGen(ri I64, ret I64, retArg I64) I64 {
     }
     m.fs[m.nFs] = fr
     m.nFs++
+    for j in range rec.DefS.Len() {
+        m.defF.Push(m.nFs - 1)
+        m.defS.Push(rec.DefS[j])
+        m.defB.Push(rec.DefB[j])
+    }
     return m.nFs - 1
 }
 
@@ -2798,6 +2806,13 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
     rec.HeldN = k + 1 - (rec.At + n)
     rec.Fr = fr
     rec.Drop = I64(drop)
+    rec.DefS.Clear()
+    rec.DefB.Clear()
+    for j in range m.defF.Len() {
+        if m.defF[j] != fi: continue
+        rec.DefS.Push(m.defS[j])
+        rec.DefB.Push(m.defB[j])
+    }
     rec.State = 1
     m.gens[ri] = rec
     m.popFrame()

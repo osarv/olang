@@ -934,7 +934,8 @@ test deferPush "hands its by-value parameter on from deferred code, once" {
 # O27, O15 (docs/fnvalues.md section 10): a value holding a destructor whose storage is built where a view of it, or of a
 # part of it, is kept - directly or through what a callee hands back of it - goes with that storage, ended as its scope
 # closes rather than at the end of its turn: each turn's 'r' outlives the loop and ends with the block 'keep' lives in,
-# the last made first (O16)
+# the last made first (O16) - each turn's two holders (':=' from a call, call 8 of 2026-11-08) registered there as the
+# turn ends, last declared first (O15), so 's' before 'r'
 type Viewed unique struct(id I64, log mut Tally&) {
     id, log
     name := "n" $id
@@ -960,7 +961,7 @@ fn viewsKept() String {
 }
 
 test Viewed "is ended where the storage a view of it is kept in lives" {
-    assert viewsKept() == "1n42n53n6/0635241"
+    assert viewsKept() == "1n42n53n6/0362514"
 }
 
 # (decided only at run time and by interpret: the values are registered where their storage lives, which the evaluator
