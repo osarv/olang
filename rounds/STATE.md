@@ -65,3 +65,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - G2+G3 and W3a merged, verified together, pushed.
 - Usage 0.69 at 15:00 CET Mon. ~0.05/day available to Sat. Effort log review (~20 agents at medium): verify fails were goldens/new-case rows only; review A found no bugs in medium rounds; fuzzers clean. Medium is enough for compiler rounds.
 - R6+R7 merged. Gap: generator given a reference param placed in that ref scope -> walk let go late (scope.olang).
+- R3 merged, verified, pushed.
