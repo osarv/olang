@@ -480,6 +480,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     lifts Map<pair.Pair<I64, I64>, Term>   # by (body, local): the term the inference gives its claim
     siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
+    ownLifts Map<pair.Pair<I64, I64>, Term> # by (body, local): where a by-value parameter's or a binding's copy is made (R3)
     # item 17: by body, its copies of a whole value local made at that local's last mention (typed.LastCopies), by site:
     # the local - found once a body, for the moves lowering may make (D9i)
     lastCopied Map<pair.Pair<I64, I64>, I64>
@@ -661,6 +662,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         s.lifts.Clear()
         s.siteLifts.Clear()
         s.liftStor.Clear()
+        s.ownLifts.Clear()
         s.wLocals.Clear()
         s.partLifts.Clear()
         s.placed.Clear()
@@ -851,6 +853,7 @@ fn (s mut Scoper&) dropLifts(comp Array<I64>&) {
     dropKeyed<Term>(s.lifts, mine)
     dropKeyed<Term>(s.siteLifts, mine)
     dropKeyed<Bool>(s.liftStor, mine)
+    dropKeyed<Term>(s.ownLifts, mine)
     dropKeyed<Bool>(s.wLocals, mine)
     dropKeyed<Bool>(s.partLifts, mine)
     dropKeyed<placedRow>(s.placed, mine)
@@ -3352,6 +3355,15 @@ fn (s mut Scoper&) run() {
             }
             case _ { }
         }
+    }
+    # R3: a by-value parameter kept past the call has its copy made where it must live (the plan's Stored, lowering's
+    # entry copy)
+    for l in b!.Params {
+        pt := s.paramLift(I64(l))
+        if pt == Term.None { continue }
+        s.stors[I64(l)] = pt
+        s.plan.Stored[I64(l)] = s.scopeOf(pt)
+        s.buildsInto(pt, b!.Locals[I64(l)].Sp, b!.File, b!.Locals[I64(l)].Sp)
     }
     # D9b: a by-value run-time array parameter the body writes, slices or borrows writably, is the callee's own copy,
     # made in the frame (the code generator's prologue copies it into the frame's arena): its elements are there, not
@@ -6180,6 +6192,20 @@ fn (s mut Scoper&) isAdapter(x typed.Expr&) Bool {
         case _ { }
     }
     return false
+}
+
+# the receiver of an instance given as a function value through its Call (E31), null for any other expression
+fn adapterRecv(x typed.Expr&) typed.Expr?& {
+    match x {
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Adapter(_, r, _) { return r }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return null
 }
 
 fn (s mut Scoper&) capturingLambda(x typed.Expr&) Bool {
@@ -9214,6 +9240,13 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
             # a binding is a local of its clause's block (S13b); alternatives binding one name from different scopes
             # bind it where neither is known (S13c, O12)
             s.stors[l] = s.blockTerm(s.B!.Locals[l].In)
+            # (R3: its copy made where it is kept)
+            bt := try s.ownLifts.Get(pair.Pair<I64, I64>(s.Id, l)) catch default Term.None
+            if bt != Term.None {
+                s.stors[l] = bt
+                s.plan.Stored[l] = s.scopeOf(bt)
+                s.buildsInto(bt, bd.From.Span(), s.B!.File, bd.From.Span())
+            }
             if flHas(bound, l) and s.terms[l] != v.T and s.terms[l] != Term.None and v.T != Term.None {
                 s.terms[l] = s.setOf(s.terms[l], v.T)
                 if l < s.origin.Len() { s.origin[l] = -2 }
@@ -11831,6 +11864,13 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
         }
         case _ { }
     }
+    # (an instance given as a function value through its Call, E31, is the instance itself: a by-value parameter's copy
+    # made where the function value is kept - R3)
+    ar := adapterRecv(u)
+    if ar is not null and s.paramOwn(s.claimRoot(ar)) {
+        s.proposeIn(ar, t)
+        return
+    }
     # (a temporary made of a value held for a statement - a rendered index held for At and SetAt: built where it is
     # kept, R2)
     ht := s.heldTemp(u)
@@ -12159,6 +12199,9 @@ fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
 # starting at key, the declaration of the local whose claim was taken from it; first: l's own declaration's value
 # proposed (its version 0), not what reaches its read
 fn (s mut Scoper&) proposeFrom(l I64, t Term, stor Bool, key I64, first Bool) {
+    # (a match binding's own storage, its copy of the payload, made where it is kept - R3; its references are its
+    # subject's, followed below)
+    if s.liftBinding(l, t, stor) and not s.holds(s.B!.Locals[l].Ty) { return }
     for _ in range s.origin.Len() + 1 {
         if l < 0 or l >= s.origin.Len() { break }
         if not first and s.isCursorLocal(l) {
@@ -12243,6 +12286,7 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     # a generator's locals live across its yields, and each Next call's result scope is that call's: nothing is lifted
     # into it (D18b, as O26a moves nothing there)
     if s.genResult(t) { return }
+    if s.liftParam(l, t, stor) { return }
     # a part of what a local builds - a field, an element - kept longer: its field gets a binding of its own first
     # (2.6); only once the field inference has settled is the instance built where the part is kept (O27 as placement,
     # docs/sec8.md 4.2) - one holding a value whose destructor is still to run too, ended where it is built (O15)
@@ -12287,6 +12331,54 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
         loc := s.B!.Locals[l]
         s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " to " $nt $(" with its storage" if stor else "") $(" for a part kept" if s.partFlow else "") " | " $s.traceAt(loc.Sp.Start))
     }
+}
+
+# R3 (refusals 5.3): a by-value parameter's own storage kept past the call - the callee's copy of its argument (D9), made
+# at entry where it must live instead of in the frame: a scope variable or the program's, which the caller passes or
+# the callee holds already (never a block of this body, which the frame outlives). Whether l is such a parameter
+fn (s mut Scoper&) liftParam(l I64, t Term, stor Bool) Bool {
+    if not s.paramOwn(l) { return false }
+    if not stor or not t.Runs() or isBlockTerm(t) { return true }
+    key := pair.Pair<I64, I64>(s.Id, l)
+    cur := try s.ownLifts.Get(key) catch default Term.None
+    nt := s.joinTerm(cur, t)
+    if nt == cur { return true }
+    s.ownLifts.Put(key, nt)
+    s.liftGrew = true
+    s.realGrew = true
+    if s.Trace { s.TraceLog.Push($"lift param " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $nt " | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+    return true
+}
+
+# R3: a match binding's copy (S13b) kept past its clause - made where it is kept, as a local is (O28). Whether it lifted
+fn (s mut Scoper&) liftBinding(l I64, t Term, stor Bool) Bool {
+    if l < 0 or l >= s.B!.Locals.Len() or s.B!.Locals[l].Kind != typed.LocalKind.Binding or s.B!.Gen { return false }
+    ty := s.B!.Locals[l].Ty
+    if not stor or not t.Runs() or s.isRef(ty) or s.isFunc(ty) or s.mayHoldDtor(ty) { return false }
+    key := pair.Pair<I64, I64>(s.Id, l)
+    own := s.blockTerm(s.B!.Locals[l].In)
+    cur := try s.ownLifts.Get(key) catch default own
+    nt := s.joinTerm(cur, t)
+    if nt == cur { return true }
+    s.ownLifts.Put(key, nt)
+    s.liftGrew = true
+    s.realGrew = true
+    if s.Trace { s.TraceLog.Push($"lift binding " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $nt " | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+    return true
+}
+
+# whether local l is a parameter by value whose copy R3 may make elsewhere: not a generator's (its frame lives where
+# the walk does, D18b), holding no destructor value (handed on or ended where its holder lets go, O15)
+fn (s mut Scoper&) paramOwn(l I64) Bool {
+    if l < 0 or l >= s.B!.Locals.Len() or s.B!.Gen or s.B!.Root is null { return false }
+    loc := s.B!.Locals[l]
+    return loc.Kind == typed.LocalKind.Param and not s.isRef(loc.Ty) and not s.isFunc(loc.Ty) and not s.mayHoldDtor(loc.Ty)
+}
+
+# the term R3 makes parameter l's copy in, None for its frame
+fn (s mut Scoper&) paramLift(l I64) Term {
+    if not s.paramOwn(l) { return Term.None }
+    return try s.ownLifts.Get(pair.Pair<I64, I64>(s.Id, l)) catch default Term.None
 }
 
 # the lift a callee's relation r failed at call c proposes (2.4): of the argument determining its outliving side, else of
