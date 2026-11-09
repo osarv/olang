@@ -62,3 +62,5 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - Usage 0.65 at 11:00 CET Mon (0.56 Sun 21:25, ~10 agents): ~0.01/agent incl. coordination. ~25 agents of room to 0.92.
 - getcopy merged, pushed. G1 running.
 - G1 merged, verified, pushed. Next: G2+G3 (wt-genheader) beside W3a (wt-frontrec).
+- G2+G3 and W3a merged, verified together, pushed.
+- Usage 0.69 at 15:00 CET Mon. ~0.05/day available to Sat. Effort log review (~20 agents at medium): verify fails were goldens/new-case rows only; review A found no bugs in medium rounds; fuzzers clean. Medium is enough for compiler rounds.
