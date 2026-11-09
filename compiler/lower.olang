@@ -395,6 +395,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     freeing Bool = false            # whether this body frees early what sole places let go of (O8d, free.Frees)
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
     regionPar Map<I64, mir.ScopeRef> # ... and the scope each is a kid of (a split copy's other parts go there)
+    feedRegions Map<I64, Bool>       # ... the sites of feeders' declarations (free.FeedSite), whose regions stay made
     # O29: the reference arguments lowered, and their operands - a scope found from one is found from its operand
     argExprs Vec<typed.Expr&>
     argOps Vec<mir.Operand>
@@ -1210,6 +1211,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
         case typed.Stmt.Let(sp, l, init) {
             ty := ln.B.Locals[I64(l)].Ty
             ln.homeKept(l)
+            ln.feedHome(l, init)
             if ln.B.Locals[I64(l)].Unset {
                 # D13d: assigned on every path before any read - nothing is written for its declaration; its storage
                 # is marked set with no value (Use(None) writes nothing), so element stores may follow
@@ -1507,6 +1509,19 @@ fn (ln mut lowering&) homeKept(l typed.LocalId) {
     ty := ln.B.Locals[i].Ty
     if ln.T.IsRef(ty) or ln.arrayOf(ty) != types.UnknownT and ln.fixedLen(ln.arrayOf(ty)) < 0: return
     ln.F.Locals[i].Home = ln.scopeRef(st)
+}
+
+# a feeder's declaration (free.FeedSite): its region made afresh, kept made for the calls building where it lives, and -
+# where it is moved into its place at its last use and its own storage is in an arena - its storage homed there too
+fn (ln mut lowering&) feedHome(l typed.LocalId, init typed.Expr&) {
+    if not ln.freeing: return
+    s := ln.L.Free!.FeedSite(I64(ln.B.Id), I64(l))
+    if s < 0 or s >= ln.plan.RegionKind.Len() or ln.plan.RegionKind[s] != 1 or ln.regionSite(init) != s: return
+    ln.feedRegions.Put(s, true)
+    ln.regions.Remove(s)
+    held := ln.regionOf(s)
+    cs := ln.L.Free!.FeedCopy(I64(ln.B.Id), I64(l))
+    if cs >= 0 and ln.moved.Has(cs) and ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame: ln.F.Locals[I64(l)].Home = held
 }
 
 # where by-value local p's storage lives, where the scope pass moved it out of its own block (O26a: the result's, a
@@ -2623,10 +2638,12 @@ fn (ln mut lowering&) val(x typed.Expr?&) mir.Operand {
     # O8d: a site whose value has a region of its own - the region made first, so everything it is built from lands
     # there - and forgotten after, so another lowering of the same expression (deferred code) makes its own
     rs := ln.regionSite(x)
-    if rs < 0 { return ln.value(x) }
+    # (a feeder's copy left out, its region with it: nothing is built there)
+    if rs < 0 or ln.noCopy.Has(rs) { return ln.value(x) }
     held := ln.regionOf(rs)
     v := ln.value(x)
-    ln.regions.Remove(rs)
+    # (a feeder's declaration's region stays made: its calls build there too, free.FeedSite)
+    if not ln.feedRegions.Has(rs): ln.regions.Remove(rs)
     return ln.settled(rs, held, v, x.Type(), x.Span())
 }
 
@@ -2638,6 +2655,8 @@ fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types
     if ln.T.Anchors(ty).Len() == 0 and not ln.T.OwnedPart(ty) { return v }
     # (a split copy - free.SplitPath - has parts outside the region whose anchors name another scope: it stays made)
     if ln.L.Free is not null and ln.L.Free!.SplitPath(I64(ln.B.Id), rs).Len() > 0 { return v }
+    # (nor is a feeder's: it is built on by the calls given it - an empty Vec's buffer comes later)
+    if ln.feedRegions.Has(rs) { return v }
     h := match held {
         case mir.ScopeRef.Held(l): l
         case _: mir.NoLocal
@@ -4030,6 +4049,9 @@ fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
         if u.AliasOf[j] == l: return false
         if (ln.vl.Has(j) or ln.rvl.Has(j)) and u.Init[j] is not null and valueRootLocal(u.Init[j]!) == l: return false
     }
+    # (a feeder - built in the region of the place its copy goes to, from its declaration on - is moved there, its region
+    # with it: early freeing judged where it lives and where the copy goes, free.FeedCopy)
+    if ln.freeing and ln.L.Free!.FeedCopy(I64(ln.B.Id), l) == site: return true
     if site >= ln.plan.Built.Len() or ln.plan.RegionKind[site] != 0: return false
     init := typed.Call.Of(u.Init[l])
     if init is not null and init.Site >= typed.SiteId(0) and ln.plan.RegionKind[I64(init.Site)] != 0: return false

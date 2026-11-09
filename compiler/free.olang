@@ -178,6 +178,30 @@ type leaf struct(Path Array<I64>, PlaceId I64) {
     PlaceId
 }
 
+# a feeder (O28, D9i): a value local copied whole at its last mention into an owner place - a field or a global - by an
+# assignment standing in the very block that declares it. Its value is built for that place from its declaration on: in
+# a region of its own, a kid of where the copy would have gone, everything its calls build where it lives built there,
+# so that the store moves it (no copy is made) and the place's next let-go releases all of it, its growth included
+type feed struct(Body I64, Local I64, PlaceId I64, Copy I64, At typed.Scope, Dest typed.Scope) {
+    Body
+    Local
+    PlaceId
+    Copy        # the copy's site, which lowering leaves out (the move)
+    At          # where the scope pass builds what the local's declaration and its calls build: the local's scope
+    Dest        # where the copy would have been built: the region's parent
+    Site I64 = -1   # the site its declaration's value is built at in a region of its own (made, final walk), -1 for none
+}
+
+# a call given a feeder (a reference to it or to a part of it) as argument Param
+type feedCall struct(Body I64, Site I64, Callee I64, Param I64, Feed I64, Writes Bool) {
+    Body
+    Site
+    Callee
+    Param
+    Feed
+    Writes      # a writable reference: what the callee builds where the feeder lives must be built in its region
+}
+
 # ---- the analysis ----
 
 type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut scope.Scoper&) {
@@ -279,6 +303,11 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # the copies made for an owner leaf whose value owns storage beside it (splitLeaf), by (body, site): the leaf's path -
     # lowering builds that part in the site's region and every other owned part where the region's parent is
     splitAt Map<pair.Pair<I64, I64>, Array<I64>>
+    # feeders (findFeeds): value locals built in the region of the owner place they are stored into, from their
+    # declarations - by (body, local), the index in feeds; and the calls given one, judged and redirected into it
+    feeds Vec<feed>
+    feedOf Map<pair.Pair<I64, I64>, I64>
+    feedCalls Vec<feedCall>
     dtorVal Vec<Bool>         # by place: what it holds has a destructor - never Sole (O15)
     curBody I64 = -1           # the body the pre-pass is in
     Done Bool = false          # whether Decide ran with a root (else every decision is "keep")
@@ -701,6 +730,9 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
         if f.Bodies[b].Root is not null { f.findCands(f.Bodies[b].Root!) }
     }
     if f.keyTy.Len() == 0 { return }
+    for b in range n {
+        if f.Bodies[b].Root is not null { f.findFeeds(b) }
+    }
     t0 := time.Now()
     # the must-summaries, greatest fixed point - what the may-summaries' stores read (withinOf): every body once,
     # callees first, then again each body a callee of which changed
@@ -1005,6 +1037,157 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
         case typed.Stmt.Defer(_, b) { f.findCands(b) }
         case typed.Stmt.Join(_, j) { f.findCands(j.Code) }
         case _ { }
+    }
+}
+
+# ---- feeders: locals built where they are kept (O28 item 17, D9i, O8d) ----
+
+# the feeders of body b: a value local declared by a statement of a block and copied whole at its last mention
+# (typed.LastCopies) into an owner place by a later assignment of the same block - so the place its value goes to is
+# known at its declaration - named no other way (assigned whole, escaping, a second name), its declaration's value
+# built where the local lives, and the copy going where the local lives or to the program's scope
+fn (f mut Free&) findFeeds(b I64) {
+    body := f.Bodies[b]
+    if body.Gen: return
+    last := typed.LastCopies(body, true)
+    if last.Len() == 0: return
+    u := typed.LocalUses.Uses(f.T(), body)
+    f.feedBlock(b, body.Root!, last, u)
+}
+
+fn (f mut Free&) feedBlock(b I64, bl typed.Block&, last Map<I64, I64>&, u typed.LocalUses&) {
+    lets Map<I64, typed.Expr&>
+    for st in bl.Stmts {
+        match st {
+            case typed.Stmt.Let(_, l, x) { lets.Put(I64(l), x) }
+            case typed.Stmt.Assign(_, p, x) {
+                cs := wholeCopySite(x)
+                l := try last.Get(cs) catch default -1
+                if l >= 0 and lets.Has(l): f.feedStore(b, l, lets.Get(l)!, cs, p, u)
+            }
+            case typed.Stmt.If(_, i) {
+                f.feedBlock(b, i.Then, last, u)
+                if i.Else is not null { f.feedBlock(b, i.Else!, last, u) }
+            }
+            case typed.Stmt.Loop(_, body, post) {
+                f.feedBlock(b, body, last, u)
+                if post is not null { f.feedBlock(b, post, last, u) }
+            }
+            case typed.Stmt.Block(_, inner) { f.feedBlock(b, inner, last, u) }
+            case _ { }
+        }
+    }
+}
+
+fn (f mut Free&) feedStore(b I64, l I64, init typed.Expr&, cs I64, p typed.Lvalue&, u typed.LocalUses&) {
+    body := f.Bodies[b]
+    loc := body.Locals[l]
+    t := f.T()
+    if loc.Kind != typed.LocalKind.Var or loc.Unset or t.IsRef(loc.Ty) or u.Whole[l] or u.EscHard[l]: return
+    for a in u.AliasOf {
+        if a == l: return
+    }
+    k := -1
+    match p {
+        case typed.Lvalue.Field(_, _, _, _) { k = f.placeOfPlace(p) }
+        case typed.Lvalue.Global(_, _, m, nm) { k = try f.globalOf.Get(pair.Pair(m, I64(nm))) catch default -1 }
+        case _ { }
+    }
+    if k < 0 or not f.owner[k] or f.topSite(init) < 0: return
+    pl := f.Plans.Ref(b)
+    at := f.siteScope(b, init)
+    dest := pl.Built[cs]
+    if not runs(at) or not runs(dest) or pl.Stored[l] != at and not (pl.Stored[l] == typed.Scope.Frame and isBlock(at)): return
+    if dest != at and dest != typed.Scope.Program: return
+    f.feedOf.Put(pair.Pair(b, l), f.feeds.Len())
+    f.feeds.Push(feed(b, l, k, cs, at, dest))
+}
+
+fn isBlock(sc typed.Scope) Bool {
+    return match sc {
+        case typed.Scope.Block(_): true
+        case _: false
+    }
+}
+
+# the site of the copy of a whole local an expression is, -1 for any other (typed.LastCopies's sites)
+fn wholeCopySite(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Make(_, _, m): I64(m.Site) if m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 and readLocalOf(m.Items[0]) >= 0 else -1
+        case typed.Expr.Away(_, _, y): wholeCopySite(y)
+        case _: -1
+    }
+}
+
+# the feeder local l of the walked body is, -1 for none
+fn (w mut walker&) feeder(l I64) I64 {
+    if l < 0 or w.F.feeds.Len() == 0 { return -1 }
+    return try w.F.feedOf.Get(pair.Pair(w.Id, l)) catch default -1
+}
+
+# the feeder an argument is a reference to, or to a part of (through fields held by value), -1 for none
+fn (w mut walker&) feederArg(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Borrow(_, _, p): w.feeder(fieldRootLocal(p))
+        case typed.Expr.Away(_, _, y): w.feederArg(y)
+        case _: -1
+    }
+}
+
+fn fieldRootLocal(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, l): I64(l)
+        case typed.Lvalue.Field(_, _, base, _): fieldRootLocal(base)
+        case _: -1
+    }
+}
+
+# a writable call given a feeder: what it builds where the feeder lives can be built in the feeder's region - its
+# variable passed the feeder's scope, and the variables built with it fitting the callee's obligations (orVars) - else
+# the feeder's place keeps, as for a value changed in place
+fn (f mut Free&) feedFits(fc feedCall) Bool {
+    fd := f.feeds[fc.Feed]
+    u := f.paramVar(fc.Callee, fc.Param)
+    if u < 0: return true
+    at := f.Plans.Ref(fc.Body).Passed(typed.SiteId(I32(fc.Site)), u)
+    if at != fd.At: return not fc.Writes
+    call := f.callAt(fc.Body, fc.Site)
+    if call is null: return not fc.Writes
+    return f.orVars(fc.Body, call, fc.Callee, at, u) >= 0 or not fc.Writes
+}
+
+# the feeders' calls: a variable passed the feeder's scope passed its region instead, and the arguments built with it
+# there too (as a call given a value of a sole place is, below)
+fn (f mut Free&) writeFeedCalls() {
+    for fc in f.feedCalls {
+        fd := f.feeds[fc.Feed]
+        if fd.Site < 0 or f.decided[fc.Body] and not f.Sole[fd.PlaceId]: continue
+        pl := f.Plans.RefMut(fc.Body)
+        if pl.RegionKind[fd.Site] != 1: continue
+        u := f.paramVar(fc.Callee, fc.Param)
+        if u < 0: continue
+        site := typed.SiteId(I32(fc.Site))
+        at := pl.Passed(site, u)
+        if at != fd.At: continue
+        call := f.callAt(fc.Body, fc.Site)
+        if call is null: continue
+        set := f.orVars(fc.Body, call, fc.Callee, at, u)
+        if set < 0: continue
+        region := typed.Scope.Region(typed.SiteId(I32(fd.Site)))
+        for v in range 63 {
+            if (set & (I64(1) << v)) != 0 { pl.SetPassed(site, v, region) }
+        }
+        for j in range call.Args.Len() {
+            v := f.paramVar(fc.Callee, j)
+            if v < 0 or v >= 63 or (set & (I64(1) << v)) == 0 or v == u: continue
+            a := call.Args[j]
+            t2 := f.topSite(a)
+            if t2 >= 0 and pl.RegionKind[t2] == 1 {
+                if pl.RegionParent[t2] == at { pl.RegionParent[t2] = region }
+            } else {
+                f.redirect(fc.Body, a, fd.Site, at, false)
+            }
+        }
     }
 }
 
@@ -1424,6 +1607,12 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             if k >= 0 { w.wholeField(k, x) }
             ol := w.ownLocal(I64(l))
             if ol >= 0 { w.store(ol, x, o, sp, w.localName(I64(l))) }
+            fd := w.feeder(I64(l))
+            if fd >= 0 and w.Final and w.quiet == 0 {
+                w.made(w.F.feeds[fd].PlaceId, x, sp, false)
+                fst := w.F.stores[w.F.stores.Len() - 1]
+                if fst.Kind == SFresh: w.F.feeds.RefMut(fd).Site = w.F.topSite(x)
+            }
         }
         case typed.Stmt.Assign(sp, p, x) { w.assign(sp, p, x) }
         case typed.Stmt.Eval(sp, x) { w.eval(sp, x) }
@@ -2199,9 +2388,11 @@ fn (w mut walker&) reach(p typed.Lvalue&) Vec<I64> {
                 pk := f.placeKey(w.ctorTy, k)
                 if pk >= 0: addTo(o, orig(OPl, pk))
             }
-            # (an owner local's value is its place's)
+            # (an owner local's value is its place's - and a feeder's the place's it is built for)
             ol := w.ownLocal(I64(l))
             if ol >= 0: addTo(o, orig(OPl, ol))
+            fd := w.feeder(I64(l))
+            if fd >= 0: addTo(o, orig(OPl, w.F.feeds[fd].PlaceId))
             return o
         }
         case typed.Lvalue.Deref(_, _, r) { return w.expr(r) }
@@ -2518,9 +2709,14 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         case _ { }
     }
     args Vec<Vec<I64>>
-    for a in c.Args {
+    for j in range c.Args.Len() {
+        a := c.Args[j]
         o := w.expr(a)
-        if w.writable(a.Type()) { w.inOwner(o, -1, sp, "a writable reference to it handed to a call") }
+        # (a feeder handed to a call the body of which is known: what it builds there is built in its region - feedFits)
+        fd := w.feederArg(a) if b2 >= 0 and not unknown and c.Site >= typed.SiteId(0) else -1
+        wr := w.writable(a.Type())
+        if fd >= 0 and w.Final and w.quiet == 0 { w.F.feedCalls.Push(feedCall(w.Id, I64(c.Site), b2, j, fd, wr)) }
+        if wr { w.inOwner(o, w.F.feeds[fd].PlaceId if fd >= 0 else -1, sp, "a writable reference to it handed to a call") }
         args.Push(o)
     }
     if w.holds(ty) and c.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(c.Site))) }
@@ -3609,6 +3805,13 @@ fn (f mut Free&) decide() {
             f.keep(oc.PlaceId, RDtor, -1, source.Span(0, 0), "a call building into what it holds may register an instance whose destructor is still to run (O16)")
         }
     }
+    # a feeder changed by a call that cannot build in its region (feedFits)
+    for fc in f.feedCalls {
+        if not f.feedFits(fc) {
+            fd := f.feeds[fc.Feed]
+            f.keep(fd.PlaceId, RInPlace, f.Bodies[fc.Body].File, f.Bodies[fc.Body].Locals[fd.Local].Sp, $"what is built for it is changed by a call that cannot build where it is: '" $f.P.L.Names.Text(f.Bodies[fc.Body].Locals[fd.Local].Name) "'")
+        }
+    }
     # condition 1's stores that cannot be built where they are
     for st in f.stores {
         if st.Kind == SFresh and (not f.placeable(st) or f.topSite(st.X!) < 0) {
@@ -3660,6 +3863,15 @@ fn (f mut Free&) decide() {
         }
         if not found: break
     }
+}
+
+# where a region made at site top of body b is a kid of: a feeder's declaration's, where its copy would have gone (the
+# place it is built for lives there); any other, at
+fn (f Free&) feedDest(b I64, top I64, at typed.Scope) typed.Scope {
+    for fd in f.feeds {
+        if fd.Body == b and fd.Site == top: return fd.Dest
+    }
+    return at
 }
 
 # the stores, by index, in the order writePlans gives their sites regions: a body's in the order of their values'
@@ -3821,10 +4033,11 @@ fn (f mut Free&) writePlans() {
         # O29: a value built where its place's storage is found at run time is built there, never in a region of its own
         if at == typed.Scope.Found or at == typed.Scope.Passed: continue
         pl.RegionKind[top] = 1
-        pl.RegionParent[top] = at
+        pl.RegionParent[top] = f.feedDest(st.Body, top, at)
         pl.RegionGuard[top] = f.guard(st.Body, k)
         f.redirect(st.Body, x, top, at, true)
     }
+    f.writeFeedCalls()
     # a store through a value of a sole place: a region made there has that value's region for its parent; parts not
     # made for a sole place are built in that region
     for os in f.orStores {
@@ -4131,6 +4344,21 @@ fn (f Free&) LocalPlace(k I64) I64, I64 {
 
 # D9h: whether the constructor call at site of body b is one whose copy is left out (freshAt)
 fn (f Free&) FreshCtorAt(b I64, site I64) Bool { return f.freshAt.Has(pair.Pair(b, site)) }
+
+# a feeder of body b (findFeeds): the site of its copy, which lowering moves (D9i) where the site its declaration's
+# value is built at has a region of its own in the plan - -1 for a local that is none
+fn (f Free&) FeedCopy(b I64, l I64) I64 {
+    if not f.Done: return -1
+    i := try f.feedOf.Get(pair.Pair(b, l)) catch default -1
+    return f.feeds[i].Copy if i >= 0 and f.feeds[i].Site >= 0 else -1
+}
+
+# ...and the site its declaration's value is built at, -1 for none
+fn (f Free&) FeedSite(b I64, l I64) I64 {
+    if not f.Done: return -1
+    i := try f.feedOf.Get(pair.Pair(b, l)) catch default -1
+    return f.feeds[i].Site if i >= 0 else -1
+}
 
 # the path of the owner leaf a copy made at site of body b is split for (splitLeaf): its part built in the site's
 # region, the rest where the region's parent is - empty for none

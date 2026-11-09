@@ -1,0 +1,89 @@
+# check: run
+# flags: -debug -sanitize
+# O8d, O28 item 17, D9i: a local filled and stored whole at its last use into an owner field or global, by a statement
+# of the block declaring it, is built in the region of that place's next value from its declaration and moved there
+# (a feeder). Each place below is let go of again and read after a churn of the closed storage: a feeder of a field, of
+# a global, one holding texts its pushes build, one a view of which is in use across a later let-go (condition 6), one
+# a view of which is kept in another field (condition 2), and one stored only on some turns (no feeder: copied)
+import "std/io"
+
+type holder struct() {
+    d Vec<I64>
+    a Vec<I64>
+    e Vec<I64>
+    f Vec<I64>
+    names Vec<String>
+    view Array<I64>&
+}
+
+cache mut Vec<I64> = Vec<I64>()
+
+fn churn() I64 {
+    t := 0
+    for _ in range 20 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+fn fill(h mut holder&, n I64, k I64) {
+    v := Vec<I64>()
+    for i in range n { v.Push(i * k) }
+    h.d = v
+}
+
+fn global(n I64, k I64) {
+    v := Vec<I64>()
+    for i in range n { v.Push(i + k) }
+    cache = v
+}
+
+fn label(h mut holder&, k I64) {
+    w := Vec<String>()
+    for i in range 5 { w.Push("n" $(i + k)) }
+    h.names = w
+}
+
+fn across(h mut holder&, k I64) I64 {
+    v := Vec<I64>()
+    for i in range 9 { v.Push(i + k) }
+    r := v.View()
+    h.a = v
+    h.a = Vec<I64>[k, k]
+    churn()
+    return r[8]
+}
+
+fn kept(h mut holder&, k I64) {
+    v := Vec<I64>()
+    for i in range 9 { v.Push(i + k) }
+    h.view = v.View()
+    h.e = v
+}
+
+fn sometimes(h mut holder&, k I64) {
+    v := Vec<I64>()
+    for i in range 7 { v.Push(i - k) }
+    if k % 2 == 0 { h.f = v }
+}
+
+fn main() {
+    h := holder()
+    s := 0
+    for k in range 30 {
+        fill(h, 10, k)
+        global(10, k)
+        label(h, k)
+        churn()
+        s += h.d[9] + cache[9] + h.names.Len()
+        s += across(h, k)
+        kept(h, k)
+        churn()
+        s += h.view[8] + h.e[8]
+        sometimes(h, k)
+        churn()
+        s += h.f[6]
+    }
+    io.Println($s " " $h.names[4] " " $h.d[3] " " $h.a[1])!
+}

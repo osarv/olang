@@ -1,0 +1,35 @@
+import "std/io"
+
+# O8d, O28 item 17, D9i: a Vec local filled and stored whole at its last use into a field of a long-lived holder - a
+# feeder - is built in the region of the field's next value from its declaration, its growth too, and moved into the
+# field: the field's next let-go frees all of it (built where the holder lives and copied into the field's region, it
+# reached 572 MB over 2,000 turns of 10,000 elements). A Vec<String> feeder's pushed texts are built there too
+N I64 = 2000
+
+type holder struct() {
+    d Vec<I64>
+    names Vec<String>
+}
+
+fn fill(h mut holder&, n I64, k I64) {
+    v := Vec<I64>()
+    for i in range n { v.Push(i + k) }
+    h.d = v
+}
+
+fn label(h mut holder&, n I64, k I64) {
+    w := Vec<String>()
+    for i in range n { w.Push("name " $(i + k)) }
+    h.names = w
+}
+
+fn main() {
+    h := holder()
+    t := 0
+    for k in range N {
+        fill(h, 10000, k)
+        label(h, 100, k)
+        t += h.d[9999] + h.names.Len()
+    }
+    io.Println($t " " $h.names[99])!
+}
