@@ -35827,6 +35827,13 @@ lru 43.5 -> 49.3 MB, 139 -> 132 ms. The peaks grow by the header's 8 bytes a nod
 reclaimed); the times are within the runs' noise. No program without `weak` changes: lowering emits nothing and
 emit allocates no header where no type is generational.
 
+**Every module's code reads it (B3i, wholeprog kind D).** Which types are generational and which fields weak is one
+whole-program fact, `T13d`, decided by lowering as the canonical text of both (by declaration identity) and read by every
+body it lowers, so a module's record - its IR reused by a later build - is kept only where that text is what it read.
+Adding or removing a `weak`, or the first weak reference to a type, lowers every module again: the cost of one fact for
+the whole table rather than one per type, which would need every type a module allocates or stores recorded as it is
+asked (a later refinement, with W3b's per-body records).
+
 **Tests.** tests/weak.olang: a list whose middle and head nodes are taken out (their weak places read `null`, the
 others their nodes), a subtree cut off (its parent links read `null` at the cut), an LRU cache's evicted entry, one
 whose Map grows, and a node popped from a Vec and pushed back (`null`, then its node again) - each read back after an
