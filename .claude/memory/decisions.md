@@ -21,6 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-- Open weights as a bootstrap (asked 2026-11-09): may the reasoning core start from an open model (distilled, then
-  RL), replaced over time by our own training, or must it be trained from scratch? Default: no work either way until
-  answered. Recommended: open weights as a bootstrap. Context: oagent/papers/survey-reasoning.md.
+(None open.)

@@ -3799,3 +3799,8 @@ stood:
      hotpath clone from this container (its CLAUDE.md loads here). 5. The 2-hourly check-in to 6-hourly. 6. xhigh
      only for new section-8 design; Sonnet for more pieces. 7. Agent reports at most ~10 lines; /compact more often.
   Answered: all yes ("move the rationales for rules out of the context we send"); 4: hotpath is now Odysx, access is fine, it has its own session - left alone; check-in 6-hourly and near-free; be resourceful, and every spawned agent too.
+
+- Open weights as a bootstrap (asked 2026-11-09): may the reasoning core start from an open model (distilled, then
+  RL), replaced over time by our own training, or must it be trained from scratch? Default: no work either way until
+  answered. Recommended: open weights as a bootstrap. Context: oagent/papers/survey-reasoning.md.
+  **Answer (the user, 2026-11-09): "We want to train from scratch."**

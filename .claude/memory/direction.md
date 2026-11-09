@@ -62,7 +62,7 @@ one rule that composes over special cases; fix rough edges found while building.
   strong reasoning kernel of a small number of GB with a lot of external tooling and RAG. I want to scale reasoning, not
   size. I also know about methods where LLMs become good at directly updating model parameters. We can go that
   direction as well. I want strong reasoning." Settling networks become a research arm, measured head-to-head; oann is
-  general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md.
+  general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md. Trained from scratch, no open weights (the user, 2026-11-09).
 
 ## Reading the user
 
