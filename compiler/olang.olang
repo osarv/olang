@@ -579,7 +579,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.DecideDerived()
     lw.Free = fr
     build.Phase("scope")
-    if cfg.Memory and d.Errors() == 0 { try io.Print($fr.Report() $fr.Sc.PlacedReport()) catch io.Error { } }
+    if cfg.Memory and d.Errors() == 0 { try io.Print($fr.Report() $weakRows(c) $fr.Sc.PlacedReport()) catch io.Error { } }
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PrintErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
@@ -1031,6 +1031,13 @@ fn inferStats(sc mut scope.Scoper&) {
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
+# B18: a row for each weak place the program declares (T2d), in the order it declares them
+fn weakRows(c typecheck.Checker&) String {
+    b := StringBuilder()
+    for r in c.P.WeakRows { b.Push(r) }
+    return b.ToString()
+}
+
 # T22c: the scope pass's twins, each one's plan and whether it has code of its own, for lowering
 fn twinsTo(lw mut lower.Lowerer&, fr free.Free&) {
     for t in range fr.Sc.TwinCount() {

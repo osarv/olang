@@ -93,6 +93,13 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     # B3i: what the program decided as a whole that a module's code reads, each read recorded (facts.olang)
     Facts := facts.Table()
     declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
+    # T2d, T13d: the generational types, by declaration - a weak reference anywhere in the program names them - each
+    # with its weak places as written ("'prev', 'tail'"), the owning places declared holding it ("'next', 'head'"), and
+    # the weak fields themselves ("DECL INDEX"); the whole program's (genrefs 0.1, item 4), found before any body
+    Gens Map<I64, String>
+    GenOwners Map<I64, String>
+    WeakSlots Map<String, Bool>
+    WeakRows Vec<String&>              # B18: -memory's row for each weak place, in the order the program declares them
     payloads Map<I64, types.TypeId>    # T19b: an error type's payload enum by its declaration (PayloadOf), UnknownT for none
     raisedFields Map<I64, types.ListId>    # T19b, R3b: an error raised by name's payload field types by its payload enum's
                                            # declaration, once its first raise settled them (SettleRaised)
@@ -663,7 +670,7 @@ fn borrowableElem(fd ast.Func&) Bool {
 
 fn refElem(a ast.TypeRef&) Bool {
     return match a {
-        case ast.TypeRef.Ref(_, _, nullable): not nullable
+        case ast.TypeRef.Ref(_, _, nullable, _): not nullable
         case _: false
     }
 }
@@ -671,7 +678,7 @@ fn refElem(a ast.TypeRef&) Bool {
 fn byValueParam(prm ast.Param&) Bool {
     if prm.Ty is null: return true
     return match prm.Ty! {
-        case ast.TypeRef.Ref(_, _, _), ast.TypeRef.Perm(_, _, _): false
+        case ast.TypeRef.Ref(_, _, _, _), ast.TypeRef.Perm(_, _, _): false
         case _: true
     }
 }
@@ -969,7 +976,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Named(sp, path, args): p.named(c, sp, path, args)
         case ast.TypeRef.Func(sp, s): p.funcType(c, sp, s)
         case ast.TypeRef.Shape(_, body): p.shape(c, body)
-        case ast.TypeRef.Ref(sp, of, nullable): p.refType(c, sp, p.Resolve(c, of), nullable)
+        case ast.TypeRef.Ref(sp, of, nullable, _): p.refType(c, sp, p.Resolve(c, of), nullable)
         case ast.TypeRef.Perm(_, of, writable): p.perm(p.Resolve(c, of), writable)
         # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
@@ -1408,7 +1415,7 @@ fn (p mut Program&) viewNext(row fnRow&) Bool {
 
 fn viewGenTy(p Program&, t ast.TypeRef&) Bool {
     return match t {
-        case ast.TypeRef.Ref(_, of, _): viewGenTy(p, of)
+        case ast.TypeRef.Ref(_, of, _, _): viewGenTy(p, of)
         case ast.TypeRef.Named(_, path, _): path.Len() == 1 and p.L.Names.Text(path[0]) == "ViewGenerator"
         case _: false
     }
@@ -3093,7 +3100,7 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
     if t is null { return -1 }
     match t {
         case ast.TypeRef.Perm(_, of, _) { return p.recvKey(mi, of, tps) }
-        case ast.TypeRef.Ref(_, of, _) { return p.recvKey(mi, of, tps) }
+        case ast.TypeRef.Ref(_, of, _, _) { return p.recvKey(mi, of, tps) }
         case ast.TypeRef.Named(sp, path, _) {
             ref := p.R.Use(p.file(mi), sp.Start)
             if ref.Kind == names.What.TypeVar {
@@ -3256,6 +3263,17 @@ fn (p mut Program&) recvApplies(f I64, x types.TypeId) Bool {
 fn (p mut Program&) Extends(t types.TypeId) Bool {
     return p.T.KindOf(t) == types.Kind.Named and p.Body(t) and p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Over and
            p.extends(p.T.DeclOf(t))
+}
+
+# T13d: whether t is generational - a struct or enum some weak reference of the program names, each of its values an
+# instance held only by reference
+fn (p mut Program&) Generational(t types.TypeId) Bool {
+    return p.T.KindOf(t) == types.Kind.Named and p.Gens.Has(I64(p.T.DeclOf(t)))
+}
+
+# T2d: whether field index of the struct t is a weak place
+fn (p mut Program&) WeakField(t types.TypeId, index I64) Bool {
+    return p.T.KindOf(t) == types.Kind.Named and p.WeakSlots.Has($I64(p.T.DeclOf(t)) " " $index)
 }
 
 # T13a: the word a declared type's declaration writes before its body - immut, or none (Plain); a type that is no
@@ -3455,7 +3473,7 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
             }
             return false
         }
-        case ast.TypeRef.Ref(_, of, _) { return mentionsName(of, n) }
+        case ast.TypeRef.Ref(_, of, _, _) { return mentionsName(of, n) }
         case ast.TypeRef.Perm(_, of, _) { return mentionsName(of, n) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { return mentionsName(of, n) }
         case ast.TypeRef.Errs(_, items) {
@@ -3635,7 +3653,7 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut Vec<source.Nam
             }
             for a in args { p.introductions(mi, a, ns, true) }
         }
-        case ast.TypeRef.Ref(_, of, _) { p.introductions(mi, of, ns, inArgs) }
+        case ast.TypeRef.Ref(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Perm(_, of, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { p.introductions(mi, of, ns, inArgs) }
         # QAH: "? E" among a receiver's arguments introduces its error-set variable
@@ -3657,7 +3675,7 @@ fn errIntroductions(t ast.TypeRef?&, out mut Vec<source.NameId>&) {
         case ast.TypeRef.Named(_, _, args) {
             for a in args { errIntroductions(a, out) }
         }
-        case ast.TypeRef.Ref(_, of, _) { errIntroductions(of, out) }
+        case ast.TypeRef.Ref(_, of, _, _) { errIntroductions(of, out) }
         case ast.TypeRef.Perm(_, of, _) { errIntroductions(of, out) }
         case ast.TypeRef.Errs(_, items) {
             for e in items {

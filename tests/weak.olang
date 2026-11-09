@@ -1,0 +1,250 @@
+# Weak references and generational types (T2d, T13d): a doubly linked list whose back links are weak, a tree whose
+# parent links are, an LRU cache whose Map owns the nodes while its list's four links point at them weakly, and a
+# generational value held by reference ("n := Node(1)" names a new instance, aliasing read back). As built so far a
+# weak place is an ordinary "?&" reference that never reads null early (genrefs round 1), so each reads back what was
+# stored. Each test reads its values back after an arena churn, and the evaluator decides the same values while
+# compiling (a baked global, top-level asserts).
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null      # points back: the list holds each node through 'head' or the 'next' before it
+}
+
+type DList struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+    n I64 = 0
+}
+
+fn (l mut DList&) PushBack(v I64) {
+    nd := Node(v)
+    t := l.tail
+    if t is null { l.head = nd } else {
+        t.next = nd
+        nd.prev = t
+    }
+    l.tail = nd
+    l.n++
+}
+
+fn (l mut DList&) PopFront() I64 {
+    h := l.head!
+    q := h.next
+    l.head = q
+    if q is null { l.tail = null } else { q.prev = null }
+    l.n--
+    return h.v
+}
+
+# the list read forward through 'next' and back through the weak 'prev', as digits
+fn (l DList&) Forward() I64 {
+    s := 0
+    at Node?& = l.head
+    for at is not null {
+        s = s * 10 + at.v
+        at = at.next
+    }
+    return s
+}
+
+fn (l DList&) Backward() I64 {
+    s := 0
+    at Node?& = l.tail
+    for at is not null {
+        s = s * 10 + at.v
+        at = at.prev
+    }
+    return s
+}
+
+# what a closed scope left behind is written over
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn listed(n I64, pops I64) I64 {
+    l := DList()
+    for i in range 1, n + 1 { l.PushBack(i) }
+    p := 0
+    for _ in range pops { p = p * 10 + l.PopFront() }
+    churn()
+    return l.Forward() * 1000000 + l.Backward() * 100 + p
+}
+
+# a binary search tree with weak parent links: the tree holds each node through 'root', 'left' and 'right'
+type TNode struct(key I64, up mut TNode?&) {
+    key
+    parent weak mut TNode?& = up
+    left mut TNode?& = null
+    right mut TNode?& = null
+}
+
+type Tree struct() {
+    root mut TNode?& = null
+}
+
+fn (t mut Tree&) Insert(k I64) mut TNode& {
+    r := t.root
+    if r is null {
+        n := TNode(k, null)
+        t.root = n
+        return n
+    }
+    at := r
+    for {
+        if k < at.key {
+            l := at.left
+            if l is null {
+                n := TNode(k, at)
+                at.left = n
+                return n
+            }
+            at = l
+        } else {
+            g := at.right
+            if g is null {
+                n := TNode(k, at)
+                at.right = n
+                return n
+            }
+            at = g
+        }
+    }
+    unreachable
+}
+
+# the keys from a node up to the root, through the weak parent links
+fn pathUp(n TNode&) I64 {
+    s := 0
+    at TNode?& = n
+    for at is not null {
+        s = s * 10 + at.key
+        at = at.parent
+    }
+    return s
+}
+
+fn treePath() I64 {
+    t := Tree()
+    t.Insert(5)
+    t.Insert(3)
+    t.Insert(8)
+    t.Insert(4)
+    leaf := t.Insert(1)
+    churn()
+    return pathUp(leaf) * 10 + pathUp(t.Insert(9))
+}
+
+# an LRU cache: the Map owns its nodes, the list links between them are weak
+type Entry struct(key String, v I64) {
+    key
+    v
+    next weak mut Entry?& = null
+    prev weak mut Entry?& = null
+}
+
+type Lru struct(cap I64) {
+    cap
+    head weak mut Entry?& = null
+    tail weak mut Entry?& = null
+    at Map<String, mut Entry&> = Map<String, mut Entry&>()
+}
+
+fn (c mut Lru&) unlink(n mut Entry&) {
+    p := n.prev
+    q := n.next
+    if p is null { c.head = q } else { p.next = q }
+    if q is null { c.tail = p } else { q.prev = p }
+    n.prev = null
+    n.next = null
+}
+
+fn (c mut Lru&) pushFront(n mut Entry&) {
+    h := c.head
+    n.next = h
+    if h is null { c.tail = n } else { h.prev = n }
+    c.head = n
+}
+
+# the value of key k, made as v where it is missing; the least recently used entry evicted at the cap
+fn (c mut Lru&) Get(k String&, v I64) I64 {
+    n := try c.at.Get(k) catch {
+        if c.at.Len() >= c.cap {
+            old := c.tail!
+            c.unlink(old)
+            assert c.at.Remove(old.key)
+        }
+        fresh := Entry(k, v)
+        c.at.Put(k, fresh)
+        c.pushFront(fresh)
+        return v
+    }
+    c.unlink(n)
+    c.pushFront(n)
+    return n.v
+}
+
+# the keys from most to least recently used
+fn (c Lru&) Order() String {
+    b := StringBuilder()
+    at Entry?& = c.head
+    for at is not null {
+        b.Push(at.key)
+        at = at.next
+    }
+    return b.ToString()
+}
+
+fn cached() String {
+    c := Lru(3)
+    for k in Array<String&>["a", "b", "c", "a", "d", "b", "e"] { c.Get(k, k.Len()) }
+    churn()
+    return c.Order()
+}
+
+# T13d: a generational value is held by reference - ":=" names a new instance, and a second name for it is the same one
+fn aliased() I64 {
+    a := Node(1)
+    b := a
+    b.v = 7
+    l := DList()
+    l.PushBack(2)
+    h := l.head!
+    h.v = 4
+    churn()
+    return a.v * 100 + l.Forward() * 10 + (1 if a == b else 0)
+}
+
+# the evaluator decides the same while compiling
+Listed := listed(5, 2)
+assert Listed == 345054312
+assert listed(4, 0) == 1234432100 and listed(3, 3) == 123
+assert treePath() == 2335 and cached() == "ebd"
+assert aliased() == 741
+
+test "a doubly linked list read forward through its owning links and back through its weak ones" {
+    assert listed(4, 0) == 1234432100
+    assert listed(5, 2) == Listed
+    assert listed(3, 3) == 123
+}
+
+test "a tree's weak parent links read back up to its root" {
+    assert treePath() == 2335
+    t := Tree()
+    assert pathUp(t.Insert(6)) == 6
+}
+
+test "an LRU cache whose Map owns its entries and whose list links are weak" {
+    assert cached() == "ebd"
+}
+
+test "a generational value is held by reference" {
+    assert aliased() == 741
+}

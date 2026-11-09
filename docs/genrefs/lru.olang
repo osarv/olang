@@ -1,5 +1,6 @@
 # an LRU cache of 1000 entries churning in main's scope: 1M lookups of pseudo-random keys out of 4000, each miss
-# evicting the least recently used entry; a node holds its key's text, the list owns the nodes and a Map finds them
+# evicting the least recently used entry; a node holds its key's text, the Map owns the nodes and the list's links
+# point at them weakly (T2d)
 import "std/io"
 import "std/time"
 import "peak"
@@ -7,14 +8,14 @@ import "peak"
 type Node struct(key String, v I64) {
     key
     v
-    next mut Node?& = null
-    prev mut Node?& = null
+    next weak mut Node?& = null
+    prev weak mut Node?& = null
 }
 
 type Lru struct(cap I64) {
     cap
-    head mut Node?& = null
-    tail mut Node?& = null
+    head weak mut Node?& = null
+    tail weak mut Node?& = null
     at Map<String, mut Node&> = Map<String, mut Node&>()
 }
 

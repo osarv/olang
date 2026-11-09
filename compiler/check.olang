@@ -299,6 +299,11 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     paramTypes Bool = false                         # a declared function's parameters' types being checked (G29)
     underRef Bool = false                           # a written type under a reference marker being checked (T21b)
+    weakHere Bool = false                           # T2d: the written type checked next stands where "weak" may: a field's,
+                                                    # a payload's, a global's or a type argument
+    genWeakAt Map<I64, diag.Where>                  # T2d: the first weak reference to each generational type, by declaration
+    genOwned Map<I64, Bool>                         # ... and those some owning place of the program holds
+    weakPlaces Vec<weakPlace>                       # ... and every weak place declared, for -memory (B18)
     refMarked Bool = false                          # ... under a reference marker itself, not named as an expression's
     unendedSaid Map<types.TypeId, Bool>             # C11: the types an unended value was said of, and those reached
     declMade Bool = false                           # a declaration's type, its value given: what T7d's lengths come from
@@ -609,6 +614,13 @@ type landing struct(Body I64, Local I64, At source.Span, Ty types.TypeId, Inst I
     Inst
 }
 
+# T2d: a weak place as declared - where its "weak" is, its name, and the type it names (by declaration)
+type weakPlace struct(At diag.Where, Label String, Key I64) {
+    At
+    Label
+    Key
+}
+
 type atRec struct(Body I64, Site I64, Base typed.Lvalue&, Of types.TypeId) {
     Body
     Site
@@ -627,6 +639,7 @@ fn (c mut Checker&) CheckProgram() {
     # attempt done again (R1a) forgets what it said, and a signature is signed only once
     for f in range c.P.FnCount() { c.P.Sig(f) }
     if c.syntaxMark < 0 { c.syntaxMark = c.P.L.Diags.RecordCount() }
+    c.genScan()
     for {
         c.Attempts++
         mark := c.P.L.Diags.Count()
@@ -657,6 +670,7 @@ fn (c mut Checker&) CheckProgram() {
             c.judgeEffects()
             c.orderGlobals()
             c.settleAllViews()
+            c.settleWeak()
             c.P.L.MutStorage = c.mutStorage()
             if (try os.Env("OLANG_HANDLES") catch default "") != "": c.handleReport()
             return
@@ -2007,7 +2021,10 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
             # T4, T17: a payload's types are known ones, said where they are written
             for cd in cases {
                 if cd.Payload.Len() == 0 { continue }
-                for prm in cd.Payload { c.writtenMet(prm.Ty) }
+                for prm in cd.Payload {
+                    c.weakHere = true   # T2d: a payload's field may be weak
+                    c.writtenMet(prm.Ty)
+                }
             }
             c.raws.Put(I64(d), c.rawTable(d, true))   # T17e, said here
         }
@@ -2085,12 +2102,13 @@ fn (c mut Checker&) uniqueRules(sp source.Span, td ast.TypeDecl&, d types.DeclId
         wsp := source.Span(sp.Start + I32(at), sp.Start + I32(at + 6))
         what := c.uniqueOn(td)
         if what != "" { c.err(wsp, msgs.UniqueKind(what)) } else if c.overImmut(td) { c.err(wsp, msgs.UniqueImmut()) }
+        if what == "" and c.P.Generational(self) { c.err(wsp, msgs.GenUnique(c.ty(self))) }   # T13d
     }
     match td.Body {
         case ast.TypeBody.Struct(sb) {
             if c.P.Immut(self) { c.immutHoldsUnique(self, fieldSpans(sb)) }
             # (a collection of the library's ends its elements: a destructor its instances holding none have not, C11)
-            if sb.Dtor.Len() > 0 and td.Word != ast.DeclWord.Unique and not c.P.T.Ends(self) {
+            if sb.Dtor.Len() > 0 and td.Word != ast.DeclWord.Unique and not c.P.T.Ends(self) and not c.P.Generational(self) {
                 c.err(source.Span(sb.DtorSp.Start, sb.DtorSp.Start + 8), msgs.DestructNotUnique(c.text(td.Name)))
             }
         }
@@ -2112,6 +2130,230 @@ fn (c mut Checker&) uniqueRules(sp source.Span, td ast.TypeDecl&, d types.DeclId
             }
         }
         case _ { }
+    }
+}
+
+# ---- weak references and generational types (T2d, T13d) ----
+
+# every weak reference written where a value is stored - a struct's field, a payload's, a global's, an element of one -
+# making the type it names generational (T13d), with the owning places declared holding such a type: whole-program
+# facts (genrefs 0.1, item 4), known before any body is checked
+fn (c mut Checker&) genScan() {
+    for mi in range c.P.L.Mods.Len() {
+        c.push(-1, mi, types.VoidT, types.ListId(0))
+        c.genDecls(mi, c.P.L.Mods[mi].Decls)
+        c.pop()
+    }
+}
+
+fn (c mut Checker&) genDecls(mi I64, ds Array<ast.Decl&>&) {
+    for d in ds {
+        match d {
+            case ast.Decl.Type(_, td) { c.genTypeDecl(mi, td) }
+            case ast.Decl.Global(_, v) {
+                for n in v.Names { c.genMarks(generic.Context(mi, -1), v.Ty, "'" $c.text(n) "'", -1, -1, true) }
+            }
+            case ast.Decl.If(_, ti) {
+                if ti.Then is not null { c.genDecls(mi, ti.Then!.Decls) }
+                if ti.Else is not null { c.genDecls(mi, ti.Else!.Decls) }
+            }
+            case _ { }
+        }
+    }
+}
+
+fn (c mut Checker&) genTypeDecl(mi I64, td ast.TypeDecl?&) {
+    if td is null or td.Body is null: return
+    ei := c.P.TypeEntry(mi, td.Name)
+    if ei < 0: return
+    d := c.P.DeclFor(mi, ei)
+    ctx := c.P.DeclContext(d)
+    match td.Body {
+        case ast.TypeBody.Struct(sb) {
+            k I64 = 0
+            for vd in generic.FieldDecls(sb) {
+                for n in vd.Names {
+                    c.genMarks(ctx, vd.Ty, "'" $c.text(n) "'", I64(d), k, true)
+                    k++
+                }
+            }
+        }
+        case ast.TypeBody.Enum(cases, _) {
+            for cd in cases {
+                for prm in cd.Payload { c.genMarks(ctx, prm.Ty, "'" $c.text(prm.Name) "'", -1, -1, true) }
+            }
+        }
+        case _ { }
+    }
+}
+
+# the weak references in a stored position's type tr (label names the place; d and k the struct and field it is, -1
+# for none), top where tr is the place's own type, not an element's: each marks the type it names generational; any
+# other reference to a struct or enum, or one held by value, is an owning place holding it
+fn (c mut Checker&) genMarks(ctx generic.Context&, tr ast.TypeRef?&, label String&, d I64, k I64, top Bool) {
+    if tr is null: return
+    match tr {
+        case ast.TypeRef.Ref(_, of, _, isWeak) {
+            rt := c.deref(c.P.Resolve(ctx, of))
+            c.genArgs(ctx, of, label)   # (what it names is no place: its type arguments are)
+            if not (c.isStruct(rt) or c.isEnum(rt)): return
+            key := I64(c.P.T.DeclOf(rt))
+            if not isWeak {
+                c.genHolds(key, label, top)
+                return
+            }
+            if not c.genWeakAt.Has(key): c.genWeakAt.Put(key, c.at(c.weakWord(tr)))
+            had := try c.P.Gens.Get(key) catch default ""
+            if not had.Contains(label): c.P.Gens.Put(key, label if had == "" else $had ", " $label)
+            if top and d >= 0: c.P.WeakSlots.Put($d " " $k, true)
+            if top: c.weakPlaces.Push(weakPlace(c.at(c.weakWord(tr)), label, key))
+        }
+        case ast.TypeRef.Perm(_, of, _) { c.genMarks(ctx, of, label, d, k, top) }
+        case ast.TypeRef.Named(_, _, _) {
+            rt := c.P.Resolve(ctx, tr)
+            if c.isStruct(rt) or c.isEnum(rt) { c.genHolds(I64(c.P.T.DeclOf(rt)), label, top) }
+            c.genArgs(ctx, tr, label)
+        }
+        case _ { }
+    }
+}
+
+# genMarks of a named type's arguments, each a place of its own
+fn (c mut Checker&) genArgs(ctx generic.Context&, tr ast.TypeRef&, label String&) {
+    match tr {
+        case ast.TypeRef.Named(_, _, args) { for a in args { c.genMarks(ctx, a, label, -1, -1, false) } }
+        case _ { }
+    }
+}
+
+# an owning place holding the type declared key: label, where it is a place's own type (top), joins the names
+# -memory and explain give
+fn (c mut Checker&) genHolds(key I64, label String&, top Bool) {
+    c.genOwned.Put(key, true)
+    if not top: return
+    had := try c.P.GenOwners.Get(key) catch default ""
+    if not had.Contains(label): c.P.GenOwners.Put(key, label if had == "" else $had ", " $label)
+}
+
+# T2d: an owning place holding what the written reference of names - a type argument's, a local's element
+fn (c mut Checker&) genHeld(of ast.TypeRef&) {
+    rt := c.deref(c.P.Resolve(c.fr().Ctx, of))
+    if c.isStruct(rt) or c.isEnum(rt): c.genOwned.Put(I64(c.P.T.DeclOf(rt)), true)
+}
+
+# T13d: a generational type held by value at nsp - said there, or, where the weak reference making it generational is
+# in another module, at that reference (the code that widened the decision, genrefs 0.1 item 4) with a note here
+fn (c mut Checker&) genByValue(tr ast.TypeRef&, nsp source.Span) {
+    ty := c.src(tr.Span())
+    at := try c.genWeakAt.Get(I64(c.P.T.DeclOf(c.P.Resolve(c.fr().Ctx, tr)))) catch default diag.Where.Nowhere
+    match at {
+        case diag.Where.Span(file, _, _) if file != c.fr().File {
+            rec := c.P.L.Diags.Error(at, msgs.GenByValueAway(ty))
+            c.P.L.Diags.Note(rec, c.at(nsp), msgs.NoteGenSlot(ty))
+            return
+        }
+        case _ { }
+    }
+    c.err(nsp, msgs.GenByValue(ty))
+}
+
+# T2d: the word "weak" before the reference tr as written - its type's span where the text before it is not the word
+fn (c mut Checker&) weakWord(tr ast.TypeRef&) source.Span {
+    s := tr.Span().Start
+    ws := source.Span(s - 5, s - 1)
+    if s >= 5 and c.src(ws) == "weak": return ws
+    return tr.Span()
+}
+
+# T2d: a weak reference tr (what it names of) where it stands: only in a stored position, and only to a struct or an
+# enum - a type variable's judged in each instance
+fn (c mut Checker&) weakMet(tr ast.TypeRef&, of ast.TypeRef&, stored Bool) Bool {
+    plain := c.src(tr.Span())
+    if not stored {
+        c.err(c.weakWord(tr), msgs.WeakPlace(plain))
+        return false
+    }
+    what := c.weakTargetWhat(of)
+    if what == "": return true
+    c.err(c.weakWord(tr), msgs.WeakTarget(c.src(of.Span()), what))
+    return false
+}
+
+# T2d: what a weak reference may not name that of is - "" for a struct, an enum, a type variable or what names nothing
+fn (c mut Checker&) weakTargetWhat(of ast.TypeRef&) String {
+    match of {
+        case ast.TypeRef.Func(_, _) { return "a function type" }
+        case ast.TypeRef.Any(_, _) { return "an any" }
+        case _ { }
+    }
+    if c.foreignNamed(of): return "an extern type"
+    rt := c.P.Resolve(c.fr().Ctx, of)
+    if rt == types.UnknownT or c.isStruct(rt) or c.isEnum(rt): return ""
+    return match c.P.T.KindOf(rt) {
+        case types.Kind.Var: ""
+        case types.Kind.Array: "an array"
+        case types.Kind.Func: "a function type"
+        case _: "no struct or enum"
+    }
+}
+
+# T13d: a value of a generational type where nothing written says what holds it (a ":=") - a writable reference to a
+# new instance; any other value as it is
+fn (c mut Checker&) genRef(x typed.Expr&, sp source.Span) typed.Expr& {
+    t := typeOf(x)
+    if t == types.UnknownT or c.isRef(t) or not c.P.Generational(t): return x
+    return c.fit(x, c.P.T.Ref(t, types.ReadOnly if c.P.Immut(t) else types.Writable), sp)
+}
+
+# T2d: a new instance of a generational type stored straight into a weak place - held by nothing owning, it would
+# read null at once
+fn (c mut Checker&) weakFresh(p typed.Lvalue&, value ast.Expr&) {
+    match p {
+        case typed.Lvalue.Field(_, _, base, index) {
+            if not c.P.WeakField(c.deref(base.Type()), index): return
+            rt := c.newInstance(value)
+            if rt != types.UnknownT: c.err(value.Span(), msgs.WeakFresh(c.ty(rt)))
+        }
+        case _ { }
+    }
+}
+
+# T2d: the generational type value makes a new instance of as written - its constructor called - else Unknown
+fn (c mut Checker&) newInstance(value ast.Expr&) types.TypeId {
+    match value {
+        case ast.Expr.Call(_, f, _) {
+            ref := c.P.R.Use(c.fr().File, f.Span().Start)
+            if ref.Kind != names.What.Type or ref.Index < 0: return types.UnknownT
+            d := c.P.DeclFor(ref.Module, ref.Index)
+            if not c.P.Gens.Has(I64(d)): return types.UnknownT
+            return c.P.SelfType(d)
+        }
+        case _ { return types.UnknownT }
+    }
+}
+
+# B18: -memory's row for a weak place - its referent kept until its scope closes, the place reading null once no owning
+# place holds it
+fn (c mut Checker&) weakRow(w weakPlace) String {
+    ty := c.ty(c.P.SelfType(types.DeclId(I32(w.Key))))
+    owners := try c.P.GenOwners.Get(w.Key) catch default ""
+    by := " - " $owners " -" if owners != "" else ""
+    at := match w.At {
+        case diag.Where.Span(file, start, _): c.P.L.Diags.Locate(file, start)
+        case _: ""
+    }
+    return $at ": memory: " $w.Label " is weak: a " $ty " is held by its owning places" $by " and kept until its scope closes; " $w.Label " reads null once none holds it\n"
+}
+
+# T2d, once the program is checked: a weak reference to a type no owning place of the program holds - every one of
+# them would read null - said at the first weak reference to it
+fn (c mut Checker&) settleWeak() {
+    c.P.WeakRows = Vec<String&>()
+    for w in c.weakPlaces { c.P.WeakRows.Push(c.weakRow(w)) }
+    for key in c.P.Gens.Keys() {
+        if c.genOwned.Has(key): continue
+        at := try c.genWeakAt.Get(key) catch { continue }
+        c.P.L.Diags.Error(at, msgs.WeakUnheld(c.ty(c.P.SelfType(types.DeclId(I32(key))))))
     }
 }
 
@@ -3986,6 +4228,7 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     want := types.UnknownT
     if v.Ty is not null {
         c.globalTop = true   # (a global's own "mut" is its binding's, S6 - never a reference's permission T13a judges)
+        c.weakHere = true    # T2d: a global may be a weak place
         want = c.resolve(v.Ty)
         c.globalTop = false
         if want != types.UnknownT { want = c.P.GlobalStorage(generic.Context(mi, -1), v, n) }   # T7d
@@ -6492,7 +6735,7 @@ fn (c mut Checker&) resolve(t ast.TypeRef?&) types.TypeId {
 fn (c mut Checker&) markOf(t ast.TypeRef?&) typed.Mark {
     if t is null { return typed.Mark.Infer }
     return match t {
-        case ast.TypeRef.Ref(_, _, _): typed.Mark.Bare
+        case ast.TypeRef.Ref(_, _, _, _): typed.Mark.Bare
         case ast.TypeRef.Perm(_, of, _): c.markOf(of)
         # a local written as a bare type variable takes its initializer's scope (O25a)
         case ast.TypeRef.Named(_, _, _): typed.Mark.Infer if c.namesTypeVar(t) else typed.Mark.None
@@ -9673,7 +9916,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     # a reference marker on a case reads the same payload (E32: the case is what is asked)
     named := tr
     match tr {
-        case ast.TypeRef.Ref(_, of, _) { if c.isEnum(et): named = of }
+        case ast.TypeRef.Ref(_, of, _, _) { if c.isEnum(et): named = of }
         case _ { }
     }
     match named {
@@ -11232,7 +11475,7 @@ fn (c mut Checker&) strInstance(m I64, t types.TypeId) {
 # whether a written type is a reference, as written
 fn refWrittenTop(t ast.TypeRef&) Bool {
     return match t {
-        case ast.TypeRef.Ref(_, _, _): true
+        case ast.TypeRef.Ref(_, _, _, _): true
         case _: false
     }
 }
@@ -11368,7 +11611,7 @@ fn (c mut Checker&) dtorWritten(tr ast.TypeRef?&) {
         case ast.TypeRef.Named(_, _, args) {
             if args.Len() > 0: c.unendedArgs(args, c.P.Resolve(c.fr().Ctx, tr))
         }
-        case ast.TypeRef.Ref(_, of, _) { c.dtorWritten(of) }
+        case ast.TypeRef.Ref(_, of, _, _) { c.dtorWritten(of) }
         case ast.TypeRef.Perm(_, of, _) { c.dtorWritten(of) }
         case ast.TypeRef.Spread(_, of) { c.dtorWritten(of) }
         case _ { }
@@ -11434,7 +11677,7 @@ fn (c mut Checker&) errorResult(tr ast.TypeRef?&) Bool {
             c.err(source.Span(nsp.End - I32(n.Len()), nsp.End), msgs.ErrorAsResult(n))
             return true
         }
-        case ast.TypeRef.Ref(_, of, _) { return c.errorResult(of) }
+        case ast.TypeRef.Ref(_, of, _, _) { return c.errorResult(of) }
         case ast.TypeRef.Perm(_, of, _) { return c.errorResult(of) }
         case _ { return false }
     }
@@ -11463,7 +11706,7 @@ fn (c mut Checker&) runArrayValue(t types.TypeId) Bool {
 fn (c mut Checker&) immutRef(of ast.TypeRef?&) Bool {
     if of is null { return false }
     match of {
-        case ast.TypeRef.Ref(_, inner, _) {
+        case ast.TypeRef.Ref(_, inner, _, _) {
             match inner {
                 case ast.TypeRef.Any(_, _), ast.TypeRef.Func(_, _) { return false }
                 case _ { }
@@ -11475,10 +11718,14 @@ fn (c mut Checker&) immutRef(of ast.TypeRef?&) Bool {
 }
 
 fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
+    stored := c.weakHere
+    c.weakHere = false
     if tr is null { return true }
     match tr {
         case ast.TypeRef.Named(nsp, path, args) { return c.namedMet(tr, nsp, path, args) }
-        case ast.TypeRef.Ref(_, of, _) {
+        case ast.TypeRef.Ref(_, of, _, isWeak) {
+            if isWeak and not c.weakMet(tr, of, stored) { return false }
+            if stored and not isWeak { c.genHeld(of) }
             match of {
                 case ast.TypeRef.Any(_, trt) { return c.anyWritten(trt) }
                 case ast.TypeRef.Func(_, s) { return c.sigWritten(s) }   # T21: "fn&(...)", "fn?&(...)"
@@ -11521,6 +11768,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
                 c.err(source.Span(psp.Start, psp.Start + 3), msgs.TextMutRef() if it == c.textType() else msgs.ImmutMutRef(c.ty(it)))
                 return false
             }
+            c.weakHere = stored   # (the reference it makes writable is what stands there)
             return c.writtenMet(of)
         }
         case ast.TypeRef.Any(asp, trt) {
@@ -11561,12 +11809,17 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
         return false
     }
     marked := c.refMarked  # (a reference to it holds nothing - C11 below)
+    under := c.underRef
     c.underRef = false   # its type arguments are places of their own
     c.refMarked = false
 
     if c.foreignNamed(tr) {
         # X10: an extern type is held by reference alone
         c.err(nsp, msgs.ForeignByValue(c.src(tr.Span())))
+        return false
+    }
+    if not under and c.P.Generational(c.P.Resolve(c.fr().Ctx, tr)) {
+        c.genByValue(tr, nsp)
         return false
     }
 
@@ -11583,6 +11836,7 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
     }
     for a in args {
         if generic.IsErrsArgOf(a) { continue }   # its items are read where it is resolved (ErrorItemKnown)
+        c.weakHere = true   # T2d: an element a type stores may be weak
         if not c.typeArgMet(a) { return false }
     }
     rt := c.P.Resolve(c.fr().Ctx, tr)
@@ -14096,6 +14350,11 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         if c.P.Unique(c.deref(t)) {
             # T13b: a unique value is never copied
             c.err(nsp, msgs.UniqueCopy(c.ty(c.deref(t))))
+            return c.unknown(sp)
+        }
+        if c.P.Generational(c.deref(t)) and c.destructs(t) {
+            # T13d: each instance's destructor runs once - a generational type declaring one has no Copy
+            c.err(nsp, msgs.GenCopyDestruct(c.ty(c.deref(t))))
             return c.unknown(sp)
         }
         v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
@@ -18436,6 +18695,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
     mark := typed.Mark.Infer
     if v.Ty is not null {
         # T7d: an array of arrays held by value takes its elements' length from the value it is given (checked below)
+        c.weakHere = v.Field   # T2d: a constructor's field may be a weak place, a local never
         declared = c.resolve(v.Ty)
         mark = c.markOf(v.Ty)
         # D11a, C3: "mut" says what a reference reaches - a local and a field are writable themselves
@@ -18538,6 +18798,15 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
                 x = c.uniqueLand(x!, "'" $c.text(v.Names[i]) "'")
             }
         }
+        # T13d: a generational value is held by reference - ":=" names a new instance
+        if i < v.Values.Len() and inferred and not v.Field and not c.isRef(t) and c.P.Generational(t) {
+            x = c.genRef(x!, v.Values[i].Span())
+            t = typeOf(x)
+        }
+        if v.Field and i < v.Values.Len() and v.Ty is not null and v.Ty!.IsWeak() {
+            rt := c.newInstance(v.Values[i])   # T2d: a weak field given a new instance
+            if rt != types.UnknownT: c.err(v.Values[i].Span(), msgs.WeakFresh(c.ty(rt)))
+        }
         if inferred and c.isRef(t) and (c.P.T.PermOf(t) & types.Writable) != 0 and c.P.T.KindOf(c.deref(t)) != types.Kind.Func and c.roRef(x) {
             t = c.P.T.Ref(c.P.T.Referent(t), c.P.T.PermOf(t) & ~types.Writable)   # (a "?&" stays one)
         }
@@ -18637,6 +18906,10 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
             # reference to it (T13b), a value owning parts its own copy (QCE, E31d)
             if not c.isRef(t) and c.uniqueExisting(v) {
                 v = c.uniqueRef(v, vsp)
+                t = typeOf(v)
+            }
+            if not c.isRef(t) and c.P.Generational(t) {
+                v = c.genRef(v, vsp)   # T13d
                 t = typeOf(v)
             }
             if not c.isRef(t) and c.P.T.OwnsParts(t) { v = c.ownCopy(v) }
@@ -18924,6 +19197,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     if not throughRef { c.notCapture(p, c.writeAt(target)) }
     t := p.Type()
     if op == token.Tok.Assign {
+        c.weakFresh(p, value)   # T2d
         c.storeInto(sp, p, value, osp, target)
         return
     }
@@ -23182,7 +23456,7 @@ fn (c mut Checker&) patternNames(tr ast.TypeRef?&, out mut Vec<source.NameId>&, 
                 for a in args { c.patternNames(a, out, true) }
             }
         }
-        case ast.TypeRef.Ref(_, of, _) { c.patternNames(of, out, inArgs) }
+        case ast.TypeRef.Ref(_, of, _, _) { c.patternNames(of, out, inArgs) }
         case ast.TypeRef.Perm(_, of, _) { c.patternNames(of, out, inArgs) }
         case _ { }
     }
@@ -23492,7 +23766,7 @@ fn (c mut Checker&) anyCaseType(sp source.Span, t types.TypeId, tyr ast.TypeRef&
     }
     named := tyr
     match tyr {
-        case ast.TypeRef.Ref(_, of, _) { named = of }
+        case ast.TypeRef.Ref(_, of, _, _) { named = of }
         case _ { }
     }
     if not c.caseTypeWritten(named) { return types.UnknownT }
@@ -23885,7 +24159,7 @@ fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut Vec<Bool>
             if c.P.T.KindOf(et) != types.Kind.Any { return }
             named := tyr
             match tyr {
-                case ast.TypeRef.Ref(_, of, _) { named = of }
+                case ast.TypeRef.Ref(_, of, _, _) { named = of }
                 case _ { }
             }
             mt := c.P.T.Plain(c.resolve(named)) if c.caseTypeWritten(named, false) else types.UnknownT

@@ -76,6 +76,7 @@ type Tok enum {
     Keeps
     Borrows
     Noborrow
+    Weak
     # operators and punctuation (L16)
     Plus
     Minus
@@ -214,6 +215,7 @@ fn (k Tok) Text() String& {
         case Tok.Keeps: "keeps"
         case Tok.Borrows: "borrows"
         case Tok.Noborrow: "noborrow"
+        case Tok.Weak: "weak"
         case Tok.NullLit: "null"
         case Tok.Plus: "+"
         case Tok.Minus: "-"
@@ -381,6 +383,7 @@ fn Tok.Keyword(t String&, at I64, n I64) Tok {
             if n == 11 and spells(t, at, "unreachable") { return Tok.Unreachable }
         }
         case 'x' { if n == 3 and spells(t, at, "xor") { return Tok.Xor } }
+        case 'w' { if n == 4 and spells(t, at, "weak") { return Tok.Weak } }
         case 'y' { if n == 5 and spells(t, at, "yield") { return Tok.Yield } }
         case _ { }
     }
@@ -401,7 +404,7 @@ test "Keyword finds every reserved word and nothing else" {
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Type, Tok.Struct, Tok.Enum
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
                  Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.Become, Tok.Comptime, Tok.NullLit
-                 Tok.Any, Tok.Unique, Tok.Immut, Tok.Packed, Tok.Commutes, Tok.Returns, Tok.Noalloc, Tok.Noblock, Tok.Nospawn, Tok.Norecurse, Tok.Noextern, Tok.Pure, Tok.Keeps, Tok.Borrows, Tok.Noborrow] {
+                 Tok.Any, Tok.Unique, Tok.Immut, Tok.Packed, Tok.Commutes, Tok.Returns, Tok.Noalloc, Tok.Noblock, Tok.Nospawn, Tok.Norecurse, Tok.Noextern, Tok.Pure, Tok.Keeps, Tok.Borrows, Tok.Noborrow, Tok.Weak] {
         w := k.Text()
         assert Tok.Keyword(w, 0, w.Len()) == k, "keyword " $w
     }

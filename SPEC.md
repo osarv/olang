@@ -150,7 +150,7 @@ unreachable
 extern    default
 any       unique  immut   packed  commutes
 returns   noalloc noblock nospawn norecurse noextern pure
-keeps     borrows noborrow
+keeps     borrows noborrow weak
 ```
 
 `true` and `false` are not keywords; they are the two spellings of `BOOL_LIT` (L11). `null` is not a
@@ -164,8 +164,8 @@ A field may be named by a word above that is a whole statement by itself - `brea
 after which nothing can follow on its line - or that begins no statement and no value: `in`,
 `is`, `as`, `and`, `or`, `xor`, `range`, `case`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
 `test`, `extern`, `default`, and the words `any`, `unique`, `immut`, `packed`, `commutes`, `returns`, `noalloc`,
-`noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow` (each stands only in the one place
-its rule gives it: `any` before a type's name where a type is written, `immut`, `unique` and `packed` before a type
+`noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow`, `weak` (each stands only in the
+one place its rule gives it: `any` before a type's name where a type is written, `weak` before a reference type (T2d), `immut`, `unique` and `packed` before a type
 declaration's body, `commutes` after an operator method's result, the others after a function type's signature). It is declared with its type or `:=` (`break I64 = 0`, `in Bool`, `type := Kind.A`), never
 as a pun, and is reached only after `.` (`s.break`, `s.break++`) - a word after `.` is always a member's name, and a line
 ending in one ends its statement there. In its constructor's body such a field is no name: it is set by its initializer,
@@ -457,7 +457,8 @@ code; a function either declares a success type or declares none (see §3.4).
 a parameter's type, a return type, an array's element type) — is one of:
 
 ```
-type-expr ::= [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | any-ref )
+type-expr ::= [ "weak" ] [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | any-ref )
+                                           ("weak" only before a type-ref with the marker "?&", T2d)
 func-type ::= "fn" reference-marker func-sig { promise }   (T21, T21c; bare - "fn" func-sig - only as a type declaration's base, T21b)
 ```
 
@@ -523,7 +524,25 @@ moves code on that assumption. A field further into a struct than the unmapped r
 not covered, and reading it through null is undefined as an index out of range is (E16e); an element of a null
 array is out of range already, its length being 0. While compiling (K1) and under `interpret` (§10 B3e), a read through
 null is reported where it is written. This is the cost of `null`: §8 continues to guarantee that a reference
-never outlives what it points at, and no longer guarantees that it points at anything.
+never outlives what it points at, and no longer guarantees that it points at anything. A weak place (T2d) also reads
+`null` once its referent is gone (O8e), with no store to it: read it into a local and test that (S8e).
+
+**T2d (weak references).** A reference type written with `weak` before it - `weak Node?&`, `weak mut Node?&` - is a
+**weak reference**, written only where a value is stored: a struct's field (C2a), a payload field of an enum case, a
+global, or an element or type argument a type stores (`Array<weak Node?&>`, `Vec<weak Node?&>`, `Map<String, weak mut
+Node?&>`) - at any depth of a type argument, wherever the type it is an argument of is written. A place of that type is
+a **weak place**: it holds its referent without keeping it - it is no owning place (O8e). Reading it gives an ordinary
+`T?&`: the referent, or `null` once the referent is gone (O8e) - narrowed by a test of a local (S8e) as any other. In
+everything else it is a `T?&`: it is given any `T&` or `T?&`, compared by `==` (E10), rendered by `$`, its permission
+the reference's (T25b). The referent's type becomes generational (T13d). Compile-time errors: `weak` before a reference
+that is never null (`weak Node&`) or before no reference, naming `?&`; on a local, a parameter, a receiver, a result or
+a function type's parameter or result, naming the ordinary reference; before an array, a function type, an `any`, an
+extern type (X10) or anything else that is no struct or enum; a weak place given a **new instance** - a constructor
+called right there (`n.prev = Node(0)`, a field's `prev weak Node?& = Node(0)`) - which nothing owning would hold, so the
+place would read `null` at once (store it into an owning place first); and a weak reference to a type that **no owning
+place of the program holds** - no field, payload or global holding it other than weakly, and no element or type
+argument holding it by an ordinary reference, in any module - said at the first weak reference to it, as it is judged
+over the whole program. A weak reference to a type variable (`weak T?&` in a generic) is judged per instance.
 
 **T3.** An anonymous struct or enum shape (written inline rather than through a `type` declaration)
 is a valid type, but has no name and so can never be the target of constructor-call or enum-value
@@ -926,6 +945,20 @@ by-value receiver and an argument by value read the field as any value. A packed
 built only by its constructor (T13), compares (`==`, E10), hashes, renders (`$h` is `Header(4, 5, 20)`), copies and
 reflects (G34) by its fields, and is computed while compiling as at run time (K1). `packed` is a keyword (L9); it
 begins a type's body only in that position.
+
+**T13d (generational types).** A struct or enum type that any weak reference of the program names (T2d) - `type Node
+struct(v I64) { v  next mut Node?& = null  prev weak mut Node?& = null }` - is **generational**: each of its values is
+an instance with an identity of its own, **held only by reference**. `n := Node(1)` makes `n` a `mut Node&` (read-only
+for an immut type) naming a new instance, built where O28 places it, and `m := n` names the same instance; a slot laid
+out for a value of it - a local written `x Node`, a field, an element, a payload, a parameter, a receiver or a result
+typed `Node`, a type argument holding it by value (`Vec<Node>`, `Array<Node>`) - is a compile-time error naming `Node&`.
+It may not be declared `unique` (T13b), an error naming T13d, and a destructor does not make it unique (C11): no value of
+it is ever copied, only referenced, so each instance's destructor runs once (O15, O16). `x.Copy()` makes a new instance
+(E31d), except of a type declaring a destructor, where it is a compile-time error. Whether a type is generational is a
+fact of the whole program, decided from every module's weak references before any body is checked; where the `weak`
+and a by-value slot are in different modules, the error is at the `weak` - the code that made the type generational -
+with a note at the slot. Its layout, `T.Size` and C's view of it (X11)
+are a struct's or enum's as ever.
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -6668,6 +6701,14 @@ retires (P1f) returns what it holds to the operating system instead.
 
 ### 8.4 The static scope check
 
+**O8e (instances of a generational type).** An instance of a generational type (T13d) is held by its **owning
+places** - every place holding a reference to it but a weak place (T2d): a field of an instance, an element of a
+collection or of an array held in a scope, a global - and reached by the references in use to it (locals, parameters,
+values being computed). Its storage is reclaimed as its scope closes (O8), as any storage's is; reclaiming it earlier,
+where its last owning place lets go of it, is the compiler's (O8d), unobservable but through weak places. A weak place
+reads `null` once its referent is reclaimed, and a program may not rely on when that is - only that a referent an
+owning place still holds, or a reference in use still reaches, is never `null`. Nothing else a program reads changes.
+
 **O9.** Wherever a value already known to be reference-shaped (not a temporary being allocated, O6) flows
 into a reference-shaped target of the same type (T27) — an assignment, a variable declaration's initializer, a
 function argument, or a return value — the source's scope tag must be **compatible** with the target's, checked
@@ -7698,8 +7739,9 @@ scope's destructors not yet run still run, each once (C10).
 than once for the same instance, and never runs for storage no constructor call ever produced an
 instance in (O16).
 
-**C11.** A struct type that declares a `destruct` block is declared `unique` (T13b) - one without the word is a
-compile-time error naming it: a destructor releases what one value holds. The one exception is a **collection of the
+**C11.** A struct type that declares a `destruct` block is declared `unique` (T13b), or is generational (T13d), whose
+values are never copied - one that is neither is a compile-time error naming `unique`: a destructor releases what one
+value holds. The one exception is a **collection of the
 library's** - a generic struct of the prelude or std, not declared unique, declaring a destructor (`Vec`, `Map`, std's
 `Deque`): its destructor ends the elements it holds, and exists only in its instances holding, by value through their
 parts (the elements of an array of a run-time length included), a value with a destructor to run - which are unique by
@@ -8455,7 +8497,10 @@ the program's places are reported - fields of its types, and what its collection
 library's collections, whose storage goes with what holds them. SCOPE is the scope of what the place's expression
 starts from: a parameter's referent's, named by its type (`the Server's scope`), or a local's function's (`main's
 scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
-values have destructors keeps what it lets go of (condition 4). Then a line for D9h: how many returns hand a view back, and how many calls read one where it
+values have destructors keeps what it lets go of (condition 4). Then a row for each weak place the program declares (T2d), in the order it declares them - `path:line:column: memory:
+'prev' is weak: a Node is held by its owning places - 'next', 'head' - and kept until its scope closes; 'prev' reads
+null once none holds it`, at its `weak`, the owning places named those fields, payloads and globals declared holding the
+type. Then a line for D9h: how many returns hand a view back, and how many calls read one where it
 stands or copy it. After early freeing's rows, a row for each placement made for a view, a part or a capture (O27), in
 source order - `path:line:column: memory:
 'X' is built in SCOPE, a new one each time it is made, for a view of it kept here` at the view (`for a part of it kept

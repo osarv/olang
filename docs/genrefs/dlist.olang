@@ -8,12 +8,12 @@ type Node struct(v I64) {
     v
     pad Array<I64> = Array<I64>(8, 0)
     next mut Node?& = null
-    prev mut Node?& = null
+    prev weak mut Node?& = null      # points back: reads null once nothing owning holds the node it names (T2d)
 }
 
 type DList struct() {
     head mut Node?& = null
-    tail mut Node?& = null
+    tail weak mut Node?& = null
     n I64 = 0
 }
 

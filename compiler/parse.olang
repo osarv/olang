@@ -1113,7 +1113,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
             }
             for a in args { p.receiverVars(a, true) }
         }
-        case ast.TypeRef.Ref(_, of, _) { p.receiverVars(of, inArgs) }
+        case ast.TypeRef.Ref(_, of, _, _) { p.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _) {
             if of is not null { p.receiverVars(of, inArgs) }
         }
@@ -1311,7 +1311,7 @@ fn (p mut Parser&) contract() ast.ContractBlock& ? Fail {
 fn (p Parser&) startsResult() Bool {
     k := p.peek()
     return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.LParen or
-           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait or k == token.Tok.Any
+           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait or k == token.Tok.Any or k == token.Tok.Weak
 }
 
 # "[? [A, B.c]]" - a list on one line; one item where the function type or lambda it ends is an item of a list (one),
@@ -1466,11 +1466,39 @@ fn (p mut Parser&) sep(close token.Tok) Bool ? Fail {
 
 fn (p mut Parser&) typeExpr() ast.TypeRef& ? Fail {
     at := p.here()
+    if p.sees(token.Tok.Weak) { return try p.weakType() }
     writable := p.accept(token.Tok.Mut)
     t := try p.typeBase()
     t = p.markers(at, t)
     if writable { return ast.TypeRef.Perm(p.from(at), t, writable) }
     return t
+}
+
+# T2d: "weak" before a reference type - "weak Node?&", "weak mut Node?&" - its reference marked weak; only before the
+# "?&" marker, where a weak place's read may be null (which place may hold one is the checker's to say)
+fn (p mut Parser&) weakType() ast.TypeRef& ? Fail {
+    at := p.here()
+    p.advance()
+    t := try p.typeExpr()
+    w := weakened(t)
+    if w is null {
+        p.report(at, at + 4, msgs.WeakNotNullable($p.src.Text[I64(at) + 5:I64(p.prevEnd)]))
+        return t
+    }
+    return w
+}
+
+# t with its outermost reference marked weak, under a "mut" - null where it is no "?&" reference
+fn weakened(t ast.TypeRef&) ast.TypeRef?& {
+    match t {
+        case ast.TypeRef.Ref(sp, of, nullable, _) { return ast.TypeRef.Ref(sp, of, true, true) if nullable else null }
+        case ast.TypeRef.Perm(sp, of, w) {
+            if of is null: return null
+            inner := weakened(of)
+            return ast.TypeRef.Perm(sp, inner, w) if inner is not null else null
+        }
+        case _ { return null }
+    }
 }
 
 fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
@@ -1488,7 +1516,7 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
             if marked { p.advance() }
             s := try p.sig(false, true)
             f := ast.TypeRef.Func(p.from(at), s)
-            if marked { return ast.TypeRef.Ref(p.from(at), f, nullable) }
+            if marked { return ast.TypeRef.Ref(p.from(at), f, nullable, false) }
             if not bareOk {
                 p.BareFuncs.Push(at)
                 p.report(at, at + 2, msgs.FuncTypeBare($p.src.Text[I64(at) + 2:I64(p.prevEnd)]))
@@ -1569,7 +1597,7 @@ fn (p mut Parser&) markers(at I32, t ast.TypeRef&) ast.TypeRef& {
         nullable := p.sees(token.Tok.Question)
         if nullable { p.advance() }
         p.advance()
-        r = ast.TypeRef.Ref(p.from(at), r, nullable)
+        r = ast.TypeRef.Ref(p.from(at), r, nullable, false)
     }
     return r
 }
@@ -1631,7 +1659,7 @@ fn (p Parser&) typeArgsShape(n I64) I64 {
             parens--
         } else if k != token.Tok.Iden and k != token.Tok.Dot and k != token.Tok.Comma and k != token.Tok.Amp and
                   k != token.Tok.Question and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.Return and
-                  k != token.Tok.Any {
+                  k != token.Tok.Any and k != token.Tok.Weak {
             return 0
         }
         if depth < 0 { return 0 }
@@ -1990,7 +2018,7 @@ fn keywordNamesField(k token.Tok) Bool {
         case token.Tok.Extern, token.Tok.Default: true
         case token.Tok.Any, token.Tok.Unique, token.Tok.Immut, token.Tok.Packed, token.Tok.Commutes, token.Tok.Returns: true
         case token.Tok.Noalloc, token.Tok.Noblock, token.Tok.Nospawn, token.Tok.Norecurse, token.Tok.Noextern: true
-        case token.Tok.Pure, token.Tok.Keeps, token.Tok.Borrows, token.Tok.Noborrow: true
+        case token.Tok.Pure, token.Tok.Keeps, token.Tok.Borrows, token.Tok.Noborrow, token.Tok.Weak: true
         case _: false
     }
 }
@@ -2049,7 +2077,7 @@ fn (p mut Parser&) idenStmt() ast.Stmt& ? Fail {
         return ast.Stmt.Var(sp, v)
     }
     if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Any or
-       k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct {
+       k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct or k2 == token.Tok.Weak {
         nt := p.tk()
         name := try p.name()
         return try p.varDecl(at, p.one(name, source.Span(nt.Start, nt.End)))

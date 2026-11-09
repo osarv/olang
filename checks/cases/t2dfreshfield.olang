@@ -1,0 +1,8 @@
+# check: fail error[T2d]: a new Node stored only into a weak place is held by nothing owning
+# T2d: a weak field given a fresh instance by its constructor
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = Node(0)
+}
+fn main() { assert Node(1).v == 1 }

@@ -390,7 +390,7 @@ fn nameAfter(m Mod&, from I32) I64 {
 fn plain(t ast.TypeRef?&) ast.TypeRef?& {
     if t is null { return null }
     match t {
-        case ast.TypeRef.Ref(_, of, _) { return plain(of) }
+        case ast.TypeRef.Ref(_, of, _, _) { return plain(of) }
         case ast.TypeRef.Perm(_, of, _) { return plain(of) }
         case _ { return t }
     }
@@ -416,7 +416,7 @@ fn mentions(t ast.TypeRef?&, n source.NameId) Bool {
             }
             return false
         }
-        case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { return mentions(of, n) }
+        case ast.TypeRef.Ref(_, of, _, _), ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { return mentions(of, n) }
         case ast.TypeRef.Perm(_, of, _) { return mentions(of, n) }
         case ast.TypeRef.Errs(_, items) {
             for e in items {

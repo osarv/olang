@@ -16,8 +16,8 @@ type TypeRef enum {
     Func(sp source.Span, sig Sig&)
     # an inline shape - an anonymous enum, struct or trait - kept as the declaration it would be
     Shape(sp source.Span, body TypeBody&)
-    # a reference marker after a type: "&" (T24); "?&" nullable (T2c)
-    Ref(sp source.Span, of TypeRef&, nullable Bool)
+    # a reference marker after a type: "&" (T24); "?&" nullable (T2c); weak where "weak" was written before it (T2d)
+    Ref(sp source.Span, of TypeRef&, nullable Bool, isWeak Bool)
     # the permission before a type: "mut" (T25b)
     Perm(sp source.Span, of TypeRef?&, writable Bool)
     # "any Trait": a run-time trait value's referent (T32) - the reference marker after it a Ref around it
@@ -458,7 +458,7 @@ fn (e Expr&) IsNamed() Bool {
 fn (t TypeRef&) FuncSig() Sig?& {
     match t {
         case TypeRef.Func(_, s) { return s }
-        case TypeRef.Ref(_, of, _) {
+        case TypeRef.Ref(_, of, _, _) {
             match of {
                 case TypeRef.Func(_, s) { return s }
                 case _ { return null }
@@ -470,10 +470,28 @@ fn (t TypeRef&) FuncSig() Sig?& {
 
 fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() is not null }
 
+# T2d: whether t is a weak reference as written - "weak T?&", "weak mut T?&"
+fn (t TypeRef&) IsWeak() Bool {
+    return match t {
+        case TypeRef.Ref(_, _, _, w): w
+        case TypeRef.Perm(_, of, _): of is not null and of.IsWeak()
+        case _: false
+    }
+}
+
+# T2d: t with "weak" taken off - the ordinary reference it is read as
+fn (t TypeRef&) Unweak() TypeRef& {
+    return match t {
+        case TypeRef.Ref(sp, of, nullable, w): TypeRef.Ref(sp, of, nullable, false) if w else t
+        case TypeRef.Perm(sp, of, w): TypeRef.Perm(sp, of.Unweak(), w) if of is not null else t
+        case _: t
+    }
+}
+
 fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _): sp
-        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _), TypeRef.Perm(sp, _, _), TypeRef.Any(sp, _): sp
+        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _), TypeRef.Any(sp, _): sp
         case TypeRef.Errs(sp, _), TypeRef.Spread(sp, _): sp
     }
 }
@@ -648,7 +666,7 @@ fn RecvTarget(f Func&, names source.Names&) String {
     for t is not null {
         match t {
             case TypeRef.Perm(_, of, _) { t = of }
-            case TypeRef.Ref(_, of, _) { t = of }
+            case TypeRef.Ref(_, of, _, _) { t = of }
             case TypeRef.Named(_, path, _) { return nameOrConstraint(f, path[path.Len() - 1], names) }
             case _ { return "" }
         }

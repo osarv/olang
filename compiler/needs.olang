@@ -70,7 +70,7 @@ fn (w mut walker&) varOf(t ast.TypeRef?&) I64 {
             if path.Len() != 1 or args.Len() > 0 { return -1 }
             return try w.vars.Get(path[0]) catch default -1
         }
-        case ast.TypeRef.Ref(_, of, _) { return w.varOf(of) }
+        case ast.TypeRef.Ref(_, of, _, _) { return w.varOf(of) }
         case ast.TypeRef.Perm(_, of, _) { return w.varOf(of) }
         case _ { return -1 }
     }
@@ -85,7 +85,7 @@ fn (w mut walker&) elemOf(t ast.TypeRef?&) I64 {
             if args.Len() != 1 or (last != "Array" and last != "Vec") { return -1 }
             return w.varOf(args[0])
         }
-        case ast.TypeRef.Ref(_, of, _) { return w.elemOf(of) }
+        case ast.TypeRef.Ref(_, of, _, _) { return w.elemOf(of) }
         case ast.TypeRef.Perm(_, of, _) { return w.elemOf(of) }
         case _ { return -1 }
     }

@@ -1,0 +1,6 @@
+# check: fail error[T2d]: a weak reference names an instance of a struct or an enum, and Array<I64> is an array - hold it by an ordinary reference
+# T2d: an array is no weak reference's target
+type Box struct() {
+    xs weak Array<I64>?& = null
+}
+fn main() { assert Box().xs is null }

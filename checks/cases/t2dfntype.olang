@@ -1,0 +1,9 @@
+# check: fail error[T2d]: 'weak' is written only where a value is stored
+# T2d: a function type's parameter is no weak place, even where the function value is stored
+type Node struct(v I64) {
+    v
+    prev weak Node?& = null
+    next mut Node?& = null
+    visit fn?&(n weak Node?&) = null
+}
+fn main() { assert Node(1).v == 1 }

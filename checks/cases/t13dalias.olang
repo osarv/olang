@@ -1,0 +1,24 @@
+# check: run
+# T13d: a generational value is held by reference: ":=" names a new instance, a second name the same instance; a
+# destructor makes no generational type unique (C11), and runs once per instance
+import "std/io"
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+} destruct { Ends++ }
+Ends mut I64 = 0
+fn made() I64 {
+    a := Node(1)
+    b := a
+    b.v = 5
+    c := Node(9)
+    a.next = Node(2)
+    nx := a.next!
+    nx.prev = a
+    return a.v * 100 + c.v * 10 + (1 if nx.prev == b else 0)
+}
+fn main() ? io.Error {
+    r := made()
+    try io.Println($r " " $Ends)
+}
