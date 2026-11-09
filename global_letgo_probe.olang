@@ -1,0 +1,11 @@
+import "std/io"
+cache mut Vec<I64> = Vec<I64>()
+fn fill(n I64) {
+    v := Vec<I64>()
+    for i in range n: v.Push(i)
+    cache = v
+}
+fn main() ? {
+    for _ in range 2000: fill(10000)
+    try io.Println("$(cache.Len())")
+}
