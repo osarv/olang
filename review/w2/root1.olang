@@ -1,0 +1,11 @@
+import "std/io"
+import "boxlib"
+
+fn main() ? {
+    b := boxlib.Box.New()
+    old := b.Items()
+    for k in range 50 { b.Set(k + 1000) }
+    boxlib.Churn()
+    assert old[7] == 7
+    try io.Println($old[7] " " $b.Items()[7])
+}

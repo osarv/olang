@@ -1,0 +1,16 @@
+type File unique struct(fd I64) {
+    fd
+} destruct { assert fd >= 0 }
+
+type Holder struct(n I64) {
+    n
+    m := Map<I64, File>()
+}
+
+fn (h mut Holder&) Set(k I64) { h.m.Put(k, File(h.n + k)) }
+
+fn main() {
+    h := Holder(1)
+    for k in range 10 { h.Set(k % 2) }
+    assert h.m.Len() == 2
+}

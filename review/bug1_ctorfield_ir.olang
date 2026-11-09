@@ -1,0 +1,16 @@
+type File unique struct(fd I64) {
+    fd
+} destruct { assert fd >= 0 }
+
+type Pool struct(n I64) {
+    n
+    items := Vec<File>()
+}
+
+fn (p mut Pool&) Fill() { p.items.Push(File(p.n)) }
+
+fn main() {
+    p := Pool(3)
+    p.Fill()
+    assert p.items.Len() == 1
+}

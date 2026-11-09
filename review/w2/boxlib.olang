@@ -1,0 +1,22 @@
+type Box struct(items Vec<I64>) { items }
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i + k) }
+    return v
+}
+
+fn Box.New() Box { return Box(mk(0)) }
+
+fn (b mut Box&) Set(k I64) { b.items = mk(k) }
+
+fn (b Box&) Items() Array<I64>& { return b.items.View() }
+
+fn Churn() I64 {
+    t := 0
+    for k in range 1000 {
+        v := mk(k * 3)
+        t += v[5]
+    }
+    return t
+}
