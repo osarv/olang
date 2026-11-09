@@ -64,7 +64,10 @@ one rule that composes over special cases; fix rough edges found while building.
   direction as well. I want strong reasoning." Then (the same day): "We are very far behind on the normal gradient descent transformer path, so we need a new
   niche. Settling networks could be this. Keep going in this direction." So settling is the niche and the main research
   line: amortized settling, exact fixed-point gradients (implicit / holomorphic EP), adaptive depth as reasoning budget,
-  sparse event-driven updates, a hybrid core with delta-rule fast weights (oagent/papers/settling-niche.md); oann is
+  sparse event-driven updates, a hybrid core with delta-rule fast weights (oagent/papers/settling-niche.md). Long term (the user, 2026-11-09): "I want to go in the biology direction down the
+  line, our networks should blend naturally with brains eventually, working in similar ways, optimizing in similar
+  ways" - prefer mechanisms with a biological counterpart (local plasticity, spikes, neuromodulation, sleep replay) when
+  measurements tie; oann is
   general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md. Trained from scratch, no open weights (the user, 2026-11-09).
 
 ## Reading the user
