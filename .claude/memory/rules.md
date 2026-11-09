@@ -139,3 +139,7 @@ slimming of 2026-11-08").
 - **Compile per module, whole program only on top**: facts and code per module, reused when inputs did not change
   (B3i); whole-program steps only in the final link/instances step. A design that makes one edit recompile others states
   that cost and goes to the user; both variants are measured where whole-program facts make memory safety clearly better.
+
+## Temporary files
+The user, 2026-11-09: delete /tmp data (the scratchpad, agents' scratch, fuzz and check output) whenever it is useful,
+no need to ask.

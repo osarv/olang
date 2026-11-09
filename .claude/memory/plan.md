@@ -70,6 +70,7 @@ on sight per rules.md, "Code rules".
 on 2026-11-07. The remaining work is /home/user/review/remaining/LIST.md.)
 
 - Current state (2026-11-08): the compiler was declared done 2026-11-07 ~19:45 CET (final verify and gates passed). On 2026-11-08 the user decided the function-values work (docs/fnvalues.md, twelve rounds, round 1 running), the refusal audit (docs/refusals.md, running) and generational back-pointers instead of reference counting (docs/genrefs.md, running); started benchmarks and saturating arithmetic; and holds oann until version 1 is mature (everything settled, built, possibly refactored once more, verified). The dated log of 2026-11-06 and 2026-11-07 is in archive/next_steps_log.md.
-- Research (2026-11-08, the user's go): settling experiments in oagent/experiments - self-contained olang programs, local
-  learning rules only, nothing oann will redo; experiments/LANGUAGE.md logs what olang lacked, feeding v1.
+- Order (the user, 2026-11-09): "the main idea is still to just finish the compiler, then build OANN, and then do the
+  experiments." Experiments only where they teach something for the compiler; E1 (oagent/experiments) taught little
+  (two small LANGUAGE.md items), so no more for now.
 - F6 (O29, scopes found at run time) merged 2026-11-08. Left: two cases still fall back to the program's scope (a value argument holding two references bound to an unknown scope; the old C1 derived case) - against the user's "never program scope", to be covered by a Found placement, not refused; one lookup per statement; OLANG_SCOPESTATS; the round's gates (scopesan, scopefuzz, race, cross, bench). Notes: review/rounds/F6_PROGRESS.md.
