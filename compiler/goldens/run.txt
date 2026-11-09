@@ -2088,6 +2088,8 @@
 | 1-payload
 === run d9hheldwrite.olang
 | status 0
+=== run d9htryview.olang
+| status 0
 === run deeparray.olang
 | status 0
 | 3
