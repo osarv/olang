@@ -1,12 +1,38 @@
-# check: fail error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
-# S19e, S20: an errdefer is in the defers' one list, so one may not be pending around a yield either
-fn tidy() {
-}
+# check: run
+# flags: -debug -sanitize
+# S19e, S20 (docs/refusals.md 5.6, question 2 - the user's yes, 2026-11-08): an errdefer pending at a yield is in the
+# defers' one list, but a walk let go is no error leaving, nor is its end (D18a) - its errdefers do not run, its defers
+# do; an error the walk raises runs them
+type Bad error { Odd }
+import "std/io"
+Tidied mut I64 = 0
+Failed mut I64 = 0
+fn tidy() { Tidied++ }
+fn failed() { Failed++ }
 
 fn f() Iterator<I64> {
-    errdefer tidy()
+    defer tidy()
+    errdefer failed()
     yield 2
 }
 
+fn g(n I64) Iterator<I64 ? Bad> {
+    errdefer failed()
+    yield n
+    if n.Mod(2) == 1: error Bad.Odd
+}
+
 fn main() ? {
+    for x in f() {
+        assert x == 2
+        break
+    }
+    assert Tidied == 1 and Failed == 0
+    for x in f() { assert x == 2 }
+    assert Tidied == 2 and Failed == 0
+    for x in try g(2) { assert x == 2 } catch { unreachable }
+    assert Failed == 0
+    for x in try g(3) { assert x == 3 } catch Bad.Odd { Failed += 10 }
+    assert Failed == 11
+    try io.Println("tidied " $Tidied " failed " $Failed)
 }

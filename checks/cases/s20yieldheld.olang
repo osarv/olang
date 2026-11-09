@@ -1,13 +1,42 @@
-# check: fail error[S20, O15]: a yield while a variable around it holds a value with a destructor - a walk stopped there would never run it; hold the value in a block that ends before the yield, or by reference
-# S20, O15: a variable holding a value with a destructor runs it as its block is left - a walk left at a yield never is
+# check: run
+# flags: -debug -sanitize
+# S20, O15 (docs/refusals.md 5.6; refused - "a yield while a variable around it holds a value with a destructor" -
+# until the user's yes to refusals question 2, 2026-11-08): a variable holding a value with a destructor across a yield
+# is ended where its block ends if the walk gets there, else where the walk is let go - once, its storage read after a
+# churn
+import "std/io"
 Closed mut I64 = 0
 type Conn unique struct(fd I64) {
     fd
-} destruct { Closed++ }
+    data := Array<I64>(16 + fd.Mod(2), fd)
+} destruct { Closed += data[3] }
 fn ids() Iterator<I64> {
     c Conn = Conn(1)
     yield c.fd
+    yield c.data[5] + 1
 }
-fn main() {
-    for x in ids() { assert x == 1 }
+fn churn() I64 {
+    n := 0
+    for i in range 200 {
+        s := $i "-" $(i * 7)
+        n += s.Len()
+    }
+    return n
+}
+fn main() ? {
+    for x in ids() { assert x == 1 or x == 2 }
+    assert Closed == 1
+    for x in ids() {
+        churn()
+        assert x == 1
+        break
+    }
+    assert Closed == 2
+    {
+        g := ids()
+        assert (try g.Next() catch { unreachable }) == 1
+        churn()
+    }
+    assert Closed == 3
+    try io.Println("closed " $Closed)
 }

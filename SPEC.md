@@ -2609,8 +2609,8 @@ leaving its body ends it the same way: that `Next()` fails with the error, every
 **D18b (where a generator's storage is).** A generator's storage - its locals, what its body builds in its blocks, the
 scopes it has open while it is stopped - is made where the generator lands, as a function value's environment is
 (D16d): `for x in evens(10)` makes it in the loop's block. Its arguments must outlive it (O14a): they are held in it for
-as long as it is walked. A walk stopped part way and never finished is dropped with the scope it lives in: the scopes
-it holds open close then, innermost first, their destructors running (O15). The value a `yield` gives is built where
+as long as it is walked. A walk stopped part way and never finished is let go with the scope it lives in: it leaves every
+block it holds open as S20 says, innermost first, their deferred code and destructors running (S19, O15). The value a `yield` gives is built where
 that `Next()`'s result goes, which no local of the generator outlives - but where its elements are kept by its walk
 (D18c) - and no local is moved into the result scope (O26a) - a yielded
 local whose references are the generator's own storage is O26's error, and the value to yield is a copy built where it
@@ -6075,8 +6075,8 @@ list holds both kinds: on an error's way out every piece registered runs, last r
 the `defer`s run. A `join` block is the one exception to that order: its tasks' failure is known only once it has
 waited, so its errdefer code runs after its wait, after its `defer`s (S19a) - a failure of one of its own statements
 runs both before the wait, in order. The error is no value inside (T20), as in a clause that does not bind it. An
-`errdefer` in a test body runs when an error ends the test; like a `defer`, one may not be pending around a `yield`
-(S20).
+`errdefer` in a test body runs when an error ends the test. A generator's walk let go part way (S20) and its end
+(D18a) are no error leaving: its `defer`s run there, its errdefers do not; an error its body raises runs them.
 
 ```
 f := try os.Create(path)
@@ -6092,10 +6092,16 @@ body gives, and the body stops there, every local and every scope it has open ke
 `Next()` goes on after it. A `yield` is no statement that leaves (D10a). A `yield` outside a generator - in a function
 whose result is not written `Iterator<T ? E>`, a lambda, a test - is a compile-time error, and so is one:
 - in deferred code (S19b: it runs while its block is left, and runs to its end);
-- in a `join` block (P1b: its tasks are waited for before it is left, which a stop part way would not do);
-- with deferred code pending in a block around it - a walk stopped there and dropped would never run it (relaxable:
-  a dropped walk could run it). An `errdefer`'s counts too (S19e), for one rule over the one list, and so does a
-  variable around it holding a value with a destructor by value (O15), said as such.
+- in a `join` block (P1b: its tasks are waited for before it is left, which a stop part way would not do).
+
+A walk **let go part way** - its generator's storage let go (its scope closing, O1) while its body is stopped at a
+`yield` - goes on from that `yield` as a `return` would leave: every block open there is left, innermost first, its
+deferred code run (S19, not an errdefer's: no error leaves, S19e) and its variables holding values with destructors
+ended (O15, in its order), each block's scope closed - then its storage is reclaimed. So deferred code pending around a
+`yield`, and a variable holding a value with a destructor by value across one, run once whichever way the walk ends,
+as Python's `close()` runs a `finally`. A generator's by-value parameter with a destructor to run is its walk's (C11):
+ended where the body ends or the walk is let go part way, and, its walk never started, as the generator is let go. When
+a walk is let go is where its storage lives (O1, O28), as for any value registered with a scope (O16).
 
 A `Next()` asked while the generator's own walk runs - its body, or what it calls, asking the very generator it is
 walked as - fails a check the language guarantees (S18a): `FILE:LINE: a generator asked for its next value inside its
@@ -7515,10 +7521,10 @@ variable holding a value with destructors to run, or a value registered after it
 declaration that holds it by value (`gs Vec<Grip> = Vec<Grip>()`), which its block then ends in the order above - one
 holding a value registered before it, in its block or an enclosing one, is ended first and needs nothing. A test ended
 by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
-before its constructor's arguments were built, is not observable. A global and a generator's
-parameter hold such a value by reference, and a type argument holds it by value only where its instance ends it (C11):
-the program's scope, a walk left part way and an array of a run-time length outside a collection have no holder that
-lets go; and no variable holds one by value across a `yield` (S20).
+before its constructor's arguments were built, is not observable. A global holds such a value by
+reference, and a type argument holds it by value only where its instance ends it (C11): the program's scope and an array
+of a run-time length outside a collection have no holder that lets go. A generator's variables and by-value parameters
+holding one across a `yield` are ended where its walk is let go part way (S20).
 
 **O16.** A value with a destructor that no place written for its value takes (O15) is registered with the scope its
 call lands in at the point the call - its **constructor call** (C6), or a call giving it by value - completes, not at
@@ -7769,9 +7775,9 @@ Vec<Res>`. Such an array is not made either: `Array<T>(n)` of a length known onl
 count known while compiling (T7c) and a copy of an array (E31d) whose elements have a destructor to run are each a
 compile-time error naming a `Vec` (a length known while compiling makes a fixed array, which ends its elements). And a
 collection holds such values by value only where they are unique: a copy of one copies its whole buffer, the positions
-it vacated too, so one whose elements copy (a holder declaring Copy, E31d) is an error naming the reference form. A **global's** type and a **generator's parameter** hold it by reference: a bare `type-ref` naming it there is a
-compile-time error naming the reference form - the program's scope and a walk left part way (S20) have no holder that
-lets go. The type named where an expression is - a constructor called (`Res(1)`, `Box<Res>(r)`
+it vacated too, so one whose elements copy (a holder declaring Copy, E31d) is an error naming the reference form. A **global's** type holds it by reference: a bare `type-ref` naming it there is a compile-time error naming
+the reference form - the program's scope has no holder that lets go. A **generator's parameter** holds it by value as
+its walk's: ended where the walk ends, is let go part way, or, never started, as the generator is let go (S20). The type named where an expression is - a constructor called (`Res(1)`, `Box<Res>(r)`
 naming its own arguments), a case of it - holds no value there; a call's value no place written for it takes is held
 where the call lands (O16, D15).
 
@@ -9756,6 +9762,9 @@ error as they would at run time. It is **not** possible when evaluation would:
   a field written `mut T&`, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
+- leave a generator's walk part way, or never start it, where letting it go would run code - its deferred code
+  pending or a variable or parameter with a destructor (S20) - since while compiling no generator is let go before
+  the value is made; a walk that ends is evaluated;
 - call an `extern` function other than the C math library's (X8) - or, building for another machine (B12a), one of
   the library's that is not exact - a call through a function value is evaluated when the function it reaches is,
   which is known only when the call is reached; the runtime's `__olang_run_on_stack(bytes, f)` (X6) is evaluated as

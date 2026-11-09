@@ -2834,7 +2834,10 @@ fn (fe mut fnEm&) run() {
     if fe.gen {
         # the first Next runs the body from its start
         fe.w("%is = call i8 @llvm.coro.suspend(token none, i1 false)")
-        fe.w("switch i8 %is, label %gen.end [ i8 0, label %gen.go i8 1, label %gen.free ]")
+        fe.w("switch i8 %is, label %gen.end [ i8 0, label %gen.go i8 1, label %gen.fresh ]")
+        fe.label("gen.fresh")
+        fe.freshDrops()
+        fe.w("br label %gen.free")
         fe.label("gen.go")
     }
     # (S21: in a body with a become and a result scope - a tail scope - the copy is made there, so that a become may hand
@@ -3875,8 +3878,8 @@ fn (fe mut fnEm&) findIdle() {
 # ---- walks made and finished here (D18e) ----
 
 # the walks this function makes and finishes, outside a test build: each call lowering marked (mir.Fn.WalkCalls) whose
-# callee is a generator function, its scope's one such call, made on every path that closes the scope or suspends
-# holding it after making it - a forward dataflow per call, each block's entry state none (0), made (1) or either (2).
+# callee is a generator function, its scope's one such call, made on every path that closes the scope (a suspend's drop
+# path among them) after making it - a forward dataflow per call, each block's entry state none (0), made (1) or either (2).
 # Where a close or a hold may or may not follow the call, or the call may run again before its scope closes, the walk
 # is left as any other: the callee registers its drop in the scope ("when in doubt, the arena path"). A test build
 # keeps that path everywhere, since a failed check unwinds the scope with no destroy written in this function
@@ -3902,11 +3905,11 @@ fn (fe mut fnEm&) findWalks() {
     }
 }
 
-# where a close (statement i of block b) or a suspend (i = -1) is, as walkMade keys it
+# where a close (statement i of block b) is, as walkMade keys it
 fn (fe fnEm&) walkKey(b I64, i I64) I64 { return b << 20 | (i & 0xFFFFF) }
 
-# the dataflow of findWalks for scope sc and its walk call c: at each close of sc and each suspend holding it, whether
-# the walk is made there - failing with Undecided where some such point, or the call itself, cannot be decided
+# the dataflow of findWalks for scope sc and its walk call c: at each close of sc (a suspend's drop path among them),
+# whether the walk is made there - failing with Undecided where some such point, or the call itself, cannot be decided
 fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool> ? Undecided {
     nb := fe.F.Blocks.Len()
     st := Array<I64>(nb, -1)
@@ -3929,8 +3932,7 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool> ? Undecided {
     return out
 }
 
-# block b's turn of walkFlow: its entry state run through its statements - in phase 1 each close of sc, and each suspend
-# holding it, recorded in out; in phase 0 its successors' states met with its exit state
+# block b's turn of walkFlow: its entry state run through its statements - in phase 1 each close of sc recorded in out; in phase 0 its successors' states met with its exit state
 fn (fe mut fnEm&) walkBlock(sc I64, c I64, b I64, phase I64, st mut Array<I64>&, work mut Vec<I64>&, out mut Map<I64, Bool>&) ? Undecided {
     f := fe.F
     x := st[b]
@@ -3976,26 +3978,16 @@ fn (fe mut fnEm&) walkBlock(sc I64, c I64, b I64, phase I64, st mut Array<I64>&,
             nexts.Push(I64(ok))
             if failed != mir.NoBlock: nexts.Push(I64(failed))
         }
-        case mir.Term.Suspend(_, _, r, held) {
-            if phase == 1 and fe.holdsScope(held, sc) {
-                if x == 2: error Undecided
-                out.Put(fe.walkKey(b, -1), x == 1)
-            }
+        # (a walk let go at a suspend closes sc on its drop path, a close of its own)
+        case mir.Term.Suspend(_, _, r, _, d) {
             nexts.Push(I64(r))
+            nexts.Push(I64(d))
         }
         case _ { }
     }
     if phase == 0 {
         for t in nexts { fe.walkJoin(st, t, x, work) }
     }
-}
-
-# whether the scopes a suspend holds open (held, of f.Refs) are sc among them
-fn (fe fnEm&) holdsScope(held mir.Range, sc I64) Bool {
-    for j in range held.N {
-        if fe.F.Refs[I64(held.At) + j] == mir.ScopeRef.Scope(mir.ScopeId(I32(sc))) { return true }
-    }
-    return false
 }
 
 # a successor's entry state met with x, queued again where it changed
@@ -5725,7 +5717,9 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             }
             fe.w("br label %ret")
         }
-        case mir.Term.Suspend(_, x, resume, held) { fe.suspend(x, resume, held) }
+        case mir.Term.Suspend(_, x, resume, held, drop) { fe.suspend(x, resume, held, drop) }
+        # S20: a walk let go - every scope its drop path closed - its frame released
+        case mir.Term.Dropped(_) { fe.w("br label %gen.free") }
         case mir.Term.Raise(sp, code) {
             fe.trace(sp)
             rt := t.RetLlvm(fe.F.Ty)
@@ -5758,9 +5752,9 @@ fn (fe mut fnEm&) term(tm mir.Term) {
 }
 
 # S20: a generator's value written where its Next's result goes - the promise, or the caller's storage for one returned
-# through memory - and the coroutine suspended: resumed, it goes on at resume; dropped, it closes the scopes it holds,
-# innermost first. In a test build the scopes it holds are off the chain of open scopes while it is suspended (P1d)
-fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range) {
+# through memory - and the coroutine suspended: resumed, it goes on at resume; dropped, at drop, the way out lowering
+# made (S20: its deferred code and holders' drops run, the scopes it holds closed, innermost first). In a test build the scopes it holds are off the chain of open scopes while it is suspended (P1d)
+fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range, drop mir.BlockId) {
     t := fe.E.T
     rt := t.RetLlvm(fe.F.Ty)
     if fe.via {
@@ -5785,24 +5779,46 @@ fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range) {
         for sc in hs { fe.unwindPop(mir.ScopeId(I32(sc))) }
     }
     s := fe.let("call i8 @llvm.coro.suspend(token none, i1 false)")
-    go, drop := fe.fresh("gen.res"), fe.fresh("gen.drop")
-    fe.w("switch i8 " $s ", label %gen.end [ i8 0, label %" $go " i8 1, label %" $drop " ]")
+    go, gone := fe.fresh("gen.res"), fe.fresh("gen.drop")
+    fe.w("switch i8 " $s ", label %gen.end [ i8 0, label %" $go " i8 1, label %" $gone " ]")
     fe.label(go)
-    if fe.E.Tests {
-        for k in range hs.Len() {
-            sc := hs[hs.Len() - 1 - k]
-            fe.unwindPush(mir.ScopeId(I32(sc)), fe.F.Scopes[sc].Kind == mir.ScopeKind.Join)
-        }
-    }
+    fe.rehold(hs)
     fe.w("br label %" $blockName(resume))
-    fe.label(drop)
-    fe.E.runtime("__olang_scope_close")
-    for sc in hs {
-        # D18e: a walk this walk made and finishes in a scope it holds, destroyed before that scope closes
-        fe.walkEnd(sc, fe.walkKey(fe.curBlock, -1))
-        fe.w("call void @__olang_scope_close(ptr %s" $sc ")")
+    # dropped: the drop path lowering made (the way out of every block, its deferred code and drops, its closes)
+    fe.label(gone)
+    fe.rehold(hs)
+    fe.w("br label %" $blockName(drop))
+}
+
+# C11, S20: a walk let go before it started - the generator's parameters it holds by value with destructors to run
+# (its captures, copied into its frame as it was made) ended, last first, in the scope it lives in, which is closing
+fn (fe mut fnEm&) freshDrops() {
+    t := fe.E.T
+    f := fe.F
+    for j in range f.Captures.Len() {
+        l := f.Captures[f.Captures.Len() - 1 - j]
+        ty := f.Locals[I64(l)].Ty
+        if t.IsRef(ty) or not t.NeedsDrop(ty) { continue }
+        k := try mir.FnKey.DropFn(t, ty, try fe.E.dtorOf.Get(ty) catch default -1) catch {
+            fe.gap("a destructor not found: " $t.Canon(ty))
+            return
+        }
+        fe.E.want(k)
+        if not fe.E.dtorSeen.Has(k) {
+            fe.E.dtorSeen.Put(k, true)
+            fe.E.dtorKeys.Push(k)
+        }
+        fe.w("call void @" $fe.E.sym(k) "_rt(ptr %l" $l ", ptr %home)")
     }
-    fe.w("br label %gen.free")
+}
+
+# P1d: in a test build the scopes a suspended walk holds back on the chain of open scopes as it goes on, outermost first
+fn (fe mut fnEm&) rehold(hs Vec<I64>&) {
+    if not fe.E.Tests { return }
+    for k in range hs.Len() {
+        sc := hs[hs.Len() - 1 - k]
+        fe.unwindPush(mir.ScopeId(I32(sc)), fe.F.Scopes[sc].Kind == mir.ScopeKind.Join)
+    }
 }
 
 # the test or the process ends (S16-S18a): a failed check prints "FILE:LINE: " and what failed, an assert's message

@@ -1368,7 +1368,8 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
         case typed.Stmt.Return(sp, value) { ln.ret(sp, value) }
         case typed.Stmt.Raise(sp, err, word) {
             code := mir.ErrorCode(ln.T, ln.T.Errors(ln.B.Ty), err, word)
-            ln.raise(sp, mir.Operand.Const(mir.I32T, code))
+            # (D18a, S19e: a walk's end - Exhausted.End, its body over - is no error leaving: its errdefers do not run)
+            ln.raise(sp, mir.Operand.Const(mir.I32T, code), not (ln.F.Gen and code == ln.F.GenEnd))
         }
         case typed.Stmt.Reraise(sp, x, from) {
             # R3a, T20: an error value raised - its code recoded from its set to the body's; a null one (code 0) stops
@@ -1767,7 +1768,8 @@ fn (ln mut lowering&) tail(sp source.Span, c typed.Call&, ty types.TypeId) {
 }
 
 # a generator's value (S20): computed as a return's is, an array value among it copied into the result scope (T7b), then
-# the function suspended with every scope it has open held, to go on at the block made here when it is next called
+# the function suspended with every scope it has open held, to go on at the block made here when it is next called - or
+# at the drop path made here when its walk is let go unfinished
 fn (ln mut lowering&) suspend(sp source.Span, value typed.Expr&) {
     res := ln.T.Result(ln.B.Ty)
     v := ln.fit(ln.val(value), value, res, sp)
@@ -1776,8 +1778,13 @@ fn (ln mut lowering&) suspend(sp source.Span, value typed.Expr&) {
     ln.retArrays(l, res, value, sp)
     held := Array<mir.ScopeRef>(ln.levels.Len(), mir.ScopeRef.Frame)
     for i in range ln.levels.Len() { held[i] = mir.ScopeRef.Scope(ln.levels[ln.levels.Len() - 1 - i].S) }
-    resume := ln.F.NewBlock()
-    ln.end(mir.Term.Suspend(sp, mir.Operand.Copy(mir.Lvalue.L(l)), resume, ln.F.ScopeRefs(held)))
+    resume, drop := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Suspend(sp, mir.Operand.Copy(mir.Lvalue.L(l)), resume, ln.F.ScopeRefs(held), drop))
+    # S20: the walk let go here unfinished - every block open left as a return leaves them, its deferred code (not an
+    # errdefer's: no error leaves) and its holders' drops run, then the frame released
+    ln.start(drop)
+    ln.leave(0)
+    ln.end(mir.Term.Dropped(sp))
     ln.start(resume)
 }
 
@@ -1886,14 +1893,14 @@ fn tupleItems(x typed.Expr&) Array<typed.Expr&>& {
 }
 
 # the body failing with code, under its own list, once every scope is closed
-fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
+fn (ln mut lowering&) raise(sp source.Span, code mir.Operand, erroring Bool = true) {
     if ln.T.Items(ln.T.Errors(ln.B.Ty)).Len() == 0 {
         ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
         return
     }
     l := ln.local(code, mir.I32T, sp)
     was := ln.erroring
-    ln.erroring = true
+    ln.erroring = erroring
     ln.leave(0)
     ln.erroring = was
     # (said once every scope of main is closed - its deferred code, errdefers and drops run first, as for a word

@@ -1,12 +1,30 @@
-# check: fail error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
-# S20: a walk stopped at a yield with deferred code pending, and dropped, would never run that code
-fn tidy() {
-}
+# check: run
+# flags: -debug -sanitize
+# S20 (docs/refusals.md 5.6, question 2 - the user's yes, 2026-11-08): deferred code pending at a yield runs where the
+# walk is let go unfinished - as its home scope closes, as Python's close() runs a finally - and where the walk ends
+import "std/io"
+Tidied mut I64 = 0
+fn tidy() { Tidied++ }
 
 fn f() Iterator<I64> {
     defer tidy()
     yield 2
+    yield 3
 }
 
 fn main() ? {
+    for x in f() { assert x > 1 }
+    assert Tidied == 1
+    for x in f() {
+        assert x == 2
+        break
+    }
+    assert Tidied == 2
+    {
+        g := f()
+        assert (try g.Next() catch { unreachable }) == 2
+        assert Tidied == 2
+    }
+    assert Tidied == 3
+    try io.Println("tidied " $Tidied)
 }

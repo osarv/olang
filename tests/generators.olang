@@ -563,3 +563,132 @@ test "D18: a lambda's environment and a lent array held across yields stay in th
     assert keptWalks() == 18 + 72000
     assert KeptBaked == 18 + 72000
 }
+
+# ---- S20, C11: what a walk holds, ended where it is let go ----
+
+# what the walk's destructors and deferred code saw, in order
+type Seen struct() {
+    ids := Vec<I64>()
+}
+
+fn (s Seen&) Text() String {
+    b := StringBuilder()
+    for x in s.ids { b.Push(" " $x) }
+    return b.ToString()
+}
+
+# a value with a destructor reading its own storage as it ends: read back after a churn, a freed array reads wrong
+type Held unique struct(id I64, log mut Seen&) {
+    id, log
+    data := Array<I64>(16 + id.Mod(2), id)
+} destruct { log.ids.Push(data[3]) }
+
+# what a walk reports to, given by value (a reference parameter would bind where the generator lives to its referent's
+# scope, so a walk held in a block would be let go only as that scope closes)
+type Witness struct(log mut Seen&) {
+    log
+}
+
+# a variable holding one across yields, deferred code pending around them, an errdefer no drop runs
+fn heldAcross(w Witness, base I64) Iterator<I64> {
+    defer w.log.ids.Push(base + 9)
+    a Held = Held(base + 1, w.log)
+    {
+        b Held = Held(base + 2, w.log)
+        errdefer w.log.ids.Push(base + 8)
+        yield a.id + b.id
+        yield b.data[0]
+    }
+    yield a.data[1]
+}
+
+# a by-value parameter with a destructor: the walk's, ended where it ends, is let go, or was never started
+fn owned(h Held, n I64) Iterator<I64> {
+    for i in range n { yield h.data[2] + i }
+}
+
+fn walkedHeld() String {
+    s := Seen()
+    # walked to the end: b as its block closes, then a, then the deferred code
+    t I64 = 0
+    for x in heldAcross(Witness(s), 10) { t += x }
+    assert t == 23 + 12 + 11
+    # left part way, at each of its yields
+    for x in heldAcross(Witness(s), 20) {
+        assert x == 43
+        break
+    }
+    n := 0
+    for x in heldAcross(Witness(s), 30) {
+        n++
+        if n == 2 {
+            assert x == 32
+            break
+        }
+        churnText()
+    }
+    {
+        g := heldAcross(Witness(s), 40)
+        assert (try g.Next() catch { unreachable }) == 83
+        churnText()
+        assert (try g.Next() catch { unreachable }) == 42
+        assert (try g.Next() catch { unreachable }) == 41
+        churnText()
+    }
+    churnText()
+    return s.Text()
+}
+
+fn unstarted(g Generator<I64>&) Bool { return g == g }
+
+fn walkedOwned() String {
+    s := Seen()
+    t I64 = 0
+    for x in owned(Held(5, s), 3) { t += x }
+    assert t == 18
+    for x in owned(Held(6, s), 3) {
+        assert x == 6
+        break
+    }
+    {
+        g := owned(Held(7, s), 3)
+        churnText()
+        assert unstarted(g)
+    }
+    {
+        g := owned(Held(8, s), 3)
+        assert (try g.Next() catch { unreachable }) == 8
+        churnText()
+    }
+    churnText()
+    return s.Text()
+}
+
+# walks that end: computed while compiling as at run time (a walk let go part way is not - while compiling nothing is
+# placed, so nothing lets it go before the value is made)
+fn walkedFull() String {
+    s := Seen()
+    t I64 = 0
+    for x in heldAcross(Witness(s), 50) { t += x }
+    for x in owned(Held(9, s), 2) { t += x }
+    return $t $s.Text()
+}
+
+WalkFullBaked := walkedFull()
+WalkHeldBaked := walkedHeld()
+WalkOwnedBaked := walkedOwned()
+
+test "S20: a walk let go part way ends what it holds and runs its deferred code, an errdefer's not" {
+    assert walkedHeld() == " 12 11 19 22 21 29 32 31 39 42 41 49"
+    assert WalkHeldBaked == walkedHeld()
+}
+
+test "S20, C11: walks that end, computed while compiling and at run time alike" {
+    assert walkedFull() == "225 52 51 59 9"
+    assert WalkFullBaked == walkedFull()
+}
+
+test "C11, S20: a generator's by-value parameter is its walk's, ended once however the walk ends" {
+    assert walkedOwned() == " 5 6 7 8"
+    assert WalkOwnedBaked == walkedOwned()
+}

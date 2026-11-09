@@ -22761,10 +22761,7 @@ fn (c mut Checker&) yieldStmt(sp source.Span, x ast.Expr&) {
         c.err(ysp, msgs.YieldInJoin())
         return
     }
-    if fr.deferBlocks.Len() > 0 {
-        c.err(ysp, msgs.YieldPastHeld() if fr.deferBlocks.Len() == fr.dropBlocks.Len() else msgs.YieldPastDefer())
-        return
-    }
+    # (deferred code and holders' drops pending around it run where the walk is let go unfinished - lowering's drop path)
     rt := fr.Result
     wasNull := c.nullDecl
     c.nullDecl = c.resultAt(0)
@@ -22806,12 +22803,6 @@ fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId, el I64) typed.Block&
         return typed.Block(typed.BlockId(0), gather(c.stmts, from))
     }
     ft := c.P.T.Items(c.P.T.Params(csig))[0]
-    # O15, S20: no holder of the walk lets go of a parameter's value - a walk may be left part way, running no deferred
-    # code - so one with destructors to run is taken by reference
-    for p in c.cur().Params {
-        t := c.localType(I64(p))
-        if t != types.UnknownT and not c.isRef(t) and c.P.T.NeedsDrop(t): c.err(c.cur().Local(p).Sp, msgs.DestructGenParam(c.ty(t)))
-    }
     # D18c: elements living where the generator does are kept in storage of its result scope - which its Next reaches
     # through a capture of a reference living there, null, made for it
     home I64 = -1
@@ -22883,6 +22874,9 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId, el I64, home I64) t
         mark := typed.Mark.Infer if c.isRef(pl.Ty) or c.P.T.HoldsRefs(pl.Ty) else typed.Mark.None
         l := c.local(pl.Name, pl.Sp, pl.Ty, typed.LocalKind.Var, mark)
         c.emit(typed.Stmt.Let(pl.Sp, typed.LocalId(I32(l)), x))
+        # C11, S20: a by-value parameter with destructors to run is the walk's - ended where its body ends, or where
+        # the walk is let go part way (its drop path), or, never started, with its captures (lowering's GenFresh)
+        c.dropOnExit(l, pl.Sp, true)
         args.Push(l)
     }
     # its contract (D17): checked as its first Next begins, a false condition that Next's ArgumentError (D18)

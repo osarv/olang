@@ -1002,17 +1002,27 @@ fn (x mut Exec&) reachStmt(f mir.Fn&, s mir.Stmt, work mut Vec<mir.FnKey>&) {
                 case _ { }
             }
         }
-        case mir.Stmt.RegisterDtor(_, _, ty, _) {
-            dk := try mir.FnKey.DropFn(x.P.T, ty, try x.dtorOf.Get(ty) catch default -1) catch { return }
-            x.M.DefineDestructor(ty, dk)
-            work.Push(dk)
-        }
+        case mir.Stmt.RegisterDtor(_, _, ty, _) { x.dtor(ty, work) }
         case _ { }
     }
 }
 
+# the destructor of ty, its drop function defined for the machine's registrations and queued
+fn (x mut Exec&) dtor(ty types.TypeId, work mut Vec<mir.FnKey>&) {
+    dk := try mir.FnKey.DropFn(x.P.T, ty, try x.dtorOf.Get(ty) catch default -1) catch { return }
+    x.M.DefineDestructor(ty, dk)
+    work.Push(dk)
+}
+
 fn (x mut Exec&) reach(f mir.Fn&, work mut Vec<mir.FnKey>&) {
     for c in f.Calls { x.callee(c.Target, work) }
+    # C11, S20: a generator's captures it ends when its walk is let go unstarted (eval's freshDrops)
+    if f.Gen {
+        for l in f.Captures {
+            ty := f.Locals[I64(l)].Ty
+            if not x.P.T.IsRef(ty) and x.P.T.NeedsDrop(ty): x.dtor(ty, work)
+        }
+    }
     for t in f.Tasks { x.callee(t.Target, work) }
     for blockIx in range f.Blocks.Len() {
         bb := f.Blocks.Ref(blockIx)

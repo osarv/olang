@@ -79,6 +79,7 @@ WhyCycle String& = "these globals are defined in terms of each other"
 WhyNoValue String& = "its initializer does not produce a value"
 WhyNoGlobal String& = "it reads a global whose initializer has not run - one with an error never does"
 WhyDestructor String& = "it builds a value whose destructor runs when its scope closes"
+WhyWalkLetGo String& = "it lets go of a generator part way, whose walk then runs code as its scope closes"
 WhyExtern String& = "it calls an external function"
 WhyEnds String& = "it ends the test or the process"
 WhySteps String& = "the computation runs longer than compile-time evaluation allows"
@@ -251,11 +252,14 @@ type frame struct() {
 # a generator (D18): its Next's function and what its walk is - not started (0), suspended (1) with its frame, the
 # frame's words (locals, scopes, scope variables: WsN of genWords from At) and the scopes it holds open, innermost
 # first, its frame's storage last (HeldN from At + WsN), running (2), or over (3). Its words are made at its first
-# suspend, room for every scope its function opens
+# suspend, room for every scope its function opens. Drop is where its suspend goes on if the walk is let go (S20)
 type genRec struct() {
     State I64 = 0
     Fn I64 = 0
     Fr frame = frame()
+    Drop I64 = -1
+    Env Ptr = NullPtr    # its Next's environment: the captures a walk let go unstarted ends (C11, S20)
+    Judged Bool = false  # (K1, S20: whether a computation's end has asked if its walk was let go with code to run)
     At I64 = -1
     WsN I64 = 0
     HeldN I64 = 0
@@ -756,7 +760,7 @@ fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
     return match t {
         case mir.Term.Branch(c, _, _): opNamesGlobal(c)
         case mir.Term.Switch(x, _, _): opNamesGlobal(x)
-        case mir.Term.Return(_, x), mir.Term.Suspend(_, x, _, _): opNamesGlobal(x)
+        case mir.Term.Return(_, x), mir.Term.Suspend(_, x, _, _, _): opNamesGlobal(x)
         case mir.Term.Call(_, k), mir.Term.Tail(_, k): rangeNamesGlobal(f, f.Calls[I64(k)].Args)
         case _: false
     }
@@ -1500,7 +1504,7 @@ fn (m mut Machine&) stepClose() {
         if g.Kind == gDtor {
             m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
         } else if g.Kind == gGen {
-            m.closeGen(g.Ty)
+            m.closeGen(id, g.Ty)
         }
         return
     }
@@ -2709,6 +2713,7 @@ fn (m mut Machine&) genClosure(fi I64, dst Ptr, cp Ptr, gi I64, s mir.ScopeRef, 
         ri = m.gens.Len() - 1
     }
     m.gens[ri].Fn = gi
+    m.gens[ri].Env = env
     m.wr(Ptr(env.Id, total + 8 * I64(args.N)), 8, ri)
     m.addReg(sc, gGen, ri, NullPtr)
     m.wrPtr(dst, cp)
@@ -2759,7 +2764,7 @@ fn (m mut Machine&) restoreGen(ri I64, ret I64, retArg I64) I64 {
 
 # S20: a generator's value given to the call that resumed it, its frame then put aside as it is - its storage, its
 # scopes and its words kept - to go on at resume when it is next asked
-fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.Range) {
+fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.Range, drop mir.BlockId) {
     ri := I64(m.fs[fi].Gen)
     if ri < 0 {
         m.notModelled()
@@ -2792,15 +2797,16 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
     m.genWords[k] = fr.Store
     rec.HeldN = k + 1 - (rec.At + n)
     rec.Fr = fr
+    rec.Drop = I64(drop)
     rec.State = 1
     m.gens[ri] = rec
     m.popFrame()
     m.returned(fr)
 }
 
-# D18: a generator's scope closing with the generator stopped part way - the scopes its walk holds closed, innermost
-# first, its frame's storage last, as its end would have closed them
-fn (m mut Machine&) closeGen(ri I64) {
+# D18: a generator's scope closing with the generator stopped part way - its drop path run (S20): its deferred code and
+# holders' drops, the scopes its walk holds closed, innermost first, its frame's storage last
+fn (m mut Machine&) closeGen(closing I64, ri I64) {
     rec := m.gens[ri]
     # its scope closing, nothing can resume it: its record is free for the next generator of its function - but not
     # one running, whose frame is still on the stack (a stop unwinding through its walk)
@@ -2808,11 +2814,76 @@ fn (m mut Machine&) closeGen(ri I64) {
         m.gens[ri].NextFree = try m.freeGens.Get(rec.Fn) catch default -1
         m.freeGens.Put(rec.Fn, ri)
     }
+    if rec.State == 0 { m.freshDrops(closing, rec) }
     if rec.State != 1 { return }
     m.gens[ri].State = 3
-    for i in range rec.HeldN {
-        id := m.genWords[rec.At + rec.WsN + rec.HeldN - 1 - i]
-        if m.live(id) { m.closing.Push(id) }
+    # S20: let go part way - its frame pushed again as it was, going on at its suspend's drop path (its deferred code
+    # and holders' drops run, its scopes closed) as a destructor's frame is, returning nothing
+    nf := m.restoreGen(ri, rDtor, 0)
+    if nf < 0 { return }
+    m.fs[nf].Block = rec.Drop
+    m.fs[nf].Stmt = 0
+    m.fs[nf].Gen = I32(-1)   # (its record free already: no one's walk now)
+}
+
+# K1, S20: while compiling nothing is placed - every generator lives in the program's scope, never let go while a value
+# is computed - so a computation that leaves a generator part way, whose walk would run code where the run time lets it
+# go (its suspend's drop path ending holders or running deferred code, an unstarted walk's parameters' destructors),
+# cannot be computed the same: whether one made since the last computation ended is such
+fn (m mut Machine&) walksLetGo() Bool {
+    found := false
+    for i in range m.gens.Len() {
+        if m.gens[i].Judged: continue
+        m.gens[i].Judged = true
+        r := m.gens[i]
+        if r.State == 0 and m.freshWork(r) or r.State == 1 and m.dropWork(r.Fn, r.Drop): found = true
+    }
+    return found
+}
+
+# whether an unstarted walk of generator function fi holds parameters with destructors to run (its captures)
+fn (m Machine&) freshWork(r genRec) Bool {
+    g := m.fns.At(r.Fn)
+    for l in g.Captures {
+        ty := g.Locals[I64(l)].Ty
+        if not m.T.IsRef(ty) and m.T.NeedsDrop(ty): return true
+    }
+    return false
+}
+
+# whether the drop path of generator function fi from block b does anything but close its scopes
+fn (m Machine&) dropWork(fi I64, b I64) Bool {
+    g := m.fns.At(fi)
+    for b >= 0 {
+        bb := g.Blocks.Ref(b)
+        for st in bb.Stmts {
+            match st {
+                case mir.Stmt.Close(_, _), mir.Stmt.Dead(_, _), mir.Stmt.Deferred(_, _, _) { }
+                case _ { return true }
+            }
+        }
+        b = match bb.T {
+            case mir.Term.Goto(t): I64(t)
+            case mir.Term.Dropped(_): -1
+            case _: -2
+        }
+        if b == -2: return true
+    }
+    return false
+}
+
+# C11, S20: a walk let go before it started - the parameters it holds by value with destructors to run (its captures)
+# ended, last first, in the scope closing, as emit's freshDrops ends them (each a destructor's frame, pushed first ending last)
+fn (m mut Machine&) freshDrops(closing I64, rec genRec) {
+    g := m.fns.At(rec.Fn)
+    if g.Captures.Len() == 0 or rec.Env.Id == 0 { return }
+    tys := Array<types.TypeId>(g.Captures.Len())
+    for i in range g.Captures.Len() { tys[i] = g.Locals[I64(g.Captures[i])].Ty }
+    offs, _ := m.pack(tys)
+    for i in range g.Captures.Len() {
+        if m.T.IsRef(tys[i]) or not m.T.NeedsDrop(tys[i]): continue
+        m.runDtor(closing, tys[i], Ptr(rec.Env.Id, rec.Env.Off + offs[i]))
+        if m.halted { return }
     }
 }
 
@@ -4811,10 +4882,15 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             if glob and not m.rangeReady(fi, m.fns.At(k), c.Args) { return }
             m.tail(fi, c)
         }
-        case mir.Term.Suspend(sp, x, resume, held) {
+        case mir.Term.Suspend(sp, x, resume, held, drop) {
             m.atK(k, sp)
             if glob and not m.operandReady(fi, x) { return }
-            m.suspend(fi, x, resume, held)
+            m.suspend(fi, x, resume, held, drop)
+        }
+        # S20: a walk let go, its drop path run: its frame's storage closed, then the frame gone, giving nothing back
+        case mir.Term.Dropped(sp) {
+            m.atK(k, sp)
+            m.leave(fi, false, mir.Operand.None, 0)
         }
         case mir.Term.Raise(sp, x) {
             m.atK(k, sp)
@@ -4997,10 +5073,15 @@ fn (m mut Machine&) returned(fr frame) {
         case rCall { m.callReturned(fr) }
         case rRequest {
             if fr.Raised { m.stop(Stop.Raised(fr.Code)) }
+            if m.When == Mode.Compile and m.walksLetGo() { m.refuse(WhyWalkLetGo) }
         }
         case rGlobal {
             if fr.Raised {
                 m.refuse(WhyNoValue)
+                return
+            }
+            if m.When == Mode.Compile and m.walksLetGo() {
+                m.refuse(WhyWalkLetGo)
                 return
             }
             m.globals[fr.RetArg].State = 2

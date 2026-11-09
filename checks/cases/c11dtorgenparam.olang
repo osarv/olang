@@ -1,10 +1,30 @@
-# check: fail error[C11, S20]: Conn has a destructor to run, so a generator takes it by reference - write Conn&: a walk left part way runs no code of its body to end it
-# C11, S20: no holder of a generator's walk lets go of a parameter's value - one with a destructor is taken by reference
+# check: run
+# flags: -debug -sanitize
+# C11, S20 (docs/refusals.md 5.6; refused - "a generator takes it by reference" - until the user's yes to refusals
+# question 2, 2026-11-08): a generator's by-value parameter with a destructor is its walk's - ended where the walk ends,
+# where it is let go part way, or, never started, where the generator is let go - once each
+import "std/io"
 Closed mut I64 = 0
 type Conn unique struct(fd I64) {
     fd
-} destruct { Closed++ }
-fn ids(c Conn) Iterator<I64> { yield c.fd }
-fn main() {
-    for x in ids(Conn(1)) { assert x == 1 }
+} destruct { Closed += fd }
+fn ids(c Conn) Iterator<I64> {
+    yield c.fd
+    yield c.fd * 2
+}
+fn idle(g Generator<I64>&) Bool { return g == g }
+fn main() ? {
+    for x in ids(Conn(1)) { assert x == 1 or x == 2 }
+    assert Closed == 1
+    for x in ids(Conn(10)) {
+        assert x == 10
+        break
+    }
+    assert Closed == 11
+    {
+        g := ids(Conn(100))
+        assert idle(g)
+    }
+    assert Closed == 111
+    try io.Println("closed " $Closed)
 }

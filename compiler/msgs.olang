@@ -276,7 +276,6 @@ type Diag enum {
     DestructCopiedHeld
     DestructRunArray
     DestructGlobal
-    DestructGenParam
     TraitNotAType
     AnyNotTrait
     AnyNeedsMarker
@@ -735,8 +734,6 @@ type Diag enum {
     YieldInLambda
     YieldInDefer
     YieldInJoin
-    YieldPastDefer
-    YieldPastHeld
     GenReturnValue
     GenErrors
     YieldOwnStorage
@@ -1273,7 +1270,6 @@ fn DestructCopiedHeld(ty String&, held String&) r.Msg { return r.Msg(Diag.Destru
 fn DestructRunArray(ty String&) r.Msg { return r.Msg(Diag.DestructRunArray, "C11", $ty " has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<" $ty ">, or hold " $ty "& ones") }
 fn DestructTypeByValue(ty String&, held String&) r.Msg { return r.Msg(Diag.DestructTypeByValue, "C11", $ty " has a destructor to run, and " $held " keeps values of it where no holder ends them - write " $ty "&, or keep them in a Vec<" $ty ">") }
 fn DestructGlobal(ty String&) r.Msg { return r.Msg(Diag.DestructGlobal, "C11", $ty " has a destructor to run, so a global holds it by reference - write " $ty "&, its destructor run as the program ends") }
-fn DestructGenParam(ty String&) r.Msg { return r.Msg(Diag.DestructGenParam, "C11, S20", $ty " has a destructor to run, so a generator takes it by reference - write " $ty "&: a walk left part way runs no code of its body to end it") }
 fn TraitNotAType(ty String&) r.Msg { return r.Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty $("" if ty.EndsWith("&") else "&") "'") }
 fn AnyNotTrait(ty String&) r.Msg { return r.Msg(Diag.AnyNotTrait, "T32", "'any' takes a trait, and " $ty " is none") }
 fn AnyNeedsMarker(ty String&) r.Msg { return r.Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }
@@ -1836,8 +1832,6 @@ fn YieldOutside() r.Msg { return r.Msg(Diag.YieldOutside, "D18, S20", "'yield' i
 fn YieldInLambda() r.Msg { return r.Msg(Diag.YieldInLambda, "S20", "a lambda is no generator - 'yield' in the function it is written in") }
 fn YieldInDefer() r.Msg { return r.Msg(Diag.YieldInDefer, "S19b, S20", "deferred code may not yield - it runs while its block is left") }
 fn YieldInJoin() r.Msg { return r.Msg(Diag.YieldInJoin, "S20", "a join block may not yield - its tasks are waited for before it is left") }
-fn YieldPastDefer() r.Msg { return r.Msg(Diag.YieldPastDefer, "S20", "a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block") }
-fn YieldPastHeld() r.Msg { return r.Msg(Diag.YieldPastHeld, "S20, O15", "a yield while a variable around it holds a value with a destructor - a walk stopped there would never run it; hold the value in a block that ends before the yield, or by reference") }
 fn GenReturnValue() r.Msg { return r.Msg(Diag.GenReturnValue, "D18a", "a generator gives its values by 'yield' - 'return' ends it and takes none") }
 fn GenYieldsBorrow(name String&) r.Msg { return r.Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Copy()')") }
 fn YieldOwnStorage() r.Msg { return r.Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Copy()', '$x')") }
