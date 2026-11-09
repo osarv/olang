@@ -2435,7 +2435,9 @@ the views may be handed back with no copy and the caller copies them where it ke
 where it stands (an argument for a read-only parameter, a text piece, a discarded value) and nothing the statement does
 can change what it views - no call in it given a writable reference, a value or a read-only reference holding one at any
 depth of its fields (judged by the type of the storage viewed where a local holds the views), or a value reaching a
-function value or an `any`,
+function value or an `any` - a function value whose type promises `pure` (T21c) aside, which writes only through the
+`mut` arguments it is given: a call through one, or one given it (a lambda written there for such a parameter, a value
+held as one), is judged by its parameters' types as a body's call is,
 in a program no global of which can be written so (a `mut` global of anything but a number, a `Bool` or an enum of no
 payload, or a global reaching a writable reference, a function value or an `any`) - or holds it in a local that nothing could tell from a copy: a local never written but in a
 scalar field, lent writably only to bodies that keep its parts as they are (a walk's `Next`), never escaping, never
@@ -3276,8 +3278,10 @@ compile-time error **where the same `Vec` is visible on both sides**, and nowher
 2. **A call given both**: a call between the view and its use is given that `Vec` - or a value or writable reference
    holding it - through a parameter its body may grow; or a call is given the view itself and, through another
    parameter, its `Vec`. A body may grow a parameter when it grows it as in 1, or hands it (or a part of it) to a callee
-   that may - read off the bodies, over calls to any depth. A call through a function value, whose body is not known
-   here, may grow what it is given by value or writably, and nothing it is not given.
+   that may - read off the bodies, over calls to any depth. A call through a function written where it is called (a
+   lambda, a named function) grows what its body grows; a call through any other function value, whose body is not
+   known here, may grow what it is given by value or writably, and nothing it is not given - one whose type promises
+   `pure` (T21c) only what it is given writably, a value it is given that reaches no writable reference being its own.
 3. **A global by name**: the `Vec` is a global's, or reached from one by fields, and a call between the view and its
    use runs a body that may grow that global by name.
 4. **A task**: while a task given a view (as an argument, or captured by the lambda it runs) may still run - until its
@@ -4562,7 +4566,10 @@ collection: `l[0].Mark(l)` lends `l` itself) - and where nothing the call runs b
 collection either: the element's type reaches no function value or `any` (a closure the element holds over its own
 collection) and no writable reference to storage a collection it is in may be or hold (by type), and neither the method's body nor that of a constructor an argument calls - with
 everything each may call - writes a global (or what a global refers to), calls through a function value or an `any`, or
-reaches a body that did not check. Judged once every body is checked (B1.1's effect summaries); where it does not hold,
+reaches a body that did not check. A function value whose type promises `pure` (T21c) is no such way: it writes only
+through the `mut` arguments it is given - the element, what the method gives it - so it may be an argument (a value
+held as `pure`, or a function or lambda written at the call for a parameter whose type promises `pure`), a part of the
+element, and called through by the method (`accs[i].Add(x, fn(v): return v * 2)`). Judged once every body is checked (B1.1's effect summaries); where it does not hold,
 the call is the copy's, and the error below.
 The receiver is then `x.RefMut(i)` (or its field), taken before the arguments are evaluated, which nothing they do can
 change: `v[i].Push(x)`, `accs[i % 3].Add(2 * n)`, `grid[0][0].Push(4)`, `rows[k].Truncate(0)`, `u.nodes[p].kids.Push(c)`.
@@ -6679,7 +6686,13 @@ condition is the compiler's to prove, over the whole program: where a fact it ne
 (a function value, an `extern` - which, in a program C may call back (condition 3), may call any export fn C may call,
 X12, but the C library's input and output, text, memory and time functions, which call nothing back - so a place one
 may let go of is let go of across it), a cycle of calls not settled - the place keeps, as O8c says;
-nothing is reclaimed on a guess, and no fact is taken from a fixed point not run to its end. A generator (D18) lets go
+nothing is reclaimed on a guess, and no fact is taken from a fixed point not run to its end. A call through a function
+value is judged by what is known of it (T21c, T22): where every function it may be is followed (T22a) - a value made in
+the function, a lambda or a function written as an argument - as direct calls of those; through a parameter the body
+never assigns, as each call of the body gives it (`apply(xs, fn(x): return x * 2)` lets go of what the lambda does,
+through any number of such calls); else by its type - it keeps what its `keeps` promises name (and, where an argument
+can be stored into, every argument), and where it promises `pure` and is given nothing that may write (a writable
+reference, a value holding a reference) it lets go of nothing. A generator (D18) lets go
 as a function does, its `yield` giving a value as a `return` does - and a `yield` is a call that may make any place let
 go, for what its frame holds across it: its consumer runs what it likes before the next `Next()`. What the
 generator was given is held by it for as long as it can be resumed (D18b); what its frame holds when a walk stops part
