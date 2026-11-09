@@ -1449,7 +1449,8 @@ functions (a **twin** of it, one for each set of functions its arguments bring).
 judged as the direct calls it is (O10c, O17, O18b), a `return` of it gives those functions back to the caller (O13c),
 an argument of it for another such parameter follows them on, and every other place it reaches - a store, a capture,
 a task - is a boundary (T22a) judged by that place's type; a capture of one of those functions' is where the caller's
-value had it, and a temporary the callee would have to build there is a compile-time error naming T22c. Likewise a
+value had it, and a temporary the callee builds there is built where that capture lives - a derived scope of the twin
+(O23a), passed by its caller - except in a lambda's body (below), where it is a compile-time error naming T22c. Likewise a
 lambda capturing a local of the body making it, given one value and never assigned again, whose functions capture
 nothing (named functions, lambdas capturing nothing) and do more than the capture's type allows, has that capture
 followed into its body (D16c's copy is never repointed). An argument whose functions its parameter's type covers takes
@@ -6880,18 +6881,22 @@ from it (O25a), through a call's result (O13c), and through the hidden locals of
 container is a **parameter** `p` of the function, the binding was made by whoever built the argument, so a field of
 it tagged with the scope variable `V` of `p`'s type reads at a **derived scope** of the function: "where the argument
 for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
-of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that it
-exists at no run time: a temporary put where a derived scope's referent lives, or a result that would land there, is
-built where that referent is found to live while the program runs (O29), and where it cannot be found (nothing to read
-it from with no effect) is a compile-time error. A callee that may build into a
-derived scope - given a reference living in one (read through the field, or a copy of that reference in a local, a `for
-... in` element or a lambda's capture) for a parameter something can be stored through and the callee may write, or
-whose result is equated with it, or whose body builds there, or given a copy out of such a field by value that it can
-build through - is passed the scope that argument's referent is found in while the program runs (O29), or, where the
-argument cannot be read again with no effect, the program's scope, which outlives the referent wherever that lives
-(never the scope the field was read through, which the referent may outlive). At each call it
-is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
-parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
+of the body (O10a), and a relation between it and another scope variable is an obligation (O10b). A function or method
+called directly, or a destructor, that builds into a derived scope - a temporary put where its referent lives, a result
+that would land there, or a callee given a reference living in one (read through the field, or a copy of that
+reference in a local, a `for ... in` element or a lambda's capture) for a parameter something can be stored through
+and the callee may write, or whose result is equated with it, or whose body builds there, or given a copy out of such a
+field by value that it can build through - takes it as a **hidden scope parameter**, as a reference parameter's scope
+is passed (O4b), per call and never stored with the instance. A call that knows where the argument's field refers
+passes that scope: the binding the argument's value carries for `V` (O13c, a local's, a call's result, a `for ... in`
+element's), or, for an argument that is itself a parameter of the caller, the caller's own derived scope passed on; so
+does a holder letting go of its value (O15), for its destructor, from the bindings of the value it holds. A call that
+knows none - through a function value or an `any`, a task's, the runtime ending a value registered with a scope (O16)
+- passes none, and the body builds where the field's referent is found to live while the program runs (O29); where
+there is nothing to find it from with no effect, in the program's scope, which outlives the referent wherever that
+lives (never the scope the field was read through, which the referent may outlive). A generator's `Next`, a lambda, an
+`export fn` and the bodies of a `become` chain take none: they always find it. For judging, a derived scope is
+resolved at each call from the argument as above; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
 from.
 
@@ -7139,7 +7144,7 @@ nothing. A block stays a scope (O2): what it built that nothing
 outside keeps is reclaimed at its close. `olang explain` shows a function's obligations (B11b).
 
 **O29 (a scope found at run time).** Where something is built into a scope the compiler cannot name while compiling -
-one of several (O12, E28), one a reference local's versions differ on (O25i), a derived one (O23a), one not traced
+one of several (O12, E28), one a reference local's versions differ on (O25i), a derived one no call passed (O23a), one not traced
 (O11), where a `Str`'s receiver lives (E11c) - it is built in the scope the storage it is built through or into lives
 in, **found while the program runs from that storage's address**: the reference built through, the container of the
 place stored into, or the place's own reference. Nothing is stored per value for it: a value's size, `T.Size`, a
@@ -7539,10 +7544,10 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
-  each call resolves, so it may read, walk, relate and repoint through the field but not **build** into that scope: a
-  temporary stored into the field or anything reached through it is a compile-time error there, and the field - or a
-  copy of what it refers to, in a local, a `for ... in` element or a capture - passed for a parameter the callee may
-  build into gives the callee the program's scope for it (O23a);
+  each call resolves, so it may read, walk, relate and repoint through the field, and what it builds into that scope -
+  directly, or through a callee given the field or a copy of what it refers to (in a local, a `for ... in` element or a
+  capture) for a parameter it may build into - goes where the field's referent lives: the scope a call that knows the
+  binding passes for it, else the one found from the referent's address while the program runs (O23a);
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
   existing storage (O17); a temporary argument is built in the instance scope (O18a). So does a parameter written
   `T` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);

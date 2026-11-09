@@ -1,0 +1,41 @@
+# check: run
+# flags: -sanitize
+# O23a, C1, O29: values whose destructors build through their reference field, held in one Vec though they refer to
+# Tallies of different scopes - the Vec ending its elements knows no one binding for them, so each destructor is passed
+# none and builds where its own Tally is found to live - read back after an arena churn
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+
+fn main() ? {
+    a mut Tally& = Tally()
+    b mut Tally& = Tally()
+    {
+        v := Vec<Logged>()
+        for k in range 20 {
+            if k % 2 == 0 { v.Push(Logged(k, a)) } else { v.Push(Logged(k, b)) }
+        }
+    }
+    t := churn(40)
+    sa := 0
+    sb := 0
+    for x in a.seen { sa += x }
+    for x in b.seen { sb += x }
+    try io.Println($a.seen.Len() " " $sa " " $b.seen.Len() " " $sb " " $t)
+}

@@ -35496,3 +35496,44 @@ rv3roclone stays refused: the failing relation is inside `List.FromIter`'s insta
 derived binding) is untraced rather than too short, and what it would build - a writable list of a read-only list's
 inner lists - is what T25c refuses where written directly (`out.Push(x)` for `x` of a read-only list's walk). It belongs
 with section 6's permission cases, not a placement.
+
+## Derived scopes passed (O23a, C1, C2d, T22c, O29; 2026-11-09, wt-derived, round 8 of docs/fnvalues.md)
+
+The user, 2026-11-08, on C1 (a call building through a reference field with a binding of its own got the program's
+scope): "they should find the right scope" - at compile time first, by run-time finding (O29) where no call knows it.
+Round 6 placed such builds `Found`, but measured it did not help the shape that started it: the loop of section 11.1
+(a destructor pushing through its instance's `log mut Tally&`) still peaked at **183 MB**, because the Tally was a
+value local in a stack slot and storage on a stack is found as the program's scope.
+
+**Built.** A body that builds into a derived scope `Derived(p, w)` of its own (a field of parameter `p` bound by its
+constructor's parameter `w`, or - T22c - a capture of a function value followed into a twin) takes it as a **hidden
+scope parameter** after its type's: `typed.Plan.DerivedP/DerivedW` list them in the order the judging met them
+(`DerivedSlot`), a build there is placed `typed.Scope.Passed(k, i)` (`i` the O29 root, or -1), MIR names it
+`VarKind.Derived(k)`, and lowering emits `Rvalue.ScopeOr(var, root)` - `__olang_scope_or(s, p)`: the passed scope,
+else the one found from `p`, else the program's. A call whose callee takes some records, by call site, what it knows
+of each `(p, w)` (`Plan.PassDerived`, from `derivedAt`: the binding the argument's value carries, a block, a scope
+variable, the program's, or its own derived scope passed on raw); a holder's drop records the same for its value's
+destructor from the local's construction bindings (`dropDerived`, `Plan.DropDerived`; lowering then calls the
+destructor directly with them, its parts through their Drop helpers as before), and a drop is now an edge of the call
+graph so the destructor is judged first. Everything else passes null - emit pads a direct call, a task's trampoline,
+a function value's thunk, an export wrapper and the runtime's destructor thunk (`_rt`); eval's frames start a derived
+variable at 0, and its `runDtor` passes none - so the body finds the scope where it builds. The summary carries the
+list (`DerivedP/W`), so a component's rounds converge on it before a caller reads it, and a caller looks each `(p, w)`
+up by name at lowering, so a twin and its body differing in the list is harmless.
+
+**Decided (mine).** One body, no twin, per the design. Generators, lambdas, `export fn`s (C calls them) and every body
+of a `become` chain (musttail needs one signature) take no derived scopes and always find them. Constructors take none
+(nothing measured needed it). The T22c refusal of a temporary built where a followed function's capture lives
+(`t22cbuildcapture`) is lifted for twins - the capture is a derived scope of the twin its caller passes - and stays for
+a lambda's body. `Inert` for a derived scope no longer arises in a body that takes them: it is `Passed(k, -1)`, the
+passed scope or the program's.
+
+**Measured.** The loop: 183 MB to **1.7 MB** peak, 0.19 s either way (`derivedpassedloop`, a run case reading its own
+peak: the seed's build grows 13.7 MB over 15,000 turns, this one stays flat). Interpreted the same.
+
+**Bug found on the way, not fixed here:** a `Vec<Logged>` local handed to a function that pushes into it is placed in
+the frame's scope, so its elements end at the function's end; where their destructors build into a Tally of that same
+scope, the sanitized build reports a use after the scope closed as it closes (the seed's too). Raised as a task.
+
+**Left.** A value argument holding two references bound to an unknown scope, and a task's result into such a place,
+still get the program's scope where nothing passes or finds it; no bench row (the run case measures it).

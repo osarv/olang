@@ -1,7 +1,9 @@
-# check: fail error[T22c]: the function given for this call's callee keeps this argument in what it captured, where this call cannot build - make the argument in the caller and pass it in
-# also: note: the functions given here followed into it (T22c)
-# T22c: a function value followed into a callee keeps what it is given in what it captured (an adapter's instance) -
-# a temporary the callee makes for it would have to be built where that capture lives, which the callee is not told
+# check: run
+# flags: -sanitize
+# T22c, O23a: a function value followed into a callee keeps what it is given in what it captured (an adapter's
+# instance) - the temporary the callee makes for it is built where that capture lives, a derived scope of the callee's
+# twin its caller passes (it was refused, the callee not told where that was) - read back after an arena churn
+import "std/io"
 type N struct(v I64) {
     v
 }
@@ -12,8 +14,18 @@ fn (k mut Keeper&) Call(n N&) { k.kept.Push(n) }
 fn feed(s fn&(n N&), base I64) {
     for i in range 3 { s(N(base + i)) }
 }
-fn main() {
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
     k := Keeper()
     feed(k, 20)
-    assert k.kept.Len() == 3
+    t := churn(50)
+    s := 0
+    for n in k.kept { s += n.v }
+    try io.Println($k.kept.Len() " " $s " " $t)
 }

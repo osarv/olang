@@ -197,6 +197,36 @@ fn (lw Lowerer&) planOf(k mir.FnKey) typed.Plan& {
     return typed.Plan(0, 0, 0)
 }
 
+# O23a, B3i: the fact naming how many derived scopes body id takes - a whole-program fact (the scope pass's field
+# inference reads every module), so a module calling it or holding its code reads it through the table and is reused
+# only where the count is what it read. "" for a body that never takes any
+fn (lw Lowerer&) derivedFact(id I64) String {
+    return match lw.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): $"O23a " $lw.P.InstanceName(inst)
+        case typed.BodyOf.Dtor(t): $"O23a dtor " $lw.P.T.Canon(t)
+        case _: ""
+    }
+}
+
+# ...decided for every body, once the scope pass has placed them
+fn (lw mut Lowerer&) DecideDerived() {
+    for id in range lw.Plans.Len() {
+        name := lw.derivedFact(id)
+        if name != "": lw.P.Facts.Decide(name, $lw.Plans[id].DerivedP.Len(), false)
+    }
+}
+
+# ...read by the module of file, its code calling or holding the code of key
+fn (lw mut Lowerer&) ReadDerived(file I64, k mir.FnKey) {
+    id := match k {
+        case mir.FnKey.Body(b), mir.FnKey.Copied(b): I64(b)
+        case _: -1
+    }
+    if id < 0 or id >= lw.Plans.Len() or file < 0: return
+    name := lw.derivedFact(id)
+    if name != "": try lw.P.Facts.Read(file, name) catch { }
+}
+
 # O23a, C1: how many derived scopes the code a key names takes after its type's (typed.Plan's DerivedP)
 fn (lw Lowerer&) DerivedN(k mir.FnKey) I64 {
     return match k {
@@ -460,6 +490,7 @@ fn (ln mut lowering&) run() {
     }
     # O23a, C1: its derived scopes, passed after its type's (a body with any has no captures)
     if ln.planned { for k in range ln.plan.DerivedP.Len() { ln.F.Vars.Push(mir.VarKind.Derived(k)) } }
+    ln.L.ReadDerived(b.File, ln.F.Of)
     if ln.gapped {
         ln.L.Gaps.Push(Gap(ln.file, b.Sp, "an unknown type (a check error or gap): a local"))
         return
@@ -539,7 +570,17 @@ fn (ln mut lowering&) instance() mir.ScopeRef {
 # ---- emitting ----
 
 fn (ln mut lowering&) emit(s mir.Stmt&) {
-    if not ln.dead { ln.F.Add(ln.cur, s) }
+    if ln.dead: return
+    ln.F.Add(ln.cur, s)
+    # (O23a, B3i: a value registered with a scope is ended by its destructor's thunk, which passes its derived scopes
+    # null - their count read as a fact)
+    if s == mir.Stmt.RegisterDtor: ln.readDtor(s.t)
+}
+
+fn (ln mut lowering&) readDtor(ty types.TypeId) {
+    ln.L.index()
+    id := try ln.L.dtorOf.Get(ln.T.Repr(ty)) catch default -1
+    if id >= 0: ln.L.ReadDerived(ln.B.File, mir.FnKey.Body(typed.BodyId(I32(id))))
 }
 
 fn (ln mut lowering&) end(t mir.Term) {
@@ -667,6 +708,7 @@ fn (ln mut lowering&) passedFor(callee mir.Callee, fty types.TypeId, site typed.
         case mir.Callee.Fn(k, _): k
         case _: mir.FnKey.Init(0)
     }
+    ln.L.ReadDerived(ln.B.File, key)
     m := ln.L.DerivedN(key)
     if m == 0 or not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len(): return ln.passed(n, site)
     cp := ln.L.planOf(key)
@@ -4988,10 +5030,16 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(ln.L.CodeOf(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
+        case typed.FnVal.Named(body): ln.namedVal(body, ty, sp)
         case typed.FnVal.Lambda(body, caps, site): ln.lambda(body, caps, site, ty, sp)
         case typed.FnVal.Adapter(call, recv, site): ln.adapter(call, recv, site, ty, sp)
     }
+}
+
+# a named function as a value: its code, through a thunk passing its derived scopes null (O23a, read as a fact)
+fn (ln mut lowering&) namedVal(body typed.BodyId, ty types.TypeId, sp source.Span) mir.Operand {
+    ln.L.ReadDerived(ln.B.File, mir.FnKey.Body(body))
+    return ln.into(ty, mir.Rvalue.Closure(ln.L.CodeOf(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
 }
 
 fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, site typed.SiteId, ty types.TypeId
@@ -5440,6 +5488,7 @@ fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
     ln.L.index()
     id := try ln.L.dtorOf.Get(t.Repr(ty)) catch default -1
     if id >= 0 and t.Destructs(t.Repr(ty)) {
+        ln.L.ReadDerived(ln.B.File, mir.FnKey.Body(typed.BodyId(I32(id))))
         callee, fty := ln.bodyCallee(typed.BodyId(I32(id)))
         p0 := t.Items(t.Params(fty))[0]
         recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp)

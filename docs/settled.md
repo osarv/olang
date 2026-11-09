@@ -379,7 +379,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   calls (T22c, round 7, built 2026-11-09, mine within the user's decision):** an argument whose known functions do more
   than its parameter's type allows is followed into a twin of the callee, keyed by callee and the functions' bodies,
   judged by a copy of the scope pass; captures of those functions are derived scopes of the parameter, resolved at the
-  call (nothing built there - T22c's error); a lambda's captured local given one capture-less function value is followed
+  call (a temporary built there goes where the capture lives, a derived scope its caller passes - round 8; in a
+  lambda's body still T22c's error); a lambda's captured local given one capture-less function value is followed
   into its one judging; limits 16 twins a body, 4 deep, 2%/256; twins with a plan of their own get code of their own
   (`_twinN`, the root object) and no early freeing; programs accepted before make no twin, their IR byte-identical. The
   function-values
@@ -552,9 +553,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   docs/fnvalues.md, 2026-11-08):** chunks up to 128 KB in aligned slots of one reserved range, each header naming its
   scope, larger ones in a sorted table, `__olang_scope_of`; a build into a scope of several (O12, O25i), a derived one
   (O23a), an untraced one (O11) or a reference `Str` receiver's (E11c) is placed `Found` and built where the storage
-  it goes through is found - from a reference read again with no effect, or the call's own argument. Left: a value
-  argument holding two references and a task's result into such a place (o12spawntarget) are refused or, for C1's
-  derived case, still given the program's scope.
+  it goes through is found - from a reference read again with no effect, or the call's own argument. **Derived scopes
+  passed (O23a, C1, round 8, built 2026-11-09, mine within the user's decision):** a directly called function or a
+  destructor building into a derived scope takes it as a hidden scope parameter after its type's (`typed.Scope.Passed`,
+  `VarKind.Derived`); a call that knows the argument's binding, or a holder's drop knowing its value's, passes it, any
+  other call null, and the body then finds it (`__olang_scope_or`). Generators, lambdas, `export fn`s and become chains
+  take none. The measured loop (docs/fnvalues.md 11.1): 183 MB to 1.7 MB. Left: a value argument holding two
+  references and a task's result into such a place (o12spawntarget) are refused, or given the program's scope where
+  nothing passes or finds it.
 - **A reference never narrows (O25, the user's decision).** A local's type says where it lives (O25a); `:=` takes its
   initializer's scope; exactness is required only where something can be stored through (O25g). Copies of
   reference-holding values keep their references where the source's are (O25h).

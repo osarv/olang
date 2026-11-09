@@ -2629,10 +2629,13 @@ fn (s mut Scoper&) takesDerived(b I64) Bool {
 fn (s mut Scoper&) derivedScope(t Term, i I64) typed.Scope {
     if not s.derivedOk: return typed.Scope.Unset
     return match t {
-        case Term.Derived(p, w): typed.Scope.Passed(s.plan.DerivedSlot(p, w), i) if p >= 0 and not isCapCode(w) else typed.Scope.Unset
+        case Term.Derived(p, w): typed.Scope.Passed(s.plan.DerivedSlot(p, w), i) if p >= 0 else typed.Scope.Unset
         case _: typed.Scope.Unset
     }
 }
+
+# T22c, O23a: whether t is a capture of a function value followed into this body that the body takes as a derived scope
+fn (s mut Scoper&) capPassed(t Term) Bool { return capTerm(t) and s.derivedScope(t, -1) != typed.Scope.Unset }
 
 # ...the same where a root's scope is to be found at run time: Found(i) as derivedScope gives it, else as it is
 fn (s mut Scoper&) foundOr(t Term, found typed.Scope) typed.Scope {
@@ -8631,7 +8634,7 @@ fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
 # run-time term, else where the expression stands (O18a's last row)
 fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     if x is null { return Val.plain() }
-    d := dest if dest.Runs() or s.finds(dest) else s.here()
+    d := dest if dest.Runs() or s.finds(dest) or s.capPassed(dest) else s.here()
     # (the local a value is declared as, for the outermost expression of its initializer only - C2)
     whole, wholeStor, wholePart := s.caseLocal, s.caseStor, s.casePart
     s.caseLocal, s.caseStor, s.casePart = -1, false, false
@@ -9529,8 +9532,12 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
         a := c.Args[i]
         if landed[i] { continue }
         if owner[i] >= 0 and capTerm(beta[owner[i]]) and (s.isFresh(a) or s.isHeldFresh(a)) {
-            # (T22c: a capture of a function value followed into this body is no scope this call has - nothing is
-            # built there)
+            # (T22c, O23a: a capture of a function value followed into this body is a derived scope of it, passed by its
+            # caller where it knows it - built there; a lambda's has none, and nothing is built there)
+            if s.derivedScope(beta[owner[i]], -1) != typed.Scope.Unset {
+                vals[i] = s.val(a, beta[owner[i]])
+                continue
+            }
             if s.report { s.err(s.opTok(a), msgs.BuildIntoCapture()) }
             vals[i] = s.val(a, Term.None)
         } else if owner[i] >= 0 and (s.isFresh(a) or s.isHeldFresh(a)) {
@@ -12682,6 +12689,10 @@ fn (s mut Scoper&) buildSite(site typed.SiteId, t Term, sp source.Span) {
         s.plan.Built[I64(site)] = s.foundOr(t, s.plan.Find(s.foundRoot!))
         return
     }
+    if s.capPassed(t) {
+        s.plan.Built[I64(site)] = s.derivedScope(t, -1)
+        return
+    }
     u := t if t.Runs() else s.here()
     s.plan.Built[I64(site)] = s.scopeOf(u)
     s.buildsInto(u, sp, s.B!.File, sp)
@@ -12714,10 +12725,9 @@ fn (s mut Scoper&) buildsInto(t Term, sp source.Span, file I64, at source.Span) 
 # a build through a call at sp into term t, the callee building into its scope variable v there (E11c's note: the
 # callee's innermost site)
 fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
-    # (C1) bound to a derived scope - a field's binding of its own, which exists at no run time (O23a): the call is passed
-    # the program's scope there (the plan's Inert), which outlives whatever the field's referent lives in, so the callee
-    # builds there - never given back to the container's scope, which would ask the field's argument to live exactly
-    # where every instance does
+    # (C1) bound to a derived scope - a field's binding of its own (O23a): the call is passed the scope this body was
+    # passed for it, or the one found where the field's referent lives (the plan's Passed and Found) - never given back
+    # to the container's scope, which would ask the field's argument to live exactly where every instance does
     if isDerived(t) { return }
     known := callee >= 0 and v >= 0 and (s.sums[callee].Done or s.sums[callee].Judging) and v < s.sums[callee].BuildAt.Len()
     saved := s.standIn

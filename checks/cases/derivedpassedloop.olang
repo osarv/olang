@@ -1,0 +1,48 @@
+# check: run
+# O23a, C1 (docs/fnvalues.md 11.1): a destructor building through its instance's reference field (a Vec grown in the
+# Tally it refers to) is passed, by each holder's drop, the scope its value's construction bound that field to - the
+# loop turn's Tally's - so each turn's buffers go with the turn. Found from the Tally's address (a stack slot) it was
+# the program's scope, about 1 KB a turn kept to the end (183 MB over 200,000 turns)
+import "std/os"
+import "std/io"
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn turns(n I64) I64 {
+    total := 0
+    for _ in range n {
+        t := Tally()
+        for k in range 64 {
+            a Logged = Logged(k, t)
+            total += a.id
+        }
+        total += t.seen.Len()
+    }
+    return total
+}
+
+fn main() ? {
+    first := turns(1000)
+    before := peakKb()
+    rest := turns(15000)
+    grew := peakKb() - before
+    if first != 1000 * 2080 or rest != 15000 * 2080 { unreachable "sum" }
+    try io.Println("flat" if grew < 6000 else $"grew " $grew " kB")
+}

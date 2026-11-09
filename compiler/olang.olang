@@ -576,6 +576,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     fr := try placement(c, cfg, l.Root, kind == build.Kind.Module)
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
+    lw.DecideDerived()
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0 { try io.Print($fr.Report() $fr.Sc.PlacedReport()) catch io.Error { } }
