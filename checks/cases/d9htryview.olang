@@ -1,4 +1,5 @@
 # check: run
+# flags: -debug -sanitize
 # D9h: a view call's value passed on by a try and read where it stands (`m.Get(k)![i]`, a clause's
 # `catch { return }` too) is read as it is only where nothing evaluated while it is alive writes what it views: an
 # index that replaces the entry it reads (bump) reads the value the call gave, a copy of the entry as it was
