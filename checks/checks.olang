@@ -1252,7 +1252,7 @@ fn interp(r mut report&) ? Failed {
                  "-i prog.olang output", dir)
     # B3e: what a build refuses is not run - section 8's errors reported as a build reports them
     try r.expect(sh(dir, "\"$OLANG\" interpret refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
-    try r.expect(outOf(dir).Contains("error[O27") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
+    try r.expect(outOf(dir).Contains("error[O1b") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
     # ... and a construct the checker does not check yet stops it, as it stops a build (F11)
     try r.expect(sh(dir, "\"$OLANG\" build gap.olang > want.txt 2>&1") == 1, "gap.olang built", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret gap.olang > out.txt 2>&1") == 1, "-i gap.olang ran", dir)

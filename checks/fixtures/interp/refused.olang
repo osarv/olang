@@ -1,17 +1,29 @@
-# B3e: interpret refuses what a build refuses, section 8's errors included - a view of a match binding's own copy kept
-# in a list outside its clause (O27, S13b: that copy is never built longer for a view). (It was a view of a block's
-# resource until O27 built such storage where the view is kept, its destructor with it - docs/fnvalues.md section 10)
+# B3e: interpret refuses what a build refuses, section 8's errors included - a global keeping a lambda over what a
+# by-value parameter's payload refers to (O1b: a global holds only what lives as long as the program). (It was a view
+# of a match binding's own copy kept outside its clause until R3 built that copy where it is kept, and before that a
+# view of a block's resource until O27 built such storage where the view is kept - docs/refusals.md 5.3)
+type Node struct(v I32) {
+    v
+}
+
 type Box enum {
-    One(s Array<I64>)
+    Has(n Node&)
+    No
+}
+
+GF mut fn?&() I32 = null
+
+fn stash(b Box) {
+    match b {
+        case Box.Has(n) { GF = fn() { return n.v } }
+        case _ { }
+    }
 }
 
 fn main() {
-    keep := Vec<Array<I64>&>()
     for i in range 3 {
-        b := Box.One(Array<I64>[i, i])
-        match b {
-            case Box.One(s) { keep.Push(s[0:1]) }
-        }
+        inner Node& = Node(I32(i))
+        stash(Box.Has(inner))
     }
-    assert keep.Len() == 3
+    assert GF!() == 2
 }

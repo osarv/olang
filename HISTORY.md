@@ -35936,5 +35936,8 @@ or ended where its holder lets go, O15) stay in the frame. Not built: the caller
 callee keeps it, the entry copy left out (5.3's "the copy left out") - an optimization.
 
 All 15 are `check: run` programs reading back after an arena churn, under the scope sanitizer and `interpret` alike;
-no other must-fail case changed its diagnostic. Every lift only moves storage of a program refused before:
+no other must-fail case changed its diagnostic. One fixture did: checks/fixtures/interp/refused.olang (B3e, interpret
+refuses what a build refuses) kept a slice of a binding's copy in a list outside its clause, refused by O27 - now the
+binding's copy is built where the view is kept, as a local's is, and runs (5 6 7 read back after a churn, built and
+interpreted alike); the fixture is now o1blambdaglobal's shape (O1b, refusals question 1). Every lift only moves storage of a program refused before:
 compiler/'s IR (master's sources built by both compilers) and bench's are byte-identical to master's.
