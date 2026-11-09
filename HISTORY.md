@@ -35448,3 +35448,13 @@ only while worker was lowered. Once worker's record from the first runner build 
 (emit.olang, `reusedReachRoot`): when a reused module reaches the root through its imports, every root function is
 written, as a non-root module's are. Checked by the `reuse` scenario's new step: an import cycle cyca/cycb, each end
 tested in turn in one directory (checks/fixtures/reuse/cyca.olang, cycb.olang).
+
+### fuzz: the general generator's programs compile again (bug, 2026-11-09)
+
+`make fuzz SEED=1 COUNT=100` reported 34 programs that "do not compile at -d": the generator (fuzz/gen.olang) had not
+followed three rules. R23a: a helper giving a Bool took a writable List or Map of its caller's - such a helper now takes
+it read-only. D3b: a bulk loop putting a struct or enum value kept its counter's name though only the value's
+construction was used (the counter was marked read before the value was replaced), and a whole struct assignment
+could pick a loop's name, which nothing then read, so it was written `_` and the assignment named nothing - the
+counter is now read only where the value reads it, and a whole struct is assigned only to an assignable local. After
+the fix the 100 programs (3000 cases) run with no finding.

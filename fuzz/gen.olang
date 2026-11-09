@@ -1012,7 +1012,7 @@ fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
     if g.chance(35) and not g.inLambda {
         coll = g.pick(0, 19)
         if coll < 0 { coll = g.pick(0, 18) }
-        collW = coll >= 0
+        collW = coll >= 0 and t != TBool       # R23a: a Bool result beside a writable reference is refused
         if coll < 0 { coll = g.pick(0, 16) }
         if coll < 0 { coll = g.pick(0, 17) }
     }
@@ -1595,8 +1595,10 @@ fn (g mut Gen&) bulk(x String&, et I32, vty I32, ind String&) String& {
     i := g.push(3, -1, false, true)                # "range n" counts in its literal's I64 (T6a)
     n I64 = 9 + g.r(40)
     m I64 = 1 + g.r(5)
-    v String& = $Prims[et] "(" $g.use(i) " * " $m ")" if isNum(et) else "(" $g.use(i) " % " $(1 + g.r(3)) " == 0)"
-    if et >= 100 { v = g.construct(et, 2) }
+    # (a struct's or enum's value made alone: the counter is then never read, its name '_', D3b)
+    v String& = "(" $g.use(i) " % " $(1 + g.r(3)) " == 0)" if not isNum(et) and et < 100 else ""
+    if isNum(et): v = $Prims[et] "(" $g.use(i) " * " $m ")"
+    if et >= 100: v = g.construct(et, 2)
     e String& = ""
     if vty < 0 {
         e = $x ".Push(" $v ")"
@@ -1925,7 +1927,8 @@ fn (g mut Gen&) assignStmt(ind String&) String& {
     }
     if p == 1 {
         s := g.pick(0, 3)
-        if s >= 0 and g.vt[s] < 200 {
+        # (not a loop's name: one only assigned is never read, written '_', D3b)
+        if s >= 0 and g.vt[s] < 200 and g.vmut[s] {
             o := g.pick(g.vt[s], 0)
             if o >= 0 and o != s and g.chance(50) { return $ind $g.target(s) " = " $g.use(o) "\n" }
             return $ind $g.target(s) " = " $g.construct(g.vt[s], 3) "\n"
