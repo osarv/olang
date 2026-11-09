@@ -2108,7 +2108,7 @@ d59ff422cc197f42 c3df74a0ecf1a697 compiler/ast.olang
 76e002fe516379d0 23a5d5b8d2beea28 compiler/bindgen.olang
 6def0079548883d7 1bd21814bf095813 compiler/build.olang
 4f9f5d75a5784da7 7f46bd1270110a85 compiler/cabi.olang
-fabefcf2831cf7ff 333f1349c19fd021 compiler/check.olang
+2ad379dae7e865d6 d14134cd452f6cbf compiler/check.olang
 94c7f3b55fc68951 6e8d7c13cd955b3e compiler/cond.olang
 08c016b6fa677234 c409e181f4f7c754 compiler/definit.olang
 7889da610f9b16fe 0bd15fe0ec03de73 compiler/diag.olang
@@ -2123,7 +2123,7 @@ fb5073cfda2ee8c8 2a39e1840cf3941c compiler/eval.olang
 1131c7ea2dadf259 9021e4c95322f690 compiler/fix.olang
 db5319c37eb798b9 42ee183a18695dc2 compiler/fmt.olang
 517f6a12d7a5d28f d4154d7aeec495a0 compiler/free.olang
-4cbf9affe2fdbec1 2eb59f0db952f2d9 compiler/generic.olang
+d8f42880f6311ede 8ff4e41dc4710c29 compiler/generic.olang
 d37fd1089d3515a3 454f6967856dcc02 compiler/interp.olang
 a60d3ef1c94e04ef 8c13020a89e52588 compiler/listing.olang
 8613922735c561a6 952e78f6e48dd4d4 compiler/load.olang

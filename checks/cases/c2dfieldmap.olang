@@ -1,0 +1,35 @@
+# check: run
+# flags: -debug -sanitize
+# C2d, O16 (review A): a ":=" field holding a Map of unique values is the instance's slot - interpreted, the map's
+# storage was a reference's and Put read outside its array
+import "std/io"
+
+type File unique struct(fd I64) {
+    fd
+} destruct { assert fd >= 0 }
+
+type Holder struct(n I64) {
+    n
+    m := Map<I64, File>()
+}
+
+fn (h mut Holder&) Set(k I64) { h.m.Put(k, File(h.n + k)) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn main() {
+    h := Holder(1)
+    for k in range 10 { h.Set(k % 2) }
+    h.m.Put(5, File(50))
+    churn()
+    assert h.m.Len() == 3 and h.m.Ref(1)!.fd == 2 and h.m.Ref(5)!.fd == 50
+    io.Println("holder " $h.m.Len() " " $h.m.Ref(0)!.fd)!
+}

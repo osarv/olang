@@ -2844,7 +2844,8 @@ stored in it. A reference-shaped result writes
 no scope tag into the declaration: the local takes its
 initializer's exact scope (§8 O25a). A call's value with a destructor to run (O15), held where the call lands (O16,
 C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
-destructed when that scope closes; `x T = expr` takes the value itself, and its holder ends it (O15). An existing value of a unique type (T13b) - a place's, read where the initializer
+destructed when that scope closes; `x T = expr` takes the value itself, and its holder ends it (O15). A constructor's `:=` field takes the value
+itself as `x T = expr` does: the field is the instance's slot (C2d), and the instance its holder. An existing value of a unique type (T13b) - a place's, read where the initializer
 names it - declares a reference to that place, writable where the place may be written (`w := f` is `w mut File& =
 f`); a fresh one (a constructor's or a call's) its value. In a generic, a `:=` copying a value of a type its binding
 made unique is the generic's need, said at the call (T13b).

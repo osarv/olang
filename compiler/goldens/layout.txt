@@ -3151,7 +3151,7 @@ tests/shared:OpScale	4 4	%"tests/shared:OpScale"	{ i32 }	fields 0
 tests/shared:OpSeen	4 4	%"tests/shared:OpSeen"	{ i32 }	fields 0
 tests/shared:OpStep	4 4	%"tests/shared:OpStep"	{ i32 }	fields 0
 tests/shared:OpVec	8 4	%"tests/shared:OpVec"	{ i32, i32 }	fields 0,4
-tests/shared:OrderedHolder	8 8	%"tests/shared:OrderedHolder"	{ ptr }	fields 0
+tests/shared:OrderedHolder	16 8	%"tests/shared:OrderedHolder"	{ %"tests/shared:OrderedRes" }	fields 0
 tests/shared:OrderedRes	16 8	%"tests/shared:OrderedRes"	{ i64, ptr }	fields 0,8
 tests/shared:OrderedRes&	8 8	ptr	-	-
 tests/shared:Outer	8 8	%"tests/shared:Outer"	{ ptr }	fields 0
