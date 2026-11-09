@@ -101,6 +101,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     ViewLog Vec<String&>
     gen mir.GenInfo = mir.GenInfo()   # the program's generational types and weak fields (Gen), once read
     genRead Bool = false
+    genDecided Map<I64, Bool>         # the declarations whose T13d fact is decided (DecideGen)
 }
 
 # T13d, B3i (docs/wholeprog.md kind D): whether a type is generational and which of its fields are weak - a
@@ -139,6 +140,7 @@ fn (lw mut Lowerer&) decideGen(mi I64, ds Array<ast.Decl&>&) {
                 ei := lw.P.TypeEntry(mi, td.Name)
                 if ei < 0: continue
                 k := I64(lw.P.DeclFor(mi, ei))
+                lw.genDecided.Put(k, true)
                 lw.P.Facts.Decide($"T13d " $lw.declName(k), lw.genValue(k), true)
             }
             case ast.Decl.If(_, ti) {
@@ -160,6 +162,8 @@ fn (lw mut Lowerer&) ReadGen(file I64) {
         return
     }
     for d in g.Asked.Keys() {
+        # (a type no module's source declares - a C header's struct, never named weakly (T2d) - has no fact)
+        if not lw.genDecided.Has(d): continue
         name := $"T13d " $lw.declName(d)
         lw.P.Facts.Decide(name, lw.genValue(d), true)
         try lw.P.Facts.Read(file, name) catch { }
