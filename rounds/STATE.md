@@ -44,3 +44,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - R1 merged (tree == its verified tip), pushed.
 - W2 merged, verified, pushed. Step 2 done.
 - Usage: seven_day 0.56 at 2026-11-08 21:25 CET (resets Sat 11-14 05:00 CET). One agent at a time now, to calibrate %/agent. F7 started (wt-lending, opus medium).
+- F7 merged, verify+scopesan+fuzz free (300, 0 findings) pass, pushed. Found: make fuzz generator emits R23a-violating programs (34/100 findings, stale gen); runner.olang link failure in reused build/ (B3i stale object?).
