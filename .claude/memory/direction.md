@@ -58,6 +58,12 @@ one rule that composes over special cases; fix rough edges found while building.
   jump needs the user's sign-off; the system cannot change its objective, its evaluation or the oversight; everything is
   logged so changes can be traced and undone.
 
+- **The agent's architecture (the user, 2026-11-09):** "we are going to build a more traditional LLM with a very
+  strong reasoning kernel of a small number of GB with a lot of external tooling and RAG. I want to scale reasoning, not
+  size. I also know about methods where LLMs become good at directly updating model parameters. We can go that
+  direction as well. I want strong reasoning." Settling networks become a research arm, measured head-to-head; oann is
+  general first (autodiff, transformers, state-space models). Survey: oagent/papers/survey-reasoning.md.
+
 ## Reading the user
 
 - **Dictated messages** (2026-10-08, 2026-11-03): read for intent. Expect dictation errors, fragments, restarts and
