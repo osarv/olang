@@ -100,6 +100,43 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     ViewLog Vec<String&>
     gen mir.GenInfo = mir.GenInfo()   # the program's generational types and weak fields (Gen), once read
     genRead Bool = false
+    genDecided Bool = false
+}
+
+# T13d, B3i (docs/wholeprog.md kind D): which types are generational and which fields weak - a whole-program fact,
+# every module's weak references read before any body is checked - decided once as the canonical text of both, by
+# declaration identity
+GenFact String& = "T13d"
+
+fn (lw mut Lowerer&) genText() String {
+    rows Vec<String&>
+    for k in lw.P.Gens.Keys() { rows.Push($"gen " $lw.declName(k)) }
+    for k in lw.P.WeakSlots.Keys() {
+        at := try k.Find(" ") catch { continue }
+        d := try k[:at].ParseInt() catch { continue }
+        rows.Push($"weak " $lw.declName(d) " " $k[at + 1:])
+    }
+    rows.Sort(fn(a String&, b String&) Bool { return a < b })
+    return rows.Join("; ")
+}
+
+# a declaration as other programs name it: its module's identity and its name
+fn (lw mut Lowerer&) declName(d I64) String {
+    m := lw.P.T.DeclModule(types.DeclId(I32(d)))
+    mod := lw.P.L.Mods[m].Identity if m >= 0 and m < lw.P.L.Mods.Len() else "?"
+    return $mod "." $lw.P.T.Names.Text(lw.P.T.DeclName(types.DeclId(I32(d))))
+}
+
+# ...read by the module of file, whose code allocates and stores by it: a module's record is reused only where no type
+# became generational or stopped being, and no field weak, since it was written - a "weak" added or removed lowers every
+# module again, the cost stated in HISTORY (rounds 2 and 3)
+fn (lw mut Lowerer&) ReadGen(file I64) {
+    if file < 0: return
+    if not lw.genDecided {
+        lw.genDecided = true
+        lw.P.Facts.Decide(GenFact, lw.genText(), true)
+    }
+    try lw.P.Facts.Read(file, GenFact) catch { }
 }
 
 # the program's generational types and weak fields (T13d, T2d), read from the checker's whole-program scan once it has
@@ -510,6 +547,7 @@ fn (ln mut lowering&) run() {
     # O23a, C1: its derived scopes, passed after its type's (a body with any has no captures)
     if ln.planned { for k in range ln.plan.DerivedP.Len() { ln.F.Vars.Push(mir.VarKind.Derived(k)) } }
     ln.L.ReadDerived(b.File, ln.F.Of)
+    ln.L.ReadGen(b.File)
     if ln.gapped {
         ln.L.Gaps.Push(Gap(ln.file, b.Sp, "an unknown type (a check error or gap): a local"))
         return
