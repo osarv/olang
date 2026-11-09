@@ -2567,6 +2567,9 @@
 | status 0
 === run o4bvalueparamgeneric.olang
 | status 0
+=== run o8dfeed.olang
+| status 0
+| 6555 n33 87 29
 === run o8dglobal.olang
 | status 0
 | 3007 450 126 1378
