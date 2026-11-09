@@ -7197,14 +7197,14 @@ type Clone struct(Base mir.FnKey, Param I64, Code mir.FnKey, Ty types.TypeId) {
 }
 
 # the limits (4.4): clones of one callee; a hand-on chain's depth; the clones' size, in percent of the program's IR
-# (but CloneFloor bytes in any program: a small one's 3% would not hold one sort's chain, ~43 KB), a MIR instruction
+# (but CloneFloor bytes in any program: a small one's 3% would not hold a sort's chain, ~43 KB, twice), a MIR instruction
 # estimated at CloneBytes of it (the prelude's measured 63); a callee below CloneSmall instructions calling through the value
 # only itself (LLVM inlines it whole, the call then direct); a body of more than CloneBlocks blocks is never cloned
 CloneMax I64 = 8
 CloneDepth I64 = 4
 ClonePct I64 = 3
 CloneBytes I64 = 64
-CloneFloor I64 = 64 << 10
+CloneFloor I64 = 256 << 10
 CloneSmall I64 = 32
 CloneBlocks I64 = 4000
 
@@ -7506,9 +7506,9 @@ fn (lw mut Lowerer&) CloneOf(base mir.FnKey, param I64, code mir.FnKey, ty types
 }
 
 # what cloning k for its parameter p pays (4.4): the bodies cloned with it - k for p, and the callees it hands p on to
-# unchanged that pay, at most CloneDepth deep - pushed onto out, and how deep in loops the calls made direct are (the
+# unchanged that pay, at most CloneDepth deep - pushed onto out (the plan's from start), and how deep in loops the calls made direct are (the
 # loops of each hand on the way added); -1 where nothing pays, out then as it was
-fn (lw mut Lowerer&) payPlan(k mir.FnKey, p I64, d I64, out mut Vec<pair.Pair<mir.FnKey, I64>>&) I64 {
+fn (lw mut Lowerer&) payPlan(k mir.FnKey, p I64, d I64, out mut Vec<pair.Pair<mir.FnKey, I64>>&, start I64) I64 {
     si := lw.cloneSum(k)
     ok := lw.cloneSums[si].Ok
     if not ok or p >= lw.cloneSums[si].Loop.Len() or lw.cloneSums[si].Loop[p] < 0: return -1
@@ -7518,8 +7518,8 @@ fn (lw mut Lowerer&) payPlan(k mir.FnKey, p I64, d I64, out mut Vec<pair.Pair<mi
     mark := out.Len()
     out.Push(pair.Pair<mir.FnKey, I64>(k, p))
     for h in hands {
-        if h.From != p or d >= CloneDepth or planHas(out, h.To, h.At): continue
-        sub := lw.payPlan(h.To, h.At, d + 1, out)
+        if h.From != p or d >= CloneDepth or planHas(out, start, h.To, h.At): continue
+        sub := lw.payPlan(h.To, h.At, d + 1, out, start)
         if sub > 0 and sub + h.Depth > best: best = sub + h.Depth
     }
     if best <= 0 {
@@ -7534,9 +7534,9 @@ fn (lw mut Lowerer&) payPlan(k mir.FnKey, p I64, d I64, out mut Vec<pair.Pair<mi
     return best
 }
 
-fn planHas(out Vec<pair.Pair<mir.FnKey, I64>>&, k mir.FnKey, p I64) Bool {
-    for x in out {
-        if x.First == k and x.Second == p: return true
+fn planHas(out Vec<pair.Pair<mir.FnKey, I64>>&, start I64, k mir.FnKey, p I64) Bool {
+    for i in range start, out.Len() {
+        if out[i].First == k and out[i].Second == p: return true
     }
     return false
 }
@@ -7551,7 +7551,7 @@ fn (lw mut Lowerer&) DecideClones(sites Vec<CloneSite>&, program I64) Array<I64>
     from := Array<I64>(n + 1)
     for i in range n {
         st := sites[i]
-        ben[i] = lw.payPlan(st.Callee, st.At, 0, plans)
+        ben[i] = lw.payPlan(st.Callee, st.At, 0, plans, plans.Len())
         from[i + 1] = plans.Len()
     }
     order Vec<I64>
