@@ -8569,7 +8569,9 @@ each place that lets go of storage made for it in code that runs again (a loop, 
 keeps it until its scope closes - `path:line:column: memory: 'PLACE' keeps what it lets go of until SCOPE closes`, at
 the statement letting go, or `removed elements of 'COLLECTION' are kept until SCOPE closes` for what a collection's
 removals let go of - then a `note:` row at the reason: the store of a reference into it elsewhere (condition 2), the
-value that was not made for it (condition 1), the view in use across the let-go (condition 6), the task or the
+value that was not made for it (condition 1), the view in use across the let-go (condition 6) - where the let-go is a
+call through a function value nothing is known of, or a call given one, saying so (`which may let go of anything: it is
+given a function value not followed whose type does not promise 'pure', and calls through it`) -, the task or the
 destructor (conditions 3 and 4); and last a line counting the places and how many free what they let go of at once. Only
 the program's places are reported - fields of its types, and what its collections hold - not those inside the
 library's collections, whose storage goes with what holds them. SCOPE is the scope of what the place's expression
