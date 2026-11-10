@@ -23,6 +23,8 @@ import "typed"
 import "scope"
 import "eval"
 import "interp"
+import "views"
+import "records"
 import "explain"
 import "build"
 import "fmt"
@@ -39,6 +41,9 @@ import cpoll "poll.h"
 # evaluable (X) - each null where an earlier pass stopped it
 type Analysis struct(L mut load.Loader&) {
     L
+    # B3i: each module's key, where the analysis keeps and takes records as a build does (Analyze's kept) - the language
+    # server's checks of a file between edits take what the last one left, as builds in one directory do; empty for none
+    Keys Array<String&>& = Array<String&>(0)
     C mut typecheck.Checker?& = null
     Sc mut scope.Scoper?& = null
     X mut interp.Exec?& = null
@@ -52,7 +57,8 @@ fn RealOf(path String&) String {
 
 # the program root is the root of, checked as "olang test" checks it (its tests too) - with each file of overlay (by
 # real path) read from there instead of from disk - and, where held is true, held to section 8 (Hold)
-fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&, overlay Map<String&, String&>&, held Bool = true) mut Analysis& {
+fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&, overlay Map<String&, String&>&, held Bool = true
+    kept Bool = false) mut Analysis& {
     f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
@@ -64,13 +70,24 @@ fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&
     Log($"loaded " $root " (" $l.Mods.Len() " modules) in " $(time.Since(t0) / 1000000) " ms")
     a mut Analysis& = Analysis(l)
     if l.Root < 0 or d.HasFatal() { return a }
-    c mut typecheck.Checker& = interp.Analyze(l, true)
+    # (kept: the records under each module's key - the front records' summaries (W3a), and Hold's judgings (W3b) - as
+    # "olang test" of the same root keeps them in the same directory)
+    fr mut views.Kept& = views.Kept()
+    fr.Later = kept
+    c mut typecheck.Checker& = interp.Analyze(l, true, fr)
     a.C = c
+    if kept { a.Keys = records.ModuleKeys(l, cfg, true) }
+    if c.ViewsDue {
+        records.FrontRecords(l, cfg, a.Keys, fr)
+        interp.JudgeViews(c, fr)
+    }
     asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     clean := d.Errors() == 0
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
-    if clean { interp.Bake(c) }
+    baked mut Map<I64, eval.Image>& = Map<I64, eval.Image>()
+    if clean { baked = interp.Bake(c) }
+    if clean and kept { records.KeepFront(l, c, cfg, a.Keys, fr, baked) }
     Log($"checked in " $(time.Since(t0) / 1000000) " ms")
     if held { Hold(a, cfg) }
     return a
@@ -81,15 +98,35 @@ fn Hold(a mut Analysis&, cfg mut build.Config&) {
     if a.C is null or a.Sc is not null or a.L.Diags.HasFatal() { return }
     t0 := time.Now()
     c := a.C
-    sc mut scope.Scoper& = scope.Scoper(c!.P, c!.Bodies)
-    sc.InstNote = fn(inst I64) String { return c!.InstNote(inst) }
-    sc.Spell = fn(t types.TypeId) String { return c!.Ty(t) }
+    sc mut scope.Scoper& = scoper(c!)
+    # B3i (W3b): the judgings the records give, where the analysis keeps them - and where one taken has to be judged
+    # again, the judging made over without them, from the marks the checker left (as a build's placement does)
+    loaded Map<I64, String&>
+    rec := a.Keys.Len() > 0
+    if rec { loaded = records.ScopeRecords(c!, cfg, a.Keys, sc) }
+    marks := sc.FieldMarks()
+    mark := c!.P.L.Diags.Count()
     sc.Run()
-    Log($"held to section 8 in " $(time.Since(t0) / 1000000) " ms")
+    if sc.Restart {
+        c!.P.L.Diags.Forget(mark)
+        sc.SetFieldMarks(marks)
+        sc = scoper(c!)
+        sc.DiskWrite = rec
+        sc.Run()
+    }
+    if rec and c!.P.L.Diags.Errors() == 0 and sc.Gaps.Len() == 0 { records.KeepScope(c!, cfg, a.Keys, sc, loaded) }
+    Log($"held to section 8 in " $(time.Since(t0) / 1000000) " ms (" $sc.DiskTaken " judgings from records)")
     a.Sc = sc
     x mut interp.Exec& = interp.Exec(c!.P, c!.Bodies, eval.Mode.Compile)
     x.Faulty = c!.Faulty
     a.X = x
+}
+
+fn scoper(c mut typecheck.Checker&) mut scope.Scoper& {
+    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
+    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
+    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
+    return sc
 }
 
 # the module read from the file at real path, -1 for none

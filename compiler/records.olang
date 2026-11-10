@@ -1,0 +1,382 @@
+# records - what the front end keeps of a module between builds (B3i, the incremental front end; docs/wholeprog.md
+# 10.2, rounds W3a and W3b): each module's key, the facts its checking read, and its records - the front record (the
+# checker's summaries, signatures and baked values) and the scope pass's (its judgings). Read and written by a build
+# (olang.olang) and by the language server's analysis (session.olang) alike, so an editor's checks and the builds of
+# one directory keep and take the same records. The IR's records are the build's alone (olang.olang, "objects reused")
+
+import "std/os"
+import "std/io"
+import "build"
+import "load"
+import "eval"
+import "views"
+import "scope"
+import "typed"
+import "types"
+import "generic"
+import typecheck "check"
+
+# what every module's object depends on beyond the modules it reaches: this compiler (where it is, its size and when
+# it was made), the build's modes, target and constants, where it runs and where the standard library is
+fn BuildInputs(cfg build.Config&, tests Bool) String {
+    exe := try os.RealPath("/proc/self/exe") catch default ""
+    info := try os.FileInfo.Stat(exe) catch os.Error { return "" }
+    cwd := try os.Cwd() catch default ""
+    t := cfg.Target
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" bench" if cfg.Bench else "") "\n" $
+            t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
+}
+
+# each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
+# paths and those of every module its imports reach, in their order, and the prelude's. The key says which record a
+# module may take; its reader record (readerRecords), which of the records under that key holds for this program
+fn ModuleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>& {
+    mods Vec<mut load.Module&>& = l.Mods
+    n := mods.Len()
+    keys mut Array<String&>& = Array<String&>(n, "")     # "" for none
+    # under -debug every object's debug information names the program's compile unit, which is the root's file (B2e):
+    # there a module's object is the root's program's as well as its own
+    base := BuildInputs(cfg, tests)
+    if base == "" { return keys }
+    inputs := $base $("\nroot " $mods[l.Root].Identity " " $mods[l.Root].Path if cfg.Debug else "")
+    hashOf := Array<String&>(n, "")
+    for m in range n {
+        md := mods[m]
+        parts Vec<String&>
+        parts.Push(md.Identity)
+        parts.Push(md.Path)
+        parts.Push(md.Real)
+        parts.Push(md.Src!.Text if md.Src is not null else "")
+        # E38: the files its embeds read are part of what its object is made from
+        for e in md.Embeds { parts.Push($"embed " $e " " $build.IrHash(String(l.Embedded(e)))) }
+        hashOf[m] = build.HashOf(parts)
+    }
+    for m in range n {
+        if m == l.Root { continue }
+        parts Vec<String&>
+        parts.Push(inputs)
+        parts.Push(hashOf[m])
+        for x in Reached(mods, m) { parts.Push($mods[x].Identity " " $hashOf[x]) }
+        keys[m] = build.HashOf(parts)
+    }
+    return keys
+}
+
+# each module's reader record (B3i, facts.olang), "" for the root's and for none: the whole-program facts its code read
+# - the checker's and lowering's (lower.mutGlobals) - and those its imports' code read that an importer's code may carry
+# (a G42 fact baked into a global, K2), each "read VALUE NAME", sorted - asked once lowering is done
+fn ReaderRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
+    mods Vec<mut load.Module&>& = l.Mods
+    reads mut Array<String&>& = Array<String&>(mods.Len(), "")
+    # each module's own reads and those an importer carries, asked once each
+    own := Array<String&>(mods.Len(), "")
+    carried := Array<String&>(mods.Len(), "")
+    for x in range mods.Len() {
+        if mods[x].File < 0: continue
+        own[x] = c.P.Facts.Record(mods[x].File, true)
+        carried[x] = c.P.Facts.Record(mods[x].File, false)
+    }
+    for m in range mods.Len() {
+        if m == l.Root { continue }
+        lines Vec<String&>
+        for x in Reached(mods, m) {
+            rec := own[x] if x == m else carried[x]
+            if rec != "": lines.Push(rec)
+        }
+        reads[m] = SortedLines(lines.Join("\n"))
+    }
+    return reads
+}
+
+# the modules m reaches through its imports, itself and the prelude's included, in the loader's order
+fn Reached(mods Vec<mut load.Module&>&, m I64) Vec<I64> {
+    n := mods.Len()
+    seen := Array<Bool>(n)
+    order Vec<I64>
+    work Vec<I64>
+    work.Push(m)
+    for p in range n {
+        if mods[p].Prelude { work.Push(p) }
+    }
+    for work.Len() > 0 {
+        x := try work.Pop() catch { break }
+        if seen[x] { continue }
+        seen[x] = true
+        order.Push(x)
+        for im in mods[x].Imports {
+            if im.Target >= 0 and not seen[im.Target] { work.Push(im.Target) }
+        }
+    }
+    order.Sort(fn(a I64, b I64) Bool { return a < b })
+    return order
+}
+
+# text's lines sorted, each once
+fn SortedLines(text String&) String {
+    if text == "": return ""
+    lines := text.Lines().ToVec()
+    lines.Sort(fn(a String&, b String&) Bool { return a < b })
+    out Vec<String&>
+    for x in lines {
+        if out.Len() == 0 or out[out.Len() - 1] != x: out.Push(x)
+    }
+    return out.Join("\n")
+}
+
+# ---- the front end's records (B3i, the incremental front end) ----
+#
+# Beside a module's record of its IR, a record of what checking it found: DIR/rec/NAME.KEY.f<HASH>, under the same key
+# (its text, the texts of every module it reaches, the build's inputs) and, as the IR's record is, named by a hash of
+# the facts its checking read ("read VALUE NAME", facts.olang). It holds each of its bodies' M19g summaries (views.olang);
+# a later build whose table gives every fact read the value read takes them, and walks none of those bodies. A record
+# is written only from a program that checked cleanly, so what it gives says nothing wrong. OLANG_CHECKINCR set: every
+# body is walked all the same and each summary taken compared with the one found, a difference said on the standard
+# error and the build ending with 3
+
+fn frontStem(cfg build.Config&, identity String&, key String&) String {
+    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20] ".f"
+}
+
+# the records under each module's key, as candidates the checker takes where their reads hold (views.Kept.TakeHolding)
+fn FrontRecords(l mut load.Loader&, cfg build.Config&, keys Array<String&>&, kept mut views.Kept&) {
+    names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return }
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0 { continue }
+        stem := frontStem(cfg, l.Mods[m].Identity, keys[m])
+        lead := stem[cfg.Dir.Len() + 5:]
+        for name in names {
+            if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
+            cand := try frontRecord($cfg.Dir "/rec/" $name, l.Mods[m].File) catch Stale { continue }
+            kept.Cands.Push(cand)
+        }
+    }
+}
+
+# the front record at path, for the module of file: whole (its sum the hash of what is before it) or not read at all
+fn frontRecord(path String&, file I64) views.Cand ? Stale {
+    text := try os.ReadFile(path) catch os.Error { error Stale }
+    sumAt := try text.Find("\nsum ") catch { error Stale }
+    if text[sumAt + 5:].Trim() != build.IrHash(text[:sumAt + 1]): error Stale
+    lines := text[:sumAt].Lines().ToVec()
+    if lines.Len() < 2 or lines[0] != "olang front record" or lines[lines.Len() - 1] != "end": error Stale
+    cand := views.Cand(file)
+    for i in range 1, lines.Len() - 1 {
+        line := lines[i]
+        if line.StartsWith("read ") {
+            cand.Reads.Push(line)
+        } else if line.StartsWith("body ") {
+            cand.Bodies.Push($line[5:])
+        } else if line.StartsWith("sig ") or line.StartsWith("baked ") {
+            cand.Others.Push(line)
+        } else {
+            error Stale
+        }
+    }
+    return cand
+}
+
+# the front records of the modules this build checked afresh, on a program that checked cleanly: each with the facts
+# its checking read (those its imports' code carries included, as the IR's record has them)
+fn KeepFront(l mut load.Loader&, c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, kept mut views.Kept&
+    baked Map<I64, eval.Image>&) {
+    if kept.Afresh { checkOthers(l, c, kept, baked) }
+    if kept.Lines.Len() == 0 or keys.Len() == 0 { return }
+    reads := ReaderRecords(l, c)
+    try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
+    pid := build.Pid()
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0: continue
+        lines := try kept.Lines.Get(l.Mods[m].File) catch { continue }
+        if lines.Len() == 0: continue
+        b := StringBuilder()
+        b.Push("olang front record\n")
+        if reads[m] != "": b.Push($reads[m] "\n")
+        for x in lines { b.Push($"body " $x "\n") }
+        for x in others(l, c, m, baked) { b.Push($x "\n") }
+        b.Push("end\n")
+        body := b.ToString()
+        PutFile($frontStem(cfg, l.Mods[m].Identity, keys[m]) $build.IrHash(reads[m])[:16], $body "sum " $build.IrHash(body) "\n", pid)
+    }
+}
+
+# what a module's front record keeps beside its summaries, sorted: "sig" and each of its functions of no type variable
+# with its signature (an inferred error set written out, as explain writes it, B11b), "baked" and each of its globals'
+# baked values - a
+# check of the records' keys: under OLANG_CHECKINCR a record taken must give what this program finds
+fn others(l mut load.Loader&, c mut typecheck.Checker&, m I64, baked Map<I64, eval.Image>&) Vec<String&> {
+    out Vec<String&>
+    for f in range c.P.FnCount() {
+        if c.P.FnModule(f) != m or c.P.VarCount(generic.FnOwner(f)) > 0: continue
+        line := sigLine(c, f)
+        if line != "": out.Push(line)
+    }
+    for e in baked {
+        match c.Bodies[e.Key].Of {
+            case typed.BodyOf.Global(gm, name) {
+                if gm == m: out.Push($"baked " $l.Names.Text(name) " " $imageText(l, e.Value))
+            }
+            case _ { }
+        }
+    }
+    out.Sort(fn(a String&, b String&) Bool { return a < b })
+    return out
+}
+
+# a function's signature as a record line, "" for one not checked: "sig NAME@OFFSET TYPE", with " ? ERRORS" where its set
+# is inferred - only spelled, nothing made in the type table
+fn sigLine(c mut typecheck.Checker&, f I64) String {
+    inst := c.P.FnInstance(f, types.ListId(0))
+    body := c.BodyOfInstance(inst)
+    if body < 0: return ""
+    sig := c.P.InstanceSig(inst)
+    b := StringBuilder()
+    b.Push($"sig " $c.P.L.Names.Text(c.P.FnDecl(f).Name) "@" $c.Bodies[body].Sp.Start " " $c.Ty(sig))
+    if c.InfersErrors(sig) {
+        b.Push(" ?")
+        for e in c.P.T.Items(c.ErrorsOf(body)) { b.Push($" " $c.Ty(e)) }
+    }
+    return b.ToString().Replace("\n", " ")
+}
+
+# a baked global's value as words: each blob's bytes in hex, its alignment, whether constant, and each reference it
+# holds - to a blob of its own or into another global's (by that global's module and name)
+fn imageText(l load.Loader&, img eval.Image&) String {
+    b := StringBuilder()
+    for bl in img.Blobs {
+        b.Push($"[" $bl.Align $("c" if bl.Constant else "") " ")
+        for x in bl.Bytes { b.Push(hexByte(x)) }
+        for i in range bl.At.Len() {
+            b.Push($" @" $bl.At[i] ">" $bl.To[i] "+" $bl.Off[i])
+            if bl.To[i] < 0 and i < bl.ExtMod.Len() and bl.ExtMod[i] >= 0 {
+                b.Push($":" $l.Mods[bl.ExtMod[i]].Identity "." $l.Names.Text(bl.ExtName[i]) "#" $bl.ExtIdx[i])
+            }
+        }
+        b.Push("]")
+    }
+    if img.Mutable: b.Push(" mutable")
+    return b.ToString()
+}
+
+fn hexByte(x U8) String {
+    digits := "0123456789abcdef"
+    return $digits[I64(x >> 4):I64(x >> 4) + 1] $digits[I64(x & 15):I64(x & 15) + 1]
+}
+
+# OLANG_CHECKINCR: each record taken against this program's signatures and baked values for its module
+fn checkOthers(l mut load.Loader&, c mut typecheck.Checker&, kept mut views.Kept&, baked Map<I64, eval.Image>&) {
+    for m in range l.Mods.Len() {
+        ci := try kept.Files.Get(l.Mods[m].File) catch { continue }
+        had := kept.Cands[ci].Others
+        now := others(l, c, m, baked)
+        if had.Join("\n") == now.Join("\n"): continue
+        for x in now {
+            if x not in had: kept.Stale.Push($l.Mods[m].Identity ": found '" $x "', not in its record")
+        }
+        for x in had {
+            if x not in now: kept.Stale.Push($l.Mods[m].Identity ": its record says '" $x "', not found")
+        }
+    }
+    if kept.Stale.Len() > 0 { CheckIncrFailed(kept) }
+}
+
+# OLANG_CHECKINCR found a record giving what checking afresh does not: each difference said, the build ending with 3
+fn CheckIncrFailed(kept views.Kept&) {
+    for x in kept.Stale { try io.PrintErr($"olang: incremental check: " $x "\n") catch io.Error { } }
+    try io.PrintErr($"olang: incremental check: " $kept.Stale.Len() " of " $kept.Taken " kept summaries differ\n") catch io.Error { }
+    os.Exit(3)
+}
+
+# text written at path by way of a temporary renamed into place: whether it is there
+fn PutFile(path String&, text String&, pid I32) Bool {
+    tmp := $path "." $pid ".tmp"
+    try os.WriteFile(tmp, text) catch os.Error { return false }
+    try os.Rename(tmp, path) catch os.Error {
+        try os.Remove(tmp) catch os.Error { }
+        return false
+    }
+    return true
+}
+
+# ---- the scope pass's records (B3i, the incremental front end, part 2) ----
+#
+# Beside a module's front record, DIR/rec/NAME.KEY.s<HASH>: the judgings of the scope pass (scope.olang's "judgings
+# kept in records") of the components whose first body is the module's, under its key and named by the facts its
+# checking read, as the front record is. A record is read only whole (its sum right) and where every fact it names reads
+# as it did; each judging in it is then taken only where everything it read is as it was (scope.diskFor). Written only
+# from a program the pass found nothing wrong in, and only where it says something the record read did not
+
+fn scopeStem(cfg build.Config&, identity String&, key String&) String {
+    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20] ".s"
+}
+
+# a scope record's sum, which finds it damaged: its length and its text's hash (String.Hash - a record is large, and read
+# every build; it guards against damage, not against a forger)
+fn sumOf(text String&) String { return $text.Len() "-" $U64(text.Hash()) }
+
+# the records under each module's key, their judgings given to the pass: by file, the text of the record read
+fn ScopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, sc mut scope.Scoper&) Map<I64, String&> {
+    loaded Map<I64, String&>
+    l := c.P.L
+    sc.DiskWrite = true
+    sc.DiskAfresh = (try os.Env("OLANG_CHECKINCR") catch default "") != ""
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0 { continue }
+        sc.Keyed.Put(l.Mods[m].File, true)
+        sc.FileKeys.Put(l.Mods[m].File, keys[m])
+    }
+    names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return loaded }
+    sc.DiskOn = true
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0 { continue }
+        stem := scopeStem(cfg, l.Mods[m].Identity, keys[m])
+        lead := stem[cfg.Dir.Len() + 5:]
+        for name in names {
+            if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
+            text := try scopeRecord(c, $cfg.Dir "/rec/" $name) catch Stale { continue }
+            at := try text.Find("\nrun ") catch default text.Len() - 1
+            try sc.AddRecord(l.Mods[m].File, text[at + 1:]) catch typed.Unwritable { continue }
+            sc.Eligible.Put(l.Mods[m].File, true)
+            loaded.Put(l.Mods[m].File, text)
+            break
+        }
+    }
+    return loaded
+}
+
+# the record at path, whole and with every fact it names reading as it did: the lines before its sum
+fn scopeRecord(c mut typecheck.Checker&, path String&) String ? Stale {
+    text := try os.ReadFile(path) catch os.Error { error Stale }
+    # (the last line's sum: a judging's summaries are "sum" lines too)
+    sumAt := (try text.Find("\nend\nsum ") catch { error Stale }) + 4
+    if text[sumAt + 5:].Trim() != sumOf(text[:sumAt + 1]): error Stale
+    body := text[:sumAt + 1]
+    if not body.StartsWith("olang scope record\n") or not body.EndsWith("end\n"): error Stale
+    # (the facts its checking read come before its first judging, whose "read" lines are summaries)
+    reads Vec<String&>
+    for line in body.Lines() {
+        if line.StartsWith("run "): break
+        if line.StartsWith("read "): reads.Push(line)
+    }
+    if not c.P.Facts.Holds(reads.ToArray()): error Stale
+    return body[:body.Len() - 4]
+}
+
+# the records of a program the pass found nothing wrong in: each module's judgings, with the facts its checking read,
+# written where they are not what was read
+fn KeepScope(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, sc mut scope.Scoper&, loaded Map<I64, String&>&) {
+    texts := sc.Records()
+    if texts.Len() == 0 { return }
+    l := c.P.L
+    reads := ReaderRecords(l, c)
+    try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
+    pid := build.Pid()
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0: continue
+        runs := try texts.Get(l.Mods[m].File) catch { continue }
+        head := $"olang scope record\n" $($reads[m] "\n" if reads[m] != "" else "")
+        body := $head $runs
+        if body == (try loaded.Get(l.Mods[m].File) catch default ""): continue
+        whole := $body "end\n"
+        PutFile($scopeStem(cfg, l.Mods[m].Identity, keys[m]) $build.IrHash(reads[m])[:16], $whole "sum " $sumOf(whole) "\n", pid)
+    }
+}

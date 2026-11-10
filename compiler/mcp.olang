@@ -129,7 +129,7 @@ fn run(name String&, file String&, hasText Bool, text String&, item String&, cfg
         return textResult(formatted, false)
     }
     d mut diag.Diagnostics& = diag.Diagnostics(false)
-    a := session.Analysis.Analyze(path, cfg, d, overlay)
+    a := session.Analysis.Analyze(path, cfg, d, overlay, kept = true)
     if name == "check" { return checkResult(a, d) }
     if d.Errors() > 0 or a.C is null or a.Sc is null { return textResult($d.Render() $d.Summary(), true) }
     if name == "explain" {

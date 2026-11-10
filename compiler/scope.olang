@@ -14624,26 +14624,26 @@ fn (s mut Scoper&) NameOf(b I64) String& {
 
 fn (s mut Scoper&) nameBodies() {
     n := s.Bodies.Len()
-    names mut Array<String&>& = Array<String&>(n, "")
-    for b in range n { names[b] = s.nameOf(b, names, 0) }
+    named mut Array<String&>& = Array<String&>(n, "")
+    for b in range n { named[b] = s.nameOf(b, named, 0) }
     seen Map<String, I64>
     for b in range n {
-        if names[b] == "": continue
-        had := try seen.Get(names[b]) catch {
-            seen.Put(names[b], b)
+        if named[b] == "": continue
+        had := try seen.Get(named[b]) catch {
+            seen.Put(named[b], b)
             continue
         }
-        names[had] = ""
-        names[b] = ""
+        named[had] = ""
+        named[b] = ""
     }
-    s.bodyNames = names
+    s.bodyNames = named
     s.nameAt.Clear()
     for b in range n {
-        if names[b] != "": s.nameAt.Put(names[b], b)
+        if named[b] != "": s.nameAt.Put(named[b], b)
     }
 }
 
-fn (s mut Scoper&) nameOf(b I64, names Array<String&>&, depth I64) String {
+fn (s mut Scoper&) nameOf(b I64, named Array<String&>&, depth I64) String {
     body := s.Bodies[b]
     mod := s.fileIdentity(body.File)
     if mod == "" or depth > 16: return ""
@@ -14653,17 +14653,17 @@ fn (s mut Scoper&) nameOf(b I64, names Array<String&>&, depth I64) String {
         case typed.BodyOf.Ctor(t, twin): $at " ctor " $s.P.T.CanonNamed(t) $s.argsWord(twin)
         case typed.BodyOf.Dtor(t): $at " dtor " $s.P.T.CanonNamed(t)
         case typed.BodyOf.Case(t, tag): $at " case " $s.P.T.CanonNamed(t) " " $tag
-        case typed.BodyOf.Lambda(parent): s.innerName($at " lambda", I64(parent), names, depth)
-        case typed.BodyOf.Contract(of, _, index): s.innerName($at " contract " $index, I64(of), names, depth)
+        case typed.BodyOf.Lambda(parent): s.innerName($at " lambda", I64(parent), named, depth)
+        case typed.BodyOf.Contract(of, _, index): s.innerName($at " contract " $index, I64(of), named, depth)
         case typed.BodyOf.Global(_, name): $mod " global " $s.P.L.Names.Text(name)
         case _: ""
     }
 }
 
 # a body written inside parent p: named with p's name, "" where p has none
-fn (s mut Scoper&) innerName(at String&, p I64, names Array<String&>&, depth I64) String {
+fn (s mut Scoper&) innerName(at String&, p I64, named Array<String&>&, depth I64) String {
     if p < 0 or p >= s.Bodies.Len(): return ""
-    pn := names[p] if p < s.Bodies.Len() and names[p] != "" else s.nameOf(p, names, depth + 1)
+    pn := named[p] if p < s.Bodies.Len() and named[p] != "" else s.nameOf(p, named, depth + 1)
     return "" if pn == "" else $at " in " $pn
 }
 

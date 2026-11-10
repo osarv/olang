@@ -411,7 +411,7 @@ type worker struct(s Server&, Cfg mut build.Config&, In I32, Out I32) {
 # the analysis of the open file in slot k as the files are now: the last one where it is that file's
 fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis& {
     if k == w.lastSlot and w.last is not null { return w.last! }
-    a := session.Analysis.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay)
+    a := session.Analysis.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay, kept = true)
     w.last = a
     w.lastSlot = k
     return a
@@ -442,7 +442,7 @@ fn (w mut worker&) check(k I64) {
     d mut diag.Diagnostics& = diag.Diagnostics(false)
     # what the checker says is published as soon as it is said; section 8's errors, which take a while longer on a large
     # program, follow if there are any
-    a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, false)
+    a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, false, true)
     said := d.Errors()
     foreign := w.publishAll(k, a, d, doc.Foreign)
     session.Hold(a, cfg)
@@ -713,7 +713,7 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
         a := session.Analysis.Analyze(doc.Path, cfg, d, overlay)
         a.Members(it, doc.Real, dot)
     } else {
-        a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay)
+        a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, kept = true)
         a.Names(it, doc.Real, at)
     }
     w.send(reply(id, $"{\"isIncomplete\":false,\"items\":[" $it.B.ToString() "]}"))
@@ -874,6 +874,90 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     assert (got.Get("6")!).Contains("return p.X + p.Y"), got.Get("6")!
     assert (got.Get("7")!).Contains("-32601")
     assert (got.Get("8")!).Contains("\"result\":null")
+}
+
+# B3i, docs/wholeprog.md 10.3 (T8): the language server's checks keep and take the records builds keep. A library is
+# edited step by step - a scope error (O10c) brought in and taken out, a type error, a body changed - and after each
+# step a session of the server checks the program from the directory the steps before left their records in: what it
+# says of each file is what "olang build" says of the same text (rule and line), and once a step's text was checked
+# before, the scope pass takes judgings from the records
+StepMain String& = "import \"lib\"\n\nfn main() {\n    a Vec<String&>\n    lib.Keep(a, \"k\")\n    assert lib.Count(a) > 0\n}\n"
+
+StepLibs := Array<String&>[
+    "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ok list.List<I64>&) I64 {\n    a := list.List.FromIter(ok.Iter())\n    return a.Len()\n}\n"
+    "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ro list.List<list.List<I64>>&, ok list.List<I64>&) I64 {\n    c := list.List.FromIter(ro.Iter())\n    return c.Len()\n}\n"
+    "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ok list.List<I64>&) I64 {\n    a := list.List.FromIter(ok.Iter())\n    return a.Len()\n}\n"
+    "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }\n\nfn Count(a Vec<String&>&) I64 {\n    x I32 = \"s\"\n    return a.Len()\n}\n"
+    "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) {\n    a.Push(s)\n    a.Push(s)\n}\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ok list.List<I64>&) I64 {\n    a := list.List.FromIter(ok.Iter())\n    return a.Len()\n}\n"
+    "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ok list.List<I64>&) I64 {\n    a := list.List.FromIter(ok.Iter())\n    return a.Len()\n}\n"]
+
+test "olang lsp checks an edited program as a build does, taking the records the checks before it left (B3i, T8)" {
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    main := $dir "/main.olang"
+    try os.WriteFile(main, StepMain) catch os.Error { unreachable "no file" }
+    for k, text in StepLibs {
+        try os.WriteFile($dir "/lib.olang", text) catch os.Error { unreachable "no file" }
+        said, log := lspSaid(dir, main)
+        built := buildSaid(dir)
+        assert said == built, "step " $k ": the server said '" $said "', olang build '" $built "'"
+        assert k == 0 or (log.Contains("judgings from records)") and not log.Contains("(0 judgings from records)")), "step " $k ": " $log
+    }
+}
+
+# a session of the server in dir opening main and checking it (its log on): each error it published, "FILE:LINE:RULE"
+# sorted, and its log
+fn lspSaid(dir String&, main String&) String, String {
+    uri := UriOf(main)
+    t := StringBuilder()
+    session.JsonStr(t, StepMain)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" $uri $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" $t.ToString() "}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    cmd := $"cd " $os.Quote(dir) " && OLANG_TOOL_LOG=1 " $os.Quote(compilerUnderTest()) " lsp"
+    out := try os.Output.Exec("sh", "-c", cmd, input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    assert out.Status == 0, out.Stderr
+    lines Vec<String&>
+    for m in frames(out.Stdout) {
+        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
+        if str(msg, "method") != "textDocument/publishDiagnostics": continue
+        params := try msg["params"] catch json.Error { continue }
+        file := baseName(PathOf(str(params, "uri")))
+        ds := try params["diagnostics"].AsArr() catch json.Error { continue }
+        for d in ds {
+            line := try d["range"]["start"]["line"].AsInt() catch json.Error default -1
+            if (try d["severity"].AsInt() catch json.Error default 1) == 1: lines.Push($file ":" $(line + 1) ":" $str(d, "code"))
+        }
+    }
+    lines.Sort(fn(x String&, y String&) Bool { return x < y })
+    return lines.Join(" "), out.Stderr
+}
+
+fn baseName(path String&) String {
+    at := path.Len()
+    for at > 0 and path[at - 1] != '/' { at-- }
+    return $path[at:]
+}
+
+# what "olang build" of dir's main.olang says: each error "FILE:LINE:RULE", sorted
+fn buildSaid(dir String&) String {
+    cmd := $"cd " $os.Quote(dir) " && " $os.Quote(compilerUnderTest()) " build main.olang 2>&1"
+    out := try os.Output.Exec("sh", "-c", cmd) catch os.Error { unreachable "olang build did not run" }
+    lines Vec<String&>
+    for l in out.Stdout.Lines() {
+        at := try l.Find(": error[") catch { continue }
+        head := l[:at].Split(":").ToVec()
+        if head.Len() < 3: continue
+        file := baseName(head[0])
+        rule := l[at + 8:]
+        rule = rule[:try rule.Find("]") catch default rule.Len()]
+        lines.Push($file ":" $head[1] ":" $rule)
+    }
+    lines.Sort(fn(a String&, b String&) Bool { return a < b })
+    return lines.Join(" ")
 }
 
 test "a file that does not parse gets its diagnostics, and requests on it answer nothing" {
