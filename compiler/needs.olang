@@ -112,7 +112,7 @@ fn (w mut walker&) elemsOf(x ast.Expr&) I64 {
 
 fn (w mut walker&) need(k I64, what String&) {
     if k < 0 or k >= w.found.Len() or w.found[k].Has(what) { return }
-    w.found.RefMut(k).Push($what)
+    w.found.RefMut(k).Push(what)
 }
 
 # what variable k needs that its written constraint does not promise
@@ -431,7 +431,7 @@ fn innerNeeds(c mut typecheck.Checker&, g I64, t ast.TypeRef?&, depth I64) Vec<S
     out Vec<String&>
     u := inner.varOf(t)
     if u < 0 or u >= inner.found.Len() { return out }
-    for n in inner.found[u] { out.Push($n) }
+    for n in inner.found[u] { out.Push(n) }
     return out
 }
 

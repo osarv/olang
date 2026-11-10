@@ -1893,11 +1893,36 @@
 | done
 | closed 1
 | closed 2
+=== run c11arraydtor.olang
+| status 0
+| 6 321
+=== run c11comprdtor.olang
+| status 0
+| 3 321
+=== run c11copyrunarray.olang
+| status 0
+| the copy 3
+| and its source 6
 === run c11dtorbyvalue.olang
 | status 0
 === run c11dtorgenparam.olang
 | status 0
 | closed 111
+=== run c11dtorglobal.olang
+| status 0
+| 3 4 7 0
+| closed 7 (1)
+| 8 1
+| closed 8 (2)
+| closed 4 (3)
+| closed 3 (4)
+=== run c11holdertypearg.olang
+| status 0
+| replaced 1
+| let go 4
+=== run c11unendedparam.olang
+| status 0
+| 3
 === run c2dargnote.olang
 | status 0
 | 1
@@ -2112,6 +2137,9 @@
 === run d18yielddefer.olang
 | status 0
 | tidied 3
+=== run d18yieldown.olang
+| status 0
+| 1 2 3 2
 === run d3bread.olang
 | status 0
 === run d8cdestructinner.olang
@@ -2213,6 +2241,9 @@
 === run e31bviewbuilds.olang
 | status 0
 | Vec<String&>["0", "1", "2"]
+=== run e31bviewenumfield.olang
+| status 0
+| Array<I64>[1, 0, 0, 0]
 === run e31bviewlaterarg.olang
 | status 0
 === run e31bviewnested.olang
@@ -2517,6 +2548,9 @@
 | status 0
 === run o1bglobalshort.olang
 | status 0
+=== run o1blambdaglobal.olang
+| status 0
+| 41
 === run o20arrelem.olang
 | status 0
 | 0
@@ -2733,6 +2767,12 @@
 === run p4aclausecapture.olang
 | status 0
 | 0 10 0 0
+=== run p4adefaultexisting.olang
+| status 0
+| 40 2 true
+=== run p4adefaultholds.olang
+| status 0
+| -1 7
 === run parkedpool.olang
 | status 0
 === run preludekv.olang
@@ -2757,6 +2797,13 @@
 | status 0
 === run r11bpassed.olang
 | status 0
+=== run r11defaultexisting.olang
+| status 0
+| 0 1 kept 0
+=== run r11defaultversions.olang
+| status 0
+| 3 3
+| ab/0 real abc
 === run r11fndefault.olang
 | status 0
 === run r1cwords.olang

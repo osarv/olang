@@ -7259,12 +7259,15 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
     k := mir.FnKey.Body(typed.BodyId(I32(mainBody)))
     ty := e.Lw.Bodies[mainBody].Ty
     errs := t.Items(t.Errors(ty))
+    # O1b, C11: the program's scope's destructors run as it ends normally
+    e.runtime("__olang_prog_end")
     if errs.Len() == 0 {
-        b.Push("  call void @" $e.sym(k) "()\n  ret i32 0\n}\n\n")
+        b.Push("  call void @" $e.sym(k) "()\n  call void @__olang_prog_end()\n  ret i32 0\n}\n\n")
         e.item("main", e.P.L.Root, b.ToString())
         return
     }
-    b.Push("  %c = call i32 @" $e.sym(k) "()\n  %bad = icmp ne i32 %c, 0\n  br i1 %bad, label %err, label %ok\nok:\n  ret i32 0\n")
+    b.Push("  %c = call i32 @" $e.sym(k) "()\n  %bad = icmp ne i32 %c, 0\n  br i1 %bad, label %err, label %ok\nok:\n")
+    b.Push("  call void @__olang_prog_end()\n  ret i32 0\n")
     b.Push("err:\n")
     e.declare("fputs", "i32 @fputs(ptr, ptr)")
     e.define("stderr", "@stderr = external global ptr")
@@ -7288,10 +7291,10 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
     if e.traced() {
         # S18d: where it came from, in a build that keeps the trace
         e.declare("__olang_ert_print", "void @__olang_ert_print(ptr)")
-        b.Push("  call void @__olang_ert_print(ptr %s)\n  ret i32 1\n}\n\n")
+        b.Push("  call void @__olang_ert_print(ptr %s)\n  call void @__olang_prog_end()\n  ret i32 1\n}\n\n")
     } else {
         e.declare("__olang_debug_hint", "void @__olang_debug_hint(ptr)")
-        b.Push("  call void @__olang_debug_hint(ptr %s)\n  ret i32 1\n}\n\n")
+        b.Push("  call void @__olang_debug_hint(ptr %s)\n  call void @__olang_prog_end()\n  ret i32 1\n}\n\n")
     }
     e.item("main", e.P.L.Root, b.ToString())
 }

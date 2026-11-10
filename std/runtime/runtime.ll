@@ -2269,6 +2269,15 @@ done:
 ; with it, made the first time this thread builds there (__olang_scope_part). Nothing is checked per allocation, and
 ; a closure that only reads what it captured asks nothing. The program's scope, or a part of it, is this thread's
 ; own part of it (@__olang_prog_scope); a stand-in folded already is followed to what it forwards to
+; O1b, C11: the program ending normally (main returning, an error escaping it) - the destructors registered with the
+; program's scope run, the last registered first (a global holding a value with destructors, what a global's referent
+; holds); its storage goes with the process
+define void @__olang_prog_end() {
+entry:
+  call void @__olang_scope_close(ptr @__olang_global_scope)
+  ret void
+}
+
 define void @__olang_thread_init() {
 entry:
   %n = atomicrmw add ptr @__olang_thread_next, i64 2 monotonic, align 8

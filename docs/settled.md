@@ -288,7 +288,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   that holder lets go (block exit, callee's end unless handed on, a store over a place after the new value is made);
   parts last first. A call's value no place takes is held where the call lands (O16); a `:=` from such a call is a
   holder of its block, and so is a temporary a statement's call is given writably (a hidden one; call 8 of 2026-11-08,
-  refusals R7). A global holds one by reference (C11); a generator's variables and by-value parameters hold one across
+  refusals R7). A global holds one by value or by reference, ended as the program ends - the program's scope's
+  destructors run when main returns or an error escapes it (O1b, C11; R8 2026-11-09, the user's yes to refusals
+  question 3; before it they never ran); a generator's variables and by-value parameters hold one across
   a `yield`, ended where the walk is let go (S20); one in a block a `become` closes is kept in its chain's tail scope
   (S21). C9b is gone: the one-path early
   end is written with a block or a helper function, `Destroy` is an ordinary method name, and `tools/destroy_migrate.olang`
@@ -297,8 +299,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-11-03).** `Vec<File>`, `Map<String, File>`, `Deque<File>` are unique as their elements are and end them (a
   removal giving nothing ends what it removes; the holder letting go ends the live elements last first). `vacate` as a
   statement ends the value, `occupy` stores into room; a generic struct of the prelude or std may declare a
-  **conditional destructor** existing only in instances holding such values. `List<File>` and a run-time
-  `Array<T>(n)` of them are refused.
+  **conditional destructor** existing only in instances holding such values (its buffer no holder of its elements). An
+  array of a run-time length ends its elements, the last first (R8, 2026-11-09, the user's yes to refusals question
+  3): `Array<File>(n)`, comprehensions, copies, by-value parameters, a program's type holding one. `List<File>` (chunks
+  behind a reference) and a Vec of copyable destructor values (its copy would copy room) stay refused.
 - **Packed structs (T13c, X11a, X18, the user's QCX 2, 2026-11-07).** `type Header packed struct(version U4, ihl U4,
   length U16) { ... }`: no padding, fields from the lowest bit up, alignment 1. Fields: integers of any width, Bool,
   floats, payload-free enums, nested packed structs, fixed arrays; references, run-time arrays and ordinary structs
@@ -698,6 +702,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   lives in the program's scope, deferred code pending at a `yield` runs when an unfinished generator is let go, and C11
   accepts run-time-length arrays of destructor values, a program's own conditional destructor and a global holding one
   by value; and storage passed at a `become` is built in a tail scope shared by the chain, as `return`'s would be).
+  **R8 (2026-11-09, mine within those answers):** what a global keeps of a scope variable's storage is the callers'
+  obligation to build it in the program's scope (O1b); a default naming existing storage is judged as the call's result
+  is - a task's (P4a), a by-value one holding references (R11), and a reference default nothing can be stored through
+  need only outlive where the result lands (O25g); a view reads a payload-free enum field as a number (E31b); a
+  generator's own variable owning storage is yielded as a copy (D18b). Left: t22alatelambda (a loop judged to a fixed
+  point over its versions) and c11keptvec (a conditional Copy).
 - **The unique hand-on is a move (T13b, O8d, D9i, 2026-11-07).** A unique value handed on out of a by-value parameter
   at its last mention is moved, never copied; a lambda keeps its own copy; a named function moving a unique value into
   what outlives the call is no function value (T22a).

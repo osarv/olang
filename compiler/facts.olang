@@ -52,14 +52,14 @@ fn (t mut Table&) Read(reader I64, name String&) String ? Undecided {
 fn (t mut Table&) Forget(kind String&) {
     gone Vec<String&>
     for k in t.values.Keys() {
-        if k.StartsWith(kind): gone.Push($k)
+        if k.StartsWith(kind): gone.Push(k)
     }
     for k in gone {
         t.values.Remove(k)
         t.carried.Remove(k)
     }
     read Vec<String&>
-    for k in t.reads.Keys() { read.Push($k) }
+    for k in t.reads.Keys() { read.Push(k) }
     for k in read {
         at := try k.Find(" ") catch { continue }
         if k[at + 1:].StartsWith(kind): t.reads.Remove(k)
@@ -96,7 +96,7 @@ fn (t Table&) Holds(lines Array<String&>&) Bool {
 
 # a value as a record writes it: itself where it is short and holds no space, else "#" and the start of its hash
 fn Token(v String&) String {
-    if v.Len() > 0 and v.Len() <= 40 and not v.Contains(" ") and not v.Contains("\n") and not v.StartsWith("#"): return $v
+    if v.Len() > 0 and v.Len() <= 40 and not v.Contains(" ") and not v.Contains("\n") and not v.StartsWith("#"): return v
     return $"#" $sha.Hex(v)[:32]
 }
 

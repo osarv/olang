@@ -192,7 +192,7 @@ fn (c Config&) CFlags() Vec<String&> {
         root := target.Sysroot()
         if root != "" { out.Push($"--sysroot=" $root) }
     }
-    if c.Target.CpuFlag != "" { out.Push($c.Target.CpuFlag) }
+    if c.Target.CpuFlag != "" { out.Push(c.Target.CpuFlag) }
     out.Push("-D_GNU_SOURCE")
     return out
 }
@@ -207,7 +207,7 @@ fn (c Config&) ModeFlags() Vec<String&> {
         root := target.Sysroot() # B12a: another architecture's C library, where it is not where clang looks
         if root != "" { out.Push($"--sysroot=" $root) }
     }
-    if c.Target.CpuFlag != "" { out.Push($c.Target.CpuFlag) }
+    if c.Target.CpuFlag != "" { out.Push(c.Target.CpuFlag) }
     if c.Library { out.Push("-fPIC") }      # X14: code a shared library holds, wherever it is loaded
     if c.Fuzz != "" { out.Push("-fsanitize=fuzzer") }   # B19: coverage for libFuzzer, and its main at the link
     if c.Debug {
@@ -259,7 +259,7 @@ fn (c Config&) CompileFlags(ir String&) Vec<String&> {
 fn (c Config&) DataFlags() Vec<String&> {
     out Vec<String&>
     for f in c.ModeFlags() {
-        if f != "-flto" and f != "-flto=thin" { out.Push($f) }
+        if f != "-flto" and f != "-flto=thin" { out.Push(f) }
     }
     return out
 }
@@ -268,7 +268,7 @@ fn (c Config&) DataFlags() Vec<String&> {
 fn (c mut Config&) clangVersion() String& {
     if c.version == "" {
         out := try target.ClangSays(Array<String&>[$c.Clang, "--version"], "", true) catch os.Error { return "" }
-        c.version = $out.Stdout
+        c.version = out.Stdout
     }
     return c.version
 }
@@ -517,19 +517,19 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     }
     tmp := $path "." $unistd.getpid() ".tmp"
     args mut Vec<String&>& = Vec<String&>()
-    args.Push($c.Clang)
-    for f in flags { args.Push($f) }
+    args.Push(c.Clang)
+    for f in flags { args.Push(f) }
     args.Push("-c")
     args.Push("-o")
-    args.Push($tmp)
-    args.Push($irTmp)
+    args.Push(tmp)
+    args.Push(irTmp)
     if remarks { args.Push($"-foptimization-record-file=" $tmp ".yaml") }
     j.cmds.Push(args.ToArray())
-    j.temps.Push($tmp)
+    j.temps.Push(tmp)
     j.records.Push($tmp ".yaml" if remarks else "")
-    j.finals.Push($path)
-    j.irs.Push($irPath)
-    j.irTemps.Push($irTmp)
+    j.finals.Push(path)
+    j.irs.Push(irPath)
+    j.irTemps.Push(irTmp)
     j.sizes.Push(ir.Len())
     return path
 }
@@ -546,7 +546,7 @@ fn (j mut compiles&) claim(path String&) Bool {
         try os.MkDir(lock) catch os.Error.Exists { made = false } catch os.Error { return true }
         if made {
             try os.WriteFile($lock "/pid", $unistd.getpid()) catch os.Error { }
-            j.locks.Push($lock)
+            j.locks.Push(lock)
             return true
         }
         if holderAlive(lock) { return false }
@@ -664,8 +664,8 @@ fn (c Config&) keep(obj String&) {
 # where clang cannot link them - what to say is the caller's (B3, B3a)
 fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec<String&>&, exports Vec<String&>?& = null) ? Failed {
     args Vec<String&>
-    args.Push($c.Clang)
-    for f in c.ModeFlags() { args.Push($f) }
+    args.Push(c.Clang)
+    for f in c.ModeFlags() { args.Push(f) }
     # ThinLTO's link keeps each module's code generated, keyed by what it was made from, so a relink after an edit
     # generates only what the edit changed (the linker's LLVM plugin's cache)
     if c.Thin {
@@ -685,9 +685,9 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
         args.Push($"-Wl,-soname," $filepath.Base(bin))
     }
     args.Push("-o")
-    args.Push($bin)
-    for o in objs { args.Push($o) }
-    for x in links { args.Push($x) }      # X9: after the objects, so a static library's members are found
+    args.Push(bin)
+    for o in objs { args.Push(o) }
+    for x in links { args.Push(x) }      # X9: after the objects, so a static library's members are found
     args.Push("-lm")
     args.Push("-lpthread")
     args.Push("-ldl") # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
@@ -780,7 +780,7 @@ fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagno
             fileFatal(c.Output, msgs.OutputCannotWrite(), d)
             return finish(d)
         }
-        obj = $c.Output
+        obj = c.Output
     }
     if not c.Quiet { sayln(c.paint("32", $"built " $obj)) }
     return 0
@@ -801,7 +801,7 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
         return finish(d)
     }
     Phase("link")
-    c.Built = $bin
+    c.Built = bin
     if not c.Quiet { sayln(c.paint("32", $"built " $(bin if c.Output != "" else Shown(bin)))) }
     return 0
 }
@@ -821,7 +821,7 @@ fn (c mut Config&) library(prog Program&, objs Vec<String&>&, file String&, d mu
         fileFatal(hdr, msgs.OutputCannotWrite(), d)
         return finish(d)
     }
-    c.Built = $lib
+    c.Built = lib
     if not c.Quiet { sayln(c.paint("32", $"built " $Shown(lib) " and " $Shown(hdr))) }
     return 0
 }
@@ -844,9 +844,9 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
     run := try c.runner(d) catch Failed { return finish(d) }
     av Vec<String&>
     # B12a: another architecture's program runs in an emulator, given the program's path
-    for w in run { av.Push($w) }
+    for w in run { av.Push(w) }
     av.Push($file if run.Len() == 0 else Shown(c.Built))
-    for a in args { av.Push($a) }
+    for a in args { av.Push(a) }
     try os.ExecInPlace(Shown(c.Built) if run.Len() == 0 else $run[0], ...av.ToArray()) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
@@ -874,11 +874,11 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     c.TestHeader(file)
     run := try c.runner(d) catch Failed { return finish(d) }
     cmd Vec<String&>
-    for w in run { cmd.Push($w) }
+    for w in run { cmd.Push(w) }
     cmd.Push(Shown(bin))
     if c.Fuzz != "" { return c.fuzzRun(cmd, prog) }
     # B7a: the words naming the tests to run, read by the test binary's harness
-    for w in filters { cmd.Push($w) }
+    for w in filters { cmd.Push(w) }
     out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
@@ -903,7 +903,7 @@ fn noTestNamed(file String&, words Array<String&>&, known Vec<String&>&) String 
             d := closeness(w, k)
             if msgs.Near(w, d) and d < bestD {
                 bestD = d
-                best = $k
+                best = k
             }
         }
     }
@@ -975,11 +975,11 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
     named := false     # B3a: some listed file has a test the words name (its run did not end with 3)
     for f in files {
         args Vec<String&>
-        args.Push($exe)
+        args.Push(exe)
         args.Push("test")
-        for p in passed { args.Push($p) }
-        args.Push($f)
-        for w in filters { args.Push($w) }
+        for p in passed { args.Push(p) }
+        args.Push(f)
+        for w in filters { args.Push(w) }
         out := try os.Output.Exec(...args.ToArray(), capture = false) catch os.Error {
             sayln(c.paint("31", $f ": lost track of its build, skipping"))
             failed = true
@@ -1084,7 +1084,7 @@ fn afresh(dir String&, d mut diag.Diagnostics&) ? Failed {
 fn listFiles(dir String&, ir Bool, out mut Listed&) {
     names Vec<String&>
     listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
-    for n in listed { names.Push($n) }
+    for n in listed { names.Push(n) }
     names.Sort(fn(a String&, b String&) Bool { return a.Len() < b.Len() or (a.Len() == b.Len() and a < b) })
     for n in names {
         if n.Contains(".yaml") { out.Remarks.Push($dir "/" $n) }
@@ -1098,17 +1098,17 @@ fn listFiles(dir String&, ir Bool, out mut Listed&) {
 # written as bitcode is turned into text by clang, which reads bitcode and writes it back as text unchanged
 fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir Bool, out mut Listed&, d mut diag.Diagnostics&) ? Failed {
     args Vec<String&>
-    args.Push($c.Clang)
-    for f in c.ModeFlags() { args.Push($f) }
+    args.Push(c.Clang)
+    for f in c.ModeFlags() { args.Push(f) }
     if c.Thin { args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit) }
     args.Push("-Wl,-plugin-opt=emit-llvm" if ir else "-Wl,-plugin-opt=emit-asm")
     args.Push($"-Wl,-plugin-opt=opt-remarks-filename=" $dir "/link.yaml")
     args.Push($"-Wl,-plugin-opt=opt-remarks-passes=" $RemarkPasses)
     args.Push("-o")
     args.Push($dir "/code")
-    for o in objs { args.Push($o) }
-    for x in prog.Links { args.Push($x) }
-    for x in Array<String&>["-lm", "-lpthread", "-ldl"] { args.Push($x) }
+    for o in objs { args.Push(o) }
+    for x in prog.Links { args.Push(x) }
+    for x in Array<String&>["-lm", "-lpthread", "-ldl"] { args.Push(x) }
     if prog.Dyncall != "" { args.Push("-lffi") }
     if c.Clang == "" { error Failed.Unbuilt }
     parts Vec<String&>
@@ -1141,10 +1141,10 @@ fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
     for n in listed {
         if not n.StartsWith("code") { continue }
         args mut Vec<String&>& = Vec<String&>()
-        args.Push($c.Clang)
+        args.Push(c.Clang)
         if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
         bc := $dir "/" $n
-        for a in Array<String&>["-S", "-emit-llvm", "-x", "ir", "-Xclang", "-disable-llvm-passes", "-o", $bc ".ll", bc] { args.Push($a) }
+        for a in Array<String&>["-S", "-emit-llvm", "-x", "ir", "-Xclang", "-disable-llvm-passes", "-o", $bc ".ll", bc] { args.Push(a) }
         cmds.Push(args.ToArray())
     }
     status, said := RunAll(cmds.ToArray(), c.width())
@@ -1188,11 +1188,11 @@ fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed
             error Failed.Reported
         }
         args mut Vec<String&>& = Vec<String&>()
-        args.Push($c.Clang)
-        for f in c.CompileFlags(text) { args.Push($f) }
+        args.Push(c.Clang)
+        for f in c.CompileFlags(text) { args.Push(f) }
         args.Push("-S")
         if ir { args.Push("-emit-llvm") }
-        for a in Array<String&>["-o", $dir "/u" $i $(".ll" if ir else ".s"), input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push($a) }
+        for a in Array<String&>["-o", $dir "/u" $i $(".ll" if ir else ".s"), input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push(a) }
         cmds.Push(args.ToArray())
         sizes.Push(text.Len())
     }
@@ -1340,7 +1340,7 @@ fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d 
 
 # the status the binary at bin ends with
 fn statusOf(bin String&) I32 {
-    out := try os.Output.Exec($bin) catch os.Error { return -1 }
+    out := try os.Output.Exec(bin) catch os.Error { return -1 }
     return out.Status
 }
 
@@ -1351,8 +1351,8 @@ test "a build compiles and links only what changed: modules, -define, the target
     defer try os.RemoveAll(dir) catch os.Error { }
     d := diag.Diagnostics(false)
     c := Config()
-    c.Dir = $dir
-    c.Clang = $clang
+    c.Dir = dir
+    c.Clang = clang
     c.Quiet = true
     c.Target = try target.Target.Resolve("native", clang, false, d)
     fe := stubFrontend()
@@ -1402,7 +1402,7 @@ test "B3j: an object another directory's build left in the store is taken from i
     fe := stubFrontend()
     one := Config()
     one.Dir = $dir "/one"
-    one.Clang = $clang
+    one.Clang = clang
     one.Quiet = true
     one.Store = $dir "/store"
     one.Target = try target.Target.Resolve("native", clang, false, d)
@@ -1413,9 +1413,9 @@ test "B3j: an object another directory's build left in the store is taken from i
     # another directory, the same program: every object from the store, linked as before
     two := Config()
     two.Dir = $dir "/two"
-    two.Clang = $clang
+    two.Clang = clang
     two.Quiet = true
-    two.Store = $one.Store
+    two.Store = one.Store
     two.Target = one.Target
     assert BuildProgram(fe, two, "app.olang", d) == 0
     assert two.Compiled == 0 and two.Linked == 1 and statusOf($two.Dir "/app") == 41

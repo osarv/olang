@@ -6854,7 +6854,7 @@ compiler/eval:cfn	264 8	%"compiler/eval:cfn"	{ i64, { i64, ptr }, { i64, ptr }, 
 compiler/eval:dkey	32 8	%"compiler/eval:dkey"	{ i64, i32, i32, i32, i32, i64 }	fields 0,8,12,16,20,24
 compiler/eval:frame	136 8	%"compiler/eval:frame"	{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i1, i1, i1, i64, i64, i1, i64, i32, i32, i64 }	fields 0,8,16,24,32,40,48,56,64,72,80,81,82,88,96,104,112,120,124,128
 compiler/eval:gkey	16 8	%"compiler/eval:gkey"	{ i64, i32 }	fields 0,8
-compiler/eval:global	48 8	%"compiler/eval:global"	{ i64, i1, i64, i64, i64, i1, i1 }	fields 0,8,16,24,32,40,41
+compiler/eval:global	48 8	%"compiler/eval:global"	{ i64, i1, i64, i64, i64, i1, i1, i1 }	fields 0,8,16,24,32,40,41,42
 compiler/eval:reg	64 8	%"compiler/eval:reg"	{ i64, i64, i64, i64, i64, i64, i64, i64 }	fields 0,8,16,24,32,40,48,56
 compiler/eval:scope	144 8	%"compiler/eval:scope"	{ i64, i1, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i1, i64, i64 }	fields 0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136
 compiler/eval:task	40 8	%"compiler/eval:task"	{ i64, i64, i64, i64, i64 }	fields 0,8,16,24,32

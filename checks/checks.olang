@@ -1253,7 +1253,7 @@ fn interp(r mut report&) ? Failed {
                  "-i prog.olang output", dir)
     # B3e: what a build refuses is not run - section 8's errors reported as a build reports them
     try r.expect(sh(dir, "\"$OLANG\" interpret refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
-    try r.expect(outOf(dir).Contains("error[O1b") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
+    try r.expect(outOf(dir).Contains("error[R11, O25]") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
     # ... and a construct the checker does not check yet stops it, as it stops a build (F11)
     try r.expect(sh(dir, "\"$OLANG\" build gap.olang > want.txt 2>&1") == 1, "gap.olang built", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret gap.olang > out.txt 2>&1") == 1, "-i gap.olang ran", dir)
@@ -1655,8 +1655,9 @@ fn k2(r mut report&) ? Failed {
     try r.expect(irHas(dir, ll, $gsym("ct", "Table") " = constant (\\{ i64, ptr \\} \\{ i64 4, ptr @ct_Table\\.k0 \\}|<\\{ \\[8 x i8\\], ptr \\}> <\\{ \\[8 x i8\\] c\"\\\\04(\\\\00){7}\", ptr @G_2ect_2eTable\\.k1 \\}>)"), "ct_Table", dir)
     # E10c: identity
     try r.expect(irHas(dir, ll, $gsym("ct", "Looped") " = constant (i1 true|<\\{ \\[1 x i8\\] \\}> <\\{ \\[1 x i8\\] c\"\\\\01\" \\}>)"), "ct_Looped", dir)
-    # K2c: never destructs, so baked
-    try r.expect(irHas(dir, ll, $gsym("ct", "Kept") " = constant (ptr|<\\{ ptr \\}> <\\{ ptr) @(G_2e)?ct(_|_2e)Kept\\.k[01]"), "ct_Kept", dir)
+    # O1b, K2c: its initializer registers a destructor with the program's scope, run as the program ends - so it is set
+    # at startup, not baked (a baked one's initializer never runs to register it)
+    try r.expect(irHas(dir, ll, $gsym("ct", "Kept") " = global ptr zeroinitializer"), "ct_Kept", dir)
     # its temporary's destructor runs
     try r.expect(irHas(dir, ll, $gsym("ct", "Dropped") " = global i32 zeroinitializer"), "ct_Dropped", dir)
     try r.expect(irHas(dir, ll, $gsym("ct", "P") " = constant (%ct\\.CtPair \\{ i32 8, double 0x3FE0000000000000 \\}|<\\{ \\[16 x i8\\] \\}> <\\{ \\[16 x i8\\] c\"\\\\08(\\\\00){11}\\\\00\\\\00\\\\E0\\\\3F\" \\}>)"), "ct_P", dir)

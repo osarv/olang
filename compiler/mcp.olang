@@ -122,7 +122,7 @@ fn run(name String&, file String&, hasText Bool, text String&, item String&, cfg
     path := file
     if name == "doc" and not file.EndsWith(".olang") { path = $session.StdModule(file) }
     overlay := Map<String&, String&>()
-    if hasText { overlay.Put(session.RealOf(path), $text) }
+    if hasText { overlay.Put(session.RealOf(path), text) }
     if name == "format" {
         given := text if hasText else (try os.ReadFile(path) catch os.Error { return toolError($"cannot read " $path) })
         formatted := try session.Format(path, given) catch { return textResult($path " does not parse - check it for its diagnostics", true) }
@@ -294,7 +294,7 @@ test "olang mcp answers a scripted session: tools/list, check, explain, doc, for
     got := Map<String&, String&>()
     for line in out.Stdout.Lines() {
         msg := try json.Json.Parse(line) catch json.Error { unreachable "a line that is no JSON: " $line }
-        got.Put(idOf(msg), $line)
+        got.Put(idOf(msg), line)
     }
     assert (got.Get("1")!).Contains("\"tools\":{\"listChanged\":false}")
     assert (got.Get("2")!).Contains("\"name\":\"check\"") and (got.Get("2")!).Contains("\"name\":\"test\"")

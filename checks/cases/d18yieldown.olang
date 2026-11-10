@@ -1,5 +1,10 @@
-# check: fail error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Copy()', '$x')
-# D18b: a yielded value holding what the generator's own blocks hold would outlive it - yield a copy
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals 5.7): compiles now - a value the walk goes on with, yielded from one of the generator's own variables,
+# flows out as a copy built where it goes (E31d: a value read out of a place is a copy), so each element kept is the
+# list as it was. It was refused ("this value refers to the generator's own storage, which its walk goes on with -
+# yield a copy"); read back after a churn
+import "std/io"
 fn lists(n I64) Iterator<Vec<I64>> {
     l := Vec<I64>()
     for i in range n {
@@ -7,8 +12,18 @@ fn lists(n I64) Iterator<Vec<I64>> {
         yield l
     }
 }
-
-fn main() ? {
-    for _ in lists(3) {
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
     }
+}
+fn main() ? {
+    kept := Vec<Vec<I64>>()
+    for l in lists(3) {
+        kept.Push(l)
+        churn()
+    }
+    churn()
+    try io.Println($kept[0].Len() " " $kept[1].Len() " " $kept[2].Len() " " $kept[2][2])
 }

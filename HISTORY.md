@@ -36185,3 +36185,62 @@ keeps it, the note naming "removes frames"), o8dfngiven (an unfollowed value: th
 after a churn, interpreted and under -sanitize alike), d9hfnpure (5 calls read a view where it stands, 2 before) and
 d9hfnpurerun, e31bfnpure (run) and e31bfnpurewrites (a value promising nothing still refused), m19gfnpure (run) and
 m19gfnpuregrows (a `pure` value given the Vec writably still grows it).
+
+## R8: precision and the rest (P4a, R11, O25g, E31b, D18b, O1b, C11; 2026-11-09, wt-r8, docs/refusals.md 5.7, 8, 9)
+
+Round R8 of docs/wholeprog.md section 10, and the user's answers of 2026-11-08 to refusals questions 1 ("if the global
+holds something, the global never goes out of scope, therefore it's held in the global scope") and 3 ("yes, if they can
+be made memory safe ... so yes, allow them").
+
+- **Defaults naming existing storage** (p4adefaultexisting, p4adefaultholds, r11defaultexisting). The checker refused a
+  task's default that named existing storage (P4a, `TaskDefaultExisting`) and a by-value default holding references
+  that did not build all it held (R11, `DefaultHoldsReferences`), for want of a judgment, not because one was unsound.
+  Both refusals are gone: a by-value default is a copy whose references the scope pass judges where the result lands, as
+  an assigned value's (O25h); a task clause's lambda is no T22a boundary now (its task alone calls it) and what its
+  default gives back of what it captured is given to each target as the task's result is (`clauseGives`), so
+  `catch default fallback` with `fallback` outliving the target runs, and one that does not is refused at the spawn.
+- **A reference default nothing can be stored through** (r11defaultversions, the shape of compiler/load.olang's
+  `dir := $m.Path`): R11/O25 asked a reference default to live exactly where the result does. Exactness matters only
+  where something can be stored through (O25g); otherwise the default need only outlive where the result lands - the
+  try is then one of two scopes, each judged where it is used, as a conditional's are. `DefaultScope` keeps its error
+  for a store-through result (r11defaultscope).
+- **A payload-free enum field read by a view** (e31bviewenumfield, review r3's over-rejection): E31b's view test let a
+  callee read number, Bool, function and reference fields; a `match` on an enum field with no payload reads its
+  ordinal, so such a field now counts as a number (`isNumberLike`).
+- **A generator's own variable yielded** (d18yieldown): `yield l` of a `Vec` the walk goes on pushing to was O26's
+  error naming the copy to write. A value read out of a place is a copy (E31d), so the checker now makes that copy
+  where the value goes for a variable of the generator's own whose value owns storage it may change (not immut, not a
+  parameter); anything else keeps the error.
+- **Question 1: what a global keeps** (o1blambdaglobal). Storing what lives where a scope variable says into a global
+  was O1b's error at the value - "no obligation on the callers". It is now the callers' obligation that it live in the
+  program's scope, so they build it there (the loop turn's `Node` in the program's scope).
+- **Question 3: destructor values C11 refused** (c11arraydtor, c11comprdtor, c11copyrunarray, c11unendedparam,
+  c11holdertypearg, c11dtorglobal). An array of a run-time length now needs a drop where its elements do
+  (types.needsDrop), and its Drop helper ends them last first by its length (lower's `dropAt`); a library collection's
+  buffer is excepted (`types.Table.FieldHolds`: no holder of its elements, and a store over it ends nothing - Vec's
+  growth stores a new buffer over the old one). `generic.unended` now finds only such an array reached through a
+  reference (List's chunks: c11dtortypearg stays refused). So `Array<R>(n)`, comprehensions, copies, by-value parameters
+  and a program's `Buf<T>` holding `Array<T>` end their elements; a program's own conditional destructor was not needed
+  for that and stays the library's (it needs `vacate`). A global may hold a destructor value by value: its initializer's
+  store registers the destructor with the program's scope (lower's `globalHeld`).
+- **Found on the way: the program's scope's destructors never ran.** O1b said "never closed ... Destructors registered
+  in it do not run at exit", while C11's message promised `Conn&` globals "its destructor run as the program ends". Now
+  `main` returning, or an error escaping it once printed, calls `__olang_prog_end` (runtime.ll: the program's scope
+  closed), and `interpret` does the same (`Machine.EndProgram`). A global whose initializer registers a destructor is
+  not baked (K2) - a baked one's initializer never runs, so nothing would register it - though it is still read while
+  compiling. No golden run output changed.
+- **Not built:** c11keptvec (a copy of `Vec<Kept>` copying only its live elements needs a Copy existing only in the
+  instances whose elements copy - a declared Copy would make `Vec<File>` copyable and no longer unique) and
+  t22alatelambda (a loop body judged to a fixed point over its versions, O25i).
+- **Dead and untested kinds** (refusals section 8): the five dead messages removed with the four above; cases for
+  `YieldInDefer`, T25c's four read-only copies, O20's `StoredRefOutlived` and `DefaultScope`. The scope pass's other
+  untested kinds were tried with the shapes their guards name and every program compiled; they stay as nets.
+- **The `$x` copies** (section 9): every `$x` given whole as an argument, assigned or returned in compiler/ was taken
+  out, the whole compiler checked, and the lines whose copy is still needed (a number or Bool rendered, a store needing
+  its own text - doc.olang's `Module(...)`, source.olang's `Names.add`) restored: 355 removed, in every file but
+  emit.olang and lower.olang (another round's then), with load.olang's `dir := $m.Path`. std/io.olang's and
+  std/csv.olang's guidance now says a kept line or field is built where it is kept.
+- **IR.** The pre-strip source (every semantic change of the round, no `$` removed) built by the round's base compiler
+  and by its own: compiler/'s IR is byte-identical but for `main` calling `__olang_prog_end` (the location strings
+  naming the checkout aside), and so is bench's, every benchmark's `main` alike. The strip then changes compiler/'s IR
+  where the copies went: 9,705 fewer IR lines and 2,658 fewer calls over its modules.

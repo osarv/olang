@@ -1,0 +1,48 @@
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals 5.7, 9): compiles now - a reference default through which nothing can be stored need only outlive where
+# the call's result lands, the try one of two scopes judged where it is used (O25g); 'dir' holds two versions, one of
+# them a parameter's referent (compiler/load.olang wrote '$m.Path' for this). It was refused ("a reference default lives
+# where the call's result does"); read back after a churn
+import "std/io"
+import "std/os"
+type E error { Empty }
+type Node struct(v I64) {
+    v
+}
+fn Node.make(v I64) mut Node& ? E {
+    if v < 0 { error E.Empty }
+    return Node(v)
+}
+fn real(t String&) String ? E {
+    if t.Len() > 3 { error E.Empty }
+    return "real " $t
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn top(path String&, n I64) String {
+    dir := path
+    for i in range n { dir = $dir "/" $i }
+    return $(try real(dir) catch default dir)
+}
+fn main() ? {
+    a mut Node& = Node(1)
+    n := os.Args().Len()
+    {
+        b mut Node& = Node(2)
+        d := a
+        if n > 0 { d = b }
+        m := try Node.make(n - 5) catch default d
+        m.v = 3
+        churn()
+        try io.Println($b.v " " $m.v)
+    }
+    t := top("ab", n)
+    u := top("abc", 0)
+    churn()
+    try io.Println($t " " $u)
+}

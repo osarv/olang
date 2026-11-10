@@ -214,8 +214,8 @@ fn (g gen&) wanted(where I64) Bool { return where == 1 or (g.all and where == 0)
 fn (g mut gen&) recordAt(key String&) I64 {
     i := try g.recIndex.Get(key) catch default -1
     if i >= 0 { return i }
-    g.recs.Push(record($key))
-    g.recIndex.Put($key, g.recs.Len() - 1)
+    g.recs.Push(record(key))
+    g.recIndex.Put(key, g.recs.Len() - 1)
     return g.recs.Len() - 1
 }
 
@@ -224,7 +224,7 @@ NoReturnAttr := " __attribute__((noreturn))"
 # a function's type with any " __attribute__((noreturn))" after it taken off
 fn noReturnOf(t String&) String {
     if t.EndsWith(NoReturnAttr) { return $t[:t.Len() - NoReturnAttr.Len()] }
-    return $t
+    return t
 }
 
 # the top-level declarations: each read once its location says which file it is in
@@ -241,15 +241,15 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
         name := text(n, "name")
         if kind == "TypedefDecl" {
             t := typeOf(n)
-            g.typedefs.Put($name, $t)
+            g.typedefs.Put(name, t)
             # an unnamed struct a typedef names takes the typedef's name: "typedef struct { ... } Pair"
             for x in inner(n) {
                 owned := member(x, "ownedTagDecl")
                 if owned is null { continue }
                 r := try g.unnamed.Get(text(owned, "id")) catch default -1
                 if r >= 0 and (t.StartsWith("struct ") or t.StartsWith("union ")) {
-                    g.recIndex.Put($t, r)
-                    g.recs[r].Key = $t
+                    g.recIndex.Put(t, r)
+                    g.recs[r].Key = t
                     if g.recs[r].Typedef == "" { g.recs[r].Typedef = $name }
                 }
             }
@@ -266,7 +266,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
                 v := constValue(c)
                 if v != "" { next = try v.ParseInt() catch default next }
                 cn := text(c, "name")
-                g.enumVals.Put($cn, next)
+                g.enumVals.Put(cn, next)
                 if g.wanted(where) { g.constant(cn, next) }
                 next++
             }
@@ -282,10 +282,10 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
                 }
             }
             static := text(n, "storageClass") == "static" or flag(n, "inline")
-            if where == 1 and static { g.ownFile.Put($name, 0) }
+            if where == 1 and static { g.ownFile.Put(name, 0) }
             mangled := text(n, "mangledName")
             sym String& = $("" if mangled == "" or mangled == name else mangled)
-            g.funcs.Push(cFunc($name, typeOf(n), ps.ToArray(), pts.ToArray(), static, sym))
+            g.funcs.Push(cFunc(name, typeOf(n), ps.ToArray(), pts.ToArray(), static, sym))
             continue
         }
         if kind == "VarDecl" and g.wanted(where) and usable(name) and text(n, "storageClass") != "static" {
@@ -338,16 +338,16 @@ fn (g mut gen&) constant(name String&, v I64) {
     if not usable(name) or name in g.constNames { return }
     ty := "I32" if v >= -2147483648 and v <= 2147483647 else "I64"
     g.consts.Push($name " " $ty " = " $v)
-    g.constNames.Put($name, 0)
-    g.taken.Put($name, 0)
+    g.constNames.Put(name, 0)
+    g.taken.Put(name, 0)
 }
 
 # a constant of another kind - a float's, a text's - written as its olang declaration
 fn (g mut gen&) namedConst(name String&, decl String&) {
     if not usable(name) or name in g.constNames { return }
     g.consts.Push(decl)
-    g.constNames.Put($name, 0)
-    g.taken.Put($name, 0)
+    g.constNames.Put(name, 0)
+    g.taken.Put(name, 0)
 }
 
 # a C name olang can declare: a word that is no keyword, not one C reserves for itself - beginning "__", or "_" and a
@@ -434,11 +434,11 @@ fn (g mut gen&) typeName(p mut ctp&, depth I64) I64 {
         } else if w in Array<String&>["short", "int", "char", "float", "double", "void", "_Bool", "bool", "_Float16", "__bf16", "__int128"] {
             if w != "int" or word == "" { word = $w }
         } else if w == "struct" or w == "union" or w == "enum" {
-            tag = $w
+            tag = w
             p.pos++
             named = p.at()
         } else if word == "" and tag == "" and named == "" and signed == 0 and longs == 0 and w.Len() > 0 and (w[0].IsLetter() or w[0] == '_') {
-            named = $w
+            named = w
         } else {
             break
         }
@@ -670,7 +670,7 @@ fn (g mut gen&) name(i I64) String { return $g.recs[i].Name }
 fn voidRef(ro Bool) String { return "CVoid?&" if ro else "mut CVoid?&" }
 
 fn (g mut gen&) skip(why String&) ? Skip {
-    g.why = $why
+    g.why = why
     error Skip.Why
 }
 
@@ -794,7 +794,7 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
 fn (g mut gen&) nameRecords() {
     for k in g.typedefs.Keys() {
         t := try g.typedefs.Get(k) catch default ""
-        if (t.StartsWith("struct ") or t.StartsWith("union ")) and t not in g.byKey and usable(k) { g.byKey.Put($t, $k) }
+        if (t.StartsWith("struct ") or t.StartsWith("union ")) and t not in g.byKey and usable(k) { g.byKey.Put(t, k) }
     }
     for i in range g.recs.Len() {
         if g.recs[i].Key == "" { continue }             # an unnamed struct no typedef names: reached by no type
@@ -814,8 +814,8 @@ fn (g mut gen&) nameRecord(i I64, td String&) {
     }
     if not usable(n) { n = "c_" $n }
     for g.taken.Has(n) or preludeName(n) { n = $n "_t" }
-    g.recs[i].Name = $n
-    g.taken.Put($n, 0)
+    g.recs[i].Name = n
+    g.taken.Put(n, 0)
 }
 
 # the names every module sees bare, which a C module may not declare: the prelude's types and constants
@@ -828,7 +828,7 @@ fn preludeName(n String&) Bool { return n in preludeNames }
 fn (g gen&) spell(i I64) String {
     r := g.recs.Ref(i)
     if r.Typedef != "" { return $r.Typedef }
-    return $r.Key
+    return r.Key
 }
 
 fn (g mut gen&) paramName(c String&, k I64, used mut Map<String&, I64>&) String {
@@ -836,7 +836,7 @@ fn (g mut gen&) paramName(c String&, k I64, used mut Map<String&, I64>&) String 
     for i < c.Len() and c[i] == '_' { i++ }       # C's own spelling of a parameter, "__format": its word
     n := $c[i:]
     if not usable(n) or n in g.taken or n in used or n == "CVoid" or n == "CStr" { n = "a" $k }
-    used.Put($n, 0)
+    used.Put(n, 0)
     return n
 }
 
@@ -861,7 +861,7 @@ fn (g mut gen&) function(f cFunc&) String ? Skip {
     if g.nodes[n.To].Kind != CKind.Void {
         r := try g.valueType(n.To, false)
         b.Push($" " $r)
-        if g.nodes[n.To].Kind == CKind.Num and g.numbersOnly(n) { g.fnResults.Put($f.Name, $r) }
+        if g.nodes[n.To].Kind == CKind.Num and g.numbersOnly(n) { g.fnResults.Put(f.Name, r) }
     } else if noRet {
         b.Push(" noreturn")
     }
@@ -917,7 +917,7 @@ fn resultText(t String&) String {
     if i <= 0 { return "" }
     r := t[:i].Trim()
     if r.Contains("(") or r == "" { return "" }
-    return $r
+    return r
 }
 
 fn (g mut gen&) structDecl(i I64) String {
@@ -957,7 +957,7 @@ fn (g mut gen&) structDecl(i I64) String {
 # the declarations: the extern block of functions and opaque types, the structs, the constants, the macros' functions,
 # and what has no form
 fn (g mut gen&) write(head String&) String {
-    for f in g.funcs { g.taken.Put($f.Name, 0) }
+    for f in g.funcs { g.taken.Put(f.Name, 0) }
     # a struct C hands back by pointer is C's to lay out: an extern type, whatever its fields
     for f in g.funcs {
         ft := noReturnOf(f.Type)
@@ -971,7 +971,7 @@ fn (g mut gen&) write(head String&) String {
     seen := Map<String&, I64>()
     for f in g.funcs {
         if f.Name in seen { continue }
-        seen.Put($f.Name, 0)
+        seen.Put(f.Name, 0)
         if not usable(f.Name) {
             if not g.all { g.skipped.Push($f.Name ": a name olang cannot declare (a keyword, or beginning with '_')") }
             continue
@@ -1113,8 +1113,8 @@ fn (g mut gen&) readMacros(out String&, probe String&, own String&, deps mut Vec
             if e <= q { continue }
             file = $line[q + 1:e].Replace("\\\\", "\\")
             if not file.StartsWith("<") and file != probe and file not in seen {
-                seen.Put($file, true)
-                deps.Push($file)
+                seen.Put(file, true)
+                deps.Push(file)
             }
             continue
         }
@@ -1143,19 +1143,19 @@ fn (g mut gen&) readMacros(out String&, probe String&, own String&, deps mut Vec
                 if pt == "..." or pt.EndsWith("...") {
                     variadic = true
                 } else if pt != "" {
-                    ps.Push($pt)
+                    ps.Push(pt)
                 }
             }
             body = rest[close + 1:]
         }
-        m mut cMacro& = cMacro($nm, isFn, ps.ToArray(), cLex(body).ToArray(), file == own or own == "")
+        m mut cMacro& = cMacro(nm, isFn, ps.ToArray(), cLex(body).ToArray(), file == own or own == "")
         m.Variadic = variadic
         k := try g.macroAt.Get(nm) catch default -1
         if k >= 0 {
             g.macros[k] = m
         } else {
             g.macros.Push(m)
-            g.macroAt.Put($nm, g.macros.Len() - 1)
+            g.macroAt.Put(nm, g.macros.Len() - 1)
         }
     }
 }
@@ -1171,20 +1171,20 @@ fn (g mut gen&) expand(toks Array<String&>&, hide mut Vec<String&>&, depth I64) 
         if t == "#" or t == "##" { try g.skip("it uses # or ##, which make text rather than an expression") }
         k := try g.macroAt.Get(t) catch default -1
         if k < 0 or g.macros[k].Name == "" or t in hide {
-            out.Push($t)
+            out.Push(t)
             i++
             continue
         }
         m := g.macros[k]
         if not m.Fn {
-            hide.Push($t)
-            for x in try g.expand(m.Body, hide, depth + 1) { out.Push($x) }
+            hide.Push(t)
+            for x in try g.expand(m.Body, hide, depth + 1) { out.Push(x) }
             try hide.Pop() catch { }
             i++
             continue
         }
         if i + 1 >= toks.Len() or toks[i + 1] != "(" {
-            out.Push($t)
+            out.Push(t)
             i++
             continue
         }
@@ -1205,7 +1205,7 @@ fn (g mut gen&) expand(toks Array<String&>&, hide mut Vec<String&>&, depth I64) 
                 args.Push(cur)
                 cur = Vec<String&>()
             } else {
-                cur.Push($a)
+                cur.Push(a)
             }
             j++
         }
@@ -1216,15 +1216,15 @@ fn (g mut gen&) expand(toks Array<String&>&, hide mut Vec<String&>&, depth I64) 
         for b in m.Body {
             p := try m.Params.FindIndex(fn(x String&) Bool { return x == b }) catch default -1
             if p < 0 {
-                body.Push($b)
+                body.Push(b)
                 continue
             }
             body.Push("(")
-            for x in try g.expand(args[p].ToArray(), hide, depth + 1) { body.Push($x) }
+            for x in try g.expand(args[p].ToArray(), hide, depth + 1) { body.Push(x) }
             body.Push(")")
         }
-        hide.Push($t)
-        for x in try g.expand(body.ToArray(), hide, depth + 1) { out.Push($x) }
+        hide.Push(t)
+        for x in try g.expand(body.ToArray(), hide, depth + 1) { out.Push(x) }
         try hide.Pop() catch { }
         i = j + 1
     }
@@ -1439,7 +1439,7 @@ fn (g mut gen&) cNumber(t String&) cx ? Skip {
         b.Push(d[x:])
         return cx.lit(b.ToString(), KFloat)
     }
-    if isHex or d.StartsWith("0b") or d == "0" or not d.StartsWith("0") { return cx.lit($d, KInt) }
+    if isHex or d.StartsWith("0b") or d == "0" or not d.StartsWith("0") { return cx.lit(d, KInt) }
     v := try d[1:].ParseInt(8) catch { try g.skip($"'" $t "', which is no number read here") } default 0
     return cx.lit($v, KInt)
 }
@@ -1546,7 +1546,7 @@ fn (g mut gen&) intMacros() Vec<I64> {
     for k, m in g.macros {
         if m.Name == "" or m.Fn or not m.Own or not usable(m.Name) or m.Body.Len() == 0 { continue }
         hide := Vec<String&>()
-        hide.Push($m.Name)
+        hide.Push(m.Name)
         body := try g.expand(m.Body, hide, 0) catch Skip { continue }
         if body.Len() == 0 or bodyKind(body) != 0 { continue }
         out.Push(k)
@@ -1561,7 +1561,7 @@ fn (g mut gen&) otherConsts() {
         if m.Name == "" or m.Fn or not m.Own or not usable(m.Name) or m.Name in g.constNames or m.Name in g.taken { continue }
         if m.Body.Len() == 0 { continue }         # "#define GUARD_H": a flag for the preprocessor, nothing to give
         hide := Vec<String&>()
-        hide.Push($m.Name)
+        hide.Push(m.Name)
         body := try g.expand(m.Body, hide, 0) catch Skip {
             g.skippedMacro(m.Name, g.why)
             continue
@@ -1613,14 +1613,14 @@ fn (g mut gen&) macroFns() {
             g.skippedMacro(m.Name, g.why)
             continue
         }
-        g.macroDecls.Push($f)
-        g.taken.Put($m.Name, 0)
+        g.macroDecls.Push(f)
+        g.taken.Put(m.Name, 0)
     }
 }
 
 fn (g mut gen&) macroFn(m cMacro&) String ? Skip {
     hide := Vec<String&>()
-    hide.Push($m.Name)
+    hide.Push(m.Name)
     body := try g.expand(m.Body, hide, 0)
     if body.Len() == 0 { try g.skip("its body is empty") }
     p := cparse(body.ToArray(), m.Params)
@@ -1694,13 +1694,13 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
     }
     g := gen($own if own != "" else "")
     g.all = true
-    g.tag = $tag
-    g.include = $include
+    g.tag = tag
+    g.include = include
     # the macros and the files read: the preprocessor's output with its definitions
     pre Vec<String&>
-    pre.Push($clang)
-    for f in flags { pre.Push($f) }
-    for a in Array<String&>["-E", "-dD", "-x", "c", "-w", probe] { pre.Push($a) }
+    pre.Push(clang)
+    for f in flags { pre.Push(f) }
+    for a in Array<String&>["-E", "-dD", "-x", "c", "-w", probe] { pre.Push(a) }
     o := try clangSays(pre.ToArray()) catch Skip {
         tr.Why = "clang could not be run"
         return tr
@@ -1754,9 +1754,9 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
 # clang's tree of probe as JSON
 fn (g mut gen&) dump(clang String&, flags Array<String&>&, probe String&) json.Json& ? Skip {
     args Vec<String&>
-    args.Push($clang)
-    for f in flags { args.Push($f) }
-    for a in Array<String&>["-x", "c", "-fsyntax-only", "-w", "-ferror-limit=0", "-Xclang", "-ast-dump=json", probe] { args.Push($a) }
+    args.Push(clang)
+    for f in flags { args.Push(f) }
+    for a in Array<String&>["-x", "c", "-fsyntax-only", "-w", "-ferror-limit=0", "-Xclang", "-ast-dump=json", probe] { args.Push(a) }
     o := try clangSays(args.ToArray()) catch Skip {
         g.why = "clang could not be run"
         error Skip.Why

@@ -284,6 +284,7 @@ type global struct() {
     State I64 = 0        # 0 not set, 1 being initialized, 2 set
     Build Bool = false   # S8a: it is a build constant's default (B10c) - reading it reads a build constant
     Used Bool = false    # S8a: its initializer read a build constant, directly or through what it called
+    Dtors Bool = false   # O1b: its initializer registered a destructor with the program's scope - run as the program ends
 }
 
 type gkey struct(Module I64, Name source.NameId) {
@@ -771,7 +772,7 @@ fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
 
 # an extern (X1), by generic.Program's function index, as the linker names it
 fn (m mut Machine&) DefineExtern(f I64, name String&, fixed I64 = -1) {
-    m.externs.Put(f, $name)
+    m.externs.Put(f, name)
     if fixed >= 0 { m.variadic.Put(f, fixed) }
 }
 
@@ -850,7 +851,7 @@ fn (m mut Machine&) stop(s Stop) {
     m.Stopped = s
 }
 
-fn (m mut Machine&) refuse(why String&) { m.stop(Stop.Refused($why, m.stopFile, m.stopSp)) }
+fn (m mut Machine&) refuse(why String&) { m.stop(Stop.Refused(why, m.stopFile, m.stopSp)) }
 
 # dead-region mode's stop: a read of storage a release reclaimed - never a refusal to evaluate, at compile time too
 fn (m mut Machine&) freedEarly() {
@@ -3976,6 +3977,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             }
             p := m.rdPtr(m.addr(fi, x, 1))
             m.addReg(sc, gDtor, I64(ty), p)
+            if sc == m.program and m.initGlobal >= 0: m.globals[m.initGlobal].Dtors = true
         }
         case mir.Stmt.Release(sp, p) {
             m.atK(fk, sp)
@@ -5625,6 +5627,26 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     return m.Stopped
 }
 
+# O1b, C11 (B3e): the program ending normally - the destructors registered with the program's scope run, the last
+# registered first, as the built program's __olang_prog_end runs them - a frame of function k (main) standing under
+# them, never stepped
+fn (m mut Machine&) EndProgram(k mir.FnKey) Stop {
+    m.halted = false
+    m.Stopped = Stop.None
+    fi := try m.fnOf.Get(k) catch { return Stop.None }
+    base := m.nFs
+    nf := m.pushFrame(fi, rRequest, 0)
+    if nf < 0 { return m.Stopped }
+    mark := m.closing.Len()
+    m.closing.Push(m.program)
+    for m.closing.Len() > mark and not m.halted {
+        m.stepClose()
+        m.loop(nf + 1)
+    }
+    m.unwind(base)
+    return m.Stopped
+}
+
 # a global's value (K2, B3e): its initializer run where it has not been, the value then at Result, of type ResultTy.
 # While compiling, a mutable global, or one holding storage a writable reference reaches, is no compile-time value -
 # baking, the latter is (its own storage written out as it is)
@@ -5660,6 +5682,12 @@ fn (m mut Machine&) Global(module I64, name source.NameId, baking Bool = false, 
         m.loop(base)
         m.unwind(base)
         if m.halted { return m.Stopped }
+    }
+    # O1b: a global whose initializer registers a destructor with the program's scope is not baked - the run's start
+    # runs it, so the destructor runs as the program ends; its value is still read while compiling
+    if baking and m.globals[g].Dtors {
+        m.refuse(WhyDestructor)
+        return m.Stopped
     }
     p := m.allocate(m.size(ty), aValue, m.program)
     m.copy(p, Ptr(m.globals[g].Store, 0), m.size(ty))
@@ -6024,7 +6052,7 @@ fn (m Machine&) ScopeSlots() I64 { return m.scopes.Len() }
 fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     seen := Map<I64, Bool>()
     work Vec<I64>
-    start := try m.fnOf.Get(k) catch { return $WhyNoBody, 0, source.Span(0, 0) }
+    start := try m.fnOf.Get(k) catch { return WhyNoBody, 0, source.Span(0, 0) }
     work.Push(start)
     seen.Put(start, true)
     for work.Len() > 0 {
@@ -6047,11 +6075,11 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
 fn (m mut Machine&) whyStmt(f mir.Fn&, s mir.Stmt) String, source.Span {
     match s {
         case mir.Stmt.Assign(sp, p, rv) {
-            if placeNamesGlobal(p) { return $WhyWritesGlobalVar, sp }
-            if m.readsMutable(f, rv) { return $WhyMutableGlobal, sp }
+            if placeNamesGlobal(p) { return WhyWritesGlobalVar, sp }
+            if m.readsMutable(f, rv) { return WhyMutableGlobal, sp }
         }
         case mir.Stmt.RegisterDtor(sp, s2, _, _) {
-            if s2 != mir.ScopeRef.Program { return $WhyDestructor, sp }
+            if s2 != mir.ScopeRef.Program { return WhyDestructor, sp }
         }
         case _ { }
     }
@@ -6063,7 +6091,7 @@ fn (m mut Machine&) whyStmt(f mir.Fn&, s mir.Stmt) String, source.Span {
 fn (m mut Machine&) whyTerm(f mir.Fn&, t mir.Term, seen mut Map<I64, Bool>&, work mut Vec<I64>&) String, source.Span {
     match t {
         case mir.Term.Exit(sp, kind, _) {
-            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return $WhyEnds, sp }
+            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return WhyEnds, sp }
         }
         case mir.Term.Call(sp, c), mir.Term.Tail(sp, c) { return m.whyCall(f.Calls[I64(c)].Target, sp, seen, work) }
         case _ { }
@@ -6077,10 +6105,10 @@ fn (m mut Machine&) whyCall(target mir.Callee, sp source.Span, seen mut Map<I64,
     match target {
         case mir.Callee.Extern(e, ty) {
             name := try m.externs.Get(e) catch default ""
-            if name != "__olang_run_on_stack" and not typed.MathExtern(name, m.T.Items(m.T.Params(ty)).Len()) { return $WhyExtern, sp }
+            if name != "__olang_run_on_stack" and not typed.MathExtern(name, m.T.Items(m.T.Params(ty)).Len()) { return WhyExtern, sp }
         }
         case mir.Callee.Fn(key, _) {
-            g := try m.fnOf.Get(key) catch { return $WhyNoBody, sp }
+            g := try m.fnOf.Get(key) catch { return WhyNoBody, sp }
             if not (try seen.Get(g) catch default false) {
                 seen.Put(g, true)
                 work.Push(g)

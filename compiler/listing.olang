@@ -21,7 +21,7 @@ import "types"
 # explain -asm/-ir FILE NAME: the code of each instance of the function NAME names, or the build's diagnostics
 fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, name String&, ir Bool, d mut diag.Diagnostics&) I32 {
     c.Listing = true
-    c.ListName = $name
+    c.ListName = name
     c.Quiet = true
     prog := build.Program()
     files := try build.Listed.ListingCode(fe, c, file, ir, prog, d) catch build.Failed.Reported {
@@ -277,8 +277,8 @@ fn (s mut Sources&) Text(path String&, n I64) String {
     if not s.lines.Has(path) {
         got Vec<String&>
         text := try os.ReadFile(path) catch os.Error default ""
-        for l in text.Lines() { got.Push($l) }
-        s.lines.Put($path, got.ToArray())
+        for l in text.Lines() { got.Push(l) }
+        s.lines.Put(path, got.ToArray())
     }
     ls := try s.lines.Get(path) catch default Array<String&>(0)
     return $ls[n - 1].TrimEnd() if n >= 1 and n <= ls.Len() else ""
@@ -324,7 +324,7 @@ fn instance(li Inputs&, code build.Code&, parts Vec<String&>&, names Namer&, src
     b.Push($cm " " $code.Label "\n")
     b.Push($cm " " $src.Shown(code.File) ":" $code.Line " - " $li.How "\n")
     chain Vec<String&>
-    chain.Push($code.Symbol)
+    chain.Push(code.Symbol)
     sym := found(parts, code.Symbol, li.Ir)
     if sym != "" {
         b.Push(body(li, sym, code.Symbol, chain.ToArray(), parts, names, src))
@@ -366,7 +366,7 @@ fn callersOf(remarks Vec<Remark>&, sym String&) Vec<String&> {
     out Vec<String&>
     for r in remarks {
         if r.Pass != "inline" or r.Kind != "passed" or not ofSym(r.Callee, sym) { continue }
-        if r.Function not in out { out.Push($r.Function) }
+        if r.Function not in out { out.Push(r.Function) }
     }
     return out
 }
@@ -386,7 +386,7 @@ fn definedIn(text String&, sym String&, ir Bool) String {
     for line in text.Lines() {
         if ir and line.StartsWith("define ") and irDefines(line, sym) { return $sym }
         if ir and line.StartsWith($"@" $sym " = ") and line.Contains(" alias ") { return aliasee(line) }
-        if not ir and line.StartsWith($sym) and (line.StartsWith($sym ":") or line.StartsWith($sym ".llvm.")) { return $sym }
+        if not ir and line.StartsWith(sym) and (line.StartsWith($sym ":") or line.StartsWith($sym ".llvm.")) { return $sym }
         if not ir and line.Trim().StartsWith($".set\t" $sym ", ") { return $line.Trim()[sym.Len() + 7:].Trim() }
     }
     return ""
@@ -409,8 +409,8 @@ fn aliasee(line String&) String {
 # it, then the code, then the remarks no line of it held
 fn body(li Inputs&, sym String&, own String&, chain Array<String&>&, parts Vec<String&>&, names Namer&, src mut Sources&) String {
     syms Vec<String&>
-    for s in chain { syms.Push($s) }
-    syms.Push($sym)
+    for s in chain { syms.Push(s) }
+    syms.Push(sym)
     remarks := Remarks(li.Files.Remarks, syms.ToArray(), names)
     w mut Writer& = Writer(li.Comment, src, remarks, syms.ToArray())
     for p in parts {
@@ -459,8 +459,8 @@ type Writer struct(Comment String&, src mut Sources&, remarks Vec<Remark>&, syms
 
 # a place reached in the code (pendFile's line pendLine of the file at pendPath): named before the next instruction
 fn (w mut Writer&) reach(name String&, path String&, line I64) {
-    w.pendFile = $name
-    w.pendPath = $path
+    w.pendFile = name
+    w.pendPath = path
     w.pendLine = line
 }
 
@@ -481,7 +481,7 @@ fn (w mut Writer&) place() {
         w.out.Push($cm " " $w.src.Shown(w.pendFile) ":" $w.pendLine "  " $w.src.Text(w.pendPath, w.pendLine).Trim() "\n")
         w.out.Push(w.remarksAt($w.pendFile ":" $w.pendLine, "    "))
     }
-    w.lastFile = $w.pendFile
+    w.lastFile = w.pendFile
     w.lastLine = 0 if generated else w.pendLine
 }
 
@@ -614,7 +614,7 @@ fn fileLine(t String&, files mut Map<I64, String&>&, dirs mut Map<I64, String&>&
 fn locOf(t String&) I64, I64 {
     words Vec<String&>
     for wd in t.Replace("\t", " ").Split(" ") {
-        if wd != "" { words.Push($wd) }
+        if wd != "" { words.Push(wd) }
     }
     if words.Len() < 3 { return -1, 0 }
     return (try words[1].ParseInt(10) catch default -1), (try words[2].ParseInt(10) catch default 0)
@@ -629,7 +629,7 @@ fn (w mut Writer&) irPart(text String&, sym String&) {
     for line in text.Lines() {
         if line.StartsWith("!") and (line.Contains("DILocation(") or line.Contains("DIFile(") or line.Contains("DISubprogram(") or line.Contains("DILexicalBlock")) {
             n := try line[1:(try line.Find(" ") catch default 1)].ParseInt(10) catch default -1
-            if n >= 0 { meta.Put(n, $line) }
+            if n >= 0 { meta.Put(n, line) }
         }
     }
     inside := false

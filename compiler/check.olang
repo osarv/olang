@@ -4238,12 +4238,6 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         # T13a: a "mut" global holding what never changes (text - "Name mut String&") is a binding that may be
         # assigned: nothing is ever written through it, so it takes any reference to one, read-only or not
         if c.isRef(want) and c.P.Immut(c.deref(want)) { want = c.P.T.Ref(c.P.T.Referent(want), c.P.T.PermOf(want) & ~types.Writable) }
-        # C11, O15: the program's scope has no holder that lets go - a global holds a value with destructors by reference,
-        # its destructors run as the program ends
-        if want != types.UnknownT and not c.isRef(want) and c.P.T.NeedsDrop(want) {
-            c.err(v.Ty!.Span(), msgs.DestructGlobal(c.src(v.Ty!.Span())))
-            want = c.P.T.Ref(want, types.ReadOnly)
-        }
     }
     from := c.stmts.Len()
     x typed.Expr?& = null
@@ -4414,7 +4408,7 @@ fn (c mut Checker&) comptimeFor(sp source.Span, f ast.ForIn&) {
         return
     }
     vals := try c.P.Unrolls.Get(key) catch {
-        c.UnrollAsks.Push(UnrollAsk($key, args.ToArray(), src, et))
+        c.UnrollAsks.Push(UnrollAsk(key, args.ToArray(), src, et))
         return
     }
     if vals.Len() > MaxUnroll {
@@ -4694,7 +4688,7 @@ fn (c mut Checker&) attrCallee(g ast.Expr&) ast.Expr&, String, source.Span {
     match g {
         case ast.Expr.Member(msp, x, n) {
             name := c.text(n)
-            if name == "Attr" or name == "HasAttr" { return x, $name, memberSpan(msp, name.Len()) }
+            if name == "Attr" or name == "HasAttr" { return x, name, memberSpan(msp, name.Len()) }
             return g, "", msp
         }
         case _ { return g, "", g.Span() }
@@ -5471,7 +5465,7 @@ fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, 
     cw, ct := c.P.L.Diags.TopContext()
     for i in range info.Reqs.Len() {
         ask := c.askBody(mi, sp, old, info.Reqs[i], args)
-        c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, $ct))
+        c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, ct))
         c.contractCallers.Push(old)
     }
     return out
@@ -5722,7 +5716,7 @@ fn (c mut Checker&) conversionAt(sp source.Span, argSp source.Span, x typed.Expr
     c.pop()
     c.state[id] = 2
     cw, ct := c.P.L.Diags.TopContext()
-    c.ContractAsks.Push(ContractAsk(id, file, sp, file, argSp, "", text, cw, $ct, $c.ty(t)))
+    c.ContractAsks.Push(ContractAsk(id, file, sp, file, argSp, "", text, cw, ct, $c.ty(t)))
     c.contractCallers.Push(-1)
 }
 
@@ -6246,7 +6240,7 @@ fn (c mut Checker&) gap(sp source.Span, what String&) {
         f = c.fr().File
         c.fr().Gapped = true
     }
-    c.Gaps.Push(Gap(f, sp, $what))
+    c.Gaps.Push(Gap(f, sp, what))
 }
 
 # the source text a span covers, in the current body's module
@@ -8271,7 +8265,7 @@ fn bangOf(t String&) String {
         if ch == ')' or ch == ']' { depth-- }
         if ch == ' ' and depth == 0 { return "(" $t ")" }
     }
-    return $t
+    return t
 }
 
 # ---- expressions ----
@@ -11236,7 +11230,7 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
             near.Offer(t)
         }
     }
-    return $near.Best
+    return near.Best
 }
 
 # E41: "_" where a value is wanted - an error naming the type wanted and what in scope fits it, locals and parameters
@@ -11644,24 +11638,12 @@ fn (c mut Checker&) unendedArgs(args Array<ast.TypeRef&>&, rt types.TypeId) Bool
     for a in args {
         if generic.IsErrsArgOf(a): continue
         ra := c.P.Resolve(c.fr().Ctx, a)
-        if not c.isRef(ra) and c.P.UnendedDrop(c.P.T.Array(ra, types.TypeId(0))) != types.UnknownT {
+        if not c.isRef(ra) and c.P.UnendedDrop(c.P.T.Ref(c.P.T.Array(ra, types.TypeId(0)), types.ReadOnly)) != types.UnknownT {
             at = a
             break
         }
     }
     c.err(at.Span(), msgs.DestructTypeByValue(c.ty(u), c.ty(rt)) if c.P.Unique(u) else msgs.DestructCopiedHeld(c.ty(u), c.ty(rt)))
-    return false
-}
-
-# C11: a value made an array of a run-time length - Array<T>(n), a comprehension, a copy of one - whose elements have a
-# destructor to run: nothing would end them (an array has no holder of its elements; a library collection's buffer is
-# its destructor's) - said at sp; whether it is none
-fn (c mut Checker&) runArrayEnds(t types.TypeId, sp source.Span) Bool {
-    r := c.P.T.Repr(c.deref(t))
-    if c.P.T.KindOf(r) != types.Kind.Array or c.P.T.Length(r) != types.TypeId(0): return true
-    el := c.P.T.Elem(r)
-    if c.isRef(el) or not c.P.T.NeedsDrop(el): return true
-    c.err(sp, msgs.DestructRunArray(c.ty(el)))
     return false
 }
 
@@ -12137,8 +12119,6 @@ fn (c mut Checker&) leadWord(sp source.Span) source.Span {
 }
 
 # Array<T>(n[, fill]), T written tr: its arguments, then the array made (QP1)
-# Array<T>(n) made: of a run-time length, its elements with no destructor to run (C11)
-fn (c mut Checker&) arrayMade(sp source.Span, x typed.Expr&) typed.Expr& { return x if c.runArrayEnds(typeOf(x), sp) else c.unknown(sp) }
 
 fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
     if args.Len() < 1 or args.Len() > 2 {
@@ -12155,7 +12135,7 @@ fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Ex
         c.dropArgs(args)
         return c.unknown(sp)
     }
-    if not c.runArrayValue(el) or args.Len() != 2 { return c.arrayMade(sp, c.arrayMake(sp, el, args, want)) }
+    if not c.runArrayValue(el) or args.Len() != 2 { return c.arrayMake(sp, el, args, want) }
     # T7d: elements held by value take their length from the fill, where it has one known while compiling
     fx := c.expr(args[1], types.UnknownT)
     ft := typeOf(fx)
@@ -12163,7 +12143,7 @@ fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Ex
         return c.arrayMake(sp, ft, args, want, fx)
     }
     # QCE: else run-time elements, each its own copy of the fill
-    if ft != types.UnknownT { return c.arrayMade(sp, c.arrayMake(sp, el, args, want, c.fit(fx, el, args[1].Span()))) }
+    if ft != types.UnknownT { return c.arrayMake(sp, el, args, want, c.fit(fx, el, args[1].Span())) }
     c.exprTo(args[0], c.i64())
     return c.unknown(sp)
 }
@@ -14446,7 +14426,6 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
         if not existingValue(v) { return v }
-        if not c.runArrayEnds(typeOf(v), nsp) { return c.unknown(sp) }   # C11
         c.wantCopy(typeOf(v), 0)
         sp0 := v.Span()
         from := c.exprs.Len()
@@ -16816,11 +16795,6 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<
                 ps := c.P.T.Items(c.P.T.Parts(t))
                 if i < ps.Len() { pt = ps[i] }
             }
-            # R11: a default for a value holding references builds all it holds - nothing existing in it
-            # (a declared function named - made once for the program, T21 - holds nothing either)
-            if value and not c.isRef(pt) and c.P.T.HoldsRefs(pt) and not builtAst(cl.Defaults[i]) and not c.namedFn(cl.Defaults[i]) {
-                c.err(cl.Defaults[i].Span(), msgs.DefaultHoldsReferences())
-            }
             c.exprs.Push(c.exprTo(cl.Defaults[i], pt))
         }
     }
@@ -16848,76 +16822,10 @@ fn (c mut Checker&) caughtPayload(sp source.Span, bind I64) {
     c.emit(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrTaken, c.readLocal(sp, bind), null)))
 }
 
-# a task's default (P4a): built where the call's result lands, so one holding references builds all it holds - a part
-# naming existing storage that holds a reference is said where it is written
+# a task's default (P4a): the targets' value, judged by the scope pass as what the task's clause returns - existing
+# storage it names outlives where the result lands, or is refused there
 fn (c mut Checker&) taskDefault(x ast.Expr&, t types.TypeId) typed.Expr& {
-    e := c.expr(x, t)
-    if c.isRef(t) or c.P.T.HoldsRefs(t) {
-        at := c.existingIn(e)
-        if at.Start >= 0 {
-            c.err(at, msgs.TaskDefaultExisting())
-            return c.unknown(x.Span())
-        }
-    }
-    return c.fit(e, t, c.argSpan(x))
-}
-
-# the first part of a value that names existing storage holding a reference rather than building it (P4a); Start -1
-# for none
-fn (c mut Checker&) existingIn(x typed.Expr?&) source.Span {
-    if x is null { return source.Span(-1, -1) }
-    match x {
-        case typed.Expr.Read(sp, ty, _, _) {
-            if c.isRef(ty) or c.P.T.HoldsRefs(ty) { return sp }
-        }
-        case typed.Expr.Borrow(sp, _, _) { return sp }
-        case typed.Expr.Promote(_, _, pr) { return c.existingIn(pr.X) }
-        case typed.Expr.Call(_, _, cl) {
-            for a in cl.Args {
-                e := c.existingIn(a)
-                if e.Start >= 0 { return e }
-            }
-        }
-        case typed.Expr.Make(_, _, m) {
-            for a in m.Items {
-                e := c.existingIn(a)
-                if e.Start >= 0 { return e }
-            }
-        }
-        case typed.Expr.Prim(_, _, op, _, args) {
-            if typed.PassesRefs(op) and args.Len() > 0 { return c.existingIn(args[0]) }
-        }
-        case _ { }
-    }
-    return source.Span(-1, -1)
-}
-
-# whether an expression builds all it holds (R11): literals, written text, calls and array literals of such, a case
-# whether an expression names a declared function (or an import's) as a value: its environment none (T21)
-fn (c mut Checker&) namedFn(x ast.Expr&) Bool {
-    return match x {
-        case ast.Expr.Name(sp, _): c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Func
-        case ast.Expr.Paren(_, y): c.namedFn(y)
-        case _: false
-    }
-}
-
-fn builtAst(x ast.Expr&) Bool {
-    return match x {
-        case ast.Expr.Lit(_, _), ast.Expr.Join(_, _), ast.Expr.Member(_, _, _): true
-        case ast.Expr.Paren(_, y): builtAst(y)
-        case ast.Expr.Unary(_, op, y): op == token.Tok.Minus and builtAst(y)
-        case ast.Expr.Call(_, _, args), ast.Expr.ArrayLit(_, _, args): allBuilt(args)
-        case _: false
-    }
-}
-
-fn allBuilt(xs Array<ast.Expr&>&) Bool {
-    if xs.Len() == 0 { return true }
-    for x in xs {
-        if not builtAst(x) { return false }
-    }
-    return true
+    return c.fit(c.expr(x, t), t, c.argSpan(x))
 }
 
 # whether an expression may stand as a statement (S3): a call, a try of one, an increment, a take - else a value
@@ -18344,7 +18252,7 @@ fn (c mut Checker&) assertStmt(sp source.Span, k ast.Expr&, msg ast.Expr?&) {
         if use == diag.Where.Nowhere and inLib: use = c.P.L.Diags.UseOf(c.at(opAt))
         if use == c.at(opAt): use = diag.Where.Nowhere
     }
-    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, opAt, cb, mb, fixed.ToArray(), cw, $ct, saidOk, $said, $written, use))
+    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, opAt, cb, mb, fixed.ToArray(), cw, ct, saidOk, said, written, use))
 }
 
 # S3: an expression standing alone is a call, "++" or "--"
@@ -20428,8 +20336,6 @@ fn (c mut Checker&) comprArray(sp source.Span, cm ast.Compr&, elem types.TypeId)
         c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprNeedsTry())
     }
     c.fr().LoopFails = fails
-    # C11: elements with destructors in an array of a run-time length - ended by nothing
-    if state != 3 and not c.runArrayEnds(at, sp) { return c.unknown(sp) }
     if state == 3 {
         # T7c: no if, a count known while compiling - a fixed array, each element written once in place
         r := c.readLocal(sp, out)
@@ -22428,11 +22334,20 @@ fn (c mut Checker&) retLand(x typed.Expr&) typed.Expr& {
     return c.handOn(x, l) if l >= 0 else x
 }
 
+# C11: whether place p is a collection's buffer (types.Table.FieldHolds): its elements the collection's own code ends,
+# so a store over it ends nothing
+fn (c mut Checker&) bufferField(p typed.Lvalue&) Bool {
+    match p {
+        case typed.Lvalue.Field(_, ty, base, _) { return not c.P.T.FieldHolds(base.Type(), ty) }
+        case _ { return false }
+    }
+}
+
 # x stored into p (S4): where p holds a value with destructors to run by value, x made first, then the old value's run
 # (a variable's only while it holds one), then the store - Rust's order
 fn (c mut Checker&) storeOver(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     t := p.Type()
-    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t) {
+    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t) or c.bufferField(p) {
         c.emit(typed.Stmt.Assign(sp, p, x))
         return
     }
@@ -22531,7 +22446,6 @@ fn (c mut Checker&) partCopy(x typed.Expr&) typed.Expr& {
 # site, as any value made is)
 fn (c mut Checker&) ownCopy(x typed.Expr&) typed.Expr& {
     if not existingValue(x) { return x }
-    if not c.runArrayEnds(typeOf(x), x.Span()) { return x }   # C11
     c.wantCopy(typeOf(x), 0)
     sp := x.Span()
     from := c.exprs.Len()
@@ -22857,7 +22771,22 @@ fn (c mut Checker&) yieldStmt(sp source.Span, x ast.Expr&) {
     c.nullDecl = wasNull
     if rt == c.textType() and c.isRef(typeOf(v)) { v = c.read(sp, typed.Lvalue.Deref(sp, rt, v)) }
     if not c.isRef(rt) { c.roStore(v, x.Span(), RoReturned) }   # T25c: the caller holds it writably
+    # (D18b: a value the walk goes on with, yielded from one of its own variables, flows out as a copy built where it
+    # goes - a value read out of a place is one, E31d; refusals 5.7)
+    if not c.isRef(rt) and c.ownVar(v) { v = c.ownCopy(v) }
     c.emit(typed.Stmt.Suspend(sp, v))
+}
+
+# whether x reads a variable of the body's own whole, its value owning storage it may change - an array of a run-time
+# length held by value, in it or in its parts (a Vec): not immut, not a parameter
+fn (c mut Checker&) ownVar(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Read(_, ty, typed.Lvalue.Local(_, _, id), _) {
+            if c.cur().Local(id).Kind != typed.LocalKind.Var or c.P.Immut(ty): return false
+            return c.P.T.OwnedPart(ty) or c.P.T.OwnsParts(ty)
+        }
+        case _ { return false }
+    }
 }
 
 # where a generator's body ends (D18a): its Next fails with Exhausted, now and whenever it is asked after
@@ -25712,7 +25641,7 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
         # (whether C may call the program back, decided over the whole program, says what a C call may do: settled as a
         # body's facts are)
         xv := try c.factPresets.Get($"extern " $f ":" $name) catch default c.Effects().OfExtern(f).Holds(k)
-        xr := factRead(-1, f, $name, xv, c.fr().File, sp, $c.src(sp))
+        xr := factRead(-1, f, name, xv, c.fr().File, sp, $c.src(sp))
         c.factReads.Push(xr)
         return c.lit(sp, types.BoolT, 1 if c.readFact(xr) else 0)
     }
@@ -25724,7 +25653,7 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
     c.fnBody(inst)    # checked in this attempt, so its facts are found once it ends
     key := $inst ":" $name
     v := try c.factPresets.Get(key) catch default effects.Conservative(k)
-    r := factRead(inst, -1, $name, v, c.fr().File, sp, $c.src(sp))
+    r := factRead(inst, -1, name, v, c.fr().File, sp, $c.src(sp))
     c.factReads.Push(r)
     return c.lit(sp, types.BoolT, 1 if c.readFact(r) else 0)
 }
@@ -26298,7 +26227,7 @@ fn rootRules(l mut load.Loader&) String {
     f := l.Mods[l.Root].File
     for s in l.Diags.AllSaid() {
         if s.File == f {
-            b.Push($s.Rule)
+            b.Push(s.Rule)
             b.PushChar(' ')
         }
     }

@@ -627,7 +627,7 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Arr
         t.shapes.Push(kept)
         t.shapeCases.Push(payloads)
         t.shapeFields.Push(Array<source.NameId>(0))
-        t.shapeKeys.Put($k, s)
+        t.shapeKeys.Put(k, s)
     }
     if fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
         fs mut Array<source.NameId>& = Array<source.NameId>(fields.Len())
@@ -653,7 +653,7 @@ fn (t mut Table&) ConstExpr(key String&) TypeId {
     p := try t.patternKeys.Get(key) catch default -1
     if p < 0 {
         p = t.patterns.Len()
-        t.patterns.Push($key)
+        t.patterns.Push(key)
         t.patternKeys.Put(t.patterns[p], p)
     }
     return t.intern(data(Kind.ConstExpr, p, 0, 0), 1)
@@ -1060,7 +1060,8 @@ fn (t Table&) needsDrop(id TypeId, depth I64) Bool {
                 case _: false
             }
         }
-        case Kind.Array { return t.Length(r) != TypeId(0) and t.needsDrop(t.Elem(r), depth + 1) }
+        # (C11: an array of a run-time length ends its elements too - its length is in it)
+        case Kind.Array { return t.needsDrop(t.Elem(r), depth + 1) }
         case Kind.Record, Kind.Tuple { return t.partsDrop(t.Parts(r), depth) }
         case Kind.AnonEnum { return t.partsDrop(t.ShapeCases(r), depth) }
         case _ { return false }
@@ -1538,7 +1539,7 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
 
 # registers a module's identity; its index
 fn (t mut Table&) AddModule(identity String&) I64 {
-    t.Modules.Push($identity)
+    t.Modules.Push(identity)
     return t.Modules.Len() - 1
 }
 
@@ -1603,6 +1604,15 @@ fn (t Table&) DtorWritten(id TypeId) Bool { return t.bodyOf(id).Destructs }
 fn (t mut Table&) MarkEnds(d DeclId) { t.endsDecls.Put(I64(d), true) }
 
 fn (t Table&) Ends(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.endsDecls.Has(I64(t.DeclOf(id))) }
+
+# C11: whether field f (its type) of a value of type owner is a holder of what it holds by value - all but the buffer
+# of a collection whose destructor ends the live elements of it (Ends): an array of a run-time length there is room past
+# its count, its elements the collection's to end
+fn (t Table&) FieldHolds(owner TypeId, f TypeId) Bool {
+    if t.IsRef(f) or not t.NeedsDrop(f): return false
+    r := t.Repr(f)
+    return not (t.KindOf(r) == Kind.Array and t.Length(r) == TypeId(0) and t.Ends(t.Repr(owner)))
+}
 
 # whether an instance of such a collection holds, by value - through its fields and the elements of the arrays they
 # are, a run-time length's included (the elements its own code says are live) - a value with destructors to run
@@ -2261,7 +2271,7 @@ fn Demangle(sym String&) String {
             continue
         }
         if cut and i + 2 >= s.Len() { break }      # an escape the cut went through
-        return $sym
+        return sym
     }
     text := b.ToString()
     if not text.Contains(".") { return $sym }

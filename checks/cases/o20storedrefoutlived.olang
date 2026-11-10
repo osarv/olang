@@ -1,0 +1,26 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O20 (refusals section 8: a kind with no case): 'r' is new storage or the parameter 'other's referent, of two scopes
+# (a try's default, R11) - stored into what 'b' refers to, the container outlives the one built here. A recorded limit:
+# the try's new storage is not built where 'b' lives when its value is one of two
+type E error { Empty }
+type Node struct(v I64) {
+    v
+}
+type Box struct(n mut Node?&) {
+    n
+}
+fn Node.make(v I64) mut Node& ? E {
+    if v < 0 { error E.Empty }
+    return Node(v)
+}
+fn set(b mut Box&, other mut Node&, v I64) {
+    r := try Node.make(v) catch default other
+    r.v = 3
+    b.n = r
+}
+fn main() {
+    b := Box(null)
+    o := Node(1)
+    set(b, o, -1)
+    assert b.n!.v == 3
+}

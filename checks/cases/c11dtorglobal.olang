@@ -1,8 +1,30 @@
-# check: fail error[C11]: Conn has a destructor to run, so a global holds it by reference - write Conn&, its destructor run as the program ends
-# C11, O15: the program's scope has no holder that lets go of a global's value - one with a destructor is held by reference
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals question 3, the user's yes of 2026-11-08; O1b): a global may hold a value with destructors by value - its
+# destructors registered with the program's scope as its initializer runs, and run as the program ends, the last
+# registered first; a store over a mutable one ends the old value (O15). It was refused ("a global holds it by
+# reference"), and neither form's destructor ran: the program's scope never closed
+import "std/io"
+import "std/os"
 Closed mut I64 = 0
 type Conn unique struct(fd I32) {
     fd
-} destruct { Closed++ }
+} destruct {
+    Closed++
+    io.Println("closed " $fd " (" $Closed ")")!
+}
 G Conn = Conn(3)
-fn main() { assert G.fd == 3 }
+R Conn& = Conn(4)
+H mut Conn = Conn(I32(os.Args().Len() + 6))
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn main() {
+    churn()
+    io.Println($G.fd " " $R.fd " " $H.fd " " $Closed)!
+    H = Conn(8)
+    io.Println($H.fd " " $Closed)!
+}

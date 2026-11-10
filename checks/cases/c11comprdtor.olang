@@ -1,12 +1,30 @@
-# check: fail error[C11]: R has a destructor to run, and Array<R> keeps values of it where no holder ends them - write R&, or keep them in a Vec<R>
-# C11: a comprehension of a run-time length makes values with destructors no holder ends (found 2026-11-07: they were
-# made and never ended; a count known while compiling makes a fixed array, which ends them)
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals question 3, the user's yes of 2026-11-08): a comprehension of a run-time length holding values with
+# destructors ends them as its holder lets go, the last first. It was refused ("Array<R> keeps values of it where no
+# holder ends them")
+import "std/io"
+import "std/os"
 Ended mut I64 = 0
+Order mut I64 = 0
 type R unique struct(id I64) {
     id
-} destruct { Ended++ }
-fn mk(n I64) I64 {
-    xs := Array<R>[R(i) for i in range n]
-    return xs.Len()
+} destruct {
+    Ended++
+    Order = Order * 10 + id
 }
-fn main() { assert mk(3) == 3 }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(n I64) I64 {
+    xs := Array<R>[R(i + 1) for i in range n]
+    churn()
+    return xs.Len() * 10 + xs[2].id
+}
+fn main() {
+    assert mk(os.Args().Len() + 2) == 33
+    io.Println($Ended " " $Order)!
+}

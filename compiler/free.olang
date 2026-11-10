@@ -3602,7 +3602,7 @@ fn (f mut Free&) what(ty types.TypeId) String {
 fn (f mut Free&) keep(k I64, kind I64, file I64, sp source.Span, text String&) {
     if k < 0 or k >= f.whyKind.Len() or f.whyKind[k] != RNone { return }
     f.whyKind[k] = kind
-    f.why[k] = reason(kind, file, sp, $text)
+    f.why[k] = reason(kind, file, sp, text)
 }
 
 # ---- condition 6: views in use when a place lets go ----
@@ -4840,7 +4840,7 @@ fn (f mut Free&) Report() String {
         # one row a cause: places let go of together, kept for one reason, are one row
         text := $d.Locate(g.File, at) ": memory: " $what "\n" $where ": note: " $why "\n"
         if text not in rows {
-            rows.Push($text)
+            rows.Push(text)
             b.Push(text)
         }
     }

@@ -702,7 +702,7 @@ fn TestDesc(d Decl&, text String&) String {
         case Decl.Test(_, name, _, _) {
             s := text[name.Start:name.End]
             if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
-            return $s
+            return s
         }
         case _ { return "test" }
     }

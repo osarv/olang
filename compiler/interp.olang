@@ -137,7 +137,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         if embeds.Has(key) { continue }
         made++
         path := try x.Text(a.Body) catch default "\0"
-        embeds.Put(key, $path)
+        embeds.Put(key, path)
     }
     if made > 0 { return made }
     # K3a: a comptime for's elements, each walk once - its range's arguments or its array evaluated
@@ -145,8 +145,8 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         if unrolls.Has(a.Key) or unrollWhy.Has(a.Key) { continue }
         made++
         match x.unrolled(a) {
-            case Unrolled.Values(vals) { unrolls.Put($a.Key, Array<I64>[v for v in vals]) }
-            case Unrolled.Refused(why) { unrollWhy.Put($a.Key, $why) }
+            case Unrolled.Values(vals) { unrolls.Put(a.Key, Array<I64>[v for v in vals]) }
+            case Unrolled.Refused(why) { unrollWhy.Put(a.Key, why) }
         }
     }
     undecided Vec<ast.If&>
@@ -170,14 +170,14 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         made++
         b := c.ExprBodyIn(a.Mi, a.Owner, a.Names, a.Vals, a.Expr, a.Want)
         if b < 0 {
-            lengths.Put($key, generic.RunTimeLength)
+            lengths.Put(key, generic.RunTimeLength)
             continue
         }
         k := mir.FnKey.Body(typed.BodyId(I32(b)))
         x.Need(k)
         match x.M.Eval(k, Array<I64>(0)) {
-            case eval.Stop.None { lengths.Put($key, x.M.Int(x.M.Result, a.Want)) }
-            case _ { lengths.Put($key, generic.RunTimeLength) }
+            case eval.Stop.None { lengths.Put(key, x.M.Int(x.M.Result, a.Want)) }
+            case _ { lengths.Put(key, generic.RunTimeLength) }
         }
     }
     for t in tops {
@@ -580,7 +580,7 @@ fn zeroFix(text String&, i I64, ty String&, from I64, to I64) String {
 fn valueWhy(s eval.Stop, at source.Span) String, I64, source.Span {
     match s {
         case eval.Stop.None { return "", -1, at }
-        case eval.Stop.Refused(why, f, sp) { return $why, f, sp }
+        case eval.Stop.Refused(why, f, sp) { return why, f, sp }
         case eval.Stop.Exited(kind, f, sp, _) {
             if kind == mir.ExitKind.Unreachable and sp.Start == at.Start { return "it fails with an error no clause handles", -1, at }
             return $AbortWhy(kind), f, sp
@@ -638,7 +638,7 @@ fn unbaked(x mut Exec&, c mut typecheck.Checker&, d mut diag.Diagnostics&, i I64
     b := x.Bodies[i]
     if c.ComptimeSites.Has(i) {
         why, _, _ := valueWhy(x.M.Stopped, b.Sp)
-        whyNot.Put(i, $why)
+        whyNot.Put(i, why)
         return
     }
     # G39: an attribute's value is built while compiling, or is an error - never set at startup
@@ -867,7 +867,7 @@ fn (x mut Exec&) intOf(body I64, ty types.TypeId) I64 ? Unevaluated {
 # why an evaluation stopped, as K1 says it
 fn stopWhy(s eval.Stop) String {
     why, _, _ := valueWhy(s, source.Span(-1, -1))
-    return $why
+    return why
 }
 
 # ---- the machine ----
@@ -1217,11 +1217,14 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
     x.Need(k)
     s := x.InitGlobals()
     if s == eval.Stop.None { s = x.M.Eval(k, Array<I64>(0)) }
+    # O1b, C11: the program's scope's destructors run as it ends normally - main returned, or (below) an error escaped it
+    if s == eval.Stop.None: s = x.M.EndProgram(k)
     match s {
         case eval.Stop.None { return 0 }
         case eval.Stop.Raised(_) {
             sayErr($x.StopText(s, entry, d) "\n")
             sayErr(x.TraceText(d))
+            x.M.EndProgram(k)
             return 1
         }
         case eval.Stop.Refused(why, _, _) {

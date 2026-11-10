@@ -431,7 +431,7 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
     lines := full.TrimEnd().Split("\n")
     at := declAt(c, mi, name)
     isFn := lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ")
-    e := Entry($attrs.ToString() $(firstLines(full) if isFn else $lines[0]), "", $name)
+    e := Entry($attrs.ToString() $(firstLines(full) if isFn else $lines[0]), "", name)
     if at >= 0 { e.Doc = Comment(text, at, true) }
     e.File = m.File
     e.At = at
@@ -460,13 +460,13 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
             continue
         }
         if line.StartsWith("meets ") {
-            e.Members.Push(Entry($line, "", ""))
+            e.Members.Push(Entry(line, "", ""))
             continue
         }
         if line.StartsWith("fn ") {
             mname := methodName(line)
             if not all and not Exported(mname) { continue }
-            me := Entry($line, "", mname)
+            me := Entry(line, "", mname)
             if d >= types.DeclId(0) {
                 f := c.P.MethodOf(c.P.SelfType(d), nm.Intern(mname))
                 if f >= 0 {
@@ -481,7 +481,7 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
         }
         mname := memberName(line)
         if not all and not Exported(mname) { continue }
-        me := Entry($line, "", mname)
+        me := Entry(line, "", mname)
         mat := memberAt(c, mi, d, mname)
         if mat >= 0 {
             # a member written on its declaration's own line has the declaration's comments, none of its own

@@ -55,7 +55,7 @@ fn IsCommit(c String&) Bool {
 }
 
 fn (f mut Fetcher&) say(line String&) {
-    f.Said.Push($line)
+    f.Said.Push(line)
     if not f.Quiet { try io.PrintErrln(line) catch io.Error { } }
 }
 
@@ -73,8 +73,8 @@ fn (f mut Fetcher&) load() {
             if k == "" { k = $part } else if c == "" { c = $part }
         }
         if c == "" { continue }
-        f.keys.Push($k)
-        f.commits.Push($c)
+        f.keys.Push(k)
+        f.commits.Push(c)
     }
 }
 
@@ -102,10 +102,10 @@ fn (f mut Fetcher&) lock(key String&, commit String&) {
     }
     if at >= 0 and f.commits[at] == commit { return }
     if at >= 0 {
-        f.commits[at] = $commit
+        f.commits[at] = commit
     } else {
-        f.keys.Push($key)
-        f.commits.Push($commit)
+        f.keys.Push(key)
+        f.commits.Push(commit)
     }
     order := Array<I64>(f.keys.Len())
     for i in range order.Len() { order[i] = i }
@@ -127,7 +127,7 @@ fn (f mut Fetcher&) updatedNow(key String&, mark Bool) Bool {
     for k in f.updated {
         if k == key { return true }
     }
-    if mark { f.updated.Push($key) }
+    if mark { f.updated.Push(key) }
     return false
 }
 
@@ -312,7 +312,7 @@ test "fetching locks a commit, a locked build is offline, deleting a line or -u 
     assert dir4 == $cache "/example.com/me/tools/" $c2
     assert u.Said[u.Said.Len() - 1] == "olang: updated example.com/me/tools to " $c2[:12] " (was " $c1[:12] ")"
     lock2 := try os.ReadFile(lockPath) catch default ""
-    assert lock2.Contains("example.com/me/tools " $c2) and not lock2.Contains($c1)
+    assert lock2.Contains("example.com/me/tools " $c2) and not lock2.Contains(c1)
     # a lock line naming no commit, a bad name, and a repository that is not there
     try os.WriteFile(lockPath, "example.com/me/tools nonsense\n") catch os.Error { unreachable }
     v := Fetcher(lockPath, cache, "file://" $base "/", false, true)

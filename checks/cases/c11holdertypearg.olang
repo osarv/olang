@@ -1,15 +1,32 @@
-# check: fail error[C11]: Pool has a destructor to run, and Buf<Pool> keeps values of it where no holder ends them - write Pool&, or keep them in a Vec<Pool>
-# C11: a holder of a value with a destructor by value has its destructor to run too - an array of a run-time length a
-# type of the program's holds says nothing of which elements are live, so nothing would end them (a Vec<Pool> does)
+# check: run
+# flags: -debug -sanitize
+# R8 (refusals question 3, the user's yes of 2026-11-08): a type of the program holding an array of a run-time length of
+# a type argument holds values with destructors by value through it - the array ends them as the holder lets go of the
+# instance. It was refused ("Buf<Pool> keeps values of it where no holder ends them"). A conditional destructor stays
+# the library's collections' (it needs vacate to say which positions are live)
+import "std/io"
+import "std/os"
 Closed mut I64 = 0
 type Conn unique struct(fd I32) {
     fd
 } destruct { Closed++ }
 type Pool struct(c Conn) { c }
-type Buf<T> struct() {
-    a Array<T>
+type Buf<T> struct(n I64) {
+    a Array<T> = Array<T>(n)
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
 }
 fn main() {
-    v := Buf<Pool>()
-    assert v.a.Len() == 0
+    {
+        v := Buf<Pool>(os.Args().Len() + 2)
+        v.a[1] = Pool(Conn(7))
+        churn()
+        assert v.a.Len() == 3 and v.a[1].c.fd == 7
+        io.Println("replaced " $Closed)!
+    }
+    io.Println("let go " $Closed)!
 }

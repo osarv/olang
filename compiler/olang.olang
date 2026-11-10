@@ -238,13 +238,13 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if ((OptModes[o] >> cl.Mode) & 1) == 0 {
                 try usage(d, msgs.OptionNotForMode(a, modesOf(OptModes[o]), modeName(cl.Mode)))
             }
-            cl.Passed.Push($a)
+            cl.Passed.Push(a)
             v String& = ""
             if OptValues[o] != "" {
                 if i >= args.Len() { try usage(d, msgs.OptionNeedsValue(a, OptValues[o])) }
                 v = $args[i]
                 i++
-                cl.Passed.Push($v)
+                cl.Passed.Push(v)
             }
             if o == 0 { cl.Output = $v }
             if o == 1 { c.Debug = true }
@@ -264,7 +264,7 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if o == 18 { c.Bench = true }
             if o == 15 or o == 16 {
                 if cl.Listing != "" { try usage(d, msgs.ListingAlone()) }
-                cl.Listing = $a
+                cl.Listing = a
             }
             if cl.Caps and cl.Listing != "" { try usage(d, msgs.ListingAlone()) }
             if o == 13 {
@@ -281,19 +281,19 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
         if cl.Mode == Doc and cl.Html == "" and cl.Files.Len() == 1 and not endsWithOlang(a) {
             # B14: a file, then the name of one of its items
             if cl.HasWord { try usage(d, msgs.DocOneName(cl.Files[0])) }
-            cl.Word = $a
+            cl.Word = a
             cl.HasWord = true
             continue
         }
         if cl.Mode == Explain or cl.Mode == Help {
             # B11b: a file, then the name of one of its items
             if cl.Mode == Explain and cl.HasWord and cl.Files.Len() == 0 and endsWithOlang(cl.Word) {
-                cl.Files.Push($cl.Word)
-                cl.Word = $a
+                cl.Files.Push(cl.Word)
+                cl.Word = a
                 continue
             }
             if cl.HasWord { try usage(d, msgs.ExplainNeedsRule() if cl.Mode == Explain else msgs.HelpOneMode()) }
-            cl.Word = $a
+            cl.Word = a
             cl.HasWord = true
             continue
         }
@@ -306,10 +306,10 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
         }
         # B7a: after test's files, a word naming no file and no .olang file is a filter
         if cl.Mode == Test and cl.Files.Len() > 0 and not endsWithOlang(a) and not os.Exists(a) {
-            cl.Filters.Push($a)
+            cl.Filters.Push(a)
             continue
         }
-        cl.Files.Push($a)
+        cl.Files.Push(a)
         if cl.Mode == Run or cl.Mode == Interp or cl.Mode == Profile {
             for i < args.Len() {
                 cl.Args.Push($args[i])
@@ -365,7 +365,7 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     } else if cl.Mode == Explain and cl.Caps {
         # B11c: one program's file, nothing after it
         if not cl.HasWord or cl.Files.Len() > 0 or not endsWithOlang(cl.Word) { try usage(d, msgs.CapsOneFile()) }
-        cl.Files.Push($cl.Word)
+        cl.Files.Push(cl.Word)
         cl.Word = ""
     } else if cl.Mode == Explain {
         if not cl.HasWord { try usage(d, msgs.ExplainNeedsRule()) }
@@ -393,7 +393,7 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     if cl.Mode == Format or cl.Mode == Fix { return cl }
     if cl.Output != "" { try checkOutput(cl.Output, d) }
     if cl.Mode == Bindgen { return cl }
-    c.Output = $cl.Output
+    c.Output = cl.Output
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
     # the tools that only analyze need no clang, as interpret does not (B12)
@@ -495,7 +495,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         # the program's command line is the file, then what follows it (B3f)
         pargs Vec<String&>
         pargs.Push($files[0])
-        for a in cl.Args { pargs.Push($a) }
+        for a in cl.Args { pargs.Push(a) }
         return build.Interpret(fe, c, files[0], pargs.ToArray(), d)
     }
     if files.Len() == 1 and c.Interpreted { return build.InterpretTests(fe, c, files[0], d, cl.Filters.ToArray()) }
@@ -632,9 +632,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         # B19: the one test the word names, or a mistake in the command line
         if e.FuzzPicked == 0 { d.Error(diag.Where.Nowhere, msgs.FuzzNoTest(e.Fuzz)) }
         if e.FuzzPicked > 1 { d.Error(diag.Where.Nowhere, msgs.FuzzManyTests(e.Fuzz, e.FuzzErr)) }
-        prog.FuzzCorpus = $e.FuzzCorpus
+        prog.FuzzCorpus = e.FuzzCorpus
     }
-    for w in e.TestWords { prog.TestWords.Push($w) }
+    for w in e.TestWords { prog.TestWords.Push(w) }
     # D9h: value results handed over as views (a -memory build lowers every module)
     if cfg.Memory {
         for line in lw.CopyLog { try io.Println(line) catch io.Error { } }
@@ -661,7 +661,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
                 if e.Library { pir = libraryIr(pir) }
-                u mut build.Unit& = build.Unit($id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
+                u mut build.Unit& = build.Unit(id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
                 u.Hash = $r.Hashes[k]
                 prog.Units.Push(u)
             }
@@ -678,11 +678,11 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             case emit.ObjectKind.Instances: build.UnitKind.Instances
             case emit.ObjectKind.Locations: build.UnitKind.Locations
         }
-        u mut build.Unit& = build.Unit($o.Identity, holds, ir)
+        u mut build.Unit& = build.Unit(o.Identity, holds, ir)
         if kind != build.Kind.Module and (o.Kind == emit.ObjectKind.Module or o.Kind == emit.ObjectKind.Locations) {
             u.Hash = build.IrHash(ir)
         }
-        hashes.Push($u.Hash)
+        hashes.Push(u.Hash)
         prog.Units.Push(u)
     }
     # (the reader records again: lowering read facts of its own)
@@ -712,7 +712,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
     if e.Library {
-        for x in e.ExportNames() { prog.Exports.Push($x) }
+        for x in e.ExportNames() { prog.Exports.Push(x) }
         prog.Header = e.Header(build.LibName(root), root)
     }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench) catch rt.Bad {
@@ -754,7 +754,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     if cfg.Quick or cfg.Debug { e.PartLimit = emit.PartSizeDev }
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     if tests {
-        e.Fuzz = $cfg.Fuzz
+        e.Fuzz = cfg.Fuzz
         e.FuzzCache = $cfg.Dir "/fuzz"
     }
     return e
@@ -1278,9 +1278,9 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
     f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
-    l.Clang = $cfg.Clang
+    l.Clang = cfg.Clang
     l.SharedLib = cfg.Library
-    for x in cfg.CFlags() { l.CFlags.Push($x) }
+    for x in cfg.CFlags() { l.CFlags.Push(x) }
     l.Load(root)
     p.Loaded = l.Mods.Len()
     if d.Errors() > 0 { error build.Failed.Reported }
@@ -1344,11 +1344,11 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         cfg.TestHeader(root)
         # the test binary's command line: its path, as test builds it, then the words
         x.M.Args.Push($"./build/" $build.Readable(l.Mods[l.Root].Identity) "_test")
-        for a in args { x.M.Args.Push($a) }
+        for a in args { x.M.Args.Push(a) }
         status = x.RunTests(d, args)
-        for w in x.TestWords { cfg.TestWords.Push($w) }
+        for w in x.TestWords { cfg.TestWords.Push(w) }
     } else {
-        for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
+        for a in args { x.M.Args.Push(a) }      # the file first (build.Interpret's)
         status = x.RunMain(d)
     }
     # a failed check, or a "!", ends interpret as it ends the built program: by SIGABRT, after what it wrote - so a
@@ -1368,8 +1368,8 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
 # a hash of the C and the flags; "" where clang cannot make it
 fn cIr(unit String&, text String&, cfg build.Config&) String {
     args Vec<String&>
-    args.Push($cfg.Clang)
-    for f in cfg.CFlags() { args.Push($f) }
+    args.Push(cfg.Clang)
+    for f in cfg.CFlags() { args.Push(f) }
     if cfg.Debug { args.Push("-g") }
     if cfg.Race { args.Push("-fsanitize=thread") }
     if cfg.Profile {
@@ -1380,7 +1380,7 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
         # B11d: C's lines named where explain -asm shows code inlined from it
         args.Push("-gline-tables-only")
     }
-    for a in Array<String&>["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push($a) }
+    for a in Array<String&>["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push(a) }
     kb := StringBuilder()
     for a in args { kb.Push($a "\n") }
     kb.Push(cfg.Target.Attrs)
@@ -1438,9 +1438,9 @@ fn cLibrary(unit String&, cfg build.Config&) String {
     if si.Kind != os.FileKind.FILE or si.ModTime < ui.ModTime {
         if cfg.Clang == "" { return "a C import's code needs clang to be compiled" }
         args Vec<String&>
-        args.Push($cfg.Clang)
-        for f in cfg.CFlags() { args.Push($f) }
-        for a in Array<String&>["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push($a) }
+        args.Push(cfg.Clang)
+        for f in cfg.CFlags() { args.Push(f) }
+        for a in Array<String&>["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push(a) }
         out := try os.Output.Exec(...args.ToArray()) catch os.Error { return "clang could not be run" }
         if out.Status != 0 { return $"clang could not compile it: " $out.Stderr.Trim() }
         try os.Rename($so ".tmp", so) catch os.Error { return "its library cannot be written" }
@@ -1480,7 +1480,7 @@ fn (p mut Passes&) Explain(root String&, name String&, cfg mut build.Config&, d 
 fn commandLine(words Array<String&>&) Array<String&> {
     args Vec<String&>
     args.Push("olang")
-    for w in words { args.Push($w) }
+    for w in words { args.Push(w) }
     return args.ToArray()
 }
 

@@ -52,6 +52,20 @@ is built and what this note proposes is built after it.
   (p2fieldofresult and p2spawncallee ran with R2); a for-in's copy lent to a task stays refused (p2forincopy).
   HISTORY.md, "R4: tasks' storage at the join's level".
 
+- Built: R8 (5.7, questions 1 and 3, sections 8 and 9; 2026-11-09, wt-r8) - a default naming existing storage
+  judged as the call's result is (P4a's task defaults, R11's by-value one holding references, and a reference default
+  nothing can be stored through need only outlive where the result lands, O25g); a payload-free enum field read by a
+  view as a number (E31b); a generator's own variable owning storage yielded as a copy (D18b); question 1: what a global
+  keeps of a scope variable's storage is the callers' obligation to build it in the program's scope; question 3: an
+  array of a run-time length ends its elements (Array<T>(n), comprehensions, copies, by-value parameters, a program's
+  type holding one), a global holds a destructor value by value - and the program's scope's destructors now run as the
+  program ends (they never did, the reference form's included; a global registering one is not baked). Ten cases run
+  (p4adefaultexisting, p4adefaultholds, r11defaultexisting, e31bviewenumfield, d18yieldown, o1blambdaglobal and the
+  six C11 ones), two new (r11defaultversions runs, r11defaultscope fails). Not built: c11keptvec (Vec's copy copying
+  only its live elements needs a Copy existing only in some instances - a conditional Copy, a design of its own) and
+  t22alatelambda (judging a loop body to a fixed point over its versions, O25i). The `$x` copies: 355 removed from
+  compiler/ (emit.olang and lower.olang left, F9's files then). HISTORY.md, "R8: precision and the rest".
+
 ## 0. Summary
 
 Of 1,246 must-fail cases, 355 are refused by a memory, placement, ownership or permission rule; the other 891 are
@@ -291,7 +305,9 @@ becomedtorresult, becomedtortemp), a by-value destructor parameter handed on (s2
   copy built where it goes - what a value flowing out of a place means (E31d: every copy calls `Copy`), and what the
   message tells the program to write. The cost is the copy the program would have written.
 - **A copy of a collection of copyable destructor values** (c11keptvec): `Vec<Kept>`'s Copy copies its live elements by
-  their `Copy`, not the whole buffer - a prelude change.
+  their `Copy`, not the whole buffer - a prelude change. (R8: not built - a Copy Vec declares would make `Vec<File>`
+  copyable and no longer unique (T13b); it has to exist only in the instances whose elements copy, a conditional Copy,
+  as the destructor is conditional. Stays refused.)
 
 ## 6. (c) stays an error
 
@@ -338,6 +354,19 @@ each message's longest literal; a few may be reached under other wording). Each 
 case, or a case showing what replaced it - or not, and goes. Several of them are what the rounds below remove anyway
 (`ViewKept`'s "where it is kept is not known here" by O29, `PartKeptDestructor` by fnvalues 10, `BuildThroughUnknownScope`
 by fnvalues 11).
+
+R8 (2026-11-09): the five dead messages removed, and P4a's `TaskDefaultExisting`, R11's `DefaultHoldsReferences`,
+C11's `DestructRunArray` and `DestructGlobal` with the refusals they said. `PartKeptDestructor` was already gone.
+`LiteralUnique` has a case. Cases written for `YieldInDefer` (s19byieldindefer), `ReadOnlyCopyLent` (t25ccopylent),
+`ReadOnlyCopyGlobal` (t25ccopyglobal), `ReadOnlyCopyReturned` (t25ccopyreturned), `ReadOnlyRefKept` (t25crefkept),
+`StoredRefOutlived` (o20storedrefoutlived, the bindgen shape with a try's two scopes - a recorded limit) and
+`DefaultScope` (r11defaultscope). The scope pass's others - `ReferenceNarrowed`, `ReferenceNarrowedLocal`,
+`ElemNotInArrayScope`, `ElemOutlived`, `ScopeArgsDisagree`, `PartKept`, `ViewKept`, `ViewKeptCopy`, `ViewReturned`,
+`TagUnknownScope`, `BuildThroughUnknownScope`, `InstanceOutlivesReferent`, `GenYieldShorter`, `GenYieldsBorrow` - and
+`GlobalHoldsShorter` (its one case, o1blambdaglobal, runs now) were each tried with the shapes their guards name (a
+reference given two scopes, a store-through slot, an element stored, a generator yielding a parameter's referent, a
+for-in copy, an instance holding a shorter referent): every program tried compiles and runs, placement building what it
+needs. They stay as the nets they are, reached by nothing found; scopefuzz is where a shape reaching one would show.
 
 ## 9. What real code hits or works around
 
@@ -434,14 +463,18 @@ by agreement on scope.olang.
 
 ## 12. Direction questions
 
-1. **What a global keeps, built in the program's scope.** o1blambdaglobal: a global keeps a lambda capturing what a loop
+1. **Answered 2026-11-08: yes ("if the global holds something, the global never goes out of scope, therefore it's held
+   in the global scope"); built in R8.** **What a global keeps, built in the program's scope.** o1blambdaglobal: a global keeps a lambda capturing what a loop
    builds; accepting it builds each turn's value in the program's scope (until exit, said by `-memory`). Your "never do
    program scope" was about a fallback for an unknown scope; this is the scope the global asks for. Recommendation:
    build it there. Default: refused.
 2. **Deferred code at an abandoned generator.** A `defer` pending at a `yield` runs when the generator is let go
    unfinished (its home scope closing), as Python's `finally` does at `close()`. Recommendation: yes. Default: refused
    ("yield outside the deferring block").
-3. **Destructor values where C11 refuses them today**: a run-time-length array of them ends its elements, a program's
+3. **Answered 2026-11-08: yes ("if they can be made memory safe ... so yes, allow them"); built in R8 - the arrays and
+   the globals; a program's generic struct holding them through a run-time array needs no destructor of its own (the
+   array ends them), and a conditional destructor stays the library's (it needs vacate).** **Destructor values where
+   C11 refuses them today**: a run-time-length array of them ends its elements, a program's
    generic struct may declare a conditional destructor, a global may hold one by value. Recommendation: all three.
    Default: refused.
 4. **A field slot given storage of another scope** (o25gfieldbinding, the alias cases): needs fields to carry a set of

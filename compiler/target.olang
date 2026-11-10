@@ -132,7 +132,7 @@ fn (t Target&) Runner() Array<String&> ? Bad {
     env := try os.Env("OLANG_EMULATOR") catch default ""
     if env != "" {
         for w in env.Split(" ") {
-            if w != "" { out.Push($w) }
+            if w != "" { out.Push(w) }
         }
         if out.Len() == 0 or not executable(out[0]) { error Bad.Target }
         out[0] = whereIs(out[0]) # run by its path: the program is put in this process's place by it
@@ -141,12 +141,12 @@ fn (t Target&) Runner() Array<String&> ? Bad {
     for name in Array<String&>[$"qemu-" $t.Arch, $"qemu-" $t.Arch "-static"] {
         at := whereIs(name)
         if at == "" { continue }
-        out.Push($at)
+        out.Push(at)
         root := Sysroot()
         if root == "" and os.IsDir($"/usr/" $t.Arch "-linux-gnu") { root = $"/usr/" $t.Arch "-linux-gnu" }
         if root != "" {
             out.Push("-L")
-            out.Push($root)
+            out.Push(root)
         }
         return out.ToArray()
     }
@@ -168,10 +168,10 @@ fn Target.Resolve(spec String&, clang String&, interpreting Bool, d mut diag.Dia
 fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hostArch String&
     d mut diag.Diagnostics&, here String& = "") Target ? Bad {
     t := Target()
-    t.Spec = $spec
+    t.Spec = spec
     # a triple begins with an architecture and a '-'; anything else is a CPU of this machine's architecture
     triple String& = ""
-    cpu String& = $spec
+    cpu String& = spec
     hasCpu := true
     ai I64 = -1
     dash := try spec.FindByte('-') catch default -1
@@ -215,7 +215,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     }
     # the probe: one empty C function compiled to IR for the target, whose attributes say what clang made of it
     args Vec<String&>
-    args.Push($clang)
+    args.Push(clang)
     if triple != "" { args.Push($"--target=" $triple) }
     if hasCpu { args.Push($ArchCpuFlags[ai] $cpu) }
     for a in Array<String&>["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
@@ -254,7 +254,7 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     al := out[at:at + nl]
     # the layouts the compiler gives its types assume a 64-bit, little-endian machine (T4)
     if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16") { error Probe.Unsupported }
-    t.Triple = $tl
+    t.Triple = tl
     t.Cpu = $(try attrValue(al, "target-cpu") catch { error Probe.Unknown })
     features := StripUnsafe(try attrValue(al, "target-features") catch default "")
     # B10a: the width of the vectors the generated code uses for its loops, and whether it has fused multiply-add

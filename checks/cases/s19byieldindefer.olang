@@ -1,0 +1,11 @@
+# check: fail error[S19b, S20]: deferred code may not yield
+# S19b, S20 (refusals section 8: a kind with no case): deferred code runs while its block is left - a yield there would
+# suspend the walk in the middle of leaving
+fn walk(n I64) Iterator<I64> {
+    for i in range n {
+        defer { yield i }
+    }
+}
+fn main() {
+    for x in walk(3) { assert x >= 0 }
+}

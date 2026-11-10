@@ -757,7 +757,7 @@ fn Caps(c mut typecheck.Checker&) String {
         if mi >= 0 { effects.Merge(reach[mi], fx.Of(b)) }
     }
     ids Vec<String&>
-    for m in mods { ids.Push($m.Identity) }
+    for m in mods { ids.Push(m.Identity) }
     order Vec<I64>
     order.Push(c.P.L.Root)
     for mi in range mods.Len() {

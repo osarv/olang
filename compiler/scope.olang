@@ -1266,7 +1266,8 @@ fn (s mut Scoper&) bndStmt(st typed.Stmt?&) {
                 if s.isFunc(p.Type()) and not s.bndCollect { s.boundary(sw.Task, BndTask) }
             }
             s.bndTask(sw.Task)
-            for c in sw.Clauses { s.bndExpr(c.Handler, BndOther) }
+            # (a clause's lambda is called by its task alone, its default given to the targets - followed, P4a)
+            for c in sw.Clauses { s.bndExpr(c.Handler, BndNone) }
         }
         case typed.Stmt.Yield(_, x) { s.bndExpr(x, BndStore) }
         case _ { }
@@ -2878,7 +2879,7 @@ fn keepRel(rs mut Vec<rel>&, r rel) {
     rs.Push(r)
 }
 
-fn (s mut Scoper&) gap(file I64, sp source.Span, what String&) { s.Gaps.Push(Gap(file, sp, $what)) }
+fn (s mut Scoper&) gap(file I64, sp source.Span, what String&) { s.Gaps.Push(Gap(file, sp, what)) }
 
 # ---- types ----
 
@@ -6346,13 +6347,14 @@ fn (s mut Scoper&) ueTarget(b typed.Body&, p typed.Lvalue&, l I64, mode I64) Boo
     }
 }
 
-# whether t is a number or a Bool (a declared type over one counts)
+# whether t is a number, a Bool or an enum with no payload (a declared type over one counts)
 fn (s mut Scoper&) isNumberLike(t types.TypeId) Bool {
     if s.P.T.IsNumber(t) or s.P.T.KindOf(t) == types.Kind.Bool { return true }
-    if s.P.T.KindOf(t) == types.Kind.Named and s.P.T.HasBody(t) and s.P.T.DeclKindOf(s.P.T.DeclOf(t)) == types.DeclKind.Over {
-        return s.isNumberLike(s.P.T.Base(t))
-    }
-    return false
+    if s.P.T.KindOf(t) != types.Kind.Named or not s.P.T.HasBody(t): return false
+    dk := s.P.T.DeclKindOf(s.P.T.DeclOf(t))
+    if dk == types.DeclKind.Over { return s.isNumberLike(s.P.T.Base(t)) }
+    # (an enum with no payload is its ordinal - matched or compared, a number read: refusals 5.7, e31bviewenumfield)
+    return dk == types.DeclKind.Enum and not s.P.T.HasPayload(s.P.T.Cases(t))
 }
 
 # ---- lambdas that never leave the frame (D16c) ----
@@ -8543,24 +8545,47 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         if s.report { s.err(s.firstToken(s.B!.File, sp), msgs.SpawnResultsDisagree()) }
     }
     # each target is assigned its result as an assignment's value is (P1g, O25): said at the spawn
-    if v.K == ValKind.Existing {
-        for p in sw.Targets {
-            if p is null or not s.holds(p.Type()) { continue }
-            sl := s.slotOf(p)
-            slot, exact, kind := sl.T, sl.Exact, sl.Kind
-            if s.bindingUnknown(p, slot) {
-                # existing storage stored into a field viewing p's referent of an instance whose binding is not known here (O23, O11)
-                s.giveBackPlace(p)
-                if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
-                continue
-            }
-            savedAt, savedSp := s.fitAt, s.fitSp
-            s.fitAt, s.fitSp = true, s.firstToken(s.B!.File, sp)
-            s.fit(v.T, slot, exact, sw.Task, kind)
-            s.fitAt, s.fitSp = savedAt, savedSp
-        }
-    }
+    if v.K == ValKind.Existing { s.giveTargets(sp, sw, v.T, sw.Task) }
+    # P4a: a clause's default naming existing storage it captured is given to the targets as the task's result is
+    for c in sw.Clauses { s.clauseGives(sp, sw, c) }
     if sw.Site >= typed.SiteId(0) { s.build(sw.Site, j if j.Runs() else s.here()) }
+}
+
+# existing storage of term t given to each target of task sw, as an assignment's value is (P1g, O25): said at the spawn
+fn (s mut Scoper&) giveTargets(sp source.Span, sw typed.Spawn&, t Term, x typed.Expr&) {
+    for p in sw.Targets {
+        if p is null or not s.holds(p.Type()) { continue }
+        sl := s.slotOf(p)
+        if s.bindingUnknown(p, sl.T) {
+            # existing storage stored into a field viewing p's referent of an instance whose binding is not known here (O23, O11)
+            s.giveBackPlace(p)
+            if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
+            continue
+        }
+        savedAt, savedSp := s.fitAt, s.fitSp
+        s.fitAt, s.fitSp = true, s.firstToken(s.B!.File, sp)
+        s.fit(t, sl.T, sl.Exact, x, sl.Kind)
+        s.fitAt, s.fitSp = savedAt, savedSp
+    }
+}
+
+# P4a, R11: a task clause's default is the targets' value - what it gives back of what the clause captured (its body's
+# relation "capture outlives result") outlives where each target keeps it, judged as the task's own result is
+fn (s mut Scoper&) clauseGives(sp source.Span, sw typed.Spawn&, c typed.TaskClause&) {
+    if c.Handler is null: return
+    match c.Handler {
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(id, _, site)) {
+            lb := I64(id)
+            rc := try s.lamCaps.Get(I64(site)) catch default Vec<Term>()
+            vs := s.Bodies[lb].Vars
+            for rl in s.sums[lb].Rels {
+                hi, lo := varOf(rl.Hi), varOf(rl.Lo)
+                if hi < 0 or hi >= rc.Len() or lo < 0 or lo >= vs.Len() or rc[hi] == Term.None: continue
+                if vs[lo] == typed.ScopeVar.Result: s.giveTargets(sp, sw, rc[hi], c.Handler!)
+            }
+        }
+        case _ { }
+    }
 }
 
 # the assignment operator after a place written at sp: "=", or a compound one ("+=", "<<=") - the place's own span where
@@ -9024,7 +9049,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                     # (the inference's one result form: an existing default of another run-time scope makes the try one of
                     # two scopes, judged per member as a conditional's values are, E28 - never built into, never exact)
                     infer := dv.K == ValKind.Existing and dv.T.Runs()
-                    if s.report and s.isRef(x.Type()) and not infer and not s.defaultFits(cv, dv) { s.err(s.opTok(df), msgs.DefaultScope()) }
+                    if s.report and s.isRef(x.Type()) and not infer and not s.defaultFits(cv, dv, s.storeThrough(x.Type())) { s.err(s.opTok(df), msgs.DefaultScope()) }
                     v = s.join(v, dv, d)
                 }
             }
@@ -9085,15 +9110,16 @@ fn (s mut Scoper&) lastCopy(site I64) I64 {
     return try s.lastCopied.Get(pair.Pair<I64, I64>(s.Id, site)) catch default -1
 }
 
-# whether a reference default dv lives where the call's result cv does (R11, O25): existing storage exactly there, a
-# temporary or constant data built or living anywhere a known scope is - null always
-fn (s mut Scoper&) defaultFits(cv Val, dv Val) Bool {
+# whether a reference default dv lives where the call's result cv does (R11, O25): existing storage exactly there where
+# something can be stored through the result (O25g), else anywhere outliving it - the try one of two scopes, each judged
+# where it lands; a temporary or constant data built or living anywhere a known scope is - null always
+fn (s mut Scoper&) defaultFits(cv Val, dv Val, exact Bool) Bool {
     known := match cv.T {
         case Term.Set(_), Term.Untraced: false
         case _: true
     }
     return match dv.K {
-        case ValKind.Existing: known and cv.T != Term.None and dv.T == cv.T
+        case ValKind.Existing: known and cv.T != Term.None and (dv.T == cv.T or not exact and s.order(dv.T, cv.T) == Holds)
         case ValKind.Fresh, ValKind.Static: known
         case _: true
     }
@@ -10319,7 +10345,7 @@ fn (s mut Scoper&) tailRows(c typed.Call&, sp source.Span) {
         if name == "": continue
         at := s.nameSpan(sp)
         text := $name " is built in " $scope ", a new one each time it is made, for the become here, kept until its chain's first caller lets go of the result"
-        p := Placement(b.File, I64(at.Start), I64(at.End), I64(a.Span().Start), $text)
+        p := Placement(b.File, I64(at.Start), I64(at.End), I64(a.Span().Start), text)
         p.Tail = true
         s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(a.Span().Start)), p)
     }
@@ -10329,7 +10355,7 @@ fn (s mut Scoper&) tailRows(c typed.Call&, sp source.Span) {
 fn (s mut Scoper&) tailDtorRow(sp source.Span) {
     if not s.report: return
     text := $"a temporary is built in " $s.placedScope(s.Id, Term.Var(s.resultVar)) ", a new one each time it is made, for a become closing its block, kept until the chain's first caller lets go of the result - its destructor runs as that scope closes, not at the end of its block"
-    p := Placement(s.B!.File, I64(sp.Start), I64(sp.End), I64(sp.Start), $text)
+    p := Placement(s.B!.File, I64(sp.Start), I64(sp.End), I64(sp.Start), text)
     p.Tail = true
     s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(sp.Start)), p)
 }
@@ -11666,12 +11692,8 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     }
     if k == Holds { return }
     if s.Trace and s.report and k != Obliged { s.TraceLog.Push($"fit fails " $t " into " $slot " exact " $exact " kind " $kind " | " $s.traceAt(x.Span().Start)) }
-    # a global holds only what lives as long as the program: what lives where a scope variable says is no obligation
-    # on the callers - stored into a global, it is O1b's error at the value, as stage 0 has it
-    if k == Obliged and kind == FitGlobal {
-        s.fitError(x, kind, exact)
-        return
-    }
+    # (a global holds what lives as long as the program: what lives where a scope variable says is the callers'
+    # obligation that it live in the program's scope - built there where they build it, refusals question 1)
     if k == Obliged {
         # what the slot keeps is a view of storage, never lifted at a call (O27)
         s.obligeView = s.viewRoot(x) >= 0
@@ -12803,7 +12825,7 @@ fn (s mut Scoper&) promoteDecl(d I64) Bool {
             q := s.bindingParam(body, f)
             if q < 0 {
                 note := $"field " $i " of " $s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(d)))) ": no constructor parameter to bind to"
-                if not s.Unplaced.Has(note) { s.Unplaced.Push($note) }
+                if not s.Unplaced.Has(note) { s.Unplaced.Push(note) }
                 continue
             }
             body.Locals[f].Marked = typed.Mark.Of(typed.LocalId(I32(q)))
@@ -13208,7 +13230,7 @@ fn (s Scoper&) Placements() Vec<Placement> {
             t = try s.siteLifts.Get(pair.Pair<I64, I64>(b, site)) catch default Term.None
         }
         text := $name " is built in " $s.placedScope(b, t) ", a new one each time it is made, " $what $ends
-        p := Placement(body.File, I64(row.At.Start), I64(row.At.End), I64(at.Start), $text)
+        p := Placement(body.File, I64(row.At.Start), I64(row.At.End), I64(at.Start), text)
         p.Tail = row.Kind == PlaceTail
         if not rows.View().Some(fn(r): return r.File == p.File and r.Start == p.Start and r.Text == p.Text) { rows.Push(p) }
     }

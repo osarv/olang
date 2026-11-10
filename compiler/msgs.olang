@@ -60,7 +60,7 @@ fn (n mut Nearest&) Offer(cand String&) {
     if cand == n.Word or cand.Len() == 0 { return }
     d := Distance(n.Word, cand)
     if Near(n.Word, d) and d < n.Far {
-        n.Best = $cand
+        n.Best = cand
         n.Far = d
     }
 }
@@ -78,7 +78,7 @@ fn (n mut Nearest&) OfferBuilder(cand String&) {
     before := at == 0 or n.Word[at - 1].IsLower() or n.Word[at - 1].IsDigit()
     after := end == n.Word.Len() or n.Word[end].IsUpper()
     if not before or not after or $n.Word[:at] $n.Word[end:] != member { return }
-    n.Best = $cand
+    n.Best = cand
     n.Far = 0
 }
 
@@ -274,8 +274,6 @@ type Diag enum {
     DoubleReferenceMarker
     DestructTypeByValue
     DestructCopiedHeld
-    DestructRunArray
-    DestructGlobal
     TraitNotAType
     AnyNotTrait
     AnyNeedsMarker
@@ -435,7 +433,6 @@ type Diag enum {
     ShiftUnadapted
     ScopeMayNotOutlive
     OwnCannotOutlive
-    OwnFromBareRefParam
     ArraySizeMismatch
     ArrayRunTimeIntoFixed
     LiteralRange
@@ -453,14 +450,12 @@ type Diag enum {
     ReadOnlyCopyArg
     ReadOnlyCopyLent
     ReadOnlyCopyWrite
-    ReadOnlyCopyRef
     ReadOnlyFuncValue
     NoteGroupFunctionType
     NoteReadOnlyCopy
     NoteReadOnlyCopyOf
     TypeNotInferable
     DeclFromNull
-    ScopeArgProgram
     BuildIntoUnknownScope
     BuildIntoCapture
     StoreIntoUnknownScope
@@ -479,7 +474,6 @@ type Diag enum {
     ScopeObligationUnmet
     ReferenceNarrowed
     ReferenceNarrowedLocal
-    ReferenceNarrowedReturned
     RefTypevarNotAggregate
     TypeArgsNotInferable
     NullableMeetsNoTrait
@@ -647,7 +641,6 @@ type Diag enum {
     MethodNotInherited
     AtomicNotInteger
     DefaultCount
-    DefaultHoldsReferences
     DefaultScope
     CatchAfterCatchAll
     CatchUnreachable
@@ -689,7 +682,6 @@ type Diag enum {
     InstanceOutlivesArg
     GlobalHoldsShorter
     ValueRefsOutlived
-    ContainerScopeUnbuildable
     MutOnLocal
     MutOnInferredLocal
     NotAStatement
@@ -769,7 +761,6 @@ type Diag enum {
     TaskClauseError
     TaskClauseNeedsDefault
     TaskDefaultInStatement
-    TaskDefaultExisting
     JoinNotTried
     JoinCannotFail
     JoinCatchNeedsTry
@@ -1268,9 +1259,7 @@ fn NoteInstanceRef() r.Msg { return r.Msg(Diag.NoteInstanceRef, "", "the referen
 fn InvalidReferenceTarget(ty String&) r.Msg { return r.Msg(Diag.InvalidReferenceTarget, "T24", $ty " cannot be a reference - only a struct, an enum or an array can") }
 fn DoubleReferenceMarker() r.Msg { return r.Msg(Diag.DoubleReferenceMarker, "T24", "a type takes at most one reference marker") }
 fn DestructCopiedHeld(ty String&, held String&) r.Msg { return r.Msg(Diag.DestructCopiedHeld, "C11", $ty " has a destructor to run and copies (its Copy), and a copy of " $held " would copy what it holds past its count - hold them by reference, " $ty "&") }
-fn DestructRunArray(ty String&) r.Msg { return r.Msg(Diag.DestructRunArray, "C11", $ty " has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<" $ty ">, or hold " $ty "& ones") }
 fn DestructTypeByValue(ty String&, held String&) r.Msg { return r.Msg(Diag.DestructTypeByValue, "C11", $ty " has a destructor to run, and " $held " keeps values of it where no holder ends them - write " $ty "&, or keep them in a Vec<" $ty ">") }
-fn DestructGlobal(ty String&) r.Msg { return r.Msg(Diag.DestructGlobal, "C11", $ty " has a destructor to run, so a global holds it by reference - write " $ty "&, its destructor run as the program ends") }
 fn TraitNotAType(ty String&) r.Msg { return r.Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty $("" if ty.EndsWith("&") else "&") "'") }
 fn AnyNotTrait(ty String&) r.Msg { return r.Msg(Diag.AnyNotTrait, "T32", "'any' takes a trait, and " $ty " is none") }
 fn AnyNeedsMarker(ty String&) r.Msg { return r.Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }
@@ -1437,7 +1426,6 @@ fn VarIsPrivate(tok String&) r.Msg { return r.Msg(Diag.VarIsPrivate, "M6", $tok 
 fn ShiftUnadapted() r.Msg { return r.Msg(Diag.ShiftUnadapted, "E8a, E4a", "this shift is past its literal's width, and nothing adapts it to a wider type - convert the literal, as I64(1) << 40") }
 fn ScopeMayNotOutlive() r.Msg { return r.Msg(Diag.ScopeMayNotOutlive, "O10", "this reference lives in a scope that may not outlive where it is put") }
 fn OwnCannotOutlive() r.Msg { return r.Msg(Diag.OwnCannotOutlive, "O10d", "this value lives in this function's own scope, which closes first") }
-fn OwnFromBareRefParam() r.Msg { return r.Msg(Diag.OwnFromBareRefParam, "O10d", "this value lives in this function's own scope, so it cannot satisfy anything longer-lived") }
 fn ArrayRunTimeIntoFixed(n I64) r.Msg { return r.Msg(Diag.ArrayRunTimeIntoFixed, "T7d", "this array's length is known only at run time, stored where " $n " elements are laid out - copy them through a slice of that length, 'v[0:" $n "]'") }
 fn ArraySizeMismatch(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.ArraySizeMismatch, "T7d", "an array of " $n1 " elements stored where " $n2 " are laid out - fixed storage takes an array of its own length") }
 fn LiteralRange(tok String&, ty String&) r.Msg { return r.Msg(Diag.LiteralRange, "T6", $tok " does not fit " $ty) }
@@ -1455,14 +1443,12 @@ fn ReadOnlyRefKept(text1 String&, text2 String&, ty String&) r.Msg { return r.Ms
 fn ReadOnlyCopyArg(text1 String&, text2 String&, ty String&, text3 String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyArg, "T25c", "'" $text1 "' writes through or keeps its parameter '" $text2 "', and this " $ty " is a read-only copy - pass one of its own, made " $text3) }
 fn ReadOnlyCopyLent(text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyLent, "T25c", "a read-only copy cannot be passed where it may be written - pass one of its own, made " $text) }
 fn ReadOnlyCopyWrite() r.Msg { return r.Msg(Diag.ReadOnlyCopyWrite, "T25c", "this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares") }
-fn ReadOnlyCopyRef() r.Msg { return r.Msg(Diag.ReadOnlyCopyRef, "T25c", "a reference a read-only copy holds is read-only - it cannot be passed or kept where it may be written through") }
 fn ReadOnlyFuncValue(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ReadOnlyFuncValue, "T25c", $text1 " writes through or keeps its by-value parameter '" $text2 "', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made " $text3) }
 fn NoteGroupFunctionType() r.Msg { return r.Msg(Diag.NoteGroupFunctionType, "", "a function type of several results or error items is parenthesized whole in a list: '(fn&(x I64) I64, I64)'") }
 fn NoteReadOnlyCopy(text String&) r.Msg { return r.Msg(Diag.NoteReadOnlyCopy, "", "'" $text "' copies a place reached read-only, so it is read-only") }
 fn NoteReadOnlyCopyOf(text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.NoteReadOnlyCopyOf, "", "'" $text1 "' copies '" $text2 "', reached read-only, so it is read-only - '" $text3 " := " $text4 ".Clone()' would be one of its own") }
 fn TypeNotInferable() r.Msg { return r.Msg(Diag.TypeNotInferable, "D15", "':=' takes its type from the initializer, and a call returning nothing has none") }
 fn DeclFromNull() r.Msg { return r.Msg(Diag.DeclFromNull, "D15", "':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'") }
-fn ScopeArgProgram(tok String&) r.Msg { return r.Msg(Diag.ScopeArgProgram, "E25, O1b", $tok " lives in the program's scope, which a result reaches by being stored there, not by a scope argument") }
 fn BuildIntoCapture() r.Msg { return r.Msg(Diag.BuildIntoCapture, "T22c", "the function given for this call's callee keeps this argument in what it captured, where this call cannot build - make the argument in the caller and pass it in") }
 fn BuildIntoUnknownScope() r.Msg { return r.Msg(Diag.BuildIntoUnknownScope, "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - put it in a local first, so its scope is found from it while the program runs (O29), or give it one known scope") }
 fn StoreIntoUnknownScope() r.Msg { return r.Msg(Diag.StoreIntoUnknownScope, "O12", "where this place's references live is not known here, so nothing new is built into it - reach the place through a local, so its scope is found from it while the program runs (O29), or store what already lives there") }
@@ -1481,7 +1467,6 @@ fn FieldBindingUnknown() r.Msg { return r.Msg(Diag.FieldBindingUnknown, "O23, O1
 fn ScopeObligationUnmet() r.Msg { return r.Msg(Diag.ScopeObligationUnmet, "O10c", "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") }
 fn ReferenceNarrowed() r.Msg { return r.Msg(Diag.ReferenceNarrowed, "O25", "a reference never narrows - declare it with ':=' from what it is given") }
 fn ReferenceNarrowedLocal(text String&) r.Msg { return r.Msg(Diag.ReferenceNarrowedLocal, "O25", "a reference never narrows - '" $text "' lives in a block that closes first, and this keeps it longer") }
-fn ReferenceNarrowedReturned() r.Msg { return r.Msg(Diag.ReferenceNarrowedReturned, "O25, O26a", "this local flows into what the function returns, so it lives where the result goes - and its value lives elsewhere: make it here, or keep it out of the result") }
 fn RefTypevarNotAggregate(ty String&, text String&) r.Msg { return r.Msg(Diag.RefTypevarNotAggregate, "G11", $ty " cannot be held through '" $text "&' - only a struct, an enum or an array can") }
 fn NullableMeetsNoTrait(text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.NullableMeetsNoTrait, "T2c", $text1 " may be null, so it meets no trait - " $text3 " must meet " $text2 " here: write " $text4 ", which never is") }
 fn TypeArgsNotInferable(text String&) r.Msg { return r.Msg(Diag.TypeArgsNotInferable, "G9", "the type arguments of " $text " cannot be inferred from these arguments") }
@@ -1728,7 +1713,6 @@ fn FromPayload(ty String&, name String&) r.Msg { return r.Msg(Diag.FromPayload, 
 fn FromCaseName() r.Msg { return r.Msg(Diag.FromCaseName, "T17e", "a case of an enum with raw values may not be named 'From', which makes a case from its raw value") }
 fn AtomicNotInteger(ty String&) r.Msg { return r.Msg(Diag.AtomicNotInteger, "P9", "the atomic operations are methods of the integer types, and " $ty " is none") }
 fn DefaultCount(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.DefaultCount, "R11", "expected " $n1 " defaults, one per result, found " $n2) }
-fn DefaultHoldsReferences() r.Msg { return r.Msg(Diag.DefaultHoldsReferences, "R11", "a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'") }
 fn DefaultScope() r.Msg { return r.Msg(Diag.DefaultScope, "R11, O25", "a reference default lives where the call's result does - or is null, or built there") }
 fn CatchAfterCatchAll() r.Msg { return r.Msg(Diag.CatchAfterCatchAll, "R11a", "a catch with no error types takes every error left, so no clause can follow it") }
 fn CatchUnreachable() r.Msg { return r.Msg(Diag.CatchUnreachable, "R11a", "an earlier clause already takes every error this one names") }
@@ -1771,7 +1755,6 @@ fn InstanceOutlivesReferent(copy String&) r.Msg { return r.Msg(Diag.InstanceOutl
 fn InstanceOutlivesArg(copy String&) r.Msg { return r.Msg(Diag.InstanceOutlivesArg, "C2d", "this instance holds a reference to an argument it would outlive - make the argument where the instance goes" $(", hold it by value in a field, or give it a copy (" $copy ")" if copy != "" else ", or hold it by value in a field")) }
 fn GlobalHoldsShorter() r.Msg { return r.Msg(Diag.GlobalHoldsShorter, "O1b", "a global holds only what lives as long as the program - store something built here, or another global's") }
 fn ValueRefsOutlived() r.Msg { return r.Msg(Diag.ValueRefsOutlived, "O25h", "this value holds references into a scope the target outlives - build it where the target is") }
-fn ContainerScopeUnbuildable() r.Msg { return r.Msg(Diag.ContainerScopeUnbuildable, "O25a", "this container's scope cannot be built into from here - write through the global itself") }
 fn MutOnLocal(ty String&) r.Msg { return r.Msg(Diag.MutOnLocal, "D11a", "a local is always writable - 'mut' is for a reference, and " $ty " is none") }
 fn MutOnInferredLocal() r.Msg { return r.Msg(Diag.MutOnInferredLocal, "D11a", "':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'") }
 fn NotAStatement() r.Msg { return r.Msg(Diag.NotAStatement, "S3", "this computes a value and discards it - only a call, '++' or '--' stands alone") }
@@ -1868,7 +1851,6 @@ fn TaskClauseLoopJump(tok String&) r.Msg { return r.Msg(Diag.TaskClauseLoopJump,
 fn TaskClauseError() r.Msg { return r.Msg(Diag.TaskClauseError, "P4a", "an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take") }
 fn TaskClauseNeedsDefault() r.Msg { return r.Msg(Diag.TaskClauseNeedsDefault, "P4a", "this clause takes an error the targets would get no value for - end it with 'default v', or end the process") }
 fn TaskDefaultInStatement() r.Msg { return r.Msg(Diag.TaskDefaultInStatement, "P4a", "a spawn without targets gives no value, so its clauses take no default") }
-fn TaskDefaultExisting() r.Msg { return r.Msg(Diag.TaskDefaultExisting, "P4a", "a task's default is built where its result lands, and this names existing storage - build the value here, or give null") }
 fn JoinNotTried(ty String&) r.Msg { return r.Msg(Diag.JoinNotTried, "P4c", "this join's tasks can fail with " $ty " - write 'try join', with catch clauses for what it handles here") }
 fn JoinCannotFail() r.Msg { return r.Msg(Diag.JoinCannotFail, "P4c", "no task of this join can fail - drop the 'try'") }
 fn JoinCatchNeedsTry() r.Msg { return r.Msg(Diag.JoinCatchNeedsTry, "P4c", "a join takes catch clauses only as 'try join', and no task of this one can fail") }
