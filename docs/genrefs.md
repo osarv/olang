@@ -60,7 +60,11 @@ Hand-off for a fresh agent after a restart. Output: this file, one line in docs/
   the one-holder rule's reclaiming is not built). Left: the one-holder rule's reclaiming (5.2's transfers recognized,
   headerless slots); sites at a terminator (a call's argument, a branch's test) and at a block's edge keep; a whole
   value holding references let go of other than a collection's entry keeps what it held
-- next: the one-holder rule's reclaiming, then G5+G6, in docs/wholeprog.md section 10's order
+- [x] G5+G6 (rounds 5 and 6, 2026-11-10, wt-g56; HISTORY "`weak` references and generational types, rounds 5 and 6"):
+  an instance's own arrays in slots, put back with it, and the fuzzers writing weak lists - see "Round 5 as built" and
+  "Round 6 as built" in section 13. Measured: lru 13.8 -> 7.0 MB (the rest the Map's own copies of its removed entries'
+  keys - O8d's, not a generational instance's), a String-keyed list churned 1M times 33 -> 1.8 MB
+- next: the one-holder rule's reclaiming, in docs/wholeprog.md section 10's order
 
 ## 0.1 Decided (the user, 2026-11-08 evening)
 
@@ -843,6 +847,49 @@ evaluator's decided and refused weak reads.
 
 The run-time arrays an instance holds by value (a `String` key, a `Vec`'s buffer) allocated as class slots of its scope
 part when the instance is generational, and reclaimed by the cascade's per-type function; the LRU flat.
+
+### Round 5 as built (2026-11-10)
+
+- **Slots through a slot scope (emit, runtime.ll).** Where a call of a generational type's Copy helper makes the value a
+  New gives storage (its result read once, by that New; the type holding arrays in place, none with destructors, no
+  Copy of its own), its scope argument is a slot scope: a scope record on the stack whose head is
+  `@__olang_slot_chunk` (no room, so every allocation takes the slow path) and whose tail names the real scope. Each
+  allocation of at most 2,032 bytes is a slot of the real scope part's class lists (4.4) - the lists instances use -
+  its payload 16-aligned (8 bytes on, the word before saying so, where the slot's own is not), the class plus one in
+  bits 24-31 of the word before it; the first eight are recorded in the slot scope. Larger ones are the scope's own.
+- **Own words.** An instance holding arrays in place (its fields', and those of structs it holds by value, at most 8,
+  4 deep - not a payload's or a fixed array's elements') has one word per array after its fields; the New sets each to
+  the array's data pointer where the slot scope recorded it, else null (genOwn). The type's drop function hands each
+  array to `__olang_gen_leaf`, which puts the slot back only where the array is still the instance's own - one stored
+  over it since, a Vec's buffer grown since, is not, and stays until its scope closes. `T.Size` and the layout are
+  unchanged; only the slot grows.
+- **Views at a site (lower, emit).** Locals that may view such an array (mir.GenInfo.ViewOf: a run-time array or a
+  reference to one, compared; a value holding one or a reference to one, a function value, an `any` - none put back
+  there) are followed by the reclaiming liveness without stopping a site; at a site the arrays' data pointers are passed
+  (vk) and a slot one points into is kept. A reference to anything but such an array views none: what it names holds
+  its arrays as storage of its own.
+- **Views across calls (free.olang, the final step).** A view's origins in the final walk - a value of an array place a
+  generational type holds in place (bufPlace), a parameter's, one not known - with the parameters judged to a fixed
+  point over the calls (taintPar: a parameter any call hands such a view; every one where a caller is not seen); each
+  call across which a local or a value of its statement viewing one is in use makes its callee, and what it calls,
+  keep (bufAll); the (body, type) pairs left get the link-time constant `olang.genbuf.<body>.<type>` the site reads
+  (vn -1 where false). A view stored into a place, captured or held by a generator across a `yield` keeps every array
+  in the program (bufNever). `-memory`: a row per type holding arrays, and one per call of the program's own a view
+  keeps.
+- **Evaluator.** `interpret` releases the instance as before and gives back nothing more (memory only).
+- **Left.** A by-value local placed where it is kept (O28) and then copied into the instance leaves its first copy in
+  the scope (a node's Vec built in a local: 127 B a node); the elements' own arrays of an array the instance holds are
+  slots but are not put back; a payload's arrays are not slots.
+
+### Round 6 as built (2026-11-10)
+
+`fuzz/scopegen.olang`'s weak scenario, in scopegen's programs (one in sixteen or so) and the early-free mode's (one in
+four): a doubly linked list of a generational type of the scenario's own - owning next links, weak back links and tail,
+a Map holding nodes too, each node a key's text and a Vec by value - pushed, popped, removed inline, moved into the Map
+and taken out, its Vecs grown, weak places given nodes of other blocks (a node stored only weakly is refused, the
+scenario left out), references and key views kept across removing calls, inline removals and a callee removing the
+node it was handed the key of; read back after churns, the weak places included. Built -d -s and interpreted (the
+dead-region evaluator in the early-free mode, and the split form), the two must print the same.
 
 ### Round 6 - the fuzzers and a bulk review (section 9; opus, high)
 

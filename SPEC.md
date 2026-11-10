@@ -6749,7 +6749,13 @@ once the local is gone, and one instance held by three owning places at once, wh
 **reclaimed** where no owning place holds it and no reference in use may reach it, as the compiler shows: its storage
 given back for reuse by a later instance of its size made in its scope, what its own owning places hold let go of in
 turn (reclaimed in the same way where nothing else holds it), and every weak place given it reading `null` from then
-on, whatever instance the storage then holds. The compiler shows it after a store or a removal lets go of the last
+on, whatever instance the storage then holds. The arrays of a run-time length it holds in place (a `String` field, a
+`Vec`'s buffer, one in a struct it holds by value) that were made for it when it was made are given back with it - each
+while it is still the one the instance holds (one stored there since, a `Vec`'s buffer grown since, stays until its
+scope closes) - unless a view of one may still be in use: a local or a value being computed in use in the function,
+which the program compares with while it runs, or one a caller holds across the call (judged over the whole program,
+as references are); and none is given back anywhere where a view of one may be kept elsewhere (stored into a place,
+captured, held by a generator across a `yield`). The compiler shows it after a store or a removal lets go of the last
 owning place holding it, and after the last use of a reference to it (a local, a call's result), where no reference
 still in use in the function may reach one of its type other than references compared with it while the program runs,
 and no caller of the function holds one across the call - judged over the whole program. It is not reclaimed early

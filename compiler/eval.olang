@@ -2265,7 +2265,10 @@ fn (m mut Machine&) reclaim(fi I64, fk I64, x mir.Operand, ty types.TypeId, ks m
     if m.halted or p.Id == 0: return
     holding Vec<Ptr>
     for i in range ks.N {
-        k := m.rdPtr(m.addr(fi, m.cf[fk].Ops[I64(ks.At) + i], 1))
+        op := m.cf[fk].Ops[I64(ks.At) + i]
+        # (round 5: a view of an array in use there - what keeps the arrays, which this releases with nothing else)
+        if not m.genRefOp(fi, op): continue
+        k := m.rdPtr(m.addr(fi, op, 1))
         if m.halted: return
         holding.Push(k)
     }
@@ -2289,6 +2292,10 @@ fn (m mut Machine&) reclaim(fi I64, fk I64, x mir.Operand, ty types.TypeId, ks m
         m.release(slot)
     }
 }
+
+# whether operand op of a Reclaim is a reference to a generational instance, not a view of an array compared beside
+# them (genrefs round 5)
+fn (m mut Machine&) genRefOp(fi I64, op mir.Operand) Bool { return m.Gen.GenRef(m.T, m.opType(fi, op)) }
 
 fn (m mut Machine&) kept(q Ptr, holding Vec<Ptr>&) Bool {
     for k in holding {
