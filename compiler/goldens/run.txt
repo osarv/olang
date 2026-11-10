@@ -340,6 +340,7 @@
 | ok - instances: keeps a constructor parameter in the instance
 | ok - vecs: keeps a parameter where a reference parameter reaches
 | ok - bindings: keeps a match binding past its clause
+| ok - slices: hands back a slice of a run-time array parameter's copy
 === test tests/lanes.olang
 | status 0
 | ok - E39: lane operators - built, fused, totalled, compared and chosen - baked, decided while compiling and run
