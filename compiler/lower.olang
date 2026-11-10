@@ -2457,6 +2457,13 @@ fn (ln mut lowering&) reclaimSites() {
         if r == mir.ReachPlain: lv.plain = true
     }
     m := lv.locals.Len()
+    if not lv.plain {
+        for bi in range nb {
+            for i in range ln.F.Blocks[bi].Stmts.Len() {
+                if ln.letGoOf(bi, i) >= 0: lv.plain = true
+            }
+        }
+    }
     # (a function too large to follow keeps: what it lets go of stays until its scope closes)
     if not lv.plain or nb * m > 20000000: return
     lv.m = m
@@ -2544,26 +2551,25 @@ fn (ln mut lowering&) reclaimBlock(lv mut liveness&, bi I64) {
     sites Vec<mir.Stmt>
     at Vec<I64>
     n := ln.F.Blocks[bi].Stmts.Len()
-    dying Vec<I64>
+    dying Vec<mir.Operand>
+    tys Vec<types.TypeId>
     for k in range n {
         i := n - 1 - k
         ln.mentions(lv, bi, i)
         sp := mir.StmtSpan(ln.F.Blocks[bi].Stmts.At(i))
         dying.Clear()
+        tys.Clear()
         let := ln.letGoOf(bi, i)
         for u in lv.uses {
             j := lv.idx[I64(u)]
-            if j < 0 or lv.reach[j] != mir.ReachPlain or lv.cur[j] or has(dying, I64(u)): continue
-            # (a temporary is a site only where it is what a store let go of: any other is a copy of something still
-            # held, or still in use)
-            if ln.F.Locals[I64(u)].Kind == mir.LocalKind.Temp and I64(u) != let: continue
-            dying.Push(I64(u))
+            if j < 0 or lv.cur[j]: continue
+            ln.dyingParts(lv, I64(u), j, let, dying, tys)
         }
-        # (the sites after one statement run in this order, each comparing with the locals whose sites run after it -
-        # two locals naming one instance reclaim it once)
+        # (the sites after one statement run in this order, each comparing with what the sites after it name - two
+        # naming one instance reclaim it once)
         for d in range dying.Len() {
             e := dying.Len() - 1 - d
-            st := ln.reclaimAt(lv, dying, e, sp)
+            st := ln.reclaimAt(lv, dying, tys, e, sp)
             if st is null: continue
             sites.Push(st)
             at.Push(i)
@@ -2572,6 +2578,52 @@ fn (ln mut lowering&) reclaimBlock(lv mut liveness&, bi I64) {
     }
     b := ln.F.Blocks.RefMut(bi)
     for k in range sites.Len() { try b.Stmts.Insert(at[k] + 1, sites[k]) catch { } }
+}
+
+# the references to generational instances local u - not in use after this statement - stops holding here: itself, a
+# plain reference no longer in use (a temporary only where it is what a store let go of: any other is a copy of
+# something still held, or still in use); or each owning reference held in place by the value a store let go of (a
+# collection's entry vacated), as a place in it
+fn (ln mut lowering&) dyingParts(lv mut liveness&, u I64, j I64, let I64, dying mut Vec<mir.Operand>&
+                                 tys mut Vec<types.TypeId>&) {
+    t := ln.T
+    me := mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(u))))
+    for d in dying {
+        if d == me: return
+    }
+    if lv.reach[j] == mir.ReachPlain {
+        if ln.F.Locals[u].Kind == mir.LocalKind.Temp and u != let: return
+        dying.Push(me)
+        tys.Push(t.Repr(t.Referent(t.Repr(ln.F.Locals[u].Ty))))
+        return
+    }
+    if u != let: return
+    path Vec<I64>
+    ln.refParts(mir.LocalId(I32(u)), t.Repr(ln.F.Locals[u].Ty), path, dying, tys)
+}
+
+# each owning reference to a generational instance a value of type r held in local l holds in a field (at any depth of
+# structs), as a place of l
+fn (ln mut lowering&) refParts(l mir.LocalId, r types.TypeId, path mut Vec<I64>&, dying mut Vec<mir.Operand>&
+                               tys mut Vec<types.TypeId>&) {
+    t := ln.T
+    g := ln.L.Gen()
+    if path.Len() > 8 or not mir.HasFields(t, r) or not g.HoldsGen(t, r): return
+    fs := t.Items(mir.FieldsOf(t, r))
+    for i in range fs.Len() {
+        if g.WeakField(t, r, i): continue
+        fr := t.Repr(fs[i])
+        path.Push(i)
+        if g.GenRef(t, fr) {
+            ps := Array<mir.Proj>(path.Len())
+            for k in range path.Len() { ps[k] = mir.Proj.Field(path[k]) }
+            dying.Push(mir.Operand.Copy(ln.F.Place(mir.Base.Local(l), ps)))
+            tys.Push(t.Repr(t.Referent(fr)))
+        } else if not t.IsRef(fr) {
+            ln.refParts(l, fr, path, dying, tys)
+        }
+        path.Pop()!
+    }
 }
 
 # the local statement i of block bi lets go of - the old value a store's count is taken down for - -1 for none
@@ -2594,28 +2646,18 @@ fn (ln mut lowering&) letGoOf(bi I64, i I64) I64 {
     }
 }
 
-fn has(xs Vec<I64>&, x I64) Bool {
-    for y in xs {
-        if y == x: return true
-    }
-    return false
-}
-
-# the Reclaim of what dying local e names where the locals in lv.cur are in use after it, and the dying locals after it
-# have sites of their own after its - none where one in use may reach a generational instance and is no plain
-# reference to one
-fn (ln mut lowering&) reclaimAt(lv mut liveness&, dying Vec<I64>&, e I64, sp source.Span) mir.Stmt?& {
+# the Reclaim of what dying e names where the locals in lv.cur are in use after it, and what the dying after it name have
+# sites of their own after its - none where one in use may reach a generational instance and is no plain reference to
+# one
+fn (ln mut lowering&) reclaimAt(lv mut liveness&, dying Vec<mir.Operand>&, tys Vec<types.TypeId>&, e I64, sp source.Span) mir.Stmt?& {
     holding Vec<mir.Operand>
     for j in range lv.m {
         if not lv.cur[j]: continue
         if lv.reach[j] == mir.ReachAny: return null
         holding.Push(mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(lv.locals[j])))))
     }
-    for k in range e + 1, dying.Len() { holding.Push(mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(dying[k]))))) }
-    x := dying[e]
-    t := ln.T
-    ty := t.Repr(t.Referent(t.Repr(ln.F.Locals[x].Ty)))
-    return mir.Stmt.Reclaim(sp, mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(x)))), ty, ln.F.Args(holding.ToArray()))
+    for k in range e + 1, dying.Len() { holding.Push(dying[k]) }
+    return mir.Stmt.Reclaim(sp, dying[e], tys[e], ln.F.Args(holding.ToArray()))
 }
 
 # whether local i is a value local an owning place is counted in: a variable holding owning references in place

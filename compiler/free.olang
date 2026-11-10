@@ -25,7 +25,6 @@
 
 import "std/pair"
 import "std/io"
-import sys "std/os"
 import "std/time"
 import "source"
 import "types"
@@ -1029,7 +1028,9 @@ fn (w mut walker&) genCalls() {
 # code, or in the statement itself outside the call; never one the statement is declaring (it holds nothing yet)
 fn (w mut walker&) inUseAcross(l I64, st I64, csp source.Span, uses Vec<I64>&) I64 {
     if w.declAt[l] > st: return -1
-    if w.declAt[l] == st and w.body().Locals[l].Kind != typed.LocalKind.Param and not w.loopDecl(st): return -1
+    # (a local whose declaration holds the call - in its initializer, or in a clause of it - holds no value yet)
+    d := w.declAt[l]
+    if w.declLet[l] and d <= st and st <= w.ends[d]: return -1
     for u in uses {
         if w.useAt[u] > st: return u
         if w.useAt[u] == st and not spanIn(w.useSp[u], csp): return u
@@ -1043,14 +1044,6 @@ fn (w mut walker&) inUseAcross(l I64, st I64, csp source.Span, uses Vec<I64>&) I
     }
     if has(w.deferred, l) and uses.Len() > 0: return uses[0]
     return -1
-}
-
-# whether statement st is a loop (the locals it declares hold a value each turn)
-fn (w mut walker&) loopDecl(st I64) Bool {
-    for a in w.loopAt {
-        if a == st: return true
-    }
-    return false
 }
 
 # a generational type (ty, -1 for every one) never reclaimed early: why, the first reason kept - noted for later where
@@ -1189,7 +1182,7 @@ fn (f mut Free&) genDecide() {
         }
     }
     f.genAcross()
-    if (try sys.Env("OLANG_GENDEBUG") catch default "") != "" {
+    if f.Debug {
         for i in range f.genTys.Len() { try io.PrintErr($"gen " $t.Canon(f.genTys[i]) " ok " $f.genOkTy[i] " " $f.genWhy[i] "\n") catch io.Error { } }
         for b in range n {
             if f.Bodies[b].Root is null: continue
@@ -1289,6 +1282,62 @@ fn (f mut Free&) genAcross() {
             if addAllTo(f.across[b], f.across[a]) > 0: changed = true
         }
     }
+}
+
+# B18: -memory's rows of reclaiming (O8e): for each generational type, whether its instances are reclaimed where their
+# last owning place lets go of them, or kept until their scope closes and why; and each call of the program's own a
+# reference to one is in use across while its callee may let go of one - those it lets go of kept there
+fn (f mut Free&) genRows() String {
+    b := StringBuilder()
+    t := f.T()
+    for i in range f.genTys.Len() {
+        nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
+        if f.genOkTy[i] {
+            b.Push($"memory: a " $nm " is reclaimed where the last owning place holding it lets go of it, once no reference to one is in use\n")
+            continue
+        }
+        b.Push($"memory: a " $nm " is kept until its scope closes, never reclaimed early\n" $f.genWhy[i] "\n")
+    }
+    lets := f.genLetsOf()
+    d := f.P.L.Diags
+    for c in range f.gcFrom.Len() {
+        a := f.gcFrom[c]
+        to := f.gcTo[c]
+        if not f.programCode[a] or to < 0 or f.acrossAll[a]: continue
+        end := f.gcAt[c + 1] if c + 1 < f.gcAt.Len() else f.gcTypes.Len()
+        for i in range f.gcAt[c], end {
+            ty := f.gcTypes[i]
+            j := f.genIndex(ty)
+            if j < 0 or not f.genOkTy[j] or not has(lets[to], ty): continue
+            nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[j])))
+            at := $d.Locate(f.gcFile[c], f.lineStart(f.gcFile[c], I64(f.gcSp[c].Start)))
+            b.Push($at ": memory: '" $f.textOf(f.gcFile[c], f.gcSp[c]) "' keeps the " $nm "s it lets go of until their scope closes\n")
+            b.Push($d.Locate(f.gcFile[c], I64(f.gcWhy[i].Start)) ": note: '" $f.textOf(f.gcFile[c], f.gcWhy[i]) "', a reference to a " $nm ", is in use across this call\n")
+        }
+    }
+    return b.ToString()
+}
+
+# by body, the generational types it may let go of - a let-go of a place holding one, its callees' included
+fn (f mut Free&) genLetsOf() Vec<Vec<I64>> {
+    out Vec<Vec<I64>>
+    for _ in range f.Bodies.Len() { out.Push(Vec<I64>()) }
+    for g in f.goes {
+        if g.PlaceId < 0 or g.PlaceId >= f.valTy.Len() or g.Body < 0: continue
+        k := g.PlaceId
+        if f.keyField[k] >= 0 and f.P.WeakField(f.keyTy[k], f.keyField[k]): continue
+        hs Vec<I64>
+        f.holdsTypes(f.T().Repr(f.valTy[g.PlaceId]), hs, 0)
+        for h in hs { addTo(out.RefMut(g.Body), h) }
+    }
+    changed := true
+    for changed {
+        changed = false
+        for c in range f.gcFrom.Len() {
+            if f.gcTo[c] >= 0 and addAllTo(out.RefMut(f.gcFrom[c]), out[f.gcTo[c]]) > 0: changed = true
+        }
+    }
+    return out
 }
 
 # the (body, type) pairs where reclaiming may run, for the root's decisions object
@@ -1791,6 +1840,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     elseFrom Vec<I64>
     elseTo Vec<I64>
     declAt Vec<I64>           # by local: the statement declaring it
+    declLet Vec<Bool>         # by local: whether a Let declares it (declAt is its statement)
     declSp Vec<source.Span>   # by local: its initializer, as written - what a hidden one (a walk's) is said by
     lastAt Vec<I64>           # the statements a return follows
     loops I64 = 0              # the loops the statement being walked is in
@@ -1869,12 +1919,14 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     n := body.Locals.Len()
     w.origins.Truncate(n)
     w.declAt.Clear()
+    w.declLet.Clear()
     w.declSp.Clear()
     w.seen.Clear()
     for i in range n {
         w.seen.Push(false)
         if i < w.origins.Len() { w.origins[i].Clear() } else { w.origins.Push(Vec<I64>()) }
         w.declAt.Push(0)
+        w.declLet.Push(false)
         w.declSp.Push(source.Span(0, 0))
     }
     for j in range body.Params.Len() {
@@ -2077,6 +2129,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
     match st {
         case typed.Stmt.Let(sp, l, x) {
             w.declAt[I64(l)] = n
+            w.declLet[I64(l)] = true
             w.declSp[I64(l)] = x.Span()
             # (Part C: storeOver's held copy, judged where it is stored - copyInto - or, read anywhere else, untracked)
             lk := w.body().Locals[I64(l)].Kind
@@ -5262,6 +5315,7 @@ fn (f mut Free&) Report() String {
         }
     }
     b.Push(f.holderRows())
+    if f.genOn: b.Push(f.genRows())
     if places == 0 {
         b.Push("memory: no place lets go of storage in code that runs again\n")
         return b.ToString()
@@ -5283,6 +5337,8 @@ fn (f mut Free&) isContents(k I64) Bool {
 # whether the report speaks of place k: storage made for it - it owns what it lets go of - and the program's: a field
 # of a type the program declares, or what a collection holds, which the library's removals let go of
 fn (f mut Free&) reported(k I64) Bool {
+    # (a place holding generational instances lets go of them by their counts - genRows says where they are reclaimed)
+    if f.P.Gens.Len() > 0 and f.genPlace(k): return false
     owns := false
     for st in f.stores {
         if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
