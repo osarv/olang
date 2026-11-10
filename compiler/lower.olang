@@ -59,6 +59,8 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # T22c: by twin (scope.twinTab), its plan, and whether it has code of its own (else a call of it reaches the body's)
     TwinPlans Vec<typed.Plan>
     TwinOwn Vec<Bool>
+    TwinBodies Vec<I64>
+    TwinStable Vec<String&>    # ... and its key in stable names (scope.TwinStable), "" where it has none
     Free mut free.Free?& = null # the early-free analysis's decisions (O8d), null for none: nothing freed early
     Gaps Vec<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap

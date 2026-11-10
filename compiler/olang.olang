@@ -686,7 +686,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(u)
     }
     # (the reader records again: lowering read facts of its own)
-    if kind != build.Kind.Module { keep(l, cfg, keys, records.ReaderRecords(l, c), e.Made, objs, hashes) }
+    if kind != build.Kind.Module { keep(l, cfg, keys, records.ReaderRecords(l, c), e, objs, hashes) }
     # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
     for m in l.Mods {
         if m.CUnit == "" { continue }
@@ -822,6 +822,8 @@ fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, Str
             r.Split = line[6:] == "1"
         } else if line.StartsWith("inst ") {
             r.Inst.Push($line[5:])
+        } else if line.StartsWith("twin ") {
+            r.Twins.Push($line[5:])
         } else if line.StartsWith("read ") {
             read.Push(line)
         } else if line.StartsWith("part ") or line.StartsWith("locs ") {
@@ -845,8 +847,9 @@ fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, Str
 # the records of the modules this emission wrote: each part's IR, then the record with what the module's code read,
 # each written under a temporary name and renamed into place, so a record that is there is whole and so is every file
 # it names, whatever build ran beside this one
-fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads Array<String&>&, made Vec<emit.Reused>&
+fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads Array<String&>&, e mut emit.Emitter&
     objs Vec<emit.Object>&, hashes Vec<String&>&) {
+    made := e.Made
     if made.Len() == 0 { return }
     try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
     pid := build.Pid()
@@ -861,6 +864,7 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
             seen.Put(sym, true)
             b.Push($"inst " $sym "\n")
         }
+        for x in e.TwinLines(r.Inst) { b.Push($"twin " $x "\n") }
         if reads[r.Module] != "": b.Push($reads[r.Module] "\n")
         ok := true
         for k in range r.Parts.Len() {
@@ -963,11 +967,14 @@ fn weakRows(c typecheck.Checker&) String {
     return b.ToString()
 }
 
-# T22c: the scope pass's twins, each one's plan and whether it has code of its own, for lowering
-fn twinsTo(lw mut lower.Lowerer&, fr free.Free&) {
+# T22c: the scope pass's twins, each one's plan, whether it has code of its own, its body and its key in stable names
+# (B3i: a module record naming a twin is taken only where the twin of that symbol has the key it had), for lowering
+fn twinsTo(lw mut lower.Lowerer&, fr mut free.Free&) {
     for t in range fr.Sc.TwinCount() {
         lw.TwinPlans.Push(fr.Sc.TwinPlan(t))
         lw.TwinOwn.Push(fr.Sc.TwinOwn(t))
+        lw.TwinBodies.Push(fr.Sc.TwinBody(t))
+        lw.TwinStable.Push(fr.Sc.TwinStable(t))
     }
 }
 

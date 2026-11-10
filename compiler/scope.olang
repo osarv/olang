@@ -2138,6 +2138,28 @@ fn (s Scoper&) TwinOwn(t I64) Bool { return s.Twins.Own[t] }
 
 fn (s Scoper&) TwinKey(t I64) String { return s.Twins.Key[t] }
 
+# B3i: twin t's key with every body named by its stable name (NameOf), for a module record naming the twin's symbol -
+# "" where it cannot be said so (an instance followed, a body with no name): a record naming it is then never taken
+fn (s mut Scoper&) TwinStable(t I64) String {
+    segs := s.Twins.Key[t].Split(" ").ToVec()
+    b := try segs[0].ParseInt(10) catch default -1
+    if b < 0 or s.NameOf(b) == "": return ""
+    out := StringBuilder()
+    out.Push(s.NameOf(b))
+    for k in range 1, segs.Len() {
+        colon := try segs[k].Find(":") catch default -1
+        if colon < 1 or segs[k][:colon].EndsWith("i"): return ""
+        out.Push($"\t" $segs[k][:colon + 1])
+        for id in segs[k][colon + 1:].Split(",") {
+            if id.Len() == 0: continue
+            n := try (id[:id.Len() - 1] if id.EndsWith("a") else id).ParseInt(10) catch default -1
+            if n < 0 or n >= s.Bodies.Len() or s.NameOf(n) == "": return ""
+            out.Push($s.NameOf(n) $("a" if id.EndsWith("a") else "") ",")
+        }
+    }
+    return out.ToString()
+}
+
 # twin t's key said in words (B11b): "a = 'less'" for each function parameter followed, "p = an instance" for an instance
 fn (s Scoper&) TwinWords(t I64) String {
     body := s.Bodies[s.Twins.Body[t]]
@@ -8976,7 +8998,8 @@ fn (s mut Scoper&) isStruct(t types.TypeId) Bool {
 fn (s mut Scoper&) partsTerm(p typed.Lvalue&) Term {
     match p {
         case typed.Lvalue.Local(_, _, id) {
-            if s.copied.Has(I64(id)) { return Term.Block(typed.BlockId(0)) }   # D9b: its own copy's elements
+            # D9b: its own copy's elements - in the frame, or where R3 makes the copy for it to be kept (O14, O28)
+            if s.copied.Has(I64(id)): return s.paramLift(I64(id)) if s.paramLift(I64(id)).Runs() else Term.Block(typed.BlockId(0))
             t := s.terms[I64(id)]
             return t if t != Term.None else s.stors[I64(id)]
         }
@@ -15650,7 +15673,11 @@ fn (s mut Scoper&) restoreHidden(b I64, text String&) {
                 continue
             }
             s.capSeen.Put(pair.Pair<I64, I64>(b, l), true)
-            if rs.Recs.Len() > 0: s.capSeeds.Put(pair.Pair<I64, I64>(b, l), rs)
+            if rs.Recs.Len() == 0: continue
+            # (followed as seedFollowed marks it, so that a judging of the lambda's maker made in this build takes
+            # the capture as followed - no boundary - as it does where the lambda was judged here)
+            s.capSeeds.Put(pair.Pair<I64, I64>(b, l), rs)
+            s.capFollowed.Put(pair.Pair<I64, I64>(b, l), true)
         }
     }
 }
@@ -15895,7 +15922,9 @@ fn (s mut Scoper&) Records() Map<I64, String&> {
 DiskVariants I64 = 2
 
 # OLANG_FACTSTATS: the files of the modules some function of no type variable of which (or what is written inside one)
-# was judged afresh, not taken from a record - as the front records' "front checked" says it (W3a)
+# was judged afresh, not taken from a record - as the front records' "front checked" says it (W3a). A judging that
+# asked for twins (compRun.Twinned) is not counted: no record holds one (RunRecord - the twins it made are numbered by
+# this build, and taking it would have to make and judge them again), so it is judged in every build, edited or not
 fn (s mut Scoper&) JudgedFiles() Map<I64, Bool> {
     out Map<I64, Bool>
     for k in range s.compFrom.Len() {
@@ -15903,7 +15932,7 @@ fn (s mut Scoper&) JudgedFiles() Map<I64, Bool> {
         b := s.compNodes[s.compFrom[k]]
         if not s.Keyed.Has(s.Bodies[b].File) or s.filesOf(b).Len() != 1 or not s.plainBody(b): continue
         latest := s.runs[k][s.runs[k].Len() - 1]
-        if latest.Disk is null: out.Put(s.Bodies[b].File, true)
+        if latest.Disk is null and not latest.Twinned: out.Put(s.Bodies[b].File, true)
     }
     return out
 }

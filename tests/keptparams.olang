@@ -47,6 +47,14 @@ fn counter(c Counter) fn&() I64 { return c }
 # a generic's String parameter sliced and handed back
 fn headOf<T>(x T) Array<Char>& { return x[0:3] }
 
+# a run-time array parameter sliced and handed back - read only, and written first (D9b's own copy)
+fn firstTwo(a Array<I64>) Array<I64>& { return a[0:2] }
+
+fn firstTwoSet(a Array<I64>) Array<I64>& {
+    a[1] = 9
+    return a[0:2]
+}
+
 # kept by what a reference parameter reaches
 fn keepIn(out mut Vec<Held>&, v Vec<I64>) { out.Push(Held(v)) }
 
@@ -93,6 +101,20 @@ fn vecs(n I64) I64 {
     return t * 1000 + out[n - 1].v[n - 1]
 }
 
+fn slices(n I64) I64 {
+    kept Vec<Array<I64>&>
+    for i in range n {
+        a := Array<I64>(4, i + 1)
+        kept.Push(firstTwo(a))
+        kept.Push(firstTwoSet(a))
+        a[0] = 100
+    }
+    churn()
+    t I64 = 0
+    for k in kept { t = t * 10 + k[0] + k[1] }
+    return t
+}
+
 # a binding kept past its clause, each turn's its own
 fn bindings(n I64) I64 {
     keep P& = P(0, 0)
@@ -119,6 +141,7 @@ test heads "hands back a slice of a parameter's copy" { assert heads() == 3196 }
 test instances "keeps a constructor parameter in the instance" { assert instances() == 42073 }
 test vecs "keeps a parameter where a reference parameter reaches" { assert vecs(4) == 1234030 }
 test bindings "keeps a match binding past its clause" { assert bindings(3) == 11036 }
+test slices "hands back a slice of a run-time array parameter's copy" { assert slices(2) == 3051 }
 
 assert borrowed() == 349 and counted() == 4243 and heads() == 3196 and instances() == 42073
-assert vecs(4) == 1234030 and bindings(3) == 11036
+assert vecs(4) == 1234030 and bindings(3) == 11036 and slices(2) == 3051

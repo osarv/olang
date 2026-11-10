@@ -22,6 +22,7 @@
 
 import "std/io"
 import "std/os"
+import "std/sha256"
 import "source"
 import "ast"
 import "diag"
@@ -167,6 +168,7 @@ type Reused struct(Module I64) {
     Size I64 = 0
     Split Bool = false
     Inst Vec<String&>
+    Twins Vec<String&>     # of the instances, each twin's "SYMBOL HASH": the hash of its key in stable names (TwinLine)
     From I64 = -1
 }
 
@@ -614,6 +616,15 @@ fn (e mut Emitter&) reusing() Vec<mir.FnKey> {
         bySym.Put($s "_adapter", mir.FnKey.Adapter(typed.BodyId(I32(i))))
         bySym.Put($s, k)
     }
+    # T22c: a twin with code of its own is an instance too - named by its number, so taken only where this program's
+    # twin of that symbol has the key the record says (Reused.Twins)
+    twinNow Map<String&, String&>
+    for t in range e.Lw.TwinOwn.Len() {
+        if not e.Lw.TwinOwn[t] or t >= e.Lw.TwinBodies.Len(): continue
+        k := mir.FnKey.Twin(typed.BodyId(I32(e.Lw.TwinBodies[t])), t)
+        bySym.Put(e.sym(k), k)
+        twinNow.Put(e.sym(k), e.TwinLine(t))
+    }
     for ri, r in e.Reuse {
         if r.Module == e.P.L.Root or e.ReusedAt.Has(r.Module) { continue }
         keys Vec<mir.FnKey>
@@ -625,9 +636,35 @@ fn (e mut Emitter&) reusing() Vec<mir.FnKey> {
             }
             keys.Push(k)
         }
+        for sym in r.Inst {
+            line := try twinNow.Get(sym) catch { continue }
+            if line == "" or line not in r.Twins: whole = false
+        }
         if not whole { continue }
         e.ReusedAt.Put(r.Module, ri)
         for k in keys { out.Push(k) }
+    }
+    return out
+}
+
+# twin t's line in a module record naming its symbol: "SYMBOL HASH", HASH that of its key in stable names - "" where
+# it has none (a record naming it is never taken)
+fn (e mut Emitter&) TwinLine(t I64) String {
+    if t >= e.Lw.TwinStable.Len() or e.Lw.TwinStable[t] == "": return ""
+    return $e.sym(mir.FnKey.Twin(typed.BodyId(I32(e.Lw.TwinBodies[t])), t)) " " $sha256.Hex(e.Lw.TwinStable[t])[:32]
+}
+
+# the twin lines of the instances a module's objects name (Reused.Inst), for its record
+fn (e mut Emitter&) TwinLines(inst Vec<String&>&) Vec<String&> {
+    out Vec<String&>
+    named Map<String&, Bool>
+    for x in inst { named.Put(x, true) }
+    for t in range e.Lw.TwinOwn.Len() {
+        if not e.Lw.TwinOwn[t] or t >= e.Lw.TwinBodies.Len(): continue
+        line := e.TwinLine(t)
+        if line == "": continue
+        sp := try line.Find(" ") catch { continue }
+        if named.Has(line[:sp]): out.Push(line)
     }
     return out
 }
