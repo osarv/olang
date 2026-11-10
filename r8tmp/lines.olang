@@ -1,0 +1,16 @@
+import "std/io"
+import "std/csv"
+fn main() ? {
+    kept := Vec<String>()
+    for line in try io.Lines(0) { kept.Push(line) }
+    rows := Vec<String>()
+    for row in try csv.Rows("a,b\nc,\"d\"\"e\"\n") {
+        rows.Push(row[0])
+        rows.Push(row[1])
+    }
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+    try io.Println($kept.Len() " " $kept[1] " " $rows[3])
+}

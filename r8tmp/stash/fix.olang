@@ -1,0 +1,293 @@
+# fix - "olang fix FILE|DIR..." (SPEC.md B17): every migration since the files were written, applied in the order the
+# language changed. A change that rewrote code ships as a tool in tools/ (tools/README.md); this runs them one after the
+# other over the files, so a file from any earlier time reads in the language of today. Each tool changes only the forms
+# it was written for, so running it on code that has none changes nothing and no version marker is kept - a file is
+# fixed when the tools have nothing more to do, and fixing it again changes nothing.
+#
+# The tools are olang programs in tools/ beside the compiler's std/ (OLANG_TOOLS names another place). They are built
+# when first needed, by this compiler, into the cache (OLANG_CACHE, fix/KEY in it - KEY this compiler's path and the
+# tools') and built again when the compiler changed or the tools' sources, the compiler's modules or std are newer.
+# Every tool is run on all the files at once, in the order of Tools below.
+#
+# Not in the table, because they are not idempotent - run on code of today they would damage it - and are for one change
+# only: io_print, io_try and io_fix (M19f: they take the `try` and the `catch` off a call of io.Print and put it back
+# where it was not), and precedence_migrate (E5: it reads every `a & b == c` as written for the old precedence).
+import "std/os"
+import "std/io"
+import "std/filepath"
+import "fetch"
+import "build"
+
+# how a tool is run: its name and what stands before the files. A text tool reads the files alone; a driven one
+# compiles them and applies what the compiler's diagnostics say, so it runs after every text tool - an old file does not
+# parse, and the compiler has nothing to say about it, until the text tools have rewritten it
+TextTool I64 = 0       # tools_NAME FILE...
+StdTool I64 = 1        # tools_NAME --std STD FILE...
+DrivenOpt I64 = 2      # tools_NAME --olang COMPILER FILE...
+DrivenArg I64 = 3      # tools_NAME COMPILER FILE...
+
+# the tools in the order the changes were made (their dates in tools/README.md): the text tools first, then the driven
+ToolNames Array<String&> = Array<String&>["bare_typevars", "perm_mut", "int_literal_i64", "errors_migrate", "cli_words"
+    "donefail_migrate", "syntax_migrate", "math_methods", "arrays_migrate", "results_migrate", "equality_migrate"
+    "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
+    "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
+    "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
+    "textbuild_migrate", "unique_migrate", "builder_migrate", "literal_migrate", "keyword_rename", "destroy_migrate"]
+ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0]
+
+fn driven(kind I64) Bool { return kind >= DrivenOpt }
+
+# the tools in the order they run: the text tools in table order, then the driven ones in table order
+fn Order() Array<I64> {
+    out Vec<I64>
+    for want in Array<String&>["text", "driven"] {
+        for t in range ToolNames.Len() {
+            if driven(ToolKinds[t]) == (want == "driven") { out.Push(t) }
+        }
+    }
+    return out.ToArray()
+}
+
+# the arguments a tool is run with: its program, what stands before the files, and the files
+fn arguments(program String&, kind I64, exe String&, std String&, files Array<String&>&) Array<String&> {
+    out Vec<String&>
+    out.Push(program)
+    if kind == StdTool {
+        out.Push("--std")
+        out.Push(std)
+    } else if kind == DrivenOpt {
+        out.Push("--olang")
+        out.Push(exe)
+    } else if kind == DrivenArg {
+        out.Push(exe)
+    }
+    for f in files { out.Push(f) }
+    return out.ToArray()
+}
+
+# the .olang files under a directory, sorted; build/ and names beginning with "." are left out
+fn walk(dir String&, out mut Vec<String&>&) {
+    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    for n in names {
+        if n.StartsWith(".") or n == "build" { continue }
+        p := filepath.Join(dir, n)
+        if os.IsDir(p) {
+            walk(p, out)
+        } else if n.EndsWith(".olang") {
+            out.Push(p)
+        }
+    }
+}
+
+# the files the command line names: a directory is every .olang file under it
+fn expand(paths Array<String&>&) Vec<String&> {
+    out Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { walk(p, out) } else { out.Push(p) }
+    }
+    return out
+}
+
+# where the tools are: OLANG_TOOLS, else tools beside the compiler (its directory's "../tools")
+fn ToolsDir(exe String&) String {
+    env := try os.Env("OLANG_TOOLS") catch default ""
+    if env != "" { return $env }
+    return $filepath.Dir(exe) "/../tools"
+}
+
+# the modification time of a file (ns), or 0 where it is not there
+fn mtime(path String&) I64 {
+    info := try os.FileInfo.Stat(path) catch os.Error { return 0 }
+    return info.ModTime
+}
+
+# the newest .olang file in a directory (the tools and the modules they share)
+fn newest(dir String&) I64 {
+    n I64 = 0
+    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    for name in names {
+        if name.EndsWith(".olang") { n = n.Max(mtime(filepath.Join(dir, name))) }
+    }
+    return n
+}
+
+# what a tool's program is made from, beyond its own source: the compiler that builds it (where it is, its size and when
+# it was made) - a program built by another compiler, or by this one before it was rebuilt, is built again
+fn builtBy(exe String&) String {
+    info := try os.FileInfo.Stat(exe) catch os.Error { return $exe }
+    return $exe " " $info.Size " " $info.ModTime "\n"
+}
+
+# where the tools' programs are kept: a directory of the cache for this compiler and these tools (B17) - two checkouts,
+# or two compilers, never share one, so a program is never one another compiler built from other sources
+fn BinDir(exe String&, tools String&) String {
+    real := try os.RealPath(exe) catch default $exe
+    rt := try os.RealPath(tools) catch default $tools
+    parts Vec<String&>
+    parts.Push(real)
+    parts.Push(rt)
+    return filepath.Join(filepath.Join(fetch.CacheDir(), "fix"), build.HashOf(parts)[0:16])
+}
+
+# the program for a tool, built into bin when it is not there, was built by another compiler (or this one before it
+# changed), or is older than the sources it is built from: the tools, the compiler's modules beside them (some tools
+# import them) and the standard library - failing with NotBuilt, said, where it cannot be
+fn ensureBuilt(exe String&, tools String&, bin String&, name String&, std String&, said mut io.Writer&) ? NotBuilt {
+    program := filepath.Join(bin, "tools_" $name)
+    stamp := $program ".from"
+    from := try os.ReadFile(stamp) catch default ""
+    lib := newest(std).Max(newest(filepath.Join(std, "prelude")))
+    sources := newest(tools).Max(newest(filepath.Join(tools, "../compiler"))).Max(lib)
+    if from == builtBy(exe) and mtime(program) > sources { return }
+    # built under a name of its own, then renamed into place: another fix running at the same time (the cache is shared
+    # by every run of this compiler over these tools) never runs a program half written, nor overwrites one it runs
+    tmp := try os.MkTemp(dir = bin, prefix = $"tools_" $name ".") catch os.Error e {
+        said.Write("olang: fix: cannot build tools/" $name ".olang: " $e "\n")
+        error NotBuilt
+    }
+    defer try os.RemoveAll(tmp) catch os.Error { }
+    made := filepath.Join(tmp, "tools_" $name)
+    out := try os.Output.Exec(exe, "build", "-output", made, filepath.Join(tools, $name ".olang"), dir = bin) catch os.Error e {
+        said.Write("olang: fix: cannot run " $exe ": " $e "\n")
+        error NotBuilt
+    }
+    if out.Status != 0 {
+        said.Write("olang: fix: tools/" $name ".olang does not build:\n" $out.Stdout $out.Stderr)
+        error NotBuilt
+    }
+    try os.Rename(made, program) catch os.Error e {
+        said.Write("olang: fix: cannot put tools_" $name " in place: " $e "\n")
+        error NotBuilt
+    }
+    try os.WriteFile(stamp, builtBy(exe)) catch os.Error { }
+}
+
+# the files at once to a tool's command line: long lists are cut into runs so the line stays short
+Batch I64 = 200
+
+# the fixes: each file changed is named on the standard output, one a line. With check nothing stays written - the files
+# are put back as they were - and the status is 1 where any would change. 2 where a tool could not be built or run
+fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
+    said := io.Writer(2)
+    out := io.Writer(1)
+    files := expand(paths).ToArray()
+    before Vec<String&>
+    for f in files {
+        text := try os.ReadFile(f) catch os.Error {
+            said.Write("olang: " $f ": cannot be read\n")
+            try said.Flush() catch io.Error { }
+            return 2
+        }
+        before.Push(text)
+    }
+    tools := ToolsDir(exe)
+    if not os.IsDir(tools) {
+        said.Write("olang: fix: no tools directory at " $tools " (OLANG_TOOLS names another)\n")
+        try said.Flush() catch io.Error { }
+        return 2
+    }
+    bin := BinDir(exe, tools)
+    try os.MkDirAll(bin) catch os.Error {
+        said.Write("olang: fix: cannot make " $bin "\n")
+        try said.Flush() catch io.Error { }
+        return 2
+    }
+    status I32 = 0
+    left I64 = 0
+    for t in Order() {
+        name := ToolNames[t]
+        try ensureBuilt(exe, tools, bin, name, std, said) catch NotBuilt {
+            status = 2
+            break
+        }
+        program := filepath.Join(bin, "tools_" $name)
+        for at in range 0, files.Len(), Batch {
+            run := files[at:(at + Batch).Min(files.Len())]
+            r := try os.Output.Exec(...arguments(program, ToolKinds[t], exe, std, run)) catch os.Error e {
+                said.Write("olang: fix: cannot run " $program ": " $e "\n")
+                status = 2
+                break
+            }
+            body := $r.Stdout $r.Stderr
+            # what a tool says is shown when it left something for a person or failed
+            people := byHand(body)
+            if r.Status > 1 or people > 0 {
+                said.Write($name ":\n" $body)
+                if not body.EndsWith("\n") { said.Write("\n") }
+            }
+            left += people
+            if r.Status > 1 { status = 2 }
+        }
+        if status != 0 { break }
+    }
+    changed := 0
+    for i in range files.Len() {
+        now := try os.ReadFile(files[i]) catch os.Error { continue }
+        if now == before[i] { continue }
+        changed++
+        out.Write($files[i] "\n")
+        if check { try os.WriteFile(files[i], before[i]) catch os.Error { said.Write("olang: " $files[i] ": cannot be written\n") } }
+    }
+    if left > 0 and status == 0 {
+        s := "" if left == 1 else "s"
+        said.Write("olang fix: " $left " place" $s " above may mean something else in the language of today than when written - look at each\n")
+    }
+    try out.Flush() catch io.Error { return 2 }
+    try said.Flush() catch io.Error { return 2 }
+    if status != 0 { return status }
+    return 1 if (check and changed > 0) or left > 0 else 0
+}
+
+# how many places what a tool said leaves to a person: its "by hand: ..." lines, and the indented lines under a "for a
+# person:" one
+fn byHand(body String&) I64 {
+    n I64 = 0
+    under := false
+    for line in body.Lines() {
+        if line.StartsWith("by hand:") {
+            n++
+        } else if line == "for a person:" {
+            under = true
+        } else if under and line.StartsWith("  ") {
+            n++
+        } else {
+            under = false
+        }
+    }
+    return n
+}
+
+test "a tool's places for a person are counted, its summary is not" {
+    assert byHand("changed 1 files: 2 rewrites\n") == 0
+    assert byHand("changed 0 files: 0 rewrites\nby hand: f:1: x\nby hand: f:2: y\n") == 2
+    assert byHand("migrated a.olang\nfor a person:\n  a.olang:3: z\n  a.olang:4: w\ndone\n") == 2
+}
+
+test "the text tools run before the driven ones, each group in the order the changes were made" {
+    o := Order()
+    assert o.Len() == ToolNames.Len() and ToolNames.Len() == ToolKinds.Len()
+    seenDriven := false
+    last I64 = -1
+    for t in o {
+        if driven(ToolKinds[t]) {
+            if not seenDriven { last = -1 }
+            seenDriven = true
+        } else {
+            assert not seenDriven
+        }
+        assert t > last
+        last = t
+    }
+    assert ToolNames[o[0]] == "bare_typevars" and ToolNames[o[o.Len() - 1]] == "unused_migrate"
+}
+
+test "a tool's command line has its compiler or std before the files" {
+    f := Array<String&>["a.olang", "b.olang"]
+    assert arguments("p", TextTool, "olang", "std", f).Len() == 3
+    s := arguments("p", StdTool, "olang", "std", f)
+    assert s.Len() == 5 and s[1] == "--std" and s[2] == "std" and s[3] == "a.olang"
+    d := arguments("p", DrivenOpt, "/x/olang", "std", f)
+    assert d.Len() == 5 and d[1] == "--olang" and d[2] == "/x/olang"
+    a := arguments("p", DrivenArg, "/x/olang", "std", f)
+    assert a.Len() == 4 and a[1] == "/x/olang" and a[2] == "a.olang"
+}

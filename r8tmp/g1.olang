@@ -1,0 +1,23 @@
+import "std/io"
+import "std/os"
+Closed mut I64 = 0
+type Conn unique struct(fd I32) {
+    fd
+} destruct {
+    Closed++
+    io.Println("closed " $fd " (" $Closed ")")!
+}
+G Conn = Conn(3)
+H mut Conn = Conn(I32(os.Args().Len() + 6))
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn main() {
+    churn()
+    io.Println($G.fd " " $H.fd " " $Closed)!
+    H = Conn(8)
+    io.Println($H.fd " " $Closed)!
+}

@@ -1,0 +1,10 @@
+type Node struct(v I64) {
+    v
+}
+fn f(a Node&, b Node&, c Bool) I64 {
+    r Node& = a if c else b
+    return r.v
+}
+fn main() {
+    assert f(Node(1), Node(2), true) == 1
+}

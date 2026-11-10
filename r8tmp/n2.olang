@@ -1,0 +1,24 @@
+import "std/io"
+import "std/os"
+type Bad error { No }
+fn validate(text String&) Vec<String&> ? Bad {
+    if text.Len() == 0 { error Bad.No }
+    return Vec<String&>()
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn main() ? {
+    got Vec<String&>
+    for i in range 2 {
+        t := "kept " $(i + os.Args().Len())
+        inner := Vec<String&>()
+        inner.Push(t)
+        got = try validate("") catch default inner
+    }
+    churn()
+    try io.Println($got[0])
+}

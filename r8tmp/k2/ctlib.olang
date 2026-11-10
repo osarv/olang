@@ -1,0 +1,7 @@
+# K2: a library's globals computed while compiling - an importer declares the plain-data ones with their values
+# (available_externally), so its optimizer reads them before the link; storage of their own and a mutable global stay
+# declarations of what this module defines
+Tile I64 = 12
+Tiles Array<I64> = Array<I64>[1, 2]
+Rows Array<I64>& = Array<I64>[3, 4]
+Counter mut I64 = 5

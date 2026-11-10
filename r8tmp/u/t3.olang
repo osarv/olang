@@ -1,0 +1,18 @@
+type Node struct(v I64) {
+    v
+}
+type W struct(n Node&) {
+    n
+}
+W0 mut W? = null
+fn main() {
+    ws := Vec<W>()
+    for i in range 2 {
+        {
+            nd := Node(i)
+            w := W(nd)
+            ws.Push(w)
+        }
+    }
+    assert ws[1].n.v == 1
+}

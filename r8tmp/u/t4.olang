@@ -1,0 +1,7 @@
+type Node struct(v I64) {
+    v
+}
+fn f(x Node) Node& { return x }
+fn main() {
+    assert f(Node(1)).v == 1
+}

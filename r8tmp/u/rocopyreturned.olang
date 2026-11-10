@@ -1,0 +1,8 @@
+type Box struct(d mut Array<I64>&) {
+    d
+}
+fn give(r Box&) Box { return r }
+fn main() {
+    b := Box(Array<I64>(2))
+    assert give(b).d.Len() == 2
+}

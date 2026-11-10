@@ -1,0 +1,12 @@
+type Box struct(d mut Array<I64>&) {
+    d
+}
+fn put<T>(v mut Vec<T>&, x T&) { v.Push(x) }
+fn main() {
+    v := Vec<Box>()
+    h := Box(Array<I64>(1))
+    r Box& = h
+    put(v, r)
+    v[0].d[0] = 3
+    assert h.d[0] == 3
+}

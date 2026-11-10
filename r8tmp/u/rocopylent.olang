@@ -1,0 +1,14 @@
+type Box struct(d mut Array<I64>&) {
+    d
+}
+type Holder struct(b Box) {
+    b
+}
+fn bump(b mut Box&) { b.d[0]++ }
+fn main() {
+    h := Holder(Box(Array<I64>(1)))
+    r Holder& = h
+    c := r.b
+    bump(c)
+    assert c.d[0] == 1
+}

@@ -1,0 +1,716 @@
+# ast - the syntax tree the parser builds (compiler/DESIGN.md 1.2).
+#
+# Nodes are recursive enums held by reference (T17d), and nothing is written into a node once it is built (O25g), so
+# any part may be shared. Every node carries the span of its tokens, [Start, End) in its file's text - a diagnostic's
+# caret needs the end - and holds names as interned ids and literals as spans, never text: the tree keeps nothing of
+# the token array it was read from. What could not be read is in the diagnostics (diag), not the tree. A case holds at most about four words; a larger payload sits behind a reference
+# to a struct, so the largest case does not size every node.
+import "source"
+import "token"
+
+# a type as written
+type TypeRef enum {
+    # alias.Name<args> - the path's last part is the name, the rest its alias chain
+    Named(sp source.Span, path Array<source.NameId>&, args Array<TypeRef&>&)
+    # fn(params) results ? errors
+    Func(sp source.Span, sig Sig&)
+    # an inline shape - an anonymous enum, struct or trait - kept as the declaration it would be
+    Shape(sp source.Span, body TypeBody&)
+    # a reference marker after a type: "&" (T24); "?&" nullable (T2c); weak where "weak" was written before it (T2d)
+    Ref(sp source.Span, of TypeRef&, nullable Bool, isWeak Bool)
+    # the permission before a type: "mut" (T25b)
+    Perm(sp source.Span, of TypeRef?&, writable Bool)
+    # "any Trait": a run-time trait value's referent (T32) - the reference marker after it a Ref around it
+    Any(sp source.Span, of TypeRef&)
+    # "? A, B" closing a type-argument list (G8, QAH): the error set given for the type's error-set parameter
+    Errs(sp source.Span, items Array<Path&>&)
+    # "...T", a variadic parameter's type (D8g): a read-only array of T, given as the call's arguments
+    Spread(sp source.Span, of TypeRef&)
+}
+
+# a parameter: name type [= default]. A lambda's parameter may leave its type out (null)
+type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&
+                  Attrs Array<Attr&>& = Array<Attr&>(0)) {
+    Sp
+    Name
+    Ty
+    Dflt
+    Attrs      # the attributes written before it (G39)
+}
+
+# an attribute (G39): "@" and the value after it - a declared type's, built while compiling - and the hidden global the
+# parser declares beside the declaration to hold it (its name "@" and its offset, which no program can write)
+type Attr struct(Sp source.Span, X Expr&, Global source.NameId) {
+    Sp
+    X
+    Global
+}
+
+# a signature: parameters, results (none, one or several), and the error set - HasErrors with no names is an inferred
+# set ("?" alone, R1a); NoReturn for "noreturn" where a result would stand (D8e)
+# a declaration's contract, null for none (D17)
+type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false
+                Contract ContractBlock?& = null, Commutes Bool = false, Variadic Bool = false
+                Promises Array<Promise&>& = Array<Promise&>(0)) {
+    Params
+    Results
+    HasErrors
+    Errors
+    NoReturn
+    Contract
+    Commutes   # "commutes" after an operator method's result (E31c): the operator applies with its operands swapped too
+    Variadic   # "..." after an extern's parameters (X17): C's variable arguments
+    Promises   # the words after a function type's signature (T21c), as written
+}
+
+# a promise after a function type's signature (T21c): its word, and the names it takes as written - "keeps b in a.f"
+# Keeps with [b, a, f], "borrows a" Borrows with [a], an effect word none
+type Promise struct(Sp source.Span, Word token.Tok, Names Array<source.NameId>&) {
+    Sp
+    Word
+    Names
+}
+
+# s with its promises (T21c)
+fn (s Sig&) WithPromises(ps Array<Promise&>&) Sig& {
+    return Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, s.Contract, s.Commutes, s.Variadic, ps)
+}
+
+# a contract (D17): its bracketed block's span and its conditions as statements - each an Assert with no message
+type ContractBlock struct(Sp source.Span, Items Array<Stmt&>&) { Sp, Items }
+
+# a dotted name: alias.Type.word - an error set's or a catch clause's item, an error statement's word
+type Path struct(Sp source.Span, Parts Array<source.NameId>&) {
+    Sp
+    Parts
+}
+
+type Expr enum {
+    Name(sp source.Span, name source.NameId)
+    Lit(sp source.Span, kind token.Tok)                # IntLit, FloatLit, CharLit, StrLit, BoolLit, NullLit: its text
+    Paren(sp source.Span, x Expr&)                     # kept: "(x.f)(a)" calls a field (E13b), and "try (x)" is an error (E24)
+    Unary(sp source.Span, op token.Tok, x Expr&)       # - ~ $ not ++ --
+    Postfix(sp source.Span, op token.Tok, x Expr&)     # x++ x-- x! (E35)
+    Binary(sp source.Span, op token.Tok, a Expr&, b Expr&)
+    NotIn(sp source.Span, a Expr&, b Expr&)            # a not in b (E29)
+    Chain(sp source.Span, c Chain&)                    # a < b <= c (E30)
+    Cond(sp source.Span, a Expr&, c Expr&, b Expr&)    # a if c else b (E28)
+    # a type after "is": known to be one by its form - "mut", "fn", "<", type arguments or a marker
+    IsType(sp source.Span, x Expr&, t TypeRef&, negated Bool)
+    # anything else after "is": an identity test, or a bare path the resolver may find to be a type (E10c, E32)
+    Is(sp source.Span, x Expr&, y Expr&, negated Bool)
+    As(sp source.Span, x Expr&, t TypeRef&)
+    Call(sp source.Span, f Expr&, args Array<Expr&>&)
+    Generic(sp source.Span, x Expr&, args Array<TypeRef&>&)                       # Name<args>: Array<I32>(n)
+    Member(sp source.Span, x Expr&, name source.NameId)
+    # x[i, j] - an index, or, where x names a type, an array literal (the resolver decides, DESIGN.md point 1). "T[]"
+    # has no items and is always a literal
+    Index(sp source.Span, x Expr&, items Array<Expr&>&)
+    Slice(sp source.Span, x Expr&, lo Expr?&, hi Expr?&)
+    ArrayLit(sp source.Span, elem TypeRef?&, items Array<Expr&>&)   # an element type that is a literal's by its form
+    Row(sp source.Span, items Array<Expr&>&)           # "[...]" nested in a literal: no 2-D arrays (E21), kept to report
+    Compr(sp source.Span, c Compr&)                    # C[e for x in s if c] (E27): C the type made
+    Join(sp source.Span, parts Array<Expr&>&)          # "a" $b "c" (E11b)
+    Try(sp source.Span, x Expr&, clauses Array<Catch&>&)    # try (E24)
+    Lambda(sp source.Span, f Func&)
+    MatchE(sp source.Span, m Match&)
+    Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
+    Default(sp source.Span)                            # "default" as an argument (E14a)
+    Named(sp source.Span, name source.NameId, x Expr&)   # "name = x" as an argument, a defaulted parameter by name (E14b)
+    Unreachable(sp source.Span, msg Expr?&)            # "unreachable [why]" where a value is expected (S16d)
+    # "...x": an array passed on as a call's variadic arguments (D8g), the rest of an array pattern (S13h) - a bare
+    # "..." there holds the name "_"
+    Spread(sp source.Span, x Expr&)
+    # the arguments a call gives its variadic parameter (D8g), gathered by the checker - never parsed
+    Variadic(sp source.Span, items Array<Expr&>&)
+}
+
+type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
+    Ops
+    Xs
+}
+
+# a comprehension: its element type, the value, the names it walks with (Key 0 for none), the source and the filter
+type Compr struct(Elem TypeRef?&, Value Expr&, Key source.NameId, Name source.NameId, Source Expr&, Filter Expr?&
+                 InCall Bool = false, At I64 = -1) {
+    Elem
+    Value
+    Key
+    Name
+    Source
+    Filter
+    InCall     # written as a call's arguments, "T(e for p in T.Params)" (G37): no brackets, no element type
+    At         # one argument it gave: the position of its item (the checker's, never the parser's)
+}
+
+# catch A, B.word e { block } default v, w - a clause with no items takes every error left (R9b); e names the error it
+# took, in the clause alone (R11b) - "catch e" with no items is written as one item, which the resolver finds is no
+# error type (Bind 0 then)
+type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defaults Array<Expr&>&, Braced Bool = true
+                  Bind source.NameId = source.NameId(0), BindSp source.Span = source.Span(0, 0)) {
+    Sp
+    Items
+    Body
+    Defaults
+    Braced     # whether a block is written - "catch E { }" has one, empty, "catch E default v" none
+    Bind
+    BindSp
+}
+
+# a match, a statement's or a value's; OnType for "match T" on an introduced type variable, whose cases are types
+type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>&) {
+    Sp
+    Subject
+    OnType
+    Cases
+}
+
+# one case: its alternatives (patterns, or types for "match T"), its guard, and a body or a value ("case P: v");
+# "case _" with no guard is the match's catch-all (S13f)
+type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr?&, Body Array<Stmt&>&
+                 Value Expr?&) {
+    Sp
+    Alts
+    Types
+    Guard
+    Body       # empty when the case gives a value (Value is not null)
+    Value
+}
+
+# a case's alternative, read as an expression and converted right after (DESIGN.md point 13)
+type Pattern enum {
+    Wild(sp source.Span)                               # _
+    Path(sp source.Span, x Expr&)                      # a bare path: an enum case with no payload list, or a value
+    Case(sp source.Span, path Expr&, subs Array<Pattern&>&)   # Shape.Rect(w, _): an enum case and its payload
+    Bind(sp source.Span, name source.NameId)           # a payload position's name (S13b)
+    Value(sp source.Span, x Expr&)                     # a literal, or any other expression, compared by "==" (S13d)
+    Type(sp source.Span, ty TypeRef&, name source.NameId, at source.Span)   # Button b: an "any"'s instance's type (T34)
+    # String&["test", file, ...words]: an array's elements in order, its length tested first (S13h) - x the expression
+    # as written, a value compared where what is before its "[" names no type
+    Elems(sp source.Span, x Expr&, subs Array<Pattern&>&)
+    Rest(sp source.Span, name source.NameId)           # "...words", "...": the elements an array pattern does not name
+    # "h = 0" in Shape.Rect(h = 0) or Point(x = 0, y): a field matched by name, a payload's or a struct's (S13b, S13i)
+    Field(sp source.Span, name source.NameId, sub Pattern&)
+}
+
+# a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
+# "x, y"), which have no type and no value. NameSps gives each name's span, Values one value per name or none
+type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef?&, Values Array<Expr&>&
+                    Infer Bool, Field Bool, Attrs Array<Attr&>& = Array<Attr&>(0), Hidden Bool = false) {
+    Names
+    NameSps
+    Ty         # null for ":=" and for a pun
+    Values
+    Infer      # ":="
+    Field      # a constructor's field
+    Attrs      # a field's attributes (G39)
+    Hidden     # the hidden global holding an attribute's value (G39), which no program names
+}
+
+# an if: its condition and branches. The diagnostics a branch's parse met are held in its group (diag.Hold), said only
+# if the branch is compiled: an if the build decides compiles one (B9, S8b, DESIGN.md point 12)
+type If struct(Cond Expr?&, Then Branch?&, Else Stmt?&) {
+    Cond
+    Then
+    Else       # null, an If ("else if"), or an If with no condition: a plain else, its Branch holding its group
+}
+
+type Branch struct(Sp source.Span, Body Array<Stmt&>&, Group I64) {
+    Sp
+    Body       # empty where it did not parse
+    Group
+}
+
+type For3 struct(Init Stmt&, Cond Expr?&, Post Stmt&, Body Array<Stmt&>&) {
+    Init
+    Cond
+    Post
+    Body
+}
+
+# for [key,] name in [try] source { body } [catch ...] (S9a, S9e)
+type ForIn struct(Key source.NameId, Name source.NameId, Source Expr&, Tried Bool, Body Array<Stmt&>&
+                  Clauses Array<Catch&>&, Comptime Bool = false) {
+    Key
+    Name
+    Source
+    Tried
+    Body
+    Clauses
+    Comptime   # "comptime for" (K3a): unrolled while compiling
+}
+
+# [try] join { body } [catch ...] (P1, P4c)
+type JoinS struct(Tried Bool, Body Array<Stmt&>&, Clauses Array<Catch&>&) {
+    Tried
+    Body
+    Clauses
+}
+
+# t1, t2 = v / t1, t2 := v / a, b = b, a (D8c, S4c): the targets, and one value per target or one for all
+type Multi struct(Targets Array<Expr&>&, Define Bool, Values Array<Expr&>&) {
+    Targets
+    Define
+    Values
+}
+
+type Stmt enum {
+    ExprS(sp source.Span, x Expr&)
+    Var(sp source.Span, v VarDecl&)
+    Multi(sp source.Span, m Multi&)
+    Assign(sp source.Span, op token.Tok, target Expr&, value Expr&)
+    TryStore(sp source.Span, s Stmt&, clauses Array<Catch&>&)    # try x[i] = v, x++ (R21)
+    If(sp source.Span, i If&)
+    Forever(sp source.Span, body Array<Stmt&>&)
+    While(sp source.Span, cond Expr&, body Array<Stmt&>&)
+    For3(sp source.Span, f For3&)
+    ForIn(sp source.Span, f ForIn&)
+    DoFor(sp source.Span, body Array<Stmt&>&, cond Expr&)
+    MatchS(sp source.Span, m Match&)
+    Return(sp source.Span, values Array<Expr&>&)
+    Jump(sp source.Span, kind token.Tok, msg Expr?&)    # break continue unreachable; an unreachable's message (S16d)
+    Assert(sp source.Span, cond Expr&, msg Expr?&)
+    # become f(x) (S21): the function becomes the call - its scopes closed, then the call made in its place
+    Become(sp source.Span, x Expr&)
+    Raise(sp source.Span, word Path?&, args Array<Expr&>?&)   # error T.WORD, error T.WORD(args) (T19b): null for none
+    Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
+    Join(sp source.Span, j JoinS&)
+    Defer(sp source.Span, s Stmt&, onError Bool)    # onError: errdefer (S19e)
+    Block(sp source.Span, body Array<Stmt&>&)
+    Yield(sp source.Span, x Expr&)                      # a generator's next value (QAG)
+}
+
+# a function, method, lambda, extern or trait method: receiver (null for none; a trait method's "mut" is a receiver of
+# no name whose type is "mut" alone), name (0 for a lambda), signature, body (null for an extern, a trait method, and a
+# function whose body did not parse - declared by its signature alone: Bodied false), and the type variables its list
+# after the name introduces (G3, QW: "fn max<T>(...)"; empty for none); Export for "export fn" (X12): C may call it.
+# A builder (D19, "fn Color.FromHex(...)") has its owner, the type written before the ".", in Owner (null for none),
+# the name after the "." in Member, and as Name the two joined, "Color.FromHex" - a name no source writes alone; in a
+# trait a builder required (T30b, "T.Parse(...)") likewise
+type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body Array<Stmt&>&
+                 TypeParams Array<TypeParam&>& = Array<TypeParam&>(0), Bodied Bool = true, Export Bool = false
+                 Attrs Array<Attr&>& = Array<Attr&>(0), Owner TypeRef?& = null, Member source.NameId = source.NameId(0)) {
+    Sp
+    Recv
+    Name
+    S
+    Body
+    TypeParams
+    Bodied
+    Export
+    Attrs      # the attributes written before it (G39)
+    Owner
+    Member
+}
+
+# D19: whether a function is a builder - declared on a type, "fn Color.FromHex(...)"
+fn (f Func&) IsBuilder() Bool { return f.Owner is not null }
+
+# D19: a builder's owner's name as written, "Color" for "fn Color.FromHex" and "List" for "fn List<T>.Of"; 0 for none
+fn (f Func&) OwnerName() source.NameId {
+    if f.Owner is null { return source.NameId(0) }
+    match f.Owner! {
+        case TypeRef.Named(_, path, _) { return path[path.Len() - 1] }
+        case _ { return source.NameId(0) }
+    }
+}
+
+# an enum case: name and payload
+# Whole for a case whose payload is one type written whole, "Round Circle": then Payload is one Param, named as the case;
+# Value its raw value written after "=" (T17e), null for none
+type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&, Whole Bool = false, Value Expr?& = null
+                     Attrs Array<Attr&>& = Array<Attr&>(0)) {
+    Sp
+    Name
+    Payload
+    Whole
+    Value
+    Attrs      # the attributes written before it (G39)
+}
+
+# the body of a type declaration
+type TypeBody enum {
+    Struct(s StructBody&)
+    Enum(cases Array<CaseDecl&>&, raw TypeRef?&)   # raw: the raw type after "enum" (T17e), null for none
+    # a trait's methods, the traits it extends (T30a) and, for a closed one, the types it lists after "for" (T31a)
+    Trait(methods Array<Func&>&, exts Array<TypeRef&>&, members Array<TypeRef&>&)
+    # type T I32 / extends ...; a constructor over a primitive (T29d) when Ctor is not null
+    Over(base TypeRef&, ctor Func?&)
+    Foreign                 # "extern type T" (X10): a C type olang holds only by reference, never reads
+}
+
+# struct[<T, ...>](params) ? errors { body } [destruct { ... }] - the destructor's span DtorSp, its body null for none;
+# the constructor's own type variables (G10d) null for none
+type StructBody struct(Params Array<Param&>&, Errs Sig?&, Body Array<Stmt&>&, DtorSp source.Span, Dtor Array<Stmt&>&
+                       TypeParams Array<TypeParam&>& = Array<TypeParam&>(0)) {
+    Params
+    Errs
+    Body
+    DtorSp
+    Dtor
+    TypeParams
+}
+
+# a type parameter: its name and its constraint (null for none) - several traits side by side its intersection (G19),
+# the first in Ty and the rest in Also; ErrSet for the error-set parameter "? E" closing a list (G1a, QAH)
+type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Array<TypeRef&>& = Array<TypeRef&>(0)
+                      ErrSet Bool = false) {
+    Sp
+    Name
+    Ty
+    Also
+    ErrSet
+}
+
+type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&
+                     Attrs Array<Attr&>& = Array<Attr&>(0), Word DeclWord = DeclWord.Plain, Packed Bool = false) {
+    Name
+    Params
+    Extends
+    Body       # null for a type whose declaration did not parse past its name - declared by its name alone
+    Attrs      # the attributes written before it (G39)
+    Word       # the word before its body (T13a, T13b): immut, unique, or none
+    Packed     # T13c: "packed" right before "struct" - laid out bit by bit, no padding
+}
+
+# what a type declaration says of its values before its body: nothing, never changing after their constructor (immut,
+# T13a), or existing in one place (unique, T13b)
+type DeclWord enum {
+    Plain
+    Immut
+    Unique
+}
+
+# a top-level if (B9): each branch's declarations and the group holding its diagnostics, the else a TopIf or a branch
+type TopIf struct(Cond Expr?&, Then TopBranch?&, ElseIf TopIf?&, Else TopBranch?&) {
+    Cond
+    Then
+    ElseIf
+    Else
+}
+
+type TopBranch struct(Sp source.Span, Decls Array<Decl&>&, Group I64) {
+    Sp
+    Decls
+    Group
+}
+
+type Decl enum {
+    Fn(f Func&)
+    Extern(f Func&)
+    Type(sp source.Span, t TypeDecl&)
+    Global(sp source.Span, v VarDecl&)
+    # the path's span holds its quotes; link the library a C header's declarations are in (X9), its quotes too - (0, 0)
+    # for none
+    Import(sp source.Span, alias source.NameId, path source.Span, link source.Span)
+    # type Name error [Member, ...] [{ Words }] (T19, T19a): an error type's own words, and the members of a named set;
+    # cases: each word as an enum case declares it - its name and its payload's fields, none for a plain word (T19b)
+    Errors(sp source.Span, name source.NameId, words Array<source.NameId>&, members Array<Path&>&, cases Array<CaseDecl&>&)
+    # test [Target] "description" { } (B14): Target a function, a type or Type.Method of the file, null for none
+    Test(sp source.Span, name source.Span, body Array<Stmt&>&, target Path?&)
+    If(sp source.Span, i TopIf&)
+    # NAME = value in a top-level if's branch (D13e): the value of a global declared above with none - target a Name
+    Set(sp source.Span, target Expr&, value Expr&)
+    # assert cond[, message] at the top level (S17a): decided while compiling, never run
+    Assert(sp source.Span, cond Expr&, msg Expr?&)
+    # extern [link "name"] { fn ... type ... } (X1, X9, X10): the declarations of what C defines - in the library the link
+    # names (its span holds its quotes; (0, 0) for none, what is linked already)
+    ExternBlock(sp source.Span, link source.Span, decls Array<Decl&>&)
+}
+
+# where a node is
+fn (e Expr&) Span() source.Span {
+    return match e {
+        case Expr.Name(sp, _), Expr.Lit(sp, _), Expr.Paren(sp, _), Expr.Unary(sp, _, _), Expr.Postfix(sp, _, _): sp
+        case Expr.Binary(sp, _, _, _), Expr.NotIn(sp, _, _), Expr.Chain(sp, _), Expr.Cond(sp, _, _, _): sp
+        case Expr.IsType(sp, _, _, _), Expr.Is(sp, _, _, _), Expr.As(sp, _, _), Expr.Call(sp, _, _): sp
+        case Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _): sp
+        case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _): sp
+        case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _): sp
+        case Expr.Default(sp): sp
+        case Expr.Named(sp, _, _), Expr.Unreachable(sp, _), Expr.Spread(sp, _), Expr.Variadic(sp, _): sp
+    }
+}
+
+# D8g: whether an argument is a variadic parameter's arguments gathered ("...a", or the checker's Variadic of them), or
+# a "...a" alone, or one given by name (E14b)
+fn (e Expr&) IsGathered() Bool {
+    match e {
+        case Expr.Spread(_, _), Expr.Variadic(_, _) { return true }
+        case _ { return false }
+    }
+}
+fn (e Expr&) IsSpread() Bool {
+    match e {
+        case Expr.Spread(_, _) { return true }
+        case _ { return false }
+    }
+}
+fn (e Expr&) IsNamed() Bool {
+    match e {
+        case Expr.Named(_, _, _) { return true }
+        case _ { return false }
+    }
+}
+
+# T21: the signature of a function type as written - bare ("fn(...)") or with its marker ("fn&(...)", "fn?&(...)") - and
+# whether the type is one
+fn (t TypeRef&) FuncSig() Sig?& {
+    match t {
+        case TypeRef.Func(_, s) { return s }
+        case TypeRef.Ref(_, of, _, _) {
+            match of {
+                case TypeRef.Func(_, s) { return s }
+                case _ { return null }
+            }
+        }
+        case _ { return null }
+    }
+}
+
+fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() is not null }
+
+# T2d: whether t is a weak reference as written - "weak T?&", "weak mut T?&"
+fn (t TypeRef&) IsWeak() Bool {
+    return match t {
+        case TypeRef.Ref(_, _, _, w): w
+        case TypeRef.Perm(_, of, _): of is not null and of.IsWeak()
+        case _: false
+    }
+}
+
+# T2d: t with "weak" taken off - the ordinary reference it is read as
+fn (t TypeRef&) Unweak() TypeRef& {
+    return match t {
+        case TypeRef.Ref(sp, of, nullable, w): TypeRef.Ref(sp, of, nullable, false) if w else t
+        case TypeRef.Perm(sp, of, w): TypeRef.Perm(sp, of.Unweak(), w) if of is not null else t
+        case _: t
+    }
+}
+
+fn (t TypeRef&) Span() source.Span {
+    return match t {
+        case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _): sp
+        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _), TypeRef.Any(sp, _): sp
+        case TypeRef.Errs(sp, _), TypeRef.Spread(sp, _): sp
+    }
+}
+
+fn (s Stmt&) Span() source.Span {
+    return match s {
+        case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _): sp
+        case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _): sp
+        case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _): sp
+        case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _, _): sp
+        case Stmt.Block(sp, _), Stmt.Yield(sp, _), Stmt.Become(sp, _): sp
+    }
+}
+
+# ---- generators (QAG) ----
+
+# where the first yield a function's body holds is, its own - nested blocks, loops, matches and the statements of catch
+# clauses included, a lambda's aside (a yield there is the lambda's, and an error): NoYield for none. A function whose
+# result is written Iterator<T ? E> and whose body yields is a generator
+NoYield source.Span = source.Span(-1, -1)
+
+fn FirstYield(body Array<Stmt&>&) source.Span {
+    if body.Len() == 0 { return NoYield }
+    for st in body {
+        y := yieldIn(st)
+        if y.Start >= I32(0) { return y }
+    }
+    return NoYield
+}
+
+fn yieldIn(st Stmt?&) source.Span {
+    if st is null { return NoYield }
+    return match st {
+        case Stmt.Yield(sp, _): sp
+        case Stmt.ExprS(_, x): yieldInExpr(x)
+        case Stmt.Var(_, v): yieldInExprs(v.Values)
+        case Stmt.Multi(_, m): yieldInExprs(m.Values)
+        case Stmt.Assign(_, _, t, v): yieldOr(yieldInExpr(t), yieldInExpr(v))
+        case Stmt.TryStore(_, inner, cs): yieldOr(yieldIn(inner), yieldInCatches(cs))
+        case Stmt.If(_, i): yieldInIf(i)
+        case Stmt.Forever(_, b), Stmt.Block(_, b): FirstYield(b)
+        case Stmt.While(_, k, b), Stmt.DoFor(_, b, k): yieldOr(yieldInExpr(k), FirstYield(b))
+        case Stmt.For3(_, f): yieldOr(yieldOr(yieldIn(f.Init), yieldInExpr(f.Cond)), yieldOr(yieldIn(f.Post), FirstYield(f.Body)))
+        case Stmt.ForIn(_, f): yieldOr(yieldOr(yieldInExpr(f.Source), FirstYield(f.Body)), yieldInCatches(f.Clauses))
+        case Stmt.MatchS(_, m): yieldInMatch(m)
+        case Stmt.Return(_, xs): yieldInExprs(xs)
+        case Stmt.Become(_, x): yieldInExpr(x)
+        case Stmt.Assert(_, k, msg): yieldOr(yieldInExpr(k), yieldInExpr(msg))
+        case Stmt.Jump(_, _, msg): yieldInExpr(msg)
+        case Stmt.Spawn(_, _, call): yieldInExpr(call)
+        case Stmt.Join(_, j): yieldOr(FirstYield(j.Body), yieldInCatches(j.Clauses))
+        case Stmt.Defer(_, d, _): yieldIn(d)
+        case Stmt.Raise(_, _, _): NoYield
+    }
+}
+
+fn yieldOr(a source.Span, b source.Span) source.Span { return a if a.Start >= I32(0) else b }
+
+fn yieldInIf(i If&) source.Span {
+    y := yieldInExpr(i.Cond)
+    if y.Start < I32(0) and i.Then is not null { y = FirstYield(i.Then!.Body) }
+    return yieldOr(y, yieldIn(i.Else))
+}
+
+fn yieldInMatch(m Match&) source.Span {
+    y := yieldInExpr(m.Subject)
+    for cs in m.Cases { y = yieldOr(y, yieldInCase(cs)) }
+    return y
+}
+
+fn yieldInCase(cs Case&) source.Span { return yieldOr(yieldOr(yieldInExpr(cs.Guard), FirstYield(cs.Body)), yieldInExpr(cs.Value)) }
+
+fn yieldInCatches(cs Array<Catch&>&) source.Span {
+    if cs.Len() == 0 { return NoYield }
+    for k in cs {
+        y := yieldOr(FirstYield(k.Body), yieldInExprs(k.Defaults))
+        if y.Start >= I32(0) { return y }
+    }
+    return NoYield
+}
+
+fn yieldInExprs(xs Array<Expr&>&) source.Span {
+    if xs.Len() == 0 { return NoYield }
+    for x in xs {
+        y := yieldInExpr(x)
+        if y.Start >= I32(0) { return y }
+    }
+    return NoYield
+}
+
+# an expression's statements: a try's clauses, a match value's cases
+fn yieldInExpr(x Expr?&) source.Span {
+    if x is null { return NoYield }
+    return match x {
+        case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Spread(_, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _): yieldInExpr(y)
+        case Expr.IsType(_, y, _, _), Expr.As(_, y, _), Expr.Generic(_, y, _): yieldInExpr(y)
+        case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _): yieldOr(yieldInExpr(a), yieldInExpr(b))
+        case Expr.Cond(_, a, k, b): yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))
+        case Expr.Chain(_, ch): yieldInExprs(ch.Xs)
+        case Expr.Call(_, f, args), Expr.Index(_, f, args): yieldOr(yieldInExpr(f), yieldInExprs(args))
+        case Expr.Slice(_, y, lo, hi): yieldOr(yieldOr(yieldInExpr(y), yieldInExpr(lo)), yieldInExpr(hi))
+        case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Variadic(_, items), Expr.Join(_, items), Expr.Range(_, items): yieldInExprs(items)
+        case Expr.Try(_, y, cs): yieldOr(yieldInExpr(y), yieldInCatches(cs))
+        case Expr.MatchE(_, m): yieldInMatch(m)
+        case Expr.Compr(_, k): yieldOr(yieldOr(yieldInExpr(k.Value), yieldInExpr(k.Source)), yieldInExpr(k.Filter))
+        case _: NoYield
+    }
+}
+
+fn (p Pattern&) Span() source.Span {
+    return match p {
+        case Pattern.Wild(sp), Pattern.Path(sp, _), Pattern.Case(sp, _, _), Pattern.Bind(sp, _): sp
+        case Pattern.Value(sp, _), Pattern.Type(sp, _, _, _), Pattern.Elems(sp, _, _), Pattern.Rest(sp, _): sp
+        case Pattern.Field(sp, _, _): sp
+    }
+}
+
+# ---- tests (B7, B7a) ----
+
+# the test declared at sp among ds - inside the branches of top-level ifs too - null for none
+fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
+    for d in ds {
+        match d {
+            case Decl.Test(dsp, _, _, _) {
+                if dsp == sp { return d }
+            }
+            case Decl.If(_, ti) {
+                found := Decl.findTestIf(ti, sp)
+                if found is not null { return found }
+            }
+            case _ { }
+        }
+    }
+    return null
+}
+
+fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
+    if ti is null { return null }
+    if ti.Then is not null {
+        f := FindTest(ti.Then!.Decls, sp)
+        if f is not null { return f }
+    }
+    if ti.Else is not null {
+        f := FindTest(ti.Else!.Decls, sp)
+        if f is not null { return f }
+    }
+    return Decl.findTestIf(ti.ElseIf, sp)
+}
+
+# what a test is an example of, as written ("Map.Get"), "" for none (B7a)
+fn TestTarget(d Decl&, names source.Names&) String {
+    match d {
+        case Decl.Test(_, _, _, target) {
+            if target is null { return "" }
+            b := StringBuilder()
+            for i, n in target.Parts {
+                if i > 0 { b.PushChar('.') }
+                b.Push(names.Text(n))
+            }
+            return b.ToString()
+        }
+        case _ { return "" }
+    }
+}
+
+# B7a: the name a test gives a method's receiver, as its declaration writes it - "Array" for "fn (a Array<T>&) Windows",
+# and a type variable's constraint for a default over one: "Iterator" for "fn (it mut I&) TakeWhile<I Iterator<T>, T>";
+# "" for no receiver or one written otherwise
+fn RecvTarget(f Func&, names source.Names&) String {
+    if f.Recv is null { return "" }
+    t := f.Recv!.Ty
+    for t is not null {
+        match t {
+            case TypeRef.Perm(_, of, _) { t = of }
+            case TypeRef.Ref(_, of, _, _) { t = of }
+            case TypeRef.Named(_, path, _) { return nameOrConstraint(f, path[path.Len() - 1], names) }
+            case _ { return "" }
+        }
+    }
+    return ""
+}
+
+# B7a, D19: the name a test gives a builder's owner, as its declaration writes it - "Color" for "fn Color.FromHex",
+# "List" for "fn List<T>.Of", and for a default over a constrained type variable the trait that constrains it ("Integer"
+# for "fn T.Parse<T Integer>"); "" for no builder
+fn OwnerTarget(f Func&, names source.Names&) String {
+    n := f.OwnerName()
+    if n == source.NameId(0) { return "" }
+    return nameOrConstraint(f, n, names)
+}
+
+# B7a: a type named n in f's declaration as a test names it - the trait constraining it where n is one of f's
+# constrained type variables, "" where its constraint is written otherwise, else n itself
+fn nameOrConstraint(f Func&, n source.NameId, names source.Names&) String {
+    for tp in f.TypeParams {
+        if tp.Name != n or tp.Ty is null { continue }
+        return match tp.Ty! {
+            case TypeRef.Named(_, cpath, _): $names.Text(cpath[cpath.Len() - 1])
+            case _: ""
+        }
+    }
+    return $names.Text(n)
+}
+
+# a test's description, between its quotes (B7)
+fn TestDesc(d Decl&, text String&) String {
+    match d {
+        case Decl.Test(_, name, _, _) {
+            s := text[name.Start:name.End]
+            if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
+            return s
+        }
+        case _ { return "test" }
+    }
+}
+
+# a test as its run reports it: "Target: description", or the description alone
+fn TestLabel(d Decl&, text String&, names source.Names&) String {
+    t := TestTarget(d, names)
+    if t.Len() == 0 { return TestDesc(d, text) }
+    return $t ": " $TestDesc(d, text)
+}

@@ -1,0 +1,22 @@
+type E error { Empty }
+type Node struct(v I64) {
+    v
+}
+type Box struct(n mut Node?&) {
+    n
+}
+fn (b mut Box&) first() mut Node& ? E {
+    if b.n is null { error E.Empty }
+    return b.n!
+}
+fn set(b mut Box&, other mut Node&) {
+    r := try b.first() catch default other
+    r.v = 3
+    b.n = r
+}
+fn main() {
+    b := Box(null)
+    o := Node(1)
+    set(b, o)
+    assert b.n!.v == 3
+}

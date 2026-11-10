@@ -1,0 +1,62 @@
+import "std/io"
+import "std/os"
+Ended mut I64 = 0
+Order mut I64 = 0
+type R unique struct(id I64 = 0) {
+    id
+} destruct {
+    Ended++
+    Order = Order * 10 + id
+}
+type Kept struct(r R) { r }
+fn (k Kept&) Copy() Kept { return Kept(R(k.r.id + 1)) }
+type Buf<T> struct(n I64) {
+    a Array<T> = Array<T>(n)
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(n I64) I64 {
+    b := Array<R>(n)
+    for i in range n { b[i] = R(i + 1) }
+    return b.Len()
+}
+fn compr(n I64) I64 {
+    xs := Array<R>[R(i + 1) for i in range n]
+    return xs.Len()
+}
+fn cp(a Array<Kept>&) I64 {
+    c := a.Copy()
+    return c[0].r.id + c.Len()
+}
+fn count(a Array<R>) I64 { return a.Len() }
+fn main() {
+    n := os.Args().Len() + 2
+    Order = 0
+    assert mk(n) == 3
+    io.Println("made " $Ended " " $Order)!
+    Ended, Order = 0, 0
+    assert compr(n) == 3
+    io.Println("comprehension " $Ended " " $Order)!
+    Ended = 0
+    {
+        ks := Array<Kept>[Kept(R(i)) for i in range n]
+        churn()
+        assert cp(ks) == 4
+        io.Println("copy " $Ended)!
+    }
+    io.Println("copy and its source " $Ended)!
+    Ended = 0
+    assert count(Array<R>[R(i) for i in range n]) == 3
+    io.Println("handed on " $Ended)!
+    Ended = 0
+    {
+        bp := Buf<R>(n)
+        churn()
+        assert bp.a.Len() == 3
+    }
+    io.Println("held in a field " $Ended)!
+}

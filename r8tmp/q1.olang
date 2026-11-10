@@ -1,0 +1,30 @@
+import "std/io"
+type Node struct(v I32) {
+    v
+}
+type Box enum {
+    Has(n Node&)
+    No
+}
+GF mut fn?&() I32 = null
+fn stash(b Box) {
+    match b {
+        case Box.Has(n) { GF = fn() { return n.v } }
+        case _ { }
+    }
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn main() ? {
+    for i in range 2 {
+        inner Node& = Node(I32(40 + i))
+        stash(Box.Has(inner))
+        churn()
+    }
+    churn()
+    try io.Println($GF!())
+}

@@ -1,0 +1,11 @@
+type Node struct(v I32) {
+    v
+}
+GR mut Node?& = null
+fn main() {
+    ns := Array<Node>[Node(1), Node(2)]
+    for n in ns {
+        GR = n
+    }
+    assert GR!.v == 2
+}

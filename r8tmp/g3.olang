@@ -1,0 +1,11 @@
+extern fn puts(s Array<U8>&) I32
+type Conn unique struct(fd I32) {
+    fd
+} destruct {
+    puts(Array<U8>[U8(99), U8(48 + fd), U8(0)])
+}
+G Conn& = Conn(3)
+fn main() {
+    x := Conn(5)
+    assert G.fd == 3
+}

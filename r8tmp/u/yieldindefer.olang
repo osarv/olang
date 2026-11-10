@@ -1,0 +1,8 @@
+fn walk(n I64) Iterator<I64> {
+    for i in range n {
+        defer { yield i }
+    }
+}
+fn main() {
+    for x in walk(3) { assert x >= 0 }
+}

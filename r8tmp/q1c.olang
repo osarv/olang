@@ -1,0 +1,10 @@
+type Node struct(v I32) {
+    v
+}
+GR mut Array<Node>?& = null
+fn keep(a mut Array<Node>&) { GR = a }
+fn main() {
+    ns mut Array<Node>& = Array<Node>[Node(1), Node(2)]
+    keep(ns[0:1])
+    assert GR![0].v == 1
+}

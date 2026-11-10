@@ -1,0 +1,8 @@
+type Box struct(d mut Array<I64>&) {
+    d
+}
+R Box = Box(Array<I64>(1))
+G mut Box = R
+fn main() {
+    assert G.d.Len() == 1
+}

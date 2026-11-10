@@ -1,0 +1,1279 @@
+# load - a program's modules: the root, the prelude and every module their imports reach, each read, scanned,
+# pre-scanned and parsed (M1-M5, M14-M17, M22, M22a, M23; compiler/DESIGN.md 1.4).
+#
+# A module is one file, known by its identity (M22a): its import path for std and a remote repository, its path from
+# the working directory for local code. Two spellings of one file are one module (by its real path), loaded once and
+# registered before its imports are, so a cycle closes.
+#
+# Before a module is parsed its tokens are pre-scanned: its type and error names in every branch (the parser's
+# declared-name oracle, DESIGN.md point 1), its imports and the top-level ifs around each, and the globals a condition
+# may read. Which branch of a top-level if exists is decided here where B9a can decide it (cond), so that only the
+# imports of chosen branches are loaded; a condition B9a cannot decide is pending - its imports wait, and its branches'
+# diagnostics stay held - until the checker decides it by compile-time evaluation (B9c) and calls Decide. Every branch
+# is parsed (DESIGN.md point 12); a branch not chosen has its diagnostics dropped.
+import "std/pair"
+import "std/os"
+import "std/filepath"
+import "source"
+import "token"
+import "scan"
+import "ast"
+import "parse"
+import "diag"
+import "msgs"
+import "diagmsg"
+import "cond"
+import "fetch"
+import "bindgen"
+import "target"
+import "std/sha256"
+
+# where a chain of top-level ifs stands: not decided yet, decided by nothing B9a can tell (pending), or none of its
+# branches chosen; a chosen branch is its index, 0 for the first and the else last
+NotYet I64 = -2
+Pending I64 = -3
+NoBranch I64 = -1
+
+# an import as written: the span of its path (quotes included) and of its alias (the path's, for a derived one), the
+# alias and the path, the branch it is in (-1 for none), and the module it reaches once loaded (-1 for none yet)
+type Import struct(Sp source.Span, AliasSp source.Span, Alias String&, Spec String&, Guard I64) {
+    Sp
+    AliasSp
+    Alias
+    Spec
+    Guard
+    Target I64 = -1
+    Link String& = ""                  # the library "link" names after the path (X9, X17), "" for none
+    LinkSp source.Span = source.Span(0, 0)
+}
+
+# a module: where it was read from (as named, and really), its identity, its text, tokens and syntax tree, and what
+# the pre-scan found
+type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
+    Path
+    Real
+    Identity
+    Prelude
+    File I64 = -1
+    Retires Bool = false               # its code calls "retire()" (M19d): under -sanitize its arrays get chunks of their own (B2f)
+    Src source.Source?& = null
+    Toks scan.Tokens?& = null
+    Decls Array<ast.Decl&>& = Array<ast.Decl&>(0)
+    Types Vec<String&>                # declared type and error names, in every branch
+    Generics Vec<String&>             # the generic functions it declares, in every branch (G12)
+    Imports Vec<Import>
+    Oracle mut parse.Oracle?& = null
+    parser mut parse.Parser?& = null
+    # the top-level ifs: each chain's first condition (its key, an offset), the token index of every condition, the
+    # branch it stands in, and what was decided
+    chainAt Vec<I32>
+    chainParent Vec<I64>
+    chainChosen Vec<I64>
+    chainElse Vec<Bool>
+    chainCondFrom Vec<I64>
+    conds Vec<I64>
+    branchChain Vec<I64>
+    branchIndex Vec<I64>
+    globalsAt Vec<I64>                # the token index of every global's name outside every branch
+    Scope mut cond.Scope?& = null          # the globals a condition reads, parsed when one is first evaluated
+    cparser mut parse.Parser?& = null
+    cdiags mut diag.Diagnostics?& = null
+    publicDone Bool = false
+    publicBusy Bool = false
+    public Vec<I64>                   # M16, M17: the modules reached through its public aliases, itself first
+    Embeds Vec<String&>               # E38: the files its embeds read, by path, each once - what its object holds
+    C Bool = false                    # a C header's or source file's translation (X17): every name of it public
+    CUnit String& = ""                # the C the build compiles beside it (X20): its file, "" for none
+    CSymbols Map<String&, String&>    # a function linked by another symbol than its name (X20)
+    CSkipped Map<String&, String&>    # what the translation could not declare, by name: why (X19)
+}
+
+# a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
+# repositories; Names and Diags the compilation's
+type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher&, Names mut source.Names&
+                   Diags mut diag.Diagnostics&) {
+    Std
+    Consts
+    Fetch
+    Names
+    Diags
+    # D9h: the parameters names found assigned whole in their bodies - a reference repointed, a by-value one
+    # given another value - by (file, the parameter's start): what such a body returns is no view of its argument
+    ParamWritten Map<pair.Pair<I64, I64>, Bool>
+    # ... and the instances whose array value result is a view of what they are given, handed back as it is: by
+    # instance, a bit per parameter whose argument it may view (typed.ViewRoots, recorded by check at each return)
+    ViewResults Map<I64, I64>
+    # ... and the constructors whose instances hold views of what they are given in their fields: by the type
+    # constructed (one with no constructor variables of its own, G10d), the bits as ViewResults'
+    CtorViews Map<I64, I64>
+    # ... and whether some global the program reads is, or reaches, storage a call given only read-only arguments may
+    # write (check.mutStorage): lowering's quiet statements then read no view where it stands
+    MutStorage Bool = true    # (until the program has checked: anything may)
+    MutGlobals Vec<I64>       # ... the types (TypeIds) of the globals through which it may (D9h's quietLife judges each)
+    Mods Vec<mut Module&>
+    preludeTypes Vec<String&>
+    Root I64 = -1
+    # files read from here, by real path, rather than from disk: the text an editor holds (B15)
+    Overlay Map<String&, String&>
+    stdReal String& = ""
+    cwd String& = ""
+    embedded Map<String&, Array<U8>&>  # E38: every file an embed read, by path - read once in a compilation
+    # X12-X14: whether C may call the program's export fns - it is built as a library (-library), or a C function is
+    # given one (by function index, as check meets it): only then may a C call reach back into the program
+    SharedLib Bool = false
+    HandedToC Map<I64, Bool>
+    Clang String& = ""                 # the clang a C import is translated with (X17), "" for none
+    CFlags Vec<String&>                # what it is translated and compiled with: the target's, and the defines (X18)
+}
+
+# where the standard library is: OLANG_STD, else std beside the compiler (its directory's "../std")
+fn StdDir() String {
+    env := try os.Env("OLANG_STD") catch default ""
+    if env != "" { return $env }
+    exe := try os.ReadLink("/proc/self/exe") catch os.Error { return "std" }
+    return $filepath.Dir(exe) "/../std"
+}
+
+# M23b: the lock file sits beside the root module
+fn LockPath(root String&) String { return filepath.Join(filepath.Dir(root), "olang.lock") }
+
+fn (l mut Loader&) at(m Module&, sp source.Span) diag.Where { return diag.Where.Span(m.File, I64(sp.Start), I64(sp.End)) }
+
+# ---- the program ----
+
+# the prelude, then the root and everything it reaches; then M16 and M17 over the whole program. The root's index
+fn (l mut Loader&) Load(root String&) I64 {
+    sr := try os.RealPath(l.Std) catch default ""
+    l.stdReal = $sr if sr != "" else $l.Std
+    l.cwd = $(try os.Cwd() catch default ".")
+    l.LoadPrelude()
+    if os.IsDir(root) {
+        l.Diags.Fatal(diag.Where.Nowhere, msgs.IsDirectory())
+        return -1
+    }
+    l.Root = l.load(root, l.rootIdentity(root), false)
+    l.checkReach()
+    return l.Root
+}
+
+# M22a: a root takes its identity from where it really is - its path from the working directory, or under std its import
+# path, or its file name when outside both
+fn (l Loader&) rootIdentity(path String&) String {
+    r := try os.RealPath(path) catch default ""
+    real := $r if r != "" else $path
+    under := ""
+    prefix := ""
+    if real.StartsWith($l.stdReal "/") {
+        under = $real[l.stdReal.Len() + 1:]
+        prefix = "std/"
+    } else if real.StartsWith($l.cwd "/") {
+        under = $real[l.cwd.Len() + 1:]
+    }
+    id := $prefix $under if under != "" else $filepath.Base(real)
+    return $id[:id.Len() - 6] if id.EndsWith(".olang") else id
+}
+
+# the prelude: every file of std/prelude, each a module, every one's type names known before any is parsed (they name
+# each other's types)
+fn (l mut Loader&) LoadPrelude() {
+    dir := filepath.Join(l.Std, "prelude")
+    names := try os.ReadDir(dir) catch os.Error { return }
+    files Vec<String&>
+    for n in names {
+        p := filepath.Join(dir, n)
+        if n.EndsWith(".olang") { files.Push($p) }
+    }
+    for f in files {
+        text := try os.ReadFile(f) catch os.Error { continue }
+        ts := scan.Tokens.Scan(text)
+        for name in typeNames(text, ts) { l.preludeTypes.Push($name) }
+    }
+    for f in files { l.load(f, l.rootIdentity(f), true) }
+}
+
+# how an error type's name is written outside its module ("io." for std/io): the module's alias, its identity's base name.
+# The prelude's names are bare everywhere, and so are the root program's own, which is the code that is running
+fn ErrQualifier(identity String&, inRoot Bool) String {
+    if inRoot or identity.StartsWith("std/prelude") { return "" }
+    k := try identity.FindLast("/") catch default -1
+    return $identity[k + 1:] "."
+}
+
+# a file's type names, error types and sets included, in every branch: "type Name"
+fn typeNames(text String&, ts scan.Tokens&) Vec<String&>& {
+    out mut Vec<String&>& = Vec<String&>()
+    toks := ts.Toks
+    for i in range toks.Len() - 2 {
+        k := toks[i].Kind
+        if toks[i + 1].Kind != token.Tok.Iden { continue }
+        if k == token.Tok.Type {
+            out.Push(text[toks[i + 1].Start:toks[i + 1].End])
+        }
+    }
+    return out
+}
+
+# the module at path, loaded once, its imports with it: its index, or -1 where it cannot be read
+fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = false) I64 {
+    r := try os.RealPath(path) catch default ""
+    real := $r if r != "" else $path
+    for i in range l.Mods.Len() {
+        if l.Mods[i].Real == real { return i }
+    }
+    i := l.Mods.Len()
+    l.Mods.Push(Module($path, $real, $identity, prelude))
+    m := l.Mods[i]
+    if real in l.Overlay {
+        m.Src = source.Source($m.Path, l.Overlay.Get(real)!)
+    } else {
+        m.Src = try source.Source.Read(m.Path) catch os.Error {
+            f := l.Diags.AddFile(m.Path, "")
+            l.Diags.Error(diag.Where.File(f), msgs.CannotOpen())
+            try l.Mods.Pop() catch { }
+            return -1
+        }
+    }
+    m.C = c
+    m.File = l.Diags.AddFile(m.Path, m.Src!.Text, m.Identity.StartsWith("std/") or c)
+    m.Toks = scan.Tokens.Scan(m.Src!.Text)
+    for d in m.Toks!.Diags {
+        line := d.Start
+        l.Diags.Error(diag.Where.Span(m.File, I64(line), I64(d.End)), diagmsg.Msg(msgs.Diag.UnknownChar, d.Rule(), d.Message()))
+    }
+    l.prescan(m)
+    m.Oracle = parse.Oracle()
+    l.ownNames(m)
+    l.loadImports(i)
+    l.parse(i)
+    return i
+}
+
+# ---- the pre-scan ----
+
+fn (l mut Loader&) prescan(m mut Module&) {
+    for t in typeNames(m.Src!.Text, m.Toks!) { m.Types.Push($t) }
+    for t in parse.GenericFnNames(m.Src!.Text, m.Toks!) { m.Generics.Push($t) }
+    l.region(m, 0, m.Toks!.Toks.Len() - 1, -1)
+}
+
+# the declarations from token from to end at the top level of the file or of a branch (parent, -1 for none): imports,
+# top-level ifs and the globals outside every branch
+fn (l mut Loader&) region(m mut Module&, from I64, end I64, parent I64) {
+    toks := m.Toks!.Toks
+    i := from
+    start := true
+    for i < end {
+        k := toks[i].Kind
+        if k == token.Tok.LBrace {
+            close := I64(m.Toks!.Match(I32(i)))
+            if close < 0 { return }
+            i = close + 1
+            start = true
+            continue
+        }
+        if k == token.Tok.StmtEnd or k == token.Tok.RBrace {
+            start = true
+            i++
+            continue
+        }
+        # a bare "&" ending a declaration's type ends no statement of its own (L18a): the line after it starts one
+        atStart := start or (i > from and toks[i - 1].Kind == token.Tok.Amp and (toks[i].Flags & token.LineBreak) != U8(0))
+        start = false
+        if k == token.Tok.If and atStart {
+            i = l.topIf(m, i, end, parent)
+            start = true
+            continue
+        }
+        if k == token.Tok.Import { l.importAt(m, i, parent) }
+        if k == token.Tok.Iden and atStart and parent < 0 { m.globalsAt.Push(i) }
+        i++
+    }
+}
+
+# import [Alias] "path": the alias derived from the path's last element when none is written (M4)
+fn (l mut Loader&) importAt(m mut Module&, i I64, parent I64) {
+    toks := m.Toks!.Toks
+    j := i + 1
+    alias := ""
+    aliasSp := source.Span(0, 0)
+    if toks[j].Kind == token.Tok.Iden {
+        aliasSp = source.Span(toks[j].Start, toks[j].End)
+        alias = $m.Src!.Text[toks[j].Start:toks[j].End]
+        j++
+    }
+    if toks[j].Kind != token.Tok.StrLit { return }   # the parser reports it
+    sp := source.Span(toks[j].Start, toks[j].End)
+    spec := scan.LiteralText(m.Src!.Text[sp.Start:sp.End])
+    if alias == "" {
+        alias = $DeriveAlias(spec)
+        aliasSp = sp
+    }
+    imp mut Import& = Import(sp, aliasSp, $alias, $spec, parent)
+    # X9, X17: "link "name"" after the path
+    if toks[j + 1].Kind == token.Tok.Iden and m.Src!.Text[toks[j + 1].Start:toks[j + 1].End] == "link" and
+       toks[j + 2].Kind == token.Tok.StrLit {
+        imp.LinkSp = source.Span(toks[j + 2].Start, toks[j + 2].End)
+        imp.Link = $scan.LiteralText(m.Src!.Text[imp.LinkSp.Start:imp.LinkSp.End])
+    }
+    m.Imports.Push(imp)
+}
+
+# M4: an import's alias when none is written - its path's last element, without ".olang", or a C file's without ".h"
+# or ".c" (X17)
+fn DeriveAlias(spec String&) String& {
+    start := (try spec.FindLast("/") catch default -1) + 1
+    end := spec.Len()
+    if end - start >= 6 and spec.EndsWith(".olang") { end -= 6 }
+    if end - start >= 2 and (spec.EndsWith(".h") or spec.EndsWith(".c")) { end -= 2 }
+    return spec[start:end]
+}
+
+# M4: an alias has an identifier's shape - a letter or "_", then letters, digits and "_"
+fn AliasShape(a String&) Bool {
+    if a.Len() == 0 or not (a[0].IsLetter() or a[0] == '_') { return false }
+    for c in a {
+        if not (c.IsLetter() or c.IsDigit() or c == '_') { return false }
+    }
+    return true
+}
+
+# a top-level if at token i, its else-ifs and else: each branch recorded and pre-scanned. Where it ends
+fn (l mut Loader&) topIf(m mut Module&, from I64, end I64, parent I64) I64 {
+    toks := m.Toks!.Toks
+    c := m.chainAt.Len()
+    m.chainAt.Push(toks[from + 1].Start)
+    m.chainParent.Push(parent)
+    m.chainChosen.Push(NotYet)
+    m.chainElse.Push(false)
+    m.chainCondFrom.Push(m.conds.Len())
+    i := from
+    index I64 = 0
+    for {
+        brace := l.condEnd(m, i + 1, end)
+        if brace < 0 { return i + 1 }
+        m.conds.Push(i + 1)
+        close := I64(m.Toks!.Match(I32(brace)))
+        if close < 0 { return end }
+        b := l.branch(m, c, index)
+        l.region(m, brace + 1, close, b)
+        i = close + 1
+        if toks[i].Kind != token.Tok.Else { return i }
+        index++
+        if toks[i + 1].Kind == token.Tok.If {
+            i = i + 1
+            continue
+        }
+        if toks[i + 1].Kind != token.Tok.LBrace { return i + 1 }
+        close2 := I64(m.Toks!.Match(I32(i + 1)))
+        if close2 < 0 { return end }
+        m.chainElse[c] = true
+        b2 := l.branch(m, c, index)
+        l.region(m, i + 2, close2, b2)
+        return close2 + 1
+    }
+}
+
+fn (l mut Loader&) branch(m mut Module&, c I64, index I64) I64 {
+    m.branchChain.Push(c)
+    m.branchIndex.Push(index)
+    return m.branchChain.Len() - 1
+}
+
+# the "{" a condition from token i ends at - skipping what is bracketed and the body of a match, a lambda or a catch
+# clause inside it - or -1 where the line ends first (the parser reports it)
+fn (l Loader&) condEnd(m Module&, from I64, end I64) I64 {
+    toks := m.Toks!.Toks
+    depth I64 = 0
+    bodyNext := false
+    i := from
+    for i < end {
+        k := toks[i].Kind
+        if k == token.Tok.LParen or k == token.Tok.LBrack { depth++ }
+        if k == token.Tok.RParen or k == token.Tok.RBrack { depth-- }
+        if k == token.Tok.Match or k == token.Tok.Fn or k == token.Tok.Catch { bodyNext = true }
+        if k == token.Tok.LBrace {
+            if depth == 0 and not bodyNext { return i }
+            close := I64(m.Toks!.Match(I32(i)))
+            if close < 0 { return -1 }
+            bodyNext = false
+            i = close + 1
+            continue
+        }
+        if depth <= 0 and (k == token.Tok.StmtEnd or k == token.Tok.Eof) { return -1 }
+        i++
+    }
+    return -1
+}
+
+# ---- deciding branches (B9a) ----
+
+# whether branch b is part of the module: 1 chosen, 0 not, -1 not decided yet (pending). -1 for no branch is chosen
+fn (l mut Loader&) taken(mi I64, b I64) I64 {
+    if b < 0 { return 1 }
+    m := l.Mods[mi]
+    c := m.branchChain[b]
+    l.decide(mi, c)
+    chosen := m.chainChosen[c]
+    if chosen == Pending { return -1 }
+    return 1 if chosen == m.branchIndex[b] else 0
+}
+
+# decides chain c where B9a can: its first true condition's branch, the else, or none; pending where a condition is
+# B9c's. A condition that is wrong is reported, and counts as false
+fn (l mut Loader&) decide(mi I64, c I64) {
+    m := l.Mods[mi]
+    if m.chainChosen[c] != NotYet { return }
+    outer := l.taken(mi, m.chainParent[c])
+    if outer == 0 {
+        m.chainChosen[c] = NoBranch
+        return
+    }
+    if outer < 0 {
+        m.chainChosen[c] = Pending
+        return
+    }
+    from := m.chainCondFrom[c]
+    to := m.conds.Len() if c + 1 == m.chainCondFrom.Len() else m.chainCondFrom[c + 1]
+    for k in range from, to {
+        d := l.evalCond(mi, m.conds[k])
+        if d.Of == cond.Outcome.Deferred {
+            m.chainChosen[c] = Pending
+            return
+        }
+        if d.Of == cond.Outcome.Decided and d.Holds {
+            m.chainChosen[c] = k - from
+            return
+        }
+    }
+    m.chainChosen[c] = to - from if m.chainElse[c] else NoBranch
+}
+
+# a top-level condition at token index i, evaluated by B9a: a mistake is reported and Failed
+fn (l mut Loader&) evalCond(mi I64, i I64) cond.Decision {
+    m := l.Mods[mi]
+    l.CondParser(m)
+    x := try m.cparser!.ExprAt(i) catch { return cond.Decision(cond.Outcome.Failed, false) } # the parser reports it
+    if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace { return cond.Decision(cond.Outcome.Deferred, false) }
+    e mut cond.Eval& = cond.Eval(m.Src!.Text, l.Names, m.Scope!, l.Consts)
+    d := e.Top(x)
+    if d.Of == cond.Outcome.Failed {
+        at, msg := e.Error()
+        l.Diags.Error(l.at(m, at), msg)
+    }
+    return d
+}
+
+# the parser conditions are read with, and the globals they may read: "Name [mut] [type] = init" and "Name := init" at
+# the top level, outside every branch - the first declaration of each name (B9a)
+fn (l mut Loader&) CondParser(m mut Module&) {
+    if m.cparser is not null { return }
+    m.cdiags = diag.Diagnostics(false)
+    file := m.cdiags!.AddFile(m.Path, m.Src!.Text)
+    m.cparser = parse.Parser(m.Src!, m.Toks!, l.Names, m.Oracle!, m.cdiags!, file)
+    m.Scope = cond.Scope(m.Identity.StartsWith("std/"))
+    toks := m.Toks!.Toks
+    for at in m.globalsAt {
+        j := at + 1
+        mutable := false
+        typeToks I64 = 0
+        typeAt I64 = -1
+        depth I64 = 0
+        for {
+            k := toks[j].Kind
+            if k == token.Tok.Eof or k == token.Tok.StmtEnd or k == token.Tok.LBrace { break }
+            if depth == 0 and (k == token.Tok.Assign or k == token.Tok.Define) { break }
+            if k == token.Tok.LParen or k == token.Tok.LBrack { depth++ }
+            if k == token.Tok.RParen or k == token.Tok.RBrack { depth-- }
+            if k == token.Tok.Mut {
+                mutable = true
+            } else {
+                typeToks++
+                typeAt = j
+            }
+            j++
+        }
+        k := toks[j].Kind
+        if k != token.Tok.Assign and k != token.Tok.Define { continue }
+        declared := ""
+        if typeToks == 1 and toks[typeAt].Kind == token.Tok.Iden {
+            declared = $m.Src!.Text[toks[typeAt].Start:toks[typeAt].End]
+        } else if typeToks > 0 {
+            declared = "?"
+        }
+        init := try m.cparser!.ExprAt(j + 1) catch { continue }
+        after := toks[m.cparser!.Pos()].Kind
+        whole := after == token.Tok.StmtEnd or after == token.Tok.Eof
+        sp := source.Span(toks[at].Start, toks[at].End)
+        m.Scope!.Add(cond.Global($m.Src!.Text[sp.Start:sp.End], sp, mutable, $declared, init, whole))
+    }
+}
+
+# ---- imports (M3, M4, M5, M22, M22a, M23) ----
+
+# the imports of module mi whose branches are chosen, each resolved and loaded. One in a pending branch waits for
+# Decide; one already loaded is left as it is
+fn (l mut Loader&) loadImports(mi I64) {
+    m := l.Mods[mi]
+    for k in range m.Imports.Len() {
+        imp := m.Imports[k]
+        if imp.Target >= 0 or imp.Target == -2 { continue }
+        if l.taken(mi, imp.Guard) != 1 { continue }
+        m.Imports[k].Target = -2   # met: not met again, whether it loads or not
+        if not AliasShape(imp.Alias) {
+            l.Diags.Error(l.at(m, imp.AliasSp), msgs.ImportAliasInvalid(imp.Alias))
+            continue
+        }
+        t I64 = -1
+        if imp.Spec.EndsWith(".h") or imp.Spec.EndsWith(".c") {
+            t = l.cImport(mi, imp)                      # X17: a C header or source file, translated
+        } else {
+            if imp.Link != "" {
+                l.Diags.Error(l.at(m, imp.LinkSp), msgs.LinkOnOlangImport())
+                continue
+            }
+            path, identity := try l.resolve(mi, imp) catch { continue }
+            t = l.load(path, identity, false)
+        }
+        if t < 0 { continue }
+        clash := false
+        for k2 in range m.Imports.Len() {
+            if k2 != k and m.Imports[k2].Target >= 0 and m.Imports[k2].Alias == imp.Alias { clash = true }
+        }
+        if clash {
+            l.Diags.Error(l.at(m, imp.AliasSp), msgs.ImportAliasConflict(imp.Alias))   # M5
+            continue
+        }
+        m.Imports[k].Target = t
+    }
+}
+
+# resolve's failure, already reported: an import that names no file it may reach
+type unresolved error {
+    Import
+}
+
+# where an import's file is, and the identity of its module (M23, M22a); what is wrong is reported
+fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
+    m := l.Mods[mi]
+    at := l.at(m, imp.Sp)
+    spec := imp.Spec
+    if spec.Len() >= 4096 {
+        l.Diags.Error(at, msgs.ImportPathTooLong())
+        error unresolved.Import
+    }
+    if spec.EndsWith(".olang") {
+        l.Diags.Error(at, msgs.ImportHasExtension())
+        error unresolved.Import
+    }
+    slash := try spec.FindByte('/') catch default spec.Len()
+    first := spec[:slash]
+    path := ""
+    identity := ""
+    if spec.StartsWith("std/") {
+        path = $Normalize($l.Std "/" $spec[4:] ".olang")
+        identity = $Normalize(spec)
+        if not identity.StartsWith("std/") {
+            l.Diags.Error(at, msgs.ImportLeavesRoot("std"))
+            error unresolved.Import
+        }
+    } else if first.Contains(".") and first != "." and first != ".." {
+        # host/owner/repo[@ref]/path - a host always has a dot, which a relative path's first element never does
+        parts := spec.Split("/")
+        if parts.Len() < 4 {
+            l.Diags.Error(at, msgs.ImportRemoteNeedsFile())
+            error unresolved.Import
+        }
+        dir := try l.Fetch.Fetch(parts[0], parts[1], parts[2])
+            catch fetch.FetchError.BadName { l.Diags.Error(at, msgs.ImportRemoteBadName()) } default ""
+            catch fetch.FetchError.NotACommit { l.Diags.Error(at, msgs.ImportLockNotACommit(key(parts))) } default ""
+            catch fetch.FetchError.Failed { l.Diags.Error(at, msgs.ImportFetchFailed(key(parts))) } default ""
+            catch fetch.FetchError.LockedFailed { l.Diags.Error(at, msgs.ImportLockedFetchFailed(key(parts))) } default ""
+        if dir == "" { error unresolved.Import }
+        b := StringBuilder()
+        b.Push(dir)
+        for i in range 3, parts.Len() {
+            b.PushChar('/')
+            b.Push(parts[i])
+        }
+        b.Push(".olang")
+        path = $Normalize(b.ToString())
+        identity = $Normalize(spec)
+        root := key(parts)
+        if not identity.StartsWith($root "/") {
+            l.Diags.Error(at, msgs.ImportLeavesRoot(root))
+            error unresolved.Import
+        }
+    } else {
+        rel := moduleDir(m.Path)
+        if spec.StartsWith("/") or rel == "." {
+            path = $Normalize($spec ".olang")
+        } else {
+            path = $Normalize($rel "/" $spec ".olang")
+        }
+        identity = $filepath.Base(spec) if spec.StartsWith("/") else $relativeIdentity(m.Identity, spec)
+        # inside std or a remote repository, a relative import stays inside it
+        root := ""
+        fromFirst := m.Identity[:(try m.Identity.FindByte('/') catch default m.Identity.Len())]
+        remote := fromFirst.Contains(".") and fromFirst != "." and fromFirst != ".."
+        if m.Identity.StartsWith("std/") {
+            root = "std"
+        } else if remote and m.Identity.Contains("/") {
+            root = $firstElems(m.Identity, 3)
+        }
+        if root != "" and not identity.StartsWith($root "/") {
+            l.Diags.Error(at, msgs.ImportLeavesRoot(root))
+            error unresolved.Import
+        }
+    }
+    if not os.Exists(path) or os.IsDir(path) {
+        l.Diags.Error(at, msgs.ImportFileNotFound(path))
+        error unresolved.Import
+    }
+    return path, identity
+}
+
+# ---- C imports (X17-X20) ----
+
+# the version of the translation's form: a translation kept under another is made again
+CImportFormat String& = "olang C import 1"
+
+# the module a C header's or source file's import names, translated and loaded: its index, or -1 where it cannot be
+# (reported). A path that names a file beside the importing module's - relative to its directory, as an olang import's
+# is, or absolute - is that file; any other header is one of the system's, found where the C compiler looks
+# ("unistd.h", "sys/stat.h"). A source file is always one beside it. The translation is kept in the cache
+# (OLANG_CACHE/cimport) under a key of what it is made from - the file, clang's own file, the flags - with the files
+# it read, and made again when one of them changed
+fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
+    m := l.Mods[mi]
+    at := l.at(m, imp.Sp)
+    spec := imp.Spec
+    isC := spec.EndsWith(".c")
+    rel := moduleDir(m.Path)
+    local := $Normalize(spec) if spec.StartsWith("/") or rel == "." else $Normalize($rel "/" $spec)
+    if spec.StartsWith("/") { local = $spec }
+    include := ""
+    own := ""
+    identity := ""
+    if os.Exists(local) and not os.IsDir(local) {
+        real := try os.RealPath(local) catch default ""
+        r := $real if real != "" else $local
+        include = $"#include \"" $r "\""
+        if isC { own = $r }
+        identity = $filepath.Base(spec) if spec.StartsWith("/") else $relativeIdentity(m.Identity, spec)
+    } else if isC or spec.StartsWith("/") or spec.StartsWith("./") or spec.StartsWith("../") {
+        l.Diags.Error(at, msgs.CFileNotFound(local))
+        return -1
+    } else {
+        include = $"#include <" $spec ">"
+        identity = $"<" $spec ">"
+    }
+    # a loader made by a tool, given no clang or flags: the build's defaults, so a C import means what it does in a build
+    if l.Clang == "" { l.Clang = target.FindClang() }
+    if l.CFlags.Len() == 0 { l.CFlags.Push("-D_GNU_SOURCE") }
+    # the tag naming its wrapper functions comes from what the import says alone, so the code built of it is the same
+    # whichever compiler or clang made it (the bootstrap's fixed point); the cache key adds both
+    kb := StringBuilder()
+    kb.Push($CImportFormat "\n" $include "\n" $own "\n")
+    for f in l.CFlags { kb.Push($f "\n") }
+    tag := sha256.Hex(kb.ToString())[:12]
+    kb.Push($fileStamp(l.Clang) "\n" $fileStamp("/proc/self/exe") "\n")
+    ck := sha256.Hex(kb.ToString())[:32]
+    dir := $fetch.CacheDir() "/cimport"
+    base := $dir "/" $ck
+    text := cachedTranslation(base)
+    if text == "" {
+        tr := bindgen.Translation.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
+        if tr.Why != "" {
+            if tr.NotFound {
+                l.Diags.Error(at, msgs.CHeaderNotFound(spec))
+            } else {
+                l.Diags.Error(at, msgs.CImportFailed(spec, tr.Why))
+            }
+            return -1
+        }
+        deps := StringBuilder()
+        for d in tr.Deps {
+            info := try os.FileInfo.Stat(d) catch os.Error { continue }
+            deps.Push($info.Size " " $info.ModTime " " $d "\n")
+        }
+        stamp := sha256.Hex(deps.ToString())[:16]
+        c := "" if tr.C == "" else $"/* " $stamp " */\n" $tr.C
+        if not keepFile(dir, $base ".olang", tr.Text) or not keepFile(dir, $base ".c", c) or not keepFile(dir, $base ".deps", deps.ToString()) {
+            l.Diags.Error(at, msgs.CImportFailed(spec, $"its translation cannot be written into " $dir))
+            return -1
+        }
+        text = tr.Text
+    }
+    i := l.load($base ".olang", identity, false, true)
+    if i < 0 { return -1 }
+    t := l.Mods[i]
+    if os.Exists($base ".c") and (try os.FileInfo.Stat($base ".c") catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)).Size > 0 {
+        t.CUnit = $base ".c"
+    }
+    skipping := false
+    for line in text.Lines() {
+        if line.StartsWith("# symbol ") {
+            ws := line[9:].Split(" ")
+            if ws.Len() == 2 { t.CSymbols.Put($ws[0], $ws[1]) }
+        } else if line == "# not declared:" {
+            skipping = true
+        } else if skipping and line.StartsWith("#   ") {
+            k := try line.Find(": ") catch default -1
+            if k > 4 { t.CSkipped.Put($line[4:k], $line[k + 2:]) }
+        }
+    }
+    return i
+}
+
+# the symbol function name of C module mi links by: its name, or the one the translation says (X20)
+fn (l Loader&) CSymbol(mi I64, name String&) String {
+    if mi < 0 or mi >= l.Mods.Len() or not l.Mods[mi].C { return $name }
+    return try l.Mods[mi].CSymbols.Get(name) catch default $name
+}
+
+# a translation kept at base: its text where every file it was made from is as it was then, else ""
+fn cachedTranslation(base String&) String {
+    deps := try os.ReadFile($base ".deps") catch os.Error { return "" }
+    for line in deps.Lines() {
+        if line == "" { continue }
+        a := try line.FindByte(' ') catch { return "" }
+        b := try line[a + 1:].FindByte(' ') catch { return "" }
+        size := try line[:a].ParseInt() catch { return "" }
+        time := try line[a + 1:a + 1 + b].ParseInt() catch { return "" }
+        info := try os.FileInfo.Stat(line[a + 2 + b:]) catch os.Error { return "" }
+        if info.Size != size or info.ModTime != time { return "" }
+    }
+    return try os.ReadFile($base ".olang") catch os.Error default ""
+}
+
+# text written at path, through a file of this process's own renamed into place: whether it was
+fn keepFile(dir String&, path String&, text String&) Bool {
+    try os.MkDirAll(dir) catch os.Error { return false }
+    tmp := $path "." $target.Pid() ".tmp"
+    try os.WriteFile(tmp, text) catch os.Error { return false }
+    try os.Rename(tmp, path) catch os.Error {
+        try os.Remove(tmp) catch os.Error { }
+        return false
+    }
+    return true
+}
+
+# what a program is, for a translation's key - clang, this compiler: its real path, size and time ("" for none)
+fn fileStamp(clang String&) String {
+    if clang == "" { return "" }
+    real := try os.RealPath(target.WhereIs(clang)) catch default ""
+    if real == "" { return $clang }
+    info := try os.FileInfo.Stat(real) catch os.Error { return $real }
+    return $real " " $info.Size " " $info.ModTime
+}
+
+# ---- E38: embedded files ----
+
+# the file "embed spec" in module mi names, read: its bytes and "", or why it cannot be - its path resolved as a
+# relative import's is, against the module's own directory, and kept inside std or the remote repository the module is
+# in. A file is read once in a compilation (every check of the program sees the same bytes) and recorded with the
+# module, whose object it is part of (B3i's key reads it)
+fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
+    none := Array<U8>(0)
+    m := l.Mods[mi]
+    if spec.Len() == 0 { return none, "an empty path names no file" }
+    if spec.Len() >= 4096 { return none, "a path of 4096 characters or more" }
+    rel := moduleDir(m.Path)
+    path := ""
+    if spec.StartsWith("/") or rel == "." {
+        path = $Normalize(spec)
+    } else {
+        path = $Normalize($rel "/" $spec)
+    }
+    # inside std or a remote repository, an embedded file stays inside it, as a relative import does
+    fromFirst := m.Identity[:(try m.Identity.FindByte('/') catch default m.Identity.Len())]
+    remote := fromFirst.Contains(".") and fromFirst != "." and fromFirst != ".."
+    root := ""
+    if m.Identity.StartsWith("std/") {
+        root = "std"
+    } else if remote and m.Identity.Contains("/") {
+        root = $firstElems(m.Identity, 3)
+    }
+    if root != "" and (spec.StartsWith("/") or not relativeIdentity(m.Identity, spec).StartsWith($root "/")) {
+        return none, $"it leaves " $root
+    }
+    # ...and so does the file it really is: a link inside the repository may name any file (F7) - judged by real
+    # paths, the repository's own root as it really is
+    if root != "" and os.Exists(path) {
+        top := ""
+        if root == "std" {
+            top = $l.stdReal
+        } else {
+            rest := m.Identity[root.Len() + 1:]
+            dir := m.Path
+            for _ in range rest.CountOf("/") + 1 { dir = $filepath.Dir(dir) }
+            top = $(try os.RealPath(dir) catch default dir)
+        }
+        real := try os.RealPath(path) catch default ""
+        if real == "" or not real.StartsWith($top "/") { return none, $"it leaves " $root ", through a link" }
+    }
+    if not l.embedded.Has(path) {
+        if not os.Exists(path) { return none, $"no file " $path }
+        if os.IsDir(path) { return none, $path " is a directory" }
+        text := try os.ReadFile(path) catch os.Error { return none, $path " cannot be read" }
+        bytes := Array<U8>(text.Len())
+        for i, ch in text { bytes[i] = U8(ch) }
+        l.embedded.Put($path, bytes)
+    }
+    known := false
+    for e in m.Embeds {
+        if e == path { known = true }
+    }
+    if not known { m.Embeds.Push($path) }
+    return (try l.embedded.Get(path) catch default none), ""
+}
+
+# the bytes of the file an embed read, by its path (Embeds): what a module's key holds of it (B3i)
+fn (l Loader&) Embedded(path String&) Array<U8>& { return try l.embedded.Get(path) catch default Array<U8>(0) }
+
+# host/owner/repo[@ref] of a remote import's parts
+fn key(parts Array<String&>&) String { return $parts[0] "/" $parts[1] "/" $parts[2] }
+
+fn firstElems(p String&, n I64) String& {
+    count I64 = 0
+    for i, c in p {
+        if c == '/' {
+            count++
+            if count == n { return p[:i] }
+        }
+    }
+    return p[:]
+}
+
+# the directory relative imports of a module's file resolve against
+fn moduleDir(path String&) String {
+    slash := try path.FindLast("/") catch { return "." }
+    if slash == 0 { return "/" }
+    return $path[:slash]
+}
+
+# M22a: a relative import's identity is the importer's with its last element replaced by the relative path
+fn relativeIdentity(from String&, spec String&) String {
+    slash := try from.FindLast("/") catch default -1
+    if slash < 0 { return Normalize(spec) }
+    return Normalize($from[:slash] "/" $spec)
+}
+
+# "." and ".." collapsed lexically, so one file reached by two spellings prints one way; a leading ".." stays
+fn Normalize(p String&) String {
+    parts Vec<String&>
+    for t in p.Split("/") {
+        if t == "" or t == "." { continue }
+        if t == ".." and parts.Len() > 0 and parts[parts.Len() - 1] != ".." {
+            try parts.Pop() catch { }
+            continue
+        }
+        parts.Push(t)
+    }
+    b := StringBuilder()
+    if p.StartsWith("/") { b.PushChar('/') }
+    for i in range parts.Len() {
+        if i > 0 { b.PushChar('/') }
+        b.Push(parts[i])
+    }
+    return "." if b.Len() == 0 else b.ToString()
+}
+
+# ---- M16 and M17 ----
+
+# whether an alias is public - re-exported (M14)
+fn Public(alias String&) Bool { return alias.Len() > 0 and alias[0].IsUpper() }
+
+# the modules reached from mi through public aliases, mi itself first, into its public list (M16); a public alias
+# reaching mi again is M17
+fn (l mut Loader&) closure(mi I64) {
+    m := l.Mods[mi]
+    if m.publicDone or m.publicBusy { return }
+    m.publicBusy = true
+    m.public.Push(mi)
+    for imp in m.Imports {
+        if imp.Target < 0 or not Public(imp.Alias) { continue }
+        if l.Mods[imp.Target].publicBusy {
+            l.Diags.Error(l.at(m, imp.AliasSp), msgs.ReexportCycle(msgs.Tok(imp.Alias)))
+            continue
+        }
+        l.closure(imp.Target)
+        for r in l.Mods[imp.Target].public {
+            if r not in m.public { m.public.Push(r) }
+        }
+    }
+    m.publicBusy = false
+    m.publicDone = true
+}
+
+# M16: no two imports of one module reach the same file - directly, or through what they re-export
+fn (l mut Loader&) checkReach() {
+    for mi in range l.Mods.Len() {
+        seen Vec<I64>
+        m := l.Mods[mi]
+        for imp in m.Imports {
+            if imp.Target < 0 { continue }
+            l.closure(imp.Target)
+            for r in l.Mods[imp.Target].public {
+                if r in seen {
+                    l.Diags.Error(l.at(m, imp.AliasSp), msgs.ImportReachedTwice(msgs.Tok(imp.Alias)))
+                } else {
+                    seen.Push(r)
+                }
+            }
+        }
+    }
+}
+
+# ---- parsing ----
+
+# the oracle's names a module has before its imports are known: its own, the prelude's exported ones, and Array
+fn (l mut Loader&) ownNames(m mut Module&) {
+    for t in m.Types { m.Oracle!.Add(l.Names, "", t) }
+    for t in m.Generics { m.Oracle!.AddFn(l.Names, "", t) }
+    for t in l.preludeTypes {
+        if t[0].IsUpper() { m.Oracle!.Add(l.Names, "", t) }
+    }
+    m.Oracle!.Add(l.Names, "", "Array")
+}
+
+# its imports' names, through their alias chains (DESIGN.md point 1)
+fn (l mut Loader&) chains(o mut parse.Oracle&, mi I64, prefix String&, depth I64) {
+    if depth >= 4 { return }
+    for imp in l.Mods[mi].Imports {
+        if imp.Target < 0 { continue }
+        chain := $prefix $imp.Alias
+        for t in l.Mods[imp.Target].Types { o.Add(l.Names, chain, t) }
+        for t in l.Mods[imp.Target].Generics { o.AddFn(l.Names, chain, t) }
+        l.chains(o, imp.Target, $chain ".", depth + 1)
+    }
+}
+
+# the module parsed - every branch, those not chosen with their diagnostics dropped
+fn (l mut Loader&) parse(mi I64) {
+    m := l.Mods[mi]
+    l.chains(m.Oracle!, mi, "", 0)
+    m.parser = parse.Parser(m.Src!, m.Toks!, l.Names, m.Oracle!, l.Diags, m.File)
+    m.Decls = m.parser!.File()
+    l.groups(mi, m.Decls)
+}
+
+# chooses or drops each top-level branch's diagnostics as its chain was decided
+fn (l mut Loader&) groups(mi I64, decls Array<ast.Decl&>&) {
+    for d in decls {
+        match d {
+            case ast.Decl.If(_, ti) {
+                chosen := l.Chosen(mi, ti.Cond!.Span().Start)
+                l.chainGroups(mi, ti, chosen, 0)
+            }
+            case _ { }
+        }
+    }
+}
+
+fn (l mut Loader&) chainGroups(mi I64, ti ast.TopIf&, chosen I64, index I64) {
+    l.branchGroup(mi, ti.Then!, chosen, index)
+    if ti.ElseIf is not null { l.chainGroups(mi, ti.ElseIf!, chosen, index + 1) }
+    if ti.Else is not null { l.branchGroup(mi, ti.Else!, chosen, index + 1) }
+}
+
+fn (l mut Loader&) branchGroup(mi I64, b ast.TopBranch&, chosen I64, index I64) {
+    if chosen == Pending { return }
+    if chosen == index {
+        l.Diags.Choose(b.Group)
+        if b.Decls.Len() > 0 { l.groups(mi, b.Decls) }
+    } else {
+        l.Diags.Drop(b.Group)
+    }
+}
+
+# ---- what later passes ask ----
+
+# X12, X13: whether the program links C of its own that may name an export fn and call it: a `.c` import (X21), or a
+# library or object a `link` names (X9) - in any branch. The C library and the system's headers name none of the
+# program's functions
+fn (l Loader&) LinksOwnC() Bool {
+    for m in l.Mods {
+        if m.C and m.Real.EndsWith(".c"): return true
+        for imp in m.Imports {
+            if imp.Link != "": return true
+        }
+        if declsLink(m.Decls): return true
+    }
+    return false
+}
+
+fn declsLink(ds Array<ast.Decl&>&) Bool {
+    for d in ds {
+        match d {
+            case ast.Decl.ExternBlock(_, link, _) { if link.End > I32(0): return true }
+            case ast.Decl.If(_, ti) { if ifLinks(ti): return true }
+            case _ { }
+        }
+    }
+    return false
+}
+
+fn ifLinks(ti ast.TopIf&) Bool {
+    if ti.Then is not null and declsLink(ti.Then!.Decls): return true
+    if ti.ElseIf is not null and ifLinks(ti.ElseIf!): return true
+    return ti.Else is not null and declsLink(ti.Else!.Decls)
+}
+
+# X9: what the program's link names besides its objects, from every module's links - an import's (X17) where the
+# import is in a chosen branch, an extern block's in a chosen branch - each once, in the modules' order: a library's
+# name as "-lNAME", a file's path (one naming a directory, or ending in .a, .o or .so) resolved from its module's
+# directory. A name that is neither is reported
+fn (l mut Loader&) Links() Vec<String&> {
+    out Vec<String&>
+    seen Map<String&, Bool>
+    for mi in range l.Mods.Len() {
+        m := l.Mods[mi]
+        for imp in m.Imports {
+            if imp.Link == "" or imp.Target < 0 or not l.Mods[imp.Target].C { continue }
+            l.addLink(mi, imp.LinkSp, out, seen)
+        }
+        l.linksIn(mi, m.Decls, out, seen)
+    }
+    return out
+}
+
+fn (l mut Loader&) linksIn(mi I64, ds Array<ast.Decl&>&, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
+    for d in ds {
+        match d {
+            case ast.Decl.ExternBlock(_, link, _) {
+                if link.End > I32(0) { l.addLink(mi, link, out, seen) }
+            }
+            case ast.Decl.If(_, ti) { l.linksIf(mi, ti, l.Chosen(mi, ti.Cond!.Span().Start), 0, out, seen) }
+            case _ { }
+        }
+    }
+}
+
+# one link's text at path's span in module mi, as the link reads it - reported where it names neither a library nor a
+# file
+fn (l mut Loader&) addLink(mi I64, path source.Span, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
+    m := l.Mods[mi]
+    text := m.Src!.Text[I64(path.Start) + 1:I64(path.End) - 1]
+    arg := ""
+    if LinkIsFile(text) {
+        arg = $(text if filepath.IsAbs(text) else filepath.Join(filepath.Dir(m.Real), text))
+    } else if LinkName(text) {
+        arg = $"-l" $text
+    } else {
+        l.Diags.Error(diag.Where.Span(m.File, I64(path.Start), I64(path.End)), msgs.LinkName(msgs.Tok(text)))
+        return
+    }
+    if seen.Has(arg) { return }
+    seen.Put($arg, true)
+    out.Push($arg)
+}
+
+fn (l mut Loader&) linksIf(mi I64, ti ast.TopIf&, chosen I64, index I64, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
+    if chosen == index and ti.Then!.Decls.Len() > 0 { l.linksIn(mi, ti.Then!.Decls, out, seen) }
+    if ti.ElseIf is not null { l.linksIf(mi, ti.ElseIf!, chosen, index + 1, out, seen) }
+    if ti.Else is not null and chosen == index + 1 and ti.Else!.Decls.Len() > 0 { l.linksIn(mi, ti.Else!.Decls, out, seen) }
+}
+
+# X9: whether a link names a file - its path holds a "/", or it ends in .a, .o or .so (a version after .so too)
+fn LinkIsFile(text String&) Bool {
+    return text.Contains("/") or text.EndsWith(".a") or text.EndsWith(".o") or text.EndsWith(".so") or text.Contains(".so.")
+}
+
+# X9: whether a link is a library's name: letters, digits, "_", "-", "+" and ".", the first a letter or a digit
+fn LinkName(text String&) Bool {
+    if text.Len() == 0 { return false }
+    for i, c in text {
+        if c.IsLetter() or c.IsDigit() { continue }
+        if i == 0 or (c != '_' and c != '-' and c != '+' and c != '.') { return false }
+    }
+    return true
+}
+
+# what was decided for the top-level if whose first condition starts at that offset: its chosen branch, NoBranch, or
+# Pending
+fn (l mut Loader&) Chosen(mi I64, condStart I32) I64 {
+    m := l.Mods[mi]
+    for c in range m.chainAt.Len() {
+        if m.chainAt[c] == condStart {
+            l.decide(mi, c)
+            return m.chainChosen[c]
+        }
+    }
+    return Pending
+}
+
+# the top-level ifs B9a left to compile-time evaluation (B9c) whose own branch is part of the module: each as its
+# module and the offset of its first condition
+fn (l mut Loader&) PendingIfs() Vec<pair.Pair<I64, I32>> {
+    out Vec<pair.Pair<I64, I32>>
+    for mi in range l.Mods.Len() {
+        m := l.Mods[mi]
+        for c in range m.chainAt.Len() {
+            l.decide(mi, c)
+            if m.chainChosen[c] == Pending and l.taken(mi, m.chainParent[c]) == 1 { out.Push(pair.Pair(mi, m.chainAt[c])) }
+        }
+    }
+    return out
+}
+
+# the checker's decision for a pending top-level if (B9c): its chosen branch, or NoBranch. The imports it makes part
+# of the module are loaded and parsed, and its branches' diagnostics chosen or dropped
+fn (l mut Loader&) Decide(mi I64, condStart I32, chosen I64) {
+    m := l.Mods[mi]
+    for c in range m.chainAt.Len() {
+        if m.chainAt[c] != condStart or m.chainChosen[c] != Pending { continue }
+        m.chainChosen[c] = chosen
+        # the chains inside it are decided again, now that their branch is known
+        for c2 in range m.chainAt.Len() {
+            if m.chainChosen[c2] == Pending and m.chainParent[c2] >= 0 { m.chainChosen[c2] = NotYet }
+        }
+    }
+    before := l.Mods.Len()
+    l.loadImports(mi)
+    l.groups(mi, m.Decls)
+    if l.Mods.Len() > before { l.checkReach() }
+}
+
+# the module graph, as "dump modules" prints it: one line per module, "module IDENTITY", then one per import it
+# loaded, "  ALIAS IDENTITY" - modules and imports sorted
+fn (l Loader&) Graph() String {
+    order := Array<I64>(l.Mods.Len())
+    for i in range order.Len() { order[i] = i }
+    order.Sort(fn(a I64, b I64) Bool { return l.Mods[a].Identity < l.Mods[b].Identity })
+    b := StringBuilder()
+    for i in order {
+        m := l.Mods[i]
+        b.Push("module " $m.Identity "\n")
+        lines Vec<String&>
+        for imp in m.Imports {
+            if imp.Target >= 0 { lines.Push("  " $imp.Alias " " $l.Mods[imp.Target].Identity "\n") }
+        }
+        lines.Sort(fn(x String&, y String&) Bool { return x < y })
+        for t in lines { b.Push(t) }
+    }
+    return b.ToString()
+}
+
+# ---- tests ----
+
+# a loader over the repository's std, with the host's build constants
+fn Loader.test(lock String&) Loader {
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    return Loader("std", consts, fetch.Fetcher(lock, $lock ".cache", "file:///nowhere/", false, true), source.Names()
+                  diag.Diagnostics(false))
+}
+
+fn write(dir String&, name String&, text String&) {
+    p := $dir "/" $name
+    try os.MkDirAll(filepath.Dir(p)) catch os.Error { }
+    try os.WriteFile(p, text) catch os.Error { }
+}
+
+fn rules(l mut Loader&) String {
+    b := StringBuilder()
+    for s in l.Diags.AllSaid() {
+        b.Push($s.Rule)
+        b.PushChar(' ')
+    }
+    return b.ToString()
+}
+
+test "a program's modules: relative imports, a cycle, the prelude and identities" {
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    write(dir, "main.olang", "import \"lib/util\"\nimport Pub \"lib/pub\"\nfn main() ? { }\n")
+    write(dir, "lib/util.olang", "import \"helper\"\ntype Box struct() { }\n")
+    write(dir, "lib/helper.olang", "import \"util\"\nfn H() I64 { return 1 }\n")
+    write(dir, "lib/pub.olang", "import \"std/stats\"\n")
+    l := Loader.test($dir "/olang.lock")
+    root := l.Load($dir "/main.olang")
+    assert root >= 0 and l.Diags.Errors() == 0, rules(l)
+    g := l.Graph()
+    assert g.Contains("module main\n  Pub lib/pub\n  util lib/util\n"), g
+    assert g.Contains("module lib/util\n  helper lib/helper\n") and g.Contains("module lib/helper\n  util lib/util\n")
+    assert g.Contains("module lib/pub\n  stats std/stats\n") and g.Contains("module std/prelude/vec\n")
+    # the oracle knew the imported type's name through its alias
+    assert l.Mods[root].Oracle is not null
+}
+
+test "imports that are wrong are reported where they are written" {
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    write(dir, "a.olang", "")
+    write(dir, "b/a.olang", "")
+    write(dir, "main.olang", "import \"a.olang\"\nimport \"nothere\"\nimport \"a\"\nimport \"b/a\"\nimport \"std/../x\"\n")
+    l := Loader.test($dir "/olang.lock")
+    l.Load($dir "/main.olang")
+    r := rules(l)
+    assert r.Contains("M23") and r.Contains("M5"), r
+    assert l.Diags.Errors() == 4, r
+    l2 := Loader.test($dir "/olang.lock")
+    assert l2.Load($dir "/absent.olang") < 0 and l2.Diags.Errors() == 1
+}
+
+test "a top-level if decides which imports exist, and a pending one waits for Decide" {
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    write(dir, "lin.olang", "")
+    write(dir, "win.olang", "")
+    write(dir, "late.olang", "")
+    write(dir, "main.olang", "Big := 3\nif TargetOs == \"linux\" and Big > 2 {\n    import \"lin\"\n} else {\n    import \"win\"\n}\nif f() {\n    import \"late\"\n}\nfn f() Bool { return true }\n")
+    l := Loader.test($dir "/olang.lock")
+    root := l.Load($dir "/main.olang")
+    assert l.Diags.Errors() == 0, rules(l)
+    g := l.Graph()
+    assert g.Contains("  lin lin\n") and not g.Contains("module win") and not g.Contains("module late"), g
+    p := l.PendingIfs()
+    assert p.Len() == 1 and p[0].First == root
+    l.Decide(root, p[0].Second, 0)
+    assert l.Graph().Contains("  late late\n") and l.PendingIfs().Len() == 0
+}
+
+test "M16 and M17: one file reached twice, and a re-export back to its importer" {
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    write(dir, "c.olang", "")
+    write(dir, "b.olang", "import C \"c\"\n")
+    write(dir, "main.olang", "import B \"b\"\nimport \"c\"\n")
+    l := Loader.test($dir "/olang.lock")
+    l.Load($dir "/main.olang")
+    assert rules(l).Contains("M16"), rules(l)
+    write(dir, "x.olang", "import Y \"y\"\n")
+    write(dir, "y.olang", "import X \"x\"\n")
+    l2 := Loader.test($dir "/olang.lock")
+    l2.Load($dir "/x.olang")
+    assert rules(l2).Contains("M17"), rules(l2)
+}
+
+fn git(dir String&, args Array<String&>&) Bool {
+    out := try os.Output.Exec(...args, dir = dir) catch os.Error { return false }
+    return out.Status == 0
+}
+
+test "a remote import is fetched, locked, and its relative imports stay inside it" {
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    repo := $dir "/remote/example.com/me/tools"
+    write(repo, "lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
+    write(repo, "part/inner.olang", "import \"../lib\"\n")
+    ok := git(repo, Array<String&>["git", "init", "-q"]) and
+          git(repo, Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
+          git(repo, Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit"
+                            "-q", "-m", "x"])
+    if not ok { return }   # no git here: nothing to fetch with
+    write(dir, "main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    f := fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file://" $dir "/remote/", false, true)
+    l := Loader("std", consts, f, source.Names(), diag.Diagnostics(false))
+    l.Load($dir "/main.olang")
+    assert l.Diags.Errors() == 0, rules(l)
+    g := l.Graph()
+    assert g.Contains("module main\n  T example.com/me/tools/lib\n"), g
+    assert g.Contains("module example.com/me/tools/lib\n  inner example.com/me/tools/part/inner\n"), g
+    assert g.Contains("module example.com/me/tools/part/inner\n  lib example.com/me/tools/lib\n"), g
+    lock := try os.ReadFile($dir "/olang.lock") catch default ""
+    assert lock.Contains("example.com/me/tools "), lock
+}

@@ -1,0 +1,13 @@
+type Node struct(v I64, next mut Node?&) {
+    v
+    next
+}
+fn link(a mut Node&, b mut Node&) { a.next = b }
+fn main() {
+    a := Node(1, null)
+    for i in range 2 {
+        b := Node(i, null)
+        link(a, b)
+    }
+    assert a.next!.v == 1
+}

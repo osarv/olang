@@ -1,0 +1,22 @@
+import "std/os"
+type E error { Empty }
+type Node struct(v I64) {
+    v
+}
+fn Node.make(v I64) Node& ? E {
+    if v < 0 { error E.Empty }
+    return Node(v)
+}
+fn pick(p Node&, n I64) I64 {
+    out Node& = p
+    for i in range n {
+        d := p
+        q := Node(i)
+        if i > 1 { d = q }
+        out = try Node.make(i - 3) catch default d
+    }
+    return out.v
+}
+fn main() {
+    assert pick(Node(9), os.Args().Len() + 2) == 2
+}

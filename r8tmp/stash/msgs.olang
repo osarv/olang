@@ -1,0 +1,2001 @@
+# msgs - every diagnostic the compiler can give, one function each (compiler/DESIGN.md section 1.3).
+#
+# A function takes what its message names, typed, and returns a Msg: which diagnostic it is (Kind), the rule of the
+# specification it applies (Rule - empty where no rule states it; never an invented one), and the text, lowercase and
+# one line with no period at the end (B11). diag records a Msg against where it is about.
+#
+# This file is the table's source, edited by hand: a diagnostic is a case of Diag and a function of the same name, one
+# line each. checks/checks.olang holds this file to the specification.
+#
+# A token parameter is the token as a reader sees it - Tok(text), or EndOfLine or EndOfFile - and a type parameter is
+# the type as source writes it. A Msg is diagmsg's (compiler/diagmsg.olang): these functions make one, and none is its
+# builder (D19a) - its type is declared beside diag's other kinds of records, not here.
+
+import r "diagmsg"
+
+# a token as a reader sees it: its text in quotes, each byte that does not print escaped
+fn Tok(text String&) String {
+    b := StringBuilder()
+    b.PushChar('\'')
+    for c in text { b.Push(Esc(c)) }
+    b.PushChar('\'')
+    return b.ToString()
+}
+
+# ---- what a misspelt name most likely meant (B11) ----
+
+# the edit distance between two names, letters compared without their case (Levenshtein's); 99 past 60 characters
+fn Distance(a String&, b String&) I64 {
+    if a.Len() > 60 or b.Len() > 60 { return 99 }
+    prev := Array<I64>(b.Len() + 1)
+    cur := Array<I64>(b.Len() + 1)
+    for j in range b.Len() + 1 { prev[j] = j }
+    for i in range 1, a.Len() + 1 {
+        cur[0] = i
+        for j in range 1, b.Len() + 1 {
+            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
+            del := prev[j] + 1
+            ins := cur[j - 1] + 1
+            k := sub if sub < del else del
+            cur[j] = k if k < ins else ins
+        }
+        for j in range b.Len() + 1 { prev[j] = cur[j] }
+    }
+    return prev[b.Len()]
+}
+
+# whether a candidate d edits from a misspelt word is near enough to be what was meant: within about a third of the
+# word (B7a), and not every letter of it changed
+fn Near(word String&, d I64) Bool { return d <= (word.Len() + 2) / 3 and d < word.Len() }
+
+# the nearest of the names offered for a misspelt word - "" while none is near - and how far it is
+type Nearest struct(Word String&) {
+    Word
+    Best String& = ""
+    Far I64 = 1 << 30
+}
+
+# a candidate offered: kept where it is nearer than any before it (the first of two as near)
+fn (n mut Nearest&) Offer(cand String&) {
+    if cand == n.Word or cand.Len() == 0 { return }
+    d := Distance(n.Word, cand)
+    if Near(n.Word, d) and d < n.Far {
+        n.Best = cand
+        n.Far = d
+    }
+}
+
+# a builder offered as "Owner.Member" (D19): taken before any near name where the word is its old name - the member
+# with its owner's name as one of its words ("ParseIP" for IP.Parse, "DateOf" for Date.Of), what a function making the
+# type was called before it became the builder (builder_migrate's renaming read backward)
+fn (n mut Nearest&) OfferBuilder(cand String&) {
+    dot := try cand.FindByte('.') catch { return }
+    owner := cand[:dot]
+    member := cand[dot + 1:]
+    if owner.Len() == 0 or owner.Len() >= n.Word.Len() or n.Far == 0 { return }
+    at := try n.Word.Find(owner) catch { return }
+    end := at + owner.Len()
+    before := at == 0 or n.Word[at - 1].IsLower() or n.Word[at - 1].IsDigit()
+    after := end == n.Word.Len() or n.Word[end].IsUpper()
+    if not before or not after or $n.Word[:at] $n.Word[end:] != member { return }
+    n.Best = cand
+    n.Far = 0
+}
+
+# " - did you mean 'x'?" for the nearest name offered, "" for none
+fn (n Nearest&) Hint() String { return $" - did you mean '" $n.Best "'?" if n.Best.Len() > 0 else "" }
+
+# the two tokens no text spells
+EndOfLine := "end of line"
+EndOfFile := "end of file"
+
+# a byte as a message shows it: itself where it prints, else escaped - \t, \n, \r, \0, or \xHH
+fn Esc(c Char) String {
+    if c == '\t' { return "\\t" }
+    if c == '\n' { return "\\n" }
+    if c == '\r' { return "\\r" }
+    if c == '\0' { return "\\0" }
+    if U8(c) < 32 or U8(c) >= 127 {
+        hex := U8(c).Format(16)
+        return "\\x" $(hex.PadStart(2, '0'))
+    }
+    b := StringBuilder()
+    b.PushChar(c)
+    return b.ToString()
+}
+
+# every diagnostic
+type Diag enum {
+    Usage
+    NotAMode
+    ModeOneFile
+    ModeNeedsFile
+    UnknownFlag
+    OptionNotForMode
+    OptionNeedsValue
+    QuickAlone
+    InterpretBuilds
+    FuzzTimeNotNumber
+    FuzzTimeAlone
+    BenchFuzz
+    FuzzNoTest
+    FuzzManyTests
+    NotASource
+    ModeFirst
+    HelpOneMode
+    OutputIsDir
+    OutputNoDir
+    OutputCannotWrite
+    CannotRun
+    FormatterMissing
+    FormatterBuild
+    TargetMissing
+    TargetUnknown
+    TargetUnsupported
+    TargetNativeForeign
+    TargetForeignMode
+    TargetNoBackend
+    TargetNoClang
+    TargetNoEmulator
+    ExplainNeedsRule
+    ExplainNeedsName
+    ExplainNoItem
+    ModeNoFiles
+    DocOneName
+    DocNoItem
+    LineBodyOnLine
+    LineBodyNotSimple
+    NoSpec
+    NoRule
+    DefineMissing
+    DefineShape
+    DefineNotName
+    DefineTwice
+    DefineBadNumber
+    DefineIntRange
+    DefineNegRange
+    DefineFloatRange
+    DefineBuiltin
+    CannotOpen
+    NotRegular
+    IsDirectory
+    NoMain
+    NoClang
+    ClangFailed
+    LinkFailed
+    UnknownChar
+    CommaEndsLine
+    Semicolon
+    NonAscii
+    CarriageReturn
+    NulByte
+    UnclosedComment
+    UnclosedString
+    StringNewline
+    UnclosedChar
+    CharNewline
+    EmptyChar
+    LongChar
+    BadEscape
+    HexNoDigits
+    BinNoDigits
+    HexDigit
+    BinDigit
+    DigitSeparator
+    PointNoDigit
+    TwoPoints
+    Expected
+    BlockNotClosed
+    Nesting
+    KeywordAsName
+    KeywordFieldRead
+    DestructInBody
+    JoinPiece
+    TrailingComma
+    NeedlessGroup
+    VarListCount
+    ErrorAfterQuestion
+    ValueAfterEq
+    CondName
+    CondMutable
+    CondGlobalInit
+    CondCycle
+    CondTypes
+    CondNoMeet
+    CondNotBool
+    ImportRemoteBadName
+    ImportLockNotACommit
+    ImportFetchFailed
+    ImportLockedFetchFailed
+    ImportPathTooLong
+    ImportFileNotFound
+    ImportHasExtension
+    ImportLeavesRoot
+    ImportRemoteNeedsFile
+    ImportAliasInvalid
+    ImportAliasConflict
+    UnknownImport
+    UnknownImportStd
+    ImportIsPrivate
+    ReexportCycle
+    ImportReachedTwice
+    NameClashesWithImport
+    UnknownType
+    UnknownTypeMeant
+    UnknownNumberType
+    UnknownName
+    UnknownNameMeant
+    TypedHole
+    TypedHoleUntyped
+    TypeNotAValue
+    UnknownFunction
+    UnknownFunctionMeant
+    UnknownErrorType
+    FuncTypeErrsUnwritten
+    TraitErrsUnwritten
+    TypeIsPrivate
+    TypeNameInUse
+    BuiltinTypeRedeclared
+    NameIsType
+    BuildConstRedeclared
+    BuildDefaultMut
+    BuildDefaultType
+    BuildDefaultFit
+    UnknownBuildName
+    NameInUse
+    ConstraintDisagrees
+    ConstraintUnmet
+    ConstraintUnmetMethod
+    ConstraintSealed
+    ConstraintClosed
+    TraitExtendsNotTrait
+    TraitExtendsItself
+    TraitMemberOpen
+    TraitMemberMissing
+    ConstraintUnmetHash
+    UnboundedInstantiation
+    TypeHoldsItself
+    ArrayTypeHoldsItself
+    MissingTypeArgs
+    TypeArgCount
+    TypeArgsOnNonGeneric
+    NarrowNotNumber
+    AsCanFail
+    TryParens
+    NarrowNeedsType
+    TypeVarAsValue
+    ArrayLengthRange
+    TypeMatchValueCase
+    ArrayTooManyArgs
+    ConstraintNotTrait
+    InvalidReferenceTarget
+    InstanceNotReferable
+    NoteInstanceRef
+    DoubleReferenceMarker
+    DestructTypeByValue
+    DestructCopiedHeld
+    TraitNotAType
+    AnyNotTrait
+    AnyNeedsMarker
+    FuncTypeBare
+    FuncDeclBare
+    FuncDeclMismatch
+    AnyNotConverted
+    AnyCopyOutlived
+    AnyUnmet
+    AnyUnmetMethod
+    AnyNotMember
+    AnyMethodScopes
+    AnyMethodObligations
+    AnyNoMethod
+    AnyNoCopy
+    AnyOpenInspected
+    AnyNotMemberCase
+    AnyCaseTwice
+    AnyCaseAlone
+    AnyCaseNotAny
+    AnySpawned
+    AnySpawnedResult
+    NoteAnyMethod
+    EnumCaseInUse
+    DeclaredTwice
+    FieldHasParamName
+    TraitMethodGeneric
+    CtorFieldNoValue
+    DefaultNotTrailing
+    TypeVarNamesType
+    TypeVarNotInferable
+    TypeVarNotErrorSet
+    ErrVarNotType
+    ErrSetArgUnwanted
+    ExternType
+    ExportMethod
+    ExportGeneric
+    ExportName
+    ExportType
+    ExportResult
+    ExportObligation
+    CallbackNotExport
+    ExternResult
+    ForeignBuilt
+    ForeignByValue
+    LinkName
+    InterpLink
+    VarArgType
+    VarArgWide
+    LinkOnOlangImport
+    CHeaderNotFound
+    CFileNotFound
+    CImportFailed
+    CNoForm
+    CPointerReadOnly
+    ConstToMutRef
+    CPointerTemporary
+    MutOnValueType
+    MutOnValueParam
+    MutOnValueField
+    PrimCtorNotPrimitive
+    PrimCtorParam
+    TypeDefinedThroughItself
+    ErrorWordInUse
+    ExtendsNotBase
+    GenericNotStruct
+    DeclaredOverAggregate
+    NotTheOperator
+    ArrayOneIndex
+    OperatorResult
+    CommutesNotHere
+    CommutesSameType
+    CommutesClash
+    SetatResult
+    MethodCannotFail
+    LessNotBool
+    LenShape
+    EqShape
+    CopyShape
+    CopyOnWhat
+    CopyDoesMore
+    ImmutWrite
+    TextWrite
+    ImmutMutRef
+    TextMutRef
+    ImmutCopy
+    UniqueImmut
+    UniqueImmutPart
+    UniqueCopy
+    UniqueByValue
+    UniqueAfter
+    UniqueFill
+    PackedNotStruct
+    PackedField
+    PackedParams
+    PackedDestruct
+    PackedLend
+    PackedByValueC
+    UniqueLentHere
+    UniqueAlias
+    DropCycle
+    DropRegistered
+    DropTempRegistered
+    UniqueKind
+    UniqueNeedsCopy
+    DestructNotUnique
+    WeakNotNullable
+    WeakPlace
+    WeakTarget
+    WeakFresh
+    WeakUnheld
+    GenByValue
+    GenByValueAway
+    NoteGenSlot
+    GenUnique
+    GenCopyDestruct
+    StrShape
+    EqStrWrites
+    ProtocolBothSpellings
+    ProtocolPrivate
+    OverrideSignature
+    DefaultOutsideTrait
+    MethodOnForeignType
+    DefaultShadowsRequired
+    MethodClashesInherited
+    MethodOverlap
+    MethodClashesSupplied
+    MethodOnBuiltinType
+    BuilderOwnerElsewhere
+    BuilderOwnerKind
+    BuilderResult
+    BuilderTakesOwner
+    BuilderNameTaken
+    BuilderTwice
+    BuilderExpected
+    BuilderOwnerBare
+    NoBuilder
+    BuilderPrivate
+    BuilderNotValue
+    AnyOfBuilderTrait
+    FromBitsWidth
+    ConstraintUnmetBuilder
+    MethodInUse
+    UnderscoreDeclared
+    LocalUnused
+    LocalUnusedBare
+    ImportUnused
+    ShadowsGlobal
+    ShadowsFunction
+    ShadowsBuildConst
+    PreludeConstRedeclared
+    ShadowsType
+    TypeHasNoConstructor
+    MethodCalledAsFunction
+    NotInModule
+    VarIsPrivate
+    ShiftUnadapted
+    ScopeMayNotOutlive
+    OwnCannotOutlive
+    ArraySizeMismatch
+    ArrayRunTimeIntoFixed
+    LiteralRange
+    ElemRefShape
+    TypeMismatch
+    NumberDoesNotFlow
+    LiteralExprRange
+    LiteralNeedsCtor
+    ReadOnlyToWritable
+    ReadOnlyCopyDecl
+    ReadOnlyCopyGlobal
+    ReadOnlyCopyStored
+    ReadOnlyCopyReturned
+    ReadOnlyRefKept
+    ReadOnlyCopyArg
+    ReadOnlyCopyLent
+    ReadOnlyCopyWrite
+    ReadOnlyFuncValue
+    NoteGroupFunctionType
+    NoteReadOnlyCopy
+    NoteReadOnlyCopyOf
+    TypeNotInferable
+    DeclFromNull
+    BuildIntoUnknownScope
+    BuildIntoCapture
+    StoreIntoUnknownScope
+    TagUnknownScope
+    BuildThroughUnknownScope
+    ReturnTypeMismatch
+    ArgCount
+    ArgCountRange
+    SpreadCount
+    ScopeArgsDisagree
+    BorrowSplitScopes
+    SliceSplitValue
+    BorrowSplitValue
+    BorrowSplitParam
+    FieldBindingUnknown
+    ScopeObligationUnmet
+    ReferenceNarrowed
+    ReferenceNarrowedLocal
+    RefTypevarNotAggregate
+    TypeArgsNotInferable
+    NullableMeetsNoTrait
+    LengthNotInferable
+    CtorTypeArgsNotInferable
+    CtorVarsNotInferable
+    CtorFieldNamesVar
+    CtorGenericInferredField
+    CtorVarOfGeneric
+    DefaultArgNoDefault
+    NamedArgUnknown
+    NamedArgUnknownMeant
+    NamedArgRequired
+    NamedArgTwice
+    NamedArgAlsoPositional
+    PositionalAfterNamed
+    NamedArgThroughValue
+    NamedArgNotHere
+    TestTargetUnknown
+    TestTargetUnknownMeant
+    TestTargetElsewhere
+    TestTargetTwice
+    AtomicNotPlace
+    AtomicNotWritable
+    VacateNotPlace
+    ConversionRepresentation
+    ConvertNotNumber
+    NotIndexable
+    IndexNotInt
+    IndexOutOfRange
+    NotSliceable
+    SliceBoundNotInt
+    NoSuchMember
+    MemberIsPrivate
+    NotAssignable
+    AssignIntoTried
+    IncdecNotNumber
+    CaptureReadOnly
+    ReadOnlyRefWrite
+    WriteIntoCallValue
+    Immutable
+    StrStoresInReceiver
+    StrReceiverWritable
+    NoteHere
+    NoteFuncTypeScopes
+    NoteVecGrewHere
+    NoteVecGrowsHere
+    NoteVecGrowsInside
+    NoteVecTaskHolds
+    NoteStrBuildsHere
+    NoteStrKeepCopies
+    NoteInLibrary
+    NoteZeroByReference
+    NoteZeroReferenceHasOne
+    NoteUnassignedDecl
+    NoteUnassignedNoElse
+    NoteUnassignedBranch
+    NoteUnassignedLoop
+    NoteUnassignedArm
+    NoteUnassignedClause
+    NoteReadUnassigned
+    NoteOtherSignature
+    NotePrivateSpelling
+    NoteProtocolSpelling
+    NoteDeclaredHere
+    NoteDeclareWritable
+    NoteLiteralLocal
+    NoteLiteralRange
+    NoteLiteralRangeExpr
+    StrOfNothing
+    IntLiteralTooLarge
+    NegLiteralTooLarge
+    OperandNotBool
+    OperandNotInt
+    OperandNotNumber
+    TupleNotAValue
+    LiteralExprNoValue
+    LiteralNoOwnType
+    LiteralDoesNotMeet
+    ShiftOutOfRange
+    DivideByZero
+    NumbersDoNotMeet
+    OperandsDiffer
+    FloatLiteralRange
+    NoSuchErrorWord
+    NoSuchCase
+    NoSuchCaseMeant
+    ScopeArgCount
+    MatmulUndeclared
+    NotExtendedOp
+    CondNotBoolType
+    CondBranchTypes
+    MembershipNoMethod
+    MembershipNotBool
+    MembershipNeedsTry
+    IncdecInExpression
+    NotCallable
+    JoinPieceCalled
+    UnhandledFallibleCall
+    OperatorCallFails
+    PowNone
+    MatchLengthUncovered
+    RestNotHere
+    RestTwice
+    RestNoSlice
+    ElemsNotSeq
+    ElemsType
+    StructPatNoField
+    StructPatPositional
+    StructPatType
+    PatFieldTwice
+    PatFieldBothWays
+    PatPositionAfterName
+    PayloadNoField
+    WholeCaseNamed
+    VariadicNotLast
+    VariadicHere
+    VariadicDefault
+    SpreadNotHere
+    SpreadAlone
+    VariadicArgCount
+    IsOnlyNull
+    IsCaseWritten
+    IsNullOfValue
+    IsNullOfNull
+    CaseTestNotEnum
+    CaseTestOther
+    NullCompared
+    FieldOfEnum
+    CallDoesNothing
+    NarrowedWrite
+    MayBeNull
+    NullToNonNull
+    NoteNullableDecl
+    NeverNull
+    NoZeroNonNull
+    ReadMaybeNull
+    NullToArray
+    ArrayIsNull
+    AsNeedsCase
+    PatternType
+    CaseIsPrivate
+    AsNothing
+    IsAsNotEnum
+    SliceNeedsLen
+    AtUndeclared
+    SetatUndeclared
+    WriteThroughAtNoSetat
+    WriteThroughAtBuilds
+    CondLentWritable
+    WriteThroughAtCall
+    WriteThroughAtOperator
+    CharNoPad
+    StepNotNumber
+    DefaultArgNotAllowed
+    DeferErrorEscapes
+    EmbedPathUnknown
+    CaseTypeArgsNotInferable
+    EmbedPathUndecided
+    EmbedNotRead
+    TryNowhereToGo
+    TryErrorNotDeclared
+    GenErrorNotDeclared
+    UnknownMethod
+    MethodNotInherited
+    AtomicNotInteger
+    DefaultCount
+    DefaultScope
+    CatchAfterCatchAll
+    CatchUnreachable
+    DefaultInStatement
+    DefaultDead
+    CatchMustLeave
+    ClauseLastValue
+    DefaultNoValue
+    DefaultNeedsCatch
+    TryNothingFails
+    BangNothingFails
+    NestedArrayLiteral
+    ErrorAsResult
+    ComprehensionReferences
+    LiteralNoFromIter
+    LiteralUnique
+    LiteralNotMade
+    FromIterShape
+    LiteralEntries
+    ComprWalkFails
+    NotAnEnum
+    TakesNoArgs
+    MethodAmbiguous
+    DefaultAmbiguous
+    MethodIsPrivate
+    GenericNotAValue
+    LengthsNotAValue
+    ArrayLengthNotInt
+    AssignListCount
+    DestructNotName
+    DestructOneValue
+    DestructCount
+    StoredRefOutlived
+    PayloadScopesDisagree
+    ElemNotInArrayScope
+    ElemOutlived
+    PayloadOutlived
+    InstanceOutlivesReferent
+    InstanceOutlivesArg
+    GlobalHoldsShorter
+    ValueRefsOutlived
+    MutOnLocal
+    MutOnInferredLocal
+    NotAStatement
+    JoinNextLine
+    ConditionConstant
+    RangeNotInt
+    RangeStep
+    ComprNeedsTry
+    ForInNeedsTry
+    ForInTryNothing
+    ForInClauseExit
+    ForInNameExists
+    NotIterable
+    AltBindsOtherNames
+    BoundTwice
+    AltBindingType
+    CaseValueType
+    PatternArity
+    ValueCaseBlock
+    LineStartsWithOperator
+    GuardNotBool
+    UnknownTypeVar
+    TypeMatchGuard
+    TypeMatchUncovered
+    MatchValueNone
+    MatchValueTypes
+    MatchNotExhaustive
+    MatchValueUncovered
+    MatchValueOne
+    WildcardNotAlone
+    CaseAfterWildcard
+    CaseUnknownName
+    CaseIsSubject
+    ReturnOwnStorage
+    ViewKept
+    ViewReturned
+    ViewKeptCopy
+    ReadAfterScope
+    VersionsDiffer
+    PartKept
+    DeferReturns
+    YieldOutside
+    YieldInLambda
+    YieldInDefer
+    YieldInJoin
+    GenReturnValue
+    GenErrors
+    YieldOwnStorage
+    GenYieldsBorrow
+    GenYieldShorter
+    ReturnCount
+    ReturnInCtor
+    ReturnInTest
+    ReturnInNoreturn
+    NoreturnFallsOff
+    NoreturnErrors
+    NoreturnHere
+    DeclFromNoreturn
+    ReturnValueInVoid
+    ReturnNeedsValue
+    ErrorOutsideFunction
+    ErrorWordTooFar
+    ErrorWordNotInSet
+    CatchWordNotProduced
+    ErrorWordIsPrivate
+    ErrorUndeclared
+    JoinWithoutSpawn
+    SpawnLambdaParams
+    SpawnInDefer
+    SpawnOutsideJoin
+    SpawnAtElement
+    SpawnNotCall
+    SpawnFallible
+    SpawnTryInfallible
+    TaskClauseReturns
+    TaskClauseLoopJump
+    TaskClauseError
+    TaskClauseNeedsDefault
+    TaskDefaultInStatement
+    JoinNotTried
+    JoinCannotFail
+    JoinCatchNeedsTry
+    JoinClauseMustLeave
+    SpawnArgTooShort
+    SpawnArgHoldsShort
+    SpawnCaptureTooShort
+    SpawnFuncTooShort
+    SpawnResultVoid
+    SpawnResultType
+    SpawnResultAsRef
+    SpawnResultTooShort
+    SpawnResultsDisagree
+    FuncValueObligations
+    LambdaValueObligations
+    LambdaValueRelates
+    CallValueObligations
+    CallValueErrors
+    ValueBeyondType
+    LambdaKeepsOuter
+    FuncTypeBeyond
+    EffectBeyond
+    NoteEffect
+    PromiseMisplaced
+    PromiseNoParam
+    PromiseTwice
+    PromiseReturnsNoreturn
+    PromiseBorrowsNothing
+    PromiseBorrowsValue
+    PromiseBorrowsBoth
+    PromiseKeepsValue
+    PromiseKeepsSelf
+    PromiseKeepsInValue
+    PromiseKeepsPath
+    PromiseKeepsField
+    TypeArgsSpaced
+    LambdaResultUninferable
+    LambdaArity
+    LambdaSignature
+    LambdaParamUntyped
+    AlreadyDeclared
+    MissingReturn
+    BreakOutsideLoop
+    DeferLoopJump
+    CatchNotProduced
+    TryCatchOnSlice
+    EmptyDestructor
+    LiteralCtorFails
+    ZeroValueShared
+    NoZeroValue
+    ReadUnassigned
+    FieldUnassigned
+    TopSetPlace
+    TopSetTarget
+    TopSetHasValue
+    TopSetTwice
+    TopSetMissing
+    TopSetNoElse
+    TopSetCondReads
+    DefaultNotComputable
+    AssertFalse
+    AssertFalseMessage
+    AssertFalseWritten
+    AssertMsgReturns
+    AssertMsgError
+    AssertMsgLoopJump
+    AssertMessageNotText
+    AssertAborts
+    GlobalAborts
+    VecViewStale
+    VecHiddenViewStale
+    VecViewGivenGrowing
+    VecGrowsUnderTask
+    AssertStale
+    GlobalStale
+    CondTooDeep
+    MainSignature
+    NoteObligationOrigin
+    NoteMakeWhere
+    NoteRefillKept
+    NoteDeclareWhere
+    NoteBindingWhere
+    NoteParamCopy
+    NoteAssignedHere
+    NoteLoopCopyLent
+    NoteViewRefusedBy
+    NoteHeldIndexWhere
+    NoteCondValue
+    NoteSliceOfTemporary
+    NoteTextCopyWhere
+    NoteLoopCopy
+    CondUndecidable
+    CondUnseen
+    CondUnknownBuild
+    CondDecidedNotBool
+    GlobalReadsItself
+    GlobalsCycle
+    ModuleIdentityClash
+    NoLimit
+    BecomeOutside
+    BecomeInside
+    BecomeTry
+    BecomeNotCall
+    BecomeSignature
+    BecomeMemory
+    BecomeErrors
+    BecomeDestructor
+    BecomeBorrows
+    BecomeHeldParam
+    TopAssertFalse
+    TopAssertFalseMessage
+    TopAssertUndecidable
+    PlaceMember
+    BitOpNotInteger
+    BitOpCount
+    RawType
+    RawNotLiteral
+    RawNoFit
+    RawRepeated
+    RawWithoutType
+    RawAnonymous
+    NoRawValues
+    FromPayload
+    FromCaseName
+    ContractFalse
+    ContractNeedsArgumentError
+    GenContractNeedsArgumentError
+    ConversionDoesNotFit
+    NoteContractCondition
+    NotAnErrorType
+    ErrorSetHoldsItself
+    ErrorWordOfMember
+    CatchNameUnused
+    CatchLoneUnused
+    CatchNameInTask
+    CaughtAssigned
+    ErrComparedNotError
+    ErrValueNoOp
+    ErrMatchNotError
+    ErrNeverNull
+    ErrValueNotHeld
+    CaughtComparedToCaught
+    CaughtCompareWhat
+    CaughtNeverIs
+    TryOnCaught
+    ReraiseUndeclared
+    ReraiseWordNotInSet
+    RaiseNotCaught
+    RaiseNearError
+    PayloadHoldsRef
+    PayloadWordBare
+    PlainWordCalled
+    PayloadFieldUnnarrowed
+    PayloadArgs
+    RaisedFieldUnnamed
+    RaisedFieldsDiffer
+    ErrorMethodGiven
+    ErrPatternNeedsName
+    ErrPatternBindValue
+    ErrPatternBindAlts
+    FlagAmongResults
+    FlagWithOutParam
+    RaiseNeedsQuestion
+    TryNeedsQuestion
+    ContractNeedsQuestion
+    RaiseWholeType
+    RaisedWordOwnName
+    CaughtMatchBlock
+    CaughtCaseNever
+    CaughtCaseForm
+    CaughtMatchMissing
+    ReflNoMember
+    ReflNoKind
+    ReflNoLength
+    ReflNoLayout
+    ReflNotList
+    ReflListValue
+    ReflIndexNotConst
+    ReflIndexRange
+    ReflFilterUndecided
+    ReflTryList
+    ReflNoDefault
+    ReflOfArgs
+    ReflOfType
+    ReflDescNoMember
+    ReflTypeNotValue
+    ReflCaseOther
+    ReflCaseUnreachable
+    ReflArgCompr
+    ReflNoType
+    ReflMatchSubject
+    AttrPlace
+    AttrPun
+    AttrType
+    AttrTwice
+    AttrNotBuilt
+    AttrWritable
+    ComptimeLocal
+    ComptimeNotBaked
+    ComptimeForTry
+    ComptimeForSource
+    ComptimeForElem
+    ComptimeForUnknown
+    ComptimeForTooMany
+    AttrRead
+    ReflFnList
+    ReflFnCall
+    LaneLengths
+    LaneReferences
+    LaneCompare
+    LaneMaskBool
+    ByteSwapWidth
+    AtomicWidth
+    GenericNeeds
+    NoteGenericNeeds
+    FactOfGeneric
+    FactUndecided
+    FactNoFunction
+    ApiNoSide
+    ApiNoFiles
+    ColumnsNotRecord
+    ColumnNamedLikeMethod
+    ColumnAssigned
+    CapsOneFile
+    ApiUsage
+    ListingUsage
+    ListingNoFunction
+    ListingAlone
+    ListingQuick
+}
+
+# one function each, under the id it is known by
+
+# lane operators (E39)
+fn LaneLengths(a I64, b I64) r.Msg { return r.Msg(Diag.LaneLengths, "E39", "these arrays are of lengths " $a " and " $b " - a lane operation takes arrays of one length") }
+fn LaneReferences() r.Msg { return r.Msg(Diag.LaneReferences, "E39", "lane operators give elements that may not be or hold references - build the array with a loop") }
+fn LaneCompare(op String&, how String&) r.Msg { return r.Msg(Diag.LaneCompare, "E39", $op " does not compare arrays - lane by lane it is '" $how "', an Array<Bool>") }
+fn LaneMaskBool(what String&, ty String&) r.Msg { return r.Msg(Diag.LaneMaskBool, "E39", $what " takes lanes of Bool, found " $ty) }
+
+# integers of any width (T4a)
+fn ByteSwapWidth(ty String&, bits I64) r.Msg { return r.Msg(Diag.ByteSwapWidth, "E37, T4a", $ty " has no 'ByteSwap': its " $bits " bits are no whole number of bytes") }
+fn AtomicWidth(ty String&) r.Msg { return r.Msg(Diag.AtomicWidth, "P9, T4a", "the atomic operations take integers of 8, 16, 32 or 64 bits, and " $ty " is none - hold the value as one of those") }
+
+# compile-time reflection (G32-G38)
+fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty " has no reflected member '" $name "' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align") }
+fn ReflNoKind(ty String&) r.Msg { return r.Msg(Diag.ReflNoKind, "G32", $ty " has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one") }
+fn ReflNoLength(ty String&) r.Msg { return r.Msg(Diag.ReflNoLength, "G32", $ty " has no Length - only an array whose length is known while compiling has one") }
+fn ReflNoLayout(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoLayout, "G32", $ty " has no " $name " - it is not laid out (a trait, an error type, an extern type)") }
+fn ReflNotList(name String&, ty String&, why String&) r.Msg { return r.Msg(Diag.ReflNotList, "G33", $ty " has no " $name " - " $why) }
+fn ReflListValue(list String&) r.Msg { return r.Msg(Diag.ReflListValue, "G33", $list " is a list known while compiling, no value - walk it with 'for', count it with '.Len()', index it with a constant, or make an array of it with a comprehension") }
+fn ReflIndexNotConst() r.Msg { return r.Msg(Diag.ReflIndexNotConst, "G33", "a list known while compiling is indexed by a constant - this index is known only at run time") }
+fn ReflIndexRange(k I64, n I64) r.Msg { return r.Msg(Diag.ReflIndexRange, "G33", $"index " $k " is outside the list, which holds " $n) }
+fn ReflFilterUndecided() r.Msg { return r.Msg(Diag.ReflFilterUndecided, "G33", "a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time") }
+fn ReflTryList() r.Msg { return r.Msg(Diag.ReflTryList, "G33", "a list known while compiling is walked with no call that can fail - write 'for x in ...' without 'try'") }
+fn ReflNoDefault(name String&, ty String&) r.Msg { return r.Msg(Diag.ReflNoDefault, "G34", $"parameter '" $name "' of " $ty " has no default - read 'p.Default' only where 'p.HasDefault' holds") }
+fn ReflOfArgs(n I64) r.Msg { return r.Msg(Diag.ReflOfArgs, "G34", $"'Of' takes one value, found " $n) }
+fn ReflOfType(want String&, have String&) r.Msg { return r.Msg(Diag.ReflOfType, "G34", $"this field is " $want "'s, and the value is " $have) }
+fn ReflDescNoMember(what String&, name String&, have String&) r.Msg { return r.Msg(Diag.ReflDescNoMember, "G34", $"a " $what " has no '" $name "' - its members are " $have) }
+fn ReflTypeNotValue(name String&) r.Msg { return r.Msg(Diag.ReflTypeNotValue, "G38", typeNotValue(name)) }
+
+# G38: a type written where a value goes - a reflected one, or a type's own name - one wording for both
+fn typeNotValue(name String&) String { return $"'" $name "' is a type, not a value - write it where a type goes: a declaration ('x " $name " = ...'), a type argument or a match's subject" }
+fn ReflCaseOther(c String&, ty String&) r.Msg { return r.Msg(Diag.ReflCaseOther, "G34", $"this case is " $c "'s, and the value is " $ty) }
+fn ReflCaseUnreachable() r.Msg { return r.Msg(Diag.ReflCaseUnreachable, "G36", "no type can reach this case - a case before it takes every type it does") }
+fn ReflArgCompr() r.Msg { return r.Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'Array<T>[e for x in c]'") }
+fn ReflNoType(name String&, ty String&, why String&) r.Msg { return r.Msg(Diag.ReflNoType, "G38", $"'" $name "' of " $ty ": " $why) }
+
+# attributes (G39, G40) and the functions reflection reads (G41)
+fn AttrPlace() r.Msg { return r.Msg(Diag.AttrPlace, "G39", "an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one") }
+fn AttrPun(name String&) r.Msg { return r.Msg(Diag.AttrPun, "G39", $"field '" $name "' is a pun of its parameter, and has the parameter's attributes - write the attribute on the parameter") }
+fn AttrType(ty String&) r.Msg { return r.Msg(Diag.AttrType, "G39", $"an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is " $ty) }
+fn AttrTwice(ty String&) r.Msg { return r.Msg(Diag.AttrTwice, "G39", $"a declaration takes one attribute of each type, and this is its second " $ty) }
+fn AttrWritable(ty String&) r.Msg { return r.Msg(Diag.AttrWritable, "G39", $"an attribute's value is read-only data, baked while compiling, and " $ty " holds a 'mut' reference no reader could write through - give its type read-only references ('T&')") }
+fn ComptimeLocal(tok String&) r.Msg { return r.Msg(Diag.ComptimeLocal, "K3", $"a comptime is computed while compiling, and " $tok " is a local or a parameter, which only the running program knows - compute it from constants, globals and type parameters, or drop 'comptime'") }
+fn ComptimeNotBaked(why String&) r.Msg { return r.Msg(Diag.ComptimeNotBaked, "K3", $"a comptime is computed while compiling, and this one cannot be: " $why) }
+fn ComptimeForTry() r.Msg { return r.Msg(Diag.ComptimeForTry, "K3a", "a comptime for's elements are computed while compiling, so nothing of its walk fails at run time - write 'comptime for x in e'") }
+fn ComptimeForSource(ty String&) r.Msg { return r.Msg(Diag.ComptimeForSource, "K3a", $"a comptime for walks a range or an array, found " $ty " - give it an array: 'comptime for x in xs.View()'") }
+fn ComptimeForElem(ty String&) r.Msg { return r.Msg(Diag.ComptimeForElem, "K3a", $"a comptime for's elements are integers, Bool or Char, found " $ty " - walk its positions: 'comptime for i in range xs.Len()'") }
+fn ComptimeForUnknown(why String&) r.Msg { return r.Msg(Diag.ComptimeForUnknown, "K3a", $"a comptime for's elements are computed while compiling, and these cannot be: " $why) }
+fn ComptimeForTooMany(n I64, most I64) r.Msg { return r.Msg(Diag.ComptimeForTooMany, "K3a", $"this comptime for unrolls into " $n " copies, at most " $most " - walk it at run time: drop 'comptime'") }
+fn AttrNotBuilt(why String&) r.Msg { return r.Msg(Diag.AttrNotBuilt, "G39", $"an attribute's value is built while compiling, and this one cannot be: " $why) }
+fn AttrRead(name String&) r.Msg { return r.Msg(Diag.AttrRead, "G40", $"'" $name "' takes the attribute's type and no arguments - '" $name "<json.Key>()'") }
+fn ReflFnList(what String&) r.Msg { return r.Msg(Diag.ReflFnList, "G41", $what " - 'Functions' is read through an import's alias ('handlers.Functions'), 'Methods' through a type") }
+fn ReflFnCall(name String&, want I64, have I64) r.Msg { return r.Msg(Diag.ReflFnCall, "G41", $"'" $name "' is called with " $want " arguments (a method's receiver first), found " $have) }
+fn ReflMatchSubject() r.Msg { return r.Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling - a type variable, or a type a reflected member names") }
+fn Usage() r.Msg { return r.Msg(Diag.Usage, "B1", "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
+fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run") }
+fn ModeOneFile(text String&) r.Msg { return r.Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
+fn ModeNeedsFile(text String&) r.Msg { return r.Msg(Diag.ModeNeedsFile, "B1", $text " needs a file") }
+fn UnknownFlag(text1 String&, text2 String&, hint String&) r.Msg { return r.Msg(Diag.UnknownFlag, "B1", "unknown option '" $text1 "'" $hint " - 'olang help' lists the options of " $text2) }
+fn OptionNotForMode(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.OptionNotForMode, "B1", $text1 " applies to " $text2 ", not to " $text3) }
+fn OptionNeedsValue(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.OptionNeedsValue, "B1", $text1 " needs a value after it: " $text2) }
+fn QuickAlone(text String&) r.Msg { return r.Msg(Diag.QuickAlone, "B2g", "-quick and " $text " each say how much to optimize - give one") }
+fn InterpretBuilds(text String&) r.Msg { return r.Msg(Diag.InterpretBuilds, "B3e", "-interpret builds nothing, and " $text " says how to build - give one") }
+fn FuzzTimeNotNumber(text String&) r.Msg { return r.Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" $text "' is none") }
+fn FuzzTimeAlone() r.Msg { return r.Msg(Diag.FuzzTimeAlone, "B19", "-fuzztime says how long -fuzz runs - give -fuzz NAME with it") }
+fn BenchFuzz() r.Msg { return r.Msg(Diag.BenchFuzz, "B19b", "-bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs - give one") }
+fn FuzzNoTest(word String&) r.Msg { return r.Msg(Diag.FuzzNoTest, "B19", "-fuzz " $word " names no test of this file - give a test's target, its target's type or a word of its description") }
+fn FuzzManyTests(word String&, names String&) r.Msg { return r.Msg(Diag.FuzzManyTests, "B19", "-fuzz " $word " names several tests (" $names ") - give a word that names one") }
+fn NotASource(text String&) r.Msg { return r.Msg(Diag.NotASource, "B1", "'" $text "' is no olang file to run - a file's name ends in .olang") }
+fn ModeFirst(text String&) r.Msg { return r.Msg(Diag.ModeFirst, "B1", "the mode comes first: 'olang " $text "' and then its options") }
+fn HelpOneMode() r.Msg { return r.Msg(Diag.HelpOneMode, "B1", "help takes at most one mode") }
+fn OutputIsDir(text String&) r.Msg { return r.Msg(Diag.OutputIsDir, "B3h", "-output " $text " is a directory - name the file to write") }
+fn OutputNoDir(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.OutputNoDir, "B3h", "-output " $text1 ": there is no directory " $text2) }
+fn OutputCannotWrite() r.Msg { return r.Msg(Diag.OutputCannotWrite, "B3h", "cannot write it") }
+fn CannotRun(text String&) r.Msg { return r.Msg(Diag.CannotRun, "B3g", "the program cannot be run: " $text) }
+fn FormatterMissing(text String&) r.Msg { return r.Msg(Diag.FormatterMissing, "B13", "the formatter's source is not beside this compiler: " $text) }
+fn FormatterBuild(text String&) r.Msg { return r.Msg(Diag.FormatterBuild, "B13", "the formatter could not be built - " $text " says why") }
+fn TargetMissing() r.Msg { return r.Msg(Diag.TargetMissing, "B12", "-target needs a target after it, as '-target x86-64-v3'") }
+fn TargetUnknown(text String&) r.Msg { return r.Msg(Diag.TargetUnknown, "B12", "unknown target '" $text "' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted") }
+fn TargetUnsupported(text String&) r.Msg { return r.Msg(Diag.TargetUnsupported, "B12", "olang does not build for '" $text "' - it builds for x86_64 and aarch64 Linux with the GNU C library") }
+fn TargetNativeForeign(text String&) r.Msg { return r.Msg(Diag.TargetNativeForeign, "B12", "'-target " $text "': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") }
+fn TargetForeignMode(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.TargetForeignMode, "B12a", $text1 " runs on this machine, and '-target " $text2 "' is another architecture or system - build, compile and test build for it") }
+fn TargetNoBackend(text String&) r.Msg { return r.Msg(Diag.TargetNoBackend, "B12a", "this clang cannot build for '" $text "': its back end for that architecture cannot generate the BF16 code the runtime holds - clang 19 or newer can (OLANG_CLANG names the one to use)") }
+fn TargetNoClang(text String&) r.Msg { return r.Msg(Diag.TargetNoClang, "B12", "clang not found on PATH - it is what builds the program, and what says what target '" $text "' is") }
+fn TargetNoEmulator(text String&) r.Msg { return r.Msg(Diag.TargetNoEmulator, "B12a", "nothing here runs " $text " programs - install qemu-user (qemu-" $text "), or name an emulator with OLANG_EMULATOR") }
+fn ExplainNeedsRule() r.Msg { return r.Msg(Diag.ExplainNeedsRule, "B11a", "explain takes one rule, as 'olang explain B1'") }
+fn ExplainNeedsName(file String&) r.Msg { return r.Msg(Diag.ExplainNeedsName, "B11b", $"explain " $file " takes the name of one of its items, as 'olang explain " $file " main'") }
+fn LineBodyOnLine() r.Msg { return r.Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
+fn LineBodyNotSimple(what String&) r.Msg { return r.Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " $what " - write a block, '{ ... }'") }
+fn ModeNoFiles(mode String&) r.Msg { return r.Msg(Diag.ModeNoFiles, "B1", $mode " takes no files - its client names them as it goes") }
+fn DocOneName(file String&) r.Msg { return r.Msg(Diag.DocOneName, "B14", $"doc " $file " takes at most the name of one of its items, as 'olang doc " $file " main'") }
+fn DocNoItem(name String&, file String&) r.Msg { return r.Msg(Diag.DocNoItem, "B14", $"'" $name "' is no item of " $file " - 'olang doc " $file "' lists them") }
+fn ExplainNoItem(name String&, file String&) r.Msg { return r.Msg(Diag.ExplainNoItem, "B11b", $"'" $name "' is no top-level item of " $file) }
+fn NoSpec(text String&) r.Msg { return r.Msg(Diag.NoSpec, "B11a", "no specification at " $text) }
+fn NoRule(text String&) r.Msg { return r.Msg(Diag.NoRule, "B11a", "the specification has no rule " $text) }
+fn DefineMissing() r.Msg { return r.Msg(Diag.DefineMissing, "B10", "-define needs Name=value after it") }
+fn DefineShape(text String&) r.Msg { return r.Msg(Diag.DefineShape, "B10", "-define takes Name=value, found '" $text "'") }
+fn DefineNotName(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineNotName, "B10", "-define " $text1 "=" $text2 ": the name is not an identifier") }
+fn DefineTwice(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineTwice, "B10", "-define " $text1 "=" $text2 ": defined twice") }
+fn DefineBadNumber(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineBadNumber, "B10", "-define " $text1 "=" $text2 ": not a number - '0x' and '0b' take digits of their own base") }
+fn DefineIntRange(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineIntRange, "B10", "-define " $text1 "=" $text2 ": beyond 64 bits") }
+fn DefineNegRange(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineNegRange, "B10", "-define " $text1 "=" $text2 ": below I64's minimum") }
+fn DefineFloatRange(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineFloatRange, "B10", "-define " $text1 "=" $text2 ": beyond F64's range") }
+fn DefineBuiltin(text String&) r.Msg { return r.Msg(Diag.DefineBuiltin, "B10a", "-define cannot redefine the built-in constant " $text) }
+fn CannotOpen() r.Msg { return r.Msg(Diag.CannotOpen, "", "cannot open this file") }
+fn NotRegular() r.Msg { return r.Msg(Diag.NotRegular, "", "not a regular file") }
+fn IsDirectory() r.Msg { return r.Msg(Diag.IsDirectory, "M1", "a directory - a module is one .olang file") }
+fn NoMain() r.Msg { return r.Msg(Diag.NoMain, "B4", "no main function - a program starts at 'fn main() { }'") }
+fn NoClang(text String&) r.Msg { return r.Msg(Diag.NoClang, "", "clang not found on PATH - install clang-20 (the IR is in " $text ")") }
+fn ClangFailed(text String&) r.Msg { return r.Msg(Diag.ClangFailed, "", "clang could not compile " $text) }
+fn LinkFailed(text String&) r.Msg { return r.Msg(Diag.LinkFailed, "", "linking " $text " failed") }
+fn UnknownChar(ch Char) r.Msg { return r.Msg(Diag.UnknownChar, "L16", "unexpected character '" $Esc(ch) "'") }
+fn CommaEndsLine() r.Msg { return r.Msg(Diag.CommaEndsLine, "L18a", "a comma never ends a line - items on different lines are separated by the line break; remove it") }
+fn Semicolon() r.Msg { return r.Msg(Diag.Semicolon, "L18", "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") }
+fn NonAscii(ch Char) r.Msg { return r.Msg(Diag.NonAscii, "L1", "non-ASCII byte '" $Esc(ch) "' - olang source is ASCII") }
+fn CarriageReturn() r.Msg { return r.Msg(Diag.CarriageReturn, "L3", "carriage return - save the file with LF line endings") }
+fn NulByte() r.Msg { return r.Msg(Diag.NulByte, "L1", "NUL byte in the source - is this a text file?") }
+fn UnclosedComment() r.Msg { return r.Msg(Diag.UnclosedComment, "L4a", "unterminated block comment - '##' closes it") }
+fn UnclosedString() r.Msg { return r.Msg(Diag.UnclosedString, "L14", "unterminated string literal") }
+fn StringNewline() r.Msg { return r.Msg(Diag.StringNewline, "L14", "string literal not closed on its line - write \\n for a newline") }
+fn UnclosedChar() r.Msg { return r.Msg(Diag.UnclosedChar, "L13", "unterminated character literal") }
+fn CharNewline() r.Msg { return r.Msg(Diag.CharNewline, "L13", "character literal not closed on its line") }
+fn EmptyChar() r.Msg { return r.Msg(Diag.EmptyChar, "L13", "empty character literal") }
+fn LongChar() r.Msg { return r.Msg(Diag.LongChar, "L13", "character literal holds more than one character - text is written in \"\"") }
+fn BadEscape(ch Char) r.Msg { return r.Msg(Diag.BadEscape, "L15", "unknown escape '\\" $Esc(ch) "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\"") }
+fn HexNoDigits() r.Msg { return r.Msg(Diag.HexNoDigits, "L10a", "'0x' needs hexadecimal digits") }
+fn BinNoDigits() r.Msg { return r.Msg(Diag.BinNoDigits, "L10c", "'0b' needs binary digits") }
+fn HexDigit(ch Char) r.Msg { return r.Msg(Diag.HexDigit, "L10a", "'" $Esc(ch) "' is not a hexadecimal digit") }
+fn BinDigit(ch Char) r.Msg { return r.Msg(Diag.BinDigit, "L10c", "'" $Esc(ch) "' is not a binary digit") }
+fn DigitSeparator() r.Msg { return r.Msg(Diag.DigitSeparator, "L10b", "'_' in a number must stand between two digits") }
+fn PointNoDigit() r.Msg { return r.Msg(Diag.PointNoDigit, "L12", "a decimal point needs a digit after it") }
+fn TwoPoints() r.Msg { return r.Msg(Diag.TwoPoints, "L12", "a number has at most one decimal point") }
+fn Expected(text String&, tok String&) r.Msg { return r.Msg(Diag.Expected, "", "expected " $text ", found " $tok) }
+fn BlockNotClosed(n I64, tok String&) r.Msg { return r.Msg(Diag.BlockNotClosed, "", "the block opened on line " $n " has no '}' - found " $tok) }
+fn Nesting(n I64) r.Msg { return r.Msg(Diag.Nesting, "L21", "nested more than " $n " levels deep - split it into locals or functions") }
+fn KeywordAsName(tok String&) r.Msg { return r.Msg(Diag.KeywordAsName, "L9", $tok " is a keyword, not a name - choose another") }
+fn KeywordFieldRead(tok String&) r.Msg { return r.Msg(Diag.KeywordFieldRead, "L9a", $tok " is a keyword, not a name - a field named by one is reached only after '.', never by the name alone") }
+fn DestructInBody() r.Msg { return r.Msg(Diag.DestructInBody, "C7", "'destruct' follows the constructor's body - close the body first: 'type T unique struct(...) { ... } destruct { ... }'") }
+fn JoinPiece(text String&) r.Msg { return r.Msg(Diag.JoinPiece, "E11b", "a join piece is a text literal or a '$' rendering - write '$" $text "'") }
+fn NeedlessGroup() r.Msg { return r.Msg(Diag.NeedlessGroup, "L18c", "parentheses group only a function type holding a comma of its own, as an item of a list - write this without them") }
+fn TrailingComma(tok String&) r.Msg { return r.Msg(Diag.TrailingComma, "L18a", "a comma before " $tok " separates nothing - remove it") }
+fn VarListCount(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.VarListCount, "D12b", $n1 " names need as many values, found " $n2) }
+fn ErrorAfterQuestion() r.Msg { return r.Msg(Diag.ErrorAfterQuestion, "R1a", "'?' alone is what the body can fail with - write '?', or name the types: '? io.Error'") }
+fn ValueAfterEq(text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.ValueAfterEq, "D12", "a declaration's value follows '=' - write '" $text1 " = " $text2 "', or '" $text3 " := " $text4 "'") }
+fn CondName(tok String&) r.Msg { return r.Msg(Diag.CondName, "B9a", $tok " is not a build constant or an immutable global of this module") }
+fn CondMutable(tok String&) r.Msg { return r.Msg(Diag.CondMutable, "B9a", $tok " is mutable, so a top-level condition cannot read it") }
+fn CondGlobalInit(tok String&) r.Msg { return r.Msg(Diag.CondGlobalInit, "B9a", $tok " is not computed from literals and build constants alone") }
+fn CondCycle(tok String&) r.Msg { return r.Msg(Diag.CondCycle, "B9a", $tok " is defined in terms of itself") }
+fn CondTypes(tok String&) r.Msg { return r.Msg(Diag.CondTypes, "B9", $tok " cannot combine these values") }
+fn CondNoMeet(tok String&) r.Msg { return r.Msg(Diag.CondNoMeet, "T6b", $tok ": these numbers' types do not meet - convert one, as I64(n)") }
+fn CondNotBool(tok String&) r.Msg { return r.Msg(Diag.CondNotBool, "B9", "the condition beginning " $tok " is not a Bool") }
+fn ImportRemoteBadName() r.Msg { return r.Msg(Diag.ImportRemoteBadName, "M23a", "a remote import's host, owner, repository and ref may hold only letters, digits, '.', '_' and '-'") }
+fn ImportLockNotACommit(text String&) r.Msg { return r.Msg(Diag.ImportLockNotACommit, "M23b", "olang.lock names no commit for " $text " - delete its line, or build with -update") }
+fn ImportFetchFailed(text String&) r.Msg { return r.Msg(Diag.ImportFetchFailed, "M23a", "could not fetch " $text " with git - check the path and the connection") }
+fn ImportLockedFetchFailed(text String&) r.Msg { return r.Msg(Diag.ImportLockedFetchFailed, "M23b, M23c", "could not fetch the commit olang.lock names for " $text " - delete its line, or build with -update") }
+fn ImportPathTooLong() r.Msg { return r.Msg(Diag.ImportPathTooLong, "M23", "this import path is too long to name a file") }
+fn ImportFileNotFound(text String&) r.Msg { return r.Msg(Diag.ImportFileNotFound, "M23", "no .olang file at " $text) }
+fn ImportHasExtension() r.Msg { return r.Msg(Diag.ImportHasExtension, "M23", "an import names its file without '.olang'") }
+fn ImportLeavesRoot(text String&) r.Msg { return r.Msg(Diag.ImportLeavesRoot, "M23", "this relative import leaves " $text " - name a module outside it by its own path") }
+fn ImportRemoteNeedsFile() r.Msg { return r.Msg(Diag.ImportRemoteNeedsFile, "M23", "a remote import names a file in the repository: host/owner/repo[@ref]/path") }
+fn ImportAliasInvalid(text String&) r.Msg { return r.Msg(Diag.ImportAliasInvalid, "M4", "'" $text "' is no identifier, so it cannot be this import's alias - write one: import Name \"...\"") }
+fn ImportAliasConflict(text String&) r.Msg { return r.Msg(Diag.ImportAliasConflict, "M5", "another import of this module is already named '" $text "' - give one an alias of its own") }
+fn UnknownImport(tok String&, hint String&) r.Msg { return r.Msg(Diag.UnknownImport, "M10", $tok " is no import here" $hint) }
+fn UnknownImportStd(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownImportStd, "M10", $tok " is no import here - std has it: 'import \"std/" $text "\"'") }
+fn ImportIsPrivate(tok String&) r.Msg { return r.Msg(Diag.ImportIsPrivate, "M14", "import " $tok " is private to its module - only a capitalized alias is re-exported") }
+fn ReexportCycle(tok String&) r.Msg { return r.Msg(Diag.ReexportCycle, "M17", "re-exporting " $tok " reaches this module again") }
+fn ImportReachedTwice(tok String&) r.Msg { return r.Msg(Diag.ImportReachedTwice, "M16", $tok " reaches a file another import of this module already reaches") }
+fn NameClashesWithImport(tok String&) r.Msg { return r.Msg(Diag.NameClashesWithImport, "M20", $tok " is an import's alias in this module - rename one of them") }
+fn UnknownType(tok String&) r.Msg { return r.Msg(Diag.UnknownType, "", "unknown type " $tok) }
+fn UnknownTypeMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownTypeMeant, "", "unknown type " $tok " - did you mean '" $text "'?") }
+fn UnknownNumberType(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNumberType, "T4", "unknown type " $tok " - the numbers are named by kind and width: did you mean '" $text "'?") }
+fn UnknownName(tok String&) r.Msg { return r.Msg(Diag.UnknownName, "", "unknown name " $tok) }
+fn UnknownNameMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNameMeant, "", "unknown name " $tok " - did you mean '" $text "'?") }
+fn TypedHole(ty String&, fits String&) r.Msg { return r.Msg(Diag.TypedHole, "E41", "'_' holds the place of a value of type " $ty $(" - nothing in scope has that type" if fits.Len() == 0 else " - in scope: " $fits)) }
+fn TypedHoleUntyped() r.Msg { return r.Msg(Diag.TypedHoleUntyped, "E41", "'_' holds the place of a value, and nothing here says its type") }
+fn TypeNotAValue(name String&) r.Msg { return r.Msg(Diag.TypeNotAValue, "G38", typeNotValue(name)) }
+fn UnknownFunction(tok String&) r.Msg { return r.Msg(Diag.UnknownFunction, "", "unknown function or type " $tok) }
+fn UnknownFunctionMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownFunctionMeant, "", "unknown function or type " $tok " - did you mean '" $text "'?") }
+fn UnknownErrorType(tok String&, hint String&) r.Msg { return r.Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok $hint) }
+
+# ---- the error a clause took (R11b, R3a) ----
+
+fn CatchNameUnused(tok String&) r.Msg { return r.Msg(Diag.CatchNameUnused, "R11b", $tok " names the error this clause took, and nothing uses it - leave the name off") }
+fn CatchLoneUnused(tok String&, hint String&) r.Msg { return r.Msg(Diag.CatchLoneUnused, "R11b", $tok " names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone" $hint) }
+fn CatchNameInTask(tok String&) r.Msg { return r.Msg(Diag.CatchNameInTask, "R11b", "a spawned call's clause runs on the task's thread and names no error - leave " $tok " off, or catch it where the join fails") }
+fn CaughtAssigned(tok String&, text String&) r.Msg { return r.Msg(Diag.CaughtAssigned, "R11b", $tok " names the error this clause took and is never assigned - hold a value that changes in a local of its own ('x := " $text "')") }
+fn CaughtComparedToCaught() r.Msg { return r.Msg(Diag.CaughtComparedToCaught, "T20", "two error types are never compared - compare an error value with each ('e == T')") }
+fn CaughtCompareWhat(tok String&) r.Msg { return r.Msg(Diag.CaughtCompareWhat, "T20", $tok " is compared with an error word, an error type, a named set or another error value - 'e == T.WORD', 'e == T'") }
+fn ErrComparedNotError(text String&, ty String&, item String&) r.Msg { return r.Msg(Diag.ErrComparedNotError, "T20", "'" $text "' is " $ty ", not an error value - only an error value is '" $item "'") }
+fn ErrValueNoOp(tok String&, ty String&) r.Msg { return r.Msg(Diag.ErrValueNoOp, "T20", $tok " on " $ty ": an error value is no number - it is compared with '==' and '!=', and rendered with '$'") }
+fn ErrMatchNotError(text String&, ty String&) r.Msg { return r.Msg(Diag.ErrMatchNotError, "T20", "the cases name errors, and '" $text "' is " $ty ", not an error value") }
+fn ErrNeverNull(tok String&) r.Msg { return r.Msg(Diag.ErrNeverNull, "T20", $tok " holds an error here, never null - a caught error, a word written or a value a test says is not null") }
+fn ErrValueNotHeld(ty1 String&, ty2 String&, text String&) r.Msg { return r.Msg(Diag.ErrValueNotHeld, "T20", "expected " $ty1 ", found " $ty2 ", which can be " $text " - test it first ('if e == T'), or hold it in a set that has it") }
+fn CaughtNeverIs(tok String&, text1 String&, text2 String&) r.Msg { return r.Msg(Diag.CaughtNeverIs, "R11b", $tok " is never " $text1 " here - it is " $text2) }
+fn TryOnCaught(text String&) r.Msg { return r.Msg(Diag.TryOnCaught, "R11b", "'" $text "' is an error already caught, not a call - raise it again with 'error " $text "'") }
+fn ReraiseUndeclared(ty String&) r.Msg { return r.Msg(Diag.ReraiseUndeclared, "R3a", "the error raised again can be " $ty ", which this function does not declare - add it after '?', or test the error first") }
+fn ReraiseWordNotInSet(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ReraiseWordNotInSet, "R3a", "the error raised again can be " $ty1 ", and this function's '?' names " $ty2 " - add it after '?', or test the error first") }
+fn RaiseNotCaught(tok String&) r.Msg { return r.Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " $tok " is neither") }
+fn PayloadHoldsRef(field String&, ty String&, what String&) r.Msg { return r.Msg(Diag.PayloadHoldsRef, "T19b", "payload field " $field " of type " $ty " holds " $what " - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data") }
+fn PayloadWordBare(word String&, fields String&) r.Msg { return r.Msg(Diag.PayloadWordBare, "T19b", $word " carries " $fields " - give them: '" $word "(" $fields ")'") }
+fn PlainWordCalled(word String&) r.Msg { return r.Msg(Diag.PlainWordCalled, "T19b", $word " carries nothing - write it without '()'") }
+fn PayloadFieldUnnarrowed(name String&, field String&) r.Msg { return r.Msg(Diag.PayloadFieldUnnarrowed, "T19b", $name " may hold an error that has no field " $field " - test which it holds first ('if " $name " == T.Word')") }
+fn PayloadArgs(word String&, want I64, got I64) r.Msg { return r.Msg(Diag.PayloadArgs, "T19b", $word " carries " $want " field" $("" if want == 1 else "s") ", " $got " given") }
+fn RaisedFieldUnnamed() r.Msg { return r.Msg(Diag.RaisedFieldUnnamed, "R3b, T19b", "a field an error raised by name carries is named by the raise: a bare name, or 'name = value'") }
+fn ErrPatternNeedsName(what String&) r.Msg { return r.Msg(Diag.ErrPatternNeedsName, "T19b, S13b", "a payload pattern reads the error a local or a catch clause's name holds, and " $what " is no name - write 'e := ...' first and match 'e'") }
+fn ErrPatternBindValue() r.Msg { return r.Msg(Diag.ErrPatternBindValue, "T19b, S13b", "a payload pattern binds names only in a match statement - in a value match read the field after the test ('case W: e.field')") }
+fn ErrPatternBindAlts() r.Msg { return r.Msg(Diag.ErrPatternBindAlts, "T19b, S13b", "a payload pattern binding a name stands alone in its case - give each alternative a case of its own") }
+fn ErrorMethodGiven(ty String&, name String&) r.Msg { return r.Msg(Diag.ErrorMethodGiven, "T20", "an error value's " $name " is the language's (T20) - " $ty " cannot declare one; choose another name") }
+fn RaisedFieldsDiffer(name String&, first String&) r.Msg { return r.Msg(Diag.RaisedFieldsDiffer, "R3b, T19b", $name " carries (" $first "), as its first raise names them - give the same fields in that order") }
+fn RaiseNearError(tok String&, near String&) r.Msg { return r.Msg(Diag.RaiseNearError, "R3b", "no error of this module is named " $tok " - did you mean " $near "? To raise a new error of that name, name it after this function's '?'") }
+fn RaiseNeedsQuestion(ty String&) r.Msg { return r.Msg(Diag.RaiseNeedsQuestion, "R1d", "this function raises " $ty " but writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or '? " $ty "'") }
+fn TryNeedsQuestion(ty String&) r.Msg { return r.Msg(Diag.TryNeedsQuestion, "R1d", $ty " can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it") }
+fn ContractNeedsQuestion(name String&) r.Msg { return r.Msg(Diag.ContractNeedsQuestion, "R1d, D17", $name " has conditions, so a call fails with ArgumentError where one is false, and it writes no '?' - write '?' after its result, or '? ArgumentError'") }
+fn FlagAmongResults() r.Msg { return r.Msg(Diag.FlagAmongResults, "R23", "a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)") }
+fn FlagWithOutParam(tok String&) r.Msg { return r.Msg(Diag.FlagWithOutParam, "R23a", "a function giving a Bool that writes through " $tok " gives a flag beside a value - give the value as the result and fail with '? E' instead") }
+fn RaiseWholeType(tok String&) r.Msg { return r.Msg(Diag.RaiseWholeType, "R3", $tok " is an error type of words - raise one of them, 'error " $(tok[1:tok.Len() - 1]) ".Word'") }
+fn RaisedWordOwnName(tok String&) r.Msg { return r.Msg(Diag.RaisedWordOwnName, "R3b", "an error of one word named as its type is declared by raising it - write 'error " $(tok[1:tok.Len() - 1]) "' where it is raised, with no declaration") }
+fn CaughtMatchBlock() r.Msg { return r.Msg(Diag.CaughtMatchBlock, "R11b", "a match on an error value used as a value gives a value in every clause, 'case P: v' - a clause that leaves is written in a match statement") }
+fn CaughtCaseNever(tok String&) r.Msg { return r.Msg(Diag.CaughtCaseNever, "R11b", "this case is never reached: the cases before it take every error " $tok " can be") }
+fn CaughtCaseForm() r.Msg { return r.Msg(Diag.CaughtCaseForm, "R11b", "a case of an error value names an error word, an error type, a named set or null") }
+fn CaughtMatchMissing(text String&) r.Msg { return r.Msg(Diag.CaughtMatchMissing, "R11b", "this match does not cover " $text " - add a case for it, or 'case _'") }
+fn ErrorSetHoldsItself(tok String&, text String&) r.Msg { return r.Msg(Diag.ErrorSetHoldsItself, "T19a", $tok " reaches itself through its member '" $text "' - a set holds its members' errors, never itself") }
+fn ErrorWordOfMember(tok String&, ty String&) r.Msg { return r.Msg(Diag.ErrorWordOfMember, "T19a", "word " $tok " is " $ty "'s too, a member of this set - name it another way") }
+fn ErrorAsResult(text String&) r.Msg { return r.Msg(Diag.ErrorAsResult, "T20", $text " is an error type: an error is raised, never returned - write '? " $text "' after the parameters") }
+fn NotAnErrorType(tok String&) r.Msg { return r.Msg(Diag.NotAnErrorType, "R1", $tok " is no error type - an error set names error types, their words and named sets") }
+fn FuncTypeErrsUnwritten() r.Msg { return r.Msg(Diag.FuncTypeErrsUnwritten, "R1b", "a function type writes its error set - '? io.Error' - since no body says what it is") }
+fn TraitErrsUnwritten() r.Msg { return r.Msg(Diag.TraitErrsUnwritten, "R1b", "a trait's method writes its error set - '? io.Error' - since no body says what it is") }
+fn TypeIsPrivate(tok String&) r.Msg { return r.Msg(Diag.TypeIsPrivate, "M6", "type " $tok " is private to its module") }
+fn TypeNameInUse(tok String&) r.Msg { return r.Msg(Diag.TypeNameInUse, "D2", "type " $tok " is already declared in this module") }
+fn BuiltinTypeRedeclared(tok String&) r.Msg { return r.Msg(Diag.BuiltinTypeRedeclared, "D3a", $tok " is a built-in type's name - choose another") }
+fn NameIsType(tok String&) r.Msg { return r.Msg(Diag.NameIsType, "D2", $tok " is already a type's name in this module - choose another") }
+fn BuildConstRedeclared(tok String&) r.Msg { return r.Msg(Diag.BuildConstRedeclared, "B10", $tok " is a build constant - choose another name") }
+fn BuildDefaultMut(tok String&) r.Msg { return r.Msg(Diag.BuildDefaultMut, "B10c", $tok " is a build constant, and a declaration giving it a default is immutable - drop 'mut'") }
+fn BuildDefaultType(tok String&, ty String&) r.Msg { return r.Msg(Diag.BuildDefaultType, "B10c", $tok " is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found " $ty) }
+fn BuildDefaultFit(text1 String&, text2 String&, tok String&, ty String&) r.Msg { return r.Msg(Diag.BuildDefaultFit, "B10c", "-define " $text1 "=" $text2 " does not fit " $tok ", which is " $ty) }
+fn UnknownBuildName(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownBuildName, "B10", "unknown name " $tok " - if it is a build constant, define it with '-define " $text "=VALUE', or declare it with a default") }
+fn NameInUse(tok String&) r.Msg { return r.Msg(Diag.NameInUse, "D2", $tok " is already declared in this module") }
+fn ConstraintDisagrees(tok String&) r.Msg { return r.Msg(Diag.ConstraintDisagrees, "G19", $tok " is constrained differently elsewhere in this declaration - one constraint per variable") }
+fn ConstraintUnmet(ty String&, text1 String&, text2 String&) r.Msg { return r.Msg(Diag.ConstraintUnmet, "G19", $ty " does not satisfy the constraint " $text1 " on " $text2) }
+fn ConstraintUnmetMethod(ty String&, text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ConstraintUnmetMethod, "G19", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no method " $text3 " that fits") }
+fn ConstraintSealed(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.ConstraintSealed, "G19, T31", $ty " does not satisfy the constraint " $text1 " on " $text2 ": " $text3 " is sealed - only the types its own module gives '" $text4 "' satisfy it") }
+fn ConstraintClosed(ty String&, text1 String&, text2 String&, text3 String&, list String&) r.Msg { return r.Msg(Diag.ConstraintClosed, "G19, T31a", $ty " does not satisfy the constraint " $text1 " on " $text2 ": " $text3 " is closed, met by " $list " alone") }
+fn TraitExtendsNotTrait(text String&) r.Msg { return r.Msg(Diag.TraitExtendsNotTrait, "T30a", $text " is not a trait, so a trait cannot extend it - a type takes a trait's methods by declaring them") }
+fn TraitExtendsItself(tok String&) r.Msg { return r.Msg(Diag.TraitExtendsItself, "T30a", $tok " extends itself through the traits it extends") }
+fn TraitMemberOpen(text String&) r.Msg { return r.Msg(Diag.TraitMemberOpen, "T31a", $text " is an open trait, so it lists no types to take in - list types, or closed traits") }
+fn TraitMemberMissing(ty String&, tok String&, tok2 String&) r.Msg { return r.Msg(Diag.TraitMemberMissing, "T31a", $ty " is listed by " $tok " but has no method " $tok2 " that fits - declare it, or leave " $ty " out") }
+fn ConstraintUnmetHash(ty String&, text1 String&, text2 String&) r.Msg { return r.Msg(Diag.ConstraintUnmetHash, "G19, E10b", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no Hash - declare 'Hash() I64', agreeing with '=='") }
+fn UnboundedInstantiation() r.Msg { return r.Msg(Diag.UnboundedInstantiation, "G17", "this generic's instantiations never end - each one requires a larger one") }
+fn TypeHoldsItself(ty String&) r.Msg { return r.Msg(Diag.TypeHoldsItself, "T16", $ty " cannot hold itself by value - hold it through a reference ('&')") }
+fn ArrayTypeHoldsItself(text1 String&, text2 String&, ty String&) r.Msg { return r.Msg(Diag.ArrayTypeHoldsItself, "T29", $text1 " holds itself through the array it is declared over - hold the array in a struct: 'type " $text2 " struct(items " $ty "&)'") }
+fn MissingTypeArgs(tok String&, text String&) r.Msg { return r.Msg(Diag.MissingTypeArgs, "G7", $tok " is generic - write its type arguments, as '" $text "<I32>'") }
+fn TypeArgCount(text String&, n1 I64, n2 I64) r.Msg { return r.Msg(Diag.TypeArgCount, "G7", "type arguments for " $text ": expected " $n1 ", found " $n2) }
+fn TryParens() r.Msg { return r.Msg(Diag.TryParens, "E24", "these parentheses group nothing - a 'try' covers the whole expression after it, so write it without them") }
+fn AsCanFail() r.Msg { return r.Msg(Diag.AsCanFail, "E32", "'as' fails where the value holds another case - write 'try' before it and catch CaseError, or '(x as C)!'") }
+fn NarrowNotNumber(ty String&) r.Msg { return r.Msg(Diag.NarrowNotNumber, "E26b", "'Narrow' converts to a number type, and " $ty " is none") }
+fn NarrowNeedsType() r.Msg { return r.Msg(Diag.NarrowNeedsType, "E26b", "'Narrow' names the type it converts to - write 'x.Narrow<I32>()'") }
+fn TypeArgsOnNonGeneric(text String&) r.Msg { return r.Msg(Diag.TypeArgsOnNonGeneric, "G7", $text " is not generic, so it takes no type arguments") }
+fn TypeVarAsValue(text String&) r.Msg { return r.Msg(Diag.TypeVarAsValue, "G8b", $text " is a type variable, not a value") }
+fn ArrayLengthRange(n I64) r.Msg { return r.Msg(Diag.ArrayLengthRange, "T7c", "an array's length is from 0 to the largest whose bytes fit an I64, found " $n) }
+fn TypeMatchValueCase(text String&) r.Msg { return r.Msg(Diag.TypeMatchValueCase, "G13", $text " is a type variable, so its cases are types") }
+fn ArrayTooManyArgs(n I64) r.Msg { return r.Msg(Diag.ArrayTooManyArgs, "G8, T7", "Array takes one type argument, its element type, found " $n " - a length is never written in a type: 'Array<T>(n)' makes n elements") }
+fn ConstraintNotTrait(ty String&) r.Msg { return r.Msg(Diag.ConstraintNotTrait, "G6, G19", $ty " is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)") }
+fn InstanceNotReferable(text String&, ty String&) r.Msg { return r.Msg(Diag.InstanceNotReferable, "T24", $text " gives a reference here, and " $ty " cannot be one - only a struct, an enum or an array can: read the value instead (as 'x[i]' does)") }
+fn NoteInstanceRef() r.Msg { return r.Msg(Diag.NoteInstanceRef, "", "the reference it would give is written here") }
+fn InvalidReferenceTarget(ty String&) r.Msg { return r.Msg(Diag.InvalidReferenceTarget, "T24", $ty " cannot be a reference - only a struct, an enum or an array can") }
+fn DoubleReferenceMarker() r.Msg { return r.Msg(Diag.DoubleReferenceMarker, "T24", "a type takes at most one reference marker") }
+fn DestructCopiedHeld(ty String&, held String&) r.Msg { return r.Msg(Diag.DestructCopiedHeld, "C11", $ty " has a destructor to run and copies (its Copy), and a copy of " $held " would copy what it holds past its count - hold them by reference, " $ty "&") }
+fn DestructTypeByValue(ty String&, held String&) r.Msg { return r.Msg(Diag.DestructTypeByValue, "C11", $ty " has a destructor to run, and " $held " keeps values of it where no holder ends them - write " $ty "&, or keep them in a Vec<" $ty ">") }
+fn TraitNotAType(ty String&) r.Msg { return r.Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty $("" if ty.EndsWith("&") else "&") "'") }
+fn AnyNotTrait(ty String&) r.Msg { return r.Msg(Diag.AnyNotTrait, "T32", "'any' takes a trait, and " $ty " is none") }
+fn AnyNeedsMarker(ty String&) r.Msg { return r.Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }
+fn FuncTypeBare(rest String&) r.Msg { return r.Msg(Diag.FuncTypeBare, "T21", "a function type is held only by reference - write 'fn&" $rest "', or 'fn?&" $rest "' where it may be null") }
+fn FuncDeclBare(ty String&) r.Msg { return r.Msg(Diag.FuncDeclBare, "T21b", $ty " is a function type, held only by reference - write '" $ty "&', or '" $ty "?&' where it may be null") }
+fn FuncDeclMismatch(want String&, have String&, name String&) r.Msg { return r.Msg(Diag.FuncDeclMismatch, "T21b, T29", "expected " $want ", found " $have " - a declared function type is a type of its own: write '" $name "(f)' to make one the other") }
+fn AnyCopyOutlived() r.Msg { return r.Msg(Diag.AnyCopyOutlived, "T32a", "the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes") }
+fn AnyNotConverted(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.AnyNotConverted, "T32a", "an '" $ty1 "' is never made an '" $ty2 "' - an 'any' is made from its instance's own type, once") }
+fn AnyUnmet(ty String&, tr String&) r.Msg { return r.Msg(Diag.AnyUnmet, "T32a", $ty " cannot be an 'any " $tr "&': it does not satisfy " $tr) }
+fn AnyUnmetMethod(ty String&, tr String&, tok String&) r.Msg { return r.Msg(Diag.AnyUnmetMethod, "T32a, T31", $ty " cannot be an 'any " $tr "&': it has no method " $tok " that fits") }
+fn AnyNotMember(ty String&, tr String&, list String&) r.Msg { return r.Msg(Diag.AnyNotMember, "T32a, T31a", $ty " cannot be an 'any " $tr "&': " $tr " is closed, met by " $list " alone") }
+fn AnyMethodScopes(ty String&, tok String&, tr String&) r.Msg { return r.Msg(Diag.AnyMethodScopes, "T32a, T22", $ty "'s " $tok " says where its references live as " $tr "'s signature does not - it cannot be called through an 'any " $tr "&'") }
+fn AnyMethodObligations(ty String&, tok String&, tr String&) r.Msg { return r.Msg(Diag.AnyMethodObligations, "T32a, T22a", $ty "'s " $tok " ties where what it is given lives to what it keeps or gives back, which a call through an 'any " $tr "&' cannot check - call it directly, or through generic code") }
+fn AnyNoCopy(tok String&, ty String&) r.Msg { return r.Msg(Diag.AnyNoCopy, "T32", $tok " keeps a copy of the value it is called on, and an " $ty " has none - call it on the instance's own type") }
+fn AnyNoMethod(ty String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.AnyNoMethod, "T32b", $ty " has no method " $tok " - an 'any' is used through its trait's methods alone" $hint) }
+fn AnyOpenInspected(ty String&, tr String&) r.Msg { return r.Msg(Diag.AnyOpenInspected, "T34", $ty "'s trait " $tr " is open, so its instance's type is never asked for - use its methods, or add the method it lacks") }
+fn AnyNotMemberCase(ty String&, tr String&) r.Msg { return r.Msg(Diag.AnyNotMemberCase, "T34", $ty " is not one of the types " $tr " lists") }
+fn AnyCaseTwice(ty String&) r.Msg { return r.Msg(Diag.AnyCaseTwice, "T34", $ty " is matched by an earlier clause - this one is never reached") }
+fn AnyCaseAlone() r.Msg { return r.Msg(Diag.AnyCaseAlone, "T34", "a type case binding a name is its clause's only alternative - bind '_' to share a clause") }
+fn AnySpawnedResult(targets String&, ty String&, text String&) r.Msg { return r.Msg(Diag.AnySpawnedResult, "T32b, P1", "a task calls a function or a function value, never through an 'any''s table - write 'spawn " $targets "fn() " $ty " { return " $text " }()'") }
+fn AnySpawned(text String&) r.Msg { return r.Msg(Diag.AnySpawned, "T32b, P1", "a task calls a function or a function value, never through an 'any''s table - write 'spawn fn() { " $text " }'") }
+fn AnyCaseNotAny(ty String&) r.Msg { return r.Msg(Diag.AnyCaseNotAny, "T34", "a type case matches an 'any' of a closed trait, and this is " $ty) }
+fn NoteAnyMethod(tok String&) r.Msg { return r.Msg(Diag.NoteAnyMethod, "", $tok " is declared here") }
+fn EnumCaseInUse(tok String&) r.Msg { return r.Msg(Diag.EnumCaseInUse, "T17", "enum case " $tok " is already declared") }
+fn DeclaredTwice(tok String&) r.Msg { return r.Msg(Diag.DeclaredTwice, "", $tok " is declared twice") }
+fn FieldHasParamName(tok String&) r.Msg { return r.Msg(Diag.FieldHasParamName, "C2a", "field " $tok " has a parameter's name - write it bare to take the parameter's value, or name it apart") }
+fn TraitMethodGeneric(tok String&) r.Msg { return r.Msg(Diag.TraitMethodGeneric, "T35", "trait method " $tok " may not be generic in a type of its own") }
+fn CtorFieldNoValue(tok String&) r.Msg { return r.Msg(Diag.CtorFieldNoValue, "C4", "field " $tok " names no parameter of the constructor - give it a value, with '=' or ':='") }
+fn DefaultNotTrailing(tok String&) r.Msg { return r.Msg(Diag.DefaultNotTrailing, "D8a", $tok " has no default, but a parameter before it does - defaulted parameters come last") }
+fn TypeVarNamesType(tok String&) r.Msg { return r.Msg(Diag.TypeVarNamesType, "G1", "type variable " $tok " is named after a type - choose a name no type has, as '<T>'") }
+fn TypeVarNotInferable(text String&, name String&) r.Msg { return r.Msg(Diag.TypeVarNotInferable, "G4", "type variable " $text " of " $name " appears in no parameter's type, so the call writes it - " $name "<...>(...)") }
+fn TypeVarNotErrorSet(tok String&) r.Msg { return r.Msg(Diag.TypeVarNotErrorSet, "G1a", $tok " is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'") }
+fn ErrVarNotType(tok String&, name String&) r.Msg { return r.Msg(Diag.ErrVarNotType, "G1a", $tok " is an error-set parameter, not a type - it stands where an error set is written, '? " $name "'") }
+fn ErrSetArgUnwanted(name String&) r.Msg { return r.Msg(Diag.ErrSetArgUnwanted, "G1a", $name " has no error-set parameter, so its arguments end in no '?'") }
+fn ExternType(ty String&) r.Msg { return r.Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }
+fn ExternResult(ty String&) r.Msg { return r.Msg(Diag.ExternResult, "X2", $ty " cannot come back from C - an extern's result is one number of the twelve primitives, Bool, extern type's reference or plain-data struct") }
+fn ForeignBuilt(ty String&) r.Msg { return r.Msg(Diag.ForeignBuilt, "X10", $ty " is an extern type: only C makes one - declare the C function that does, as 'extern fn open() " $ty "&'") }
+fn ForeignByValue(ty String&) r.Msg { return r.Msg(Diag.ForeignByValue, "X10", $ty " is an extern type, held only by reference - write '" $ty "&', or '" $ty "?&' where it may be null") }
+fn ExportMethod() r.Msg { return r.Msg(Diag.ExportMethod, "X12", "an export fn is one C calls by its name, and a method has no C name - declare a function taking the receiver") }
+fn ExportGeneric() r.Msg { return r.Msg(Diag.ExportGeneric, "X12", "an export fn is one C function, and a generic one stands for many - declare it for the types C passes") }
+fn ExportName(tok String&) r.Msg { return r.Msg(Diag.ExportName, "X12", $tok " is the program's own name in C - name the export fn otherwise") }
+fn ExportType(ty String&) r.Msg { return r.Msg(Diag.ExportType, "X12", $ty " cannot come from C - an export fn's parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array by reference") }
+fn ExportResult(ty String&) r.Msg { return r.Msg(Diag.ExportResult, "X12", $ty " cannot go back to C - an export fn gives one number, Bool, extern type's reference, plain-data struct, or an array of these by value") }
+fn ExportObligation(rel String&) r.Msg { return r.Msg(Diag.ExportObligation, "X12", "an export fn's caller is C, which nothing holds to what its body requires (" $rel ") - keep what it is given only for the call") }
+fn CallbackNotExport() r.Msg { return r.Msg(Diag.CallbackNotExport, "X13", "a C function is given a function by the name of an export fn - declare one with 'export fn' and pass it by name") }
+fn LinkName(tok String&) r.Msg { return r.Msg(Diag.LinkName, "X9", $tok " names no library and no file - write a library's name, as 'link \"m\"', or a path to one, as 'link \"lib/libx.a\"'") }
+fn InterpLink(text String&, why String&) r.Msg { return r.Msg(Diag.InterpLink, "B3e", "the library '" $text "' a link names cannot be loaded into interpret: " $why " - build the program instead") }
+fn VarArgType(ty String&) r.Msg { return r.Msg(Diag.VarArgType, "X21", $ty " cannot be a C variable argument - pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference") }
+fn VarArgWide(ty String&) r.Msg { return r.Msg(Diag.VarArgWide, "X21", $ty " cannot be a C variable argument - no C type of olang's holds it; convert it, 'I64(x)' or 'U64(x)'") }
+fn LinkOnOlangImport() r.Msg { return r.Msg(Diag.LinkOnOlangImport, "X17", "'link' names the library a C header's declarations are in - an olang module needs none") }
+fn CHeaderNotFound(spec String&) r.Msg { return r.Msg(Diag.CHeaderNotFound, "X17", "no C header '" $spec "' beside this file or where the C compiler looks") }
+fn CFileNotFound(path String&) r.Msg { return r.Msg(Diag.CFileNotFound, "X17", "no C file at " $path) }
+fn CImportFailed(spec String&, why String&) r.Msg { return r.Msg(Diag.CImportFailed, "X17", "'" $spec "' cannot be imported: " $why) }
+fn CNoForm(name String&, why String&) r.Msg { return r.Msg(Diag.CNoForm, "X19", "the C import has no olang form of '" $name "': " $why) }
+fn ConstToMutRef(fix String&) r.Msg { return r.Msg(Diag.ConstToMutRef, "T25d", "this hands data written in the program where it may be written - pass a copy of its own: " $fix) }
+fn CPointerReadOnly(ty String&) r.Msg { return r.Msg(Diag.CPointerReadOnly, "X22", "C may write through this pointer, and " $ty " is read-only - pass a writable one ('mut')") }
+fn CPointerTemporary(ty String&) r.Msg { return r.Msg(Diag.CPointerTemporary, "X22", "C is handed a pointer to a " $ty " that is no place - put it in a local first") }
+fn MutOnValueType(ty String&) r.Msg { return r.Msg(Diag.MutOnValueType, "T25b", "'mut' makes a reference writable, and " $ty " is no reference") }
+fn MutOnValueParam(ty String&) r.Msg { return r.Msg(Diag.MutOnValueParam, "D9", "a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and " $ty " is none") }
+fn MutOnValueField(ty String&) r.Msg { return r.Msg(Diag.MutOnValueField, "C3", "a field is writable wherever its instance is - 'mut' is for a reference, and " $ty " is none") }
+fn PrimCtorNotPrimitive() r.Msg { return r.Msg(Diag.PrimCtorNotPrimitive, "T29d", "only a type over a primitive has a constructor written this way - a struct writes 'struct(params) { ... }'") }
+fn PrimCtorParam(ty String&) r.Msg { return r.Msg(Diag.PrimCtorParam, "T29d", "this constructor takes one parameter, of type " $ty " - the value it checks") }
+fn TypeDefinedThroughItself(text String&) r.Msg { return r.Msg(Diag.TypeDefinedThroughItself, "", $text " is used while it is still being declared") }
+fn ErrorWordInUse(tok String&) r.Msg { return r.Msg(Diag.ErrorWordInUse, "T19", "error word " $tok " is already declared") }
+fn ExtendsNotBase() r.Msg { return r.Msg(Diag.ExtendsNotBase, "T29f", "only a type over a number or an array extends its base") }
+fn GenericNotStruct() r.Msg { return r.Msg(Diag.GenericNotStruct, "G6", "only a struct, an enum or a trait takes type parameters") }
+fn DeclaredOverAggregate(ty String&) r.Msg { return r.Msg(Diag.DeclaredOverAggregate, "T29", "a type is declared over a number, an array or a function type, not over " $ty " - hold it in a struct's field instead") }
+fn NotTheOperator(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.NotTheOperator, "E31", $ty "'s " $text1 " takes " $text2 " besides its receiver - an ordinary method, not the one " $text3 " calls, which takes " $text4) }
+fn ArrayOneIndex(ty String&) r.Msg { return r.Msg(Diag.ArrayOneIndex, "E31", $ty " takes one index - several are passed to a type's At or SetAt") }
+fn OperatorResult(text String&) r.Msg { return r.Msg(Diag.OperatorResult, "E31", $text " gives one result") }
+fn CommutesNotHere(text String&) r.Msg { return r.Msg(Diag.CommutesNotHere, "E31c", "'commutes' is written only on a Plus, Mul, BitAnd, BitOr or BitXor of one parameter, and " $text " is none - remove it") }
+fn CommutesSameType(text String&, ty String&) r.Msg { return r.Msg(Diag.CommutesSameType, "E31c", $text " takes " $ty ", its own receiver's type, so the operator reads both ways already - remove 'commutes'") }
+fn CommutesClash(op String&, a String&, b String&, other String&) r.Msg { return r.Msg(Diag.CommutesClash, "E31c", "with 'commutes' here, " $op " between " $a " and " $b " would call this method or " $other " - remove 'commutes'") }
+fn SetatResult() r.Msg { return r.Msg(Diag.SetatResult, "E31", "SetAt gives no result") }
+fn MethodCannotFail(text String&) r.Msg { return r.Msg(Diag.MethodCannotFail, "E31", $text " cannot fail - the operation calling it has nowhere to handle an error") }
+fn LessNotBool() r.Msg { return r.Msg(Diag.LessNotBool, "E31", "Less, which '<' calls, gives a Bool") }
+fn LenShape() r.Msg { return r.Msg(Diag.LenShape, "E31", "Len gives an I64") }
+fn EqShape() r.Msg { return r.Msg(Diag.EqShape, "E10a", "Eq takes one parameter of its receiver's own type and gives a Bool") }
+fn CopyShape(ty String&) r.Msg { return r.Msg(Diag.CopyShape, "E31d", "Copy takes nothing but its receiver, read through a read-only reference, gives a new " $ty " and cannot fail - write 'fn (x " $ty "&) Copy() " $ty "'") }
+fn CopyOnWhat(ty String&) r.Msg { return r.Msg(Diag.CopyOnWhat, "E31d", "only a struct or an enum the program declares has a Copy of its own, not " $ty " - its supplied Copy is the one") }
+fn CopyDoesMore(what String&) r.Msg { return r.Msg(Diag.CopyDoesMore, "E31d", "a Copy only builds the new value, and this one " $what " - every copy of the value runs it, so it may do nothing else") }
+fn ImmutWrite(ty String&) r.Msg { return r.Msg(Diag.ImmutWrite, "T13a", "nothing of " $ty " changes after its constructor (it is immut) - make a new one") }
+fn TextWrite() r.Msg { return r.Msg(Diag.TextWrite, "T13a, T29c", "a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder") }
+fn ImmutMutRef(ty String&) r.Msg { return r.Msg(Diag.ImmutMutRef, "T13a", "'mut' makes a reference writable, and nothing of " $ty " changes after its constructor (it is immut) - read it through '" $ty "&'") }
+fn TextMutRef() r.Msg { return r.Msg(Diag.TextMutRef, "T13a, T29c", "'mut' makes a reference writable, and a String never changes once it is made - write text through 'mut Array<Char>&', read it through 'String&'") }
+fn ImmutCopy(ty String&) r.Msg { return r.Msg(Diag.ImmutCopy, "T13a, E31d", "a copy of " $ty " shares it, as nothing of it changes (it is immut) - it declares no Copy") }
+fn UniqueImmut() r.Msg { return r.Msg(Diag.UniqueImmut, "T13b", "'unique' and 'immut' are never one type's - an immut value is copied freely, a unique one never") }
+fn UniqueImmutPart(ty String&, part String&) r.Msg { return r.Msg(Diag.UniqueImmutPart, "T13b", $part " is unique, so it is no part of " $ty ", which is immut - an immut value is copied freely, a unique one never; hold a reference, '" $part "&'") }
+fn UniqueCopy(ty String&) r.Msg { return r.Msg(Diag.UniqueCopy, "T13b, E31d", $ty " is unique, so it is never copied and has no Copy - make a new one with a function or its constructor") }
+fn UniqueByValue(ty String&, what String&) r.Msg { return r.Msg(Diag.UniqueByValue, "T13b", $ty " is unique: this value is held elsewhere, and " $what " holds one of its own - write a reference ('" $ty "&'), or make a new " $ty " here") }
+fn UniqueFill(ty String&) r.Msg { return r.Msg(Diag.UniqueFill, "T13b", "Array<" $ty ">(n, fill) copies its fill into every element, and " $ty " is unique - make each element with a comprehension ('" $ty "[" $ty "(...) for i in range n]'), or hold references ('Array<" $ty "&>')") }
+fn PackedNotStruct() r.Msg { return r.Msg(Diag.PackedNotStruct, "T13c", "'packed' lays a struct out bit by bit - it is written right before 'struct', nothing else") }
+fn PackedField(ty String&, what String&) r.Msg { return r.Msg(Diag.PackedField, "T13c", "a packed struct lays its fields out bit by bit, so " $ty " (" $what ") is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these") }
+fn PackedParams() r.Msg { return r.Msg(Diag.PackedParams, "T13c", "a packed struct takes no type parameters - its layout is its declaration's") }
+fn PackedDestruct() r.Msg { return r.Msg(Diag.PackedDestruct, "T13c", "a packed struct holds plain data, so it declares no destructor") }
+fn PackedLend(field String&) r.Msg { return r.Msg(Diag.PackedLend, "T13c", "'" $field "' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := " $field "') and lend that") }
+fn PackedByValueC(ty String&) r.Msg { return r.Msg(Diag.PackedByValueC, "X11a", $ty " is packed and holds a float, so it crosses to C by reference only - write '" $ty "&'") }
+fn UniqueAfter(name String&, ty String&) r.Msg { return r.Msg(Diag.UniqueAfter, "T13b", "'" $name "' is handed on here, and " $ty " is unique - a unique value given by value lands once more only at its last mention, and '" $name "' is mentioned after") }
+fn UniqueLentHere(name String&, ty String&) r.Msg { return r.Msg(Diag.UniqueLentHere, "T13b", "'" $name "' is handed on here while the same call also reaches it, and " $ty " is unique - one value would be in two places: give the call '" $name "' once, or hand it on in a call of its own") }
+fn UniqueAlias(name String&, ty String&, alias String&) r.Msg { return r.Msg(Diag.UniqueAlias, "T13b", "'" $name "' is handed on here, and " $ty " is unique - '" $alias "', which reaches it, is used after: use '" $alias "' before handing '" $name "' on, or no longer after") }
+fn DropRegistered(h String&, v String&, t String&) r.Msg { return r.Msg(Diag.DropRegistered, "O15, O16", "'" $h "' holds a value where its call landed, ended as that scope closes - after '" $v "', which it may hold a reference to, so its destructors could read '" $v "' already ended: declare it by value, '" $h " " $t " = ...', and its block ends it first") }
+fn DropTempRegistered(v String&, t String&) r.Msg { return r.Msg(Diag.DropTempRegistered, "O15, O16", "this value is held where its call lands, ended as that scope closes - after '" $v "', which the call may make it hold a reference to, so its destructors could read '" $v "' already ended: declare it by value first, 'x " $t " = ...', and give the call that") }
+fn DropCycle(a String&, b String&) r.Msg { return r.Msg(Diag.DropCycle, "O15", "'" $a "' and '" $b "' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own), or hold one by reference") }
+fn UniqueKind(what String&) r.Msg { return r.Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
+fn UniqueNeedsCopy(text String&, ty String&) r.Msg { return r.Msg(Diag.UniqueNeedsCopy, "T13b, G18", $text " needs a copy, and " $ty " is unique - its values are never copied: call " $text " with a reference ('" $ty "&') or with a type that copies") }
+fn DestructNotUnique(ty String&) r.Msg { return r.Msg(Diag.DestructNotUnique, "C11, T13b", "a destructor releases what one value holds, so " $ty " is unique - declare it 'type " $ty " unique struct(...)'") }
+# T2d, T13d: weak references and the generational types they name
+fn WeakNotNullable(rest String&) r.Msg { return r.Msg(Diag.WeakNotNullable, "T2d", "a weak place reads null once nothing owning holds what it names, so 'weak' is written before a reference that may be null - write 'weak " $weakFix(rest) "'") }
+fn weakFix(rest String&) String {
+    if rest.EndsWith("&") and not rest.EndsWith("?&"): return $rest[:rest.Len() - 1] "?&"
+    return $rest "?&"
+}
+fn WeakPlace(ty String&) r.Msg { return r.Msg(Diag.WeakPlace, "T2d", "'weak' is written only where a value is stored - a field, a payload, an element or a type argument a type stores, or a global - never on a local, a parameter, a result or a function type's: write '" $ty "' here") }
+fn WeakTarget(ty String&, what String&) r.Msg { return r.Msg(Diag.WeakTarget, "T2d", "a weak reference names an instance of a struct or an enum, and " $ty " is " $what " - hold it by an ordinary reference") }
+fn WeakFresh(ty String&) r.Msg { return r.Msg(Diag.WeakFresh, "T2d", "a new " $ty " stored only into a weak place is held by nothing owning, so the place would read null at once - store it into an owning place first, then here") }
+fn WeakUnheld(ty String&) r.Msg { return r.Msg(Diag.WeakUnheld, "T2d", "no owning place of the program holds a " $ty " - a field, an element, a payload or a global holding it other than weakly - so every weak reference to one would read null: hold it somewhere owning, or drop 'weak'") }
+fn GenByValue(ty String&) r.Msg { return r.Msg(Diag.GenByValue, "T13d", $ty " is generational - a weak reference names it - so its values are held only by reference: write '" $ty "&' here") }
+fn GenByValueAway(ty String&) r.Msg { return r.Msg(Diag.GenByValueAway, "T13d", "this weak reference makes " $ty " generational - its values held only by reference - and another module holds one by value: write '" $ty "&' there, or drop 'weak'") }
+fn NoteGenSlot(ty String&) r.Msg { return r.Msg(Diag.NoteGenSlot, "", "a " $ty " held by value here") }
+fn GenUnique(ty String&) r.Msg { return r.Msg(Diag.GenUnique, "T13d", $ty " is generational - a weak reference names it - and its values are never copied, only referenced: drop 'unique'") }
+fn GenCopyDestruct(ty String&) r.Msg { return r.Msg(Diag.GenCopyDestruct, "T13d, E31d", $ty " is generational and declares a destructor, so it has no Copy - each instance's destructor runs once: make a new one with its constructor") }
+fn StrShape() r.Msg { return r.Msg(Diag.StrShape, "E11c", "Str gives a String") }
+fn EqStrWrites(text String&) r.Msg { return r.Msg(Diag.EqStrWrites, "E10a, E11c", $text " takes what it is given read-only - neither its receiver nor a parameter may be 'mut'") }
+fn ProtocolBothSpellings(ty String&, text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ProtocolBothSpellings, "M6b", $ty " declares " $text1 " twice, public and private - keep one: " $text2 ", or " $text3 " for its own module only") }
+fn ProtocolPrivate(tok String&, ty String&, text1 String&, text2 String&) r.Msg { return r.Msg(Diag.ProtocolPrivate, "M6b", $tok " needs " $ty "'s " $text1 ", which is private to its module - declare it " $text2 " to use it here") }
+fn OverrideSignature(text String&) r.Msg { return r.Msg(Diag.OverrideSignature, "M19e", $text " does not have the signature of the default it overrides - match it, or choose another name") }
+fn DefaultOutsideTrait(text String&) r.Msg { return r.Msg(Diag.DefaultOutsideTrait, "M19e", "a default of trait " $text " is declared in that trait's module") }
+fn MethodOnForeignType(ty String&) r.Msg { return r.Msg(Diag.MethodOnForeignType, "M19", "a method of " $ty " is declared in that type's module") }
+fn DefaultShadowsRequired(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefaultShadowsRequired, "M19e", "trait " $text1 " already requires a method " $text2 " - choose another name for this default") }
+fn MethodClashesInherited(ty String&, text String&) r.Msg { return r.Msg(Diag.MethodClashesInherited, "T29e", $ty " inherits a method " $text " from its base - choose another name") }
+
+# M21: two methods of one name whose receivers some one instance meets alike
+fn MethodOverlap(name String&, ty String&) r.Msg { return r.Msg(Diag.MethodOverlap, "M21", "'" $name "' is declared twice for " $ty " - declare one per instance") }
+fn MethodClashesSupplied(text String&, ty String&) r.Msg { return r.Msg(Diag.MethodClashesSupplied, "E23, E33, E37, P9, T17e", "the compiler supplies " $text " for " $ty " - choose another name") }
+fn MethodOnBuiltinType(ty String&) r.Msg { return r.Msg(Diag.MethodOnBuiltinType, "M19d", "only the prelude declares methods of " $ty " - declare a type of your own over it: 'type T extends ...'") }
+fn BuilderOwnerElsewhere(ty String&) r.Msg { return r.Msg(Diag.BuilderOwnerElsewhere, "D19", "a builder is declared in its owner's module, and " $ty " is not this module's - declare it there") }
+fn BuilderOwnerKind(ty String&) r.Msg { return r.Msg(Diag.BuilderOwnerKind, "D19", $ty " is no type a builder makes - its owner is a struct, an enum, a type declared over another, an extern type, or a type variable a trait constrains") }
+fn BuilderResult(owner String&, got String&) r.Msg { return r.Msg(Diag.BuilderResult, "D19", "a builder of " $owner " gives one value of it - its result is " $owner ", a reference to it or an instance of it, not " $got) }
+fn BuilderTakesOwner(owner String&, param String&) r.Msg { return r.Msg(Diag.BuilderTakesOwner, "D19", "a builder of " $owner " takes no value of it, and " $param " does - make it a method, 'fn (x " $owner ") ...', or a function of the module") }
+fn BuilderNameTaken(owner String&, tok String&, what String&) r.Msg { return r.Msg(Diag.BuilderNameTaken, "D19", $tok " is already " $what " of " $owner " - name the builder otherwise") }
+fn BuilderTwice(owner String&, tok String&) r.Msg { return r.Msg(Diag.BuilderTwice, "D19", $owner " has two builders named " $tok) }
+fn BuilderExpected(tok String&, ty String&, owner String&, name String&) r.Msg { return r.Msg(Diag.BuilderExpected, "D19a", $tok " makes a " $ty " its module declares and takes none - declare it as the type's builder, 'fn " $owner "." $name "(...)', and call it '" $ty "." $name "(...)'") }
+fn BuilderOwnerBare(ty String&, every String&, one String&, name String&) r.Msg { return r.Msg(Diag.BuilderOwnerBare, "D19", $ty " is generic, and a builder's owner is written with its arguments - 'fn " $every "." $name "(...)' for every instance, 'fn " $one "." $name "(...)' for one") }
+fn NoBuilder(ty String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NoBuilder, "D19", $ty " has no builder, case or member " $tok $hint) }
+fn BuilderPrivate(ty String&, tok String&) r.Msg { return r.Msg(Diag.BuilderPrivate, "M6", $ty "'s builder " $tok " is private to its module") }
+fn BuilderNotValue(tok String&) r.Msg { return r.Msg(Diag.BuilderNotValue, "T21", "the builder " $tok " is generic, so it is no value by its name alone - call it, or pass a lambda calling it") }
+fn ConstraintUnmetBuilder(ty String&, text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ConstraintUnmetBuilder, "T30b", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no builder " $text3 " that fits") }
+fn FromBitsWidth(ty String&, u String&, got String&) r.Msg { return r.Msg(Diag.FromBitsWidth, "E33", $ty ".FromBits takes the " $u " of its width, and this is a " $got " - convert it first: '" $u "(x)'") }
+fn AnyOfBuilderTrait(tr String&, tok String&) r.Msg { return r.Msg(Diag.AnyOfBuilderTrait, "T30b", $tr " requires the builder " $tok ", so it has no run-time value - a builder takes no instance to dispatch on; take the type as a constrained variable") }
+fn MethodInUse(ty String&, text String&) r.Msg { return r.Msg(Diag.MethodInUse, "M21", $ty " already has a method " $text " in this module") }
+fn LocalUnused(name String&) r.Msg { return r.Msg(Diag.LocalUnused, "D3b", $name " is declared and never read - read it, or leave the declaration out") }
+fn LocalUnusedBare(name String&) r.Msg { return r.Msg(Diag.LocalUnusedBare, "D3b", $name " is never read - write '_' in its place") }
+fn ImportUnused(alias String&, spec String&) r.Msg { return r.Msg(Diag.ImportUnused, "M5a", "nothing here is reached through " $alias " - remove 'import \"" $spec "\"'") }
+fn UnderscoreDeclared() r.Msg { return r.Msg(Diag.UnderscoreDeclared, "D8c", "'_' discards a value and names nothing, so it cannot be declared") }
+fn ShadowsGlobal(tok String&) r.Msg { return r.Msg(Diag.ShadowsGlobal, "D3a", $tok " is already declared in this module - a name means one thing in it") }
+fn ShadowsFunction(tok String&) r.Msg { return r.Msg(Diag.ShadowsFunction, "D3a", $tok " names a function of this module - a name means one thing in it, so name this apart") }
+fn ShadowsBuildConst(tok String&) r.Msg { return r.Msg(Diag.ShadowsBuildConst, "D3a", $tok " is a build constant - choose another name") }
+fn PreludeConstRedeclared(tok String&) r.Msg { return r.Msg(Diag.PreludeConstRedeclared, "D3a", $tok " is a constant of the prelude - choose another name") }
+fn ShadowsType(tok String&) r.Msg { return r.Msg(Diag.ShadowsType, "D3a", $tok " is a type's name - choose another") }
+fn TypeHasNoConstructor(tok String&) r.Msg { return r.Msg(Diag.TypeHasNoConstructor, "", "type " $tok " has no constructor - an enum's values are its cases") }
+fn MethodCalledAsFunction(tok String&, text String&) r.Msg { return r.Msg(Diag.MethodCalledAsFunction, "M19", $tok " is a method - call it on its receiver: x." $text "(...)") }
+fn NotInModule(text String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NotInModule, "M9", $text " declares no " $tok $hint) }
+fn VarIsPrivate(tok String&) r.Msg { return r.Msg(Diag.VarIsPrivate, "M6", $tok " is private to its module") }
+fn ShiftUnadapted() r.Msg { return r.Msg(Diag.ShiftUnadapted, "E8a, E4a", "this shift is past its literal's width, and nothing adapts it to a wider type - convert the literal, as I64(1) << 40") }
+fn ScopeMayNotOutlive() r.Msg { return r.Msg(Diag.ScopeMayNotOutlive, "O10", "this reference lives in a scope that may not outlive where it is put") }
+fn OwnCannotOutlive() r.Msg { return r.Msg(Diag.OwnCannotOutlive, "O10d", "this value lives in this function's own scope, which closes first") }
+fn ArrayRunTimeIntoFixed(n I64) r.Msg { return r.Msg(Diag.ArrayRunTimeIntoFixed, "T7d", "this array's length is known only at run time, stored where " $n " elements are laid out - copy them through a slice of that length, 'v[0:" $n "]'") }
+fn ArraySizeMismatch(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.ArraySizeMismatch, "T7d", "an array of " $n1 " elements stored where " $n2 " are laid out - fixed storage takes an array of its own length") }
+fn LiteralRange(tok String&, ty String&) r.Msg { return r.Msg(Diag.LiteralRange, "T6", $tok " does not fit " $ty) }
+fn ElemRefShape(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ElemRefShape, "T25a", "expected " $ty1 ", found " $ty2 " - they differ in whether the elements are references") }
+fn TypeMismatch(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.TypeMismatch, "E12", "expected " $ty1 ", found " $ty2) }
+fn NumberDoesNotFlow(ty1 String&, ty2 String&, ty3 String&) r.Msg { return r.Msg(Diag.NumberDoesNotFlow, "T6b", $ty1 " does not flow into " $ty2 " - convert it, as " $ty3 "(x)") }
+fn LiteralExprRange(ty String&) r.Msg { return r.Msg(Diag.LiteralExprRange, "E4a", "this literal expression's value does not fit " $ty) }
+fn LiteralNeedsCtor(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.LiteralNeedsCtor, "T29d", "a value of " $ty1 " is made by its constructor - write " $ty2 "(...)") }
+fn ReadOnlyToWritable() r.Msg { return r.Msg(Diag.ReadOnlyToWritable, "T25c", "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") }
+fn ReadOnlyCopyDecl(ty String&, text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyDecl, "T25c", "this copies a read-only " $ty ", and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own " $text) }
+fn ReadOnlyCopyGlobal(ty String&, text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyGlobal, "T25c", "a mutable global holds no copy of a read-only " $ty " - give it one of its own, made " $text ", or drop its 'mut'") }
+fn ReadOnlyCopyStored(ty String&, text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyStored, "T25c", "a copy of a read-only " $ty " cannot be stored where it can be written - store one of its own, made " $text) }
+fn ReadOnlyCopyReturned(ty String&, text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyReturned, "T25c", "a copy of a read-only " $ty " cannot be returned as a writable value - return one of its own, made " $text ", or a read-only reference") }
+fn ReadOnlyRefKept(text1 String&, text2 String&, ty String&) r.Msg { return r.Msg(Diag.ReadOnlyRefKept, "T25c", "'" $text1 "' keeps what its parameter '" $text2 "' reaches where it can be written, and this " $ty " is read-only - pass a writable one") }
+fn ReadOnlyCopyArg(text1 String&, text2 String&, ty String&, text3 String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyArg, "T25c", "'" $text1 "' writes through or keeps its parameter '" $text2 "', and this " $ty " is a read-only copy - pass one of its own, made " $text3) }
+fn ReadOnlyCopyLent(text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyLent, "T25c", "a read-only copy cannot be passed where it may be written - pass one of its own, made " $text) }
+fn ReadOnlyCopyWrite() r.Msg { return r.Msg(Diag.ReadOnlyCopyWrite, "T25c", "this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares") }
+fn ReadOnlyFuncValue(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ReadOnlyFuncValue, "T25c", $text1 " writes through or keeps its by-value parameter '" $text2 "', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made " $text3) }
+fn NoteGroupFunctionType() r.Msg { return r.Msg(Diag.NoteGroupFunctionType, "", "a function type of several results or error items is parenthesized whole in a list: '(fn&(x I64) I64, I64)'") }
+fn NoteReadOnlyCopy(text String&) r.Msg { return r.Msg(Diag.NoteReadOnlyCopy, "", "'" $text "' copies a place reached read-only, so it is read-only") }
+fn NoteReadOnlyCopyOf(text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.NoteReadOnlyCopyOf, "", "'" $text1 "' copies '" $text2 "', reached read-only, so it is read-only - '" $text3 " := " $text4 ".Clone()' would be one of its own") }
+fn TypeNotInferable() r.Msg { return r.Msg(Diag.TypeNotInferable, "D15", "':=' takes its type from the initializer, and a call returning nothing has none") }
+fn DeclFromNull() r.Msg { return r.Msg(Diag.DeclFromNull, "D15", "':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'") }
+fn BuildIntoCapture() r.Msg { return r.Msg(Diag.BuildIntoCapture, "T22c", "the function given for this call's callee keeps this argument in what it captured, where this call cannot build - make the argument in the caller and pass it in") }
+fn BuildIntoUnknownScope() r.Msg { return r.Msg(Diag.BuildIntoUnknownScope, "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - put it in a local first, so its scope is found from it while the program runs (O29), or give it one known scope") }
+fn StoreIntoUnknownScope() r.Msg { return r.Msg(Diag.StoreIntoUnknownScope, "O12", "where this place's references live is not known here, so nothing new is built into it - reach the place through a local, so its scope is found from it while the program runs (O29), or store what already lives there") }
+fn TagUnknownScope(tok1 String&, tok2 String&) r.Msg { return r.Msg(Diag.TagUnknownScope, "O12", "where " $tok1 " lives is not known here, so nothing is declared to live there - read it through " $tok2 ", or declare the local with ':='") }
+fn BuildThroughUnknownScope() r.Msg { return r.Msg(Diag.BuildThroughUnknownScope, "C2d", "this builds through a field whose scope is not known here - read the field into a local first, so its scope is found from it while the program runs (O29), or build where it lives") }
+fn ReturnTypeMismatch(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ReturnTypeMismatch, "D8", "this function returns " $ty1 ", found " $ty2) }
+fn ArgCount(n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.ArgCount, "E14", "expected " $n1 " argument" $text ", found " $n2) }
+fn ArgCountRange(n1 I64, n2 I64, n3 I64) r.Msg { return r.Msg(Diag.ArgCountRange, "E14", "expected " $n1 " to " $n2 " arguments, found " $n3) }
+fn SpreadCount() r.Msg { return r.Msg(Diag.SpreadCount, "D8d", "these results are passed as the arguments, so there must be as many - destructure them first: 'a, b := g()'") }
+fn ScopeArgsDisagree() r.Msg { return r.Msg(Diag.ScopeArgsDisagree, "O25e", "these arguments live in different scopes, and the call needs them in one - make them where one of them lives") }
+fn BorrowSplitScopes() r.Msg { return r.Msg(Diag.BorrowSplitScopes, "O17", "this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')") }
+fn SliceSplitValue() r.Msg { return r.Msg(Diag.SliceSplitValue, "O17a", "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") }
+fn BorrowSplitValue() r.Msg { return r.Msg(Diag.BorrowSplitValue, "O17a", "this value's references live where its own storage does not, so it is not held by reference - use the value itself") }
+fn BorrowSplitParam(name String&) r.Msg { return r.Msg(Diag.BorrowSplitParam, "O17a, T13b", "'" $name "' holds references to the caller's storage while its own storage is this call's, so it is not held by reference - use '" $name "' itself, or take its value where it is mentioned last, declaring its type ('w T = " $name "')") }
+fn FieldBindingUnknown() r.Msg { return r.Msg(Diag.FieldBindingUnknown, "O23, O11", "this stores into a field whose binding is not known through this path - store through a variable holding the instance") }
+fn ScopeObligationUnmet() r.Msg { return r.Msg(Diag.ScopeObligationUnmet, "O10c", "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") }
+fn ReferenceNarrowed() r.Msg { return r.Msg(Diag.ReferenceNarrowed, "O25", "a reference never narrows - declare it with ':=' from what it is given") }
+fn ReferenceNarrowedLocal(text String&) r.Msg { return r.Msg(Diag.ReferenceNarrowedLocal, "O25", "a reference never narrows - '" $text "' lives in a block that closes first, and this keeps it longer") }
+fn RefTypevarNotAggregate(ty String&, text String&) r.Msg { return r.Msg(Diag.RefTypevarNotAggregate, "G11", $ty " cannot be held through '" $text "&' - only a struct, an enum or an array can") }
+fn NullableMeetsNoTrait(text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.NullableMeetsNoTrait, "T2c", $text1 " may be null, so it meets no trait - " $text3 " must meet " $text2 " here: write " $text4 ", which never is") }
+fn TypeArgsNotInferable(text String&) r.Msg { return r.Msg(Diag.TypeArgsNotInferable, "G9", "the type arguments of " $text " cannot be inferred from these arguments") }
+fn LengthNotInferable(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.LengthNotInferable, "G29", "'" $text1 "' takes an array by value whose length its body decides on, and this argument gives none ('" $text2 "') - give it an array, or take the parameter as '&'") }
+fn CtorTypeArgsNotInferable(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.CtorTypeArgsNotInferable, "G10c", "the type arguments of " $text1 " cannot be inferred from these arguments - write them: " $text2 "<...>(...)") }
+fn CtorVarsNotInferable(text String&) r.Msg { return r.Msg(Diag.CtorVarsNotInferable, "G10d", "what " $text "'s constructor introduces cannot be inferred from these arguments") }
+fn CtorFieldNamesVar(tok String&, text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.CtorFieldNamesVar, "G10d", "the type of field " $tok " names " $text1 ", which only the constructor introduces - for a field to hold it, declare it the type's parameter: 'type " $text2 "<" $text3 ">'") }
+fn CtorGenericInferredField(tok String&, text String&) r.Msg { return r.Msg(Diag.CtorGenericInferredField, "G10d", "field " $tok " takes its type from ':=', and the constructor introduces " $text ", so its body is checked per call - write the field's type") }
+fn CtorVarOfGeneric(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.CtorVarOfGeneric, "G10d", $text1 " is not one of " $text2 "'s parameters, and a generic type's constructor introduces none of its own - add " $text3 " to the type's list") }
+fn DefaultArgNoDefault(text String&) r.Msg { return r.Msg(Diag.DefaultArgNoDefault, "E14a", "parameter " $text " declares no default, so 'default' cannot stand in for it") }
+fn NamedArgUnknown(tok String&, text String&) r.Msg { return r.Msg(Diag.NamedArgUnknown, "E14b", $tok " names no parameter of " $text) }
+fn NamedArgUnknownMeant(tok String&, text String&, best String&) r.Msg { return r.Msg(Diag.NamedArgUnknownMeant, "E14b", $tok " names no parameter of " $text " - did you mean '" $best "'?") }
+fn NamedArgRequired(tok String&) r.Msg { return r.Msg(Diag.NamedArgRequired, "E14b", "parameter " $tok " declares no default, so it is given by position, not by name") }
+fn NamedArgTwice(tok String&) r.Msg { return r.Msg(Diag.NamedArgTwice, "E14b", "parameter " $tok " is named twice") }
+fn NamedArgAlsoPositional(tok String&) r.Msg { return r.Msg(Diag.NamedArgAlsoPositional, "E14b", "parameter " $tok " is given by position already") }
+fn PositionalAfterNamed() r.Msg { return r.Msg(Diag.PositionalAfterNamed, "E14b", "an argument by position comes before every argument by name") }
+fn NamedArgThroughValue() r.Msg { return r.Msg(Diag.NamedArgThroughValue, "E14b", "a call through a function value takes its arguments by position - a function type names no parameters") }
+fn NamedArgNotHere() r.Msg { return r.Msg(Diag.NamedArgNotHere, "E14b", "an argument by name gives a function's, a method's or a constructor's defaulted parameter, in a call") }
+fn TestTargetUnknown(text String&) r.Msg { return r.Msg(Diag.TestTargetUnknown, "B7a", "a test names a function, a type or Type.Method of its file, and '" $text "' is none") }
+fn TestTargetUnknownMeant(text String&, best String&) r.Msg { return r.Msg(Diag.TestTargetUnknownMeant, "B7a", "a test names a function, a type or Type.Method of its file, and '" $text "' is none - did you mean '" $best "'?") }
+fn TestTargetElsewhere(text String&) r.Msg { return r.Msg(Diag.TestTargetElsewhere, "B7a", "'" $text "' is declared in another file - a test is an example of its own file's code, written beside it") }
+fn TestTargetTwice(text String&) r.Msg { return r.Msg(Diag.TestTargetTwice, "B7a", "this file has a test of " $text " described so already - tell them apart by their descriptions") }
+fn AtomicNotPlace() r.Msg { return r.Msg(Diag.AtomicNotPlace, "P9", "an atomic operation acts on a place - a variable, a field or an element") }
+fn AtomicNotWritable() r.Msg { return r.Msg(Diag.AtomicNotWritable, "P9", "this atomic operation writes its place, which must be writable") }
+
+# the prelude's vacate() on what is no writable place (docs/memory.md 3.4)
+fn VacateNotPlace() r.Msg { return r.Msg(Diag.VacateNotPlace, "M19d", "vacate() empties a place - a writable variable, field or element") }
+
+fn ConversionRepresentation(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ConversionRepresentation, "T29", $ty1 " cannot become " $ty2 " - their representations differ") }
+fn ConvertNotNumber(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ConvertNotNumber, "E26", $ty1 " is no number, so " $ty2 "(x) cannot convert it") }
+fn NotIndexable(ty String&) r.Msg { return r.Msg(Diag.NotIndexable, "E16", $ty " cannot be indexed") }
+fn IndexNotInt(ty String&) r.Msg { return r.Msg(Diag.IndexNotInt, "E16", "an index is an integer, found " $ty) }
+fn IndexOutOfRange(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.IndexOutOfRange, "E16", "index " $n1 " is outside the array's " $n2 " elements") }
+fn NotSliceable(ty String&) r.Msg { return r.Msg(Diag.NotSliceable, "E16a", $ty " cannot be sliced") }
+fn SliceBoundNotInt(ty String&) r.Msg { return r.Msg(Diag.SliceBoundNotInt, "E16a", "a slice's bounds are integers, found " $ty) }
+fn NoSuchMember(ty String&, text String&, hint String&) r.Msg { return r.Msg(Diag.NoSuchMember, "", $ty " has no member '" $text "'" $hint) }
+fn MemberIsPrivate(text String&, ty String&) r.Msg { return r.Msg(Diag.MemberIsPrivate, "M6a", "member '" $text "' of " $ty " is private to its module") }
+fn NotAssignable() r.Msg { return r.Msg(Diag.NotAssignable, "S4", "this cannot be written - a variable, an element or a member can") }
+fn AssignIntoTried() r.Msg { return r.Msg(Diag.AssignIntoTried, "R9a", "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write into the collection itself, 'x[i].f = v'") }
+fn IncdecNotNumber(tok String&, ty String&) r.Msg { return r.Msg(Diag.IncdecNotNumber, "S3a", $tok " takes a number, found " $ty) }
+fn CaptureReadOnly() r.Msg { return r.Msg(Diag.CaptureReadOnly, "D16c", "a lambda's captures are read-only - capture a reference to change what is outside it") }
+fn ReadOnlyRefWrite() r.Msg { return r.Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - one with no 'mut' in its type") }
+fn WriteIntoCallValue() r.Msg { return r.Msg(Diag.WriteIntoCallValue, "E31", "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") }
+fn Immutable(text String&) r.Msg { return r.Msg(Diag.Immutable, "S6", $text " cannot be written - only a local, a parameter or a 'mut' global can") }
+fn StrStoresInReceiver() r.Msg { return r.Msg(Diag.StrStoresInReceiver, "E11c, O12", "'$' does not say where a value it renders lives, so a Str taking its receiver by value builds and stores nothing where the receiver's references reach - take the receiver by reference ('x T&'), or build what it needs here") }
+fn StrReceiverWritable() r.Msg { return r.Msg(Diag.StrReceiverWritable, "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") }
+fn NoteUnassignedDecl() r.Msg { return r.Msg(Diag.NoteUnassignedDecl, "", "declared here with no value") }
+fn NoteUnassignedNoElse() r.Msg { return r.Msg(Diag.NoteUnassignedNoElse, "", "when this condition is false nothing assigns it - this 'if' has no 'else'") }
+fn NoteUnassignedBranch() r.Msg { return r.Msg(Diag.NoteUnassignedBranch, "", "this branch does not assign it") }
+fn NoteUnassignedLoop() r.Msg { return r.Msg(Diag.NoteUnassignedLoop, "", "this loop may run no times - assigning in its body does not count") }
+fn NoteUnassignedArm() r.Msg { return r.Msg(Diag.NoteUnassignedArm, "", "this arm does not assign it") }
+fn NoteUnassignedClause() r.Msg { return r.Msg(Diag.NoteUnassignedClause, "", "this clause runs when the try fails, which may be before the assignment") }
+fn NoteReadUnassigned() r.Msg { return r.Msg(Diag.NoteReadUnassigned, "", "read here before it is assigned on every path - assign it on each path before this read") }
+fn NoteHere() r.Msg { return r.Msg(Diag.NoteHere, "", "here") }
+fn NoteFuncTypeScopes(ty String&) r.Msg { return r.Msg(Diag.NoteFuncTypeScopes, "", "a function type says where each reference argument and the result live, as the function does - write '" $ty "', or pass a lambda calling it") }
+fn NoteVecGrewHere() r.Msg { return r.Msg(Diag.NoteVecGrewHere, "", "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") }
+fn NoteVecGrowsHere(text1 String&, text2 String&, copy String&) r.Msg { return r.Msg(Diag.NoteVecGrowsHere, "", "'" $text1 "' may grow here, in " $text2 " - take the view or the reference after it, or " $copy) }
+fn NoteVecGrowsInside(text String&) r.Msg { return r.Msg(Diag.NoteVecGrowsInside, "", $text " may grow it here") }
+fn NoteVecTaskHolds(text String&) r.Msg { return r.Msg(Diag.NoteVecTaskHolds, "", "the task holding a view of '" $text "' is started here") }
+fn NoteStrBuildsHere() r.Msg { return r.Msg(Diag.NoteStrBuildsHere, "", "built here, where the receiver's part it was handed lives") }
+fn NoteStrKeepCopies(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NoteStrKeepCopies, "", "'" $text1 "' cannot be made where '" $text2 "' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") }
+fn NoteInLibrary() r.Msg { return r.Msg(Diag.NoteInLibrary, "", "in the standard library's code, here") }
+fn NoteZeroByReference(text String&) r.Msg { return r.Msg(Diag.NoteZeroByReference, "", "'" $text "' holds it by reference, whose zero value is null") }
+fn NoteZeroReferenceHasOne(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoteZeroReferenceHasOne, "", "a reference has one, null - hold " $ty1 " as '" $ty2 "&' where this use names it") }
+fn NoteOtherSignature(text String&) r.Msg { return r.Msg(Diag.NoteOtherSignature, "", "'" $text "' is declared here, with another signature") }
+fn NotePrivateSpelling(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NotePrivateSpelling, "", "'" $text1 "' is private to its module, and only a public " $text2 " meets the constraint") }
+fn NoteProtocolSpelling(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.NoteProtocolSpelling, "", "'" $text1 "' is " $text2 "'s private spelling with " $text3 "'s parameters, so it is held to its shape") }
+fn NoteDeclaredHere(tok String&) r.Msg { return r.Msg(Diag.NoteDeclaredHere, "", $tok " is declared here") }
+fn NoteDeclareWritable(text1 String&, text2 String&, ty String&) r.Msg { return r.Msg(Diag.NoteDeclareWritable, "", "'" $text1 "' is declared read-only here - declare it '" $text2 " mut " $ty "' to write through it") }
+fn NoteLiteralLocal(text1 String&, ty1 String&, text2 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoteLiteralLocal, "", "'" $text1 "' is " $ty1 ", its literal's own type - declare the type it should have, '" $text2 " " $ty2 " = ...'") }
+fn NoteLiteralRange(text1 String&, ty1 String&, ty2 String&, text2 String&, ty3 String&) r.Msg { return r.Msg(Diag.NoteLiteralRange, "", "the range's literals make '" $text1 "' " $ty1 " - write '" $ty2 "(" $text2 ")' here for " $ty3 " values") }
+fn NoteLiteralRangeExpr(text String&, ty1 String&, ty2 String&, ty3 String&) r.Msg { return r.Msg(Diag.NoteLiteralRangeExpr, "", "the range's literals make '" $text "' " $ty1 " - convert its end, '" $ty2 "(...)', for " $ty3 " values") }
+fn StrOfNothing() r.Msg { return r.Msg(Diag.StrOfNothing, "E11a", "'$' has nothing to render - this call returns no value") }
+fn IntLiteralTooLarge(tok String&) r.Msg { return r.Msg(Diag.IntLiteralTooLarge, "L10", $tok " is beyond 128 bits - the largest integer literal is U128's 340282366920938463463374607431768211455") }
+fn NegLiteralTooLarge(tok String&) r.Msg { return r.Msg(Diag.NegLiteralTooLarge, "L10", "-" $tok " is below I64's minimum") }
+fn OperandNotBool(tok String&, ty String&) r.Msg { return r.Msg(Diag.OperandNotBool, "E7", $tok " takes a Bool, found " $ty) }
+fn OperandNotInt(tok String&, ty String&) r.Msg { return r.Msg(Diag.OperandNotInt, "E8", $tok " takes an integer, found " $ty) }
+fn OperandNotNumber(tok String&, ty String&) r.Msg { return r.Msg(Diag.OperandNotNumber, "E6", $tok " takes numbers, found " $ty) }
+fn TupleNotAValue() r.Msg { return r.Msg(Diag.TupleNotAValue, "D8c", "several results are not one value - destructure them ('a, b := f()'), or pass them as all of a call's arguments") }
+fn LiteralExprNoValue() r.Msg { return r.Msg(Diag.LiteralExprNoValue, "E4a", "this literal expression has no value - no integer type holds it, from I128's least to U128's greatest") }
+fn LiteralNoOwnType(what String&) r.Msg { return r.Msg(Diag.LiteralNoOwnType, "T6a, E4a", $what " needs more than 64 bits, and a literal's own type is at most U64 - give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'") }
+fn LiteralDoesNotMeet(ty1 String&, ty2 String&, ty3 String&) r.Msg { return r.Msg(Diag.LiteralDoesNotMeet, "E6d", "this literal does not fit " $ty1 ", and " $ty2 " does not flow into " $ty3 " - convert one") }
+fn ShiftOutOfRange(ty String&, n1 I64, n2 I64) r.Msg { return r.Msg(Diag.ShiftOutOfRange, "E8a", "shifting " $ty " by " $n1 " is outside its width of " $n2 " bits") }
+fn DivideByZero() r.Msg { return r.Msg(Diag.DivideByZero, "E6a", "division by zero") }
+fn NumbersDoNotMeet(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NumbersDoNotMeet, "T6b", $ty1 " and " $ty2 " do not meet - neither flows into the other; convert one") }
+fn OperandsDiffer(tok String&, ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.OperandsDiffer, "", $tok " takes operands of one type, found " $ty1 " and " $ty2) }
+fn FloatLiteralRange(tok String&) r.Msg { return r.Msg(Diag.FloatLiteralRange, "L12b", $tok " is beyond F64's range") }
+fn NoSuchErrorWord(ty String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NoSuchErrorWord, "T19", $ty " has no word " $tok $hint) }
+fn NoSuchCase(ty String&, tok String&) r.Msg { return r.Msg(Diag.NoSuchCase, "T17", $ty " has no case " $tok) }
+fn NoSuchCaseMeant(ty String&, tok String&, text String&) r.Msg { return r.Msg(Diag.NoSuchCaseMeant, "T17", $ty " has no case " $tok " - did you mean '" $text "'?") }
+fn ScopeArgCount() r.Msg { return r.Msg(Diag.ScopeArgCount, "E25", "a call takes at most one scope argument") }
+fn MatmulUndeclared(ty String&) r.Msg { return r.Msg(Diag.MatmulUndeclared, "E31", "'@' has no built-in meaning, and " $ty " declares no MatMul") }
+fn NotExtendedOp(ty String&, tok String&, text String&) r.Msg { return r.Msg(Diag.NotExtendedOp, "T29f", $ty " does not extend its base, so it takes no " $tok " - declare its method " $text ", or declare it with 'extends'") }
+fn CondNotBoolType(ty String&) r.Msg { return r.Msg(Diag.CondNotBoolType, "", "a condition is a Bool, found " $ty) }
+fn CondBranchTypes(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.CondBranchTypes, "E28", "both values of 'a if c else b' have one type, found " $ty1 " and " $ty2) }
+fn MembershipNoMethod(text String&, ty String&) r.Msg { return r.Msg(Diag.MembershipNoMethod, "E29", "'x in c' calls " $text ", and " $ty " has none") }
+fn MembershipNotBool(text String&) r.Msg { return r.Msg(Diag.MembershipNotBool, "E29", $text ", which 'in' calls, gives a Bool") }
+fn MembershipNeedsTry(text String&) r.Msg { return r.Msg(Diag.MembershipNeedsTry, "E29", $text " can fail here - write 'try x in c'") }
+fn IncdecInExpression(tok String&) r.Msg { return r.Msg(Diag.IncdecInExpression, "S3a", $tok " is a statement of its own, never part of an expression") }
+fn NotCallable(ty String&) r.Msg { return r.Msg(Diag.NotCallable, "E13b", $ty " is not a function, and declares no Call") }
+fn JoinPieceCalled() r.Msg { return r.Msg(Diag.JoinPieceCalled, "E11b", "'(' after a piece of text calls it - to join the value inside, write '$(...)'") }
+fn UnhandledFallibleCall() r.Msg { return r.Msg(Diag.UnhandledFallibleCall, "E15", "this call can fail - write 'try', and catch or pass on its errors") }
+fn VariadicNotLast() r.Msg { return r.Msg(Diag.VariadicNotLast, "D8g", "a variadic parameter is the last one but defaulted ones - one variadic parameter, and only parameters with a default after it, given by name") }
+fn VariadicHere(what String&) r.Msg { return r.Msg(Diag.VariadicHere, "D8g", "a variadic parameter is a function's, not " $what) }
+fn VariadicDefault() r.Msg { return r.Msg(Diag.VariadicDefault, "D8g", "a variadic parameter takes no default - a call giving it no argument gives it the empty array") }
+fn SpreadNotHere() r.Msg { return r.Msg(Diag.SpreadNotHere, "D8g", "'...a' passes an array on as a variadic parameter's arguments, and stands nowhere else - pass the array itself, 'a'") }
+fn SpreadAlone() r.Msg { return r.Msg(Diag.SpreadAlone, "D8g", "'...a' passes an array on as all of a variadic parameter's arguments - alone, with no others beside it") }
+fn VariadicArgCount(n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.VariadicArgCount, "E14", "expected at least " $n1 " argument" $text ", found " $n2) }
+fn RestNotHere() r.Msg { return r.Msg(Diag.RestNotHere, "S13h", "'...' stands among an array pattern's items, for the elements they do not name - 'case Array<String&>[first, ...rest]'") }
+fn RestTwice() r.Msg { return r.Msg(Diag.RestTwice, "S13h", "an array pattern has one '...', for the elements its other items do not name") }
+fn RestNoSlice(ty String&) r.Msg { return r.Msg(Diag.RestNoSlice, "S13h", "a named rest is a slice of what is matched, and " $ty " declares no Slice - write a bare '...', or match the elements as an array (a Vec's View())") }
+fn ElemsNotSeq(ty String&) r.Msg { return r.Msg(Diag.ElemsNotSeq, "S13h", "an array pattern matches an array, text or a type declaring At and Len - " $ty " is none of them") }
+fn ElemsType(written String&, elem String&) r.Msg { return r.Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write 'Array<" $elem ">[...]'") }
+fn StructPatNoField(ty String&, text String&, hint String&) r.Msg { return r.Msg(Diag.StructPatNoField, "S13i", $ty " has no field '" $text "' - a struct pattern names the fields it matches, never its constructor's parameters" $hint) }
+fn StructPatPositional(ty String&) r.Msg { return r.Msg(Diag.StructPatPositional, "S13i", "a struct pattern names the fields it matches - write 'field = pattern' or a field's name: the order of " $ty "'s fields is no part of it") }
+fn StructPatType(ty String&, text String&) r.Msg { return r.Msg(Diag.StructPatType, "S13i", "the value matched here is " $ty ", and this struct pattern matches " $text) }
+fn PatFieldTwice(text String&) r.Msg { return r.Msg(Diag.PatFieldTwice, "S13b", "field '" $text "' is named twice in this pattern") }
+fn PatFieldBothWays(text String&) r.Msg { return r.Msg(Diag.PatFieldBothWays, "S13b", "field '" $text "' is matched by position and again by name") }
+fn PatPositionAfterName() r.Msg { return r.Msg(Diag.PatPositionAfterName, "S13b", "an item by position follows one by name - items by position come first, as a call's arguments do") }
+fn PayloadNoField(text String&, name String&, hint String&) r.Msg { return r.Msg(Diag.PayloadNoField, "S13b", "case " $text " has no field '" $name "'" $hint) }
+fn WholeCaseNamed(text String&, ty String&) r.Msg { return r.Msg(Diag.WholeCaseNamed, "S13b", "case " $text " carries one whole " $ty " and has no field names - match its fields with a struct pattern, '" $text "(" $ty "(field = ...))'") }
+fn MatchLengthUncovered(ty String&, what String&) r.Msg { return r.Msg(Diag.MatchLengthUncovered, "S13h", "a match over " $ty " gives a value only when its cases cover every value - none matches an array of " $what "; add a case for it, or 'case _: v'") }
+fn PowNone(ty String&, hint String&) r.Msg { return r.Msg(Diag.PowNone, "E5a", "'**' calls Pow, which " $ty " has none of" $hint) }
+fn OperatorCallFails(text String&) r.Msg { return r.Msg(Diag.OperatorCallFails, "E31", "this operator calls " $text ", which can fail - write 'try' before the expression") }
+fn IsOnlyNull(op String&) r.Msg { return r.Msg(Diag.IsOnlyNull, "E10c", $"'is' tests for null and nothing else - compare with '" $op "'") }
+fn IsCaseWritten(op String&, x String&, y String&) r.Msg { return r.Msg(Diag.IsCaseWritten, "E10c, E32", $"a case is tested with '" $op "': '" $x " " $op " " $y "'") }
+fn CaseTestNotEnum(text String&, ty String&) r.Msg { return r.Msg(Diag.CaseTestNotEnum, "E32", $text " is a case of an enum, and this is " $ty) }
+fn CaseTestOther(text String&, ty String&) r.Msg { return r.Msg(Diag.CaseTestOther, "E32", $text " is no case of " $ty ", the type this tests") }
+fn IsNullOfNull() r.Msg { return r.Msg(Diag.IsNullOfNull, "E10c", "'null is null' tests nothing - 'is null' follows a reference or a function value") }
+fn IsNullOfValue(ty String&) r.Msg { return r.Msg(Diag.IsNullOfValue, "E10c", $"only a reference or a function value can be null, and this is " $ty) }
+fn MayBeNull(text String&, ty1 String&, ty2 String&, bang String&) r.Msg { return r.Msg(Diag.MayBeNull, "T2c", "'" $text "' is a " $ty1 ", which may be null, and " $ty2 " never is - test it first ('if x is not null'), or write '" $bang "!'") }
+fn NullToNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NullToNonNull, "T2c", $ty1 " is never null - a reference that may be is written " $ty2) }
+fn NoteNullableDecl() r.Msg { return r.Msg(Diag.NoteNullableDecl, "", "the type is written here - write '?&' for '&' where it may be null") }
+fn NeverNull(text String&, ty String&, val String&) r.Msg { return r.Msg(Diag.NeverNull, "T2c", "'" $text "' is a " $ty ", never null, so this is always " $val) }
+fn NoZeroNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoZeroNonNull, "T2c", $ty1 " is never null, so it has no zero value - give it a value, or write " $ty2) }
+fn ReadMaybeNull(text String&, ty String&, bang String&) r.Msg { return r.Msg(Diag.ReadMaybeNull, "T2c", "'" $text "' is a " $ty ", which may be null - read through it where a test says it is not ('if x is not null'), or write '" $bang "!'") }
+fn NullToArray(ty String&, empty String&) r.Msg { return r.Msg(Diag.NullToArray, "T2c", "an array written '&' is never null - write '" $empty "' for an empty " $ty ", or '?&' where it may be null") }
+fn ArrayIsNull(text String&, empty String&) r.Msg { return r.Msg(Diag.ArrayIsNull, "T2c", "an array written '&' is never null - test whether it is empty: write '" $text $empty "', or '?&' where it may be null") }
+fn NarrowedWrite(local String&, kase String&) r.Msg { return r.Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written or lent writably - '" $local "' is narrowed to " $kase ", and what it reads there is a copy of the payload: assign the whole case, '" $local " = " $kase "(...)', or change a copy a match binds and assign the case back") }
+fn CallDoesNothing(call String&) r.Msg { return r.Msg(Diag.CallDoesNothing, "S3", "'" $call "' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out") }
+fn FieldOfEnum(ty String&, f String&) r.Msg { return r.Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', until it is assigned") }
+fn NullCompared(x String&, form String&) r.Msg { return r.Msg(Diag.NullCompared, "E10c", $"null is tested with 'is', never compared - write '" $x " " $form "'") }
+fn AsNeedsCase(ty String&, text String&) r.Msg { return r.Msg(Diag.AsNeedsCase, "E32", "after 'as' comes a case of " $ty ", found " $text) }
+fn PatternType(ty String&, text String&) r.Msg { return r.Msg(Diag.PatternType, "S13b", "a pattern here names a case of " $ty ", found " $text) }
+fn CaseIsPrivate(tok String&) r.Msg { return r.Msg(Diag.CaseIsPrivate, "M6a", "case " $tok " is private to its module") }
+fn AsNothing(text String&) r.Msg { return r.Msg(Diag.AsNothing, "E32", "case " $text " carries nothing for 'as' to give - test for it with '=='") }
+fn IsAsNotEnum(ty String&) r.Msg { return r.Msg(Diag.IsAsNotEnum, "E32", "'as' asks for an enum value's payload, and this is " $ty) }
+fn SliceNeedsLen(ty String&) r.Msg { return r.Msg(Diag.SliceNeedsLen, "E31", "a slice with no end runs to Len(), and " $ty " has none") }
+fn AtUndeclared(ty String&) r.Msg { return r.Msg(Diag.AtUndeclared, "E31", $ty " declares SetAt but not At, which reading x[i] calls") }
+fn SetatUndeclared(ty String&) r.Msg { return r.Msg(Diag.SetatUndeclared, "E31", $ty " declares At but not SetAt, which x[i] = v calls") }
+fn WriteThroughAtNoSetat(ty String&) r.Msg { return r.Msg(Diag.WriteThroughAtNoSetat, "E31", "this writes through x[i] on " $ty ", which declares At but not SetAt - the copy At gives back is never written back; declare SetAt") }
+fn WriteThroughAtBuilds() r.Msg { return r.Msg(Diag.WriteThroughAtBuilds, "E31, O17", "x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')") }
+fn CondLentWritable() r.Msg { return r.Msg(Diag.CondLentWritable, "E28", "a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") }
+fn WriteThroughAtCall() r.Msg { return r.Msg(Diag.WriteThroughAtCall, "E31b", "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") }
+fn WriteThroughAtOperator(ty String&, method String&) r.Msg { return r.Msg(Diag.WriteThroughAtOperator, "E31b", "x[i] gives a copy of the element, and this store would run " $ty "'s " $method " between reading it and writing it back - write 't := x[i]', the store into 't', then 'x[i] = t'") }
+fn CharNoPad(tok String&, name String&) r.Msg { return r.Msg(Diag.CharNoPad, "M19, T29f", "Char has no method " $tok " - a character is padded as text: '($c)." $name "(n)'") }
+fn StepNotNumber(ty String&) r.Msg { return r.Msg(Diag.StepNotNumber, "S3a, E31", "'++' and '--' step a number, or a type declaring Inc (Dec) or Plus (Minus) - found " $ty) }
+fn DefaultArgNotAllowed() r.Msg { return r.Msg(Diag.DefaultArgNotAllowed, "E14a", "'default' stands only for a parameter's declared default, in a call") }
+fn DeferErrorEscapes() r.Msg { return r.Msg(Diag.DeferErrorEscapes, "S19b", "an error may not leave deferred code - catch it here") }
+fn CaseTypeArgsNotInferable(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.CaseTypeArgsNotInferable, "G10c", "the type arguments of " $text1 " cannot be inferred from this case - write them, '" $text1 "<...>." $text2[text1.Len() + 1:] "', or give it a type to land in") }
+fn EmbedPathUnknown() r.Msg { return r.Msg(Diag.EmbedPathUnknown, "E38", "an embed's path is text known while compiling - a literal, or what reads no local") }
+fn EmbedPathUndecided() r.Msg { return r.Msg(Diag.EmbedPathUndecided, "E38", "this embed's path cannot be computed while compiling - write it so it can, or as a literal") }
+fn EmbedNotRead(path String&, why String&) r.Msg { return r.Msg(Diag.EmbedNotRead, "E38", $"embed " $path " reads no file: " $why) }
+fn TryNowhereToGo() r.Msg { return r.Msg(Diag.TryNowhereToGo, "R13", "an error tried here has nowhere to go - catch every one it can be") }
+fn GenErrorNotDeclared(ty String&) r.Msg { return r.Msg(Diag.GenErrorNotDeclared, "R9, D18", $ty " can escape here, and this generator's result does not say it fails with it - write 'Iterator<T ? " $ty ">', or catch it") }
+fn TryErrorNotDeclared(ty String&) r.Msg { return r.Msg(Diag.TryErrorNotDeclared, "R9", $ty " can escape here, and this function does not declare it - add it after '?', or catch it") }
+fn UnknownMethod(ty String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.UnknownMethod, "M19", $ty " has no method " $tok $hint) }
+fn MethodNotInherited(ty String&, tok String&) r.Msg { return r.Msg(Diag.MethodNotInherited, "T29f", $ty " declares no " $tok ", and does not extend its base, which has one - declare it with 'extends'") }
+
+# a name read through a number type that is none of its limits (E36), or a limit of a type that is no number
+fn NoLimit(ty String&, name String&, tail String&) r.Msg { return r.Msg(Diag.NoLimit, "E36", $ty " has no limit '" $name "'" $tail) }
+
+# become where no jump can stand (S21): a test, a constructor, a lambda, main ...
+fn BecomeOutside(where String&) r.Msg { return r.Msg(Diag.BecomeOutside, "S21", "'become' ends a function declared with fn, never " $where " - write 'return' and the call") }
+
+# become inside what may not be left so (S21)
+fn BecomeInside(what String&) r.Msg { return r.Msg(Diag.BecomeInside, "S21", "'become' leaves the function at once, so not from " $what " - write 'return' and the call") }
+
+# become try f(x) (S21)
+fn BecomeTry() r.Msg { return r.Msg(Diag.BecomeTry, "S21", "'become' takes the call alone - what it fails with is the function's own, so write it without 'try'") }
+
+# become given what is no call of a function (S21)
+fn BecomeNotCall(what String&) r.Msg { return r.Msg(Diag.BecomeNotCall, "S21", "'become' takes a call of a function or a method declared with fn, and this is " $what " - write 'return' instead") }
+
+# become calling a function of another signature (S21)
+fn BecomeSignature(have String&, callee String&) r.Msg { return r.Msg(Diag.BecomeSignature, "S21", "'become' calls a function of this one's own signature, and this is " $have ", the callee " $callee " - write 'return' and the call, or give them one signature") }
+
+# become with a parameter or result through memory (S21)
+fn BecomeMemory() r.Msg { return r.Msg(Diag.BecomeMemory, "S21", "'become' cannot jump where a parameter or the result is over 128 bytes, passed through memory the function's frame holds - pass a reference, or write 'return'") }
+
+# become whose callee fails otherwise (S21)
+fn BecomeErrors(have String&, callee String&) r.Msg { return r.Msg(Diag.BecomeErrors, "S21", "'become' makes the callee's failure this function's own, and this one fails with " $have ", the callee with " $callee " - give them one error set, in one order, or write 'return try' and the call") }
+
+# become in a function holding what has a destructor (S21, O16)
+fn BecomeDestructor(what String&) r.Msg { return r.Msg(Diag.BecomeDestructor, "S21", "'become' closes this function's scopes before the call, and " $what " whose destructor would run then, before the call - write 'return' and the call") }
+
+# become leaving a by-value parameter holding a value with a destructor it does not hand on (S21, O15)
+fn BecomeHeldParam(name String&) r.Msg { return r.Msg(Diag.BecomeHeldParam, "S21", "'become' ends this function before the call, and its parameter '" $name "' holds a value with a destructor the call does not take, which would run then - hand it on, or write 'return' and the call") }
+
+# become handing the callee storage of a scope it closes (S21, section 8)
+fn BecomeBorrows() r.Msg { return r.Msg(Diag.BecomeBorrows, "S21", "'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'") }
+
+# a top-level assert decided false while compiling (S17a), with its message where that computes too
+fn TopAssertFalse() r.Msg { return r.Msg(Diag.TopAssertFalse, "S17a", "this top-level assert is false, decided while compiling") }
+fn TopAssertFalseMessage(text String&) r.Msg { return r.Msg(Diag.TopAssertFalseMessage, "S17a", "this top-level assert is false, decided while compiling: " $text) }
+
+# a top-level assert the evaluator cannot decide (S17a): it holds of the program while compiling, or is no assert there
+fn TopAssertUndecidable(why String&) r.Msg { return r.Msg(Diag.TopAssertUndecidable, "S17a", "a top-level assert is decided while compiling, and this one cannot be: " $why " - assert it in a function or a test, where it is checked at run time") }
+
+# a name read through Place that is not Here (E40)
+fn PlaceMember(name String&) r.Msg { return r.Msg(Diag.PlaceMember, "E40", "Place gives no '" $name "' through its name - 'Place.Here' is the place where it is written") }
+
+# a bit operation on what is no integer (E37)
+fn BitOpNotInteger(name String&, ty String&) r.Msg { return r.Msg(Diag.BitOpNotInteger, "E37", "'" $name "' is a method of the integer types, and " $ty " is none") }
+
+# a rotation's count of no integer type (E37)
+fn BitOpCount(ty String&) r.Msg { return r.Msg(Diag.BitOpCount, "E37", "a rotation's count is an integer, found " $ty) }
+
+# an enum's raw type that is neither text nor an integer type (T17e)
+fn RawType(ty String&) r.Msg { return r.Msg(Diag.RawType, "T17e", "an enum's raw type is String or an integer type, found " $ty) }
+
+# a raw value that is no literal of the raw type (T17e)
+fn RawNotLiteral(ty String&) r.Msg { return r.Msg(Diag.RawNotLiteral, "T17e", "a raw value is a literal of the raw type " $ty) }
+
+# a raw value the raw type cannot hold (T17e)
+fn RawNoFit(v String&, ty String&) r.Msg { return r.Msg(Diag.RawNoFit, "T17e", "the raw value " $v " does not fit " $ty) }
+
+# two cases of one enum with one raw value (T17e)
+fn RawRepeated(name String&, v String&, other String&) r.Msg { return r.Msg(Diag.RawRepeated, "T17e", "'" $name "' has the raw value " $v ", which '" $other "' has already - raw values are distinct") }
+
+# a raw value in an enum that names no raw type (T17e)
+fn RawWithoutType() r.Msg { return r.Msg(Diag.RawWithoutType, "T17e", "a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'") }
+
+# a raw type on an anonymous enum (T17e)
+fn RawAnonymous() r.Msg { return r.Msg(Diag.RawAnonymous, "T17e", "only a declared enum has raw values - declare the enum with 'type'") }
+
+# Value or From on an enum without raw values (T17e)
+fn NoRawValues(ty String&, name String&) r.Msg { return r.Msg(Diag.NoRawValues, "T17e", $ty " declares no raw values, so it has no '" $name "' - name a raw type after 'enum'") }
+
+# From on an enum a case of which carries a payload (T17e)
+fn FromPayload(ty String&, name String&) r.Msg { return r.Msg(Diag.FromPayload, "T17e", "'From' makes a case from its raw value alone, and " $ty "'s case '" $name "' carries a payload") }
+
+# a case named From in an enum with raw values (T17e)
+fn FromCaseName() r.Msg { return r.Msg(Diag.FromCaseName, "T17e", "a case of an enum with raw values may not be named 'From', which makes a case from its raw value") }
+fn AtomicNotInteger(ty String&) r.Msg { return r.Msg(Diag.AtomicNotInteger, "P9", "the atomic operations are methods of the integer types, and " $ty " is none") }
+fn DefaultCount(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.DefaultCount, "R11", "expected " $n1 " defaults, one per result, found " $n2) }
+fn DefaultScope() r.Msg { return r.Msg(Diag.DefaultScope, "R11, O25", "a reference default lives where the call's result does - or is null, or built there") }
+fn CatchAfterCatchAll() r.Msg { return r.Msg(Diag.CatchAfterCatchAll, "R11a", "a catch with no error types takes every error left, so no clause can follow it") }
+fn CatchUnreachable() r.Msg { return r.Msg(Diag.CatchUnreachable, "R11a", "an earlier clause already takes every error this one names") }
+fn DefaultInStatement() r.Msg { return r.Msg(Diag.DefaultInStatement, "R11", "a try written as a statement gives no value, so it takes no default") }
+fn DefaultDead() r.Msg { return r.Msg(Diag.DefaultDead, "R11", "this clause's block always leaves, so its default is never the value - remove it") }
+fn CatchMustLeave() r.Msg { return r.Msg(Diag.CatchMustLeave, "R11", "a clause here leaves, or gives the value with 'default v'") }
+fn ClauseLastValue(text String&) r.Msg { return r.Msg(Diag.ClauseLastValue, "R11", "a block's last value is not the clause's value - write '} default " $text "' after the block") }
+fn DefaultNoValue() r.Msg { return r.Msg(Diag.DefaultNoValue, "R11", "this call returns no value, so there is nothing for a default to stand in for") }
+fn DefaultNeedsCatch() r.Msg { return r.Msg(Diag.DefaultNeedsCatch, "R11", "a default belongs to a catch clause: 'catch default v'") }
+fn TryNothingFails(text String&) r.Msg { return r.Msg(Diag.TryNothingFails, "R8", "nothing here can fail - write it without '" $text "'") }
+fn BangNothingFails() r.Msg { return r.Msg(Diag.BangNothingFails, "E35", "nothing here can fail - write it without '!'") }
+
+
+fn NestedArrayLiteral() r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<Array<I32>>[Array<I32>[1, 2], Array<I32>[3, 4]]") }
+fn ComprehensionReferences() r.Msg { return r.Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
+fn LiteralUnique(ty String&, elem String&) r.Msg { return r.Msg(Diag.LiteralUnique, "E19, T13b", "a literal or comprehension of " $ty " hands its FromIter a walk of references to the values, and " $elem " is unique - its values are never copied: make the " $ty " and add each value by its own call (Push, Put)") }
+fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes the type before its '[', through that type's FromIter, and " $ty " has none - for an array of " $ty ", write Array<" $ty ">[...]") }
+fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type before its '[', and " $ty " is a reference - an array of them is Array<" $ty ">[...]") }
+fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty "'s FromIter takes no one iterator, so no literal can call it - call it as " $ty ".FromIter(...)") }
+fn LiteralEntries(ty String&) r.Msg { return r.Msg(Diag.LiteralEntries, "E19", "a literal of " $ty " holds no 'key: value' entries - its elements are no MapEntry") }
+fn ComprWalkFails() r.Msg { return r.Msg(Diag.ComprWalkFails, "E27", "a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them, and may not fail by calls of its own - write a generator function and call the collection's FromIter with it") }
+fn NotAnEnum(tok String&) r.Msg { return r.Msg(Diag.NotAnEnum, "E22", $tok " is not an enum type, so it has no values 'T.Case'") }
+fn TakesNoArgs(tok String&) r.Msg { return r.Msg(Diag.TakesNoArgs, "E14", $tok " takes no arguments") }
+fn MethodAmbiguous(tok String&) r.Msg { return r.Msg(Diag.MethodAmbiguous, "M22", "two imported modules declare " $tok " for this type - import only the one meant") }
+fn DefaultAmbiguous(ty String&, tok String&) r.Msg { return r.Msg(Diag.DefaultAmbiguous, "M19e", "two traits " $ty " satisfies both declare a default " $tok " - the call cannot choose") }
+fn MethodIsPrivate(tok String&) r.Msg { return r.Msg(Diag.MethodIsPrivate, "M6", "method " $tok " is private to its module") }
+fn LengthsNotAValue(text String&) r.Msg { return r.Msg(Diag.LengthsNotAValue, "G12", "'" $text "' takes an array by value, an instance per length (G29), so it is no value - pass a lambda calling it") }
+fn GenericNotAValue(text String&) r.Msg { return r.Msg(Diag.GenericNotAValue, "G12", "generic function '" $text "' is not a value - call it, or name an instance by its type arguments, as '" $text "<I64>'") }
+fn ArrayLengthNotInt(ty String&) r.Msg { return r.Msg(Diag.ArrayLengthNotInt, "E13a", "an array's length is an integer, found " $ty) }
+fn AssignListCount(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.AssignListCount, "S4c", $n1 " targets need as many values, found " $n2) }
+fn DestructNotName() r.Msg { return r.Msg(Diag.DestructNotName, "D8c", "':=' declares each target, so each is a name or '_' - use '=' to assign into places") }
+fn DestructOneValue(ty String&) r.Msg { return r.Msg(Diag.DestructOneValue, "D8c", "only several results can be destructured, and this is one " $ty) }
+fn DestructCount(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.DestructCount, "D8c", $n1 " targets for " $n2 " results - write '_' for one not wanted") }
+fn StoredRefOutlived() r.Msg { return r.Msg(Diag.StoredRefOutlived, "O20", "the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')") }
+fn PayloadScopesDisagree() r.Msg { return r.Msg(Diag.PayloadScopesDisagree, "T17c", "this payload holds references into two scopes, and it lives in one - build what it holds in one scope") }
+fn ElemNotInArrayScope() r.Msg { return r.Msg(Diag.ElemNotInArrayScope, "O25c", "this element can be stored through, so it lives exactly where the array is put - build it there") }
+fn ElemOutlived() r.Msg { return r.Msg(Diag.ElemOutlived, "O25c", "the array outlives what this element refers to - build the element where the array goes") }
+fn PayloadOutlived() r.Msg { return r.Msg(Diag.PayloadOutlived, "T17c", "this value's payload refers to storage the value would outlive - make that storage where the value is kept") }
+fn InstanceOutlivesReferent(copy String&) r.Msg { return r.Msg(Diag.InstanceOutlivesReferent, "C2d", "this instance would outlive what its field refers to - keep it in that block" $(", hold the value by value in the field, or give the field a copy (" $copy ")" if copy != "" else ", or hold the value by value in the field")) }
+fn InstanceOutlivesArg(copy String&) r.Msg { return r.Msg(Diag.InstanceOutlivesArg, "C2d", "this instance holds a reference to an argument it would outlive - make the argument where the instance goes" $(", hold it by value in a field, or give it a copy (" $copy ")" if copy != "" else ", or hold it by value in a field")) }
+fn GlobalHoldsShorter() r.Msg { return r.Msg(Diag.GlobalHoldsShorter, "O1b", "a global holds only what lives as long as the program - store something built here, or another global's") }
+fn ValueRefsOutlived() r.Msg { return r.Msg(Diag.ValueRefsOutlived, "O25h", "this value holds references into a scope the target outlives - build it where the target is") }
+fn MutOnLocal(ty String&) r.Msg { return r.Msg(Diag.MutOnLocal, "D11a", "a local is always writable - 'mut' is for a reference, and " $ty " is none") }
+fn MutOnInferredLocal() r.Msg { return r.Msg(Diag.MutOnInferredLocal, "D11a", "':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'") }
+fn NotAStatement() r.Msg { return r.Msg(Diag.NotAStatement, "S3", "this computes a value and discards it - only a call, '++' or '--' stands alone") }
+fn JoinNextLine() r.Msg { return r.Msg(Diag.JoinNextLine, "S3, E11b", "text on a line of its own does nothing - a join continues onto the next line only inside parentheses") }
+fn ConditionConstant() r.Msg { return r.Msg(Diag.ConditionConstant, "S8a", "this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it") }
+fn RangeNotInt(ty String&) r.Msg { return r.Msg(Diag.RangeNotInt, "S9b", "a range's bounds and step are integers, found " $ty) }
+fn RangeStep() r.Msg { return r.Msg(Diag.RangeStep, "S9b", "a range only counts upward, so its step is positive") }
+fn ComprNeedsTry() r.Msg { return r.Msg(Diag.ComprNeedsTry, "E27, S9e", "this comprehension's own calls can fail - write 'try Array<T>[e for x in c]'") }
+fn ForInNeedsTry() r.Msg { return r.Msg(Diag.ForInNeedsTry, "S9e", "this loop's own calls can fail - write 'for x in try c', with catch clauses after the body") }
+fn ForInTryNothing() r.Msg { return r.Msg(Diag.ForInTryNothing, "S9e", "nothing this loop calls by itself can fail - drop the 'try'") }
+fn ForInClauseExit() r.Msg { return r.Msg(Diag.ForInClauseExit, "S9e", "a loop's catch clause runs after the loop has ended, so it has no loop to break or continue - set a flag") }
+fn ForInNameExists(tok String&, text String&) r.Msg { return r.Msg(Diag.ForInNameExists, "D3a, E29", $tok " is already declared, and a for-in declares new names - choose another, or to loop while it is in c write 'for { if " $text " not in c { break } }'") }
+fn NotIterable(ty String&) r.Msg { return r.Msg(Diag.NotIterable, "S9a", $ty " cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()") }
+fn AltBindsOtherNames() r.Msg { return r.Msg(Diag.AltBindsOtherNames, "S13c", "every alternative binds the same names - bind it in each, write '_', or split the case") }
+fn BoundTwice(tok String&) r.Msg { return r.Msg(Diag.BoundTwice, "S13c", $tok " is bound twice in one alternative") }
+fn AltBindingType(tok String&, ty String&) r.Msg { return r.Msg(Diag.AltBindingType, "S13c", $tok " is bound as " $ty " by an earlier alternative - split the case") }
+fn CaseValueType(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.CaseValueType, "S13", "a case value here is " $ty1 ", found " $ty2) }
+fn PatternArity(text String&, n I64) r.Msg { return r.Msg(Diag.PatternArity, "S13b", "case " $text " holds " $n " fields, and a pattern names each - write '_' for one not wanted") }
+fn ValueCaseBlock() r.Msg { return r.Msg(Diag.ValueCaseBlock, "S12b", "a block gives no value - a clause of a match used as a value is 'case P: v', or 'case P: return x' to leave") }
+fn LineStartsWithOperator(tok1 String&, tok2 String&) r.Msg { return r.Msg(Diag.LineStartsWithOperator, "L18", "a line cannot begin with " $tok1 " - the line before ended its statement; end that line with " $tok2 ", or put the expression in parentheses") }
+fn GuardNotBool(ty String&) r.Msg { return r.Msg(Diag.GuardNotBool, "S13e", "a guard is a Bool, found " $ty) }
+fn UnknownTypeVar(text String&) r.Msg { return r.Msg(Diag.UnknownTypeVar, "", "unknown type variable " $text) }
+fn TypeMatchGuard() r.Msg { return r.Msg(Diag.TypeMatchGuard, "S13e", "a type match chooses its case while compiling, so it takes no guard - test the value inside the case") }
+fn MatchValueNone() r.Msg { return r.Msg(Diag.MatchValueNone, "G30", "no clause of this match gives a value at this instance's length - add one, or 'case _'") }
+fn TypeMatchUncovered(ty String&) r.Msg { return r.Msg(Diag.TypeMatchUncovered, "G15", "no case covers " $ty ", which this generic is instantiated with - add one, or 'case _'") }
+fn MatchValueTypes(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.MatchValueTypes, "S12b", "every value of this match is " $ty1 ", found " $ty2) }
+fn MatchNotExhaustive(text String&, ty String&) r.Msg { return r.Msg(Diag.MatchNotExhaustive, "S13a", "case " $text " of " $ty " is not covered - add it, or 'case _ { }'") }
+fn MatchValueUncovered(ty String&) r.Msg { return r.Msg(Diag.MatchValueUncovered, "S12b", "a match over " $ty " gives a value only when its cases cover every value - add 'case _: v'") }
+fn MatchValueOne() r.Msg { return r.Msg(Diag.MatchValueOne, "S12b, D8c", "a match gives one value - to give several, return them from each case of a match statement: 'case P: return a, b'") }
+fn WildcardNotAlone() r.Msg { return r.Msg(Diag.WildcardNotAlone, "S13f", "'_' matches every value, so it is its case's only alternative") }
+fn CaseAfterWildcard() r.Msg { return r.Msg(Diag.CaseAfterWildcard, "S13f", "no value reaches this - an earlier 'case _' with no guard takes every one") }
+fn CaseUnknownName(tok String&) r.Msg { return r.Msg(Diag.CaseUnknownName, "S13f", "unknown name " $tok " - a name in a case is a value compared by '=='; to take any value and test it, write 'case _ if ...'") }
+fn CaseIsSubject(tok String&) r.Msg { return r.Msg(Diag.CaseIsSubject, "S13f", $tok " is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'") }
+fn ReturnOwnStorage() r.Msg { return r.Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Copy()')") }
+
+# O27 as placement (docs/sec8.md 4.3): a view kept where the storage it shows cannot be built - where it is kept is no
+# scope that exists at run time, or not known here
+fn ViewKept(name String&) r.Msg { return r.Msg(Diag.ViewKept, "O27", "this keeps a view of '" $name "' where no storage can be built for it (where it is kept is not known here) - keep a copy of what it shows: '$x' or 'x.Copy()'") }
+
+# ... returned: the result scope a view's storage would be built in is not known here
+fn ViewReturned(name String&) r.Msg { return r.Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', whose storage cannot be built where the result goes - return the value (a result written without '&' copies it), or a copy: '$x'") }
+
+# ... of the copy a match binding or a lambda's capture made where it stands (S13b, D16c), which lives no longer
+fn ViewKeptCopy(name String&) r.Msg { return r.Msg(Diag.ViewKeptCopy, "O27", "this keeps a view of '" $name "', the copy its match or lambda made where it stands, which goes with it - keep a copy of what it shows: '$x' or 'x.Copy()'") }
+
+# O25i (NLL, docs/sec8.md 3.4): a read of a reference local an assignment may have given storage that no longer lives
+# where the read stands, and that cannot be built longer
+fn ReadAfterScope(name String&) r.Msg { return r.Msg(Diag.ReadAfterScope, "O25i", "this reads '" $name "', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here") }
+
+# O25i, O12: something built or stored exactly where a reference local's referent lives, its versions reaching here living
+# in different scopes
+fn VersionsDiffer(name String&) r.Msg { return r.Msg(Diag.VersionsDiffer, "O25i, O12", "'" $name "' may hold values of different scopes here, so where its referent lives is not known - nothing new is built or stored through it: give it values of one scope, or store through each where it is assigned") }
+
+# O20 under the inference (docs/rework.md 2.6, 3): a value read out of a container this function builds, kept where the
+# container does not live, through a field that cannot have a binding of its own
+fn PartKept(part String&, whole String&) r.Msg { return r.Msg(Diag.PartKept, "O20", "'" $part "' lives where '" $whole "' does, which closes first - keep a copy ('$" $part "'), or keep what '" $whole "' was made from") }
+
+fn DeferReturns() r.Msg { return r.Msg(Diag.DeferReturns, "S19b", "deferred code may not return - it runs while its block is left") }
+fn YieldOutside() r.Msg { return r.Msg(Diag.YieldOutside, "D18, S20", "'yield' is a generator's - a function whose result is written 'Iterator<T>'") }
+fn YieldInLambda() r.Msg { return r.Msg(Diag.YieldInLambda, "S20", "a lambda is no generator - 'yield' in the function it is written in") }
+fn YieldInDefer() r.Msg { return r.Msg(Diag.YieldInDefer, "S19b, S20", "deferred code may not yield - it runs while its block is left") }
+fn YieldInJoin() r.Msg { return r.Msg(Diag.YieldInJoin, "S20", "a join block may not yield - its tasks are waited for before it is left") }
+fn GenReturnValue() r.Msg { return r.Msg(Diag.GenReturnValue, "D18a", "a generator gives its values by 'yield' - 'return' ends it and takes none") }
+fn GenYieldsBorrow(name String&) r.Msg { return r.Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Copy()')") }
+fn YieldOwnStorage() r.Msg { return r.Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Copy()', '$x')") }
+fn GenYieldShorter(where String&) r.Msg { return r.Msg(Diag.GenYieldShorter, "D18c, S20", "this generator's elements live " $where ", and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Copy()')") }
+fn GenErrors(elem String&) r.Msg { return r.Msg(Diag.GenErrors, "D18", "a generator fails as its Next does - write its errors in its result: 'Iterator<" $elem " ? E>'") }
+fn ReturnCount(n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.ReturnCount, "D8c", "this function returns " $n1 " value" $text ", found " $n2) }
+fn ReturnInCtor() r.Msg { return r.Msg(Diag.ReturnInCtor, "C2b", "a constructor gives no value - its fields are the instance; fail with 'error'") }
+fn ReturnInTest() r.Msg { return r.Msg(Diag.ReturnInTest, "S15", "a test has no result - a bare 'return' ends it as passed") }
+fn ReturnInNoreturn() r.Msg { return r.Msg(Diag.ReturnInNoreturn, "D8e", "a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'") }
+fn NoreturnFallsOff() r.Msg { return r.Msg(Diag.NoreturnFallsOff, "D8e", "a 'noreturn' function may not reach its end - end every path with a noreturn call, 'unreachable' or 'for { }'") }
+fn NoreturnErrors() r.Msg { return r.Msg(Diag.NoreturnErrors, "D8e", "a 'noreturn' function never returns to its caller, so it fails with nothing - drop the '?'") }
+fn NoreturnHere(text String&) r.Msg { return r.Msg(Diag.NoreturnHere, "D8e", $text " cannot be 'noreturn'") }
+fn DeclFromNoreturn(what String& = "a 'noreturn' call") r.Msg { return r.Msg(Diag.DeclFromNoreturn, "D8e", $what " gives no value, so ':=' has no type to take") }
+fn ReturnValueInVoid() r.Msg { return r.Msg(Diag.ReturnValueInVoid, "D8", "this function returns no value") }
+fn ReturnNeedsValue(ty String&) r.Msg { return r.Msg(Diag.ReturnNeedsValue, "D8", "this function returns " $ty ", so 'return' needs a value") }
+fn ErrorOutsideFunction() r.Msg { return r.Msg(Diag.ErrorOutsideFunction, "R3", "'error' fails a function, and this is not inside one") }
+fn ErrorWordTooFar(ty String&) r.Msg { return r.Msg(Diag.ErrorWordTooFar, "R1c", "an error set names one of " $ty "'s first 64 words alone, and this is past them - name the type whole") }
+fn ErrorWordNotInSet(ty String&) r.Msg { return r.Msg(Diag.ErrorWordNotInSet, "R3", "this function's '?' names " $ty ", not this word - add it after '?'") }
+fn CatchWordNotProduced(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.CatchWordNotProduced, "R14", "the call does not fail with " $ty1 " - it fails with " $ty2) }
+fn ErrorWordIsPrivate(tok String&) r.Msg { return r.Msg(Diag.ErrorWordIsPrivate, "M6a", "error word " $tok " is private to its module") }
+fn ErrorUndeclared(tok String&) r.Msg { return r.Msg(Diag.ErrorUndeclared, "R3", "this function does not declare " $tok " - add it after '?'") }
+fn JoinWithoutSpawn() r.Msg { return r.Msg(Diag.JoinWithoutSpawn, "P1a", "this join spawns nothing, so it waits for nothing") }
+fn SpawnLambdaParams() r.Msg { return r.Msg(Diag.SpawnLambdaParams, "D16e", "a spawned lambda takes no parameters - it captures what it needs") }
+fn SpawnInDefer() r.Msg { return r.Msg(Diag.SpawnInDefer, "S19b, P1a", "a spawn in deferred code needs a join written in the deferred code") }
+fn SpawnOutsideJoin() r.Msg { return r.Msg(Diag.SpawnOutsideJoin, "P1", "'spawn' is written inside a 'join' block, which waits for the task") }
+fn SpawnAtElement() r.Msg { return r.Msg(Diag.SpawnAtElement, "E31b, P2", "a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself") }
+fn SpawnNotCall() r.Msg { return r.Msg(Diag.SpawnNotCall, "P1", "'spawn' takes a call") }
+fn SpawnFallible() r.Msg { return r.Msg(Diag.SpawnFallible, "P4", "this call can fail - write 'spawn try', and what its clauses do not take reaches the join") }
+fn SpawnTryInfallible() r.Msg { return r.Msg(Diag.SpawnTryInfallible, "P4", "this task cannot fail - drop the 'try'") }
+fn TaskClauseReturns() r.Msg { return r.Msg(Diag.TaskClauseReturns, "P4a", "a task's clause runs on the task and may not return - it ends where its block does") }
+fn TaskClauseLoopJump(tok String&) r.Msg { return r.Msg(Diag.TaskClauseLoopJump, "P4a", $tok " may not leave a task's clause - it runs on the task, outside the spawner's loops") }
+fn TaskClauseError() r.Msg { return r.Msg(Diag.TaskClauseError, "P4a", "an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take") }
+fn TaskClauseNeedsDefault() r.Msg { return r.Msg(Diag.TaskClauseNeedsDefault, "P4a", "this clause takes an error the targets would get no value for - end it with 'default v', or end the process") }
+fn TaskDefaultInStatement() r.Msg { return r.Msg(Diag.TaskDefaultInStatement, "P4a", "a spawn without targets gives no value, so its clauses take no default") }
+fn JoinNotTried(ty String&) r.Msg { return r.Msg(Diag.JoinNotTried, "P4c", "this join's tasks can fail with " $ty " - write 'try join', with catch clauses for what it handles here") }
+fn JoinCannotFail() r.Msg { return r.Msg(Diag.JoinCannotFail, "P4c", "no task of this join can fail - drop the 'try'") }
+fn JoinCatchNeedsTry() r.Msg { return r.Msg(Diag.JoinCatchNeedsTry, "P4c", "a join takes catch clauses only as 'try join', and no task of this one can fail") }
+fn JoinClauseMustLeave() r.Msg { return r.Msg(Diag.JoinClauseMustLeave, "P4d", "a task of this join binds a target it leaves unwritten when it fails - this clause must leave") }
+fn SpawnArgTooShort() r.Msg { return r.Msg(Diag.SpawnArgTooShort, "P2", "this argument's storage closes before the join does - declare it at the join's level or wider") }
+fn SpawnArgHoldsShort() r.Msg { return r.Msg(Diag.SpawnArgHoldsShort, "P2", "this argument refers to storage that closes before the join does - declare that at the join's level or wider") }
+fn SpawnCaptureTooShort() r.Msg { return r.Msg(Diag.SpawnCaptureTooShort, "P2, D16e", "this lambda captures a variable declared inside the join, which closes while the task may run") }
+fn SpawnFuncTooShort() r.Msg { return r.Msg(Diag.SpawnFuncTooShort, "P2, D16e", "this function value closes before the join does - make it outside, or spawn the lambda itself") }
+fn SpawnResultVoid() r.Msg { return r.Msg(Diag.SpawnResultVoid, "P1g", "this call returns nothing to bind - drop the target") }
+fn SpawnResultType(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.SpawnResultType, "P1g", "a spawn target has exactly the call's type " $ty1 ", found " $ty2 " - convert after the join") }
+fn SpawnResultAsRef(ty1 String&, ty2 String&, text String&, ty3 String&) r.Msg { return r.Msg(Diag.SpawnResultAsRef, "P1g", "a spawn target has exactly the call's type " $ty1 ", found " $ty2 " - declare '" $text "' to give " $ty3 ", built where its result lands") }
+fn SpawnResultTooShort() r.Msg { return r.Msg(Diag.SpawnResultTooShort, "P1g", "this target closes before the join does - declare it at the join's level or wider") }
+fn SpawnResultsDisagree() r.Msg { return r.Msg(Diag.SpawnResultsDisagree, "P1g", "these targets live in different scopes, and the results are built in one") }
+fn FuncValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.FuncValueObligations, "T22a", "'" $text "' ties where what it is given lives to what it keeps or gives back, and " $place " holds only what its written function type says of every call - call it directly, or hold it in a local and call it there") }
+fn LambdaValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.LambdaValueObligations, "T22a", "this lambda keeps '" $text "' beyond the call, and " $place " holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there") }
+fn LambdaValueRelates(place String&) r.Msg { return r.Msg(Diag.LambdaValueRelates, "T22a", "this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and " $place " holds only what its written function type says of every call - hold it in a local and call it there") }
+# a function value at a boundary doing what one promise word would say of its place's type (T22b): the word to write
+fn ValueBeyondType(subject String&, does String&, place String&, word String&) r.Msg { return r.Msg(Diag.ValueBeyondType, "T22b", $subject " " $does ", and the function type of " $place " says nothing of that - write '" $word "' after its signature") }
+# 2.2.1: a lambda keeping an argument in a capture that outlives the lambda, held where "keeps x" is all the type says
+fn LambdaKeepsOuter(text String&) r.Msg { return r.Msg(Diag.LambdaKeepsOuter, "T22b", "this lambda keeps '" $text "' in what it captured from a scope that outlives where the lambda lives, and 'keeps " $text "' says only that '" $text "' outlives the lambda - capture from one scope, or hold the lambda in a local and call it there") }
+# a function value whose functions are not followed, held as a type promising more than its own (T22b)
+# a function value whose functions are followed doing what an effect word of the type it is held as denies (T22b)
+fn EffectBeyond(what String&, does String&, want String&, word String&) r.Msg { return r.Msg(Diag.EffectBeyond, "T22b", $what " may " $does ", and '" $want "', the type it is held as here, promises '" $word "' - give a function that does not, or hold it as a type without '" $word "'") }
+fn NoteEffect(text String&) r.Msg { return r.Msg(Diag.NoteEffect, "", text) }
+fn FuncTypeBeyond(have String&, want String&, word String&) r.Msg { return r.Msg(Diag.FuncTypeBeyond, "T22b", "a value of type '" $have "' may do what '" $want "' does not say ('" $word "'), and which functions it holds is not known here - write '" $word "' after the signature of the type it is held as, or give a function directly") }
+
+# T21c: a promise's misuses
+fn PromiseMisplaced(word String&) r.Msg { return r.Msg(Diag.PromiseMisplaced, "T21c", "'" $word "' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)") }
+fn PromiseNoParam(name String&) r.Msg { return r.Msg(Diag.PromiseNoParam, "T21c", "'" $name "' is no parameter of this function type - a promise names its parameters by the names written in it") }
+fn PromiseTwice(word String&) r.Msg { return r.Msg(Diag.PromiseTwice, "T21c", "'" $word "' is promised twice - write it once") }
+fn PromiseReturnsNoreturn() r.Msg { return r.Msg(Diag.PromiseReturnsNoreturn, "T21c", "'returns' promises every call comes back, and 'noreturn' that none does - write one of them") }
+fn PromiseBorrowsNothing(word String&) r.Msg { return r.Msg(Diag.PromiseBorrowsNothing, "T21c", "this function type's result holds no reference, so '" $word "' says nothing - leave it out") }
+fn PromiseBorrowsValue(name String&) r.Msg { return r.Msg(Diag.PromiseBorrowsValue, "T21c", "'" $name "' holds no reference, so no result can refer into it - leave 'borrows " $name "' out") }
+fn PromiseBorrowsBoth() r.Msg { return r.Msg(Diag.PromiseBorrowsBoth, "T21c", "'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one - write one of them") }
+fn PromiseKeepsValue(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsValue, "T21c", "'" $name "' holds no reference and is not unique, so a call can keep only a copy of it, which needs no word - leave the 'keeps' out") }
+fn PromiseKeepsSelf(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsSelf, "T21c", "'keeps " $name " in " $name "' keeps a parameter in itself, which says nothing - leave it out") }
+fn PromiseKeepsInValue(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsInValue, "T21c", "'" $name "' holds no reference, so nothing can be kept in what it refers to") }
+fn PromiseKeepsPath(name String&, field String&) r.Msg { return r.Msg(Diag.PromiseKeepsPath, "T21c", "a promise names one field of a parameter - write 'in " $name "." $field "'") }
+fn PromiseKeepsField(field String&, name String&) r.Msg { return r.Msg(Diag.PromiseKeepsField, "T21c", "'" $field "' is no field of what '" $name "' refers to") }
+
+# type arguments written apart from the name or the "(" (G12)
+fn TypeArgsSpaced(name String&) r.Msg { return r.Msg(Diag.TypeArgsSpaced, "G12", "type arguments are written touching the name and the '(': '" $name "<...>(...)' - with spaces, '<' and '>' compare") }
+
+# a Call failing with other errors than the function type it is wanted as
+fn CallValueErrors(ty String&, has String&, wants String&, fix String&) r.Msg { return r.Msg(Diag.CallValueErrors, "T22, E31", $ty "'s Call fails with " $has " where the function type says " $wants " - the same errors in the same order: " $fix) }
+fn CallValueObligations(ty String&, place String&) r.Msg { return r.Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call ties where what it is given lives to what it keeps or gives back, and " $place " holds only what its written function type says of every call - call it by name, or hold the value in a local and call it there") }
+fn LambdaResultUninferable() r.Msg { return r.Msg(Diag.LambdaResultUninferable, "D16b", "this value gives the lambda no result type - write one") }
+fn LambdaArity(ty String&, n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.LambdaArity, "D16a", $ty " takes " $n1 " parameter" $text ", and this lambda " $n2) }
+fn LambdaSignature(ty String&) r.Msg { return r.Msg(Diag.LambdaSignature, "D16a", "this lambda's signature disagrees with " $ty " - leave that part out, or make them agree") }
+fn LambdaParamUntyped(tok String&) r.Msg { return r.Msg(Diag.LambdaParamUntyped, "D16a", "lambda parameter " $tok " has no type, and nothing gives it one - write it") }
+fn AlreadyDeclared(tok String&) r.Msg { return r.Msg(Diag.AlreadyDeclared, "", $tok " is already declared here") }
+fn MissingReturn(ty String&) r.Msg { return r.Msg(Diag.MissingReturn, "D10a", "the end can be reached without returning " $ty " - return on every path, or end it with 'unreachable'") }
+fn BreakOutsideLoop(tok String&) r.Msg { return r.Msg(Diag.BreakOutsideLoop, "S11", $tok " acts on the innermost loop, and there is none here") }
+fn DeferLoopJump(tok String&) r.Msg { return r.Msg(Diag.DeferLoopJump, "S19b", $tok " may not leave deferred code - it runs while its block is left") }
+fn CatchNotProduced(ty String&) r.Msg { return r.Msg(Diag.CatchNotProduced, "R14", "the call does not fail with " $ty) }
+fn TryCatchOnSlice() r.Msg { return r.Msg(Diag.TryCatchOnSlice, "R10", "a try statement discards its value, leaving a slice nothing - write 's := try a[lo:hi]' and catch where it is used") }
+fn EmptyDestructor() r.Msg { return r.Msg(Diag.EmptyDestructor, "C7a", "this destructor does nothing - remove it") }
+fn LiteralCtorFails(ty String&, text String&) r.Msg { return r.Msg(Diag.LiteralCtorFails, "T29d", "this literal enters " $ty " through its constructor, which does not run on it while compiling: " $text) }
+fn ZeroValueShared(ty String&) r.Msg { return r.Msg(Diag.ZeroValueShared, "D13c", $ty "'s zero value holds references, which a fill would share - give a fill, or build the elements") }
+fn NoZeroValue(ty String&, text String&) r.Msg { return r.Msg(Diag.NoZeroValue, "D13c", $ty " has no zero value, so this needs one - its constructor does not run on zeros while compiling: " $text) }
+fn ReadUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.ReadUnassigned, "D13d", "'" $name "' is read here before it is assigned on every path, and " $ty " has no zero value - assign it on each path before this read, or give it a value" $fix) }
+fn FieldUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.FieldUnassigned, "D13d", "the field '" $name "' is not assigned on every path through the constructor, and " $ty " has no zero value - assign it on each path, or give it a value" $fix) }
+fn TopSetPlace() r.Msg { return r.Msg(Diag.TopSetPlace, "D13e", "an assignment at the top level is a global's initializer, written only inside a top-level 'if' - give the value in the global's declaration") }
+fn TopSetTarget(name String&) r.Msg { return r.Msg(Diag.TopSetTarget, "D13e", "'" $name "' is no global of this module declared above with no value - only such a global is assigned at the top level") }
+fn TopSetHasValue(name String&) r.Msg { return r.Msg(Diag.TopSetHasValue, "D13e", "'" $name "' has a value in its declaration - a global is given its value once: declare it with no value, or drop this assignment") }
+fn TopSetTwice(name String&) r.Msg { return r.Msg(Diag.TopSetTwice, "D13e", "'" $name "' is assigned twice at the top level in this build - each build gives a global one value") }
+fn TopSetMissing(name String&, ty String&) r.Msg { return r.Msg(Diag.TopSetMissing, "D13e", "this branch does not assign '" $name "', and " $ty " has no zero value - assign it in every branch of the 'if', or give it a value") }
+fn TopSetNoElse(name String&, ty String&) r.Msg { return r.Msg(Diag.TopSetNoElse, "D13e", "this 'if' assigns '" $name "' and has no 'else', and " $ty " has no zero value - add an 'else' assigning it, or give it a value") }
+fn TopSetCondReads(name String&) r.Msg { return r.Msg(Diag.TopSetCondReads, "D13e", "this condition reads '" $name "', which its 'if' assigns - a condition cannot decide the value it reads") }
+fn DefaultNotComputable(text String&) r.Msg { return r.Msg(Diag.DefaultNotComputable, "D8a", "a default is computed while compiling, and this one cannot be: " $text) }
+fn AssertFalse() r.Msg { return r.Msg(Diag.AssertFalse, "S18c", "this assertion is false, evaluated while compiling") }
+fn AssertFalseMessage(text String&) r.Msg { return r.Msg(Diag.AssertFalseMessage, "S18c", "this assertion is false, evaluated while compiling: " $text) }
+fn AssertFalseWritten(text String&) r.Msg { return r.Msg(Diag.AssertFalseWritten, "S18c", "this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: " $text) }
+fn AssertMsgReturns(text String&) r.Msg { return r.Msg(Diag.AssertMsgReturns, "S17", $text " message may not return - it is evaluated only where it is used, and gives text") }
+fn AssertMsgError(text String&) r.Msg { return r.Msg(Diag.AssertMsgError, "S17", "an error may not leave " $text " message - catch it here") }
+fn AssertMsgLoopJump(tok String&, text String&) r.Msg { return r.Msg(Diag.AssertMsgLoopJump, "S17", $tok " may not leave " $text " message - it is evaluated only where it is used") }
+fn AssertMessageNotText(ty String&, text String&) r.Msg { return r.Msg(Diag.AssertMessageNotText, "S18a", $text " message is text, found " $ty " - write it as text: \"x is \" $x") }
+fn AssertAborts(text String&) r.Msg { return r.Msg(Diag.AssertAborts, "S18c", "this assertion aborts the program, evaluated while compiling: " $text) }
+fn GlobalAborts(text String&) r.Msg { return r.Msg(Diag.GlobalAborts, "K2", "this global's initializer aborts the program, evaluated while compiling: " $text) }
+fn VecViewStale(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.VecViewStale, "M19g", "'" $text1 "' holds a view of '" $text2 "' taken before '" $text3 "' may have grown") }
+fn VecHiddenViewStale(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.VecHiddenViewStale, "M19g", "this reads a view of '" $text1 "' taken before '" $text2 "' may have grown") }
+fn VecViewGivenGrowing(text1 String&, text2 String&, text3 String&, copy String&) r.Msg { return r.Msg(Diag.VecViewGivenGrowing, "M19g", "this view of '" $text1 "' is given to " $text2 ", which may grow '" $text3 "' - " $copy) }
+fn VecGrowsUnderTask(text1 String&, copy String&) r.Msg { return r.Msg(Diag.VecGrowsUnderTask, "M19g", "'" $text1 "' may grow here while a task holds a view of it - give the task " $copy) }
+fn AssertStale(text String&) r.Msg { return r.Msg(Diag.AssertStale, "S18c, K1", "evaluated while compiling, this assertion stops on a stale view: " $text) }
+fn GlobalStale(text String&) r.Msg { return r.Msg(Diag.GlobalStale, "K2, K1", "evaluated while compiling, this global's initializer stops on a stale view: " $text) }
+fn CondTooDeep(n I64) r.Msg { return r.Msg(Diag.CondTooDeep, "B9c", "conditions decide branches holding further conditions more than " $n " levels deep") }
+fn MainSignature() r.Msg { return r.Msg(Diag.MainSignature, "B4", "main takes no parameters and returns no value: 'fn main() { }', or 'fn main() ? { }'") }
+fn NoteObligationOrigin() r.Msg { return r.Msg(Diag.NoteObligationOrigin, "", "the callee requires it because of this statement") }
+fn NoteMakeWhere(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.NoteMakeWhere, "", "'" $text1 "' is made here by '" $text3 "', in a block that closes first - declare it where '" $text2 "' lives and assign it here") }
+fn NoteRefillKept(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NoteRefillKept, "", "or refill the one kept - '" $text1 ".Clear()', then put the elements in: one made where '" $text2 "' lives stays there, beside every one made before it, until that scope closes") }
+fn NoteParamCopy(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NoteParamCopy, "", "'" $text1 "' is the call's own copy of its argument - take it by reference to give back what the caller passed: '" $text2 "'") }
+fn NoteAssignedHere(name String&) r.Msg { return r.Msg(Diag.NoteAssignedHere, "", "'" $name "' is given a value here") }
+fn NoteBindingWhere(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NoteBindingWhere, "", "'" $text1 "' is bound here to what the matched value holds, which lives in a block that closes first - make that where '" $text2 "' lives") }
+fn NoteDeclareWhere(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.NoteDeclareWhere, "", "'" $text1 "' is declared here, in a block that closes first - declare it where '" $text2 "' lives, '" $text1 " " $text3 "&', and assign it here") }
+fn NoteLoopCopyLent(text String&) r.Msg { return r.Msg(Diag.NoteLoopCopyLent, "", "'" $text "' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") }
+fn NoteViewRefusedBy() r.Msg { return r.Msg(Diag.NoteViewRefusedBy, "", "the callee is no view of the element because of this statement") }
+fn NoteHeldIndexWhere(text String&) r.Msg { return r.Msg(Diag.NoteHeldIndexWhere, "", "the index is held here, for both the read and the write, in a block that closes first - make it where '" $text "' lives first, then index with it") }
+fn NoteCondValue() r.Msg { return r.Msg(Diag.NoteCondValue, "", "this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)") }
+fn NoteSliceOfTemporary() r.Msg { return r.Msg(Diag.NoteSliceOfTemporary, "", "this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Copy()')") }
+fn NoteTextCopyWhere(text String&) r.Msg { return r.Msg(Diag.NoteTextCopyWhere, "", "this text lives in a block that closes first - pass a copy, which is made where '" $text "' lives: write '$' before it") }
+fn NoteLoopCopy(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.NoteLoopCopy, "", "'" $text1 "' is the loop's copy of an element, made in the loop's block - lend the element itself: '" $text2 "[i]', with 'for i in range " $text3 ".Len()'") }
+fn CondUndecidable(text String&) r.Msg { return r.Msg(Diag.CondUndecidable, "B9c", "this top-level condition cannot be decided while compiling: " $text) }
+fn CondUnseen() r.Msg { return r.Msg(Diag.CondUnseen, "B9c", "this top-level condition uses what exists only in the branches it decides, or does not check") }
+fn CondUnknownBuild(text String&) r.Msg { return r.Msg(Diag.CondUnknownBuild, "B10", "unknown name " $text) }
+fn CondDecidedNotBool() r.Msg { return r.Msg(Diag.CondDecidedNotBool, "B9", "a top-level condition is true or false") }
+fn GlobalReadsItself(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.GlobalReadsItself, "B5a", $text1 "'s initializer reads " $text2 ", which is not set until the initializer is done") }
+fn GlobalsCycle(text String&) r.Msg { return r.Msg(Diag.GlobalsCycle, "B5a", "these globals' initializers read each other, so none can be set first: " $text) }
+fn ModuleIdentityClash(text String&) r.Msg { return r.Msg(Diag.ModuleIdentityClash, "M22a", "this module has the same identity as " $text " - rename one, or import it by a relative path") }
+
+# ---- tests ----
+
+# ---- contracts (D17) ----
+
+fn ContractNeedsArgumentError(name String&) r.Msg { return r.Msg(Diag.ContractNeedsArgumentError, "D17", $name " has conditions, so a call fails with ArgumentError where one is false - add it after '?'") }
+fn GenContractNeedsArgumentError(name String&) r.Msg { return r.Msg(Diag.GenContractNeedsArgumentError, "D18, D17", $name " has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'") }
+fn ContractFalse(cond String&, name String&) r.Msg { return r.Msg(Diag.ContractFalse, "D17e", $"this call breaks " $name "'s requirement '" $cond "'") }
+fn ConversionDoesNotFit(value String&, ty String&) r.Msg { return r.Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty " - write a value that fits, or 'try x.Narrow<" $ty ">()' to fail with an error") }
+fn NoteContractCondition() r.Msg { return r.Msg(Diag.NoteContractCondition, "", "the condition") }
+fn GenericNeeds(text String&, need String&, ty String&) r.Msg { return r.Msg(Diag.GenericNeeds, "G18", $text " needs " $need ", and " $ty " has none - declare it for " $ty ", or call " $text " with a type that has it") }
+fn NoteGenericNeeds(text String&, need String&) r.Msg { return r.Msg(Diag.NoteGenericNeeds, "", $text " needs " $need " here") }
+fn FactOfGeneric(text String&, fact String&) r.Msg { return r.Msg(Diag.FactOfGeneric, "G42", $text " is generic, and each of its instances has facts of its own - name one with its type arguments: '" $text "<T>." $fact "'") }
+fn FactUndecided(text String&) r.Msg { return r.Msg(Diag.FactUndecided, "G42", "'" $text "' cannot be decided: the code it reads it from changes with its value - read it outside what it decides") }
+fn FactNoFunction(fact String&) r.Msg { return r.Msg(Diag.FactNoFunction, "G42", $fact " is read through a function's name or a function's descriptor ('f." $fact "', 'd." $fact "' in a walk of 'm.Functions')") }
+fn CapsOneFile() r.Msg { return r.Msg(Diag.CapsOneFile, "B11c", "explain -caps takes one program's file, as 'olang explain -caps main.olang'") }
+fn ListingUsage(opt String&) r.Msg { return r.Msg(Diag.ListingUsage, "B11d", $"explain " $opt " takes a program's file and the name of one of its functions, as 'olang explain " $opt " main.olang main'") }
+fn ListingNoFunction(name String&, file String&) r.Msg { return r.Msg(Diag.ListingNoFunction, "B11d", $"'" $name "' is no function of " $file " - explain -asm and -ir show a function's code, or a method's as 'Type.Method'") }
+fn ListingAlone() r.Msg { return r.Msg(Diag.ListingAlone, "B11d", "-asm, -ir and -caps exclude one another - explain shows one of them at a time") }
+fn ListingQuick(opt String&) r.Msg { return r.Msg(Diag.ListingQuick, "B11d", $opt " applies to explain only with -asm or -ir, which show code as a build makes it") }
+fn ApiUsage() r.Msg { return r.Msg(Diag.ApiUsage, "B21", "api takes two versions and a path, as 'olang api HEAD~1 HEAD std/io.olang' - each version a commit or a directory") }
+fn ApiNoSide(text String&) r.Msg { return r.Msg(Diag.ApiNoSide, "B21", "'" $text "' is neither a path nor a commit of the repository here") }
+fn ApiNoFiles(text String&) r.Msg { return r.Msg(Diag.ApiNoFiles, "B21", "'" $text "' names no .olang file on either side") }
+fn ColumnsNotRecord(ty String&, row String&, why String&) r.Msg { return r.Msg(Diag.ColumnsNotRecord, "T7e", $ty " takes a record for its rows, and " $row " " $why " - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'") }
+fn ColumnNamedLikeMethod(ty String&, row String&, name String&) r.Msg { return r.Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method '" $name "' (M19) - rename the field") }
+fn ColumnAssigned() r.Msg { return r.Msg(Diag.ColumnAssigned, "T7e", "a column is assigned whole only alone - 'c.x = v', its length checked against its table's") }
+
+test "a message is its text, its arguments in their places" {
+    m := Expected("'}'", Tok("South"))
+    assert m.Text == "expected '}', found 'South'" and m.Rule == "" and m.Kind == Diag.Expected
+    assert UnknownChar('@').Rule == "L16"
+    assert NoMain().Text == "no main function - a program starts at 'fn main() { }'"
+}
+
+test "a byte that does not print is escaped, in a character and in a token" {
+    assert UnknownChar('\t').Text == "unexpected character '\\t'"
+    assert Esc(Char(1)) == "\\x01" and Esc(Char(200)) == "\\xc8" and Esc('a') == "a"
+    assert Tok("a\nb") == "'a\\nb'"
+    assert Expected("a name", EndOfLine).Text == "expected a name, found end of line"
+}

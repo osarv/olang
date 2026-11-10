@@ -1,0 +1,2423 @@
+# types - every type the compiler meets, interned, and each one's layout (compiler/DESIGN.md 1.6; T1-T36, G16a, G17,
+# G29, D8c, R15).
+#
+# A type is a TypeId: an index into one hash-consed table, so two types are the same type exactly when their ids are
+# equal. What a type is - its kind and up to three operands, other ids among them - is its key: a type is interned by
+# its key, built from its parts' ids, so a part is always interned before what holds it. Reference shape and permission
+# are part of a type (T25a, T25b, T25e); the scope a reference lives in is not, being §8's (DESIGN.md 1.7). A list of
+# types - a function's parameters, an instance's arguments - is interned the same way, as a ListId.
+#
+# A function type also carries its scopes (ScopesId): what its written markers say about where its parameters and results
+# live - a parameter sharing an earlier one's scope variable, a result borrowed from a parameter or written as a type
+# variable. T22's identity leaves them out (O5): Plain gives the type with every function type's scopes left out, so two
+# types are one type exactly when their Plain ids are equal (Same), and what is named by its parts' identity - an
+# instance's arguments (G16a), an anonymous enum's payloads (T27) - is held plain. ScopeVarsOf derives from a function
+# type alone the scope variables a call passes, in order (DESIGN.md 1.6.1).
+#
+# A declared type is known by its DeclId, which the program's declarations (generic) register here with the module
+# declaring it and its name; a use of it is a Named type: the declaration and its arguments. What a declared type holds
+# - its fields, cases or base - is its body, which generic resolves on demand and stores here per Named type. Layout -
+# size, alignment, field offsets and the LLVM spelling, as the target's C compiler lays the same data out - is computed
+# once per type: generic asks for it (a request, with T16's cycle check), and the arithmetic is here.
+#
+# A type's canonical text (Canon) names it injectively, the declaring module's identity before every declared name, so
+# it serves as an instance's name (G16a) and as the text the layout oracle and this table are compared by
+# (compiler/tools/layoutdiff.olang). Symbol makes a linker symbol of such a text, injectively.
+import "source"
+
+# ---- ids ----
+
+# a type: an index into the table. 0 is the stand-in for a type already reported (Unknown)
+type TypeId extends I32
+
+# a list of types, interned: 0 is the empty list
+type ListId extends I32
+
+# a declared type: a struct, an enum, an error type, a trait or a type declared over another
+type DeclId extends I32
+
+# ---- what a type is ----
+
+type Kind enum {
+    Unknown     # a stand-in for a type already reported (B11): it fits anything and has no layout
+    Void        # no value: a function's result where it has none
+    Bool
+    I8
+    I16
+    I32
+    I64
+    U8
+    U16
+    U32
+    U64
+    F16
+    BF16
+    F32
+    F64
+    Null        # null's own type, before it adapts to a reference (T2a)
+    DefaultErr  # "?" alone in a signature: the set its body is found to fail with, inferred (R1a)
+    Noreturn    # "noreturn" where a function's result would stand (D8e): no value, and no way back to the caller
+    Named       # a declared type: A its DeclId, B its arguments (a ListId)
+    Array       # A its element; B its length - a Const, or a constant pattern - or 0 for a length known at run time (T7)
+    Ref         # A what it refers to, B its permission (Perm): T24, T25b, T25e
+    Func        # A its parameters (a ListId), B its result (Void for none, a Tuple for several, D8c), C its errors, D its
+                # scopes (a ScopesId), E its parameters' names where it is written (rendering only: E11a, Unnamed), F
+                # Nullable where it may be null ("fn?&(...)", T21) - a function value is never null otherwise - and, above
+                # its low byte, the declared function type it is (T21b: "Handler&"), as its Named instance's id, 0 none;
+                # G its promises (T21c, an index of promiseLists, 0 none) - part of its identity
+    Tuple       # several results (D8c): A its elements
+    Record      # an anonymous struct - an enum case's payload: A its fields
+    AnonEnum    # an anonymous enum (T27): A its shape (cases and payloads)
+    Var         # a type variable or a constant variable (G1, G29): A its owner, B its index, C its permission (T2)
+    Const       # a constant argument's value (G29, T7c): A its type, B its value (a U64's bits)
+    ConstExpr   # a constant argument still to be computed from variables (T7c): A its pattern
+    ErrWords    # an error set's entry holding some words of an error type (R1c): A the type, B the words (bit i word i)
+    # a run-time trait value's referent (T32): A the trait (a Named trait, its arguments bound) - always under a Ref, the
+    # pair (instance, table)
+    Any
+    # an error set given for an error-set parameter (G1a, QAH): A its entries (a ListId) - error types, words entries
+    # (ErrWords) and error-set variables (Var) - in the canonical order (R1a), so one set is one type. Only ever an
+    # instance's argument or a variable's binding; never a value's type
+    ErrSet
+    # an integer type of a width not among the eight above (T4a): A its width in bits, 1 to 128, B 1 for a signed type
+    # and 0 for an unsigned one. Interned with the table, I1 to I128 and U1 to U128, so a name always finds it (Prim)
+    Int
+    # an error value (T20, QAM): a value whose type is an error type or a named set - A its entries (a ListId: error
+    # types and words entries, ErrWords) merged and in the canonical order (R1a), so one set is one type whichever way
+    # it is written. Held as the 32-bit code renumbered to that order (R6), 0 null - "no error"; it holds no reference
+    ErrVal
+}
+
+# a reference's permission: read-only or writable ("mut", T25b); 2, once owning ("own"), is unused
+ReadOnly I64 = 0
+Writable I64 = 1
+Nullable I64 = 4    # "?&": a reference that may be null (T2c) - none is unless its type says so
+Spread I64 = 8      # "xs ...T": a variadic parameter's read-only array, as its function's signature holds it (D8g)
+
+# a type's key: its kind and operands - what it is, and so what it is interned by
+type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0, F I64 = 0, G I64 = 0) {
+    K
+    A
+    B
+    C
+    D
+    E
+    F
+    G
+}
+
+# a function type's scopes, interned: 0 the scopes of a function type no marker of which names anything - each parameter
+# its own scope variable, each result built (DESIGN.md 1.6.1)
+type ScopesId extends I32
+
+# what a function type's scopes pass besides its parameters' (O3): a function's result scope, where it has one (O13); a
+# constructor's - an enum case's payload as a constructor too - its instance's scope (C2d, T17c); a destructor's the
+# closing scope alone, which the runtime passes (C9a); a function of a become chain keeping what it hands on, whose
+# result holds no reference, its tail scope - passed as a result scope is, ResultVar (S21)
+RoleFn I64 = 0
+RoleCtor I64 = 1
+RoleDtor I64 = 2
+RoleTail I64 = 3
+
+# a scopes entry: a parameter's own scope variable - none where it holds no reference - or a result built (O13); a result
+# written as a bare type variable, which may hand back an argument where it became a reference (O14b, T22a); otherwise
+# an index - the earlier parameter whose variable a parameter shares ("&x", O4b), or a result is borrowed from ("T&p")
+OwnScope I64 = -1
+FromTypeVar I64 = -2
+
+# what ScopeVarsOf gives besides a parameter's index: the result scope (a constructor's instance), the closing scope
+ResultVar I64 = -1
+ClosingVar I64 = -2
+
+# what a declared type's declaration is
+type DeclKind enum {
+    Struct
+    Enum
+    Error
+    Trait
+    Over        # a type declared over a number, an array or another such type (T29)
+    Foreign     # "extern type T" (X10): a C type, held only by reference, with no layout and nothing to read
+}
+
+# a declared type: its module (an index into the program's modules), its name, what it is, and its parameters: how
+# many
+type decl struct(Module I64, Name source.NameId, K DeclKind, Params I32) {
+    Module
+    Name
+    K
+    Params
+}
+
+# what a declared type holds, per Named type (a declaration, or one instance of a generic one): a struct's fields, an
+# enum's cases - each a Record of its payload, or 0 for none - and an over type's base. Destructs: it declares a
+# destructor (C7). Ready: resolved
+type body struct(Fields ListId, Cases ListId, Base TypeId, Destructs Bool, Ready Bool) {
+    Fields
+    Cases
+    Base
+    Destructs
+    Ready
+}
+
+# a layout's progress: not asked for, being computed (a cycle when asked again: T16), done, or none to have
+NotLaidOut I64 = 0
+LayingOut I64 = 1
+LaidOut I64 = 2
+NoLayout I64 = 3
+
+# ---- the table ----
+
+type Table struct(Names mut source.Names&) {
+    Names
+    types Vec<data>
+    keys Map<data, TypeId>
+    canonNames Bool = false             # Canon writing function types' parameter names too (CanonNamed)
+    depths Vec<I32>                    # G17: how deep a type's arguments nest
+    lists Vec<Array<TypeId>&>
+    listKeys Map<Array<TypeId>&, ListId>
+    shapes Vec<Array<source.NameId>&>  # an anonymous enum's case names, by AnonEnum's A; its payloads in shapeCases
+    shapeCases Vec<ListId>
+    shapeFields Vec<Array<source.NameId>&>  # its payloads' field names, case after case, as the first written gave them
+    shapeKeys Map<String&, I64>
+    patterns Vec<String&>              # a constant pattern's key, by ConstExpr's A (its owner and expression)
+    patternKeys Map<String&, I64>
+    decls Vec<decl>
+    Modules Vec<String&>               # every module's identity, by index
+    declKeys Map<String&, DeclId>       # "IDENTITY:Name"
+    bodies Map<TypeId, body>
+    caseNames Map<TypeId, Array<source.NameId>&>
+    errValNames Map<TypeId, DeclId>     # T20: the named set an error value's type was first written as, for spelling
+    errReprs Map<TypeId, TypeId>        # T19b: an error value's type whose set holds payload words, its record
+    # layouts, per type
+    state Vec<I64>
+    sizes Vec<I64>
+    aligns Vec<I64>
+    offsetsAt Vec<I64>                 # where a struct's or record's field offsets start in offsets, or -1
+    offsets Vec<I64>
+    payloads Vec<I64>                  # an enum's payload size in bytes, rounded to whole words; -1 for none
+    llvm Vec<String&>                  # the LLVM spelling, made when first asked for ("" until then)
+    plains Vec<TypeId>                 # each type with every function type's scopes left out (Plain)
+    scopes Vec<Array<I64>&>            # a function type's scopes, by ScopesId: role, how many parameters, their entries,
+    scopeKeys Map<Array<I64>&, ScopesId> # then the results'
+    nameLists Vec<Array<I64>&>         # a written function type's parameter names (NameIds), by index; 0 none
+    nameKeys Map<Array<I64>&, I64>
+    promiseLists Vec<Array<I64>&>      # a function type's promises (T21c) in canonical form (Promises), by index; 0 none
+    promiseKeys Map<Array<I64>&, I64>
+    refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
+    holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
+    ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
+    copyDecls Map<I64, Bool>           # E31d: the declared types (by DeclId) that declare their own Copy
+    uniqueDecls Map<I64, Bool>         # T13b: the declared types (by DeclId) declared unique
+    packedDecls Map<I64, Bool>         # T13c: the struct declarations (by DeclId) declared packed
+    rawTys Map<I64, TypeId>            # T13c: an enum's integer raw type (by DeclId), where a packed field holds one
+    rawBits Map<I64, Array<I64>&>      # ... and its cases' raw values, in case order
+    endsDecls Map<I64, Bool>           # C11: the library's collections (by DeclId) whose destructor ends what they hold
+    uniqueKnown Map<I64, Bool>         # ... and whether a type is unique, once every part of it was typed (Unique)
+}
+
+# a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
+# from I8 3 to F64 14, Null 15, the inferred set's mark 16, noreturn 17
+fn Table.New(names mut source.Names&) Table {
+    t := Table(names)
+    t.lists.Push(Array<TypeId>(0))
+    t.scopes.Push(Array<I64>(0))
+    t.nameLists.Push(Array<I64>(0))
+    t.promiseLists.Push(Array<I64>[0, 0])
+    for k in Array<Kind>[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32
+                  Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
+        t.intern(data(k, 0, 0, 0), 1)
+    }
+    # T4a: every integer width, the eight above at their own ids - so I24 and U7 are found by name without the table
+    # changing, and a width's type is one type wherever it is written
+    t.ints.Push(UnknownT)
+    for u in range 2 {
+        for bits in range 1, 129 {
+            fixed := TypeId(I32(primIndex(bits, u == 1)))
+            t.ints.Push(fixed if fixed != UnknownT else t.intern(data(Kind.Int, bits, 1 - u, 0), 1))
+        }
+    }
+    return t
+}
+
+# the id of one of the eight fixed integer types of a width, else Unknown
+fn primIndex(bits I64, unsigned Bool) I64 {
+    k := match bits {
+        case 8: 0
+        case 16: 1
+        case 32: 2
+        case 64: 3
+        case _: -1
+    }
+    if k < 0 { return 0 }
+    return 3 + k + (4 if unsigned else 0)
+}
+
+# T4a: the width an integer type's name gives - "I24" 24 (signed, its "I"), "U7" 7 (unsigned, its "U") - or 0 where it
+# names none: a width of 1 to 128 written with no leading zero
+fn IntWidth(name String&) I64 {
+    if name.Len() < 2 or name.Len() > 4 or (name[0] != 'I' and name[0] != 'U') or name[1] == '0' { return 0 }
+    n I64 = 0
+    for i in range 1, name.Len() {
+        if not name[i].IsDigit() { return 0 }
+        n = n * 10 + I64(name[i]) - I64('0')
+    }
+    if n < 1 or n > 128 { return 0 }
+    return n
+}
+
+fn IsIntName(name String&) Bool { return IntWidth(name) > 0 }
+
+# the integer type of a width (1 to 128), signed or not (T4a)
+fn (t Table&) IntType(bits I64, unsigned Bool) TypeId { return t.ints[bits + (128 if unsigned else 0)] }
+
+UnknownT TypeId = TypeId(0)
+VoidT TypeId = TypeId(1)
+BoolT TypeId = TypeId(2)
+NullT TypeId = TypeId(15)
+DefaultErrT TypeId = TypeId(16)
+NoreturnT TypeId = TypeId(17)
+
+# an error set's entry for some words of error type e (R1c): mask bit i is e's word i
+fn (t mut Table&) ErrWords(e TypeId, mask U64) TypeId { return t.intern(data(Kind.ErrWords, I64(e), I64(mask), 0), 1) }
+
+# the error type an error set's entry is of: itself, or the type a words entry holds words of (R1c)
+fn (t Table&) ErrOf(e TypeId) TypeId { return TypeId(I32(t.A(e))) if t.KindOf(e) == Kind.ErrWords else e }
+
+# the words an error set's entry holds (R1c): a words entry's, else every one (all bits)
+fn (t Table&) ErrMask(e TypeId) U64 { return U64(t.B(e)) if t.KindOf(e) == Kind.ErrWords else U64(0) - 1 }
+
+# a number type by its name (T4), or Unknown
+fn (t Table&) Prim(name String&) TypeId {
+    for i in range 1, 15 {
+        if primNames[i] == name { return TypeId(I32(i)) }
+    }
+    bits := IntWidth(name)
+    if bits > 0 { return t.IntType(bits, name[0] == 'U') }
+    return UnknownT
+}
+
+primNames := Array<String&>["", "", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
+primLlvm := Array<String&>["", "void", "i1", "i8", "i16", "i32", "i64", "i8", "i16", "i32", "i64", "half", "bfloat", "float"
+                    "double"]
+primBits := Array<I64>[0, 0, 1, 8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64]
+
+fn (t mut Table&) intern(d data, depth I32) TypeId {
+    id := try t.keys.Get(d) catch default TypeId(-1)
+    if id >= TypeId(0) { return id }
+    id = TypeId(I32(t.types.Len()))
+    t.types.Push(d)
+    t.keys.Put(d, id)
+    t.depths.Push(depth)
+    t.state.Push(NotLaidOut)
+    t.sizes.Push(0)
+    t.aligns.Push(1)
+    t.offsetsAt.Push(-1)
+    t.payloads.Push(-1)
+    t.llvm.Push("")
+    t.plains.Push(id)
+    return id
+}
+
+fn (t Table&) at(id TypeId) data { return t.types[I64(id)] }
+
+fn (t Table&) depthOf(id TypeId) I32 { return t.depths[I64(id)] }
+
+fn (t Table&) deepest(l ListId) I32 {
+    d I32 = 0
+    for x in t.lists[I64(l)] {
+        if t.depthOf(x) > d { d = t.depthOf(x) }
+    }
+    return d
+}
+
+# ---- making types ----
+
+# a list of types, interned
+fn (t mut Table&) List(xs Array<TypeId>&) ListId {
+    if xs.Len() == 0 { return ListId(0) }
+    id := try t.listKeys.Get(xs) catch default ListId(-1)
+    if id >= ListId(0) { return id }
+    kept mut Array<TypeId>& = Array<TypeId>(xs.Len())
+    for i in range xs.Len() { kept[i] = xs[i] }
+    id = ListId(I32(t.lists.Len()))
+    t.lists.Push(kept)
+    t.listKeys.Put(kept, id)
+    return id
+}
+
+fn (t mut Table&) List1(a TypeId) ListId { return t.List(Array<TypeId>[a]) }
+
+# the types of a list
+fn (t Table&) Items(l ListId) Array<TypeId>& { return t.lists[I64(l)] }
+
+# a declared type, or an instance: its arguments held plain, so an instance never depends on scopes (G16a)
+fn (t mut Table&) Named(d DeclId, args ListId) TypeId {
+    a := t.PlainList(args)
+    return t.intern(data(Kind.Named, I64(d), I64(a), 0), t.deepest(a) + 1)
+}
+
+fn (t mut Table&) Array(elem TypeId, length TypeId) TypeId {
+    # (a length bound to "known only at run time" - G29's one instance for those - is no length: a run-time array)
+    if length != TypeId(0) and length == t.RunLength() { return t.Array(elem, TypeId(0)) }
+    id := t.intern(data(Kind.Array, I64(elem), I64(length), 0), t.depthOf(elem) + 1)
+    if t.Plain(elem) != elem { t.plains[I64(id)] = t.Array(t.Plain(elem), length) }
+    return id
+}
+
+fn (t mut Table&) Ref(of TypeId, perm I64) TypeId {
+    id := t.intern(data(Kind.Ref, I64(of), perm, 0), t.depthOf(of) + 1)
+    if t.Plain(of) != of { t.plains[I64(id)] = t.Ref(t.Plain(of), perm) }
+    return id
+}
+
+# a function type: its parameters, its result (Void for none, a Tuple for several), its errors, in order (T22), its
+# scopes - what its markers say, which T22's identity leaves out (Plain) - and whether it may be null ("fn?&", T21),
+# which is part of its identity as "?&" is a reference's (T2c)
+fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0), names I64 = 0
+                       nullable Bool = false, tag TypeId = TypeId(0), promises I64 = 0) TypeId {
+    d := t.deepest(params)
+    if t.depthOf(result) > d { d = t.depthOf(result) }
+    fl := (Nullable if nullable else 0) | I64(tag) << 8
+    id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes), names, fl, promises), d + 1)
+    pp := t.PlainList(params)
+    pr := t.Plain(result)
+    if scopes != ScopesId(0) or names != 0 or pp != params or pr != result {
+        t.plains[I64(id)] = t.Func(pp, pr, errors, nullable = nullable, tag = tag, promises = promises)
+    }
+    return id
+}
+
+# ---- promises (T21c) ----
+#
+# A function type's promises are kept by position, so two types naming their parameters differently promise the same
+# (T22): an array of words - the effect words and noborrow as bits of the first, then how many parameters "borrows"
+# names and their indices, sorted, then each "keeps" as three - the kept parameter, the parameter it is kept in (KeepsHome
+# for the function value's own home, "keeps x"), and the field of it (a NameId, 0 for none) - sorted. A type with none
+# is 0
+
+PromReturns I64 = 1
+PromNoalloc I64 = 2
+PromNoblock I64 = 4
+PromNospawn I64 = 8
+PromNorecurse I64 = 16
+PromNoextern I64 = 32
+PromPure I64 = 64
+PromNoborrow I64 = 128
+PromBorrows I64 = 256   # "borrows" written: the result borrows from the parameters it names alone
+KeepsHome I64 = -1
+# the words of the bits PromReturns ... PromNoborrow, in that order - the canonical order they are written in
+PromiseNames := Array<String&>["returns", "noalloc", "noblock", "nospawn", "norecurse", "noextern", "pure", "noborrow"]
+
+# a promises entry, interned: the words' bits, the parameters "borrows" names, the "keeps" triples - 0 where none says
+# anything
+fn (t mut Table&) Promises(words I64, borrowed Array<I64>&, kept Array<I64>&) I64 {
+    if words == 0 and borrowed.Len() == 0 and kept.Len() == 0 { return 0 }
+    key := Array<I64>(2 + borrowed.Len() + kept.Len())
+    key[0] = words | (PromBorrows if borrowed.Len() > 0 else 0)
+    key[1] = borrowed.Len()
+    for i in range borrowed.Len() { key[2 + i] = borrowed[i] }
+    from := 2 + borrowed.Len()
+    for i in range kept.Len() { key[from + i] = kept[i] }
+    sortRuns(key, 2, borrowed.Len(), 1)
+    sortRuns(key, from, kept.Len() / 3, 3)
+    id := try t.promiseKeys.Get(key) catch default -1
+    if id >= 0 { return id }
+    id = t.promiseLists.Len()
+    t.promiseLists.Push(key)
+    t.promiseKeys.Put(key, id)
+    return id
+}
+
+# n runs of w numbers each from a[at], sorted in place by their numbers in order (an insertion sort: a type writes few)
+fn sortRuns(a mut Array<I64>&, at I64, n I64, w I64) {
+    for i in range 1, n {
+        j := i
+        for j > 0 and runLess(a, at + j * w, at + (j - 1) * w, w) {
+            for k in range w { a[at + j * w + k], a[at + (j - 1) * w + k] = a[at + (j - 1) * w + k], a[at + j * w + k] }
+            j--
+        }
+    }
+}
+
+fn runLess(a Array<I64>&, x I64, y I64, w I64) Bool {
+    for k in range w {
+        if a[x + k] != a[y + k] { return a[x + k] < a[y + k] }
+    }
+    return false
+}
+
+# a function type's promises entry (0 for none)
+fn (t Table&) PromisesOf(f TypeId) I64 { return t.at(f).G if t.KindOf(f) == Kind.Func else 0 }
+
+# its words' bits: PromReturns ... PromNoborrow, PromBorrows
+fn (t Table&) PromiseWords(f TypeId) I64 { return t.promiseLists[t.PromisesOf(f)][0] }
+
+# the parameters its "borrows" names (empty where it writes none)
+fn (t Table&) BorrowsOf(f TypeId) Array<I64> {
+    p := t.promiseLists[t.PromisesOf(f)]
+    out := Array<I64>(p[1])
+    for i in range p[1] { out[i] = p[2 + i] }
+    return out
+}
+
+# its "keeps" promises, three numbers each: the kept parameter, the one it is kept in (KeepsHome: the value's home),
+# the field of that (a NameId, 0 none)
+fn (t Table&) KeepsOf(f TypeId) Array<I64> {
+    p := t.promiseLists[t.PromisesOf(f)]
+    from := 2 + p[1]
+    out := Array<I64>(p.Len() - from)
+    for i in range out.Len() { out[i] = p[from + i] }
+    return out
+}
+
+# whether a result holding references may refer into what parameter i refers to (T21c): every parameter unless
+# "borrows" or "noborrow" narrows it
+fn (t Table&) MayBorrow(f TypeId, i I64) Bool {
+    w := t.PromiseWords(f)
+    if (w & PromNoborrow) != 0 { return false }
+    if (w & PromBorrows) == 0 { return true }
+    for b in t.BorrowsOf(f) {
+        if b == i { return true }
+    }
+    return false
+}
+
+# whether a function type writes "keeps x" for some x: a value of it keeps what it is given in its own home (2.2.1)
+fn (t Table&) KeepsHome(f TypeId) Bool {
+    ks := t.KeepsOf(f)
+    for k in range ks.Len() / 3 {
+        if ks[3 * k + 1] == KeepsHome { return true }
+    }
+    return false
+}
+
+# a function type with other promises, as nullable as f is and the same declared type
+fn (t mut Table&) WithPromises(f TypeId, promises I64) TypeId {
+    if t.KindOf(f) != Kind.Func { return f }
+    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), t.NamesIdOf(f), t.FuncNullable(f), t.FuncTag(f), promises)
+}
+
+# the promise words as source writes them after a signature, each with a space before it, in canonical order: the
+# effect words, "noborrow" or "borrows a", then each "keeps" - its parameters named by the names the type was written
+# with, else by position ("#2")
+fn (t Table&) PromiseText(f TypeId) String {
+    if t.PromisesOf(f) == 0 { return "" }
+    b := StringBuilder()
+    w := t.PromiseWords(f)
+    for i in range PromiseNames.Len() {
+        if (w & (I64(1) << i)) != 0 { b.Push(" " $PromiseNames[i]) }
+    }
+    for x in t.BorrowsOf(f) { b.Push(" borrows " $t.ParamName(f, x)) }
+    ks := t.KeepsOf(f)
+    for k in range ks.Len() / 3 { b.Push(" " $t.KeepsText(f, ks[3 * k], ks[3 * k + 1], ks[3 * k + 2])) }
+    return b.ToString()
+}
+
+# one "keeps" promise as source writes it: "keeps b", "keeps b in a", "keeps b in a.f"
+fn (t Table&) KeepsText(f TypeId, kept I64, into I64, field I64) String {
+    if into == KeepsHome { return "keeps " $t.ParamName(f, kept) }
+    fs := "." $t.Names.Text(source.NameId(I32(field))) if field != 0 else ""
+    return "keeps " $t.ParamName(f, kept) " in " $t.ParamName(f, into) $fs
+}
+
+# parameter i of a function type by the name it was written with, else by position ("#1" the first)
+fn (t Table&) ParamName(f TypeId, i I64) String {
+    ns := t.NamesOf(f)
+    if i < ns.Len() { return t.Names.Text(source.NameId(I32(ns[i]))) }
+    return "#" $(i + 1)
+}
+
+# whether a function type may be null ("fn?&(...)", T21)
+fn (t Table&) FuncNullable(f TypeId) Bool { return t.KindOf(f) == Kind.Func and (t.at(f).F & Nullable) != 0 }
+
+# the declared function type a function type is (T21b: the Named instance "Handler" of "Handler&"), Unknown for none
+fn (t Table&) FuncTag(f TypeId) TypeId { return TypeId(I32(t.at(f).F >> 8)) if t.KindOf(f) == Kind.Func else UnknownT }
+
+# a function type with other parts, as nullable as f is and the same declared type: what every rebuilding of a value's
+# function type keeps
+fn (t mut Table&) Refunc(f TypeId, params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0)
+                         names I64 = 0) TypeId {
+    return t.Func(params, result, errors, scopes, names, t.FuncNullable(f), t.FuncTag(f), t.PromisesOf(f))
+}
+
+# the function type a declared one stands for, its declaration left out (T21b) - as nullable as it is
+fn (t mut Table&) Untagged(f TypeId) TypeId {
+    if t.FuncTag(f) == UnknownT { return f }
+    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), t.NamesIdOf(f), t.FuncNullable(f), promises = t.PromisesOf(f))
+}
+
+# a written function type's parameter names, interned (0 for none: a type no source wrote, or one with no parameters)
+fn (t mut Table&) ParamNames(ns Array<I64>&) I64 {
+    if ns.Len() == 0 { return 0 }
+    key mut Array<I64>& = Array<I64>(ns.Len())
+    for i in range ns.Len() { key[i] = ns[i] }
+    id := try t.nameKeys.Get(key) catch default -1
+    if id >= 0 { return id }
+    id = t.nameLists.Len()
+    t.nameLists.Push(key)
+    t.nameKeys.Put(key, id)
+    return id
+}
+
+# the names entry of a function type (0 for none)
+fn (t Table&) NamesIdOf(f TypeId) I64 { return t.at(f).E if t.KindOf(f) == Kind.Func else 0 }
+
+# a function type's parameters' names as written (NameIds), none where no source wrote it
+fn (t Table&) NamesOf(f TypeId) Array<I64>& { return t.nameLists[t.at(f).E] if t.KindOf(f) == Kind.Func else t.nameLists[0] }
+
+# the same function type carrying names - the names a declaration, a lambda or a written type gives its parameters
+fn (t mut Table&) WithNames(f TypeId, names I64) TypeId {
+    if t.KindOf(f) != Kind.Func { return f }
+    return t.Refunc(f, t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), names)
+}
+
+# a type with its function types' parameter names left out, scopes kept: what tells instances apart (G16a), where the
+# names only render (E11a)
+fn (t mut Table&) Unnamed(id TypeId) TypeId {
+    k := t.KindOf(id)
+    if k == Kind.Func {
+        return t.Refunc(id, t.unnamedList(t.Params(id)), t.Unnamed(t.Result(id)), t.Errors(id), t.ScopesOf(id))
+    }
+    if k == Kind.Ref { return t.Ref(t.Unnamed(t.Referent(id)), t.PermOf(id)) }
+    if k == Kind.Array { return t.Array(t.Unnamed(t.Elem(id)), t.Length(id)) }
+    if k == Kind.Tuple { return t.Tuple(t.unnamedList(t.Parts(id))) }
+    return id
+}
+
+fn (t mut Table&) unnamedList(l ListId) ListId {
+    xs := t.Items(l)
+    out := Array<TypeId>(xs.Len())
+    same := true
+    for i in range xs.Len() {
+        out[i] = t.Unnamed(xs[i])
+        same = same and out[i] == xs[i]
+    }
+    return l if same else t.List(out)
+}
+
+# several results (D8c): each keeps its scopes, as a result does
+fn (t mut Table&) Tuple(elems ListId) TypeId {
+    id := t.intern(data(Kind.Tuple, I64(elems), 0, 0), t.deepest(elems) + 1)
+    pl := t.PlainList(elems)
+    if pl != elems { t.plains[I64(id)] = t.Tuple(pl) }
+    return id
+}
+
+fn (t mut Table&) Record(fields ListId) TypeId {
+    id := t.intern(data(Kind.Record, I64(fields), 0, 0), t.deepest(fields) + 1)
+    pl := t.PlainList(fields)
+    if pl != fields { t.plains[I64(id)] = t.Record(pl) }
+    return id
+}
+
+# an anonymous enum: its cases' names and payloads (a Record, or 0 for none) - one type exactly when both agree (T27)
+# (fields: the payloads' field names, case after case - not part of its identity, kept from the first that gives them to
+# spell it, T27)
+fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Array<source.NameId>& = Array<source.NameId>(0)) TypeId {
+    payloads := t.PlainList(cases)
+    key := StringBuilder()
+    for n in names { key.Push($I32(n) ",") }
+    key.Push(":" $I32(payloads))
+    k := key.ToString()
+    s := try t.shapeKeys.Get(k) catch default -1
+    if s < 0 {
+        kept mut Array<source.NameId>& = Array<source.NameId>(names.Len())
+        for i in range names.Len() { kept[i] = names[i] }
+        s = t.shapes.Len()
+        t.shapes.Push(kept)
+        t.shapeCases.Push(payloads)
+        t.shapeFields.Push(Array<source.NameId>(0))
+        t.shapeKeys.Put(k, s)
+    }
+    if fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
+        fs mut Array<source.NameId>& = Array<source.NameId>(fields.Len())
+        for i in range fields.Len() { fs[i] = fields[i] }
+        t.shapeFields[s] = fs
+    }
+    return t.intern(data(Kind.AnonEnum, s, 0, 0), t.deepest(payloads) + 1)
+}
+
+# a type variable or a constant variable: its owner (a declaration's own number, generic's), its index among the owner's
+# variables, and the permission "mut T" gives it where it is bound to a reference (T2)
+fn (t mut Table&) Var(owner I64, index I64, perm I64) TypeId { return t.intern(data(Kind.Var, owner, index, perm), 1) }
+
+# a constant: its type and its value (G29, T7c)
+fn (t mut Table&) Const(ty TypeId, value I64) TypeId { return t.intern(data(Kind.Const, I64(ty), value, 0), 1) }
+
+# G29: what a length variable is bound to where an array of a length known only at run time is given for it - the one
+# instance for every such call, in which the length is no constant (an array made of it is of a run-time length)
+fn (t mut Table&) RunLength() TypeId { return t.intern(data(Kind.Const, 0, -1, 0), 1) }
+
+# a constant still to be computed: its pattern, by a key naming its owner and its expression (T7c)
+fn (t mut Table&) ConstExpr(key String&) TypeId {
+    p := try t.patternKeys.Get(key) catch default -1
+    if p < 0 {
+        p = t.patterns.Len()
+        t.patterns.Push(key)
+        t.patternKeys.Put(t.patterns[p], p)
+    }
+    return t.intern(data(Kind.ConstExpr, p, 0, 0), 1)
+}
+
+# what "any R&" refers to (T32): R a trait instance
+fn (t mut Table&) Any(tr TypeId) TypeId { return t.intern(data(Kind.Any, I64(tr), 0, 0), t.depthOf(tr) + 1) }
+
+# an error set as an argument (G1a): its entries, already merged and in the canonical order (generic's ErrSetOf)
+fn (t mut Table&) ErrSet(entries ListId) TypeId { return t.intern(data(Kind.ErrSet, I64(entries), 0, 0), 1) }
+
+# an error value's type (T20): its entries, already merged and in the canonical order (generic's ErrValOf)
+fn (t mut Table&) ErrVal(entries ListId) TypeId { return t.intern(data(Kind.ErrVal, I64(entries), 0, 0), 1) }
+
+# an error value's entries
+fn (t Table&) ErrValItems(id TypeId) ListId { return ListId(I32(t.A(id))) if t.KindOf(id) == Kind.ErrVal else ListId(0) }
+
+fn (t Table&) IsErrVal(id TypeId) Bool { return t.KindOf(id) == Kind.ErrVal }
+
+# the named set (T19a) an error value's type was first written as - its spelling where it has several entries - or -1
+fn (t Table&) ErrValName(id TypeId) DeclId { return try t.errValNames.Get(id) catch default DeclId(-1) }
+
+fn (t mut Table&) NameErrVal(id TypeId, d DeclId) {
+    if not t.errValNames.Has(id) { t.errValNames.Put(id, d) }
+}
+
+# T19b: an error value's type whose set holds an error type with payload words is laid out as a record - its code (an
+# I32), then one payload enum per such member type, in the set's order, the one of the code's type holding the error's
+# data and the others their zero; generic's ErrValOf records it
+fn (t mut Table&) SetErrRepr(id TypeId, tuple TypeId) { t.errReprs.Put(id, tuple) }
+
+# the tuple an error value's type is laid out as (SetErrRepr), UnknownT for one that is its code alone
+fn (t Table&) ErrRepr(id TypeId) TypeId { return try t.errReprs.Get(id) catch default UnknownT }
+
+# whether an error value's type holds data beside its code (T19b)
+fn (t Table&) ErrCarries(id TypeId) Bool { return t.KindOf(id) == Kind.ErrVal and t.errReprs.Has(id) }
+
+# an error-set argument's entries
+fn (t Table&) ErrSetItems(id TypeId) ListId { return ListId(I32(t.A(id))) if t.KindOf(id) == Kind.ErrSet else ListId(0) }
+
+# ---- reading types ----
+
+fn (t Table&) KindOf(id TypeId) Kind { return t.at(id).K }
+fn (t Table&) A(id TypeId) I64 { return t.at(id).A }
+fn (t Table&) B(id TypeId) I64 { return t.at(id).B }
+fn (t Table&) C(id TypeId) I64 { return t.at(id).C }
+
+# a Named type's declaration and arguments
+fn (t Table&) DeclOf(id TypeId) DeclId { return DeclId(I32(t.A(id))) }
+fn (t Table&) Args(id TypeId) ListId { return ListId(I32(t.B(id))) }
+
+# an array's element and length (a Const, a pattern, or 0 for a length known at run time)
+fn (t Table&) Elem(id TypeId) TypeId { return TypeId(I32(t.A(id))) }
+fn (t Table&) Length(id TypeId) TypeId { return TypeId(I32(t.B(id))) }
+
+# what a reference refers to, and its permission
+fn (t Table&) Referent(id TypeId) TypeId { return TypeId(I32(t.A(id))) }
+fn (t Table&) PermOf(id TypeId) I64 { return t.B(id) }
+
+# a function type's parts
+fn (t Table&) Params(id TypeId) ListId { return ListId(I32(t.A(id))) }
+fn (t Table&) Result(id TypeId) TypeId { return TypeId(I32(t.B(id))) }
+fn (t Table&) Errors(id TypeId) ListId { return ListId(I32(t.C(id))) }
+fn (t Table&) ScopesOf(id TypeId) ScopesId { return ScopesId(I32(t.at(id).D)) }
+
+# a tuple's or record's parts
+fn (t Table&) Parts(id TypeId) ListId { return ListId(I32(t.A(id))) }
+
+# a constant's type and value
+fn (t Table&) ConstType(id TypeId) TypeId { return TypeId(I32(t.A(id))) }
+fn (t Table&) ConstValue(id TypeId) I64 { return t.B(id) }
+
+# a constant pattern's key
+fn (t Table&) Pattern(id TypeId) String& { return t.patterns[t.A(id)] }
+
+# an anonymous enum's case names and payloads
+fn (t Table&) ShapeNames(id TypeId) Array<source.NameId>& { return t.shapes[t.A(id)] }
+fn (t Table&) ShapeCases(id TypeId) ListId { return t.shapeCases[t.A(id)] }
+fn (t Table&) ShapeFields(id TypeId) Array<source.NameId>& { return t.shapeFields[t.A(id)] }
+
+# G17: how deep a type nests - a number 1, Array<List<I64>> 3
+fn (t Table&) Depth(id TypeId) I64 { return I64(t.depthOf(id)) }
+
+fn (t Table&) IsRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref }
+
+# T32: whether a type is a run-time trait value, "any R&" - a reference to an Any - and the trait an Any or one names
+fn (t Table&) IsAny(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Referent(id)) == Kind.Any }
+fn (t Table&) AnyTrait(id TypeId) TypeId {
+    x := t.Referent(id) if t.KindOf(id) == Kind.Ref else id
+    return TypeId(I32(t.A(x))) if t.KindOf(x) == Kind.Any else UnknownT
+}
+
+# T2c: a reference that may be null ("?&"), a function value that may be ("fn?&", T21), and the same known not to be,
+# or allowed to be
+fn (t Table&) IsNullable(id TypeId) Bool {
+    return t.KindOf(id) == Kind.Ref and (t.PermOf(id) & Nullable) != 0 or t.FuncNullable(id)
+}
+fn (t mut Table&) NonNull(id TypeId) TypeId {
+    if not t.IsNullable(id) { return id }
+    if t.KindOf(id) == Kind.Func {
+        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), tag = t.FuncTag(id)
+                      promises = t.PromisesOf(id))
+    }
+    return t.Ref(t.Referent(id), t.PermOf(id) & ~Nullable)
+}
+fn (t mut Table&) OrNull(id TypeId) TypeId {
+    if t.IsNullable(id) { return id }
+    if t.KindOf(id) == Kind.Func {
+        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), true, t.FuncTag(id)
+                      t.PromisesOf(id))
+    }
+    if t.KindOf(id) != Kind.Ref { return id }
+    return t.Ref(t.Referent(id), t.PermOf(id) | Nullable)
+}
+# D8g: a variadic parameter's type ("xs ...T"), the same read-only array reference as its body holds it, and which of a
+# function type's parameters is variadic (-1 for none)
+fn (t Table&) IsSpread(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and (t.PermOf(id) & Spread) != 0 }
+fn (t mut Table&) Unspread(id TypeId) TypeId {
+    if not t.IsSpread(id) { return id }
+    return t.Ref(t.Referent(id), t.PermOf(id) & ~Spread)
+}
+fn (t Table&) SpreadAt(f TypeId) I64 {
+    if t.KindOf(f) != Kind.Func { return -1 }
+    ps := t.Items(t.Params(f))
+    for i in range ps.Len() {
+        if t.IsSpread(ps[i]) { return i }
+    }
+    return -1
+}
+# whether a reference names an array - its zero value the empty array, whether or not it may be null (T2c)
+fn (t Table&) ArrayRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Repr(t.Referent(id))) == Kind.Array }
+fn (t Table&) IsNumber(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(14) or t.KindOf(id) == Kind.Int }
+fn (t Table&) IsInt(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(10) or t.KindOf(id) == Kind.Int }
+fn (t Table&) IsUnsigned(id TypeId) Bool {
+    return id >= TypeId(7) and id <= TypeId(10) or t.KindOf(id) == Kind.Int and t.B(id) == 0
+}
+fn (t Table&) IsFloat(id TypeId) Bool { return id >= TypeId(11) and id <= TypeId(14) }
+
+# a number type's width in bits (Bool 1)
+fn (t Table&) Bits(id TypeId) I64 {
+    if id <= TypeId(14) { return primBits[I64(id)] }
+    return t.A(id) if t.KindOf(id) == Kind.Int else 0
+}
+
+# T4a: the bytes an integer of b bits is held in - the next of 1, 2, 4, 8 and 16 bytes, as LLVM lays iN out and C lays
+# out a _BitInt
+fn IntBytes(b I64) I64 { return 1 if b <= 8 else 2 if b <= 16 else 4 if b <= 32 else 8 if b <= 64 else 16 }
+
+# whether a type is closed - holds no variable, pattern or stand-in - and so is one the program can hold
+fn (t Table&) Closed(id TypeId) Bool {
+    d := t.at(id)
+    return match d.K {
+        case Kind.Unknown, Kind.Var, Kind.ConstExpr, Kind.Null: false
+        case Kind.Named, Kind.Tuple, Kind.Record: t.closedList(ListId(I32(d.B if d.K == Kind.Named else d.A)))
+        case Kind.Array: t.Closed(t.Elem(id)) and (t.Length(id) == TypeId(0) or t.Closed(t.Length(id)))
+        case Kind.Ref: t.Closed(t.Referent(id))
+        case Kind.Func: t.closedList(t.Params(id)) and t.Closed(t.Result(id)) and t.closedList(t.Errors(id))
+        case Kind.AnonEnum: t.closedList(t.ShapeCases(id))
+        case Kind.Const: t.Closed(t.ConstType(id))
+        case Kind.Any: t.Closed(t.AnyTrait(id))
+        case Kind.ErrSet: t.closedList(t.ErrSetItems(id))
+        case _: true
+    }
+}
+
+fn (t Table&) closedList(l ListId) Bool {
+    for x in t.Items(l) {
+        if x != TypeId(0) and not t.Closed(x) { return false }
+    }
+    return true
+}
+
+# ---- scopes (DESIGN.md 1.6.1) ----
+
+# a function type's scopes, interned: its role, then one entry per parameter (the receiver first) and one per result
+# (OwnScope, FromTypeVar, or an earlier parameter's index). A function's scopes that say nothing - RoleFn, every entry
+# OwnScope - are ScopesId(0)
+fn (t mut Table&) Scopes(role I64, params Array<I64>&, results Array<I64>&) ScopesId {
+    plain := role == RoleFn
+    for e in params { plain = plain and e == OwnScope }
+    for e in results { plain = plain and e == OwnScope }
+    if plain { return ScopesId(0) }
+    key mut Array<I64>& = Array<I64>(2 + params.Len() + results.Len())
+    key[0], key[1] = role, params.Len()
+    for i in range params.Len() { key[2 + i] = params[i] }
+    for i in range results.Len() { key[2 + params.Len() + i] = results[i] }
+    id := try t.scopeKeys.Get(key) catch default ScopesId(-1)
+    if id >= ScopesId(0) { return id }
+    id = ScopesId(I32(t.scopes.Len()))
+    t.scopes.Push(key)
+    t.scopeKeys.Put(key, id)
+    return id
+}
+
+# function type f as one of role: its parameters' and results' entries kept (S21's tail scope)
+fn (t mut Table&) WithRole(f TypeId, role I64) TypeId {
+    ps := t.Items(t.Params(f))
+    shares := Array<I64>(ps.Len())
+    for i in range ps.Len() { shares[i] = t.ShareOf(f, i) }
+    rs := t.Results(f)
+    from := Array<I64>(rs.Len())
+    for k in range rs.Len() { from[k] = t.ResultFrom(f, k) }
+    return t.Refunc(f, t.Params(f), t.Result(f), t.Errors(f), t.Scopes(role, shares, from), t.at(f).E)
+}
+
+# what a function type's scopes say: its role, the entry of parameter i, the entry of result k
+fn (t Table&) Role(f TypeId) I64 {
+    s := t.scopes[I64(t.ScopesOf(f))]
+    return s[0] if s.Len() > 0 else RoleFn
+}
+
+# a parameter or result the record has no entry for - a result of a function with none, read as its first - is
+# OwnScope, as every entry of a plain record is (an index past the record read memory beyond it, E16e)
+fn (t Table&) ShareOf(f TypeId, i I64) I64 {
+    s := t.scopes[I64(t.ScopesOf(f))]
+    return s[2 + i] if s.Len() > 0 and i >= 0 and 2 + i < s.Len() else OwnScope
+}
+
+fn (t Table&) ResultFrom(f TypeId, k I64) I64 {
+    s := t.scopes[I64(t.ScopesOf(f))]
+    return s[2 + s[1] + k] if s.Len() > 0 and k >= 0 and 2 + s[1] + k < s.Len() else OwnScope
+}
+
+# a function type's results: none (Void), one, or a Tuple's parts (D8c)
+fn (t Table&) Results(f TypeId) Array<TypeId> {
+    r := t.Result(f)
+    if r == VoidT { return Array<TypeId>(0) }
+    if t.KindOf(r) == Kind.Tuple {
+        xs := t.Items(t.Parts(r))
+        out := Array<TypeId>(xs.Len())
+        for i in range xs.Len() { out[i] = xs[i] }
+        return out
+    }
+    return Array<TypeId>[r]
+}
+
+# a type with every function type's scopes left out: T22's identity (O5)
+fn (t Table&) Plain(id TypeId) TypeId { return t.plains[I64(id)] }
+
+fn (t mut Table&) PlainList(l ListId) ListId {
+    xs := t.Items(l)
+    same := true
+    for x in xs { same = same and t.Plain(x) == x }
+    if same { return l }
+    out := Array<TypeId>(xs.Len())
+    for i in range xs.Len() { out[i] = t.Plain(xs[i]) }
+    return t.List(out)
+}
+
+# whether two types are one type (T22, T25a): identity with function types' scopes left out
+fn (t Table&) Same(a TypeId, b TypeId) Bool { return t.Plain(a) == t.Plain(b) }
+
+# whether two types that are Same also say the same of where function types' references live (T22): each parameter
+# sharing the same earlier one, each result borrowed from the same parameter or from none (built, or written as a type
+# variable: the same scopes passed), at any depth. A function value fits only a type saying what it says - a value of a
+# type saying less establishes nothing its function requires, and passes other hidden scope arguments
+fn (t Table&) ScopesFit(a TypeId, b TypeId) Bool {
+    if a == b or t.KindOf(a) != t.KindOf(b) { return true }
+    match t.KindOf(a) {
+        case Kind.Func {
+            if t.Role(a) != t.Role(b) { return false }
+            ap, bp := t.Items(t.Params(a)), t.Items(t.Params(b))
+            if ap.Len() != bp.Len() { return true }
+            for i in range ap.Len() {
+                if t.ShareOf(a, i) != t.ShareOf(b, i) or not t.ScopesFit(ap[i], bp[i]) { return false }
+            }
+            ar, br := t.Results(a), t.Results(b)
+            for k in range ar.Len() {
+                if k >= br.Len() { break }
+                ea, eb := t.ResultFrom(a, k), t.ResultFrom(b, k)
+                if ea != eb and not ((ea == OwnScope or ea == FromTypeVar) and (eb == OwnScope or eb == FromTypeVar)) {
+                    return false
+                }
+                if not t.ScopesFit(ar[k], br[k]) { return false }
+            }
+            return true
+        }
+        case Kind.Array { return t.ScopesFit(t.Elem(a), t.Elem(b)) }
+        case Kind.Ref { return t.ScopesFit(t.Referent(a), t.Referent(b)) }
+        case Kind.Tuple {
+            ap, bp := t.Items(t.Parts(a)), t.Items(t.Parts(b))
+            for i in range ap.Len() {
+                if i < bp.Len() and not t.ScopesFit(ap[i], bp[i]) { return false }
+            }
+            return true
+        }
+        case _ { return true }
+    }
+}
+
+# whether a value of a type holds a reference - is one, or holds one in a field, element, payload or part held in
+# place, a function value among them (T21): what gives a parameter a scope variable of its own (O4b). A type variable
+# might become one, so it does; a declared type's body must be resolved first (generic asks), and one not resolved
+# counts as holding one
+fn (t mut Table&) HoldsRefs(id TypeId) Bool {
+    k := t.KindOf(id)
+    if k == Kind.ErrVal { return t.errReprs.Has(id) and t.HoldsRefs(t.Repr(id)) }   # T19b: as its record
+    if t.ForeignRef(id) { return false }   # X10: an extern type's reference is C's, in no scope of olang's
+    # an any's instance is of a type not known here (T32): it may hold one
+    if k == Kind.Ref or k == Kind.Func or k == Kind.Var or k == Kind.Any { return true }
+    if k != Kind.Named and k != Kind.Array and k != Kind.Tuple and k != Kind.Record and k != Kind.AnonEnum { return false }
+    if k == Kind.Named and not t.HasBody(id) { return true }
+    state := t.holdsState(id)
+    if state != 0 { return state == 3 }
+    t.setHolds(id, 1)
+    outer := t.holdsUnsure
+    t.holdsUnsure = false
+    holds := false
+    match k {
+        case Kind.Named {
+            match t.DeclKindOf(t.DeclOf(id)) {
+                case DeclKind.Struct { holds = t.listHolds(t.Fields(id)) }
+                case DeclKind.Enum { holds = t.listHolds(t.Cases(id), true) }
+                case DeclKind.Over { holds = t.HoldsRefs(t.Base(id)) }
+                case _ { }
+            }
+        }
+        case Kind.Array { holds = t.HoldsRefs(t.Elem(id)) or t.OwnedPart(t.Elem(id)) }
+        case Kind.Tuple { holds = t.listHolds(t.Parts(id), false, false) }
+        case Kind.Record { holds = t.listHolds(t.Parts(id)) }
+        case Kind.AnonEnum { holds = t.listHolds(t.ShapeCases(id), true) }
+        case _ { }
+    }
+    # a part not typed yet (a ":=" field the checker has not reached) leaves the answer to be asked again
+    t.setHolds(id, 0 if t.holdsUnsure else 3 if holds else 2)
+    t.holdsUnsure = t.holdsUnsure or outer
+    return holds
+}
+
+# X10: whether a type is a reference to an extern type ("Db&", "Db?&") - a C pointer olang holds and never reads: it
+# lives in no scope of olang's, so section 8 takes it for a value holding no reference, as a number is
+fn (t Table&) ForeignRef(id TypeId) Bool {
+    if t.KindOf(id) != Kind.Ref { return false }
+    x := t.Referent(id)
+    return t.KindOf(x) == Kind.Named and t.DeclKindOf(t.DeclOf(x)) == DeclKind.Foreign
+}
+
+fn (t Table&) holdsState(id TypeId) U8 {
+    i := I64(id)
+    return t.refHolds[i] if i < t.refHolds.Len() else 0
+}
+
+fn (t mut Table&) setHolds(id TypeId, state U8) {
+    i := I64(id)
+    for t.refHolds.Len() <= i { t.refHolds.Push(0) }
+    t.refHolds[i] = state
+}
+
+# a list's holding: a part's 0 is one not typed yet - but among cases (cases), a case without a payload, which holds
+# nothing (taken for a part not typed, no enum with a payload-less case was ever remembered, and every type holding
+# one was worked out again at each asking: 4% of the front end's work on the compiler's own build)
+fn (t mut Table&) listHolds(l ListId, cases Bool = false, owned Bool = true) Bool {
+    for x in t.Items(l) {
+        if x == TypeId(0) {
+            if not cases { t.holdsUnsure = true }
+        } else if t.HoldsRefs(x) or (owned and t.OwnedPart(x)) {
+            return true
+        }
+    }
+    return false
+}
+
+# QCE, T7a relaxed: whether a part of a value - a field, an element, a payload's - is an array
+# of a run-time length held by value, its elements its container's own storage, which lives where the container's
+# references do. Section 8 takes such a part for a reference into that scope (HoldsRefs), so a container sharing a
+# part's storage with what it was made from is judged as sharing it, never as owning it; a part store copies its value
+# in (check's ownCopy), so a container owns its parts' storage. A run-time array is no part of several results (a
+# Tuple's parts are the results' own). Never on the default path, where such a part is T7a's error
+fn (t Table&) OwnedPart(x TypeId) Bool {
+    r := t.Repr(x)
+    return t.KindOf(r) == Kind.Array and t.Length(r) == TypeId(0)
+}
+
+# whether a value of a type holds, by value, a part that is an array of a run-time length (OwnedPart) - in a field, an
+# element, a payload, through any value it holds by value: so a copy of it copies those parts' elements too, deep through
+# values and shallow at references (QCE). A reference never does (its referent is shared), nor do
+# several results (a Tuple), nor a plain run-time array, whose copy is its elements'
+fn (t mut Table&) OwnsParts(id TypeId) Bool { return t.ownsParts(id, 0) }
+
+# E31d: a declared type declaring its own Copy - which every copy of a value of it calls, so a copy of it, or of a value
+# holding it by value, is more than its bytes (OwnsParts)
+fn (t mut Table&) MarkCopy(d DeclId) { t.copyDecls.Put(I64(d), true) }
+
+fn (t Table&) DeclaresCopy(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.copyDecls.Has(I64(t.DeclOf(id))) }
+
+# whether a copy of a value of a type runs a declared Copy (E31d): the type's own, or a part's it holds by value - deep
+# through values, never through a reference (whose referent a copy shares)
+fn (t mut Table&) RunsCopy(id TypeId) Bool { return t.copyDecls.Len() > 0 and t.runsCopy(id, 0) }
+
+# C11, O15: whether a value of a type has a destructor to run when its holder lets go of it - a struct declaring one,
+# or a value holding such a part by value (a field, a payload, an element of a fixed array), deep through values,
+# never through a reference (whose referent's own place has it)
+fn (t Table&) NeedsDrop(id TypeId) Bool { return t.needsDrop(id, 0) }
+
+fn (t Table&) needsDrop(id TypeId, depth I64) Bool {
+    if depth > 16: return false
+    r := t.Repr(id)
+    match t.KindOf(r) {
+        case Kind.Named {
+            if not t.HasBody(r): return false
+            return match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.destructs(r, depth) or t.partsDrop(t.Fields(r), depth)
+                case DeclKind.Enum: t.partsDrop(t.Cases(r), depth)
+                case _: false
+            }
+        }
+        # (C11: an array of a run-time length ends its elements too - its length is in it)
+        case Kind.Array { return t.needsDrop(t.Elem(r), depth + 1) }
+        case Kind.Record, Kind.Tuple { return t.partsDrop(t.Parts(r), depth) }
+        case Kind.AnonEnum { return t.partsDrop(t.ShapeCases(r), depth) }
+        case _ { return false }
+    }
+}
+
+fn (t Table&) partsDrop(l ListId, depth I64) Bool {
+    for x in t.Items(l) {
+        if x != TypeId(0) and not t.IsRef(x) and t.needsDrop(x, depth + 1): return true
+    }
+    return false
+}
+
+# T13b: a declared type declared unique - registered as declarations are, before anything is judged by it
+fn (t mut Table&) MarkUnique(d DeclId) { t.uniqueDecls.Put(I64(d), true) }
+
+fn (t Table&) AnyUnique() Bool { return t.uniqueDecls.Len() > 0 }
+
+# T13c: a struct declared packed - registered as declarations are, before any layout is asked for
+fn (t mut Table&) MarkPacked(d DeclId) { t.packedDecls.Put(I64(d), true) }
+
+fn (t Table&) Packed(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.packedDecls.Has(I64(t.DeclOf(id))) }
+
+# T13c: an enum's integer raw type (T17e), recorded where a packed field holds the enum (generic's layout), and its
+# cases' raw values, recorded by the checker
+fn (t mut Table&) SetRawType(d DeclId, ty TypeId) { t.rawTys.Put(I64(d), ty) }
+fn (t mut Table&) SetRawBits(d DeclId, bits Array<I64>&) { t.rawBits.Put(I64(d), bits) }
+
+# an enum's integer raw type as recorded (UnknownT for none), and its cases' raw values
+fn (t Table&) RawType(id TypeId) TypeId {
+    if t.KindOf(id) != Kind.Named { return UnknownT }
+    return try t.rawTys.Get(I64(t.DeclOf(id))) catch default UnknownT
+}
+fn (t Table&) RawBits(id TypeId) Array<I64>& { return try t.rawBits.Get(I64(t.DeclOf(id))) catch default Array<I64>(0) }
+
+# T13c: the bits a value of a type takes as a packed struct's field - an integer its width, a Bool 1, a float its bits,
+# a payload-free enum its raw type's width or the fewest bits counting its cases, a packed struct its fields' bits, a
+# fixed array its length times its element's; -1 for a type no packed field may be
+fn (t Table&) PackedBits(id TypeId) I64 {
+    r := t.Repr(id)
+    if r == BoolT: return 1
+    if t.IsNumber(r): return t.Bits(r)
+    match t.KindOf(r) {
+        case Kind.Array {
+            if t.Length(r) == TypeId(0) or t.KindOf(t.Length(r)) != Kind.Const: return -1
+            e := t.PackedBits(t.Elem(r))
+            return -1 if e < 0 else e * t.ConstValue(t.Length(r))
+        }
+        case Kind.Named { return t.namedPackedBits(r) }
+        case _ { return -1 }
+    }
+}
+
+fn (t Table&) namedPackedBits(r TypeId) I64 {
+    if not t.HasBody(r): return -1
+    match t.DeclKindOf(t.DeclOf(r)) {
+        case DeclKind.Struct {
+            if not t.Packed(r): return -1
+            n I64 = 0
+            for f in t.Items(t.Fields(r)) {
+                b := t.PackedBits(f)
+                if b < 0: return -1
+                n += b
+            }
+            return n
+        }
+        case DeclKind.Enum {
+            if t.HasPayload(t.Cases(r)): return -1
+            raw := t.RawType(r)
+            if raw != UnknownT: return t.Bits(t.Repr(raw))
+            return CaseBits(t.Items(t.Cases(r)).Len())
+        }
+        case _ { return -1 }
+    }
+}
+
+# the fewest bits that count n cases, at least 1
+fn CaseBits(n I64) I64 {
+    b I64 = 1
+    for (I64(1) << b) < n { b++ }
+    return b
+}
+
+# T13c: a packed struct's fields' bit offsets, in order
+fn (t Table&) BitOffsets(id TypeId) Array<I64> {
+    fs := t.Items(t.Fields(id))
+    out := Array<I64>(fs.Len())
+    at I64 = 0
+    for i in range fs.Len() {
+        out[i] = at
+        at += t.fieldBits(fs[i])
+    }
+    return out
+}
+
+# a packed struct's field's width - one no packed field may have (its error said by the checker) taken as its bytes, so
+# the rest is laid out as written
+fn (t Table&) fieldBits(f TypeId) I64 {
+    b := t.PackedBits(f)
+    return b if b >= 0 else 8 * t.Size(f)
+}
+
+# whether Unique's answer for a type is known already
+fn (t Table&) UniqueSettled(id TypeId) Bool { return t.uniqueKnown.Has(I64(id)) }
+
+fn (t Table&) DeclaredUnique(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.uniqueDecls.Has(I64(t.DeclOf(id))) }
+
+# T13b: whether a value of a type exists in one place: its type declared unique, or holding by value a part that is -
+# a field, a payload, an element of an array held by value, deep through values, never through a reference - unless it
+# declares a Copy of its own (E31d), which makes that part anew. A collection holds its elements by value, so it follows
+# them (Vec<File> is unique)
+fn (t mut Table&) Unique(id TypeId) Bool {
+    if t.uniqueDecls.Len() == 0: return false
+    if t.uniqueKnown.Has(I64(id)): return try t.uniqueKnown.Get(I64(id)) catch default false
+    outer := t.holdsUnsure
+    t.holdsUnsure = false
+    u := t.unique(id, 0)
+    if not t.holdsUnsure: t.uniqueKnown.Put(I64(id), u)
+    t.holdsUnsure = outer
+    return u
+}
+
+fn (t mut Table&) unique(id TypeId, depth I64) Bool {
+    if depth > 16: return false
+    if t.KindOf(id) == Kind.Named {
+        if t.uniqueDecls.Has(I64(t.DeclOf(id))): return true
+        if t.DeclaresCopy(id): return false
+        if not t.HasBody(id) {
+            t.holdsUnsure = true
+            return false
+        }
+        return match t.DeclKindOf(t.DeclOf(id)) {
+            case DeclKind.Struct: t.partsUnique(t.Fields(id), depth)
+            case DeclKind.Enum: t.partsUnique(t.Cases(id), depth, true)
+            case DeclKind.Over: t.unique(t.Base(id), depth + 1)
+            case _: false
+        }
+    }
+    return match t.KindOf(id) {
+        case Kind.Array: t.unique(t.Elem(id), depth + 1)
+        case Kind.Record: t.partsUnique(t.Parts(id), depth)
+        case Kind.AnonEnum: t.partsUnique(t.ShapeCases(id), depth, true)
+        case _: false
+    }
+}
+
+# a list's: a part's 0 is one not typed yet - among cases, a case with no payload
+fn (t mut Table&) partsUnique(l ListId, depth I64, cases Bool = false) Bool {
+    for x in t.Items(l) {
+        if x == TypeId(0) {
+            if not cases: t.holdsUnsure = true
+        } else if not t.IsRef(x) and t.unique(x, depth + 1) {
+            return true
+        }
+    }
+    return false
+}
+
+fn (t mut Table&) runsCopy(id TypeId, depth I64) Bool {
+    if depth > 16 { return false }
+    if t.DeclaresCopy(id) { return true }
+    r := t.Repr(id)
+    if t.DeclaresCopy(r) { return true }
+    match t.KindOf(r) {
+        case Kind.Array { return t.runsCopy(t.Elem(r), depth + 1) }
+        case Kind.Record { return t.partsRunCopy(t.Parts(r), depth) }
+        case Kind.AnonEnum { return t.partsRunCopy(t.ShapeCases(r), depth) }
+        case Kind.Named {
+            if not t.HasBody(r) { return false }
+            return match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.partsRunCopy(t.Fields(r), depth)
+                case DeclKind.Enum: t.partsRunCopy(t.Cases(r), depth)
+                case _: false
+            }
+        }
+        case _ { return false }
+    }
+}
+
+fn (t mut Table&) partsRunCopy(l ListId, depth I64) Bool {
+    for x in t.Items(l) {
+        if x != TypeId(0) and not t.IsRef(x) and t.runsCopy(x, depth + 1) { return true }
+    }
+    return false
+}
+
+fn (t mut Table&) ownsParts(id TypeId, depth I64) Bool {
+    if depth > 16 { return true }
+    r := t.Repr(id)
+    match t.KindOf(r) {
+        case Kind.Array { return t.OwnedPart(t.Elem(r)) or t.ownsParts(t.Elem(r), depth + 1) }
+        case Kind.Record { return t.partsOwn(t.Parts(r), depth) }
+        case Kind.AnonEnum { return t.partsOwn(t.ShapeCases(r), depth) }
+        case Kind.Named {
+            if t.copyDecls.Has(I64(t.DeclOf(r))) { return true }   # E31d: its own Copy makes every copy of it
+            if not t.HasBody(r) { return false }
+            return match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.partsOwn(t.Fields(r), depth)
+                case DeclKind.Enum: t.partsOwn(t.Cases(r), depth)
+                case _: false
+            }
+        }
+        case _ { return false }
+    }
+}
+
+# O8d: the anchors of an owner - a struct held by value whose every field is plain data, an owned part (an array of a
+# run-time length held by value) or such a struct in turn, at least one owned part among them, and no destructor -
+# each the field path to an owned part; none for any other type. Everything an owner's value reaches, it reaches
+# through its anchors, so where all of its storage is built in one region (early freeing's owner places), an anchor
+# holding storage names that region (the word before it), and one with none is empty or constant data
+fn (t mut Table&) Anchors(id TypeId) Vec<Array<I64>> {
+    out Vec<Array<I64>>
+    try t.anchorsInto(id, Array<I64>(0), out, 0) catch { return Vec<Array<I64>>() }
+    if out.Len() == 0 { return Vec<Array<I64>>() }
+    return out
+}
+
+# the anchors of a struct held in place at path `at`, added to out - failing with NoOwner where a field is none of
+# plain data, an owned part, or such a struct in turn
+fn (t mut Table&) anchorsInto(id TypeId, at Array<I64>&, out mut Vec<Array<I64>>&, depth I64) ? NoOwner {
+    r := t.Repr(id)
+    if depth > 8 or t.KindOf(r) != Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != DeclKind.Struct: error NoOwner
+    if t.Destructs(r): error NoOwner
+    fs := t.Items(t.Fields(r))
+    for i in range fs.Len() {
+        path := Array<I64>(at.Len() + 1)
+        for j in range at.Len() { path[j] = at[j] }
+        path[at.Len()] = i
+        if t.OwnedPart(fs[i]) {
+            out.Push(path)
+            continue
+        }
+        if not t.HoldsRefs(fs[i]) and not t.OwnsParts(fs[i]): continue
+        try t.anchorsInto(fs[i], path, out, depth + 1)
+    }
+}
+
+# whether a value of a type holds a reference, a function value or an "any": HoldsRefs with its owned parts aside - what
+# a copy of it made by OwnsParts' rule still shares with the original (the references it holds name what they named)
+fn (t mut Table&) SharesRefs(id TypeId) Bool { return t.sharesRefs(id, 0) }
+
+fn (t mut Table&) sharesRefs(id TypeId, depth I64) Bool {
+    if depth > 16 { return true }
+    if t.ForeignRef(id) { return false }
+    k := t.KindOf(id)
+    if k == Kind.Ref or k == Kind.Func or k == Kind.Var or k == Kind.Any { return true }
+    match k {
+        case Kind.Named {
+            if not t.HasBody(id) { return true }
+            return match t.DeclKindOf(t.DeclOf(id)) {
+                case DeclKind.Struct: t.listShares(t.Fields(id), depth, false)
+                case DeclKind.Enum: t.listShares(t.Cases(id), depth, true)
+                case DeclKind.Over: t.sharesRefs(t.Base(id), depth + 1)
+                case _: false
+            }
+        }
+        case Kind.Array { return t.sharesRefs(t.Elem(id), depth + 1) }
+        case Kind.Tuple, Kind.Record { return t.listShares(t.Parts(id), depth, false) }
+        case Kind.AnonEnum { return t.listShares(t.ShapeCases(id), depth, true) }
+        case _ { return false }
+    }
+}
+
+# whether a value of a type reaches code that may write what it was not given writably: a function value (a closure may
+# hold a "mut" reference), an "any" or a type variable - in it or behind its references, at any depth (D9h's quiet
+# calls). A type already being walked adds nothing; one not resolved may reach anything
+fn (t Table&) ReachesCode(id TypeId) Bool {
+    w := codeWalk(t)
+    return w.reaches(id)
+}
+
+# ... or a writable reference: what a global's value may let a call write (check.mutStorage)
+fn (t Table&) ReachesWrite(id TypeId) Bool {
+    w := codeWalk(t, true)
+    return w.reaches(id)
+}
+
+type codeWalk struct(T Table&, Writes Bool = false) {
+    T
+    Writes
+    walking Vec<TypeId>
+}
+
+fn (w mut codeWalk&) reaches(id TypeId) Bool {
+    t := w.T
+    if t.ForeignRef(id) or w.walking.Has(id): return false
+    k := t.KindOf(id)
+    if k == Kind.Func or k == Kind.Var or k == Kind.Any: return true
+    if w.Writes and k == Kind.Ref and (t.PermOf(id) & Writable) != 0: return true
+    w.walking.Push(id)
+    return match k {
+        case Kind.Ref: w.reaches(t.Referent(id))
+        case Kind.Array: w.reaches(t.Elem(id))
+        case Kind.Tuple, Kind.Record: w.some(t.Parts(id))
+        case Kind.AnonEnum: w.some(t.ShapeCases(id))
+        case Kind.Named: w.named(id)
+        case _: false
+    }
+}
+
+fn (w mut codeWalk&) named(id TypeId) Bool {
+    t := w.T
+    if not t.HasBody(id): return true
+    return match t.DeclKindOf(t.DeclOf(id)) {
+        case DeclKind.Struct: w.some(t.Fields(id))
+        case DeclKind.Enum: w.some(t.Cases(id))
+        case DeclKind.Over: w.reaches(t.Base(id))
+        case _: false
+    }
+}
+
+fn (w mut codeWalk&) some(l ListId) Bool {
+    for x in w.T.Items(l) {
+        if x != TypeId(0) and w.reaches(x): return true
+    }
+    return false
+}
+
+# O15's holders: whether a value of type from may hold - in a part, or behind a reference it reaches, at any depth - a
+# reference into the storage of a value of type into: to it, or to a part it holds by value (deep through fields,
+# payloads and elements held by value - a run-time array part's elements among them, its own storage). A function
+# value, an "any", a type variable or a type not resolved may hold any; an extern type's reference holds none (X10)
+fn (t Table&) RefInto(from TypeId, into TypeId) Bool {
+    ins Vec<TypeId>
+    t.valueParts(into, ins)
+    w := refWalk(t, ins)
+    return w.reaches(from)
+}
+
+# id and every type it holds by value (deep through fields, payloads and elements held by value), as representations
+fn (t Table&) ValueParts(id TypeId) Vec<TypeId> {
+    out Vec<TypeId>
+    t.valueParts(id, out)
+    return out
+}
+
+fn (t Table&) valueParts(id TypeId, out mut Vec<TypeId>&) {
+    r := t.Repr(id)
+    if out.Has(r): return
+    out.Push(r)
+    match t.KindOf(r) {
+        case Kind.Array: t.valueParts(t.Elem(r), out)
+        case Kind.Tuple, Kind.Record: t.valuePartsOf(t.Parts(r), out)
+        case Kind.AnonEnum: t.valuePartsOf(t.ShapeCases(r), out)
+        case Kind.Named {
+            if not t.HasBody(r): return
+            match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.valuePartsOf(t.Fields(r), out)
+                case DeclKind.Enum: t.valuePartsOf(t.Cases(r), out)
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+}
+
+fn (t Table&) valuePartsOf(l ListId, out mut Vec<TypeId>&) {
+    for x in t.Items(l) {
+        if x != TypeId(0): t.valueParts(x, out)
+    }
+}
+
+type refWalk struct(T Table&, Into Vec<TypeId>&) {
+    T, Into
+    walking Vec<TypeId>
+}
+
+fn (w mut refWalk&) reaches(id TypeId) Bool {
+    t := w.T
+    if t.ForeignRef(id) or w.walking.Has(id): return false
+    k := t.KindOf(id)
+    if k == Kind.Func or k == Kind.Var or k == Kind.Any or k == Kind.Unknown: return true
+    w.walking.Push(id)
+    return match k {
+        case Kind.Ref: w.lands(t.Referent(id)) or w.reaches(t.Referent(id))
+        case Kind.Array: w.reaches(t.Elem(id))
+        case Kind.Tuple, Kind.Record: w.some(t.Parts(id))
+        case Kind.AnonEnum: w.some(t.ShapeCases(id))
+        case Kind.Named: w.named(id)
+        case _: false
+    }
+}
+
+# whether a reference to a referent of this type may name storage among Into: the same representation, or - an array
+# view - an array of the same elements, whatever its length
+fn (w mut refWalk&) lands(x TypeId) Bool {
+    t := w.T
+    r := t.Repr(x)
+    if w.Into.Has(r): return true
+    if t.KindOf(r) != Kind.Array: return false
+    e := t.Repr(t.Elem(r))
+    for y in w.Into {
+        if t.KindOf(y) == Kind.Array and t.Repr(t.Elem(y)) == e: return true
+    }
+    return false
+}
+
+fn (w mut refWalk&) named(id TypeId) Bool {
+    t := w.T
+    if not t.HasBody(id): return true
+    return match t.DeclKindOf(t.DeclOf(id)) {
+        case DeclKind.Struct: w.some(t.Fields(id))
+        case DeclKind.Enum: w.some(t.Cases(id))
+        case DeclKind.Over: w.reaches(t.Base(id))
+        case _: false
+    }
+}
+
+fn (w mut refWalk&) some(l ListId) Bool {
+    for x in w.T.Items(l) {
+        if x != TypeId(0) and w.reaches(x): return true
+    }
+    return false
+}
+
+# (a part not typed yet may hold one; among cases, 0 is a case without a payload)
+fn (t mut Table&) listShares(l ListId, depth I64, cases Bool) Bool {
+    for x in t.Items(l) {
+        if x == TypeId(0) {
+            if not cases { return true }
+        } else if t.sharesRefs(x, depth + 1) {
+            return true
+        }
+    }
+    return false
+}
+
+fn (t mut Table&) partsOwn(l ListId, depth I64) Bool {
+    for x in t.Items(l) {
+        if x != TypeId(0) and (t.OwnedPart(x) or t.ownsParts(x, depth + 1)) { return true }
+    }
+    return false
+}
+
+# the scope variables a call of a function of this type passes, in order, as hidden arguments - read off the type alone,
+# so a call, the body it reaches and a function value's adapter agree (DESIGN.md 1.6.1): each parameter (the receiver
+# first) holding a reference and sharing no earlier one's, by its index; then ResultVar where a result is built or
+# written as a type variable (O13, O14b) and holds one, or is an array value whose storage is made where the result goes
+# (T7b), or the function is a constructor (its instance, C2d) or keeps a become chain's storage (its tail scope, S21); a
+# destructor's is ClosingVar alone (C9a). A closure's
+# captures are its environment's, never the type's (D16c)
+fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
+    role := t.Role(f)
+    if role == RoleDtor { return Array<I64>[ClosingVar] }
+    out Vec<I64>
+    ps := t.Items(t.Params(f))
+    for i in range ps.Len() {
+        if t.ShareOf(f, i) == OwnScope and t.HoldsRefs(ps[i]) { out.Push(i) }
+    }
+    built := role == RoleCtor or role == RoleTail
+    rs := t.Results(f)
+    for k in range rs.Len() {
+        e := t.ResultFrom(f, k)
+        if (e == OwnScope or e == FromTypeVar) and (t.HoldsRefs(rs[k]) or t.runTimeArray(rs[k])) { built = true }
+    }
+    if built { out.Push(ResultVar) }
+    return out.ToArray()
+}
+
+# ---- declared types ----
+
+# registers a module's identity; its index
+fn (t mut Table&) AddModule(identity String&) I64 {
+    t.Modules.Push(identity)
+    return t.Modules.Len() - 1
+}
+
+# registers a declared type of module m; its id
+fn (t mut Table&) AddDecl(m I64, name source.NameId, kind DeclKind, params I32) DeclId {
+    id := DeclId(I32(t.decls.Len()))
+    t.decls.Push(decl(m, name, kind, params))
+    t.declKeys.Put($t.Modules[m] ":" $t.Names.Text(name), id)
+    return id
+}
+
+fn (t Table&) DeclModule(d DeclId) I64 { return t.decls[I64(d)].Module }
+fn (t Table&) DeclName(d DeclId) source.NameId { return t.decls[I64(d)].Name }
+fn (t Table&) DeclKindOf(d DeclId) DeclKind { return t.decls[I64(d)].K }
+fn (t Table&) DeclParams(d DeclId) I64 { return I64(t.decls[I64(d)].Params) }
+
+# a declared type by its module's identity and its name, as Canon writes it ("std/prelude/list:List")
+fn (t Table&) FindDecl(qualified String&) DeclId ? {
+    return try t.declKeys.Get(qualified)
+}
+
+# what a Named type holds - its body - and whether it is resolved
+fn (t Table&) bodyOf(id TypeId) body {
+    return try t.bodies.Get(id) catch default body(ListId(0), ListId(0), UnknownT, false, false)
+}
+fn (t Table&) HasBody(id TypeId) Bool { return t.bodyOf(id).Ready }
+
+fn (t mut Table&) SetStructBody(id TypeId, fields ListId, destructs Bool) {
+    t.bodies.Put(id, body(fields, ListId(0), UnknownT, destructs, true))
+}
+
+# an enum's body: its cases' names, and each case's payload, a Record (0 for none)
+fn (t mut Table&) SetEnumBody(id TypeId, names Array<source.NameId>&, payloads ListId) {
+    kept mut Array<source.NameId>& = Array<source.NameId>(names.Len())
+    for i in range names.Len() { kept[i] = names[i] }
+    t.caseNames.Put(id, kept)
+    t.bodies.Put(id, body(ListId(0), payloads, UnknownT, false, true))
+}
+
+fn (t mut Table&) SetOverBody(id TypeId, base TypeId) { t.bodies.Put(id, body(ListId(0), ListId(0), base, false, true)) }
+
+# an error type's or a trait's body: nothing to hold
+fn (t mut Table&) SetEmptyBody(id TypeId) { t.bodies.Put(id, body(ListId(0), ListId(0), UnknownT, false, true)) }
+
+fn (t Table&) Fields(id TypeId) ListId { return t.bodyOf(id).Fields }
+fn (t Table&) Cases(id TypeId) ListId { return t.bodyOf(id).Cases }
+fn (t Table&) Base(id TypeId) TypeId { return t.bodyOf(id).Base }
+fn (t Table&) Destructs(id TypeId) Bool { return t.destructs(id, 0) }
+
+fn (t Table&) destructs(id TypeId, depth I64) Bool {
+    b := t.bodyOf(id)
+    if not b.Destructs or t.endsDecls.Len() == 0 or not t.endsDecls.Has(I64(t.DeclOf(id))): return b.Destructs
+    return t.holdsDropping(id, depth)
+}
+
+# whether a struct's declaration has a destructor written - where it runs or not (an instance of a collection holding
+# nothing with destructors has none, Destructs)
+fn (t Table&) DtorWritten(id TypeId) Bool { return t.bodyOf(id).Destructs }
+
+# C11, O15: a collection of the prelude or std whose destructor, not declared unique, ends the elements it holds - a
+# destructor that exists only in its instances holding a value with destructors to run (EndsHeld)
+fn (t mut Table&) MarkEnds(d DeclId) { t.endsDecls.Put(I64(d), true) }
+
+fn (t Table&) Ends(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.endsDecls.Has(I64(t.DeclOf(id))) }
+
+# C11: whether field f (its type) of a value of type owner is a holder of what it holds by value - all but the buffer
+# of a collection whose destructor ends the live elements of it (Ends): an array of a run-time length there is room past
+# its count, its elements the collection's to end
+fn (t Table&) FieldHolds(owner TypeId, f TypeId) Bool {
+    if t.IsRef(f) or not t.NeedsDrop(f): return false
+    r := t.Repr(f)
+    return not (t.KindOf(r) == Kind.Array and t.Length(r) == TypeId(0) and t.Ends(t.Repr(owner)))
+}
+
+# whether an instance of such a collection holds, by value - through its fields and the elements of the arrays they
+# are, a run-time length's included (the elements its own code says are live) - a value with destructors to run
+fn (t Table&) holdsDropping(id TypeId, depth I64) Bool {
+    for x in t.Items(t.Fields(id)) {
+        if x == TypeId(0) or t.IsRef(x): continue
+        if t.needsDrop(x, depth + 1): return true
+        r := t.Repr(x)
+        if t.KindOf(r) == Kind.Array and t.needsDrop(t.Elem(r), depth + 2): return true
+    }
+    return false
+}
+
+
+# an enum's case names, in order
+fn (t Table&) CaseNames(id TypeId) Array<source.NameId>& { return try t.caseNames.Get(id) catch default Array<source.NameId>(0) }
+
+# whether an enum carries a payload in any case (T17): one that does not is its bare ordinal
+fn (t Table&) HasPayload(cases ListId) Bool {
+    for c in t.Items(cases) {
+        if c != TypeId(0) { return true }
+    }
+    return false
+}
+
+# ---- layout ----
+
+# how far a type's layout has come
+fn (t Table&) LayoutState(id TypeId) I64 { return t.state[I64(id)] }
+fn (t mut Table&) SetLayoutState(id TypeId, s I64) { t.state[I64(id)] = s }
+
+fn (t Table&) Size(id TypeId) I64 { return t.sizes[I64(id)] }
+fn (t Table&) Align(id TypeId) I64 { return t.aligns[I64(id)] }
+
+# a struct's, tuple's or record's field offsets, in order
+fn (t Table&) Offsets(id TypeId) Array<I64> {
+    if t.KindOf(id) == Kind.ErrVal and t.errReprs.Has(id): return t.Offsets(t.Repr(id))   # T19b
+    n := t.Items(t.fieldList(id)).Len()
+    out := Array<I64>(n)
+    at := t.offsetsAt[I64(id)]
+    if at < 0 { return out }
+    for i in range n { out[i] = t.offsets[at + i] }
+    return out
+}
+
+# an enum's payload size in bytes, rounded to whole words; -1 for an enum carrying none
+fn (t Table&) PayloadSize(id TypeId) I64 { return t.payloads[I64(id)] }
+
+fn (t Table&) fieldList(id TypeId) ListId {
+    return match t.KindOf(id) {
+        case Kind.Named: t.Fields(id)
+        case Kind.Tuple, Kind.Record: t.Parts(id)
+        case Kind.ErrVal: t.Parts(t.Repr(id)) if t.errReprs.Has(id) else ListId(0)
+        case _: ListId(0)
+    }
+}
+
+# a walk asking whether a value of a type may hold an instance whose destructor is to run (C11, O16) - through
+# references, elements, fields and cases - or a value of a type not known here: an any's instance, a type variable's.
+# Each type is asked once a walk
+type DtorWalk struct(T Table&) {
+    T
+    seen Map<TypeId, Bool>
+}
+
+fn (w mut DtorWalk&) Holds(ty TypeId) Bool {
+    t := w.T
+    r := t.Repr(ty)
+    if w.seen.Has(r) { return try w.seen.Get(r) catch default false }
+    w.seen.Put(r, false)
+    out := match t.KindOf(r) {
+        case Kind.Ref: w.Holds(t.Referent(r))
+        case Kind.Any, Kind.Var: true
+        case Kind.Array: w.Holds(t.Elem(r))
+        case Kind.Tuple, Kind.Record: w.some(t.Items(t.Parts(r)))
+        case Kind.Named: not t.HasBody(r) or t.Destructs(r) or w.some(t.Items(t.Fields(r))) or w.some(t.Items(t.Cases(r)))
+        case _: false
+    }
+    w.seen.Put(r, out)
+    return out
+}
+
+fn (w mut DtorWalk&) some(ts Array<TypeId>&) Bool {
+    for p in ts {
+        if p != TypeId(0) and w.Holds(p) { return true }
+    }
+    return false
+}
+
+# what a type's value is: the representation its layout follows, past any declared type over another (T29)
+fn (t Table&) Repr(id TypeId) TypeId {
+    if t.KindOf(id) == Kind.ErrVal { return try t.errReprs.Get(id) catch default TypeId(5) }   # T20: its code, an I32
+    r := id
+    for t.KindOf(r) == Kind.Named and t.DeclKindOf(t.DeclOf(r)) == DeclKind.Over and t.HasBody(r) { r = t.Base(r) }
+    return r
+}
+
+# the types whose layouts a type's layout is made of, which must be laid out first: a value's parts held in place. A
+# reference, a run-time-length array and a function value hold theirs elsewhere
+fn (t Table&) Embedded(id TypeId) Array<TypeId> {
+    out Vec<TypeId>
+    match t.KindOf(id) {
+        case Kind.Named {
+            match t.DeclKindOf(t.DeclOf(id)) {
+                case DeclKind.Struct {
+                    for f in t.Items(t.Fields(id)) { out.Push(f) }
+                }
+                case DeclKind.Enum { pushPayloads(t.Items(t.Cases(id)), out) }
+                case DeclKind.Over { out.Push(t.Base(id)) }
+                case _ { }
+            }
+        }
+        case Kind.Array {
+            if t.Length(id) != TypeId(0) { out.Push(t.Elem(id)) }
+        }
+        case Kind.Tuple, Kind.Record {
+            for f in t.Items(t.Parts(id)) { out.Push(f) }
+        }
+        case Kind.AnonEnum { pushPayloads(t.Items(t.ShapeCases(id)), out) }
+        case Kind.ErrVal {
+            if t.Repr(id) != TypeId(5) { out.Push(t.Repr(id)) }
+        }
+        case _ { }
+    }
+    return out.ToArray()
+}
+
+# the payload types of a list of cases, the cases carrying one (0 for none)
+fn pushPayloads(cs Array<TypeId>&, out mut Vec<TypeId>&) {
+    for c in cs {
+        if c != TypeId(0) { out.Push(c) }
+    }
+}
+
+# computes a type's layout from its embedded parts' (Embedded), which are laid out already - as LLVM lays out a struct
+# that is not packed, the same rule as the target's C compiler: each field at its own alignment, in order, the whole
+# rounded to its largest field's (T16). Whether the type has one: a variable, a pattern, a trait or a stand-in has none
+fn (t mut Table&) ComputeLayout(id TypeId) Bool {
+    d := t.at(id)
+    size, align I64 = 0, 1
+    match d.K {
+        case Kind.Void, Kind.Noreturn { }
+        case Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16, Kind.BF16
+             Kind.F32, Kind.F64 {
+            size = primBits[I64(id)] / 8 if id != BoolT else 1
+            align = size
+        }
+        case Kind.Int { size, align = IntBytes(d.A), IntBytes(d.A) }
+        case Kind.DefaultErr { size, align = 4, 4 }
+        case Kind.ErrVal {
+            r := t.Repr(id)
+            if r == TypeId(5) {
+                size, align = 4, 4
+            } else {
+                if t.LayoutState(r) != LaidOut { return false }
+                size, align = t.Size(r), t.Align(r)
+            }
+        }
+        case Kind.Func { size, align = 16, 8 }   # T21: the pair (code, environment)
+        case Kind.Ref {
+            # a reference to a run-time-length array is the pair (length, storage), as the array's value is (T11); an
+            # any the pair (instance, table) (T32)
+            if t.runTimeArray(t.Referent(id)) or t.KindOf(t.Referent(id)) == Kind.Any {
+                size, align = 16, 8
+            } else {
+                size, align = 8, 8
+            }
+        }
+        case Kind.Array {
+            if t.Length(id) == TypeId(0) {
+                size, align = 16, 8
+            } else {
+                if t.KindOf(t.Length(id)) != Kind.Const { return false }   # a length still to be bound or computed
+                e := t.Elem(id)
+                size, align = t.Size(e) * t.ConstValue(t.Length(id)), t.Align(e)
+            }
+        }
+        case Kind.Tuple, Kind.Record {
+            size, align = t.layFields(id, t.Parts(id))
+        }
+        case Kind.AnonEnum {
+            size, align = t.layEnum(id, t.ShapeCases(id))
+        }
+        case Kind.Named {
+            if not t.HasBody(id) { return false }
+            match t.DeclKindOf(t.DeclOf(id)) {
+                case DeclKind.Struct {
+                    size, align = t.layPacked(id) if t.Packed(id) else t.layFields(id, t.Fields(id))
+                }
+                case DeclKind.Enum { size, align = t.layEnum(id, t.Cases(id)) }
+                case DeclKind.Error { size, align = 4, 4 }
+                case DeclKind.Over {
+                    b := t.Base(id)
+                    if t.LayoutState(b) != LaidOut { return false }
+                    size, align = t.Size(b), t.Align(b)
+                }
+                case DeclKind.Trait, DeclKind.Foreign { return false }
+            }
+        }
+        case _ { return false }
+    }
+    t.sizes[I64(id)] = size
+    t.aligns[I64(id)] = align
+    return true
+}
+
+fn (t Table&) runTimeArray(id TypeId) Bool {
+    r := t.Repr(id)
+    return t.KindOf(r) == Kind.Array and t.Length(r) == TypeId(0)
+}
+
+# fields laid out in order, each at its own alignment; the size rounded to the largest alignment
+fn (t mut Table&) layFields(id TypeId, fields ListId) I64, I64 {
+    off, align I64 = 0, 1
+    t.offsetsAt[I64(id)] = t.offsets.Len()
+    for f in t.Items(fields) {
+        a := t.Align(f)
+        if a > align { align = a }
+        off = (off + a - 1) / a * a
+        t.offsets.Push(off)
+        off += t.Size(f)
+    }
+    return (off + align - 1) / align * align, align
+}
+
+# T13c: a packed struct's bits rounded up to bytes, alignment 1; its fields' offsets the bytes holding their lowest bits
+fn (t mut Table&) layPacked(id TypeId) I64, I64 {
+    bits I64 = 0
+    t.offsetsAt[I64(id)] = t.offsets.Len()
+    for f in t.Items(t.Fields(id)) {
+        t.offsets.Push(bits / 8)
+        bits += t.fieldBits(f)
+    }
+    return (bits + 7) / 8, 1
+}
+
+# T17: an enum carrying no payload is its ordinal, an I32; one that does is a tag word and room for its largest
+# payload, in whole words
+fn (t mut Table&) layEnum(id TypeId, cases ListId) I64, I64 {
+    if not t.HasPayload(cases) { return 4, 4 }
+    most I64 = 0
+    for c in t.Items(cases) {
+        if c != TypeId(0) and t.Size(c) > most { most = t.Size(c) }
+    }
+    words := (most + 7) / 8 * 8
+    t.payloads[I64(id)] = words
+    return 8 + words, 8
+}
+
+# whether a value of this type is held in memory and handled by its address - a struct, a tuple, a record, a fixed
+# array, held by value
+fn (t Table&) ByAddress(id TypeId) Bool {
+    r := t.Repr(id)
+    return match t.KindOf(r) {
+        case Kind.Tuple, Kind.Record: true
+        case Kind.Named: t.DeclKindOf(t.DeclOf(r)) == DeclKind.Struct
+        case Kind.Array: t.Length(r) != TypeId(0)
+        case _: false
+    }
+}
+
+# a value too large to pass or return as one: it goes through memory, as a C compiler passes a large struct
+BigAggregate I64 = 128
+
+fn (t Table&) ViaMemory(id TypeId) Bool { return t.ByAddress(id) and t.Size(id) > BigAggregate }
+
+# ---- spellings ----
+
+# the LLVM type of a value: a declared struct by its name (%"CANON"), an anonymous one spelled out
+fn (t mut Table&) Llvm(id TypeId) String& {
+    i := I64(id)
+    if t.llvm[i] != "" { return t.llvm[i] }
+    t.llvm[i] = t.spellLlvm(id)
+    return t.llvm[i]
+}
+
+fn (t mut Table&) spellLlvm(id TypeId) String {
+    d := t.at(id)
+    return match d.K {
+        case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
+             Kind.BF16, Kind.F32, Kind.F64: $primLlvm[I64(id)]
+        case Kind.Int: "i" $d.A
+        case Kind.DefaultErr: "i32"
+        case Kind.ErrVal: "i32" if t.Repr(id) == TypeId(5) else t.Llvm(t.Repr(id))
+        case Kind.Noreturn: "void"
+        case Kind.Func: "{ ptr, ptr }"
+        case Kind.Ref: "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "{ ptr, ptr }" if t.KindOf(t.Referent(id)) == Kind.Any else "ptr"
+        case Kind.Array: t.arrayLlvm(id)
+        case Kind.Tuple, Kind.Record: t.aggregate(t.Parts(id))
+        case Kind.AnonEnum: t.enumLlvm(id)
+        case Kind.Named: t.namedLlvm(id)
+        case _: "?"
+    }
+}
+
+fn (t mut Table&) arrayLlvm(id TypeId) String {
+    if t.Length(id) == TypeId(0) { return "{ i64, ptr }" }
+    return "[" $t.ConstValue(t.Length(id)) " x " $t.Llvm(t.Elem(id)) "]"
+}
+
+fn (t mut Table&) enumLlvm(id TypeId) String {
+    if t.PayloadSize(id) < 0 { return "i32" }
+    return "{ i64, [" $(t.PayloadSize(id) / 8) " x i64] }"
+}
+
+fn (t mut Table&) namedLlvm(id TypeId) String {
+    return match t.DeclKindOf(t.DeclOf(id)) {
+        case DeclKind.Struct: "[" $t.Size(id) " x i8]" if t.Packed(id) else t.structName(id)
+        case DeclKind.Enum: t.enumLlvm(id)
+        case DeclKind.Error: "i32"
+        case DeclKind.Over: $t.Llvm(t.Base(id))
+        case _: "?"
+    }
+}
+
+# a declared struct's LLVM name: its canonical name - or, for an instance of a generic struct, the generic's with a
+# hash of its body (%"std/prelude/list:List.H"), so instances laid out alike are one LLVM type and the functions of
+# two instances whose code is the same are spelled the same, which is what lets emit merge them (List<Node&> and
+# List<Expr&>: every reference is one pointer)
+fn (t mut Table&) structName(id TypeId) String {
+    c := t.Canon(id)
+    if t.Args(id) == ListId(0) { return $"%\"" $c "\"" }
+    lt := try c.Find("<") catch default c.Len()
+    h1, h2 := hash128(t.StructBody(id))
+    return $"%\"" $c[:lt] "." $hex16(h1) $hex16(h2) "\""
+}
+
+# a struct's fields spelled as an LLVM aggregate: "{ i32, ptr }"
+fn (t mut Table&) aggregate(fields ListId) String {
+    b := StringBuilder()
+    b.Push("{ ")
+    xs := t.Items(fields)
+    for i in range xs.Len() {
+        if i > 0 { b.Push(", ") }
+        b.Push(t.Llvm(xs[i]))
+    }
+    b.Push(" }")
+    return b.ToString()
+}
+
+# a declared struct's body as its type definition spells it: "{ i32, ptr }", "{ }" for none
+fn (t mut Table&) StructBody(id TypeId) String {
+    if t.Items(t.Fields(id)).Len() == 0 { return "{ }" }
+    return t.aggregate(t.Fields(id))
+}
+
+# the LLVM type a function of this type returns, after its error set (the error-union ABI): its result, or the pair
+# { i32 code, result } where it can fail (a bare i32 with no result), or through memory where the result is too large
+# to return as one value - then an i32 code or nothing
+fn (t mut Table&) RetLlvm(f TypeId) String {
+    r := t.Result(f)
+    errs := t.Items(t.Errors(f)).Len() > 0
+    if r != VoidT and t.ViaMemory(r) { return "i32" if errs else "void" }
+    if not errs { return $t.Llvm(r) }
+    if r == VoidT { return "i32" }
+    return "{ i32, " $t.Llvm(r) " }"
+}
+
+# how each parameter is passed: "v" as a value, "m" through memory (ViaMemory), "s" a function value split into its
+# code and its environment
+fn (t mut Table&) Passing(f TypeId) String {
+    b := StringBuilder()
+    for p in t.Items(t.Params(f)) {
+        if t.ViaMemory(p) {
+            b.PushChar('m')
+        } else if t.KindOf(p) == Kind.Func {
+            b.PushChar('s')
+        } else {
+            b.PushChar('v')
+        }
+    }
+    return b.ToString()
+}
+
+# a type's canonical text: a number by its name; a declared type as "IDENTITY:Name", an instance's arguments after it
+# ("std/prelude/list:List<I64>"); "Array<T>" and "Array<T, N>"; a reference as its referent with "&" after and its
+# permission before ("own mut T&"); a function type as "fn(P, Q) R ? E + F" ("?" alone for the default error, a result
+# that is itself a function type in parentheses), scopes that say something after it as " ~[role,n,entries]"; several
+# results as "(A, B)", a record as "struct(A, B)", an anonymous enum as "enum{A(T) B}". A variable is "<owner.index>", a
+# pattern "<pattern>", the stand-in "?"
+fn (t mut Table&) Canon(id TypeId) String {
+    b := StringBuilder()
+    t.canon(b, id)
+    return b.ToString()
+}
+
+# T21c: a function type's promises in its canonical text, by position: "returns, borrows 0, keeps 1 in 0.f, keeps 1"
+fn (t Table&) canonPromises(b mut StringBuilder&, f TypeId) {
+    w := t.PromiseWords(f)
+    sep := ""
+    for i in range PromiseNames.Len() {
+        if (w & (I64(1) << i)) == 0: continue
+        b.Push($sep $PromiseNames[i])
+        sep = ", "
+    }
+    for x in t.BorrowsOf(f) {
+        b.Push($sep "borrows " $x)
+        sep = ", "
+    }
+    ks := t.KeepsOf(f)
+    for k in range ks.Len() / 3 {
+        b.Push($sep "keeps " $ks[3 * k])
+        sep = ", "
+        if ks[3 * k + 1] == KeepsHome: continue
+        b.Push(" in " $ks[3 * k + 1])
+        if ks[3 * k + 2] != 0 { b.Push("." $t.Names.Text(source.NameId(I32(ks[3 * k + 2])))) }
+    }
+}
+
+# a type's canonical text with its function types' parameter names after each, "fn(I64){n}": what tells apart two
+# types Unnamed makes one - a symbol named by it means one type in every program, where a type's number would not
+fn (t mut Table&) CanonNamed(id TypeId) String {
+    t.canonNames = true
+    s := t.Canon(id)
+    t.canonNames = false
+    return s
+}
+
+# a list of types' canonical texts, ", " between them
+fn (t mut Table&) CanonList(l ListId) String {
+    b := StringBuilder()
+    t.joined(b, l)
+    return b.ToString()
+}
+
+fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
+    d := t.at(id)
+    match d.K {
+        case Kind.Unknown { b.Push("?") }
+        case Kind.Null { b.Push("null") }
+        case Kind.DefaultErr { b.Push("default") }
+        case Kind.Noreturn { b.Push("noreturn") }
+        case Kind.ErrWords {
+            t.canon(b, t.ErrOf(id))
+            b.Push(".#" $t.ErrMask(id))
+        }
+        case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
+             Kind.BF16, Kind.F32, Kind.F64 {
+            b.Push("void" if id == VoidT else primNames[I64(id)])
+        }
+        case Kind.Int { b.Push($("I" if d.B == 1 else "U") $d.A) }
+        case Kind.Named {
+            dl := t.DeclOf(id)
+            b.Push(t.Modules[t.DeclModule(dl)])
+            b.PushChar(':')
+            b.Push(t.Names.Text(t.DeclName(dl)))
+            args := t.Items(t.Args(id))
+            # G1a: an error-set argument after the types, " ? A + B" - the empty set left out, as "Iterator<I64>" writes it
+            n := args.Len()
+            if n > 0 and t.KindOf(args[n - 1]) == Kind.ErrSet and t.ErrSetItems(args[n - 1]) == ListId(0) { n-- }
+            if n > 0 {
+                b.PushChar('<')
+                for i in range n {
+                    if i > 0 { b.Push(" " if t.KindOf(args[i]) == Kind.ErrSet else ", ") }
+                    t.canon(b, args[i])
+                }
+                b.PushChar('>')
+            }
+        }
+        case Kind.Array {
+            b.Push("Array<")
+            t.canon(b, t.Elem(id))
+            if t.Length(id) != TypeId(0) {
+                b.Push(", ")
+                t.canon(b, t.Length(id))
+            }
+            b.PushChar('>')
+        }
+        case Kind.Ref {
+            p := t.PermOf(id)
+            if (p & Spread) != 0 {
+                # D8g: a variadic parameter's array, as it is written
+                b.Push("...")
+                t.canon(b, t.Elem(t.Referent(id)))
+                return
+            }
+            if (p & Writable) != 0 { b.Push("mut ") }
+            t.canon(b, t.Referent(id))
+            b.Push("?&" if (p & Nullable) != 0 else "&")
+        }
+        case Kind.Func {
+            b.Push("fn?" if (d.F & Nullable) != 0 else "fn")
+            if (d.F >> 8) != 0 {
+                # T21b: the declared function type it is, "fn[m:Handler](...)"
+                b.PushChar('[')
+                t.canon(b, TypeId(I32(d.F >> 8)))
+                b.PushChar(']')
+            }
+            b.PushChar('(')
+            t.joined(b, t.Params(id))
+            b.PushChar(')')
+            r := t.Result(id)
+            if r != VoidT {
+                fnResult := t.KindOf(r) == Kind.Func
+                b.Push(" (" if fnResult else " ")
+                t.canon(b, r)
+                if fnResult { b.PushChar(')') }
+            }
+            errs := t.Items(t.Errors(id))
+            if errs.Len() > 0 {
+                b.Push(" ?")
+                if not (errs.Len() == 1 and errs[0] == DefaultErrT) { t.canonErrs(b, errs) }
+            }
+            if d.G != 0 {
+                # T21c: its promises by position, " ![returns, borrows 0, keeps 1 in 0.f, keeps 1]"
+                b.Push(" ![")
+                t.canonPromises(b, id)
+                b.PushChar(']')
+            }
+            if t.canonNames and d.E != 0 {
+                b.PushChar('{')
+                ns := t.nameLists[d.E]
+                for i in range ns.Len() {
+                    if i > 0 { b.PushChar(',') }
+                    b.Push(t.Names.Text(source.NameId(I32(ns[i]))))
+                }
+                b.PushChar('}')
+            }
+            if d.D != 0 {
+                sc := t.scopes[d.D]
+                b.Push(" ~[")
+                for i in range sc.Len() {
+                    if i > 0 { b.PushChar(',') }
+                    b.Push($sc[i])
+                }
+                b.PushChar(']')
+            }
+        }
+        case Kind.Tuple {
+            b.PushChar('(')
+            t.joined(b, t.Parts(id))
+            b.PushChar(')')
+        }
+        case Kind.Record {
+            b.Push("struct(")
+            t.joined(b, t.Parts(id))
+            b.PushChar(')')
+        }
+        case Kind.AnonEnum {
+            b.Push("enum{")
+            names := t.ShapeNames(id)
+            cases := t.Items(t.ShapeCases(id))
+            for i in range names.Len() {
+                if i > 0 { b.PushChar(' ') }
+                b.Push(t.Names.Text(names[i]))
+                if cases[i] != TypeId(0) {
+                    b.PushChar('(')
+                    t.joined(b, t.Parts(cases[i]))
+                    b.PushChar(')')
+                }
+            }
+            b.PushChar('}')
+        }
+        case Kind.Var { b.Push("<" $d.A "." $d.B ">") }
+        case Kind.Const {
+            ty := t.ConstType(id)
+            if ty == BoolT {
+                b.Push("true" if d.B != 0 else "false")
+            } else if t.IsUnsigned(ty) and d.B < 0 {
+                b.Push(UnsignedText(d.B))
+            } else {
+                b.Push($d.B)
+            }
+        }
+        case Kind.ConstExpr { b.Push("<" $t.Pattern(id) ">") }
+        case Kind.Any {
+            b.Push("any ")
+            t.canon(b, t.AnyTrait(id))
+        }
+        case Kind.ErrVal {
+            b.Push("error{")
+            t.joined(b, t.ErrValItems(id))
+            b.PushChar('}')
+        }
+        case Kind.ErrSet {
+            b.PushChar('?')
+            t.canonErrs(b, t.Items(t.ErrSetItems(id)))
+        }
+    }
+}
+
+# an error list as Canon spells it, each item after " " or " + "
+fn (t mut Table&) canonErrs(b mut StringBuilder&, es Array<TypeId>&) {
+    for i in range es.Len() {
+        b.Push(" + " if i > 0 else " ")
+        t.canon(b, es[i])
+    }
+}
+
+fn (t mut Table&) joined(b mut StringBuilder&, l ListId) {
+    xs := t.Items(l)
+    for i in range xs.Len() {
+        if i > 0 { b.Push(", ") }
+        t.canon(b, xs[i])
+    }
+}
+
+# a U64's bits, held in an I64, as the unsigned number they are
+fn UnsignedText(bits I64) String { return U64(bits).Format() }
+
+# ---- symbols (G16a) ----
+
+# a linker symbol for a canonical text, injective: letters and digits are themselves, "_" is "__", anything else "_HH"
+# (its byte in hex); a symbol longer than 120 characters is its beginning and a 128-bit hash of the whole text
+fn Symbol(text String&) String {
+    b := StringBuilder()
+    for i, c in text {
+        # an LLVM name begins with no digit (B3b: a module "2go" is "_32go")
+        if c.IsLetter() or (c.IsDigit() and i > 0) {
+            b.PushChar(c)
+        } else if c == '_' {
+            b.Push("__")
+        } else {
+            b.PushChar('_')
+            b.Push(hex2(U8(c)))
+        }
+    }
+    s := b.ToString()
+    if s.Len() <= 120 { return s }
+    h1, h2 := hash128(text)
+    return $s[:88] "_H" $hex16(h1) $hex16(h2)
+}
+
+# whether ch is what a symbol olang writes (types.Symbol) holds after "_" as one of its escapes' two digits
+fn symbolHexDigit(ch Char) Bool { return (ch >= '0' and ch <= '9') or (ch >= 'a' and ch <= 'f') }
+
+fn symbolHexValue(ch Char) I64 { return I64(ch - '0') if ch <= '9' else I64(ch - 'a') + 10 }
+
+# a symbol olang wrote read back as the text it was written from (B3b: "_" is "__", any other character but a letter
+# or a digit "_HH"; a long one is its beginning, "_H" and a hash, read back as the beginning and "..."). A symbol that is
+# not one - a C function's, the runtime's - is given as it is
+fn Demangle(sym String&) String {
+    s := sym
+    cut := false
+    if s.Len() == 122 and s[88:90] == "_H" {
+        s = s[:88]
+        cut = true
+    }
+    b := StringBuilder()
+    i I64 = 0
+    for i < s.Len() {
+        ch := s[i]
+        if ch != '_' {
+            b.PushChar(ch)
+            i++
+            continue
+        }
+        if i + 1 < s.Len() and s[i + 1] == '_' {
+            b.PushChar('_')
+            i += 2
+            continue
+        }
+        if i + 2 < s.Len() and symbolHexDigit(s[i + 1]) and symbolHexDigit(s[i + 2]) {
+            b.PushChar(Char(U8(symbolHexValue(s[i + 1]) * 16 + symbolHexValue(s[i + 2]))))
+            i += 3
+            continue
+        }
+        if cut and i + 2 >= s.Len() { break }      # an escape the cut went through
+        return sym
+    }
+    text := b.ToString()
+    if not text.Contains(".") { return $sym }
+    return $text "..." if cut else text
+}
+
+fn hex2(v U8) String { return I64(v).Format(16).PadStart(2, '0') }
+
+fn hex16(v U64) String { return v.Format(16).PadStart(16, '0') }
+
+# two independent 64-bit FNV-1a hashes, from different offset bases
+fn hash128(text String&) U64, U64 {
+    a U64 = 0xcbf29ce484222325
+    b U64 = 0x6c62272e07bb0142
+    prime := U64(1099511628211)
+    for c in text {
+        a = (a ^ U64(U8(c))) * prime
+        b = (b ^ U64(U8(c))) * prime
+        b = b ^ (b >> U64(29))
+    }
+    return a, b
+}
+
+# ---- tests ----
+
+test "types are interned: the same parts give the same id, permission and shape are part of identity" {
+    names := source.Names()
+    t := Table.New(names)
+    i64 := t.Prim("I64")
+    assert i64 == TypeId(6) and t.Prim("F64") == TypeId(14) and t.Prim("Bool") == BoolT
+    a := t.Array(i64, TypeId(0))
+    assert t.Array(i64, TypeId(0)) == a
+    r := t.Ref(a, ReadOnly)
+    w := t.Ref(a, Writable)
+    assert r != w and t.Ref(a, ReadOnly) == r
+    l1 := t.List(Array<TypeId>[i64, r])
+    assert t.List(Array<TypeId>[i64, r]) == l1 and t.List(Array<TypeId>[r, i64]) != l1 and t.List(Array<TypeId>[]) == ListId(0)
+    f := t.Func(l1, VoidT, ListId(0))
+    assert t.Func(t.List(Array<TypeId>[i64, r]), VoidT, ListId(0)) == f
+    n3 := t.Const(i64, 3)
+    assert t.Const(i64, 3) == n3 and t.Array(i64, n3) != a
+    assert t.Depth(t.Ref(t.Array(t.Array(i64, n3), TypeId(0)), Writable)) == 4
+}
+
+test "canonical texts name every kind of type" {
+    names := source.Names()
+    t := Table.New(names)
+    m := t.AddModule("std/prelude/list")
+    list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1)
+    i64 := t.Prim("I64")
+    li := t.Named(list, t.List1(i64))
+    assert t.Canon(li) == "std/prelude/list:List<I64>"
+    assert t.Canon(t.Ref(li, Writable)) == "mut std/prelude/list:List<I64>&"
+    assert t.Canon(t.Ref(t.Array(i64, TypeId(0)), Writable)) == "mut Array<I64>&"
+    assert t.Canon(t.Array(t.Prim("U8"), t.Const(i64, 16))) == "Array<U8, 16>"
+    f := t.Func(t.List(Array<TypeId>[i64, t.Prim("F32")]), t.Tuple(t.List(Array<TypeId>[i64, i64])), t.List1(DefaultErrT))
+    assert t.Canon(f) == "fn(I64, F32) (I64, I64) ?"
+    g := t.Func(ListId(0), f, ListId(0))
+    assert t.Canon(g) == "fn() (fn(I64, F32) (I64, I64) ?)"
+    assert t.Canon(t.Const(t.Prim("U64"), -1)) == "18446744073709551615"
+    assert t.Canon(t.Const(BoolT, 1)) == "true"
+    assert (try t.FindDecl("std/prelude/list:List") catch default DeclId(-1)) == list
+}
+
+test "layouts follow C's: fields at their alignment, enums a tag word and their largest payload" {
+    names := source.Names()
+    t := Table.New(names)
+    m := t.AddModule("t")
+    p := t.Named(t.AddDecl(m, names.Intern("P"), DeclKind.Struct, 0), ListId(0))
+    i32, i64, u8 := t.Prim("I32"), t.Prim("I64"), t.Prim("U8")
+    t.SetStructBody(p, t.List(Array<TypeId>[i32, i64, u8]), false)
+    for x in Array<TypeId>[i32, i64, u8] { assert t.ComputeLayout(x) }
+    assert t.ComputeLayout(p)
+    assert t.Size(p) == 24 and t.Align(p) == 8 and t.Offsets(p) == Array<I64>[0, 8, 16]
+    assert t.Llvm(p) == "%\"t:P\"" and t.StructBody(p) == "{ i32, i64, i8 }"
+    e := t.Named(t.AddDecl(m, names.Intern("E"), DeclKind.Enum, 0), ListId(0))
+    rec := t.Record(t.List(Array<TypeId>[i64, u8]))
+    assert t.ComputeLayout(rec) and t.Size(rec) == 16 and t.Offsets(rec) == Array<I64>[0, 8]
+    t.SetEnumBody(e, Array<source.NameId>[names.Intern("A"), names.Intern("B")], t.List(Array<TypeId>[rec, TypeId(0)]))
+    assert t.ComputeLayout(e)
+    assert t.Size(e) == 24 and t.Align(e) == 8 and t.Llvm(e) == "{ i64, [2 x i64] }"
+    plain := t.Named(t.AddDecl(m, names.Intern("D"), DeclKind.Enum, 0), ListId(0))
+    t.SetEnumBody(plain, Array<source.NameId>[names.Intern("N")], t.List1(TypeId(0)))
+    assert t.ComputeLayout(plain) and t.Size(plain) == 4 and t.Llvm(plain) == "i32"
+}
+
+test "a function type's ABI: the error union, large results through memory, function values split" {
+    names := source.Names()
+    t := Table.New(names)
+    i64 := t.Prim("I64")
+    for x in Array<TypeId>[i64, VoidT] { assert t.ComputeLayout(x) }
+    f := t.Func(t.List1(i64), i64, t.List1(DefaultErrT))
+    assert t.RetLlvm(f) == "{ i32, i64 }" and t.Passing(f) == "v"
+    big := t.Array(i64, t.Const(i64, 20))
+    assert t.ComputeLayout(big) and t.Size(big) == 160 and t.ViaMemory(big)
+    g := t.Func(t.List(Array<TypeId>[big, f]), big, ListId(0))
+    assert t.RetLlvm(g) == "void" and t.Passing(g) == "ms"
+    h := t.Func(ListId(0), VoidT, t.List1(DefaultErrT))
+    assert t.RetLlvm(h) == "i32"
+}
+
+test "function types carry their scopes; identity leaves them out; a call's scope variables come from the type alone" {
+    names := source.Names()
+    t := Table.New(names)
+    m := t.AddModule("t")
+    n := t.Named(t.AddDecl(m, names.Intern("N"), DeclKind.Struct, 0), ListId(0))
+    i64 := t.Prim("I64")
+    t.SetStructBody(n, t.List1(i64), false)
+    mutN, roN := t.Ref(n, Writable), t.Ref(n, ReadOnly)
+    params := t.List(Array<TypeId>[mutN, roN, i64])
+    plain := t.Func(params, VoidT, ListId(0))
+    assert t.Func(params, VoidT, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope, OwnScope, OwnScope], Array<I64>[])) == plain
+    shared := t.Func(params, VoidT, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope, 0, OwnScope], Array<I64>[]))
+    assert shared != plain and t.Plain(shared) == plain and t.Same(shared, plain)
+    assert t.ScopeVarsOf(plain) == Array<I64>[0, 1] and t.ScopeVarsOf(shared) == Array<I64>[0]
+    assert t.Canon(shared) == "fn(mut t:N&, t:N&, I64) ~[0,3,-1,0,-1]"
+    built := t.Func(t.List1(roN), roN, ListId(0))
+    borrowed := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope], Array<I64>[0]))
+    assert t.ScopeVarsOf(built) == Array<I64>[0, ResultVar] and t.ScopeVarsOf(borrowed) == Array<I64>[0]
+    # T22: one type, but a function value fits only a type saying where its references live as it does
+    assert not t.ScopesFit(shared, plain) and not t.ScopesFit(plain, shared) and t.ScopesFit(shared, shared)
+    assert not t.ScopesFit(built, borrowed) and not t.ScopesFit(borrowed, built)
+    typeVarResult := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope], Array<I64>[FromTypeVar]))
+    assert t.ScopesFit(built, typeVarResult) and not t.ScopesFit(borrowed, typeVarResult)
+    assert not t.ScopesFit(t.Array(shared, TypeId(0)), t.Array(plain, TypeId(0)))
+    ctor := t.Func(t.List1(i64), n, ListId(0), t.Scopes(RoleCtor, Array<I64>[OwnScope], Array<I64>[OwnScope]))
+    dtor := t.Func(t.List1(mutN), VoidT, ListId(0), t.Scopes(RoleDtor, Array<I64>[OwnScope], Array<I64>[]))
+    assert t.ScopeVarsOf(ctor) == Array<I64>[ResultVar] and t.ScopeVarsOf(dtor) == Array<I64>[ClosingVar]
+    # a function with no result read as having a first one, or a parameter past its last, is OwnScope - the record has
+    # no entry there (the scope pass asked shared's result 0 and read beyond the record: a crash building target.olang)
+    assert t.ResultFrom(shared, 0) == OwnScope and t.ResultFrom(dtor, 0) == OwnScope and t.ShareOf(shared, 3) == OwnScope
+    # an array of them keeps its element's scopes, one of plain ones is its plain type; an instance's arguments are held
+    # plain, so it is one instance whatever scopes its arguments were written with
+    arr := t.Array(shared, TypeId(0))
+    assert arr != t.Array(plain, TypeId(0)) and t.Plain(arr) == t.Array(plain, TypeId(0))
+    list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1)
+    assert t.Named(list, t.List1(shared)) == t.Named(list, t.List1(plain))
+    assert not t.HoldsRefs(i64) and not t.HoldsRefs(n) and t.HoldsRefs(roN) and t.HoldsRefs(plain)
+    assert t.HoldsRefs(t.Tuple(t.List(Array<TypeId>[i64, roN]))) and not t.HoldsRefs(t.Array(i64, TypeId(0)))
+}
+
+test "symbols are injective and bounded" {
+    assert Symbol("std/prelude/list:List<I64>") == "std_2fprelude_2flist_3aList_3cI64_3e"
+    assert Symbol("a_b") != Symbol("a/b") and Symbol("a_2fb") != Symbol("a/b")
+    long := "x".Repeat(200)
+    assert Symbol(long).Len() == 122 and Symbol(long) != Symbol($long "y")
+}
+
+# a table's words (T32): its instance's type's identity first, then $'s renderings - inside another value's (slot -2)
+# and at the top of a piece (slot -1) - then each slot's function: slot s at AnySlotBase + s
+AnySlotBase I64 = 3
+
+test Demangle "a symbol olang wrote read back as its text; any other as it is" {
+    for text in Array<String&>["std/io.Println", "compiler/check.compiler/check:Checker.joinStmt", "a_b.c<I64, Array<U8>&>", "x.$y"] {
+        assert Demangle(Symbol(text)) == text
+    }
+    xs := StringBuilder()
+    for _ in range 150 { xs.PushChar('x') }
+    long := $"m." $xs.ToString()
+    assert Symbol(long).Len() == 122 and Demangle(Symbol(long)) == $long[:86] "..."
+    for sym in Array<String&>["__olang_scope_alloc", "memcpy", "_start", "olang_lambda_3", "main"] { assert Demangle(sym) == sym }
+}

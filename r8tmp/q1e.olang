@@ -1,0 +1,11 @@
+type Node struct(v I32) {
+    v
+}
+GF mut fn?&() I32 = null
+fn main() {
+    ns := Array<Node>[Node(1), Node(2)]
+    for n in ns {
+        GF = fn() { return n.v }
+    }
+    assert GF!() == 2
+}
