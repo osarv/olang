@@ -240,12 +240,17 @@ GivMade I64 = 3
 GivResult I64 = 4
 PartLambda I64 = 5
 PartAdapter I64 = 6
+# T22d: what a callee's returns put in its instance's fixed field (Val the callee, Path the fields, From the call's
+# index among the body's calls), resolved once the callee is walked
+GivResField I64 = 7
 
 type part struct(Kind I64, Val I64, Ty types.TypeId, X typed.Expr?&) {
     Kind
     Val
     Ty
     X
+    Path Vec<I64>     # GivResField's
+    From I64 = -1
 }
 
 # what a body gives a slot holding a function value: Site the call (an index of its calls - a callee's slot At - or -1
@@ -256,6 +261,8 @@ type given struct(Site I64, At I64, Kind I64, Val I64, Ty types.TypeId) {
     Kind
     Val
     Ty
+    Path Vec<I64>     # GivResField's
+    From I64 = -1
 }
 
 # a value classified at the walk's end, every value its locals are given seen: an argument for a callee's slot (Site
@@ -264,6 +271,7 @@ type pend struct(Site I64, At I64, X typed.Expr&) {
     Site
     At
     X
+    Path Vec<I64>     # T22d: a field slot's - X the instance, the value its fixed fields along Path hold
 }
 
 # T22b's verdict on a function value held as a function type writing effect words: the word broken, "" for none
@@ -338,6 +346,18 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     dtorsNoted Bool = false
     ownC I64 = -1                 # whether the program links C of its own and has an export fn (cMayCallBack), -1 unknown
     dtorOf Map<types.TypeId, I64> # by type: its destructor's body (C9)
+    # T22d: the fixed fields - (a struct type's representation, a field) any body assigns after construction, -1 a
+    # whole instance written through a reference - scanned once, where first asked; by type, the paths of fixed fields
+    # from it to a function value; by body, its field slots, and what its returns put along each path of its result
+    assignedOk Bool = false
+    assigned Map<pair, Bool>
+    pathsOf Map<types.TypeId, Vec<fpath>>
+    fslots Map<I64, Vec<fslot>>
+    fieldRets Map<I64, Vec<fret>>
+    instDefs Map<I64, Vec<typed.Expr&>>  # by local holding an instance: every value given it
+    instSome Map<I64, Bool>
+    callAt Map<I64, I64>                 # by call site: its index among the body's calls
+    retInst Bool = false                 # whether the body walked gives an instance with fixed function fields
 }
 
 type pair struct(A I64, B I64) {
@@ -1236,9 +1256,13 @@ fn (e mut Effects&) call(cl typed.Call&) {
                 if e.P.T.IsRef(a.Type()) and e.P.T.PermOf(a.Type()) & types.Writable != 0: e.written(a)
             }
         }
-        case typed.Callee.Dispatch(_, _, _) {
-            e.cur.Unknown = true
-            e.cur.Through = true
+        case typed.Callee.Dispatch(_, _, sig) {
+            # T30c: what its trait's method promises (its words' bound, T22b) - with none, anything - writing what it
+            # is given writably, the instance among it
+            Merge(e.cur, Facts.Bound(e.P.T, sig))
+            for a in cl.Args {
+                if e.P.T.IsRef(a.Type()) and e.P.T.PermOf(a.Type()) & types.Writable != 0: e.written(a)
+            }
         }
         case typed.Callee.Helper(_, _) { }
     }
@@ -1688,6 +1712,21 @@ fn (e mut Effects&) partFacts(b I64, pt part&) Facts {
     }
     return Facts.Bound(e.P.T, pt.Ty)
 }
+
+# the first of words a function doing f breaks, into v (T30c: a trait's table's method judged by check)
+fn (e Effects&) JudgeFacts(f Facts&, words I64, v mut Verdict&) { e.judgeFacts(f, words, v) }
+
+# the first body body b calls (a table's slot's method, T30c), b itself where it calls none
+fn (e mut Effects&) FirstCallee(b I64) I64 {
+    e.Of(b)
+    for w in e.calls[b] {
+        if w >= 0 and w < e.Bodies.Len(): return w
+    }
+    return b
+}
+
+# v said of body w, named what: where in it the word is broken
+fn (e mut Effects&) Blame(v Verdict, w I64, what String&) Verdict { return e.blame(v, w, what) }
 
 # the first of words a function doing f breaks, into v
 fn (e Effects&) judgeFacts(f Facts&, words I64, v mut Verdict&) {

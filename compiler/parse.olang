@@ -1002,7 +1002,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                     mn = p.names.Intern($p.names.Text(on) "." $p.names.Text(member))
                 }
                 # D17f: a trait's method may state the contract every call through an "any" is held to
-                s := try p.sig(false, false, true)
+                s := try p.sig(false, false, true, true)
                 methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false, false
                                       Array<ast.Attr&>(0), owner, member))
                 try p.entryEnd()
@@ -1183,7 +1183,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>& ? Fail {
 # "(params) [results] [? errors]" - the "(" not yet read; several results bare, "I64, I64" (D8c). A lambda's parameters
 # may leave their types out. A function type or a lambda (value) read as an item of a list takes one result and one
 # error item, so a "," after it is the list's: one with several of either is parenthesized whole (L18c)
-fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.Sig& ? Fail {
+fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTrait Bool = false) ast.Sig& ? Fail {
     one := value and p.item
     try p.want(token.Tok.LParen)
     p.sawVariadic = false
@@ -1224,9 +1224,9 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
         swaps = true
     }
     errs := try p.errorSet(one)
-    # T21c: a function type's promises follow its signature - written nowhere else
+    # T21c: a function type's promises follow its signature - and a trait's method's (T30c) - written nowhere else
     words := try p.promises()
-    if words.Len() > 0 and (lambda or not value) {
+    if words.Len() > 0 and (lambda or not value) and not ofTrait {
         w := words[0]
         p.report(w.Sp.Start, w.Sp.End, msgs.PromiseMisplaced(w.Word.Text()))
     }

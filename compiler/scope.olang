@@ -1091,6 +1091,7 @@ fn (s mut Scoper&) wordFor(b I64, adapter Bool, fty types.TypeId, k I64) String,
     if hi < 0 or hi >= PosDerived or lo == PosNone { return "", "" }
     h := s.posName(fty, body, adapter, hi)
     hb := s.bodyParamName(body, adapter, hi)
+    if hb == "" { hb = h }
     if lo == PosResult { return $"borrows " $h, $"gives back what '" $hb "' refers to" }
     if lo == PosHome { return $"keeps " $h, $"keeps '" $hb "' in " $("its instance" if adapter else "what it captured") }
     if lo < PosDerived { return $"keeps " $h " in " $s.posName(fty, body, adapter, lo), $"keeps '" $hb "' in '" $s.bodyParamName(body, adapter, lo) "'" }
@@ -2426,12 +2427,19 @@ fn (s mut Scoper&) anyTables() {
         slots := s.P.AnySlots(tab.Trait)
         for k in range tab.Slots.Len() {
             b := tab.Slots[k]
-            if b >= s.sums.Len() or s.sums[b].Rels.Len() == 0 { continue }
+            if b >= s.sums.Len() or s.sums[b].Rels.Len() == 0 or slots.Len() == 0 { continue }
+            # T30c: within its trait's method's bound (T22b), its receiver a parameter - what every call relies on
+            sl := slots[k % slots.Len()]
+            if s.valueOK(b, false, sl.Sig) { continue }
             at := diag.Where.Span(tab.File, I64(tab.Sp.Start), I64(tab.Sp.End))
-            name := $"'" $s.P.L.Names.Text(slots[k % slots.Len()].Name) "'" if slots.Len() > 0 else ""
-            ty := s.Spell!(tab.Concrete) if s.Spell is not null else s.P.T.Canon(tab.Concrete)
-            tr := s.Spell!(tab.Trait) if s.Spell is not null else s.P.T.Canon(tab.Trait)
-            s.P.L.Diags.Error(at, msgs.AnyMethodObligations(ty, name, tr))
+            name := $"'" $s.P.L.Names.Text(sl.Name) "'"
+            ty := s.spell(tab.Concrete)
+            tr := s.spell(tab.Trait)
+            # (the word as the trait writes it: its receiver the method's home, as an adapter's is)
+            word, does := "", ""
+            if sl.Want != types.UnknownT { word, does = s.wordFor(b, true, sl.Want, s.bndWhy) }
+            does = does.Replace("its instance", "the instance")
+            s.P.L.Diags.Error(at, msgs.TraitMethodBeyond(ty, name, does, tr, word) if word != "" else msgs.AnyMethodObligations(ty, name, tr))
             break
         }
     }
@@ -9933,6 +9941,8 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
         agreed = s.argsAgree(c, callee, rv, owner, vals, beta)
     }
     if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
+    # T30c: a call through an "any" relies on its trait's method's bound (T22b), as one through a value not followed
+    if c.Target == typed.Callee.Dispatch { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
     if callee < 0 and c.Target == typed.Callee.Value {
         # each record judged as the direct call it is (5.3); a value not followed by what its type says (T22)
         for i in range recs.Recs.Len() { s.dischargeRels(sp, rrels[i], recs.Recs[i].Body, s.recBeta(recs.Recs[i], rmaps[i], beta), c, agreed) }

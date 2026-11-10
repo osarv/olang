@@ -985,6 +985,8 @@ type Diag enum {
     ColumnsNotRecord
     ColumnNamedLikeMethod
     ColumnAssigned
+    TraitMethodEffect
+    TraitMethodBeyond
     CapsOneFile
     ApiUsage
     ListingUsage
@@ -1987,6 +1989,8 @@ fn ApiNoFiles(text String&) r.Msg { return r.Msg(Diag.ApiNoFiles, "B21", "'" $te
 fn ColumnsNotRecord(ty String&, row String&, why String&) r.Msg { return r.Msg(Diag.ColumnsNotRecord, "T7e", $ty " takes a record for its rows, and " $row " " $why " - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'") }
 fn ColumnNamedLikeMethod(ty String&, row String&, name String&) r.Msg { return r.Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method '" $name "' (M19) - rename the field") }
 fn ColumnAssigned() r.Msg { return r.Msg(Diag.ColumnAssigned, "T7e", "a column is assigned whole only alone - 'c.x = v', its length checked against its table's") }
+fn TraitMethodEffect(ty String&, tok String&, does String&, tr String&, word String&) r.Msg { return r.Msg(Diag.TraitMethodEffect, "T30c, T22b", $ty "'s " $tok " may " $does ", and " $tr "'s " $tok " promises '" $word "' - every call through an 'any " $tr "&' relies on it: give " $ty " a method that does not, or take '" $word "' off the trait's method") }
+fn TraitMethodBeyond(ty String&, tok String&, does String&, tr String&, word String&) r.Msg { return r.Msg(Diag.TraitMethodBeyond, "T30c, T22b", $ty "'s " $tok " " $does ", and " $tr "'s " $tok " says nothing of that - write '" $word "' after its signature in the trait") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))
