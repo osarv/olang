@@ -54,7 +54,13 @@ Hand-off for a fresh agent after a restart. Output: this file, one line in docs/
   a node (dlist 88.7 -> 97.0 MB, tree 97.0 -> 104.3 MB, lru 43.5 -> 49.3 MB, stack unchanged - no `weak`). Left: a `weak
   T?&` in a generic is still an ordinary owning reference (judging it per instance needs generic.olang's instance
   hook); the "stored only into weak places" error still covers only a constructor called straight into one
-- next: G4, in docs/wholeprog.md section 10's order
+- [x] G4 (round 4, 2026-11-10, wt-g4; HISTORY "`weak` references and generational types, round 4: reclaiming"):
+  counted types reclaimed - see "Round 4 as built" in section 13. Measured: dlist 97.0 -> 1.8 MB (45 -> 20 ms), tree
+  104.3 -> 1.9 MB (84 -> 40 ms), lru 49.3 -> 13.8 MB (the keys' text, round 5's), stack 17.5 MB unchanged (no `weak`:
+  the one-holder rule's reclaiming is not built). Left: the one-holder rule's reclaiming (5.2's transfers recognized,
+  headerless slots); sites at a terminator (a call's argument, a branch's test) and at a block's edge keep; a whole
+  value holding references let go of other than a collection's entry keeps what it held
+- next: the one-holder rule's reclaiming, then G5+G6, in docs/wholeprog.md section 10's order
 
 ## 0.1 Decided (the user, 2026-11-08 evening)
 
@@ -798,6 +804,40 @@ within a few MB after round 5); weak reads after removals giving `null`, read ba
 reclaimed after its last use; a removed node kept by a reference in use across a call (its `-memory` row); a cycle kept
 until its scope closes; a destructor type kept; a program with tasks reclaiming nothing (and clean under `-race`); the
 evaluator's decided and refused weak reads.
+
+### Round 4 as built (2026-11-10)
+
+- **Sites, per module (lowering, `mir.Stmt.Reclaim`).** A liveness pass over each function's MIR, of the locals that may
+  reach a generational instance (`mir.GenInfo.Reach`: a plain reference to one; or "any" - a value holding one in place
+  that is not a counted variable, a read-only reference to storage that may hold one uncounted, a reference into a
+  generational slot, a function value, an `any`). A site follows a statement where a plain reference stops being in use:
+  the old value a store let go of (the temporary its count is taken down for - each owning reference of a collection's
+  entry vacated, as a place in it), a named local's last use, a call's result nobody reads (at the start of the block the
+  call continues at). It is placed only where every local still in use is a plain reference, all of which it compares
+  with at run time (the "compares with the body's own locals" of 5.3), and several sites after one statement compare
+  with each other's, so one instance is reclaimed once. Not at a terminator nor at a block's edge (those keep).
+- **Callers (the final step, free.olang).** Each call of the final walk records the generational types a reference in
+  use across it may reach: a local used after its statement (or in a loop around it, or in deferred code - not one its
+  declaration is still being made by), a value its statement computes outside the call. Summed to a fixed point down the
+  calls; every type for a body called where no call is seen (a lambda, a destructor, a generator, a function named as
+  a value or exported, a method an `any` table holds or the language calls by a protocol name, a contract). A
+  condition run only while compiling is no caller. A body may reclaim a type where neither it nor a type it holds
+  through owning places is in that set: the link-time constant `olang.genok.<body>.<type>` the root's decisions object
+  defines (W2's mechanism), which the site loads. A type is never reclaimed early with tasks, a destructor, a lambda
+  capture or a generator local reaching it, an `any` made or C given one (a type held by such a type neither).
+- **Run time (runtime.ll).** `__olang_gen_alloc` takes a slot of the class (4.4's 23) from the scope part's free list -
+  its table made in the scope's own storage at its first reclaim, named by the stamp word of its tail chunk (unused while
+  a scope holds a chunk, cleared where a chunk becomes a tail) - else bumps the class's size; `__olang_gen_reclaim` runs
+  the worklist: the type's drop function (emit's, per type) lets go of what its owning places hold, a child left with
+  no holder and none of the compared references pushed; then the generation bumped (65,535 retires) and the slot found
+  by address (O29) put on its list. A type aligned past 8 or over 2,048 bytes is reclaimed but its slot not reused.
+  Under -sanitize the slot is quarantined (poisoned, never reused).
+- **The evaluator.** `interpret` runs the same sites, releasing the instance (dead-region mode then reports a later
+  read); a weak read of a released instance gives null. While compiling nothing is reclaimed and a weak read of an
+  unheld node is refused (G2+G3's).
+- **`-memory`.** A row per generational type (reclaimed, or kept and why) and a row per call of the program's own across
+  which a reference is in use while the callee may let go of one; O8d's rows for places of generational instances are
+  left out (their counts let go).
 
 ### Round 5 - an instance's own arrays reclaimed with it (4.4; opus, high)
 
