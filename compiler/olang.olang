@@ -595,7 +595,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # O8d: early freeing is decided for a program at its root, every module's sites reading the decisions as link-time
     # constants (wholeprog 2.1) - a module compiled on its own is judged as a program of its own, so its sites are
     # written as any build writes them, but no decision of it is emitted: what it reads is the link's
-    fr := try placement(c, cfg, l.Root, kind == build.Kind.Module)
+    fr := try placement(c, cfg, l.Root, kind == build.Kind.Module, keys)
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
@@ -1220,6 +1220,7 @@ fn inferStats(sc mut scope.Scoper&) {
     b.Push($"olang: " $sc.VerStats() "\n")
     b.Push($"olang: field rounds " $sc.FieldRounds ", components reused " $sc.Reused " of " $sc.Components() " a round, lone bodies judged again " $sc.Redone "\n")
     b.Push($"olang: " $sc.TwinStats() "\n")
+    b.Push($"olang: records: " $sc.DiskStats() "\n")
     for f in sc.PromotedFields() { b.Push($"olang: promoted " $f "\n") }
     for f in sc.Unplaced { b.Push($"olang: unplaced " $f "\n") }
     if to[0] != '/' {
@@ -1279,16 +1280,36 @@ fn apartModules(l load.Loader&, cfg build.Config&, out mut Map<I64, Bool>&) {
     }
 }
 
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false) mut free.Free& ? build.Failed {
-    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
-    # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
-    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
-    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
-    sc.Trace = (try os.Env("OLANG_INFERDUMP") catch default "") != ""
-    sc.ReuseCheck = (try os.Env("OLANG_SCOPECHECK") catch default "") != ""
-    sc.NoReuse = (try os.Env("OLANG_NOREUSE") catch default "") != ""
-    if not alone { apartModules(c.P.L, cfg, sc.Apart) }
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false
+    keys Array<String&>& = Array<String&>(0)) mut free.Free& ? build.Failed {
+    sc mut scope.Scoper& = scoper(c, cfg, alone)
+    # B3i (W3b): the judgings records of earlier builds give, under each module's key - not for -memory, which lists
+    # what every judging placed
+    rec := keys.Len() > 0 and not cfg.Memory and (try os.Env("OLANG_NOSCOPEREC") catch default "") == ""
+    loaded Map<I64, String&>
+    if rec { loaded = scopeRecords(c, cfg, keys, sc) }
+    marks := sc.FieldMarks()
+    mark := c.P.L.Diags.Count()
     sc.Run()
+    if sc.Restart {
+        # a component a record gave had to be judged again: the judging starts over, without records, from the marks
+        # the checker left
+        c.P.L.Diags.Forget(mark)
+        sc.SetFieldMarks(marks)
+        if sc.Trace or (try os.Env("OLANG_SCOPESTATS") catch default "") != "" {
+            for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
+        }
+        taken := sc.DiskTaken
+        sc = scoper(c, cfg, alone)
+        sc.DiskWrite = rec
+        sc.Restarts = 1
+        sc.DiskTaken = taken
+        sc.Run()
+    }
+    build.Phase("scope judged")
+    if sc.DiskAfresh { scopeAfresh(c, cfg, alone, sc, marks, mark) }
+    if rec and c.P.L.Diags.Errors() == 0 and sc.Gaps.Len() == 0 { keepScope(c, cfg, keys, sc, loaded) }
+    build.Phase("scope records")
     # B3i, W4: a module compiled on its own into the object store is precompiled for the programs that use the store
     if alone and sc.Gaps.Len() == 0 { markApart(c.P.L, cfg) }
     # a construct section 8 does not judge yet: never built as though it were judged, as the checker's gaps are not
@@ -1305,6 +1326,120 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     fr.Alone = alone
     fr.Decide(sc.Plans, root)
     return fr
+}
+
+# OLANG_CHECKINCR (T4): the scope pass that took judgings from records against the same pass made without them, from
+# the marks the checker left - every plan, summary, mark and diagnostic the same, else each difference upTo on the
+# standard error and the build ending with 3. What the second pass upTo is forgotten, and the first's marks stand
+fn scopeAfresh(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool, sc mut scope.Scoper&, marks Vec<typed.Mark>&, mark I64) {
+    final := sc.FieldMarks()
+    upTo := c.P.L.Diags.Count()
+    first := c.P.L.Diags.Since(mark)
+    sc.SetFieldMarks(marks)
+    ref mut scope.Scoper& = scoper(c, cfg, alone)
+    ref.Run()
+    diffs := sc.Compare(ref)
+    if not first.Same(c.P.L.Diags.Since(upTo)) { diffs.Push("scope: the diagnostics differ") }
+    if ref.FieldMarks() != final { diffs.Push("scope: the field inference's marks differ") }
+    c.P.L.Diags.Forget(upTo)
+    sc.SetFieldMarks(final)
+    if diffs.Len() == 0 {
+        try io.PrintErr($"olang: incremental check: scope, " $sc.DiskTaken " judgings taken from records, every body the same\n") catch io.Error { }
+        return
+    }
+    for x in diffs { try io.PrintErr($"olang: incremental check: " $x "\n") catch io.Error { } }
+    try io.PrintErr($"olang: incremental check: the scope pass with records differs from it without them\n") catch io.Error { }
+    os.Exit(3)
+}
+
+# the scope pass over a checked program, its notes naming types and instantiations as the checker spells them (B11, G16b)
+fn scoper(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool) mut scope.Scoper& {
+    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
+    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
+    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
+    sc.Trace = (try os.Env("OLANG_INFERDUMP") catch default "") != ""
+    sc.ReuseCheck = (try os.Env("OLANG_SCOPECHECK") catch default "") != ""
+    sc.NoReuse = (try os.Env("OLANG_NOREUSE") catch default "") != ""
+    if not alone { apartModules(c.P.L, cfg, sc.Apart) }
+    return sc
+}
+
+# ---- the scope pass's records (B3i, the incremental front end, part 2) ----
+#
+# Beside a module's front record, DIR/rec/NAME.KEY.s<HASH>: the judgings of the scope pass (scope.olang's "judgings
+# kept in records") of the components whose first body is the module's, under its key and named by the facts its
+# checking read, as the front record is. A record is read only whole (its sum right) and where every fact it names reads
+# as it did; each judging in it is then taken only where everything it read is as it was (scope.diskFor). Written only
+# from a program the pass found nothing wrong in, and only where it says something the record read did not
+
+fn scopeStem(cfg build.Config&, identity String&, key String&) String {
+    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20] ".s"
+}
+
+# the records under each module's key, their judgings given to the pass: by file, the text of the record read
+fn scopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, sc mut scope.Scoper&) Map<I64, String&> {
+    loaded Map<I64, String&>
+    l := c.P.L
+    sc.DiskWrite = true
+    sc.DiskAfresh = (try os.Env("OLANG_CHECKINCR") catch default "") != ""
+    for m in range keys.Len() {
+        if keys[m] != "" and l.Mods[m].File >= 0 { sc.Keyed.Put(l.Mods[m].File, true) }
+    }
+    names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return loaded }
+    sc.DiskOn = true
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0 { continue }
+        stem := scopeStem(cfg, l.Mods[m].Identity, keys[m])
+        lead := stem[cfg.Dir.Len() + 5:]
+        for name in names {
+            if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
+            text := try scopeRecord(c, $cfg.Dir "/rec/" $name) catch Stale { continue }
+            at := try text.Find("\nrun ") catch default text.Len() - 1
+            try sc.AddRecord(text[at + 1:]) catch typed.Unwritable { continue }
+            sc.Eligible.Put(l.Mods[m].File, true)
+            loaded.Put(l.Mods[m].File, text)
+            break
+        }
+    }
+    return loaded
+}
+
+# the record at path, whole and with every fact it names reading as it did: the lines before its sum
+fn scopeRecord(c mut typecheck.Checker&, path String&) String ? Stale {
+    text := try os.ReadFile(path) catch os.Error { error Stale }
+    # (the last line's sum: a judging's summaries are "sum" lines too)
+    sumAt := (try text.Find("\nend\nsum ") catch { error Stale }) + 4
+    if text[sumAt + 5:].Trim() != build.IrHash(text[:sumAt + 1]): error Stale
+    body := text[:sumAt + 1]
+    if not body.StartsWith("olang scope record\n") or not body.EndsWith("end\n"): error Stale
+    # (the facts its checking read come before its first judging, whose "read" lines are summaries)
+    reads Vec<String&>
+    for line in body.Lines() {
+        if line.StartsWith("run "): break
+        if line.StartsWith("read "): reads.Push(line)
+    }
+    if not c.P.Facts.Holds(reads.ToArray()): error Stale
+    return body[:body.Len() - 4]
+}
+
+# the records of a program the pass found nothing wrong in: each module's judgings, with the facts its checking read,
+# written where they are not what was read
+fn keepScope(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, sc mut scope.Scoper&, loaded Map<I64, String&>&) {
+    texts := sc.Records()
+    if texts.Len() == 0 { return }
+    l := c.P.L
+    reads := readerRecords(l, c)
+    try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
+    pid := build.Pid()
+    for m in range keys.Len() {
+        if keys[m] == "" or l.Mods[m].File < 0: continue
+        runs := try texts.Get(l.Mods[m].File) catch { continue }
+        head := $"olang scope record\n" $($reads[m] "\n" if reads[m] != "" else "")
+        body := $head $runs
+        if body == (try loaded.Get(l.Mods[m].File) catch default ""): continue
+        whole := $body "end\n"
+        putFile($scopeStem(cfg, l.Mods[m].Identity, keys[m]) $build.IrHash(reads[m])[:16], $whole "sum " $build.IrHash(whole) "\n", pid)
+    }
 }
 
 fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&) mut load.Loader& ? build.Failed {

@@ -1571,6 +1571,7 @@ fn (t Table&) DeclModule(d DeclId) I64 { return t.decls[I64(d)].Module }
 fn (t Table&) DeclName(d DeclId) source.NameId { return t.decls[I64(d)].Name }
 fn (t Table&) DeclKindOf(d DeclId) DeclKind { return t.decls[I64(d)].K }
 fn (t Table&) DeclParams(d DeclId) I64 { return I64(t.decls[I64(d)].Params) }
+fn (t Table&) DeclCount() I64 { return t.decls.Len() }
 
 # a declared type by its module's identity and its name, as Canon writes it ("std/prelude/list:List")
 fn (t Table&) FindDecl(qualified String&) DeclId ? {

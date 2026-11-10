@@ -22,6 +22,7 @@
 # What the pass does not judge yet is recorded as a gap (Gaps), as check's are; compiler/PROGRESS notes say which.
 
 import "std/pair"
+import "std/sha256"
 import "source"
 import "diag"
 import "msgs"
@@ -252,6 +253,19 @@ type compRun struct() {
     Marks Vec<markRead>
     Read Vec<sumRead>
     Twinned Bool = false   # T22c: a call of it reached a twin, judged again in every round (judgeTwin)
+    # B3i (the records, W3b): its component's stable names and round (empty where it is not written); by body, the
+    # judging whose state it was judged from (null: the record's InDisk names it); what it read, as words; its bodies'
+    # calls through values; its name (runId); the record it was taken from; whether it read nothing a record cannot say
+    Sig String = ""
+    Ctx String = ""
+    InRun Vec<mut compRun?&>
+    InDisk Vec<String&>
+    ReadTexts Vec<String&>
+    Vrs Vec<vrRow>
+    Id String = ""
+    Disk diskRun?& = null
+    Recordable Bool = false
+    Hidden Vec<String&>    # by body: the state the judging left it in, as words (hiddenText)
 }
 
 type markRead struct(Ctor I64, Field I64, Mark typed.Mark) {
@@ -654,6 +668,42 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     wantNew Vec<I64>                       # ... those first asked by it, for judgeOnce to forget
     wantNewField Vec<pair.Pair<I64, I64>>
     TraceLog Vec<String&>
+    # B3i, the records (W3b): the judgings records of earlier builds give, by component (DiskOn: they may be taken;
+    # DiskWrite: this build's are written; DiskAfresh, OLANG_CHECKINCR: each one that would be taken is judged all the
+    # same and held to it, a difference in DiskStale); the files whose records hold (Eligible) and of the modules
+    # records are kept for (Keyed); Restart: a component taken from a record had to be judged again - the build's
+    # judging is to start over without records
+    Disk Map<String, Vec<diskRun>>
+    DiskOn Bool = false
+    DiskWrite Bool = false
+    DiskAfresh Bool = false
+    DiskStale Vec<String&>
+    DiskTaken I64 = 0
+    DiskChecked I64 = 0
+    Restarts I64 = 0
+    DiskWhy String = ""
+    whyN Map<String, I64>
+    Restart Bool = false
+    Eligible Map<I64, Bool>
+    Keyed Map<I64, Bool>
+    diskRec Bool = false
+    logReads Bool = false
+    readLog Vec<I64>
+    globalDep Bool = false                 # the judging read something only the whole program says (a twin's limit)
+    stRun Vec<mut compRun?&>               # by body: the judging that left its state, null for none
+    stDisk Vec<String&>                    # ... the record's name for it, "0" before any
+    fromDisk Vec<Bool>                     # by body: taken from a record this build
+    bodyNames Array<String&>& = Array<String&>(0)
+    nameAt Map<String, I64>
+    sumTextAt Map<I64, String&>
+    vrLog Vec<vrRow>
+    globalMade Bool = false
+    globalWords String = ""
+    fsPending Map<I64, String&>             # by body taken from a record: its field sets as words, read when judged
+    canonAt Map<String, types.TypeId>       # a type by its canonical text, for them
+    canonMade I64 = 0
+    trDeps Map<pair.Pair<I64, I64>, Array<I64>>
+    useDeps Map<pair.Pair<I64, I64>, Array<I64>>
 }
 
 # every body judged, callees before callers, a component of the call graph until its obligations stop growing
@@ -672,16 +722,24 @@ fn (s mut Scoper&) Run() {
     }
     s.components()
     s.sizeComponents()
-    if not s.inferFields() { s.judgeAll(true) }
+    s.diskRec = (s.DiskOn or s.DiskWrite) and not s.ReuseCheck
+    if not s.diskRec { s.DiskOn = false }
+    for _ in range s.Bodies.Len() {
+        s.stRun.Push(null)
+        s.stDisk.Push("0")
+        s.fromDisk.Push(false)
+    }
+    if not s.inferFields() and not s.Restart { s.judgeAll(true) }
+    if s.Restart: return
     s.twinsOwn()
     for b in range s.sums.Len() {
-        if s.sums[b].Rels.Len() > 0 and s.valueCovered(b, s.sums[b].Rels, s.Bodies[b].Ty) { s.covered.Put(b, true) }
-        if s.sums[b].ResFn.Recs.Len() == 0 or not s.isFunc(s.Bodies[b].Ty) { continue }
+        if s.sum(b).Rels.Len() > 0 and s.valueCovered(b, s.sum(b).Rels, s.Bodies[b].Ty) { s.covered.Put(b, true) }
+        if s.sum(b).ResFn.Recs.Len() == 0 or not s.isFunc(s.Bodies[b].Ty) { continue }
         # what its returns give, judged by its result's type, promises and all (T22b)
         seen Map<I64, Bool>
         seen.Put(b, true)
         res := s.P.T.Result(s.Bodies[b].Ty)
-        for r in s.sums[b].ResFn.Recs {
+        for r in s.sum(b).ResFn.Recs {
             g := s.uncovered(r.Body, r.Adapter, res, seen)
             if g < 0 { continue }
             s.gives.Put(b, g)
@@ -705,6 +763,9 @@ fn (s mut Scoper&) judgeAll(report Bool) {
     s.trMemo.Clear()
     s.useMemo.Clear()
     s.useWhy.Clear()
+    s.trDeps.Clear()
+    s.useDeps.Clear()
+    s.sumTextAt.Clear()
     s.lateBody = -1
     if not reusing {
         s.lifts.Clear()
@@ -730,7 +791,9 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         for i in range comp.Len() { comp[i] = s.compNodes[s.compFrom[k] + i] }
         if not reusing {
             s.runs.Push(Vec<mut compRun&>())
-            s.runs.RefMut(k).Push(s.judgeComp(comp, report))
+            first := s.judgeOrTake(comp, report)
+            if first is null: return
+            s.runs.RefMut(k).Push(first)
             continue
         }
         prior := s.takeable(k)
@@ -746,9 +809,11 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         }
         s.dropLifts(comp)
         if s.Trace { s.TraceLog.Push($"rejudged " $k " size " $comp.Len() " first " $comp[0] " " $s.Bodies[comp[0]].Of " sites " $s.Bodies[comp[0]].Sites.Len() " why " $s.whyNot(k)) }
+        made := s.judgeOrTake(comp, report)
+        if made is null: return
         hist := s.runs.RefMut(k)
         if hist.Len() >= 4 { hist.RemoveAt(0)! }
-        hist.Push(s.judgeComp(comp, report))
+        hist.Push(made)
         # a promoted field built through where its binding is not known goes back for good (inferFields): given back
         # now, the components judged after this one read it as the round after would - most taken again as they were
         # before it was promoted, rather than judged once with it and once without
@@ -769,12 +834,24 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     s.wantsDecl.Clear()
     s.wantsField.Clear()
     s.twinAsked = false
-    s.component(comp, report)
+    s.globalDep = false
+    s.vrLog.Clear()
+    s.readLog.Clear()
+    s.logReads = s.diskRec
     run mut compRun& = compRun()
+    if s.diskRec {
+        for b in comp {
+            run.InRun.Push(s.stRun[b])
+            run.InDisk.Push(s.stDisk[b])
+        }
+    }
+    s.component(comp, report)
+    s.logReads = false
     run.Twinned = s.twinAsked
+    for v in s.vrLog { run.Vrs.Push(v) }
     for b in comp {
         run.Plans.Push(s.Plans[b])
-        run.Sums.Push(s.sums[b])
+        run.Sums.Push(s.sum(b))
         run.Judged.Push(s.judged[b])
     }
     run.Diags = s.P.L.Diags.Since(mark)
@@ -799,6 +876,59 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     for c in s.sumReads.Keys() {
         if not mine.Has(c) { run.Read.Push(sumRead(c, s.sums[c])) }
     }
+    if s.diskRec { s.recordReads(run, comp, mine) }
+    return run
+}
+
+# B3i: a judging's reads as words, for its record and its name - every body it read but its own, by stable name
+fn (s mut Scoper&) recordReads(run mut compRun&, comp Array<I64>&, mine Map<I64, Bool>&) {
+    for b in comp {
+        s.stRun[b] = run
+        s.stDisk[b] = ""
+    }
+    if not s.recordable(comp) or s.globalDep: return
+    run.Sig = s.sigOf(comp)
+    run.Ctx = s.ctxText(s.report)
+    seen Map<I64, Bool>
+    for x in s.readLog { seen.Put(x, true) }
+    for x in s.sumReads.Keys() { seen.Put(x, true) }
+    for x in seen.Keys() {
+        if not mine.Has(x): run.ReadTexts.Push(s.readText(x))
+    }
+    run.ReadTexts.Sort(fn(a String&, b String&) Bool { return a < b })
+    for b in comp {
+        h := try s.hiddenText(b) catch typed.Unwritable { return }
+        run.Hidden.Push(h)
+    }
+    run.Recordable = true
+}
+
+# component comp's judging for this round: a record's, where one holds (taken as a judging would be made), else made
+# now - null where a component taken from a record must be judged again (Restart). Under DiskAfresh the record's is
+# judged all the same and held to what it gives
+fn (s mut Scoper&) judgeOrTake(comp Array<I64>&, report Bool) mut compRun?& {
+    d := s.diskFor(comp, report)
+    if d is not null {
+        taken := s.takeDisk(d, comp)
+        if taken is not null {
+            s.retake(taken, comp)
+            s.wantsDecl.Clear()
+            s.wantsField.Clear()
+            for x in taken.WantDecl { s.wantsDecl.Push(x) }
+            for x in taken.WantField { s.wantsField.Push(x) }
+            for i in range comp.Len() {
+                b := comp[i]
+                s.stRun[b] = null
+                s.stDisk[b] = d.Out
+                s.fromDisk[b] = true
+                s.restoreHidden(b, d.Hidden[i])
+            }
+            s.DiskTaken++
+            return taken
+        }
+    }
+    run := s.judgeComp(comp, report)
+    if s.Restart: return null
     return run
 }
 
@@ -830,7 +960,7 @@ fn (s mut Scoper&) asItWas(run compRun&) Bool {
         if s.fieldMarkOf(m.Ctor, m.Field) != m.Mark { return false }
     }
     for r in run.Read {
-        if not sameSummary(s.sums[r.Body], r.Sum) { return false }
+        if not sameSummary(s.sum(r.Body), r.Sum) { return false }
     }
     return true
 }
@@ -843,7 +973,7 @@ fn (s mut Scoper&) whyNot(k I64) String {
         if s.fieldMarkOf(m.Ctor, m.Field) != m.Mark { return $"mark " $m.Ctor "." $m.Field " " $s.Bodies[m.Ctor].Of }
     }
     for r in run.Read {
-        if not sameSummary(s.sums[r.Body], r.Sum) { return $"sum " $r.Body " " $s.Bodies[r.Body].Of " " $summaryDiff(s.sums[r.Body], r.Sum) }
+        if not sameSummary(s.sum(r.Body), r.Sum) { return $"sum " $r.Body " " $s.Bodies[r.Body].Of " " $summaryDiff(s.sum(r.Body), r.Sum) }
     }
     return "?"
 }
@@ -857,6 +987,7 @@ fn (s mut Scoper&) retake(run mut compRun&, comp Array<I64>&) {
         s.judged[b] = run.Judged[i]
     }
     s.P.L.Diags.Replay(run.Diags)
+    for v in run.Vrs { s.valueRecs.Put(pair.Pair(v.Body, v.Site), v.Recs) }
     for g in run.Gaps { s.Gaps.Push(g) }
     for d in run.WantDecl { s.wantDecl.Put(d, true) }
     for w in run.WantField { s.wantField.Put(w, true) }
@@ -946,7 +1077,7 @@ fn (s mut Scoper&) exports() {
         match s.Bodies[b].Of {
             case typed.BodyOf.Fn(inst) {
                 f := s.P.InstanceFn(inst)
-                if not s.P.FnDecl(f).Export or s.sums[b].Rels.Len() == 0 { continue }
+                if not s.P.FnDecl(f).Export or s.sum(b).Rels.Len() == 0 { continue }
                 fd := s.P.FnDecl(f)
                 file := s.P.L.Mods[s.P.FnModule(f)].File
                 ob := s.Obligations(b, s.P.L.Names)
@@ -1021,7 +1152,7 @@ fn (s mut Scoper&) uncovered(b I64, adapter Bool, fty types.TypeId, seen mut Map
     seen.Put(b, true)
     if not s.valueOK(b, adapter, fty) { return b }
     res := s.P.T.Result(fty) if s.isFunc(fty) else types.UnknownT
-    for r in s.sums[b].ResFn.Recs {
+    for r in s.sum(b).ResFn.Recs {
         u := s.uncovered(r.Body, r.Adapter, res if s.isFunc(res) else s.Bodies[r.Body].Ty, seen)
         if u >= 0 { return u }
     }
@@ -1032,7 +1163,7 @@ fn (s mut Scoper&) uncovered(b I64, adapter Bool, fty types.TypeId, seen mut Map
 # written for a callback whose result is a type variable may require what that type does, each argument outliving its
 # result scope (O14b); an adapter's Call (E31) has its receiver read as the value's home
 fn (s mut Scoper&) valueOK(b I64, adapter Bool, fty types.TypeId) Bool {
-    rels := s.sums[b].Rels
+    rels := s.sum(b).Rels
     s.bndWhy, s.bndType = -1, fty
     if rels.Len() == 0 { return true }
     body := s.Bodies[b]
@@ -1081,7 +1212,7 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
             s.err(at, msgs.ValueBeyondType($"'" $name "'", does, pl, word) if word != "" else msgs.FuncValueObligations(name, pl))
         }
         case _ {
-            kept := s.keptParam(body, s.sums[b].Rels)
+            kept := s.keptParam(body, s.sum(b).Rels)
             if body.Gen {
                 s.err(at, msgs.GenYieldsBorrow(kept))
                 return
@@ -1099,9 +1230,9 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
 # a" and "keeps 'b' in 'a'" - the promise's names fty's own where it was written with them, the body's otherwise; ""
 # where no promise says it (a result held in an argument, a capture given back)
 fn (s mut Scoper&) wordFor(b I64, adapter Bool, fty types.TypeId, k I64) String, String {
-    if k < 0 or k >= s.sums[b].Rels.Len() or not s.isFunc(fty) { return "", "" }
+    if k < 0 or k >= s.sum(b).Rels.Len() or not s.isFunc(fty) { return "", "" }
     body := s.Bodies[b]
-    r := s.sums[b].Rels[k]
+    r := s.sum(b).Rels[k]
     hi := s.posOf(body, adapter, r.Hi)
     lo := s.posOf(body, adapter, r.Lo)
     if hi < 0 or hi >= PosDerived or lo == PosNone { return "", "" }
@@ -1222,13 +1353,13 @@ fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
             match c.Target {
                 case typed.Callee.Body(id) {
                     tw := s.plan.Twin(c.Site)
-                    for r in (s.Twins.Sums[tw] if tw >= 0 else s.sums[I64(id)]).ResFn.Recs { out.Push(r) }
+                    for r in (s.Twins.Sums[tw] if tw >= 0 else s.sum(I64(id))).ResFn.Recs { out.Push(r) }
                 }
                 case typed.Callee.Value(v) {
                     rs Vec<fnRec>
                     s.bndRecs(v, rs)
                     for r in rs {
-                        for g in s.sums[r.Body].ResFn.Recs { out.Push(g) }
+                        for g in s.sum(r.Body).ResFn.Recs { out.Push(g) }
                     }
                 }
                 case _ { }
@@ -1580,7 +1711,7 @@ fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
     t := try s.Twins.Keys.Get(k) catch default -1
     # (its own body calling itself with what it was given handed on: the judging under way, to its fixed point)
     if k == s.twinKey and t >= 0: return s.twinMarked(c, t, mask)
-    if not s.sums[b].Done or s.sums[b].Judging or b >= s.compSize.Len() or s.compSize[b] > 1: return s.twinLimited(c, mask)
+    if not s.sum(b).Done or s.sum(b).Judging or b >= s.compSize.Len() or s.compSize[b] > 1: return s.twinLimited(c, mask)
     if t < 0 {
         if not s.twinRoom(b): return s.twinLimited(c, mask)
         t = s.newTwin(b, k, seeds, iseeds)
@@ -1602,6 +1733,7 @@ fn (s mut Scoper&) twinnable(b I64) Bool {
 
 # a call whose arguments would be followed but for a limit: each a boundary, its error naming the limit
 fn (s mut Scoper&) twinLimited(c typed.Call&, mask I64) I64 {
+    s.globalDep = true
     s.limited.Put(I64(c.Site), mask)
     return -1
 }
@@ -1619,7 +1751,7 @@ fn (s mut Scoper&) followable(a typed.Expr&, pty types.TypeId) Bool {
     recs := s.keyRecs(a)
     if not recs.Full or recs.Recs.Len() == 0 or recs.Late.Len() > 0 or recs.Loose.Len() > 0: return false
     for r in recs.Recs {
-        if r.Body < 0 or r.Body >= s.sums.Len() or not s.sums[r.Body].Done or s.sums[r.Body].Judging: return false
+        if r.Body < 0 or r.Body >= s.sums.Len() or not s.sum(r.Body).Done or s.sum(r.Body).Judging: return false
     }
     return s.someUncovered(recs, pty)
 }
@@ -1632,10 +1764,10 @@ fn (s mut Scoper&) keyRecs(a typed.Expr&) fnRecs {
     c := typed.Call.Of(s.unAway(a))
     if c is null: return recs
     b := s.bodyOf(c.Target)
-    if b < 0 or not s.sums[b].Done: return recs
+    if b < 0 or not s.sum(b).Done: return recs
     out := fnRecs()
-    out.Full = s.sums[b].ResFn.Full
-    for r in s.sums[b].ResFn.Recs { addRec(out, fnRec(r.Body, Vec<Term>(), r.Adapter)) }
+    out.Full = s.sum(b).ResFn.Full
+    for r in s.sum(b).ResFn.Recs { addRec(out, fnRec(r.Body, Vec<Term>(), r.Adapter)) }
     return out
 }
 
@@ -1864,7 +1996,7 @@ fn (s mut Scoper&) capturedRecs(cp typed.Capture&) fnRecs {
     for r in rs { addRec(out, r) }
     ty := s.B!.Locals[I64(cp.Inner)].Ty
     for r in out.Recs {
-        if not s.sums[r.Body].Done or s.sums[r.Body].Judging: return fnRecs()
+        if not s.sum(r.Body).Done or s.sum(r.Body).Judging: return fnRecs()
     }
     return out if s.someUncovered(out, ty) else fnRecs()
 }
@@ -2213,7 +2345,7 @@ fn (s mut Scoper&) instFollowable(items Vec<followItem>&) Bool {
     some := false
     for it in items {
         b := it.Key.Body
-        if b < 0 or b >= s.sums.Len() or not s.sums[b].Done or s.sums[b].Judging or s.Bodies[b].Gen: return false
+        if b < 0 or b >= s.sums.Len() or not s.sum(b).Done or s.sum(b).Judging or s.Bodies[b].Gen: return false
         if not some and s.uncovered(b, it.Key.Adapter, it.Ty, seen) >= 0: some = true
     }
     return some
@@ -2271,7 +2403,7 @@ fn (s mut Scoper&) keyInst(a typed.Expr&) I64 {
     } else {
         tw = try s.earlyTwin.Get(I64(c.Site)) catch default -1
     }
-    ri := s.Twins.Sums[tw].ResInst if tw >= 0 else s.sums[b].ResInst
+    ri := s.Twins.Sums[tw].ResInst if tw >= 0 else s.sum(b).ResInst
     if not s.summed(b) or ri.Nodes.Len() == 0: return -1
     return copyNode(ri, 0, s.itree)
 }
@@ -2357,7 +2489,7 @@ fn (s mut Scoper&) bndCallTree(c typed.Call&, ty types.TypeId, tr mut instTree&,
     if b < 0 or b >= s.sums.Len(): return -1
     if s.Bodies[b].Of != typed.BodyOf.Ctor {
         tw := s.plan.Twin(c.Site)
-        ri := s.Twins.Sums[tw].ResInst if tw >= 0 else s.sums[b].ResInst
+        ri := s.Twins.Sums[tw].ResInst if tw >= 0 else s.sum(b).ResInst
         return copyNode(ri, 0, tr) if ri.Nodes.Len() > 0 else -1
     }
     r := s.instStruct(ty)
@@ -2749,7 +2881,7 @@ fn (s mut Scoper&) recBeta(r fnRec, m Array<I64>&, beta Array<Term>&) Array<Term
 # receiver, one of the receiver's not traced
 fn (s mut Scoper&) recRels(r fnRec, m Array<I64>&) Vec<rel> {
     out Vec<rel>
-    for x in s.sums[r.Body].Rels {
+    for x in s.sum(r.Body).Rels {
         y := x
         y.Hi = recTerm(x.Hi, m, r.Adapter)
         y.Lo = recTerm(x.Lo, m, r.Adapter)
@@ -2775,14 +2907,14 @@ fn (s mut Scoper&) resultRecs(c typed.Call&, callee I64, recs fnRecs&, vars Arra
         if not s.summed(callee) { return fnRecs() }
         id := Array<I64>(beta.Len())
         for k in range id.Len() { id[k] = k }
-        s.transRecs(out, s.sums[callee].ResFn, c, id, false, beta)
+        s.transRecs(out, s.sum(callee).ResFn, c, id, false, beta)
         return out
     }
     if c.Target != typed.Callee.Value or recs.Recs.Len() == 0 { return fnRecs() }
     if not recs.Full { out.Full = false }
     for r in recs.Recs {
         m := s.recMap(r, vars, rv)
-        s.transRecs(out, s.sums[r.Body].ResFn, c, m, r.Adapter, s.recBeta(r, m, beta))
+        s.transRecs(out, s.sum(r.Body).ResFn, c, m, r.Adapter, s.recBeta(r, m, beta))
     }
     return out
 }
@@ -3039,7 +3171,7 @@ fn (s mut Scoper&) anyTables() {
         slots := s.P.AnySlots(tab.Trait)
         for k in range tab.Slots.Len() {
             b := tab.Slots[k]
-            if b >= s.sums.Len() or s.sums[b].Rels.Len() == 0 or slots.Len() == 0 { continue }
+            if b >= s.sums.Len() or s.sum(b).Rels.Len() == 0 or slots.Len() == 0 { continue }
             # T30c: within its trait's method's bound (T22b), its receiver a parameter - what every call relies on
             sl := slots[k % slots.Len()]
             if s.valueOK(b, false, sl.Sig) { continue }
@@ -3072,10 +3204,10 @@ fn (s mut Scoper&) component(comp Array<I64>&, report Bool) {
         for {
             grew := false
             for b in comp {
-                before := s.sums[b].Rels.Len()
+                before := s.sum(b).Rels.Len()
                 built := s.facts(b)
                 s.inferClaims(b)
-                if s.sums[b].Rels.Len() != before or s.facts(b) != built { grew = true }
+                if s.sum(b).Rels.Len() != before or s.facts(b) != built { grew = true }
             }
             if not grew { break }
         }
@@ -3136,7 +3268,7 @@ fn (s mut Scoper&) judgeOnce(b I64, report Bool) Bool {
 
 # how many of a body's may-facts hold: what it builds into, keeps and stores (each only grows over a component's rounds)
 fn (s mut Scoper&) facts(b I64) I64 {
-    sm := s.sums[b]
+    sm := s.sum(b)
     return countTrue(sm.Builds) + countTrue(sm.Real) + countTrue(sm.Keeps) + countTrue(sm.Stores) + countTrue(sm.Puts) +
         countTrue(sm.CapKeeps) + countTrue(sm.CapStores) + countTrue(sm.CapPuts) + (1 if sm.HandsBack else 0)
 }
@@ -3179,6 +3311,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.judged[b] = true
     s.B = body
     s.Id = b
+    if s.fsPending.Has(b) { s.readFsets(b) }
     s.fsStart(body)
     s.terms.Clear()
     s.stors.Clear()
@@ -3274,8 +3407,8 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         s.P.L.Diags.ContextBase(base)
     }
     # the obligations only grow: what a round found is kept for the next - one a round found whole stays whole (O27)
-    for r in s.gamma { keepRel(s.sums[b].Rels, r) }
-    sm := s.sums[b]
+    for r in s.gamma { keepRel(s.sum(b).Rels, r) }
+    sm := s.sum(b)
     if report { sm.Erred = s.P.L.Diags.Count() > said }
     s.noteFieldRecs(sm)
     sm.ResBind.Clear()
@@ -3320,6 +3453,7 @@ fn (s mut Scoper&) keepValueRecs(b I64) {
         out := Array<I64>(rs.Recs.Len())
         for i in range out.Len() { out[i] = 2 * rs.Recs[i].Body + (1 if rs.Recs[i].Adapter else 0) }
         s.valueRecs.Put(pair.Pair(b, site), out)
+        s.vrLog.Push(vrRow(b, site, out))
     }
 }
 
@@ -3412,7 +3546,7 @@ fn (s mut Scoper&) foundOr(t Term, found typed.Scope) typed.Scope {
 # argument's value carries, or the caller's own derived scope passed on - Unset where the call knows none
 fn (s mut Scoper&) passDerived(c typed.Call&, callee I64, beta Array<Term>&) {
     if callee < 0 or c.Tail: return
-    sm := s.sums[callee]
+    sm := s.sum(callee)
     if sm.DerivedP.Len() == 0: return
     xs Vec<typed.DerivedArg>
     for k in range sm.DerivedP.Len() {
@@ -3447,7 +3581,7 @@ fn (s mut Scoper&) dtorBody(ty types.TypeId) I64 {
 fn (s mut Scoper&) dropDerived(a typed.Expr&) {
     d := s.dtorBody(a.Type())
     if d < 0 or not s.summed(d): return
-    sm := s.sums[d]
+    sm := s.sum(d)
     if sm.DerivedP.Len() == 0: return
     rec := s.argRec(a)
     xs Vec<typed.DerivedArg>
@@ -4513,7 +4647,7 @@ fn (s mut Scoper&) resultVarOf(fty types.TypeId) I64 {
 }
 
 fn (s mut Scoper&) sumBuilds(callee I64, v I64) Bool {
-    bs := s.sums[callee].Builds
+    bs := s.sum(callee).Builds
     return v >= bs.Len() or bs[v]
 }
 
@@ -4530,14 +4664,14 @@ fn (s mut Scoper&) calleeBuilds(c typed.Call&, callee I64, v I64) Bool {
 # component being judged, what the rounds so far found (a least fixed point)
 fn (s mut Scoper&) buildsSum(callee I64, v I64) Bool {
     if callee < 0 or v < 0 { return true }
-    sm := s.sums[callee]
+    sm := s.sum(callee)
     if sm.Judging { return v < sm.Builds.Len() and sm.Builds[v] }
     if not sm.Done { return true }
     return s.sumBuilds(callee, v)
 }
 
 # whether a callee's obligations need its result scope to outlive, or to be, one an argument gives (O18c, O25g)
-fn (s mut Scoper&) forced(callee I64, rv I64) Bool { return s.forcedBy(s.sums[callee].Rels, rv) }
+fn (s mut Scoper&) forced(callee I64, rv I64) Bool { return s.forcedBy(s.sum(callee).Rels, rv) }
 
 fn (s mut Scoper&) forcedBy(rels Vec<rel>&, rv I64) Bool {
     for r in rels {
@@ -4658,7 +4792,7 @@ fn (s mut Scoper&) argLands(a typed.Expr&) Bool { return s.landTerm(a) != Term.N
 # (valueRels); none for another callee
 fn (s mut Scoper&) callRels(c typed.Call&) Vec<rel> {
     callee := s.bodyOf(c.Target)
-    if callee >= 0 { return s.sums[callee].Rels }
+    if callee >= 0 { return s.sum(callee).Rels }
     if c.Target != typed.Callee.Value { return Vec<rel>() }
     # (a call through a value whose records are known: theirs, T22a 5.3)
     if s.valRelsAt.Has(I64(c.Site)) { return try s.valRelsAt.Get(I64(c.Site)) catch default Vec<rel>() }
@@ -4745,10 +4879,10 @@ fn (s mut Scoper&) tiedToBlock(x typed.Expr&) Bool {
     if c is null { return false }
     fty := s.calleeType(c)
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.sums[callee].Done { return false }
+    if callee < 0 or not s.sum(callee).Done { return false }
     rv := s.resultVarOf(fty)
     vars := s.P.T.ScopeVarsOf(fty)
-    for r in s.sums[callee].Rels {
+    for r in s.sum(callee).Rels {
         if r.Lo != Term.Var(rv) { continue }
         match r.Hi {
             case Term.Var(v) {
@@ -5351,19 +5485,19 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
     # keeps a reference to the argument elsewhere only through a result borrowed from it, a parameter sharing its scope
     # (both above) or an obligation (below) - storing into what the argument names makes no second name of it
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.sums[callee].Done or s.sums[callee].Judging { return true }
+    if callee < 0 or not s.sum(callee).Done or s.sum(callee).Judging { return true }
     vars := s.P.T.ScopeVarsOf(fty)
     k := s.P.T.ShareOf(fty, j)
     q := k if k >= 0 else j
     for v in range vars.Len() {
         if vars[v] != q { continue }
-        for r in s.sums[callee].Rels {
+        for r in s.sum(callee).Rels {
             if r.Hi == Term.Var(v) or (r.Exact and r.Lo == Term.Var(v)) { return true }
         }
     }
     # what the argument's fields viewing p's referent refer to, where an obligation holds it (O23a): kept through the argument too -
     # "fn RewrapR(x W&) H { return H(x.D) }" keeps what x.D names in its result
-    for r in s.sums[callee].Rels {
+    for r in s.sum(callee).Rels {
         if derivedOf(r.Hi, j) or (r.Exact and derivedOf(r.Lo, j)) { return true }
     }
     return false
@@ -5592,22 +5726,22 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
     s.regionLocals(b)
     s.cursorRegions()
     s.kwBlock(b.Root)
-    s.sums[s.Id].Keeps.Clear()
-    s.sums[s.Id].Stores.Clear()
-    s.sums[s.Id].Puts.Clear()
+    s.sum(s.Id).Keeps.Clear()
+    s.sum(s.Id).Stores.Clear()
+    s.sum(s.Id).Puts.Clear()
     for p in b.Params {
-        s.sums[s.Id].Keeps.Push(s.kept[I64(p)])
-        s.sums[s.Id].Stores.Push(s.keptStore[I64(p)])
-        s.sums[s.Id].Puts.Push(s.keptPut[I64(p)])
+        s.sum(s.Id).Keeps.Push(s.kept[I64(p)])
+        s.sum(s.Id).Stores.Push(s.keptStore[I64(p)])
+        s.sum(s.Id).Puts.Push(s.keptPut[I64(p)])
     }
-    s.sums[s.Id].CapKeeps.Clear()
-    s.sums[s.Id].CapStores.Clear()
-    s.sums[s.Id].CapPuts.Clear()
+    s.sum(s.Id).CapKeeps.Clear()
+    s.sum(s.Id).CapStores.Clear()
+    s.sum(s.Id).CapPuts.Clear()
     if s.isLambda(b) {
         for i in range b.Locals.Len() {
-            s.sums[s.Id].CapKeeps.Push(s.kept[i])
-            s.sums[s.Id].CapStores.Push(s.keptStore[i])
-            s.sums[s.Id].CapPuts.Push(s.keptPut[i])
+            s.sum(s.Id).CapKeeps.Push(s.kept[i])
+            s.sum(s.Id).CapStores.Push(s.keptStore[i])
+            s.sum(s.Id).CapPuts.Push(s.keptPut[i])
         }
     }
 }
@@ -6191,7 +6325,7 @@ fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
 }
 
 fn (s mut Scoper&) kwCapture(lb I64, cp typed.Capture&, tr Bool) {
-    sm := s.sums[lb]
+    sm := s.sum(lb)
     k := I64(cp.Inner)
     if not tr or not (sm.Done or sm.Judging) or k >= sm.CapKeeps.Len() {
         s.kwExpr(cp.Outer, false)
@@ -6369,21 +6503,21 @@ fn (s mut Scoper&) handedRegion(a typed.Expr&) I64 {
 # whether body cb may keep something in what its argument k names, store into it, store into it itself (its summary;
 # one not judged to the end may) - a record's body, for a call through a value (T22a)
 fn (s mut Scoper&) sumKeeps(cb I64, k I64) Bool {
-    if s.sums[cb].Judging { return k < s.sums[cb].Keeps.Len() and s.sums[cb].Keeps[k] }
-    if not s.sums[cb].Done or k >= s.sums[cb].Keeps.Len() { return true }
-    return s.sums[cb].Keeps[k]
+    if s.sum(cb).Judging { return k < s.sum(cb).Keeps.Len() and s.sum(cb).Keeps[k] }
+    if not s.sum(cb).Done or k >= s.sum(cb).Keeps.Len() { return true }
+    return s.sum(cb).Keeps[k]
 }
 
 fn (s mut Scoper&) sumStores(cb I64, k I64) Bool {
-    if s.sums[cb].Judging { return k < s.sums[cb].Stores.Len() and s.sums[cb].Stores[k] }
-    if not s.sums[cb].Done or k >= s.sums[cb].Stores.Len() { return true }
-    return s.sums[cb].Stores[k]
+    if s.sum(cb).Judging { return k < s.sum(cb).Stores.Len() and s.sum(cb).Stores[k] }
+    if not s.sum(cb).Done or k >= s.sum(cb).Stores.Len() { return true }
+    return s.sum(cb).Stores[k]
 }
 
 fn (s mut Scoper&) sumPuts(cb I64, k I64) Bool {
-    if s.sums[cb].Judging { return k < s.sums[cb].Puts.Len() and s.sums[cb].Puts[k] }
-    if not s.sums[cb].Done or k >= s.sums[cb].Puts.Len() { return true }
-    return s.sums[cb].Puts[k]
+    if s.sum(cb).Judging { return k < s.sum(cb).Puts.Len() and s.sum(cb).Puts[k] }
+    if not s.sum(cb).Done or k >= s.sum(cb).Puts.Len() { return true }
+    return s.sum(cb).Puts[k]
 }
 
 # a call through a value whose records are all known (T22a, 5.3): whether any record's body keeps (what 0), puts (1) or
@@ -6405,9 +6539,9 @@ fn (s mut Scoper&) calleeKeepsArg(c typed.Call&, k I64) Bool {
         case typed.Callee.Body(id) {
             cb := I64(id)
             # one of the component being judged: what the rounds so far found (a least fixed point, 7.2)
-            if s.sums[cb].Judging { return k < s.sums[cb].Keeps.Len() and s.sums[cb].Keeps[k] }
-            if not s.sums[cb].Done or k >= s.sums[cb].Keeps.Len() { return true }
-            return s.sums[cb].Keeps[k]
+            if s.sum(cb).Judging { return k < s.sum(cb).Keeps.Len() and s.sum(cb).Keeps[k] }
+            if not s.sum(cb).Done or k >= s.sum(cb).Keeps.Len() { return true }
+            return s.sum(cb).Keeps[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
         case typed.Callee.Value(_) { return s.valueArgBy(c, k, 0) }
@@ -6420,9 +6554,9 @@ fn (s mut Scoper&) calleePutsArg(c typed.Call&, k I64) Bool {
     match c.Target {
         case typed.Callee.Body(id) {
             cb := I64(id)
-            if s.sums[cb].Judging { return k < s.sums[cb].Puts.Len() and s.sums[cb].Puts[k] }
-            if not s.sums[cb].Done or k >= s.sums[cb].Puts.Len() { return true }
-            return s.sums[cb].Puts[k]
+            if s.sum(cb).Judging { return k < s.sum(cb).Puts.Len() and s.sum(cb).Puts[k] }
+            if not s.sum(cb).Done or k >= s.sum(cb).Puts.Len() { return true }
+            return s.sum(cb).Puts[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
         case typed.Callee.Value(_) { return s.valueArgBy(c, k, 1) }
@@ -6436,9 +6570,9 @@ fn (s mut Scoper&) calleeStoresArg(c typed.Call&, k I64) Bool {
         case typed.Callee.Body(id) {
             cb := I64(id)
             # one of the component being judged: what the rounds so far found (a least fixed point, 7.2)
-            if s.sums[cb].Judging { return k < s.sums[cb].Stores.Len() and s.sums[cb].Stores[k] }
-            if not s.sums[cb].Done or k >= s.sums[cb].Stores.Len() { return true }
-            return s.sums[cb].Stores[k]
+            if s.sum(cb).Judging { return k < s.sum(cb).Stores.Len() and s.sum(cb).Stores[k] }
+            if not s.sum(cb).Done or k >= s.sum(cb).Stores.Len() { return true }
+            return s.sum(cb).Stores[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
         case typed.Callee.Value(_) { return s.valueArgBy(c, k, 2) }
@@ -6655,15 +6789,22 @@ UseOwn I64 = 3
 fn (s mut Scoper&) uses(b I64, j I64, mode I64) Bool {
     if b < 0 { return false }
     key := pair.Pair(b * 4 + mode, j)
+    if s.logReads { s.readLog.Push(b) }
     st := try s.useMemo.Get(key) catch default 0
-    if st != 0 { return st != 2 }
+    if st == 1 { return true }
+    if st != 0 {
+        s.memoReads(key, s.useDeps)
+        return st != 2
+    }
     body := s.Bodies[b]
     if body.Root is null or not s.judged[b] or j >= body.Params.Len() { return false }
     s.useMemo.Put(key, 1)
     saved := s.ueBad
     s.ueBad = source.Span(0, 0)
+    at := s.readLog.Len()
     r := s.ueBlock(body, body.Root, I64(body.Params[j]), mode)
     s.useMemo.Put(key, 3 if r else 2)
+    if s.logReads { s.useDeps.Put(key, s.readsSince(at)) }
     if not r and s.ueBad.End > I32(0) { s.useWhy.Put(key, s.ueBad) }
     s.ueBad = saved
     return r
@@ -7058,11 +7199,18 @@ fn (s mut Scoper&) capturingLambda(x typed.Expr&) Bool {
 fn (s mut Scoper&) transient(callee I64, j I64) Bool {
     if callee < 0 { return false }
     key := pair.Pair(callee, j)
+    if s.logReads { s.readLog.Push(callee) }
     st := try s.trMemo.Get(key) catch default 0
-    if st != 0 { return st == 3 }
+    if st == 1 { return false }
+    if st != 0 {
+        s.memoReads(key, s.trDeps)
+        return st == 3
+    }
     s.trMemo.Put(key, 1)
+    at := s.readLog.Len()
     r := s.transientNow(callee, j)
     s.trMemo.Put(key, 3 if r else 2)
+    if s.logReads { s.trDeps.Put(key, s.readsSince(at)) }
     return r
 }
 
@@ -7072,7 +7220,7 @@ fn (s mut Scoper&) transientNow(callee I64, j I64) Bool {
         case typed.BodyOf.Fn(_) { }
         case _ { return false }
     }
-    if b.Root is null or not s.judged[callee] or not s.sums[callee].Done or j >= b.Params.Len() { return false }
+    if b.Root is null or not s.isJudged(callee) or not s.sum(callee).Done or j >= b.Params.Len() { return false }
     fty := b.Ty
     k := s.P.T.ShareOf(fty, j)
     q := k if k >= 0 else j
@@ -7082,7 +7230,7 @@ fn (s mut Scoper&) transientNow(callee I64, j I64) Bool {
         if vars[i] == q { v = i }
     }
     if v < 0 { return false }
-    for r in s.sums[callee].Rels {
+    for r in s.sum(callee).Rels {
         if r.Hi == Term.Var(v) or r.Lo == Term.Var(v) { return false }
         match r.Hi {
             case Term.Derived(p, _) {
@@ -7795,15 +7943,15 @@ fn (s mut Scoper&) fieldRec(base typed.Lvalue&, i I64) I64 {
     # bindings this instance's record has, its instance scope where this instance's references are
     cb := try s.ctorOf.Get(bt) catch default -1
     if cb >= 0 { s.sumReads.Put(cb, true) }
-    if cb < 0 or not s.summed(cb) or i >= s.sums[cb].FieldFrom.Len() { return -1 }
-    ff := s.sums[cb].FieldFrom[i]
+    if cb < 0 or not s.summed(cb) or i >= s.sum(cb).FieldFrom.Len() { return -1 }
+    ff := s.sum(cb).FieldFrom[i]
     if ff < 0 { return -1 }
     cbody := s.Bodies[cb]
     n := s.ctorParams(cbody.Locals[I64(cbody.Fields[i])].Ty) if i < cbody.Fields.Len() else 0
-    if n == 0 or ff + n > s.sums[cb].FieldTerms.Len() { return -1 }
+    if n == 0 or ff + n > s.sum(cb).FieldTerms.Len() { return -1 }
     from := s.bindTerms.Len()
     for w in range n {
-        u := s.fieldRecTerm(cbody, s.sums[cb].FieldTerms[ff + w], base, rb)
+        u := s.fieldRecTerm(cbody, s.sum(cb).FieldTerms[ff + w], base, rb)
         s.bindTerms.Push(u)
         s.bindKids.Push(-1)
     }
@@ -8565,7 +8713,7 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
     callee := s.bodyOf(c.Target)
     rv := s.resultVarOf(s.calleeType(c))
     if callee < 0 or rv < 0 or not s.summed(callee) { return false }
-    for r in s.sums[callee].Rels {
+    for r in s.sum(callee).Rels {
         if r.Why == 0 or r.Lo != Term.Var(rv) { continue }
         ai := s.argOfVar(c, r.Hi)
         if ai < 0 or from + ai >= s.bindTerms.Len() { continue }
@@ -9257,7 +9405,7 @@ fn (s mut Scoper&) clauseGives(sp source.Span, sw typed.Spawn&, c typed.TaskClau
             lb := I64(id)
             rc := try s.lamCaps.Get(I64(site)) catch default Vec<Term>()
             vs := s.Bodies[lb].Vars
-            for rl in s.sums[lb].Rels {
+            for rl in s.sum(lb).Rels {
                 hi, lo := varOf(rl.Hi), varOf(rl.Lo)
                 if hi < 0 or hi >= rc.Len() or lo < 0 or lo >= vs.Len() or rc[hi] == Term.None: continue
                 if vs[lo] == typed.ScopeVar.Result: s.giveTargets(sp, sw, rc[hi], c.Handler!)
@@ -9916,7 +10064,7 @@ fn (s mut Scoper&) builtOK(x typed.Expr?&, t Term) Bool {
     if callee < 0 or not s.summed(callee) { return false }
     rv := s.resultVarOf(fty)
     if rv < 0 { return true }
-    for r in s.sums[callee].Rels {
+    for r in s.sum(callee).Rels {
         if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv) { continue }
         match r.Hi {
             case Term.Var(v) {
@@ -10331,7 +10479,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         t = try s.earlyTwin.Get(I64(c.Site)) catch default s.twinFor(c, b, sp)
     }
     if t < 0 { return s.callAs(sp, ty, c, dest) }
-    saved := s.sums[b]
+    saved := s.sum(b)
     s.sums[b] = s.Twins.Sums[t]
     v := s.callAs(sp, ty, c, dest)
     s.sums[b] = saved
@@ -10570,17 +10718,17 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     # what its result carries, where it is a function value (5.2)
     if s.isFunc(ty) { s.siteRecs.Put(I64(c.Site), s.resultRecs(c, callee, recs, vars, rv, beta)) }
     # T22d: the instance it gives - a constructor's, made of its arguments; a callee's returns', through this call
-    if s.P.T.Role(fty) == types.RoleCtor { s.ctorInst(c, ty) } else if callee >= 0 and s.summed(callee) and s.sums[callee].ResInst.Nodes.Len() > 0 {
-        s.siteInst.Put(I64(c.Site), s.importInst(s.sums[callee].ResInst, 0, c, beta))
+    if s.P.T.Role(fty) == types.RoleCtor { s.ctorInst(c, ty) } else if callee >= 0 and s.summed(callee) and s.sum(callee).ResInst.Nodes.Len() > 0 {
+        s.siteInst.Put(I64(c.Site), s.importInst(s.sum(callee).ResInst, 0, c, beta))
     }
     s.resAt = beta[rv] if rv >= 0 else here
     if not s.holds(ty) { return Val.plain() }
-    if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sums[callee].ResBind.Len() > 0 {
+    if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sum(callee).ResBind.Len() > 0 {
         # the instance it gives carries the bindings its callee's returns had, through this call's (O13c): "it :=
         # l.Iter()" knows its iterator reads l
         s.ctorSite = I64(c.Site)
         s.ctorFrom = s.bindTerms.Len()
-        for t in s.sums[callee].ResBind {
+        for t in s.sum(callee).ResBind {
             u := s.through(t, beta, c, false) if t != Term.Untraced else Term.Untraced
             s.bindTerms.Push(u)
             s.bindKids.Push(-1)
@@ -10653,7 +10801,7 @@ fn namedValue(x typed.Expr&) Bool {
 fn (s mut Scoper&) keptAtHome(r fnRec, ty types.TypeId, h Term, y typed.Expr&) {
     if r.Adapter or r.Body < 0 or r.Body >= s.sums.Len() { return }
     body := s.Bodies[r.Body]
-    for rl in s.sums[r.Body].Rels {
+    for rl in s.sum(r.Body).Rels {
         lo := varOf(rl.Lo)
         if lo < 0 or lo >= body.Vars.Len() or lo >= r.Caps.Len() or body.Vars[lo] != typed.ScopeVar.Capture { continue }
         x := s.posOf(body, false, rl.Hi)
@@ -11079,7 +11227,7 @@ fn (s mut Scoper&) keptCall(x typed.Expr&) Bool {
     c := typed.Call.Of(s.unAway(x))
     if c is null: return false
     return match c.Target {
-        case typed.Callee.Body(id): s.sums[I64(id)].HandsBack or not (s.sums[I64(id)].Done or s.sums[I64(id)].Judging)
+        case typed.Callee.Body(id): s.sum(I64(id)).HandsBack or not (s.sum(I64(id)).Done or s.sum(I64(id)).Judging)
         case _: false
     }
 }
@@ -11396,8 +11544,8 @@ fn (s mut Scoper&) caseFrom(x typed.Expr&) {
 # the argument whose local decided where a call's scope variable v is bound: the one that bound it, else the one a
 # callee's obligation ties it to (requiredBy) - -1 for none
 fn (s mut Scoper&) bindingArg(callee I64, v I64, firstArg Array<I64>&) I64 {
-    if firstArg[v] >= 0 or callee < 0 or not (s.sums[callee].Done or s.sums[callee].Judging): return firstArg[v]
-    for r in s.sums[callee].Rels {
+    if firstArg[v] >= 0 or callee < 0 or not (s.sum(callee).Done or s.sum(callee).Judging): return firstArg[v]
+    for r in s.sum(callee).Rels {
         if r.Hi != Term.Var(v): continue
         match r.Lo {
             case Term.Var(k) { if k < firstArg.Len() and firstArg[k] >= 0: return firstArg[k] }
@@ -11412,8 +11560,8 @@ fn (s mut Scoper&) bindingArg(callee I64, v I64, firstArg Array<I64>&) I64 {
 # grow, so the first relation naming v - what this reads - is fixed once found, and the rounds still reach their fixed
 # point before anything is said (7.2)
 fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
-    if callee < 0 or not (s.sums[callee].Done or s.sums[callee].Judging) { return Term.None }
-    return s.requiredIn(s.sums[callee].Rels, v, beta)
+    if callee < 0 or not (s.sum(callee).Done or s.sum(callee).Judging) { return Term.None }
+    return s.requiredIn(s.sum(callee).Rels, v, beta)
 }
 
 # ... by obligations rels, in the call's numbering
@@ -11437,7 +11585,7 @@ fn (s mut Scoper&) requiredIn(rels Vec<rel>&, v I64, beta Array<Term>&) Term {
 # a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
 # at the call naming the callee's statement that required it
 fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
-    s.dischargeRels(sp, s.sums[callee].Rels, callee, beta, c, agreed)
+    s.dischargeRels(sp, s.sum(callee).Rels, callee, beta, c, agreed)
 }
 
 # ... rels judged so - a body's (callee), or what a function type says of a call through a value (-1, valueRels)
@@ -11505,7 +11653,7 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
         # not said again at its calls (one cause, one error); its obligations still pass up and still lift, so what is
         # judged is as it would be (a callee that erred in one round of the field inference and not the next costs the
         # rounds nothing)
-        if callee >= 0 and s.sums[callee].Erred { continue }
+        if callee >= 0 and s.sum(callee).Erred { continue }
         if s.taskTemp and lo == s.taskSlot {
             # a temporary a task is handed, holding what does not last until the join (P2)
             s.err(s.taskAt, msgs.SpawnFuncTooShort() if s.taskFunc else msgs.SpawnArgHoldsShort())
@@ -11577,7 +11725,7 @@ fn (s mut Scoper&) argsAgree(c typed.Call&, callee I64, rv I64, owner Array<I64>
         if v < 0 or v == rv or vals[i].K != ValKind.Existing { continue }
         held := false
         viaField := false
-        for r in s.sums[callee].Rels {
+        for r in s.sum(callee).Rels {
             if r.Why == 0 { continue }
             if r.Hi == Term.Var(v) and r.Lo == Term.Var(rv) {
                 held = true
@@ -11660,7 +11808,7 @@ fn (s mut Scoper&) payloadAgree(items Array<typed.Expr&>&, vs Array<Val>&) Bool 
 
 # whether a body's summary can be read: judged, or of the component being judged - what its rounds so far found, which
 # only grows, the rounds running to their fixed point before anything is said (7.2)
-fn (s mut Scoper&) summed(b I64) Bool { return s.sums[b].Done or s.sums[b].Judging }
+fn (s mut Scoper&) summed(b I64) Bool { return s.sum(b).Done or s.sum(b).Judging }
 
 # whether a callee's relation on its result, through a call, asks this function's own storage to outlive this one's
 # result: what the call builds is returned (O26) - in a function, not a constructor, whose instance is its fields' own concern (C2d)
@@ -12001,7 +12149,7 @@ fn (s mut Scoper&) noteThroughResult(rec I64, c typed.Call&, w I64, wname String
     if rv < 0 { return false }
     first := -1
     made Vec<I64>
-    for r in s.sums[callee].Rels {
+    for r in s.sum(callee).Rels {
         if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv) { continue }
         ai := s.argOfVar(c, r.Hi)
         if ai < 0 { continue }
@@ -12878,7 +13026,7 @@ fn (s mut Scoper&) resultViews(c typed.Call&, ai I64) Bool {
     }
     rv := s.resultVarOf(s.calleeType(c))
     if rv < 0 or cb < 0 or cb >= s.sums.Len() { return false }
-    for r in s.sums[cb].Rels {
+    for r in s.sum(cb).Rels {
         if r.Lo == Term.Var(rv) and s.argOfVar(c, r.Hi) == ai { return true }
     }
     return false
@@ -13588,6 +13736,7 @@ fn (s mut Scoper&) inferFields() Bool {
         s.fieldGather = true
         s.judgeAll(true)
         s.fieldGather = false
+        if s.Restart: return true
         grew := false
         # what a round that gave fields back as it went asked was asked with marks some components read before the
         # giving back and some after: the next round, all judged with the marks given back, asks again
@@ -13934,12 +14083,12 @@ fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
     # passed for it, or the one found where the field's referent lives (the plan's Passed and Found) - never given back
     # to the container's scope, which would ask the field's argument to live exactly where every instance does
     if isDerived(t) { return }
-    known := callee >= 0 and v >= 0 and (s.sums[callee].Done or s.sums[callee].Judging) and v < s.sums[callee].BuildAt.Len()
+    known := callee >= 0 and v >= 0 and (s.sum(callee).Done or s.sum(callee).Judging) and v < s.sum(callee).BuildAt.Len()
     saved := s.standIn
     # a callee building only its tasks' stand-ins there builds a stand-in here too
-    if known and v < s.sums[callee].Real.Len() and not s.sums[callee].Real[v] { s.standIn = true }
+    if known and v < s.sum(callee).Real.Len() and not s.sum(callee).Real[v] { s.standIn = true }
     if known {
-        s.buildsInto(t, sp, s.sums[callee].BuildFile[v], s.sums[callee].BuildAt[v])
+        s.buildsInto(t, sp, s.sum(callee).BuildFile[v], s.sum(callee).BuildAt[v])
     } else {
         s.buildsInto(t, sp, s.B!.File, sp)
     }
@@ -14386,6 +14535,987 @@ fn (s Scoper&) localName(body typed.Body&, l typed.LocalId, nm source.Names&) St
     return "a hidden local" if n == source.NameId(0) else $nm.Text(n)
 }
 
+# ---- judgings kept in records (B3i, the incremental front end, part 2: docs/wholeprog.md 10.2, W3b) ----
+#
+# A component's judging (compRun) is a function of what it judges and what it reads: its bodies, as the module's text
+# and the texts of everything it reaches make them (its record is kept under that module's B3i key, olang.olang
+# scopeRecords), the state its earlier judgings in the build left in the pass (its bodies' field sets, versions and
+# the like - named by the judgings that left it, stateOf), the marks of the constructor fields it read, the summaries
+# and judged flags of every other body it read (sum, logged as they are read), the round it is judged in (ctxText) and
+# the few whole-program sets the pass keeps (globalText). A record holds each such judging as words; a later build whose
+# component reads all the same takes it - its plans, summaries and what it asked of the field inference - instead of
+# judging it. Only a judging of keyed bodies (a function of no type variable and what is written inside one, as
+# views.BodyKeys keys them) that said nothing, left no gap and asked for no twin is written. A component taken from a
+# record that must be judged again later in the build (something it read changed in a later round) is not judged from a
+# state the pass does not have: the build's judging starts over without records (Restart). OLANG_CHECKINCR (DiskAfresh)
+# judges every component a record would give and holds the record to what it finds.
+
+# a judging found in a record: its component (each body's stable name) and what it read and gave, as words
+type diskRun struct(Sig String&) {
+    Sig
+    Ctx String = ""
+    In Vec<String&>        # by body of the component: the state it was judged from (stateOf)
+    Marks Vec<String&>     # "CTOR FIELD MARK"
+    Reads Vec<String&>     # "NAME\tTEXT" (readText)
+    Wants Vec<String&>     # "decl NAME", "field NAME K"
+    Hits I64 = 0
+    Vrs Vec<String&>       # "I SITE NAME,ADAPTER..." - its bodies' calls through a value (valueRecs)
+    Judged Vec<Bool>
+    Plans Vec<String&>
+    Sums Vec<String&>
+    Out String = ""        # the state its bodies are left in: its name ...
+    Hidden Vec<String&>    # ... and the state itself, by body (hiddenText)
+}
+
+# a call through a value a judging found the bodies of (valueRecs), kept with the judging
+type vrRow struct(Body I64, Site I64, Recs Array<I64>) {
+    Body
+    Site
+    Recs
+}
+
+# body b's stable name, the same in every build of the same text: its module, what it is and where it is written, an
+# instance's arguments by their canonical text - "" for a body none can be given, or a name two bodies would share
+fn (s mut Scoper&) NameOf(b I64) String& {
+    if s.bodyNames.Len() != s.Bodies.Len() { s.nameBodies() }
+    return s.bodyNames[b]
+}
+
+fn (s mut Scoper&) nameBodies() {
+    n := s.Bodies.Len()
+    names mut Array<String&>& = Array<String&>(n, "")
+    for b in range n { names[b] = s.nameOf(b, names, 0) }
+    seen Map<String, I64>
+    for b in range n {
+        if names[b] == "": continue
+        had := try seen.Get(names[b]) catch {
+            seen.Put(names[b], b)
+            continue
+        }
+        names[had] = ""
+        names[b] = ""
+    }
+    s.bodyNames = names
+    s.nameAt.Clear()
+    for b in range n {
+        if names[b] != "": s.nameAt.Put(names[b], b)
+    }
+}
+
+fn (s mut Scoper&) nameOf(b I64, names Array<String&>&, depth I64) String {
+    body := s.Bodies[b]
+    mod := s.fileIdentity(body.File)
+    if mod == "" or depth > 16: return ""
+    at := $mod " " $body.Sp.Start "-" $body.Sp.End
+    return match body.Of {
+        case typed.BodyOf.Fn(inst): $at " fn" $s.argsWord(s.P.InstanceArgs(inst))
+        case typed.BodyOf.Ctor(t, twin): $at " ctor " $s.P.T.CanonNamed(t) $s.argsWord(twin)
+        case typed.BodyOf.Dtor(t): $at " dtor " $s.P.T.CanonNamed(t)
+        case typed.BodyOf.Case(t, tag): $at " case " $s.P.T.CanonNamed(t) " " $tag
+        case typed.BodyOf.Lambda(parent): s.innerName($at " lambda", I64(parent), names, depth)
+        case typed.BodyOf.Contract(of, _, index): s.innerName($at " contract " $index, I64(of), names, depth)
+        case typed.BodyOf.Global(_, name): $mod " global " $s.P.L.Names.Text(name)
+        case _: ""
+    }
+}
+
+# a body written inside parent p: named with p's name, "" where p has none
+fn (s mut Scoper&) innerName(at String&, p I64, names Array<String&>&, depth I64) String {
+    if p < 0 or p >= s.Bodies.Len(): return ""
+    pn := names[p] if p < s.Bodies.Len() and names[p] != "" else s.nameOf(p, names, depth + 1)
+    return "" if pn == "" else $at " in " $pn
+}
+
+fn (s mut Scoper&) argsWord(l types.ListId) String {
+    if l == types.ListId(0): return ""
+    b := StringBuilder()
+    b.Push(" <")
+    for t in s.P.T.Items(l) { b.Push($s.P.T.CanonNamed(t) ";") }
+    b.Push(">")
+    return b.ToString().Replace("\t", " ").Replace("\n", " ")
+}
+
+fn (s Scoper&) fileIdentity(file I64) String {
+    for m in s.P.L.Mods {
+        if m.File == file: return $m.Identity
+    }
+    return ""
+}
+
+# a declaration as a record says it: its module's identity and its name ("std/prelude/list:List")
+fn (s mut Scoper&) declWord(d I64) String {
+    if d < 0 or d >= s.P.T.DeclCount(): return "-"
+    dl := types.DeclId(I32(d))
+    return $s.P.T.Modules[s.P.T.DeclModule(dl)] ":" $s.P.T.Names.Text(s.P.T.DeclName(dl))
+}
+
+fn (s mut Scoper&) declOfWord(w String&) I64 ? typed.Unwritable {
+    d := try s.P.T.FindDecl(w) catch { error typed.Unwritable.Here }
+    return I64(d)
+}
+
+# every constructor's fields' marks, in order - what the field inference changes, taken before a judging that may start
+# over (Restart) and given back then
+fn (s Scoper&) FieldMarks() Vec<typed.Mark> {
+    out Vec<typed.Mark>
+    for b in range s.Bodies.Len() {
+        if not s.isCtorBody(b): continue
+        for i in range s.Bodies[b].Fields.Len() { out.Push(s.fieldMarkOf(b, i)) }
+    }
+    return out
+}
+
+fn (s mut Scoper&) SetFieldMarks(marks Vec<typed.Mark>&) {
+    k := 0
+    for b in range s.Bodies.Len() {
+        if not s.isCtorBody(b): continue
+        for i in range s.Bodies[b].Fields.Len() {
+            s.Bodies[b].Locals[I64(s.Bodies[b].Fields[i])].Marked = marks[k]
+            k++
+        }
+    }
+}
+
+# whether a judging of component comp may be written: every body has a stable name, is a keyed one (no type variable
+# binds it) and is of a module records are kept for (Keyed)
+fn (s mut Scoper&) recordable(comp Array<I64>&) Bool {
+    for b in comp {
+        if s.NameOf(b) == "" or not s.Keyed.Has(s.Bodies[b].File) or not s.keyedBody(b): return false
+    }
+    return true
+}
+
+fn (s mut Scoper&) keyedBody(b I64) Bool {
+    for _ in range 64 {
+        match s.Bodies[b].Of {
+            case typed.BodyOf.Fn(inst) { return s.P.InstanceArgs(inst) == types.ListId(0) }
+            case typed.BodyOf.Ctor(t, twin) { return twin == types.ListId(0) and s.plainDecl(t) }
+            case typed.BodyOf.Dtor(t) { return s.plainDecl(t) }
+            case typed.BodyOf.Global(_, _) { return true }
+            case typed.BodyOf.Lambda(parent) { b = I64(parent) }
+            case typed.BodyOf.Contract(of, _, _) { b = I64(of) }
+            case _ { return false }
+        }
+        if b < 0 or b >= s.Bodies.Len(): return false
+    }
+    return false
+}
+
+fn (s mut Scoper&) plainDecl(t types.TypeId) Bool {
+    return s.P.T.KindOf(t) == types.Kind.Named and s.P.T.DeclParams(s.P.T.DeclOf(t)) == 0
+}
+
+# the component's signature: its bodies' stable names, in its order
+fn (s mut Scoper&) sigOf(comp Array<I64>&) String {
+    b := StringBuilder()
+    for x in comp { b.Push($s.NameOf(x) "\n") }
+    return b.ToString()
+}
+
+# what the round a judging is made in decides of it
+fn (s mut Scoper&) ctxText(report Bool) String {
+    return $"r" $(1 if report else 0) " g" $(1 if s.fieldGather else 0) " p" $(1 if s.partsOn else 0)
+}
+
+# the whole-program sets every judging may read, as words: the fields any body assigns after construction, the bodies a
+# become chain keeps from derived scopes, the modules apart (B3i)
+fn (s mut Scoper&) globalText() String {
+    if s.globalMade: return s.globalWords
+    lines Vec<String&>
+    for k in s.fieldsAssigned.Keys() {
+        lines.Push($"assigned " $s.P.T.CanonNamed(types.TypeId(I32(k.First))) " " $k.Second)
+    }
+    for b in s.noDerived.Keys() { lines.Push($"noderived " $(s.NameOf(b) if s.NameOf(b) != "" else $"#" $b)) }
+    for m in s.Apart.Keys() { lines.Push($"apart " $(s.P.L.Mods[m].Identity if m >= 0 and m < s.P.L.Mods.Len() else "?")) }
+    lines.Sort(fn(a String&, b String&) Bool { return a < b })
+    s.globalWords = hashText(lines.Join("\n"))
+    s.globalMade = true
+    return s.globalWords
+}
+
+fn hashText(t String&) String { return sha256.Hex(t)[:32] }
+
+# a body's summary read through a judging: logged as read, for the judging's record (compRun.ReadTexts)
+fn (s mut Scoper&) sum(b I64) mut summary& {
+    if s.logReads and b >= 0 { s.readLog.Push(b) }
+    return s.sums[b]
+}
+
+fn (s mut Scoper&) isJudged(b I64) Bool {
+    if s.logReads and b >= 0 { s.readLog.Push(b) }
+    return s.judged[b]
+}
+
+# a memo's answer given again (transient, uses): what its finding read, read again - a judging taking it reads what
+# finding it did. One found while nothing was logged leaves the judging unwritten
+fn (s mut Scoper&) memoReads(key pair.Pair<I64, I64>, deps Map<pair.Pair<I64, I64>, Array<I64>>&) {
+    if not s.logReads: return
+    ds := try deps.Get(key) catch {
+        s.globalDep = true
+        return
+    }
+    for x in ds { s.readLog.Push(x) }
+}
+
+fn (s Scoper&) readsSince(at I64) Array<I64> {
+    out := Array<I64>(s.readLog.Len() - at)
+    for i in range out.Len() { out[i] = s.readLog[at + i] }
+    return out
+}
+
+# ---- the state a body is judged from ----
+
+# the state body b is in: "0" before any judging of it in the build, else named by the judging that left it - a
+# record's, or one made in this build (runId)
+fn (s mut Scoper&) stateOf(b I64) String {
+    r := s.stRun[b]
+    if r is null: return s.stDisk[b]
+    return s.runId(r)
+}
+
+# a judging made in this build named by what it read (judgings of the same bodies from the same state, reading the
+# same, find the same and leave the same state): its component, round, state, marks and reads
+fn (s mut Scoper&) runId(run mut compRun&) String {
+    if run.Id != "": return run.Id
+    b := StringBuilder()
+    b.Push($run.Sig "\n" $run.Ctx "\n" $s.globalText() "\n")
+    for i in range run.InRun.Len() {
+        r := run.InRun[i]
+        b.Push($(s.runId(r) if r is not null else run.InDisk[i]) "\n")
+    }
+    for m in s.marksOf(run) { b.Push($m "\n") }
+    for x in run.ReadTexts { b.Push($x "\n") }
+    run.Id = hashText(b.ToString())
+    return run.Id
+}
+
+fn (s mut Scoper&) marksOf(run compRun&) Vec<String&> {
+    out Vec<String&>
+    for m in run.Marks { out.Push($s.NameOf(m.Ctor) "\t" $m.Field " " $markWord(m.Mark)) }
+    out.Sort(fn(a String&, b String&) Bool { return a < b })
+    return out
+}
+
+fn markWord(m typed.Mark) String {
+    return match m {
+        case typed.Mark.None: "N"
+        case typed.Mark.Bare: "B"
+        case typed.Mark.Of(l): $"O" $I64(l)
+        case typed.Mark.Return: "R"
+        case typed.Mark.Infer: "I"
+        case typed.Mark.TypeVar: "T"
+    }
+}
+
+# what a judging read of body x, as words: whether it was judged, and its summary - "?" where the summary cannot be
+# written (a judging that read it is not written)
+fn (s mut Scoper&) readText(x I64) String {
+    if x < 0 or x >= s.Bodies.Len(): return "?"
+    name := s.NameOf(x)
+    if name == "": return "?"
+    if s.sums[x].Done and not s.sums[x].Judging {
+        had := try s.sumTextAt.Get(x) catch default ""
+        if had != "": return had
+    }
+    text := try s.sumText(x) catch typed.Unwritable default "?"
+    if text == "?": return "?"
+    out := $name "\t" $("j" if s.judged[x] else "n") " " $text
+    if s.sums[x].Done and not s.sums[x].Judging { s.sumTextAt.Put(x, out) }
+    return out
+}
+
+# ---- terms and summaries as words ----
+
+fn (s mut Scoper&) termWord(t Term) String ? typed.Unwritable {
+    return match t {
+        case Term.None: "N"
+        case Term.Block(b): $"B" $I64(b)
+        case Term.Var(i): $"V" $i
+        case Term.Program: "P"
+        case Term.Derived(p, w): $"D" $p "/" $w
+        case Term.Untraced: "U"
+        case _: error typed.Unwritable.Here
+    }
+}
+
+fn (s mut Scoper&) termOfWord(w String&) Term ? typed.Unwritable {
+    if w == "N": return Term.None
+    if w == "P": return Term.Program
+    if w == "U": return Term.Untraced
+    if w.Len() < 2: error typed.Unwritable.Here
+    rest := w[1:]
+    if w[0] == 'D' {
+        slash := try rest.Find("/") catch { error typed.Unwritable.Here }
+        p := try rest[:slash].ParseInt() catch { error typed.Unwritable.Here }
+        q := try rest[slash + 1:].ParseInt() catch { error typed.Unwritable.Here }
+        return Term.Derived(p, q)
+    }
+    n := try rest.ParseInt() catch { error typed.Unwritable.Here }
+    return match w[0] {
+        case 'B': Term.Block(typed.BlockId(I32(n)))
+        case 'V': Term.Var(n)
+        case _: error typed.Unwritable.Here
+    }
+}
+
+fn (s mut Scoper&) termsWord(ts Vec<Term>&) String ? typed.Unwritable {
+    b := StringBuilder()
+    b.Push("t")
+    for t in ts { b.Push($"," $(try s.termWord(t))) }
+    return b.ToString()
+}
+
+fn (s mut Scoper&) termsOfWord(w String&, into mut Vec<Term>&) ? typed.Unwritable {
+    if not w.StartsWith("t"): error typed.Unwritable.Here
+    for x in w[1:].Split(",") {
+        if x != "": into.Push(try s.termOfWord(x))
+    }
+}
+
+fn boolsWord(xs Vec<Bool>&) String {
+    b := StringBuilder()
+    b.Push("b")
+    for x in xs { b.PushChar('1' if x else '0') }
+    return b.ToString()
+}
+
+fn boolsOfWord(w String&, into mut Vec<Bool>&) ? typed.Unwritable {
+    if not w.StartsWith("b"): error typed.Unwritable.Here
+    for i in range 1, w.Len() {
+        if w[i] != '0' and w[i] != '1': error typed.Unwritable.Here
+        into.Push(w[i] == '1')
+    }
+}
+
+fn intsWord(xs Vec<I64>&) String {
+    b := StringBuilder()
+    b.Push("i")
+    for x in xs { b.Push($"," $x) }
+    return b.ToString()
+}
+
+fn intsOfWord(w String&, into mut Vec<I64>&) ? typed.Unwritable {
+    if not w.StartsWith("i"): error typed.Unwritable.Here
+    for x in w[1:].Split(",") {
+        if x == "": continue
+        into.Push(try x.ParseInt() catch { error typed.Unwritable.Here })
+    }
+}
+
+# body b's summary as words, the same for the same summary: its relations, its flags by variable and parameter, where
+# it first builds into each variable, its result's bindings, its fields' bindings, its derived scopes, the functions its
+# returns give and its own flags. A summary holding a term of a set, or an instance's record (T22d), cannot be written
+fn (s mut Scoper&) sumText(b I64) String ? typed.Unwritable {
+    return try s.sumWords(s.sums[b])
+}
+
+fn (s mut Scoper&) sumWords(sm summary&) String ? typed.Unwritable {
+    if sm.ResInst.Nodes.Len() > 0: error typed.Unwritable.Here
+    w Vec<String&>
+    rb := StringBuilder()
+    rb.Push("r")
+    for r in sm.Rels {
+        rb.Push($";" $(try s.termWord(r.Hi)) "," $(try s.termWord(r.Lo)) "," $(1 if r.Exact else 0) "," $r.At.Start "," $r.At.End)
+        rb.Push($"," $r.Why "," $(1 if r.View else 0) "," $(1 if r.Bind else 0))
+    }
+    w.Push(rb.ToString())
+    for xs in Array<Vec<Bool>&>[sm.Builds, sm.Real, sm.Keeps, sm.Stores, sm.Puts, sm.CapKeeps, sm.CapStores, sm.CapPuts] { w.Push(boolsWord(xs)) }
+    ab := StringBuilder()
+    ab.Push("a")
+    for k in range sm.BuildFile.Len() {
+        f := "-" if sm.BuildFile[k] < 0 else s.fileIdentity(sm.BuildFile[k])
+        if f == "" or f.Contains(" ") or f.Contains(","): error typed.Unwritable.Here
+        ab.Push($"," $f ":" $sm.BuildAt[k].Start ":" $sm.BuildAt[k].End)
+    }
+    w.Push(ab.ToString())
+    w.Push(try s.termsWord(sm.ResBind))
+    w.Push(intsWord(sm.FieldFrom))
+    w.Push(try s.termsWord(sm.FieldTerms))
+    w.Push(intsWord(sm.DerivedP))
+    w.Push(intsWord(sm.DerivedW))
+    w.Push(try s.recsWord(sm.ResFn))
+    w.Push($"f" $(1 if sm.HandsBack else 0) $(1 if sm.Erred else 0) $(1 if sm.Done else 0) $(1 if sm.Judging else 0))
+    return w.Join(" ")
+}
+
+# a function value's records as one word: Full, Late and Loose, then each record's body (by its stable name, its
+# adapter flag) and captures
+fn (s mut Scoper&) recsWord(rs fnRecs&) String ? typed.Unwritable {
+    b := StringBuilder()
+    b.Push($"c" $(1 if rs.Full else 0) "/" $(intsWord(rs.Late)) "/" $(intsWord(rs.Loose)))
+    for r in rs.Recs {
+        if r.Body < 0 or r.Body >= s.Bodies.Len(): error typed.Unwritable.Here
+        name := s.NameOf(r.Body)
+        if name == "": error typed.Unwritable.Here
+        b.Push($"/" $(name.Replace(" ", "~")) "=" $(1 if r.Adapter else 0) "=" $(try s.termsWord(r.Caps)))
+    }
+    return b.ToString()
+}
+
+fn (s mut Scoper&) recsOfWord(w String&) fnRecs ? typed.Unwritable {
+    if not w.StartsWith("c"): error typed.Unwritable.Here
+    parts := w[1:].Split("/").ToVec()
+    if parts.Len() < 3: error typed.Unwritable.Here
+    rs := fnRecs()
+    rs.Full = parts[0] == "1"
+    try intsOfWord(parts[1], rs.Late)
+    try intsOfWord(parts[2], rs.Loose)
+    for i in range 3, parts.Len() {
+        f := parts[i].Split("=").ToVec()
+        if f.Len() != 3: error typed.Unwritable.Here
+        body := try s.nameAt.Get(f[0].Replace("~", " ")) catch { error typed.Unwritable.Here }
+        caps Vec<Term>
+        try s.termsOfWord(f[2], caps)
+        rs.Recs.Push(fnRec(body, caps, f[1] == "1"))
+    }
+    return rs
+}
+
+# the summary sumText wrote, for body b
+fn (s mut Scoper&) sumOfText(text String&) summary ? typed.Unwritable {
+    w := text.Split(" ").ToVec()
+    if w.Len() != 17: error typed.Unwritable.Here
+    sm := summary()
+    if not w[0].StartsWith("r"): error typed.Unwritable.Here
+    for x in w[0][1:].Split(";") {
+        if x == "": continue
+        f := x.Split(",").ToVec()
+        if f.Len() != 8: error typed.Unwritable.Here
+        start := try f[3].ParseInt() catch { error typed.Unwritable.Here }
+        end := try f[4].ParseInt() catch { error typed.Unwritable.Here }
+        why := try f[5].ParseInt() catch { error typed.Unwritable.Here }
+        sm.Rels.Push(rel(try s.termOfWord(f[0]), try s.termOfWord(f[1]), f[2] == "1", source.Span(I32(start), I32(end)), why, f[6] == "1", f[7] == "1"))
+    }
+    try boolsOfWord(w[1], sm.Builds)
+    try boolsOfWord(w[2], sm.Real)
+    try boolsOfWord(w[3], sm.Keeps)
+    try boolsOfWord(w[4], sm.Stores)
+    try boolsOfWord(w[5], sm.Puts)
+    try boolsOfWord(w[6], sm.CapKeeps)
+    try boolsOfWord(w[7], sm.CapStores)
+    try boolsOfWord(w[8], sm.CapPuts)
+    if not w[9].StartsWith("a"): error typed.Unwritable.Here
+    for x in w[9][1:].Split(",") {
+        if x == "": continue
+        f := x.Split(":").ToVec()
+        if f.Len() != 3: error typed.Unwritable.Here
+        file := -1 if f[0] == "-" else try s.fileOfIdentity(f[0])
+        start := try f[1].ParseInt() catch { error typed.Unwritable.Here }
+        end := try f[2].ParseInt() catch { error typed.Unwritable.Here }
+        sm.BuildFile.Push(file)
+        sm.BuildAt.Push(source.Span(I32(start), I32(end)))
+    }
+    try s.termsOfWord(w[10], sm.ResBind)
+    try intsOfWord(w[11], sm.FieldFrom)
+    try s.termsOfWord(w[12], sm.FieldTerms)
+    try intsOfWord(w[13], sm.DerivedP)
+    try intsOfWord(w[14], sm.DerivedW)
+    sm.ResFn = try s.recsOfWord(w[15])
+    fl := w[16]
+    if fl.Len() != 5 or not fl.StartsWith("f"): error typed.Unwritable.Here
+    sm.HandsBack = fl[1] == '1'
+    sm.Erred = fl[2] == '1'
+    sm.Done = fl[3] == '1'
+    sm.Judging = fl[4] == '1'
+    return sm
+}
+
+fn (s Scoper&) fileOfIdentity(identity String&) I64 ? typed.Unwritable {
+    for m in s.P.L.Mods {
+        if m.Identity == identity: return m.File
+    }
+    error typed.Unwritable.Here
+}
+
+# ---- a judging as a record ----
+
+# run's lines for its module's record, "" where it cannot be written: its component's bodies, round, state, what it
+# read, what it asked of the field inference, the calls through values it found, each body's plan and summary, and the
+# state it leaves
+fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
+    if run.Disk is not null: return diskLines(run.Disk!)
+    if not run.Recordable or run.Twinned or run.Diags.Count() > 0 or run.Gaps.Len() > 0 or run.Sig == "" or run.Hidden.Len() != comp.Len() {
+        s.why($"w-rec" $(1 if run.Recordable else 0) "t" $(1 if run.Twinned else 0) "d" $run.Diags.Count() "g" $run.Gaps.Len())
+        return ""
+    }
+    b := StringBuilder()
+    b.Push($"run " $run.Sig.Replace("\n", "\t") "\n")
+    b.Push($"ctx " $run.Ctx "\n")
+    for i in range comp.Len() {
+        r := run.InRun[i]
+        b.Push($"in " $(s.runId(r) if r is not null else run.InDisk[i]) "\n")
+    }
+    for m in s.marksOf(run) { b.Push($"mark " $m "\n") }
+    for x in run.ReadTexts {
+        if x == "?" {
+            s.why("w-read?")
+            return ""
+        }
+        b.Push($"read " $x "\n")
+    }
+    for d in run.WantDecl { b.Push($"want decl " $s.declWord(d) "\n") }
+    for f in run.WantField { b.Push($"want field " $s.declWord(f.First) " " $f.Second "\n") }
+    b.Push($"hits " $run.WantHits "\n")
+    for v in run.Vrs {
+        i := indexIn(comp, v.Body)
+        if i < 0: return ""
+        vb := StringBuilder()
+        vb.Push($"vr " $i " " $v.Site)
+        for x in v.Recs {
+            name := s.NameOf(x / 2)
+            if name == "": return ""
+            vb.Push($"\t" $name "=" $(x % 2))
+        }
+        b.Push($vb.ToString() "\n")
+    }
+    for i in range comp.Len() {
+        pl := try run.Plans[i].Text() catch typed.Unwritable {
+            s.why("w-plan")
+            return ""
+        }
+        sm := try s.sumWords(run.Sums[i]) catch typed.Unwritable {
+            s.why("w-sum")
+            return ""
+        }
+        b.Push($"body " $(1 if run.Judged[i] else 0) " " $pl "\n")
+        b.Push($"sum " $sm "\n")
+        b.Push($"hid " $run.Hidden[i] "\n")
+    }
+    b.Push($"out " $s.runId(run) "\n")
+    return b.ToString()
+}
+
+fn indexIn(xs Array<I64>&, x I64) I64 {
+    for i in range xs.Len() {
+        if xs[i] == x: return i
+    }
+    return -1
+}
+
+fn diskLines(d diskRun&) String {
+    b := StringBuilder()
+    b.Push($"run " $d.Sig.Replace("\n", "\t") "\n")
+    b.Push($"ctx " $d.Ctx "\n")
+    for x in d.In { b.Push($"in " $x "\n") }
+    for x in d.Marks { b.Push($"mark " $x "\n") }
+    for x in d.Reads { b.Push($"read " $x "\n") }
+    for x in d.Wants { b.Push($"want " $x "\n") }
+    b.Push($"hits " $d.Hits "\n")
+    for x in d.Vrs { b.Push($"vr " $x "\n") }
+    for i in range d.Plans.Len() {
+        b.Push($"body " $(1 if d.Judged[i] else 0) " " $d.Plans[i] "\n")
+        b.Push($"sum " $d.Sums[i] "\n")
+        b.Push($"hid " $d.Hidden[i] "\n")
+    }
+    b.Push($"out " $d.Out "\n")
+    return b.ToString()
+}
+
+# a record's judgings, read: each "run" up to its "out" - a line out of place, and the record is not read
+fn ReadRuns(text String&, into mut Map<String, Vec<diskRun>>&) ? typed.Unwritable {
+    cur mut diskRun?& = null
+    for line in text.Lines() {
+        if line == "": continue
+        sp := try line.Find(" ") catch { error typed.Unwritable.Here }
+        word := line[:sp]
+        rest := line[sp + 1:]
+        if word == "run" {
+            if cur is not null: error typed.Unwritable.Here
+            cur = diskRun($rest.Replace("\t", "\n"))
+            continue
+        }
+        if cur is null: error typed.Unwritable.Here
+        d := cur
+        match word {
+            case "ctx" { d.Ctx = rest }
+            case "in" { d.In.Push(rest) }
+            case "mark" { d.Marks.Push(rest) }
+            case "read" { d.Reads.Push(rest) }
+            case "want" { d.Wants.Push(rest) }
+            case "hits" { d.Hits = try rest.ParseInt() catch { error typed.Unwritable.Here } }
+            case "vr" { d.Vrs.Push(rest) }
+            case "body" {
+                if rest.Len() < 2: error typed.Unwritable.Here
+                d.Judged.Push(rest[0] == '1')
+                d.Plans.Push(rest[2:])
+            }
+            case "sum" { d.Sums.Push(rest) }
+            case "hid" { d.Hidden.Push(rest) }
+            case "out" {
+                d.Out = rest
+                if d.Plans.Len() != d.Sums.Len() or d.Plans.Len() != d.In.Len() or d.Hidden.Len() != d.In.Len(): error typed.Unwritable.Here
+                had := try into.Get(d.Sig) catch default Vec<diskRun>()
+                had.Push(d)
+                into.Put(d.Sig, had)
+                cur = null
+            }
+            case _ { error typed.Unwritable.Here }
+        }
+    }
+    if cur is not null: error typed.Unwritable.Here
+}
+
+fn (s mut Scoper&) whyNot0(comp Array<I64>&) String {
+    for k in range s.compFrom.Len() {
+        if s.compNodes[s.compFrom[k]] == comp[0] and k < s.runs.Len() and s.runs[k].Len() > 0: return s.whyNot(k)
+    }
+    return "?"
+}
+
+# OLANG_CHECKINCR (T4 over the scope pass): this pass, which took judgings from records, against o, which judged the
+# same program without them - each body's plan, summary and whether it was judged, the calls through values found and
+# the gaps; a line for each difference
+fn (s mut Scoper&) Compare(o mut Scoper&) Vec<String&> {
+    out Vec<String&>
+    if s.Plans.Len() != o.Plans.Len() or s.sums.Len() != o.sums.Len() {
+        out.Push($"scope: " $s.Plans.Len() " plans, " $o.Plans.Len() " judged afresh")
+        return out
+    }
+    for b in range s.Plans.Len() {
+        what := ""
+        if s.judged[b] != o.judged[b] { what = "whether it was judged" }
+        if what == "" and s.Plans[b].Shown() != o.Plans[b].Shown() { what = $"its plan: " $s.Plans[b].Shown() " against " $o.Plans[b].Shown() }
+        mine := try s.sumText(b) catch typed.Unwritable default "?"
+        theirs := try o.sumText(b) catch typed.Unwritable default "?"
+        if what == "" and (mine != theirs or not sameSummary(s.sums[b], o.sums[b])) { what = $"its summary: " $mine " against " $theirs }
+        if what == "": continue
+        out.Push($"scope: " $(s.NameOf(b) if s.NameOf(b) != "" else $"body " $b) " differs in " $what)
+        if out.Len() >= 20: return out
+    }
+    for e in s.valueRecs {
+        if not o.valueRecs.Has(e.Key) or (try o.valueRecs.Get(e.Key) catch default Array<I64>(0)) != e.Value { out.Push($"scope: the calls through a value of body " $e.Key.First " differ") }
+    }
+    if s.valueRecs.Len() != o.valueRecs.Len(): out.Push("scope: the calls through values found differ")
+    if s.Gaps.Len() != o.Gaps.Len(): out.Push("scope: the gaps differ")
+    if s.TwinCount() != o.TwinCount(): out.Push("scope: the twins differ")
+    return out
+}
+
+# what the records gave, for OLANG_SCOPESTATS
+fn (s Scoper&) DiskStats() String {
+    n := 0
+    for e in s.Disk { n += e.Value.Len() }
+    return $n " judgings in " $s.Eligible.Len() " modules' records, " $s.DiskTaken " taken, " $s.DiskChecked " checked, " $s.Restarts " restarts " $s.DiskWhy
+}
+
+# a record's judgings given to the pass: all of them, or none where a line is out of place
+fn (s mut Scoper&) AddRecord(text String&) ? typed.Unwritable {
+    runs Map<String, Vec<diskRun>>
+    try ReadRuns(text, runs)
+    for e in runs {
+        had := try s.Disk.Get(e.Key) catch default Vec<diskRun>()
+        for d in e.Value { had.Push(d) }
+        s.Disk.Put(e.Key, had)
+    }
+}
+
+# ---- the state a judging leaves a body in, as words ----
+#
+# What a later judging of the same body reads of an earlier one's: its field sets (W4), the declarations a derived
+# scope was read through (derivedDecl), whether its definitions' terms only grow (verUnion), its fresh definitions
+# (freshDefs) and the records followed into a lambda's captures (capSeen, capSeeds) - written with the judging, and given
+# back where it is taken, so that a judging made later from it starts where a judging made in this build would
+
+fn (s mut Scoper&) hiddenText(b I64) String ? typed.Unwritable {
+    w Vec<String&>
+    fb := try s.fsets.Get(b) catch default fsBody()
+    had := s.fsets.Has(b)
+    fs := StringBuilder()
+    fs.Push($"fs" $(1 if had else 0))
+    for row in fb.Rows { fs.Push($";" $row.Key ":" $(try s.termWord(row.T))) }
+    w.Push(fs.ToString())
+    for o in fb.Open {
+        c := s.P.T.CanonNamed(o.T)
+        if c.Contains("\t") or c.Contains("\n") or c == "": error typed.Unwritable.Here
+        w.Push($"o" $(1 if o.Inside else 0) $c)
+    }
+    for e in s.derivedDecl {
+        if e.Key.First / 65536 == b: w.Push($"dd" $(e.Key.First % 65536) ":" $e.Key.Second ":" $s.declWord(e.Value))
+    }
+    if s.verUnion.Has(b): w.Push("vu")
+    for e in s.freshDefs {
+        if e.Key.First == b: w.Push($"fd" $e.Key.Second)
+    }
+    for e in s.capSeen {
+        if e.Key.First != b: continue
+        rs := try s.capSeeds.Get(e.Key) catch default fnRecs()
+        w.Push($"cs" $e.Key.Second ":" $(try s.recsWord(rs)))
+    }
+    out := w.Join("\t")
+    return out
+}
+
+# body b's state given back as a record says it (hiddenText); its field sets read only when it is judged (readFsets)
+fn (s mut Scoper&) restoreHidden(b I64, text String&) {
+    parts := text.Split("\t").ToVec()
+    s.fsets.Remove(b)
+    s.fsPending.Put(b, text)
+    gone Vec<pair.Pair<I64, I64>>
+    for k in s.derivedDecl.Keys() {
+        if k.First / 65536 == b: gone.Push(k)
+    }
+    for k in gone { s.derivedDecl.Remove(k) }
+    s.verUnion.Remove(b)
+    gone.Clear()
+    for k in s.freshDefs.Keys() {
+        if k.First == b: gone.Push(k)
+    }
+    for k in gone { s.freshDefs.Remove(k) }
+    gone.Clear()
+    for k in s.capSeen.Keys() {
+        if k.First == b: gone.Push(k)
+    }
+    for k in gone {
+        s.capSeen.Remove(k)
+        s.capSeeds.Remove(k)
+    }
+    for x in parts {
+        if x.StartsWith("dd") {
+            f := x[2:].Split(":").ToVec()
+            p := -1
+            q := -1
+            dl := -2
+            if f.Len() >= 3 {
+                p = try f[0].ParseInt() catch default -1
+                q = try f[1].ParseInt() catch default -1
+                word := x[2 + f[0].Len() + f[1].Len() + 2:]
+                dl = -1 if word == "-" else try s.declOfWord(word) catch typed.Unwritable default -2
+            }
+            if p < 0 or dl == -2 {
+                s.Restart = true
+                continue
+            }
+            s.derivedDecl.Put(pair.Pair<I64, I64>(b * 65536 + p, q), dl)
+        } else if x == "vu" {
+            s.verUnion.Put(b, true)
+        } else if x.StartsWith("fd") {
+            k := try x[2:].ParseInt() catch default -1
+            if k < 0 {
+                s.Restart = true
+                continue
+            }
+            s.freshDefs.Put(pair.Pair<I64, I64>(b, k), true)
+        } else if x.StartsWith("cs") {
+            colon := try x.Find(":") catch default -1
+            l := -1
+            if colon > 2 { l = try x[2:colon].ParseInt() catch default -1 }
+            if l < 0 {
+                s.Restart = true
+                continue
+            }
+            rs := try s.recsOfWord(x[colon + 1:]) catch typed.Unwritable {
+                s.Restart = true
+                continue
+            }
+            s.capSeen.Put(pair.Pair<I64, I64>(b, l), true)
+            if rs.Recs.Len() > 0: s.capSeeds.Put(pair.Pair<I64, I64>(b, l), rs)
+        }
+    }
+}
+
+# a body taken from a record judged now: its field sets read from the record's words - where they cannot be, the
+# build's judging starts over without records
+fn (s mut Scoper&) readFsets(b I64) {
+    text := try s.fsPending.Get(b) catch { return }
+    s.fsPending.Remove(b)
+    fb := fsBody()
+    had := false
+    for x in text.Split("\t") {
+        if x.StartsWith("fs") {
+            had = x.StartsWith("fs1")
+            for r in x[3:].Split(";") {
+                if r == "": continue
+                colon := try r.Find(":") catch default -1
+                key := -1
+                if colon > 0 { key = try r[:colon].ParseInt() catch default -1 }
+                t := try s.termOfWord(r[colon + 1:]) catch typed.Unwritable default Term.Set(-1)
+                if key < 0 or t == Term.Set {
+                    s.Restart = true
+                    return
+                }
+                fb.Rows.Push(fsRow(key, t))
+            }
+        } else if x.StartsWith("o") and x.Len() > 2 {
+            t := s.typeOfCanon(x[2:])
+            if t == types.UnknownT {
+                s.Restart = true
+                return
+            }
+            fb.Open.Push(fsOpen(t, x[1] == '1'))
+        }
+    }
+    if had: s.fsets.Put(b, fb)
+}
+
+# a type by its canonical text (types.Canon, with its function types' parameter names), UnknownT for none
+fn (s mut Scoper&) typeOfCanon(c String&) types.TypeId {
+    for {
+        t := try s.canonAt.Get(c) catch default types.UnknownT
+        if t != types.UnknownT or s.canonMade >= s.P.T.TypeCount(): return t
+        n := s.P.T.TypeCount()
+        for i in range s.canonMade, n {
+            id := types.TypeId(I32(i))
+            k := s.P.T.CanonNamed(id)
+            if not s.canonAt.Has(k): s.canonAt.Put(k, id)
+        }
+        s.canonMade = n
+    }
+}
+
+# ---- taking a record's judging ----
+
+# the first of the records' judgings of component comp whose state, round and reads are this build's - null for none
+fn (s mut Scoper&) diskFor(comp Array<I64>&, report Bool) diskRun?& {
+    if not s.DiskOn or s.Disk.Len() == 0 or not s.recordable(comp): return null
+    for b in comp {
+        if not s.Eligible.Has(s.Bodies[b].File): return null
+    }
+    cands := try s.Disk.Get(s.sigOf(comp)) catch {
+        s.why("nosig")
+        return null
+    }
+    ctx := s.ctxText(report)
+    for d in cands {
+        if d.Ctx != ctx or d.In.Len() != comp.Len() {
+            s.why("ctx")
+            continue
+        }
+        if s.diskHolds(d, comp): return d
+    }
+    return null
+}
+
+fn (s mut Scoper&) why(w String&) {
+    s.whyN.Put(w, (try s.whyN.Get(w) catch default 0) + 1)
+    s.DiskWhy = ""
+    for e in s.whyN { s.DiskWhy = $s.DiskWhy " " $e.Key "=" $e.Value }
+}
+
+fn (s mut Scoper&) diskHolds(d diskRun&, comp Array<I64>&) Bool {
+    for i in range comp.Len() {
+        if d.In[i] != s.stateOf(comp[i]) {
+            s.why("in")
+            return false
+        }
+    }
+    for m in d.Marks {
+        tab := try m.Find("\t") catch { return false }
+        ctor := try s.nameAt.Get(m[:tab]) catch { return false }
+        f := m[tab + 1:].Split(" ").ToVec()
+        if f.Len() != 2: return false
+        k := try f[0].ParseInt() catch { return false }
+        if not s.isCtorBody(ctor) or k < 0 or k >= s.Bodies[ctor].Fields.Len(): return false
+        if markWord(s.fieldMarkOf(ctor, k)) != f[1]: return false
+    }
+    for r in d.Reads {
+        tab := try r.Find("\t") catch { return false }
+        x := try s.nameAt.Get(r[:tab]) catch { return false }
+        if s.readText(x) != r {
+            if s.whyN.Len() < 3 { s.TraceLog.Push($"read differs: had " $r "\nnow " $s.readText(x)) }
+            s.why("read")
+            return false
+        }
+    }
+    return true
+}
+
+# record d's judging of component comp taken: its plans, summaries and the rest given as a judging made now would
+# give them, and a compRun of it for the rounds after (takeable). Null where a part of it cannot be read
+fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
+    run mut compRun& = compRun()
+    run.Disk = d
+    run.Sig = d.Sig
+    run.Ctx = d.Ctx
+    for i in range comp.Len() {
+        b := comp[i]
+        pl := try typed.Plan.Read(s.Bodies[b], d.Plans[i]) catch typed.Unwritable {
+            s.why("plan")
+            if s.whyN.Len() < 6 { s.TraceLog.Push($"plan unread: " $d.Plans[i]) }
+            return null
+        }
+        sm := try s.sumOfText(d.Sums[i]) catch typed.Unwritable {
+            s.why("sum")
+            if s.whyN.Len() < 6 { s.TraceLog.Push($"sum unread: " $d.Sums[i]) }
+            return null
+        }
+        run.Plans.Push(pl)
+        run.Sums.Push(sm)
+        run.Judged.Push(d.Judged[i])
+    }
+    for m in d.Marks {
+        tab := try m.Find("\t") catch { return null }
+        ctor := try s.nameAt.Get(m[:tab]) catch { return null }
+        k := try m[tab + 1:].Split(" ").ToVec()[0].ParseInt() catch { return null }
+        run.Marks.Push(markRead(ctor, k, s.fieldMarkOf(ctor, k)))
+    }
+    for r in d.Reads {
+        tab := try r.Find("\t") catch { return null }
+        x := try s.nameAt.Get(r[:tab]) catch { return null }
+        run.Read.Push(sumRead(x, s.sums[x]))
+        run.ReadTexts.Push(r)
+    }
+    for w in d.Wants {
+        f := w.Split(" ").ToVec()
+        if f.Len() < 2: return null
+        dl := try s.declOfWord(f[1]) catch typed.Unwritable { return null }
+        if f[0] == "decl" {
+            run.WantDecl.Push(dl)
+        } else {
+            if f.Len() != 3: return null
+            run.WantField.Push(pair.Pair<I64, I64>(dl, try f[2].ParseInt() catch { return null }))
+        }
+    }
+    run.WantHits = d.Hits
+    for v in d.Vrs {
+        f := v.Split("\t").ToVec()
+        head := f[0].Split(" ").ToVec()
+        if head.Len() != 2: return null
+        i := try head[0].ParseInt() catch { return null }
+        site := try head[1].ParseInt() catch { return null }
+        if i < 0 or i >= comp.Len(): return null
+        recs := Array<I64>(f.Len() - 1)
+        for j in range 1, f.Len() {
+            eq := try f[j].Find("=") catch { return null }
+            x := try s.nameAt.Get(f[j][:eq]) catch { return null }
+            recs[j - 1] = 2 * x + (1 if f[j][eq + 1:] == "1" else 0)
+        }
+        run.Vrs.Push(vrRow(comp[i], site, recs))
+    }
+    run.Recordable = true
+    run.Id = d.Out
+    return run
+}
+
+# the records' lines of every module kept (Keyed), by file: the judgings of the components whose first body is there
+fn (s mut Scoper&) Records() Map<I64, String&> {
+    at Map<I64, I64>
+    parts Vec<StringBuilder>
+    files Vec<I64>
+    for k in range s.compFrom.Len() {
+        if k >= s.runs.Len(): break
+        end := s.compFrom[k + 1] if k + 1 < s.compFrom.Len() else s.compNodes.Len()
+        comp := Array<I64>(end - s.compFrom[k])
+        for i in range comp.Len() { comp[i] = s.compNodes[s.compFrom[k] + i] }
+        if not s.recordable(comp): continue
+        file := s.Bodies[comp[0]].File
+        for run in s.runs.Ref(k) {
+            text := s.RunRecord(run, comp)
+            if text == "": continue
+            i := try at.Get(file) catch default -1
+            if i < 0 {
+                i = parts.Len()
+                at.Put(file, i)
+                parts.Push(StringBuilder())
+                files.Push(file)
+            }
+            parts.RefMut(i).Push(text)
+        }
+    }
+    out Map<I64, String&>
+    for i in range files.Len() { out.Put(files[i], parts[i].ToString()) }
+    return out
+}
+
 # ---- tests: the plan and the summaries ----
 
 if TestBuild {
@@ -14587,10 +15717,10 @@ if TestBuild {
         fp := bodyAt(l, c.Bodies, 15)
         fg := bodyAt(l, c.Bodies, 20)
         assert g >= 0 and fp >= 0 and fg >= 0
-        assert s.sums[g].Builds[0] and s.sums[g].Real[0]
-        assert s.sums[fg].Builds[0] and s.sums[fg].Real[0]
-        assert s.sums[fp].Builds[0], "fanPeek makes a stand-in of its list's scope"
-        assert not s.sums[fp].Real[0], "fanPeek builds into no real scope"
+        assert s.sum(g).Builds[0] and s.sum(g).Real[0]
+        assert s.sum(fg).Builds[0] and s.sum(fg).Real[0]
+        assert s.sum(fp).Builds[0], "fanPeek makes a stand-in of its list's scope"
+        assert not s.sum(fp).Real[0], "fanPeek builds into no real scope"
     }
 
     jpArrays String& = ("type E enum {\n"
