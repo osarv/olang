@@ -36454,4 +36454,21 @@ asserts that the program's modules whose functions the scope pass judged afresh 
 `lsp.olang` edits a library step by step (an O10c error brought in and taken out, a type error, a body changed) and
 after each step runs a server session from the directory the steps before left their records in - what it publishes
 is what `olang build` says of the same text, rule and line, and every session after the first takes judgings from the
-records. T5, T7 and the bootstrap: measured below.
+records. **T5**: the edit fuzzer (seed 7, 20 programs of 8 steps) found no build differing from its clean one and no
+record giving what judging afresh does not; its three findings are a W1 matter found on the way (below); the scope fuzzer's
+long run (`make scopefuzz SEED=7 COUNT=1000`): 1000 programs, no finding. **T7**, once: the last 100 commits touching
+compiler/ built one after another in one directory (front end, `OLANG_CHECKINCR`): 99 build in today's language, the
+pass with records the pass without in every one; a commit judged ~2,200 of its ~13,700 components afresh on average
+(the rest taken), the scope judging's median 1.5 s against 4.7-4.9 s judging all. **T8**, the bootstrap: stage 1 built
+stage 2 twice in one directory, the second taking 12,573 judgings from the first's records, and once clean - the three
+byte for byte the same.
+
+Measured (the compiler, front end only, full objects - each compiler built as the bootstrap builds it): a no-op build
+5.6-6.1 s before, 4.2 s now; a leaf edit (a comment in `lsp.olang`) 5.7-5.8 s before, 4.1-4.4 s now. Of it, section 8's
+judging 4.9 s to 0.75-1.0 s; reading and writing the records 0.07 s and 0.08-0.13 s; early freeing, `twinsTo` and
+the lowerer's decisions after it about 0.8 s, as before.
+
+Found on the way, not fixed (lowering's, another round's file): a module whose lowering reads a T13d fact
+(`read plain T13d m1.Bag`, genrefs) that only lowering another module decides is lowered again in every build - its
+record never holds where that module's object is reused (the edit fuzzer's "undoing lowered again", seeds 11, 17 and 21;
+master's compiler finds seed 21 as well). A speed bug, not a stale object: the record is not taken.
