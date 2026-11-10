@@ -1,0 +1,11 @@
+type Bag struct() {
+    items Vec<I64>
+}
+fn main() {
+    b := Bag()
+    b.items.Push(1)
+    f fn&(g Bag) I64 pure = fn(g): return g.items.Len()
+    d := b.items.View()
+    n := f(b)
+    assert d[0] == 1 and n == 1
+}

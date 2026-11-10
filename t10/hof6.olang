@@ -1,0 +1,26 @@
+type Frame struct(d I64) {
+    depth I64 = d
+}
+type Interp struct() {
+    frames Vec<mut Frame&>
+}
+fn (it mut Interp&) step(d I64) I64 {
+    it.frames.Push(Frame(d))
+    f := try it.frames.Last() catch { unreachable }
+    g := fn(x I64) I64 {
+        try it.frames.Pop() catch { }
+        it.frames.Push(Frame(x))
+        return x * 2
+    }
+    r := g(d)
+    r += f.depth
+    try it.frames.Pop() catch { unreachable }
+    return r
+}
+
+fn main() {
+    it := Interp()
+    s I64 = 0
+    for i in range 1000 { s += it.step(i) }
+    assert s > 0
+}

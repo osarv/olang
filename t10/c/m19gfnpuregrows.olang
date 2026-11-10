@@ -1,0 +1,12 @@
+# check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+# also: note: 'v' may grow here, in a call through a function value
+# M19g (docs/fnvalues.md 4.6): a "pure" value writes through the "mut" arguments it is given - given the Vec writably, it
+# may grow it
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    f fn&(w mut Vec<I64>&) pure = fn(w) { w.Push(2) }
+    d := v.View()
+    f(v)
+    assert d[0] == 1
+}

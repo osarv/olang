@@ -1,0 +1,55 @@
+# check: run
+# O8d (docs/fnvalues.md 4.6): o8dfnpure's place, freed at once where it lets go - its elements read back after each
+# higher-order call and after the arena has been churned, the ones the Vec still holds read back at the end
+type Frame struct(d I64) {
+    depth I64 = d
+    name String = "frame " $d
+}
+type Interp struct(s fn&(x I64) I64 pure) {
+    frames Vec<mut Frame&>
+    scale fn&(x I64) I64 pure = s
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+fn sumPure(xs Array<I64>&, f fn&(x I64) I64 pure) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn sum(xs Array<I64>&, f fn&(x I64) I64) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn twice(xs Array<I64>&, f fn&(x I64) I64) I64 { return sum(xs, f) + sum(xs, f) }
+fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
+    it.frames.Push(Frame(d))
+    it.frames.Push(Frame(d + 1))
+    f := try it.frames.Last() catch { unreachable }
+    r := sumPure(xs, fn(x): return x * 2)
+    r += twice(xs, fn(x): return x + d)
+    r += sum(xs, it.scale)
+    g := fn(x I64) I64 { return x * 3 }
+    r += g(d)
+    assert churn() > 0
+    assert f.depth == d + 1 and f.name == "frame " $(d + 1)
+    got := f.depth
+    try it.frames.Pop() catch { unreachable }
+    return r + got
+}
+fn main() {
+    it := Interp(fn(x): return x + 1)
+    xs := Array<I64>[1, 2, 3]
+    s I64 = 0
+    for i in range 300 { s += it.step(i, xs) }
+    assert churn() > 0
+    assert it.frames.Len() == 300
+    for i in range 300 { assert it.frames[i].depth == i and it.frames[i].name == "frame " $i }
+    assert s == 300 * (12 + 9) + 2 * 6 * 300 + 2 * 3 * (299 * 300 / 2) + 3 * (299 * 300 / 2) + (299 * 300 / 2) + 300
+}

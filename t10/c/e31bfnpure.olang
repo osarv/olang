@@ -1,0 +1,32 @@
+# check: run
+# E31b (docs/fnvalues.md 4.6): calls writing through x[i] made on the element in place though given a function value -
+# a lambda written at the call and a value held as "pure", for a parameter whose type promises "pure" - and though the
+# method calls through the element's own "pure" field: each writes only through the "mut" arguments it is given, never
+# the collection. What the elements were given is read back after the arena has been churned
+type Acc struct(f fn&(x I64) I64 pure) {
+    n I64 = 0
+    log Vec<I64> = Vec<I64>()
+    scale fn&(x I64) I64 pure = f
+}
+fn (a mut Acc&) Add(x I64, f fn&(x I64) I64 pure) {
+    a.n += f(x)
+    a.log.Push(a.scale(x))
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+fn main() ? {
+    accs := Vec<Acc>()
+    for _ in range 3 { accs.Push(Acc(fn(x): return x * 3)) }
+    g fn&(x I64) I64 pure = fn(x): return x + 1
+    for i in range 30 { accs[i % 3].Add(i, fn(x): return x * 2) }
+    for i in range 30 { accs[i % 3].Add(i, g) }
+    assert churn() > 0
+    assert accs[0].log.Len() == 20 and accs[0].log[1] == 9 and accs[2].log[19] == 87
+    assert accs[1].n == 2 * (1 + 4 + 7 + 10 + 13 + 16 + 19 + 22 + 25 + 28) + (1 + 4 + 7 + 10 + 13 + 16 + 19 + 22 + 25 + 28) + 10
+}

@@ -1,0 +1,28 @@
+# check: run
+# M19g (docs/fnvalues.md 4.6): what a call through a function value grows - a "pure" value given a Vec's holder by value
+# grows nothing of the caller's, a lambda called where it is written given the Vec writably grows what its body grows
+# (it only sets an element) - so the views held across them stay the Vec's; read back after the arena has been churned
+type Bag struct() {
+    items Vec<I64>
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    b := Bag()
+    b.items.Push(7)
+    f fn&(g Bag) I64 pure = fn(g): return g.items.Len()
+    d := v.View()
+    e := b.items.View()
+    n := f(b)
+    fn(w mut Vec<I64>&) { w[0] = 3 }(v)
+    assert churn() > 0
+    assert d[0] == 3 and e[0] == 7 and n == 1
+}

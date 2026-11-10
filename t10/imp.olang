@@ -1,0 +1,22 @@
+type Interp struct() {
+    frames Vec<I64>
+}
+fn total(xs Array<I64>&, f fn&(x I64) I64 pure) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn main() {
+    it0 := Interp()
+    it mut Interp& = it0
+    xs := Array<I64>[1, 2, 3]
+    g := fn(x I64) I64 {
+        it.frames.Push(x)
+        return x
+    }
+    assert total(xs, g) > 0
+    assert total(xs, fn(x) {
+        it.frames.Push(x)
+        return x
+    }) > 0
+}

@@ -1,0 +1,47 @@
+# check: build
+# flags: -memory
+# also: memory: 1 place lets go of storage in code that runs again - 1 frees it at once, 0 keep it
+# never: keeps what it lets go of
+# never: removed elements of
+# O8d (docs/fnvalues.md 4.6): calls through function values judged by what is followed and promised - a callback whose
+# parameter's type promises "pure" given no argument that may write lets go of nothing; a lambda given a parameter
+# promising nothing, through two higher-order calls, lets go of what its body does (letsVia); a "pure" value held in a
+# field given such a parameter, by its type; a local lambda called, as its body. So 'f', a view of an element of
+# 'it.frames' used after each, keeps nothing: the place frees what it lets go of at once
+type Frame struct(d I64) {
+    depth I64 = d
+}
+type Interp struct(s fn&(x I64) I64 pure) {
+    frames Vec<mut Frame&>
+    scale fn&(x I64) I64 pure = s
+}
+fn sumPure(xs Array<I64>&, f fn&(x I64) I64 pure) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn sum(xs Array<I64>&, f fn&(x I64) I64) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn twice(xs Array<I64>&, f fn&(x I64) I64) I64 { return sum(xs, f) + sum(xs, f) }
+fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
+    it.frames.Push(Frame(d))
+    f := try it.frames.Last() catch { unreachable }
+    r := sumPure(xs, fn(x): return x * 2)
+    r += twice(xs, fn(x): return x + d)
+    r += sum(xs, it.scale)
+    g := fn(x I64) I64 { return x * 3 }
+    r += g(d)
+    r += f.depth
+    try it.frames.Pop() catch { unreachable }
+    return r
+}
+fn main() {
+    it := Interp(fn(x): return x + 1)
+    xs := Array<I64>[1, 2, 3]
+    s I64 = 0
+    for i in range 1000 { s += it.step(i, xs) }
+    assert s > 0
+}

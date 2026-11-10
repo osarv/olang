@@ -1,0 +1,17 @@
+fn twice(f fn&(x I64) I64, x I64) I64 { return f(f(x)) }
+
+fn main() {
+    m := Map<I64, Vec<I64>>()
+    for k in range 16 {
+        a := Vec<I64>()
+        for j in range 64 { a.Push(k + j) }
+        m.Put(k, a)
+    }
+    g fn&(x I64) I64 = fn(x): return x + 1
+    s I64 = 0
+    for i in range 100000 {
+        s += m.Get(i % 16)![twice(g, i) % 64]
+        s += m.Get(i % 16)![g(i) % 64]
+    }
+    assert s > 0
+}

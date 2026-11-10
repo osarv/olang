@@ -1,0 +1,29 @@
+type Frame struct(d I64) {
+    depth I64 = d
+}
+type Interp struct(f fn&(x I64) I64 pure) {
+    frames Vec<mut Frame&>
+    scale fn&(x I64) I64 pure = f
+}
+fn total(xs Array<I64>&, f fn&(x I64) I64 pure) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
+    it.frames.Push(Frame(d))
+    f := try it.frames.Last() catch { unreachable }
+    r := total(xs, fn(x): return x * 2)
+    r += total(xs, it.scale)
+    r += f.depth
+    try it.frames.Pop() catch { unreachable }
+    return r
+}
+
+fn main() {
+    it := Interp(fn(x): return x + 1)
+    xs := Array<I64>[1, 2, 3]
+    s I64 = 0
+    for i in range 1000 { s += it.step(i, xs) }
+    assert s > 0
+}
