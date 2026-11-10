@@ -3949,14 +3949,15 @@ fn (w mut walker&) letsThrough(c typed.Call&, a typed.Expr&, pty types.TypeId, w
                 w.goAll(sp, c, rb)
                 continue
             }
-            for k in f.lets[rb] { w.go(k, LCall, sp, receiverSpan(c), rb) }
+            # (let go of by the function value given, not by this call's callee: its first argument is no receiver)
+            for k in f.lets[rb] { w.go(k, LCall, sp, source.Span(0, 0), rb) }
         }
         return
     }
     p := w.fixedParam(a)
     if p >= 0 {
         if w.Final {
-            w.go(AnyPlace, LCall, sp, receiverSpan(c), CalleeGiven)
+            w.go(AnyPlace, LCall, sp, source.Span(0, 0), CalleeGiven)
             return
         }
         w.via(p, writes)
@@ -5654,7 +5655,17 @@ fn (f mut Free&) collection(k I64, b I64, row letGo) String {
             if r != "": return r
         }
     }
+    # (a row at a call of the program's own code, which removes in a body of its own or through a function value it
+    # was given: the removal's receiver where it removes, its first argument being no collection)
+    own := row.Callee >= 0 and row.Callee < f.programCode.Len() and f.programCode[row.Callee]
     r := f.recvOf(row)
+    if r != "" and not own: return r
+    for g in f.goes {
+        if g.PlaceId == k and g.Kind != LAssign and g.Callee >= 0 and not f.programCode[g.Callee] {
+            r2 := f.recvOf(g)
+            if r2 != "": return r2
+        }
+    }
     return r if r != "" else "its elements"
 }
 
