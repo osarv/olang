@@ -76,3 +76,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-10: W4 merged, verified, pushed.
 - 2026-11-10: G4 merged, verified, pushed. F12 running.
 - 2026-11-10: F12 merged, verified, pushed.
+- 2026-11-10: G5+G6 merged. FOR REVIEW B: residual soundness gap (temp reference to a shallow copy of a local struct not compared at reclaim sites, genrefs round 5 as built). LRU 7.0 MB: Map key copies of removed entries -> O8d.

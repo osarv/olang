@@ -66,3 +66,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-10	W4	opus	medium	done				pass		field sets; found element-field build use-after-scope; invented compile-apart store for B3i
 2026-11-10	G4	opus	medium	done	556	286	185	fail(goldens,checkir)		reclaiming; dlist 97->1.7MB tree 104->1.8 lru 49->13.8; needed one resume
 2026-11-10	F12	opus	high	done				goldens		fixed fields T22d, trait promise words T30c; design pass in brief
+2026-11-10	G5+G6	opus	medium	done	617	294	133	fail(stored run)		LRU 13.8->7.0 (Map key copies left); fuzzer found 3 bugs; residual gap: temp ref to shallow copy not compared at sites
