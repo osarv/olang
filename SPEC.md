@@ -8198,6 +8198,22 @@ every build. Every body is still checked otherwise (the scope rules of section 8
 and what is built and reported is the same either way. A front record that is not whole, does not match its hash or
 names a fact this build decides otherwise is never taken.
 
+The scope rules of section 8 are judged the same way (**scope records**, `build/rec/NAME.KEY.s...`). Section 8 judges a
+program's bodies over its call graph's strongly connected components, callees first, a component until its obligations
+stop growing (O10b, O10c), and the field inference (O23a) judges the whole program again in rounds. Each judging of a
+component made in a program the rules found nothing wrong in is kept, under the inputs of every module its bodies come
+from (for a generic's instance, the modules declaring its type arguments too), with what it read: the summaries of the
+bodies it reads but its own (their obligations, what they may build into, keep and store), the marks of the constructor
+fields it reads (the field inference's), the round it was judged in, the few sets the rules read of the whole program
+(which fields any body assigns after construction, which bodies a `become` chain holds, the precompiled modules), and
+the judgings of the same bodies before it in the build. A later build finding, at the same point of its rounds, a
+component with the same inputs that reads all the same takes that judging - where each value is built, and what the
+bodies require of their callers - and does not judge the component again; anything else is judged. What is built and
+reported is the same either way: a judging is kept only where nothing in it was wrong, so one taken says nothing, and a
+record that is not whole is never read. `olang lsp` and `olang mcp` check a program as `olang test` does in the
+directory they run in, keeping and taking the same front and scope records, so a check after an edit judges again only
+what the edit reaches.
+
 A module whose object is made apart from the program that uses it - by `compile`, or kept as a library of objects - is
 a **precompiled module**, and at its boundary **the defining module decides**. Every decision its object carries is made
 from that module and the inputs above alone: where the storage its code builds is placed, and which scopes a field it
