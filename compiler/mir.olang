@@ -686,6 +686,11 @@ type GenInfo struct() {
     # Reach: the types a generational type holds in place (its slot), from the types scanned so far
     parts Map<types.TypeId, Bool>
     scanned I64 = 0
+    # genrefs round 5: by type, whether it holds an array of a run-time length in place (Leaves), settled; and whether
+    # some generational type does (AnyLeaves: 0 not asked, 1 no, 2 yes)
+    leaves Map<types.TypeId, Bool>
+    anyLeaves I64 = 0
+    walked Map<types.TypeId, Bool>             # ... the types one walk of HasLeaves or ViewOf has been to
 }
 
 # genrefs 5.3: what a value of type ty - a local's, a value in flight - may reach of the generational instances, as
@@ -718,6 +723,122 @@ fn (g mut GenInfo&) Reach(t types.Table&, ty types.TypeId) I64 {
     return ReachAny if g.HoldsGen(t, rr) else ReachNone
 }
 
+# genrefs round 5: whether a value of type ty holds an array of a run-time length in place - itself one, or a struct's
+# field holding one by value, at any depth (not a payload's, not a fixed array's element's: emit's genLeaves)
+fn (g mut GenInfo&) Leaves(t types.Table&, ty types.TypeId) Bool {
+    r := t.Repr(ty)
+    if g.leaves.Has(r): return try g.leaves.Get(r) catch default false
+    g.leaves.Put(r, false)
+    v := false
+    k := t.KindOf(r)
+    if k == types.Kind.Array and t.Length(r) == types.TypeId(0) {
+        v = true
+    } else if k != types.Kind.Ref and HasFields(t, r) {
+        for f in t.Items(FieldsOf(t, r)) {
+            if not t.IsRef(t.Repr(f)) and g.Leaves(t, f): v = true
+        }
+    }
+    g.leaves.Put(r, v)
+    return v
+}
+
+# whether some generational type of the program holds an array of a run-time length in place - so that a view of one
+# may be into storage reclaiming puts back (round 5)
+fn (g mut GenInfo&) AnyLeaves(t types.Table&) Bool {
+    if g.Decls.Len() == 0: return false
+    if g.anyLeaves == 0 {
+        g.anyLeaves = 1
+        for i in range t.TypeCount() {
+            x := types.TypeId(I32(i))
+            if t.KindOf(x) != types.Kind.Named or t.Repr(x) != x or not g.Decls.Has(I64(t.DeclOf(x))) or not t.HasBody(x): continue
+            if g.Leaves(t, x): g.anyLeaves = 2
+        }
+    }
+    for d in g.Decls.Keys() { g.Asked.Put(d, true) }
+    return g.anyLeaves == 2
+}
+
+# whether reclaiming an instance of the generational type ty may put back arrays held in place: it holds one, or a type
+# it holds through owning references does (what its reclaiming may reclaim in turn)
+fn (g mut GenInfo&) HasLeaves(t types.Table&, ty types.TypeId) Bool {
+    g.walked.Clear()
+    return g.leavesThrough(t, t.Repr(ty), 0)
+}
+
+fn (g mut GenInfo&) leavesThrough(t types.Table&, r types.TypeId, depth I64) Bool {
+    if depth > 32 or g.walked.Has(r): return false
+    g.walked.Put(r, true)
+    g.note(t, r)
+    if g.IsGen(t, r) and g.Leaves(t, r): return true
+    k := t.KindOf(r)
+    if k == types.Kind.Ref: return g.IsGen(t, t.Referent(r)) and g.leavesThrough(t, t.Repr(t.Referent(r)), depth + 1)
+    if k == types.Kind.Array: return g.leavesThrough(t, t.Repr(t.Elem(r)), depth + 1)
+    if HasFields(t, r) {
+        fs := t.Items(FieldsOf(t, r))
+        for i in range fs.Len() {
+            if not g.WeakField(t, r, i) and g.leavesThrough(t, t.Repr(fs[i]), depth + 1): return true
+        }
+        return false
+    }
+    if not HasCases(t, r): return false
+    for c in t.Items(CasesOf(t, r)) {
+        if c == types.TypeId(0): continue
+        for f in t.Items(t.Parts(c)) {
+            if g.leavesThrough(t, t.Repr(f), depth + 1): return true
+        }
+    }
+    return false
+}
+
+# genrefs round 5: how a value of type ty may view an array reclaiming puts back - ViewNone not at all; ViewArray as an
+# array of a run-time length (a value or a reference: its data pointer, compared at a reclaiming site); ViewOther
+# through a part of it (a struct holding one or a reference to one, a function value, an "any" - none put back where it
+# is in use). A reference to anything but such an array views none: what it names holds its arrays as its own storage
+# (a store copies an array into a place), never a view of an instance's
+ViewNone I64 = 0
+ViewArray I64 = 1
+ViewOther I64 = 2
+
+fn (g mut GenInfo&) ViewOf(t types.Table&, ty types.TypeId) I64 {
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k == types.Kind.Func or k == types.Kind.Any: return ViewOther
+    if k == types.Kind.Ref: return ViewArray if runArray(t, t.Repr(t.Referent(r))) else ViewNone
+    if runArray(t, r): return ViewArray
+    g.walked.Clear()
+    return ViewOther if g.holdsArray(t, r, 0) else ViewNone
+}
+
+fn runArray(t types.Table&, r types.TypeId) Bool { return t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0) }
+
+# whether a value of r holds an array of a run-time length, or a reference to one, in place - or a function value or an
+# "any", whose parts are not seen
+fn (g mut GenInfo&) holdsArray(t types.Table&, r types.TypeId, depth I64) Bool {
+    if depth > 32 or g.walked.Has(r): return false
+    g.walked.Put(r, true)
+    k := t.KindOf(r)
+    if k == types.Kind.Func or k == types.Kind.Any or k == types.Kind.Var: return true
+    if k == types.Kind.Ref: return runArray(t, t.Repr(t.Referent(r)))
+    if k == types.Kind.Array: return t.Length(r) == types.TypeId(0) or g.holdsArray(t, t.Repr(t.Elem(r)), depth + 1)
+    if HasFields(t, r) {
+        for f in t.Items(FieldsOf(t, r)) {
+            if g.holdsArray(t, t.Repr(f), depth + 1): return true
+        }
+        return false
+    }
+    if not HasCases(t, r): return false
+    for c in t.Items(CasesOf(t, r)) {
+        if c == types.TypeId(0): continue
+        for f in t.Items(t.Parts(c)) {
+            if g.holdsArray(t, t.Repr(f), depth + 1): return true
+        }
+    }
+    return false
+}
+
+# whether r is held in place by a generational type (partOfGen)
+fn (g mut GenInfo&) PartOfGen(t types.Table&, r types.TypeId) Bool { return g.partOfGen(t, t.Repr(r)) }
+
 # whether r is held in place by a generational type - a field's, a payload's or a fixed array's element type, at any
 # depth - so a reference to a value of it may point into an instance's slot
 fn (g mut GenInfo&) partOfGen(t types.Table&, r types.TypeId) Bool {
@@ -736,7 +857,7 @@ fn (g mut GenInfo&) inPlace(t types.Table&, r types.TypeId, depth I64) {
     if depth > 32: return
     k := t.KindOf(r)
     if k == types.Kind.Array {
-        if t.Length(r) == types.TypeId(0): return
+        # (a run-time-length array's elements too, since round 5: its storage is put back with the instance)
         e := t.Repr(t.Elem(r))
         g.parts.Put(e, true)
         g.inPlace(t, e, depth + 1)

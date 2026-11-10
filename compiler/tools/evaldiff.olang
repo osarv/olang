@@ -49,6 +49,7 @@ Expected Array<String&> = Array<String&>[
 Skipped Array<String&> = Array<String&>[
     "checks/cases/gemmflat.olang - matrix products over ten minutes interpreted (the memory it holds flat is the build's)"
     # O8e: a million nodes churned, minutes interpreted, and the peak each asserts is the interpreting compiler's
+    "checks/cases/o8earrays.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8edlist.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8elru.olang - a million lookups, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8estack.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"

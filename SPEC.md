@@ -6787,7 +6787,13 @@ once the local is gone, and one instance held by three owning places at once, wh
 **reclaimed** where no owning place holds it and no reference in use may reach it, as the compiler shows: its storage
 given back for reuse by a later instance of its size made in its scope, what its own owning places hold let go of in
 turn (reclaimed in the same way where nothing else holds it), and every weak place given it reading `null` from then
-on, whatever instance the storage then holds. The compiler shows it after a store or a removal lets go of the last
+on, whatever instance the storage then holds. The arrays of a run-time length it holds in place (a `String` field, a
+`Vec`'s buffer, one in a struct it holds by value) that were made for it when it was made are given back with it - each
+while it is still the one the instance holds (one stored there since, a `Vec`'s buffer grown since, stays until its
+scope closes) - unless a view of one may still be in use: a local or a value being computed in use in the function,
+which the program compares with while it runs, or one a caller holds across the call (judged over the whole program,
+as references are); and none is given back anywhere where a view of one may be kept elsewhere (stored into a place,
+captured, held by a generator across a `yield`). The compiler shows it after a store or a removal lets go of the last
 owning place holding it, and after the last use of a reference to it (a local, a call's result), where no reference
 still in use in the function may reach one of its type other than references compared with it while the program runs,
 and no caller of the function holds one across the call - judged over the whole program. It is not reclaimed early
@@ -8656,7 +8662,12 @@ generational type, `memory: a Node is reclaimed where the last owning place hold
 to one is in use` - or `memory: a Node is kept until its scope closes, never reclaimed early` and a `note:` row with why
 (O8e) - and for each call of the program's own across which a reference to one is in use while the callee may let go of
 one, `path:line:column: memory: 'l.drop()' keeps the Nodes it lets go of until their scope closes` at the call and a
-`note:` row naming the reference (`'h', a reference to a Node, is in use across this call`). Before the count of places, a row for each type the program declares that its owning places hold by reference
+`note:` row naming the reference (`'h', a reference to a Node, is in use across this call`); then, for each such type
+holding arrays in place, `memory: the arrays a Node holds in place are put back with it, unless a view of one is in
+use` - or `... are kept until their scope closes` and a `note:` row with why - and for each call of the program's own
+across which a view that may be into one is in use while its callee may reclaim one, `path:line:column: memory:
+'l.pop()' keeps the arrays of what it reclaims until their scope closes` and a `note:` row naming the view (`'k', which
+may view one, is in use across this call`). Before the count of places, a row for each type the program declares that its owning places hold by reference
 (O8e's one-holder rule), at the first store into one of them: `path:line:column: memory: Node has one holder: every
 instance stored into an owning place is a new one`, or `... Node may be held by two owning places at once, so it has no
 one holder` and a `note:` row at the first store handing an owning place an existing instance. Then a line for D9h: how many returns hand a view back, and how many calls read one where it

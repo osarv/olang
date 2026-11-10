@@ -36381,3 +36381,59 @@ design is fnvalues.md round 12's "As designed".
 - **Not done.** No clone is made for a call through a field (clones stay round 9's, keyed by function parameters); the
   inliner sees the constructor's argument where the instance does not escape. A generator's walk is not followed by the
   scope pass (D18's rules). The words are held only at `any` tables, not at a constraint's binding.
+## `weak` references and generational types, rounds 5 and 6: an instance's own arrays, and the fuzzers (O8e, B18, B2f, B3e; 2026-11-10, wt-g56, genrefs G5+G6)
+
+Rounds 5 and 6 of docs/genrefs.md ("Round 5 as built" and "Round 6 as built" there say what was built). After round 4
+the LRU probe's peak was 13.8 MB where what is live is 1.8: each node's key text, a String the node holds by value, was
+built in the cache's scope and stayed when the node was reclaimed. Round 5 puts back the arrays an instance holds in
+place with it.
+
+**Telling an instance's own array from any other.** The drop function must know, for each array the instance holds,
+whether its storage is a slot it may put back - an array stored over the field since (a store copying into it, a Vec's
+growth inside the Vec's own code, which knows nothing of the node) is arena storage with no header, and nothing about
+an arbitrary pointer says which it is: the word before it is whatever came before it in the arena. A marker there was
+rejected (a coincidence is unlikely, not impossible), as was a chunk kind of its own for slots (a scope part's chunk
+list kept in two kinds). What was built: the instance keeps one "own" word per array, after its fields (the slot grows;
+`T.Size` and the layout do not), set when it is made to the pointer of each array made for it as a slot, null
+otherwise - so a slot is put back only while the field still holds exactly that pointer.
+
+**Making the arrays as slots, with no new MIR.** A new instance's value is the type's Copy helper's result, given
+storage by a New; the helper and the helpers it calls build every array in their one scope argument. Emit passes, for
+that call alone (its result read once, by the New), a slot scope - a scope record on the stack whose head chunk has no
+room, so every allocation reaches the slow path, where the runtime allocates a slot of the real scope part's class and
+records it; the New then sets the own words to the recorded pointers. A type with a destructor (a slot scope holds no
+registrations) or a Copy of its own (which may build anything) is left out.
+
+**Views.** Round 4 freed only the instance's slot, so a view of its key outlived it harmlessly; now it would not. Three
+places see one: at a site, the locals that may view such an array (a run-time array or a reference to one; a value
+holding one, a function value, an `any` keep every array there) are passed and compared with what is put back, while the
+program runs; across a call, the final step follows views by their origins - a value of an array place a generational
+type holds, a parameter's (judged to a fixed point over the calls, so that a key a caller built for itself, like the
+LRU's lookup key, is no view), one not known - and a callee across which one is in use, and everything it calls, keeps
+(a link-time constant per body and type, as round 4's); a view stored into a place, captured or held across a `yield`
+keeps every array of the program. Judging every String in use across a call as a view would have kept the LRU's keys:
+`Get(k)` holds its parameter across the call that removes the node.
+
+**Measured.** lru 13.8 -> 7.0 MB: the rest is the Map's own copies of the keys of its removed entries (a Map is no
+generational instance; O8d's). A String-keyed list churned a million times: 33 -> 1.8 MB (checks/cases/o8earrays.olang).
+
+**Found on the way.** interpret's Reclaim read every operand it was handed as a reference; handed a view, it stopped
+("a value compile-time evaluation does not model") - found by round 6's fuzzer within its first seeds; it now skips them
+(the interpreter gives back no arrays). The same fuzzer's split form (the program as a module of its own under a root
+that only calls it) found a round-4 gap: a store into a place holding references to a generational type kept its O8d
+release site, guarded by the place's link-time constant, in every module but the root's (whose decisions lowering
+writes in) - although such a place is never sole in any program (genKeeps) - and the release's read of the old value
+kept it in use past the store, so no site there reclaimed it: in a program split into modules nothing of the list was
+reclaimed, and a weak place read its node later than in the one-module build. Lowering now writes no release for such
+a place (or a weak one), reading the type's status through the program's generational facts, so a module's code records
+it (B3i). And a by-value local placed where it is kept (O28) is still copied into the new
+instance, leaving its first copy in the scope (127 bytes a node for a Vec built in a local) - recorded in genrefs, left.
+
+**Round 6.** fuzz/scopegen.olang's weak scenario (in scopegen's programs and the early-free mode's): weak lists with
+keys and Vecs, moves through a Map, inline removals, references and key views kept across removing calls and handed to
+a callee removing their node, weak places given nodes of other blocks.
+
+**Tests.** tests/reclaimarrays.olang (arrays reused by new nodes and every node read back; a key viewed across an inline
+removal - the site's compare keeps it, which a build without the compare fails; across a removing call and in a callee;
+a Vec grown after the node was made; a weak place to a removed node), checks/cases/o8earrays.olang (a peak), o8elru's
+peak lowered to 9 MB.

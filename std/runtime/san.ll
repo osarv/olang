@@ -158,7 +158,10 @@ notempty:
   %rheadp = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
   %rhead = load ptr, ptr %rheadp
   %inregion = icmp eq ptr %rhead, @__olang_region_chunk
-  br i1 %inregion, label %plain, label %own
+  ; (and a slot scope's, genrefs round 5: an array of a new generational instance is a slot, poisoned when put back)
+  %inslotsc = icmp eq ptr %rhead, @__olang_slot_chunk
+  %notown = or i1 %inregion, %inslotsc
+  br i1 %notown, label %plain, label %own
 plain:
   %pp = call ptr @__olang_scope_alloc_zeroed(ptr %scope, i64 %size)
   ret ptr %pp

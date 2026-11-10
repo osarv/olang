@@ -268,7 +268,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   unless it declares a Copy; unique and immut are never one type's. Generics copying a unique T are refused at the
   program's call (G18a).
 - **`weak` references and generational types (T2d, T13d, O8e; docs/genrefs.md, the user's decisions 2026-11-08
-  evening; round 1 built 2026-11-09, rounds 2-3 2026-11-09, round 4 2026-11-10).** `prev weak mut Node?& = null`: `weak` before a `?&`
+  evening; round 1 built 2026-11-09, rounds 2-3 2026-11-09, round 4 2026-11-10, rounds 5-6 2026-11-10).** `prev weak mut Node?& = null`: `weak` before a `?&`
   reference in a stored position (a field, a payload, a global, an element or type argument a type stores) makes a weak
   place - it reads `null` from the moment no owning place holds its node, by the count of owning places in the word
   before every instance (generation 16 bits, count 2 bits saturating at 3; constant data and stack instances pinned);
@@ -280,7 +280,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its callers' references across the call judged over the whole program (a link-time constant per body and type) -
   the slot goes on its scope part's free list for its class (found by address), its generation bumped (65,535
   retires it), what it owns let go of through a worklist. Never early with tasks, a destructor, a capture, a generator
-  holding one, an `any` or C given one; -sanitize quarantines; interpret follows the same sites. `-memory` adds the one-holder rule's classification per type (a whole-program fact). Errors: on a local,
+  holding one, an `any` or C given one; -sanitize quarantines; interpret follows the same sites. **Its arrays (round
+  5):** the run-time arrays a new instance holds in place, made by its copy through a slot scope, are slots of its scope
+  part's class lists, each recorded in an "own" word after its fields and put back by its type's drop function while
+  still its own - unless a view in use at the site points into it (compared at run time) or a caller holds a view
+  across the call (a link-time constant per body and type, from views' origins and parameters' taint over the whole
+  program); none anywhere where a view is stored, captured or held across a `yield`. The fuzzers (round 6) write weak
+  lists with keys, Vecs, moves and views kept across calls. `-memory` adds the one-holder rule's classification per type (a whole-program fact). Errors: on a local,
   parameter, result or function type; before a never-null reference, an array, a function type, an `any` or an extern
   type; a constructor's new instance stored straight into a weak place; a weak reference to a type no owning place of
   the program holds. The type it names is **generational** over the whole program (any module's `weak`): held only by

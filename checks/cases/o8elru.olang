@@ -1,6 +1,7 @@
 # check: run
-# O8e (genrefs round 4): the LRU cache whose Map owns its nodes of docs/genrefs/lru.olang, its peak asserted - each node let go of is
-# reclaimed where its last owning place lets go of it, its slot reused, so 1M operations stay near what is live
+# O8e (genrefs rounds 4 and 5): the LRU cache whose Map owns its nodes of docs/genrefs/lru.olang, its peak asserted - each node let
+# go of is reclaimed where its last owning place lets go of it, its slot and its key's text reused, so 1M operations stay
+# near what is live (what is left above it is the Map's own copies of the keys its removed entries held)
 import "std/os"
 type Node struct(key String, v I64) {
     key
@@ -69,5 +70,5 @@ fn main() ? {
     }
     assert total == 1998857408
     kb := peakKb()
-    assert kb > 0 and kb < 25000, $kb
+    assert kb > 0 and kb < 9000, $kb
 }

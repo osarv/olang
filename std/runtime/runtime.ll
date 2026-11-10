@@ -761,9 +761,13 @@ done:
 }
 
 ; O8e: the instance p (non-null, of the generational type whose drop function is drop) reclaimed where no owning place
-; holds it and it is none of the n references in use at keep - and what that lets go of in turn, through the worklist
-define void @__olang_gen_reclaim(ptr %p, ptr %drop, ptr %keep, i64 %n) noinline {
+; holds it and it is none of the n references in use at keep - and what that lets go of in turn, through the worklist.
+; The arrays they hold in place go back to their lists unless vn is -1; the vn views at vk in use at the site keep
+; those they point into (round 5)
+define void @__olang_gen_reclaim(ptr %p, ptr %drop, ptr %keep, i64 %n, ptr %vk, i64 %vn) noinline {
 entry:
+  store ptr %vk, ptr @__olang_gen_vk
+  store i64 %vn, ptr @__olang_gen_vn
   call void @__olang_gen_push(ptr %p, ptr %drop, ptr %keep, i64 %n)
   br label %loop
 loop:
@@ -795,6 +799,7 @@ free:
   call void @__olang_gen_free(ptr %x, i64 %cls)
   br label %loop
 done:
+  store i64 -1, ptr @__olang_gen_vn
   ret void
 }
 
@@ -867,6 +872,197 @@ b:
   ret i64 %v
 }
 @__olang_gen_big = unnamed_addr constant [7 x i64] [i64 320, i64 384, i64 512, i64 768, i64 1024, i64 1536, i64 2048]
+
+; ---- an instance's own arrays in slots (T13d, O8e; docs/genrefs.md 4.4, round 5) ----
+;
+; The run-time arrays a new instance of a generational type holds by value - a String key, a Vec's buffer - are made
+; through a SLOT SCOPE: a scope record on the stack whose head is @__olang_slot_chunk (no room, so every allocation
+; takes the slow path, which comes here) and whose tail names the scope the instance is built in. Each allocation of at
+; most 2,032 bytes is a slot of that scope part's class lists (4.4) - the same lists an instance's slots are on - with
+; its payload 16-aligned: where the slot's own payload is not, it starts 8 bytes on, and the word before it says so (bit
+; 23). The word before the payload carries the class plus one in bits 24-31 (the slot's generation word where the
+; payload is the slot's own: its generation and count untouched, so a stale weak word naming the instance the slot
+; held reads null as ever). The first eight such allocations are recorded in the slot scope, and the instance keeps,
+; for each array it holds in place, the one recorded for it (__olang_gen_mine): its "own" word, after its fields. When
+; the instance is reclaimed, its type's drop function hands each array whose pointer is still its own word to
+; __olang_gen_leaf - an array replaced since (a store, a Vec's growth) is not its own and is left - and the slot goes
+; back on its list unless the reclaiming site said no (vn -1: a caller may hold a view of one across the call, the
+; whole program's constant) or one of the views in use there (vk, compared while the program runs) points into it
+@__olang_slot_chunk = global %olang.chunk zeroinitializer
+%olang.slotscope = type { %olang.scope, i64, [8 x ptr] }
+; the views in use at the reclaiming site running on this thread (their data pointers) and their count, -1 while no
+; array may be put back
+@__olang_gen_vk = thread_local(initialexec) global ptr null
+@__olang_gen_vn = thread_local(initialexec) global i64 -1
+
+; the class of a slot of n bytes (4.4), -1 past 2,048
+define i64 @__olang_gen_class_of(i64 %n) {
+entry:
+  %small = icmp ule i64 %n, 256
+  br i1 %small, label %s, label %b
+s:
+  %n15 = add i64 %n, 15
+  %q = lshr i64 %n15, 4
+  %c = sub i64 %q, 1
+  ret i64 %c
+b:
+  %i = phi i64 [ 0, %entry ], [ %i1, %next ]
+  %done = icmp eq i64 %i, 7
+  br i1 %done, label %none, label %look
+look:
+  %p = getelementptr [7 x i64], ptr @__olang_gen_big, i64 0, i64 %i
+  %v = load i64, ptr %p
+  %fits = icmp ule i64 %n, %v
+  br i1 %fits, label %found, label %next
+next:
+  %i1 = add i64 %i, 1
+  br label %b
+found:
+  %c2 = add i64 %i, 16
+  ret i64 %c2
+none:
+  ret i64 -1
+}
+
+; an allocation through the slot scope ss of rawsize bytes aligned to aln: a slot of the class it takes (16-aligned,
+; enough for every element type - an array's size class of 32 or 64 is a vector load's preference, not a need), recorded
+; in ss; past 2,032 bytes, the scope's own storage, unrecorded
+define noalias ptr @__olang_gen_buf(ptr %ss, i64 %rawsize, i64 %aln) noinline {
+entry:
+  %tp = getelementptr %olang.scope, ptr %ss, i32 0, i32 2
+  %real = load ptr, ptr %tp
+  %up = add i64 %rawsize, 7
+  %s8 = and i64 %up, -8
+  %z = icmp eq i64 %s8, 0
+  %size = select i1 %z, i64 8, i64 %s8
+  %need = add i64 %size, 16
+  %cls = call i64 @__olang_gen_class_of(i64 %need)
+  %big = icmp slt i64 %cls, 0
+  br i1 %big, label %plain, label %slot
+plain:
+  %pp = call ptr @__olang_scope_alloc_a(ptr %real, i64 %rawsize, i64 %aln)
+  ret ptr %pp
+slot:
+  %csize = call i64 @__olang_gen_class_size(i64 %cls)
+  %x = call ptr @__olang_gen_alloc(ptr %real, i64 %cls, i64 %csize)
+  %xi = ptrtoint ptr %x to i64
+  %mis = and i64 %xi, 15
+  %pad = icmp ne i64 %mis, 0
+  %c1 = add i64 %cls, 1
+  %cb = shl i64 %c1, 24
+  br i1 %pad, label %padded, label %own
+own:
+  %hp = getelementptr i8, ptr %x, i64 -8
+  %hw = load i64, ptr %hp
+  %hw1 = or i64 %hw, %cb
+  store i64 %hw1, ptr %hp
+  br label %rec
+padded:
+  %pw = or i64 %cb, 8388608
+  store i64 %pw, ptr %x
+  %x16 = getelementptr i8, ptr %x, i64 8
+  br label %rec
+rec:
+  %p = phi ptr [ %x, %own ], [ %x16, %padded ]
+  %np = getelementptr %olang.slotscope, ptr %ss, i32 0, i32 1
+  %n = load i64, ptr %np
+  %room = icmp ult i64 %n, 8
+  br i1 %room, label %put, label %done
+put:
+  %ep = getelementptr %olang.slotscope, ptr %ss, i32 0, i32 2, i64 %n
+  store ptr %p, ptr %ep
+  %n1 = add i64 %n, 1
+  store i64 %n1, ptr %np
+  br label %done
+done:
+  ret ptr %p
+}
+
+; p where the slot scope ss recorded it - an array made there, in a slot - else null
+define ptr @__olang_gen_mine(ptr %ss, ptr %p) {
+entry:
+  %np = getelementptr %olang.slotscope, ptr %ss, i32 0, i32 1
+  %n = load i64, ptr %np
+  %none = icmp eq ptr %p, null
+  br i1 %none, label %no, label %loop
+loop:
+  %i = phi i64 [ 0, %entry ], [ %i1, %next ]
+  %more = icmp ult i64 %i, %n
+  br i1 %more, label %cmp, label %no
+cmp:
+  %ep = getelementptr %olang.slotscope, ptr %ss, i32 0, i32 2, i64 %i
+  %e = load ptr, ptr %ep
+  %same = icmp eq ptr %e, %p
+  br i1 %same, label %yes, label %next
+next:
+  %i1 = add i64 %i, 1
+  br label %loop
+yes:
+  ret ptr %p
+no:
+  ret ptr null
+}
+
+; a drop function's step for an array its instance holds in place: its data pointer buf, and the instance's own word for
+; it - the slot put back where they are one (and not null)
+define void @__olang_gen_leaf(ptr %buf, ptr %own) {
+entry:
+  %none = icmp eq ptr %buf, null
+  %other = icmp ne ptr %buf, %own
+  %skip = or i1 %none, %other
+  br i1 %skip, label %done, label %go
+go:
+  call void @__olang_gen_buffree(ptr %buf)
+  br label %done
+done:
+  ret void
+}
+
+; the slot whose payload is buf put back on its list - unless the reclaiming site said no (vn -1) or a view in use there
+; points into it
+define void @__olang_gen_buffree(ptr %buf) noinline {
+entry:
+  %vn = load i64, ptr @__olang_gen_vn
+  %no = icmp slt i64 %vn, 0
+  br i1 %no, label %done, label %head
+head:
+  %hp = getelementptr i8, ptr %buf, i64 -8
+  %hw = load i64, ptr %hp
+  %c0 = lshr i64 %hw, 24
+  %c1 = and i64 %c0, 255
+  %unk = icmp eq i64 %c1, 0
+  br i1 %unk, label %done, label %find
+find:
+  %cls = sub i64 %c1, 1
+  %padb = and i64 %hw, 8388608
+  %pad = icmp ne i64 %padb, 0
+  %xp = getelementptr i8, ptr %buf, i64 -8
+  %x = select i1 %pad, ptr %xp, ptr %buf
+  %sz = call i64 @__olang_gen_class_size(i64 %cls)
+  %xi = ptrtoint ptr %x to i64
+  %lo = sub i64 %xi, 8
+  %vk = load ptr, ptr @__olang_gen_vk
+  br label %scan
+scan:
+  %i = phi i64 [ 0, %find ], [ %i1, %nextv ]
+  %more = icmp slt i64 %i, %vn
+  br i1 %more, label %cmp, label %free
+cmp:
+  %vp = getelementptr ptr, ptr %vk, i64 %i
+  %v = load ptr, ptr %vp
+  %vi = ptrtoint ptr %v to i64
+  %off = sub i64 %vi, %lo
+  %in = icmp ult i64 %off, %sz
+  br i1 %in, label %done, label %nextv
+nextv:
+  %i1 = add i64 %i, 1
+  br label %scan
+free:
+  call void @__olang_gen_free(ptr %x, i64 %cls)
+  br label %done
+done:
+  ret void
+}
 
 
 ; an empty chunk whose data holds at least size bytes, when the spare will not do (__olang_scope_alloc takes that
@@ -1847,7 +2043,14 @@ forward:
   ; a region (O8d): its tail names it, and it allocates with the word before each object
 notfwd:
   %isreg = icmp eq ptr %head, @__olang_region_chunk
-  br i1 %isreg, label %region, label %fresh
+  br i1 %isreg, label %region, label %notreg
+  ; a slot scope (round 5): an array of a new generational instance, in a slot of the scope its tail names
+notreg:
+  %isslot = icmp eq ptr %head, @__olang_slot_chunk
+  br i1 %isslot, label %slotted, label %fresh
+slotted:
+  %inslot = tail call ptr @__olang_gen_buf(ptr %scope, i64 %rawsize, i64 %aln)
+  ret ptr %inslot
 region:
   %regptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
   %reg = load ptr, ptr %regptr, !tbaa !59

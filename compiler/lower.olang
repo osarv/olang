@@ -1068,12 +1068,28 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath
     k := fr.PlaceOf(p)
     # (an owner local given another value: its place's old value, held whole)
     if p == typed.Lvalue.Local and assign { k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id)) }
-    g := fr.Guard(I64(ln.B.Id), k)
+    g := ln.guardOf(k)
     if k >= 0 and g != free.NotSole {
         out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0)))
         return out
     }
     return ln.leafPaths(p.Type())
+}
+
+# what guards place k's release here (free.Guard): never sole where its values are references to a generational type or
+# it is a weak place (free's genKeeps, in every program) - read through the program's generational facts (GenInfo), so
+# that the module's code records reading them (B3i). Writing no release there keeps no old value in use past the store,
+# which would hold back reclaiming it (O8e) in every module but the root's, whose decisions are written in
+fn (ln mut lowering&) guardOf(k I64) I64 {
+    fr := ln.L.Free!
+    if k >= 0 {
+        kt, field := fr.PlaceKey(k)
+        vt := fr.PlaceValue(k)
+        g := ln.L.Gen()
+        if field >= 0 and g.WeakField(ln.T, kt, field): return free.NotSole
+        if vt != types.UnknownT and g.GenRef(ln.T, vt): return free.NotSole
+    }
+    return fr.Guard(I64(ln.B.Id), k)
 }
 
 # the release paths of a value of type ty's candidate leaves: each by the fields that reach it, and a handle's
@@ -1082,7 +1098,7 @@ fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<relPath> {
     out Vec<relPath>
     fr := ln.L.Free!
     for lf in fr.Leaves(ty) {
-        g := fr.Guard(I64(ln.B.Id), lf.PlaceId)
+        g := ln.guardOf(lf.PlaceId)
         if g == free.NotSole: continue
         if not fr.IsHandle(lf.PlaceId) {
             out.Push(relPath(g, lf.Path))
@@ -2444,11 +2460,15 @@ fn (ln mut lowering&) reclaimSites() {
     if nb == 0: return
     g := ln.L.Gen()
     lv mut liveness& = liveness()
+    views := g.AnyLeaves(ln.T)
     for i in range ln.F.Locals.Len() {
         r := g.Reach(ln.T, ln.F.Locals[i].Ty)
         # (a variable or parameter holding owning references in place is an owning place, counted: countedLocal, holdParams)
         k := ln.F.Locals[i].Kind
         if r == mir.ReachAny and (k == mir.LocalKind.Var or k == mir.LocalKind.Param) and ln.counts(ln.F.Locals[i].Ty) { r = mir.ReachNone }
+        # (round 5: one that may view an array a generational instance holds in place - compared at a site, which puts
+        # back no array it points into; or, viewing one through a part, keeping every array there: mir.ViewOf)
+        if r == mir.ReachNone and views and g.ViewOf(ln.T, ln.F.Locals[i].Ty) != mir.ViewNone { r = ReachView }
         lv.idx.Push(-1)
         if r == mir.ReachNone: continue
         lv.idx[i] = lv.locals.Len()
@@ -2571,6 +2591,10 @@ fn (ln mut lowering&) resultSites(lv mut liveness&) {
         try b.Stmts.Insert(0, st) catch { }
     }
 }
+
+# a local reclaimSites follows that reaches no generational instance but may view an array one holds in place (round 5):
+# in use at a site, it is compared there (mir.ViewOf)
+ReachView I64 = 3
 
 # the liveness reclaimSites follows: of the locals that may reach a generational instance only (locals, by compact
 # index, with their reach), by block at its entry and its exit, and in use at the point being walked

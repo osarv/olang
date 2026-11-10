@@ -1898,6 +1898,8 @@ fn (e mut Emitter&) SoleUnit() String {
     for k in fr.SoleNow() { names.Push(e.soleName(k)) }
     # O8e: where a generational type's instances may be reclaimed, by body and type (genOk)
     for bt in fr.GenOkNow() { names.Push(e.genOkName(bt.First, bt.Second)) }
+    # (round 5: where they may put back the arrays they hold in place)
+    for bt in fr.GenBufNow() { names.Push(e.genBufName(bt.First, bt.Second)) }
     if names.Len() == 0 { return "" }
     names.Sort(fn(a String&, b String&) Bool { return a < b })
     b := StringBuilder()
@@ -2171,6 +2173,9 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     gen Bool = false
     promTy String& = ""
     dropping Bool = false   # O8e: writing a generational type's drop function - holdersAt lets go of each child (genDrop)
+    # genrefs round 5: the slot scope (an alloca's name) a copy of a new generational instance was made through, by the
+    # local holding the copy - its arrays slots, recorded there, which the instance's own words take (genOwn)
+    slotOf Map<I64, String>
     # D18e: writing a generator function's ".walk" form - the one a for-in finishing its walk calls: its generator's
     # drop registered with no scope, the caller destroying the walk where the scope it lives in closes
     walkForm Bool = false
@@ -3682,20 +3687,156 @@ fn (fe mut fnEm&) alloc(r mir.ScopeRef, size String&, align I64, stack String& =
 fn (fe mut fnEm&) genAlloc(s mir.ScopeRef, rt types.TypeId) String {
     a := fe.align(rt)
     h := 8 if a <= 8 else a
-    n := fe.size(rt) + h
+    n := fe.genBytes(rt) + h
     cls := genClass(n)
     # (a slot of a class, reused for any instance of that class in its scope part - genrefs 4.4 - where the type is aligned
     # no further than its header and the slot is not too large to be kept)
     if h == 8 and cls >= 0 and not fe.isFrame(s) and s != mir.ScopeRef.Held {
         fe.E.runtime("__olang_gen_alloc")
-        return fe.let("call ptr @__olang_gen_alloc(ptr " $fe.scope(s) ", i64 " $cls ", i64 " $genClassSize(cls) ")")
+        p := fe.let("call ptr @__olang_gen_alloc(ptr " $fe.scope(s) ", i64 " $cls ", i64 " $genClassSize(cls) ")")
+        fe.ownWordsClear(p, rt)
+        return p
     }
     raw := fe.alloc(s, $n, h, "[" $n " x i8]")
     p := fe.let("getelementptr i8, ptr " $raw ", i64 " $h)
     head := 1 | (3 << 16) if fe.isFrame(s) else 1
     fe.w("store i64 " $head ", ptr " $fe.let("getelementptr i8, ptr " $p ", i64 -8") ", align 8")
+    fe.ownWordsClear(p, rt)
     return p
 }
+
+# genrefs round 5: an instance's bytes - its fields, then (where it holds arrays of a run-time length in place) one "own"
+# word for each, after them (genLeaves): the array a slot scope made for it, which its reclaiming puts back
+fn (fe mut fnEm&) genBytes(rt types.TypeId) I64 {
+    n := fe.genLeaves(rt).Len()
+    if n == 0: return fe.size(rt)
+    return (fe.size(rt) + 7) / 8 * 8 + 8 * n
+}
+
+# the arrays of a run-time length a generational instance of type rt holds in place, as paths of field positions:
+# its fields', and those of the structs its fields hold by value (at most 8, 4 deep) - not a payload's, not a fixed
+# array's elements', whose layout is the case's or the element's
+fn (fe mut fnEm&) genLeaves(rt types.TypeId) Vec<Array<I64>> {
+    out Vec<Array<I64>>
+    path Vec<I64>
+    fe.leavesOf(fe.E.T.Repr(rt), path, out)
+    return out
+}
+
+fn (fe mut fnEm&) leavesOf(r types.TypeId, path mut Vec<I64>&, out mut Vec<Array<I64>>&) {
+    t := fe.E.T
+    if path.Len() > 4 or out.Len() >= 8 or not mir.HasFields(t, r): return
+    fs := t.Items(fe.fieldList(r))
+    for i in range fs.Len() {
+        fr := t.Repr(fs[i])
+        if t.IsRef(fr) or out.Len() >= 8: continue
+        path.Push(i)
+        if t.KindOf(fr) == types.Kind.Array and not fe.fixed(fr) {
+            out.Push(path.ToArray())
+        } else {
+            fe.leavesOf(fr, path, out)
+        }
+        path.Pop()!
+    }
+}
+
+# the address of a leaf's array (its { i64, ptr } pair) in the instance at p of type rt
+fn (fe mut fnEm&) leafAt(p String&, rt types.TypeId, path Array<I64>&) String {
+    t := fe.E.T
+    at := p
+    ty := t.Repr(rt)
+    for i in path {
+        at = fe.let("getelementptr " $fe.ty(ty) ", ptr " $at ", i32 0, i32 " $i)
+        ty = t.Repr(t.Items(fe.fieldList(ty))[i])
+    }
+    return at
+}
+
+# the address of the instance's own word for leaf k
+fn (fe mut fnEm&) ownWord(p String&, rt types.TypeId, k I64) String {
+    return fe.let("getelementptr i8, ptr " $p ", i64 " $((fe.size(rt) + 7) / 8 * 8 + 8 * k))
+}
+
+fn (fe mut fnEm&) ownWordsClear(p String&, rt types.TypeId) {
+    n := fe.genLeaves(rt).Len()
+    for k in range n { fe.w("store ptr null, ptr " $fe.ownWord(p, rt, k) ", align 8") }
+}
+
+# genrefs round 5: the new instance p of type rt, whose value is a copy made through the slot scope ss: each array it
+# holds in place its own where ss made it (__olang_gen_mine)
+fn (fe mut fnEm&) genOwn(p String&, rt types.TypeId, ss String&) {
+    lv := fe.genLeaves(rt)
+    fe.E.runtime("__olang_gen_mine")
+    for k in range lv.Len() {
+        data := fe.load("ptr", fe.let("getelementptr { i64, ptr }, ptr " $fe.leafAt(p, rt, lv[k]) ", i32 0, i32 1"))
+        mine := fe.let("call ptr @__olang_gen_mine(ptr " $ss ", ptr " $data ")")
+        fe.w("store ptr " $mine ", ptr " $fe.ownWord(p, rt, k) ", align 8")
+    }
+}
+
+# genrefs round 5: the local a call puts the value of a new generational instance in, where the call is the type's Copy
+# helper and makes it through a slot scope - its result read once, by the New giving it storage; the type holding arrays
+# in place, none with destructors (a slot scope holds no registrations), copied part by part (no Copy of its own, which
+# may build anything) - else -1
+fn (fe mut fnEm&) slotCopy(c mir.Call) I64 {
+    t := fe.E.T
+    ty := match c.Target {
+        case mir.Callee.Fn(k, _): match k {
+            case mir.FnKey.Helper(kind, x): x if kind == mir.HelperKind.Copy else types.UnknownT
+            case _: types.UnknownT
+        }
+        case _: types.UnknownT
+    }
+    if ty == types.UnknownT or c.Scopes.N != I32(1) or not c.HasDest or c.Dest.Path.N != I32(0): return -1
+    r := t.Repr(ty)
+    if not fe.E.Lw.Gen().IsGen(t, r) or t.NeedsDrop(r) or t.DeclaresCopy(r) or fe.genLeaves(r).Len() == 0: return -1
+    l := match c.Dest.B {
+        case mir.Base.Local(x): I64(x)
+        case _: -1
+    }
+    if l < 0 or not fe.newOnce(l, r): return -1
+    return l
+}
+
+# whether local l is read once in this function, by a New giving a generational instance of type r its storage
+fn (fe mut fnEm&) newOnce(l I64, r types.TypeId) Bool {
+    uses Vec<mir.LocalId>
+    defs Vec<mir.LocalId>
+    n := 0
+    found := false
+    for b in fe.F.Blocks {
+        for st in b.Stmts {
+            uses.Clear()
+            defs.Clear()
+            fe.F.Mentions(st, uses, defs)
+            for u in uses {
+                if I64(u) == l: n++
+            }
+            if fe.newOf(st, l, r): found = true
+        }
+        uses.Clear()
+        defs.Clear()
+        fe.F.TermMentions(b.T, uses, defs)
+        for u in uses {
+            if I64(u) == l: n++
+        }
+    }
+    return found and n == 1
+}
+
+# whether statement st gives local l's value, a generational type r's, storage of its own (a New)
+fn (fe mut fnEm&) newOf(st mir.Stmt&, l I64, r types.TypeId) Bool {
+    t := fe.E.T
+    rv := match st {
+        case mir.Stmt.Assign(_, _, v): v
+        case _: mir.Rvalue.Use(mir.Operand.None)
+    }
+    return match rv {
+        case mir.Rvalue.New(_, x, ty): x == mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(l)))) and t.Repr(t.Referent(t.Repr(ty))) == r
+        case _: false
+    }
+}
+
 
 # mir.Stmt.Holders: the counts of the generational instances x's owning references name changed by by (an i64)
 fn (fe mut fnEm&) holders(x mir.Operand, by String&) {
@@ -3829,17 +3970,48 @@ fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
     fe.label(tst)
     fe.w("br i1 " $fe.let("icmp eq i64 " $fe.let("and i64 " $hw ", 196608") ", 0") ", label %" $call ", label %" $done)
     fe.label(call)
-    n := I64(ks.N)
+    # the references in use compared (keep), and (round 5) the arrays in use - their data pointers, compared with the
+    # arrays put back (vk) - or, where one in use may hold a view other than as an array, none put back
+    refs Vec<mir.Operand>
+    views Vec<mir.Operand>
+    opaque := false
+    t := e.T
+    for i in range I64(ks.N) {
+        k := fe.F.Ops[I64(ks.At) + i]
+        r := t.Repr(fe.otype(k))
+        if e.Lw.Gen().GenRef(t, r) {
+            refs.Push(k)
+        } else if fe.ty(r) == "{ i64, ptr }" {
+            views.Push(k)
+        } else {
+            opaque = true
+        }
+    }
+    n := refs.Len()
     keep := "null"
     if n > 0 {
         keep = fe.alloca("[" $n " x ptr]")
         for i in range n {
-            k := fe.F.Ops[I64(ks.At) + i]
+            k := refs[i]
             fe.w("store ptr " $fe.val(k, fe.otype(k)) ", ptr " $fe.let("getelementptr [" $n " x ptr], ptr " $keep ", i64 0, i64 " $i))
         }
     }
+    vk := "null"
+    vn := "-1"
+    if not opaque and e.genBufOn(ty) {
+        nv := views.Len()
+        if nv > 0 {
+            vk = fe.alloca("[" $nv " x ptr]")
+            for i in range nv {
+                k := views[i]
+                d := fe.let("extractvalue { i64, ptr } " $fe.val(k, fe.otype(k)) ", 1")
+                fe.w("store ptr " $d ", ptr " $fe.let("getelementptr [" $nv " x ptr], ptr " $vk ", i64 0, i64 " $i))
+            }
+        }
+        vn = fe.let("select i1 " $fe.load("i1", "@" $e.genBuf(b, ty)) ", i64 " $nv ", i64 -1")
+    }
     e.runtime("__olang_gen_reclaim")
-    fe.w("call void @__olang_gen_reclaim(ptr " $p ", ptr @" $e.genDropFn(ty) ", ptr " $keep ", i64 " $n ")")
+    fe.w("call void @__olang_gen_reclaim(ptr " $p ", ptr @" $e.genDropFn(ty) ", ptr " $keep ", i64 " $n ", ptr " $vk ", i64 " $vn ")")
     fe.w("br label %" $done)
     fe.label(done)
 }
@@ -3858,6 +4030,27 @@ fn (e mut Emitter&) genOkName(b I64, ty types.TypeId) String {
     return types.Symbol($"olang.genok." $e.stableSym(b) "." $e.T.Canon(ty))
 }
 
+# genrefs round 5: the link-time constant saying whether body b, reclaiming an instance of ty, may put back the arrays
+# it and what it lets go of in turn hold in place - the root's decisions object defining it true where the whole program
+# shows no caller of b holds a view that may be into one across a call into it (Free.GenBufNow)
+fn (e mut Emitter&) genBuf(b I64, ty types.TypeId) String {
+    s := e.genBufName(b, ty)
+    e.item(s, HomeShared, $"@" $s " = weak hidden constant i1 false\n")
+    return s
+}
+
+fn (e mut Emitter&) genBufName(b I64, ty types.TypeId) String {
+    return types.Symbol($"olang.genbuf." $e.stableSym(b) "." $e.T.Canon(ty))
+}
+
+# whether reclaiming an instance of ty may put back arrays: it, or a type it holds through owning references, holds
+# one in place
+fn (e mut Emitter&) genBufOn(ty types.TypeId) Bool {
+    t := e.T
+    g := e.Lw.Gen()
+    return g.HasLeaves(t, ty)
+}
+
 # a generational type's drop function (4.5), fn(ptr x, ptr keep, i64 n) i64: each owning reference x's instance holds
 # let go of (__olang_gen_let - a child no owning place holds any more, and none of the n at keep, put on the worklist),
 # and the class of x's slot plus one returned - 0 where it is never put on a free list
@@ -3870,8 +4063,15 @@ fn (e mut Emitter&) genDropFn(ty types.TypeId) String {
     fe mut fnEm& = fnEm(e, mir.Fn(k, types.VoidT, 0, source.Span(0, 0)), k)
     fe.dropping = true
     fe.holdersAt("%x", ty, "-1", false)
+    # (round 5: each array it holds in place put back where it is still its own)
+    lv := fe.genLeaves(ty)
+    if lv.Len() > 0: e.runtime("__olang_gen_leaf")
+    for q in range lv.Len() {
+        data := fe.load("ptr", fe.let("getelementptr { i64, ptr }, ptr " $fe.leafAt("%x", ty, lv[q]) ", i32 0, i32 1"))
+        fe.w("call void @__olang_gen_leaf(ptr " $data ", ptr " $fe.load("ptr", fe.ownWord("%x", ty, q)) ")")
+    }
     a := fe.align(ty)
-    cls := genClass(fe.size(ty) + 8) if a <= 8 else -1
+    cls := genClass(fe.genBytes(ty) + 8) if a <= 8 else -1
     fe.w("ret i64 " $(cls + 1))
     e.item(s, HomeShared, $"define linkonce_odr hidden i64 @" $s "(ptr %x, ptr %keep, i64 %n) #0 {\nentry:\n" $fe.head.ToString() $
            fe.pro.ToString() $fe.code.ToString() "}\n\n")
@@ -4513,6 +4713,14 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             if fe.E.Lw.Gen().IsGen(t, rt) {
                 p := fe.genAlloc(s, rt)
                 fe.put(p, rt, x)
+                l := match x {
+                    case mir.Operand.Copy(q): match q.B {
+                        case mir.Base.Local(y): I64(y) if q.Path.N == I32(0) else -1
+                        case _: -1
+                    }
+                    case _: -1
+                }
+                if l >= 0 and fe.slotOf.Has(l) { fe.genOwn(p, rt, try fe.slotOf.Get(l) catch default "") }
                 return p
             }
             if fe.viaMem(rt) {
@@ -6257,10 +6465,22 @@ fn (fe mut fnEm&) call(c mir.Call) {
         args.Push("ptr " $out)
         first = false
     }
+    sl := fe.slotCopy(c)
     for i in range c.Scopes.N {
         if not first { args.Push(", ") }
         first = false
-        args.Push("ptr " $fe.scope(fe.F.Refs[I64(c.Scopes.At) + i]))
+        sc := fe.scope(fe.F.Refs[I64(c.Scopes.At) + i])
+        if sl >= 0 {
+            # genrefs round 5: the copy's arrays made through a slot scope building into sc
+            ss := fe.alloca("%olang.slotscope")
+            fe.w("store %olang.slotscope zeroinitializer, ptr " $ss)
+            fe.w("store ptr @__olang_slot_chunk, ptr " $ss)
+            fe.w("store ptr " $sc ", ptr " $fe.let("getelementptr %olang.scope, ptr " $ss ", i32 0, i32 2"))
+            fe.E.runtime("__olang_slot_chunk")
+            fe.slotOf.Put(sl, ss)
+            sc = ss
+        }
+        args.Push("ptr " $sc)
     }
     # (O23a: a body's derived scopes a call passes none of, null - found where the body builds there)
     for _ in range I64(c.Scopes.N), fe.padTo(c.Target) {
