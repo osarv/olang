@@ -2366,14 +2366,17 @@ type wordReader struct(W String&, Types fn&(c String&) types.TypeId) {
     at I64 = 0
 }
 
-fn (n Nodes&) ReadExpr(w String&, typeOf fn&(c String&) types.TypeId) Expr ? Unwritable {
+# ...read back: a body's own expression as itself, never a copy - lowering finds a root among a call's arguments by
+# identity (lower.passedOr, foundOf), so a copy would have it evaluated again, the code differing from a judging's made
+# now
+fn (n Nodes&) ReadExpr(w String&, typeOf fn&(c String&) types.TypeId) Expr& ? Unwritable {
     r := wordReader(w, typeOf)
     x := try n.readExpr(r)
     if r.at != w.Len(): error Unwritable.Here
     return x
 }
 
-fn (n Nodes&) readExpr(r mut wordReader&) Expr ? Unwritable {
+fn (n Nodes&) readExpr(r mut wordReader&) Expr& ? Unwritable {
     if r.at >= r.W.Len(): error Unwritable.Here
     k := r.W[r.at]
     r.at++
@@ -2392,7 +2395,7 @@ fn (n Nodes&) readExpr(r mut wordReader&) Expr ? Unwritable {
     return Expr.Read(sp, ty, p, SiteId(I32(site)))
 }
 
-fn (n Nodes&) readPlace(r mut wordReader&) Lvalue ? Unwritable {
+fn (n Nodes&) readPlace(r mut wordReader&) Lvalue& ? Unwritable {
     if r.at >= r.W.Len(): error Unwritable.Here
     k := r.W[r.at]
     r.at++
@@ -4277,6 +4280,26 @@ test "a body: locals, blocks and sites, read back and printed" {
     assert b.Local(s).Marked == Mark.Infer and b.Encloses(root, root)
     got := b.Print(t)
     assert got == "body 3 locals 1 blocks 0 sites\n{0\n  let L2 = (Add I32 (read L0) (read L1))\n  return (read L2)\n", got
+}
+
+# a plan's reference to the body's own expression, written to a record and read back (B3i): lowering finds a root among a
+# call's arguments by identity, so the word must give the expression itself
+test Nodes.ReadExpr "a body's expression read back from its word is that expression, not a copy" {
+    names := source.Names()
+    t := types.Table.New(names)
+    i32 := t.Prim("I32")
+    sp := source.Span(0, 10)
+    b := Body(BodyId(0), BodyOf.Fn(0), t.Func(t.List1(i32), i32, types.ListId(0)), 0, sp)
+    root := b.AddBlock(BlockId(-1), BlockKind.Body, sp)
+    a := b.AddLocal(Local(names.Intern("a"), sp, i32, root, LocalKind.Param, Mark.None))
+    b.Params.Push(a)
+    x Expr& = Expr.Read(sp, i32, Lvalue.Local(sp, i32, a), SiteId(-1))
+    b.Root = Block(root, Array<Stmt&>[Stmt.Return(sp, x)])
+    n := Nodes.Of(b)
+    w := n.ExprWord(x, fn(ty types.TypeId) String { return "I32" })!
+    assert w == "N0", w
+    back := n.ReadExpr(w, fn(c String&) types.TypeId { return i32 })!
+    assert back == x and n.ExprAt(back) == 0
 }
 
 test "a plan: what each site builds into and each call passes, Unset where nothing is decided" {

@@ -36535,3 +36535,27 @@ Found on the way, not fixed (lowering's, another round's file): a module whose l
 (`read plain T13d m1.Bag`, genrefs) that only lowering another module decides is lowered again in every build - its
 record never holds where that module's object is reused (the edit fuzzer's "undoing lowered again", seeds 11, 17 and 21;
 master's compiler finds seed 21 as well). A speed bug, not a stale object: the record is not taken.
+
+## W3b merged with G5+G6: a record's roots read back as copies (B3i; 2026-11-10, wt-incfix)
+
+The merge of W3b (the scope pass's judgings in records) with G5+G6 failed two items of the suite. **`editfuzzcheck`**:
+seed 1 step 3 and seed 2 step 0 built a root whose instances unit differed from a clean build's. The function that
+differed was `MapIter<I64, mut m2:WN2&>.Next`, an instance G6's weak lists with keys made the edit fuzzer write: its
+call `it.m.live(k)` passes a derived scope (O23a) found from a root, `it.m`, which lowering looks for among the call's
+arguments by identity (`lower.passedOr`, `foundOf`) and, finding it, uses the argument's value; otherwise it evaluates
+the root again. A judging taken from a record read its roots (`rN14`) through `typed.Nodes.ReadExpr`, which returned
+an `Expr` - a value, so pushing it into the plan's `Roots Vec<Expr&>` built a copy, never the body's own expression.
+The code was right but not the code a judging made now gives, so the root unit's hash differed. Not a stale key: no
+fact was missing from a reuse key. `ReadExpr`, `readExpr` and `readPlace` now give `Expr&`/`Lvalue&`, the body's node
+itself; a test in `compiler/typed.olang` holds a word read back to the same expression. W3b's own gates had not met it
+because nothing it fuzzed passed a derived scope found from a root taken from a record.
+
+**`compiler/lower.olang`'s tests** were killed by the memory cgroup during that verify (the kernel's log shows the OOM
+kills while other agents' builds ran beside it); alone they pass, peaking at 2.9 GB. Nothing to fix in the code.
+
+The re-lowering noted at the end of W3b's entry (a module lowered again in every build, seeds 11, 17 and 21) is another
+mechanism, not a T13d fact: the module's record is taken, but its object names a twin (T22c) instance,
+`m0_2erd0_twin0`, and `emit.reusing` looks a record's instances up among bodies and adapters only - a twin's symbol is
+named by its index in this build's twin table, which is not stable across programs, so it is rightly not taken by
+name. The record variants alternate (one reads every declaration's T13d fact, one fewer) only because the module is
+lowered alone in one build and beside the others in the next. Left for a round naming twins stably.
