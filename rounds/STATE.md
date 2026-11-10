@@ -75,3 +75,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-10: R8 merged, verified, pushed. G4 running. Next: W4 (after R8), then F12, F11, W3b, G5+G6, review B.
 - 2026-11-10: W4 merged, verified, pushed.
 - 2026-11-10: G4 merged, verified, pushed. F12 running.
+- 2026-11-10: F12 merged, verified, pushed.
