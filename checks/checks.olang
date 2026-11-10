@@ -1495,7 +1495,10 @@ fn apicaps(r mut report&) ? Failed {
     for want in Array<String&>["  breaking  added case: Blue\n", "  ok        added fn: fn (p Point) Max() I64\n"
             "  breaking  changed fn: fn Grow(a I64) I64\n              now: fn Grow(a I64, b I64) I64\n"
             "  ok        value of global: Limit I64 = 3\n", "  breaking  removed fn: fn Old() I64\n"
-            "  breaking  changed word: Lost\n              now: Lost(n I64)\n", "4 breaking changes\n"] {
+            "  breaking  changed word: Lost\n              now: Lost(n I64)\n"
+            "  ok        promise words of a function type in fn: fn Apply(f fn&(x I64) I64 noalloc, v I64) I64\n"
+            "  breaking  promise words lost by fn (a function type may rely on them): fn&(a I64) I64 returns noalloc "
+            "noblock nospawn norecurse noextern pure\n", "6 breaking changes\n"] {
         try r.expect(out.Contains(want), $"api: " $want.Trim(), dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" api old old lib.olang > out.txt 2>&1") == 0 and outOf(dir) == "0 breaking changes\n"

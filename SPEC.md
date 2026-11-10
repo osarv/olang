@@ -8544,10 +8544,14 @@ function value whose type writes no effect word, or through an `any`, is `anythi
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
 (G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
 one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
-length of an array it takes by value (G29) has none. Under a function whose scope obligations are more than a written
-function type says of every call - or which gives such a function - a line `# as a value: held in locals and results
-only - ...` names its scopes, or the function it gives (T22a). `doc` (B14) and the language server's hover (B15) show
-the same lines.
+length of an array it takes by value (G29) has none. Under every other function a line `# fits: fn&(a mut N&, b N&)
+keeps b in a noalloc ...` gives the tightest function type it is a value of (T21c): its signature with its inferred
+error set, then the effect words its body breaks none of (G42's facts, in the canonical order) and the relations its
+scope obligations say (`keeps b in a`, `borrows a`), so a place holding it can copy the type; a function held in locals
+and results only (T22a) says so after it. A function judged in twins (T22c) lists them, one line each - `# followed for:
+f = 'link', at FILE:LINE:COLUMN`, the function values followed and the call that first asked for the twin. `doc` (B14),
+the language server's hover (B15) and `mcp`'s `explain` and `doc` (B16) show the same lines; completion (B15) offers the
+promise words, and after `keeps`, `borrows` or `in` the parameters of the signature being written.
 
 **B11c (what imports reach).** `explain -caps FILE` prints, for the program `FILE` is the root of once it has checked,
 each module it loads - the root first, then its imports in the order loaded - with what code of the module may reach,
@@ -8807,7 +8811,11 @@ row is written per change, `breaking`, `ok` or - for an item deprecated (L4b) in
 breaks, 1 where something does, 2 where a side is neither a directory nor a commit, or a module on it does not check.
 What breaks an importer: a name removed; a signature changed - its parameters, results or receiver, a field's type, a
 constructor's parameters, a global's type; an error set grown (a complete `catch` or match of the old set no longer
-is); an enum's case, an error type's word or a trait's method added (S13a, R14, T31); a trait no longer met. What does
+is); an enum's case, an error type's word or a trait's method added (S13a, R14, T31); a trait no longer met. A function's own `# fits:` words (B11b) are compared by what an importer may hold it as: an effect word it loses (it now
+allocates, blocks, can call itself) or a relation it gains (it now keeps an argument, borrows from one more parameter)
+breaks, and one it gains or loses the other way does not. A function type written in a function's signature: a parameter's
+type gaining an effect word or `borrows`, or losing a `keeps`, breaks (an importer's functions must do less); a result's,
+the other way round; a declared function type's or a field's words changing either way breaks. What does
 not: a name added - a function, a type, a method, a field, a global; an error set narrowed; a global's value changed; a
 trait newly met.
 

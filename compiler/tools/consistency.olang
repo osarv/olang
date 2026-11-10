@@ -201,7 +201,7 @@ PromiseFacts Array<String&> = Array<String&>["returns Returns", "noalloc Allocat
 # and G42's, and nothing is a promise name without being in this table or the relation words
 fn checkPromises(p mut Problems&) {
     names := Vec<String&>()
-    for w in quoted(first("compiler/types.olang", "PromiseNames := Array")) { names.Push($w) }
+    for w in quoted(rowWith("compiler/types.olang", "PromiseNames := Array")) { names.Push($w) }
     named := Vec<String&>()
     for w in PromiseFacts { named.Push($w.Split(" ")[0]) }
     for w in names {
@@ -219,7 +219,7 @@ fn checkPromises(p mut Problems&) {
 }
 
 # the first row of a file holding text, "" for none
-fn first(path String&, text String&) String {
+fn rowWith(path String&, text String&) String {
     for row in toolkit.Rows(toolkit.Read(path)) {
         if mentions(row, text) { return $row }
     }

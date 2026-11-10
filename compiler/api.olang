@@ -166,6 +166,7 @@ fn itemSigs(b mut StringBuilder&, it doc.Entry&) {
     line := sigLine(it.Line)
     kind := itemKind(line)
     b.Push($it.Name "\t" $kind "\t" $line "\t" $depMark(it) "\n")
+    pushFits(b, it.Name, it)
     for m in it.Members {
         ml := sigLine(m.Line)
         if ml.StartsWith("meets ") {
@@ -173,6 +174,19 @@ fn itemSigs(b mut StringBuilder&, it doc.Entry&) {
             continue
         }
         b.Push($it.Name "." $m.Name "\t" $memberKind(kind, ml, m.Builder) "\t" $ml "\t" $depMark(m) "\n")
+        pushFits(b, $it.Name "." $m.Name, m)
+    }
+}
+
+# a function's "# fits:" line (B11b) as a row of its own - its key the function's and " fits", its line the type: how
+# the function is a value of a function type is the importer's to rely on (T21c)
+fn pushFits(b mut StringBuilder&, key String&, it doc.Entry&) {
+    for line in it.Line.Lines() {
+        t := line.TrimStart()
+        if not t.StartsWith("# fits: "): continue
+        c := try t.Find("   #") catch default t.Len()
+        if c < 8: continue
+        b.Push($key " fits\tfits\t" $t[8:c].Trim() "\t\n")
     }
 }
 
@@ -217,16 +231,16 @@ fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
     for s in olds { was.Put(s.Key, s) }
     for n in news {
         o := try was.Get(n.Key) catch MapError {
-            out.Push(change(addBreaks(n.Kind), $"added " $n.Kind, "", n.Line))
+            if n.Kind != "fits": out.Push(change(addBreaks(n.Kind), $"added " $n.Kind, "", n.Line))
             continue
         }
-        if o.Line != n.Line { out.Push(change.changed(o, n)) }
+        if o.Line != n.Line { pushChange(out, o, n) }
         if n.Dep and not o.Dep { out.Push(change.deprecation(n)) }
     }
     now Map<String&, Bool>
     for n in news { now.Put(n.Key, true) }
     for o in olds {
-        if not now.Has(o.Key) { out.Push(change(true, $"removed " $o.Kind, o.Line, "")) }
+        if not now.Has(o.Key) and o.Kind != "fits": out.Push(change(true, $"removed " $o.Kind, o.Line, ""))
     }
     return out
 }
@@ -242,6 +256,176 @@ fn change.deprecation(n sig) change {
 # error type's word (the same for its matches and clauses, R14), a trait's method (a type meeting it may now not)
 fn addBreaks(kind String&) Bool { return kind == "case" or kind == "word" or kind == "method" }
 
+# a changed line's change, if it is one: a function's own fits row only by its words (T21c: an importer holds the
+# function as a type with the words it had)
+fn pushChange(out mut Vec<change>&, o sig, n sig) {
+    if n.Kind != "fits" {
+        out.Push(change.changed(o, n))
+        return
+    }
+    c := change.fits(o, n)
+    if c.What != "": out.Push(c)
+}
+
+# the words a function's fits row lost or gained (B21, docs/fnvalues.md 9): an effect word it no longer has - it now
+# allocates, blocks, can call itself - breaks a type an importer holds it as, and one it gains breaks nothing; a relation
+# it gains (it now keeps an argument, borrows from one more parameter) breaks, one it loses does not
+fn change.fits(o sig, n sig) change {
+    ow := wordsOf(o.Line)
+    nw := wordsOf(n.Line)
+    lost Vec<String&>
+    gained Vec<String&>
+    for w in ow { if not nw.Has(w) and not relation(w): lost.Push(w) }
+    for w in nw { if not ow.Has(w) and relation(w): lost.Push(w) }
+    for w in nw { if not ow.Has(w) and not relation(w): gained.Push(w) }
+    for w in ow { if not nw.Has(w) and relation(w): gained.Push(w) }
+    if lost.Len() > 0 { return change(true, "promise words lost by fn (a function type may rely on them)", o.Line, n.Line) }
+    if gained.Len() > 0 { return change(false, "promise words gained by fn", o.Line, n.Line) }
+    return change(false, "", "", "")
+}
+
+fn relation(w String&) Bool { return w.StartsWith("keeps ") or w.StartsWith("borrows ") }
+
+# the promise words a function type's text ends with, each as written ("noalloc", "keeps b in a", "borrows a"), found from
+# the right: effect words, then "keeps x [in y]" and "borrows x"
+fn wordsOf(text String&) Array<String&> {
+    out Vec<String&>
+    toks := text.Split(" ")
+    i := toks.Len() - 1
+    for i >= 0 {
+        if EffectWords.Has(toks[i]) {
+            out.Push($toks[i])
+            i--
+        } else if i >= 3 and toks[i - 1] == "in" and toks[i - 3] == "keeps" {
+            out.Push($toks[i - 3] " " $toks[i - 2] " in " $toks[i])
+            i -= 4
+        } else if i >= 1 and (toks[i - 1] == "keeps" or toks[i - 1] == "borrows") {
+            out.Push($toks[i - 1] " " $toks[i])
+            i -= 2
+        } else {
+            break
+        }
+    }
+    return out.ToArray()
+}
+
+EffectWords Array<String&> = Array<String&>["returns", "noalloc", "noblock", "nospawn", "norecurse", "noextern", "pure", "noborrow"]
+
+# a function type written in a signature, polarity by where it stands: given where an importer supplies the function
+# (a parameter, not inside another function type's parameters), taken where it receives it (a result)
+type fnType struct(Words Array<String&>, Given Bool) { Words, Given }
+
+# a signature with every function type's promise words taken off, and those words, in order of appearance (B21)
+fn stripWords(s String&, given Bool, out mut Vec<fnType>&) String {
+    b := StringBuilder()
+    i I64 = 0
+    for i < s.Len() {
+        at := fnTypeAt(s, i)
+        if at < 0 {
+            b.Push(s[i:])
+            break
+        }
+        open := at + (try s[at:].Find("(") catch default s.Len())
+        close := matching(s, open)
+        if close < 0 {
+            b.Push(s[i:])
+            break
+        }
+        b.Push(s[i:open + 1])
+        slot := out.Len()
+        out.Push(fnType(Array<String&>(0), given))
+        b.Push(stripWords(s[open + 1:close], not given, out))
+        end := tailEnd(s, close + 1)
+        tail := s[close + 1:end]
+        ws := wordsOf(tail)
+        out[slot] = fnType(ws, given)
+        b.Push(")")
+        b.Push(untilWords(tail, ws))
+        i = end
+    }
+    return b.ToString()
+}
+
+# a function's signature line with the function types' promise words taken off: its parameters' types are given, its
+# result's taken. The parameter list is the first parenthesized group after the name (after a receiver's)
+fn stripSig(line String&, out mut Vec<fnType>&) String {
+    open := 2
+    if line.StartsWith("fn (") or line.StartsWith("extern fn (") {
+        r := try line.Find("(") catch default 0
+        open = matching(line, r) + 1
+    }
+    open = open + (try line[open:].Find("(") catch default line.Len() - open)
+    close := matching(line, open)
+    if close < 0 or open >= line.Len(): return stripWords(line, false, out)
+    head := line[:open + 1]
+    params := stripWords(line[open + 1:close], true, out)
+    return $head $params $stripWords(line[close:], false, out)
+}
+
+# where a function type ("fn(", "fn&(", "fn?&(") begins at or after offset from in s, -1 for none
+fn fnTypeAt(s String&, from I64) I64 {
+    for i in range from, s.Len() {
+        if not s[i:].StartsWith("fn"): continue
+        if i > 0 and (Char(s[i - 1]).IsLetter() or Char(s[i - 1]).IsDigit() or s[i - 1] == '_' or s[i - 1] == '.'): continue
+        rest := s[i + 2:]
+        if rest.StartsWith("(") or rest.StartsWith("&(") or rest.StartsWith("?&("): return i
+    }
+    return -1
+}
+
+# the index of the ")" closing the "(" at offset open, -1 for none
+fn matching(s String&, open I64) I64 {
+    depth I64 = 0
+    for i in range open, s.Len() {
+        if s[i] == '(': depth++
+        if s[i] == ')' {
+            depth--
+            if depth == 0: return i
+        }
+    }
+    return -1
+}
+
+# where the text after a function type's parameters ends: at the next "," or unmatched ")" outside brackets
+fn tailEnd(s String&, from I64) I64 {
+    depth I64 = 0
+    for i in range from, s.Len() {
+        ch := s[i]
+        if ch == '(' or ch == '<' or ch == '[': depth++
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0: depth--
+        if depth == 0 and (ch == ',' or ch == ')'): return i
+    }
+    return s.Len()
+}
+
+# tail without its trailing words
+fn untilWords(tail String&, ws Array<String&>&) String {
+    toks := tail.Split(" ")
+    n I64 = 0
+    for w in ws { n += w.Split(" ").Len() }
+    return toks[:toks.Len() - n].Join(" ") if n > 0 else tail
+}
+
+# whether a changed signature line of a function differs only in function types' promise words, and none of the changes
+# breaks: a parameter's type gaining a restricting word or losing a "keeps" makes callers' functions do less; a
+# result's, the other way round
+fn wordsOnly(o String&, n String&) Bool {
+    ofs Vec<fnType>
+    nfs Vec<fnType>
+    if stripSig(o, ofs) != stripSig(n, nfs) or ofs.Len() != nfs.Len() or ofs.Len() == 0: return false
+    for k in range ofs.Len() {
+        for w in nfs[k].Words {
+            if ofs[k].Words.Has(w): continue
+            if ofs[k].Given != relation(w) { return false }
+        }
+        for w in ofs[k].Words {
+            if nfs[k].Words.Has(w): continue
+            if ofs[k].Given == relation(w) { return false }
+        }
+    }
+    return true
+}
+
 # what a changed line is: a function's or a constructor's error set only - narrower breaks nothing, anything else does -
 # a global's value only, which breaks nothing; any other change breaks
 fn change.changed(o sig, n sig) change {
@@ -250,6 +434,9 @@ fn change.changed(o sig, n sig) change {
     if oh == nh and oe != ne {
         if subset(ne, oe) { return change(false, $"narrower error set of " $n.Kind, o.Line, n.Line) }
         return change(true, $"wider error set of " $n.Kind, o.Line, n.Line)
+    }
+    if n.Kind == "fn" and wordsOnly(o.Line, n.Line) {
+        return change(false, "promise words of a function type in fn", o.Line, n.Line)
     }
     if n.Kind == "global" and valueless(o.Line) == valueless(n.Line) {
         return change(false, "value of global", o.Line, n.Line)

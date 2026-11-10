@@ -2154,13 +2154,13 @@ fn (s Scoper&) TwinWords(t I64) String {
             out.Push($who " = an instance")
             continue
         }
-        names Vec<String&>
+        fns Vec<String&>
         for id in seg[colon + 1:].Split(",") {
             if id.Len() == 0 { continue }
             n := try (id[:id.Len() - 1] if id.EndsWith("a") else id).ParseInt(10) catch default -1
-            if n >= 0 and n < s.Bodies.Len() { names.Push(s.bodyWho(s.Bodies[n])) }
+            if n >= 0 and n < s.Bodies.Len() { fns.Push(s.bodyWho(s.Bodies[n])) }
         }
-        out.Push($who " = " $names.Join(", "))
+        out.Push($who " = " $fns.Join(", "))
     }
     return out.Join(", ")
 }
