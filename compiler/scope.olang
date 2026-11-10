@@ -1360,7 +1360,7 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
     # T22d: an instance whose fixed fields hold functions - judged here by their fields' types; a constructor's call
     # judges its arguments as before
     instAt := place
-    if place != BndNone and not s.bndCollect and typed.Call.Of(s.unAway(x)) is null and s.instType(x.Type()) {
+    if place != BndNone and not s.bndCollect and not s.ctorCall(x) and s.instType(x.Type()) {
         s.bndInst(x, place)
         place = BndNone
     }
@@ -2428,6 +2428,14 @@ fn (s mut Scoper&) bndFieldRecs(p typed.Lvalue&, out mut Vec<fnRec>&) {
         }
         case _ { }
     }
+}
+
+# whether x is a constructor's call (its arguments judged at a boundary as before)
+fn (s mut Scoper&) ctorCall(x typed.Expr&) Bool {
+    c := typed.Call.Of(s.unAway(x))
+    if c is null: return false
+    b := s.bodyOf(c.Target)
+    return b >= 0 and s.Bodies[b].Of == typed.BodyOf.Ctor
 }
 
 # the arguments of constructor call c that give a fixed field its value (bits by argument): followed where its instance
