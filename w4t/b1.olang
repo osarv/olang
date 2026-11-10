@@ -1,0 +1,25 @@
+type N struct(v I32) {
+    v
+}
+type Cur struct(of mut N&) {
+    at mut N& = of
+}
+fn churn() {
+    for i in range 50 {
+        junk := Array<I64>(1000, i)
+        assert junk[999] == i
+    }
+}
+fn main() ? {
+    outer mut N& = N(1)
+    keep N& = outer
+    for i in range 3 {
+        x mut N& = N(I32(42 + i))
+        c := Cur(outer)
+        arr Array<mut Cur&> = Array<Cur&>[c]
+        arr[0].at = x
+        keep = c.at
+    }
+    churn()
+    assert keep.v == 44
+}

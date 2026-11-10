@@ -1,0 +1,102 @@
+== b11near.olang
+OLD: b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'First'?
+   16 |     if count < 0 { error MyErr.FIRTS }
+b11near.olang:17:12: error: unknown name 'cout' - did you mean 'count'?
+st=141
+NEW: b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'First'?
+   16 |     if count < 0 { error MyErr.FIRTS }
+b11near.olang:17:12: error: unknown name 'cout' - did you mean 'count'?
+st=1
+== d15null.olang
+OLD: d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'
+d15null.olang:10:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
+d15null.olang:11:50: error[E4a]: this literal expression has no value - no integer type holds it, from I128's least to U128's greatest
+st=141
+NEW: d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'
+d15null.olang:10:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
+d15null.olang:11:50: error[E4a]: this literal expression has no value - no integer type holds it, from I128's least to U128's greatest
+st=1
+== d19bareowner.olang
+OLD: d19bareowner.olang:9:4: error[D19]: Bag is generic, and a builder's owner is written with its arguments - 'fn Bag<T>.mk(...)' for every instance, 'fn Bag<String&>.mk(...)' for one
+d19bareowner.olang:11:4: error[D19a]: 'two' makes a Bag its module declares and takes none - declare it as the type's builder, 'fn Bag<I64>.two(...)', and call it 'Bag.two(...)'
+d19bareowner.olang:17:19: error[D19]: Bag<F64> has no builder, case or member 'one'
+st=1
+NEW: d19bareowner.olang:9:4: error[D19]: Bag is generic, and a builder's owner is written with its arguments - 'fn Bag<T>.mk(...)' for every instance, 'fn Bag<String&>.mk(...)' for one
+d19bareowner.olang:11:4: error[D19a]: 'two' makes a Bag its module declares and takes none - declare it as the type's builder, 'fn Bag<I64>.two(...)', and call it 'Bag.two(...)'
+d19bareowner.olang:17:19: error[D19]: Bag<F64> has no builder, case or member 'one'
+st=141
+== g1atypevarerrs.olang
+OLD: g1atypevarerrs.olang:3:21: error[G1a]: 'T' is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'
+g1atypevarerrs.olang:6:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+g1atypevarerrs.olang:6:5: error[S3]: 'keep(1)' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+st=1
+NEW: g1atypevarerrs.olang:3:21: error[G1a]: 'T' is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'
+g1atypevarerrs.olang:6:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+g1atypevarerrs.olang:6:5: error[S3]: 'keep(1)' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+st=141
+== o23aliasmethod.olang
+OLD: o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
+compilation failed with 1 error
+st=1
+NEW: built
+st=0
+== o23aliaswrite.olang
+OLD: o23aliaswrite.olang:24:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+compilation failed with 1 error
+st=1
+NEW: built
+st=0
+== protobothstr.olang
+OLD: protobothstr.olang:6:10: error[M6b]: K declares Str twice, public and private - keep one: Str, or str for its own module only
+protobothstr.olang:8:15: error[M6b]: K declares Next twice, public and private - keep one: Next, or next for its own module only
+    8 | fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.End }
+st=141
+NEW: protobothstr.olang:6:10: error[M6b]: K declares Str twice, public and private - keep one: Str, or str for its own module only
+protobothstr.olang:8:15: error[M6b]: K declares Next twice, public and private - keep one: Next, or next for its own module only
+    8 | fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.End }
+st=1
+== r3bqualified.olang
+OLD: r3bqualified.olang:8:11: error[T19]: NotFound has no word 'NotFound'
+    8 |     error NotFound.NotFound
+r3bqualified.olang:12:5: error[R8]: nothing here can fail - write it without 'try'
+st=1
+NEW: r3bqualified.olang:8:11: error[T19]: NotFound has no word 'NotFound'
+    8 |     error NotFound.NotFound
+r3bqualified.olang:12:5: error[R8]: nothing here can fail - write it without 'try'
+st=141
+== roglobaltext.olang
+OLD: roglobaltext.olang:13:7: error[S6]: T cannot be written - only a local, a parameter or a 'mut' global can
+roglobaltext.olang:14:7: error[S6]: U cannot be written - only a local, a parameter or a 'mut' global can
+roglobaltext.olang:15:14: error[S6]: V cannot be written - only a local, a parameter or a 'mut' global can
+st=141
+NEW: roglobaltext.olang:13:7: error[S6]: T cannot be written - only a local, a parameter or a 'mut' global can
+roglobaltext.olang:14:7: error[S6]: U cannot be written - only a local, a parameter or a 'mut' global can
+roglobaltext.olang:15:14: error[S6]: V cannot be written - only a local, a parameter or a 'mut' global can
+st=1
+== sweepeval.olang
+OLD: sweepeval.olang:94:29: error[S18c]: this assertion is false, evaluated while compiling: I33
+sweepeval.olang:95:29: error[S18c]: this assertion is false, evaluated while compiling: U33
+sweepeval.olang:96:29: error[S18c]: this assertion is false, evaluated while compiling: I40
+st=1
+NEW: sweepeval.olang:94:29: error[S18c]: this assertion is false, evaluated while compiling: I33
+sweepeval.olang:95:29: error[S18c]: this assertion is false, evaluated while compiling: U33
+sweepeval.olang:96:29: error[S18c]: this assertion is false, evaluated while compiling: I40
+st=141
+== t19asetholdsitself.olang
+OLD: t19asetholdsitself.olang:3:6: error[T19a]: 'A' reaches itself through its member 'B' - a set holds its members' errors, never itself
+    3 | type A error B { X }
+t19asetholdsitself.olang:4:6: error[T19a]: 'B' reaches itself through its member 'A' - a set holds its members' errors, never itself
+st=141
+NEW: t19asetholdsitself.olang:3:6: error[T19a]: 'A' reaches itself through its member 'B' - a set holds its members' errors, never itself
+    3 | type A error B { X }
+t19asetholdsitself.olang:4:6: error[T19a]: 'B' reaches itself through its member 'A' - a set holds its members' errors, never itself
+st=1
+== unknowncascade.olang
+OLD: unknowncascade.olang:10:17: error: unknown name 'nope'
+unknowncascade.olang:12:16: error: unknown name 'nope2'
+unknowncascade.olang:13:12: error: unknown name 'nope3'
+st=141
+NEW: unknowncascade.olang:10:17: error: unknown name 'nope'
+unknowncascade.olang:12:16: error: unknown name 'nope2'
+unknowncascade.olang:13:12: error: unknown name 'nope3'
+st=1

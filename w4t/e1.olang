@@ -1,0 +1,24 @@
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+type Hold3 struct(of mut Node&) {
+    at mut Node& = of
+}
+fn widen3() I64 {
+    outer mut Node& = Node(7)
+    keep Node& = outer
+    for i in range 2 {
+        x mut Node& = Node(i)
+        h := Hold3(outer)
+        hs Array<mut Hold3&> = Array<Hold3&>[h]
+        hs[0].at = x
+        keep = h.at
+    }
+    junk := Array<I64>(5000, 9)
+    assert junk[0] == 9
+    return keep.v
+}
+fn main() {
+    assert widen3() == 1
+}

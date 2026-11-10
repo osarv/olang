@@ -1,0 +1,19 @@
+type N struct(v I32) {
+    v
+    next mut N?& = null
+}
+type Cur struct(of mut N&) {
+    at mut N& = of
+}
+fn main() ? {
+    outer mut N& = N(1)
+    for _ in range 2 {
+        x mut N& = N(42)
+        c := Cur(outer)
+        arr Array<mut Cur&> = Array<Cur&>[c]
+        arr[0].at = x
+        y mut N& = N(7)
+        outer.next = y
+    }
+    assert outer.next!.v == 7
+}

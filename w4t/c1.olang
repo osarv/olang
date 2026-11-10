@@ -1,0 +1,18 @@
+type N struct() {
+    next mut N?& = null
+    v I64 = 0
+}
+type C struct(of mut N&) {
+    cur mut N& = of
+}
+fn f(t mut N&, g mut N&) {
+    c := C(t)
+    c.cur = g
+    c.cur.next = N()
+}
+fn main() ? {
+    a mut N& = N()
+    b mut N& = N()
+    f(a, b)
+    assert b.next is not null
+}

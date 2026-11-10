@@ -1,0 +1,28 @@
+type N struct() {
+    next mut N?& = null
+    v I64 = 0
+}
+type C struct(of mut N&) {
+    cur mut N& = of
+}
+fn churn() {
+    for i in range 50 {
+        junk := Array<I64>(1000, i)
+        assert junk[999] == i
+    }
+}
+fn main() ? {
+    g mut N& = N()
+    {
+        t mut N& = N()
+        a := C(g)
+        b := C(t)
+        arr Array<mut C&> = Array<C&>[a, b]
+        for k in range 2 {
+            arr[k].cur.next = N()
+            arr[k].cur.next!.v = 7
+        }
+    }
+    churn()
+    assert g.next!.v == 7
+}

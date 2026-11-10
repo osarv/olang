@@ -1,0 +1,88 @@
+origin none -1 typed.Expr.Borrow(source.Span(4410, 4416), 883, typed.Lvalue.Field(source.Span(4410, 4416), 882, typed.Lvalue.Deref(sour | line 60: old Array<T>& = v.data                                  # the buffer being replaced, viewed (not copied)
+origin none -1 typed.Expr.Slice(source.Span(4512, 4521), 883, typed.Slice(typed.Lvalue.Deref(source.Span(4512, 4521), 882, typed.Expr.R | line 61: v.data = old[:v.n].grown(r)
+origin none -1 typed.Expr.Borrow(source.Span(4410, 4416), 2608, typed.Lvalue.Field(source.Span(4410, 4416), 2339, typed.Lvalue.Deref(so | line 60: old Array<T>& = v.data                                  # the buffer being replaced, viewed (not copied)
+origin none -1 typed.Expr.Slice(source.Span(4512, 4521), 2608, typed.Slice(typed.Lvalue.Deref(source.Span(4512, 4521), 2339, typed.Expr | line 61: v.data = old[:v.n].grown(r)
+lift out to scope.Term.Var(1) with its storage | line 1177: out := Array<Char>(n)
+lift out to scope.Term.Var(1) with its storage | line 1177: out := Array<Char>(n)
+origin none 0 typed.Expr.Read(source.Span(2277, 2278), 1958, typed.Lvalue.Local(source.Span(2277, 2278), 1958, 0), -1) | line 49: for c in t {
+origin none 0 typed.Expr.Read(source.Span(5562, 5563), 1958, typed.Lvalue.Local(source.Span(5562, 5563), 1958, 0), -1) | line 155: for x in t {
+origin none 0 typed.Expr.Read(source.Span(7558, 7559), 1958, typed.Lvalue.Local(source.Span(7558, 7559), 1958, 0), -1) | line 229: for i, c in t { out[i] = c.ToUpper() }
+lift out to scope.Term.Var(1) with its storage | line 228: out := Array<Char>(t.Len())
+origin none 0 typed.Expr.Read(source.Span(7558, 7559), 1958, typed.Lvalue.Local(source.Span(7558, 7559), 1958, 0), -1) | line 229: for i, c in t { out[i] = c.ToUpper() }
+lift out to scope.Term.Var(1) with its storage | line 228: out := Array<Char>(t.Len())
+origin none 0 typed.Expr.Read(source.Span(7558, 7559), 1958, typed.Lvalue.Local(source.Span(7558, 7559), 1958, 0), -1) | line 229: for i, c in t { out[i] = c.ToUpper() }
+origin none 0 typed.Expr.Read(source.Span(7558, 7559), 1958, typed.Lvalue.Local(source.Span(7558, 7559), 1958, 0), -1) | line 229: for i, c in t { out[i] = c.ToUpper() }
+origin none 0 typed.Expr.Read(source.Span(7800, 7801), 1958, typed.Lvalue.Local(source.Span(7800, 7801), 1958, 0), -1) | line 236: for i, c in t { out[i] = c.ToLower() }
+lift out to scope.Term.Var(1) with its storage | line 235: out := Array<Char>(t.Len())
+origin none 0 typed.Expr.Read(source.Span(7800, 7801), 1958, typed.Lvalue.Local(source.Span(7800, 7801), 1958, 0), -1) | line 236: for i, c in t { out[i] = c.ToLower() }
+lift out to scope.Term.Var(1) with its storage | line 235: out := Array<Char>(t.Len())
+origin none 0 typed.Expr.Read(source.Span(7800, 7801), 1958, typed.Lvalue.Local(source.Span(7800, 7801), 1958, 0), -1) | line 236: for i, c in t { out[i] = c.ToLower() }
+origin none 0 typed.Expr.Read(source.Span(7800, 7801), 1958, typed.Lvalue.Local(source.Span(7800, 7801), 1958, 0), -1) | line 236: for i, c in t { out[i] = c.ToLower() }
+origin none 0 typed.Expr.Read(source.Span(8559, 8560), 1958, typed.Lvalue.Local(source.Span(8559, 8560), 1958, 0), -1) | line 255: for i, c in t { out[i] = U8(c) }
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1968, typed.Lvalue.Local(source.Span(11266, 11271), 1968, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1968, typed.Lvalue.Local(source.Span(11407, 11412), 1968, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+lift out to scope.Term.Var(2) with its storage | line 320: out := Array<Char>(n)
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1968, typed.Lvalue.Local(source.Span(11266, 11271), 1968, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1968, typed.Lvalue.Local(source.Span(11407, 11412), 1968, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+lift out to scope.Term.Var(2) with its storage | line 320: out := Array<Char>(n)
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1968, typed.Lvalue.Local(source.Span(11266, 11271), 1968, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1968, typed.Lvalue.Local(source.Span(11407, 11412), 1968, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1968, typed.Lvalue.Local(source.Span(11266, 11271), 1968, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1968, typed.Lvalue.Local(source.Span(11407, 11412), 1968, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1985, typed.Lvalue.Local(source.Span(11266, 11271), 1985, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1985, typed.Lvalue.Local(source.Span(11407, 11412), 1985, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+lift out to scope.Term.Var(2) with its storage | line 320: out := Array<Char>(n)
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1985, typed.Lvalue.Local(source.Span(11266, 11271), 1985, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1985, typed.Lvalue.Local(source.Span(11407, 11412), 1985, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+lift out to scope.Term.Var(2) with its storage | line 320: out := Array<Char>(n)
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1985, typed.Lvalue.Local(source.Span(11266, 11271), 1985, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1985, typed.Lvalue.Local(source.Span(11407, 11412), 1985, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+origin none 0 typed.Expr.Read(source.Span(11266, 11271), 1985, typed.Lvalue.Local(source.Span(11266, 11271), 1985, 0), -1) | line 318: for p in parts { n += p.Len() }
+origin none 0 typed.Expr.Read(source.Span(11407, 11412), 1985, typed.Lvalue.Local(source.Span(11407, 11412), 1985, 0), -1) | line 322: for i, p in parts {
+origin none 1 typed.Expr.Read(source.Span(11455, 11458), 1958, typed.Lvalue.Local(source.Span(11455, 11458), 1958, 1), -1) | line 324: for c in sep {
+origin none 0 typed.Expr.Read(source.Span(12199, 12200), 1958, typed.Lvalue.Local(source.Span(12199, 12200), 1958, 0), -1) | line 346: for i, c in t { out[at + i] = c }
+lift out to scope.Term.Var(1) with its storage | line 344: out := Array<Char>(width, fill)
+origin none 0 typed.Expr.Read(source.Span(12199, 12200), 1958, typed.Lvalue.Local(source.Span(12199, 12200), 1958, 0), -1) | line 346: for i, c in t { out[at + i] = c }
+lift out to scope.Term.Var(1) with its storage | line 344: out := Array<Char>(width, fill)
+origin none 0 typed.Expr.Read(source.Span(12199, 12200), 1958, typed.Lvalue.Local(source.Span(12199, 12200), 1958, 0), -1) | line 346: for i, c in t { out[at + i] = c }
+origin none 0 typed.Expr.Read(source.Span(12199, 12200), 1958, typed.Lvalue.Local(source.Span(12199, 12200), 1958, 0), -1) | line 346: for i, c in t { out[at + i] = c }
+origin none 0 typed.Expr.Read(source.Span(12579, 12580), 1958, typed.Lvalue.Local(source.Span(12579, 12580), 1958, 0), -1) | line 355: for i, c in t { out[i] = c }
+lift out to scope.Term.Var(1) with its storage | line 354: out := Array<Char>(width, fill)
+origin none 0 typed.Expr.Read(source.Span(12579, 12580), 1958, typed.Lvalue.Local(source.Span(12579, 12580), 1958, 0), -1) | line 355: for i, c in t { out[i] = c }
+lift out to scope.Term.Var(1) with its storage | line 354: out := Array<Char>(width, fill)
+origin none 0 typed.Expr.Read(source.Span(12579, 12580), 1958, typed.Lvalue.Local(source.Span(12579, 12580), 1958, 0), -1) | line 355: for i, c in t { out[i] = c }
+origin none 0 typed.Expr.Read(source.Span(12579, 12580), 1958, typed.Lvalue.Local(source.Span(12579, 12580), 1958, 0), -1) | line 355: for i, c in t { out[i] = c }
+lift out to scope.Term.Var(0) with its storage | line 465: out := Array<Char>(65 - at)
+lift out to scope.Term.Var(0) with its storage | line 465: out := Array<Char>(65 - at)
+origin none -1 typed.Expr.Cond(source.Span(19869, 19906), 1958, typed.Cond(typed.Expr.Cond(source.Span(19878, 19896), 2, typed.Cond(typ | line 483: digits := t[1:] if neg or t[0] == '+' else t[:]
+origin none -1 typed.Expr.Cond(source.Span(20836, 20866), 1958, typed.Cond(typed.Expr.Prim(source.Span(20845, 20856), 2, typed.PrimOp.E | line 499: digits := t[1:] if t[0] == '+' else t[:]
+origin none 0 typed.Expr.Read(source.Span(30515, 30516), 1958, typed.Lvalue.Local(source.Span(30515, 30516), 1958, 0), -1) | line 729: for i, c in t {
+origin none -1 typed.Expr.Slice(source.Span(28049, 28058), 1958, typed.Slice(typed.Lvalue.Deref(source.Span(28049, 28058), 701, typed.E | line 659: body := t[start:]
+origin none 1 typed.Expr.Read(source.Span(12499, 12502), 1958, typed.Lvalue.Local(source.Span(12499, 12502), 1958, 1), -1) | line 267: for c in sep {
+origin none -1 typed.Expr.Borrow(source.Span(12593, 12602), 1958, typed.Lvalue.Elem(source.Span(12593, 12602), 701, typed.Elem(typed.Lv | line 272: for c in v.data[i] {
+lift out to scope.Term.Var(2) with its storage | line 263: out := Array<Char>(n)
+origin none 1 typed.Expr.Read(source.Span(12499, 12502), 1958, typed.Lvalue.Local(source.Span(12499, 12502), 1958, 1), -1) | line 267: for c in sep {
+origin none -1 typed.Expr.Borrow(source.Span(12593, 12602), 1958, typed.Lvalue.Elem(source.Span(12593, 12602), 701, typed.Elem(typed.Lv | line 272: for c in v.data[i] {
+lift out to scope.Term.Var(2) with its storage | line 263: out := Array<Char>(n)
+origin none 1 typed.Expr.Read(source.Span(12499, 12502), 1958, typed.Lvalue.Local(source.Span(12499, 12502), 1958, 1), -1) | line 267: for c in sep {
+origin none -1 typed.Expr.Borrow(source.Span(12593, 12602), 1958, typed.Lvalue.Elem(source.Span(12593, 12602), 701, typed.Elem(typed.Lv | line 272: for c in v.data[i] {
+origin none 1 typed.Expr.Read(source.Span(12499, 12502), 1958, typed.Lvalue.Local(source.Span(12499, 12502), 1958, 1), -1) | line 267: for c in sep {
+origin none -1 typed.Expr.Borrow(source.Span(12593, 12602), 1958, typed.Lvalue.Elem(source.Span(12593, 12602), 701, typed.Elem(typed.Lv | line 272: for c in v.data[i] {
+no lift c for a part kept | line 19: c := Cur(outer)
+no lift c for a part kept | line 19: c := Cur(outer)
+rejudged 180 size 1 first 251 typed.BodyOf.Ctor(2578, 0) sites 0 why mark 251.0 typed.BodyOf.Ctor(2578, 0)
+rejudged 181 size 1 first 156 typed.BodyOf.Fn(156) sites 9 why mark 251.0 typed.BodyOf.Ctor(2578, 0)
+checks/cases/o23aliaswrite.olang:24:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   24 |     assert $keep != ""
+      |             ^~~~
+checks/cases/o23aliaswrite.olang:22:9: note: 'keep' is given a value here
+   22 |         keep = c.at
+      |         ^~~~~~~~~~~
+compilation failed with 1 error
