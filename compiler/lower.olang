@@ -2444,11 +2444,15 @@ fn (ln mut lowering&) reclaimSites() {
     if nb == 0: return
     g := ln.L.Gen()
     lv mut liveness& = liveness()
+    views := g.AnyLeaves(ln.T)
     for i in range ln.F.Locals.Len() {
         r := g.Reach(ln.T, ln.F.Locals[i].Ty)
         # (a variable or parameter holding owning references in place is an owning place, counted: countedLocal, holdParams)
         k := ln.F.Locals[i].Kind
         if r == mir.ReachAny and (k == mir.LocalKind.Var or k == mir.LocalKind.Param) and ln.counts(ln.F.Locals[i].Ty) { r = mir.ReachNone }
+        # (round 5: one that may view an array a generational instance holds in place - compared at a site, which puts
+        # back no array it points into; or, viewing one through a part, keeping every array there: mir.ViewOf)
+        if r == mir.ReachNone and views and g.ViewOf(ln.T, ln.F.Locals[i].Ty) != mir.ViewNone { r = ReachView }
         lv.idx.Push(-1)
         if r == mir.ReachNone: continue
         lv.idx[i] = lv.locals.Len()
@@ -2571,6 +2575,10 @@ fn (ln mut lowering&) resultSites(lv mut liveness&) {
         try b.Stmts.Insert(0, st) catch { }
     }
 }
+
+# a local reclaimSites follows that reaches no generational instance but may view an array one holds in place (round 5):
+# in use at a site, it is compared there (mir.ViewOf)
+ReachView I64 = 3
 
 # the liveness reclaimSites follows: of the locals that may reach a generational instance only (locals, by compact
 # index, with their reach), by block at its entry and its exit, and in use at the point being walked

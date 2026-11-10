@@ -62,6 +62,13 @@ fn addAllTo(s mut Vec<I64>&, t Vec<I64>&) I64 {
     return n
 }
 
+# a list of origins of its own
+fn copyOf(o Vec<I64>&) Vec<I64> {
+    out Vec<I64>
+    for y in o { out.Push(y) }
+    return out
+}
+
 fn has(s Vec<I64>&, x I64) Bool {
     for y in s {
         if y == x: return true
@@ -264,6 +271,27 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     genListed Bool = false
     pendTy Vec<I64>           # reasons found by the walks, before the types are listed
     pendWhy Vec<String&>
+    # genrefs round 5: whether a generational type holds an array in place (bufOn), put back with it where its
+    # reclaiming may - unless a view of one is kept somewhere no reclaiming site sees (bufNever, its reason bufWhy). The
+    # final walks' facts: each call's arguments' origins (taFrom calls taTo, argument taJ); the views in use across each call (gvCall, an index into the gc lists, with their origins and
+    # where each is). Then, by body: the parameters that may be views (taintPar; taintAll every one, where a caller is
+    # not seen), whether no array may be put back in it (bufAll, with the view across a call that says so, bufBy); the
+    # decisions
+    bufOn Bool = false
+    bufNever Bool = false
+    bufWhy String& = ""
+    taFrom Vec<I64>
+    taTo Vec<I64>
+    taJ Vec<I64>
+    taOrig Vec<mut Vec<I64>&>
+    gvCall Vec<I64>
+    gvOrig Vec<mut Vec<I64>&>
+    gvSp Vec<source.Span>
+    taintPar Vec<mut Vec<I64>&>
+    taintAll Vec<Bool>
+    bufAll Vec<Bool>
+    bufBy Vec<I64>
+    genBuf Vec<pair.Pair<I64, types.TypeId>>
     prelude Vec<Bool>         # whether its code is the prelude's (std/prelude), whose fills are trusted (makeStores)
     # summaries, by body: the origins its result may carry (no New); the places each parameter's value is stored into
     # directly, (param << 32) | place; the parameters whose values it may keep elsewhere; the places it may let go of,
@@ -731,6 +759,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     if f.genOn {
         for k in f.P.Gens.Keys() { f.gen.Decls.Put(k, true) }
         for k in f.P.WeakSlots.Keys() { f.gen.Weak.Put(k, true) }
+        f.bufOn = f.gen.AnyLeaves(f.T())
     }
     for b in range n {
         m := f.bodyModule(b)
@@ -994,6 +1023,17 @@ fn (w mut walker&) genCalls() {
         l := w.useLocal[u]
         if l >= 0 and l < nl and reach[l] != -2: usesOf[l].Push(u)
     }
+    views Vec<I64>
+    viewUses Vec<mut Vec<I64>&>
+    if f.bufOn {
+        w.viewLocals(views, viewUses)
+        # (a generator holding a view across a yield: its caller may reclaim between two)
+        if body.Gen {
+            for l in views {
+                if f.mayView(w.origins[l]): f.bufNot("a generator holds a view that may be into an array a generational instance holds in place, across a yield", body.File, body.Locals[l].Sp)
+            }
+        }
+    }
     for c in range w.gcStmt.Len() {
         st := w.gcStmt[c]
         csp := w.gcSp[c]
@@ -1020,8 +1060,152 @@ fn (w mut walker&) genCalls() {
             f.gcTypes.Push(tys[i])
             f.gcWhy.Push(whys[i])
         }
+        if f.bufOn: w.viewsAcross(f.gcFrom.Len() - 1, st, csp, views, viewUses)
     }
 }
+
+# ---- round 5: views of the arrays a generational instance holds in place, in use across calls ----
+
+# the locals of this body that may view an array a generational instance holds in place (mir.GenInfo.ViewOf), and the
+# uses of each
+fn (w mut walker&) viewLocals(views mut Vec<I64>&, viewUses mut Vec<mut Vec<I64>&>&) {
+    body := w.body()
+    nl := body.Locals.Len()
+    for l in range nl {
+        viewUses.Push(Vec<I64>())
+        if body.Locals[l].Kind != typed.LocalKind.Capture and w.F.gen.ViewOf(w.T(), body.Locals[l].Ty) != mir.ViewNone: views.Push(l)
+    }
+    for u in range w.useLocal.Len() {
+        l := w.useLocal[u]
+        if l >= 0 and l < nl: viewUses[l].Push(u)
+    }
+}
+
+# call gi (an index into the gc lists) at csp in statement st: the views in use across it - a local used after the
+# statement, a value the statement computes outside the call - with their origins, judged once the parameters' are
+# known (bufDecide)
+fn (w mut walker&) viewsAcross(gi I64, st I64, csp source.Span, views Vec<I64>&, viewUses Vec<mut Vec<I64>&>&) {
+    f := w.F
+    for l in views {
+        u := w.inUseAcross(l, st, csp, viewUses[l])
+        if u < 0 or not f.mayView(w.origins[l]): continue
+        f.gvCall.Push(gi)
+        f.gvOrig.Push(copyOf(w.origins[l]))
+        f.gvSp.Push(w.useSp[u])
+    }
+    for i in range w.gvStmt.Len() {
+        if w.gvStmt[i] != st or spanIn(w.gvSp[i], csp) or spanIn(csp, w.gvSp[i]): continue
+        f.gvCall.Push(gi)
+        f.gvOrig.Push(copyOf(w.gvOrig[i]))
+        f.gvSp.Push(w.gvSp[i])
+    }
+}
+
+# a value computed in the final walk that may view an array a generational instance holds in place: in use across any
+# call its statement makes outside it (viewsAcross)
+fn (w mut walker&) noteView(x typed.Expr&, o Vec<I64>&) {
+    f := w.F
+    if f.gen.ViewOf(w.T(), x.Type()) == mir.ViewNone or not f.mayView(o): return
+    w.gvStmt.Push(w.cur)
+    w.gvSp.Push(x.Span())
+    w.gvOrig.Push(copyOf(o))
+}
+
+# whether origins o may name an array a generational instance holds in place, before the parameters are judged: a
+# value of a place such an instance holds (bufPlace), a parameter's, or one not known
+fn (f mut Free&) mayView(o Vec<I64>&) Bool {
+    for y in o {
+        k := okind(y)
+        if k == OPar or k == OParC or k == OUnk: return true
+        if k == OPl and f.bufPlace(oval(y)): return true
+    }
+    return false
+}
+
+# ...and once they are judged, in body b
+fn (f mut Free&) views(o Vec<I64>&, b I64) Bool {
+    for y in o {
+        k := okind(y)
+        if k == OUnk: return true
+        if k == OPl and f.bufPlace(oval(y)): return true
+        if (k == OPar or k == OParC) and (f.taintAll[b] or has(f.taintPar[b], oval(y))): return true
+    }
+    return false
+}
+
+# whether candidate place k is an array, or an owner (a Vec, a Map), held in place by a generational type - its keying
+# type one, or a type one holds in place - so that its value is storage reclaiming may put back
+fn (f mut Free&) bufPlace(k I64) Bool {
+    if k < 0 or k >= f.keyTy.Len() or f.keyField[k] < 0 or not (f.arr[k] or f.owner[k]): return false
+    t := f.T()
+    r := t.Repr(f.keyTy[k])
+    return f.gen.IsGen(t, r) or f.gen.PartOfGen(t, r)
+}
+
+# a view that may be into such an array kept where no reclaiming site sees it - stored into a place, captured, held by a
+# generator across a yield: no array is put back anywhere
+fn (f mut Free&) bufNot(why String&, file I64, sp source.Span) {
+    if f.bufNever: return
+    f.bufNever = true
+    f.bufWhy = $f.P.L.Diags.Locate(file, I64(sp.Start)) ": note: " $why if file >= 0 else $"note: " $why
+}
+
+# the final step's decisions for the arrays (round 5): the parameters that may be views, to a fixed point over the
+# calls; then by body, whether a caller may hold a view across a call into it - along every call, as genAcross; the
+# (body, type) pairs where reclaiming may put them back
+fn (f mut Free&) bufDecide() {
+    n := f.Bodies.Len()
+    for b in range n {
+        f.taintPar.Push(Vec<I64>())
+        f.taintAll.Push(f.acrossAll[b])
+        f.bufAll.Push(f.acrossAll[b])
+        f.bufBy.Push(-1)
+    }
+    changed := true
+    for changed {
+        changed = false
+        for i in range f.taFrom.Len() {
+            to := f.taTo[i]
+            if to < 0 or to >= n or f.taintAll[to] or has(f.taintPar[to], f.taJ[i]): continue
+            if not f.views(f.taOrig[i], f.taFrom[i]): continue
+            f.taintPar[to].Push(f.taJ[i])
+            changed = true
+        }
+    }
+    for i in range f.gvCall.Len() {
+        c := f.gvCall[i]
+        to := f.gcTo[c]
+        if to < 0 or to >= n or f.bufAll[to] or not f.views(f.gvOrig[i], f.gcFrom[c]): continue
+        f.bufAll[to] = true
+        f.bufBy[to] = i
+    }
+    changed = true
+    for changed {
+        changed = false
+        for c in range f.gcFrom.Len() {
+            a := f.gcFrom[c]
+            b := f.gcTo[c]
+            if b < 0 or b >= n or f.bufAll[b] or not f.bufAll[a] or f.Bodies[a].Of == typed.BodyOf.Cond: continue
+            f.bufAll[b] = true
+            f.bufBy[b] = f.bufBy[a]
+            changed = true
+        }
+    }
+    if f.Debug {
+        try io.PrintErr($"buf never " $f.bufNever " " $f.bufWhy "\n") catch io.Error { }
+        for b in range n {
+            if f.Bodies[b].Root is not null and f.bufAll[b] { try io.PrintErr($"buf all " $f.fnName(b) " by " $f.bufBy[b] " taintAll " $f.taintAll[b] "\n") catch io.Error { } }
+        }
+    }
+    if f.bufNever: return
+    for bt in f.genOk {
+        if not f.bufAll[bt.First]: f.genBuf.Push(bt)
+    }
+}
+
+# the (body, type) pairs where reclaiming may put back the arrays an instance holds in place, for the root's decisions
+# object (genrefs round 5)
+fn (f Free&) GenBufNow() Vec<pair.Pair<I64, types.TypeId>> { return f.genBuf }
 
 # the first use of local l showing it in use across the call at csp in statement st - an index into the uses, -1 for none:
 # used after the statement (in statements it holds among them), in a loop around it declared outside it, in deferred
@@ -1197,6 +1381,7 @@ fn (f mut Free&) genDecide() {
             f.genOk.Push(pair.Pair(b, f.genTys[i]))
         }
     }
+    if f.bufOn: f.bufDecide()
 }
 
 fn (f mut Free&) genIndex(ty I64) I64 {
@@ -1891,6 +2076,11 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     grStmt Vec<I64>
     grSp Vec<source.Span>
     grTy Vec<I64>
+    # round 5: the values computed that may view an array a generational instance holds in place - the statement, where,
+    # their origins (noteView)
+    gvStmt Vec<I64>
+    gvSp Vec<source.Span>
+    gvOrig Vec<mut Vec<I64>&>
     deferStack Vec<I64>        # the Defer statements being walked
     deferEnd Map<I64, I64>     # by Defer statement, the last statement of the block it is in
 }
@@ -2044,6 +2234,9 @@ fn (w mut walker&) reset() {
     w.grStmt.Clear()
     w.grSp.Clear()
     w.grTy.Clear()
+    w.gvStmt.Clear()
+    w.gvSp.Clear()
+    w.gvOrig.Clear()
 }
 
 fn (w mut walker&) body() typed.Body& { return w.F.Bodies[w.Id] }
@@ -2837,6 +3030,9 @@ fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool,
         if k == OPl and w.Final and oval(y) != q {
             f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is kept here")
         }
+        if k == OPl and w.Final and f.bufOn and w.quiet == 0 and f.bufPlace(oval(y)) {
+            f.bufNot($"a view that may be into an array a generational instance holds in place is kept here: '" $w.text(sp) "'", w.body().File, sp)
+        }
     }
 }
 
@@ -3060,6 +3256,12 @@ fn (w mut walker&) captured(sp source.Span, x typed.Expr&) Vec<I64> {
 }
 
 fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
+    o := w.exprOf(x)
+    if w.Final and w.F.bufOn and w.quiet == 0: w.noteView(x, o)
+    return o
+}
+
+fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
     out Vec<I64>
     if w.Final and w.F.genOn: w.noteReach(x)
     match x {
@@ -3288,6 +3490,16 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         if f.isCase(b2) {
             for a in args { addAllTo(out, a) }
             return out
+        }
+        # (round 5: what each argument may view, for the parameters' judging - bufDecide)
+        if w.Final and f.bufOn and w.quiet == 0 {
+            for j in range args.Len() {
+                if f.gen.ViewOf(w.T(), c.Args[j].Type()) == mir.ViewNone or not f.mayView(args[j]): continue
+                f.taFrom.Push(w.Id)
+                f.taTo.Push(b2)
+                f.taJ.Push(j)
+                f.taOrig.Push(copyOf(args[j]))
+            }
         }
         for y in f.resFrom[b2] { f.through(y, args, out) }
         # a constructor's stores are into the instance it makes: its candidate leaves hold them - places of their own,
@@ -3817,6 +4029,13 @@ fn (f mut Free&) isCase(b I64) Bool {
 # parameter's value a summary's store, and - in the final walk - whether it was made for the place
 fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, where String&, multi Bool, contained Bool = false) {
     f := w.F
+    # (round 5: a view of an array a generational instance holds in place, stored - kept where no site sees it)
+    # (a parameter's value is judged where it is passed - the callers' stores; a constructor's field its own place's)
+    if w.Final and f.bufOn and w.quiet == 0 and w.paramOf(x) < 0 {
+        for y in o {
+            if okind(y) == OPl and oval(y) != w.storeInside and f.bufPlace(oval(y)): f.bufNot($"a view that may be into an array a generational instance holds in place is stored here: '" $w.text(sp) "'", w.body().File, sp)
+        }
+    }
     # a view of the place itself stored back into it is said as condition 1 says it, below: the new value lives in the
     # old one's storage
     for y in o {

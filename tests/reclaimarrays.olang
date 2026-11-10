@@ -1,0 +1,208 @@
+# The arrays a generational instance holds in place reclaimed with it (O8e, docs/genrefs.md round 5): a node's String
+# key, its Vec's buffer and a String in a struct it holds by value are slots of its scope part, put back where the node
+# is reclaimed - unless a view of one is still in use - and reused by the next node's arrays of their size. Each test
+# churns nodes and their arrays through reused slots and reads every value back: a removed node's key viewed across its
+# removal, in the body and in a callee, keeps its text; a Vec grown after the node was made keeps the buffer it grew; a
+# weak place to a removed node reads null. The evaluator decides the same values while compiling (top-level asserts),
+# and interpret runs the rest as built.
+
+# read while the program runs only (a mutable global the evaluator refuses): what the tests hand the functions below, so
+# their bodies run as built, where the top-level asserts hand them 0 and the evaluator decides them
+Extra mut I64 = 0
+
+type Tag struct(name String, n I64) {
+    name
+    n
+}
+
+type KNode struct(key String, xs Vec<I64>, tag Tag) {
+    key
+    xs
+    tag
+    next mut KNode?& = null
+    prev weak mut KNode?& = null
+}
+
+type KList struct() {
+    head mut KNode?& = null
+    tail weak mut KNode?& = null
+    n I64 = 0
+}
+
+fn (l mut KList&) PushBack(i I64) {
+    xs := Vec<I64>()
+    for k in range i % 5 + 1 { xs.Push(i * 10 + k) }
+    nd := KNode("key-" $i, xs, Tag("tag" $(i * 7), i))
+    t := l.tail
+    if t is null { l.head = nd } else {
+        t.next = nd
+        nd.prev = t
+    }
+    l.tail = nd
+    l.n++
+}
+
+fn (l mut KList&) PopFront() {
+    h := l.head!
+    q := h.next
+    l.head = q
+    if q is null { l.tail = null } else { q.prev = null }
+    l.n--
+}
+
+# a node's arrays read back as one number: its key's and its tag's digits, its Vec's sum
+fn (nd KNode&) Sum() I64 {
+    s := nd.tag.n * 1000 + nd.xs.View().Sum()
+    for c in nd.key {
+        if c >= '0' and c <= '9': s += I64(c - '0')
+    }
+    for c in nd.tag.name {
+        if c >= '0' and c <= '9': s += I64(c - '0')
+    }
+    return s
+}
+
+fn (l KList&) Total() I64 {
+    s := 0
+    at KNode?& = l.head
+    for at is not null {
+        s += at.Sum()
+        at = at.next
+    }
+    return s
+}
+
+# what Total gives for nodes from..to-1 made by PushBack
+fn expected(from I64, to I64) I64 {
+    l := KList()
+    for i in range from, to { l.PushBack(i) }
+    return l.Total()
+}
+
+# nodes made and removed through a list of their own, their slots and their arrays' reused; and what a closed scope
+# left behind written over
+fn churn(n I64) {
+    l := KList()
+    for i in range n {
+        l.PushBack(500 + i)
+        l.PopFront()
+    }
+    t := 0
+    for i in range 100 {
+        a := Array<I64>(32, -i)
+        t += a[1]
+    }
+    assert l.n == 0 and t == -4950
+}
+
+# the first node removed - where no caller holds a view across the call, so its arrays are put back here
+fn (l mut KList&) Drop() {
+    h := l.head!
+    q := h.next
+    l.head = q
+    if q is null { l.tail = null } else { q.prev = null }
+    l.n--
+}
+
+fn churnFree(n I64) {
+    l := KList()
+    for i in range n {
+        l.PushBack(500 + i)
+        l.Drop()
+    }
+    t := 0
+    for i in range 100 {
+        a := Array<I64>(32, -i)
+        t += a[1]
+    }
+    assert l.n == 0 and t == -4950
+}
+
+# removed nodes' arrays reused by new nodes: the list read back has every key, Vec and tag of its own
+fn reused(extra I64) Bool {
+    l := KList()
+    for i in range 1, 30 + extra { l.PushBack(i) }
+    for _ in range 20 { l.Drop() }
+    churnFree(60)
+    for i in range 30, 40 { l.PushBack(i) }
+    churnFree(60)
+    return l.Total() == expected(21, 40)
+}
+
+# a removed node's key viewed across its removal where the removal is written in the body itself: the site compares
+# the view, keeping the key's slot, while the next nodes' arrays reuse the others
+fn viewAtSite(extra I64) Bool {
+    l := KList()
+    for i in range 1, 4 + extra { l.PushBack(i) }
+    k String& = l.head!.key
+    for _ in range 30 {
+        h := l.head!
+        l.head = h.next
+        l.tail!.next = null
+        l.PushBack(7)
+    }
+    return k == "key-1" and l.head!.key == "key-7"
+}
+
+# a removed node's key viewed across its removal, in the body: the text kept, never the next node's
+fn viewKept(extra I64) Bool {
+    l := KList()
+    for i in range 1, 4 + extra { l.PushBack(i) }
+    k String& = l.head!.key
+    l.PopFront()
+    churn(40)
+    return k == "key-1"
+}
+
+# ... and in a callee, handed the key: the callee removes the node, then reads the key
+fn (l mut KList&) popAndRead(k String&) Bool {
+    l.PopFront()
+    churn(40)
+    return k == "key-1"
+}
+
+fn viewInCallee(extra I64) Bool {
+    l := KList()
+    for i in range 1, 4 + extra { l.PushBack(i) }
+    return l.popAndRead(l.head!.key)
+}
+
+# a node's Vec grown after it was made: the buffer it grew is no array of its own - kept as its scope's - and what it
+# held before is kept too; the node read back before and after its neighbours are removed
+fn grown(extra I64) Bool {
+    l := KList()
+    for i in range 1, 5 + extra { l.PushBack(i) }
+    last := l.tail!
+    for k in range 20 { last.xs.Push(k) }
+    s := last.Sum()
+    for _ in range 3 { l.PopFront() }
+    churn(40)
+    return l.n == 1 and l.head!.Sum() == s
+}
+
+# a weak place to a removed node reads null, and the node made after it in its slot reads its own arrays
+type Seen struct(n mut KNode?&) {
+    w weak mut KNode?& = n
+}
+
+fn weakNull(extra I64) Bool {
+    l := KList()
+    for i in range 1, 4 + extra { l.PushBack(i) }
+    s := Seen(l.head)
+    l.PopFront()
+    churn(20)
+    l.PushBack(9)
+    return s.w is null and l.tail!.key == "key-9" and l.tail!.xs.Len() == 5
+}
+
+assert reused(0)
+assert viewAtSite(0)
+assert viewKept(0)
+assert grown(0)
+
+test PushBack "removed nodes' arrays reused by new nodes, every node's read back" { assert reused(Extra) }
+test Tag "a key viewed across its removal in the body keeps its text, the site comparing it" { assert viewAtSite(Extra) }
+test PopFront "a removed node's key viewed across its removal keeps its text" { assert viewKept(Extra) }
+test KList.popAndRead "a callee removing a node reads the key it was handed" { assert viewInCallee(Extra) }
+test KNode "a node's Vec grown after it was made keeps what it grew" { assert grown(Extra) }
+test KList "a weak place to a removed node reads null, its slot's next node its own arrays" { assert weakNull(Extra) }
