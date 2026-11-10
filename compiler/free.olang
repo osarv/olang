@@ -1502,6 +1502,44 @@ fn (f mut Free&) genRows() String {
             b.Push($d.Locate(f.gcFile[c], I64(f.gcWhy[i].Start)) ": note: '" $f.textOf(f.gcFile[c], f.gcWhy[i]) "', a reference to a " $nm ", is in use across this call\n")
         }
     }
+    if f.bufOn: b.Push(f.bufRows(lets))
+    return b.ToString()
+}
+
+# whether one of the generational types tys (a body's lets) holds arrays in place
+fn (f mut Free&) letsLeaves(tys Vec<I64>&) Bool {
+    for ty in tys {
+        j := f.genIndex(ty)
+        if j >= 0 and f.genOkTy[j] and f.gen.Leaves(f.T(), f.genTys[j]): return true
+    }
+    return false
+}
+
+# B18: -memory's rows of round 5: for each generational type holding arrays in place, whether they are put back with
+# it or kept and why; and each call of the program's own across which a view that may be into one is in use, which
+# keeps them in the callee
+fn (f mut Free&) bufRows(lets Vec<Vec<I64>>&) String {
+    b := StringBuilder()
+    t := f.T()
+    for i in range f.genTys.Len() {
+        if not f.genOkTy[i] or not f.gen.Leaves(t, f.genTys[i]): continue
+        nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
+        if f.bufNever {
+            b.Push($"memory: the arrays a " $nm " holds in place are kept until their scope closes\n" $f.bufWhy "\n")
+            continue
+        }
+        b.Push($"memory: the arrays a " $nm " holds in place are put back with it, unless a view of one is in use\n")
+    }
+    if f.bufNever: return b.ToString()
+    d := f.P.L.Diags
+    for i in range f.gvCall.Len() {
+        c := f.gvCall[i]
+        to := f.gcTo[c]
+        if to < 0 or to >= f.bufBy.Len() or f.bufBy[to] != i or not f.programCode[f.gcFrom[c]] or not f.letsLeaves(lets[to]): continue
+        at := $d.Locate(f.gcFile[c], f.lineStart(f.gcFile[c], I64(f.gcSp[c].Start)))
+        b.Push($at ": memory: '" $f.textOf(f.gcFile[c], f.gcSp[c]) "' keeps the arrays of what it reclaims until their scope closes\n")
+        b.Push($d.Locate(f.gcFile[c], I64(f.gvSp[i].Start)) ": note: '" $f.textOf(f.gcFile[c], f.gvSp[i]) "', which may view one, is in use across this call\n")
+    }
     return b.ToString()
 }
 

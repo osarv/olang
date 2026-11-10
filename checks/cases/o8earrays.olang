@@ -1,0 +1,53 @@
+# check: run
+# O8e (genrefs round 5): a list of nodes each holding its key's text, churned 1M times, its peak asserted - each node let
+# go of is reclaimed with the arrays it holds in place, their slots reused by the next node's, so the churn stays near
+# what is live (the round before, the keys' text grew with every node made: 33 MB)
+import "std/os"
+type Node struct(key String) {
+    key
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type List struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut List&) push(i I64) {
+    nd := Node("key-" $i)
+    t := l.tail
+    if t is null { l.head = nd } else {
+        t.next = nd
+        nd.prev = t
+    }
+    l.tail = nd
+}
+
+fn (l mut List&) drop() {
+    h := l.head!
+    q := h.next
+    l.head = q
+    if q is null { l.tail = null } else { q.prev = null }
+}
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn main() {
+    l := List()
+    for i in range 100 { l.push(i) }
+    for i in range 1000000 {
+        l.drop()
+        l.push(i)
+    }
+    assert l.head!.key == "key-999900" and l.tail!.key == "key-999999"
+    kb := peakKb()
+    assert kb > 0 and kb < 4000, $kb
+}
