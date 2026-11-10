@@ -60,3 +60,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09	overrej	opus	medium	done	360	225	79	goldens		p7 wrong count (dtor late) fixed; r1/r2 relaxed; p9 sound, message only
 2026-11-09	R4	opus	medium	done	287	123	55	pass		7 task refusals accepted; found spawn call-copy built per turn (use after scope)
 2026-11-09	F9	opus	medium	done	364	156	71	goldens		clones; sort 0.102->0.081s; IR +0.35%
+2026-11-09	F10	opus	medium	done	411	204	75	pass		followed fn values in free/D9h/E31b/M19g; found lambda-in-conversion bug
