@@ -1,0 +1,54 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type Opt enum {
+    Some(n mut Node&)
+    None
+}
+
+type Holder struct() {
+    o mut Opt = Opt.None
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i)
+        l.PopFront()
+    }
+}
+
+fn keep(h mut Holder&, l mut L&) {
+    h.o = Opt.Some(l.head!)
+}
+
+fn read(h Holder&) I64 {
+    match h.o {
+        case Opt.Some(n): return n.v
+        case Opt.None: return -1
+    }
+}
+
+fn main() ? {
+    l := L()
+    h := Holder()
+    l.head = Node(7)
+    keep(h, l)
+    l.PopFront()
+    churn(l)
+    try io.Println("enum payload: " $read(h) " want 7")
+}

@@ -1,0 +1,50 @@
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        a := Array<I64>(16, i)
+        t += x.Len() + a[2] - i
+    }
+    return t
+}
+type P struct(x I64, y I64) {
+    x
+    y
+}
+extern fn usleep(us U32) I32
+type C struct(base I64, xs Array<I64>&) {
+    base
+    xs
+}
+fn (c C&) Run(out mut Array<I64>&, i I64) {
+    usleep(20000)
+    out[i] = c.base + c.xs[1]
+}
+fn sumOf(s Array<I64>&, out mut Array<I64>&, i I64) {
+    usleep(20000)
+    out[i] = s[0] + s[1]
+}
+fn main() ? {
+    o1 := Array<I64>(4)
+    o2 := Array<I64>(4)
+    o3 mut Array<I64>& = Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(4, i * 3)
+            spawn sumOf(a[1:3], o1, i)
+            c := C(i * 100, Array<I64>(3, i))
+            spawn c.Run(o2, i)
+            n P& = P(i, i)
+            g := fn() {
+                usleep(30000)
+                o3[i] = n.x * 7
+            }
+            n = P(-5, -5)
+            spawn g()
+            junk := Array<I64>(200, 7)
+            assert junk[0] == 7
+        }
+    }
+    try io.Println($o1[0] " " $o1[3] " " $o2[0] " " $o2[3] " " $o3[0] " " $o3[3])
+}

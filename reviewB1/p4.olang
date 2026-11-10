@@ -1,0 +1,61 @@
+import "std/io"
+
+type Inner struct(a I64, name String) {
+    a
+    name
+}
+
+type Node struct(v I64, inner Inner) {
+    v
+    inner
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i, Inner(-i, "zzzzzzzzzz" $i))
+        l.head = null
+    }
+}
+
+fn show(t Inner&, l mut L&, s mut L&) I64 {
+    l.PopFront()
+    churn(l)
+    w := l.tail
+    gone := 1 if w is null else 0
+    return gone * 1000000 + t.a * 1000 + t.name.Len()
+}
+
+fn showS(t String&, l mut L&, s mut L&) I64 {
+    l.PopFront()
+    churn(l)
+    w := l.tail
+    gone := 1 if w is null else 0
+    return gone * 1000000 + t.Len()
+}
+
+fn main() ? {
+    l := L()
+    s := L()
+    l.head = Node(7, Inner(42, "abc"))
+    l.tail = l.head
+    r := show(l.head!.inner, l, s)
+    w := l.tail
+    try io.Println("inner: " $r " want 42003; tail null " $(w is null))
+    l.head = Node(8, Inner(43, "abcd"))
+    l.tail = l.head
+    r2 := showS(l.head!.inner.name, l, s)
+    w2 := l.tail
+    try io.Println("name: " $r2 " want 4; tail null " $(w2 is null))
+}

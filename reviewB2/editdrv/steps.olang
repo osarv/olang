@@ -1,0 +1,9 @@
+import "std/io"
+import "std/os"
+import eg "editgen"
+fn main() ? {
+    args := os.Args()
+    seed := try args[1].ParseInt() catch default 101
+    steps := try args[2].ParseInt() catch default 3
+    try io.Print(try eg.Steps(".", seed, steps, 3, args[3] if args.Len() > 3 else ""))
+}

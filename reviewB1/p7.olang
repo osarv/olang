@@ -1,0 +1,60 @@
+import "std/io"
+
+type Rec struct(key String, n I64) {
+    key
+    n
+}
+
+type Node struct(key String) {
+    key
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) Push(k String&) {
+    nd := Node(k)
+    nd.next = l.head
+    l.head = nd
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.Push("zzzzzzzzzzzzzzz" $(i % 10))
+        l.PopFront()
+    }
+}
+
+# A: a temporary struct built from the node's key, handed by reference
+fn fa(r Rec&, l mut L&) String {
+    l.PopFront()
+    churn(l)
+    return r.key
+}
+
+# B: a local struct holding the key, lent by reference to a callee that removes the node
+fn fb(r Rec&, l mut L&) String {
+    l.PopFront()
+    churn(l)
+    return r.key
+}
+
+fn main() ? {
+    l := L()
+    l.Push("abcdefghijklmnop")
+    a := fa(Rec(l.head!.key, 1), l)
+    try io.Println("A: " $a " want abcdefghijklmnop")
+    l.Push("ABCDEFGHIJKLMNOP")
+    r := Rec(l.head!.key, 2)
+    b := fb(r, l)
+    try io.Println("B: " $b " want ABCDEFGHIJKLMNOP " $r.n)
+}

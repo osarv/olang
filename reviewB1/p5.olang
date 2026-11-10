@@ -1,0 +1,55 @@
+import "std/io"
+
+type Inner struct(a I64, name String) {
+    a
+    name
+}
+
+type Node struct(v I64, inner Inner) {
+    v
+    inner
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i, Inner(-i, "zzzzzzzzzzzzzzz" $(i % 10)))
+        l.head = null
+    }
+}
+
+
+fn show(t Inner&, l mut L&) String {
+    l.PopFront()
+    churn(l)
+    w := l.tail
+    return "gone=" $(w is null) " a=" $t.a " name=" $t.name
+}
+
+fn showS(t String&, l mut L&) String {
+    l.PopFront()
+    churn(l)
+    w := l.tail
+    return "gone=" $(w is null) " name=" $t
+}
+
+fn main() ? {
+    l := L()
+    l.head = Node(7, Inner(42, "abcdefghijklmnop"))
+    l.tail = l.head
+    try io.Println("inner: " $show(l.head!.inner, l) " want a=42 name=abcdefghijklmnop")
+    l.head = Node(8, Inner(43, "ABCDEFGHIJKLMNOP"))
+    l.tail = l.head
+    try io.Println("name: " $showS(l.head!.inner.name, l) " want ABCDEFGHIJKLMNOP")
+}

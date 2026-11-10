@@ -1,0 +1,38 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type Box struct(n mut Node?&) {
+    n
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i)
+        l.head = null
+    }
+}
+
+fn use(b mut Box&, l mut L&, s mut L&) I64 {
+    l.head = null
+    churn(s)
+    return b.n!.v
+}
+
+fn main() ? {
+    l := L()
+    s := L()
+    l.head = Node(7)
+    l.tail = l.head
+    r := use(Box(l.head), l, s)
+    try io.Println("got " $r ", want 7")
+}

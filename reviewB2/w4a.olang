@@ -1,0 +1,29 @@
+import "std/io"
+type N struct(v I32) {
+    v
+}
+type Cur struct(of mut N&) {
+    at mut N& = of
+}
+fn churn() {
+    for i in range 50 {
+        junk := Array<I64>(1000, i)
+        assert junk[999] == i
+    }
+}
+fn body(y mut N&, outer mut N&) N& {
+    c := Cur(outer)
+    c.at = y
+    arr Array<mut Cur&> = Array<Cur&>[c]
+    return arr[0].at
+}
+fn main() ? {
+    outer mut N& = N(1)
+    keep N& = outer
+    for i in range 2 {
+        y mut N& = N(I32(42 + i))
+        keep = body(y, outer)
+    }
+    churn()
+    try io.Println($keep.v)
+}

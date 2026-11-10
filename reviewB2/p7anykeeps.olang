@@ -1,0 +1,41 @@
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        a := Array<I64>(16, i)
+        t += x.Len() + a[2] - i
+    }
+    return t
+}
+type P struct(x I64, y I64) {
+    x
+    y
+}
+type Sink trait {
+    mut Put(n P&)
+}
+type Bag struct() {
+    v Vec<P&> = Vec<P&>()
+}
+fn stash(b mut Bag&, n P&) { b.v.Push(n) }
+fn (b mut Bag&) Put(n P&) { stash(b, n) }
+type G struct() {
+    k I64 = 0
+}
+last mut P?& = null
+fn (g mut G&) Put(n P&) {
+    g.k++
+    last = n
+}
+fn put(x mut any Sink&, n P&) { x.Put(n) }
+fn main() ? {
+    b := Bag()
+    g := G()
+    for i in range 3 {
+        put(b, P(i, i))
+        put(g, P(i + 7, 0))
+    }
+    churn()
+    try io.Println($b.v.Len() " " $b.v[2].x " " $last!.x)
+}

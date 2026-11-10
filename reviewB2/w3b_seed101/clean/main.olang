@@ -1,0 +1,6 @@
+# editgen root
+import "std/io"
+import "m0"
+fn main() {
+    try io.Println($m0.Total()) catch io.Error { }
+}

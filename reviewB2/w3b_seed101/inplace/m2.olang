@@ -1,0 +1,316 @@
+# editgen module 2
+import "std/io"
+import "std/list"
+type SgErr error {
+    E
+}
+extern fn getpid() I32
+fn say(t String&) { try io.Println(t) catch io.Error { } }
+Run mut I64 = 1          # read by every condition, so none is decided while compiling
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+type Box struct() {
+    head mut Node& = Node(1)
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+type H struct(b Box) { b }
+type E enum {
+    A(b Box)
+    N(n mut Node&)
+    Z
+}
+type Cell struct() {
+    S list.List<mut Node&>
+    t I64 = 0
+}
+type Bag struct() {
+    nodes list.List<mut Node&>
+    boxes list.List<Box>
+    cells list.List<Cell>
+    grid list.List<list.List<Cell>>
+    anys list.List<any Ag&>
+    cls list.List<mut any Cl&>
+    szs list.List<any Sz&>
+}
+# run-time trait values (T32): an open trait met by nodes, boxes, a number and the enum, a mut one, a closed one
+type Ag trait {
+    Val() I64
+}
+type Gr trait {
+    Val() I64
+    mut Grow(v I64)
+}
+type Cl trait for Node, Cnt {
+    Val() I64
+}
+type Cnt extends I64
+# arrays copied into an any's box (T32a): their elements' references held where it lands, a conversion copied too
+type Sz trait {
+    Len() I64
+}
+type Lab extends Array<Char>
+fn (l Lab&) Val() I64 { return l.Len() * 7 + I64(U8(l[0])) }
+type Ns extends Array<mut Node&>
+fn (a Ns&) Val() I64 {
+    t I64 = 0
+    for n in a { t = t * 3 + chain(n) }
+    return t
+}
+fn sumSz(l list.List<any Sz&>&) I64 {
+    t I64 = 0
+    for x in l { t = t * 7 + ($x).Len() }
+    return t
+}
+fn (c Cnt) Val() I64 { return I64(c) * 3 }
+fn (n Node&) Val() I64 { return chain(n) }
+fn (n mut Node&) Grow(v I64) { n.next = Node(v) }
+fn (b Box&) Val() I64 { return chain(b.head) * 5 }
+fn (b mut Box&) Grow(v I64) { b.head.next = Node(v) }
+fn (e E) Val() I64 { return sumE(e) + 1 }
+fn sumAg(l list.List<any Ag&>&) I64 {
+    t I64 = 0
+    for x in l { t = t * 7 + x.Val() }
+    return t
+}
+fn sumCl(l list.List<mut any Cl&>&) I64 {
+    t I64 = 0
+    for x in l {
+        match x {
+            case Node n { t = t * 7 + chain(n) }
+            case Cnt c { t = t * 11 + I64(c) }
+        }
+    }
+    return t
+}
+fn growAny(g mut any Gr&, v I64) { g.Grow(v) }
+fn anyOf(v I64) any Ag& { return Node(v) if v % 2 == 0 else Cnt(v) }
+fn sumCells(l list.List<Cell>&) I64 {
+    t I64 = 0
+    for c in l { t = t * 7 + sumList(c.S) }
+    return t
+}
+fn gridPush(b mut Bag&, v I64) { b.grid[0][0].S.Push(Node(v)) }
+type Two struct() {
+    items := Array<mut Node&>(2, Node(0))
+}
+# allocates and gives back: whatever reuses a closed scope's storage writes -7 and text over it
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t + I64(getpid() * 0)
+}
+# a chain's values, 40 nodes at most
+fn chain(n Node?&) I64 {
+    t I64 = 0
+    c := n
+    for _ in range 40 {
+        if c is null { break }
+        t = t * 31 + c.v
+        c = c.next
+    }
+    return t
+}
+fn sumList(l list.List<mut Node&>&) I64 {
+    t I64 = 0
+    for n in l { t = t * 7 + chain(n) }
+    return t
+}
+fn sumArr(a Array<mut Node&>&) I64 {
+    t I64 = 0
+    for n in a { t = t * 7 + chain(n) }
+    return t
+}
+fn sumMap(m Map<I64, mut Node&>&) I64 {
+    t I64 = 0
+    for k in range 40 {
+        n := try m.Get(k) catch default null
+        t = t * 7 + chain(n)
+    }
+    return t
+}
+fn sumBoxes(l list.List<Box>&) I64 {
+    t I64 = 0
+    for b in l { t = t * 7 + chain(b.head) }
+    return t
+}
+fn sumE(e E&) I64 {
+    if e == E.A {
+        b := (e as E.A)!
+        return chain(b.head)
+    }
+    if e == E.N { return chain((e as E.N)!) }
+    return 0
+}
+fn Node.mkNode(v I64) mut Node& { return Node(v) }
+# a call's result built where it lands (O18a)
+fn mkText(v I64) String { return "t" $v "-" $(v * 3) }
+fn putRet(p mut Node&, v I64) String {
+    p.next = Node.mkNode(v)
+    return "r" $v
+}
+fn stashLab(l mut list.List<any Ag&>&, v I64) String {
+    l.Push(Lab(mkText(v)))
+    return "r" $v
+}
+# for text scenarios (the fourth any review's A): arrays of plain data a scope argument puts elsewhere, returned on
+fn mkNums(v I64) Array<I64> { return Array<I64>[v, v * 2, v * 3] }
+fn retAt(p String&, v I64) String { return mkText(v) }
+fn retAtChain(p String&, v I64) String { return retAt(p, v) }
+fn retNumsAt(p String&, v I64) Array<I64> { return mkNums(v) }
+fn retLocal(v I64) String {
+    t := "loc" $v
+    r := mkText(t.Len() + v)
+    return r
+}
+fn retDirect(v I64) String {
+    t := "dir" $v
+    return mkText(t.Len() + v)
+}
+fn retTup(v I64) String, I64 {
+    t := "tup" $v
+    return mkText(t.Len() + v), v
+}
+fn retCond(p String&, v I64) String { return mkText(v) if Run > 0 else mkText(v) }
+fn retTry(v I64) String {
+    t := "try" $v
+    return try textFail(t.Len() + v) catch default mkText(v + 1)
+}
+fn hashNums(a Array<I64>&) I64 {
+    t I64 = 0
+    for x in a { t = t * 31 + x }
+    return t
+}
+# for second-name scenarios (the fourth any review's B): a returned text local something else names - text that is
+# written, characters (a String never changes, T13a)
+type Tx extends Array<Char>
+type TK struct(s Tx&) { s }
+fn (k mut TK&) Set(t Tx&) { k.s = t }
+# the fifth review's: parameters sharing a scope, which a callee may store one into the other with no obligation
+type TH struct(l mut list.List<Tx&>&) { l }
+fn (h mut TH&) Add(x Tx&) I64 {
+    h.l.Push(x)
+    return 1
+}
+fn (x Tx&) AddTo(h mut TH&) I64 {
+    h.l.Push(x)
+    return 3
+}
+fn tieTo(l mut list.List<Tx&>&, x Tx&) I64 {
+    l.Push(x)
+    return 2
+}
+fn Tx.txNo(v I64) Tx ? {
+    if v < 1000000 { error SgErr.E }
+    return Tx("never" $v)
+}
+# conversions of a place to a type over characters (T29a), returned
+fn Lab.retConv(v I64) Lab {
+    s := "cv" $v
+    return Lab(s)
+}
+fn Lab.retConvCond(v I64) Lab {
+    s := "cc" $v
+    u := "cu" $v
+    return Lab(s) if Run > 0 else Lab(u)
+}
+fn Node.mkChain(v I64) mut Node& {
+    n := Node(v)
+    n.next = Node(v + 1)
+    return n
+}
+fn Node.via(v I64) mut Node& { return Node.mkChain(v) }
+fn Node.mkLambda(v I64) mut Node& {
+    f := fn(x I64) mut Node& { return Node(x) }
+    return f(v)
+}
+fn Node.nodeOf(e E) mut Node& { return (e as E.N)! }
+fn pickNode(x mut Node&) mut Node& { return x }
+fn pickBox(x mut Box&) mut Box& { return x }
+fn build(b Box) { b.head.next = Node(42) }
+fn byAs(e E) {
+    b := (e as E.A)!
+    b.head.next = Node(43)
+}
+fn link(a mut Node&, b mut Node?&) { a.next = b }
+fn grow(a mut Node&, v I64) { a.next = Node(v) }
+fn growDeep(a mut Node&, v I64) {
+    if v > 0 {
+        for i in range 2 {
+            a.next = Node(v + i)
+            churn()
+        }
+    }
+}
+fn mkList(v I64) list.List<mut Node&> {
+    l := list.List<mut Node&>()
+    for i in range 3 { l.Push(Node(v + i)) }
+    return l
+}
+fn mkList2(v I64) list.List<mut Node&> { return mkList(v) }
+fn pushNode(l mut list.List<mut Node&>&, v I64) { l.Push(Node(v)) }
+fn idBox(b mut Box&) Box { return b }
+fn addVia(b Box&, v I64) { b.head.next = Node(v) }
+fn addViaMut(b mut Box&, v I64) { b.head.next = Node(v) }
+fn readBox(b Box&) I64 { return chain(b.head) }
+fn keepBox(b Box&) fn&() I64 { return fn() I64 { return chain(b.head) } }
+fn useBox(b Box&) I64 {
+    f := fn() I64 { return chain(b.head) }
+    return f() + f()
+}
+fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }
+fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }
+# fallible: growF and mkF succeed, failF fails after building, mkFail fails
+fn growF(a mut Node&, v I64) ? {
+    if Run < 0 { error SgErr.E }
+    a.next = Node(v)
+}
+fn failF(a mut Node&, v I64) ? {
+    a.next = Node(v)
+    if Run > 0 { error SgErr.E }
+}
+fn Node.mkF(v I64) mut Node& ? {
+    if Run < 0 { error SgErr.E }
+    return Node(v)
+}
+fn textFail(v I64) String ? {
+    if Run > 0 { error SgErr.E }
+    return "never" $v
+}
+fn Node.mkFail(v I64) mut Node& ? {
+    if Run > 0 { error SgErr.E }
+    return Node(v)
+}
+# for Str scenarios: a borrowed result that fails, callbacks, a generic, call cycles, a local moved into a borrowed result's home
+fn borrowF(n mut Node&) mut Node& ? {
+    if Run > 0 { error SgErr.E }
+    return n
+}
+fn applyN(n mut Node&, f fn&(x mut Node&)) { f(n) }
+fn applyR(n Node&, f fn&(x Node&) I64) I64 { return f(n) }
+fn idT<T>(x T) T { return x }
+fn cycA(n Node&, c I64) I64 {
+    if c > 0 { return cycB(n, c - 1) }
+    return n.v
+}
+fn cycB(n Node&, c I64) I64 { return cycA(n, c) + 1 }
+fn cycGrow(n mut Node&, c I64) {
+    if c > 0 { cycGrow2(n, c - 1) } else { n.next = Node(c + 7) }
+}
+fn cycGrow2(n mut Node&, c I64) { cycGrow(n, c) }
+type P2 struct(n mut Node&) { n }
+fn moveH(n mut Node&) mut Node& {
+    p := P2(n)
+    return p.n
+}
+fn pickDef(n mut Node&, v I64) mut Node& { return try borrowF(n) catch default Node.mkNode(v) }
+fn readN(n Node&) I64 { return chain(n) }
+fn quiet1() Bool { return not churn.Allocates }
+fn Total() I64 { return 0 + 0 }

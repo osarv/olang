@@ -1,0 +1,28 @@
+import "std/io"
+type N struct(v I64) { v }
+type Holder struct(f fn&(x N&)) { f }
+fn (h Holder&) Call(x N&) { h.f(x) }
+type Outer struct(h Holder) { h }
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+fn use(kept mut Vec<N&>&, k I64) {
+    kept2 Vec<N&>
+    h := Holder(fn(x N&) { kept2.Push(x) })
+    g := Holder(fn(x N&) { kept.Push(x) })
+    hs := Array<Holder&>[h, g]
+    hs[1].Call(N(k + 5))
+    churn(10)
+}
+fn main() ? {
+    kept Vec<N&>
+    for k in range 3 { use(kept, k) }
+    churn(100)
+    try io.Println($kept.Len() " " $kept[0].v " " $kept[1].v)
+}

@@ -1,0 +1,26 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn look(l L&) ? {
+    w := l.tail
+    try io.Println("held: tail null " $(w is null))
+}
+
+fn main() ? {
+    l := L()
+    l.head = Node(7)
+    l.tail = l.head
+    try look(l)
+    l.head = null
+    try look(l)
+}

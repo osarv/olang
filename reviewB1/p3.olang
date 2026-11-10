@@ -1,0 +1,73 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type Box struct(n mut Node?&) {
+    n
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i)
+        l.head = null
+    }
+}
+
+fn useV(b mut Vec<Box>&, l mut L&, s mut L&) I64 {
+    l.head = null
+    churn(s)
+    return b[0].n!.v
+}
+
+fn useA(b mut Array<Box>&, l mut L&, s mut L&) I64 {
+    l.head = null
+    churn(s)
+    return b[0].n!.v
+}
+
+fn useM(b mut Map<I64, Box>&, l mut L&, s mut L&) I64 {
+    l.head = null
+    churn(s)
+    return (try b.Get(0) catch { return -1 }).n!.v
+}
+
+fn one() I64 {
+    l := L()
+    s := L()
+    l.head = Node(7)
+    v Vec<Box>
+    v.Push(Box(l.head))
+    return useV(v, l, s)
+}
+
+fn two() I64 {
+    l := L()
+    s := L()
+    l.head = Node(8)
+    a := Array<Box>(3, Box(l.head))
+    return useA(a, l, s)
+}
+
+fn three() I64 {
+    l := L()
+    s := L()
+    l.head = Node(9)
+    m Map<I64, Box>
+    m.Put(0, Box(l.head))
+    return useM(m, l, s)
+}
+
+fn main() ? {
+    try io.Println("vec: " $one() " want 7")
+    try io.Println("comp: " $two() " want 8")
+    try io.Println("map: " $three() " want 9")
+}

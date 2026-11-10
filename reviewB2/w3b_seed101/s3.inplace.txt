@@ -1,0 +1,4 @@
+m1.olang:332:21: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this capture says nothing of that - write 'keeps b in a' after its signature
+  332 |     q1_1f := fn() { q1_1(root, Node(2)) }
+      |                     ^~~~
+compilation failed with 1 error

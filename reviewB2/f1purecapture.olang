@@ -1,0 +1,42 @@
+import "std/io"
+type Frame struct(d I64) {
+    depth I64 = d
+    name String = "frame " $d
+}
+type Interp struct() {
+    frames Vec<mut Frame&>
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+fn sumPure(xs Array<I64>&, f fn&(x I64) I64 pure) I64 {
+    t I64 = 0
+    for x in xs { t += f(x) }
+    return t
+}
+fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
+    it.frames.Push(Frame(d))
+    it.frames.Push(Frame(d + 1))
+    f := try it.frames.Last() catch { unreachable }
+    me mut Interp& = it
+    r := sumPure(xs, fn(x) {
+        if x == 2 { me.frames.Truncate(1) }
+        return x * 2
+    })
+    assert churn() > 0
+    got := f.depth
+    assert f.name == "frame " $(d + 1)
+    return r + got
+}
+fn main() ? {
+    it := Interp()
+    xs := Array<I64>[1, 2, 3]
+    s I64 = 0
+    for i in range 5 { s += it.step(i, xs) }
+    try io.Println($s " " $it.frames.Len())
+}

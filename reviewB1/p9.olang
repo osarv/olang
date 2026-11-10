@@ -1,0 +1,63 @@
+import "std/io"
+
+type Rec struct(key String, n I64) {
+    key
+    n
+}
+
+type Node struct(rec Rec) {
+    rec
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) Push(k String&) {
+    nd := Node(Rec(k, k.Len()))
+    nd.next = l.head
+    l.head = nd
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.Push("zzzzzzzzzzzzzzz" $(i % 10))
+        l.PopFront()
+    }
+}
+
+fn fb(r Rec&, l mut L&) String {
+    l.PopFront()
+    churn(l)
+    return r.key
+}
+
+fn fc(r Rec, l mut L&) String {
+    l.PopFront()
+    churn(l)
+    return r.key
+}
+
+fn main() ? {
+    l := L()
+    l.Push("abcdefghijklmnop")
+    r := l.head!.rec
+    b := fb(r, l)
+    try io.Println("B: " $b " want abcdefghijklmnop")
+    l.Push("ABCDEFGHIJKLMNOP")
+    c := fc(l.head!.rec, l)
+    try io.Println("C: " $c " want ABCDEFGHIJKLMNOP")
+    l.Push("qrstuvwxyzqrstuv")
+    r2 := l.head!.rec
+    l.PopFront()
+    churn(l)
+    try io.Println("D: " $r2.key " want qrstuvwxyzqrstuv")
+}

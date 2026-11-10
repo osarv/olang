@@ -1,0 +1,41 @@
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        a := Array<I64>(16, i)
+        t += x.Len() + a[2] - i
+    }
+    return t
+}
+type P struct(x I64, y I64) {
+    x
+    y
+}
+type Src trait {
+    Get() P&
+}
+type Box struct(n P&) {
+    n
+}
+fn (b Box&) Get() P& { return b.n }
+type Mk struct(k I64) {
+    k
+}
+fn (m Mk&) Get() P& { return P(m.k, 1) }
+fn pick(a any Src&) P& { return a.Get() }
+fn main() ? {
+    keep P& = P(0, 0)
+    keep2 P& = P(0, 0)
+    for i in range 3 {
+        nd := P(i, 2)
+        bx := Box(nd)
+        mk := Mk(i * 10)
+        a any Src& = bx
+        b any Src& = mk
+        if i == 1 { keep = pick(a) }
+        if i == 2 { keep2 = pick(b) }
+    }
+    churn()
+    try io.Println($keep.x " " $keep.y " " $keep2.x " " $keep2.y)
+}

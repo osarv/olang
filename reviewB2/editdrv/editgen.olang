@@ -1,0 +1,251 @@
+# fuzz/editgen - the incremental build's edit fuzzer (B3i; docs/wholeprog.md 10.3, T5). A program of several modules -
+# a chain m0 -> m1 -> ... each holding one of scopegen's scenarios beside scopegen's prelude, and a root printing what
+# the chain computes - is built, then edited step by step with the kinds of edit the incremental scenario of checks
+# makes by hand: a module's scenario written again (bodies and signatures), a mutable reference global added (D9h's
+# fact), a G42 fact read added, a field's set widened by a store through an alias (W4), the root handing an export fn to C and taking it back (the C callback input), a number
+# in a module's code changed, and the last edit undone. After each step the program is built in the directory of every
+# build before it and in a clean one: the objects (by their IR's hashes), what the builds said and what the program
+# printed must be the same, and an undone edit must lower and check nothing again (its front records taken, every one
+# compared with checking afresh under OLANG_CHECKINCR). A scenario the compiler refuses is left out of its
+# module (a clean build's diagnostics name the module), as the scope fuzzer leaves refused scenarios out.
+
+import "std/os"
+import "scopegen"
+
+# what a program is made of: per module, its scenario's seed, whether that scenario is left out, the text edits added,
+# and the number its Total adds; and whether the root hands an export fn to C
+type Prog struct(n I64) {
+    n
+    seeds Array<U64> = Array<U64>(n)
+    dead Array<Bool> = Array<Bool>(n)
+    extra Array<String&> = Array<String&>(n, "")
+    bump Array<I64> = Array<I64>(n)
+    callback Bool = false
+}
+
+# the edit fuzzer's random numbers (xorshift), one stream per seed
+type Rng struct(seed U64) {
+    s := seed * 2654435761 + 1
+}
+
+fn (r mut Rng&) next(n I64) I64 {
+    r.s ^= r.s << 13
+    r.s ^= r.s >> 7
+    r.s ^= r.s << 17
+    return I64(r.s % U64(n))
+}
+
+# module k's text
+fn Module(p Prog&, k I64) String {
+    b := StringBuilder()
+    b.Push($"# editgen module " $k "\n")
+    if k + 1 < p.n: b.Push($"import onward \"m" $(k + 1) "\"\n")
+    b.Push(scopegen.Prelude)
+    if scopegen.HasDtors(p.seeds[k]): b.Push(scopegen.DtorPrelude)
+    if not p.dead[k]: b.Push(scopegen.Scenario(p.seeds[k], k))
+    b.Push(p.extra[k])
+    own := "0" if p.dead[k] else $"s" $k "()"
+    rest := " + onward.Total()" if k + 1 < p.n else ""
+    b.Push($"fn Total() I64 { return " $own " + " $p.bump[k] $rest " }\n")
+    return b.ToString()
+}
+
+# the root's text: m0's Total printed, and with callback an export fn handed to C's qsort (G42's and E31b's input)
+fn Root(p Prog&) String {
+    b := StringBuilder()
+    b.Push("# editgen root\nimport \"std/io\"\nimport \"m0\"\n")
+    if p.callback {
+        b.Push("type Item struct(key I32) { key }\n")
+        b.Push("extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&) I32)\n")
+        b.Push("export fn olang_cmp(a Item&, b Item&) I32 { return a.key - b.key }\n")
+    }
+    b.Push("fn main() {\n")
+    if p.callback {
+        b.Push("    xs := Array<Item>[Item(2), Item(1)]\n    qsort(xs, xs.Len(), 4, olang_cmp)\n")
+    }
+    b.Push("    try io.Println($m0.Total()) catch io.Error { }\n}\n")
+    return b.ToString()
+}
+
+# the program written into dir: its modules and root, main.olang
+fn Write(p Prog&, dir String&) ? os.Error {
+    for k in range p.n { try os.WriteFile($dir "/m" $k ".olang", Module(p, k)) }
+    try os.WriteFile($dir "/main.olang", Root(p))
+}
+
+# one random edit of p at step, named
+fn Edit(p mut Prog&, r mut Rng&, step I64) String {
+    k := r.next(p.n)
+    match r.next(6) {
+        case 0 {
+            p.seeds[k] = U64(r.next(1000000)) + 1
+            p.dead[k] = false
+            return $"m" $k "'s scenario written again"
+        }
+        case 1 {
+            p.extra[k] = $p.extra[k] "EditG" $step " mut Node?& = null\n"
+            return $"a mutable reference global added to m" $k
+        }
+        case 2 {
+            p.extra[k] = $p.extra[k] "fn quiet" $step "() Bool { return not churn.Allocates }\n"
+            return $"a G42 fact read added to m" $k
+        }
+        case 4 {
+            # W4: a struct whose field views its constructor argument's referent, stored into through an element
+            # aliasing an instance - its binding there the body's field set
+            h := $"Hold" $step
+            p.extra[k] = $p.extra[k] "type " $h " struct(of mut Node&) {\n    at mut Node& = of\n}\n" $
+                         "fn widen" $step "() I64 {\n    outer mut Node& = Node(7)\n    keep Node& = outer\n" $
+                         "    for i in range 2 {\n        x mut Node& = Node(i)\n        h := " $h "(outer)\n" $
+                         "        hs Array<mut " $h "&> = Array<" $h "&>[h]\n        hs[0].at = x\n        keep = h.at\n    }\n" $
+                         "    return keep.v\n}\n"
+            return $"a field's set widened in m" $k
+        }
+        case 3 {
+            p.callback = not p.callback
+            return "the root hands an export fn to C" if p.callback else "the root's export fn to C taken back"
+        }
+        case _ {
+            p.bump[k] += 1
+            return $"a number in m" $k "'s code changed"
+        }
+    }
+}
+
+# a copy of p, for undoing
+fn Copy(p Prog&) Prog {
+    q := Prog(p.n)
+    for k in range p.n {
+        q.seeds[k] = p.seeds[k]
+        q.dead[k] = p.dead[k]
+        q.extra[k] = $p.extra[k]
+        q.bump[k] = p.bump[k]
+    }
+    q.callback = p.callback
+    return q
+}
+
+# an edit run: the compiler under test and the directory its builds are made in
+type Run struct(olang String&, dir String&) {
+    olang
+    dir
+}
+
+fn (u Run&) sh(cmd String&) I32 { return os.Run($"cd " $os.Quote(u.dir) " && OLANG=" $os.Quote(u.olang) " && " $cmd) }
+
+fn (u Run&) read(name String&) String { return try os.ReadFile($u.dir "/" $name) catch default "" }
+
+# the program built in sub (OLANG_FACTSTATS's lines with what the build said) and run, into to - whether it built
+fn (u Run&) build(sub String&, to String&) Bool {
+    return u.sh($"cd " $sub " && rm -f build/main && OLANG_FACTSTATS=1 OLANG_CHECKINCR=1 timeout 600 \"$OLANG\" build " $
+                "main.olang > ../" $to " 2>&1 && timeout 120 ./build/main >> ../" $to " 2>&1") == 0
+}
+
+# p written and built clean; a scenario the clean build refuses left out, its module named by the diagnostics, until
+# the program builds (or no module is to blame) - then built in inc, and the two compared. "" where they agree
+fn (u Run&) step(p mut Prog&, undo Bool) String ? os.Error {
+    for _ in range p.n + 1 {
+        u.sh("rm -rf clean && mkdir clean")
+        try Write(p, $u.dir "/clean")
+        if u.build("clean", "there"): break
+        said := u.read("there")
+        blamed := false
+        for k in range p.n {
+            if p.dead[k] or not said.Contains($"m" $k ".olang:"): continue
+            p.dead[k] = true
+            blamed = true
+        }
+        if not blamed: return $"does not compile, and no scenario is to blame:\n" $said
+    }
+    try Write(p, $u.dir "/inc")
+    u.build("inc", "here")
+    # (what was reused or lowered again, the front end's records taken or checked, the modules the scope pass judged
+    # afresh and how many facts were read differ by design; OLANG_CHECKINCR ends a build whose records give what
+    # checking afresh does not)
+    u.sh("grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)' here | sort > a; " $
+         "grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)' there | sort > b")
+    if u.sh("diff a b > d") != 0: return $"the build in place (<) differs from the clean one (>):\n" $u.read("d")
+    if undo and u.read("here").Contains("olang: lowered "): return $"undoing lowered again:\n" $u.read("here")
+    if undo and u.read("here").Contains("olang: front checked "): return $"undoing checked again:\n" $u.read("here")
+    if undo and u.read("here").Contains("olang: scope judged m"): return $"undoing judged again:\n" $u.read("here")
+    return ""
+}
+
+# seed's run of steps edits on a program of n modules, in dir: "" where every step agreed, else the step and what
+# differed
+fn Seed(olang String&, dir String&, seed I64, steps I64, n I64) String ? os.Error {
+    u := Run(olang, dir)
+    u.sh("rm -rf inc && mkdir inc")
+    r := Rng(U64(seed))
+    p := Prog(n)
+    for k in range n { p.seeds[k] = U64(seed * 1000 + k) }
+    found := try u.step(p, false)
+    if found != "": return $"the first build: " $found
+    before := Copy(p)
+    for i in range steps {
+        undo := r.next(4) == 0
+        what := "the last edit undone"
+        if undo {
+            p = Copy(before)
+        } else {
+            before = Copy(p)
+            what = Edit(p, r, i)
+        }
+        found = try u.step(p, undo)
+        if found != "": return $"step " $i " (" $what "): " $found
+    }
+    return ""
+}
+
+test Module "a chain of modules, each with its Total, and a root printing m0's" {
+    p := Prog(2)
+    p.dead[0] = true
+    p.dead[1] = true
+    p.bump[1] = 5
+    assert Module(p, 0).Contains("import onward \"m1\"") and Module(p, 0).Contains("return 0 + 0 + onward.Total()")
+    assert not Module(p, 1).Contains("import onward") and Module(p, 1).Contains("return 0 + 5 }")
+    assert not Root(p).Contains("qsort")
+    p.callback = true
+    assert Root(p).Contains("qsort(xs")
+}
+
+test Edit "every edit changes the program, and a copy undoes it" {
+    p := Prog(3)
+    r := Rng(7)
+    for i in range 20 {
+        before := Copy(p)
+        Edit(p, r, i)
+        changed := p.callback != before.callback
+        for k in range 3 { changed = changed or Module(p, k) != Module(before, k) }
+        assert changed
+        q := Copy(before)
+        for k in range 3 { assert Module(q, k) == Module(before, k) }
+    }
+}
+
+# (review B2) seed's program at each step written into DIR/sN, the edit fuzzer's Seed without building
+fn Steps(dir String&, seed I64, steps I64, n I64, dead String&) String ? os.Error {
+    r := Rng(U64(seed))
+    p := Prog(n)
+    for k in range n { p.seeds[k] = U64(seed * 1000 + k) }
+    for k in range n { p.dead[k] = dead.Contains($k) }
+    os.Run("mkdir -p " $dir "/s0")
+    try Write(p, $dir "/s0")
+    log := ""
+    before := Copy(p)
+    for i in range steps {
+        undo := r.next(4) == 0
+        what := "the last edit undone"
+        if undo {
+            p = Copy(before)
+        } else {
+            before = Copy(p)
+            what = Edit(p, r, i)
+        }
+        d := $dir "/s" $(i + 1)
+        os.Run("mkdir -p " $d)
+        try Write(p, d)
+        log = $log "s" $(i + 1) ": " $what "\n"
+    }
+    return log
+}

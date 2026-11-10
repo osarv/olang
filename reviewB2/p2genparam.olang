@@ -1,0 +1,27 @@
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        a := Array<I64>(16, i)
+        t += x.Len() + a[2] - i
+    }
+    return t
+}
+type P struct(x I64, y I64) {
+    x
+    y
+}
+fn gen(p P) Iterator<P&> {
+    yield p
+    p.x = p.x + 1
+    yield p
+}
+fn main() ? {
+    keep P& = P(0, 0)
+    for i in range 3 {
+        for x in gen(P(i * 10, 7)) { keep = x }
+    }
+    churn()
+    try io.Println($keep.x " " $keep.y)
+}

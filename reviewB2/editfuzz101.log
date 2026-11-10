@@ -1,0 +1,156 @@
+fuzz edit: seed 101: step 2 (a G42 fact read added to m0): the build in place (<) differs from the clean one (>):
+1,3c1,32
+< olang: incremental check: scope: m1 9117-10313 fn differs in its summary: r b b b b b b b b a t i t i i c0/i/i f0110 against r b b b b b b b b a t i t i i c0/i/i f0010
+< olang: incremental check: scope: the diagnostics differ
+< olang: incremental check: the scope pass with records differs from it without them
+---
+> 142651566
+> built ./build/main
+> olang: unit <fcntl.h> 3cb7faae5eee700ebcd6540bf6063b6366f10a3ed807e9c995632a48bc9d28ff
+> olang: unit <math.h> 252a42ba8bb9ea5ade0a9b8bea0e5dcb3acd21cf013723c8c0532520a5879170
+> olang: unit <string.h> a64f6aad1d67660067bc03e9d6d82f9cc4fc1c39286fc1c2cbe1d65bcc2a17e0
+> olang: unit <unistd.h> 6d24c2d8fe279f6aacb688d6c9cdf6b0c4ca5e0bf72168fda845cf76858e95ec
+> olang: unit m0 1dba975e4a959644869bdd3d8b19db8b248e8aaf6429609216d43dcdbf2f348a
+> olang: unit m0 2eb9523f8ce639fd8c1b4bb39adc516368f3ab63bf739031631078839a4eae11
+> olang: unit m1 8eb230200396d4bee3241e68a87eef6132023a04d9904ac0d2b4e636e82f5ac5
+> olang: unit m1 ca32fa78829f28441456e138502345f5b8ce8cc38044e9a4cba4919259cdd03a
+> olang: unit m2 8c32f3cb76b0b2c3cfaabcb030bb067e6dc7f2017097032bb58b3f0f18f9f6cc
+> olang: unit m2 f46920598491e84800754b1446e1e6c5e3df829f33421b855c6408ee205619fe
+> olang: unit main 423c15b45709c32ab8105d9745f61fce39e6fcdbfeaa172e42326ea94f9cb9d0
+> olang: unit main 5e2d7e6f1aaec6f4b02ca5c7316863ffb444b0cac1698cf130b88cbeb4e2ec8c
+> olang: unit main~~sole e9d8210f58403d4bbfda250534de92d63dc512fedc079daf18b6cee9ab069193
+> olang: unit std/io 11a72e1b36ee7b7c2adfc90038fd7129aee58ec093053e4f103f84529263e4a0
+> olang: unit std/io 8ebb803bc2afd3ddcac0e0cb9809ed88e0805bb69a7a7cc69bd99f9d3a05df65
+> olang: unit std/list b17f270de9b1296af046036606961932c43bea078ad5b9ad584ff7f31dd8d6a6
+> olang: unit std/list e18f55c30ffe9efb09cfbe75685949e5205fe90f39ef1c269093c932c63069bf
+> olang: unit std/prelude/array 71661ca51de8e5c5488a28c610a7242f800fc230c1a9ae89588382a91deb4e5a
+> olang: unit std/prelude/complex 2eef6adf885ec89487c4c02384d5f1d2c45381b498246a2a6aa9b903a2afae1e
+> olang: unit std/prelude/f8 23d5dc90bbf263e1edf02c2f328c10fb9de5fecf48e59d96c0f97c3691d360a8
+> olang: unit std/prelude/float 67d54be3a96bac4fb7784ae7eddb82814670f12c6ecba10744e6ee8ffe881230
+> olang: unit std/prelude/float dff7a002c55ece0dcb500a428ddff3a76401f8e95ce0180ce154bcbbe58f1e7b
+> olang: unit std/prelude/hash bf8c383c93a6e918a551bd9dd4ecd303035e0a53e1fc856fe7aa4d7aad73a2fb
+> olang: unit std/prelude/map 22f688e84162da18df6e1138b51e549ef700b855c56faf4475913b51926d3e98
+> olang: unit std/prelude/number 06fa827091df713acadd197e7f2713a57008a97588e3ddc9b8136f6143bf1783
+> olang: unit std/prelude/place 8c639a060da3d1c640f1e3ccf274f90556b0ee9dc5fe46f27a51d9056a3da39d
+> olang: unit std/prelude/text 44add6d84e106ef27757f8f77512ddc5143612f6e499428e4c7295bc9f403b54
+> olang: unit std/prelude/text b9b3670a7666c39bb74d32c22e167322ab90b167b1ec03e71c7dd73bef874c5c
+> olang: unit std/prelude/vec 1882858ac791799b2db2ee4c1b1f98d026ff82db42222d5736dfc1e517237d30
+> olang: unit std/prelude/vec 590c9dd15200063ef4e3f8e423ca9041bc9384865a3672c15fe8a8b892baa3ad
+
+fuzz edit: seed 102: step 1 (the last edit undone): undoing lowered again:
+olang: incremental check: 739 kept summaries, every one the same
+olang: incremental check: scope, 911 judgings taken from records, every one the same
+olang: facts 1095 decided, 802 read
+olang: reused std/prelude/array
+olang: front kept std/prelude/array
+olang: reused std/prelude/complex
+olang: front kept std/prelude/complex
+olang: reused std/prelude/f8
+olang: front kept std/prelude/f8
+olang: reused std/prelude/float
+olang: front kept std/prelude/float
+olang: reused std/prelude/hash
+olang: front kept std/prelude/hash
+olang: front kept std/prelude/iterator
+olang: reused std/prelude/map
+olang: front kept std/prelude/map
+olang: reused std/prelude/number
+olang: front kept std/prelude/number
+olang: reused <math.h>
+olang: front kept <math.h>
+olang: reused std/prelude/place
+olang: front kept std/prelude/place
+olang: reused std/prelude/text
+olang: front kept std/prelude/text
+olang: reused <string.h>
+olang: front kept <string.h>
+olang: reused std/prelude/vec
+olang: front kept std/prelude/vec
+olang: reused std/io
+olang: front kept std/io
+olang: reused <unistd.h>
+olang: front kept <unistd.h>
+olang: reused <fcntl.h>
+olang: front kept <fcntl.h>
+olang: reused m0
+olang: front kept m0
+olang: reused m1
+olang: front kept m1
+olang: lowered m2
+olang: front kept m2
+olang: scope judged m2
+olang: reused std/list
+olang: front kept std/list
+olang: unit std/prelude/array 71661ca51de8e5c5488a28c610a7242f800fc230c1a9ae89588382a91deb4e5a
+olang: unit std/prelude/complex 2eef6adf885ec89487c4c02384d5f1d2c45381b498246a2a6aa9b903a2afae1e
+olang: unit std/prelude/f8 23d5dc90bbf263e1edf02c2f328c10fb9de5fecf48e59d96c0f97c3691d360a8
+olang: unit std/prelude/float 67d54be3a96bac4fb7784ae7eddb82814670f12c6ecba10744e6ee8ffe881230
+olang: unit std/prelude/float dff7a002c55ece0dcb500a428ddff3a76401f8e95ce0180ce154bcbbe58f1e7b
+olang: unit std/prelude/hash bf8c383c93a6e918a551bd9dd4ecd303035e0a53e1fc856fe7aa4d7aad73a2fb
+olang: unit std/prelude/map 22f688e84162da18df6e1138b51e549ef700b855c56faf4475913b51926d3e98
+olang: unit std/prelude/number 06fa827091df713acadd197e7f2713a57008a97588e3ddc9b8136f6143bf1783
+olang: unit <math.h> 252a42ba8bb9ea5ade0a9b8bea0e5dcb3acd21cf013723c8c0532520a5879170
+olang: unit std/prelude/place 8c639a060da3d1c640f1e3ccf274f90556b0ee9dc5fe46f27a51d9056a3da39d
+olang: unit std/prelude/text 44add6d84e106ef27757f8f77512ddc5143612f6e499428e4c7295bc9f403b54
+olang: unit std/prelude/text b9b3670a7666c39bb74d32c22e167322ab90b167b1ec03e71c7dd73bef874c5c
+olang: unit <string.h> a64f6aad1d67660067bc03e9d6d82f9cc4fc1c39286fc1c2cbe1d65bcc2a17e0
+olang: unit std/prelude/vec 590c9dd15200063ef4e3f8e423ca9041bc9384865a3672c15fe8a8b892baa3ad
+olang: unit std/prelude/vec 1882858ac791799b2db2ee4c1b1f98d026ff82db42222d5736dfc1e517237d30
+olang: unit std/io 8ebb803bc2afd3ddcac0e0cb9809ed88e0805bb69a7a7cc69bd99f9d3a05df65
+olang: unit std/io 11a72e1b36ee7b7c2adfc90038fd7129aee58ec093053e4f103f84529263e4a0
+olang: unit <unistd.h> 6d24c2d8fe279f6aacb688d6c9cdf6b0c4ca5e0bf72168fda845cf76858e95ec
+olang: unit <fcntl.h> 3cb7faae5eee700ebcd6540bf6063b6366f10a3ed807e9c995632a48bc9d28ff
+olang: unit m0 da32655fff371f495a0be553101ba767f00de66182e7a7b838a221e3f94d2a76
+olang: unit m0 8ee836afee5bcdfa8c38573aa60dfaccada7cc65a9925b4e1ad9373fde40c3c7
+olang: unit m1 ca2b5d4590f983a0ce63cfd22f7db8c118a01e76d681ab03703bb18c3f195109
+olang: unit m1 8928f5b9c798ef85f474d94553cc49968c6ebb202f7a6851694ec0522a2b3fb8
+olang: unit m2 6ae329120c19c46ca6235883cc43864cda571fc190b52ae39d935ce2238020ee
+olang: unit m2 f46920598491e84800754b1446e1e6c5e3df829f33421b855c6408ee205619fe
+olang: unit std/list b17f270de9b1296af046036606961932c43bea078ad5b9ad584ff7f31dd8d6a6
+olang: unit std/list e18f55c30ffe9efb09cfbe75685949e5205fe90f39ef1c269093c932c63069bf
+olang: unit main 036e073a24ef256ea4ec1687adf145b3010cc19a0eaf4c75d4dac570972a9248
+olang: unit main 742cec5899cb3698d3e1fe45075845d24fd1990a335d1678c7deefc81e079ee1
+olang: unit main~~sole 23dcde90afbcd84d62a1059c7dce34fa372807e8c6a1c924323d0094e812b0d9
+built ./build/main
+551368013
+
+fuzz edit: seed 106: step 2 (the root hands an export fn to C): the build in place (<) differs from the clean one (>):
+1,3c1,31
+< olang: incremental check: scope: m0 9117-9575 fn differs in its summary: r b b b b b b b b a t i t i i c0/i/i f0110 against r b b b b b b b b a t i t i i c0/i/i f0010
+< olang: incremental check: scope: the diagnostics differ
+< olang: incremental check: the scope pass with records differs from it without them
+---
+> 429834
+> built ./build/main
+> olang: unit <fcntl.h> 3cb7faae5eee700ebcd6540bf6063b6366f10a3ed807e9c995632a48bc9d28ff
+> olang: unit <math.h> 252a42ba8bb9ea5ade0a9b8bea0e5dcb3acd21cf013723c8c0532520a5879170
+> olang: unit <string.h> a64f6aad1d67660067bc03e9d6d82f9cc4fc1c39286fc1c2cbe1d65bcc2a17e0
+> olang: unit <unistd.h> 6d24c2d8fe279f6aacb688d6c9cdf6b0c4ca5e0bf72168fda845cf76858e95ec
+> olang: unit m0 2c9b51ec4ccb6e5d05616639af3ee540e2fab9f546dcf598fb998c736c996311
+> olang: unit m0 8ee836afee5bcdfa8c38573aa60dfaccada7cc65a9925b4e1ad9373fde40c3c7
+> olang: unit m1 11073bf2df73cf7cb0a8c284796e8d9dacf2c812e4ee41ffd8f44a190ec8997a
+> olang: unit m1 8eb230200396d4bee3241e68a87eef6132023a04d9904ac0d2b4e636e82f5ac5
+> olang: unit m2 712714c3a83e0372386d13bb78b8c15362a49416e5acb328e37991801026b6dd
+> olang: unit m2 f46920598491e84800754b1446e1e6c5e3df829f33421b855c6408ee205619fe
+> olang: unit main 742cec5899cb3698d3e1fe45075845d24fd1990a335d1678c7deefc81e079ee1
+> olang: unit main f32710380bc6f5372c75edacc13ef839fbef2192e1918c6d91154cd94d2998fc
+> olang: unit std/io 11a72e1b36ee7b7c2adfc90038fd7129aee58ec093053e4f103f84529263e4a0
+> olang: unit std/io 8ebb803bc2afd3ddcac0e0cb9809ed88e0805bb69a7a7cc69bd99f9d3a05df65
+> olang: unit std/list b17f270de9b1296af046036606961932c43bea078ad5b9ad584ff7f31dd8d6a6
+> olang: unit std/list e18f55c30ffe9efb09cfbe75685949e5205fe90f39ef1c269093c932c63069bf
+> olang: unit std/prelude/array 71661ca51de8e5c5488a28c610a7242f800fc230c1a9ae89588382a91deb4e5a
+> olang: unit std/prelude/complex 2eef6adf885ec89487c4c02384d5f1d2c45381b498246a2a6aa9b903a2afae1e
+> olang: unit std/prelude/f8 23d5dc90bbf263e1edf02c2f328c10fb9de5fecf48e59d96c0f97c3691d360a8
+> olang: unit std/prelude/float 67d54be3a96bac4fb7784ae7eddb82814670f12c6ecba10744e6ee8ffe881230
+> olang: unit std/prelude/float dff7a002c55ece0dcb500a428ddff3a76401f8e95ce0180ce154bcbbe58f1e7b
+> olang: unit std/prelude/hash bf8c383c93a6e918a551bd9dd4ecd303035e0a53e1fc856fe7aa4d7aad73a2fb
+> olang: unit std/prelude/map 22f688e84162da18df6e1138b51e549ef700b855c56faf4475913b51926d3e98
+> olang: unit std/prelude/number 06fa827091df713acadd197e7f2713a57008a97588e3ddc9b8136f6143bf1783
+> olang: unit std/prelude/place 8c639a060da3d1c640f1e3ccf274f90556b0ee9dc5fe46f27a51d9056a3da39d
+> olang: unit std/prelude/text 8f7807f15e4c7103ef92c625d1961bbbe65bacbca66b52069bd24429cce74301
+> olang: unit std/prelude/text b9b3670a7666c39bb74d32c22e167322ab90b167b1ec03e71c7dd73bef874c5c
+> olang: unit std/prelude/vec 1882858ac791799b2db2ee4c1b1f98d026ff82db42222d5736dfc1e517237d30
+> olang: unit std/prelude/vec 590c9dd15200063ef4e3f8e423ca9041bc9384865a3672c15fe8a8b892baa3ad
+
+fuzz edit: 10 programs edited 8 times each, 3 findings (in /home/user/wt/merge/build/fz/run2Y4ans)
+exit 1

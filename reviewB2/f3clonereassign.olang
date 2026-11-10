@@ -1,0 +1,39 @@
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        a := Array<I64>(16, i)
+        t += x.Len() + a[2] - i
+    }
+    return t
+}
+type P struct(x I64, y I64) {
+    x
+    y
+}
+fn dbl(x I64) I64 { return x * 2 }
+fn neg(x I64) I64 { return -x }
+fn apply(xs Array<I64>&, f fn&(x I64) I64, flip Bool) I64 {
+    t I64 = 0
+    for i, x in xs {
+        if flip and i == 1 { f = neg }
+        t += f(x)
+    }
+    return t
+}
+fn apply2(xs Array<I64>&, f fn&(x I64) I64, g fn&(x I64) I64) I64 {
+    t I64 = 0
+    for x in xs {
+        t += f(x)
+        f, g = g, f
+    }
+    return t
+}
+fn main() ? {
+    xs := Array<I64>[1, 2, 3, 4]
+    a := apply(xs, dbl, true)
+    b := apply(xs, dbl, false)
+    c := apply2(xs, dbl, neg)
+    try io.Println($a " " $b " " $c)
+}

@@ -1,0 +1,21 @@
+import "std/io"
+seen mut I64 = 0
+type Source trait {
+    Next() I64 pure
+}
+type W struct(f fn&(x I64) I64) {
+    f
+}
+fn (w W&) Next() I64 { return w.f(3) }
+fn next(x any Source&) I64 { return x.Next() }
+fn bump(x I64) I64 {
+    seen++
+    return x
+}
+fn twice(x I64) I64 { return x * 2 }
+fn main() ? {
+    a := W(twice)
+    b := W(bump)
+    r := next(a) + next(b)
+    try io.Println($r " " $seen)
+}
