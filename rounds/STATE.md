@@ -72,3 +72,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-09: R4 + F9 merged, verified, pushed. R8 running.
 - 2026-11-10: F10 merged, verified, pushed.
 - 2026-11-10 01:03 UTC: container restart killed R8 (final verify) and G4. R8 merged by me (conflicts: HISTORY, goldens recaptured), verifying. G4 relaunched with PROGRESS.md + commit-as-you-go.
+- 2026-11-10: R8 merged, verified, pushed. G4 running. Next: W4 (after R8), then F12, F11, W3b, G5+G6, review B.
