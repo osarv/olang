@@ -36559,3 +36559,7 @@ mechanism, not a T13d fact: the module's record is taken, but its object names a
 named by its index in this build's twin table, which is not stable across programs, so it is rightly not taken by
 name. The record variants alternate (one reads every declaration's T13d fact, one fewer) only because the module is
 lowered alone in one build and beside the others in the next. Left for a round naming twins stably.
+
+`compiler/lsp.olang`'s test of an edited program (W3b's) runs the compiler from a temporary directory of its own; run
+by hand with no `OLANG` set, its fallback `build/olang` named nothing there ("build/olang: not found"). The tests'
+`compilerUnderTest` (lsp and mcp) now falls back to `build/olang` under the directory the test starts in.

@@ -263,7 +263,9 @@ test "a test run read as outcomes" {
 # the compiler under test: $OLANG, else build/olang
 fn compilerUnderTest() String {
     c := try os.Env("OLANG") catch default ""
-    return $c if c != "" else "build/olang"
+    if c != "": return c
+    # (absolute: a test running it from a directory of its own finds it too)
+    return $(try os.Cwd() catch os.Error default ".") "/build/olang"
 }
 
 test "olang mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)" {
