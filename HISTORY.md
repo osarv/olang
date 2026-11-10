@@ -36579,3 +36579,45 @@ list already held the words; completion gained the signature's parameter names a
 variance is computed from the words found at the end of a function type (`wordsOf`, right to left) with polarity by
 position. The consistency tool checks `PromiseNames` against `Fact.Named` and SPEC's two tables. Found on the way: a
 `make` started while sources are being edited builds the half-edited tree - edit after the build has read them.
+## Review B2's findings fixed (B3i W3b, O14, B18, O8e; 2026-11-10, wt-b2fix)
+
+**In place refused what clean accepted (W3b, edit fuzzer seeds 101 and 106).** After an edit elsewhere, a function
+(`s1`, making `q1_1f := fn() { q1_1(root, Node(2)) }` over `q1_1 := link`) was judged afresh while the lambda inside
+it was taken from a record. Its judging then took the capture `q1_1` as a boundary - T22b, "'link' keeps 'b' in 'a'" -
+where a clean build follows it (D16c). Not a whole-program fact missing from a read set, as the review guessed: the
+parent's boundary walk asks `capFollowed`, which only `seedFollowed` set, as a lambda is judged; a lambda taken from a
+record restored its `capSeen`/`capSeeds` (`restoreHidden`) but never marked the capture followed. `restoreHidden` now
+marks it where the record gives seeds, as `seedFollowed` would. The edit kinds that found it (a G42 fact read added,
+the root handing an export fn to C) are what reaches it, so no edit kind is added.
+
+**A module lowered again in every build (seed 102's "undoing lowered again").** The cause left open in the entry
+before: a module record naming a twin (T22c) instance, `m2_2erh2_twin1`, was never taken, `emit.reusing` finding
+instances among bodies and adapters only. A twin's symbol is its index in this build's twin table, so a record now
+writes, beside `inst`, a `twin SYMBOL HASH` line - HASH the twin's key with each body by its stable name
+(`Scoper.TwinStable`; a key following an instance has none, and such a record is never taken) - and `reusing` takes
+the record only where this program's twin of that symbol has the same key. The scope pass still judges such a module
+afresh: a judging that asked for twins is never recorded (`RunRecord`; taking one would have to make and judge its
+twins again), so `JudgedFiles` (`scope judged` under `OLANG_FACTSTATS`) no longer counts those - they are judged in
+every build, edited or not, and say nothing of an edit. Recording twinned judgings is left: it is build time only.
+
+**A run-time array parameter's slice handed back (O14, D9b).** `fn sl(a Array<I64>) Array<I64>& { return a[0:2] }` was
+refused with O10d while the generic `sl2<T>` ran. O14 says a by-value parameter's storage handed back has the call's
+copy made in the result scope at entry (O28); R3 lifted the parameter, but the slice is writable, so D9b's walk marked
+the parameter copied, and `partsTerm` put a copied parameter's elements in the frame whatever R3 decided. They are now
+where R3 makes the copy when it lifts one (lowering's entry copy already did so). The generic instance reads the
+caller's array (D9b, read only), so both are accepted, each sound. tests/keptparams.olang `slices`, read back after a
+churn, written first and not; the evaluator decides it too.
+
+**Messages.** A `-memory` row at a call letting go through a function value it is given named the call's first argument
+('xs') as the collection; such a call's first argument is no receiver, so the row names the removal's own receiver where
+it removes ('me.frames'). p8anykeepsderef (a method keeping its argument in what the instance's reference field refers
+to, through an `any` whose trait says `keeps n`) is still refused with O10c at the call rather than T30c: the method's
+summary carries that keeping in its field sets, not in the relations `anyTables` compares with the trait's bound, so
+the table check passes it and the followed call refuses it. The refusal is sound; the better message needs `anyTables`
+to read field sets, left.
+
+**Review B1, the same branch.** `GenInfo.Reach` takes a writable reference to a struct as reaching nothing uncounted;
+a temporary is counted from the writable reference made of it (`countedAssign`), but not from a writable slice of it -
+now from either. docs/genrefs.md 2.5 said a weak read still gives the referent while a reference in use names it; the
+runtime (`__olang_weak_read`: generation and a count above zero) and T2d give `null` once no owning place holds it, and
+the section says so.

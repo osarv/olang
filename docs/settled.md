@@ -809,6 +809,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   sets, the judgings of its bodies before it, by name) and the state it leaves its bodies in; taken where all of it
   reads alike, generics' instances included (keyed by the modules of their type arguments too) - the compiler's scope
   judging of a no-op build 4.9 s to 1.0 s. `OLANG_CHECKINCR` holds the whole pass with records to the pass without.
+  A lambda's judging taken from a record gives back its captures followed (T22c) as one made now does; a judging that
+  asked for twins is never recorded (judged in every build); a module record naming a twin keeps a `twin SYMBOL HASH`
+  line, the hash of the twin's key in stable body names, and is taken only where this program's twin of that symbol has
+  it (review B2, 2026-11-10).
   Effects are not kept (found on demand, ~20 ms on the compiler); early freeing is judged afresh (W3b's next step).
   `olang lsp` and `olang mcp` keep and take the same front and scope records as `olang test` in their directory. **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
   code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
