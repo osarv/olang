@@ -8624,7 +8624,12 @@ generational type, `memory: a Node is reclaimed where the last owning place hold
 to one is in use` - or `memory: a Node is kept until its scope closes, never reclaimed early` and a `note:` row with why
 (O8e) - and for each call of the program's own across which a reference to one is in use while the callee may let go of
 one, `path:line:column: memory: 'l.drop()' keeps the Nodes it lets go of until their scope closes` at the call and a
-`note:` row naming the reference (`'h', a reference to a Node, is in use across this call`). Before the count of places, a row for each type the program declares that its owning places hold by reference
+`note:` row naming the reference (`'h', a reference to a Node, is in use across this call`); then, for each such type
+holding arrays in place, `memory: the arrays a Node holds in place are put back with it, unless a view of one is in
+use` - or `... are kept until their scope closes` and a `note:` row with why - and for each call of the program's own
+across which a view that may be into one is in use while its callee may reclaim one, `path:line:column: memory:
+'l.pop()' keeps the arrays of what it reclaims until their scope closes` and a `note:` row naming the view (`'k', which
+may view one, is in use across this call`). Before the count of places, a row for each type the program declares that its owning places hold by reference
 (O8e's one-holder rule), at the first store into one of them: `path:line:column: memory: Node has one holder: every
 instance stored into an owning place is a new one`, or `... Node may be held by two owning places at once, so it has no
 one holder` and a `note:` row at the first store handing an owning place an existing instance. Then a line for D9h: how many returns hand a view back, and how many calls read one where it

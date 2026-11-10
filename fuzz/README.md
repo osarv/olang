@@ -24,7 +24,7 @@ make fuzz SEED=500 COUNT=1000
 
 Each program is built under the scope sanitizer (`-d -s`) and interpreted (`-i`). A value used after its scope
 closed reads poison or faults under `-s`, so it shows as a difference. A program the compiler refuses is left out
-and counted. Its scenarios include generators walked every way a loop can end (D18, D18e), generators handing out views of what they were given or of what their walk keeps (D18c), reference locals given values of several scopes - walked along chains, built through, captured, read in deferred code and after the blocks that gave them (O25i) - and functions and closures whose obligations are more than their type says, held in locals, chosen by conditionals, given again in loops and called with nodes of blocks and turns (T22a).
+and counted. Its scenarios include generators walked every way a loop can end (D18, D18e), generators handing out views of what they were given or of what their walk keeps (D18c), reference locals given values of several scopes - walked along chains, built through, captured, read in deferred code and after the blocks that gave them (O25i) - and functions and closures whose obligations are more than their type says, held in locals, chosen by conditionals, given again in loops and called with nodes of blocks and turns (T22a), and weak lists (T2d, O8e): a generational type's nodes holding a key and a Vec by value, owning next links and weak back links, pushed, popped, removed inline, moved through a Map, their Vecs grown, references and key views kept across the calls removing them.
 
 ```
 make scopefuzz                    # SEED=1 COUNT=100 JOBS=2 SCENARIOS=12
@@ -36,7 +36,8 @@ Programs that replace and remove in long-lived places, keep views across the let
 take resources out of a Map, each scenario with a holder type of its own. One scenario in three
 hands unique values owning storage on through by-value parameters (T13b's move) - one call deep, two, through a
 constructor's field - into a Map and a Vec held by value, replaces, removes and takes them out to holders, and in half
-of them keeps views across those let-goes. Each is built
+of them keeps views across those let-goes. One in four is a weak list, as the scope fuzzer's (above), whose nodes and
+the arrays they hold are reclaimed where their last owning place lets go of them (O8e). Each is built
 `-d -s -memory` and interpreted in the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`), which stops at a read of
 a region a release reclaimed; a program that passes is built and interpreted again as a module of its own under a root
 that only calls it, where its sites read the decisions as link-time constants (W2). Scenarios the compiler refuses are left out and counted; the summary counts the places
