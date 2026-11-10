@@ -2195,7 +2195,7 @@ bc6f2855afa050c8 cf32e4a3d85515c5 compiler/diag.olang
 5f082e242ba93794 e94995ac5a2bfda1 compiler/diagmsg.olang
 cdb2fbc7d83fc6a5 ec376a742de2f838 compiler/doc.olang
 019a366a3edc3139 07813356a2d4f0cf compiler/effects.olang
-e56849000273d172 fbf46551b870ccfd compiler/emit.olang
+97fc54bff7cfd9a7 d5db75781f60e971 compiler/emit.olang
 8d4ab1999d893a00 566139f9f5704198 compiler/eval.olang
 8c31f3a8e86b2448 c55aabb9f1883a0a compiler/explain.olang
 cfbae2c024604f26 ede20fa970cbc0c2 compiler/facts.olang
