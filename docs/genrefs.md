@@ -309,19 +309,20 @@ would free a held instance, and section 9 is about why it cannot.
 
 ### 2.5 What a weak read gives
 
-Reading a weak place gives a `T?&`: its referent while the referent is held (by an owning place or a reference in use),
-`null` from the moment it is reclaimed, and in between - after the last holder let go, before reclaiming - still the
-referent. Where reclaiming happens is decided by the compiler (section 5) and reported by `-memory` and the language
-server, the same for every build of one program by one compiler.
+Reading a weak place gives a `T?&`: its referent while some owning place holds it, and `null` from the moment none
+does (SPEC T2d, O8e) - a reference in use does not keep a weak read giving the referent: it keeps the instance's
+storage from being reclaimed (section 5), never the weak read's answer. (Corrected 2026-11-10, review B1: this section
+said a reference in use kept the referent readable, and that between the last owning holder letting go and reclaiming a
+weak read still gave the referent; the runtime and T2d give `null` once no owning place holds it.) Where reclaiming
+happens is decided by the compiler (section 5) and reported by `-memory` and the language server, the same for every
+build of one program by one compiler.
 
-That is the contract of a weak reference everywhere: Swift's `weak var` turns nil where ARC frees the object, which its
-optimizer may move ("object lifetimes end at their last use", `withExtendedLifetime` exists for it); Java's and
-Python's when a collector runs. A program written to it - one that treats `null` as "gone" and never reads a removed
-node through a back link expecting it - behaves the same whatever the compiler decides. It is also a departure from the
-user's rule for contracts (direction.md: "a program's meaning never depends on how clever the prover is"): a program
-that does read a removed node through a weak place may print the node with one compiler and `null` with a better one.
-Exact timing would need ownership written and checked in types (Vale's owning references, Rust's `Box` with moves),
-which olang has declined (no borrow checker, no `own`). Question 2.
+So what a weak read gives depends on the owning places alone - which the program's own stores and removals decide -
+and not on where the compiler places reclaiming: `__olang_weak_read` (std/runtime/runtime.ll) gives the instance only
+where its generation is the one the word saw and its count of owning holders is above zero. Swift's `weak var`, which
+turns nil where ARC frees the object (a point its optimizer may move), and Java's and Python's weak references, which
+turn null when a collector runs, are looser than this. (The design first stated the looser contract - a removed node
+still readable until reclaimed - and question 2 asked about it; the built rule is the exact one above.)
 
 ## 3. The rules, as SPEC would state them
 
