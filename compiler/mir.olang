@@ -695,7 +695,8 @@ type GenInfo struct() {
 
 # genrefs 5.3: what a value of type ty - a local's, a value in flight - may reach of the generational instances, as
 # reclaiming judges the references in use: ReachNone nothing an owning place does not hold counted (a writable reference
-# to storage whose stores count, an array of a run-time length - its elements counted where they are stored); ReachPlain
+# to storage whose stores count - a temporary's too, held from the writable reference or slice made of it on, lowering's
+# countedAssign - an array of a run-time length - its elements counted where they are stored); ReachPlain
 # a reference to one, of the generational type Referent(ty), compared at a reclaiming site; ReachAny anything else that
 # may - a value holding one in place, a read-only reference to storage that may hold one uncounted (a temporary), a
 # reference into a generational instance's slot (to a part it holds in place), a function value or an "any" (what

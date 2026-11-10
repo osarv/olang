@@ -2357,9 +2357,15 @@ fn (ln mut lowering&) counted(s mir.Stmt&) Bool {
 fn (ln mut lowering&) countedAssign(sp source.Span, p mir.Lvalue, rv mir.Rvalue) Bool {
     t := ln.T
     if rv == mir.Rvalue.Use(mir.Operand.None): return false
-    if rv == mir.Rvalue.Ref and (t.PermOf(t.Repr(rv.ty)) & types.Writable) != 0 and ln.tempPart(rv.p) {
-        # a temporary written through a reference from here on: an owning place, what it holds held
-        if ln.counts(ln.stepType(rv.p, I64(rv.p.Path.N))): ln.holders(rv.p, 1, sp)
+    # a temporary written through a reference or a slice from here on: an owning place, what it holds held - so a
+    # writable reference reaches nothing uncounted (mir.GenInfo.Reach), whatever it names
+    match rv {
+        case mir.Rvalue.Ref(rp, rty), mir.Rvalue.Slice(rp, _, _, rty) {
+            if (t.PermOf(t.Repr(rty)) & types.Writable) != 0 and ln.tempPart(rp) and ln.counts(ln.stepType(rp, I64(rp.Path.N))) {
+                ln.holders(rp, 1, sp)
+            }
+        }
+        case _ { }
     }
     pt := ln.stepType(p, I64(p.Path.N))
     isWeak := ln.weakPlace(p)
