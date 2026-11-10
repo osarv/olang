@@ -36373,7 +36373,14 @@ generational instance; O8d's). A String-keyed list churned a million times: 33 -
 
 **Found on the way.** interpret's Reclaim read every operand it was handed as a reference; handed a view, it stopped
 ("a value compile-time evaluation does not model") - found by round 6's fuzzer within its first seeds; it now skips them
-(the interpreter gives back no arrays). And a by-value local placed where it is kept (O28) is still copied into the new
+(the interpreter gives back no arrays). The same fuzzer's split form (the program as a module of its own under a root
+that only calls it) found a round-4 gap: a store into a place holding references to a generational type kept its O8d
+release site, guarded by the place's link-time constant, in every module but the root's (whose decisions lowering
+writes in) - although such a place is never sole in any program (genKeeps) - and the release's read of the old value
+kept it in use past the store, so no site there reclaimed it: in a program split into modules nothing of the list was
+reclaimed, and a weak place read its node later than in the one-module build. Lowering now writes no release for such
+a place (or a weak one), reading the type's status through the program's generational facts, so a module's code records
+it (B3i). And a by-value local placed where it is kept (O28) is still copied into the new
 instance, leaving its first copy in the scope (127 bytes a node for a Vec built in a local) - recorded in genrefs, left.
 
 **Round 6.** fuzz/scopegen.olang's weak scenario (in scopegen's programs and the early-free mode's): weak lists with
