@@ -699,6 +699,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     logReads Bool = false
     readLog Vec<I64>
     absentLog Vec<String&>                 # ... and the types it asked for the constructor or destructor of, where none is
+    instReads Map<types.TypeId, Array<I64>>         # what instTypeAt's finding for a type read, given again on a hit
+    instAbsent Map<types.TypeId, Array<String&>>
     ctorCanons Map<String, Bool>           # the canonical texts of the types with a constructor (absentNow)
     dtorCanons Map<String, Bool>
     globalDep Bool = false                 # the judging read something only the whole program says (a twin's limit)
@@ -2182,8 +2184,20 @@ fn (s mut Scoper&) instType(t types.TypeId) Bool { return s.instTypeAt(s.instStr
 
 fn (s mut Scoper&) instTypeAt(r types.TypeId, depth I64) Bool {
     if r == types.UnknownT or depth >= InstDepth: return false
-    if s.instTypes.Has(r): return try s.instTypes.Get(r) catch default false
+    if s.instTypes.Has(r) {
+        # (B3i: what finding it read - a constructor, or none - read again by the judging asking now)
+        if s.logReads {
+            rs := try s.instReads.Get(r) catch default Array<I64>(0)
+            for x in rs { s.readLog.Push(x) }
+            ab := try s.instAbsent.Get(r) catch default Array<String&>(0)
+            for x in ab { s.absentLog.Push($x) }
+            if not s.instReads.Has(r): s.globalDep = true
+        }
+        return try s.instTypes.Get(r) catch default false
+    }
     s.instTypes.Put(r, false)
+    at := s.readLog.Len()
+    atAbsent := s.absentLog.Len()
     fs := s.P.T.Items(s.P.T.Fields(r))
     out := false
     for i in range fs.Len() {
@@ -2191,6 +2205,12 @@ fn (s mut Scoper&) instTypeAt(r types.TypeId, depth I64) Bool {
         if s.isFunc(fs[i]) or not s.isRef(fs[i]) and s.instTypeAt(s.instStruct(fs[i]), depth + 1): out = true
     }
     s.instTypes.Put(r, out)
+    if s.logReads {
+        s.instReads.Put(r, s.readsSince(at))
+        ab := Array<String&>(s.absentLog.Len() - atAbsent, "")
+        for i in range ab.Len() { ab[i] = s.absentLog[atAbsent + i] }
+        s.instAbsent.Put(r, ab)
+    }
     return out
 }
 
