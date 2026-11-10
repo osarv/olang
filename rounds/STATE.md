@@ -70,3 +70,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-09: fallbacks merged (ed3c06d5), verified, pushed. Left: reference parameter assigned in body; capture via stored fn value; `$` in a generator maps Inert to program scope (nothing built).
 - 2026-11-09: overrej merged, verified, pushed. R4 started.
 - 2026-11-09: R4 + F9 merged, verified, pushed. R8 running.
+- 2026-11-10: F10 merged, verified, pushed.
