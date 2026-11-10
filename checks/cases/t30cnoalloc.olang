@@ -1,0 +1,15 @@
+# check: fail error[T30c, T22b]: Sq's 'Area' may allocate, and Shape's 'Area' promises 'noalloc'
+# also: note: it may allocate here
+# T30c: a type's method given a trait's table is held to the effect words of the trait's method
+type Shape trait {
+    Area() F64 noalloc
+}
+type Sq struct(s F64) { s }
+fn (q Sq&) Area() F64 {
+    t := $q.s
+    return F64(t.Len())
+}
+fn area(x any Shape&) F64 { return x.Area() }
+fn main() {
+    assert area(Sq(2.0)) > 0.0
+}

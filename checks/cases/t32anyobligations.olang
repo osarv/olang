@@ -1,5 +1,5 @@
-# check: fail aBag's 'Put' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
-# T32a, T22a: run-time trait values
+# check: fail error[T30c, T22b]: aBag's 'Put' keeps 'n' in the instance, and aSink's 'Put' says nothing of that - write 'keeps n' after its signature in the trait
+# T32a, T30c: a call through an "any" keeps nothing its trait's method does not say
 type aNode struct(v I64) { v }
 type aSink trait {
     mut Put(n aNode&)

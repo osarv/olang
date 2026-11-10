@@ -1,0 +1,28 @@
+# check: run
+# flags: -debug -sanitize
+# T30c: t32anyobligations with the word written - Put keeps n in the instance, and a call through the "any" holds n to
+# outlive what the any refers to: read back after storage was made and let go many times
+type aNode struct(v I64) { v }
+type aSink trait {
+    mut Put(n aNode&) keeps n
+}
+type aBag struct() {
+    last aNode?& = null
+}
+fn (b mut aBag&) Put(n aNode&) { b.last = n }
+fn put(x mut any aSink&, n aNode&) { x.Put(n) }
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<aNode>()
+        for j in range 16 { v.Push(aNode(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+fn main() {
+    b := aBag()
+    for i in range 3 { put(b, aNode(i + 4)) }
+    churn(100)
+    assert b.last!.v == 6
+}

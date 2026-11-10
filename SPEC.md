@@ -1354,8 +1354,9 @@ onEvict fn?&(k String&) keeps k
 ```
 
 They are written only on function types - a place's (`fn&`, `fn?&`), a declared function type's base (T21b), a type
-argument's: the type of something that holds a function value and calls through it. A function the program writes - a
-declaration, a method, a trait's method, a lambda, a constructor - writes none (a word after its signature is a
+argument's: the type of something that holds a function value and calls through it - and on a trait's method signatures,
+whose calls through an `any` rely on them (T30c). A function the program writes - a declaration, a method, a lambda, a
+constructor - writes none (a word after its signature is a
 compile-time error naming T21c): what it does is read off its body (its obligations O10b, its facts G42), and it is a
 value of such a type where what it does is within what the words say (T22b). `noreturn` (D8e) stands where it stood,
 before the promises (`fn&(I32) noreturn nospawn`); it is no promise.
@@ -1817,7 +1818,7 @@ destructor, no storage:
 ```
 trait-body ::= "trait" [ "extends" type-ref { "," type-ref } ] [ "for" type-ref { "," type-ref } ]
                "{" [ STMNT_END ] { ( method-sig | builder-sig ) STMNT_END } "}"
-method-sig ::= [ "mut" ] IDEN func-sig
+method-sig ::= [ "mut" ] IDEN func-sig { promise }      (promises: T30c)
 builder-sig ::= IDEN "." IDEN func-sig                  (T30b)
 ```
 
@@ -1880,6 +1881,19 @@ satisfies it exactly when it satisfies each of them and has its own methods too;
 (`type Walk<T> trait extends Iterator<T> { }`). Each name after `extends` must be a trait - a type gives a trait
 methods by declaring them, never by being extended - and a trait may not reach itself through what it extends; both are
 compile-time errors at the declaration.
+
+**T30c (promises on a trait's methods).** A trait's method signature may end with promises (T21c), as a function type
+does: `type Shape trait { Area() F64 noalloc pure }`, `type Sink trait { mut Put(n Node&) keeps n }`. They name the
+method's written parameters; its receiver has no name and is the method's home, so `keeps x` says the method may keep `x`
+in the instance, as an adapter's receiver is its value's home (E31). Misuse is T21c's error, at the trait. The method's
+**bound** is T22b's for its function type with the receiver first: without `borrows` or `noborrow` its result may borrow
+from the receiver and from every reference parameter, `keeps x` adds that `x` outlives the instance, and the effect words
+promise their facts. Every call through an `any` of the trait relies on the bound (T32b): it discharges the bound's
+relations (O10c) and has the effect words' facts (G42) - with no effect word, anything. Each method a type gives the
+trait's table where an `any` of it is made (its own or the default it takes, T32b) is held to the bound - its
+obligations within the relations (T22b), its facts within the effect words - and a method doing more is a compile-time
+error at the conversion naming T30c, the method and the word, with a note where an effect word is broken. A type meets a
+trait as T31 says whatever the words: a constrained generic's call (G19) is a direct call, judged by the method's body.
 
 **T31a (closed traits).** A trait may **list the types that satisfy it**, after `for`: `type Float trait for F16,
 BF16, F32, F64 { }`. Such a trait is **closed**: a type satisfies it when it is one of the types listed - the very type,
@@ -2017,9 +2031,10 @@ from its own type, once. A type that does not satisfy `R` is a compile-time erro
 method it lacks.
 
 A call through the table knows only `R`'s signature, so where `T` meets `R` for an `any`, each method the table holds
-must say no more than the signature: one that carries a scope obligation (O10b - storing an argument into its receiver,
-or handing back storage of one, among them), is a compile-time error at the conversion naming the method; called
-directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
+must do no more than the signature's bound (T30c): one carrying a scope obligation the bound does not allow (O10b -
+storing an argument into its receiver where no `keeps` says so, handing back storage of an argument `borrows` leaves
+out), or doing what an effect word of the method rules out, is a compile-time error at the conversion naming the method
+and the word that would say it; called directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
 in the table (T35): it is reached as T32c says. A default whose result holds its receiver by value - an adapter that
 keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`,
 `StepBy`, `FlatMap`), a `List` of it, which
