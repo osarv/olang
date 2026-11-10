@@ -1253,6 +1253,75 @@ G42's facts are) carries its value's records through the instance's locals and c
 instance calling through it is judged per pattern (the receiver an input of the twin's key). And, for question 2, a
 trait's method signatures taking the words, a call through an `any` relying on them (T32a relaxed). Design pass first.
 
+**As designed (2026-11-10, wt-f12; the user's yes to questions 1 and 2 of 2026-11-08).** The details are mine, within
+the answers: "followed as far as the compiler can know them, constructor-fixed fields included, code specialized only
+where it pays"; "written where relied on, inferred on implementations; a call through an `any` relies on them".
+
+*Part A - functions a constructor fixes in a field (T22d, G42).*
+
+1. **A fixed field.** A field of a struct is **fixed** where its constructor gives it its value once - its declaration
+   a parameter's pun or an initializer reading one parameter (`pred fn&(x T) Bool ? E = keep`), never assigned in the
+   constructor after - and no body of the program assigns it after the constructor, nor writes a whole instance of the
+   struct through a reference (the scope pass's `fieldsAssigned`, read off every body as G42's facts are; the effects
+   pass reads the same with a scan of its own, made once and only where it is asked). A fixed field holding a function
+   value carries the records of what the constructor was given; one holding a struct by value carries that instance's
+   records in turn (`TakeWhileIter.it`), so records form a tree, four levels at most (15, decision 5's depth).
+2. **What carries them (scope).** An **instance record** - by field, the records of a fixed function field and the
+   record of a fixed struct field - is made by a constructor call from its arguments' records; a local declared once
+   and never assigned whole carries its initializer's, and a borrow of it the same; a call's result carries its
+   callee's `ResInst` (what every return's instance carried, in the callee's terms, through the call as `ResFn` is,
+   O13c), none for a body in a cycle. Inside a twin, a followed parameter's instance holds its seeded record. A read of a
+   fixed field of a place whose instance record is known (`t.pred`) carries that field's records, so a call through it
+   is judged as the direct calls it is (T22a). Generators' walks are not followed by the scope pass: D18's rules for
+   their elements and homes stand, and a walk's relations are what its `Generator.next` type says, as before.
+3. **Twins keyed by an instance (T22c extended).** An argument whose instance record carries, anywhere in its tree,
+   records all known and some uncovered by their field's type (T22b) is followed into the callee: the twin's key gains,
+   for that parameter, each field's path and its bodies; its seed is the tree with each capture a derived scope of the
+   parameter (`capCode`, numbered over the tree's records in depth-first order), resolved by the caller from its
+   argument's tree as a function argument's captures are (`capturedAt`). The receiver is such an argument, so a
+   method calling through its own fixed field (`TakeWhileIter.Next`, `Heap.Push`) is judged per what its instance
+   holds. The limits are T22c's.
+4. **Boundaries (T22a).** A constructor's argument for a fixed field is no boundary where the instance is followed - a
+   local declared whole, a `return` the caller follows (`ResInst`), an argument followed into its callee; anywhere
+   else the instance meets a boundary (a store into a field, an element, a payload, a global; an argument not followed;
+   an `any`; a task; a `yield`; a return no caller follows), and there every record in its tree is judged by its field's
+   type, the error naming the field's type and the word that would say it. So nothing reaches code judged once for
+   many values with more than that code's types say.
+5. **Effects (G42, 4.5).** A body's slots gain **field slots**: for each parameter whose type is (a reference to) a
+   struct, each path of fixed fields from it to a function field (depth 4), numbered after its parameters and captures
+   (all slots at most 63; past that a field slot is its type's bound). A call through a fixed field of a parameter's
+   instance sets that slot's `Calls` bit; at a call, the caller gives each field slot what its argument's instance holds
+   there - a constructor's argument, every value given a local, a field slot of its own, or what a callee's returns put
+   there (`fieldRets`, resolved once the callee is walked; a parameter of the callee's given back is resolved by what
+   the call gave it). A lambda or adapter reaching a field is made by some body whose facts already hold what calling it
+   does ("a body's lambdas are its own"), so a call through a field holding one adds nothing; a value not followed adds
+   its type's bound. So `for x in gen()` has the generator's own facts, and `xs.Iter().TakeWhile(p)` its predicate's.
+6. **Code.** Twins with plans of their own are compiled as round 7's are; nothing else is specialized (clones stay
+   round 9's: a call through a field is no parameter, so no clone is made for it - "only where it pays" is left to the
+   inliner, which sees the constructor's argument where the instance does not escape).
+
+*Part B - promise words on a trait's methods (T30, T32a, T21c).*
+
+7. **Where written.** A trait's method signature may end with the words, as a function type's does
+   (`type Shape trait { Area() F64 noalloc pure }`); a method a type declares still writes none (T21c). They name the
+   method's written parameters; the receiver has no name, and is the method's **home**: `keeps x` keeps `x` in the
+   instance, as an adapter's receiver is its value's home (E31). Misuse is T21c's error, said at the trait.
+8. **The bound.** A trait method's function type with the receiver first (its `any` slot) takes the words shifted past
+   the receiver, `keeps x` becoming "keeps x in the receiver"; its bound is T22b's: without `borrows`/`noborrow` the
+   result may borrow from the receiver and every reference parameter. A call through an `any` is judged as a call through
+   a value of that type whose functions are not followed (T22a): it discharges the bound's relations and has the effect
+   words' facts (an `any` call with no effect word stays "anything"). T32a's refusal of a method with any obligation
+   becomes the bound's: a method whose obligations the bound does not cover is refused at the table, naming the word
+   that would say it (t32anyscopes, a result borrowing from the instance, compiles; t32anyobligations, keeping its
+   argument in the instance, is refused with "write 'keeps n'").
+9. **Held where relied on.** Each method a type gives a trait's table (T32b: its own, or the default it takes) is held
+   to the words where the table is made - its relations by the scope pass, its facts by the effects pass (T22b's error
+   naming the trait, the method and the word, with a note at what breaks it). A constrained generic's call (G19) is a
+   direct call of the type's own method, judged by its body; the words rely on nothing there, so a type meets a trait
+   as before (T31) and is held to the words only where an `any` of it is made.
+10. **Identity.** A trait method's words are part of the trait's declaration, not of any type the program names; an
+    `any`'s slots carry them. `olang api` reads them as a function type's (a word lost breaks callers relying on it).
+
 ### The checklist, per round
 
 1 spec first (above); 2 the passes named; 3 the evaluator - `interpret` follows twins' plans (round 7), builds found
