@@ -3832,7 +3832,7 @@ fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
     n := I64(ks.N)
     keep := "null"
     if n > 0 {
-        keep = fe.let("alloca [" $n " x ptr]")
+        keep = fe.alloca("[" $n " x ptr]")
         for i in range n {
             k := fe.F.Ops[I64(ks.At) + i]
             fe.w("store ptr " $fe.val(k, fe.otype(k)) ", ptr " $fe.let("getelementptr [" $n " x ptr], ptr " $keep ", i64 0, i64 " $i))
