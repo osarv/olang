@@ -273,6 +273,7 @@ fn (lw mut Lowerer&) lowerAs(id I64, t I64) mir.Fn& {
     ln.freeing = t < 0 and lw.Free is not null and lw.Free!.Frees(id)
     lw.ReadGen(-1)   # (what a helper lowered before asked is not this body's)
     ln.run()
+    if t < 0 and not ln.gapped and lw.P.Gens.Len() > 0: ln.reclaimSites()
     lw.ReadGen(b.File)
     lw.Gapped = ln.gapped
     return ln.F
@@ -2426,6 +2427,195 @@ fn (ln mut lowering&) holdParams() {
     for i in range ln.F.Locals.Len() {
         if ln.countedLocal(i) and ln.F.Locals[i].Home == mir.ScopeRef.Frame: ln.zeroLocal(i, ln.B.Sp)
     }
+}
+
+# ---- where a generational instance is reclaimed (O8e, genrefs 2.3, 5.3) ----
+
+# A reference to a generational instance stops being in use where its local's last use is: the old value a store into
+# an owning place let go of (a temporary read just before the store), a local whose last read is here. At each such
+# point - after a statement, never at a terminator (a call's arguments, a branch's test: kept there, which keeps memory)
+# - where every other local still in use is either one that reaches no generational instance uncounted or a plain
+# reference to one, a Reclaim is placed: the instance reclaimed if no owning place holds it and it is none of those
+# references (compared while the program runs). Whether a caller holds a reference across the call is the whole
+# program's question, answered by a link-time constant per body and type (mir.Stmt.Reclaim)
+
+fn (ln mut lowering&) reclaimSites() {
+    nb := ln.F.Blocks.Len()
+    if nb == 0: return
+    g := ln.L.Gen()
+    lv mut liveness& = liveness()
+    for i in range ln.F.Locals.Len() {
+        r := g.Reach(ln.T, ln.F.Locals[i].Ty)
+        # (a variable or parameter holding owning references in place is an owning place, counted: countedLocal, holdParams)
+        k := ln.F.Locals[i].Kind
+        if r == mir.ReachAny and (k == mir.LocalKind.Var or k == mir.LocalKind.Param) and ln.counts(ln.F.Locals[i].Ty) { r = mir.ReachNone }
+        lv.idx.Push(-1)
+        if r == mir.ReachNone: continue
+        lv.idx[i] = lv.locals.Len()
+        lv.locals.Push(i)
+        lv.reach.Push(r)
+        if r == mir.ReachPlain: lv.plain = true
+    }
+    m := lv.locals.Len()
+    # (a function too large to follow keeps: what it lets go of stays until its scope closes)
+    if not lv.plain or nb * m > 20000000: return
+    lv.m = m
+    lv.liveIn = Array<Bool>(nb * m, false)
+    lv.liveOut = Array<Bool>(nb * m, false)
+    lv.cur = Array<Bool>(m, false)
+    changed := true
+    for changed {
+        changed = false
+        for k in range nb { changed = ln.liveBlock(lv, nb - 1 - k) > 0 or changed }
+    }
+    for bi in range nb { ln.reclaimBlock(lv, bi) }
+}
+
+# the liveness reclaimSites follows: of the locals that may reach a generational instance only (locals, by compact
+# index, with their reach), by block at its entry and its exit, and in use at the point being walked
+type liveness struct() {
+    idx Vec<I64>
+    locals Vec<I64>
+    reach Vec<I64>
+    plain Bool = false
+    m I64 = 0
+    liveIn mut Array<Bool>& = Array<Bool>(0)
+    liveOut mut Array<Bool>& = Array<Bool>(0)
+    cur mut Array<Bool>& = Array<Bool>(0)
+    uses Vec<mir.LocalId>
+    defs Vec<mir.LocalId>
+    nexts Vec<mir.BlockId>
+}
+
+# block bi's liveness from its successors': how many locals its entry's gained
+fn (ln mut lowering&) liveBlock(lv mut liveness&, bi I64) I64 {
+    m := lv.m
+    lv.nexts.Clear()
+    mir.TermNext(ln.F.Blocks[bi].T, ln.F, lv.nexts)
+    for l in range m { lv.cur[l] = false }
+    for nx in lv.nexts {
+        for l in range m {
+            if lv.liveIn[I64(nx) * m + l]: lv.cur[l] = true
+        }
+    }
+    for l in range m { lv.liveOut[bi * m + l] = lv.cur[l] }
+    ln.liveStep(lv, bi, -1)
+    n := ln.F.Blocks[bi].Stmts.Len()
+    for k in range n { ln.liveStep(lv, bi, n - 1 - k) }
+    grew I64 = 0
+    for l in range m {
+        if lv.cur[l] and not lv.liveIn[bi * m + l] {
+            lv.liveIn[bi * m + l] = true
+            grew++
+        }
+    }
+    return grew
+}
+
+# what statement i of block bi (-1: its terminator) mentions, into lv.uses and lv.defs
+fn (ln mut lowering&) mentions(lv mut liveness&, bi I64, i I64) {
+    lv.uses.Clear()
+    lv.defs.Clear()
+    if i < 0 {
+        ln.F.TermMentions(ln.F.Blocks[bi].T, lv.uses, lv.defs)
+    } else {
+        ln.F.Mentions(ln.F.Blocks[bi].Stmts.At(i), lv.uses, lv.defs)
+    }
+}
+
+# lv.cur, in use after statement i (-1: the terminator), made what is in use before it
+fn (ln mut lowering&) liveStep(lv mut liveness&, bi I64, i I64) {
+    ln.mentions(lv, bi, i)
+    for d in lv.defs {
+        k := lv.idx[I64(d)]
+        if k >= 0: lv.cur[k] = false
+    }
+    for u in lv.uses {
+        k := lv.idx[I64(u)]
+        if k >= 0: lv.cur[k] = true
+    }
+}
+
+# block bi's reclaiming sites, walking back from its exit
+fn (ln mut lowering&) reclaimBlock(lv mut liveness&, bi I64) {
+    m := lv.m
+    for l in range m { lv.cur[l] = lv.liveOut[bi * m + l] }
+    ln.liveStep(lv, bi, -1)
+    sites Vec<mir.Stmt>
+    at Vec<I64>
+    n := ln.F.Blocks[bi].Stmts.Len()
+    dying Vec<I64>
+    for k in range n {
+        i := n - 1 - k
+        ln.mentions(lv, bi, i)
+        sp := mir.StmtSpan(ln.F.Blocks[bi].Stmts.At(i))
+        dying.Clear()
+        let := ln.letGoOf(bi, i)
+        for u in lv.uses {
+            j := lv.idx[I64(u)]
+            if j < 0 or lv.reach[j] != mir.ReachPlain or lv.cur[j] or has(dying, I64(u)): continue
+            # (a temporary is a site only where it is what a store let go of: any other is a copy of something still
+            # held, or still in use)
+            if ln.F.Locals[I64(u)].Kind == mir.LocalKind.Temp and I64(u) != let: continue
+            dying.Push(I64(u))
+        }
+        # (the sites after one statement run in this order, each comparing with the locals whose sites run after it -
+        # two locals naming one instance reclaim it once)
+        for d in range dying.Len() {
+            e := dying.Len() - 1 - d
+            st := ln.reclaimAt(lv, dying, e, sp)
+            if st is null: continue
+            sites.Push(st)
+            at.Push(i)
+        }
+        ln.liveStep(lv, bi, i)
+    }
+    b := ln.F.Blocks.RefMut(bi)
+    for k in range sites.Len() { try b.Stmts.Insert(at[k] + 1, sites[k]) catch { } }
+}
+
+# the local statement i of block bi lets go of - the old value a store's count is taken down for - -1 for none
+fn (ln mut lowering&) letGoOf(bi I64, i I64) I64 {
+    match ln.F.Blocks[bi].Stmts.At(i) {
+        case mir.Stmt.Holders(_, x, by) {
+            if by != mir.Operand.Const(mir.I64T, -1): return -1
+            match x {
+                case mir.Operand.Copy(p) {
+                    if p.Path.N != I32(0): return -1
+                    return match p.B {
+                        case mir.Base.Local(l): I64(l)
+                        case _: -1
+                    }
+                }
+                case _ { return -1 }
+            }
+        }
+        case _ { return -1 }
+    }
+}
+
+fn has(xs Vec<I64>&, x I64) Bool {
+    for y in xs {
+        if y == x: return true
+    }
+    return false
+}
+
+# the Reclaim of what dying local e names where the locals in lv.cur are in use after it, and the dying locals after it
+# have sites of their own after its - none where one in use may reach a generational instance and is no plain
+# reference to one
+fn (ln mut lowering&) reclaimAt(lv mut liveness&, dying Vec<I64>&, e I64, sp source.Span) mir.Stmt?& {
+    holding Vec<mir.Operand>
+    for j in range lv.m {
+        if not lv.cur[j]: continue
+        if lv.reach[j] == mir.ReachAny: return null
+        holding.Push(mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(lv.locals[j])))))
+    }
+    for k in range e + 1, dying.Len() { holding.Push(mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(dying[k]))))) }
+    x := dying[e]
+    t := ln.T
+    ty := t.Repr(t.Referent(t.Repr(ln.F.Locals[x].Ty)))
+    return mir.Stmt.Reclaim(sp, mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(x)))), ty, ln.F.Args(holding.ToArray()))
 }
 
 # whether local i is a value local an owning place is counted in: a variable holding owning references in place

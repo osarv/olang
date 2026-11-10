@@ -151,8 +151,8 @@ type ScopeInfo struct(Kind ScopeKind, Parent ScopeId, Block typed.BlockId, Sp so
 }
 
 # a scope something is built in or passed: one this function opens; one of its scope variables, by index in Vars; the
-# program's (O1b); the frame - storage on the stack, live until the function returns (a temporary nothing keeps, an
-# environment no callee keeps, D16c); or the scope an I64 local's handle names - a region an early free made (Region)
+# program's (O1b); the frame - storage on the stack, live until the function returns (a temporary nothing holding, an
+# environment no callee holding, D16c); or the scope an I64 local's handle names - a region an early free made (Region)
 # or found (RegionOr, O8d)
 type ScopeRef enum {
     Scope(s ScopeId)
@@ -322,6 +322,13 @@ type Stmt enum {
     # array's storage, which is counted where its elements are stored) - each held by `by` more owning places (an I64,
     # at least 1), or by one fewer for -1; a count saturates at 3, pinned, which nothing changes after
     Holders(sp source.Span, x Operand, by Operand)
+    # O8e, genrefs 2.3, 5.3: the generational instance of type ty that reference x names (null: nothing) reclaimed where
+    # no owning place holds it and it is none of the references in use holding names (f.Ops) - the site's locals that may
+    # still name one of the types its reclaiming reaches - and what that lets go of in turn (4.5). Lowering places it
+    # where x's last use, or the let-go x is the old value of, leaves no other reference in use that it cannot compare;
+    # it does anything only where the whole program says no caller holds such a reference across a call into this body
+    # (a link-time constant, as Sole's)
+    Reclaim(sp source.Span, x Operand, ty types.TypeId, holding Range)
     # B3e: deferred code registered at s, its cleanup at entry - blocks reached by nothing but this, a copy of the
     # deferred code ending in Resume, which interpret runs for each block a stop leaves (S19's "on every way out", as
     # the built program, going on, would run it); with entry NoBlock, the newest registered at s about to run on this
@@ -676,6 +683,84 @@ type GenInfo struct() {
     deps Map<types.TypeId, Array<I64>&>        # ... and the declarations it was read from
     walking Vec<I64>                           # ... those of the walks being made, depth deep
     depth I64 = 0
+    # Reach: the types a generational type holds in place (its slot), from the types scanned so far
+    parts Map<types.TypeId, Bool>
+    scanned I64 = 0
+}
+
+# genrefs 5.3: what a value of type ty - a local's, a value in flight - may reach of the generational instances, as
+# reclaiming judges the references in use: ReachNone nothing an owning place does not hold counted (a writable reference
+# to storage whose stores count, an array of a run-time length - its elements counted where they are stored); ReachPlain
+# a reference to one, of the generational type Referent(ty), compared at a reclaiming site; ReachAny anything else that
+# may - a value holding one in place, a read-only reference to storage that may hold one uncounted (a temporary), a
+# reference into a generational instance's slot (to a part it holds in place), a function value or an "any" (what
+# they hold is not seen)
+ReachNone I64 = 0
+ReachPlain I64 = 1
+ReachAny I64 = 2
+
+fn (g mut GenInfo&) Reach(t types.Table&, ty types.TypeId) I64 {
+    if g.Decls.Len() == 0: return ReachNone
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k == types.Kind.Func or k == types.Kind.Any: return ReachAny
+    if k != types.Kind.Ref {
+        if k == types.Kind.Array and t.Length(r) == types.TypeId(0): return ReachNone
+        return ReachAny if g.HoldsGen(t, r) else ReachNone
+    }
+    rr := t.Repr(t.Referent(r))
+    rk := t.KindOf(rr)
+    if g.IsGen(t, rr): return ReachPlain
+    if rk == types.Kind.Func or rk == types.Kind.Any or rk == types.Kind.Ref: return ReachAny
+    if rk == types.Kind.Array and t.Length(rr) == types.TypeId(0): return ReachNone
+    if g.partOfGen(t, rr): return ReachAny
+    if (t.PermOf(r) & types.Writable) != 0: return ReachNone
+    return ReachAny if g.HoldsGen(t, rr) else ReachNone
+}
+
+# whether r is held in place by a generational type - a field's, a payload's or a fixed array's element type, at any
+# depth - so a reference to a value of it may point into an instance's slot
+fn (g mut GenInfo&) partOfGen(t types.Table&, r types.TypeId) Bool {
+    n := t.TypeCount()
+    for g.scanned < n {
+        x := types.TypeId(I32(g.scanned))
+        g.scanned++
+        if t.KindOf(x) != types.Kind.Named or not g.Decls.Has(I64(t.DeclOf(x))) or t.Repr(x) != x: continue
+        g.inPlace(t, x, 0)
+    }
+    for d in g.Decls.Keys() { g.Asked.Put(d, true) }
+    return g.parts.Has(r)
+}
+
+fn (g mut GenInfo&) inPlace(t types.Table&, r types.TypeId, depth I64) {
+    if depth > 32: return
+    k := t.KindOf(r)
+    if k == types.Kind.Array {
+        if t.Length(r) == types.TypeId(0): return
+        e := t.Repr(t.Elem(r))
+        g.parts.Put(e, true)
+        g.inPlace(t, e, depth + 1)
+        return
+    }
+    if HasFields(t, r) {
+        for f in t.Items(FieldsOf(t, r)) {
+            fr := t.Repr(f)
+            if t.KindOf(fr) == types.Kind.Ref: continue
+            g.parts.Put(fr, true)
+            g.inPlace(t, fr, depth + 1)
+        }
+        return
+    }
+    if not HasCases(t, r): return
+    for c in t.Items(CasesOf(t, r)) {
+        if c == types.TypeId(0): continue
+        for f in t.Items(t.Parts(c)) {
+            fr := t.Repr(f)
+            if t.KindOf(fr) == types.Kind.Ref: continue
+            g.parts.Put(fr, true)
+            g.inPlace(t, fr, depth + 1)
+        }
+    }
 }
 
 fn (g mut GenInfo&) note(t types.Table&, r types.TypeId) {
@@ -913,7 +998,7 @@ fn ErrorCode(t types.Table&, errors types.ListId, err types.TypeId, word I64) I6
 # ---- the verifier ----
 
 # the problems with a function, a line each - "bbN[i]: ..." for the i-th statement of block N, "bbN[term]: ..." for
-# its terminator, "fn: ..." for the function's own tables; "" when it keeps the contract
+# its terminator, "fn: ..." for the function's own tables; "" when it holding the contract
 fn (f Fn&) Verify(t mut types.Table&) String {
     v mut verifier& = verifier(f, t)
     v.run()
@@ -1187,6 +1272,10 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
         case Stmt.Holders(_, x, by) {
             v.operand(x)
             v.operand(by)
+        }
+        case Stmt.Reclaim(_, x, _, ks) {
+            v.operand(x)
+            v.ops(ks)
         }
         case Stmt.Deferred(_, s, e) {
             v.scope(s)
@@ -2293,6 +2382,10 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
             v.reads(x)
             v.reads(by)
         }
+        case Stmt.Reclaim(_, x, _, ks) {
+            v.reads(x)
+            v.readArgs(ks)
+        }
         # a cleanup entered with the state where its deferred code is registered, inside the scope registering it
         case Stmt.Deferred(_, x, e) {
             if not v.open(x) { v.bad("deferred code registered at S" $x ", which is not open") }
@@ -2627,6 +2720,7 @@ fn (w mut dumper&) stmt(s Stmt&) String {
         case Stmt.ErrSet(_, x): "payload set " $w.operand(x)
         case Stmt.ErrPop(_): "payload pop"
         case Stmt.Holders(_, x, by): "holders " $w.operand(x) " by " $w.operand(by)
+        case Stmt.Reclaim(_, x, ty, ks): "reclaim " $w.operand(x) ": " $w.T.Canon(ty) " keeping (" $w.operands(ks) ")"
         case Stmt.Deferred(_, x, e): "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
     }
 }
@@ -3011,4 +3105,201 @@ test "constants are flattened into the function's tables; helpers' ABI is their 
     eq := HelperType(t, HelperKind.Equal, i64)
     assert t.Canon(eq) == "fn(I64&, I64&) Bool" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Equal, i64), eq), eq) == 0
     assert PassedCount(t, Callee.Fn(FnKey.Body(typed.BodyId(0)), eq), eq) == 2
+}
+
+# ---- what a statement or terminator mentions (genrefs 5.3's liveness, lowering's reclaiming sites) ----
+
+# the locals statement s reads - every local named in an operand, a place (a store's target's base and indices among
+# them, but a whole local stored into), a scope handle - into uses; a whole local s stores into, into defs. A task's
+# arguments are uses too. Over-stating a use only holding a reference in use longer
+fn (f Fn&) Mentions(s Stmt&, uses mut Vec<LocalId>&, defs mut Vec<LocalId>&) {
+    match s {
+        case Stmt.Assign(_, p, rv) {
+            f.rvMentions(rv, uses)
+            f.target(p, uses, defs)
+        }
+        case Stmt.RegisterDtor(_, r, _, x) {
+            f.refMentions(r, uses)
+            f.opMentions(x, uses)
+        }
+        case Stmt.Release(_, p) { f.placeMentions(p, uses) }
+        case Stmt.Settle(_, h, p) {
+            uses.Push(h)
+            f.placeMentions(p, uses)
+        }
+        case Stmt.Write(_, b, _, x) {
+            f.refMentions(b, uses)
+            f.opMentions(x, uses)
+        }
+        case Stmt.CopyElems(_, d, src, n) {
+            f.placeMentions(d, uses)
+            f.placeMentions(src, uses)
+            f.opMentions(n, uses)
+        }
+        case Stmt.Spawn(_, _, k) {
+            tk := f.Tasks[I64(k)]
+            f.calleeMentions(tk.Target, uses)
+            f.rangeMentions(tk.Args, uses)
+            for i in range tk.Scopes.N { f.refMentions(f.Refs[I64(tk.Scopes.At) + i], uses) }
+        }
+        case Stmt.ErrSet(_, x) { f.opMentions(x, uses) }
+        case Stmt.Holders(_, x, by) {
+            f.opMentions(x, uses)
+            f.opMentions(by, uses)
+        }
+        case Stmt.Reclaim(_, x, _, ks) {
+            f.opMentions(x, uses)
+            f.rangeMentions(ks, uses)
+        }
+        case _ { }
+    }
+}
+
+# ...and terminator t's
+fn (f Fn&) TermMentions(t Term, uses mut Vec<LocalId>&, defs mut Vec<LocalId>&) {
+    match t {
+        case Term.Branch(c, _, _) { f.opMentions(c, uses) }
+        case Term.Switch(x, _, _) { f.opMentions(x, uses) }
+        case Term.Call(_, k), Term.Tail(_, k) {
+            c := f.Calls[I64(k)]
+            f.calleeMentions(c.Target, uses)
+            f.rangeMentions(c.Args, uses)
+            for i in range c.Scopes.N { f.refMentions(f.Refs[I64(c.Scopes.At) + i], uses) }
+            if c.HasDest: f.target(c.Dest, uses, defs)
+            if c.Code != NoLocal: defs.Push(c.Code)
+        }
+        case Term.Return(_, x), Term.Raise(_, x), Term.Exit(_, _, x) { f.opMentions(x, uses) }
+        case Term.Suspend(_, x, _, _, _) { f.opMentions(x, uses) }
+        case Term.Wait(_, _, _, code, _) { if code != NoLocal: defs.Push(code) }
+        case _ { }
+    }
+}
+
+# the blocks terminator t may go on to
+fn TermNext(t Term, f Fn&, out mut Vec<BlockId>&) {
+    match t {
+        case Term.Goto(b) { out.Push(b) }
+        case Term.Branch(_, y, n) {
+            out.Push(y)
+            out.Push(n)
+        }
+        case Term.Switch(_, r, o) {
+            for i in range r.N { out.Push(f.Cases[I64(r.At) + i].To) }
+            out.Push(o)
+        }
+        case Term.Call(_, k) {
+            c := f.Calls[I64(k)]
+            if c.Ok != NoBlock: out.Push(c.Ok)
+            if c.Err != NoBlock: out.Push(c.Err)
+        }
+        case Term.Wait(_, _, ok, _, failed) {
+            if ok != NoBlock: out.Push(ok)
+            if failed != NoBlock: out.Push(failed)
+        }
+        case Term.Suspend(_, _, resume, _, drop) {
+            if resume != NoBlock: out.Push(resume)
+            if drop != NoBlock: out.Push(drop)
+        }
+        case _ { }
+    }
+}
+
+fn (f Fn&) target(p Lvalue, uses mut Vec<LocalId>&, defs mut Vec<LocalId>&) {
+    if p.Path.N == I32(0) {
+        match p.B {
+            case Base.Local(l) {
+                defs.Push(l)
+                return
+            }
+            case _ { }
+        }
+    }
+    f.placeMentions(p, uses)
+}
+
+fn (f Fn&) placeMentions(p Lvalue, uses mut Vec<LocalId>&) {
+    match p.B {
+        case Base.Local(l) { uses.Push(l) }
+        case _ { }
+    }
+    for i in range p.Path.N {
+        match f.Projs[I64(p.Path.At) + i] {
+            case Proj.Index(l) { uses.Push(l) }
+            case _ { }
+        }
+    }
+}
+
+fn (f Fn&) opMentions(x Operand, uses mut Vec<LocalId>&) {
+    match x {
+        case Operand.Copy(p) { f.placeMentions(p, uses) }
+        case _ { }
+    }
+}
+
+fn (f Fn&) rangeMentions(r Range, uses mut Vec<LocalId>&) {
+    for i in range r.N { f.opMentions(f.Ops[I64(r.At) + i], uses) }
+}
+
+fn (f Fn&) refMentions(r ScopeRef, uses mut Vec<LocalId>&) {
+    match r {
+        case ScopeRef.Held(l) { uses.Push(l) }
+        case _ { }
+    }
+}
+
+fn (f Fn&) calleeMentions(c Callee, uses mut Vec<LocalId>&) {
+    match c {
+        case Callee.Value(x), Callee.Dispatch(x, _, _) { f.opMentions(x, uses) }
+        case _ { }
+    }
+}
+
+fn (f Fn&) rvMentions(rv Rvalue, uses mut Vec<LocalId>&) {
+    match rv {
+        case Rvalue.Use(x), Rvalue.Recode(x, _, _), Rvalue.ScopeOf(x), Rvalue.WeakWord(x) { f.opMentions(x, uses) }
+        case Rvalue.Ref(p, _), Rvalue.Take(p), Rvalue.Tag(p), Rvalue.Weak(p, _) { f.placeMentions(p, uses) }
+        case Rvalue.Prim(_, _, r), Rvalue.Overflows(_, _, r), Rvalue.Aggregate(_, _, r) { f.rangeMentions(r, uses) }
+        case Rvalue.New(s, x, _) {
+            f.refMentions(s, uses)
+            f.opMentions(x, uses)
+        }
+        case Rvalue.NewArray(s, _, n, fill) {
+            f.refMentions(s, uses)
+            f.opMentions(n, uses)
+            f.opMentions(fill, uses)
+        }
+        case Rvalue.Slice(p, lo, hi, _) {
+            f.placeMentions(p, uses)
+            f.opMentions(lo, uses)
+            f.opMentions(hi, uses)
+        }
+        case Rvalue.Closure(_, _, s, args, caps) {
+            f.refMentions(s, uses)
+            f.rangeMentions(args, uses)
+            for i in range caps.N { f.refMentions(f.Refs[I64(caps.At) + i], uses) }
+        }
+        case Rvalue.Text(b, into, _) {
+            f.refMentions(b, uses)
+            f.refMentions(into, uses)
+        }
+        case Rvalue.Region(s), Rvalue.Handle(s) { f.refMentions(s, uses) }
+        case Rvalue.RegionOr(x, s), Rvalue.ScopeOr(s, x) {
+            f.opMentions(x, uses)
+            f.refMentions(s, uses)
+        }
+        case _ { }
+    }
+}
+
+# where statement s is written
+fn StmtSpan(s Stmt&) source.Span {
+    return match s {
+        case Stmt.Assign(sp, _, _), Stmt.Live(sp, _), Stmt.Dead(sp, _), Stmt.Open(sp, _): sp
+        case Stmt.Close(sp, _), Stmt.RegisterDtor(sp, _, _, _), Stmt.Release(sp, _): sp
+        case Stmt.Settle(sp, _, _), Stmt.Write(sp, _, _, _): sp
+        case Stmt.CopyElems(sp, _, _, _), Stmt.Spawn(sp, _, _), Stmt.Raised(sp): sp
+        case Stmt.Deferred(sp, _, _), Stmt.ErrSet(sp, _), Stmt.ErrPop(sp): sp
+        case Stmt.Holders(sp, _, _), Stmt.Reclaim(sp, _, _, _): sp
+    }
 }

@@ -119,6 +119,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     BF16Opaque Bool = false         # a -debug or -race build: every BF16 widening's bits kept opaque (bf16Bits)
     rtTypes String& = ""            # the runtime's types, as its text defines them
     rtRead Bool = false
+    genDrops Map<String&, Bool>      # O8e: the drop functions written or being written (genDrop)
     # B2e, in a -debug build: metadata numbered from 1000 (below it the fixed alias tags), renumbered in each object;
     # the shared nodes - the compile unit, a file each, the subroutine type, a basic type each - as items "!N"
     dbgN I64 = 1000
@@ -1784,16 +1785,7 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
     }
 }
 
-fn stmtSpan(s mir.Stmt&) source.Span {
-    return match s {
-        case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _): sp
-        case mir.Stmt.Close(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _), mir.Stmt.Release(sp, _): sp
-        case mir.Stmt.Settle(sp, _, _), mir.Stmt.Write(sp, _, _, _): sp
-        case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp): sp
-        case mir.Stmt.Deferred(sp, _, _), mir.Stmt.ErrSet(sp, _), mir.Stmt.ErrPop(sp): sp
-        case mir.Stmt.Holders(sp, _, _): sp
-    }
-}
+fn stmtSpan(s mir.Stmt&) source.Span { return mir.StmtSpan(s) }
 
 fn termSpan(tm mir.Term) source.Span {
     return match tm {
@@ -1904,6 +1896,8 @@ fn (e mut Emitter&) SoleUnit() String {
     if fr is null { return "" }
     names Vec<String&>
     for k in fr.SoleNow() { names.Push(e.soleName(k)) }
+    # O8e: where a generational type's instances may be reclaimed, by body and type (genOk)
+    for bt in fr.GenOkNow() { names.Push(e.genOkName(bt.First, bt.Second)) }
     if names.Len() == 0 { return "" }
     names.Sort(fn(a String&, b String&) Bool { return a < b })
     b := StringBuilder()
@@ -2176,6 +2170,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     # function returns it, a "running" word, the result pointer, then the scopes the call passed
     gen Bool = false
     promTy String& = ""
+    dropping Bool = false   # O8e: writing a generational type's drop function - holdersAt lets go of each child (genDrop)
     # D18e: writing a generator function's ".walk" form - the one a for-in finishing its walk calls: its generator's
     # drop registered with no scope, the caller destroying the walk where the scope it lives in closes
     walkForm Bool = false
@@ -3688,6 +3683,13 @@ fn (fe mut fnEm&) genAlloc(s mir.ScopeRef, rt types.TypeId) String {
     a := fe.align(rt)
     h := 8 if a <= 8 else a
     n := fe.size(rt) + h
+    cls := genClass(n)
+    # (a slot of a class, reused for any instance of that class in its scope part - genrefs 4.4 - where the type is aligned
+    # no further than its header and the slot is not too large to be kept)
+    if h == 8 and cls >= 0 and not fe.isFrame(s) and s != mir.ScopeRef.Held {
+        fe.E.runtime("__olang_gen_alloc")
+        return fe.let("call ptr @__olang_gen_alloc(ptr " $fe.scope(s) ", i64 " $cls ", i64 " $genClassSize(cls) ")")
+    }
     raw := fe.alloc(s, $n, h, "[" $n " x i8]")
     p := fe.let("getelementptr i8, ptr " $raw ", i64 " $h)
     head := 1 | (3 << 16) if fe.isFrame(s) else 1
@@ -3720,6 +3722,12 @@ fn (fe mut fnEm&) holdersAt(at String&, ty types.TypeId, by String&, top Bool) {
     if not fe.E.Lw.Gen().HoldsGen(t, r): return
     k := t.KindOf(r)
     if k == types.Kind.Ref {
+        if fe.dropping {
+            fe.E.runtime("__olang_gen_let")
+            d := fe.E.genDropFn(t.Repr(t.Referent(r)))
+            fe.w("call void @__olang_gen_let(ptr " $fe.load("ptr", at) ", ptr @" $d ", ptr %keep, i64 %n)")
+            return
+        }
         fe.E.runtime("__olang_gen_count")
         fe.w("call void @__olang_gen_count(ptr " $fe.load("ptr", at) ", i64 " $by ")")
         return
@@ -3780,6 +3788,94 @@ fn (fe mut fnEm&) holdersCases(at String&, r types.TypeId, by String&) {
         fe.w("br label %" $no)
         fe.label(no)
     }
+}
+
+# ---- reclaiming generational instances (O8e, genrefs 4.4, 4.5) ----
+
+# the class of a generational slot of n bytes, its header included (4.4): 16-byte classes up to 256, then 320, 384, 512,
+# 768, 1,024, 1,536, 2,048 - -1 for a larger one, never reclaimed into a list
+fn genClass(n I64) I64 {
+    if n <= 256: return (n + 15) / 16 - 1
+    big := Array<I64>[320, 384, 512, 768, 1024, 1536, 2048]
+    for i in range big.Len() {
+        if n <= big[i]: return 16 + i
+    }
+    return -1
+}
+
+fn genClassSize(c I64) I64 {
+    if c < 16: return (c + 1) * 16
+    return Array<I64>[320, 384, 512, 768, 1024, 1536, 2048][c - 16]
+}
+
+# mir.Stmt.Reclaim: where this body's whole-program constant for ty says no caller holds a reference to one across a
+# call into it, the instance x names reclaimed if its count says no owning place holds it - the runtime comparing it
+# with the references still in use, ks
+fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
+    e := fe.E
+    b := match fe.F.Of {
+        case mir.FnKey.Body(id): I64(id)
+        case _: -1
+    }
+    if b < 0 { return }
+    ok := e.genOk(b, ty)
+    p := fe.val(x, fe.otype(x))
+    go, tst, call, done := fe.fresh("rc"), fe.fresh("rc"), fe.fresh("rc"), fe.fresh("rc")
+    some := fe.let("icmp ne ptr " $p ", null")
+    fe.w("br i1 " $fe.let("and i1 " $fe.load("i1", "@" $ok) ", " $some) ", label %" $go ", label %" $done)
+    fe.label(go)
+    hw := fe.let("load atomic i64, ptr " $fe.let("getelementptr i8, ptr " $p ", i64 -8") " monotonic, align 8")
+    fe.w("br label %" $tst)
+    fe.label(tst)
+    fe.w("br i1 " $fe.let("icmp eq i64 " $fe.let("and i64 " $hw ", 196608") ", 0") ", label %" $call ", label %" $done)
+    fe.label(call)
+    n := I64(ks.N)
+    keep := "null"
+    if n > 0 {
+        keep = fe.let("alloca [" $n " x ptr]")
+        for i in range n {
+            k := fe.F.Ops[I64(ks.At) + i]
+            fe.w("store ptr " $fe.val(k, fe.otype(k)) ", ptr " $fe.let("getelementptr [" $n " x ptr], ptr " $keep ", i64 0, i64 " $i))
+        }
+    }
+    e.runtime("__olang_gen_reclaim")
+    fe.w("call void @__olang_gen_reclaim(ptr " $p ", ptr @" $e.genDropFn(ty) ", ptr " $keep ", i64 " $n ")")
+    fe.w("br label %" $done)
+    fe.label(done)
+}
+
+# the link-time constant saying whether body b may reclaim an instance of ty (and what that lets go of in turn): weak
+# and false in every object reading it, the root's decisions object (SoleUnit) defining it true where the whole program
+# shows no caller of b holds a reference that may reach one across a call into it - named by b and the type, the same in
+# every program
+fn (e mut Emitter&) genOk(b I64, ty types.TypeId) String {
+    s := e.genOkName(b, ty)
+    e.item(s, HomeShared, $"@" $s " = weak hidden constant i1 false\n")
+    return s
+}
+
+fn (e mut Emitter&) genOkName(b I64, ty types.TypeId) String {
+    return types.Symbol($"olang.genok." $e.stableSym(b) "." $e.T.Canon(ty))
+}
+
+# a generational type's drop function (4.5), fn(ptr x, ptr keep, i64 n) i64: each owning reference x's instance holds
+# let go of (__olang_gen_let - a child no owning place holds any more, and none of the n at keep, put on the worklist),
+# and the class of x's slot plus one returned - 0 where it is never put on a free list
+fn (e mut Emitter&) genDropFn(ty types.TypeId) String {
+    t := e.T
+    s := types.Symbol($"olang.gendrop." $t.Canon(ty))
+    if e.genDrops.Has(s) { return s }
+    e.genDrops.Put(s, true)
+    k := mir.FnKey.Init(0)
+    fe mut fnEm& = fnEm(e, mir.Fn(k, types.VoidT, 0, source.Span(0, 0)), k)
+    fe.dropping = true
+    fe.holdersAt("%x", ty, "-1", false)
+    a := fe.align(ty)
+    cls := genClass(fe.size(ty) + 8) if a <= 8 else -1
+    fe.w("ret i64 " $(cls + 1))
+    e.item(s, HomeShared, $"define linkonce_odr hidden i64 @" $s "(ptr %x, ptr %keep, i64 %n) #0 {\nentry:\n" $fe.head.ToString() $
+           fe.pro.ToString() $fe.code.ToString() "}\n\n")
+    return s
 }
 
 # ---- statements ----
@@ -3858,6 +3954,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
         }
         case mir.Stmt.Deferred(_, _, _) { fe.gap("a cleanup (interpret's)") }
         case mir.Stmt.Holders(_, x, by) { fe.holders(x, fe.val(by, mir.I64T)) }
+        case mir.Stmt.Reclaim(_, x, ty, ks) { fe.reclaim(x, ty, ks) }
         case mir.Stmt.RegisterDtor(_, sr, ty, x) {
             k := try mir.FnKey.DropFn(t, ty, try fe.E.dtorOf.Get(ty) catch default -1) catch {
                 fe.gap("a destructor not found: " $t.Canon(ty))

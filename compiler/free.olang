@@ -25,12 +25,14 @@
 
 import "std/pair"
 import "std/io"
+import sys "std/os"
 import "std/time"
 import "source"
 import "types"
 import "generic"
 import "typed"
 import "scope"
+import "mir"
 
 # ---- origins: what a value may refer into, one number each - its kind above bit 40 ----
 
@@ -239,6 +241,30 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     OneHolder Map<types.TypeId, String>
     holderTypes Vec<types.TypeId>
     holderAt Vec<store>
+    # O8e, genrefs 5.3: whether the program has generational types; what reaches them (mir.GenInfo.Reach); each call's
+    # references in use across it (gcFrom calls gcTo; gcAt its types in use, gcTypes[gcAt[i] ..], -1 for every type, with
+    # where the first of each is, gcWhy); by body, the types a caller may hold a reference to across a call into it
+    # (acrossAll: every one) and the types it may let go of (lets, its callees' included); the generational types and
+    # whether each may be reclaimed (genOkTy; genWhy says why not); the decisions (genOk)
+    genOn Bool = false
+    gen mir.GenInfo = mir.GenInfo()
+    gcFrom Vec<I64>
+    gcTo Vec<I64>
+    gcFile Vec<I64>
+    gcSp Vec<source.Span>
+    gcAt Vec<I64>
+    gcTypes Vec<I64>
+    gcWhy Vec<source.Span>
+    across Vec<mut Vec<I64>&>
+    acrossAll Vec<Bool>
+    genLets Vec<mut Vec<I64>&>
+    genTys Vec<types.TypeId>
+    genOkTy Vec<Bool>
+    genWhy Vec<String&>
+    genOk Vec<pair.Pair<I64, types.TypeId>>
+    genListed Bool = false
+    pendTy Vec<I64>           # reasons found by the walks, before the types are listed
+    pendWhy Vec<String&>
     prelude Vec<Bool>         # whether its code is the prelude's (std/prelude), whose fills are trusted (makeStores)
     # summaries, by body: the origins its result may carry (no New); the places each parameter's value is stored into
     # directly, (param << 32) | place; the parameters whose values it may keep elsewhere; the places it may let go of,
@@ -702,6 +728,11 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     f.Plans = plans
     f.Root = root
     n := f.Bodies.Len()
+    f.genOn = f.P.Gens.Len() > 0 and not f.Alone
+    if f.genOn {
+        for k in f.P.Gens.Keys() { f.gen.Decls.Put(k, true) }
+        for k in f.P.WeakSlots.Keys() { f.gen.Weak.Put(k, true) }
+    }
     for b in range n {
         m := f.bodyModule(b)
         f.module.Push(m)
@@ -823,6 +854,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     f.genKeeps()
     f.decide()
     f.classifyHolders()
+    if f.genOn: f.genDecide()
     f.Done = true
     f.writePlans()
     t5 := time.Now()
@@ -898,6 +930,369 @@ fn (f mut Free&) holderRows() String {
     }
     return b.ToString()
 }
+
+# ---- reclaiming generational instances: references in use across calls (O8e, genrefs 5.3, the final step) ----
+
+# what a value of type ty reaches of the generational instances, as a type: the referent of a plain reference to one, -1
+# for anything else that may reach one (mir.GenInfo.Reach), -2 for nothing
+fn (f mut Free&) reachTy(ty types.TypeId) I64 {
+    r := f.gen.Reach(f.T(), ty)
+    if r == mir.ReachNone: return -2
+    if r == mir.ReachAny: return -1
+    t := f.T()
+    return I64(t.Repr(t.Referent(t.Repr(ty))))
+}
+
+# ...of a local's value: one holding owning references in place - any but a capture, a variable in MIR, or a parameter -
+# is an owning place, counted (lowering's countedLocal and holdParams), no reference in use
+fn (f mut Free&) localReach(l typed.Local&) I64 {
+    t := f.T()
+    if l.Kind != typed.LocalKind.Capture and not t.IsRef(t.Repr(l.Ty)) and not f.funcTy(l.Ty) {
+        r := t.Repr(l.Ty)
+        if not (t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)) and t.KindOf(r) != types.Kind.Any: return -2
+    }
+    return f.reachTy(l.Ty)
+}
+
+# a value computed in the final walk that may reach a generational instance - in use across any call its statement
+# makes outside it - and what makes a type never reclaimed: an "any" made of one, one given to C (genDecide)
+fn (w mut walker&) noteReach(x typed.Expr&) {
+    ty := x.Type()
+    if ty == types.UnknownT or ty == types.VoidT: return
+    r := w.F.reachTy(ty)
+    if r != -2 {
+        w.grStmt.Push(w.cur)
+        w.grSp.Push(x.Span())
+        w.grTy.Push(r)
+    }
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op != typed.PrimOp.AnyMake and op != typed.PrimOp.AnyInstance: return
+            for a in args { w.F.genNever(w.F.reachTy(a.Type()), "an 'any' is made of a reference that may reach one, which nothing counts", w.body().File, a.Span()) }
+        }
+        case typed.Expr.Call(_, _, c) {
+            if c.Target != typed.Callee.Extern: return
+            for a in c.Args { w.F.genNever(w.F.reachTy(a.Type()), "C is given a reference that may reach one", w.body().File, a.Span()) }
+        }
+        case _ { }
+    }
+}
+
+fn spanIn(a source.Span, b source.Span) Bool { return a.Start >= b.Start and a.End <= b.End }
+
+# each call of this body's final walk: the generational types a reference in use across it may reach - a local used after
+# its statement (or in a loop around it, or in deferred code), or a value its statement computes outside the call -
+# with the first reference reaching each
+fn (w mut walker&) genCalls() {
+    f := w.F
+    body := w.body()
+    nl := body.Locals.Len()
+    reach := Array<I64>(nl, -2)
+    for l in range nl { reach[l] = f.localReach(body.Locals[l]) }
+    usesOf Vec<mut Vec<I64>&>
+    for _ in range nl { usesOf.Push(Vec<I64>()) }
+    for u in range w.useLocal.Len() {
+        l := w.useLocal[u]
+        if l >= 0 and l < nl and reach[l] != -2: usesOf[l].Push(u)
+    }
+    for c in range w.gcStmt.Len() {
+        st := w.gcStmt[c]
+        csp := w.gcSp[c]
+        tys Vec<I64>
+        whys Vec<source.Span>
+        for l in range nl {
+            if reach[l] == -2: continue
+            u := w.inUseAcross(l, st, csp, usesOf[l])
+            if u < 0 or has(tys, reach[l]): continue
+            tys.Push(reach[l])
+            whys.Push(w.useSp[u])
+        }
+        for i in range w.grStmt.Len() {
+            if w.grStmt[i] != st or spanIn(w.grSp[i], csp) or spanIn(csp, w.grSp[i]) or has(tys, w.grTy[i]): continue
+            tys.Push(w.grTy[i])
+            whys.Push(w.grSp[i])
+        }
+        f.gcFrom.Push(w.Id)
+        f.gcTo.Push(w.gcCallee[c])
+        f.gcFile.Push(body.File)
+        f.gcSp.Push(csp)
+        f.gcAt.Push(f.gcTypes.Len())
+        for i in range tys.Len() {
+            f.gcTypes.Push(tys[i])
+            f.gcWhy.Push(whys[i])
+        }
+    }
+}
+
+# the first use of local l showing it in use across the call at csp in statement st - an index into the uses, -1 for none:
+# used after the statement (in statements it holds among them), in a loop around it declared outside it, in deferred
+# code, or in the statement itself outside the call; never one the statement is declaring (it holds nothing yet)
+fn (w mut walker&) inUseAcross(l I64, st I64, csp source.Span, uses Vec<I64>&) I64 {
+    if w.declAt[l] > st: return -1
+    if w.declAt[l] == st and w.body().Locals[l].Kind != typed.LocalKind.Param and not w.loopDecl(st): return -1
+    for u in uses {
+        if w.useAt[u] > st: return u
+        if w.useAt[u] == st and not spanIn(w.useSp[u], csp): return u
+    }
+    for i in range w.loopAt.Len() {
+        a := w.loopAt[i]
+        if not (a < st and st <= w.loopEnd[i]) or w.declAt[l] > a: continue
+        for u in uses {
+            if a < w.useAt[u] and w.useAt[u] <= w.loopEnd[i]: return u
+        }
+    }
+    if has(w.deferred, l) and uses.Len() > 0: return uses[0]
+    return -1
+}
+
+# whether statement st is a loop (the locals it declares hold a value each turn)
+fn (w mut walker&) loopDecl(st I64) Bool {
+    for a in w.loopAt {
+        if a == st: return true
+    }
+    return false
+}
+
+# a generational type (ty, -1 for every one) never reclaimed early: why, the first reason kept - noted for later where
+# the types are not listed yet (the walks')
+fn (f mut Free&) genNever(ty I64, why String&, file I64, sp source.Span) {
+    if ty == -2: return
+    text := $f.P.L.Diags.Locate(file, I64(sp.Start)) ": note: " $why if file >= 0 else $"note: " $why
+    if not f.genListed {
+        f.pendTy.Push(ty)
+        f.pendWhy.Push(text)
+        return
+    }
+    f.genNeverText(ty, text)
+}
+
+fn (f mut Free&) genNeverText(ty I64, text String&) {
+    for i in range f.genTys.Len() {
+        if (ty == -1 or I64(f.genTys[i]) == ty) and f.genOkTy[i] {
+            f.genOkTy[i] = false
+            f.genWhy[i] = text
+        }
+    }
+}
+
+# whether a body's callers are not all calls the walks see: a lambda, a destructor, a generator, a function named as a
+# value or exported, a method a table may call or the language calls where no call is written ($, ==, a walk, an
+# operator) - a caller there may hold anything across the call
+fn (f mut Free&) hiddenCalls(b I64) Bool {
+    body := f.Bodies[b]
+    if body.Gen: return true
+    i := match body.Of {
+        case typed.BodyOf.Fn(inst): inst
+        case typed.BodyOf.Ctor(_, _), typed.BodyOf.Test(_): -2
+        case typed.BodyOf.Global(_, _): -2
+        case _: -1
+    }
+    if i == -2: return false
+    if i < 0 or f.named[b]: return true
+    d := f.P.FnDecl(f.P.InstanceFn(i))
+    if d.Export: return true
+    if d.Recv is null: return false
+    if f.anyMethod(b): return true
+    nm := f.P.L.Names.Text(d.Name)
+    return protocolName(nm)
+}
+
+# whether method body b's receiver's type is stored in an "any" somewhere: a table may call it (T32b)
+fn (f mut Free&) anyMethod(b I64) Bool {
+    t := f.T()
+    ps := f.Bodies[b].Params
+    if ps.Len() == 0 or f.P.AnyTables.Len() == 0: return false
+    r := t.Repr(f.Bodies[b].Locals[I64(ps[0])].Ty)
+    if t.IsRef(r): r = t.Repr(t.Referent(r))
+    for at in f.P.AnyTables {
+        if t.Repr(at.Concrete) == r: return true
+    }
+    return false
+}
+
+# the methods the language calls where no call is written (E31, E11c, E10, S9, E28)
+fn protocolName(nm String&) Bool {
+    for p in Array<String&>["Str", "Eq", "Hash", "Copy", "Iter", "Next", "RunFrom", "At", "SetAt", "Len", "Has"
+        "Contains", "Slice", "Call", "Less", "Plus", "Minus", "Mul", "Div", "Rem", "MatMul", "Neg", "Pow", "BitAnd"
+        "BitOr", "BitXor", "Shl", "Shr", "BitNot", "Inc", "Dec", "FromIter"] {
+        # (lower case, an operator private to its module - M6b)
+        if nm == p or (nm.Len() == p.Len() and nm[1:] == p[1:] and nm[0] == p[0] + 32): return true
+    }
+    return false
+}
+
+# the generational types instance r holds through its own owning references, in place (r's closure, without r)
+fn (f mut Free&) holdsTypes(r types.TypeId, out mut Vec<I64>&, depth I64) {
+    t := f.T()
+    if depth > 32: return
+    k := t.KindOf(r)
+    if k == types.Kind.Ref {
+        rr := t.Repr(t.Referent(r))
+        if f.gen.IsGen(t, rr): addTo(out, I64(rr))
+        return
+    }
+    if k == types.Kind.Array {
+        if t.Length(r) != types.TypeId(0): f.holdsTypes(t.Repr(t.Elem(r)), out, depth + 1)
+        return
+    }
+    if mir.HasFields(t, r) {
+        fs := t.Items(mir.FieldsOf(t, r))
+        for i in range fs.Len() {
+            if not f.gen.WeakField(t, r, i): f.holdsTypes(t.Repr(fs[i]), out, depth + 1)
+        }
+        return
+    }
+    if not mir.HasCases(t, r): return
+    for c in t.Items(mir.CasesOf(t, r)) {
+        if c == types.TypeId(0): continue
+        for x in t.Items(t.Parts(c)) { f.holdsTypes(t.Repr(x), out, depth + 1) }
+    }
+}
+
+# the final step's decisions for generational types (O8e, genrefs 5.3): which types may be reclaimed early at all, which
+# types a caller may hold across a call into each body, and so where reclaiming may run - (body, type) pairs, the
+# link-time constants the root's decisions object defines
+fn (f mut Free&) genDecide() {
+    t := f.T()
+    n := f.Bodies.Len()
+    for i in range t.TypeCount() {
+        x := types.TypeId(I32(i))
+        if t.KindOf(x) != types.Kind.Named or t.Repr(x) != x or not f.gen.Decls.Has(I64(t.DeclOf(x))): continue
+        if not t.HasBody(x): continue
+        f.genTys.Push(x)
+        f.genOkTy.Push(true)
+        f.genWhy.Push("")
+    }
+    # (what the walks found - an "any" made of one, one given to C - was noted against types not listed yet)
+    f.genNeverAgain()
+    for i in range f.genTys.Len() {
+        x := f.genTys[i]
+        if f.tasks { f.genNever(I64(x), "the program has tasks, which may reach one (O8d's condition 3)", -1, source.Span(0, 0)) }
+        if t.NeedsDrop(x) { f.genNever(I64(x), "it has a destructor, which runs as its scope closes (O8d's condition 4)", -1, source.Span(0, 0)) }
+    }
+    for b in range n { f.genBodyNever(b) }
+    # a type held in place by one never reclaimed early is never reclaimed by the cascade either: the type with it
+    changed := true
+    for changed {
+        changed = false
+        for i in range f.genTys.Len() {
+            if not f.genOkTy[i]: continue
+            hs Vec<I64>
+            f.holdsTypes(f.genTys[i], hs, 0)
+            for h in hs {
+                j := f.genIndex(h)
+                if j < 0 or f.genOkTy[j]: continue
+                f.genOkTy[i] = false
+                f.genWhy[i] = f.genWhy[j]
+                changed = true
+            }
+        }
+    }
+    f.genAcross()
+    if (try sys.Env("OLANG_GENDEBUG") catch default "") != "" {
+        for i in range f.genTys.Len() { try io.PrintErr($"gen " $t.Canon(f.genTys[i]) " ok " $f.genOkTy[i] " " $f.genWhy[i] "\n") catch io.Error { } }
+        for b in range n {
+            if f.Bodies[b].Root is null: continue
+            try io.PrintErr($"body " $b " " $f.fnName(b) " all " $f.acrossAll[b] " across " $f.across[b].Len() "\n") catch io.Error { }
+        }
+    }
+    for b in range n {
+        if f.acrossAll[b]: continue
+        for i in range f.genTys.Len() {
+            if not f.genOkTy[i] or f.acrossHas(b, I64(f.genTys[i])): continue
+            f.genOk.Push(pair.Pair(b, f.genTys[i]))
+        }
+    }
+}
+
+fn (f mut Free&) genIndex(ty I64) I64 {
+    for i in range f.genTys.Len() {
+        if I64(f.genTys[i]) == ty: return i
+    }
+    return -1
+}
+
+# the reasons noted before the types were listed (noteReach's), applied now
+fn (f mut Free&) genNeverAgain() {
+    f.genListed = true
+    for i in range f.pendTy.Len() { f.genNeverText(f.pendTy[i], f.pendWhy[i]) }
+}
+
+# body b's own reasons: a lambda's captures, a generator's locals - storage no count follows that may hold a reference
+# across the reclaiming of what it names
+fn (f mut Free&) genBodyNever(b I64) {
+    body := f.Bodies[b]
+    lambda := match body.Of {
+        case typed.BodyOf.Lambda(_): true
+        case _: false
+    }
+    if not lambda and not body.Gen: return
+    for l in body.Locals {
+        if lambda and not body.Gen and l.Kind != typed.LocalKind.Capture: continue
+        why := "a generator holds a reference that may reach one across a yield" if body.Gen else "a lambda captures a reference that may reach one"
+        # (a function value captured is judged where it is made: what its own lambda captures)
+        if f.funcTy(l.Ty): continue
+        f.genNever(f.reachTy(l.Ty), why, body.File, l.Sp)
+    }
+}
+
+# whether ty is a function value's type (or a reference to one)
+fn (f mut Free&) funcTy(ty types.TypeId) Bool {
+    t := f.T()
+    r := t.Repr(ty)
+    if t.IsRef(r): r = t.Repr(t.Referent(r))
+    return t.KindOf(r) == types.Kind.Func
+}
+
+# whether a caller of b may hold a reference reaching type ty across a call into it (or every type)
+fn (f mut Free&) acrossHas(b I64, ty I64) Bool {
+    if f.acrossAll[b]: return true
+    hs Vec<I64>
+    hs.Push(ty)
+    f.holdsTypes(types.TypeId(I32(ty)), hs, 0)
+    for h in hs {
+        if has(f.across[b], h): return true
+    }
+    return false
+}
+
+# across, by body: the types its callers may hold a reference to across a call into it - every type for a body called
+# where no call is seen - grown along every call to a fixed point
+fn (f mut Free&) genAcross() {
+    n := f.Bodies.Len()
+    for b in range n {
+        f.across.Push(Vec<I64>())
+        f.acrossAll.Push(f.hiddenCalls(b))
+    }
+    changed := true
+    for changed {
+        changed = false
+        for c in range f.gcFrom.Len() {
+            a := f.gcFrom[c]
+            b := f.gcTo[c]
+            if b < 0 or b >= n or f.acrossAll[b]: continue
+            if f.acrossAll[a] {
+                f.acrossAll[b] = true
+                changed = true
+                continue
+            }
+            end := f.gcAt[c + 1] if c + 1 < f.gcAt.Len() else f.gcTypes.Len()
+            for i in range f.gcAt[c], end {
+                if f.gcTypes[i] == -1 {
+                    f.acrossAll[b] = true
+                    changed = true
+                    break
+                }
+                if addTo(f.across[b], f.gcTypes[i]) > 0: changed = true
+            }
+            if f.acrossAll[b]: continue
+            if addAllTo(f.across[b], f.across[a]) > 0: changed = true
+        }
+    }
+}
+
+# the (body, type) pairs where reclaiming may run, for the root's decisions object
+fn (f Free&) GenOkNow() Vec<pair.Pair<I64, types.TypeId>> { return f.genOk }
 
 # whether the program may start a task (condition 3): a body that starts one, or gives C a function value, reached from
 # where the program's code may begin - every body but a plain function's (main, a test, an initializer, a lambda, a
@@ -1435,6 +1830,15 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     parSite Vec<I64>          # stores of a parameter's value into a place: the parameter, the place, the statement
     parSitePlace Vec<I64>
     parSiteAt Vec<I64>
+    # O8e: in the final walk of a program with generational types, the calls made - the statement, where, the callee -
+    # and the values reaching a generational instance computed (the statement, where, mir.GenInfo.Reach's type: the
+    # referent of a plain reference, -1 for any)
+    gcStmt Vec<I64>
+    gcSp Vec<source.Span>
+    gcCallee Vec<I64>
+    grStmt Vec<I64>
+    grSp Vec<source.Span>
+    grTy Vec<I64>
     deferStack Vec<I64>        # the Defer statements being walked
     deferEnd Map<I64, I64>     # by Defer statement, the last statement of the block it is in
 }
@@ -1543,6 +1947,7 @@ fn (f mut Free&) walk(b I64, final Bool) {
         w.reset()
         w.block(body.Root!)
         w.views()
+        if f.genOn: w.genCalls()
     }
 }
 
@@ -1579,6 +1984,12 @@ fn (w mut walker&) reset() {
     w.parSiteAt.Clear()
     w.deferStack.Clear()
     w.deferEnd.Clear()
+    w.gcStmt.Clear()
+    w.gcSp.Clear()
+    w.gcCallee.Clear()
+    w.grStmt.Clear()
+    w.grSp.Clear()
+    w.grTy.Clear()
 }
 
 fn (w mut walker&) body() typed.Body& { return w.F.Bodies[w.Id] }
@@ -2595,6 +3006,7 @@ fn (w mut walker&) captured(sp source.Span, x typed.Expr&) Vec<I64> {
 
 fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
     out Vec<I64>
+    if w.Final and w.F.genOn: w.noteReach(x)
     match x {
         case typed.Expr.Read(_, ty, p, _) { out = w.readOf(p, ty) }
         case typed.Expr.Borrow(_, _, p) { out = w.borrowOf(p) }
@@ -2777,6 +3189,11 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         case typed.Callee.Body(id) {
             b2 = I64(id)
             unknown = f.Bodies[b2].Root is null and not f.isCase(b2)
+            if w.Final and f.genOn and w.quiet == 0 {
+                w.gcStmt.Push(w.cur)
+                w.gcSp.Push(sp)
+                w.gcCallee.Push(b2)
+            }
             if not w.Final { addTo(f.callers[b2], w.Id) }
             # what the callee registers in its scope variables lands where this call passes them: one of this body's
             if not w.Final and (unknown or f.regOut[b2]) and f.passesVar(w.Id, c, b2) { f.setRegOut(w.Id) }

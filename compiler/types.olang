@@ -697,6 +697,8 @@ fn (t Table&) ErrSetItems(id TypeId) ListId { return ListId(I32(t.A(id))) if t.K
 # ---- reading types ----
 
 fn (t Table&) KindOf(id TypeId) Kind { return t.at(id).K }
+# how many types the table holds: every TypeId is below it
+fn (t Table&) TypeCount() I64 { return t.types.Len() }
 fn (t Table&) A(id TypeId) I64 { return t.at(id).A }
 fn (t Table&) B(id TypeId) I64 { return t.at(id).B }
 fn (t Table&) C(id TypeId) I64 { return t.at(id).C }
