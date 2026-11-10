@@ -683,6 +683,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     DiskTaken I64 = 0
     DiskChecked I64 = 0
     Restarts I64 = 0
+    Debug String = ""                      # OLANG_SCOPEDEBUG: a component whose signature holds it says what it read
     Times Vec<String&>                     # how long each step took, for OLANG_SCOPESTATS
     freshN I64 = 0
     freshRec I64 = 0
@@ -697,6 +698,9 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     diskRec Bool = false
     logReads Bool = false
     readLog Vec<I64>
+    absentLog Vec<String&>                 # ... and the types it asked for the constructor or destructor of, where none is
+    ctorCanons Map<String, Bool>           # the canonical texts of the types with a constructor (absentNow)
+    dtorCanons Map<String, Bool>
     globalDep Bool = false                 # the judging read something only the whole program says (a twin's limit)
     stRun Vec<mut compRun?&>               # by body: the judging that left its state, null for none
     stDisk Vec<String&>                    # ... the record's name for it, "0" before any
@@ -861,6 +865,7 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     s.globalDep = false
     s.vrLog.Clear()
     s.readLog.Clear()
+    s.absentLog.Clear()
     s.logReads = s.diskRec
     run mut compRun& = compRun()
     if s.diskRec {
@@ -919,7 +924,16 @@ fn (s mut Scoper&) recordReads(run mut compRun&, comp Array<I64>&, mine Map<I64,
     for x in seen.Keys() {
         if not mine.Has(x): run.ReadTexts.Push(s.readLine(x))
     }
+    absent Map<String, Bool>
+    for x in s.absentLog { absent.Put(x, true) }
+    for x in absent.Keys() { run.ReadTexts.Push(x) }
     run.ReadTexts.Sort(fn(a String&, b String&) Bool { return a < b })
+    if s.Debug != "" and run.Sig.Contains(s.Debug) {
+        s.TraceLog.Push($"DEBUG judging " $run.Sig " ctx " $run.Ctx " keys " $s.keysOf(comp) " global " $s.globalText())
+        for x in seen.Keys() { s.TraceLog.Push($"DEBUG read " $s.readText(x)) }
+        for m in s.marksOf(run) { s.TraceLog.Push($"DEBUG mark " $m) }
+        s.TraceLog.Push($"DEBUG sum " $(try s.sumText(comp[0]) catch typed.Unwritable default "?"))
+    }
     for b in comp {
         h := try s.hiddenText(b) catch typed.Unwritable { return }
         run.Hidden.Push(h)
@@ -1303,7 +1317,7 @@ fn (s mut Scoper&) derivedField(fty types.TypeId, a I64, w I64) String {
     ps := s.P.T.Items(s.P.T.Params(fty))
     if a >= ps.Len() { return "" }
     t := s.P.T.Referent(ps[a]) if s.isRef(ps[a]) else ps[a]
-    id := try s.ctorOf.Get(t) catch default -1
+    id := s.ctorBody(t)
     if id < 0 { return "" }
     cb := s.Bodies[id]
     for i in range cb.Fields.Len() {
@@ -2183,7 +2197,7 @@ fn (s mut Scoper&) instTypeAt(r types.TypeId, depth I64) Bool {
 # the parameter of struct r's constructor whose value its field i is given whole, -1 for none (another value, or the
 # field assigned again in the constructor)
 fn (s mut Scoper&) ctorFieldParam(r types.TypeId, i I64) I64 {
-    cb := try s.ctorOf.Get(r) catch default -1
+    cb := s.ctorBody(r)
     if cb < 0 or cb >= s.Bodies.Len(): return -1
     body := s.Bodies[cb]
     if i >= body.Fields.Len() or body.Root is null: return -1
@@ -3103,7 +3117,7 @@ fn (s mut Scoper&) fieldPos(fty types.TypeId, a I64, f I64) I64 {
     ps := s.P.T.Items(s.P.T.Params(fty))
     if f == 0 or a >= ps.Len() { return a }
     t := s.P.T.Referent(ps[a]) if s.isRef(ps[a]) else ps[a]
-    id := try s.ctorOf.Get(t) catch default -1
+    id := s.ctorBody(t)
     if id < 0 or not s.isStruct(t) { return a }
     cb := s.Bodies[id]
     for i in range cb.Fields.Len() {
@@ -3611,7 +3625,7 @@ fn (s mut Scoper&) passDerived(c typed.Call&, callee I64, beta Array<Term>&) {
 fn (s mut Scoper&) dtorBody(ty types.TypeId) I64 {
     r := s.P.T.Repr(ty)
     if s.isRef(r): r = s.P.T.Repr(s.P.T.Referent(r))
-    return try s.dtorOf.Get(r) catch default -1
+    return s.dtorFor(r)
 }
 
 # O23a, C1: a holder letting go of its value (drop, its place borrowed in a) passes its destructor the derived scopes
@@ -3855,7 +3869,7 @@ fn (s mut Scoper&) bodyOf(c typed.Callee&) I64 {
 # a struct type's field i's mark, as its constructor's Fields say (C2d): Bare for a bare field, Of(param) for one
 # viewing param's referent; None where the type has no constructor body
 fn (s mut Scoper&) fieldMark(t types.TypeId, i I64) typed.Mark {
-    id := try s.ctorOf.Get(t) catch default -1
+    id := s.ctorBody(t)
     if id < 0 { return typed.Mark.None }
     b := s.Bodies[id]
     if i >= b.Fields.Len() { return typed.Mark.None }
@@ -7827,7 +7841,7 @@ fn (s mut Scoper&) bindLocal(l typed.LocalId, x typed.Expr&) {
 fn (s mut Scoper&) ctorParams(t types.TypeId) I64 {
     r := s.P.T.Repr(t)
     if s.isRef(r) { r = s.P.T.Repr(s.P.T.Referent(r)) }
-    id := try s.ctorOf.Get(r) catch default -1
+    id := s.ctorBody(r)
     return s.Bodies[id].Params.Len() if id >= 0 else 0
 }
 
@@ -7979,7 +7993,7 @@ fn (s mut Scoper&) fieldRec(base typed.Lvalue&, i I64) I64 {
     }
     # a bare field: the instance its constructor gave it, its bindings in that constructor's terms - its parameters'
     # bindings this instance's record has, its instance scope where this instance's references are
-    cb := try s.ctorOf.Get(bt) catch default -1
+    cb := s.ctorBody(bt)
     if cb >= 0 { s.sumReads.Put(cb, true) }
     if cb < 0 or not s.summed(cb) or i >= s.sum(cb).FieldFrom.Len() { return -1 }
     ff := s.sum(cb).FieldFrom[i]
@@ -8987,7 +9001,7 @@ fn throughElemExpr(x typed.Expr?&) Bool {
 
 # the index among a constructor's parameters of its local q, -1 for none
 fn (s mut Scoper&) ctorParamIndex(t types.TypeId, q typed.LocalId) I64 {
-    id := try s.ctorOf.Get(t) catch default -1
+    id := s.ctorBody(t)
     if id < 0 { return -1 }
     ps := s.Bodies[id].Params
     for k in range ps.Len() {
@@ -12333,7 +12347,7 @@ fn (s mut Scoper&) apartField(p typed.Lvalue&) String {
     bt := s.P.T.Repr(p.base.Type())
     if s.isRef(bt) { bt = s.P.T.Repr(s.P.T.Referent(bt)) }
     d := s.declOf(bt)
-    id := try s.ctorOf.Get(bt) catch default -1
+    id := s.ctorBody(bt)
     if d < 0 or id < 0 or not s.apartDecl(d) or p.index >= s.Bodies[id].Fields.Len(): return ""
     cb := s.Bodies[id]
     f := cb.Locals[I64(cb.Fields[p.index])]
@@ -13823,7 +13837,7 @@ fn (s mut Scoper&) giveBackDecl(d I64) Bool {
 fn (s mut Scoper&) declOf(t types.TypeId) I64 {
     r := s.P.T.Repr(t)
     if s.isRef(r) { r = s.P.T.Repr(s.P.T.Referent(r)) }
-    if not s.ctorOf.Has(r) or s.P.T.KindOf(r) != types.Kind.Named { return -1 }
+    if s.ctorBody(r) < 0 or s.P.T.KindOf(r) != types.Kind.Named { return -1 }
     return I64(s.P.T.DeclOf(r))
 }
 
@@ -14865,6 +14879,42 @@ fn (s mut Scoper&) sum(b I64) mut summary& {
     return s.sums[b]
 }
 
+# a type's constructor's body (twin 0), -1 for none - and its destructor's: which instances a program has is the whole
+# program's, so a judging asking logs what it found - the body, as a read; none, by the type's canonical text
+fn (s mut Scoper&) ctorBody(t types.TypeId) I64 {
+    id := try s.ctorOf.Get(t) catch default -1
+    if s.logReads { s.logLookup(id, t, "-ctor\t") }
+    return id
+}
+
+fn (s mut Scoper&) dtorFor(r types.TypeId) I64 {
+    id := try s.dtorOf.Get(r) catch default -1
+    if s.logReads { s.logLookup(id, r, "-dtor\t") }
+    return id
+}
+
+fn (s mut Scoper&) logLookup(id I64, t types.TypeId, kind String&) {
+    if id >= 0 {
+        s.readLog.Push(id)
+        return
+    }
+    c := s.P.T.CanonNamed(t)
+    if c.Contains("\n"): s.globalDep = true
+    s.absentLog.Push($kind $c)
+}
+
+# whether no constructor (kind "-ctor\t") or destructor ("-dtor\t") of the type of canonical text c is in the program
+fn (s mut Scoper&) absentNow(line String&) Bool {
+    if s.ctorCanons.Len() == 0 and s.dtorCanons.Len() == 0 {
+        for e in s.ctorOf { s.ctorCanons.Put(s.P.T.CanonNamed(e.Key), true) }
+        for e in s.dtorOf { s.dtorCanons.Put(s.P.T.CanonNamed(e.Key), true) }
+        s.ctorCanons.Put("", true)
+    }
+    if line.StartsWith("-ctor\t"): return not s.ctorCanons.Has(line[6:])
+    if line.StartsWith("-dtor\t"): return not s.dtorCanons.Has(line[6:])
+    return false
+}
+
 fn (s mut Scoper&) isJudged(b I64) Bool {
     if s.logReads and b >= 0 { s.readLog.Push(b) }
     return s.judged[b]
@@ -15596,6 +15646,13 @@ fn (s mut Scoper&) diskHolds(d diskRun&, comp Array<I64>&) Bool {
         return false
     }
     for r in d.Reads {
+        if r.StartsWith("-") {
+            if not s.absentNow(r) {
+                s.why("absent")
+                return false
+            }
+            continue
+        }
         tab := try r.Find("\t") catch { return false }
         x := try s.nameAt.Get(r[:tab]) catch { return false }
         if s.readLine(x) != r {

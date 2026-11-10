@@ -36433,7 +36433,14 @@ copies asked about).
   versions, found by the whole-pass check below: a scope record's "sum" lines taken for its own sum (the record never
   read); in-memory judgings taken from a record held to all their logged reads where a judging made in the build is
   held to its callees' (the build then judged in round 2 what the clean build had taken again - the pass the same, more
-  work); the length of a field-marks list compared with its lines.
+  work); the length of a field-marks list compared with its lines. And one found by `reuseall` under the whole-pass
+  check in the first full verify: whether a type has a constructor or destructor body is the whole program's (an
+  instance exists only where some program instantiates it), and a judging asking for one it did not find read nothing
+  the record said - std/list's `List<String&>.Join` judged in a program with no `List<String&>` constructor kept its
+  receiver, and the record was taken by one with it, where judging afresh reads the field's mark and does not. Every
+  lookup of a constructor or destructor (`ctorBody`, `dtorFor`) is now a read: the body found, or "none" by the type's
+  canonical text, held to the program's set of them (`absentNow`). `OLANG_SCOPEDEBUG=TEXT` says what a component whose
+  signature holds TEXT read.
 - **The language server keeps its session in the records** (`session.Analysis.Analyze(..., kept)`, `lsp.olang`,
   `mcp.olang`). Each check of the server's (a worker process, as before) keeps and takes the front and scope records
   as `olang test` does in the directory it runs in - so a check after an edit judges again only what the edit reaches,

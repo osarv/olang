@@ -1082,6 +1082,7 @@ fn scoper(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool) mut scope
     sc.Trace = (try os.Env("OLANG_INFERDUMP") catch default "") != ""
     sc.ReuseCheck = (try os.Env("OLANG_SCOPECHECK") catch default "") != ""
     sc.NoReuse = (try os.Env("OLANG_NOREUSE") catch default "") != ""
+    sc.Debug = try os.Env("OLANG_SCOPEDEBUG") catch default ""
     if not alone { apartModules(c.P.L, cfg, sc.Apart) }
     return sc
 }
