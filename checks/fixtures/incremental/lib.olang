@@ -20,6 +20,12 @@ fn Viewed() I64 {
     return v[0]
 }
 
+fn Passed() I64 {
+    a Vec<String&>
+    deep.Pass(a, "passed")
+    return a.Len()
+}
+
 fn Kept() I64 {
     a Vec<String&>
     deep.Keep(a, "kept")

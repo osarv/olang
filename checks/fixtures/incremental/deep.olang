@@ -16,6 +16,10 @@ fn Parse(t String&) I64 ? { return try t.ParseInt(10) }
 
 fn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }
 
+# W3b: a function keeping nothing of its second parameter, which the edit "a scope obligation added" makes it keep - its
+# summary, which lib's Passed reads, changes
+fn Pass(a mut Vec<String&>&, s String&) { a.Push("p") }
+
 # M19g: a body's summary of checking - whether it may grow the Vec it is given
 fn Touch(a mut Vec<I64>&) { a[0] = 2 }
 

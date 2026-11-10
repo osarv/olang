@@ -684,7 +684,6 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     DiskChecked I64 = 0
     Restarts I64 = 0
     Times Vec<String&>                     # how long each step took, for OLANG_SCOPESTATS
-    whyMs Map<String, I64>
     freshN I64 = 0
     freshRec I64 = 0
     judgeNs I64 = 0
@@ -962,13 +961,10 @@ fn (s mut Scoper&) judgeOrTake(comp Array<I64>&, report Bool) mut compRun?& {
     if s.recordable(comp) {
         s.freshRec++
         if d is null and s.Eligible.Has(s.Bodies[comp[0]].File) { s.freshWhy(comp) }
-        s.whyMs.Put($"REC " $s.NameOf(comp[0]), (time.Now() - tj) / 1000)
     } else {
         b := comp[0]
         f := s.Bodies[b].File
-        if s.NameOf(b) == "" and s.whyN.Len() < 60 { s.TraceLog.Push($"unnamed " $s.Bodies[b].Of " file " $f " " $s.fileIdentity(f) " raw '" $s.nameOf(b, s.bodyNames, 0) "'") }
         s.why($"f-" $("unnamed" if s.NameOf(b) == "" else "root" if not s.Keyed.Has(f) else "types" if s.filesOf(b)[0] < 0 else "args"))
-        s.whyMs.Put(s.fileIdentity(f), (try s.whyMs.Get(s.fileIdentity(f)) catch default 0) + (time.Now() - tj) / 1000)
     }
     if s.Restart: return null
     return run
@@ -14607,6 +14603,7 @@ type diskRun struct(Sig String&) {
     Judged Vec<Bool>
     Plans Vec<String&>
     Sums Vec<String&>
+    File I64 = -1          # the file of the module whose record held it
     Out String = ""        # the state its bodies are left in: its name ...
     Hidden Vec<String&>    # ... and the state itself, by body (hiddenText)
 }
@@ -15380,17 +15377,16 @@ fn (s Scoper&) DiskStats() String {
     n := s.diskAll.Len()
     why := StringBuilder()
     for e in s.whyN { why.Push($" " $e.Key "=" $e.Value) }
-    for e in s.whyMs {
-        if e.Value > 10000: why.Push($"\n   " $e.Key ":" $(e.Value / 1000) "ms")
-    }
     return $n " judgings in " $s.Eligible.Len() " modules' records, " $s.DiskTaken " taken, " $s.Restarts " restarts;" $why.ToString() "; ms: " $s.Times.Join(", ")
 }
 
-# a record's judgings given to the pass: all of them, or none where a line is out of place
-fn (s mut Scoper&) AddRecord(text String&) ? typed.Unwritable {
+# a record's judgings given to the pass, from the record of file's module: all of them, or none where a line is out of
+# place
+fn (s mut Scoper&) AddRecord(file I64, text String&) ? typed.Unwritable {
     runs Vec<mut diskRun&>
     try ReadRuns(text, runs)
     for d in runs {
+        d.File = file
         had := try s.Disk.Get(d.Sig) catch default Vec<I64>()
         had.Push(s.diskAll.Len())
         s.diskAll.Push(d)
@@ -15583,13 +15579,7 @@ fn (s mut Scoper&) freshWhy(comp Array<I64>&) {
         s.why("x-nosig")
         return
     }
-    if s.whyN.Len() < 40 {
-        for i in cands {
-            d := s.diskAll[i]
-            s.TraceLog.Push($"fresh " $s.NameOf(comp[0]) " ctx " $d.Ctx "/" $s.ctxText(s.report) " keys " $(d.Keys == s.keysOf(comp)) " in " $d.In.Join(",") " now " $s.stateOf(comp[0]) " fromdisk " $s.fromDisk[comp[0]])
-        }
-    }
-    s.why("x-cands")
+    s.why($"x-cands" $cands.Len())
 }
 
 fn (s mut Scoper&) diskHolds(d diskRun&, comp Array<I64>&) Bool {
@@ -15687,6 +15677,7 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
 
 # the records' lines of every module kept (Keyed), by file: the judgings of the components whose first body is there
 fn (s mut Scoper&) Records() Map<I64, String&> {
+    written Map<String, Bool>
     at Map<I64, I64>
     parts Vec<StringBuilder>
     files Vec<I64>
@@ -15697,6 +15688,7 @@ fn (s mut Scoper&) Records() Map<I64, String&> {
         for i in range comp.Len() { comp[i] = s.compNodes[s.compFrom[k] + i] }
         if not s.recordable(comp): continue
         file := s.Bodies[comp[0]].File
+        written.Put($s.sigOf(comp) "\n" $s.keysOf(comp), true)
         for run in s.runs.Ref(k) {
             text := s.RunRecord(run, comp)
             if text == "": continue
@@ -15710,9 +15702,64 @@ fn (s mut Scoper&) Records() Map<I64, String&> {
             parts.RefMut(i).Push(text)
         }
     }
+    # ... and the judgings the records read gave of components this build did not judge alike - another instance of a
+    # generic, the same function under other keys - at most two variants of each, so that edits back and forth do not
+    # judge again what the build before them had (an instance's record is its generic's module's)
+    kept Map<String, I64>
+    for d in s.diskAll {
+        vk := $d.Sig "\n" $d.Keys
+        if written.Has(vk) or d.File < 0: continue
+        n := try kept.Get(d.Sig) catch default 0
+        if n >= DiskVariants: continue
+        kept.Put(d.Sig, n + 1)
+        written.Put(vk, true)
+        i := try at.Get(d.File) catch default -1
+        if i < 0 {
+            i = parts.Len()
+            at.Put(d.File, i)
+            parts.Push(StringBuilder())
+            files.Push(d.File)
+        }
+        parts.RefMut(i).Push(diskLines(d))
+    }
     out Map<I64, String&>
     for i in range files.Len() { out.Put(files[i], parts[i].ToString()) }
     return out
+}
+
+# how many variants of a component's judgings a record keeps beyond this build's
+DiskVariants I64 = 2
+
+# OLANG_FACTSTATS: the files of the modules some function of no type variable of which (or what is written inside one)
+# was judged afresh, not taken from a record - as the front records' "front checked" says it (W3a)
+fn (s mut Scoper&) JudgedFiles() Map<I64, Bool> {
+    out Map<I64, Bool>
+    for k in range s.compFrom.Len() {
+        if k >= s.runs.Len() or s.runs[k].Len() == 0: continue
+        b := s.compNodes[s.compFrom[k]]
+        if not s.Keyed.Has(s.Bodies[b].File) or s.filesOf(b).Len() != 1 or not s.plainBody(b): continue
+        latest := s.runs[k][s.runs[k].Len() - 1]
+        if latest.Disk is null: out.Put(s.Bodies[b].File, true)
+    }
+    return out
+}
+
+# whether body b is code of no type variable: a function's, a plain type's constructor or destructor, a global's
+# initializer, or a lambda or contract item inside one
+fn (s mut Scoper&) plainBody(b I64) Bool {
+    for _ in range 64 {
+        match s.Bodies[b].Of {
+            case typed.BodyOf.Fn(inst) { return s.P.InstanceArgs(inst) == types.ListId(0) }
+            case typed.BodyOf.Ctor(t, twin) { return twin == types.ListId(0) and s.plainDecl(t) }
+            case typed.BodyOf.Dtor(t) { return s.plainDecl(t) }
+            case typed.BodyOf.Global(_, _) { return true }
+            case typed.BodyOf.Lambda(parent) { b = I64(parent) }
+            case typed.BodyOf.Contract(of, _, _) { b = I64(of) }
+            case _ { return false }
+        }
+        if b < 0 or b >= s.Bodies.Len(): return false
+    }
+    return false
 }
 
 # ---- tests: the plan and the summaries ----

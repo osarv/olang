@@ -708,7 +708,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         sole := e.SoleUnit()
         if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if e.Library else sole)) }
     }
-    if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog, kept) }
+    if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog, kept, fr.Sc.JudgedFiles()) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
     if e.Library {
@@ -1147,7 +1147,8 @@ fn checkIncrFailed(kept views.Kept&) {
 # OLANG_FACTSTATS: what the program decided and its modules read (facts.olang), and which modules were reused and which
 # written again (a module with no code of its own is neither), and each object, a line each on the standard error - what
 # the incremental build's checks compare
-fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Array<String&>&, prog build.Program&, kept views.Kept&) {
+fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Array<String&>&, prog build.Program&, kept views.Kept&
+    scoped Map<I64, Bool>&) {
     made Map<I64, Bool>
     for r in e.Made { made.Put(r.Module, true) }
     b := StringBuilder()
@@ -1158,6 +1159,7 @@ fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Arr
         if what != "": b.Push($"olang: " $what $l.Mods[m].Identity "\n")
         if kept.Files.Has(l.Mods[m].File): b.Push($"olang: front kept " $l.Mods[m].Identity "\n")
         if kept.Lines.Has(l.Mods[m].File): b.Push($"olang: front checked " $l.Mods[m].Identity "\n")
+        if scoped.Has(l.Mods[m].File): b.Push($"olang: scope judged " $l.Mods[m].Identity "\n")
     }
     # each object by its IR's hash: equal objects have equal names (B3j)
     for u in prog.Units { b.Push($"olang: unit " $u.Identity " " $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) "\n") }
@@ -1346,7 +1348,7 @@ fn scopeAfresh(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool, sc m
     c.P.L.Diags.Forget(upTo)
     sc.SetFieldMarks(final)
     if diffs.Len() == 0 {
-        try io.PrintErr($"olang: incremental check: scope, " $sc.DiskTaken " judgings taken from records, every body the same\n") catch io.Error { }
+        try io.PrintErr($"olang: incremental check: scope, " $sc.DiskTaken " judgings taken from records, every one the same\n") catch io.Error { }
         return
     }
     for x in diffs { try io.PrintErr($"olang: incremental check: " $x "\n") catch io.Error { } }
@@ -1403,7 +1405,7 @@ fn scopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>
             if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
             text := try scopeRecord(c, $cfg.Dir "/rec/" $name) catch Stale { continue }
             at := try text.Find("\nrun ") catch default text.Len() - 1
-            try sc.AddRecord(text[at + 1:]) catch typed.Unwritable { continue }
+            try sc.AddRecord(l.Mods[m].File, text[at + 1:]) catch typed.Unwritable { continue }
             sc.Eligible.Put(l.Mods[m].File, true)
             loaded.Put(l.Mods[m].File, text)
             break
