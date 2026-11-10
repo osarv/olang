@@ -1,0 +1,3384 @@
+make clean
+make[1]: Entering directory '/home/user/wt/merge'
+rm -rf build
+make[1]: Leaving directory '/home/user/wt/merge'
+make boot
+make[1]: Entering directory '/home/user/wt/merge'
+boot: build/olang is the bootstrap of these inputs that passed before (.bootcache/af556499a4c4589e1964080ce98ca0aa)
+make[1]: Leaving directory '/home/user/wt/merge'
+make suite
+make[1]: Entering directory '/home/user/wt/merge'
+== compiler/load.olang ==
+ok - a program's modules: relative imports, a cycle, the prelude and identities
+ok - imports that are wrong are reported where they are written
+ok - a top-level if decides which imports exist, and a pending one waits for Decide
+ok - M16 and M17: one file reached twice, and a re-export back to its importer
+ok - a remote import is fetched, locked, and its relative imports stay inside it
+5 passed, 0 failed
+== compiler/eval.olang ==
+ok - integers at every width agree with the run time: wrapping, comparisons, shifts, the undefined refused
+ok - floats at every width agree with the run time: one rounding at their own type, NaNs and infinities
+ok - conversions between every pair of numeric types agree with the run time: one rounding, the undefined refused
+ok - loops and recursion: a loop's scope every turn, calls to depth, a loop that allocates nothing never grows
+ok - errors: raised under the function's own list, dispatched by a switch, re-encoded where they pass on (R6, R17)
+ok - undefined behaviour stops with where: outside an array, after a scope closed, through null, budgets run out
+ok - exits: a failed check stops with FILE:LINE and its message (S18a); done and fail are refused while compiling
+ok - aggregates, enums, arrays and references: laid out as the target lays them out, read and written in place
+ok - globals while compiling: an immutable one initialized when first read (K2), a mutable one or a write refused
+ok - scopes and destructors under -i: a scope's registrations run as it closes, last registered first (O15, O16)
+10 passed, 0 failed
+Killed
+== compiler/generic.olang ==
+ok - declared types and instances: laid out as C lays them out, their canonical texts read back
+ok - T16 and G17: a type holding itself, and instances nesting without end
+ok - a known length folds as the program computes it (T7c): typed, wrapping, from globals
+ok - inference (G9): literals adapt, numbers widen unless a receiver bound them, permissions meet
+ok - constraints (G19): a type satisfies a trait by its methods, checked where a variable is bound
+ok - a closed trait (T31a): the prelude's Float, Integer and Number are met by the built-in numbers alone
+ok - every reference parameter has a scope variable of its own, a reference result a result scope; instances remember where
+7 passed, 0 failed
+built ./build/tests_runner
+build/olang build compiler/tools/tokdiff.olang
+built ./build/compiler_tools_tokdiff
+== compiler/scope.olang ==
+ok - versions: the definitions of a reference local reaching each statement, through branches, loops and a catch clause, and the loops they cross (O25i)
+ok - plans and summaries: a task's temporary built in its join block, an element where its list lives (O18b), a build through a stand-in apart from one into the scope itself (P2)
+ok - plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there, as one a conditional's arm returns (O26a); a lambda may build only into what it builds into (decision 48)
+ok - C2d, P1g: a task's built result stored into a field of a parameter is built where the field lives, as the assignment's is
+4 passed, 0 failed
+build/olang build compiler/tools/astdiff.olang
+built ./build/compiler_tools_astdiff
+build/olang build compiler/tools/namesdiff.olang
+built ./build/compiler_tools_namesdiff
+build/olang build compiler/tools/layoutdiff.olang
+built ./build/compiler_tools_layoutdiff
+build/olang build compiler/tools/dump.olang
+built ./build/compiler_tools_dump
+build/olang build compiler/tools/drvdiff.olang
+built ./build/compiler_tools_drvdiff
+build/olang build compiler/tools/consistency.olang
+built ./build/compiler_tools_consistency
+build/olang build compiler/tools/fmt.olang
+built ./build/compiler_tools_fmt
+== tests/Base.olang ==
+0 passed, 0 failed
+== tests/Lib.olang ==
+0 passed, 0 failed
+== tests/any.olang ==
+ok - T32a: an any holds a struct borrowed, temporaries built where it lands, numbers, enums and text copied
+ok - T32b: a mut method through a mut any writes the instance itself
+ok - T32c: an any of another module's trait, its default through the table, generic code over it
+ok - T33: == is the same instance; an any renders its instance
+ok - T34: type cases bind the instance itself; as gives it, or fails under checked
+ok - D17f: a trait's contract and the instance's own, checked through an any
+ok - T32b: an any Iterator walked by for-in and its defaults
+ok - K2: anys evaluated while compiling agree with the run time
+ok - T32a: arrays and conversions of them are copied into the box
+ok - T32a: a conditional, a match or a catch default put in an any is copied into its box
+ok - E11a: $ counts an any as a reference, 8 deep
+ok - T32a: an any Iterator whose element type some defaults do not fit
+ok - T34: type cases naming a generic's instances
+ok - D8a: a trait's defaults through an any
+ok - E19: an array literal of anys, rendered as written
+ok - M21: a method of one instance is not another's
+ok - M21: two instances' methods each found for their own instance, an exact receiver first
+ok - T32: a type variable in an any's trait, substituted and inferred; Map to a reference through an any
+ok - T32a: a call's array a scope argument puts elsewhere is copied into the box
+ok - O26a: a returned local a kept borrow names is copied at its return
+ok - M21: Eq and Hash of one instance are not another's
+ok - T7b, E25: a scoped call's array of plain data is copied where it is returned or boxed
+ok - O26a, T7b: a returned array local something else names is copied at its return
+ok - E25, P1g: a spawn target set by a call given a scope argument
+ok - P1g, T11b: a spawn target holding an array by value is stored as its assignment
+ok - O26a, T7b: a callee sharing a parameter's scope keeps it, so the returned local is copied
+ok - T29a: a conversion of a place to a type over characters names its storage
+ok - T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time
+ok - E25, O25a: a local a scoped call declares lives where the argument puts it
+29 passed, 0 failed
+== tests/arraypat.olang ==
+ok - S13h: an array pattern's literals compare, its names bind, its rest is a view
+ok - S13h: from the end after a rest, text, a payload's array, a Vec
+2 passed, 0 failed
+== tests/asserts.olang ==
+ok - a false assert after a clause that returns is not reached
+ok - a false assert after what leaves a function is not reached
+ok - a true assert is decided wherever it is
+ok - the evaluator agrees
+4 passed, 0 failed
+== tests/attrmod.olang ==
+ok - a module walks its own functions, private ones too, through an import of itself
+1 passed, 0 failed
+== tests/attrs.olang ==
+ok - Key: attributes are read on types, fields, puns, cases and their fields
+ok - functions reflected: a router and a command table collected while compiling
+ok - a reflected function's errors are its descriptor's
+3 passed, 0 failed
+== tests/become.olang ==
+ok - become runs a chain of any depth in one frame
+ok - a become's failure is the function's own
+ok - references given are handed on, results built where they go
+ok - a run-time array a generic was given is handed on
+ok - grow: what a chain makes and hands on is kept in its tail scope
+ok - probe: instances a become's blocks made end as the tail scope closes, last made first
+become: 500500
+ok - the evaluator agrees
+7 passed, 0 failed
+== tests/bench.olang ==
+ok - sorted: ten thousand numbers
+ok - counts: a thousand words into a map
+ok - the sum of a million numbers, by lanes
+3 passed, 0 failed
+== tests/builders.olang ==
+ok - Color.Gray: makes three equal channels
+ok - Color.FromHex: reads #rrggbb, failing on anything else
+ok - a private builder is its module's
+ok - a builder gives a reference, read back after an arena churn
+ok - through an instance, bare and inferred, and one of an instance alone
+ok - an enum's builder
+ok - a builder is a value where nothing generic is left
+ok - a trait requires a builder, and a generic calls it through its variable
+ok - through the owner's variables
+ok - another module's builders, through its alias
+ok - reflection walks a type's builders
+ok - the prelude's builders: T.Parse, F64.FromBits, String.FromC
+ok - the evaluator bakes and decides what the run time computes
+13 passed, 0 failed
+== tests/cimport.olang ==
+ok - a header's integer, float and text macros are constants
+ok - a header's enum is constants, and its struct a plain struct held in place
+ok - a macro taking arguments is a function of its arguments' types
+ok - a static inline function is reached through the C the build compiles
+ok - the C library: functions, a C string back, pointer arguments of any array
+ok - a variadic call: each argument promoted as C promotes it
+ok - a variadic call: integers of other widths promoted to the C type that holds them (X21, T4a)
+ok - a packed record of bitfields is a packed struct, its bits C's (X18, X11a)
+8 passed, 0 failed
+== tests/comptime.olang ==
+comptime: 20300
+ok - comptime gives constant data
+ok - comptime for unrolls
+ok - the evaluator agrees
+3 passed, 0 failed
+== tests/copy.olang ==
+ok - an assignment copies by the declared Copy
+ok - a by-value argument is the callee's own copy
+ok - a value holding one by value copies it by its Copy
+ok - a collection's elements are copied by their own Copy
+ok - a Map's values are copied by their own Copy, its empty slots as they are
+ok - Copy() written calls it, supplied or declared
+ok - while compiling, as at run time
+ok - parallel: copies each value of a parallel declaration and assignment
+ok - captured: copies what a captured value owns, by its Copy
+9 passed, 0 failed
+== tests/defaultbinds.olang ==
+busy 3 idle
+ok - a default left off gives its variable a type
+ok - a case of no values needs no clause
+ok - the evaluator agrees
+3 passed, 0 failed
+== tests/definit.olang ==
+ok - a never-null reference assigned in both branches (D13d)
+ok - a match and a try assign on every path (D13d)
+ok - an effectful constructor assigned first runs once (D13c, D13d)
+ok - a zero value is read where nothing assigned it (D13d)
+ok - a zero value read after a loop that ends by a break it holds anywhere (D13d)
+ok - a constructor's field assigned in its branches (D13d)
+ok - a global given its value by a top-level if (D13e)
+ok - comprehensions write each element once (E27, T7c)
+ok - Array<T>(n) filled by the loop after it (D14d)
+ok - a counted fill whose counter is assigned keeps its clear (D14d)
+ok - definitely assigned references read back after the arena churns (D13d, O2)
+11 passed, 0 failed
+fuzz edit: seed 1: step 3 (a field's set widened in m0): the build in place (<) differs from the clean one (>):
+14c14
+< olang: unit main 64ee62fc4b77cd54269b5a796c9eb32496c0cc24381a56fc59734e699788c24f
+---
+> olang: unit main f37bd21c2050bd04ef726e36d216cd1cc63cdf052549e6bc67016052a498d5e1
+
+fuzz edit: seed 2: step 0 (a number in m1's code changed): the build in place (<) differs from the clean one (>):
+13d12
+< olang: unit main 0eb26a764758533b37acceef66c59729d60a34df67c19c08336b97e82d990d46
+14a14
+> olang: unit main c7cec86f0c130af308d6f29199e6ff66935b11fb6496da7169e86902cb9605f5
+
+fuzz edit: 2 programs edited 6 times each, 2 findings (in /home/user/wt/merge/build/fz/runpVJrx8)
+make[2]: *** [makefile:529: editfuzzcheck] Error 1
+== tests/drops.olang ==
+ok - a by-value holder's destructors run where it lets go, once each
+ok - a value a call gave that nothing holds by value is held where the call lands (O16)
+ok - a reference to a by-value variable is no holder
+ok - a holder declaring Copy is no unique type: each copy its own, ended by its own holder
+ok - a constructor failing part way ends the fields it built, the last first
+ok - seenBy: reads a join block's holder while its task runs, ended after the wait
+ok - Res.mkRef: ends a holder whose storage flowed out where that storage lives
+ok - handOver: ends a value handed on to a call that is never made
+ok - guarded: ends what a failed requirement's call was given
+ok - Res.mkFresh: stores over a holder what a try gives
+ok - deferredEnd: ends a held value as its function is left, and a holder given a new one
+ok - Wrapped.wrapOn: hands its parameter on, so a declared Copy may call it
+ok - gSome: runs its parameter's destructor where it does not hand it on
+ok - Logged: builds through its field from its destructor, the instance made in an inner block
+ok - heldTwo: holds a parameter's reference where the parameter's references live, ended at its end
+ok - vecEnds: ends what a Vec of destructor values removes, the last first, and every element where it is let go
+ok - mapEnds: ends what a Map of destructor values removes or replaces, and its live entries where it is let go
+ok - dequeEnds: a Deque of destructor values ends its ring back to front, and what Clear removes
+ok - nestedEnds: a collection held in a collection or a value is let go with its holder
+ok - destroyedVec: a Vec of destructor values ended by its function, by its by-value parameter, by its caller
+ok - Named: a Vec of destructor values built in a loop reads its elements back after a churn
+ok - getBox: a store over a holder's part through what a call gives ends the old value, once
+ok - loopDestroyed: ends a holder its loop's body declares, every turn
+ok - a holder is ended before what it holds - stored, through a call, past deferred code, through a shelf, in a closure
+ok - gripsHeld: ends a collection by value before what its elements hold
+ok - registeredHeld: ends a registered holder before a value registered before it
+ok - deferPush: hands its by-value parameter on from deferred code, once
+ok - Viewed: is ended where the storage a view of it is kept in lives
+28 passed, 0 failed
+== tests/embed.olang ==
+ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
+ok - E38: an embed in a loop or a generic is its one instance's bytes each time
+2 passed, 0 failed
+== tests/errsetparams.olang ==
+ok - G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail
+ok - G1a: an instance at the empty set is called without try
+ok - QAH: the helpers take callbacks that fail
+ok - QAH: a comparator that fails stops the sort
+ok - QAH: an iterator's own errors reach what walks it
+ok - G1a: a type's error-set parameter, and catch E in its methods
+ok - T19a: a named set as an error-set argument
+ok - K1: error-set instances are evaluated while compiling
+ok - G12: an instance named with its error set, and one whose set is left to inference
+ok - T32, T31: an any of a fallible iterator, and a set written in another order
+10 passed, 0 failed
+== tests/errdata.olang ==
+ok - a payload is read in the clause and where narrowing leaves one word
+ok - error e raises the payload it holds
+ok - a value kept outlives the clause and the scopes after it
+ok - values compare and hash by word and payload
+ok - a payload rides from a task to its join, the earliest-spawned failure's kept
+ok - a loop raising and taking payloads stays flat
+ok - an error raised by name carries what its raise names
+ok - an error type's methods read what it carries
+ok - a false requirement's ArgumentError carries the condition
+ok - a payload is matched by position and by name
+ok - a join block's own error leaves with its own payload, the tasks' dropped
+ok - a narrowed payload's array field is indexed in place
+ok - text inside a payload's structs, enums, arrays and errors is its own
+ok - the first raise in source order settles a raised error's fields
+14 passed, 0 failed
+== tests/errsets.olang ==
+ok - an error type and a set are declared as types, and a set stands for its members
+ok - a caught error renders as its name prints, decided while compiling and at run time alike
+ok - a caught error is compared, narrowed and matched
+ok - a caught error is raised again, held to the set the narrowing leaves
+ok - a clause's name reaches its block and its default; each clause its own
+5 passed, 0 failed
+== tests/facts.olang ==
+ok - facts are constants the running program reads too
+ok - facts through function values: what is called through a parameter is what each call gives it
+2 passed, 0 failed
+== tests/errvalues.olang ==
+ok - an error value is stored in a field, a local and a Vec, null where nothing failed
+ok - an error value is matched, null among the cases
+ok - an error value is compared with words, types, sets and other values, passed and captured
+ok - an error value is a Map key, and is raised again
+ok - a caught error is held past its clause
+ok - an error type in a rendering is qualified as its values are
+ok - error values equal across sets hash alike
+7 passed, 0 failed
+== tests/filtered.olang ==
+ok - a filtered comprehension's result is an array of its own
+1 passed, 0 failed
+== tests/fnrel.olang ==
+ok - linked: keeps what a named function held in a local keeps
+ok - added: keeps each turn's text a local lambda keeps
+ok - made: keeps what a closure a call hands back keeps
+ok - chosen: judges each function a conditional gives
+ok - cursor: judges every version of a function-valued local
+ok - adapted: keeps a closure an adapter held in a local keeps
+ok - twice: keeps through a value a call through a value gives
+7 passed, 0 failed
+== tests/fnref.olang ==
+ok - nested: a null inside a value renders null, and an enum's zero holds its payload's zero values
+ok - fire: a declared function type is held as its function value, a lambda fitting it directly
+ok - press: a function value that may be null is called once a test says it is not
+ok - longest: an array that may be null: null distinct from empty, read once narrowed
+ok - sample: the evaluator agrees: baked while compiling as at run time
+ok - zeros: an array that may be null, given no value, starts as null: baked while compiling as at run time
+6 passed, 0 failed
+== tests/follow.olang ==
+ok - a walk given a lambda keeping what it is given in what it captured
+ok - a function followed through a chain three deep
+ok - a recursive callee handing on the function it was given
+ok - a captured function value followed into the lambda's body
+ok - a function given back by what it was given to holds what it was given
+ok - a twin building where the followed function needs it
+ok - an adapter keeping what it is handed, followed
+ok - a global baked and an assert decided through a twin
+8 passed, 0 failed
+== tests/fnvalues.olang ==
+ok - a function handing back a view of its argument is a value
+ok - a lambda handing back its argument is a value
+ok - a result handed back through a value lands where its argument lives
+ok - text made in a loop, picked through a value and read in the turn
+ok - a value of a type whose result is built is unchanged
+5 passed, 0 failed
+== tests/genenums.olang ==
+ok - G6b: generic enums - built, matched, compared, rendered - baked, decided while compiling and run
+ok - G6b, E10b: an instance of a generic enum is a Map key, hashed per instance
+ok - G6b, T17c: payloads holding references live where the value does - read back after an arena churn
+3 passed, 0 failed
+== tests/globalstart.olang ==
+ok - a mutable global starts at the value its initializer gives, and is written as any
+ok - the evaluator computes the initializer as the run time would
+2 passed, 0 failed
+== tests/handover.olang ==
+ok - inner: hands a view over where the caller only reads it, and copies it where the caller keeps it
+ok - pick: copies a view kept beside new text, whatever it gives
+ok - nameOf: keeps a view of a field's text its own when the entry changes
+ok - apply: copies a view handed back through a function value and through an any
+ok - cutWith: copies the view an adapter's Call hands back
+ok - skipSpaces: hands a tail call's view back, and copies one of new text
+ok - joinedFired: copies a view where a closure an argument holds may write what it views before it is read
+7 passed, 0 failed
+== tests/handoverglobal.olang ==
+ok - mid: a view of a mutable global's storage is copied where a call may write the global before it is read
+ok - mid: a view of what an immutable global's writable reference names is copied where a call may write it
+2 passed, 0 failed
+== tests/immut.olang ==
+ok - an immut value is read, held and replaced whole, never changed
+ok - an Array<Char> lent as a writable Array<U8>& is written in place
+2 passed, 0 failed
+== tests/generators.olang ==
+ok - D18: a generator walked by for-in and by the iterator helpers, while compiling and at run time
+ok - D18: a generic generator, a generator method, text built for each value
+ok - D18: errors - the error leaves, Exhausted after it
+ok - D18a: return ends a walk, and Next after the end fails with Exhausted again
+ok - D18: a generator over another iterator ends where that one does
+ok - D18: a copy of a Generator is the same walk; a field holds one
+ok - D18b: a walk stopped part way closes its scopes with the scope the generator lives in
+ok - D18: a walk churned between values reads what it made, not reused storage
+ok - D18b: a generator builds into what it was given, where that lives
+ok - D18c: a generator yields copies of what it was given
+ok - S19e: an errdefer in a generator's body runs when the walk fails, not when it ends
+ok - D18: a generator's contract, failing its first Next
+ok - D18b: walks holding no scope and walks holding one, stopped part way, side by side
+ok - D18e: a walk left by a return out of two loops, or by an error, closes its scopes once
+ok - D18c: a generator's elements borrowed from what it was given live where that does
+ok - D18c: a generator's elements kept by its walk live where the generator does
+ok - D18e: a walk a for-in makes is dropped as the loop's block is left, whatever it was given
+ok - D18e: a generator held in a local and walked once there is dropped as the local's block closes
+ok - D18: a lambda's environment and a lent array held across yields stay in the generator's frame
+ok - S20: a walk let go part way ends what it holds and runs its deferred code, an errdefer's not
+ok - S20, C11: walks that end, computed while compiling and at run time alike
+ok - C11, S20: a generator's by-value parameter is its walk's, ended once however the walk ends
+22 passed, 0 failed
+== tests/inplace.olang ==
+ok - letters: reads Split's pieces and walks over them where they stand
+ok - firstWord: a piece handed back is a copy the caller keeps
+ok - letters: elements of an array of text written in the walk are the elements as they were
+ok - letters: pieces kept in a Vec are its own
+ok - total: a built result read where it stands, then kept as a copy
+ok - letters: the run time agrees with what the evaluator baked
+ok - Tree.child: pushes onto a field of an element in place, an argument that grows the collection taken first
+7 passed, 0 failed
+== tests/intwidths.olang ==
+ok - T4a: one bit, seven bits and 24 bits wrap at their widths - baked, decided while compiling and run
+ok - T4a: 63, 65 and 128 bits, past a word and to its double
+ok - T4a: conversions between widths and to and from floats round once
+ok - T4a: bit operations, Format, Abs, Min, Pow and T.Parse at the new widths
+ok - T4a: std/arith and Narrow fail where a new width cannot hold the result
+ok - T4a: narrower widths flow into wider ones, and hashing agrees with ==
+ok - E4a, L10: literals of up to 128 bits are computed exactly and adapt to a type wide enough
+ok - T4a: Sqrt, PadStart and PadEnd at the new widths
+ok - T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding
+ok - T4a: Pow at one bit wraps its 1 as I1 holds it
+ok - L10a: T.Parse reads a prefixed literal of up to 128 bits
+11 passed, 0 failed
+== tests/kept.olang ==
+ok - everyTurn: keeps each turn's local, each its own
+ok - someTurns: keeps the turns that keep it, each its own
+ok - vecs: keeps a Vec by reference and sees what is pushed after
+ok - arrays: keeps an array lent whole
+ok - nested: keeps in an outer turn's block
+ok - reassigned: keeps the local's storage, which a later assignment writes
+ok - rows: moves a whole local into what outlives its turn
+ok - texts: builds text where the result keeps it
+ok - caseLocals: gives locals an enum case holding a parameter's reference
+9 passed, 0 failed
+== tests/keptparams.olang ==
+ok - borrowed: hands back the parameter's own copy, made in the result scope
+ok - counted: keeps an instance given as a function value
+ok - heads: hands back a slice of a parameter's copy
+ok - instances: keeps a constructor parameter in the instance
+ok - vecs: keeps a parameter where a reference parameter reaches
+ok - bindings: keeps a match binding past its clause
+6 passed, 0 failed
+== tests/intsweep.olang ==
+ok - T4a: 1 to 9 bits, signed and unsigned - baked, decided while compiling and run agree
+ok - T4a: 17 to 33 bits, signed and unsigned - baked, decided while compiling and run agree
+ok - T4a: 40 to 64 bits, signed and unsigned - baked, decided while compiling and run agree
+ok - T4a: 65 to 128 bits, signed and unsigned - baked, decided while compiling and run agree
+4 passed, 0 failed
+== tests/lanes.olang ==
+ok - E39: lane operators - built, fused, totalled, compared and chosen - baked, decided while compiling and run
+ok - E39: a fused total makes no array, and an empty one
+ok - E39: Min and Max by '<', a float's NaN the answer once met, ties the first
+ok - E39: lanes made in a function and returned are read back after an arena churn
+ok - E39, E31b: an in-place lane store through x[i] is written back, or goes where a reference read out of it points
+ok - E39: an in-place operand overlapping its target reads the lanes already stored
+ok - E39: Max runs the operation once a lane
+7 passed, 0 failed
+== tests/match.olang ==
+ok - a value match's clauses give their values after ':', a value running on over lines
+ok - a clause of a value match may leave instead, one statement after its ':'
+ok - a statement match's clauses are blocks or one statement after ':'
+ok - a guard's test narrows in its clause
+ok - the evaluator agrees: globals baked from the same matches
+5 passed, 0 failed
+== tests/namedargs.olang ==
+ok - a defaulted parameter is given by name, in any order, after the arguments by position
+ok - constructors and methods take arguments by name
+ok - a generic's, a reference's and an any's parameters by name
+ok - arguments are evaluated in the order written
+4 passed, 0 failed
+== tests/nll.olang ==
+ok - click: walks the parents to the button
+ok - appendTail: appends at the tail a cursor found
+ok - planAt: keeps an option from a parameter's array
+ok - ops: keeps an element of a constant literal
+ok - find: gives a version in a catch clause
+ok - lastSeen: reads every version in deferred code
+ok - captured: captures the version reaching the lambda
+ok - afterLoop: reads after the loop what the last turn gave
+ok - twoOfOne: builds through versions of one scope
+9 passed, 0 failed
+== tests/literals.olang ==
+ok - literals make the type before their bracket
+ok - a program's FromIter: generic, concrete, keyed, fallible
+ok - FromIter is an ordinary call too
+ok - a rendering reads back as the literal making it
+ok - array patterns write the matched value's type
+ok - a comprehension made into another collection is walked by its FromIter
+ok - Strict.FromIter: takes a comprehension through the array its elements make
+7 passed, 0 failed
+== tests/place.olang ==
+ok - Place.Here is where it is written
+ok - a default Place.Here is the call's place
+ok - an argument given is the caller's value
+ok - baked and run time agree
+place: tests/place.olang:58:10
+ok - Place renders and compares as its fields
+5 passed, 0 failed
+== tests/power.olang ==
+ok - E5a: '**' calls Pow - tighter than '-', to the right, '**=' with it
+ok - E5a, E39: '**' lane by lane
+ok - E5a: a type's Pow that fails makes '**' fail as written (E31)
+3 passed, 0 failed
+== tests/promises.olang ==
+ok - Cache: keeps what a handler written 'keeps k' keeps of each key
+ok - linkedAll: holds functions keeping their second argument in their first
+ok - viaLinker: holds a function as a declared function type with a promise
+ok - pickFirst: lets a result borrow only from the argument 'borrows' names
+ok - keptPast: keeps a result written 'noborrow' past both arguments
+ok - addAll: keeps what is kept in a field's referent where the field refers
+ok - spelled: writes a function type's promises
+7 passed, 0 failed
+== tests/raised.olang ==
+ok - an error raised by name is caught by its name and is one error wherever it is raised
+ok - it prints by its name, is held as a value and compared
+ok - the evaluator agrees: values baked while compiling
+ok - another module's: named through its alias, private ones caught whole, a set listing them
+4 passed, 0 failed
+== tests/raisedlex.olang ==
+0 passed, 0 failed
+== tests/packed.olang ==
+ok - Header: fields read and written by their bits alone, computed while compiling as at run time
+ok - Header: a field's neighbours keep their bits when it is stored, signed fields keep their sign
+ok - Header: a packed value held in a struct and an array, its fields written through them
+ok - Header: reflection gives each field's bits
+ok - Pub: json writes and reads a packed struct by its fields
+ok - Header: an array field stored whole, and its copy's lanes
+6 passed, 0 failed
+== tests/reads.olang ==
+ok - walk: reads elements in place where a call shares the statement, and gives the copies' values
+ok - grow: keeps a copy of an element a later argument changes before the read is used
+ok - kidsOf: reads an element's array in place through a view a local holds
+ok - copies made in a loop turn are each the element's
+ok - moved: hands a local to a constructor at its last use, and copies it where it is used again
+ok - walk: is the value the evaluator baked
+ok - peek: copies a by-value argument the same call also lends
+ok - slowRead: gives each spawned task its own argument
+ok - Pt.pinned: reads a returned local's storage where the result went
+9 passed, 0 failed
+== tests/reclaim.olang ==
+ok - PushBack: removed nodes' slots reused: weak places to them read null
+ok - PopFront: an orphan kept by a local is read back after nodes reuse slots
+ok - DList.churn: a node in use across the call letting go of it keeps its value
+ok - Node: a cycle of owning links is kept until its scope closes
+ok - Res: a generational type with a destructor is kept, its destructor run once as its scope closes
+5 passed, 0 failed
+== tests/reclaimarrays.olang ==
+ok - PushBack: removed nodes' arrays reused by new nodes, every node's read back
+ok - Tag: a key viewed across its removal in the body keeps its text, the site comparing it
+ok - PopFront: a removed node's key viewed across its removal keeps its text
+ok - KList.popAndRead: a callee removing a node reads the key it was handed
+ok - KNode: a node's Vec grown after it was made keeps what it grew
+ok - KList: a weak place to a removed node reads null, its slot's next node its own arrays
+6 passed, 0 failed
+== tests/reclaimtasks.olang ==
+ok - churned: lists churned on several threads at once keep their nodes, their weak places reading null once let go
+1 passed, 0 failed
+== tests/reflmod.olang ==
+ok - a module's own reflection sees its private fields; its generics see what this module sees
+1 passed, 0 failed
+== tests/reflect.olang ==
+ok - a type's name, kind and layout are constants of each instance
+ok - a type's Nullable says whether a value of it may be null
+ok - a value's fields walked and read; an enum's case found by ==, its fields read where it is narrowed
+ok - fields are places: written through a writable value
+ok - a value built through its constructor, defaults taken where written
+ok - match T: generic cases bind their arguments, traits are met, the first case wins
+ok - a function type's parameters, results and errors
+ok - a module's private fields are its own: another module's reflection does not see them
+ok - agrees with the run time: the same walks over values only the run time knows
+ok - an unrolled walk breaks and continues; a match on a reflected constant is decided per instance
+ok - reflected types chain, and are types
+ok - a case descriptor called builds its case
+ok - error values: their kind, and their words as cases
+13 passed, 0 failed
+== tests/structpat.olang ==
+ok - Point: S13i: struct patterns take a struct apart by its fields, at run time and while compiling
+1 passed, 0 failed
+== tests/textslot.olang ==
+ok - a text local from a literal starts from the literal every turn, and is written as any array
+ok - a value text local from a conditional or a match of existing text is a copy
+2 passed, 0 failed
+== tests/topassert.olang ==
+3
+ok - a file whose top-level asserts hold builds and runs
+1 passed, 0 failed
+== tests/unique.olang ==
+ok - a unique value is one place: copies are references, fresh values land by value
+ok - a Vec of unique values: Push takes fresh ones, x[i] is the element in place, a walk names each where it is
+ok - a holder of a unique part is unique: its copies are references too, its payload bound in place
+ok - a Map of unique values: Put takes fresh ones, Take hands one back
+ok - Slot.aliasBefore: hands a parameter on after the names made from it are done
+ok - a unique value owning storage handed on by value is moved - into a Map, a Vec, a constructor's field
+6 passed, 0 failed
+== tests/unreachable.olang ==
+unreachable: ok
+ok - unreachable gives way to the values beside it
+ok - the evaluator agrees
+2 passed, 0 failed
+== tests/runner.olang ==
+ok - calling back across the cycle from runner
+ok - runner sees the same shared error type worker does
+ok - runner can call worker's cross-module wrapper directly
+ok - originating a foreign module's error type directly with 'error alias.Type.word'
+ok - a bare cross-module variable read, no call
+ok - a two-hop alias chain reaches a re-exported module's own function
+ok - a two-hop alias chain reaches a re-exported module's own variable, read and write
+ok - a two-hop alias chain reaches a re-exported module's own type
+ok - a lowercase member is private across the module boundary, reachable through its own module
+ok - a generic from another module returns its own argument
+ok - a two-hop alias chain names a re-exported enum type's word, and matches on it
+ok - a private enum case's value still crosses the boundary
+ok - a private error word is still caught by its type from another module
+ok - a two-hop alias chain constructs a re-exported plain type via a struct literal
+ok - a two-hop alias chain constructs a re-exported plain type via an array literal
+ok - a two-hop alias chain reaches a re-exported module's own error type via catch
+ok - originating a two-hop re-exported error type directly with 'error alias.alias.Type.word'
+ok - a local type satisfies an imported trait structurally
+ok - a sealed trait is satisfied only by its own module's types
+ok - the prelude's methods on a built-in type are visible without an import
+ok - M23: a file in a directory imports by its path, its alias the last element
+ok - M19: a method on a type from an imported module is reached through its receiver
+ok - B5a: an importer's global initializer sees its import's globals already set
+ok - B9: a conditional import is loaded when its branch is taken
+ok - D15: an imported global's type is settled from its initializer before any body reads it
+25 passed, 0 failed
+== tests/valueparts.olang ==
+ok - a part store copies its value in
+ok - a Vec and a Map own what they hold
+ok - payloads, literals and fills
+ok - a whole copy is its own
+ok - a comprehension's elements are its own
+ok - a by-value parameter owns its parts
+ok - a part stored through a parameter outlives the call
+ok - a clone of an array is its own, its elements' parts too
+ok - a walk of a Vec reads elements in place only where nothing can write them
+9 passed, 0 failed
+== tests/variadic.olang ==
+ok - D8g: a variadic parameter takes any number of arguments, or an array passed on
+ok - D8g: before and after it, generics infer from its arguments
+ok - D8g, T22: a function fits a function type taking the array, or the arguments
+ok - D8g: arguments evaluated in the order written
+ok - D8g: a trait's variadic method, through a constraint and an any
+5 passed, 0 failed
+== tests/viewplace.olang ==
+ok - firsts: keeps the first character of each turn's text
+ok - head: hands back a view of what it builds
+ok - setRow: keeps a slice of a temporary in a parameter's field
+ok - pieces: keeps a generator's views of a local it made
+ok - stash: keeps a closure over a turn's local
+ok - partAfter: keeps a part of an instance past its turn
+6 passed, 0 failed
+== tests/weak.olang ==
+ok - a doubly linked list read forward through its owning links and back through its weak ones
+ok - a tree's weak parent links read back up to its root
+ok - an LRU cache whose Map owns its entries and whose list links are weak
+ok - a generational value is held by reference
+ok - a weak place reads null once no owning place holds its node
+ok - a subtree cut off: its nodes' weak parent links read null at the cut
+ok - an LRU cache's evicted entry reads null through a weak place outside it
+ok - an LRU cache whose Map grows: an entry evicted reads null, the newest its entry
+ok - a node popped from a Vec reads null through a weak place, and its node again once pushed back
+9 passed, 0 failed
+== tests/geom/measure.olang ==
+ok - a value of a type declared in the neighbouring file
+ok - B9a: a condition reads a global of an imported module
+2 passed, 0 failed
+== tests/geom/rect.olang ==
+ok - a function in one file calls one declared in its neighbour, through an import
+ok - a Map keyed by a neighbour's type, named in a signature here
+2 passed, 0 failed
+== std/arith.olang ==
+ok - integers: what fits is the plain result, what does not fails
+ok - Rem by -1 is 0, the least value's too - while compiling as at run time (the lang25 review)
+ok - floats: IEEE's exceptions as errors
+ok - Checked: each step checked, left to right, the same while compiling as at run time
+ok - every width: Neg, Shift, Div, Mul, Rem and Pow at widths no case names - baked, decided and run alike (T4a)
+ok - Saturating: clamped at the limits at every width - baked, decided and run alike (T4a)
+ok - Saturating: lane by lane (E39), baked and run alike
+7 passed, 0 failed
+== std/base64.olang ==
+ok - the RFC 4648 test vectors
+ok - every byte round-trips, in both alphabets
+ok - decoding is strict
+3 passed, 0 failed
+== tests/worker.olang ==
+ok - Classify accepts values inside the range
+ok - Classify rejects negative input with its own error
+ok - Classify rejects out-of-range input with the shared error
+ok - checkRangeOk reports success and failure correctly
+ok - reordered propagation identifies negative correctly
+ok - reordered propagation identifies too-big correctly
+ok - reordered propagation identifies bad-input correctly
+ok - reordered propagation: catching both combined error types with +
+ok - reordered propagation: success path is unaffected by the reordering
+ok - cross-module: ComputeChecked identifies div-by-zero correctly
+ok - cross-module: ComputeChecked identifies too-small correctly
+ok - cross-module: catching a specific word by its full alias.Type.word name
+ok - calling across the worker/runner import cycle
+ok - D8a: another module's default reads its own global, never a caller's type variable of that name
+ok - D8a/D16: a lambda default from another module
+ok - G12: sh.PickSecond<I64> names an instance, called or as a value
+16 passed, 0 failed
+== std/bench.olang ==
+ok - Run: outside -bench, calls the work once
+ok - Measurement.Of: grows the calls to the budget
+ok - Measurement.Of: fails as the work does, at once
+ok - nextOps: grows by the last round's pace, within Go's bounds
+ok - Measurement.Str: writes what one call cost, leaving out what was not counted
+ok - Keep: keeps a value of any type
+6 passed, 0 failed
+== std/cancel.olang ==
+ok - a token fires on Cancel, and not before
+ok - a token with a deadline fires by itself
+ok - Token.After: a deadline fires on the virtual clock
+ok - a busy task stops when the token is cancelled
+ok - a deferred Cancel lets a join block's tasks stop, on an error too
+5 passed, 0 failed
+== std/bitset.olang ==
+ok - BitSet: holds the cases of an enum
+ok - BitSet: set algebra by operators
+ok - BitSet: a walk gives the cases in declaration order
+ok - BitSet.FromBits: round trips Bits and fails past the last case
+ok - BitSet: flag words from raw values
+ok - BitSet: its constructor refuses bits past the last case
+ok - the compile-time evaluator computes a BitSet
+7 passed, 0 failed
+== std/crc32.olang ==
+ok - the CRC-32 check value, and pieces
+1 passed, 0 failed
+== std/chan.olang ==
+ok - a bounded channel carries values between two tasks
+ok - the ring buffer wraps
+ok - a wait with a token returns what is there, and gives up when the deadline passes
+ok - Cancel wakes a task blocked in a wait
+ok - P4: a task cancelled in RecvUntil fails into its join, or takes its own default
+ok - a channel carries any element type
+ok - a channel of capacity 0 is a rendezvous
+ok - a closed channel gives what it holds, then fails with CLOSED
+ok - for v in c receives until the channel is closed and drained
+ok - Close wakes every task waiting to receive, and RecvUntil sees it before its deadline
+ok - a channel's capacity is an I64
+ok - Ready.Select: takes the first case ready, in order
+ok - Ready.Select: sends through SendOf, a rendezvous handing its value to a waiting receiver
+ok - Ready.Select: times out on time.After, on the virtual clock in no time
+ok - Ready.Select: fails with CLOSED once a channel it receives from is closed and drained
+15 passed, 0 failed
+build/olang build compiler/olang.olang
+built ./build/compiler_olang
+== std/deque.olang ==
+ok - a Deque is pushed and popped at both ends
+ok - a Deque used as a ring wraps and grows in order
+ok - a Deque of text
+3 passed, 0 failed
+== std/ffi.olang ==
+ok - Has finds the C library's functions, and the math library's
+ok - Call passes numbers and gives each kind of result
+ok - Call hands an array over and reads back what the function wrote
+ok - Call fails on a function it cannot find, and on a kind nothing can pass
+4 passed, 0 failed
+== std/csv.olang ==
+ok - Rows reads fields, separators and line breaks
+ok - Rows reads quoted fields: separators, line breaks and doubled quotes inside
+ok - Rows reports what is not CSV, and where
+ok - fields borrow the text unless a doubled quote must be made one
+ok - Record quotes what must be, and Rows reads it back
+ok - Rows read while compiling as at run time
+ok - Decode: records read as structs by their header's names, written back by Encode
+ok - Error: an error carries where the text went wrong
+8 passed, 0 failed
+== std/filepath.olang ==
+ok - Clean follows Go's rules, case for case
+ok - Clean borrows the path where its clean form is the path's own beginning, and builds otherwise
+ok - Base and Dir take a path apart
+ok - Ext is the last element's extension
+ok - IsAbs is whether a path starts at the root
+ok - Join makes one clean path of its parts, leaving empty ones out
+ok - Rel makes one path relative to another, Go's table case for case
+ok - what filepath gives lives where it is put, evaluated at run time
+8 passed, 0 failed
+== std/heap.olang ==
+ok - a Heap gives its elements least first
+ok - a Heap ordered the other way gives the largest first
+ok - a Heap sorts many numbers
+3 passed, 0 failed
+== std/hex.olang ==
+ok - bytes are written as hex and read back
+1 passed, 0 failed
+== std/flags.olang ==
+ok - flags are read in every spelling, the rest are arguments
+ok - what the declarations do not allow fails, with a message
+ok - Flags.Read: a struct's parameters are flags, its attributes their help
+ok - the help text lists every flag
+ok - Error: an error names the flag and what it was given
+5 passed, 0 failed
+== std/fuzz.olang ==
+ok - Slug: a test's name as a directory names it
+ok - Check: outside -fuzz, runs on the empty input
+2 passed, 0 failed
+== std/io.olang ==
+ok - Write reports a failure from the underlying syscall
+io.olang: hello from a standard library written in olang
+ok - Write succeeds on a real descriptor
+io.olang: Print and Println
+
+io.olang: n is 42
+ok - Print and Println write text, Println with its line end
+std/io.olang:286:12: 41
+std/io.olang:287:12: io.olang: Show
+std/io.olang:288:11: Array<I64>[1, 2, 3]
+ok - Show: gives its value back after writing it, with the place of the call, to the standard error
+ok - Read returns a slice of the caller's own buffer
+ok - FormatInt renders decimals, including zero and negatives
+ok - Lines gives each line, without its newline
+ok - Lines drops the carriage return of a CRLF, and only that one
+ok - Lines reads lines longer than its buffer
+ok - Lines reports a read that fails, and ends the loop with it
+ok - Next fails with Exhausted once the lines are over, each time it is called
+ok - a line kept is built where it is kept
+ok - a Writer gathers what is written and writes it when flushed
+ok - a Writer keeps every byte in order across its buffer's edges
+ok - a Writer's failed write is Flush's, and every Flush's after it
+ok - a deferred Flush writes what was written however the function is left
+16 passed, 0 failed
+== std/http.olang ==
+ok - the response is the last of what curl received
+ok - curl's exit status names the Error
+ok - what cannot be sent as given is refused before anything runs
+ok - requests against a local server
+4 passed, 0 failed
+== std/list.olang ==
+ok - an empty list
+ok - pushes survive many chunk boundaries, in order
+ok - ToArray is a copy, independent of the list
+ok - a list of structs
+ok - an outer list flattened into an inner block
+ok - a List is iterable: every loop over it gets its own position
+ok - a List of references: the words of a line, as slices of it
+ok - pushing from inside a loop builds where the list lives
+ok - a list's elements, walked through a lambda
+ok - a comprehension walks a List
+ok - membership in a List
+ok - indexing a List
+ok - a checked index into a List
+ok - indexing a List of structs and of references
+ok - PushAll appends an array across chunk boundaries
+ok - walking a long List
+ok - a List with At is still walked by its own iterator
+ok - indexing a List, evaluated while compiling as at run time
+ok - S9f: a List is walked run by run, and every loop rule holds
+ok - S9f: Iter's helpers walk run by run and leave the iterator where Next would
+ok - Pop, First and Last, on both sides of every chunk boundary
+ok - Pop and Push back and forth at a chunk boundary, and a work list
+ok - Clear empties a list and keeps its chunks for the Pushes that follow
+ok - an iterator over a List ends where the list now ends after Clear or Pop
+ok - TakeAt, RemoveAt and Insert move the elements after the position, across chunk boundaries
+ok - Reverse and Sort reorder a List in place
+ok - an array, and an iterator, made into a List
+ok - Join puts a separator between the texts of a List
+ok - reshaping a List, evaluated while compiling as at run time
+ok - a List of mutable references, reordered and emptied
+ok - a copy of a List value names the same list, and From makes another
+ok - a List built from another outlives the list it copies, across chunk boundaries
+ok - From at every chunk boundary, evaluated while compiling as at run time
+ok - Truncate keeps the first n, across chunk boundaries, and Push carries on after them
+ok - Truncate evaluated while compiling as at run time
+ok - IndexOf, Remove and SwapRemove, across chunk boundaries
+ok - IndexOf, Remove and SwapRemove, evaluated while compiling as at run time
+ok - $ renders a List's elements, not its storage
+ok - S9f: a List of references, walked by every route
+ok - removals empty what they no longer use and shifts move, evaluated while compiling as at run time
+40 passed, 0 failed
+== std/order.olang ==
+ok - ByFields: orders a struct by its fields in order
+ok - ByFields: is the comparator Sort takes
+ok - ByFields: orders an enum by case, then by the case's fields
+ok - ByFields: recurses into nested structs and enums, text included
+ok - ByFields: a field's own Less wins over its fields
+ok - the compile-time evaluator sorts by fields
+6 passed, 0 failed
+== std/net.olang ==
+ok - addresses are read and written as text
+ok - Error: an address refused carries the text, a name not found the name
+ok - names are resolved through the C library, numbers read as they are
+ok - a TCP connection over loopback carries bytes both ways
+ok - dialing where nothing listens is refused, and a taken address is in use
+ok - a read times out
+ok - UDP datagrams travel over loopback
+7 passed, 0 failed
+== std/pair.olang ==
+ok - a pair holds its two values, its types inferred
+ok - pairs compare and hash by their parts
+ok - a pair of things with no Hash is still a pair
+ok - a pair of written text holds a reference to it
+4 passed, 0 failed
+== std/pool.olang ==
+ok - Pool.Add: values are added, read and changed through handles
+ok - Pool.Remove: a removed handle is stale, also once its slot is reused
+ok - Pool.RefMut: a Vec in a pool is changed in place
+ok - Pool.Take: records are taken out and walked with their handles
+ok - Pool.FromIter: a Pool is made from a literal
+ok - Pool: a pool computed while compiling agrees with the run time
+6 passed, 0 failed
+== std/prop.olang ==
+ok - Check: passes a property that holds, of every kind of value it makes
+ok - search: finds a failing case, which shrink makes smallest
+ok - search: finds nothing where every case passes
+ok - gen: draws the least values from zero bytes
+4 passed, 0 failed
+== std/rand.olang ==
+ok - the first numbers are xoshiro256** seeded by splitmix64
+ok - from the state 1, 2, 3, 4 xoshiro256** gives its reference outputs
+ok - State and SetState put a generator back where it was, evaluated while compiling as at run time
+ok - Below is uniform and in range
+ok - Float lies in [0, 1) with the mean of a uniform
+ok - Normal has mean 0 and standard deviation 1
+ok - Shuffle permutes, and one seed gives one order
+7 passed, 0 failed
+== std/os.olang ==
+ok - Run gives a command's exit status
+ok - ReadFile reads what a command wrote
+ok - ReadFile reads to the end, whatever the size says
+ok - Quote survives a quote
+ok - Args gives the program's own name first
+ok - Env gives a variable's value, and fails when it is not set
+ok - WriteFile creates a file, and empties one that is there
+ok - Create writes through a descriptor, a piece at a time
+ok - io.Lines follows a file another descriptor is still writing
+ok - Stat gives the kind, the size, and the modification time to the nanosecond
+ok - MkDir and MkDirAll make directories
+ok - ReadDir, Rename and Remove
+ok - Link gives a file a second name, and fails where the name is taken
+ok - ReadLink, RealPath and Cwd
+ok - ReadFile names why it failed
+ok - what os gives back lives where it is put
+ok - IsTerminal tells a terminal from a file, a pipe and no descriptor
+ok - Exec runs a program without a shell, and gathers what it writes
+ok - Exec feeds its input to the program's standard input
+ok - Exec takes any amount of output without waiting on it
+ok - Exec fails only when the program cannot be started
+ok - Exec runs a program in the directory it is given
+ok - ExecUntil kills a program that outlives its token
+ok - Start, Wait, Kill and Pid
+ok - what Exec gives back lives where it is put
+ok - RemoveAll removes a tree, depth first, and never follows a link
+ok - MkTemp makes a new directory only its user can enter, and names it
+ok - Exec without capture leaves the program this one's output and error
+ok - RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it
+ok - a return inside RunOnStack closes the scopes f had open
+ok - the test before ended with f's scopes closed
+ok - RunOnStack from tasks builds into the program's scope through each task's own part of it
+32 passed, 0 failed
+== std/json.olang ==
+ok - every kind of value, and asking for its parts
+ok - numbers are read to the nearest F64
+ok - strings: escapes, \\u and surrogate pairs to UTF-8
+ok - what is wrong, and where
+ok - nesting is bounded by MaxDepth
+ok - Encode writes compact and indented text
+ok - a number is written as the shortest text that reads back as it
+ok - what Encode writes, Parse reads back as an equal value
+ok - objects keep their order, answer with the last of a repeated name, and index big ones
+ok - two values are equal when they hold equal parts, objects in any order
+ok - values built in code
+ok - a tree lives where its caller puts it, and no longer needs the text
+ok - the fixture file
+ok - Parse and Encode give the same while compiling as at run time
+ok - a value of any type written by its type
+ok - Naming: names become keys by a policy, a type's own winning, a member's own key over both
+ok - Skip: a field left out is never written, and read back takes its default
+ok - a value of any type read through its constructor
+ok - error values are written as their words, and read back
+ok - whole numbers are read and written exactly, through I64's and U64's ranges
+20 passed, 0 failed
+== std/set.olang ==
+ok - a Set holds each value once
+ok - Set algebra
+ok - a Set of text
+3 passed, 0 failed
+== std/sha256.olang ==
+ok - the FIPS 180-4 test vectors
+ok - a Hasher fed in pieces gives the digest of the whole
+2 passed, 0 failed
+== std/regex.olang ==
+ok - literals, classes, repetition and alternation
+ok - capture groups
+ok - FindAll, Replace and Split
+ok - what does not compile
+ok - matching takes linear time where backtracking takes exponential
+ok - the DFAs find the matches the Pike VM finds
+ok - a match is computed while compiling as at run time
+ok - SyntaxError: an error carries the offset where the pattern went wrong
+8 passed, 0 failed
+== std/sync.olang ==
+ok - a Mutex keeps every task's increments
+ok - With hands the guarded struct over by reference
+ok - a Mutex guards a collection, and a copy of it is the same lock
+ok - an RWLock lets readers share it and a writer have it alone
+ok - Once runs its callback once, whoever asks first
+5 passed, 0 failed
+== std/stats.olang ==
+ok - Sum, Mean, Variance and StdDev
+ok - pairwise sums keep the mean's error small
+ok - Median and Percentile interpolate between the closest ranks, as numpy does
+ok - Min, Max and Histogram
+ok - the statistics computed while compiling equal the run time's
+5 passed, 0 failed
+== std/prelude/argument.olang ==
+0 passed, 0 failed
+== std/utf8.olang ==
+ok - code points are written and read back
+ok - what is not UTF-8 is refused, and walked as replacement characters
+2 passed, 0 failed
+== std/time.olang ==
+ok - the monotonic clock never goes back, and measures what passes
+ok - the wall clock is a date after this was written
+ok - Virtual: sleeps take no time, and the clock reads what was slept
+ok - durations are made, read back, compared and rendered
+ok - Sleep waits at least what it is given
+ok - dates are written as RFC 3339 and read back
+ok - Parse refuses what is not a date
+ok - Error: Syntax carries the offset where the text stopped being a date
+8 passed, 0 failed
+== std/prelude/columns.olang ==
+ok - Columns: a column per field, a row per index
+ok - ColumnVec.Push: adds a row at the end of every column
+2 passed, 0 failed
+== std/prelude/complex.olang ==
+ok - complex arithmetic, in each width
+ok - complex division near the ends of each width's range
+2 passed, 0 failed
+== std/prelude/enums.olang ==
+0 passed, 0 failed
+== std/prelude/f8.olang ==
+ok - 8-bit floats encode to their bit patterns and decode back
+1 passed, 0 failed
+== std/prelude/float.olang ==
+0 passed, 0 failed
+== std/prelude/hash.olang ==
+ok - equal keys hash equally, and nearby integers spread
+1 passed, 0 failed
+== std/prelude/array.olang ==
+ok - Array.Reversed: an array from its last element to its first
+ok - Array.BinarySearch: the position of an element of a sorted array, the first of equal ones
+ok - Array.LowerBound: where an element would go to keep a sorted array sorted
+ok - Array.Cycle: the elements over and over
+ok - Array.ChunkBy: the runs a test holds for between neighbours, as views
+ok - Array.Windows: every run of so many consecutive elements, as views
+ok - Array.Reversed: text from its last byte to its first
+ok - the array methods take what to do as a lambda
+ok - Sort is stable, and sorts long arrays and arrays of references
+9 passed, 0 failed
+== std/prelude/map.olang ==
+ok - Map.Get: gives the value put for a key
+ok - Map.Get: fails on a key never put
+2 passed, 0 failed
+== std/prelude/number.olang ==
+0 passed, 0 failed
+== std/prelude/place.olang ==
+0 passed, 0 failed
+== std/prelude/reflect.olang ==
+0 passed, 0 failed
+== std/prelude/iterator.olang ==
+ok - Iterator.TakeWhile: the leading values a test holds for
+ok - Iterator.TakeWhile: fails with what its test fails with
+ok - Iterator.SkipWhile: the values from the first a test does not hold for
+ok - Iterator.StepBy: the first value and every n-th after it
+ok - Iterator.FlatMap: the values of each value's walk, one walk after another
+ok - Iterator.Scan: each running value, from a start not given
+ok - Iterator.GroupBy: the values by their key, the keys in the order first met
+ok - Iterator.ChunkBy: the runs a test holds for between neighbours, each a Vec
+ok - Iterator.Dedup: each run of equal values once
+ok - Iterator.Unzip: pairs taken apart
+ok - Iterator.Product: every value multiplied together
+ok - Iterator.Last: the last value, Exhausted when there is none
+ok - Iterator.Nth: the value at a position counted from 0
+ok - Indexable.BinarySearch: the position of an element of a sorted Vec
+ok - Indexable.Cycle: a Vec's elements over and over
+ok - Indexable.Reversed: a Vec from its last element to its first
+16 passed, 0 failed
+== std/prelude/vec.olang ==
+ok - Vec.Push: adds at the end
+1 passed, 0 failed
+== std/prelude/text.olang ==
+ok - String.Trim: takes the spaces off both ends, keeping the inner ones
+ok - String.Trim: borrows the text it trims, copying nothing
+ok - Eq compares contents, and == goes through it; same asks for one instance
+ok - Compare orders bytewise, a prefix first
+ok - prefixes, suffixes and searching
+ok - Trim borrows the receiver's storage
+ok - ParseInt reads decimals across the whole I64 range
+ok - ParseInt names what was wrong
+ok - T29c: written text is a String, and a String is still its bytes
+ok - equal text hashes equally, whatever storage holds it
+ok - Split gives the pieces between separators, borrowed from the text
+ok - Split and Find, evaluated while compiling as at run time
+ok - a StringBuilder gathers text and hands it back as one String
+ok - a StringBuilder, evaluated while compiling as at run time
+ok - StringBuilder.Clear empties it for reuse, while compiling as at run time
+ok - a StringBuilder's text lives where the caller keeps it
+16 passed, 0 failed
+== std/prelude/tests/float.olang ==
+ok - Fixed rounds to n digits as %.*f does, while compiling as at run time
+1 passed, 0 failed
+== std/prelude/tests/columns.olang ==
+ok - Columns: rows are read and written through the columns
+ok - Columns: zero rows take the record's defaults, and a copy is a table of its own
+ok - Columns.Sort: moves every column together, stably
+ok - ColumnVec.Push: grows every column together
+ok - ColumnVec: evaluated while compiling as at run time
+ok - Columns: reflection sees a struct of columns, its rows' type its Element
+6 passed, 0 failed
+== std/prelude/tests/array.olang ==
+ok - CountOf counts runs from the start, without overlapping
+ok - Replace puts new in place of every run old, building the array once
+ok - Repeat and Reverse
+ok - CountOf, Replace, Repeat and Reverse, evaluated while compiling as at run time
+ok - Sort is O(n log n) and stable on numbers, merging through a scratch array
+ok - Sort orders elements holding references through positions, in blocks, stably
+ok - Sort evaluated while compiling as at run time
+ok - Chunks cuts an array into consecutive pieces, the last holding what is left
+ok - a size computed while running is a ChunkSize, refused below one
+ok - tasks each write their own piece of an array, read back after the join
+10 passed, 0 failed
+== std/prelude/tests/folds.olang ==
+ok - Take and Skip fold as Next walks them, with Sum, Count, Min and Max through Fold
+ok - a fold failing part way leaves Take and Skip where Next would
+2 passed, 0 failed
+== std/prelude/tests/number.olang ==
+ok - the compile-time values are the run time's
+ok - Sqrt is correctly rounded, in every float type
+ok - a result outside a function's domain is IEEE's, never an error
+ok - huge and tiny arguments
+ok - trigonometry
+ok - rounding to a whole number
+ok - Fma rounds once
+ok - sign and size
+ok - NaN, the infinities and -0
+ok - Min, Max and Clamp
+ok - the constants
+ok - Pow wraps as * does (std/arith's Pow checks it)
+ok - an integer's Sqrt is the floor of its root, exact at every edge
+ok - an integer's Sqrt beside every perfect square near the top of U64, where the F64 rounds
+ok - a negative signed integer has no square root
+ok - Abs, Min, Max and Clamp on the integers
+ok - methods on number literals
+ok - Mod is floored, its sign the divisor's; DivFloor and DivCeil round down and up, where % and / truncate
+18 passed, 0 failed
+== std/prelude/tests/iterator.olang ==
+ok - Take and Skip walk part of an iterator
+ok - Enumerate, Zip and Chain
+ok - Sum, Min, Max and their keyed forms
+ok - an adapter is evaluated while compiling
+ok - Reversed walks arrays, text and Vecs backward
+ok - Windows gives every run of n, overlapping, as views
+ok - an array's TakeWhile and SkipWhile are views, Partition two arrays
+ok - FlatMap walks the iterator each value gives
+ok - Partition splits a walk into two Vecs
+ok - the walks fail with what their iterator and callbacks fail with
+ok - the walks are evaluated while compiling
+ok - the third round's walks are evaluated while compiling, as they run
+12 passed, 0 failed
+== std/prelude/tests/pow.olang ==
+ok - the exponents Pow computes without pow, alike at run time and while compiling
+ok - x * x, 1 / x and the square root are what pow gives
+2 passed, 0 failed
+== std/prelude/tests/map.olang ==
+ok - put, get, replace, remove
+ok - Update counts in one lookup, inserting f(init) for a missing key
+ok - Update, evaluated while compiling as at run time
+ok - a map grows, and keeps every key through it
+ok - text keys compare by what they say
+ok - for ... in visits every entry once
+ok - a pair is a key when both its parts are
+ok - membership in a Map is by key
+ok - a miss is an error, evaluated while compiling as at run time
+ok - walking a Map of text keys, evaluated while compiling as at run time
+ok - O18b/O23a: text keys put in a loop survive it, and one map's entries go into another
+ok - O18c: a Map's entries, walked through a parameter, go into another map and out as its own keys
+ok - T25d/O1b: constant text keys put from a for-in, and a global map read through read-only receivers
+ok - a Map of Lists is filled and walked
+ok - keys with Bool parts
+ok - keys come and go, and each keeps its own value
+ok - removing the entry just given, during a walk
+ok - Keys and Values, one part of every entry
+ok - Clear empties a map, which fills again from its own slots
+ok - Keys, Values and Clear, evaluated while compiling as at run time
+ok - a copy of a Map is a map of its own
+ok - a value changed where a Map holds it
+ok - a copy of a Map outlives the map it copies
+ok - a Map walked in order of its keys: its entries listed, then sorted
+ok - $ renders a Map's entries, not its buckets
+ok - Take gives a key's value and removes it, evaluated while compiling as at run time
+26 passed, 0 failed
+== std/prelude/tests/text.olang ==
+ok - TrimStart and TrimEnd borrow the receiver's storage, as Trim does
+ok - ToUpper and ToLower change ASCII letters and nothing else
+ok - FindLast finds the last occurrence, failing when there is none
+ok - text orders by its bytes with < and the comparisons derived from it
+ok - Lines gives each line without its newline, as io.Lines reads a file's
+ok - Join puts a separator between the texts of an array
+ok - ParseFloat reads a decimal number to the nearest F64
+ok - ParseFloat reads the infinities and NaN, so what $ writes reads back
+ok - ParseFloat names what was wrong
+ok - ShortestDecimal gives the fewest digits that read back
+ok - ParseFloat and ShortestDecimal, evaluated while compiling as at run time
+ok - ParseInt and ParseUint read the digits of any base from 2 to 36
+ok - base 0 reads an integer as olang writes its literal (L10)
+ok - ParseInt and ParseUint, evaluated while compiling as at run time
+ok - PadStart and PadEnd make text a column wide
+ok - the integers pad as numbers, zeros after a sign
+ok - Format writes an integer in any base from 2 to 36, read back by ParseInt and ParseUint
+ok - Format, evaluated while compiling as at run time
+ok - $ renders a StringBuilder as its text
+ok - text goes to C NUL-terminated and comes back copied (X15)
+20 passed, 0 failed
+== compiler/ast.olang ==
+0 passed, 0 failed
+== std/prelude/tests/vec.olang ==
+ok - Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort, Pop, Truncate, a copy - while compiling and at run time
+ok - Vec: text sorted, viewed and kept - while compiling and at run time
+ok - Vec: an empty one fails First, Last, Pop and IndexOf with the default error
+ok - Vec: growth keeps every element, the buffer doubling from 8
+ok - Vec: text kept in one, an element kept while it grows, read back after a churn
+ok - Vec: View lends the elements as an array, and for-in walks them by position
+ok - Vec: a for-in that pushes sees what it pushed - a work list
+ok - Vec: equal Vecs compare and hash alike, and render as their elements
+ok - Vec: a copy is a Vec of its own, a second name is written &
+ok - Vec: one lent writably is pushed to, one passed by value is the callee's copy
+ok - Vec: held in a List, a Map and a Vec - a type argument like any other, each holding its own
+ok - Vec: a lambda capturing one holds it as it was when made, one capturing a reference reads it when called
+ok - Vec: filled by tasks, one each, read after the join
+ok - Vec: its view cut into Chunks, each piece written by a task of its own
+ok - Vec: references kept in one, read back after a churn and after the Vec is replaced
+ok - Vec: room made up front, Reserve, Cap, Remove and Join
+ok - Vec: texts held by value joined, while compiling and at run time
+ok - Vec: a struct holding a Vec in a field - built, grown, sorted, replaced - while compiling and at run time
+ok - Vec: a Vec field filled by a method, its elements' text read back after the arena churns
+ok - Vec: a Vec two structs deep, replaced through each level
+ok - Vec: a global Vec, pushed to from functions, copied and replaced
+ok - Vec: elements that are values holding references, kept across growth and read back after the arena churns
+ok - Vec: a conversion of a view to a String copies the buffer
+ok - Vec: a Vec local that is returned, its text read back after the arena churns
+ok - Vec: removals empty what they no longer use and shifts move, evaluated while compiling as at run time
+ok - Vec: an empty one equals its copy and hashes alike - while compiling and at run time
+26 passed, 0 failed
+== compiler/bindgen.olang ==
+0 passed, 0 failed
+== compiler/cabi.olang ==
+ok - a struct crosses to C as clang 18 passes it, on x86-64 and on AArch64 (X11)
+ok - a narrow integer or a Bool crosses extended on x86-64, as itself on AArch64
+2 passed, 0 failed
+== compiler/cond.olang ==
+ok - a -D value reads as its literal would
+ok - integers meet as T6b says
+2 passed, 0 failed
+== compiler/build.olang ==
+ok - SHA-256 gives FIPS 180-4's digests, whatever the writes are cut into
+ok - an object's name is its identity made readable and a hash of its IR, its flags and clang
+ok - commands run side by side, each one's status and output kept by its number
+ok - a build compiles and links only what changed: modules, -define, the target, a missing binary
+ok - B3j: an object another directory's build left in the store is taken from it, never compiled again
+ok - B3k: an object one build claims another waits for, unless the build that claimed it is gone
+x_kill.olang: the compiler ended (Killed), skipping
+no listed file has a test named by 'w'
+ok - listed test files run one after another in processes of their own, a signal said
+7 passed, 0 failed
+== compiler/definit.olang ==
+0 passed, 0 failed
+== compiler/diag.olang ==
+ok - a span is written as path:line:col, with its line and a caret under it
+ok - a rule is written in brackets, and an error with no rule has none
+ok - errors are written in source order: by file as first reported, then by line, then as reported
+ok - notes follow their error, and a note on an error not reported is dropped
+ok - a whole file, a line, and the compilation as a whole are written with what is known of them
+ok - the same error at the same place twice is one error, and once per line means once
+ok - a statement reports one error about where something lives
+ok - what a branch holds is reported once the branch is chosen, never when it is dropped or undecided
+ok - an error inside an instantiation says where it was asked for; one in the library is reported at the use
+ok - only the innermost contexts and the outermost are named
+ok - a long line is shown as a window around the span; tabs line up and control bytes do not reach the terminal
+ok - colour is the terminal's codes around each part
+ok - -e prints a rule under its section's heading, up to the next rule
+13 passed, 0 failed
+== compiler/diagmsg.olang ==
+0 passed, 0 failed
+== compiler/effects.olang ==
+0 passed, 0 failed
+== compiler/api.olang ==
+ok - itemKind: an error raised by name is an error, not a global (bulk review 8)
+1 passed, 0 failed
+== compiler/facts.olang ==
+ok - Table: records only what was read, and holds a record only where every value read is the same
+ok - Table.Decide: a name decided twice with different values holds both
+ok - Token: a long value is written as its hash
+3 passed, 0 failed
+== compiler/fetch.olang ==
+ok - a remote's name parts are checked, and a commit is 40 or 64 hex digits
+ok - fetching locks a commit, a locked build is offline, deleting a line or -u updates
+2 passed, 0 failed
+== compiler/fix.olang ==
+ok - a tool's places for a person are counted, its summary is not
+ok - the text tools run before the driven ones, each group in the order the changes were made
+ok - a tool's command line has its compiler or std before the files
+3 passed, 0 failed
+== compiler/doc.olang ==
+ok - a doc comment is the comment lines directly above a declaration (L4b)
+ok - a member's trailing comment, a block comment, a shebang and the module's own comment
+ok - pages and their names
+ok - a Deprecated: paragraph of a doc comment marks its declaration (L4b)
+ok - an item's deprecation is marked in the text and the HTML of its documentation (B14)
+5 passed, 0 failed
+== compiler/fmt.olang ==
+0 passed, 0 failed
+== compiler/listing.olang ==
+ok - a remark's YAML read: its kind, pass, place, function and message, the inliner's call site left out
+ok - a symbol named as source writes it outside its module
+ok - YAML scalars and places as the remark writer writes them
+ok - assembly's .file and .loc directives read
+ok - metadata fields read by key, not by a key ending in it
+5 passed, 0 failed
+== compiler/explain.olang ==
+0 passed, 0 failed
+== compiler/free.olang ==
+0 passed, 0 failed
+== compiler/mir.olang ==
+ok - a function: built, verified and dumped
+ok - control flow: a loop's scope every turn, a call's error edge, an error raised with every scope closed
+ok - a cleanup: reached from where its deferred code is registered, inside the scope registering it
+ok - a malformed function: every malformation is caught
+ok - error codes are each function's own: an error's type's position from 1, its word; the default error for the rest
+ok - constants are flattened into the function's tables; helpers' ABI is their kind's
+6 passed, 0 failed
+== compiler/msgs.olang ==
+ok - a message is its text, its arguments in their places
+ok - a byte that does not print is escaped, in a character and in a token
+2 passed, 0 failed
+== compiler/mcp.olang ==
+ok - a test run read as outcomes
+ok - olang mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)
+2 passed, 0 failed
+== compiler/lsp.olang ==
+ok - a file URI and its path
+ok - olang lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)
+ok - olang lsp checks an edited program as a build does, taking the records the checks before it left (B3i, T8)
+ok - a file that does not parse gets its diagnostics, and requests on it answer nothing
+ok - a hover on a function shows the first test naming it and how many more there are (B7a, B15)
+ok - a deprecated item: hover shows the note, completion tags it, its uses get a Hint tagged Deprecated (L4b, B15)
+6 passed, 0 failed
+== compiler/names.olang ==
+ok - D2, D3a and M20: a name means one thing in a module; nothing is reached bare that no import gave
+ok - B10, B10c: build constants and their defaults, and an unknown name in a condition
+ok - D3a, E29: a for-in declares new names; a local if the build decides chooses its branch
+3 passed, 0 failed
+== compiler/profile.olang ==
+ok - Report: the functions by self time, the hottest lines, the callers
+ok - FlameGraph: a frame for each stack's function, the root's at the bottom, names escaped
+ok - Profile.Read: a record still pending as the program ended is stepped over, the records after it read
+ok - Profile.Read: a samples file's header, records and map; a record cut short ends the records
+ok - Readable: a symbol olang wrote read back as the profile names it; any other name as it is
+ok - fileLine: a symbolizer's place: its file and line
+ok - symbolAt: the function an address falls in, by the symbol table's addresses and sizes
+7 passed, 0 failed
+== compiler/needs.olang ==
+0 passed, 0 failed
+== compiler/parse.olang ==
+ok - operators bind by E5's table: tighter first, left to right, not looser than a comparison
+ok - a list at a statement's start is read once and the token after it decides
+ok - a type-argument list splits the angles it closes, and Name< is a type only where the oracle says so
+ok - an error skips its statement, and the items after it are read
+ok - a function whose body does not parse is declared by its signature
+ok - nesting past the limit is one diagnostic (L21), never a crash
+ok - a statement met at the limit is too deep at its first token, and one that nests nothing keeps its item (L21)
+ok - what a branch meets is held until the branch is chosen; a plain else keeps its branch
+ok - a trait method's mut is kept, as its receiver
+9 passed, 0 failed
+== compiler/runtime.olang ==
+ok - the runtime is filled in for an architecture and a mode, every placeholder replaced
+ok - a benchmark build's runtime counts allocations, and no other build's does
+ok - the attribute rewrite puts groups before the brace and linkonce_odr globals in comdats
+3 passed, 0 failed
+== compiler/scan.olang ==
+ok - words, numbers and operators take the longest token that starts there
+ok - keywords, literals, and a word after a dot is a name
+ok - a line's end ends a statement after a token that can end one, inside brackets too
+ok - a comma never ends a line (L18a)
+ok - a declaration at a line's start ends the brackets left open before it
+ok - comments end lines; a block comment only where it spans one
+ok - flags say what stood before a token
+ok - a semicolon is reported and ends a statement where one could end
+ok - bytes that begin no token are reported once a run and passed over
+ok - literals are checked as they are read
+ok - a literal never runs past its line
+ok - the brace table matches braces alone
+ok - escapes by number and raw text (L15, L14a)
+13 passed, 0 failed
+== compiler/source.olang ==
+ok - a source's line table finds every line and column
+ok - an empty source has one line
+ok - names are interned once, the empty name first
+3 passed, 0 failed
+== compiler/target.olang ==
+ok - a probe gives the triple, the CPU, the features without the IEEE-unsafe ones, and the vector width
+ok - features read as clang lists them, and the x86-64 levels read from /proc/cpuinfo's flags
+ok - what cannot be built for is said as stage 0 says it, before clang is asked anything
+ok - with clang, native is this machine's CPU, a triple of this machine its baseline, and a bad CPU is unknown
+ok - B12a: this machine's programs run as they are, another architecture's through an emulator
+ok - B12d: the clangs looked for on PATH, newest first, and a name found as a path
+6 passed, 0 failed
+== compiler/token.olang ==
+ok - Keyword finds every reserved word and nothing else
+ok - a token's description names it as a diagnostic does
+2 passed, 0 failed
+== compiler/records.olang ==
+0 passed, 0 failed
+== compiler/typed.olang ==
+ok - a body: locals, blocks and sites, read back and printed
+ok - a plan: what each site builds into and each call passes, Unset where nothing is decided
+ok - a body's marks and scope variables come from its type; constants, temporaries and matches as check makes them
+3 passed, 0 failed
+== compiler/unparse.olang ==
+0 passed, 0 failed
+== tools/arrays_migrate.olang ==
+ok - a declaration with no value is made by Array<T>(n), any other spelling loses its length
+ok - a type argument, a view and a constant type parameter are left for a person
+2 passed, 0 failed
+== tools/as_migrate.olang ==
+ok - an 'as' wrapped where it stands, parenthesized ones given '!' after them
+1 passed, 0 failed
+== compiler/types.olang ==
+ok - types are interned: the same parts give the same id, permission and shape are part of identity
+ok - canonical texts name every kind of type
+ok - layouts follow C's: fields at their alignment, enums a tag word and their largest payload
+ok - a function type's ABI: the error union, large results through memory, function values split
+ok - function types carry their scopes; identity leaves them out; a call's scope variables come from the type alone
+ok - symbols are injective and bounded
+ok - Demangle: a symbol olang wrote read back as its text; any other as it is
+7 passed, 0 failed
+== tools/bare_typevars.olang ==
+ok - a function's later <T> and a type's whole item become T
+ok - a constraint written later moves to the introduction
+2 passed, 0 failed
+== tools/builder_migrate.olang ==
+ok - a list's items at its top level
+ok - a type's name taken out of a builder's
+ok - an owner's variables given
+ok - the prelude's methods become builders
+4 passed, 0 failed
+== compiler/session.olang ==
+ok - the identifier at an offset
+1 passed, 0 failed
+== tools/checkerror_rename.olang ==
+ok - BuiltinError becomes CheckError and its file's path follows; a longer word is left
+1 passed, 0 failed
+== tools/cli_words.olang ==
+0 passed, 0 failed
+== tools/clone_migrate.olang ==
+ok - migrate: a Clone() in code becomes Copy(), comments and text left as they are
+ok - changedLines: the lines a rewrite changed
+2 passed, 0 failed
+== tools/checked_migrate.olang ==
+ok - an index, a slice and a narrowing rewritten, their errors renamed
+ok - what is not mechanical is listed and left as it was, and a second run changes nothing
+ok - a try written inside an operator expression is parenthesized, and the checks it no longer makes listed
+ok - a checked 'as' is the try of today, where nothing else in it was checked
+4 passed, 0 failed
+== tools/contracts_migrate.olang ==
+ok - a contract moved after the parameters, its results' names and guarantees dropped
+ok - what is already moved, and what has no contract, is left alone
+2 passed, 0 failed
+== tools/destroy_migrate.olang ==
+ok - migrate: a deferred Destroy and the last Destroy of the block declaring the variable are deleted
+ok - migrate: every other use is left and listed for a person
+ok - migrate: a Destroy in a comment or a text is left alone, and the migration is idempotent
+3 passed, 0 failed
+== tools/diagedit.olang ==
+ok - ParseRow reads errors and notes
+ok - ExpectedTexts reads the check headers
+ok - Sub clamps as a Python slice does
+ok - ShiftExpected moves a header's column with the edit
+ok - Realign keeps a comment's column
+5 passed, 0 failed
+== tools/donefail_migrate.olang ==
+ok - a fail ending a catch becomes '!' outside a test and goes in one
+ok - 'if C { fail }' becomes an assert of the negation
+ok - done is return in a test or main, abort and a test's last fail unreachable
+3 passed, 0 failed
+== tools/equality_migrate.olang ==
+ok - null tests are 'is null', case tests and identity '=='
+ok - what is already new is left as it is
+2 passed, 0 failed
+== tools/errorcase_rename.olang ==
+ok - Camel: an upper-case word becomes its parts, each capitalized
+ok - rename: a declaration's words and their qualified uses are renamed; a bare word and another type's are not
+ok - rename: a type of one word that is its own name is an error raised by name: its declaration dropped
+ok - rename: a set's own words, words across lines and a declaration in a string
+4 passed, 0 failed
+== tools/errors_migrate.olang ==
+ok - the checked forms are renamed as whole words
+ok - a call is tried, a try made checked, an error declared
+2 passed, 0 failed
+== tools/errortype_migrate.olang ==
+ok - an error type declared with its keyword first becomes a type; statements and new declarations are left
+1 passed, 0 failed
+== tools/helper_rename.olang ==
+ok - Any and All, called or declared, become Some and Every; anything else is left
+1 passed, 0 failed
+== tools/handles_migrate.olang ==
+ok - edit.reportRow: reads a report row
+ok - asReference: a copy of a place made a reference to it
+ok - reassigned: a copy kept as the old value
+ok - asRef: an element or a value read where its collection holds it
+ok - asLent: a written by-value parameter lent writably
+ok - asElem: an element changed where its Vec holds it
+ok - asValue: a Clone left out
+7 passed, 0 failed
+== tools/io_fix.olang ==
+0 passed, 0 failed
+== tools/int_literal_i64.olang ==
+ok - a note names the type to write, a range its end
+1 passed, 0 failed
+== tools/io_print.olang ==
+ok - print words become io's, except in headers, declarations and strings
+ok - try io.Print loses its try unless a clause handles the error
+ok - the import goes after the last import, else after the leading comments
+3 passed, 0 failed
+== tools/io_try.olang ==
+ok - try goes before a print call in code only
+1 passed, 0 failed
+== tools/link_migrate.olang ==
+ok - a link and its module's externs become one block
+1 passed, 0 failed
+== tools/keyword_rename.olang ==
+ok - migrate: a name spelled like a keyword gets a _; the words in their places, members and comments are left
+ok - migrate: promise words after a function type stay; a field read after a dot stays
+ok - migrate: idempotent
+3 passed, 0 failed
+== tools/list_vec.olang ==
+ok - List onto Vec: types, the error type and ToList; anything else is left
+ok - kept on List: qualified, with the import; ToList listed
+ok - ListIter and RunFrom are listed onto Vec
+3 passed, 0 failed
+== tools/fnref_migrate.olang ==
+ok - a function type on a place is marked, a declaration and a lambda are not
+ok - a marked type is left as it is, so a second run changes nothing
+ok - a Markdown file's olang blocks are migrated, its prose is not
+3 passed, 0 failed
+== tools/match_migrate.olang ==
+ok - nomatch becomes case _, => becomes :
+ok - a value match's one-statement block is written after a colon; several statements are listed
+ok - a match on one line
+ok - a match giving a clause's value is no block of that clause
+ok - a statement match keeps its blocks; nested matches are read on their own
+ok - code of the new form, comments and strings are left; running it twice changes nothing
+6 passed, 0 failed
+== tools/literal_migrate.olang ==
+ok - old fronts become the array they made; new ones are left as they are
+ok - a type of an import declaring a FromIter, and one declaring none (bulk review 8)
+ok - Markdown: the code in fences and spans
+3 passed, 0 failed
+== tools/math_methods.olang ==
+ok - functions become methods of their first argument, constants the prelude's
+ok - literal receivers
+ok - strings, comments and other modules' names are left alone
+ok - the import is found, aliased or not, and std's relative one
+4 passed, 0 failed
+== tools/perm_mut.olang ==
+ok - a pun loses its mut, a keyword list does not
+1 passed, 0 failed
+== tools/null_migrate.olang ==
+ok - a note's & is made nullable, a quoted read gets a !
+1 passed, 0 failed
+== tools/question_migrate.olang ==
+ok - a '?' written before the body
+ok - nothing to do where a '?' is written, and nothing to find above the first declaration
+2 passed, 0 failed
+== tools/results_migrate.olang ==
+ok - a declaration's results lose their parentheses
+ok - a function type outside a list is bare, inside one parenthesized whole
+ok - a lambda in a list is parenthesized whole, its body with it
+ok - what is already new is left as it is
+4 passed, 0 failed
+== tools/scopes_migrate.olang ==
+ok - a marker loses its scope name, a nullable one and a result's too
+ok - a scope argument goes, a bitwise and stays
+ok - an outlives chain goes, the block with it where it held nothing else
+ok - comments, text and code already bare are left alone; running it again changes nothing
+ok - a Markdown file's olang blocks are migrated, its prose is not
+5 passed, 0 failed
+== tools/srcmask.olang ==
+ok - Mask tells code from comments and literals
+ok - Strip and Prefix work as Python's str methods do
+ok - ValidUtf8 refuses what Python's decoder refuses
+ok - operators read where they stand
+ok - CloseOf counts only brackets in code
+ok - IoAlias finds the name std/io is imported by
+ok - Translate gives line breaks as Python reads them
+7 passed, 0 failed
+== tools/precedence_migrate.olang ==
+ok - a comparison under a bitwise operator is wrapped, nothing else
+ok - the old reading's comparisons under a bitwise operator are found, and a parenthesized one is not
+ok - after the migration a file reads alike at both precedences
+3 passed, 0 failed
+== tools/stutter_rename.olang ==
+ok - a qualified name is renamed everywhere; the bare one only in its module's own file
+ok - a longer word is left, every module is covered, and a second run changes nothing
+2 passed, 0 failed
+== tools/textbuild_migrate.olang ==
+ok - migrate: a String built by its characters becomes an Array<Char>, its returns its String
+1 passed, 0 failed
+== tools/try_migrate.olang ==
+ok - parentheses around a try's operand taken off, a try read on wrapped with --old
+ok - a second run changes nothing
+ok - a try reading on is wrapped or listed only where the two readings differ
+ok - an 'as' a try covers is given '!' where only a chain of names is read, listed otherwise
+4 passed, 0 failed
+== tools/unique_migrate.olang ==
+ok - migrate: a destructor's type gains unique, once; one saying it, comments and text left as they are
+1 passed, 0 failed
+== tools/syntax_migrate.olang ==
+ok - a comma ending a line in a list goes, and a line ending a statement separates
+ok - an item running over lines stays one
+ok - a comma ending a line outside brackets
+ok - error sets and catch items take commas
+ok - a function's type variables are listed after its name
+ok - running it again changes nothing
+6 passed, 0 failed
+== tools/unused_migrate.olang ==
+ok - a name never read made '_'
+ok - a declaration never read: its line left out, or its one call kept
+ok - a declaration whose block names it again is left
+ok - one call, and not an expression holding one
+4 passed, 0 failed
+== tools/variadic_migrate.olang ==
+ok - a literal's items take the array's place, later positions by name
+ok - a call's array passed on, the token first, re-runnable
+by hand: t.olang:3: the array is a name - pass it on as '...name', or give its items
+ok - a name is left for a person; the new form and other modules alone
+3 passed, 0 failed
+== compiler/tools/tokdiff.olang ==
+0 passed, 0 failed
+== compiler/tools/toolkit.olang ==
+ok - rows are awk's
+ok - fields split on runs of blanks
+ok - sorting is by bytes
+ok - a golden section reads back as its body, whatever the body holds
+ok - a hash is FNV-1a's
+ok - a stored run reads back
+ok - dump sections are split at their headers
+7 passed, 0 failed
+== compiler/tools/astdiff.olang ==
+ok - an L21 inside a kept item is dropped, one ending an item loses its position
+ok - rows of the two renderings meet, sorted by bytes
+2 passed, 0 failed
+== compiler/tools/namesdiff.olang ==
+ok - a case's flags become the dump's arguments
+ok - only load's and names' rules are kept
+2 passed, 0 failed
+== compiler/tools/modgraph.olang ==
+ok - stage 0's build-constants module and the section headers are left out
+ok - a lock's keys are its rows' first words
+2 passed, 0 failed
+== compiler/tools/layoutgold.olang ==
+0 passed, 0 failed
+== compiler/tools/layoutdiff.olang ==
+ok - equal rows count, a deferred row is allowed where listed, anything else is a difference
+ok - a listed type that is laid out, and a different number of rows, are differences
+ok - an instance named differently but laid out alike is the same; laid out differently it is a difference
+3 passed, 0 failed
+== compiler/tools/diaggold_capture.olang ==
+ok - a case's flags are the rest of its first flags line
+1 passed, 0 failed
+== compiler/tools/rungold.olang ==
+ok - a case's binary is named for its flags
+1 passed, 0 failed
+== checks/fixtures/frameenv/envcheck.olang ==
+ok - a closure pair whose environment is an alloca of the function is on the stack
+ok - the self-hosted compiler's two halves of a pair are one pair
+ok - other lines make no pair
+3 passed, 0 failed
+build/olang build compiler/tools/evaldiff.olang
+built ./build/compiler_tools_evaldiff
+== compiler/tools/diaggold.olang ==
+ok - diag renders stage 0's diagnostics on every checks/cases program byte for byte
+ok - -e prints each rule a message names as stage 0 does
+2 passed, 0 failed
+== fuzz/editgen.olang ==
+ok - Module: a chain of modules, each with its Total, and a root printing m0's
+ok - Edit: every edit changes the program, and a copy undoes it
+2 passed, 0 failed
+build/compiler_tools_tokdiff || { echo "tokdiff" >> build/failed.txt; exit 1; }
+tokdiff: no difference over 2506 files
+build/compiler_tools_astdiff || { echo "astdiff" >> build/failed.txt; exit 1; }
+astdiff: no difference over 2506 files
+astdiff: every tree written back reads as itself
+build/compiler_tools_namesdiff || { echo "namesdiff" >> build/failed.txt; exit 1; }
+namesdiff: 1880 cases, 43 errors of load's and names' rules, all the same
+== compiler/views.olang ==
+ok - a view used after its Vec grows, in the function, through a second name or a call, is an error at the use
+ok - a view given to a call that may grow its Vec, or held by a task while it grows; nothing else
+2 passed, 0 failed
+== compiler/check.olang ==
+ok - a small program checks clean, and its main is checked
+ok - type errors: E12, T6b, D10a, S3
+ok - for-in walks iterators, runs, iterables and indexables; comprehensions (S9a, S9c, S9d, S9f, E27)
+ok - lambdas: expected types, inference, captures, generic calls (D16, D16a-D16c, G9a, G9c)
+ok - a literal reaching a constrained variable takes the type the constraint names (G9a, G19, T35c)
+ok - lambda errors: an untyped parameter, a written capture (D16a, D16c)
+ok - x[i] through At and SetAt: reads, stores, compound stores and increments written back (E31, E31b)
+ok - join and spawn: targets, failing tasks, clauses on the task, try join (P1, P1a, P1g, P4, P4a-P4c)
+ok - join and spawn errors (P1, P1a, P4, P4c)
+ok - errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (R1a, R1c, E26b, D8e, E35)
+ok - errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)
+ok - writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)
+ok - a destructor reads its fields bare (C9, C10)
+ok - a top-level condition is checked with no body around it (B9c)
+14 passed, 0 failed
+OLANG_STD=std build/compiler_tools_fmt -v $(git ls-files '*.olang') || { echo "fmtdiff" >> build/failed.txt; exit 1; }
+2506 files: 2118 already formatted, 285 formatted, 103 skipped (they do not parse), 0 failed
+build/compiler_tools_consistency build/olang || { echo "consistency" >> build/failed.txt; exit 1; }
+consistency: the keywords, the command line, the fix tools, the MCP tools, the READMEs and the root's files are in step
+tests/Base.olang: same 0
+build/compiler_tools_layoutdiff || { echo "layoutdiff" >> build/failed.txt; exit 1; }
+layoutdiff: 10996 types as stage 0 lays them out, 17 deferred to the evaluator
+tests/Lib.olang: same 0
+tests/arraypat.olang: same 2
+tests/asserts.olang: same 4
+tests/attrmod.olang: same 1
+tests/attrs.olang: same 3
+build/compiler_tools_drvdiff || { echo "drvdiff" >> build/failed.txt; exit 1; }
+drvdiff: no difference from the golden over 95 command lines
+tests/any.olang: same 29
+tests/builders.olang: same 13
+tests/cimport.olang: built 8 ok 0 fail (status 0); interpreted 7 ok 1 fail (status 1); 1 differ as listed
+tests/comptime.olang: same 3
+tests/copy.olang: same 9
+tests/defaultbinds.olang: same 3
+tests/definit.olang: same 11
+tests/drops.olang: same 28
+tests/embed.olang: same 2
+tests/bench.olang: same 3
+tests/errsetparams.olang: same 10
+tests/errsets.olang: same 5
+tests/errvalues.olang: same 7
+tests/facts.olang: same 2
+tests/filtered.olang: same 1
+tests/fnref.olang: same 6
+tests/fnrel.olang: same 7
+tests/fnvalues.olang: same 5
+tests/follow.olang: same 8
+tests/genenums.olang: same 3
+tests/errdata.olang: same 14
+tests/generators.olang: same 22
+tests/globalstart.olang: same 2
+tests/handover.olang: same 7
+tests/handoverglobal.olang: same 2
+tests/immut.olang: same 2
+tests/inplace.olang: same 7
+tests/intwidths.olang: same 11
+tests/kept.olang: same 9
+tests/keptparams.olang: same 6
+tests/lanes.olang: same 7
+tests/intsweep.olang: same 4
+tests/match.olang: same 5
+tests/literals.olang: same 7
+tests/nll.olang: same 9
+tests/packed.olang: same 6
+tests/place.olang: same 5
+tests/power.olang: same 3
+tests/namedargs.olang: same 4
+tests/promises.olang: same 7
+tests/raised.olang: same 4
+tests/raisedlex.olang: same 0
+tests/reclaim.olang: same 5
+tests/reclaimarrays.olang: same 6
+tests/reclaimtasks.olang: same 1
+tests/reflect.olang: same 13
+tests/reflmod.olang: same 1
+tests/reads.olang: same 9
+tests/structpat.olang: same 1
+tests/textslot.olang: same 2
+tests/topassert.olang: same 1
+tests/unique.olang: same 6
+tests/unreachable.olang: same 2
+tests/valueparts.olang: same 9
+tests/variadic.olang: same 5
+tests/viewplace.olang: same 6
+tests/runner.olang: same 25
+tests/weak.olang: same 9
+std/arith.olang: same 7
+std/base64.olang: same 3
+std/bench.olang: same 6
+std/bitset.olang: same 7
+std/cancel.olang: same 4
+tests/worker.olang: same 16
+std/chan.olang: built 14 ok 0 fail (status 0); interpreted 9 ok 5 fail (status 1); 5 differ as listed
+std/crc32.olang: same 1
+std/csv.olang: same 8
+std/deque.olang: same 3
+std/ffi.olang: same 4
+std/filepath.olang: same 8
+std/flags.olang: same 5
+std/fuzz.olang: same 2
+std/heap.olang: same 3
+std/hex.olang: same 1
+std/io.olang: same 16
+std/http.olang: same 4
+std/list.olang: same 40
+std/json.olang: same 20
+std/order.olang: same 6
+std/net.olang: built 6 ok 0 fail (status 0); interpreted 5 ok 1 fail (status 1); 1 differ as listed
+std/pair.olang: same 4
+std/pool.olang: same 6
+std/os.olang: built 30 ok 1 fail (status 1); interpreted 29 ok 2 fail (status 1); 1 differ as listed
+std/prop.olang: same 4
+std/rand.olang: same 7
+std/set.olang: same 3
+std/sha256.olang: same 2
+std/stats.olang: same 5
+std/sync.olang: same 5
+std/time.olang: same 8
+std/utf8.olang: same 2
+std/prelude/tests/array.olang: same 10
+std/prelude/tests/columns.olang: same 6
+std/prelude/tests/float.olang: same 1
+std/prelude/tests/folds.olang: same 2
+std/prelude/tests/iterator.olang: same 12
+std/regex.olang: same 8
+std/prelude/tests/number.olang: same 18
+std/prelude/tests/map.olang: same 26
+std/prelude/tests/pow.olang: same 2
+std/prelude/tests/vec.olang: same 26
+std/prelude/tests/text.olang: same 20
+checks/cases/anyenumpayload.olang: same
+checks/cases/b10cnodefine.olang: same
+checks/cases/b10u64.olang: same
+checks/cases/b11notevalue.olang: same
+checks/cases/b6condelem.olang: same
+checks/cases/b6elemfield.olang: same
+checks/cases/b6elemparallel.olang: same
+checks/cases/b9aglobal.olang: same
+checks/cases/b9scanbranch.olang: same
+checks/cases/becomearenatext.olang: same
+checks/cases/becomedtorresult.olang: same
+checks/cases/c11copyrunarray.olang: same
+checks/cases/c11holdertypearg.olang: same
+checks/cases/c2dbuildarg.olang: same
+checks/cases/c2dcondarg.olang: same
+checks/cases/c2dcondfieldok.olang: same
+checks/cases/c2dexactobliged.olang: same
+checks/cases/c2dfieldmapput.olang: same
+checks/cases/c2dheldreturned.olang: same
+checks/cases/c2downarr.olang: same
+checks/cases/c2dunnamed.olang: same
+checks/cases/c4genwalkkept2.olang: same
+checks/cases/callvaluekeepsblock.olang: same
+checks/cases/columnsrun.olang: same
+checks/cases/condmixedstore.olang: same
+checks/cases/ctorlambdafield2.olang: same
+checks/cases/ctorlambdafieldval.olang: same
+checks/cases/d16blambdaorder.olang: same
+checks/cases/d16dcomposeshort.olang: same
+checks/cases/d17entrycheck.olang: same
+checks/cases/d18cheldlocal.olang: same
+checks/cases/d18cyieldframe.olang: same
+checks/cases/d18run.olang: same
+checks/cases/d18yieldown.olang: same
+checks/cases/d8evalues.olang: same
+checks/cases/d9hheldwrite.olang: same
+checks/cases/defslow.olang: same
+checks/cases/derivedfoundmixed.olang: same
+checks/cases/derivedpassedtemp.olang: same
+checks/cases/e13cparens.olang: same
+checks/cases/e31bcallinplace.olang: same
+checks/cases/e31bhandlefieldloop.olang: same
+checks/cases/e31bhandlefieldtwolevel.olang: same
+checks/cases/e31bvecinplace.olang: same
+checks/cases/e31bviewenumfield.olang: same
+checks/cases/e31bviewotherslot.olang: same
+checks/cases/e35bangrun.olang: same
+checks/cases/externruntime2.olang: same
+checks/cases/g16bgenericonce.olang: same
+checks/cases/g42dtor.olang: same
+checks/cases/globalvaluecopy.olang: same
+checks/cases/l12method.olang: same
+checks/cases/l9afields.olang: same
+checks/cases/m19gfnpure.olang: same
+checks/cases/matchholdcall.olang: same
+checks/cases/nllmerge.olang: same
+checks/cases/o10celementstash.olang: same
+checks/cases/o10cnoteprovenance.olang: same
+checks/cases/o10delementfield.olang: same
+checks/cases/o13afieldstorewrap.olang: same
+checks/cases/o14bfoldshort.olang: same
+checks/cases/o14ccopyslice.olang: same
+checks/cases/o15registeredinner.olang: same
+checks/cases/o17bhandleout.olang: same
+checks/cases/o17bloopcopy.olang: same
+checks/cases/o17bpending.olang: same
+checks/cases/o17copylent.olang: same
+checks/cases/o17lambdastore.olang: same
+checks/cases/o17ownturnwalk.olang: same
+checks/cases/o17permute4.olang: same
+checks/cases/o17selfview.olang: same
+checks/cases/o17tempcallresult.olang: same
+checks/cases/o17templambdacond.olang: same
+checks/cases/o17tempreadonly.olang: same
+checks/cases/o18claterkept.olang: same
+checks/cases/o18cnestedwhole.olang: same
+checks/cases/o1bglobalarg.olang: same
+checks/cases/o20fieldofresultstored.olang: same
+checks/cases/o23adepth.olang: same
+checks/cases/o23paramfield.olang: same
+checks/cases/o25derived.olang: same
+checks/cases/o25gfieldreassigndtor.olang: same
+checks/cases/o25hcopyout.olang: same
+checks/cases/o25hpairpush.olang: same
+checks/cases/o26acallkeeps.olang: same
+checks/cases/o26acyclereceiver.olang: same
+checks/cases/o26alambdanested.olang: same
+checks/cases/o26aviewflow.olang: same
+checks/cases/o27destructorfiles.olang: same
+checks/cases/o29spawnfound.olang: same
+checks/cases/o4bvalueparam.olang: same
+checks/cases/o8dglobal.olang: same
+checks/cases/o8earrays.olang: not interpreted - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret
+checks/cases/o8etree.olang: not interpreted - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret
+checks/cases/p1gtargetstwoblocks.olang: same
+checks/cases/p2fieldofresult.olang: same
+checks/cases/p2spawncallee.olang: same
+checks/cases/p2spawnlambda.olang: same
+checks/cases/p2viewtask.olang: same
+checks/cases/parkedpool.olang: same
+checks/cases/qcevaluearg.olang: same
+checks/cases/r11bcomparecaught.olang: same
+checks/cases/r11defaultversions.olang: same
+checks/cases/r3araisenarrowed.olang: same
+checks/cases/reflfnoneself.olang: same
+checks/cases/rv3assigncopy.olang: same
+checks/cases/rv3globalcopy.olang: same
+checks/cases/rv3roget.olang: same
+checks/cases/rv3viewsplit.olang: same
+checks/cases/rv5ctorfieldcopy.olang: same
+checks/cases/rv5derivedbyvalue.olang: same
+checks/cases/rv5matchkeep.olang: same
+checks/cases/rv5taskfunccapture.olang: same
+checks/cases/rv5taskprogclosure.olang: same
+checks/cases/rv6nestedjoins.olang: same
+checks/cases/rv7o1iterfold.olang: same
+checks/cases/rv7p2arrayrefs.olang: same
+checks/cases/rv7p3cursorref.olang: same
+checks/cases/rv7p5lambda.olang: same
+checks/cases/rv7r1condmember.olang: same
+checks/cases/rv8parallelparam.olang: same
+checks/cases/rv9slicetemp.olang: same
+checks/cases/s12bleaves.olang: same
+checks/cases/s17msgok.olang: same
+checks/cases/s1bline.olang: same
+checks/cases/s21becomeheld.olang: same
+checks/cases/s5callresultpush.olang: same
+checks/cases/s5e31bfield.olang: same
+checks/cases/s5helperlist.olang: same
+checks/cases/s5mapgetreturnsan.olang: same
+checks/cases/s5projectionelem.olang: same
+checks/cases/s6handlestore.olang: same
+checks/cases/s6strref.olang: same
+checks/cases/s8blocalnames.olang: same
+checks/cases/s8dwide.olang: same
+checks/cases/splitborrowstore.olang: same
+checks/cases/strborrowedcond.olang: same
+checks/cases/strcalleecond.olang: same
+checks/cases/strcalleespawnlambda.olang: same
+checks/cases/strcursornewnode.olang: same
+checks/cases/strdefaultindex.olang: same
+checks/cases/strderivedcallback.olang: same
+checks/cases/strhelpermap.olang: same
+checks/cases/strmovedlocalkept.olang: same
+checks/cases/strobligation.olang: same
+checks/cases/strshape.olang: same
+checks/cases/strspawnpart.olang: same
+checks/cases/strstorespawn.olang: same
+checks/cases/strtransientinner.olang: same
+checks/cases/t13bmovedvalue.olang: same
+checks/cases/t17cheadline.olang: same
+checks/cases/t17payloadoutlived.olang: same
+checks/cases/t20errorparam.olang: same
+checks/cases/t22acursorfn.olang: same
+checks/cases/t22alocal.olang: same
+checks/cases/t22aviewkept.olang: same
+checks/cases/t22bpushedkeeps.olang: same
+checks/cases/t22cbuildcapture.olang: same
+checks/cases/t22dheap.olang: same
+checks/cases/t22sharedscopetype.olang: same
+checks/cases/t25delement.olang: same
+checks/cases/t29etrait.olang: same
+checks/cases/t30ckeeps.olang: same
+checks/cases/t32anyarrofany.olang: same
+checks/cases/t32anyscopes.olang: same
+checks/cases/t7adeclaredfield.olang: same
+checks/cases/t7alambdaresult.olang: same
+checks/cases/tagunknownscope.olang: same
+checks/cases/vec09iter.olang: same
+checks/cases/vec113elemsetloop.olang: same
+checks/cases/vec12elemvalue.olang: same
+checks/cases/vec156getterfresh.olang: same
+checks/cases/vec22recrun.olang: same
+checks/cases/vec48freshkept.olang: same
+checks/cases/vec71ctorfieldfunc.olang: same
+checks/cases/vec91fieldcopygrows.olang: same
+checks/cases/x17header.olang: same
+== total: files 177 same 175 differing as listed 2 differing 0
+tests/become.olang: same 7
+checks/cases/attrreadonlyref.olang: same
+checks/cases/b10negative.olang: same
+checks/cases/b11notehandle.olang: same
+checks/cases/b4methodmain.olang: same
+checks/cases/b6condtyped.olang: same
+checks/cases/b6elemfirst.olang: same
+checks/cases/b6elemvalue.olang: same
+checks/cases/b9awrap.olang: same
+checks/cases/becomearenacall.olang: same
+checks/cases/becomedtor.olang: same
+checks/cases/c11arraydtor.olang: same
+checks/cases/c11dtorgenparam.olang: same
+checks/cases/c2dargnote.olang: same
+checks/cases/c2dbuildlocal.olang: same
+checks/cases/c2dcondargshort.olang: same
+checks/cases/c2dctorbuilds.olang: same
+checks/cases/c2dfieldentry.olang: same
+checks/cases/c2dfieldvec.olang: same
+checks/cases/c2dmixedscopes.olang: same
+checks/cases/c2downfieldread.olang: same
+checks/cases/c3secondname.olang: same
+checks/cases/callcond.olang: same
+checks/cases/callvaluekeepsword.olang: same
+checks/cases/condcallvalue.olang: same
+checks/cases/condvaluesame.olang: same
+checks/cases/ctorlambdafieldloop.olang: same
+checks/cases/d13crunlength.olang: same
+checks/cases/d16cescape.olang: same
+checks/cases/d16dtwoscopes.olang: same
+checks/cases/d18argoutlived.olang: same
+checks/cases/d18cotherparam.olang: same
+checks/cases/d18cyieldturn.olang: same
+checks/cases/d18yieldborrow.olang: same
+checks/cases/d8cdestructinner.olang: same
+checks/cases/d9apayloadstring.olang: same
+checks/cases/deeparray.olang: same
+checks/cases/derivedcopybuild.olang: same
+checks/cases/derivedhelpercountvec.olang: same
+checks/cases/e13cfloat.olang: same
+checks/cases/e16dgetbang.olang: same
+checks/cases/e31bfieldviewmethod.olang: same
+checks/cases/e31bhandlefieldparam.olang: same
+checks/cases/e31binplaceown.olang: same
+checks/cases/e31bviewbodyerrors.olang: same
+checks/cases/e31bviewnested.olang: same
+checks/cases/e31calllocal.olang: same
+checks/cases/errcomma.olang: same
+checks/cases/g10drun.olang: same
+checks/cases/g21mutable.olang: same
+checks/cases/gemmflat.olang: not interpreted - matrix products over ten minutes interpreted (the memory it holds flat is the build's)
+checks/cases/keywordfield.olang: same
+checks/cases/l18bifinparens.olang: same
+checks/cases/listscopetext.olang: same
+checks/cases/m5askipped.olang: same
+checks/cases/nllkeepsunion1.olang: same
+checks/cases/o10arrlocal.olang: same
+checks/cases/o10cnote.olang: same
+checks/cases/o10cresultlanding.olang: same
+checks/cases/o13acopywrap.olang: same
+checks/cases/o13aloopreturnwrap.olang: same
+checks/cases/o14byvalborrow.olang: same
+checks/cases/o15deepchain.olang: same
+checks/cases/o15registeredtemp.olang: same
+checks/cases/o17bkeepsother.olang: same
+checks/cases/o17borrowsplit.olang: same
+checks/cases/o17btrydefaultarray.olang: same
+checks/cases/o17handout.olang: same
+checks/cases/o17ownturnstruct.olang: same
+checks/cases/o17permute15.olang: same
+checks/cases/o17readonlycapture.olang: same
+checks/cases/o17spawntargets.olang: same
+checks/cases/o17tempcondarray.olang: same
+checks/cases/o17templambdakeep.olang: same
+checks/cases/o18cforinborrowed.olang: same
+checks/cases/o18cnestedfield.olang: same
+checks/cases/o18cprojectionfresh.olang: same
+checks/cases/o1blambdaglobal.olang: same
+checks/cases/o20valuefield.olang: same
+checks/cases/o23aliaswrite.olang: same
+checks/cases/o25atypevar.olang: same
+checks/cases/o25gfieldbinding.olang: same
+checks/cases/o25harrayslice.olang: same
+checks/cases/o25hcopyprogram.olang: same
+checks/cases/o25scopeargborrow.olang: same
+checks/cases/o26acyclemethod.olang: same
+checks/cases/o26afieldafter.olang: same
+checks/cases/o26anumberstorefix.olang: same
+checks/cases/o27callplaced.olang: same
+checks/cases/o27destructorview.olang: same
+checks/cases/o4bbyvaluebuild.olang: same
+checks/cases/o8dfeed.olang: same
+checks/cases/o8dremovedelemref.olang: same
+checks/cases/o8elru.olang: not interpreted - a million lookups, minutes interpreted; its peak is the compiler's under interpret
+checks/cases/p1gtargetscope.olang: same
+checks/cases/p2clausedefault.olang: same
+checks/cases/p2spawncallcopy.olang: same
+checks/cases/p2spawnenum.olang: same
+checks/cases/p2spawnvalue.olang: same
+checks/cases/p4adefaultexisting.olang: same
+checks/cases/preludeuse.olang: same
+checks/cases/r11bcaptured.olang: same
+checks/cases/r11bpassed.olang: same
+checks/cases/r1cwords.olang: same
+checks/cases/r9adefaultinner.olang: same
+checks/cases/renderoperandhere.olang: same
+checks/cases/rv3copyrun.olang: same
+checks/cases/rv3payloadlend.olang: same
+checks/cases/rv3spawnrun.olang: same
+checks/cases/rv5condmember.olang: same
+checks/cases/rv5ctorparam.olang: same
+checks/cases/rv5foldforwardstack.olang: same
+checks/cases/rv5strlambdaalias.olang: same
+checks/cases/rv5taskidentity.olang: same
+checks/cases/rv6closurekept.olang: same
+checks/cases/rv6taskfuncbaked.olang: same
+checks/cases/rv7p1bctorcallee.olang: same
+checks/cases/rv7p3bcursorarray.olang: same
+checks/cases/rv7p4cursorarray.olang: same
+checks/cases/rv7p7bcondref.olang: same
+checks/cases/rv7r3helpercond.olang: same
+checks/cases/rv9dtorbuild.olang: same
+checks/cases/rv9slicetempctor.olang: same
+checks/cases/s13caltscope.olang: same
+checks/cases/s19eyield.olang: same
+checks/cases/s20walkheldref.olang: same
+checks/cases/s5atbuilds.olang: same
+checks/cases/s5clonepush.olang: same
+checks/cases/s5handlerepoint.olang: same
+checks/cases/s5mapgetreturn.olang: same
+checks/cases/s5nestedhandlemap.olang: same
+checks/cases/s5spawnhandlerun.olang: same
+checks/cases/s6strchain.olang: same
+checks/cases/s8bchosen.olang: same
+checks/cases/s8dnarrow.olang: same
+checks/cases/splitborrowctor.olang: same
+checks/cases/stradapterbody.olang: same
+checks/cases/strcalleeadapter.olang: same
+checks/cases/strcalleelambda.olang: same
+checks/cases/strcondnode.olang: same
+checks/cases/strdefaultfnvalue.olang: same
+checks/cases/strdefaultmapget.olang: same
+checks/cases/strescapinglambda.olang: same
+checks/cases/strlambdahere.olang: same
+checks/cases/stro17captures.olang: same
+checks/cases/strrenderchanges.olang: same
+checks/cases/strspawnclausedefault.olang: same
+checks/cases/strstorelambda.olang: same
+checks/cases/strtransientadapter.olang: same
+checks/cases/t13bhandondeferred.olang: same
+checks/cases/t17ccaselocallifted.olang: same
+checks/cases/t17cparambinding.olang: same
+checks/cases/t17payloadwrite.olang: same
+checks/cases/t21cmisplacedtrait.olang: same
+checks/cases/t22agivesarg.olang: same
+checks/cases/t22aresult.olang: same
+checks/cases/t22blambdakeeps.olang: same
+checks/cases/t22bresultkept.olang: same
+checks/cases/t22dchain.olang: same
+checks/cases/t22sharedscope.olang: same
+checks/cases/t25ccopylend.olang: same
+checks/cases/t29aconvlifetime.olang: same
+checks/cases/t2dnull.olang: same
+checks/cases/t32anyarrcopy.olang: same
+checks/cases/t32anyglobal.olang: same
+checks/cases/t6adefine.olang: same
+checks/cases/t7aelemkept.olang: same
+checks/cases/t7aoverrows.olang: same
+checks/cases/typeargsassign.olang: same
+checks/cases/vec110elemtextloop.olang: same
+checks/cases/vec126globalcopy.olang: same
+checks/cases/vec144taketolocal.olang: same
+checks/cases/vec159convfixedcall.olang: same
+checks/cases/vec26toarray.olang: same
+checks/cases/vec66elseiffresh.olang: same
+checks/cases/vec73ctorlocaltyped.olang: same
+checks/cases/x10handles.olang: same
+== total: files 176 same 174 differing as listed 2 differing 0
+checks/cases/attrhasruns.olang: same
+checks/cases/b10float.olang: same
+checks/cases/b10version.olang: same
+checks/cases/b12level.olang: same
+checks/cases/b6condfield.olang: same
+checks/cases/b6elemfieldmap.olang: same
+checks/cases/b6elemrows.olang: same
+checks/cases/b9ashort.olang: same
+checks/cases/becomearenaarray.olang: same
+checks/cases/becomeborrows.olang: same
+checks/cases/becomedtortemp.olang: same
+checks/cases/c11dtorbyvalue.olang: same
+checks/cases/c11unendedparam.olang: same
+checks/cases/c2dbuildassign.olang: same
+checks/cases/c2dcondargkinds.olang: same
+checks/cases/c2dctorarg.olang: same
+checks/cases/c2dfielddrain.olang: same
+checks/cases/c2dfieldoutlives.olang: same
+checks/cases/c2dmatchfield.olang: same
+checks/cases/c2downfield.olang: same
+checks/cases/c2swap.olang: same
+checks/cases/c6selectjoin.olang: not interpreted - Select polls for a task its join runs only after it (B3e)
+checks/cases/callvaluekeepsframe.olang: same
+checks/cases/condcall.olang: same
+checks/cases/condvaluefield.olang: same
+checks/cases/ctorlambdafieldkinds.olang: same
+checks/cases/ctortempdestruct.olang: same
+checks/cases/d16cborrowescape.olang: same
+checks/cases/d16dlambdaown.olang: same
+checks/cases/d17reqcaught.olang: same
+checks/cases/d18cinputoutlived.olang: same
+checks/cases/d18cyieldlocal.olang: same
+checks/cases/d18twoscopes.olang: same
+checks/cases/d3bread.olang: same
+checks/cases/d9abarevariable.olang: same
+checks/cases/d9htryview.olang: same
+checks/cases/defstext.olang: same
+checks/cases/derivedhelpercount.olang: same
+checks/cases/e11ctwolevelfield.olang: same
+checks/cases/e16atrydefaultslice.olang: same
+checks/cases/e31bfieldviewbuild.olang: same
+checks/cases/e31bhandlefieldnested.olang: same
+checks/cases/e31bhandlereplaced.olang: same
+checks/cases/e31bviewbigcond.olang: same
+checks/cases/e31bviewlaterarg.olang: same
+checks/cases/e31bviewreplaced.olang: same
+checks/cases/enumcomma.olang: same
+checks/cases/fieldcomma.olang: same
+checks/cases/g21effect.olang: same
+checks/cases/g4resultwritten.olang: same
+checks/cases/joinwritesafter.olang: same
+checks/cases/l12twopoints.olang: same
+checks/cases/l9aowntake.olang: same
+checks/cases/m19grefok.olang: same
+checks/cases/methodnamedlocal.olang: same
+checks/cases/numtraitsqrtlit.olang: same
+checks/cases/o10cloopcopy.olang: same
+checks/cases/o10cnotethroughcall.olang: same
+checks/cases/o12spawntarget.olang: same
+checks/cases/o13aloopreturn.olang: same
+checks/cases/o14btypevar.olang: same
+checks/cases/o14returnglobalvalue.olang: same
+checks/cases/o15registeredlater.olang: same
+checks/cases/o17bkeeps.olang: same
+checks/cases/o17bnoand.olang: same
+checks/cases/o17bpendingok.olang: same
+checks/cases/o17handlewalk.olang: same
+checks/cases/o17ownkept.olang: same
+checks/cases/o17permute14.olang: same
+checks/cases/o17permute5.olang: same
+checks/cases/o17settlestale.olang: same
+checks/cases/o17tempcond.olang: same
+checks/cases/o17templambdacycle.olang: same
+checks/cases/o17tempreadsonly.olang: same
+checks/cases/o18claterlend.olang: same
+checks/cases/o18cprojectionborrow.olang: same
+checks/cases/o1bglobalshort.olang: same
+checks/cases/o20innertext.olang: same
+checks/cases/o23aliasmethod.olang: same
+checks/cases/o25abare.olang: same
+checks/cases/o25enote.olang: same
+checks/cases/o25harrayreturn.olang: same
+checks/cases/o25hcopyouter.olang: same
+checks/cases/o25replacelist.olang: same
+checks/cases/o26acopyflow.olang: same
+checks/cases/o26aderived.olang: same
+checks/cases/o26anumberstore.olang: same
+checks/cases/o26own.olang: same
+checks/cases/o27destructorgen.olang: same
+checks/cases/o4bblock.olang: same
+checks/cases/o4bvalueparamgeneric.olang: same
+checks/cases/o8dmapkeytext.olang: same
+checks/cases/o8edlist.olang: not interpreted - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret
+checks/cases/opfallible.olang: same
+checks/cases/p2blocklocal.olang: same
+checks/cases/p2reassignedcallback.olang: same
+checks/cases/p2spawndtorcapture.olang: same
+checks/cases/p2spawntemp.olang: same
+checks/cases/p4aclausecapture.olang: same
+checks/cases/preludekv.olang: same
+checks/cases/qwlist.olang: same
+checks/cases/r11bnotavalue.olang: same
+checks/cases/r11fndefault.olang: same
+checks/cases/r3bnearnamed.olang: same
+checks/cases/rendercopyc2d.olang: same
+checks/cases/rv3condstore.olang: same
+checks/cases/rv3payloadcopy.olang: same
+checks/cases/rv3slicesplit.olang: same
+checks/cases/rv5condas.olang: same
+checks/cases/rv5ctormatch.olang: same
+checks/cases/rv5foldforward.olang: same
+checks/cases/rv5strlambda.olang: same
+checks/cases/rv5taskfuncfield.olang: same
+checks/cases/rv5taskstore.olang: same
+checks/cases/rv6runonstack.olang: same
+checks/cases/rv7o2forparam.olang: same
+checks/cases/rv7p2barraylit.olang: same
+checks/cases/rv7p4bcursorcond.olang: same
+checks/cases/rv7p6genericid.olang: same
+checks/cases/rv7r2matchmember.olang: same
+checks/cases/rv9ctorview.olang: same
+checks/cases/rv9slicetempas.olang: same
+checks/cases/s12bstmtline.olang: same
+checks/cases/s18cnoreturn.olang: same
+checks/cases/s1bparallel.olang: same
+checks/cases/s3busy.olang: same
+checks/cases/s5capturestruct.olang: same
+checks/cases/s5handlenote.olang: same
+checks/cases/s5keepcall.olang: same
+checks/cases/s5nestedhandle.olang: same
+checks/cases/s5spawnhandle.olang: same
+checks/cases/s6nestedhandlerun.olang: same
+checks/cases/s8bchaintaken.olang: same
+checks/cases/s8ddeferheld.olang: same
+checks/cases/s9erangeundertry.olang: same
+checks/cases/stradapter.olang: same
+checks/cases/strcallbackbuilds.olang: same
+checks/cases/strcalleegeneric.olang: same
+checks/cases/strcatchnode.olang: same
+checks/cases/strcycledeps.olang: same
+checks/cases/strdefaultlanding.olang: same
+checks/cases/streffect.olang: same
+checks/cases/strlambdahelper.olang: same
+checks/cases/strnotecopies.olang: same
+checks/cases/strreassignedcallback.olang: same
+checks/cases/strspawnbuilds.olang: same
+checks/cases/strstoredtor.olang: same
+checks/cases/strstoresreceiver.olang: same
+checks/cases/strwalks.olang: same
+checks/cases/t13dalias.olang: same
+checks/cases/t17cparamas.olang: same
+checks/cases/t17payloadscopes.olang: same
+checks/cases/t21bconvert.olang: same
+checks/cases/t22agivenvalue.olang: same
+checks/cases/t22aobligation.olang: same
+checks/cases/t22bborrows.olang: same
+checks/cases/t22breadonlyresult.olang: same
+checks/cases/t22ccapturefound.olang: same
+checks/cases/t22dtakewhile.olang: same
+checks/cases/t25ccopydecl.olang: same
+checks/cases/t27anonsame.olang: same
+checks/cases/t2cnarrow.olang: same
+checks/cases/t30ckeepsoutlived.olang: same
+checks/cases/t32anyconvcopy.olang: same
+checks/cases/t34casebindnote.olang: same
+checks/cases/t7aelem.olang: same
+checks/cases/t7anested.olang: same
+checks/cases/tdscope.olang: same
+checks/cases/vec10keep.olang: same
+checks/cases/vec114elemkeepfn.olang: same
+checks/cases/vec143convview.olang: same
+checks/cases/vec157convcond.olang: same
+checks/cases/vec25cloneref.olang: same
+checks/cases/vec49byname.olang: same
+checks/cases/vec72ctorscopearg.olang: same
+checks/cases/vecdropbuilds.olang: same
+checks/cases/x9linkmath.olang: same
+== total: files 177 same 175 differing as listed 2 differing 0
+== tests/shared.olang ==
+ok - factorial of small numbers
+ok - add sums its two arguments
+ok - F32 arithmetic
+ok - U8 comparisons
+ok - bitwise or, and, xor, shift
+ok - a numeric literal widens into I64/F64, including negative ones, everywhere exact matching is required
+ok - an integer literal adapts to U8 whenever its value fits, in every context exact matching is required
+ok - a character literal adapts out of U8 the same way an integer literal adapts into it
+ok - when both operands are literals of differing numeric types, the narrower adapts to the wider
+ok - an integer literal too large for I32 is typed I64, so it is never silently truncated
+ok - T6a: a float literal is an F64 where nothing adapts it, and still adapts where something does
+ok - T6a: an integer literal is an I64 where nothing adapts it, and still adapts where something does
+ok - O26a: a parenthesized rendering returned does not move what it renders
+ok - E4a/S13: a literal-only case value adapts to the matched type
+ok - E4a: an expression built only from literals adapts to its target as one literal does
+ok - E6d: a literal the other operand cannot hold meets it at the literal's own type
+ok - E11a: a float renders as the shortest text that reads back as it, in its own type
+ok - addLong, previously unreachable for lack of any way to construct an I64, now works
+ok - TypeName(x) explicitly converts a non-literal numeric value in either direction
+ok - a function passed by name as a value can be called through the receiving parameter
+ok - enum values: construction, equality, and match/case
+ok - match selects the right case
+ok - do-while accumulates
+ok - fixed U8 arrays compare by value, not identity
+ok - struct literal construction and structural equality
+ok - single-value struct literal
+ok - nested struct literals
+ok - one generic instantiated over several types
+ok - a generic calling a generic cascades instantiation
+ok - a generic over a struct type uses ordinary structural equality
+ok - the same type arguments reuse one instantiation
+ok - a generic struct type instantiates, and its fields take the argument types
+ok - an instantiated generic type crosses a function boundary
+ok - G10c: a generic constructor's type arguments are inferred from its arguments
+ok - a generic instantiated with another generic's instantiation
+ok - a type match selects a different arm per instantiation
+ok - a type variable used as a type inside the body
+ok - a run-time-sized constructor field is sized per construction
+ok - writing through a run-time-sized constructor field does not corrupt its length
+ok - a generic type's constructor is monomorphized alongside the type
+ok - a generic type's constructor calling a generic function
+ok - a generic type's destructor is monomorphized per instantiation
+ok - O15: nested instances built into a reference destruct in reverse construction order
+ok - C11/D15: := of a destructor-declaring type declares its reference, and the instance is destructed
+ok - a constructor-declaring type built by its constructor
+ok - ':=' infers a type from a constructor call
+ok - a call may omit trailing arguments
+ok - 'default' reaches a later parameter
+ok - defaults on a constructor's parameter list
+ok - defaults on a generic function's and a generic constructor's parameter lists
+ok - a struct literal as a parameter default
+ok - scope runtime: mixed-alignment allocations interleaved across many scope closes
+ok - a 'mut &' parameter writes to the caller's own instance
+ok - a non-mut '&' parameter still reads it
+ok - a constructor field is writable through a writable instance
+ok - a plain struct's fields stay writable
+ok - a declared 'Array<T>' adopts its initializer's compile-time length into the type
+ok - a 'Array<T>' initialized from a runtime-length value stays runtime-length
+ok - array literal construction, compile-time- and runtime-length
+ok - an existing (non-literal) compile-time-length-array value promotes into a runtime-length target too
+ok - an array of references to compile-time-length rows: each row separately allocated, all the same length
+ok - an unmarked runtime-length array is a value: assignment copies, == compares elements
+ok - assigning a runtime-length array keeps its own storage when the length already matches
+ok - assigning a longer runtime-length array grows into fresh storage
+ok - self-assignment of a runtime-length array is safe
+ok - a declared type over a primitive is distinct from it and from its siblings
+ok - methods work on a named primitive and on a struct alike
+ok - a method receiver may be a member-access chain of any depth
+ok - every combination of value/reference argument and value/reference parameter
+ok - two tasks run concurrently and are joined before the block ends
+ok - several tasks may be handed the same instance
+ok - the same instance may be shared read-only by several tasks
+ok - join blocks nest
+ok - sibling join blocks
+ok - a callee's join is entirely its own
+ok - a test left early still waits for its tasks
+ok - ...and the task really had finished before the next test began
+ok - a test left early runs the destructors of every scope it abandons
+ok - ...all three of them ran
+ok - P1g: a spawned call's result is bound to a target
+ok - P1g: one slot per task is parallel map
+ok - P1g: the plain form is unchanged
+ok - O2c: a local declared in a loop does not grow the stack
+ok - O2c: and a temporary in a loop does not either
+ok - E11a: every built-in rendering
+ok - E11a: a Char array renders as text, in every shape; a U8 array as numbers (T29h)
+ok - E11a: a declared type renders from its fields, whatever methods it has
+ok - E11b: text pieces side by side are joined
+ok - E11a: a struct, an array and an enum render from their parts
+ok - E11a: nested text is escaped the way a literal would write it
+ok - E11a: a run-time-length array renders all its elements, and an empty one renders as Type[]
+ok - E11a: a reference renders its referent, null as null, and a cycle is cut off
+ok - E11a: a reference inside a struct renders its referent
+ok - E11a: a call's several results render together
+ok - E11a: functions render as signatures
+ok - E11a/QY: a function's error set renders with commas
+ok - E11a: '$' on text is a copy - it is a value, not a second name for the storage
+ok - E11a/E11b: a function can build text and return it into its caller's scope
+ok - T11: a literal passed to a 'Array<T>&' parameter
+ok - E11b: a join is a value in the block's own scope, usable like any other array
+ok - T29: a declared type over an array has methods
+ok - T29: a LITERAL adapts to it, exactly as a numeric literal adapts to a named numeric type
+ok - M19: methods on types declared over a primitive and over an array
+ok - T29: and the built-in operators still reach it - it IS an array
+ok - a one-element array holding a variable
+ok - T29b: arrays satisfy traits
+ok - C9: one constructor call is one destructor run, however many names it has
+ok - C9: three constructor calls are three destructor runs
+ok - T36: alternating enum cases over the same payload bytes read back correctly
+ok - T36: and in a loop, where a reordering optimizer has room to move things
+ok - T36: an array literal's elements read back through indexing
+ok - T36: narrow enum cases over the same payload bytes read back correctly
+ok - T36: narrow arrays written through a struct read back what was written
+ok - O2d: a call inside a block allocates into the scope its argument names, not the block's
+ok - O2d: and the same through a loop, which is what growing a buffer actually looks like
+ok - D15a: an array reference with no initializer is null, not garbage
+ok - T11a: a sized reference declaration allocates, and its type is length-free
+ok - G16a: two array instantiations of one generic are distinct
+ok - G16a: and a generic function over both
+ok - G16a: function types, permissions, declared array types and long names each make their own instantiation
+ok - G8a: a generic function over a generic type
+ok - G8a: a generic type holding a generic
+ok - G8a: composition with a struct as the type argument
+ok - G8a: nested application
+ok - G8a: a method over a concrete application still wins
+ok - G9a: a literal adapts to a type variable another argument bound
+ok - G9a: null takes no part in inferring a type variable
+ok - G8a: a generic method serves every application
+ok - G8b: type variables in type arguments, and shifts beside them
+ok - G8a: a variable introduced inside type-args
+ok - G8b: a variable is written bare after its introduction
+ok - P9: the five atomic methods, and what each returns
+ok - P9: an atomic counter across two tasks is exact
+ok - P9: U8 and I64 targets
+ok - P9: atomic methods on every integer type, an extending type, a field and an element
+ok - P8: a task sees everything the spawner did before the spawn
+ok - P8: the spawner sees what a task did, after the join
+ok - P8: ordering composes across two join blocks
+ok - leaving a join block by return still waits for its tasks
+ok - leaving a join block by continue still waits for its tasks
+ok - a spawn nested in an if inside a join still binds to that join
+ok - leaving a join block by break still waits for its tasks
+ok - a helper's fan-out overlaps the caller's own work with no signature effect
+ok - a join block runs ordinary code between its spawns
+ok - a loop inside a join starts one task per iteration
+ok - two tasks may allocate into one scope
+ok - a value a task allocates into the caller's scope survives the join
+ok - a task that allocates repeatedly does not accumulate memory
+ok - destructors registered on a task thread run when the spawner's scope closes
+ok - G12: big<I64> names one instance, called or as a value
+ok - G12: x.M<T>(...) names a method's own type arguments
+ok - E31c: 2.0 * v calls v.Mul(2.0), operands still left first
+ok - a generic used before its own declaration still gets its body
+ok - a generic parameterised by a callback can actually call it
+ok - slicing a compile-time-length array, with either bound omitted
+ok - ':=' infers a slice's type from the slice expression
+ok - ':=' infers from an array's Len() and from an atomic method
+ok - ':=' infers an I64 from an array's Len()
+ok - slicing a runtime-length array, and slicing a slice
+ok - a tried slice yields its value when the bounds hold
+ok - an out-of-range tried slice propagates rather than aborting
+ok - the in-range edges of a slice are all accepted
+ok - a slice borrows: writing through it is writing the source
+ok - a slice of a mutable array is mutable, and reaches a 'mut' parameter
+ok - an unmarked local is borrowed by a '&' parameter, of either array length kind
+ok - an unmarked struct local is borrowed by a '&' parameter too
+ok - a temporary still promotes into a '&' parameter rather than borrowing
+ok - a struct behaves exactly as an array does across the three value/reference directions
+ok - taking a reference to an array borrows its storage rather than copying it
+ok - borrowing an array from a scope that outlives the reference is fine in the safe direction
+ok - reference into value copies out rather than aliasing the reference
+ok - a marked runtime-length array is a reference: assignment repoints, '==' compares what it holds
+ok - a marked compile-time-length array is a reference too - same rule, other length kind
+ok - an array of references keeps its elements' reference-shapedness as part of its own type
+ok - a value promotes into a reference target, and a reference copies out into a value target
+ok - T11a: an array of array references, rows of their own lengths
+ok - a single-value and an empty array literal both parse correctly
+ok - an array literal of struct values
+ok - an int literal widens to float inside an array literal
+ok - a compile-time-length array reference survives crossing a function boundary via a named scope
+ok - Len() works uniformly across embedded, fixed-reference, and runtime-length arrays
+ok - struct literal as a match case value
+ok - := infers a variable's type from its literal initializer
+ok - try/catch: SafeDiv succeeds on a non-zero divisor
+ok - try/catch: SafeDiv reports failure on divide by zero
+ok - an inferred set: the success path is unaffected
+ok - a function naming its errors is fully handled by catching them
+ok - an inferred set: an untyped catch catches what it holds
+ok - R17: a try statement catching part of what its call can fail with, in a bare '?' function
+ok - an undetermined scope variable binds to the caller's own scope
+ok - a plain struct literal promotes correctly into a heap-indirect parameter and return type
+ok - the real arena allocator handles chunk growth and reuse across many scope open/close cycles
+ok - constructor: every field a bare pun
+ok - one-line blocks: a whole body between braces on a single line
+ok - constructor: a computed field alongside a punned one
+ok - constructor: a fallible field initializer propagates through the constructor's own declared error union
+ok - constructor: 'error' raises the constructor's own declared error before any field is built
+ok - constructor: a check placed after a field tests the field it just built
+ok - constructor: a later field reads an earlier one, and the whole body completes
+ok - constructor: a body with no declared errors catches a fallible call entirely
+ok - destructor runs when the instance's own scope closes at function return
+ok - an instance tagged to a passed-in scope outlives the function that constructed it
+ok - deferral is scoped to exactly the caller-tagged instance, not every instance in that function
+ok - destructor runs for every heap-indirect instance when their scope closes, in one batch
+ok - elements of a returned array follow the array's own scope, not the callee's
+ok - an array of references and a reference to an array of values are both expressible
+ok - destructor runs for every handle held through an array of references
+ok - destructor runs for every handle in a fixed literal promoted into a runtime-length array
+ok - passing an instance to a function does not release the caller's resource
+ok - copying a reference is the same instance, destructed exactly once
+ok - constructing zero instances runs zero destructors
+ok - assert with and without parentheses
+ok - a bare '&' field assigned through a scope-tagged parameter survives the callee's return
+ok - a parameter type may reference an earlier parameter as its scope tag
+ok - a constructor field's scope tag, naming the constructor's own scope variable, survives the constructor call returning
+ok - a struct returned entirely by value still compiles fine when its nested reference field is named, not bare
+ok - C2d: a field built in the constructor body survives the constructor returning
+ok - C2d: a by-value instance's field lives in the caller's scope
+ok - C2d: an instance returned into a named scope takes its fields with it
+ok - C2d: a constructor call inside a field initializer lands with the outer instance
+ok - a plain struct's bare '&' field survives a function boundary by inheriting its container's own target scope
+ok - a bare '&' field assigned through a two-hop chain of bare '&' bases resolves to the outermost named scope
+ok - the static scope checker allows a received named scope to narrow into this function's own bare '&' scope
+ok - the static scope checker verifies a constructor field's scope tag through a call's own binding map
+ok - the static scope checker verifies an ordinary function's return-type scope tag through a call's own binding map
+ok - the static scope checker traces a scope tag through a field of a field, not just one level
+ok - the static scope checker traces a scope tag through a bare-pun field, not just an explicit one
+ok - the static scope checker disambiguates two bare-pun fields of the same type tagged to different scopes
+ok - the static scope checker resolves a scope tag through three levels of nested bare-pun forwarding
+ok - a longer-lived scope satisfies a target asking for a shorter-lived one
+ok - a built result is built where the caller puts it
+ok - a scope obligation recorded from a body is discharged at every call
+ok - two same-typed sibling fields at different nesting depths never collide
+ok - the static scope checker tracks a var's scope binding through a plain reassignment
+ok - the static scope checker merges two branches that reassign a var to the same agreed scope
+ok - 'T[N]' with no initializer zero-fills a global (real BSS)
+ok - D15a: an uninitialized local is its own zero value
+ok - D15b: 'T[N]' with no initializer is uninitialized, not zero-filled
+ok - D15c: a declared-size array fills from one element value
+ok - 'T[expr]' arena-allocates an array sized at runtime, own scope by default
+ok - a runtime-sized array tagged to a named scope survives a function boundary
+ok - D10a: every path produces a result
+ok - L10a: hexadecimal literals
+ok - L10c: binary literals
+ok - L10b: digit separators
+ok - L12a: exponent literals
+ok - an 'e' that is not an exponent lexes as it always did
+ok - shifts inside the width are unaffected
+ok - float-to-int conversions inside the range are unaffected
+ok - an integer narrowing conversion still wraps, and is still not checked
+ok - ordinary integer division and modulo are unaffected
+ok - float division by zero is a value, not a failure
+ok - return ends the current test as passed
+ok - a return from a nested block ends the test, running what is deferred
+ok - ...and the deferred code ran
+ok - a test after one that ended early still runs
+ok - a try in a test need not catch: what succeeds goes on
+ok - break leaves the innermost loop, continue advances it
+ok - S11a: break and continue close every block scope they leave
+ok - a destructor-bearing value in a loop body is destructed each iteration
+ok - a value at a body's top level still lives for the whole call
+ok - a value assigned out of a block is allocated where the target lives
+ok - C2a: every local-variable initialization rule applies to a constructor field
+ok - T2a: null in every position a reference is written
+ok - T2a: null is all-zero bits, so the two-word shapes read as empty
+ok - T2a: a null field is an ordinary field
+ok - a 'mut Array<T>&' parameter writes to the caller's own array
+ok - assigning to a reference parameter repoints this function's own cursor
+ok - a compile-time-length array reference widens into a runtime-length reference parameter
+ok - 'extern fn' links against and calls a real external scalar-only function
+ok - 'extern fn' marshals a Array<U8> argument to a raw pointer at the call boundary
+ok - a trait constrains generic code, compiled per type with direct calls
+ok - a mut trait method writes through to the very instance
+ok - a fallible trait method propagates through generic code
+ok - a generic call runs as a spawned task
+ok - a collection of mixed types is an enum of them
+ok - an enum case carries a payload, and match binds it
+ok - an enum value is created by naming a case, and nothing else
+ok - assigning a different case overwrites the payload entirely
+ok - nomatch is the opt-out from exhaustiveness, and still runs
+ok - an enum with a payload is an ordinary value type
+ok - enum equality compares the tag, then the live case's payload
+ok - a payload's fields compare by their own kind, not by their bytes
+ok - a scope argument supplies the scope a fresh payload is built into
+ok - two match arms may bind the same name without colliding
+ok - an enum carries a reference out of the function that built it
+ok - several values per case: any one selects it, and alternatives bind the same names
+ok - a guard is read after the pattern matched, and a false one goes on to the next case
+ok - a payload position may hold a nested case or a literal
+ok - a case literal adapts to the matched value's type
+ok - the matched value is evaluated once
+ok - a type match takes several types per case
+ok - a match whose unguarded cases cover the enum leaves on every path
+ok - the evaluator matches cases, guards and nested patterns as the run time does
+ok - an enum holds itself through a struct, declared in either order
+ok - T17d: an expression tree of enums held by reference, folded with nested patterns
+ok - T17d: a tree baked into a global, matched through its references
+ok - T17d: a null reference to an enum holds no case
+ok - T17d: a copy built in the result scope, and trees across blocks
+ok - T17d: zero values hold null references
+ok - T17d: structs and enums holding each other by reference
+ok - a match used as a value
+ok - a match's value is built where it lands
+ok - the evaluator gives a match's value as the run time does
+ok - indexing in range is unaffected
+ok - a constant index into a fixed-size array needs no run-time check
+ok - a temporary assigned through a reference container is built in the container's scope
+ok - a generic run-time-sized field still works for reference-free element types
+ok - a struct holding a reference can be returned when the scope is named
+ok - branches that agree on a scope keep it
+ok - storing into a container of the same scope discharges the obligation
+ok - a value can be written back into a field of a container built from it
+ok - a field of a container parameter can be written, and the caller discharges it
+ok - a field of a container parameter can be read out at the container's scope
+ok - a temporary written through a container parameter lands in the caller's scope
+ok - a field is read through and passed on; an instance-scoped one is built into and returned
+ok - escapes: \0 and \r decode to their bytes in strings and characters
+ok - a self-referential struct reads through a chain of any length
+ok - a generic linked node, walked by a for loop that advances by assignment
+ok - a returned local is built where the result goes
+ok - O25: a write through an adopted local lands in the referent's scope
+ok - O25: a field read determines a callee's scope as its container's
+ok - O25: same-scope locals link, and an inner-block cursor writes into the outer structure
+ok - O25: a bare parameter's scope is adopted for reading
+ok - D15: := from a call
+ok - D8c: several results, destructured
+ok - D8c: with try, scopes, generics, methods and interfaces
+ok - L18c: a function type of several results grouped whole in a list
+ok - D8c: spawn binds several results
+ok - D8d: several results passed as a call's arguments
+ok - D8d: a spread reference lives where the outer result lands
+ok - O14a: a function value passes back through a function
+ok - E13b: a call's result, an element or a parenthesized value is called directly
+ok - E13b: a field holding a function is called as x.f(args)
+ok - E24: try covers a chain's last call, whatever the chain starts with
+ok - E13b: a parenthesized expression on the next line is a statement of its own
+ok - R9a: a default stands in for a failed call, and the success value is untouched
+ok - R9a: several results take one default each, where they are destructured or returned
+ok - R9a: the default is evaluated only on failure
+ok - R9a: a default binds as tightly as the try, and is one value inside an argument list
+ok - R9a: a checked index and a slice take a default for out-of-range
+ok - R9a: a reference default lives in exactly the result's scope, or is built there, or is null
+ok - R9b: catch statements take several clauses, the first that names the error runs
+ok - R9b: in value position each clause gives its own default, after its block
+ok - R9b: a clause that leaves needs no default
+ok - R9b: an error no clause names still propagates
+ok - R9b: break and continue leave a clause in value position
+ok - R9b: a checked index names the bare error, and several defaults sit in one clause
+ok - B9: only the taken branch of a top-level if is compiled
+ok - B10a: the built-in build constants are ordinary immutable globals
+ok - B12: the target's build constants describe one machine, while compiling and at run time
+ok - B9a: a top-level condition reads immutable globals
+ok - K2: globals computed at compile time hold what running their initializers would give
+ok - K1: compile-time evaluation keeps a parameter's repoint local and an argument's error out of the call's clauses
+ok - K1: an argument's own try leaves the function past a try statement's clauses, while compiling too
+ok - B9c: conditions decided by compile-time evaluation, nested two deep
+ok - S8b: a local if the build decides compiles only the branch it chooses
+ok - S8b: local ifs decided by compile-time evaluation, one inside a function another condition calls
+ok - S8b: a provably fixed local decides an if; a written one does not
+ok - S8c: a fixed local read through another decides an if, and an assert
+ok - K1: a global whose initializer runs a destructor is set at startup, destructor and all
+ok - K2c: an instance built in a global's own initializer is never destructed, and is decided while compiling
+ok - S9: for with no clauses and with only a condition
+ok - S9: a loop's condition is evaluated in the turn it decides
+ok - S9a: for-in over an array gives each element, and the index when asked
+ok - S9a: the element is a copy - writing it leaves the array alone
+ok - S9a: for-in over an iterator, and over one a collection hands out
+ok - S9a: break and continue in a for-in
+ok - E7a: and, or, not - not binds looser than a comparison
+ok - S9b: range with one, two and three arguments
+ok - S9b: a range whose start is not below its end, or whose step is not positive, runs nothing
+ok - S9b: a range's index form, and its type follows its bounds
+ok - E7: and/or skip their right side once the left decides
+ok - D15a: a reference declared from a literal can be repointed at an array of another length
+ok - T35a: a generic interface, satisfied by a plain type and by a generic one
+ok - G9c: a concrete type passed to a generic interface binds its variables through its methods
+ok - K1: interface calls are evaluated while compiling, and agree with the run time
+ok - T35b: every array hands out an Iterator, so code written over Iterator takes arrays too
+ok - E27: comprehensions over arrays, ranges and text, with and without a filter
+ok - E27: a comprehension is evaluated while compiling, and agrees with the run time
+ok - E27/T7: a comprehension or Array<T>(n) returned through a reference result is built in the result's scope
+ok - E27/T2c: a comprehension over an empty source is an empty array
+ok - E28: a conditional expression evaluates only the value its condition chooses
+ok - E30: ordering comparisons chain, each operand evaluated once; == does not chain
+ok - E29: membership - Has for an element, Contains for a run of the collection's own type
+ok - E28/E29/E30: evaluated while compiling, as at run time
+ok - E30: literals in chains adapt; indexes of any integer type; arrays of two lengths compared
+ok - E30, G12: a chain spaced as comparisons is one, never type arguments
+ok - E30: a chain's literal is typed beside each comparison's other operand, as the chain written out
+ok - S12b: a value match with only a nomatch takes its value's type
+ok - E28: written texts and array literals of different lengths, and an enum case as a receiver
+ok - S4c/D12b: parallel assignment swaps; several names share one type
+ok - L4a: a block comment is whitespace, and a line break where it spans one
+ok - G19: interfaces constrain type variables of functions and of generic types
+ok - G19: a supplied Len or Bits meets a constraint
+ok - E31: operators call methods named for them - arithmetic, negation, ordering, @, compound assignment
+ok - E31: bitwise and shift operators, and ++/-- from Inc/Dec or derived from Plus/Minus
+ok - E31: Call makes a value callable and passable as a function; a fallible At and Slice are called with try
+ok - E31: a Call writing its parameter and its receiver, passed where a matching function type is wanted
+ok - E31: indexing calls At, assigning through it SetAt, slicing Slice
+ok - E31: operators in generic code, in a constraint, and while compiling
+ok - M19e: defaults reach satisfying types; a type's own method wins
+ok - T17: an array of enums with a small payload is laid out at its real stride
+ok - S9d: for-in walks At and Len as a counted loop; an own Iter wins; Indexable derives Iter
+ok - E31/E16d/S9e: a type's own fallible methods under try; try on a store or an increment; for x in try c
+ok - E29/S9e: try reaches a fallible Has, and a comprehension's own calls
+ok - E32: is and as on enum values
+ok - E10, E10c: a reference compares by identity unless its type declares Eq, and 'is null' asks for none, while compiling and at run time
+ok - M19d: a prelude generic type is named bare with its arguments written, as an expression too
+ok - T35a: Iterator<T> is built in, and a type satisfying it is walked by for-in
+ok - E11b: a returned join survives later allocations
+ok - T7c: fixed-length array fields have the length their type computes
+ok - T7c: copying an instance copies its fixed-length arrays - nothing is shared
+ok - T7d: an array of a run-time length is copied into fixed storage through a slice of its length
+ok - T7d: a fixed-length field is borrowed as an ordinary array
+ok - T7c: each instantiation of a generic type has its own fixed length
+ok - an array declared from a literal can later hold one of another length
+ok - S9c: a generic iterator is walked by for-in
+ok - S9c: an iterable is walked through a fresh iterator each time, temporaries included
+ok - a reference stored into an element of a reference-reached array lives in the array's scope
+ok - O4b: a structure built through bare reference parameters, with no scope written anywhere
+ok - O18a: a result lands in an outer variable from an inner block
+ok - O18a: nested builders land with their caller's result
+ok - O4a: &x on parameters, results and locals
+ok - O4a: &x naming a block-scoped local builds there, from an inner block
+ok - E25 (inferred, QCB): a call's result built where what it is kept in lives
+ok - O13/O26: built results and returned locals live where the result goes
+ok - O18a: a by-value result is built where it lands - a loop body's own block, or straight into an outer value
+ok - C2d/E25: a cursor over a longer-lived list, and a constructor built where a variable lives
+ok - O26/O25a (inferred, QCB): a result built where the result goes, := adopting it, a typed local holding it
+ok - T29d: a primitive type's constructor checks the way in, and arithmetic keeps working
+ok - T29: a type over a declared number does not take its constructor
+ok - D15: a cursor declared with := from a field read
+ok - E6c: integer arithmetic wraps
+ok - ArrayError.OutOfRange from a.Get(i), caught by name and propagated
+ok - E16d: a.Set(i, v) is a checked store - baked and run
+ok - std/arith checks arithmetic and shifts, Narrow conversions, Get indices
+ok - std/arith follows IEEE's exceptions
+ok - T6b/R9a: a tried value widened where it lands keeps its checks
+ok - the evaluator runs checked operations as the generated code does
+ok - the evaluator models slices, text and enum payloads as the run time does
+ok - written text declared with := is a String as a global
+ok - Split's pieces live with the text, and the evaluator splits as the run time does
+ok - T29a: a conversion names its argument's storage, at run time and while compiling
+ok - written text compares with a String value
+ok - the evaluator models function values and interfaces, and bakes enums carrying payloads
+ok - D16: lambdas take their types from where they are passed, and from their bodies
+ok - a signature renders as it is written
+ok - D16, S1b: a lambda's one-line body
+ok - D16c: a lambda captures values by copy and references by reference
+ok - T21: a function value is one value in fields, elements and copies, and compares by code and captures
+ok - D16e: a spawned lambda captures its loop's variables per task
+ok - D16b: a lambda called where it is written
+ok - D16e: a lambda called where it is spawned keeps its captures until the join
+ok - T29e: String and a program's own array type inherit the array methods
+ok - T7b: a captured array is borrowed, and a destructured array result is taken, not copied
+ok - T25b: writable and read-only references, by type
+ok - T25b/D9/C3/D11: mut is the reference's; parameters, fields and locals are assigned as their place allows
+ok - D9b: a by-value array parameter is the caller's array until the body writes it
+ok - E10a: == consults a declared Eq at every depth, while compiling and at run time
+ok - E11c: $ renders through a declared Str, wherever the value sits
+ok - T6b: numbers widen within their family, and meet at the wider
+ok - T29f: extends inherits the base's methods and operators; without it a type reads as its base
+ok - E28/S12b: a conditional of literals takes its target's type; a value made in an arm is built where it lands
+ok - T7/E12c: a reference field or element adopts a fresh array, each its own storage
+ok - T7b: a returned local array is the caller's own, built where it lands or copied there
+ok - D13c: an Array<T>(n) is zeros, from a freshly mapped chunk or a recycled one
+ok - D13c: a type with a constructor makes its own zero value
+ok - T4: signed, unsigned and half-width float types
+ok - E11a: integers render in decimal at every digit-count boundary, at run time as while compiling
+ok - T4: an F16 or BF16 zero is zero, while compiling and at run time
+ok - T29h: Char is text's unit and String holds Chars
+ok - M19e: an override of a generic trait's default runs from generic code
+ok - E33: a float's bits, and a float from bits
+ok - E33a: a signalling NaN keeps its payload, quieted or not
+ok - E36: a number type's limits
+ok - E37: an integer's bit operations
+ok - L13-L15, L14a: escapes by number, and raw text
+ok - E5: the bitwise operators bind tighter than the comparisons
+ok - T17e: raw values
+ok - S19: deferred code runs on every way out of its block, while compiling and at run time
+ok - S19e: errdefer runs only on an error's way out, in the defers' order, while compiling and at run time
+ok - errdefer pending in a test body is not run when the test passes
+ok - ...and was not run
+ok - S19a: deferred code runs before its block's scope closes
+ok - a block inside a catch clause closes at its own brace
+ok - a statement after a return compiles
+ok - an unsigned narrow index reads the element its value names
+ok - a checked index evaluates its base once
+ok - S4: assignment is left to right, and a compound one reads its place once
+ok - an array filled with a struct holds the struct in every element
+ok - a decimal literal above I64's maximum is a U64
+ok - a long text literal is not truncated
+ok - a block inside a match value closes at its own brace
+ok - a big struct is passed and returned through memory, with value semantics
+ok - a spawned constructor and a spawned computed call run as their calls do
+ok - O18b: List.Push of a temporary in a loop builds it where the list lives
+ok - O18b: a temporary pushed from a doubly nested block, and text pushed in a loop
+ok - O10b: a method, a function and a generic declared after their caller
+ok - StringBuilder in a loop: the text is copied in, so nothing it is given needs to outlive it
+ok - O23a: elements of one list pushed into another, through the iterator
+ok - O13c: a hand-written iterator's elements live where its collection does
+ok - O18b/O23a: the same pushes computed while compiling and at run time
+ok - T7b: an array or text value returned from a local is built in the result scope, before the callee's scopes close
+ok - O1b: what a function assigns to a global, or into one, is built in the program's scope
+ok - P2/O1b: tasks building into the program's scope at once each build into their own stand-in for it
+ok - P2/P1g: what a task builds lives where its call bound it, not in the join block
+ok - R9a: a catch default is built where the call's result lives
+ok - O18a: a value local's references live in its own block - a loop body's are reclaimed with the iteration
+ok - T7b/R9a: the same results computed while compiling and at run time
+ok - R9a: a reference default is judged where the call's result lands, not where the try is written
+ok - O18a: a field, an element, a slice or a payload of a call's built result lands where it is put
+ok - T7/O18a: an array literal or fill built from temporaries, returned, holds them where the array lands
+ok - D8c/O18a: results destructured into existing variables land where those variables live
+ok - E28/S12b: a conditional or match of a reference and a new value is a reference, the new one built where it lands
+ok - C2d/E31: a constructor call pushed lands with the list, and a checked index reads through a field
+ok - O4b/G11: a list of pairs holding text references, built in a loop over another list
+ok - O4b/O14c: a by-value parameter holding references returns them to a caller that keeps them no further out
+ok - E31/O14a: an instance whose type declares Call, passed in, is returned as a function value
+ok - O1b/O25e: a global argument binds the callee's scope to the program's, read through a read-only receiver or built into
+ok - T25d: constant text elements read through a for-in are static, and may be stored anywhere
+ok - O18a/T25d: the same results computed while compiling and at run time
+ok - E11a: a negative zero renders as -0 in every float type, while compiling and at run time
+ok - T4: an integer rounds once to a float, while compiling and at run time
+ok - E10: arrays compare by what they hold - lengths, then elements - the empty array included (T2c)
+ok - E12: a value result read out of a reference is a copy, compared by value while compiling and at run time
+ok - S12b: text a match gives as its value is built where the value lands
+ok - T7d: a copy into fixed storage of its length, while compiling and at run time
+ok - T25d/E10: static literals compare by what they hold, wherever they were written
+ok - a function-typed global holds a function value, read, called and assigned as one
+ok - B5a: a global is set after the globals its initializer reads, directly or through a call
+ok - B5a: through a function value, and declaration order among globals with no dependency between them
+ok - T7: an array or struct value is assigned into the storage it has, unless an array's length changes
+ok - K1: a global reaching what a writable reference can change is not a compile-time value, and is written at run time
+ok - K2b: globals sharing an instance or a slice of one share it in the program's data too
+ok - E30/E27: a chain re-evaluated inside its own Less, and comprehensions nested by recursion
+ok - E31: a Call adapter, evaluated while compiling as at run time
+ok - a local named like a method calls the method
+ok - E28: text chosen by a conditional and returned is built where the result lives
+ok - T6b: a conditional widening into its target is of the target's type
+ok - E10a: a call's String value compared with a String reference
+ok - T8: an array filled with a reference names one instance in every element
+ok - T4: an integer converted to F16 overflows to infinity, at -O3 too
+ok - E33: the bits of one 16-bit float made into the other are read as the other
+ok - T4: an F32 narrows to a BF16 inline, rounded once, ties to even
+ok - T4: a BF16 below F16's range, widened and computed on, narrows to F16 as computed
+ok - K1: a function holding unreachable is evaluated until it reaches one
+ok - K1/S13a: a function with an exhaustive match over an enum reference is evaluated while compiling
+ok - K1/P9: atomic operations are evaluated while compiling, and agree with the run time
+ok - K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time
+ok - R10: a try statement's clauses do not take an error raised by its call's arguments
+ok - E10, T2c: a reference to an array with no storage renders as the empty array
+ok - G8a: a field after a generic self-reference is reached through the instantiation's elements
+ok - G10c: a generic constructor takes its expected type's arguments
+ok - S13a: patterns cover a case together, a Bool's values cover it, evaluated while compiling as at run time
+ok - L18a: lists, literals, comprehensions and joins run over several lines inside brackets
+ok - S1a: a bare block closes its scope at its end, and leaves as its statements do (D10a)
+ok - S1b: one-line bodies run as the blocks they stand for, at run time and while compiling
+ok - D10a: a loop with no condition and no break of its own never falls through
+ok - E8b: a shift of a literal by a value takes its target's type, or the other operand's
+ok - E28: ':=' from a conditional of text, and of numbers of one type
+ok - E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash
+ok - E10b: a struct, an enum or an array is a key with no Hash written
+ok - E10b: an enum whose cases hold references hashes whichever case it holds
+ok - T29e/G19: a type extending a number is a key through its inherited Hash, or through its own
+ok - C2d: a constructor field builds an entry from the constructor's parameters
+ok - O25h: copies of records holding text are swapped, sorted, pushed outward and kept as an argmin
+ok - O18c: a call with a catch block lands as a call with no clause does
+ok - O18c: an element of a list of lists, used as a receiver and as a loop's source
+ok - a number read out of a list is a number
+ok - O13c: an iterator returning its element through a local
+ok - D16d: compose returns a lambda capturing both of its function parameters
+ok - O25h: an enum field's case rebuilt from its own payload
+ok - O14b/T22a: Fold keeping one of its elements
+ok - O25a: Fold with a reference accumulator
+ok - T25d: a static literal's elements stored into a longer-lived array
+ok - O1b: a copy of a global's element keeps building in the program's scope
+ok - O25h/D16d: sorted copies and a composed lambda, evaluated while compiling as at run time
+ok - C2d: a Map of lists reuses a removed key's slot
+ok - O13c/O17: fresh results from a local's operands; a value built in the result scope lent and passed on
+ok - O25h/O10c: pairs holding text and nodes pushed where their list lives
+ok - M6b: private protocol methods - operators, ==, $, indexing, for, in, Call, Hash - work in their own module
+ok - D15: ':=' infers from arithmetic, comparisons, variables and conditionals
+ok - D8a: a default naming a global declared later, of a constructor and of a function
+ok - D13c: a List of a type with no zero value
+ok - L10a: a hex or binary literal with its top bit set fits U64
+ok - a generic's by-value array parameter: borrowed for a call, and its own copy where its body writes it
+ok - E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)
+ok - S18a: an assert's message is evaluated only when it fails
+ok - E11a: a float's text, computed directly, is the shortest that reads back - while compiling and at run time
+ok - a ring over a capacity its constructor checks
+ok - G29: arrays by value, an instance per length
+ok - D15: := copies fixed storage; a local assigned another length holds it at run time
+ok - a matrix's dimensions are its constructor's, and a product's shape is asserted
+ok - G30: decided per instance - a recursion on a length ends where it is chosen to
+ok - G30: what follows a decided if that leaves is not checked in that instance
+ok - marker types and match T choose per instantiation
+ok - G29: an instance's lengths are constants, read as any value
+ok - T7d: inline fields whose lengths the compile-time evaluator computes
+ok - T7d: fixed storage is a value, laid out in place
+ok - E12, E16a: fixed storage is lent; a slice views part of an array
+ok - T29f: a declared type extends an array whose length is inferred
+ok - QP1: a length is computed in its operands' types, as the program computes it
+ok - D15: ':=' keeps fixed storage, and copies it
+ok - T7d/E10: long fixed arrays are copied and compared whole
+ok - D9a/D16a: a lambda over an array of fixed arrays
+ok - E10c: 'is' meets a reference to fixed storage and one to a run-time length as '==' does
+ok - T7d: a fixed-array local beyond a stack frame's size
+ok - G29: an array of arrays by value under a reference, an instance per element length
+ok - O26a: a returned List, Map, struct, conditional, destructured local and reference result outlive the call
+ok - O26a: a local a conditional, a match or a try's default returns outlives the call
+ok - S12b: text a match value's arm renders outlives the arm
+ok - O25e: an immutable global List or Map, read through its methods
+ok - T29f: a slice of a String has the array methods String inherits
+ok - E28: a conditional of references shares their scope, and is held and passed as one of them
+ok - C2d/C2g: a constructor reads an argument it does not keep, and grows what its fields hold
+ok - O18c: a lookup chained through a list element whose type holds a map
+ok - D16d: a lambda capturing a function value, made for one call in a loop
+ok - E10: == through array references compares the elements they name, while compiling and at run time
+ok - T7d: a fixed array's reference returned as its value, while compiling and at run time
+ok - S13f: 'case _' with a guard and without one, while compiling and at run time
+ok - L9a: keywords as method names
+ok - O26a: a Pratt parser's reference locals, rebuilt in a loop and returned, outlive the call
+ok - O17: a value whose references live elsewhere, lent to callees that read it or write into it
+ok - E31: x[i]++ and a compound store through a value field's SetAt
+ok - O23a: Map.Keys and Map.Values hand out what lives where the map's entries do
+ok - C2d: a context struct over a local List and the caller's sink
+ok - T25d: static names kept by rooms in a returned game
+ok - G9a, T22: Fold's literal start and a read-only lambda parameter
+ok - R11: a default List and a default struct of written text, filled afterwards
+ok - E31: a method named for an operator with another shape is an ordinary method
+ok - G10d: a constructor introducing a type variable, called with two element types
+ok - O26a: a returned value built from a local List's elements keeps them where the result lives
+ok - O4b: a temporary stored through a by-value parameter's reference lives where that reference's referent does
+ok - E10: a struct whose comparison comes round to its own type, while compiling and at run time
+ok - D9b: a by-value array is the caller's array through a reference or a slice, while compiling and at run time
+ok - D11a: a local's mut before a bare type variable is the reference's, and nothing for a number
+ok - E4a/E28: a conditional or match of literals adapts as a literal does, while compiling and at run time
+ok - O17a: a for-in over a split value, and a copy out of a reference, build where the references live
+ok - S4d: an assignment's value borrowing the place it writes over takes the place's old value
+ok - S4d: decided by the result's type, not by what the callee does
+ok - S4c: a parallel assignment's enum case and array literal read their values before any target is written
+ok - S5/E31: an increment evaluates its place once
+ok - T22: a read-only reference parameter fits a function type whose parameter is writable
+ok - T22a: a function whose parameters' scopes relate, called directly, links what it is given where it is kept
+ok - O17: a callee storing what it reads through the lent value's references may be lent a split value
+ok - P2: a task calls a function value read out of storage that lasts until the join
+ok - E16: try on a constant index known to be out of range compiles, and fails where it runs
+ok - O26a: a number computed from a local carries nothing into the result
+ok - O26a: a local a returned value borrows lives in the result scope
+ok - O26a: '&x' of a returned local is the result scope
+ok - O26a: a receiver a method's result holds flows into the result
+ok - O17b: a handle is lent as its reference
+ok - O20: a value copied out of a reference holds what its referent holds
+ok - S12b: array literals of different lengths in a match value
+ok - L9a: a keyword names a field
+ok - T25c: a read-only copy is read, iterated and passed by value; a writable one is written; Clone gives one of its own
+ok - O25h: a copy out of a reference, by any expression, builds where the referent's references live
+ok - S4d: a compound assignment and an increment keep the place's old value, and land where the place lives
+ok - E6d: a conditional of literals folds each value exactly and meets the other operand at the widest
+ok - E11c: a Str building only for itself renders the same while compiling as at run time
+ok - E11c: a Str walks with an iterator it made, whose steps write only the iterator
+ok - E11c: Str is called once per rendering, in order - while compiling as at run time
+ok - E11c: a Str writing a global is called once per rendering - keys and values of a Map included
+ok - E11b: a join's operands are evaluated before any piece renders - while compiling as at run time
+ok - E11c: a Str walking a Map and a List of its receiver renders the same after the arena churned
+ok - C11/O16: a constructor call's instance is destructed once wherever it is used
+ok - T25c: a generic's read-only parameter gives copies as writable as its argument
+ok - P2: spawned lambdas building through what they captured each build into a stand-in of their own
+ok - C2g: a constructor's nested blocks build through its fields into the instance's scope
+ok - O25h: copies of a local enum's payload build where the enum's references live
+ok - P2: a task keeps the closure it was handed, and one it made over a scope it was handed, past the join
+ok - O25h: a payload copied out of a conditional builds where the arms' references live
+ok - E11a: a declared type over Char renders as a character, extends or not, alone and inside another value
+ok - E11a/E21: an array of arrays writes each element as an array of its own, its element type whole
+ok - E11a/T25b: a rendered type writes each inner level's mut, as source writes it
+ok - O18c: a call's result passed on lives where its argument does, and is kept when that is where it is kept
+ok - O18c: a reference read out of a call's value result is kept where its referent lives
+ok - E31: writes through x[i] go back through SetAt, evaluated while compiling as at run time
+ok - E31: an element holding references, written through x[i] in a loop
+ok - O17: a generic's instantiations each say what their own body does with a region
+ok - O26a: a for-in element pushed into a returned list
+ok - E25: a scope argument on a call whose results are destructured
+ok - D16c: a lambda capturing a value holding references
+ok - E31b: a store through x[i] holds its place, evaluates the value, then reads, assigns and writes back
+ok - E31b/O17b: a call on a handle element reaches the shared state, read back after an arena churn
+ok - O18c: a field or an element of a call's value result passed on
+ok - E31b/O17b: nested handle elements are held and lent at every level; a repointing method is written out
+ok - E31b: a view element lent to a callee writing only through its references needs no write-back
+ok - E16a/C2d: a constructor field kept a view of is stored where the instance lands
+ok - E16a: a slice of a temporary is used where it is made; a call's array result and written text go further
+ok - C9/O16: what a destructor builds through its fields lives until its scope's destructors have run
+ok - D8a/D16: a lambda default, from its own module
+ok - E10/K1: a slice of an empty fixed array is empty, not null, while compiling and at run time
+ok - S4c: a parallel assignment builds a global reference field's temporary where the global lives
+ok - O26a: a copy handed to a method lives where the result goes only where the method can keep it
+ok - O18c/O20: a field of a call's value result passed on, through a reference parameter
+ok - O18c: a field or a payload read off a call's result, and a walk of a read-only copy's reference
+ok - O4b: a Map whose values hold Maps of themselves
+ok - C2d/E25: a constructor with a scope argument, declared with ':='
+ok - P4: a join's tasks that fail - evaluated while compiling
+ok - P4: ...and the same at run time
+ok - P4b: the join fails with the task spawned earliest among those that failed
+ok - P4a: a task's clause runs on its thread and counts what it takes
+ok - P4a: a task with several targets gives each a default
+ok - P4a: defaults holding references outlive the join
+ok - P1g: array values tasks give their targets outlive the join
+ok - P4b: a failed join replaces a return, a break and a continue, but not an error already leaving
+ok - P4b: a failed join's deferred code runs, then the clause
+ok - P4: a spawned lambda fails, and nested joins pass a failure out
+ok - R1a/P4c: an inferred set through a join
+ok - D10a/P4c: a function may end in a join that leaves
+ok - P4b: a return inside a failing join is replaced by the join's failure
+ok - O18c/O20: a store through an element At, Get, First or Last hands back is judged where the collection lives
+ok - E28/O12: a conditional of references from different scopes, each value fitting the store
+ok - C9a/P2: what a destructor's task builds is destructed with the scope being closed
+ok - C10: a destructor calls a method on a field it reads bare
+ok - S4c: several parallel assignments in one function, while compiling too
+ok - S4c: several parallel assignments in one function
+ok - E31a: try on a fallible Call
+ok - O1b/S4c: a parallel assignment builds a whole global value's references where the global lives
+ok - P4a/D16d: a task's default holding a lambda, while compiling and at run time
+ok - P4a/D16d: a task's default may hold a lambda capturing only values
+ok - O15/O16: a chain of 300,000 nodes in a block destructs once each, in reverse construction order, as the block closes
+ok - O15: a tree's nodes destruct in reverse construction order - each node after the nodes it holds were built
+ok - R1a, R1b: an inferred set is what the body can fail with, through cycles and function values
+ok - R8: try covers a chain, its arguments and a parenthesized expression
+ok - std/arith reports a shifted-out bit; Narrow a changed conversion and an infinite narrowing; as the wrong case
+ok - E31: a fallible operator
+ok - E35: a postfix '!' gives the value where nothing fails
+ok - T35c: Float, Integer and Number - decided while compiling, and the same at run time
+ok - G9a: a literal reaching a constrained variable - decided while compiling, and the same at run time
+ok - E27, D9b: a grown comprehension and a written by-value String, read back after a churn
+ok - E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling
+ok - S8d: case narrowing in and, or, conditionals, after an assert, in and after loops, agreeing while compiling
+ok - E10, E10b: List and Map compare and hash by contents; references without Eq by identity
+ok - T2c, S8e: a nullable reference is read where a test narrows it - baked, decided while compiling, and run
+ok - S8e: a break or continue in a null test's block narrows the rest of the turn - baked and run
+ok - T2c: an array is never null - its zero value is the empty array
+ok - C2d/E28: a conditional or match passed to a constructor lands with the instance
+ok - T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run
+ok - D17e: requirements hold where the evaluator computes the calls - baked and run
+ok - D17e: a closed call whose ArgumentError is caught fails as written - baked, decided and run
+ok - D17: requirements checked on entry, in every build, failing with ArgumentError.Invalid
+ok - D17a: conditions calling functions and lambdas, a call in one failing as itself, a constructor's contract
+ok - D17d, D17f: written scope relations are obligations; a function with value conditions is a value, checked
+ok - D17g: a conversion checked at run time keeps its own words
+ok - E24: a try covers the whole expression after it, and the evaluator agrees
+ok - O15: destructors run where their holders let go, in reverse construction order
+ok - O15: a value ended by an error leaving, by its function, and by its block after a call that keeps nothing
+ok - O15: a value ended where an error leaves, and the values of a generator's turns
+ok - O8d: a place let go of between a generator's yields and in an errdefer - baked, decided and run alike
+ok - O8d, F1: a view a generator holds across a yield keeps what it names
+ok - O8d, F2: a value of a place stored inside another value of that place keeps the place
+ok - O8d, F4: a destructor a let-go would run early runs at its scope's close
+ok - O15: a continue - and a break - in the loop that declares r end it
+ok - S6: text lent writably as an Array<Char> where it may be written
+ok - E31b: a mutating call through x[i] is made on the element in place, as the evaluator makes it
+ok - S4c, E31: a parallel assignment of elements stores through SetAt
+759 passed, 0 failed
+== checks/checks.olang ==
+cp: -r not specified; omitting directory 'checks/fixtures/testfuzz/testdata'
+grep: compiles.txt: No such file or directory
+ok - every case in checks/cases does what its header says
+ok - what a long-lived place lets go of is freed at once
+ok - where a value lands, as whole builds
+ok - std/io beside a local io.olang
+ok - builds side by side in one directory compile each object once
+ok - a file in a remote repository, fetched once into the cache
+ok - nothing in a remote import or the lock file is run
+ok - objects and symbols are named by what they are built from
+ok - a program locked back to an older commit is built from it
+ok - -t runs every file it can, whatever another one is
+ok - -t goes on past a file the compiler crashed on
+ok - a program of many long-named modules links
+ok - diagnostics are on one stream, and a crash says so
+ok - a module outside the working directory imports its neighbours
+ok - a directory groups files and is never a module
+ok - a -D value rebuilds only the modules that mention it
+ok - an unchanged module's object is reused, and the program is the one written afresh
+ok - weak references are judged over the whole program
+ok - a store widening a precompiled module's field is refused at the store, accepted from source
+ok - a module's record is reused only by a program whose facts read alike
+ok - an edit of every kind built incrementally is the program built clean, lowering only what read it
+ok - every run case built in one directory, in two orders, reuses only what it would write afresh
+ok - a damaged or foreign record is written again, never read; builds side by side keep whole records
+ok - an embedded file changed rebuilds what embeds it; an embed in std stays in std
+ok - -i interprets a program as the built program runs
+ok - a program reads its arguments and environment, and uses the file system
+ok - os.Exit ends the process with its status
+ok - io.Print and io.Println write, and fail with io.Error when the write fails
+ok - olang test -fuzz finds a planted bug, and the test replays it
+ok - olang profile names the hot function, its line and its callers
+ok - olang api lists a module's interface changes, and explain -caps what each module reaches
+ok - olang explain -asm and -ir show a function's code with its source lines and LLVM's remarks
+ok - a failed check says where it is
+ok - a proven assert leaves no run-time check
+ok - a twin with a plan of its own has code of its own
+ok - a sort given a lambda has a clone, its merge loop calling nothing through a value
+ok - a literal reaching a read-only reference is static data
+ok - computed globals are written out as data
+ok - a NaN made from bits is written out with its bits, and a BF16's sign bit read from memory
+ok - an aggregate is returned through one slot
+ok - an array of 128-bit elements is 16-aligned
+ok - -memory lists the storage built where a view of it is kept
+ok - what is assigned before it is read gets no zero first
+ok - every numeric primitive has its own alias tags
+ok - a private operator works only in its own module
+ok - a private protocol method works in its own module, and is an error elsewhere
+ok - an enum's payload is held as words
+ok - a List is walked run by run, not by At
+ok - editing the prelude rebuilds what uses it
+ok - nested lambdas and try-catch statements parse in time linear in their depth
+ok - nesting is bounded with a diagnostic, never a crash
+ok - a function of many local ifs compiles in time linear in their number
+ok - the code generator's review fixes, as whole builds
+ok - the type checker's review fixes, across modules
+ok - a function value through an import alias is checked as one named bare
+ok - a Vec, built, sanitized and interpreted alike, and a stale view is caught
+ok - failing tasks agree built, sanitized and interpreted
+ok - generators agree built, sanitized and interpreted
+ok - the evaluator, the run time and -i agree
+ok - a view from a module found after the caller's holds the caller's array
+ok - every benchmark program compiles
+ok - the arena's chunk pool gives memory back beyond its bound
+ok - olang calls C and C calls olang, as clang's code does
+ok - a build is for this machine unless -a names another target
+ok - a generic type first reached from another module's signature
+ok - a ':=' field read before its constructor's body is built
+ok - every message of compiler/msgs.olang names rules the specification states, and is its own Diag
+ok - the differential fuzzer finds nothing on its fixed seeds
+ok - the scope sanitizer reports a use after a scope closed, and nothing else
+ok - os.OnCrash reports a crash on every thread, and os.RunOnStack makes room
+ok - a closure that may build asks for the scopes it captured
+ok - joins reaching a Str give what they did when reviewed
+ok - a local lambda only ever called keeps its environment in the frame, and no other
+ok - the runtime's regions make, release and hand back what they hold
+ok - the runtime finds a scope from an address
+ok - tests that fail on purpose, and where an error went
+ok - a file is built and run, and runs as a script
+ok - -output names what build and compile write
+ok - format writes the layout, and -check lists what is not in it
+ok - fix rewrites old code to the language of today, and -check only says so
+ok - the command line is words
+ok - a run case's stored output is read back from compiler/goldens/run.txt
+82 passed, 0 failed
+== compiler/interp.olang ==
+0 passed, 0 failed
+tests/shared.olang: same 759
+== compiler/olang.olang ==
+ok - a command line's mistakes are said as stage 0 says them
+ok - -quick builds at -O2 with no link-time optimization, its objects apart (B2g)
+ok - the options are recorded wherever they stand, and passed on as written
+ok - the modes: each said wrong as stage 0 says it
+ok - doc, lsp and mcp: their files, names and options (B14-B16)
+ok - explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)
+ok - help lists the modes, and a mode's options, as stage 0 does
+7 passed, 0 failed
+== compiler/emit.olang ==
+ok - a slot stored once and loaded once is folded into the value stored; any other slot is kept
+1 passed, 0 failed
+checks/cases/2digitname.olang: same
+checks/cases/b10cdefault.olang: same
+checks/cases/b10text.olang: same
+checks/cases/b11notehandlefix.olang: same
+checks/cases/b6condarg.olang: same
+checks/cases/b6dtortask.olang: same
+checks/cases/b6elemgeneric.olang: same
+checks/cases/b6matchfield.olang: same
+checks/cases/b9cmethod.olang: same
+checks/cases/becomearenacopied.olang: same
+checks/cases/becomedtorpayload.olang: same
+checks/cases/c11comprdtor.olang: same
+checks/cases/c11dtorglobal.olang: same
+checks/cases/c2dblock.olang: same
+checks/cases/c2dcapturebuild.olang: same
+checks/cases/c2dcondfield.olang: same
+checks/cases/c2de25once.olang: same
+checks/cases/c2dfieldmap.olang: same
+checks/cases/c2dheldpush.olang: same
+checks/cases/c2dnoclone.olang: same
+checks/cases/c2dreturn.olang: same
+checks/cases/c4genwalkkept.olang: same
+checks/cases/callvaluekeeps.olang: same
+checks/cases/chunkpool.olang: differs - status built 0, interpreted 134 as listed - chunkpool.olang:46: assertion failed
+checks/cases/condchainlit.olang: same
+checks/cases/ctorlambdafield.olang: same
+checks/cases/ctorlambdafieldout.olang: same
+checks/cases/d15forward.olang: same
+checks/cases/d16cstore.olang: same
+checks/cases/d16espawn.olang: same
+checks/cases/d18cheldfield.olang: same
+checks/cases/d18cviewkept.olang: same
+checks/cases/d18framekept.olang: same
+checks/cases/d18yielddefer.olang: same
+checks/cases/d8eruns.olang: same
+checks/cases/d9hfnpurerun.olang: same
+checks/cases/defsfast.olang: same
+checks/cases/derivedcopycapture.olang: same
+checks/cases/derivedpassedloop.olang: same
+checks/cases/e13cliterals.olang: same
+checks/cases/e31bcallargs.olang: same
+checks/cases/e31bfnpure.olang: same
+checks/cases/e31bhandlefieldtext.olang: same
+checks/cases/e31btryelem.olang: same
+checks/cases/e31bviewbuilds.olang: same
+checks/cases/e31bviewnoindexnote.olang: same
+checks/cases/e32marker.olang: same
+checks/cases/externruntime.olang: same
+checks/cases/g12explicitlength.olang: same
+checks/cases/g29runtime.olang: same
+checks/cases/genericenum.olang: same
+checks/cases/kw.olang: same
+checks/cases/l18cgroupok.olang: same
+checks/cases/m19g20allowed.olang: same
+checks/cases/mapchurn.olang: differs - status built 0, interpreted 134 as listed - mapchurn.olang:24: assertion failed
+checks/cases/nllkeepsunion2.olang: same
+checks/cases/o10ccycle.olang: same
+checks/cases/o10cnotedecl.olang: same
+checks/cases/o10dd9bslice.olang: same
+checks/cases/o13afieldstore.olang: same
+checks/cases/o14afn.olang: same
+checks/cases/o14byvalborrowany.olang: same
+checks/cases/o15registeredholds.olang: same
+checks/cases/o17aparamhandon.olang: same
+checks/cases/o17blambdakeep.olang: same
+checks/cases/o17borrowsplitwrap.olang: same
+checks/cases/o17btrydefaultkept.olang: same
+checks/cases/o17lambdareads.olang: same
+checks/cases/o17ownturnvec.olang: same
+checks/cases/o17permute3.olang: same
+checks/cases/o17selfstore.olang: same
+checks/cases/o17splitvecdtor.olang: same
+checks/cases/o17templambdaarg.olang: same
+checks/cases/o17templambdalocal.olang: same
+checks/cases/o18ckeptloop.olang: same
+checks/cases/o18cnestedhandles.olang: same
+checks/cases/o18cstorage.olang: same
+checks/cases/o20arrelem.olang: same
+checks/cases/o23abuild.olang: same
+checks/cases/o23awrite.olang: same
+checks/cases/o25carrayelem.olang: same
+checks/cases/o25gfieldreassign.olang: same
+checks/cases/o25hcopyelem.olang: same
+checks/cases/o25hcopyreturn.olang: same
+checks/cases/o26aborrowparam.olang: same
+checks/cases/o26acycleplain.olang: same
+checks/cases/o26ainlinearray.olang: same
+checks/cases/o26areflocal.olang: same
+checks/cases/o27destructorcall.olang: same
+checks/cases/o27genborrow.olang: same
+checks/cases/o4bmapvalueblock.olang: same
+checks/cases/o8dfnpurerun.olang: same
+checks/cases/o8dviewctorarray.olang: same
+checks/cases/o8estack.olang: not interpreted - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret
+checks/cases/p1gtargetsnarrow.olang: same
+checks/cases/p2cycledeps.olang: same
+checks/cases/p2spawncalled.olang: same
+checks/cases/p2spawnfieldclosure.olang: same
+checks/cases/p2transientinner.olang: same
+checks/cases/p4adefaultholds.olang: same
+checks/cases/qceretglobal.olang: same
+checks/cases/r11bcapturedcmp.olang: same
+checks/cases/r11defaultexisting.olang: same
+checks/cases/r23areceiver.olang: same
+checks/cases/r9adefaultlocal.olang: same
+checks/cases/runonstackdebug.olang: same
+checks/cases/rv3ctorcopy.olang: same
+checks/cases/rv3rofilter.olang: same
+checks/cases/rv3strwrites.olang: same
+checks/cases/rv5ctorblock.olang: same
+checks/cases/rv5ctorparamcall.olang: same
+checks/cases/rv5matchborrow.olang: same
+checks/cases/rv5taskclosure.olang: same
+checks/cases/rv5taskkeep.olang: same
+checks/cases/rv6closuretasks.olang: same
+checks/cases/rv7o1bkeystolist.olang: same
+checks/cases/rv7p1ctorbare.olang: same
+checks/cases/rv7p3ccursorenum.olang: same
+checks/cases/rv7p5blambdacount.olang: same
+checks/cases/rv7p7conddirect.olang: same
+checks/cases/rv8defaultshared.olang: same
+checks/cases/rv9parallelglobal.olang: same
+checks/cases/rv9slicetempview.olang: same
+checks/cases/s13fexhaustive.olang: same
+checks/cases/s1ablock.olang: same
+checks/cases/s20yieldheld.olang: same
+checks/cases/s5callresultfield.olang: same
+checks/cases/s5destructnoscope.olang: same
+checks/cases/s5heldindexnote.olang: same
+checks/cases/s5mapgetreturnparam.olang: same
+checks/cases/s5projection.olang: same
+checks/cases/s6handleloop.olang: same
+checks/cases/s6strdeep.olang: same
+checks/cases/s8belseif.olang: same
+checks/cases/s8dnarrowrefpayload.olang: same
+checks/cases/splitborrowlocal.olang: same
+checks/cases/strarraycallback.olang: same
+checks/cases/strcalleecatch.olang: same
+checks/cases/strcalleespawn.olang: same
+checks/cases/strcondtext.olang: same
+checks/cases/strdefaulthelper.olang: same
+checks/cases/strdefaultspawned.olang: same
+checks/cases/strhelperiter.olang: same
+checks/cases/strmovedlocal.olang: same
+checks/cases/stro20condstore.olang: same
+checks/cases/strselfrecdeps.olang: same
+checks/cases/strspawnnobuild.olang: same
+checks/cases/strstorelocal.olang: same
+checks/cases/strtransientbuilds.olang: same
+checks/cases/t13bhandonlambda.olang: same
+checks/cases/t17ccaseparamcopy.olang: same
+checks/cases/t17enumref.olang: same
+checks/cases/t17wholereflines.olang: same
+checks/cases/t22acapture.olang: same
+checks/cases/t22ainstancename.olang: same
+checks/cases/t22avalueexact.olang: same
+checks/cases/t22borrowedresult.olang: same
+checks/cases/t22breturncycle.olang: same
+checks/cases/t22dgenfacts.olang: same
+checks/cases/t22sharedscopegeneric.olang: same
+checks/cases/t25ccopyreturn.olang: same
+checks/cases/t29dradixcall.olang: same
+checks/cases/t30cfacts.olang: same
+checks/cases/t32anyarrcopyassign.olang: same
+checks/cases/t32anyleak.olang: same
+checks/cases/t7adeclaredelem.olang: same
+checks/cases/t7aelemvalue.olang: same
+checks/cases/t7dfixedrun.olang: same
+checks/cases/vec03copy.olang: same
+checks/cases/vec112elemviewstore.olang: same
+checks/cases/vec127globalfieldcopy.olang: same
+checks/cases/vec146deepok.olang: same
+checks/cases/vec20byname.olang: same
+checks/cases/vec27cloneshort.olang: same
+checks/cases/vec70ctorfieldblock.olang: same
+checks/cases/vec90structcopygrows.olang: same
+checks/cases/x13qsort.olang: differs - status built 0, interpreted 1 as listed - olang interpret: x13qsort.olang:14: it calls an external function with a parameter or result interpret cannot pass - only numbers, Bools, arrays and structs of numbers, and pointers C gave
+== total: files 177 same 173 differing as listed 4 differing 0
+failed: compiler/lower.olang editfuzzcheck 
+make[1]: *** [makefile:378: suite] Error 1
+make[1]: Leaving directory '/home/user/wt/merge'
+make: *** [makefile:390: verify] Error 2
