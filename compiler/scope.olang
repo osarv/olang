@@ -108,6 +108,26 @@ type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64, View Bool
     Bind     # the slot's half of an exact fit (O25g): where Hi's references are bound, never that its own storage is kept
 }
 
+# W4 (O23a, O25g): a field set's member - the binding a constructor call of a body gave its argument w of the struct
+# declared d (Key d * 256 + w), Untraced where it is not known there
+type fsRow struct(Key I64, T Term) {
+    Key
+    T
+}
+
+# ... and what a judging of a body gathers: its constructor calls' bindings, and the types of what came into the body
+# from outside it - a parameter, a capture, a global read, a call's result, what a call may write through an argument
+# (Inside: only what the argument's referent holds) - any of which may bring an instance whose binding it does not know
+type fsOpen struct(T types.TypeId, Inside Bool) {
+    T
+    Inside
+}
+
+type fsBody struct() {
+    Rows Vec<fsRow>
+    Open Vec<fsOpen>
+}
+
 WhyHolds I64 = 1
 WhyField I64 = 2
 WhyResult I64 = 3 # what an instance a function returns holds (C2d through its result, said where the result lands)
@@ -359,6 +379,12 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     bindTerms Vec<Term>
     bindKids Vec<I64>         # parallel to bindTerms: the record of the argument's own instance there, -1 for none
     siteRec Map<I64, I64>      # a call's site: the record its instance's bindings start at
+    # W4 (O23a, O25g): by body, the field sets its last judging gathered (fieldSet); what this judging gathers; the
+    # precompiled modules, by index, whose field sets are their own (B3i)
+    fsets Map<I64, fsBody>
+    fsNow fsBody
+    Apart Map<I64, Bool>
+    fsSeen Vec<types.TypeId>   # the types fsReach walked
     fieldsAssigned Map<pair.Pair<I64, I64>, Bool> # (struct type, field) any body assigns after construction, -1 all
     # a local assigned after its declaration: the record every value it is given has, merged over a quiet judging of
     # the body first (lateBody) - Untraced where they disagree, none where one has no record (O23a)
@@ -2533,6 +2559,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.judged[b] = true
     s.B = body
     s.Id = b
+    s.fsStart(body)
     s.terms.Clear()
     s.stors.Clear()
     s.origin.Clear()
@@ -2614,6 +2641,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     said := s.P.L.Diags.Count()
     s.run()
     s.verEnd()
+    s.fsets.Put(b, s.fsNow)
     if report { s.fnBounds() }
     if report and str { s.strReceiver() }
     if report and s.tailSp.Start >= I32(0) and s.dtorAt.Start >= I32(0) {
@@ -7829,7 +7857,8 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         # path - an element, a field of another instance: only its container's scope is, an underestimate, and the store
         # could falsify the binding every reader of that instance relies on (O23, O11); a promoted field's goes back
         s.giveBackPlace(p)
-        if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
+        f := s.apartField(p)
+        if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldSetPrecompiled(f) if f != "" else msgs.FieldBindingUnknown()) }
         try s.targets.Pop() catch { }
         return
     }
@@ -8075,6 +8104,19 @@ fn (s mut Scoper&) partsTerm(p typed.Lvalue&) Term {
 # where the instance is, an underestimate (O23) that is read but never built into nor shown to be outlived
 fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
     bt := base.Type()
+    if s.isRef(bt) and throughElem(base) {
+        # (W4: a field of an instance an element refers to - its binding is the body's field set, where that is known)
+        st := s.P.T.Referent(s.P.T.Repr(bt))
+        sm := s.fieldMark(st, i) if s.isStruct(st) else typed.Mark.None
+        if sm != typed.Mark.Of { return s.partsTerm(base) }
+        w := s.ctorParamIndex(st, sm.local)
+        fs := s.fieldSet(st, w)
+        if fs != Term.None { return fs }
+        s.under.Push(s.partsTerm(base))
+        s.underElem.Push(true)
+        s.underDecl.Push(s.declOf(st))
+        return Term.Derived(-s.under.Len(), w)
+    }
     if not s.isStruct(bt) { return s.partsTerm(base) }
     fm := s.fieldMark(bt, i)
     if fm != typed.Mark.Of { return s.partsTerm(base) }
@@ -8086,6 +8128,9 @@ fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
     }
     # an instance whose construction bindings are known (O23a): a local's, a field's of one
     if s.recAt(s.recOf(base), w) != Term.None { return s.recAt(s.recOf(base), w) }
+    # (W4: else where the body's own instances' fields are bound - its field set - where every instance is its own)
+    fs := s.fieldSet(bt, w) if throughElem(base) else Term.None
+    if fs != Term.None { return fs }
     s.under.Push(s.partsTerm(base))
     s.underElem.Push(throughElem(base))
     s.underDecl.Push(s.declOf(bt))
@@ -8905,9 +8950,11 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
         case typed.Expr.Data(_, _, _, _) { return Val(ValKind.Static, Term.Program) }
         case typed.Expr.Read(_, ty, p, _), typed.Expr.Take(_, ty, p) {
             if p == typed.Lvalue.Local and s.isCursorLocal(I64(p.id)) { s.readCursor(I64(p.id), x) }
+            if globalRooted(p) { s.fsNow.Open.Push(fsOpen(ty, false)) }
             return s.read(p, ty, dest)
         }
-        case typed.Expr.Borrow(_, _, p) {
+        case typed.Expr.Borrow(_, bty, p) {
+            if globalRooted(p) { s.fsNow.Open.Push(fsOpen(bty, false)) }
             s.placeOperands(p)
             return Val.existing(s.storOf(p))
         }
@@ -9896,6 +9943,7 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
         }
         s.siteRec.Put(I64(c.Site), s.ctorFrom)
     }
+    if s.P.T.Role(fty) != types.RoleCtor { s.fsCall(c, ty) }
     if s.P.T.Role(fty) == types.RoleCtor {
         # its construction bindings, for a local it initializes (O23a): where each parameter's argument lives
         s.ctorSite = I64(c.Site)
@@ -9905,6 +9953,7 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
             s.bindKids.Push(s.argRec(c.Args[p]))
         }
         s.siteRec.Put(I64(c.Site), s.ctorFrom)
+        s.fsCtor(ty, s.ctorFrom, n)
         return s.liftedVal(Val.fresh(beta[rv] if rv >= 0 else here), sl, want)
     }
     # D18c: a generator whose elements borrow from parameter p: where p's argument lives, for the walk it may make
@@ -11379,9 +11428,147 @@ fn (s mut Scoper&) derivedAt(p I64, w I64, c typed.Call&, hi Bool, beta Array<Te
     # an instance whose construction bindings are known (O23a): a local's, a field's of one
     rec := s.argRec(a)
     if s.recAt(rec, w) != Term.None { return s.recAt(rec, w) }
+    # W4: an instance an element refers to - where the body's field set says its fields are bound
+    if throughElemExpr(s.unAway(a)) {
+        fs := s.fieldSet(a.Type(), w)
+        if fs != Term.None { return fs }
+    }
     if not hi { return Term.Untraced }
     t := s.paramBinding(c, p, beta)
     return t if t != Term.None else Term.Untraced
+}
+
+# ---- field sets (W4: O23a, O25g; docs/wholeprog.md 2.4) ----
+#
+# A field viewing its constructor argument's referent is bound, per instance, where that argument lived (C2d). Reached
+# through a path that names no instance - an element, a field of another instance - its binding is the field's set in
+# the body: the bindings the body's own constructor calls gave that argument, one term or several (O12). Reads through
+# it are judged against each - the shortest - and stores into it against each - the longest, exactly each where
+# something can be stored through it (O25g), which placement makes one where it can (O28); what is built through it is
+# built where its referent is found to live (O29). The set is the last judging's of the body, and it is known only
+# where every instance of the type the body can reach is its own: none came in from outside - a parameter, a capture, a
+# global, a call's result, a call writing through an argument - else the binding is not known through that path (O23)
+
+# a judging's gathering begun: the parameters' and captures' types come from outside it
+fn (s mut Scoper&) fsStart(body typed.Body&) {
+    s.fsNow = fsBody()
+    for l in body.Locals {
+        if l.Kind == typed.LocalKind.Param or l.Kind == typed.LocalKind.Capture { s.fsNow.Open.Push(fsOpen(l.Ty, false)) }
+    }
+}
+
+# a constructor call of type ty whose bindings are recorded from from, one for each of its n parameters
+fn (s mut Scoper&) fsCtor(ty types.TypeId, from I64, n I64) {
+    d := s.declOf(ty)
+    if d < 0: return
+    for w in range n {
+        if w >= 256 or from + w >= s.bindTerms.Len(): return
+        t := s.bindTerms[from + w]
+        s.fsNow.Rows.Push(fsRow(d * 256 + w, t if t.Runs() else Term.Untraced))
+    }
+}
+
+# any other call: its result, and what it may write through its arguments, may bring instances from outside the body
+fn (s mut Scoper&) fsCall(c typed.Call&, ty types.TypeId) {
+    if s.holds(ty) { s.fsNow.Open.Push(fsOpen(ty, false)) }
+    for a in c.Args { s.fsNow.Open.Push(fsOpen(a.Type(), true)) }
+}
+
+# the field set of argument w of the struct t is, or refers to, in this body: its own constructor calls' bindings, one
+# term or a set (O12); None where it is not known - an instance may have come from outside, a binding is not known, no
+# judging gathered it yet, or the struct is a precompiled module's and this body another module's (B3i: its field
+# sets are its own stores')
+fn (s mut Scoper&) fieldSet(t types.TypeId, w I64) Term {
+    d := s.declOf(t)
+    if d < 0 or w < 0 or w >= 256 or s.apartDecl(d): return Term.None
+    fb := try s.fsets.Get(s.Id) catch { return Term.None }
+    r := s.P.T.Repr(t)
+    if s.isRef(r) { r = s.P.T.Repr(s.P.T.Referent(r)) }
+    for o in fb.Open {
+        if s.fsReaches(o.T, r, o.Inside): return Term.None
+    }
+    ts Vec<Term>
+    for row in fb.Rows {
+        if row.Key != d * 256 + w: continue
+        if not row.T.Runs(): return Term.None
+        if not ts.View().Some(fn(u Term) Bool { return u == row.T }): ts.Push(row.T)
+    }
+    return s.termOf(ts)
+}
+
+# the name of the field place p is, where its struct is a precompiled module's and this body another module's (B3i) -
+# "" otherwise
+fn (s mut Scoper&) apartField(p typed.Lvalue&) String {
+    if p != typed.Lvalue.Field: return ""
+    bt := s.P.T.Repr(p.base.Type())
+    if s.isRef(bt) { bt = s.P.T.Repr(s.P.T.Referent(bt)) }
+    d := s.declOf(bt)
+    id := try s.ctorOf.Get(bt) catch default -1
+    if d < 0 or id < 0 or not s.apartDecl(d) or p.index >= s.Bodies[id].Fields.Len(): return ""
+    cb := s.Bodies[id]
+    return s.P.L.Names.Text(cb.Locals[I64(cb.Fields[p.index])].Name)
+}
+
+# whether struct declaration d is a precompiled module's and the body judged another module's (B3i)
+fn (s mut Scoper&) apartDecl(d I64) Bool {
+    if s.Apart.Len() == 0: return false
+    m := s.P.T.DeclModule(types.DeclId(I32(d)))
+    if not s.Apart.Has(m) or m < 0 or m >= s.P.L.Mods.Len(): return false
+    return s.P.L.Mods[m].File != s.B!.File
+}
+
+# whether a value of type t can reach an instance of struct r - inside: other than as the referent or value t is itself
+fn (s mut Scoper&) fsReaches(t types.TypeId, r types.TypeId, inside Bool) Bool {
+    s.fsSeen.Clear()
+    u := s.P.T.Repr(t)
+    if not inside: return s.fsReach(u, r)
+    if s.isRef(u) { u = s.P.T.Repr(s.P.T.Referent(u)) }
+    s.fsSeen.Push(u)
+    return s.fsParts(u, r)
+}
+
+fn (s mut Scoper&) fsReach(t types.TypeId, r types.TypeId) Bool {
+    u := s.P.T.Repr(t)
+    if u == r: return true
+    if s.fsSeen.View().Some(fn(v types.TypeId) Bool { return v == u }): return false
+    s.fsSeen.Push(u)
+    return match s.P.T.KindOf(u) {
+        case types.Kind.Ref: s.fsReach(s.P.T.Referent(u), r)
+        case types.Kind.Any, types.Kind.Var: true
+        case _: s.fsParts(u, r)
+    }
+}
+
+# ... through what a value of type u holds: elements, fields, cases, parts
+fn (s mut Scoper&) fsParts(u types.TypeId, r types.TypeId) Bool {
+    ps Vec<types.TypeId>
+    match s.P.T.KindOf(u) {
+        case types.Kind.Ref { ps.Push(s.P.T.Referent(u)) }
+        case types.Kind.Array { ps.Push(s.P.T.Elem(u)) }
+        case types.Kind.Tuple, types.Kind.Record { for p in s.P.T.Items(s.P.T.Parts(u)) { ps.Push(p) } }
+        case types.Kind.Named {
+            if not s.P.T.HasBody(u): return true
+            for p in s.P.T.Items(s.P.T.Fields(u)) { ps.Push(p) }
+            for p in s.P.T.Items(s.P.T.Cases(u)) { ps.Push(p) }
+        }
+        case types.Kind.Any, types.Kind.Var { return true }
+        case _ { }
+    }
+    for p in ps {
+        if p != types.TypeId(0) and s.fsReach(p, r): return true
+    }
+    return false
+}
+
+# whether a place is a global or part of one (O1b)
+fn globalRooted(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Global(_, _, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): globalRooted(b)
+        case typed.Lvalue.Elem(_, _, e): globalRooted(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): globalRooted(pl.Base)
+        case _: false
+    }
 }
 
 # the local an argument is, read or borrowed whole: -1 for any other argument

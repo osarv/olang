@@ -1,25 +1,32 @@
-# check: fail error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
-# O23/O11: a field written '&of' lives where the instance's constructor argument did, which every reader of c believes
-# (c.at reads at outer's scope) - storing through an element that aliases c could falsify that, so it is rejected
-# (O25i: 'keep' is typed per assignment now, so the error is at the read after the loop, which the version
-# 'keep = c.at' reaches - storage of the loop body's; O27 as placement, docs/sec8.md 4.7: the part 'c.at' is read through an
-# instance an element aliases, which no placement of the part's instance serves - it stays refused, as sound as being
-# accepted with c and x built in main's block would be)
+# check: run
+# O23/O23a, W4 (field sets): a field written '= of' lives where the instance's constructor argument did, which every
+# reader of c believes (c.at reads at outer's scope). Storing through an element that aliases c was refused (O23, O11)
+# until 2026-11-10: now the field's binding through the element is the body's field set - the bindings main's own
+# constructor calls gave it, outer's scope alone - so x is held to it and built where outer is (O28), a new one each
+# turn, and 'keep' read after the loop and an arena churn still names the last turn's
 type N struct(v I32) {
     v
 }
 type Cur struct(of mut N&) {
     at mut N& = of
 }
+fn churn() {
+    for i in range 50 {
+        junk := Array<I64>(1000, i)
+        assert junk[999] == i
+    }
+}
 fn main() ? {
     outer mut N& = N(1)
     keep N& = outer
-    for _ in range 2 {
-        x mut N& = N(42)
+    for i in range 2 {
+        x mut N& = N(I32(42 + i))
         c := Cur(outer)
         arr Array<mut Cur&> = Array<Cur&>[c]
         arr[0].at = x
         keep = c.at
     }
+    churn()
     assert $keep != ""
+    assert keep.v == 43
 }

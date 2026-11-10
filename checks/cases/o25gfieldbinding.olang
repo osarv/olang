@@ -2,13 +2,20 @@
 # O25g/O23a, O28: a field written "&of" lives where its constructor's argument for of lived, exactly where something can be
 # stored through it - storing a longer-lived node there moves that binding: the argument's node (t's, made in the inner
 # block) is built where g's is, so a node built through c.cur below is built there too and outlives the block (it was
-# refused as O25h until 2026-11-09; the refusal audit's question 4 asked for a set of scopes per field instead)
+# refused as O25h until 2026-11-09; the refusal audit's question 4 asked for a set of scopes per field instead -
+# W4's field sets, which serve the stores through an alias, o23aliaswrite); read back after an arena churn
 type N struct() {
     next mut N?& = null
     v I64 = 0
 }
 type C struct(of mut N&) {
     cur mut N& = of
+}
+fn churn() {
+    for i in range 50 {
+        junk := Array<I64>(1000, i)
+        assert junk[999] == i
+    }
 }
 fn main() ? {
     g mut N& = N()
@@ -17,6 +24,9 @@ fn main() ? {
         c := C(t)
         c.cur = g
         c.cur.next = N()
+        c.cur.next!.v = 5
     }
+    churn()
     assert g.next is not null
+    assert g.next!.v == 5
 }

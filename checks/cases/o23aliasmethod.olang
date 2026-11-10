@@ -1,5 +1,7 @@
-# check: fail error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
-# O23/O11: the same store made by a method called through the alias - the method's obligation reaches the call
+# check: run
+# O23/O11, W4 (field sets): the same store made by a method called through the alias - the method's obligation (x
+# outlives where c.at is bound, a derived scope) reaches the call, which resolves it for an element through main's
+# field set: outer's scope, so x is built there (refused as O23 until 2026-11-10); 'keep' read back after a churn
 type N struct(v I32) {
     v
 }
@@ -7,15 +9,23 @@ type Cur struct(of mut N&) {
     at mut N& = of
 }
 fn (c mut Cur&) Set(x mut N&) { c.at = x }
+fn churn() {
+    for i in range 50 {
+        junk := Array<I64>(1000, i)
+        assert junk[999] == i
+    }
+}
 fn main() ? {
     outer mut N& = N(1)
     keep N& = outer
-    for _ in range 2 {
-        x mut N& = N(42)
+    for i in range 2 {
+        x mut N& = N(I32(42 + i))
         c := Cur(outer)
         arr Array<mut Cur&> = Array<Cur&>[c]
         arr[0].Set(x)
         keep = c.at
     }
+    churn()
     assert $keep != ""
+    assert keep.v == 43
 }
