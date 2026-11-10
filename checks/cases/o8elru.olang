@@ -1,0 +1,73 @@
+# check: run
+# O8e (genrefs round 4): the LRU cache whose Map owns its nodes of docs/genrefs/lru.olang, its peak asserted - each node let go of is
+# reclaimed where its last owning place lets go of it, its slot reused, so 1M operations stay near what is live
+import "std/os"
+type Node struct(key String, v I64) {
+    key
+    v
+    next weak mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type Lru struct(cap I64) {
+    cap
+    head weak mut Node?& = null
+    tail weak mut Node?& = null
+    at Map<String, mut Node&> = Map<String, mut Node&>()
+}
+
+fn (c mut Lru&) unlink(n mut Node&) {
+    p := n.prev
+    q := n.next
+    if p is null { c.head = q } else { p.next = q }
+    if q is null { c.tail = p } else { q.prev = p }
+    n.prev = null
+    n.next = null
+}
+
+fn (c mut Lru&) pushFront(n mut Node&) {
+    h := c.head
+    n.next = h
+    if h is null { c.tail = n } else { h.prev = n }
+    c.head = n
+}
+
+fn (c mut Lru&) Get(k String&, v I64) I64 {
+    n := try c.at.Get(k) catch {
+        if c.at.Len() >= c.cap {
+            old := c.tail!
+            c.unlink(old)
+            assert c.at.Remove(old.key)
+        }
+        fresh := Node(k, v)
+        c.at.Put(k, fresh)
+        c.pushFront(fresh)
+        return v
+    }
+    c.unlink(n)
+    c.pushFront(n)
+    return n.v
+}
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn main() ? {
+    c := Lru(1000)
+    total := 0
+    x := 777
+    for _ in range 1000000 {
+        x = (x * 1103515245 + 12345) % 2147483648
+        k := x % 4000
+        total += c.Get("key-" $k, k)
+    }
+    assert total == 1998857408
+    kb := peakKb()
+    assert kb > 0 and kb < 25000, $kb
+}

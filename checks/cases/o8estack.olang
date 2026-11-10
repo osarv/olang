@@ -1,0 +1,47 @@
+# check: run
+# O8e (genrefs round 4): the singly linked stack of docs/genrefs/stack.olang, 1M pushes and pops in main's scope with at most 100
+# nodes live. Its Node names no weak reference, so it is no generational type: only the one-holder rule (genrefs 0.1
+# item 5) would reclaim it, which is not built - every node pushed is kept until main ends, as before (17.5 MB)
+import "std/os"
+type Node struct(v I64, next Node?&) {
+    v
+    next
+}
+
+type Stack struct() {
+    head Node?& = null
+    n I64 = 0
+}
+
+fn (s mut Stack&) Push(v I64) {
+    s.head = Node(v, s.head)
+    s.n++
+}
+
+fn (s mut Stack&) Pop() I64 {
+    h := s.head!
+    s.head = h.next
+    s.n--
+    return h.v
+}
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn main() ? {
+    s := Stack()
+    total := 0
+    for i in range 1000000 {
+        s.Push(i)
+        if s.n > 100: total += s.Pop()
+    }
+    assert total == 499999495050
+    kb := peakKb()
+    assert kb > 0 and kb < 25000, $kb
+}

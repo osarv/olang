@@ -1,0 +1,52 @@
+# Reclaiming in a program with tasks (O8e, genrefs 4.6): nothing is reclaimed early where two threads may reach an
+# instance, so a list built and walked on several threads at once keeps every node until its scope closes - its weak
+# back links still read null once no owning place holds what they name. Clean under -race (make race): the counts in
+# the nodes' header words are updated with relaxed atomics, and no generation changes while two threads may read it.
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type List struct() {
+    head mut Node?& = null
+}
+
+# n nodes pushed, the first half popped again, and what is left summed - with whether a popped node's weak place reads
+# null (1) and a kept one's its node (2)
+fn churned(n I64) I64 {
+    l := List()
+    for i in range n {
+        nd := Node(i)
+        h := l.head
+        nd.next = h
+        if h is not null: h.prev = nd
+        l.head = nd
+    }
+    top := l.head!
+    second := top.next!
+    for _ in range n / 2 {
+        h := l.head!
+        l.head = h.next
+    }
+    s := 0
+    at Node?& = l.head
+    for at is not null {
+        s += at.v
+        at = at.next
+    }
+    flags := (1 if second.prev is null else 0) + (2 if l.head!.next!.prev is not null else 0)
+    return s * 10 + flags + 0 * top.v
+}
+
+test churned "lists churned on several threads at once keep their nodes, their weak places reading null once let go" {
+    a, b, c := 0, 0, 0
+    join {
+        spawn a = churned(10)
+        spawn b = churned(20)
+        spawn c = churned(40)
+    }
+    assert a == churned(10) and b == churned(20) and c == churned(40)
+    assert a == 103 and b == 453
+}

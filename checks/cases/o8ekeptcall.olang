@@ -1,0 +1,30 @@
+# check: build
+# flags: -memory
+# also: memory: a Node is reclaimed where the last owning place holding it lets go of it, once no reference to one is in use
+# also: memory: 'l.drop()' keeps the Nodes it lets go of until their scope closes
+# also: note: 'h', a reference to a Node, is in use across this call
+# O8e (genrefs 5.3): a node a call lets go of while the caller still holds a reference to it across the call is kept -
+# the callee reclaims nothing of that type - and -memory says where and which reference
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type List struct() {
+    head mut Node?& = null
+}
+
+fn (l mut List&) drop() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn main() {
+    l := List()
+    l.head = Node(1)
+    l.head!.next = Node(2)
+    h := l.head!
+    l.drop()
+    assert h.v == 1
+}

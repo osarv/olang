@@ -1,0 +1,96 @@
+# check: run
+# O8e (genrefs round 4): the tree with weak parent links of docs/genrefs/tree.olang, its peak asserted - each node let go of is
+# reclaimed where its last owning place lets go of it, its slot reused, so 1M operations stay near what is live
+import "std/os"
+type Node struct(key I64, up mut Node?&) {
+    key
+    parent weak mut Node?& = up # points back (T2d): the tree holds each node through 'root', 'left' and 'right'
+    pad Array<I64> = Array<I64>(8, 0)
+    left mut Node?& = null
+    right mut Node?& = null
+}
+
+type Tree struct() {
+    root mut Node?& = null
+    n I64 = 0
+}
+
+fn (t mut Tree&) Insert(k I64) {
+    if t.root is null {
+        t.root = Node(k, null)
+        t.n++
+        return
+    }
+    at := t.root!
+    for {
+        if k < at.key {
+            l := at.left
+            if l is null {
+                at.left = Node(k, at)
+                t.n++
+                return
+            }
+            at = l
+        } else {
+            r := at.right
+            if r is null {
+                at.right = Node(k, at)
+                t.n++
+                return
+            }
+            at = r
+        }
+    }
+}
+
+fn leftmost(n mut Node&) mut Node& {
+    at := n
+    for {
+        l := at.left
+        if l is null: return at
+        at = l
+    }
+}
+
+fn (t mut Tree&) replace(n mut Node&, c mut Node?&) {
+    p := n.parent
+    if c is not null: c.parent = p
+    if p is null {
+        t.root = c
+    } else if p.left == n {
+        p.left = c
+    } else {
+        p.right = c
+    }
+}
+
+fn (t mut Tree&) DeleteMin() I64 {
+    m := leftmost(t.root!)
+    k := m.key
+    t.replace(m, m.right)
+    t.n--
+    return k
+}
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn main() ? {
+    t := Tree()
+    total := 0
+    x := 12345
+    for _ in range 1000000 {
+        x = (x * 1103515245 + 12345) % 2147483648
+        t.Insert(x)
+        if t.n > 1000: total += t.DeleteMin() % 1000
+    }
+    assert total == 499241966
+    kb := peakKb()
+    assert kb > 0 and kb < 8000, $kb
+}

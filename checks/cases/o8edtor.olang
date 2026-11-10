@@ -1,0 +1,29 @@
+# check: build
+# flags: -memory
+# also: memory: a Res is kept until its scope closes, never reclaimed early
+# also: note: it has a destructor, which runs as its scope closes (O8d's condition 4)
+# O8e (genrefs 5.4): a generational type declaring a destructor is never reclaimed early - its destructor runs once, as
+# its scope closes (O16) - though a weak place to an instance no owning place holds still reads null
+Ended mut I64 = 0
+
+type Res struct(v I64) {
+    v
+    next mut Res?& = null
+    back weak Res?& = null
+} destruct {
+    Ended += 1
+}
+
+type Holder struct() {
+    first mut Res?& = null
+}
+
+fn main() {
+    h := Holder()
+    h.first = Res(1)
+    r := h.first!
+    r.next = Res(2)
+    r.next!.back = r
+    h.first = null
+    assert r.next!.back is null
+}
