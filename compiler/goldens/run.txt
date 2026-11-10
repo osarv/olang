@@ -430,6 +430,16 @@
 | ok - peek: copies a by-value argument the same call also lends
 | ok - slowRead: gives each spawned task its own argument
 | ok - Pt.pinned: reads a returned local's storage where the result went
+=== test tests/reclaim.olang
+| status 0
+| ok - PushBack: removed nodes' slots reused: weak places to them read null
+| ok - PopFront: an orphan kept by a local is read back after nodes reuse slots
+| ok - DList.churn: a node in use across the call letting go of it keeps its value
+| ok - Node: a cycle of owning links is kept until its scope closes
+| ok - Res: a generational type with a destructor is kept, its destructor run once as its scope closes
+=== test tests/reclaimtasks.olang
+| status 0
+| ok - churned: lists churned on several threads at once keep their nodes, their weak places reading null once let go
 === test tests/reflect.olang
 | status 0
 | ok - a type's name, kind and layout are constants of each instance
@@ -2709,6 +2719,14 @@
 === run o8dviewctorarray.olang
 | status 0
 | 2015890 1999-name 1999
+=== run o8edlist.olang
+| status 0
+=== run o8elru.olang
+| status 0
+=== run o8estack.olang
+| status 0
+=== run o8etree.olang
+| status 0
 === run opfallible.olang
 | status 0
 === run p1gtargetscope.olang
