@@ -1923,7 +1923,7 @@ a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang
 752f8d4fa0ba2c85 2b11f3b917c49f74 checks/fixtures/agree/r17.olang
 191abecb65b8dfd6 ea13c0f6857c0a4c checks/fixtures/agree/share.olang
 d37e713f36e3e8e6 7ca216f27cd0e8fe checks/fixtures/apicaps/caps.olang
-0dcda6044e2df4e4 b65af00b24a36f9e checks/fixtures/apicaps/dep/lib.olang
+1aec6583afe7d379 e75971443a5eaf45 checks/fixtures/apicaps/dep/lib.olang
 bd947520cd8aa2ac ce2a46b406814f0a checks/fixtures/apicaps/new/lib.olang
 9f3134a1857ed17b c8c64dacb35c8aeb checks/fixtures/apicaps/old/lib.olang
 525cf9d7ac865e77 6458c858472e9590 checks/fixtures/assertloc/guaranteed.olang
