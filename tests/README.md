@@ -24,6 +24,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `weak.olang` - weak references and generational types (T2d, T13d, O8e): a list, a tree and an LRU cache with weak
   links, a generational value held by reference, and weak places reading `null` once no owning place holds their node
   (removals, a subtree cut off, an eviction, a Map that grows, a Vec's pop).
+- `reclaim.olang` - reclaiming generational instances (O8e): removed nodes' slots reused while weak places to them read
+  `null`, an orphan kept by a local, a node in use across the call letting go of it, a cycle and a destructor type kept.
+- `reclaimtasks.olang` - a program with tasks reclaims nothing early (O8e), clean under `-race`.
 - `bench.olang` - benchmarks (std/bench, B19b): run once here, measured by `olang test -bench tests/bench.olang`.
 - `errsets.olang` - error types declared as types, named error sets and the error a catch clause names (T19, T19a,
   R11b, R3a), each computation baked while compiling beside the same one at run time.

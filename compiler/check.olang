@@ -2345,7 +2345,7 @@ fn (c mut Checker&) weakRow(w weakPlace) String {
         case diag.Where.Span(file, start, _): c.P.L.Diags.Locate(file, start)
         case _: ""
     }
-    return $at ": memory: " $w.Label " is weak: a " $ty " is held by its owning places" $by " and kept until its scope closes; " $w.Label " reads null once none holds it\n"
+    return $at ": memory: " $w.Label " is weak: a " $ty " is held by its owning places" $by " and " $w.Label " reads null once none holds it\n"
 }
 
 # T2d, once the program is checked: a weak reference to a type no owning place of the program holds - every one of

@@ -36288,3 +36288,50 @@ argument's referent.
   and the obligations a parameter's field passes up already answer it - `fn f(t mut N&, g mut N&) { c := C(t); c.cur =
   g; c.cur.next = N() }` compiled before this round). Field sets across functions are carried by derived scopes as
   before; a whole-program gathering per field (all bodies' stores) was not needed for any refused program.
+## `weak` references and generational types, round 4: reclaiming (O8e, B18, B2f, K1, B3e; 2026-11-10, wt-g4, genrefs G4)
+
+Round 4 of docs/genrefs.md (its "Round 4 as built" says what was built, section by section): an instance of a
+generational type no owning place holds and no reference in use reaches is reclaimed - its slot reused by the next
+instance of its class made in its scope, its generation bumped, what it owns let go of in turn - at sites in every
+module, each guarded by a link-time constant the root's decisions object defines, W2's mechanism.
+
+**Where the design moved, and why.** 5.3 judges references in use by type at the typed level, in the final step. The
+sites are placed per module instead, by a liveness pass over the lowered MIR, because only there are the temporaries
+seen: the old value a store let go of is a temporary read just before the store, and a call's dropped result has no
+typed local at all. What a caller holds across a call is the part that needs the whole program, and stays in the final
+step (free.olang), as a set of types per body grown down the calls; the constant per (body, type) carries it to every
+object. "Compares with the body's own locals" became the rule rather than a refinement: a site is placed only where every
+reference still in use is a plain reference, and the runtime compares the instance with each, so a site never has to
+know which instance is the one let go of - an orphan reclaimed after its last use and the old value of a store are one
+case. Several sites after one statement compare with each other's operands, so two names of one instance reclaim it once
+(a double reclaim would run the drop function over a slot whose first word is now the free list's link).
+
+**Free lists found by address.** The scope part's table of 23 lists is named by the stamp word of the scope's tail chunk
+- a word the pool uses only while a chunk is pooled - rather than a new field of %olang.scope, whose size the region
+headers' 152 bytes are written against. The stamp is cleared where a chunk becomes a scope's tail (the slow path), and
+an allocation reads the table only once its thread has put a slot on a list, so a program with tasks (whose stand-ins'
+tails are spliced with no stamp cleared) never reads one: it reclaims nothing (condition 3).
+
+**What counts as in use.** A variable or parameter holding owning references in place is itself an owning place (G3
+counts it), so it is no reference in use; a temporary of such a value, a read-only reference to storage that may hold
+one uncounted (a temporary's), a reference to a part a generational type holds in place (it may point into a slot), a
+function value and an `any` are. Without the first, every probe's `l := DList()` blocked every callee. A lambda's
+capture of a function value is judged where that value's own lambda is made; protocol methods (`Str`, `Eq`, `Next`,
+operators ...) are called where no call is written, so their callers are unknown; a condition evaluated only while
+compiling (an S18c assert's body) calls nothing at run time and is no caller - a test build's top-level asserts had made
+every function they call "called from anywhere".
+
+**Bugs found on the way.** `f := ln.F` in lowering copies the whole function (a value field), so the first sites were
+inserted into a copy and vanished; the pass works on `ln.F` directly. A run-time-length array's elements count where
+stored, so `mut Map&` holds generational instances in place - harmless, a writable reference's storage being counted.
+
+**Measured** (the probes of docs/genrefs/, -O3 and LTO): dlist 97.0 -> 1.8 MB and 45 -> 20 ms, tree 104.3 -> 1.9 MB and
+84 -> 40 ms, lru 49.3 -> 13.8 MB (the rest the keys' text, which round 5 reclaims with its node), stack 17.5 MB as before
+(no `weak`: the one-holder rule's reclaiming, with 5.2's transfers, is not built - left with the round's other leftovers
+in docs/genrefs.md's progress).
+
+**Tests.** tests/reclaim.olang (slots reused while weak places to the removed read null, an orphan read after its slot's
+neighbours churn, a node in use across the call letting go of it, a cycle kept, a destructor type kept and ended once;
+the evaluator deciding two of them while compiling), tests/reclaimtasks.olang (tasks: nothing reclaimed, clean under
+-race), checks/cases/o8e*.olang (the four probes asserting their peaks - listed in evaldiff as too slow interpreted, the
+peak being the compiler's there - and -memory's rows).

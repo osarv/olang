@@ -1,0 +1,39 @@
+# check: build
+# flags: -memory
+# also: note: the program has tasks, which may reach one (O8d's condition 3)
+# O8e (genrefs 4.6): a program with tasks reclaims nothing early - an instance two threads may reach keeps its
+# generation - though its weak places still read null once no owning place holds what they name
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type List struct() {
+    head mut Node?& = null
+}
+
+fn sum(n I64) I64 {
+    l := List()
+    for i in range n {
+        nd := Node(i)
+        nd.next = l.head
+        l.head = nd
+    }
+    s := 0
+    at Node?& = l.head
+    for at is not null {
+        s += at.v
+        at = at.next
+    }
+    return s
+}
+
+fn main() {
+    a, b := 0, 0
+    join {
+        spawn a = sum(10)
+        spawn b = sum(20)
+    }
+    assert a == 45 and b == 190
+}

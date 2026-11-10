@@ -47,6 +47,7 @@ declare void @exit(i32) noreturn
 declare ptr @malloc(i64)
 declare ptr @aligned_alloc(i64, i64)
 declare void @free(ptr)
+declare ptr @realloc(ptr, i64)
 declare ptr @mmap(ptr, i64, i32, i32, i32, i64)
 declare i32 @munmap(ptr, i64)
 declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)
@@ -607,6 +608,266 @@ declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)
 ; made for the one before, or a stand-in it claimed, for its own
 @__olang_self = thread_local(initialexec) global ptr null
 @__olang_thread_next = global i64 1
+
+; ---- reclaiming generational instances (T13d, O8e; docs/genrefs.md 2.3, 4.3-4.5) ----
+;
+; An instance no owning place holds and no reference in use reaches - as the compiler shows at the site calling
+; __olang_gen_reclaim - is reclaimed: what its own owning places hold let go of (its type's drop function, which the
+; compiler writes: each child's count taken down, a child no owning place holds any more reclaimed in turn, through a
+; worklist - never recursion), its generation bumped so every weak word naming it reads null (a slot whose generation
+; reaches 65,535 is retired: kept, never reused, until its scope closes - 4.3), and its slot put on its scope part's
+; free list for its class (4.4): 16-byte classes up to 256 bytes, then 320, 384, 512, 768, 1,024, 1,536, 2,048, the
+; header word included. The scope part is found from the slot's address (O29: its chunk's owner); its table of 23 lists
+; is made in its own storage the first time it reclaims, named from the stamp word of its tail chunk - unused while a
+; scope holds the chunk, and cleared where a chunk becomes a scope's tail (__olang_scope_alloc_slow). A slot's first word
+; stays its generation; its first payload word links the list. Under -sanitize nothing is reused: the slot is
+; quarantined - its payload written with a poison pattern - so a reference wrongly let through reads garbage, never a
+; new instance (section 7)
+
+; the worklist (pairs of an instance and its type's drop function), its count and room - this thread's; and whether
+; this thread has put a slot on a free list, so that an allocation reads no table before (a program with tasks never
+; reclaims, and its stand-ins' tails are spliced with no stamp cleared)
+@__olang_gen_wl = thread_local(initialexec) global ptr null
+@__olang_gen_wn = thread_local(initialexec) global i64 0
+@__olang_gen_wc = thread_local(initialexec) global i64 0
+@__olang_gen_reused = thread_local(initialexec) global i64 0
+
+; storage for an instance of a generational type of class cls (csize bytes, the header word included) in scope, with its
+; header written - generation kept from the slot's last instance, count 0 - and the instance's address (after the
+; header) returned: a slot of the scope's free list for the class, else bumped
+define ptr @__olang_gen_alloc(ptr %scope, i64 %cls, i64 %csize) alwaysinline {
+entry:
+; @if san
+  br label %bump
+; @else
+  %any = load i64, ptr @__olang_gen_reused
+  %some = icmp ne i64 %any, 0
+  br i1 %some, label %look, label %bump
+look:
+  %head = load ptr, ptr %scope
+  %nohead = icmp eq ptr %head, null
+  %isreg = icmp eq ptr %head, @__olang_region_chunk
+  %isfwd = icmp eq ptr %head, @__olang_fwd_chunk
+  %odd0 = or i1 %nohead, %isreg
+  %odd = or i1 %odd0, %isfwd
+  br i1 %odd, label %bump, label %table
+table:
+  %tailp = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
+  %tail = load ptr, ptr %tailp
+  %tabp = getelementptr %olang.chunk, ptr %tail, i32 0, i32 7
+  %tabi = load i64, ptr %tabp
+  %notab = icmp eq i64 %tabi, 0
+  br i1 %notab, label %bump, label %list
+list:
+  %tab = inttoptr i64 %tabi to ptr
+  %lp = getelementptr ptr, ptr %tab, i64 %cls
+  %x = load ptr, ptr %lp
+  %empty = icmp eq ptr %x, null
+  br i1 %empty, label %bump, label %pop
+pop:
+  %next = load ptr, ptr %x
+  store ptr %next, ptr %lp
+  %hp = getelementptr i8, ptr %x, i64 -8
+  %hw = load i64, ptr %hp
+  %g = and i64 %hw, 65535
+  store i64 %g, ptr %hp
+  ret ptr %x
+; @end
+bump:
+  %raw = call ptr @__olang_scope_alloc_a(ptr %scope, i64 %csize, i64 8)
+  store i64 1, ptr %raw
+  %p = getelementptr i8, ptr %raw, i64 8
+  ret ptr %p
+}
+
+; the instance x (its type's drop function drop) put on the worklist where no owning place holds it (a count of 0 - not
+; 3, pinned) and it is none of the n references in use at keep the reclaiming site compares it with
+define void @__olang_gen_push(ptr %x, ptr %drop, ptr %keep, i64 %n) {
+entry:
+  %none = icmp eq ptr %x, null
+  br i1 %none, label %done, label %go
+go:
+  %hp = getelementptr i8, ptr %x, i64 -8
+  %hw = load atomic i64, ptr %hp monotonic, align 8
+  %c = and i64 %hw, 196608
+  %held = icmp ne i64 %c, 0
+  br i1 %held, label %done, label %scan
+scan:
+  %i = phi i64 [ 0, %go ], [ %i1, %next ]
+  %more = icmp slt i64 %i, %n
+  br i1 %more, label %cmp, label %add
+cmp:
+  %kp = getelementptr ptr, ptr %keep, i64 %i
+  %k = load ptr, ptr %kp
+  %same = icmp eq ptr %k, %x
+  br i1 %same, label %done, label %next
+next:
+  %i1 = add i64 %i, 1
+  br label %scan
+add:
+  %wn = load i64, ptr @__olang_gen_wn
+  %wc = load i64, ptr @__olang_gen_wc
+  %full = icmp eq i64 %wn, %wc
+  br i1 %full, label %grow, label %put
+grow:
+  %wc2 = mul i64 %wc, 2
+  %wc3 = add i64 %wc2, 64
+  %bytes = mul i64 %wc3, 16
+  %old = load ptr, ptr @__olang_gen_wl
+  %new = call ptr @realloc(ptr %old, i64 %bytes)
+  call void @__olang_alloc_check(ptr %new)
+  store ptr %new, ptr @__olang_gen_wl
+  store i64 %wc3, ptr @__olang_gen_wc
+  br label %put
+put:
+  %wl = load ptr, ptr @__olang_gen_wl
+  %ep = getelementptr { ptr, ptr }, ptr %wl, i64 %wn
+  store ptr %x, ptr %ep
+  %dp = getelementptr { ptr, ptr }, ptr %wl, i64 %wn, i32 1
+  store ptr %drop, ptr %dp
+  %wn1 = add i64 %wn, 1
+  store i64 %wn1, ptr @__olang_gen_wn
+  br label %done
+done:
+  ret void
+}
+
+; a drop function's step: the instance x one of whose owning places - in an instance being reclaimed - lets go of it:
+; its count taken down, and where that leaves none, x put on the worklist (a count already 0 is a let-go no store
+; recorded, which over-states nothing: left alone)
+define void @__olang_gen_let(ptr %x, ptr %drop, ptr %keep, i64 %n) {
+entry:
+  %none = icmp eq ptr %x, null
+  br i1 %none, label %done, label %go
+go:
+  %hp = getelementptr i8, ptr %x, i64 -8
+  %hw = load atomic i64, ptr %hp monotonic, align 8
+  %c0 = lshr i64 %hw, 16
+  %c = and i64 %c0, 3
+  %skip0 = icmp eq i64 %c, 0
+  %skip1 = icmp eq i64 %c, 3
+  %skip = or i1 %skip0, %skip1
+  br i1 %skip, label %done, label %down
+down:
+  %w2 = sub i64 %hw, 65536
+  store atomic i64 %w2, ptr %hp monotonic, align 8
+  %last = icmp eq i64 %c, 1
+  br i1 %last, label %push, label %done
+push:
+  call void @__olang_gen_push(ptr %x, ptr %drop, ptr %keep, i64 %n)
+  br label %done
+done:
+  ret void
+}
+
+; O8e: the instance p (non-null, of the generational type whose drop function is drop) reclaimed where no owning place
+; holds it and it is none of the n references in use at keep - and what that lets go of in turn, through the worklist
+define void @__olang_gen_reclaim(ptr %p, ptr %drop, ptr %keep, i64 %n) noinline {
+entry:
+  call void @__olang_gen_push(ptr %p, ptr %drop, ptr %keep, i64 %n)
+  br label %loop
+loop:
+  %wn = load i64, ptr @__olang_gen_wn
+  %empty = icmp eq i64 %wn, 0
+  br i1 %empty, label %done, label %pop
+pop:
+  %wn1 = sub i64 %wn, 1
+  store i64 %wn1, ptr @__olang_gen_wn
+  %wl = load ptr, ptr @__olang_gen_wl
+  %ep = getelementptr { ptr, ptr }, ptr %wl, i64 %wn1
+  %x = load ptr, ptr %ep
+  %dp = getelementptr { ptr, ptr }, ptr %wl, i64 %wn1, i32 1
+  %d = load ptr, ptr %dp
+  ; its class, plus one (0: a slot never reused - over 2,048 bytes, or aligned past 8)
+  %cls1 = call i64 %d(ptr %x, ptr %keep, i64 %n)
+  %hp = getelementptr i8, ptr %x, i64 -8
+  %hw = load atomic i64, ptr %hp monotonic, align 8
+  %g = and i64 %hw, 65535
+  %old = icmp uge i64 %g, 65534
+  %g1 = add i64 %g, 1
+  %g2 = select i1 %old, i64 65535, i64 %g1
+  store atomic i64 %g2, ptr %hp monotonic, align 8
+  %noslot = icmp eq i64 %cls1, 0
+  %keepit = or i1 %noslot, %old
+  br i1 %keepit, label %loop, label %free
+free:
+  %cls = sub i64 %cls1, 1
+  call void @__olang_gen_free(ptr %x, i64 %cls)
+  br label %loop
+done:
+  ret void
+}
+
+; the slot of the reclaimed instance x, of class cls, on its scope part's free list - quarantined under -sanitize
+define void @__olang_gen_free(ptr %x, i64 %cls) noinline {
+entry:
+; @if san
+  %sz = call i64 @__olang_gen_class_size(i64 %cls)
+  %pay = sub i64 %sz, 8
+  call void @llvm.memset.p0.i64(ptr %x, i8 -37, i64 %pay, i1 false)
+  ret void
+; @else
+  %c = call ptr @__olang_chunk_of(ptr %x)
+  %noc = icmp eq ptr %c, null
+  br i1 %noc, label %done, label %owner
+owner:
+  %op = getelementptr %olang.chunk, ptr %c, i32 0, i32 6
+  %o = load ptr, ptr %op
+  %noo = icmp eq ptr %o, null
+  br i1 %noo, label %done, label %scope
+scope:
+  %head = load ptr, ptr %o
+  %isreg = icmp eq ptr %head, @__olang_region_chunk
+  %isfwd = icmp eq ptr %head, @__olang_fwd_chunk
+  %odd = or i1 %isreg, %isfwd
+  br i1 %odd, label %done, label %tail
+tail:
+  %tailp = getelementptr %olang.scope, ptr %o, i32 0, i32 2
+  %t = load ptr, ptr %tailp
+  %not = icmp eq ptr %t, null
+  br i1 %not, label %done, label %table
+table:
+  %tabp = getelementptr %olang.chunk, ptr %t, i32 0, i32 7
+  %tabi = load i64, ptr %tabp
+  %notab = icmp eq i64 %tabi, 0
+  br i1 %notab, label %make, label %have
+make:
+  %fresh = call ptr @__olang_scope_alloc_a(ptr %o, i64 184, i64 8)
+  call void @llvm.memset.p0.i64(ptr %fresh, i8 0, i64 184, i1 false)
+  %fi = ptrtoint ptr %fresh to i64
+  store i64 %fi, ptr %tabp
+  br label %have
+have:
+  %ti = phi i64 [ %tabi, %table ], [ %fi, %make ]
+  %tab = inttoptr i64 %ti to ptr
+  %lp = getelementptr ptr, ptr %tab, i64 %cls
+  %first = load ptr, ptr %lp
+  store ptr %first, ptr %x
+  store ptr %x, ptr %lp
+  store i64 1, ptr @__olang_gen_reused
+  br label %done
+done:
+  ret void
+; @end
+}
+
+; the bytes of class cls's slots (4.4)
+define i64 @__olang_gen_class_size(i64 %cls) {
+entry:
+  %small = icmp ult i64 %cls, 16
+  br i1 %small, label %s, label %b
+s:
+  %c1 = add i64 %cls, 1
+  %sz = mul i64 %c1, 16
+  ret i64 %sz
+b:
+  %k = sub i64 %cls, 16
+  %p = getelementptr [7 x i64], ptr @__olang_gen_big, i64 0, i64 %k
+  %v = load i64, ptr %p
+  ret i64 %v
+}
+@__olang_gen_big = unnamed_addr constant [7 x i64] [i64 320, i64 384, i64 512, i64 768, i64 1024, i64 1536, i64 2048]
+
 
 ; an empty chunk whose data holds at least size bytes, when the spare will not do (__olang_scope_alloc takes that
 ; itself): the newest chunk of the smallest class in this thread's pool that holds size bytes, no more than eight
@@ -1623,6 +1884,9 @@ link:
 settail:
   %tailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
   store ptr %newchunk, ptr %tailptr, !tbaa !59
+  ; T13d (genrefs 4.4): a tail chunk's stamp names its scope's free lists of generational slots - none yet
+  %tabptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 7
+  store i64 0, ptr %tabptr, !tbaa !60
   br label %first
   ; a chunk from __olang_new_chunk is empty (its offset 0) and its data area 64-aligned, so this allocation is its
   ; first bytes, whatever alignment it wants

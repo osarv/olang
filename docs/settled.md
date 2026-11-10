@@ -268,14 +268,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   unless it declares a Copy; unique and immut are never one type's. Generics copying a unique T are refused at the
   program's call (G18a).
 - **`weak` references and generational types (T2d, T13d, O8e; docs/genrefs.md, the user's decisions 2026-11-08
-  evening; round 1 built 2026-11-09, rounds 2-3 2026-11-09).** `prev weak mut Node?& = null`: `weak` before a `?&`
+  evening; round 1 built 2026-11-09, rounds 2-3 2026-11-09, round 4 2026-11-10).** `prev weak mut Node?& = null`: `weak` before a `?&`
   reference in a stored position (a field, a payload, a global, an element or type argument a type stores) makes a weak
   place - it reads `null` from the moment no owning place holds its node, by the count of owning places in the word
   before every instance (generation 16 bits, count 2 bits saturating at 3; constant data and stack instances pinned);
   a weak place holds the reference with the generation it saw in its top 16 bits. Owning places counted: fields,
   elements, globals, a value local's parts; a let-go not followed (an element overwritten in place, a dead value local)
-  only puts the `null` later. While compiling such a read is refused, left to the run time (K1). Nothing is reclaimed
-  yet (round 4). `-memory` adds the one-holder rule's classification per type (a whole-program fact). Errors: on a local,
+  only puts the `null` later. While compiling such a read is refused, left to the run time (K1). **Reclaimed (O8e,
+  round 4):** where no owning place holds an instance and no reference in use may reach it - after a let-go's old value
+  and a reference's last use (a local, a call's result), the function's other plain references compared at run time,
+  its callers' references across the call judged over the whole program (a link-time constant per body and type) -
+  the slot goes on its scope part's free list for its class (found by address), its generation bumped (65,535
+  retires it), what it owns let go of through a worklist. Never early with tasks, a destructor, a capture, a generator
+  holding one, an `any` or C given one; -sanitize quarantines; interpret follows the same sites. `-memory` adds the one-holder rule's classification per type (a whole-program fact). Errors: on a local,
   parameter, result or function type; before a never-null reference, an array, a function type, an `any` or an extern
   type; a constructor's new instance stored straight into a weak place; a weak reference to a type no owning place of
   the program holds. The type it names is **generational** over the whole program (any module's `weak`): held only by
@@ -698,12 +703,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
   additions with no run-time cost (the user, 2026-11-03).
 - **Back links are `weak` (T2d, T13d, O8e; the user's decisions 2026-11-08 evening, docs/genrefs.md 0.1; decided, being
-  built).** `prev weak mut Node?&` in a stored position holds without keeping; every other holding place owns. A type
+  built: rounds 1-4).** `prev weak mut Node?&` in a stored position holds without keeping; every other holding place owns. A type
   any module names weakly is generational: held only by reference, one header word (generation and a count of owning
   places, 0-3). A weak read gives `null` as soon as no owning place holds the node (the user: "the entire point of
   having weak links"); reclaiming where the last owner lets go, in every module. Errors: a fresh node stored only into
   weak places; a weakly named type no owning place of the program holds. Nodes only ever held by one owning link are
-  freed at compile time alone (the one-holder rule). `unique` and `weak` stay (alternatives declined); `std/pool` beside.
+  freed at compile time alone (the one-holder rule - classified, its reclaiming not built yet). `unique` and `weak` stay (alternatives declined); `std/pool` beside.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF); a
   `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left (the refusal audit,
   docs/refusals.md, 2026-11-08, sorts them by cause; the user's yes the same day, rounds R6/R8: what a global keeps

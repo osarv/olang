@@ -6745,9 +6745,20 @@ place holds what the new value names and lets go of what the old one named, a re
 lets go of what it moves out, and a new instance's own owning places hold what it is built with. Where a let-go cannot
 be followed the referent stays held until the place's scope closes, which only puts the `null` later, never earlier:
 what an instance no owning place holds still holds itself, an element overwritten in place, a value local's parts
-once the local is gone, and one instance held by three owning places at once, which stays held. Its storage is
-reclaimed as its scope closes (O8), as any storage's is; reclaiming it earlier, where it is held by no owning place
-and reached by no reference in use, is the compiler's (O8d), unobservable. Nothing else a program reads changes. The
+once the local is gone, and one instance held by three owning places at once, which stays held. An instance is
+**reclaimed** where no owning place holds it and no reference in use may reach it, as the compiler shows: its storage
+given back for reuse by a later instance of its size made in its scope, what its own owning places hold let go of in
+turn (reclaimed in the same way where nothing else holds it), and every weak place given it reading `null` from then
+on, whatever instance the storage then holds. The compiler shows it after a store or a removal lets go of the last
+owning place holding it, and after the last use of a reference to it (a local, a call's result), where no reference
+still in use in the function may reach one of its type other than references compared with it while the program runs,
+and no caller of the function holds one across the call - judged over the whole program. It is not reclaimed early
+where the program has tasks (O8d's condition 3), where its type, or a type it holds through its owning places,
+declares a destructor (condition 4), where a lambda captures, a generator holds across a `yield`, an `any` is made of
+or C is given a reference that may reach one, nor where a cycle of owning places holds it; at the latest it is
+reclaimed as its scope closes (O8), as any storage is. Where it is reclaimed is unobservable but in memory and through
+weak places, which read `null` once no owning place holds the instance in any case. Nothing else a program reads
+changes. The
 **one-holder rule**: a type the program declares, held by reference in owning places, whose every store into one hands
 it a new instance (built there, `null`, constant data, or moved out of that same place) has one holder - no instance of
 it is ever held by two owning places at once - a fact of the whole program, which `-memory` reports (B18).
@@ -7969,6 +7980,10 @@ reported as `stale view: ...`
 and ends the program as a failed check does. The buffer stays held until its scope closes, and is then held back as
 the scope's other storage is.
 
+A **reclaimed generational instance** (O8e) is never reused under `-sanitize`: its storage after the header word is
+overwritten with the byte `0xDB` and kept until its scope closes, so a reference wrongly let through reads the pattern,
+never a later instance.
+
 **O2d.** Where a call binds one of a callee's scope variables to the caller's own scope, the **block** that
 means is decided by what bound it. A binding an argument determines (O17) refers to the block the
 argument's referent lives in, which may be any number of blocks out from where the call is written. A
@@ -8597,9 +8612,13 @@ library's collections, whose storage goes with what holds them. SCOPE is the sco
 starts from: a parameter's referent's, named by its type (`the Server's scope`), or a local's function's (`main's
 scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
 values have destructors keeps what it lets go of (condition 4). Then a row for each weak place the program declares (T2d), in the order it declares them - `path:line:column: memory:
-'prev' is weak: a Node is held by its owning places - 'next', 'head' - and kept until its scope closes; 'prev' reads
-null once none holds it`, at its `weak`, the owning places named those fields, payloads and globals declared holding the
-type. Before the count of places, a row for each type the program declares that its owning places hold by reference
+'prev' is weak: a Node is held by its owning places - 'next', 'head' - and 'prev' reads null once none holds it`, at its
+`weak`, the owning places named those fields, payloads and globals declared holding the type; before them, for each
+generational type, `memory: a Node is reclaimed where the last owning place holding it lets go of it, once no reference
+to one is in use` - or `memory: a Node is kept until its scope closes, never reclaimed early` and a `note:` row with why
+(O8e) - and for each call of the program's own across which a reference to one is in use while the callee may let go of
+one, `path:line:column: memory: 'l.drop()' keeps the Nodes it lets go of until their scope closes` at the call and a
+`note:` row naming the reference (`'h', a reference to a Node, is in use across this call`). Before the count of places, a row for each type the program declares that its owning places hold by reference
 (O8e's one-holder rule), at the first store into one of them: `path:line:column: memory: Node has one holder: every
 instance stored into an owning place is a new one`, or `... Node may be held by two owning places at once, so it has no
 one holder` and a `note:` row at the first store handing an owning place an existing instance. Then a line for D9h: how many returns hand a view back, and how many calls read one where it

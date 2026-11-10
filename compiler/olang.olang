@@ -1371,6 +1371,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     twinsTo(x.Lw, fr)
     x.Lw.Free = fr
     x.M.Soles = fr.Sole
+    for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First " " $bt.Second, true) }
     os.OnCrash(eval.InterpCrash)
     status I32 = 0
     if tests {
