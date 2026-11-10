@@ -2,7 +2,7 @@
 # a chain m0 -> m1 -> ... each holding one of scopegen's scenarios beside scopegen's prelude, and a root printing what
 # the chain computes - is built, then edited step by step with the kinds of edit the incremental scenario of checks
 # makes by hand: a module's scenario written again (bodies and signatures), a mutable reference global added (D9h's
-# fact), a G42 fact read added, the root handing an export fn to C and taking it back (the C callback input), a number
+# fact), a G42 fact read added, a field's set widened by a store through an alias (W4), the root handing an export fn to C and taking it back (the C callback input), a number
 # in a module's code changed, and the last edit undone. After each step the program is built in the directory of every
 # build before it and in a clean one: the objects (by their IR's hashes), what the builds said and what the program
 # printed must be the same, and an undone edit must lower and check nothing again (its front records taken, every one
@@ -76,7 +76,7 @@ fn Write(p Prog&, dir String&) ? os.Error {
 # one random edit of p at step, named
 fn Edit(p mut Prog&, r mut Rng&, step I64) String {
     k := r.next(p.n)
-    match r.next(5) {
+    match r.next(6) {
         case 0 {
             p.seeds[k] = U64(r.next(1000000)) + 1
             p.dead[k] = false
@@ -89,6 +89,17 @@ fn Edit(p mut Prog&, r mut Rng&, step I64) String {
         case 2 {
             p.extra[k] = $p.extra[k] "fn quiet" $step "() Bool { return not churn.Allocates }\n"
             return $"a G42 fact read added to m" $k
+        }
+        case 4 {
+            # W4: a struct whose field views its constructor argument's referent, stored into through an element
+            # aliasing an instance - its binding there the body's field set
+            h := $"Hold" $step
+            p.extra[k] = $p.extra[k] "type " $h " struct(of mut Node&) {\n    at mut Node& = of\n}\n" $
+                         "fn widen" $step "() I64 {\n    outer mut Node& = Node(7)\n    keep Node& = outer\n" $
+                         "    for i in range 2 {\n        x mut Node& = Node(i)\n        h := " $h "(outer)\n" $
+                         "        hs Array<mut " $h "&> = Array<" $h "&>[h]\n        hs[0].at = x\n        keep = h.at\n    }\n" $
+                         "    return keep.v\n}\n"
+            return $"a field's set widened in m" $k
         }
         case 3 {
             p.callback = not p.callback

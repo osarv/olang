@@ -46,7 +46,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones"]
+                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -465,6 +465,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "cgreview" { try cgreview(r) }
         case "typereview" { try typereview(r) }
         case "weakmods" { try weakmods(r) }
+        case "fieldset" { try fieldset(r) }
         case "agree" { try agree(r) }
         case "fuzz" { try fuzz(r) }
         case "latermodule" { try latermodule(r) }
@@ -1004,6 +1005,28 @@ fn weakmods(r mut report&) ? Failed {
     try r.expect(outOf(dir).Contains("byval.olang:4:12: note: a node.Node held by value here"), "away's note at the slot", dir)
 }
 
+# W4, B3i: a store in one module through an element aliasing an instance of another module's struct, into a field
+# viewing its constructor argument's referent - from source the field's binding through the element is the storing
+# body's field set (the storage built where it is kept, read back after a churn); with the struct's module compiled
+# apart into the object store (B3j) it is a precompiled module, which alone decides what its fields may be given, so the
+# store is refused at the store, naming the field - and accepted again once the module's text no longer is the one
+# compiled
+test "a store widening a precompiled module's field is refused at the store, accepted from source" { assert passed("fieldset") }
+
+fn fieldset(r mut report&) ? Failed {
+    dir := fresh("fieldset")
+    os.Run("cp checks/fixtures/fieldset/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0, "from source", dir)
+    try r.expect(outOf(dir) == "43\n", "from source: expected '43'", dir)
+    apart := "OLANG_OBJECTS=\"$PWD/store\" "
+    try r.expect(sh(dir, $apart "\"$OLANG\" compile lib.olang > out.txt 2>&1") == 0, "lib compiled apart", dir)
+    try r.expect(sh(dir, $apart "\"$OLANG\" build main.olang > out.txt 2>&1") != 0, "built with lib precompiled", dir)
+    try r.expect(outOf(dir).Contains("main.olang:20:19: error[B3i, O23]: this stores into 'At' of an instance whose binding is not known through this path, and a precompiled module declares the field")
+                 "the error at the store, naming the field", dir)
+    try r.expect(sh(dir, $"echo '# changed' >> lib.olang && " $apart "\"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0
+                 "lib changed since it was compiled: from source again", dir)
+}
+
 # B3i, G42, E31b: a module's code a fact of the whole program decides (whether C may call the program back) - its record
 # is kept per answer, so a second program built in the same directory gives the answer its own clean build gives, and
 # OLANG_CHECKREUSE finds every reused object the one written afresh (docs/wholeprog.md section 8)
@@ -1069,6 +1092,12 @@ Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/
     # T22c: a call of a library function given a function it does not cover - the twin made in the root's object
     Edit("a twin added", "sed -i 's/^    g := lib.Log()$/    held Vec<String\\&>\\n    lib.Apply(lib.KeepIt, held)\\n    " $
          "assert held.Len() == 1\\n    g := lib.Log()/' main.olang", "", "", "main.olang", "main")
+    # W4: a store through an element aliasing an instance of lib's struct - its field's binding there main's field
+    # set, the stored value built where the instance's argument is - so only the root's code changes
+    Edit("a field's set widens (W4)", "sed -i 's/^    g := lib.Log()$/    outer mut lib.Box\\& = lib.Box(1)\\n    for i in range 2 {" $
+         "\\n        x mut lib.Box\\& = lib.Box(i)\\n        h := lib.Holder(outer)\\n        hs Array<mut lib.Holder\\&> = " $
+         "Array<lib.Holder\\&>[h]\\n        hs[0].At = x\\n        assert h.At.V == i\\n    }\\n    g := lib.Log()/' main.olang", "", ""
+         "main.olang", "main")
     # genrefs G1: the first weak reference to a type makes it generational, a whole-program fact (T13d)
     Edit("the first weak to a type", "printf 'type Link struct() {\\n    next mut Link?& = null\\n    back weak Link?& = " $
          "null\\n}\\n' >> lib.olang", "", "lib", "lib.olang", "Link")

@@ -1249,6 +1249,36 @@ fn twinsTo(lw mut lower.Lowerer&, fr free.Free&) {
     }
 }
 
+# B3i (W4): where a module compiled on its own records, in the object store (B3j), that it was compiled apart - by
+# its identity - and what it records: a hash of the module's identity and text
+fn apartPath(cfg build.Config&, md load.Module&) String { return $cfg.Store "/apart/" $build.IrHash(md.Identity)[:16] }
+
+fn apartKey(md load.Module&) String {
+    parts Vec<String&>
+    parts.Push(md.Identity)
+    parts.Push(md.Src!.Text if md.Src is not null else "")
+    return build.HashOf(parts)
+}
+
+# the module compile made, recorded in the store as compiled apart (nothing where there is no store)
+fn markApart(l load.Loader&, cfg build.Config&) {
+    if cfg.Store == "" or l.Root < 0: return
+    md := l.Mods[l.Root]
+    try os.MkDirAll($cfg.Store "/apart") catch os.Error { return }
+    try os.WriteFile(apartPath(cfg, md), apartKey(md)) catch os.Error { }
+}
+
+# the modules of a program the store records compiled apart from it, as they are now: precompiled modules, whose field
+# sets are their own (B3i)
+fn apartModules(l load.Loader&, cfg build.Config&, out mut Map<I64, Bool>&) {
+    if cfg.Store == "": return
+    for m in range l.Mods.Len() {
+        if m == l.Root or l.Mods[m].Src is null: continue
+        had := try os.ReadFile(apartPath(cfg, l.Mods[m])) catch os.Error { continue }
+        if had == apartKey(l.Mods[m]) { out.Put(m, true) }
+    }
+}
+
 fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false) mut free.Free& ? build.Failed {
     sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
@@ -1257,7 +1287,10 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     sc.Trace = (try os.Env("OLANG_INFERDUMP") catch default "") != ""
     sc.ReuseCheck = (try os.Env("OLANG_SCOPECHECK") catch default "") != ""
     sc.NoReuse = (try os.Env("OLANG_NOREUSE") catch default "") != ""
+    if not alone { apartModules(c.P.L, cfg, sc.Apart) }
     sc.Run()
+    # B3i, W4: a module compiled on its own into the object store is precompiled for the programs that use the store
+    if alone and sc.Gaps.Len() == 0 { markApart(c.P.L, cfg) }
     # a construct section 8 does not judge yet: never built as though it were judged, as the checker's gaps are not
     if sc.Gaps.Len() > 0 {
         for g in sc.Gaps { build.Unbuildable($c.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) ": it does not judge " $g.What " yet") }

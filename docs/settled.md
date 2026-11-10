@@ -639,9 +639,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   main closed). A Mark.Of field of a value local this function's constructor made, given a longer-lived reference
   (`lg.log = out`), moves its binding: the constructor's argument is placed where the new referent lives (O28) and the
   instance bound there, the local's storage and end staying put - which answers the refusal audit's question 4 for
-  locals by placement, o25gfieldbinding now a program; aliases through elements (o23aliaswrite, o23aliasmethod) stay
-  refused. `w := v` of a unique by-value parameter stays O17a's error (its storage is the call's), now saying to take
+  locals by placement, o25gfieldbinding now a program; aliases through elements (o23aliaswrite, o23aliasmethod) by
+  field sets (below). `w := v` of a unique by-value parameter stays O17a's error (its storage is the call's), now saying to take
   the value at its last mention (`w T = v`, T13b).
+- **Field sets (O23, O23a, O25g, B3i; W4 of docs/wholeprog.md, 2026-11-10, the user's yes to question 4).** Through an
+  element or another instance's field, a field viewing its constructor argument's referent is bound where the storing
+  body's own constructor calls bound it - one scope or an O12 set: reads judged against the shortest, stores against
+  the longest (placed there where they can, O28), builds found at run time (O29); a call through such an instance
+  resolves its callee's derived scope the same way. Known only where every instance the body reaches is its own (no
+  parameter, capture, global, call result or writable call argument reaching the struct), else O23's error. A module
+  compiled apart into the object store is precompiled: a store through such a path into its field is refused at the
+  store, naming the field.
 - **Kept through an obligation, a store or a payload (O28; R2 of docs/refusals.md, 2026-11-09, mine within the user's
   decisions).** O28's "built where it is kept" is reached through every way a statement keeps a value, not only a
   store: a callee's obligation (O10c) - a value the statement holds for itself included (E31b's held index, a borrow

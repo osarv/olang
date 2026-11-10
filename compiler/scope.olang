@@ -7852,6 +7852,13 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     s.foundTerm = Term.None
     s.landSite, s.landSp = savedLand, savedLandSp
     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
+    if v.K == ValKind.Existing and p == typed.Lvalue.Field and throughElem(p.base) and s.recOf(p.base) < 0 and s.apartField(p) != "" {
+        # B3i, W4: through an instance whose binding is not known here, into a field a precompiled module declares and
+        # its own code binds - only that module decides what the field may be given
+        if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldSetPrecompiled(s.apartField(p))) }
+        try s.targets.Pop() catch { }
+        return
+    }
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
         # existing storage stored into a field viewing p's referent of an instance whose construction binding is not known through this
         # path - an element, a field of another instance: only its container's scope is, an underestimate, and the store
@@ -7959,8 +7966,10 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
 fn (s mut Scoper&) bindingUnknown(p typed.Lvalue&, slot Term) Bool {
     match p {
         case typed.Lvalue.Field(_, _, base, i) {
-            if not s.isStruct(base.Type()) { return false }
-            match s.fieldMark(base.Type(), i) {
+            bt := s.P.T.Repr(base.Type())
+            if s.isRef(bt) { bt = s.P.T.Repr(s.P.T.Referent(bt)) }
+            if not s.isStruct(bt) { return false }
+            match s.fieldMark(bt, i) {
                 case typed.Mark.Of(_) { }
                 case _ { return false }
             }
@@ -8034,6 +8043,8 @@ fn (s mut Scoper&) slotOf(p typed.Lvalue&) placeSlot {
         case typed.Lvalue.Global(_, _, _, _) { return placeSlot(Term.Program, isRef and s.storeThrough(t), FitGlobal) }
         case typed.Lvalue.Field(_, _, base, i) {
             bt := base.Type()
+            # (an instance an element refers to, its field viewing an argument's referent too - W4)
+            if s.isRef(bt) and throughElem(base) { bt = s.P.T.Repr(s.P.T.Referent(s.P.T.Repr(bt))) }
             mark := typed.Mark.None
             if s.P.T.KindOf(bt) == types.Kind.Named and s.isStruct(bt) { mark = s.fieldMark(bt, i) }
             match mark {
@@ -8106,7 +8117,7 @@ fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
     bt := base.Type()
     if s.isRef(bt) and throughElem(base) {
         # (W4: a field of an instance an element refers to - its binding is the body's field set, where that is known)
-        st := s.P.T.Referent(s.P.T.Repr(bt))
+        st := s.P.T.Repr(s.P.T.Referent(s.P.T.Repr(bt)))
         sm := s.fieldMark(st, i) if s.isStruct(st) else typed.Mark.None
         if sm != typed.Mark.Of { return s.partsTerm(base) }
         w := s.ctorParamIndex(st, sm.local)
@@ -11506,7 +11517,10 @@ fn (s mut Scoper&) apartField(p typed.Lvalue&) String {
     id := try s.ctorOf.Get(bt) catch default -1
     if d < 0 or id < 0 or not s.apartDecl(d) or p.index >= s.Bodies[id].Fields.Len(): return ""
     cb := s.Bodies[id]
-    return s.P.L.Names.Text(cb.Locals[I64(cb.Fields[p.index])].Name)
+    f := cb.Locals[I64(cb.Fields[p.index])]
+    # (a field viewing its constructor argument's referent, or one the field inference may make so - 2.6)
+    bound := f.Marked == typed.Mark.Of or (s.isRef(f.Ty) and s.bindingParam(cb, I64(cb.Fields[p.index])) >= 0)
+    return s.P.L.Names.Text(f.Name) if bound else ""
 }
 
 # whether struct declaration d is a precompiled module's and the body judged another module's (B3i)

@@ -1,0 +1,25 @@
+# W4: a store through an element aliasing a library's instance - the field's binding through the element is main's
+# field set, outer's scope, so x is built where outer is; refused where the library is precompiled (B3i)
+import "std/io"
+import "lib"
+
+fn churn() {
+    for i in range 50 {
+        junk := Array<I64>(1000, i)
+        assert junk[999] == i
+    }
+}
+
+fn main() ? {
+    outer mut lib.N& = lib.N(1)
+    keep lib.N& = outer
+    for i in range 2 {
+        x mut lib.N& = lib.N(I32(42 + i))
+        c := lib.Cur(outer)
+        arr Array<mut lib.Cur&> = Array<lib.Cur&>[c]
+        arr[0].At = x
+        keep = c.At
+    }
+    churn()
+    try io.Println($keep.V)
+}

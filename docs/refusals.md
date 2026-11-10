@@ -332,7 +332,7 @@ take them over.
 
 | cases | the decision | recommendation |
 |---|---|---|
-| o25gfieldbinding, o23aliaswrite, o23aliasmethod (O25h, O25i, O23) | a field slot whose binding is exact (O25g) given storage of another scope - directly (`c.cur = g`) or through an alias of its instance (`arr[0].at = x`). Accepting it needs a field to carry a set of possible scopes (a whole-program points-to over field stores): stores through it judged against the longest, builds through it found (O29). fnvalues 12.4 keeps it refused | not now - three constructed cases, nothing in real code; record it, revisit when code hits it (question 4). 2026-11-09: o25gfieldbinding, and review A's r1/r2, became programs by placement instead - the constructor's argument built where the new referent lives (O25h, HISTORY "Review A's over-rejections"); the two alias cases stay |
+| o25gfieldbinding, o23aliaswrite, o23aliasmethod (O25h, O25i, O23) | a field slot whose binding is exact (O25g) given storage of another scope - directly (`c.cur = g`) or through an alias of its instance (`arr[0].at = x`). Accepting it needs a field to carry a set of possible scopes (a whole-program points-to over field stores): stores through it judged against the longest, builds through it found (O29). fnvalues 12.4 keeps it refused | not now - three constructed cases, nothing in real code; record it, revisit when code hits it (question 4). 2026-11-09: o25gfieldbinding, and review A's r1/r2, became programs by placement instead - the constructor's argument built where the new referent lives (O25h, HISTORY "Review A's over-rejections"); 2026-11-10 (W4): the two alias cases run, the binding through the element being the body's field set (O23) |
 | o1blambdaglobal (O1b) | a global keeps a lambda capturing what a by-value parameter's payload refers to: the obligation reaches `main`, which would build the loop turn's `Node` in the program's scope - the scope the global needs, not a fallback, but held to exit | yes: it is what the program asks for, said by `-memory` (question 1) |
 | d18yielddefer, s19eyield (S20) | deferred code pending at a yield: run it when an unfinished walk's generator is let go (its home scope closing), as Python's `close()` runs `finally` | yes (question 2) |
 | c11arraydtor, c11comprdtor, c11copyrunarray, c11unendedparam (C11) | an `Array<R>(n)` of a run-time length (a comprehension's, a copy's, a parameter's) holding destructor values: its holder ends each element, last first, as Vec's conditional destructor does - the length is in the array | yes (question 3) |
@@ -480,6 +480,8 @@ by agreement on scope.olang.
 4. **A field slot given storage of another scope** (o25gfieldbinding, the alias cases): needs fields to carry a set of
    possible scopes, a whole-program analysis. Recommendation: not now - record it. Default: refused. **Answered
    2026-11-08 as docs/wholeprog.md's question 4: allowed, with whole-program field scope sets (its section 10, W4).**
+   **Built 2026-11-10 (W4):** through an element or another instance's field, a field's binding is the storing body's
+   field set (O23) - o23aliaswrite and o23aliasmethod run; a precompiled module's fields are its own (B3i).
 5. **Copying an `any`'s instance** (`it.Take(2)` on an `any Iterator<I64>&`): through a Copy and a size in its table.
    Recommendation: not now. Default: refused.
 6. **`become` and memory.** Built in the tail scope, what each level of a `become` chain builds stays until the chain's

@@ -36244,3 +36244,47 @@ be made memory safe ... so yes, allow them").
   and by its own: compiler/'s IR is byte-identical but for `main` calling `__olang_prog_end` (the location strings
   naming the checkout aside), and so is bench's, every benchmark's `main` alike. The strip then changes compiler/'s IR
   where the copies went: 9,705 fewer IR lines and 2,658 fewer calls over its modules.
+
+## W4: field sets - a field reached through an element bound where the body's own instances are (O23, O23a, O25g, O28, O29, B3i; 2026-11-10, wt-w4, docs/wholeprog.md 2.4 and 10.2, docs/refusals.md question 4)
+
+The refusal audit's question 4, answered yes on 2026-11-08 as docs/wholeprog.md's question 4: a field slot given
+storage of another scope. Round "overrej" had already made o25gfieldbinding a program by placement (the constructor's
+argument built where the new referent lives); the two alias cases stayed refused - `arr[0].at = x` and
+`arr[0].Set(x)` with `arr` an array of references to a local instance `c`, whose field `at` views its constructor
+argument's referent.
+
+- **The rule (O23).** Through a path naming no instance - an element, another instance's field - a field viewing a
+  constructor argument's referent is bound where the body's **field set** says: the bindings the body's own constructor
+  calls gave that argument, one term or several (an O12 set). Reads through the path live where each member does (the
+  shortest); existing storage stored through it outlives each member (the longest) and is exactly each where something
+  can be stored through it (O25g), which O28's placement satisfies where it can (o23aliaswrite's `x` is built where
+  `outer` is, a new one each turn); a build through it is found at run time (O29). A call whose callee stores through a
+  parameter given an element-reached instance resolves the derived scope (O23a) to the same set (o23aliasmethod).
+- **Where the set is known.** Only where every instance of the struct the body can reach is its own: no parameter, no
+  capture, no global read, no call result, and no call argument through which a callee could write one into the
+  body's containers (`fsReaches`, by type) reaches the struct. Elsewhere the old answer stands - the binding is not
+  known through the path (O23, O11). Conservative by design: `v.Push(c)` on a `Vec<Cur&>` opens the set (a callee given
+  the Vec could put any instance there), so a body pushing into a collection keeps the refusal; recorded as a limit.
+- **How it is gathered.** Each judging of a body records its constructor calls' bindings (`fsCtor`) and what came from
+  outside (`fsStart`, `fsCall`, global reads in `val`); the next judging of that body reads them (`fieldSet`). A body is
+  always judged more than once before it reports, so the reporting judging sees its own set; no fact crosses modules -
+  the set is the storing body's, so no other module's object changes with it (the edit kind "a field's set widens" in
+  the incremental scenario and in fuzz/editgen lowers the root alone).
+- **Found on the way: a build through an element-reached instance's field was built in the container's scope.**
+  `slotOf` and `fieldTerm` judged a field through a reference-typed base (`arr[k].cur` with `arr Array<mut C&>`) at
+  the container's scope without looking at the field's mark, so `arr[k].cur.next = N()` built the node in the block of
+  `arr` and stored it into `g`, which outlives it: a use after the scope closed, found by -sanitize (w4t's b4). The base
+  is now taken through its referent, the field's binding is the set (built where `cur`'s referent is found, O29), and
+  where no set is known the store is O23's error.
+- **The precompiled boundary (B3i).** A module `compile` makes with an object store (`OLANG_OBJECTS`, B3j) is recorded
+  there as compiled apart (`apart/HASH`, the hash of its identity and text, olang.olang's `markApart`); a program built
+  with that store uses such a module, while its text is the one compiled, as a precompiled module (`apartModules`,
+  `Scoper.Apart`). Its field sets are its own: existing storage stored through an element-reached instance into a field
+  it declares and binds to its constructor's argument (or that the field inference may bind so) is refused at the store,
+  naming the field (`FieldSetPrecompiled`, B3i, O23), and no field set of the program resolves its fields. The checks
+  scenario `fieldset`: accepted from source (and read back after a churn), refused with the library compiled apart,
+  accepted again once the library's text changed.
+- **Not built.** A store of existing storage through a variable naming the instance needs no set (O25h's moved binding
+  and the obligations a parameter's field passes up already answer it - `fn f(t mut N&, g mut N&) { c := C(t); c.cur =
+  g; c.cur.next = N() }` compiled before this round). Field sets across functions are carried by derived scopes as
+  before; a whole-program gathering per field (all bodies' stores) was not needed for any refused program.

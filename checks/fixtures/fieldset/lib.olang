@@ -1,0 +1,9 @@
+# W4, B3i: a library declaring a struct whose field views its constructor argument's referent - its own code gives
+# the field only what the constructor's argument was
+type N struct(v I32) {
+    V I32 = v
+}
+
+type Cur struct(of mut N&) {
+    At mut N& = of
+}

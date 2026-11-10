@@ -41,3 +41,13 @@ fn Said() String { return $deep.Quiet() " " $deep.Run() " " $deep.Data.Trim() }
 fn Apply(f fn&(a mut Vec<String&>&, s String&), a mut Vec<String&>&) { f(a, "applied") }
 
 fn KeepIt(a mut Vec<String&>&, s String&) { a.Push(s) }
+
+# W4: a field viewing its constructor argument's referent (the edit "a field's set widens" stores into it through an
+# element aliasing an instance)
+type Box struct(v I64) {
+    V I64 = v
+}
+
+type Holder struct(of mut Box&) {
+    At mut Box& = of
+}

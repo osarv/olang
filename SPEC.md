@@ -6913,7 +6913,9 @@ value where it dangles. Accordingly:
   fields holds a reference, nothing can be stored. Exactness protects exactly those stores - what
   one builds is built in the reference's scope and kept where the referent really is - so where none can happen, a
   reference held somewhere it merely outlives misplaces nothing, and O25c, O25e, O25f, O14 and C2d ask only that it
-  outlive. A reference to plain data is the simplest such case.
+  outlive. A reference to plain data is the simplest such case. A field whose binding is one of several scopes (a
+  field set, O23) is exact in none: existing storage stored through it is exactly each member, and what is built
+  through it is built where its referent is found (O29).
 - **O25h (a value holding references).** A value holding references keeps them where it was built: a value local's
   references are where its initializer put them - its own block for a result or an instance built there (O18a), where
   its initializer's are when it is a copy of one that already lives somewhere, whether the declaration writes its type
@@ -6974,9 +6976,19 @@ parameter of the function (O23a), the field reads at the **container's** scope. 
 claim: every value that can reach the field was required to outlive the container (C2d, O20, O22), which in turn
 outlives wherever the container now sits. **Storing** into a field written `&p` therefore requires its binding: through
 a variable the instance was built into, or a parameter whose argument's binding is known (O23a). Through any other path
-- an element of an array, a field of another instance - only the underestimate is known, and a store could put the
-field somewhere every other reader of the instance believes it is not; it is unverifiable (O11) and a compile-time
-error, and so is a call whose callee makes such a store through a parameter given an instance reached that way.
+- an element of an array, a field of another instance - the instance is not named, and the field's binding there is
+its **field set** in the function: the bindings the function's own constructor calls gave that field's argument - one
+scope, or several (O12) - known where every instance of the struct the function can reach is one it built: none came
+through a parameter, a capture, a global, a call's result, or what a call may write through an argument. A read
+through such a path lives where each member does (the shortest); existing storage stored through it must outlive each
+member (the longest), and be exactly each where something can be stored through it (O25g) - which building the stored
+value where the members are (O28) satisfies where it can, a new one each time its declaration runs; what is built
+through it is built where its referent is found to live while the program runs (O29). A call whose callee makes such a
+store through a parameter given an instance reached that way resolves the callee's derived scope (O23a) to the same set.
+Where the set is not known, the store could put the field somewhere every other reader of the instance believes it is
+not; it is unverifiable (O11) and a compile-time error, and so is such a call. A field set never decides what a
+precompiled module's code assumes (B3i): existing storage stored through such a path into a field a precompiled module
+declares, binding it to its constructor's argument, is an error at that store, naming the field.
 
 **O23a (derived scopes).** A **per-instance** binding - the scope a constructor-bearing value's field written `&p`, or
 a bare one, was bound to where the value was built (C2d) - is carried with the value: through a local initialized
@@ -7001,7 +7013,8 @@ parameter (the field would then be another instance's) and nothing else gives a 
 the program's scope, which outlives the referent wherever that lives (never the scope the field was read through, which
 the referent may outlive). A generator's `Next`, a lambda, an
 `export fn` and the bodies of a `become` chain take none: they always find it. For judging, a derived scope is
-resolved at each call from the argument as above; where neither is known, the argument's own scope (O23).
+resolved at each call from the argument as above - for an argument reached through an element, the caller's field set
+of that field (O23); where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
 from.
 
@@ -8140,7 +8153,9 @@ linked (O8d), so a precompiled module frees what the program using it decides. W
 module (its declarations and the facts of its own code). Nothing a program using it does changes what its object does:
 where code of the program would need one of its decisions to be otherwise - a store giving a field the module declares
 storage of a scope the module's own code does not give that field - the error is in the program's code, at that store,
-naming the field, never in the precompiled module.
+naming the field, never in the precompiled module (O23's field sets). A module `compile` makes with an object store
+(B3j) is recorded there as compiled apart, by its identity and text: a program built with that store, whose copy of the
+module has that text, uses it as a precompiled module.
 
 **B3j.** An object is named by a hash of what it is made from (B3), so builds in different directories that make the
 same object make it under the same name. With the environment variable `OLANG_OBJECTS` naming a directory, `build`,
