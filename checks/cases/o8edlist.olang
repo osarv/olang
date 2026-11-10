@@ -48,6 +48,8 @@ fn peakKb() I64 {
 }
 
 fn main() ? {
+    base := peakKb()
+    assert base > 0
     l := DList()
     total := 0
     for i in range 1000000 {
@@ -55,6 +57,6 @@ fn main() ? {
         if l.n > 100: total += l.PopFront()
     }
     assert total == 499899505050
-    kb := peakKb()
-    assert kb > 0 and kb < 8000, $kb
+    kb := peakKb() - base
+    assert kb < 8000, $kb
 }

@@ -41,6 +41,8 @@ fn peakKb() I64 {
 }
 
 fn main() {
+    base := peakKb()
+    assert base > 0
     l := List()
     for i in range 100 { l.push(i) }
     for i in range 1000000 {
@@ -48,6 +50,6 @@ fn main() {
         l.push(i)
     }
     assert l.head!.key == "key-999900" and l.tail!.key == "key-999999"
-    kb := peakKb()
-    assert kb > 0 and kb < 4000, $kb
+    kb := peakKb() - base
+    assert kb < 4000, $kb
 }

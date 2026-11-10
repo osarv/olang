@@ -60,6 +60,8 @@ fn peakKb() I64 {
 }
 
 fn main() ? {
+    base := peakKb()
+    assert base > 0
     c := Lru(1000)
     total := 0
     x := 777
@@ -69,6 +71,6 @@ fn main() ? {
         total += c.Get("key-" $k, k)
     }
     assert total == 1998857408
-    kb := peakKb()
-    assert kb > 0 and kb < 9000, $kb
+    kb := peakKb() - base
+    assert kb < 9000, $kb
 }

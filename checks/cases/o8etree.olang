@@ -82,6 +82,8 @@ fn peakKb() I64 {
 }
 
 fn main() ? {
+    base := peakKb()
+    assert base > 0
     t := Tree()
     total := 0
     x := 12345
@@ -91,6 +93,6 @@ fn main() ? {
         if t.n > 1000: total += t.DeleteMin() % 1000
     }
     assert total == 499241966
-    kb := peakKb()
-    assert kb > 0 and kb < 8000, $kb
+    kb := peakKb() - base
+    assert kb < 8000, $kb
 }

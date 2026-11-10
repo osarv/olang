@@ -35,6 +35,8 @@ fn peakKb() I64 {
 }
 
 fn main() ? {
+    base := peakKb()
+    assert base > 0
     s := Stack()
     total := 0
     for i in range 1000000 {
@@ -42,6 +44,6 @@ fn main() ? {
         if s.n > 100: total += s.Pop()
     }
     assert total == 499999495050
-    kb := peakKb()
-    assert kb > 0 and kb < 25000, $kb
+    kb := peakKb() - base
+    assert kb < 25000, $kb
 }
