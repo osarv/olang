@@ -46,7 +46,10 @@ bits, identity, `Canon` and `PromiseText`), `generic.olang` (`promisesOf`'s misu
 renamed); `checks/cases`. `pure` and `keeps` are read beyond their own pass (docs/fnvalues.md 4.6): `types.olang`'s
 `PromisesPure`, `ReachesImpure` and `ReachesWrite(t, clean)`, by `free.olang` (`valueCall`, `typeKeeps`), `lower.olang`
 (D9h's `quietCall`), `check.olang` (E31b's `plainArg`, `pureFnArg`, `collWalk`, `settleInPlace`) and `views.olang` (M19g's
-value calls) - a word that changes what `pure` or `keeps` lets a value do changes them too.
+value calls) - a word that changes what `pure` or `keeps` lets a value do changes them too. A trait's method takes the words
+too (T30c): `parse.olang` `sig`'s `ofTrait`, `generic.olang` `TraitSig` and `AnySlots` (`types.olang`
+`ReceiverPromises`), `check.olang` `traitHeader` and `judgeTables`, `scope.olang` `anyTables` and a `Dispatch` call's
+bound, `effects.olang`'s `Dispatch`.
 
 ## An operator or punctuation
 

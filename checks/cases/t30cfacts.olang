@@ -1,0 +1,13 @@
+# check: run
+# T30c, G42: a call through an "any" has what its trait's method's words promise - "noalloc noblock nospawn" read
+# through the caller's name while compiling (S17a)
+type Shape trait {
+    Area() F64 noalloc noblock nospawn
+}
+type Sq struct(s F64) { s }
+fn (q Sq&) Area() F64 { return q.s * q.s }
+fn area(x any Shape&) F64 { return x.Area() }
+assert not area.Allocates and not area.Blocks and not area.Spawns
+fn main() {
+    assert area(Sq(3.0)) == 9.0
+}

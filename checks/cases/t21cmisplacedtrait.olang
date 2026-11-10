@@ -1,6 +1,11 @@
-# check: fail error[T21c]: 'pure' is a promise, written only after a function type's signature
-# T21c: a trait's method writes no promise
+# check: run
+# T30c (was a T21c refusal): a trait's method writes its promises, as a function type does - Sq's Area keeps them
 type Shape trait {
     Area() F64 pure
 }
-fn main() { }
+type Sq struct(s F64) { s }
+fn (q Sq&) Area() F64 { return q.s * q.s }
+fn area(x any Shape&) F64 { return x.Area() }
+fn main() {
+    assert area(Sq(3.0)) == 9.0
+}

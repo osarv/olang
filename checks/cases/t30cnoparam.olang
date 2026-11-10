@@ -1,0 +1,7 @@
+# check: fail error[T21c]: 'k' is
+# T30c, T21c: a trait's method's word names one of its written parameters - the receiver has no name
+type aNode struct(v I64) { v }
+type aSink trait {
+    mut Put(n aNode&) keeps k
+}
+fn main() { }

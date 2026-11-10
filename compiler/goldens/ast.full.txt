@@ -454,10 +454,6 @@
 | RETURN 3:40-3:51
 | -- diagnostics
 | error T21c 4:36
-=== checks/cases/t21cmisplacedtrait.olang
-| FN 6:1-6:14
-| -- diagnostics
-| error T21c 4:16
 === checks/cases/t22ainstancename.olang
 | EXPR 12:36-12:45
 | EXPR 15:24-15:41

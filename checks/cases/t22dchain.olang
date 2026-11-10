@@ -1,0 +1,35 @@
+# check: run
+# flags: -debug -sanitize
+# T22d: a walk of walks - SkipWhile's and TakeWhile's predicates each keep what they are given; TakeWhileIter holds the
+# SkipWhileIter in a fixed field, so both are followed with the outer instance: read back after a churn
+type N struct(v I64) { v }
+
+fn walk(xs Array<N&>&, seen mut Vec<N&>&, kept mut Vec<N&>&) I64 {
+    t := 0
+    for x in xs.Iter().SkipWhile(fn(x) {
+        seen.Push(x)
+        return x.v < 2
+    }).TakeWhile(fn(x) {
+        kept.Push(x)
+        return x.v < 3
+    }) { t += x.v }
+    return t
+}
+
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
+fn main() {
+    seen, kept Vec<N&>
+    a := Array<N&>[N(1), N(2), N(3), N(4)]
+    assert walk(a, seen, kept) == 2
+    churn(100)
+    assert seen.Len() == 2 and kept.Len() == 2 and kept[1].v == 3
+}

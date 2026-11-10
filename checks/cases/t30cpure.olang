@@ -1,0 +1,15 @@
+# check: fail error[T30c, T22b]: Counter's 'Next' may write a global, and Source's 'Next' promises 'pure'
+# T30c: "pure" on a trait's method - an implementation writing a global breaks it
+seen mut I64 = 0
+type Source trait {
+    Next() I64 pure
+}
+type Counter struct(n I64) { n }
+fn (c Counter&) Next() I64 {
+    seen++
+    return c.n
+}
+fn next(x any Source&) I64 { return x.Next() }
+fn main() {
+    assert next(Counter(2)) == 2
+}

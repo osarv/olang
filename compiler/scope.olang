@@ -222,6 +222,8 @@ type summary struct() {
     # T22a (docs/sec8.md 5.2): what every return gives, where the result is a function value - in the body's terms; not
     # Full for a body in a cycle or one not judged (its returns are boundaries)
     ResFn fnRecs
+    # T22d: the record of the instance every return gives, in the body's terms - empty where none is known
+    ResInst instTree
     # whether a return may hand back existing storage - a result outliving its scope by an obligation (O13, 2.7) -
     # rather than what the body builds
     HandsBack Bool = false
@@ -614,6 +616,19 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     twinDepth I64 = 0
     seedBody I64 = -1
     seedRecs Map<I64, fnRecs>
+    # T22d: this judging's instance records, by call site and by local; a twin's followed instances, by parameter local;
+    # what the returns give (resInstOk: they may); the records each instance argument followed into a twin, by (site,
+    # parameter); the types whose instances may carry records
+    itree instTree
+    siteInst Map<I64, I64>
+    localInst Map<I64, I64>
+    seedInst Map<I64, instTree>
+    resInst instTree
+    resInstOk Bool = false
+    instFollow Map<pair.Pair<I64, I64>, Vec<followItem>>
+    instTypes Map<types.TypeId, Bool>
+    seedRi I64 = 0
+    earlyTwin Map<I64, I64>   # by call site: the twin keyInst asked for before the call was judged
     followed Map<I64, I64>
     limited Map<I64, I64>                 # ... and those a limit kept from being followed (bits)
     capFollowed Map<pair.Pair<I64, I64>, Bool>
@@ -873,6 +888,7 @@ fn summaryDiff(a summary&, b summary&) String {
     if not (av.FieldFrom == bv.FieldFrom) { return "FieldFrom" }
     if not (av.FieldTerms == bv.FieldTerms) { return "FieldTerms" }
     if not (av.ResFn == bv.ResFn) { return "ResFn" }
+    if not (av.ResInst == bv.ResInst) { return "ResInst" }
     if av.Done != bv.Done or av.HandsBack != bv.HandsBack or av.Judging != bv.Judging { return "flags" }
     av.BuildFile = bv.BuildFile
     av.BuildAt = bv.BuildAt
@@ -1091,6 +1107,7 @@ fn (s mut Scoper&) wordFor(b I64, adapter Bool, fty types.TypeId, k I64) String,
     if hi < 0 or hi >= PosDerived or lo == PosNone { return "", "" }
     h := s.posName(fty, body, adapter, hi)
     hb := s.bodyParamName(body, adapter, hi)
+    if hb == "" { hb = h }
     if lo == PosResult { return $"borrows " $h, $"gives back what '" $hb "' refers to" }
     if lo == PosHome { return $"keeps " $h, $"keeps '" $hb "' in " $("its instance" if adapter else "what it captured") }
     if lo < PosDerived { return $"keeps " $h " in " $s.posName(fty, body, adapter, lo), $"keeps '" $hb "' in '" $s.bodyParamName(body, adapter, lo) "'" }
@@ -1189,7 +1206,11 @@ fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
         }
         case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) {
             l := wholeLocal(p)
-            if l < 0 or s.bndSeen.Has(l) { return }
+            if l < 0 {
+                s.bndFieldRecs(p, out)
+                return
+            }
+            if s.bndSeen.Has(l) { return }
             s.bndSeen.Put(l, true)
             # (T22c: a parameter or a capture whose functions are followed into this body holds them)
             sd := s.seededRecs(l)
@@ -1312,7 +1333,7 @@ fn (s mut Scoper&) bndReturn(x typed.Expr?&) {
         }
         case _ { }
     }
-    s.bndExpr(x, BndNone if s.resFnOk else BndReturn)
+    s.bndExpr(x, BndNone if s.resFnOk or s.resInstOk else BndReturn)
 }
 
 # a task: what it calls through, and its arguments, are boundaries (decision 15)
@@ -1336,8 +1357,21 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
         s.boundary(x, place)
         place = BndNone
     }
+    # T22d: an instance whose fixed fields hold functions - judged here by their fields' types; a constructor's call
+    # judges its arguments as before
+    instAt := place
+    if place != BndNone and not s.bndCollect and not s.ctorCall(x) and s.instType(x.Type()) {
+        s.bndInst(x, place)
+        place = BndNone
+    }
     match x {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) { s.bndPlace(p) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) {
+            # (a temporary read or borrowed whole is its value, where the read goes)
+            match p {
+                case typed.Lvalue.Temp(_, _, v, _) { s.bndExpr(v, place) }
+                case _ { s.bndPlace(p) }
+            }
+        }
         case typed.Expr.Promote(_, _, pr) { s.bndExpr(pr.X, place) }
         case typed.Expr.Call(_, _, c) {
             match c.Target {
@@ -1347,6 +1381,8 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
             # (T22c: an argument followed into a twin is no boundary - the twin judges where its functions go)
             fw := try s.followed.Get(I64(c.Site)) catch default 0
             lm := try s.limited.Get(I64(c.Site)) catch default 0
+            # (T22d: a constructor's argument for a fixed field is followed where its instance is)
+            if instAt == BndNone { fw = fw | s.ctorFixedArgs(c, x.Type()) }
             for i in range c.Args.Len() {
                 bit := (1 << i) if i < 62 else 0
                 s.bndExpr(c.Args[i], BndNone if fw & bit != 0 else (BndLimit if lm & bit != 0 else BndArg))
@@ -1431,7 +1467,8 @@ fn (s mut Scoper&) bndArm(a typed.Arm?&, place I64) {
 fn (s mut Scoper&) bndPlace(p typed.Lvalue?&) {
     if p is null { return }
     match p {
-        case typed.Lvalue.Deref(_, _, r) { s.bndExpr(r, BndOther) }
+        # (T22d: an instance read through - its fields' values judged where they go)
+        case typed.Lvalue.Deref(_, _, r) { s.bndExpr(r, BndNone if s.instType(r.Type()) else BndOther) }
         case typed.Lvalue.Field(_, _, b, _) { s.bndPlace(b) }
         case typed.Lvalue.Elem(_, _, e) {
             s.bndPlace(e.Base)
@@ -1455,6 +1492,7 @@ type twinTab struct() {
     Body Vec<I64>
     Key Vec<String>
     Seeds Vec<Map<I64, fnRecs>>
+    ISeeds Vec<Map<I64, instTree>>   # T22d: the instances followed, by parameter local
     Sums Vec<mut summary&>
     Plans Vec<typed.Plan>
     Planned Vec<Bool>
@@ -1521,6 +1559,22 @@ fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
         seeds.Put(I64(body.Params[i]), s.seedOf(rs, i))
         mask |= 1 << i
     }
+    # T22d: an instance whose fixed fields hold functions some field's type does not cover - its tree's records
+    iseeds Map<I64, instTree>
+    for i in range c.Args.Len() {
+        if i >= ps.Len() or i >= body.Params.Len() or i >= 62 or s.isFunc(ps[i]) or not s.instType(ps[i]): continue
+        if s.assignsWhole(b, I64(body.Params[i])): continue
+        n := s.keyInst(c.Args[i])
+        if n < 0: continue
+        items Vec<followItem>
+        s.followItems(n, "", 0, items)
+        if not s.instFollowable(items): continue
+        key.Push($" " $i "i:")
+        for it in items { key.Push($it.Path ":" $it.Key.Body $("a" if it.Key.Adapter else "") ",") }
+        iseeds.Put(I64(body.Params[i]), s.seedInstOf(n, i, items))
+        s.instFollow.Put(pair.Pair<I64, I64>(I64(c.Site), i), items)
+        mask |= 1 << i
+    }
     if mask == 0: return -1
     k := key.ToString()
     t := try s.Twins.Keys.Get(k) catch default -1
@@ -1529,7 +1583,7 @@ fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
     if not s.sums[b].Done or s.sums[b].Judging or b >= s.compSize.Len() or s.compSize[b] > 1: return s.twinLimited(c, mask)
     if t < 0 {
         if not s.twinRoom(b): return s.twinLimited(c, mask)
-        t = s.newTwin(b, k, seeds)
+        t = s.newTwin(b, k, seeds, iseeds)
     }
     if s.Twins.Gen[t] != s.Twins.Round or s.report: s.judgeTwin(t, sp)
     return s.twinMarked(c, t, mask)
@@ -1602,13 +1656,14 @@ fn (s mut Scoper&) twinRoom(b I64) Bool {
     return s.Twins.Body.Len() < (most if most > TwinsLeast else TwinsLeast)
 }
 
-fn (s mut Scoper&) newTwin(b I64, k String&, seeds Map<I64, fnRecs>&) I64 {
+fn (s mut Scoper&) newTwin(b I64, k String&, seeds Map<I64, fnRecs>&, iseeds Map<I64, instTree>&) I64 {
     tw := s.Twins
     t := tw.Body.Len()
     tw.Keys.Put(k, t)
     tw.Body.Push(b)
     tw.Key.Push(k)
     tw.Seeds.Push(seeds)
+    tw.ISeeds.Push(iseeds)
     tw.Sums.Push(summary())
     tw.Plans.Push(typed.Plan.New(s.Bodies[b]))
     tw.Planned.Push(false)
@@ -1646,6 +1701,7 @@ fn capVarOf(b typed.Body&, k I64, adapter Bool) Bool {
 fn (s mut Scoper&) capturedAt(p I64, w I64, c typed.Call&) Term {
     code := -2 - w
     ri, k := code / 4096, code % 4096
+    if s.instFollow.Has(pair.Pair<I64, I64>(I64(c.Site), p)): return s.instCapturedAt(p, ri, k, c)
     recs := s.recsOf(c.Args[p])
     if not recs.Full: return Term.Untraced
     keys := sortedRecs(recs.Recs)
@@ -1657,6 +1713,26 @@ fn (s mut Scoper&) capturedAt(p I64, w I64, c typed.Call&) Term {
         if t == Term.None: return Term.Untraced
         if out == Term.None: out = t
         if out != t: return Term.Untraced
+    }
+    return out if out != Term.None else Term.Untraced
+}
+
+# T22d: capture k of the ri-th function an instance argument for parameter p carried into its twin, in this body's terms
+# - read off the argument as judged (its instance's records, in the order the key took them)
+fn (s mut Scoper&) instCapturedAt(p I64, ri I64, k I64, c typed.Call&) Term {
+    n := s.instOf(c.Args[p]) if p < c.Args.Len() else -1
+    if n < 0: return Term.Untraced
+    items Vec<followItem>
+    s.followItems(n, "", 0, items)
+    keys := try s.instFollow.Get(pair.Pair<I64, I64>(I64(c.Site), p)) catch default Vec<followItem>()
+    if ri >= items.Len() or ri >= keys.Len() or items[ri].Key != keys[ri].Key: return Term.Untraced
+    key := items[ri].Key
+    out := Term.None
+    for r in items[ri].Field.Recs {
+        if r.Body != key.Body or r.Adapter != key.Adapter: continue
+        t := r.Caps[k] if k < r.Caps.Len() else Term.None
+        if t == Term.None or out != Term.None and out != t: return Term.Untraced
+        out = t
     }
     return out if out != Term.None else Term.Untraced
 }
@@ -1711,6 +1787,7 @@ fn (s mut Scoper&) judgeTwin(t I64, sp source.Span) {
     sub.twinDepth = s.twinDepth + 1
     sub.seedBody = b
     sub.seedRecs = tw.Seeds[t]
+    sub.seedInst = tw.ISeeds[t]
     at := s.nameSpan(sp)
     sub.twinAt = Gap(s.B!.File, at, "")
     sub.sums[b] = summary()
@@ -1871,6 +1948,541 @@ fn (s Scoper&) TwinOwn(t I64) Bool { return s.Twins.Own[t] }
 
 fn (s Scoper&) TwinKey(t I64) String { return s.Twins.Key[t] }
 
+# ---- T22d: functions a constructor fixes in a field, followed with the instance (docs/fnvalues.md round 12) ----
+#
+# A field no body assigns after construction (fieldsAssigned), which its constructor gives one parameter's value, holds
+# that value for the instance's life. An instance's record - by field, the records of a fixed field holding a function
+# value, and the record of a fixed field holding an instance by value - is made by its constructor call, carried by a
+# local declared once and never assigned whole, by a call's result (ResInst, as ResFn is) and, in a twin, by a followed
+# parameter; a read of a fixed field of an instance whose record is known carries the field's records (addRecs), and an
+# argument whose instance carries records some field's type does not cover is followed into its callee (twinFor)
+
+# an instance's record: by field, a fixed function field's records (none known: not Full) and the record of the
+# instance a fixed field holds by value (-1 none) - nodes of a tree
+type instNode struct(Ty types.TypeId) {
+    Ty
+    Fields Vec<fnRecs>
+    Kids Vec<I64>
+}
+
+type instTree struct() {
+    Nodes Vec<instNode>
+}
+
+# a record followed into a twin with an instance: the field's path, the function (its body) in key order, the field's
+# records where the value was made (their captures the caller's terms), and the field's type
+type followItem struct(Path String, Key fnRec, Field fnRecs, Ty types.TypeId) {
+    Path
+    Key
+    Field
+    Ty
+}
+
+InstDepth I64 = 4   # instances followed through fixed fields at most this deep (15, decision 5)
+
+# the struct an instance of type t is, through a reference; Unknown for none
+fn (s mut Scoper&) instStruct(t types.TypeId) types.TypeId {
+    x := s.P.T.Repr(s.P.T.Referent(t) if s.isRef(t) else t)
+    return x if s.isStruct(x) else types.UnknownT
+}
+
+# whether field i of struct r is fixed: no body assigns it after construction, nor a whole instance through a reference
+fn (s mut Scoper&) fixedField(r types.TypeId, i I64) Bool {
+    ri := I64(s.P.T.Repr(r))
+    return not s.fieldsAssigned.Has(pair.Pair(ri, i)) and not s.fieldsAssigned.Has(pair.Pair(ri, I64(-1)))
+}
+
+# whether an instance of type t may carry records: its struct has a fixed field holding a function value, or one holding
+# such an instance by value
+fn (s mut Scoper&) instType(t types.TypeId) Bool { return s.instTypeAt(s.instStruct(t), 0) }
+
+fn (s mut Scoper&) instTypeAt(r types.TypeId, depth I64) Bool {
+    if r == types.UnknownT or depth >= InstDepth: return false
+    if s.instTypes.Has(r): return try s.instTypes.Get(r) catch default false
+    s.instTypes.Put(r, false)
+    fs := s.P.T.Items(s.P.T.Fields(r))
+    out := false
+    for i in range fs.Len() {
+        if not s.fixedField(r, i): continue
+        if s.isFunc(fs[i]) or not s.isRef(fs[i]) and s.instTypeAt(s.instStruct(fs[i]), depth + 1): out = true
+    }
+    s.instTypes.Put(r, out)
+    return out
+}
+
+# the parameter of struct r's constructor whose value its field i is given whole, -1 for none (another value, or the
+# field assigned again in the constructor)
+fn (s mut Scoper&) ctorFieldParam(r types.TypeId, i I64) I64 {
+    cb := try s.ctorOf.Get(r) catch default -1
+    if cb < 0 or cb >= s.Bodies.Len(): return -1
+    body := s.Bodies[cb]
+    if i >= body.Fields.Len() or body.Root is null: return -1
+    f := body.Fields[i]
+    k := -1
+    for st in body.Root!.Stmts {
+        match st {
+            case typed.Stmt.Let(_, id, x) { if id == f: k = s.paramRead(body, x) }
+            case typed.Stmt.Assign(_, typed.Lvalue.Local(_, _, id), _) { if id == f: return -1 }
+            case _ { }
+        }
+    }
+    return k
+}
+
+fn (s mut Scoper&) paramRead(body typed.Body&, x typed.Expr&) I64 {
+    match s.unAway(x) {
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _), typed.Expr.Take(_, _, typed.Lvalue.Local(_, _, id)) { return paramPos(body, id) }
+        case _ { return -1 }
+    }
+}
+
+# a new node of tree tr for an instance of struct type r with n fields, each unknown
+fn newNode(tr mut instTree&, r types.TypeId, n I64) I64 {
+    nd := instNode(r)
+    for _ in range n {
+        nd.Fields.Push(fnRecs())
+        nd.Kids.Push(-1)
+    }
+    tr.Nodes.Push(nd)
+    return tr.Nodes.Len() - 1
+}
+
+# a constructor call's instance (of type ty): its fixed fields given its arguments' records - a generator's walk not
+# among them (D18's rules judge it) - recorded by the call's site
+fn (s mut Scoper&) ctorInst(c typed.Call&, ty types.TypeId) {
+    r := s.instStruct(ty)
+    if r == types.UnknownT or not s.instType(r): return
+    fs := s.P.T.Items(s.P.T.Fields(r))
+    n := newNode(s.itree, r, fs.Len())
+    some := false
+    for i in range fs.Len() {
+        k := s.ctorFieldParam(r, i) if s.fixedField(r, i) else -1
+        if k < 0 or k >= c.Args.Len(): continue
+        if s.isFunc(fs[i]) {
+            rs := s.recsOf(c.Args[k])
+            if not rs.Full or rs.Recs.Len() == 0 or s.anyGen(rs): continue
+            s.itree.Nodes[n].Fields[i] = rs
+            some = true
+        } else if not s.isRef(fs[i]) {
+            kid := s.instOf(c.Args[k])
+            s.itree.Nodes[n].Kids[i] = kid
+            if kid >= 0: some = true
+        }
+    }
+    if some: s.siteInst.Put(I64(c.Site), n)
+}
+
+# the record of the instance value x is, in this judging: a call's, a local's, a fixed field's; -1 where not known
+fn (s mut Scoper&) instOf(x typed.Expr?&) I64 {
+    if x is null: return -1
+    y := s.unPromoted(s.unAway(x))
+    c := typed.Call.Of(y)
+    if c is not null: return try s.siteInst.Get(I64(c.Site)) catch default -1
+    match y {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return s.placeInst(p) }
+        case _ { return -1 }
+    }
+}
+
+fn (s mut Scoper&) placeInst(p typed.Lvalue&) I64 {
+    match p {
+        case typed.Lvalue.Local(_, _, id) {
+            l := I64(id)
+            # (a held local's temporary initializer, built where its one use puts it)
+            if s.held.Has(l) {
+                hx := try s.held.Get(l) catch { return -1 }
+                return s.instOf(hx)
+            }
+            if not s.localInst.Has(l) or s.assignedWhole(l): return -1
+            return try s.localInst.Get(l) catch default -1
+        }
+        case typed.Lvalue.Deref(_, _, r) { return s.instOf(r) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.instOf(v) }
+        case typed.Lvalue.Field(_, _, b, i) {
+            if not s.fixedField(s.instStruct(b.Type()), i): return -1
+            n := s.placeInst(b)
+            return s.itree.Nodes[n].Kids[i] if n >= 0 and i < s.itree.Nodes[n].Kids.Len() else -1
+        }
+        case _ { return -1 }
+    }
+}
+
+# the records a read of a fixed field carries (addRecs), into out - not Full where its instance's are not known
+fn (s mut Scoper&) fieldRecs(out mut fnRecs&, p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Field(_, _, b, i) {
+            if s.fixedField(s.instStruct(b.Type()), i) {
+                n := s.placeInst(b)
+                if n >= 0 and i < s.itree.Nodes[n].Fields.Len() and s.itree.Nodes[n].Fields[i].Recs.Len() > 0 {
+                    mergeRecs(out, s.itree.Nodes[n].Fields[i])
+                    return
+                }
+            }
+        }
+        case _ { }
+    }
+    out.Full = false
+}
+
+# a local declared with value x: the record of the instance it holds or refers to, for its reads
+fn (s mut Scoper&) noteInst(l I64, x typed.Expr?&) {
+    if x is null or not s.instType(s.B!.Locals[l].Ty): return
+    n := s.instOf(x)
+    if n >= 0: s.localInst.Put(l, n)
+}
+
+# a return's instance merged into what the body's returns give (ResInst): one not known, none
+fn (s mut Scoper&) retInst(x typed.Expr&) {
+    n := s.instOf(x)
+    if n < 0 {
+        s.resInstOk = false
+        return
+    }
+    if s.resInst.Nodes.Len() == 0 {
+        copyNode(s.itree, n, s.resInst)
+        return
+    }
+    t := instTree()
+    copyNode(s.itree, n, t)
+    out := instTree()
+    mergeNode(s.resInst, 0, t, 0, out)
+    s.resInst = out
+}
+
+# node n of from copied into into (its kids after it), its index there
+fn copyNode(from instTree&, n I64, into mut instTree&) I64 {
+    nd := from.Nodes[n]
+    at := newNode(into, nd.Ty, nd.Fields.Len())
+    for i in range nd.Fields.Len() {
+        into.Nodes[at].Fields[i] = nd.Fields[i]
+        if nd.Kids[i] >= 0 { into.Nodes[at].Kids[i] = copyNode(from, nd.Kids[i], into) }
+    }
+    return at
+}
+
+# nodes a of ta and b of tb merged into out: each field's records both's, a kid where both have one
+fn mergeNode(ta instTree&, a I64, tb instTree&, b I64, out mut instTree&) I64 {
+    na := ta.Nodes[a]
+    nb := tb.Nodes[b]
+    at := newNode(out, na.Ty, na.Fields.Len())
+    for i in range na.Fields.Len() {
+        if i >= nb.Fields.Len(): break
+        f := na.Fields[i]
+        mergeRecs(f, nb.Fields[i])
+        out.Nodes[at].Fields[i] = f if na.Fields[i].Recs.Len() > 0 and nb.Fields[i].Recs.Len() > 0 else fnRecs()
+        if na.Kids[i] >= 0 and nb.Kids[i] >= 0 { out.Nodes[at].Kids[i] = mergeNode(ta, na.Kids[i], tb, nb.Kids[i], out) }
+    }
+    return at
+}
+
+# a callee's ResInst through call c (beta its bindings): each record's captures the caller's terms - its node here
+fn (s mut Scoper&) importInst(from instTree&, n I64, c typed.Call&, beta Array<Term>&) I64 {
+    nd := from.Nodes[n]
+    at := newNode(s.itree, nd.Ty, nd.Fields.Len())
+    id := Array<I64>(beta.Len())
+    for k in range id.Len() { id[k] = k }
+    for i in range nd.Fields.Len() {
+        if nd.Fields[i].Recs.Len() > 0 {
+            out := fnRecs()
+            out.Full = true
+            s.transRecs(out, nd.Fields[i], c, id, false, beta)
+            s.itree.Nodes[at].Fields[i] = out
+        }
+        if nd.Kids[i] >= 0 { s.itree.Nodes[at].Kids[i] = s.importInst(from, nd.Kids[i], c, beta) }
+    }
+    return at
+}
+
+# T22c with an instance: the records argument a's instance (node n) carries, depth first by field, each field's functions
+# in key order - followed where every one is known and judged, and some do what their field's type does not say
+fn (s mut Scoper&) followItems(n I64, path String&, depth I64, out mut Vec<followItem>&) {
+    nd := s.itree.Nodes[n]
+    for i in range nd.Fields.Len() {
+        p := $path "." $i
+        if nd.Fields[i].Full and nd.Fields[i].Recs.Len() > 0 {
+            ft := s.P.T.Items(s.P.T.Fields(nd.Ty))[i]
+            for r in sortedRecs(nd.Fields[i].Recs) { out.Push(followItem(p, r, nd.Fields[i], ft)) }
+        }
+        if nd.Kids[i] >= 0 and depth + 1 < InstDepth { s.followItems(nd.Kids[i], p, depth + 1, out) }
+    }
+}
+
+fn (s mut Scoper&) instFollowable(items Vec<followItem>&) Bool {
+    if items.Len() == 0: return false
+    seen Map<I64, Bool>
+    some := false
+    for it in items {
+        b := it.Key.Body
+        if b < 0 or b >= s.sums.Len() or not s.sums[b].Done or s.sums[b].Judging or s.Bodies[b].Gen: return false
+        if not some and s.uncovered(b, it.Key.Adapter, it.Ty, seen) >= 0: some = true
+    }
+    return some
+}
+
+# the twin's seed for parameter p: the instance's tree with each followed record's captures derived scopes of p, by
+# its place in items (capCode)
+fn (s mut Scoper&) seedInstOf(n I64, p I64, items Vec<followItem>&) instTree {
+    tr := instTree()
+    s.seedRi = 0
+    s.seedNode(n, p, tr, 0)
+    return tr
+}
+
+fn (s mut Scoper&) seedNode(n I64, p I64, tr mut instTree&, depth I64) I64 {
+    nd := s.itree.Nodes[n]
+    at := newNode(tr, nd.Ty, nd.Fields.Len())
+    for i in range nd.Fields.Len() {
+        if nd.Fields[i].Full and nd.Fields[i].Recs.Len() > 0 {
+            out := fnRecs()
+            out.Full = true
+            for r in sortedRecs(nd.Fields[i].Recs) {
+                b := s.Bodies[r.Body]
+                caps Vec<Term>
+                for k in range b.Vars.Len() { caps.Push(Term.Derived(p, capCode(s.seedRi, k)) if capVarOf(b, k, r.Adapter) else Term.None) }
+                out.Recs.Push(fnRec(r.Body, caps, r.Adapter))
+                s.seedRi++
+            }
+            tr.Nodes[at].Fields[i] = out
+        }
+        if nd.Kids[i] >= 0 and depth + 1 < InstDepth { tr.Nodes[at].Kids[i] = s.seedNode(nd.Kids[i], p, tr, depth + 1) }
+    }
+    return at
+}
+
+# the instance argument a carries, before the call judges it: its record where known, else - a call not judged yet - a
+# constructor's made of its arguments, or what its callee's returns give (ResInst), each by its bodies alone
+fn (s mut Scoper&) keyInst(a typed.Expr&) I64 {
+    n := s.instOf(a)
+    if n >= 0: return n
+    x := s.argCall(a, 0)
+    if x is null: return -1
+    c := typed.Call.Of(x)!
+    b := s.bodyOf(c.Target)
+    if b < 0 or b >= s.sums.Len(): return -1
+    if s.Bodies[b].Of == typed.BodyOf.Ctor {
+        s.ctorInst(c, x.Type())
+        return try s.siteInst.Get(I64(c.Site)) catch default -1
+    }
+    # (its twin asked for now - the one its own judging reaches, the call routed to it once)
+    tw := -1
+    if not s.earlyTwin.Has(I64(c.Site)) {
+        tw = s.twinFor(c, b, x.Span())
+        s.earlyTwin.Put(I64(c.Site), tw)
+    } else {
+        tw = try s.earlyTwin.Get(I64(c.Site)) catch default -1
+    }
+    ri := s.Twins.Sums[tw].ResInst if tw >= 0 else s.sums[b].ResInst
+    if not s.summed(b) or ri.Nodes.Len() == 0: return -1
+    return copyNode(ri, 0, s.itree)
+}
+
+# the call an argument is made of: itself, a temporary's, a held local's initializer; null for none
+fn (s mut Scoper&) argCall(a typed.Expr&, depth I64) typed.Expr?& {
+    x := s.unPromoted(s.unAway(a))
+    if typed.Call.Of(x) is not null: return x
+    if depth > 4: return null
+    match x {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) {
+            match p {
+                case typed.Lvalue.Temp(_, _, v, _): return s.argCall(v, depth + 1)
+                case typed.Lvalue.Local(_, _, id) {
+                    if not s.held.Has(I64(id)): return null
+                    hx := try s.held.Get(I64(id)) catch { return null }
+                    return s.argCall(hx, depth + 1)
+                }
+                case _: return null
+            }
+        }
+        case _ { return null }
+    }
+}
+
+# whether any of a value's functions is a generator's walk (D18's rules judge those)
+fn (s mut Scoper&) anyGen(rs fnRecs&) Bool {
+    for r in rs.Recs {
+        if s.Bodies[r.Body].Gen: return true
+    }
+    return false
+}
+
+# ---- T22d at boundaries ----
+
+# T22a: an instance value x reaching a place code judged once for many values reads (a store, an argument not followed,
+# an "any", a task, a return no caller follows ...): every function a fixed field of it may hold, read structurally
+# (bndTree), judged by its field's type - else the error, at the value
+fn (s mut Scoper&) bndInst(x typed.Expr&, place I64) {
+    tr := instTree()
+    s.bndSeen.Clear()
+    n := s.bndTree(x, tr, 0)
+    if n >= 0: s.bndJudge(x, tr, n, place, 0)
+}
+
+fn (s mut Scoper&) bndJudge(x typed.Expr&, tr instTree&, n I64, place I64, depth I64) Bool {
+    nd := tr.Nodes[n]
+    fs := s.P.T.Items(s.P.T.Fields(nd.Ty))
+    seen Map<I64, Bool>
+    for i in range nd.Fields.Len() {
+        for r in nd.Fields[i].Recs {
+            bad := s.uncovered(r.Body, r.Adapter, fs[i], seen)
+            if bad < 0 { continue }
+            s.bndError(x, bad, bad == r.Body and r.Adapter, place)
+            return true
+        }
+        if nd.Kids[i] >= 0 and depth < InstDepth and s.bndJudge(x, tr, nd.Kids[i], place, depth + 1): return true
+    }
+    return false
+}
+
+# the instance value x may be, every way it may come (bndDefs: every value a local is given), into tr: its node, -1 for
+# none known - functions without where their captures lived (bndRecs)
+fn (s mut Scoper&) bndTree(x typed.Expr?&, tr mut instTree&, depth I64) I64 {
+    if x is null or depth > 16: return -1
+    match x {
+        case typed.Expr.Away(_, _, y) { return s.bndTree(y, tr, depth + 1) }
+        case typed.Expr.Promote(_, _, pr) { return s.bndTree(pr.X, tr, depth + 1) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) { return s.bndPlaceTree(p, tr, depth) }
+        case typed.Expr.Cond(_, _, c) { return s.bndMerge(tr, s.bndTree(c.A, tr, depth + 1), s.bndTree(c.B, tr, depth + 1)) }
+        case typed.Expr.Match(_, _, m) {
+            n := -1
+            for a in m.Arms { n = s.bndMerge(tr, n, s.bndTree(a.Value, tr, depth + 1)) }
+            return n
+        }
+        case typed.Expr.Call(_, ty, c) { return s.bndCallTree(c, ty, tr, depth) }
+        case _ { return -1 }
+    }
+}
+
+fn (s mut Scoper&) bndCallTree(c typed.Call&, ty types.TypeId, tr mut instTree&, depth I64) I64 {
+    b := s.bodyOf(c.Target)
+    if b < 0 or b >= s.sums.Len(): return -1
+    if s.Bodies[b].Of != typed.BodyOf.Ctor {
+        tw := s.plan.Twin(c.Site)
+        ri := s.Twins.Sums[tw].ResInst if tw >= 0 else s.sums[b].ResInst
+        return copyNode(ri, 0, tr) if ri.Nodes.Len() > 0 else -1
+    }
+    r := s.instStruct(ty)
+    if r == types.UnknownT or not s.instType(r): return -1
+    fs := s.P.T.Items(s.P.T.Fields(r))
+    n := newNode(tr, r, fs.Len())
+    for i in range fs.Len() {
+        k := s.ctorFieldParam(r, i) if s.fixedField(r, i) else -1
+        if k < 0 or k >= c.Args.Len(): continue
+        if s.isFunc(fs[i]) {
+            rs Vec<fnRec>
+            s.bndRecs(c.Args[k], rs)
+            out := fnRecs()
+            out.Full = true
+            for x in rs { addRec(out, x) }
+            tr.Nodes[n].Fields[i] = out
+        } else if not s.isRef(fs[i]) {
+            kid := s.bndTree(c.Args[k], tr, depth + 1)
+            tr.Nodes[n].Kids[i] = kid
+        }
+    }
+    return n
+}
+
+fn (s mut Scoper&) bndPlaceTree(p typed.Lvalue&, tr mut instTree&, depth I64) I64 {
+    match p {
+        case typed.Lvalue.Local(_, _, id) {
+            l := I64(id)
+            if s.Id == s.seedBody and s.seedInst.Has(l) {
+                st := try s.seedInst.Get(l) catch default instTree()
+                return copyNode(st, 0, tr) if st.Nodes.Len() > 0 else -1
+            }
+            if s.bndSeen.Has(l): return -1
+            s.bndSeen.Put(l, true)
+            n := -1
+            ds := try s.bndDefs.Ref(l) catch default Vec<typed.Expr&>()
+            for d in ds { n = s.bndMerge(tr, n, s.bndTree(d, tr, depth + 1)) }
+            return n
+        }
+        case typed.Lvalue.Deref(_, _, r) { return s.bndTree(r, tr, depth + 1) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.bndTree(v, tr, depth + 1) }
+        case typed.Lvalue.Field(_, _, b, i) {
+            if not s.fixedField(s.instStruct(b.Type()), i): return -1
+            n := s.bndPlaceTree(b, tr, depth + 1)
+            return tr.Nodes[n].Kids[i] if n >= 0 and i < tr.Nodes[n].Kids.Len() else -1
+        }
+        case _ { return -1 }
+    }
+}
+
+# nodes a and b of tr as one (both's records, a kid where both have one), -1 where either is none known
+fn (s mut Scoper&) bndMerge(tr mut instTree&, a I64, b I64) I64 {
+    if a < 0: return b
+    if b < 0: return a
+    t := tr
+    return mergeNode(t, a, t, b, tr)
+}
+
+# bndRecs of a read of a fixed field: the functions its instance's field may hold
+fn (s mut Scoper&) bndFieldRecs(p typed.Lvalue&, out mut Vec<fnRec>&) {
+    match p {
+        case typed.Lvalue.Field(_, _, b, i) {
+            if not s.fixedField(s.instStruct(b.Type()), i): return
+            tr := instTree()
+            n := s.bndPlaceTree(b, tr, 0)
+            if n < 0 or i >= tr.Nodes[n].Fields.Len(): return
+            for r in tr.Nodes[n].Fields[i].Recs { out.Push(fnRec(r.Body, Vec<Term>(), r.Adapter)) }
+        }
+        case _ { }
+    }
+}
+
+# whether x is a constructor's call (its arguments judged at a boundary as before)
+fn (s mut Scoper&) ctorCall(x typed.Expr&) Bool {
+    c := typed.Call.Of(s.unAway(x))
+    if c is null: return false
+    b := s.bodyOf(c.Target)
+    return b >= 0 and s.Bodies[b].Of == typed.BodyOf.Ctor
+}
+
+# the arguments of constructor call c that give a fixed field its value (bits by argument): followed where its instance
+# is (the place it reaches BndNone)
+fn (s mut Scoper&) ctorFixedArgs(c typed.Call&, ty types.TypeId) I64 {
+    b := s.bodyOf(c.Target)
+    if b < 0 or s.Bodies[b].Of != typed.BodyOf.Ctor: return 0
+    r := s.instStruct(ty)
+    if r == types.UnknownT or not s.instType(r): return 0
+    fs := s.P.T.Items(s.P.T.Fields(r))
+    mask I64 = 0
+    for i in range fs.Len() {
+        if not s.fixedField(r, i) or not (s.isFunc(fs[i]) or not s.isRef(fs[i]) and s.instType(fs[i])): continue
+        k := s.ctorFieldParam(r, i)
+        if k >= 0 and k < 62: mask = mask | (1 << k)
+    }
+    return mask
+}
+
+# a judging begun: no instance known yet but a twin's followed parameters'; whether its returns' instances are carried
+# (one result an instance that may carry records, no cycle, no generator - D18's rules judge a walk)
+fn (s mut Scoper&) instStart() {
+    s.itree = instTree()
+    s.siteInst.Clear()
+    s.localInst.Clear()
+    s.instFollow.Clear()
+    s.earlyTwin.Clear()
+    s.resInst = instTree()
+    ty := s.B!.Ty
+    fnTy := s.P.T.KindOf(ty) == types.Kind.Func
+    s.resInstOk = fnTy and not (s.cyclic or s.B!.Gen or s.genBody(s.Id)) and s.P.T.Results(ty).Len() == 1 and s.instType(s.P.T.Result(ty))
+    if s.Id != s.seedBody: return
+    for l in s.seedInst.Keys() {
+        tr := try s.seedInst.Get(l) catch default instTree()
+        if tr.Nodes.Len() > 0 { s.localInst.Put(l, copyNode(tr, 0, s.itree)) }
+    }
+}
+
+# whether body b assigns its local l whole after its declaration
+fn (s mut Scoper&) assignsWhole(b I64, l I64) Bool {
+    if b + 1 >= s.assignedFrom.Len(): return true
+    for k in range s.assignedFrom[b], s.assignedFrom[b + 1] {
+        if s.assignedTo[k] == l: return true
+    }
+    return false
+}
+
 # ---- T22a: records in the judging (docs/sec8.md 5.2, 5.3) ----
 
 # a judging begun: no record known yet; the body's returns carry where it gives one function value outside a cycle
@@ -1883,6 +2495,7 @@ fn (s mut Scoper&) recStart() {
     s.valRelsAt.Clear()
     s.followed.Clear()
     s.limited.Clear()
+    s.instStart()
     s.seedFollowed()
     s.resFns = fnRecs()
     s.resFns.Full = true
@@ -1945,7 +2558,7 @@ fn (s mut Scoper&) addRecs(out mut fnRecs&, x typed.Expr?&) {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) {
             l := wholeLocal(p)
             if l < 0 {
-                out.Full = false
+                s.fieldRecs(out, p)
                 return
             }
             s.addLocalRecs(out, l)
@@ -2426,12 +3039,19 @@ fn (s mut Scoper&) anyTables() {
         slots := s.P.AnySlots(tab.Trait)
         for k in range tab.Slots.Len() {
             b := tab.Slots[k]
-            if b >= s.sums.Len() or s.sums[b].Rels.Len() == 0 { continue }
+            if b >= s.sums.Len() or s.sums[b].Rels.Len() == 0 or slots.Len() == 0 { continue }
+            # T30c: within its trait's method's bound (T22b), its receiver a parameter - what every call relies on
+            sl := slots[k % slots.Len()]
+            if s.valueOK(b, false, sl.Sig) { continue }
             at := diag.Where.Span(tab.File, I64(tab.Sp.Start), I64(tab.Sp.End))
-            name := $"'" $s.P.L.Names.Text(slots[k % slots.Len()].Name) "'" if slots.Len() > 0 else ""
-            ty := s.Spell!(tab.Concrete) if s.Spell is not null else s.P.T.Canon(tab.Concrete)
-            tr := s.Spell!(tab.Trait) if s.Spell is not null else s.P.T.Canon(tab.Trait)
-            s.P.L.Diags.Error(at, msgs.AnyMethodObligations(ty, name, tr))
+            name := $"'" $s.P.L.Names.Text(sl.Name) "'"
+            ty := s.spell(tab.Concrete)
+            tr := s.spell(tab.Trait)
+            # (the word as the trait writes it: its receiver the method's home, as an adapter's is)
+            word, does := "", ""
+            if sl.Want != types.UnknownT { word, does = s.wordFor(b, true, sl.Want, s.bndWhy) }
+            does = does.Replace("its instance", "the instance")
+            s.P.L.Diags.Error(at, msgs.TraitMethodBeyond(ty, name, does, tr, word) if word != "" else msgs.AnyMethodObligations(ty, name, tr))
             break
         }
     }
@@ -2663,6 +3283,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         for t in s.resBind { sm.ResBind.Push(t) }
     }
     sm.ResFn = s.resFns if s.resFnOk else fnRecs()
+    sm.ResInst = s.resInst if s.resInstOk else instTree()
     sm.DerivedP.Clear()
     sm.DerivedW.Clear()
     for k in range s.plan.DerivedP.Len() {
@@ -6728,6 +7349,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     s.letBody(sp, l, x)
     # T22a: what a function value it is given carries (5.2)
     s.noteRecs(sp, I64(l), x)
+    s.noteInst(I64(l), x)
 }
 
 fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
@@ -8377,6 +8999,7 @@ fn (s mut Scoper&) ret(sp source.Span, x typed.Expr?&) {
     s.inRet = saved
     # T22a: what the result carries, for its callers (ResFn, 5.2)
     if s.resFnOk and not s.suspending { mergeRecs(s.resFns, s.recsOf(x)) }
+    if s.resInstOk and not s.suspending { s.retInst(x) }
 }
 
 fn (s mut Scoper&) retValue(sp source.Span, x typed.Expr&) {
@@ -9702,7 +10325,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # T22c: a call whose arguments' functions are followed into its callee is judged as a call of the twin they ask for -
     # its summary read in the callee's place while the call is judged
     b := s.bodyOf(c.Target)
-    t := s.twinFor(c, b, sp) if b >= 0 and not s.inSpawn else -1
+    t := -1
+    if b >= 0 and not s.inSpawn {
+        # (T22d: asked for already where an instance argument's twin was keyed by it)
+        t = try s.earlyTwin.Get(I64(c.Site)) catch default s.twinFor(c, b, sp)
+    }
     if t < 0 { return s.callAs(sp, ty, c, dest) }
     saved := s.sums[b]
     s.sums[b] = s.Twins.Sums[t]
@@ -9933,6 +10560,8 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
         agreed = s.argsAgree(c, callee, rv, owner, vals, beta)
     }
     if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
+    # T30c: a call through an "any" relies on its trait's method's bound (T22b), as one through a value not followed
+    if c.Target == typed.Callee.Dispatch { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
     if callee < 0 and c.Target == typed.Callee.Value {
         # each record judged as the direct call it is (5.3); a value not followed by what its type says (T22)
         for i in range recs.Recs.Len() { s.dischargeRels(sp, rrels[i], recs.Recs[i].Body, s.recBeta(recs.Recs[i], rmaps[i], beta), c, agreed) }
@@ -9940,6 +10569,10 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     }
     # what its result carries, where it is a function value (5.2)
     if s.isFunc(ty) { s.siteRecs.Put(I64(c.Site), s.resultRecs(c, callee, recs, vars, rv, beta)) }
+    # T22d: the instance it gives - a constructor's, made of its arguments; a callee's returns', through this call
+    if s.P.T.Role(fty) == types.RoleCtor { s.ctorInst(c, ty) } else if callee >= 0 and s.summed(callee) and s.sums[callee].ResInst.Nodes.Len() > 0 {
+        s.siteInst.Put(I64(c.Site), s.importInst(s.sums[callee].ResInst, 0, c, beta))
+    }
     s.resAt = beta[rv] if rv >= 0 else here
     if not s.holds(ty) { return Val.plain() }
     if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sums[callee].ResBind.Len() > 0 {

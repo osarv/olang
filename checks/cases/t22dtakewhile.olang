@@ -1,0 +1,45 @@
+# check: run
+# flags: -debug -sanitize
+# T22d (was a T22b refusal): TakeWhile's predicate keeps each value it is given in a Vec it captured - fixed in
+# TakeWhileIter's field by its constructor, followed with the instance into Next, whose call through the field is judged
+# as the lambda's: the values kept read back after storage was made and let go many times; a top-level assert decides
+# the same while compiling (S17a)
+type N struct(v I64) { v }
+
+fn keepSome(xs Array<N&>&, kept mut Vec<N&>&) I64 {
+    t := 0
+    for x in xs.Iter().TakeWhile(fn(x) {
+        kept.Push(x)
+        return x.v < 3
+    }) { t += x.v }
+    return t
+}
+
+fn run() I64 {
+    a := Array<N&>[N(1), N(2), N(3), N(4)]
+    kept Vec<N&>
+    t := keepSome(a, kept)
+    return t * 10 + kept.Len()
+}
+
+assert run() == 33
+
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
+fn main() {
+    kept Vec<N&>
+    {
+        a := Array<N&>[N(1), N(2), N(3), N(4)]
+        assert keepSome(a, kept) == 3
+    }
+    churn(100)
+    assert kept.Len() == 3 and kept[0].v == 1 and kept[2].v == 3
+}

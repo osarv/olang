@@ -194,6 +194,7 @@ type AnySlot struct(Name source.NameId, Trait types.TypeId, Method I64, Default 
     Default
     Mut
     Sig
+    Want types.TypeId = types.UnknownT   # T30c: the trait's method's own type, its receiver left out, with its words
 }
 
 # a constant argument a fold could not compute: its expression, the module whose context reads it, its type, the
@@ -1287,6 +1288,15 @@ fn (p mut Program&) promisesOf(c Context&, s ast.Sig&, f types.TypeId) I64 {
     }
     if (words & types.PromNoborrow) != 0 and borrowed.Len() > 0: p.promiseErr(c, s.Promises[0], msgs.PromiseBorrowsBoth())
     return p.T.Promises(words, borrowed.ToArray(), kept.ToArray())
+}
+
+# T30c: a trait's method's signature (declared d), its receiver left out, with the promises it writes (T21c) and its
+# parameters' names - the trait's variables bound by args. Each misuse of a word is said once, at the trait
+fn (p mut Program&) TraitSig(d types.DeclId, m ast.Func&, args types.ListId) types.TypeId {
+    c := p.declContext(d)
+    f := p.sigType(c, m.S, types.UnknownT, source.NameId(0))
+    f = p.T.WithNames(p.T.WithPromises(f, p.promisesOf(c, m.S, f)), p.SigNames(m.S))
+    return p.Subst(f, DeclOwner(d), args)
 }
 
 # T21c: the bit of an effect word or "noborrow", 0 for a word naming parameters
@@ -4650,9 +4660,12 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>& {
                     m := methods[k]
                     if m.IsBuilder() or seen.Has(m.Name) { continue }   # T30b: no builder in a table
                     seen.Push(m.Name)
-                    want := p.Subst(p.sigType(p.declContext(d), m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), p.T.Args(tr))
+                    want := p.TraitSig(d, m, p.T.Args(tr))
                     writes := m.Recv is not null
-                    out.Push(AnySlot(m.Name, tr, k, -1, writes, p.WithReceiver(want, p.T.Ref(p.T.Any(r), types.Writable if writes else types.ReadOnly))))
+                    sig := p.WithReceiver(want, p.T.Ref(p.T.Any(r), types.Writable if writes else types.ReadOnly))
+                    sl := AnySlot(m.Name, tr, k, -1, writes, p.T.WithPromises(sig, p.T.ReceiverPromises(want)))
+                    sl.Want = want
+                    out.Push(sl)
                 }
             }
             case _ { }

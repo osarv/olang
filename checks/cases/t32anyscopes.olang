@@ -1,13 +1,27 @@
-# check: fail error[T32a, T22a]: aBox's 'Get' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aHas&' cannot check - call it directly, or through generic code
-# T32a, T22: run-time trait values
+# check: run
+# flags: -debug -sanitize
+# T30c (was a T32a refusal): a method whose result borrows from the instance is within its trait's method's bound - the
+# result may borrow from the receiver, as a function type's from its parameters (T22b) - and a call through the "any"
+# is held to it: the item read back after storage was made and let go many times
 type aItem struct(v I64) { v }
 type aHas trait {
     Get() aItem&
 }
 type aBox struct(it aItem&) { it }
 fn (b aBox&) Get() aItem& { return b.it }
-fn f(x any aHas&) { }
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<aItem>()
+        for j in range 16 { v.Push(aItem(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
 fn main() {
     b := aBox(aItem(1))
-    f(b)
+    x any aHas& = b
+    r := x.Get()
+    churn(100)
+    assert r.v == 1
 }

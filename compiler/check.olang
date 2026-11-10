@@ -671,6 +671,7 @@ fn (c mut Checker&) CheckProgram() {
             c.settleDropOrder()
             c.copyEffects()
             c.judgeEffects()
+            c.judgeTables()
             c.orderGlobals()
             c.settleAllViews()
             c.settleWeak()
@@ -2615,11 +2616,15 @@ fn (c mut Checker&) holdsSelf(d types.DeclId, b types.TypeId) Bool {
 fn (c mut Checker&) traitHeader(mi I64, td ast.TypeDecl?&) {
     if td is null or td.Body is null { return }
     match td.Body {
-        case ast.TypeBody.Trait(_, exts, members) {
-            if exts.Len() == 0 and members.Len() == 0 { return }
+        case ast.TypeBody.Trait(methods, exts, members) {
             ei := c.P.TypeEntry(mi, td.Name)
             if ei < 0 { return }
             d := c.P.DeclFor(mi, ei)
+            # T30c: a method's promises read, each misuse said here, at the trait
+            for m in methods {
+                if m.S.Promises.Len() > 0 and not m.IsBuilder(): c.P.TraitSig(d, m, c.P.T.Args(c.P.SelfType(d)))
+            }
+            if exts.Len() == 0 and members.Len() == 0 { return }
             fr := c.push(-1, mi, types.VoidT, types.ListId(0))
             fr.Ctx = c.P.DeclContext(d)
             self := c.P.SelfType(d)
@@ -22523,6 +22528,35 @@ fn (c mut Checker&) judgeEffects() {
         rec := c.P.L.Diags.Error(at, msgs.EffectBeyond(v.What, v.Does, c.ty(p.Want), v.Word))
         if v.NoteFile >= 0: c.P.L.Diags.Note(rec, diag.Where.Span(v.NoteFile, I64(v.NoteSp.Start), I64(v.NoteSp.End)), msgs.NoteEffect(v.Note))
     }
+}
+
+# T30c: each method a type gives a trait's table, held to the effect words of the trait's method - every call through an
+# "any" relies on them (T22b) - said at the table, with where in the method the word is broken
+fn (c mut Checker&) judgeTables() {
+    if c.P.AnyTables.Len() == 0 or c.P.L.Diags.Errors() > 0: return
+    c.fx = null
+    for ti in range c.P.AnyTables.Len() {
+        tab := c.P.AnyTables[ti]
+        slots := c.P.AnySlots(tab.Trait)
+        for k in range tab.Slots.Len() {
+            if c.judgeSlot(tab, slots[k % slots.Len()], tab.Slots[k]): break
+        }
+    }
+}
+
+# whether table tab's slot sl, body b, breaks an effect word of its trait's method - said where it does
+fn (c mut Checker&) judgeSlot(tab generic.AnyTable&, sl generic.AnySlot&, b I64) Bool {
+    words := c.P.T.PromiseWords(sl.Sig) & effects.EffectWords
+    if words == 0 or b < 0: return false
+    v := effects.Verdict()
+    fx := c.Effects()
+    fx.JudgeFacts(fx.Of(b), words, v)
+    if v.Word == "": return false
+    v = fx.Blame(v, fx.FirstCallee(b), "")
+    at := diag.Where.Span(tab.File, I64(tab.Sp.Start), I64(tab.Sp.End))
+    rec := c.P.L.Diags.Error(at, msgs.TraitMethodEffect(c.ty(tab.Concrete), c.tok(sl.Name), v.Does, c.ty(tab.Trait), v.Word))
+    if v.NoteFile >= 0: c.P.L.Diags.Note(rec, diag.Where.Span(v.NoteFile, I64(v.NoteSp.Start), I64(v.NoteSp.End)), msgs.NoteEffect(v.Note))
+    return true
 }
 
 # what a Copy does beyond building its value, "" for nothing

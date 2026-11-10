@@ -491,6 +491,20 @@ fn (t Table&) KeepsHome(f TypeId) Bool {
     return false
 }
 
+# T30c: a trait method's promises read with its receiver first (its "any" slot): each parameter one further on, and
+# "keeps x" - kept in the method's home - kept in the receiver
+fn (t mut Table&) ReceiverPromises(f TypeId) I64 {
+    if t.PromisesOf(f) == 0 { return 0 }
+    bs := t.BorrowsOf(f)
+    for i in range bs.Len() { bs[i] = bs[i] + 1 }
+    ks := t.KeepsOf(f)
+    for k in range ks.Len() / 3 {
+        ks[3 * k] = ks[3 * k] + 1
+        ks[3 * k + 1] = 0 if ks[3 * k + 1] == KeepsHome else ks[3 * k + 1] + 1
+    }
+    return t.Promises(t.PromiseWords(f), bs, ks)
+}
+
 # a function type with other promises, as nullable as f is and the same declared type
 fn (t mut Table&) WithPromises(f TypeId, promises I64) TypeId {
     if t.KindOf(f) != Kind.Func { return f }

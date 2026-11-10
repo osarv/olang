@@ -384,7 +384,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   words, the instance and a static table per (type, trait). A struct or enum variable is borrowed, a temporary built
   where the any lands, a number/Bool/Char/array copied. Calls dispatch through the table; `mut` only through `mut
   any`; `==` is identity. A closed trait's any is matched by type cases `case Button b`; an open trait's never (the
-  user).
+  user). **Promises on a trait's methods (T30c, the user's yes to fnvalues question 2, 2026-11-08; built 2026-11-10):**
+  a trait's method may end with the promise words (its receiver unnamed, the method's home: `keeps x` keeps `x` in the
+  instance); a call through an `any` relies on the method's bound (T22b's, the receiver first: its result may borrow
+  from the receiver) - its relations discharged, its effect words' facts - and each method a type gives an `any`'s
+  table is held to it, else an error naming the word. So a method handing back what its instance holds is callable
+  through an `any`, one keeping its argument in the instance once the trait writes `keeps n`.
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **Parameters (D9, D9b).** `&` says whose instance, `mut` whether it can be written; an immutable lvalue never binds
   a `mut &` parameter. Arrays are passed by value as instances (D9a, G29).
@@ -427,11 +432,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   built. **Promises (T21c, T22b; the user's decision 2026-11-08; built 2026-11-08, round 4):** words after a function
   type's signature - `keeps b in a`, `keeps b in a.f`, `keeps x`, `borrows a`, `noborrow` and the effect words `returns
   noalloc noblock nospawn norecurse noextern pure` (G42's facts, judged where a value is held since round 5) - written only on
-  function types (a declaration's, lambda's or trait method's is an error), part of the type's identity by position.
+  function types and (T30c, below) a trait's methods (a declaration's or lambda's is an error), part of the type's identity by position.
   They are the type's bound: a call through an unfollowed value discharges exactly its relations (`keeps x` against
   where the value lives, such a value held exactly), a value fits where its functions' obligations are within it, and
   T22a's error names the word to write. No promise says an argument is kept in a global. The boundary's coverage now
   matches what a call discharges (a hole: a result kept in an argument was accepted through a read-only result type).
+  **Fixed fields followed with the instance (T22d, round 12, the user's yes to fnvalues question 1, 2026-11-08; built
+  2026-11-10):** a field its constructor gives one parameter's value and no body assigns after (nor a whole instance
+  through a reference) carries its functions with the instance - through constructor calls, locals declared once,
+  temporaries, call results (`ResInst`), four levels of instances held by value - so a call through it is judged as the
+  direct calls it is; an instance argument whose fields hold functions their types do not cover is followed into a
+  twin (the receiver among them), keyed by each field's bodies; anywhere else the instance meets a boundary, its
+  fields' functions are judged there by their types. Generators' walks stay D18's. The effect facts follow the same
+  fields through per-parameter field slots: `for x in gen()` has its generator's facts, `TakeWhile(p)` its
+  predicate's. So `xs.Iter().TakeWhile(fn(x) { kept.Push(x); ... })` and a `Heap` ordered by a keeping lambda compile.
 - **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
   itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
 - **A number type's limits through its name (E36, the user's decision 2026-10-24).** `I64.Max`, `U8.Min`, `T.Max`, and

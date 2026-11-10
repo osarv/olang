@@ -3375,6 +3375,8 @@
 | null
 === run t21bconvert.olang
 | status 0
+=== run t21cmisplacedtrait.olang
+| status 0
 === run t22acapture.olang
 | status 0
 === run t22acursorfn.olang
@@ -3426,6 +3428,14 @@
 === run t22ccapturefound.olang
 | status 0
 | 3 63 6
+=== run t22dchain.olang
+| status 0
+=== run t22dgenfacts.olang
+| status 0
+=== run t22dheap.olang
+| status 0
+=== run t22dtakewhile.olang
+| status 0
 === run t22sharedscope.olang
 | status 0
 === run t22sharedscopegeneric.olang
@@ -3458,6 +3468,12 @@
 | 1
 | true
 | 1
+=== run t30cfacts.olang
+| status 0
+=== run t30ckeeps.olang
+| status 0
+=== run t30ckeepsoutlived.olang
+| status 0
 === run t32anyarrcopy.olang
 | status 0
 === run t32anyarrcopyassign.olang
@@ -3476,6 +3492,8 @@
 === run t32anyglobal.olang
 | status 0
 === run t32anyleak.olang
+| status 0
+=== run t32anyscopes.olang
 | status 0
 === run t34casebindnote.olang
 | status 0

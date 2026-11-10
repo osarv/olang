@@ -240,12 +240,17 @@ GivMade I64 = 3
 GivResult I64 = 4
 PartLambda I64 = 5
 PartAdapter I64 = 6
+# T22d: what a callee's returns put in its instance's fixed field (Val the callee, Path the fields, From the call's
+# index among the body's calls), resolved once the callee is walked
+GivResField I64 = 7
 
 type part struct(Kind I64, Val I64, Ty types.TypeId, X typed.Expr?&) {
     Kind
     Val
     Ty
     X
+    Path Vec<I64>     # GivResField's
+    From I64 = -1
 }
 
 # what a body gives a slot holding a function value: Site the call (an index of its calls - a callee's slot At - or -1
@@ -256,6 +261,8 @@ type given struct(Site I64, At I64, Kind I64, Val I64, Ty types.TypeId) {
     Kind
     Val
     Ty
+    Path Vec<I64>     # GivResField's
+    From I64 = -1
 }
 
 # a value classified at the walk's end, every value its locals are given seen: an argument for a callee's slot (Site
@@ -264,6 +271,7 @@ type pend struct(Site I64, At I64, X typed.Expr&) {
     Site
     At
     X
+    Path Vec<I64>     # T22d: a field slot's - X the instance, the value its fixed fields along Path hold
 }
 
 # T22b's verdict on a function value held as a function type writing effect words: the word broken, "" for none
@@ -338,6 +346,18 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     dtorsNoted Bool = false
     ownC I64 = -1                 # whether the program links C of its own and has an export fn (cMayCallBack), -1 unknown
     dtorOf Map<types.TypeId, I64> # by type: its destructor's body (C9)
+    # T22d: the fixed fields - (a struct type's representation, a field) any body assigns after construction, -1 a
+    # whole instance written through a reference - scanned once, where first asked; by type, the paths of fixed fields
+    # from it to a function value; by body, its field slots, and what its returns put along each path of its result
+    assignedOk Bool = false
+    assigned Map<pair, Bool>
+    pathsOf Map<types.TypeId, Vec<fpath>>
+    fslots Map<I64, Vec<fslot>>
+    fieldRets Map<I64, Vec<fret>>
+    instDefs Map<I64, Vec<typed.Expr&>>  # by local holding an instance: every value given it
+    instSome Map<I64, Bool>
+    callAt Map<I64, I64>                 # by call site: its index among the body's calls
+    retInst Bool = false                 # whether the body walked gives an instance with fixed function fields
 }
 
 type pair struct(A I64, B I64) {
@@ -435,9 +455,14 @@ fn (e mut Effects&) OfExtern(f I64) Facts {
 # ---- slots ----
 
 # the type of body w's slot k: its parameter's, or its capture's
-fn (e Effects&) slotType(w I64, k I64) types.TypeId {
+fn (e mut Effects&) slotType(w I64, k I64) types.TypeId {
     body := e.Bodies[w]
     if k < body.Params.Len(): return body.Locals[I64(body.Params[k])].Ty
+    base := e.slotBase(w)
+    if k >= base {
+        fs := e.fieldSlots(w)
+        return fs[k - base].Ty if k - base < fs.Len() else types.UnknownT
+    }
     n := body.Params.Len()
     for i in range body.Locals.Len() {
         if body.Locals[i].Kind != typed.LocalKind.Capture: continue
@@ -523,7 +548,7 @@ fn (e mut Effects&) expand(b I64) {
     if not e.gives[b] or not e.givs.Has(b): return
     gs := try e.givs.Get(b) catch default Vec<given>()
     for g in gs {
-        if g.Kind != GivNamed and g.Kind != GivResult: continue
+        if g.Kind != GivNamed and g.Kind != GivResult and g.Kind != GivResField: continue
         if g.Site >= 0 {
             w := e.calls[b][g.Site]
             if w < 0 or w >= e.Bodies.Len() or e.state[w] == 2 and not hasBit(e.callsOf[w], g.At): continue
@@ -532,11 +557,28 @@ fn (e mut Effects&) expand(b I64) {
             e.callEdge(b, g.Val)
             continue
         }
+        if g.Kind == GivResField {
+            e.expandField(b, g)
+            continue
+        }
         if e.rets.Has(g.Val) {
             for t in e.retsOf(g.Val): e.callEdge(b, t)
         } else if g.Site < 0 {
             Merge(e.own.RefMut(b), Facts.Bound(e.P.T, g.Ty))    # (a callee's slot given it: settle's bounds)
         }
+    }
+}
+
+# T22d: what a callee's returns put in a fixed field, called through by b or what b calls: a named function's body
+# called, a value not followed its type's bound, b's own slot called through
+fn (e mut Effects&) expandField(b I64, g given&) {
+    ps Vec<part>
+    e.resField(b, g, ps, 0)
+    for pt in ps {
+        if pt.Kind == GivNamed { e.callEdge(b, pt.Val) } else if pt.Kind == GivBound { Merge(e.own.RefMut(b), Facts.Bound(e.P.T, pt.Ty)) }
+        if pt.Kind != GivSlot: continue
+        o := e.own.RefMut(b)
+        o.Calls = o.Calls | paramBit(pt.Val)
     }
 }
 
@@ -728,6 +770,467 @@ fn Merge(into mut Facts&, from Facts&) {
     }
 }
 
+# ---- fixed fields (T22d) ----
+#
+# A field of a struct no body assigns after its constructor, which its constructor gives one parameter's value, holds
+# that value for the instance's life. A call through one is read as a call through what the instance's constructor was
+# given there: by a parameter's field slot (its own Calls bit, as a parameter's), by a local's instance's every value, or
+# by what a callee's returns put there
+
+# a path of fixed fields from a struct type to a function value: the fields, and the function's type
+type fpath struct(Path Vec<I64>, Ty types.TypeId) {
+    Path
+    Ty
+}
+
+# a body's field slot: its parameter's instance's fixed fields along Path, a function value of type Ty
+type fslot struct(Param I64, Path Vec<I64>, Ty types.TypeId) {
+    Param
+    Path
+    Ty
+}
+
+# what a body's returns put along a path of its result's fixed fields: its parts
+type fret struct(Path Vec<I64>, Parts Vec<part>) {
+    Path
+    Parts
+}
+
+FieldDepth I64 = 4   # the paths of fixed fields followed: at most this many fields long
+
+# the struct type an instance of type t is, through a reference - Unknown where it is none
+fn (e Effects&) structOf(t types.TypeId) types.TypeId {
+    x := e.P.T.Repr(e.P.T.Referent(t) if e.P.T.IsRef(t) else t)
+    if e.P.T.KindOf(x) != types.Kind.Named or e.P.T.DeclKindOf(e.P.T.DeclOf(x)) != types.DeclKind.Struct: return types.UnknownT
+    return x
+}
+
+# whether field i of struct type r is fixed: no body assigns it after its constructor, nor writes a whole instance
+fn (e mut Effects&) fixed(r types.TypeId, i I64) Bool {
+    if not e.assignedOk: e.scanAssigned()
+    return not e.assigned.Has(pair(I64(r), i)) and not e.assigned.Has(pair(I64(r), -1))
+}
+
+# the paths of fixed fields from struct type r to a function value, depth fields deep at most
+fn (e mut Effects&) paths(r types.TypeId) Vec<fpath> {
+    if r == types.UnknownT: return Vec<fpath>()
+    if e.pathsOf.Has(r): return try e.pathsOf.Get(r) catch default Vec<fpath>()
+    e.pathsOf.Put(r, Vec<fpath>())     # (a type holding itself through a path: none)
+    out Vec<fpath>
+    fs := e.P.T.Items(e.P.T.Fields(r))
+    for i in range fs.Len() {
+        if not e.fixed(r, i): continue
+        if e.isFn(fs[i]) {
+            out.Push(fpath(Vec<I64>[i], fs[i]))
+            continue
+        }
+        if e.P.T.IsRef(fs[i]): continue
+        for q in e.paths(e.structOf(fs[i])) {
+            if q.Path.Len() >= FieldDepth: continue
+            p := Vec<I64>[i]
+            for k in q.Path: p.Push(k)
+            out.Push(fpath(p, q.Ty))
+        }
+    }
+    e.pathsOf.Put(r, out)
+    return out
+}
+
+# body w's field slots: each parameter's instance's paths, in order
+fn (e mut Effects&) fieldSlots(w I64) Vec<fslot> {
+    if e.fslots.Has(w): return try e.fslots.Get(w) catch default Vec<fslot>()
+    out Vec<fslot>
+    body := e.Bodies[w]
+    for k in range body.Params.Len() {
+        for q in e.paths(e.structOf(body.Locals[I64(body.Params[k])].Ty)) { out.Push(fslot(k, q.Path, q.Ty)) }
+    }
+    e.fslots.Put(w, out)
+    return out
+}
+
+# the slot of body w its first field slot is: after its parameters and captures
+fn (e Effects&) slotBase(w I64) I64 {
+    body := e.Bodies[w]
+    n := body.Params.Len()
+    for l in body.Locals {
+        if l.Kind == typed.LocalKind.Capture: n++
+    }
+    return n
+}
+
+# the slot of body w's parameter k's instance's fields along path, -1 for none
+fn (e mut Effects&) fieldSlotOf(w I64, k I64, path Vec<I64>&) I64 {
+    fs := e.fieldSlots(w)
+    for j in range fs.Len() {
+        if fs[j].Param == k and fs[j].Path == path: return e.slotBase(w) + j
+    }
+    return -1
+}
+
+# the parameter of constructor body cb whose value its field i is given, -1 where the field is given anything else, or
+# assigned again in the constructor
+fn (e Effects&) ctorArg(cb I64, i I64) I64 {
+    body := e.Bodies[cb]
+    if i >= body.Fields.Len() or body.Root is null: return -1
+    f := body.Fields[i]
+    k := -1
+    for st in body.Root!.Stmts {
+        match st {
+            case typed.Stmt.Let(_, id, x) {
+                if id == f: k = paramOf(body, x)
+            }
+            case typed.Stmt.Assign(_, typed.Lvalue.Local(_, _, id), _) { if id == f: return -1 }
+            case _ { }
+        }
+    }
+    return k
+}
+
+# the parameter a value reads whole, -1 for none
+fn paramOf(body typed.Body&, x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Away(_, _, y): return paramOf(body, y)
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _), typed.Expr.Take(_, _, typed.Lvalue.Local(_, _, id)) {
+            for j in range body.Params.Len() {
+                if body.Params[j] == id: return j
+            }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# a function value read out of a place's fixed fields, along path (fields after the place's own), into parts
+fn (e mut Effects&) classifyField(p typed.Lvalue&, path Vec<I64>, ty types.TypeId, depth I64) {
+    if depth > 16 or path.Len() > FieldDepth {
+        e.parts.Push(part(GivBound, 0, ty, null))
+        return
+    }
+    match p {
+        case typed.Lvalue.Field(_, _, b, i) {
+            if not e.fixed(e.structOf(b.Type()), i) {
+                e.parts.Push(part(GivBound, 0, ty, null))
+                return
+            }
+            q := Vec<I64>[i]
+            for k in path: q.Push(k)
+            e.classifyField(b, q, ty, depth + 1)
+        }
+        case typed.Lvalue.Local(_, _, id): e.classifyInstLocal(I64(id), path, ty, depth)
+        case typed.Lvalue.Deref(_, _, r): e.classifyInst(r, path, ty, depth + 1)
+        case _: e.parts.Push(part(GivBound, 0, ty, null))
+    }
+}
+
+# what an instance local holds along path: a parameter's field slot, every value given another local
+fn (e mut Effects&) classifyInstLocal(id I64, path Vec<I64>&, ty types.TypeId, depth I64) {
+    slot := try e.paramAt.Get(id) catch default -1
+    if slot >= 0 {
+        k := e.fieldSlotOf(e.curBody, slot, path) if slot < e.Bodies[e.curBody].Params.Len() else -1
+        e.parts.Push(part(GivSlot, k, ty, null) if k >= 0 else part(GivBound, 0, ty, null))
+        return
+    }
+    if e.instSome.Has(id) or not e.instDefs.Has(id) {
+        e.parts.Push(part(GivBound, 0, ty, null))
+        return
+    }
+    defs := try e.instDefs.Get(id) catch default Vec<typed.Expr&>()
+    for d in defs: e.classifyInst(d, path, ty, depth + 1)
+}
+
+# what instance x holds along path: a constructor's argument, a place's, what a callee's returns put there
+fn (e mut Effects&) classifyInst(x typed.Expr&, path Vec<I64>&, ty types.TypeId, depth I64) {
+    if depth > 16 {
+        e.parts.Push(part(GivBound, 0, ty, null))
+        return
+    }
+    match x {
+        case typed.Expr.Away(_, _, y) { e.classifyInst(y, path, ty, depth + 1) }
+        case typed.Expr.Promote(_, _, pr) { e.classifyInst(pr.X, path, ty, depth + 1) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.classifyField(p, path, ty, depth + 1) }
+        case typed.Expr.Cond(_, _, cd) {
+            if cd.A is null { e.parts.Push(part(GivBound, 0, ty, null)) } else { e.classifyInst(cd.A!, path, ty, depth + 1) }
+            e.classifyInst(cd.B, path, ty, depth + 1)
+        }
+        case typed.Expr.Call(_, _, cl) { e.classifyCallInst(cl, path, ty, depth) }
+        case _ { e.parts.Push(part(GivBound, 0, ty, null)) }
+    }
+}
+
+fn (e mut Effects&) classifyCallInst(cl typed.Call&, path Vec<I64>&, ty types.TypeId, depth I64) {
+    id := match cl.Target {
+        case typed.Callee.Body(b): I64(b)
+        case _: I64(-1)
+    }
+    if id < 0 {
+        e.parts.Push(part(GivBound, 0, ty, null))
+        return
+    }
+    if e.Bodies[id].Of != typed.BodyOf.Ctor {
+        pt := part(GivResField, id, ty, null)
+        pt.Path = path
+        pt.From = try e.callAt.Get(I64(cl.Site)) catch default -1
+        e.parts.Push(pt)
+        return
+    }
+    k := e.ctorArg(id, path[0])
+    if k < 0 or k >= cl.Args.Len() {
+        e.parts.Push(part(GivBound, 0, ty, null))
+        return
+    }
+    if path.Len() == 1 {
+        e.classify(cl.Args[k], depth + 1)
+        return
+    }
+    rest Vec<I64>
+    for j in range 1, path.Len(): rest.Push(path[j])
+    e.classifyInst(cl.Args[k], rest, ty, depth + 1)
+}
+
+# whether a local's type holds an instance with fixed function fields (its values are kept for classifying them)
+fn (e mut Effects&) instType(t types.TypeId) Bool { return e.paths(e.structOf(t)).Len() > 0 }
+
+# a call of body w: each of its field slots given what the argument's instance holds there
+fn (e mut Effects&) fieldPends(w I64, site I64, cl typed.Call&) {
+    fs := e.fieldSlots(w)
+    if fs.Len() == 0: return
+    base := e.slotBase(w)
+    for j in range fs.Len() {
+        k := fs[j].Param
+        if k >= cl.Args.Len(): continue
+        pd := pend(site, base + j, cl.Args[k])
+        pd.Path = fs[j].Path
+        e.pends.Push(pd)
+        e.giving = true
+    }
+}
+
+# the walk's returns, where the body gives an instance with fixed function fields: what each puts along each path
+fn (e mut Effects&) retFields(b I64) {
+    out Vec<fret>
+    for q in e.paths(e.structOf(e.P.T.Result(e.Bodies[b].Ty))) {
+        e.parts.Clear()
+        for x in e.curRets: e.classifyInst(x, q.Path, q.Ty, 0)
+        kept Vec<part>
+        for pt in e.parts {
+            k := pt.Kind
+            if k == PartLambda or k == PartAdapter: k = GivMade
+            np := part(k, pt.Val, pt.Ty, null)
+            np.Path = pt.Path
+            np.From = pt.From
+            kept.Push(np)
+        }
+        out.Push(fret(q.Path, kept))
+    }
+    e.fieldRets.Put(b, out)
+}
+
+# what a callee's returns put along a path (given g, of body b's), as parts of b's own: a function named, made (what
+# making it does is the callee's), a value not followed (its type), a slot of b's - the callee's parameter it gave back
+# resolved by what b's call gave it
+fn (e mut Effects&) resField(b I64, g given&, out mut Vec<part>&, depth I64) {
+    rs := try e.fieldRets.Get(g.Val) catch {
+        out.Push(part(GivBound, 0, g.Ty, null))
+        return
+    }
+    for r in rs {
+        if r.Path != g.Path: continue
+        for pt in r.Parts: e.resPart(b, g, pt, out, depth)
+        return
+    }
+    out.Push(part(GivBound, 0, g.Ty, null))
+}
+
+fn (e mut Effects&) resPart(b I64, g given&, pt part&, out mut Vec<part>&, depth I64) {
+    if pt.Kind == GivNamed or pt.Kind == GivMade or pt.Kind == GivBound {
+        out.Push(pt)
+        return
+    }
+    if pt.Kind == GivResult and e.rets.Has(pt.Val) {
+        for t in e.retsOf(pt.Val): out.Push(part(GivNamed, t, pt.Ty, null))
+        return
+    }
+    if pt.Kind != GivSlot or g.From < 0 or depth > 4 {
+        out.Push(part(GivBound, 0, pt.Ty, null))
+        return
+    }
+    # the callee's slot: what b's call (g.From) gave it
+    seen := false
+    gs := try e.givs.Get(b) catch default Vec<given>()
+    for gg in gs {
+        if gg.Site != g.From or gg.At != pt.Val: continue
+        seen = true
+        if gg.Kind == GivResField {
+            e.resField(b, gg, out, depth + 1)
+            continue
+        }
+        if gg.Kind == GivSlot {
+            out.Push(part(GivSlot, gg.Val, gg.Ty, null))
+            continue
+        }
+        if gg.Kind == GivResult and not e.rets.Has(gg.Val) {
+            out.Push(part(GivBound, 0, gg.Ty, null))
+            continue
+        }
+        if gg.Kind == GivResult {
+            for t in e.retsOf(gg.Val): out.Push(part(GivNamed, t, gg.Ty, null))
+            continue
+        }
+        out.Push(part(gg.Kind, gg.Val, gg.Ty, null))
+    }
+    if not seen: out.Push(part(GivBound, 0, pt.Ty, null))
+}
+
+# T22d: every (struct type, field) a body of the program assigns after construction - (type, -1) where it writes a
+# whole instance through a reference - read once
+fn (e mut Effects&) scanAssigned() {
+    e.assignedOk = true
+    for b in e.Bodies {
+        if b.Root is not null: e.scanBlock(b.Root)
+    }
+}
+
+fn (e mut Effects&) scanBlock(bl typed.Block?&) {
+    if bl is null: return
+    for st in bl.Stmts: e.scanStmt(st)
+}
+
+fn (e mut Effects&) scanStmt(st typed.Stmt&) {
+    match st {
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.scanExpr(x) }
+        case typed.Stmt.Assign(_, t, x) {
+            e.scanTarget(t)
+            e.scanExpr(x)
+        }
+        case typed.Stmt.If(_, i) {
+            e.scanExpr(i.Test)
+            e.scanBlock(i.Then)
+            e.scanBlock(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            e.scanBlock(body)
+            e.scanBlock(post)
+        }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { e.scanExpr(x) }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { e.scanBlock(b) }
+        case typed.Stmt.Assert(_, c, m) {
+            e.scanExpr(c)
+            e.scanExpr(m)
+        }
+        case typed.Stmt.Exit(_, _, m), typed.Stmt.Reraise(_, m, _) { e.scanExpr(m) }
+        case typed.Stmt.Join(_, j) {
+            e.scanBlock(j.Code)
+            for cl in j.Clauses: e.scanBlock(cl.Code)
+        }
+        case typed.Stmt.Spawn(_, sw) {
+            for t in sw.Targets {
+                if t is not null: e.scanTarget(t)
+            }
+            e.scanExpr(sw.Task)
+        }
+        case _ { }
+    }
+}
+
+# a store into a field, or into a whole instance through a reference
+fn (e mut Effects&) scanTarget(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Field(_, _, b, i) { e.assigned.Put(pair(I64(e.P.T.Repr(b.Type())), i), true) }
+        case typed.Lvalue.Deref(_, ty, _) { e.assigned.Put(pair(I64(e.P.T.Repr(ty)), -1), true) }
+        case _ { }
+    }
+}
+
+# the statements an expression holds, and the places it reads through
+fn (e mut Effects&) scanExpr(x typed.Expr?&) {
+    if x is null: return
+    match x {
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts: e.scanStmt(st)
+            e.scanExpr(q.X)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held: e.scanStmt(st)
+            for a in m.Arms: e.scanArm(a)
+            if m.NoMatch is not null: e.scanArm(m.NoMatch!)
+        }
+        case typed.Expr.Collect(_, _, cl) {
+            e.scanExpr(cl.Reserve)
+            e.scanBlock(cl.Loop)
+        }
+        case typed.Expr.Try(_, _, tr) {
+            e.scanExpr(tr.X)
+            for cl in tr.Clauses {
+                e.scanBlock(cl.Code)
+                for d in cl.Defaults: e.scanExpr(d)
+            }
+        }
+        case typed.Expr.Call(_, _, cl) {
+            match cl.Target {
+                case typed.Callee.Value(v) { e.scanExpr(v) }
+                case _ { }
+            }
+            for a in cl.Args: e.scanExpr(a)
+        }
+        case typed.Expr.Cond(_, _, cd) {
+            e.scanExpr(cd.C)
+            e.scanExpr(cd.A)
+            e.scanExpr(cd.B)
+        }
+        case typed.Expr.Make(_, _, m) {
+            e.scanExpr(m.Length)
+            for y in m.Items: e.scanExpr(y)
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for y in args: e.scanExpr(y)
+        }
+        case typed.Expr.Promote(_, _, pr) { e.scanExpr(pr.X) }
+        case typed.Expr.Slice(_, _, sl) {
+            e.scanPlace(sl.Base)
+            e.scanExpr(sl.Lo)
+            e.scanExpr(sl.Hi)
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(y) { e.scanExpr(y) }
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.scanPlace(p) }
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(_, caps, _)) {
+            for cp in caps: e.scanExpr(cp.Outer)
+        }
+        case typed.Expr.Away(_, _, y) { e.scanExpr(y) }
+        case _ { }
+    }
+}
+
+fn (e mut Effects&) scanArm(a typed.Arm&) {
+    for alt in a.Alts {
+        e.scanExpr(alt.Test)
+        for bd in alt.Binds: e.scanExpr(bd.From)
+    }
+    e.scanExpr(a.Guard)
+    e.scanBlock(a.Code)
+    e.scanExpr(a.Value)
+}
+
+fn (e mut Effects&) scanPlace(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Deref(_, _, r) { e.scanExpr(r) }
+        case typed.Lvalue.Field(_, _, b, _) { e.scanPlace(b) }
+        case typed.Lvalue.Elem(_, _, el) {
+            e.scanPlace(el.Base)
+            e.scanExpr(el.Index)
+        }
+        case typed.Lvalue.Payload(_, _, pl) { e.scanPlace(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { e.scanExpr(v) }
+        case _ { }
+    }
+}
+
 # ---- one body's own facts ----
 
 fn (e mut Effects&) walk(b I64) {
@@ -765,6 +1268,10 @@ fn (e mut Effects&) walkBody(b I64) {
     if e.curRetNamed.Len() > 0: e.curRetNamed.Clear()
     e.curRetKnown = false
     e.retFn = e.P.T.KindOf(body.Ty) == types.Kind.Func and e.isFn(e.P.T.Result(body.Ty))
+    e.retInst = e.P.T.KindOf(body.Ty) == types.Kind.Func and e.instType(e.P.T.Result(body.Ty))
+    if e.instDefs.Len() > 0: e.instDefs.Clear()
+    if e.instSome.Len() > 0: e.instSome.Clear()
+    if e.callAt.Len() > 0: e.callAt.Clear()
     e.paramAt = Map<I64, I64>()
     e.derived = Map<I64, I64>()
     for i in range body.Params.Len() { e.paramAt.Put(I64(body.Params[i]), i) }
@@ -799,6 +1306,7 @@ fn (e mut Effects&) walkBody(b I64) {
 fn (e mut Effects&) finish() {
     for p in e.pends { e.resolve(p) }
     if e.outs.Len() > 0 or e.outLinks: e.outsJudged()
+    if e.retInst: e.retFields(e.curBody)
     if not e.retFn: return
     e.curRetKnown = true
     for x in e.curRets {
@@ -815,14 +1323,21 @@ fn (e mut Effects&) finish() {
 # does here
 fn (e mut Effects&) resolve(p pend&) {
     e.parts.Clear()
-    e.classify(p.X, 0)
+    if p.Path.Len() > 0 {
+        e.classifyInst(p.X, p.Path, e.slotType(e.curCalls[p.Site], p.At), 0)
+    } else {
+        e.classify(p.X, 0)
+    }
     was := e.whyNow() if e.whyWord != 0 else true
     for pt in e.parts {
         k := pt.Kind
         if k == PartLambda or k == PartAdapter { k = GivMade }
         if k == GivSlot and pt.Val >= 63 { k = GivBound }
-        if p.Site >= 0 {
-            e.curGivs.Push(given(p.Site, p.At, k, pt.Val, pt.Ty))
+        if p.Site >= 0 or k == GivResField {
+            gv := given(p.Site, p.At, k, pt.Val, pt.Ty)
+            gv.Path = pt.Path
+            gv.From = pt.From
+            e.curGivs.Push(gv)
             continue
         }
         if k == GivSlot {
@@ -875,6 +1390,10 @@ fn (e mut Effects&) classify(x typed.Expr?&, depth I64) {
         }
         case typed.Expr.Fn(_, _, f) { e.parts.Push(e.fnPart(f, x)) }
         case typed.Expr.Read(_, ty, typed.Lvalue.Local(_, _, id), _) { e.classifyLocal(I64(id), ty, depth) }
+        # T22d: a function value read out of an instance's fixed field - what its constructor was given there
+        case typed.Expr.Read(_, ty, p, _) {
+            if p == typed.Lvalue.Field { e.classifyField(p, Vec<I64>(), ty, depth) } else { e.parts.Push(part(GivBound, 0, ty, null)) }
+        }
         case typed.Expr.Lit(_, _, _) { e.parts.Push(part(GivMade, 0, x.Type(), null)) }
         case typed.Expr.Call(_, ty, cl) {
             match cl.Target {
@@ -915,6 +1434,10 @@ fn (e mut Effects&) define(id I64, x typed.Expr&) {
         if not e.fnDefs.Has(id): e.fnDefs.Put(id, Vec<typed.Expr&>())
         e.fnDefs.RefMut(id)!.Push(x)
         return
+    }
+    if e.instType(t) {
+        if not e.instDefs.Has(id): e.instDefs.Put(id, Vec<typed.Expr&>())
+        e.instDefs.RefMut(id)!.Push(x)
     }
     if not (e.P.T.IsRef(t) or e.P.T.HoldsRefs(t)): return
     bits := e.rootBits(x, 0)
@@ -993,7 +1516,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
             e.expr(v)
             # (a reference's slots read off its declaration's value alone, as before; every value where Pure is asked)
             match t {
-                case typed.Lvalue.Local(_, ty, id) { if e.WantPure or e.isFn(ty): e.define(I64(id), v) }
+                case typed.Lvalue.Local(_, ty, id) { if e.WantPure or e.isFn(ty) or e.instType(ty): e.define(I64(id), v) }
                 case _ { }
             }
         }
@@ -1009,7 +1532,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Return(_, v) {
             e.expr(v)
-            if e.retFn and v is not null: e.curRets.Push(v)
+            if (e.retFn or e.retInst) and v is not null: e.curRets.Push(v)
         }
         case typed.Stmt.Suspend(_, v) { e.expr(v) }
         case typed.Stmt.Reraise(_, code, _) { e.expr(code) }
@@ -1045,6 +1568,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
                 match t {
                     case typed.Lvalue.Local(_, _, id) {
                         e.fnSome.Put(I64(id), true)
+                        e.instSome.Put(I64(id), true)
                         if e.WantPure: e.refDefs.Push(2 * I64(id))
                     }
                     case _ { }
@@ -1218,6 +1742,8 @@ fn (e mut Effects&) call(cl typed.Call&) {
         case typed.Callee.Body(id) {
             site := e.curCalls.Len()
             e.curCalls.Push(I64(id))
+            e.callAt.Put(I64(cl.Site), site)
+            e.fieldPends(I64(id), site, cl)
             for j in range cl.Args.Len() {
                 e.argLink(I64(id), j, cl.Args[j])
                 if e.takesFn(I64(id)) and e.isFn(cl.Args[j].Type()) {
@@ -1236,9 +1762,13 @@ fn (e mut Effects&) call(cl typed.Call&) {
                 if e.P.T.IsRef(a.Type()) and e.P.T.PermOf(a.Type()) & types.Writable != 0: e.written(a)
             }
         }
-        case typed.Callee.Dispatch(_, _, _) {
-            e.cur.Unknown = true
-            e.cur.Through = true
+        case typed.Callee.Dispatch(_, _, sig) {
+            # T30c: what its trait's method promises (its words' bound, T22b) - with none, anything - writing what it
+            # is given writably, the instance among it
+            Merge(e.cur, Facts.Bound(e.P.T, sig))
+            for a in cl.Args {
+                if e.P.T.IsRef(a.Type()) and e.P.T.PermOf(a.Type()) & types.Writable != 0: e.written(a)
+            }
         }
         case typed.Callee.Helper(_, _) { }
     }
@@ -1617,7 +2147,7 @@ fn (e mut Effects&) Judge(b I64, x typed.Expr&, want types.TypeId) Verdict {
     e.parts.Clear()
     e.classify(x, 0)
     ps := e.parts
-    for pt in ps {
+    for pt in e.judgedParts(b, ps) {
         if pt.Kind == GivResult and e.rets.Has(pt.Val) {
             for g in e.retsOf(pt.Val) {
                 e.judgeFacts(e.Of(g), words, v)
@@ -1649,6 +2179,28 @@ fn (e mut Effects&) Judge(b I64, x typed.Expr&, want types.TypeId) Verdict {
     return v
 }
 
+# T22d: a value's parts with what a callee's returns put in a fixed field resolved, in body b (walked last)
+fn (e mut Effects&) judgedParts(b I64, ps Vec<part>&) Vec<part> {
+    out Vec<part>
+    for pt in ps {
+        if pt.Kind != GivResField {
+            out.Push(pt)
+            continue
+        }
+        for q in e.fieldParts(b, pt): out.Push(q)
+    }
+    return out
+}
+
+fn (e mut Effects&) fieldParts(b I64, pt part&) Vec<part> {
+    g := given(-1, 0, GivResField, pt.Val, pt.Ty)
+    g.Path = pt.Path
+    g.From = pt.From
+    out Vec<part>
+    e.resField(b, g, out, 0)
+    return out
+}
+
 # the facts of lambda body l, made in body b by lambda x: what it calls through each capture is what that capture is
 # where it is made, through a parameter what its type promises
 fn (e mut Effects&) lambdaFacts(b I64, l I64, x typed.Expr&) Facts {
@@ -1656,6 +2208,10 @@ fn (e mut Effects&) lambdaFacts(b I64, l I64, x typed.Expr&) Facts {
     f := e.whole[l]
     if f.Calls == 0: return f
     for k in range e.Bodies[l].Params.Len() {
+        if hasBit(f.Calls, k): Merge(f, Facts.Bound(e.P.T, e.slotType(l, k)))
+    }
+    base := e.slotBase(l)
+    for k in range base, base + e.fieldSlots(l).Len() {
         if hasBit(f.Calls, k): Merge(f, Facts.Bound(e.P.T, e.slotType(l, k)))
     }
     match x {
@@ -1681,6 +2237,11 @@ fn (e mut Effects&) partFacts(b I64, pt part&) Facts {
     if pt.Kind == PartAdapter: return e.Of(pt.Val)
     if pt.Kind == PartLambda: return e.lambdaFacts(b, pt.Val, pt.X!)
     if pt.Kind == GivMade: return Facts()
+    if pt.Kind == GivResField {
+        f := Facts()
+        for q in e.fieldParts(b, pt): Merge(f, e.partFacts(b, q))
+        return f
+    }
     if pt.Kind == GivResult and e.rets.Has(pt.Val) {
         f := Facts()
         for g in e.retsOf(pt.Val): Merge(f, e.Of(g))
@@ -1688,6 +2249,21 @@ fn (e mut Effects&) partFacts(b I64, pt part&) Facts {
     }
     return Facts.Bound(e.P.T, pt.Ty)
 }
+
+# the first of words a function doing f breaks, into v (T30c: a trait's table's method judged by check)
+fn (e Effects&) JudgeFacts(f Facts&, words I64, v mut Verdict&) { e.judgeFacts(f, words, v) }
+
+# the first body body b calls (a table's slot's method, T30c), b itself where it calls none
+fn (e mut Effects&) FirstCallee(b I64) I64 {
+    e.Of(b)
+    for w in e.calls[b] {
+        if w >= 0 and w < e.Bodies.Len(): return w
+    }
+    return b
+}
+
+# v said of body w, named what: where in it the word is broken
+fn (e mut Effects&) Blame(v Verdict, w I64, what String&) Verdict { return e.blame(v, w, what) }
 
 # the first of words a function doing f breaks, into v
 fn (e Effects&) judgeFacts(f Facts&, words I64, v mut Verdict&) {
