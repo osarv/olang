@@ -1320,7 +1320,8 @@ where it pays"; "written where relied on, inferred on implementations; a call th
    direct call of the type's own method, judged by its body; the words rely on nothing there, so a type meets a trait
    as before (T31) and is held to the words only where an `any` of it is made.
 10. **Identity.** A trait method's words are part of the trait's declaration, not of any type the program names; an
-    `any`'s slots carry them. `olang api` reads them as a function type's (a word lost breaks callers relying on it).
+    `any`'s slots carry them. `olang api` reads a trait method's changed line as breaking, a word added or taken off
+    alike (a type's method may no longer fit; a call may have relied on it).
 
 ### The checklist, per round
 

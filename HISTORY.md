@@ -36288,3 +36288,49 @@ argument's referent.
   and the obligations a parameter's field passes up already answer it - `fn f(t mut N&, g mut N&) { c := C(t); c.cur =
   g; c.cur.next = N() }` compiled before this round). Field sets across functions are carried by derived scopes as
   before; a whole-program gathering per field (all bodies' stores) was not needed for any refused program.
+
+## Fixed fields followed with the instance; promises on a trait's methods (T22d, T30c, T32a, T22a, G42; 2026-11-10, wt-f12, round 12 of docs/fnvalues.md)
+
+The user's yes of 2026-11-08 to fnvalues.md's direction questions 1 and 2: "function values followed as far as the
+compiler can know them, constructor-fixed fields included, code specialized only where it pays", and "promise words on
+trait methods - written where relied on, inferred on implementations; a call through an `any` relies on them". The
+design is fnvalues.md round 12's "As designed".
+
+- **T30c, promises on a trait's methods.** The parser takes the words after a trait method's signature (`sig`'s
+  `ofTrait`); `generic.TraitSig` reads them (T21c's misuses said at the trait, by `traitHeader`), and an `any`'s slot
+  carries them shifted past the receiver (`types.ReceiverPromises`: `keeps x`, kept in the method's home, becomes
+  "kept in the receiver"). A call through an `any` now discharges the slot's bound (T22b) in the scope pass and has its
+  effect words' facts (`Facts.Bound`, with the writes through what it is given writably); each table's method is held
+  to the bound - its relations by `scope.anyTables` (judged as a function of the slot's type with the receiver a
+  parameter, the word named as the trait would write it), its facts by `check.judgeTables` with a note in the method.
+  T32a relaxed: a trait method writing nothing has the default bound, so a method handing back what its instance holds
+  (t32anyscopes) is callable through an `any`, a run case read back after a churn; t32anyobligations is refused naming
+  `keeps n`, and t30ckeeps writes it. A type meets a trait as before (T31); a constrained generic's call is direct, so
+  the words are held only where an `any` is made. compiler/ and std use no `any`, so their IR is unchanged by it.
+- **T22d, fixed fields.** A field its constructor gives one parameter's value (a pun, or `pred ... = keep`) and nothing
+  assigns after - the scope pass's `fieldsAssigned`, read off every body - carries what the constructor was given.
+  The scope pass keeps a tree of instance records (`instTree`: by field, a function field's records, an instance
+  field's node) per judging: made by a constructor's call, carried by a local declared once and never assigned whole,
+  a temporary, a held local's initializer, a call's result (`summary.ResInst`, none for a cycle or a generator) and a
+  twin's followed parameter; `addRecs` reads a fixed field through it. `twinFor` follows an instance argument whose
+  tree holds records some field's type does not cover, keying the twin by each field's path and bodies; the seed's
+  captures are derived scopes numbered over the tree depth first, resolved by `instCapturedAt` from the argument as
+  judged. An argument made by a call not yet judged (TakeWhile's receiver, a SkipWhile's result) asks for that call's
+  twin first (`earlyTwin`, the call then routed to it once), so a chain of lazy walks is followed whole. In the boundary
+  walk, an instance reaching a boundary has every function its fixed fields may hold judged by the field's type
+  (`bndInst`, a structural tree over every value given a local), a constructor's argument for a fixed field is followed
+  where its instance is, reading through an instance's reference is no boundary, and a temporary read whole is its
+  value. The effects pass follows the same fields with field slots (a parameter's paths of fixed fields, after its
+  parameters and captures, four deep): a call through one sets its `Calls` bit; a call gives each what its argument's
+  instance holds - a constructor's argument, a local's values, its own field slot, or what a callee's returns put there
+  (`fieldRets`, a callee's parameter given back resolved by what the call gave it). Its own scan of assignments
+  (`scanAssigned`) runs only where a function field is first read. A lambda reaching a field is counted where it is
+  made, so a call through it adds nothing.
+- **What it lets through.** `xs.Iter().TakeWhile(fn(x) { kept.Push(x); ... })` (t22dtakewhile, with an S17a assert
+  the evaluator decides through it), the same through a SkipWhile (t22dchain), a `Heap` ordered by a keeping lambda
+  (t22dheap) - each built with `-debug -sanitize`, read back after a churn, and interpreted; `for x in gen()` and
+  `TakeWhile(p)` with their own facts (t22dgenfacts). Refused still: an instance holding a keeping lambda stored into a
+  Vec (t22dstored, the error at Vec.Push's store with the field's type), and a field some method assigns (t22dassigned).
+- **Not done.** No clone is made for a call through a field (clones stay round 9's, keyed by function parameters); the
+  inliner sees the constructor's argument where the instance does not escape. A generator's walk is not followed by the
+  scope pass (D18's rules). The words are held only at `any` tables, not at a constraint's binding.

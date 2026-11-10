@@ -1428,7 +1428,8 @@ lambda was made, what the callee may keep of an argument counted as a direct cal
 relations are not followed (a parameter's, a field's, an element's) by what its type says of every call (T22). A
 **boundary** is a place where the value meets code judged once for many values: an argument for a parameter that is
 not followed into its callee (T22c), a store
-into anything but a whole local (a field, an element, a payload, a global, a constructor's field), a value an array, a
+into anything but a whole local (a field, an element, a payload, a global, a constructor's field - but a fixed field of
+an instance the inference follows, T22d), a value an array, a
 tuple or an enum case is made of, a capture that is not followed into the lambda's body (T22c), a task's function,
 argument or result, an `any` (T32a), a `yield`, a
 binding of a pattern, a `return` of a function whose result is not one function value or that calls itself (O13c), and
@@ -1501,6 +1502,28 @@ changes at run time but which compiled code a call reaches (B2c): a program mean
 followed.
 
 ### 2.8 Scopes
+
+**T22d (functions a constructor fixes in a field).** A field of a struct is **fixed** where its constructor gives it one
+parameter's value - the parameter's pun, or a field initialized by reading the parameter (`pred fn&(x T) Bool ? E =
+keep`) - and assigns it nowhere after, and no function of the program assigns it after construction or writes a whole
+instance of the struct through a reference. A fixed field holding a function value holds, for the instance's life, what
+its constructor was given; one holding an instance by value holds that instance's fixed fields in turn (to four levels).
+So an instance carries its fixed fields' functions as T22a's records, where the inference follows it whole: a
+constructor's call, a local declared with it and never assigned whole (a reference to one too), a temporary, a call's
+result (what every `return` of the callee gives, O13c - none for a callee in a cycle of calls or a generator), and, in a
+twin (T22c), an instance followed into it. A read of a fixed field of such an instance carries the field's functions
+(T22a), so a call through it is judged as the direct calls it is. An argument whose instance carries functions some
+fixed field's type does not cover (T22b) - a method's receiver among them - is followed into its callee as a function
+argument is (T22c), the twin keyed by each field's functions, a capture of one of them where the caller's value had it.
+A constructor's argument for a fixed field is no boundary (T22a) where its instance is followed; wherever the instance
+meets a boundary instead - a store, an argument not followed, an `any`, a task, a `yield`, a `return` no caller
+follows - every function its fixed fields may hold is judged there by its field's type. A generator's walk (D18) is not
+followed by scope: its type says what a call of it does, as before. The effect facts (G42) follow the same fields: a call
+through a fixed field of a parameter's instance is a call through that parameter's **field slot**, given at each call by
+what the argument's instance holds there (a constructor's argument, a local's every value, a field slot of the caller's,
+what a callee's returns put there) - a function value made by some function counted where it is made - so a `for x in
+gen()` has its generator's facts and `xs.Iter().TakeWhile(p)` its predicate's. Nothing is written for any of it, and
+nothing changes at run time but which compiled code a call reaches.
 
 **T23.** A **scope** is a region of memory (§8 O1). It is not a type and not a value, and it has **no
 name**: there is no `scope` type, no expression of scope kind, and nothing of scope kind may be declared,
