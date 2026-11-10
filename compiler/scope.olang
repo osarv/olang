@@ -12337,6 +12337,7 @@ fn (s mut Scoper&) apartField(p typed.Lvalue&) String {
     if d < 0 or id < 0 or not s.apartDecl(d) or p.index >= s.Bodies[id].Fields.Len(): return ""
     cb := s.Bodies[id]
     f := cb.Locals[I64(cb.Fields[p.index])]
+    s.markReads.Put(pair.Pair<I64, I64>(id, p.index), f.Marked)
     # (a field viewing its constructor argument's referent, or one the field inference may make so - 2.6)
     bound := f.Marked == typed.Mark.Of or (s.isRef(f.Ty) and s.bindingParam(cb, I64(cb.Fields[p.index])) >= 0)
     return s.P.L.Names.Text(f.Name) if bound else ""

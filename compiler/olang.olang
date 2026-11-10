@@ -1008,7 +1008,6 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     # what every judging placed
     rec := keys.Len() > 0 and not cfg.Memory and (try os.Env("OLANG_NOSCOPEREC") catch default "") == ""
     loaded Map<I64, String&>
-    build.Phase("scope start")
     if rec { loaded = records.ScopeRecords(c, cfg, keys, sc) }
     build.Phase("scope records read")
     marks := sc.FieldMarks()

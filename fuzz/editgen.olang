@@ -159,13 +159,15 @@ fn (u Run&) step(p mut Prog&, undo Bool) String ? os.Error {
     }
     try Write(p, $u.dir "/inc")
     u.build("inc", "here")
-    # (what was reused or lowered again, the front end's records taken or checked, and how many facts were read differ
-    # by design; OLANG_CHECKINCR ends a build whose records give what checking afresh does not)
-    u.sh("grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|incremental check:.*every one the same\\)' here | sort > a; " $
-         "grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|incremental check:.*every one the same\\)' there | sort > b")
+    # (what was reused or lowered again, the front end's records taken or checked, the modules the scope pass judged
+    # afresh and how many facts were read differ by design; OLANG_CHECKINCR ends a build whose records give what
+    # checking afresh does not)
+    u.sh("grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)' here | sort > a; " $
+         "grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)' there | sort > b")
     if u.sh("diff a b > d") != 0: return $"the build in place (<) differs from the clean one (>):\n" $u.read("d")
     if undo and u.read("here").Contains("olang: lowered "): return $"undoing lowered again:\n" $u.read("here")
     if undo and u.read("here").Contains("olang: front checked "): return $"undoing checked again:\n" $u.read("here")
+    if undo and u.read("here").Contains("olang: scope judged m"): return $"undoing judged again:\n" $u.read("here")
     return ""
 }
 
