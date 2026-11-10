@@ -1584,7 +1584,9 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
 # into the Map and takes them out, grows a node's Vec after it was made, stores into weak places from nodes of other
 # blocks (a node stored only weakly is refused, the scenario left out), and keeps references and views of keys across
 # calls that remove their nodes, across inline removals, and handed to a callee that removes the node first - then
-# churns and reads everything back, the weak places included (null reads as 0). What the build reclaims (and puts back)
+# churns and reads everything back, the weak places included (null reads as 0). A removed node lets go of its next
+# link: an instance no owning place holds still holds what it holds until it is reclaimed (O8e), so what a weak place to
+# the next reads would depend on where reclaiming runs - which differs between the one-module and split builds. What the build reclaims (and puts back)
 # the interpreter reclaims at the same sites, so the two print the same; a use of a reclaimed node or array shows.
 
 fn weakHelpers(k I64) String& {
@@ -1620,6 +1622,7 @@ fn weakHelpers(k I64) String& {
             "    h := l.head\n"
             "    if h is null { return }\n"
             "    q := h.next\n"
+            "    h.next = null\n"
             "    l.head = q\n"
             "    if q is null { l.tail = null } else { q.prev = null }\n"
             "    l.n--\n"
@@ -1663,7 +1666,7 @@ fn (g mut SG&) weakOp(k I64, ind String&) String& {
     if w == 5 {    # ... removed inline, the next node made at once
         h := g.name("h")
         return ($ind "if l.head is not null {\n" $ind "    " $x " String& = l.head!.key\n" $ind "    " $h " := l.head!\n" $ind "    l.head = "
-                $h ".next\n" $ind "    if l.head is null { l.tail = null }\n" $ind "    l.n--\n" $ind "    l.push(i + " $v ")\n" $ind
+                $h ".next\n" $ind "    " $h ".next = null\n" $ind "    if l.head is null { l.tail = null }\n" $ind "    l.n--\n" $ind "    l.push(i + " $v ")\n" $ind
                 "    acc = acc * 31 % 1000000007 + " $x ".Hash() % 1000\n" $ind "}\n")
     }
     if w == 6 { return $ind "if l.head is not null { acc += l.popRead(l.head!.key) }\n" }

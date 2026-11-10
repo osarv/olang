@@ -1068,12 +1068,28 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath
     k := fr.PlaceOf(p)
     # (an owner local given another value: its place's old value, held whole)
     if p == typed.Lvalue.Local and assign { k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id)) }
-    g := fr.Guard(I64(ln.B.Id), k)
+    g := ln.guardOf(k)
     if k >= 0 and g != free.NotSole {
         out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0)))
         return out
     }
     return ln.leafPaths(p.Type())
+}
+
+# what guards place k's release here (free.Guard): never sole where its values are references to a generational type or
+# it is a weak place (free's genKeeps, in every program) - read through the program's generational facts (GenInfo), so
+# that the module's code records reading them (B3i). Writing no release there keeps no old value in use past the store,
+# which would hold back reclaiming it (O8e) in every module but the root's, whose decisions are written in
+fn (ln mut lowering&) guardOf(k I64) I64 {
+    fr := ln.L.Free!
+    if k >= 0 {
+        kt, field := fr.PlaceKey(k)
+        vt := fr.PlaceValue(k)
+        g := ln.L.Gen()
+        if field >= 0 and g.WeakField(ln.T, kt, field): return free.NotSole
+        if vt != types.UnknownT and g.GenRef(ln.T, vt): return free.NotSole
+    }
+    return fr.Guard(I64(ln.B.Id), k)
 }
 
 # the release paths of a value of type ty's candidate leaves: each by the fields that reach it, and a handle's
@@ -1082,7 +1098,7 @@ fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<relPath> {
     out Vec<relPath>
     fr := ln.L.Free!
     for lf in fr.Leaves(ty) {
-        g := fr.Guard(I64(ln.B.Id), lf.PlaceId)
+        g := ln.guardOf(lf.PlaceId)
         if g == free.NotSole: continue
         if not fr.IsHandle(lf.PlaceId) {
             out.Push(relPath(g, lf.Path))

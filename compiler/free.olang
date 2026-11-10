@@ -5408,6 +5408,9 @@ fn (f Free&) Guard(b I64, k I64) I64 {
     return -1 if f.IsSole(k) else NotSole
 }
 
+# candidate place k's value's type
+fn (f Free&) PlaceValue(k I64) types.TypeId { return f.valTy[k] if k >= 0 and k < f.valTy.Len() else types.UnknownT }
+
 # the candidate place a place is, -1 for none: what its let-go releases where it is decided sole
 fn (f mut Free&) PlaceOf(p typed.Lvalue&) I64 {
     if not f.Done { return -1 }
