@@ -63,3 +63,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-09	F10	opus	medium	done	411	204	75	pass		followed fn values in free/D9h/E31b/M19g; found lambda-in-conversion bug
 2026-11-09	R8	opus	medium	lost-at-verify						container restart during final verify; work all committed; merged by me
 2026-11-10	G4	opus	medium	lost						container restart ~20 min in, nothing committed; relaunched
+2026-11-10	W4	opus	medium	done				pass		field sets; found element-field build use-after-scope; invented compile-apart store for B3i
