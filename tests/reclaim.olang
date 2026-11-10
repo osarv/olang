@@ -1,0 +1,208 @@
+# Reclaiming generational instances (O8e, docs/genrefs.md round 4): a node no owning place holds and no reference in use
+# reaches is reclaimed where its last owning place lets go of it - its slot put on its scope's free list for its size,
+# its generation bumped so every weak place naming it reads null, what it held let go of in turn - and the slot reused by
+# the next node of its size made there. Each test churns nodes through reused slots and reads every value back: a node
+# still in use (a reference across a call, a local after its let-go, a cycle, a value with a destructor) keeps its
+# value, and a weak place to a reclaimed one reads null, never the node now in its slot. The evaluator decides the same
+# values while compiling where every node it reads through a weak place is held (top-level asserts), and interpret runs
+# the rest as built.
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type DList struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+    n I64 = 0
+}
+
+fn (l mut DList&) PushBack(v I64) {
+    nd := Node(v)
+    t := l.tail
+    if t is null { l.head = nd } else {
+        t.next = nd
+        nd.prev = t
+    }
+    l.tail = nd
+    l.n++
+}
+
+# the first node taken out and handed back: held by nothing owning, in use by the caller's local
+fn (l mut DList&) PopFront() mut Node& {
+    h := l.head!
+    q := h.next
+    l.head = q
+    if q is null { l.tail = null } else { q.prev = null }
+    l.n--
+    return h
+}
+
+fn (l DList&) Forward() I64 {
+    s := 0
+    at Node?& = l.head
+    for at is not null {
+        s = s * 10 + at.v
+        at = at.next
+    }
+    return s
+}
+
+fn (l DList&) Backward() I64 {
+    s := 0
+    at Node?& = l.tail
+    for at is not null {
+        s = s * 10 + at.v
+        at = at.prev
+    }
+    return s
+}
+
+# nodes made and let go of through a list of its own (the scratch list beside the one read), their slots reused, and
+# what a closed scope left behind written over
+fn (l mut DList&) churn(n I64) {
+    for i in range n {
+        l.PushBack(100 + i)
+        l.PopFront()
+    }
+    t := 0
+    for i in range 200 {
+        a := Array<I64>(32, -i)
+        t += a[1]
+    }
+    assert l.n == 0 and t == -19900
+}
+
+type Seen struct(n mut Node?&) {
+    w weak mut Node?& = n
+}
+
+# the nodes a weak place names, as digits (0 for null)
+fn digits(xs Array<Seen>&) I64 {
+    s := 0
+    for x in xs {
+        at := x.w
+        s = s * 10 + (at.v if at is not null else 0)
+    }
+    return s
+}
+
+# removed nodes' slots reused by new nodes: the weak places to the removed read null, never the nodes now in their slots
+fn reused() I64 {
+    l := DList()
+    for i in range 1, 6 { l.PushBack(i) }
+    seen := Array<Seen>[Seen(l.head), Seen(l.head!.next), Seen(l.tail)]
+    scratch := DList()
+    l.PopFront()
+    l.PopFront()
+    scratch.churn(50)
+    for i in range 6, 9 { l.PushBack(i) }
+    return digits(seen) * 100000000 + l.Forward() * 100 + l.n
+}
+
+# an orphan: a node taken out and kept by a local, read after nodes reuse slots - reclaimed only after its last use
+fn orphan() I64 {
+    l := DList()
+    for i in range 1, 4 { l.PushBack(i) }
+    scratch := DList()
+    h := l.PopFront()
+    w := Seen(h)
+    scratch.churn(40)
+    v := h.v * 10 + (1 if w.w is null else 0)
+    return v * 1000 + l.Forward()
+}
+
+# a removed node kept by a reference in use across the call that lets go of it: the callee's nodes reuse no slot of it
+fn (l mut DList&) dropAndChurn(scratch mut DList&) {
+    l.PopFront()
+    scratch.churn(40)
+}
+
+fn acrossCall() I64 {
+    l := DList()
+    for i in range 1, 4 { l.PushBack(i) }
+    scratch := DList()
+    h := l.head!
+    l.dropAndChurn(scratch)
+    return h.v * 1000 + l.Forward()
+}
+
+# a cycle: two nodes holding each other through their owning links, let go of by the list - each still held by the
+# other, so both kept until their scope closes, and their weak places still name them
+fn cycle() I64 {
+    l := DList()
+    l.PushBack(1)
+    l.PushBack(2)
+    a := l.head!
+    b := a.next!
+    b.next = a
+    s := Seen(a)
+    l.head = null
+    scratch := DList()
+    scratch.churn(40)
+    at := s.w
+    return (at.v * 10 + at.next!.v) if at is not null else -1
+}
+
+# a generational type with a destructor: never reclaimed early - its destructor runs once, as its scope closes
+Ended mut I64 = 0
+
+type Res struct(v I64) {
+    v
+    next mut Res?& = null
+    back weak Res?& = null
+} destruct {
+    Ended += 1
+}
+
+type Holder struct() {
+    first mut Res?& = null
+}
+
+fn ended() I64 {
+    before := Ended
+    {
+        h := Holder()
+        h.first = Res(1)
+        r := h.first!
+        r.next = Res(2)
+        r.next!.back = r
+        k := Seen2(r)
+        h.first = null
+        gone := k.w is null
+        h.first = Res(3)
+        Ended = Ended + (100 if gone else 0)
+    }
+    return Ended - before
+}
+
+type Seen2 struct(n Res?&) {
+    w weak Res?& = n
+}
+
+# the evaluator decides the same while compiling
+assert cycle() == 12
+assert acrossCall() == 1023
+
+test PushBack "removed nodes' slots reused: weak places to them read null" {
+    r := reused()
+    assert r == 534567806, $r
+}
+
+test PopFront "an orphan kept by a local is read back after nodes reuse slots" {
+    assert orphan() == 11023
+}
+
+test DList.churn "a node in use across the call letting go of it keeps its value" {
+    assert acrossCall() == 1023
+}
+
+test Node "a cycle of owning links is kept until its scope closes" {
+    assert cycle() == 12
+}
+
+test Res "a generational type with a destructor is kept, its destructor run once as its scope closes" {
+    assert ended() == 103
+}

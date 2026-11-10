@@ -1078,6 +1078,7 @@ fn (f mut Free&) hiddenCalls(b I64) Bool {
         case typed.BodyOf.Fn(inst): inst
         case typed.BodyOf.Ctor(_, _), typed.BodyOf.Test(_): -2
         case typed.BodyOf.Global(_, _): -2
+        case typed.BodyOf.Cond(_, _): -2    # (run only while compiling: genAcross follows no call of it)
         case _: -1
     }
     if i == -2: return false
@@ -1256,6 +1257,7 @@ fn (f mut Free&) genAcross() {
     for b in range n {
         f.across.Push(Vec<I64>())
         f.acrossAll.Push(f.hiddenCalls(b))
+        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root is not null { try io.PrintErr($"hidden " $b " " $f.fnName(b) " " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
     }
     changed := true
     for changed {
@@ -1263,7 +1265,7 @@ fn (f mut Free&) genAcross() {
         for c in range f.gcFrom.Len() {
             a := f.gcFrom[c]
             b := f.gcTo[c]
-            if b < 0 or b >= n or f.acrossAll[b]: continue
+            if b < 0 or b >= n or f.acrossAll[b] or f.Bodies[a].Of == typed.BodyOf.Cond: continue
             if f.acrossAll[a] {
                 f.acrossAll[b] = true
                 changed = true

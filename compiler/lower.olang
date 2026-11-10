@@ -2456,7 +2456,22 @@ fn (ln mut lowering&) reclaimSites() {
         lv.reach.Push(r)
         if r == mir.ReachPlain: lv.plain = true
     }
+    ln.keepResults(lv)
     m := lv.locals.Len()
+    for bi in range nb {
+        match ln.F.Blocks[bi].T {
+            case mir.Term.Call(_, c) {
+                cl := ln.F.Calls[I64(c)]
+                if cl.HasDest and cl.Dest.Path.N == I32(0) {
+                    match cl.Dest.B {
+                        case mir.Base.Local(l) { lv.results.Put(I64(l), true) }
+                        case _ { }
+                    }
+                }
+            }
+            case _ { }
+        }
+    }
     if not lv.plain {
         for bi in range nb {
             for i in range ln.F.Blocks[bi].Stmts.Len() {
@@ -2476,6 +2491,85 @@ fn (ln mut lowering&) reclaimSites() {
         for k in range nb { changed = ln.liveBlock(lv, nb - 1 - k) > 0 or changed }
     }
     for bi in range nb { ln.reclaimBlock(lv, bi) }
+    ln.resultSites(lv)
+}
+
+# a call dropping a result that names a generational instance - a callee handing back what it let go of (genrefs 5.3's
+# results), the caller writing no use of it - has its result put in a temporary of its own, a reclaiming site where it
+# continues (resultSites)
+fn (ln mut lowering&) keepResults(lv mut liveness&) {
+    t := ln.T
+    for bi in range ln.F.Blocks.Len() {
+        match ln.F.Blocks[bi].T {
+            case mir.Term.Call(_, c) {
+                cl := ln.F.Calls[I64(c)]
+                if cl.HasDest or cl.Ok == mir.NoBlock: continue
+                fty := match cl.Target {
+                    case mir.Callee.Fn(_, ty), mir.Callee.Dispatch(_, _, ty): ty
+                    case _: types.UnknownT
+                }
+                if fty == types.UnknownT: continue
+                r := t.Result(fty)
+                if r == types.VoidT or r == types.NoreturnT or not ln.L.Gen().GenRef(t, r): continue
+                tmp := ln.F.AddTemp(r, ln.F.Sp)
+                lv.idx.Push(lv.locals.Len())
+                lv.locals.Push(I64(tmp))
+                lv.reach.Push(mir.ReachPlain)
+                lv.dropped.Push(I64(tmp))
+                lv.droppedAt.Push(I64(cl.Ok))
+                cl.Dest = mir.Lvalue.L(tmp)
+                cl.HasDest = true
+                ln.F.Calls[I64(c)] = cl
+            }
+            case _ { }
+        }
+    }
+}
+
+# each dropped result's site: first in the block its call continues at, where that block is reached from the call alone
+fn (ln mut lowering&) resultSites(lv mut liveness&) {
+    preds := Array<I64>(ln.F.Blocks.Len(), 0)
+    for bi in range ln.F.Blocks.Len() {
+        lv.nexts.Clear()
+        mir.TermNext(ln.F.Blocks[bi].T, ln.F, lv.nexts)
+        for nx in lv.nexts { preds[I64(nx)] += 1 }
+    }
+    # (a result put in a temporary of the program's that nothing reads is one too)
+    for bi in range ln.F.Blocks.Len() {
+        match ln.F.Blocks[bi].T {
+            case mir.Term.Call(_, c) {
+                cl := ln.F.Calls[I64(c)]
+                if not cl.HasDest or cl.Dest.Path.N != I32(0) or cl.Ok == mir.NoBlock: continue
+                x := match cl.Dest.B {
+                    case mir.Base.Local(l): I64(l)
+                    case _: -1
+                }
+                if x < 0 or ln.F.Locals[x].Kind != mir.LocalKind.Temp or has(lv.dropped, x): continue
+                j := lv.idx[x]
+                if j < 0 or lv.reach[j] != mir.ReachPlain or lv.liveIn[I64(cl.Ok) * lv.m + j]: continue
+                lv.dropped.Push(x)
+                lv.droppedAt.Push(I64(cl.Ok))
+            }
+            case _ { }
+        }
+    }
+    for k in range lv.dropped.Len() {
+        ok := lv.droppedAt[k]
+        if preds[ok] != 1: continue
+        holding Vec<mir.Operand>
+        clean := true
+        for j in range lv.m {
+            if not lv.liveIn[ok * lv.m + j]: continue
+            if lv.reach[j] == mir.ReachAny: clean = false
+            holding.Push(mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(lv.locals[j])))))
+        }
+        if not clean: continue
+        x := lv.dropped[k]
+        ty := ln.T.Repr(ln.T.Referent(ln.T.Repr(ln.F.Locals[x].Ty)))
+        st := mir.Stmt.Reclaim(ln.F.Sp, mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(x)))), ty, ln.F.Args(holding.ToArray()))
+        b := ln.F.Blocks.RefMut(ok)
+        try b.Stmts.Insert(0, st) catch { }
+    }
 }
 
 # the liveness reclaimSites follows: of the locals that may reach a generational instance only (locals, by compact
@@ -2492,6 +2586,9 @@ type liveness struct() {
     uses Vec<mir.LocalId>
     defs Vec<mir.LocalId>
     nexts Vec<mir.BlockId>
+    results Map<I64, Bool>    # the temporaries a call's result is put in
+    dropped Vec<I64>          # the temporaries keepResults gave a dropped result, and the block each call continues at
+    droppedAt Vec<I64>
 }
 
 # block bi's liveness from its successors': how many locals its entry's gained
@@ -2581,7 +2678,8 @@ fn (ln mut lowering&) reclaimBlock(lv mut liveness&, bi I64) {
 }
 
 # the references to generational instances local u - not in use after this statement - stops holding here: itself, a
-# plain reference no longer in use (a temporary only where it is what a store let go of: any other is a copy of
+# plain reference no longer in use (a temporary only where it is what a store let go of, or a call's result - genrefs
+# 5.3's results, a callee handing back what it let go of: any other is a copy of
 # something still held, or still in use); or each owning reference held in place by the value a store let go of (a
 # collection's entry vacated), as a place in it
 fn (ln mut lowering&) dyingParts(lv mut liveness&, u I64, j I64, let I64, dying mut Vec<mir.Operand>&
@@ -2592,7 +2690,7 @@ fn (ln mut lowering&) dyingParts(lv mut liveness&, u I64, j I64, let I64, dying 
         if d == me: return
     }
     if lv.reach[j] == mir.ReachPlain {
-        if ln.F.Locals[u].Kind == mir.LocalKind.Temp and u != let: return
+        if ln.F.Locals[u].Kind == mir.LocalKind.Temp and u != let and not lv.results.Has(u): return
         dying.Push(me)
         tys.Push(t.Repr(t.Referent(t.Repr(ln.F.Locals[u].Ty))))
         return
@@ -2624,6 +2722,13 @@ fn (ln mut lowering&) refParts(l mir.LocalId, r types.TypeId, path mut Vec<I64>&
         }
         path.Pop()!
     }
+}
+
+fn has(xs Vec<I64>&, x I64) Bool {
+    for y in xs {
+        if y == x: return true
+    }
+    return false
 }
 
 # the local statement i of block bi lets go of - the old value a store's count is taken down for - -1 for none
