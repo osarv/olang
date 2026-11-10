@@ -5281,11 +5281,6 @@ t21cmisplacedlambda.olang:4:36: error[T21c]: 'noalloc' is a promise, written onl
     4 | fn main() { _ := use(fn(x I64) I64 noalloc { return x }) }
       |                                    ^~~~~~~
 compilation failed with 1 error
-=== t21cmisplacedtrait.olang
-t21cmisplacedtrait.olang:4:16: error[T21c]: 'pure' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)
-    4 |     Area() F64 pure
-      |                ^~~~
-compilation failed with 1 error
 === t21cnoparam.olang
 t21cnoparam.olang:3:25: error[T21c]: 'y' is no parameter of this function type - a promise names its parameters by the names written in it
     3 | fn use(f fn&(x String&) keeps y) { f("a") }
@@ -5439,6 +5434,25 @@ t22cstorefollowed.olang:13:55: error[T22b]: 'link' keeps 'b' in 'a', and the fun
 t22cstorefollowed.olang:16:5: note: the functions given here followed into it (T22c)
    16 |     stash(h, link)
       |     ^~~~~
+compilation failed with 1 error
+=== t22dassigned.olang
+t22dassigned.olang:11:17: error[T22b]: this lambda keeps 'x' in what it captured, and the function type of this argument says nothing of that - write 'keeps x' after its signature
+   11 |     h := Holder(fn(x N&) { kept.Push(x) })
+      |                 ^~
+compilation failed with 1 error
+=== t22dstored.olang
+t22dstored.olang:9:9: error[T22b]: this lambda keeps 'x' in what it captured, and the function type of this store says nothing of that - write 'keeps x' after its signature
+    9 |     all.Push(h)
+      |         ^~~~
+$ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
+   68 |     v.data[v.n].occupy(x)
+      |                        ^
+t22dstored.olang:9:9: note: the functions given here followed into it (T22c)
+    9 |     all.Push(h)
+      |         ^~~~
+t22dstored.olang:9:9: note: instantiated here, with T = Holder
+    9 |     all.Push(h)
+      |         ^~~~
 compilation failed with 1 error
 === t24primref.olang
 t24primref.olang:4:10: error[T24]: I32 cannot be a reference - only a struct, an enum or an array can
@@ -5900,6 +5914,27 @@ t30bunmet.olang:7:14: error[T30b]: Pt does not satisfy the constraint Parsed on 
     7 |     p := try read<Pt>("1")
       |              ^~~~~~~~
 compilation failed with 1 error
+=== t30cnoalloc.olang
+t30cnoalloc.olang:14:17: error[T30c, T22b]: Sq's 'Area' may allocate, and Shape's 'Area' promises 'noalloc' - every call through an 'any Shape&' relies on it: give Sq a method that does not, or take 'noalloc' off the trait's method
+   14 |     assert area(Sq(2.0)) > 0.0
+      |                 ^~~~~~~
+t30cnoalloc.olang:9:5: note: it may allocate here
+    9 |     t := $q.s
+      |     ^
+compilation failed with 1 error
+=== t30cnoparam.olang
+t30cnoparam.olang:5:23: error[T21c]: 'k' is no parameter of this function type - a promise names its parameters by the names written in it
+    5 |     mut Put(n aNode&) keeps k
+      |                       ^~~~~~~
+compilation failed with 1 error
+=== t30cpure.olang
+t30cpure.olang:14:17: error[T30c, T22b]: Counter's 'Next' may write a global, and Source's 'Next' promises 'pure' - every call through an 'any Source&' relies on it: give Counter a method that does not, or take 'pure' off the trait's method
+   14 |     assert next(Counter(2)) == 2
+      |                 ^~~~~~~~~~
+t30cpure.olang:9:5: note: it may write a global here
+    9 |     seen++
+      |     ^~~~~~
+compilation failed with 1 error
 === t30sep.olang
 t30sep.olang:3:28: error: expected '}', found 'Perim'
     3 | type Sh trait { Area() I32 Perim() I32 }
@@ -6011,7 +6046,7 @@ t32anynottrait.olang:3:12: error[T32]: 'any' takes a trait, and I64 is none
       |            ^~~
 compilation failed with 1 error
 === t32anyobligations.olang
-t32anyobligations.olang:14:7: error[T32a, T22a]: aBag's 'Put' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
+t32anyobligations.olang:14:7: error[T30c, T22b]: aBag's 'Put' keeps 'n' in the instance, and aSink's 'Put' says nothing of that - write 'keeps n' after its signature in the trait
    14 |     f(b)
       |       ^
 compilation failed with 1 error
@@ -6024,11 +6059,6 @@ compilation failed with 1 error
 t32anyopenmatch.olang:11:14: error[T34]: any aShape&'s trait aShape is open, so its instance's type is never asked for - use its methods, or add the method it lacks
    11 |         case aSq q { return q.s }
       |              ^~~~~
-compilation failed with 1 error
-=== t32anyscopes.olang
-t32anyscopes.olang:12:7: error[T32a, T22a]: aBox's 'Get' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aHas&' cannot check - call it directly, or through generic code
-   12 |     f(b)
-      |       ^
 compilation failed with 1 error
 === t32anyspawned.olang
 t32anyspawned.olang:11:15: error[T32b, P1]: a task calls a function or a function value, never through an 'any''s table - write 'spawn fn() { x.Area() }'
