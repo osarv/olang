@@ -815,6 +815,49 @@ fn nameIn(t String&, from I64, name String&) I64 {
 
 # ---- completion ----
 
+# T21c: after "keeps", "borrows" or "keeps x in" in a signature, the names of the parameters the line writes (B15): the
+# first word of each item of the first parenthesized list of the line the cursor is on, at offset at of t
+fn PromiseTargets(t String&, at I64) Array<String&> {
+    out Vec<String&>
+    ls := at
+    for ls > 0 and t[ls - 1] != '\n' { ls-- }
+    line := t[ls:at]
+    words := line.TrimEnd().Split(" ")
+    if words.Len() < 2 or not line.Contains("fn") { return out.ToArray() }
+    prev := words[words.Len() - 1] if line.EndsWith(" ") else words[words.Len() - 2]
+    ok := prev == "keeps" or prev == "borrows" or prev == "in"
+    if not ok { return out.ToArray() }
+    close := line.Len() - 1
+    for close >= 0 and line[close] != ')': close--
+    if close < 0 { return out.ToArray() }
+    open := close
+    depth I64 = 0
+    for open >= 0 {
+        if line[open] == ')': depth++
+        if line[open] == '(': depth--
+        if depth == 0: break
+        open--
+    }
+    if open < 0 { return out.ToArray() }
+    fresh := true
+    i := open + 1
+    for i < close {
+        ch := line[i]
+        if depth == 0 and fresh and (ch == '_' or Char(ch).IsLetter()) {
+            from := i
+            for i < close and WordChar(line[i]): i++
+            out.Push($line[from:i])
+            fresh = false
+            continue
+        }
+        if ch == '(' or ch == '<' or ch == '[': depth++
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0: depth--
+        if depth == 0 and ch == ',': fresh = true
+        i++
+    }
+    return out.ToArray()
+}
+
 # LSP's CompletionItemKind
 CompMethod I64 = 2
 CompFunction I64 = 3

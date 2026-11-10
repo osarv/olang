@@ -50,6 +50,11 @@ value calls) - a word that changes what `pure` or `keeps` lets a value do change
 too (T30c): `parse.olang` `sig`'s `ofTrait`, `generic.olang` `TraitSig` and `AnySlots` (`types.olang`
 `ReceiverPromises`), `check.olang` `traitHeader` and `judgeTables`, `scope.olang` `anyTables` and a `Dispatch` call's
 bound, `effects.olang`'s `Dispatch`.
+A word is also read by the tools: explain's `# fits:` (`explain.olang` `fitsLine`, `scope.olang` `RelationWords`), the language
+server's completion (`session.olang` `PromiseTargets`), `api.olang` (`EffectWords`, `wordsOf`: effect words and relations are
+compared with their variance) and `checks/fixtures/apicaps`. **[checked]** by `make consistency`: every effect word of
+`types.olang`'s `PromiseNames` has its fact in `effects.olang`'s `Fact.Named` and a row in SPEC's T21c and G42 tables
+(`compiler/tools/consistency.olang` `PromiseFacts`).
 
 ## An operator or punctuation
 

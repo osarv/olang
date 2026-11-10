@@ -40,6 +40,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-10-27 and "if it doesn't cost compile time" 2026-10-31; built 2026-10-31).** explain, doc and hover print
   `# effects: ...`, `# T needs: ...` and `# not a value: why` under functions; `olang explain -caps FILE` lists per
   module the capabilities (files, network, processes, environment, threads, C) its code may reach.
+- **`# fits:`, twins, and the promise words in the tools (B11b, B15, B21, fnvalues round 11, 2026-11-10).** Under a
+  function that can be a value, explain (so doc, hover and `mcp`) prints `# fits: fn&(a mut N&, b N&) noalloc ... keeps b in
+  a` - the tightest function type it is a value of: the effect words its body breaks none of, then its relations
+  (`borrows x`, `keeps x in y`); `# as a value` is folded into it (a trailing note), `# not a value` stays for a method,
+  an extern, a generic and a per-length function. A function with twins lists them: `# followed for: f = 'link', at
+  FILE:L:C`. Clones are decided only while the root's object is written, so explain does not list them. Completion
+  offers the parameters of the signature being written after `keeps`, `borrows` and `in`. `olang api` compares a
+  function's `fits` words (an effect word lost or a relation gained breaks) and the words of function types in a
+  signature by polarity (parameter: a restricting word gained or a `keeps` lost breaks; result: the reverse); a
+  declared function type's or a field's words changing is breaking either way. `make consistency` checks that every
+  effect word has its fact in `Fact.Named` and its rows in SPEC's T21c and G42 tables.
 - **`explain -asm FILE NAME` and `explain -ir FILE NAME` (B11d, QBP 7, the user's "build it" 2026-10-27; built
   2026-11-07).** A function's machine code or optimized LLVM IR as build compiles it, headed by source lines with
   LLVM's optimization remarks.

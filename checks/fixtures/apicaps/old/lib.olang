@@ -12,3 +12,5 @@ fn Old() I64 { return 1 }
 fn Same(a I64) I64 { return a }
 fn Grow(a I64) I64 { return a }
 Limit I64 = 3
+fn Apply(f fn&(x I64) I64 noalloc, v I64) I64 { return f(v) }
+fn Calc(a I64) I64 { return a + 1 }

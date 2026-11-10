@@ -36563,3 +36563,19 @@ lowered alone in one build and beside the others in the next. Left for a round n
 `compiler/lsp.olang`'s test of an edited program (W3b's) runs the compiler from a temporary directory of its own; run
 by hand with no `OLANG` set, its fallback `build/olang` named nothing there ("build/olang: not found"). The tests'
 `compilerUnderTest` (lsp and mcp) now falls back to `build/olang` under the directory the test starts in.
+## fnvalues round 11: the tools (2026-11-10, wt-f11)
+
+explain's `# fits:` line is built from what the checker already knows: the effect words whose fact `effects.Breaks` finds
+unbroken for the body (so `returns`, `noalloc`, ... are never claimed beyond G42), and the relation words from the scope
+pass's relations between parameter scopes and the result (`Scoper.RelationWords`: `keeps b in a` for a parameter outliving
+another, `borrows b` for one the result lives in; relations of anything but parameters are left out). Words go through
+`Table.Promises` and `PromiseText`, so the line is spelled as `$` spells the type. `# as a value` became a trailing note on
+the line (its reason is now visible in the relation words); `# not a value` stays for what is structurally no value.
+Twins: `twinTab` records the call each twin was first asked for and the body it is in (`TwinAt`), `TwinWords` reads the key
+back into function names. Clones are chosen by lowering while the root's object is written, so they are not listed (a
+build would be needed to list them; left). The language server needed nothing for hover (explain's text) and its keyword
+list already held the words; completion gained the signature's parameter names after `keeps`/`borrows`/`in`
+(`session.PromiseTargets`). `olang api` works on text, so the fits line became a row of its own per function and the
+variance is computed from the words found at the end of a function type (`wordsOf`, right to left) with polarity by
+position. The consistency tool checks `PromiseNames` against `Fact.Named` and SPEC's two tables. Found on the way: a
+`make` started while sources are being edited builds the half-edited tree - edit after the build has read them.

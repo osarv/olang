@@ -701,6 +701,7 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
     start := at
     for start > 0 and session.WordChar(text[start - 1]) { start-- }
     it := session.Items()
+    for n in session.PromiseTargets(text, start) { it.Add(n, session.CompVariable, "a parameter a promise word names (T21c)") }
     if start > 0 and text[start - 1] == '.' {
         dot := start - 1
         # the word the cursor stands in goes too, so what follows does not join x
@@ -1054,4 +1055,44 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
     assert diags.Contains("\"severity\":4") and diags.Contains("\"tags\":[2]"), diags
     assert diags.Contains("\"start\":{\"line\":4,\"character\":9}") and not diags.Contains("\"line\":1,"), diags
     assert not diags.Contains("\"severity\":1"), diags
+}
+
+FitsSrc String& = """
+    type N struct(v I64) { v }
+    fn link(a mut N&, b N&) { a.v = b.v }
+    fn main() {
+        n := N(1)
+        link(n, N(2))
+        assert n.v == 2
+    }
+    """
+
+test "a hover on a function shows its # fits: line; a promise word is followed by the line's parameters (T21c, B11b, B15)" {
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    path := $dir "/f.olang"
+    try os.WriteFile(path, FitsSrc) catch os.Error { unreachable "no file" }
+    uri := UriOf(path)
+    td := $"{\"uri\":\"" $uri "\"}"
+    t := StringBuilder()
+    session.JsonStr(t, FitsSrc)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" $uri $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" $t.ToString() "}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/hover\",\"params\":{\"textDocument\":" $td $
+                  ",\"position\":{\"line\":4,\"character\":5}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    assert out.Status == 0, out.Stderr
+    got := Map<String&, String&>()
+    for m in frames(out.Stdout) {
+        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
+        if idOf(msg) != "" { got.Put(idOf(msg), m) }
+    }
+    assert (got.Get("2")!).Contains("# fits: fn&(a mut N&, b N&) returns noalloc"), got.Get("2")!
+    line := "fn Keep(f fn&(a mut N&, b N&) keeps b in "
+    assert session.PromiseTargets(line, line.Len()) == Array<String&>["a", "b"]
+    assert session.PromiseTargets("x := 1 + ", 9).Len() == 0
 }
