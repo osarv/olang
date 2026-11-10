@@ -628,6 +628,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     instFollow Map<pair.Pair<I64, I64>, Vec<followItem>>
     instTypes Map<types.TypeId, Bool>
     seedRi I64 = 0
+    earlyTwin Map<I64, I64>   # by call site: the twin keyInst asked for before the call was judged
     followed Map<I64, I64>
     limited Map<I64, I64>                 # ... and those a limit kept from being followed (bits)
     capFollowed Map<pair.Pair<I64, I64>, Bool>
@@ -1364,7 +1365,13 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
         place = BndNone
     }
     match x {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) { s.bndPlace(p) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) {
+            # (a temporary read or borrowed whole is its value, where the read goes)
+            match p {
+                case typed.Lvalue.Temp(_, _, v, _) { s.bndExpr(v, place) }
+                case _ { s.bndPlace(p) }
+            }
+        }
         case typed.Expr.Promote(_, _, pr) { s.bndExpr(pr.X, place) }
         case typed.Expr.Call(_, _, c) {
             match c.Target {
@@ -1557,7 +1564,7 @@ fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
     for i in range c.Args.Len() {
         if i >= ps.Len() or i >= body.Params.Len() or i >= 62 or s.isFunc(ps[i]) or not s.instType(ps[i]): continue
         if s.assignsWhole(b, I64(body.Params[i])): continue
-        n := s.instOf(c.Args[i])
+        n := s.keyInst(c.Args[i])
         if n < 0: continue
         items Vec<followItem>
         s.followItems(n, "", 0, items)
@@ -1711,9 +1718,14 @@ fn (s mut Scoper&) capturedAt(p I64, w I64, c typed.Call&) Term {
 }
 
 # T22d: capture k of the ri-th function an instance argument for parameter p carried into its twin, in this body's terms
+# - read off the argument as judged (its instance's records, in the order the key took them)
 fn (s mut Scoper&) instCapturedAt(p I64, ri I64, k I64, c typed.Call&) Term {
-    items := try s.instFollow.Get(pair.Pair<I64, I64>(I64(c.Site), p)) catch default Vec<followItem>()
-    if ri >= items.Len(): return Term.Untraced
+    n := s.instOf(c.Args[p]) if p < c.Args.Len() else -1
+    if n < 0: return Term.Untraced
+    items Vec<followItem>
+    s.followItems(n, "", 0, items)
+    keys := try s.instFollow.Get(pair.Pair<I64, I64>(I64(c.Site), p)) catch default Vec<followItem>()
+    if ri >= items.Len() or ri >= keys.Len() or items[ri].Key != keys[ri].Key: return Term.Untraced
     key := items[ri].Key
     out := Term.None
     for r in items[ri].Field.Recs {
@@ -2076,10 +2088,16 @@ fn (s mut Scoper&) placeInst(p typed.Lvalue&) I64 {
     match p {
         case typed.Lvalue.Local(_, _, id) {
             l := I64(id)
+            # (a held local's temporary initializer, built where its one use puts it)
+            if s.held.Has(l) {
+                hx := try s.held.Get(l) catch { return -1 }
+                return s.instOf(hx)
+            }
             if not s.localInst.Has(l) or s.assignedWhole(l): return -1
             return try s.localInst.Get(l) catch default -1
         }
         case typed.Lvalue.Deref(_, _, r) { return s.instOf(r) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.instOf(v) }
         case typed.Lvalue.Field(_, _, b, i) {
             if not s.fixedField(s.instStruct(b.Type()), i): return -1
             n := s.placeInst(b)
@@ -2231,6 +2249,54 @@ fn (s mut Scoper&) seedNode(n I64, p I64, tr mut instTree&, depth I64) I64 {
     return at
 }
 
+# the instance argument a carries, before the call judges it: its record where known, else - a call not judged yet - a
+# constructor's made of its arguments, or what its callee's returns give (ResInst), each by its bodies alone
+fn (s mut Scoper&) keyInst(a typed.Expr&) I64 {
+    n := s.instOf(a)
+    if n >= 0: return n
+    x := s.argCall(a, 0)
+    if x is null: return -1
+    c := typed.Call.Of(x)!
+    b := s.bodyOf(c.Target)
+    if b < 0 or b >= s.sums.Len(): return -1
+    if s.Bodies[b].Of == typed.BodyOf.Ctor {
+        s.ctorInst(c, x.Type())
+        return try s.siteInst.Get(I64(c.Site)) catch default -1
+    }
+    # (its twin asked for now - the one its own judging reaches, the call routed to it once)
+    tw := -1
+    if not s.earlyTwin.Has(I64(c.Site)) {
+        tw = s.twinFor(c, b, x.Span())
+        s.earlyTwin.Put(I64(c.Site), tw)
+    } else {
+        tw = try s.earlyTwin.Get(I64(c.Site)) catch default -1
+    }
+    ri := s.Twins.Sums[tw].ResInst if tw >= 0 else s.sums[b].ResInst
+    if not s.summed(b) or ri.Nodes.Len() == 0: return -1
+    return copyNode(ri, 0, s.itree)
+}
+
+# the call an argument is made of: itself, a temporary's, a held local's initializer; null for none
+fn (s mut Scoper&) argCall(a typed.Expr&, depth I64) typed.Expr?& {
+    x := s.unPromoted(s.unAway(a))
+    if typed.Call.Of(x) is not null: return x
+    if depth > 4: return null
+    match x {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) {
+            match p {
+                case typed.Lvalue.Temp(_, _, v, _): return s.argCall(v, depth + 1)
+                case typed.Lvalue.Local(_, _, id) {
+                    if not s.held.Has(I64(id)): return null
+                    hx := try s.held.Get(I64(id)) catch { return null }
+                    return s.argCall(hx, depth + 1)
+                }
+                case _: return null
+            }
+        }
+        case _ { return null }
+    }
+}
+
 # whether any of a value's functions is a generator's walk (D18's rules judge those)
 fn (s mut Scoper&) anyGen(rs fnRecs&) Bool {
     for r in rs.Recs {
@@ -2332,6 +2398,7 @@ fn (s mut Scoper&) bndPlaceTree(p typed.Lvalue&, tr mut instTree&, depth I64) I6
             return n
         }
         case typed.Lvalue.Deref(_, _, r) { return s.bndTree(r, tr, depth + 1) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.bndTree(v, tr, depth + 1) }
         case typed.Lvalue.Field(_, _, b, i) {
             if not s.fixedField(s.instStruct(b.Type()), i): return -1
             n := s.bndPlaceTree(b, tr, depth + 1)
@@ -2387,6 +2454,7 @@ fn (s mut Scoper&) instStart() {
     s.siteInst.Clear()
     s.localInst.Clear()
     s.instFollow.Clear()
+    s.earlyTwin.Clear()
     s.resInst = instTree()
     ty := s.B!.Ty
     fnTy := s.P.T.KindOf(ty) == types.Kind.Func
@@ -10249,7 +10317,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # T22c: a call whose arguments' functions are followed into its callee is judged as a call of the twin they ask for -
     # its summary read in the callee's place while the call is judged
     b := s.bodyOf(c.Target)
-    t := s.twinFor(c, b, sp) if b >= 0 and not s.inSpawn else -1
+    t := -1
+    if b >= 0 and not s.inSpawn {
+        # (T22d: asked for already where an instance argument's twin was keyed by it)
+        t = try s.earlyTwin.Get(I64(c.Site)) catch default s.twinFor(c, b, sp)
+    }
     if t < 0 { return s.callAs(sp, ty, c, dest) }
     saved := s.sums[b]
     s.sums[b] = s.Twins.Sums[t]
