@@ -72,3 +72,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-10	incfix	opus	medium	done	263	117	35	goldens		editing copies from records (ReadExpr by value); lsp abs path; OOM not a bug
 2026-11-10	reviewB2	opus	high	done				-		~25 probes; 1 confirmed W3b stale record (G42 fact not in key); no use-after-scope
 2026-11-10	reviewB1	opus	high	done	244	83	10	-		17 probes, no confirmed hole; suspicion Temp not counted in GenInfo.Reach -> sent to b2fix
+2026-11-10	b2fix	opus	medium	done	376	200	50	goldens		capFollowed not restored from record; twin records keyed; sl over-rejection; B1 temp count
