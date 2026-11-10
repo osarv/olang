@@ -28,6 +28,7 @@ fn main() {
     if not toolkit.Built(compiler) { toolkit.Die("consistency: " $compiler " is not built (make build/olang)") }
     p := Problems()
     checkKeywords(p)
+    checkPromises(p)
     checkCommandLine(compiler, p)
     checkFixTools(p)
     checkMcpTools(p)
@@ -188,6 +189,41 @@ fn checkKeywords(p mut Problems&) {
     compare(p, " (SPEC L9)", "the scanner", reserved, "SPEC L9", spec)
     compare(p, " (editors/nvim/syntax/olang.vim)", "the scanner", scanner, "the Neovim syntax", nvimWords())
     compare(p, " (compiler/session.olang Keywords)", "the scanner", scanner, "the language server's list", lspWords())
+}
+
+# ---- promise words (T21c, G42) ----
+
+# each effect word of a function type and the function fact it promises (compiler/effects.olang's Fact.Named)
+PromiseFacts Array<String&> = Array<String&>["returns Returns", "noalloc Allocates", "noblock Blocks", "nospawn Spawns"
+    "norecurse Recursive", "noextern CallsC", "pure Pure"]
+
+# types.olang's PromiseNames: each effect word has its fact in effects.olang's Fact.Named and a row in SPEC's T21c table
+# and G42's, and nothing is a promise name without being in this table or the relation words
+fn checkPromises(p mut Problems&) {
+    names := Vec<String&>()
+    for w in quoted(first("compiler/types.olang", "PromiseNames := Array")) { names.Push($w) }
+    named := Vec<String&>()
+    for w in PromiseFacts { named.Push($w.Split(" ")[0]) }
+    for w in names {
+        if w != "noborrow" and not has(named, w) { p.Add($"types.olang's PromiseNames has " $w ", which this check's table of facts (compiler/tools/consistency.olang PromiseFacts) has not") }
+    }
+    spec := toolkit.Read("SPEC.md")
+    effects := toolkit.Read("compiler/effects.olang")
+    for pf in PromiseFacts {
+        parts := pf.Split(" ")
+        if not has(names, parts[0]) { p.Add($"PromiseNames lacks " $parts[0] ", which PromiseFacts has") }
+        if not effects.Contains($"case \"" $parts[1] "\": Fact." $parts[1]) { p.Add($"effects.olang's Fact.Named lacks " $parts[1] ", the fact " $parts[0] " promises") }
+        if not spec.Contains($"| `" $parts[0] "` |") { p.Add($"SPEC's T21c table has no row for " $parts[0]) }
+        if not spec.Contains($"| `" $parts[1] "` |") { p.Add($"SPEC's G42 table has no row for " $parts[1] ", the fact " $parts[0] " promises") }
+    }
+}
+
+# the first row of a file holding text, "" for none
+fn first(path String&, text String&) String {
+    for row in toolkit.Rows(toolkit.Read(path)) {
+        if mentions(row, text) { return $row }
+    }
+    return ""
 }
 
 # ---- the command line ----

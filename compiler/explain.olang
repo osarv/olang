@@ -135,6 +135,7 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
         obligations(b, c, sc, body, "    ")
         noValue(b, c, sc, f, body, "    ")
         effectLine(b, c, f, body, "    ")
+        twinLines(b, c, sc, body, "    ")
         return b.ToString()
     }
     b.Push($fnLine(c, f, c.P.Sig(f), -1) "\n")
@@ -149,7 +150,9 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
         sig := named(c, c.P.InstanceSig(i), decl.Recv, decl.S.Params)
         b.Push($"    instance " $c.P.L.Names.Text(decl.Name) $typeArgs(c, c.P.InstanceArgs(i)) ": " $sigOf(c, sig, body) "\n")
         obligations(b, c, sc, body, "        ")
+        fitsLine(b, c, sc, sig, body, "        ")
         effectLine(b, c, f, body, "        ")
+        twinLines(b, c, sc, body, "        ")
     }
     return b.ToString()
 }
@@ -356,16 +359,51 @@ fn effectLine(b mut StringBuilder&, c mut typecheck.Checker&, f I64, body I64, i
     b.Push($indent "# effects: " $effects.Describe(fx.Of(body), ps.ToArray()) "\n")
 }
 
-# T21, T22a, G12, G29: a function that cannot become a value, and why; one that can only where its relations are
-# followed, where (T22a) - nothing for one any value of its type may be
+# T21, T21c, G12, G29: why a function cannot become a value; for one that can, the tightest function type it is a value
+# of (B11b, docs/fnvalues.md 9), so a place holding it can copy the type
 fn noValue(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64, indent String&) {
     why := NoValueWhy(c, sc, f, body)
     if why != "" {
         b.Push($indent "# not a value: " $why "\n")
         return
     }
-    held := AsValueWhere(c, sc, body)
-    if held != "" { b.Push($indent "# as a value: " $held "\n") }
+    if body < 0 { return }
+    decl := c.P.FnDecl(f)
+    inst := c.P.FnInstance(f, types.ListId(0))
+    fitsLine(b, c, sc, named(c, c.P.InstanceSig(inst), decl.Recv, decl.S.Params), body, indent)
+}
+
+# "# fits: fn&(a mut N&, b N&) keeps b in a noalloc ..." - the signature with the words its body keeps: the effect words
+# it breaks none of (effects.olang's Breaks), then the relations its scope obligations say (T21c). A function held in
+# locals and results only (T22a) says so after it
+fn fitsLine(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, sig types.TypeId, body I64, indent String&) {
+    if body < 0 { return }
+    full := sig
+    if c.InfersErrors(sig) { full = c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), c.ErrorsOf(body), c.P.T.ScopesOf(sig), c.P.T.NamesIdOf(sig)) }
+    fx := c.Effects().Of(body)
+    bits I64 = 0
+    for i in range types.PromiseNames.Len() {
+        if types.PromiseNames[i] == "noborrow": continue
+        if effects.Breaks(fx, I64(1) << i) == "": bits |= I64(1) << i
+    }
+    text := c.Ty(c.P.T.WithPromises(full, c.P.T.Promises(bits, Array<I64>(0), Array<I64>(0))))
+    rels := sc.RelationWords(body, c.P.L.Names)
+    for r in rels { if r.StartsWith("borrows ") { text = $text " " $r } }
+    for r in rels { if r.StartsWith("keeps ") { text = $text " " $r } }
+    held := AsValueWhere(c, sc, body) != ""
+    b.Push($indent "# fits: " $text $("   # held in locals and results only (T22a)" if held else "") "\n")
+}
+
+# T22c: the twins of the body - the function values its calls were judged with, and the call each was first asked for at
+fn twinLines(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, body I64, indent String&) {
+    if body < 0 { return }
+    dg := c.P.L.Diags
+    for t in range sc.TwinCount() {
+        if sc.TwinBody(t) != body: continue
+        sp, caller := sc.TwinAt(t)
+        file := sc.Bodies[caller].File
+        b.Push($indent "# followed for: " $sc.TwinWords(t) ", at " $dg.PathOf(file) ":" $dg.LineAt(file, I64(sp.Start)) ":" $dg.ColumnAt(file, I64(sp.Start)) "\n")
+    }
 }
 
 # T22a (docs/sec8.md 5.5): where a function whose scope obligations are more than a written function type says of every
