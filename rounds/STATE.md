@@ -80,3 +80,5 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-10: G5+G6 verified (2nd run; 1st OOM beside W3b), pushed.
 - F11 done (wt-f11 57a2dc65), held until incfix lands; baseline fails also lsp.olang test "build/olang: not found".
 - 2026-11-10: W3b + incfix + F11 merged, verified (last run: only tok/ast goldens of the fixture, recaptured and passing), pushed. Next: review B.
+- review B2 done: W3b record stale vs whole-program fact (repro reviewB2/w3b_seed101); undo-edit relowers; over-rejections p10/p11, p8 msg, -memory name. Fix after B1.
+- review B1 done: no confirmed hole; Temp-not-counted suspicion + genrefs 2.5 doc sent to b2fix.

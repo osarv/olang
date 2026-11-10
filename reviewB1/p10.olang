@@ -12,7 +12,7 @@ type Opt enum {
 }
 
 type Holder struct() {
-    o mut Opt = Opt.None
+    o Opt = Opt.None
 }
 
 type L struct() {

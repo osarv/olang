@@ -1,0 +1,70 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+type Bag struct(n I64) {
+    xs mut Array<mut Node?&>& = Array<mut Node?&>(n, null)
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        nd := Node(1000 + i)
+        nd.next = l.head
+        l.head = nd
+        l.PopFront()
+    }
+}
+
+fn copyArr(n I64) I64 {
+    l := L()
+    l.head = Node(7)
+    a := Array<mut Node?&>(n, null)
+    a[0] = l.head
+    b := a.Copy()
+    a[0] = null
+    l.PopFront()
+    churn(l)
+    return b[0]!.v
+}
+
+fn copyArr2(n I64) I64 {
+    l := L()
+    l.head = Node(8)
+    a := Array<mut Node?&>(n, null)
+    a[0] = l.head
+    b Array<mut Node?&> = a
+    a[0] = null
+    l.PopFront()
+    churn(l)
+    return b[0]!.v
+}
+
+fn copyVec() I64 {
+    l := L()
+    l.head = Node(9)
+    a Vec<mut Node?&>
+    a.Push(l.head)
+    b := a.Copy()
+    a[0] = null
+    l.PopFront()
+    churn(l)
+    return b[0]!.v
+}
+
+fn main() ? {
+    try io.Println("copy " $copyArr(1) " assign " $copyArr2(1) " vec " $copyVec() " want 7 8 9")
+}

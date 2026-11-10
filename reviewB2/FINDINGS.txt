@@ -1,0 +1,15 @@
+Review B2 (2026-11-10, wt-merge 80bf7ffa): scope pass and function values since review A.
+Confirmed:
+1. W3b: in-place build refuses what a clean build accepts. w3b_seed101/repro.sh (programs from editdrv/, the edit
+   fuzzer's seed 101, module 2 dead): s0..s2 build in place, s3 (only edit: m0 gains `fn quiet2() Bool { return not
+   churn.Allocates }`) fails in place with T22b at m1.olang:332 ("'link' keeps 'b' in 'a'"), clean builds and prints
+   142651566. OLANG_CHECKINCR: m1 9117-10313 summary flags f0110 (records) vs f0010 (afresh). Seed 106 (step 2, the
+   root hands an export fn to C) shows the same summary-flag split in m0 (editfuzz101.log). Guess: a judging taken
+   from a record is not held to a whole-program effect fact (G42 Allocates read / "a C call is anything" once an export
+   fn reaches C) that a function value's summary flag reads.
+2. Edit fuzzer seed 102 step 1: undoing an edit lowered m2 again (work only, no output difference) - editfuzz101.log.
+No confirmed use-after-scope or early free: p1-p11, f1-f6, g1-g2, c1-c2, s1-s2, w4a-c, p4-p8 all either refused
+soundly or ran identically under -debug -sanitize and interpret.
+Over-rejections seen: p10slparam (non-generic `fn sl(a Array<I64>) Array<I64>& { return a[0:2] }` O10d while the
+generic `sl2<T>` runs); p8anykeepsderef (keeps n through the receiver's referent: O10c rather than a T30c message);
+f2capturedcall -memory note names 'xs' for the place that is it.frames (wrong name in the note).

@@ -1,0 +1,44 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        nd := Node(1000 + i)
+        nd.next = l.head
+        l.head = nd
+        l.PopFront()
+    }
+}
+
+fn mayFail(l mut L&, k I64) ? {
+    l.PopFront()
+    churn(l)
+    if k > 0: error Boom
+}
+
+fn viaError(l mut L&, k I64) I64 {
+    h := l.head!
+    try mayFail(l, k) catch { return h.v }
+    return -1
+}
+
+fn main() ? {
+    l := L()
+    l.head = Node(7)
+    try io.Println("error edge: " $viaError(l, 1) " want 7")
+}

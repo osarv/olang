@@ -1,0 +1,36 @@
+import "std/io"
+type N struct(v I64) {
+    v
+}
+type Keeper struct() {
+    kept Vec<N&>
+}
+fn (k mut Keeper&) Call(n N&) { k.kept.Push(n) }
+type Box struct(s fn&(n N&) keeps n) {
+    s
+}
+fn feed(s fn&(n N&), base I64) {
+    for i in range 3 { s(N(base + i)) }
+}
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    k := Keeper()
+    t := 0
+    for j in range 3 {
+        k2 := Keeper()
+        f mut Keeper& = k if j == 1 else k2
+        g fn&(n N&) keeps n = f
+        if j == 2 { g = k }
+        feed(g, 20)
+        t += churn(20) + k2.kept.Len()
+    }
+    s := 0
+    for n in k.kept { s += n.v }
+    try io.Println($k.kept.Len() " " $s " " $t)
+}

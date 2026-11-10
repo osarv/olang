@@ -1,0 +1,17 @@
+import "std/io"
+import lib "lib"
+
+fn hold(l mut lib.L&) I64 {
+    h := l.Head!
+    l.PopFront()
+    l.Churn()
+    return h.V
+}
+
+fn main() ? {
+    l := lib.L()
+    l.Head = lib.Node(7)
+    a := hold(l)
+    l.Head = lib.Node(8)
+    try io.Println("split: " $a " want 7")
+}

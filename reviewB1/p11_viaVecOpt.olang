@@ -1,0 +1,48 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type Opt enum {
+    Some(n mut Node&)
+    None
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+G mut Node?& = null
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i)
+        l.PopFront()
+    }
+}
+
+fn viaVecOpt() I64 {
+    l := L()
+    v Vec<Opt>
+    l.head = Node(4)
+    v.Push(Opt.Some(l.head!))
+    l.PopFront()
+    churn(l)
+    return match v[0] {
+        case Opt.Some(n): n.v
+        case Opt.None: -1
+    }
+}
+
+fn main() ? {
+    try io.Println("viaVecOpt " $viaVecOpt())
+}

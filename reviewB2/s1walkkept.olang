@@ -1,0 +1,39 @@
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        a := Array<I64>(16, i)
+        t += x.Len() + a[2] - i
+    }
+    return t
+}
+type P struct(x I64, y I64) {
+    x
+    y
+}
+type Box struct(v I64) { v }
+fn gen(b Box&) Iterator<Box&> {
+    yield b
+    x := Box(b.v * 10)
+    yield x
+    loc := Vec<Box>()
+    loc.Push(Box(b.v + 1))
+    yield loc[0]
+}
+fn main() ? {
+    keep Box& = Box(0)
+    held Vec<Box&>
+    for i in range 3 {
+        c := Box(i + 1)
+        g := gen(c)
+        a := try g.Next() catch { return }
+        b := try g.Next() catch { return }
+        held.Push(b)
+        if i == 1 { keep = a }
+    }
+    churn()
+    s := ""
+    for h in held { s = $s $h.v " " }
+    try io.Println($s $keep.v)
+}

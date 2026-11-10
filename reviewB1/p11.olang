@@ -1,0 +1,90 @@
+import "std/io"
+import "std/deque"
+import "std/pair"
+import "std/list"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type Opt enum {
+    Some(n mut Node&)
+    None
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+G mut Node?& = null
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i)
+        l.PopFront()
+    }
+}
+
+fn viaGlobal() I64 {
+    l := L()
+    l.head = Node(1)
+    G = l.head
+    l.PopFront()
+    churn(l)
+    return G!.v
+}
+
+fn viaDeque() I64 {
+    l := L()
+    d := deque.Deque<mut Node&>()
+    l.head = Node(2)
+    d.PushBack(l.head!)
+    l.PopFront()
+    churn(l)
+    return (try d.PopFront() catch { return -1 }).v
+}
+
+fn viaPair() I64 {
+    l := L()
+    v Vec<pair.Pair<mut Node&, I64>>
+    l.head = Node(3)
+    v.Push(pair.Pair(l.head!, 0))
+    l.PopFront()
+    churn(l)
+    return v[0].First.v
+}
+
+fn viaVecOpt() I64 {
+    l := L()
+    v Vec<Opt>
+    l.head = Node(4)
+    v.Push(Opt.Some(l.head!))
+    l.PopFront()
+    churn(l)
+    return match v[0] {
+        case Opt.Some(n): n.v
+        case Opt.None: -1
+    }
+}
+
+fn viaList() I64 {
+    l := L()
+    x := list.List<mut Node&>()
+    l.head = Node(5)
+    x.Push(l.head!)
+    l.PopFront()
+    churn(l)
+    return (try x.Get(0) catch { return -1 }).v
+}
+
+fn main() ? {
+    try io.Println("global " $viaGlobal() " deque " $viaDeque() " pair " $viaPair() " vecopt " $viaVecOpt() " list " $viaList() "  want 1 2 3 4 5")
+}

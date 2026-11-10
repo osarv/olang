@@ -1,0 +1,22 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn main() ? {
+    l := L()
+    l.head = Node(7)
+    l.tail = l.head
+    h := l.head!
+    l.head = null
+    w := l.tail
+    try io.Println("orphan in use: tail null " $(w is null) ", h.v " $h.v)
+}

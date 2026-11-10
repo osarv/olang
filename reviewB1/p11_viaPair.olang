@@ -1,0 +1,46 @@
+import "std/io"
+import "std/pair"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type Opt enum {
+    Some(n mut Node&)
+    None
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+G mut Node?& = null
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.head = Node(1000 + i)
+        l.PopFront()
+    }
+}
+
+fn viaPair() I64 {
+    l := L()
+    v Vec<pair.Pair<mut Node&, I64>>
+    l.head = Node(3)
+    v.Push(pair.Pair(l.head!, 0))
+    l.PopFront()
+    churn(l)
+    return v[0].First.v
+}
+
+fn main() ? {
+    try io.Println("viaPair " $viaPair())
+}

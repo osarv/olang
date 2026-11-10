@@ -1,0 +1,50 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        nd := Node(1000 + i)
+        nd.next = l.head
+        l.head = nd
+        l.PopFront()
+    }
+}
+
+fn walk(l L&) Iterator<I64> {
+    at Node?& = l.head
+    for at is not null {
+        yield at.v
+        at = at.next
+    }
+}
+
+fn main() ? {
+    l := L()
+    for i in range 3 {
+        nd := Node(3 - i)
+        nd.next = l.head
+        l.head = nd
+    }
+    s := 0
+    for v in walk(l) {
+        s = s * 10 + v
+        l.PopFront()
+        churn(l)
+    }
+    try io.Println("gen: " $s " want 123")
+}

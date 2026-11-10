@@ -1,0 +1,47 @@
+import "std/io"
+
+type Wrap struct(s String&) {
+    s
+}
+
+type Node struct(key String) {
+    key
+    next mut Node?& = null
+    prev weak mut Node?& = null
+}
+
+type L struct() {
+    head mut Node?& = null
+    tail weak mut Node?& = null
+}
+
+fn (l mut L&) Push(k String&) {
+    nd := Node(k)
+    nd.next = l.head
+    l.head = nd
+}
+
+fn (l mut L&) PopFront() {
+    h := l.head!
+    l.head = h.next
+}
+
+fn churn(l mut L&) {
+    for i in range 50 {
+        l.Push("zzzzzzzzzzzzzzz" $(i % 10))
+        l.PopFront()
+    }
+}
+
+fn f(w Wrap&, l mut L&) String {
+    l.PopFront()
+    churn(l)
+    return w.s
+}
+
+fn main() ? {
+    l := L()
+    l.Push("abcdefghijklmnop")
+    r := f(Wrap(l.head!.key), l)
+    try io.Println("wrap: " $r " want abcdefghijklmnop")
+}

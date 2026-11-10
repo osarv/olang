@@ -1,0 +1,39 @@
+import "std/io"
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        a := Array<I64>(16, i)
+        t += x.Len() + a[2] - i
+    }
+    return t
+}
+type P struct(x I64, y I64) {
+    x
+    y
+}
+fn mk(p P, q P&) fn&() I64 {
+    r P& = p
+    g := fn() I64 { return r.x * 10 + q.y }
+    p = P(-1, -1)
+    return g
+}
+fn sl(a Array<I64>) Array<I64>& {
+    a[0] = a[0] + 1
+    return a[0:2]
+}
+fn main() ? {
+    fs := Vec<fn&() I64>()
+    ss := Vec<Array<I64>&>()
+    for i in range 3 {
+        loc := P(i, i + 5)
+        fs.Push(mk(P(i + 1, 0), loc))
+        arr := Array<I64>(4, i * 2)
+        ss.Push(sl(arr))
+    }
+    churn()
+    s := ""
+    for f in fs { s = $s $f() " " }
+    for a in ss { s = $s $a[0] "," $a[1] " " }
+    try io.Println(s)
+}
