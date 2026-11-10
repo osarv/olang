@@ -1918,10 +1918,30 @@ type Unwritable error { Here }
 
 # the plan as one line of words, the same for the same plan: its sizes, then each array - a scope as ScopeText writes
 # it - and the passes, derived scopes and what each call passes for them
-fn (pl Plan&) Text() String ? Unwritable {
-    if pl.Roots.Len() > 0 or pl.DropAt.Len() > 0 or pl.DropInAt.Len() > 0: error Unwritable.Here
-    return try pl.text(false)
+fn (pl Plan&) Text(n Nodes&, canon fn&(t types.TypeId) String) String ? Unwritable {
+    b := StringBuilder()
+    b.Push(try pl.text(false))
+    # (what refers to the body's expressions, after " ||": each with its length before it - a type's canonical text in
+    # a root may hold anything but a line break)
+    b.Push(" ||")
+    for x in pl.Roots { b.Push(lengthWord($"r" $(try n.ExprWord(x, canon)))) }
+    for i in range pl.DropAt.Len() {
+        at := n.ExprAt(pl.DropAt[i])
+        if at < 0: error Unwritable.Here
+        w := StringBuilder()
+        w.Push($"d" $at)
+        for x in pl.DropArgs[i] { w.Push($"," $x.P "/" $x.W "/" $(try ScopeText(x.Sc))) }
+        b.Push(lengthWord(w.ToString()))
+    }
+    for i in range pl.DropInAt.Len() {
+        at := n.ExprAt(pl.DropInAt[i])
+        if at < 0: error Unwritable.Here
+        b.Push(lengthWord($"i" $at "," $(try ScopeText(pl.DropIn[i]))))
+    }
+    return b.ToString()
 }
+
+fn lengthWord(w String&) String { return $" " $w.Len() ":" $w }
 
 # the plan as words for a comparison (OLANG_CHECKINCR): Text's, and what a record cannot hold said by where it stands -
 # the references' spans, the twins and regions
@@ -2009,7 +2029,50 @@ fn Scope.OfText(w String&) Scope ? Unwritable {
 }
 
 # the plan Text wrote, for body b: anything else - another body's sizes, a word out of place - is not read
-fn Plan.Read(b Body&, text String&) Plan ? Unwritable {
+fn Plan.Read(b Body&, text String&, n Nodes&, typeOf fn&(c String&) types.TypeId) Plan ? Unwritable {
+    cut := try text.Find(" ||") catch { error Unwritable.Here }
+    pl := try Plan.readHead(b, text[:cut])
+    rest := text[cut + 3:]
+    at := 0
+    for at < rest.Len() {
+        if rest[at] != ' ': error Unwritable.Here
+        colon := try rest[at + 1:].Find(":") catch { error Unwritable.Here }
+        k := try rest[at + 1:at + 1 + colon].ParseInt() catch { error Unwritable.Here }
+        from := at + 2 + colon
+        if k <= 0 or from + k > rest.Len(): error Unwritable.Here
+        try pl.readRef(rest[from:from + k], n, typeOf)
+        at = from + k
+    }
+    return pl
+}
+
+# one of what refers to the body's expressions (Text's words after " ||"), put in the plan
+fn (pl mut Plan&) readRef(w String&, n Nodes&, typeOf fn&(c String&) types.TypeId) ? Unwritable {
+    if w[0] == 'r' {
+        pl.Roots.Push(try n.ReadExpr(w[1:], typeOf))
+        return
+    }
+    f := w[1:].Split(",").ToVec()
+    i := try f[0].ParseInt() catch { error Unwritable.Here }
+    if i < 0 or i >= n.Exprs.Len(): error Unwritable.Here
+    if w[0] == 'i' {
+        if f.Len() != 2: error Unwritable.Here
+        pl.DropHome(n.Exprs[i], try Scope.OfText(f[1]))
+        return
+    }
+    if w[0] != 'd': error Unwritable.Here
+    xs Vec<DerivedArg>
+    for k in range 1, f.Len() {
+        g := f[k].Split("/").ToVec()
+        if g.Len() < 3: error Unwritable.Here
+        p := try g[0].ParseInt() catch { error Unwritable.Here }
+        q := try g[1].ParseInt() catch { error Unwritable.Here }
+        xs.Push(DerivedArg(p, q, try Scope.OfText(f[k][g[0].Len() + g[1].Len() + 2:])))
+    }
+    pl.DropDerived(n.Exprs[i], xs)
+}
+
+fn Plan.readHead(b Body&, text String&) Plan ? Unwritable {
     parts := text.Split(" |").ToVec()
     if parts.Len() != 7: error Unwritable.Here
     sizes := parts[0].Split(" ").ToVec()
@@ -2077,6 +2140,313 @@ fn readBits(w String&, into mut Array<Bool>&) ? Unwritable {
         if ch != '0' and ch != '1': error Unwritable.Here
         into[i] = ch == '1'
     }
+}
+
+# ---- a body's nodes by number (B3i: a plan's references to expressions, in a record) ----
+
+# every expression and place of a body, numbered in one walk of it, the same in every build of the same text: what a
+# plan's reference to one of its expressions (Roots, DropAt, DropInAt) is written as
+type Nodes struct() {
+    Exprs Vec<Expr&>
+    Places Vec<Lvalue&>
+}
+
+fn Nodes.Of(b Body&) Nodes {
+    n := Nodes()
+    n.block(b.Root)
+    return n
+}
+
+fn (n mut Nodes&) block(bl Block?&) {
+    if bl is null: return
+    for st in bl.Stmts { n.stmt(st) }
+}
+
+fn (n mut Nodes&) stmts(ss Array<Stmt&>&) {
+    for st in ss { n.stmt(st) }
+}
+
+fn (n mut Nodes&) stmt(st Stmt&) {
+    match st {
+        case Stmt.Let(_, _, x): n.expr(x)
+        case Stmt.Assign(_, p, x) {
+            n.place(p)
+            n.expr(x)
+        }
+        case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): n.expr(x)
+        case Stmt.If(_, i) {
+            n.expr(i.Test)
+            n.block(i.Then)
+            n.block(i.Else)
+        }
+        case Stmt.Loop(_, body, post) {
+            n.block(body)
+            n.block(post)
+        }
+        case Stmt.Return(_, x), Stmt.Suspend(_, x), Stmt.Exit(_, _, x): n.opt(x)
+        case Stmt.Assert(_, c, m) {
+            n.expr(c)
+            n.opt(m)
+        }
+        case Stmt.Block(_, b), Stmt.Defer(_, b): n.block(b)
+        case Stmt.Join(_, j) {
+            n.block(j.Code)
+            n.clauses(j.Clauses)
+        }
+        case Stmt.Spawn(_, sp) {
+            for t in sp.Targets {
+                if t is not null: n.place(t)
+            }
+            n.expr(sp.Task)
+            for c in sp.Clauses { n.opt(c.Handler) }
+        }
+        case _ { }
+    }
+}
+
+fn (n mut Nodes&) opt(x Expr?&) {
+    if x is not null: n.expr(x)
+}
+
+fn (n mut Nodes&) clauses(cs Array<Clause&>&) {
+    for c in cs {
+        n.block(c.Code)
+        for d in c.Defaults { n.expr(d) }
+    }
+}
+
+fn (n mut Nodes&) expr(x Expr&) {
+    n.Exprs.Push(x)
+    match x {
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): n.place(p)
+        case Expr.Promote(_, _, pr): n.expr(pr.X)
+        case Expr.Call(_, _, c): n.call(c)
+        case Expr.Make(_, _, m) {
+            for y in m.Items { n.expr(y) }
+            n.opt(m.Length)
+        }
+        case Expr.Collect(_, _, c) {
+            n.opt(c.Reserve)
+            n.block(c.Loop)
+        }
+        case Expr.Prim(_, _, _, _, args) { for y in args { n.expr(y) } }
+        case Expr.Slice(_, _, sl) {
+            n.place(sl.Base)
+            n.expr(sl.Lo)
+            n.expr(sl.Hi)
+        }
+        case Expr.Cond(_, _, c) {
+            n.expr(c.C)
+            n.opt(c.A)
+            n.expr(c.B)
+        }
+        case Expr.Seq(_, _, sq) {
+            n.stmts(sq.Stmts)
+            n.opt(sq.X)
+        }
+        case Expr.Match(_, _, m) { n.match(m) }
+        case Expr.Try(_, _, t) {
+            n.opt(t.X)
+            n.clauses(t.Clauses)
+        }
+        case Expr.Fn(_, _, f) { n.fnVal(f) }
+        case Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case Piece.Render(y): n.expr(y)
+                    case _ { }
+                }
+            }
+        }
+        case Expr.Away(_, _, y): n.expr(y)
+        case _ { }
+    }
+}
+
+fn (n mut Nodes&) match(m Match&) {
+    n.stmts(m.Held)
+    for a in m.Arms { n.arm(a) }
+    n.optArm(m.NoMatch)
+}
+
+fn (n mut Nodes&) optArm(a Arm?&) {
+    if a is not null: n.arm(a)
+}
+
+fn (n mut Nodes&) arm(a Arm&) {
+    for alt in a.Alts {
+        n.expr(alt.Test)
+        for bd in alt.Binds { n.expr(bd.From) }
+    }
+    n.opt(a.Guard)
+    n.block(a.Code)
+    n.opt(a.Value)
+}
+
+fn (n mut Nodes&) call(c Call&) {
+    match c.Target {
+        case Callee.Value(v): n.expr(v)
+        case _ { }
+    }
+    for a in c.Args { n.expr(a) }
+}
+
+fn (n mut Nodes&) fnVal(f FnVal&) {
+    match f {
+        case FnVal.Lambda(_, caps, _) { for cp in caps { n.expr(cp.Outer) } }
+        case FnVal.Adapter(_, r, _): n.expr(r)
+        case _ { }
+    }
+}
+
+fn (n mut Nodes&) place(p Lvalue&) {
+    n.Places.Push(p)
+    match p {
+        case Lvalue.Deref(_, _, r): n.expr(r)
+        case Lvalue.Field(_, _, base, _): n.place(base)
+        case Lvalue.Elem(_, _, e) {
+            n.place(e.Base)
+            n.expr(e.Index)
+        }
+        case Lvalue.Payload(_, _, q): n.place(q.Base)
+        case Lvalue.Temp(_, _, v, _): n.expr(v)
+        case _ { }
+    }
+}
+
+# an expression's number among the body's, -1 for one not of it (one the scope pass made)
+fn (n Nodes&) ExprAt(x Expr&) I64 {
+    for i in range n.Exprs.Len() {
+        if n.Exprs[i] == x: return i
+    }
+    return -1
+}
+
+fn (n Nodes&) placeAt(p Lvalue&) I64 {
+    for i in range n.Places.Len() {
+        if n.Places[i] == p: return i
+    }
+    return -1
+}
+
+# a plan's reference to an expression as words: the body's expression by its number ("N12"), else what the scope pass
+# made - a read of a place, a field of one, what a reference names, a local - written out over the body's places and
+# expressions, each with its span and its type's canonical text (canon); anything else cannot be written
+fn (n Nodes&) ExprWord(x Expr&, canon fn&(t types.TypeId) String) String ? Unwritable {
+    at := n.ExprAt(x)
+    if at >= 0: return $"N" $at
+    return match x {
+        case Expr.Read(sp, ty, p, site): $"R" $sp.Start "," $sp.End "," $(try typeWord(ty, canon)) "," $I64(site) "(" $(try n.placeWord(p, canon)) ")"
+        case _: error Unwritable.Here
+    }
+}
+
+fn (n Nodes&) placeWord(p Lvalue&, canon fn&(t types.TypeId) String) String ? Unwritable {
+    at := n.placeAt(p)
+    if at >= 0: return $"L" $at
+    return match p {
+        case Lvalue.Local(sp, ty, id): $"V" $sp.Start "," $sp.End "," $(try typeWord(ty, canon)) "," $I64(id)
+        case Lvalue.Field(sp, ty, base, k): $"F" $sp.Start "," $sp.End "," $(try typeWord(ty, canon)) "," $k "(" $(try n.placeWord(base, canon)) ")"
+        case Lvalue.Deref(sp, ty, r): $"D" $sp.Start "," $sp.End "," $(try typeWord(ty, canon)) "(" $(try n.ExprWord(r, canon)) ")"
+        case _: error Unwritable.Here
+    }
+}
+
+# a type as its canonical text with its length before it, so that no character of it ends the word early
+fn typeWord(t types.TypeId, canon fn&(t types.TypeId) String) String ? Unwritable {
+    c := canon(t)
+    if c == "" or c.Contains("\n") or c.Contains("\t"): error Unwritable.Here
+    return $c.Len() ":" $c
+}
+
+# what ExprWord wrote, read back at from in w - the expression and where its word ends
+type wordReader struct(W String&, Types fn&(c String&) types.TypeId) {
+    W
+    Types
+    at I64 = 0
+}
+
+fn (n Nodes&) ReadExpr(w String&, typeOf fn&(c String&) types.TypeId) Expr ? Unwritable {
+    r := wordReader(w, typeOf)
+    x := try n.readExpr(r)
+    if r.at != w.Len(): error Unwritable.Here
+    return x
+}
+
+fn (n Nodes&) readExpr(r mut wordReader&) Expr ? Unwritable {
+    if r.at >= r.W.Len(): error Unwritable.Here
+    k := r.W[r.at]
+    r.at++
+    if k == 'N' {
+        i := try r.int()
+        if i < 0 or i >= n.Exprs.Len(): error Unwritable.Here
+        return n.Exprs[i]
+    }
+    if k != 'R': error Unwritable.Here
+    sp := try r.span()
+    ty := try r.ty()
+    site := try r.int()
+    try r.char('(')
+    p := try n.readPlace(r)
+    try r.char(')')
+    return Expr.Read(sp, ty, p, SiteId(I32(site)))
+}
+
+fn (n Nodes&) readPlace(r mut wordReader&) Lvalue ? Unwritable {
+    if r.at >= r.W.Len(): error Unwritable.Here
+    k := r.W[r.at]
+    r.at++
+    if k == 'L' {
+        i := try r.int()
+        if i < 0 or i >= n.Places.Len(): error Unwritable.Here
+        return n.Places[i]
+    }
+    sp := try r.span()
+    ty := try r.ty()
+    if k == 'V': return Lvalue.Local(sp, ty, LocalId(I32(try r.int())))
+    if k == 'F' {
+        idx := try r.int()
+        try r.char('(')
+        base := try n.readPlace(r)
+        try r.char(')')
+        return Lvalue.Field(sp, ty, base, idx)
+    }
+    if k != 'D': error Unwritable.Here
+    try r.char('(')
+    ref := try n.readExpr(r)
+    try r.char(')')
+    return Lvalue.Deref(sp, ty, ref)
+}
+
+fn (r mut wordReader&) char(c Char) ? Unwritable {
+    if r.at >= r.W.Len() or r.W[r.at] != c: error Unwritable.Here
+    r.at++
+}
+
+fn (r mut wordReader&) int() I64 ? Unwritable {
+    start := r.at
+    if r.at < r.W.Len() and r.W[r.at] == '-': r.at++
+    for r.at < r.W.Len() and r.W[r.at].IsDigit() { r.at++ }
+    return try r.W[start:r.at].ParseInt() catch { error Unwritable.Here }
+}
+
+fn (r mut wordReader&) span() source.Span ? Unwritable {
+    a := try r.int()
+    try r.char(',')
+    b := try r.int()
+    try r.char(',')
+    return source.Span(I32(a), I32(b))
+}
+
+fn (r mut wordReader&) ty() types.TypeId ? Unwritable {
+    n := try r.int()
+    try r.char(':')
+    if n <= 0 or r.at + n > r.W.Len(): error Unwritable.Here
+    t := r.Types(r.W[r.at:r.at + n])
+    r.at += n
+    if t == types.UnknownT: error Unwritable.Here
+    if r.at < r.W.Len() and r.W[r.at] == ',': r.at++
+    return t
 }
 
 # ---- copies at a local's last use (D9i) ----

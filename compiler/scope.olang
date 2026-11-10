@@ -23,6 +23,7 @@
 
 import "std/pair"
 import "std/sha256"
+import "std/time"
 import "source"
 import "diag"
 import "msgs"
@@ -673,7 +674,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # same and held to it, a difference in DiskStale); the files whose records hold (Eligible) and of the modules
     # records are kept for (Keyed); Restart: a component taken from a record had to be judged again - the build's
     # judging is to start over without records
-    Disk Map<String, Vec<diskRun>>
+    Disk Map<String, Vec<I64>>             # ... each by its number in diskAll
+    diskAll Vec<mut diskRun&>
     DiskOn Bool = false
     DiskWrite Bool = false
     DiskAfresh Bool = false
@@ -681,11 +683,18 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     DiskTaken I64 = 0
     DiskChecked I64 = 0
     Restarts I64 = 0
-    DiskWhy String = ""
+    Times Vec<String&>                     # how long each step took, for OLANG_SCOPESTATS
+    whyMs Map<String, I64>
+    freshN I64 = 0
+    freshRec I64 = 0
+    judgeNs I64 = 0
+    findNs I64 = 0
+    takeNs I64 = 0
     whyN Map<String, I64>
     Restart Bool = false
     Eligible Map<I64, Bool>
     Keyed Map<I64, Bool>
+    FileKeys Map<I64, String&>             # by file: its module's B3i key (keyed modules only)
     diskRec Bool = false
     logReads Bool = false
     readLog Vec<I64>
@@ -696,12 +705,14 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     bodyNames Array<String&>& = Array<String&>(0)
     nameAt Map<String, I64>
     sumTextAt Map<I64, String&>
+    lineAt Map<I64, String&>
     vrLog Vec<vrRow>
     globalMade Bool = false
     globalWords String = ""
     fsPending Map<I64, String&>             # by body taken from a record: its field sets as words, read when judged
     canonAt Map<String, types.TypeId>       # a type by its canonical text, for them
     canonMade I64 = 0
+    filesAt Map<I64, Array<I64>>            # filesOf's answers, by body
     trDeps Map<pair.Pair<I64, I64>, Array<I64>>
     useDeps Map<pair.Pair<I64, I64>, Array<I64>>
 }
@@ -720,8 +731,10 @@ fn (s mut Scoper&) Run() {
     for m in s.P.L.Mods {
         if m.Src is not null and m.File >= 0 { s.texts.Put(m.File, m.Src!.Text) }
     }
+    t0 := time.Now()
     s.components()
     s.sizeComponents()
+    s.Times.Push($"graph " $((time.Now() - t0) / 1000000))
     s.diskRec = (s.DiskOn or s.DiskWrite) and not s.ReuseCheck
     if not s.diskRec { s.DiskOn = false }
     for _ in range s.Bodies.Len() {
@@ -731,6 +744,7 @@ fn (s mut Scoper&) Run() {
     }
     if not s.inferFields() and not s.Restart { s.judgeAll(true) }
     if s.Restart: return
+    t1 := time.Now()
     s.twinsOwn()
     for b in range s.sums.Len() {
         if s.sum(b).Rels.Len() > 0 and s.valueCovered(b, s.sum(b).Rels, s.Bodies[b].Ty) { s.covered.Put(b, true) }
@@ -748,12 +762,22 @@ fn (s mut Scoper&) Run() {
     }
     s.anyTables()
     s.exports()
+    s.Times.Push($"after " $((time.Now() - t1) / 1000000))
 }
 
 # every body judged, a component at a time, callees first - its errors said where report holds. In a later round of the
 # field inference (reuse) a component is judged again only where something it read is not what it was in one of its
 # judgings so far - a constructor field's mark, a callee's summary, a constructor's - else that judging is taken again
 fn (s mut Scoper&) judgeAll(report Bool) {
+    t0 := time.Now()
+    defer {
+        s.Times.Push($"round " $((time.Now() - t0) / 1000000) " (fresh " $s.freshN " of them recordable " $s.freshRec ", judging " $(s.judgeNs / 1000000) ", finding " $(s.findNs / 1000000) ", taking " $(s.takeNs / 1000000) ")")
+        s.freshN = 0
+        s.freshRec = 0
+        s.judgeNs = 0
+        s.findNs = 0
+        s.takeNs = 0
+    }
     reusing := s.reuse and s.runs.Len() == s.compFrom.Len()
     s.Twins.Round++
     s.Plans.Clear()
@@ -766,6 +790,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
     s.trDeps.Clear()
     s.useDeps.Clear()
     s.sumTextAt.Clear()
+    s.lineAt.Clear()
     s.lateBody = -1
     if not reusing {
         s.lifts.Clear()
@@ -893,7 +918,7 @@ fn (s mut Scoper&) recordReads(run mut compRun&, comp Array<I64>&, mine Map<I64,
     for x in s.readLog { seen.Put(x, true) }
     for x in s.sumReads.Keys() { seen.Put(x, true) }
     for x in seen.Keys() {
-        if not mine.Has(x): run.ReadTexts.Push(s.readText(x))
+        if not mine.Has(x): run.ReadTexts.Push(s.readLine(x))
     }
     run.ReadTexts.Sort(fn(a String&, b String&) Bool { return a < b })
     for b in comp {
@@ -907,7 +932,9 @@ fn (s mut Scoper&) recordReads(run mut compRun&, comp Array<I64>&, mine Map<I64,
 # now - null where a component taken from a record must be judged again (Restart). Under DiskAfresh the record's is
 # judged all the same and held to what it gives
 fn (s mut Scoper&) judgeOrTake(comp Array<I64>&, report Bool) mut compRun?& {
+    ta := time.Now()
     d := s.diskFor(comp, report)
+    s.findNs += time.Now() - ta
     if d is not null {
         taken := s.takeDisk(d, comp)
         if taken is not null {
@@ -924,10 +951,25 @@ fn (s mut Scoper&) judgeOrTake(comp Array<I64>&, report Bool) mut compRun?& {
                 s.restoreHidden(b, d.Hidden[i])
             }
             s.DiskTaken++
+            s.takeNs += time.Now() - ta
             return taken
         }
     }
+    s.freshN++
+    tj := time.Now()
     run := s.judgeComp(comp, report)
+    s.judgeNs += time.Now() - tj
+    if s.recordable(comp) {
+        s.freshRec++
+        if d is null and s.Eligible.Has(s.Bodies[comp[0]].File) { s.freshWhy(comp) }
+        s.whyMs.Put($"REC " $s.NameOf(comp[0]), (time.Now() - tj) / 1000)
+    } else {
+        b := comp[0]
+        f := s.Bodies[b].File
+        if s.NameOf(b) == "" and s.whyN.Len() < 60 { s.TraceLog.Push($"unnamed " $s.Bodies[b].Of " file " $f " " $s.fileIdentity(f) " raw '" $s.nameOf(b, s.bodyNames, 0) "'") }
+        s.why($"f-" $("unnamed" if s.NameOf(b) == "" else "root" if not s.Keyed.Has(f) else "types" if s.filesOf(b)[0] < 0 else "args"))
+        s.whyMs.Put(s.fileIdentity(f), (try s.whyMs.Get(s.fileIdentity(f)) catch default 0) + (time.Now() - tj) / 1000)
+    }
     if s.Restart: return null
     return run
 }
@@ -14554,9 +14596,11 @@ fn (s Scoper&) localName(body typed.Body&, l typed.LocalId, nm source.Names&) St
 type diskRun struct(Sig String&) {
     Sig
     Ctx String = ""
+    Keys String = ""       # the B3i keys of the modules its bodies hang on (keysOf)
     In Vec<String&>        # by body of the component: the state it was judged from (stateOf)
-    Marks Vec<String&>     # "CTOR FIELD MARK"
-    Reads Vec<String&>     # "NAME\tTEXT" (readText)
+    Marks Vec<String&>     # "CTOR\tFIELD,FIELD..." - the constructors' fields whose marks it read
+    MarksHash String = ""  # ... and a hash of the marks they had (marksOf)
+    Reads Vec<String&>     # "NAME\tHASH" (readLine)
     Wants Vec<String&>     # "decl NAME", "field NAME K"
     Hits I64 = 0
     Vrs Vec<String&>       # "I SITE NAME,ADAPTER..." - its bodies' calls through a value (valueRecs)
@@ -14680,25 +14724,107 @@ fn (s mut Scoper&) SetFieldMarks(marks Vec<typed.Mark>&) {
 # binds it) and is of a module records are kept for (Keyed)
 fn (s mut Scoper&) recordable(comp Array<I64>&) Bool {
     for b in comp {
-        if s.NameOf(b) == "" or not s.Keyed.Has(s.Bodies[b].File) or not s.keyedBody(b): return false
+        if s.NameOf(b) == "": return false
+        for f in s.filesOf(b) {
+            if f < 0 or not s.Keyed.Has(f): return false
+        }
     }
     return true
 }
 
-fn (s mut Scoper&) keyedBody(b I64) Bool {
+# the files body b's judging hangs on beyond what it reads (its text, as its module's key and the keys of the modules
+# declaring its instance's type arguments say it): its module's, and for an instance (a lambda or contract item inside
+# one) the modules declaring every type its arguments name - a method of a type is its module's (M19). [-1] for a body
+# no record keeps
+fn (s mut Scoper&) filesOf(b I64) Array<I64>& {
+    had := try s.filesAt.Get(b) catch default Array<I64>(0)
+    if had.Len() > 0: return had
+    out Vec<I64>
+    out.Push(s.Bodies[b].File)
+    try s.bodyTypes(b, out) catch typed.Unwritable { out = Vec<I64>[-1] }
+    made := out.ToArray()
+    s.filesAt.Put(b, made)
+    return made
+}
+
+# the keys of the modules component comp's bodies hang on (filesOf), each "IDENTITY=KEY", sorted
+fn (s mut Scoper&) keysOf(comp Array<I64>&) String {
+    seen Map<I64, Bool>
+    words Vec<String&>
+    for b in comp {
+        for f in s.filesOf(b) {
+            if seen.Has(f): continue
+            seen.Put(f, true)
+            words.Push($s.fileIdentity(f) "=" $(try s.FileKeys.Get(f) catch default "?"))
+        }
+    }
+    words.Sort(fn(a String&, b String&) Bool { return a < b })
+    return words.Join(" ")
+}
+
+fn (s mut Scoper&) bodyTypes(b I64, out mut Vec<I64>&) ? typed.Unwritable {
     for _ in range 64 {
         match s.Bodies[b].Of {
-            case typed.BodyOf.Fn(inst) { return s.P.InstanceArgs(inst) == types.ListId(0) }
-            case typed.BodyOf.Ctor(t, twin) { return twin == types.ListId(0) and s.plainDecl(t) }
-            case typed.BodyOf.Dtor(t) { return s.plainDecl(t) }
-            case typed.BodyOf.Global(_, _) { return true }
+            case typed.BodyOf.Fn(inst) {
+                try s.listFiles(s.P.InstanceArgs(inst), out, 0)
+                return
+            }
+            case typed.BodyOf.Ctor(t, twin) {
+                try s.typeFiles(t, out, 0)
+                try s.listFiles(twin, out, 0)
+                return
+            }
+            case typed.BodyOf.Dtor(t) {
+                try s.typeFiles(t, out, 0)
+                return
+            }
+            case typed.BodyOf.Global(_, _) { return }
             case typed.BodyOf.Lambda(parent) { b = I64(parent) }
             case typed.BodyOf.Contract(of, _, _) { b = I64(of) }
-            case _ { return false }
+            case _ { error typed.Unwritable.Here }
         }
-        if b < 0 or b >= s.Bodies.Len(): return false
+        if b < 0 or b >= s.Bodies.Len(): error typed.Unwritable.Here
     }
-    return false
+    error typed.Unwritable.Here
+}
+
+fn (s mut Scoper&) listFiles(l types.ListId, out mut Vec<I64>&, depth I64) ? typed.Unwritable {
+    if l == types.ListId(0): return
+    for t in s.P.T.Items(l) { try s.typeFiles(t, out, depth) }
+}
+
+# the files of the modules declaring the types t names, put in out - not for a type not known here (a variable, a
+# stand-in) or one too deep to follow
+fn (s mut Scoper&) typeFiles(t types.TypeId, out mut Vec<I64>&, depth I64) ? typed.Unwritable {
+    if depth > 32: error typed.Unwritable.Here
+    match s.P.T.KindOf(t) {
+        case types.Kind.Named {
+            try s.declFile(s.P.T.DeclOf(t), out)
+            try s.listFiles(s.P.T.Args(t), out, depth + 1)
+        }
+        case types.Kind.Ref { try s.typeFiles(s.P.T.Referent(t), out, depth + 1) }
+        case types.Kind.Array { try s.typeFiles(s.P.T.Elem(t), out, depth + 1) }
+        case types.Kind.Func {
+            try s.listFiles(s.P.T.Params(t), out, depth + 1)
+            try s.typeFiles(s.P.T.Result(t), out, depth + 1)
+            try s.listFiles(s.P.T.Errors(t), out, depth + 1)
+        }
+        case types.Kind.Tuple, types.Kind.Record { try s.listFiles(s.P.T.Parts(t), out, depth + 1) }
+        case types.Kind.Void, types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8
+             types.Kind.U16, types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64
+             types.Kind.Int, types.Kind.Null, types.Kind.Noreturn { }
+        case _ { error typed.Unwritable.Here }
+    }
+}
+
+fn (s mut Scoper&) declFile(d types.DeclId, out mut Vec<I64>&) ? typed.Unwritable {
+    m := s.P.T.DeclModule(d)
+    if m < 0 or m >= s.P.T.Modules.Len(): error typed.Unwritable.Here
+    f := try s.fileOfIdentity(s.P.T.Modules[m])
+    for x in out {
+        if x == f: return
+    }
+    out.Push(f)
 }
 
 fn (s mut Scoper&) plainDecl(t types.TypeId) Bool {
@@ -14796,6 +14922,50 @@ fn (s mut Scoper&) marksOf(run compRun&) Vec<String&> {
     return out
 }
 
+# the marks a judging read, as a record keeps them: a line for each constructor, its fields' numbers after it
+fn (s mut Scoper&) markLines(run compRun&) Vec<String&> {
+    by Map<I64, Vec<I64>>
+    for m in run.Marks {
+        had := try by.Get(m.Ctor) catch default Vec<I64>()
+        had.Push(m.Field)
+        by.Put(m.Ctor, had)
+    }
+    out Vec<String&>
+    for e in by {
+        ks := e.Value
+        ks.Sort(fn(a I64, b I64) Bool { return a < b })
+        b := StringBuilder()
+        b.Push($s.NameOf(e.Key) "\t")
+        for i in range ks.Len() { b.Push($(("," if i > 0 else "")) $ks[i]) }
+        out.Push(b.ToString())
+    }
+    out.Sort(fn(a String&, b String&) Bool { return a < b })
+    return out
+}
+
+fn (s mut Scoper&) marksText(rs Vec<markRead>&) String {
+    lines Vec<String&>
+    for m in rs { lines.Push($s.NameOf(m.Ctor) "\t" $m.Field " " $markWord(m.Mark)) }
+    lines.Sort(fn(a String&, b String&) Bool { return a < b })
+    return lines.Join("\n")
+}
+
+# the marks a record's judging read, as they are now - fewer than its lines where a constructor or field is not found
+fn (s mut Scoper&) diskMarks(d diskRun&) Vec<markRead> {
+    out Vec<markRead>
+    for m in d.Marks {
+        tab := try m.Find("\t") catch { return Vec<markRead>() }
+        ctor := try s.nameAt.Get(m[:tab]) catch { return Vec<markRead>() }
+        if not s.isCtorBody(ctor): return Vec<markRead>()
+        for f in m[tab + 1:].Split(",") {
+            k := try f.ParseInt() catch { return Vec<markRead>() }
+            if k < 0 or k >= s.Bodies[ctor].Fields.Len(): return Vec<markRead>()
+            out.Push(markRead(ctor, k, s.fieldMarkOf(ctor, k)))
+        }
+    }
+    return out
+}
+
 fn markWord(m typed.Mark) String {
     return match m {
         case typed.Mark.None: "N"
@@ -14805,6 +14975,21 @@ fn markWord(m typed.Mark) String {
         case typed.Mark.Infer: "I"
         case typed.Mark.TypeVar: "T"
     }
+}
+
+# what a judging read of body x, as a record's line: its name and a hash of readText's words
+fn (s mut Scoper&) readLine(x I64) String {
+    settled := x >= 0 and x < s.sums.Len() and s.sums[x].Done and not s.sums[x].Judging
+    if settled {
+        had := try s.lineAt.Get(x) catch default ""
+        if had != "": return had
+    }
+    t := s.readText(x)
+    if t == "?": return "?"
+    tab := try t.Find("\t") catch { return "?" }
+    line := $t[:tab] "\t" $hashText(t[tab + 1:])
+    if settled { s.lineAt.Put(x, line) }
+    return line
 }
 
 # what a judging read of body x, as words: whether it was judged, and its summary - "?" where the summary cannot be
@@ -15041,11 +15226,13 @@ fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
     b := StringBuilder()
     b.Push($"run " $run.Sig.Replace("\n", "\t") "\n")
     b.Push($"ctx " $run.Ctx "\n")
+    b.Push($"keys " $s.keysOf(comp) "\n")
     for i in range comp.Len() {
         r := run.InRun[i]
         b.Push($"in " $(s.runId(r) if r is not null else run.InDisk[i]) "\n")
     }
-    for m in s.marksOf(run) { b.Push($"mark " $m "\n") }
+    for m in s.markLines(run) { b.Push($"mark " $m "\n") }
+    b.Push($"marks " $hashText(s.marksText(run.Marks)) "\n")
     for x in run.ReadTexts {
         if x == "?" {
             s.why("w-read?")
@@ -15069,7 +15256,9 @@ fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
         b.Push($vb.ToString() "\n")
     }
     for i in range comp.Len() {
-        pl := try run.Plans[i].Text() catch typed.Unwritable {
+        refs := run.Plans[i].Roots.Len() + run.Plans[i].DropAt.Len() + run.Plans[i].DropInAt.Len() > 0
+        nodes := typed.Nodes.Of(s.Bodies[comp[i]]) if refs else typed.Nodes()
+        pl := try run.Plans[i].Text(nodes, fn(t types.TypeId) String { return s.P.T.CanonNamed(t) }) catch typed.Unwritable {
             s.why("w-plan")
             return ""
         }
@@ -15096,8 +15285,10 @@ fn diskLines(d diskRun&) String {
     b := StringBuilder()
     b.Push($"run " $d.Sig.Replace("\n", "\t") "\n")
     b.Push($"ctx " $d.Ctx "\n")
+    b.Push($"keys " $d.Keys "\n")
     for x in d.In { b.Push($"in " $x "\n") }
     for x in d.Marks { b.Push($"mark " $x "\n") }
+    b.Push($"marks " $d.MarksHash "\n")
     for x in d.Reads { b.Push($"read " $x "\n") }
     for x in d.Wants { b.Push($"want " $x "\n") }
     b.Push($"hits " $d.Hits "\n")
@@ -15112,7 +15303,7 @@ fn diskLines(d diskRun&) String {
 }
 
 # a record's judgings, read: each "run" up to its "out" - a line out of place, and the record is not read
-fn ReadRuns(text String&, into mut Map<String, Vec<diskRun>>&) ? typed.Unwritable {
+fn ReadRuns(text String&, into mut Vec<mut diskRun&>&) ? typed.Unwritable {
     cur mut diskRun?& = null
     for line in text.Lines() {
         if line == "": continue
@@ -15128,8 +15319,10 @@ fn ReadRuns(text String&, into mut Map<String, Vec<diskRun>>&) ? typed.Unwritabl
         d := cur
         match word {
             case "ctx" { d.Ctx = rest }
+            case "keys" { d.Keys = rest }
             case "in" { d.In.Push(rest) }
             case "mark" { d.Marks.Push(rest) }
+            case "marks" { d.MarksHash = rest }
             case "read" { d.Reads.Push(rest) }
             case "want" { d.Wants.Push(rest) }
             case "hits" { d.Hits = try rest.ParseInt() catch { error typed.Unwritable.Here } }
@@ -15144,22 +15337,13 @@ fn ReadRuns(text String&, into mut Map<String, Vec<diskRun>>&) ? typed.Unwritabl
             case "out" {
                 d.Out = rest
                 if d.Plans.Len() != d.Sums.Len() or d.Plans.Len() != d.In.Len() or d.Hidden.Len() != d.In.Len(): error typed.Unwritable.Here
-                had := try into.Get(d.Sig) catch default Vec<diskRun>()
-                had.Push(d)
-                into.Put(d.Sig, had)
+                into.Push(d)
                 cur = null
             }
             case _ { error typed.Unwritable.Here }
         }
     }
     if cur is not null: error typed.Unwritable.Here
-}
-
-fn (s mut Scoper&) whyNot0(comp Array<I64>&) String {
-    for k in range s.compFrom.Len() {
-        if s.compNodes[s.compFrom[k]] == comp[0] and k < s.runs.Len() and s.runs[k].Len() > 0: return s.whyNot(k)
-    }
-    return "?"
 }
 
 # OLANG_CHECKINCR (T4 over the scope pass): this pass, which took judgings from records, against o, which judged the
@@ -15193,19 +15377,24 @@ fn (s mut Scoper&) Compare(o mut Scoper&) Vec<String&> {
 
 # what the records gave, for OLANG_SCOPESTATS
 fn (s Scoper&) DiskStats() String {
-    n := 0
-    for e in s.Disk { n += e.Value.Len() }
-    return $n " judgings in " $s.Eligible.Len() " modules' records, " $s.DiskTaken " taken, " $s.DiskChecked " checked, " $s.Restarts " restarts " $s.DiskWhy
+    n := s.diskAll.Len()
+    why := StringBuilder()
+    for e in s.whyN { why.Push($" " $e.Key "=" $e.Value) }
+    for e in s.whyMs {
+        if e.Value > 10000: why.Push($"\n   " $e.Key ":" $(e.Value / 1000) "ms")
+    }
+    return $n " judgings in " $s.Eligible.Len() " modules' records, " $s.DiskTaken " taken, " $s.Restarts " restarts;" $why.ToString() "; ms: " $s.Times.Join(", ")
 }
 
 # a record's judgings given to the pass: all of them, or none where a line is out of place
 fn (s mut Scoper&) AddRecord(text String&) ? typed.Unwritable {
-    runs Map<String, Vec<diskRun>>
+    runs Vec<mut diskRun&>
     try ReadRuns(text, runs)
-    for e in runs {
-        had := try s.Disk.Get(e.Key) catch default Vec<diskRun>()
-        for d in e.Value { had.Push(d) }
-        s.Disk.Put(e.Key, had)
+    for d in runs {
+        had := try s.Disk.Get(d.Sig) catch default Vec<I64>()
+        had.Push(s.diskAll.Len())
+        s.diskAll.Push(d)
+        s.Disk.Put(d.Sig, had)
     }
 }
 
@@ -15375,8 +15564,9 @@ fn (s mut Scoper&) diskFor(comp Array<I64>&, report Bool) diskRun?& {
         return null
     }
     ctx := s.ctxText(report)
-    for d in cands {
-        if d.Ctx != ctx or d.In.Len() != comp.Len() {
+    for i in cands {
+        d := s.diskAll[i]
+        if d.Ctx != ctx or d.In.Len() != comp.Len() or d.Keys != s.keysOf(comp) {
             s.why("ctx")
             continue
         }
@@ -15385,10 +15575,21 @@ fn (s mut Scoper&) diskFor(comp Array<I64>&, report Bool) diskRun?& {
     return null
 }
 
-fn (s mut Scoper&) why(w String&) {
-    s.whyN.Put(w, (try s.whyN.Get(w) catch default 0) + 1)
-    s.DiskWhy = ""
-    for e in s.whyN { s.DiskWhy = $s.DiskWhy " " $e.Key "=" $e.Value }
+fn (s mut Scoper&) why(w String&) { s.whyN.Put(w, (try s.whyN.Get(w) catch default 0) + 1) }
+
+# OLANG_SCOPESTATS: why a component a record could have given was judged
+fn (s mut Scoper&) freshWhy(comp Array<I64>&) {
+    cands := try s.Disk.Get(s.sigOf(comp)) catch {
+        s.why("x-nosig")
+        return
+    }
+    if s.whyN.Len() < 40 {
+        for i in cands {
+            d := s.diskAll[i]
+            s.TraceLog.Push($"fresh " $s.NameOf(comp[0]) " ctx " $d.Ctx "/" $s.ctxText(s.report) " keys " $(d.Keys == s.keysOf(comp)) " in " $d.In.Join(",") " now " $s.stateOf(comp[0]) " fromdisk " $s.fromDisk[comp[0]])
+        }
+    }
+    s.why("x-cands")
 }
 
 fn (s mut Scoper&) diskHolds(d diskRun&, comp Array<I64>&) Bool {
@@ -15398,20 +15599,15 @@ fn (s mut Scoper&) diskHolds(d diskRun&, comp Array<I64>&) Bool {
             return false
         }
     }
-    for m in d.Marks {
-        tab := try m.Find("\t") catch { return false }
-        ctor := try s.nameAt.Get(m[:tab]) catch { return false }
-        f := m[tab + 1:].Split(" ").ToVec()
-        if f.Len() != 2: return false
-        k := try f[0].ParseInt() catch { return false }
-        if not s.isCtorBody(ctor) or k < 0 or k >= s.Bodies[ctor].Fields.Len(): return false
-        if markWord(s.fieldMarkOf(ctor, k)) != f[1]: return false
+    reads := s.diskMarks(d)
+    if (reads.Len() == 0) != (d.Marks.Len() == 0) or hashText(s.marksText(reads)) != d.MarksHash {
+        s.why("mark")
+        return false
     }
     for r in d.Reads {
         tab := try r.Find("\t") catch { return false }
         x := try s.nameAt.Get(r[:tab]) catch { return false }
-        if s.readText(x) != r {
-            if s.whyN.Len() < 3 { s.TraceLog.Push($"read differs: had " $r "\nnow " $s.readText(x)) }
+        if s.readLine(x) != r {
             s.why("read")
             return false
         }
@@ -15428,7 +15624,8 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
     run.Ctx = d.Ctx
     for i in range comp.Len() {
         b := comp[i]
-        pl := try typed.Plan.Read(s.Bodies[b], d.Plans[i]) catch typed.Unwritable {
+        nodes := typed.Nodes() if d.Plans[i].EndsWith(" ||") else typed.Nodes.Of(s.Bodies[b])
+        pl := try typed.Plan.Read(s.Bodies[b], d.Plans[i], nodes, fn(c String&) types.TypeId { return s.typeOfCanon(c) }) catch typed.Unwritable {
             s.why("plan")
             if s.whyN.Len() < 6 { s.TraceLog.Push($"plan unread: " $d.Plans[i]) }
             return null
@@ -15442,17 +15639,19 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
         run.Sums.Push(sm)
         run.Judged.Push(d.Judged[i])
     }
-    for m in d.Marks {
-        tab := try m.Find("\t") catch { return null }
-        ctor := try s.nameAt.Get(m[:tab]) catch { return null }
-        k := try m[tab + 1:].Split(" ").ToVec()[0].ParseInt() catch { return null }
-        run.Marks.Push(markRead(ctor, k, s.fieldMarkOf(ctor, k)))
-    }
-    for r in d.Reads {
-        tab := try r.Find("\t") catch { return null }
-        x := try s.nameAt.Get(r[:tab]) catch { return null }
-        run.Read.Push(sumRead(x, s.sums[x]))
-        run.ReadTexts.Push(r)
+    for m in s.diskMarks(d) { run.Marks.Push(m) }
+    for r in d.Reads { run.ReadTexts.Push(r) }
+    # (what a later round's judgeAll holds it to, as a judging made now: its callees' summaries - compRun.Read)
+    mine Map<I64, Bool>
+    for b in comp { mine.Put(b, true) }
+    seen Map<I64, Bool>
+    for b in comp {
+        for e in range s.edgeFrom[b], s.edgeFrom[b + 1] {
+            c := s.edgeTo[e]
+            if mine.Has(c) or seen.Has(c): continue
+            seen.Put(c, true)
+            run.Read.Push(sumRead(c, s.sums[c]))
+        }
     }
     for w in d.Wants {
         f := w.Split(" ").ToVec()

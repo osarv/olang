@@ -1287,7 +1287,9 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     # what every judging placed
     rec := keys.Len() > 0 and not cfg.Memory and (try os.Env("OLANG_NOSCOPEREC") catch default "") == ""
     loaded Map<I64, String&>
+    build.Phase("scope start")
     if rec { loaded = scopeRecords(c, cfg, keys, sc) }
+    build.Phase("scope records read")
     marks := sc.FieldMarks()
     mark := c.P.L.Diags.Count()
     sc.Run()
@@ -1376,6 +1378,10 @@ fn scopeStem(cfg build.Config&, identity String&, key String&) String {
     return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20] ".s"
 }
 
+# a scope record's sum, which finds it damaged: its length and its text's hash (String.Hash - a record is large, and read
+# every build; it guards against damage, not against a forger)
+fn sumOf(text String&) String { return $text.Len() "-" $U64(text.Hash()) }
+
 # the records under each module's key, their judgings given to the pass: by file, the text of the record read
 fn scopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, sc mut scope.Scoper&) Map<I64, String&> {
     loaded Map<I64, String&>
@@ -1383,7 +1389,9 @@ fn scopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>
     sc.DiskWrite = true
     sc.DiskAfresh = (try os.Env("OLANG_CHECKINCR") catch default "") != ""
     for m in range keys.Len() {
-        if keys[m] != "" and l.Mods[m].File >= 0 { sc.Keyed.Put(l.Mods[m].File, true) }
+        if keys[m] == "" or l.Mods[m].File < 0 { continue }
+        sc.Keyed.Put(l.Mods[m].File, true)
+        sc.FileKeys.Put(l.Mods[m].File, keys[m])
     }
     names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return loaded }
     sc.DiskOn = true
@@ -1409,7 +1417,7 @@ fn scopeRecord(c mut typecheck.Checker&, path String&) String ? Stale {
     text := try os.ReadFile(path) catch os.Error { error Stale }
     # (the last line's sum: a judging's summaries are "sum" lines too)
     sumAt := (try text.Find("\nend\nsum ") catch { error Stale }) + 4
-    if text[sumAt + 5:].Trim() != build.IrHash(text[:sumAt + 1]): error Stale
+    if text[sumAt + 5:].Trim() != sumOf(text[:sumAt + 1]): error Stale
     body := text[:sumAt + 1]
     if not body.StartsWith("olang scope record\n") or not body.EndsWith("end\n"): error Stale
     # (the facts its checking read come before its first judging, whose "read" lines are summaries)
@@ -1438,7 +1446,7 @@ fn keepScope(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, 
         body := $head $runs
         if body == (try loaded.Get(l.Mods[m].File) catch default ""): continue
         whole := $body "end\n"
-        putFile($scopeStem(cfg, l.Mods[m].Identity, keys[m]) $build.IrHash(reads[m])[:16], $whole "sum " $build.IrHash(whole) "\n", pid)
+        putFile($scopeStem(cfg, l.Mods[m].Identity, keys[m]) $build.IrHash(reads[m])[:16], $whole "sum " $sumOf(whole) "\n", pid)
     }
 }
 
