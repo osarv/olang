@@ -1106,11 +1106,16 @@ Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/
     Edit("an inferred error set shrunk", "sed -i 's/{ return try t.ParseInt(10) }/{\\n    if t.Len() == 0: error " $
          "ParseError.Empty\\n    return t.Len()\\n}/' deep.olang", "", "deep lib", "deep.olang", "Parse")
     Edit("a summary of checking changed (M19g)", "sed -i 's/{ a\\[0\\] = 2 }/{ a.Push(2) }/' deep.olang", "", "", "lib.olang", "Viewed")
+    # W3b: a callee's scope obligation (O10b) and its effects (G42, A2.3) - each a summary its callers' judgings read
+    Edit("a scope obligation added", "sed -i 's/a.Push(\"p\")/a.Push(s)/' deep.olang", "", "deep lib", "deep.olang", "Pass")
+    Edit("an effect changed", "sed -i 's/{ a\\[0\\] = 2 }/{\\n    getuid()\\n    a[0] = 2\\n}/' deep.olang", "", "deep lib", "deep.olang"
+         "Touch")
     Edit("a diagnostic introduced", "sed -i 's/deep.Baked/deep.Bakd/' lib.olang", "", "", "lib.olang", "Kept")]
 
 # what an incremental build says that a clean one need not: what was reused or lowered again, the front end's records
-# taken or checked (W3a), how many facts were read, and OLANG_CHECKINCR's line saying every record taken holds
-Varying := "'^olang: \\(reused\\|lowered\\|facts\\|front\\|incremental check:.*every one the same\\)'"
+# taken or checked (W3a), the modules whose functions the scope pass judged afresh (W3b), how many facts were read, and
+# OLANG_CHECKINCR's lines saying every record taken holds
+Varying := "'^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)'"
 
 fn incremental(r mut report&) ? Failed {
     dir := fresh("incremental")
@@ -1150,9 +1155,14 @@ fn incEdit(r mut report&, dir String&, e Edit&) ? Failed {
        "tr '\\n' ' ' > checked")
     checked := (try os.ReadFile($dir "/checked") catch default "").Trim()
     try r.expect(checked == e.lowered, $"the modules checked afresh " $what ": expected '" $e.lowered "', not '" $checked "'", dir)
+    # W3b: and those whose functions the scope pass judged afresh, not taken from its records - the same modules
+    sh(dir, "grep '^olang: scope judged ' here | grep -v 'judged std/' | grep -v 'judged <' | cut -d' ' -f4 | sort | " $
+       "tr '\\n' ' ' > judged")
+    judged := (try os.ReadFile($dir "/judged") catch default "").Trim()
+    try r.expect(judged == e.lowered, $"the modules the scope pass judged afresh " $what ": expected '" $e.lowered "', not '" $judged "'", dir)
     try r.expect(sh($dir "/inc", "rm -f *.olang *.c *.txt && cp ../orig/* .") == 0, $"undoing " $what, dir)
     try r.expect(incBuild(dir, "inc", "", "undone", "main.olang", "main") == 0, $"the build undoing " $what, dir)
-    try r.expect(sh(dir, $"! grep -q '^olang: \\(lowered\\|front checked\\) ' undone && grep -v " $Varying " undone > a && " $
+    try r.expect(sh(dir, $"! grep -q '^olang: \\(lowered\\|front checked\\|scope judged\\) ' undone && grep -v " $Varying " undone > a && " $
                     "grep -v " $Varying " base > b && cmp -s a b") == 0
                  $"the build undoing " $what " lowered or checked something again, or differs (undone, base)", dir)
 }

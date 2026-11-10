@@ -506,6 +506,18 @@ skipped (a no-op build's front end 5.6 s to 4.5 s on the compiler). T4 (`OLANG_C
 stale). Bodies are all still checked and keys are still the texts a module reaches: section 8 and early freeing read
 every typed body, and what a module reads of its imports is a summary of every pass - both W3b's.
 
+**Built in W3b (2026-11-10, HISTORY "The front end's records, part 2"):** scope records (`build/rec/NAME.KEY.s...`,
+`compiler/records.olang`): every judging of a component in every round of the field inference, kept with everything
+it read (other bodies' summaries and judged flags, logged; constructor fields' marks; the whole-program sets; the
+judgings of its bodies before it, by name) and the state it leaves its bodies in, taken by a later build where all of it
+reads alike - generics' instances included, under the keys of the modules declaring their type arguments. The fixed
+points run as before over kept summaries, a component whose reads changed judged again from the state a build judging
+it all along would have. The compiler's scope judging of a no-op build 4.9 s to 1.0 s; its front end (full objects)
+5.6-6.1 s to 4.2 s on a no-op and 5.7-5.8 s to 4.1-4.4 s on a leaf edit. T4 holds the whole pass with records to the pass
+without; T2 gains obligation and effect edits and asserts the modules judged afresh; T8 is a scripted session of the
+language server, which keeps and takes the same records. Effects are not kept (~20 ms, found on demand); early
+freeing's per-body summaries (~1 s) are not kept yet - the next step, keyed by the program's candidate places.
+
 ### 10.4 genrefs in the order
 
 Every genrefs question was answered on 2026-11-08 (genrefs section 0.1). Its rounds in this order: **G1** at step 4,

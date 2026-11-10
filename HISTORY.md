@@ -36437,3 +36437,101 @@ a callee removing their node, weak places given nodes of other blocks.
 removal - the site's compare keeps it, which a build without the compare fails; across a removing call and in a callee;
 a Vec grown after the node was made; a weak place to a removed node), checks/cases/o8earrays.olang (a peak), o8elru's
 peak lowered to 9 MB.
+
+## The front end's records, part 2: the scope pass's judgings (B3i; 2026-11-10, wt-w3b, round W3b of docs/wholeprog.md)
+
+W3b makes section 8 keep what it judged, as W3a made the checker keep its M19g summaries. Measured first, on the
+compiler building itself (a no-op build, front end only, `-quick` objects): the scope pass's judging 4.7-4.9 s of a
+6 s front end - three rounds of the field inference (2.5 s, 1.8 s, 0.2 s), each judging the program's ~13,700
+components callees first; early freeing after it about 1 s; effects about 20 ms (found on demand, for the facts and the
+copies asked about).
+
+- **What is kept: every judging of a component** (`scope.olang`, "judgings kept in records"). The pass already kept a
+  component's judgings in memory for the field inference's later rounds (`compRun`: plans, summaries, diagnostics, the
+  marks and callee summaries read - `takeable`, `retake`). W3b writes them to `build/rec/NAME.KEY.s<HASH>`
+  (`records.olang`'s `KeepScope`, `ScopeRecords`), the module the component's first body is in, under that module's
+  B3i key and named by the facts its checking read, as the front record is. A later build takes one (`judgeOrTake`)
+  where its component reads all the same, at the same point of the rounds: the same bodies (each by a **stable name**,
+  `NameOf`: module, kind, span, an instance's arguments by `types.CanonNamed`), the same round (`ctxText`), the same
+  keys of every module its bodies hang on (`keysOf`: a generic's instance hangs on the modules declaring its type
+  arguments, whose methods it calls, M19), the same marks of the constructor fields it read, the same summaries and
+  judged flags of every other body it read, and the same state of its own bodies (below). Taken, it gives its plans,
+  summaries, the calls through values it found (`valueRecs`, early freeing's) and what it asked of the field
+  inference, exactly as a judging made then would; and the rounds after hold it to their reads as they hold one made in
+  the build.
+- **What a judging reads, logged.** The in-memory reuse held a judging to its call graph's callees only. A record must
+  hold to everything: every summary or judged flag of another body is now read through `Scoper.sum`/`isJudged`, which
+  log it while a component is judged (`readLog`; a function value's bodies, a constructor's field bindings, a callee's
+  callee through `transient` and `uses` included - their memos keep what their finding read and give it again on a
+  hit, `memoReads`). A judging touching a twin's limit (`twinLimited`, a whole-program count) or a twin is not written.
+  The few sets the pass reads of the whole program - fields some body assigns after construction (`fieldsAssigned`,
+  T22d), bodies a `become` chain holds (`noDerived`), the precompiled modules (`Apart`) - are one hash every judging is
+  held to (`globalText`).
+- **A body's state.** A judging also reads what the judgings of its own bodies before it in the build left in the pass:
+  its field sets (W4's `fsets`), the declarations a derived scope was read through (`derivedDecl`), `verUnion`,
+  `freshDefs`, the records followed into a lambda's captures (`capSeen`, `capSeeds`). Each body's state is named by the
+  judging that left it (`stateOf`, `runId`: a hash of what that judging read, its state chained) - equal names, equal
+  state, since a judging is a function of what it reads - and written with the judging (`hiddenText`, types by their
+  canonical text), so that a component taken in one round and judged afresh in the next starts from the state a build
+  judging it all along would have. A state that cannot be read back makes the build's judging start over without
+  records (`Restart`, the checker's marks given back first); none was seen on the compiler, the suite or T7.
+- **Plans and summaries as words** (`typed.Plan.Text`/`Read`, `Scoper.sumWords`/`sumOfText`). A plan's references to
+  the body's expressions (O29's roots, a drop's derived scopes, C9a's homes) are written by the expression's number in
+  one walk of the body (`typed.Nodes`), a root the pass made - a field read through a parameter, a value's one
+  reference - written out over the body's places with its types' canonical text. A summary holding an instance record
+  (T22d) or a term of a set is not written; its judging is made in every build.
+- **Size and speed.** The first version wrote each read as the callee's whole summary and each mark on a line of its
+  own: 14 MB of records for the compiler, and a no-op build spent a second hashing them (SHA-256 in olang). Reads are
+  now a hash of the summary's words, marks a line per constructor with one hash of their values, and a record's sum
+  `String.Hash` (it guards against damage, not a forger): 1.7 MB for the scope module's, 6 MB in all. A record keeps
+  this build's judgings and up to two variants of each component a build before it judged otherwise (another
+  instance, other keys), so edits back and forth do not judge again what the build before them had. Bugs of the first
+  versions, found by the whole-pass check below: a scope record's "sum" lines taken for its own sum (the record never
+  read); in-memory judgings taken from a record held to all their logged reads where a judging made in the build is
+  held to its callees' (the build then judged in round 2 what the clean build had taken again - the pass the same, more
+  work); the length of a field-marks list compared with its lines. And one found by `reuseall` under the whole-pass
+  check in the first full verify: whether a type has a constructor or destructor body is the whole program's (an
+  instance exists only where some program instantiates it), and a judging asking for one it did not find read nothing
+  the record said - std/list's `List<String&>.Join` judged in a program with no `List<String&>` constructor kept its
+  receiver, and the record was taken by one with it, where judging afresh reads the field's mark and does not. Every
+  lookup of a constructor or destructor (`ctorBody`, `dtorFor`) is now a read: the body found, or "none" by the type's
+  canonical text, held to the program's set of them (`absentNow`). `OLANG_SCOPEDEBUG=TEXT` says what a component whose
+  signature holds TEXT read.
+- **The language server keeps its session in the records** (`session.Analysis.Analyze(..., kept)`, `lsp.olang`,
+  `mcp.olang`). Each check of the server's (a worker process, as before) keeps and takes the front and scope records
+  as `olang test` does in the directory it runs in - so a check after an edit judges again only what the edit reaches,
+  and an editor and the builds of one directory share them. The record helpers moved from `olang.olang` to
+  `records.olang` for the two to share.
+- **Effects are not kept**: found on demand, about 20 ms on the compiler - reading them back would cost more.
+  **Early freeing is judged afresh** every build (about 1 s on the compiler): its decisions are the whole program's,
+  over candidate places found in every body, and each body's walk hangs on the candidates; keeping its per-body
+  summaries is the next step (the place set as the key every body's walk is held to).
+
+Testing (docs/wholeprog.md 10.3): **T4**, `OLANG_CHECKINCR` now runs the whole scope pass twice - with records, and
+without them from the marks the checker left - and holds every plan, summary, judged flag, call through a value, gap,
+twin, diagnostic and the field inference's final marks to each other (`scopeAfresh`, `Scoper.Compare`); in
+`incremental`, `reuseall`, `records` and the edit fuzzer, as W3a's. **T2** gains "a scope obligation added" (deep's
+`Pass` keeping its second parameter, lib's `Passed` reading it) and "an effect changed" (deep's `Touch` calling C), and
+asserts that the program's modules whose functions the scope pass judged afresh (`olang: scope judged`, as
+`OLANG_FACTSTATS` names them) are those lowered again, and that undoing an edit judges nothing again. **T8**: a test in
+`lsp.olang` edits a library step by step (an O10c error brought in and taken out, a type error, a body changed) and
+after each step runs a server session from the directory the steps before left their records in - what it publishes
+is what `olang build` says of the same text, rule and line, and every session after the first takes judgings from the
+records. **T5**: the edit fuzzer (seed 7, 20 programs of 8 steps) found no build differing from its clean one and no
+record giving what judging afresh does not; its three findings are a W1 matter found on the way (below); the scope fuzzer's
+long run (`make scopefuzz SEED=7 COUNT=1000`): 1000 programs, no finding. **T7**, once: the last 100 commits touching
+compiler/ built one after another in one directory (front end, `OLANG_CHECKINCR`): 99 build in today's language, the
+pass with records the pass without in every one; a commit judged ~2,200 of its ~13,700 components afresh on average
+(the rest taken), the scope judging's median 1.5 s against 4.7-4.9 s judging all. **T8**, the bootstrap: stage 1 built
+stage 2 twice in one directory, the second taking 12,573 judgings from the first's records, and once clean - the three
+byte for byte the same.
+
+Measured (the compiler, front end only, full objects - each compiler built as the bootstrap builds it): a no-op build
+5.6-6.1 s before, 4.2 s now; a leaf edit (a comment in `lsp.olang`) 5.7-5.8 s before, 4.1-4.4 s now. Of it, section 8's
+judging 4.9 s to 0.75-1.0 s; reading and writing the records 0.07 s and 0.08-0.13 s; early freeing, `twinsTo` and
+the lowerer's decisions after it about 0.8 s, as before.
+
+Found on the way, not fixed (lowering's, another round's file): a module whose lowering reads a T13d fact
+(`read plain T13d m1.Bag`, genrefs) that only lowering another module decides is lowered again in every build - its
+record never holds where that module's object is reused (the edit fuzzer's "undoing lowered again", seeds 11, 17 and 21;
+master's compiler finds seed 21 as well). A speed bug, not a stale object: the record is not taken.

@@ -32,7 +32,6 @@ import rt "runtime"
 import "eval"
 import "interp"
 import "typed"
-import "generic"
 import "views"
 import "explain"
 import "api"
@@ -41,6 +40,7 @@ import "profile"
 import "listing"
 import "session"
 import "lsp"
+import "records"
 import "mcp"
 import typecheck "check"
 import "std/pair"
@@ -545,14 +545,14 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     kept.Later = kind != build.Kind.Module
     kept.Afresh = (try os.Env("OLANG_CHECKINCR") catch default "") != ""
     c mut typecheck.Checker& = interp.Analyze(l, tests, kept)
-    if kind != build.Kind.Module { keys = moduleKeys(l, cfg, tests) }
+    if kind != build.Kind.Module { keys = records.ModuleKeys(l, cfg, tests) }
     if c.ViewsDue {
-        frontRecords(l, cfg, keys, kept)
+        records.FrontRecords(l, cfg, keys, kept)
         vt := time.Now()
         interp.JudgeViews(c, kept)
         c.ViewsMs = (time.Now() - vt) / 1000000
     }
-    if kept.Stale.Len() > 0 { checkIncrFailed(kept) }
+    if kept.Stale.Len() > 0 { records.CheckIncrFailed(kept) }
     if kept.Afresh and kept.Taken > 0 {
         try io.PrintErr($"olang: incremental check: " $kept.Taken " kept summaries, every one the same\n") catch io.Error { }
     }
@@ -566,7 +566,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     interp.DecideAsserts(c, asserts)
     baked mut Map<I64, eval.Image>& = Map<I64, eval.Image>()
     if clean { baked = interp.Bake(c) }
-    if clean and kind != build.Kind.Module { keepFront(l, c, cfg, keys, kept, baked) }
+    if clean and kind != build.Kind.Module { records.KeepFront(l, c, cfg, keys, kept, baked) }
     build.Phase("evaluate")
     if d.Errors() > 0 {
         # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
@@ -595,7 +595,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # O8d: early freeing is decided for a program at its root, every module's sites reading the decisions as link-time
     # constants (wholeprog 2.1) - a module compiled on its own is judged as a program of its own, so its sites are
     # written as any build writes them, but no decision of it is emitted: what it reads is the link's
-    fr := try placement(c, cfg, l.Root, kind == build.Kind.Module)
+    fr := try placement(c, cfg, l.Root, kind == build.Kind.Module, keys)
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
@@ -686,7 +686,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(u)
     }
     # (the reader records again: lowering read facts of its own)
-    if kind != build.Kind.Module { keep(l, cfg, keys, readerRecords(l, c), e.Made, objs, hashes) }
+    if kind != build.Kind.Module { keep(l, cfg, keys, records.ReaderRecords(l, c), e.Made, objs, hashes) }
     # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
     for m in l.Mods {
         if m.CUnit == "" { continue }
@@ -708,7 +708,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         sole := e.SoleUnit()
         if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if e.Library else sole)) }
     }
-    if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog, kept) }
+    if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog, kept, fr.Sc.JudgedFiles()) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
     if e.Library {
@@ -771,113 +771,6 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
 # as the module's, and the emitter neither lowers nor writes the module - it declares what of it other objects name,
 # and makes the instances the record names. OLANG_CHECKREUSE set: every reused module, and the root's object, written
 # afresh too and compared with what was reused, a difference said on the standard error and the build ending with 3
-
-# what every module's object depends on beyond the modules it reaches: this compiler (where it is, its size and when
-# it was made), the build's modes, target and constants, where it runs and where the standard library is
-fn buildInputs(cfg build.Config&, tests Bool) String {
-    exe := try os.RealPath("/proc/self/exe") catch default ""
-    info := try os.FileInfo.Stat(exe) catch os.Error { return "" }
-    cwd := try os.Cwd() catch default ""
-    t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" bench" if cfg.Bench else "") "\n" $
-            t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
-}
-
-# each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
-# paths and those of every module its imports reach, in their order, and the prelude's. The key says which record a
-# module may take; its reader record (readerRecords), which of the records under that key holds for this program
-fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>& {
-    mods Vec<mut load.Module&>& = l.Mods
-    n := mods.Len()
-    keys mut Array<String&>& = Array<String&>(n, "")     # "" for none
-    # under -debug every object's debug information names the program's compile unit, which is the root's file (B2e):
-    # there a module's object is the root's program's as well as its own
-    base := buildInputs(cfg, tests)
-    if base == "" { return keys }
-    inputs := $base $("\nroot " $mods[l.Root].Identity " " $mods[l.Root].Path if cfg.Debug else "")
-    hashOf := Array<String&>(n, "")
-    for m in range n {
-        md := mods[m]
-        parts Vec<String&>
-        parts.Push(md.Identity)
-        parts.Push(md.Path)
-        parts.Push(md.Real)
-        parts.Push(md.Src!.Text if md.Src is not null else "")
-        # E38: the files its embeds read are part of what its object is made from
-        for e in md.Embeds { parts.Push($"embed " $e " " $build.IrHash(String(l.Embedded(e)))) }
-        hashOf[m] = build.HashOf(parts)
-    }
-    for m in range n {
-        if m == l.Root { continue }
-        parts Vec<String&>
-        parts.Push(inputs)
-        parts.Push(hashOf[m])
-        for x in reached(mods, m) { parts.Push($mods[x].Identity " " $hashOf[x]) }
-        keys[m] = build.HashOf(parts)
-    }
-    return keys
-}
-
-# each module's reader record (B3i, facts.olang), "" for the root's and for none: the whole-program facts its code read
-# - the checker's and lowering's (lower.mutGlobals) - and those its imports' code read that an importer's code may carry
-# (a G42 fact baked into a global, K2), each "read VALUE NAME", sorted - asked once lowering is done
-fn readerRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
-    mods Vec<mut load.Module&>& = l.Mods
-    reads mut Array<String&>& = Array<String&>(mods.Len(), "")
-    # each module's own reads and those an importer carries, asked once each
-    own := Array<String&>(mods.Len(), "")
-    carried := Array<String&>(mods.Len(), "")
-    for x in range mods.Len() {
-        if mods[x].File < 0: continue
-        own[x] = c.P.Facts.Record(mods[x].File, true)
-        carried[x] = c.P.Facts.Record(mods[x].File, false)
-    }
-    for m in range mods.Len() {
-        if m == l.Root { continue }
-        lines Vec<String&>
-        for x in reached(mods, m) {
-            rec := own[x] if x == m else carried[x]
-            if rec != "": lines.Push(rec)
-        }
-        reads[m] = sortedLines(lines.Join("\n"))
-    }
-    return reads
-}
-
-# the modules m reaches through its imports, itself and the prelude's included, in the loader's order
-fn reached(mods Vec<mut load.Module&>&, m I64) Vec<I64> {
-    n := mods.Len()
-    seen := Array<Bool>(n)
-    order Vec<I64>
-    work Vec<I64>
-    work.Push(m)
-    for p in range n {
-        if mods[p].Prelude { work.Push(p) }
-    }
-    for work.Len() > 0 {
-        x := try work.Pop() catch { break }
-        if seen[x] { continue }
-        seen[x] = true
-        order.Push(x)
-        for im in mods[x].Imports {
-            if im.Target >= 0 and not seen[im.Target] { work.Push(im.Target) }
-        }
-    }
-    order.Sort(fn(a I64, b I64) Bool { return a < b })
-    return order
-}
-
-# text's lines sorted, each once
-fn sortedLines(text String&) String {
-    if text == "": return ""
-    lines := text.Lines().ToVec()
-    lines.Sort(fn(a String&, b String&) Bool { return a < b })
-    out Vec<String&>
-    for x in lines {
-        if out.Len() == 0 or out[out.Len() - 1] != x: out.Push(x)
-    }
-    return out.Join("\n")
-}
 
 # where module m's record is kept for this reader record: its key's first 20 hex digits and the hash of what its code
 # read naming it - each program reading the module's facts otherwise keeping a record of its own beside it - and "s"
@@ -971,183 +864,21 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
         if reads[r.Module] != "": b.Push($reads[r.Module] "\n")
         ok := true
         for k in range r.Parts.Len() {
-            if not putFile($base ".p" $k ".ll", objs[r.From + k].Ir, pid) { ok = false }
+            if not records.PutFile($base ".p" $k ".ll", objs[r.From + k].Ir, pid) { ok = false }
             b.Push($("locs " if r.Locs[k] else "part ") $hashes[r.From + k] " " $r.Parts[k] "\n")
         }
         if not ok { continue }
         b.Push("end\n")
         body := b.ToString()
-        putFile(base, $body "sum " $build.IrHash(body) "\n", pid)
+        records.PutFile(base, $body "sum " $build.IrHash(body) "\n", pid)
     }
-}
-
-# ---- the front end's records (B3i, the incremental front end) ----
-#
-# Beside a module's record of its IR, a record of what checking it found: DIR/rec/NAME.KEY.f<HASH>, under the same key
-# (its text, the texts of every module it reaches, the build's inputs) and, as the IR's record is, named by a hash of
-# the facts its checking read ("read VALUE NAME", facts.olang). It holds each of its bodies' M19g summaries (views.olang);
-# a later build whose table gives every fact read the value read takes them, and walks none of those bodies. A record
-# is written only from a program that checked cleanly, so what it gives says nothing wrong. OLANG_CHECKINCR set: every
-# body is walked all the same and each summary taken compared with the one found, a difference said on the standard
-# error and the build ending with 3
-
-fn frontStem(cfg build.Config&, identity String&, key String&) String {
-    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20] ".f"
-}
-
-# the records under each module's key, as candidates the checker takes where their reads hold (views.Kept.TakeHolding)
-fn frontRecords(l mut load.Loader&, cfg build.Config&, keys Array<String&>&, kept mut views.Kept&) {
-    names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return }
-    for m in range keys.Len() {
-        if keys[m] == "" or l.Mods[m].File < 0 { continue }
-        stem := frontStem(cfg, l.Mods[m].Identity, keys[m])
-        lead := stem[cfg.Dir.Len() + 5:]
-        for name in names {
-            if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
-            cand := try frontRecord($cfg.Dir "/rec/" $name, l.Mods[m].File) catch Stale { continue }
-            kept.Cands.Push(cand)
-        }
-    }
-}
-
-# the front record at path, for the module of file: whole (its sum the hash of what is before it) or not read at all
-fn frontRecord(path String&, file I64) views.Cand ? Stale {
-    text := try os.ReadFile(path) catch os.Error { error Stale }
-    sumAt := try text.Find("\nsum ") catch { error Stale }
-    if text[sumAt + 5:].Trim() != build.IrHash(text[:sumAt + 1]): error Stale
-    lines := text[:sumAt].Lines().ToVec()
-    if lines.Len() < 2 or lines[0] != "olang front record" or lines[lines.Len() - 1] != "end": error Stale
-    cand := views.Cand(file)
-    for i in range 1, lines.Len() - 1 {
-        line := lines[i]
-        if line.StartsWith("read ") {
-            cand.Reads.Push(line)
-        } else if line.StartsWith("body ") {
-            cand.Bodies.Push($line[5:])
-        } else if line.StartsWith("sig ") or line.StartsWith("baked ") {
-            cand.Others.Push(line)
-        } else {
-            error Stale
-        }
-    }
-    return cand
-}
-
-# the front records of the modules this build checked afresh, on a program that checked cleanly: each with the facts
-# its checking read (those its imports' code carries included, as the IR's record has them)
-fn keepFront(l mut load.Loader&, c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, kept mut views.Kept&
-    baked Map<I64, eval.Image>&) {
-    if kept.Afresh { checkOthers(l, c, kept, baked) }
-    if kept.Lines.Len() == 0 or keys.Len() == 0 { return }
-    reads := readerRecords(l, c)
-    try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
-    pid := build.Pid()
-    for m in range keys.Len() {
-        if keys[m] == "" or l.Mods[m].File < 0: continue
-        lines := try kept.Lines.Get(l.Mods[m].File) catch { continue }
-        if lines.Len() == 0: continue
-        b := StringBuilder()
-        b.Push("olang front record\n")
-        if reads[m] != "": b.Push($reads[m] "\n")
-        for x in lines { b.Push($"body " $x "\n") }
-        for x in others(l, c, m, baked) { b.Push($x "\n") }
-        b.Push("end\n")
-        body := b.ToString()
-        putFile($frontStem(cfg, l.Mods[m].Identity, keys[m]) $build.IrHash(reads[m])[:16], $body "sum " $build.IrHash(body) "\n", pid)
-    }
-}
-
-# what a module's front record keeps beside its summaries, sorted: "sig" and each of its functions of no type variable
-# with its signature (an inferred error set written out, as explain writes it, B11b), "baked" and each of its globals'
-# baked values - a
-# check of the records' keys: under OLANG_CHECKINCR a record taken must give what this program finds
-fn others(l mut load.Loader&, c mut typecheck.Checker&, m I64, baked Map<I64, eval.Image>&) Vec<String&> {
-    out Vec<String&>
-    for f in range c.P.FnCount() {
-        if c.P.FnModule(f) != m or c.P.VarCount(generic.FnOwner(f)) > 0: continue
-        line := sigLine(c, f)
-        if line != "": out.Push(line)
-    }
-    for e in baked {
-        match c.Bodies[e.Key].Of {
-            case typed.BodyOf.Global(gm, name) {
-                if gm == m: out.Push($"baked " $l.Names.Text(name) " " $imageText(l, e.Value))
-            }
-            case _ { }
-        }
-    }
-    out.Sort(fn(a String&, b String&) Bool { return a < b })
-    return out
-}
-
-# a function's signature as a record line, "" for one not checked: "sig NAME@OFFSET TYPE", with " ? ERRORS" where its set
-# is inferred - only spelled, nothing made in the type table
-fn sigLine(c mut typecheck.Checker&, f I64) String {
-    inst := c.P.FnInstance(f, types.ListId(0))
-    body := c.BodyOfInstance(inst)
-    if body < 0: return ""
-    sig := c.P.InstanceSig(inst)
-    b := StringBuilder()
-    b.Push($"sig " $c.P.L.Names.Text(c.P.FnDecl(f).Name) "@" $c.Bodies[body].Sp.Start " " $c.Ty(sig))
-    if c.InfersErrors(sig) {
-        b.Push(" ?")
-        for e in c.P.T.Items(c.ErrorsOf(body)) { b.Push($" " $c.Ty(e)) }
-    }
-    return b.ToString().Replace("\n", " ")
-}
-
-# a baked global's value as words: each blob's bytes in hex, its alignment, whether constant, and each reference it
-# holds - to a blob of its own or into another global's (by that global's module and name)
-fn imageText(l load.Loader&, img eval.Image&) String {
-    b := StringBuilder()
-    for bl in img.Blobs {
-        b.Push($"[" $bl.Align $("c" if bl.Constant else "") " ")
-        for x in bl.Bytes { b.Push(hexByte(x)) }
-        for i in range bl.At.Len() {
-            b.Push($" @" $bl.At[i] ">" $bl.To[i] "+" $bl.Off[i])
-            if bl.To[i] < 0 and i < bl.ExtMod.Len() and bl.ExtMod[i] >= 0 {
-                b.Push($":" $l.Mods[bl.ExtMod[i]].Identity "." $l.Names.Text(bl.ExtName[i]) "#" $bl.ExtIdx[i])
-            }
-        }
-        b.Push("]")
-    }
-    if img.Mutable: b.Push(" mutable")
-    return b.ToString()
-}
-
-fn hexByte(x U8) String {
-    digits := "0123456789abcdef"
-    return $digits[I64(x >> 4):I64(x >> 4) + 1] $digits[I64(x & 15):I64(x & 15) + 1]
-}
-
-# OLANG_CHECKINCR: each record taken against this program's signatures and baked values for its module
-fn checkOthers(l mut load.Loader&, c mut typecheck.Checker&, kept mut views.Kept&, baked Map<I64, eval.Image>&) {
-    for m in range l.Mods.Len() {
-        ci := try kept.Files.Get(l.Mods[m].File) catch { continue }
-        had := kept.Cands[ci].Others
-        now := others(l, c, m, baked)
-        if had.Join("\n") == now.Join("\n"): continue
-        for x in now {
-            if x not in had: kept.Stale.Push($l.Mods[m].Identity ": found '" $x "', not in its record")
-        }
-        for x in had {
-            if x not in now: kept.Stale.Push($l.Mods[m].Identity ": its record says '" $x "', not found")
-        }
-    }
-    if kept.Stale.Len() > 0 { checkIncrFailed(kept) }
-}
-
-# OLANG_CHECKINCR found a record giving what checking afresh does not: each difference said, the build ending with 3
-fn checkIncrFailed(kept views.Kept&) {
-    for x in kept.Stale { try io.PrintErr($"olang: incremental check: " $x "\n") catch io.Error { } }
-    try io.PrintErr($"olang: incremental check: " $kept.Stale.Len() " of " $kept.Taken " kept summaries differ\n") catch io.Error { }
-    os.Exit(3)
 }
 
 # OLANG_FACTSTATS: what the program decided and its modules read (facts.olang), and which modules were reused and which
 # written again (a module with no code of its own is neither), and each object, a line each on the standard error - what
 # the incremental build's checks compare
-fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Array<String&>&, prog build.Program&, kept views.Kept&) {
+fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Array<String&>&, prog build.Program&, kept views.Kept&
+    scoped Map<I64, Bool>&) {
     made Map<I64, Bool>
     for r in e.Made { made.Put(r.Module, true) }
     b := StringBuilder()
@@ -1158,21 +889,11 @@ fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Arr
         if what != "": b.Push($"olang: " $what $l.Mods[m].Identity "\n")
         if kept.Files.Has(l.Mods[m].File): b.Push($"olang: front kept " $l.Mods[m].Identity "\n")
         if kept.Lines.Has(l.Mods[m].File): b.Push($"olang: front checked " $l.Mods[m].Identity "\n")
+        if scoped.Has(l.Mods[m].File): b.Push($"olang: scope judged " $l.Mods[m].Identity "\n")
     }
     # each object by its IR's hash: equal objects have equal names (B3j)
     for u in prog.Units { b.Push($"olang: unit " $u.Identity " " $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) "\n") }
     try io.PrintErr(b.ToString()) catch io.Error { }
-}
-
-# text written at path by way of a temporary renamed into place: whether it is there
-fn putFile(path String&, text String&, pid I32) Bool {
-    tmp := $path "." $pid ".tmp"
-    try os.WriteFile(tmp, text) catch os.Error { return false }
-    try os.Rename(tmp, path) catch os.Error {
-        try os.Remove(tmp) catch os.Error { }
-        return false
-    }
-    return true
 }
 
 # how many units the program's C files (X20) add after its objects
@@ -1220,6 +941,7 @@ fn inferStats(sc mut scope.Scoper&) {
     b.Push($"olang: " $sc.VerStats() "\n")
     b.Push($"olang: field rounds " $sc.FieldRounds ", components reused " $sc.Reused " of " $sc.Components() " a round, lone bodies judged again " $sc.Redone "\n")
     b.Push($"olang: " $sc.TwinStats() "\n")
+    b.Push($"olang: records: " $sc.DiskStats() "\n")
     for f in sc.PromotedFields() { b.Push($"olang: promoted " $f "\n") }
     for f in sc.Unplaced { b.Push($"olang: unplaced " $f "\n") }
     if to[0] != '/' {
@@ -1279,16 +1001,37 @@ fn apartModules(l load.Loader&, cfg build.Config&, out mut Map<I64, Bool>&) {
     }
 }
 
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false) mut free.Free& ? build.Failed {
-    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
-    # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
-    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
-    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
-    sc.Trace = (try os.Env("OLANG_INFERDUMP") catch default "") != ""
-    sc.ReuseCheck = (try os.Env("OLANG_SCOPECHECK") catch default "") != ""
-    sc.NoReuse = (try os.Env("OLANG_NOREUSE") catch default "") != ""
-    if not alone { apartModules(c.P.L, cfg, sc.Apart) }
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false
+    keys Array<String&>& = Array<String&>(0)) mut free.Free& ? build.Failed {
+    sc mut scope.Scoper& = scoper(c, cfg, alone)
+    # B3i (W3b): the judgings records of earlier builds give, under each module's key - not for -memory, which lists
+    # what every judging placed
+    rec := keys.Len() > 0 and not cfg.Memory and (try os.Env("OLANG_NOSCOPEREC") catch default "") == ""
+    loaded Map<I64, String&>
+    if rec { loaded = records.ScopeRecords(c, cfg, keys, sc) }
+    build.Phase("scope records read")
+    marks := sc.FieldMarks()
+    mark := c.P.L.Diags.Count()
     sc.Run()
+    if sc.Restart {
+        # a component a record gave had to be judged again: the judging starts over, without records, from the marks
+        # the checker left
+        c.P.L.Diags.Forget(mark)
+        sc.SetFieldMarks(marks)
+        if sc.Trace or (try os.Env("OLANG_SCOPESTATS") catch default "") != "" {
+            for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
+        }
+        taken := sc.DiskTaken
+        sc = scoper(c, cfg, alone)
+        sc.DiskWrite = rec
+        sc.Restarts = 1
+        sc.DiskTaken = taken
+        sc.Run()
+    }
+    build.Phase("scope judged")
+    if sc.DiskAfresh { scopeAfresh(c, cfg, alone, sc, marks, mark) }
+    if rec and c.P.L.Diags.Errors() == 0 and sc.Gaps.Len() == 0 { records.KeepScope(c, cfg, keys, sc, loaded) }
+    build.Phase("scope records")
     # B3i, W4: a module compiled on its own into the object store is precompiled for the programs that use the store
     if alone and sc.Gaps.Len() == 0 { markApart(c.P.L, cfg) }
     # a construct section 8 does not judge yet: never built as though it were judged, as the checker's gaps are not
@@ -1305,6 +1048,43 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     fr.Alone = alone
     fr.Decide(sc.Plans, root)
     return fr
+}
+
+# OLANG_CHECKINCR (T4): the scope pass that took judgings from records against the same pass made without them, from
+# the marks the checker left - every plan, summary, mark and diagnostic the same, else each difference upTo on the
+# standard error and the build ending with 3. What the second pass upTo is forgotten, and the first's marks stand
+fn scopeAfresh(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool, sc mut scope.Scoper&, marks Vec<typed.Mark>&, mark I64) {
+    final := sc.FieldMarks()
+    upTo := c.P.L.Diags.Count()
+    first := c.P.L.Diags.Since(mark)
+    sc.SetFieldMarks(marks)
+    ref mut scope.Scoper& = scoper(c, cfg, alone)
+    ref.Run()
+    diffs := sc.Compare(ref)
+    if not first.Same(c.P.L.Diags.Since(upTo)) { diffs.Push("scope: the diagnostics differ") }
+    if ref.FieldMarks() != final { diffs.Push("scope: the field inference's marks differ") }
+    c.P.L.Diags.Forget(upTo)
+    sc.SetFieldMarks(final)
+    if diffs.Len() == 0 {
+        try io.PrintErr($"olang: incremental check: scope, " $sc.DiskTaken " judgings taken from records, every one the same\n") catch io.Error { }
+        return
+    }
+    for x in diffs { try io.PrintErr($"olang: incremental check: " $x "\n") catch io.Error { } }
+    try io.PrintErr($"olang: incremental check: the scope pass with records differs from it without them\n") catch io.Error { }
+    os.Exit(3)
+}
+
+# the scope pass over a checked program, its notes naming types and instantiations as the checker spells them (B11, G16b)
+fn scoper(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool) mut scope.Scoper& {
+    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
+    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
+    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
+    sc.Trace = (try os.Env("OLANG_INFERDUMP") catch default "") != ""
+    sc.ReuseCheck = (try os.Env("OLANG_SCOPECHECK") catch default "") != ""
+    sc.NoReuse = (try os.Env("OLANG_NOREUSE") catch default "") != ""
+    sc.Debug = try os.Env("OLANG_SCOPEDEBUG") catch default ""
+    if not alone { apartModules(c.P.L, cfg, sc.Apart) }
+    return sc
 }
 
 fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&) mut load.Loader& ? build.Failed {
