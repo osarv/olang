@@ -2228,13 +2228,13 @@ f84d4e3df19cccaf db66a83c73ef5b7a compiler/mcp.olang
 29ea3ae3f2958238 577061926a1ab42a compiler/msgs.olang
 59f5f54bcf770981 5ebc0b0885293463 compiler/names.olang
 fffba02702d708ba 94c889e2514b85ce compiler/needs.olang
-cb47116b9e868c8b ffcd7a26ecdc82cb compiler/olang.olang
+f7f45b2590110bc9 af27e0ea81d4b8f8 compiler/olang.olang
 f54f917733dc2869 7212eff2a21e8595 compiler/parse.olang
 10f9bb5b20744b5f d7e6f720d606e42a compiler/profile.olang
 49745b9b20cffd77 2d08391c316bd0bf compiler/records.olang
 cd6dc04fc51a289c b9ae6c193e932c8d compiler/runtime.olang
 1cd1dca247f6cfbd d236a0d4563f5d62 compiler/scan.olang
-35e6e980cda8c894 e38e7ef583055e1c compiler/scope.olang
+2668793014c23960 9b989f63dda94e65 compiler/scope.olang
 7add16c07c1b6f49 7b664940105506a7 compiler/session.olang
 a846754911a07a9e a10b92acabcbf1b6 compiler/source.olang
 dc92112e41e19da5 e31c7d608aaf7a68 compiler/target.olang
