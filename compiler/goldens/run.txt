@@ -437,6 +437,14 @@
 | ok - DList.churn: a node in use across the call letting go of it keeps its value
 | ok - Node: a cycle of owning links is kept until its scope closes
 | ok - Res: a generational type with a destructor is kept, its destructor run once as its scope closes
+=== test tests/reclaimarrays.olang
+| status 0
+| ok - PushBack: removed nodes' arrays reused by new nodes, every node's read back
+| ok - Tag: a key viewed across its removal in the body keeps its text, the site comparing it
+| ok - PopFront: a removed node's key viewed across its removal keeps its text
+| ok - KList.popAndRead: a callee removing a node reads the key it was handed
+| ok - KNode: a node's Vec grown after it was made keeps what it grew
+| ok - KList: a weak place to a removed node reads null, its slot's next node its own arrays
 === test tests/reclaimtasks.olang
 | status 0
 | ok - churned: lists churned on several threads at once keep their nodes, their weak places reading null once let go
@@ -2723,6 +2731,8 @@
 === run o8dviewctorarray.olang
 | status 0
 | 2015890 1999-name 1999
+=== run o8earrays.olang
+| status 0
 === run o8edlist.olang
 | status 0
 === run o8elru.olang
