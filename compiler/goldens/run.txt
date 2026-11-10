@@ -2565,6 +2565,10 @@
 | status 0
 === run o23adepth.olang
 | status 0
+=== run o23aliasmethod.olang
+| status 0
+=== run o23aliaswrite.olang
+| status 0
 === run o23awrite.olang
 | status 0
 === run o23paramfield.olang

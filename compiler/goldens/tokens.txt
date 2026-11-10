@@ -921,8 +921,8 @@ d7ced6f745aa3e5b fbabdd57786891b9 checks/cases/o20storedrefoutlived.olang
 55bdcc18287a2f09 59ed0162b15c738c checks/cases/o20valuefield.olang
 e5af1040eab33790 539605c4d23c510f checks/cases/o23abuild.olang
 44f61099bb894308 090cae4027456048 checks/cases/o23adepth.olang
-d3cc94c6101ad27f e5505e37ceadd640 checks/cases/o23aliasmethod.olang
-51a0e232a0d96f32 72e5cf29517fdab9 checks/cases/o23aliaswrite.olang
+c8310d0202f90f4a 725508f96016b54b checks/cases/o23aliasmethod.olang
+88367f665917bc81 7ea379dbff7059fe checks/cases/o23aliaswrite.olang
 32a51df9d05ca063 160c18b06ddc0d12 checks/cases/o23awrite.olang
 21d305396206a5fc 67f384abf80da478 checks/cases/o23paramfield.olang
 240dd7ffd096b47e b1b23cd32e35e4e3 checks/cases/o25abare.olang
@@ -930,7 +930,7 @@ f2041338ed319511 2d7704f3bbd0bc5e checks/cases/o25atypevar.olang
 64d650d52bb2b700 c9ad3289047c8d81 checks/cases/o25carrayelem.olang
 eb3abd5f83c5d5f1 cd16ad9650242cb1 checks/cases/o25derived.olang
 a86650f700944345 0a6abcaf5a2e1901 checks/cases/o25enote.olang
-ce32fd829e8447ec 2218b8636b9849a5 checks/cases/o25gfieldbinding.olang
+72de5dda1745f39a 0b79883268ec1faf checks/cases/o25gfieldbinding.olang
 400321f94cfd34eb 5d83f48cf4ad777a checks/cases/o25gfieldreassign.olang
 8a419c1276ed0650 7a2ec339a7b5c819 checks/cases/o25gfieldreassigndtor.olang
 a08d24f4bcb5316a 4606160d7b3f8ff3 checks/cases/o25harrayreturn.olang
@@ -1896,7 +1896,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 244020b30fdf2de1 0f06288b2bb8f361 checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-6afec79b63d8bfb1 3918f71104ccb2b9 checks/checks.olang
+8d535fb13fb39528 0604a0dcb0fe934c checks/checks.olang
 a9e28b3dd92156ad ab5a1081715b6588 checks/fixtures/agree/agree.olang
 93a0581f17cca83e 1f1000aa84a5a1d5 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang
@@ -1976,6 +1976,8 @@ e4fe04a787b15a44 57dab8374bfc6260 checks/fixtures/embed/app.olang
 de1ba308ee01c692 0920f7f0d746f430 checks/fixtures/embed/leaks.olang
 3d7feeb0fc83daf2 ab3747b075ddc69e checks/fixtures/embed/lib.olang
 3c046fc8889cf925 da6a49eadf5a32f0 checks/fixtures/enumwords/enumwords.olang
+ca22e82c01b522fe 92105c43abcc108c checks/fixtures/fieldset/lib.olang
+1a88d87c80d91c92 0cfa80106607cf6d checks/fixtures/fieldset/main.olang
 0fd75a3b5ed8b121 ef13bb1c53723e1d checks/fixtures/fix/bag.olang
 60f3fd29b7c0ec25 a593aa1ed5ea4c9f checks/fixtures/fix/before1107.olang
 95c4d5555edc3952 00128457cb89b58b checks/fixtures/fix/before25.olang
@@ -1996,7 +1998,7 @@ a4c476fee6a07b2c c4ca9cab35e21cd3 checks/fixtures/generators/views.olang
 874d57cf483ad610 51fc87e57a5d715a checks/fixtures/http/server.olang
 c18db4183da48dc4 92c354f2dcf6ec18 checks/fixtures/incremental/deep.olang
 4accb5f85606649c a7324ef34639de3b checks/fixtures/incremental/gen.olang
-d0882a4ae29f1c12 c1930bcd2ec2bd0e checks/fixtures/incremental/lib.olang
+d1eb7b494782ce1d 48090cc90f6685f6 checks/fixtures/incremental/lib.olang
 c2bb7b360c22b78e 67013dfff7f3200b checks/fixtures/incremental/main.olang
 db7ae913d7d108c2 e7edcd35e379bd5f checks/fixtures/inferfield/a.olang
 aa98e0467ad1a7ef 3c2db434ce7bf69c checks/fixtures/inferfield/b.olang
@@ -2204,15 +2206,15 @@ b594314c49482270 03a8ddac32ae99b6 compiler/load.olang
 4bf5c2f2040f09aa db319890a0efccbf compiler/lsp.olang
 eeca1c6fa960bb90 2ab590653e85a58b compiler/mcp.olang
 bf8fd7184d10d265 b030e84c87515d54 compiler/mir.olang
-1eb143fc674f8b3d 629db4473909baef compiler/msgs.olang
+9bc30a0b32b85870 27c51d1296388cb9 compiler/msgs.olang
 59f5f54bcf770981 5ebc0b0885293463 compiler/names.olang
 fffba02702d708ba 94c889e2514b85ce compiler/needs.olang
-d99ef647e0edae45 659beb2b7d25f003 compiler/olang.olang
+5b413b941f6659c7 68cc9db3382655fc compiler/olang.olang
 6948a774c3e03d0a 0f6305671f1009cf compiler/parse.olang
 10f9bb5b20744b5f d7e6f720d606e42a compiler/profile.olang
 cd6dc04fc51a289c b9ae6c193e932c8d compiler/runtime.olang
 1cd1dca247f6cfbd d236a0d4563f5d62 compiler/scan.olang
-a2e0b17239bf2895 77b0fe4ade67185a compiler/scope.olang
+a1b197473f6d3bcc 4a014a19d07bd89b compiler/scope.olang
 914c88f1a308b0fc 5498c4288cff46a0 compiler/session.olang
 a846754911a07a9e a10b92acabcbf1b6 compiler/source.olang
 dc92112e41e19da5 e31c7d608aaf7a68 compiler/target.olang
@@ -2290,7 +2292,7 @@ d9cdc7db47faa601 e2ed6a548f907e29 docs/values-study/findings/lastuse.olang
 2252a3500ae3ce18 8ada73d461e254e9 docs/values-study/settle/refs.olang
 c6e91cb5b420e7e4 d1bd3322a4df816a docs/values-study/settle/vals.olang
 f2bbc73f9f9154db 614fb5e8ae9733d3 docs/values-study/split/split.olang
-2fc8f3e693a203c4 9ac34b2bd915732a fuzz/editgen.olang
+5830a9709b8e70d0 4b8065c3aab50c93 fuzz/editgen.olang
 192433f3cff898ae 0edce550ccb6275c fuzz/fuzz.olang
 44099bb2c50f10e5 bdde2ec3b948f38f fuzz/gen.olang
 98268a56f6fe3c77 fed36841ad906999 fuzz/repro/bf16bitcastfold.olang

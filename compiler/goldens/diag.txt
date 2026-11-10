@@ -3332,22 +3332,6 @@ o20storedrefoutlived.olang:19:9: error[O20]: the container outlives what this re
    19 |     b.n = r
       |         ^
 compilation failed with 1 error
-=== o23aliasmethod.olang
-o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
-   17 |         arr[0].Set(x)
-      |                ^~~
-o23aliasmethod.olang:9:33: note: the callee requires it because of this statement
-    9 | fn (c mut Cur&) Set(x mut N&) { c.at = x }
-      |                                 ^
-compilation failed with 1 error
-=== o23aliaswrite.olang
-o23aliaswrite.olang:24:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
-   24 |     assert $keep != ""
-      |             ^~~~
-o23aliaswrite.olang:22:9: note: 'keep' is given a value here
-   22 |         keep = c.at
-      |         ^~~~~~~~~~~
-compilation failed with 1 error
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
     9 |     t := V(1) + V(2)
