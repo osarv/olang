@@ -1323,6 +1323,15 @@ where it pays"; "written where relied on, inferred on implementations; a call th
     `any`'s slots carry them. `olang api` reads a trait method's changed line as breaking, a word added or taken off
     alike (a type's method may no longer fit; a call may have relied on it).
 
+**As built (2026-11-10, wt-f12).** As designed, with these details: an instance argument made by a call not judged
+yet (a lazy walk's receiver made by the walk before it) asks for that call's twin first (`earlyTwin`), the call then
+routed to it once, so `xs.Iter().SkipWhile(p).TakeWhile(q)` is followed whole; a temporary read whole and a held
+local's initializer carry their instance; reading through an instance's reference is no boundary; a call's result
+instance reaching a boundary is judged by its fields' types, a constructor's call by its arguments as before (so its
+errors read as before). compiler/'s IR is byte-identical (no call in it through a fixed field holds more than its
+type says); scopefuzz (seed 7, 300 programs) found nothing. The effects pass's assignment scan runs where a function
+field is first read; `explain -caps compiler/olang.olang` is unchanged in output and time.
+
 ### The checklist, per round
 
 1 spec first (above); 2 the passes named; 3 the evaluator - `interpret` follows twins' plans (round 7), builds found
