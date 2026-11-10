@@ -2223,8 +2223,8 @@ ed72a0f6f9cecf75 64bf5165a48defde compiler/interp.olang
 92f3aed793830781 91816f49812e0ca6 compiler/listing.olang
 b594314c49482270 178e4b14f4a6f4c3 compiler/load.olang
 17ecd98044804d22 9961f2821f777cb7 compiler/lower.olang
-f7df527aa13f036e 670a4c18fc827cb6 compiler/lsp.olang
-f84d4e3df19cccaf 660736b179e9ea80 compiler/mcp.olang
+4a9dc118e6b8f901 8032d2f494150b95 compiler/lsp.olang
+f470d9f8bf5653a6 f7b72ffb351d5a8e compiler/mcp.olang
 c7369678807e08fb d27c7cbff63f64f9 compiler/mir.olang
 29ea3ae3f2958238 3f9478d6eb2c7aab compiler/msgs.olang
 59f5f54bcf770981 82b68291274b3324 compiler/names.olang
@@ -2276,7 +2276,7 @@ d19ca4c6f3ef58cd a168df0c0c02ad56 compiler/tools/namesdiff.olang
 3eeaef21e68f3823 32fe7ce6f8de60bc compiler/tools/seed.olang
 5f8e74923332b3f9 3daf7f4ba96547cd compiler/tools/tokdiff.olang
 0bfae04e3fc7eb91 0d1f554dfe82d263 compiler/tools/toolkit.olang
-a0d1557b16d8386d 620d045671b4394e compiler/typed.olang
+61316112f2b81edc fccbd12ceb4c120e compiler/typed.olang
 9cfd616d31aec960 dd56890d9dde9c99 compiler/types.olang
 f4488f5769771ce0 2b14703c813d38a4 compiler/unparse.olang
 f052724f1625853b c662f25486acf87f compiler/views.olang
