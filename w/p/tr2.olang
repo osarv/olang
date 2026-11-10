@@ -1,0 +1,12 @@
+type Shape trait {
+    Area() F64 noalloc
+}
+type Sq struct(s F64) { s }
+fn (q Sq&) Area() F64 {
+    t := $q.s
+    return F64(t.Len())
+}
+fn total(x any Shape&) F64 { return x.Area() }
+fn main() {
+    assert total(Sq(2.0)) == 3.0
+}

@@ -1,0 +1,12 @@
+# F12 progress (untracked)
+- [x] design note appended (docs/fnvalues.md round 12 "As designed")
+- [x] (b) parse: trait sig words; generic: AnySlots sig shifted promises; types ShiftPromises; trait decl misuse errors
+- [x] (b) effects: Dispatch bound; tables held
+- [x] (b) scope: Dispatch discharges bound; anyTables by bound
+- [x] (a) effects field slots
+- [x] (a) scope instance records, twins by instance
+- [ ] tests, SPEC, settled, HISTORY, DEPENDENTS, goldens, verify
+- committed: design, T30c, T22d effects, T22d scope (+earlyTwin, temps), docs
+- uncommitted: scope ctorCall fix in bndExpr (non-ctor call results judged by bndInst)
+- running: IR compare (scratchpad irA old / irB new), scopefuzz SEED=7 COUNT=300 (w/scopefuzz.log)
+- next: rebuild, rungold/diaggold, make quick-ish, scopesan, full verify via /home/user/vlock make verify

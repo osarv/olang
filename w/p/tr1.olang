@@ -1,0 +1,19 @@
+type Shape trait {
+    Area() F64 noalloc pure
+    Grow(by F64) noblock
+}
+
+type Sq struct(s F64) { s }
+fn (q Sq&) Area() F64 { return q.s * q.s }
+fn (q Sq&) Grow(by F64) { }
+
+fn total(xs Array<any Shape&>&) F64 {
+    t := 0.0
+    for x in xs { t += x.Area() }
+    return t
+}
+
+fn main() {
+    a := Sq(2.0)
+    assert total(Array<any Shape&>[a]) == 4.0
+}

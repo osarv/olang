@@ -1,0 +1,11 @@
+import heap "std/heap"
+
+fn top(xs Array<I64>&) I64 {
+    h := heap.Heap<I64>(fn(a I64, b I64) Bool { return a < b })
+    for x in xs { h.Push(x) }
+    return try h.Pop() catch default 0
+}
+
+fn main() {
+    assert top(Array<I64>[3, 1, 2]) == 1
+}

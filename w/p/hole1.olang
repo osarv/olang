@@ -1,0 +1,15 @@
+type N struct(v I64) { v }
+
+fn hold(all mut Vec<TakeWhileIter<ArrayIter<N&>, N&>>&, xs Array<N&>&, kept mut Vec<N&>&) {
+    all.Push(xs.Iter().TakeWhile(fn(x) {
+        kept.Push(x)
+        return true
+    }))
+}
+
+fn main() {
+    all Vec<TakeWhileIter<ArrayIter<N&>, N&>>
+    kept Vec<N&>
+    a := Array<N&>[N(1)]
+    hold(all, a, kept)
+}

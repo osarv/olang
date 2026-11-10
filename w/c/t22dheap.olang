@@ -1,0 +1,34 @@
+# check: run
+# flags: -debug -sanitize
+# T22d: a Heap's ordering keeps what it compares in a Vec it captured - fixed in Heap's field "less", followed with the
+# Heap into Push and Pop: read back after storage was made and let go many times
+import heap "std/heap"
+
+type N struct(v I64) { v }
+
+fn smallest(seen mut Vec<N&>&) I64 {
+    h := heap.Heap<N&>(fn(a N&, b N&) Bool {
+        seen.Push(a)
+        return a.v < b.v
+    })
+    for i in range 5 { h.Push(N(9 - i)) }
+    m := try h.Pop() catch default N(-1)
+    return m.v
+}
+
+fn churn(n I64) I64 {
+    t := 0
+    for i in range n {
+        v := Vec<N>()
+        for j in range 16 { v.Push(N(i * j)) }
+        t += v[15].v
+    }
+    return t
+}
+
+fn main() {
+    seen Vec<N&>
+    assert smallest(seen) == 5
+    churn(100)
+    assert seen.Len() > 0 and seen[0].v >= 5
+}

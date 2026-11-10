@@ -1,0 +1,20 @@
+fn count(n I64) Iterator<I64> {
+    for i in range n { yield i }
+}
+
+fn total() I64 {
+    t I64 = 0
+    for x in count(5) { t += x }
+    return t
+}
+
+fn lazy(xs Array<I64>&) I64 {
+    t I64 = 0
+    for x in xs.Iter().TakeWhile(fn(x) { return x < 3 }) { t += x }
+    return t
+}
+
+fn main() {
+    assert total() == 10
+    assert lazy(Array<I64>[1, 2, 3, 4]) == 3
+}

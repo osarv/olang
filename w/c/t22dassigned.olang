@@ -1,0 +1,19 @@
+# check: fail error[T22b]: this lambda keeps 'x' in what it captured
+# T22d: a field some body assigns after construction is no fixed field - what it holds is judged by its type where it
+# is given, as before
+type N struct(v I64) { v }
+type Holder struct(f fn&(x N&)) { f }
+
+fn (h mut Holder&) Reset() { h.f = fn(x N&) { } }
+fn (h Holder&) Call(x N&) { h.f(x) }
+
+fn use(kept mut Vec<N&>&) {
+    h := Holder(fn(x N&) { kept.Push(x) })
+    h.Call(N(1))
+    h.Reset()
+}
+
+fn main() {
+    kept Vec<N&>
+    use(kept)
+}

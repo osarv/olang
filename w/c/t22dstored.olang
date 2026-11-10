@@ -1,0 +1,16 @@
+# check: fail error[T22b]: this lambda keeps 'x' in what it captured, and the function type of this store says nothing of that - write 'keeps x' after its signature
+# T22d, T22a: an instance whose fixed field holds a keeping lambda, stored into a Vec's elements - a boundary, where the
+# field's type is all a later call through it is judged by
+type N struct(v I64) { v }
+type Holder struct(f fn&(x N&)) { f }
+
+fn hold(all mut Vec<Holder>&, kept mut Vec<N&>&) {
+    h := Holder(fn(x N&) { kept.Push(x) })
+    all.Push(h)
+}
+
+fn main() {
+    all Vec<Holder>
+    kept Vec<N&>
+    hold(all, kept)
+}
