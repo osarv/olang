@@ -3525,6 +3525,14 @@ preludename.olang:2:6: error[D3a]: 'ParseError' is a built-in type's name - choo
     2 | type ParseError struct(x I32) { x }
       |      ^~~~~~~~~~
 compilation failed with 1 error
+=== preludeprint.olang
+preludeprint.olang:6:4: error[D3a]: 'print' is the prelude's function, reached bare in every module - choose another name
+    6 | fn print(t String&) { }
+      |    ^~~~~
+preludeprint.olang:8:5: error[D3a]: 'println' is the prelude's function, reached bare in every module - choose another name
+    8 |     println := 1
+      |     ^~~~~~~
+compilation failed with 2 errors
 === protobothstr.olang
 protobothstr.olang:6:10: error[M6b]: K declares Str twice, public and private - keep one: Str, or str for its own module only
     6 | fn (k K) Str() String { return "a" }
