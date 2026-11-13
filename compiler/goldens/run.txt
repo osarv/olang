@@ -2588,6 +2588,12 @@
 | status 0
 === run o23aliaswrite.olang
 | status 0
+=== run o23areassignedparam.olang
+| status 0
+| 20 2190 0
+=== run o23areassignedvalue.olang
+| status 0
+| 119 190
 === run o23awrite.olang
 | status 0
 === run o23paramfield.olang
@@ -3034,6 +3040,11 @@
 | status 0
 === run s1bparallel.olang
 | status 0
+=== run s20renderframe.olang
+| status 0
+| w1 2 Array<I64>[1, 1]
+| w2 2 Array<I64>[2, 2]
+| w3 2 Array<I64>[3, 3]
 === run s20walkheldref.olang
 | status 0
 | let go
@@ -3437,6 +3448,12 @@
 | status 0
 | 3 63 0
 === run t22ccapturefound.olang
+| status 0
+| 3 63 6
+=== run t22cstoredcapture.olang
+| status 0
+| 3 63 6
+=== run t22cstoredlambda.olang
 | status 0
 | 3 63 6
 === run t22dchain.olang
