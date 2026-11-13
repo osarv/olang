@@ -19,7 +19,7 @@ fn name(n I64) String {
 }
 
 fn main() ? io.Error {
-    try io.Println("fixed " $id(7))
+    try io.PutLine("fixed " $id(7))
     r := try half(8) catch Bad default 0
-    try io.Println($r " " $name(r))
+    try io.PutLine($r " " $name(r))
 }

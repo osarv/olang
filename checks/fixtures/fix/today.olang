@@ -10,5 +10,5 @@ fn make<C>() C {
 
 fn main() {
     s := make<set.Set<I64>>()
-    io.Println($bag.Bag[bag.Bag(2), bag.Bag(3)] " " $s.Len())!
+    io.PutLine($bag.Bag[bag.Bag(2), bag.Bag(3)] " " $s.Len())!
 }

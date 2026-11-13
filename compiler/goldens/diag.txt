@@ -237,8 +237,8 @@ b11near.olang:22:22: error[M19]: Box has no method 'Aera' - did you mean 'Area'?
 b11near.olang:23:16: error[T17]: Shape has no case 'Cricle' - did you mean 'Circle'?
    23 |     s := Shape.Cricle
       |                ^~~~~~
-b11near.olang:24:12: error[M9]: module std/io declares no 'Prinln' - did you mean 'Println'?
-   24 |     try io.Prinln($n $s)
+b11near.olang:24:12: error[M9]: module std/io declares no 'PutLin' - did you mean 'PutLine'?
+   24 |     try io.PutLin($n $s)
       |            ^~~~~~
 compilation failed with 6 errors
 === b11unknownonce.olang
@@ -3554,11 +3554,11 @@ preludename.olang:2:6: error[D3a]: 'ParseError' is a built-in type's name - choo
       |      ^~~~~~~~~~
 compilation failed with 1 error
 === preludeprint.olang
-preludeprint.olang:6:4: error[D3a]: 'print' is the prelude's function, reached bare in every module - choose another name
-    6 | fn print(t String&) { }
+preludeprint.olang:6:4: error[D3a]: 'Print' is the prelude's function, reached bare in every module - choose another name
+    6 | fn Print(t String&) { }
       |    ^~~~~
-preludeprint.olang:8:5: error[D3a]: 'println' is the prelude's function, reached bare in every module - choose another name
-    8 |     println := 1
+preludeprint.olang:8:5: error[D3a]: 'Println' is the prelude's function, reached bare in every module - choose another name
+    8 |     Println := 1
       |     ^~~~~~~
 compilation failed with 2 errors
 === protobothstr.olang
@@ -5404,7 +5404,7 @@ compilation failed with 1 error
 t22bnoalloc.olang:9:16: error[T22b]: this lambda may allocate, and 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc' - give a function that does not, or hold it as a type without 'noalloc'
     9 |     k := Apply(fn(x I64) I64 {
       |                ^~~~~~~~~~~~~~~
-t22bnoalloc.olang:10:9: note: its call of 'Println' may allocate
+t22bnoalloc.olang:10:9: note: its call of 'PutLine' may allocate
    10 |         try io.PutLine($x) catch { }
       |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error

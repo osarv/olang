@@ -901,12 +901,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   scope closes, so a stale view reads old elements, never freed memory. `View()`/`ViewMut()` give the elements as an
   array. **M19g**: using a view or Ref after the same Vec may have grown is a compile-time error where the compiler
   sees the same Vec on both sides. Array and Vec stay two types (QCV, the user's "Yeah, okay, keep them" 2026-11-06).
-- **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
-  `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
+- **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Put`, `io.PutLine(t = "")`,
+  `io.PutErr`, `io.PutErrLine` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
   Place.Here) T` (QBP 4) writes `FILE:LINE:COLUMN: $v` to the standard error and gives `v` back. `io.Writer` buffers
   (errors at `Flush`); `io.Lines` reads lines. **`Print(x)` and `Println(x = "")` (M19d, the user's "make the language
   as easy to use as python", 2026-11-13; capitalized 2026-11-13, "no carveout for them")**: the prelude's two exported functions reached bare, any value as `$x` renders it, no
-  `try` - a failed write ends the program as `!` does, reported at the caller's place (`at Place = Place.Here`; in a test, fails it); reserved by D3a. **std/io's printing functions renamed (M19f, mine 2026-11-13, for the user's no-carveout and no-shadowing rules - D3a would reject `io.Print` beside the prelude's `Print`)**: `io.Put`, `io.PutLine`, `io.PutErr`, `io.PutErrLine`, same signatures, still `? io.Error` (`io.Write`, the coordinator's first choice, is the raw `Write(fd, data)`); tools/io_rename migrates.
+  `try` - a failed write ends the program as `!` does, reported at the caller's place (`at Place = Place.Here`; in a test, fails it); reserved by D3a. **std/io's printing functions renamed (M19f, mine 2026-11-13, for the user's no-carveout and no-shadowing rules - D3a would reject `io.Put` beside the prelude's `Print`)**: `io.Put`, `io.PutLine`, `io.PutErr`, `io.PutErrLine`, same signatures, still `? io.Error` (`io.Write`, the coordinator's first choice, is the raw `Write(fd, data)`); tools/io_rename migrates.
 - **Libraries:** `std/os`, `std/json` (immutable recursive enum tree), `std/http` (over curl), `std/csv`, `std/stats`,
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi), `std/sync` (`Mutex<T>` reached
   only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/net` (blocking TCP and UDP), `std/set`, `std/deque`, `std/pool` (a slotmap of generational handles: `Add`, `try p.Get(h)`/`Ref`/`RefMut`/`Remove` failing with `pool.Error.Stale`; the user 2026-11-08),

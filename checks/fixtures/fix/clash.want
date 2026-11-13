@@ -7,5 +7,5 @@ type Col enum String { Red, Blue }
 fn Col.RedCol() Col { return Col.Red }
 
 fn main() {
-    io.Println($Col.RedCol())!
+    io.PutLine($Col.RedCol())!
 }

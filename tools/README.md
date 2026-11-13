@@ -102,7 +102,7 @@ compiler has nothing to say about it until the text tools have run:
 `checkerror_rename`, `stutter_rename`, `checked_migrate`, `contracts_migrate`, `try_migrate`, `as_migrate`,
 `errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `question_migrate`, `unused_migrate`, `errorcase_rename`,
 `variadic_migrate`, `scopes_migrate`, `fnref_migrate`, `clone_migrate`, `textbuild_migrate`, `unique_migrate`,
-`builder_migrate`, `literal_migrate`, `keyword_rename`, `destroy_migrate` (the table's order; the tools that read the text run first and those driven by diagnostics after,
+`builder_migrate`, `literal_migrate`, `keyword_rename`, `destroy_migrate`, `io_rename` (the table's order; the tools that read the text run first and those driven by diagnostics after,
 so `unused_migrate` runs last: D3b is said only of a file with no other error).
 
 **Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and
