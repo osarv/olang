@@ -3,7 +3,7 @@
 # also: error: Box has no member 'valeu' - did you mean 'value'?
 # also: error[M19]: Box has no method 'Aera' - did you mean 'Area'?
 # also: error[T17]: Shape has no case 'Cricle' - did you mean 'Circle'?
-# also: error[M9]: module std/io declares no 'Prinln' - did you mean 'Println'?
+# also: error[M9]: module std/io declares no 'PutLin' - did you mean 'PutLine'?
 # B11: an unknown name ends its message with the nearest one allowed there
 import "std/io"
 
@@ -21,6 +21,6 @@ fn main() ? {
     b := Box(2)
     n := b.valeu + b.Aera()
     s := Shape.Cricle
-    try io.Prinln($n $s)
+    try io.PutLin($n $s)
     try pick(1)
 }

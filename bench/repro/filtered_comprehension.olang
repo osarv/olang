@@ -34,5 +34,5 @@ fn main() ? {
         else if args[1] == "ifloop" { for x in a { if x % 2 == 0 { s += x } } }
         s = s ^ p
     }
-    try io.Println($s)
+    try io.PutLine($s)
 }

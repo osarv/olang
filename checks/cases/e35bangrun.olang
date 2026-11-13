@@ -9,7 +9,7 @@ fn half(n I64) I64 ? {
     return n / 2
 }
 fn main() {
-    io.Println("half of 8 is " $(half(8)!))!
+    io.PutLine("half of 8 is " $(half(8)!))!
     x := half(half(8)!)!
     assert x == 2
 }

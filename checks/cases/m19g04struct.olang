@@ -12,5 +12,5 @@ fn main() ? {
     l.toks.Push(7)
     d := l.toks.View()
     scan(l)
-    try io.Println($d[0])
+    try io.PutLine($d[0])
 }

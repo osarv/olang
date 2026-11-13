@@ -23,5 +23,5 @@ fn main() {
     b mut Box& = Box()
     stash(b)
     churn()
-    io.Println($b.f!(37))!
+    io.PutLine($b.f!(37))!
 }

@@ -21,5 +21,5 @@ fn readOnly(src mut W&) {
 fn main() ? {
     w := W(Box())
     readOnly(w)
-    try io.Println($w.b.head.v)
+    try io.PutLine($w.b.head.v)
 }

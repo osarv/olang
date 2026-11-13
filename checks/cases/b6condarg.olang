@@ -16,5 +16,5 @@ fn main() ? {
         x String& = "w" $i
         keep(b, x if i == 1 else outer)
     }
-    try io.Println(b.last)
+    try io.PutLine(b.last)
 }

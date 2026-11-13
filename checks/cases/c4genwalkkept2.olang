@@ -24,5 +24,5 @@ fn main() {
     }
     junk := Vec<String>()
     for i in range 100 { junk.Push("zzzzzzzzzzzzzzzzzz" $i) }
-    io.Println($out " " $junk.Len())!
+    io.PutLine($out " " $junk.Len())!
 }

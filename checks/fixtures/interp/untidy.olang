@@ -3,5 +3,5 @@ import "std/os"
 
 fn main() {
     left := 3
-    println("ran")
+    Println("ran")
 }

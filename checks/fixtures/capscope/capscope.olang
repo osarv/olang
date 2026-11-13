@@ -88,5 +88,5 @@ fn main() ? {
     for k in range 20, 26 {
         assert nodes[k]!.v == N - 1
     }
-    try io.Println("capscope: ok")
+    try io.PutLine("capscope: ok")
 }

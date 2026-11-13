@@ -29,7 +29,7 @@ fn main() {
     h := Holder()
     for i in range 5 {
         h.n = Node(i + 1)        # lets go of the old node
-        io.Println($"turn " $i ": " $Ends " ended")!
+        io.PutLine($"turn " $i ": " $Ends " ended")!
     }
-    io.Println($"before the close: " $Ends " ended")!
+    io.PutLine($"before the close: " $Ends " ended")!
 }

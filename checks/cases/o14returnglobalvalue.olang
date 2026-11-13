@@ -6,5 +6,5 @@ fn Show() Array<Char> { return Data }
 fn main() {
     x := Show()
     x[0] = 'Z'
-    io.Println($x " " $Data)!
+    io.PutLine($x " " $Data)!
 }

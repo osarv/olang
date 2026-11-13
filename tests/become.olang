@@ -199,5 +199,5 @@ test "the evaluator agrees" {
     assert BakedRun == 200 and BakedEnds == 6
     assert sum(100, 0) == 5050                # decided while compiling (S18c)
     assert count("aaa", 0, 0) == 3
-    io.Println("become: " $BakedSum)!
+    io.PutLine("become: " $BakedSum)!
 }

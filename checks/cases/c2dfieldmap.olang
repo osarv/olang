@@ -31,5 +31,5 @@ fn main() {
     h.m.Put(5, File(50))
     churn()
     assert h.m.Len() == 3 and h.m.Ref(1)!.fd == 2 and h.m.Ref(5)!.fd == 50
-    io.Println("holder " $h.m.Len() " " $h.m.Ref(0)!.fd)!
+    io.PutLine("holder " $h.m.Len() " " $h.m.Ref(0)!.fd)!
 }

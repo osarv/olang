@@ -5,5 +5,5 @@ import "splitlib"
 # (the check writes it) - freeing what it lets go of at once as the one-module form (whole) does; its peak read here
 fn main() {
     splitlib.Run()
-    io.PrintErrln($"peak " $splitlib.Peak())!
+    io.PutErrLine($"peak " $splitlib.Peak())!
 }

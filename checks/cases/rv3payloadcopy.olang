@@ -38,5 +38,5 @@ fn main() ? {
     b := Box()
     viaPayload(b, 7)
     churn()
-    try io.Println($b.head.next!.v)
+    try io.PutLine($b.head.next!.v)
 }

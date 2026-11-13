@@ -9,5 +9,5 @@ fn main() ? {
     bags := Vec<Bag&>()
     bags.Push(Bag())
     assert bags.Iter().Count(fn(b) { return b.items.Len() == 0 }) == 1
-    try io.Println("")
+    try io.PutLine("")
 }

@@ -22,5 +22,5 @@ fn main() {
     for _ in range 5 { other.Push(Blob(-7)) }
     acc := 0
     for b in v { acc = acc * 10 + b.data[0] }
-    io.Println($acc)!
+    io.PutLine($acc)!
 }

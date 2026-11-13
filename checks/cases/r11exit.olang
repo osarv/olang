@@ -5,8 +5,8 @@ import "std/os"
 import "std/io"
 fn main() ? {
     text := try os.ReadFile("/nonexistent") catch os.Error {
-        try io.PrintErrln("cannot read")
+        try io.PutErrLine("cannot read")
         os.Exit(2)
     }
-    try io.Println(text)
+    try io.PutLine(text)
 }

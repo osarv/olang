@@ -20,5 +20,5 @@ assert ended.WritesGlobals and ended.Allocates, "ended's destructor grows G"
 fn main() {
     touch()
     ended()
-    io.Println("len " $G.Len())!
+    io.PutLine("len " $G.Len())!
 }

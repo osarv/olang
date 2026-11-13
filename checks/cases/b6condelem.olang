@@ -10,5 +10,5 @@ fn main() ? {
         x String& = "w" $i
         keep = Array<String&>[x if i == 1 else outer]
     }
-    try io.Println(keep[0])
+    try io.PutLine(keep[0])
 }

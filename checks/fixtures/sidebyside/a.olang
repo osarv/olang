@@ -2,5 +2,5 @@ import "std/io"
 import "lib"
 
 fn main() {
-    io.Println($"a " $lib.Sum(10) " " $lib.Words(5))!
+    io.PutLine($"a " $lib.Sum(10) " " $lib.Words(5))!
 }

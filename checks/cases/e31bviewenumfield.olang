@@ -38,5 +38,5 @@ fn main() ? {
     s := Vs(Array<I64>(4))
     f(s[1])
     churn()
-    try io.Println($s.d)
+    try io.PutLine($s.d)
 }

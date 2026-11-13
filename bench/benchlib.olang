@@ -12,12 +12,12 @@ Dir String& = "bench"
 
 # text on standard output
 fn Say(t String&) {
-    try io.Print(t) catch io.Error { }
+    try io.Put(t) catch io.Error { }
 }
 
 # text on standard error
 fn Warn(t String&) {
-    try io.PrintErr(t) catch io.Error { }
+    try io.PutErr(t) catch io.Error { }
 }
 
 # says why on standard error and ends with status

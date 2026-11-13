@@ -36,7 +36,7 @@ BakedOnly I64 = only(Either<I64, Nothing>.Left(4))
 test "a default left off gives its variable a type" {
     assert both(Busy(1)) == "busy 1 idle"
     assert both(Busy(1), Busy(2)) == "busy 1 busy 2"
-    io.Println(both(Busy(3)))!
+    io.PutLine(both(Busy(3)))!
 }
 
 test "a case of no values needs no clause" {

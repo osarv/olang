@@ -20,5 +20,5 @@ fn main() ? {
     for _ in range steps: step(s)
     sum := F64(0.0)
     for p in s: sum += F64(p.X + p.Y)
-    try io.Println("columnslanes: " $sum)
+    try io.PutLine("columnslanes: " $sum)
 }

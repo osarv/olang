@@ -11,7 +11,7 @@ type Conn unique struct(fd I32) {
     fd
 } destruct {
     Closed++
-    io.Println("closed " $fd " (" $Closed ")")!
+    io.PutLine("closed " $fd " (" $Closed ")")!
 }
 G Conn = Conn(3)
 R Conn& = Conn(4)
@@ -24,7 +24,7 @@ fn churn() {
 }
 fn main() {
     churn()
-    io.Println($G.fd " " $R.fd " " $H.fd " " $Closed)!
+    io.PutLine($G.fd " " $R.fd " " $H.fd " " $Closed)!
     H = Conn(8)
-    io.Println($H.fd " " $Closed)!
+    io.PutLine($H.fd " " $Closed)!
 }

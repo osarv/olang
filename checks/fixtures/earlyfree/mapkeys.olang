@@ -21,5 +21,5 @@ fn main() {
     }
     t I64 = 0
     for k in range 50 { t += (try m.Get("key " $k) catch { continue }).Len() }
-    io.Println($m.Len() " " $t)!
+    io.PutLine($m.Len() " " $t)!
 }

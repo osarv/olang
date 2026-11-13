@@ -31,7 +31,7 @@ import rt "../runtime"
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PrintErrln("usage: emitdump [-D NAME=VALUE]... [-t] [-standin] [-o OUT.ll] FILE") catch io.Error { }
+        try io.PutErrLine("usage: emitdump [-D NAME=VALUE]... [-t] [-standin] [-o OUT.ll] FILE") catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(args) })
@@ -69,7 +69,7 @@ fn run(args Array<String&>&) {
     # B12: built for this machine, as stage 0 builds by default - what the target constants say and every function
     # carries
     tg := try target.Target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
-        try io.PrintErr(d.Render()) catch io.Error { }
+        try io.PutErr(d.Render()) catch io.Error { }
         os.Exit(1)
     }
     consts.Builtins(tg.Os, tg.Arch, tg.Cpu, tg.VectorBits, 1 if tg.Fma else 0, false, false, testBuild)
@@ -85,7 +85,7 @@ fn run(args Array<String&>&) {
     interp.DecideAsserts(c, asserts)
     # what checking said, and the program written anyway: a body checking left wrong is a function that says so when
     # it is called (the self-hosted checker is still being finished, M5b/M5c)
-    if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.Error { } }
+    if d.Count() > 0 { try io.PutErr(d.Render()) catch io.Error { } }
     lw := lower.Lowerer(p, c.Bodies)
     lw.AssertsTrue = asserts
     # placed by the scope pass (M6); its own errors, which stage 0's checker reports while checking, are not shown. A
@@ -114,22 +114,22 @@ fn run(args Array<String&>&) {
         outPath = "build/" $base ".ll"
     }
     fd := try os.Create(outPath) catch os.Error {
-        try io.PrintErrln("emitdump: cannot write " $outPath) catch io.Error { }
+        try io.PutErrLine("emitdump: cannot write " $outPath) catch io.Error { }
         os.Exit(1)
     }
     w := io.Writer(fd)
     e.Program(w)
     try w.Flush() catch io.Error { os.Exit(1) }
     try os.Close(fd) catch os.Error { }
-    for g in e.Gaps { try io.PrintErrln("gap " $g) catch io.Error { } }
-    for g in lw.Gaps { try io.PrintErrln("lower gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.Error { } }
+    for g in e.Gaps { try io.PutErrLine("gap " $g) catch io.Error { } }
+    for g in lw.Gaps { try io.PutErrLine("lower gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.Error { } }
 }
 
 # the runtime's files filled in for this machine (B12), written into dir: compiler/runtime.olang's, as the driver builds
 fn runtimeFiles(dir String&) {
     d := diag.Diagnostics(false)
     tg := try target.Target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
-        try io.PrintErr(d.Render()) catch io.Error { }
+        try io.PutErr(d.Render()) catch io.Error { }
         os.Exit(1)
     }
     core := try rt.Ir(tg.Triple, tg.Arch, tg.Attrs, false, false) catch rt.Bad { os.Exit(1) }
@@ -141,7 +141,7 @@ fn runtimeFiles(dir String&) {
 
 fn write(path String&, text String&) {
     try os.WriteFile(path, text) catch os.Error {
-        try io.PrintErrln("emitdump: cannot write " $path) catch io.Error { }
+        try io.PutErrLine("emitdump: cannot write " $path) catch io.Error { }
         os.Exit(1)
     }
 }

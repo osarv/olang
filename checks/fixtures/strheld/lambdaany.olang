@@ -14,5 +14,5 @@ fn main() ? {
     it := Item(7)
     it.tags.Push("a")
     it.tags.Push("7")
-    try io.Println($it)
+    try io.PutLine($it)
 }

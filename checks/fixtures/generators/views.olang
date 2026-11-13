@@ -100,15 +100,15 @@ fn main() {
     }
     for h in text.Halves() { kept.Push(h) }
     churn()
-    for w in kept { io.Println(w)! }
-    io.Println("count " $spans(text).Count(fn(w) { return w.Len() > 4 }))!
-    io.Println("first " $firstLong(text, 5))!
+    for w in kept { io.PutLine(w)! }
+    io.PutLine("count " $spans(text).Count(fn(w) { return w.Len() > 4 }))!
+    io.PutLine("first " $firstLong(text, 5))!
     g := labels(text, 2)
     a := try g.Next() catch default ""
     b := try g.Next() catch default ""
     churn()
     c := try g.Next() catch default ""
-    io.Println($a " " $b " " $c)!
+    io.PutLine($a " " $b " " $c)!
     seen := Vec<Pt&>()
     pg := points(3)
     for p in pg {
@@ -116,15 +116,15 @@ fn main() {
         seen.Push(p)
     }
     churn()
-    for p in seen { io.Println("pt " $p.x)! }
-    io.Println("drops " $Drops)!
+    for p in seen { io.PutLine("pt " $p.x)! }
+    io.PutLine("drops " $Drops)!
     t I64 = 0
     for p in points(2) {
         if p.x > 10 { break }
         t += p.x
     }
-    io.Println("t " $t " drops " $Drops)!
+    io.PutLine("t " $t " drops " $Drops)!
     total I64 = 0
     for _ in range 1000 { total += sum() }
-    io.Println("sum " $total " drops " $Drops)!
+    io.PutLine("sum " $total " drops " $Drops)!
 }

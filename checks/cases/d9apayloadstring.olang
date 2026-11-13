@@ -15,5 +15,5 @@ fn main() ? io.Error {
         case E.A(s): $s
         case _: "none"
     }
-    try io.Println(m)
+    try io.PutLine(m)
 }

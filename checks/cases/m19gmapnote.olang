@@ -9,5 +9,5 @@ fn main() {
     m.Put(1, blk(1))
     r := m.Ref(1)!
     for k in range 2, 3000 { m.Put(k, blk(k)) }
-    io.Println("r " $r.n)!
+    io.PutLine("r " $r.n)!
 }

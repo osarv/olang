@@ -4,5 +4,5 @@
 # not one more error away ('$'c'.PadStart(3)' is T29f's)
 import "std/io"
 fn main() {
-    io.Println("x" 'c'.PadStart(3) "y")!
+    io.PutLine("x" 'c'.PadStart(3) "y")!
 }

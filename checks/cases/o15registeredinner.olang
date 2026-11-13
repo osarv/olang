@@ -39,5 +39,5 @@ fn main() ? {
     t := Tally()
     run(t)
     assert t.n == 110
-    try io.Println("n " $t.n)
+    try io.PutLine("n " $t.n)
 }

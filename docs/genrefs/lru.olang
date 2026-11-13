@@ -63,5 +63,5 @@ fn main() ? io.Error {
         total += c.Get("key-" $k, k)
     }
     ms := time.Since(t0) / 1000000
-    try io.Println("lru: total " $total " peak " $peak.PeakKb() " KB, " $ms " ms")
+    try io.PutLine("lru: total " $total " peak " $peak.PeakKb() " KB, " $ms " ms")
 }

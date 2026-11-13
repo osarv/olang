@@ -14,5 +14,5 @@ fn main() {
         for j in range i { v.Push(j) }
         keepIn(out, v)
     }
-    io.Println($out.Len() " " $out[4].v.Len() " " $out[4].v[3])!
+    io.PutLine($out.Len() " " $out[4].v.Len() " " $out[4].v[3])!
 }

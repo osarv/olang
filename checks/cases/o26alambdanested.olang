@@ -34,5 +34,5 @@ fn main() {
     b := nested(6)
     c := twice(2)
     n := churn()
-    io.Println($a() " " $b() " " $c() " " $(Baked + n))!
+    io.PutLine($a() " " $b() " " $c() " " $(Baked + n))!
 }

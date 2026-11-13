@@ -3,12 +3,12 @@
 import "std/io"
 type Res unique struct(n String&) {
     name := $n
-} destruct { io.Println("end " $name)! }
+} destruct { io.PutLine("end " $name)! }
 fn main() {
     keep := Vec<String&>()
     for i in range 3 {
         f := Res($i "-file")
         keep.Push(f.name[0:1])
     }
-    io.Println($keep)!
+    io.PutLine($keep)!
 }

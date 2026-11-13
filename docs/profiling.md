@@ -47,7 +47,7 @@ flame graph: ./build/profile/hot.html
 ```
 
 **self** is the time in the function itself, **total** the time it is on the stack (once a sample). Names are as source
-writes them outside the module: `io.Println`, `Vec<I64>.Push`, `check.Checker.Expr`; the root's own and the prelude's
+writes them outside the module: `io.PutLine`, `Vec<I64>.Push`, `check.Checker.Expr`; the root's own and the prelude's
 bare; `startup` the program's entry, `task` a spawned call's trampoline. The flame graph is one HTML file with nothing
 loaded from elsewhere: the thread's first frame at the bottom, each function over its caller, as wide as its share; a
 frame's tooltip gives its name and time, a click zooms to it, a click on the bottom bar goes back.

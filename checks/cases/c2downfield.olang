@@ -13,5 +13,5 @@ fn main() ? {
         x := $5 "abc"
         w = W(x)
     }
-    try io.Println(w.inner.t)
+    try io.PutLine(w.inner.t)
 }

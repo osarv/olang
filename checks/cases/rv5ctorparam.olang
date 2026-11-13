@@ -10,5 +10,5 @@ type H struct(p P) {
 fn main() ? {
     h := H(P(42))
     h2 := H(P(7))
-    try io.Println($h.keep.v " " $h2.keep.v)
+    try io.PutLine($h.keep.v " " $h2.keep.v)
 }

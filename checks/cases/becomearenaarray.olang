@@ -23,5 +23,5 @@ fn main() {
     a := Array<I64>(os.Args().Len() + 2, 1)
     r := walk(a, 3)
     churn()
-    io.Println($r " " $walk(a, 0))!
+    io.PutLine($r " " $walk(a, 0))!
 }

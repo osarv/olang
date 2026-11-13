@@ -19,5 +19,5 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Node(1, Node(2, null)))
-    try io.Println($b)
+    try io.PutLine($b)
 }

@@ -20,5 +20,5 @@ fn main() ? {
             s += ln(t)
         }
     }
-    try io.Println($s)
+    try io.PutLine($s)
 }

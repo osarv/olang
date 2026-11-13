@@ -60,5 +60,5 @@ test "Place renders and compares as its fields" {
     assert a != b and a.File == b.File and a.Line + 1 == b.Line
     c := Place(a.File, a.Line, a.Column)
     assert c == a and c.Hash() == a.Hash()
-    io.Println("place: " $a)!
+    io.PutLine("place: " $a)!
 }

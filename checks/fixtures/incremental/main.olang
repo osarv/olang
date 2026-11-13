@@ -11,5 +11,5 @@ fn main() ? {
     n := try lib.Num("12") catch default -1
     g := lib.Log()
     for i in range 3 { g.Note(i) }
-    try io.Println($c.Total() " " $n " " $lib.Kept() " " $lib.Said() " " $fast.twice_c(4) " " $g.Last())
+    try io.PutLine($c.Total() " " $n " " $lib.Kept() " " $lib.Said() " " $fast.twice_c(4) " " $g.Last())
 }

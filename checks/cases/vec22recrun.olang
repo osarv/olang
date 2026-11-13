@@ -20,9 +20,9 @@ fn vb(v Vec<I64>&, n I64) Array<I64>& { return va(v, n) }
 fn use(c mut CB&) ? io.Error {
     t := b(c, 2)
     u := b(c, 0)
-    try io.Println($t $u)
+    try io.PutLine($t $u)
     c.text = "zz"
-    try io.Println(b(c, 2))
+    try io.PutLine(b(c, 2))
 }
 fn main() ? {
     c := CB()
@@ -31,7 +31,7 @@ fn main() ? {
     v.Push(10)
     v.Push(20)
     d := vb(v, 3)
-    try io.Println($d[0] " " $d[1])
+    try io.PutLine($d[0] " " $d[1])
     v.Push(30)
     assert va(v, 2)[2] == 30
 }

@@ -827,7 +827,7 @@ fn frames(out String&) Vec<String&>& {
 
 SessionSrc String& = ("import \"std/io\"\n\n# a point on a plane\ntype Point struct(X I64, Y I64) {\n    X\n    Y\n}\n\n" $
                       "# the sum of a point's coordinates\nfn sum(p Point) I64 {\n    return p.X+p.Y\n}\n\n" $
-                      "fn main() {\n    q := Point(1, 2)\n    io.Println($sum(q))!\n    bad I32 = \"x\"\n}\n")
+                      "fn main() {\n    q := Point(1, 2)\n    io.PutLine($sum(q))!\n    bad I32 = \"x\"\n}\n")
 
 test "olang lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
@@ -873,7 +873,7 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     assert (got.Get("2")!).Contains("fn sum(p Point) I64") and (got.Get("2")!).Contains("the sum of a point's coordinates")
     assert (got.Get("3")!).Contains("\"range\":{\"start\":{\"line\":9,\"character\":3}"), got.Get("3")!
     assert (got.Get("4")!).Contains("\"name\":\"Point\"") and (got.Get("4")!).Contains("\"name\":\"X\"")
-    assert (got.Get("5")!).Contains("\"label\":\"Println\""), got.Get("5")!
+    assert (got.Get("5")!).Contains("\"label\":\"PutLine\""), got.Get("5")!
     assert (got.Get("6")!).Contains("return p.X + p.Y"), got.Get("6")!
     assert (got.Get("7")!).Contains("-32601")
     assert (got.Get("8")!).Contains("\"result\":null")

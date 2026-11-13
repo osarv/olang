@@ -12,5 +12,5 @@ fn evens(n I64) Iterator<I64> {
 }
 
 fn main() ? {
-    for x in evens(6) { try io.Println($x) }
+    for x in evens(6) { try io.PutLine($x) }
 }

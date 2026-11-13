@@ -466,12 +466,12 @@ release: $(OLANG)
 releasetest:
 	@t=$$(mktemp -d) && tar -C $$t -xJf build/release/$(RELEASE_NAME).tar.xz && mkdir $$t/work $$t/path && \
 	for p in ld ld.bfd as sh cat; do ln -s $$(command -v $$p) $$t/path/$$p; done && \
-	printf 'import "std/io"\nimport cstring "string.h"\nimport stdint "stdint.h"\n\nfn main() {\n    n := cstring.strlen("hello".ToC())\n    io.Println("hello from " $$TargetArch " " $$n " " $$stdint.INT8_MAX)!\n}\n' > $$t/work/hello.olang && \
+	printf 'import "std/io"\nimport cstring "string.h"\nimport stdint "stdint.h"\n\nfn main() {\n    n := cstring.strlen("hello".ToC())\n    io.PutLine("hello from " $$TargetArch " " $$n " " $$stdint.INT8_MAX)!\n}\n' > $$t/work/hello.olang && \
 	cd $$t/work && env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang hello.olang > out.txt 2>&1; \
 	st=$$?; cat $$t/work/out.txt; \
 	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang explain T6a > explain.txt 2>&1; \
 	ex=$$?; head -3 $$t/work/explain.txt; \
-	printf 'import "std/io"\n\nfn spin(n I64) I64 {\n    s I64 = 1\n    for i in range n { s = (s * 31 + i) ^ (s >> 7) }\n    return s\n}\n\nfn main() { io.Println($$spin(300000000))! }\n' > $$t/work/spin.olang && \
+	printf 'import "std/io"\n\nfn spin(n I64) I64 {\n    s I64 = 1\n    for i in range n { s = (s * 31 + i) ^ (s >> 7) }\n    return s\n}\n\nfn main() { io.PutLine($$spin(300000000))! }\n' > $$t/work/spin.olang && \
 	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang profile spin.olang > profile.txt 2>&1; \
 	pr=$$?; grep -A2 "  self   total" $$t/work/profile.txt; \
 	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang explain -asm spin.olang spin > asm.txt 2>&1; \

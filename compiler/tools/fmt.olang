@@ -24,7 +24,7 @@ fn main() ? {
     args := os.Args()
     mode := args[1] if args.Len() >= 2 else ""
     if (mode != "-f" and mode != "-l" and mode != "-p" and mode != "-v") or args.Len() < 3 {
-        try io.PrintErrln("usage: fmt -f|-l|-p|-v FILE...") catch io.Error { }
+        try io.PutErrLine("usage: fmt -f|-l|-p|-v FILE...") catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { os.Exit(run(mode, args)) })
@@ -43,7 +43,7 @@ fn run(mode String&, args Array<String&>&) I32 {
     for k in range 2, args.Len() {
         path := args[k]
         src := try source.Source.Read(path) catch os.Error {
-            try io.PrintErr("olang: " $path ": cannot be read\n") catch io.Error { }
+            try io.PutErr("olang: " $path ": cannot be read\n") catch io.Error { }
             status = 1
             continue
         }

@@ -22,5 +22,5 @@ fn main() ? {
         w = W(h)
     }
     a := Array<I64>(64, 9)
-    try io.Println($w.inner.t " " $a[0])
+    try io.PutLine($w.inner.t " " $a[0])
 }

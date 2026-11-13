@@ -2,5 +2,5 @@
 # (appended by the check: the program as one module, its peak read as split.olang reads its split form's)
 fn main() {
     Run()
-    io.PrintErrln($"peak " $Peak())!
+    io.PutErrLine($"peak " $Peak())!
 }

@@ -2,7 +2,7 @@
 # errdefers and the destructors of what it holds - whether or not its word carries a payload, then is said
 import "std/io"
 type E error { Bad(n I64), Plain }
-type R unique struct(id I64) { id } destruct { io.Println("destruct " $id)! }
+type R unique struct(id I64) { id } destruct { io.PutLine("destruct " $id)! }
 Live mut I64 = 0
 fn f(n I64) I64 ? E {
     if n < 0: error E.Plain
@@ -10,11 +10,11 @@ fn f(n I64) I64 ? E {
 }
 fn main() ? {
     r := R(1)
-    defer io.Println("deferred " $r.id)!
-    errdefer io.Println("errdeferred")!
+    defer io.PutLine("deferred " $r.id)!
+    errdefer io.PutLine("errdeferred")!
     {
-        defer io.Println("inner deferred")!
+        defer io.PutLine("inner deferred")!
         x := try f(Live + 2)
-        io.Println($x)!
+        io.PutLine($x)!
     }
 }

@@ -31,5 +31,5 @@ fn main() {
         label(h, 100, k)
         t += h.d[9999] + h.names.Len()
     }
-    io.Println($t " " $h.names[99])!
+    io.PutLine($t " " $h.names[99])!
 }

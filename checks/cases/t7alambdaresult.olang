@@ -7,5 +7,5 @@ fn main() ? {
     nums := Array<I64>[1, 2, 3]
     ws := nums.Map(fn(n I64) String { return "#" $n })
     assert ws.Len() == 3 and ws[2] == "#3"
-    try io.Println($ws[0] " " $ws[1])
+    try io.PutLine($ws[0] " " $ws[1])
 }

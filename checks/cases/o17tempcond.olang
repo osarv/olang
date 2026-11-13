@@ -6,7 +6,7 @@ import "std/io"
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.Println("x") }
+        if a[0] == 3 { try io.PutLine("x") }
     }
 }
 type Node struct(v I64, next mut Node?&) {
@@ -31,5 +31,5 @@ fn main() ? {
         try churn()
     }
     try churn()
-    try io.Println("b1 " $sum(b1))
+    try io.PutLine("b1 " $sum(b1))
 }

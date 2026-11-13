@@ -7,5 +7,5 @@ fn main() ? {
     v.Push(1)
     b Vec<I64>& = v
     v.Push(2)
-    try io.Println($b.Len())
+    try io.PutLine($b.Len())
 }

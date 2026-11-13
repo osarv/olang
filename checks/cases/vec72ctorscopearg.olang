@@ -15,7 +15,7 @@ fn main() ? {
         h = H(t, 5 + i)
     }
     churn()
-    try io.Println(h.y)
+    try io.PutLine(h.y)
 }
 fn churn() I64 {
     t := 0

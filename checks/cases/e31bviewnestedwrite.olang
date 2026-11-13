@@ -25,5 +25,5 @@ fn step(c mut Layer&) {
 fn main() ? {
     s := Layers(Array<I64>(4))
     step(s[1])
-    try io.Println($s.d)
+    try io.PutLine($s.d)
 }

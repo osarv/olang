@@ -3,24 +3,24 @@
 # deferred code and destructors first; a "!" that fails it prints its error's trace
 import "std/io"
 type E error { Bad(n I64) }
-type R unique struct(id I64) { id } destruct { io.Println("destruct " $id)! }
+type R unique struct(id I64) { id } destruct { io.PutLine("destruct " $id)! }
 Live mut I64 = 0
 fn f(n I64) I64 ? E { error E.Bad(n) }
 fn inner(n I64) I64 ? E { return try f(n) }
 fn helper(n I64) {
     r := R(n)
-    defer io.Println("helper defer " $r.id)!
+    defer io.PutLine("helper defer " $r.id)!
     assert n == 0, "boom"
 }
 test helper "fails in a helper" {
     r := R(1)
-    defer io.Println("deferred " $r.id)!
+    defer io.PutLine("deferred " $r.id)!
     helper(Live + 2)
 }
 test inner "lets a payload out" {
     r := R(3)
-    defer io.Println("deferred " $r.id)!
-    errdefer io.Println("errdeferred " $r.id)!
+    defer io.PutLine("deferred " $r.id)!
+    errdefer io.PutLine("errdeferred " $r.id)!
     x := try inner(Live + 4)
     assert x == 0
 }
@@ -30,5 +30,5 @@ test inner "a bang fails it" {
 }
 test "the next test runs" {
     r := R(7)
-    io.Println("next " $r.id)!
+    io.PutLine("next " $r.id)!
 }

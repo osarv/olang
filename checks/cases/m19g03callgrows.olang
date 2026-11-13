@@ -9,5 +9,5 @@ fn main() ? {
     v.Push(1)
     d := v.View()
     fill(v, 100)
-    try io.Println($d[0])
+    try io.PutLine($d[0])
 }

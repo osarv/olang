@@ -12,5 +12,5 @@ fn main() {
     for i in range 1, 1000 { m.Put(i, rec(i)) }
     r.n = 77
     x := try m.Get(0) catch { return }
-    io.Println("m[0].n " $x.n " r.n " $r.n " (77 77 in place)")!
+    io.PutLine("m[0].n " $x.n " r.n " $r.n " (77 77 in place)")!
 }

@@ -63,7 +63,7 @@ fn Root(p Prog&) String {
     if p.callback {
         b.Push("    xs := Array<Item>[Item(2), Item(1)]\n    qsort(xs, xs.Len(), 4, olang_cmp)\n")
     }
-    b.Push("    try io.Println($m0.Total()) catch io.Error { }\n}\n")
+    b.Push("    try io.PutLine($m0.Total()) catch io.Error { }\n}\n")
     return b.ToString()
 }
 

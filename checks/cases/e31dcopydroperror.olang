@@ -25,5 +25,5 @@ fn (k Kept&) Copy() Kept { return try Kept.wrapThen(Res(k.r.id + 200), k.r.id) c
 fn main() ? {
     a Kept = Kept(Res(1))
     b := a
-    try io.Println($b.r.id " " $Ended)
+    try io.PutLine($b.r.id " " $Ended)
 }

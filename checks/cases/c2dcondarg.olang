@@ -40,5 +40,5 @@ fn main() {
         churn()
         if a.B == "x-made" and b.B == "y-made" and c.B == "z-made" { n += 1 }
     }
-    io.Println($n " " $E.viaLocal("w", -1).B.Len())!
+    io.PutLine($n " " $E.viaLocal("w", -1).B.Len())!
 }

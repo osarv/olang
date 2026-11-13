@@ -17,5 +17,5 @@ fn main() {
     g := fn() { for i in range 1000 { vr.Push(blk(i, fn() { })) } }
     v[0].f = g
     v[0].Run()
-    io.Println("v[0].n = " $v[0].n " len " $v.Len())!
+    io.PutLine("v[0].n = " $v[0].n " len " $v.Len())!
 }

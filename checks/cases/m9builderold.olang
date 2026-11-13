@@ -10,5 +10,5 @@ import "std/time"
 fn main() ? {
     ip := try net.ParseIP("127.0.0.1") catch net.Error default net.IP.Loopback4()
     d := time.DateOf(0)
-    try io.Println($ip " " $d.Year)
+    try io.PutLine($ip " " $d.Year)
 }

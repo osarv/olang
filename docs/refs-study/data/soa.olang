@@ -33,5 +33,5 @@ fn main() ? {
     for _ in range steps: step(s)
     sum := F64(0.0)
     for i in range n: sum += F64(s.X[i] + s.Y[i])
-    try io.Println("soa: " $sum)
+    try io.PutLine("soa: " $sum)
 }

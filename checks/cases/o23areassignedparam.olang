@@ -37,5 +37,5 @@ fn main() ? {
     t := churn(40)
     s := 0
     for x in b.seen { s += x }
-    try io.Println($b.seen.Len() " " $s " " $t)
+    try io.PutLine($b.seen.Len() " " $s " " $t)
 }

@@ -49,5 +49,5 @@ fn main() ? {
         }
         s = s ^ p
     }
-    try io.Println($s)
+    try io.PutLine($s)
 }

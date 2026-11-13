@@ -4,7 +4,7 @@
 import "std/io"
 
 fn greet() {
-    try io.Println("hello")
+    try io.PutLine("hello")
 }
 
 fn main() { greet() }

@@ -15,5 +15,5 @@ fn main() {
     r := ss.RefMut(0).m.RefMut(1)!
     fill(ss.RefMut(0).m)
     r.n = 77
-    io.Println("r.n " $r.n " r.m " $r.m)!
+    io.PutLine("r.n " $r.n " r.m " $r.m)!
 }

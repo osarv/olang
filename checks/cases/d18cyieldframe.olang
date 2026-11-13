@@ -27,5 +27,5 @@ fn main() {
         churn()
         s = s * 10 + h[0] + 1
     }
-    io.Println($s)!
+    io.PutLine($s)!
 }

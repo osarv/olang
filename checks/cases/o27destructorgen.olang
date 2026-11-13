@@ -8,7 +8,7 @@
 import "std/io"
 type Res unique struct(n String&) {
     name := $n
-} destruct { io.Println("end " $name)! }
+} destruct { io.PutLine("end " $name)! }
 fn names(n I64) Iterator<String&> {
     for i in range n {
         f := Res($i "-file")
@@ -25,5 +25,5 @@ fn main() {
     out := Vec<String&>()
     for w in names(3) { out.Push(w) }
     churn()
-    io.Println($out)!
+    io.PutLine($out)!
 }

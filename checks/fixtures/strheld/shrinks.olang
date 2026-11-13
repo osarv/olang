@@ -24,6 +24,6 @@ fn joins() String {
 Baked String& = joins()
 fn main() ? {
     s := joins()
-    try io.Println(s)
+    try io.PutLine(s)
     assert Baked == s
 }

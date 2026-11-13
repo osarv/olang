@@ -10,5 +10,5 @@ fn main() ? {
     f := Fir(t)
     t[0] = 9
     assert f.taps[0] == 1
-    try io.Println($f.taps.Len())
+    try io.PutLine($f.taps.Len())
 }

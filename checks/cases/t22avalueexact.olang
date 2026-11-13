@@ -23,5 +23,5 @@ fn main() {
         w.Push(t)
     }
     churn()
-    io.Println($v)!
+    io.PutLine($v)!
 }

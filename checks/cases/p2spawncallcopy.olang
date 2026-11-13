@@ -23,5 +23,5 @@ fn main() ? {
             assert junk[0] == 7
         }
     }
-    try io.Println($out[0] " " $out[1] " " $out[2] " " $out[3])
+    try io.PutLine($out[0] " " $out[1] " " $out[2] " " $out[3])
 }

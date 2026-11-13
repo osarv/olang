@@ -25,5 +25,5 @@ fn main() ? {
   r := try s as Shape.Circle catch default -1.0
   k := try (n * 2).Narrow<I32>() catch default 0
   q := try pick(1, 3)
-  io.Println($x " " $y " " $z " " $w " " $v " " $u " " $b " " $r " " $k " " $q)!
+  io.PutLine($x " " $y " " $z " " $w " " $v " " $u " " $b " " $r " " $k " " $q)!
 }

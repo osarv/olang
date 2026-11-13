@@ -26,5 +26,5 @@ fn main() ? {
         assert idle(g)
     }
     assert Closed == 111
-    try io.Println("closed " $Closed)
+    try io.PutLine("closed " $Closed)
 }

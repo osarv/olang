@@ -27,5 +27,5 @@ fn main() ? {
         s(fn() I64 { return m.v + 1 })
     }
     t := churn(100)
-    try io.Println($kp.kept!() " " $t)
+    try io.PutLine($kp.kept!() " " $t)
 }

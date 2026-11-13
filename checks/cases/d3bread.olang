@@ -23,7 +23,7 @@ fn main() ? {
     for _, x in Array<I64>[5, 6] { n += x }
     _, r := divmod(7, 2)
     only := 9
-    if TargetOs == "no such system" { try io.Println($only) }
+    if TargetOs == "no such system" { try io.PutLine($only) }
     hold()
     assert f(n) == 28 and r == 1 and u == "te" and Closed == 1
 }

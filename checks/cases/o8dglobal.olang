@@ -82,5 +82,5 @@ fn values(n I64) I64 {
 }
 
 fn main() {
-    io.Println($freed(50) " " $viewed(50) " " $keeper(20) " " $values(50))!
+    io.PutLine($freed(50) " " $viewed(50) " " $keeper(20) " " $values(50))!
 }

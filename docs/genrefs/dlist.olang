@@ -49,5 +49,5 @@ fn main() ? io.Error {
         if l.n > 100: total += l.PopFront()
     }
     ms := time.Since(t0) / 1000000
-    try io.Println("dlist: total " $total " peak " $peak.PeakKb() " KB, " $ms " ms")
+    try io.PutLine("dlist: total " $total " peak " $peak.PeakKb() " KB, " $ms " ms")
 }

@@ -8,5 +8,5 @@ type Color enum { Red, Green, Blue }
 
 fn main() {
     s := bitset.BitSet<Color>(12)!
-    for c in s { io.Println($c)! }
+    for c in s { io.PutLine($c)! }
 }

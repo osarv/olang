@@ -47,5 +47,5 @@ fn main() ? {
     s := squares(4)
     f := filled(4)
     t := stopped(5)
-    try io.Println($assigned(3) " " $s " " $f " " $t " " $Root.v)
+    try io.PutLine($assigned(3) " " $s " " $f " " $t " " $Root.v)
 }

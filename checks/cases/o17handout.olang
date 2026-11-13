@@ -27,5 +27,5 @@ fn bump(src mut W&) {
 fn main() ? {
     w := W(Box())
     bump(w)
-    try io.Println($w.b.head.next!.v)
+    try io.PutLine($w.b.head.next!.v)
 }

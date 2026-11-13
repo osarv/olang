@@ -29,5 +29,5 @@ fn main() ? {
         spawn s = try Node.mk(2) catch default fallback
     }
     churn()
-    try io.Println($r!.v " " $s!.v " " $(r! == fallback))
+    try io.PutLine($r!.v " " $s!.v " " $(r! == fallback))
 }

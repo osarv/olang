@@ -36,6 +36,6 @@ fn main() ? {
     for _ in range 3 {
         s := $b
         churn()
-        try io.Println(s)
+        try io.PutLine(s)
     }
 }

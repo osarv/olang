@@ -37,5 +37,5 @@ fn main() {
         table.Put(k % 3, mk(1000))
         if k % 3 == 2: table.Remove(0)
     }
-    io.Println($t " " $cache.Len() " " $table.Len())!
+    io.PutLine($t " " $cache.Len() " " $table.Len())!
 }

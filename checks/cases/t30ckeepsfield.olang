@@ -31,5 +31,5 @@ fn main() ? {
         churn()
     }
     churn()
-    try io.Println($outer.Len() " " $outer[0].x " " $outer[2].x)
+    try io.PutLine($outer.Len() " " $outer[0].x " " $outer[2].x)
 }

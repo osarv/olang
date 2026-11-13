@@ -25,6 +25,6 @@ fn main() ? {
     s := $b
     keep := Vec<Node&>()
     for _ in range 2000 { keep.Push(Node(-7, null)) }
-    try io.Println(s)
-    try io.Println($b.head.next!.v)
+    try io.PutLine(s)
+    try io.PutLine($b.head.next!.v)
 }

@@ -12,5 +12,5 @@ fn main() ? io.Error {
         arr := outer if i < 10 else inner
         join { spawn arr[0] = Node.mkNode(i + 50) }
     }
-    try io.Println($outer[0].v)
+    try io.PutLine($outer[0].v)
 }

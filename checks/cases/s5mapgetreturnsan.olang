@@ -39,5 +39,5 @@ fn main() ? {
     a := try first()
     b := try inner()
     churn()
-    io.Println($a.Len() " " $a[29] " " $b.Len() " " $b[0])!
+    io.PutLine($a.Len() " " $a[29] " " $b.Len() " " $b[0])!
 }

@@ -40,5 +40,5 @@ fn main() {
     p := Program()
     p.root = Expr.build(10)
     for _ in range N { p.root = simplify(p.root) }
-    io.Println($count(p.root))!
+    io.PutLine($count(p.root))!
 }

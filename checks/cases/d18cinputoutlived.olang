@@ -31,5 +31,5 @@ fn main() {
         for w in words(t) { kept.Push(w) }
     }
     churn()
-    io.Println($kept)!
+    io.PutLine($kept)!
 }

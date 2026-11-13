@@ -16,7 +16,7 @@ fn Res.r3(c Bool) Res& {
     }
 }
 fn Res.mk(c Bool) Res& { return Res(5) if c else Res(6) }
-fn show(i I64) ? io.Error { try io.Println($i ": " $(Made - Gone)) }
+fn show(i I64) ? io.Error { try io.PutLine($i ": " $(Made - Gone)) }
 fn main() ? {
     c := false
     { x := Res.r1(c) }

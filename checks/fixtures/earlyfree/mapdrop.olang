@@ -18,5 +18,5 @@ fn main() {
         m.Put(i % 64, Res(i, 32))
         if i % 2 == 1: m.Remove(i % 64)
     }
-    io.Println($Ended " " $m.Len())!
+    io.PutLine($Ended " " $m.Len())!
 }

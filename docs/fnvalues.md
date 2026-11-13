@@ -353,7 +353,7 @@ that the type does not say, the place, and **the word to write on the place's ty
 ```
 p.olang:9:5: error[T22a]: 'link' keeps 'b' in 'a', and this field's type says nothing of that - write 'keeps b in a' after its signature
 p.olang:12:16: error[T22b]: this argument's type promises noalloc, and 'logTo' may allocate
-    note: p.olang:4:5: its call of 'io.Println' allocates
+    note: p.olang:4:5: its call of 'io.PutLine' allocates
 ```
 
 What no word can say - a lambda keeping `x` in a capture that lives longer than the lambda (2.2.1), a result referring
@@ -541,7 +541,7 @@ facts need (they are read back into check).
 
 **Effect words checked.** Where check fits a function value to a function type with effect words or `pure` (E12), it
 records the place; once the facts settle, each place is judged: the value's facts, as the table above gives them, must
-be within the type's bound - else T22b's error, with a note at what breaks it ("its call of 'io.Println' allocates").
+be within the type's bound - else T22b's error, with a note at what breaks it ("its call of 'io.PutLine' allocates").
 The effects pass runs in a build only where something asks: an explain or a doc line, a fact read (G42), or a function
 type with an effect word or `pure` - so a program that writes no word pays nothing new.
 
@@ -1176,7 +1176,7 @@ Beside round 4 once its grammar and types have merged (effects.olang, and check.
   words checked at the places check records, its own records through `typed.Versions`); explain's `# effects:` line.
 - **Tests**: tests/facts.olang: S17a asserts `not Apply.Allocates` with `f fn&(x I64) I64 noalloc`, `Sum.Pure`,
   `Sum.Returns`, `not Use.Allocates` through `Twice`; g42factvalue kept, a passing twin of it; checks: fail - a lambda
-  calling `io.Println` given for `noalloc`, a lambda writing through a captured reference given for `pure`, one reaching
+  calling `io.PutLine` given for `noalloc`, a lambda writing through a captured reference given for `pure`, one reaching
   an `assert` given for `returns`, a field of type `fn&() noblock` given a value of type `fn&()`.
 - **Gates**: verify; the effects pass's time on compiler/ (`explain -caps`) within +5%.
 

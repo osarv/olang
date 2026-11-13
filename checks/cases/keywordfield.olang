@@ -15,6 +15,6 @@ fn (r Record&) noalloc() Bool { return r.pure }
 
 fn main() ? io.Error {
     r := Record(5)
-    try io.Println("returns " $r.returns " keeps " $r.keeps " pure " $r.pure " any " $r.any)
-    try io.Println("borrows " $r.borrows() " noalloc " $r.noalloc())
+    try io.PutLine("returns " $r.returns " keeps " $r.keeps " pure " $r.pure " any " $r.any)
+    try io.PutLine("borrows " $r.borrows() " noalloc " $r.noalloc())
 }

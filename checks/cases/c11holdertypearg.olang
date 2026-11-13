@@ -26,7 +26,7 @@ fn main() {
         v.a[1] = Pool(Conn(7))
         churn()
         assert v.a.Len() == 3 and v.a[1].c.fd == 7
-        io.Println("replaced " $Closed)!
+        io.PutLine("replaced " $Closed)!
     }
-    io.Println("let go " $Closed)!
+    io.PutLine("let go " $Closed)!
 }

@@ -9,7 +9,7 @@ type Holder struct(e E) { e }
 fn final(e E) Bool { return e != E.A }
 fn main() ? {
     x E
-    try io.Println($x)
+    try io.PutLine($x)
     assert x is null and final(x)
     h := Holder(E.B)
     assert final(h.e) and $h == "Holder(E.B)"

@@ -7,7 +7,7 @@ import "std/io"
 type Res unique struct(n I64) {
     n
 } destruct {
-    io.Println("closed " $n)!
+    io.PutLine("closed " $n)!
 }
 fn f(n I64) I64 {
     r := Res(n)
@@ -17,7 +17,7 @@ fn f(n I64) I64 {
 fn main() {
     {
         assert f(2) == 0
-        io.Println("used")!
+        io.PutLine("used")!
     }
-    io.Println("after")!
+    io.PutLine("after")!
 }

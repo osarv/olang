@@ -23,5 +23,5 @@ fn main() ? {
         t := $box $big $(try g(i + 2) catch { continue })
         n += s.Len() + t.Len()
     }
-    try io.Println($n)
+    try io.PutLine($n)
 }

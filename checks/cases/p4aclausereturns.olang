@@ -13,4 +13,4 @@ fn run() I32 {
     }
     return 0
 }
-fn main() ? { try io.Println($run()) }
+fn main() ? { try io.PutLine($run()) }

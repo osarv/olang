@@ -18,5 +18,5 @@ Live mut I64 = 3
 fn main() {
     v := try Runner(Live).main() catch PE e default -e.n
     assert v == -3
-    io.Println("caught " $v)!
+    io.PutLine("caught " $v)!
 }

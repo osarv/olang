@@ -84,5 +84,5 @@ fn main() ? {
     } else {
         error Usage.Mode
     }
-    try io.Print($total "\n")
+    try io.Put($total "\n")
 }

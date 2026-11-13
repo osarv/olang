@@ -17,5 +17,5 @@ fn main() {
     for i in range 1000 { v.Push(blk(i)) }
     s := 0
     for x in g: s += x
-    io.Println("sum " $s)!
+    io.PutLine("sum " $s)!
 }

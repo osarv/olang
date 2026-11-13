@@ -12,5 +12,5 @@ fn wrap(k I64) String& {
 }
 run mut I64 = 1
 fn main() ? io.Error {
-    try io.Print($wrap(run) "\n")
+    try io.Put($wrap(run) "\n")
 }

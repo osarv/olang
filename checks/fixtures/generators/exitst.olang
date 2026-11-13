@@ -5,7 +5,7 @@ import "std/io"
 type Res unique struct(id I64) {
     id
 } destruct {
-    try io.Println("drop " $id) catch { }
+    try io.PutLine("drop " $id) catch { }
 }
 
 fn held(id I64, n I64) Iterator<I64> {

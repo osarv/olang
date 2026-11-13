@@ -102,7 +102,7 @@
 | 9 try
 | 9 io
 | 9 .
-| 9 Println
+| 9 PutLine
 | 9 (
 | 9 $
 | 9 b
@@ -211,7 +211,7 @@
 | 9 try
 | 9 io
 | 9 .
-| 9 Println
+| 9 PutLine
 | 9 (
 | 9 $
 | 9 b
@@ -344,7 +344,7 @@
 | 8 try
 | 8 io
 | 8 .
-| 8 Println
+| 8 PutLine
 | 8 (
 | 8 $
 | 8 f
@@ -378,7 +378,7 @@
 | 10 try
 | 10 io
 | 10 .
-| 10 Println
+| 10 PutLine
 | 10 (
 | 10 $
 | 10 y

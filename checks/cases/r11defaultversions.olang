@@ -39,10 +39,10 @@ fn main() ? {
         m := try Node.make(n - 5) catch default d
         m.v = 3
         churn()
-        try io.Println($b.v " " $m.v)
+        try io.PutLine($b.v " " $m.v)
     }
     t := top("ab", n)
     u := top("abc", 0)
     churn()
-    try io.Println($t " " $u)
+    try io.PutLine($t " " $u)
 }

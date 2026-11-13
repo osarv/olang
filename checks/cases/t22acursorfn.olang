@@ -16,5 +16,5 @@ fn main() ? {
         op(x, N(i + 10))
         op = link
     }
-    try io.Println($x.v " " $x.next!.v)
+    try io.PutLine($x.v " " $x.next!.v)
 }

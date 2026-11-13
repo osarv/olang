@@ -26,5 +26,5 @@ fn (b Bag&) Str() String {
     return $count(b.arr) " " $b.box.Twice()
 }
 fn main() ? {
-    try io.Println($Bag(Array<I64>[1, 2, 3], Box(5)))
+    try io.PutLine($Bag(Array<I64>[1, 2, 3], Box(5)))
 }

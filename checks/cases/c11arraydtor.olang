@@ -28,5 +28,5 @@ fn mk(n I64) I64 {
 fn main() {
     n := os.Args().Len() + 2
     assert mk(n) == 4
-    io.Println($Ended " " $Order)!
+    io.PutLine($Ended " " $Order)!
 }

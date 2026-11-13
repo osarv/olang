@@ -16,5 +16,5 @@ fn main() ? {
     f := adder(gone)
     for i in range 4 { f($i "!") }
     t := churn()
-    try io.Println($gone.Join(",") " " $(t > 0))
+    try io.PutLine($gone.Join(",") " " $(t > 0))
 }

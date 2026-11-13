@@ -33,7 +33,7 @@ After a `git pull`, run `make` again: it rebuilds the compiler only when its sou
 
 ```
 fn main() {
-    println("Hello World!")
+    Println("Hello World!")
 }
 ```
 

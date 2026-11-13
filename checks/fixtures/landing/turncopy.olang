@@ -16,5 +16,5 @@ fn main() ? {
         n := v[0]
         s += n.w
     }
-    try io.Println($s)
+    try io.PutLine($s)
 }

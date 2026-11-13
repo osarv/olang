@@ -95,7 +95,7 @@ fn step(h mut Holder&, i I64) {
     }
     h.set(i)            # lets go of the text the chain's last local holds
     churn()
-    io.Println(a34)!
+    io.PutLine(a34)!
 }
 
 fn main() {

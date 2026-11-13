@@ -22,5 +22,5 @@ fn main() {
         s += (try vv.Get(i % 16) catch { continue })[6]
         s += (try m.Get(i % 32) catch { continue })[7]
     }
-    io.Println($s " " $n)!
+    io.PutLine($s " " $n)!
 }

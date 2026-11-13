@@ -152,5 +152,5 @@ fn main() ? {
     }
     layout(root, 0, 0)
     for _ in range clicks: depth += click(hit(root, r.roll(4096), r.roll(4096)))
-    try io.Println("nestedbox: depth " $depth ", sum " $sum(root) ", live " $count(root))
+    try io.PutLine("nestedbox: depth " $depth ", sum " $sum(root) ", live " $count(root))
 }

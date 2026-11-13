@@ -15,7 +15,7 @@ fn grow(w mut Vec<I64>&) ? io.Error {
     d := vlib.View2(w)
     for i in range 1000 { w.Push(i + 100) }
     churn()
-    try io.Println($d[0] " " $d[1])
+    try io.PutLine($d[0] " " $d[1])
 }
 fn main() ? {
     v := Vec<I64>()

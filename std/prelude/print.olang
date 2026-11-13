@@ -1,21 +1,21 @@
-# printing with nothing to handle, part of the prelude (M19d): "print(x)" writes any value as "$x" renders it to the
-# standard output, "println(x)" with a line end after it, "println()" a line end alone. Each call is one write, as
-# std/io's are. A write the system refuses ends the program as "!" does (E35) - in a test, it fails the test - so no
-# "try" is written; a program that handles a failed write uses std/io's Print and Println, which fail with io.Error.
+# printing with nothing to handle, part of the prelude (M19d): "Print(x)" writes any value as "$x" renders it to the
+# standard output, "Println(x)" with a line end after it, "Println()" a line end alone. Each call is one write, as
+# std/io's are. A write the system refuses ends the program like "!" (E35) - in a test, it fails the test - so no
+# "try" is written; a program that handles a failed write uses std/io's Put and PutLine, which fail with io.Error.
 
 import unistd "unistd.h"
 
-# what a write to the standard output fails with, ended on by "!" in print and println
+# what a write to the standard output fails with, ended on in Print and Println (reported at the caller's place)
 type output error {
     Refused
     Stalled
 }
 
 # x as "$x" renders it, then nothing - to the standard output
-fn print<T>(x T) { writeOut($x)! }
+fn Print<T>(x T, at Place = Place.Here) { try writeOut($x) catch e { assert false, $at ": " $e } }
 
 # x as "$x" renders it and a line end - to the standard output; with nothing, a line end alone
-fn println<T>(x T = "") { writeOut($x "\n")! }
+fn Println<T>(x T = "", at Place = Place.Here) { try writeOut($x "\n") catch e { assert false, $at ": " $e } }
 
 # every byte of t to the standard output, retrying a short write on the rest
 fn writeOut(t String&) ? output {
@@ -29,10 +29,10 @@ fn writeOut(t String&) ? output {
     }
 }
 
-test "print and println write what $x renders" {
-    print("a")
-    print(1)
-    println(2.5)
-    println()
-    println(Array<I64>[1, 2])
+test "Print and Println write what $x renders" {
+    Print("a")
+    Print(1)
+    Println(2.5)
+    Println()
+    Println(Array<I64>[1, 2])
 }

@@ -11,5 +11,5 @@ fn (s S&) Slice(lo I64, hi I64) I64 { return hi - lo }
 
 fn main() {
     s := S(5)
-    io.Println("sliced " $s[1:])!
+    io.PutLine("sliced " $s[1:])!
 }

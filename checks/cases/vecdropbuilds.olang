@@ -76,5 +76,5 @@ fn main() ? {
     s := 0
     for x in out { s += x }
     assert out.Len() == 20 and s == 190 and out[0] == 19 and out[19] == 0
-    try io.Println($out.Len() "/" $s)
+    try io.PutLine($out.Len() "/" $s)
 }

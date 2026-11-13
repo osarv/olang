@@ -35,5 +35,5 @@ fn main() {
     for h in hs { out = $out $h.r.s }
     s := 0
     for h in ahs { s += h.a.Len() + h.a[0] }
-    io.Println("recs " $out " (12345) arrays " $s " (30)")!
+    io.PutLine("recs " $out " (12345) arrays " $s " (30)")!
 }

@@ -19,7 +19,7 @@ fn main() {
     b := Holder()
     for i in range 6 {
         b.n = Node(i + 1)
-        if a.n.next is not null { io.Println($"linked: " $a.n.next!.v " " $a.n.next!.t)! }
+        if a.n.next is not null { io.PutLine($"linked: " $a.n.next!.v " " $a.n.next!.t)! }
         a.n.next = b.n          # the node of one holder linked from another holder's node
         b.n = Node(100 + i)     # which lets go of it: freed at once
     }

@@ -32,5 +32,5 @@ fn main() ? {
     s := Store.load(4)
     churn()
     assert s.keys.Len() == 2
-    try io.Println($s.keys)
+    try io.PutLine($s.keys)
 }

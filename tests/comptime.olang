@@ -106,7 +106,7 @@ test "comptime gives constant data" {
     s := comptime "ab" "cd"
     assert s == "abcd"
     assert fixedLocal() == 8
-    io.Println("comptime: " $hot(3))!
+    io.PutLine("comptime: " $hot(3))!
 }
 
 test "comptime for unrolls" {

@@ -20,5 +20,5 @@ fn load(dir String&, keep mut Vec<Module>&) {
 fn main() ? {
     keep := Vec<Module>()
     load("src", keep)
-    try io.Println($keep.Len())
+    try io.PutLine($keep.Len())
 }

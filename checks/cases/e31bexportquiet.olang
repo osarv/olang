@@ -16,5 +16,5 @@ fn (b mut blk&) Bump() {
 fn main() {
     G.Push(blk(1))
     G[0].Bump()
-    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+    io.PutLine("G[0].n = " $G[0].n " len " $G.Len())!
 }

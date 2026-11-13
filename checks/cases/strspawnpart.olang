@@ -22,7 +22,7 @@ fn churn() I64 {
 type Bag struct(head mut Node&) {
     head
 }
-fn show(n Node&) { try io.Println($n.v) catch io.Error { } }
+fn show(n Node&) { try io.PutLine($n.v) catch io.Error { } }
 fn (b Bag&) Str() String {
     join { spawn show(b.head) }
     return "b"
@@ -31,5 +31,5 @@ fn main() ? {
     b := Bag(Node(4, null))
     s := $b
     churn()
-    try io.Println(s)
+    try io.PutLine(s)
 }

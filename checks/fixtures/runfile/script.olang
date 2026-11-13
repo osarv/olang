@@ -6,6 +6,6 @@ import "std/io"
 
 fn main() ? io.Error {
     args := os.Args()
-    for a in args { try io.Println(a) }
+    for a in args { try io.PutLine(a) }
     if args.Len() > 1 and args[1] == "seven" { os.Exit(7) }
 }

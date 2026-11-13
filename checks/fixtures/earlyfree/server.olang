@@ -36,5 +36,5 @@ fn main() {
         s.OnRequest(k % 64, "GET /index.html HTTP/1.1\nHost: example.com\nAccept: text/html\nX-Request: " $k "\n")
     }
     n := try s.conns[5].hdrs.Get("Host") catch { unreachable }
-    io.Println(n)!
+    io.PutLine(n)!
 }

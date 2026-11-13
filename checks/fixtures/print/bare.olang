@@ -1,9 +1,9 @@
-# M19d: the prelude's print and println - any value as $ renders it, no try; a write that fails ends the program as
+# M19d: the prelude's Print and Println - any value as $ renders it, no try; a write that fails ends the program as
 # "!" does
 fn main() {
     n := 42
-    print("n is ")
-    println(n)
-    println()
-    println(Array<I64>[1, 2])
+    Print("n is ")
+    Println(n)
+    Println()
+    Println(Array<I64>[1, 2])
 }

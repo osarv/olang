@@ -22,5 +22,5 @@ fn main() {
     steps := Vec<fn&(a mut Array<F32>&, b Array<F32>&)>()
     for _ in range n % 7 + 2 { steps.Push(scale) }
     for f in steps { f(a, b) }
-    io.Println($a[0] " " $big(n, 3) " " $big(F64(n), 2.5))!
+    io.PutLine($a[0] " " $big(n, 3) " " $big(F64(n), 2.5))!
 }

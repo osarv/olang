@@ -5,7 +5,7 @@ import "std/io"
 type Res unique struct(id I64) {
     id
 } destruct {
-    try io.Println("drop " $id) catch { }
+    try io.PutLine("drop " $id) catch { }
 }
 
 fn repeat<T>(x T, n I64) Iterator<T> {
@@ -50,28 +50,28 @@ type Holder struct(g Generator<I64>) {
 }
 
 fn main() ? {
-    try io.Println("total " $Total)
-    for s in slices("a,bb,,ccc") { try io.Println("[" $s "]") }
+    try io.PutLine("total " $Total)
+    for s in slices("a,bb,,ccc") { try io.PutLine("[" $s "]") }
     l := Vec<I64>()
     l.Push(1)
     l.Push(2)
-    for x in l.Twice() { try io.Println($x) }
+    for x in l.Twice() { try io.PutLine($x) }
     {
         g := guarded(10)
         a := try g.Next() catch default -1
         b := try g.Next() catch default -1
-        try io.Println("got " $a " " $b)
+        try io.PutLine("got " $a " " $b)
     }
-    try io.Println("after")
-    for z in nested(2) { try io.Println($z) }
+    try io.PutLine("after")
+    for z in nested(2) { try io.PutLine($z) }
     h := Holder(repeat(7, 2))
     c := h.g
     x1 := try h.g.Next() catch default -1
     x2 := try c.Next() catch default -1
     x3 := try c.Next() catch default -1
-    try io.Println($x1 " " $x2 " " $x3)
+    try io.PutLine($x1 " " $x2 " " $x3)
     a mut any Iterator<I64>& = repeat(5, 3)
     n I64 = 0
     for v in a { n += v }
-    try io.Println("any " $n)
+    try io.PutLine("any " $n)
 }

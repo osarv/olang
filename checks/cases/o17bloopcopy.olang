@@ -34,5 +34,5 @@ fn total(words Array<String&>&) I64 {
 fn main() ? {
     t := total(Array<String&>["x", "y", "x"])
     assert t == 2
-    try io.Println($t)
+    try io.PutLine($t)
 }

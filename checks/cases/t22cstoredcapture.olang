@@ -33,5 +33,5 @@ fn main() ? {
     }
     s := 0
     for n in k.kept { s += n.v }
-    try io.Println($k.kept.Len() " " $s " " $t)
+    try io.PutLine($k.kept.Len() " " $s " " $t)
 }

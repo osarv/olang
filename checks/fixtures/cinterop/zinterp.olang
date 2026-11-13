@@ -8,5 +8,5 @@ extern link "z" {
 
 fn main() {
     t := "hello".ToC()
-    io.Println("bound " $compressBound(100) " crc " $crc32(0, t, 5).Format(16))!
+    io.PutLine("bound " $compressBound(100) " crc " $crc32(0, t, 5).Format(16))!
 }

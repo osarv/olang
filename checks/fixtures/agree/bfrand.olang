@@ -20,5 +20,5 @@ fn main() ? io.Error {
         v I64 = I64(k) - 300
         b.Push($BF16(v).Bits() " " $F16(v * 113).Bits() "\n")
     }
-    try io.Print(b.ToString())
+    try io.Put(b.ToString())
 }

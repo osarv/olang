@@ -22,5 +22,5 @@ fn main() {
         a := Array<F64>(4, 9.0)
         assert a[0] == 9.0
     }
-    io.Println($t " " $kept.Len() " " $kept[2].Data[0])!
+    io.PutLine($t " " $kept.Len() " " $kept[2].Data[0])!
 }

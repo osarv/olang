@@ -9,5 +9,5 @@ fn main() ? {
         x mut Array<I64>& = Array<I64>(4)
         y = x
     }
-    try io.Println($y[0])
+    try io.PutLine($y[0])
 }

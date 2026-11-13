@@ -121,5 +121,5 @@ fn main() ? {
     c := a.codes
     assert viewed(c, c) == 10000
     assert c[0] == Code(10) and c[n - 1] == Code(10), $c[0]
-    try io.Println("narrow: ok")
+    try io.PutLine("narrow: ok")
 }

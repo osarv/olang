@@ -22,5 +22,5 @@ fn NB.bad(p P) NB& {
 fn main() ? {
     b := NB.bad(P(1))
     churn()
-    try io.Println($b.inner.x)
+    try io.PutLine($b.inner.x)
 }

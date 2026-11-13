@@ -39,6 +39,6 @@ fn mk() String {
 }
 Baked String& = mk()
 fn main() ? {
-    try io.Println(mk())
+    try io.PutLine(mk())
     assert Baked == mk()
 }

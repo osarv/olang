@@ -15,5 +15,5 @@ fn main() ? {
         x String& = "w" $i
         cells[i].s = x
     }
-    try io.Println(cells[0].s)
+    try io.PutLine(cells[0].s)
 }

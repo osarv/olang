@@ -269,6 +269,6 @@ fn main() ? {
     top := c.block(p.T, prog)
     m := Machine(c.slots)
     for k in range I64(top.From), I64(top.To): m.run(c.T, c.T.List[k])
-    try io.Println(("vals: " $ntoks " tokens, " $c.slots " slots, " $c.errors " errors, " $m.prints " prints, sum "
+    try io.PutLine(("vals: " $ntoks " tokens, " $c.slots " slots, " $c.errors " errors, " $m.prints " prints, sum "
         $m.sum))
 }

@@ -39,11 +39,11 @@ fn main() {
         churn()
         t += x
     }
-    io.Println($t)!
+    io.PutLine($t)!
     for k in range 6 { h.l.Push($"text item " $k " padded out ...................................") }
     for y in eachText(h) {
         try h.l.Pop() catch { }                             # lets go of the last element
         churn()
-        io.Println($y)!
+        io.PutLine($y)!
     }
 }

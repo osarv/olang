@@ -25,5 +25,5 @@ fn main() ? {
     n := bor(q)
     q.x = 0
     churn()
-    try io.Println(n.Name())
+    try io.PutLine(n.Name())
 }

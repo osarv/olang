@@ -2,5 +2,5 @@
 import "std/io"
 import "anylib"
 fn main() {
-    for x in anylib.Make(3) { try io.Println($x) catch { } }
+    for x in anylib.Make(3) { try io.PutLine($x) catch { } }
 }

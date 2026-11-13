@@ -6,13 +6,13 @@ type FRes unique struct(k I64) ? E {
     gone Bool = false
     if k < 0 { error E.X }
 } destruct {
-    try io.Println("destruct " $k " (this instance destructed before: " $gone ")") catch io.Error { }
+    try io.PutLine("destruct " $k " (this instance destructed before: " $gone ")") catch io.Error { }
     gone = true
 }
 fn main() ? {
     {
         x := try FRes(-1) catch default (try FRes(5) catch { unreachable })
-        try io.Println("x " $x.k)
+        try io.PutLine("x " $x.k)
     }
-    try io.Println("end")
+    try io.PutLine("end")
 }

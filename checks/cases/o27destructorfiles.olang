@@ -40,5 +40,5 @@ fn keepNames(n I64) Vec<I32> {
 fn main() {
     fds := keepNames(4)
     for fd in fds { assert not open(fd), "a kept file's descriptor was left open after its scope closed" }
-    io.Println($fds.Len() " files kept open for their views, then closed")!
+    io.PutLine($fds.Len() " files kept open for their views, then closed")!
 }

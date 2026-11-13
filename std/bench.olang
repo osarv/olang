@@ -134,7 +134,7 @@ fn Run<? E>(body fn&() ? E, label String& = "", budget time.Duration = DefaultBu
     }
     m := try Measurement.Of(body, budget)
     name := $running() $("/" if label != "" else "") $label
-    try io.Println($"bench " $name "  " $m) catch io.Error { }
+    try io.PutLine($"bench " $name "  " $m) catch io.Error { }
 }
 
 # the running test's name, as its run reports it ("Sum: a million numbers"), "" outside a test

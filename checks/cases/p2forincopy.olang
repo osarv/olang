@@ -17,5 +17,5 @@ fn main() ? {
             spawn out[i] = see(n)
         }
     }
-    try io.Println($out[0] " " $out[1])
+    try io.PutLine($out[0] " " $out[1])
 }

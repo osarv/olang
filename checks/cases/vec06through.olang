@@ -8,5 +8,5 @@ fn main() ? {
     v.Push(4)
     d := firstPart(v)
     v.Push(5)
-    try io.Println($d)
+    try io.PutLine($d)
 }

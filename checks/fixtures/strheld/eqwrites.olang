@@ -19,7 +19,7 @@ fn main() ? {
     p1 := P(K(1))
     p2 := P(K(1))
     s := $G " " $(p1 == p2)
-    try io.Println(s)
+    try io.PutLine(s)
     t := $G " " $(K(1) == K(2))
-    try io.Println(t)
+    try io.PutLine(t)
 }

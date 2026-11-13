@@ -35,5 +35,5 @@ fn main() {
     }
     s := 0
     for w in ws { s += w.v.Len() }
-    io.Println("sum " $s " (15)")!
+    io.PutLine("sum " $s " (15)")!
 }

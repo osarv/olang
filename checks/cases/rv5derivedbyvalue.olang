@@ -33,5 +33,5 @@ fn main() ? {
         f(h)
     }
     churn()
-    try io.Println($rd(k))
+    try io.PutLine($rd(k))
 }

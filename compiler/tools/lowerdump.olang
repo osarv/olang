@@ -31,7 +31,7 @@ import "../lower"
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PrintErrln("usage: lowerdump [-D NAME=VALUE]... [-t] [-v] [-standin] [-mir PATTERN] [-typed PATTERN] FILE...")
+        try io.PutErrLine("usage: lowerdump [-D NAME=VALUE]... [-t] [-v] [-standin] [-mir PATTERN] [-typed PATTERN] FILE...")
             catch io.Error { }
         os.Exit(2)
     }

@@ -218,7 +218,7 @@ fn filesOf(paths Array<String&>&) Vec<String&> ? {
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PrintErrln("usage: donefail_migrate PATH...")
+        try io.PutErrLine("usage: donefail_migrate PATH...")
         os.Exit(2)
     }
     left := Vec<String&>()
@@ -227,8 +227,8 @@ fn main() ? {
         if f.EndsWith("donefail_migrate.olang") { continue }
         total += try migrate(f, left)
     }
-    try io.Println($total " lines changed")
-    for l in left { try io.Println(l) }
+    try io.PutLine($total " lines changed")
+    for l in left { try io.PutLine(l) }
 }
 
 test "a fail ending a catch becomes '!' outside a test and goes in one" {

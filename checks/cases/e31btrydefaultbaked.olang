@@ -19,5 +19,5 @@ Baked := f()
 V mut I64 = 0
 fn main() ? {
     V = f()
-    try io.Println("baked " $Baked " run " $V)
+    try io.PutLine("baked " $Baked " run " $V)
 }

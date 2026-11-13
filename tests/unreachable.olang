@@ -51,7 +51,7 @@ test "unreachable gives way to the values beside it" {
     assert first(v) == "q"
     assert twice(3 if v.Len() == 1 else unreachable) == 6
     assert sign(1) == 1 and sign(0) == 0
-    io.Println(pick("unreachable: ok", true))!
+    io.PutLine(pick("unreachable: ok", true))!
 }
 
 test "the evaluator agrees" {

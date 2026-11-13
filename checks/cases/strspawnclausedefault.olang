@@ -30,7 +30,7 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     b := Bag(Node(1))
-    try io.Println($b)
+    try io.PutLine($b)
     t := churn(100)
-    try io.Println($b.head.next!.v " " $t)
+    try io.PutLine($b.head.next!.v " " $t)
 }

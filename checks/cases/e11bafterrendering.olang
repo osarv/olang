@@ -4,5 +4,5 @@ import "std/io"
 fn main() ? {
     mark := "!"
     n := 5
-    try io.Println("a " $n mark "b")
+    try io.PutLine("a " $n mark "b")
 }

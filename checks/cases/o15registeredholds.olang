@@ -49,5 +49,5 @@ fn main() ? {
     t := Tally()
     hold(t)
     assert t.n == 22
-    try io.Println("n " $t.n)
+    try io.PutLine("n " $t.n)
 }

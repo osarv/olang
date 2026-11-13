@@ -23,5 +23,5 @@ fn churn() {
 fn main() {
     r := walk(Array<I64>(os.Args().Len() + 3, 1), 2)
     churn()
-    io.Println($r)!
+    io.PutLine($r)!
 }

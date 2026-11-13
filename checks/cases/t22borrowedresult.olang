@@ -27,5 +27,5 @@ fn main() {
     x mut N& = N(1)
     keep(self, x, 42)
     churn()
-    io.Println($x.next!.v)!
+    io.PutLine($x.next!.v)!
 }

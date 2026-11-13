@@ -4,5 +4,5 @@ import "std/os"
 
 fn main() ? {
     try os.WriteFile("/dev/null", "x")
-    try io.Println("written")
+    try io.PutLine("written")
 }

@@ -8,20 +8,20 @@ import "std/cancel"
 fn main() ? os.Error, io.Error, json.Error {
     r := try os.Output.Exec("printf", "{\"a\": [1, 2.5e-3, true], \"b\": \"%s\"}", "it's ok \\u00e9")
     doc := try json.Json.Parse(r.Stdout)
-    try io.Print($r.Status " " $json.Encode(doc) "\n")
-    try io.Print($json.Encode(doc, "  ") "\n")
+    try io.Put($r.Status " " $json.Encode(doc) "\n")
+    try io.Put($json.Encode(doc, "  ") "\n")
     e := try os.Output.Exec("sh", "-c", "cat; echo err >&2; exit 4", input = "fed in")
-    try io.Print($e.Status " [" $e.Stdout "] [" $e.Stderr "]\n")
+    try io.Put($e.Status " [" $e.Stdout "] [" $e.Stderr "]\n")
     missing := "no"
     try os.Output.Exec("olang-no-such-program") catch os.Error.NotFound { missing = "yes" }
-    try io.Print("missing " $missing "\n")
+    try io.Put("missing " $missing "\n")
     try processes()
 }
 
 # X6: a directory to run in, a deadline that kills, and programs started and waited for - the same either way
 fn processes() ? os.Error, io.Error {
     w := try os.Output.Exec("pwd", dir = "/")
-    try io.Print("in " $w.Stdout)
+    try io.Put("in " $w.Stdout)
     late := "no"
     try os.Output.ExecUntil(cancel.Token.After(50), "sleep", "5") catch cancel.Stopped { late = "yes" }
     p := try os.Process.Start("cat", input = "started")
@@ -29,5 +29,5 @@ fn processes() ? os.Error, io.Error {
     q.Kill()
     a := try p.Wait()
     b := try q.Wait()
-    try io.Print("late " $late " [" $a.Stdout "] " $b.Status "\n")
+    try io.Put("late " $late " [" $a.Stdout "] " $b.Status "\n")
 }

@@ -18,7 +18,7 @@ fn addRef(b mut Box&, v I64) { b.head.next = Node(v, b.head.next) }
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.Println("x") }
+        if a[0] == 3 { try io.PutLine("x") }
     }
 }
 fn main() ? {
@@ -30,5 +30,5 @@ fn main() ? {
     try churn()
     n := 0
     for x Node?& = seed.head, x is not null, x = x.next { n = n * 10 + x.v }
-    try io.Println("chain " $n)
+    try io.PutLine("chain " $n)
 }

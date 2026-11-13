@@ -19,5 +19,5 @@ fn main() {
         m.Put(i % 64, Res(i, 32))
         t += m.Ref(i % 64)!.data[31]
     }
-    io.Println($Ended " " $t " " $m.Len())!
+    io.PutLine($Ended " " $t " " $m.Len())!
 }

@@ -17,7 +17,7 @@ fn (b Big&) Str() String {
 G String& = $Big(1) "g"
 type Res unique struct(k I64) {
     k
-} destruct { try io.Println("dtor " $Big(k) "!") catch io.Error { } }
+} destruct { try io.PutLine("dtor " $Big(k) "!") catch io.Error { } }
 type Holder struct(k I64) {
     k
     t String& = $Big(k) "h"
@@ -37,27 +37,27 @@ fn fails(k I64) String ? {
 fn main() ? {
     f := fn(k I64) I64 { s := $Big(k) "lam"
         return s.Len() }
-    try io.Println($f(3) " " $G.Len())
+    try io.PutLine($f(3) " " $G.Len())
     {
         r := Res(4)
-        defer { try io.Println("defer " $Big(5) "!") catch io.Error { } }
+        defer { try io.PutLine("defer " $Big(5) "!") catch io.Error { } }
         match r.k {
             case 4 {
                 x := $Big(6) "m"
-                try io.Println(x)
+                try io.PutLine(x)
             }
             case _ { }
         }
     }
     h := Holder(7)
     h2 := Holder2(8)
-    try io.Println($h.t " " $h2.t)
+    try io.PutLine($h.t " " $h2.t)
     d := try fails(1) catch default $Big(9) "d"
-    try io.Println(d)
+    try io.PutLine(d)
     out := Array<I64>(2)
     join { for k in range 2 { spawn out[k] = f(10 + k) } }
-    try io.Println($out)
+    try io.PutLine($out)
     i I64 = 0
     for ($Big(11) " " $i).Len() > 0 and i < 3 { i++ }
-    try io.Println($i)
+    try io.PutLine($i)
 }

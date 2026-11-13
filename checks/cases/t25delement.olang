@@ -30,5 +30,5 @@ fn main() ? {
     churn()
     assert keep.Len() == 5 and keep[1] == "b" and keep[4] == "bob"
     assert w == "c" and op == " * "
-    try io.Println($keep.Len() $w $op)
+    try io.PutLine($keep.Len() $w $op)
 }

@@ -10,7 +10,7 @@ type Node struct(n I64) {
 type Holder struct() {
     cur mut Node?&
 }
-fn look(h Holder&) { try io.Println(h.cur!.name) catch io.Error { } }
+fn look(h Holder&) { try io.PutLine(h.cur!.name) catch io.Error { } }
 fn main() ? {
     join {
         {

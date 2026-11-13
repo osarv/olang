@@ -48,5 +48,5 @@ fn main() ? {
     }
     churn()
     assert t.seen.Len() >= 37 + 28 and t.seen.Len() <= 37 + 30
-    try io.Println($t.seen.Len() " " $sum(t))
+    try io.PutLine($t.seen.Len() " " $sum(t))
 }

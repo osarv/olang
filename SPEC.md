@@ -3136,11 +3136,11 @@ through the owner's name (`Color.FromHex(t)`), never through a value.
 `prelude` directory, each an ordinary module, loaded before any other module. Their exported types and
 their exported immutable globals - the **constants of the prelude** - are visible in every module by their bare names,
 with no import, and no module may declare a type, a global, a function, a local or a parameter of the same name
-(D2, D3a). So are its two **printing functions**, `print(x)` and `println(x = "")`, lower case as a word of the
-language is, and reserved the same way: each writes `$x` (E11a) - `println` with a line end after it, a line end alone
-with nothing - to the standard output in one write, and a write the system refuses ends the program as `!` does (E35;
-in a test, the test fails), so neither is fallible and no `try` is written. A program that handles a failed write uses
-`std/io`'s `Print` and `Println` (M19f), which fail with `io.Error`. They are the only modules that may declare methods on a built-in type, which is how the built-in
+(D2, D3a). So are its two **printing functions**, `Print(x)` and `Println(x = "")`, exported like any
+other prelude name (M6) and reserved the same way: each writes `$x` (E11a) - `Println` with a line end after it, a line end alone
+with nothing - to the standard output in one write, and a write the system refuses ends the program as `!` does (E35, reported at the
+caller's place, the trailing parameter `at Place = Place.Here`, E40; in a test, the test fails), so neither is fallible and no `try` is written. A program that handles a failed write uses
+`std/io`'s `Put` and `PutLine` (M19f), which fail with `io.Error`. They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
 of the built-in types and of its own - `String.FromC(p, max)` (X15), the floats' `FromBits` (E33), every integer type's
 `Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
@@ -3449,18 +3449,18 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 `x`'s sign bit is set, so `(-0.04).Fixed(1)` is `-0.0`. A NaN is `nan`, an infinity `inf` or `-inf`, as `$` writes them
 (E11a). It is ordinary computation in the prelude, so it is evaluated while compiling (K1) as at run time.
 
-**M19f (writing text).** Writing text is `std/io`'s - beside the prelude's `print` and `println` (M19d), which end the
+**M19f (writing text).** Writing text is `std/io`'s - beside the prelude's `Print` and `Println` (M19d), which end the
 program where a write fails - with no words of the compiler's own:
 
 ```
-fn Print(t String&) ? io.Error            # t, to the standard output
-fn Println(t String& = "") ? io.Error     # t and a line end, to the standard output
-fn PrintErr(t String&) ? io.Error         # t, to the standard error
-fn PrintErrln(t String& = "") ? io.Error  # t and a line end, to the standard error
+fn Put(t String&) ? io.Error            # t, to the standard output
+fn PutLine(t String& = "") ? io.Error     # t and a line end, to the standard output
+fn PutErr(t String&) ? io.Error         # t, to the standard error
+fn PutErrLine(t String& = "") ? io.Error  # t and a line end, to the standard error
 ```
 
-Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.Println("n is " $n)`.
-`Println` and `PrintErrln` write the text and its line end as one write. Each call writes at once, with nothing held
+Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.PutLine("n is " $n)`.
+`PutLine` and `PutErrLine` write the text and its line end as one write. Each call writes at once, with nothing held
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
 `io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
 of one is never evaluated while compiling (K1) and is performed under `interpret` (B3e).
@@ -5001,7 +5001,7 @@ writes `FILE:LINE: ` and the error - its type, named as the program writes it, a
 of its path (`io.Error.Failed`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; a check is a call
 that can fail, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
-`fn main() { io.Println("Hello World!")! }` is a program. On a value of a nullable reference type (T2c) - an array's
+`fn main() { io.PutLine("Hello World!")! }` is a program. On a value of a nullable reference type (T2c) - an array's
 included - `x!` is that reference as a `T&`, and on a function value that may be null (`fn?&(...)`, T21) that value as
 a `fn&(...)` (`f!(x)` calls it), ending the program as a failed `assert` does (`FILE:LINE: null reached`) when it is
 null - after handling a failure first, where the expression can also fail. `!` on an expression that neither can fail
@@ -5032,7 +5032,7 @@ is read through the type's name only (as E36's limits are), and any other member
 
 ```
 fn expectEq(got I64, want I64, at Place = Place.Here) {
-    if got != want: io.PrintErrln($at ": got " $got ", want " $want)!
+    if got != want: io.PutErrLine($at ": got " $got ", want " $want)!
 }
 expectEq(f(2), 4)                       # reports this line, not expectEq's
 ```
@@ -8860,7 +8860,7 @@ ends - by returning from `main`, by `os.Exit` (B5b), by an error leaving `main`,
 crashes; a process the program forks writes none.
 
 **B20a (names).** A function is named in a profile as source writes it outside its module: a module's function by the
-module's alias and its name (`io.Println`), a method by its receiver's type and its name (`check.Checker.Expr`,
+module's alias and its name (`io.PutLine`), a method by its receiver's type and its name (`check.Checker.Expr`,
 `Vec<I64>.Push` - the type written as `$` spells types), a constructor by its type, a destructor `T.destruct`, a lambda
 by the function it is written in (`main.lambda`), a global's initializer `NAME.init`; the root module's own and the
 prelude's are bare (`burn`, `Vec<I64>.Push`), as error names print (B5). A function inlined into another is still named
