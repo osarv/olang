@@ -114,7 +114,7 @@ slimming of 2026-11-08").
 - **A README per folder** that is a thing of its own, in the commit that creates it; kept current.
 - **Keep old tests**: the suite is additive; touch an old test only when the language change invalidates it.
 - **Nesting depth: three blocks, four at most** (mine and my agents' code only): guard clauses, `:` one-liners, helpers.
-- **One-line bodies (the user, 2026-11-13: "a lot of places where we dont use the new : semantic for one-statement followups on conditions or loops blocks")**: a block of one simple statement after `if`, `else`, `for`, `catch` is written `if c: stmt` (S1b), in new code and in every refactor; the refactor pass converts the existing ones (mechanically, by a tool, where S1b allows).
+- **One-line bodies (the user, 2026-11-13: "a lot of places where we dont use the new : semantic for one-statement followups on conditions or loops blocks")**: a block of one simple statement after `if`, `else`, `for`, `catch` is written `if c: stmt` (S1b), in new code and in code a change touches anyway; no dedicated pass ("its not a big deal, just something to remember going into the future").
 - **Use the construct that fits**: the language's newer forms (guard clauses, narrowing, `case P: v`, conditional
   expressions, comprehensions, generators, `try` over a whole expression, named arguments, `become`, `defer`, reflection,
   lane operators) over C-style habit.
