@@ -17,6 +17,3 @@ fn (a Axis) Bounds(n I64) I64, I64 {
         case Axis.Rest: return 0, n
     }
 }
-
-# whether the item is a plain index, the axis it names dropped where the type follows NumPy
-fn (a Axis) Drops() Bool { return a == Axis.Index }
