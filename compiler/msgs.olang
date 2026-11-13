@@ -425,6 +425,7 @@ type Diag enum {
     ShadowsFunction
     ShadowsBuildConst
     PreludeConstRedeclared
+    PreludeFuncRedeclared
     ShadowsType
     TypeHasNoConstructor
     MethodCalledAsFunction
@@ -1426,6 +1427,7 @@ fn ShadowsGlobal(tok String&) r.Msg { return r.Msg(Diag.ShadowsGlobal, "D3a", $t
 fn ShadowsFunction(tok String&) r.Msg { return r.Msg(Diag.ShadowsFunction, "D3a", $tok " names a function of this module - a name means one thing in it, so name this apart") }
 fn ShadowsBuildConst(tok String&) r.Msg { return r.Msg(Diag.ShadowsBuildConst, "D3a", $tok " is a build constant - choose another name") }
 fn PreludeConstRedeclared(tok String&) r.Msg { return r.Msg(Diag.PreludeConstRedeclared, "D3a", $tok " is a constant of the prelude - choose another name") }
+fn PreludeFuncRedeclared(tok String&) r.Msg { return r.Msg(Diag.PreludeFuncRedeclared, "D3a", $tok " is the prelude's function, reached bare in every module - choose another name") }
 fn ShadowsType(tok String&) r.Msg { return r.Msg(Diag.ShadowsType, "D3a", $tok " is a type's name - choose another") }
 fn TypeHasNoConstructor(tok String&) r.Msg { return r.Msg(Diag.TypeHasNoConstructor, "", "type " $tok " has no constructor - an enum's values are its cases") }
 fn MethodCalledAsFunction(tok String&, text String&) r.Msg { return r.Msg(Diag.MethodCalledAsFunction, "M19", $tok " is a method - call it on its receiver: x." $text "(...)") }

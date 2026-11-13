@@ -839,6 +839,9 @@ fn LibName(file String&) String {
 # written) and ARGS as its command line - its status, a signal's included, the program's own (B3g)
 fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     c.Quiet = true
+    # B3g: a file run is built as -quick builds (B2g) unless -debug or -race says how much to optimize - start-up is
+    # what running a file waits on, and -O3 with link-time optimization is build's
+    if not c.Debug and not c.Race: c.Quick = true
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
     run := try c.runner(d) catch Failed { return finish(d) }

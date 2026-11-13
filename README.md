@@ -32,15 +32,13 @@ After a `git pull`, run `make` again: it rebuilds the compiler only when its sou
 `hello.olang`:
 
 ```
-import "std/io"
-
 fn main() {
-    io.Println("Hello World!")!
+    println("Hello World!")
 }
 ```
 
 ```
-build/olang hello.olang       # builds the program and runs it
+build/olang hello.olang       # builds the program quickly (-quick) and runs it; an unchanged one is not built again
 build/olang test hello.olang  # runs the file's tests
 build/olang help              # every mode and option
 make install                  # links ~/.local/bin/olang to build/olang, so `olang` runs from anywhere

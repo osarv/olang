@@ -80,6 +80,8 @@ type Diagnostics struct(Color Bool) {
     fatalText String& = ""
     fatal Bool = false
     Quiet Bool = false              # nothing reported while it is set: a pass walking code a second time (names' survey)
+    Lenient Bool = false            # interpret (B3e): what is only untidy - D3b, M5a - is a warning, not an error
+    warns := Vec<record>()          # the warnings, in report order
 }
 
 Pending I64 = 0
@@ -154,6 +156,13 @@ fn (d mut Diagnostics&) ErrorOncePerLine(at Where, m diagmsg.Msg) I64 { return d
 
 fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
     if d.Quiet { return -1 }
+    if d.Lenient and Untidy(m.Rule) {
+        for w in d.warns {
+            if w.text == m.Text and w.at == at: return -1
+        }
+        d.warns.Push(record(at, m.Rule, m.Text, m.Kind, -1, false))
+        return -1
+    }
     if d.scopeOn and isScopeRule(m.Rule) {
         if d.scopeSeen { return -1 }
         d.scopeSeen = true
@@ -199,7 +208,7 @@ fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
 # earlier or later, by another pass (D3b: an unread local is most often what another mistake left out)
 fn (d mut Diagnostics&) ErrorAlone(at Where, m diagmsg.Msg) I64 {
     r := d.Error(at, m)
-    d.alone.Push(r)
+    if r >= 0: d.alone.Push(r)
     return r
 }
 
@@ -669,6 +678,16 @@ fn (d mut Diagnostics&) Errors() I64 { return d.written().Len() + (1 if d.fatal 
 # whether a fatal error was reported: nothing after it is worth judging
 fn (d Diagnostics&) HasFatal() Bool { return d.fatal }
 
+# B3e: what interpret reports as a warning and runs the program beside - an unread local (D3b), an unused import (M5a)
+fn Untidy(rule String&) Bool { return rule == "D3b" or rule == "M5a" }
+
+# the warnings (Lenient), each a row "path:line:col: warning[RULE]: text" with its source, in report order
+fn (d mut Diagnostics&) Warnings() String {
+    b := StringBuilder()
+    for w in d.warns: d.putRow(b, w.at, "warning", w.rule, w.text)
+    return b.ToString()
+}
+
 # every diagnostic, in source order: each error with its source and its notes, then the fatal one if there is one
 fn (d mut Diagnostics&) Render() String {
     b := StringBuilder()
@@ -716,6 +735,8 @@ fn (d mut Diagnostics&) putRow(b mut StringBuilder&, at Where, word String&, rul
     d.putLocation(b, at)
     if word == "error" {
         b.Push(d.errorWord(rule))
+    } else if word == "warning" {
+        b.Push($d.sgr("1;35") "warning[" $rule "]:" $d.sgr("0") " ")
     } else {
         b.Push($d.sgr("1;36") "note:" $d.sgr("0") " ")
     }

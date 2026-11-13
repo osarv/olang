@@ -124,7 +124,12 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 once had to rename `Place`); `std/prelude/tests/`; the compiler's hard-coded prelude names - `grep -n '"NAME"'
 compiler/check.olang generic.olang explain.olang bindgen.olang` and `c.P.PreludeFn("std/prelude/...", "fn")` (the
 compiler calls prelude functions by name: `caseIndex`, `attrGot`, `Generator`, `Place`); `eval.olang` for an
-intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method set is a rule.
+intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method set is a rule. A function reached bare (`print`,
+`println`, M19d) is named in `compiler/names.olang` `PreludeFunction`, which the resolver, D3a's message and the
+language server's completion (`session.olang` `moduleNames`) read.
+
+A diagnostic said as a warning under `interpret` (B3e: D3b, M5a) is named in `compiler/diag.olang` `Untidy`; the row
+`warning[RULE]` is B11's, and `editors/nvim/compiler/olang.vim`'s errorformat reads it.
 
 ## A built-in type or supplied method
 

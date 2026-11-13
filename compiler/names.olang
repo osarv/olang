@@ -153,6 +153,8 @@ fn (r mut Resolver&) Resolve() {
             if en.Kind == What.Global and not en.Mut and r.text(e.Key)[0].IsUpper() {
                 r.preludeConsts.Put(e.Key, Ref(What.Global, mi, e.Value))
             }
+            # M19d: the prelude's functions print and println are reached bare, as its constants are
+            if en.Kind == What.Func and PreludeFunction(r.text(e.Key)): r.preludeConsts.Put(e.Key, Ref(What.Func, mi, e.Value))
         }
     }
     for mi in range r.L.Mods.Len() {
@@ -578,7 +580,7 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
         if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
             r.L.Diags.Error(r.at(mi, sp), msgs.NameIsType(r.tok(n)))
         }
-        if not m.Prelude and n in r.preludeConsts { r.L.Diags.Error(r.at(mi, sp), msgs.PreludeConstRedeclared(r.tok(n))) }
+        if not m.Prelude and n in r.preludeConsts { r.preludeTaken(mi, n, sp) }
         t.values.Put(n, t.Entries.Len())
     }
     t.Entries.Push(Entry(n, sp, What.Func if isFunc else What.Global, mutable, null))
@@ -643,6 +645,15 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     if p >= 0 { return Ref(What.Type, p, try r.Tables[p].types.Get(n) catch default -1) }
     if BuiltinTypeName(name) { return Ref(What.Builtin, -1, -1) }
     return Ref(What.None, -1, -1)
+}
+
+# M19d: the prelude's functions reached by their bare names in every module - lower case, as Python's are
+fn PreludeFunction(name String&) Bool { return name == "print" or name == "println" }
+
+# D3a, M19d: what a declaration reusing a name the prelude gives every module is told
+fn (r mut Resolver&) preludeTaken(mi I64, n source.NameId, sp source.Span) {
+    m := msgs.PreludeFuncRedeclared(r.tok(n)) if PreludeFunction(r.text(n)) else msgs.PreludeConstRedeclared(r.tok(n))
+    r.L.Diags.Error(r.at(mi, sp), m)
 }
 
 # a type's name in module mi: its own, the prelude's exported one, or a built-in one
@@ -763,7 +774,7 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
     } else if r.L.Consts.Has(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
     } else if n in r.preludeConsts {
-        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeConstRedeclared(r.tok(n)))
+        r.preludeTaken(r.mi, n, sp)
     } else if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n)))
     } else {
@@ -1795,7 +1806,7 @@ fn lineCol(text String&, at I64) I64, I64 {
 test "D2, D3a and M20: a name means one thing in a module; nothing is reached bare that no import gave" {
     got := testRules(Array<String&>["main.olang", "import \"util\"\nfn Circle() I32 { return 3 }\ntype Circle struct() { }\nCount I32 = 1\nfn f(Count I32, I32 I32) { for c in Array<I32>[1] { c := 2 } }\nfn print() { }\nutil := 3\nfn main() ? { }\n", "util.olang", ""], Array<String&>[])
     assert got.Contains("D2 3:6\n") and got.Contains("D3a 5:6\n") and got.Contains("D3a 5:17\n"), got
-    assert got.Contains(" 5:53\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
+    assert got.Contains(" 5:53\n") and got.Contains("D3a 6:4\n") and got.Contains("M20 7:1\n"), got   # M19d: print is the prelude's
 }
 
 test "B10, B10c: build constants and their defaults, and an unknown name in a condition" {

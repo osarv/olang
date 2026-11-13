@@ -69,7 +69,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   integration").** LSP over stdio (diagnostics, hover, definition, symbols, completion, formatting); MCP over stdio
   (`check`, `explain`, `doc`, `format`, `test`). The Neovim plugin and notes are `editors/`.
 - **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs it (its
-  status, `#!/usr/bin/env olang` scripts); `-output PATH` names the output (B3h).
+  status, `#!/usr/bin/env olang` scripts); `-output PATH` names the output (B3h). **Built as `-quick` builds unless
+  `-debug` or `-race` is given (2026-11-13, the user's ease items)**; an unchanged program is not built again (B3i).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; only whitespace changes.
 - **The bitwise operators bind tighter than the comparisons (E5, mine 2026-10-24).** `x & 1 == 0` is `(x & 1) == 0`:
   `| ^ &` sit between the comparisons and the shifts.
@@ -91,7 +92,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Every local is read and every import used (D3b, M5a, 2026-10-26, the user: "extend this to unused variables
   too").** A read is any appearance but as an assignment target (Go's rule); a place never read is written `_`.
   Exempt: parameters, constructor fields, catch names, destructor-typed locals, names in branches the build leaves out.
-  Said only of a program with no other error.
+  Said only of a program with no other error. **Under `interpret` both are warnings (`warning[D3b]: ...` on the
+  standard error) and the program runs (B3e, 2026-11-13, the user's ease items)**; `test -interpret` keeps them errors.
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
   once. Assignment to a reference repoints (S4a). Parallel assignment `a, b = b, a` evaluates every value first;
   `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call); `x[i] = v` on a type declaring
@@ -902,7 +904,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
   Place.Here) T` (QBP 4) writes `FILE:LINE:COLUMN: $v` to the standard error and gives `v` back. `io.Writer` buffers
-  (errors at `Flush`); `io.Lines` reads lines.
+  (errors at `Flush`); `io.Lines` reads lines. **`print(x)` and `println(x = "")` (M19d, the user's "make the language
+  as easy to use as python", 2026-11-13)**: the prelude's two functions reached bare, any value as `$x` renders it, no
+  `try` - a failed write ends the program as `!` does (in a test, fails it); reserved by D3a.
 - **Libraries:** `std/os`, `std/json` (immutable recursive enum tree), `std/http` (over curl), `std/csv`, `std/stats`,
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi), `std/sync` (`Mutex<T>` reached
   only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/net` (blocking TCP and UDP), `std/set`, `std/deque`, `std/pool` (a slotmap of generational handles: `Add`, `try p.Get(h)`/`Ref`/`RefMut`/`Remove` failing with `pool.Error.Stale`; the user 2026-11-08),

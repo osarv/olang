@@ -36744,3 +36744,41 @@ array elements laid them out at the length they shared (`Array<F64>` items of th
 then did not fit the builder's `Iterator<Array<F64>>`; such literals now hold each item at the builder's element type
 (`arrayLit`'s `exact`). A reference element (`Array<Array<I32>&>[[1, 2]]`) is an error naming the by-value form - a
 row would be a temporary nothing holds.
+## Ease items: print and println, a run built -quick, untidy code warned under interpret (M19d, B3g, B3e, D3b, M5a; 2026-11-13, wt-ease)
+
+The user approved three items of "make the language as easy to use as python" (2026-11-13).
+
+- **`print(x)` and `println(x = "")` in the prelude (M19d, M19f).** Writing text had been `std/io`'s alone since
+  2026-10-17 (M19f, "one pathway"): a hello world needed an import, a `try` or a `!`. The prelude's new file
+  `print.olang` declares two generic functions writing `$x` (any value, as E11a renders it) to the standard output in one
+  write, `println` with a line end - `println()` binds its default `""`. A write the system refuses or stalls on ends
+  the program by `!` on the prelude's private error `output` (`output.Refused`, `output.Stalled`), so in a test it fails
+  the test, and the call needs no `try`; std/io's `Print` and `Println` stay for a program that handles the error.
+  They are lower case, as a word of the language is, which M6 would make private: the resolver puts the prelude's
+  functions `PreludeFunction` names (`print`, `println`) beside its constants, so they are reached bare in every module
+  and reserved by D3a (`PreludeFuncRedeclared`), and the language server offers them. names.olang's test that `fn
+  print() { }` raises no error of the removed print builtin (M19f) now finds D3a's. Under `interpret` the write goes
+  through the C library as any extern does; while compiling it is refused, as io's writes are (K1). The README's
+  hello world is now `println("Hello World!")`. checks: preludeprint, the print scenario's bare.olang (built,
+  interpreted, a closed output ending with SIGABRT).
+- **Running a file builds as `-quick` does (B3g, B2g).** Measured on this machine (4 cores, another agent's verify
+  running beside), olang's own build/ cache emptied before each cold run:
+
+  | program | cold, -O3+LTO | cold, -quick | after an edit, -O3+LTO | after an edit, -quick | unchanged |
+  |---|---|---|---|---|---|
+  | a 6-line script | 0.9-1.4 s | 1.1-1.7 s | 0.41 s | 0.28 s | 0.08 s |
+  | compiler/tools/fmt.olang (the formatter, the compiler's scanner, parser and layout) | 14.6 s | 12.7 s | 7.7 s | 1.8 s | 0.44 s |
+
+  A cold run is the front end and per-module code generation either way; what -quick removes is the whole-program LTO
+  link, which every edit pays - four times the wait on the larger program. An unchanged program was already not built
+  again (B3i: the front end's records, the objects, and the link skipped where its inputs are the same), so nothing was
+  added there. `RunProgram` now sets `Quick` unless `-debug` or `-race` is given; `build` keeps -O3 and LTO (B2c), and
+  a run's objects and program are `.quick` artifacts of their own (B4), so the two never displace each other. checks:
+  runfile finds `build/script.quick`.
+- **Unread locals and unused imports are warnings under `interpret` (B3e, D3b, M5a).** A script being written has
+  half-used names; refusing to run it is Go's strictness, right for a build, in the way while exploring. `Diagnostics`
+  gains `Lenient` (set for the `interpret` mode only - `test -interpret` keeps `test`'s errors) and a list of warnings:
+  a report of rule D3b or M5a while it is set is kept as a warning (once per place and text), not an error, so it
+  neither counts nor stops anything, and `Passes.Interpret` writes them to the standard error as `path:line:col:
+  warning[RULE]: message` rows with their source once the program has checked, then runs it. checks: the interp
+  scenario's untidy.olang (interpreted with both warnings; built, refused with M5a).

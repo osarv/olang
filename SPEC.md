@@ -2187,7 +2187,7 @@ local whose type has a destructor (C7) - the close of its scope is what it is he
 check (its error said already), and a local of a body nothing checks (a branch the build leaves out, a generic never
 instantiated). A name in the text of a branch the build leaves out (S8b) counts as read. These errors are said only of a
 program in which no other error is found - by the checker or by a later pass (section 8's, M19g's): a read may be what another mistake left out, or sit in code that mistake
-keeps from being checked.
+keeps from being checked. Under `interpret` (B3e) one is a warning instead, and the program runs.
 
 ### 3.3 Type and error declarations
 
@@ -3045,7 +3045,8 @@ is reached transitively through re-export (§4.5) — see §4.6.
 **M5a (every import is used).** An import whose alias nothing in its module reaches through - no name, member, type
 or error written with it, the text of a top-level or local branch the build leaves out (B9, S8b) included - is a
 compile-time error naming it, saying to remove it. An import re-exported (its alias capitalized, M14) is its importers'
-and never one. The imports of a module with a top-level condition only evaluation decides (B9c) are not judged.
+and never one. The imports of a module with a top-level condition only evaluation decides (B9c) are not judged. Under
+`interpret` (B3e) one is a warning instead, and the program runs.
 
 ### 4.3 Visibility
 
@@ -3133,7 +3134,11 @@ through the owner's name (`Color.FromHex(t)`), never through a value.
 `prelude` directory, each an ordinary module, loaded before any other module. Their exported types and
 their exported immutable globals - the **constants of the prelude** - are visible in every module by their bare names,
 with no import, and no module may declare a type, a global, a function, a local or a parameter of the same name
-(D2, D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
+(D2, D3a). So are its two **printing functions**, `print(x)` and `println(x = "")`, lower case as a word of the
+language is, and reserved the same way: each writes `$x` (E11a) - `println` with a line end after it, a line end alone
+with nothing - to the standard output in one write, and a write the system refuses ends the program as `!` does (E35;
+in a test, the test fails), so neither is fallible and no `try` is written. A program that handles a failed write uses
+`std/io`'s `Print` and `Println` (M19f), which fail with `io.Error`. They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
 of the built-in types and of its own - `String.FromC(p, max)` (X15), the floats' `FromBits` (E33), every integer type's
 `Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
@@ -3442,7 +3447,8 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 `x`'s sign bit is set, so `(-0.04).Fixed(1)` is `-0.0`. A NaN is `nan`, an infinity `inf` or `-inf`, as `$` writes them
 (E11a). It is ordinary computation in the prelude, so it is evaluated while compiling (K1) as at run time.
 
-**M19f (writing text).** Writing text is `std/io`'s, with no words of the prelude's or of the compiler's own:
+**M19f (writing text).** Writing text is `std/io`'s - beside the prelude's `print` and `println` (M19d), which end the
+program where a write fails - with no words of the compiler's own:
 
 ```
 fn Print(t String&) ? io.Error            # t, to the standard output
@@ -8022,7 +8028,7 @@ builds differs - unobservable but in speed and size.
 module compiled to native code of its own, so a build - and above all a rebuild after an edit to code many modules
 inline - takes a fraction of the default's time, and the program runs somewhat slower (about a fifth, measured on the
 compiler itself). It is an option of the modes that build (B1); it says how much to optimize, as `-debug` and `-race`
-do, so it is a compile-time error beside either of them. A quick object is a distinct artifact (B4), named with
+do, so it is a compile-time error beside either of them. Running a file (B3g) builds at this level by default. A quick object is a distinct artifact (B4), named with
 `.quick`. Nothing else changes: the program means what it means in the default build.
 
 **B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
@@ -8128,7 +8134,10 @@ file has a test the words name; where none has, the run fails, its last line `no
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
 same way, section 8's included (where values live is the same scope pass's, so a program the build refuses is not
-run, a construct this compiler does not check yet among what it refuses) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
+run, a construct this compiler does not check yet among what it refuses), but for an unread local (D3b) and an unused
+import (M5a), which are only untidy: each is a **warning**, a row `path:line:column: warning[RULE]: message` with its
+source, written to the standard error before the program runs, which runs as it would without it (`test -interpret`
+keeps them errors, as `test` does) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
 nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5
@@ -8183,8 +8192,10 @@ passed on to it as written — one beginning with `-` included, which is never r
 program's command line (B4a) is `<file>`, as written, followed by those arguments.
 
 **B3g (running a file).** `olang [<option> ...] <file> [<argument> ...]` - a file ending in `.olang` where the mode
-would stand - builds the program whose root module is `<file>` exactly as `build` does (B3: into `build/` beside the
-working directory, objects reused while current, `main` required), saying nothing when the build succeeds, and then runs
+would stand - builds the program whose root module is `<file>` as `build` does (B3: into `build/` beside the
+working directory, objects reused while current, `main` required) but at `-quick`'s level (B2g) unless `-debug` or
+`-race` gives another - start-up is what running a file waits on, and an unchanged program is not built again -
+saying nothing when the build succeeds, and then runs
 it in the compiler's place: its standard input, output and error are the compiler's, its command line (B4a) is `<file>`
 as written followed by every argument after it - one beginning with `-` included - and its exit status is the
 compiler's (a signal that ends it ends the process, which a shell reports as 128 plus its number). A compile-time error
@@ -8518,7 +8529,8 @@ source line it is about and a caret line marking the token it is about (`^`, the
 states (`expected '}', found 'x'`); several are separated by `, `. An error about a whole file is `path: error[RULE]:
 message`, and one about no file - the command line - is `olang: error[RULE]: message`. A **note**, adding to the error
 before it (where something was declared, which instantiation of a generic was being checked), is a line of its own in
-the same form with `note` in place of `error[RULE]`, followed by its source. The message names what it is about - the
+the same form with `note` in place of `error[RULE]`, followed by its source. A **warning** - what `interpret` says in place of an error that
+is only untidy (B3e) - is a line in the same form with `warning[RULE]` in its place, followed by its source. The message names what it is about - the
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
 order they are found in, and the last line of a failed compilation is `compilation failed with N errors` (`1 error`).

@@ -1,0 +1,9 @@
+# check: fail error[D3a]: 'print' is the prelude's function, reached bare in every module - choose another name
+# also: error[D3a]: 'println' is the prelude's function, reached bare in every module - choose another name
+# also: compilation failed with 2 errors
+# M19d/D3a: the prelude's print and println are reached by their bare names in every module, so no module declares
+# either again - not as a function, not as a local
+fn print(t String&) { }
+fn main() {
+    println := 1
+}

@@ -88,7 +88,8 @@ stays in.
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
   `axis` (`Axis`, one item of a subscript by axes, `m[0:2, :]`, `m[..., 1]`, handed to a type's `Slice`, E16f),
   `argument` (`ArgumentError`, what a call whose contract's condition is false fails with, D17), `enums`
-  (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32). Only the prelude may give methods to built-in types (M19d).
+  (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32), `print` (`print(x)` and
+  `println(x)`, the two functions reached bare, writing `$x` and ending the program where a write fails, M19d). Only the prelude may give methods to built-in types (M19d).
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.
 - `runtime/` - the runtime as LLVM IR text: `runtime.ll` (arena allocator, chunk pools, regions, worker cache),
   `san.ll` (scope sanitizer, linked only under `-s`), `prof.ll` (the sampling profiler, linked only into an
