@@ -1938,7 +1938,7 @@ fn (f mut Free&) writeFeedCalls() {
             if v < 0 or v >= 63 or (set & (I64(1) << v)) == 0 or v == u: continue
             a := call.Args[j]
             t2 := f.topSite(a)
-            if t2 >= 0 and pl.RegionKind[t2] == 1 {
+            if t2 >= 0 and (pl.RegionKind[t2] == 1 or pl.RegionKind[t2] == 3) {
                 if pl.RegionParent[t2] == at { pl.RegionParent[t2] = region }
             } else {
                 f.redirect(fc.Body, a, fd.Site, at, false)
@@ -5141,7 +5141,7 @@ fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I6
 fn (f mut Free&) builtAt(b I64, x typed.Expr&) typed.Scope {
     top := f.topSite(x)
     pl := f.Plans.Ref(b)
-    if top >= 0 and pl.RegionKind[top] == 1 { return pl.RegionParent[top] }
+    if top >= 0 and (pl.RegionKind[top] == 1 or pl.RegionKind[top] == 3) { return pl.RegionParent[top] }
     return f.siteScope(b, x)
 }
 
@@ -5181,7 +5181,7 @@ fn (f mut Free&) writePlans() {
         at := f.siteScope(st.Body, x)
         # O29: a value built where its place's storage is found at run time is built there, never in a region of its own
         if at == typed.Scope.Found or at == typed.Scope.Passed: continue
-        pl.RegionKind[top] = 1
+        pl.RegionKind[top] = 3 if f.SlotPlace(k) else 1
         pl.RegionParent[top] = f.feedDest(st.Body, top, at)
         pl.RegionGuard[top] = f.guard(st.Body, k)
         f.redirect(st.Body, x, top, at, true)
@@ -5190,7 +5190,7 @@ fn (f mut Free&) writePlans() {
     # a store through a value of a sole place: a region made there has that value's region for its parent; parts not
     # made for a sole place are built in that region
     for os in f.orStores {
-        if f.decided[os.Body] and not f.Sole[os.PlaceId]: continue
+        if f.decided[os.Body] and not f.Sole[os.PlaceId] or f.SlotPlace(os.PlaceId): continue
         top := f.topSite(os.X)
         if top < 0: continue
         pl := f.Plans.Ref(os.Body)
@@ -5212,8 +5212,9 @@ fn (f mut Free&) writePlans() {
         f.redirect(os.Body, os.X, top, at, true)
     }
     # a call given a value of a sole place: what it builds where that value lives is built in its region
+    # (never one of a slot place's: its value's word before it names no region)
     for oc in f.ors {
-        if f.decided[oc.Body] and not f.Sole[oc.PlaceId]: continue
+        if f.decided[oc.Body] and not f.Sole[oc.PlaceId] or f.SlotPlace(oc.PlaceId): continue
         pl := f.Plans.RefMut(oc.Body)
         if pl.RegionKind[oc.Site] != 0: continue
         v := f.paramVar(oc.Callee, oc.Param)
@@ -5238,7 +5239,7 @@ fn (f mut Free&) writePlans() {
             if u < 0 or u >= 63 or (set & (I64(1) << u)) == 0 or j == oc.Param: continue
             a := call.Args[j]
             t2 := f.topSite(a)
-            if t2 >= 0 and pl.RegionKind[t2] == 1 {
+            if t2 >= 0 and (pl.RegionKind[t2] == 1 or pl.RegionKind[t2] == 3) {
                 pl.RegionParent[t2] = typed.Scope.Region(site)
             } else {
                 f.redirect(oc.Body, a, oc.Site, at, false)
@@ -5393,7 +5394,7 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
     region := typed.Scope.Region(typed.SiteId(I32(top)))
     # a part with a region of its own (another place's value, written first) is a kid of this one
     ps := f.topSite(x)
-    if not self and ps >= 0 and ps != top and pl.RegionKind[ps] == 1 {
+    if not self and ps >= 0 and ps != top and (pl.RegionKind[ps] == 1 or pl.RegionKind[ps] == 3) {
         if pl.RegionParent[ps] == at { pl.RegionParent[ps] = region }
         return
     }
@@ -5551,6 +5552,22 @@ fn (f mut Free&) RetirePlaces(b I64, sp source.Span) Vec<I64> {
 
 # whether a candidate place holds an owner (types.Anchors): its let-go releases the region its anchors name
 fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.owner[k] }
+
+# whether place k is a text field of a prelude struct (a Map entry's key or value): its values - small, never grown in
+# place - are built in slots of the scope their region would have been a kid of (mir.Rvalue.Slots) and put back on their
+# class lists where it lets go of them (mir.Stmt.ReleaseSlot), rather than each in a region of its own, whose header and
+# first block are some 400 bytes. A property of the place's type alone, so every module builds and releases its values
+# alike
+fn (f mut Free&) SlotPlace(k I64) Bool {
+    if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or f.owner[k] or f.handle[k]: return false
+    t := f.T()
+    r := t.Plain(t.Repr(f.keyTy[k]))
+    if t.KindOf(r) != types.Kind.Named: return false
+    m := t.DeclModule(t.DeclOf(r))
+    if m < 0 or m >= f.P.L.Mods.Len() or not f.P.L.Mods[m].Identity.StartsWith("std/prelude"): return false
+    el := t.Elem(t.Repr(f.valTy[k]))
+    return f.P.Immut(f.valTy[k]) and not t.HoldsRefs(el) and not t.OwnsParts(el)
+}
 
 # the place a dropped call's result is a value moved out of - what lowering releases after the statement where it is
 # decided sole - -1 for none

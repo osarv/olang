@@ -250,6 +250,10 @@ type Rvalue enum {
     # O8d (docs/memory.md 3.4): a new region, a kid of parent - closed with it unless released first - as a scope handle
     # (an I64), which ScopeRef.Held names: where a value a sole place is to hold is built
     Region(parent ScopeRef)
+    # ...a slot scope building into parent (genrefs 4.4's class lists): each allocation a slot of parent's lists, or
+    # past 2,032 bytes parent's own storage with a zero word before it - where a sole text place's value is built, released
+    # by ReleaseSlot
+    Slots(parent ScopeRef)
     # ...the region the object reference x names was built in, or otherwise, for null and constant data: where what is
     # built through a sole place's value goes
     RegionOr(x Operand, otherwise ScopeRef)
@@ -309,6 +313,8 @@ type Stmt enum {
                                                                           # when s closes (O16)
     Release(sp source.Span, p Lvalue)   # the object the own slot p holds, if any, released, and p left null (O35);
                                         # an owner's value (types.Anchors): the region its anchors name released
+    ReleaseSlot(sp source.Span, p Lvalue)   # the text p holds, built through Slots, put back on its class list (none
+                                            # for null, constant data or one past 2,032 bytes), and p left empty
     Settle(sp source.Span, h LocalId, p Lvalue)   # O8d: the region local h holds released unless an anchor of the
                                                   # owner's value at p names it - a value built there holding nothing
     Write(sp source.Span, b ScopeRef, how WriteKind, x Operand)    # x appended to the text builder b (E11a)
@@ -1371,7 +1377,7 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
             v.ref(s)
             v.operand(x)
         }
-        case Stmt.Release(_, p) { v.place(p) }
+        case Stmt.Release(_, p), Stmt.ReleaseSlot(_, p) { v.place(p) }
         case Stmt.Settle(_, h, p) {
             v.local(h)
             v.place(p)
@@ -1435,7 +1441,7 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
             v.ref(b)
             v.ref(into)
         }
-        case Rvalue.Region(s) { v.ref(s) }
+        case Rvalue.Region(s), Rvalue.Slots(s) { v.ref(s) }
         case Rvalue.RegionOr(x, s) {
             v.operand(x)
             v.ref(s)
@@ -1830,7 +1836,7 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.Closure(_, ty, _, _, _): v.closureType(ty)
         case Rvalue.Recode(x, _, _): v.intOf(v.operandType(x), I32T, "an error code")
         case Rvalue.Text(b, _, ty): v.textType(b, ty)
-        case Rvalue.Region(_): I64T
+        case Rvalue.Region(_), Rvalue.Slots(_): I64T
         case Rvalue.RegionOr(x, _): v.regionOrType(v.operandType(x))
         case Rvalue.ScopeOf(x): v.regionOrType(v.operandType(x))
         case Rvalue.ScopeOr(_, x): I64T if x == Operand.None else v.regionOrType(v.operandType(x))
@@ -2470,7 +2476,7 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
             v.usesScope(sc)
             v.reads(x)
         }
-        case Stmt.Release(_, p) { v.readPlace(p) }
+        case Stmt.Release(_, p), Stmt.ReleaseSlot(_, p) { v.readPlace(p) }
         case Stmt.Settle(_, h, p) {
             v.used(h)
             v.readPlace(p)
@@ -2565,7 +2571,7 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
             v.usesScope(b)
             v.buildsIn(into)
         }
-        case Rvalue.Region(s) { v.buildsIn(s) }
+        case Rvalue.Region(s), Rvalue.Slots(s) { v.buildsIn(s) }
         case Rvalue.RegionOr(x, s) {
             v.reads(x)
             v.usesScope(s)
@@ -2813,6 +2819,7 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
         case Rvalue.Recode(x, from, to): "recode " $w.operand(x) " from " $w.list(from) " to " $w.list(to)
         case Rvalue.Text(b, into, ty): "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
         case Rvalue.Region(s): "region in " $w.ref(s)
+        case Rvalue.Slots(s): "slots in " $w.ref(s)
         case Rvalue.RegionOr(x, s): "region of " $w.operand(x) " or " $w.ref(s)
         case Rvalue.ScopeOf(x): "scope of " $w.operand(x)
         case Rvalue.ScopeOr(s, x): "scope " $w.ref(s) " or of " $w.operand(x)
@@ -2834,6 +2841,7 @@ fn (w mut dumper&) stmt(s Stmt&) String {
         case Stmt.Close(_, x): "close S" $x
         case Stmt.RegisterDtor(_, sc, ty, x): "register dtor " $w.T.Canon(ty) " " $w.operand(x) " in " $w.ref(sc)
         case Stmt.Release(_, p): "release " $w.place(p)
+        case Stmt.ReleaseSlot(_, p): "release slot " $w.place(p)
         case Stmt.Settle(_, h, p): "settle L" $I64(h) " by " $w.place(p)
         case Stmt.Write(_, b, how, x): "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
         case Stmt.CopyElems(_, d, src, n): "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
@@ -3244,7 +3252,7 @@ fn (f Fn&) Mentions(s Stmt&, uses mut Vec<LocalId>&, defs mut Vec<LocalId>&) {
             f.refMentions(r, uses)
             f.opMentions(x, uses)
         }
-        case Stmt.Release(_, p) { f.placeMentions(p, uses) }
+        case Stmt.Release(_, p), Stmt.ReleaseSlot(_, p) { f.placeMentions(p, uses) }
         case Stmt.Settle(_, h, p) {
             uses.Push(h)
             f.placeMentions(p, uses)
@@ -3405,7 +3413,7 @@ fn (f Fn&) rvMentions(rv Rvalue, uses mut Vec<LocalId>&) {
             f.refMentions(b, uses)
             f.refMentions(into, uses)
         }
-        case Rvalue.Region(s), Rvalue.Handle(s) { f.refMentions(s, uses) }
+        case Rvalue.Region(s), Rvalue.Slots(s), Rvalue.Handle(s) { f.refMentions(s, uses) }
         case Rvalue.RegionOr(x, s), Rvalue.ScopeOr(s, x) {
             f.opMentions(x, uses)
             f.refMentions(s, uses)
@@ -3418,7 +3426,7 @@ fn (f Fn&) rvMentions(rv Rvalue, uses mut Vec<LocalId>&) {
 fn StmtSpan(s Stmt&) source.Span {
     return match s {
         case Stmt.Assign(sp, _, _), Stmt.Live(sp, _), Stmt.Dead(sp, _), Stmt.Open(sp, _): sp
-        case Stmt.Close(sp, _), Stmt.RegisterDtor(sp, _, _, _), Stmt.Release(sp, _): sp
+        case Stmt.Close(sp, _), Stmt.RegisterDtor(sp, _, _, _), Stmt.Release(sp, _), Stmt.ReleaseSlot(sp, _): sp
         case Stmt.Settle(sp, _, _), Stmt.Write(sp, _, _, _): sp
         case Stmt.CopyElems(sp, _, _, _), Stmt.Spawn(sp, _, _), Stmt.Raised(sp): sp
         case Stmt.Deferred(sp, _, _), Stmt.ErrSet(sp, _), Stmt.ErrPop(sp): sp

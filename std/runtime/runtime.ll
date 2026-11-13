@@ -940,7 +940,14 @@ entry:
   %big = icmp slt i64 %cls, 0
   br i1 %big, label %plain, label %slot
 plain:
-  %pp = call ptr @__olang_scope_alloc_a(ptr %real, i64 %rawsize, i64 %aln)
+  ; (a zero word before it, as constant data has: no slot's, so __olang_slot_release puts nothing back)
+  %small = icmp ult i64 %aln, 8
+  %pa = select i1 %small, i64 8, i64 %aln
+  %ptot = add i64 %rawsize, %pa
+  %praw = call ptr @__olang_scope_alloc_a(ptr %real, i64 %ptot, i64 %pa)
+  %pp = getelementptr i8, ptr %praw, i64 %pa
+  %pzw = getelementptr i8, ptr %pp, i64 -8
+  store i64 0, ptr %pzw
   ret ptr %pp
 slot:
   %csize = call i64 @__olang_gen_class_size(i64 %cls)
@@ -1064,6 +1071,31 @@ done:
   ret void
 }
 
+; O8d: the text a sole text place let go of (built through a slot scope, mir.Rvalue.Slots) put back on its slot's class
+; list - nothing for null, constant data or one past 2,032 bytes (a zero word before it). The early-free analysis proved
+; nothing still uses it, so no view is compared
+define void @__olang_slot_release(ptr %buf) noinline {
+entry:
+  %none = icmp eq ptr %buf, null
+  br i1 %none, label %done, label %head
+head:
+  %hp = getelementptr i8, ptr %buf, i64 -8
+  %hw = load i64, ptr %hp
+  %c0 = lshr i64 %hw, 24
+  %c1 = and i64 %c0, 255
+  %unk = icmp eq i64 %c1, 0
+  br i1 %unk, label %done, label %free
+free:
+  %cls = sub i64 %c1, 1
+  %padb = and i64 %hw, 8388608
+  %pad = icmp ne i64 %padb, 0
+  %xp = getelementptr i8, ptr %buf, i64 -8
+  %x = select i1 %pad, ptr %xp, ptr %buf
+  call void @__olang_gen_free(ptr %x, i64 %cls)
+  br label %done
+done:
+  ret void
+}
 
 ; an empty chunk whose data holds at least size bytes, when the spare will not do (__olang_scope_alloc takes that
 ; itself): the newest chunk of the smallest class in this thread's pool that holds size bytes, no more than eight

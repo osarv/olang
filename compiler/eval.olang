@@ -2193,7 +2193,9 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             m.wr(dst, 4, m.recode(m.intValue(m.scalar(fi, x), mir.I32T), from, to))
         }
         case mir.Rvalue.Text(b, into, _) { m.text(fi, dst, b, into) }
-        case mir.Rvalue.Region(s) {
+        # (a slot scope is a region here: what is built there is released with the value, which the release reads as
+        # the built program's slot put back - the evaluator's dead-region mode the stricter oracle)
+        case mir.Rvalue.Region(s), mir.Rvalue.Slots(s) {
             parent := m.buildScope(fi, s)
             if m.halted { return }
             id := m.newScope(sRegion)
@@ -4041,7 +4043,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             m.addReg(sc, gDtor, I64(ty), p)
             if sc == m.program and m.initGlobal >= 0: m.globals[m.initGlobal].Dtors = true
         }
-        case mir.Stmt.Release(sp, p) {
+        case mir.Stmt.Release(sp, p), mir.Stmt.ReleaseSlot(sp, p) {
             m.atK(fk, sp)
             slot, pty := m.place(fi, p)
             n := m.closing.Len()
