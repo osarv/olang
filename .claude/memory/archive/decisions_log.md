@@ -3817,3 +3817,6 @@ stood:
   7. nested literals `Tensor<F32>[[1, 2], [3, 4]]` built through FromIter of rows - yes;
   8. (no question: `@` is already MatMul, E31; broadcasting is oann's operator methods.)
   All seven approved; item 4's extent asked separately.
+
+- Literals without the type in front (item 4 of the Python-ease list, approved 2026-11-13; the user: "how far do you want to extend that?"). My proposal: (a) wherever a type is expected - a typed declaration, an argument (the parameter's type), a return (the result type), a field, a constructor argument, an element or value of an enclosing literal, an assignment to a typed place - a bare `[..]`, `[k: v]` or comprehension makes that type (through FromIter for Vec, Set, Map, Tensor, as with the type in front); (b) with nothing expected (`xs := [1, 2]`) the literal takes its own type as a number literal does (T6a): `Array<T>` of its elements' own type, `Map<K, V>` for `[k: v]`; an empty `[]` or `[:]` with nothing expected is an error naming the type to write. The type in front stays allowed everywhere. Default until answered: (a) only.
+  ANSWERED 2026-11-13: both (a) and (b) (the user: "good. and I like the 'takes its own type' rule"); no target-typed constructors ("we cant extend it to constructors, there is no way for that, right?" - agreed: no spelling without a new form).

@@ -21,4 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-- Literals without the type in front (item 4 of the Python-ease list, approved 2026-11-13; the user: "how far do you want to extend that?"). My proposal: (a) wherever a type is expected - a typed declaration, an argument (the parameter's type), a return (the result type), a field, a constructor argument, an element or value of an enclosing literal, an assignment to a typed place - a bare `[..]`, `[k: v]` or comprehension makes that type (through FromIter for Vec, Set, Map, Tensor, as with the type in front); (b) with nothing expected (`xs := [1, 2]`) the literal takes its own type as a number literal does (T6a): `Array<T>` of its elements' own type, `Map<K, V>` for `[k: v]`; an empty `[]` or `[:]` with nothing expected is an error naming the type to write. The type in front stays allowed everywhere. Default until answered: (a) only.
+(None open.)
