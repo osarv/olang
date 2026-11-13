@@ -8,6 +8,7 @@ let current_compiler = "olang"
 CompilerSet makeprg=olang\ compile\ %:S
 CompilerSet errorformat=%f:%l:%c:\ %trror[%*[^]]]:\ %m,
       \%f:%l:%c:\ %trror:\ %m,
+      \%f:%l:%c:\ %tarning[%*[^]]]:\ %m,
       \%f:%l:%c:\ %tote:\ %m,
       \%f:%l:\ %trror[%*[^]]]:\ %m,
       \%f:\ %trror[%*[^]]]:\ %m,

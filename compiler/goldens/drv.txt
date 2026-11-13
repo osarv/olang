@@ -254,7 +254,7 @@
 | usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]
 | 
 | modes:
-|   FILE.olang  builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file
+|   FILE.olang  builds the program FILE.olang is the root of, as build -quick does, and runs it with the arguments after the file
 |   build       builds one program, FILE.olang its root module, into build/ (B3)
 |   compile     compiles one module to an object, linking nothing (B2)
 |   test        runs each file's test blocks, each file built on its own (B3a)
@@ -294,7 +294,7 @@
 === olang help run
 | stdout:
 | usage: olang [OPTION...] FILE.olang [ARGUMENT...]
-| builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file
+| builds the program FILE.olang is the root of, as build -quick does, and runs it with the arguments after the file
 | 
 | options:
 |   -debug             builds unoptimized, with debug information (B2c, B2e)

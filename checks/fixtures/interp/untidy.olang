@@ -1,0 +1,7 @@
+# B3e: interpret says an unused import (M5a) and an unread local (D3b) as warnings and runs the program; build refuses
+import "std/os"
+
+fn main() {
+    left := 3
+    println("ran")
+}

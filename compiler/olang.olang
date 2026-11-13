@@ -109,7 +109,7 @@ ModeUsage Array<String&> = Array<String&>[
     "olang api OLD NEW FILE.olang|DIR"
 ]
 ModeWhat Array<String&> = Array<String&>[
-    "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
+    "builds the program FILE.olang is the root of, as build -quick does, and runs it with the arguments after the file"
     "builds one program, FILE.olang its root module, into build/ (B3)"
     "compiles one module to an object, linking nothing (B2)"
     "runs each file's test blocks, each file built on its own (B3a)"
@@ -463,6 +463,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     c := build.Config()
     c.Color = d.Color
     cl := try CommandLine.Prepare(args, c, d) catch Bad { return said(d) }
+    d.Lenient = cl.Mode == Interp
     if cl.Mode == Help {
         text := try help(cl, d) catch Bad { return said(d) }
         return write(text)
@@ -1154,6 +1155,8 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     # not run
     fr := try placement(c, cfg, l.Root)
     if d.Errors() > 0 { error build.Failed.Reported }
+    # B3e: what is only untidy is said as a warning, on the standard error, and the program runs
+    if d.Lenient: try io.PrintErr(d.Warnings()) catch io.Error { }
     x.Lw.Plans = fr.Plans
     twinsTo(x.Lw, fr)
     x.Lw.Free = fr
