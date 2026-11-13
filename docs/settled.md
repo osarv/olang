@@ -406,7 +406,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   instance); a call through an `any` relies on the method's bound (T22b's, the receiver first: its result may borrow
   from the receiver) - its relations discharged, its effect words' facts - and each method a type gives an `any`'s
   table is held to it, else an error naming the word. So a method handing back what its instance holds is callable
-  through an `any`, one keeping its argument in the instance once the trait writes `keeps n`.
+  through an `any`, one keeping its argument in the instance once the trait writes `keeps n`. One keeping it in what a
+  field of its instance refers to (a derived scope of the receiver) is beyond every word, its error naming what it does.
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **Parameters (D9, D9b).** `&` says whose instance, `mut` whether it can be written; an immutable lvalue never binds
   a `mut &` parameter. Arrays are passed by value as instances (D9a, G29).
@@ -635,8 +636,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   mine within the user's decision):** a derived scope with no root of its own is found from its field read through the
   parameter (a value argument holding two references included); a twin's capture its caller's records disagree on, from
   the adapter's instance or lambda capture written at the call; a task's result into a place of several scopes
-  (o12spawntarget) is placed `Found` as the plain assignment is, looked up in the spawner. Left: a parameter the body
-  assigns, and a capture reached through a stored function value, still take the program's scope where nothing passes.
+  (o12spawntarget) is placed `Found` as the plain assignment is, looked up in the spawner. **The last ones (2026-11-13,
+  wt-leftA):** a field of a parameter the body assigns is the derived scope of the parameter whose argument the version
+  read holds (O25i - another parameter's after `h = other`), its root read as the body is entered; a capture of a
+  function value held in a local never assigned again is found from what the value was made of; an `Inert` scope is
+  the frame's. None remains.
 - **A generator's walk is built where it is held (D18b, S20; 2026-11-09, found by R6+R7).** `g := gen(r)` lands in
   `g`'s block, never in `r`'s referent's scope by the call's obligations, so a walk left part way is let go as that
   block is left.
