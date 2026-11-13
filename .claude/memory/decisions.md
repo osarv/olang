@@ -27,3 +27,7 @@ Open questions:
   3. printing needs `try io.Println(...)`: add a prelude `print`/`println` that ends the program on a write failure (as `!` does) - yes;
   4. `Array<I64>[1, 2]` always: allow a bare `[1, 2]` where the type it makes is written at the target (a typed declaration, parameter, field) - yes, narrow;
   5. unused locals/imports are errors (D3b): keep as errors, but `interpret` and the prompt report them as warnings - yes.
+  The user added (2026-11-13): "we are going to be doing a lot of ML stuff, I want that to be clean and easy". ML items:
+  6. multi-axis indexing and slicing for oann's tensors: `t[0:2, :, i]`, `t[..., -1]` - a bare `:` (whole axis) and `...` in an index, lowered to one Slice/At call with several ranges - yes;
+  7. nested literals `Tensor<F32>[[1, 2], [3, 4]]` built through FromIter of rows - yes;
+  8. (no question: `@` is already MatMul, E31; broadcasting is oann's operator methods.)
