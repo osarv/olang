@@ -76,3 +76,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-13	leftB	opus	medium	done				pass		1-3 already fixed; LRU 7.2->2.0MB; text slots per scope
 2026-11-13	leftA	opus	medium	done				goldens		found real use-after-free on reassigned ref param (heldParam); stored-capture lookup; twins recorded; T30c msg
 2026-11-13	axes	opus	medium	done				goldens+OOM		E16f multi-axis subscripts via Axis enum; E21 nested literals; 2 bugs fixed
+2026-11-13	ease	opus	medium	done	257	121		goldens+OOM		print/println, -quick run, interpret warnings
