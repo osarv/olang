@@ -36744,3 +36744,56 @@ array elements laid them out at the length they shared (`Array<F64>` items of th
 then did not fit the builder's `Iterator<Array<F64>>`; such literals now hold each item at the builder's element type
 (`arrayLit`'s `exact`). A reference element (`Array<Array<I32>&>[[1, 2]]`) is an error naming the by-value form - a
 row would be a temporary nothing holds.
+
+## Literals without the type in front (E19, E20, E20a, E21, E27, S13h, T6a; 2026-11-13, wt-lits)
+
+The user decided on 2026-11-13, among the Python/ML ease items, that literals need not restate their type: target-typed
+wherever a type is expected, else their own type, partly reversing QBU's "type in front for sure" (2026-10-27). QBU
+had settled that the type before the `[` is the type made - a literal never guesses - and `Vec<I64>[1, 2]`,
+`Map<String, I64>["a": 1]` stay exactly as they were; what changed is that the type may be left to the place the
+literal stands, as a number literal's already is (T6), so `v Vec<I64> = [1, 2]`, `total([1, 2])` and
+`return [x * 2 for x in xs]` read as they would in Python. Constructors keep their names (no target-typed `(...)`).
+
+**The rule (E19, E20).** One rule for every form - items, entries, `[]`, `[:]`, comprehensions, nested rows: the type
+expected where the literal stands is what it makes, exactly as if written in front; a reference expected makes its
+referent, lent as `Array<I64>[1, 2]` is at an `Array<I64>&` parameter (E12), which is what makes `f([1, 2])` work for
+the common read-only array parameter. A type no literal makes (a number, Bool, a function type, an any) expects
+nothing; the literal then has its own type and fits or not as any value. With nothing expected, the own type: an
+`Array<T>`, `T` the first non-literal item's type (each item typed once, never twice - a second typing would emit its
+statements twice), the literals adapting to it; all literals, the widest of their own types by T6's pair rule (`[1,
+2.5]` is `Array<F64>`; meeting by T6b alone would have refused it). Entries make a `Map<K, V>`, keys and values each by
+the same rule. `[]`, `[:]` and a literal of nothing but `null` have no own type: errors naming the type to write
+(E20's new diagnostic, LiteralNoTarget). `[:]` is new: the empty keyed literal, needed because `[]` cannot tell a map
+expected of it apart from nothing at all in a message; expected of a type whose elements are no MapEntry it is the
+entries' error. The parser reads a bracket in operand position as the existing `ast.Expr.Row` (E21's nested row, which
+already meant "a literal of the type expected"), `[:]` as a Row of one bare Axis; a comprehension with no type is a
+`Compr` with no Elem, as G37's argument comprehensions already were.
+
+**Comprehensions with no type.** Their element type is only known once the element is typed inside the walk, after the
+source's local is declared. Rather than type the element twice, the walk types it once at its own type (comprOwn) and
+the element type follows from it; where the source's count is known and there is no `if` (T7c), the fixed array's
+declaration, emitted before the loop with a placeholder element type, is set then - so `[x * x for x in range 4]` is a
+fixed `Array<I64>` of 4 with no allocation, as the typed form is. Entry comprehensions `[k: v for ...]` are new in
+both forms (`Map<I64, I64>[x: x * x for x in range 3]` did not parse before): an entry element makes the made type's
+MapEntry. A bare one of entries collects MapEntry values and hands them to Map's FromIter.
+
+**Generic calls (E20a, mine).** A bare literal argument binds as a numeric literal does (G9a): after the other
+arguments, made of its parameter's type where they bound it whole (`pick(U8(1), [2, 3])` makes `Array<U8>`), else at
+its own type, which then binds the parameter (`first([3, 4])`: `T` is `I64`). A parameter like `Vec<T>` left open is not
+inferred from the own type (`Array<I64>` does not unify with it); the type is written in front or as a type argument.
+Making the literal of `Vec<own element>` there was possible but is a second rule for one case; left until a program
+asks for it.
+
+**Patterns (S13h).** `case ["test", file, ...rest]` takes the subject's element type; the typed form still compares
+its element type with the subject's.
+
+**Nested rows of references.** wt-axes made `Array<Array<I32>&>[[1, 2]]` an error ("a row would be a temporary nothing
+holds"); the typed equivalent `Array<Array<I32>&>[Array<I32>[1, 2]]` already worked, its rows placed where the outer
+array lands (O28), so with one rule for literals the bare row now does the same, and checks/cases/e21rowref.olang
+became a run case. NestedArrayLiteral is gone.
+
+Diagnostics reworded: LiteralNoFromIter and LiteralNotMade now say "the type written before its '[' or expected where it
+stands". The generic checker's `:=` inference (`generic.Infer`, fields and globals) gives a bare literal its own type
+(`ownLiteral`). Tests: tests/barelits.olang (every form beside the typed one, baked globals and decided asserts the
+evaluator runs, `test -interpret`), checks/cases e20emptykeyed, e20null, e20mixed, e19barenofromiter, e19bareentries,
+comprnotype (now the empty literal's error).

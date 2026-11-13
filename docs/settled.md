@@ -139,8 +139,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   narrows in its clause (S13e, QBP 1, the user's yes).
 - **Array patterns (S13h, QBP 10, the user's "Do it" and the rest spelled `...`, 2026-10-31).** `case
   Array<String&>["test", file, ...words]`: a literal compares an element, a name binds one, `...name` binds the rest
-  as a slice, a bare `...` skips it, no `...` is the exact length; items after the rest count from the end. The type
-  is written as the literal making the subject (QBU). Arrays, text and At+Len types.
+  as a slice, a bare `...` skips it, no `...` is the exact length; items after the rest count from the end. With no
+  type in front (`case ["test", f]`) it takes the subject's (the user, 2026-11-13); a type written is the literal making
+  the subject (QBU). Arrays, text and At+Len types.
 - **Struct patterns by field name; payload fields by name too (S13i, S13b, the user's decision 2026-11-07: "structs
   by name, arrays by position, and enums by both").** `case Point(x = 0, y)`: a struct's parentheses list FIELDS,
   never constructor parameters, and nothing runs; `name = p` matches a field, a bare `name` binds it, unmentioned
@@ -157,18 +158,28 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   nothing narrows is S8d's error. **One narrowing walk (2026-10-26, the user's "Do narrowing")** serves case, null and
   error-value tests: `and`/`or`/`not`, conditionals, after an assert, loops on the test; a narrowing holds until a
   statement assigns the local. Only locals and parameters narrow, never fields.
-- **Comprehensions `Array<T>[e for x in c if p]` (E27, the user's design)** - the made type required (QBU), brackets;
-  an array's reserved up front from a known length, else 100 and doubling (the user's numbers).
+- **Comprehensions `[e for x in c if p]` (E27, the user's design)** - the type in front optional as for any literal
+  (the user, 2026-11-13), brackets; `[k: v for ...]` makes entries; an array's reserved up front from a known length,
+  else 100 and doubling (the user's numbers).
 - **The type before a literal's `[` is the type it makes; `FromIter` builds the rest (E19-E21, E27, S13h, D19, QBU and
   QBW, the user's decisions 2026-10-27: "type in front for sure", "do only fromIter"; built 2026-11-07).**
   `Array<I64>[1, 2]`, `Vec<I64>[1, 2]`, `set.Set<I64>[1, 2]`, `Map<String, I64>["a": 1]`, `C[]` empty; a comprehension
   alike. An `Array<T>` is laid out as before; any other type is `C.FromIter(walk)`, the one protocol (D19), its errors
   the literal's. The prelude and std collections declare one. **`$` renders the literal making it (E11a)**. No trait
   requires FromIter. A primitive, reference or struct with no FromIter in front is an error naming `Array<T>[...]`.
+- **Literals without the type in front (E19, E20, E20a, the user, 2026-11-13, partly reversing QBU's "type in front";
+  constructors keep their names).** One rule for every literal form, as a number literal adapts (T6/T6a): `[a, b]`,
+  `[k: v]`, `[]`, `[:]`, a comprehension, a nested literal make the type expected where they stand (declaration,
+  argument, result, field, assignment, element, a reference's referent lent); with nothing expected their own (E20):
+  `Array<T>` of the first non-literal item's type, else the literals' widest, `Map<K, V>` for entries; `[]`/`[:]`/all
+  `null` with nothing expected are errors naming the type to write. Mine: a bare literal argument of a generic binds
+  after the others (E20a), made of its parameter where they bound it whole, else its own type binding it (`Vec<T>` left
+  open is not inferred). The type in front stays allowed everywhere.
 - **Nested literals (E21, the user's "yes, do them" 2026-11-13, for ML; built 2026-11-13).** A bracketed item of a
   literal is a literal of the element the outer one takes: `Array<Array<F32>>[[1, 2], [3, 4]]`, `Vec<Vec<I64>>[[1],
   [2, 3]]`, `Matrix[[1, 2], [3, 4]]` (each row the element its FromIter walks, e.g. `Array<F64>`). Mine: rows for a
-  FromIter are each the element type itself (no shared layout); a reference element is an error.
+  FromIter are each the element type itself (no shared layout); a reference element makes its referent, lent (E19,
+  2026-11-13; it was an error).
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
   breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
