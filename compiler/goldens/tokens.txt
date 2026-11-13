@@ -1059,6 +1059,7 @@ a1bf977910b2a53b 85e9656c8684e19b checks/cases/placemember.olang
 e8d9ab0bef8352b6 95f9e3a2b4e40198 checks/cases/preludeconst.olang
 35fb37f9a3adf718 843731c8b5d3ef75 checks/cases/preludekv.olang
 afcdf411953d8be8 d6aec0f07cabd017 checks/cases/preludename.olang
+9d6c5ee486a18b5c e7606ad75a147f50 checks/cases/preludeprint.olang
 b961d37b3df33fb8 2e3417609bbf55a8 checks/cases/preludeuse.olang
 b7626c3baf492c2f c0844ecb48f466b1 checks/cases/protobothstr.olang
 0cee253bfb371e3d 67b675f71be33817 checks/cases/protoprivhash.olang
@@ -1924,7 +1925,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 244020b30fdf2de1 0f06288b2bb8f361 checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-84615b6a78ae1128 7ebfcf4f2679d187 checks/checks.olang
+f97cf8752794ff89 0a30069138d7e1dd checks/checks.olang
 a9e28b3dd92156ad ab5a1081715b6588 checks/fixtures/agree/agree.olang
 93a0581f17cca83e 1f1000aa84a5a1d5 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang
@@ -2040,6 +2041,7 @@ ffdde4db985e473e 52018eb8d0cf1c7b checks/fixtures/interp/cyclic.olang
 cfedd2acd90e0c40 9a222c5937cf23c4 checks/fixtures/interp/tasks.olang
 3635a1df29668b81 7d07fb0be5f90b6e checks/fixtures/interp/tests.olang
 cc2d9cb569bd1d13 85e3670ac3db13a2 checks/fixtures/interp/ub.olang
+d8cf2f8aa9060f45 bd0ec80fe84d68c4 checks/fixtures/interp/untidy.olang
 cd456f0b43eac363 f7e980d98e3742a4 checks/fixtures/interp/unwind.olang
 a2545f005af4eb2b 7f8e79178e93c453 checks/fixtures/k2/ct.olang
 604a0c44ee673893 72e7ac4e44242f69 checks/fixtures/k2/ctlib.olang
@@ -2091,6 +2093,7 @@ ada23c059c160f60 41c7aec4591f0fe8 checks/fixtures/output/words.olang
 7997feee1d9bfc93 d3ea23cc8ac4d7d3 checks/fixtures/pkg/three.olang
 a9856be9d1136714 6503f05c7630b155 checks/fixtures/pkg/two.olang
 4f91da4882a61202 8ebcda44c2364e1f checks/fixtures/preludestale/probe.olang
+2e277c103ee0ac73 b48c7226b08f14f3 checks/fixtures/print/bare.olang
 deb9a4e5158fda37 994aec538ccbe6e7 checks/fixtures/print/print.olang
 a2de9753799a7347 d55796b68b7fb7b7 checks/fixtures/profile/hot.olang
 52f27a153c137524 b0040307ab4d4037 checks/fixtures/protopriv/bad.olang
@@ -2209,12 +2212,12 @@ c9ac6a4f683c0c9c af17b37aa6d64f6e checks/fixtures/weak/good.olang
 91bae425e9997a39 560ee83673121326 compiler/api.olang
 38d188222b4b7911 54a865b2c0d568ed compiler/ast.olang
 bad46d0ab3fa6dca f4355fed3b7a720f compiler/bindgen.olang
-62ce059dbc0fdaf1 bda1c54e531c35b9 compiler/build.olang
+5f19183a75e05ba2 7c68da54e91963be compiler/build.olang
 a3ca35f7e618cd35 250f530abd62bee2 compiler/cabi.olang
 d905b50507465b97 81b1331f5fb2aab3 compiler/check.olang
 41408ddbab722ebf b4782e4676c2df78 compiler/cond.olang
 08c016b6fa677234 38b6caca809cf49b compiler/definit.olang
-bc6f2855afa050c8 302425c334b1a69b compiler/diag.olang
+4656fbe369a71b65 df946ea82f6841ba compiler/diag.olang
 5f082e242ba93794 7f771c54233db1e4 compiler/diagmsg.olang
 cdb2fbc7d83fc6a5 ee444280d4cdd13f compiler/doc.olang
 c619c0fde3bf42a6 a33e39712f2a35c6 compiler/effects.olang
@@ -2234,17 +2237,17 @@ d07c60236d3de9a7 7c34090aab85e876 compiler/lower.olang
 1180de3a1bb9c277 911e5e04d58febc7 compiler/lsp.olang
 f470d9f8bf5653a6 f1e0cbe6bc3a197b compiler/mcp.olang
 e1f62fe67c1ce681 d26139143508a17c compiler/mir.olang
-8cbfad84f62f94fe c6fbf6ada16b6bbf compiler/msgs.olang
-59f5f54bcf770981 5ebc0b0885293463 compiler/names.olang
+1895f379faf6553e 098ec0325d36acf7 compiler/msgs.olang
+d1ae4f87299f19fa 56e1db8a0a95cf69 compiler/names.olang
 fffba02702d708ba 94c889e2514b85ce compiler/needs.olang
-7a81e4a7d6b82865 a9c683a21ea869f3 compiler/olang.olang
+0ba23363e86ea8d7 114522234a045be6 compiler/olang.olang
 f54f917733dc2869 7212eff2a21e8595 compiler/parse.olang
 10f9bb5b20744b5f d7e6f720d606e42a compiler/profile.olang
 49745b9b20cffd77 2d08391c316bd0bf compiler/records.olang
 cd6dc04fc51a289c b9ae6c193e932c8d compiler/runtime.olang
 1cd1dca247f6cfbd d236a0d4563f5d62 compiler/scan.olang
 d63902b7bfe21cc8 179ccfa885a4582c compiler/scope.olang
-43a16be4fbaa1759 daf0d06abd331cf8 compiler/session.olang
+5b7635d901c4aa98 d311dd5ce2cc1a5f compiler/session.olang
 a846754911a07a9e a10b92acabcbf1b6 compiler/source.olang
 dc92112e41e19da5 e31c7d608aaf7a68 compiler/target.olang
 6a532120b548d9b9 1f959f62979af9eb compiler/testdata/lex/brackets.olang
@@ -2379,6 +2382,7 @@ c8285ddbf1cbb114 fb2a509b6ebf03f6 std/prelude/float.olang
 b2b44b1247499128 d50fc0ca3804f457 std/prelude/map.olang
 1d72b208b1032190 889211717abc1973 std/prelude/number.olang
 b281768945e7440c bfd77aea086ce2fa std/prelude/place.olang
+3070f347e7ab0e0b 293b298eb1ace98e std/prelude/print.olang
 58a87f07ff6919f2 17a3747c9500bc53 std/prelude/reflect.olang
 fd100f0ff059caa9 98870e08d69fa573 std/prelude/tests/array.olang
 2588f3aaed492d79 1ecf6b297c39323d std/prelude/tests/columns.olang
