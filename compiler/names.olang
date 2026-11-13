@@ -1394,6 +1394,7 @@ fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut Vec<source.NameId>&) {
 fn (r mut Resolver&) elemsPattern(x ast.Expr&, subs Array<ast.Pattern&>&, bound mut Vec<source.NameId>&) {
     match x {
         case ast.Expr.ArrayLit(_, elem, _) { if elem is not null: r.typeRef(elem) }
+        case ast.Expr.Row(_, _) { }
         case ast.Expr.Index(_, ty, _) {
             if not r.namesType(ty) {
                 r.expr(x)

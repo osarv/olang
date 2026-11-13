@@ -599,9 +599,9 @@ comprneedstry.olang:12:24: error[E27, S9e]: this comprehension's own calls can f
       |                        ^~~
 compilation failed with 1 error
 === comprnotype.olang
-comprnotype.olang:4:10: error: expected the type a literal makes before the [, as in Array<I32>[...], found '['
-    4 |     a := [y for y in range 3]
-      |          ^
+comprnotype.olang:5:10: error[E20]: [] makes the type expected where it stands, and nothing is expected here - write the type in front, as Array<I64>[]
+    5 |     a := []
+      |          ^~
 compilation failed with 1 error
 === comprref.olang
 comprref.olang:5:24: error[E27]: a comprehension's elements may not be or hold references yet - build the array with a loop
@@ -1442,6 +1442,16 @@ e16slicenumber.olang:4:19: error[E16]: I64 cannot be indexed
     4 | fn main() { x := $Live[:1] }
       |                   ^~~~~~~~
 compilation failed with 1 error
+=== e19bareentries.olang
+e19bareentries.olang:5:19: error[E19]: a literal of Array<I64> holds no 'key: value' entries - its elements are no MapEntry
+    5 |     assert total([1: 2]) == 1
+      |                   ^~~~
+compilation failed with 1 error
+=== e19barenofromiter.olang
+e19barenofromiter.olang:8:12: error[E19]: a literal makes the type written before its '[' or expected where it stands, through that type's FromIter, and Pt has none - for an array of Pt, write Array<Pt>[...]
+    8 |     p Pt = [1, 2]
+      |            ^~~~~~
+compilation failed with 1 error
 === e19entries.olang
 e19entries.olang:4:22: error[E19]: a literal of Array<I64> holds no 'key: value' entries - its elements are no MapEntry
     4 |     xs := Array<I64>[1: 2]
@@ -1458,12 +1468,12 @@ e19mixed.olang:4:39: error: expected ':', found ']'
       |                                       ^
 compilation failed with 1 error
 === e19nofromiter.olang
-e19nofromiter.olang:4:11: error[E19]: a literal makes the type before its '[', through that type's FromIter, and I64 has none - for an array of I64, write Array<I64>[...]
+e19nofromiter.olang:4:11: error[E19]: a literal makes the type written before its '[' or expected where it stands, through that type's FromIter, and I64 has none - for an array of I64, write Array<I64>[...]
     4 |     xs := I64[1, 2]
       |           ^~~
 compilation failed with 1 error
 === e19reference.olang
-e19reference.olang:6:11: error[E19]: a literal makes the type before its '[', and Node& is a reference - an array of them is Array<Node&>[...]
+e19reference.olang:6:11: error[E19]: a literal makes the type written before its '[', and Node& is a reference - an array of them is Array<Node&>[...], or [...] where one is expected
     6 |     xs := Node&[n]
       |           ^~~~~
 compilation failed with 1 error
@@ -1475,14 +1485,21 @@ e19unique.olang:11:10: error[E19, T13b]: a literal or comprehension of Map<I64, 
    11 |     m := Map<I64, Tok>[1: Tok(5)]
       |          ^~~~~~~~~~~~~
 compilation failed with 2 errors
-=== e21rowref.olang
-e21rowref.olang:4:29: error[E21]: a nested '[...]' is a literal of the element its literal takes, and Array<I64>& is no type a literal makes - write the element itself, or hold the rows by value: Array<Array<I32>>[[1, 2], [3, 4]]
-    4 |     a := Array<Array<I64>&>[[1, 2], [3, 4]]
-      |                             ^~~~~~
-e21rowref.olang:4:37: error[E21]: a nested '[...]' is a literal of the element its literal takes, and Array<I64>& is no type a literal makes - write the element itself, or hold the rows by value: Array<Array<I32>>[[1, 2], [3, 4]]
-    4 |     a := Array<Array<I64>&>[[1, 2], [3, 4]]
-      |                                     ^~~~~~
-compilation failed with 2 errors
+=== e20emptykeyed.olang
+e20emptykeyed.olang:4:10: error[E20]: [:] makes the type expected where it stands, and nothing is expected here - write the type in front, as Map<String, I64>[]
+    4 |     m := [:]
+      |          ^~~
+compilation failed with 1 error
+=== e20mixed.olang
+e20mixed.olang:5:15: error[E12]: expected String, found F64
+    5 |     xs := [s, 2.5]
+      |               ^~~
+compilation failed with 1 error
+=== e20null.olang
+e20null.olang:4:12: error[E20]: a literal of null makes the type expected where it stands, and nothing is expected here - write the type in front, as Array<T?&>[null]
+    4 |     xs := [null, null]
+      |            ^~~~
+compilation failed with 1 error
 === e23lenclash.olang
 e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Len for Nums& - choose another name
     4 | fn (n Nums&) Len() I64 { return 7 }

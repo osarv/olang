@@ -1,0 +1,6 @@
+# check: fail error[E20]: a literal of null makes the type expected where it stands
+# E20: null has no type of its own for a literal's elements to take
+fn main() {
+    xs := [null, null]
+    assert xs.Len() == 2
+}

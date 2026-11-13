@@ -1,0 +1,10 @@
+# check: fail error[E19]: a literal makes the type written before its '[' or expected where it stands, through that type's FromIter, and Pt has none
+# E19: a literal with no type before it makes the type expected - a struct with no FromIter is made by no literal
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn main() {
+    p Pt = [1, 2]
+    assert p.x == 1
+}

@@ -1,6 +1,6 @@
-# check: fail error[E21]: a nested '[...]' is a literal of the element its literal takes, and Array<I64>& is no type a literal makes
-# E21: a nested row is made where the element is held by value (an Array<T>, a type with FromIter), never as a reference
+# check: run
+# E21, E12: a nested row whose element is a reference is a literal of its referent, lent as Array<I64>[1, 2] is there
 fn main() {
-    a := Array<Array<I64>&>[[1, 2], [3, 4]]
-    assert a.Len() == 2
+    a := Array<Array<I64>&>[[1, 2], [3]]
+    assert a.Len() == 2 and a[0][1] == 2 and a[1].Len() == 1
 }

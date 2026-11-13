@@ -1027,7 +1027,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         case ast.Expr.Compr(_, c) {
             # G37: one written as a call's arguments has no brackets
             if not c.InCall {
-                w.ty(c.Elem!)
+                if c.Elem is not null: w.ty(c.Elem!)
                 w.put("[")
             }
             w.expr(c.Value)

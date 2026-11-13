@@ -639,7 +639,9 @@ type, L10a), none for one past 64 bits - it adapts to a type wide enough for it,
 signed integer and the widest float, so a value nothing types is never narrowed or wrapped by a type nobody chose. This
 is the type `:=` infers (§6.2 D15: `x := 0` is an `I64`) and the type such a literal carries into a context that
 requires no particular type of it - a range of literals (S9b), a type variable only literals reach (G9a), a `-define` build
-constant (B10). A literal written against a typed target still adapts to it (T6): `b U8 = 3`, an `I32` argument `5`,
+constant (B10). A literal of a collection with no type before it has an own type as a number does - an `Array<T>` or a `Map<K, V>`
+of its items' own types (E20) - and makes the type a typed target expects (E19). A literal written against a typed
+target still adapts to it (T6): `b U8 = 3`, an `I32` argument `5`,
 `i32 + 1` and `case 5` against an `I32` are as before. Where an `I64` made so meets a narrower integer it does not flow
 into (T6b) - `x := 0` handed to an `I32` parameter - the type it should have is declared (`x I32 = 0`), or the value
 converted (`I32(x)`). A literal-only expression (E4a) that nothing adapts
@@ -4297,9 +4299,9 @@ type is that field's declared type.
 
 ### 5.6 Literals of collections
 
-**E19.** `array-literal ::= made-type "[" [ list(arr-item) | list(entry) ] "]"` (L18a), where
-`made-type ::= alias-chain IDEN [ type-args ]` (§4.4 M8) is **the type of the value the literal makes**, stated exactly
-once regardless of nesting depth (E21) - `Array<I64>[1, 2]`, `Vec<String&>["a", "b"]`, `set.Set<I64>[1, 2]`,
+**E19.** `array-literal ::= [ made-type ] "[" [ list(arr-item) | list(entry) | ":" ] "]"` (L18a), where
+`made-type ::= alias-chain IDEN [ type-args ]` (§4.4 M8) is **the type of the value the literal makes**, stated at most
+once regardless of nesting depth (E21), or left off where the type is expected (below) - `Array<I64>[1, 2]`, `Vec<String&>["a", "b"]`, `set.Set<I64>[1, 2]`,
 `Map<String&, I64>["a": 1]`, a type variable of the generic the literal is written in included (`C[a, b]`, §12 G8b) -
 and `entry ::= expr ":" expr`. It is never a reference or an `any` (T24, T32): those are elements' types, written inside
 the made type's arguments - `Array<Handle&>[a, b, c]` builds three instances, each with its own allocation and its own
@@ -4327,6 +4329,17 @@ each entry is `MapEntry<K, V>(k, v)`, the key checked against `K` and the value 
 whose elements are no `MapEntry` are a compile-time error, and so are plain items where they are. `C[]` is empty in
 either form. An entry's `:` is no slice's (E16): a slice has its base before the `[`.
 
+**Written or expected.** With no made type before its `[`, a literal makes the **type expected where it stands**, as a
+numeric literal adapts to it (T6): a typed declaration's or an assignment's target, an argument's parameter, a
+`return`'s result, a constructor's argument or a field's declared type, an element or a value of an enclosing literal
+(E21), a `case` subject's (S13h) - exactly as that type written in front would make it: `v Vec<I64> = [1, 2]` is
+`v Vec<I64> = Vec<I64>[1, 2]`. Where a reference is expected the literal makes its referent, lent as that literal with
+its type in front is there (E12): `total([1, 2])`, its parameter an `Array<I64>&`. An expected type no literal makes -
+a number, `Bool`, a function type, an `any` - expects nothing of it. With nothing expected - `xs := [1, 2]`, an operand,
+a receiver, a `for`'s source - the literal takes its own type (E20). `[]` and, for the keyed form, `[:]` are the empty
+literals; a type whose elements are no `MapEntry` expected of `[:]` is the entries' error above. The type in front
+stays allowed everywhere; it is what is written where nothing is expected and the own type is not the one meant.
+
 The literal is the one way to write a collection's values in place; `C.FromIter(it)` is an ordinary call (D19), so
 any walk becomes any collection: `set.Set<I64>.FromIter(words.Iter().Map(len).Iter())`. The prelude's `Array<T>`
 declares `FromIter` too - a walk of unknown length gathered as a `Vec` gathers - though its literals and comprehensions
@@ -4345,16 +4358,33 @@ whatever the literal is checked against (T7c). An `Array<T>` literal's type is a
 (D15), a bare type variable (G9), a parameter (an instance of its length, G29) - and storage it is kept in may be fixed
 with its length (T7d). Any other literal's type is its made type.
 
-**E21 (nested literals).** An item of a literal written as a bracket group, `[a, b]`, is a literal of the **element the
-outer literal takes**, its made type that element (E19): the element of an `Array<T>`, or the element a made type's
+**A literal's own type.** A literal with no type before it and nothing expected of it (E19) makes its **own type**, as
+a numeric literal takes its own (T6a): `[a, b]` an `Array<T>`, and `[k: v]` a `Map<K, V>` (M19d), each entry its
+`MapEntry(k, v)`. `T` - and `K` of the keys, `V` of the values - is the type of the first item that is no literal or
+literal-only expression (E4a), the others fitting it as an argument fits its parameter (T6, T6b); where every item is a
+literal, the widest of their own types, as two literals beside each other adapt (T6: `Char` < `I64` < `U64` < `F64`) -
+`[1, 2.5]` is an `Array<F64>` - written text being a `String` (T29c), each of its own length (T7a): `["a", "bc"]` is an
+`Array<String>`. A nested literal takes its own type too: `[[1, 2], [3, 4]]` is two rows of two laid out in place
+(T7d), rows of different lengths each their own copy. `[]`, `[:]` and a literal of nothing but `null` have none: each
+is a compile-time error naming the type to write in front (`Array<I64>[]`).
+
+**E20a (literals in generic calls).** A literal with no type before it given to a generic function (G9) binds as a
+numeric literal does (G9a): after the other arguments - it makes its parameter's type where they bound that type whole
+(`pick(U8(1), [2, 3])`, `fn pick<T>(fallback T, xs Array<T>&) T`, makes an `Array<U8>`), and otherwise takes its own
+type (E20), which then binds the parameter's variables (`first([3, 4])` binds `T` to `I64`). A parameter whose type is
+a collection other than an array, left open by the other arguments (`Vec<T>`), is bound by nothing the own type gives:
+the type is written in front, or given explicitly (`count<I64>([1, 2])`).
+
+**E21 (nested literals).** An item of a literal written as a bracket group, `[a, b]`, is a literal with no type before
+it (E19) where the **element the outer literal takes** is expected: the element of an `Array<T>`, or the element a made type's
 `FromIter` walks. `Array<Array<F32>>[[1, 2], [3, 4]]` is `Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]`;
 `Vec<Vec<I64>>[[1], [2, 3]]` builds each row through `Vec<I64>.FromIter`; a type whose `FromIter` walks rows -
 `fn Matrix.FromIter<I Iterator<Array<F64> ? E> ? E>(it mut I&) Matrix ? E` - is written `Matrix[[1, 2], [3, 4]]`, each
 row an `Array<F64>` handed to it as one element. Rows nest to any depth, each level by its own element type, and the
 lengths of rows are what their items make them (an `Array<T>` element held by value is its own copy, T7a; rows made
-for a `FromIter` are each the element type itself, never laid out at a shared length). An element that is no type a
-literal makes - a reference (`Array<Array<I32>&>`), a primitive, a struct with no `FromIter` - is a compile-time error
-naming the form that holds rows by value. There is still no multi-dimensional array (T7a): a nested literal of arrays
+for a `FromIter` are each the element type itself, never laid out at a shared length). An element that is a reference is
+made as its referent and lent (E19): `Array<Array<I32>&>[[1, 2], [3]]` holds references to two arrays made where the
+literal lands; one no literal makes - a primitive, a struct with no `FromIter` - is E19's error for that type. There is still no multi-dimensional array (T7a): a nested literal of arrays
 is an array of arrays.
 
 ### 5.7 Enum values
@@ -4433,10 +4463,14 @@ olang (written over `T(x)` and E36's limits), so the compile-time evaluator comp
 
 ### 5.12 Comprehensions
 
-**E27.** `comprehension ::= made-type "[" expr "for" IDEN [ "," IDEN ] "in" ( binary | range ) [ "if" binary ] "]"`
-is a new value of the made type (E19) holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk,
+**E27.** `comprehension ::= [ made-type ] "[" ( expr | entry ) "for" IDEN [ "," IDEN ] "in" ( binary | range ) [ "if" binary ] "]"`
+is a new value of the made type (E19) - written, or with none written the type expected where it stands, else its own
+(E19, E20: an `Array<T>` of its element's own type, or for an entry `k: v` a `Map<K, V>` of the key's and the value's,
+the first element deciding them; a fixed array where the source's count is known and there is no `if`, T7c) - holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk,
 in order — only those for which the condition after `if` is `true`, when there is one. It is a literal (E19) whose one
-item is followed by the `for` clause; every element must fit the made type's element type as a literal's items must.
+item is followed by the `for` clause; every element must fit the made type's element type as a literal's items must,
+an entry `k: v` making its `MapEntry(k, v)` where the made type's `FromIter` takes them (E19's keyed form):
+`Map<String, I64>[w: w.Len() for w in words]`, or `[i: i * i for i in range 4]`, a `Map<I64, I64>` of its own.
 It is no list: a line break before its `for`, or anywhere in its clause, separates nothing (L18a). The names are bound
 for each value exactly as in a `for ... in` loop (copied out of an array, an index counting from 0 for the two-name
 form) and are visible in the element expression and the condition only. What may follow `in` is what a `for ... in`
@@ -5366,7 +5400,7 @@ pattern        ::= alias-chain IDEN "." IDEN [ "(" list(item) ")" ]
 item           ::= sub-pattern | IDEN "=" sub-pattern                    (S13b, S13i)
 sub-pattern    ::= IDEN | pattern | struct-pattern | array-pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
 struct-pattern ::= alias-chain IDEN "(" [ list(item) ] ")"               (S13i)
-array-pattern  ::= made-type "[" [ list(array-item) ] "]"               (S13h)
+array-pattern  ::= [ made-type ] "[" [ list(array-item) ] "]"           (S13h)
 array-item     ::= sub-pattern | "..." [ IDEN ]
 ```
 
@@ -5499,8 +5533,9 @@ by a reference never null - is never the value matched: S13a asks no clause for 
 covered, and a match over a type all of whose cases are such needs no clause at all. std/chan's `Ready` of a Select
 given two cases has four, the last two carrying such a value, so a match of two clauses is exhaustive.
 
-**S13h (array patterns).** `case Array<String&>["test", file, ...words]` matches an array element by element. The type
-before the `[` is written as a literal making the matched value writes it (E19) - `Array<I64>[...]`,
+**S13h (array patterns).** `case ["test", file, ...words]` matches an array element by element. With no type before
+its `[` it takes the matched value's (as a literal takes the type expected, E19); a type written before the `[` is
+written as a literal making the matched value writes it (E19) - `Array<I64>[...]`,
 `Array<String&>[...]`, `Vec<I64>[...]` for a `Vec` - or, for a declared array type such as `String`, as the array it is
 declared over (`Array<Char>[...]`); its element type is the matched value's (a compile-time error otherwise). Each item is a `sub-pattern` matched against one
 element, as a payload's position is (S13b): a literal compares the element by `==`, a name binds a copy of it - always a

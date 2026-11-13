@@ -2692,7 +2692,7 @@ fn (p mut Parser&) pattern(x ast.Expr&, top Bool) ast.Pattern& {
             if isPath(ty) { return p.elemsPattern(sp, x, items) }
             return ast.Pattern.Value(sp, x)
         }
-        case ast.Expr.ArrayLit(sp, _, items) { return p.elemsPattern(sp, x, items) }
+        case ast.Expr.ArrayLit(sp, _, items), ast.Expr.Row(sp, items) { return p.elemsPattern(sp, x, items) }
         case ast.Expr.Spread(sp, y) {
             match y {
                 case ast.Expr.Name(_, n) { if not top: return ast.Pattern.Rest(sp, n) }
@@ -3266,13 +3266,43 @@ fn axisSlice(sp source.Span, x ast.Expr&, item ast.Expr&) ast.Expr& {
 }
 
 # an element of a bracket list: an expression, or a nested "[...]" row (E21, reported by the checker)
-fn (p mut Parser&) elem() ast.Expr& ? Fail {
-    if not p.sees(token.Tok.LBrack) { return try p.expr() }
-    at := p.advance()
+fn (p mut Parser&) elem() ast.Expr& ? Fail { return try p.expr() }
+
+# "[" items "]" with no type before it (E19, E21, E27): a Row, made where it stands into the type expected there, or
+# its own - entries "k: v" its items in the keyed form, "[:]" the empty keyed one (a Row of one bare axis); a
+# comprehension with no type (Elem null)
+fn (p mut Parser&) bareLit() ast.Expr& ? Fail {
+    at := p.here()
+    try p.want(token.Tok.LBrack)
+    wasNoGt := p.noGt
+    p.noGt = false
+    p.brackets++
+    wasSkip, wasItem := p.skip, p.item
+    p.skip = false
+    p.item = true
+    defer {
+        p.brackets--
+        p.noGt = wasNoGt
+        p.skip = wasSkip
+        p.item = wasItem
+    }
     from := p.exprs.Len()
-    for not p.sees(token.Tok.RBrack) {
-        p.exprs.Push(try p.elem())
-        if not try p.sep(token.Tok.RBrack) { break }
+    if p.sees(token.Tok.Colon) and p.look(1) == token.Tok.RBrack {
+        cat := p.advance()
+        p.exprs.Push(ast.Expr.Axis(p.from(cat), null, null))
+    } else if not p.sees(token.Tok.RBrack) {
+        if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace) { try p.fail(token.Tok.RBrack.Describe()) }
+        first := try p.elem()
+        if p.comprehends() { return try p.comprehension(at, null, first) }
+        keyed := p.sees(token.Tok.Colon)
+        if keyed { first = try p.entry(first) }
+        if keyed and p.comprehends() { return try p.comprehension(at, null, first) }
+        p.exprs.Push(first)
+        for try p.sep(token.Tok.RBrack) {
+            x ast.Expr& = try p.elem()
+            if keyed { x = try p.entry(x) }
+            p.exprs.Push(x)
+        }
     }
     if not p.sees(token.Tok.RBrack) {
         p.exprs.Truncate(from)
@@ -3466,8 +3496,8 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
             p.advance()
             return ast.Expr.Name(p.from(at), name)
         }
-        # a bracket with no element type before it (E19): a literal states its element type once
-        case token.Tok.LBrack { try p.fail("the type a literal makes before the [, as in Array<I32>[...]") }
+        # a bracket with no type before it (E19): a literal making the type expected where it stands, or its own
+        case token.Tok.LBrack { return try p.bareLit() }
         case _ { try p.fail("an expression") }
     }
     unreachable
@@ -3518,6 +3548,7 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&) ast.Expr& ? Fail {
         # E19: "k: v" - the keyed form, every item an entry, held as a binary ":" no other expression is
         keyed := p.sees(token.Tok.Colon)
         if keyed { first = try p.entry(first) }
+        if keyed and p.comprehends() { return try p.comprehension(at, elem, first) }
         p.exprs.Push(first)
         for try p.sep(token.Tok.RBrack) {
             x ast.Expr& = try p.elem()

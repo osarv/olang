@@ -2518,6 +2518,7 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Join(_, _): p.textType()
         case ast.Expr.Name(sp, n): try known.Get(n) catch default p.nameType(c, sp, n)
         case ast.Expr.ArrayLit(_, made, items): p.literalMade(c, known, p.Resolve(c, made), items)
+        case ast.Expr.Row(_, items): p.ownLiteral(c, known, items)
         case ast.Expr.Index(_, y, items): p.literalOf(c, y, items)
         case ast.Expr.Call(_, f, cargs): p.madeType(c, known, f, cargs)
         case ast.Expr.Try(_, y, _): p.Infer(c, known, y)
@@ -2531,6 +2532,32 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
 fn (p mut Program&) literalMade(c Context&, known Map<source.NameId, types.TypeId>&, made types.TypeId, items Array<ast.Expr&>&) types.TypeId {
     if made == types.UnknownT or p.T.KindOf(made) != types.Kind.Array { return made }
     return p.T.Array(p.itemsElem(c, known, p.T.Elem(made), items), p.T.Const(p.T.Prim("I64"), items.Len()))
+}
+
+# E20: a literal with no type before it, where nothing is expected - an Array<T> of its items' own type: its first item
+# that is no literal, else the widest of the literals' own types; Unknown where the checker must say (an empty or a
+# keyed one, an item it cannot tell)
+fn (p mut Program&) ownLiteral(c Context&, known Map<source.NameId, types.TypeId>&, items Array<ast.Expr&>&) types.TypeId {
+    if items.Len() == 0 { return types.UnknownT }
+    et := types.UnknownT
+    lit := true
+    for x in items {
+        if x == ast.Expr.Binary { return types.UnknownT }
+        t := p.Infer(c, known, x)
+        if t == types.UnknownT { return t }
+        own := x == ast.Expr.Lit or x == ast.Expr.Unary
+        if not own and lit {
+            et, lit = t, false
+        } else if lit and et == types.UnknownT {
+            et = t
+        } else if lit and p.T.IsNumber(et) and p.T.IsNumber(t) and p.Meet(et, t) >= types.TypeId(0) {
+            et = p.Meet(et, t)
+        }
+    }
+    if p.T.KindOf(et) == types.Kind.Array and p.T.KindOf(p.T.Length(et)) == types.Kind.Const {
+        et = p.itemsElem(c, known, p.T.Array(p.T.Elem(et), types.TypeId(0)), items)
+    }
+    return p.T.Array(et, p.T.Const(p.T.Prim("I64"), items.Len()))
 }
 
 # an array literal's element type: the written one, or where that is an array value of no known length, the items' one

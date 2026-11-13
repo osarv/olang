@@ -1,0 +1,7 @@
+# check: fail error[E12]: expected String, found F64
+# E20: with nothing expected, a literal's items take its first non-literal item's type
+fn main() {
+    s := "a"
+    xs := [s, 2.5]
+    assert xs.Len() == 2
+}
