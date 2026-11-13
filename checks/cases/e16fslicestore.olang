@@ -1,0 +1,9 @@
+# check: fail error[E16f]: a slice is not stored into (E16a)
+# E16f: what Slice gives is a value with no place of its own - read, never stored into
+type Grid struct(n I64) { n }
+fn (g Grid&) Slice(r Axis, c Axis) I64 { return g.n }
+
+fn main() {
+    g := Grid(3)
+    g[0:2, :] = 4
+}

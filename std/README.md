@@ -86,6 +86,7 @@ stays in.
   `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`, `StepBy`, `FlatMap`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`, and `Partition` into two Vecs, `Scan`, `GroupBy`, `ChunkBy`, `Dedup`, `Unzip`, `Product`, `Last`, `Nth`; `Reversed`, `Cycle`, `LowerBound` and `BinarySearch` for a Vec or any type with `At` and `Len`; an array's `Reversed`, `Windows`, `TakeWhile`/`SkipWhile` views, `Partition`, `Cycle`, `LowerBound`, `BinarySearch` and `ChunkBy` views), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
+  `axis` (`Axis`, one item of a subscript by axes, `m[0:2, :]`, `m[..., 1]`, handed to a type's `Slice`, E16f),
   `argument` (`ArgumentError`, what a call whose contract's condition is false fails with, D17), `enums`
   (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32). Only the prelude may give methods to built-in types (M19d).
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.

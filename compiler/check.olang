@@ -10058,6 +10058,13 @@ fn exprKindName(x ast.Expr&) String& {
 
 # ---- subscripts by axes (E16f) ----
 
+fn slicedTarget(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Index(_, _, items): return ast.Slicing(items)
+        case _: return false
+    }
+}
+
 # x[i, lo:hi, :, ...]: a subscript with a range or "..." among its items calls x's Slice with one Axis per item - an
 # index Axis.Index(i), a range Axis.Range(lo, hi), "..." Axis.Rest. An array has one axis, sliced by x[lo:hi] alone
 fn (c mut Checker&) axes(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) typed.Expr& {
@@ -19307,6 +19314,12 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, 
 }
 
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
+    if slicedTarget(target) {
+        # E16f: what Slice gives has no place of its own
+        c.err(target.Span(), msgs.SliceNoPlace())
+        c.expr(value, types.UnknownT)
+        return
+    }
     if c.assignAt(sp, op, target, value) { return }
     osp0 := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)
     ca := c.compoundAt

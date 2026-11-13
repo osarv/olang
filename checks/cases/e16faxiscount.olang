@@ -1,0 +1,9 @@
+# check: fail error[E16f]: Grid's Slice takes 2 axes, 3 written
+# E16f: one Axis per item, as many as the Slice's parameters (a variadic '...Axis' takes any number)
+type Grid struct(n I64) { n }
+fn (g Grid&) Slice(r Axis, c Axis) I64 { return g.n }
+
+fn main() {
+    g := Grid(3)
+    assert g[0:2, :, 1] == 3
+}

@@ -3134,7 +3134,7 @@ with no import, and no module may declare a type, a global, a function, a local 
 types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
 of the built-in types and of its own - `String.FromC(p, max)` (X15), the floats' `FromBits` (E33), every integer type's
 `Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
-(T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `TypeKind` enum is what
+(T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `Axis` enum is what a subscript by axes passes to `Slice` (E16f); its `TypeKind` enum is what
 reflection's `T.Kind` gives (G32), and its `FieldInfo`, `CaseInfo`, `ParamInfo` and `ResultInfo` are the types of
 reflection's descriptors (G34), made only by the compiler. Its collections are `Vec` (the growable array), `Map`,
 `StringBuilder` and the structures of arrays `Columns` and `ColumnVec` (T7e) - `String` and `Array` are built in - and every other container is a module of the standard library,
@@ -3618,8 +3618,9 @@ primary  ::= literal | try-expr | comptime-expr | call-expr | struct-literal
 ```
 
 `match-expr` is a `match` used as a value (§6.4 S12b); `unreachable-expr` is `unreachable` where a value is expected
-(§6.6 S16e); `comptime-expr ::= "comptime" expr` is a value computed while compiling (§13 K3). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
-indices only for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
+(§6.6 S16e); `comptime-expr ::= "comptime" expr` is a value computed while compiling (§13 K3). `index ::= "[" sub-item { sep sub-item } [ line-sep ] "]"`
+with `sub-item ::= expr | [ expr ] ":" [ expr ] | "..."` (several indices only for a type's `At`/`SetAt`, E31; one
+range alone is a slice, E16a; a range or `...` among several items a subscript by axes, E16f), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" list(arg) ")"` calls the function value everything to its left gives (E13b). Every one of these lists
 follows the listing rule (L18a); a parenthesized expression, `"(" expr ")"`, is no list.
@@ -4255,6 +4256,26 @@ paid per slice expression, never per element access.
 aborting, covered by `try` or `!` as any fallible call is. It is the slice in every other respect - a borrow of
 `base`'s storage, its type, scope and permission `base[lo:hi]`'s (E16a) - and both bounds are written.
 
+**E16f (subscripts by axes).** A subscript whose items include a **range** `lo:hi` (either end may be left off; a bare
+`:` is the whole axis) or a bare `...` (the axes not written, at most once), among several items or as its one `...`,
+calls the base's type's `Slice` with **one value of the prelude's enum `Axis` per item**, in order: an index `i` is
+`Axis.Index(i)`, a range `Axis.Range(lo, hi)` - an end left off `0` for `lo`, `I64.Max` for `hi` ("to the axis's end")
+- and `...` is `Axis.Rest`. Each index and bound is an integer that widens to an `I64` (T6b). `m[0:2, :]` is
+`m.Slice(Axis.Range(0, 2), Axis.Range(0, I64.Max))`, `m[..., 1]` is `m.Slice(Axis.Rest, Axis.Index(1))`. What each
+item means - whether an index drops its axis, how many axes `Rest` covers, whether the result is a view or a copy - is
+the type's: the language gives the items and nothing else. `a.Bounds(n)`, supplied on `Axis`, gives the bounds an item
+takes on an axis of `n` elements (`i, i + 1`; `lo, hi` with an end left off at `n`; `0, n`), checking nothing.
+
+The `Slice` taking them is a method whose parameters besides the receiver are **all `Axis`**, one per axis, or **one
+variadic `...Axis`** (D8g) taking any number; such a type slices by axes everywhere, so its one-range `x[lo:hi]` is
+`x.Slice(Axis.Range(lo, hi))` too. The written items must be as many as a fixed list of `Axis` parameters, else a
+compile-time error naming both counts; a type with no such `Slice` is an error naming the forms it may declare. A plain
+`x[i, j]` with no range and no `...` is `At` as before (E31). An **array has one axis**: a subscript by axes of an array
+is a compile-time error naming `a[lo:hi]`. What `Slice` gives is a value with no place of its own (E16a): it is read,
+indexed, called on and passed on, never assigned or stored into - `m[0:2, :] = v` is an error. It composes as any call
+does: under `try` where `Slice` can fail (E31), through a type variable as a need (G18a), and in the compile-time
+evaluator (K1).
+
 The two forms divide the two cases cleanly. Bounds that come from the program itself (`a[:]`, `a[0:a.Len()]`,
 a loop index already checked) cannot fail, cost nothing, and force no error onto the signature. Bounds that
 come from somewhere that can legitimately be wrong — a parsed length, a protocol field — are written with
@@ -4307,17 +4328,25 @@ unique (T13b) - `Vec<File>[...]`, `Map<I64, File>[1: f]` - has no literal: a com
 add each value (`v.Push(File(3))`, `m.Put(1, File(5))`), each value then handed on fresh. An `Array<File>[...]` is laid
 out and has one.
 
-`arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` - a plain expression, or a nested bracketed group with no
-restated type, which is an error (E21).
+`arr-item ::= expr | "[" [ list(arr-item) ] "]"` - a plain expression, or a nested bracketed group with no restated
+type, a **nested literal** (E21).
 
 **E20.** A literal's length is the number of items written - zero items, zero - and is known while compiling,
 whatever the literal is checked against (T7c). An `Array<T>` literal's type is an `Array<T>` (T7) everywhere - a `:=`
 (D15), a bare type variable (G9), a parameter (an instance of its length, G29) - and storage it is kept in may be fixed
 with its length (T7d). Any other literal's type is its made type.
 
-**E21.** A literal's items are never themselves bracket groups: there are no nested literals, since there
-is no multi-dimensional array (T7a). An array of arrays is a literal of references, `Array<Array<I32>&>[r0, r1]`, or of
-arrays held by value, each item an array of its own (`Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]`).
+**E21 (nested literals).** An item of a literal written as a bracket group, `[a, b]`, is a literal of the **element the
+outer literal takes**, its made type that element (E19): the element of an `Array<T>`, or the element a made type's
+`FromIter` walks. `Array<Array<F32>>[[1, 2], [3, 4]]` is `Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]`;
+`Vec<Vec<I64>>[[1], [2, 3]]` builds each row through `Vec<I64>.FromIter`; a type whose `FromIter` walks rows -
+`fn Matrix.FromIter<I Iterator<Array<F64> ? E> ? E>(it mut I&) Matrix ? E` - is written `Matrix[[1, 2], [3, 4]]`, each
+row an `Array<F64>` handed to it as one element. Rows nest to any depth, each level by its own element type, and the
+lengths of rows are what their items make them (an `Array<T>` element held by value is its own copy, T7a; rows made
+for a `FromIter` are each the element type itself, never laid out at a shared length). An element that is no type a
+literal makes - a reference (`Array<Array<I32>&>`), a primitive, a struct with no `FromIter` - is a compile-time error
+naming the form that holds rows by value. There is still no multi-dimensional array (T7a): a nested literal of arrays
+is an array of arrays.
 
 ### 5.7 Enum values
 
@@ -4516,6 +4545,7 @@ type declares one:
 | `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
 | `x[i] = v`, `x[i, j, ...] = v` | `SetAt` | the indices, then the value; no result |
 | `x[lo:hi]` | `Slice` | two operands, a result |
+| `x[i, lo:hi, :, ...]` (E16f) | `Slice` | one `Axis` per item (or one `...Axis`), a result |
 | `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | `BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight` | one operand, a result |
 | `~a` | `BitNot` | none, a result |
 | `x++`, `x--` (either side) | `Inc`, `Dec` | none, a result |
