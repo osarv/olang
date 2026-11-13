@@ -1412,6 +1412,26 @@ e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
     9 |     b := z[5]
       |            ^
 compilation failed with 1 error
+=== e16farrayaxes.olang
+e16farrayaxes.olang:5:11: error[E16f]: Array<I64> has one axis - slice it with one range, 'a[lo:hi]'; ':' or '...' among several items calls a type's Slice taking Axis values
+    5 |     s := a[0:2, 1]
+      |           ^
+compilation failed with 1 error
+=== e16faxiscount.olang
+e16faxiscount.olang:8:13: error[E16f]: Grid's Slice takes 2 axes, 3 written - write one item per axis ('...' for the rest is the type's to read), or declare 'Slice(axes ...Axis)'
+    8 |     assert g[0:2, :, 1] == 3
+      |             ^
+compilation failed with 1 error
+=== e16fnoaxisslice.olang
+e16fnoaxisslice.olang:9:13: error[E16f]: Grid declares no Slice taking Axis values - ':' or '...' among a subscript's items calls 'fn (x T&) Slice(a Axis, b Axis) R' (one per axis) or 'Slice(axes ...Axis)'
+    9 |     assert g[0:2, 1] == 2
+      |             ^
+compilation failed with 1 error
+=== e16fslicestore.olang
+e16fslicestore.olang:8:5: error[E16f]: a slice is not stored into (E16a) - store through its elements, or call a method the type declares for it
+    8 |     g[0:2, :] = 4
+      |     ^~~~~~~~~
+compilation failed with 1 error
 === e16getnotry.olang
 e16getnotry.olang:5:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
     5 |     x := a.Get(1)
@@ -1454,6 +1474,14 @@ e19unique.olang:10:10: error[E19, T13b]: a literal or comprehension of Vec<Tok> 
 e19unique.olang:11:10: error[E19, T13b]: a literal or comprehension of Map<I64, Tok> hands its FromIter a walk of references to the values, and MapEntry<I64, Tok> is unique - its values are never copied: make the Map<I64, Tok> and add each value by its own call (Push, Put)
    11 |     m := Map<I64, Tok>[1: Tok(5)]
       |          ^~~~~~~~~~~~~
+compilation failed with 2 errors
+=== e21rowref.olang
+e21rowref.olang:4:29: error[E21]: a nested '[...]' is a literal of the element its literal takes, and Array<I64>& is no type a literal makes - write the element itself, or hold the rows by value: Array<Array<I32>>[[1, 2], [3, 4]]
+    4 |     a := Array<Array<I64>&>[[1, 2], [3, 4]]
+      |                             ^~~~~~
+e21rowref.olang:4:37: error[E21]: a nested '[...]' is a literal of the element its literal takes, and Array<I64>& is no type a literal makes - write the element itself, or hold the rows by value: Array<Array<I32>>[[1, 2], [3, 4]]
+    4 |     a := Array<Array<I64>&>[[1, 2], [3, 4]]
+      |                                     ^~~~~~
 compilation failed with 2 errors
 === e23lenclash.olang
 e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Len for Nums& - choose another name
