@@ -64,6 +64,17 @@ operator method name (E31 in SPEC; `std/prelude` declares it for the built-ins; 
 operators (E39) if it applies to arrays; `eval.olang` and `emit.olang` for the computation, including the 128-bit and
 odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if precedence moves.
 
+## A literal form (E19-E21, E27, S13h)
+
+A form of `[...]` - with a type in front or none (the type expected where it stands, else its own, E20): `parse.olang`
+(`primary`'s `bareLit`, `arrayLit`, `comprehension`, `pattern`'s array patterns, `Subscripts` for every index's `[`);
+`check.olang` (`row`/`litTarget`/`ownLit`, `madeLit`, `comprehension`/`comprOwn`, `invoke`'s bare arguments for G9a,
+`elemsWritten` for patterns); `generic.olang` `Infer` (a `:=` field's or global's type, `ownLiteral`); `names.olang`;
+`unparse.olang`; `fmt.olang` `markEntries` (an entry's `:` is any non-subscript `[`'s top-level colon, so the parser
+must list every subscript); `eval.olang` only through the typed tree; `tests/barelits.olang`, `tests/literals.olang`;
+`checks/cases/e19*`, `e20*`, `e21*`; goldens (`make tokgold astgold diaggold`, and `run.txt` for a new test). The
+editors and the language server carry no list of literal forms.
+
 ## A rule number or a diagnostic
 
 | place | why |

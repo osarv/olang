@@ -58,6 +58,14 @@
 | ok - an axis's bounds
 | ok - nested literals of arrays and Vecs
 | ok - Tensor.Slice: a generic tensor's literal and slices
+=== test tests/barelits.olang
+| status 0
+| ok - a literal with nothing expected takes its own type (E20)
+| ok - a literal makes the type expected where it stands (E19, E21)
+| ok - comprehensions with no type (E27, E20)
+| ok - generic calls bind a bare literal after the other arguments (G9a)
+| ok - array patterns take the matched value's type (S13h)
+| ok - the evaluator agrees (K1)
 === test tests/become.olang
 | status 0
 | ok - become runs a chain of any depth in one frame
@@ -2228,6 +2236,8 @@
 | status 0
 | v 11 22 t 15008
 === run e16dgetbang.olang
+| status 0
+=== run e21rowref.olang
 | status 0
 === run e31bcallargs.olang
 | status 0
