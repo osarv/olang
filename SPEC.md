@@ -1487,8 +1487,9 @@ an argument of it for another such parameter follows them on, and every other pl
 a task - is a boundary (T22a) judged by that place's type; a capture of one of those functions' is where the caller's
 value had it, and a temporary the callee builds there is built where that capture lives - a derived scope of the twin
 (O23a), passed by its caller; a caller whose argument's functions disagree on where the capture is passes the scope
-found while the program runs (O29) from the reference the value is made of, where it is written at the call (an
-adapter's instance, a lambda's captured reference) - except in a lambda's body (below), where it is a compile-time
+found while the program runs (O29) from the reference the value is made of, where it is written at the call or in
+the declaration of a local never assigned again that the call reads (an adapter's instance, a lambda's captured
+reference, itself a local never assigned again) - except in a lambda's body (below), where it is a compile-time
 error naming T22c. Likewise a
 lambda capturing a local of the body making it, given one value and never assigned again, whose functions capture
 nothing (named functions, lambdas capturing nothing) and do more than the capture's type allows, has that capture
@@ -1915,7 +1916,9 @@ promise their facts. Every call through an `any` of the trait relies on the boun
 relations (O10c) and has the effect words' facts (G42) - with no effect word, anything. Each method a type gives the
 trait's table where an `any` of it is made (its own or the default it takes, T32b) is held to the bound - its
 obligations within the relations (T22b), its facts within the effect words - and a method doing more is a compile-time
-error at the conversion naming T30c, the method and the word, with a note where an effect word is broken. A type meets a
+error at the conversion naming T30c, the method and the word, with a note where an effect word is broken. A method
+keeping a parameter in what a field of its instance refers to (the field's own binding, O23a) does what no word of the
+trait can say, the receiver having no name: the error names what it does. A type meets a
 trait as T31 says whatever the words: a constrained generic's call (G19) is a direct call, judged by the method's body.
 
 **T31a (closed traits).** A trait may **list the types that satisfy it**, after `for`: `type Float trait for F16,
@@ -7064,10 +7067,11 @@ element's), or, for an argument that is itself a parameter of the caller, the ca
 does a holder letting go of its value (O15), for its destructor, from the bindings of the value it holds. A call that
 knows none - through a function value or an `any`, a task's, the runtime ending a value registered with a scope (O16)
 - passes none, and the body builds where the field's referent is found to live while the program runs (O29): from the
-reference it builds through, else the field itself read through the parameter. Only where the body assigns that
-parameter (the field would then be another instance's) and nothing else gives a reference to find it from is it built in
-the program's scope, which outlives the referent wherever that lives (never the scope the field was read through, which
-the referent may outlive). A generator's `Next`, a lambda, an
+reference it builds through, else the field itself read through the parameter - read as the body is entered where the
+body assigns that parameter, so it is the argument's field. A reference parameter the body assigns reads at the derived
+scopes of the parameter whose argument it holds where it is read: its own where only its entry reaches the read, another
+parameter's where every version reaching it is a read of that one (O25i); elsewhere its field is that of an instance
+the function did not build (O23). A generator's `Next`, a lambda, an
 `export fn` and the bodies of a `become` chain take none: they always find it. For judging, a derived scope is
 resolved at each call from the argument as above - for an argument reached through an element, the caller's field set
 of that field (O23); where neither is known, the argument's own scope (O23).

@@ -923,6 +923,8 @@ e5af1040eab33790 247297a748403d14 checks/cases/o23abuild.olang
 44f61099bb894308 ca75d30c2e8d1201 checks/cases/o23adepth.olang
 c8310d0202f90f4a 63d72ab8965f5c44 checks/cases/o23aliasmethod.olang
 88367f665917bc81 8e8da20e9116cd6f checks/cases/o23aliaswrite.olang
+1e711545f995c48d 1f7b9895edbca212 checks/cases/o23areassignedparam.olang
+8fe3744de80cf024 a1605ef2b69d7140 checks/cases/o23areassignedvalue.olang
 32a51df9d05ca063 f7b85ae07c7e474c checks/cases/o23awrite.olang
 21d305396206a5fc f51ac7b33b688013 checks/cases/o23paramfield.olang
 240dd7ffd096b47e a4a2cf5dda4488de checks/cases/o25abare.olang
@@ -1323,6 +1325,7 @@ d46023e412df6c24 4072bafb460488f2 checks/cases/s19eyield.olang
 4a36da5c29d2a822 803f4a9e55fa7fb8 checks/cases/s1bnested.olang
 669db0507a1009d1 3b1729ee86f20876 checks/cases/s1bparallel.olang
 d4e2190baab6f4c8 802aea9e55e9338e checks/cases/s1bsameline.olang
+99c25f9dac88828f 8bc1682bb0c9ac31 checks/cases/s20renderframe.olang
 cf496e4c4f06fbf3 e4fe040d432b0b9d checks/cases/s20walkheldref.olang
 7170810fecd4421a 9a6333bde63a34e5 checks/cases/s20yieldheld.olang
 172a4e5781c44ceb e52a83a95486ef4b checks/cases/s21becomeheld.olang
@@ -1631,6 +1634,8 @@ dbcdabccc2ccf176 cb1b46e9dba2a43b checks/cases/t22bwordsfit.olang
 d11bd5140006f0f6 9b6db8a77326a3ce checks/cases/t22cbuildcapture.olang
 ec175ca822dd2ac1 8458c2f92edc68bc checks/cases/t22ccapturefound.olang
 b2ba128df2e64b19 18985e5da161a303 checks/cases/t22climit.olang
+4773c9e288d24736 82b662873e906a65 checks/cases/t22cstoredcapture.olang
+e066fdafdfd3a5cf 3f3e03820eca0263 checks/cases/t22cstoredlambda.olang
 b64de0543bdae585 2e3b4200f86d9eda checks/cases/t22cstorefollowed.olang
 5b86d050aab6a39b 7b9a5cad634b15bc checks/cases/t22dassigned.olang
 e1292b2146eea8f9 13af1fc7fb21576a checks/cases/t22dchain.olang
@@ -1734,6 +1739,7 @@ f06b5580ae5c0c07 256c568db13c8379 checks/cases/t30banybuilder.olang
 f1e118dc222f7584 3e09ded379dd308c checks/cases/t30bunmet.olang
 24852435d204c6a2 70814e0e263f206c checks/cases/t30cfacts.olang
 44fa0fbfdf100cb0 87fb0ad818e63968 checks/cases/t30ckeeps.olang
+f4269cc1707ed508 884a48688842e365 checks/cases/t30ckeepsfield.olang
 880214684e6a1833 4f224f014ea3b683 checks/cases/t30ckeepsoutlived.olang
 1b20f91c92aef811 19dde8db704e4ef5 checks/cases/t30cnoalloc.olang
 a1f7d7d928a52a05 ea0e182818b6341a checks/cases/t30cnoparam.olang
@@ -2224,11 +2230,11 @@ cfbae2c024604f26 ede20fa970cbc0c2 compiler/facts.olang
 ed72a0f6f9cecf75 64bf5165a48defde compiler/interp.olang
 92f3aed793830781 91816f49812e0ca6 compiler/listing.olang
 b594314c49482270 178e4b14f4a6f4c3 compiler/load.olang
-8754e6e0cdeb95ce 3a3d0c06a499372b compiler/lower.olang
+d07c60236d3de9a7 ba00c0031de00a1a compiler/lower.olang
 1180de3a1bb9c277 250f5b791be35111 compiler/lsp.olang
 f470d9f8bf5653a6 f7b72ffb351d5a8e compiler/mcp.olang
 e1f62fe67c1ce681 6cac0cd09ccd8a05 compiler/mir.olang
-29ea3ae3f2958238 3f9478d6eb2c7aab compiler/msgs.olang
+8cbfad84f62f94fe 5170312c1494be19 compiler/msgs.olang
 59f5f54bcf770981 82b68291274b3324 compiler/names.olang
 fffba02702d708ba db5a6c005be0c544 compiler/needs.olang
 7a81e4a7d6b82865 8d0a5756619ad81a compiler/olang.olang
@@ -2237,7 +2243,7 @@ f54f917733dc2869 644fe3a84ad79c04 compiler/parse.olang
 49745b9b20cffd77 201d55791b3b1324 compiler/records.olang
 cd6dc04fc51a289c 717b2d1c1d7ae607 compiler/runtime.olang
 1cd1dca247f6cfbd 65a9cc0be9512004 compiler/scan.olang
-5e3b27b8694291e7 583c4d4e7c792b95 compiler/scope.olang
+d63902b7bfe21cc8 0fc2026f253e1210 compiler/scope.olang
 43a16be4fbaa1759 6c5a2d0c7d986e2a compiler/session.olang
 a846754911a07a9e 65d90941d2eb0321 compiler/source.olang
 dc92112e41e19da5 686ccb031c2df0f0 compiler/target.olang
@@ -2278,7 +2284,7 @@ d19ca4c6f3ef58cd a168df0c0c02ad56 compiler/tools/namesdiff.olang
 3eeaef21e68f3823 32fe7ce6f8de60bc compiler/tools/seed.olang
 5f8e74923332b3f9 3daf7f4ba96547cd compiler/tools/tokdiff.olang
 0bfae04e3fc7eb91 0d1f554dfe82d263 compiler/tools/toolkit.olang
-61316112f2b81edc fccbd12ceb4c120e compiler/typed.olang
+f796e13d317b0107 76cbf765a1acd64b compiler/typed.olang
 9cfd616d31aec960 dd56890d9dde9c99 compiler/types.olang
 f4488f5769771ce0 2b14703c813d38a4 compiler/unparse.olang
 f052724f1625853b c662f25486acf87f compiler/views.olang

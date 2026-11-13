@@ -5914,6 +5914,11 @@ t30bunmet.olang:7:14: error[T30b]: Pt does not satisfy the constraint Parsed on 
     7 |     p := try read<Pt>("1")
       |              ^~~~~~~~
 compilation failed with 1 error
+=== t30ckeepsfield.olang
+t30ckeepsfield.olang:30:13: error[T30c, T22b]: Bag2's 'Put' keeps 'n' in what the instance's 'v' refers to, which no promise of Sink's 'Put' can say - call it directly, or through generic code
+   30 |         put(b, P(i, i))
+      |             ^
+compilation failed with 1 error
 === t30cnoalloc.olang
 t30cnoalloc.olang:14:17: error[T30c, T22b]: Sq's 'Area' may allocate, and Shape's 'Area' promises 'noalloc' - every call through an 'any Shape&' relies on it: give Sq a method that does not, or take 'noalloc' off the trait's method
    14 |     assert area(Sq(2.0)) > 0.0

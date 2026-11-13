@@ -20,7 +20,7 @@
 # Placement is the plan's (typed.Plan, M6): the scope pass's (compiler/scope.olang) where Plans holds one per body, else
 # the stand-in DESIGN.md 1.6.1 allows - every site built in the program's scope, every local in its frame, every scope
 # variable passed the program's. A plan's block is the MIR scope its typed block opened; an Inert scope (O12, E11c) is
-# the program's until lowering opens Inert scopes of its own.
+# the body's frame's.
 #
 # Memory is one model (docs/memory.md): scopes and destructor registration; a Take lowers to MIR's Take, and what a sole
 # place lets go of is released where early freeing says (O8d: Release, Settle).
@@ -501,6 +501,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # O29: the reference arguments lowered, and their operands - a scope found from one is found from its operand
     argExprs Vec<typed.Expr&>
     argOps Vec<mir.Operand>
+    entryRoots Map<I64, mir.Operand>   # O23a: the plan's roots read as the body is entered (Plan.AtEntry), by index
     retiring Bool = false            # a retire() being lowered past its O8d guard (retire)
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
                                     # else 1 + the place's guard (free.Guard) << 1, and 0 the value or 1 the handle's
@@ -618,6 +619,7 @@ fn (ln mut lowering&) run() {
     ln.levels.Push(level(frame, root!.Id, mir.ScopeKind.Frame))
     ln.copyParams()
     ln.holdParams()
+    ln.readEntryRoots()
     ln.settleViews()
     for s in root!.Stmts { ln.stmt(s) }
     if ln.dead { return }
@@ -660,6 +662,16 @@ fn (ln mut lowering&) copyParams() {
         if a != l { ln.emit(mir.Stmt.Live(sp, l)) }
         v := ln.ownCopyOf(mir.Operand.Copy(mir.Lvalue.L(a)), ty, home, sp)
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(v)))
+    }
+}
+
+# O23a, O29: each root the plan reads as the body is entered (a field of a parameter the body assigns), read now
+fn (ln mut lowering&) readEntryRoots() {
+    if not ln.planned: return
+    for i in ln.plan.AtEntry {
+        if i >= ln.plan.Roots.Len(): continue
+        r := ln.plan.Roots[i]
+        ln.entryRoots.Put(i, ln.into(r.Type(), mir.Rvalue.Use(ln.val(r)), ln.B.Sp))
     }
 }
 
@@ -895,6 +907,7 @@ fn (ln mut lowering&) passedOr(k I64, i I64) mir.ScopeRef {
     o := mir.Operand.None
     if i >= 0 and i < ln.plan.Roots.Len() {
         root := ln.plan.Roots[i]
+        o = try ln.entryRoots.Get(i) catch default mir.Operand.None
         for j := ln.argExprs.Len() - 1, j >= 0 and o == mir.Operand.None, j-- {
             if ln.argExprs[j] == root: o = ln.argOps[j]
         }
@@ -924,6 +937,8 @@ fn (ln mut lowering&) scopeRef(sc typed.Scope) mir.ScopeRef {
         case typed.Scope.Region(site) { return ln.regionOf(I64(site)) }
         case typed.Scope.Found(i) { return ln.foundOf(i) }
         case typed.Scope.Passed(k, i) { return ln.passedOr(k, i) }
+        # (a live scope nothing is built in - the body's frame's, never the program's)
+        case typed.Scope.Inert { return ln.copyHome(mir.ScopeRef.Frame) }
         case _ { return mir.ScopeRef.Program }
     }
 }
@@ -934,7 +949,7 @@ fn (ln mut lowering&) foundOf(i I64) mir.ScopeRef {
     if i >= ln.plan.Roots.Len(): return mir.ScopeRef.Program
     sp := ln.B.Sp
     root := ln.plan.Roots[i]
-    o := mir.Operand.None
+    o := try ln.entryRoots.Get(i) catch default mir.Operand.None
     for j := ln.argExprs.Len() - 1, j >= 0 and o == mir.Operand.None, j-- {
         if ln.argExprs[j] == root: o = ln.argOps[j]
     }

@@ -36663,3 +36663,50 @@ reused, a removal by a view of the removed node's own key, a Take).
 
 Left: a key beside an owner value (Map<String, Vec<I64>>) is still built where the entry would have been (the split
 copy's rest), so removed keys stay until the Map's scope closes.
+## The rounds' leftovers, part A: the last program-scope fallbacks, twinned judgings recorded, T30c for a field kept (O23a, O25i, O29, T22c, T30c, B3i; 2026-11-13, wt-leftA)
+
+What the fallbacks round, W3b's fix round and review B2 left, by the user's rule "never fall back to the program's
+scope".
+
+- **A reference parameter the body assigns (O23a, O25i) - a soundness bug on the way.** Its field read after `h =
+  other` was still judged at `h`'s own derived scope: `fieldTerm` and `derivedAt` took any parameter's field as
+  `Derived(p, w)` whatever version of `p` reached the read. With `h`'s field in a short block and `other`'s in main,
+  `note(ha, k, hb)` passed the short block's scope for the derived slot and `other.log`'s Vec grew its buffer there: a
+  use after the block closed under -sanitize. Now `heldParam` reads the versions reaching the statement: the
+  parameter's own derived scopes where only its entry reaches, another parameter's where every version reaching it reads
+  that one (never assigned itself), and otherwise none - the field is then an instance the function did not build (O23's
+  underestimate). o23areassignedparam reads the Tally back after a churn. And the fallback itself: `derivedRoot` refused
+  a parameter the body assigns, leaving a build into its derived scope with no root the program's where a call passed
+  none. It now gives the field read through the parameter as before, registered in the plan as read when the body is
+  entered (`Plan.AtEntry`, lowering's `readEntryRoots`; a record word `e<i>`), so it is the argument's field whatever the
+  body does to the parameter later. o23areassignedvalue calls such a function through a value (its calls pass no
+  derived scope).
+- **A capture reached through a stored function value (T22c).** `g fn&(n N&) = f; feed(g, 20)` passed the twin null for
+  the capture its records disagree on. `capRoot` now looks through a local of a function type never assigned again to
+  the value it was declared with (`storedFn`), and takes that value's adapter instance or captured reference as the root
+  where it is itself a whole local never assigned again (`steadyLocal`) - the same reference where the call reads it.
+  t22cstoredcapture (an adapter) and t22cstoredlambda (a lambda) read back after a churn; their IR passes the twin
+  `__olang_scope_of` of the Keeper where it passed null.
+- **`Inert` in lowering.** A generator over two captured references making its walk passed the prelude's Generator
+  constructor `Inert` for the function value's scope (the captures' terms disagree; nothing is built there) and
+  lowering's `scopeRef` read it as the program's. `Inert` is now the body's frame's scope - live, never the program's
+  (s20renderframe).
+- **Twinned judgings recorded (B3i, T22c).** W3b left a judging that asked for twins unrecorded, so every build judged
+  such components afresh. A judging now keeps the twins its calls reached (`twinsUsed`, nested ones included, merged back
+  from the twin's sub-pass with what it read - `readLog`, `absentLog`, `markReads` - and the lambdas' captures its
+  judgings found followed, `capAdded`). Its record writes each twin by where it was first asked for and its key in
+  stable names (`twin AT START END NAME #P pNAME aNAME ...`), its plan (`TwinAt` as `t<site>,<i>` in the record's own
+  numbering - `Plan.Text`/`Plan.Read` take the map) and summary (`tplan`, `tsum`), the B3i keys of the modules the
+  twins' bodies and followed functions hang on (`tkeys`) and the captures (`cf`). Taking it (`takeTwins`) finds this
+  build's twin of each key or makes it as `twinFor` would (`twinOfRec`, seeds from the key), in the record's order -
+  the order they were made - so the twins' numbers are a fresh build's; gives it the plan and summary; marks the
+  captures; and refuses the record where a name is unknown, `tkeys` differ or there is no room. `JudgedFiles` counts
+  every judging again. The same program built twice in one directory judged `lib` (with the twinned call) afresh in
+  each build before and in the first only now, OLANG_CHECKINCR finding every one the same; an edit to the twin's body
+  in another module changes `tkeys` and judges it again.
+- **T30c for a field kept (review B2's p8anykeepsderef).** The `any` table's thunk passes its receiver on as a borrow of
+  its referent, which `derivedAt` did not see as the parameter, so the method's keeping of `n` in what `b.v` refers to
+  was lost from the thunk's relations and `anyTables` passed the table; the followed call refused it with O10c.
+  `refLocal` sees through the reborrow; the thunk's relation `n outlives D(0, v)` is beyond every word (the receiver has
+  no name), and the conversion is refused with T30c naming what the method does (`TraitMethodBeyondField`;
+  `derivedField` now names a field written bare by its declaration). t30ckeepsfield.

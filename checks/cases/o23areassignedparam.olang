@@ -1,0 +1,41 @@
+# check: run
+# flags: -sanitize
+# O23a, O25i: a reference parameter the body assigns another parameter - a build through its field after the
+# assignment goes where the other argument's field refers, not where the first one's does (its derived scope taken
+# by the version reaching the read) - read back after an arena churn
+import "std/io"
+type Tally struct() {
+    seen := Vec<I64>()
+}
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+type Holder struct(log mut Tally&) {
+    log
+}
+fn note(h mut Holder&, id I64, other mut Holder&) {
+    h.log.Saw(id)
+    h = other
+    h.log.Saw(id + 100)
+}
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    b mut Tally& = Tally()
+    for k in range 20 {
+        a mut Tally& = Tally()
+        for _ in range 1 {
+            ha := Holder(a)
+            hb := Holder(b)
+            note(ha, k, hb)
+        }
+        churn(5)
+    }
+    t := churn(40)
+    s := 0
+    for x in b.seen { s += x }
+    try io.Println($b.seen.Len() " " $s " " $t)
+}
