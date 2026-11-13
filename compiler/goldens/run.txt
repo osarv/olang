@@ -2723,6 +2723,11 @@
 === run o8dglobal.olang
 | status 0
 | 3007 450 126 1378
+=== run o8dmapkeyfree.olang
+| status 0
+=== run o8dmapkeyfreesan.olang
+| status 0
+| 294950
 === run o8dmapkeytext.olang
 | status 0
 | 1143 7023

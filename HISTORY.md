@@ -36621,3 +36621,45 @@ a temporary is counted from the writable reference made of it (`countedAssign`),
 now from either. docs/genrefs.md 2.5 said a weak read still gives the referent while a reference in use names it; the
 runtime (`__olang_weak_read`: generation and a count above zero) and T2d give `null` once no owning place holds it, and
 the section says so.
+
+## Memory leftovers: a Map entry's text released with the entry (O8d, O8e; 2026-11-13, wt-leftB)
+
+The leftovers of globalfree, regionkeep and G5+G6. Probed first: the field store lift (globalfree's 572 MB) and the
+global copy are regionkeep's feeders (a field probe 2.2 MB, review/global_letgo_probe.olang 2.2 MB); a Map with text
+keys frees its values again by regionkeep's split copies (a Put churn 3.5 MB); `s += m.Get(k)![5]` is getcopy's
+(D9h through a try). All three hold on this branch; the fourth was open.
+
+**The LRU's keys.** checks/cases/o8elru.olang (a Map<String, mut Node&> owning its nodes, 1M operations) grew 6.2 MB
+over its start (7.2 MB peak, 1.8 MB live): the Map's copy of each removed entry's key text stayed until the Map's scope
+closed. Three things kept it:
+- viewCtor (free.olang) made a constructor's copy (D9h) for its one owner leaf only; an array leaf - the key's text,
+  beside a reference - was always given a value "not made for it". Now an array leaf that is the only storage the
+  copy owns is made for as an owner leaf is.
+- add's `MapEntry<K, V>(key, value)` recorded Put's `key` parameter as stored into the key place (parStored), so every
+  caller's argument (a view, `k`) was "existing storage". A constructor's instance copied into a struct held in place
+  (copiedCtor, viewCopied) stores copies of the parameters it views, never them.
+- The copy's site could not be given a region: the constructor's signature relates a writable reference field's scope
+  to the instance's both ways (varsFit). A constructor whose body only gives each field a parameter, its instance
+  copied where it is stored (copiedPlain), stores nothing anywhere; the region at its site holds the copy alone.
+Then lowering: the vacated entry's value is put in a temporary the release reads after the vacate let go of its node,
+which kept the node in use there - no reclaiming site, so the nodes were never reclaimed (77 MB). A release of a part
+of a local's own bytes, through no reference (ownRelease), reads no generational instance and keeps none in use.
+
+**Slots, not regions, for small text.** A region per entry costs its 152-byte header and a first block of at least 256
+bytes: a Map<String, I64> of a million keys with one removal went from 99 MB to 490 MB. A text field of a prelude struct
+(a Map entry's key or value: free.SlotPlace, a property of the place's type, so every module builds and releases alike)
+is instead built through a slot scope building into the scope its region would have been a kid of (mir.Rvalue.Slots,
+the same class lists as O8e's generational slots) and put back on its list where the place lets go of it
+(mir.Stmt.ReleaseSlot, __olang_slot_release): nothing for null, constant data, or text past 2,032 bytes, which
+__olang_gen_buf now gives a zero word before. Such a place is never a root of another value's region (orStores, ors),
+since the word before it names no region. The evaluator runs both as a region and its release - the stricter oracle
+under dead-region mode. The million keys are 115 MB (99 before; a slot of 32 bytes where a key took 16).
+
+Peaks: o8elru 7.2 -> 2.0 MB (growth 6.2 MB -> 0.7 MB, now asserted under 2 MB); a Map<String, I64> put/remove churn
+15.4 -> 1.9 MB; a Map<String, mut Node&> of generational nodes 16.5 -> 1.9 MB; a Map<I64, String>'s text values are
+freed too. Tests: run cases o8dmapkeyfree (both churns, growth under 3 MB; skipped by evaldiff as the other peaks are)
+and o8dmapkeyfreesan (-debug -sanitize, interpreted: keys and nodes read back after the removed ones' slots were
+reused, a removal by a view of the removed node's own key, a Take).
+
+Left: a key beside an owner value (Map<String, Vec<I64>>) is still built where the entry would have been (the split
+copy's rest), so removed keys stay until the Map's scope closes.

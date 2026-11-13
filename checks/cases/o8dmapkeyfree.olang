@@ -1,0 +1,51 @@
+# check: run
+# O8d: a Map whose key is the only storage an entry owns (text keys beside numbers, or beside references to the nodes
+# it owns): the copy of the key each new entry makes is built in a region of its own and released where the entry is
+# removed (as a value place's is), and the removed entry's node is reclaimed though that release reads the entry after
+# the node is let go of - so a million puts and removes stay near what is live; read back after the churn
+import "std/os"
+
+type Node struct(key String, v I64) {
+    key
+    v
+    next weak mut Node?& = null
+}
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn numbers(n I64) I64 {
+    m := Map<String, I64>()
+    for t in range n {
+        m.Put("key-" $t, t)
+        if t >= 1000: assert m.Remove("key-" $(t - 1000))
+    }
+    return m.Get("key-" $(n - 1))! + m.Len()
+}
+
+fn nodes(n I64) I64 {
+    m := Map<String, mut Node&>()
+    for t in range n {
+        k := "node-" $t
+        m.Put(k, Node(k, t))
+        if t >= 1000: assert m.Remove("node-" $(t - 1000))
+    }
+    last := m.Get("node-" $(n - 1))!
+    assert last.key == "node-" $(n - 1)
+    return last.v + m.Len()
+}
+
+fn main() {
+    base := peakKb()
+    assert base > 0
+    assert numbers(1000000) == 1000999
+    assert nodes(1000000) == 1000999
+    kb := peakKb() - base
+    assert kb < 3000, $kb
+}

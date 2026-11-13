@@ -4220,6 +4220,14 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             fe.w("call void @__olang_region_release(ptr " $fe.objectPtr(v, pty) ")")
             fe.store(fe.ty(pty), fe.E.constText(pty, 0), at)
         }
+        case mir.Stmt.ReleaseSlot(_, p) {
+            # O8d: the text a sole text place let go of, put back on its slot's class list
+            at, pty := fe.addr(p)
+            v := fe.load(fe.ty(pty), at)
+            fe.E.runtime("__olang_slot_release")
+            fe.w("call void @__olang_slot_release(ptr " $fe.objectPtr(v, pty) ")")
+            fe.store(fe.ty(pty), fe.E.constText(pty, 0), at)
+        }
         case mir.Stmt.Settle(_, h, p) {
             at, pty := fe.addr(p)
             r := fe.let("inttoptr i64 " $fe.load("i64", fe.localAt(h)) " to ptr")
@@ -4514,7 +4522,7 @@ fn (u mut scopeUse&) stmt(st mir.Stmt) {
                     u.use(into)
                 }
                 # a region's parent (O8d): its kids close with it, and its registrations go on its list (C9b)
-                case mir.Rvalue.Region(r), mir.Rvalue.RegionOr(_, r) { u.use(r) }
+                case mir.Rvalue.Region(r), mir.Rvalue.Slots(r), mir.Rvalue.RegionOr(_, r) { u.use(r) }
                 case _ { }
             }
         }
@@ -4790,6 +4798,15 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             fe.E.runtime("__olang_region_make")
             r := fe.let("call ptr @__olang_region_make(ptr " $fe.scope(s) ")")
             return fe.let("ptrtoint ptr " $r " to i64")
+        }
+        case mir.Rvalue.Slots(s) {
+            # a slot scope building into s (as a copy's arrays are made, slotCopy): its allocations slots of s's lists
+            ss := fe.alloca("%olang.slotscope")
+            fe.w("store %olang.slotscope zeroinitializer, ptr " $ss)
+            fe.w("store ptr @__olang_slot_chunk, ptr " $ss)
+            fe.w("store ptr " $fe.scope(s) ", ptr " $fe.let("getelementptr %olang.scope, ptr " $ss ", i32 0, i32 2"))
+            fe.E.runtime("__olang_slot_chunk")
+            return fe.let("ptrtoint ptr " $ss " to i64")
         }
         case mir.Rvalue.RegionOr(x, s) {
             fe.E.runtime("__olang_region_or")

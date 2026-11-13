@@ -967,7 +967,8 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
         parent = mir.ScopeRef.Held(h0)
     }
     h := ln.temp(mir.I64T, sp)
-    ln.guarded(h, ln.plan.RegionGuard[site], mir.Rvalue.Region(parent), parent, sp)
+    rv := mir.Rvalue.Slots(parent) if kind == 3 else mir.Rvalue.Region(parent)
+    ln.guarded(h, ln.plan.RegionGuard[site], rv, parent, sp)
     ln.regions.Put(site, h)
     ln.regionPar.Put(site, parent)
     return mir.ScopeRef.Held(h)
@@ -1048,9 +1049,10 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
 
 # what a let-go releases where a place is decided sole: by the fields that reach it from the holder, and a handle's
 # reference, field 0
-type relPath struct(At I64, Path Array<I64>) {
+type relPath struct(At I64, Path Array<I64>, Slot Bool = false) {
     At
     Path
+    Slot        # a text place's value built in a slot (free.SlotPlace): put back on its list, no region released
 }
 
 # the candidate places a place's let-go releases where each is decided sole: the place itself, or the leaves of a
@@ -1072,7 +1074,7 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath
     if p == typed.Lvalue.Local and assign { k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id)) }
     g := ln.guardOf(k)
     if k >= 0 and g != free.NotSole {
-        out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0)))
+        out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0), fr.SlotPlace(k)))
         return out
     }
     return ln.leafPaths(p.Type())
@@ -1103,7 +1105,7 @@ fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<relPath> {
         g := ln.guardOf(lf.PlaceId)
         if g == free.NotSole: continue
         if not fr.IsHandle(lf.PlaceId) {
-            out.Push(relPath(g, lf.Path))
+            out.Push(relPath(g, lf.Path, fr.SlotPlace(lf.PlaceId)))
             continue
         }
         path := Array<I64>(lf.Path.Len() + 1)
@@ -1122,7 +1124,7 @@ fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<relPath>&, sp source.Sp
         after := ln.whenSole(r.At, true, sp) if r.At >= 0 else mir.NoBlock
         q := pl(mir.Base.Local(l))
         for i in r.Path { q = ln.with(q, mir.Proj.Field(i)) }
-        ln.emit(mir.Stmt.Release(sp, ln.mk(q)))
+        ln.emit(mir.Stmt.ReleaseSlot(sp, ln.mk(q)) if r.Slot else mir.Stmt.Release(sp, ln.mk(q)))
         if after != mir.NoBlock: ln.joinAt(after)
     }
 }
@@ -2654,8 +2656,24 @@ fn (ln mut lowering&) mentions(lv mut liveness&, bi I64, i I64) {
     lv.defs.Clear()
     if i < 0 {
         ln.F.TermMentions(ln.F.Blocks[bi].T, lv.uses, lv.defs)
-    } else {
+    } else if not ln.ownRelease(ln.F.Blocks[bi].Stmts.At(i)) {
         ln.F.Mentions(ln.F.Blocks[bi].Stmts.At(i), lv.uses, lv.defs)
+    }
+}
+
+# whether s releases a region named by a part of a local's own bytes, through no reference (releaseAt's, of a value a
+# vacate moved out): it reads no generational instance, so it keeps none in use - the value's owning references die
+# where the vacate let go of them (a Map entry's key text released beside the node its value names)
+fn (ln mut lowering&) ownRelease(s mir.Stmt&) Bool {
+    match s {
+        case mir.Stmt.Release(_, p), mir.Stmt.ReleaseSlot(_, p) {
+            if baseLocal(p) < 0: return false
+            for pr in ln.projsOf(p) {
+                if pr != mir.Proj.Field: return false
+            }
+            return true
+        }
+        case _ { return false }
     }
 }
 
@@ -3630,7 +3648,7 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
                     ln.val(x)
                     return
                 }
-                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0))) }
+                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0), ln.L.Free!.SlotPlace(k))) }
             }
         }
     }

@@ -1938,7 +1938,7 @@ fn (f mut Free&) writeFeedCalls() {
             if v < 0 or v >= 63 or (set & (I64(1) << v)) == 0 or v == u: continue
             a := call.Args[j]
             t2 := f.topSite(a)
-            if t2 >= 0 and pl.RegionKind[t2] == 1 {
+            if t2 >= 0 and (pl.RegionKind[t2] == 1 or pl.RegionKind[t2] == 3) {
                 if pl.RegionParent[t2] == at { pl.RegionParent[t2] = region }
             } else {
                 f.redirect(fc.Body, a, fd.Site, at, false)
@@ -2078,6 +2078,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     storeWithin I64 = -1       # the parameter the container being stored into is reached from (withinOf), -1 none
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
     exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
+    copiedCtor I64 = -1        # ... where it is a constructor viewing what it is given, its instance copied into a struct
+                               # held in place (viewCtor): the parameters it views are copied there, never stored
     # Part C: QCE's copy of a value handed on (check.ownCopy) as the value of a store into a struct or an element held in
     # place - made right there for the one owner or array leaf it holds (copyInto). check.storeOver holds it in a Held
     # local first (by local, the copy); the copy whose site is exempt from untracked, the held local read as the store's
@@ -2495,6 +2497,8 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     c0 := typed.Call.Of(x)
     outer := w.exemptSite
     w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
+    outerC := w.copiedCtor
+    w.copiedCtor = w.copiedCtorOf(p, c0)
     # Part C: a copy of a value handed on stored into a part held in place - made for its leaves (copyInto)
     cm := w.copyStored(p, x)
     wasE, wasR := w.copyExempt, w.copyRead
@@ -2507,6 +2511,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if cm is not null: o = w.F.unowned(o)
     w.copyExempt, w.copyRead = wasE, wasR
     w.exemptSite = outer
+    w.copiedCtor = outerC
     try w.targets.Pop() catch { }
     # (a value array stored whole from existing storage is copied there, T7b)
     if p != typed.Lvalue.Local and w.T().KindOf(w.T().Repr(p.Type())) == types.Kind.Array and copiedStore(x) {
@@ -2578,6 +2583,26 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if fr < 0 { w.escape(o, sp, w.text(p.Span()), true, w.withinOf(p), w.storeInside) }
     w.storeWithin = -1
     w.storeInside = -1
+}
+
+# the site of call c0 where it is a constructor viewing what it is given whose instance is copied into struct place p
+# held in place (copyInto's viewCtor), -1 for any other
+fn (w mut walker&) copiedCtorOf(p typed.Lvalue&, c0 typed.Call?&) I64 {
+    if c0 is null or (p != typed.Lvalue.Field and p != typed.Lvalue.Elem): return -1
+    f := w.F
+    t := w.T()
+    b2 := typed.CalleeBody(c0)
+    if b2 < 0 or f.placeOfPlace(p) >= 0 or f.leaves(p.Type()).Len() == 0 or t.Role(f.Bodies[b2].Ty) != types.RoleCtor: return -1
+    vs := f.viewsOf(b2)
+    if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c0, vs): return -1
+    return I64(c0.Site)
+}
+
+# whether parameter j of constructor b2 called by c is one copiedCtor's copy views: its argument is copied into the
+# instance's place, never stored there
+fn (w mut walker&) viewCopied(c typed.Call&, b2 I64, j I64) Bool {
+    if w.copiedCtor < 0 or I64(c.Site) != w.copiedCtor or j >= typed.ViewBits: return false
+    return (w.F.viewsOf(b2) & (I64(1) << j)) != 0
 }
 
 # a unique value moved out of a parameter (movedPar, no copy cm) stored whole into a struct held in place: the
@@ -2763,12 +2788,17 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
     f := w.F
     if not w.Final or w.quiet > 0 { return }
     owners Vec<I64>
+    arrs Vec<I64>
     for lf in lvs {
         if f.IsOwner(lf.PlaceId): owners.Push(lf.PlaceId)
-        if f.arr[lf.PlaceId] and not f.IsOwner(lf.PlaceId) {
-            f.stores.Push(store(lf.PlaceId, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
-            f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" $w.text(x.Span()) "'")
-        }
+        if f.arr[lf.PlaceId] and not f.IsOwner(lf.PlaceId): arrs.Push(lf.PlaceId)
+    }
+    # an array leaf that is the only storage the copy owns (a Map entry's key text beside a reference) is made for as an
+    # owner leaf is: built in its region, released where the entry is removed
+    if owners.Len() == 0 and arrs.Len() == 1: owners.Push(arrs.Pop()!)
+    for k in arrs {
+        f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
+        f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" $w.text(x.Span()) "'")
     }
     if owners.Len() == 0 { return }
     one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.splitLeaf(w.Id, I64(c.Site), x.Type(), lvs, owners[0])
@@ -3546,7 +3576,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         for e in f.parStored[b2] {
             j := e >> 32
             k := e & ((I64(1) << 32) - 1)
-            if j < args.Len() {
+            if j < args.Len() and not w.viewCopied(c, b2, j) {
                 multi := f.storedMore(b2, j)
                 w.storeAs(k, c.Args[j], args[j], sp, "", multi, ctor)
             }
@@ -5059,6 +5089,26 @@ fn (f mut Free&) placeable(st store) Bool {
     return f.varsFit(st.Body, c, b2, f.siteScope(st.Body, x), f.resultVar(b2)) >= 0
 }
 
+# whether call c of constructor b2 is one whose instance is copied where it is stored (D9h, viewCtor) and whose body
+# only gives each field a parameter: the region made at its site holds the copy's arrays and nothing else - the
+# instance its constructor builds stores nothing anywhere, so the obligations its signature states (a writable
+# reference field's scope equal to the instance's) ask nothing of that region
+fn (f mut Free&) copiedPlain(c typed.Call&, b2 I64) Bool {
+    vs := f.viewsOf(b2)
+    if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c, vs): return false
+    body := f.Bodies[b2]
+    if f.T().Role(body.Ty) != types.RoleCtor or body.Root is null: return false
+    for st in body.Root!.Stmts {
+        match st {
+            case typed.Stmt.Let(_, _, typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _)) {
+                if not body.Params.Has(id): return false
+            }
+            case _ { return false }
+        }
+    }
+    return true
+}
+
 # the constructor call a temporary is, null for none
 fn ctorCall(x typed.Expr&) typed.Call?& {
     return match x {
@@ -5072,6 +5122,7 @@ fn ctorCall(x typed.Expr&) typed.Call?& {
 # outlive something not in them, or an equality across
 fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64 {
     if v < 0 or v >= 63 { return -1 }
+    if f.copiedPlain(c, b2) { return I64(1) << v }
     pl := f.Plans.Ref(b)
     set := I64(1) << v
     for j in range c.Args.Len() {
@@ -5090,7 +5141,7 @@ fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I6
 fn (f mut Free&) builtAt(b I64, x typed.Expr&) typed.Scope {
     top := f.topSite(x)
     pl := f.Plans.Ref(b)
-    if top >= 0 and pl.RegionKind[top] == 1 { return pl.RegionParent[top] }
+    if top >= 0 and (pl.RegionKind[top] == 1 or pl.RegionKind[top] == 3) { return pl.RegionParent[top] }
     return f.siteScope(b, x)
 }
 
@@ -5130,7 +5181,7 @@ fn (f mut Free&) writePlans() {
         at := f.siteScope(st.Body, x)
         # O29: a value built where its place's storage is found at run time is built there, never in a region of its own
         if at == typed.Scope.Found or at == typed.Scope.Passed: continue
-        pl.RegionKind[top] = 1
+        pl.RegionKind[top] = 3 if f.SlotPlace(k) else 1
         pl.RegionParent[top] = f.feedDest(st.Body, top, at)
         pl.RegionGuard[top] = f.guard(st.Body, k)
         f.redirect(st.Body, x, top, at, true)
@@ -5139,7 +5190,7 @@ fn (f mut Free&) writePlans() {
     # a store through a value of a sole place: a region made there has that value's region for its parent; parts not
     # made for a sole place are built in that region
     for os in f.orStores {
-        if f.decided[os.Body] and not f.Sole[os.PlaceId]: continue
+        if f.decided[os.Body] and not f.Sole[os.PlaceId] or f.SlotPlace(os.PlaceId): continue
         top := f.topSite(os.X)
         if top < 0: continue
         pl := f.Plans.Ref(os.Body)
@@ -5161,8 +5212,9 @@ fn (f mut Free&) writePlans() {
         f.redirect(os.Body, os.X, top, at, true)
     }
     # a call given a value of a sole place: what it builds where that value lives is built in its region
+    # (never one of a slot place's: its value's word before it names no region)
     for oc in f.ors {
-        if f.decided[oc.Body] and not f.Sole[oc.PlaceId]: continue
+        if f.decided[oc.Body] and not f.Sole[oc.PlaceId] or f.SlotPlace(oc.PlaceId): continue
         pl := f.Plans.RefMut(oc.Body)
         if pl.RegionKind[oc.Site] != 0: continue
         v := f.paramVar(oc.Callee, oc.Param)
@@ -5187,7 +5239,7 @@ fn (f mut Free&) writePlans() {
             if u < 0 or u >= 63 or (set & (I64(1) << u)) == 0 or j == oc.Param: continue
             a := call.Args[j]
             t2 := f.topSite(a)
-            if t2 >= 0 and pl.RegionKind[t2] == 1 {
+            if t2 >= 0 and (pl.RegionKind[t2] == 1 or pl.RegionKind[t2] == 3) {
                 pl.RegionParent[t2] = typed.Scope.Region(site)
             } else {
                 f.redirect(oc.Body, a, oc.Site, at, false)
@@ -5342,7 +5394,7 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
     region := typed.Scope.Region(typed.SiteId(I32(top)))
     # a part with a region of its own (another place's value, written first) is a kid of this one
     ps := f.topSite(x)
-    if not self and ps >= 0 and ps != top and pl.RegionKind[ps] == 1 {
+    if not self and ps >= 0 and ps != top and (pl.RegionKind[ps] == 1 or pl.RegionKind[ps] == 3) {
         if pl.RegionParent[ps] == at { pl.RegionParent[ps] = region }
         return
     }
@@ -5500,6 +5552,22 @@ fn (f mut Free&) RetirePlaces(b I64, sp source.Span) Vec<I64> {
 
 # whether a candidate place holds an owner (types.Anchors): its let-go releases the region its anchors name
 fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.owner[k] }
+
+# whether place k is a text field of a prelude struct (a Map entry's key or value): its values - small, never grown in
+# place - are built in slots of the scope their region would have been a kid of (mir.Rvalue.Slots) and put back on their
+# class lists where it lets go of them (mir.Stmt.ReleaseSlot), rather than each in a region of its own, whose header and
+# first block are some 400 bytes. A property of the place's type alone, so every module builds and releases its values
+# alike
+fn (f mut Free&) SlotPlace(k I64) Bool {
+    if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or f.owner[k] or f.handle[k]: return false
+    t := f.T()
+    r := t.Plain(t.Repr(f.keyTy[k]))
+    if t.KindOf(r) != types.Kind.Named: return false
+    m := t.DeclModule(t.DeclOf(r))
+    if m < 0 or m >= f.P.L.Mods.Len() or not f.P.L.Mods[m].Identity.StartsWith("std/prelude"): return false
+    el := t.Elem(t.Repr(f.valTy[k]))
+    return f.P.Immut(f.valTy[k]) and not t.HoldsRefs(el) and not t.OwnsParts(el)
+}
 
 # the place a dropped call's result is a value moved out of - what lowering releases after the statement where it is
 # decided sole - -1 for none
