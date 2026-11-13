@@ -6715,7 +6715,8 @@ moved into it (D9i): that is the place's value made for it, and the local's read
 view of it kept or in use across a let-go makes the place keep, and so does a call changing it that cannot build where
 it is built. A value made for an owner held in a part of a struct - a `Map` entry's `Vec` value beside its text key -
 is that part alone: what the struct's other parts own is built where the struct would have been, never reclaimed
-with the part's old value.
+with the part's old value. Where a text part is all the storage the entry owns (a text key beside a number or a
+reference, a text value beside a number key), that text is the value made for it: reclaimed where the entry is removed.
 A collection's **own storage** - a `Vec`'s buffer, a `Map`'s slot arrays, any array of a run-time length a struct holds
 by value - is a place too: what the collection's growth replaces is reclaimed as it grows, where the conditions hold -
 no view of the old storage in use across the growth (`View()`, `Ref()`, an element's reference, condition 6), every
