@@ -1,0 +1,36 @@
+# check: run
+# flags: -debug -sanitize
+# O8d: a Map's key text released with its removed entry (o8dmapkeyfree's churn, smaller, under the scope sanitizer and
+# interpreted): every key and node still in the map reads back as it was put after the removed ones' regions are gone
+# and new entries took their slots; a key looked up by a view of a removed node's own key, and a Take giving the value
+import "std/io"
+
+type Node struct(key String, v I64) {
+    key
+    v
+    next weak mut Node?& = null
+}
+
+fn main() ? {
+    m := Map<String, mut Node&>()
+    nums := Map<String, I64>()
+    for t in range 3000 {
+        k := "n" $t
+        m.Put(k, Node(k, t * 2))
+        nums.Put("k" $t, t)
+        if t >= 100 {
+            old := m.Get("n" $(t - 100))!
+            assert m.Remove(old.key)
+            assert nums.Take("k" $(t - 100))! == t - 100
+        }
+    }
+    assert m.Len() == 100 and nums.Len() == 100
+    sum := 0
+    for t in range 2900, 3000 {
+        n := m.Get("n" $t)!
+        assert n.key == "n" $t and n.v == t * 2
+        sum += nums.Get("k" $t)!
+    }
+    assert "n5" not in m and "k5" not in nums
+    try io.Println($sum)
+}

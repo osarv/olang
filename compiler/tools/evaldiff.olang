@@ -52,6 +52,7 @@ Skipped Array<String&> = Array<String&>[
     "checks/cases/o8earrays.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8edlist.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8elru.olang - a million lookups, minutes interpreted; its peak is the compiler's under interpret"
+    "checks/cases/o8dmapkeyfree.olang - a million puts and removes, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8estack.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8etree.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "std/cancel.olang: a busy task stops when the token is cancelled - a task spins until another cancels it (B3e)"
