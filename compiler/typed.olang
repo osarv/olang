@@ -1764,6 +1764,8 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # O29: the references whose referents' scopes Found builds go into, found at run time - each one evaluating has no
     # effect of (a local, a field read, a conditional of those)
     Roots Vec<Expr&>
+    # ... those of them read once, as the body is entered (O23a: a field of a parameter the body assigns), by index
+    AtEntry Vec<I64>
     # T22c: by site, the twin of its callee a call reaches - judged with the function values it is given followed into
     # it (scope.twinTab) - -1 for the callee's ordinary judgment
     TwinAt mut Array<I64>& = Array<I64>(Sites, -1)
@@ -1817,6 +1819,13 @@ fn Pure(x Expr&) Bool {
 fn (pl mut Plan&) Find(root Expr&) Scope {
     pl.Roots.Push(root)
     return Scope.Found(pl.Roots.Len() - 1)
+}
+
+# ... its index among the roots, read as the body is entered where entry says so
+fn (pl mut Plan&) FindIndex(root Expr&, entry Bool) I64 {
+    pl.Roots.Push(root)
+    if entry: pl.AtEntry.Push(pl.Roots.Len() - 1)
+    return pl.Roots.Len() - 1
 }
 
 fn (pl mut Plan&) Pass(site SiteId, scopes Array<Scope>&) {
@@ -1925,6 +1934,7 @@ fn (pl Plan&) Text(n Nodes&, canon fn&(t types.TypeId) String) String ? Unwritab
     # a root may hold anything but a line break)
     b.Push(" ||")
     for x in pl.Roots { b.Push(lengthWord($"r" $(try n.ExprWord(x, canon)))) }
+    for i in pl.AtEntry { b.Push(lengthWord($"e" $i)) }
     for i in range pl.DropAt.Len() {
         at := n.ExprAt(pl.DropAt[i])
         if at < 0: error Unwritable.Here
@@ -1948,6 +1958,7 @@ fn lengthWord(w String&) String { return $" " $w.Len() ":" $w }
 fn (pl Plan&) Shown() String {
     b := StringBuilder()
     for x in pl.Roots { b.Push($" root " $x.Span().Start "-" $x.Span().End) }
+    for i in pl.AtEntry { b.Push($" entry " $i) }
     for x in pl.DropAt { b.Push($" drop " $x.Span().Start "-" $x.Span().End) }
     for i in range pl.DropInAt.Len() { b.Push($" dropin " $pl.DropInAt[i].Span().Start " " $(try ScopeText(pl.DropIn[i]) catch Unwritable default "?")) }
     for i in range pl.Built.Len() {
@@ -2050,6 +2061,10 @@ fn Plan.Read(b Body&, text String&, n Nodes&, typeOf fn&(c String&) types.TypeId
 fn (pl mut Plan&) readRef(w String&, n Nodes&, typeOf fn&(c String&) types.TypeId) ? Unwritable {
     if w[0] == 'r' {
         pl.Roots.Push(try n.ReadExpr(w[1:], typeOf))
+        return
+    }
+    if w[0] == 'e' {
+        pl.AtEntry.Push(try w[1:].ParseInt() catch { error Unwritable.Here })
         return
     }
     f := w[1:].Split(",").ToVec()

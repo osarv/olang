@@ -1302,6 +1302,24 @@ fn (s mut Scoper&) wordFor(b I64, adapter Bool, fty types.TypeId, k I64) String,
     return $"keeps " $h " in " $s.posName(fty, body, adapter, a) "." $f, $"keeps '" $hb "' in '" $s.bodyParamName(body, adapter, a) "." $f "'"
 }
 
+# T30c: obligation k of an 'any' table's slot b (its receiver the method's home) as what it does where it keeps a
+# parameter in what a field of the instance refers to (a derived scope of the receiver, O23a) - no promise word says
+# that: "keeps 'n' in what the instance's 'v' refers to"; "" for any other
+fn (s mut Scoper&) homeFieldDoes(b I64, fty types.TypeId, k I64) String {
+    if k < 0 or k >= s.sum(b).Rels.Len() or not s.isFunc(fty) { return "" }
+    body := s.Bodies[b]
+    r := s.sum(b).Rels[k]
+    hi := s.posOf(body, true, r.Hi)
+    if hi < 0 or hi >= PosDerived { return "" }
+    w := match r.Lo {
+        case Term.Derived(0, w): w
+        case _: -1
+    }
+    f := s.derivedField(body.Ty, 0, w) if w >= 0 else ""
+    if f == "" { return "" }
+    return $"keeps '" $s.posName(fty, body, true, hi) "' in what the instance's '" $f "' refers to"
+}
+
 # parameter i of function type fty by the name it was written with, else by body's own parameter's
 fn (s mut Scoper&) posName(fty types.TypeId, body typed.Body&, adapter Bool, i I64) String {
     ns := s.P.T.NamesOf(fty)
@@ -1318,13 +1336,17 @@ fn (s mut Scoper&) bodyParamName(body typed.Body&, adapter Bool, i I64) String {
 fn (s mut Scoper&) derivedField(fty types.TypeId, a I64, w I64) String {
     ps := s.P.T.Items(s.P.T.Params(fty))
     if a >= ps.Len() { return "" }
-    t := s.P.T.Referent(ps[a]) if s.isRef(ps[a]) else ps[a]
+    t := s.P.T.Repr(s.P.T.Referent(ps[a]) if s.isRef(ps[a]) else ps[a])
     id := s.ctorBody(t)
     if id < 0 { return "" }
     cb := s.Bodies[id]
     for i in range cb.Fields.Len() {
         m := s.fieldMark(t, i)
-        if m == typed.Mark.Of and s.ctorParamIndex(t, m.local) == w { return s.P.L.Names.Text(cb.Locals[I64(cb.Fields[i])].Name) }
+            if m != typed.Mark.Of or s.ctorParamIndex(t, m.local) != w { continue }
+        # (a field written bare, a pun of a parameter, is named by the declaration)
+        n := s.P.L.Names.Text(cb.Locals[I64(cb.Fields[i])].Name)
+        ns := s.P.FieldNames(t)
+        return n if n != "" or i >= ns.Len() else s.P.L.Names.Text(ns[i])
     }
     return ""
 }
@@ -1939,6 +1961,10 @@ fn (s mut Scoper&) capRoot(c typed.Call&, p I64, w I64) typed.Expr?& {
     b := s.Bodies[keys[0].Body]
     if k >= b.Vars.Len(): return null
     x := s.unAway(c.Args[p])
+    # (a local given the function value where it is declared and never assigned again: the value it was given, whose
+    # root is then a local never assigned again either - the same reference where the call reads it)
+    held := s.storedFn(x)
+    if held is not null { x = s.unAway(held) }
     for _ in range 8 {
         match x {
             case typed.Expr.Promote(_, _, pr) { x = s.unAway(pr.X) }
@@ -1951,7 +1977,27 @@ fn (s mut Scoper&) capRoot(c typed.Call&, p I64, w I64) typed.Expr?& {
         case _: null
     }
     if root is null or not s.isRef(root.Type()) or not typed.Pure(root): return null
+    if held is not null and not s.steadyLocal(s.unAway(root)): return null
     return root
+}
+
+# the function value local x reads was declared with, where the body never assigns it again: null for anything else
+fn (s mut Scoper&) storedFn(x typed.Expr&) typed.Expr?& {
+    y := match x {
+        case typed.Expr.Read(_, _, pl, _): wholeLocal(pl)
+        case _: -1
+    }
+    if y < 0 or s.B!.Locals[y].Kind != typed.LocalKind.Var or s.reassigned(y) or not s.isFunc(s.B!.Locals[y].Ty): return null
+    return letOf(s.B!.Root, y)
+}
+
+# whether x reads or borrows a whole local or parameter the body never assigns
+fn (s mut Scoper&) steadyLocal(x typed.Expr&) Bool {
+    y := match x {
+        case typed.Expr.Read(_, _, pl, _), typed.Expr.Borrow(_, _, pl): wholeLocal(pl)
+        case _: -1
+    }
+    return y >= 0 and not s.reassigned(y)
 }
 
 # the value lambda body b's capture whose referent its scope variable k is copied from where the lambda is made
@@ -3318,7 +3364,15 @@ fn (s mut Scoper&) anyTables() {
             word, does := "", ""
             if sl.Want != types.UnknownT { word, does = s.wordFor(b, true, sl.Want, s.bndWhy) }
             does = does.Replace("its instance", "the instance")
-            s.P.L.Diags.Error(at, msgs.TraitMethodBeyond(ty, name, does, tr, word) if word != "" else msgs.AnyMethodObligations(ty, name, tr))
+            # (what it keeps in what a field of its instance refers to - a field set of the receiver - no word says)
+            home := s.homeFieldDoes(b, sl.Want, s.bndWhy) if word == "" and sl.Want != types.UnknownT else ""
+            if word != "" {
+                s.P.L.Diags.Error(at, msgs.TraitMethodBeyond(ty, name, does, tr, word))
+            } else if home != "" {
+                s.P.L.Diags.Error(at, msgs.TraitMethodBeyondField(ty, name, home, tr))
+            } else {
+                s.P.L.Diags.Error(at, msgs.AnyMethodObligations(ty, name, tr))
+            }
             break
         }
     }
@@ -3626,15 +3680,11 @@ fn (s mut Scoper&) derivedScope(t Term, i I64) typed.Scope {
     match t {
         case Term.Derived(p, w) {
             if p < 0: return typed.Scope.Unset
-            # (O29: with no root of its own, found from the field itself - never the program's)
-            if i < 0 {
-                r := s.derivedRoot(p, w)
-                if r is not null {
-                    match s.plan.Find(r) {
-                        case typed.Scope.Found(k) { i = k }
-                        case _ { }
-                    }
-                }
+            # (O29: with no root of its own, found from the field itself - never the program's; read as the body is
+            # entered where the body assigns the parameter, whose field is then another instance's)
+            r := s.derivedRoot(p, w) if i < 0 else null
+            if r is not null {
+                i = s.plan.FindIndex(r, s.reassigned(I64(s.B!.Params[p])))
             }
             return typed.Scope.Passed(s.plan.DerivedSlot(p, w), i)
         }
@@ -3643,13 +3693,13 @@ fn (s mut Scoper&) derivedScope(t Term, i I64) typed.Scope {
 }
 
 # O23a, O29: the field of reference parameter p its constructor bound to its parameter w, read through p - the reference
-# whose referent is where the derived scope (p, w) is, found from it at run time where no caller passed it. Null where p
-# is assigned in the body (p's field would then be another instance's), the field is no reference, or w is a capture's
+# whose referent is where the derived scope (p, w) is, found from it at run time where no caller passed it (read as the
+# body is entered where the body assigns p - derivedScope). Null where the field is no reference or w is a capture's
 fn (s mut Scoper&) derivedRoot(p I64, w I64) typed.Expr?& {
     if isCapCode(w) or p >= s.B!.Params.Len(): return null
     y := I64(s.B!.Params[p])
     loc := s.B!.Locals[y]
-    if not s.isRef(loc.Ty) or s.reassigned(y): return null
+    if not s.isRef(loc.Ty): return null
     bt := s.P.T.Referent(loc.Ty)
     if not s.isStruct(bt): return null
     fs := s.P.T.Items(s.P.T.Fields(bt))
@@ -6727,6 +6777,20 @@ fn regionRoot(p typed.Lvalue&) I64 {
     }
 }
 
+# the local a reference expression reads, or borrows the referent of again (an 'any' table's thunk passing its receiver
+# on, T32): -1 for anything else
+fn refLocal(r typed.Expr&) I64 {
+    match r {
+        case typed.Expr.Borrow(_, _, p) {
+            match p {
+                case typed.Lvalue.Deref(_, _, x) { return regionLocal(x) }
+                case _ { return -1 }
+            }
+        }
+        case _ { return regionLocal(r) }
+    }
+}
+
 fn regionLocal(r typed.Expr&) I64 {
     match r {
         case typed.Expr.Read(_, _, p, _) {
@@ -9039,9 +9103,10 @@ fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
     if fm != typed.Mark.Of { return s.partsTerm(base) }
     w := s.ctorParamIndex(bt, fm.local)
     y := regionLocal(base.ref) if base == typed.Lvalue.Deref else -1
-    if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param {
-        if s.fieldGather { s.derivedDecl.Put(pair.Pair<I64, I64>(s.Id * 65536 + s.paramIndex(y), w), s.declOf(bt)) }
-        return Term.Derived(s.paramIndex(y), w)
+    hp := s.heldParam(y) if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param else -1
+    if hp >= 0 {
+        if s.fieldGather { s.derivedDecl.Put(pair.Pair<I64, I64>(s.Id * 65536 + hp, w), s.declOf(bt)) }
+        return Term.Derived(hp, w)
     }
     # an instance whose construction bindings are known (O23a): a local's, a field's of one
     if s.recAt(s.recOf(base), w) != Term.None { return s.recAt(s.recOf(base), w) }
@@ -9095,6 +9160,33 @@ fn (s mut Scoper&) ctorParamIndex(t types.TypeId, q typed.LocalId) I64 {
 }
 
 # the index among this body's parameters of its local y
+# O23a, O25i: the reference parameter whose argument reference parameter y holds where it is read: its own index where
+# the body never assigns it, or where every version reaching the statement read is its entry or a read of one such
+# parameter - each version naming one parameter's argument, whose derived scopes are then that parameter's; -1 where
+# the versions reaching it name another instance, or several (a store into a field binding then follows the local)
+fn (s mut Scoper&) heldParam(y I64) I64 {
+    if not s.reassigned(y): return s.paramIndex(y)
+    if not s.isCursorLocal(y) or s.keys.Len() == 0: return -1
+    v := s.vers!
+    ds Vec<I64>
+    v.ReachInto(s.keys[s.keys.Len() - 1], y, ds)
+    out := -1
+    for d in ds {
+        q := s.paramIndex(y) if v.DefSp[d].Start < I32(0) else s.entryParamOf(v.DefValue[d])
+        if q < 0 or out >= 0 and q != out: return -1
+        out = q
+    }
+    return out
+}
+
+# the reference parameter value x reads, where that parameter is never assigned: -1 for anything else
+fn (s mut Scoper&) entryParamOf(x typed.Expr?&) I64 {
+    if x is null: return -1
+    q := regionLocal(s.unAway(x))
+    if q < 0 or s.B!.Locals[q].Kind != typed.LocalKind.Param or s.reassigned(q): return -1
+    return s.paramIndex(q)
+}
+
 fn (s mut Scoper&) paramIndex(y I64) I64 {
     for k in range s.B!.Params.Len() {
         if I64(s.B!.Params[k]) == y { return k }
@@ -12349,10 +12441,9 @@ fn (s mut Scoper&) derivedAt(p I64, w I64, c typed.Call&, hi Bool, beta Array<Te
     if p < 0 or p >= c.Args.Len() { return Term.Untraced }
     if isCapCode(w) { return s.capturedAt(p, w, c) }
     a := c.Args[p]
-    y := regionLocal(a)
-    if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param and s.isRef(s.B!.Locals[y].Ty) {
-        return Term.Derived(s.paramIndex(y), w)
-    }
+    y := refLocal(s.unAway(a))
+    hp := s.heldParam(y) if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param and s.isRef(s.B!.Locals[y].Ty) else -1
+    if hp >= 0: return Term.Derived(hp, w)
     # an instance whose construction bindings are known (O23a): a local's, a field's of one
     rec := s.argRec(a)
     if s.recAt(rec, w) != Term.None { return s.recAt(rec, w) }
