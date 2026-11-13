@@ -335,13 +335,17 @@ fn (w mut walker&) expr(x ast.Expr?&) {
             w.expr(y)
         }
         case ast.Expr.Index(_, y, items) {
-            w.need(w.valOf(y), "At")
+            w.need(w.valOf(y), "Slice" if ast.Slicing(items) else "At")
             w.expr(y)
             for it in items { w.expr(it) }
         }
         case ast.Expr.Slice(_, y, lo, hi) {
             w.need(w.valOf(y), "Slice")
             w.expr(y)
+            w.expr(lo)
+            w.expr(hi)
+        }
+        case ast.Expr.Axis(_, lo, hi) {
             w.expr(lo)
             w.expr(hi)
         }

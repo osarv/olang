@@ -107,6 +107,7 @@ type Expr enum {
     # has no items and is always a literal
     Index(sp source.Span, x Expr&, items Array<Expr&>&)
     Slice(sp source.Span, x Expr&, lo Expr?&, hi Expr?&)
+    Axis(sp source.Span, lo Expr?&, hi Expr?&)         # "lo:hi" among several subscript items (E16f), either end left off
     ArrayLit(sp source.Span, elem TypeRef?&, items Array<Expr&>&)   # an element type that is a literal's by its form
     Row(sp source.Span, items Array<Expr&>&)           # "[...]" nested in a literal: no 2-D arrays (E21), kept to report
     Compr(sp source.Span, c Compr&)                    # C[e for x in s if c] (E27): C the type made
@@ -427,8 +428,29 @@ fn (e Expr&) Span() source.Span {
         case Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _): sp
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _): sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _): sp
-        case Expr.Default(sp): sp
+        case Expr.Default(sp), Expr.Axis(sp, _, _): sp
         case Expr.Named(sp, _, _), Expr.Unreachable(sp, _), Expr.Spread(sp, _), Expr.Variadic(sp, _): sp
+    }
+}
+
+# E16f: whether a subscript's items slice - one is a range "lo:hi" or a bare "..." - so x[...] calls Slice, not At
+fn Slicing(items Array<Expr&>&) Bool {
+    for it in items {
+        if it == Expr.Axis or IsRest(it): return true
+    }
+    return false
+}
+
+# a bare "..." (E16f, S13h): a Spread holding the name "_"
+fn IsRest(x Expr&) Bool {
+    match x {
+        case Expr.Spread(_, y) {
+            match y {
+                case Expr.Name(sp, _): return sp.Start == x.Span().Start
+                case _: return false
+            }
+        }
+        case _: return false
     }
 }
 
@@ -593,6 +615,7 @@ fn yieldInExpr(x Expr?&) source.Span {
         case Expr.Chain(_, ch): yieldInExprs(ch.Xs)
         case Expr.Call(_, f, args), Expr.Index(_, f, args): yieldOr(yieldInExpr(f), yieldInExprs(args))
         case Expr.Slice(_, y, lo, hi): yieldOr(yieldOr(yieldInExpr(y), yieldInExpr(lo)), yieldInExpr(hi))
+        case Expr.Axis(_, lo, hi): yieldOr(yieldInExpr(lo), yieldInExpr(hi))
         case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Variadic(_, items), Expr.Join(_, items), Expr.Range(_, items): yieldInExprs(items)
         case Expr.Try(_, y, cs): yieldOr(yieldInExpr(y), yieldInCatches(cs))
         case Expr.MatchE(_, m): yieldInMatch(m)

@@ -1,0 +1,22 @@
+# one item of a subscript that slices (E16f): x[0:2, :], x[..., 1] call the type's Slice with one Axis per item -
+# Index(i) for a plain index "i", Range(lo, hi) for "lo:hi" (an end left off: 0 for lo, I64.Max for hi, "to the
+# axis's end"; a bare ":" is Range(0, I64.Max), the whole axis) and Rest for "...", the axes not written. What each
+# means is the type's: an index may drop its axis where a range keeps it, as NumPy's do
+type Axis enum {
+    Index(i I64)
+    Range(lo I64, hi I64)
+    Rest
+}
+
+# the bounds the item takes on an axis of n elements, lo first: an index its one element, a range its ends - one left
+# off the axis's end - and Rest the whole axis. Nothing is checked: the type checks what it slices, as E16b does
+fn (a Axis) Bounds(n I64) I64, I64 {
+    match a {
+        case Axis.Index(i): return i, i + 1
+        case Axis.Range(lo, hi): return lo, n if hi == I64.Max else hi
+        case Axis.Rest: return 0, n
+    }
+}
+
+# whether the item is a plain index, the axis it names dropped where the type follows NumPy
+fn (a Axis) Drops() Bool { return a == Axis.Index }

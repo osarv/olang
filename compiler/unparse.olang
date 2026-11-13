@@ -1008,6 +1008,11 @@ fn (w mut writer&) expr(x ast.Expr&) {
             if hi is not null { w.expr(hi) }
             w.put("]")
         }
+        case ast.Expr.Axis(_, lo, hi) {
+            if lo is not null: w.expr(lo)
+            w.put(":")
+            if hi is not null: w.expr(hi)
+        }
         case ast.Expr.ArrayLit(_, elem, items) {
             w.ty(elem!)
             w.put("[")

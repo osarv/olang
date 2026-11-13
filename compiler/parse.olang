@@ -3216,15 +3216,15 @@ fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
                 return ast.Expr.ArrayLit(p.from(start), try p.exprAsType(x), gather(p.exprs, from))
             }
         }
-        if p.accept(token.Tok.Colon) {
-            hi ast.Expr?& = null
-            if not p.sees(token.Tok.RBrack) { hi = try p.expr() }
-            try p.want(token.Tok.RBrack)
-            return ast.Expr.Slice(p.from(start), x, lo, hi)
+        first := try p.axisItem(p.here() if lo is null else lo.Span().Start, lo)
+        # E16a: one range alone is the one-axis slice
+        if p.sees(token.Tok.RBrack) and isAxis(first) {
+            p.advance()
+            return axisSlice(p.from(start), x, first)
         }
         from := p.exprs.Len()
-        p.exprs.Push(lo!)
-        for try p.sep(token.Tok.RBrack) { p.exprs.Push(try p.elem()) }
+        p.exprs.Push(first)
+        for try p.sep(token.Tok.RBrack) { p.exprs.Push(try p.subItem()) }
         if not p.sees(token.Tok.RBrack) {
             p.exprs.Truncate(from)
             try p.fail(token.Tok.RBrack.Describe())
@@ -3234,6 +3234,32 @@ fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
     }
     p.advance()
     return ast.Expr.Index(p.from(start), x, Array<ast.Expr&>(0))
+}
+
+# E16f: an item of a subscript after its first - an index, a range "lo:hi" with either end left off, or "..."
+fn (p mut Parser&) subItem() ast.Expr& ? Fail {
+    at := p.here()
+    if p.sees(token.Tok.Colon): return try p.axisItem(at, null)
+    return try p.axisItem(at, try p.elem())
+}
+
+# lo, or the range "lo:hi" it begins where a ":" follows (E16f) - lo null where the range's start is left off
+fn (p mut Parser&) axisItem(at I32, lo ast.Expr?&) ast.Expr& ? Fail {
+    if not p.accept(token.Tok.Colon): return lo!
+    hi ast.Expr?& = null
+    k := p.peek()
+    if k != token.Tok.RBrack and k != token.Tok.Comma and k != token.Tok.StmtEnd: hi = try p.expr()
+    return ast.Expr.Axis(p.from(at), lo, hi)
+}
+
+fn isAxis(x ast.Expr&) Bool { return x == ast.Expr.Axis }
+
+# the one-axis slice x[lo:hi] (E16a) a lone range item makes
+fn axisSlice(sp source.Span, x ast.Expr&, item ast.Expr&) ast.Expr& {
+    return match item {
+        case ast.Expr.Axis(_, lo, hi): ast.Expr.Slice(sp, x, lo, hi)
+        case _: item
+    }
 }
 
 # an element of a bracket list: an expression, or a nested "[...]" row (E21, reported by the checker)
