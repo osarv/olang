@@ -74,3 +74,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-10	reviewB1	opus	high	done	244	83	10	-		17 probes, no confirmed hole; suspicion Temp not counted in GenInfo.Reach -> sent to b2fix
 2026-11-10	b2fix	opus	medium	done	376	200	50	goldens		capFollowed not restored from record; twin records keyed; sl over-rejection; B1 temp count
 2026-11-13	leftB	opus	medium	done				pass		1-3 already fixed; LRU 7.2->2.0MB; text slots per scope
+2026-11-13	leftA	opus	medium	done				goldens		found real use-after-free on reassigned ref param (heldParam); stored-capture lookup; twins recorded; T30c msg
