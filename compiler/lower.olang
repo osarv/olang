@@ -2654,8 +2654,24 @@ fn (ln mut lowering&) mentions(lv mut liveness&, bi I64, i I64) {
     lv.defs.Clear()
     if i < 0 {
         ln.F.TermMentions(ln.F.Blocks[bi].T, lv.uses, lv.defs)
-    } else {
+    } else if not ln.ownRelease(ln.F.Blocks[bi].Stmts.At(i)) {
         ln.F.Mentions(ln.F.Blocks[bi].Stmts.At(i), lv.uses, lv.defs)
+    }
+}
+
+# whether s releases a region named by a part of a local's own bytes, through no reference (releaseAt's, of a value a
+# vacate moved out): it reads no generational instance, so it keeps none in use - the value's owning references die
+# where the vacate let go of them (a Map entry's key text released beside the node its value names)
+fn (ln mut lowering&) ownRelease(s mir.Stmt&) Bool {
+    match s {
+        case mir.Stmt.Release(_, p) {
+            if baseLocal(p) < 0: return false
+            for pr in ln.projsOf(p) {
+                if pr != mir.Proj.Field: return false
+            }
+            return true
+        }
+        case _ { return false }
     }
 }
 

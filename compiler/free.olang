@@ -2078,6 +2078,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     storeWithin I64 = -1       # the parameter the container being stored into is reached from (withinOf), -1 none
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
     exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
+    copiedCtor I64 = -1        # ... where it is a constructor viewing what it is given, its instance copied into a struct
+                               # held in place (viewCtor): the parameters it views are copied there, never stored
     # Part C: QCE's copy of a value handed on (check.ownCopy) as the value of a store into a struct or an element held in
     # place - made right there for the one owner or array leaf it holds (copyInto). check.storeOver holds it in a Held
     # local first (by local, the copy); the copy whose site is exempt from untracked, the held local read as the store's
@@ -2495,6 +2497,8 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     c0 := typed.Call.Of(x)
     outer := w.exemptSite
     w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
+    outerC := w.copiedCtor
+    w.copiedCtor = w.copiedCtorOf(p, c0)
     # Part C: a copy of a value handed on stored into a part held in place - made for its leaves (copyInto)
     cm := w.copyStored(p, x)
     wasE, wasR := w.copyExempt, w.copyRead
@@ -2507,6 +2511,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if cm is not null: o = w.F.unowned(o)
     w.copyExempt, w.copyRead = wasE, wasR
     w.exemptSite = outer
+    w.copiedCtor = outerC
     try w.targets.Pop() catch { }
     # (a value array stored whole from existing storage is copied there, T7b)
     if p != typed.Lvalue.Local and w.T().KindOf(w.T().Repr(p.Type())) == types.Kind.Array and copiedStore(x) {
@@ -2578,6 +2583,26 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if fr < 0 { w.escape(o, sp, w.text(p.Span()), true, w.withinOf(p), w.storeInside) }
     w.storeWithin = -1
     w.storeInside = -1
+}
+
+# the site of call c0 where it is a constructor viewing what it is given whose instance is copied into struct place p
+# held in place (copyInto's viewCtor), -1 for any other
+fn (w mut walker&) copiedCtorOf(p typed.Lvalue&, c0 typed.Call?&) I64 {
+    if c0 is null or (p != typed.Lvalue.Field and p != typed.Lvalue.Elem): return -1
+    f := w.F
+    t := w.T()
+    b2 := typed.CalleeBody(c0)
+    if b2 < 0 or f.placeOfPlace(p) >= 0 or f.leaves(p.Type()).Len() == 0 or t.Role(f.Bodies[b2].Ty) != types.RoleCtor: return -1
+    vs := f.viewsOf(b2)
+    if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c0, vs): return -1
+    return I64(c0.Site)
+}
+
+# whether parameter j of constructor b2 called by c is one copiedCtor's copy views: its argument is copied into the
+# instance's place, never stored there
+fn (w mut walker&) viewCopied(c typed.Call&, b2 I64, j I64) Bool {
+    if w.copiedCtor < 0 or I64(c.Site) != w.copiedCtor or j >= typed.ViewBits: return false
+    return (w.F.viewsOf(b2) & (I64(1) << j)) != 0
 }
 
 # a unique value moved out of a parameter (movedPar, no copy cm) stored whole into a struct held in place: the
@@ -2763,12 +2788,17 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
     f := w.F
     if not w.Final or w.quiet > 0 { return }
     owners Vec<I64>
+    arrs Vec<I64>
     for lf in lvs {
         if f.IsOwner(lf.PlaceId): owners.Push(lf.PlaceId)
-        if f.arr[lf.PlaceId] and not f.IsOwner(lf.PlaceId) {
-            f.stores.Push(store(lf.PlaceId, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
-            f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" $w.text(x.Span()) "'")
-        }
+        if f.arr[lf.PlaceId] and not f.IsOwner(lf.PlaceId): arrs.Push(lf.PlaceId)
+    }
+    # an array leaf that is the only storage the copy owns (a Map entry's key text beside a reference) is made for as an
+    # owner leaf is: built in its region, released where the entry is removed
+    if owners.Len() == 0 and arrs.Len() == 1: owners.Push(arrs.Pop()!)
+    for k in arrs {
+        f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
+        f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" $w.text(x.Span()) "'")
     }
     if owners.Len() == 0 { return }
     one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.splitLeaf(w.Id, I64(c.Site), x.Type(), lvs, owners[0])
@@ -3546,7 +3576,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         for e in f.parStored[b2] {
             j := e >> 32
             k := e & ((I64(1) << 32) - 1)
-            if j < args.Len() {
+            if j < args.Len() and not w.viewCopied(c, b2, j) {
                 multi := f.storedMore(b2, j)
                 w.storeAs(k, c.Args[j], args[j], sp, "", multi, ctor)
             }
@@ -5059,6 +5089,26 @@ fn (f mut Free&) placeable(st store) Bool {
     return f.varsFit(st.Body, c, b2, f.siteScope(st.Body, x), f.resultVar(b2)) >= 0
 }
 
+# whether call c of constructor b2 is one whose instance is copied where it is stored (D9h, viewCtor) and whose body
+# only gives each field a parameter: the region made at its site holds the copy's arrays and nothing else - the
+# instance its constructor builds stores nothing anywhere, so the obligations its signature states (a writable
+# reference field's scope equal to the instance's) ask nothing of that region
+fn (f mut Free&) copiedPlain(c typed.Call&, b2 I64) Bool {
+    vs := f.viewsOf(b2)
+    if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c, vs): return false
+    body := f.Bodies[b2]
+    if f.T().Role(body.Ty) != types.RoleCtor or body.Root is null: return false
+    for st in body.Root!.Stmts {
+        match st {
+            case typed.Stmt.Let(_, _, typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _)) {
+                if not body.Params.Has(id): return false
+            }
+            case _ { return false }
+        }
+    }
+    return true
+}
+
 # the constructor call a temporary is, null for none
 fn ctorCall(x typed.Expr&) typed.Call?& {
     return match x {
@@ -5072,6 +5122,7 @@ fn ctorCall(x typed.Expr&) typed.Call?& {
 # outlive something not in them, or an equality across
 fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64 {
     if v < 0 or v >= 63 { return -1 }
+    if f.copiedPlain(c, b2) { return I64(1) << v }
     pl := f.Plans.Ref(b)
     set := I64(1) << v
     for j in range c.Args.Len() {
