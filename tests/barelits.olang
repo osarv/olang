@@ -85,16 +85,16 @@ test "a literal with nothing expected takes its own type (E20)" {
     a := [1, 2, 3]
     b := Array<I64>[1, 2, 3]
     assert a == b and a.Len() == 3
-    f := [1, 2.5]                      # the literals' widest own type, F64
+    f := [1, 2.5] # the literals' widest own type, F64
     assert f[0] == 1.0
-    t := ["a", "bc"]                   # text: String values of their own lengths
+    t := ["a", "bc"] # text: String values of their own lengths
     assert t[1].Len() == 2
     u8 U8 = 3
-    u := [u8, 4]                       # the first item that is no literal: U8, the literal adapting
+    u := [u8, 4] # the first item that is no literal: U8, the literal adapting
     assert u[1] == U8(4)
-    m := ["one": 1, "two": 2]          # entries: a Map<String, I64>
+    m := ["one": 1, "two": 2] # entries: a Map<String, I64>
     assert m.Get("two")! == 2 and m == Map<String, I64>["one": 1, "two": 2]
-    rows := [[1, 2], [3, 4]]           # rows held by value, laid out at the length they share
+    rows := [[1, 2], [3, 4]] # rows held by value, laid out at the length they share
     assert rows[1][1] == 4
     assert [1, 2].Len() == 2 and 2 in [1, 2, 3]
     n := 0
@@ -117,7 +117,7 @@ test "a literal makes the type expected where it stands (E19, E21)" {
     assert g.rows == 2 and g.data[3] == 4
     nested Vec<Vec<I64>> = [[1], [2, 3]]
     assert nested[1].Len() == 2
-    refs := Array<Array<I64>&>[[1, 2], [3]]      # a reference element: its referent made and lent (E12)
+    refs := Array<Array<I64>&>[[1, 2], [3]] # a reference element: its referent made and lent (E12)
     assert refs[0][1] == 2
     v = [7]
     assert v[0] == 7
