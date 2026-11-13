@@ -973,6 +973,7 @@ fn (c mut Checker&) readsFixed(x ast.Expr?&) Bool {
         case ast.Expr.Call(_, f, args): c.paramLen(f, args) >= 0 or (c.readsFixed(f) and c.allFixed(args))
         case ast.Expr.Index(_, a, items): c.readsFixed(a) and c.allFixed(items)
         case ast.Expr.Slice(_, a, lo, hi): c.readsFixed(a) and c.readsFixed(lo) and c.readsFixed(hi)
+        case ast.Expr.Axis(_, lo, hi): c.readsFixed(lo) and c.readsFixed(hi)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.allFixed(items)
         case ast.Expr.Try(_, a, clauses): c.readsFixed(a) and (clauses.Len() == 0)
         case ast.Expr.Unreachable(_, msg): msg is null or c.readsFixed(msg)
@@ -3287,6 +3288,7 @@ fn (c mut Checker&) declaresNames(x ast.Expr?&) Bool {
         case ast.Expr.Call(_, f, args): c.declaresNames(f) or c.anyDeclaresNames(args)
         case ast.Expr.Index(_, a, items): c.declaresNames(a) or c.anyDeclaresNames(items)
         case ast.Expr.Slice(_, a, lo, hi): c.declaresNames(a) or c.declaresNames(lo) or c.declaresNames(hi)
+        case ast.Expr.Axis(_, lo, hi): c.declaresNames(lo) or c.declaresNames(hi)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.anyDeclaresNames(items)
         case ast.Expr.Try(_, a, clauses): c.declaresNames(a) or (clauses.Len() > 0)
         case ast.Expr.Unreachable(_, msg): c.declaresNames(msg)
@@ -5153,6 +5155,10 @@ fn storedExpr(x ast.Expr?&, out mut Map<source.NameId, Bool>&) {
         }
         case ast.Expr.Slice(_, y, lo, hi) {
             storedExpr(y, out)
+            storedExpr(lo, out)
+            storedExpr(hi, out)
+        }
+        case ast.Expr.Axis(_, lo, hi) {
             storedExpr(lo, out)
             storedExpr(hi, out)
         }
@@ -8320,6 +8326,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
         case ast.Expr.Member(sp, y, n) { return c.member(sp, y, n, want) }
         case ast.Expr.Index(sp, y, items) { return c.index(sp, y, items) }
         case ast.Expr.ArrayLit(sp, made, items) { return c.madeLit(sp, made!.Span(), c.resolve(made!), items) }
+        case ast.Expr.Row(sp, items): return c.row(sp, items, want)
         case ast.Expr.Join(sp, parts) { return c.join(sp, parts) }
         case ast.Expr.Try(sp, y, clauses) { return c.tryExpr(sp, y, clauses, want) }
         case ast.Expr.Postfix(sp, op, y) if op == token.Tok.Bang { return c.bang(sp, y, want) }
@@ -10049,6 +10056,111 @@ fn exprKindName(x ast.Expr&) String& {
     }
 }
 
+# ---- subscripts by axes (E16f) ----
+
+fn slicedTarget(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Index(_, _, items): return ast.Slicing(items)
+        case _: return false
+    }
+}
+
+# x[i, lo:hi, :, ...]: a subscript with a range or "..." among its items calls x's Slice with one Axis per item - an
+# index Axis.Index(i), a range Axis.Range(lo, hi), "..." Axis.Rest. An array has one axis, sliced by x[lo:hi] alone
+fn (c mut Checker&) axes(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) typed.Expr& {
+    base := c.place(x)
+    if base is null: return c.dropAxes(sp, items)
+    b typed.Lvalue& = base
+    t := b.Type()
+    for _ in range 4 {
+        if not c.isRef(t): break
+        c.nullRead(b)
+        b = typed.Lvalue.Deref(sp, c.P.T.Referent(t), c.read(sp, b))
+        t = c.P.T.Referent(t)
+    }
+    if t == types.UnknownT: return c.dropAxes(sp, items)
+    if c.arrayOf(t) != types.UnknownT or not c.isNamed(t) {
+        c.err(c.bracketIn(sp), msgs.ArrayOneAxis(c.ty(t)))
+        return c.dropAxes(sp, items)
+    }
+    if c.axisMethod(t) < 0 {
+        c.needErr(c.bracketIn(sp), t, "Slice by axes ('x[a, b:c]')", msgs.NoAxisSlice(c.ty(t)))
+        return c.dropAxes(sp, items)
+    }
+    from := c.exprs.Len()
+    for it in items: c.exprs.Push(c.axisValue(it))
+    return c.axisCall(sp, b, t, gather(c.exprs, from))
+}
+
+# a subscript's items checked for their own errors where nothing is sliced
+fn (c mut Checker&) dropAxes(sp source.Span, items Array<ast.Expr&>&) typed.Expr& {
+    for it in items: c.axisValue(it)
+    return c.unknown(sp)
+}
+
+# the prelude's Axis (E16f)
+fn (c mut Checker&) axisType() types.TypeId { return c.P.PreludeType("std/prelude/axis", "Axis") }
+
+# t's Slice taking Axis values - one parameter per axis, or one variadic "...Axis" - by either spelling (M6b); -1 for
+# none
+fn (c mut Checker&) axisMethod(t types.TypeId) I64 {
+    for name in Array<String&>["Slice", "slice"] {
+        m := c.P.MethodOf(t, c.P.L.Names.Intern(name))
+        if m >= 0 and c.slicesByAxes(m): return m
+    }
+    return -1
+}
+
+fn (c mut Checker&) slicesByAxes(m I64) Bool {
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(m)))
+    if ps.Len() < 2: return false
+    ax := c.axisType()
+    for i in range 1, ps.Len() {
+        p := c.P.T.Unspread(ps[i])
+        if c.P.T.SpreadAt(c.P.Sig(m)) == i: p = c.P.T.Elem(c.deref(p))
+        if not c.P.T.Same(c.P.T.Plain(c.deref(p)), ax): return false
+    }
+    return true
+}
+
+# one item of a subscript as an Axis value: "..." Rest, "lo:hi" Range, any other an index
+fn (c mut Checker&) axisValue(it ast.Expr&) typed.Expr& {
+    if ast.IsRest(it): return c.axisCase(it.Span(), 2, Array<typed.Expr&>(0))
+    match it {
+        case ast.Expr.Axis(sp, lo, hi): return c.axisRange(sp, lo, hi)
+        case _: return c.axisCase(it.Span(), 0, c.one(c.value(c.exprTo(it, c.i64()), it.Span())))
+    }
+}
+
+# Axis.Range(lo, hi): an end left off is 0, or I64.Max for "to the axis's end"
+fn (c mut Checker&) axisRange(sp source.Span, lo ast.Expr?&, hi ast.Expr?&) typed.Expr& {
+    l := c.lit(sp, c.i64(), 0) if lo is null else c.value(c.exprTo(lo, c.i64()), lo.Span())
+    h := c.lit(sp, c.i64(), I64.Max) if hi is null else c.value(c.exprTo(hi, c.i64()), hi.Span())
+    return c.axisCase(sp, 1, Array<typed.Expr&>[l, h])
+}
+
+fn (c mut Checker&) axisCase(sp source.Span, tag I64, items Array<typed.Expr&>&) typed.Expr& {
+    return typed.Expr.Make(sp, c.axisType(), typed.Make(typed.MakeKind.Case, tag, items, null, typed.SiteId(-1), typed.Check.None))
+}
+
+# the type's Slice called with the axes: one argument each, or one array of them for a variadic "...Axis"
+fn (c mut Checker&) axisCall(sp source.Span, base typed.Lvalue&, t types.TypeId, vals Array<typed.Expr&>&) typed.Expr& {
+    m := c.axisMethod(t)
+    c.privateRole(m, t, "Slice", c.bracketIn(sp), "'['")
+    sig := c.P.Sig(m)
+    want := c.P.T.Items(c.P.T.Params(sig)).Len() - 1
+    if c.P.T.SpreadAt(sig) < 0 and want != vals.Len() {
+        c.err(c.bracketIn(sp), msgs.AxisCount(c.ty(t), want, vals.Len()))
+        return c.unknown(sp)
+    }
+    args := vals
+    if c.P.T.SpreadAt(sig) >= 0 {
+        at := c.P.T.Array(c.axisType(), c.P.T.Const(c.i64(), vals.Len()))
+        args = c.one(typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, vals, null, c.site(typed.SiteKind.Make, sp), typed.Check.None)))
+    }
+    return c.invoke(sp, sp, m, c.read(sp, base), Array<ast.Expr&>(0), args)
+}
+
 # x[lo:hi] (E16a): part of an array's storage, a reference of the array's own type, its bounds checked once (E16b)
 fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr?&, hi ast.Expr?&) typed.Expr& {
     base := c.place(y)
@@ -10078,6 +10190,12 @@ fn (c mut Checker&) sliceOf(sp source.Span, b typed.Lvalue&, lo ast.Expr?&, hi a
         if not c.isNamed(t) {
             c.err(sp, msgs.NotIndexable(c.ty(t)))
             return c.unknown(sp)
+        }
+        # E16f: a type slicing by axes takes x[lo:hi] as one Axis
+        if c.axisMethod(t) >= 0 {
+            from := c.exprs.Len()
+            c.exprs.Push(c.axisRange(sp, lo, hi))
+            return c.axisCall(sp, base, t, gather(c.exprs, from))
         }
         # x[lo:hi] on a declared type (E31): its Slice; an absent end its Len()
         m := c.roleMethod(t, "Slice", 2)
@@ -16174,6 +16292,7 @@ fn (c mut Checker&) enumFrom(sp source.Span, nsp source.Span, et types.TypeId, a
 fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) typed.Expr& {
     et := c.typeNamed(x)
     if et >= types.TypeId(0) { return c.madeLit(sp, x.Span(), et, items) }
+    if ast.Slicing(items): return c.axes(sp, x, items)
     # G33: an item of a list known while compiling, by a constant index
     rl := c.listOf(x)
     if rl.Ok {
@@ -16299,9 +16418,24 @@ fn (c mut Checker&) madeLit(sp source.Span, msp source.Span, made types.TypeId, 
         c.dropItems(items)
         return c.unknown(sp)
     }
-    arr := c.entriesLit(sp, b.Elem, items) if c.entryAt(items) >= 0 else c.arrayLit(sp, b.Elem, items)
+    arr := c.entriesLit(sp, b.Elem, items) if c.entryAt(items) >= 0 else c.arrayLit(sp, b.Elem, items, true)
     if typeOf(arr) == types.UnknownT { return c.unknown(sp) }
     return c.fromIter(sp, msp, b, made, arr)
+}
+
+# E21: a nested "[...]" in a literal is a literal of the element its literal takes - an Array<T> held by value, or a type
+# with a FromIter - "Matrix[[1, 2], [3, 4]]" each row its builder's element made of the row's items
+fn (c mut Checker&) row(sp source.Span, items Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
+    if want != types.UnknownT and c.madeByLiteral(want): return c.madeLit(sp, sp, want, items)
+    c.err(sp, msgs.NestedArrayLiteral("an element of no type the literal names" if want == types.UnknownT else c.ty(want)))
+    c.dropItems(items)
+    return c.unknown(sp)
+}
+
+fn (c mut Checker&) madeByLiteral(t types.TypeId) Bool {
+    if c.isRef(t): return false
+    if c.P.T.KindOf(t) == types.Kind.Array: return true
+    return c.isNamed(t) and c.P.BuilderOf(t, c.P.L.Names.Intern("FromIter")) >= 0
 }
 
 # the builder a literal of made calls (E19, D19): its FromIter taking one iterator, and the elements it takes - F -1
@@ -16436,7 +16570,8 @@ fn (c mut Checker&) entriesLit(sp source.Span, el types.TypeId, items Array<ast.
 }
 
 # Array<T>[a, b]: an array literal, its length its items' count (E19)
-fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.Expr&>&) typed.Expr& {
+# - exact: each item held at elem itself (a builder's walk gives elem, E19), never laid out at the one length they share
+fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.Expr&>&, exact Bool = false) typed.Expr& {
     elem = c.errValueType(elem)
     # T7a, T7d: arrays held by value as elements are laid out at the one known length the items give them - each item
     # typed once, then fitted to that
@@ -16445,7 +16580,7 @@ fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.
         first := types.UnknownT
         ok := true
         for i in range items.Len() {
-            ys[i] = c.expr(items[i], types.UnknownT)
+            ys[i] = c.expr(items[i], elem if items[i] == ast.Expr.Row else types.UnknownT)
             t := c.deref(typeOf(ys[i]))
             if typeOf(ys[i]) == types.UnknownT { return c.unknown(sp) }
             # written text: its characters' count (T7c)
@@ -16457,7 +16592,7 @@ fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.
                 ok = false
             }
         }
-        if not ok {
+        if not ok or exact {
             # QCE: elements of several lengths held by value, each its own run-time array
             first = elem
         }
@@ -16529,6 +16664,13 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Lvalue?& {
                 p := c.place(y)
                 if p is null { return null }
                 return c.field(sp, memberSpan(sp, c.text(n).Len()), p, n)
+            }
+        }
+        case ast.Expr.Index(sp, _, items) if ast.Slicing(items) {
+            # E16f: what Slice gives is a value with no place of its own - read, never stored into
+            if w or c.compoundAt.Start >= 0 {
+                c.err(sp, msgs.SliceNoPlace())
+                return null
             }
         }
         case ast.Expr.Index(sp, y, items) {
@@ -19172,6 +19314,12 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, 
 }
 
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
+    if slicedTarget(target) {
+        # E16f: what Slice gives has no place of its own
+        c.err(target.Span(), msgs.SliceNoPlace())
+        c.expr(value, types.UnknownT)
+        return
+    }
     if c.assignAt(sp, op, target, value) { return }
     osp0 := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)
     ca := c.compoundAt
@@ -25288,6 +25436,7 @@ fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
             return exprAssigns(f, n) or exprsAssign(args, n)
         }
         case ast.Expr.Slice(_, y, lo, hi) { return exprAssigns(y, n) or exprAssigns(lo, n) or exprAssigns(hi, n) }
+        case ast.Expr.Axis(_, lo, hi): return exprAssigns(lo, n) or exprAssigns(hi, n)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
             return exprsAssign(items, n)
         }

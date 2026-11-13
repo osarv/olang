@@ -1,0 +1,152 @@
+# subscripts by axes (E16f) and nested literals (E21), on small matrices: x[i, j] calls At, a subscript with a range,
+# ":" or "..." among its items calls Slice with one Axis per item, and Matrix[[1, 2], [3, 4]] is built row by row
+# through the type's FromIter
+
+# a row-major matrix of F64
+type Matrix struct(rows I64, cols I64) {
+    rows, cols
+    data := Vec<F64>()
+    for _ in range rows * cols: data.Push(0.0)
+}
+
+fn (m Matrix&) At(i I64, j I64) F64 { return m.data[i * m.cols + j] }
+fn (m mut Matrix&) SetAt(i I64, j I64, v F64) { m.data[i * m.cols + j] = v }
+
+# the part of m the two axes select, a copy; "..." first is every row, as ":" is
+fn (m Matrix&) Slice(r Axis, c Axis) Matrix {
+    r0, r1 := r.Bounds(m.rows)
+    c0, c1 := c.Bounds(m.cols)
+    out := Matrix(r1 - r0, c1 - c0)
+    for i in range r0, r1 {
+        for j in range c0, c1: out[i - r0, j - c0] = m[i, j]
+    }
+    return out
+}
+
+# a matrix of the rows a literal gives: Matrix[[1, 2], [3, 4]]
+fn Matrix.FromIter<I Iterator<Array<F64> ? E> ? E>(it mut I&) Matrix ? E {
+    data := Vec<F64>()
+    rows, cols I64
+    for row in try it {
+        cols = row.Len()
+        for x in row: data.Push(x)
+        rows++
+    }
+    m := Matrix(rows, cols)
+    for k in range data.Len(): m.data[k] = data[k]
+    return m
+}
+
+# an n x n x n cube holding 0, 1, 2, ... in order, sliced by any number of axes: "..." stands for the axes not written
+type Cube struct(n I64) {
+    n
+    data := Vec<I64>()
+    for k in range n * n * n: data.Push(k)
+}
+
+fn (c Cube&) At(i I64, j I64, k I64) I64 { return c.data[(i * c.n + j) * c.n + k] }
+
+# the sum of the elements the axes select
+fn (c Cube&) Slice(axes ...Axis) I64 {
+    lo := Array<I64>[0, 0, 0]
+    hi := Array<I64>[c.n, c.n, c.n]
+    d I64 = 0
+    for i, a in axes {
+        if a == Axis.Rest {
+            d = 3 - (axes.Len() - i - 1)
+            continue
+        }
+        l, h := a.Bounds(c.n)
+        lo[d] = l
+        hi[d] = h
+        d++
+    }
+    total I64 = 0
+    for i in range lo[0], hi[0] {
+        for j in range lo[1], hi[1] {
+            for k in range lo[2], hi[2]: total += c[i, j, k]
+        }
+    }
+    return total
+}
+
+test Matrix.Slice "rows, columns and the rest" {
+    m := Matrix[[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    assert m.rows == 3 and m.cols == 3 and m[1, 2] == 6.0
+    top := m[0:2, :]
+    assert top.rows == 2 and top.cols == 3 and top[1, 0] == 4.0
+    col := m[..., 1]
+    assert col.rows == 3 and col.cols == 1 and col[2, 0] == 8.0
+    corner := m[1:, :2]
+    assert corner.rows == 2 and corner.cols == 2 and corner[1, 1] == 8.0
+    row := m[2, :]
+    assert row.rows == 1 and row[0, 2] == 9.0
+    m[1, 1] = 50.0
+    assert m[0:3, 1:2][1, 0] == 50.0
+}
+
+test Cube.Slice "any number of axes, '...' the rest" {
+    c := Cube(3)
+    assert c[1, 2, 0] == 15
+    assert c[..., 0] == 0 + 3 + 6 + 9 + 12 + 15 + 18 + 21 + 24
+    assert c[0, ...] == 36
+    assert c[0, :, 1:] == 1 + 2 + 4 + 5 + 7 + 8
+    assert c[0:1, 0:1, 0:1] == 0
+    assert c[2, ..., 2] == 20 + 23 + 26
+}
+
+test "an axis's bounds" {
+    l, h := Axis.Range(2, I64.Max).Bounds(10)
+    assert l == 2 and h == 10
+    i, j := Axis.Index(4).Bounds(10)
+    assert i == 4 and j == 5
+}
+
+test "nested literals of arrays and Vecs" {
+    a := Array<Array<I64>>[[1, 2], [3, 4], [5, 6]]
+    assert a.Len() == 3 and a[2][1] == 6
+    v := Vec<Vec<I64>>[[1], [2, 3], []]
+    assert v.Len() == 3 and v[1][1] == 3 and v[2].Len() == 0
+}
+
+# a generic 2-D tensor: the nested literal and the subscript by axes compose with generics
+type Tensor<T> struct(rows I64, cols I64, data Vec<T>) { rows, cols, data }
+
+fn Tensor<T>.FromIter<I Iterator<Array<T> ? E> ? E>(it mut I&) Tensor<T> ? E {
+    data := Vec<T>()
+    rows, cols I64
+    for row in try it {
+        cols = row.Len()
+        for x in row: data.Push(x)
+        rows++
+    }
+    return Tensor<T>(rows, cols, data)
+}
+
+fn (t Tensor<T>&) At(i I64, j I64) T { return t.data[i * t.cols + j] }
+
+# the elements the two axes select, row by row
+fn (t Tensor<T>&) Slice(r Axis, c Axis) Vec<T> {
+    out := Vec<T>()
+    r0, r1 := r.Bounds(t.rows)
+    c0, c1 := c.Bounds(t.cols)
+    for i in range r0, r1 {
+        for j in range c0, c1: out.Push(t[i, j])
+    }
+    return out
+}
+
+test Tensor.Slice "a generic tensor's literal and slices" {
+    t := Tensor<F32>[[1, 2, 3], [4, 5, 6]]
+    assert t[1, 0] == 4.0
+    col := t[:, 1]
+    assert col.Len() == 2 and col[1] == 5.0
+    assert t[1, ...].Len() == 3
+    assert t[0:1, 1:].Len() == 2
+}
+
+# the compile-time evaluator agrees (K1, S17a): decided while compiling
+assert Matrix[[1, 2], [3, 4]][..., 1][1, 0] == 4.0
+assert Cube(2)[..., 1] == 1 + 3 + 5 + 7
+assert Array<Array<I64>>[[1, 2], [3, 4]][1][0] == 3
+assert Tensor<I64>[[1, 2], [3, 4]][..., 0][1] == 3

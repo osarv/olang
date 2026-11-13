@@ -1,0 +1,10 @@
+# check: fail error[E16f]: Grid declares no Slice taking Axis values
+# E16f: a subscript with a range among several items calls Slice with Axis values; a Slice of bounds is not one
+type Grid struct(n I64) { n }
+fn (g Grid&) At(i I64, j I64) I64 { return i * g.n + j }
+fn (g Grid&) Slice(lo I64, hi I64) I64 { return hi - lo }
+
+fn main() {
+    g := Grid(3)
+    assert g[0:2, 1] == 2
+}

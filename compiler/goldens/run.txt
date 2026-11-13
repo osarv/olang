@@ -51,6 +51,13 @@
 | ok - Key: attributes are read on types, fields, puns, cases and their fields
 | ok - functions reflected: a router and a command table collected while compiling
 | ok - a reflected function's errors are its descriptor's
+=== test tests/axes.olang
+| status 0
+| ok - Matrix.Slice: rows, columns and the rest
+| ok - Cube.Slice: any number of axes, '...' the rest
+| ok - an axis's bounds
+| ok - nested literals of arrays and Vecs
+| ok - Tensor.Slice: a generic tensor's literal and slices
 === test tests/become.olang
 | status 0
 | ok - become runs a chain of any depth in one frame

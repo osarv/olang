@@ -41,8 +41,9 @@ import "unparse"
 # the file's text written in the layout: ts is its scan, the lists the parser's type brackets by token index, held the
 # spans of the branches to leave as written
 fn Format(text String&, ts scan.Tokens&, argAngles Vec<I64>&, closeAngles Vec<I64>&
-          held Array<source.Span>&, groups Vec<I64>&) String {
+          held Array<source.Span>&, groups Vec<I64>&, subscripts Vec<I64>& = Vec<I64>()) String {
     f := formatter(text, ts.Toks)
+    for i in subscripts: f.subscript[i] = true
     for i in argAngles { f.argOpen[i] = f.argOpen[i] + 1 }
     for i in groups { f.group[i] = true }
     for i in closeAngles { f.closes[i] = f.closes[i] + 1 }
@@ -77,6 +78,7 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     closes mut Array<I64>& = Array<I64>(toks.Len())
     bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
     entryColon mut Array<Bool>& = Array<Bool>(toks.Len()) # a keyed literal's ":" (E19), "k: v"
+    subscript mut Array<Bool>& = Array<Bool>(toks.Len())  # an index's or a slice's "[" (E16a, E16f): its ":" are no entries
     # the tokens with text, by index into toks, and beside each whether a statement end stands before it
     real Vec<I64>
     ended Vec<Bool>
@@ -553,6 +555,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     if ka == token.Tok.Dot or kb == token.Tok.Dot { return "" }
     if kb == token.Tok.Bang { return "" }    # "!" is postfix only (E35)
     if ka == token.Tok.Colon and (f.bodyColon[a] or f.group[a] or f.entryColon[a]) { return " " }
+    if ka == token.Tok.Comma and kb == token.Tok.Colon: return " "    # "m[i, :]" (E16f)
     if ka == token.Tok.Colon or kb == token.Tok.Colon { return "" }
     if f.prefix(a, rb - 1) {
         # "- -x" stays apart, or it would read as "--"
@@ -666,7 +669,7 @@ fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, sa
         error Unparsable.Syntax
     }
     held := unparse.HeldBranches(decls, names, src.Text, d)
-    return Format(src.Text, ts, p.ArgAngles, p.CloseAngles, held, p.TypeGroups)
+    return Format(src.Text, ts, p.ArgAngles, p.CloseAngles, held, p.TypeGroups, p.Subscripts)
 }
 
 # "olang format" over files (B13): mode "-f" rewrites each file in its layout, "-l" names each file not in it, one a
@@ -854,7 +857,7 @@ fn (l loader&) chains(o mut parse.Oracle&, names mut source.Names&, m I64, prefi
 fn (f mut formatter&) markEntries() {
     for r in range f.real.Len() {
         j := f.real[r]
-        if f.kind(j) != token.Tok.LBrack { continue }
+        if f.kind(j) != token.Tok.LBrack or f.subscript[j]: continue
         afterType := r > 0 and f.kind(f.real[r - 1]) == token.Tok.Gt and not f.toks[j].Has(token.Space)
         colons Vec<I64>
         comma := false

@@ -1461,6 +1461,10 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.expr(lo)
             r.expr(hi)
         }
+        case ast.Expr.Axis(_, lo, hi) {
+            r.expr(lo)
+            r.expr(hi)
+        }
         case ast.Expr.ArrayLit(_, elem, items) {
             if elem is not null { r.typeRef(elem) }
             for e in items { r.expr(e) }

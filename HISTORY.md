@@ -36710,3 +36710,37 @@ scope".
   `refLocal` sees through the reborrow; the thunk's relation `n outlives D(0, v)` is beyond every word (the receiver has
   no name), and the conversion is refused with T30c naming what the method does (`TraitMethodBeyondField`;
   `derivedField` now names a field written bare by its declaration). t30ckeepsfield.
+
+## Subscripts by axes and nested literals (E16f, E21; 2026-11-13, wt-axes)
+
+The user approved both for ML work on 2026-11-13 ("we are going to be doing a lot of ML stuff, I want that to be clean
+and easy"). Before, `x[i, j]` called `At(i, j)` and `x[lo:hi]` a two-bound `Slice`, so a matrix had no way to say
+"the first two rows, every column", and `Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]` restated the inner
+type on every row (E21 refused `[[1, 2], [3, 4]]`, saying there are no multi-dimensional arrays).
+
+**Subscripts by axes (E16f).** The design question was how to hand a type its items so that its own methods decide what
+they mean (NumPy drops an indexed axis; a view type may keep it; a tensor's `...` covers a rank only it knows). I chose
+the smallest thing that composes: a prelude enum `Axis { Index(i I64), Range(lo I64, hi I64), Rest }`, one value per
+item, passed to the type's `Slice`. An enum and not a struct because a match over it is exhaustive and `$` renders it
+as source; no `All` case, because `:` is exactly `0:` to the end - one value for one meaning - with `I64.Max` standing
+for "to the axis's end" (no optional fields in an enum payload, and the type knows the length: `a.Bounds(n)` resolves
+it). Which `Slice` is meant is read off its parameters: all `Axis`, one per axis, or one variadic `...Axis` (D8g) for
+a rank-generic tensor - no new method name, and a type slicing by axes takes its one-range `x[lo:hi]` as one Axis too,
+so `m[0:2]` on a matrix is never a two-bound call into an Axis parameter. A subscript with no range and no `...` stays
+`At`, so `m[i, j]` costs what it did. The compiler builds the Axis values directly as enum cases (typed `Make`) and
+calls the method through the ordinary call path, so `try`, generics' needs (G18a: a slicing subscript needs `Slice`),
+the evaluator and `interpret` apply with no rules of their own: tests/axes.olang's top-level asserts are decided while
+compiling. An array keeps one axis; a multi-item slice of one is an error naming `a[lo:hi]`. A slice result has no
+place: `m[0:2, :] = v` is an error rather than a silent store into a temporary; a slice store (`SetSlice`) did not fall
+out cheaply and is left for when a tensor library asks for it. The parser reads each item as an index, `lo:hi` (a new
+`ast.Expr.Axis`, either end optional) or a bare `...` (the existing Spread holding `_`); a lone range is still
+`Expr.Slice`, so nothing that parsed before changes shape.
+
+**Nested literals (E21).** The parser already kept bracket rows (`ast.Expr.Row`) to report them. Now a row checked
+against an expected element type is a literal of that type (`madeLit`): an `Array<T>` element, or the element a made
+type's `FromIter` walks - so `Matrix[[1, 2], [3, 4]]` works for a `FromIter` over `Iterator<Array<F64>>`, and
+`Vec<Vec<I64>>[[1], [2, 3]]` builds each row through Vec's own `FromIter`. A bug on the way: a FromIter literal of
+array elements laid them out at the length they shared (`Array<F64>` items of three became `Array<F64, 3>`), whose walk
+then did not fit the builder's `Iterator<Array<F64>>`; such literals now hold each item at the builder's element type
+(`arrayLit`'s `exact`). A reference element (`Array<Array<I32>&>[[1, 2]]`) is an error naming the by-value form - a
+row would be a temporary nothing holds.

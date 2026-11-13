@@ -165,6 +165,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   alike. An `Array<T>` is laid out as before; any other type is `C.FromIter(walk)`, the one protocol (D19), its errors
   the literal's. The prelude and std collections declare one. **`$` renders the literal making it (E11a)**. No trait
   requires FromIter. A primitive, reference or struct with no FromIter in front is an error naming `Array<T>[...]`.
+- **Nested literals (E21, the user's "yes, do them" 2026-11-13, for ML; built 2026-11-13).** A bracketed item of a
+  literal is a literal of the element the outer one takes: `Array<Array<F32>>[[1, 2], [3, 4]]`, `Vec<Vec<I64>>[[1],
+  [2, 3]]`, `Matrix[[1, 2], [3, 4]]` (each row the element its FromIter walks, e.g. `Array<F64>`). Mine: rows for a
+  FromIter are each the element type itself (no shared layout); a reference element is an error.
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
   breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
@@ -249,6 +253,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)`, `try a.SliceOf(lo, hi)` fail with
   `ArrayError.OutOfRange`. An out-of-range index, a wrong `extern` prototype and a data race are the three unchecked
   holes, stated.
+- **Subscripts by axes, NumPy's (E16f, the user's "yes, do them" 2026-11-13, for ML; built 2026-11-13).** `m[0:2, :]`,
+  `m[..., 1]`, `c[0, :, 1:]`: a range (`lo:hi`, either end off, bare `:`) or `...` among the items calls the type's
+  `Slice` with one prelude `Axis` per item - `Index(i)`, `Range(lo, hi)` (an end off: 0, `I64.Max`), `Rest`; the
+  type decides the meaning (`a.Bounds(n)` helps). Mine: one enum rather than a struct; a Slice of all-`Axis` parameters
+  or one `...Axis`, which then takes `x[lo:hi]` as one Axis too; plain `x[i, j]` stays At; an array has one axis (an
+  error); a slice result is never stored into (`m[0:2, :] = v` an error - no SetSlice yet).
 - **Structures of arrays: `Columns<T>` and `ColumnVec<T>` (T7e, QCS 3 and QCU, the user's decisions 2026-11-06/07:
   "Do the columns solution", "two column types", no computed types).** `Columns<T>` is laid out as one `Array<F>` per
   field of the record `T` (`c.x` is a column, lane operators apply); `ColumnVec<T>` grows like a Vec. T must be a

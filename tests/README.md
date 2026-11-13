@@ -32,6 +32,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   R11b, R3a), each computation baked while compiling beside the same one at run time.
 - `lanes.olang` - lane-by-lane array operators, totals, lane comparisons and masks (E39), baked and decided while
   compiling beside the run time.
+- `axes.olang` - subscripts by axes (`m[0:2, :]`, `m[..., 1]`, E16f) and nested literals (`Matrix[[1, 2], [3, 4]]`,
+  E21) on a matrix, a cube and a generic tensor, decided while compiling beside the run time.
 - `intwidths.olang` - integers of every width, I1 to I128 and U1 to U128 (T4a), at compile time and at run time.
 - `fnref.olang` - function types reference-only (`fn&`, `fn?&`, T21), declared function types (`Handler&`, T21b) and
   arrays that may be null (`String?&`, T2c), baked and decided while compiling beside the run time.
