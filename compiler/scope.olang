@@ -254,6 +254,8 @@ type compRun struct() {
     Marks Vec<markRead>
     Read Vec<sumRead>
     Twinned Bool = false   # T22c: a call of it reached a twin, judged again in every round (judgeTwin)
+    Twins Vec<I64>         # ... the twins its calls reached, at any depth, ascending (as they were made)
+    CapAdded Vec<pair.Pair<I64, I64>>  # ... and the lambdas' captures their judgings found followed (capFollowed)
     # B3i (the records, W3b): its component's stable names and round (empty where it is not written); by body, the
     # judging whose state it was judged from (null: the record's InDisk names it); what it read, as words; its bodies'
     # calls through values; its name (runId); the record it was taken from; whether it read nothing a record cannot say
@@ -650,6 +652,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     lamOf Map<I64, Array<typed.Capture&>>
     compSize Vec<I64>
     twinAsked Bool = false
+    twinsUsed Vec<I64>                     # T22c: the twins the judging under way reached (compRun.Twins) ...
+    capAdded Vec<pair.Pair<I64, I64>>      # ... and the captures their judgings found followed (compRun.CapAdded)
     twinAt Gap = Gap(-1, source.Span(0, 0), "")  # the call the twin being judged was asked for at
     capSeeds Map<pair.Pair<I64, I64>, fnRecs>       # by (lambda, capture local): the records followed into its body
     capSeen Map<pair.Pair<I64, I64>, Bool>
@@ -864,6 +868,8 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     s.wantsDecl.Clear()
     s.wantsField.Clear()
     s.twinAsked = false
+    s.twinsUsed.Clear()
+    s.capAdded.Clear()
     s.globalDep = false
     s.vrLog.Clear()
     s.readLog.Clear()
@@ -879,6 +885,11 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     s.component(comp, report)
     s.logReads = false
     run.Twinned = s.twinAsked
+    for t in s.twinsUsed {
+        if not run.Twins.Has(t): run.Twins.Push(t)
+    }
+    run.Twins.Sort(fn(a I64, b I64) Bool { return a < b })
+    for k in s.capAdded { run.CapAdded.Push(k) }
     for v in s.vrLog { run.Vrs.Push(v) }
     for b in comp {
         run.Plans.Push(s.Plans[b])
@@ -1820,6 +1831,7 @@ fn (s mut Scoper&) twinMarked(c typed.Call&, t I64, mask I64) I64 {
     s.followed.Put(I64(c.Site), (try s.followed.Get(I64(c.Site)) catch default 0) | mask)
     s.plan.SetTwin(c.Site, t)
     s.twinAsked = true
+    s.twinsUsed.Push(t)
     return t
 }
 
@@ -2042,7 +2054,17 @@ fn (s mut Scoper&) judgeTwin(t I64, sp source.Span) {
         tw.Planned[t] = true
     }
     # (what the twin's judging found of lambdas' captures holds for every judging)
-    for key in sub.capFollowed.Keys() { s.capFollowed.Put(key, true) }
+    s.capAdded = sub.capAdded
+    for key in sub.capFollowed.Keys() {
+        if not s.capFollowed.Has(key): s.capAdded.Push(key)
+        s.capFollowed.Put(key, true)
+    }
+    # (what it read and the twins it reached are the asking judging's, for its record - B3i)
+    s.readLog = sub.readLog
+    s.absentLog = sub.absentLog
+    s.markReads = sub.markReads
+    s.twinsUsed = sub.twinsUsed
+    s.globalDep = s.globalDep or sub.globalDep
 }
 
 # the records a parameter or a capture of the body being judged holds where they are followed into it (T22c, D16c):
@@ -14841,6 +14863,13 @@ type diskRun struct(Sig String&) {
     File I64 = -1          # the file of the module whose record held it
     Out String = ""        # the state its bodies are left in: its name ...
     Hidden Vec<String&>    # ... and the state itself, by body (hiddenText)
+    # T22c: the twins its calls reached (twinRecLine), each one's plan and summary, the B3i keys of the modules their
+    # bodies and the functions they follow hang on, and the lambdas' captures their judgings found followed
+    Twins Vec<String&>
+    TPlans Vec<String&>
+    TSums Vec<String&>
+    TKeys String = ""
+    Caps Vec<String&>
 }
 
 # a call through a value a judging found the bodies of (valueRecs), kept with the judging
@@ -15487,10 +15516,13 @@ fn (s Scoper&) fileOfIdentity(identity String&) I64 ? typed.Unwritable {
 # state it leaves
 fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
     if run.Disk is not null: return diskLines(run.Disk!)
-    if not run.Recordable or run.Twinned or run.Diags.Count() > 0 or run.Gaps.Len() > 0 or run.Sig == "" or run.Hidden.Len() != comp.Len() {
-        s.why($"w-rec" $(1 if run.Recordable else 0) "t" $(1 if run.Twinned else 0) "d" $run.Diags.Count() "g" $run.Gaps.Len())
+    if not run.Recordable or run.Diags.Count() > 0 or run.Gaps.Len() > 0 or run.Sig == "" or run.Hidden.Len() != comp.Len() {
+        s.why($"w-rec" $(1 if run.Recordable else 0) "d" $run.Diags.Count() "g" $run.Gaps.Len())
         return ""
     }
+    # (T22c: the twins it reached, numbered as the record numbers them)
+    tmap Map<I64, I64>
+    for i in range run.Twins.Len() { tmap.Put(run.Twins[i], i) }
     b := StringBuilder()
     b.Push($"run " $run.Sig.Replace("\n", "\t") "\n")
     b.Push($"ctx " $run.Ctx "\n")
@@ -15526,7 +15558,7 @@ fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
     for i in range comp.Len() {
         refs := run.Plans[i].Roots.Len() + run.Plans[i].DropAt.Len() + run.Plans[i].DropInAt.Len() > 0
         nodes := typed.Nodes.Of(s.Bodies[comp[i]]) if refs else typed.Nodes()
-        pl := try run.Plans[i].Text(nodes, fn(t types.TypeId) String { return s.P.T.CanonNamed(t) }) catch typed.Unwritable {
+        pl := try run.Plans[i].Text(nodes, fn(t types.TypeId) String { return s.P.T.CanonNamed(t) }, tmap) catch typed.Unwritable {
             s.why("w-plan")
             return ""
         }
@@ -15538,8 +15570,112 @@ fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
         b.Push($"sum " $sm "\n")
         b.Push($"hid " $run.Hidden[i] "\n")
     }
+    tw := try s.twinLines(run, tmap) catch typed.Unwritable {
+        s.why("w-twin")
+        return ""
+    }
+    b.Push(tw)
     b.Push($"out " $s.runId(run) "\n")
     return b.ToString()
+}
+
+# T22c, B3i: the twins a judging reached, for its record - each where it was first asked for and its key in stable names
+# (twinRecKey), its plan and summary, then the keys of the modules they hang on and the captures their judgings found
+# followed; Unwritable where one of them cannot be said so
+fn (s mut Scoper&) twinLines(run compRun&, tmap Map<I64, I64>&) String ? typed.Unwritable {
+    if run.Twins.Len() == 0: return ""
+    tw := s.Twins
+    b := StringBuilder()
+    bodies Vec<I64>
+    for t in run.Twins {
+        key := s.twinRecKey(t, bodies)
+        at := s.NameOf(tw.AtBody[t])
+        if key == "" or at == "" or not tw.Planned[t]: error typed.Unwritable.Here
+        bb := tw.Body[t]
+        refs := tw.Plans[t].Roots.Len() + tw.Plans[t].DropAt.Len() + tw.Plans[t].DropInAt.Len() > 0
+        nodes := typed.Nodes.Of(s.Bodies[bb]) if refs else typed.Nodes()
+        pl := try tw.Plans[t].Text(nodes, fn(x types.TypeId) String { return s.P.T.CanonNamed(x) }, tmap)
+        b.Push($"twin " $at "\t" $tw.At[t].Start "\t" $tw.At[t].End "\t" $key "\n")
+        b.Push($"tplan " $pl "\n")
+        b.Push($"tsum " $(try s.sumWords(tw.Sums[t])) "\n")
+    }
+    for x in bodies {
+        for f in s.filesOf(x) {
+            if f < 0 or not s.Keyed.Has(f): error typed.Unwritable.Here
+        }
+    }
+    b.Push($"tkeys " $s.keysOf(bodies.ToArray()) "\n")
+    for k in run.CapAdded {
+        name := s.NameOf(k.First)
+        if name == "": error typed.Unwritable.Here
+        b.Push($"cf " $k.Second "\t" $name "\n")
+    }
+    return b.ToString()
+}
+
+# twin t's key in stable names, its body and each function a parameter is followed with ("#P", then "pNAME", or
+# "aNAME" for an adapter), tab-separated - the bodies named added to bodies; "" where it cannot be said so (an
+# instance followed, T22d, or a body with no name)
+fn (s mut Scoper&) twinRecKey(t I64, bodies mut Vec<I64>&) String {
+    segs := s.Twins.Key[t].Split(" ").ToVec()
+    b := try segs[0].ParseInt(10) catch default -1
+    if b < 0 or s.NameOf(b) == "": return ""
+    out := StringBuilder()
+    out.Push(s.NameOf(b))
+    if not bodies.Has(b): bodies.Push(b)
+    for k in range 1, segs.Len() {
+        colon := try segs[k].Find(":") catch default -1
+        if colon < 1 or segs[k][:colon].EndsWith("i"): return ""
+        out.Push($"\t#" $segs[k][:colon])
+        for id in segs[k][colon + 1:].Split(",") {
+            if id.Len() == 0: continue
+            ad := id.EndsWith("a")
+            n := try (id[:id.Len() - 1] if ad else id).ParseInt(10) catch default -1
+            if n < 0 or n >= s.Bodies.Len() or s.NameOf(n) == "": return ""
+            out.Push($"\t" $("a" if ad else "p") $s.NameOf(n))
+            if not bodies.Has(n): bodies.Push(n)
+        }
+    }
+    return out.ToString()
+}
+
+# the twin a record's "twin" line names: this build's of the same key, else made now as twinFor makes one (newTwin) -
+# its index, -1 where a name is not this build's, the line is out of shape or there is no room (twinRoom)
+fn (s mut Scoper&) twinOfRec(line String&) I64 {
+    f := line.Split("\t").ToVec()
+    if f.Len() < 4: return -1
+    atb := try s.nameAt.Get(f[0]) catch { return -1 }
+    st := try f[1].ParseInt() catch { return -1 }
+    en := try f[2].ParseInt() catch { return -1 }
+    b := try s.nameAt.Get(f[3]) catch { return -1 }
+    body := s.Bodies[b]
+    key := StringBuilder()
+    key.Push($b)
+    seeds Map<I64, fnRecs>
+    i := 4
+    for i < f.Len() {
+        if not f[i].StartsWith("#"): return -1
+        p := try f[i][1:].ParseInt() catch { return -1 }
+        i++
+        rs Vec<fnRec>
+        for i < f.Len() and not f[i].StartsWith("#") {
+            x := try s.nameAt.Get(f[i][1:]) catch { return -1 }
+            rs.Push(fnRec(x, Vec<Term>(), f[i][0] == 'a'))
+            i++
+        }
+        if p < 0 or p >= body.Params.Len() or rs.Len() == 0: return -1
+        sorted := sortedRecs(rs)
+        key.Push($" " $p ":")
+        for r in sorted { key.Push($r.Body $("a" if r.Adapter else "") ",") }
+        seeds.Put(I64(body.Params[p]), s.seedOf(sorted, p))
+    }
+    k := key.ToString()
+    have := try s.Twins.Keys.Get(k) catch default -1
+    if have >= 0: return have
+    if not s.twinRoom(b): return -1
+    t := s.newTwin(b, k, seeds, Map<I64, instTree>(), source.Span(I32(st), I32(en)))
+    s.Twins.AtBody[t] = atb
+    return t
 }
 
 fn indexIn(xs Array<I64>&, x I64) I64 {
@@ -15566,6 +15702,13 @@ fn diskLines(d diskRun&) String {
         b.Push($"sum " $d.Sums[i] "\n")
         b.Push($"hid " $d.Hidden[i] "\n")
     }
+    for i in range d.Twins.Len() {
+        b.Push($"twin " $d.Twins[i] "\n")
+        b.Push($"tplan " $d.TPlans[i] "\n")
+        b.Push($"tsum " $d.TSums[i] "\n")
+    }
+    if d.Twins.Len() > 0: b.Push($"tkeys " $d.TKeys "\n")
+    for x in d.Caps { b.Push($"cf " $x "\n") }
     b.Push($"out " $d.Out "\n")
     return b.ToString()
 }
@@ -15602,9 +15745,15 @@ fn ReadRuns(text String&, into mut Vec<mut diskRun&>&) ? typed.Unwritable {
             }
             case "sum" { d.Sums.Push(rest) }
             case "hid" { d.Hidden.Push(rest) }
+            case "twin" { d.Twins.Push(rest) }
+            case "tplan" { d.TPlans.Push(rest) }
+            case "tsum" { d.TSums.Push(rest) }
+            case "tkeys" { d.TKeys = rest }
+            case "cf" { d.Caps.Push(rest) }
             case "out" {
                 d.Out = rest
                 if d.Plans.Len() != d.Sums.Len() or d.Plans.Len() != d.In.Len() or d.Hidden.Len() != d.In.Len(): error typed.Unwritable.Here
+                if d.TPlans.Len() != d.Twins.Len() or d.TSums.Len() != d.Twins.Len(): error typed.Unwritable.Here
                 into.Push(d)
                 cur = null
             }
@@ -15894,10 +16043,14 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
     run.Disk = d
     run.Sig = d.Sig
     run.Ctx = d.Ctx
+    twins := s.takeTwins(d)
+    if twins is null: return null
+    for t in twins { run.Twins.Push(t) }
+    run.Twinned = twins.Len() > 0
     for i in range comp.Len() {
         b := comp[i]
         nodes := typed.Nodes() if d.Plans[i].EndsWith(" ||") else typed.Nodes.Of(s.Bodies[b])
-        pl := try typed.Plan.Read(s.Bodies[b], d.Plans[i], nodes, fn(c String&) types.TypeId { return s.typeOfCanon(c) }) catch typed.Unwritable {
+        pl := try typed.Plan.Read(s.Bodies[b], d.Plans[i], nodes, fn(c String&) types.TypeId { return s.typeOfCanon(c) }, twins) catch typed.Unwritable {
             s.why("plan")
             if s.whyN.Len() < 6 { s.TraceLog.Push($"plan unread: " $d.Plans[i]) }
             return null
@@ -15957,6 +16110,49 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
     return run
 }
 
+# T22c, B3i: the twins a record's judging reached, made in this build where they are not yet (twinOfRec), each given the
+# plan and summary the record holds, and the captures their judgings found followed marked so: this build's index of
+# each, by the record's numbering - null where one cannot be (a name not this build's, the modules their bodies hang on
+# changed, no room)
+fn (s mut Scoper&) takeTwins(d diskRun&) Array<I64>?& {
+    out := Array<I64>(d.Twins.Len())
+    if d.Twins.Len() == 0: return out
+    bodies Vec<I64>
+    for i in range d.Twins.Len() {
+        t := s.twinOfRec(d.Twins[i])
+        if t < 0: return s.whyNull("twin")
+        out[i] = t
+        if s.twinRecKey(t, bodies) == "": return s.whyNull("twin")
+    }
+    if s.keysOf(bodies.ToArray()) != d.TKeys: return s.whyNull("tkeys")
+    tw := s.Twins
+    for i in range out.Len() {
+        t := out[i]
+        b := tw.Body[t]
+        nodes := typed.Nodes() if d.TPlans[i].EndsWith(" ||") else typed.Nodes.Of(s.Bodies[b])
+        pl := try typed.Plan.Read(s.Bodies[b], d.TPlans[i], nodes, fn(c String&) types.TypeId { return s.typeOfCanon(c) }, out) catch typed.Unwritable { return s.whyNull("tplan") }
+        sm := try s.sumOfText(d.TSums[i]) catch typed.Unwritable { return s.whyNull("tsum") }
+        tw.Sums[t] = sm
+        tw.Gen[t] = tw.Round
+        if d.Ctx.StartsWith("r1") {
+            tw.Plans[t] = pl
+            tw.Planned[t] = true
+        }
+    }
+    for x in d.Caps {
+        tab := try x.Find("\t") catch { return s.whyNull("cf") }
+        l := try x[:tab].ParseInt() catch { return s.whyNull("cf") }
+        b := try s.nameAt.Get(x[tab + 1:]) catch { return s.whyNull("cf") }
+        s.capFollowed.Put(pair.Pair<I64, I64>(b, l), true)
+    }
+    return out
+}
+
+fn (s mut Scoper&) whyNull(w String&) Array<I64>?& {
+    s.why(w)
+    return null
+}
+
 # the records' lines of every module kept (Keyed), by file: the judgings of the components whose first body is there
 fn (s mut Scoper&) Records() Map<I64, String&> {
     written Map<String, Bool>
@@ -16014,8 +16210,7 @@ DiskVariants I64 = 2
 
 # OLANG_FACTSTATS: the files of the modules some function of no type variable of which (or what is written inside one)
 # was judged afresh, not taken from a record - as the front records' "front checked" says it (W3a). A judging that
-# asked for twins (compRun.Twinned) is not counted: no record holds one (RunRecord - the twins it made are numbered by
-# this build, and taking it would have to make and judge them again), so it is judged in every build, edited or not
+# asked for twins is recorded with them by stable key (twinLines), so a build of nothing edited judges none afresh
 fn (s mut Scoper&) JudgedFiles() Map<I64, Bool> {
     out Map<I64, Bool>
     for k in range s.compFrom.Len() {
@@ -16023,7 +16218,7 @@ fn (s mut Scoper&) JudgedFiles() Map<I64, Bool> {
         b := s.compNodes[s.compFrom[k]]
         if not s.Keyed.Has(s.Bodies[b].File) or s.filesOf(b).Len() != 1 or not s.plainBody(b): continue
         latest := s.runs[k][s.runs[k].Len() - 1]
-        if latest.Disk is null and not latest.Twinned: out.Put(s.Bodies[b].File, true)
+        if latest.Disk is null: out.Put(s.Bodies[b].File, true)
     }
     return out
 }
