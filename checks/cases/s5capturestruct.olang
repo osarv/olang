@@ -26,5 +26,5 @@ fn main() ? {
         fs.Push(fn() I64 { return x.Sensor.Len() })
     }
     churn()
-    for f in fs { try io.Println($f()) }
+    for f in fs { try io.PutLine($f()) }
 }

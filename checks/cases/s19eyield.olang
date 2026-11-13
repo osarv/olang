@@ -34,5 +34,5 @@ fn main() ? {
     assert Failed == 0
     for x in try g(3) { assert x == 3 } catch Bad.Odd { Failed += 10 }
     assert Failed == 11
-    try io.Println("tidied " $Tidied " failed " $Failed)
+    try io.PutLine("tidied " $Tidied " failed " $Failed)
 }

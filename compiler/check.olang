@@ -1575,7 +1575,7 @@ fn (c mut Checker&) inheritClash(f I64) {
     # integer's bit methods, a type extending an integer's atomics
     u := c.under(rt)
     given := false
-    if c.P.T.KindOf(u) == types.Kind.Array and (name == "Len" or name == "len" or name == "Get" or name == "Set" or name == "SliceOf") { given = true }
+    if c.P.T.KindOf(u) == types.Kind.Array and (name == "Len" or name == "Get" or name == "Set" or name == "SliceOf") { given = true }
     if name == "Narrow" and c.isNumber(rt) { given = true }
     if c.P.Extends(rt) {
         if name == "Bits" and c.P.T.IsFloat(u) { given = true }
@@ -26773,7 +26773,7 @@ fn (c mut Checker&) handleLine(b typed.Body&, l typed.Local&, mi I64, kind Strin
     ty := c.ty(l.Ty)
     c.spellQualified = was
     c.spellMod = -1
-    try io.PrintErrln("handles: " $c.P.L.Diags.Locate(b.File, I64(l.Sp.Start)) ": " $kind " " $c.text(l.Name) "|" $ty "|" $root) catch io.Error { }
+    try io.PutErrLine("handles: " $c.P.L.Diags.Locate(b.File, I64(l.Sp.Start)) ": " $kind " " $c.text(l.Name) "|" $ty "|" $root) catch io.Error { }
 }
 
 # the local a place's storage belongs to - through fields, payloads, the elements of an array held by value and a

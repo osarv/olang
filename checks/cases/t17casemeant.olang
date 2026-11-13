@@ -4,5 +4,5 @@ import "std/os"
 import "std/io"
 fn main() ? {
     k := os.FileKind.Other
-    try io.Println($k)
+    try io.PutLine($k)
 }

@@ -4,5 +4,5 @@ import "uid"
 import "bake"
 
 fn main() ? {
-    try io.Println($uid.Quiet() " " $bake.Said() " " $uid.Run())
+    try io.PutLine($uid.Quiet() " " $bake.Said() " " $uid.Run())
 }

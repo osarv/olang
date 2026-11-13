@@ -37,7 +37,7 @@ fn main() {
     c := H.f3()
     e := H.f4(5)
     churn()
-    io.Println($c.X[0] " " $e.X[3])!
+    io.PutLine($c.X[0] " " $e.X[3])!
 }
 
 fn churn() {

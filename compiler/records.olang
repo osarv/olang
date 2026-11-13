@@ -281,8 +281,8 @@ fn checkOthers(l mut load.Loader&, c mut typecheck.Checker&, kept mut views.Kept
 
 # OLANG_CHECKINCR found a record giving what checking afresh does not: each difference said, the build ending with 3
 fn CheckIncrFailed(kept views.Kept&) {
-    for x in kept.Stale { try io.PrintErr($"olang: incremental check: " $x "\n") catch io.Error { } }
-    try io.PrintErr($"olang: incremental check: " $kept.Stale.Len() " of " $kept.Taken " kept summaries differ\n") catch io.Error { }
+    for x in kept.Stale { try io.PutErr($"olang: incremental check: " $x "\n") catch io.Error { } }
+    try io.PutErr($"olang: incremental check: " $kept.Stale.Len() " of " $kept.Taken " kept summaries differ\n") catch io.Error { }
     os.Exit(3)
 }
 

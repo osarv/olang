@@ -7,7 +7,7 @@
 import "std/io"
 type Res unique struct(n String&) {
     name := $n
-} destruct { io.Println("end " $name)! }
+} destruct { io.PutLine("end " $name)! }
 fn churn() {
     for k in range 50 {
         x := Array<I64>(100, k)
@@ -21,5 +21,5 @@ fn main() {
         keep.Push(f.name[0:1])
     }
     churn()
-    io.Println($keep)!
+    io.PutLine($keep)!
 }

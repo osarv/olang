@@ -31,5 +31,5 @@ fn main() ? {
     a := Array<mut Node&>(2, Node(3))
     work(a)
     t := churn(60)
-    try io.Println($a[0].next!.v " " $a[1].next!.v " " $t)
+    try io.PutLine($a[0].next!.v " " $a[1].next!.v " " $t)
 }

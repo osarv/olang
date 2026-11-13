@@ -105,7 +105,7 @@ Prelude := (
     "import \"std/io\"\nimport \"std/list\"\n"
     "type SgErr error {\n    E\n}\n"
     "extern fn getpid() I32\n"
-    "fn say(t String&) { try io.Println(t) catch io.Error { } }\n"
+    "fn say(t String&) { try io.PutLine(t) catch io.Error { } }\n"
     "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"
     "type Node struct(v I64) {\n"
     "    v\n"
@@ -1713,7 +1713,7 @@ fn (g mut SG&) weakScenario(k I64) String& {
 FreePrelude := (
     "import \"std/io\"\n"
     "extern fn getpid() I32\n"
-    "fn say(t String&) { try io.Println(t) catch io.Error { } }\n"
+    "fn say(t String&) { try io.PutLine(t) catch io.Error { } }\n"
     "Run mut I64 = 1\n"
     "type Node struct(v I64) {\n"
     "    v\n"

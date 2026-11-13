@@ -110,5 +110,5 @@ fn main() ? {
         for _ in range sweeps: res = c.sweep(1.0)
         check += res + c.s.Ref(out)[0] + c.s.Ref(out)[15]
     }
-    try io.Println("vals: " $check)
+    try io.PutLine("vals: " $check)
 }

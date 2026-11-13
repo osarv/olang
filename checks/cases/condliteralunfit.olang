@@ -6,5 +6,5 @@ C mut Bool = true
 
 fn main() ? {
     b U8 = 300 if C else 1
-    try io.Println($b)
+    try io.PutLine($b)
 }

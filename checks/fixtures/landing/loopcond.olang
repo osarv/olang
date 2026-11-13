@@ -37,5 +37,5 @@ fn main() ? {
     for i := 0, put(s[1], 1) + key(Node(i)) < 10000, i++ { t++ }
     do { t++ } for put(s[2], 1) < 5000
     for i := 0, i < 5000, i = keyB(BigN(i)) + 1 { t++ }
-    try io.Println($s.d[0] $" " $s.d[1] $" " $s.d[2] $" " $t)
+    try io.PutLine($s.d[0] $" " $s.d[1] $" " $s.d[2] $" " $t)
 }

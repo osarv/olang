@@ -857,7 +857,7 @@ fn (m mut Machine&) refuse(why String&) { m.stop(Stop.Refused(why, m.stopFile, m
 
 # dead-region mode's stop: a read of storage a release reclaimed - never a refusal to evaluate, at compile time too
 fn (m mut Machine&) freedEarly() {
-    try io.PrintErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyFreedEarly "\n") catch io.Error { }
+    try io.PutErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyFreedEarly "\n") catch io.Error { }
     os.Exit(70)
 }
 
@@ -2385,7 +2385,7 @@ fn (m mut Machine&) holderCheck(q Ptr) {
         if g.State == 2 and g.Store != 0: m.genWalk(Ptr(g.Store, 0), types.TypeId(I32(g.Ty)), false, look)
     }
     if not m.holderHit: return
-    try io.PrintErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyHolderMissed "\n") catch io.Error { }
+    try io.PutErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyHolderMissed "\n") catch io.Error { }
     os.Exit(70)
 }
 

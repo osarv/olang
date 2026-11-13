@@ -10,5 +10,5 @@ fn pick() I32 {
 }
 
 fn main() {
-    io.Println($pick())!
+    io.PutLine($pick())!
 }

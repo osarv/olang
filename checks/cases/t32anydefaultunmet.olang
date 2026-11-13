@@ -15,5 +15,5 @@ fn (w mut aWords&) Next() String ? Exhausted {
 fn main() {
     w := aWords(3)
     it mut any Iterator<String>& = w
-    io.Println($it.Sum())!
+    io.PutLine($it.Sum())!
 }

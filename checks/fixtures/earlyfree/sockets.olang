@@ -19,5 +19,5 @@ fn main() ? {
         try s.open(i)
         if i >= 16 { s.done(i - 16) }
     }
-    io.Println($s.socks.Len())!
+    io.PutLine($s.socks.Len())!
 }

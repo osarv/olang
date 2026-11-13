@@ -2,7 +2,7 @@
 # S21, S19: deferred code runs as its block is left, which a become does before its call
 import "std/io"
 fn f(n I64) I64 {
-    defer io.Println("left")!
+    defer io.PutLine("left")!
     if n == 0: return 0
     become f(n - 1)
 }

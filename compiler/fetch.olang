@@ -56,7 +56,7 @@ fn IsCommit(c String&) Bool {
 
 fn (f mut Fetcher&) say(line String&) {
     f.Said.Push(line)
-    if not f.Quiet { try io.PrintErrln(line) catch io.Error { } }
+    if not f.Quiet { try io.PutErrLine(line) catch io.Error { } }
 }
 
 fn (f mut Fetcher&) load() {

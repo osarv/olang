@@ -9,12 +9,12 @@ import "std/io"
 
 # t on standard output, whole - a failed write is not worth stopping a report for
 fn Say(t String&) {
-    try io.Print(t) catch io.Error { }
+    try io.Put(t) catch io.Error { }
 }
 
 # t on standard error
 fn Warn(t String&) {
-    try io.PrintErr(t) catch io.Error { }
+    try io.PutErr(t) catch io.Error { }
 }
 
 # says why on standard output and ends with status 1: the tool did not run to its end

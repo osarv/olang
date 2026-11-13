@@ -8,7 +8,7 @@ import "std/io"
 type Box struct(v I64) { v }
 
 fn gen(b Box&) Iterator<I64> {
-    defer { io.Println("let go") ! }
+    defer { io.PutLine("let go") ! }
     yield b.v
     yield b.v + 1
 }
@@ -19,21 +19,21 @@ fn part(b Box&) I64 {
         g := gen(b)
         t = (try g.Next() catch { return 0 })
     }
-    io.Println("block left")!
+    io.PutLine("block left")!
     return t
 }
 
 fn main() {
     b := Box(4)
-    io.Println($part(b))!
+    io.PutLine($part(b))!
     {
         c := Box(5)
         {
             g := gen(c)
             u := try g.Next() catch { return }
-            io.Println($u)!
+            io.PutLine($u)!
         }
-        io.Println("inner left")!
+        io.PutLine("inner left")!
     }
-    io.Println("outer left")!
+    io.PutLine("outer left")!
 }

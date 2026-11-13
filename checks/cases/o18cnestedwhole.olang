@@ -9,7 +9,7 @@ type Blk struct() {
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.Println("x") }
+        if a[0] == 3 { try io.PutLine("x") }
     }
 }
 fn add(ll mut Vec<Vec<Blk>>&, x I64) {

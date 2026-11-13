@@ -20,5 +20,5 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Ctr(2))
-    try io.Println($b)
+    try io.PutLine($b)
 }

@@ -5,7 +5,7 @@ import "std/io"
 
 fn main() {
     v := z.zlibVersion()
-    if v is not null { io.Println("zlib " $String.FromC(v, 32))! }
+    if v is not null { io.PutLine("zlib " $String.FromC(v, 32))! }
     src := String("hello hello hello hello hello hello, zlib!").ToC()
     dest := Array<U8>(I64(z.compressBound(U64(src.Len()))))
     dlen := Array<U64>(1, U64(dest.Len()))
@@ -13,5 +13,5 @@ fn main() {
     back := Array<U8>(src.Len())
     blen := Array<U64>(1, U64(back.Len()))
     assert z.uncompress(back, blen, dest, dlen[0]) == z.Z_OK
-    io.Println("compressed " $src.Len() " bytes to " $dlen[0] ", back: " $String(back[:I64(blen[0]) - 1]) " " $z.ZLIB_VERSION)!
+    io.PutLine("compressed " $src.Len() " bytes to " $dlen[0] ", back: " $String(back[:I64(blen[0]) - 1]) " " $z.ZLIB_VERSION)!
 }

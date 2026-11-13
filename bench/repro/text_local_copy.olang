@@ -17,5 +17,5 @@ fn f(n I64) I64 {
 
 fn main() ? {
     n := try os.Args()[1].ParseInt()
-    try io.Println($f(n))
+    try io.PutLine($f(n))
 }

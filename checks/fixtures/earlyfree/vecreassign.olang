@@ -40,5 +40,5 @@ fn field() I64 {
 }
 
 fn main() {
-    io.Println($local() " " $field())!
+    io.PutLine($local() " " $field())!
 }

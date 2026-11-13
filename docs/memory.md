@@ -348,7 +348,7 @@ fn tail(n I64) {
     v.Push(1)
     head := v.View()                 # a window on the buffer as it is now
     for i in range n { v.Push(i) }   # may move the elements into a new buffer
-    io.Println($head[0])!            # error[M19g]
+    io.PutLine($head[0])!            # error[M19g]
 }
 ```
 
@@ -369,7 +369,7 @@ fn add(j mut Job&) { j.items.Push(9) }
 fn report(v Vec<I64>, j mut Job&) {   # a caller set 'j.items = v' earlier: two names for one Vec
     head := v.View()
     add(j)                            # grows v through j.items - report cannot see that
-    io.Println($head[0])!             # the old elements; memory-safe
+    io.PutLine($head[0])!             # the old elements; memory-safe
 }
 ```
 
@@ -393,7 +393,7 @@ fn main() {
         m.Put($i, Rec("payload " $i " - about sixty bytes of value text ....."))
         if i >= 100 { m.Remove($(i - 100)) }
     }
-    io.Println($m.Len())!
+    io.PutLine($m.Len())!
 }
 ```
 

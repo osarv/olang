@@ -7,7 +7,7 @@ fn Apply(f fn&(x I64) I64 noalloc, x I64) I64 { return f(x) }
 
 fn main() {
     k := Apply(fn(x I64) I64 {
-        try io.Println($x) catch { }
+        try io.PutLine($x) catch { }
         return x
     }, 3)
     assert k == 3

@@ -1118,10 +1118,10 @@ fn (e mut Emitter&) clones() {
     if (try os.Env("OLANG_CLONES") catch default "") != "" {
         for i in range chosen.Len() {
             st := e.cloneSites[i]
-            try io.PrintErrln($"site " $e.sym(e.siteKey[i]) " call " $e.siteCall[i] " -> " $e.sym(st.Callee) " at " $st.At " code " $e.sym(st.Code) ": clone " $chosen[i]) catch io.Error { }
+            try io.PutErrLine($"site " $e.sym(e.siteKey[i]) " call " $e.siteCall[i] " -> " $e.sym(st.Callee) " at " $st.At " code " $e.sym(st.Code) ": clone " $chosen[i]) catch io.Error { }
         }
-        try io.PrintErrln($"clones " $e.Lw.Clones.Len() " program " $e.programBytes()) catch io.Error { }
-        for k in e.Lw.CloneSumKeys() { try io.PrintErrln($"sum " $e.sym(k) ": " $e.Lw.CloneSumText(k)) catch io.Error { } }
+        try io.PutErrLine($"clones " $e.Lw.Clones.Len() " program " $e.programBytes()) catch io.Error { }
+        for k in e.Lw.CloneSumKeys() { try io.PutErrLine($"sum " $e.sym(k) ": " $e.Lw.CloneSumText(k)) catch io.Error { } }
     }
     e.clonesDecided = true
     again Vec<mir.FnKey>
@@ -1685,7 +1685,7 @@ fn (e mut Emitter&) dbgName(k mir.FnKey) String {
     }
 }
 
-# the name a profile shows a function by (B20): as source writes it outside its module - "io.Println",
+# the name a profile shows a function by (B20): as source writes it outside its module - "io.PutLine",
 # "Vec<I64>.Push", "parse.Parser.Expr" - the program's own and the prelude's bare, as errors print (load.ErrQualifier);
 # a lambda by the function it is written in, a constructor by its type
 fn (e mut Emitter&) ProfName(k mir.FnKey) String {

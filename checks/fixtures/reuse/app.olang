@@ -4,5 +4,5 @@ import "lib"
 
 fn main() ? {
     l := lib.Make(3)
-    try io.Println($"app " $lib.Total(l) " " $l.Len())
+    try io.PutLine($"app " $lib.Total(l) " " $l.Len())
 }

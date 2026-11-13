@@ -3,5 +3,5 @@
 import "std/io"
 fn main() ? {
     a := Array<I32>(10 / 0)
-    try io.Println($a.Len())
+    try io.PutLine($a.Len())
 }

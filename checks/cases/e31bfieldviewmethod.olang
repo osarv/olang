@@ -23,7 +23,7 @@ type Layer struct(w M, n I64) {
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.Println("x") }
+        if a[0] == 3 { try io.PutLine("x") }
     }
 }
 fn (m mut M&) Build(v I64) { m.r.next = Node(v, null) }
@@ -33,5 +33,5 @@ fn main() ? {
     l.Push(Layer(M(Node(1, null), 0), 0))
     add(l, 12)
     try churn()
-    try io.Println($l[0].w.r.next!.v)
+    try io.PutLine($l[0].w.r.next!.v)
 }

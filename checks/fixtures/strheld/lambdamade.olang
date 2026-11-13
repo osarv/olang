@@ -12,5 +12,5 @@ fn (b Bag&) Str() String {
     return "bag " $b.k
 }
 fn main() ? {
-    try io.Println($Bag(3))
+    try io.PutLine($Bag(3))
 }

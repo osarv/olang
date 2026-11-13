@@ -34,5 +34,5 @@ fn main() ? {
     d := longer(v.ViewMut(), other)   # a view of the Vec's buffer
     for i in range 1000 { v.Push(i) } # frees the buffer
     churn()
-    try io.Println($d[0] " " $d[1])
+    try io.PutLine($d[0] " " $d[1])
 }

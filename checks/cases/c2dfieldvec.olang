@@ -32,5 +32,5 @@ fn main() {
     p.items.Push(File(4))
     churn()
     assert p.items.Len() == 2 and p.items[0].fd == 3 and p.items[1].fd == 4
-    io.Println("pool " $p.items.Len() " " $p.items[1].fd)!
+    io.PutLine("pool " $p.items.Len() " " $p.items[1].fd)!
 }

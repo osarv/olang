@@ -70,5 +70,5 @@ fn main() ? {
     if mode == "view": h = views(t)
     if mode == "copy": h = copies(t)
     if mode == "span": h = spans(t)
-    try io.Println($mode ": " $h)
+    try io.PutLine($mode ": " $h)
 }

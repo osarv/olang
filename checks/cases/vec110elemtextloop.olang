@@ -13,5 +13,5 @@ fn main() ? {
         t := "w" $i
         v.Push(Tok(t, i))
     }
-    try io.Println($v[0].text)
+    try io.PutLine($v[0].text)
 }

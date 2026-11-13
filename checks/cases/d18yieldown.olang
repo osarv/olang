@@ -25,5 +25,5 @@ fn main() ? {
         churn()
     }
     churn()
-    try io.Println($kept[0].Len() " " $kept[1].Len() " " $kept[2].Len() " " $kept[2][2])
+    try io.PutLine($kept[0].Len() " " $kept[1].Len() " " $kept[2].Len() " " $kept[2][2])
 }

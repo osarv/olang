@@ -38,6 +38,6 @@ fn main() ? {
     keep := Vec<Junk&>()
     for _ in range 2000 { keep.Push(Junk(-7, -7)) }
     churn()
-    try io.Println(s)
-    try io.Println($b.head.next!.v)
+    try io.PutLine(s)
+    try io.PutLine($b.head.next!.v)
 }

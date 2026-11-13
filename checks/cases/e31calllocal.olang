@@ -28,5 +28,5 @@ fn main() ? {
     churn()
     a := g()
     b := g()
-    try io.Println($a " " $b)
+    try io.PutLine($a " " $b)
 }

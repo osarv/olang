@@ -4,5 +4,5 @@ import "std/os"
 import "std/io"
 fn main() ? {
     if TargetOs == "no such system" { os.Exit(3) }
-    try io.Println("hi")
+    try io.PutLine("hi")
 }

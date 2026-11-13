@@ -3,5 +3,5 @@
 import "std/io"
 fn main() ? {
     m := filepath.Base("a/b")
-    try io.Println($m)
+    try io.PutLine($m)
 }

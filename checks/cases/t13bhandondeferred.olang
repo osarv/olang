@@ -58,9 +58,9 @@ fn main() {
         churn()
         s := 0
         for l in v { s += l.data[l.data.Len() - 1] }
-        io.Println("held " $v.Len() " sum " $s)!
+        io.PutLine("held " $v.Len() " sum " $s)!
     }
     b := StringBuilder()
     for x in t.ids { b.Push($x ",") }
-    io.Println("ends " $t.ends " " $b.ToString())!
+    io.PutLine("ends " $t.ends " " $b.ToString())!
 }

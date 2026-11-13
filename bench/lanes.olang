@@ -57,7 +57,7 @@ fn main() ? {
                 t += s
             }
         }
-        try io.Println($t)
+        try io.PutLine($t)
     } else if mode == "isum" {
         x := ints(a)
         y := ints(b)
@@ -71,7 +71,7 @@ fn main() ? {
                 t += s
             }
         }
-        try io.Println($t)
+        try io.PutLine($t)
     } else if mode == "axpy" {
         x := narrow(a)
         y := narrow(b)
@@ -85,7 +85,7 @@ fn main() ? {
         }
         s := 0.0
         for v in y { s += v }
-        try io.Println($s)
+        try io.PutLine($s)
     } else if mode == "saxpy" {
         x := narrow(a)
         y := narrow(b)
@@ -101,7 +101,7 @@ fn main() ? {
                 t += z[p % n]
             }
         }
-        try io.Println($t)
+        try io.PutLine($t)
     } else if mode == "select" {
         t := 0.0
         for p in range passes {
@@ -114,7 +114,7 @@ fn main() ? {
                 t += z[p % n]
             }
         }
-        try io.Println($t)
+        try io.PutLine($t)
     } else {
         error Usage.Mode
     }

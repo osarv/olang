@@ -85,5 +85,5 @@ fn main() {
         churn()
         s += h.f[6]
     }
-    io.Println($s " " $h.names[4] " " $h.d[3] " " $h.a[1])!
+    io.PutLine($s " " $h.names[4] " " $h.d[3] " " $h.a[1])!
 }

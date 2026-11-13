@@ -862,7 +862,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
         }
     }
     t2 := time.Now()
-    if f.Debug { try io.PrintErr($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n") catch io.Error { } }
+    if f.Debug { try io.PutErr($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n") catch io.Error { } }
     # destructors, Str, Eq and Hash run where no call is written: one that lets go of a place keeps everything
     for b in range n {
         if f.lets[b].Len() > 0 or f.letsAll[b] or f.letsVia[b] != 0 {
@@ -871,7 +871,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
             # (Part C: a destructor running only where a value's holder lets go of it is a call there - dtorCalls)
             if f.implicit(b) and not f.modelled(b) {
                 if f.letsAll[b] or f.letsVia[b] != 0 { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
-                if f.Debug { try io.PrintErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
+                if f.Debug { try io.PutErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
             }
         }
     }
@@ -886,7 +886,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     f.Done = true
     f.writePlans()
     t5 := time.Now()
-    if f.Debug { try io.PrintErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
+    if f.Debug { try io.PutErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
 }
 
 # ---- generational types and the one-holder rule (T13d, genrefs 0.1 item 5, 4.1) ----
@@ -1192,9 +1192,9 @@ fn (f mut Free&) bufDecide() {
         }
     }
     if f.Debug {
-        try io.PrintErr($"buf never " $f.bufNever " " $f.bufWhy "\n") catch io.Error { }
+        try io.PutErr($"buf never " $f.bufNever " " $f.bufWhy "\n") catch io.Error { }
         for b in range n {
-            if f.Bodies[b].Root is not null and f.bufAll[b] { try io.PrintErr($"buf all " $f.fnName(b) " by " $f.bufBy[b] " taintAll " $f.taintAll[b] "\n") catch io.Error { } }
+            if f.Bodies[b].Root is not null and f.bufAll[b] { try io.PutErr($"buf all " $f.fnName(b) " by " $f.bufBy[b] " taintAll " $f.taintAll[b] "\n") catch io.Error { } }
         }
     }
     if f.bufNever: return
@@ -1368,10 +1368,10 @@ fn (f mut Free&) genDecide() {
     }
     f.genAcross()
     if f.Debug {
-        for i in range f.genTys.Len() { try io.PrintErr($"gen " $t.Canon(f.genTys[i]) " ok " $f.genOkTy[i] " " $f.genWhy[i] "\n") catch io.Error { } }
+        for i in range f.genTys.Len() { try io.PutErr($"gen " $t.Canon(f.genTys[i]) " ok " $f.genOkTy[i] " " $f.genWhy[i] "\n") catch io.Error { } }
         for b in range n {
             if f.Bodies[b].Root is null: continue
-            try io.PrintErr($"body " $b " " $f.fnName(b) " all " $f.acrossAll[b] " across " $f.across[b].Len() "\n") catch io.Error { }
+            try io.PutErr($"body " $b " " $f.fnName(b) " all " $f.acrossAll[b] " across " $f.across[b].Len() "\n") catch io.Error { }
         }
     }
     for b in range n {
@@ -1442,7 +1442,7 @@ fn (f mut Free&) genAcross() {
     for b in range n {
         f.across.Push(Vec<I64>())
         f.acrossAll.Push(f.hiddenCalls(b))
-        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root is not null { try io.PrintErr($"hidden " $b " " $f.fnName(b) " " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
+        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root is not null { try io.PutErr($"hidden " $b " " $f.fnName(b) " " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
     }
     changed := true
     for changed {
@@ -1635,7 +1635,7 @@ fn (f mut Free&) noteDtor(b I64) {
 # a value of type ty registered with a scope (O16): the destructors it runs - its own and its parts' - run as that
 # scope closes, where no call is written
 fn (f mut Free&) register(ty types.TypeId) {
-    if f.Debug and not f.registered.Has(I64(f.T().Repr(ty))) { try io.PrintErr($"free: registered " $f.T().Canon(ty) "\n") catch io.Error { } }
+    if f.Debug and not f.registered.Has(I64(f.T().Repr(ty))) { try io.PutErr($"free: registered " $f.T().Canon(ty) "\n") catch io.Error { } }
     for p in f.T().ValueParts(ty) { f.registered.Put(I64(p), true) }
 }
 
@@ -1738,7 +1738,7 @@ fn (w mut walker&) escapedHolder(d typed.Block&) {
     if l >= st.Len(): return
     s := st[l]
     own := s == typed.Scope.Frame or s == typed.Scope.Unset or (s == typed.Scope.Block and s.b == b.Locals[l].In)
-    if not own and w.F.Debug { try io.PrintErr($"free: escaped holder " $l " in " $w.F.fnName(w.Id) " " $s " in " $b.Locals[l].In "\n") catch io.Error { } }
+    if not own and w.F.Debug { try io.PutErr($"free: escaped holder " $l " in " $w.F.fnName(w.Id) " " $s " in " $b.Locals[l].In "\n") catch io.Error { } }
     if not own { w.F.register(b.Locals[l].Ty) }
 }
 
@@ -2335,7 +2335,7 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&) {
     if not w.Final or w.quiet > 0 { return }
     for k in w.F.heldPlaces(ty) {
-        if w.F.Debug { try io.PrintErr($"untracked " $k " at " $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) "\n") catch io.Error { } }
+        if w.F.Debug { try io.PutErr($"untracked " $k " at " $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) "\n") catch io.Error { } }
         w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " $how ": '" $w.text(sp) "'")
     }
 }
@@ -3092,7 +3092,7 @@ fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool,
         if k == OPar and not w.Final and oval(y) != inside {
             if addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
-                if f.Debug { try io.PrintErr($"esc " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " inside " $inside "\n") catch io.Error { } }
+                if f.Debug { try io.PutErr($"esc " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " inside " $inside "\n") catch io.Error { } }
             }
         }
         if k == OPl and w.Final and oval(y) != q {
@@ -4134,7 +4134,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
             if okind(y) == OParC and oval(y) != w.storeWithin and addTo(f.parEscC[w.Id], oval(y)) > 0 { f.changed = true }
             if okind(y) == OPar and oval(y) != w.storeWithin and addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
-                if f.Debug { try io.PrintErr($"esc-store " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " within " $w.storeWithin "\n") catch io.Error { } }
+                if f.Debug { try io.PutErr($"esc-store " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " within " $w.storeWithin "\n") catch io.Error { } }
             }
         }
         return

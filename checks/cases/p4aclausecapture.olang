@@ -23,5 +23,5 @@ fn main() ? {
             spawn try work(i - 2) catch E { note(n, seen) }
         }
     }
-    try io.Println($seen[0] " " $seen[1] " " $seen[2] " " $seen[3])
+    try io.PutLine($seen[0] " " $seen[1] " " $seen[2] " " $seen[3])
 }

@@ -63,7 +63,7 @@ fn Mode(old String&, now String&, path String&, cfg mut build.Config&) I32 {
     return 1 if broken > 0 else 0
 }
 
-fn say(text String&) { try io.Print(text) catch io.Error { } }
+fn say(text String&) { try io.Put(text) catch io.Error { } }
 
 fn said(d mut diag.Diagnostics&) I32 {
     say(d.Render())

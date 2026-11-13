@@ -3,7 +3,7 @@
 import "std/io"
 type File unique struct(fd I32) { fd }
 fn give(v mut Vec<File>&, f File) {
-    defer { io.Println($f.fd)! }
+    defer { io.PutLine($f.fd)! }
     v.Push(f)
 }
 fn main() {

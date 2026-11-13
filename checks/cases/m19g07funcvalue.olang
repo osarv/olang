@@ -9,5 +9,5 @@ fn main() ? {
     f := grow
     d := v.View()
     f(v)
-    try io.Println($d[0])
+    try io.PutLine($d[0])
 }

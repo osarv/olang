@@ -1893,7 +1893,7 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
              "# 'extern link \"NAME\" {' (X9), or import the header itself (X17).\n")
     result := g.write(head)
     if output == "" {
-        try io.Print(result) catch io.Error { return 1 }
+        try io.Put(result) catch io.Error { return 1 }
         return 0
     }
     try os.WriteFile(output, result) catch os.Error {

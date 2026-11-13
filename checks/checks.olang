@@ -194,7 +194,7 @@ fn passed(name String&) Bool {
 # whether an outcome is a pass, printing it when it is not
 fn reported(outcome String&) Bool {
     if outcome.Len() == 0 { return true }
-    try io.PrintErr(outcome) catch io.Error { }
+    try io.PutErr(outcome) catch io.Error { }
     return false
 }
 
@@ -881,7 +881,7 @@ fn manymods(r mut report&) ? Failed {
     }
     app.Push("fn main() ? io.Error {\n    s := 0\n")
     for i in range 40 { app.Push("    s = s + m" $i ".F()\n") }
-    app.Push("    try io.Print($s \"\\n\")\n}\n")
+    app.Push("    try io.Put($s \"\\n\")\n}\n")
     try os.WriteFile($dir "/app.olang", app.ToString()) catch { try r.failed("writing app.olang", dir) }
     try r.expect(sh(dir, "\"$OLANG\" build app.olang > out.txt 2>&1 && ./build/app > out.txt") == 0, "many modules", dir)
     try r.expect(outOf(dir) == "780\n", "many modules output", dir)
@@ -979,7 +979,7 @@ fn reuse(r mut report&) ? Failed {
     # built - its slot is the root's, so the reused object of anylib still reaches the default (it reached an
     # "unreachable" when the slot was in anylib's object)
     try r.expect(sh(dir, "\"$OLANG\" build anyapp.olang > out.txt 2>&1 && ./build/anyapp > run.txt") == 0, "anyapp's build", dir)
-    try r.expect(sh(dir, "sed -i 's/^}$/    try io.Println(\"count \" $anylib.Make(5).Count(fn(x I64) Bool { return x > 2 })) " $
+    try r.expect(sh(dir, "sed -i 's/^}$/    try io.PutLine(\"count \" $anylib.Make(5).Count(fn(x I64) Bool { return x > 2 })) " $
                     "catch { }\\n}/' anyapp.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build anyapp.olang > out.txt 2>&1 && " $
                     "./build/anyapp > run.txt") == 0, "anyapp's build calling Count through the any", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'count 3' run.txt") == 0, "anyapp's run calling Count", dir)
@@ -1266,8 +1266,8 @@ fn embedded(r mut report&) ? Failed {
     try r.expect(sh(repo, "echo inside > lib/ok.txt && ln -s " $os.Quote($dir "/s/outside.txt") " lib/data.txt && " $
                     "echo 'Data := String(embed \"data.txt\")' > lib/peek.olang && echo 'Ok := String(embed \"ok.txt\")' > lib/good.olang && " $
                     "git init -q && git add . && " $git " commit -qm v1") == 0, "the repository", dir)
-    try r.expect(sh(dir, "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/good\"\\nfn main() { io.Print(good.Ok)! }\\n' > good.olang && " $
-                    "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/peek\"\\nfn main() { io.Print(peek.Data)! }\\n' > peek.olang") == 0
+    try r.expect(sh(dir, "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/good\"\\nfn main() { io.Put(good.Ok)! }\\n' > good.olang && " $
+                    "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/peek\"\\nfn main() { io.Put(peek.Data)! }\\n' > peek.olang") == 0
                  "the programs", dir)
     try r.expect(sh(dir, $env "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0 and outOf(dir) == "inside\n"
                  "a remote module embedding a file of its repository", dir)
@@ -1395,9 +1395,9 @@ fn osexit(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "before\n", "osexit -i output", dir)
 }
 
-# M19f: io.Print, Println, PrintErr and PrintErrln write to the standard output and error, built and interpreted alike -
+# M19f: io.Put, Println, PrintErr and PrintErrln write to the standard output and error, built and interpreted alike -
 # and a write that fails is an io.Error like any other
-test "io.Print and io.Println write, and fail with io.Error when the write fails" { assert passed("print") }
+test "io.Put and io.PutLine write, and fail with io.Error when the write fails" { assert passed("print") }
 
 fn printing(r mut report&) ? Failed {
     dir := fresh("print")
@@ -1412,11 +1412,11 @@ fn printing(r mut report&) ? Failed {
     try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
     try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 1, "print to a closed output fails", dir)
     try r.expect(outOf(dir).StartsWith("unhandled error: io.Error.Failed\n"), "print to a closed output: the error", dir)
-    # M19d: the prelude's print and println - no try, any value; a failed write ends the program as "!" does
+    # M19d: the prelude's Print and Println - no try, any value; a failed write ends the program as "!" does
     bare := "n is 42\n\nArray<I64>[1, 2]\n"
     try r.expect(sh(dir, "\"$OLANG\" build bare.olang > out.txt 2>&1 && ./build/bare > out.txt") == 0 and outOf(dir) == bare
-                 "print and println", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret bare.olang > out.txt") == 0 and outOf(dir) == bare, "print and println -i", dir)
+                 "Print and Println", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret bare.olang > out.txt") == 0 and outOf(dir) == bare, "Print and Println -i", dir)
     try r.expect(sh(dir, "./build/bare >&- 2> out.txt") == 134 and outOf(dir).Contains("output.Refused")
                  "println to a closed output ends the program", dir)
 }
@@ -2501,7 +2501,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
         name := line.Trim()
         if name.Len() == 0 { continue }
         if name in cases {
-            try io.PrintErr("check FAIL: msgs.olang's Diag names " $name " twice\n") catch io.Error { }
+            try io.PutErr("check FAIL: msgs.olang's Diag names " $name " twice\n") catch io.Error { }
             bad++
         }
         cases.Put(name, false)
@@ -2522,15 +2522,15 @@ test "every message of compiler/msgs.olang names rules the specification states,
         kindEnd I64 = kindAt + (try rest[kindAt:].FindByte(',') catch default 0)
         kind := rest[kindAt:kindEnd]
         if kind != name {
-            try io.PrintErr("check FAIL: msgs.olang's " $name " gives Diag." $kind "\n") catch io.Error { }
+            try io.PutErr("check FAIL: msgs.olang's " $name " gives Diag." $kind "\n") catch io.Error { }
             bad++
         }
         seen := try cases.Get(name) catch default false
         if name not in cases {
-            try io.PrintErr("check FAIL: msgs.olang's " $name " is no case of Diag\n") catch io.Error { }
+            try io.PutErr("check FAIL: msgs.olang's " $name " is no case of Diag\n") catch io.Error { }
             bad++
         } else if seen {
-            try io.PrintErr("check FAIL: msgs.olang has two functions " $name "\n") catch io.Error { }
+            try io.PutErr("check FAIL: msgs.olang has two functions " $name "\n") catch io.Error { }
             bad++
         } else {
             cases.Put(name, true)
@@ -2539,14 +2539,14 @@ test "every message of compiler/msgs.olang names rules the specification states,
         rules := rest[rs:re]
         for r in rules.Split(", ") {
             if r.Len() > 0 and not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: msgs.olang's " $name " names rule " $r ", which SPEC.md does not state\n") catch io.Error { }
+                try io.PutErr("check FAIL: msgs.olang's " $name " names rule " $r ", which SPEC.md does not state\n") catch io.Error { }
                 bad++
             }
         }
     }
     for e in cases.Iter() {
         if not e.Value {
-            try io.PrintErr("check FAIL: msgs.olang's Diag." $e.Key " has no function\n") catch io.Error { }
+            try io.PutErr("check FAIL: msgs.olang's Diag." $e.Key " has no function\n") catch io.Error { }
             bad++
         }
     }

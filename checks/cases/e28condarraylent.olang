@@ -14,5 +14,5 @@ fn main() ? {
     a := Array<Acc>[Acc(), Acc()]
     k := a.Len()
     bump(a[0] if k > 0 else a[1])
-    try io.Println("array N " $a[0].N)
+    try io.PutLine("array N " $a[0].N)
 }

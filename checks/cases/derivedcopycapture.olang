@@ -23,5 +23,5 @@ fn main() ? {
     a := Array<mut Node&>(1, Node(3))
     visit(View(a))
     visit2(View(a))
-    try io.Println($a[0].next!.v)
+    try io.PutLine($a[0].next!.v)
 }

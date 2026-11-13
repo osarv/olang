@@ -109,5 +109,5 @@ fn main() ? {
         for _ in range sweeps: res = c.sweep(1.0)
         check += res + out.s[0] + out.s[15]
     }
-    try io.Println("refs: " $check)
+    try io.PutLine("refs: " $check)
 }

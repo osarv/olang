@@ -3,7 +3,7 @@
 # that leaves the argument off (D8a: a default is built per call), so a helper reports its caller's line:
 #
 #     fn expectEq(got I64, want I64, at Place = Place.Here) {
-#         if got != want: io.PrintErrln($at ": got " $got ", want " $want)!
+#         if got != want: io.PutErrLine($at ": got " $got ", want " $want)!
 #     }
 type Place struct(File String&, Line I64, Column I64) {
     File, Line, Column

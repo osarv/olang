@@ -90,7 +90,7 @@ fn main() ? {
     if args.Len() > 1 { n = try args[1].ParseInt() }
     bodies := planets()
     offsetMomentum(bodies)
-    try io.Print($energy(bodies) "\n")
+    try io.Put($energy(bodies) "\n")
     for _ in range n { advance(bodies, 0.01) }
-    try io.Print($energy(bodies) "\n")
+    try io.Put($energy(bodies) "\n")
 }

@@ -2,5 +2,5 @@ import "std/io"
 import "geom/rect"
 import "geom_rect"
 fn main() ? io.Error {
-    try io.Print($rect.Area() " " $geom_rect.Area() "\n")
+    try io.Put($rect.Area() " " $geom_rect.Area() "\n")
 }

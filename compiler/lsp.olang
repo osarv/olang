@@ -827,7 +827,7 @@ fn frames(out String&) Vec<String&>& {
 
 SessionSrc String& = ("import \"std/io\"\n\n# a point on a plane\ntype Point struct(X I64, Y I64) {\n    X\n    Y\n}\n\n" $
                       "# the sum of a point's coordinates\nfn sum(p Point) I64 {\n    return p.X+p.Y\n}\n\n" $
-                      "fn main() {\n    q := Point(1, 2)\n    io.Println($sum(q))!\n    bad I32 = \"x\"\n}\n")
+                      "fn main() {\n    q := Point(1, 2)\n    io.PutLine($sum(q))!\n    bad I32 = \"x\"\n}\n")
 
 test "olang lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }

@@ -19,5 +19,5 @@ fn (b mut blk&) Set(a w) { b.n = a.y }
 fn main() {
     G.Push(blk(1))
     G[0].Set(w(42))
-    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+    io.PutLine("G[0].n = " $G[0].n " len " $G.Len())!
 }

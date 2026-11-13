@@ -18,5 +18,5 @@ export fn olang_count(a Item&, b Item&) I32 {
 fn main() ? {
     xs := Array<Item>[Item(2), Item(1)]
     qsort(xs, xs.Len(), 4, olang_count)
-    try io.Println($uid.Quiet() " " $bake.Said() " " $uid.Run())
+    try io.PutLine($uid.Quiet() " " $bake.Said() " " $uid.Run())
 }

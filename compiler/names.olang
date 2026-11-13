@@ -153,8 +153,8 @@ fn (r mut Resolver&) Resolve() {
             if en.Kind == What.Global and not en.Mut and r.text(e.Key)[0].IsUpper() {
                 r.preludeConsts.Put(e.Key, Ref(What.Global, mi, e.Value))
             }
-            # M19d: the prelude's functions print and println are reached bare, as its constants are
-            if en.Kind == What.Func and PreludeFunction(r.text(e.Key)): r.preludeConsts.Put(e.Key, Ref(What.Func, mi, e.Value))
+            # M19d: an exported function of the prelude (Print, Println) is reached bare, as its constants are
+            if en.Kind == What.Func and r.text(e.Key)[0].IsUpper(): r.preludeConsts.Put(e.Key, Ref(What.Func, mi, e.Value))
         }
     }
     for mi in range r.L.Mods.Len() {
@@ -647,12 +647,9 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     return Ref(What.None, -1, -1)
 }
 
-# M19d: the prelude's functions reached by their bare names in every module - lower case, as Python's are
-fn PreludeFunction(name String&) Bool { return name == "print" or name == "println" }
-
 # D3a, M19d: what a declaration reusing a name the prelude gives every module is told
 fn (r mut Resolver&) preludeTaken(mi I64, n source.NameId, sp source.Span) {
-    m := msgs.PreludeFuncRedeclared(r.tok(n)) if PreludeFunction(r.text(n)) else msgs.PreludeConstRedeclared(r.tok(n))
+    m := msgs.PreludeFuncRedeclared(r.tok(n)) if (try r.preludeConsts.Get(n) catch default Ref(What.None, -1, -1)).Kind == What.Func else msgs.PreludeConstRedeclared(r.tok(n))
     r.L.Diags.Error(r.at(mi, sp), m)
 }
 

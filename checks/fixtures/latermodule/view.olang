@@ -31,5 +31,5 @@ fn main() ? {
     a := try mk(4)
     b := try last(2)
     churn()
-    io.Println($a.Get(3, 3) " " $b.Get(1, 1))!
+    io.PutLine($a.Get(3, 3) " " $b.Get(1, 1))!
 }

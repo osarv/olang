@@ -7,4 +7,4 @@ fn sat(v F64) F64 {
         case _: v
     }
 }
-fn main() ? { try io.Println($sat(40000.0)) }
+fn main() ? { try io.PutLine($sat(40000.0)) }

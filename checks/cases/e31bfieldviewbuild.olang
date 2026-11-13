@@ -21,7 +21,7 @@ fn g(m mut M&, v I64) { m.r.next = Node(v, null) }
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.Println("x") }
+        if a[0] == 3 { try io.PutLine("x") }
     }
 }
 fn main() ? {
@@ -29,5 +29,5 @@ fn main() ? {
     l.Push(Layer(M(Node(1, null), 0), 0))
     for i in range 3 { g(l[0].w, i + 10) }
     try churn()
-    try io.Println($l[0].w.r.next!.v)
+    try io.PutLine($l[0].w.r.next!.v)
 }

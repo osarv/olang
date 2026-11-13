@@ -99,5 +99,5 @@ fn main() {
             if f.B == "f-made" and h.L[i] == "g-made" and l[3].B == "l-made" { n += 1 }
         }
     }
-    io.Println($n " " $h.L.Len())!
+    io.PutLine($n " " $h.L.Len())!
 }

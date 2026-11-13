@@ -52,5 +52,5 @@ fn outlived(n I64) I64 {
 }
 
 fn main() {
-    io.Println($plain(50) " " $outlived(5))!
+    io.PutLine($plain(50) " " $outlived(5))!
 }

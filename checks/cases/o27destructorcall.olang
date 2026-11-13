@@ -12,7 +12,7 @@ type H unique struct(n I64) {
     arr := Array<I64>(4 + n.Mod(3), n)
 } destruct {
     arr[0] = -99
-    io.Println("end " $n)!
+    io.PutLine("end " $n)!
 }
 
 fn first2(h H&) Array<I64>& { return h.arr[0:2] }
@@ -52,5 +52,5 @@ fn viaLocal(n I64) I64 {
 fn main() {
     a := keep(5)
     b := viaLocal(3)
-    io.Println($a " " $b)!
+    io.PutLine($a " " $b)!
 }

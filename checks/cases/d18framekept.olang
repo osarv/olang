@@ -36,5 +36,5 @@ fn main() {
     for x in viaLambda(5) { t += x + churn() }
     u := 0
     for x in viaArray(5) { u += x + churn() }
-    io.Println($t " " $u)!
+    io.PutLine($t " " $u)!
 }

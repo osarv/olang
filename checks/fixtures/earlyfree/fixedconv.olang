@@ -41,5 +41,5 @@ fn main() {
         q := mkLit(i)
         total += q[0]
     }
-    io.Println($total)!
+    io.PutLine($total)!
 }

@@ -32,6 +32,6 @@ fn main() ? {
     n := first(Array<I64>[1])
     v := Vec<I64>()
     v.Push(1)
-    try io.Println("" $Count " " $b.v " " $v.Len())
+    try io.PutLine("" $Count " " $b.v " " $v.Len())
     assert Count == 1 and b.v == 5 and n == 0
 }

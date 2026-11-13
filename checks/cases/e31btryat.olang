@@ -11,5 +11,5 @@ fn main() ? {
     l := Vec<Acc>()
     l.Push(Acc())
     bump(try l[0])
-    try io.Println($l[0].N)
+    try io.PutLine($l[0].N)
 }

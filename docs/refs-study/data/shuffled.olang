@@ -32,5 +32,5 @@ fn main() ? {
     for _ in range steps: step(ps)
     sum := F64(0.0)
     for p in ps: sum += F64(p.X + p.Y)
-    try io.Println("shuffled: " $sum)
+    try io.PutLine("shuffled: " $sum)
 }

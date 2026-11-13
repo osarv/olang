@@ -7,5 +7,5 @@ fn main() ? {
     d := v.View()
     f := fn() I64 { return d[0] }
     for i in range 100 { v.Push(i) }
-    try io.Println($f())
+    try io.PutLine($f())
 }

@@ -28,5 +28,5 @@ fn main() ? {
         spawn r = try Node.mk(-1) catch default Node(-1, anchor)
     }
     churn()
-    try io.Println($r!.v " " $r!.next!.v)
+    try io.PutLine($r!.v " " $r!.next!.v)
 }

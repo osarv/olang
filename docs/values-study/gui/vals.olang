@@ -189,6 +189,6 @@ fn main() ? {
     }
     u.layout(0, 0, 0)
     for _ in range clicks: depth += u.click(u.hit(r.roll(4096), r.roll(4096)))
-    try io.Println(("vals: depth " $depth ", sum " $u.sum(0) ", live " $(u.nodes.Len() - u.free.Len()) ", slots "
+    try io.PutLine(("vals: depth " $depth ", sum " $u.sum(0) ", live " $(u.nodes.Len() - u.free.Len()) ", slots "
         $u.nodes.Len()))
 }

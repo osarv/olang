@@ -23,5 +23,5 @@ fn main() {
     out := Vec<String&>()
     for w in initials("ab") { out.Push(w) }
     churn()
-    io.Println($out)!
+    io.PutLine($out)!
 }

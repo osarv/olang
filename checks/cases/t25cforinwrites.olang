@@ -22,5 +22,5 @@ fn walk(hs Vec<Holder>&) I64 {
 fn main() ? {
     hs := Vec<Holder>()
     hs.Push(Holder())
-    try io.Println($walk(hs))
+    try io.PutLine($walk(hs))
 }

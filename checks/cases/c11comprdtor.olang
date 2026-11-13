@@ -26,5 +26,5 @@ fn mk(n I64) I64 {
 }
 fn main() {
     assert mk(os.Args().Len() + 2) == 33
-    io.Println($Ended " " $Order)!
+    io.PutLine($Ended " " $Order)!
 }

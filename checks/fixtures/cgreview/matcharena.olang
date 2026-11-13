@@ -16,5 +16,5 @@ fn work(n I64) I64 {
 }
 
 fn main() ? io.Error {
-    try io.Print($work(200000 * os.Args().Len()) "\n")
+    try io.Put($work(200000 * os.Args().Len()) "\n")
 }

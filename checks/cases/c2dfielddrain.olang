@@ -53,5 +53,5 @@ fn main() ? {
     }
     churn()
     assert t.seen.Len() == 200 and sum(t) == 900
-    try io.Println($t.seen.Len() " " $sum(t))
+    try io.PutLine($t.seen.Len() " " $sum(t))
 }

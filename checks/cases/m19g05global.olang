@@ -8,5 +8,5 @@ fn main() ? {
     Toks.Push(3)
     d := Toks.View()
     more()
-    try io.Println($d[0])
+    try io.PutLine($d[0])
 }

@@ -37,5 +37,5 @@ fn main() {
         churn := Array<I64>(64, k)
         total += verify(s) + j.Len() + churn[0]
     }
-    io.Println($total)!
+    io.PutLine($total)!
 }

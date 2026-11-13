@@ -18,10 +18,10 @@ fn main() ? {
     args := os.Args()
     if args.Len() > 1 and args[1] == "fresh" {
         p := P(mk(4000000))
-        try io.Println($p.toks.Len())
+        try io.PutLine($p.toks.Len())
         return
     }
     t := mk(4000000)
     p := P(t)
-    try io.Println($p.toks.Len())
+    try io.PutLine($p.toks.Len())
 }

@@ -2442,7 +2442,7 @@ test "symbols are injective and bounded" {
 AnySlotBase I64 = 3
 
 test Demangle "a symbol olang wrote read back as its text; any other as it is" {
-    for text in Array<String&>["std/io.Println", "compiler/check.compiler/check:Checker.joinStmt", "a_b.c<I64, Array<U8>&>", "x.$y"] {
+    for text in Array<String&>["std/io.PutLine", "compiler/check.compiler/check:Checker.joinStmt", "a_b.c<I64, Array<U8>&>", "x.$y"] {
         assert Demangle(Symbol(text)) == text
     }
     xs := StringBuilder()

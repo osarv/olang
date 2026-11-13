@@ -40,5 +40,5 @@ fn main() ? {
         growv(h)
     }
     churn()
-    try io.Println($rd(k1))
+    try io.PutLine($rd(k1))
 }

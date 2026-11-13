@@ -1298,5 +1298,5 @@ fn detachedEnd(text String&) noreturn {
     os.Exit(134)
 }
 
-fn say(t String&) { try io.Print(t) catch io.Error { } }
-fn sayErr(t String&) { try io.PrintErr(t) catch io.Error { } }
+fn say(t String&) { try io.Put(t) catch io.Error { } }
+fn sayErr(t String&) { try io.PutErr(t) catch io.Error { } }

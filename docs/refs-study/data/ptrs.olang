@@ -25,5 +25,5 @@ fn main() ? {
     for _ in range steps: step(ps)
     sum := F64(0.0)
     for p in ps: sum += F64(p.X + p.Y)
-    try io.Println("ptrs: " $sum)
+    try io.PutLine("ptrs: " $sum)
 }

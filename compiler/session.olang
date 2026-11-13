@@ -1024,7 +1024,7 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
     nm := c!.P.L.Names
     for e in c!.P.R.Tables[mi].Entries {
         name := nm.Text(e.Name)
-        if not own and not doc.Exported(name) and not names.PreludeFunction(name) { continue }   # M19d: print, println
+        if not own and not doc.Exported(name) { continue }
         if name.Contains("$") { continue }              # an error type's hidden payload enum (T19b)
         if e.Kind == names.What.Func {
             f := c!.P.FnNamed(mi, e.Name)
@@ -1366,7 +1366,7 @@ fn IdentityOf(path String&) String {
 # a line for whoever reads the tool's standard error, where OLANG_TOOL_LOG is set (B15, B16): what it is doing, timed
 fn Log(text String&) {
     if (try os.Env("OLANG_TOOL_LOG") catch default "") == "" { return }
-    try io.PrintErr($"olang: " $text "\n") catch io.Error { }
+    try io.PutErr($"olang: " $text "\n") catch io.Error { }
 }
 
 # signal.h's own signal takes a handler function, and SIG_IGN is a cast of 1 to one, which olang cannot write (X19)
@@ -1555,7 +1555,7 @@ fn stdModules(out mut Vec<String&>&) {
     }
 }
 
-fn say(text String&) { try io.Print(text) catch io.Error { } }
+fn say(text String&) { try io.Put(text) catch io.Error { } }
 
 # ---- tests ----
 

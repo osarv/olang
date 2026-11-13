@@ -36782,3 +36782,21 @@ The user approved three items of "make the language as easy to use as python" (2
   neither counts nor stops anything, and `Passes.Interpret` writes them to the standard error as `path:line:col:
   warning[RULE]: message` rows with their source once the program has checked, then runs it. checks: the interp
   scenario's untidy.olang (interpreted with both warnings; built, refused with M5a).
+
+## Print and Println are capitalized, no carve-out (M6, M19d, E40; 2026-11-13, wt-printcap)
+
+The user: "make print and println capitalized like normal exports. no carveout for them". wt-ease had added lowercase
+`print`/`println` reached bare through a name list (`PreludeFunction`) beside M6. They are now `Print(x, at Place =
+Place.Here)` and `Println(x = "", at Place = Place.Here)`, ordinary exported prelude functions: the resolver reserves
+every exported prelude function as it does the constants (D3a), the list and its completion exception are gone. A
+failed write was reported at the prelude's line; it is now reported at `at`, the caller's place (as a failed assert
+with the place in its message: aborting outside a test, failing the test inside one).
+Also removed: the E23 supplied-method check in compiler/check.olang listed `len` beside `Len` for arrays; arrays have no `len`
+(`a.len()` is refused by M19), so the alternative was dead.
+
+**io.Print family renamed (M19f, D3a; 2026-11-13, the coordinator's call while the user slept, for their "no carveout" and no-shadowing rules).**
+With `Print` and `Println` exported prelude functions, D3a rejected std/io's own `Print` and `Println`. Nothing may share a
+prelude name, so std/io's four became `io.Put`, `io.PutLine`, `io.PutErr`, `io.PutErrLine` (same signatures, still `?
+io.Error`). The coordinator named `Write`/`WriteLine`, but `io.Write(fd, data)` is the raw write and an overload by
+parameters is not allowed (M21), so `Put` it is. `tools/io_rename.olang` (in `olang fix`'s table) migrated every use in the
+tree - 774 files; the old migration tools io_print, io_try and io_fix and their fixture keep the old names, being the record.

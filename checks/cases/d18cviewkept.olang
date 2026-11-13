@@ -23,5 +23,5 @@ fn main() {
     kept := Vec<String&>()
     for w in labels(3) { kept.Push(w) }
     churn()
-    io.Println($kept)!
+    io.PutLine($kept)!
 }

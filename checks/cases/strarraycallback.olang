@@ -12,4 +12,4 @@ fn (b Bag&) Str() String {
     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
     return "n" $long
 }
-fn main() ? { try io.Println($Bag(Array<String&>["ab", "c"])) }
+fn main() ? { try io.PutLine($Bag(Array<String&>["ab", "c"])) }

@@ -5,7 +5,7 @@
 # built by a callee in the frame's block a become closes, is built in the chain's tail scope and ended as it closes
 import "std/io"
 
-type Res unique struct(n I64) { n } destruct { io.Println("destroy " $n)! }
+type Res unique struct(n I64) { n } destruct { io.PutLine("destroy " $n)! }
 
 type Wrap struct(r Res&) { r }
 
@@ -19,4 +19,4 @@ fn f(n I64) I64 {
     become f(k - 1)
 }
 
-fn main() { io.Println("result " $f(2))! }
+fn main() { io.PutLine("result " $f(2))! }

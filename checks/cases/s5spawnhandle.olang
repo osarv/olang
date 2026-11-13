@@ -16,5 +16,5 @@ fn main() ? {
     for i in range 1000 { churn.Push("x" $i) }
     t I64 = 0
     for k in range 4 { t += users[k].Len() * 10 + (try users[k].Get(0) catch default -1) }
-    try io.Println($t " " $churn.Len())
+    try io.PutLine($t " " $churn.Len())
 }

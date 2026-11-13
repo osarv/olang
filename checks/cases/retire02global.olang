@@ -20,5 +20,5 @@ fn stale(n I64) I64 {
 }
 G I64 = stale(4)
 fn main() {
-    io.Println($G)!
+    io.PutLine($G)!
 }

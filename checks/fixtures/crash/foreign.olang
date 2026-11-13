@@ -6,5 +6,5 @@ extern fn raise(sig I32) I32
 
 fn main() ? {
     os.OnCrash("foreign.olang crashed\n")
-    try io.Println($raise(11))   # SIGSEGV, raised inside the foreign function
+    try io.PutLine($raise(11))   # SIGSEGV, raised inside the foreign function
 }

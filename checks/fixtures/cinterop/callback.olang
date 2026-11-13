@@ -34,6 +34,6 @@ fn main() {
         v := G.t            # a view of the global holder's text
         c_run(i)            # C calls olang_reset, which lets go of it
         churn()
-        io.Println(v)!
+        io.PutLine(v)!
     }
 }

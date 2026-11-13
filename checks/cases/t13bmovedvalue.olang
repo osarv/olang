@@ -65,5 +65,5 @@ fn main() {
     v := Vec<Buf>()
     f := keepIt
     f(v, Buf(3))
-    io.Println($v.Len() " " $fill(200) " " $chosen(100) " " $reassigned(100))!
+    io.PutLine($v.Len() " " $fill(200) " " $chosen(100) " " $reassigned(100))!
 }

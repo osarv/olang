@@ -18,5 +18,5 @@ fn work(k I64) I64 {
 fn main() {
     s := 0
     for k in range 200 { s += work(k) }
-    io.Println("sum " $s)!
+    io.PutLine("sum " $s)!
 }

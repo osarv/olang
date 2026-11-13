@@ -33,5 +33,5 @@ fn main() ? {
     b := Bag(Node(4, null))
     s := $b
     churn()
-    try io.Println(s)
+    try io.PutLine(s)
 }

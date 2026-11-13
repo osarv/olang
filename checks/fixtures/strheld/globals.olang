@@ -25,5 +25,5 @@ fn bump() I64 {
     return 0
 }
 fn main() ? {
-    try io.Println($G " " $H " " $E " " $C " " $growG() $sameH() $bump() " " $G " " $H " " $E " " $C)
+    try io.PutLine($G " " $H " " $E " " $C " " $growG() $sameH() $bump() " " $G " " $H " " $E " " $C)
 }

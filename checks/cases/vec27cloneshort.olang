@@ -23,5 +23,5 @@ fn main() ? {
         keep = w
     }
     churn()
-    try io.Println($keep)
+    try io.PutLine($keep)
 }

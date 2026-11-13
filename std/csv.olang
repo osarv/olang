@@ -46,7 +46,7 @@ type Error error {
 #
 #     rows := csv.Rows(text)
 #     for {
-#         row := try rows.Next() catch Exhausted { break } catch csv.Error { io.PrintErrln("line " $rows.Line); fail }
+#         row := try rows.Next() catch Exhausted { break } catch csv.Error { io.PutErrLine("line " $rows.Line); fail }
 #         ...
 #     }
 type Rows struct(of String&, sep Char = ',') {

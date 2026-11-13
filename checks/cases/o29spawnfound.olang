@@ -26,5 +26,5 @@ fn main() ? io.Error {
         total += inner[0].v + t
     }
     t := churn(20)
-    try io.Println($outer[0].v " " $total " " $t)
+    try io.PutLine($outer[0].v " " $total " " $t)
 }

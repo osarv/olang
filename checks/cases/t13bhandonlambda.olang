@@ -34,5 +34,5 @@ fn main() {
     churn()
     t := 0
     for b in v { t += b.data[0] + b.data.Len() }
-    io.Println($t " " $v.Len())!
+    io.PutLine($t " " $v.Len())!
 }

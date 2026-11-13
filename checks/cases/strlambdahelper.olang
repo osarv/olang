@@ -25,5 +25,5 @@ fn main() ? {
         s := $b
         t += s.Len()
     }
-    try io.Println($t)
+    try io.PutLine($t)
 }

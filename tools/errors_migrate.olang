@@ -293,7 +293,7 @@ fn filesOf(paths Array<String&>&) Vec<String&> ? {
 fn main() ? {
     args := os.Args()
     if args.Len() < 3 {
-        try io.PrintErrln("usage: errors_migrate OLANG PATH...")
+        try io.PutErrLine("usage: errors_migrate OLANG PATH...")
         os.Exit(2)
     }
     olang := try os.RealPath(args[1])
@@ -322,10 +322,10 @@ fn main() ? {
             }
             edits += try apply(name, ds, left)
         }
-        try io.PrintErrln("round " $round ": " $edits " edits")
+        try io.PutErrLine("round " $round ": " $edits " edits")
         if edits == 0 { break }
     }
-    for l in left { try io.Println(l) }
+    for l in left { try io.PutLine(l) }
 }
 
 test "the checked forms are renamed as whole words" {

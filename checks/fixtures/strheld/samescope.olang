@@ -13,11 +13,11 @@ fn main() ? {
     h mut Hold& = Hold()
     for i in range 3 {
         h.f = G if i == 0 else P(7)
-        try io.Println($h.f!.v)
+        try io.PutLine($h.f!.v)
     }
     l P& = P(4)
     setIt(h, l, true)
-    try io.Println($h.f!.v)
+    try io.PutLine($h.f!.v)
     setIt(h, l, false)
-    try io.Println($h.f!.v)
+    try io.PutLine($h.f!.v)
 }

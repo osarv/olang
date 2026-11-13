@@ -31,7 +31,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, name Stri
     return 0
 }
 
-fn say(text String&) { try io.Print(text) catch io.Error { } }
+fn say(text String&) { try io.Put(text) catch io.Error { } }
 
 # what a listing says of how its code was made
 fn how(c build.Config&, ir Bool) String {
@@ -215,7 +215,7 @@ fn Namer.Make(prog build.Program&) Namer {
     return n
 }
 
-# sym, a symbol olang wrote, as source names what it is the code of ("io.Println", "Vec<I64>.Push", "scale"); any
+# sym, a symbol olang wrote, as source names what it is the code of ("io.PutLine", "Vec<I64>.Push", "scale"); any
 # other symbol (C's, the runtime's) as it is
 fn (n Namer&) Name(sym String&) String {
     if sym == "main" { return "startup" }       # the program's entry, as a profile names it (B20a)
@@ -710,7 +710,7 @@ test "a remark's YAML read: its kind, pass, place, function and message, the inl
 test "a symbol named as source writes it outside its module" {
     n := Namer()
     n.root = "v"
-    assert n.Name(types.Symbol("v.scale")) == "scale" and n.Name(types.Symbol("std/io.Println")) == "io.Println"
+    assert n.Name(types.Symbol("v.scale")) == "scale" and n.Name(types.Symbol("std/io.PutLine")) == "io.PutLine"
     assert n.Name(types.Symbol("std/prelude/vec.std/prelude/vec:Vec<v:Point>.Push")) == "Vec<Point>.Push"
     assert n.Name(types.Symbol("std/net.std/net:Conn.Read")) == "net.Conn.Read"
     assert n.Name("main") == "startup" and n.Name("memcpy") == "memcpy"

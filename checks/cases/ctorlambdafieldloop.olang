@@ -18,7 +18,7 @@ fn main() {
         ms.Push(M(2, d))
     }
     churn()
-    io.Println($ms[0].F() " " $ms[2].F())!
+    io.PutLine($ms[0].F() " " $ms[2].F())!
 }
 
 fn churn() {

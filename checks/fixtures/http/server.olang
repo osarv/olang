@@ -194,7 +194,7 @@ fn send(fd I32, data String&) {
 fn main() ? {
     args := os.Args()
     if args.Len() != 2 {
-        try io.PrintErrln("usage: server PORTFILE")
+        try io.PutErrLine("usage: server PORTFILE")
         os.Exit(2)
     }
     alarm(60)
@@ -206,16 +206,16 @@ fn main() ? {
     size mut Array<U32>& = Array<U32>(1)
     size[0] = 16
     if bind(fd, addr, 16) != 0 or listen(fd, 16) != 0 or getsockname(fd, addr, size) != 0 {
-        try io.PrintErrln("server: cannot listen")
+        try io.PutErrLine("server: cannot listen")
         os.Exit(1)
     }
     port := I64(addr[2]) * 256 + I64(addr[3])
     try os.WriteFile($args[1] ".tmp", $port) catch {
-        try io.PrintErrln("server: cannot write the port")
+        try io.PutErrLine("server: cannot write the port")
         os.Exit(1)
     }
     try os.Rename($args[1] ".tmp", args[1]) catch {
-        try io.PrintErrln("server: cannot write the port")
+        try io.PutErrLine("server: cannot write the port")
         os.Exit(1)
     }
     peer mut Array<U8>& = Array<U8>(16)

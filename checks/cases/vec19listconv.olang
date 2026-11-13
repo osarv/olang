@@ -10,5 +10,5 @@ fn main() ? {
     l := Vec<Txt&>()
     l.Push(Txt(v.View()))
     for _ in range 100 { v.Push('b') }
-    try io.Println($l[0])
+    try io.PutLine($l[0])
 }

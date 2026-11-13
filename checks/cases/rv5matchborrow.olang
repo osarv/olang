@@ -18,5 +18,5 @@ fn main() ? {
             case _ { }
         }
     }
-    try io.Println($keep.v)
+    try io.PutLine($keep.v)
 }

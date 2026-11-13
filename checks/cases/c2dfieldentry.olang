@@ -29,5 +29,5 @@ fn main() ? {
         all.Push(FeSlot(l))
     }
     churn()
-    try io.Println($s.e.V[0] " " $all[0].e.V[0] " " $all[1].e.V[0] " " $all[2].e.V[0])
+    try io.PutLine($s.e.V[0] " " $all[0].e.V[0] " " $all[1].e.V[0] " " $all[2].e.V[0])
 }

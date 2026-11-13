@@ -20,5 +20,5 @@ fn main() ? {
         x := st.get(0).inner
         held = x
     }
-    try io.Println(held!.s)
+    try io.PutLine(held!.s)
 }

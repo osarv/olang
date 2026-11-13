@@ -31,7 +31,7 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     b := Bag(Array<mut Node&>(1, Node(3)))
-    try io.Println($b)
+    try io.PutLine($b)
     t := churn(100)
-    try io.Println($b.ns[0].next!.v " " $t)
+    try io.PutLine($b.ns[0].next!.v " " $t)
 }

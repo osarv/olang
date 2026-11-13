@@ -27,5 +27,5 @@ fn main() {
         for w in g { kept.Push(w) }
     }
     churn()
-    io.Println($kept)!
+    io.PutLine($kept)!
 }

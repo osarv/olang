@@ -26,5 +26,5 @@ fn main() {
         s.open(i)
         if i >= 64 { s.close(i - 64) }
     }
-    io.Println($Closed " " $s.conns.Len())!
+    io.PutLine($Closed " " $s.conns.Len())!
 }

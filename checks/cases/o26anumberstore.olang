@@ -22,4 +22,4 @@ fn S.scan(n I64) S {
     }
     return s
 }
-fn main() ? { try io.Println($S.scan(3).names.Len()) }
+fn main() ? { try io.PutLine($S.scan(3).names.Len()) }

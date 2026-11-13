@@ -22,5 +22,5 @@ fn main() ? {
     g := Info(1)
     c mut Holder& = Holder(Env(g))
     build(c)
-    try io.Println($c.e.r.n)
+    try io.PutLine($c.e.r.n)
 }

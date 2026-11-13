@@ -27,7 +27,7 @@ fn main() ? {
 }
 
 fn die(why String&) noreturn {
-    try io.PrintErrln($"seed: " $why) catch io.Error { }
+    try io.PutErrLine($"seed: " $why) catch io.Error { }
     os.Exit(1)
 }
 
@@ -40,17 +40,17 @@ fn run(dir String&) I32 {
     d := diag.Diagnostics(false)
     c := build.Config()
     cl := try olang.CommandLine.Prepare(Array<String&>["olang", "build", "-target", "x86-64", "compiler/olang.olang"], c, d) catch olang.Bad {
-        try io.Print(d.Render()) catch io.Error { }
+        try io.Put(d.Render()) catch io.Error { }
         return 1
     }
     fe := olang.Passes()
     prog := build.Program()
     try fe.Analyze(cl.Files[0], build.Kind.Program, c, prog, d) catch build.Failed {
-        try io.Print(d.Render()) catch io.Error { }
+        try io.Put(d.Render()) catch io.Error { }
         return 1
     }
     if d.Errors() > 0 or prog.Units.Len() == 0 {
-        try io.Print(d.Render()) catch io.Error { }
+        try io.Put(d.Render()) catch io.Error { }
         return 1
     }
     try os.MkDirAll(dir) catch os.Error { die($"cannot make " $dir) }

@@ -3,7 +3,7 @@
 # registered first, a loop's for this turn only; what already ran on a way out does not run again
 import "std/io"
 
-fn say(t String&) { io.Println(t)! }
+fn say(t String&) { io.PutLine(t)! }
 
 fn reach(a Array<I64>&, i I64) I64 {
     defer say("reach's")
@@ -27,5 +27,5 @@ fn main() {
     defer say("main's first")
     defer say("main's second")
     a := Array<I64>(3, 5)
-    io.Println("sum " $walk(a))!
+    io.PutLine("sum " $walk(a))!
 }

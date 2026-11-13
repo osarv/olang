@@ -360,7 +360,7 @@ fn Check<F>(f F, cases I64 = 100) ? F.Errors {
     data := try fuzz.Input() catch fuzz.Error {
         for path in fuzz.Saved() {
             saved := try os.ReadFile(path) catch os.Error { continue }
-            try io.PrintErr($"prop: replaying " $path "\n") catch io.Error { }
+            try io.PutErr($"prop: replaying " $path "\n") catch io.Error { }
             s := source.newSource(saved, 0)
             try run(f, s) catch skip { }
         }
@@ -370,7 +370,7 @@ fn Check<F>(f F, cases I64 = 100) ? F.Errors {
         found := shrink(f, record(f, failed), 2000)
         shown2 := source.newSource(found, 0)
         where := fuzz.Save(found)
-        try io.PrintErr($"prop: a failing case, shrunk to:\n" $shown(f, shown2) $("" if where == "" else $"  saved as " $where "\n")) catch io.Error { }
+        try io.PutErr($"prop: a failing case, shrunk to:\n" $shown(f, shown2) $("" if where == "" else $"  saved as " $where "\n")) catch io.Error { }
         s := source.newSource(found, 0)
         try run(f, s) catch skip { unreachable "prop: the smallest failing case was refused here" }
         unreachable "prop: the case failed in its own process but not here"

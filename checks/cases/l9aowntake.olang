@@ -12,5 +12,5 @@ fn main() ? io.Error {
     p := Pile(2)
     r := take(p.own)
     if r != 4 or p.n != 2 { os.Exit(1) }
-    try io.Println($r)
+    try io.PutLine($r)
 }

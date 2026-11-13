@@ -3,5 +3,5 @@ import "std/io"
 import "lib"
 
 fn main() ? {
-    try io.Println($"other " $lib.Total(lib.Make(5)))
+    try io.PutLine($"other " $lib.Total(lib.Make(5)))
 }

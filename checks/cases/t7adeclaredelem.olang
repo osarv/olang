@@ -6,5 +6,5 @@ type Box<T> struct(v T) { v }
 fn main() ? io.Error {
     a := Array<String>(3, "init")
     b := Box<String>("start")
-    try io.Println($a.Len() " " $b.v)
+    try io.PutLine($a.Len() " " $b.v)
 }

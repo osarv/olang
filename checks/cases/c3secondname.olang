@@ -55,5 +55,5 @@ fn main() ? {
     e := H.mk4after(13)
     churn()
     assert a.next!.v == 4 and b.n.v == 5 and c.next!.v == 8 and d.v == 11 and d.next!.v == 12 and e.n.v == 13
-    try io.Println($a.next!.v " " $b.n.v " " $c.next!.v " " $d.next!.v " " $e.n.v)
+    try io.PutLine($a.next!.v " " $b.n.v " " $c.next!.v " " $d.next!.v " " $e.n.v)
 }

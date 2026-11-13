@@ -29,5 +29,5 @@ fn churn() I64 {
 fn main() ? {
     l := try group()
     c := churn()
-    io.Println($l.Len() " " $l[0] " " $l[39] " " $c)!
+    io.PutLine($l.Len() " " $l[0] " " $l[39] " " $c)!
 }

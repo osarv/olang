@@ -428,14 +428,14 @@ has nested patterns too; what a pattern cannot say is a test that is not a case,
 ```
 match s {
     case Slot.Held(p) if p is not null {
-        io.Println($p.v)!      # error[T2c] today: 'p' is a Node?&, which may be null
+        io.PutLine($p.v)!      # error[T2c] today: 'p' is a Node?&, which may be null
     }
     case Slot.Held(_), Slot.Empty { }
 }
 
 match w {
     case Wrap.One(s) if s == Shape.Circle and s.r > 1.0 {    # the guard itself narrows (checked) ...
-        io.Println($s.r)!                                       # ... the body does not: error[S8d]
+        io.PutLine($s.r)!                                       # ... the body does not: error[S8d]
     }
     case Wrap.One(_) { }
 }

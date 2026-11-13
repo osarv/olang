@@ -33,5 +33,5 @@ fn main() ? {
     for p in range passes {
         if args[1] == "iter" { s += viaIter(a, n) ^ p } else if args[1] == "locals" { s += viaLocals(a, n) ^ p } else if args[1] == "take" { s += viaTake(a, n) ^ p } else if args[1] == "skip" { s += viaSkip(a) ^ p } else if args[1] == "sum" { s += viaSum(a) ^ p } else { s += viaLoop(a, n) ^ p }
     }
-    try io.Println($s)
+    try io.PutLine($s)
 }

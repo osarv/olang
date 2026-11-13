@@ -44,5 +44,5 @@ fn main() ? {
     rest := turns(15000)
     grew := peakKb() - before
     if first != 1000 * 2080 or rest != 15000 * 2080 { unreachable "sum" }
-    try io.Println("flat" if grew < 6000 else $"grew " $grew " kB")
+    try io.PutLine("flat" if grew < 6000 else $"grew " $grew " kB")
 }

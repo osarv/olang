@@ -19,5 +19,5 @@ fn main() ? {
     text := b.ToString()
     ing := regex.Regex.Compile("[a-z]+ing")!
     num := regex.Regex.Compile("error [0-9]+")!
-    try io.Println($ing.Count(text) " " $num.Count(text))
+    try io.PutLine($ing.Count(text) " " $num.Count(text))
 }

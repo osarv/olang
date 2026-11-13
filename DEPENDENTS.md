@@ -112,6 +112,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `SPEC.md` | only if the language rule changes (a std API is not specified there, except B14-B16 outputs) |
 | `compiler/doc.olang` | `olang doc -html` writes all of std; nothing to add per module |
 | `tools/stutter_rename.olang` | the naming rule (no module name repeated in a type: `io.Error`, never `io.IoError`) |
+| `tools/io_rename.olang` | a std/io function renamed: no `io` function shares a name with a prelude one (D3a), `Put`, `PutLine`, `PutErr`, `PutErrLine` |
 | `std/runtime/*.ll` and `compiler/runtime.olang` | a new runtime function or C-library fact; `emit.olang` declares runtime functions from the runtime's text |
 | `compiler/eval.olang` `runtimeFn` (and `callExtern`'s compile-time list) | a runtime function std calls (`__olang_*`): what the evaluator answers for it, under `interpret` and while compiling (B19b's `__olang_bench_*`) |
 | `compiler/*.olang` that import it | `grep -l 'std/NAME'` - the compiler uses `std/os`, `std/io`, `std/json`, `std/filepath` and others |
@@ -124,9 +125,9 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 once had to rename `Place`); `std/prelude/tests/`; the compiler's hard-coded prelude names - `grep -n '"NAME"'
 compiler/check.olang generic.olang explain.olang bindgen.olang` and `c.P.PreludeFn("std/prelude/...", "fn")` (the
 compiler calls prelude functions by name: `caseIndex`, `attrGot`, `Generator`, `Place`); `eval.olang` for an
-intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method set is a rule. A function reached bare (`print`,
-`println`, M19d) is named in `compiler/names.olang` `PreludeFunction`, which the resolver, D3a's message and the
-language server's completion (`session.olang` `moduleNames`) read.
+intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method set is a rule. An exported function of the prelude (`Print`,
+`Println`, M19d) is reached bare by M6 alone: `compiler/names.olang` reserves every exported prelude name (D3a) and the
+language server's completion (`session.olang` `moduleNames`) lists it with the other exports.
 
 A diagnostic said as a warning under `interpret` (B3e: D3b, M5a) is named in `compiler/diag.olang` `Untidy`; the row
 `warning[RULE]` is B11's, and `editors/nvim/compiler/olang.vim`'s errorformat reads it.

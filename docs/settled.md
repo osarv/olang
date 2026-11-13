@@ -904,9 +904,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
   Place.Here) T` (QBP 4) writes `FILE:LINE:COLUMN: $v` to the standard error and gives `v` back. `io.Writer` buffers
-  (errors at `Flush`); `io.Lines` reads lines. **`print(x)` and `println(x = "")` (M19d, the user's "make the language
-  as easy to use as python", 2026-11-13)**: the prelude's two functions reached bare, any value as `$x` renders it, no
-  `try` - a failed write ends the program as `!` does (in a test, fails it); reserved by D3a.
+  (errors at `Flush`); `io.Lines` reads lines. **`Print(x)` and `Println(x = "")` (M19d, the user's "make the language
+  as easy to use as python", 2026-11-13; capitalized 2026-11-13, "no carveout for them")**: the prelude's two exported functions reached bare, any value as `$x` renders it, no
+  `try` - a failed write ends the program as `!` does, reported at the caller's place (`at Place = Place.Here`; in a test, fails it); reserved by D3a. **std/io's printing functions renamed (M19f, mine 2026-11-13, for the user's no-carveout and no-shadowing rules - D3a would reject `io.Print` beside the prelude's `Print`)**: `io.Put`, `io.PutLine`, `io.PutErr`, `io.PutErrLine`, same signatures, still `? io.Error` (`io.Write`, the coordinator's first choice, is the raw `Write(fd, data)`); tools/io_rename migrates.
 - **Libraries:** `std/os`, `std/json` (immutable recursive enum tree), `std/http` (over curl), `std/csv`, `std/stats`,
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi), `std/sync` (`Mutex<T>` reached
   only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/net` (blocking TCP and UDP), `std/set`, `std/deque`, `std/pool` (a slotmap of generational handles: `Add`, `try p.Get(h)`/`Ref`/`RefMut`/`Remove` failing with `pool.Error.Stale`; the user 2026-11-08),

@@ -38,5 +38,5 @@ fn main() ? {
         t += churn(5) + a.last!.v
     }
     t += churn(40)
-    try io.Println($b.last!.v " " $t)
+    try io.PutLine($b.last!.v " " $t)
 }

@@ -41,7 +41,7 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Node(1), 3)
-    try io.Println($b)
+    try io.PutLine($b)
     t := churn(100)
-    try io.Println($nv(b.head) " " $t)
+    try io.PutLine($nv(b.head) " " $t)
 }

@@ -14,9 +14,9 @@ fn main() ? io.Error {
     Head = a
     b := Node(2)
     b.back = a
-    try io.Println($b.back!.v)
+    try io.PutLine($b.back!.v)
     Head = null
-    try io.Println($(b.back is null))
+    try io.PutLine($(b.back is null))
     b.next = a
-    try io.Println($b.back!.v)
+    try io.PutLine($b.back!.v)
 }

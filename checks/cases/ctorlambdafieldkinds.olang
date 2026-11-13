@@ -43,7 +43,7 @@ fn main() {
     dd := D(ct)
     e := E(d)
     churn()
-    io.Println($m.F() " " $a.G() " " $c.F() " " $c.k " " $dd.F() " " $e.F() " " $e.K)!
+    io.PutLine($m.F() " " $a.G() " " $c.F() " " $c.k " " $dd.F() " " $e.F() " " $e.K)!
 }
 
 fn churn() {

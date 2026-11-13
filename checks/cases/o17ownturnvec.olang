@@ -27,5 +27,5 @@ fn main() {
     churn()
     s := 0
     for h in hs { s += h.v.Len() + h.v[h.v.Len() - 1] }
-    io.Println("vec lens and lasts " $s " (25)")!
+    io.PutLine("vec lens and lasts " $s " (25)")!
 }

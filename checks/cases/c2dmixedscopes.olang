@@ -36,4 +36,4 @@ fn check() I64 {
     churn()
     return c.nums.Len() + c.diag.col
 }
-fn main() ? { try io.Println($check()) }
+fn main() ? { try io.PutLine($check()) }

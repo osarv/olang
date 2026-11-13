@@ -38,6 +38,6 @@ fn main() {
         if i >= 1 { h.m.Remove(i - 1) }  # which a removal then lets go of
         churn()
         c := try h.m.Get(i) catch { unreachable }
-        if c.next is not null { io.Println(c.next!.t)! }
+        if c.next is not null { io.PutLine(c.next!.t)! }
     }
 }

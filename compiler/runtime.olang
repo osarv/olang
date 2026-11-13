@@ -42,7 +42,7 @@ fn fact(name String&, row I64) I64 ? {
 
 # a stop at line n of the runtime file at path: a mistake in the repository, not in the program
 fn malformed(path String&, n I64, why String&) ? Bad {
-    try io.PrintErrln($"olang: " $path ":" $n ": " $why) catch io.Error { }
+    try io.PutErrLine($"olang: " $path ":" $n ": " $why) catch io.Error { }
     error Bad.Unreadable
 }
 
@@ -66,7 +66,7 @@ fn directive(line String&) I64 {
 fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = false) String ? Bad {
     path := $load.StdDir() "/runtime/" $file
     bytes := try os.ReadFile(path) catch os.Error {
-        try io.PrintErrln($"olang: " $path ": cannot open this file") catch io.Error { }
+        try io.PutErrLine($"olang: " $path ": cannot open this file") catch io.Error { }
         error Bad.Unreadable
     }
     text := String(bytes)

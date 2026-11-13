@@ -22,5 +22,5 @@ fn main() ? {
     w := bor(q)
     q.x = 9
     churn()
-    try io.Println($w.x " " $w.y " " $q.x)
+    try io.PutLine($w.x " " $w.y " " $q.x)
 }

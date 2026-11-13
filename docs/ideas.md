@@ -42,7 +42,7 @@ fn evens(n I64) Iterator<I64> {
     }
 }
 
-for e in evens(10) { try io.Println($e) }
+for e in evens(10) { try io.PutLine($e) }
 ```
 
 Today the same takes a struct, a constructor, a `Next` method and state kept by hand.

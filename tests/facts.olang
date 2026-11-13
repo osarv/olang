@@ -20,7 +20,7 @@ fn Note(x I64) { Seen.Push(x) }
 
 fn Fact(n I64) I64 { return 1 if n < 2 else n * Fact(n - 1) }
 
-fn Shout(t String&) ? io.Error { try io.Println(t) }
+fn Shout(t String&) ? io.Error { try io.PutLine(t) }
 
 fn Label(n I64) String { return $"#" $n }
 

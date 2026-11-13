@@ -6,5 +6,5 @@ fn main() ? {
     text := scanref.Generate(scanref.SizeArg(200000))
     names := Map<String, I64>()
     toks := scanref.Scan(text, names)
-    try io.Println("baseref: " $toks.Len() " tokens")
+    try io.PutLine("baseref: " $toks.Len() " tokens")
 }

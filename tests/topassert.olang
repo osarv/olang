@@ -26,5 +26,5 @@ if TargetOs == "linux" {
 
 test "a file whose top-level asserts hold builds and runs" {
     assert total(Widths) == 7
-    io.Println($Kinds.Len())!
+    io.PutLine($Kinds.Len())!
 }

@@ -22,5 +22,5 @@ fn viaCtor(src mut W&) {
 fn main() ? {
     w := W(Box())
     viaCtor(w)
-    try io.Println($w.b.head.v)
+    try io.PutLine($w.b.head.v)
 }

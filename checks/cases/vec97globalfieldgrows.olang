@@ -12,5 +12,5 @@ fn main() ? {
     for i in range 3 { GL.toks.Push(i) }
     d := GL.toks.View()
     bump()
-    try io.Println($d[0])
+    try io.PutLine($d[0])
 }

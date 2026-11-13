@@ -33,5 +33,5 @@ fn main() ? {
     v := Vec<N&>()
     use(put, v)
     churn(100)
-    try io.Println($v[0].v)
+    try io.PutLine($v[0].v)
 }

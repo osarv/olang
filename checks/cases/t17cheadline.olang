@@ -19,5 +19,5 @@ fn (b mut Buffer&) Delete(at I64, n I64) {
 fn main() ? {
     b := Buffer("hello world")
     b.Delete(0, 6)
-    try io.Println($b.undos.Len())
+    try io.PutLine($b.undos.Len())
 }

@@ -30,5 +30,5 @@ fn main() {
         ms.Push(M(2, d))
     }
     churn()
-    io.Println($ms[0].Data[1] " " $ms[2].Data[1])!
+    io.PutLine($ms[0].Data[1] " " $ms[2].Data[1])!
 }

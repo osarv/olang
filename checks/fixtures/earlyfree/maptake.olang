@@ -23,5 +23,5 @@ fn main() {
             t += r.data[31]
         }
     }
-    io.Println($Ended " " $t " " $m.Len())!
+    io.PutLine($Ended " " $t " " $m.Len())!
 }

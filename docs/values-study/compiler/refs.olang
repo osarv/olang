@@ -243,6 +243,6 @@ fn main() ? {
     typed := c.block(prog)
     m := Machine(c.slots)
     for t in typed: m.run(t)
-    try io.Println(("refs: " $toks.Len() " tokens, " $c.slots " slots, " $c.errors " errors, " $m.prints " prints, sum "
+    try io.PutLine(("refs: " $toks.Len() " tokens, " $c.slots " slots, " $c.errors " errors, " $m.prints " prints, sum "
         $m.sum))
 }

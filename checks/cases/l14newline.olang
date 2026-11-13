@@ -6,5 +6,5 @@ import "std/io"
 fn main() ? {
     a := "abc
     b := 2
-    try io.Println($b)
+    try io.PutLine($b)
 }

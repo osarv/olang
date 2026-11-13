@@ -105,5 +105,5 @@ fn viewed(n I64) I64 {
 }
 
 fn main() {
-    io.Println($removals(100) " " $blobs(100) " " $viewed(100))!
+    io.PutLine($removals(100) " " $blobs(100) " " $viewed(100))!
 }

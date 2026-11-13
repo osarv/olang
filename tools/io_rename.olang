@@ -1,6 +1,6 @@
 # io_rename - std/io's printing functions renamed so that none shares a name with the prelude's Print and Println
-# (M19d, M19f, 2026-11-13, the coordinator's call for the user's "no carveout" rule): io.Print becomes io.Put, io.Println
-# io.PutLine, io.PrintErr io.PutErr, io.PrintErrln io.PutErrLine - every whole-word "io." followed by an old name, in code,
+# (M19d, M19f, 2026-11-13, the coordinator's call for the user's "no carveout" rule): io.Put becomes io.Put, io.PutLine
+# io.PutLine, io.PutErr io.PutErr, io.PutErrLine io.PutErrLine - every whole-word "io." followed by an old name, in code,
 # comments and text alike, and the bare names inside std/io.olang itself. Same signatures, still failing with io.Error.
 # Files are rewritten in place and a count printed; --check writes nothing and the exit status says whether anything
 # would change. It reads .olang, .md, .txt and .want files. Idempotent.
@@ -118,7 +118,7 @@ fn main() ? {
     if check and changed > 0 { os.Exit(1) }
 }
 
-test "io.Print and its kin become io.Put and its kin; a longer word and a bare name elsewhere are left" {
+test "io.Put and its kin become io.Put and its kin; a longer word and a bare name elsewhere are left" {
     n := Count()
     assert rename("    try io." "Println(\"a\")\n", "x.olang", n) == "    try io.PutLine(\"a\")\n"
     assert rename("io." "PrintErrln(t) io." "PrintErr(t) io." "Print(t)", "x.olang", n) == "io.PutErrLine(t) io.PutErr(t) io.Put(t)"

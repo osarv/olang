@@ -17,5 +17,5 @@ fn main() ? {
     l.Push(Acc())
     k := l.Len()
     bump(l[0] if k > 0 else l[1])
-    try io.Println("list N " $l[0].N)
+    try io.PutLine("list N " $l[0].N)
 }

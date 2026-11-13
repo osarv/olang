@@ -18,5 +18,5 @@ fn main() ? {
             spawn h.f()
         }
     }
-    try io.Println($c[0] " " $c[1] " " $c[2] " " $c[3])
+    try io.PutLine($c[0] " " $c[1] " " $c[2] " " $c[3])
 }

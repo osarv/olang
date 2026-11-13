@@ -22,7 +22,7 @@ fn main() {
     b := Holder()
     for i in range 6 {
         b.n = Node(i + 1)
-        if a.n.next is not null { io.Println($"linked: " $a.n.next!.v " " $a.n.next!.t)! }
+        if a.n.next is not null { io.PutLine($"linked: " $a.n.next!.v " " $a.n.next!.t)! }
         link(a, b)
         b.n = Node(100 + i)     # lets go of the node a's node links: freed at once
     }

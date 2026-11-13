@@ -21,17 +21,17 @@ fn main() ? io.Error {
     for k in range 1, args.Len() {
         path := args[k]
         text := try os.ReadFile(path) catch os.Error {
-            try io.PrintErrln("clone_migrate: " $path ": cannot be read")
+            try io.PutErrLine("clone_migrate: " $path ": cannot be read")
             continue
         }
         out := migrate(text)
         if out == text: continue
-        try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("clone_migrate: " $path ": cannot be written") }
-        try io.Println(path)
+        try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("clone_migrate: " $path ": cannot be written") }
+        try io.PutLine(path)
         if not text.Contains("\"std/list\""): continue
         for n in changedLines(text, out) {
-            if listed == 0: try io.PrintErrln("for a person: a list.List's Clone() was a list of its own, its Copy() names the same list - write list.From(l.Iter()) where a List is meant:")
-            try io.PrintErrln("  " $path ":" $n)
+            if listed == 0: try io.PutErrLine("for a person: a list.List's Clone() was a list of its own, its Copy() names the same list - write list.From(l.Iter()) where a List is meant:")
+            try io.PutErrLine("  " $path ":" $n)
             listed++
         }
     }

@@ -37,5 +37,5 @@ fn main() ? {
     sb := 0
     for x in a.seen { sa += x }
     for x in b.seen { sb += x }
-    try io.Println($a.seen.Len() " " $sa " " $b.seen.Len() " " $sb " " $t)
+    try io.PutLine($a.seen.Len() " " $sa " " $b.seen.Len() " " $sb " " $t)
 }

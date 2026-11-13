@@ -25,9 +25,9 @@ fn main() {
         l := Vec<I64>()
         for j in range 40 { l.Push(k + j) }
     }
-    for x in xs { io.Println($x)! }
+    for x in xs { io.PutLine($x)! }
     s := "hello"
     b mut any aBump& = aLab(s)
     b.Bump()
-    io.Println($s " " $b)!
+    io.PutLine($s " " $b)!
 }

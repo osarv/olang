@@ -11,5 +11,5 @@ fn main() {
     r := vs.RefMut(0).RefMut(0)
     for i in range 1000 { vs[0].Push(blk(i, i)) }
     r.n = 77
-    io.Println("vs[0][0].n " $vs[0][0].n " r.n " $r.n)!
+    io.PutLine("vs[0][0].n " $vs[0][0].n " r.n " $r.n)!
 }

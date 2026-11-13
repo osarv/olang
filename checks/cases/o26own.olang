@@ -23,5 +23,5 @@ fn main() ? {
     r := f(a)
     a.v = 6
     churn()
-    try io.Println($r.v " " $a.v)
+    try io.PutLine($r.v " " $a.v)
 }

@@ -15,5 +15,5 @@ fn (c mut Acc&) Bump() { c.N++ }
 fn main() ? {
     a := Array<Acc>[Acc(), Acc()]
     (try a.Get(1) catch default Acc()).P.Bump()
-    try io.Println("array P " $a[1].P.X " N " $a[1].N)
+    try io.PutLine("array P " $a[1].P.X " N " $a[1].N)
 }

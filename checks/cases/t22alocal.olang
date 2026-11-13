@@ -19,5 +19,5 @@ fn main() ? {
     g := link
     g(x, N(5))
     t := churn()
-    try io.Println($x.next!.v " " $(t > 0))
+    try io.PutLine($x.next!.v " " $(t > 0))
 }

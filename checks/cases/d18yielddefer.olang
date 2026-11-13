@@ -26,5 +26,5 @@ fn main() ? {
         assert Tidied == 2
     }
     assert Tidied == 3
-    try io.Println("tidied " $Tidied)
+    try io.PutLine("tidied " $Tidied)
 }

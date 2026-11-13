@@ -507,7 +507,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
 
 # text written to the standard output; 0, or 1 where it could not be
 fn write(text String&) I32 {
-    try io.Print(text) catch io.Error { return 1 }
+    try io.Put(text) catch io.Error { return 1 }
     return 0
 }
 
@@ -555,7 +555,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     if kept.Stale.Len() > 0 { records.CheckIncrFailed(kept) }
     if kept.Afresh and kept.Taken > 0 {
-        try io.PrintErr($"olang: incremental check: " $kept.Taken " kept summaries, every one the same\n") catch io.Error { }
+        try io.PutErr($"olang: incremental check: " $kept.Taken " kept summaries, every one the same\n") catch io.Error { }
     }
     build.Phase($"check (" $c.Rounds " rounds, " $c.Attempts " attempts in the last, views " $c.ViewsMs " ms)")
     if kind == build.Kind.Program and not cfg.Library { c.CheckMain() }
@@ -603,8 +603,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.DecideGen()
     lw.Free = fr
     build.Phase("scope")
-    if cfg.Memory and d.Errors() == 0 { try io.Print($fr.Report() $weakRows(c) $fr.Sc.PlacedReport()) catch io.Error { } }
-    if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PrintErr(fr.Dump()) catch io.Error { } }
+    if cfg.Memory and d.Errors() == 0 { try io.Put($fr.Report() $weakRows(c) $fr.Sc.PlacedReport()) catch io.Error { } }
+    if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PutErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
     # B3i: a module whose object a build with the same inputs made already is not lowered or written again
@@ -638,10 +638,10 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     for w in e.TestWords { prog.TestWords.Push(w) }
     # D9h: value results handed over as views (a -memory build lowers every module)
     if cfg.Memory {
-        for line in lw.CopyLog { try io.Println(line) catch io.Error { } }
-        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgViews " by-value arguments are read where they are, " $lw.Moves " copies are moves at a last use") catch io.Error { }
+        for line in lw.CopyLog { try io.PutLine(line) catch io.Error { } }
+        try io.PutLine($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgViews " by-value arguments are read where they are, " $lw.Moves " copies are moves at a last use") catch io.Error { }
     }
-    for v in lw.ViewLog { try io.PrintErr($v "\n") catch io.Error { } }
+    for v in lw.ViewLog { try io.PutErr($v "\n") catch io.Error { } }
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
         for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
         for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }
@@ -898,7 +898,7 @@ fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Arr
     }
     # each object by its IR's hash: equal objects have equal names (B3j)
     for u in prog.Units { b.Push($"olang: unit " $u.Identity " " $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) "\n") }
-    try io.PrintErr(b.ToString()) catch io.Error { }
+    try io.PutErr(b.ToString()) catch io.Error { }
 }
 
 # how many units the program's C files (X20) add after its objects
@@ -923,15 +923,15 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
         if i >= units { break }
         u := prog.Units[i]
         if fresh[i].Identity != u.Identity or fresh[i].Ir != u.Ir {
-            try io.PrintErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.Error { }
+            try io.PutErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.Error { }
             bad = true
         }
     }
     if bad {
-        try io.PrintErr($"olang: reuse check: " $units " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
+        try io.PutErr($"olang: reuse check: " $units " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
         os.Exit(3)
     }
-    try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }
+    try io.PutErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }
 }
 
 # what the scope inference found, where OLANG_SCOPESTATS asks: to the standard error, or with
@@ -950,7 +950,7 @@ fn inferStats(sc mut scope.Scoper&) {
     for f in sc.PromotedFields() { b.Push($"olang: promoted " $f "\n") }
     for f in sc.Unplaced { b.Push($"olang: unplaced " $f "\n") }
     if to[0] != '/' {
-        try io.PrintErr(b.ToString()) catch io.Error { }
+        try io.PutErr(b.ToString()) catch io.Error { }
         return
     }
     head := StringBuilder()
@@ -1027,7 +1027,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
         c.P.L.Diags.Forget(mark)
         sc.SetFieldMarks(marks)
         if sc.Trace or (try os.Env("OLANG_SCOPESTATS") catch default "") != "" {
-            for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
+            for t in sc.TraceLog { try io.PutErr($t "\n") catch io.Error { } }
         }
         taken := sc.DiskTaken
         sc = scoper(c, cfg, alone)
@@ -1048,7 +1048,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
         error build.Failed.Unbuilt
     }
     inferStats(sc)
-    for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
+    for t in sc.TraceLog { try io.PutErr($t "\n") catch io.Error { } }
     # and early freeing's decisions written into its plans (O8d), for a program at its root
     fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
@@ -1074,11 +1074,11 @@ fn scopeAfresh(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool, sc m
     c.P.L.Diags.Forget(upTo)
     sc.SetFieldMarks(final)
     if diffs.Len() == 0 {
-        try io.PrintErr($"olang: incremental check: scope, " $sc.DiskTaken " judgings taken from records, every one the same\n") catch io.Error { }
+        try io.PutErr($"olang: incremental check: scope, " $sc.DiskTaken " judgings taken from records, every one the same\n") catch io.Error { }
         return
     }
-    for x in diffs { try io.PrintErr($"olang: incremental check: " $x "\n") catch io.Error { } }
-    try io.PrintErr($"olang: incremental check: the scope pass with records differs from it without them\n") catch io.Error { }
+    for x in diffs { try io.PutErr($"olang: incremental check: " $x "\n") catch io.Error { } }
+    try io.PutErr($"olang: incremental check: the scope pass with records differs from it without them\n") catch io.Error { }
     os.Exit(3)
 }
 
@@ -1156,7 +1156,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     fr := try placement(c, cfg, l.Root)
     if d.Errors() > 0 { error build.Failed.Reported }
     # B3e: what is only untidy is said as a warning, on the standard error, and the program runs
-    if d.Lenient: try io.PrintErr(d.Warnings()) catch io.Error { }
+    if d.Lenient: try io.PutErr(d.Warnings()) catch io.Error { }
     x.Lw.Plans = fr.Plans
     twinsTo(x.Lw, fr)
     x.Lw.Free = fr
@@ -1215,7 +1215,7 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     if cfg.Clang == "" { return "" }
     out := try os.Output.Exec(...args.ToArray(), input = text) catch os.Error { return "" }
     if out.Status != 0 {
-        try io.PrintErr(out.Stderr) catch io.Error { }
+        try io.PutErr(out.Stderr) catch io.Error { }
         return ""
     }
     ir := retarget(out.Stdout, cfg.Target.Attrs)

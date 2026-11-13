@@ -12,5 +12,5 @@ fn b(k I64) I64 ? NotFond {
 fn main() ? {
     x := try a(-1) catch NotFound default 1
     y := try b(-1) catch NotFond default 2
-    try io.Println($x " " $y)
+    try io.PutLine($x " " $y)
 }

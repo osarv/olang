@@ -24,7 +24,7 @@ fn id(p Pt&) Pt& { return p }
 fn churn() ? io.Error {
     for k in range 100 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.Println("x") }
+        if a[0] == 3 { try io.PutLine("x") }
     }
 }
 fn clobber(n I64) I64 {
@@ -39,5 +39,5 @@ fn main() ? {
     out := Vec<Pt&>()
     for k in range 3 { f(s[k], out) }
     try churn()
-    try io.Println($clobber(10) " " $out[0].X)
+    try io.PutLine($clobber(10) " " $out[0].X)
 }

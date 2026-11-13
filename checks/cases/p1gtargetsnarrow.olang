@@ -28,5 +28,5 @@ fn main() ? {
         spawn x, k = pick(m)
     }
     churn()
-    try io.Println($x.v " " $k)
+    try io.PutLine($x.v " " $k)
 }

@@ -4,5 +4,5 @@ import "lib"
 Baked := lib.Total()
 
 fn main() ? io.Error {
-    io.Println("lib " $Baked " " $lib.Total())!
+    io.PutLine("lib " $Baked " " $lib.Total())!
 }

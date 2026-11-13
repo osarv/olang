@@ -16,7 +16,7 @@ fn grow(w mut Vec<Char>&) ? io.Error {
     t := Txt.asText(w)                        # a borrowed result; its type is Txt (nominal), not Array<Char>
     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
     churn()                               # reuse what was freed
-    try io.Println($t)
+    try io.PutLine($t)
 }
 fn main() ? {
     v := Vec<Char>()

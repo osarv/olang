@@ -215,7 +215,7 @@ type.
 
 ```
 fn expectEq<T>(got T, want T, at Place = Here) {
-    if got != want: io.PrintErrln($at ": got " $got ", want " $want)!
+    if got != want: io.PutErrLine($at ": got " $got ", want " $want)!
 }
 ```
 

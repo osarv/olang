@@ -77,7 +77,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
     return status
 }
 
-fn say(text String&) { try io.Print(text) catch io.Error { } }
+fn say(text String&) { try io.Put(text) catch io.Error { } }
 
 # the program at bin run with file and args as its command line, in a process of its own that has this one's input,
 # output and error streams, and OLANG_PROFILE naming where its samples go: its status (128 and the signal for one ended
@@ -867,7 +867,7 @@ test Profile.Read "a samples file's header, records and map; a record cut short 
 }
 
 test Readable "a symbol olang wrote read back as the profile names it; any other name as it is" {
-    assert Readable(types.Symbol("std/io.Println")) == "io.Println"
+    assert Readable(types.Symbol("std/io.PutLine")) == "io.PutLine"
     assert Readable(types.Symbol("compiler/check.compiler/check:Checker.joinStmt")) == "check.Checker.joinStmt"
     assert Readable(types.Symbol("std/prelude/vec.std/prelude/vec:Vec<I64>.Push")) == "Vec<I64>.Push"
     assert Readable(types.Symbol("hot.main")) == "hot.main"

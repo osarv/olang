@@ -17,4 +17,4 @@ fn peek(n Node&) I64 {
     return g()
 }
 fn (b Bag&) Str() String { return "b" $peek(b.head) }
-fn main() ? { try io.Println($Bag(Node(4))) }
+fn main() ? { try io.PutLine($Bag(Node(4))) }

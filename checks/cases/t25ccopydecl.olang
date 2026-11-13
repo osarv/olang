@@ -7,5 +7,5 @@ fn main() ? {
     y Vec<I64> = G
     y.Push(2)
     assert y.Len() == 2 and G.Len() == 1
-    try io.Println($y.Len())
+    try io.PutLine($y.Len())
 }

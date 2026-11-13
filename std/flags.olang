@@ -4,10 +4,10 @@
 #     count := p.Int("count", 'n', 10, "stop after this many matches")
 #     quiet := p.Bool("quiet", 'q', "print nothing, only set the status")
 #     try p.Parse(os.Args()) catch flags.Error.Help {
-#         try io.Print(p.Help())
+#         try io.Put(p.Help())
 #         return
 #     } catch flags.Error {
-#         try io.PrintErrln(p.Message())
+#         try io.PutErrLine(p.Message())
 #         os.Exit(2)
 #     }
 #     ... count.Get() ... quiet.Get() ... p.Args() ...

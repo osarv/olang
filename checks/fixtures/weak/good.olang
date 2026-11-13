@@ -11,5 +11,5 @@ fn main() ? io.Error {
     b := back.Back()
     b.Point(n)
     at := b.At
-    try io.Println($(at.V if at is not null else -1) " " $(k.N == b.At))
+    try io.PutLine($(at.V if at is not null else -1) " " $(k.N == b.At))
 }

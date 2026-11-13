@@ -50,5 +50,5 @@ fn main() ? {
     for i in range 1, n {
         if a[i - 1] > a[i] or a[i] != b[i]: unreachable "unsorted"
     }
-    try io.Println($a[0] " " $a[n - 1])
+    try io.PutLine($a[0] " " $a[n - 1])
 }

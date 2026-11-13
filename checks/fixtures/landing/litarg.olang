@@ -33,5 +33,5 @@ fn main() {
     if args.Len() > 1: n = args[1].ParseInt(10)!
     t I64 = 0
     for i in range n { t += arg(i) + ctor(i) + returned(i) + assigned(i) + filled(i) + chosen(i) }
-    io.Println($t)!
+    io.PutLine($t)!
 }

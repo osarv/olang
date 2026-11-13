@@ -40,7 +40,7 @@ fn main() {
     }
     out := Array<I64>(1)
     join { spawn out[0] = spin(40000000) }
-    io.Println($(t ^ out[0]))!
+    io.PutLine($(t ^ out[0]))!
     args := os.Args()
     if args.Len() > 1 { os.Exit(I32(try args[1].ParseInt(10) catch default 0)) }
 }

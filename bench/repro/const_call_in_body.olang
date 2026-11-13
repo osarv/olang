@@ -29,5 +29,5 @@ fn main() ? {
         else if args[1] == "find" { s += try "hello world, wonderful".Find("wor") + i }
         else if args[1] == "parse" { s += try "12345".ParseInt() + i }
     }
-    try io.Println($s)
+    try io.PutLine($s)
 }
