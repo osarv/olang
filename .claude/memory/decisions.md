@@ -21,4 +21,9 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(None open.)
+- Python-like ease (asked 2026-11-13, the user: "anything else we want to add to make the language as easy to use as python?"). Defaults in effect: as built. Recommendations:
+  1. the interactive prompt and Jupyter kernel (QCX 6, already decided) - build right after version 1, before oann;
+  2. running a file (`olang f.olang`) builds at -O3+LTO (B3g): run it at `-quick` (or cached) unless `-output` asks for a build - measure first;
+  3. printing needs `try io.Println(...)`: add a prelude `print`/`println` that ends the program on a write failure (as `!` does) - yes;
+  4. `Array<I64>[1, 2]` always: allow a bare `[1, 2]` where the type it makes is written at the target (a typed declaration, parameter, field) - yes, narrow;
+  5. unused locals/imports are errors (D3b): keep as errors, but `interpret` and the prompt report them as warnings - yes.
