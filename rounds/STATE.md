@@ -84,3 +84,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - review B1 done: no confirmed hole; Temp-not-counted suspicion + genrefs 2.5 doc sent to b2fix.
 - 2026-11-10: review B fixes merged, verified, pushed. All 10.2 rounds done. Left: final gates (cross, bench, race), leftovers list.
 - 2026-11-10: final gates pass: race (only the intentional one), cross aarch64 (needs clang-19, libc6-dev-arm64-cross, binutils-aarch64-linux-gnu, qemu-user; o8e probes now assert growth), scopesan, scopefuzz SEED=11 x500, fuzz free 5 x300. Pushed. Usage ~0.89: no new agents until reset (send_later armed Sat 05:10 CET).
+- 2026-11-13 18:40 CET: user allowed burning the rest of this week (0.89 at 17:34 UTC, reset 05:00 CET Sat), olang first as planned. Running: wt-leftA (scope shapes, twin records, p8 msg), wt-leftB (memory leftovers). Then the refactor pass.
