@@ -1,5 +1,7 @@
-# check: fail the type a literal makes before the [, as in Array<I32>[...]
-# E27: a comprehension states the type it makes, as a literal does (E19)
-fn main() ? {
-    a := [y for y in range 3]
+# check: fail error[E20]: [] makes the type expected where it stands, and nothing is expected here - write the type in front, as Array<I64>[]
+# E20: a literal with no type before it makes the type expected where it stands, or its own - an empty one has none
+# (a comprehension with no type takes its element's own: tests/barelits.olang)
+fn main() {
+    a := []
+    assert a.Len() == 0
 }

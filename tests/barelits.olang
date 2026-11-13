@@ -1,0 +1,164 @@
+# literals with no type before them (E19-E21, E27, S13h, the user's decision 2026-11-13): "[a, b]", "[k: v]", "[]",
+# "[:]", "[e for x in c]" make the type expected where they stand - a declaration's, a parameter's, a result's, a
+# field's, an element's - as a number literal adapts to it (T6); with nothing expected, their own (E20): an Array<T> of
+# the items' own type, a Map<K, V> for entries. The type in front stays allowed: both forms side by side here
+
+import set "std/set"
+
+# a row-major matrix built row by row through its FromIter, as tests/axes.olang's
+type Grid struct(rows I64, cols I64) {
+    rows, cols
+    data := Vec<I64>()
+}
+
+fn Grid.FromIter<I Iterator<Array<I64> ? E> ? E>(it mut I&) Grid ? E {
+    data := Vec<I64>()
+    rows, cols I64
+    for row in try it {
+        cols = row.Len()
+        for x in row: data.Push(x)
+        rows++
+    }
+    g := Grid(rows, cols)
+    for x in data: g.data.Push(x)
+    return g
+}
+
+# a field given a bare literal: its declared type, or its own (":=")
+type Bag struct(name String&) {
+    name
+    sizes := [1, 2, 3]
+    tags Vec<String> = ["new"]
+    seen set.Set<I64> = []
+}
+
+fn total(xs Array<I64>&) I64 {
+    t := 0
+    for x in xs: t += x
+    return t
+}
+
+fn count(v Vec<I64>&) I64 { return v.Len() }
+
+fn evens(n I64) Vec<I64> { return [2 * x for x in range n] }
+
+fn squares() Array<I64> { return [x * x for x in range 4] }
+
+fn firstOf<T>(xs Array<T>&) T { return xs[0] }
+
+fn pick<T>(fallback T, xs Array<T>&) T { return xs[0] if xs.Len() > 0 else fallback }
+
+fn kind(words Array<String&>&) String {
+    return match words {
+        case ["test", file, ...rest]: "test " $file " +" $rest.Len()
+        case ["build", ...]: "build"
+        case Array<String&>[]: "nothing"
+        case _: "other"
+    }
+}
+
+# baked while compiling (K2)
+Small := [1, 2, 3]
+Squares := [x * x for x in range 5]
+Ages := ["ann": 31, "bo": 45]
+Rows := [[1, 2], [3, 4]]
+Ragged := [[1], [2, 3]]
+Mixed := [1, 2.5, 3]
+Letters := ['a', 'b']
+
+# decided while compiling (S18c, K1)
+assert Small == Array<I64>[1, 2, 3]
+assert Squares[4] == 16 and Squares.Len() == 5
+assert Ages.Get("bo")! == 45
+assert Rows[1][0] == 3 and Ragged[1].Len() == 2
+assert Mixed[1] == 2.5 and Mixed[2] == 3.0 and Letters[1] == 'b'
+assert total([4, 5, 6]) == 15
+assert firstOf(["x", "y"]) == "x"
+assert pick(U8(9), [7]) == 7 and pick(U8(9), Array<U8>[]) == 9
+assert count([1, 2]) == 2 and evens(3)[2] == 4
+assert Grid[[1, 2, 3], [4, 5, 6]].cols == 3
+assert kind(["test", "a.olang", "-v"]) == "test a.olang +1"
+assert [x for x in Small if x > 1] == Array<I64>[2, 3]
+assert [k: v * 2 for k, v in Small].Get(2)! == 6
+
+test "a literal with nothing expected takes its own type (E20)" {
+    a := [1, 2, 3]
+    b := Array<I64>[1, 2, 3]
+    assert a == b and a.Len() == 3
+    f := [1, 2.5]                      # the literals' widest own type, F64
+    assert f[0] == 1.0
+    t := ["a", "bc"]                   # text: String values of their own lengths
+    assert t[1].Len() == 2
+    u8 U8 = 3
+    u := [u8, 4]                       # the first item that is no literal: U8, the literal adapting
+    assert u[1] == U8(4)
+    m := ["one": 1, "two": 2]          # entries: a Map<String, I64>
+    assert m.Get("two")! == 2 and m == Map<String, I64>["one": 1, "two": 2]
+    rows := [[1, 2], [3, 4]]           # rows held by value, laid out at the length they share
+    assert rows[1][1] == 4
+    assert [1, 2].Len() == 2 and 2 in [1, 2, 3]
+    n := 0
+    for x in [10, 20]: n += x
+    assert n == 30
+}
+
+test "a literal makes the type expected where it stands (E19, E21)" {
+    v Vec<I64> = [4, 5]
+    assert v == Vec<I64>[4, 5]
+    e Vec<I64> = []
+    assert e.Len() == 0
+    m Map<String, I64> = [:]
+    assert m.Len() == 0
+    s set.Set<I64> = [1, 2, 2]
+    assert s.Len() == 2
+    w Array<F32> = [1, 2]
+    assert w[1] == F32(2)
+    g Grid = [[1, 2], [3, 4]]
+    assert g.rows == 2 and g.data[3] == 4
+    nested Vec<Vec<I64>> = [[1], [2, 3]]
+    assert nested[1].Len() == 2
+    refs := Array<Array<I64>&>[[1, 2], [3]]      # a reference element: its referent made and lent (E12)
+    assert refs[0][1] == 2
+    v = [7]
+    assert v[0] == 7
+    b := Bag("b")
+    assert b.sizes[2] == 3 and b.tags[0] == "new" and b.seen.Len() == 0
+    assert total([4, 5]) == 9 and count([1, 2, 3]) == 3
+}
+
+test "comprehensions with no type (E27, E20)" {
+    a := [x * x for x in range 4]
+    assert a == Array<I64>[x * x for x in range 4]
+    odd := [x for x in a if x % 2 == 1]
+    assert odd == Array<I64>[1, 9]
+    v Vec<I64> = [x + 1 for x in range 3]
+    assert v == Vec<I64>[1, 2, 3]
+    m := [x: x * x for x in range 3]
+    assert m.Get(2)! == 4
+    typed := Map<I64, I64>[x: x * x for x in range 3]
+    assert m == typed
+    assert evens(4)[3] == 6 and squares()[3] == 9
+}
+
+test "generic calls bind a bare literal after the other arguments (G9a)" {
+    assert firstOf([3, 4]) == 3
+    assert pick(U8(1), [2, 3]) == U8(2)
+    assert pick("none", ["some"]) == "some"
+}
+
+test "array patterns take the matched value's type (S13h)" {
+    assert kind(["test", "x", "a", "b"]) == "test x +2"
+    assert kind(["build", "y"]) == "build"
+    assert kind(Array<String&>[]) == "nothing"
+    match Vec<I64>[1, 2, 3] {
+        case [first, ..., last] { assert first == 1 and last == 3 }
+        case _ { unreachable }
+    }
+}
+
+test "the evaluator agrees (K1)" {
+    assert comptime total([1, 2, 3]) == 6
+    assert comptime [x * 2 for x in range 3][2] == 4
+    assert comptime ["a": 1].Len() == 1
+    assert Small == [1, 2, 3] and Squares[3] == 9 and Mixed[2] == 3.0 and Letters[1] == 'b'
+}

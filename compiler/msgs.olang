@@ -653,12 +653,12 @@ type Diag enum {
     DefaultNeedsCatch
     TryNothingFails
     BangNothingFails
-    NestedArrayLiteral
     ErrorAsResult
     ComprehensionReferences
     LiteralNoFromIter
     LiteralUnique
     LiteralNotMade
+    LiteralNoTarget
     FromIterShape
     LiteralEntries
     ComprWalkFails
@@ -1735,15 +1735,15 @@ fn TryNothingFails(text String&) r.Msg { return r.Msg(Diag.TryNothingFails, "R8"
 fn BangNothingFails() r.Msg { return r.Msg(Diag.BangNothingFails, "E35", "nothing here can fail - write it without '!'") }
 
 
-fn NestedArrayLiteral(ty String&) r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "a nested '[...]' is a literal of the element its literal takes, and " $ty " is no type a literal makes - write the element itself, or hold the rows by value: Array<Array<I32>>[[1, 2], [3, 4]]") }
 fn ArrayOneAxis(ty String&) r.Msg { return r.Msg(Diag.ArrayOneAxis, "E16f", $ty " has one axis - slice it with one range, 'a[lo:hi]'; ':' or '...' among several items calls a type's Slice taking Axis values") }
 fn NoAxisSlice(ty String&) r.Msg { return r.Msg(Diag.NoAxisSlice, "E16f", $ty " declares no Slice taking Axis values - ':' or '...' among a subscript's items calls 'fn (x T&) Slice(a Axis, b Axis) R' (one per axis) or 'Slice(axes ...Axis)'") }
 fn AxisCount(ty String&, want I64, got I64) r.Msg { return r.Msg(Diag.AxisCount, "E16f", $ty "'s Slice takes " $want " axes, " $got " written - write one item per axis ('...' for the rest is the type's to read), or declare 'Slice(axes ...Axis)'") }
 fn SliceNoPlace() r.Msg { return r.Msg(Diag.SliceNoPlace, "E16f", "a slice is not stored into (E16a) - store through its elements, or call a method the type declares for it") }
 fn ComprehensionReferences() r.Msg { return r.Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
 fn LiteralUnique(ty String&, elem String&) r.Msg { return r.Msg(Diag.LiteralUnique, "E19, T13b", "a literal or comprehension of " $ty " hands its FromIter a walk of references to the values, and " $elem " is unique - its values are never copied: make the " $ty " and add each value by its own call (Push, Put)") }
-fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes the type before its '[', through that type's FromIter, and " $ty " has none - for an array of " $ty ", write Array<" $ty ">[...]") }
-fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type before its '[', and " $ty " is a reference - an array of them is Array<" $ty ">[...]") }
+fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes the type written before its '[' or expected where it stands, through that type's FromIter, and " $ty " has none - for an array of " $ty ", write Array<" $ty ">[...]") }
+fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type written before its '[', and " $ty " is a reference - an array of them is Array<" $ty ">[...], or [...] where one is expected") }
+fn LiteralNoTarget(what String&, write String&) r.Msg { return r.Msg(Diag.LiteralNoTarget, "E20", $what " makes the type expected where it stands, and nothing is expected here - write the type in front, as " $write) }
 fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty "'s FromIter takes no one iterator, so no literal can call it - call it as " $ty ".FromIter(...)") }
 fn LiteralEntries(ty String&) r.Msg { return r.Msg(Diag.LiteralEntries, "E19", "a literal of " $ty " holds no 'key: value' entries - its elements are no MapEntry") }
 fn ComprWalkFails() r.Msg { return r.Msg(Diag.ComprWalkFails, "E27", "a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them, and may not fail by calls of its own - write a generator function and call the collection's FromIter with it") }

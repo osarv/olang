@@ -1,4 +1,4 @@
-# check: fail error[E19]: a literal makes the type before its '[', through that type's FromIter, and I64 has none - for an array of I64, write Array<I64>[...]
+# check: fail error[E19]: a literal makes the type written before its '[' or expected where it stands, through that type's FromIter, and I64 has none - for an array of I64, write Array<I64>[...]
 # E19: the type before a literal's "[" is the type it makes - an element type in front makes nothing
 fn main() {
     xs := I64[1, 2]
