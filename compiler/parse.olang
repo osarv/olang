@@ -112,6 +112,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # reads them
     ArgAngles Vec<I64>
     CloseAngles Vec<I64>
+    Subscripts Vec<I64>               # each "[" of an index or a slice (E16a, E16f), by token index, for the formatter
     TypeGroups Vec<I64>               # each "(" grouping a function type in a list (L18c), by token index, for the formatter
     # every comparison read as an operand of "&", "|" or "^" with nothing around it, by its span - where E5's
     # bitwise-tighter precedence (2026-10-24) reads the text otherwise; tools/precedence_migrate.olang wraps them
@@ -3188,6 +3189,7 @@ fn (p Parser&) isQualifiedType(x ast.Expr&) Bool {
 # "[" ... "]" after an operand: a slice, or an index - or an array literal, where the operand names a type
 fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
     start := x.Span().Start
+    lb := p.pos
     p.advance()
     if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace) { try p.fail(token.Tok.RBrack.Describe()) }
     wasNoGt, wasItem := p.noGt, p.item
@@ -3216,6 +3218,7 @@ fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
                 return ast.Expr.ArrayLit(p.from(start), try p.exprAsType(x), gather(p.exprs, from))
             }
         }
+        p.Subscripts.Push(lb)
         first := try p.axisItem(p.here() if lo is null else lo.Span().Start, lo)
         # E16a: one range alone is the one-axis slice
         if p.sees(token.Tok.RBrack) and isAxis(first) {
