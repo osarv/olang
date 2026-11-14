@@ -33,6 +33,7 @@ top-level locals kept for the cells after. A cell whose last statement is an exp
 goes on over several lines while a bracket is open. A cell declaring a name again replaces what had it.
   :type EXPR   the type of the expression's value
   :load FILE   the file's text as a cell
+  :set vi      vi's keys at the prompt (:set emacs, emacs's - the default), remembered
   :help        this
   :quit        leaves (so does the end of the input)
 101

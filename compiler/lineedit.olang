@@ -172,6 +172,21 @@ fn wordLast(t String&, at I64) I64 {
     return i
 }
 
+# the last character of the word at at (vi's cw changes to it)
+fn wordHere(t String&, at I64) I64 {
+    i := at
+    k := class(t[i])
+    for i + 1 < t.Len() and class(t[i + 1]) == k: i++
+    return i
+}
+
+# cw's reach: the word under the cursor, then n - 1 more
+fn (e Editor&) wordsHere(n I64) I64 {
+    to := wordHere(e.Text, e.At)
+    for _ in range n - 1: to = wordLast(e.Text, to)
+    return to
+}
+
 fn one(c Char) String { return String(Array<Char>[c]) }
 
 fn indexOf(t String&, q String&) I64 {
@@ -617,9 +632,11 @@ fn (e mut Editor&) operate(c Char, n I64) Event {
     o := e.op
     e.op = '\0'
     if c == o: return e.wholeLine(o)
-    m := 'e' if o == 'c' and c == 'w' else c
+    word := o == 'c' and c == 'w' and e.At < e.Text.Len() and class(e.Text[e.At]) != 0
+    m := 'e' if word else c
     to := try e.moved(m, n) catch NotMotion { return Event.Editing }
-    if m == 'e' or m == '$': to = nextAt(e.Text, to) if m == 'e' else to
+    if word: to = e.wordsHere(n)
+    if m == 'e': to = nextAt(e.Text, to)
     a := e.At if e.At < to else to
     b := to if e.At < to else e.At
     e.remove(a, b, kill = true)
@@ -1086,6 +1103,16 @@ test Editor "vi: deleting and changing" {
     assert e.Text == "_Y thre"
     e.typed("cc")
     assert e.Text == "" and not e.Normal
+}
+
+test Editor "vi: cw changes the word under the cursor, however short" {
+    e := Editor.testing(vi = true)
+    e.typed("x := 1\x1b0cwy\x1b")
+    assert e.Text == "y := 1"
+    e.typed("0c2wab\x1b")
+    assert e.Text == "ab 1"
+    e.typed("ccfoo bar baz\x1b0c2wq\x1b")
+    assert e.Text == "q baz"
 }
 
 test Editor "vi: i a I A o, dd and j k over an entry's lines" {
