@@ -1,4 +1,4 @@
-# B3e: an index out of range is undefined in the built program; -i stops there and says where
+# B3e, E16g: an index out of range is undefined in a release build; -i checks it and stops there, saying where
 fn main() ? {
     a := Array<I32>[1, 2, 3]
     i I64 = 2
