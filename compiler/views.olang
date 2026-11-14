@@ -727,12 +727,7 @@ fn (v mut Viewer&) rootPlace(p typed.Lvalue&) typed.Lvalue?& {
             case typed.Lvalue.Field(_, _, b, _) { q = b }
             case typed.Lvalue.Elem(_, _, e) { q = e.Base }
             case typed.Lvalue.Payload(_, _, pl) { q = pl.Base }
-            case typed.Lvalue.Deref(_, _, r) {
-                y := unAway(r)
-                q = null
-                if y == typed.Expr.Read: q = y.p
-                if y == typed.Expr.Borrow: q = y.p
-            }
+            case typed.Lvalue.Deref(_, _, r) { q = argPlace(r) }
             case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _) { return q }
             case _ { return null }
         }
