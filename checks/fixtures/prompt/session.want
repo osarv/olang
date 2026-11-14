@@ -9,12 +9,12 @@ Map<String, I64>["a": 1, "b": 2]
 unhandled error: TooBig
 cell20:2: raised here
 cell21:1: try passed it on
-cell22:1:1: error: unknown name 'y'
+cell22:1:1: error[M22]: unknown name 'y'
     1 | y
       | ^
 3
 p is let go: its type is not laid out as it was
-cell26:1:1: error: unknown name 'p'
+cell26:1:1: error[M22]: unknown name 'p'
     1 | p
       | ^
 f is let go: it holds a function value or an 'any', whose code went with its cell - a function declared with 'fn' is kept
@@ -24,7 +24,7 @@ cell29:1:14: warning[D3b]: 'u' is declared and never read - read it, or leave th
 cell30:1: assertion failed
 now text
 102
-cell35:1:6: error: unknown name 'undefinedName'
+cell35:1:6: error[M22]: unknown name 'undefinedName'
     1 | z := undefinedName
       |      ^~~~~~~~~~~~~
 unknown command :bogus - :help lists them

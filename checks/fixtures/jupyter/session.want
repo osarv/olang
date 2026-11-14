@@ -18,7 +18,7 @@ heartbeat: ping
   execute_reply: status="ok"
 > execute_request
   iopub execute_input: "y := nothing_here"
-  iopub error: CompileError "In[5]:1:6: error: unknown name 'nothing_here'"
+  iopub error: CompileError "In[5]:1:6: error[M22]: unknown name 'nothing_here'"
   execute_reply: status="error"
 > execute_request
 > interrupt_request

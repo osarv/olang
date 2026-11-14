@@ -433,6 +433,7 @@ type Diag enum {
     TypeHasNoConstructor
     MethodCalledAsFunction
     NotInModule
+    NotInModulePrelude
     VarIsPrivate
     ShiftUnadapted
     ScopeMayNotOutlive
@@ -1436,7 +1437,7 @@ fn ShadowsType(tok String&) r.Msg { return r.Msg(Diag.ShadowsType, "D3a", $tok "
 fn TypeHasNoConstructor(tok String&) r.Msg { return r.Msg(Diag.TypeHasNoConstructor, "", "type " $tok " has no constructor - an enum's values are its cases") }
 fn MethodCalledAsFunction(tok String&, text String&) r.Msg { return r.Msg(Diag.MethodCalledAsFunction, "M19", $tok " is a method - call it on its receiver: x." $text "(...)") }
 fn NotInModule(text String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NotInModule, "M9", $text " declares no " $tok $hint) }
-fn NotInModulePrelude(text String&, tok String&, call String&) r.Msg { return r.Msg(Diag.NotInModule, "M9", $text " declares no " $tok, "", "the prelude's " $tok " needs no module: write '" $call "'") }
+fn NotInModulePrelude(text String&, tok String&, call String&) r.Msg { return r.Msg(Diag.NotInModulePrelude, "M9", $text " declares no " $tok, "", "the prelude's " $tok " needs no module: write '" $call "'") }
 fn VarIsPrivate(tok String&) r.Msg { return r.Msg(Diag.VarIsPrivate, "M6", $tok " is private to its module") }
 fn ShiftUnadapted() r.Msg { return r.Msg(Diag.ShiftUnadapted, "E8a, E4a", "this shift is past its literal's width, and nothing adapts it to a wider type", "", "convert the literal, as I64(1) << 40") }
 fn ScopeMayNotOutlive() r.Msg { return r.Msg(Diag.ScopeMayNotOutlive, "O10", "this reference lives in a scope that may not outlive where it is put") }
