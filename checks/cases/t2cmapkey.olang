@@ -1,4 +1,4 @@
-# check: fail error[T2c]: String?& may be null, so it meets no trait - K must meet Hashable here: write String&
+# check: fail error[T2c]: String?& may be null, so it meets no trait
 # T2c (bulk review 6 F12, F14): a reference that may be null meets no trait - said at the program's call, not in the
 # prelude's Map where its key is hashed
 fn main() {

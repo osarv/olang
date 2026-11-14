@@ -1,4 +1,4 @@
-# check: fail error[T13c]: a packed struct lays its fields out bit by bit, so String (an array of a run-time length) is no field of one
+# check: fail error[T13c]: String (an array of a run-time length) is no field of a packed struct
 # T13c: text is an array of a run-time length - its own storage elsewhere, no bits in place
 type P packed struct(name String, k U4) { name, k }
 fn main() { }

@@ -838,7 +838,7 @@ compilation failed with 1 error
 d13czeroref.olang:19:12: error[D13c]: Ticket has no zero value, so this needs one
    19 |     b := a.Repeat(2)
       |            ^~~~~~
-d13czeroref.olang:19:12: note: its constructor does not run on zeros while compiling
+d13czeroref.olang:19:12: note: its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
 $ROOT/std/prelude/array.olang:178:12: note: in the standard library's code, here
   178 |     out := Array<T>(a.Len() * k)
       |            ^~~~~~~~~~~~~~~~~~~~~
@@ -848,7 +848,6 @@ d13czeroref.olang:11:5: note: here
 d13czeroref.olang:19:12: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
    19 |     b := a.Repeat(2)
       |            ^~~~~~
-d13czeroref.olang:19:12: help: it writes a global, which the running program would then not see written
 compilation failed with 1 error
 === d15forwardcycle.olang
 d15forwardcycle.olang:4:1: error[B5a]: these globals' initializers read each other, so none can be set first: A -> B -> C -> A
@@ -1340,14 +1339,13 @@ compilation failed with 2 errors
 definiteffect.olang:11:5: error[D13c]: Eff has no zero value, so this needs one
    11 |     e Eff
       |     ^
-definiteffect.olang:11:5: note: its constructor does not run on zeros while compiling
+definiteffect.olang:11:5: note: its constructor does not run on zeros while compiling: it reads a mutable global, whose value is the running program's
 definiteffect.olang:13:12: note: read here before it is assigned on every path - assign it on each path before this read
    13 |     return e.v
       |            ^
 definiteffect.olang:8:12: note: here
     8 |     Made = Made + 1
       |            ^~~~
-definiteffect.olang:11:5: help: it reads a mutable global, whose value is the running program's
 compilation failed with 1 error
 === definitfield.olang
 definitfield.olang:7:5: error[D13d]: the field 'n' is not assigned on every path through the constructor
@@ -2543,13 +2541,11 @@ compilation failed with 1 error
 g10dnozero.olang:12:5: error[D13c]: D has no zero value, so this needs one
    12 |     d D
       |     ^
-g10dnozero.olang:12:5: note: its constructor does not run on zeros while compiling
-g10dnozero.olang:12:5: help: it introduces a type variable, which no zero binds
+g10dnozero.olang:12:5: note: its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
 g10dnozero.olang:14:10: error[D13c]: D has no zero value, so this needs one
    14 |     a := Array<D>(3)
       |          ^~~~~~~~~~~
-g10dnozero.olang:14:10: note: its constructor does not run on zeros while compiling
-g10dnozero.olang:14:10: help: it introduces a type variable, which no zero binds
+g10dnozero.olang:14:10: note: its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
 compilation failed with 2 errors
 === g10dtypeargs.olang
 g10dtypeargs.olang:9:22: error[G7]: D is not generic, so it takes no type arguments
@@ -7528,24 +7524,22 @@ compilation failed with 1 error
 zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one
     9 |     c Counted
       |     ^
-zeroeffect.olang:9:5: note: its constructor does not run on zeros while compiling
+zeroeffect.olang:9:5: note: its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
 zeroeffect.olang:10:12: note: read here before it is assigned on every path - assign it on each path before this read
    10 |     assert c.n == 0
       |            ^
 zeroeffect.olang:6:5: note: here
     6 |     Made++
       |     ^~~~~~
-zeroeffect.olang:9:5: help: it writes a global, which the running program would then not see written
 compilation failed with 1 error
 === zerofails.olang
 zerofails.olang:11:5: error[D13c]: NonZero has no zero value, so this needs one
    11 |     n NonZero
       |     ^
-zerofails.olang:11:5: note: its constructor does not run on zeros while compiling
+zerofails.olang:11:5: note: its constructor does not run on zeros while compiling: it fails with an error no clause handles
 zerofails.olang:12:16: note: read here before it is assigned on every path - assign it on each path before this read
    12 |     assert I32(n) != 0
       |                ^
-zerofails.olang:11:5: help: it fails with an error no clause handles
 compilation failed with 1 error
 === zeroshared.olang
 zeroshared.olang:7:13: error[D13c]: Bag's zero value holds references, which a fill would share

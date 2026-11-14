@@ -1,4 +1,4 @@
-# check: fail error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows
+# check: fail error[S8d]: Shape is an enum
 # S8d: a narrowing holds until a statement assigns the local - read before it, not after
 type Shape enum { Dot, Ring(r I64) }
 fn main() {

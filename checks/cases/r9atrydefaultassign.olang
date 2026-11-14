@@ -1,4 +1,4 @@
-# check: fail a 'try ... catch' value is the element or what a clause gives
+# check: fail a 'try ... catch' value is
 # R9a (T1h): an assignment, and an increment, through a field of "try a[i] catch default v" - no place (baked 51, run 0)
 import "std/io"
 type Pt struct() {

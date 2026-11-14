@@ -1926,7 +1926,7 @@ fn TryCatchOnSlice() r.Msg { return r.Msg(Diag.TryCatchOnSlice, "R10", "a try st
 fn EmptyDestructor() r.Msg { return r.Msg(Diag.EmptyDestructor, "C7a", "this destructor does nothing - remove it") }
 fn LiteralCtorFails(ty String&, text String&) r.Msg { return r.Msg(Diag.LiteralCtorFails, "T29d", "this literal enters " $ty " through its constructor, which does not run on it while compiling", $text) }
 fn ZeroValueShared(ty String&) r.Msg { return r.Msg(Diag.ZeroValueShared, "D13c", $ty "'s zero value holds references, which a fill would share", "", "give a fill, or build the elements") }
-fn NoZeroValue(ty String&, text String&) r.Msg { return r.Msg(Diag.NoZeroValue, "D13c", $ty " has no zero value, so this needs one", "its constructor does not run on zeros while compiling", $text) }
+fn NoZeroValue(ty String&, text String&) r.Msg { return r.Msg(Diag.NoZeroValue, "D13c", $ty " has no zero value, so this needs one", "its constructor does not run on zeros while compiling: " $text) }
 fn ReadUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.ReadUnassigned, "D13d", "'" $name "' is read here before it is assigned on every path", $ty " has no zero value", "assign it on each path before this read, or give it a value" $fix) }
 fn FieldUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.FieldUnassigned, "D13d", "the field '" $name "' is not assigned on every path through the constructor", $ty " has no zero value", "assign it on each path, or give it a value" $fix) }
 fn TopSetPlace() r.Msg { return r.Msg(Diag.TopSetPlace, "D13e", "a top-level assignment is written only inside a top-level 'if'", "it is a global's initializer", "give the value in the global's declaration") }

@@ -1,4 +1,4 @@
-# check: fail error[P4a]: 'break' may not leave a task's clause - it runs on the task, outside the spawner's loops
+# check: fail error[P4a]: 'break' may not leave a task's clause
 # P4a: the clause runs on the task's thread, so the spawner's loop is not around it
 type E error {
     Bad

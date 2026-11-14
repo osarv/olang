@@ -1,6 +1,7 @@
 === olang 
 | stdout:
-| olang: error[B1]: nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)
+| olang: error[B1]: nothing to do
+| olang: help: write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)
 | stderr:
 | status 1
 === olang -debug
@@ -65,7 +66,9 @@
 | status 1
 === olang test -bench -fuzz x main.olang
 | stdout:
-| olang: error[B19b]: -bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs - give one
+| olang: error[B19b]: -bench and -fuzz are given together
+| olang: note: -bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs
+| olang: help: give one
 | stderr:
 | status 1
 === olang help -debug
@@ -110,37 +113,47 @@
 | status 1
 === olang compile -target bogus-cpu main.olang
 | stdout:
-| olang: error[B12]: unknown target 'bogus-cpu' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+| olang: error[B12]: unknown target 'bogus-cpu'
+| olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
 | stderr:
 | status 1
 === olang compile -target riscv64-linux-gnu main.olang
 | stdout:
-| olang: error[B12]: olang does not build for 'riscv64-linux-gnu' - it builds for x86_64 and aarch64 Linux with the GNU C library
+| olang: error[B12]: olang does not build for 'riscv64-linux-gnu'
+| olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library
 | stderr:
 | status 1
 === olang compile -target x86_64-apple-darwin main.olang
 | stdout:
-| olang: error[B12]: olang does not build for 'x86_64-apple-darwin' - it builds for x86_64 and aarch64 Linux with the GNU C library
+| olang: error[B12]: olang does not build for 'x86_64-apple-darwin'
+| olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library
 | stderr:
 | status 1
 === olang compile -target x86_64-linux-gnu:a:b main.olang
 | stdout:
-| olang: error[B12]: unknown target 'x86_64-linux-gnu:a:b' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+| olang: error[B12]: unknown target 'x86_64-linux-gnu:a:b'
+| olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
 | stderr:
 | status 1
 === olang compile -target aarch64-linux-gnu:native main.olang
 | stdout:
-| olang: error[B12]: '-target aarch64-linux-gnu:native': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default
+| olang: error[B12]: '-target aarch64-linux-gnu:native' names native with another architecture's CPU
+| olang: note: native is this machine's CPU
+| olang: help: name the other architecture's CPU after ':', or none for its default
 | stderr:
 | status 1
 === olang build -target aarch64-linux-gnu:native main.olang
 | stdout:
-| olang: error[B12]: '-target aarch64-linux-gnu:native': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default
+| olang: error[B12]: '-target aarch64-linux-gnu:native' names native with another architecture's CPU
+| olang: note: native is this machine's CPU
+| olang: help: name the other architecture's CPU after ':', or none for its default
 | stderr:
 | status 1
 === olang interpret -target aarch64-linux-gnu main.olang
 | stdout:
-| olang: error[B12a]: interpret runs on this machine, and '-target aarch64-linux-gnu' is another architecture or system - build, compile and test build for it
+| olang: error[B12a]: interpret runs on this machine, not on '-target aarch64-linux-gnu'
+| olang: note: '-target aarch64-linux-gnu' is another architecture or system
+| olang: help: build, compile and test build for it
 | stderr:
 | status 1
 === olang build -define X main.olang
@@ -231,12 +244,14 @@
 | status 1
 === olang bogus
 | stdout:
-| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
+| olang: error[B1]: 'bogus' is not a mode
+| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang main.txt
 | stdout:
-| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
+| olang: error[B1]: 'main.txt' is not a mode
+| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang -debug main.txt
@@ -420,7 +435,8 @@
 | status 0
 === olang help nope
 | stdout:
-| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
+| olang: error[B1]: 'nope' is not a mode
+| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang help build test

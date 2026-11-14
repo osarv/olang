@@ -1,4 +1,4 @@
-# check: fail error[T2c]: 'p' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
+# check: fail error[T2c]: 'p' is a N?&, which may be null
 # S8e: after "for p is null { }" p is known not null only where the loop holds no break - a break may leave with p null
 type N struct(v I64) { v }
 fn f(a Array<N?&>&) I64 {

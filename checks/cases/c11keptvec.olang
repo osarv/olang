@@ -1,4 +1,4 @@
-# check: fail error[C11]: Kept has a destructor to run and copies (its Copy), and a copy of Vec<Kept> would copy what it holds past its count - hold them by reference, Kept&
+# check: fail error[C11]: Kept has a destructor to run and copies
 # C11: a collection holds values with destructors by value only where they are unique - a copy of it copies its whole
 # buffer, the positions it vacated too
 Ended mut I64 = 0

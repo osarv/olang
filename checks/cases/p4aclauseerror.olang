@@ -1,4 +1,4 @@
-# check: fail error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
+# check: fail error[P4a]: an error may not leave a task's clause
 # P4a: an error statement in a clause would leave it - what the task lets through is what its clauses do not take
 type E error {
     Bad

@@ -1,5 +1,5 @@
 # check: fail error[D11a]: a local is always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
-# also: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
+# also: error[D9]: 'mut' on a by-value parameter of type fn&(x I64) I64
 # D11a, D9: a function value is no reference - "mut" before its type says nothing, on a local and a parameter alike
 import "std/io"
 fn dbl(x I64) I64 { return x * 2 }

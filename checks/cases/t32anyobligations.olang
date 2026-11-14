@@ -1,4 +1,4 @@
-# check: fail error[T30c, T22b]: aBag's 'Put' keeps 'n' in the instance, and aSink's 'Put' says nothing of that - write 'keeps n' after its signature in the trait
+# check: fail error[T30c, T22b]: aBag's 'Put' keeps 'n' in the instance, and aSink's 'Put' says nothing of that
 # T32a, T30c: a call through an "any" keeps nothing its trait's method does not say
 type aNode struct(v I64) { v }
 type aSink trait {

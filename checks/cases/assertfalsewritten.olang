@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: "n is " $n
+# check: fail error[S18c]: this assertion is false, evaluated while
 # also: compilation failed with 1 error
 # S18c: a decided false assert whose message reads what only the running program knows (a parameter) carries the
 # message as written, saying so

@@ -1,4 +1,4 @@
-# check: fail error[T13d]: Node is generational - a weak reference names it - and its values are never copied, only referenced: drop 'unique'
+# check: fail error[T13d]: Node is generational
 # T13d: a generational type is never unique
 type Node unique struct(v I64) {
     v

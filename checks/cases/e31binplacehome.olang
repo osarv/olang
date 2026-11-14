@@ -1,4 +1,4 @@
-# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection
+# check: fail error[E31b]: this call writes a copy of x[i]
 # never: error[E31, O17]
 # R1 (refusals 5.1): the split lend is no longer refused; E31b's write-back stays (section 6)
 # E31b (bulk review 6 F1): an element holding a writable reference to a collection of its own type - its method may grow

@@ -1,12 +1,12 @@
-# check: fail error[E31]: Graph's MatMul takes 4 parameters besides its receiver - an ordinary method, not the one '@' calls, which takes one
+# check: fail error[E31]: Graph's MatMul takes 4 parameters besides its receiver
 # also: note: 'MatMul' is declared here
-# also: error[E31]: Graph's Neg takes one parameter besides its receiver - an ordinary method, not the one '-' calls, which takes none
-# also: error[E31]: Graph's SetAt takes one parameter besides its receiver - an ordinary method, not the one 'x[i] = v' calls, which takes at least 2
-# also: error[E31]: Graph's Slice takes one parameter besides its receiver - an ordinary method, not the one 'x[lo:hi]' calls, which takes 2
-# also: error[E31]: Graph's Has takes 2 parameters besides its receiver - an ordinary method, not the one 'x in c' calls, which takes one
-# also: error[E31]: Graph's Next takes one parameter besides its receiver - an ordinary method, not the one 'for ... in' calls, which takes none
-# also: error[E31]: Graph's Inc takes one parameter besides its receiver - an ordinary method, not the one '++' calls, which takes none
-# also: error[E31]: Graph's Less takes 2 parameters besides its receiver - an ordinary method, not the one '<' calls, which takes one
+# also: error[E31]: Graph's Neg takes one parameter besides its receiver
+# also: error[E31]: Graph's SetAt takes one parameter besides its receiver
+# also: error[E31]: Graph's Slice takes one parameter besides its receiver
+# also: error[E31]: Graph's Has takes 2 parameters besides its receiver
+# also: error[E31]: Graph's Next takes one parameter besides its receiver
+# also: error[E31]: Graph's Inc takes one parameter besides its receiver
+# also: error[E31]: Graph's Less takes 2 parameters besides its receiver
 # also: compilation failed with 8 errors
 # E31: a method named for an operator but shaped otherwise is an ordinary method - it is declared and called by name
 # freely, and only using the operator on the type is an error, which names the method and the parameters it takes

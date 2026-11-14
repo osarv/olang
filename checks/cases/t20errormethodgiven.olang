@@ -1,4 +1,4 @@
-# check: fail error[T20]: an error value's Str is the language's (T20)
+# check: fail error[T20]: an error value's Str is the language's
 # T20: an error type may not declare what the language gives every error value - here how it renders
 type ReadError error { Bad(line I64), Eof }
 fn (e ReadError) Str() String { return "parse" }

@@ -1,4 +1,4 @@
-# check: fail error[T13b]: Vec<Conn> is unique: this value is held elsewhere, and 'c' holds one of its own - write a reference ('Vec<Conn>&'), or make a new Vec<Conn> here
+# check: fail error[T13b]: Vec<Conn> is unique
 # C11, T13b: a Vec of values with destructors is unique, as they are - never copied
 Closed mut I64 = 0
 type Conn unique struct(fd I32) {

@@ -1,4 +1,4 @@
-# check: fail error[E31d]: a Copy only builds the new value, and this one writes a global
+# check: fail error[E31d]: this Copy writes a global
 # E31d, O15 (A5): effects read a holder's drop where its flag may be set - here the callee hands its parameter on, then
 # an error may leave with the holder still holding it, whose destructor (writing a global) runs: a Copy calling it may do
 # more than build, however it handles the error

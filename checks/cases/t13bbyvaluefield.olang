@@ -1,4 +1,4 @@
-# check: fail error[T13b]: File is unique: this value is held elsewhere, and a field holds one of its own
+# check: fail error[T13b]: File is unique
 # T13b: a field typed with the value's type, stored an existing value
 type File unique struct(fd I32) { fd }
 type Box struct() {

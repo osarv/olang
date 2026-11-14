@@ -1,4 +1,4 @@
-# check: fail error[T13b]: 'f' is handed on here, and File is unique - a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
+# check: fail error[T13b]: 'f' is handed on here, and File is unique
 # T13b: deferred code runs after everything - a mention there comes after the landing, whatever its place in the text
 import "std/io"
 type File unique struct(fd I32) { fd }

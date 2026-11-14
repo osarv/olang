@@ -1,4 +1,4 @@
-# check: fail error[K2]: this global's initializer aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
+# check: fail error[K2]: this global's initializer aborts the program, evaluated while compiling
 # also: compilation failed with 1 error
 # K2, S18c, S17a: a global whose initializer aborts is one error, at the global - the asserts reading it (a top-level
 # one, decided ones in main, one through another global) say nothing more

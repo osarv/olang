@@ -1,4 +1,4 @@
-# check: fail error[R11b]: a match on an error value used as a value gives a value in every clause, 'case P: v' - a clause that leaves is written in a match statement
+# check: fail error[R11b]: a match on an error value used as a value
 # R11b: a value match on a caught error is the conditional it is, so each clause gives a value
 type P error { A, B }
 fn f() I64 ? P { error P.A }

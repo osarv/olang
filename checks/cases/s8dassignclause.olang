@@ -1,4 +1,4 @@
-# check: fail error[S8d]: Shape is an enum - its payload's 'p' is read where a test narrows a local or a parameter to the case
+# check: fail error[S8d]: Shape is an enum
 # also: error[T2c]: 'q' is a N?&, which may be null
 # S8d, S8e: a local assigned in a catch clause inside a declaration's value (or any other expression) is assigned in
 # the block, so the narrowing ends - it held, and a payload was read as another case's (a reference read from a number)

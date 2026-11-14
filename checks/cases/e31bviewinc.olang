@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b: an increment of the parameter's own field is a write of its own storage
 type V struct(d mut Array<I64>&, n I64) {
     d

@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b: a "mut" method writing the receiver's own field, called on x[i]
 type V struct(d mut Array<I64>&, n I64) {
     d

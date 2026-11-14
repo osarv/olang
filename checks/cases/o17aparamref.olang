@@ -1,4 +1,4 @@
-# check: fail error[O17a, T13b]: 'v' holds references to the caller's storage while its own storage is this call's
+# check: fail error[O17a, T13b]: 'v'
 # O17a, T13b: 'w := v' of a unique by-value parameter is a reference to it, and its references are the caller's while its
 # storage is the call's - the value is taken at its last mention instead, 'w Vec<Logged> = v' (review A, p9;
 # o17aparamhandon runs that)

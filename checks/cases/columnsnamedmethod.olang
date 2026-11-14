@@ -1,4 +1,4 @@
-# check: fail error[T7e]: R's field 'Len' would be a column of Columns<R> named like its method 'Len' (M19) - rename the field
+# check: fail error[T7e]: R's field 'Len' would be a column of Columns<R> named like its method
 # T7e, M19: a column is named as its field, and a member may not be both a field and a method
 type R struct(Len I64, W I64) { Len, W }
 fn main() {

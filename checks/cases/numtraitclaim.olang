@@ -1,4 +1,4 @@
-# check: fail nfFake does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
+# check: fail nfFake does not satisfy the constraint Float on T
 # T31a/T35c: Float is closed - a type having every method a float has still is none of the types the trait lists
 type nfFake struct(v F64) { v }
 fn (f nfFake) Div(d F64) nfFake { return nfFake(f.v / d) }

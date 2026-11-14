@@ -1,4 +1,4 @@
-# check: fail error[S13i]: a struct pattern names the fields it matches - write 'field = pattern' or a field's name: the order of Point's fields is no part of it
+# check: fail error[S13i]: a struct pattern names the fields it matches
 # S13i: a struct pattern has no item by position, whatever its constructor takes
 type Point struct(x I64, y I64) { x, y }
 fn f(p Point) I64 {

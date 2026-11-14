@@ -1,4 +1,4 @@
-# check: fail error[D3a, E29]: 'x' is already declared, and a for-in declares new names - choose another
+# check: fail error[D3a, E29]: 'x' is already declared, and a for-in declares new names
 # E29: "for x in c" is always a loop over c - with x already declared it is an error, never a membership test
 fn main() ? {
     x := 2

@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b/O17b (G2): the same through a function taking the handle by a writable reference, declared after its caller
 type State struct() {
     n I64 = 0

@@ -1,4 +1,4 @@
-# check: fail error[G38]: 'I64' is a type, not a value - write it where a type goes: a declaration ('x I64 = ...'), a type argument or a match's subject
+# check: fail error[G38]: 'I64' is a type, not a value
 # a built-in type read as a value is an error - it was taken for an unknown value, and a comparison of it for false
 fn main() {
     e := I64 > 3

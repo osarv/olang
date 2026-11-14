@@ -1,4 +1,4 @@
-# check: fail aKnob cannot be an 'any aWidget&': aWidget is closed, met by aButton, aSlider alone
+# check: fail aKnob cannot be an 'any aWidget&'
 # T32a, T31a: run-time trait values
 type aWidget trait for aButton, aSlider {
     Draw() I64

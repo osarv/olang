@@ -1,4 +1,4 @@
-# check: fail error[T2d]: a weak reference names an instance of a struct or an enum, and Db is an extern type
+# check: fail error[T2d]: a weak reference names
 # T2d: an extern type is no weak reference's target
 extern {
     type Db

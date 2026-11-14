@@ -1,4 +1,4 @@
-# check: fail error[G33]: a list known while compiling is walked with no call that can fail - write 'for x in ...' without 'try'
+# check: fail error[G33]: 'try' on a walk of a list known while compiling
 # also: compilation failed with 1 error
 # G33: walking a reflected list makes no call that can fail
 type Point struct(x I64, y I64 = 2) { x, y }

@@ -1,4 +1,4 @@
-# check: fail declares At but not SetAt - the copy At gives back is never written back
+# check: fail declares At but not SetAt
 # E31: a write through "x[i]" - a field assigned, a mut method, a "mut &" argument - reads the element through At and
 # writes the copy back through SetAt; a type declaring At and no SetAt has nothing to write it back with
 type P struct(x I32) {

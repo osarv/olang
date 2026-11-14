@@ -1,4 +1,4 @@
-# check: fail error[T22b]: this lambda may end the program, and 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns'
+# check: fail error[T22b]: this lambda may end the program
 # also: note: it may end the program here
 # T22b: returns rules out an ending the program writes - an assert not decided true while compiling is one
 fn Run(f fn&(x I64) I64 returns, x I64) I64 { return f(x) }

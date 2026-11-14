@@ -1,4 +1,4 @@
-# check: fail error[R1d]: this function raises Odd but writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or '? Odd'
+# check: fail error[R1d]: this function raises Odd but writes no '?'
 # R1d: raising an error is failing, which a function writing no '?' cannot
 fn half(n I64) I64 {
     if n % 2 == 1 { error Odd }

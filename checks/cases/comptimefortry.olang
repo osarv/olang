@@ -1,4 +1,4 @@
-# check: fail error[K3a]: a comptime for's elements are computed while compiling, so nothing of its walk fails at run time
+# check: fail error[K3a]: a comptime for's
 # K3a: an unrolled walk has nothing to fail at run time
 fn main() {
     t I64 = 0

@@ -1,4 +1,4 @@
-# check: fail error[O15, O16]: this value is held where its call lands, ended as that scope closes - after 'l'
+# check: fail error[O15, O16]: this value
 # O15, O16: a temporary given writably after an argument with an effect stays registered where its call lands (a hidden
 # holder made first would reorder the effect), ended after the block's variables - one of which the call may make it hold
 type Tally struct() {

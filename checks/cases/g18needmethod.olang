@@ -1,4 +1,4 @@
-# check: fail g18needmethod.olang:9:10: error[G18]: Describe needs Name, and String has none - declare it for String, or call Describe with a type that has it
+# check: fail g18needmethod.olang:9:10: error[G18]: Describe needs Name, and String has none
 # also: g18needmethod.olang:6:39: note: Describe needs Name here
 # also: and I64 has none
 # never: instantiated here

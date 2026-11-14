@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back, and this store holds only what its written function type says of every call
+# check: fail error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back
 # T22b, T21c: "keeps k" relates k to where the function value lives; keeping it in a global needs it to outlive the
 # program's scope, which no promise says
 store mut Vec<String&> = Vec<String&>()

@@ -1,4 +1,4 @@
-# check: fail error[R23a]: a function giving a Bool that writes through 'out' gives a flag beside a value - give the value as the result and fail with '? E' instead
+# check: fail error[R23a]: a function giving a Bool that writes through 'out' gives a flag beside a value
 # R23a: a success flag beside an out-parameter is a value and an error
 fn parse(t String&, out mut Vec<I64>&) Bool {
     if t.Len() == 0 { return false }

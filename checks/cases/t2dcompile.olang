@@ -1,4 +1,4 @@
-# check: fail error[S17a]: a top-level assert is decided while compiling, and this one cannot be: it reads a weak place whose referent no owning place holds, which the running program may read as null (t2dcompile.olang:22) - assert it in a function or a test, where it is checked at run time
+# check: fail error[S17a]: this top-level assert cannot be decided while compiling
 # K1, T2d: the evaluator decides a weak read only while an owning place holds its node; a node let go of is read as
 # null by the running program, and never guessed while compiling - the read is left to the run time
 type Node struct(v I64) {

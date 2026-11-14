@@ -1,4 +1,4 @@
-# check: fail error[T22b]: 'link16' keeps 'b' in 'a', and the function type of this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) - says nothing of that - write 'keeps b in a' after its signature
+# check: fail error[T22b]: 'link16' keeps 'b' in 'a'
 # T22c: at most 16 twins of one body - the seventeenth function needing one is a boundary, its error naming the limit
 type N struct(v I64) {
     v

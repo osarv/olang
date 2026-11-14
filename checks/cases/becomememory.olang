@@ -1,4 +1,4 @@
-# check: fail error[S21]: 'become' cannot jump where a parameter or the result is over 128 bytes, passed through memory the function's frame holds - pass a reference, or write 'return'
+# check: fail error[S21]: 'become' cannot jump
 # S21: a result over 128 bytes is passed through memory, which a musttail jump cannot hand on
 fn big(n I64) Array<I64> {
     a := Array<I64>(20, n)

@@ -1,8 +1,10 @@
 ===  tests/Base.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14,6 +16,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22,8 +26,10 @@
 ===  tests/Lib.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -35,6 +41,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -43,10 +51,12 @@
 ===  tests/any.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -58,6 +68,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -70,8 +82,10 @@
 ===  tests/arraypat.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -83,6 +97,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -120,6 +136,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -131,6 +148,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -142,8 +161,10 @@
 ===  tests/attrmod.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -155,6 +176,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -164,8 +187,10 @@
 ===  tests/attrs.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -177,6 +202,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -186,6 +213,58 @@
 | module tests/attrs
 |   attrmod tests/attrmod
 |   me2 tests/attrs
+===  tests/axes.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/axes
+===  tests/barelits.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/set
+| module tests/barelits
+|   set std/set
 ===  tests/become.olang
 | module <fcntl.h>
 | module <math.h>
@@ -196,6 +275,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -207,6 +287,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -227,6 +309,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -238,6 +321,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -249,8 +334,10 @@
 ===  tests/builders.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -262,6 +349,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -277,8 +366,10 @@
 | module <stdio.h>
 | module <stdlib.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -290,6 +381,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -310,6 +403,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -321,6 +415,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -330,8 +426,10 @@
 ===  tests/copy.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -343,6 +441,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -358,6 +458,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -369,6 +470,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -378,8 +481,10 @@
 ===  tests/definit.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -391,6 +496,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -399,9 +506,11 @@
 ===  tests/drops.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/deque
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -413,6 +522,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -422,8 +533,10 @@
 ===  tests/embed.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -435,6 +548,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -443,8 +558,10 @@
 ===  tests/errdata.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -456,6 +573,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -464,8 +583,10 @@
 ===  tests/errsetparams.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -477,6 +598,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -514,6 +637,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -525,6 +649,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -565,6 +691,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -576,6 +703,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -616,6 +745,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -627,6 +757,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -640,8 +772,10 @@
 ===  tests/filtered.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -653,6 +787,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -661,8 +797,10 @@
 ===  tests/fnref.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -674,6 +812,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -682,8 +822,10 @@
 ===  tests/fnrel.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -695,6 +837,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -703,8 +847,10 @@
 ===  tests/fnvalues.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -716,6 +862,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -724,8 +872,10 @@
 ===  tests/follow.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -737,6 +887,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -745,8 +897,10 @@
 ===  tests/genenums.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -758,6 +912,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -766,8 +922,10 @@
 ===  tests/generators.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -779,6 +937,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -787,8 +947,10 @@
 ===  tests/globalstart.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -800,6 +962,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -808,8 +972,10 @@
 ===  tests/handover.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -821,6 +987,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -829,8 +997,10 @@
 ===  tests/handoverglobal.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -842,6 +1012,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -850,8 +1022,10 @@
 ===  tests/immut.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -863,6 +1037,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -871,8 +1047,10 @@
 ===  tests/inplace.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -884,6 +1062,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -892,8 +1072,10 @@
 ===  tests/intsweep.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -905,6 +1087,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -913,9 +1097,11 @@
 ===  tests/intwidths.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -927,6 +1113,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -936,8 +1124,10 @@
 ===  tests/kept.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -949,6 +1139,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -957,8 +1149,10 @@
 ===  tests/keptparams.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -970,6 +1164,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -978,8 +1174,10 @@
 ===  tests/lanes.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -991,6 +1189,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -999,11 +1199,13 @@
 ===  tests/literals.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/bitset
 | module std/deque
 | module std/list
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1015,6 +1217,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1028,8 +1232,10 @@
 ===  tests/match.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1041,6 +1247,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1049,8 +1257,10 @@
 ===  tests/namedargs.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1062,6 +1272,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1070,8 +1282,10 @@
 ===  tests/nll.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1083,6 +1297,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1091,11 +1307,13 @@
 ===  tests/packed.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/json
 |   list std/list
 | module std/list
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1107,6 +1325,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1123,6 +1343,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1134,6 +1355,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1143,9 +1366,11 @@
 ===  tests/power.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1157,6 +1382,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1166,8 +1393,10 @@
 ===  tests/promises.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1179,6 +1408,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1187,8 +1418,10 @@
 ===  tests/raised.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1200,6 +1433,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1210,8 +1445,10 @@
 ===  tests/raisedlex.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1223,6 +1460,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1231,8 +1470,10 @@
 ===  tests/reads.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1244,6 +1485,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1252,8 +1495,10 @@
 ===  tests/reclaim.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1265,6 +1510,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1273,8 +1520,10 @@
 ===  tests/reclaimarrays.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1286,6 +1535,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1294,8 +1545,10 @@
 ===  tests/reclaimtasks.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1307,6 +1560,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1344,6 +1599,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1355,6 +1611,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1368,8 +1626,10 @@
 ===  tests/reflmod.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1381,6 +1641,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1389,10 +1651,12 @@
 ===  tests/runner.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1404,6 +1668,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1428,10 +1694,12 @@
 ===  tests/shared.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1443,6 +1711,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1453,8 +1723,10 @@
 ===  tests/structpat.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1466,6 +1738,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1474,8 +1748,10 @@
 ===  tests/textslot.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1487,6 +1763,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1502,6 +1780,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1513,6 +1792,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1522,8 +1803,10 @@
 ===  tests/unique.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1535,6 +1818,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1550,6 +1835,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1561,6 +1847,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1570,8 +1858,10 @@
 ===  tests/valueparts.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1583,6 +1873,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1591,8 +1883,10 @@
 ===  tests/variadic.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1604,6 +1898,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1612,8 +1908,10 @@
 ===  tests/viewplace.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1625,6 +1923,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1633,8 +1933,10 @@
 ===  tests/weak.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1646,6 +1948,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1654,10 +1958,12 @@
 ===  tests/worker.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1669,6 +1975,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1693,8 +2001,10 @@
 ===  tests/geom/measure.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1706,6 +2016,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1717,8 +2029,10 @@
 ===  tests/geom/rect.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1730,6 +2044,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1741,9 +2057,11 @@
 ===  std/arith.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1755,6 +2073,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1762,9 +2082,11 @@
 ===  std/base64.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/base64
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1776,6 +2098,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1794,6 +2118,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1805,6 +2130,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1814,9 +2141,11 @@
 ===  std/bitset.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/bitset
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1828,6 +2157,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1836,11 +2167,13 @@
 | module <math.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/cancel
 |   ctime <time.h>
 |   time std/time
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1852,6 +2185,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1863,6 +2198,7 @@
 | module <pthread.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/cancel
 |   ctime <time.h>
 |   time std/time
@@ -1873,6 +2209,7 @@
 |   time std/time
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1884,6 +2221,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1893,9 +2232,11 @@
 ===  std/crc32.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/crc32
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1907,6 +2248,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1914,9 +2257,11 @@
 ===  std/csv.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/csv
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1928,6 +2273,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1935,9 +2282,11 @@
 ===  std/deque.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/deque
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1949,6 +2298,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1956,9 +2307,11 @@
 ===  std/ffi.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/ffi
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1970,6 +2323,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1977,9 +2332,11 @@
 ===  std/filepath.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/filepath
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -1991,6 +2348,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -1998,9 +2357,11 @@
 ===  std/flags.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/flags
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2012,6 +2373,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2053,6 +2416,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2064,6 +2428,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2073,9 +2439,11 @@
 ===  std/heap.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/heap
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2087,6 +2455,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2094,9 +2464,11 @@
 ===  std/hex.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/hex
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2108,6 +2480,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2146,6 +2520,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2157,6 +2532,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2173,6 +2550,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2184,6 +2562,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2191,11 +2571,13 @@
 ===  std/json.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/json
 |   list std/list
 | module std/list
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2207,6 +2589,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2214,9 +2598,11 @@
 ===  std/list.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/list
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2228,6 +2614,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2247,6 +2635,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2258,6 +2647,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2267,9 +2658,11 @@
 ===  std/order.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/order
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2281,6 +2674,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2317,6 +2712,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2328,6 +2724,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2337,9 +2735,11 @@
 ===  std/pair.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2351,6 +2751,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2358,9 +2760,11 @@
 ===  std/pool.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/pool
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2372,6 +2776,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2413,6 +2819,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2424,6 +2831,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2443,8 +2852,10 @@
 ===  std/rand.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2456,6 +2867,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2464,8 +2877,10 @@
 ===  std/regex.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2477,6 +2892,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2487,8 +2904,10 @@
 ===  std/set.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2500,6 +2919,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2508,9 +2929,11 @@
 ===  std/sha256.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/hex
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2522,6 +2945,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2531,8 +2956,10 @@
 ===  std/stats.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2544,6 +2971,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2553,8 +2982,10 @@
 | module <math.h>
 | module <pthread.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2566,6 +2997,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2576,8 +3009,10 @@
 | module <math.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2589,6 +3024,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2598,8 +3035,10 @@
 ===  std/utf8.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2611,6 +3050,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -2981,6 +3422,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -2992,6 +3434,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3038,6 +3482,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3049,6 +3494,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3098,6 +3545,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3109,6 +3557,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3199,6 +3649,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3210,6 +3661,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3255,6 +3708,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3266,6 +3720,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3442,6 +3898,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3453,6 +3910,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3518,6 +3977,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3529,6 +3989,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3578,6 +4040,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3589,6 +4052,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3638,6 +4103,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3649,6 +4115,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3658,12 +4126,14 @@
 ===  compiler/diagmsg.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/diagmsg
 |   msgs compiler/msgs
 | module compiler/msgs
 |   r compiler/diagmsg
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3675,6 +4145,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -3958,6 +4430,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -3969,6 +4442,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -4123,6 +4598,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -4134,6 +4610,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -4223,6 +4701,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -4385,6 +4864,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -4396,6 +4876,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -4458,6 +4940,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -4469,6 +4952,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -4745,6 +5230,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -4756,6 +5242,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -4767,11 +5255,13 @@
 ===  compiler/facts.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/facts
 |   sha std/sha256
 | module std/hex
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -4783,6 +5273,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -4824,6 +5316,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -4835,6 +5328,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -4934,6 +5429,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -4945,6 +5441,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -5027,6 +5525,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -5038,6 +5537,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -5210,6 +5711,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -5221,6 +5723,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -5367,6 +5871,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -5378,6 +5883,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -5636,6 +6143,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -5647,6 +6155,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -5788,6 +6298,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -5799,6 +6310,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -5913,6 +6426,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -5924,6 +6438,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -6143,6 +6659,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -6154,6 +6671,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -6525,6 +7044,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -6536,6 +7056,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -6909,6 +7431,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -6920,6 +7443,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -6971,6 +7496,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -6982,6 +7508,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -6991,12 +7519,14 @@
 ===  compiler/msgs.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/diagmsg
 |   msgs compiler/msgs
 | module compiler/msgs
 |   r compiler/diagmsg
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -7008,6 +7538,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -7133,6 +7665,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -7144,6 +7677,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -7330,6 +7865,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -7341,6 +7877,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -7464,6 +8002,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -7817,6 +8356,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -7828,6 +8368,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -7894,6 +8436,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -7905,6 +8448,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -8009,6 +8554,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -8020,6 +8566,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -8258,6 +8806,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -8269,6 +8818,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -8387,6 +8938,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -8398,6 +8950,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -8409,11 +8963,13 @@
 ===  compiler/scan.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/scan
 |   token compiler/token
 | module compiler/token
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -8425,6 +8981,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -8581,6 +9139,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -8592,6 +9151,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -8956,6 +9517,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -8967,6 +9529,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9009,6 +9573,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9020,6 +9585,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9077,6 +9644,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9088,6 +9656,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9097,9 +9667,11 @@
 ===  compiler/token.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/token
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9111,6 +9683,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9154,6 +9728,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9165,6 +9740,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9207,6 +9784,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9218,6 +9796,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9276,6 +9856,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9287,6 +9868,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9441,6 +10024,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9452,6 +10036,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9498,6 +10084,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9509,6 +10096,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9704,6 +10293,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9715,6 +10305,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9761,6 +10353,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9772,6 +10365,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9827,6 +10422,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9838,6 +10434,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9884,6 +10482,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9895,6 +10494,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -9939,6 +10540,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -9950,6 +10552,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10117,6 +10721,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -10128,6 +10733,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10174,6 +10781,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -10185,6 +10793,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10273,6 +10883,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -10479,6 +11090,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -10490,6 +11102,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10538,6 +11152,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -10549,6 +11164,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10640,6 +11257,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -10651,6 +11269,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10695,6 +11315,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -10706,6 +11327,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10749,6 +11372,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -10760,6 +11384,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -10991,6 +11617,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11002,6 +11629,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -11048,6 +11677,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11059,6 +11689,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -11105,6 +11737,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11116,6 +11749,63 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/time
+|   ctime <time.h>
+===  compiler/tools/nesting.olang
+| module <fcntl.h>
+| module <math.h>
+| module <signal.h>
+| module <stdio.h>
+| module <stdlib.h>
+| module <string.h>
+| module <sys/mman.h>
+| module <sys/stat.h>
+| module <sys/wait.h>
+| module <time.h>
+| module <unistd.h>
+| module compiler/tools/nesting
+|   io std/io
+|   os std/os
+| module std/cancel
+|   ctime <time.h>
+|   time std/time
+| module std/io
+|   fcntl <fcntl.h>
+|   unistd <unistd.h>
+| module std/os
+|   cancel std/cancel
+|   csignal <signal.h>
+|   ctime <time.h>
+|   fcntl <fcntl.h>
+|   io std/io
+|   mman <sys/mman.h>
+|   stdio <stdio.h>
+|   stdlib <stdlib.h>
+|   sysstat <sys/stat.h>
+|   syswait <sys/wait.h>
+|   unistd <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -11162,6 +11852,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11173,6 +11864,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -11374,6 +12067,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11385,6 +12079,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -11508,6 +12204,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -11867,6 +12564,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11878,6 +12576,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -11924,6 +12624,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11935,6 +12636,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -11976,6 +12679,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -11987,6 +12691,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12036,6 +12742,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12047,6 +12754,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12089,6 +12798,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12100,6 +12810,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12157,6 +12869,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12168,6 +12881,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12208,6 +12923,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12219,6 +12935,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12228,9 +12946,11 @@
 ===  fuzz/scopegen.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module fuzz/scopegen
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12242,6 +12962,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12281,6 +13003,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12292,6 +13015,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12333,6 +13058,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12344,6 +13070,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12385,6 +13113,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12396,6 +13125,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12437,6 +13168,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12448,6 +13180,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12489,6 +13223,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12500,6 +13235,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12544,6 +13281,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12555,6 +13293,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12596,6 +13336,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12607,6 +13348,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12648,6 +13391,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12659,6 +13403,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12700,6 +13446,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12711,6 +13458,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12752,6 +13501,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12763,6 +13513,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12804,6 +13556,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12815,6 +13568,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12856,6 +13611,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12867,6 +13623,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12909,6 +13667,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12920,6 +13679,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -12968,6 +13729,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -12979,6 +13741,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13023,6 +13787,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13034,6 +13799,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13077,6 +13844,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13088,6 +13856,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13131,6 +13901,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13142,6 +13913,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13183,6 +13956,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13194,6 +13968,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13237,6 +14013,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13248,6 +14025,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13257,8 +14036,10 @@
 === -t tests/Base.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13270,6 +14051,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13278,8 +14061,10 @@
 === -t tests/Lib.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13291,6 +14076,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13299,10 +14086,12 @@
 === -t tests/any.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13314,6 +14103,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13326,8 +14117,10 @@
 === -t tests/arraypat.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13339,6 +14132,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13376,6 +14171,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13387,6 +14183,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13398,8 +14196,10 @@
 === -t tests/attrmod.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13411,6 +14211,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13420,8 +14222,10 @@
 === -t tests/attrs.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13433,6 +14237,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13442,6 +14248,58 @@
 | module tests/attrs
 |   attrmod tests/attrmod
 |   me2 tests/attrs
+=== -t tests/axes.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/axes
+=== -t tests/barelits.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/set
+| module tests/barelits
+|   set std/set
 === -t tests/become.olang
 | module <fcntl.h>
 | module <math.h>
@@ -13452,6 +14310,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13463,6 +14322,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13483,6 +14344,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13494,6 +14356,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13505,8 +14369,10 @@
 === -t tests/builders.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13518,6 +14384,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13533,8 +14401,10 @@
 | module <stdio.h>
 | module <stdlib.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13546,6 +14416,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13566,6 +14438,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13577,6 +14450,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13586,8 +14461,10 @@
 === -t tests/copy.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13599,6 +14476,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13614,6 +14493,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13625,6 +14505,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13634,8 +14516,10 @@
 === -t tests/definit.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13647,6 +14531,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13655,9 +14541,11 @@
 === -t tests/drops.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/deque
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13669,6 +14557,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13678,8 +14568,10 @@
 === -t tests/embed.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13691,6 +14583,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13699,8 +14593,10 @@
 === -t tests/errdata.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13712,6 +14608,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13720,8 +14618,10 @@
 === -t tests/errsetparams.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13733,6 +14633,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13770,6 +14672,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13781,6 +14684,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13821,6 +14726,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13832,6 +14738,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13872,6 +14780,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13883,6 +14792,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13896,8 +14807,10 @@
 === -t tests/filtered.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13909,6 +14822,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13917,8 +14832,10 @@
 === -t tests/fnref.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13930,6 +14847,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13938,8 +14857,10 @@
 === -t tests/fnrel.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13951,6 +14872,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13959,8 +14882,10 @@
 === -t tests/fnvalues.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13972,6 +14897,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -13980,8 +14907,10 @@
 === -t tests/follow.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -13993,6 +14922,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14001,8 +14932,10 @@
 === -t tests/genenums.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14014,6 +14947,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14022,8 +14957,10 @@
 === -t tests/generators.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14035,6 +14972,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14043,8 +14982,10 @@
 === -t tests/globalstart.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14056,6 +14997,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14064,8 +15007,10 @@
 === -t tests/handover.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14077,6 +15022,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14085,8 +15032,10 @@
 === -t tests/handoverglobal.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14098,6 +15047,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14106,8 +15057,10 @@
 === -t tests/immut.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14119,6 +15072,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14127,8 +15082,10 @@
 === -t tests/inplace.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14140,6 +15097,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14148,8 +15107,10 @@
 === -t tests/intsweep.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14161,6 +15122,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14169,9 +15132,11 @@
 === -t tests/intwidths.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14183,6 +15148,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14192,8 +15159,10 @@
 === -t tests/kept.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14205,6 +15174,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14213,8 +15184,10 @@
 === -t tests/keptparams.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14226,6 +15199,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14234,8 +15209,10 @@
 === -t tests/lanes.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14247,6 +15224,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14255,6 +15234,7 @@
 === -t tests/literals.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/bitset
 | module std/deque
 | module std/list
@@ -14262,6 +15242,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14273,6 +15254,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14286,8 +15269,10 @@
 === -t tests/match.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14299,6 +15284,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14307,8 +15294,10 @@
 === -t tests/namedargs.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14320,6 +15309,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14328,8 +15319,10 @@
 === -t tests/nll.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14341,6 +15334,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14384,6 +15379,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14395,6 +15391,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14413,6 +15411,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14424,6 +15423,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14433,9 +15434,11 @@
 === -t tests/power.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14447,6 +15450,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14456,8 +15461,10 @@
 === -t tests/promises.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14469,6 +15476,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14477,8 +15486,10 @@
 === -t tests/raised.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14490,6 +15501,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14500,8 +15513,10 @@
 === -t tests/raisedlex.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14513,6 +15528,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14521,8 +15538,10 @@
 === -t tests/reads.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14534,6 +15553,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14542,8 +15563,10 @@
 === -t tests/reclaim.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14555,6 +15578,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14563,8 +15588,10 @@
 === -t tests/reclaimarrays.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14576,6 +15603,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14584,8 +15613,10 @@
 === -t tests/reclaimtasks.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14597,6 +15628,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14634,6 +15667,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14645,6 +15679,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14658,8 +15694,10 @@
 === -t tests/reflmod.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14671,6 +15709,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14680,10 +15720,12 @@
 | module <math.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14695,6 +15737,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14722,10 +15766,12 @@
 === -t tests/shared.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14737,6 +15783,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14747,8 +15795,10 @@
 === -t tests/structpat.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14760,6 +15810,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14768,8 +15820,10 @@
 === -t tests/textslot.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14781,6 +15835,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14796,6 +15852,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14807,6 +15864,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14816,8 +15875,10 @@
 === -t tests/unique.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14829,6 +15890,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14844,6 +15907,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14855,6 +15919,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14864,8 +15930,10 @@
 === -t tests/valueparts.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14877,6 +15945,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14885,8 +15955,10 @@
 === -t tests/variadic.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14898,6 +15970,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14906,8 +15980,10 @@
 === -t tests/viewplace.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14919,6 +15995,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14927,8 +16005,10 @@
 === -t tests/weak.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14940,6 +16020,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14949,10 +16031,12 @@
 | module <math.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/arith
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -14964,6 +16048,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -14991,8 +16077,10 @@
 === -t tests/geom/measure.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15004,6 +16092,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15015,8 +16105,10 @@
 === -t tests/geom/rect.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15028,6 +16120,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15039,9 +16133,11 @@
 === -t std/arith.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/arith
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15053,6 +16149,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15060,9 +16158,11 @@
 === -t std/base64.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/base64
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15074,6 +16174,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15092,6 +16194,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15103,6 +16206,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15112,9 +16217,11 @@
 === -t std/bitset.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/bitset
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15126,6 +16233,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15134,11 +16243,13 @@
 | module <math.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/cancel
 |   ctime <time.h>
 |   time std/time
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15150,6 +16261,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15161,6 +16274,7 @@
 | module <pthread.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/cancel
 |   ctime <time.h>
 |   time std/time
@@ -15171,6 +16285,7 @@
 |   time std/time
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15182,6 +16297,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15191,9 +16308,11 @@
 === -t std/crc32.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/crc32
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15205,6 +16324,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15212,9 +16333,11 @@
 === -t std/csv.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/csv
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15226,6 +16349,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15233,9 +16358,11 @@
 === -t std/deque.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/deque
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15247,6 +16374,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15254,9 +16383,11 @@
 === -t std/ffi.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/ffi
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15268,6 +16399,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15275,9 +16408,11 @@
 === -t std/filepath.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/filepath
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15289,6 +16424,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15296,9 +16433,11 @@
 === -t std/flags.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/flags
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15310,6 +16449,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15351,6 +16492,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15362,6 +16504,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15371,9 +16515,11 @@
 === -t std/heap.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/heap
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15385,6 +16531,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15392,9 +16540,11 @@
 === -t std/hex.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/hex
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15406,6 +16556,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15451,6 +16603,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15462,6 +16615,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15478,6 +16633,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15489,6 +16645,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15531,6 +16689,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15542,6 +16701,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15551,11 +16712,13 @@
 === -t std/list.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/list
 |   pair std/pair
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15567,6 +16730,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15586,6 +16751,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15597,6 +16763,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15606,9 +16774,11 @@
 === -t std/order.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/order
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15620,6 +16790,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15656,6 +16828,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15667,6 +16840,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15676,9 +16851,11 @@
 === -t std/pair.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15690,6 +16867,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15697,9 +16876,11 @@
 === -t std/pool.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/pool
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15711,6 +16892,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15752,6 +16935,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15763,6 +16947,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15782,8 +16968,10 @@
 === -t std/rand.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15795,6 +16983,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15803,8 +16993,10 @@
 === -t std/regex.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15816,6 +17008,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15826,8 +17020,10 @@
 === -t std/set.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15839,6 +17035,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15847,9 +17045,11 @@
 === -t std/sha256.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/hex
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15861,6 +17061,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15870,8 +17072,10 @@
 === -t std/stats.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15883,6 +17087,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15892,8 +17098,10 @@
 | module <math.h>
 | module <pthread.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15905,6 +17113,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15915,8 +17125,10 @@
 | module <math.h>
 | module <string.h>
 | module <time.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15928,6 +17140,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -15937,8 +17151,10 @@
 === -t std/utf8.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -15950,6 +17166,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16334,6 +17552,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16345,6 +17564,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16391,6 +17612,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16402,6 +17624,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16454,6 +17678,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16465,6 +17690,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16555,6 +17782,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16566,6 +17794,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16611,6 +17841,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16622,6 +17853,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16800,6 +18033,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16811,6 +18045,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16876,6 +18112,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16887,6 +18124,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16936,6 +18175,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -16947,6 +18187,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -16996,6 +18238,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -17007,6 +18250,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -17016,12 +18261,14 @@
 === -t compiler/diagmsg.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/diagmsg
 |   msgs compiler/msgs
 | module compiler/msgs
 |   r compiler/diagmsg
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -17033,6 +18280,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -17330,6 +18579,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -17341,6 +18591,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -17497,6 +18749,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -17508,6 +18761,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -17597,6 +18852,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -17767,6 +19023,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -17778,6 +19035,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -17840,6 +19099,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -17851,6 +19111,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -18141,6 +19403,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -18152,6 +19415,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -18163,11 +19428,13 @@
 === -t compiler/facts.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/facts
 |   sha std/sha256
 | module std/hex
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -18179,6 +19446,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -18220,6 +19489,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -18231,6 +19501,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -18330,6 +19602,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -18341,6 +19614,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -18423,6 +19698,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -18434,6 +19710,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -18643,6 +19921,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -18654,6 +19933,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -18802,6 +20083,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -18813,6 +20095,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -19085,6 +20369,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -19096,6 +20381,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -19239,6 +20526,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -19250,6 +20538,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -19366,6 +20656,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -19377,6 +20668,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -19604,6 +20897,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -19615,6 +20909,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -20000,6 +21296,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -20011,6 +21308,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -20398,6 +21697,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -20409,6 +21709,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -20460,6 +21762,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -20471,6 +21774,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -20480,12 +21785,14 @@
 === -t compiler/msgs.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/diagmsg
 |   msgs compiler/msgs
 | module compiler/msgs
 |   r compiler/diagmsg
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -20497,6 +21804,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -20624,6 +21933,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -20635,6 +21945,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -20823,6 +22135,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -20834,6 +22147,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -20957,6 +22272,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -21324,6 +22640,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -21335,6 +22652,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -21401,6 +22720,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -21412,6 +22732,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -21516,6 +22838,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -21527,6 +22850,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -21779,6 +23104,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -21790,6 +23116,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -21910,6 +23238,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -21921,6 +23250,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -21932,11 +23263,13 @@
 === -t compiler/scan.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/scan
 |   token compiler/token
 | module compiler/token
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -21948,6 +23281,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22141,6 +23476,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22152,6 +23488,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22530,6 +23868,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22541,6 +23880,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22583,6 +23924,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22594,6 +23936,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22651,6 +23995,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22662,6 +24007,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22671,9 +24018,11 @@
 === -t compiler/token.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module compiler/token
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22685,6 +24034,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22728,6 +24079,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22739,6 +24091,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22781,6 +24135,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22792,6 +24147,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -22850,6 +24207,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -22861,6 +24219,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23052,6 +24412,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23063,6 +24424,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23109,6 +24472,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23120,6 +24484,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23323,6 +24689,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23334,6 +24701,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23380,6 +24749,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23391,6 +24761,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23446,6 +24818,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23457,6 +24830,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23503,6 +24878,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23514,6 +24890,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23558,6 +24936,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23569,6 +24948,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23738,6 +25119,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23749,6 +25131,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23795,6 +25179,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -23806,6 +25191,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -23894,6 +25281,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -24114,6 +25502,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24125,6 +25514,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24173,6 +25564,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24184,6 +25576,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24275,6 +25669,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24286,6 +25681,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24330,6 +25727,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24341,6 +25739,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24384,6 +25784,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24395,6 +25796,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24634,6 +26037,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24645,6 +26049,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24691,6 +26097,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24702,6 +26109,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24748,6 +26157,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24759,6 +26169,63 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/time
+|   ctime <time.h>
+=== -t compiler/tools/nesting.olang
+| module <fcntl.h>
+| module <math.h>
+| module <signal.h>
+| module <stdio.h>
+| module <stdlib.h>
+| module <string.h>
+| module <sys/mman.h>
+| module <sys/stat.h>
+| module <sys/wait.h>
+| module <time.h>
+| module <unistd.h>
+| module compiler/tools/nesting
+|   io std/io
+|   os std/os
+| module std/cancel
+|   ctime <time.h>
+|   time std/time
+| module std/io
+|   fcntl <fcntl.h>
+|   unistd <unistd.h>
+| module std/os
+|   cancel std/cancel
+|   csignal <signal.h>
+|   ctime <time.h>
+|   fcntl <fcntl.h>
+|   io std/io
+|   mman <sys/mman.h>
+|   stdio <stdio.h>
+|   stdlib <stdlib.h>
+|   sysstat <sys/stat.h>
+|   syswait <sys/wait.h>
+|   unistd <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -24805,6 +26272,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -24816,6 +26284,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25025,6 +26495,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25036,6 +26507,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25159,6 +26632,7 @@
 |   mir compiler/mir
 |   olrt compiler/runtime
 |   os std/os
+|   sha256 std/sha256
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -25532,6 +27006,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25543,6 +27018,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25589,6 +27066,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25600,6 +27078,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25641,6 +27121,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25652,6 +27133,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25701,6 +27184,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25712,6 +27196,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25754,6 +27240,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25765,6 +27252,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25822,6 +27311,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25833,6 +27323,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25873,6 +27365,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25884,6 +27377,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25893,9 +27388,11 @@
 === -t fuzz/scopegen.olang
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module fuzz/scopegen
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25907,6 +27404,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25946,6 +27445,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -25957,6 +27457,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -25998,6 +27500,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26009,6 +27512,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26050,6 +27555,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26061,6 +27567,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26102,6 +27610,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26113,6 +27622,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26154,6 +27665,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26165,6 +27677,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26209,6 +27723,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26220,6 +27735,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26261,6 +27778,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26272,6 +27790,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26313,6 +27833,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26324,6 +27845,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26365,6 +27888,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26376,6 +27900,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26417,6 +27943,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26428,6 +27955,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26469,6 +27998,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26480,6 +28010,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26521,6 +28053,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26532,6 +28065,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26574,6 +28109,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26585,6 +28121,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26633,6 +28171,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26644,6 +28183,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26688,6 +28229,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26699,6 +28241,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26742,6 +28286,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26753,6 +28298,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26798,6 +28345,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26809,6 +28357,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26850,6 +28400,7 @@
 |   unistd <unistd.h>
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26861,6 +28412,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26906,6 +28459,7 @@
 | module std/pair
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26917,6 +28471,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>
@@ -26926,6 +28482,7 @@
 === remote
 | module <math.h>
 | module <string.h>
+| module <unistd.h>
 | module example.com/me/tools/lib
 |   inner example.com/me/tools/part/inner
 | module example.com/me/tools/part/inner
@@ -26934,6 +28491,7 @@
 |   T example.com/me/tools/lib
 | module std/prelude/argument
 | module std/prelude/array
+| module std/prelude/axis
 | module std/prelude/columns
 | module std/prelude/complex
 | module std/prelude/enums
@@ -26945,6 +28503,8 @@
 | module std/prelude/number
 |   cmath <math.h>
 | module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
 | module std/prelude/reflect
 | module std/prelude/text
 |   cstring <string.h>

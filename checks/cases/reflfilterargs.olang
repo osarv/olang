@@ -1,4 +1,4 @@
-# check: fail error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
+# check: fail error[G33]: this comprehension's filter is known only at run time
 # also: compilation failed with 1 error
 # G33, G37: an argument comprehension's filter is decided while compiling too
 type Point struct(x I64, y I64 = 2) { x, y }

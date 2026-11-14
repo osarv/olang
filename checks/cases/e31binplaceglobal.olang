@@ -1,4 +1,4 @@
-# check: fail error[E31b]: x[i] gives a copy of the element
+# check: fail error[E31b]: this call writes a copy of x[i]
 # E31b (bulk review 6 F1): the call through x[i] is not made in place through RefMut where what it runs before its
 # write lands - the method, a constructor an argument calls - may change the collection (here: the method grows it through a global) - the copy's error
 import "std/io"

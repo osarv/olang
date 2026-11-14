@@ -1021,7 +1021,8 @@ fn fieldset(r mut report&) ? Failed {
     apart := "OLANG_OBJECTS=\"$PWD/store\" "
     try r.expect(sh(dir, $apart "\"$OLANG\" compile lib.olang > out.txt 2>&1") == 0, "lib compiled apart", dir)
     try r.expect(sh(dir, $apart "\"$OLANG\" build main.olang > out.txt 2>&1") != 0, "built with lib precompiled", dir)
-    try r.expect(outOf(dir).Contains("main.olang:20:19: error[B3i, O23]: this stores into 'At' of an instance whose binding is not known through this path, and a precompiled module declares the field")
+    try r.expect(outOf(dir).Contains("main.olang:20:19: error[B3i, O23]: this stores into 'At' through a path with no known binding") and
+                 outOf(dir).Contains("a precompiled module declares the field")
                  "the error at the store, naming the field", dir)
     try r.expect(sh(dir, $"echo '# changed' >> lib.olang && " $apart "\"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0
                  "lib changed since it was compiled: from source again", dir)
@@ -2957,7 +2958,7 @@ fn words(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/output/words.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B1]: nothing to do"), "no arguments", dir)
     try r.expect(sh(dir, "\"$OLANG\" bild prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("'bild' is not a mode - the modes are build, compile"), "an unknown mode", dir)
+                 outOf(dir).Contains("'bild' is not a mode") and outOf(dir).Contains("the modes are build, compile"), "an unknown mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -b prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("unknown option '-b'"), "an old flag", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret -debug prog.olang > out.txt 2>&1") == 1 and

@@ -1,4 +1,4 @@
-# check: fail error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>& - declare 'part' to give Array<I64>&
+# check: fail error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>&
 # P1g: a task's array result goes into a reference slot (an element of Array<Array<I64>&>, T7a) - the fix is the
 # function's result, built, which the error names (study 4's r16)
 import "std/io"

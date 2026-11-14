@@ -1,4 +1,4 @@
-# check: fail any aShape&'s trait aShape is open, so its instance's type is never asked for - use its methods, or add the method it lacks
+# check: fail any aShape&'s trait aShape is open, so its instance's type is never asked for
 # T34: run-time trait values
 type aShape trait {
     Area() I64

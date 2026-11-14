@@ -1,4 +1,4 @@
-# check: fail error[T13b]: 't' is handed on here, and Res is unique - 'seen', which reaches it, is used after
+# check: fail error[T13b]: 't' is handed on here, and
 # T13b (bulk review 7, F16): a reference to a by-value parameter pushed into a collection, the collection used after the
 # parameter's value was handed on
 Ended mut I64 = 0

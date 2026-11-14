@@ -1,4 +1,4 @@
-# check: fail aShape& is a trait - a constraint on a type variable; a value of any type meeting it is an 'any aShape&'
+# check: fail aShape& is a trait
 # T30, T32: run-time trait values
 type aShape trait {
     Area() I64

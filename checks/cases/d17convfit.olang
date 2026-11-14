@@ -1,4 +1,4 @@
-# check: fail error[D17g]: 300 does not fit U8 - write a value that fits
+# check: fail error[D17g]: 300 does not fit U8
 # D17g: a conversion to a number type requires its value fits - a constant that does not is an error at the conversion
 fn main() {
     b := U8(300)

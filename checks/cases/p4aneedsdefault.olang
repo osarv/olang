@@ -1,4 +1,4 @@
-# check: fail error[P4a]: this clause takes an error the targets would get no value for - end it with 'default v', or end the process
+# check: fail error[P4a]: this clause takes an error the targets would get no value for
 # P4a: with targets a clause is in value position - it gives the targets' values, or ends the process
 type E error {
     Bad

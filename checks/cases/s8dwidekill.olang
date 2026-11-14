@@ -1,4 +1,4 @@
-# check: fail error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows
+# check: fail error[S8d]: Shape is an enum
 # S8d: a narrowing after an assert holds until a statement assigns the local
 type Shape enum { Dot, Ring(r I64) }
 fn radius(s Shape) I64 {

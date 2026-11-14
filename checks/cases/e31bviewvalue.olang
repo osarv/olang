@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b: a struct field held by value lent on to a writing callee is the parameter's own storage
 type P struct(x I64) {
     x

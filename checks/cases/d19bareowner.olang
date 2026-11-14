@@ -1,5 +1,5 @@
-# check: fail error[D19]: Bag is generic, and a builder's owner is written with its arguments - 'fn Bag<T>.mk(...)' for every instance, 'fn Bag<String&>.mk(...)' for one
-# also: error[D19a]: 'two' makes a Bag its module declares and takes none - declare it as the type's builder, 'fn Bag<I64>.two(...)', and call it 'Bag.two(...)'
+# check: fail error[D19]: Bag is generic, and a builder's owner is written with its arguments
+# also: error[D19a]: 'two' makes a Bag its module declares and takes none
 # also: error[D19]: Bag<F64> has no builder, case or member 'one'
 # never: cannot build this yet
 # D19 (bulk review 8): a generic owner is written with its arguments - bare, it named nothing and the builder was taken

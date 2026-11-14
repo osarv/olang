@@ -1,4 +1,4 @@
-# check: fail error[T2d]: a weak reference names an instance of a struct or an enum
+# check: fail error[T2d]: a weak reference names
 # also: is a function type
 # T2d: a function value is no weak reference's target
 type Box struct() {

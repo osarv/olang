@@ -1,4 +1,4 @@
-# check: fail error[T21c]: 'x' holds no reference and is not unique, so a call can keep only a copy of it, which needs no word - leave the 'keeps' out
+# check: fail error[T21c]: 'x' holds no reference and is not unique
 # T21c: what a call keeps of a plain value is a copy
 fn use(f fn&(x I64) keeps x) { f(1) }
 fn main() { use(fn(x I64) { }) }

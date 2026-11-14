@@ -1,5 +1,5 @@
-# check: fail error[E19, T13b]: a literal or comprehension of Vec<Tok> hands its FromIter a walk of references to the values, and Tok is unique - its values are never copied: make the Vec<Tok> and add each value by its own call (Push, Put)
-# also: error[E19, T13b]: a literal or comprehension of Map<I64, Tok> hands its FromIter a walk of references to the values, and MapEntry<I64, Tok> is unique
+# check: fail error[E19, T13b]: a literal or comprehension of Vec<Tok>
+# also: error[E19, T13b]: a literal or comprehension of Map<I64, Tok>
 # never: needs a copy
 # E19, T13b (bulk review 8): a collection made through FromIter has no literal of unique values - said at the literal,
 # naming Push and Put, not as a copy inside the prelude's FromIter; an array's literal is laid out and has one

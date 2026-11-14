@@ -1,4 +1,4 @@
-# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write
+# check: fail error[E31b]: this call writes a copy of x[i]
 # E31b, T25c: At on a read-only Vec of Vecs gives a copy of the inner Vec - a Vec of its own since 2026-11-01 (a handle's
 # copy was read-only, T25c) - which pushing to would write and lose; RefMut, in place, needs a writable one
 fn look(ls Vec<Vec<I32>>&) {

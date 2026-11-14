@@ -1,4 +1,4 @@
-# check: fail error[E31d]: Copy takes nothing but its receiver, read through a read-only reference, gives a new tree and cannot fail
+# check: fail error[E31d]: this Copy has the wrong shape
 # E31d: a Copy gives a value of its receiver's type - not a reference, not another type
 type tree struct(n I64) { n }
 fn (t tree&) Copy() I64 { return t.n }

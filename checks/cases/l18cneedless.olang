@@ -1,4 +1,4 @@
-# check: fail error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list
+# check: fail error[L18c]: these parentheses group nothing
 # L18c: a type is parenthesized only to group a function type of several results or error items in a list
 fn main() {
     x Vec<(I64)>

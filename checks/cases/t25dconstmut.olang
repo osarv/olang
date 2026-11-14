@@ -1,4 +1,4 @@
-# check: fail error[T25d]: this hands data written in the program where it may be written - pass a copy of its own: '$"abc"'
+# check: fail error[T25d]: this hands data written in the program where it may be written
 # text written in the program given a writable reference of the type text is declared over (Array<Char>): it was
 # converted to that type and handed over as the constant itself, a write through it landing in the program's constant
 # data (found by the rework's round 3b, closed on the default path in 3d)

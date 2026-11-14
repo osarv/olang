@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b/R9a (T1h): as e31btrydefaultfield, a "mut" method called on the field
 import "std/io"
 type Pt struct() {

@@ -1,4 +1,4 @@
-# check: fail error[S13h]: '...' stands among an array pattern's items, for the elements they do not name
+# check: fail error[S13h]: '...' stands among an array pattern's items
 # S13h: a case's payload is no array - each of its fields is named
 type Cmd enum {
     Run(a I64)

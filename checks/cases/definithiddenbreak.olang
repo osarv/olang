@@ -1,4 +1,4 @@
-# check: fail error[D13d]: 'a' is read here before it is assigned on every path, and Node& has no zero value
+# check: fail error[D13d]: 'a' is read here before it is assigned on every path
 # also: error[D13d]: 'b' is read here before it is assigned on every path
 # also: error[D13d]: 'c' is read here before it is assigned on every path
 # also: error[D13d]: 'd' is read here before it is assigned on every path

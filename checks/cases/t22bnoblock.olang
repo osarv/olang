@@ -1,4 +1,4 @@
-# check: fail error[T22b]: a value of type 'fn&()' may do what 'fn&() noblock' does not say ('noblock'), and which functions it holds is not known here
+# check: fail error[T22b]: a value of type 'fn&()' may do what 'fn&() noblock' does not say ('noblock')
 # T22b: a value whose functions are not followed (a parameter's) fits a type with an effect word only where its own
 # type writes it
 type Box struct() {

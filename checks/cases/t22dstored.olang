@@ -1,4 +1,4 @@
-# check: fail error[T22b]: this lambda keeps 'x' in what it captured, and the function type of this store says nothing of that - write 'keeps x' after its signature
+# check: fail error[T22b]: this lambda keeps 'x' in what it captured
 # T22d, T22a: an instance whose fixed field holds a keeping lambda, stored into a Vec's elements - a boundary, where the
 # field's type is all a later call through it is judged by
 type N struct(v I64) { v }

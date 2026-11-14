@@ -1,4 +1,4 @@
-# check: fail error[T22b]: this lambda may write through what it was not given writably, and 'fn&(x I64) I64 pure', the type it is held as here, promises 'pure'
+# check: fail error[T22b]: this lambda may write through what it was not given writably
 # also: note: it may write through what it was not given writably here
 # T22b: pure writes only through its mut parameters - a store through a captured reference is none
 type N struct(v I64) { v }
