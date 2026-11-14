@@ -49,9 +49,10 @@ assertfalsepieces.olang:7:21: error[S18c]: this assertion is false, evaluated wh
       |                     ^~
 compilation failed with 1 error
 === assertfalsewritten.olang
-assertfalsewritten.olang:6:14: error[S18c]: this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: "n is " $n
+assertfalsewritten.olang:6:14: error[S18c]: this assertion is false, evaluated while compiling
     6 |     assert 1 > 2, "n is " $n
       |              ^
+assertfalsewritten.olang:6:14: note: its message reads what only the running program knows, so it is shown as written: "n is " $n
 compilation failed with 1 error
 === assertmsgnottext.olang
 assertmsgnottext.olang:5:23: error[S18a]: an assert's message is text, found I64 - write it as text: "x is " $x
@@ -600,29 +601,39 @@ columnassigned.olang:7:10: error[T7e]: a column is assigned whole only alone - '
       |          ^~~
 compilation failed with 2 errors
 === columnscontract.olang
-columnscontract.olang:5:18: error[T7e]: Columns<Pos> takes a record for its rows, and Pos has a constructor that checks or fails - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+columnscontract.olang:5:18: error[T7e]: Columns<Pos> takes a record for its rows, and Pos has a constructor that checks or fails
     5 |     c := Columns<Pos>(1, Pos(1)!)
       |                  ^~~
+columnscontract.olang:5:18: note: a record is a struct whose constructor declares exactly its fields, each a parameter written bare
+columnscontract.olang:5:18: help: write 'type P struct(X F32, Y F32) { X, Y }'
 compilation failed with 1 error
 === columnsnamedmethod.olang
-columnsnamedmethod.olang:5:18: error[T7e]: R's field 'Len' would be a column of Columns<R> named like its method 'Len' (M19) - rename the field
+columnsnamedmethod.olang:5:18: error[T7e]: R's field 'Len' would be a column of Columns<R> named like its method
     5 |     c := Columns<R>(2)
       |                  ^
+columnsnamedmethod.olang:5:18: note: a field may not share a method's name 'Len' (M19)
+columnsnamedmethod.olang:5:18: help: rename the field
 compilation failed with 1 error
 === columnsnotrecord.olang
-columnsnotrecord.olang:9:18: error[T7e]: Columns<Q> takes a record for its rows, and Q has a field its constructor computes - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+columnsnotrecord.olang:9:18: error[T7e]: Columns<Q> takes a record for its rows, and Q has a field its constructor computes
     9 |     c := Columns<Q>(4)
       |                  ^
+columnsnotrecord.olang:9:18: note: a record is a struct whose constructor declares exactly its fields, each a parameter written bare
+columnsnotrecord.olang:9:18: help: write 'type P struct(X F32, Y F32) { X, Y }'
 compilation failed with 1 error
 === columnsnotstruct.olang
-columnsnotstruct.olang:4:20: error[T7e]: ColumnVec<I64> takes a record for its rows, and I64 is no struct - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+columnsnotstruct.olang:4:20: error[T7e]: ColumnVec<I64> takes a record for its rows, and I64 is no struct
     4 |     v := ColumnVec<I64>()
       |                    ^~~
+columnsnotstruct.olang:4:20: note: a record is a struct whose constructor declares exactly its fields, each a parameter written bare
+columnsnotstruct.olang:4:20: help: write 'type P struct(X F32, Y F32) { X, Y }'
 compilation failed with 1 error
 === columnsnozero.olang
-columnsnozero.olang:8:20: error[T7e]: ColumnVec<R> takes a record for its rows, and R has no zero value (a never-null reference field - hold it as ?&) - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+columnsnozero.olang:8:20: error[T7e]: ColumnVec<R> takes a record for its rows, and R has no zero value (a never-null reference field - hold it as ?&)
     8 |     v := ColumnVec<R>()
       |                    ^
+columnsnozero.olang:8:20: note: a record is a struct whose constructor declares exactly its fields, each a parameter written bare
+columnsnozero.olang:8:20: help: write 'type P struct(X F32, Y F32) { X, Y }'
 compilation failed with 1 error
 === commaendsline.olang
 commaendsline.olang:5:17: error[L18a]: a comma never ends a line - items on different lines are separated by the line break; remove it
@@ -797,9 +808,10 @@ d11amutvaluelocal.olang:4:7: error[D11a]: a local is always writable - 'mut' is 
       |       ^~~
 compilation failed with 1 error
 === d13czeroref.olang
-d13czeroref.olang:19:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
+d13czeroref.olang:19:12: error[D13c]: Ticket has no zero value, so this needs one
    19 |     b := a.Repeat(2)
       |            ^~~~~~
+d13czeroref.olang:19:12: note: its constructor does not run on zeros while compiling
 $ROOT/std/prelude/array.olang:178:12: note: in the standard library's code, here
   178 |     out := Array<T>(a.Len() * k)
       |            ^~~~~~~~~~~~~~~~~~~~~
@@ -809,6 +821,7 @@ d13czeroref.olang:11:5: note: here
 d13czeroref.olang:19:12: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
    19 |     b := a.Repeat(2)
       |            ^~~~~~
+d13czeroref.olang:19:12: help: it writes a global, which the running program would then not see written
 compilation failed with 1 error
 === d15forwardcycle.olang
 d15forwardcycle.olang:4:1: error[B5a]: these globals' initializers read each other, so none can be set first: A -> B -> C -> A
@@ -885,14 +898,16 @@ d17condfails.olang:3:25: error[R9]: ParseError can escape here, and this functio
       |                         ^~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === d17convfit.olang
-d17convfit.olang:4:10: error[D17g]: 300 does not fit U8 - write a value that fits, or 'try x.Narrow<U8>()' to fail with an error
+d17convfit.olang:4:10: error[D17g]: 300 does not fit U8
     4 |     b := U8(300)
       |          ^~~~~~~
+d17convfit.olang:4:10: help: write a value that fits, or 'try x.Narrow<U8>()' to fail with an error
 compilation failed with 1 error
 === d17convglobal.olang
-d17convglobal.olang:6:10: error[D17g]: Big does not fit I32 - write a value that fits, or 'try x.Narrow<I32>()' to fail with an error
+d17convglobal.olang:6:10: error[D17g]: Big does not fit I32
     6 |     n := I32(Big)
       |          ^~~~~~~~
+d17convglobal.olang:6:10: help: write a value that fits, or 'try x.Narrow<I32>()' to fail with an error
 compilation failed with 1 error
 === d17needsargerror.olang
 d17needsargerror.olang:4:16: error[D17]: half has conditions, so a call fails with ArgumentError where one is false - add it after '?'
@@ -925,9 +940,11 @@ $ROOT/std/prelude/iterator.olang:35:34: note: 'Next' is declared here
       |                                  ^~~~
 compilation failed with 1 error
 === d18contract.olang
-d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'
+d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next can fail with ArgumentError
     3 | fn evens(n I64) [n >= 0] Iterator<I64> {
       |                 ^~~~~~~~
+d18contract.olang:3:17: note: it fails where a condition is false
+d18contract.olang:3:17: help: add it to its result's errors, 'Iterator<T ? ArgumentError>'
 compilation failed with 1 error
 === d18cviewwrite.olang
 d18cviewwrite.olang:13:27: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
@@ -1244,117 +1261,147 @@ d9mutvaluerecv.olang:4:7: error[D9]: 'mut' on a by-value parameter of type P
 d9mutvaluerecv.olang:4:7: note: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference
 compilation failed with 1 error
 === definitcapture.olang
-definitcapture.olang:6:28: error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+definitcapture.olang:6:28: error[D13d]: 'x' is read here before it is assigned on every path
     6 |     f := fn() I64 { return x.v }
       |                            ^
+definitcapture.olang:6:28: note: N& has no zero value
 definitcapture.olang:5:5: note: declared here with no value
     5 |     x N&
       |     ^
+definitcapture.olang:6:28: help: assign it on each path before this read, or give it a value, or write 'N?&'
 compilation failed with 1 error
 === definitclause.olang
-definitclause.olang:13:14: error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+definitclause.olang:13:14: error[D13d]: 'x' is read here before it is assigned on every path
    13 |         y := x.v
       |              ^
+definitclause.olang:13:14: note: N& has no zero value
 definitclause.olang:11:5: note: declared here with no value
    11 |     x N&
       |     ^
+definitclause.olang:13:14: help: assign it on each path before this read, or give it a value, or write 'N?&'
 compilation failed with 1 error
 === definitdefer.olang
-definitdefer.olang:7:20: error[D13d]: 'w' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+definitdefer.olang:7:20: error[D13d]: 'w' is read here before it is assigned on every path
     7 |     defer { assert w.v > 0 }
       |                    ^
+definitdefer.olang:7:20: note: N& has no zero value
 definitdefer.olang:6:5: note: declared here with no value
     6 |     w N&
       |     ^
+definitdefer.olang:7:20: help: assign it on each path before this read, or give it a value, or write 'N?&'
 compilation failed with 1 error
 === definitdowhile.olang
-definitdowhile.olang:9:12: error[D13d]: 'n' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definitdowhile.olang:9:12: error[D13d]: 'n' is read here before it is assigned on every path
     9 |     return n.v
       |            ^
+definitdowhile.olang:9:12: note: Node& has no zero value
 definitdowhile.olang:6:5: note: declared here with no value
     6 |     n Node&
       |     ^
+definitdowhile.olang:9:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
 definitdowhile.olang:11:13: error[S3]: 'probe()' gives a value and does nothing else
    11 | fn main() { probe() }
       |             ^~~~~~~
 definitdowhile.olang:11:13: help: use the value (assign it, pass it on), or leave the call out
 compilation failed with 2 errors
 === definiteffect.olang
-definiteffect.olang:11:5: error[D13c]: Eff has no zero value, so this needs one - its constructor does not run on zeros while compiling: it reads a mutable global, whose value is the running program's
+definiteffect.olang:11:5: error[D13c]: Eff has no zero value, so this needs one
    11 |     e Eff
       |     ^
+definiteffect.olang:11:5: note: its constructor does not run on zeros while compiling
 definiteffect.olang:13:12: note: read here before it is assigned on every path - assign it on each path before this read
    13 |     return e.v
       |            ^
 definiteffect.olang:8:12: note: here
     8 |     Made = Made + 1
       |            ^~~~
+definiteffect.olang:11:5: help: it reads a mutable global, whose value is the running program's
 compilation failed with 1 error
 === definitfield.olang
-definitfield.olang:7:5: error[D13d]: the field 'n' is not assigned on every path through the constructor, and N& has no zero value - assign it on each path, or give it a value, or write 'N?&'
+definitfield.olang:7:5: error[D13d]: the field 'n' is not assigned on every path through the constructor
     7 |     n N&
       |     ^
+definitfield.olang:7:5: note: N& has no zero value
 definitfield.olang:8:5: note: when this condition is false nothing assigns it - this 'if' has no 'else'
     8 |     if c { n = N(1) }
       |     ^~~~~~~~~~~~~~~~~
+definitfield.olang:7:5: help: assign it on each path, or give it a value, or write 'N?&'
 compilation failed with 1 error
 === definithiddenbreak.olang
-definithiddenbreak.olang:31:12: error[D13d]: 'a' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:31:12: error[D13d]: 'a' is read here before it is assigned on every path
    31 |     return a.v
       |            ^
+definithiddenbreak.olang:31:12: note: Node& has no zero value
 definithiddenbreak.olang:25:5: note: declared here with no value
    25 |     a Node&
       |     ^
-definithiddenbreak.olang:40:12: error[D13d]: 'b' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:31:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:40:12: error[D13d]: 'b' is read here before it is assigned on every path
    40 |     return b.v
       |            ^
+definithiddenbreak.olang:40:12: note: Node& has no zero value
 definithiddenbreak.olang:34:5: note: declared here with no value
    34 |     b Node&
       |     ^
-definithiddenbreak.olang:49:12: error[D13d]: 'c' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:40:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:49:12: error[D13d]: 'c' is read here before it is assigned on every path
    49 |     return c.v
       |            ^
+definithiddenbreak.olang:49:12: note: Node& has no zero value
 definithiddenbreak.olang:43:5: note: declared here with no value
    43 |     c Node&
       |     ^
-definithiddenbreak.olang:58:12: error[D13d]: 'd' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:49:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:58:12: error[D13d]: 'd' is read here before it is assigned on every path
    58 |     return d.v
       |            ^
+definithiddenbreak.olang:58:12: note: Node& has no zero value
 definithiddenbreak.olang:52:5: note: declared here with no value
    52 |     d Node&
       |     ^
-definithiddenbreak.olang:67:12: error[D13d]: 'e' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:58:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:67:12: error[D13d]: 'e' is read here before it is assigned on every path
    67 |     return e.v
       |            ^
+definithiddenbreak.olang:67:12: note: Node& has no zero value
 definithiddenbreak.olang:61:5: note: declared here with no value
    61 |     e Node&
       |     ^
-definithiddenbreak.olang:76:12: error[D13d]: 'f' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:67:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:76:12: error[D13d]: 'f' is read here before it is assigned on every path
    76 |     return f.v
       |            ^
+definithiddenbreak.olang:76:12: note: Node& has no zero value
 definithiddenbreak.olang:70:5: note: declared here with no value
    70 |     f Node&
       |     ^
-definithiddenbreak.olang:85:12: error[D13d]: 'h' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:76:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:85:12: error[D13d]: 'h' is read here before it is assigned on every path
    85 |     return h.v
       |            ^
+definithiddenbreak.olang:85:12: note: Node& has no zero value
 definithiddenbreak.olang:79:5: note: declared here with no value
    79 |     h Node&
       |     ^
-definithiddenbreak.olang:94:12: error[D13d]: 'k' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:85:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
+definithiddenbreak.olang:94:12: error[D13d]: 'k' is read here before it is assigned on every path
    94 |     return k.v
       |            ^
+definithiddenbreak.olang:94:12: note: Node& has no zero value
 definithiddenbreak.olang:88:5: note: declared here with no value
    88 |     k Node&
       |     ^
+definithiddenbreak.olang:94:12: help: assign it on each path before this read, or give it a value, or write 'Node?&'
 compilation failed with 8 errors
 === definitloop.olang
-definitloop.olang:8:12: error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+definitloop.olang:8:12: error[D13d]: 'x' is read here before it is assigned on every path
     8 |     return x.v
       |            ^
+definitloop.olang:8:12: note: N& has no zero value
 definitloop.olang:7:5: note: this loop may run no times - assigning in its body does not count
     7 |     for i in range 3 { x = N(i) }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+definitloop.olang:8:12: help: assign it on each path before this read, or give it a value, or write 'N?&'
 compilation failed with 1 error
 === e10aprivateeq.olang
 e10aprivateeq.olang:12:5: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
@@ -1960,14 +2007,18 @@ e31bviewvalue.olang:15:18: note: the callee is no view of the element because of
 e31bviewvalue.olang:19:8: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === e31callerrs.olang
-e31callerrs.olang:10:16: error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing - the same errors in the same order: write the function type 'fn&(I64) I64 ? ArgumentError', or pass a lambda handling them
+e31callerrs.olang:10:16: error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing
    10 |     assert run(g, 1) == 1
       |                ^
+e31callerrs.olang:10:16: note: the errors must be the same, in the same order
+e31callerrs.olang:10:16: help: write the function type 'fn&(I64) I64 ? ArgumentError', or pass a lambda handling them
 compilation failed with 1 error
 === e31callerrs2.olang
-e31callerrs2.olang:9:17: error[T22, E31]: Gate's Call fails with nothing where the function type says E - the same errors in the same order: pass a lambda calling it
+e31callerrs2.olang:9:17: error[T22, E31]: Gate's Call fails with nothing where the function type says E
     9 |     assert run2(Gate(5), 1) == 101
       |                 ^~~~~~~
+e31callerrs2.olang:9:17: note: the errors must be the same, in the same order
+e31callerrs2.olang:9:17: help: pass a lambda calling it
 compilation failed with 1 error
 === e31ccommutesbothways.olang
 e31ccommutesbothways.olang:6:10: error[E31c]: 'commutes' here makes '+' between B and A ambiguous
@@ -2438,12 +2489,16 @@ g10dnotinferable.olang:9:20: error[G10d]: what D's constructor introduces cannot
       |                    ^
 compilation failed with 1 error
 === g10dnozero.olang
-g10dnozero.olang:12:5: error[D13c]: D has no zero value, so this needs one - its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
+g10dnozero.olang:12:5: error[D13c]: D has no zero value, so this needs one
    12 |     d D
       |     ^
-g10dnozero.olang:14:10: error[D13c]: D has no zero value, so this needs one - its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
+g10dnozero.olang:12:5: note: its constructor does not run on zeros while compiling
+g10dnozero.olang:12:5: help: it introduces a type variable, which no zero binds
+g10dnozero.olang:14:10: error[D13c]: D has no zero value, so this needs one
    14 |     a := Array<D>(3)
       |          ^~~~~~~~~~~
+g10dnozero.olang:14:10: note: its constructor does not run on zeros while compiling
+g10dnozero.olang:14:10: help: it introduces a type variable, which no zero binds
 compilation failed with 2 errors
 === g10dtypeargs.olang
 g10dtypeargs.olang:9:22: error[G7]: D is not generic, so it takes no type arguments
@@ -2476,9 +2531,11 @@ g12methodnotgeneric.olang:7:16: error[G7]: Get is not generic, so it takes no ty
       |                ^~~
 compilation failed with 1 error
 === g12spaced.olang
-g12spaced.olang:6:23: error[G12]: type arguments are written touching the name and the '(': 'Narrow<...>(...)' - with spaces, '<' and '>' compare
+g12spaced.olang:6:23: error[G12]: type arguments are written touching the name and the '('
     6 |     v := try x.Narrow <I32> ()
       |                       ^
+g12spaced.olang:6:23: note: with spaces, '<' and '>' compare
+g12spaced.olang:6:23: help: write 'Narrow<...>(...)'
 compilation failed with 1 error
 === g12value.olang
 g12value.olang:7:22: error[G12]: generic function 'id' is not a value
@@ -2543,26 +2600,29 @@ g17type.olang:3:6: error[G17]: this generic's instantiations never end - each on
       |      ^~~~
 compilation failed with 1 error
 === g18needcall.olang
-g18needcall.olang:15:10: error[G18]: Largest needs Less ('<'), and Point has none - declare it for Point, or call Largest with a type that has it
+g18needcall.olang:15:10: error[G18]: Largest needs Less ('<'), and Point has none
    15 |     p := Largest(ps)
       |          ^~~~~~~
 g18needcall.olang:9:40: note: pick needs Less ('<') here
     9 | fn pick<T>(a T, b T) T { return b if a < b else a }
       |                                        ^
+g18needcall.olang:15:10: help: declare it for Point, or call Largest with a type that has it
 compilation failed with 1 error
 === g18needmethod.olang
-g18needmethod.olang:9:10: error[G18]: Describe needs Name, and String has none - declare it for String, or call Describe with a type that has it
+g18needmethod.olang:9:10: error[G18]: Describe needs Name, and String has none
     9 |     q := Describe("a")
       |          ^~~~~~~~
 g18needmethod.olang:6:39: note: Describe needs Name here
     6 | fn Describe<T>(a T) String { return a.Name() }
       |                                       ^~~~
-g18needmethod.olang:10:10: error[G18]: Describe needs Name, and I64 has none - declare it for I64, or call Describe with a type that has it
+g18needmethod.olang:9:10: help: declare it for String, or call Describe with a type that has it
+g18needmethod.olang:10:10: error[G18]: Describe needs Name, and I64 has none
    10 |     r := Describe(4)
       |          ^~~~~~~~
 g18needmethod.olang:6:39: note: Describe needs Name here
     6 | fn Describe<T>(a T) String { return a.Name() }
       |                                       ^~~~
+g18needmethod.olang:10:10: help: declare it for I64, or call Describe with a type that has it
 compilation failed with 2 errors
 === g19arrayspell.olang
 g19arrayspell.olang:4:12: error[G19, E10b]: Array<F64> does not satisfy the constraint Hashable on K
@@ -2703,9 +2763,10 @@ g42factfalse.olang:5:8: error[S17a]: this top-level assert is false, decided whi
       |        ^~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === g42factgeneric.olang
-g42factgeneric.olang:5:13: error[G42]: pick is generic, and each of its instances has facts of its own - name one with its type arguments: 'pick<T>.Terminates'
+g42factgeneric.olang:5:13: error[G42]: pick is generic, and each of its instances has facts of its own
     5 | assert pick.Terminates
       |             ^~~~~~~~~~
+g42factgeneric.olang:5:13: help: name one with its type arguments: 'pick<T>.Terminates'
 compilation failed with 1 error
 === g42factvalue.olang
 g42factvalue.olang:6:8: error[S17a]: this top-level assert is false, decided while compiling: anything it calls may allocate
@@ -3714,9 +3775,10 @@ overridesig.olang:11:12: error[M19e]: Twice does not have the signature of the d
       |            ^~~~~
 compilation failed with 1 error
 === p1gresultref.olang
-p1gresultref.olang:13:39: error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>& - declare 'part' to give Array<I64>&, built where its result lands
+p1gresultref.olang:13:39: error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>&
    13 |         for t in range 2 { spawn parts[t] = part(t * 4, t * 4 + 4) }
       |                                       ^
+p1gresultref.olang:13:39: help: declare 'part' to give Array<I64>&, built where its result lands
 compilation failed with 1 error
 === p1gtargetsfields.olang
 p1gtargetsfields.olang:20:13: error[P1g]: these targets live in different scopes, and the results are built in one
@@ -3758,9 +3820,10 @@ p4adefaultstatement.olang:12:32: error[P4a]: a spawn without targets gives no va
       |                                ^~~~~~~
 compilation failed with 1 error
 === p4aneedsdefault.olang
-p4aneedsdefault.olang:14:30: error[P4a]: this clause takes an error the targets would get no value for - end it with 'default v', or end the process
+p4aneedsdefault.olang:14:30: error[P4a]: this clause takes an error the targets would get no value for
    14 |         spawn r = try sq(-1) catch E { hits[0].AtomicAdd(1) }
       |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+p4aneedsdefault.olang:14:30: help: end it with 'default v', or end the process
 compilation failed with 1 error
 === p4catchnotproduced.olang
 p4catchnotproduced.olang:14:34: error[R14]: the call does not fail with F
@@ -3778,9 +3841,10 @@ p4cjoincatchnotry.olang:7:7: error[P4c]: a join takes catch clauses only as 'try
       |       ^~~~~
 compilation failed with 1 error
 === p4cjoinnotried.olang
-p4cjoinnotried.olang:10:5: error[P4c]: this join's tasks can fail with E - write 'try join', with catch clauses for what it handles here
+p4cjoinnotried.olang:10:5: error[P4c]: this join's tasks can fail with E
    10 |     join {
       |     ^~~~~~
+p4cjoinnotried.olang:10:5: help: write 'try join', with catch clauses for what it handles here
 compilation failed with 1 error
 === p4cjoinundeclared.olang
 p4cjoinundeclared.olang:12:9: error[R1d]: E.Worse can escape here, and this function writes no '?'
@@ -5769,9 +5833,11 @@ t21callmaybenull.olang:8:12: error[T2c]: 'b.on' is a fn?&(n I64) I64, which may 
 t21callmaybenull.olang:8:12: help: read through it where a test says it is not ('if x is not null'), or write 'b.on!'
 compilation failed with 1 error
 === t21cborrowsboth.olang
-t21cborrowsboth.olang:4:23: error[T21c]: 'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one - write one of them
+t21cborrowsboth.olang:4:23: error[T21c]: 'noborrow' and 'borrows' say opposite things
     4 | fn use(f fn&(x N&) N& noborrow borrows x) I64 { return f(N(2)).v }
       |                       ^~~~~~~~
+t21cborrowsboth.olang:4:23: note: 'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one
+t21cborrowsboth.olang:4:23: help: write one of them
 t21cborrowsboth.olang:5:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
     5 | fn main() { _ := use(fn(x N&) N& { return N(x.v) }) }
       |             ^
@@ -5813,24 +5879,29 @@ t21ckeepsself.olang:7:30: error[T21c]: 'keeps a in a' keeps a parameter in itsel
       |                              ^~~~~~~~~~~~
 compilation failed with 1 error
 === t21ckeepsvalue.olang
-t21ckeepsvalue.olang:3:21: error[T21c]: 'x' holds no reference and is not unique, so a call can keep only a copy of it, which needs no word - leave the 'keeps' out
+t21ckeepsvalue.olang:3:21: error[T21c]: 'x' holds no reference and is not unique
     3 | fn use(f fn&(x I64) keeps x) { f(1) }
       |                     ^~~~~~~
+t21ckeepsvalue.olang:3:21: note: a call can keep only a copy of it, which needs no word
+t21ckeepsvalue.olang:3:21: help: leave the 'keeps' out
 compilation failed with 1 error
 === t21cmisplaced.olang
-t21cmisplaced.olang:3:21: error[T21c]: 'pure' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)
+t21cmisplaced.olang:3:21: error[T21c]: 'pure' is a promise, written only after a function type's signature
     3 | fn twice(x I64) I64 pure { return 2 * x }
       |                     ^~~~
+t21cmisplaced.olang:3:21: note: what a function itself does is read off its body ('olang explain' shows it)
 compilation failed with 1 error
 === t21cmisplacedlambda.olang
-t21cmisplacedlambda.olang:4:36: error[T21c]: 'noalloc' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)
+t21cmisplacedlambda.olang:4:36: error[T21c]: 'noalloc' is a promise, written only after a function type's signature
     4 | fn main() { _ := use(fn(x I64) I64 noalloc { return x }) }
       |                                    ^~~~~~~
+t21cmisplacedlambda.olang:4:36: note: what a function itself does is read off its body ('olang explain' shows it)
 compilation failed with 1 error
 === t21cnoparam.olang
-t21cnoparam.olang:3:25: error[T21c]: 'y' is no parameter of this function type - a promise names its parameters by the names written in it
+t21cnoparam.olang:3:25: error[T21c]: 'y' is no parameter of this function type
     3 | fn use(f fn&(x String&) keeps y) { f("a") }
       |                         ^~~~~~~
+t21cnoparam.olang:3:25: note: a promise names its parameters by the names written in it
 compilation failed with 1 error
 === t21creturnsnoreturn.olang
 t21creturnsnoreturn.olang:3:33: error[T21c]: 'returns' promises every call comes back, and 'noreturn' that none does - write one of them
@@ -5872,19 +5943,24 @@ t22afallible.olang:10:16: error[E12]: expected fn&(n I32) I32, found fn&(n I32) 
       |                ^~~
 compilation failed with 1 error
 === t22alambdakeeps.olang
-t22alambdakeeps.olang:12:15: error[T22b]: this lambda keeps 'k' in what it captured, and the function type of this store says nothing of that - write 'keeps k' after its signature
+t22alambdakeeps.olang:12:15: error[T22b]: this lambda keeps 'k' in what it captured, beyond this store's function type
    12 |     c.onEvict = fn(k String&) { goneRef.Push(k) }
       |               ^
+t22alambdakeeps.olang:12:15: note: the function type of this store says nothing of that
+t22alambdakeeps.olang:12:15: help: write 'keeps k' after its signature
 compilation failed with 1 error
 === t22alatelambda.olang
-t22alatelambda.olang:15:9: error[T22b]: this lambda keeps 'b' in what it captured, and the function type of this call - reached in a loop's next turn by a value assigned after it - says nothing of that - write 'keeps b' after its signature
+t22alatelambda.olang:15:9: error[T22b]: this lambda keeps 'b' in what it captured, beyond this call - reached in a loop's next turn by a value assigned after it -'s function type
    15 |         op(x, N(i))
       |         ^~
+t22alatelambda.olang:15:9: note: the function type of this call - reached in a loop's next turn by a value assigned after it - says nothing of that
+t22alatelambda.olang:15:9: help: write 'keeps b' after its signature
 compilation failed with 1 error
 === t22apushed.olang
-t22apushed.olang:12:8: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
+t22apushed.olang:12:8: error[T22b]: 'link' keeps 'b' in 'a', beyond this store's function type
    12 |     fs.Push(g)
       |        ^~~~
+t22apushed.olang:12:8: note: the function type of this store says nothing of that
 $ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
    68 |     v.data[v.n].occupy(x)
       |                        ^
@@ -5894,71 +5970,92 @@ t22apushed.olang:12:8: note: the functions given here followed into it (T22c)
 t22apushed.olang:12:8: note: instantiated here, with T = fn&(mut N&, N&)
    12 |     fs.Push(g)
       |        ^~~~
+t22apushed.olang:12:8: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22areturncycle.olang
-t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this return (from a function calling itself, or among several results) says nothing of that - write 'keeps b in a' after its signature
+t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a', beyond this return (from a function calling itself, or among several results)'s function type
    10 |     if n == 0 { return link }
       |                        ^~~~
+t22areturncycle.olang:10:24: note: the function type of this return (from a function calling itself, or among several results) says nothing of that
+t22areturncycle.olang:10:24: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22bglobalkeep.olang
-t22bglobalkeep.olang:11:15: error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back, and this store holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22bglobalkeep.olang:11:15: error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back
    11 |     c.onEvict = keepIt
       |               ^
+t22bglobalkeep.olang:11:15: note: this store holds only what its written function type says of every call
+t22bglobalkeep.olang:11:15: help: call it directly, or hold it in a local and call it there
 compilation failed with 1 error
 === t22bkeepsouter.olang
-t22bkeepsouter.olang:14:21: error[T22b]: this lambda keeps 'k' in what it captured from a scope that outlives where the lambda lives, and 'keeps k' says only that 'k' outlives the lambda - capture from one scope, or hold the lambda in a local and call it there
+t22bkeepsouter.olang:14:21: error[T22b]: this lambda keeps 'k' in what it captured from an outer scope
    14 |         c.onEvict = fn(k String&) {
       |                     ^~
+t22bkeepsouter.olang:14:21: note: that scope outlives where the lambda lives, and 'keeps k' says only that 'k' outlives the lambda
+t22bkeepsouter.olang:14:21: help: capture from one scope, or hold the lambda in a local and call it there
 compilation failed with 1 error
 === t22bnoalloc.olang
-t22bnoalloc.olang:9:16: error[T22b]: this lambda may allocate, and 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc' - give a function that does not, or hold it as a type without 'noalloc'
+t22bnoalloc.olang:9:16: error[T22b]: this lambda may allocate, which its held type promises it does not
     9 |     k := Apply(fn(x I64) I64 {
       |                ^~~~~~~~~~~~~~~
+t22bnoalloc.olang:9:16: note: 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc'
 t22bnoalloc.olang:10:9: note: its call of 'PutLine' may allocate
    10 |         try io.PutLine($x) catch { }
       |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+t22bnoalloc.olang:9:16: help: give a function that does not, or hold it as a type without 'noalloc'
 compilation failed with 1 error
 === t22bnoblock.olang
-t22bnoblock.olang:8:36: error[T22b]: a value of type 'fn&()' may do what 'fn&() noblock' does not say ('noblock'), and which functions it holds is not known here - write 'noblock' after the signature of the type it is held as, or give a function directly
+t22bnoblock.olang:8:36: error[T22b]: a value of type 'fn&()' may do what 'fn&() noblock' does not say ('noblock')
     8 | fn Keep(b mut Box&, g fn&()) { b.f = g }
       |                                    ^
+t22bnoblock.olang:8:36: note: which functions it holds is not known here
+t22bnoblock.olang:8:36: help: write 'noblock' after the signature of the type it is held as, or give a function directly
 compilation failed with 1 error
 === t22bnorecurse.olang
-t22bnorecurse.olang:8:24: error[T22b]: 'Count' may call itself, and 'fn&(n I64) I64 norecurse', the type it is held as here, promises 'norecurse' - give a function that does not, or hold it as a type without 'norecurse'
+t22bnorecurse.olang:8:24: error[T22b]: 'Count' may call itself, which its held type promises it does not
     8 | fn main() { assert Run(Count) == 3 }
       |                        ^~~~~
+t22bnorecurse.olang:8:24: note: 'fn&(n I64) I64 norecurse', the type it is held as here, promises 'norecurse'
 t22bnorecurse.olang:4:23: note: its call of 'Count' may call itself
     4 | fn Count(n I64) I64 { return 0 if n < 1 else 1 + Count(n - 1) }
       |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+t22bnorecurse.olang:8:24: help: give a function that does not, or hold it as a type without 'norecurse'
 compilation failed with 1 error
 === t22bpure.olang
-t22bpure.olang:10:14: error[T22b]: this lambda may write through what it was not given writably, and 'fn&(x I64) I64 pure', the type it is held as here, promises 'pure' - give a function that does not, or hold it as a type without 'pure'
+t22bpure.olang:10:14: error[T22b]: this lambda may write through what it was not given writably, which its held type promises it does not
    10 |     k := Run(fn(x I64) I64 {
       |              ^~~~~~~~~~~~~~~
+t22bpure.olang:10:14: note: 'fn&(x I64) I64 pure', the type it is held as here, promises 'pure'
 t22bpure.olang:11:9: note: it may write through what it was not given writably here
    11 |         n.v = x
       |         ^~~~~~~
+t22bpure.olang:10:14: help: give a function that does not, or hold it as a type without 'pure'
 compilation failed with 1 error
 === t22breturns.olang
-t22breturns.olang:7:14: error[T22b]: this lambda may end the program, and 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns' - give a function that does not, or hold it as a type without 'returns'
+t22breturns.olang:7:14: error[T22b]: this lambda may end the program, which its held type promises it does not
     7 |     k := Run(fn(x I64) I64 {
       |              ^~~~~~~~~~~~~~~
+t22breturns.olang:7:14: note: 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns'
 t22breturns.olang:8:9: note: it may end the program here
     8 |         assert x > 0, "positive"
       |         ^~~~~~~~~~~~~~~~~~~~~~~~
+t22breturns.olang:7:14: help: give a function that does not, or hold it as a type without 'returns'
 compilation failed with 1 error
 === t22breturnscycle.olang
-t22breturnscycle.olang:11:9: error[T22b]: this lambda may call through a function value it does not follow, which may not come back, and 'fn&() returns', the type it is held as here, promises 'returns' - give a function that does not, or hold it as a type without 'returns'
+t22breturnscycle.olang:11:9: error[T22b]: this lambda may call through a function value it does not follow, which may not come back, which its held type promises it does not
    11 |     b.f = fn() { b.f!() }
       |         ^
+t22breturnscycle.olang:11:9: note: 'fn&() returns', the type it is held as here, promises 'returns'
 t22breturnscycle.olang:11:18: note: it calls through a function value here, and what that calls is not followed
    11 |     b.f = fn() { b.f!() }
       |                  ^~~~
+t22breturnscycle.olang:11:9: help: give a function that does not, or hold it as a type without 'returns'
 compilation failed with 1 error
 === t22btypebeyond.olang
-t22btypebeyond.olang:10:13: error[T22b]: a value of type 'fn&(a mut N&, b N&) keeps b in a' may do what 'fn&(mut N&, N&)' does not say ('keeps b in a'), and which functions it holds is not known here - write 'keeps b in a' after the signature of the type it is held as, or give a function directly
+t22btypebeyond.olang:10:13: error[T22b]: a value of type 'fn&(a mut N&, b N&) keeps b in a' may do what 'fn&(mut N&, N&)' does not say ('keeps b in a')
    10 |     fs.Push(f)
       |             ^
+t22btypebeyond.olang:10:13: note: which functions it holds is not known here
+t22btypebeyond.olang:10:13: help: write 'keeps b in a' after the signature of the type it is held as, or give a function directly
 compilation failed with 1 error
 === t22callunsafe.olang
 t22callunsafe.olang:20:29: error[E12]: expected fn&(n P&) I64, found fn&(n mut P&) I64
@@ -5969,27 +6066,34 @@ t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
       |                                                ^~~~
 compilation failed with 2 errors
 === t22climit.olang
-t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a', and the function type of this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) - says nothing of that - write 'keeps b in a' after its signature
+t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a', beyond this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) -'s function type
    43 |     put(link16, x, 16)
       |         ^~~~~~
+t22climit.olang:43:9: note: the function type of this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) - says nothing of that
+t22climit.olang:43:9: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22cstorefollowed.olang
-t22cstorefollowed.olang:13:55: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
+t22cstorefollowed.olang:13:55: error[T22b]: 'link' keeps 'b' in 'a', beyond this store's function type
    13 | fn stash(h mut Holder&, f fn&(a mut N&, b N&)) { h.cb = f }
       |                                                       ^
+t22cstorefollowed.olang:13:55: note: the function type of this store says nothing of that
 t22cstorefollowed.olang:16:5: note: the functions given here followed into it (T22c)
    16 |     stash(h, link)
       |     ^~~~~
+t22cstorefollowed.olang:13:55: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22dassigned.olang
-t22dassigned.olang:11:17: error[T22b]: this lambda keeps 'x' in what it captured, and the function type of this argument says nothing of that - write 'keeps x' after its signature
+t22dassigned.olang:11:17: error[T22b]: this lambda keeps 'x' in what it captured, beyond this argument's function type
    11 |     h := Holder(fn(x N&) { kept.Push(x) })
       |                 ^~
+t22dassigned.olang:11:17: note: the function type of this argument says nothing of that
+t22dassigned.olang:11:17: help: write 'keeps x' after its signature
 compilation failed with 1 error
 === t22dstored.olang
-t22dstored.olang:9:9: error[T22b]: this lambda keeps 'x' in what it captured, and the function type of this store says nothing of that - write 'keeps x' after its signature
+t22dstored.olang:9:9: error[T22b]: this lambda keeps 'x' in what it captured, beyond this store's function type
     9 |     all.Push(h)
       |         ^~~~
+t22dstored.olang:9:9: note: the function type of this store says nothing of that
 $ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
    68 |     v.data[v.n].occupy(x)
       |                        ^
@@ -5999,6 +6103,7 @@ t22dstored.olang:9:9: note: the functions given here followed into it (T22c)
 t22dstored.olang:9:9: note: instantiated here, with T = Holder
     9 |     all.Push(h)
       |         ^~~~
+t22dstored.olang:9:9: help: write 'keeps x' after its signature
 compilation failed with 1 error
 === t24primref.olang
 t24primref.olang:4:10: error[T24]: I32 cannot be a reference - only a struct, an enum or an array can
@@ -6520,30 +6625,37 @@ t30bunmet.olang:7:14: error[T30b]: Pt does not satisfy the constraint Parsed on 
       |              ^~~~~~~~
 compilation failed with 1 error
 === t30ckeepsfield.olang
-t30ckeepsfield.olang:30:13: error[T30c, T22b]: Bag2's 'Put' keeps 'n' in what the instance's 'v' refers to, which no promise of Sink's 'Put' can say - call it directly, or through generic code
+t30ckeepsfield.olang:30:13: error[T30c, T22b]: Bag2's 'Put' keeps 'n' in what the instance's 'v' refers to
    30 |         put(b, P(i, i))
       |             ^
+t30ckeepsfield.olang:30:13: note: no promise of Sink's 'Put' can say that
+t30ckeepsfield.olang:30:13: help: call it directly, or through generic code
 compilation failed with 1 error
 === t30cnoalloc.olang
-t30cnoalloc.olang:14:17: error[T30c, T22b]: Sq's 'Area' may allocate, and Shape's 'Area' promises 'noalloc' - every call through an 'any Shape&' relies on it: give Sq a method that does not, or take 'noalloc' off the trait's method
+t30cnoalloc.olang:14:17: error[T30c, T22b]: Sq's 'Area' may allocate, and Shape's 'Area' promises 'noalloc'
    14 |     assert area(Sq(2.0)) > 0.0
       |                 ^~~~~~~
+t30cnoalloc.olang:14:17: note: every call through an 'any Shape&' relies on it
 t30cnoalloc.olang:9:5: note: it may allocate here
     9 |     t := $q.s
       |     ^
+t30cnoalloc.olang:14:17: help: give Sq a method that does not, or take 'noalloc' off the trait's method
 compilation failed with 1 error
 === t30cnoparam.olang
-t30cnoparam.olang:5:23: error[T21c]: 'k' is no parameter of this function type - a promise names its parameters by the names written in it
+t30cnoparam.olang:5:23: error[T21c]: 'k' is no parameter of this function type
     5 |     mut Put(n aNode&) keeps k
       |                       ^~~~~~~
+t30cnoparam.olang:5:23: note: a promise names its parameters by the names written in it
 compilation failed with 1 error
 === t30cpure.olang
-t30cpure.olang:14:17: error[T30c, T22b]: Counter's 'Next' may write a global, and Source's 'Next' promises 'pure' - every call through an 'any Source&' relies on it: give Counter a method that does not, or take 'pure' off the trait's method
+t30cpure.olang:14:17: error[T30c, T22b]: Counter's 'Next' may write a global, and Source's 'Next' promises 'pure'
    14 |     assert next(Counter(2)) == 2
       |                 ^~~~~~~~~~
+t30cpure.olang:14:17: note: every call through an 'any Source&' relies on it
 t30cpure.olang:9:5: note: it may write a global here
     9 |     seen++
       |     ^~~~~~
+t30cpure.olang:14:17: help: give Counter a method that does not, or take 'pure' off the trait's method
 compilation failed with 1 error
 === t30sep.olang
 t30sep.olang:3:28: error: expected '}', found 'Perim'
@@ -6658,9 +6770,10 @@ t32anynottrait.olang:3:12: error[T32]: 'any' takes a trait, and I64 is none
       |            ^~~
 compilation failed with 1 error
 === t32anyobligations.olang
-t32anyobligations.olang:14:7: error[T30c, T22b]: aBag's 'Put' keeps 'n' in the instance, and aSink's 'Put' says nothing of that - write 'keeps n' after its signature in the trait
+t32anyobligations.olang:14:7: error[T30c, T22b]: aBag's 'Put' keeps 'n' in the instance, and aSink's 'Put' says nothing of that
    14 |     f(b)
       |       ^
+t32anyobligations.olang:14:7: help: write 'keeps n' after its signature in the trait
 compilation failed with 1 error
 === t32anyopenas.olang
 t32anyopenas.olang:9:37: error[T34]: any aShape&'s trait aShape is open, so its instance's type is never asked for
@@ -6877,37 +6990,46 @@ topsetcondreads.olang:4:4: error[D13e]: this condition reads 'X', which its 'if'
       |    ^~~~~~
 compilation failed with 1 error
 === topsethasvalue.olang
-topsethasvalue.olang:4:26: error[D13e]: 'X' has a value in its declaration - a global is given its value once: declare it with no value, or drop this assignment
+topsethasvalue.olang:4:26: error[D13e]: 'X' has a value in its declaration
     4 | if TargetOs == "linux" { X = 5 } else { X = 6 }
       |                          ^
-topsethasvalue.olang:4:41: error[D13e]: 'X' has a value in its declaration - a global is given its value once: declare it with no value, or drop this assignment
+topsethasvalue.olang:4:26: note: a global is given its value once
+topsethasvalue.olang:4:26: help: declare it with no value, or drop this assignment
+topsethasvalue.olang:4:41: error[D13e]: 'X' has a value in its declaration
     4 | if TargetOs == "linux" { X = 5 } else { X = 6 }
       |                                         ^
+topsethasvalue.olang:4:41: note: a global is given its value once
+topsethasvalue.olang:4:41: help: declare it with no value, or drop this assignment
 compilation failed with 2 errors
 === topsetmissing.olang
-topsetmissing.olang:5:48: error[D13e]: this branch does not assign 'Root', and Node& has no zero value - assign it in every branch of the 'if', or give it a value
+topsetmissing.olang:5:48: error[D13e]: this branch does not assign 'Root', and Node& has no zero value
     5 | if TargetOs == "linux" { Root = Node(1) } else { }
       |                                                ^
+topsetmissing.olang:5:48: help: assign it in every branch of the 'if', or give it a value
 compilation failed with 1 error
 === topsetnested.olang
-topsetnested.olang:6:8: error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value - add an 'else' assigning it, or give it a value
+topsetnested.olang:6:8: error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value
     6 |     if TargetArch == "x86_64" { Root = Node(1) }
       |        ^~~~~~~~~~~~~~~~~~~~~~
+topsetnested.olang:6:8: help: add an 'else' assigning it, or give it a value
 compilation failed with 1 error
 === topsetnoelse.olang
-topsetnoelse.olang:6:4: error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value - add an 'else' assigning it, or give it a value
+topsetnoelse.olang:6:4: error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value
     6 | if TargetOs == "linux" { Root = Node(7) }
       |    ^~~~~~~~~~~~~~~~~~~
+topsetnoelse.olang:6:4: help: add an 'else' assigning it, or give it a value
 compilation failed with 1 error
 === topsetplace.olang
-topsetplace.olang:4:1: error[D13e]: an assignment at the top level is a global's initializer, written only inside a top-level 'if' - give the value in the global's declaration
+topsetplace.olang:4:1: error[D13e]: an assignment at the top level is a global's initializer, written only inside a top-level 'if'
     4 | X = 5
       | ^~~~~
+topsetplace.olang:4:1: help: give the value in the global's declaration
 compilation failed with 1 error
 === topsettarget.olang
-topsettarget.olang:4:26: error[D13e]: 'Y' is no global of this module declared above with no value - only such a global is assigned at the top level
+topsettarget.olang:4:26: error[D13e]: 'Y' is no global of this module declared above with no value
     4 | if TargetOs == "linux" { Y = 5 } else { X = 6 }
       |                          ^
+topsettarget.olang:4:26: note: only such a global is assigned at the top level
 compilation failed with 1 error
 === topsettwice.olang
 topsettwice.olang:5:26: error[D13e]: 'X' is assigned twice at the top level in this build - each build gives a global one value
@@ -7291,23 +7413,27 @@ x9linkname.olang:3:13: error[X9]: 'lib m' names no library and no file
 x9linkname.olang:3:13: help: write a library's name, as 'link "m"', or a path to one, as 'link "lib/libx.a"'
 compilation failed with 1 error
 === zeroeffect.olang
-zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
+zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one
     9 |     c Counted
       |     ^
+zeroeffect.olang:9:5: note: its constructor does not run on zeros while compiling
 zeroeffect.olang:10:12: note: read here before it is assigned on every path - assign it on each path before this read
    10 |     assert c.n == 0
       |            ^
 zeroeffect.olang:6:5: note: here
     6 |     Made++
       |     ^~~~~~
+zeroeffect.olang:9:5: help: it writes a global, which the running program would then not see written
 compilation failed with 1 error
 === zerofails.olang
-zerofails.olang:11:5: error[D13c]: NonZero has no zero value, so this needs one - its constructor does not run on zeros while compiling: it fails with an error no clause handles
+zerofails.olang:11:5: error[D13c]: NonZero has no zero value, so this needs one
    11 |     n NonZero
       |     ^
+zerofails.olang:11:5: note: its constructor does not run on zeros while compiling
 zerofails.olang:12:16: note: read here before it is assigned on every path - assign it on each path before this read
    12 |     assert I32(n) != 0
       |                ^
+zerofails.olang:11:5: help: it fails with an error no clause handles
 compilation failed with 1 error
 === zeroshared.olang
 zeroshared.olang:7:13: error[D13c]: Bag's zero value holds references, which a fill would share - give a fill, or build the elements

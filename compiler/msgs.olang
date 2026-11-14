@@ -1864,54 +1864,54 @@ fn SpawnTryInfallible() r.Msg { return r.Msg(Diag.SpawnTryInfallible, "P4", "thi
 fn TaskClauseReturns() r.Msg { return r.Msg(Diag.TaskClauseReturns, "P4a", "a task's clause runs on the task and may not return - it ends where its block does") }
 fn TaskClauseLoopJump(tok String&) r.Msg { return r.Msg(Diag.TaskClauseLoopJump, "P4a", $tok " may not leave a task's clause - it runs on the task, outside the spawner's loops") }
 fn TaskClauseError() r.Msg { return r.Msg(Diag.TaskClauseError, "P4a", "an error may not leave a task's clause", "the task lets through what its clauses do not take", "catch it here") }
-fn TaskClauseNeedsDefault() r.Msg { return r.Msg(Diag.TaskClauseNeedsDefault, "P4a", "this clause takes an error the targets would get no value for - end it with 'default v', or end the process") }
+fn TaskClauseNeedsDefault() r.Msg { return r.Msg(Diag.TaskClauseNeedsDefault, "P4a", "this clause takes an error the targets would get no value for", "", "end it with 'default v', or end the process") }
 fn TaskDefaultInStatement() r.Msg { return r.Msg(Diag.TaskDefaultInStatement, "P4a", "a spawn without targets gives no value, so its clauses take no default") }
-fn JoinNotTried(ty String&) r.Msg { return r.Msg(Diag.JoinNotTried, "P4c", "this join's tasks can fail with " $ty " - write 'try join', with catch clauses for what it handles here") }
+fn JoinNotTried(ty String&) r.Msg { return r.Msg(Diag.JoinNotTried, "P4c", "this join's tasks can fail with " $ty, "", "write 'try join', with catch clauses for what it handles here") }
 fn JoinCannotFail() r.Msg { return r.Msg(Diag.JoinCannotFail, "P4c", "no task of this join can fail - drop the 'try'") }
 fn JoinCatchNeedsTry() r.Msg { return r.Msg(Diag.JoinCatchNeedsTry, "P4c", "a join takes catch clauses only as 'try join', and no task of this one can fail") }
 fn JoinClauseMustLeave() r.Msg { return r.Msg(Diag.JoinClauseMustLeave, "P4d", "a task of this join binds a target it leaves unwritten when it fails - this clause must leave") }
 fn SpawnArgTooShort() r.Msg { return r.Msg(Diag.SpawnArgTooShort, "P2", "this argument's storage closes before the join does - declare it at the join's level or wider") }
-fn SpawnArgHoldsShort() r.Msg { return r.Msg(Diag.SpawnArgHoldsShort, "P2", "this argument refers to storage that closes before the join does - declare that at the join's level or wider") }
+fn SpawnArgHoldsShort() r.Msg { return r.Msg(Diag.SpawnArgHoldsShort, "P2", "this argument refers to storage that closes before the join does", "", "declare that at the join's level or wider") }
 fn SpawnCaptureTooShort() r.Msg { return r.Msg(Diag.SpawnCaptureTooShort, "P2, D16e", "this lambda captures a variable declared inside the join, which closes while the task may run") }
 fn SpawnFuncTooShort() r.Msg { return r.Msg(Diag.SpawnFuncTooShort, "P2, D16e", "this function value closes before the join does - make it outside, or spawn the lambda itself") }
 fn SpawnResultVoid() r.Msg { return r.Msg(Diag.SpawnResultVoid, "P1g", "this call returns nothing to bind - drop the target") }
 fn SpawnResultType(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.SpawnResultType, "P1g", "a spawn target has exactly the call's type " $ty1 ", found " $ty2 " - convert after the join") }
-fn SpawnResultAsRef(ty1 String&, ty2 String&, text String&, ty3 String&) r.Msg { return r.Msg(Diag.SpawnResultAsRef, "P1g", "a spawn target has exactly the call's type " $ty1 ", found " $ty2 " - declare '" $text "' to give " $ty3 ", built where its result lands") }
+fn SpawnResultAsRef(ty1 String&, ty2 String&, text String&, ty3 String&) r.Msg { return r.Msg(Diag.SpawnResultAsRef, "P1g", "a spawn target has exactly the call's type " $ty1 ", found " $ty2, "", "declare '" $text "' to give " $ty3 ", built where its result lands") }
 fn SpawnResultTooShort() r.Msg { return r.Msg(Diag.SpawnResultTooShort, "P1g", "this target closes before the join does - declare it at the join's level or wider") }
 fn SpawnResultsDisagree() r.Msg { return r.Msg(Diag.SpawnResultsDisagree, "P1g", "these targets live in different scopes, and the results are built in one") }
-fn FuncValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.FuncValueObligations, "T22a", "'" $text "' ties where what it is given lives to what it keeps or gives back, and " $place " holds only what its written function type says of every call - call it directly, or hold it in a local and call it there") }
-fn LambdaValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.LambdaValueObligations, "T22a", "this lambda keeps '" $text "' beyond the call, and " $place " holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there") }
-fn LambdaValueRelates(place String&) r.Msg { return r.Msg(Diag.LambdaValueRelates, "T22a", "this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and " $place " holds only what its written function type says of every call - hold it in a local and call it there") }
+fn FuncValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.FuncValueObligations, "T22a", "'" $text "' ties where what it is given lives to what it keeps or gives back", $place " holds only what its written function type says of every call", "call it directly, or hold it in a local and call it there") }
+fn LambdaValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.LambdaValueObligations, "T22a", "this lambda keeps '" $text "' beyond the call", $place " holds only what its written function type says of every call", "keep a copy instead, or hold the lambda in a local and call it there") }
+fn LambdaValueRelates(place String&) r.Msg { return r.Msg(Diag.LambdaValueRelates, "T22a", "this lambda ties where what it is given lives to what it keeps or gives back", "its captures are included, and " $place " holds only what its written function type says of every call", "hold it in a local and call it there") }
 # a function value at a boundary doing what one promise word would say of its place's type (T22b): the word to write
-fn ValueBeyondType(subject String&, does String&, place String&, word String&) r.Msg { return r.Msg(Diag.ValueBeyondType, "T22b", $subject " " $does ", and the function type of " $place " says nothing of that - write '" $word "' after its signature") }
+fn ValueBeyondType(subject String&, does String&, place String&, word String&) r.Msg { return r.Msg(Diag.ValueBeyondType, "T22b", $subject " " $does ", beyond " $place "'s function type", "the function type of " $place " says nothing of that", "write '" $word "' after its signature") }
 # 2.2.1: a lambda keeping an argument in a capture that outlives the lambda, held where "keeps x" is all the type says
-fn LambdaKeepsOuter(text String&) r.Msg { return r.Msg(Diag.LambdaKeepsOuter, "T22b", "this lambda keeps '" $text "' in what it captured from a scope that outlives where the lambda lives, and 'keeps " $text "' says only that '" $text "' outlives the lambda - capture from one scope, or hold the lambda in a local and call it there") }
+fn LambdaKeepsOuter(text String&) r.Msg { return r.Msg(Diag.LambdaKeepsOuter, "T22b", "this lambda keeps '" $text "' in what it captured from an outer scope", "that scope outlives where the lambda lives, and 'keeps " $text "' says only that '" $text "' outlives the lambda", "capture from one scope, or hold the lambda in a local and call it there") }
 # a function value whose functions are not followed, held as a type promising more than its own (T22b)
 # a function value whose functions are followed doing what an effect word of the type it is held as denies (T22b)
-fn EffectBeyond(what String&, does String&, want String&, word String&) r.Msg { return r.Msg(Diag.EffectBeyond, "T22b", $what " may " $does ", and '" $want "', the type it is held as here, promises '" $word "' - give a function that does not, or hold it as a type without '" $word "'") }
+fn EffectBeyond(what String&, does String&, want String&, word String&) r.Msg { return r.Msg(Diag.EffectBeyond, "T22b", $what " may " $does ", which its held type promises it does not", "'" $want "', the type it is held as here, promises '" $word "'", "give a function that does not, or hold it as a type without '" $word "'") }
 fn NoteEffect(text String&) r.Msg { return r.Msg(Diag.NoteEffect, "", text) }
-fn FuncTypeBeyond(have String&, want String&, word String&) r.Msg { return r.Msg(Diag.FuncTypeBeyond, "T22b", "a value of type '" $have "' may do what '" $want "' does not say ('" $word "'), and which functions it holds is not known here - write '" $word "' after the signature of the type it is held as, or give a function directly") }
+fn FuncTypeBeyond(have String&, want String&, word String&) r.Msg { return r.Msg(Diag.FuncTypeBeyond, "T22b", "a value of type '" $have "' may do what '" $want "' does not say ('" $word "')", "which functions it holds is not known here", "write '" $word "' after the signature of the type it is held as, or give a function directly") }
 
 # T21c: a promise's misuses
-fn PromiseMisplaced(word String&) r.Msg { return r.Msg(Diag.PromiseMisplaced, "T21c", "'" $word "' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)") }
-fn PromiseNoParam(name String&) r.Msg { return r.Msg(Diag.PromiseNoParam, "T21c", "'" $name "' is no parameter of this function type - a promise names its parameters by the names written in it") }
+fn PromiseMisplaced(word String&) r.Msg { return r.Msg(Diag.PromiseMisplaced, "T21c", "'" $word "' is a promise, written only after a function type's signature", "what a function itself does is read off its body ('olang explain' shows it)") }
+fn PromiseNoParam(name String&) r.Msg { return r.Msg(Diag.PromiseNoParam, "T21c", "'" $name "' is no parameter of this function type", "a promise names its parameters by the names written in it") }
 fn PromiseTwice(word String&) r.Msg { return r.Msg(Diag.PromiseTwice, "T21c", "'" $word "' is promised twice - write it once") }
 fn PromiseReturnsNoreturn() r.Msg { return r.Msg(Diag.PromiseReturnsNoreturn, "T21c", "'returns' promises every call comes back, and 'noreturn' that none does - write one of them") }
 fn PromiseBorrowsNothing(word String&) r.Msg { return r.Msg(Diag.PromiseBorrowsNothing, "T21c", "this function type's result holds no reference, so '" $word "' says nothing - leave it out") }
 fn PromiseBorrowsValue(name String&) r.Msg { return r.Msg(Diag.PromiseBorrowsValue, "T21c", "'" $name "' holds no reference, so no result can refer into it - leave 'borrows " $name "' out") }
-fn PromiseBorrowsBoth() r.Msg { return r.Msg(Diag.PromiseBorrowsBoth, "T21c", "'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one - write one of them") }
-fn PromiseKeepsValue(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsValue, "T21c", "'" $name "' holds no reference and is not unique, so a call can keep only a copy of it, which needs no word - leave the 'keeps' out") }
+fn PromiseBorrowsBoth() r.Msg { return r.Msg(Diag.PromiseBorrowsBoth, "T21c", "'noborrow' and 'borrows' say opposite things", "'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one", "write one of them") }
+fn PromiseKeepsValue(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsValue, "T21c", "'" $name "' holds no reference and is not unique", "a call can keep only a copy of it, which needs no word", "leave the 'keeps' out") }
 fn PromiseKeepsSelf(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsSelf, "T21c", "'keeps " $name " in " $name "' keeps a parameter in itself, which says nothing - leave it out") }
 fn PromiseKeepsInValue(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsInValue, "T21c", "'" $name "' holds no reference, so nothing can be kept in what it refers to") }
 fn PromiseKeepsPath(name String&, field String&) r.Msg { return r.Msg(Diag.PromiseKeepsPath, "T21c", "a promise names one field of a parameter - write 'in " $name "." $field "'") }
 fn PromiseKeepsField(field String&, name String&) r.Msg { return r.Msg(Diag.PromiseKeepsField, "T21c", "'" $field "' is no field of what '" $name "' refers to") }
 
 # type arguments written apart from the name or the "(" (G12)
-fn TypeArgsSpaced(name String&) r.Msg { return r.Msg(Diag.TypeArgsSpaced, "G12", "type arguments are written touching the name and the '(': '" $name "<...>(...)' - with spaces, '<' and '>' compare") }
+fn TypeArgsSpaced(name String&) r.Msg { return r.Msg(Diag.TypeArgsSpaced, "G12", "type arguments are written touching the name and the '('", "with spaces, '<' and '>' compare", "write '" $name "<...>(...)'") }
 
 # a Call failing with other errors than the function type it is wanted as
-fn CallValueErrors(ty String&, has String&, wants String&, fix String&) r.Msg { return r.Msg(Diag.CallValueErrors, "T22, E31", $ty "'s Call fails with " $has " where the function type says " $wants " - the same errors in the same order: " $fix) }
-fn CallValueObligations(ty String&, place String&) r.Msg { return r.Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call ties where what it is given lives to what it keeps or gives back, and " $place " holds only what its written function type says of every call - call it by name, or hold the value in a local and call it there") }
+fn CallValueErrors(ty String&, has String&, wants String&, fix String&) r.Msg { return r.Msg(Diag.CallValueErrors, "T22, E31", $ty "'s Call fails with " $has " where the function type says " $wants, "the errors must be the same, in the same order", $fix) }
+fn CallValueObligations(ty String&, place String&) r.Msg { return r.Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call ties where what it is given lives to what it keeps or gives back", $place " holds only what its written function type says of every call", "call it by name, or hold the value in a local and call it there") }
 fn LambdaResultUninferable() r.Msg { return r.Msg(Diag.LambdaResultUninferable, "D16b", "this value gives the lambda no result type - write one") }
 fn LambdaArity(ty String&, n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.LambdaArity, "D16a", $ty " takes " $n1 " parameter" $text ", and this lambda " $n2) }
 fn LambdaSignature(ty String&) r.Msg { return r.Msg(Diag.LambdaSignature, "D16a", "this lambda's signature disagrees with " $ty " - leave that part out, or make them agree") }
@@ -1921,24 +1921,24 @@ fn MissingReturn(ty String&) r.Msg { return r.Msg(Diag.MissingReturn, "D10a", "t
 fn BreakOutsideLoop(tok String&) r.Msg { return r.Msg(Diag.BreakOutsideLoop, "S11", $tok " acts on the innermost loop, and there is none here") }
 fn DeferLoopJump(tok String&) r.Msg { return r.Msg(Diag.DeferLoopJump, "S19b", $tok " may not leave deferred code - it runs while its block is left") }
 fn CatchNotProduced(ty String&) r.Msg { return r.Msg(Diag.CatchNotProduced, "R14", "the call does not fail with " $ty) }
-fn TryCatchOnSlice() r.Msg { return r.Msg(Diag.TryCatchOnSlice, "R10", "a try statement discards its value, leaving a slice nothing - write 's := try a[lo:hi]' and catch where it is used") }
+fn TryCatchOnSlice() r.Msg { return r.Msg(Diag.TryCatchOnSlice, "R10", "a try statement discards its value, leaving a slice nothing", "", "write 's := try a[lo:hi]' and catch where it is used") }
 fn EmptyDestructor() r.Msg { return r.Msg(Diag.EmptyDestructor, "C7a", "this destructor does nothing - remove it") }
 fn LiteralCtorFails(ty String&, text String&) r.Msg { return r.Msg(Diag.LiteralCtorFails, "T29d", "this literal enters " $ty " through its constructor, which does not run on it while compiling: " $text) }
 fn ZeroValueShared(ty String&) r.Msg { return r.Msg(Diag.ZeroValueShared, "D13c", $ty "'s zero value holds references, which a fill would share - give a fill, or build the elements") }
-fn NoZeroValue(ty String&, text String&) r.Msg { return r.Msg(Diag.NoZeroValue, "D13c", $ty " has no zero value, so this needs one - its constructor does not run on zeros while compiling: " $text) }
-fn ReadUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.ReadUnassigned, "D13d", "'" $name "' is read here before it is assigned on every path, and " $ty " has no zero value - assign it on each path before this read, or give it a value" $fix) }
-fn FieldUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.FieldUnassigned, "D13d", "the field '" $name "' is not assigned on every path through the constructor, and " $ty " has no zero value - assign it on each path, or give it a value" $fix) }
-fn TopSetPlace() r.Msg { return r.Msg(Diag.TopSetPlace, "D13e", "an assignment at the top level is a global's initializer, written only inside a top-level 'if' - give the value in the global's declaration") }
-fn TopSetTarget(name String&) r.Msg { return r.Msg(Diag.TopSetTarget, "D13e", "'" $name "' is no global of this module declared above with no value - only such a global is assigned at the top level") }
-fn TopSetHasValue(name String&) r.Msg { return r.Msg(Diag.TopSetHasValue, "D13e", "'" $name "' has a value in its declaration - a global is given its value once: declare it with no value, or drop this assignment") }
+fn NoZeroValue(ty String&, text String&) r.Msg { return r.Msg(Diag.NoZeroValue, "D13c", $ty " has no zero value, so this needs one", "its constructor does not run on zeros while compiling", $text) }
+fn ReadUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.ReadUnassigned, "D13d", "'" $name "' is read here before it is assigned on every path", $ty " has no zero value", "assign it on each path before this read, or give it a value" $fix) }
+fn FieldUnassigned(name String&, ty String&, fix String&) r.Msg { return r.Msg(Diag.FieldUnassigned, "D13d", "the field '" $name "' is not assigned on every path through the constructor", $ty " has no zero value", "assign it on each path, or give it a value" $fix) }
+fn TopSetPlace() r.Msg { return r.Msg(Diag.TopSetPlace, "D13e", "an assignment at the top level is a global's initializer, written only inside a top-level 'if'", "", "give the value in the global's declaration") }
+fn TopSetTarget(name String&) r.Msg { return r.Msg(Diag.TopSetTarget, "D13e", "'" $name "' is no global of this module declared above with no value", "only such a global is assigned at the top level") }
+fn TopSetHasValue(name String&) r.Msg { return r.Msg(Diag.TopSetHasValue, "D13e", "'" $name "' has a value in its declaration", "a global is given its value once", "declare it with no value, or drop this assignment") }
 fn TopSetTwice(name String&) r.Msg { return r.Msg(Diag.TopSetTwice, "D13e", "'" $name "' is assigned twice at the top level in this build - each build gives a global one value") }
-fn TopSetMissing(name String&, ty String&) r.Msg { return r.Msg(Diag.TopSetMissing, "D13e", "this branch does not assign '" $name "', and " $ty " has no zero value - assign it in every branch of the 'if', or give it a value") }
-fn TopSetNoElse(name String&, ty String&) r.Msg { return r.Msg(Diag.TopSetNoElse, "D13e", "this 'if' assigns '" $name "' and has no 'else', and " $ty " has no zero value - add an 'else' assigning it, or give it a value") }
+fn TopSetMissing(name String&, ty String&) r.Msg { return r.Msg(Diag.TopSetMissing, "D13e", "this branch does not assign '" $name "', and " $ty " has no zero value", "", "assign it in every branch of the 'if', or give it a value") }
+fn TopSetNoElse(name String&, ty String&) r.Msg { return r.Msg(Diag.TopSetNoElse, "D13e", "this 'if' assigns '" $name "' and has no 'else', and " $ty " has no zero value", "", "add an 'else' assigning it, or give it a value") }
 fn TopSetCondReads(name String&) r.Msg { return r.Msg(Diag.TopSetCondReads, "D13e", "this condition reads '" $name "', which its 'if' assigns - a condition cannot decide the value it reads") }
 fn DefaultNotComputable(text String&) r.Msg { return r.Msg(Diag.DefaultNotComputable, "D8a", "a default is computed while compiling, and this one cannot be: " $text) }
 fn AssertFalse() r.Msg { return r.Msg(Diag.AssertFalse, "S18c", "this assertion is false, evaluated while compiling") }
 fn AssertFalseMessage(text String&) r.Msg { return r.Msg(Diag.AssertFalseMessage, "S18c", "this assertion is false, evaluated while compiling: " $text) }
-fn AssertFalseWritten(text String&) r.Msg { return r.Msg(Diag.AssertFalseWritten, "S18c", "this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: " $text) }
+fn AssertFalseWritten(text String&) r.Msg { return r.Msg(Diag.AssertFalseWritten, "S18c", "this assertion is false, evaluated while compiling", "its message reads what only the running program knows, so it is shown as written: " $text) }
 fn AssertMsgReturns(text String&) r.Msg { return r.Msg(Diag.AssertMsgReturns, "S17", $text " message may not return - it is evaluated only where it is used, and gives text") }
 fn AssertMsgError(text String&) r.Msg { return r.Msg(Diag.AssertMsgError, "S17", "an error may not leave " $text " message - catch it here") }
 fn AssertMsgLoopJump(tok String&, text String&) r.Msg { return r.Msg(Diag.AssertMsgLoopJump, "S17", $tok " may not leave " $text " message - it is evaluated only where it is used") }
@@ -1980,29 +1980,29 @@ fn ModuleIdentityClash(text String&) r.Msg { return r.Msg(Diag.ModuleIdentityCla
 # ---- contracts (D17) ----
 
 fn ContractNeedsArgumentError(name String&) r.Msg { return r.Msg(Diag.ContractNeedsArgumentError, "D17", $name " has conditions, so a call fails with ArgumentError where one is false - add it after '?'") }
-fn GenContractNeedsArgumentError(name String&) r.Msg { return r.Msg(Diag.GenContractNeedsArgumentError, "D18, D17", $name " has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'") }
+fn GenContractNeedsArgumentError(name String&) r.Msg { return r.Msg(Diag.GenContractNeedsArgumentError, "D18, D17", $name " has conditions, so its first Next can fail with ArgumentError", "it fails where a condition is false", "add it to its result's errors, 'Iterator<T ? ArgumentError>'") }
 fn ContractFalse(cond String&, name String&) r.Msg { return r.Msg(Diag.ContractFalse, "D17e", $"this call breaks " $name "'s requirement '" $cond "'") }
-fn ConversionDoesNotFit(value String&, ty String&) r.Msg { return r.Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty " - write a value that fits, or 'try x.Narrow<" $ty ">()' to fail with an error") }
+fn ConversionDoesNotFit(value String&, ty String&) r.Msg { return r.Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty, "", "write a value that fits, or 'try x.Narrow<" $ty ">()' to fail with an error") }
 fn NoteContractCondition() r.Msg { return r.Msg(Diag.NoteContractCondition, "", "the condition") }
-fn GenericNeeds(text String&, need String&, ty String&) r.Msg { return r.Msg(Diag.GenericNeeds, "G18", $text " needs " $need ", and " $ty " has none - declare it for " $ty ", or call " $text " with a type that has it") }
+fn GenericNeeds(text String&, need String&, ty String&) r.Msg { return r.Msg(Diag.GenericNeeds, "G18", $text " needs " $need ", and " $ty " has none", "", "declare it for " $ty ", or call " $text " with a type that has it") }
 fn NoteGenericNeeds(text String&, need String&) r.Msg { return r.Msg(Diag.NoteGenericNeeds, "", $text " needs " $need " here") }
-fn FactOfGeneric(text String&, fact String&) r.Msg { return r.Msg(Diag.FactOfGeneric, "G42", $text " is generic, and each of its instances has facts of its own - name one with its type arguments: '" $text "<T>." $fact "'") }
-fn FactUndecided(text String&) r.Msg { return r.Msg(Diag.FactUndecided, "G42", "'" $text "' cannot be decided: the code it reads it from changes with its value - read it outside what it decides") }
-fn FactNoFunction(fact String&) r.Msg { return r.Msg(Diag.FactNoFunction, "G42", $fact " is read through a function's name or a function's descriptor ('f." $fact "', 'd." $fact "' in a walk of 'm.Functions')") }
+fn FactOfGeneric(text String&, fact String&) r.Msg { return r.Msg(Diag.FactOfGeneric, "G42", $text " is generic, and each of its instances has facts of its own", "", "name one with its type arguments: '" $text "<T>." $fact "'") }
+fn FactUndecided(text String&) r.Msg { return r.Msg(Diag.FactUndecided, "G42", "'" $text "' cannot be decided", "the code it reads it from changes with its value", "read it outside what it decides") }
+fn FactNoFunction(fact String&) r.Msg { return r.Msg(Diag.FactNoFunction, "G42", $fact " is read through a function", "", "write it through a function's name or a function's descriptor ('f." $fact "', 'd." $fact "' in a walk of 'm.Functions')") }
 fn CapsOneFile() r.Msg { return r.Msg(Diag.CapsOneFile, "B11c", "explain -caps takes one program's file, as 'olang explain -caps main.olang'") }
-fn ListingUsage(opt String&) r.Msg { return r.Msg(Diag.ListingUsage, "B11d", $"explain " $opt " takes a program's file and the name of one of its functions, as 'olang explain " $opt " main.olang main'") }
-fn ListingNoFunction(name String&, file String&) r.Msg { return r.Msg(Diag.ListingNoFunction, "B11d", $"'" $name "' is no function of " $file " - explain -asm and -ir show a function's code, or a method's as 'Type.Method'") }
+fn ListingUsage(opt String&) r.Msg { return r.Msg(Diag.ListingUsage, "B11d", $"explain " $opt " takes a program's file and a function's name", "", "write 'olang explain " $opt " main.olang main'") }
+fn ListingNoFunction(name String&, file String&) r.Msg { return r.Msg(Diag.ListingNoFunction, "B11d", $"'" $name "' is no function of " $file, "explain -asm and -ir show a function's code, or a method's as 'Type.Method'") }
 fn ListingAlone() r.Msg { return r.Msg(Diag.ListingAlone, "B11d", "-asm, -ir and -caps exclude one another - explain shows one of them at a time") }
 fn ListingQuick(opt String&) r.Msg { return r.Msg(Diag.ListingQuick, "B11d", $opt " applies to explain only with -asm or -ir, which show code as a build makes it") }
-fn ApiUsage() r.Msg { return r.Msg(Diag.ApiUsage, "B21", "api takes two versions and a path, as 'olang api HEAD~1 HEAD std/io.olang' - each version a commit or a directory") }
+fn ApiUsage() r.Msg { return r.Msg(Diag.ApiUsage, "B21", "api takes two versions and a path", "each version is a commit or a directory", "write 'olang api HEAD~1 HEAD std/io.olang'") }
 fn ApiNoSide(text String&) r.Msg { return r.Msg(Diag.ApiNoSide, "B21", "'" $text "' is neither a path nor a commit of the repository here") }
 fn ApiNoFiles(text String&) r.Msg { return r.Msg(Diag.ApiNoFiles, "B21", "'" $text "' names no .olang file on either side") }
-fn ColumnsNotRecord(ty String&, row String&, why String&) r.Msg { return r.Msg(Diag.ColumnsNotRecord, "T7e", $ty " takes a record for its rows, and " $row " " $why " - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'") }
-fn ColumnNamedLikeMethod(ty String&, row String&, name String&) r.Msg { return r.Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method '" $name "' (M19) - rename the field") }
+fn ColumnsNotRecord(ty String&, row String&, why String&) r.Msg { return r.Msg(Diag.ColumnsNotRecord, "T7e", $ty " takes a record for its rows, and " $row " " $why, "a record is a struct whose constructor declares exactly its fields, each a parameter written bare", "write 'type P struct(X F32, Y F32) { X, Y }'") }
+fn ColumnNamedLikeMethod(ty String&, row String&, name String&) r.Msg { return r.Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method", "a field may not share a method's name '" $name "' (M19)", "rename the field") }
 fn ColumnAssigned() r.Msg { return r.Msg(Diag.ColumnAssigned, "T7e", "a column is assigned whole only alone - 'c.x = v', its length checked against its table's") }
-fn TraitMethodEffect(ty String&, tok String&, does String&, tr String&, word String&) r.Msg { return r.Msg(Diag.TraitMethodEffect, "T30c, T22b", $ty "'s " $tok " may " $does ", and " $tr "'s " $tok " promises '" $word "' - every call through an 'any " $tr "&' relies on it: give " $ty " a method that does not, or take '" $word "' off the trait's method") }
-fn TraitMethodBeyondField(ty String&, tok String&, does String&, tr String&) r.Msg { return r.Msg(Diag.TraitMethodBeyondField, "T30c, T22b", $ty "'s " $tok " " $does ", which no promise of " $tr "'s " $tok " can say - call it directly, or through generic code") }
-fn TraitMethodBeyond(ty String&, tok String&, does String&, tr String&, word String&) r.Msg { return r.Msg(Diag.TraitMethodBeyond, "T30c, T22b", $ty "'s " $tok " " $does ", and " $tr "'s " $tok " says nothing of that - write '" $word "' after its signature in the trait") }
+fn TraitMethodEffect(ty String&, tok String&, does String&, tr String&, word String&) r.Msg { return r.Msg(Diag.TraitMethodEffect, "T30c, T22b", $ty "'s " $tok " may " $does ", and " $tr "'s " $tok " promises '" $word "'", "every call through an 'any " $tr "&' relies on it", "give " $ty " a method that does not, or take '" $word "' off the trait's method") }
+fn TraitMethodBeyondField(ty String&, tok String&, does String&, tr String&) r.Msg { return r.Msg(Diag.TraitMethodBeyondField, "T30c, T22b", $ty "'s " $tok " " $does, "no promise of " $tr "'s " $tok " can say that", "call it directly, or through generic code") }
+fn TraitMethodBeyond(ty String&, tok String&, does String&, tr String&, word String&) r.Msg { return r.Msg(Diag.TraitMethodBeyond, "T30c, T22b", $ty "'s " $tok " " $does ", and " $tr "'s " $tok " says nothing of that", "", "write '" $word "' after its signature in the trait") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))
