@@ -97,3 +97,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	muloti	opus	medium	done				targeted		wideMul via umul.with.overflow + weak __muloti4 on aarch64
 2026-11-14	nbrun	sonnet	medium	done				targeted		olang notebook run
 2026-11-14	msgfix	sonnet	medium	done				targeted		TextForLength/CharsForText/BuilderForText helps; t.Bytes()
+2026-11-14	checked	opus	medium	running						checked builds: index/div/shift checks in test/debug/interpret
+2026-11-14	cells	opus	high	running						compiled notebook/prompt cells
