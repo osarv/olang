@@ -84,3 +84,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	refac2	opus	medium	done				pass		148->31 at depth5; 6 long fns split
 2026-11-14	refac3	opus	medium	done	275	119		pass		all fns depth<=4, none >200 lines; helper-extraction over-rejection O10c (rootPlace Deref)
 2026-11-14	helperrej	opus	medium	done	265	128		pass		O10c over-rejection via call landing; narrow readFrom fix; seed regenerated
+2026-11-14	diagsplit	sonnet	medium	done				unverified(queue)		~380 msgs split; headline median 85->55, >120: 314->2
