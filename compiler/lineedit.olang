@@ -377,7 +377,7 @@ fn (e mut Editor&) key(c Char) Event {
     if c == 4 and e.Text == "": return Event.End
     if c == '\t': c = ' '
     if c >= 32 and c != 127 {
-        e.insert(one(c) if c != ' ' or e.Text[lineStart(e.Text, e.At):e.At].Trim() != "" else " ")
+        e.insert(one(c))
         e.quiet = incomplete(e.Text, e.At)
         return Event.Editing
     }

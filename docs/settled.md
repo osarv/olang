@@ -902,6 +902,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is let go with a note (values of an old type do not outlive its redefinition). `:type`, `:load`, `:help`, `:quit`.
   compiler/prompt.olang's `Session.Cell` (text in; diagnostics, shown value, failure out) is what the Jupyter kernel is
   to drive.
+- **Editing at the prompt (B22, the user 2026-11-14: "we need a way to scroll up the last commands and edit one to run
+  it again", then colour, Ctrl keys and a vi mode).** On a terminal the prompt edits each entry itself -
+  compiler/lineedit.olang over termios, no readline or libedit, raw mode only while an entry is read: emacs's keys by
+  default (every arrow also a Ctrl key), vi's by `:set vi` (remembered in `~/.config/olang/prompt`) or `OLANG_EDIT`;
+  the history walked whole per entry, searched, kept in `~/.local/state/olang/history` (1000 entries). Colour from the
+  compiler's own scanner (compiler/paint.olang), 16 ANSI colours, off for `NO_COLOR` and non-terminals. Mine: the
+  editor lives in compiler/, not std (its one user is the prompt and it colours with the scanner); it is a state
+  machine fed bytes, tested without a terminal, and a pty scenario (promptkeys) runs it whole.
 - **`olang jupyter` and rich display (B23, QCX 6, plan.md's "rich-display convention beside the notebook", 2026-11-13;
   built 2026-11-14).** A Jupyter kernel (messaging protocol 5.3) over std/zmtp - ZeroMQ's wire protocol written in
   olang, no libzmq - signed with HMAC-SHA256; cells run as the prompt runs them, output streamed, the shown value an

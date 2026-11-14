@@ -111,6 +111,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `tools/cli_words.olang` | rewrites old spellings; add to it only if an option is renamed |
 | `compiler/goldens/drv.txt` (`make drvgold`), `compiler/tools/drvdiff.olang` | the driver's command-line behaviour |
 | `compiler/prompt.olang` (`Session`, `pieces`, `HelpText`), `checks/fixtures/prompt/session.want` | the prompt (B22): what a cell may hold, its commands, and the session the checks scenario `prompt` replays - a change to interpret's diagnostics or `$` renderings changes `session.want` |
+| `compiler/lineedit.olang`, `compiler/paint.olang`, the checks scenario `promptkeys` | the prompt's editing on a terminal (B22): a key, a setting or the history's file changed changes SPEC B22's list, `HelpText` (and `session.want`, which prints it), README "Try it"; paint colours by `token.Tok`, so a token kind added (a keyword) is coloured by its spelling with nothing to change |
 | `compiler/jupyter.olang`, `checks/fixtures/jupyter/` (`client.olang`, `session.want`), `tests/display.olang` | the notebook kernel (B23) drives the prompt's `Session.Cell`: a change to what a cell shows or says, or to the prelude's `Display`, changes `session.want`; `README.md` "Notebooks" quotes `jupyter -install` |
 | `compiler/olang.olang` `Passes.Interpret`, `build.olang` `InterpretTests` | `test -interpret` (B3e): an option saying how to build is refused beside it (`buildWord`) |
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |

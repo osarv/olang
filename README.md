@@ -49,7 +49,10 @@ make install                  # links ~/.local/bin/olang to build/olang, so `ola
 
 Plain `olang` opens the prompt (SPEC B22). Each entry runs in one session: declarations join it, statements run, a
 top-level local stays for the entries after, and an expression's value is shown. An entry goes on while a bracket is
-open; `:type EXPR`, `:load FILE`, `:help`, `:quit`.
+open; `:type EXPR`, `:load FILE`, `:help`, `:quit`. On a terminal each entry is edited in place and coloured as you
+type: Up and Down (or Ctrl-P, Ctrl-N) bring back earlier entries - a multi-line one whole - to edit and run again,
+Ctrl-R searches them, and they are kept in `~/.local/state/olang/history`. The keys are emacs's, as in bash; `:set vi`
+(or `OLANG_EDIT=vi`) gives vi's, Esc to normal mode, and `:set emacs` goes back. `NO_COLOR=1` turns colour off.
 
 ```
 >>> xs := [1, 2, 3, 4]
