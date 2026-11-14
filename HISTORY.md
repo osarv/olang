@@ -37263,3 +37263,24 @@ stop on the index the arguments push out of range).
   1.053 hoisted (IRCE's loop splitting slows as many loops as it speeds); sorts +40-60%, gathers +10-15%; the self-build's
   front end +10% per access. The user: "Keep it unchecked" - release builds stay unchecked (principle 2), checked builds
   (above) check test, -debug and interpret. The switch stays as a measuring tool, off by default.
+- 2026-11-14: the suite's memory (docs/testmem.md, wt-testmem). `make verify` had `olang` OOM-killed at 5.4 GB with
+  several of the compiler's test builds side by side. Measured every test build's peak (its process tree in a cgroup of
+  its own, the compiler's VmHWM per phase): the compiler's lower+emit set it, for two reasons. 1. A program whose
+  objects are cut into parts (B3d) reusing a record cut otherwise - the prelude's, from a small program built before it
+  - threw its whole emission away after making it and made it again (`Redo`), the first one's memory held; now the cut
+  is guessed from the program's sources before emitting (`cutLikely`, 1,000,000 bytes: over the suite every program
+  above 1,033,000 was cut and none below 924,000) and only records cut as guessed are reused at first - a wrong guess
+  costs what a mismatch always cost, the objects never change. 2. Every function's emitter state (`fnEm`, its text
+  builders) was placed where the Emitter is, so all of them lived until the build ended: eight fnEm methods reached the
+  emitter's storage otherwise than through its own methods (the lowerer's GenInfo through `fe.E.Lw.Gen()`, a local
+  copy of `fe.E`, `genDropFn` handing back the symbol it keeps); routed through Emitter methods, a copy kept. Found by
+  delta debugging - method bodies stubbed half by half, the scope fnEm is allocated in read from `writeBody`'s IR.
+  The compiler's largest test builds 5.6-5.9 -> 3.6-3.9 GB (`compiler/olang.olang` 7.5 -> 5.3 GB), lower+emit 9.7 ->
+  5.2 s; the IR byte-identical (328 files). Left, measured: every function's lowering is kept the same way (about 1 GB;
+  `lowerAs` ties its result to the Lowerer - more than seventeen causes found, its own round), and the evaluate phase
+  of `compiler/olang.olang`'s test build (+1.27 GB). The suite's two fixed lanes of heavy builds are replaced by a
+  memory gate (compiler/tools/memgate.olang; the user's direction: machine-agnostic): each test build, interpreted run
+  and heavy tool build starts once the memory the machine has now - MemAvailable or vm_stat, lowered to every cgroup's
+  headroom - less what the running ones may still grow by, leaves room for its peak (its last run's here, else
+  compiler/tools/peaks.txt) and a margin; one runs alone whatever its size. `make` still runs a job per core (`nproc`,
+  else `sysctl hw.ncpu`).
