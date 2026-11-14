@@ -36881,4 +36881,4 @@ stored through it, so it is sound. Tried first for every call's value: that took
 reach (a result read where it is pushed, `for x in cfg.CFlags()`, lands there and lifts its argument), and 30 sites of
 compiler/ were refused - so it is narrowed to the cursor assignment, the place the versions are judged. rootPlace now
 reads through a `Deref` with views' own `argPlace` (the same read, already a helper). The case runs under -debug
--sanitize and `interpret`, read back after a churn.
+-sanitize and `interpret`, read back after a churn. The seed was regenerated, since the compiler's own source now needs the fix to bootstrap.
