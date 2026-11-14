@@ -36971,3 +36971,14 @@ written in olang (checks/fixtures/jupyter/client.olang) starts the kernel, check
 heartbeat, kernel_info, kept values, a shown value, a stream, the HTML table, a compile error, an interrupted endless
 loop, is_complete, complete and shutdown against session.want. Confirmed by hand against Python's jupyter_client 8.10
 (start, execute, interrupt, restart, shutdown) and nbclient executing a notebook.
+
+## std/plot, SVG charts (2026-11-14, wt-plot)
+
+Approved 2026-11-13 with the quick data-science items. My calls: a `Plot` is a value built by calls, each adding a
+series (`Line`, `Scatter`, `Histogram`, `Heatmap`) in the next colour of an eight-colour cycle; constructor named
+arguments carry title, axis labels and size, so there are no setters but `XRange`/`YRange`. Data is any `Array<Number>`
+held as F64 (a Vec is handed over as `v.View()`, as std/stats takes it). Failing data is an error, not a guess:
+`plot.Error` (Uneven, Empty, BadBins, BadShape, Mixed - a heatmap holds nothing else, its axes being cell counts).
+Auto ranges widen to a multiple of a 1-2-5 tick step; a histogram's y includes 0; a heatmap's row 0 is on top.
+`Display()` returns `Display.Svg`, so a Plot as a cell's value is shown inline (B23). The SVG has a white background
+so it reads in dark notebooks. Tests (built and `-interpret`) check the SVG text for structure, not pixels.

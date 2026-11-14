@@ -1,0 +1,392 @@
+# plot - small SVG charts for data, benchmarks and scripts: lines, scatter points, histograms and heatmaps, with a
+# title, axis labels, nice ticks, a legend and a colour cycle. No dependencies; the picture is SVG text.
+#
+#     import "std/plot"
+#     p := plot.Plot(title = "Latency", xlabel = "run", ylabel = "ms")
+#     try p.Line(runs, times, name = "build")
+#     try p.Scatter(runs, samples, name = "samples")
+#     try p.Save("latency.svg")          # or p.Svg(), the text
+#
+# A Plot is a value built up with calls; each call adds a series, in the next colour of the cycle. Data is any number
+# type, held as F64 (a Vec is handed over as v.View()). A call whose data does not fit fails with plot.Error. Axis
+# ranges follow the data, widened to the next nice tick; XRange and YRange fix them. A plot with a Heatmap holds
+# nothing else. Plot declares Display() (B23), so a Plot as a notebook cell's value shows as the picture. Ordinary
+# olang: it runs while compiling and under -i.
+
+import "std/os"
+
+# why a series does not fit
+type Error error {
+    Uneven     # x and y of different lengths
+    Empty      # no values
+    BadBins    # a histogram of fewer than one bin
+    BadShape   # a heatmap whose cells do not fill whole rows of the given columns
+    Mixed      # a heatmap beside other series
+}
+
+type form enum { Line, Scatter, Bars, Heat }
+
+type series struct(kind form, name String, xs Array<F64>, ys Array<F64>, cols I64) { kind, name, xs, ys, cols }
+
+# the chart: its text, size (pixels), and what has been added to it
+type Plot struct(title String = "", xlabel String = "", ylabel String = "", width I64 = 640, height I64 = 400) {
+    title
+    xlabel
+    ylabel
+    width
+    height
+    items Vec<series> = Vec<series>()
+    xfixed Bool = false
+    xmin F64 = 0.0
+    xmax F64 = 1.0
+    yfixed Bool = false
+    ymin F64 = 0.0
+    ymax F64 = 1.0
+}
+
+# the colour cycle: each series takes the next, wrapping round
+palette Array<String> = Array<String>["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"]
+
+# ---- adding series ----
+
+# a line through the points (xs[i], ys[i])
+fn (p mut Plot&) Line<X Number, Y Number>(xs Array<X>&, ys Array<Y>&, name String = "") ? Error {
+    try p.add(form.Line, name, xs, ys)
+}
+
+# the points (xs[i], ys[i]) as dots
+fn (p mut Plot&) Scatter<X Number, Y Number>(xs Array<X>&, ys Array<Y>&, name String = "") ? Error {
+    try p.add(form.Scatter, name, xs, ys)
+}
+
+# a histogram: bars counting how many values fall in each of `bins` equal ranges from the least value to the greatest
+fn (p mut Plot&) Histogram<T Number>(values Array<T>&, bins I64 = 10, name String = "") ? Error {
+    if bins < 1 { error Error.BadBins }
+    if values.Len() == 0 { error Error.Empty }
+    v := toF64(values)
+    lo, hi := least(v), greatest(v)
+    if not (hi > lo) { lo, hi = lo - 0.5, hi + 0.5 }
+    step := (hi - lo) / F64(bins)
+    edges := Array<F64>(bins + 1)
+    counts := Array<F64>(bins)
+    for i in range bins + 1 { edges[i] = lo + step * F64(i) }
+    for x in v {
+        k := I64((x - lo) / step)
+        if k >= bins: k = bins - 1
+        if k >= 0: counts[k] += 1.0
+    }
+    try p.add2(form.Bars, name, edges, counts, 0)
+}
+
+# a heatmap of `cells`, row by row, `columns` to a row: row 0 on top, the colour running from light (the least) to dark
+fn (p mut Plot&) Heatmap<T Number>(cells Array<T>&, columns I64) ? Error {
+    if cells.Len() == 0 { error Error.Empty }
+    if columns < 1 or cells.Len() % columns != 0 { error Error.BadShape }
+    try p.add2(form.Heat, "", Array<F64>(0), toF64(cells), columns)
+}
+
+# fixes the x axis to lo..hi
+fn (p mut Plot&) XRange(lo F64, hi F64) {
+    p.xfixed, p.xmin, p.xmax = true, lo, hi
+}
+
+# fixes the y axis to lo..hi
+fn (p mut Plot&) YRange(lo F64, hi F64) {
+    p.yfixed, p.ymin, p.ymax = true, lo, hi
+}
+
+fn (p mut Plot&) add<X Number, Y Number>(k form, name String, xs Array<X>&, ys Array<Y>&) ? Error {
+    if xs.Len() != ys.Len() { error Error.Uneven }
+    if xs.Len() == 0 { error Error.Empty }
+    try p.add2(k, name, toF64(xs), toF64(ys), 0)
+}
+
+fn (p mut Plot&) add2(k form, name String, xs Array<F64>&, ys Array<F64>&, cols I64) ? Error {
+    for s in p.items.View() {
+        if (s.kind == form.Heat) != (k == form.Heat) { error Error.Mixed }
+    }
+    p.items.Push(series(k, name, xs, ys, cols))
+}
+
+fn toF64<T Number>(a Array<T>&) Array<F64> {
+    out := Array<F64>(a.Len())
+    for i, x in a { out[i] = F64(x) }
+    return out
+}
+
+# ---- the picture ----
+
+# the plot as SVG text, in the caller's scope
+fn (p Plot&) Svg() String {
+    b := StringBuilder()
+    xlo, xhi, ylo, yhi := p.extent()
+    heat := p.items.Len() > 0 and p.items.View()[0].kind == form.Heat
+    c := canvas(F64(p.width), F64(p.height), xlo, xhi, ylo, yhi, heat)
+    w, h := $p.width, $p.height
+    b.Push(("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" $w "\" height=\"" $h "\" viewBox=\"0 0 " $w " " $h
+        "\" font-family=\"sans-serif\" font-size=\"12\">\n"))
+    b.Push("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>\n")
+    c.drawAxes(b, p)
+    b.Push(("<clipPath id=\"area\"><rect x=\"" $f(c.left) "\" y=\"" $f(c.top) "\" width=\"" $f(c.right - c.left)
+        "\" height=\"" $f(c.bottom - c.top) "\"/></clipPath>\n<g clip-path=\"url(#area)\">\n"))
+    for i, s in p.items.View() { c.drawSeries(b, s, i) }
+    b.Push("</g>\n")
+    c.drawLegend(b, p)
+    b.Push("</svg>\n")
+    return b.ToString()
+}
+
+# the plot as an SVG file
+fn (p Plot&) Save(path String&) ? os.Error { try os.WriteFile(path, p.Svg()) }
+
+# how a notebook shows a Plot
+fn (p Plot&) Display() Display { return Display.Svg(p.Svg()) }
+
+# the axes' ends: fixed where set, else the data's extent widened to the next nice tick (a heatmap's exact)
+fn (p Plot&) extent() F64, F64, F64, F64 {
+    xlo, xhi, ylo, yhi := F64.Inf, -F64.Inf, F64.Inf, -F64.Inf
+    exact := false
+    for s in p.items.View() {
+        if s.kind == form.Heat {
+            xlo, xhi, ylo, yhi = 0.0, F64(s.cols), 0.0, F64(s.ys.Len() / s.cols)
+            exact = true
+            continue
+        }
+        xlo, xhi = min2(xlo, least(s.xs)), max2(xhi, greatest(s.xs))
+        ylo, yhi = min2(ylo, least(s.ys)), max2(yhi, greatest(s.ys))
+        if s.kind == form.Bars { ylo = min2(ylo, 0.0) }
+    }
+    if p.items.Len() == 0 { xlo, xhi, ylo, yhi = 0.0, 1.0, 0.0, 1.0 }
+    if not exact { xlo, xhi = nice(xlo, xhi) }
+    if not exact { ylo, yhi = nice(ylo, yhi) }
+    if p.xfixed { xlo, xhi = p.xmin, p.xmax }
+    if p.yfixed { ylo, yhi = p.ymin, p.ymax }
+    return xlo, xhi, ylo, yhi
+}
+
+fn least(a Array<F64>&) F64 {
+    m := a[0]
+    for x in a: m = min2(m, x)
+    return m
+}
+
+fn greatest(a Array<F64>&) F64 {
+    m := a[0]
+    for x in a: m = max2(m, x)
+    return m
+}
+
+fn min2(a F64, b F64) F64 { return a if a < b else b }
+fn max2(a F64, b F64) F64 { return a if a > b else b }
+
+# lo..hi widened to multiples of its tick step; an empty range is given a width
+fn nice(lo F64, hi F64) F64, F64 {
+    if not (hi > lo) { lo, hi = lo - 0.5, hi + 0.5 }
+    step, _ := niceStep(hi - lo)
+    return (lo / step).Floor() * step, (hi / step).Ceil() * step
+}
+
+# a tick step for a range, a 1, 2 or 5 times a power of ten giving about five ticks, and the digits after the point it needs
+fn niceStep(extent F64) F64, I64 {
+    raw := extent / 5.0
+    mag, digits := 1.0, 0
+    for mag > raw { mag, digits = mag / 10.0, digits + 1 }
+    for mag * 10.0 <= raw { mag, digits = mag * 10.0, digits - 1 }
+    frac := raw / mag
+    step := mag * (1.0 if frac < 1.5 else 2.0 if frac < 3.5 else 5.0 if frac < 7.5 else 10.0)
+    if frac >= 7.5 { digits-- }
+    return step, (digits if digits > 0 else 0)
+}
+
+# the ticks within lo..hi, as their values and their text
+fn ticks(lo F64, hi F64) Array<F64>, Array<String> {
+    step, digits := niceStep(hi - lo)
+    first := (lo / step - 1e-9).Ceil()
+    n := I64((hi / step + 1e-9).Floor() - first) + 1
+    if n < 1 { n = 1 }
+    vs := Array<F64>(n)
+    ts := Array<String>(n)
+    for i in range n {
+        vs[i] = (first + F64(i)) * step
+        ts[i] = vs[i].Fixed(digits)
+    }
+    return vs, ts
+}
+
+# two decimals: coordinates
+fn f(x F64) String { return x.Fixed(2) }
+
+# text safe inside SVG
+fn esc(t String&) String {
+    b := StringBuilder()
+    for c in t {
+        if c == '&': b.Push("&amp;")
+        else if c == '<': b.Push("&lt;")
+        else if c == '>': b.Push("&gt;")
+        else if c == '"': b.Push("&quot;")
+        else: b.PushChar(c)
+    }
+    return b.ToString()
+}
+
+# a heat cell's colour: white-blue for the least, deep blue for the greatest
+fn shade(t F64) String {
+    k := min2(max2(t, 0.0), 1.0)
+    return "#" $hex(247.0 - 239.0 * k) $hex(251.0 - 203.0 * k) $hex(255.0 - 148.0 * k)
+}
+
+fn hex(v F64) String {
+    n := I64(v + 0.5)
+    t := n.Format(16)
+    return ("0" $t) if n < 16 else t
+}
+
+# the drawing area and how data maps onto it
+type canvas struct(width F64, height F64, xlo F64, xhi F64, ylo F64, yhi F64, flip Bool) {
+    width
+    height
+    left F64 = 64.0
+    right F64 = width - 24.0
+    top F64 = 40.0
+    bottom F64 = height - 52.0
+    xlo
+    xhi
+    ylo
+    yhi
+    flip
+}
+
+fn (c canvas&) X(v F64) F64 { return c.left + (v - c.xlo) / (c.xhi - c.xlo) * (c.right - c.left) }
+
+fn (c canvas&) Y(v F64) F64 {
+    t := (v - c.ylo) / (c.yhi - c.ylo)
+    return (c.top + t * (c.bottom - c.top)) if c.flip else (c.bottom - t * (c.bottom - c.top))
+}
+
+fn (c canvas&) drawAxes(b mut StringBuilder&, p Plot&) {
+    b.Push("<g stroke=\"#e0e0e0\">\n")
+    xv, xt := ticks(c.xlo, c.xhi)
+    yv, yt := ticks(c.ylo, c.yhi)
+    for v in xv { b.Push("<line x1=\"" $f(c.X(v)) "\" y1=\"" $f(c.top) "\" x2=\"" $f(c.X(v)) "\" y2=\"" $f(c.bottom) "\"/>\n") }
+    for v in yv { b.Push("<line x1=\"" $f(c.left) "\" y1=\"" $f(c.Y(v)) "\" x2=\"" $f(c.right) "\" y2=\"" $f(c.Y(v)) "\"/>\n") }
+    b.Push("</g>\n<g fill=\"#333333\">\n")
+    for i, v in xv { b.Push("<text x=\"" $f(c.X(v)) "\" y=\"" $f(c.bottom + 16.0) "\" text-anchor=\"middle\">" $esc(xt[i]) "</text>\n") }
+    for i, v in yv { b.Push("<text x=\"" $f(c.left - 6.0) "\" y=\"" $f(c.Y(v) + 4.0) "\" text-anchor=\"end\">" $esc(yt[i]) "</text>\n") }
+    mid := (c.left + c.right) / 2.0
+    b.Push("<text x=\"" $f(mid) "\" y=\"22\" text-anchor=\"middle\" font-size=\"16\" font-weight=\"bold\">" $esc(p.title) "</text>\n")
+    b.Push("<text x=\"" $f(mid) "\" y=\"" $f(c.height - 10.0) "\" text-anchor=\"middle\">" $esc(p.xlabel) "</text>\n")
+    b.Push("<text transform=\"translate(16 " $f((c.top + c.bottom) / 2.0) ") rotate(-90)\" text-anchor=\"middle\">" $esc(p.ylabel) "</text>\n")
+    b.Push(("</g>\n<rect x=\"" $f(c.left) "\" y=\"" $f(c.top) "\" width=\"" $f(c.right - c.left) "\" height=\"" $f(c.bottom - c.top)
+        "\" fill=\"none\" stroke=\"#333333\"/>\n"))
+}
+
+fn (c canvas&) drawSeries(b mut StringBuilder&, s series&, i I64) {
+    colour := palette[i % palette.Len()]
+    if s.kind == form.Line { c.drawLine(b, s, colour) }
+    else if s.kind == form.Scatter { c.drawDots(b, s, colour) }
+    else if s.kind == form.Bars { c.drawBars(b, s, colour) }
+    else { c.drawCells(b, s) }
+}
+
+fn (c canvas&) drawLine(b mut StringBuilder&, s series&, colour String) {
+    b.Push("<polyline fill=\"none\" stroke=\"" $colour "\" stroke-width=\"2\" points=\"")
+    for i, x in s.xs { b.Push($f(c.X(x)) "," $f(c.Y(s.ys[i])) " ") }
+    b.Push("\"/>\n")
+}
+
+fn (c canvas&) drawDots(b mut StringBuilder&, s series&, colour String) {
+    for i, x in s.xs { b.Push("<circle cx=\"" $f(c.X(x)) "\" cy=\"" $f(c.Y(s.ys[i])) "\" r=\"3\" fill=\"" $colour "\"/>\n") }
+}
+
+fn (c canvas&) drawBars(b mut StringBuilder&, s series&, colour String) {
+    base := c.Y(0.0)
+    for i, n in s.ys {
+        x0, x1 := c.X(s.xs[i]), c.X(s.xs[i + 1])
+        y := c.Y(n)
+        b.Push(("<rect x=\"" $f(x0) "\" y=\"" $f(min2(y, base)) "\" width=\"" $f(x1 - x0) "\" height=\"" $f((y - base).Abs())
+            "\" fill=\"" $colour "\" fill-opacity=\"0.85\" stroke=\"#ffffff\"/>\n"))
+    }
+}
+
+fn (c canvas&) drawCells(b mut StringBuilder&, s series&) {
+    lo, hi := least(s.ys), greatest(s.ys)
+    span := hi - lo if hi > lo else 1.0
+    for i, v in s.ys {
+        x0, y0 := c.X(F64(i % s.cols)), c.Y(F64(i / s.cols))
+        x1, y1 := c.X(F64(i % s.cols + 1)), c.Y(F64(i / s.cols + 1))
+        b.Push(("<rect x=\"" $f(x0) "\" y=\"" $f(y0) "\" width=\"" $f(x1 - x0) "\" height=\"" $f(y1 - y0)
+            "\" fill=\"" $shade((v - lo) / span) "\"/>\n"))
+    }
+}
+
+# the names of the series that have one, a swatch each, inside the top right corner
+fn (c canvas&) drawLegend(b mut StringBuilder&, p Plot&) {
+    row := 0
+    for i, s in p.items.View() {
+        if s.name.Len() == 0: continue
+        y := c.top + 14.0 + 18.0 * F64(row)
+        b.Push(("<rect x=\"" $f(c.right - 120.0) "\" y=\"" $f(y - 9.0) "\" width=\"12\" height=\"12\" fill=\"" $palette[i % palette.Len()]
+            "\"/><text x=\"" $f(c.right - 102.0) "\" y=\"" $f(y + 2.0) "\" fill=\"#333333\">" $esc(s.name) "</text>\n"))
+        row++
+    }
+}
+
+# ---- tests ----
+
+test "a plot's SVG holds its title, labels, ticks, series and legend" {
+    p := Plot(title = "Speed <fast>", xlabel = "n", ylabel = "ms")
+    try p.Line([1, 2, 3], [10.0, 20.0, 15.0], name = "build")
+    try p.Scatter([1.0, 2.0], [12, 18], name = "samples")
+    svg := p.Svg()
+    assert svg.Contains("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"400\"")
+    assert svg.Contains(">Speed &lt;fast&gt;</text>")
+    assert svg.Contains(">ms</text>") and svg.Contains(">n</text>")
+    assert svg.Contains("<polyline") and svg.Contains("stroke=\"#4e79a7\"")
+    assert svg.Contains("<circle") and svg.Contains("fill=\"#f28e2b\"")
+    assert svg.Contains(">build</text>") and svg.Contains(">samples</text>")
+    assert svg.Contains(">10</text>") and svg.Contains(">20</text>") and svg.Contains(">1.5</text>")
+    assert svg.Contains("</svg>")
+}
+
+test "ticks are nice numbers" {
+    vs, ts := ticks(0.0, 1.0)
+    assert vs.Len() == 6 and ts[1] == "0.2" and ts[5] == "1.0"
+    vs, ts = ticks(3.0, 97.0)
+    assert ts[0] == "20" and ts[vs.Len() - 1] == "80"
+    lo, hi := nice(0.3, 9.1)
+    assert lo == 0.0 and hi == 10.0
+}
+
+test "a histogram counts into equal bins; a heatmap fills cells; ranges can be fixed" {
+    h := Plot(title = "h")
+    try h.Histogram([1, 2, 2, 3, 3, 3, 4, 4, 4, 4], bins = 3, name = "v")
+    s := h.Svg()
+    assert s.Contains("fill-opacity=\"0.85\"") and s.Contains(">v</text>")
+    m := Plot()
+    try m.Heatmap([1.0, 2.0, 3.0, 4.0], 2)
+    assert m.Svg().Contains("fill=\"#f7fbff\"") and m.Svg().Contains("fill=\"#08306b\"")
+    m.XRange(0.0, 4.0)
+    assert m.Svg().Contains(">4</text>")
+    assert h.Display().Mime() == "image/svg+xml"
+}
+
+test "data that does not fit is an error" {
+    p := Plot()
+    n := 0
+    try p.Line([1, 2], [1.0]) catch Error.Uneven { n++ }
+    try p.Histogram([1.0], bins = 0) catch Error.BadBins { n++ }
+    try p.Heatmap([1.0, 2.0, 3.0], 2) catch Error.BadShape { n++ }
+    try p.Line(Array<F64>(0), Array<F64>(0)) catch Error.Empty { n++ }
+    try p.Line([1.0], [1.0])
+    try p.Heatmap([1.0], 1) catch Error.Mixed { n++ }
+    assert n == 5
+}
+
+test "Save writes the SVG file" {
+    p := Plot(title = "t")
+    try p.Line([1, 2], [3, 4])
+    try os.MkDirAll("build/plot_files")
+    try p.Save("build/plot_files/a.svg")
+    got := try os.ReadFile("build/plot_files/a.svg")
+    assert String(got) == p.Svg()
+}
