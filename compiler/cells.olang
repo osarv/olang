@@ -66,10 +66,9 @@ type Plan struct() {
     NoInit Map<String&, Bool>
 }
 
-# the cell's program built and linked as the shared object so: the objects the root's code is in, which nothing after
-# the session needs (the session takes them away as it ends)
+# the cell's program built and linked as the shared object so
 fn Build(cfg mut build.Config&, root String&, text String&, shadow Array<String&>&, paths Array<String&>&
-    lines Array<I64>&, plan Plan&, so String&, d mut diag.Diagnostics&) Vec<String&> ? build.Failed {
+    lines Array<I64>&, plan Plan&, so String&, d mut diag.Diagnostics&) ? build.Failed {
     prog := build.Program()
     # (a copy of the configuration, which the build keeps what it reports in)
     c build.Config = cfg
@@ -84,10 +83,7 @@ fn Build(cfg mut build.Config&, root String&, text String&, shadow Array<String&
     prog.Runtime = ""     # (the worker's)
     try os.MkDirAll(cfg.Dir) catch os.Error { error build.Failed.Reported }
     objs := try cfg.Objects(prog, d)
-    own Vec<String&>
-    for i in range prog.Units.Len() {
-        if prog.Units[i].Holds != build.UnitKind.Module: own.Push(objs[i])
-    }
+    build.Phase("cell compile")
     args Vec<String&>
     args.Push(cfg.Clang)
     for f in cfg.ModeFlags(): args.Push(f)
@@ -102,7 +98,7 @@ fn Build(cfg mut build.Config&, root String&, text String&, shadow Array<String&
     for f in Array<String&>["-lm", "-lpthread", "-ldl"]: args.Push(f)
     if prog.Dyncall != "": args.Push("-lffi")
     try link(args, so, d)
-    return own
+    build.Phase("cell link")
 }
 
 # a link run: clang's complaint said and the failure reported where it fails
@@ -454,7 +450,6 @@ WorkerSource String& = """
     }
 
     fn main() {
-        signal(2, 1)
         fcntl.fcntl(3, 2, 1)
         fcntl.fcntl(4, 2, 1)
         cmds := io.Lines(3)
@@ -476,6 +471,7 @@ WorkerSource String& = """
     }
 
     fn run(path String&) {
+        signal(2, 1)
         sync := Array<I32>(2)
         if unistd.pipe2(sync, 524288) != 0 {
             say(12, "the session cannot run the cell: no pipe")

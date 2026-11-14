@@ -114,7 +114,6 @@ type Session struct(Cfg mut build.Config&) {
     work cells.Worker = cells.Worker(false)
     cc build.Config = build.Config()
     ident String& = ""     # the root module's identity, which its globals' symbols are named by
-    made Vec<String&>      # the cells' own objects, taken away as the session ends
 }
 
 # ---- a cell's pieces ----
@@ -553,6 +552,9 @@ fn (s mut Session&) startWorker() {
     else if s.Cfg.Clang == "": why = "there is no clang to build them with"
     else if s.Cfg.Target.Foreign: why = "they are built for another machine"
     if why == "" {
+        # (a root of this session's own: what its cells' objects are named by is no other session's, which takes its
+        # own away as it ends)
+        if not s.cc.Cell: s.Root = $s.Root[:s.Root.Len() - 6] "-" $build.Pid() ".olang"
         s.cc = cells.Config(s.Cfg)
         s.work = cells.Worker(s.Relay)
         why = s.work.Start(s.cc)
@@ -568,6 +570,13 @@ fn (s mut Session&) startWorker() {
 fn (s mut Session&) attemptCompiled(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
     r := Reply()
     c.Keeps.Clear()
+    if not s.probes(c) {
+        # (nothing it declares lays out anything anew, and it keeps no local: the layouts are what they were)
+        lay Map<String&, String&>
+        for v in vs: lay.Put(v.Name, v.Layout)
+        s.runCompiled(ds, vs, c, lay, r)
+        return r
+    }
     d := diag.Diagnostics(false)
     d.Lenient = true
     ch := s.check(s.write(ds, vs, c, false), d)
@@ -578,12 +587,26 @@ fn (s mut Session&) attemptCompiled(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) 
     s.keptLocals(ch, c)
     s.ident = $ch.P.L.Mods[ch.P.L.Root].Identity
     lay := layouts(ch, ds, vs)
+    build.Phase("cell probe")
     for v in vs {
         if v.Store != "" and (try lay.Get(v.Name) catch default "") != v.Layout: r.gone.Push($v.Name)
     }
     if r.gone.Len() > 0: return r
     s.runCompiled(ds, vs, c, lay, r)
     return r
+}
+
+# whether the cell is checked before it is built: where it keeps a local (for its type), declares anything but a
+# function (a type, an import, a global may lay a kept value out anew), or the session's program was never checked
+fn (s Session&) probes(c cell&) Bool {
+    if s.ident == "": return true
+    for it in c.Items {
+        if it.Names.Len() > 0: return true
+        if not it.IsDecl: continue
+        t := c.Text[it.Start:it.End]
+        if not t.StartsWith("fn ") and not t.StartsWith("export fn "): return true
+    }
+    return false
 }
 
 # the layouts of what the session keeps, as the checked program c lays them out (eval.Machine.Layout): its values and
@@ -613,8 +636,12 @@ fn layouts(c mut typecheck.Checker&, ds Vec<Decl>&, vs Vec<Value>&) Map<String&,
     return out
 }
 
-# a value's layout as kept: a reference's its referent's, after a "&"
+# a value's layout as kept: a reference's its referent's, after a "&"; an array's as one of a run-time length, as the
+# program keeping it declares it (its type as the program writes it says no length)
 fn layoutKey(x mut interp.Exec&, c mut typecheck.Checker&, ty types.TypeId, byRef Bool) String {
+    if c.P.T.KindOf(ty) == types.Kind.Array and c.P.T.Length(ty) != types.TypeId(0) {
+        return layoutKey(x, c, c.P.T.Array(c.P.T.Elem(ty), types.TypeId(0)), byRef)
+    }
     r := c.P.T.Repr(ty)
     if c.P.T.KindOf(r) == types.Kind.Ref: return $"&" $x.M.Layout(c.P.T.Referent(r))
     return $("&" if byRef else "") $x.M.Layout(ty)
@@ -645,15 +672,15 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
     dir := s.cellDir()
     try os.MkDirAll(dir) catch os.Error { }
     so := $dir "/cell" $n ".so"
-    own := try cells.Build(s.cc, s.Root, p.B.ToString(), p.Kept.ToArray(), p.Paths.ToArray(), p.Lines.ToArray(), plan, so, d) catch build.Failed {
+    try cells.Build(s.cc, s.Root, p.B.ToString(), p.Kept.ToArray(), p.Paths.ToArray(), p.Lines.ToArray(), plan, so, d) catch build.Failed {
         r.Diags = cellRows(d.Render(), ce.Label)
         if r.Diags == "": r.Diags = "olang: the cell cannot be built\n"
         return
     }
-    for o in own: s.made.Push(o)
     r.Checked = true
     r.Diags = cellRows(d.Warnings(), ce.Label)
     o := s.work.Run(so, s.Watch)
+    build.Phase("cell run")
     s.Decls = ds
     vals Vec<Value>
     if o.Lost {
@@ -744,12 +771,18 @@ fn places(t String&, p program&, root String&) String {
     return b.ToString()
 }
 
-# the session over, compiled: the worker ended - the values' destructors run - and the cells' objects taken away
+# the session over, compiled: the worker ended - the values' destructors run - and what the session's cells made in
+# the cache taken away: their objects, all named by its root (OLANG_CELLS_KEEP keeps them)
 fn (s mut Session&) endCompiled() {
     s.work.End()
-    if (try os.Env("OLANG_CELLS_KEEP") catch os.Error default "") != "": return
-    for o in s.made: try os.Remove(o) catch os.Error { }
-    if s.cc.Cell: try os.RemoveAll(s.cellDir()) catch os.Error { }
+    if not s.cc.Cell or (try os.Env("OLANG_CELLS_KEEP") catch os.Error default "") != "": return
+    try os.RemoveAll(s.cellDir()) catch os.Error { }
+    if s.ident == "": return
+    base := build.Readable(s.ident)
+    names := try os.ReadDir(s.cc.Dir) catch os.Error { return }
+    for name in names {
+        if name.StartsWith($base ".") or name.StartsWith($base "__"): try os.Remove($s.cc.Dir "/" $name) catch os.Error { }
+    }
 }
 
 # the program checked as interpret checks one (B3e) - its conditions and asserts the evaluator decides decided - with

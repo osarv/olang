@@ -23,7 +23,7 @@ heartbeat: ping
 > execute_request
 > interrupt_request
   iopub execute_input: "n := 0\nfor { n++ }"
-  iopub error: RuntimeError "In[6]:2: interrupted"
+  iopub error: RuntimeError "interrupted - the session's values are as they were before the cell"
   execute_reply: status="error"
   interrupt_reply: status="ok"
 > is_complete_request

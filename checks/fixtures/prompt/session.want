@@ -7,8 +7,6 @@ Vec<I64>[0, 1, 4, 9]
 Map<String, I64>["a": 1, "b": 2]
 7
 unhandled error: TooBig
-cell20:2: raised here
-cell21:1: try passed it on
 cell22:1:1: error[M22]: unknown name 'y'
     1 | y
       | ^
@@ -17,7 +15,6 @@ p is let go: its type is not laid out as it was
 cell26:1:1: error[M22]: unknown name 'p'
     1 | p
       | ^
-f is let go: it holds a function value or an 'any', whose code went with its cell - a function declared with 'fn' is kept
 cell29:1:14: warning[D3b]: 'u' is declared and never read - read it, or leave the declaration out
     1 | fn quiet() { u := 1 }
       |              ^
@@ -38,4 +35,5 @@ goes on over several lines while a bracket is open. A cell declaring a name agai
   :quit        leaves (so does the end of the input)
 101
 201
+717
 bye 7

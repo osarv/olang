@@ -1288,14 +1288,18 @@ test "-i interprets a program as the built program runs" { assert passed("interp
 
 test "plain olang runs its input as cells of one session" { assert passed("prompt") }
 
-# B22: plain "olang" reads cells from its standard input - values kept from cell to cell, declarations replaced, the
-# last expression's value shown, errors said and the session going on, a value whose type changed let go, :type,
-# :load, and the destructors of what the session kept run as it ends
+# B22: plain "olang" reads cells from its standard input, each built and run compiled - values kept from cell to cell,
+# declarations replaced, the last expression's value shown, errors said and the session going on, a value whose type
+# changed let go, :type, :load, a matrix product interpreting would take seconds over, and the destructors of what the
+# session kept run as it ends - and interpreted where OLANG_CELLS says so
 fn prompt(r mut report&) ? Failed {
     dir := fresh("prompt")
     os.Run("cp checks/fixtures/prompt/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" < session.in > out.txt 2>&1") == 0, "the prompt's session did not end with 0", dir)
     try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the prompt's session printed other than session.want", dir)
+    # its cells interpreted where OLANG_CELLS says so (B3e), as before cells were compiled
+    try r.expect(sh(dir, "OLANG_CELLS=interpret \"$OLANG\" < interp.in > out.txt 2>&1") == 0, "the interpreted session did not end with 0", dir)
+    try r.expect(sh(dir, "cmp -s interp.want out.txt") == 0, "the interpreted session printed other than interp.want", dir)
 }
 
 test "on a terminal the prompt edits its entries and keeps their history" { assert passed("promptkeys") }
