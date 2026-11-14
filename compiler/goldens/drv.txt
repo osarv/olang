@@ -1,8 +1,7 @@
 === olang 
 | stdout:
-| olang: error[B1]: nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)
 | stderr:
-| status 1
+| status 0
 === olang -debug
 | stdout:
 | olang: error[B1]: running a file needs a file
@@ -271,6 +270,7 @@
 |   api         lists what a module's exported interface gained, lost and changed between two versions - commits or directories - each change marked as breaking importers or not (B21)
 | 
 | 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
+| 'olang' with nothing after it opens the prompt, which runs what is typed as it is typed (B22).
 | stderr:
 | status 0
 === olang help build

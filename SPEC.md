@@ -8006,7 +8006,7 @@ option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-t
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
-an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
+an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
 (B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20) and `api` (B21). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
@@ -8900,6 +8900,39 @@ type gaining an effect word or `borrows`, or losing a `keeps`, breaks (an import
 the other way round; a declared function type's or a field's words changing either way breaks. What does
 not: a name added - a function, a type, a method, a field, a global; an error set narrowed; a global's value changed; a
 trait newly met.
+
+**B22 (the prompt).** `olang` with nothing after it reads **entries** from its standard input - each a **cell** - and
+runs them in one **session**, as `interpret` runs a program (B3e); where the input is a terminal it asks with `>>> `, and
+`... ` while an entry is open: an entry goes on over the next line while a bracket of it, a raw text (L14a) or a block
+comment (L4a) is not closed. The session ends at the end of the input or at `:quit`, with status 0.
+
+A cell is top-level declarations and statements in any order, split where a line ends with no bracket open (an `else` or
+`catch` beginning the next line goes on with the statement before it, S1b, R9b). Its declarations - `fn`, `type`,
+`import`, a global, `extern`, a `test` - join the session's; one declaring a name the session has (a function, a type, a
+method `T.M`, an import's alias, a global, a kept value) replaces it, and later cells see the new one. Its statements run
+in order as the body of a function of the session's, so `try` passes an error out of the cell. A local the cell declares
+at its top level (`x := e`, `x T = e`, `a, b := f()`) is **kept**: once the cell has run to its end, later cells read
+and assign it by name as a mutable global of the session, of the type the cell gave it - a value of a `unique` type
+(T13b) kept by reference to it - and a parameter or local of a later declaration may be named like it, standing in
+front of it (an exception to D3a). A cell whose last statement is an expression giving a value - not an assignment, a
+step or a call giving nothing - shows the value as `$` renders it (E11a).
+
+Every cell is checked with the session as one program - its diagnostics as `interpret` gives them (B11), its lines named
+`cellN:LINE:COLUMN` (N counting the entries), a loaded file's by its path; unused locals and unread imports of the cell
+itself are warnings, an import nothing reaches yet none. A cell with errors changes nothing. A cell that checks is run:
+what stops it - an error leaving it (with its trace, S18d), a failed assert, `unreachable`, undefined behaviour - is said
+and the session goes on, its declarations kept, the locals it declared not; what it assigned to kept values stays.
+`os.Exit` ends the session.
+
+What the session keeps is copied whole between cells, everything it reaches with it and what two values share still
+shared; a value that holds a function value or an `any` (whose code is its cell's), a generational instance (T13d) or a
+reference to a global's storage is **let go**, as is one whose type a later declaration lays out otherwise: the cell that
+lets one go says so (`p is let go: ...`), and the name is then unknown. The destructors of what a value held run when it
+is let go or replaced, and of what the session keeps when it ends; everything else a cell made, its scopes and its
+program, is reclaimed when the cell ends.
+
+Commands begin an entry with `:` - `:type EXPR` (the type of the expression's value, as B11b writes types), `:load
+FILE` (the file's text run as a cell), `:help` and `:quit`.
 
 ## 11. External Functions
 

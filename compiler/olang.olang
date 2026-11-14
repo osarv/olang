@@ -429,6 +429,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push($"  " $"FILE.olang".PadEnd(11) " " $ModeWhat[Run] "\n")
         for m in range 1, ModeWords.Len() { b.Push($"  " $ModeWords[m].PadEnd(11) " " $ModeWhat[m] "\n") }
         b.Push("\n'olang help MODE' lists a mode's options; 'olang help run' those of running a file.\n")
+        b.Push("'olang' with nothing after it opens the prompt, which runs what is typed as it is typed (B22).\n")
         return b.ToString()
     }
     m := Run if cl.Word == "run" else modeNumber(cl.Word)

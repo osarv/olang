@@ -41,7 +41,23 @@ fn main() {
 build/olang hello.olang       # builds the program quickly (-quick) and runs it; an unchanged one is not built again
 build/olang test hello.olang  # runs the file's tests
 build/olang help              # every mode and option
+build/olang                   # the prompt: each entry runs as you type it
 make install                  # links ~/.local/bin/olang to build/olang, so `olang` runs from anywhere
+```
+
+### Try it
+
+Plain `olang` opens the prompt (SPEC B22). Each entry runs in one session: declarations join it, statements run, a
+top-level local stays for the entries after, and an expression's value is shown. An entry goes on while a bracket is
+open; `:type EXPR`, `:load FILE`, `:help`, `:quit`.
+
+```
+>>> xs := [1, 2, 3, 4]
+>>> fn square(n I64) I64 { return n * n }
+>>> Array<I64>[square(x) for x in xs]
+Array<I64>[1, 4, 9, 16]
+>>> :type xs.Sum()
+I64
 ```
 
 The compiler finds the standard library beside itself, so the checkout must stay where it is. To use another clang,
