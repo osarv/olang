@@ -1307,7 +1307,7 @@ fn promptkeys(r mut report&) ? Failed {
     keys := """(sleep 2; printf 'x := 1\r'; sleep 1; printf '\033[A\1772\r'; sleep 1; printf 'x\r'; sleep 1; printf '\004')"""
     run := """XDG_STATE_HOME="$PWD/state" NO_COLOR=1 timeout 60 script -qfec "$OLANG" /dev/null > out.txt 2>&1"""
     try r.expect(sh(dir, $keys " | " $run) == 0, "the prompt on a terminal did not end with 0", dir)
-    try r.expect(sh(dir, "tr -d '\\r' < out.txt | grep -qx 2") == 0, "the entry recalled and edited did not run", dir)
+    try r.expect(sh(dir, "tr -d '\\r' < out.txt | sed 's/\\x1b\\[[?0-9;]*[A-Za-z]//g' | grep -qx 2") == 0, "the entry recalled and edited did not run", dir)
     want := "printf 'x := 1\\nx := 2\\nx\\n' | cmp -s - state/olang/history"
     try r.expect(sh(dir, want) == 0, "the history's file holds other than the entries typed", dir)
 }

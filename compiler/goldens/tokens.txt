@@ -1936,7 +1936,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 244020b30fdf2de1 0f06288b2bb8f361 checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-c8cffb39f641f894 a0d093ecb3468885 checks/checks.olang
+6a9b1b66e3992583 f9e029e1860a6018 checks/checks.olang
 bbd03894d369bef3 b34a8b76c2943cbe checks/fixtures/agree/agree.olang
 e8390f5a7a3b4f20 8dd87e4f935d7ac7 checks/fixtures/agree/bfrand.olang
 bd3eed5b0a26d026 008eb186ab96e3cf checks/fixtures/agree/math.olang
