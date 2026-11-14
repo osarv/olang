@@ -787,7 +787,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     # a callee of which changed its summary
     rw := f.mayFixedPoint(order)
     t2 := time.Now()
-    if f.Debug { try io.PutErr($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n") catch io.Error { } }
+    if f.Debug: f.debugOut($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n")
     # destructors, Str, Eq and Hash run where no call is written: one that lets go of a place keeps everything
     for b in range n { f.hiddenLetGo(b) }
     t3 := time.Now()
@@ -801,7 +801,12 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     f.Done = true
     f.writePlans()
     t5 := time.Now()
-    if f.Debug { try io.PutErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
+    if f.Debug: f.debugOut($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n")
+}
+
+# a line of the analysis' account, where it is asked for (f.Debug)
+fn (f Free&) debugOut(t String&) {
+    try io.PutErr(t) catch io.Error { }
 }
 
 # Decide's facts of body b, before any is decided
@@ -907,7 +912,7 @@ fn (f mut Free&) hiddenLetGo(b I64) {
     # (Part C: a destructor running only where a value's holder lets go of it is a call there - dtorCalls)
     if f.implicit(b) and not f.modelled(b) {
         if f.letsAll[b] or f.letsVia[b] != 0 { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
-        if f.Debug { try io.PutErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
+        if f.Debug: f.debugOut($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n")
     }
 }
 
@@ -3114,7 +3119,7 @@ fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool,
         if k == OPar and not w.Final and oval(y) != inside {
             if addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
-                if f.Debug { try io.PutErr($"esc " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " inside " $inside "\n") catch io.Error { } }
+                if f.Debug: f.debugOut($"esc " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " inside " $inside "\n")
             }
         }
         if k == OPl and w.Final and oval(y) != q {
@@ -3358,37 +3363,9 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
         case typed.Expr.Read(_, ty, p, _) { out = w.readOf(p, ty) }
         case typed.Expr.Borrow(_, _, p) { out = w.borrowOf(p) }
         case typed.Expr.Take(_, ty, p) { out = w.takeOf(p, ty) }
-        case typed.Expr.Promote(_, pty, pr) {
-            # (Part C: a value with destructors to run given storage here is registered there, O16)
-            dtor := w.T().IsRef(pty) and w.T().NeedsDrop(w.T().Referent(pty))
-            if dtor: w.registeredAt(pr.Site, w.T().Referent(pty))
-            out = w.expr(pr.X)
-            # (a value moved out of a place held so is ended where the scope closes, which releases nothing of it: the
-            # place keeps, its values never built in regions no release would reach)
-            if dtor and w.Final {
-                for y in out {
-                    if okind(y) == OMov: w.F.keep(oval(y), RMade, w.body().File, pr.X.Span(), $"a value moved out of it is held where its call lands (O16), where nothing releases it: '" $w.text(pr.X.Span()) "'")
-                }
-            }
-            addTo(out, orig(ONew, I64(pr.Site)))
-            if not w.Final and w.F.destructs(pty) and isVar(w.F.Plans[w.Id].Built[I64(pr.Site)]) { w.F.setRegOut(w.Id) }
-        }
+        case typed.Expr.Promote(_, pty, pr) { out = w.promoteOf(pty, pr) }
         case typed.Expr.Call(sp, ty, c) { out = w.call(c, ty, sp) }
-        case typed.Expr.Make(sp, ty, m) {
-            # a prelude fill's value is in positions the collection never reads (makeStores): no part of the array
-            dead := m.Kind == typed.MakeKind.Fill and w.F.prelude[w.Id]
-            for it in m.Items {
-                o := w.expr(it)
-                if not dead: addAllTo(out, o)
-            }
-            if m.Length is not null { w.expr(m.Length!) }
-            if m.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(m.Site))) }
-            # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
-            if m.Kind == typed.MakeKind.Copy { out = w.F.unowned(out) }
-            exempt := m.Kind == typed.MakeKind.Copy and w.copyExempt >= 0 and I64(m.Site) == w.copyExempt
-            if (m.Kind == typed.MakeKind.Copy or m.Kind == typed.MakeKind.Fill) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
-            w.makeStores(m, ty, sp)
-        }
+        case typed.Expr.Make(sp, ty, m) { out = w.makeOf(sp, ty, m) }
         case typed.Expr.Collect(_, ty, c) {
             if c.Reserve is not null { w.expr(c.Reserve!) }
             w.yieldTo.Push(w.F.placeKey(w.F.arrayOf(ty), -1))
@@ -3412,10 +3389,7 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
                 return out
             }
             if l >= 0 {
-                if w.Final {
-                    o Vec<I64> = w.origins[l]
-                    w.F.retires.Push(retire(w.Id, psp, o))
-                }
+                if w.Final: w.F.retires.Push(retire(w.Id, psp, w.origins[l]))
             } else {
                 for a in args { addAllTo(out, w.expr(a)) }
             }
@@ -3451,38 +3425,85 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
                 for d in c.Defaults { addAllTo(out, w.expr(d)) }
             }
         }
-        case typed.Expr.Fn(sp, _, fv) {
-            match fv {
-                case typed.FnVal.Lambda(lb, caps, site) {
-                    # a lambda that may register in what it captured: its maker may, where it is called is not known
-                    if not w.Final { w.lambdaMade(lb) }
-                    for c in caps { addAllTo(out, w.captured(sp, c.Outer)) }
-                    addTo(out, orig(ONew, I64(site)))
-                }
-                case typed.FnVal.Named(b) { w.F.named[I64(b)] = true }
-                case typed.FnVal.Adapter(_, r, site) {
-                    if not w.Final { w.F.setRegOut(w.Id) }
-                    o := w.expr(r)
-                    w.escape(o, sp, "", false)
-                    addAllTo(out, o)
-                    addTo(out, orig(ONew, I64(site)))
-                }
-                case _ { }
-            }
-        }
-        case typed.Expr.Text(_, _, tx) {
-            for pc in tx.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { w.expr(r) }
-                    case _ { }
-                }
-            }
-            addTo(out, orig(ONew, I64(tx.Site)))
-        }
+        case typed.Expr.Fn(sp, _, fv) { out = w.fnValOf(sp, fv) }
+        case typed.Expr.Text(_, _, tx) { out = w.textOf(tx) }
         case typed.Expr.Away(_, _, y) { out = w.expr(y) }
         case _ { }
     }
     if not w.holds(x.Type()) { return Vec<I64>() }
+    return out
+}
+
+# exprOf's temporary given storage: what its value comes from, and the storage made
+fn (w mut walker&) promoteOf(pty types.TypeId, pr typed.Promote&) Vec<I64> {
+    # (Part C: a value with destructors to run given storage here is registered there, O16)
+    dtor := w.T().IsRef(pty) and w.T().NeedsDrop(w.T().Referent(pty))
+    if dtor: w.registeredAt(pr.Site, w.T().Referent(pty))
+    out := w.expr(pr.X)
+    # (a value moved out of a place held so is ended where the scope closes, which releases nothing of it: the
+    # place keeps, its values never built in regions no release would reach)
+    if dtor and w.Final {
+        for y in out {
+            if okind(y) == OMov: w.F.keep(oval(y), RMade, w.body().File, pr.X.Span(), $"a value moved out of it is held where its call lands (O16), where nothing releases it: '" $w.text(pr.X.Span()) "'")
+        }
+    }
+    addTo(out, orig(ONew, I64(pr.Site)))
+    if not w.Final and w.F.destructs(pty) and isVar(w.F.Plans[w.Id].Built[I64(pr.Site)]) { w.F.setRegOut(w.Id) }
+    return out
+}
+
+# exprOf's tuple, case or array made: what its items come from, and the storage made
+fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I64> {
+    out Vec<I64>
+    # a prelude fill's value is in positions the collection never reads (makeStores): no part of the array
+    dead := m.Kind == typed.MakeKind.Fill and w.F.prelude[w.Id]
+    for it in m.Items {
+        o := w.expr(it)
+        if not dead: addAllTo(out, o)
+    }
+    if m.Length is not null { w.expr(m.Length!) }
+    if m.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(m.Site))) }
+    # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
+    if m.Kind == typed.MakeKind.Copy { out = w.F.unowned(out) }
+    exempt := m.Kind == typed.MakeKind.Copy and w.copyExempt >= 0 and I64(m.Site) == w.copyExempt
+    if (m.Kind == typed.MakeKind.Copy or m.Kind == typed.MakeKind.Fill) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
+    w.makeStores(m, ty, sp)
+    return out
+}
+
+# exprOf's function value: what a lambda captures or an adapter holds, and the storage made
+fn (w mut walker&) fnValOf(sp source.Span, fv typed.FnVal&) Vec<I64> {
+    out Vec<I64>
+    match fv {
+        case typed.FnVal.Lambda(lb, caps, site) {
+            # a lambda that may register in what it captured: its maker may, where it is called is not known
+            if not w.Final { w.lambdaMade(lb) }
+            for c in caps { addAllTo(out, w.captured(sp, c.Outer)) }
+            addTo(out, orig(ONew, I64(site)))
+        }
+        case typed.FnVal.Named(b) { w.F.named[I64(b)] = true }
+        case typed.FnVal.Adapter(_, r, site) {
+            if not w.Final { w.F.setRegOut(w.Id) }
+            o := w.expr(r)
+            w.escape(o, sp, "", false)
+            addAllTo(out, o)
+            addTo(out, orig(ONew, I64(site)))
+        }
+        case _ { }
+    }
+    return out
+}
+
+# exprOf's text joined: each rendering walked, and the storage made
+fn (w mut walker&) textOf(tx typed.Text&) Vec<I64> {
+    out Vec<I64>
+    for pc in tx.Pieces {
+        match pc {
+            case typed.Piece.Render(r) { w.expr(r) }
+            case _ { }
+        }
+    }
+    addTo(out, orig(ONew, I64(tx.Site)))
     return out
 }
 
@@ -3710,24 +3731,9 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
             }
             return m.Length is not null and f.mayRegister(m.Length!)
         }
-        case typed.Expr.Text(_, _, tx) {
-            for pc in tx.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { if f.mayRegister(r): return true }
-                    case _ { }
-                }
-            }
-            return false
-        }
+        case typed.Expr.Text(_, _, tx) { return f.textMayRegister(tx) }
         case typed.Expr.Call(_, _, c) {
-            match c.Target {
-                case typed.Callee.Body(id) {
-                    b2 := I64(id)
-                    if not f.isCase(b2) and (f.Bodies[b2].Root is null or f.regOut[b2]) { return true }
-                }
-                case typed.Callee.Helper(_, _), typed.Callee.Extern(_) { }
-                case _ { return true }
-            }
+            if f.calleeMayRegister(c.Target) { return true }
             for a in c.Args {
                 if f.mayRegister(a): return true
             }
@@ -3743,16 +3749,7 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
         case typed.Expr.Cond(_, _, c) {
             return f.mayRegister(c.C) or (c.A is not null and f.mayRegister(c.A!)) or f.mayRegister(c.B)
         }
-        case typed.Expr.Try(_, _, t) {
-            if t.X is not null and f.mayRegister(t.X!) { return true }
-            for cl in t.Clauses {
-                if cl.Code is not null: return true
-                for d in cl.Defaults {
-                    if f.mayRegister(d): return true
-                }
-            }
-            return false
-        }
+        case typed.Expr.Try(_, _, t) { return f.tryMayRegister(t) }
         case typed.Expr.Fn(_, _, fv) {
             return match fv {
                 case typed.FnVal.Named(_): false
@@ -3773,6 +3770,42 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
         # statements inside a match: not walked here
         case _ { return true }
     }
+}
+
+# mayRegister's text joined: whether a rendering may
+fn (f mut Free&) textMayRegister(tx typed.Text&) Bool {
+    for pc in tx.Pieces {
+        match pc {
+            case typed.Piece.Render(r) { if f.mayRegister(r): return true }
+            case _ { }
+        }
+    }
+    return false
+}
+
+# mayRegister's callee: a body that may, or one not known here (a function value); a helper or a C function never
+fn (f mut Free&) calleeMayRegister(t typed.Callee&) Bool {
+    match t {
+        case typed.Callee.Body(id) {
+            b2 := I64(id)
+            if not f.isCase(b2) and (f.Bodies[b2].Root is null or f.regOut[b2]) { return true }
+        }
+        case typed.Callee.Helper(_, _), typed.Callee.Extern(_) { }
+        case _ { return true }
+    }
+    return false
+}
+
+# mayRegister's try: its value, or a clause - one with code taken to
+fn (f mut Free&) tryMayRegister(t typed.Try&) Bool {
+    if t.X is not null and f.mayRegister(t.X!) { return true }
+    for cl in t.Clauses {
+        if cl.Code is not null: return true
+        for d in cl.Defaults {
+            if f.mayRegister(d): return true
+        }
+    }
+    return false
 }
 
 # whether running these statements, inside a value being built, may register a destructor (mayRegister's): a local
@@ -4154,7 +4187,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
             if okind(y) == OParC and oval(y) != w.storeWithin and addTo(f.parEscC[w.Id], oval(y)) > 0 { f.changed = true }
             if okind(y) == OPar and oval(y) != w.storeWithin and addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
-                if f.Debug { try io.PutErr($"esc-store " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " within " $w.storeWithin "\n") catch io.Error { } }
+                if f.Debug: f.debugOut($"esc-store " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " within " $w.storeWithin "\n")
             }
         }
         return
