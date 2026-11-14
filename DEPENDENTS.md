@@ -225,4 +225,6 @@ capabilities are described in SPEC B15 and `editors/README.md` by hand.
 `lua/olang/init.lua` (format and LSP commands), `compiler/olang.vim` (makeprg `olang compile %` and errorformat: the diagnostic row
 format `path:line:col: error[RULE]: message` of B11), `ftdetect/olang.lua`, `editors/README.md`, `editors/nvim/README.md`.
 A change to the diagnostic row format, a mode name used there, or a keyword touches all of them. `make release` packs
-`editors/` as is (`makefile` `release`).
+`editors/` as is (`makefile` `release`). `make install` (`install-editors`) copies `editors/nvim` whole as a Neovim
+package and its `syntax/olang.vim` and `compiler/olang.vim` for Vim, with a filetype rule of its own that follows
+`ftdetect/olang.lua`'s: a new Vimscript file, or a change to what ftdetect recognises, changes it.
