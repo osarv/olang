@@ -307,6 +307,15 @@ fn functionSymbols(path String&) Vec<elfFn> {
 }
 
 # the function of syms (by address) holding address a, "" for none
+# Resolve's function at address a of the file at path, by its symbol table (read once per file); "??" where none holds it
+fn symbolIn(syms mut Map<String&, Vec<elfFn>>&, path String&, a I64) String {
+    if not syms.Has(path) { syms.Put($path, functionSymbols(path)) }
+    ss := try syms.Ref(path) catch default Vec<elfFn>()
+    fun := symbolAt(ss, a)
+    if fun == "" { fun = "??" }
+    return fun
+}
+
 fn symbolAt(syms Vec<elfFn>&, a I64) String {
     lo I64 = 0
     hi := syms.Len()
@@ -365,12 +374,11 @@ fn Places.Resolve(p Profile&, tool String&) Places {
             if a < m.Start or a >= m.End { continue }
             path = m.Path
             off := a - m.Start + m.Offset
-            if path.StartsWith("/") {
-                if not segs.Has(path) { segs.Put(path, segments(path)) }
-                ss := try segs.Ref(path) catch default Vec<I64>()
-                for j in range 0, ss.Len(), 3 {
-                    if off >= ss[j] and off < ss[j] + ss[j + 1] { r = off - ss[j] + ss[j + 2] }
-                }
+            if not path.StartsWith("/") { break }
+            if not segs.Has(path) { segs.Put(path, segments(path)) }
+            ss := try segs.Ref(path) catch default Vec<I64>()
+            for j in range 0, ss.Len(), 3 {
+                if off >= ss[j] and off < ss[j] + ss[j + 1] { r = off - ss[j] + ss[j + 2] }
             }
             break
         }
@@ -406,12 +414,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
                 place := said[at + 1]
                 at += 2
                 file, line := fileLine(place)
-                if fun == "??" and files[i].StartsWith("/") {
-                    if not syms.Has(files[i]) { syms.Put($files[i], functionSymbols(files[i])) }
-                    ss := try syms.Ref(files[i]) catch default Vec<elfFn>()
-                    fun = symbolAt(ss, rel[i])
-                    if fun == "" { fun = "??" }
-                }
+                if fun == "??" and files[i].StartsWith("/") { fun = symbolIn(syms, files[i], rel[i]) }
                 if fun == "??": fun = $"0x" $U64(keys[i]).Format(16) " (" $filepath.Base(files[i]) ")"
                 else: fun = Readable(fun)
                 pl.Frames.Push(Frame(pl.name(fun), pl.name(file), line))

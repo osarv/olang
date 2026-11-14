@@ -182,12 +182,7 @@ fn (s mut scanner&) run() {
                 i = lineEnd(t, i)
                 if i == n { nl = true }
             } else if c == '#' {
-                end := blockComment(t, i + 2)
-                if end < 0 {
-                    s.diag(LexError.UnclosedComment, i, i + 2)
-                    i = n
-                    continue
-                }
+                end := s.blockEnd(i)
                 if hasLineEnd(t, i + 2, end) { nl = true }
                 i = end
             } else {
@@ -213,26 +208,19 @@ fn (s mut scanner&) run() {
             end = s.char(i)
         } else {
             k, end = operator(t, i)
+            # no token starts here (L1, L3, L16): reported and passed over, as though the bytes were not there - except
+            # a ';', which ends a statement where one could end (L18)
+            if k == token.Tok.Eof and c != ';' {
+                i = s.junk(c, i)
+                continue
+            }
             if k == token.Tok.Eof {
-                # no token starts here (L1, L3, L16): reported and passed over, as though the bytes were not there -
-                # except a ';', which ends a statement where one could end (L18)
-                if c == ';' {
-                    s.diag(LexError.Semicolon, i, i + 1)
-                    i++
-                    if not last.EndsStatement() { continue }
-                    at := lastEnd if nl else start
-                    s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(at), I32(at)))
-                    last = token.Tok.StmtEnd
-                } else if c == '\r' {
-                    if not s.reportedCR { s.diag(LexError.CarriageReturn, i, i + 1) }
-                    s.reportedCR = true
-                    i++
-                } else {
-                    j := junkEnd(t, i + 1)
-                    kind := LexError.NulByte if c == '\0' else (LexError.NonAscii if c >= 128 else LexError.UnknownChar)
-                    s.diag(kind, i, j, c)
-                    i = j
-                }
+                s.diag(LexError.Semicolon, i, i + 1)
+                i++
+                if not last.EndsStatement() { continue }
+                at := lastEnd if nl else start
+                s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(at), I32(at)))
+                last = token.Tok.StmtEnd
                 continue
             }
         }
@@ -337,6 +325,28 @@ fn blockComment(t String&, from I64) I64 {
 }
 
 # whether t[from:to] holds a line's end
+# run's bytes starting at i, with c the first, that start no token and are no ';': reported (a carriage return once) and
+# passed over; where the token after them starts
+fn (s mut scanner&) junk(c Char, i I64) I64 {
+    if c == '\r' {
+        if not s.reportedCR { s.diag(LexError.CarriageReturn, i, i + 1) }
+        s.reportedCR = true
+        return i + 1
+    }
+    j := junkEnd(s.text, i + 1)
+    kind := LexError.NulByte if c == '\0' else (LexError.NonAscii if c >= 128 else LexError.UnknownChar)
+    s.diag(kind, i, j, c)
+    return j
+}
+
+# the end of the block comment starting at i (L4a): past its closing "##", or the text's end where it has none (said)
+fn (s mut scanner&) blockEnd(i I64) I64 {
+    end := blockComment(s.text, i + 2)
+    if end >= 0 { return end }
+    s.diag(LexError.UnclosedComment, i, i + 2)
+    return s.text.Len()
+}
+
 fn hasLineEnd(t String&, from I64, to I64) Bool {
     for i in range from, to {
         if t[i] == '\n' { return true }
