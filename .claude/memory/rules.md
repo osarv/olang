@@ -96,6 +96,10 @@ slimming of 2026-11-08").
   docs/settled.md (terse, current state) and HISTORY.md (the story) in the same session. Memory files live in the repo
   and are committed with the work.
 
+# Verification
+
+- **No full verify for small changes, once the compiler passes the full gates (the user, 2026-11-14: "dont rerun the entire verify machine, we got the compiler to work now. any small change doesnt need the 2 hour check", "if we get it to pass that is")**: interface work, std additions, messages, tools, editors and docs are checked by their targeted tests, the scenarios they touch, `make quick` and the goldens they move; the full `make verify` and the gates only for changes to the compiler's semantics, scopes, memory or code generation, and before a release tag.
+
 # Build memory
 
 - **The build uses as little memory as possible (the user, 2026-11-14: "dont just make it fit 8gb, make it as small as possible")**: the bootstrap and every build keep peak memory minimal, not merely under a limit; measure the peak per phase in rounds that touch the build.
