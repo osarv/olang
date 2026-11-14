@@ -574,6 +574,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     if r.Failure != "": return null
     x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
+    x.Lw.Checked = true     # E16g: the prompt is a checked build
     x.Lw.Cleanups = true
     sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }

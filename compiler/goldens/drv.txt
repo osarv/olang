@@ -270,7 +270,7 @@
 |   FILE.olang  builds the program FILE.olang is the root of, as build -quick does, and runs it with the arguments after the file
 |   build       builds one program, FILE.olang its root module, into build/ (B3)
 |   compile     compiles one module to an object, linking nothing (B2)
-|   test        runs each file's test blocks, each file built on its own (B3a)
+|   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
 |   interpret   runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)
 |   format      rewrites each file in olang's one layout (B13)
 |   explain     prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)
@@ -302,7 +302,7 @@
 | 
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
-|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
@@ -319,7 +319,7 @@
 | builds the program FILE.olang is the root of, as build -quick does, and runs it with the arguments after the file
 | 
 | options:
-|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
@@ -336,7 +336,7 @@
 | 
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
-|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
@@ -348,10 +348,10 @@
 === olang help test
 | stdout:
 | usage: olang test [OPTION...] FILE.olang...
-| runs each file's test blocks, each file built on its own (B3a)
+| runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
 | 
 | options:
-|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)

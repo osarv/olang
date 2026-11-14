@@ -9236,7 +9236,22 @@ fn (c mut Checker&) checkedPrim(sp source.Span, t types.TypeId, op typed.PrimOp,
     from := c.exprs.Len()
     c.exprs.Push(a)
     c.exprs.Push(b)
-    return typed.Expr.Prim(sp, t, op, typed.Check.None, gather(c.exprs, from))
+    return typed.Expr.Prim(sp, t, op, c.opCheck(op, t), gather(c.exprs, from))
+}
+
+# E16g: an integer / or % (E6a) and a shift (E8a) the program wrote are checked in a checked build
+fn (c mut Checker&) opCheck(op typed.PrimOp, t types.TypeId) typed.Check {
+    if op != typed.PrimOp.Div and op != typed.PrimOp.Rem and op != typed.PrimOp.Shl and op != typed.PrimOp.Shr: return typed.Check.None
+    return typed.Check.Debug if c.isInt(t) else typed.Check.None
+}
+
+# a lane's element operation (E39) as a release build makes it in every build: lanes are never checked per element
+fn unchecked(x typed.Expr&) typed.Expr& {
+    match x {
+        case typed.Expr.Prim(sp, ty, op, ck, args) { if ck == typed.Check.Debug: return typed.Expr.Prim(sp, ty, op, typed.Check.None, args) }
+        case _ { }
+    }
+    return x
 }
 
 # the method an operator calls on a declared type's values (E31)
@@ -16490,7 +16505,8 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Lvalue&, items Array<ast.E
         n := c.P.T.ConstValue(lt)
         if v.Ok and not v.IsFloat and not v.Big and (v.I < 0 or v.I >= n) { c.err(items[0].Span(), msgs.IndexOutOfRange(v.I, n)) }
     }
-    return typed.Lvalue.Elem(sp, c.P.T.Elem(at), typed.Elem(base, i, chk))
+    # E16g: an index the program wrote is checked in a checked build
+    return typed.Lvalue.Elem(sp, c.P.T.Elem(at), typed.Elem(base, i, typed.Check.Debug if chk == typed.Check.None else chk))
 }
 
 # C[a, b] (E19): a literal of the type made before its "[" - an Array<T>'s elements laid out (arrayLit), any other type's
@@ -19713,7 +19729,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         if c.isNumber(vt) and c.P.Flows(vt, t): v = c.convert(value.Span(), v!, t)
         else: c.err(osp, msgs.NumberDoesNotFlow(c.ty(vt), c.ty(t), c.ty(t)))
     }
-    c.emit(typed.Stmt.Assign(sp, p, c.prim(sp, t, binaryOp(bop), old, v)))
+    c.emit(typed.Stmt.Assign(sp, p, c.checkedPrim(sp, t, binaryOp(bop), old, v!)))
 }
 
 # the element read through At that a store into p writes into, reached from p's top without passing a reference:
@@ -19917,7 +19933,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         if op == token.Tok.StarStarEq {
             v = c.fit(c.powValues(sp, osp, c.read(sp, typed.Lvalue.Target(sp, pt)), v!), pt, sp)
         } else if op != token.Tok.Assign {
-            v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Lvalue.Target(sp, pt)), v)
+            v = c.checkedPrim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Lvalue.Target(sp, pt)), v!)
         }
         c.emit(typed.Stmt.Assign(sp, p2, v!))
     }
@@ -21350,7 +21366,7 @@ fn (c mut Checker&) laneElem(sp source.Span, k I64, lv laneVals&, i typed.Expr&)
         if n.Op == token.Tok.And { return typed.Expr.Cond(n.Sp, types.BoolT, typed.Cond(ea, eb, c.lit(n.Sp, types.BoolT, 0))) }
         return typed.Expr.Cond(n.Sp, types.BoolT, typed.Cond(ea, c.lit(n.Sp, types.BoolT, 1), eb))
     }
-    return c.laneOut(c.opValues(n.Sp, n.OpSp, n.Op, ea, eb, n.Sp, n.Sp))
+    return c.laneOut(unchecked(c.opValues(n.Sp, n.OpSp, n.Op, ea, eb, n.Sp, n.Sp)))
 }
 
 # whether a lane's element is a Bool, said at sp where it is not

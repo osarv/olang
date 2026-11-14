@@ -62,6 +62,10 @@ fn (s Stop) Text(src source.Source&) String {
         case Stop.Raised(code) { return "an error escapes, code " $code }
         case Stop.Exited(kind, _, sp, msg) {
             if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return "" }
+            if mir.Columned(kind) {
+                l, c := src.LineCol(sp.Start)
+                return $src.Path ":" $l ":" $c ": " $mir.ExitText(kind)
+            }
             if msg == "" { return $src.Path ":" $src.Line(sp.Start) ": " $mir.ExitText(kind) }
             return $src.Path ":" $src.Line(sp.Start) ": " $mir.ExitText(kind) ": " $msg
         }
