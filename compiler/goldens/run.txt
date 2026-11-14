@@ -66,6 +66,7 @@
 | ok - generic calls bind a bare literal after the other arguments (G9a)
 | ok - array patterns take the matched value's type (S13h)
 | ok - the evaluator agrees (K1)
+| ok - a number beside a Char adapts only where the type is given (E20, T6)
 === test tests/become.olang
 | status 0
 | ok - become runs a chain of any depth in one frame

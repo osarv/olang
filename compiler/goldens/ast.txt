@@ -427,6 +427,7 @@ df1d4ae3ead6e131 bb7134afa6d9b633 checks/cases/e11bcharpad.olang
 8d77a533c1941779 43f37432ebe1863c checks/cases/e11bjoinvalue.olang
 898d8596350bfb48 cd1c9909e72aa3dd checks/cases/e11blongchain.olang
 8a339d0e3341a274 cf62e3f55d2c8b49 checks/cases/e11ctwolevelfield.olang
+91c8e36acb7ea8b0 a3a5c8a72a797c42 checks/cases/e12textforlength.olang
 1057581429e4d8cf 15889ee0112fc74b checks/cases/e13bfieldnotfn.olang
 113a4e1d024f9d55 35f70b26fe3d2ec3 checks/cases/e13bfieldtry.olang
 1e3c352515d10f04 9b23d168e3c2b265 checks/cases/e13bnotfn.olang
@@ -1704,7 +1705,9 @@ efcd1fece6948778 791137a96a35729e checks/cases/t29aconvassign.olang
 4b92ad0bb2a1b42e b8daba15df2e2775 checks/cases/t29aconvglobal.olang
 451467ec7d4a9412 bd8726f1ccab4e8d checks/cases/t29aconvlifetime.olang
 c7d826b799eeffe1 2679ba4614d531b1 checks/cases/t29aconvreadonly.olang
+b31ba49214a23101 0d64812d0ebe13f1 checks/cases/t29cbuilderfortext.olang
 0e0301a3c34ccde5 ba0335f8c23d547a checks/cases/t29cbytes.olang
+a2e0c962fffcb6ef 51be7fd7d4c8b9e5 checks/cases/t29cscharsfortext.olang
 33e876a7a8b1ad3b 374ea7f603766357 checks/cases/t29dliteral.olang
 3a09d1399ce69e9f 835d89d9d81cb445 checks/cases/t29dparams.olang
 39e7559848ca344f 40ab278b550452de checks/cases/t29dradixbad.olang
@@ -2231,7 +2234,7 @@ cfc2d604776fa139 d2119933f49abf57 compiler/api.olang
 76deda85728295e6 a32c90ffe9decb7d compiler/bindgen.olang
 b77425d43bb448de c7e5759ff2e7a22a compiler/build.olang
 3356b65039487057 ef5918803804e565 compiler/cabi.olang
-500e92826bb05aa2 7e46f42f26c75b06 compiler/check.olang
+a5fe5bfcf65d2f65 3f6ecc3b89259ea0 compiler/check.olang
 55aeb690bfdaa45c c20ab7f5f229b733 compiler/cond.olang
 7036f9705d76ef54 f9c0e5f18cd6aedb compiler/definit.olang
 ebdb38cba173d701 63b967e10e8f5392 compiler/diag.olang
@@ -2256,9 +2259,10 @@ e89f9ab0af8b30ba 07da4622a648807d compiler/lower.olang
 80831975a021c7d2 12dee153fc27bdc0 compiler/lsp.olang
 78c00122c50d6b84 eaaa84cd3f4e5697 compiler/mcp.olang
 7c840607794c96e1 1415eeec6e37c4ef compiler/mir.olang
-25f4f6f710d40020 c7414bb200582084 compiler/msgs.olang
+ae8eaa8924ba4c11 71a67663e714304e compiler/msgs.olang
 8a8b53f139ef9b02 93b30be6689d5e9c compiler/names.olang
 b9520ca5794a662c e90b4dca0bb20d91 compiler/needs.olang
+840d6d1ac274dc62 e09850fe4137672a compiler/notebook.olang
 a260ef747633a452 45a7f7a9b344d039 compiler/olang.olang
 1fc70a2d9b239453 2a7da59f3902303c compiler/paint.olang
 b0871112e9a77b06 3c9164b08b7f7f09 compiler/parse.olang
@@ -2420,7 +2424,7 @@ b44aed536bd7248e 8959989bf1fe6eef std/prelude/tests/map.olang
 6598ecdc4507cbef 0317aacce2948e05 std/prelude/tests/pow.olang
 96870b657d19c7e1 0aad7aad158a4e7b std/prelude/tests/text.olang
 d965bcc6886b9315 f71cbd98150ac740 std/prelude/tests/vec.olang
-c693f9bf1857a8df c3f6bff3b446c2db std/prelude/text.olang
+13176cdd458984bf 7c7d8cc8fd8ebcdb std/prelude/text.olang
 df73995a16c43c1b 0867242a258db998 std/prelude/vec.olang
 2f7d17eebbc40caa 9fd00c06f056b52c std/prop.olang
 029d48fc743e8cf3 ddd69740918105fa std/rand.olang
