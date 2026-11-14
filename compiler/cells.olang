@@ -1,0 +1,637 @@
+# cells - a session's cells run compiled (B22, B23, B24; compiler/DESIGN.md, "Cells run compiled"). Each cell's program
+# is built as a build builds one, -quick, into a shared object that leaves the runtime out; a worker process - a small
+# program holding the runtime, its symbols shown - loads each object in turn and runs the cell in it. The session's
+# values live in the worker: a value a cell keeps has its storage in that cell's object, and every later cell's object
+# names that storage instead of defining its own, so nothing a cell keeps is ever moved or copied. Every module's
+# object but the root's is the cache's, made once (B3i).
+#
+# A cell runs in a copy of the worker (fork): a cell that ends in order - to its end, by an error leaving it, or by a
+# failed check, which comes back by the runtime's recovery point - leaves its copy holding the session and the copy
+# before it goes; one that crashes, ends the process or is interrupted (SIGINT, or a kill the kernel sends) leaves the
+# copy before it holding the session as it was before the cell.
+
+import "std/os"
+import "std/io"
+import "build"
+import "diag"
+import "msgs"
+import "session"
+import unistd "unistd.h"
+import syswait "sys/wait.h"
+import csignal "signal.h"
+
+# ---- the front end's build ----
+
+# the front end's build of a program whose root's text is given (olang.olang's buildCell): its root, the text, the
+# names of the session's values its declarations may stand in front of, and each of the root's lines' cell and line
+type BuildFn fn(r String&, t String&, sh Array<String&>&, ps Array<String&>&, ls Array<I64>&, c mut build.Config&
+    p mut build.Program&, d mut diag.Diagnostics&) ? build.Failed keeps d in c keeps d in p keeps r in c keeps t in c keeps sh in c keeps ps in c keeps ls in c
+Builder mut BuildFn?& = null
+
+# where sessions keep their objects, from one session to the next: $XDG_CACHE_HOME/olang/cells, else ~/.cache's
+fn CacheDir() String {
+    x := try os.Env("XDG_CACHE_HOME") catch os.Error default ""
+    if x != "": return $x "/olang/cells"
+    h := try os.Env("HOME") catch os.Error default ""
+    if h != "": return $h "/.cache/olang/cells"
+    return $"/tmp/olang-cells-" $unistd.getuid()
+}
+
+# the build of a session's cells, from the session's own configuration: -quick, a shared object, in the cache
+fn Config(from build.Config&) build.Config {
+    c := build.Config()
+    c.Clang = from.Clang
+    c.Target = from.Target
+    c.Consts = from.Consts
+    c.Update = from.Update
+    c.Jobs = from.Jobs
+    c.Quick = true
+    c.Cell = true
+    c.Quiet = true
+    c.Dir = CacheDir()
+    return c
+}
+
+# signal.h's own signal takes a handler, and SIG_IGN is a cast of 1 to one (session.olang's)
+extern { fn signal(sig I32, handler I64) I64 }
+
+# ---- a cell's object ----
+
+# what a cell's object does with the root's globals the session keeps: each one's symbol renamed to its storage's
+# (Rename) - declared, not defined, where an earlier cell's object holds that storage (Extern) - and the initializers
+# not called by the cell's start (NoInit, by their symbols)
+type Plan struct() {
+    Rename Map<String&, String&>
+    Extern Map<String&, Bool>
+    NoInit Map<String&, Bool>
+}
+
+# the cell's program built and linked as the shared object so: the objects the root's code is in, which nothing after
+# the session needs (the session takes them away as it ends)
+fn Build(cfg mut build.Config&, root String&, text String&, shadow Array<String&>&, paths Array<String&>&
+    lines Array<I64>&, plan Plan&, so String&, d mut diag.Diagnostics&) Vec<String&> ? build.Failed {
+    prog := build.Program()
+    # (a copy of the configuration, which the build keeps what it reports in)
+    c build.Config = cfg
+    try Builder!(root, text, shadow, paths, lines, c, prog, d)
+    if d.Errors() > 0: error build.Failed.Reported
+    for i in range prog.Units.Len() {
+        u := prog.Units.RefMut(i)
+        if u.Holds == build.UnitKind.Module: continue
+        u.Ir = rewrite(u.Ir, plan)
+        u.Hash = ""
+    }
+    prog.Runtime = ""     # (the worker's)
+    try os.MkDirAll(cfg.Dir) catch os.Error { error build.Failed.Reported }
+    objs := try cfg.Objects(prog, d)
+    own Vec<String&>
+    for i in range prog.Units.Len() {
+        if prog.Units[i].Holds != build.UnitKind.Module: own.Push(objs[i])
+    }
+    args Vec<String&>
+    args.Push(cfg.Clang)
+    for f in cfg.ModeFlags(): args.Push(f)
+    # (what it shows: its start, its entry and the storage it holds for the cells after it - nothing else, so that what
+    # its modules leave undefined, weak - an early-freeing decision another cell's object made, wholeprog 2.1 - is
+    # never found in another cell's)
+    vs := $so ".map"
+    try os.WriteFile(vs, "{\n  global: olang_cell_init; olang_cell_run; *.cell[0-9]*;\n  local: *;\n};\n") catch os.Error { }
+    for f in Array<String&>["-shared", "-Wl,-Bsymbolic", $"-Wl,--version-script=" $vs, "-o", so]: args.Push(f)
+    for o in objs: args.Push(o)
+    for x in prog.Links: args.Push(x)
+    for f in Array<String&>["-lm", "-lpthread", "-ldl"]: args.Push(f)
+    if prog.Dyncall != "": args.Push("-lffi")
+    try link(args, so, d)
+    return own
+}
+
+# a link run: clang's complaint said and the failure reported where it fails
+fn link(args Vec<String&>&, out String&, d mut diag.Diagnostics&) ? build.Failed {
+    r := try os.Output.Exec(...args.ToArray()) catch os.Error {
+        d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(out))
+        error build.Failed.Reported
+    }
+    if r.Status == 0: return
+    try io.PutErr($r.Stdout $r.Stderr) catch io.Error { }
+    d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(out))
+    error build.Failed.Reported
+}
+
+# the root's IR as the cell's object holds it: the library start (X14) the worker's to call - no constructor, no
+# thread made known again - with the kept values' initializers left out, and each kept value's symbol its storage's
+fn rewrite(ir String&, plan Plan&) String {
+    b := StringBuilder()
+    start := false
+    for line in ir.Lines() {
+        if line.StartsWith("@llvm.global_ctors = "): continue
+        if line.StartsWith("define internal void @__olang_lib_init()") {
+            b.Push("define void @olang_cell_init() #0 {\n")
+            start = true
+            continue
+        }
+        if start and line == "}": start = false
+        if start and dropped(line, plan): continue
+        if line.StartsWith("@") {
+            name := symbolAt(line, 1)
+            if name in plan.Extern {
+                b.Push($"@" $plan.Rename.Get(name)! " = external global i8\n")
+                continue
+            }
+        }
+        renamed(b, line, plan.Rename)
+        b.PushChar('\n')
+    }
+    return b.ToString()
+}
+
+# whether a line of the start is a call it leaves out: the thread made known (the worker's own is), a kept value's
+# initializer
+fn dropped(line String&, plan Plan&) Bool {
+    if line == "  call void @__olang_thread_init()" or line == "  call void @__olang_san_init()": return true
+    if not line.StartsWith("  call void @") or not line.EndsWith("()"): return false
+    return line[13:line.Len() - 2] in plan.NoInit
+}
+
+# the symbol written at i of an IR line, "" for a quoted one
+fn symbolAt(line String&, i I64) String& {
+    j := i
+    for j < line.Len() and symbolChar(line[j]) { j++ }
+    return line[i:j]
+}
+
+fn symbolChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' or ch == '.' or ch == '$' or ch == '-' }
+
+# an IR line written with each symbol renamed in its place
+fn renamed(b mut StringBuilder&, line String&, names Map<String&, String&>&) {
+    if names.Len() == 0 or not line.Contains("@") {
+        b.Push(line)
+        return
+    }
+    i I64 = 0
+    for i < line.Len() {
+        ch := line[i]
+        b.PushChar(ch)
+        i++
+        if ch != '@': continue
+        name := symbolAt(line, i)
+        b.Push(try names.Get(name) catch default name)
+        i += name.Len()
+    }
+}
+
+# ---- the worker ----
+
+# what a cell's run came to: shown (its value's text, and its rich rendering's MIME type and data), its failure (an
+# error leaving it, a failed check: the cell ended in order), or what stopped its process - the session's values as
+# they were before the cell - or the worker gone, every value with it
+type Outcome struct() {
+    Shown Bool = false
+    Text String& = ""
+    Mime String& = ""
+    Data String& = ""
+    Failure String& = ""
+    Stopped String& = ""
+    Lost Bool = false
+    Over Bool = false
+}
+
+# the kinds of frame the worker and a cell write: a cell's (cells.olang's program) and the worker's own
+FrameShown I64 = 1
+FrameFailure I64 = 2
+FrameMime I64 = 3
+FrameData I64 = 4
+FramePid I64 = 10
+FrameDone I64 = 11
+FrameStopped I64 = 12
+
+# the worker process: its first process (this process's child), the copy running the cell (between cells -1), the
+# pipe its commands go down and the one its frames come up, and - where its output is relayed (Jupyter's capture) -
+# its standard output and error
+type Worker struct(Relay Bool) {
+    Relay
+    Pid I32 = -1
+    Holder I32 = -1
+    In I32 = -1
+    Out I32 = -1
+    Std I32 = -1
+    Err I32 = -1
+    buf Vec<U8>
+}
+
+# the worker started, built first where the cache has none for this compiler: "" where it is running, else why not
+fn (w mut Worker&) Start(cfg mut build.Config&) String {
+    d := diag.Diagnostics(false)
+    c build.Config = cfg
+    c.Cell = false
+    exe := try workerExe(c, d) catch build.Failed {
+        return $"its worker cannot be built: " $d.Render().Trim()
+    }
+    session.IgnoreBrokenPipes()
+    cin, cinW := session.Pipe()
+    outR, outW := session.Pipe()
+    stdR, stdW, errR, errW := I32(-1), I32(-1), I32(-1), I32(-1)
+    if w.Relay {
+        stdR, stdW = session.Pipe()
+        errR, errW = session.Pipe()
+    }
+    pid := session.Fork()
+    if pid < 0: return "its worker cannot be started"
+    if pid == 0 {
+        # the worker's descriptors: 3 its commands, 4 its frames, 1 and 2 relayed or this process's - nothing else
+        session.Dup2(cin, 100)
+        session.Dup2(outW, 101)
+        if w.Relay {
+            session.Dup2(stdW, 1)
+            session.Dup2(errW, 2)
+        }
+        session.Dup2(100, 3)
+        session.Dup2(101, 4)
+        for fd in range 5, 1024: unistd.close(I32(fd))
+        try os.ExecInPlace(exe, "olang") catch os.Error { }
+        session.Exit(127)
+    }
+    for fd in Array<I32>[cin, outW, stdW, errW]: session.CloseFd(fd)
+    w.Pid = pid
+    w.In = cinW
+    w.Out = outR
+    w.Std = stdR
+    w.Err = errR
+    return ""
+}
+
+# the worker's executable, built where the cache has none made from these objects
+fn workerExe(c mut build.Config&, d mut diag.Diagnostics&) String ? build.Failed {
+    try os.MkDirAll(c.Dir) catch os.Error { error build.Failed.Reported }
+    prog := build.Program()
+    root := $c.Dir "/olang-cellworker.olang"
+    none := Array<String&>(0)
+    lines := Array<I64>(0)
+    cc build.Config = c
+    try Builder!(root, WorkerSource, none, none, lines, cc, prog, d)
+    if d.Errors() > 0: error build.Failed.Reported
+    prog.Units.Push(build.Unit("olang_cellhelp", build.UnitKind.Module, $"target triple = \"" $c.Target.Triple "\"\n" $HelperIr))
+    objs := try c.Objects(prog, d)
+    names := StringBuilder()
+    for o in objs: names.Push($o " ")
+    exe := $c.Dir "/olang-cellworker." $build.IrHash(names.ToString())[:16]
+    if os.Exists(exe): return exe
+    list := $exe ".list"
+    try os.WriteFile(list, "{ __olang_*; __muloti4; olang_cell_*; };\n") catch os.Error { error build.Failed.Reported }
+    tmp := $exe "." $unistd.getpid()
+    args Vec<String&>
+    args.Push(c.Clang)
+    for f in c.ModeFlags(): args.Push(f)
+    args.Push("-o")
+    args.Push(tmp)
+    for o in objs: args.Push(o)
+    for x in prog.Links: args.Push(x)
+    for f in Array<String&>[$"-Wl,--dynamic-list=" $list, "-lm", "-lpthread", "-ldl"]: args.Push(f)
+    if prog.Dyncall != "": args.Push("-lffi")
+    try link(args, exe, d)
+    try os.Rename(tmp, exe) catch os.Error { error build.Failed.Reported }
+    return exe
+}
+
+# whether the worker is running
+fn (w Worker&) Running() Bool { return w.In >= 0 }
+
+# the cell's object so run by the worker: its frames read and its output relayed until the cell is over - watch asked
+# now and then whether to stop it (a notebook's interrupt), which ends the copy running it
+fn (w mut Worker&) Run(so String&, watch fn?&() Bool) Outcome {
+    o := Outcome()
+    try io.Write(w.In, $"cell " $so "\n") catch io.Error {
+        w.lost(o)
+        return o
+    }
+    # (the terminal's interrupt is the cell's: its process ends, this one and the worker go on)
+    signal(2, 1)
+    defer signal(2, 0)
+    w.Holder = -1
+    asked := false
+    for {
+        fds := Array<I32>[w.Out, w.Std, w.Err]
+        ready := session.Readable(fds, 50 if watch is not null else -1)
+        if ready[1]: w.relay(1)
+        if ready[2]: w.relay(2)
+        if ready[0]: w.take(o)
+        if o.Over: break
+        if watch is null or asked or w.Holder <= 0: continue
+        if watch() {
+            csignal.kill(w.Holder, 9)
+            asked = true
+        }
+    }
+    w.Holder = -1
+    # what the cell wrote before it was over
+    for w.Std >= 0 and session.Readable(Array<I32>[w.Std], 0)[0] and w.relay(1) { }
+    for w.Err >= 0 and session.Readable(Array<I32>[w.Err], 0)[0] and w.relay(2) { }
+    if w.Pid > 0 and syswait.waitpid(w.Pid, Array<I32>(1), 1) == w.Pid: w.Pid = 0
+    return o
+}
+
+# the frames the worker has written read into o - Over once the cell is
+fn (w mut Worker&) take(o mut Outcome&) {
+    chunk := Array<U8>(65536)
+    n := unistd.read(w.Out, chunk, U64(chunk.Len()))
+    if n <= 0 {
+        w.lost(o)
+        return
+    }
+    w.buf.PushAll(chunk[:n])
+    for not o.Over {
+        v := w.buf.View()
+        if v.Len() < 16: return
+        kind := word(v, 0)
+        size := word(v, 8)
+        if v.Len() < 16 + size: return
+        text := $String(v[16:16 + size])
+        w.drop(16 + size)
+        frame(o, kind, text, w)
+    }
+}
+
+# a frame taken into the outcome
+fn frame(o mut Outcome&, kind I64, text String&, w mut Worker&) {
+    if kind == FramePid: w.Holder = I32(try text.ParseInt() catch default -1)
+    if kind == FrameShown {
+        o.Shown = true
+        o.Text = text
+    }
+    if kind == FrameMime: o.Mime = text
+    if kind == FrameData: o.Data = text
+    if kind == FrameFailure: o.Failure = $o.Failure $text
+    if kind == FrameStopped: o.Stopped = text
+    o.Over = kind == FrameDone or kind == FrameStopped
+}
+
+# the worker gone: every value it held with it
+fn (w mut Worker&) lost(o mut Outcome&) {
+    o.Lost = true
+    o.Over = true
+    w.close()
+    if w.Pid > 0: session.Reap(w.Pid)
+    w.Pid = -1
+}
+
+fn (w mut Worker&) close() {
+    for fd in Array<I32>[w.In, w.Out, w.Std, w.Err]: session.CloseFd(fd)
+    w.In, w.Out, w.Std, w.Err = -1, -1, -1, -1
+    w.buf.Clear()
+}
+
+# what the worker wrote on its output (1) or error (2) written on this process's: false at its end
+fn (w mut Worker&) relay(which I64) Bool {
+    fd := w.Std if which == 1 else w.Err
+    chunk := Array<U8>(65536)
+    n := unistd.read(fd, chunk, U64(chunk.Len()))
+    if n > 0 {
+        try io.Write(I32(which), chunk[:n]) catch io.Error { }
+        return true
+    }
+    session.CloseFd(fd)
+    if which == 1: w.Std = -1
+    else: w.Err = -1
+    return false
+}
+
+fn (w mut Worker&) drop(k I64) {
+    n := w.buf.Len()
+    for i in range k, n { w.buf[i - k] = w.buf[i] }
+    w.buf.Truncate(n - k)
+}
+
+# an I64 written little-endian at at
+fn word(v Array<U8>&, at I64) I64 {
+    n I64 = 0
+    for i in range 8: n = n | (I64(v[at + i]) << (8 * i))
+    return n
+}
+
+# the session over: the worker told to end - its program's end, the values' destructors run - and waited for, its
+# output relayed until it is gone
+fn (w mut Worker&) End() {
+    if not w.Running(): return
+    try io.Write(w.In, "end\n") catch io.Error { }
+    session.CloseFd(w.In)
+    w.In = -1
+    for w.Out >= 0 {
+        ready := session.Readable(Array<I32>[w.Out, w.Std, w.Err], -1)
+        if ready[1]: w.relay(1)
+        if ready[2]: w.relay(2)
+        if not ready[0]: continue
+        chunk := Array<U8>(4096)
+        if unistd.read(w.Out, chunk, U64(chunk.Len())) <= 0 {
+            session.CloseFd(w.Out)
+            w.Out = -1
+        }
+    }
+    for w.Std >= 0 and w.relay(1) { }
+    for w.Err >= 0 and w.relay(2) { }
+    w.close()
+    if w.Pid > 0: session.Reap(w.Pid)
+    w.Pid = -1
+}
+
+# ---- the worker's program ----
+
+# the worker: commands read from descriptor 3 ("cell PATH", "end"), frames written to 4. Each cell runs in a copy of
+# the worker made for it (fork): the copy loads the cell's object (dlopen, its symbols global, so the cells after it
+# find the storage it holds), calls its start and its entry behind the runtime's recovery point (olang_cell_call),
+# says what came of it and goes on as the worker, telling the process it was copied from to go. Where the copy ends
+# otherwise - a crash, an exit, an interrupt - the process before it says how and goes on itself
+WorkerSource String& = """
+    import "std/io"
+    import unistd "unistd.h"
+    import syswait "sys/wait.h"
+    import dlfcn "dlfcn.h"
+    import mman "sys/mman.h"
+    import fcntl "fcntl.h"
+
+    extern {
+        fn olang_cell_call(start CVoid?&, entry CVoid?&, fd I32) I32
+        fn olang_cell_afterfork()
+        fn signal(sig I32, handler I64) I64
+    }
+
+    fn main() {
+        signal(2, 1)
+        fcntl.fcntl(3, 2, 1)
+        fcntl.fcntl(4, 2, 1)
+        cmds := io.Lines(3)
+        for {
+            line := try cmds.Next() catch { break }
+            if line.StartsWith("cell "): run(line[5:])
+            if line == "end": break
+        }
+    }
+
+    fn say(kind I64, text Array<U8>&) {
+        head := Array<U8>(16)
+        for i in range 8 {
+            head[i] = U8((kind >> (8 * i)) & 255)
+            head[8 + i] = U8((text.Len() >> (8 * i)) & 255)
+        }
+        try io.Write(4, head) catch io.Error { }
+        try io.Write(4, text) catch io.Error { }
+    }
+
+    fn run(path String&) {
+        sync := Array<I32>(2)
+        if unistd.pipe2(sync, 524288) != 0 {
+            say(12, "the session cannot run the cell: no pipe")
+            return
+        }
+        pid := unistd.fork()
+        if pid < 0 {
+            say(12, "the session cannot run the cell: no process")
+            return
+        }
+        if pid == 0 {
+            unistd.close(sync[0])
+            cell(path)
+            try io.Write(sync[1], "k") catch io.Error { }
+            unistd.close(sync[1])
+            return
+        }
+        unistd.close(sync[1])
+        b := Array<U8>(1)
+        if unistd.read(sync[0], b, 1) == 1: unistd._exit(0)
+        unistd.close(sync[0])
+        st := Array<I32>(1)
+        syswait.waitpid(pid, st, 0)
+        say(12, ending(st[0]))
+    }
+
+    fn ending(raw I32) String {
+        sig := raw & 127
+        if sig == 0: return $"exited " $((raw >> 8) & 255)
+        if sig == 2 or sig == 9: return "interrupted"
+        return $"signal " $sig
+    }
+
+    fn cell(path String&) {
+        signal(2, 0)
+        olang_cell_afterfork()
+        say(10, $unistd.getpid())
+        h := dlfcn.dlopen(path.ToC(), 258)
+        if h is null {
+            e := dlfcn.dlerror()
+            say(2, $"the cell cannot be loaded: " $(String.FromC(e, 400) if e is not null else path) "\n")
+            say(11, "")
+            return
+        }
+        start := dlfcn.dlsym(h, "olang_cell_init".ToC())
+        entry := dlfcn.dlsym(h, "olang_cell_run".ToC())
+        if start is null or entry is null {
+            say(2, "the cell's object has no entry\n")
+            say(11, "")
+            return
+        }
+        fd := mman.memfd_create("olang-cell\0", 1)
+        if olang_cell_call(start, entry, unistd.dup(fd)) != 0: say(2, failure(fd))
+        unistd.close(fd)
+        say(11, "")
+    }
+
+    fn failure(fd I32) String {
+        size := unistd.lseek(fd, 0, 2)
+        unistd.lseek(fd, 0, 0)
+        text := Array<U8>(size if size > 0 else 0)
+        got I64 = 0
+        for got < text.Len() {
+            n := unistd.read(fd, text[got:], U64(text.Len() - got))
+            if n <= 0: break
+            got += n
+        }
+        return String(text[:got])
+    }
+    """
+
+# what the worker's program cannot say in olang, as IR: a cell's start and entry called behind the runtime's recovery
+# point, a failed check's message (written on C's standard output while a test runs, __olang_check_stream) going to the
+# descriptor given; and the runtime's parked task threads forgotten in a copy, which has none of them (P1f)
+HelperIr String& = """
+    @stdout = external global ptr
+    @__olang_jmp_target = external thread_local(initialexec) global ptr
+    @__olang_unwind_top = external thread_local(initialexec) global ptr
+    @__olang_unwind_mark = external thread_local(initialexec) global ptr
+    @__olang_worker_free = external global ptr
+    @__olang_worker_idle = external global i64
+    @olang.cell.w = private unnamed_addr constant [2 x i8] c"w\00"
+    declare i32 @setjmp(ptr) returns_twice
+    declare ptr @fdopen(i32, ptr)
+    declare i32 @fclose(ptr)
+
+    define i32 @olang_cell_call(ptr %start, ptr %run, i32 %fd) {
+    entry:
+      %jb = alloca [1024 x i8], align 16
+      %f = call ptr @fdopen(i32 %fd, ptr @olang.cell.w)
+      %old = load ptr, ptr @stdout
+      %some = icmp ne ptr %f, null
+      br i1 %some, label %swap, label %guard
+    swap:
+      store ptr %f, ptr @stdout
+      br label %guard
+    guard:
+      %top = load ptr, ptr @__olang_unwind_top
+      store ptr %top, ptr @__olang_unwind_mark
+      store ptr %jb, ptr @__olang_jmp_target
+      %r = call i32 @setjmp(ptr %jb)
+      %first = icmp eq i32 %r, 0
+      br i1 %first, label %go, label %done
+    go:
+      call void %start()
+      call void %run()
+      br label %done
+    done:
+      %rc = phi i32 [ 0, %go ], [ %r, %guard ]
+      store ptr null, ptr @__olang_jmp_target
+      store ptr %old, ptr @stdout
+      br i1 %some, label %close, label %out
+    close:
+      call i32 @fclose(ptr %f)
+      br label %out
+    out:
+      ret i32 %rc
+    }
+
+    define void @olang_cell_afterfork() {
+    entry:
+      store ptr null, ptr @__olang_worker_free
+      store i64 0, ptr @__olang_worker_idle
+      ret void
+    }
+
+    define void @olang_cell_say(i64 %kind, ptr %data, i64 %n) {
+    entry:
+      %h = alloca [2 x i64], align 8
+      store i64 %kind, ptr %h
+      %hn = getelementptr [2 x i64], ptr %h, i64 0, i64 1
+      store i64 %n, ptr %hn
+      call void @olang_cell_all(ptr %h, i64 16)
+      call void @olang_cell_all(ptr %data, i64 %n)
+      ret void
+    }
+
+    declare i64 @write(i32, ptr, i64)
+
+    define void @olang_cell_all(ptr %p, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %at = phi i64 [ 0, %entry ], [ %next, %more ]
+      %left = sub i64 %n, %at
+      %todo = icmp sgt i64 %left, 0
+      br i1 %todo, label %write, label %out
+    write:
+      %q = getelementptr i8, ptr %p, i64 %at
+      %w = call i64 @write(i32 4, ptr %q, i64 %left)
+      %ok = icmp sgt i64 %w, 0
+      br i1 %ok, label %more, label %out
+    more:
+      %next = add i64 %at, %w
+      br label %loop
+    out:
+      ret void
+    }
+    """

@@ -86,6 +86,7 @@ fn Serve(cfg mut build.Config&, file String&) I32 {
         ls.Push(try net.Listener.Listen(a) catch net.Error e { return fail($"cannot listen at " $a ": " $e) })
     }
     s := prompt.Session(cfg)
+    s.Relay = true
     s.Watch = fn() Bool { return k.interrupted() }
     for not k.Done {
         fds Vec<I32>

@@ -29,6 +29,7 @@ import "build"
 import "scope"
 import "free"
 import "lineedit"
+import "cells"
 import "paint"
 import cpoll "poll.h"
 import typecheck "check"
@@ -45,13 +46,15 @@ type Decl struct(Key String&, Text String&, Label String&, Line I64) {
 }
 
 # a value the session keeps: a cell's top-level local (Made, Type its type as the program writes it) or a global a cell
-# declared; the allocation its storage was saved as, and its type's layout then (eval.Machine.Layout)
+# declared; the allocation its storage was saved as (interpreted) or the symbol of its storage in the worker
+# (compiled, cells.olang), and its type's layout then (eval.Machine.Layout)
 type Value struct(Name String&, Type String&, Made Bool) {
     Name
     Type
     Made
     Root I64 = -1
     Layout String& = ""
+    Store String& = ""
 }
 
 # what a cell gave: whether it checked - its declarations and values then the session's - the diagnostics (its errors,
@@ -104,6 +107,14 @@ type Session struct(Cfg mut build.Config&) {
     snap eval.Snapshot = eval.Snapshot()
     # B23: asked now and then while a cell runs whether to stop it - a notebook's interrupt (eval.Machine.Watch)
     Watch fn?&() Bool = null
+    # cells run compiled (cells.olang), unless OLANG_CELLS=interpret says to interpret them (B3e) or they cannot be
+    # built here; Relay: the worker's output written by this process (a kernel's capture of a cell's output)
+    Interp Bool = (try os.Env("OLANG_CELLS") catch os.Error default "") == "interpret"
+    Relay Bool = false
+    work cells.Worker = cells.Worker(false)
+    cc build.Config = build.Config()
+    ident String& = ""     # the root module's identity, which its globals' symbols are named by
+    made Vec<String&>      # the cells' own objects, taken away as the session ends
 }
 
 # ---- a cell's pieces ----
@@ -355,6 +366,7 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
         p.put($ShownName " mut String = \"\"", Synthetic, 0)
         p.put(RichDecls, Synthetic, 0)
     }
+    if not s.Interp: p.put(SayDecl, Synthetic, 0)
     p.put($"fn " $CellName "() ? {", Synthetic, 0)
     last := c.Items.Len() - 1
     for i, it in c.Items {
@@ -369,9 +381,32 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
     if keeping {
         for v in c.Keeps { p.put($KeepPrefix $v.Name " = " $v.Name, c.Label, v.Root) }
     }
+    if c.Show and not s.Interp: p.put(SayShown, Synthetic, 0)
     p.put("}", Synthetic, 0)
+    if not s.Interp: p.put(CellEntry, Synthetic, 0)
     return p
 }
+
+# B22, compiled (cells.olang): what a cell's program says to the worker - its shown value and its rich rendering, an
+# error leaving it - through the worker's olang_cell_say, by the frames cells.olang reads; and its entry, which the
+# worker calls (the generic one takes the cell's errors, which may be none)
+SayDecl String& = "extern { fn olang_cell_say(kind I64, data Array<U8>&, n I64) }"
+SayShown String& = """
+    olang_cell_say(1, olangShown, olangShown.Len())
+    if olangShownMime != "" {
+        olang_cell_say(3, olangShownMime, olangShownMime.Len())
+        olang_cell_say(4, olangShownData, olangShownData.Len())
+    }
+    """
+CellEntry String& = """
+    fn olangEntry<OlangEntryType>() {
+        try olangCell() catch e {
+            olangFailed := "unhandled error: " $e "\n"
+            olang_cell_say(2, olangFailed, olangFailed.Len())
+        }
+    }
+    export fn olang_cell_run() { olangEntry<I64>() }
+    """
 
 # ---- a cell run ----
 
@@ -467,6 +502,8 @@ fn flushRow(b mut StringBuilder&, row String&, label String&, seen mut Map<Strin
 # the cell checked with the session's declarations ds and values vs, and run: the probe first where it keeps locals,
 # for their types; the reply
 fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
+    if not s.Interp: s.startWorker()
+    if not s.Interp: return s.attemptCompiled(ds, vs, c)
     r := Reply()
     c.Keeps.Clear()
     probe := false
@@ -503,6 +540,216 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
     r.Diags = cellRows(d.Warnings(), c.Label)
     s.run(ch, x, d, ds, vs, c, r)
     return r
+}
+
+# ---- a cell run compiled (cells.olang) ----
+
+# the worker started for the session's cells, where it is not running - else the cells interpreted from here on (B3e),
+# a note saying why: no clang, another machine's target, no worker
+fn (s mut Session&) startWorker() {
+    if s.work.Running(): return
+    why := ""
+    if cells.Builder is null: why = "this compiler builds no cells"
+    else if s.Cfg.Clang == "": why = "there is no clang to build them with"
+    else if s.Cfg.Target.Foreign: why = "they are built for another machine"
+    if why == "" {
+        s.cc = cells.Config(s.Cfg)
+        s.work = cells.Worker(s.Relay)
+        why = s.work.Start(s.cc)
+        if why == "": return
+    }
+    s.Interp = true
+    sayErr($"olang: the cells are interpreted: " $why "\n")
+}
+
+# the cell checked with the session's declarations ds and values vs, then built and run by the worker: checked first
+# without its keeping, for the types of the locals it keeps and the layouts of the session's values as its program
+# lays them out - a value whose layout is not what it was let go (gone) and the cell checked again without it
+fn (s mut Session&) attemptCompiled(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
+    r := Reply()
+    c.Keeps.Clear()
+    d := diag.Diagnostics(false)
+    d.Lenient = true
+    ch := s.check(s.write(ds, vs, c, false), d)
+    if ch is null {
+        r.Diags = cellRows(d.Render(), c.Label)
+        return r
+    }
+    s.keptLocals(ch, c)
+    s.ident = $ch.P.L.Mods[ch.P.L.Root].Identity
+    lay := layouts(ch, ds, vs)
+    for v in vs {
+        if v.Store != "" and (try lay.Get(v.Name) catch default "") != v.Layout: r.gone.Push($v.Name)
+    }
+    if r.gone.Len() > 0: return r
+    s.runCompiled(ds, vs, c, lay, r)
+    return r
+}
+
+# the layouts of what the session keeps, as the checked program c lays them out (eval.Machine.Layout): its values and
+# its declarations' globals, and each top-level local of the cell's function - one kept by reference as it is kept
+fn layouts(c mut typecheck.Checker&, ds Vec<Decl>&, vs Vec<Value>&) Map<String&, String&> {
+    out Map<String&, String&>
+    b := cellBody(c)
+    if b < 0: return out
+    x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
+    x.Need(mir.FnKey.Body(typed.BodyId(I32(b))))
+    root := c.P.L.Root
+    names := c.P.L.Names
+    globals Vec<String&>
+    for v in vs: globals.Push(v.Name)
+    for dc in ds {
+        if isGlobal(dc): globals.Push(dc.Key)
+    }
+    for g in globals {
+        _, ty := try x.M.GlobalAt(root, names.Intern(g)) catch eval.NotSaved { continue }
+        out.Put($g, layoutKey(x, c, ty, false))
+    }
+    for lc in c.Bodies[b].Locals {
+        if lc.In != typed.BlockId(0) or lc.Kind != typed.LocalKind.Var or lc.Name == source.NameId(0): continue
+        byRef := c.P.T.KindOf(lc.Ty) != types.Kind.Ref and c.P.T.Unique(lc.Ty)
+        out.Put($names.Text(lc.Name), layoutKey(x, c, lc.Ty, byRef))
+    }
+    return out
+}
+
+# a value's layout as kept: a reference's its referent's, after a "&"
+fn layoutKey(x mut interp.Exec&, c mut typecheck.Checker&, ty types.TypeId, byRef Bool) String {
+    r := c.P.T.Repr(ty)
+    if c.P.T.KindOf(r) == types.Kind.Ref: return $"&" $x.M.Layout(c.P.T.Referent(r))
+    return $("&" if byRef else "") $x.M.Layout(ty)
+}
+
+# the cell's program built as a shared object - each value the session keeps named by its storage, the cell's kept
+# locals and new globals given storage of their own - and run by the worker; the session's declarations and values as
+# the run leaves them
+fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map<String&, String&>&, r mut Reply&) {
+    n := s.Cells
+    plan := cells.Plan()
+    for v in vs {
+        if v.Store == "": continue
+        plan.Rename.Put(s.globalSym(v.Name), v.Store)
+        plan.Extern.Put(s.globalSym(v.Name), true)
+        plan.NoInit.Put(s.initSym(v.Name), true)
+    }
+    for v in ce.Keeps {
+        k := $KeepPrefix $v.Name
+        plan.Rename.Put(s.globalSym(k), s.storeOf(k, n))
+        plan.NoInit.Put(s.initSym(k), true)
+    }
+    fresh := freshGlobals(ds, vs)
+    for g in fresh: plan.Rename.Put(s.globalSym(g), s.storeOf(g, n))
+    p := s.write(ds, vs, ce, true)
+    d := diag.Diagnostics(false)
+    d.Lenient = true
+    dir := s.cellDir()
+    try os.MkDirAll(dir) catch os.Error { }
+    so := $dir "/cell" $n ".so"
+    own := try cells.Build(s.cc, s.Root, p.B.ToString(), p.Kept.ToArray(), p.Paths.ToArray(), p.Lines.ToArray(), plan, so, d) catch build.Failed {
+        r.Diags = cellRows(d.Render(), ce.Label)
+        if r.Diags == "": r.Diags = "olang: the cell cannot be built\n"
+        return
+    }
+    for o in own: s.made.Push(o)
+    r.Checked = true
+    r.Diags = cellRows(d.Warnings(), ce.Label)
+    o := s.work.Run(so, s.Watch)
+    s.Decls = ds
+    vals Vec<Value>
+    if o.Lost {
+        r.Failure = "olang: the session's worker ended, and the values it kept with it\n"
+        s.Values = vals
+        return
+    }
+    for v in vs: vals.Push(v)
+    if o.Stopped != "" {
+        r.Failure = stopped(o.Stopped)
+        s.Values = vals
+        return
+    }
+    r.Failure = places(o.Failure, p, s.Root)
+    if o.Failure == "" {
+        for v in ce.Keeps: vals.Push(s.kept(v.Name, v.Type, true, $KeepPrefix $v.Name, lay))
+        for g in fresh: vals.Push(s.kept(g, "", false, g, lay))
+        r.Shown = o.Shown
+        r.Text = o.Text
+        r.Mime = o.Mime
+        r.Data = o.Data
+    }
+    s.Values = vals
+}
+
+# a value the cell made kept: its storage the cell's own global's (held)
+fn (s Session&) kept(name String&, ty String&, made Bool, held String&, lay Map<String&, String&>&) Value {
+    v := Value($name, $ty, made)
+    v.Store = s.storeOf(held, s.Cells)
+    v.Layout = try lay.Get(name) catch default ""
+    return v
+}
+
+# the globals the declarations ds declare that no value of vs has storage for yet: made by this cell
+fn freshGlobals(ds Vec<Decl>&, vs Vec<Value>&) Vec<String&> {
+    held Map<String&, Bool>
+    for v in vs {
+        if v.Store != "": held.Put(v.Name, true)
+    }
+    out Vec<String&>
+    for dc in ds {
+        if isGlobal(dc) and dc.Key not in held: out.Push(dc.Key)
+    }
+    return out
+}
+
+# the symbol of the session's program's global name, of its initializer, and of the storage cell n gives it
+fn (s Session&) globalSym(name String&) String { return types.Symbol($"G." $s.ident "." $name) }
+fn (s Session&) initSym(name String&) String { return types.Symbol($s.ident "." $name ".init") }
+fn (s Session&) storeOf(name String&, n I64) String { return $s.globalSym(name) ".cell" $n }
+
+# where this session's cells' objects are linked, taken away as it ends
+fn (s Session&) cellDir() String { return $s.cc.Dir "/s" $build.Pid() }
+
+# what stopped a cell's process, said: the session's values as they were before it
+fn stopped(how String&) String {
+    what := match how {
+        case "interrupted": "interrupted"
+        case _ if how.StartsWith("exited "): $"the cell ended the program with status " $how[7:]
+        case _ if how.StartsWith("signal "): $"the cell's run crashed (signal " $how[7:] ")"
+        case _: $how
+    }
+    return $what " - the session's values are as they were before the cell\n"
+}
+
+# a run's text with the places in the session's program (root, as the build names it) given as their cells' places
+fn places(t String&, p program&, root String&) String {
+    if t == "": return ""
+    b := StringBuilder()
+    lead := $root ":"
+    at I64 = 0
+    for {
+        i := try t[at:].Find(lead) catch { break }
+        b.Push(t[at:at + i])
+        j := at + i + lead.Len()
+        k := j
+        for k < t.Len() and t[k].IsDigit() { k++ }
+        line := (try t[j:k].ParseInt() catch default 0) - 1
+        if line < 0 or line >= p.Paths.Len() {
+            b.Push(lead)
+            at = j
+            continue
+        }
+        b.Push($p.Paths[line] ":" $p.Lines[line])
+        at = k
+    }
+    b.Push(t[at:])
+    return b.ToString()
+}
+
+# the session over, compiled: the worker ended - the values' destructors run - and the cells' objects taken away
+fn (s mut Session&) endCompiled() {
+    s.work.End()
+    if (try os.Env("OLANG_CELLS_KEEP") catch os.Error default "") != "": return
+    for o in s.made: try os.Remove(o) catch os.Error { }
+    if s.cc.Cell: try os.RemoveAll(s.cellDir()) catch os.Error { }
 }
 
 # the program checked as interpret checks one (B3e) - its conditions and asserts the evaluator decides decided - with
@@ -717,6 +964,10 @@ fn (s mut Session&) mismatched(c mut typecheck.Checker&, x mut interp.Exec&, vs 
 
 # the session ended: what its values hold that has a destructor ended, as a program's end ends it (O1b)
 fn (s mut Session&) End() {
+    if not s.Interp {
+        s.endCompiled()
+        return
+    }
     if s.snap.RegTy.Len() == 0: return
     c := cell("end", "")
     d := diag.Diagnostics(false)
