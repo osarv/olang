@@ -761,41 +761,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
         for k in f.P.WeakSlots.Keys() { f.gen.Weak.Put(k, true) }
         f.bufOn = f.gen.AnyLeaves(f.T())
     }
-    for b in range n {
-        m := f.bodyModule(b)
-        f.module.Push(m)
-        f.decided.Push(not f.Alone and (m == -3 or m == root))
-        f.programCode.Push(f.ownCode(b))
-        f.prelude.Push(f.preludeCode(b))
-        f.resFrom.Push(Vec<I64>())
-        f.parStored.Push(Vec<I64>())
-        f.parEsc.Push(Vec<I64>())
-        f.parEscC.Push(Vec<I64>())
-        f.parMulti.Push(Vec<I64>())
-        f.parWhole.Push(Vec<I64>())
-        f.lets.Push(Vec<I64>())
-        f.letsAll.Push(false)
-        f.letsVia.Push(0)
-        f.viaMut.Push(0)
-        f.escVia.Push(Vec<I64>())
-        f.mustRes.Push(MustTop)
-        f.resFresh.Push(true)
-        f.regOut.Push(false)
-        match f.Bodies[b].Of {
-            case typed.BodyOf.Fn(i) { if f.P.FnDecl(f.P.InstanceFn(i)).Export and f.handedToC(i) { f.exports.Push(b) } }
-            case _ { }
-        }
-        f.mustLocals.Push(Vec<I64>())
-        f.withinLocals.Push(Vec<I64>())
-        f.freshLocals.Push(Vec<Bool>())
-        f.callers.Push(Vec<I64>())
-        f.taskAt.Push(false)
-        f.named.Push(false)
-        f.saved.Push(Array<I64>(0))
-        f.savedAt.Push(Array<I64>(0))
-        f.olIn.Push(false)
-        f.noteDtor(b)
-    }
+    for b in range n { f.addBody(b, root) }
     # with no root nothing is freed early
     if root < 0 { return }
     # the candidates: places a body assigns or vacates (a let-go of one needs one of those somewhere)
@@ -815,6 +781,70 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
         order = Array<I64>(n)
         for b in range n { order[b] = b }
     }
+    rm := f.mustFixedPoint(order)
+    t1 := time.Now()
+    # the may-summaries, least fixed point: every body walked once - which finds who calls whom - then again each body
+    # a callee of which changed its summary
+    rw := f.mayFixedPoint(order)
+    t2 := time.Now()
+    if f.Debug { try io.PutErr($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n") catch io.Error { } }
+    # destructors, Str, Eq and Hash run where no call is written: one that lets go of a place keeps everything
+    for b in range n { f.hiddenLetGo(b) }
+    t3 := time.Now()
+    for b in range n { f.walk(b, true) }
+    t4 := time.Now()
+    f.tasks = f.reachedTasks()
+    f.genKeeps()
+    f.decide()
+    f.classifyHolders()
+    if f.genOn: f.genDecide()
+    f.Done = true
+    f.writePlans()
+    t5 := time.Now()
+    if f.Debug { try io.PutErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
+}
+
+# Decide's facts of body b, before any is decided
+fn (f mut Free&) addBody(b I64, root I64) {
+    m := f.bodyModule(b)
+    f.module.Push(m)
+    f.decided.Push(not f.Alone and (m == -3 or m == root))
+    f.programCode.Push(f.ownCode(b))
+    f.prelude.Push(f.preludeCode(b))
+    f.resFrom.Push(Vec<I64>())
+    f.parStored.Push(Vec<I64>())
+    f.parEsc.Push(Vec<I64>())
+    f.parEscC.Push(Vec<I64>())
+    f.parMulti.Push(Vec<I64>())
+    f.parWhole.Push(Vec<I64>())
+    f.lets.Push(Vec<I64>())
+    f.letsAll.Push(false)
+    f.letsVia.Push(0)
+    f.viaMut.Push(0)
+    f.escVia.Push(Vec<I64>())
+    f.mustRes.Push(MustTop)
+    f.resFresh.Push(true)
+    f.regOut.Push(false)
+    match f.Bodies[b].Of {
+        case typed.BodyOf.Fn(i) { if f.P.FnDecl(f.P.InstanceFn(i)).Export and f.handedToC(i) { f.exports.Push(b) } }
+        case _ { }
+    }
+    f.mustLocals.Push(Vec<I64>())
+    f.withinLocals.Push(Vec<I64>())
+    f.freshLocals.Push(Vec<Bool>())
+    f.callers.Push(Vec<I64>())
+    f.taskAt.Push(false)
+    f.named.Push(false)
+    f.saved.Push(Array<I64>(0))
+    f.savedAt.Push(Array<I64>(0))
+    f.olIn.Push(false)
+    f.noteDtor(b)
+}
+
+# Decide's must-summaries, greatest fixed point: every body once in order, then again each body a callee of which
+# changed; how many bodies were summarized
+fn (f mut Free&) mustFixedPoint(order Array<I64>&) I64 {
+    n := f.Bodies.Len()
     mustCallers Vec<Vec<I64>>
     for _ in range n { mustCallers.Push(Vec<I64>()) }
     for b in range n {
@@ -840,9 +870,13 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
             }
         }
     }
-    t1 := time.Now()
-    # the may-summaries, least fixed point: every body walked once - which finds who calls whom - then again each body
-    # a callee of which changed its summary
+    return rm
+}
+
+# Decide's may-summaries, least fixed point: every body walked once - which finds who calls whom - then again each body
+# a callee of which changed its summary; how many walks it took
+fn (f mut Free&) mayFixedPoint(order Array<I64>&) I64 {
+    n := f.Bodies.Len()
     rw I64 = 0
     queue Vec<I64>
     queued := Array<Bool>(n, true)
@@ -861,32 +895,20 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
             }
         }
     }
-    t2 := time.Now()
-    if f.Debug { try io.PutErr($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n") catch io.Error { } }
-    # destructors, Str, Eq and Hash run where no call is written: one that lets go of a place keeps everything
-    for b in range n {
-        if f.lets[b].Len() > 0 or f.letsAll[b] or f.letsVia[b] != 0 {
-            # what it may let go of keeps: it runs where no call is written, so no view can be judged across it - every
-            # place, where it may let go of any
-            # (Part C: a destructor running only where a value's holder lets go of it is a call there - dtorCalls)
-            if f.implicit(b) and not f.modelled(b) {
-                if f.letsAll[b] or f.letsVia[b] != 0 { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
-                if f.Debug { try io.PutErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
-            }
-        }
+    return rw
+}
+
+# Decide's destructor, Str, Eq or Hash of body b that lets go of a place: it runs where no call is written, so what it
+# may let go of keeps
+fn (f mut Free&) hiddenLetGo(b I64) {
+    if f.lets[b].Len() == 0 and not f.letsAll[b] and f.letsVia[b] == 0 { return }
+    # what it may let go of keeps: it runs where no call is written, so no view can be judged across it - every
+    # place, where it may let go of any
+    # (Part C: a destructor running only where a value's holder lets go of it is a call there - dtorCalls)
+    if f.implicit(b) and not f.modelled(b) {
+        if f.letsAll[b] or f.letsVia[b] != 0 { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
+        if f.Debug { try io.PutErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
     }
-    t3 := time.Now()
-    for b in range n { f.walk(b, true) }
-    t4 := time.Now()
-    f.tasks = f.reachedTasks()
-    f.genKeeps()
-    f.decide()
-    f.classifyHolders()
-    if f.genOn: f.genDecide()
-    f.Done = true
-    f.writePlans()
-    t5 := time.Now()
-    if f.Debug { try io.PutErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
 }
 
 # ---- generational types and the one-holder rule (T13d, genrefs 0.1 item 5, 4.1) ----

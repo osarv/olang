@@ -5717,40 +5717,7 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         ln.popIf(ln.errCodeOf(x, args[0].Type()), ln.T.ErrValItems(args[0].Type()), sp)
         return mir.Operand.None
     }
-    if op == typed.PrimOp.Drop {
-        # O15, T13b: a by-value holder letting go - the value's destructors run in the closing block's scope (C9a)
-        match args[0] {
-            case typed.Expr.Borrow(_, _, p) {
-                a := ln.place(p)
-                if ln.dead { return mir.Operand.None }
-                home := ln.escapedHome(p)
-                # (K1, K2c: with no plan a landed holder's drop is not known here - registered with its block, which
-                # the evaluator refuses)
-                if not ln.planned and p == typed.Lvalue.Local and ln.B.Locals[I64(p.id)].Landed { home = ln.innermost() }
-                if home == mir.ScopeRef.Frame {
-                    das := ln.plan.DropDerivedOf(args[0]) if ln.planned else Vec<typed.DerivedArg>()
-                    # (C9a: a place that is no local - a collection's element it vacates - ended in the scope its value
-                    # lives in, as the scope pass judged its destructor's builds)
-                    held := ln.plan.DropHomeOf(args[0]) if ln.planned and p != typed.Lvalue.Local else typed.Scope.Unset
-                    ln.dropAt(a, p.Type(), ln.innermost() if held == typed.Scope.Unset else ln.scopeRef(held), sp, das.Len() > 0, das)
-                    # Part C (O8d): a holder letting go as its block is left releases what its sole leaves hold, once
-                    # its destructors ran (free.olang's LHeld)
-                    if ln.heldDrop and ln.freeing and p == typed.Lvalue.Local and not ln.dead {
-                        ln.releaseAt(mir.LocalId(I32(p.id)), ln.leafPaths(p.Type()), sp)
-                    }
-                    return mir.Operand.None
-                }
-                # (bulk review 7, F4) a holder whose storage the scope pass moved where it flows - the result's, a
-                # parameter's, an outer block's - lets go of nothing here: its value is registered where its storage
-                # lives, as a call's value no slot takes is (O16), and its destructors run as that scope closes
-                rt := ln.T.Ref(p.Type(), types.Writable)
-                r := ln.into(rt, mir.Rvalue.Ref(ln.mk(a), rt), sp)
-                ln.emit(mir.Stmt.RegisterDtor(sp, home, p.Type(), r))
-            }
-            case _ { ln.gap(sp, "a drop of no place") }
-        }
-        return mir.Operand.None
-    }
+    if op == typed.PrimOp.Drop { return ln.dropPrim(args, sp) }
     if op == typed.PrimOp.LaneLen {
         # E39: two lanes' lengths, the first once they agree - a guaranteed check, once per lane operation
         a := ln.val(args[0])
@@ -5818,6 +5785,42 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         return e if op == typed.PrimOp.Eq else ln.prim(typed.PrimOp.Not, types.BoolT, Array<mir.Operand>[e], sp)
     }
     return ln.prim(op, ty, ops, sp)
+}
+
+# primExpr's drop: a by-value holder letting go - the value's destructors run in the closing block's scope (O15, T13b,
+# C9a)
+fn (ln mut lowering&) dropPrim(args Array<typed.Expr&>&, sp source.Span) mir.Operand {
+    match args[0] {
+        case typed.Expr.Borrow(_, _, p) {
+            a := ln.place(p)
+            if ln.dead { return mir.Operand.None }
+            home := ln.escapedHome(p)
+            # (K1, K2c: with no plan a landed holder's drop is not known here - registered with its block, which
+            # the evaluator refuses)
+            if not ln.planned and p == typed.Lvalue.Local and ln.B.Locals[I64(p.id)].Landed { home = ln.innermost() }
+            if home == mir.ScopeRef.Frame {
+                das := ln.plan.DropDerivedOf(args[0]) if ln.planned else Vec<typed.DerivedArg>()
+                # (C9a: a place that is no local - a collection's element it vacates - ended in the scope its value
+                # lives in, as the scope pass judged its destructor's builds)
+                held := ln.plan.DropHomeOf(args[0]) if ln.planned and p != typed.Lvalue.Local else typed.Scope.Unset
+                ln.dropAt(a, p.Type(), ln.innermost() if held == typed.Scope.Unset else ln.scopeRef(held), sp, das.Len() > 0, das)
+                # Part C (O8d): a holder letting go as its block is left releases what its sole leaves hold, once
+                # its destructors ran (free.olang's LHeld)
+                if ln.heldDrop and ln.freeing and p == typed.Lvalue.Local and not ln.dead {
+                    ln.releaseAt(mir.LocalId(I32(p.id)), ln.leafPaths(p.Type()), sp)
+                }
+                return mir.Operand.None
+            }
+            # (bulk review 7, F4) a holder whose storage the scope pass moved where it flows - the result's, a
+            # parameter's, an outer block's - lets go of nothing here: its value is registered where its storage
+            # lives, as a call's value no slot takes is (O16), and its destructors run as that scope closes
+            rt := ln.T.Ref(p.Type(), types.Writable)
+            r := ln.into(rt, mir.Rvalue.Ref(ln.mk(a), rt), sp)
+            ln.emit(mir.Stmt.RegisterDtor(sp, home, p.Type(), r))
+        }
+        case _ { ln.gap(sp, "a drop of no place") }
+    }
+    return mir.Operand.None
 }
 
 # T32a: an "any" made of a reference to its instance and its table - an array's copy put in the box the conversion

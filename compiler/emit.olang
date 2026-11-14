@@ -2839,13 +2839,7 @@ fn foldSlots(body String&, nlocals I64) String {
             for j < z and symbolChar(body[j]) { j++ }
             if m >= 0 and m < subst.Len() and subst[m] != "" {
                 out.Push(body[at:i])
-                r := subst[m]
-                for {
-                    q := tempNumber(r, 0, r.Len())
-                    if q < 0 or q >= subst.Len() or subst[q] == "" { break }
-                    r = subst[q]
-                }
-                out.Push(r)
+                out.Push(finalSubst(subst, m))
                 at = j
             }
             i = j
@@ -2854,6 +2848,16 @@ fn foldSlots(body String&, nlocals I64) String {
         if z < n { out.PushChar('\n') }
     }
     return out.ToString()
+}
+
+# foldSlots' text for the temporary numbered m: what it was folded into, followed through the temporaries that names
+fn finalSubst(subst Vec<String&>&, m I64) String& {
+    r := subst[m]
+    for {
+        q := tempNumber(r, 0, r.Len())
+        if q < 0 or q >= subst.Len() or subst[q] == "" { return r }
+        r = subst[q]
+    }
 }
 
 # the number K of a temporary "%tK" starting at i of text and ending before z, the whole name (what follows it no
