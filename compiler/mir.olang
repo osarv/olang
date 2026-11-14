@@ -1989,11 +1989,8 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             } else {
                 it := t.Referent(ra)
                 for i in range 1, n { v.want(v.operandType(v.arg(r, i)), it, $short($op) "'s operand " $i) }
-                if op == typed.PrimOp.AtomicStore {
-                    if ty != types.VoidT { v.bad("AtomicStore typed " $v.canon(ty)) }
-                } else if not v.fits(it, ty) {
-                    v.bad($short($op) " typed " $v.canon(ty))
-                }
+                if op == typed.PrimOp.AtomicStore and ty != types.VoidT: v.bad("AtomicStore typed " $v.canon(ty))
+                if op != typed.PrimOp.AtomicStore and not v.fits(it, ty): v.bad($short($op) " typed " $v.canon(ty))
             }
         }
     }

@@ -459,49 +459,8 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     name := $nm.Text(c.P.T.DeclName(d)) $typeVars(c, generic.DeclOwner(d), 0)
     match c.P.T.DeclKindOf(d) {
         case types.DeclKind.Foreign { return $"extern type " $name "\n" }
-        case types.DeclKind.Error {
-            # T19, T19a: its members as written, then its own words
-            if c.P.IsRaisedError(d) {
-                b.Push($"error " $name)
-                wordPayload(b, c, self, 0)
-                b.Push("   # declared where it is raised (R3b)\n")
-                return b.ToString()
-            }
-            src := c.P.L.Mods[c.P.DeclModule(d)].Src!.Text
-            b.Push($"type " $name " error")
-            ms := c.P.ErrorMembers(d)
-            for i in range ms.Len() { b.Push($(", " if i > 0 else " ") $src[I64(ms[i].Sp.Start):I64(ms[i].Sp.End)]) }
-            b.Push("\n")
-            ws := c.P.ErrorWords(d)
-            for k in range ws.Len() {
-                b.Push($"    " $nm.Text(ws[k]))
-                wordPayload(b, c, self, k)
-                b.PushChar('\n')
-            }
-            return b.ToString()
-        }
-        case types.DeclKind.Trait {
-            td := c.P.TypeDecl(d)
-            mi := c.P.DeclModule(d)
-            src := c.P.L.Mods[mi].Src!.Text
-            b.Push($"type " $name " trait")
-            match td!.Body {
-                case ast.TypeBody.Trait(_, exts, members) {
-                    # what it extends (T30a) and the types it lists (T31a), as written
-                    if exts.Len() > 0 { b.Push($" extends " $listed(src, exts)) }
-                    if members.Len() > 0 { b.Push($" for " $listed(src, members)) }
-                }
-                case _ { }
-            }
-            b.Push("\n")
-            match td!.Body {
-                case ast.TypeBody.Trait(ms, _, _) {
-                    for m in ms { b.Push($"    " $src[I64(m.Sp.Start):I64(m.Sp.End)].Trim() "\n") }
-                }
-                case _ { }
-            }
-            return b.ToString()
-        }
+        case types.DeclKind.Error { return errorTypeItem(b, c, d, self, name) }
+        case types.DeclKind.Trait { return traitItem(b, c, d, name) }
         case types.DeclKind.Enum {
             b.Push($"type " $name $declWord(c, self) " enum\n")
             genLine(b, c, d)
@@ -520,14 +479,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             bt := c.P.T.Base(self)
             b.Push($"type " $name $declWord(c, self) $(" extends " if c.P.Extends(self) else " ") $(declSig(c, bt) if c.P.T.KindOf(bt) == types.Kind.Func else c.Ty(bt)))
             # T29d: its constructor's parameter and errors
-            match c.P.TypeDecl(d)!.Body {
-                case ast.TypeBody.Over(_, ctor) if ctor is not null {
-                    sig := declSig(c, named(c, c.P.CtorSig(self), null, ctor.S.Params))
-                    close := firstClose(sig)
-                    b.Push($sig[2:close + 1] $errorsAfter(sig[close + 1:]))
-                }
-                case _ { }
-            }
+            overCtor(b, c, d, self)
             b.PushChar('\n')
         }
         case types.DeclKind.Struct {
@@ -535,12 +487,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             close := firstClose(sig)
             ps := withDefaults(c, sig[3:close], ctorParams(c.P.TypeDecl(d)!), c.P.DeclModule(d), 0)
             b.Push($"type " $name $declWord(c, self) $(" packed" if c.P.T.Packed(self) else "") " struct(" $ps ")" $errorsAfter(sig[close + 1:]) "\n")
-            match c.P.TypeDecl(d)!.Body {
-                case ast.TypeBody.Struct(sb) {
-                    if sb.Errs is not null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }
-                }
-                case _ { }
-            }
+            structContract(b, c, d)
             genLine(b, c, d)
             fields(b, c, self)
         }
@@ -548,6 +495,76 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     builders(b, c, d)
     methods(b, c, self)
     traitsMet(b, c, self)
+    return b.ToString()
+}
+
+# typeItem's constructor of a declared primitive, its parameter and errors (T29d)
+fn overCtor(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, self types.TypeId) {
+    match c.P.TypeDecl(d)!.Body {
+        case ast.TypeBody.Over(_, ctor) if ctor is not null {
+            sig := declSig(c, named(c, c.P.CtorSig(self), null, ctor.S.Params))
+            close := firstClose(sig)
+            b.Push($sig[2:close + 1] $errorsAfter(sig[close + 1:]))
+        }
+        case _ { }
+    }
+}
+
+# typeItem's struct's contract (D17), as written
+fn structContract(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
+    match c.P.TypeDecl(d)!.Body {
+        case ast.TypeBody.Struct(sb) {
+            if sb.Errs is not null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }
+        }
+        case _ { }
+    }
+}
+
+# typeItem's trait: what it extends and lists, and its methods as written
+fn traitItem(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, name String&) String {
+    td := c.P.TypeDecl(d)
+    mi := c.P.DeclModule(d)
+    src := c.P.L.Mods[mi].Src!.Text
+    b.Push($"type " $name " trait")
+    match td!.Body {
+        case ast.TypeBody.Trait(_, exts, members) {
+            # what it extends (T30a) and the types it lists (T31a), as written
+            if exts.Len() > 0 { b.Push($" extends " $listed(src, exts)) }
+            if members.Len() > 0 { b.Push($" for " $listed(src, members)) }
+        }
+        case _ { }
+    }
+    b.Push("\n")
+    match td!.Body {
+        case ast.TypeBody.Trait(ms, _, _) {
+            for m in ms { b.Push($"    " $src[I64(m.Sp.Start):I64(m.Sp.End)].Trim() "\n") }
+        }
+        case _ { }
+    }
+    return b.ToString()
+}
+
+# typeItem's error type
+fn errorTypeItem(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, self types.TypeId, name String&) String {
+    nm := c.P.L.Names
+    # T19, T19a: its members as written, then its own words
+    if c.P.IsRaisedError(d) {
+        b.Push($"error " $name)
+        wordPayload(b, c, self, 0)
+        b.Push("   # declared where it is raised (R3b)\n")
+        return b.ToString()
+    }
+    src := c.P.L.Mods[c.P.DeclModule(d)].Src!.Text
+    b.Push($"type " $name " error")
+    ms := c.P.ErrorMembers(d)
+    for i in range ms.Len() { b.Push($(", " if i > 0 else " ") $src[I64(ms[i].Sp.Start):I64(ms[i].Sp.End)]) }
+    b.Push("\n")
+    ws := c.P.ErrorWords(d)
+    for k in range ws.Len() {
+        b.Push($"    " $nm.Text(ws[k]))
+        wordPayload(b, c, self, k)
+        b.PushChar('\n')
+    }
     return b.ToString()
 }
 

@@ -2028,14 +2028,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
             for prm in sb.Params { c.dtorWritten(prm.Ty) }   # C11: a parameter's type is checked nowhere else
         }
         case ast.TypeBody.Enum(cases, _) {
-            # T4, T17: a payload's types are known ones, said where they are written
-            for cd in cases {
-                if cd.Payload.Len() == 0 { continue }
-                for prm in cd.Payload {
-                    c.weakHere = true   # T2d: a payload's field may be weak
-                    c.writtenMet(prm.Ty)
-                }
-            }
+            c.payloadTypesMet(cases)
             c.raws.Put(I64(d), c.rawTable(d, true))   # T17e, said here
         }
         case _ { }
@@ -2051,9 +2044,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
             b := c.P.Resolve(fr.Ctx, base)
             if c.isNamed(b) {
                 k := c.declKind(b)
-                if k != types.DeclKind.Over or c.P.T.Args(b) != types.ListId(0) {
-                    c.err(base.Span(), msgs.DeclaredOverAggregate(c.ty(b)))
-                }
+                if k != types.DeclKind.Over or c.P.T.Args(b) != types.ListId(0): c.err(base.Span(), msgs.DeclaredOverAggregate(c.ty(b)))
             } else if c.P.T.KindOf(b) == types.Kind.Array and c.holdsSelf(d, b) {
                 c.err(nsp, msgs.ArrayTypeHoldsItself(name, name, c.ty(b)))
             } else if c.P.T.KindOf(b) == types.Kind.Func {
@@ -2065,32 +2056,8 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
     # T16: a struct or an enum holding itself by value - directly, or through a fixed array, a payload or another
     # value it holds - is infinitely large
     match td.Body {
-        case ast.TypeBody.Struct(sb) {
-            self := c.P.SelfType(d)
-            # a generic's is said per instance, as its constructor is checked (holdsItself)
-            if c.P.T.Items(c.P.T.Args(self)).Len() == 0 and c.P.Body(self) {
-                fs := c.P.T.Items(c.P.T.Fields(self))
-                sps := fieldSpans(sb)
-                for i in range fs.Len() {
-                    if i >= sps.Len() or not c.holdsBy(fs[i], d, 0) { continue }
-                    c.err(sps[i], msgs.TypeHoldsItself(c.ty(self)))
-                    break
-                }
-            }
-        }
-        case ast.TypeBody.Enum(cases, _) {
-            self := c.P.SelfType(d)
-            said := false
-            for cd in cases {
-                if said or cd.Payload.Len() == 0 { continue }
-                for prm in cd.Payload {
-                    if not c.holdsBy(c.P.Resolve(fr.Ctx, prm.Ty), d, 0) { continue }
-                    c.err(source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len())), msgs.TypeHoldsItself(c.ty(self)))
-                    said = true
-                    break
-                }
-            }
-        }
+        case ast.TypeBody.Struct(sb) { c.structHoldsSelf(sb, d) }
+        case ast.TypeBody.Enum(cases, _) { c.enumHoldsSelf(cases, d, fr.Ctx) }
         case _ { }
     }
     if td.Extends and not over {
@@ -2100,6 +2067,42 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
     c.uniqueRules(sp, td, d)
     c.packedRules(sp, nsp, td, d)
     c.pop()
+}
+
+# T4, T17: typeRules' payloads' types are known ones, said where they are written
+fn (c mut Checker&) payloadTypesMet(cases Array<ast.CaseDecl&>&) {
+    for cd in cases {
+        for prm in cd.Payload {
+            c.weakHere = true   # T2d: a payload's field may be weak
+            c.writtenMet(prm.Ty)
+        }
+    }
+}
+
+# T16: typeRules' struct holding itself by value, said at the first field that does - a generic's is said per instance,
+# as its constructor is checked (holdsItself)
+fn (c mut Checker&) structHoldsSelf(sb ast.StructBody&, d types.DeclId) {
+    self := c.P.SelfType(d)
+    if c.P.T.Items(c.P.T.Args(self)).Len() != 0 or not c.P.Body(self) { return }
+    fs := c.P.T.Items(c.P.T.Fields(self))
+    sps := fieldSpans(sb)
+    for i in range fs.Len() {
+        if i >= sps.Len() or not c.holdsBy(fs[i], d, 0) { continue }
+        c.err(sps[i], msgs.TypeHoldsItself(c.ty(self)))
+        return
+    }
+}
+
+# T16: typeRules' enum holding itself by value, said at the first payload field that does
+fn (c mut Checker&) enumHoldsSelf(cases Array<ast.CaseDecl&>&, d types.DeclId, ctx generic.Context&) {
+    self := c.P.SelfType(d)
+    for cd in cases {
+        for prm in cd.Payload {
+            if not c.holdsBy(c.P.Resolve(ctx, prm.Ty), d, 0) { continue }
+            c.err(source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len())), msgs.TypeHoldsItself(c.ty(self)))
+            return
+        }
+    }
 }
 
 # T13b: what "unique" is said of - a struct, an enum or a type over another, never with what is immut (written over one,
