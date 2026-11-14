@@ -12,7 +12,7 @@ with:
 - clang 18, 19 or 20. On Ubuntu 24.04 that is `sudo apt install clang-18`; older releases get it from
   https://apt.llvm.org: `wget https://apt.llvm.org/llvm.sh && sudo bash llvm.sh 18`.
 - make, xz, libffi and the C library's headers: `sudo apt install make xz-utils libffi-dev libc6-dev`.
-- About 4 GB of memory free and 1 GB of disk. The build runs as many of clang's compiles at once as the memory
+- About 4.5 GB of memory free (the compiler builds itself in 3.7 GB, the rest is clang) and 1 GB of disk. The build runs as many of clang's compiles at once as the memory
   available holds (512 MB each), never more than one per core; `OLANG_JOBS=N make` sets the number. Under WSL the
   memory is what `.wslconfig`'s `memory=` gives it (by default half the machine's).
 
