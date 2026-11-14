@@ -2067,24 +2067,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             b.Push("void" if id == VoidT else primNames[I64(id)])
         }
         case Kind.Int { b.Push($("I" if d.B == 1 else "U") $d.A) }
-        case Kind.Named {
-            dl := t.DeclOf(id)
-            b.Push(t.Modules[t.DeclModule(dl)])
-            b.PushChar(':')
-            b.Push(t.Names.Text(t.DeclName(dl)))
-            args := t.Items(t.Args(id))
-            # G1a: an error-set argument after the types, " ? A + B" - the empty set left out, as "Iterator<I64>" writes it
-            n := args.Len()
-            if n > 0 and t.KindOf(args[n - 1]) == Kind.ErrSet and t.ErrSetItems(args[n - 1]) == ListId(0) { n-- }
-            if n > 0 {
-                b.PushChar('<')
-                for i in range n {
-                    if i > 0 { b.Push(" " if t.KindOf(args[i]) == Kind.ErrSet else ", ") }
-                    t.canon(b, args[i])
-                }
-                b.PushChar('>')
-            }
-        }
+        case Kind.Named { t.canonNamed(b, id) }
         case Kind.Array {
             b.Push("Array<")
             t.canon(b, t.Elem(id))
@@ -2106,54 +2089,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             t.canon(b, t.Referent(id))
             b.Push("?&" if (p & Nullable) != 0 else "&")
         }
-        case Kind.Func {
-            b.Push("fn?" if (d.F & Nullable) != 0 else "fn")
-            if (d.F >> 8) != 0 {
-                # T21b: the declared function type it is, "fn[m:Handler](...)"
-                b.PushChar('[')
-                t.canon(b, TypeId(I32(d.F >> 8)))
-                b.PushChar(']')
-            }
-            b.PushChar('(')
-            t.joined(b, t.Params(id))
-            b.PushChar(')')
-            r := t.Result(id)
-            if r != VoidT {
-                fnResult := t.KindOf(r) == Kind.Func
-                b.Push(" (" if fnResult else " ")
-                t.canon(b, r)
-                if fnResult { b.PushChar(')') }
-            }
-            errs := t.Items(t.Errors(id))
-            if errs.Len() > 0 {
-                b.Push(" ?")
-                if not (errs.Len() == 1 and errs[0] == DefaultErrT) { t.canonErrs(b, errs) }
-            }
-            if d.G != 0 {
-                # T21c: its promises by position, " ![returns, borrows 0, keeps 1 in 0.f, keeps 1]"
-                b.Push(" ![")
-                t.canonPromises(b, id)
-                b.PushChar(']')
-            }
-            if t.canonNames and d.E != 0 {
-                b.PushChar('{')
-                ns := t.nameLists[d.E]
-                for i in range ns.Len() {
-                    if i > 0 { b.PushChar(',') }
-                    b.Push(t.Names.Text(source.NameId(I32(ns[i]))))
-                }
-                b.PushChar('}')
-            }
-            if d.D != 0 {
-                sc := t.scopes[d.D]
-                b.Push(" ~[")
-                for i in range sc.Len() {
-                    if i > 0 { b.PushChar(',') }
-                    b.Push($sc[i])
-                }
-                b.PushChar(']')
-            }
-        }
+        case Kind.Func { t.canonFunc(b, id) }
         case Kind.Tuple {
             b.PushChar('(')
             t.joined(b, t.Parts(id))
@@ -2204,6 +2140,77 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             b.PushChar('?')
             t.canonErrs(b, t.Items(t.ErrSetItems(id)))
         }
+    }
+}
+
+# canon's function type: its parameters, result, errors, promises, parameter names and scopes
+fn (t mut Table&) canonFunc(b mut StringBuilder&, id TypeId) {
+    d := t.at(id)
+    b.Push("fn?" if (d.F & Nullable) != 0 else "fn")
+    if (d.F >> 8) != 0 {
+        # T21b: the declared function type it is, "fn[m:Handler](...)"
+        b.PushChar('[')
+        t.canon(b, TypeId(I32(d.F >> 8)))
+        b.PushChar(']')
+    }
+    b.PushChar('(')
+    t.joined(b, t.Params(id))
+    b.PushChar(')')
+    r := t.Result(id)
+    if r != VoidT {
+        fnResult := t.KindOf(r) == Kind.Func
+        b.Push(" (" if fnResult else " ")
+        t.canon(b, r)
+        if fnResult { b.PushChar(')') }
+    }
+    errs := t.Items(t.Errors(id))
+    if errs.Len() > 0 {
+        b.Push(" ?")
+        if not (errs.Len() == 1 and errs[0] == DefaultErrT) { t.canonErrs(b, errs) }
+    }
+    if d.G != 0 {
+        # T21c: its promises by position, " ![returns, borrows 0, keeps 1 in 0.f, keeps 1]"
+        b.Push(" ![")
+        t.canonPromises(b, id)
+        b.PushChar(']')
+    }
+    if t.canonNames and d.E != 0 {
+        b.PushChar('{')
+        ns := t.nameLists[d.E]
+        for i in range ns.Len() {
+            if i > 0 { b.PushChar(',') }
+            b.Push(t.Names.Text(source.NameId(I32(ns[i]))))
+        }
+        b.PushChar('}')
+    }
+    if d.D != 0 {
+        sc := t.scopes[d.D]
+        b.Push(" ~[")
+        for i in range sc.Len() {
+            if i > 0 { b.PushChar(',') }
+            b.Push($sc[i])
+        }
+        b.PushChar(']')
+    }
+}
+
+# canon's declared type: its module, its name and its type arguments
+fn (t mut Table&) canonNamed(b mut StringBuilder&, id TypeId) {
+    dl := t.DeclOf(id)
+    b.Push(t.Modules[t.DeclModule(dl)])
+    b.PushChar(':')
+    b.Push(t.Names.Text(t.DeclName(dl)))
+    args := t.Items(t.Args(id))
+    # G1a: an error-set argument after the types, " ? A + B" - the empty set left out, as "Iterator<I64>" writes it
+    n := args.Len()
+    if n > 0 and t.KindOf(args[n - 1]) == Kind.ErrSet and t.ErrSetItems(args[n - 1]) == ListId(0) { n-- }
+    if n > 0 {
+        b.PushChar('<')
+        for i in range n {
+            if i > 0 { b.Push(" " if t.KindOf(args[i]) == Kind.ErrSet else ", ") }
+            t.canon(b, args[i])
+        }
+        b.PushChar('>')
     }
 }
 

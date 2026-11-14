@@ -12037,138 +12037,8 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
         return c.unknown(sp)
     }
     match f {
-        case ast.Expr.Name(nsp, n) {
-            ref := c.P.R.Use(c.fr().File, nsp.Start)
-            if ref.Kind == names.What.Func { return c.invoke(sp, nsp, c.P.FnNamed(ref.Module, n), null, args, Array<typed.Expr&>(0)) }
-            if ref.Kind == names.What.Builtin { return c.conversion(sp, c.builtinType(n), args) }
-            if ref.Kind == names.What.Type {
-                t := c.typeNamed(f)
-                if t < types.TypeId(0) and ref.Index >= 0 { return c.inferredCtor(sp, nsp, c.P.DeclFor(ref.Module, ref.Index), args, want) }
-                if t < types.TypeId(0) { return c.unknown(sp) }
-                return c.construct(sp, nsp, t, args)
-            }
-            if ref.Kind == names.What.None {
-                # B11: with the name it most likely meant - a number's, said as an unknown type (T4)
-                best := c.suggest(c.text(n), true)
-                if best.Len() == 0: c.err(nsp, msgs.UnknownFunction(c.tok(n)))
-                else if c.P.T.Prim(best) != types.UnknownT: c.err(nsp, msgs.UnknownNumberType(c.tok(n), best))
-                else: c.err(nsp, msgs.UnknownFunctionMeant(c.tok(n), best))
-                c.dropArgs(args)
-                return c.unknown(sp)
-            }
-            if ref.Kind == names.What.Local {
-                # G34: a case descriptor called builds its case, as the case's name would - a struct's one case its
-                # constructor
-                dt := c.descTypeOf(f)
-                if dt == types.UnknownT {
-                    c.dropArgs(args)
-                    return c.unknown(sp)
-                }
-                if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescFunc { return c.reflFnCall(sp, nsp, c.P.DescOf(dt), args) }
-                if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescCase {
-                    ds := c.P.DescOf(dt)
-                    r := c.P.ReflUnder(ds.Of)
-                    if c.isStruct(r) { return c.construct(sp, nsp, ds.Of, args) }
-                    if c.P.T.KindOf(r) == types.Kind.ErrVal { return c.errWordCalled(sp, r, ds.Case, args) }
-                    return c.enumCase(sp, nsp, ds.Of, c.P.T.CaseNames(r)[ds.Case], args)
-                }
-            }
-            if ref.Kind == names.What.Local or ref.Kind == names.What.Global {
-                return c.callValue(sp, nsp, c.expr(f, types.UnknownT), args)
-            }
-            if ref.Kind == names.What.TypeVar {
-                # G8b: U(x) in an instance is the call its bound type's name is - a conversion, or a constructor
-                t := c.typeNamed(f)
-                if t >= types.TypeId(0) and (c.P.T.IsFloat(t) or c.P.T.IsInt(t) or t == types.BoolT) { return c.conversion(sp, t, args) }
-                if t >= types.TypeId(0) and c.isNamed(t) { return c.construct(sp, nsp, t, args) }
-                if t >= types.TypeId(0) and c.P.T.KindOf(t) != types.Kind.Var {
-                    c.err(nsp, msgs.NotCallable(c.ty(t)))
-                    c.dropArgs(args)
-                    return c.unknown(sp)
-                }
-            }
-            c.gap(nsp, "a call of a name of this kind")
-            return c.unknown(sp)
-        }
-        case ast.Expr.Member(msp, x, n) {
-            ref := c.P.R.Member(c.fr().File, msp.End)
-            nsp := memberSpan(msp, c.text(n).Len())
-            if ref.Kind == names.What.Func { return c.invoke(sp, nsp, c.P.FnNamed(ref.Module, n), null, args, Array<typed.Expr&>(0)) }
-            if ref.Kind == names.What.Type {
-                t := c.typeNamed(f)
-                if t < types.TypeId(0) and ref.Index >= 0 { return c.inferredCtor(sp, nsp, c.P.DeclFor(ref.Module, ref.Index), args, want) }
-                if t < types.TypeId(0) { return c.unknown(sp) }
-                return c.construct(sp, nsp, t, args)
-            }
-            if ref.Kind != names.What.None {
-                c.gap(nsp, "a call of this kind")
-                return c.unknown(sp)
-            }
-            # D19: a builder, through its owner's name - "Color.FromHex(t)", "List<I64>.Of(a)", "T.Parse(t)"
-            bc := c.builderCall(sp, nsp, x, n, args, Array<ast.TypeRef&>(0), nsp)
-            if bc is not null { return bc }
-            # G38: a reflected type called is the call its type's name is - "T.Base(x)", "p.Type(v)" - unless the
-            # name is a case of the enum named ("ast.Decl.Type(...)")
-            et0 := c.typeNamed(x)
-            caseNamed := et0 >= types.TypeId(0) and c.isEnum(et0) and c.hasCase(et0, n)
-            gd0 := c.genericNamed(x)
-            if gd0 >= types.DeclId(0) and c.P.T.DeclKindOf(gd0) == types.DeclKind.Enum { caseNamed = true }
-            if generic.ProjectsType(c.text(n)) and not caseNamed {
-                rt := c.reflType(f)
-                if rt == types.UnknownT {
-                    c.dropArgs(args)
-                    return c.unknown(sp)
-                }
-                if rt >= types.TypeId(0) and (c.P.T.IsFloat(rt) or c.P.T.IsInt(rt) or rt == types.BoolT) { return c.conversion(sp, rt, args) }
-                if rt >= types.TypeId(0) and c.isNamed(rt) { return c.construct(sp, nsp, rt, args) }
-                if rt >= types.TypeId(0) {
-                    c.err(nsp, msgs.NotCallable(c.ty(rt)))
-                    c.dropArgs(args)
-                    return c.unknown(sp)
-                }
-            }
-            et := c.typeNamed(x)
-            if et < types.TypeId(0) { et = c.instanceWritten(x) }   # D19: "Bag<I64>.mk(7)" with no builder of that instance
-            if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
-            if et >= types.TypeId(0) and not c.isEnum(et) and not (c.isNamed(et) and c.declKind(et) == types.DeclKind.Error) {   # an error word with a payload is built as its case (T19b)
-                c.noBuilder(nsp, x, et, n)
-                c.dropArgs(args)
-                return c.unknown(sp)
-            }
-            if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
-            gd := c.genericNamed(x)
-            if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, args, want) }
-            # G33, G34: a list's Len, a field's Of
-            rl := c.listOf(x)
-            if rl.Ok {
-                if c.text(n) == "Len" and args.Len() == 0 {
-                    if rl.Of == types.UnknownT { return c.unknown(sp) }
-                    return c.lit(sp, c.i64(), c.listItems(x.Span(), rl).Len())
-                }
-                c.err(x.Span(), msgs.ReflListValue($c.src(x.Span())))
-                c.dropArgs(args)
-                return c.unknown(sp)
-            }
-            dt := c.descTypeOf(x)
-            if dt >= types.TypeId(0) and c.text(n) == "Of" {
-                if dt == types.UnknownT { return c.unknown(sp) }
-                fp := c.reflOf(sp, nsp, dt, args)
-                if fp is null { return c.unknown(sp) }
-                return c.read(sp, fp)
-            }
-            if ref.Kind == names.What.None and c.importPath(x) {
-                # a name the imported module does not declare (or does not export: the resolver said so already)
-                at := match x {
-                    case ast.Expr.Name(xsp, _): c.P.R.Use(c.fr().File, xsp.Start).Module
-                    case ast.Expr.Member(xsp, _, _): c.P.R.Member(c.fr().File, xsp.End).Module
-                    case _: -1
-                }
-                if at >= 0 and not c.declaresName(at, n) { c.notInModule(at, n, nsp) }
-                c.dropArgs(args)
-                return c.unknown(sp)
-            }
-            return c.methodCall(sp, x, n, nsp, args)
-        }
+        case ast.Expr.Name(nsp, n) { return c.callNamed(sp, f, nsp, n, args, want) }
+        case ast.Expr.Member(msp, x, n) { return c.callMember(sp, f, msp, x, n, args, want) }
         case ast.Expr.Generic(gsp, g, targs) {
             # G40: x.Attr<A>(), x.HasAttr<A>() - a type's or a descriptor's attributes
             ar := c.attrRead(sp, g, targs, args)
@@ -12177,6 +12047,144 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
         }
         case _ { return c.callValue(sp, c.opAfter(f.Span(), 1), c.expr(f, types.UnknownT), args) }
     }
+}
+
+# call's function written as a member, x.n: an imported function or type, a builder (D19), a reflected type (G38), an
+# enum case, a list's Len (G33), a field's Of (G34), else a method
+fn (c mut Checker&) callMember(sp source.Span, f ast.Expr&, msp source.Span, x ast.Expr&, n source.NameId, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
+    ref := c.P.R.Member(c.fr().File, msp.End)
+    nsp := memberSpan(msp, c.text(n).Len())
+    if ref.Kind == names.What.Func { return c.invoke(sp, nsp, c.P.FnNamed(ref.Module, n), null, args, Array<typed.Expr&>(0)) }
+    if ref.Kind == names.What.Type {
+        t := c.typeNamed(f)
+        if t < types.TypeId(0) and ref.Index >= 0 { return c.inferredCtor(sp, nsp, c.P.DeclFor(ref.Module, ref.Index), args, want) }
+        if t < types.TypeId(0) { return c.unknown(sp) }
+        return c.construct(sp, nsp, t, args)
+    }
+    if ref.Kind != names.What.None {
+        c.gap(nsp, "a call of this kind")
+        return c.unknown(sp)
+    }
+    # D19: a builder, through its owner's name - "Color.FromHex(t)", "List<I64>.Of(a)", "T.Parse(t)"
+    bc := c.builderCall(sp, nsp, x, n, args, Array<ast.TypeRef&>(0), nsp)
+    if bc is not null { return bc }
+    # G38: a reflected type called is the call its type's name is - "T.Base(x)", "p.Type(v)" - unless the
+    # name is a case of the enum named ("ast.Decl.Type(...)")
+    et0 := c.typeNamed(x)
+    caseNamed := et0 >= types.TypeId(0) and c.isEnum(et0) and c.hasCase(et0, n)
+    gd0 := c.genericNamed(x)
+    if gd0 >= types.DeclId(0) and c.P.T.DeclKindOf(gd0) == types.DeclKind.Enum { caseNamed = true }
+    if generic.ProjectsType(c.text(n)) and not caseNamed {
+        rt := c.reflType(f)
+        if rt == types.UnknownT {
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        if rt >= types.TypeId(0) and (c.P.T.IsFloat(rt) or c.P.T.IsInt(rt) or rt == types.BoolT) { return c.conversion(sp, rt, args) }
+        if rt >= types.TypeId(0) and c.isNamed(rt) { return c.construct(sp, nsp, rt, args) }
+        if rt >= types.TypeId(0) {
+            c.err(nsp, msgs.NotCallable(c.ty(rt)))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+    }
+    et := c.typeNamed(x)
+    if et < types.TypeId(0) { et = c.instanceWritten(x) }   # D19: "Bag<I64>.mk(7)" with no builder of that instance
+    if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
+    if et >= types.TypeId(0) and not c.isEnum(et) and not (c.isNamed(et) and c.declKind(et) == types.DeclKind.Error) {   # an error word with a payload is built as its case (T19b)
+        c.noBuilder(nsp, x, et, n)
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
+    gd := c.genericNamed(x)
+    if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, args, want) }
+    # G33, G34: a list's Len, a field's Of
+    rl := c.listOf(x)
+    if rl.Ok {
+        if c.text(n) == "Len" and args.Len() == 0 {
+            if rl.Of == types.UnknownT { return c.unknown(sp) }
+            return c.lit(sp, c.i64(), c.listItems(x.Span(), rl).Len())
+        }
+        c.err(x.Span(), msgs.ReflListValue($c.src(x.Span())))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    dt := c.descTypeOf(x)
+    if dt >= types.TypeId(0) and c.text(n) == "Of" {
+        if dt == types.UnknownT { return c.unknown(sp) }
+        fp := c.reflOf(sp, nsp, dt, args)
+        if fp is null { return c.unknown(sp) }
+        return c.read(sp, fp)
+    }
+    if ref.Kind == names.What.None and c.importPath(x) {
+        # a name the imported module does not declare (or does not export: the resolver said so already)
+        at := match x {
+            case ast.Expr.Name(xsp, _): c.P.R.Use(c.fr().File, xsp.Start).Module
+            case ast.Expr.Member(xsp, _, _): c.P.R.Member(c.fr().File, xsp.End).Module
+            case _: -1
+        }
+        if at >= 0 and not c.declaresName(at, n) { c.notInModule(at, n, nsp) }
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    return c.methodCall(sp, x, n, nsp, args)
+}
+
+# call's function written as a name: a function, a type's constructor or conversion, a local or global function value,
+# a case descriptor (G34), a type variable's bound type (G8b)
+fn (c mut Checker&) callNamed(sp source.Span, f ast.Expr&, nsp source.Span, n source.NameId, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
+    ref := c.P.R.Use(c.fr().File, nsp.Start)
+    if ref.Kind == names.What.Func { return c.invoke(sp, nsp, c.P.FnNamed(ref.Module, n), null, args, Array<typed.Expr&>(0)) }
+    if ref.Kind == names.What.Builtin { return c.conversion(sp, c.builtinType(n), args) }
+    if ref.Kind == names.What.Type {
+        t := c.typeNamed(f)
+        if t < types.TypeId(0) and ref.Index >= 0 { return c.inferredCtor(sp, nsp, c.P.DeclFor(ref.Module, ref.Index), args, want) }
+        if t < types.TypeId(0) { return c.unknown(sp) }
+        return c.construct(sp, nsp, t, args)
+    }
+    if ref.Kind == names.What.None {
+        # B11: with the name it most likely meant - a number's, said as an unknown type (T4)
+        best := c.suggest(c.text(n), true)
+        if best.Len() == 0: c.err(nsp, msgs.UnknownFunction(c.tok(n)))
+        else if c.P.T.Prim(best) != types.UnknownT: c.err(nsp, msgs.UnknownNumberType(c.tok(n), best))
+        else: c.err(nsp, msgs.UnknownFunctionMeant(c.tok(n), best))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    if ref.Kind == names.What.Local {
+        # G34: a case descriptor called builds its case, as the case's name would - a struct's one case its
+        # constructor
+        dt := c.descTypeOf(f)
+        if dt == types.UnknownT {
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescFunc { return c.reflFnCall(sp, nsp, c.P.DescOf(dt), args) }
+        if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescCase {
+            ds := c.P.DescOf(dt)
+            r := c.P.ReflUnder(ds.Of)
+            if c.isStruct(r) { return c.construct(sp, nsp, ds.Of, args) }
+            if c.P.T.KindOf(r) == types.Kind.ErrVal { return c.errWordCalled(sp, r, ds.Case, args) }
+            return c.enumCase(sp, nsp, ds.Of, c.P.T.CaseNames(r)[ds.Case], args)
+        }
+    }
+    if ref.Kind == names.What.Local or ref.Kind == names.What.Global {
+        return c.callValue(sp, nsp, c.expr(f, types.UnknownT), args)
+    }
+    if ref.Kind == names.What.TypeVar {
+        # G8b: U(x) in an instance is the call its bound type's name is - a conversion, or a constructor
+        t := c.typeNamed(f)
+        if t >= types.TypeId(0) and (c.P.T.IsFloat(t) or c.P.T.IsInt(t) or t == types.BoolT) { return c.conversion(sp, t, args) }
+        if t >= types.TypeId(0) and c.isNamed(t) { return c.construct(sp, nsp, t, args) }
+        if t >= types.TypeId(0) and c.P.T.KindOf(t) != types.Kind.Var {
+            c.err(nsp, msgs.NotCallable(c.ty(t)))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+    }
+    c.gap(nsp, "a call of a name of this kind")
+    return c.unknown(sp)
 }
 
 # Array<T>(n), Array<T>(n, fill) (D14, T8, QP1) - every array construction's type decided here: an Array<T, n> where n
@@ -13062,22 +13070,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             } else if k == spreadParam and args[i].IsGathered() {
                 e = c.fit(c.heldArray(from, c.variadicValue(args[i], ps[k])), ps[k], args[i].Span())   # D8g
             } else {
-                e = c.litCtor(args[i], ps[k])
-                if e is null { e = c.expr(args[i], ps[k]) }
-                if c.P.T.KindOf(typeOf(e)) == types.Kind.Tuple and c.P.T.KindOf(ps[k]) != types.Kind.Tuple {
-                    # D8c: several results are one value nowhere but as all of a call's arguments (D8d)
-                    c.err(c.calleeSpan(args[i]), msgs.TupleNotAValue())
-                    e = c.unknown(asp)
-                } else {
-                    if c.writable(ps[k]) and c.condChoosesPlace(e!) { c.err(c.chosenAt(e!), msgs.CondLentWritable()) }
-                    ex := c.cPointerArg(target, e!, ps[k], c.argSpan(args[i]))
-                    if ex is null { ex = c.externArray(target, e!, ps[k], c.argSpan(args[i])) }
-                    wasNull := c.nullDecl
-                    c.nullDecl = c.paramAt(target, f, k)
-                    e = ex if ex is not null else c.fit(e!, ps[k], c.argSpan(args[i]))
-                    c.nullDecl = wasNull
-                    if c.cCallback(target, f) and c.P.T.KindOf(ps[k]) == types.Kind.Func { c.callbackArg(e!, c.argSpan(args[i])) }
-                }
+                e = c.writtenArg(target, f, k, args[i], ps[k], asp)
             }
         } else {
             e = c.unknown(asp)
@@ -13118,6 +13111,27 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     if cb >= 0 and c.fr().Contract == 0 and c.hasContract(cb) { call = c.contractAt(sp, nsp, r, call, target, targs, site, cb) }
     if c.stmts.Len() > sfrom { call = typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return c.held(sp, call)
+}
+
+# callBody's argument as written for parameter k, of type pt: checked against it, then fitted - a C pointer or array
+# where an extern takes one (X11, X15), a callback checked where C is handed a function (X13)
+fn (c mut Checker&) writtenArg(target typed.Callee&, f I64, k I64, arg ast.Expr&, pt types.TypeId, asp source.Span) typed.Expr& {
+    e := c.litCtor(arg, pt)
+    if e is null { e = c.expr(arg, pt) }
+    if c.P.T.KindOf(typeOf(e)) == types.Kind.Tuple and c.P.T.KindOf(pt) != types.Kind.Tuple {
+        # D8c: several results are one value nowhere but as all of a call's arguments (D8d)
+        c.err(c.calleeSpan(arg), msgs.TupleNotAValue())
+        return c.unknown(asp)
+    }
+    if c.writable(pt) and c.condChoosesPlace(e!) { c.err(c.chosenAt(e!), msgs.CondLentWritable()) }
+    ex := c.cPointerArg(target, e!, pt, c.argSpan(arg))
+    if ex is null { ex = c.externArray(target, e!, pt, c.argSpan(arg)) }
+    wasNull := c.nullDecl
+    c.nullDecl = c.paramAt(target, f, k)
+    e = ex if ex is not null else c.fit(e!, pt, c.argSpan(arg))
+    c.nullDecl = wasNull
+    if c.cCallback(target, f) and c.P.T.KindOf(pt) == types.Kind.Func { c.callbackArg(e!, c.argSpan(arg)) }
+    return e!
 }
 
 # C11, O16: a call's value with a destructor to run - a constructor's instance, a function's value result holding one -
