@@ -89,6 +89,11 @@ set `OLANG_CLANG=/path/to/clang` for both `make` and the compiler.
 output is streamed, the last expression's value shown, and a type declaring `fn (x T&) Display() Display` (the
 prelude's, e.g. `Display.Html(...)`) is shown richly - a table, a plot, a formula. The stop button interrupts a cell.
 
+`olang notebook run FILE.ipynb` runs a notebook with no Jupyter and no Python: its code cells run in order as the kernel
+runs them, and the notebook is written back (in place, or to `-output PATH`) with each cell's output as Jupyter stores
+it - printed text, the shown value, a plot's SVG, an error - and its execution count (SPEC B24). It stops at the first
+failing cell with status 1; `-continue` runs the rest.
+
 `editors/` has the Neovim plugin and the language server's setup (`olang lsp`).
 
 ## The repository

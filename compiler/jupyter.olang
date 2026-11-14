@@ -266,7 +266,7 @@ fn (k mut kernel&) publish(kind String&, parent String&, content String&) {
 # the stream of text out of the cell, stdout or stderr, where it wrote any
 fn (k mut kernel&) stream(parent String&, name String&, text String&) {
     if text == "": return
-    k.publish("stream", parent, $"{\"name\":\"" $name "\",\"text\":" $q(text) "}")
+    k.publish("stream", parent, $"{\"name\":\"" $name "\",\"text\":" $Q(text) "}")
 }
 
 # ---- the requests ----
@@ -286,9 +286,9 @@ fn (k mut kernel&) execute(s mut prompt.Session&, j I64, rq request&, content js
     silent := try content["silent"].AsBool() catch json.Error default false
     if not silent: k.Count++
     n := k.Count
-    if not silent: k.publish("execute_input", rq.Header, $"{\"code\":" $q(code) ",\"execution_count\":" $n "}")
-    out := capture(1)
-    errs := capture(2)
+    if not silent: k.publish("execute_input", rq.Header, $"{\"code\":" $Q(code) ",\"execution_count\":" $n "}")
+    out := Capture(1)
+    errs := Capture(2)
     r := s.Cell(code, label = $"In[" $n "]" if not silent else "silent")
     said := out.End()
     complained := errs.End()
@@ -296,7 +296,7 @@ fn (k mut kernel&) execute(s mut prompt.Session&, j I64, rq request&, content js
     warnings := r.Diags if r.Checked else ""
     k.stream(rq.Header, "stderr", $complained $warnings $r.Notes)
     if r.Shown and not silent {
-        k.publish("execute_result", rq.Header, $"{\"execution_count\":" $n ",\"data\":" $data(r) ",\"metadata\":{}}")
+        k.publish("execute_result", rq.Header, $"{\"execution_count\":" $n ",\"data\":" $Data(r) ",\"metadata\":{}}")
     }
     failure := r.Failure if r.Checked else r.Diags
     if failure == "" {
@@ -305,22 +305,22 @@ fn (k mut kernel&) execute(s mut prompt.Session&, j I64, rq request&, content js
     }
     ename := "RuntimeError" if r.Checked else "CompileError"
     rows Vec<String&>
-    for line in failure.TrimEnd().Lines(): rows.Push(q(line))
-    err := $"\"ename\":\"" $ename "\",\"evalue\":" $q(firstLine(failure)) ",\"traceback\":[" $rows.Join(",") "]"
+    for line in failure.TrimEnd().Lines(): rows.Push(Q(line))
+    err := $"\"ename\":\"" $ename "\",\"evalue\":" $Q(FirstLine(failure)) ",\"traceback\":[" $rows.Join(",") "]"
     k.publish("error", rq.Header, $"{" $err "}")
     k.reply(j, rq, "execute_reply", $"{\"status\":\"error\",\"execution_count\":" $n "," $err "}")
 }
 
-fn firstLine(t String&) String { return $t[:try t.FindByte('\n') catch default t.Len()] }
+fn FirstLine(t String&) String { return $t[:try t.FindByte('\n') catch default t.Len()] }
 
 # a shown value's data, by MIME type: its text, and its own rendering where its type has one (B23) - a picture's bytes
 # in base64, as the protocol carries them
-fn data(r prompt.Reply&) String {
+fn Data(r prompt.Reply&) String {
     b := StringBuilder()
-    b.Push($"{\"text/plain\":" $q(r.Text))
+    b.Push($"{\"text/plain\":" $Q(r.Text))
     if r.Mime != "" {
         body := base64.Encode(r.Data) if r.Mime == "image/png" else r.Data
-        b.Push($"," $q(r.Mime) ":" $q(body))
+        b.Push($"," $Q(r.Mime) ":" $Q(body))
     }
     b.PushChar('}')
     return b.ToString()
@@ -355,7 +355,7 @@ fn complete(s prompt.Session&, content json.Json&) String {
     for name in names.View() {
         if not name.StartsWith(word) or name in seen: continue
         seen.Put(name, true)
-        found.Push(q(name))
+        found.Push(Q(name))
     }
     return $"{\"status\":\"ok\",\"matches\":[" $found.Join(",") "],\"cursor_start\":" $start ",\"cursor_end\":" $at ",\"metadata\":{}}"
 }
@@ -363,7 +363,7 @@ fn complete(s prompt.Session&, content json.Json&) String {
 fn str(j json.Json&, key String&) String& { return try j[key].AsStr() catch json.Error default "" }
 
 # text as a JSON string
-fn q(t String&) String {
+fn Q(t String&) String {
     b := StringBuilder()
     session.JsonStr(b, t)
     return b.ToString()
@@ -372,14 +372,14 @@ fn q(t String&) String {
 # ---- a cell's output captured ----
 
 # a descriptor's writes going to a file in memory until End: what was written then
-type capture struct(fd I32) {
+type Capture struct(fd I32) {
     fd
     saved I32 = unistd.dup(fd)
     file I32 = mman.memfd_create("olang-cell\0", 1)
     unistd.dup2(file, fd)
 }
 
-fn (c capture&) End() String {
+fn (c Capture&) End() String {
     unistd.dup2(c.saved, c.fd)
     unistd.close(c.saved)
     size := unistd.lseek(c.file, 0, 2)
@@ -431,7 +431,7 @@ fn Install(exe String&) I32 {
     if base == "": base = $(try os.Env("HOME") catch default ".") "/.local/share/jupyter"
     dir := $base "/kernels/olang"
     try os.MkDirAll(dir) catch os.Error e { return fail($"cannot make " $dir ": " $e) }
-    spec := $"{\n  \"argv\": [" $q(exe) ", \"jupyter\", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" $
+    spec := $"{\n  \"argv\": [" $Q(exe) ", \"jupyter\", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" $
         "  \"language\": \"olang\",\n  \"interrupt_mode\": \"message\"\n}\n"
     try os.WriteFile($dir "/kernel.json", spec) catch os.Error e { return fail($"cannot write " $dir "/kernel.json: " $e) }
     try io.Put($"olang jupyter: the kernel is installed at " $dir "/kernel.json - pick \"olang\" in a notebook\n") catch io.Error { }

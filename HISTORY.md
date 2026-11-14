@@ -37141,3 +37141,22 @@ Neovim package was checked by its files only.
   against 64 for the saturating product, clang-19 -O2); checked exhaustively at i8 against LLVM's intrinsics. Run case
   checks/cases/mul128overflow (I128, U128, I100: saturating and checked multiply of both signs, overflowing and not,
   and the other 128-bit Checked/Saturating operations), run natively and under qemu-aarch64.
+
+## `olang notebook run` (B24; 2026-11-14, wt-nbrun)
+
+The user approved running a Jupyter notebook without Jupyter or Python. Built as the mode `notebook` (one subcommand,
+`run`, so `olang notebook` has room for more) in compiler/notebook.olang, over what the kernel already does: the
+prompt's `Session.Cell` runs the cells, and jupyter.olang's output capture (fd 1 and 2 per cell), its shown value's
+`data` (text/plain plus the Display's MIME type, a PNG in base64), its JSON text quoting and first-line rule are
+called, not copied - only their names became capitalized so another module may call them. My calls: the notebook is
+read with std/json and rebuilt object by object, so every member the run does not touch keeps its place and value;
+only `outputs` and `execution_count` of a code cell change and `kernelspec` is added to the metadata where absent;
+the file is written with std/json's indentation of one space, a trailing newline - the notebook is deterministic, no
+timestamps or ids (the kernel's header dates are not stored). A stream's text is a list of the lines it ends, as
+Jupyter stores them. A cell with no source is skipped as nbconvert skips it. The first failing cell stops the run, as
+`nbconvert --execute` does; the cells after it are cleared (outputs `[]`, count null) so the file never mixes old and
+new outputs; `-continue` runs them anyway. Status 1 for a failed cell, 2 for a notebook that cannot be read or
+written. Tests: checks scenario `notebook` (checks/fixtures/notebook: a markdown cell, a printing cell with a stale
+output, a value, a std/plot SVG, a compile error, a last cell run only with `-continue`; `-output`, in place, and the
+usage error).
+
