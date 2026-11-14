@@ -97,13 +97,9 @@ fn main() {
     for f in files {
         r := result.compare(gold, olang, f, verbose)
         toolkit.Say(r.Row)
-        if r.Equal {
-            same++
-        } else if r.Known {
-            known++
-        } else {
-            differ++
-        }
+        if r.Equal: same++
+        else if r.Known: known++
+        else: differ++
     }
     if files.Len() > 1 {
         toolkit.Say(("== total: files " $files.Len() " same " $same " differing as listed " $known " differing " $differ
@@ -286,11 +282,8 @@ fn firstLine(t String&) String {
 fn outcomes(rows Vec<String&>&) Map<String&, String&> {
     m Map<String&, String&>
     for row in rows {
-        if row.StartsWith("ok - ") {
-            m.Put($row[5:], "ok")
-        } else if row.StartsWith("FAIL - ") {
-            m.Put(toolkit.TestName(row[7:]), "FAIL")
-        }
+        if row.StartsWith("ok - "): m.Put($row[5:], "ok")
+        else if row.StartsWith("FAIL - "): m.Put(toolkit.TestName(row[7:]), "FAIL")
     }
     return m
 }

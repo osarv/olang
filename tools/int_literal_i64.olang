@@ -80,13 +80,9 @@ fn rangeType(msg String&) String ? {
         for p < msg.Len() and srcmask.IsWord(msg[p]) { p++ }
         if not msg[p:].StartsWith("' I64 - ") { continue }
         p += 8
-        if msg[p:].StartsWith("write ") {
-            p += 6
-        } else if msg[p:].StartsWith("convert its end, ") {
-            p += 17
-        } else {
-            continue
-        }
+        if msg[p:].StartsWith("write "): p += 6
+        else if msg[p:].StartsWith("convert its end, "): p += 17
+        else: continue
         if p >= msg.Len() or msg[p] != '\'' { continue }
         p++
         t := p
@@ -122,11 +118,8 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
         if localT.Len() == 0 { rangeT = $(try rangeType(msg) catch default "") }
         if current.Len() > 0 and (localT.Len() > 0 or rangeT.Len() > 0) {
             if diagedit.Allowed(full, allowed) {
-                if localT.Len() > 0 {
-                    edits.Push(diagedit.Request($full, line, col, "local", $localT, $current))
-                } else {
-                    edits.Push(diagedit.Request($full, line, col, "range", $rangeT, $current))
-                }
+                if localT.Len() > 0: edits.Push(diagedit.Request($full, line, col, "local", $localT, $current))
+                else: edits.Push(diagedit.Request($full, line, col, "range", $rangeT, $current))
             }
             answered = true
         }

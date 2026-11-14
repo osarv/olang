@@ -239,11 +239,8 @@ fn walk(dir String&, out mut Vec<String&>&, all Bool) {
     for n in names {
         if n.StartsWith(".") or n == "build" { continue }
         p := srcmask.PathJoin(dir, n)
-        if os.IsDir(p) {
-            walk(p, out, all)
-        } else if wanted(p) and (all or p.EndsWith(".olang")) {
-            out.Push($p)
-        }
+        if os.IsDir(p): walk(p, out, all)
+        else if wanted(p) and (all or p.EndsWith(".olang")): out.Push($p)
     }
 }
 

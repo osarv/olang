@@ -1459,11 +1459,8 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
         rs[i] = p.Resolve(c, s.Results[i])
         from[i] = types.FromTypeVar if p.T.KindOf(rs[i]) == types.Kind.Var else types.OwnScope
     }
-    if s.Results.Len() == 1 {
-        result = rs[0]
-    } else if s.Results.Len() > 1 {
-        result = p.T.Tuple(p.T.List(rs))
-    }
+    if s.Results.Len() == 1: result = rs[0]
+    else if s.Results.Len() > 1: result = p.T.Tuple(p.T.List(rs))
     if s.NoReturn { result = types.NoreturnT }
     scopes := p.T.Scopes(types.RoleFn, shares.ToArray(), from)
     return p.T.Func(p.T.List(ps.ToArray()), result, p.errorList(c, s.HasErrors, s.Errors), scopes)
@@ -1547,13 +1544,9 @@ fn (p mut Program&) mergeEntries(flat Vec<types.TypeId>&, es mut Vec<types.TypeI
         for j in range es.Len() {
             if t != types.UnknownT and p.T.ErrOf(es[j]) == p.T.ErrOf(t) { k = j }
         }
-        if k < 0 {
-            es.Push(t)
-        } else if p.T.KindOf(es[k]) != types.Kind.ErrWords or p.T.KindOf(t) != types.Kind.ErrWords {
-            es[k] = p.T.ErrOf(t)
-        } else {
-            es[k] = p.T.ErrWords(p.T.ErrOf(t), p.T.ErrMask(es[k]) | p.T.ErrMask(t))
-        }
+        if k < 0: es.Push(t)
+        else if p.T.KindOf(es[k]) != types.Kind.ErrWords or p.T.KindOf(t) != types.Kind.ErrWords: es[k] = p.T.ErrOf(t)
+        else: es[k] = p.T.ErrWords(p.T.ErrOf(t), p.T.ErrMask(es[k]) | p.T.ErrMask(t))
     }
 }
 
@@ -4391,11 +4384,8 @@ fn (p mut Program&) members(tr types.TypeId, out mut Vec<types.TypeId>&, depth I
             c := p.declContext(d)
             for m in ms {
                 t := p.Subst(p.Resolve(c, m), DeclOwner(d), p.T.Args(tr))
-                if p.IsClosedTrait(t) {
-                    p.members(t, out, depth + 1)
-                } else if not out.Has(t) {
-                    out.Push(t)
-                }
+                if p.IsClosedTrait(t): p.members(t, out, depth + 1)
+                else if not out.Has(t): out.Push(t)
             }
         }
         case _ { }
@@ -5357,17 +5347,11 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
     }
     # fields: a struct's (its one case's), or an enum case's
     ns := Array<source.NameId>(0)
-    if p.T.KindOf(r) == types.Kind.ErrVal and cs >= 0 {
-        return none, ""
-    } else if p.isStructT(r) {
-        ns = p.FieldNames(r)
-    } else if p.isEnumT(r) and cs >= 0 {
-        ns = p.CaseFieldNames(r, cs)
-    } else if p.isEnumT(r) {
-        return none, "an enum's fields are its cases' - walk T.Cases, then each case's Fields"
-    } else {
-        return none, "only a struct and an enum's case have fields"
-    }
+    if p.T.KindOf(r) == types.Kind.ErrVal and cs >= 0: return none, ""
+    else if p.isStructT(r): ns = p.FieldNames(r)
+    else if p.isEnumT(r) and cs >= 0: ns = p.CaseFieldNames(r, cs)
+    else if p.isEnumT(r): return none, "an enum's fields are its cases' - walk T.Cases, then each case's Fields"
+    else: return none, "only a struct and an enum's case have fields"
     # M6a: a struct's private fields are its module's; an enum case's fields are read by any module that reads the case
     # (T7e: the prelude, which supplies Columns over any struct, sees every field)
     own := p.T.DeclModule(p.T.DeclOf(r)) == mi or not p.isStructT(r) or p.L.Mods[p.T.DeclModule(p.T.DeclOf(r))].C or
@@ -5614,11 +5598,8 @@ fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool, tag types.TypeId = t
     if c.eat(" ?") {
         if c.eat(" ") {
             for {
-                if c.eat("default") {
-                    es.Push(types.DefaultErrT)
-                } else {
-                    es.Push(try p.canonInner(c))
-                }
+                if c.eat("default"): es.Push(types.DefaultErrT)
+                else: es.Push(try p.canonInner(c))
                 if not c.eat(" + ") { break }
             }
         } else {

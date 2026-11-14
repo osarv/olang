@@ -1993,13 +1993,9 @@ fn (t mut Table&) RetLlvm(f TypeId) String {
 fn (t mut Table&) Passing(f TypeId) String {
     b := StringBuilder()
     for p in t.Items(t.Params(f)) {
-        if t.ViaMemory(p) {
-            b.PushChar('m')
-        } else if t.KindOf(p) == Kind.Func {
-            b.PushChar('s')
-        } else {
-            b.PushChar('v')
-        }
+        if t.ViaMemory(p): b.PushChar('m')
+        else if t.KindOf(p) == Kind.Func: b.PushChar('s')
+        else: b.PushChar('v')
     }
     return b.ToString()
 }

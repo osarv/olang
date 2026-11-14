@@ -223,9 +223,7 @@ fn main() ? {
     }
     notes := Vec<String&>()
     changed := 0
-    for f in files {
-        changed += migrateFile(f, dry, notes)
-    }
+    for f in files: changed += migrateFile(f, dry, notes)
     srcmask.Say($changed " files " $("would change" if dry else "changed"))
     if notes.Len() > 0 {
         srcmask.Say("for a person:")

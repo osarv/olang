@@ -452,9 +452,7 @@ fn splitErrors(line String&) String, Array<String&> {
         ch := line[i]
         if ch == '(' or ch == '<' or ch == '[' { depth++ }
         if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
-        if depth == 0 and ch == '?' and i > 0 and line[i - 1] == ' ' {
-            return $line[:i - 1], items(line[i + 1:].Trim())
-        }
+        if depth == 0 and ch == '?' and i > 0 and line[i - 1] == ' ': return $line[:i - 1], items(line[i + 1:].Trim())
     }
     return line, Array<String&>(0)
 }

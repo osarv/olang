@@ -108,18 +108,12 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
         } else if word == "ListError" and not ownError and not afterDot {
             with = "list.Error" if keep else "VecError"
         } else if word == "ListIter" and not ownIter and not afterDot {
-            if keep {
-                with = "list.Iter"
-            } else {
-                r.leave(path, src, t.start, "ListIter: a Vec's Iter() is an IndexIter - or keep the List (no --vec)")
-            }
+            if keep: with = "list.Iter"
+            else: r.leave(path, src, t.start, "ListIter: a Vec's Iter() is an IndexIter - or keep the List (no --vec)")
         } else if word == "ToList" and afterDot and next == token.Tok.LParen and not ownToList {
             if i + 2 < v.Len() and v[i + 2].k == token.Tok.RParen {
-                if keep {
-                    r.leave(path, src, t.start, "ToList(): list.Of(a) for an array, list.From(it) for an iterator")
-                } else {
-                    with = "ToVec"
-                }
+                if keep: r.leave(path, src, t.start, "ToList(): list.Of(a) for an array, list.From(it) for an iterator")
+                else: with = "ToVec"
             }
         } else if word == "RunFrom" and afterDot and next == token.Tok.LParen and not keep {
             r.leave(path, src, t.start, "RunFrom: a List's alone - keep the List (no --vec), or walk a Vec by its positions")
@@ -203,15 +197,10 @@ fn main() ? {
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
-        if a == "--check" {
-            check = true
-        } else if a == "--vec" {
-            keep = false
-        } else if a == "-v" {
-            verbose = true
-        } else {
-            paths.Push($a)
-        }
+        if a == "--check": check = true
+        else if a == "--vec": keep = false
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
     }
     if paths.Len() == 0 {
         srcmask.SayErr("usage: tools_list_vec [--vec] [--check] [-v] FILE|DIR...")

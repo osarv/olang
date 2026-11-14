@@ -1160,13 +1160,9 @@ type verifier struct(F Fn&, T mut types.Table&) {
 
 fn (v mut verifier&) bad(text String&) {
     if not v.report { return }
-    if v.at < 0 {
-        v.out.Push("fn: ")
-    } else if v.idx < 0 {
-        v.out.Push("bb" $v.at "[term]: ")
-    } else {
-        v.out.Push("bb" $v.at "[" $v.idx "]: ")
-    }
+    if v.at < 0: v.out.Push("fn: ")
+    else if v.idx < 0: v.out.Push("bb" $v.at "[term]: ")
+    else: v.out.Push("bb" $v.at "[" $v.idx "]: ")
     v.out.Push(text)
     v.out.PushChar('\n')
 }
@@ -1201,9 +1197,7 @@ fn (v mut verifier&) shape() Bool {
         return false
     }
     ps := v.T.Items(v.T.Params(f.Ty))
-    if ps.Len() != f.Params.Len() {
-        v.bad("its type has " $ps.Len() " parameters, its Params " $f.Params.Len())
-    }
+    if ps.Len() != f.Params.Len(): v.bad("its type has " $ps.Len() " parameters, its Params " $f.Params.Len())
     for i in range f.Params.Len() {
         if v.local(f.Params[i]) {
             l := f.Locals[I64(f.Params[i])]
@@ -1864,9 +1858,7 @@ fn (v mut verifier&) refType(of types.TypeId, ty types.TypeId) types.TypeId {
         v.bad("a reference typed " $v.canon(ty))
         return types.UnknownT
     }
-    if of != types.UnknownT and not v.fits(of, t.Referent(ty)) {
-        v.bad("a reference " $v.canon(ty) " to a " $v.canon(of))
-    }
+    if of != types.UnknownT and not v.fits(of, t.Referent(ty)): v.bad("a reference " $v.canon(ty) " to a " $v.canon(of))
     return ty
 }
 
@@ -2407,11 +2399,8 @@ fn (v mut verifier&) stores(p Lvalue) {
     match p.B {
         case Base.Local(l) {
             if not v.live[I64(l)] { v.bad("L" $l " stored into with no storage: its Live not reached") }
-            if p.Path.N == I32(0) {
-                v.init[I64(l)] = true
-            } else {
-                v.readPlace(p)
-            }
+            if p.Path.N == I32(0): v.init[I64(l)] = true
+            else: v.readPlace(p)
         }
         case _ { v.readPlace(p) }
     }
@@ -2526,11 +2515,8 @@ fn (v mut verifier&) name(s ScopeId) String { return "none" if s == NoScope else
 
 fn (v mut verifier&) pop(x ScopeId, what String&) {
     if v.stack.Len() == 0 or v.stack[v.stack.Len() - 1] != x {
-        if v.open(x) {
-            v.bad("S" $x " " $what " while S" $v.stack[v.stack.Len() - 1] ", opened in it, is open")
-        } else {
-            v.bad("S" $x " " $what ", but it is not open")
-        }
+        if v.open(x): v.bad("S" $x " " $what " while S" $v.stack[v.stack.Len() - 1] ", opened in it, is open")
+        else: v.bad("S" $x " " $what ", but it is not open")
         return
     }
     try v.stack.Pop() catch { unreachable }

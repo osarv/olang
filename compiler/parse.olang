@@ -32,20 +32,14 @@ type Oracle struct() {
 }
 
 fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
-    if alias == "" {
-        o.bare.Put(names.Intern(name), true)
-    } else {
-        o.qualified.Put($alias "." $name, true)
-    }
+    if alias == "": o.bare.Put(names.Intern(name), true)
+    else: o.qualified.Put($alias "." $name, true)
 }
 
 # a generic function's name: "name<I64>" names its instance (G12)
 fn (o mut Oracle&) AddFn(names mut source.Names&, alias String&, name String&) {
-    if alias == "" {
-        o.fns.Put(names.Intern(name), true)
-    } else {
-        o.fnsQualified.Put($alias "." $name, true)
-    }
+    if alias == "": o.fns.Put(names.Intern(name), true)
+    else: o.fnsQualified.Put($alias "." $name, true)
 }
 
 # the generic functions a file declares: "fn name<", by name
@@ -1930,9 +1924,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
             p.advance()
             # S16d: "unreachable why" - a message, evaluated only where it is reached
             msg ast.Expr?& = null
-            if k == token.Tok.Unreachable and not p.atEnd() {
-                msg = try p.expr()
-            }
+            if k == token.Tok.Unreachable and not p.atEnd(): msg = try p.expr()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Jump(sp, k, msg)

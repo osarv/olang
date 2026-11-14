@@ -175,11 +175,8 @@ fn runsWritten(a mut Array<I64>&, scratch mut Array<I64>&, from I64, to I64, fir
             m := lo + run
             hi := m + run if m + run < to else to
             if not (a[m] < a[m - 1]): continue
-            if m - lo <= hi - m {
-                forwardWritten(a, scratch, lo, m, hi)
-            } else {
-                backwardWritten(a, scratch, lo, m, hi)
-            }
+            if m - lo <= hi - m: forwardWritten(a, scratch, lo, m, hi)
+            else: backwardWritten(a, scratch, lo, m, hi)
         }
     }
 }

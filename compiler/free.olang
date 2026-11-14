@@ -3468,9 +3468,7 @@ fn (w mut walker&) arm(a typed.Arm&) Vec<I64> {
     out Vec<I64>
     for alt in a.Alts {
         w.expr(alt.Test)
-        for bd in alt.Binds {
-            w.give(I64(bd.To), w.expr(bd.From))
-        }
+        for bd in alt.Binds: w.give(I64(bd.To), w.expr(bd.From))
     }
     if a.Guard is not null { w.expr(a.Guard!) }
     if a.Code is not null { w.block(a.Code!) }

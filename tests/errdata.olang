@@ -75,9 +75,7 @@ fn kept(ns Array<I64>&) Vec<LoadErr> {
 fn fanned(base I64) String {
     out := Array<I64>(8)
     try join {
-        for i in range 8 {
-            spawn out[i] = try parse(base + 5 - i)
-        }
+        for i in range 8: spawn out[i] = try parse(base + 5 - i)
     } catch ParseErr e {
         return $e
     }
@@ -251,9 +249,7 @@ fn ownFails(n I64) ? JoinErr { error JoinErr.Own(n, "own") }
 fn joinOwn(n I64) String ? JoinErr {
     out := Array<I64>(4)
     try join {
-        for i in range 4 {
-            spawn out[i] = try task(i + n)
-        }
+        for i in range 4: spawn out[i] = try task(i + n)
         try ownFails(n)
     } catch JoinErr e {
         return "inner " $e

@@ -322,11 +322,8 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
                 cand := best.ToArray()
                 cand[i] = U8(mid)
                 tries++
-                if outcome.inChild(f, cand) == outcome.Failed {
-                    hi = mid
-                } else {
-                    lo = mid + 1
-                }
+                if outcome.inChild(f, cand) == outcome.Failed: hi = mid
+                else: lo = mid + 1
             }
             if hi < I64(best[i]) {
                 best.SetAt(i, U8(hi))

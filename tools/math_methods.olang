@@ -113,13 +113,9 @@ fn simple(t String&) Bool {
     for i in range t.Len() {
         if mask[i] != 'c' { continue }
         c := t[i]
-        if c == '(' or c == '[' or c == '{' {
-            depth++
-        } else if c == ')' or c == ']' or c == '}' {
-            depth--
-        } else if depth == 0 and not (srcmask.IsWord(c) or c == '.') {
-            return false
-        }
+        if c == '(' or c == '[' or c == '{': depth++
+        else if c == ')' or c == ']' or c == '}': depth--
+        else if depth == 0 and not (srcmask.IsWord(c) or c == '.'): return false
     }
     return true
 }

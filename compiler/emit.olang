@@ -2068,11 +2068,8 @@ fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
                 q++
             }
             tyText.Push("ptr")
-            if b.Off[r] == 0 {
-                valText.Push("ptr " $to)
-            } else {
-                valText.Push("ptr getelementptr (i8, ptr " $to ", i64 " $b.Off[r] ")")
-            }
+            if b.Off[r] == 0: valText.Push("ptr " $to)
+            else: valText.Push("ptr getelementptr (i8, ptr " $to ", i64 " $b.Off[r] ")")
             at = b.At[r] + 8
         }
         out.Push($name " = " $kind " <{ " $tyText.ToString() " }> <{ " $valText.ToString() " }>, align " $b.Align "\n")
@@ -2263,11 +2260,8 @@ fn (fe mut fnEm&) w(line String&) {
     fe.code.Push(line)
     # B2e: before the first statement's line only a call is located (the verifier wants it), so the debugger stops at
     # the first statement, as clang's prologue_end does
-    if fe.dbgLoc != "" {
-        fe.code.Push(fe.dbgLoc)
-    } else if fe.dbgSp >= 0 and line.Contains("call ") {
-        fe.code.Push(fe.dbgEntry())
-    }
+    if fe.dbgLoc != "": fe.code.Push(fe.dbgLoc)
+    else if fe.dbgSp >= 0 and line.Contains("call "): fe.code.Push(fe.dbgEntry())
     fe.code.PushChar('\n')
 }
 
@@ -2776,11 +2770,8 @@ fn foldSlots(body String&, nlocals I64) String {
             if i == a + 2 and body[a:i] == "  " and body[j:z].StartsWith(" = alloca ") {
                 allocaAt[v] = li
             } else if atEnd and i >= a + 6 and body[i - 6:i] == ", ptr " {
-                if body[a:z].StartsWith("  store ") {
-                    storeAt[v] = li
-                } else if body[a:z].Contains(" = load ") {
-                    loadAt[v] = li
-                }
+                if body[a:z].StartsWith("  store "): storeAt[v] = li
+                else if body[a:z].Contains(" = load "): loadAt[v] = li
             }
             i = j
         }
@@ -3768,11 +3759,8 @@ fn (fe mut fnEm&) leavesOf(r types.TypeId, path mut Vec<I64>&, out mut Vec<Array
         fr := t.Repr(fs[i])
         if t.IsRef(fr) or out.Len() >= 8: continue
         path.Push(i)
-        if t.KindOf(fr) == types.Kind.Array and not fe.fixed(fr) {
-            out.Push(path.ToArray())
-        } else {
-            fe.leavesOf(fr, path, out)
-        }
+        if t.KindOf(fr) == types.Kind.Array and not fe.fixed(fr): out.Push(path.ToArray())
+        else: fe.leavesOf(fr, path, out)
         path.Pop()!
     }
 }
@@ -4016,13 +4004,9 @@ fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
     for i in range I64(ks.N) {
         k := fe.F.Ops[I64(ks.At) + i]
         r := t.Repr(fe.otype(k))
-        if e.Lw.Gen().GenRef(t, r) {
-            refs.Push(k)
-        } else if fe.ty(r) == "{ i64, ptr }" {
-            views.Push(k)
-        } else {
-            opaque = true
-        }
+        if e.Lw.Gen().GenRef(t, r): refs.Push(k)
+        else if fe.ty(r) == "{ i64, ptr }": views.Push(k)
+        else: opaque = true
     }
     n := refs.Len()
     keep := "null"
@@ -4489,11 +4473,8 @@ fn (fe mut fnEm&) walkEnds() {
         res := t.Result(nty)
         if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr " $fe.slot(res)) }
         for _ in range mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), nty) { args.Push(", ptr null") }
-        if rt == "void" {
-            fe.w("call void " $code "(" $args.ToString() ")")
-        } else {
-            fe.let("call " $rt " " $code "(" $args.ToString() ")")
-        }
+        if rt == "void": fe.w("call void " $code "(" $args.ToString() ")")
+        else: fe.let("call " $rt " " $code "(" $args.ToString() ")")
         sel := fe.load("i32", "%ws" $sc)
         b := StringBuilder()
         b.Push("switch i32 " $sel ", label %wend" $sc ".c0 [")
@@ -4993,9 +4974,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
         p = fe.arrayStorage(sc, bytes, el, true)
     }
     if not zero {
-        if p == "" {
-            p = fe.arrayStorage(sc, bytes, el, false)
-        }
+        if p == "": p = fe.arrayStorage(sc, bytes, el, false)
         big := fe.viaMem(el)
         v := "" if big else fe.val(fill, el)
         elt := fe.ty(el)
@@ -5009,11 +4988,8 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
         fe.w("br i1 " $more ", label %" $body ", label %" $done)
         fe.label(body)
         at := fe.let("getelementptr " $elt ", ptr " $p ", i64 " $k)
-        if big {
-            fe.put(at, el, fill)
-        } else {
-            fe.store(elt, v, at)
-        }
+        if big: fe.put(at, el, fill)
+        else: fe.store(elt, v, at)
         fe.store("i64", fe.let("add i64 " $k ", 1"), i)
         fe.w("br label %" $head)
         fe.label(done)
@@ -5816,11 +5792,8 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
             if un == t.IsUnsigned(g) { return diff }
             # a sign change: a negative made unsigned, or an unsigned top bit made negative
             neg := ""
-            if un {
-                neg = fe.let("icmp slt " $fe.ty(g) " " $there ", 0")
-            } else {
-                neg = fe.let("icmp slt " $lt " " $x ", 0")
-            }
+            if un: neg = fe.let("icmp slt " $fe.ty(g) " " $there ", 0")
+            else: neg = fe.let("icmp slt " $lt " " $x ", 0")
             return fe.let("or i1 " $diff ", " $neg)
         }
         case _ {
@@ -5856,11 +5829,8 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             x := fe.arg(args, i)
             xt := fe.otype(x)
             at := fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i)
-            if fe.viaMem(xt) {
-                fe.put(at, xt, x)
-            } else {
-                fe.store(fe.ty(xt), fe.val(x, xt), at, ", !tbaa !28")
-            }
+            if fe.viaMem(xt): fe.put(at, xt, x)
+            else: fe.store(fe.ty(xt), fe.val(x, xt), at, ", !tbaa !28")
         }
         # where the captures holding references live (D16c): null for the program's, and for each the plan did not say
         for j in range nc {
@@ -6074,11 +6044,8 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
     res := t.Result(f)
     if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr %out") }
     for i in range ip {
-        if i < vp {
-            args.Push(", ptr %v" $i)
-        } else {
-            args.Push(", ptr " $fe.program())
-        }
+        if i < vp: args.Push(", ptr %v" $i)
+        else: args.Push(", ptr " $fe.program())
     }
     ps := t.Items(t.Params(g))
     pass := t.Passing(g)
@@ -6190,11 +6157,8 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             fe.trace(sp)
             rt := t.RetLlvm(fe.F.Ty)
             c := fe.val(code, mir.I32T)
-            if rt == "i32" {
-                fe.store("i32", c, "%rv")
-            } else {
-                fe.store(rt, fe.let("insertvalue " $rt " zeroinitializer, i32 " $c ", 0"), "%rv")
-            }
+            if rt == "i32": fe.store("i32", c, "%rv")
+            else: fe.store(rt, fe.let("insertvalue " $rt " zeroinitializer, i32 " $c ", 0"), "%rv")
             fe.w("br label %ret")
         }
         case mir.Term.Wait(_, j, ok, code, failed) {
@@ -6573,11 +6537,8 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     rt := fe.E.externRet(ty) if isExtern else t.RetLlvm(ty)
     r := ""
-    if rt == "void" {
-        fe.w("call void " $target "(" $args.ToString() ")")
-    } else {
-        r = fe.let("call " $rt " " $target "(" $args.ToString() ")")
-    }
+    if rt == "void": fe.w("call void " $target "(" $args.ToString() ")")
+    else: r = fe.let("call " $rt " " $target "(" $args.ToString() ")")
     if res == types.NoreturnT {
         fe.w("unreachable")
         return
@@ -6612,11 +6573,8 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     if c.HasDest and value != "" {
         at, dt := fe.addr(c.Dest)
-        if via {
-            fe.memmove(at, out, fe.size(res))
-        } else {
-            fe.store(fe.ty(dt), value, at)
-        }
+        if via: fe.memmove(at, out, fe.size(res))
+        else: fe.store(fe.ty(dt), value, at)
     }
     fe.w("br label %" $blockName(c.Ok))
 }
@@ -6935,11 +6893,8 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
     callTy := hdr
     if variadic { callTy = $hdr " (" $fe.E.cParamList(ty, false) $(", ..." if ps.Len() > 0 else "...") ")" }
     r := ""
-    if hdr == "void" {
-        fe.w("call " $callTy " " $target "(" $args.ToString() ")")
-    } else {
-        r = fe.let("call " $callTy " " $target "(" $args.ToString() ")")
-    }
+    if hdr == "void": fe.w("call " $callTy " " $target "(" $args.ToString() ")")
+    else: r = fe.let("call " $callTy " " $target "(" $args.ToString() ")")
     if res == types.NoreturnT {
         fe.w("unreachable")
         return
@@ -7175,11 +7130,8 @@ fn (e mut Emitter&) exportEntry(i I64) {
         if q > 0 { al.Push(", ") }
         al.Push(a)
     }
-    if rt == "void" {
-        fe.w($"call void @" $e.sym(k) "(" $al.ToString() ")")
-    } else {
-        r = fe.let($"call " $rt " @" $e.sym(k) "(" $al.ToString() ")")
-    }
+    if rt == "void": fe.w($"call void @" $e.sym(k) "(" $al.ToString() ")")
+    else: r = fe.let($"call " $rt " @" $e.sym(k) "(" $al.ToString() ")")
     # the code, and the value where there is one
     code := ""
     val := ""
@@ -8125,11 +8077,8 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
     first := 1 if isValue else 0
     for i in range fields.Len() {
         at := fe.let("getelementptr " $envT ", ptr " $env ", i32 0, i32 " $i)
-        if vals[i] == "" {
-            fe.put(at, ps[i - first], fe.arg(k.Args, i - first))
-        } else {
-            fe.store(fields[i], vals[i], at)
-        }
+        if vals[i] == "": fe.put(at, ps[i - first], fe.arg(k.Args, i - first))
+        else: fe.store(fields[i], vals[i], at)
     }
     # the task's node (%olang.task: next, done, merges, error, the payload record its error carries - T19b) and its
     # stand-ins' merge records
@@ -8165,9 +8114,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
     e.ntask++
     b := StringBuilder()
     b.Push("define internal ptr @" $name "(ptr %env) #0 {\nentry:\n")
-    for i in range fields.Len() {
-        b.Push("  %f" $i " = getelementptr " $envT ", ptr %env, i32 0, i32 " $i "\n")
-    }
+    for i in range fields.Len(): b.Push("  %f" $i " = getelementptr " $envT ", ptr %env, i32 0, i32 " $i "\n")
     tfield := (1 if isValue else 0) + t.Items(t.Params(ty)).Len() + nscopes
     fe.taskOld(b, k, tfield)
     at I64 = 0
@@ -8227,11 +8174,8 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
     }
     rt := t.RetLlvm(ty)
     errs := t.Items(t.Errors(ty)).Len() > 0
-    if rt == "void" {
-        b.Push("  call void " $target "(" $args.ToString() ")\n")
-    } else {
-        b.Push("  %r = call " $rt " " $target "(" $args.ToString() ")\n")
-    }
+    if rt == "void": b.Push("  call void " $target "(" $args.ToString() ")\n")
+    else: b.Push("  %r = call " $rt " " $target "(" $args.ToString() ")\n")
     value := ""
     if via {
         value = "%out"
@@ -8367,11 +8311,8 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
                 it := fe.F.Items[I64(cl.Items.At) + ii]
                 pos := e.position(errs, it.Err)
                 n := "%k" $ci "_" $ii
-                if it.Word < 0 {
-                    b.Push("  " $n "h = lshr i32 " $code ", 16\n  " $n " = icmp eq i32 " $n "h, " $pos "\n")
-                } else {
-                    b.Push("  " $n " = icmp eq i32 " $code ", " $((pos << 16) | it.Word) "\n")
-                }
+                if it.Word < 0: b.Push("  " $n "h = lshr i32 " $code ", 16\n  " $n " = icmp eq i32 " $n "h, " $pos "\n")
+                else: b.Push("  " $n " = icmp eq i32 " $code ", " $((pos << 16) | it.Word) "\n")
                 b.Push("  " $n "o = or i1 " $cond ", " $n "\n")
                 cond = $n "o"
             }

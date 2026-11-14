@@ -66,18 +66,14 @@ fn (it mut I&) Count<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) I64 ? E {
 # every value folded into one, starting from init
 fn (it mut I&) Fold<I Iterator<T ? E>, T, U ? E>(init U, f fn&(acc U, x T) U ? E) U ? E {
     acc U = init
-    for x in try it {
-        acc = try f(acc, x)
-    }
+    for x in try it: acc = try f(acc, x)
     return acc
 }
 
 # a new Vec - in the caller's scope - of f applied to every element
 fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn&(x T) U ? E) mut Vec<U>& ? E {
     out mut Vec<U>& = Vec<U>()
-    for x in try it {
-        out.Push(try f(x))
-    }
+    for x in try it: out.Push(try f(x))
     return out
 }
 
@@ -93,9 +89,7 @@ fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) mut Vec<
 # a new Vec - in the caller's scope - of every value, in order: "m.Keys().ToVec()"
 fn (it mut I&) ToVec<I Iterator<T ? E>, T ? E>() mut Vec<T>& ? E {
     out mut Vec<T>& = Vec<T>()
-    for x in try it {
-        out.Push(x)
-    }
+    for x in try it: out.Push(x)
     return out
 }
 
@@ -479,11 +473,8 @@ fn (it mut I&) Partition<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) Vec<T
     yes mut Vec<T>& = Vec<T>()
     no mut Vec<T>& = Vec<T>()
     for x in try it {
-        if try keep(x) {
-            yes.Push(x)
-        } else {
-            no.Push(x)
-        }
+        if try keep(x): yes.Push(x)
+        else: no.Push(x)
     }
     return yes, no
 }

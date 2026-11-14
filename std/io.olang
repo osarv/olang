@@ -33,20 +33,14 @@ Stderr I32 = 2
 # no way to name the tail at all.
 fn Write(fd I32, data Array<U8>&) ? Error {
     total I64 = I64(data.Len())
-    if total == 0 {
-        return
-    }
+    if total == 0: return
     sent I64 = 0
     do {
         tail := data[sent:]
         n I64 = unistd.write(fd, tail, U64(tail.Len()))
-        if n < 0 {
-            error Error.Failed
-        }
+        if n < 0: error Error.Failed
         # no bytes moved with bytes still outstanding: retrying would spin rather than make progress
-        if n == 0 {
-            error Error.Partial(sent)
-        }
+        if n == 0: error Error.Partial(sent)
         sent = sent + n
     } for sent < total
 }
@@ -58,9 +52,7 @@ fn Write(fd I32, data Array<U8>&) ? Error {
 # return type is rejected outright (O13).
 fn Read(fd I32, buf mut Array<U8>&) Array<U8>& ? Error {
     n I64 = unistd.read(fd, buf, U64(buf.Len()))
-    if n < 0 {
-        error Error.Failed
-    }
+    if n < 0: error Error.Failed
     return buf[:n]
 }
 

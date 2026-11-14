@@ -280,11 +280,8 @@ fn (w mut walker&) reflects(x ast.Expr?&) Bool {
 
 fn (w mut walker&) forIn(f ast.ForIn&) {
     e := w.elemsOf(f.Source)
-    if e >= 0 {
-        w.vals.Put(f.Name, e)
-    } else {
-        w.need(w.valOf(f.Source), "a walk (Next, Iter, or At and Len)")
-    }
+    if e >= 0: w.vals.Put(f.Name, e)
+    else: w.need(w.valOf(f.Source), "a walk (Next, Iter, or At and Len)")
     w.expr(f.Source)
     w.stmts(f.Body)
     w.catches(f.Clauses)

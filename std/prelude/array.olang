@@ -93,9 +93,7 @@ fn (a Array<T>&) Count<? E>(keep fn&(x T) Bool ? E) I64 ? E {
 fn (a Array<T>&) Map<U ? E>(f fn&(x T) U ? E) Array<U> ? E {
     if a.Len() == 0 { return Array<U>(0) }           # no element, so no zero value of U is needed (D13c)
     out := Array<U>(a.Len(), try f(a[0]))
-    for i in range 1, a.Len() {
-        out[i] = try f(a[i])
-    }
+    for i in range 1, a.Len(): out[i] = try f(a[i])
     return out
 }
 
@@ -122,9 +120,7 @@ fn (a Array<T>&) Filter<? E>(keep fn&(x T) Bool ? E) Array<T> ? E {
 # the elements combined, in order, from init: f(f(f(init, a[0]), a[1]), ...)
 fn (a Array<T>&) Fold<U ? E>(init U, f fn&(acc U, x T) U ? E) U ? E {
     acc U = init
-    for x in a {
-        acc = try f(acc, x)
-    }
+    for x in a: acc = try f(acc, x)
     return acc
 }
 

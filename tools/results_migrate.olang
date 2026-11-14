@@ -170,11 +170,8 @@ fn (g migration&) sigs() Vec<I64> {
         k := g.v[i].k
         if k == token.Tok.Fn and i + 1 < n {
             d := g.declParams(i)
-            if d >= 0 {
-                out.Push(d)
-            } else if g.v[i + 1].k == token.Tok.LParen {
-                out.Push(i + 1)
-            }
+            if d >= 0: out.Push(d)
+            else if g.v[i + 1].k == token.Tok.LParen: out.Push(i + 1)
         } else if k == token.Tok.Trait and i + 1 < n and g.v[i + 1].k == token.Tok.LBrace and g.m[i + 1] > 0 {
             # a trait's methods: "[mut] Name(params) results" at the start of a line, or just after a one-line "{"
             j := i + 2
@@ -401,13 +398,9 @@ fn main() ? {
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
-        if a == "--check" {
-            check = true
-        } else if a == "-v" {
-            verbose = true
-        } else {
-            paths.Push($a)
-        }
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
     }
     if paths.Len() == 0 {
         srcmask.SayErr("usage: tools_results_migrate [--check] [-v] FILE|DIR...")

@@ -26,9 +26,7 @@ type InputError error {
 }
 
 fn Classify(n I32) I32 ? sh.RangeError, WorkerError {
-    if n < 0 {
-        error WorkerError.BadInput
-    }
+    if n < 0: error WorkerError.BadInput
     return try sh.CheckRange(n, 0, 100)
 }
 
@@ -36,15 +34,9 @@ fn Classify(n I32) I32 ? sh.RangeError, WorkerError {
 # re-declares the same pair in the OPPOSITE order when it propagates this, exercising the error-union
 # ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
 fn classifyInput(n I32) I32 ? WorkerError, InputError {
-    if n < 0 {
-        error InputError.Negative
-    }
-    if n > 1000 {
-        error InputError.TooBig
-    }
-    if n == 0 {
-        error WorkerError.BadInput
-    }
+    if n < 0: error InputError.Negative
+    if n > 1000: error InputError.TooBig
+    if n == 0: error WorkerError.BadInput
     return n
 }
 

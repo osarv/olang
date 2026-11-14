@@ -414,11 +414,8 @@ fn body(li Inputs&, sym String&, own String&, chain Array<String&>&, parts Vec<S
     remarks := Remarks(li.Files.Remarks, syms.ToArray(), names)
     w mut Writer& = Writer(li.Comment, src, remarks, syms.ToArray())
     for p in parts {
-        if li.Ir {
-            w.irPart(p, sym)
-        } else {
-            w.asmPart(p, sym)
-        }
+        if li.Ir: w.irPart(p, sym)
+        else: w.asmPart(p, sym)
         if w.out.Len() > 0 { break }
     }
     b := StringBuilder()

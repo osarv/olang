@@ -126,11 +126,8 @@ fn run(args Array<String&>&) {
             gaps := lw.Gaps.Len()
             wantDump := mirAt.Len() > 0 and (try where.Find(mirAt) catch default -1) >= 0
             problems, dump := try lw.Verified(b, wantDump) catch {
-                if lw.Gaps.Len() > gaps and lw.Gaps[gaps].What.StartsWith("an unknown type") {
-                    n.unchecked++
-                } else {
-                    n.gapped++
-                }
+                if lw.Gaps.Len() > gaps and lw.Gaps[gaps].What.StartsWith("an unknown type"): n.unchecked++
+                else: n.gapped++
                 continue
             }
             n.lowered++

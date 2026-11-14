@@ -162,15 +162,10 @@ fn frontRecord(path String&, file I64) views.Cand ? Stale {
     cand := views.Cand(file)
     for i in range 1, lines.Len() - 1 {
         line := lines[i]
-        if line.StartsWith("read ") {
-            cand.Reads.Push(line)
-        } else if line.StartsWith("body ") {
-            cand.Bodies.Push($line[5:])
-        } else if line.StartsWith("sig ") or line.StartsWith("baked ") {
-            cand.Others.Push(line)
-        } else {
-            error Stale
-        }
+        if line.StartsWith("read "): cand.Reads.Push(line)
+        else if line.StartsWith("body "): cand.Bodies.Push($line[5:])
+        else if line.StartsWith("sig ") or line.StartsWith("baked "): cand.Others.Push(line)
+        else: error Stale
     }
     return cand
 }

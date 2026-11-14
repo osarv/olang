@@ -412,11 +412,8 @@ fn Places.Resolve(p Profile&, tool String&) Places {
                     fun = symbolAt(ss, rel[i])
                     if fun == "" { fun = "??" }
                 }
-                if fun == "??" {
-                    fun = $"0x" $U64(keys[i]).Format(16) " (" $filepath.Base(files[i]) ")"
-                } else {
-                    fun = Readable(fun)
-                }
+                if fun == "??": fun = $"0x" $U64(keys[i]).Format(16) " (" $filepath.Base(files[i]) ")"
+                else: fun = Readable(fun)
                 pl.Frames.Push(Frame(pl.name(fun), pl.name(file), line))
                 frames++
             }
@@ -670,17 +667,11 @@ type node struct(Fn I64, Depth I64) {
 fn escapeXml(t String&) String {
     b := StringBuilder()
     for ch in t {
-        if ch == '<' {
-            b.Push("&lt;")
-        } else if ch == '>' {
-            b.Push("&gt;")
-        } else if ch == '&' {
-            b.Push("&amp;")
-        } else if ch == '"' {
-            b.Push("&quot;")
-        } else {
-            b.PushChar(ch)
-        }
+        if ch == '<': b.Push("&lt;")
+        else if ch == '>': b.Push("&gt;")
+        else if ch == '&': b.Push("&amp;")
+        else if ch == '"': b.Push("&quot;")
+        else: b.PushChar(ch)
     }
     return b.ToString()
 }

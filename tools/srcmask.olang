@@ -251,7 +251,7 @@ fn SayErr(t String&) {
 
 # the operators an expression continues with, longest first so "<<" is not read as "<"
 Ops Array<String&> = Array<String&>["<<=", ">>=", "<<", ">>", "<=", ">=", "==", "!=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^="
-                             "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "@"]
+    "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "@"]
 Words Array<String&> = Array<String&>["and", "or", "xor", "in", "not", "is", "as", "if"]
 
 # the operator the text t starts with ("" for none) - an assignment is none, for a store is no expression
@@ -306,13 +306,9 @@ fn SkipGap(text String&, mask String&, br String&, i I64) I64 {
     for j < text.Len() {
         c := text[j]
         inside := br[j] == '(' or br[j] == '['
-        if c == ' ' or c == '\t' {
-            j++
-        } else if inside and (c == '\n' or mask[j] == 'm') {
-            j++
-        } else {
-            break
-        }
+        if c == ' ' or c == '\t': j++
+        else if inside and (c == '\n' or mask[j] == 'm'): j++
+        else: break
     }
     return j
 }

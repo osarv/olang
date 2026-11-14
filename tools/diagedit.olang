@@ -196,11 +196,8 @@ fn Allowed(path String&, allowed Vec<String&>&) Bool {
 fn OlangFiles(paths Vec<String&>&, out mut Vec<String&>&) {
     found Vec<String&>
     for p in paths {
-        if os.IsDir(p) {
-            srcmask.Walk(p, found)
-        } else if p.EndsWith(".olang") {
-            found.Push($p)
-        }
+        if os.IsDir(p): srcmask.Walk(p, found)
+        else if p.EndsWith(".olang"): found.Push($p)
     }
     real Vec<String&>
     for f in found { real.Push(RealPathOf(f)) }

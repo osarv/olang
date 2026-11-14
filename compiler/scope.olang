@@ -3388,13 +3388,9 @@ fn (s mut Scoper&) anyTables() {
             does = does.Replace("its instance", "the instance")
             # (what it keeps in what a field of its instance refers to - a field set of the receiver - no word says)
             home := s.homeFieldDoes(b, sl.Want, s.bndWhy) if word == "" and sl.Want != types.UnknownT else ""
-            if word != "" {
-                s.P.L.Diags.Error(at, msgs.TraitMethodBeyond(ty, name, does, tr, word))
-            } else if home != "" {
-                s.P.L.Diags.Error(at, msgs.TraitMethodBeyondField(ty, name, home, tr))
-            } else {
-                s.P.L.Diags.Error(at, msgs.AnyMethodObligations(ty, name, tr))
-            }
+            if word != "": s.P.L.Diags.Error(at, msgs.TraitMethodBeyond(ty, name, does, tr, word))
+            else if home != "": s.P.L.Diags.Error(at, msgs.TraitMethodBeyondField(ty, name, home, tr))
+            else: s.P.L.Diags.Error(at, msgs.AnyMethodObligations(ty, name, tr))
             break
         }
     }
@@ -3705,9 +3701,7 @@ fn (s mut Scoper&) derivedScope(t Term, i I64) typed.Scope {
             # (O29: with no root of its own, found from the field itself - never the program's; read as the body is
             # entered where the body assigns the parameter, whose field is then another instance's)
             r := s.derivedRoot(p, w) if i < 0 else null
-            if r is not null {
-                i = s.plan.FindIndex(r, s.reassigned(I64(s.B!.Params[p])))
-            }
+            if r is not null: i = s.plan.FindIndex(r, s.reassigned(I64(s.B!.Params[p])))
             return typed.Scope.Passed(s.plan.DerivedSlot(p, w), i)
         }
         case _ { return typed.Scope.Unset }
@@ -3760,11 +3754,8 @@ fn (s mut Scoper&) passDerived(c typed.Call&, callee I64, beta Array<Term>&) {
         p, w := sm.DerivedP[k], sm.DerivedW[k]
         t := s.derivedAt(p, w, c, false, beta)
         sc := typed.Scope.Unset
-        if t.Runs() and not s.finds(t) {
-            sc = s.scopeOf(t)
-        } else {
-            sc = s.derivedScope(t, -1)
-        }
+        if t.Runs() and not s.finds(t): sc = s.scopeOf(t)
+        else: sc = s.derivedScope(t, -1)
         # (T22c, O29: a capture no one term stands for here - the argument's records disagree - is found while the
         # program runs from the reference the function value is made of, never left to the program's scope)
         if sc == typed.Scope.Unset and isCapCode(w) {
@@ -3795,11 +3786,8 @@ fn (s mut Scoper&) dropDerived(a typed.Expr&) {
     for k in range sm.DerivedP.Len() {
         t := s.recAt(rec, sm.DerivedW[k]) if sm.DerivedP[k] == 0 else Term.None
         sc := typed.Scope.Unset
-        if t.Runs() and not s.finds(t) {
-            sc = s.scopeOf(t)
-        } else {
-            sc = s.derivedScope(t, -1)
-        }
+        if t.Runs() and not s.finds(t): sc = s.scopeOf(t)
+        else: sc = s.derivedScope(t, -1)
         xs.Push(typed.DerivedArg(sm.DerivedP[k], sm.DerivedW[k], sc))
     }
     s.plan.DropDerived(a, xs)
@@ -4926,13 +4914,9 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
             }
             case _ { return Term.None }
         }
-        if best == Term.None {
-            best = to
-        } else if s.order(best, to) == Holds {
-            best = to
-        } else if s.order(to, best) != Holds {
-            return Term.None
-        }
+        if best == Term.None: best = to
+        else if s.order(best, to) == Holds: best = to
+        else if s.order(to, best) != Holds: return Term.None
     }
     return best
 }
@@ -5750,9 +5734,7 @@ fn (s mut Scoper&) returnedArrays(x typed.Expr?&, out mut Vec<I64>&) {
             s.returnedArrays(c.B, out)
         }
         case typed.Expr.Match(_, _, m) {
-            for a in m.Arms {
-                s.returnedArrays(a.Value, out)
-            }
+            for a in m.Arms: s.returnedArrays(a.Value, out)
             if m.NoMatch is not null { s.returnedArrays(m.NoMatch!.Value, out) }
         }
         case typed.Expr.Try(_, _, t) {
@@ -5800,9 +5782,7 @@ fn (s mut Scoper&) carried(x typed.Expr?&, out mut Vec<I64>&) {
         }
         case typed.Expr.Seq(_, _, q) { s.carried(q.X, out) }
         case typed.Expr.Match(_, _, m) {
-            for a in m.Arms {
-                s.carried(a.Value, out)
-            }
+            for a in m.Arms: s.carried(a.Value, out)
             if m.NoMatch is not null { s.carried(m.NoMatch!.Value, out) }
         }
         case typed.Expr.Try(_, _, t) {
@@ -6330,9 +6310,7 @@ fn (s mut Scoper&) keepParam(id I64) {
 }
 
 fn (s mut Scoper&) keepOne(id I64) {
-    if id >= 0 and id < s.kept.Len() and s.regionKind(id) and s.isRef(s.B!.Locals[id].Ty) {
-        s.kept[id] = true
-    }
+    if id >= 0 and id < s.kept.Len() and s.regionKind(id) and s.isRef(s.B!.Locals[id].Ty): s.kept[id] = true
 }
 
 # a parameter whose region the body stores into, or hands a writable reference into out (O17): kept, and more - put
@@ -6608,13 +6586,9 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
             s.kwHanded(a)
             continue
         }
-        if c.Target == typed.Callee.Value {
-            s.kwValueArg(c, k, r, ps, true)
-        } else if s.calleeStoresArg(c, k) {
-            s.storeParam(r, s.calleePutsArg(c, k))
-        } else if s.calleeKeepsArg(c, k) {
-            s.keepParam(r)
-        }
+        if c.Target == typed.Callee.Value: s.kwValueArg(c, k, r, ps, true)
+        else if s.calleeStoresArg(c, k): s.storeParam(r, s.calleePutsArg(c, k))
+        else if s.calleeKeepsArg(c, k): s.keepParam(r)
         s.kwHanded(a)
     }
 }
@@ -6629,11 +6603,8 @@ fn (s mut Scoper&) kwValueArg(c typed.Call&, k I64, r I64, ps Array<types.TypeId
     if not rs.Full and kept and s.typeKeeps(s.calleeType(c), k) { s.keepParam(r) }
     for x in rs.Recs {
         q := k + 1 if x.Adapter else k
-        if s.sumStores(x.Body, q) {
-            s.storeParam(r, s.sumPuts(x.Body, q))
-        } else if kept and s.sumKeeps(x.Body, q) {
-            s.keepParam(r)
-        }
+        if s.sumStores(x.Body, q): s.storeParam(r, s.sumPuts(x.Body, q))
+        else if kept and s.sumKeeps(x.Body, q): s.keepParam(r)
     }
 }
 
@@ -6655,11 +6626,8 @@ fn (s mut Scoper&) kwOutOfRegion(c typed.Call&, k I64, ua typed.Expr&, rr I64, p
         # a reference into a region handed on: kept where the callee keeps it - through a function value, where something
         # can be stored through its parameter (T22a). A reference read out of the region names storage that lives where
         # the region's does: kept in it only by a callee storing into what it names, not by one keeping the reference
-        if byValue {
-            s.kwValueArg(c, k, rr, ps, false)
-        } else if s.calleeStoresArg(c, k) {
-            s.storeParam(rr, s.calleePutsArg(c, k))
-        }
+        if byValue: s.kwValueArg(c, k, rr, ps, false)
+        else if s.calleeStoresArg(c, k): s.storeParam(rr, s.calleePutsArg(c, k))
         return
     }
     # a copy of a value read out of the region holding writable references, given to a function value: its body, not
@@ -6844,11 +6812,8 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, j Term, callSp source.Span)
     match x {
         case typed.Expr.Promote(_, _, pr) {
             v := s.unAway(pr.X)
-            if s.atCall(v) {
-                how = 1
-            } else if s.tryDefault(v) or s.choiceOfPlaces(v) {
-                how = 2
-            }
+            if s.atCall(v): how = 1
+            else if s.tryDefault(v) or s.choiceOfPlaces(v): how = 2
             et = v.Type()
             at = s.elemAt(v)
             lasts = spawned and s.lastsUntil(s.copyHere(pr), j)
@@ -6856,11 +6821,8 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, j Term, callSp source.Span)
         case typed.Expr.Borrow(_, _, p) {
             v := tempOf(p)
             if v is not null {
-                if s.atCall(v) {
-                    how = 1
-                } else if s.tryDefault(v) or s.choiceOfPlaces(v) {
-                    how = 2
-                }
+                if s.atCall(v): how = 1
+                else if s.tryDefault(v) or s.choiceOfPlaces(v): how = 2
             }
             et = p.Type()
             match p {
@@ -8039,11 +8001,8 @@ fn (s mut Scoper&) noteResBind(x typed.Expr&) {
             }
             if not ok { t = Term.Untraced }
         }
-        if not s.resBound {
-            s.resBind.Push(t)
-        } else if w < s.resBind.Len() and s.resBind[w] != t {
-            s.resBind[w] = Term.Untraced
-        }
+        if not s.resBound: s.resBind.Push(t)
+        else if w < s.resBind.Len() and s.resBind[w] != t: s.resBind[w] = Term.Untraced
     }
     s.resBound = true
 }
@@ -8072,11 +8031,8 @@ fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
     ts := try s.late.RefMut(l) catch { return }
     for w in range n {
         t := s.bindTerms[s.ctorFrom + w]
-        if first {
-            ts.Push(t)
-        } else if w < ts.Len() and ts[w] != t {
-            ts[w] = Term.Untraced
-        }
+        if first: ts.Push(t)
+        else if w < ts.Len() and ts[w] != t: ts[w] = Term.Untraced
     }
 }
 
@@ -8581,11 +8537,8 @@ fn (s mut Scoper&) toAtoms(t Term, out mut Vec<verAtom>&) {
             s.toAtoms(s.under[k], base)
             if base.Len() == 0 { base.Push(verAtom(5, 0, 0, 0, 0, 0, false, -1)) }
             for b in base {
-                if b.K == 6 {
-                    addAtom(out, verAtom(6, 0, w, b.BK, b.BA, b.BW, s.underElem[k], s.underDecl[k]))
-                } else {
-                    addAtom(out, verAtom(6, 0, w, b.K, b.A, b.W, s.underElem[k], s.underDecl[k]))
-                }
+                if b.K == 6: addAtom(out, verAtom(6, 0, w, b.BK, b.BA, b.BW, s.underElem[k], s.underDecl[k]))
+                else: addAtom(out, verAtom(6, 0, w, b.K, b.A, b.W, s.underElem[k], s.underDecl[k]))
             }
         }
     }
@@ -8725,11 +8678,8 @@ fn (s mut Scoper&) proposeCursor(l I64, t Term, stor Bool, key I64) {
     for d in s.reachFor(l, key) {
         if v.DefSp[d].Start < I32(0) or s.propSeen.Has(d) { continue }
         s.propSeen.Put(d, true)
-        if v.DefFirst[d] {
-            s.proposeFrom(l, t, stor, -1, true)
-        } else {
-            s.proposeDef(d, t)
-        }
+        if v.DefFirst[d]: s.proposeFrom(l, t, stor, -1, true)
+        else: s.proposeDef(d, t)
     }
 }
 
@@ -9569,11 +9519,8 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
             d = s.peekPlace(p, false)
         }
         if not d.Runs() { continue }
-        if first == Term.None {
-            first = d
-        } else if d != first {
-            agree = false
-        }
+        if first == Term.None: first = d
+        else if d != first: agree = false
         if not dest.Runs() or s.order(d, dest) == Holds { dest = d }
     }
     clauseBuilt := false
@@ -9876,9 +9823,7 @@ fn (s mut Scoper&) clauseBuilds(lb I64, dest Term, sp source.Span) Bool {
 
 # held locals no use placed: their temporaries are built in the block they were held in
 fn (s mut Scoper&) landHeld() {
-    for e in s.held {
-        s.val(e.Value, s.here())
-    }
+    for e in s.held: s.val(e.Value, s.here())
 }
 
 # ---- expressions ----
@@ -10427,11 +10372,8 @@ fn (s mut Scoper&) choiceDest(xs Vec<typed.Expr&>&, dest Term) Term {
         if s.isFresh(x) or s.isNullLit(x) or not s.holds(x.Type()) { continue }
         t := s.choicePeek(x)
         if t == Term.None or not t.Runs() { return dest }
-        if shared == Term.None {
-            shared = t
-        } else if shared != t {
-            return dest
-        }
+        if shared == Term.None: shared = t
+        else if shared != t: return dest
     }
     return dest if shared == Term.None else shared
 }
@@ -10612,11 +10554,8 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             }
             s.lamCaps.Put(I64(site), rc)
             if home == Term.None {
-                if frame {
-                    s.onFrameAt(site)
-                } else {
-                    s.build(site, d)
-                }
+                if frame: s.onFrameAt(site)
+                else: s.build(site, d)
                 s.plan.Pass(site, scopes.ToArray())
                 return Val.fresh(d)
             }
@@ -11131,11 +11070,8 @@ fn (s mut Scoper&) calleeValue(x typed.Expr&, spawned Bool, j Term) Term {
     # (the inference: what the task calls through, or what its lambda captured, built at the join's level - R4)
     if s.liftGather { s.propose(x, j) }
     if not s.report { return fv.T }
-    if lambda {
-        s.err(s.firstToken(s.B!.File, x.Span()), msgs.SpawnCaptureTooShort())
-    } else {
-        s.err(s.opTok(x), msgs.SpawnFuncTooShort())
-    }
+    if lambda: s.err(s.firstToken(s.B!.File, x.Span()), msgs.SpawnCaptureTooShort())
+    else: s.err(s.opTok(x), msgs.SpawnFuncTooShort())
     return fv.T
 }
 
@@ -12102,11 +12038,8 @@ fn (s mut Scoper&) noteLoopCopy(rec I64, a typed.Expr&) {
     name := s.P.L.Names.Text(s.B!.Locals[l].Name)
     at := s.wordAt(s.B!.Locals[l].Sp, name)
     arr := s.loopArray(try s.inits.Get(l) catch default null)
-    if arr != "" {
-        s.note(rec, s.B!.File, at, msgs.NoteLoopCopy(name, arr, arr))
-    } else if s.holds(s.B!.Locals[l].Ty) {
-        s.note(rec, s.B!.File, at, msgs.NoteLoopCopyLent(name))
-    }
+    if arr != "": s.note(rec, s.B!.File, at, msgs.NoteLoopCopy(name, arr, arr))
+    else if s.holds(s.B!.Locals[l].Ty): s.note(rec, s.B!.File, at, msgs.NoteLoopCopyLent(name))
 }
 
 # B11/O10c: where an argument lives too briefly for one it must outlive, what to change - it is made in a block of this
@@ -12954,11 +12887,8 @@ fn (s mut Scoper&) capsDiffer(x typed.Expr&) Bool {
         if not s.holds(cp.Outer.Type()) { continue }
         t := s.peekTerm(cp.Outer)
         if t == Term.None { continue }
-        if first == Term.None {
-            first = t
-        } else if t != first {
-            return true
-        }
+        if first == Term.None: first = t
+        else if t != first: return true
     }
     return false
 }
@@ -13091,9 +13021,7 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
     } else if (kind == FitOwn or kind == FitReturn) and s.inRet and s.genElemTerm() != Term.None {
         # D18c: a yield where the generator's elements live elsewhere than this value can be shown to
         where := "where the generator does"
-        if not s.B!.GenHome {
-            where = "with what '" $s.P.L.Names.Text(s.B!.Locals[I64(s.B!.GenElem)].Name) "' refers to"
-        }
+        if not s.B!.GenHome: where = "with what '" $s.P.L.Names.Text(s.B!.Locals[I64(s.B!.GenElem)].Name) "' refers to"
         m = msgs.GenYieldShorter(where)
     } else if kind == FitOwn {
         m = msgs.OwnCannotOutlive()
@@ -14337,11 +14265,8 @@ fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
     saved := s.standIn
     # a callee building only its tasks' stand-ins there builds a stand-in here too
     if known and v < s.sum(callee).Real.Len() and not s.sum(callee).Real[v] { s.standIn = true }
-    if known {
-        s.buildsInto(t, sp, s.sum(callee).BuildFile[v], s.sum(callee).BuildAt[v])
-    } else {
-        s.buildsInto(t, sp, s.B!.File, sp)
-    }
+    if known: s.buildsInto(t, sp, s.sum(callee).BuildFile[v], s.sum(callee).BuildAt[v])
+    else: s.buildsInto(t, sp, s.B!.File, sp)
     s.standIn = saved
 }
 

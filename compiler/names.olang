@@ -390,11 +390,8 @@ fn (r mut Resolver&) nameSpan(mi I64, from I32, n source.NameId) source.Span {
     hi := toks.Len()
     for lo < hi {
         mid := (lo + hi) / 2
-        if toks[mid].Start < from {
-            lo = mid + 1
-        } else {
-            hi = mid
-        }
+        if toks[mid].Start < from: lo = mid + 1
+        else: hi = mid
     }
     want := r.text(n)
     for i in range lo, toks.Len() {
@@ -426,11 +423,8 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
         match d {
             case ast.Decl.If(_, ti) {
                 chosen := r.L.Chosen(mi, ti.Cond!.Span().Start)
-                if chosen == load.Pending {
-                    r.waitAside(mi, ti)
-                } else {
-                    r.collectIf(mi, ti, chosen, 0)
-                }
+                if chosen == load.Pending: r.waitAside(mi, ti)
+                else: r.collectIf(mi, ti, chosen, 0)
             }
             case ast.Decl.Fn(f), ast.Decl.Extern(f) {
                 if f.IsBuilder() {
@@ -590,11 +584,8 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
 fn (r mut Resolver&) buildDefault(mi I64, n source.NameId, sp source.Span, v ast.VarDecl?&) {
     if v is null { return }
     ty := ""
-    if v.Ty is not null {
-        ty = $r.L.Mods[mi].Src!.Text[v.Ty!.Span().Start:v.Ty!.Span().End]
-    } else if v.Values.Len() == 1 {
-        ty = $literalType(v.Values[0])
-    }
+    if v.Ty is not null: ty = $r.L.Mods[mi].Src!.Text[v.Ty!.Span().Start:v.Ty!.Span().End]
+    else if v.Values.Len() == 1: ty = $literalType(v.Values[0])
     if ty == "" { return }   # its type is the checker's to find
     if ty != "Bool" and ty != "I32" and ty != "I64" and ty != "U64" and ty != "F64" and ty != "String" {
         r.L.Diags.Error(r.at(mi, sp), msgs.BuildDefaultType(r.tok(n), ty))
@@ -687,11 +678,8 @@ fn (r mut Resolver&) popTo(mark I64) {
     for r.undo.Len() > mark {
         p := try r.undo.Pop() catch { return }
         r.judge(try r.scope.Get(p.First) catch default -1)
-        if p.Second < 0 {
-            r.scope.Remove(p.First)
-        } else {
-            r.scope.Put(p.First, p.Second)
-        }
+        if p.Second < 0: r.scope.Remove(p.First)
+        else: r.scope.Put(p.First, p.Second)
     }
 }
 
@@ -903,9 +891,7 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
         r.receiverVars(f.Owner, false)
         r.typeRef(f.Owner)
     }
-    for p in s.Params {
-        r.typeRef(p.Ty)
-    }
+    for p in s.Params: r.typeRef(p.Ty)
     for t in s.Results { r.typeRef(t) }
     for e in s.Errors { r.path(e) }
     for p in s.Params {
@@ -1006,9 +992,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
         case ast.TypeBody.Struct(s) {
             m0 := r.mark()
             r.typeParams(s.TypeParams)
-            for p in s.Params {
-                r.typeRef(p.Ty)
-            }
+            for p in s.Params: r.typeRef(p.Ty)
             if s.Errs is not null {
                 for e in s.Errs!.Errors { r.path(e) }
             }
@@ -1032,9 +1016,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
         case ast.TypeBody.Enum(cases, raw) {
             if raw is not null { r.typeRef(raw) }   # T17e
             for c in cases {
-                for p in c.Payload {
-                    r.typeRef(p.Ty)
-                }
+                for p in c.Payload: r.typeRef(p.Ty)
             }
         }
         case ast.TypeBody.Trait(methods, exts, members) {
@@ -1181,11 +1163,8 @@ fn (r mut Resolver&) varDecl(v ast.VarDecl&) {
     if v.Field and v.Ty is null and v.Values.Len() == 0 and not v.Infer { return }
     # a field named as a parameter is C2a's error, the checker's to say
     for i in range v.Names.Len() {
-        if v.Field {
-            r.declare(v.Names[i], v.NameSps[i], true)
-        } else {
-            r.declareRead(v.Names[i], v.NameSps[i], false)
-        }
+        if v.Field: r.declare(v.Names[i], v.NameSps[i], true)
+        else: r.declareRead(v.Names[i], v.NameSps[i], false)
     }
     # S8c: a local declared with its own value may be fixed - which the checker decides, knowing its type and its writes
     if not v.Field and v.Values.Len() == v.Names.Len() {
@@ -1265,11 +1244,8 @@ fn (r mut Resolver&) choose(b ast.Branch&, decided Bool, taken Bool, runtime Boo
     if b.Group < 0 { return }
     if decided and not taken { r.skipped.Push(b.Sp) }   # D3b: its text only is left
     if decided {
-        if taken {
-            r.L.Diags.Choose(b.Group)
-        } else {
-            r.L.Diags.Drop(b.Group)
-        }
+        if taken: r.L.Diags.Choose(b.Group)
+        else: r.L.Diags.Drop(b.Group)
     } else if runtime and not r.L.Diags.Holds(b.Group) {
         # a branch that did not parse may be one compile-time evaluation drops (S8c, B9c): the checker decides it
         r.L.Diags.Choose(b.Group)

@@ -196,11 +196,8 @@ fn (f mut formatter&) gap(a I64, b I64, next I64) {
     for i < b {
         c := t[i]
         if c == '\n' {
-            if f.open {
-                f.finish()
-            } else {
-                f.newlines++
-            }
+            if f.open: f.finish()
+            else: f.newlines++
             i++
         } else if c == '#' {
             e := i + 1
@@ -230,11 +227,8 @@ fn (f mut formatter&) comment(s I64, e I64, block Bool, next I64) {
         f.curComE = e
         return
     }
-    if not f.open {
-        f.begin(f.levelAt(next))
-    } else if f.last != 0 {
-        f.codes.PushChar(' ')
-    }
+    if not f.open: f.begin(f.levelAt(next))
+    else if f.last != 0: f.codes.PushChar(' ')
     for i in range s, e {
         if f.text[i] == '\n' { f.curMulti = true }
     }
@@ -371,9 +365,7 @@ fn (f mut formatter&) level(r I64) I64 {
         c = f.cont(r)
         lv = f.child() + c
     }
-    if c == 0 and (n == 0 or f.stKind[n - 1] == 0 or (closing and n > 1 and f.stKind[n - 2] == 0)) {
-        f.stmtBase = lv
-    }
+    if c == 0 and (n == 0 or f.stKind[n - 1] == 0 or (closing and n > 1 and f.stKind[n - 2] == 0)): f.stmtBase = lv
     f.curIndent = lv
     return lv
 }
@@ -393,11 +385,8 @@ fn (f mut formatter&) track(j I64) {
     }
     if k == token.Tok.LBrace {
         n := f.stKind.Len()
-        if n == 0 or f.stKind[n - 1] == 0 {
-            f.push(0, f.stmtBase + 1, f.stmtBase)
-        } else {
-            f.push(0, f.curIndent + 1, f.curIndent)
-        }
+        if n == 0 or f.stKind[n - 1] == 0: f.push(0, f.stmtBase + 1, f.stmtBase)
+        else: f.push(0, f.curIndent + 1, f.curIndent)
     } else if k == token.Tok.LParen or k == token.Tok.LBrack {
         f.push(1, f.curIndent + 1, f.curIndent)
     } else {
@@ -543,9 +532,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     if ka == token.Tok.Amp and not f.toks[a].Has(token.Space) { return f.asWritten(b) }
     if kb == token.Tok.Amp { return f.asWritten(b) }
     # a nullable marker "?&" (T2c) belongs to the type before it, as "&" does - never an error set's "?"
-    if kb == token.Tok.Question and rb + 1 < f.real.Len() and f.kind(f.real[rb + 1]) == token.Tok.Amp {
-        return ""
-    }
+    if kb == token.Tok.Question and rb + 1 < f.real.Len() and f.kind(f.real[rb + 1]) == token.Tok.Amp: return ""
     if (ka == token.Tok.Iden or ka == token.Tok.Return) and rb >= 2 and not f.toks[a].Has(token.Space) and kb != token.Tok.LBrace {
         pa := f.real[rb - 2]
         if f.kind(pa) == token.Tok.Amp and not f.toks[pa].Has(token.Space) { return f.asWritten(b) }
@@ -834,11 +821,8 @@ fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelu
 
 fn (l loader&) addNames(o mut parse.Oracle&, names mut source.Names&, alias String&, list String&) {
     for t in list.Split(" ") {
-        if t.StartsWith("fn:") {
-            o.AddFn(names, alias, t[3:])
-        } else if t != "" {
-            o.Add(names, alias, t)
-        }
+        if t.StartsWith("fn:"): o.AddFn(names, alias, t[3:])
+        else if t != "": o.Add(names, alias, t)
     }
 }
 

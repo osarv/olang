@@ -241,11 +241,8 @@ fn tokens(out mut io.Writer&, src source.Source&) {
         if tk.Kind == token.Tok.Eof { break }
         out.Write($src.Line(tk.Start))
         out.WriteChar(' ')
-        if tk.Kind == token.Tok.StmtEnd {
-            out.WriteChar(';')
-        } else {
-            out.Write(src.Text[tk.Start:tk.End])
-        }
+        if tk.Kind == token.Tok.StmtEnd: out.WriteChar(';')
+        else: out.Write(src.Text[tk.Start:tk.End])
         out.WriteChar('\n')
     }
     for d in ts.Diags {

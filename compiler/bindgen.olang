@@ -1013,11 +1013,8 @@ fn (g mut gen&) write(head String&) String {
     for i in range g.recs.Len() {
         # (wantRecord and holdable may grow g.recs: each read of a record takes its reference anew - M19g)
         if g.recs.Ref(i).Name == "" or not g.wantRecord(i) { continue }
-        if g.holdable(i) {
-            plains.Push($"\n" $g.structDecl(i))
-        } else {
-            opaque.Push("    type " $g.recs.Ref(i).Name "\n")
-        }
+        if g.holdable(i): plains.Push($"\n" $g.structDecl(i))
+        else: opaque.Push("    type " $g.recs.Ref(i).Name "\n")
     }
     if opaque.Len() > 0 or fns.Len() > 0 { out.Push($"\nextern {\n" $opaque.ToString() $fns.ToString() "}\n") }
     out.Push(plains.ToString())
@@ -1140,11 +1137,8 @@ fn (g mut gen&) readMacros(out String&, probe String&, own String&, deps mut Vec
             if close < 0 { continue }
             for p in rest[e + 1:close].Split(",") {
                 pt := p.Trim()
-                if pt == "..." or pt.EndsWith("...") {
-                    variadic = true
-                } else if pt != "" {
-                    ps.Push(pt)
-                }
+                if pt == "..." or pt.EndsWith("..."): variadic = true
+                else if pt != "": ps.Push(pt)
             }
             body = rest[close + 1:]
         }
@@ -1569,11 +1563,8 @@ fn (g mut gen&) otherConsts() {
         k := bodyKind(body)
         if k == 2 {
             t := textLiteral(body.ToArray())
-            if t == "" {
-                g.skippedMacro(m.Name, "its text is no olang text literal")
-            } else {
-                g.namedConst(m.Name, $m.Name " String = " $t)
-            }
+            if t == "": g.skippedMacro(m.Name, "its text is no olang text literal")
+            else: g.namedConst(m.Name, $m.Name " String = " $t)
             continue
         }
         if k == 1 {

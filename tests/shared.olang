@@ -45,9 +45,7 @@ fn add(a I32, b I32) I32 {
 }
 
 fn factorial(n I32) I32 {
-    if n <= 1 {
-        return 1
-    }
+    if n <= 1: return 1
     return n * factorial(n - 1)
 }
 
@@ -206,26 +204,18 @@ fn noisePoint(n I32) I32 {
 
 fn sumUntil(n I32) I32 {
     total I32 = 0
-    for i in range 1, n + 1 {
-        total = total + i
-    }
+    for i in range 1, n + 1: total = total + i
     return total
 }
 
 fn SafeDiv(a I32, b I32) I32 ? MathError {
-    if b == 0 {
-        error MathError.DivByZero
-    }
+    if b == 0: error MathError.DivByZero
     return a / b
 }
 
 fn CheckRange(n I32, lo I32, hi I32) I32 ? RangeError {
-    if n < lo {
-        error RangeError.TooSmall
-    }
-    if n > hi {
-        error RangeError.TooLarge
-    }
+    if n < lo: error RangeError.TooSmall
+    if n > hi: error RangeError.TooLarge
     return n
 }
 
@@ -233,16 +223,10 @@ fn CheckRange(n I32, lo I32, hi I32) I32 ? RangeError {
 # worker.olang re-declares the same pair in the OPPOSITE order when it propagates this, exercising the
 # error-union ABI's ordinal remap across two differently-ordered signatures
 fn ComputeChecked(a I32, b I32, lo I32, hi I32) I32 ? MathError, RangeError {
-    if b == 0 {
-        error MathError.DivByZero
-    }
+    if b == 0: error MathError.DivByZero
     result I32 = a / b
-    if result < lo {
-        error RangeError.TooSmall
-    }
-    if result > hi {
-        error RangeError.TooLarge
-    }
+    if result < lo: error RangeError.TooSmall
+    if result > hi: error RangeError.TooLarge
     return result
 }
 
@@ -285,9 +269,7 @@ type ValidationError error {
 }
 
 fn checkNonNegative(n I32) I32 ? ValidationError {
-    if n < 0 {
-        error ValidationError.Negative
-    }
+    if n < 0: error ValidationError.Negative
     return n
 }
 
@@ -315,13 +297,9 @@ type MeasureError error {
 # and a later statement alike can read one that was already built ("half" reads "doubled", and the
 # second check tests "doubled" rather than re-deriving it from "n").
 type Measure struct(n I32) ? MeasureError {
-    if n < 0 {
-        error MeasureError.Negative
-    }
+    if n < 0: error MeasureError.Negative
     doubled I32 = n * 2
-    if doubled > 100 {
-        error MeasureError.TooBig
-    }
+    if doubled > 100: error MeasureError.TooBig
     n
     half I32 = doubled / 4
 }
@@ -569,11 +547,8 @@ fn Point.reassignSameScopeChecked(x I32, y I32) Point& {
 # two branches reassigning box into one agreed scope merge to that scope
 fn Point.reassignBothBranchesAgreeChecked(cond Bool, x I32, y I32) Point& {
     box ScopedBox& = ScopedBox(Point(1, 2))
-    if cond {
-        box = ScopedBox(Point(x, y))
-    } else {
-        box = ScopedBox(Point(y, x))
-    }
+    if cond: box = ScopedBox(Point(x, y))
+    else: box = ScopedBox(Point(y, x))
     return box.inner
 }
 
@@ -1026,9 +1001,7 @@ fn initializerWithNoCompileTimeLength(n I32) I32 {
 # arguments produces one monomorphized copy (G16) - an ordinary function with the variables substituted
 # away, to which every other rule in the language then applies unchanged.
 fn maxOf<T>(a T, b T) T {
-    if a > b {
-        return a
-    }
+    if a > b: return a
     return b
 }
 
@@ -1422,9 +1395,7 @@ fn mixedAlignment(n I32) I32 {
 
 fn manyChunks(rounds I32, per I32) I32 {
     acc I32 = 0
-    for _ in range rounds {
-        acc = acc + mixedAlignment(per)
-    }
+    for _ in range rounds: acc = acc + mixedAlignment(per)
     return acc
 }
 
@@ -1730,9 +1701,7 @@ type Tally struct(n I32) {
 }
 
 fn addUp(t mut Tally&, times I32) {
-    for _ in range times {
-        t.val = t.val + 1
-    }
+    for _ in range times: t.val = t.val + 1
 }
 
 fn readOut(t Tally&) I32 {
@@ -2477,9 +2446,7 @@ test "O2d: a call inside a block allocates into the scope its argument names, no
     c.data[0] = 11
     c.data[1] = 22
     c.n = 2
-    if c.n == 2 {
-        c = c.regrow(4)
-    }
+    if c.n == 2: c = c.regrow(4)
     assert churnArena() == 2469000
     assert c.data.Len() == 4
     assert c.data[0] == 11
@@ -2936,9 +2903,7 @@ test "a spawn nested in an if inside a join still binds to that join" {
     t mut Tally& = Tally(0)
     n I32 = t.val + 3        # read through a reference, so known only at run time (a fixed n would be S8a's dead code)
     join {
-        if n > 1 {
-            spawn addUp(t, 50000)
-        }
+        if n > 1: spawn addUp(t, 50000)
     }
     assert t.val == 50000
 }
@@ -2990,9 +2955,7 @@ test "a join block runs ordinary code between its spawns" {
     join {
         spawn addUp(a, 10)
         seen = seen + 1
-        for _ in range 3 {
-            seen = seen + 1
-        }
+        for _ in range 3: seen = seen + 1
         spawn addUp(b, 20)
         seen = seen + 1
     }
@@ -3010,9 +2973,7 @@ fn addUpIdx(ts mut Array<mut Tally&>&, i I32, times I32) {
 test "a loop inside a join starts one task per iteration" {
     ts mut Array<mut Tally&>& = Array<Tally&>[Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0)]
     join {
-        for i in range I32(8) {
-            spawn addUpIdx(ts, i, 1000)
-        }
+        for i in range I32(8): spawn addUpIdx(ts, i, 1000)
     }
     total I32 = 0
     for i in range 8 { total = total + ts[i].val }
@@ -3026,9 +2987,7 @@ test "a loop inside a join starts one task per iteration" {
 # arena standing in for the scope it was given, and the spawner folds them back in after the join.
 fn Crate2.churnInto(times I32) Crate2& {
     last mut Crate2& = Crate2(0)
-    for i in range times {
-        last = Crate2(i)
-    }
+    for i in range times: last = Crate2(i)
     return last
 }
 
@@ -3240,9 +3199,7 @@ test "a generic parameterised by a callback can actually call it" {
 # anywhere the array itself could and nowhere it could not.
 fn sumSlice(b Array<I32>&) I32 {
     total I32 = 0
-    for i in range b.Len() {
-        total = total + b[i]
-    }
+    for i in range b.Len(): total = total + b[i]
     return total
 }
 
@@ -3741,13 +3698,9 @@ test "a plain struct literal promotes correctly into a heap-indirect parameter a
 
 test "the real arena allocator handles chunk growth and reuse across many scope open/close cycles" {
     expectedOneRound I32 = 0
-    for i in range I32(300) {
-        expectedOneRound = expectedOneRound + i
-    }
+    for i in range I32(300): expectedOneRound = expectedOneRound + i
     total I32 = 0
-    for _ in range 10 {
-        total = total + sumManyPoints(300)
-    }
+    for _ in range 10: total = total + sumManyPoints(300)
     assert total == expectedOneRound * 10
 }
 
@@ -3998,9 +3951,7 @@ test "a bare '&' field assigned through a scope-tagged parameter survives the ca
         # force reuse of fillBoxedPoint's own now-closed private scope's chunk - would corrupt "inner" if it
         # had dangled into that scope instead of the one actually passed in
     noise I32 = 0
-    for i in range I32(20) {
-        noise = noise + noisePoint(i)
-    }
+    for i in range I32(20): noise = noise + noisePoint(i)
 
     assert box.inner.x == 7
     assert box.inner.y == 8
@@ -4019,9 +3970,7 @@ test "a constructor field's scope tag, naming the constructor's own scope variab
         # force reuse of fillBoxViaCtor's own now-closed private scope's chunk - would corrupt "q" if
         # ScopedBox's "inner" field had actually landed there instead of in "outer" (passed in)
     noise I32 = 0
-    for i in range I32(20) {
-        noise = noise + noisePoint(i)
-    }
+    for i in range I32(20): noise = noise + noisePoint(i)
 
     assert q.x == 7
     assert q.y == 8
@@ -4080,9 +4029,7 @@ test "a plain struct's bare '&' field survives a function boundary by inheriting
         # force reuse of makeNestedBox's own now-closed private scope's chunk - would corrupt nb.inner if
         # "inner" had actually landed there instead of in the caller's own scope, tagged via "s"
     noise I32 = 0
-    for i in range I32(20) {
-        noise = noise + noisePoint(i)
-    }
+    for i in range I32(20): noise = noise + noisePoint(i)
 
     assert nb.inner.x == 11
     assert nb.inner.y == 22
@@ -4099,9 +4046,7 @@ test "a bare '&' field assigned through a two-hop chain of bare '&' bases resolv
         # the old one-hop-only resolution (which only ever looked at "co.mid" itself, always bare, and so
         # always fell back to "whatever function is executing right now") had actually been used here
     noise I32 = 0
-    for i in range I32(20) {
-        noise = noise + noisePoint(i)
-    }
+    for i in range I32(20): noise = noise + noisePoint(i)
 
     assert co.mid.leaf.x == 5
     assert co.mid.leaf.y == 6
@@ -4358,11 +4303,8 @@ test "a runtime-sized array tagged to a named scope survives a function boundary
 # functions that do always return. That is what "unreachable" is for, and it is the only one of these
 # statements a checker ever REQUIRES.
 fn everyPathReturns(c Bool) I32 {
-    if c {
-        return 1
-    } else {
-        return 2
-    }
+    if c: return 1
+    else: return 2
 }
 
 fn viaExhaustiveMatch(d Direction) I32 {
@@ -4378,9 +4320,7 @@ fn viaExhaustiveMatch(d Direction) I32 {
 # leaving and the loop leaving are different questions. "unreachable" is how you say which you meant.
 fn loopsUntilFound(n I32) I32 {
     for i I32 = 0, true, i++ {
-        if i == n {
-            return i
-        }
+        if i == n: return i
     }
     unreachable
 }
@@ -4618,9 +4558,7 @@ fn firstOver(limit I32) I32 {
 fn sumEvens(n I32) I32 {
     total I32 = 0
     for i in range n {
-        if i % 2 != 0 {
-            continue
-        }
+        if i % 2 != 0: continue
         total = total + i
     }
     return total
@@ -4630,9 +4568,7 @@ fn doBreak() I32 {
     n I32 = 0
     do {
         n = n + 1
-        if n == 3 {
-            break
-        }
+        if n == 3: break
     } for n < 100
     return n
 }
@@ -4642,9 +4578,7 @@ fn doContinue() I32 {
     hits I32 = 0
     do {
         n = n + 1
-        if n % 2 == 0 {
-            continue
-        }
+        if n % 2 == 0: continue
         hits = hits + 1
     } for n < 6
     return hits
@@ -4655,9 +4589,7 @@ fn nestedBreak() I32 {
     hits I32 = 0
     for _ in range 3 {
         for j in range 10 {
-            if j == 2 {
-                break
-            }
+            if j == 2: break
             hits = hits + 1
         }
         hits = hits + 100
@@ -4692,9 +4624,7 @@ fn continueUnwinds(n I32) I32 {
 fn breakUnwinds(n I32) I32 {
     for i in range n {
         h Handle& = Handle(i)
-        if h.id == 2 {
-            break
-        }
+        if h.id == 2: break
     }
     return resourcesClosed
 }
@@ -4723,9 +4653,7 @@ fn perIterationCount(times I32) I32 {
     for i in range times {
         h Handle& = Handle(i)
         # every PREVIOUS iteration's handle has already been destructed by now
-        if resourcesClosed != i {
-            return -1
-        }
+        if resourcesClosed != i: return -1
     }
     return resourcesClosed
 }
@@ -6299,9 +6227,7 @@ test "a generic linked node, walked by a for loop that advances by assignment" {
     a.next = GLink<I64>(20)
     a.next!.next = GLink<I64>(300)
     sum I64 = 0
-    for c GLink<I64>?& = a, c is not null, c = c.next {
-        sum = sum + c.v
-    }
+    for c GLink<I64>?& = a, c is not null, c = c.next: sum = sum + c.v
     assert sum == 321
 }
 
@@ -6351,9 +6277,7 @@ fn growLink(p mut Link&) { p.next = Link(9) }
 test "O25: a field read determines a callee's scope as its container's" {
     a mut Link& = Link(1)
     a.next = Link(2)
-    if a.v == 1 {
-        growLink(a.next!)
-    }
+    if a.v == 1: growLink(a.next!)
     churnLinks()
     assert a.next!.next!.v == 9
 }
@@ -6743,9 +6667,7 @@ test "R9a: the default is evaluated only on failure" {
 tdZero mut I32 = 0        # a divisor known only at run time: with a constant one the condition below is fixed (S8a)
 
 test "R9a: a default binds as tightly as the try, and is one value inside an argument list" {
-    if try SafeDiv(1, tdZero) catch default 0 == 0 {
-        tdCalls = 100
-    }
+    if try SafeDiv(1, tdZero) catch default 0 == 0: tdCalls = 100
     assert tdCalls == 100
     assert 1 + (try SafeDiv(1, 0) catch default 10) == 11
     assert tdAdd(try SafeDiv(1, 0) catch default 1, 2) == 3
@@ -7011,9 +6933,7 @@ fn ktFib(n I32) I32 {
 
 fn ktSquares() Array<I32>& {
     t mut Array<I32>& = Array<I32>(8)
-    for i in range I32(8) {
-        t[i] = i * i
-    }
+    for i in range I32(8): t[i] = i * i
     return t
 }
 
@@ -7157,21 +7077,14 @@ test "B9c: conditions decided by compile-time evaluation, nested two deep" {
 # S8b: a local if the build decides is conditional compilation - only the chosen branch is parsed and
 # checked, so the others may name what does not exist on this target
 fn ccLocalChoice() I32 {
-    if TargetOs == "no-such-os" {
-        return NoSuchType{1}.v + noSuchFunction()
-    } else if TestBuild or not TestBuild {
-        return 7
-    } else {
-        return alsoMissing()
-    }
+    if TargetOs == "no-such-os": return NoSuchType{1}.v + noSuchFunction()
+    else if TestBuild or not TestBuild: return 7
+    else: return alsoMissing()
 }
 
 fn ccRuntimeThenDecided(x I32) I32 {
-    if x > 3 {
-        return 1
-    } else if TargetOs == "no-such-os" {
-        return noSuchFunction()
-    }
+    if x > 3: return 1
+    else if TargetOs == "no-such-os": return noSuchFunction()
     return 2
 }
 
@@ -7188,20 +7101,14 @@ fn ccOnRealOs() Bool {
 }
 
 fn ccPlatformPage() I32 {
-    if ccOnRealOs() {
-        return 4096
-    } else {
-        return NoSuchPlatformType{0}.size
-    }
+    if ccOnRealOs(): return 4096
+    else: return NoSuchPlatformType{0}.size
 }
 
 # this condition calls ccPlatformPage, whose own if is decided first
 fn ccUsesPlatformPage() I32 {
-    if ccPlatformPage() == 4096 and ccOnRealOs() {
-        return 1
-    } else {
-        return AnotherMissingType{0}.size
-    }
+    if ccPlatformPage() == 4096 and ccOnRealOs(): return 1
+    else: return AnotherMissingType{0}.size
 }
 
 test "S8b: local ifs decided by compile-time evaluation, one inside a function another condition calls" {
@@ -7213,20 +7120,15 @@ test "S8b: local ifs decided by compile-time evaluation, one inside a function a
 # as compile-time too, so it can decide an if the build decides
 fn ccFixedLocal() I32 {
     arch I64 = TargetArch.Len()
-    if arch > 0 and ccOnRealOs() {
-        return 1
-    } else {
-        return MissingOnThisTarget{0}.v
-    }
+    if arch > 0 and ccOnRealOs(): return 1
+    else: return MissingOnThisTarget{0}.v
 }
 
 # ...while one that is written anywhere in its function is the running program's
 fn ccWrittenLocal(steps I32) I32 {
     k := 0
     for _ in range steps { k++ }
-    if k > 2 {
-        return 1
-    }
+    if k > 2: return 1
     return 0
 }
 
@@ -7242,11 +7144,8 @@ fn ccFixedChain() I32 {
     a I64 = TargetOs.Len()
     b := a + 1
     k Bool = b > 1
-    if k and b > a {
-        return 2
-    } else {
-        return NotOnThisTarget{0}.v
-    }
+    if k and b > a: return 2
+    else: return NotOnThisTarget{0}.v
 }
 
 test "S8c: a fixed local read through another decides an if, and an assert" {
@@ -9564,9 +9463,7 @@ test "Split's pieces live with the text, and the evaluator splits as the run tim
     k I32 = ctRuntimeZero
     line String& = "x" $k ",yy,zzz"
     parts Array<String&>& = line.Split("!")
-    if k == 0 {
-        parts = line.Split(",")
-    }
+    if k == 0: parts = line.Split(",")
     assert churnArena() == 2469000
     assert parts.Len() == 3 and parts[0].Eq("x0") and parts[2].Eq("zzz")
     assert CtSplitN == 4 and CtSplitLast.Eq("v")
@@ -9629,9 +9526,7 @@ test "the evaluator models function values and interfaces, and bakes enums carry
 fn lamApply(f fn&(x I32) I32, n I32) I32 { return f(n) }
 fn lamMap<T, U>(a Array<T>&, f fn&(x T) U) Array<U> {
     out := Array<U>(a.Len())
-    for i, x in a {
-        out[i] = f(x)
-    }
+    for i, x in a: out[i] = f(x)
     return out
 }
 fn lamCount<T>(a Array<T>&, keep fn&(x T) Bool) I32 {
@@ -11723,9 +11618,7 @@ fn sfIdRef(h SfHolder&) SfHolder& { return h }
 test "O4b/O14c: a by-value parameter holding references returns them to a caller that keeps them no further out" {
     outer SfNode& = SfNode(sfRun)
     keep SfHolder = SfHolder(outer)
-    for _ in range 2 {
-        keep = sfIdHolder(SfHolder(outer))
-    }
+    for _ in range 2: keep = sfIdHolder(SfHolder(outer))
     h := SfHolder(outer)
     r SfHolder& = sfIdRef(h)
     obChurn()
@@ -17899,9 +17792,7 @@ fn w8Depth(t R2Tree&) I64 {
     return n
 }
 fn w8Leaf(t R2Tree&) I64 {
-    for t != R2Tree.Leaf {
-        t = R2Tree.Leaf(7)
-    }
+    for t != R2Tree.Leaf: t = R2Tree.Leaf(7)
     return t.v
 }
 W8Baked := w8Big(R2Shape.Round(R2Disk(2.0))) and not w8Big(R2Shape.Round(R2Disk(1.0))) and w8W(R2Shape.Box(2.0, 1.0)) == 2.0 and

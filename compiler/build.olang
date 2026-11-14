@@ -883,9 +883,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     # B7a: the words naming the tests to run, read by the test binary's harness
     for w in filters { cmd.Push(w) }
     out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
-    if out.Status > 128 {
-        sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
-    }
+    if out.Status > 128: sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     # B3a: words naming none of this file's tests - said, and the status 3 TestFiles reads: a run fails by them only
     # where no listed file has a test they name
     if out.Status == 3 and filters.Len() > 0 {

@@ -30,11 +30,8 @@ fn main() {
     for c in cases {
         text := try os.ReadFile("checks/cases/" $c) catch default ""
         args := flagArgs(flagsOf(text))
-        if args.Len() == 0 {
-            plain.Push(c)
-        } else {
-            said.Push(names(root, dump, args, Array<String&>[c]))
-        }
+        if args.Len() == 0: plain.Push(c)
+        else: said.Push(names(root, dump, args, Array<String&>[c]))
     }
     if plain.Len() > 0 { said.Push(names(root, dump, Array<String&>(0), plain.ToArray())) }
     n := toolkit.Sections(said.ToString())

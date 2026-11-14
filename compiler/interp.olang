@@ -527,11 +527,8 @@ fn DecideValues(c mut typecheck.Checker&) I64 {
         if moved { d.Note(rec, at, msgs.NoteInLibrary()) }
         if a.Read != diag.Where.Nowhere { d.Note(rec, a.Read, msgs.NoteReadUnassigned()) }
         noteWhy(d, rec, a.File, a.Sp, file, sp)
-        if fix != "" {
-            d.Note(rec, use, msgs.NoteZeroByReference(fix))
-        } else if moved {
-            d.Note(rec, use, msgs.NoteZeroReferenceHasOne(c.Ty(a.Ty), c.Ty(a.Ty)))
-        }
+        if fix != "": d.Note(rec, use, msgs.NoteZeroByReference(fix))
+        else if moved: d.Note(rec, use, msgs.NoteZeroReferenceHasOne(c.Ty(a.Ty), c.Ty(a.Ty)))
     }
     return n
 }

@@ -152,9 +152,7 @@ fn main() {
             }
         }
     }
-    if rows.Len() == 0 {
-        benchlib.Fail("no benchmark matches " $o.names.ToArray().Join(" "), 2)
-    }
+    if rows.Len() == 0: benchlib.Fail("no benchmark matches " $o.names.ToArray().Join(" "), 2)
     olang := benchlib.Compiler()
     try os.MkDirAll($benchlib.Dir "/build") catch os.Error { benchlib.Fail("cannot make bench/build", 1) }
     build(olang, rows, o.base)
@@ -235,9 +233,7 @@ fn check(rows Vec<String&>&, base Bool) {
             b := benchlib.Capture(command(pair[1], args), benchlib.Dir)
             if a.Stderr.Len() > 0 { benchlib.Warn(a.Stderr) }
             if b.Stderr.Len() > 0 { benchlib.Warn(b.Stderr) }
-            if a.Stdout != b.Stdout {
-                benchlib.Fail("OUTPUTS DIFFER: " $name " (" $v " " $args ")", 1)
-            }
+            if a.Stdout != b.Stdout: benchlib.Fail("OUTPUTS DIFFER: " $name " (" $v " " $args ")", 1)
         }
     }
     benchlib.Warn("outputs agree\n")
