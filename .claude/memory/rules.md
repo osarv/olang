@@ -96,6 +96,10 @@ slimming of 2026-11-08").
   docs/settled.md (terse, current state) and HISTORY.md (the story) in the same session. Memory files live in the repo
   and are committed with the work.
 
+# Build memory
+
+- **The build uses as little memory as possible (the user, 2026-11-14: "dont just make it fit 8gb, make it as small as possible")**: the bootstrap and every build keep peak memory minimal, not merely under a limit; measure the peak per phase in rounds that touch the build.
+
 # Language rules
 
 - **No per-operation run-time checks** ("It's not even a question"): checks are opt-in by a named call that fails
