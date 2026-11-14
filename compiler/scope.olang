@@ -5232,10 +5232,8 @@ fn (s mut Scoper&) soleExpr(x typed.Expr?&, strict Bool) {
         }
         case typed.Expr.Promote(_, _, pr) { s.soleExpr(pr.X, strict) }
         case typed.Expr.Call(_, _, c) {
-            match c.Target {
-                case typed.Callee.Value(f) { s.soleExpr(f, strict) }
-                case _ { }
-            }
+            tg := c.Target
+            if tg == typed.Callee.Value: s.soleExpr(tg.x, strict)
             for j in range c.Args.Len() {
                 a := c.Args[j]
                 # lent to a call that keeps nothing of it
@@ -5277,15 +5275,14 @@ fn (s mut Scoper&) soleExpr(x typed.Expr?&, strict Bool) {
             s.soleExpr(t.X, strict)
             for c in t.Clauses {
                 s.soleBlockBy(c.Code, strict)
-                for df in c.Defaults { s.soleExpr(df, strict) }
+                for df in c.Defaults: s.soleExpr(df, strict)
             }
         }
         case typed.Expr.Fn(_, _, f) {
-            match f {
-                case typed.FnVal.Lambda(_, caps, _) { for cp in caps { s.soleExpr(cp.Outer, true) } }
-                case typed.FnVal.Adapter(_, r, _) { s.soleExpr(r, true) }
-                case _ { }
+            if f == typed.FnVal.Lambda {
+                for cp in f.captures: s.soleExpr(cp.Outer, true)
             }
+            if f == typed.FnVal.Adapter: s.soleExpr(f.receiver, true)
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {

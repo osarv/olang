@@ -1063,29 +1063,34 @@ fn (r mut Resolver&) block(body Array<ast.Stmt&>&) {
     r.popTo(m)
 }
 
+# an expression statement: D3b, "n++" and "n--" change n, and read nothing
+fn (r mut Resolver&) exprStmt(x ast.Expr&) {
+    match x {
+        case ast.Expr.Unary(_, op, a), ast.Expr.Postfix(_, op, a) {
+            if op == token.Tok.Inc or op == token.Tok.Dec { r.target(a) } else { r.expr(x) }
+        }
+        case _ { r.expr(x) }
+    }
+}
+
+# a statement of several names: "a, b = b, a", "q, r := f()"
+fn (r mut Resolver&) multi(mu ast.Multi&) {
+    for x in mu.Values { r.expr(x) }
+    for t in mu.Targets {
+        match t {
+            case ast.Expr.Name(sp, n) if mu.Define and r.text(n) != "_" { r.declareRead(n, sp, true) }
+            case ast.Expr.Name(_, _) if mu.Define { }
+            case _ { r.target(t) }
+        }
+    }
+}
+
 fn (r mut Resolver&) stmt(s ast.Stmt?&) {
     if s is null { return }
     match s {
-        case ast.Stmt.ExprS(_, x) {
-            # D3b: "n++" and "n--" change n, and read nothing
-            match x {
-                case ast.Expr.Unary(_, op, a), ast.Expr.Postfix(_, op, a) {
-                    if op == token.Tok.Inc or op == token.Tok.Dec { r.target(a) } else { r.expr(x) }
-                }
-                case _ { r.expr(x) }
-            }
-        }
+        case ast.Stmt.ExprS(_, x) { r.exprStmt(x) }
         case ast.Stmt.Var(_, v) { r.varDecl(v) }
-        case ast.Stmt.Multi(_, mu) {
-            for x in mu.Values { r.expr(x) }
-            for t in mu.Targets {
-                match t {
-                    case ast.Expr.Name(sp, n) if mu.Define and r.text(n) != "_" { r.declareRead(n, sp, true) }
-                    case ast.Expr.Name(_, _) if mu.Define { }
-                    case _ { r.target(t) }
-                }
-            }
-        }
+        case ast.Stmt.Multi(_, mu) { r.multi(mu) }
         case ast.Stmt.Assign(_, _, target, value) {
             r.target(target)
             r.expr(value)
@@ -1135,7 +1140,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Raise(_, word, args) {
             if r.survey: r.surveyRaise(word, args) else: r.path(word)
             if args is not null {
-                for a in args { r.expr(a) }
+                for a in args: r.expr(a)
             }
         }
         case ast.Stmt.Spawn(_, targets, call) {

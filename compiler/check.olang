@@ -3866,11 +3866,8 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
             c.paramWritten(prm, ps[k])
             # D8a: a literal default fits its parameter where it is written, called without it or not (a null for a
             # reference never null, T2c); a parameter of a type variable's is fitted per call (G18)
-            if prm.Dflt is not null and c.P.T.Closed(ps[k]) and c.P.T.Items(c.P.InstanceArgs(inst)).Len() == 0 {
-                match prm.Dflt {
-                    case ast.Expr.Lit(_, _) { c.exprTo(prm.Dflt!, ps[k]) }
-                    case _ { }
-                }
+            if prm.Dflt is not null and c.P.T.Closed(ps[k]) and c.P.T.Items(c.P.InstanceArgs(inst)).Len() == 0 and prm.Dflt! == ast.Expr.Lit {
+                c.exprTo(prm.Dflt!, ps[k])
             }
         }
         k++
@@ -24405,82 +24402,8 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
     if rows.Len() == 0 or depth > 16 { return false }
     t := c.deref(ts[0])
     rest := ts[1:]
-    if t == types.BoolT {
-        seen := Array<I64>[0, 0]
-        for r in rows {
-            bv := c.patBool(r[0])
-            if bv >= 0 { seen[bv] = 1 }
-        }
-        if seen[0] == 0 or seen[1] == 0 {
-            sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
-            for r in rows {
-                if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
-            }
-            return c.coversRows(sub, rest, depth + 1)
-        }
-        for bv in range 2 {
-            sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
-            for r in rows {
-                if c.patWild(r[0]) or c.patBool(r[0]) == bv { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
-            }
-            if not c.coversRows(sub, rest, depth + 1) { return false }
-        }
-        return true
-    }
-    if c.isEnum(t) {
-        n := c.P.T.Items(c.P.T.Cases(t)).Len()
-        # the cases column 0 names: where some case is named nowhere only a wildcard covers it, so the rest of the rows
-        # with a wildcard there decide (Maranget's default matrix) - each case checked only where all are named
-        named := Array<Bool>(n, false)
-        for k in range n { named[k] = c.noValueCase(t, k) }   # S13g
-        for r in rows {
-            match r[0] {
-                case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
-                    k := c.caseTag(x, t)
-                    if k >= 0: named[k] = true
-                }
-                case ast.Pattern.Case(_, path, _) {
-                    k := c.caseTag(path, t)
-                    if k >= 0: named[k] = true
-                }
-                case _ { }
-            }
-        }
-        complete := true
-        for b in named {
-            if not b { complete = false }
-        }
-        if not complete {
-            sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
-            for r in rows {
-                if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
-            }
-            return c.coversRows(sub, rest, depth + 1)
-        }
-        for k in range n {
-            if c.noValueCase(t, k) { continue }   # S13g
-            sig := c.P.CaseSig(t, k)
-            ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
-            nts Vec<types.TypeId>
-            for q in ps { nts.Push(q) }
-            for q in rest { nts.Push(q) }
-            sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
-            for r in rows {
-                p := r[0]
-                if c.patWild(p) {
-                    sub.Push(patTail(r, Array<ast.Pattern&>(0), ps.Len()))
-                    continue
-                }
-                match p {
-                    case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) if c.caseTag(x, t) == k { sub.Push(patTail(r, Array<ast.Pattern&>(0), ps.Len())) }
-                    case ast.Pattern.Case(_, path, subs) if c.caseTag(path, t) == k { c.byFieldRow(sub, r, subs, c.caseFields(t, k, path)) }
-                    case _ { }
-                }
-            }
-            if not c.coversRows(sub, nts.ToArray(), depth + 1) { return false }
-        }
-        return true
-    }
+    if t == types.BoolT { return c.coversBool(rows, rest, depth) }
+    if c.isEnum(t) { return c.coversEnum(rows, t, rest, depth) }
     if c.seqColumn(rows) { return c.coversSeq(rows, t, rest, depth) }
     if c.isStruct(t) and c.structColumn(rows, t) { return c.coversStruct(rows, t, rest, depth) }
     sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
@@ -24488,6 +24411,92 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
         if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
     }
     return c.coversRows(sub, rest, depth + 1)
+}
+
+# coversRows of a Bool column: each value covered, or the rows with a wildcard there covering the rest
+fn (c mut Checker&) coversBool(rows Vec<Array<ast.Pattern&>&>&, rest Array<types.TypeId>&, depth I64) Bool {
+    seen := Array<I64>[0, 0]
+    for r in rows {
+        bv := c.patBool(r[0])
+        if bv >= 0 { seen[bv] = 1 }
+    }
+    if seen[0] == 0 or seen[1] == 0 {
+        sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
+        for r in rows {
+            if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
+        }
+        return c.coversRows(sub, rest, depth + 1)
+    }
+    for bv in range 2 {
+        sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
+        for r in rows {
+            if c.patWild(r[0]) or c.patBool(r[0]) == bv { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
+        }
+        if not c.coversRows(sub, rest, depth + 1) { return false }
+    }
+    return true
+}
+
+# coversRows of an enum column: each case's rows covering its payload and the rest (Maranget's specialized matrix)
+fn (c mut Checker&) coversEnum(rows Vec<Array<ast.Pattern&>&>&, t types.TypeId, rest Array<types.TypeId>&, depth I64) Bool {
+    n := c.P.T.Items(c.P.T.Cases(t)).Len()
+    # the cases column 0 names: where some case is named nowhere only a wildcard covers it, so the rest of the rows
+    # with a wildcard there decide (Maranget's default matrix) - each case checked only where all are named
+    named := Array<Bool>(n, false)
+    for k in range n { named[k] = c.noValueCase(t, k) }   # S13g
+    for r in rows {
+        match r[0] {
+            case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
+                k := c.caseTag(x, t)
+                if k >= 0: named[k] = true
+            }
+            case ast.Pattern.Case(_, path, _) {
+                k := c.caseTag(path, t)
+                if k >= 0: named[k] = true
+            }
+            case _ { }
+        }
+    }
+    complete := true
+    for b in named {
+        if not b { complete = false }
+    }
+    if not complete {
+        sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
+        for r in rows {
+            if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
+        }
+        return c.coversRows(sub, rest, depth + 1)
+    }
+    for k in range n {
+        if c.noValueCase(t, k) { continue }   # S13g
+        sig := c.P.CaseSig(t, k)
+        ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
+        nts Vec<types.TypeId>
+        for q in ps { nts.Push(q) }
+        for q in rest { nts.Push(q) }
+        sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
+        c.caseRows(sub, rows, t, k, ps.Len())
+        if not c.coversRows(sub, nts.ToArray(), depth + 1) { return false }
+    }
+    return true
+}
+
+# the rows of the matrix specialized to case k of t: a wildcard's or a pattern naming k's, k's payload of width items
+# put in front of the rest
+fn (c mut Checker&) caseRows(sub mut Vec<Array<ast.Pattern&>&>&, rows Vec<Array<ast.Pattern&>&>&, t types.TypeId, k I64, width I64) {
+    for r in rows {
+        p := r[0]
+        if c.patWild(p) {
+            sub.Push(patTail(r, Array<ast.Pattern&>(0), width))
+            continue
+        }
+        match p {
+            case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) if c.caseTag(x, t) == k { sub.Push(patTail(r, Array<ast.Pattern&>(0), width)) }
+            case ast.Pattern.Case(_, path, subs) if c.caseTag(path, t) == k { c.byFieldRow(sub, r, subs, c.caseFields(t, k, path)) }
+            case _ { }
+        }
+    }
 }
 
 # S13a, S13h: whether a column holds an array pattern, so its lengths are its constructors

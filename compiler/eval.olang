@@ -4907,6 +4907,22 @@ fn (m mut Machine&) caseHolds(xt types.TypeId, cv I64, v I64, whi I64, mk I64) B
     return clo == v and chi == whi
 }
 
+# term's call: an extern called, or the callee's frame entered
+fn (m mut Machine&) callTerm(fi I64, k I64, sp source.Span, ci I32, glob Bool) {
+    m.atK(k, sp)
+    c := m.cf[k].Calls[I64(ci)]
+    if glob and not m.rangeReady(fi, m.fns.At(k), c.Args) { return }
+    match c.Target {
+        case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
+        case mir.Callee.Value(_) {
+            _, _, e := m.callee(fi, c.Target)
+            if m.halted { return }
+            if e >= 0: m.externCall(fi, c, e, m.calleeType(fi, c.Target)) else: m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci))
+        }
+        case _ { m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci)) }
+    }
+}
+
 fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
     k := m.fs[fi].Fn
     match t {
@@ -4921,20 +4937,7 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             to := m.switchTo(fi, k, x, cases, otherwise)
             if not m.halted { m.jump(fi, to) }
         }
-        case mir.Term.Call(sp, ci) {
-            m.atK(k, sp)
-            c := m.cf[k].Calls[I64(ci)]
-            if glob and not m.rangeReady(fi, m.fns.At(k), c.Args) { return }
-            match c.Target {
-                case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
-                case mir.Callee.Value(_) {
-                    _, _, e := m.callee(fi, c.Target)
-                    if m.halted { return }
-                    if e >= 0: m.externCall(fi, c, e, m.calleeType(fi, c.Target)) else: m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci))
-                }
-                case _ { m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci)) }
-            }
-        }
+        case mir.Term.Call(sp, ci) { m.callTerm(fi, k, sp, ci, glob) }
         case mir.Term.Return(sp, x) {
             m.atK(k, sp)
             if not m.fs[fi].Done and glob and not m.operandReady(fi, x) { return }

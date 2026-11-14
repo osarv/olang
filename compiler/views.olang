@@ -1260,9 +1260,8 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
             for i in range args.Len() {
                 part := Vec<view>()
                 v.expr(args[i], st, part)
-                if typed.PassesRefs(op) and i == 0 {
-                    for r in part: viewAdd(mine, r)
-                }
+                if not typed.PassesRefs(op) or i != 0 { continue }
+                for r in part: viewAdd(mine, r)
             }
         }
         case typed.Expr.Slice(sp, _, sl) {
@@ -1293,13 +1292,11 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
             v.clauses(t.Clauses, st, mine)
         }
         case typed.Expr.Fn(_, _, f) {
-            match f {
-                case typed.FnVal.Lambda(_, caps, _) {
-                    for c in caps { v.expr(c.Outer, st, mine) } # D16: a lambda holds what it captured
-                }
-                case typed.FnVal.Adapter(_, r, _) { v.expr(r, st, mine) }
-                case _ { }
+            # D16: a lambda holds what it captured
+            if f == typed.FnVal.Lambda {
+                for c in f.captures: v.expr(c.Outer, st, mine)
             }
+            if f == typed.FnVal.Adapter: v.expr(f.receiver, st, mine)
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {

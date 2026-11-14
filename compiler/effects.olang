@@ -1495,6 +1495,13 @@ fn (e mut Effects&) whyStmt(st typed.Stmt&) {
     if not was and e.whyNow(): e.because(stmtSpan(st), $"it may " $e.whyDoes() " here")
 }
 
+# a local a spawned call stores its result in: marked in fnSome and instSome, and refDefs where Pure is asked
+fn (e mut Effects&) spawnedInto(id I64) {
+    e.fnSome.Put(id, true)
+    e.instSome.Put(id, true)
+    if e.WantPure: e.refDefs.Push(2 * id)
+}
+
 fn (e mut Effects&) stmt(st typed.Stmt&) {
     match st {
         case typed.Stmt.Let(_, id, x) {
@@ -1506,10 +1513,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
             e.place(t, true)
             e.expr(v)
             # (a reference's slots read off its declaration's value alone, as before; every value where Pure is asked)
-            match t {
-                case typed.Lvalue.Local(_, ty, id) { if e.WantPure or e.isFn(ty) or e.instType(ty): e.define(I64(id), v) }
-                case _ { }
-            }
+            if t == typed.Lvalue.Local and (e.WantPure or e.isFn(t.ty) or e.instType(t.ty)): e.define(I64(t.id), v)
         }
         case typed.Stmt.If(_, i) {
             e.expr(i.Test)
@@ -1556,14 +1560,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
             for t in s.Targets {
                 if t is null: continue
                 e.place(t, true)
-                match t {
-                    case typed.Lvalue.Local(_, _, id) {
-                        e.fnSome.Put(I64(id), true)
-                        e.instSome.Put(I64(id), true)
-                        if e.WantPure: e.refDefs.Push(2 * I64(id))
-                    }
-                    case _ { }
-                }
+                if t == typed.Lvalue.Local: e.spawnedInto(I64(t.id))
             }
             e.expr(s.Task)
             for cl in s.Clauses { e.expr(cl.Handler) }

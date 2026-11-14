@@ -2282,10 +2282,7 @@ fn (n mut Nodes&) expr(x Expr&) {
         case Expr.Fn(_, _, f) { n.fnVal(f) }
         case Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case Piece.Render(y): n.expr(y)
-                    case _ { }
-                }
+                if pc == Piece.Render: n.expr(pc.x)
             }
         }
         case Expr.Away(_, _, y): n.expr(y)
@@ -3099,11 +3096,10 @@ fn (w mut dropWalk&) expr(x Expr?&) {
         }
         case Expr.Away(_, _, y): w.expr(y)
         case Expr.Fn(_, _, f) {
-            match f {
-                case FnVal.Lambda(_, caps, _) { for cp in caps { w.expr(cp.Outer) } }
-                case FnVal.Adapter(_, recv, _) { w.expr(recv) }
-                case FnVal.Named(_) { }
+            if f == FnVal.Lambda {
+                for cp in f.captures: w.expr(cp.Outer)
             }
+            if f == FnVal.Adapter: w.expr(f.receiver)
         }
     }
 }
@@ -4819,10 +4815,8 @@ fn (w mut Landings&) expr(x Expr?&) {
         case Expr.Promote(_, _, pr): w.expr(pr.X)
         case Expr.Call(_, _, c) {
             i0 := w.saidL.Len()
-            match c.Target {
-                case Callee.Value(f) { w.expr(f) }
-                case _ { }
-            }
+            tg := c.Target
+            if tg == Callee.Value: w.expr(tg.x)
             w.exprs(c.Args)
             w.apart(i0)
             w.keptBy(i0)
@@ -4878,11 +4872,10 @@ fn (w mut Landings&) expr(x Expr?&) {
             w.restore(sx)
         }
         case Expr.Fn(_, _, f) {
-            match f {
-                case FnVal.Lambda(_, caps, _) { for cp in caps { w.expr(cp.Outer) } }
-                case FnVal.Adapter(_, recv, _) { w.expr(recv) }
-                case FnVal.Named(_) { }
+            if f == FnVal.Lambda {
+                for cp in f.captures: w.expr(cp.Outer)
             }
+            if f == FnVal.Adapter: w.expr(f.receiver)
         }
         case Expr.Text(_, _, tx) {
             for pc in tx.Pieces {
@@ -5359,10 +5352,8 @@ fn (v mut Versions&) expr(x Expr?&) {
         case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): v.place(p)
         case Expr.Promote(_, _, pr): v.expr(pr.X)
         case Expr.Call(_, _, c) {
-            match c.Target {
-                case Callee.Value(f) { v.expr(f) }
-                case _ { }
-            }
+            tg := c.Target
+            if tg == Callee.Value: v.expr(tg.x)
             v.exprs(c.Args)
         }
         case Expr.Make(_, _, m) {
@@ -5402,18 +5393,17 @@ fn (v mut Versions&) expr(x Expr?&) {
             # a clause runs from any point inside what the try covers: what reached it, and every definition made there
             entry := v.save()
             if not v.counting {
-                for k in range s0.Len() - 1 { entry[k] = v.outer(entry[k], s0[k]) }
+                for k in range s0.Len() - 1: entry[k] = v.outer(entry[k], s0[k])
                 entry[s0.Len() - 1] = s0[s0.Len() - 1]
-                for j in range mark, v.gens.Len() { entry[v.gens[j]] = v.outer(entry[v.gens[j]], -1) }
+                for j in range mark, v.gens.Len(): entry[v.gens[j]] = v.outer(entry[v.gens[j]], -1)
             }
             v.clauses(t.Clauses, entry, false)
         }
         case Expr.Fn(_, _, f) {
-            match f {
-                case FnVal.Lambda(_, caps, _) { for cp in caps { v.expr(cp.Outer) } }
-                case FnVal.Adapter(_, recv, _) { v.expr(recv) }
-                case FnVal.Named(_) { }
+            if f == FnVal.Lambda {
+                for cp in f.captures: v.expr(cp.Outer)
             }
+            if f == FnVal.Adapter: v.expr(f.receiver)
         }
         case Expr.Text(_, _, tx) {
             for pc in tx.Pieces {
