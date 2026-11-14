@@ -36857,3 +36857,28 @@ tree - 774 files; the old migration tools io_print, io_try and io_fix and their 
 - 2026-11-14, refactor round 1: compiler/tools/nesting.olang lists every function's deepest block nesting and length; before: 7368 functions, 154 over depth 4, 6 over depth 5 (all at 6), 6 over 200 lines; the six at depth 6 (check fold, scope bndRecs/bndError, lower reclaimSites, parse shapeOf, eval writesAfter) split into helpers, now at 4 or less (148 over 4, none over 5); the IR the compiler emits for bench/ and tests/ byte-identical before and after.
 - 2026-11-14, refactor round 2: fit, letBody, invoke, spell, val and varDecl split into named steps (fitData/fitBorrow/lendSame/fitRefs/fitNull/fitIntoFixed/mismatch, letMoved/letInferred/letClaimed, argForInference/lambdaArg/notInferable, spellFunc/spellErrVal, valPromote/valMake/valTry, declName/zeroDecl); about 45 more depth-5 functions brought to 4 by helpers, guard clauses and case tests (a text's renderings, a function value's captures), and 77 by writing their innermost one-statement bodies with ':'; before: 7380 functions, 148 over depth 4, 6 over 200 lines; after: 7463 functions, 31 over depth 4, 3 over 200 lines (scope callAs, check suppliedCall, emit exportEntry); the IR the compiler emits for bench/ and tests/ byte-identical before and after, goldens recaptured.
 - 2026-11-14, refactor round 3, the last of the pass: the 31 functions left at depth 5 brought to 4 - guard clauses and case tests in place of one-case matches (a function value's captures, a callee value, a statement's target), `:` bodies, and helpers named for their step (coversBool/coversEnum/caseRows, coverType, branchesCopy, stopAtComparison, callTerm, exprStmt/multi, spawnedInto, varPos); no dispatch over many cases had to stay at 5; the three functions over 200 lines split into named steps: scope callAs (argOwners, bindArgs, bindResult, bindRest, argTemps, buildsOfCall, dischargeCall, callValue), check suppliedCall (suppliedSet, suppliedGet, suppliedBitOp, suppliedSat, suppliedGrown, suppliedVacate, suppliedOccupy, suppliedAtomic, suppliedCopy), emit exportEntry (exportParams, threadEntry, exportCall, exportFailed, exportResult, exportHead); after: 7499 functions, none over depth 4 (522 at 4), none over 200 lines (the longest Analyze, 194); the IR the compiler emits for bench/, tests/, std/ and the checks' export fns byte-identical before and after, goldens recaptured.
+
+## A read taken out into a helper is judged as the read in place (O13, O25i; 2026-11-14, wt-helperrej)
+
+The compiler/ refactor (round 3) found that moving views' rootPlace's read through a `Deref` - `y := unAway(r)`, then
+`q = y.p` where `y` is a `Read` or a `Borrow` - out into a helper made the scope pass refuse rootPlace with O10c (and
+O10d at its `return q`); the refactor kept the read inline. Minimal shape (checks/cases/o13readhelper): a reference
+local `q` walked down a chain in a loop, `q = b` for a field and `q = r.spot()` for a helper returning `r.p`.
+
+Over-rejection, not a sound refusal: the helper builds nothing, its one obligation is `r outlives return`, and its
+result is a read-only reference into what `r` refers to - O13 already says such a call's result "is then the
+argument's storage, where that lives". The scope pass instead gave the assignment's version (O25i) the call's landing,
+the local's block, in the first judging; the `q = b` version reads `q`'s own versions, so that block stayed in the set
+the loop head reads after the inference lifted the landing to the result scope, and `r` (read from `q`) was judged
+against the result scope with a block among its terms. Inline, `q = r.p` gives `r`'s term and the versions agree.
+
+Fix (scope.olang, `readFrom` in callValue, reached from cursorAssign): a call a reference local is assigned whole
+from gives the argument's term as the version, where the result is a read-only, non-array reference nothing can be
+stored through (`admitsStores`), the callee builds nothing into its result scope, no obligation has the result scope
+outlive anything, and every obligation on it names one argument's scope variable, not exact. Claiming the argument's
+scope is never longer than where the value lives (it outlives that argument by the obligation) and nothing can be
+stored through it, so it is sound. Tried first for every call's value: that took the landing out of the inference's
+reach (a result read where it is pushed, `for x in cfg.CFlags()`, lands there and lifts its argument), and 30 sites of
+compiler/ were refused - so it is narrowed to the cursor assignment, the place the versions are judged. rootPlace now
+reads through a `Deref` with views' own `argPlace` (the same read, already a helper). The case runs under -debug
+-sanitize and `interpret`, read back after a churn.

@@ -66,6 +66,12 @@ is built and what this note proposes is built after it.
   t22alatelambda (judging a loop body to a fixed point over its versions, O25i). The `$x` copies: 355 removed from
   compiler/ (emit.olang and lower.olang left, F9's files then). HISTORY.md, "R8: precision and the rest".
 
+- Built: a read taken out into a helper (2026-11-14, wt-helperrej) - a reference local assigned whole a call that only
+  reads what one argument refers to (read-only, building nothing, its one obligation that argument outliving the
+  result) takes that argument's scope as its version (O13, O25i), as the read written in place does; views' rootPlace,
+  refused with O10c once its read through a `Deref` was a helper, now uses one (o13readhelper runs). HISTORY.md, "A read
+  taken out into a helper is judged as the read in place".
+
 ## 0. Summary
 
 Of 1,246 must-fail cases, 355 are refused by a memory, placement, ownership or permission rule; the other 891 are
