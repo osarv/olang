@@ -204,7 +204,7 @@ type Lvalue enum {
 type Elem struct(Base Lvalue&, Index Expr&, Checked Check) {
     Base
     Index
-    Checked     # None for x[i] (E16), Try for x.Get(i) (E16d)
+    Checked     # Debug for x[i] (E16, E16g), Try for x.Get(i) (E16d), None for an index the language made
 }
 
 type Payload struct(Base Lvalue&, Tag I64, Checked Check) {
@@ -219,7 +219,8 @@ type Check enum {
     Abort      # a guaranteed check (S18a): a slice's bounds, an array's length, a copy into fixed storage
     Try        # it fails as written, to the innermost enclosing Try (E15a, R20): a.Get(i), a.SliceOf(lo, hi),
                # x.Narrow<T>(), e as C - each with its prelude word
-
+    Debug      # E16g: unchecked (None) in a release build, a guaranteed check in a checked one (test, -debug,
+               # interpret) - an index the program wrote, an integer / or % and a shift; never the language's own
 }
 
 # ---- expressions ----
@@ -1809,7 +1810,7 @@ fn Pure(x Expr&) Bool {
         case Expr.Lit(_, _, _): true
         case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p): PurePlace(p)
         case Expr.Away(_, _, y): Pure(y)
-        case Expr.Prim(_, _, _, check, args): check == Check.None and args.Every(fn(y): return Pure(y))
+        case Expr.Prim(_, _, _, check, args): (check == Check.None or check == Check.Debug) and args.Every(fn(y): return Pure(y))
         case Expr.Cond(_, _, c): Pure(c.C) and (c.A is null or Pure(c.A!)) and Pure(c.B)
         case _: false
     }
@@ -4222,7 +4223,7 @@ fn (w mut printer&) expr(x Expr?&) String {
         case Expr.Call(_, _, c): "(call " $w.callee(c.Target) " " $w.exprs(c.Args) " site " $c.Site ")"
         case Expr.Make(_, _, m): "(make " $short($m.Kind) " " $ty " " $w.exprs(m.Items) ")"
         case Expr.Collect(_, _, c): "(collect " $ty " site " $c.Site ")"
-        case Expr.Prim(_, _, op, ck, args): "(" $short($op) $(" " $short($ck) if ck != Check.None else "") " " $ty " " $w.exprs(args) ")"
+        case Expr.Prim(_, _, op, ck, args): "(" $short($op) $(" " $short($ck) if ck != Check.None and ck != Check.Debug else "") " " $ty " " $w.exprs(args) ")"
         case Expr.Slice(_, _, s): "(slice " $w.place(s.Base) " " $w.expr(s.Lo) " " $w.expr(s.Hi) ")"
         case Expr.Cond(_, _, c): "(cond " $w.expr(c.C) " " $w.expr(c.A) " " $w.expr(c.B) ")"
         case Expr.Seq(_, _, s): "(seq " $s.Stmts.Len() " " $w.expr(s.X) ")"

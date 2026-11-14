@@ -390,6 +390,16 @@ type ExitKind enum {
     GenRunning     # S20: "a generator asked for its next value inside its own walk" - a Next while it runs
     Error          # E35: an error a "!" took - its message, the error's name ("io.Error.FULL"), is the exit's text
     Escaped        # S16: an error left a test body - the test fails, its FAIL line naming the error, the exit's text
+    # E16g, in a checked build only: what is undefined in a release build stops, said with the column
+    IndexBounds    # E16: "index out of range"
+    DivideByZero   # E6a: "division by zero"
+    DivideOverflow # E6a: "division overflows: the least value by -1"
+    ShiftAmount    # E8a: "shift amount outside the width"
+}
+
+# whether a failed check says its column too (E16g: "FILE:LINE:COLUMN: text"), several on one line being usual
+fn Columned(k ExitKind) Bool {
+    return k == ExitKind.IndexBounds or k == ExitKind.DivideByZero or k == ExitKind.DivideOverflow or k == ExitKind.ShiftAmount
 }
 
 # what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
@@ -407,6 +417,10 @@ fn ExitText(k ExitKind) String& {
         case ExitKind.FixedLength: "array length does not match its fixed storage"
         case ExitKind.LaneLength: "lane lengths differ"
         case ExitKind.GenRunning: "a generator asked for its next value inside its own walk"
+        case ExitKind.IndexBounds: "index out of range"
+        case ExitKind.DivideByZero: "division by zero"
+        case ExitKind.DivideOverflow: "division overflows: the least value by -1"
+        case ExitKind.ShiftAmount: "shift amount outside the width"
     }
 }
 

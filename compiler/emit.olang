@@ -1429,9 +1429,9 @@ fn (e mut Emitter&) locBase(k mir.FnKey) String {
 # LocApart), it is named by the function's symbol and how many places the function named before it - neither of which
 # a line added above the function changes - and its text is defined in its home's Locations object: so such an edit
 # leaves the code as it was, and only the Locations object is compiled again
-fn (fe mut fnEm&) located(sp source.Span, rest String&) String {
+fn (fe mut fnEm&) located(sp source.Span, rest String&, column Bool = false) String {
     e := fe.E
-    text := $e.where(fe.F.File, sp) $rest
+    text := $(e.D.Locate(fe.F.File, I64(sp.Start)) if column else e.where(fe.F.File, sp)) $rest
     if not e.LocApart { return e.cstr(text) }
     # one symbol for one text in a function, as cstr gives: the code failing alike at two sites of one line is one
     # block (the backend merging the two), and whether two sites share a line no edit outside the function changes
@@ -6365,7 +6365,7 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
     match msg {
         case mir.Operand.None {
             fe.E.runtime("__olang_check_failed")
-            fe.w("call void @__olang_check_failed(ptr " $fe.located(sp, $": " $what "\n") ")")
+            fe.w("call void @__olang_check_failed(ptr " $fe.located(sp, $": " $what "\n", mir.Columned(kind)) ")")
         }
         case _ {
             fe.E.runtime("__olang_check_failed_text")

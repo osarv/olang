@@ -68,6 +68,13 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # interpret runs for the blocks a stop leaves; never for a build (emit has no use for them)
     Cleanups Bool = false
     Tests Bool = false        # a test build: a by-value holder's guard registered with its block (F5)
+    # E16g: a checked build (test, -debug, interpret, the prompt) - an index the program wrote, an integer / or % and a
+    # shift (typed.Check.Debug) stop where they would be undefined
+    Checked Bool = false
+    # OLANG_CHECKS=all or hoist (an experiment, docs/checks-measure.md): an index the program wrote checked in every
+    # build; IndexSites each such index lowered (its file and where it starts), and whether it is in a loop
+    IndexChecks Bool = false
+    IndexSites Map<pair.Pair<I64, I64>, Bool>
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
     AssertsTrue Map<pair.Pair<I64, I64>, Bool>
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
@@ -2951,12 +2958,13 @@ fn (ln mut lowering&) elem(e typed.Elem&, sp source.Span) pl {
     x := ln.val(e.Index)
     if ln.dead { return base }
     ity := e.Index.Type()
-    if e.Checked != typed.Check.None {
+    if e.Checked == typed.Check.Abort or e.Checked == typed.Check.Try {
         n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(base))], sp)
         i := ln.asI64(x, ity, sp)
         ln.bounds(i, n, false, e.Checked, mir.ExitKind.SliceBounds, sp)
     }
-    if e.Checked == typed.Check.None {
+    if e.Checked == typed.Check.Debug and (ln.L.Checked or ln.L.IndexChecks): ln.indexCheck(base, e.Base.Type(), x, ity, sp)
+    if e.Checked == typed.Check.None or e.Checked == typed.Check.Debug {
         match x {
             case mir.Operand.Const(_, v) {
                 if v >= 0 { return ln.with(base, mir.Proj.At(v)) }
@@ -2976,6 +2984,23 @@ fn (ln mut lowering&) payload(py typed.Payload&, sp source.Span) pl {
         ln.check(ok, py.Checked, mir.ExitKind.As, WrongCase, sp)
     }
     return ln.with(base, mir.Proj.Payload(py.Tag))
+}
+
+# E16g: an index the program wrote, in a checked build - one unsigned comparison (a negative index reads as one past
+# every length) against the length, known while compiling for a fixed array (whose constant index E16 judged already,
+# and which a packed struct's field holds with no place to read a length from)
+fn (ln mut lowering&) indexCheck(base pl, bt types.TypeId, x mir.Operand, ity types.TypeId, sp source.Span) {
+    if ln.L.IndexChecks {
+        key := pair.Pair<I64, I64>(ln.B.File, I64(sp.Start))
+        ln.L.IndexSites.Put(key, ln.loops.Len() > 0 or (try ln.L.IndexSites.Get(key) catch default false))
+    }
+    fl := ln.fixedLen(ln.arrayOf(bt)) if ln.arrayOf(bt) != types.UnknownT else -1
+    if fl >= 0 and x == mir.Operand.Const: return
+    n := ln.constI64(fl) if fl >= 0 else ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(base))], sp)
+    u := types.TypeId(10)   # U64
+    iu := ln.prim(typed.PrimOp.Convert, u, Array<mir.Operand>[ln.asI64(x, ity, sp)], sp)
+    nu := ln.prim(typed.PrimOp.Convert, u, Array<mir.Operand>[n], sp)
+    ln.check(ln.prim(typed.PrimOp.Lt, types.BoolT, Array<mir.Operand>[iu, nu], sp), typed.Check.Abort, mir.ExitKind.IndexBounds, OutOfBounds, sp)
 }
 
 # 0 <= i < n (or <= n where incl): on to the code after, or to the check's failure
@@ -5759,7 +5784,11 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     }
     if ln.widening(op, args, ty) { return ln.widen(ops[0], args[0].Type(), ty, sp, ln.innermost()) }
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
-    if chk != typed.Check.None { ln.primChecks(op, chk, ops, args, ty, sp) }
+    if chk == typed.Check.Debug {
+        if ln.L.Checked: ln.opChecks(op, ops, args, ty, sp)
+    } else if chk != typed.Check.None {
+        ln.primChecks(op, chk, ops, args, ty, sp)
+    }
     if (op == typed.PrimOp.Eq or op == typed.PrimOp.Ne) and args.Len() == 2 and t.ErrCarries(args[0].Type()) {
         # T19b: error values carrying payloads equal where their codes and their payloads do (E10)
         et := args[0].Type()
@@ -5890,6 +5919,38 @@ fn (ln mut lowering&) primChecks(op typed.PrimOp, chk typed.Check, ops Array<mir
         }
         case _ { }
     }
+}
+
+# E16g, in a checked build: an integer / or % stopping on a zero divisor and on the least value by -1 (E6a), a shift
+# on an amount outside [0, width) (E8a) - before the operation, which is then as a release build makes it
+fn (ln mut lowering&) opChecks(op typed.PrimOp, ops Array<mir.Operand>&, args Array<typed.Expr&>&, ty types.TypeId
+                               sp source.Span) {
+    t := ln.T
+    if op == typed.PrimOp.Shl or op == typed.PrimOp.Shr {
+        at := args[1].Type()
+        w := t.Bits(t.Repr(ty))
+        # an amount of up to 64 bits read as an I64 (a U64 past I64's maximum negative, so out of range too); a wider
+        # one compared in its own type, which holds the width
+        wide := t.Bits(t.Repr(at)) > 64
+        n := ops[1] if wide else ln.asI64(ops[1], at, sp)
+        nt := at if wide else mir.I64T
+        if not wide or not t.IsUnsigned(t.Repr(at)) {
+            lo := ln.prim(typed.PrimOp.Ge, types.BoolT, Array<mir.Operand>[n, mir.Operand.Const(nt, 0)], sp)
+            ln.check(lo, typed.Check.Abort, mir.ExitKind.ShiftAmount, OutOfBounds, sp)
+        }
+        hi := ln.prim(typed.PrimOp.Lt, types.BoolT, Array<mir.Operand>[n, mir.Operand.Const(nt, w)], sp)
+        ln.check(hi, typed.Check.Abort, mir.ExitKind.ShiftAmount, OutOfBounds, sp)
+        return
+    }
+    nz := ln.prim(typed.PrimOp.Ne, types.BoolT, Array<mir.Operand>[ops[1], mir.Operand.Const(ty, 0)], sp)
+    ln.check(nz, typed.Check.Abort, mir.ExitKind.DivideByZero, OutOfBounds, sp)
+    if t.IsUnsigned(t.Repr(ty)) { return }
+    # the least value: 1 shifted into the sign bit, which wraps there (E6c)
+    least := ln.prim(typed.PrimOp.Shl, ty, Array<mir.Operand>[mir.Operand.Const(ty, 1), mir.Operand.Const(ty, t.Bits(t.Repr(ty)) - 1)], sp)
+    isLeast := ln.prim(typed.PrimOp.Eq, types.BoolT, Array<mir.Operand>[ops[0], least], sp)
+    isMinus := ln.prim(typed.PrimOp.Eq, types.BoolT, Array<mir.Operand>[ops[1], mir.Operand.Const(ty, -1)], sp)
+    both := ln.prim(typed.PrimOp.BitAnd, types.BoolT, Array<mir.Operand>[isLeast, isMinus], sp)
+    ln.fails(both, typed.Check.Abort, mir.ExitKind.DivideOverflow, OutOfBounds, sp)
 }
 
 fn (ln mut lowering&) constBool(b Bool, sp source.Span) mir.Operand { return mir.Operand.Const(types.BoolT, 1 if b else 0) }

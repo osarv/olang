@@ -3754,7 +3754,7 @@ Mixing distinct numeric types that do not meet - by T6b, or with a literal by E6
 see §5.11 E26 for the explicit conversion this requires instead.
 
 **E6a.** Integer `/` and `%` have **undefined behaviour** for two operand pairs, and neither is checked
-at run time:
+at run time in a release build (a checked build stops on both, E16g):
 
 - a **zero divisor**, for either operator and either signedness;
 - the **most negative value divided by `-1`**, for a signed type, whose true quotient is one past the
@@ -3813,7 +3813,7 @@ the result is the shifted operand's own type.
 
 **E8a.** A shift amount outside `[0, w)`, where `w` is the **shifted** operand's width in bits, is
 **undefined behaviour** — the two operands need not share a type (E5), and it is the left one's width that
-bounds the right one. Nothing is checked at run time. Where the amount is a literal or a literal-only expression
+bounds the right one. Nothing is checked at run time in a release build (a checked build stops on it, E16g). Where the amount is a literal or a literal-only expression
 (E4a) the check is made at compile time and an out-of-range one is a compile-time error, which costs nothing to
 apply - at every width (T4a: `u << 7` on a `U7`, `x >> 128` on an `I128`), in a compound assignment (`x <<= 9`) and
 lane by lane (E39) alike. The one exception is a shift that is itself part of a literal-only expression something adapts (E4a): it is
@@ -4166,8 +4166,9 @@ written before it, or before an expression or chain it is part of; a bare, unhan
 compile-time error.
 
 **E15a (checking an operation).** No operation is checked by the language at run time beyond what it states as
-guaranteed (a slice's bounds, an array's length, an `as`): each behaves as its rule says - wrapping (E6c), IEEE's
-results, or undefined (E6a, E16, E26a). A check is asked for by calling something that fails, covered by a `try` or a
+guaranteed (a slice's bounds, an array's length, an `as`; and in a checked build, an index, a division and a shift
+the program writes, E16g): each behaves as its rule says - wrapping (E6c), IEEE's results, or undefined (E6a, E16,
+E26a). A check is asked for by calling something that fails, covered by a `try` or a
 `!` as any fallible call is:
 
 | to check | write | fails with |
@@ -4194,7 +4195,8 @@ vector loop. The compile-time evaluator computes the same results.
 ### 5.5 Indexing and member access
 
 **E16.** `base [ index ]` requires `base` to be an array type and `index` to be an integer type - any one: a literal
-index is an `I64`, a conditional or a `match` of `U64`s a `U64`; its result type is `base`'s element type. **The index is not checked at run time.** An `index` outside
+index is an `I64`, a conditional or a `match` of `U64`s a `U64`; its result type is `base`'s element type. **The index is not checked at run time** in a release build (a checked
+build stops on one out of range, E16g). An `index` outside
 `[0, base.Len())` (E23) reads or writes storage the array does not own, which is **undefined behaviour** —
 the same reading C gives it, and one of exactly two places in this language where a program can reach
 storage it does not own (the other is `extern fn`, §11 X1a).
@@ -4223,6 +4225,25 @@ cannot establish, and nothing at all where it can. Every other guarantee in this
 containment above all — is stated as holding for programs that do not index out of range. What remains
 checked costs nothing or is asked for: a constant index is a compile-time error (E16), a slice is always
 checked (E16b), and `a.Get(i)` (E16d) checks where the program asks it to.
+
+**E16g (checked builds).** A **checked build** - `test` (B3a), a `-debug` build (B2c), `interpret` and `test
+-interpret` (B3e), the prompt (B22) and the notebook kernel (B23, B24) - stops where these operations the program wrote are undefined, as a failed
+`assert` stops it (S18a: a test fails, any other run aborts), printing `FILE:LINE:COLUMN: ` (where the operation's
+expression starts) and what failed:
+
+| the operation | where it stops | prints |
+|---|---|---|
+| an index `base[index]` of an array, a slice's base or text (E16), read or written | `index` outside `[0, base.Len())` | `index out of range` |
+| an integer `/`, `%`, `/=` or `%=` (E6a) | a zero divisor | `division by zero` |
+| the same, of a signed type | the least value divided by `-1` | `division overflows: the least value by -1` |
+| `<<`, `>>`, `<<=` or `>>=` (E8a) | an amount outside `[0, w)`, `w` the shifted operand's width | `shift amount outside the width` |
+
+Only an operation the program writes is checked: an index the language makes - a `for ... in` walk (S9), a
+comprehension (E27), a lane operation (E39), an array pattern (S13h), a type's `At` (E31) - and a lane operation's `/`,
+`%` and shifts are never checked, in any build. A **release build** - `build`, running a file (B3g), `-quick`,
+`-library`, `compile` without `-debug` - checks none of them and costs nothing for them: the operations are undefined
+there, as E6a, E8a and E16 say. A checked build changes no program's meaning: what it stops is undefined in a release
+build. The compile-time evaluator (K1) refuses the same operations as undefined.
 
 **E16a.** `base "[" [ lo ] ":" [ hi ] "]"` is a **slice**. `base` must be an array, value or reference, of any
 length; `lo` and `hi` must be integer types, and either may be omitted, defaulting to `0` and
@@ -8057,7 +8078,7 @@ any length runs in constant stack.
 
 **B2c.** Generated code is **fully optimized by default**, in every mode, for the machine it is built for - this
 machine's own CPU unless `-target` names another (B12). `-debug` is the single exception:
-it disables optimization so that the emitted code corresponds to the program as written — nothing is
+it is a checked build (E16g), and it disables optimization so that the emitted code corresponds to the program as written — nothing is
 inlined, nothing is reordered, and values live in memory rather than in registers, so a backtrace names the
 functions actually called and the state is inspectable. It is an option of the modes that build (B1), and composes
 with `-race`. A function a call gives functions to follow (T22c) may be compiled once more for them, where what it
@@ -8182,8 +8203,10 @@ globals are initialized imports first (B5a) and may be read and written, an `ext
 the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5
 says, an atomic operation is performed, and a check the language guarantees - a failed `assert`,
 `unreachable`, a slice out of range (E16b), an array length out of range (D14b), lanes of different lengths (E39),
-an `as` that does not hold (E32) - aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
-out of range, dividing by zero, a shift or conversion out of range - or where it traps reading through a null
+an `as` that does not hold (E32) - aborts with the message the built program prints; `interpret` is a checked build
+(E16g), so an index out of range, a division by zero or of the least value by `-1` and a shift out of range the program
+wrote abort the same way, with the message a checked build prints. Where the built program's behaviour is otherwise **undefined** - an index
+the language makes out of range, a conversion out of range - or where it traps reading through a null
 reference (T2b), the interpreter stops, naming the operation and where it is, with status 1. A `join` block's tasks
 (§6.8) run as K1 runs them: one after another, at the join - after its body and its deferred code - each to
 completion, in the order they were spawned. That is one of the orders the built program may run them in, so a program

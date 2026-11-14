@@ -782,6 +782,10 @@ fn AbortWhy(k mir.ExitKind) String& {
         case mir.ExitKind.LaneLength: "a lane operation in it meets arrays of different lengths, which aborts the program"
         case mir.ExitKind.As: "an 'as' that does not hold aborts the program"
         case mir.ExitKind.GenRunning: "it asks a generator for its next value from inside the generator's own walk, which aborts the program"
+        case mir.ExitKind.IndexBounds: "it indexes out of range, which stops a checked build"
+        case mir.ExitKind.DivideByZero: "it divides by zero, which stops a checked build"
+        case mir.ExitKind.DivideOverflow: "it divides the least value by -1, which stops a checked build"
+        case mir.ExitKind.ShiftAmount: "it shifts by an amount outside the width, which stops a checked build"
         case mir.ExitKind.Error: "an error reaches '!', which ends the program"
         case mir.ExitKind.Escaped: "an error leaves the test, which ends it"
         case _: "it ends the test or the process"
@@ -1127,6 +1131,7 @@ fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
             if kind == mir.ExitKind.Error { return $line(d, file, sp) ": " $msg }
             if kind == mir.ExitKind.Unhandled { return "unhandled error: " $msg }
             if what == "" { return $msg }
+            if mir.Columned(kind) { return $d.Locate(file, I64(sp.Start)) ": " $what }   # E16g
             if msg == "" { return $line(d, file, sp) ": " $what }
             return $line(d, file, sp) ": " $what ": " $msg
         }
