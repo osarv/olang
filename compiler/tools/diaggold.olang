@@ -104,31 +104,48 @@ fn spanEnd(text String&, start I64, caret String&) I64 {
     return end if tildes == 0 else start
 }
 
-# renders a case's rows through diag; "" when it renders as stage 0 did, else what differs
-fn check(c golden&) String {
-    g := goldenRun()
+# one row of a golden: an error, a note or a help, where it is, whether source was written under it
+type goldRow struct(kind String&, where diag.Where, rule String&, text String&, excerpt Bool) {
+    kind
+    where
+    rule
+    text
+    excerpt
+}
+
+# a case's rows, and its last row's "compilation failed ..." line
+fn readRows(g mut goldenRun&, c golden&) Vec<goldRow>, String& {
+    out Vec<goldRow>
     rows := c.text.Split("\n")
     summary := ""
-    rec I64 = -1
     i I64 = 0
     for i < rows.Len() {
-        row := rows[i]
+        line := rows[i]
         i++
-        if row.Len() == 0 { continue }
-        if row.StartsWith("compilation failed") or row.StartsWith("compilation successful") {
-            summary = row
+        if line.Len() == 0 { continue }
+        if line.StartsWith("compilation failed") or line.StartsWith("compilation successful") {
+            summary = line
             continue
         }
-        e := try row.Find(": error") catch default -1
-        n := try row.Find(": note: ") catch default -1
-        if e < 0 and n < 0 { return "unreadable row: " $row }
-        isNote := n >= 0 and (e < 0 or n < e)
-        at := n if isNote else e
-        where := g.where(row[:at])
+        e := try line.Find(": error") catch default -1
+        n := try line.Find(": note: ") catch default -1
+        h := try line.Find(": help: ") catch default -1
+        if e < 0 and n < 0 and h < 0 { return out, $"unreadable row: " $line }
+        kind := "error"
+        at := e
+        if n >= 0 and (e < 0 or n < e) {
+            kind = "note"
+            at = n
+        }
+        if h >= 0 and (e < 0 or h < e) and (n < 0 or h < n) {
+            kind = "help"
+            at = h
+        }
+        where := g.where(line[:at])
         rule := ""
-        text := row[at + 8:]
-        if not isNote {
-            rest := row[at + 7:]
+        text := line[at + 8:]
+        if kind == "error" {
+            rest := line[at + 7:]
             if rest.StartsWith("[") {
                 close := try rest.Find("]: ") catch default 0
                 rule = rest[1:close]
@@ -138,15 +155,39 @@ fn check(c golden&) String {
             }
         }
         # the excerpt under it gives the span's end
-        if i + 1 < rows.Len() and isExcerpt(rows[i]) {
+        excerpt := i + 1 < rows.Len() and isExcerpt(rows[i])
+        if excerpt {
             match where {
                 case diag.Where.Span(f, s, _) { where = diag.Where.Span(f, s, spanEnd(g.texts[f], s, rows[i + 1])) }
                 case _ { }
             }
             i += 2
         }
-        m := diagmsg.Msg(msgs.Diag.Expected, rule, text)
-        if isNote { g.d.Note(rec, where, m) } else { rec = g.d.Error(where, m) }
+        out.Push(goldRow(kind, where, rule, text, excerpt))
+    }
+    return out, summary
+}
+
+# renders a case's rows through diag; "" when it renders as stage 0 did, else what differs. A note or help with no
+# source under it is the error's own (its message's Note and Help), the rest are notes reported on it
+fn check(c golden&) String {
+    g := goldenRun()
+    all, summary := readRows(g, c)
+    if summary.StartsWith("unreadable") { return summary }
+    for k in range all.Len() {
+        r := all[k]
+        if r.kind != "error" { continue }
+        own, help := "", ""
+        for j in range k + 1, all.Len() {
+            if all[j].kind == "error" { break }
+            if all[j].excerpt { continue }
+            if all[j].kind == "help" { help = all[j].text } else { own = all[j].text }
+        }
+        rec := g.d.Error(r.where, diagmsg.Msg(msgs.Diag.Expected, r.rule, r.text, own, help))
+        for j in range k + 1, all.Len() {
+            if all[j].kind == "error" { break }
+            if all[j].excerpt { g.d.Note(rec, all[j].where, diagmsg.Msg(msgs.Diag.Expected, "", all[j].text)) }
+        }
     }
     got := $g.d.Render() $(g.d.Summary() if summary.Len() > 0 else "")
     if got == c.text { return "" }

@@ -9,6 +9,10 @@
 #        12 | the source line
 #           |       ^~~~~
 #     path:line:col: note: text
+#     path:line:col: help: text
+#
+# The headline is what is wrong; the reason, when it has one, follows as a note, and what to write instead, when the
+# message says, as a help after every note.
 #
 # with colour only where a person reads them on a terminal. -e RULE prints a rule's text from the specification beside
 # the compiler (B11a) - Explain.
@@ -41,11 +45,14 @@ type record struct(at Where, rule String&, text String&, kind msgs.Diag, group I
     oncePerLine
 }
 
-# a note on the error numbered rec
-type note struct(rec I64, at Where, text String&) {
+# a note on the error numbered rec - or a help (what to write instead, written after the notes). plain: the message's own
+# reason or fix, at the error's place, with no excerpt of its own
+type note struct(rec I64, at Where, text String&, help Bool = false, plain Bool = false) {
     rec
     at
     text
+    help
+    plain
 }
 
 # what an error is reported inside - a generic's body checked for one instantiation (G16): every error reported while
@@ -78,6 +85,8 @@ type Diagnostics struct(Color Bool) {
     fatalAt Where = Where.Nowhere
     fatalRule String& = ""
     fatalText String& = ""
+    fatalNote String& = ""
+    fatalHelp String& = ""
     fatal Bool = false
     Quiet Bool = false              # nothing reported while it is set: a pass walking code a second time (names' survey)
     Lenient Bool = false            # interpret (B3e): what is only untidy - D3b, M5a - is a warning, not an error
@@ -174,6 +183,7 @@ fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
     group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
     d.records.Push(record(where, m.Rule, m.Text, m.Kind, group, oncePerLine))
     rec := d.records.Len() - 1
+    d.pushOwn(rec, where, m)
     top := d.contexts.Len()
     if use >= 0 {
         d.notes.Push(note(rec, at, $msgs.NoteInLibrary().Text))
@@ -216,7 +226,14 @@ fn (d mut Diagnostics&) ErrorBare(at Where, m diagmsg.Msg) I64 {
     if d.Quiet { return -1 }
     group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
     d.records.Push(record(at, m.Rule, m.Text, m.Kind, group, false))
+    d.pushOwn(d.records.Len() - 1, at, m)
     return d.records.Len() - 1
+}
+
+# the message's own reason and fix, as rows after the error numbered rec
+fn (d mut Diagnostics&) pushOwn(rec I64, at Where, m diagmsg.Msg) {
+    if m.Note.Len() > 0 { d.notes.Push(note(rec, at, m.Note, false, true)) }
+    if m.Help.Len() > 0 { d.notes.Push(note(rec, at, m.Help, true, true)) }
 }
 
 # a note on the error numbered rec - nothing when that error was not reported
@@ -237,6 +254,8 @@ fn (d mut Diagnostics&) Fatal(at Where, m diagmsg.Msg) {
     d.fatalAt = at
     d.fatalRule = m.Rule
     d.fatalText = m.Text
+    d.fatalNote = m.Note
+    d.fatalHelp = m.Help
 }
 
 # the rules about where something lives: a statement reports the first error of these (B11) - a scope found wrong is
@@ -425,7 +444,7 @@ fn (d Diagnostics&) Since(mark I64) Taken {
     t := Taken()
     for i in range mark, d.records.Len() { t.records.Push(d.records[i]) }
     for n in d.notes {
-        if n.rec >= mark { t.notes.Push(note(n.rec - mark, n.at, n.text)) }
+        if n.rec >= mark { t.notes.Push(note(n.rec - mark, n.at, n.text, n.help, n.plain)) }
     }
     for y in d.yielding {
         if y >= mark { t.yielding.Push(y - mark) }
@@ -439,7 +458,7 @@ fn (d Diagnostics&) Since(mark I64) Taken {
 fn (d mut Diagnostics&) Replay(t Taken&) {
     base := d.records.Len()
     for r in t.records { d.records.Push(r) }
-    for n in t.notes { d.notes.Push(note(n.rec + base, n.at, n.text)) }
+    for n in t.notes { d.notes.Push(note(n.rec + base, n.at, n.text, n.help, n.plain)) }
     for y in t.yielding { d.yielding.Push(y + base) }
     for a in t.alone { d.alone.Push(a + base) }
 }
@@ -636,10 +655,10 @@ fn (d mut Diagnostics&) AllSaid() Vec<Said> {
     return l
 }
 
-# a diagnostic as a tool reads it - an editor, an agent (B15, B16): an error, or a note on the error before it; its rule
-# ("" for a note); the file AddFile numbered (-1 for none); its span's offsets in that file's text (-1 for none), or
+# a diagnostic as a tool reads it - an editor, an agent (B15, B16): an error, or a note or help on the error before it
+# (Help says which); its rule ("" for a note); the file AddFile numbered (-1 for none); its span's offsets in that file's text (-1 for none), or
 # the line it is about (0 for none); and its text
-type Item struct(Error Bool, Rule String&, File I64, Start I64, End I64, Line I64, Text String&) {
+type Item struct(Error Bool, Rule String&, File I64, Start I64, End I64, Line I64, Text String&, Help Bool = false) {
     Error
     Rule
     File
@@ -647,14 +666,15 @@ type Item struct(Error Bool, Rule String&, File I64, Start I64, End I64, Line I6
     End
     Line
     Text
+    Help
 }
 
-fn Item.item(isError Bool, rule String&, at Where, text String&) Item {
+fn Item.item(isError Bool, rule String&, at Where, text String&, help Bool = false) Item {
     return match at {
-        case Where.Span(f, s, e): Item(isError, rule, f, s, e, 0, text)
-        case Where.Line(f, l): Item(isError, rule, f, -1, -1, l, text)
-        case Where.File(f): Item(isError, rule, f, -1, -1, 0, text)
-        case Where.Nowhere: Item(isError, rule, -1, -1, -1, 0, text)
+        case Where.Span(f, s, e): Item(isError, rule, f, s, e, 0, text, help)
+        case Where.Line(f, l): Item(isError, rule, f, -1, -1, l, text, help)
+        case Where.File(f): Item(isError, rule, f, -1, -1, 0, text, help)
+        case Where.Nowhere: Item(isError, rule, -1, -1, -1, 0, text, help)
     }
 }
 
@@ -665,10 +685,17 @@ fn (d mut Diagnostics&) Items() Vec<Item> {
         rec := d.records[r]
         l.Push(Item.item(true, rec.rule, rec.at, rec.text))
         for nt in d.notes {
-            if nt.rec == r { l.Push(Item.item(false, "", nt.at, nt.text)) }
+            if nt.rec == r and not nt.help { l.Push(Item.item(false, "", nt.at, nt.text)) }
+        }
+        for nt in d.notes {
+            if nt.rec == r and nt.help { l.Push(Item.item(false, "", nt.at, nt.text, true)) }
         }
     }
-    if d.fatal { l.Push(Item.item(true, d.fatalRule, d.fatalAt, d.fatalText)) }
+    if d.fatal {
+        l.Push(Item.item(true, d.fatalRule, d.fatalAt, d.fatalText))
+        if d.fatalNote.Len() > 0 { l.Push(Item.item(false, "", d.fatalAt, d.fatalNote)) }
+        if d.fatalHelp.Len() > 0 { l.Push(Item.item(false, "", d.fatalAt, d.fatalHelp, true)) }
+    }
     return l
 }
 
@@ -695,7 +722,10 @@ fn (d mut Diagnostics&) Render() String {
         rec := d.records[r]
         d.putRow(b, rec.at, "error", rec.rule, rec.text)
         for nt in d.notes {
-            if nt.rec == r { d.putRow(b, nt.at, "note", "", nt.text) }
+            if nt.rec == r and not nt.help { d.putNote(b, nt) }
+        }
+        for nt in d.notes {
+            if nt.rec == r and nt.help { d.putNote(b, nt) }
         }
     }
     if d.fatal {
@@ -703,6 +733,8 @@ fn (d mut Diagnostics&) Render() String {
         b.Push(d.errorWord(d.fatalRule))
         b.Push(d.fatalText)
         b.PushChar('\n')
+        if d.fatalNote.Len() > 0 { d.putPlain(b, d.fatalAt, "note", d.fatalNote) }
+        if d.fatalHelp.Len() > 0 { d.putPlain(b, d.fatalAt, "help", d.fatalHelp) }
     }
     return b.ToString()
 }
@@ -714,13 +746,15 @@ fn (d mut Diagnostics&) Summary() String {
     return $d.sgr("1;31") "compilation failed with " $n " error" $("" if n == 1 else "s") $d.sgr("0") "\n"
 }
 
-# a mistake in the command line, before any compilation: "olang: error[RULE]: text"
+# a mistake in the command line, before any compilation: "olang: error[RULE]: text", then its note and help
 fn (d mut Diagnostics&) Usage(m diagmsg.Msg) String {
     b := StringBuilder()
     d.putLocation(b, Where.Nowhere)
     b.Push(d.errorWord(m.Rule))
     b.Push(m.Text)
     b.PushChar('\n')
+    if m.Note.Len() > 0 { d.putPlain(b, Where.Nowhere, "note", m.Note) }
+    if m.Help.Len() > 0 { d.putPlain(b, Where.Nowhere, "help", m.Help) }
     return b.ToString()
 }
 
@@ -739,6 +773,19 @@ fn (d mut Diagnostics&) putRow(b mut StringBuilder&, at Where, word String&, rul
     b.Push(text)
     b.PushChar('\n')
     d.putExcerpt(b, at)
+}
+
+# a note or help row: with the source under it, unless it is the message's own (plain), said at the place the error was
+fn (d mut Diagnostics&) putNote(b mut StringBuilder&, nt note&) {
+    if nt.plain { d.putPlain(b, nt.at, "help" if nt.help else "note", nt.text) } else { d.putRow(b, nt.at, "note", "", nt.text) }
+}
+
+# "path:line:col: note: text" (or help) alone on its row
+fn (d mut Diagnostics&) putPlain(b mut StringBuilder&, at Where, word String&, text String&) {
+    d.putLocation(b, at)
+    b.Push($d.sgr("1;36") $word ":" $d.sgr("0") " ")
+    b.Push(text)
+    b.PushChar('\n')
 }
 
 # "path:line:col: " - or as much of it as is known, and "olang: " for the compilation as a whole
@@ -947,6 +994,18 @@ test "notes follow their error, and a note on an error not reported is dropped" 
     d.Note(-1, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
     want := "c.olang:2:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    2 | b\n      | ^\n" "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n"
     assert d.Render() == want
+}
+
+test "a message's own note and help are rows of their own, the help after the notes" {
+    d := Diagnostics(false)
+    f := d.AddFile("c.olang", "a\nb\n")
+    e := d.Error(Where.Span(f, 2, 3), diagmsg.Msg(msgs.Diag.CannotOpen, "T1", "what is wrong", "why it is", "what to write"))
+    d.Note(e, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
+    want := "c.olang:2:1: error[T1]: what is wrong\n    2 | b\n      | ^\n" "c.olang:2:1: note: why it is\n" "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n" "c.olang:2:1: help: what to write\n"
+    assert d.Render() == want
+    items := d.Items()
+    assert items.Len() == 4
+    assert items[3].Help and not items[3].Error and items[3].Text == "what to write"
 }
 
 test "a whole file, a line, and the compilation as a whole are written with what is known of them" {

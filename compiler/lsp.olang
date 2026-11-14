@@ -565,8 +565,8 @@ fn (w worker&) textOf(a session.Analysis&, real String&) String {
     return $a.TextOf(mi) if mi >= 0 else ""
 }
 
-# items[i], an error, as an LSP Diagnostic: its range in its file, its rule as its code, and its notes as related
-# information
+# items[i], an error, as an LSP Diagnostic: its range in its file, its rule as its code, and its notes and helps (written "help: ...") as
+# related information
 fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut diag.Diagnostics&, items Vec<diag.Item>&
     i I64, real String&) {
     it := items[i]
@@ -592,7 +592,7 @@ fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut d
         rel.Push(",\"range\":")
         w.rangeOf(rel, np, nt)
         rel.Push("},\"message\":")
-        session.JsonStr(rel, nt.Text)
+        session.JsonStr(rel, $"help: " $nt.Text if nt.Help else nt.Text)
         rel.PushChar('}')
     }
     if rel.Len() > 0 { b.Push($",\"relatedInformation\":[" $rel.ToString() "]") }
