@@ -3553,16 +3553,21 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where B
 # region's (O8d: __olang_region_or, __olang_region_release) - a place an early free is made for holds such a reference
 fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) String, I64 {
     lt, init, n := fe.constInit(el, c)
+    return fe.E.constData(lt, init, site), n
+}
+
+# constGlobal's constant, written once per type, contents and site (none: shared by every array of them)
+fn (e mut Emitter&) constData(lt String&, init String&, site String&) String {
     key := "d:" $lt " " $init if site == "" else "s:" $site " " $lt " " $init
-    if fe.E.dataAt.Has(key) { return (try fe.E.dataAt.Get(key) catch default ""), n }
-    s := "@.d" $fe.E.nconst
-    fe.E.nconst++
+    if e.dataAt.Has(key) { return try e.dataAt.Get(key) catch default "" }
+    s := "@.d" $e.nconst
+    e.nconst++
     wt := "<{ i64, " $lt " }>"
     value := $wt " <{ i64 0, " $lt " " $init " }>, align 8"
-    fe.E.item(s[1:], HomeLocal, $s " = private " $("unnamed_addr " if site == "" else "") "constant " $value "\n")
+    e.item(s[1:], HomeLocal, $s " = private " $("unnamed_addr " if site == "" else "") "constant " $value "\n")
     g := "getelementptr inbounds (" $wt ", ptr " $s ", i32 0, i32 1)"
-    fe.E.dataAt.Put($key, $g)
-    return g, n
+    e.dataAt.Put($key, $g)
+    return g
 }
 
 # an array constant's LLVM type, initializer and length
@@ -3813,7 +3818,7 @@ fn (fe mut fnEm&) slotCopy(c mir.Call) I64 {
     }
     if ty == types.UnknownT or c.Scopes.N != I32(1) or not c.HasDest or c.Dest.Path.N != I32(0): return -1
     r := t.Repr(ty)
-    if not fe.E.Lw.Gen().IsGen(t, r) or t.NeedsDrop(r) or t.DeclaresCopy(r) or fe.genLeaves(r).Len() == 0: return -1
+    if not fe.E.genType(r) or t.NeedsDrop(r) or t.DeclaresCopy(r) or fe.genLeaves(r).Len() == 0: return -1
     l := match c.Dest.B {
         case mir.Base.Local(x): I64(x)
         case _: -1
@@ -3884,7 +3889,7 @@ fn (fe mut fnEm&) holders(x mir.Operand, by String&) {
 fn (fe mut fnEm&) holdersAt(at String&, ty types.TypeId, by String&, top Bool) {
     t := fe.E.T
     r := t.Repr(ty)
-    if not fe.E.Lw.Gen().HoldsGen(t, r): return
+    if not fe.E.holdsGen(r): return
     k := t.KindOf(r)
     if k == types.Kind.Ref {
         if fe.dropping {
@@ -3908,7 +3913,7 @@ fn (fe mut fnEm&) holdersAt(at String&, ty types.TypeId, by String&, top Bool) {
     if mir.HasFields(t, r) {
         fs := t.Items(fe.fieldList(r))
         for i in range fs.Len() {
-            if fe.E.Lw.Gen().WeakField(t, r, i): continue
+            if fe.E.weakField(r, i): continue
             fe.holdersAt(fe.let("getelementptr " $fe.ty(r) ", ptr " $at ", i32 0, i32 " $i), fs[i], by, false)
         }
         return
@@ -3945,7 +3950,7 @@ fn (fe mut fnEm&) holdersCases(at String&, r types.TypeId, by String&) {
     pay := fe.let("getelementptr " $lt ", ptr " $at ", i32 0, i32 1")
     for c in range cs.Len() {
         rec := cs[c]
-        if rec == types.TypeId(0) or not fe.E.Lw.Gen().HoldsGen(t, rec): continue
+        if rec == types.TypeId(0) or not fe.E.holdsGen(rec): continue
         yes, no := fe.fresh("gcase"), fe.fresh("gcase")
         fe.w("br i1 " $fe.let("icmp eq i64 " $tag ", " $c) ", label %" $yes ", label %" $no)
         fe.label(yes)
@@ -3977,13 +3982,12 @@ fn genClassSize(c I64) I64 {
 # call into it, the instance x names reclaimed if its count says no owning place holds it - the runtime comparing it
 # with the references still in use, ks
 fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
-    e := fe.E
     b := match fe.F.Of {
         case mir.FnKey.Body(id): I64(id)
         case _: -1
     }
     if b < 0 { return }
-    ok := e.genOk(b, ty)
+    ok := fe.E.genOk(b, ty)
     p := fe.val(x, fe.otype(x))
     go, tst, call, done := fe.fresh("rc"), fe.fresh("rc"), fe.fresh("rc"), fe.fresh("rc")
     some := fe.let("icmp ne ptr " $p ", null")
@@ -3999,11 +4003,11 @@ fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
     refs Vec<mir.Operand>
     views Vec<mir.Operand>
     opaque := false
-    t := e.T
+    t := fe.E.T
     for i in range I64(ks.N) {
         k := fe.F.Ops[I64(ks.At) + i]
         r := t.Repr(fe.otype(k))
-        if e.Lw.Gen().GenRef(t, r): refs.Push(k)
+        if fe.E.genRef(r): refs.Push(k)
         else if fe.ty(r) == "{ i64, ptr }": views.Push(k)
         else: opaque = true
     }
@@ -4018,7 +4022,7 @@ fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
     }
     vk := "null"
     vn := "-1"
-    if not opaque and e.genBufOn(ty) {
+    if not opaque and fe.E.genBufOn(ty) {
         nv := views.Len()
         if nv > 0 {
             vk = fe.alloca("[" $nv " x ptr]")
@@ -4028,10 +4032,10 @@ fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
                 fe.w("store ptr " $d ", ptr " $fe.let("getelementptr [" $nv " x ptr], ptr " $vk ", i64 0, i64 " $i))
             }
         }
-        vn = fe.let("select i1 " $fe.load("i1", "@" $e.genBuf(b, ty)) ", i64 " $nv ", i64 -1")
+        vn = fe.let("select i1 " $fe.load("i1", "@" $fe.E.genBuf(b, ty)) ", i64 " $nv ", i64 -1")
     }
-    e.runtime("__olang_gen_reclaim")
-    fe.w("call void @__olang_gen_reclaim(ptr " $p ", ptr @" $e.genDropFn(ty) ", ptr " $keep ", i64 " $n ", ptr " $vk ", i64 " $vn ")")
+    fe.E.runtime("__olang_gen_reclaim")
+    fe.w("call void @__olang_gen_reclaim(ptr " $p ", ptr @" $fe.E.genDropFn(ty) ", ptr " $keep ", i64 " $n ", ptr " $vk ", i64 " $vn ")")
     fe.w("br label %" $done)
     fe.label(done)
 }
@@ -4059,6 +4063,16 @@ fn (e mut Emitter&) genBuf(b I64, ty types.TypeId) String {
     return s
 }
 
+# the program's generational facts (T13d) as a function's emission asks them, through the emitter's own methods. A fnEm
+# method reaching what the emitter holds otherwise - the lowerer's GenInfo through E, the emitter's fields through a
+# local copy of E, a symbol the emitter keeps handed back as it is (genDropFn) - grows it in the fnEm's own scope, which
+# places every fnEm where the emitter is: each function's emission, its text builders included, was kept until the build
+# ended (docs/testmem.md)
+fn (e mut Emitter&) genType(ty types.TypeId) Bool { return e.Lw.Gen().IsGen(e.T, ty) }
+fn (e mut Emitter&) holdsGen(ty types.TypeId) Bool { return e.Lw.Gen().HoldsGen(e.T, ty) }
+fn (e mut Emitter&) weakField(ty types.TypeId, k I64) Bool { return e.Lw.Gen().WeakField(e.T, ty, k) }
+fn (e mut Emitter&) genRef(ty types.TypeId) Bool { return e.Lw.Gen().GenRef(e.T, ty) }
+
 fn (e mut Emitter&) genBufName(b I64, ty types.TypeId) String {
     return types.Symbol($"olang.genbuf." $e.stableSym(b) "." $e.T.Canon(ty))
 }
@@ -4078,7 +4092,7 @@ fn (e mut Emitter&) genDropFn(ty types.TypeId) String {
     t := e.T
     s := types.Symbol($"olang.gendrop." $t.Canon(ty))
     if e.genDrops.Has(s) { return s }
-    e.genDrops.Put(s, true)
+    e.genDrops.Put($s, true)
     k := mir.FnKey.Init(0)
     fe mut fnEm& = fnEm(e, mir.Fn(k, types.VoidT, 0, source.Span(0, 0)), k)
     fe.dropping = true
@@ -4822,7 +4836,7 @@ fn (fe mut fnEm&) builtText(b mir.ScopeRef, into mir.ScopeRef) String {
 fn (fe mut fnEm&) newValue(s mir.ScopeRef, x mir.Operand, ty types.TypeId) String {
     t := fe.E.T
     rt := t.Referent(t.Repr(ty))
-    if fe.E.Lw.Gen().IsGen(t, rt) {
+    if fe.E.genType(rt) {
         p := fe.genAlloc(s, rt)
         fe.put(p, rt, x)
         l := match x {
@@ -6054,6 +6068,16 @@ fn (e mut Emitter&) thunkSym(s String&, ty types.TypeId) String { return $s "_fv
 # an adapter's key between two function types
 fn (e mut Emitter&) adaptKey(f types.TypeId, g types.TypeId) String { return types.Symbol($e.T.Canon(f) "|" $e.T.Canon(g)) }
 
+# the adapter from f to g wanted (written after the functions, fvAdapter), by its key
+fn (e mut Emitter&) adapter(f types.TypeId, g types.TypeId) String {
+    key := e.adaptKey(f, g)
+    if e.adaptAt.Has(key): return key
+    e.adaptAt.Put($key, true)
+    e.adaptFrom.Push(f)
+    e.adaptTo.Push(g)
+    return key
+}
+
 # whether a call through a function value of type f and one of type g differ in what is returned (R6: a function that
 # cannot fail as a value that can, or another error list)
 fn (e mut Emitter&) abiDiffers(f types.TypeId, g types.TypeId) Bool {
@@ -6064,14 +6088,8 @@ fn (e mut Emitter&) abiDiffers(f types.TypeId, g types.TypeId) Bool {
 # a function value of type f as one of type g whose ABI differs: an environment holding the value, in the program's
 # scope (it may be kept anywhere), called through an adapter that re-encodes what it returns
 fn (fe mut fnEm&) adapt(v String&, f types.TypeId, g types.TypeId) String {
-    e := fe.E
-    key := e.adaptKey(f, g)
-    if not e.adaptAt.Has(key) {
-        e.adaptAt.Put($key, true)
-        e.adaptFrom.Push(f)
-        e.adaptTo.Push(g)
-    }
-    e.runtime("__olang_scope_alloc")
+    key := fe.E.adapter(f, g)
+    fe.E.runtime("__olang_scope_alloc")
     env := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.program() ", i64 16)")
     fe.store("{ ptr, ptr }", v, env)
     a := fe.let("insertvalue { ptr, ptr } undef, ptr @olang_fvadapt_" $key ", 0")
@@ -6998,7 +7016,7 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
             rv := st.v
             # T21: converted to a C function pointer that may be null ("fn?&") - the value it was made of
             if rv == mir.Rvalue.Prim and rv.op == typed.PrimOp.Convert and rv.args.N == I32(1) { return fe.exportNamed(fe.F.Ops[I64(rv.args.At)]) }
-            name := fe.exportBody(rv)
+            name := fe.E.exportBody(rv)
             if name != "" { return name }
         }
     }
@@ -7007,13 +7025,13 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
 }
 
 # the name of the export fn a closure is made of, "" where the value is no such closure
-fn (fe mut fnEm&) exportBody(rv mir.Rvalue) String {
+fn (e mut Emitter&) exportBody(rv mir.Rvalue) String {
     if rv != mir.Rvalue.Closure { return "" }
     code := rv.code
     if code != mir.FnKey.Body { return "" }
-    of := fe.E.Lw.Bodies[I64(code.id)].Of
+    of := e.Lw.Bodies[I64(code.id)].Of
     if of != typed.BodyOf.Fn { return "" }
-    return $fe.E.text(fe.E.P.FnDecl(fe.E.P.InstanceFn(of.instance)).Name)
+    return $e.text(e.P.FnDecl(e.P.InstanceFn(of.instance)).Name)
 }
 
 

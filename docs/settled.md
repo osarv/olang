@@ -1032,7 +1032,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (docs/optsurvey.md lists what was built). Benchmarks against C are in `bench/` (not in verify).
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
   port's diffs; `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the
-  user's rule). The suite runs side by side; `make quick` is the edit-test loop; `make verify` stays the gate.
+  user's rule). The suite runs side by side, at most a job per core, each test build, interpreted run and heavy tool
+  build behind the memory gate (compiler/tools/memgate.olang, 2026-11-14, the user's "machine-agnostic"): it starts
+  once the memory the machine, container or cgroup has now leaves room for its measured peak beside what the running
+  ones may still take - never a fixed size or core count (docs/testmem.md); `make quick` is the edit-test loop; `make
+  verify` stays the gate.
 
 ### The C compiler and the port
 

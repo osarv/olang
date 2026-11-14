@@ -1943,7 +1943,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 244020b30fdf2de1 b897660d40972e4d checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-d974de9a6fdccdf9 83d632df6898f5e2 checks/checks.olang
+e2ec00158cea42a8 cac590f71be169a1 checks/checks.olang
 bbd03894d369bef3 2ab23287336a4d78 checks/fixtures/agree/agree.olang
 e8390f5a7a3b4f20 fcd591b00a0bb69e checks/fixtures/agree/bfrand.olang
 bd3eed5b0a26d026 7a265dc0e0b0b216 checks/fixtures/agree/math.olang
@@ -2060,7 +2060,7 @@ c19166f8551251ad 1dc31d58d4e174db checks/fixtures/interp/prog.olang
 4582fb3d758527b0 6943b577288dff0c checks/fixtures/interp/refused.olang
 0f4f182c54a29af0 2c7bf2576332dc12 checks/fixtures/interp/tasks.olang
 3635a1df29668b81 d00bf9575e1976bb checks/fixtures/interp/tests.olang
-cc2d9cb569bd1d13 e6f362aca8498797 checks/fixtures/interp/ub.olang
+65c2dbf528718858 e6f362aca8498797 checks/fixtures/interp/ub.olang
 7afddd805de12e25 fa0cafe390e232c3 checks/fixtures/interp/untidy.olang
 39542e2812061a2f aed6cb87e0ca7604 checks/fixtures/interp/unwind.olang
 452898196b527b79 5a41c234018a1de6 checks/fixtures/jupyter/client.olang
@@ -2244,7 +2244,7 @@ ebdb38cba173d701 63b967e10e8f5392 compiler/diag.olang
 8eecc7e6e624f53a d60fad56d190f340 compiler/diagmsg.olang
 2229a19f4d82a1e7 67b969a384044583 compiler/doc.olang
 cfd8b9ab052e4332 14de45b9b78bc93c compiler/effects.olang
-02bcb5b57b7c8c9d 2fdb92a7c9ca0eff compiler/emit.olang
+68dff868c9f8865c 8ffae1c36503b9e7 compiler/emit.olang
 b5b775eb62555e06 7b6a8081b52501dd compiler/eval.olang
 f6565c2f1a43446c d8b019a955d4cf3f compiler/explain.olang
 cfbae2c024604f26 ede20fa970cbc0c2 compiler/facts.olang
@@ -2266,7 +2266,7 @@ ae8eaa8924ba4c11 71a67663e714304e compiler/msgs.olang
 8a8b53f139ef9b02 93b30be6689d5e9c compiler/names.olang
 b9520ca5794a662c e90b4dca0bb20d91 compiler/needs.olang
 d53334245b1ae545 a79156effe1800a0 compiler/notebook.olang
-5d3fb1dc3818cda0 78f8529207441c47 compiler/olang.olang
+469e26c72489d754 53a9aa884be18dc8 compiler/olang.olang
 1fc70a2d9b239453 2a7da59f3902303c compiler/paint.olang
 b0871112e9a77b06 3c9164b08b7f7f09 compiler/parse.olang
 4d6bd2444db67352 a4637b7cca99ba90 compiler/profile.olang
@@ -2308,6 +2308,7 @@ efc252af39d851a8 98b129f7aa4d5090 compiler/tools/fmt.olang
 49ff91bbc5a7e5dd 94cbed42627ab79b compiler/tools/layoutdiff.olang
 5a2f2c41abe76de6 e31e93b113ea3827 compiler/tools/layoutgold.olang
 08b825b99f7fa216 d697c874672ab920 compiler/tools/lowerdump.olang
+5f088a5665e7c48f 0b3ad1e6cf30a2b5 compiler/tools/memgate.olang
 3df58f87dacb941e 284ecee08216ecc0 compiler/tools/modgraph.olang
 33fdd75a6e9d98ca c5aab9ec8682c5df compiler/tools/namesdiff.olang
 21f954d4d533b621 2a31843e1645d4d5 compiler/tools/nesting.olang
