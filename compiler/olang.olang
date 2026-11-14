@@ -661,7 +661,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     irs Map<String, String&>      # a reused module's parts' IR, "MODULE PART", read and checked against their hashes
     if kind != build.Kind.Module {
         # -memory reports what lowering decided in every module, so it lowers every one (records still kept)
-        if not cfg.Memory: e.Reuse = reusable(l, c, cfg, keys, irs, -1)
+        if not cfg.Memory: e.Reuse = reusable(l, c, cfg, keys, irs, cutLikely(l, cfg))
         build.Phase("facts")
     }
     objs := e.Objects()
@@ -858,6 +858,22 @@ fn recordStem(cfg build.Config&, identity String&, key String&) String {
 # has the value this program decided (facts.Table.Holds), written whole (its "sum" line the hash of the lines before
 # it), each part's IR there with the hash the record names - else the record is passed over, never read in part - and,
 # where cut is 0 or 1, cut as that says (B3d). The parts' IR is kept in irs ("MODULE PART") for the build
+# whether this program's objects are likely cut (B3d), before anything is emitted: from its sources' size, which a
+# program's own IR follows at about 8 to 15 bytes of IR to a byte of source (measured over the suite's 247 test
+# builds, 2026-11-14: every one of more than 1,033,000 bytes of source was cut, none below 924,000). Only the records cut
+# as it says are reused at first, so a mistake costs what reusing any record cost before every time a record was cut
+# otherwise than the program - its emission thrown away and made again (Redo); a guess never changes the objects. 1 cut,
+# 0 not (a -debug build is always cut)
+fn cutLikely(l load.Loader&, cfg build.Config&) I64 {
+    if cfg.Debug: return 1
+    src I64 = 0
+    for m in l.Mods {
+        if m.Src is not null: src += m.Src!.Text.Len()
+    }
+    return 1 if src >= LikelyCutSource else 0
+}
+LikelyCutSource I64 = 1000000
+
 fn reusable(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, keys Array<String&>&
     irs mut Map<String, String&>&, cut I64) Vec<emit.Reused> {
     out Vec<emit.Reused>
