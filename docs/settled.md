@@ -900,16 +900,24 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   their join. Every test file and the checks' run cases are compared with the built runs; listed differences only
   (std/chan's waits for a task, std/net's getaddrinfo, memory-measuring cases, an export fn handed to C).
 - **The prompt (B22, QCX 6, the user 2026-11-07 and 2026-11-13 "as easy to use as python"; built 2026-11-14).** Plain
-  `olang` reads cells from the standard input into one session, run as interpret runs a program. Mine: the session is
-  one program checked again for each cell (the latest declaration of each name; the cell's statements a function of
-  its own); a cell's top-level locals are kept as mutable globals of the session, which later declarations' names may
-  stand in front of (a D3a exception); a cell with errors changes nothing, a failing run keeps its declarations but not
-  its new locals; the last expression's value is shown with `$`. Kept values are saved from each cell's machine and
-  restored into the next (eval.Snapshot), so a cell's program and machine are reclaimed as it ends (flat at ~38 MB over
-  60 cells); a value holding a function value, an `any` or a generational instance, or whose type was laid out anew,
-  is let go with a note (values of an old type do not outlive its redefinition). `:type`, `:load`, `:help`, `:quit`.
-  compiler/prompt.olang's `Session.Cell` (text in; diagnostics, shown value, failure out) is what the Jupyter kernel is
-  to drive.
+  `olang` reads cells from the standard input into one session. Mine: the session is one program checked again for each
+  cell (the latest declaration of each name; the cell's statements a function of its own); a cell's top-level locals
+  are kept as mutable globals of the session, which later declarations' names may stand in front of (a D3a exception);
+  a cell with errors changes nothing, a failing run keeps its declarations but not its new locals; the last
+  expression's value is shown with `$`. `:type`, `:load`, `:help`, `:quit`. compiler/prompt.olang's `Session.Cell`
+  (text in; diagnostics, shown value, failure out) is what the Jupyter kernel drives.
+- **Cells run compiled (B22-B24, the user 2026-11-14: "the notebooks have to run the optimized code. There's no way
+  around that").** Each cell is built as the run form builds a program (-quick, release semantics) into a shared object
+  (compiler/cells.olang) that a worker process loads; std's and the prelude's objects are the cache's
+  (`$XDG_CACHE_HOME/olang/cells`), the runtime the worker's. Mine: a kept value's storage stays in the object of the
+  cell that made it, later cells naming it (`RTLD_GLOBAL`), so nothing kept is copied or moved and only a value whose
+  type is laid out anew is let go (function values and `any`s are kept); each cell runs in a fork of the worker - one
+  that ends in order goes on as the worker, one that crashes, exits or is interrupted (Ctrl-C, Jupyter's interrupt)
+  leaves the session as it was before it, with no check in compiled loops; no early freeing across cells (O8d decides
+  per program, and a cell's values outlive its program); the error trace is not kept (a debug build's). A small cell
+  answers in ~0.3 s, a 240x240 hand matmul runs in 11 ms against 19 s interpreted. `OLANG_CELLS=interpret` (and no
+  clang, or another machine's target) interprets them as before: values saved from each cell's machine and restored
+  into the next (eval.Snapshot).
 - **Editing at the prompt (B22, the user 2026-11-14: "we need a way to scroll up the last commands and edit one to run
   it again", then colour, Ctrl keys and a vi mode).** On a terminal the prompt edits each entry itself -
   compiler/lineedit.olang over termios, no readline or libedit, raw mode only while an entry is read: emacs's keys by
@@ -920,8 +928,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   machine fed bytes, tested without a terminal, and a pty scenario (promptkeys) runs it whole.
 - **`olang jupyter` and rich display (B23, QCX 6, plan.md's "rich-display convention beside the notebook", 2026-11-13;
   built 2026-11-14).** A Jupyter kernel (messaging protocol 5.3) over std/zmtp - ZeroMQ's wire protocol written in
-  olang, no libzmq - signed with HMAC-SHA256; cells run as the prompt runs them, output streamed, the shown value an
-  execute_result, errors with a traceback, interrupts on the control channel stopping a cell, is_complete, complete,
+  olang, no libzmq - signed with HMAC-SHA256; cells run as the prompt runs them (compiled), output relayed from the
+  worker and streamed, the shown value an execute_result, errors with a traceback, interrupts on the control channel
+  ending the cell's process, is_complete, complete,
   shutdown; `olang jupyter -install` writes the kernel spec. Rich display is a prelude convention, no language rule:
   `Display` (Html, Markdown, Latex, Svg, Png) and the trait `Displayable`; a type declaring `Display()` is shown by it
   beside its `$` text.

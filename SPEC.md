@@ -8916,7 +8916,10 @@ not: a name added - a function, a type, a method, a field, a global; an error se
 trait newly met.
 
 **B22 (the prompt).** `olang` with nothing after it reads **entries** from its standard input - each a **cell** - and
-runs them in one **session**, as `interpret` runs a program (B3e); where the input is a terminal it asks with `>>> `, and
+runs them in one **session**, each built as a file run is built (B3g: `-quick`, no check the run form leaves out) and run
+in a process the session keeps; with `OLANG_CELLS=interpret` set, or where no cell can be built (no clang, a target that
+is not this machine), they are interpreted as `interpret` runs a program (B3e), said once. Where the input is a terminal
+it asks with `>>> `, and
 `... ` while an entry is open: an entry goes on over the next line while a bracket of it, a raw text (L14a) or a block
 comment (L4a) is not closed. The session ends at the end of the input or at `:quit`, with status 0.
 
@@ -8934,16 +8937,19 @@ step or a call giving nothing - shows the value as `$` renders it (E11a).
 Every cell is checked with the session as one program - its diagnostics as `interpret` gives them (B11), its lines named
 `cellN:LINE:COLUMN` (N counting the entries), a loaded file's by its path; unused locals and unread imports of the cell
 itself are warnings, an import nothing reaches yet none. A cell with errors changes nothing. A cell that checks is run:
-what stops it - an error leaving it (with its trace, S18d), a failed assert, `unreachable`, undefined behaviour - is said
-and the session goes on, its declarations kept, the locals it declared not; what it assigned to kept values stays.
-`os.Exit` ends the session.
+what stops it in order - an error leaving it, a failed assert, `unreachable`, a `!` - is said and the session goes on,
+its declarations kept, the locals it declared not; what it assigned to kept values stays. What ends its run otherwise -
+a crash, `os.Exit` (its status said), an **interrupt** (Ctrl-C at the prompt, which reaches the running cell alone) - is
+said, and the session goes on with its declarations and with its values as they were before the cell.
 
-What the session keeps is copied whole between cells, everything it reaches with it and what two values share still
-shared; a value that holds a function value or an `any` (whose code is its cell's), a generational instance (T13d) or a
-reference to a global's storage is **let go**, as is one whose type a later declaration lays out otherwise: the cell that
-lets one go says so (`p is let go: ...`), and the name is then unknown. The destructors of what a value held run when it
-is let go or replaced, and of what the session keeps when it ends; everything else a cell made, its scopes and its
-program, is reclaimed when the cell ends.
+A value the session keeps stays where its cell made it - never copied or moved between cells, so a reference into it
+stays good and a function value or an `any` it holds is kept; one whose type a later declaration lays out otherwise is
+**let go**: the cell that lets one go says so (`p is let go: ...`), and the name is then unknown. What a value let go or
+replaced holds, and what the session keeps, is reclaimed and its destructors run when the session ends; everything else
+a cell made is reclaimed as its scopes close (early freeing, O8d, does not reach across cells). Interpreted (B3e), what
+the session keeps is instead copied whole between cells, everything it reaches with it and what two values share still
+shared, and a value holding a function value or an `any`, a generational instance (T13d) or a reference to a global's
+storage is let go too; an error leaving a cell is said with its trace (S18d), and `os.Exit` ends the session.
 
 Commands begin an entry with `:` - `:type EXPR` (the type of the expression's value, as B11b writes types), `:load
 FILE` (the file's text run as a cell), `:set vi` and `:set emacs` (the keys, below), `:help` and `:quit`.
@@ -8980,7 +8986,7 @@ Its cells run in one session as the prompt runs them (B22), named `In[N]` in dia
 value it shows as an `execute_result` whose data holds `text/plain` (`$` rendering, E11a) and, where the value's type
 declares `Display` (below), that rendering under its MIME type (a PNG's bytes in base64); a cell that does not check, or
 that stops, publishes an `error` (`CompileError` or `RuntimeError`, one traceback row per line of what was said) and
-replies `error`. An `interrupt_request` on the control channel stops the running cell as a failed check does (B22),
+replies `error`. An `interrupt_request` on the control channel interrupts the running cell (B22),
 `is_complete_request` answers `incomplete` while an entry would go on at the prompt, `complete_request` offers the
 session's names and the keywords starting with the word before the cursor, and `shutdown_request` ends the kernel with
 status 0. Input is not read (`stdin` is connected, never asked). `olang jupyter -install` takes no file: it writes the

@@ -1,15 +1,16 @@
-# prompt - the interpreter at a prompt (B22): plain "olang" reads entries from the standard input, each a cell run in
-# a session as interpret runs a program (B3e). Session is what holds one, and what a notebook's kernel drives too: a
+# prompt - the prompt (B22): plain "olang" reads entries from the standard input, each a cell run in a session - built
+# and run compiled (cells.olang), or interpreted as interpret runs a program (B3e) where OLANG_CELLS=interpret says so. Session is what holds one, and what a notebook's kernel drives too: a
 # cell's text in; its diagnostics, the value of its last expression and what stopped its run out (Reply). What the cell
 # writes goes to the standard output as it runs.
 #
-# A session is a program the prompt writes again for every cell and checks whole, as interpret checks one: the
-# declarations its cells made (the latest of each name), a global for each value it keeps, and the cell's statements as
-# the body of a function of its own, run on a machine made for the cell. A top-level local of a cell is kept by
-# assigning it, as the cell ends, to a global made for it; the next cell's program declares it as a global of its own
-# name. What the session keeps is saved from the machine when the cell ends (eval.Snapshot) and restored into the next
-# cell's, so what a cell made - its program, its checker, its machine - is reclaimed as it ends, and only what is kept
-# stays.
+# A session is a program the prompt writes again for every cell and checks whole: the declarations its cells made (the
+# latest of each name), a global for each value it keeps, and the cell's statements as the body of a function of its
+# own. A top-level local of a cell is kept by assigning it, as the cell ends, to a global made for it; the next cell's
+# program declares it as a global of its own name. Compiled, that global's storage stays in the worker, in the object
+# of the cell that made it, and every later cell's object names it (cells.olang). Interpreted, the cell runs on a
+# machine made for it, and what the session keeps is saved from the machine when the cell ends (eval.Snapshot) and
+# restored into the next cell's, so what a cell made - its program, its checker, its machine - is reclaimed as it ends,
+# and only what is kept stays.
 
 import "std/os"
 import "std/io"

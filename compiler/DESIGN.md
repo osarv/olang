@@ -948,6 +948,51 @@ golden dumps in `lower`'s tests stand in for round trips.
   it LTO over one 43 MB module) builds stage 2 byte for byte equal to itself. `make drvdiff` compares 11 whole builds
   with stage 0's beside the 72 command lines.
 
+### 1.12 Cells run compiled (`cells`, `prompt`; B22-B24, 2026-11-14)
+
+The prompt, the Jupyter kernel and `notebook run` build each cell as the run form builds a program (B3g: `-quick`, no
+LTO, release semantics) and run it in a long-lived worker process; `interpret` stays for `interpret`, `test
+-interpret`, compile-time evaluation and `OLANG_CELLS=interpret` (or where no cell can be built: no clang, another
+machine's target).
+
+- **A cell is a shared object, the runtime is the worker's.** The session's program (prompt.olang writes it as before:
+  the latest declaration of each name, a global per kept value, the cell's statements as `olangCell`) is built by
+  `Passes.Analyze` with its root's text overlaid (`cells.Builder`, set by olang.olang) in a `Cell` configuration:
+  `-fPIC`, objects `.cell` in `$XDG_CACHE_HOME/olang/cells` (shared by sessions, every module's object made once and
+  reused by B3i), started as a library is (X14's start, which the worker calls instead of a constructor), linked
+  `-shared -Bsymbolic` without the runtime, showing only its start, its entry (`export fn olang_cell_run`) and the
+  storage it holds. The worker (`cells.WorkerSource`, built once per compiler into the cache) is a small olang program
+  holding the runtime, its `__olang_*` symbols exported (a dynamic list), plus a little IR (`HelperIr`): the call
+  behind the runtime's recovery point, the frames a cell writes, the task-thread cache forgotten after a fork.
+- **Values are never moved.** A kept value's storage is the global its cell made for it (`olangKeep_x`, its symbol
+  renamed `….cellN`); every later cell's object names that symbol, declared, not defined (its definition rewritten to
+  `external global`, its initializer left out of the start), and dlopen's `RTLD_GLOBAL` finds it in the cell that holds
+  it. So nothing kept is copied: references into a kept value stay good, function values and `any`s are kept (their
+  code's object is never unloaded), and the only value let go is one whose type a declaration lays out anew (the
+  layouts are `eval.Machine.Layout`'s, taken from a check of the cell's program run first where the cell keeps a
+  local or declares anything but a function). A redefined or let-go value's storage stays until the session ends.
+- **A cell runs in a fork of the worker.** The copy loads the object and calls start and entry behind the runtime's
+  recovery point (`__olang_jmp_target`, C's `stdout` pointed at a memfd so a failed check's message is the cell's
+  failure); one ending in order - to its end, an error leaving it, a failed check - goes on as the worker and tells the
+  process before it to go. One that crashes, calls `os.Exit` or is interrupted ends, and the process before it - the
+  session as it was before the cell - says how and goes on. Interrupts need nothing in compiled code: Ctrl-C at the
+  prompt reaches the cell's process alone (the compiler and the worker ignore SIGINT while a cell runs), a Jupyter
+  `interrupt_request` kills it. What is lost: an interrupted or crashed cell's effects (all of them, by design), and a
+  write-heavy cell pays copy-on-write for the pages it changes (memory up to twice those pages while it runs).
+- **No early freeing across cells.** O8d/O8e decide for a whole program, and a cell's values outlive its program: a
+  place one cell decides sole may hold a value an earlier cell built where none is (the first build crashed so in
+  Vec's growth). A cell is built with no root for `Free.Decide` and alone (no generational decisions): what it lets go
+  of is reclaimed when its scope closes.
+- **Output.** At the prompt the worker writes to the compiler's own descriptors; for the kernel and `notebook run`
+  (`Session.Relay`) its output and error are pipes the compiler relays into its own while it waits, so jupyter.olang's
+  capture holds them. The error return trace (S18d) is a debug build's and is not kept.
+- **Measured (2026-11-14, a loaded 4-core container):** a small cell 0.25-0.3 s - its front end ~70 ms, the probe
+  check ~30 ms, clang on the root's object ~120-150 ms (mostly the prelude's instances the root object holds), the link
+  ~45 ms, fork, load and run ~1 ms; the session's first cell 0.5 s (the worker's build, cached after). A 240x240
+  hand-loop matrix product: 11 ms in its cell against 19 s interpreted. The compiler stays at ~90 MB over 120 cells,
+  the worker at 2-3 MB. Left to gain: the root's object cut so that the instances only modules reach are objects of
+  their own the cache keeps (B3d's groups) while the root keeps those it calls, inlinable.
+
 ## 2. The thirteen grammar points
 
 Each point gets decision (a), handled by the parser with bounded lookahead and no language change, or (b), a

@@ -214,7 +214,7 @@ type CommandLine struct() {
     Html String& = ""
     Caps Bool = false
     Listing String& = ""   # B11d: "-asm" or "-ir", explain showing a function's code
-    Prompt Bool = false    # B22: nothing after "olang" - the prompt, interpreting as interpret does
+    Prompt Bool = false    # B22: nothing after "olang" - the prompt, its cells built and run as a file run is
     Install Bool = false   # B23: jupyter -install
     Continue Bool = false  # B24: notebook run -continue
 }
@@ -452,12 +452,13 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push($"  " $"FILE.olang".PadEnd(11) " " $ModeWhat[Run] "\n")
         for m in range 1, ModeWords.Len() { b.Push($"  " $ModeWords[m].PadEnd(11) " " $ModeWhat[m] "\n") }
         b.Push("\n'olang help MODE' lists a mode's options; 'olang help run' those of running a file.\n")
-        b.Push("'olang' with nothing after it opens the prompt, which runs what is typed as it is typed (B22).\n")
+        b.Push("'olang' with nothing after it opens the prompt, which builds and runs what is typed as it is typed (B22).\n")
         b.Push("\nenvironment:\n")
         b.Push("  OLANG_JOBS=N       runs N of clang's compiles at once; unset, one per core the memory available holds (B3m)\n")
         b.Push("  OLANG_TIMES=1      says each phase of a build as it ends, with its time and the compiler's memory (B3m)\n")
         b.Push("  OLANG_CLANG=PATH   names the clang a build uses (B12d)\n")
         b.Push("  OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)\n")
+        b.Push("  OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)\n")
         return b.ToString()
     }
     m := Run if cl.Word == "run" else modeNumber(cl.Word)
@@ -1377,7 +1378,7 @@ fn mistake(words Array<String&>&) String {
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
-    # B22: nothing after "olang" opens the prompt, which interprets
+    # B22: nothing after "olang" opens the prompt (the mode it is said as: interpret's)
     assert mistake(Array<String&>[]) == "no mistake: interpret"
     assert mistake(Array<String&>["-x"]) ==
         "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"
