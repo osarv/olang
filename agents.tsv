@@ -87,3 +87,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	diagsplit	sonnet	medium	done				unverified(queue)		~380 msgs split; headline median 85->55, >120: 314->2
 2026-11-14	prompt	opus	medium	done	427	153	110	disk-full then pass		REPL via whole-session recheck per cell; snapshot copy; D3a prompt exception
 2026-11-14	jupyter	opus	medium	done(2 agents, restart)				pass		zmtp in olang; kernel; Display; nbclient verified
+2026-11-14	plot	sonnet	medium	done(goldens left, disk full)	192	47	48	-		std/plot SVG
