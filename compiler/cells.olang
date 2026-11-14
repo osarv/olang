@@ -1,4 +1,4 @@
-# cells - a session's cells run compiled (B22, B23, B24; compiler/DESIGN.md, "Cells run compiled"). Each cell's program
+# cells - a session's cells run compiled (B22, B23, B24; compiler/DESIGN.md 1.12). Each cell's program
 # is built as a build builds one, -quick, into a shared object that leaves the runtime out; a worker process - a small
 # program holding the runtime, its symbols shown - loads each object in turn and runs the cell in it. The session's
 # values live in the worker: a value a cell keeps has its storage in that cell's object, and every later cell's object
@@ -70,7 +70,7 @@ type Plan struct() {
 fn Build(cfg mut build.Config&, root String&, text String&, shadow Array<String&>&, paths Array<String&>&
     lines Array<I64>&, plan Plan&, so String&, d mut diag.Diagnostics&) ? build.Failed {
     prog := build.Program()
-    # (a copy of the configuration, which the build keeps what it reports in)
+    # (a copy of the configuration: the build keeps references to what it reports in it)
     c build.Config = cfg
     try Builder!(root, text, shadow, paths, lines, c, prog, d)
     if d.Errors() > 0: error build.Failed.Reported
@@ -87,9 +87,8 @@ fn Build(cfg mut build.Config&, root String&, text String&, shadow Array<String&
     args Vec<String&>
     args.Push(cfg.Clang)
     for f in cfg.ModeFlags(): args.Push(f)
-    # (what it shows: its start, its entry and the storage it holds for the cells after it - nothing else, so that what
-    # its modules leave undefined, weak - an early-freeing decision another cell's object made, wholeprog 2.1 - is
-    # never found in another cell's)
+    # (what it shows: its start, its entry and the storage it holds for the cells after it - nothing else, so that a
+    # symbol its objects leave undefined, a weak one above all, is never found in another cell's)
     vs := $so ".map"
     try os.WriteFile(vs, "{\n  global: olang_cell_init; olang_cell_run; *.cell[0-9]*;\n  local: *;\n};\n") catch os.Error { }
     for f in Array<String&>["-shared", "-Wl,-Bsymbolic", $"-Wl,--version-script=" $vs, "-o", so]: args.Push(f)
@@ -191,7 +190,7 @@ type Outcome struct() {
     Over Bool = false
 }
 
-# the kinds of frame the worker and a cell write: a cell's (cells.olang's program) and the worker's own
+# the kinds of frame the worker and a cell write: a cell's (prompt.olang's program writes them) and the worker's own
 FrameShown I64 = 1
 FrameFailure I64 = 2
 FrameMime I64 = 3
