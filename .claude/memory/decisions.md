@@ -21,4 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(None open.)
+- The prompt's shadowing exception (asked 2026-11-14). The prompt keeps a cell's top-level locals as session globals, and lets a later declaration's parameters or locals share their names - a D3a exception for the prompt only (one line in names.olang). Default in effect: the exception. Options: (a) keep it (otherwise `x := 1` in one cell forbids `fn f(x I64)` in every later cell); (b) no exception: such a declaration is refused, naming the session global. Recommendation: (a) - the session's names are not the program's, and the exception exists only at the prompt.
