@@ -37161,3 +37161,36 @@ output, a value, a std/plot SVG, a compile error, a last cell run only with `-co
 usage error).
 
 - 2026-11-14: message fixes from the user's first local use. `Array<U8>("text")`, an `Array<Char>`/`Vec<Char>` or a StringBuilder where a String is wanted, and a write into a String each give help rows with the code to write (msgs.TextForLength, CharsForText, BuilderForText, TextWrite; hooked in Checker.mismatch, the length argument found by `lenArgAt`). `fn (t String&) Bytes() Array<U8>&` added to the prelude: `return t` is a view with no copy, since Char extends U8 (T29h) and a String already flows into an `Array<U8>&`. Did-you-mean for methods by synonym (`b.Add` for `Push`) was skipped: the nearest-name list has no synonym table and none was added; StringBuilder's methods are unchanged.
+
+## Checked builds (E16g; 2026-11-14, wt-checked)
+
+The user decided that the builds where speed does not matter - `olang test`, `-debug`, `interpret` and `test
+-interpret`, the prompt and the notebook kernel - stop on what is undefined in a release build, the way a failed assert
+does: an out-of-range index the program wrote (`a[i]` on an array, a slice's base or text, not a type's `At`), an
+integer `/` or `%` by zero, the least value divided by -1, and a shift by the width or more or a negative amount.
+Release builds (`build`, running a file, which builds `-quick`, `-quick`, `-library`) are unchanged, and the user was
+explicit that data-science loops must not pay: lane operators, comprehensions and for-in walks index per element
+without a check even in a checked build. Nothing changes what a program means; it only turns undefined behaviour into a
+stop.
+
+How it is built: the checker marks the operations the program wrote with a new check kind, `typed.Check.Debug` - an
+`Elem` made by `elemPlace` for `x[i]` (never the `Elem`s the checker makes for walks, comprehensions, lanes and
+patterns), and the `Prim` of an integer `/ % << >>` and their compound assignments (`checkedPrim`). A lane's element
+operation is rebuilt with `None` (`unchecked`), since lanes go through the same binary path. Lowering turns `Debug`
+into a guaranteed check (`Exit` with the new kinds `IndexBounds`, `DivideByZero`, `DivideOverflow`, `ShiftAmount`)
+only when the `Lowerer` is `Checked` - set for a test or `-debug` build and for interpret's and the prompt's
+evaluation - and otherwise exactly as `None`, so a release build's MIR and IR are what they were: the IR of thirteen
+bench programs and the prelude/std modules they use was compared file by file with the base commit's compiler (87
+`.ll` files, all identical). Because the check is in MIR, the evaluator stops on it with the built program's text,
+and interpret, the prompt and the built test agree; the compile-time evaluator (K1, an unchecked lowering) refuses
+these operations as undefined, as before. The least value is computed as `1 << (bits - 1)` in the type, which wraps
+into the sign bit (E6c), so every width up to 128 needs no wide constant; a shift amount of up to 64 bits is compared
+as an I64 (a U64 past I64's maximum reads negative, so out of range too), a wider one in its own type.
+
+My calls: the message carries the column (`FILE:LINE:COLUMN:`, the operation's expression start) where an assert's
+says only the line - several indexes or divisions share a line; the texts are `index out of range`, `division by
+zero`, `division overflows: the least value by -1` and `shift amount outside the width`; `Get`/`Set` keep failing
+with `ArrayError.OutOfRange` (`Try`), not stopping. Tests: checks scenario `checkedbuild` (checks/fixtures/
+checkedbuild: ten failing tests and two passing ones, the same output from `test` and `test -interpret`; a release
+build of `release.olang` carries none of the four texts in any object and runs; its `-debug` build and `interpret`
+stop on the index the arguments push out of range).

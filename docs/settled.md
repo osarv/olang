@@ -266,6 +266,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)`, `try a.SliceOf(lo, hi)` fail with
   `ArrayError.OutOfRange`. An out-of-range index, a wrong `extern` prototype and a data race are the three unchecked
   holes, stated.
+- **Checked builds (E16g, the user's decision 2026-11-14; built 2026-11-14).** `test`, `-debug`, `interpret`, `test
+  -interpret`, the prompt and the notebook kernel stop, as a failed assert does, on an index, an integer `/` or `%`
+  (a zero divisor, the least value by -1) and a shift (amount outside the width) the program wrote, printing
+  `FILE:LINE:COLUMN: index out of range` (`division by zero`, `division overflows: the least value by -1`, `shift
+  amount outside the width`). Indexes the language makes (for-in walks, comprehensions, lanes, patterns) and lane
+  operations' divisions and shifts are never checked. Release builds (`build`, running a file, `-quick`, `-library`)
+  are byte-identical to before: no check, no cost. Mine: the column (several per line), a check kind `typed.Check.Debug`
+  lowered to a guaranteed check only when the Lowerer is `Checked`, so the evaluator stops with the built text.
 - **Subscripts by axes, NumPy's (E16f, the user's "yes, do them" 2026-11-13, for ML; built 2026-11-13).** `m[0:2, :]`,
   `m[..., 1]`, `c[0, :, 1:]`: a range (`lo:hi`, either end off, bare `:`) or `...` among the items calls the type's
   `Slice` with one prelude `Axis` per item - `Index(i)`, `Range(lo, hi)` (an end off: 0, `I64.Max`), `Rest`; the
@@ -1006,7 +1014,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Cold paths, inferred (survey2 item 9, the user's decision 2026-10-27).** No syntax. What ends the program or a test
   calls `cold noreturn` runtime functions; a call's error edge carries weights.
 - **No per-operation run-time checks (the user's rule).** Checks are per construction (slice bounds, array length) or
-  opt-in by a named call that fails (`try a.Get(i)`, `try x.Narrow<I32>()`, `std/arith`).
+  opt-in by a named call that fails (`try a.Get(i)`, `try x.Narrow<I32>()`, `std/arith`); in release builds - a
+  checked build (E16g: test, -debug, interpret) checks indexes, divisions and shifts the program wrote, where speed does
+  not matter.
 - **Optimizations are mine to decide (the user, 2026-10-27).** Those that change no meaning are never a question
   (docs/optsurvey.md lists what was built). Benchmarks against C are in `bench/` (not in verify).
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
