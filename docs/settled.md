@@ -902,6 +902,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is let go with a note (values of an old type do not outlive its redefinition). `:type`, `:load`, `:help`, `:quit`.
   compiler/prompt.olang's `Session.Cell` (text in; diagnostics, shown value, failure out) is what the Jupyter kernel is
   to drive.
+- **`olang jupyter` and rich display (B23, QCX 6, plan.md's "rich-display convention beside the notebook", 2026-11-13;
+  built 2026-11-14).** A Jupyter kernel (messaging protocol 5.3) over std/zmtp - ZeroMQ's wire protocol written in
+  olang, no libzmq - signed with HMAC-SHA256; cells run as the prompt runs them, output streamed, the shown value an
+  execute_result, errors with a traceback, interrupts on the control channel stopping a cell, is_complete, complete,
+  shutdown; `olang jupyter -install` writes the kernel spec. Rich display is a prelude convention, no language rule:
+  `Display` (Html, Markdown, Latex, Svg, Png) and the trait `Displayable`; a type declaring `Display()` is shown by it
+  beside its `$` text.
 - **`embed PATH` (E38, the user's decision 2026-10-18).** A file's bytes read while compiling: a read-only
   `Array<U8>&` of constant data; text is `String(embed "f")`. PATH is a literal or an expression reading no local,
   resolved like a relative import, kept inside std or a remote repository.

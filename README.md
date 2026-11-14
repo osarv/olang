@@ -63,6 +63,13 @@ I64
 The compiler finds the standard library beside itself, so the checkout must stay where it is. To use another clang,
 set `OLANG_CLANG=/path/to/clang` for both `make` and the compiler.
 
+### Notebooks
+
+`olang jupyter -install` writes olang's kernel spec into your Jupyter kernels (`$JUPYTER_DATA_DIR`, else
+`~/.local/share/jupyter`); then pick "olang" in JupyterLab, Notebook or VS Code (SPEC B23). Cells run as at the prompt;
+output is streamed, the last expression's value shown, and a type declaring `fn (x T&) Display() Display` (the
+prelude's, e.g. `Display.Html(...)`) is shown richly - a table, a plot, a formula. The stop button interrupts a cell.
+
 `editors/` has the Neovim plugin and the language server's setup (`olang lsp`).
 
 ## The repository

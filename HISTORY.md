@@ -36936,3 +36936,38 @@ opens the interpreter at a prompt, a Jupyter kernel on top later. Built in compi
 Tests: checks scenario `prompt` (checks/fixtures/prompt: a session and its expected output - kept values, redefined
 function and type, failing cell with trace, unique value's destructor at the end, `:type`, `:load`, `:help`). The
 driver golden's empty command line now opens the prompt (status 0 on empty input), and `help` mentions it.
+
+## The Jupyter kernel and rich display (B23; 2026-11-14, wt-jupyter)
+
+The user decided (QCX 6, 2026-11-07; 2026-11-13, the quick data-science items) on a Jupyter kernel on top of the prompt
+and a rich-display convention beside it. Built as `olang jupyter`; my calls:
+
+- **No libzmq.** Jupyter's front ends speak ZeroMQ; linking libzmq would add a C dependency every install must have.
+  ZMTP 3.0 with the NULL mechanism is small (a greeting, a READY command, length-prefixed frames), so std/zmtp writes it
+  over std/net's TCP: a `Socket` is one connection; what ZeroMQ's socket types do across connections (ROUTER answering
+  on the connection a request came by, PUB sending to every subscriber, REP echoing) is the kernel's. Subscriptions are
+  not filtered and commands after READY are dropped - a kernel's iopub sends everything anyway. std/sha256 gained
+  `Hmac` (RFC 4231's vectors) for message signatures, std/net `Fd` and `Readable` (poll) so one thread waits on every
+  socket.
+- **One thread, a cell at a time.** The kernel polls its five listeners and its connections; a cell runs to its end
+  before the next message is read. While a cell runs, the prompt's `Session.Watch` (asked between the evaluator's steps)
+  reads the control connections: an interrupt_request or shutdown_request stops the cell (it ends as a failed run,
+  `In[N]:LINE: interrupted`), and the requests read are answered once it has ended.
+- **A cell's output** is captured by pointing descriptors 1 and 2 at memory files (memfd) while it runs, so what the
+  program writes, by any route, is published as `stream`s. Diagnostics name the cell `In[N]`, as notebooks number it.
+  A cell that does not check is a `CompileError`, one that stops a `RuntimeError`; the traceback is what was said, one
+  row a line.
+- **Rich display is library data, no rule.** The prelude declares `Display` (an enum of renderings: Html, Markdown,
+  Latex, Svg, Png) and the trait `Displayable`; the prompt's shown value is passed through a generic matching
+  `Displayable` (`match T`, G15), so a type declaring `Display()` gets its rendering beside its text and every other
+  type costs nothing. The language never calls it; `$x` stays the text. `display_data` mid-cell (IPython's `display()`)
+  is not offered: the value a cell ends with is shown, which covers tables and plots.
+- **`-install`** writes `kernels/olang/kernel.json` under `$JUPYTER_DATA_DIR` or `~/.local/share/jupyter`, naming this
+  executable by its absolute path (`/proc/self/exe`) rather than `olang`, so the kernel starts whether or not olang is
+  on the notebook server's PATH; `interrupt_mode` is `message`.
+
+Tests: tests/display.olang (a table rendering itself as HTML, baked and run); checks scenario `jupyter` - a front end
+written in olang (checks/fixtures/jupyter/client.olang) starts the kernel, checks every signature and replays
+heartbeat, kernel_info, kept values, a shown value, a stream, the HTML table, a compile error, an interrupted endless
+loop, is_complete, complete and shutdown against session.want. Confirmed by hand against Python's jupyter_client 8.10
+(start, execute, interrupt, restart, shutdown) and nbclient executing a notebook.

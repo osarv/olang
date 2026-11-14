@@ -23,12 +23,13 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error`; `Saturating<T>`, an integer whose operators clamp at its limits instead of wrapping |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
-| `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`) and the IEEE CRC-32 |
+| `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`, `Hmac`) and the IEEE CRC-32 |
 | `flags.olang` | command-line flags declared with types, defaults and help, or read from a struct's parameters (`Read<T>`, `@flags.Help`, `@flags.Short`); `--help` text; `flags.Error` |
 | `regex.olang` | RE2-style regular expressions, linear time (a lazy DFA and a Pike VM): `Compile`, `Matches`, `Find`, `FindAll`, `Replace`, `Split`, groups |
 | `json.olang` | JSON parse into an immutable tree, and encode; `Encode`/`Decode<T>` of any value by reflection, keys by a `Naming` policy, `@json.Key`, `@json.Skip` |
 | `csv.olang` | RFC 4180 records, read and written; structs as records (`Encode`, `Decode<T>`, `@csv.Column`, `@csv.Skip`) |
-| `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, names resolved (`Lookup`, `Resolve`), `net.Error` |
+| `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, names resolved (`Lookup`, `Resolve`), `net.Error`; `Readable` waits on several descriptors at once |
+| `zmtp.olang` | ZeroMQ's wire protocol (ZMTP 3.0, NULL mechanism) over TCP, no libzmq: a `Socket` per connection (`Accept`, `Dial`, `Send`, `Recv`) - what the Jupyter kernel speaks (B23) |
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, `Select` over two to four channels, sends (`SendOf`) and timers, cancellation tokens and deadlines |
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |
@@ -89,7 +90,9 @@ stays in.
   `axis` (`Axis`, one item of a subscript by axes, `m[0:2, :]`, `m[..., 1]`, handed to a type's `Slice`, E16f),
   `argument` (`ArgumentError`, what a call whose contract's condition is false fails with, D17), `enums`
   (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32), `print` (`Print(x)` and
-  `Println(x)`, the two functions reached bare, writing `$x` and ending the program where a write fails, M19d). Only the prelude may give methods to built-in types (M19d).
+  `Println(x)`, the two functions reached bare, writing `$x` and ending the program where a write fails, M19d), `display`
+  (`Display`, a value's rich rendering - HTML, Markdown, LaTeX, SVG, PNG - and `Displayable`, met by a type declaring
+  `Display()`, which the Jupyter kernel shows, B23). Only the prelude may give methods to built-in types (M19d).
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.
 - `runtime/` - the runtime as LLVM IR text: `runtime.ll` (arena allocator, chunk pools, regions, worker cache),
   `san.ll` (scope sanitizer, linked only under `-s`), `prof.ll` (the sampling profiler, linked only into an
