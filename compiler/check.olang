@@ -350,6 +350,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     comprInfer Bool = false
     comprElem types.TypeId = types.UnknownT
     comprLetAt I64 = -1
+    lenArgAt I64 = -1           # E12: where Array<T>(n)'s length argument starts, for the message a text there gets
     noClear Bool = false        # D14d: the Array<T>(n) being checked is filled by the loop after it - made with no clear
     # D17: each function's or constructor's body's contract, its items made bodies of their own, by body - made the
     # first time it is asked for (ctDone says it was, Contracts holds it where there is one); the calls whose
@@ -7630,7 +7631,16 @@ fn (c mut Checker&) mismatch(x typed.Expr&, have types.TypeId, want types.TypeId
         ws = $ws " of " $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(want)))].Identity
         hs = $hs " of " $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(have)))].Identity
     }
-    c.err(sp, msgs.TypeMismatch(ws, hs))
+    hd := c.ty(c.deref(have))
+    if c.lenArgAt == sp.Start and ws == "I64" and c.deref(have) == c.textType() {
+        c.err(sp, msgs.TextForLength(hs))
+    } else if c.deref(want) == c.textType() and (hd == "Array<Char>" or hd == "Vec<Char>") {
+        c.err(sp, msgs.CharsForText(hs, ws))
+    } else if c.deref(want) == c.textType() and hd == "StringBuilder" {
+        c.err(sp, msgs.BuilderForText(ws))
+    } else {
+        c.err(sp, msgs.TypeMismatch(ws, hs))
+    }
     return x
 }
 
@@ -12174,7 +12184,9 @@ fn (c mut Checker&) callNamed(sp source.Span, f ast.Expr&, nsp source.Span, n so
 # M8's evaluator decides it), else a run-time Array<T>; a written target type wins (want an Array<T> of a run-time
 # length, or of another length, which fit then reports)
 fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.Expr&>&, want types.TypeId, filled typed.Expr?& = null) typed.Expr& {
+    c.lenArgAt = c.argSpan(args[0]).Start
     n0 := c.exprTo(args[0], c.i64())
+    c.lenArgAt = -1
     length := types.TypeId(0)
     w := c.deref(want) if want != types.UnknownT else types.UnknownT
     # QP1, T7c: fixed storage where n is known while compiling - except where a run-time array is wanted (a local some
