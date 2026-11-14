@@ -2374,6 +2374,7 @@ c7b9c532afd927c0 a9848bedffc38316 std/csv.olang
 165c628f49727a08 8c2487b0c71e3957 std/ffi.olang
 b5572b9de99427da 393726777280a7e0 std/filepath.olang
 21ca51aa2777d945 8f65d16e98158e85 std/flags.olang
+8592b0379cb4768c 99c3c22d6cfd5f48 std/frame.olang
 a612d236b0ecdf8b 36c8cda414fac69f std/fuzz.olang
 4aceaca56a32b13a e0d78639da7a44a4 std/heap.olang
 23c0a6c5e1ea4d69 109eeaf4e1d12ea9 std/hex.olang
@@ -2387,9 +2388,9 @@ dfb51f12cdc44e13 8e3c30629556d964 std/os.olang
 17c08f79ab55afc4 3582f78520a746d0 std/pair.olang
 fe278ac34f6934dc d7b16cfbfec84733 std/pool.olang
 da51f409b1ec6aad e4bdf373a917a2e6 std/prelude/argument.olang
-8efd4ae69c1b2ead 068f23e4826868fb std/prelude/array.olang
+d0e426f991622615 103af270287ef10f std/prelude/array.olang
 71c041edf9953fff 79ca2f0eaf4e79f4 std/prelude/axis.olang
-ade079e03a31f4c2 2dd7c9feff5e4a84 std/prelude/columns.olang
+da00dc611acbfbb5 d2b124138d6a8fa8 std/prelude/columns.olang
 7dd2a3dddcacf115 84d47f905dab7904 std/prelude/complex.olang
 e9622651aa114e56 9f4e2e4a9ca5470f std/prelude/display.olang
 e0b087f8d8856973 4f870ed7f00ae4e1 std/prelude/enums.olang
@@ -2402,8 +2403,8 @@ b2b44b1247499128 d50fc0ca3804f457 std/prelude/map.olang
 1027a8f3113fac6a bfd77aea086ce2fa std/prelude/place.olang
 4629c3af376c7f11 5aaa4754a0978b23 std/prelude/print.olang
 58a87f07ff6919f2 17a3747c9500bc53 std/prelude/reflect.olang
-fd100f0ff059caa9 98870e08d69fa573 std/prelude/tests/array.olang
-2588f3aaed492d79 1ecf6b297c39323d std/prelude/tests/columns.olang
+2c93134e638d2828 7f521f7ad8f228fa std/prelude/tests/array.olang
+ad6ad7fd330acc42 91cdea31f306c9c3 std/prelude/tests/columns.olang
 7cc291fdd20f66dd a51a31b11051c63f std/prelude/tests/float.olang
 5a3e5a76421f0e3b c0bcae9a511eaa84 std/prelude/tests/folds.olang
 e987260a1fa2d6c1 db6086197be9cfdc std/prelude/tests/iterator.olang
@@ -2415,11 +2416,11 @@ d965bcc6886b9315 ea034645ea3bbfbc std/prelude/tests/vec.olang
 c693f9bf1857a8df deb59254b0d02e3b std/prelude/text.olang
 df73995a16c43c1b 163d2125881c0923 std/prelude/vec.olang
 2f7d17eebbc40caa edaca35e17fd1be3 std/prop.olang
-2847f4f652f578e6 e56e54b51d7a5f54 std/rand.olang
+029d48fc743e8cf3 71631ffec756b00c std/rand.olang
 ba561c566a4b46b9 f3277b9ed96a680d std/regex.olang
 7dee6e5f9e12bb31 b09cd1bc9a47c2fe std/set.olang
 51db682a0127abbb 58f602287eb1ceee std/sha256.olang
-f2855babf7504220 0b8170251527f6c3 std/stats.olang
+df60ff6747bf93d6 a6f782d9bcf192a8 std/stats.olang
 4b5ed2f9ae8654ad 797d7c0bd37a86d6 std/sync.olang
 d022f0b8497c55b7 09c175a3019e3d35 std/time.olang
 6fae617fa370f0f6 e1ddbf0e162df83a std/utf8.olang
