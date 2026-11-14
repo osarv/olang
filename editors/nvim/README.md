@@ -14,8 +14,10 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
   terminal split at the bottom, reused by the next run; `:OlangBuild` (`olang build FILE`) and `:OlangTest [words]`
   (`olang test FILE words`) fill the quickfix list through `:make`; `:OlangFormat` formats the buffer, keeping the
   cursor; `:OlangExplain` shows `olang explain FILE WORD` for the word under the cursor in a floating window;
-  `:OlangRepl` opens plain `olang`, the interactive prompt, in a terminal split.
-  Keymaps under `<localleader>` - `r` run, `b` build, `t` test, `f` format, `e` explain, `i` repl - are set where
+  `:OlangRepl` opens plain `olang`, the interactive prompt, in a terminal split; `:OlangFormatOnSave [on|off]`
+  toggles format on save (no argument) or sets it, and remembers the choice (`stdpath("state")/olang/format_on_save`),
+  which then wins over the default and `setup()`.
+  Keymaps under `<localleader>` - `r` run, `b` build, `t` test, `f` format, `F` format on save, `e` explain, `i` repl - are set where
   nothing is mapped already; `vim.g.olang_no_maps = 1` turns them off.
 
 Everything but the last works without the server; all of it needs `olang` on `PATH`.

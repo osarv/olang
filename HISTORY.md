@@ -37019,3 +37019,4 @@ under `test -interpret`.
 
 Neovim plugin: buffer-local commands :OlangRun, :OlangBuild, :OlangTest, :OlangFormat, :OlangExplain, :OlangRepl and
 <localleader> keymaps (r b t f e i; `vim.g.olang_no_maps = 1` turns them off), in editors/nvim.
+- 2026-11-14: nvim: :OlangFormatOnSave [on|off] toggles format on save and remembers the choice (the user).

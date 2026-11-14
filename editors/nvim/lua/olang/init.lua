@@ -13,6 +13,7 @@ M.config = { cmd = { "olang", "lsp" }, format_on_save = true }
 
 function M.setup(opts)
   M.config = vim.tbl_extend("force", M.config, opts or {})
+  if M.saved_choice then M.saved_choice() end
 end
 
 -- the directory a file's project is rooted at: the nearest holding olang.lock or .git, else the file's own
@@ -52,21 +53,39 @@ function M.attach(bufnr)
   if cfg.cmd and vim.lsp.start and vim.fn.executable(cfg.cmd[1]) == 1 then
     vim.lsp.start({ name = "olang", cmd = cfg.cmd, root_dir = root(bufnr) }, { bufnr = bufnr })
   end
-  if cfg.format_on_save then
-    vim.api.nvim_create_autocmd("BufWritePre", {
-      buffer = bufnr,
-      group = vim.api.nvim_create_augroup("olang_format_" .. bufnr, { clear = true }),
-      callback = function(ev)
-        local clients = (vim.lsp.get_clients or vim.lsp.get_active_clients)({ bufnr = ev.buf, name = "olang" })
-        if #clients > 0 then
-          vim.lsp.buf.format({ bufnr = ev.buf, name = "olang", timeout_ms = 3000 })
-        else
-          M.format(ev.buf)
-        end
-      end,
-    })
-  end
+  vim.api.nvim_create_autocmd("BufWritePre", {
+    buffer = bufnr,
+    group = vim.api.nvim_create_augroup("olang_format_" .. bufnr, { clear = true }),
+    callback = function(ev)
+      if not M.config.format_on_save then return end
+      local clients = (vim.lsp.get_clients or vim.lsp.get_active_clients)({ bufnr = ev.buf, name = "olang" })
+      if #clients > 0 then
+        vim.lsp.buf.format({ bufnr = ev.buf, name = "olang", timeout_ms = 3000 })
+      else
+        M.format(ev.buf)
+      end
+    end,
+  })
 end
+
+-- format on save turned on, off, or toggled (no argument); the setting holds for every olang buffer
+function M.format_on_save(arg)
+  local on = M.config.format_on_save
+  if arg == "on" then on = true elseif arg == "off" then on = false else on = not on end
+  M.config.format_on_save = on
+  vim.fn.mkdir(vim.fn.fnamemodify(M.choice_file, ":h"), "p")
+  vim.fn.writefile({ on and "on" or "off" }, M.choice_file)
+  vim.notify("olang: format on save " .. (on and "on" or "off") .. " (saved)")
+end
+
+-- the choice :OlangFormatOnSave saved last; it wins over the default and setup()
+M.choice_file = vim.fn.stdpath("state") .. "/olang/format_on_save"
+function M.saved_choice()
+  if vim.fn.filereadable(M.choice_file) == 0 then return end
+  local saved = vim.fn.readfile(M.choice_file)[1]
+  if saved == "on" or saved == "off" then M.config.format_on_save = saved == "on" end
+end
+M.saved_choice()
 
 -- a terminal split at the bottom running cmd; the split of the last run is reused
 local function term(cmd)
@@ -116,8 +135,10 @@ function M.commands(bufnr)
     vim.lsp.util.open_floating_preview(out, "olang", { border = "rounded", focus_id = "olang_explain" })
   end)
   cmd("OlangRepl", function() term({ "olang" }) end)
+  vim.api.nvim_buf_create_user_command(bufnr, "OlangFormatOnSave", function(o) M.format_on_save(o.args) end,
+    { nargs = "?", complete = function() return { "on", "off" } end })
   if vim.g.olang_no_maps == 1 then return end
-  local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", e = "OlangExplain", i = "OlangRepl" }
+  local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", F = "OlangFormatOnSave", e = "OlangExplain", i = "OlangRepl" }
   for k, c in pairs(keys) do
     local lhs = "<localleader>" .. k
     if vim.fn.maparg(lhs, "n") == "" then
