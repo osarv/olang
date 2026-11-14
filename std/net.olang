@@ -16,10 +16,9 @@ import unistd "unistd.h"
 import netdb "netdb.h"
 import cstring "string.h"
 
-extern {
-    fn __olang_err() I32
-    fn poll(fds mut Array<I32>&, count U64, ms I32) I32
-}
+import cpoll "poll.h"
+
+extern { fn __olang_err() I32 }
 
 afInet I32 = 2
 afInet6 I32 = 10
@@ -510,13 +509,13 @@ fn (c Conn&) Fd() I32 { return c.fd }
 # limit; then none may be ready). A socket whose descriptor failed reads as ready: its read says why. One server thread
 # serving several sockets waits here, as poll(2) waits
 fn Readable(fds Array<I32>&, ms I64 = -1) Array<Bool> {
-    set := Array<I32>(2 * fds.Len())
+    set := Array<cpoll.pollfd>(fds.Len())
     for i, fd in fds {
-        set[2 * i] = fd
-        set[2 * i + 1] = 1                  # POLLIN; revents in the high half
+        set[i].fd = fd
+        set[i].events = I16(cpoll.POLLIN)
     }
-    for poll(set, U64(fds.Len()), I32(ms)) < 0 and interrupted() { }
-    return Array<Bool>[(set[2 * i + 1] >> 16) & 0xffff != 0 for i in range fds.Len()]
+    for cpoll.poll(set, U64(fds.Len()), I32(ms)) < 0 and interrupted() { }
+    return Array<Bool>[set[i].revents != 0 for i in range fds.Len()]
 }
 
 # a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default)

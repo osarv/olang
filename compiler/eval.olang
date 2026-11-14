@@ -83,6 +83,8 @@ WhyWalkLetGo String& = "it lets go of a generator part way, whose walk then runs
 WhyExtern String& = "it calls an external function"
 WhyEnds String& = "it ends the test or the process"
 WhySteps String& = "the computation runs longer than compile-time evaluation allows"
+WhyInterrupted String& = "interrupted"
+WatchSteps I64 = 65536
 WhyMemory String& = "the computation takes more memory than compile-time evaluation allows"
 WhyDepth String& = "the computation recurses deeper than compile-time evaluation allows"
 WhyRunDepth String& = "it recurses deeper than interpret allows"
@@ -368,6 +370,9 @@ type Machine struct(T mut types.Table&, When Mode) {
     T
     When
     StepBudget I64 = 20000000
+    # B23: where it is set, asked every WatchSteps steps whether to stop - a notebook's interrupt; the step budget is
+    # then the next step it is asked at
+    Watch fn?&() Bool = null
     Soles Vec<Bool>             # O8d: by candidate place, whether it is decided sole (mir.Rvalue.Sole) - none while compiling
     Gen mir.GenInfo = mir.GenInfo()    # T13d, T2d: the program's generational types and weak fields
     holderHit Bool = false             # holderCheck's walk met the instance
@@ -5583,14 +5588,27 @@ fn (m mut Machine&) payDrop(base I64) {
 
 # ---- the loop ----
 
+# the step budget passed: the machine refuses to go on (K1) - or, where it is watched (B23), it asks whether to stop,
+# and goes on to the next look where not
+fn (m mut Machine&) overBudget() Bool {
+    w := m.Watch
+    if w is not null {
+        if not w() {
+            m.StepBudget = m.Steps + WatchSteps
+            return false
+        }
+        m.refuse(WhyInterrupted)
+        return true
+    }
+    m.refuse(WhySteps)
+    return true
+}
+
 # runs until the frames are back to base or the machine stops
 fn (m mut Machine&) loop(base I64) {
     for m.nFs > base and not m.halted {
         m.Steps++
-        if m.StepBudget >= 0 and m.Steps > m.StepBudget {
-            m.refuse(WhySteps)
-            return
-        }
+        if m.StepBudget >= 0 and m.Steps > m.StepBudget and m.overBudget(): return
         fi := m.nFs - 1
         if m.closing.Len() > m.fs[fi].Closing {
             m.stepClose()
@@ -5615,10 +5633,7 @@ fn (m mut Machine&) loop(base I64) {
                 i++
                 if i >= end or fast[i * fastStride] == 0 { break }
                 m.Steps++
-                if m.StepBudget >= 0 and m.Steps > m.StepBudget {
-                    m.refuse(WhySteps)
-                    return
-                }
+                if m.StepBudget >= 0 and m.Steps > m.StepBudget and m.overBudget(): return
             }
             continue
         }

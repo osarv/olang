@@ -143,6 +143,7 @@ type Diag enum {
     ExplainNeedsName
     ExplainNoItem
     ModeNoFiles
+    InstallNoFiles
     DocOneName
     DocNoItem
     LineBodyOnLine
@@ -1057,7 +1058,7 @@ fn ReflFnList(what String&) r.Msg { return r.Msg(Diag.ReflFnList, "G41", $what, 
 fn ReflFnCall(name String&, want I64, have I64) r.Msg { return r.Msg(Diag.ReflFnCall, "G41", $"'" $name "' is called with " $want " arguments (a method's receiver first), found " $have) }
 fn ReflMatchSubject() r.Msg { return r.Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling", "", "match a type variable, or a type a reflected member names") }
 fn Usage() r.Msg { return r.Msg(Diag.Usage, "B1", "nothing to do", "", "write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
-fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode", "the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run") }
+fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode", "the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api and jupyter, and a file ending in .olang is built and run") }
 fn ModeOneFile(text String&) r.Msg { return r.Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
 fn ModeNeedsFile(text String&) r.Msg { return r.Msg(Diag.ModeNeedsFile, "B1", $text " needs a file") }
 fn UnknownFlag(text1 String&, text2 String&, hint String&) r.Msg { return r.Msg(Diag.UnknownFlag, "B1", "unknown option '" $text1 "'" $hint " - 'olang help' lists the options of " $text2) }
@@ -1091,6 +1092,7 @@ fn ExplainNeedsRule() r.Msg { return r.Msg(Diag.ExplainNeedsRule, "B11a", "expla
 fn ExplainNeedsName(file String&) r.Msg { return r.Msg(Diag.ExplainNeedsName, "B11b", $"explain " $file " takes the name of one of its items, as 'olang explain " $file " main'") }
 fn LineBodyOnLine() r.Msg { return r.Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
 fn LineBodyNotSimple(what String&) r.Msg { return r.Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " $what " - write a block, '{ ... }'") }
+fn InstallNoFiles() r.Msg { return r.Msg(Diag.InstallNoFiles, "B23", "jupyter -install takes no files - it writes the kernel's spec and ends") }
 fn ModeNoFiles(mode String&) r.Msg { return r.Msg(Diag.ModeNoFiles, "B1", $mode " takes no files - its client names them as it goes") }
 fn DocOneName(file String&) r.Msg { return r.Msg(Diag.DocOneName, "B14", $"doc " $file " takes at most the name of one of its items, as 'olang doc " $file " main'") }
 fn DocNoItem(name String&, file String&) r.Msg { return r.Msg(Diag.DocNoItem, "B14", $"'" $name "' is no item of " $file " - 'olang doc " $file "' lists them") }

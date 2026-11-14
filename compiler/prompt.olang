@@ -99,6 +99,8 @@ type Session struct(Cfg mut build.Config&) {
     Decls Vec<Decl>
     Values Vec<Value>
     snap eval.Snapshot = eval.Snapshot()
+    # B23: asked now and then while a cell runs whether to stop it - a notebook's interrupt (eval.Machine.Watch)
+    Watch fn?&() Bool = null
 }
 
 # ---- a cell's pieces ----
@@ -589,6 +591,10 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     x.M.Soles = fr.Sole
     for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First " " $bt.Second, true) }
     x.M.Args.Push("olang")
+    if s.Watch is not null {
+        x.M.Watch = s.Watch
+        x.M.StepBudget = 0
+    }
     return x
 }
 

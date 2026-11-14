@@ -1,0 +1,456 @@
+# jupyter - "olang jupyter CONNECTION_FILE" (B23): a Jupyter kernel, the prompt's session (prompt.olang, B22) driven by
+# a notebook. It speaks Jupyter's messaging protocol 5.3 over ZeroMQ's wire protocol, std/zmtp - no libzmq - on the
+# five ports the connection file names: shell and control (requests, each answered on the connection it came by), stdin
+# (connected, never asked: input is not read), iopub (what the kernel publishes: status, the code run, its output,
+# results and errors, to every subscriber) and heartbeat (echoed). Every message is signed with HMAC-SHA256 under the
+# file's key, and one whose signature does not match is dropped. One thread serves every socket, waiting on all of them
+# at once (net.Readable); a cell runs to its end before the next message is read.
+#
+# A cell is run as the prompt runs an entry: its standard output and standard error captured while it runs (each into a
+# file in memory) and published as streams; the value of its last expression as an execute_result, its text "$v" and,
+# where its type renders itself (Display, B23), that rendering under its MIME type; its diagnostics and what stopped it
+# as an error, with a row of traceback per line. "olang jupyter -install" writes the kernel's spec for Jupyter to find.
+
+import "std/os"
+import "std/io"
+import "std/json"
+import "std/net"
+import "std/zmtp"
+import "std/sha256"
+import "std/hex"
+import "std/base64"
+import "std/time"
+import "build"
+import "session"
+import "prompt"
+
+import unistd "unistd.h"
+import mman "sys/mman.h"
+
+extern { fn getpid() I32 }
+
+# the channels, by the order of their ports in a socket's role
+Shell I64 = 0
+Control I64 = 1
+Stdin I64 = 2
+IOPub I64 = 3
+Heartbeat I64 = 4
+PortKeys Array<String&> = Array<String&>["shell_port", "control_port", "stdin_port", "iopub_port", "hb_port"]
+Kinds Array<String&> = Array<String&>["ROUTER", "ROUTER", "ROUTER", "PUB", "REP"]
+
+Delimiter String& = "<IDS|MSG>"
+Protocol String& = "5.3"
+
+# a message read: who sent it (the frames before the delimiter), its header and content, and the header's text - the
+# parent of every message it causes
+type request struct(Ids Array<String>, Header String, Content String) {
+    Ids
+    Header
+    Content
+}
+
+type kernel struct(Key String) {
+    Key
+    Session String = newId()
+    Count I64 = 0             # execution_count: the cells run that were not silent
+    Sent I64 = 0              # the messages sent, numbering their ids
+    Socks Vec<zmtp.Socket>
+    Roles Vec<I64>
+    Done Bool = false
+    Later Vec<pending>        # control requests read while a cell ran, handled once it has ended
+}
+
+# a message read from socket J, handled later
+type pending struct(J I64, Frames Array<String>) {
+    J
+    Frames
+}
+
+# a fresh id: 32 hex digits, from the time and the process
+fn newId() String {
+    return hex.Encode(sha256.Sum($time.Wall() " " $time.Now() " " $getpid()))[:32]
+}
+
+# the kernel on the connection file's ports, until a shutdown_request: 0, or 1 where the file cannot be read or a port
+# not listened at
+fn Serve(cfg mut build.Config&, file String&) I32 {
+    session.IgnoreBrokenPipes()
+    text := try os.ReadFile(file) catch os.Error e { return fail($"cannot read the connection file " $file ": " $e) }
+    conn := try json.Json.Parse(text) catch json.Error e { return fail($"the connection file is no JSON: " $e) }
+    ip := try conn["ip"].AsStr() catch json.Error default "127.0.0.1"
+    k mut kernel& = kernel($(try conn["key"].AsStr() catch json.Error default ""))
+    ls Vec<net.Listener>
+    for key in PortKeys {
+        port := try conn[key].AsInt() catch json.Error e { return fail($"the connection file has no " $key ": " $e) }
+        a := try net.Addr.Parse($ip ":" $port) catch net.Error e { return fail($e) }
+        ls.Push(try net.Listener.Listen(a) catch net.Error e { return fail($"cannot listen at " $a ": " $e) })
+    }
+    s := prompt.Session(cfg)
+    s.Watch = fn() Bool { return k.interrupted() }
+    for not k.Done {
+        fds Vec<I32>
+        for l in ls.View(): fds.Push(l.Fd())
+        for c in k.Socks.View(): fds.Push(c.Fd())
+        ready := net.Readable(fds.View())
+        for i in range ls.Len() {
+            if ready[i]: k.accept(ls.RefMut(i), i)
+        }
+        for j in range ready.Len() - ls.Len() {
+            if ready[ls.Len() + j]: k.serve(s, j)
+        }
+        for not k.Done and k.Later.Len() > 0 {
+            p := try k.Later.TakeAt(0) catch VecError { break }
+            k.handle(s, p.J, p.Frames)
+        }
+        k.sweep()
+    }
+    s.End()
+    return 0
+}
+
+fn fail(why String&) I32 {
+    try io.PutErr($"olang jupyter: " $why "\n") catch io.Error { }
+    return 1
+}
+
+# a connection made to the channel role's port
+fn (k mut kernel&) accept(l mut net.Listener&, role I64) {
+    k.Socks.Push(try zmtp.Socket.Accept(l, Kinds[role]) catch net.Error { return })
+    k.Roles.Push(role)
+}
+
+# what socket j has read in, each whole message handled; a socket whose connection failed marked to go (role -1)
+fn (k mut kernel&) serve(s mut prompt.Session&, j I64) {
+    try k.Socks.RefMut(j).Fill() catch net.Error {
+        k.Roles[j] = -1
+        return
+    }
+    for not k.Done {
+        frames := try k.Socks.RefMut(j).Next() catch Exhausted { return } catch zmtp.Error {
+            k.Roles[j] = -1
+            return
+        }
+        k.handle(s, j, frames)
+    }
+}
+
+# while a cell runs: the control requests arrived since the last look read and kept for later - whether one of them
+# asks to stop the cell, an interrupt_request or a shutdown_request
+fn (k mut kernel&) interrupted() Bool {
+    from := k.Later.Len()
+    for j in range k.Socks.Len() {
+        if k.Roles[j] != Control or not net.Readable(Array<I32>[k.Socks.Ref(j).Fd()], 0)[0]: continue
+        try k.Socks.RefMut(j).Fill() catch net.Error {
+            k.Roles[j] = -1
+            continue
+        }
+        for {
+            frames := try k.Socks.RefMut(j).Next() catch Exhausted { break } catch zmtp.Error { break }
+            k.Later.Push(pending(j, frames))
+        }
+    }
+    for i in range from, k.Later.Len() {
+        rq := try k.read(k.Later.Ref(i).Frames) catch Unsigned { continue }
+        kind := kindOf(rq)
+        if kind == "interrupt_request" or kind == "shutdown_request": return true
+    }
+    return false
+}
+
+fn kindOf(rq request&) String {
+    return $str(try json.Json.Parse(rq.Header) catch json.Error default json.Json.Null, "msg_type")
+}
+
+# the sockets whose connections failed let go
+fn (k mut kernel&) sweep() {
+    for i in range k.Roles.Len() {
+        j := k.Roles.Len() - 1 - i
+        if k.Roles[j] >= 0: continue
+        try k.Socks.RemoveAt(j) catch VecError { }
+        try k.Roles.RemoveAt(j) catch VecError { }
+    }
+}
+
+# a message on socket j: a heartbeat echoed, a stdin or iopub message dropped, a request answered
+fn (k mut kernel&) handle(s mut prompt.Session&, j I64, frames Array<String>&) {
+    role := k.Roles[j]
+    if role == Heartbeat {
+        echo Vec<String&>
+        for f in frames: echo.Push(f)
+        try k.Socks.RefMut(j).Send(...echo.ToArray()) catch net.Error { k.Roles[j] = -1 }
+        return
+    }
+    if role != Shell and role != Control: return
+    rq := try k.read(frames) catch Unsigned { return }
+    kind := kindOf(rq)
+    content := try json.Json.Parse(rq.Content) catch json.Error default json.Json.Null
+    k.publish("status", rq.Header, "{\"execution_state\":\"busy\"}")
+    match kind {
+        case "kernel_info_request": k.reply(j, rq, "kernel_info_reply", kernelInfo())
+        case "execute_request": k.execute(s, j, rq, content)
+        case "is_complete_request": k.reply(j, rq, "is_complete_reply", isComplete(str(content, "code")))
+        case "complete_request": k.reply(j, rq, "complete_reply", complete(s, content))
+        case "inspect_request": k.reply(j, rq, "inspect_reply", "{\"status\":\"ok\",\"found\":false,\"data\":{},\"metadata\":{}}")
+        case "history_request": k.reply(j, rq, "history_reply", "{\"status\":\"ok\",\"history\":[]}")
+        case "comm_info_request": k.reply(j, rq, "comm_info_reply", "{\"status\":\"ok\",\"comms\":{}}")
+        case "interrupt_request": k.reply(j, rq, "interrupt_reply", "{\"status\":\"ok\"}")
+        case "shutdown_request" {
+            restart := try content["restart"].AsBool() catch json.Error default false
+            k.reply(j, rq, "shutdown_reply", $"{\"status\":\"ok\",\"restart\":" $restart "}")
+            k.Done = true
+        }
+        case _ { }
+    }
+    k.publish("status", rq.Header, "{\"execution_state\":\"idle\"}")
+}
+
+type Unsigned error { Signature, Shape }
+
+# the request frames hold: its sender's ids, then after the delimiter its signature, header, parent header, metadata
+# and content - Signature where the signature is not the one the key gives, Shape where a frame is missing
+fn (k kernel&) read(frames Array<String>&) request ? Unsigned {
+    d I64 = -1
+    for i, f in frames {
+        if f == Delimiter and d < 0: d = i
+    }
+    if d < 0 or frames.Len() < d + 6: error Unsigned.Shape
+    if k.sign(frames[d + 2], frames[d + 3], frames[d + 4], frames[d + 5]) != frames[d + 1]: error Unsigned.Signature
+    ids := Array<String>[$frames[i] for i in range d]
+    return request(ids, $frames[d + 2], $frames[d + 5])
+}
+
+# the signature of a message's four parts under the key: "" for no key
+fn (k kernel&) sign(header String&, parent String&, metadata String&, content String&) String {
+    if k.Key == "": return ""
+    return hex.Encode(sha256.Hmac(k.Key, header, parent, metadata, content))
+}
+
+# a message's header, of the type kind
+fn (k mut kernel&) header(kind String&) String {
+    k.Sent++
+    b := StringBuilder()
+    b.Push($"{\"msg_id\":\"" $k.Session "-" $k.Sent "\",\"session\":\"" $k.Session "\",\"username\":\"olang\",\"date\":\"")
+    b.Push($isoNow() "\",\"msg_type\":\"" $kind "\",\"version\":\"" $Protocol "\"}")
+    return b.ToString()
+}
+
+# the frames of a message after the ids: the delimiter, signature, header, parent, metadata and content
+fn (k mut kernel&) frames(ids Array<String>&, kind String&, parent String&, content String&) Array<String&>& {
+    h := k.header(kind)
+    out Vec<String&>
+    for id in ids: out.Push(id)
+    out.Push(Delimiter)
+    out.Push(k.sign(h, parent, "{}", content))
+    out.Push(h)
+    out.Push(parent)
+    out.Push("{}")
+    out.Push(content)
+    return out.ToArray()
+}
+
+# the reply to rq on socket j, its sender's ids before it
+fn (k mut kernel&) reply(j I64, rq request&, kind String&, content String&) {
+    msg := k.frames(rq.Ids, kind, rq.Header, content)
+    try k.Socks.RefMut(j).Send(...msg) catch net.Error { k.Roles[j] = -1 }
+}
+
+# a message to every subscriber of iopub, its topic before it
+fn (k mut kernel&) publish(kind String&, parent String&, content String&) {
+    msg := k.frames(Array<String>[$"kernel." $k.Session "." $kind], kind, parent, content)
+    for j in range k.Socks.Len() {
+        if k.Roles[j] != IOPub: continue
+        try k.Socks.RefMut(j).Send(...msg) catch net.Error { k.Roles[j] = -1 }
+    }
+}
+
+# the stream of text out of the cell, stdout or stderr, where it wrote any
+fn (k mut kernel&) stream(parent String&, name String&, text String&) {
+    if text == "": return
+    k.publish("stream", parent, $"{\"name\":\"" $name "\",\"text\":" $q(text) "}")
+}
+
+# ---- the requests ----
+
+fn kernelInfo() String {
+    b := StringBuilder()
+    b.Push($"{\"status\":\"ok\",\"protocol_version\":\"" $Protocol "\",\"implementation\":\"olang\",")
+    b.Push("\"implementation_version\":\"1\",\"language_info\":{\"name\":\"olang\",\"version\":\"1\",")
+    b.Push("\"mimetype\":\"text/x-olang\",\"file_extension\":\".olang\"},")
+    b.Push("\"banner\":\"olang - each cell runs in one session, as at the prompt (B22)\",\"help_links\":[]}")
+    return b.ToString()
+}
+
+# a cell run: its code published, its output streamed, its value or what stopped it, then the reply
+fn (k mut kernel&) execute(s mut prompt.Session&, j I64, rq request&, content json.Json&) {
+    code := str(content, "code")
+    silent := try content["silent"].AsBool() catch json.Error default false
+    if not silent: k.Count++
+    n := k.Count
+    if not silent: k.publish("execute_input", rq.Header, $"{\"code\":" $q(code) ",\"execution_count\":" $n "}")
+    out := capture(1)
+    errs := capture(2)
+    r := s.Cell(code, label = $"In[" $n "]" if not silent else "silent")
+    said := out.End()
+    complained := errs.End()
+    k.stream(rq.Header, "stdout", said)
+    warnings := r.Diags if r.Checked else ""
+    k.stream(rq.Header, "stderr", $complained $warnings $r.Notes)
+    if r.Shown and not silent {
+        k.publish("execute_result", rq.Header, $"{\"execution_count\":" $n ",\"data\":" $data(r) ",\"metadata\":{}}")
+    }
+    failure := r.Failure if r.Checked else r.Diags
+    if failure == "" {
+        k.reply(j, rq, "execute_reply", $"{\"status\":\"ok\",\"execution_count\":" $n ",\"user_expressions\":{},\"payload\":[]}")
+        return
+    }
+    ename := "RuntimeError" if r.Checked else "CompileError"
+    rows Vec<String&>
+    for line in failure.TrimEnd().Lines(): rows.Push(q(line))
+    err := $"\"ename\":\"" $ename "\",\"evalue\":" $q(firstLine(failure)) ",\"traceback\":[" $rows.Join(",") "]"
+    k.publish("error", rq.Header, $"{" $err "}")
+    k.reply(j, rq, "execute_reply", $"{\"status\":\"error\",\"execution_count\":" $n "," $err "}")
+}
+
+fn firstLine(t String&) String { return $t[:try t.FindByte('\n') catch default t.Len()] }
+
+# a shown value's data, by MIME type: its text, and its own rendering where its type has one (B23) - a picture's bytes
+# in base64, as the protocol carries them
+fn data(r prompt.Reply&) String {
+    b := StringBuilder()
+    b.Push($"{\"text/plain\":" $q(r.Text))
+    if r.Mime != "" {
+        body := base64.Encode(r.Data) if r.Mime == "image/png" else r.Data
+        b.Push($"," $q(r.Mime) ":" $q(body))
+    }
+    b.PushChar('}')
+    return b.ToString()
+}
+
+# whether code is whole: incomplete while a bracket, raw text or block comment of it is open (B22's rule)
+fn isComplete(code String&) String {
+    if prompt.Open(code): return "{\"status\":\"incomplete\",\"indent\":\"    \"}"
+    return "{\"status\":\"complete\"}"
+}
+
+Keywords Array<String&> = Array<String&>["fn", "type", "import", "for", "in", "if", "else", "return", "match", "case", "mut"
+    "try", "catch", "error", "and", "or", "not", "true", "false", "null", "struct", "enum", "trait", "defer", "range"]
+
+# the names the word before the cursor may finish: the session's declarations and values, then the keywords
+fn complete(s prompt.Session&, content json.Json&) String {
+    code := str(content, "code")
+    at := try content["cursor_pos"].AsInt() catch json.Error default code.Len()
+    if at > code.Len() or at < 0: at = code.Len()
+    start := at
+    for start > 0 and (code[start - 1].IsLetter() or code[start - 1].IsDigit() or code[start - 1] == '_') { start-- }
+    word := code[start:at]
+    names Vec<String&>
+    for d in s.Decls.View() {
+        name := d.Key[7:] if d.Key.StartsWith("import ") else d.Key
+        if not name.StartsWith("text ") and not name.Contains("."): names.Push(name)
+    }
+    for v in s.Values.View(): names.Push(v.Name)
+    for w in Keywords: names.Push(w)
+    seen Map<String&, Bool>
+    found Vec<String&>
+    for name in names.View() {
+        if not name.StartsWith(word) or name in seen: continue
+        seen.Put(name, true)
+        found.Push(q(name))
+    }
+    return $"{\"status\":\"ok\",\"matches\":[" $found.Join(",") "],\"cursor_start\":" $start ",\"cursor_end\":" $at ",\"metadata\":{}}"
+}
+
+fn str(j json.Json&, key String&) String& { return try j[key].AsStr() catch json.Error default "" }
+
+# text as a JSON string
+fn q(t String&) String {
+    b := StringBuilder()
+    session.JsonStr(b, t)
+    return b.ToString()
+}
+
+# ---- a cell's output captured ----
+
+# a descriptor's writes going to a file in memory until End: what was written then
+type capture struct(fd I32) {
+    fd
+    saved I32 = unistd.dup(fd)
+    file I32 = mman.memfd_create("olang-cell\0", 1)
+    unistd.dup2(file, fd)
+}
+
+fn (c capture&) End() String {
+    unistd.dup2(c.saved, c.fd)
+    unistd.close(c.saved)
+    size := unistd.lseek(c.file, 0, 2)
+    unistd.lseek(c.file, 0, 0)
+    text := Array<U8>(size if size > 0 else 0)
+    got I64 = 0
+    for got < text.Len() {
+        n := unistd.read(c.file, text[got:], U64(text.Len() - got))
+        if n <= 0: break
+        got += n
+    }
+    unistd.close(c.file)
+    return String(text[:got])
+}
+
+# ---- time ----
+
+# now as ISO 8601 in UTC, to the microsecond: the date a header carries
+fn isoNow() String {
+    ns := time.Wall()
+    secs := ns / 1000000000
+    y, m, d := civil(secs / 86400)
+    t := secs % 86400
+    micros := $(ns % 1000000000 / 1000)
+    return $y "-" $two(m) "-" $two(d) "T" $two(t / 3600) ":" $two(t / 60 % 60) ":" $two(t % 60) "." $micros.PadStart(6, '0') "Z"
+}
+
+fn two(n I64) String { return $n.PadStart(2, '0') }
+
+# the year, month and day of the day days after 1970-01-01 (H. Hinnant's civil_from_days)
+fn civil(days I64) I64, I64, I64 {
+    z := days + 719468
+    era := z / 146097
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    d := doy - (153 * mp + 2) / 5 + 1
+    m := mp + 3 if mp < 10 else mp - 9
+    return yoe + era * 400 + (1 if m <= 2 else 0), m, d
+}
+
+# ---- the kernel's spec ----
+
+# "olang jupyter -install": the kernel's spec written where Jupyter looks for a user's kernels - $JUPYTER_DATA_DIR,
+# else ~/.local/share/jupyter - as kernels/olang/kernel.json, running this olang
+fn Install(exe String&) I32 {
+    base := try os.Env("JUPYTER_DATA_DIR") catch default ""
+    if base == "": base = $(try os.Env("HOME") catch default ".") "/.local/share/jupyter"
+    dir := $base "/kernels/olang"
+    try os.MkDirAll(dir) catch os.Error e { return fail($"cannot make " $dir ": " $e) }
+    spec := $"{\n  \"argv\": [" $q(exe) ", \"jupyter\", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" $
+        "  \"language\": \"olang\",\n  \"interrupt_mode\": \"message\"\n}\n"
+    try os.WriteFile($dir "/kernel.json", spec) catch os.Error e { return fail($"cannot write " $dir "/kernel.json: " $e) }
+    try io.Put($"olang jupyter: the kernel is installed at " $dir "/kernel.json - pick \"olang\" in a notebook\n") catch io.Error { }
+    return 0
+}
+
+if TestBuild {
+
+test civil "days since 1970 as dates" {
+    y, m, d := civil(0)
+    assert y == 1970 and m == 1 and d == 1
+    y2, m2, d2 := civil(20406)
+    assert y2 == 2025 and m2 == 11 and d2 == 14, $y2 "-" $m2 "-" $d2
+    y3, m3, d3 := civil(11016)
+    assert y3 == 2000 and m3 == 2 and d3 == 29
+}
+
+test isComplete "an open bracket asks for more" {
+    assert isComplete("fn f() {").Contains("incomplete") and isComplete("x := 1").Contains("\"complete\"")
+}
+
+}
