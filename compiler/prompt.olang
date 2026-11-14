@@ -28,6 +28,9 @@ import "interp"
 import "build"
 import "scope"
 import "free"
+import "lineedit"
+import "paint"
+import cpoll "poll.h"
 import typecheck "check"
 
 # ---- what a session holds ----
@@ -774,6 +777,7 @@ HelpText String& = """
     goes on over several lines while a bracket is open. A cell declaring a name again replaces what had it.
       :type EXPR   the type of the expression's value
       :load FILE   the file's text as a cell
+      :set vi      vi's keys at the prompt (:set emacs, emacs's - the default), remembered
       :help        this
       :quit        leaves (so does the end of the input)
     """
@@ -784,9 +788,13 @@ fn Run(cfg mut build.Config&) I32 {
     s := Session(cfg)
     tty := os.IsTerminal(0)
     if tty: say("olang - :help for help, :quit to leave\n")
+    # on a terminal at both ends, the line editor (lineedit): keys, colour, the history
+    edit := tty and os.IsTerminal(1)
+    ed := lineedit.Editor(Vi = lineedit.ViChosen(), Colour = paint.Wanted(1))
+    if edit: ed.Load(lineedit.HistoryPath())
     lines := io.Lines(0)
     for {
-        entry := try readEntry(lines, tty) catch Ended { break }
+        entry := try nextEntry(ed, lines, edit, tty) catch Ended { break }
         t := entry.Trim()
         if t == "": continue
         if not t.StartsWith(":") {
@@ -794,10 +802,16 @@ fn Run(cfg mut build.Config&) I32 {
             continue
         }
         if t == ":quit" or t == ":q": break
-        command(s, t)
+        command(s, ed, t)
     }
     s.End()
     return 0
+}
+
+# the next entry: through the line editor, or read as lines
+fn nextEntry(ed mut lineedit.Editor&, lines mut io.Lines&, edit Bool, tty Bool) String ? Ended {
+    if not edit: return try readEntry(lines, tty)
+    return $(try ed.Read(Open) catch lineedit.Ended { error Ended.Input })
 }
 
 type Ended error { Input }
@@ -807,7 +821,7 @@ fn readEntry(lines mut io.Lines&, tty Bool) String ? Ended {
     b := StringBuilder()
     first := true
     for {
-        if tty: say(">>> " if first else "... ")
+        if tty and not waiting(lines): say(">>> " if first else "... ")
         line := try lines.Next() catch {
             if first: error Ended.Input
             break
@@ -820,8 +834,22 @@ fn readEntry(lines mut io.Lines&, tty Bool) String ? Ended {
     return b.ToString()
 }
 
+# whether a line is there to read already - read, or typed or pasted ahead: no prompt is asked for it
+fn waiting(lines io.Lines&) Bool {
+    if lines.Buffered(): return true
+    p := Array<cpoll.pollfd>(1)
+    p[0].fd = 0
+    p[0].events = I16(cpoll.POLLIN)
+    return cpoll.poll(p, 1, 0) > 0
+}
+
 # a command other than :quit
-fn command(s mut Session&, t String&) {
+fn command(s mut Session&, ed mut lineedit.Editor&, t String&) {
+    if t == ":set vi" or t == ":set emacs" {
+        ed.Vi = t == ":set vi"
+        try lineedit.Choose(ed.Vi) catch os.Error { sayErr("cannot remember the keys chosen\n") }
+        return
+    }
     if t == ":help" {
         say($HelpText "\n")
         return
@@ -844,10 +872,11 @@ fn command(s mut Session&, t String&) {
 
 # a reply told: its diagnostics, what stopped its run and its notes on the standard error, its value on the output
 fn tell(r Reply&) {
-    if r.Diags != "": sayErr(r.Diags)
-    if r.Failure != "": sayErr(r.Failure)
+    colourErr := paint.Wanted(2)
+    if r.Diags != "": sayErr(paint.Diagnostics(r.Diags) if colourErr else $r.Diags)
+    if r.Failure != "": sayErr(paint.Diagnostics(r.Failure) if colourErr else $r.Failure)
     if r.Notes != "": sayErr(r.Notes)
-    if r.Shown: say($r.Text "\n")
+    if r.Shown: say($(paint.Source(r.Text) if paint.Wanted(1) else $r.Text) "\n")
 }
 
 fn say(t String&) { try io.Put(t) catch io.Error { } }

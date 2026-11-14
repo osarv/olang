@@ -36937,6 +36937,48 @@ Tests: checks scenario `prompt` (checks/fixtures/prompt: a session and its expec
 function and type, failing cell with trace, unique value's destructor at the end, `:type`, `:load`, `:help`). The
 driver golden's empty command line now opens the prompt (status 0 on empty input), and `help` mentions it.
 
+## Editing at the prompt (B22; 2026-11-14, wt-lineedit)
+
+The user, at the prompt: "we need a way to scroll up the last commands and edit one to run it again"; then, the same
+day, syntax highlighting with the compiler's own scanner (keywords, type names, numbers, text, comments, operators;
+diagnostics' kinds; NO_COLOR; the 16 ANSI colours), every arrow action also on a Ctrl key (they have no arrow keys),
+and a vi mode as bash's `set -o vi`, chosen by `:set vi`/`:set emacs`, remembered, or OLANG_EDIT. My calls:
+
+- **No readline.** Written in olang over termios.h, unistd.h and sys/ioctl.h imported as C (X17); the width is asked of
+  the terminal with TIOCGWINSZ through a small extern (an `Array<U16>` for `struct winsize`, since a C variadic call takes
+  no struct). The terminal is in raw mode only inside `Editor.Read` (a `defer` sets it back), so a cell runs with the
+  terminal as the user had it: Ctrl-C while a cell runs, a failing cell, `os.Exit` and the end of the session need no
+  restoring of their own. TCSANOW, not TCSAFLUSH, so keys typed ahead (a paste of several lines) are not dropped; bytes
+  read past an entry's end wait for the next.
+- **compiler/, not std.** The editor's one user is the prompt, and colour needs the scanner, which std cannot import.
+  `lineedit.olang` (keys, drawing, history, raw mode) and `paint.olang` (colour) are modules of their own.
+- **A state machine.** `Feed(byte)` gives an event (editing, Enter, end) and leaves the drawing in `Out`; Enter is the
+  caller's, which asks the prompt's bracket rule (`Open`) and then calls `Accept` or `Break` - so the editor knows
+  nothing of olang's syntax but its colours. The whole entry is drawn again on every key, from its first row (lines
+  that wrap counted by the terminal's width, a line exactly filling its rows ending with a line break so the cursor's
+  row is known); one write per read. A lone ESC is told from an escape sequence by the read it came in (`Idle` after
+  each read): in vi's insert mode it is Esc, in emacs's the start of an Alt key.
+- **Keys.** Readline's names and bash's vi; Tab inserts a space (there is no completion yet), Break indents.
+  Undo keeps up to 100 changes, a run of typed characters one. Up on an entry's first line (or
+  Down on its last) goes to the history; a recalled entry has the cursor at its end (Up) or its first line's end
+  (Down), so Up and Down keep walking. Ctrl-R is incremental; vi's `/` and `?` use the same search, Enter ending the
+  search in normal mode rather than running the entry. `cw` on a word changes to the word's end, as vi's does.
+- **Pasting** (the user, testing: a pasted program printed ">>> >>> ... ... ..." after it, a prompt per line read).
+  The editor asks for bracketed paste (ESC [?2004h, off again as Read returns): the paste goes in whole, line ends
+  included, one undo step, drawn once at its end; the line ends it ends with are dropped, and the entry runs at once
+  where it is complete. Read as lines from a terminal (output not one), a prompt is written only when no line is
+  already read (`io.Lines.Buffered`) or waiting (`poll`), so a paste in cooked mode prints no run of prompts.
+- **The history file** is appended to as entries run (two sessions at once both keep theirs), one escaped line an
+  entry, and written again with the last 1000 when it has grown past 2000.
+- **Colour** comes from scan.Tokens: a keyword is a token whose kind is not Iden spelled with a letter, a type name a
+  capitalized Iden; the gaps between tokens are blanks or comments. A colour is ended at each line end and taken up
+  after it, so each line of an entry is drawn on its own. Shown values are coloured the same way (they render as source
+  writes them), and `:type`'s answer with them.
+- **Tests**: compiler/lineedit.olang's tests feed bytes and read the entry, the cursor and the screen's escape codes
+  (emacs keys, words, UTF-8, Enter, history, search, Ctrl-C/D, undo, wrapping, vi's motions, operators, counts, cw,
+  history and search); compiler/paint.olang's the colours; the checks scenario `promptkeys` types into the prompt
+  through script(1)'s pseudo-terminal, a pause between keys, and reads the run and the history file back.
+
 ## The Jupyter kernel and rich display (B23; 2026-11-14, wt-jupyter)
 
 The user decided (QCX 6, 2026-11-07; 2026-11-13, the quick data-science items) on a Jupyter kernel on top of the prompt

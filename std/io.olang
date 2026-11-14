@@ -175,6 +175,9 @@ fn (l mut Lines&) Next() String& ? Error, Exhausted {
     unreachable
 }
 
+# whether what was read holds more not yet given as a line - which Next gives without reading
+fn (l Lines&) Buffered() Bool { return l.end > l.start }
+
 # buf[first:last] as new text, a carriage return at its end dropped
 fn (l Lines&) line(first I64, last I64) String& {
     n I64 = last - first - (1 if last > first and l.buf[last - 1] == '\r' else 0)
@@ -364,6 +367,17 @@ test "Lines gives each line, without its newline" {
     assert bracketed("\n", 65536) == "[]"
     assert bracketed("", 65536) == ""                                  # an empty file has no lines
     assert bracketed("no newline at all", 65536) == "[no newline at all]"
+}
+
+test Lines.Buffered "tells whether a line is there without reading" {
+    fd := reading("a\nb\n")
+    l := Lines(fd)
+    assert not l.Buffered()
+    assert try l.Next() == "a"
+    assert l.Buffered()
+    assert try l.Next() == "b"
+    assert not l.Buffered()
+    unistd.close(fd)
 }
 
 test "Lines drops the carriage return of a CRLF, and only that one" {

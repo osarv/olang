@@ -1482,6 +1482,7 @@
 | ok - Read returns a slice of the caller's own buffer
 | ok - FormatInt renders decimals, including zero and negatives
 | ok - Lines gives each line, without its newline
+| ok - Lines.Buffered: tells whether a line is there without reading
 | ok - Lines drops the carriage return of a CRLF, and only that one
 | ok - Lines reads lines longer than its buffer
 | ok - Lines reports a read that fails, and ends the loop with it

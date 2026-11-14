@@ -1,0 +1,136 @@
+# paint - colour for the prompt (B22): olang text coloured by the compiler's own scanner (scan), never a second lexer, and
+# the words of diagnostics. Only the 16 standard ANSI colours, so any terminal theme reads them; nothing is coloured
+# where the output is not a terminal or NO_COLOR is set (Wanted).
+
+import "std/os"
+import "scan"
+import "token"
+
+# the colours, as SGR parameters
+keywordColour String& = "35"       # magenta: keywords, true, false, null
+typeNameColour String& = "36"      # cyan: a capitalized name
+numberColour String& = "33"        # yellow
+textColour String& = "32"          # green: text and character literals
+commentColour String& = "90"       # bright black
+operatorColour String& = "34"      # blue
+errorWord String& = "1;31"
+warningWord String& = "1;33"
+noteWord String& = "1;36"
+helpWord String& = "1;32"
+
+# whether what is written to fd is coloured: it is a terminal and NO_COLOR is unset or empty (no-color.org)
+fn Wanted(fd I32) Bool {
+    if not os.IsTerminal(fd): return false
+    v := try os.Env("NO_COLOR") catch os.Error { return true }
+    return v == ""
+}
+
+# t in colour code, the colour ended at each line end and taken up again after it, so each line stands alone
+fn coloured(code String&, t String&) String {
+    on := $"\x1b[" $code "m"
+    return $on $String(t.Replace("\n", $"\x1b[0m\n" $on)) "\x1b[0m"
+}
+
+# olang text coloured token by token, as the scanner reads it; what lies between tokens is coloured as a comment from
+# its first '#'. The text written is the text given, with only escape codes added
+fn Source(text String&) String {
+    ts := scan.Tokens.Scan(text)
+    b := StringBuilder()
+    at I64 = 0
+    for t in ts.Toks {
+        s := I64(t.Start)
+        e := I64(t.End)
+        if e <= s or s < at: continue
+        b.Push(gap(text[at:s]))
+        b.Push(piece(text, t.Kind, s, e))
+        at = e
+    }
+    b.Push(gap(text[at:]))
+    return b.ToString()
+}
+
+# what stands between two tokens: blanks, then a comment from its first '#'
+fn gap(t String&) String {
+    for i in range t.Len() {
+        if t[i] == '#': return $t[:i] $coloured(commentColour, t[i:])
+    }
+    return $t
+}
+
+fn piece(text String&, k token.Tok, s I64, e I64) String {
+    t := text[s:e]
+    code := colourOf(k, t)
+    return $t if code == "" else coloured(code, t)
+}
+
+fn colourOf(k token.Tok, t String&) String& {
+    if k == token.Tok.Iden: return typeNameColour if t[0] >= 'A' and t[0] <= 'Z' else ""
+    if k == token.Tok.IntLit or k == token.Tok.FloatLit: return numberColour
+    if k == token.Tok.StrLit or k == token.Tok.CharLit: return textColour
+    c := t[0]
+    if (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z'): return keywordColour
+    if k == token.Tok.Comma or k == token.Tok.Dot or k == token.Tok.Colon: return ""
+    if k == token.Tok.LParen or k == token.Tok.RParen or k == token.Tok.LBrack or k == token.Tok.RBrack: return ""
+    if k == token.Tok.LBrace or k == token.Tok.RBrace: return ""
+    return operatorColour
+}
+
+# diagnostics with their words coloured: "error", "warning", "note" and "help" where a row names its kind - after the
+# place ("cell3:1:1: error[D3b]: ...") or first on the row ("note: ...")
+fn Diagnostics(text String&) String {
+    b := StringBuilder()
+    first := true
+    for line in text.Split("\n") {
+        if not first: b.PushChar('\n')
+        first = false
+        b.Push(row(line))
+    }
+    return b.ToString()
+}
+
+fn row(line String&) String {
+    words := Array<String&>["error", "warning", "note", "help"]
+    codes := Array<String&>[errorWord, warningWord, noteWord, helpWord]
+    for i in range words.Len() {
+        at := kindAt(line, words[i])
+        if at >= 0: return $line[:at] $coloured(codes[i], words[i]) $line[at + words[i].Len():]
+    }
+    return $line
+}
+
+# where word stands as a row's kind - first on the row (after blanks) or after ": " - followed by ':' or '['; else -1
+fn kindAt(line String&, word String&) I64 {
+    for i in range line.Len() - word.Len() {
+        if not startsAt(line, word, i): continue
+        after := line[i + word.Len()]
+        if after != ':' and after != '[': continue
+        if line[:i].Trim() == "" or (i >= 2 and line[i - 2] == ':' and line[i - 1] == ' '): return i
+    }
+    return -1
+}
+
+fn startsAt(t String&, w String&, i I64) Bool {
+    if i + w.Len() > t.Len(): return false
+    for j in range w.Len() {
+        if t[i + j] != w[j]: return false
+    }
+    return true
+}
+
+test Source "colours each token by its kind, and only adds escape codes" {
+    out := Source("x := 1")
+    assert out == "x \x1b[34m:=\x1b[0m \x1b[33m1\x1b[0m"
+    assert Source("fn F() T # done") == "\x1b[35mfn\x1b[0m \x1b[36mF\x1b[0m() \x1b[36mT\x1b[0m \x1b[90m# done\x1b[0m"
+    assert Source("\"a\"") == "\x1b[32m\"a\"\x1b[0m"
+    assert Source("") == ""
+}
+
+test Source "ends a colour at a line end and takes it up again" {
+    assert Source("\"\"\"\n    a\n    \"\"\"") == "\x1b[32m\"\"\"\x1b[0m\n\x1b[32m    a\x1b[0m\n\x1b[32m    \"\"\"\x1b[0m"
+}
+
+test Diagnostics "colours the kind of each row" {
+    d := Diagnostics("cell1:1:1: error[D3b]: no\n    1 | x\nnote: see\ncell2:1:1: warning: w")
+    assert d == "cell1:1:1: \x1b[1;31merror\x1b[0m[D3b]: no\n    1 | x\n\x1b[1;36mnote\x1b[0m: see\ncell2:1:1: \x1b[1;33mwarning\x1b[0m: w"
+    assert Diagnostics("an error: here") == "an error: here"
+}

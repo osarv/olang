@@ -1,0 +1,1220 @@
+# lineedit - the prompt's line editor (B22): an entry edited in place on a terminal, its text coloured as it is typed
+# (paint), a history walked with Up and Down (or Ctrl-P and Ctrl-N) and searched with Ctrl-R, kept in a file between
+# sessions, and bash's two sets of keys, emacs's (the default) and vi's. Written in olang over termios, no readline:
+# the terminal is put in raw mode only while an entry is read, and set back before the entry runs, so a cell that
+# fails, Ctrl-C while one runs and the end of the session all find it as it was.
+#
+# The editor itself knows no terminal: Feed takes the bytes a terminal sends, one at a time, and leaves what to draw in
+# Out - which is how its tests drive it. Read is the loop over a real terminal.
+
+import "std/os"
+import "std/io"
+import "paint"
+import termios "termios.h"
+import cio "sys/ioctl.h"
+import fcntl "fcntl.h"
+import unistd "unistd.h"
+
+extern { fn ioctl(fd I32, request U64, size mut Array<U16>&) I32 }
+
+# the entries a history keeps, the most recent ones
+Keep I64 = 1000
+
+# what a byte fed did: the entry is being edited; Enter was pressed (the caller decides whether the entry is complete -
+# Accept - or goes on over a new line - Break); a paste ended (the caller accepts the entry where it is complete); the
+# input ended (Ctrl-D on an empty entry)
+type Event enum { Editing, Enter, Pasted, End }
+
+type snap struct(Text String&, At I64) {
+    Text
+    At
+}
+
+type Editor struct(Vi Bool = false, Colour Bool = false, Width I64 = 80) {
+    Vi
+    Colour
+    Width                        # the terminal's columns, for lines that wrap
+    Text String& = ""            # the entry, its lines joined by "\n"
+    At I64 = 0                   # the cursor: a byte offset into Text
+    Normal Bool = false          # vi's normal mode (insert mode where false)
+    Out StringBuilder = StringBuilder()
+    History Vec<String&> = Vec<String&>()
+    File String& = ""            # where Remember appends, "" for nowhere
+    Prompt String& = ">>> "
+    More String& = "... "
+    NormalPrompt String& = "::: "
+    walk I64 = 0                 # the history entry shown; History.Len() for the entry being written
+    draft String& = ""           # the entry being written, while the history is walked
+    row I64 = 0                  # the row the cursor was drawn on, from the entry's first
+    esc String& = ""             # an escape sequence being read, from its ESC
+    killed String& = ""          # the text the last kill took, which Ctrl-Y, p and P put back
+    undos Vec<snap> = Vec<snap>()
+    lastEdit I64 = 0             # 1 after a typed character, so a run of them is undone at once
+    inserted Bool = false
+    quiet Bool = false           # a character's first bytes typed: drawn when it is whole
+    searching Bool = false
+    pasting Bool = false         # inside a bracketed paste: its line ends are the entry's, nothing runs
+    viSearch Bool = false        # begun by / or ?: Enter ends the search, not the entry
+    back Bool = true             # searching toward older entries
+    query String& = ""
+    lastQuery String& = ""
+    found I64 = 0
+    failed Bool = false
+    kept String& = ""            # the entry before a search, given back if it is cancelled
+    keptAt I64 = 0
+    keptWalk I64 = 0
+    count I64 = 0                # vi: a count being typed
+    op Char = '\0'               # vi: an operator waiting for its motion - 'd', 'c' - or 'r' for its character
+    opCount I64 = 1
+    pending Vec<U8> = Vec<U8>()  # Read: bytes read and not yet fed
+    pos I64 = 0
+}
+
+# ---- text ----
+
+fn isCont(c Char) Bool { return (c & 0xC0) == 0x80 }
+
+fn lineStart(t String&, at I64) I64 {
+    i := at
+    for i > 0 and t[i - 1] != '\n': i--
+    return i
+}
+
+fn lineEnd(t String&, at I64) I64 {
+    i := at
+    for i < t.Len() and t[i] != '\n': i++
+    return i
+}
+
+# the columns t takes: its characters, one each
+fn cells(t String&) I64 {
+    n I64 = 0
+    for c in t {
+        if not isCont(c): n++
+    }
+    return n
+}
+
+fn nextAt(t String&, at I64) I64 {
+    if at >= t.Len(): return at
+    i := at + 1
+    for i < t.Len() and isCont(t[i]): i++
+    return i
+}
+
+fn prevAt(t String&, at I64) I64 {
+    if at <= 0: return 0
+    i := at - 1
+    for i > 0 and isCont(t[i]): i--
+    return i
+}
+
+# the byte col characters after from, not past to
+fn offsetOf(t String&, from I64, to I64, col I64) I64 {
+    i := from
+    for _ in range col {
+        if i >= to: break
+        i = nextAt(t, i)
+    }
+    return i if i < to else to
+}
+
+# whether the character ending at at is still missing bytes (its first byte promises more)
+fn incomplete(t String&, at I64) Bool {
+    i := at - 1
+    for i > 0 and isCont(t[i]): i--
+    if i < 0 or t[i] < 0xC0: return false
+    want I64 = 2 if t[i] < 0xE0 else 3 if t[i] < 0xF0 else 4
+    return at - i < want
+}
+
+# a character's class for word motions: 0 a blank, 1 a word's (letters, digits, '_', anything not ASCII), 2 punctuation
+fn class(c Char) I64 {
+    if c == ' ' or c == '\t' or c == '\n': return 0
+    if (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_' or c >= 0x80: return 1
+    return 2
+}
+
+# the start of the word before at (emacs Alt-B, Ctrl-W; vi b)
+fn wordBack(t String&, at I64) I64 {
+    i := at
+    for i > 0 and class(t[i - 1]) == 0: i--
+    if i == 0: return 0
+    k := class(t[i - 1])
+    for i > 0 and class(t[i - 1]) == k: i--
+    return i
+}
+
+# the end of the word at or after at (emacs Alt-F)
+fn wordEnd(t String&, at I64) I64 {
+    i := at
+    for i < t.Len() and class(t[i]) != 1: i++
+    for i < t.Len() and class(t[i]) == 1: i++
+    return i
+}
+
+# the start of the next word (vi w)
+fn wordNext(t String&, at I64) I64 {
+    i := at
+    if i < t.Len() {
+        k := class(t[i])
+        for i < t.Len() and k != 0 and class(t[i]) == k: i++
+    }
+    for i < t.Len() and class(t[i]) == 0: i++
+    return i
+}
+
+# the last character of the word after at (vi e)
+fn wordLast(t String&, at I64) I64 {
+    i := nextAt(t, at)
+    for i < t.Len() and class(t[i]) == 0: i++
+    if i >= t.Len(): return prevAt(t, t.Len())
+    k := class(t[i])
+    for i + 1 < t.Len() and class(t[i + 1]) == k: i++
+    return i
+}
+
+# the last character of the word at at (vi's cw changes to it)
+fn wordHere(t String&, at I64) I64 {
+    i := at
+    k := class(t[i])
+    for i + 1 < t.Len() and class(t[i + 1]) == k: i++
+    return i
+}
+
+# cw's reach: the word under the cursor, then n - 1 more
+fn (e Editor&) wordsHere(n I64) I64 {
+    to := wordHere(e.Text, e.At)
+    for _ in range n - 1: to = wordLast(e.Text, to)
+    return to
+}
+
+fn one(c Char) String { return String(Array<Char>[c]) }
+
+fn indexOf(t String&, q String&) I64 {
+    for i in range t.Len() - q.Len() + 1 {
+        j I64 = 0
+        for j < q.Len() and t[i + j] == q[j]: j++
+        if j == q.Len(): return i
+    }
+    return -1
+}
+
+# ---- drawing ----
+
+fn (e Editor&) promptOf(i I64) String& {
+    if i > 0: return e.More
+    return e.NormalPrompt if e.Normal and not e.searching else e.Prompt
+}
+
+fn (e Editor&) status() String {
+    if e.viSearch: return $("/" if e.back else "?") $e.query
+    return $("(failed search) " if e.failed else "(search) ") $e.query
+}
+
+# the entry drawn again from its first row, the cursor put where At is - or, while searching, at the end of the search
+# line below it
+fn (e mut Editor&) draw() {
+    if e.row > 0: e.Out.Push($"\x1b[" $e.row "A")
+    e.Out.Push("\r\x1b[J")
+    lines := e.Text.Split("\n")
+    painted := (paint.Source(e.Text) if e.Colour else $e.Text).Split("\n")
+    w := e.Width if e.Width > 0 else I64.Max
+    top I64 = 0
+    start I64 = 0
+    curRow I64 = 0
+    curCol I64 = 0
+    c I64 = 0
+    for i in range lines.Len() {
+        p := e.promptOf(i)
+        if i > 0: top += (c - 1) / w + 1
+        if i > 0: e.Out.Push("\r\n")
+        e.Out.Push($p $painted[i])
+        c = cells(p) + cells(lines[i])
+        if e.At >= start and e.At <= start + lines[i].Len() {
+            k := cells(p) + cells(lines[i][:e.At - start])
+            curRow, curCol = top + k / w, k % w
+        }
+        start += lines[i].Len() + 1
+    }
+    if e.searching {
+        top += (c - 1) / w + 1
+        s := e.status()
+        e.Out.Push($"\r\n" $s)
+        c = cells(s)
+        curRow, curCol = top + c / w, c % w
+    }
+    if c > 0 and c % w == 0: e.Out.Push("\r\n")
+    up := top + c / w - curRow
+    if up > 0: e.Out.Push($"\x1b[" $up "A")
+    e.Out.Push("\r")
+    if curCol > 0: e.Out.Push($"\x1b[" $curCol "C")
+    e.row = curRow
+}
+
+# ---- an entry ----
+
+# a new entry, empty, drawn
+fn (e mut Editor&) Begin() {
+    e.reset()
+    e.draw()
+}
+
+fn (e mut Editor&) reset() {
+    e.Text = ""
+    e.At = 0
+    e.row = 0
+    e.walk = e.History.Len()
+    e.undos.Clear()
+    e.Normal = false
+    e.searching = false
+    e.count = 0
+    e.op = '\0'
+}
+
+# the entry ended: the cursor put after it, the line ended, the entry remembered; it is given back
+fn (e mut Editor&) Accept() String& {
+    e.searching = false
+    e.At = e.Text.Len()
+    e.draw()
+    e.Out.Push("\r\n")
+    t := e.Text
+    e.Remember(t)
+    return t
+}
+
+# the entry goes on over a new line at the cursor, indented as the line it leaves - four more after an open bracket
+fn (e mut Editor&) Break() {
+    ls := lineStart(e.Text, e.At)
+    i := ls
+    for i < e.At and e.Text[i] == ' ': i++
+    indent := " ".Repeat(i - ls)
+    more := e.At > ls and (e.Text[e.At - 1] == '{' or e.Text[e.At - 1] == '(' or e.Text[e.At - 1] == '[')
+    e.insert($"\n" $indent $("    " if more else ""))
+    e.Normal = false
+    e.draw()
+}
+
+# ---- feeding bytes ----
+
+# one byte from the terminal: what it did; what to draw is added to Out
+fn (e mut Editor&) Feed(b U8) Event {
+    e.inserted = false
+    e.quiet = false
+    ev := e.step(Char(b))
+    if not e.inserted: e.lastEdit = 0
+    if (ev == Event.Editing or ev == Event.Pasted) and e.esc == "" and not e.quiet: e.draw()
+    return ev
+}
+
+# the input paused: an ESC read alone is the Esc key - vi's normal mode, or the end of a search
+fn (e mut Editor&) Idle() {
+    if e.esc != "\x1b": return
+    e.esc = ""
+    if e.searching: e.acceptSearch()
+    if e.Vi and not e.searching: e.toNormal()
+    e.draw()
+}
+
+fn (e mut Editor&) step(c Char) Event {
+    if e.esc != "": return e.escape(c)
+    if c == 27 {
+        e.esc = "\x1b"
+        return Event.Editing
+    }
+    if e.pasting: return e.pasted(c)
+    if e.searching: return e.searchKey(c)
+    if e.Vi and e.Normal: return e.normalKey(c)
+    return e.key(c)
+}
+
+# a byte of an escape sequence: ESC [ ... final, ESC O final; or ESC and a key - Alt and it, or in vi the Esc key and it
+fn (e mut Editor&) escape(c Char) Event {
+    if e.esc == "\x1b" and c != '[' and c != 'O' {
+        e.esc = ""
+        return e.meta(c)
+    }
+    e.esc = $e.esc $one(c)
+    if e.esc.Len() <= 2 or c < 0x40 or c > 0x7E: return Event.Editing
+    if e.esc.Len() > 16 {
+        e.esc = ""
+        return Event.Editing
+    }
+    seq := e.esc
+    e.esc = ""
+    if e.searching: e.acceptSearch()
+    return e.sequence(seq)
+}
+
+fn (e mut Editor&) meta(c Char) Event {
+    if e.searching: e.acceptSearch()
+    if e.Vi and not e.Normal: e.toNormal()
+    if e.Vi: return e.step(c)
+    if c == 'b': e.At = wordBack(e.Text, e.At)
+    if c == 'f': e.At = wordEnd(e.Text, e.At)
+    if c == 'd': e.remove(e.At, wordEnd(e.Text, e.At), kill = true)
+    if c == 127 or c == 8: e.remove(wordBack(e.Text, e.At), e.At, kill = true)
+    return Event.Editing
+}
+
+# a finished escape sequence: the arrows (with Ctrl or Alt, by words), Home, End, Delete
+fn (e mut Editor&) sequence(seq String&) Event {
+    final := seq[seq.Len() - 1]
+    params := seq[2:seq.Len() - 1]
+    if final == '~' and (params == "200" or params == "201"): return e.bracket(params == "200")
+    if e.pasting: return Event.Editing
+    words := params.Len() > 0 and params[params.Len() - 1] != '1' and final != '~'
+    if final == 'A': e.up()
+    if final == 'B': e.down()
+    if final == 'C': e.At = wordEnd(e.Text, e.At) if words else e.right()
+    if final == 'D': e.At = wordBack(e.Text, e.At) if words else e.left()
+    if final == 'H' or (final == '~' and (params == "1" or params == "7")): e.At = lineStart(e.Text, e.At)
+    if final == 'F' or (final == '~' and (params == "4" or params == "8")): e.At = lineEnd(e.Text, e.At)
+    if final == '~' and params == "3": e.remove(e.At, nextAt(e.Text, e.At), kill = false)
+    if e.Normal: e.clamp()
+    return Event.Editing
+}
+
+# a bracketed paste begun or ended (the terminal sends ESC [200~ and ESC [201~ around what is pasted, ESC [?2004h asked
+# for in Read): the pasted text goes into the entry as it is, drawn once at its end, the line ends it ended with left out
+fn (e mut Editor&) bracket(begins Bool) Event {
+    e.pasting = begins
+    e.quiet = begins
+    if begins: return Event.Editing
+    for e.Text.EndsWith("\n") {
+        e.Text = e.Text[:e.Text.Len() - 1]
+        if e.At > e.Text.Len(): e.At = e.Text.Len()
+    }
+    if e.Vi: e.Normal = false
+    return Event.Pasted
+}
+
+fn (e mut Editor&) pasted(c Char) Event {
+    e.quiet = true
+    if c == '\r' or c == '\n': e.insert("\n")
+    if c == '\t': e.insert("    ")
+    if c >= 32 and c != 127: e.insert(one(c))
+    return Event.Editing
+}
+
+# a key in emacs's keys, or vi's insert mode
+fn (e mut Editor&) key(c Char) Event {
+    if c == '\r' or c == '\n': return Event.Enter
+    if c == 3: return e.interrupt()
+    if c == 4 and e.Text == "": return Event.End
+    if c == '\t': c = ' '
+    if c >= 32 and c != 127 {
+        e.insert(one(c))
+        e.quiet = incomplete(e.Text, e.At)
+        return Event.Editing
+    }
+    e.control(c)
+    return Event.Editing
+}
+
+fn (e mut Editor&) control(c Char) {
+    t := e.Text
+    if c == 1: e.At = lineStart(t, e.At)
+    if c == 5: e.At = lineEnd(t, e.At)
+    if c == 2: e.At = e.left()
+    if c == 6: e.At = e.right()
+    if c == 16: e.up()
+    if c == 14: e.down()
+    if c == 4: e.remove(e.At, nextAt(t, e.At), kill = false)
+    if c == 8 or c == 127: e.remove(prevAt(t, e.At), e.At, kill = false)
+    if c == 11: e.remove(e.At, lineEnd(t, e.At), kill = true)
+    if c == 21: e.remove(lineStart(t, e.At), e.At, kill = true)
+    if c == 23: e.remove(wordBack(t, e.At), e.At, kill = true)
+    if c == 25: e.insert(e.killed)
+    if c == 31: e.undo()
+    if c == 18: e.beginSearch(back = true, vi = false)
+    if c == 12 {
+        e.Out.Push("\x1b[H\x1b[2J")
+        e.row = 0
+    }
+}
+
+# Ctrl-C: the entry given up, a new one begun
+fn (e mut Editor&) interrupt() Event {
+    e.searching = false
+    e.At = e.Text.Len()
+    e.draw()
+    e.Out.Push("^C\r\n")
+    e.reset()
+    return Event.Editing
+}
+
+# ---- moving and changing ----
+
+fn (e Editor&) left() I64 { return prevAt(e.Text, e.At) if e.At > lineStart(e.Text, e.At) else e.At }
+fn (e Editor&) right() I64 { return nextAt(e.Text, e.At) if e.At < lineEnd(e.Text, e.At) else e.At }
+
+# Up: the line above in the entry, at the same column; on the first line, the entry before in the history
+fn (e mut Editor&) up() {
+    t := e.Text
+    ls := lineStart(t, e.At)
+    if ls == 0 {
+        e.older()
+        return
+    }
+    e.At = offsetOf(t, lineStart(t, ls - 1), ls - 1, cells(t[ls:e.At]))
+}
+
+# Down: the line below, at the same column; on the last line, the entry after in the history
+fn (e mut Editor&) down() {
+    t := e.Text
+    le := lineEnd(t, e.At)
+    if le == t.Len() {
+        e.newer()
+        return
+    }
+    e.At = offsetOf(t, le + 1, lineEnd(t, le + 1), cells(t[lineStart(t, e.At):e.At]))
+}
+
+fn (e mut Editor&) older() {
+    if e.walk == 0: return
+    if e.walk == e.History.Len(): e.draft = e.Text
+    e.walk--
+    e.Text = e.History[e.walk]
+    e.At = e.Text.Len()
+}
+
+fn (e mut Editor&) newer() {
+    if e.walk >= e.History.Len(): return
+    e.walk++
+    e.Text = e.draft if e.walk == e.History.Len() else e.History[e.walk]
+    e.At = e.Text.Len() if e.walk == e.History.Len() else lineEnd(e.Text, 0)
+}
+
+# the text before a change, for undo - a run of typed characters is one change
+fn (e mut Editor&) save(kind I64) {
+    if not (kind == 1 and e.lastEdit == 1): e.undos.Push(snap(e.Text, e.At))
+    if e.undos.Len() > 100: try e.undos.RemoveAt(0) catch { }
+    e.lastEdit = kind
+}
+
+fn (e mut Editor&) undo() {
+    s := try e.undos.Pop() catch { return }
+    e.Text = s.Text
+    e.At = s.At
+}
+
+fn (e mut Editor&) insert(s String&) {
+    if s == "": return
+    e.save(1 if s.Len() == 1 else 2)
+    e.inserted = true
+    e.Text = $e.Text[:e.At] $s $e.Text[e.At:]
+    e.At += s.Len()
+}
+
+# [a, b) taken out of the entry - into what was killed, where kill
+fn (e mut Editor&) remove(a I64, b I64, kill Bool = false) {
+    if b <= a: return
+    e.save(2)
+    if kill: e.killed = $e.Text[a:b]
+    e.Text = $e.Text[:a] $e.Text[b:]
+    e.At = a
+}
+
+# ---- searching the history ----
+
+fn (e mut Editor&) beginSearch(back Bool = true, vi Bool = false) {
+    e.searching = true
+    e.viSearch = vi
+    e.back = back
+    e.query = ""
+    e.failed = false
+    e.kept, e.keptAt, e.keptWalk = e.Text, e.At, e.walk
+    e.found = e.walk
+}
+
+# the nearest entry holding the query from from on, toward older entries where back
+fn (e mut Editor&) find(from I64) {
+    i := from
+    for i >= 0 and i < e.History.Len() {
+        at := indexOf(e.History[i], e.query)
+        if at >= 0 {
+            e.found, e.walk = i, i
+            e.Text = e.History[i]
+            e.At = at
+            e.failed = false
+            return
+        }
+        i += -1 if e.back else 1
+    }
+    e.failed = true
+}
+
+fn (e mut Editor&) searchKey(c Char) Event {
+    if c == 7 or c == 3 {
+        e.searching = false
+        e.Text, e.At, e.walk = e.kept, e.keptAt, e.keptWalk
+        return Event.Editing
+    }
+    if c == 18: e.find(e.found + (-1 if e.back else 1))
+    if c == 18: return Event.Editing
+    if c == 8 or c == 127 {
+        e.query = e.query[:prevAt(e.query, e.query.Len())]
+        e.find(e.keptWalk + (-1 if e.back else 1))
+        return Event.Editing
+    }
+    if c >= 32 {
+        e.query = $e.query $one(c)
+        e.find(e.found if e.found < e.History.Len() else e.found - 1)
+        return Event.Editing
+    }
+    vi := e.viSearch
+    e.acceptSearch()
+    if vi and (c == '\r' or c == '\n'): return Event.Editing
+    return e.step(c)
+}
+
+fn (e mut Editor&) acceptSearch() {
+    e.searching = false
+    if e.query != "": e.lastQuery = e.query
+    if e.Normal: e.clamp()
+}
+
+# vi's n and N: the last search again, the same way or the other
+fn (e mut Editor&) again(same Bool) {
+    if e.lastQuery == "": return
+    back := e.back == same
+    e.query = e.lastQuery
+    e.back = back
+    e.find(e.walk + (-1 if back else 1))
+    e.back = e.back == same
+    e.clamp()
+}
+
+# ---- vi ----
+
+fn (e mut Editor&) toNormal() {
+    e.Normal = true
+    e.count = 0
+    e.op = '\0'
+    if e.At > lineStart(e.Text, e.At): e.At = prevAt(e.Text, e.At)
+}
+
+# in normal mode the cursor stands on a character, never after a line's last
+fn (e mut Editor&) clamp() {
+    if e.At == lineEnd(e.Text, e.At) and e.At > lineStart(e.Text, e.At): e.At = prevAt(e.Text, e.At)
+}
+
+# where a motion goes from at; NotMotion where c is none
+fn (e Editor&) target(c Char, at I64) I64 ? NotMotion {
+    t := e.Text
+    if c == 'h': return prevAt(t, at) if at > lineStart(t, at) else at
+    if c == 'l': return nextAt(t, at) if at < lineEnd(t, at) else at
+    if c == 'w': return wordNext(t, at)
+    if c == 'b': return wordBack(t, at)
+    if c == 'e': return wordLast(t, at)
+    if c == '0': return lineStart(t, at)
+    if c == '$': return lineEnd(t, at)
+    if c == '^': return firstWord(t, at)
+    error NotMotion
+}
+
+fn firstWord(t String&, at I64) I64 {
+    i := lineStart(t, at)
+    for i < lineEnd(t, at) and class(t[i]) == 0: i++
+    return i
+}
+
+fn (e mut Editor&) normalKey(c Char) Event {
+    if c == '\r' or c == '\n': return Event.Enter
+    if c == 3: return e.interrupt()
+    if c == 4 and e.Text == "": return Event.End
+    if e.op == 'r': return e.replace(c)
+    if (c >= '1' and c <= '9') or (c == '0' and e.count > 0) {
+        e.count = e.count * 10 + I64(c - '0')
+        return Event.Editing
+    }
+    n := e.count if e.count > 0 else 1
+    e.count = 0
+    if e.op != '\0': return e.operate(c, n * e.opCount)
+    to := try e.moved(c, n) catch NotMotion { return e.command(c, n) }
+    e.At = to
+    e.clamp()
+    return Event.Editing
+}
+
+fn (e Editor&) moved(c Char, n I64) I64 ? NotMotion {
+    at := e.At
+    for _ in range n: at = try e.target(c, at)
+    return at
+}
+
+fn (e mut Editor&) replace(c Char) Event {
+    e.op = '\0'
+    if c < 32 or e.At >= lineEnd(e.Text, e.At): return Event.Editing
+    at := e.At
+    e.remove(at, nextAt(e.Text, at), kill = false)
+    e.insert(one(c))
+    e.At = at
+    return Event.Editing
+}
+
+# d or c and its motion: dd and cc take the line; the range ends after the target for e and $; cw is ce, as in vi
+fn (e mut Editor&) operate(c Char, n I64) Event {
+    o := e.op
+    e.op = '\0'
+    if c == o: return e.wholeLine(o)
+    word := o == 'c' and c == 'w' and e.At < e.Text.Len() and class(e.Text[e.At]) != 0
+    m := 'e' if word else c
+    to := try e.moved(m, n) catch NotMotion { return Event.Editing }
+    if word: to = e.wordsHere(n)
+    if m == 'e': to = nextAt(e.Text, to)
+    a := e.At if e.At < to else to
+    b := to if e.At < to else e.At
+    e.remove(a, b, kill = true)
+    if o == 'c': e.Normal = false
+    if o == 'd': e.clamp()
+    return Event.Editing
+}
+
+fn (e mut Editor&) wholeLine(o Char) Event {
+    t := e.Text
+    ls := lineStart(t, e.At)
+    le := lineEnd(t, e.At)
+    if o == 'c' {
+        e.remove(ls, le, kill = true)
+        e.Normal = false
+        return Event.Editing
+    }
+    e.killed = $t[ls:le]
+    a := ls - 1 if le == t.Len() and ls > 0 else ls
+    b := le + 1 if le < t.Len() else le
+    k := e.killed
+    e.remove(a, b, kill = false)
+    e.killed = k
+    e.At = firstWord(e.Text, e.At if e.At <= e.Text.Len() else e.Text.Len())
+    return Event.Editing
+}
+
+fn (e mut Editor&) command(c Char, n I64) Event {
+    t := e.Text
+    if c == 'd' or c == 'c' or c == 'r' {
+        e.op = c
+        e.opCount = n
+    }
+    if c == 'x': e.remove(e.At, offsetOf(t, e.At, lineEnd(t, e.At), n), kill = true)
+    if c == 'X': e.remove(e.backBy(n), e.At, kill = true)
+    if c == 'D' or c == 'C': e.remove(e.At, lineEnd(t, e.At), kill = true)
+    if c == '~': e.toggle(n)
+    for _ in range (n if c == 'u' else 0): e.undo()
+    if c == 'p' or c == 'P': e.paste(c == 'p', n)
+    for _ in range (n if c == 'j' else 0): e.down()
+    for _ in range (n if c == 'k' else 0): e.up()
+    if c == '/' or c == '?': e.beginSearch(back = c == '/', vi = true)
+    if c == 'n' or c == 'N': e.again(c == 'n')
+    if c == 'i' or c == 'a' or c == 'I' or c == 'A' or c == 'C' or c == 'o' or c == 'O': e.enter(c)
+    if e.Normal and not e.searching: e.clamp()
+    return Event.Editing
+}
+
+fn (e Editor&) backBy(n I64) I64 {
+    at := e.At
+    ls := lineStart(e.Text, at)
+    for _ in range n {
+        if at > ls: at = prevAt(e.Text, at)
+    }
+    return at
+}
+
+# insert mode, entered where the key says: i before the cursor, a after it, I at the line's first word, A at its end, o
+# and O on a new line below or above
+fn (e mut Editor&) enter(c Char) {
+    t := e.Text
+    e.Normal = false
+    if c == 'a': e.At = e.right()
+    if c == 'I': e.At = firstWord(t, e.At)
+    if c == 'A': e.At = lineEnd(t, e.At)
+    if c == 'o' {
+        e.At = lineEnd(t, e.At)
+        e.insert("\n")
+    }
+    if c == 'O' {
+        e.At = lineStart(t, e.At)
+        e.insert("\n")
+        e.At--
+    }
+}
+
+fn (e mut Editor&) toggle(n I64) {
+    end := offsetOf(e.Text, e.At, lineEnd(e.Text, e.At), n)
+    part := e.Text[e.At:end]
+    b := StringBuilder()
+    for c in part {
+        u := c - 32 if c >= 'a' and c <= 'z' else c + 32 if c >= 'A' and c <= 'Z' else c
+        b.PushChar(u)
+    }
+    at := e.At
+    e.remove(at, end, kill = false)
+    e.insert(b.ToString())
+    e.At = end
+}
+
+# p puts what was killed after the cursor, P before it, n times; the cursor on its last character
+fn (e mut Editor&) paste(after Bool, n I64) {
+    if e.killed == "": return
+    if after and e.At < lineEnd(e.Text, e.At): e.At = nextAt(e.Text, e.At)
+    e.insert(String(e.killed.Repeat(n)))
+    e.At = prevAt(e.Text, e.At)
+}
+
+# ---- the history's file ----
+
+# $XDG_STATE_HOME/olang/history, else ~/.local/state/olang/history
+fn HistoryPath() String {
+    dir := try os.Env("XDG_STATE_HOME") catch default ""
+    if dir == "": return $(try os.Env("HOME") catch default ".") "/.local/state/olang/history"
+    return $dir "/olang/history"
+}
+
+# an entry on one line of the file: '\' and line ends escaped
+fn encode(t String&) String { return String(String(t.Replace("\\", "\\\\")).Replace("\n", "\\n")) }
+
+fn decode(t String&) String {
+    b := StringBuilder()
+    i I64 = 0
+    for i < t.Len() {
+        c := t[i]
+        if c == '\\' and i + 1 < t.Len() {
+            i++
+            c = '\n' if t[i] == 'n' else t[i]
+        }
+        b.PushChar(c)
+        i++
+    }
+    return b.ToString()
+}
+
+# the history in the file at path, its most recent Keep entries; later entries are added to it. A file grown past
+# twice Keep is written again with only those
+fn (e mut Editor&) Load(path String&) {
+    e.File = path
+    text := try os.ReadFile(path) catch default ""
+    lines := text.Split("\n")
+    n I64 = 0
+    for line in lines {
+        if line == "": continue
+        e.History.Push(decode(line))
+        n++
+    }
+    for e.History.Len() > Keep: try e.History.RemoveAt(0) catch { }
+    e.walk = e.History.Len()
+    if n <= 2 * Keep: return
+    b := StringBuilder()
+    for h in e.History.View(): b.Push($encode(h) "\n")
+    try os.WriteFile(path, b.ToString()) catch os.Error { }
+}
+
+# an entry added to the history - not a blank one, nor one the same as the entry before - and to its file
+fn (e mut Editor&) Remember(t String&) {
+    if t.Trim() == "": return
+    if e.History.Len() > 0 and e.History[e.History.Len() - 1] == t: return
+    e.History.Push(t)
+    if e.History.Len() > Keep: try e.History.RemoveAt(0) catch { }
+    e.walk = e.History.Len()
+    if e.File != "": appendLine(e.File, encode(t))
+}
+
+fn appendLine(path String&, line String&) {
+    slash := path.Len() - 1
+    for slash > 0 and path[slash] != '/': slash--
+    if slash > 0: try os.MkDirAll(path[:slash]) catch os.Error { }
+    fd := fcntl.open($path "\0", fcntl.O_WRONLY | fcntl.O_CREAT | fcntl.O_APPEND, 384)    # 0600
+    if fd < 0: return
+    try io.Write(fd, $line "\n") catch io.Error { }
+    unistd.close(fd)
+}
+
+# ---- the keys chosen ----
+
+# $XDG_CONFIG_HOME/olang/prompt, else ~/.config/olang/prompt: the prompt's settings, a line "edit vi" or "edit emacs"
+fn ConfigPath() String {
+    dir := try os.Env("XDG_CONFIG_HOME") catch default ""
+    if dir == "": return $(try os.Env("HOME") catch default ".") "/.config/olang/prompt"
+    return $dir "/olang/prompt"
+}
+
+# whether vi's keys are chosen: OLANG_EDIT=vi or emacs, else the settings' file, else emacs's
+fn ViChosen() Bool {
+    env := try os.Env("OLANG_EDIT") catch default ""
+    if env != "": return env == "vi"
+    text := try os.ReadFile(ConfigPath()) catch default ""
+    for line in text.Split("\n") {
+        if line.Trim() == "edit vi": return true
+    }
+    return false
+}
+
+# the keys chosen remembered in the settings' file
+fn Choose(vi Bool) ? os.Error {
+    path := ConfigPath()
+    try os.MkDirAll(path[:path.Len() - "/prompt".Len()])
+    try os.WriteFile(path, "edit vi\n" if vi else "edit emacs\n")
+}
+
+# ---- the terminal ----
+
+# the terminal's columns, 80 where it does not say
+fn columns() I64 {
+    w := Array<U16>[0, 0, 0, 0]
+    if ioctl(1, U64(cio.TIOCGWINSZ), w) != 0 or w[1] == 0: return 80
+    return I64(w[1])
+}
+
+fn (e mut Editor&) flush() {
+    if e.Out.Len() == 0: return
+    try io.Write(1, e.Out.ToString()) catch io.Error { }
+    e.Out.Clear()
+}
+
+# an entry read from the terminal on the standard input, drawn on the standard output, Enter ending it where open says
+# it is complete; Ended at the end of the input or Ctrl-D on an empty entry. The terminal is in raw mode only inside
+fn (e mut Editor&) Read(open fn&(t String&) Bool) String& ? Ended {
+    saved termios.termios
+    if termios.tcgetattr(0, saved) != 0: error Ended
+    raw := saved
+    raw.c_iflag = raw.c_iflag & ~U32(termios.BRKINT | termios.ICRNL | termios.INPCK | termios.ISTRIP | termios.IXON)
+    raw.c_oflag = raw.c_oflag & ~U32(termios.OPOST)
+    raw.c_lflag = raw.c_lflag & ~U32(termios.ECHO | termios.ICANON | termios.IEXTEN | termios.ISIG)
+    raw.c_cc[termios.VMIN] = 1
+    raw.c_cc[termios.VTIME] = 0
+    termios.tcsetattr(0, termios.TCSANOW, raw)
+    defer termios.tcsetattr(0, termios.TCSANOW, saved)
+    e.Out.Push("\x1b[?2004h")
+    defer {
+        e.Out.Push("\x1b[?2004l")
+        e.flush()
+    }
+    e.Width = columns()
+    e.Begin()
+    for {
+        e.flush()
+        if e.pos >= e.pending.Len(): try e.fill()
+        t := try e.feedPending(open)
+        if t is not null: return t
+    }
+}
+
+fn (e mut Editor&) done() String& {
+    t := e.Accept()
+    e.flush()
+    return t
+}
+
+fn (e mut Editor&) fill() ? Ended {
+    buf := Array<U8>(256)
+    n I64 = unistd.read(0, buf, 256)
+    if n <= 0: error Ended
+    e.pending.Clear()
+    e.pending.PushAll(buf[:n])
+    e.pos = 0
+}
+
+# the bytes read fed until an entry ends (given back) or they run out (null)
+fn (e mut Editor&) feedPending(open fn&(t String&) Bool) String?& ? Ended {
+    for e.pos < e.pending.Len() {
+        ev := e.Feed(e.pending[e.pos])
+        e.pos++
+        if ev == Event.End {
+            e.Out.Push("\r\n")
+            e.flush()
+            error Ended
+        }
+        if ev == Event.Pasted and not open(e.Text): return e.done()
+        if ev != Event.Enter: continue
+        if open(e.Text) {
+            e.Break()
+            continue
+        }
+        return e.done()
+    }
+    e.Idle()
+    return null
+}
+
+# ---- tests: bytes in, the entry and the screen out ----
+
+fn (e mut Editor&) typed(keys String&) Event {
+    ev := Event.Editing
+    for c in keys: ev = e.Feed(c)
+    return ev
+}
+
+fn Editor.testing(vi Bool = false) Editor {
+    e := Editor(Vi = vi)
+    e.Begin()
+    e.Out.Clear()
+    return e
+}
+
+test Editor "types, moves and edits a line" {
+    e := Editor.testing()
+    e.typed("x := 1")
+    assert e.Text == "x := 1" and e.At == 6
+    e.typed("\x1b[D\x1b[D2")          # Left, Left
+    assert e.Text == "x :=2 1" and e.At == 5
+    e.typed("\x01y\x05!")             # Ctrl-A, Ctrl-E
+    assert e.Text == "yx :=2 1!"
+    e.typed("\x7f\x7f")                 # Backspace
+    assert e.Text == "yx :=2 " and e.At == 7
+    e.typed("\x7f\x1b[H\x1b[3~")      # Backspace, Home, Delete
+    assert e.Text == "x :=2" and e.At == 0
+    e.typed("\x06\x06\x0b")              # Ctrl-F twice, Ctrl-K
+    assert e.Text == "x " and e.killed == ":=2"
+    e.typed("\x19")                     # Ctrl-Y
+    assert e.Text == "x :=2"
+    e.typed("\x17")                     # Ctrl-W
+    assert e.Text == "x :="
+    e.typed("\x15")                     # Ctrl-U
+    assert e.Text == "" and e.killed == "x :="
+}
+
+test Editor "draws the entry and puts the cursor where it is" {
+    e := Editor.testing()
+    e.typed("ab")
+    e.Out.Clear()
+    e.typed("\x02")                     # Ctrl-B
+    assert e.Out.ToString() == "\r\x1b[J>>> ab\r\x1b[5C"
+}
+
+test Editor "moves by words, by Alt and by Ctrl's arrows" {
+    e := Editor.testing()
+    e.typed("foo bar.baz")
+    e.typed("\x1bb")
+    assert e.At == 8
+    e.typed("\x1b[1;5D\x1bb")
+    assert e.At == 4
+    e.typed("\x1bf")
+    assert e.At == 7
+    e.typed("\x1b[1;5C")
+    assert e.At == 11
+}
+
+test Editor "walks a character of several bytes as one" {
+    e := Editor.testing()
+    e.typed("aé")
+    assert e.Text.Len() == 3 and e.At == 3
+    e.typed("\x02")
+    assert e.At == 1
+    e.typed("\x04")
+    assert e.Text == "a"
+}
+
+test Editor "Enter is the caller's: a new line, or the entry accepted" {
+    e := Editor.testing()
+    assert e.typed("fn f() {\r") == Event.Enter
+    e.Break()
+    assert e.Text == "fn f() {\n    "
+    e.typed("return 1\r")
+    e.Break()
+    e.typed("\x7f\x7f\x7f\x7f}")
+    assert e.Text == "fn f() {\n    return 1\n}"
+    e.Out.Clear()
+    assert e.Accept() == "fn f() {\n    return 1\n}"
+    assert e.History.Len() == 1
+    assert e.Out.ToString().EndsWith("\r\n")
+}
+
+test Editor "Up and Down walk the history, and the lines of an entry" {
+    e := Editor.testing()
+    e.Remember("a := 1")
+    e.Remember("fn g() {\n    return 2\n}")
+    e.Remember("fn g() {\n    return 2\n}")
+    assert e.History.Len() == 2
+    e.Begin()
+    e.typed("dra")
+    e.typed("\x1b[A")
+    assert e.Text == "fn g() {\n    return 2\n}" and e.At == e.Text.Len()
+    e.typed("\x1b[A")                   # the line above, the same column
+    assert e.At == 10
+    e.typed("\x10\x10")                 # Ctrl-P: the first line, then the entry before
+    assert e.Text == "a := 1"
+    e.typed("\x0e")                     # Ctrl-N: the next entry, on its first line
+    assert e.Text.StartsWith("fn g()") and e.At == 8
+    e.typed("\x1b[B\x1b[B\x1b[B")
+    assert e.Text == "dra"
+}
+
+test Editor "a bracketed paste is one entry, drawn once, run where it is complete" {
+    e := Editor.testing()
+    e.typed("\x1b[200~fn f() I64 {\r\treturn 1\r}\r")
+    assert e.pasting and e.Out.Len() == 0
+    assert e.typed("\x1b[201~") == Event.Pasted
+    assert e.Text == "fn f() I64 {\n    return 1\n}" and e.At == e.Text.Len()
+    assert e.Out.ToString() == "\r\x1b[J>>> fn f() I64 {\r\n...     return 1\r\n... }\r\x1b[5C"
+    e.typed("\x1b[200~\x1b[A\x1b[201~")
+    assert e.Text == "fn f() I64 {\n    return 1\n}"
+}
+
+test Editor "Ctrl-R finds an entry by what it holds" {
+    e := Editor.testing()
+    e.Remember("alpha := 1")
+    e.Remember("beta := 2")
+    e.Remember("alpine := 3")
+    e.Begin()
+    e.typed("\x12al")
+    assert e.Text == "alpine := 3" and e.searching
+    e.typed("\x12")
+    assert e.Text == "alpha := 1"
+    e.typed("\x12")
+    assert e.failed and e.Text == "alpha := 1"
+    assert e.typed("\r") == Event.Enter and not e.searching
+    e.Begin()
+    e.typed("x\x12be\x07")
+    assert e.Text == "x" and not e.searching
+}
+
+test Editor "Ctrl-C gives the entry up, Ctrl-D on none ends the input" {
+    e := Editor.testing()
+    e.typed("abc")
+    e.Out.Clear()
+    assert e.typed("\x03") == Event.Editing and e.Text == ""
+    assert e.Out.ToString().Contains("^C\r\n")
+    e.typed("q")
+    assert e.typed("\x02\x04") == Event.Editing and e.Text == ""
+    assert e.typed("\x04") == Event.End
+}
+
+test Editor "undoes a run of typing at once, and a kill" {
+    e := Editor.testing()
+    e.typed("abc def")
+    e.typed("\x17")
+    assert e.Text == "abc "
+    e.typed("\x1f")
+    assert e.Text == "abc def"
+    e.typed("\x1f")
+    assert e.Text == ""
+}
+
+test Editor "draws a line that wraps, and comes back to its first row" {
+    e := Editor(Width = 10)
+    e.Begin()
+    e.typed("abcdefghij")              # 4 + 10 columns: two rows
+    assert e.row == 1
+    e.Out.Clear()
+    e.typed("\x01")
+    assert e.Out.ToString() == "\x1b[1A\r\x1b[J>>> abcdefghij\x1b[1A\r\x1b[4C" and e.row == 0
+    e.typed("\x05xyzwvu")               # exactly two rows: the cursor goes to the third
+    assert e.row == 2
+}
+
+test Editor "vi: Esc to normal mode, motions and counts" {
+    e := Editor.testing(vi = true)
+    e.typed("one two three")
+    e.typed("\x1b")
+    e.Idle()
+    assert e.Normal and e.At == 12
+    e.typed("0")
+    assert e.At == 0
+    e.typed("w")
+    assert e.At == 4
+    e.typed("2w")
+    assert e.At == 12
+    e.typed("b")
+    assert e.At == 8
+    e.typed("e")
+    assert e.At == 12
+    e.typed("^$")
+    assert e.At == 12
+    e.typed("hhl")
+    assert e.At == 11
+    e.Out.Clear()
+    e.typed("0")
+    assert e.Out.ToString() == "\r\x1b[J::: one two three\r\x1b[4C"
+}
+
+test Editor "vi: deleting and changing" {
+    e := Editor.testing(vi = true)
+    e.typed("one two three\x1b0")
+    e.typed("dw")
+    assert e.Text == "two three" and e.killed == "one "
+    e.typed("x")
+    assert e.Text == "wo three"
+    e.typed("cwxy\x1b")
+    e.Idle()
+    assert e.Text == "xy three" and e.Normal
+    e.typed("$X")
+    assert e.Text == "xy thre"
+    e.typed("0D")
+    assert e.Text == "" and e.killed == "xy thre"
+    e.typed("p")
+    assert e.Text == "xy thre"
+    e.typed("u")
+    assert e.Text == ""
+    e.typed("u")
+    assert e.Text == "xy thre"
+    e.typed("0r_l~")
+    assert e.Text == "_Y thre"
+    e.typed("cc")
+    assert e.Text == "" and not e.Normal
+}
+
+test Editor "vi: cw changes the word under the cursor, however short" {
+    e := Editor.testing(vi = true)
+    e.typed("x := 1\x1b0cwy\x1b")
+    assert e.Text == "y := 1"
+    e.typed("0c2wab\x1b")
+    assert e.Text == "ab 1"
+    e.typed("ccfoo bar baz\x1b0c2wq\x1b")
+    assert e.Text == "q baz"
+}
+
+test Editor "vi: i a I A o, dd and j k over an entry's lines" {
+    e := Editor.testing(vi = true)
+    e.typed("b\x1bia\x1bAc\x1b")
+    e.Idle()
+    assert e.Text == "abc"
+    e.typed("od\x1b")
+    e.Idle()
+    assert e.Text == "abc\nd" and e.Normal
+    e.typed("k")
+    assert e.At == 0
+    e.typed("dd")
+    assert e.Text == "d" and e.killed == "abc"
+    e.typed("P")
+    assert e.Text == "abcd"
+    e.typed("I  \x1b")
+    e.Idle()
+    assert e.Text == "  abcd"
+}
+
+test Editor "vi: j and k walk the history, / and n search it" {
+    e := Editor.testing(vi = true)
+    e.Remember("alpha")
+    e.Remember("beta")
+    e.Remember("alps")
+    e.Begin()
+    e.typed("\x1b")
+    e.Idle()
+    e.typed("k")
+    assert e.Text == "alps" and e.At == 3
+    e.typed("j")
+    assert e.Text == ""
+    e.typed("/al\r")
+    assert e.Text == "alps" and not e.searching and e.Normal
+    e.typed("n")
+    assert e.Text == "alpha"
+    e.typed("N")
+    assert e.Text == "alps"
+    assert e.typed("\r") == Event.Enter
+}
+
+test Remember "keeps the history in its file, escaped, and the most recent entries" {
+    dir := try os.MkTemp(prefix = "lineedit")
+    path := $dir "/state/olang/history"
+    e := Editor()
+    e.Load(path)
+    e.Remember("a \\ b")
+    e.Remember("f(\n1)")
+    e.Remember("f(\n1)")
+    text := try os.ReadFile(path)
+    assert text == "a \\\\ b\nf(\\n1)\n"
+    d := Editor()
+    d.Load(path)
+    assert d.History.Len() == 2 and d.History[1] == "f(\n1)" and d.History[0] == "a \\ b"
+    try os.RemoveAll(dir)
+}

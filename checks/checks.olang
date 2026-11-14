@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "jupyter"]
+                     "prompt", "promptkeys", "jupyter"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -439,6 +439,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
         case "prompt" { try prompt(r) }
+        case "promptkeys" { try promptkeys(r) }
         case "jupyter" { try jupyter(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
@@ -1294,6 +1295,21 @@ fn prompt(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/prompt/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" < session.in > out.txt 2>&1") == 0, "the prompt's session did not end with 0", dir)
     try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the prompt's session printed other than session.want", dir)
+}
+
+test "on a terminal the prompt edits its entries and keeps their history" { assert passed("promptkeys") }
+
+# B22: on a terminal the prompt edits each entry - a pseudo-terminal (script(1)) is typed into, the keys a pause apart so
+# each finds the terminal in raw mode: an entry recalled with Up, edited and run again, Ctrl-D ending the session; the
+# history then in its file, in the order typed
+fn promptkeys(r mut report&) ? Failed {
+    dir := fresh("promptkeys")
+    keys := """(sleep 2; printf 'x := 1\r'; sleep 1; printf '\033[A\1772\r'; sleep 1; printf 'x\r'; sleep 1; printf '\004')"""
+    run := """XDG_STATE_HOME="$PWD/state" NO_COLOR=1 timeout 60 script -qfec "$OLANG" /dev/null > out.txt 2>&1"""
+    try r.expect(sh(dir, $keys " | " $run) == 0, "the prompt on a terminal did not end with 0", dir)
+    try r.expect(sh(dir, "tr -d '\\r' < out.txt | sed 's/\\x1b\\[[?0-9;]*[A-Za-z]//g' | grep -qx 2") == 0, "the entry recalled and edited did not run", dir)
+    want := "printf 'x := 1\\nx := 2\\nx\\n' | cmp -s - state/olang/history"
+    try r.expect(sh(dir, want) == 0, "the history's file holds other than the entries typed", dir)
 }
 
 test "olang jupyter speaks Jupyter's protocol to a front end" { assert passed("jupyter") }
