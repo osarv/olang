@@ -6384,46 +6384,13 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.Null { b.Push("null") }
         case types.Kind.DefaultErr { b.Push("what its body can fail with") }
         case types.Kind.Noreturn { b.Push("noreturn") }
-        case types.Kind.ErrWords {
-            # R1c: "T.W, T.V", as a signature writes the words it names
-            et := c.P.T.ErrOf(t)
-            name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
-            if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) $name }
-            ws := c.P.ErrorWords(c.P.T.DeclOf(et))
-            mask := c.P.T.ErrMask(t)
-            first := true
-            for i in range ws.Len() {
-                if i < 64 and (mask & (U64(1) << i)) != 0 {
-                    if not first { b.Push(", ") }
-                    b.Push($name if c.P.IsRaisedError(c.P.T.DeclOf(et)) else $name "." $c.text(ws[i]))
-                    first = false
-                }
-            }
-        }
+        case types.Kind.ErrWords { c.spellErrWords(b, t) }
         case types.Kind.Named {
             if c.spellQualified { b.Push(c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(t)))) }
             b.Push(c.text(c.P.T.DeclName(c.P.T.DeclOf(t))))
             c.spellArgs(b, c.P.T.Args(t))
         }
-        case types.Kind.ErrVal {
-            # T20: an error value's type as written - its error type, or the named set it was written as; a set no name
-            # was written for, its entries in braces
-            es := c.P.T.Items(c.P.T.ErrValItems(t))
-            nd := c.P.T.ErrValName(t)
-            if nd >= types.DeclId(0) {
-                if c.spellQualified { b.Push(c.qualifierFor(c.P.T.DeclModule(nd))) }
-                b.Push(c.text(c.P.T.DeclName(nd)))
-            } else if es.Len() == 1 {
-                c.spell(b, es[0], false)
-            } else {
-                b.PushChar('{')
-                for i in range es.Len() {
-                    if i > 0 { b.Push(", ") }
-                    c.spell(b, es[i], false)
-                }
-                b.PushChar('}')
-            }
-        }
+        case types.Kind.ErrVal { c.spellErrVal(b, t) }
         case types.Kind.Any {
             b.Push("any ")
             c.spell(b, c.P.T.AnyTrait(t), false)
@@ -6448,100 +6415,9 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             c.spell(b, c.P.T.Referent(t), false)
             b.Push("?&" if (perm & types.Nullable) != 0 else "&")
         }
-        case types.Kind.Func {
-            res := c.P.T.Result(t)
-            es := c.P.T.Items(c.P.T.Errors(t))
-            named := 0
-            for e in es {
-                if e != types.DefaultErrT { named++ }
-            }
-            several := (c.P.T.KindOf(res) == types.Kind.Tuple and c.P.T.Items(c.P.T.Parts(res)).Len() > 1) or named > 1
-            # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
-            wrap := c.spellGroup or (c.spellItem and several)
-            c.spellGroup = false
-            wasItem := c.spellItem
-            c.spellItem = true
-            if c.P.T.FuncTag(t) != types.UnknownT {
-                # T21b: a declared function type, as it is held - "Handler&", "Handler?&"
-                c.spell(b, c.P.T.FuncTag(t), false)
-                b.Push("?&" if c.P.T.FuncNullable(t) else "&")
-                c.spellGroup = false
-                c.spellItem = wasItem
-                return
-            }
-            if wrap { b.PushChar('(') }
-            b.Push("fn?&(" if c.P.T.FuncNullable(t) else "fn&(")   # T21: always held by reference, its marker on its "fn"
-            ps := c.P.T.Items(c.P.T.Params(t))
-            ns := c.P.T.NamesOf(t)
-            for i in range ps.Len() {
-                if i > 0 { b.Push(", ") }
-                if ns.Len() == ps.Len() {
-                    b.Push(c.text(source.NameId(I32(ns[i]))))
-                    b.PushChar(' ')
-                }
-                c.spell(b, ps[i], false)
-            }
-            b.PushChar(')')
-            if c.P.T.KindOf(res) == types.Kind.Tuple {
-                # several results, bare (D8c)
-                parts := c.P.T.Items(c.P.T.Parts(res))
-                for i in range parts.Len() {
-                    b.Push(", " if i > 0 else " ")
-                    c.spell(b, parts[i], false)
-                }
-            } else if res != types.VoidT {
-                b.PushChar(' ')
-                # (a result's promises end it before a "?", T21c)
-                c.spellGroup = es.Len() > 0 and c.P.T.KindOf(res) == types.Kind.Func and
-                               c.P.T.Items(c.P.T.Errors(res)).Len() == 0 and c.P.T.PromisesOf(res) == 0
-                c.spell(b, res, false)
-                c.spellGroup = false
-            }
-            c.spellItem = wasItem
-            if es.Len() > 0 {
-                b.Push(" ?")
-                k := 0
-                for e in es {
-                    if e == types.DefaultErrT { continue }
-                    b.Push(" " if k == 0 else ", ")
-                    c.spell(b, e, false)
-                    k++
-                }
-            }
-            b.Push(c.P.T.PromiseText(t))   # T21c: its promises after its signature
-            if wrap { b.PushChar(')') }
-        }
+        case types.Kind.Func { c.spellFunc(b, t) }
         case types.Kind.Tuple { c.spellList(b, c.P.T.Parts(t), "(", ")") }
-        case types.Kind.AnonEnum {
-            # "enum { A(I32) B }", as an anonymous enum is written (T27)
-            b.Push("enum {")
-            # each payload's field named as the first declaration written gave them
-            ns := c.P.T.ShapeNames(t)
-            cs := c.P.T.Items(c.P.T.ShapeCases(t))
-            fs := c.P.T.ShapeFields(t)
-            at := 0
-            for i in range ns.Len() {
-                b.PushChar(' ')
-                b.Push(c.text(ns[i]))
-                if i >= cs.Len() or cs[i] == types.TypeId(0) { continue }
-                parts := c.P.T.Items(c.P.T.Parts(cs[i]))
-                if parts.Len() == 0 { continue }
-                if fs.Len() < at + parts.Len() {
-                    c.spellList(b, c.P.T.Parts(cs[i]), "(", ")")
-                    continue
-                }
-                b.PushChar('(')
-                for j in range parts.Len() {
-                    if j > 0 { b.Push(", ") }
-                    b.Push(c.text(fs[at + j]))
-                    b.PushChar(' ')
-                    c.spell(b, parts[j], false)
-                }
-                b.PushChar(')')
-                at += parts.Len()
-            }
-            b.Push(" }")
-        }
+        case types.Kind.AnonEnum { c.spellAnonEnum(b, t) }
         case types.Kind.Const { b.Push($c.P.T.ConstValue(t)) }
         case types.Kind.Var { b.Push(c.text(c.P.VarAt(c.P.T.A(t), c.P.T.B(t)).Name)) }
         # QAH: an error set given for an error-set parameter, "Bad, io.Error" - "nothing" for the empty set
@@ -6555,6 +6431,142 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         }
         case _ { b.Push(c.P.T.Canon(t)) }
     }
+}
+
+# spell's error words
+fn (c mut Checker&) spellErrWords(b mut StringBuilder&, t types.TypeId) {
+    # R1c: "T.W, T.V", as a signature writes the words it names
+    et := c.P.T.ErrOf(t)
+    name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
+    if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) $name }
+    ws := c.P.ErrorWords(c.P.T.DeclOf(et))
+    mask := c.P.T.ErrMask(t)
+    first := true
+    for i in range ws.Len() {
+        if i < 64 and (mask & (U64(1) << i)) != 0 {
+            if not first { b.Push(", ") }
+            b.Push($name if c.P.IsRaisedError(c.P.T.DeclOf(et)) else $name "." $c.text(ws[i]))
+            first = false
+        }
+    }
+}
+
+# spell's error value type
+fn (c mut Checker&) spellErrVal(b mut StringBuilder&, t types.TypeId) {
+    # T20: an error value's type as written - its error type, or the named set it was written as; a set no name
+    # was written for, its entries in braces
+    es := c.P.T.Items(c.P.T.ErrValItems(t))
+    nd := c.P.T.ErrValName(t)
+    if nd >= types.DeclId(0) {
+        if c.spellQualified { b.Push(c.qualifierFor(c.P.T.DeclModule(nd))) }
+        b.Push(c.text(c.P.T.DeclName(nd)))
+    } else if es.Len() == 1 {
+        c.spell(b, es[0], false)
+    } else {
+        b.PushChar('{')
+        for i in range es.Len() {
+            if i > 0 { b.Push(", ") }
+            c.spell(b, es[i], false)
+        }
+        b.PushChar('}')
+    }
+}
+
+# spell's function type
+fn (c mut Checker&) spellFunc(b mut StringBuilder&, t types.TypeId) {
+    res := c.P.T.Result(t)
+    es := c.P.T.Items(c.P.T.Errors(t))
+    named := 0
+    for e in es {
+        if e != types.DefaultErrT { named++ }
+    }
+    several := (c.P.T.KindOf(res) == types.Kind.Tuple and c.P.T.Items(c.P.T.Parts(res)).Len() > 1) or named > 1
+    # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
+    wrap := c.spellGroup or (c.spellItem and several)
+    c.spellGroup = false
+    wasItem := c.spellItem
+    c.spellItem = true
+    if c.P.T.FuncTag(t) != types.UnknownT {
+        # T21b: a declared function type, as it is held - "Handler&", "Handler?&"
+        c.spell(b, c.P.T.FuncTag(t), false)
+        b.Push("?&" if c.P.T.FuncNullable(t) else "&")
+        c.spellGroup = false
+        c.spellItem = wasItem
+        return
+    }
+    if wrap { b.PushChar('(') }
+    b.Push("fn?&(" if c.P.T.FuncNullable(t) else "fn&(")   # T21: always held by reference, its marker on its "fn"
+    ps := c.P.T.Items(c.P.T.Params(t))
+    ns := c.P.T.NamesOf(t)
+    for i in range ps.Len() {
+        if i > 0 { b.Push(", ") }
+        if ns.Len() == ps.Len() {
+            b.Push(c.text(source.NameId(I32(ns[i]))))
+            b.PushChar(' ')
+        }
+        c.spell(b, ps[i], false)
+    }
+    b.PushChar(')')
+    if c.P.T.KindOf(res) == types.Kind.Tuple {
+        # several results, bare (D8c)
+        parts := c.P.T.Items(c.P.T.Parts(res))
+        for i in range parts.Len() {
+            b.Push(", " if i > 0 else " ")
+            c.spell(b, parts[i], false)
+        }
+    } else if res != types.VoidT {
+        b.PushChar(' ')
+        # (a result's promises end it before a "?", T21c)
+        c.spellGroup = es.Len() > 0 and c.P.T.KindOf(res) == types.Kind.Func and
+                       c.P.T.Items(c.P.T.Errors(res)).Len() == 0 and c.P.T.PromisesOf(res) == 0
+        c.spell(b, res, false)
+        c.spellGroup = false
+    }
+    c.spellItem = wasItem
+    if es.Len() > 0 {
+        b.Push(" ?")
+        k := 0
+        for e in es {
+            if e == types.DefaultErrT { continue }
+            b.Push(" " if k == 0 else ", ")
+            c.spell(b, e, false)
+            k++
+        }
+    }
+    b.Push(c.P.T.PromiseText(t))   # T21c: its promises after its signature
+    if wrap { b.PushChar(')') }
+}
+
+# spell's anonymous enum
+fn (c mut Checker&) spellAnonEnum(b mut StringBuilder&, t types.TypeId) {
+    # "enum { A(I32) B }", as an anonymous enum is written (T27)
+    b.Push("enum {")
+    # each payload's field named as the first declaration written gave them
+    ns := c.P.T.ShapeNames(t)
+    cs := c.P.T.Items(c.P.T.ShapeCases(t))
+    fs := c.P.T.ShapeFields(t)
+    at := 0
+    for i in range ns.Len() {
+        b.PushChar(' ')
+        b.Push(c.text(ns[i]))
+        if i >= cs.Len() or cs[i] == types.TypeId(0) { continue }
+        parts := c.P.T.Items(c.P.T.Parts(cs[i]))
+        if parts.Len() == 0 { continue }
+        if fs.Len() < at + parts.Len() {
+            c.spellList(b, c.P.T.Parts(cs[i]), "(", ")")
+            continue
+        }
+        b.PushChar('(')
+        for j in range parts.Len() {
+            if j > 0 { b.Push(", ") }
+            b.Push(c.text(fs[at + j]))
+            b.PushChar(' ')
+            c.spell(b, parts[j], false)
+        }
+        b.PushChar(')')
+        at += parts.Len()
+    }
+    b.Push(" }")
 }
 
 # whether a type is written as a function type
@@ -12628,19 +12640,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
             # D8g: a variadic parameter's arguments, each unified with its element
             e = c.variadicUnify(args[i], ps[k], b)
         } else {
-            v := c.fold(args[i])
-            if v.Ok or c.litLike(args[i]) {
-                fl := v.IsFloat if v.Ok else c.litFloat(args[i])
-                if k < ps.Len() { c.unify(ps[k], c.P.T.Prim("F64") if fl else c.P.T.Prim("U64") if v.Ok and c.litU64(args[i]) else c.i64(), b, true, false) }
-            } else {
-                match args[i] {
-                    case ast.Expr.Lambda(_, _) { lambdas.Push(i) }
-                    case ast.Expr.Row(_, _) { bares.Push(i) }
-                    case ast.Expr.Compr(_, cm) if cm.Elem is null and not cm.InCall { bares.Push(i) }
-                    case ast.Expr.Default(_) { }
-                    case _ { e = c.expr(args[i], c.boundParam(ps, k, b) if recv is not null else types.UnknownT) }
-                }
-            }
+            e = c.argForInference(args[i], i, ps, k, b, recv is not null, lambdas, bares)
         }
         if e is not null and k < ps.Len() and typeOf(e) != types.UnknownT and typeOf(e) != types.NoreturnT {
             c.unify(ps[k], c.bindType(e), b, false, false)
@@ -12670,18 +12670,9 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     # receiver or a constraint bound, which its parameter may be looser than (T22)
     if pre.Len() == 0 and lambdas.Len() > 0 {
         for i in lambdas {
-            lf := lambdaOf(args[i])
             pk := i + k0w
             if pk >= ps.Len() or c.P.T.KindOf(ps[pk]) != types.Kind.Func { continue }
-            lps := c.P.T.Items(c.P.T.Params(ps[pk]))
-            for j in range lf!.S.Params.Len() {
-                if j < lps.Len() and lf!.S.Params[j].Ty is not null { c.unifySoft(lps[j], c.resolve(lf!.S.Params[j].Ty), b) }
-            }
-            if lf!.S.Results.Len() > 0 and lf!.S.Results.Len() == 1 {
-                lr := c.resolve(lf!.S.Results[0])
-                pr := c.P.T.Result(ps[pk])
-                c.unifySoft(pr, lr, b)
-            }
+            c.lambdaWrittenTypes(lambdaOf(args[i])!, ps[pk], b)
         }
         c.P.InferThroughBounds(b)
     }
@@ -12695,14 +12686,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         }
         pk := i + k0w
         if pk >= ps.Len() { continue }
-        e := c.lambda(args[i].Span(), lambdaOf(args[i])!, c.P.Subst(ps[pk], owner, c.P.T.List(part)))
-        if typeOf(e) != types.UnknownT {
-            c.unifySoft(ps[pk], typeOf(e), b)
-            if c.P.T.KindOf(ps[pk]) == types.Kind.Func and c.P.T.KindOf(typeOf(e)) == types.Kind.Func {
-                try c.P.UnifyErrors(c.P.T.Errors(ps[pk]), c.P.T.Errors(typeOf(e)), b) catch { }
-            }
-        }
-        vals[i] = e
+        vals[i] = c.lambdaArg(args[i], ps[pk], c.P.Subst(ps[pk], owner, c.P.T.List(part)), b)
         c.P.InferThroughBounds(b)
     }
     # G9e: a parameter left off whose type is a variable of the call nothing else bound takes its default's type
@@ -12713,40 +12697,14 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         if b.Vals[i] == types.UnknownT and c.P.ErrVarAt(owner, i) { b.Vals[i] = c.P.ErrSetOf(types.ListId(0)) }
     }
     for i in range nv {
-        if b.Vals[i] == types.UnknownT {
-            # D9a: a length an array taken by value gives (G29), reached by an array whose length is known only at run
-            # time
-            for kk in range vals.Len() {
-                pk := kk + k0w
-                if vals[kk] is null or pk >= ps.Len() { continue }
-                pa := c.arrayOf(c.deref(ps[pk]))
-                if pa == types.UnknownT { continue }
-                pl := c.P.T.Length(pa)
-                at := c.deref(typeOf(vals[kk]))
-                aa := c.arrayOf(at)
-                if pl != types.TypeId(0) and c.P.T.KindOf(pl) == types.Kind.Var and c.P.T.A(pl) == owner and c.P.T.B(pl) == i and aa != types.UnknownT and c.P.T.Length(aa) == types.TypeId(0) {
-                    # (D9a lifted: an array of a run-time length given where the body decides on its length - an instance
-                    # whose length is known only at run time, deciding there)
-                    b.Vals[i] = c.P.T.RunLength()
-                    break
-                }
-            }
-            if b.Vals[i] != types.UnknownT { continue }
-            # G4: one no parameter names is written at the call, or nothing gives it
-            seen := Array<Bool>(nv, false)
-            for q in ps { c.varsIn(q, owner, seen, 0) }
-            fname := c.text(c.P.FnDecl(f).Name)
-            vn := c.text(c.P.VarAt(owner, i).Name)
-            if not seen[i] {
-                c.err(nsp, msgs.TypeVarNotInferable(vn, fname))
-            } else if vn.EndsWith(".Len()") {
-                # G29: a length variable, which only an array's length binds - no type argument the program writes
-                c.err(nsp, msgs.LengthNotInferable(fname, vn))
-            } else {
-                c.err(nsp, msgs.TypeArgsNotInferable(fname))
-            }
-            return c.unknown(sp)
+        if b.Vals[i] != types.UnknownT { continue }
+        # D9a: a length an array taken by value gives (G29), reached by an array whose length is known only at run time
+        if c.runLengthGiven(vals, ps, k0w, owner, i) {
+            b.Vals[i] = c.P.T.RunLength()
+            continue
         }
+        c.notInferable(nsp, f, owner, ps, i)
+        return c.unknown(sp)
     }
     # G19: each binding against its constraint, and every type instance the instance's signature holds against its own,
     # where the call binds them - the instance's body is not checked where one is not met
@@ -12777,7 +12735,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     pv := Array<typed.Expr&>(vals.Len(), c.hole)
     for i in range vals.Len() {
         v := vals[i]
-        if v is not null { pv[i] = v }
+        if v is not null: pv[i] = v
     }
     c.setOrder(ord)
     x := c.callBody(sp, nsp, c.P.InstanceSig(inst), typed.Callee.Body(typed.BodyId(I32(id))), f, recv, args, pv)
@@ -12789,6 +12747,83 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         }
     }
     return x
+}
+
+# invoke's argument i as written, for inference (G9): a literal binds its parameter as a literal does, a lambda or a
+# literal of no type is put off (its index pushed on lambdas or bares), any other value checked and given
+fn (c mut Checker&) argForInference(arg ast.Expr&, i I64, ps Array<types.TypeId>&, k I64, b mut generic.Binding&, onRecv Bool
+                                   lambdas mut Vec<I64>&, bares mut Vec<I64>&) typed.Expr?& {
+    v := c.fold(arg)
+    if v.Ok or c.litLike(arg) {
+        fl := v.IsFloat if v.Ok else c.litFloat(arg)
+        if k < ps.Len() { c.unify(ps[k], c.P.T.Prim("F64") if fl else c.P.T.Prim("U64") if v.Ok and c.litU64(arg) else c.i64(), b, true, false) }
+        return null
+    }
+    match arg {
+        case ast.Expr.Lambda(_, _) { lambdas.Push(i) }
+        case ast.Expr.Row(_, _) { bares.Push(i) }
+        case ast.Expr.Compr(_, cm) if cm.Elem is null and not cm.InCall { bares.Push(i) }
+        case ast.Expr.Default(_) { }
+        case _ { return c.expr(arg, c.boundParam(ps, k, b) if onRecv else types.UnknownT) }
+    }
+    return null
+}
+
+# G9a: a lambda's written types bind what only literals reached, or nothing did, of its parameter's type pt
+fn (c mut Checker&) lambdaWrittenTypes(lf ast.Func&, pt types.TypeId, b mut generic.Binding&) {
+    lps := c.P.T.Items(c.P.T.Params(pt))
+    for j in range lf.S.Params.Len() {
+        if j < lps.Len() and lf.S.Params[j].Ty is not null { c.unifySoft(lps[j], c.resolve(lf.S.Params[j].Ty), b) }
+    }
+    if lf.S.Results.Len() > 0 and lf.S.Results.Len() == 1 {
+        lr := c.resolve(lf.S.Results[0])
+        pr := c.P.T.Result(pt)
+        c.unifySoft(pr, lr, b)
+    }
+}
+
+# D16a: invoke's lambda argument checked against its parameter pt as far as the other arguments bound it (want), what
+# it gives then binding pt's variables, its error set among them (QAH)
+fn (c mut Checker&) lambdaArg(arg ast.Expr&, pt types.TypeId, want types.TypeId, b mut generic.Binding&) typed.Expr& {
+    e := c.lambda(arg.Span(), lambdaOf(arg)!, want)
+    if typeOf(e) == types.UnknownT { return e }
+    c.unifySoft(pt, typeOf(e), b)
+    if c.P.T.KindOf(pt) == types.Kind.Func and c.P.T.KindOf(typeOf(e)) == types.Kind.Func {
+        try c.P.UnifyErrors(c.P.T.Errors(pt), c.P.T.Errors(typeOf(e)), b) catch { }
+    }
+    return e
+}
+
+# D9a: whether owner's variable i is the length of an array taken by value (G29) that an argument of a run-time length
+# reaches - an instance whose length is known only at run time, deciding there (D9a lifted)
+fn (c mut Checker&) runLengthGiven(vals Vec<typed.Expr?&>&, ps Array<types.TypeId>&, k0 I64, owner I64, i I64) Bool {
+    for kk in range vals.Len() {
+        pk := kk + k0
+        if vals[kk] is null or pk >= ps.Len() { continue }
+        pa := c.arrayOf(c.deref(ps[pk]))
+        if pa == types.UnknownT { continue }
+        pl := c.P.T.Length(pa)
+        aa := c.arrayOf(c.deref(typeOf(vals[kk])))
+        if pl != types.TypeId(0) and c.P.T.KindOf(pl) == types.Kind.Var and c.P.T.A(pl) == owner and c.P.T.B(pl) == i and aa != types.UnknownT and c.P.T.Length(aa) == types.TypeId(0) { return true }
+    }
+    return false
+}
+
+# G4: owner's variable i, which no argument bound, is written at the call - or nothing gives it; G29: a length variable
+# only an array's length binds
+fn (c mut Checker&) notInferable(nsp source.Span, f I64, owner I64, ps Array<types.TypeId>&, i I64) {
+    seen := Array<Bool>(c.P.VarCount(owner), false)
+    for q in ps { c.varsIn(q, owner, seen, 0) }
+    fname := c.text(c.P.FnDecl(f).Name)
+    vn := c.text(c.P.VarAt(owner, i).Name)
+    if not seen[i] {
+        c.err(nsp, msgs.TypeVarNotInferable(vn, fname))
+    } else if vn.EndsWith(".Len()") {
+        # G29: a length variable, which only an array's length binds - no type argument the program writes
+        c.err(nsp, msgs.LengthNotInferable(fname, vn))
+    } else {
+        c.err(nsp, msgs.TypeArgsNotInferable(fname))
+    }
 }
 
 # parameter k as far as a binding has bound it, where that leaves no variable open - what a receiver's type arguments
@@ -18977,24 +19012,7 @@ fn (c mut Checker&) stepMethod(sp source.Span, p typed.Lvalue&, t types.TypeId, 
 fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
     if v.Field and v.Ty is null and v.Values.Len() == 0 and not v.Infer {
         # a pun (C4): the field takes its parameter
-        for i in range v.Names.Len() {
-            pid := c.localNamed(v.Names[i])
-            if pid < 0 {
-                c.gap(v.NameSps[i], "a pun naming no parameter (C4)")
-                continue
-            }
-            nsp := v.NameSps[i]
-            # T7a: a parameter a type variable bound to a run-time array (G18) - held by reference in an instance
-            id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
-            c.roNeed(typed.Lvalue.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
-            # (O15: the parameter's destructors handed on into the instance with its value - the field and the
-            # parameter are one name in the body, C4; a unique one moved, T13b, as every hand-on of it is)
-            pt := c.localType(pid)
-            x := c.handOn(c.readLocal(nsp, pid), pid, not c.isRef(pt) and pt != types.UnknownT and c.P.Unique(pt) and c.movesHere())
-            c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
-            c.cur().Fields.Push(typed.LocalId(I32(id)))
-            c.dropOnExit(id, nsp, true)
-        }
+        c.punFields(v)
         return
     }
     if v.Values.Len() != 0 and v.Values.Len() != v.Names.Len() {
@@ -19018,130 +19036,161 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
     }
     kind := typed.LocalKind.Field if v.Field else typed.LocalKind.Var
+    for i in range v.Names.Len() { c.declName(v, i, declared, mark, kind) }
+}
+
+# varDecl's puns (C4): each field takes its parameter
+fn (c mut Checker&) punFields(v ast.VarDecl&) {
     for i in range v.Names.Len() {
+        pid := c.localNamed(v.Names[i])
+        if pid < 0 {
+            c.gap(v.NameSps[i], "a pun naming no parameter (C4)")
+            continue
+        }
         nsp := v.NameSps[i]
-        if v.Field {
-            # C2a: a field named like a parameter is a pun, written bare
-            pid := c.localNamed(v.Names[i])
-            if pid >= 0 and c.cur().Locals[pid].Kind == typed.LocalKind.Param {
-                rec := c.err(nsp, msgs.FieldHasParamName(c.tok(v.Names[i])))
-                c.P.L.Diags.Note(rec, c.at(c.cur().Locals[pid].Sp), msgs.NoteDeclaredHere(c.tok(v.Names[i])))
-            }
-        }
-        t := declared
-        x typed.Expr?& = null
-        landed := false
-        pend := unsetCand(-1, -1, -1, false, -1, nsp, types.UnknownT, false)
-        # T7d: a field's storage is its type's (C2e: held in the instance where its declaration gives it a length); a
-        # local's fixed where its initializer's length is known and nothing assigns it as a whole afterwards
-        keep := not c.fr().stored.Has(v.Names[i])
-        want := declared
-        if v.Field {
-            keep = true
-            ft := c.fieldTypeAt(c.cur().Fields.Len())
-            if c.P.T.KindOf(ft) == types.Kind.Array and c.P.T.Length(ft) != types.TypeId(0) {
-                want = ft
-                t = ft
-            }
-        } else if keep and v.Ty is not null and not v.Infer and i < v.Values.Len() {
-            want = c.P.StorageOf(c.fr().Ctx, declared, v.Values[i])
-            t = want
-        }
-        if keep and i < v.Values.Len() and not v.Field and v.Ty is not null and not v.Infer and c.P.T.KindOf(want) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(want)) {
-            # T7d: an array of arrays held by value takes its elements' length from its value - typed alone first
-            x = c.expr(v.Values[i], types.UnknownT)
-            if c.P.LengthsOnly(typeOf(x), want) and c.P.T.KindOf(typeOf(x)) == types.Kind.Array { t = typeOf(x) } else { x = c.fit(x!, want, v.Values[i].Span()) }
-        } else if i < v.Values.Len() {
-            wasNull := c.nullDecl
-            if v.Ty is not null and not v.Infer { c.nullDecl = c.typeWrittenAt(v.Ty!) }
-            # D14d: Array<T>(n) whose every element the counted loop after it writes before any read - no clear
-            filled := not v.Field and v.Names.Len() == 1 and c.filledNext(v.Names[i], v.Values[i])
-            c.noClear = filled
-            x = c.exprTo(v.Values[i], want)
-            c.noClear = false
-            c.nullDecl = wasNull
-            if v.Ty is null or v.Infer {
-                t = c.inferred(v.Values[i], x!, keep)
-                # C2d, O16: a ":=" field given a call's value with destructors to run is the instance's slot - the
-                # value lands in it as it is, held by the instance, never a reference to storage the call's landing made;
-                # a ":=" local so given is a holder of its block (O15), ended in its order (QCZ) as it is left
-                hv := heldValue(x!)
-                if hv is not null and c.P.T.NeedsDrop(typeOf(hv)) {
-                    x = hv
-                    t = typeOf(hv)
-                    landed = not v.Field
-                }
-                if v.Field and v.Ty is not null {
-                    # C3: a ":=" field's "mut" says what its inferred reference permits
-                    msp := c.mutBefore(v.Ty!, t)
-                    if msp.Start >= 0 { c.err(msp, msgs.MutOnValueField(c.ty(t))) }
-                }
-                if c.P.T.KindOf(c.deref(t)) == types.Kind.Array and not c.P.T.Same(t, typeOf(x)) { x = c.fit(x!, t, v.Values[i].Span()) }
-            }
-        } else {
-            # D13c, D13d: its zero value, held back - said only if a path reads it before assigning it (settleUnset)
-            wasNull := c.nullDecl
-            c.nullDecl = c.typeWrittenAt(v.Ty!)
-            dg := c.P.L.Diags
-            g := dg.Hold()
-            zmark := dg.Count()
-            x = c.zero(nsp, t)
-            dg.EndHold()
-            noZero := dg.Count() > zmark
-            if noZero { x = c.lit(nsp, t, 0) }   # never lowered: an error is said unless every path assigns first
-            c.nullDecl = wasNull
-            ask := c.ValueAsks.Len()
-            c.askValue(ValueKind.Zero, nsp, t, null)
-            if c.ValueAsks.Len() == ask { ask = -1 }
-            pend = unsetCand(c.fr().Body, -1, g, noZero, ask, nsp, t, v.Field)
-        }
-        if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(nsp, typed.Lvalue.Deref(nsp, t, x!)) }
-        # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
-        # a writable value
-        inferred := i < v.Values.Len() and (v.Ty is null or v.Infer)
-        moved := false
-        # T13b: a unique value existing elsewhere - a reference to it, where nothing written says what holds it; a slot
-        # laid out for the value (a written type, a constructor's field) takes only a fresh one
-        if i < v.Values.Len() and not c.isRef(t) and c.uniqueExisting(x!) {
-            if inferred and not v.Field {
-                x = c.uniqueRef(x!, v.Values[i].Span())
-                t = typeOf(x)
-            } else {
-                moved = c.uniqueMoved(x!)
-                x = c.uniqueLand(x!, "'" $c.text(v.Names[i]) "'")
-            }
-        }
-        # T13d: a generational value is held by reference - ":=" names a new instance
-        if i < v.Values.Len() and inferred and not v.Field and not c.isRef(t) and c.P.Generational(t) {
-            x = c.genRef(x!, v.Values[i].Span())
-            t = typeOf(x)
-        }
-        if v.Field and i < v.Values.Len() and v.Ty is not null and v.Ty!.IsWeak() {
-            rt := c.newInstance(v.Values[i])   # T2d: a weak field given a new instance
-            if rt != types.UnknownT: c.err(v.Values[i].Span(), msgs.WeakFresh(c.ty(rt)))
-        }
-        if inferred and c.isRef(t) and (c.P.T.PermOf(t) & types.Writable) != 0 and c.P.T.KindOf(c.deref(t)) != types.Kind.Func and c.roRef(x) {
-            t = c.P.T.Ref(c.P.T.Referent(t), c.P.T.PermOf(t) & ~types.Writable)   # (a "?&" stays one)
-        }
-        if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
-        id := c.local(v.Names[i], nsp, t, kind, mark)
-        if landed { c.cur().Locals[id].Landed = true }
-        # D14d: a fixed array so filled is not written before the loop (its value is never seen)
-        if i < v.Values.Len() and not v.Field and v.Names.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(t)) == types.Kind.Array and
-           c.P.T.Length(c.P.T.Repr(t)) != types.TypeId(0) and c.noClearMade(x) { c.cur().Locals[id].Unset = true }
-        if pend.Group >= 0 { c.unsets.Push(unsetCand(pend.Body, id, pend.Group, pend.NoZero, pend.ValueAt, pend.Sp, pend.Ty, pend.Field)) }
-        if v.Ty is not null and not v.Infer { c.fr().typeAt.Put(id, c.typeWrittenAt(v.Ty!)) }
-        if inferred { c.roLet(id, x!) }
-        # T6a: a number its literal's own type declares, for the note where it does not flow (B11)
-        if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
-        # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
-        if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
-        # (QCE: a value whose parts own storage, given existing storage, is its own copy)
-        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) and not moved { x = c.ownCopy(x!) }
-        c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x!))
-        if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
-        c.dropOnExit(id, nsp, not pend.NoZero or pend.Group < 0)   # O15: held until its block is left
+        # T7a: a parameter a type variable bound to a run-time array (G18) - held by reference in an instance
+        id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
+        c.roNeed(typed.Lvalue.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
+        # (O15: the parameter's destructors handed on into the instance with its value - the field and the
+        # parameter are one name in the body, C4; a unique one moved, T13b, as every hand-on of it is)
+        pt := c.localType(pid)
+        x := c.handOn(c.readLocal(nsp, pid), pid, not c.isRef(pt) and pt != types.UnknownT and c.P.Unique(pt) and c.movesHere())
+        c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
+        c.cur().Fields.Push(typed.LocalId(I32(id)))
+        c.dropOnExit(id, nsp, true)
     }
+}
+
+# varDecl's name i: its local, typed by what is written or what it is given, and its value
+fn (c mut Checker&) declName(v ast.VarDecl&, i I64, declared types.TypeId, mark typed.Mark, kind typed.LocalKind) {
+    nsp := v.NameSps[i]
+    if v.Field { c.fieldNotParam(v.Names[i], nsp) }
+    t := declared
+    x typed.Expr?& = null
+    landed := false
+    pend := unsetCand(-1, -1, -1, false, -1, nsp, types.UnknownT, false)
+    # T7d: a field's storage is its type's (C2e: held in the instance where its declaration gives it a length); a
+    # local's fixed where its initializer's length is known and nothing assigns it as a whole afterwards
+    keep := not c.fr().stored.Has(v.Names[i])
+    want := declared
+    if v.Field {
+        keep = true
+        ft := c.fieldTypeAt(c.cur().Fields.Len())
+        if c.P.T.KindOf(ft) == types.Kind.Array and c.P.T.Length(ft) != types.TypeId(0) {
+            want = ft
+            t = ft
+        }
+    } else if keep and v.Ty is not null and not v.Infer and i < v.Values.Len() {
+        want = c.P.StorageOf(c.fr().Ctx, declared, v.Values[i])
+        t = want
+    }
+    if keep and i < v.Values.Len() and not v.Field and v.Ty is not null and not v.Infer and c.P.T.KindOf(want) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(want)) {
+        # T7d: an array of arrays held by value takes its elements' length from its value - typed alone first
+        x = c.expr(v.Values[i], types.UnknownT)
+        if c.P.LengthsOnly(typeOf(x), want) and c.P.T.KindOf(typeOf(x)) == types.Kind.Array { t = typeOf(x) } else { x = c.fit(x!, want, v.Values[i].Span()) }
+    } else if i < v.Values.Len() {
+        wasNull := c.nullDecl
+        if v.Ty is not null and not v.Infer { c.nullDecl = c.typeWrittenAt(v.Ty!) }
+        # D14d: Array<T>(n) whose every element the counted loop after it writes before any read - no clear
+        filled := not v.Field and v.Names.Len() == 1 and c.filledNext(v.Names[i], v.Values[i])
+        c.noClear = filled
+        x = c.exprTo(v.Values[i], want)
+        c.noClear = false
+        c.nullDecl = wasNull
+        if v.Ty is null or v.Infer {
+            t = c.inferred(v.Values[i], x!, keep)
+            # C2d, O16: a ":=" field given a call's value with destructors to run is the instance's slot - the
+            # value lands in it as it is, held by the instance, never a reference to storage the call's landing made;
+            # a ":=" local so given is a holder of its block (O15), ended in its order (QCZ) as it is left
+            hv := heldValue(x!)
+            if hv is not null and c.P.T.NeedsDrop(typeOf(hv)) {
+                x = hv
+                t = typeOf(hv)
+                landed = not v.Field
+            }
+            if v.Field and v.Ty is not null {
+                # C3: a ":=" field's "mut" says what its inferred reference permits
+                msp := c.mutBefore(v.Ty!, t)
+                if msp.Start >= 0 { c.err(msp, msgs.MutOnValueField(c.ty(t))) }
+            }
+            if c.P.T.KindOf(c.deref(t)) == types.Kind.Array and not c.P.T.Same(t, typeOf(x)) { x = c.fit(x!, t, v.Values[i].Span()) }
+        }
+    } else {
+        x, pend = c.zeroDecl(v, nsp, t)
+    }
+    if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(nsp, typed.Lvalue.Deref(nsp, t, x!)) }
+    # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
+    # a writable value
+    inferred := i < v.Values.Len() and (v.Ty is null or v.Infer)
+    moved := false
+    # T13b: a unique value existing elsewhere - a reference to it, where nothing written says what holds it; a slot
+    # laid out for the value (a written type, a constructor's field) takes only a fresh one
+    if i < v.Values.Len() and not c.isRef(t) and c.uniqueExisting(x!) {
+        if inferred and not v.Field {
+            x = c.uniqueRef(x!, v.Values[i].Span())
+            t = typeOf(x)
+        } else {
+            moved = c.uniqueMoved(x!)
+            x = c.uniqueLand(x!, "'" $c.text(v.Names[i]) "'")
+        }
+    }
+    # T13d: a generational value is held by reference - ":=" names a new instance
+    if i < v.Values.Len() and inferred and not v.Field and not c.isRef(t) and c.P.Generational(t) {
+        x = c.genRef(x!, v.Values[i].Span())
+        t = typeOf(x)
+    }
+    if v.Field and i < v.Values.Len() and v.Ty is not null and v.Ty!.IsWeak() {
+        rt := c.newInstance(v.Values[i])   # T2d: a weak field given a new instance
+        if rt != types.UnknownT: c.err(v.Values[i].Span(), msgs.WeakFresh(c.ty(rt)))
+    }
+    if inferred and c.isRef(t) and (c.P.T.PermOf(t) & types.Writable) != 0 and c.P.T.KindOf(c.deref(t)) != types.Kind.Func and c.roRef(x) {
+        t = c.P.T.Ref(c.P.T.Referent(t), c.P.T.PermOf(t) & ~types.Writable)   # (a "?&" stays one)
+    }
+    if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
+    id := c.local(v.Names[i], nsp, t, kind, mark)
+    if landed { c.cur().Locals[id].Landed = true }
+    # D14d: a fixed array so filled is not written before the loop (its value is never seen)
+    if i < v.Values.Len() and not v.Field and v.Names.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(t)) == types.Kind.Array and
+       c.P.T.Length(c.P.T.Repr(t)) != types.TypeId(0) and c.noClearMade(x) { c.cur().Locals[id].Unset = true }
+    if pend.Group >= 0 { c.unsets.Push(unsetCand(pend.Body, id, pend.Group, pend.NoZero, pend.ValueAt, pend.Sp, pend.Ty, pend.Field)) }
+    if v.Ty is not null and not v.Infer { c.fr().typeAt.Put(id, c.typeWrittenAt(v.Ty!)) }
+    if inferred { c.roLet(id, x!) }
+    # T6a: a number its literal's own type declares, for the note where it does not flow (B11)
+    if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
+    # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
+    if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
+    # (QCE: a value whose parts own storage, given existing storage, is its own copy)
+    if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) and not moved { x = c.ownCopy(x!) }
+    c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x!))
+    if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
+    c.dropOnExit(id, nsp, not pend.NoZero or pend.Group < 0)   # O15: held until its block is left
+}
+
+# C2a: a field named like a parameter is a pun, written bare
+fn (c mut Checker&) fieldNotParam(name source.NameId, nsp source.Span) {
+    pid := c.localNamed(name)
+    if pid < 0 or c.cur().Locals[pid].Kind != typed.LocalKind.Param { return }
+    rec := c.err(nsp, msgs.FieldHasParamName(c.tok(name)))
+    c.P.L.Diags.Note(rec, c.at(c.cur().Locals[pid].Sp), msgs.NoteDeclaredHere(c.tok(name)))
+}
+
+# declName's local declared with no value: its zero value, held back - said only if a path reads it before assigning
+# it (D13c, D13d, settleUnset) - and what settleUnset is to judge
+fn (c mut Checker&) zeroDecl(v ast.VarDecl&, nsp source.Span, t types.TypeId) typed.Expr&, unsetCand {
+    wasNull := c.nullDecl
+    c.nullDecl = c.typeWrittenAt(v.Ty!)
+    dg := c.P.L.Diags
+    g := dg.Hold()
+    zmark := dg.Count()
+    x := c.zero(nsp, t)
+    dg.EndHold()
+    noZero := dg.Count() > zmark
+    if noZero { x = c.lit(nsp, t, 0) }   # never lowered: an error is said unless every path assigns first
+    c.nullDecl = wasNull
+    ask := c.ValueAsks.Len()
+    c.askValue(ValueKind.Zero, nsp, t, null)
+    if c.ValueAsks.Len() == ask { ask = -1 }
+    return x, unsetCand(c.fr().Body, -1, g, noZero, ask, nsp, t, v.Field)
 }
 
 # x[i] = v on a declared type: x.SetAt(i, v) (E31); false where x is an array, or the target no index

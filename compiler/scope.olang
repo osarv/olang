@@ -9980,70 +9980,9 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.placeOperands(p)
             return Val.existing(s.storOf(p))
         }
-        case typed.Expr.Promote(_, _, pr) {
-            box := s.anyBox
-            s.anyBox = false
-            # the inference: a temporary a local is declared as, whose value is too short-lived for where it is built,
-            # proposes a longer claim for that local (2.4)
-            owner := s.promoteLocal
-            s.promoteLocal = -1
-            # S21: an instance with a destructor made in a block a become closes is made in the tail scope instead
-            if isBlockTerm(d) and s.resultVar >= 0 and s.mayHoldDtor(pr.X.Type()) and s.tailCloses(d) {
-                d = Term.Var(s.resultVar)
-                s.tailDtorRow(pr.X.Span())
-            }
-            # (the inference's landing for it, where a held temporary is kept longer than its first use - R2)
-            psl := s.siteLift(I64(pr.Site))
-            if psl.Runs() { d = s.joinTerm(d, psl) if d.Runs() else psl }
-            s.buildSite(pr.Site, d, pr.X.Span())
-            s.anyItems = box and anyArrayBox(pr.X)
-            # (an enum case a reference local is declared with: its payload judged as the local's - R1, T17c)
-            if s.madeCase(pr.X) { s.caseLocal = whole }
-            pv := s.val(pr.X, d)
-            s.anyItems = false
-            # a conversion of an array's storage to a type declared over it names that storage (T29a, E12c): it is no
-            # temporary, and lives where the storage does - but an "any"'s box is a copy of it (T32a)
-            cp := s.convertedPlace(pr.X) if not box else null
-            if cp is not null {
-                t := s.peekPlace(cp, false)
-                if t != Term.None { return Val.existing(t) }
-            }
-            # a copy of existing storage holding references - an array copied into an "any" (T32a) - is new storage built
-            # in d, its references still naming what they did: what they refer to outlives d, as an array literal's
-            # elements do (O25c)
-            if pv.K == ValKind.Existing and s.holds(pr.X.Type()) {
-                s.fitTarget = owner
-                s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy if box else FitValue)
-                s.fitTarget = -1
-            }
-            return Val.fresh(d)
-        }
+        case typed.Expr.Promote(_, _, pr) { return s.valPromote(pr, d, whole) }
         case typed.Expr.Call(sp, ty, c) { return s.call(sp, ty, c, dest) }
-        case typed.Expr.Make(_, ty, m) {
-            # (C2) an enum case a local is declared as: its payload lives where it does (T17c), so a payload exactly
-            # where a longer scope's references are proposes that local's claim there (the inference, 2.4)
-            if m.Kind != typed.MakeKind.Case { whole = -1 }
-            if m.Kind == typed.MakeKind.Copy { return s.ownCopy(m, ty, d) }
-            kind := FitAnyCopy if s.anyItems else s.itemKind(m.Kind)
-            s.anyItems = false
-            if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
-            s.val(m.Length, Term.None)
-            # an item built in d too (O6), existing storage judged as a slot of it (O25c, T17c) - a payload's once
-            # its items agree on one scope (T17c)
-            vs := Array<Val>(m.Items.Len())
-            for k in range m.Items.Len() { vs[k] = s.val(m.Items[k], d) }
-            agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
-            for k in range m.Items.Len() {
-                # an "any"'s copy of an array holding no reference keeps nothing of where it was (T32a)
-                copied := kind == FitAnyCopy and not s.holds(m.Items[k].Type())
-                if not agreed or vs[k].K != ValKind.Existing or copied: continue
-                s.fitTarget, s.fitStor, s.fitPart = whole, wholeStor, wholePart
-                s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind)
-                s.fitTarget, s.fitStor, s.fitPart = -1, false, false
-            }
-            if not s.holds(ty) and m.Site < typed.SiteId(0) { return Val.plain() }
-            return Val.fresh(d)
-        }
+        case typed.Expr.Make(_, ty, m) { return s.valMake(m, ty, d, whole, wholeStor, wholePart) }
         case typed.Expr.Collect(_, _, c) {
             s.build(c.Site, d)
             s.val(c.Reserve, Term.None)
@@ -10052,39 +9991,8 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             try s.collectAt.Pop() catch { }
             return Val.fresh(d)
         }
-        case typed.Expr.Prim(_, ty, op, _, args) {
-            # T22b: a function value held as a function type promising otherwise than its own
-            if op == typed.PrimOp.Convert and args.Len() == 1 and s.isFunc(ty) and s.isFunc(args[0].Type()) and
-               s.P.T.PromisesOf(ty) != s.P.T.PromisesOf(args[0].Type()) {
-                return s.funcHeld(ty, args[0], dest)
-            }
-            # a conversion names its argument's storage (T29a): an array value's too
-            if typed.PassesRefs(op) and args.Len() > 0 and (s.holds(ty) or s.arenaValue(ty)) {
-                s.anyBox = op == typed.PrimOp.AnyMake
-                v := s.val(args[0], dest)
-                s.anyBox = false
-                return v
-            }
-            if op == typed.PrimOp.Drop and args.Len() == 1 and not s.inSpawn {
-                s.dropDerived(args[0])
-                s.dropHome(args[0])
-            }
-            for a in args { s.val(a, Term.None) }
-            return Val.plain()
-        }
-        case typed.Expr.Slice(sp, ty, sl) {
-            # a slice of a call's built result put elsewhere has its call land there (O18a)
-            pk := s.partLand(sl.Base, ty, dest)
-            s.placeOperands(sl.Base)
-            # a slice or a view of a value whose references live elsewhere than its storage would take them to live
-            # where that is (O17a)
-            if s.splitPlace(sl.Base) and not s.liftSplitPlace(sl.Base) and s.report { s.err(s.sliceAt(sp, sl), msgs.SliceSplitValue()) }
-            s.val(sl.Lo, Term.None)
-            s.val(sl.Hi, Term.None)
-            st := s.sliceTerm(sl.Base)
-            if pk >= 0 { s.partDest.Remove(pk) }
-            return Val.existing(st)
-        }
+        case typed.Expr.Prim(_, ty, op, _, args) { return s.valPrim(ty, op, args, dest) }
+        case typed.Expr.Slice(sp, ty, sl) { return s.valSlice(sp, ty, sl, dest) }
         case typed.Expr.Cond(_, _, c) {
             s.val(c.C, Term.None)
             xs Vec<typed.Expr&>
@@ -10103,40 +10011,150 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             return s.val(q.X, dest)
         }
         case typed.Expr.Match(_, _, m) { return s.match(m, dest) }
-        case typed.Expr.Try(_, _, t) {
-            v := s.val(t.X, dest)
-            # a default is built where the value it stands for lives (R9a, R11)
-            dd := v.T if (v.K == ValKind.Existing or v.K == ValKind.Fresh) and v.T.Runs() else dest
-            cv := v
-            for c in t.Clauses {
-                # R11b, T19b: the error a clause names lives in the block it is declared in - what its payload holds
-                # is built there, for its block and its defaults alike
-                if c.Caught >= 0 and s.terms[c.Caught] == Term.None { s.terms[c.Caught] = s.blockTerm(s.B!.Locals[c.Caught].In) }
-                s.block(c.Code)
-                for df in c.Defaults {
-                    dv := s.val(df, dd)
-                    # (the inference's one result form: an existing default of another run-time scope makes the try one of
-                    # two scopes, judged per member as a conditional's values are, E28 - never built into, never exact)
-                    infer := dv.K == ValKind.Existing and dv.T.Runs()
-                    if s.report and s.isRef(x.Type()) and not infer and not s.defaultFits(cv, dv, s.storeThrough(x.Type())) { s.err(s.opTok(df), msgs.DefaultScope()) }
-                    v = s.join(v, dv, d)
-                }
-            }
-            return v
-        }
+        case typed.Expr.Try(_, _, t) { return s.valTry(x, t, dest, d) }
         case typed.Expr.Fn(sp, _, f) { return s.fnVal(f, d, sp) }
-        case typed.Expr.Text(_, _, t) {
-            s.build(t.Site, d)
-            for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { s.val(r, Term.None) }
-                    case _ { }
-                }
-            }
-            return Val.fresh(d)
-        }
+        case typed.Expr.Text(_, _, t) { return s.valText(t, d) }
         case typed.Expr.Away(_, _, y) { return s.val(y, dest) }
     }
+}
+
+# val's temporary given storage (E12c): built where it lands, d - or where a conversion names, or the inference lifts it
+fn (s mut Scoper&) valPromote(pr typed.Promote&, d Term, whole I64) Val {
+    box := s.anyBox
+    s.anyBox = false
+    # the inference: a temporary a local is declared as, whose value is too short-lived for where it is built,
+    # proposes a longer claim for that local (2.4)
+    owner := s.promoteLocal
+    s.promoteLocal = -1
+    # S21: an instance with a destructor made in a block a become closes is made in the tail scope instead
+    if isBlockTerm(d) and s.resultVar >= 0 and s.mayHoldDtor(pr.X.Type()) and s.tailCloses(d) {
+        d = Term.Var(s.resultVar)
+        s.tailDtorRow(pr.X.Span())
+    }
+    # (the inference's landing for it, where a held temporary is kept longer than its first use - R2)
+    psl := s.siteLift(I64(pr.Site))
+    if psl.Runs() { d = s.joinTerm(d, psl) if d.Runs() else psl }
+    s.buildSite(pr.Site, d, pr.X.Span())
+    s.anyItems = box and anyArrayBox(pr.X)
+    # (an enum case a reference local is declared with: its payload judged as the local's - R1, T17c)
+    if s.madeCase(pr.X) { s.caseLocal = whole }
+    pv := s.val(pr.X, d)
+    s.anyItems = false
+    # a conversion of an array's storage to a type declared over it names that storage (T29a, E12c): it is no
+    # temporary, and lives where the storage does - but an "any"'s box is a copy of it (T32a)
+    cp := s.convertedPlace(pr.X) if not box else null
+    if cp is not null {
+        t := s.peekPlace(cp, false)
+        if t != Term.None { return Val.existing(t) }
+    }
+    # a copy of existing storage holding references - an array copied into an "any" (T32a) - is new storage built
+    # in d, its references still naming what they did: what they refer to outlives d, as an array literal's
+    # elements do (O25c)
+    if pv.K == ValKind.Existing and s.holds(pr.X.Type()) {
+        s.fitTarget = owner
+        s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy if box else FitValue)
+        s.fitTarget = -1
+    }
+    return Val.fresh(d)
+}
+
+# val's tuple, enum case or array made: built in d, its items too (O6), existing storage judged as a slot of it
+fn (s mut Scoper&) valMake(m typed.Make&, ty types.TypeId, d Term, whole I64, wholeStor Bool, wholePart Bool) Val {
+    # (C2) an enum case a local is declared as: its payload lives where it does (T17c), so a payload exactly
+    # where a longer scope's references are proposes that local's claim there (the inference, 2.4)
+    if m.Kind != typed.MakeKind.Case { whole = -1 }
+    if m.Kind == typed.MakeKind.Copy { return s.ownCopy(m, ty, d) }
+    kind := FitAnyCopy if s.anyItems else s.itemKind(m.Kind)
+    s.anyItems = false
+    if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
+    s.val(m.Length, Term.None)
+    # an item built in d too (O6), existing storage judged as a slot of it (O25c, T17c) - a payload's once
+    # its items agree on one scope (T17c)
+    vs := Array<Val>(m.Items.Len())
+    for k in range m.Items.Len() { vs[k] = s.val(m.Items[k], d) }
+    agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
+    for k in range m.Items.Len() {
+        # an "any"'s copy of an array holding no reference keeps nothing of where it was (T32a)
+        copied := kind == FitAnyCopy and not s.holds(m.Items[k].Type())
+        if not agreed or vs[k].K != ValKind.Existing or copied: continue
+        s.fitTarget, s.fitStor, s.fitPart = whole, wholeStor, wholePart
+        s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind)
+        s.fitTarget, s.fitStor, s.fitPart = -1, false, false
+    }
+    if not s.holds(ty) and m.Site < typed.SiteId(0) { return Val.plain() }
+    return Val.fresh(d)
+}
+
+# val's operation of the language's own: a conversion names its argument's storage, anything else is a plain value
+fn (s mut Scoper&) valPrim(ty types.TypeId, op typed.PrimOp, args Array<typed.Expr&>&, dest Term) Val {
+    # T22b: a function value held as a function type promising otherwise than its own
+    if op == typed.PrimOp.Convert and args.Len() == 1 and s.isFunc(ty) and s.isFunc(args[0].Type()) and
+       s.P.T.PromisesOf(ty) != s.P.T.PromisesOf(args[0].Type()) {
+        return s.funcHeld(ty, args[0], dest)
+    }
+    # a conversion names its argument's storage (T29a): an array value's too
+    if typed.PassesRefs(op) and args.Len() > 0 and (s.holds(ty) or s.arenaValue(ty)) {
+        s.anyBox = op == typed.PrimOp.AnyMake
+        v := s.val(args[0], dest)
+        s.anyBox = false
+        return v
+    }
+    if op == typed.PrimOp.Drop and args.Len() == 1 and not s.inSpawn {
+        s.dropDerived(args[0])
+        s.dropHome(args[0])
+    }
+    for a in args { s.val(a, Term.None) }
+    return Val.plain()
+}
+
+# val's slice: a borrow of its base's storage (E16a)
+fn (s mut Scoper&) valSlice(sp source.Span, ty types.TypeId, sl typed.Slice&, dest Term) Val {
+    # a slice of a call's built result put elsewhere has its call land there (O18a)
+    pk := s.partLand(sl.Base, ty, dest)
+    s.placeOperands(sl.Base)
+    # a slice or a view of a value whose references live elsewhere than its storage would take them to live
+    # where that is (O17a)
+    if s.splitPlace(sl.Base) and not s.liftSplitPlace(sl.Base) and s.report { s.err(s.sliceAt(sp, sl), msgs.SliceSplitValue()) }
+    s.val(sl.Lo, Term.None)
+    s.val(sl.Hi, Term.None)
+    st := s.sliceTerm(sl.Base)
+    if pk >= 0 { s.partDest.Remove(pk) }
+    return Val.existing(st)
+}
+
+# val's text joined (E11a): built in d, each rendering judged
+fn (s mut Scoper&) valText(t typed.Text&, d Term) Val {
+    s.build(t.Site, d)
+    for pc in t.Pieces {
+        match pc {
+            case typed.Piece.Render(r) { s.val(r, Term.None) }
+            case _ { }
+        }
+    }
+    return Val.fresh(d)
+}
+
+# val's try: its value, or its clauses' defaults, each built where the value it stands for lives (R9a, R11)
+fn (s mut Scoper&) valTry(x typed.Expr&, t typed.Try&, dest Term, d Term) Val {
+    v := s.val(t.X, dest)
+    # a default is built where the value it stands for lives (R9a, R11)
+    dd := v.T if (v.K == ValKind.Existing or v.K == ValKind.Fresh) and v.T.Runs() else dest
+    cv := v
+    for c in t.Clauses {
+        # R11b, T19b: the error a clause names lives in the block it is declared in - what its payload holds
+        # is built there, for its block and its defaults alike
+        if c.Caught >= 0 and s.terms[c.Caught] == Term.None { s.terms[c.Caught] = s.blockTerm(s.B!.Locals[c.Caught].In) }
+        s.block(c.Code)
+        for df in c.Defaults {
+            dv := s.val(df, dd)
+            # (the inference's one result form: an existing default of another run-time scope makes the try one of
+            # two scopes, judged per member as a conditional's values are, E28 - never built into, never exact)
+            infer := dv.K == ValKind.Existing and dv.T.Runs()
+            if s.report and s.isRef(x.Type()) and not infer and not s.defaultFits(cv, dv, s.storeThrough(x.Type())) { s.err(s.opTok(df), msgs.DefaultScope()) }
+            v = s.join(v, dv, d)
+        }
+    }
+    return v
 }
 
 # QCE: a value's own copy (typed.MakeKind.Copy) - new storage built in d, its parts that are
