@@ -906,7 +906,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   it again", then colour, Ctrl keys and a vi mode).** On a terminal the prompt edits each entry itself -
   compiler/lineedit.olang over termios, no readline or libedit, raw mode only while an entry is read: emacs's keys by
   default (every arrow also a Ctrl key), vi's by `:set vi` (remembered in `~/.config/olang/prompt`) or `OLANG_EDIT`;
-  the history walked whole per entry, searched, kept in `~/.local/state/olang/history` (1000 entries). Colour from the
+  a bracketed paste one entry, run when it ends complete; the history walked whole per entry, searched, kept in `~/.local/state/olang/history` (1000 entries). Colour from the
   compiler's own scanner (compiler/paint.olang), 16 ANSI colours, off for `NO_COLOR` and non-terminals. Mine: the
   editor lives in compiler/, not std (its one user is the prompt and it colours with the scanner); it is a state
   machine fed bytes, tested without a terminal, and a pty scenario (promptkeys) runs it whole.

@@ -36963,6 +36963,11 @@ and a vi mode as bash's `set -o vi`, chosen by `:set vi`/`:set emacs`, remembere
   Down on its last) goes to the history; a recalled entry has the cursor at its end (Up) or its first line's end
   (Down), so Up and Down keep walking. Ctrl-R is incremental; vi's `/` and `?` use the same search, Enter ending the
   search in normal mode rather than running the entry. `cw` on a word changes to the word's end, as vi's does.
+- **Pasting** (the user, testing: a pasted program printed ">>> >>> ... ... ..." after it, a prompt per line read).
+  The editor asks for bracketed paste (ESC [?2004h, off again as Read returns): the paste goes in whole, line ends
+  included, one undo step, drawn once at its end; the line ends it ends with are dropped, and the entry runs at once
+  where it is complete. Read as lines from a terminal (output not one), a prompt is written only when no line is
+  already read (`io.Lines.Buffered`) or waiting (`poll`), so a paste in cooked mode prints no run of prompts.
 - **The history file** is appended to as entries run (two sessions at once both keep theirs), one escaped line an
   entry, and written again with the last 1000 when it has grown past 2000.
 - **Colour** comes from scan.Tokens: a keyword is a token whose kind is not Iden spelled with a letter, a type name a

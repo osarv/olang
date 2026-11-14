@@ -8942,7 +8942,9 @@ FILE` (the file's text run as a cell), `:set vi` and `:set emacs` (the keys, bel
 Where the standard input and output are both a terminal, an entry is **edited** before it is run, the terminal in raw
 mode only while it is read: the entry is drawn again as it changes, coloured by its tokens, its characters UTF-8's.
 Enter runs it where it is complete and otherwise goes on over a new line, indented as the line it leaves (four more
-after an open bracket); Ctrl-C gives the entry up, Ctrl-D on an empty entry ends the session. The **history** is the
+after an open bracket); Ctrl-C gives the entry up, Ctrl-D on an empty entry ends the session. A paste (the terminal's bracketed paste,
+asked for while an entry is read) goes into the entry as typed text, its line ends the entry's own, drawn once; where
+the entry is complete when the paste ends it is run. The **history** is the
 entries run, a blank one or one the same as the entry before left out, the most recent 1000, kept in
 `$XDG_STATE_HOME/olang/history` (else `~/.local/state/olang/history`), one entry a line with `\` and line ends
 escaped. The keys are emacs's (bash's): Left, Right, Home, End and Delete, Ctrl-B, Ctrl-F, Ctrl-A, Ctrl-E, Alt-B and
@@ -8957,7 +8959,8 @@ toward older and newer entries, `n N` again, and a count before a command repeat
 choose, remembered as a line `edit vi` or `edit emacs` in `$XDG_CONFIG_HOME/olang/prompt` (else
 `~/.config/olang/prompt`); `OLANG_EDIT=vi` or `emacs` overrides it. Output to a terminal is coloured too - the kinds of
 diagnostics' rows and a shown value by its tokens - with the 16 standard ANSI colours, and nothing is coloured where
-`NO_COLOR` is set and not empty. Input that is not a terminal is read as lines, as before.
+`NO_COLOR` is set and not empty. Input that is not a terminal is read as lines, as before; where it is read as lines from a terminal, no prompt is
+written for a line already read or waiting to be (one pasted).
 
 **B23 (the notebook kernel).** `olang jupyter CONNECTION_FILE` is a kernel of Jupyter's messaging protocol (version
 5.3): it reads the connection file (JSON: `ip`, `key`, and `shell_port`, `control_port`, `stdin_port`, `iopub_port`,
