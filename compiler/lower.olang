@@ -2498,15 +2498,7 @@ fn (ln mut lowering&) reclaimSites() {
     m := lv.locals.Len()
     for bi in range nb {
         match ln.F.Blocks[bi].T {
-            case mir.Term.Call(_, c) {
-                cl := ln.F.Calls[I64(c)]
-                if cl.HasDest and cl.Dest.Path.N == I32(0) {
-                    match cl.Dest.B {
-                        case mir.Base.Local(l) { lv.results.Put(I64(l), true) }
-                        case _ { }
-                    }
-                }
-            }
+            case mir.Term.Call(_, c): ln.markResult(lv, I64(c))
             case _ { }
         }
     }
@@ -2530,6 +2522,16 @@ fn (ln mut lowering&) reclaimSites() {
     }
     for bi in range nb { ln.reclaimBlock(lv, bi) }
     ln.resultSites(lv)
+}
+
+# call c's destination, where it is a whole local, holds a result (liveness.results)
+fn (ln mut lowering&) markResult(lv mut liveness&, c I64) {
+    cl := ln.F.Calls[c]
+    if not cl.HasDest or cl.Dest.Path.N != I32(0): return
+    match cl.Dest.B {
+        case mir.Base.Local(l): lv.results.Put(I64(l), true)
+        case _ { }
+    }
 }
 
 # a call dropping a result that names a generational instance - a callee handing back what it let go of (genrefs 5.3's

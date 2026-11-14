@@ -4297,16 +4297,21 @@ fn (m Machine&) writesAfter(fi I64, module I64, name source.NameId) Bool {
     for j in range k + 1, stmts.Len() {
         match stmts[j] {
             case mir.Stmt.Assign(sp, p, _) {
-                if sp.Start != at { return false }
-                match p.B {
-                    case mir.Base.Global(mo, n, _) { if mo == module and n == name { return true } }
-                    case _ { }
-                }
+                if sp.Start != at: return false
+                if writesGlobal(p, module, name): return true
             }
             case _ { return false }
         }
     }
     return false
+}
+
+# whether place p is global name of module, whole or in part
+fn writesGlobal(p mir.Lvalue&, module I64, name source.NameId) Bool {
+    return match p.B {
+        case mir.Base.Global(mo, n, _): mo == module and n == name
+        case _: false
+    }
 }
 
 # K2c: whether frame fi is a global's initializer's own, or a constructor it calls directly - the one place a

@@ -7014,114 +7014,132 @@ fn litv.intLit(v I64) litv { return litv(true, false, false, v, 0.0) }
 fn litv.floatLit(f F64) litv { return litv(true, true, false, 0, f) }
 
 fn (c mut Checker&) fold(x ast.Expr?&) litv {
-    if x is null { return litv.noLit() }
+    if x is null: return litv.noLit()
     match x {
-        case ast.Expr.Lit(sp, kind) {
-            text := c.src(sp)
-            if kind == token.Tok.IntLit {
-                if text.Len() > 2 and text[0] == '0' and (text[1] == 'x' or text[1] == 'X' or text[1] == 'b' or text[1] == 'B') {
-                    # L10a: a pattern of at most 64 bits keeps both readings; a wider one is its unsigned value
-                    u := try text.ParseUint(0) catch { return litv.ofMag(false, try wideDigits(text) catch { return litv.noLit() }) }
-                    h := litv.intLit(I64(u))
-                    h.Hex = true
-                    return h
-                }
-                v := try text.ParseInt(0) catch {
-                    u := try text.ParseUint(0) catch { return litv.ofMag(false, try wideDigits(text) catch { return litv.noLit() }) }
-                    return litv(true, false, true, I64(u), 0.0)
-                }
-                return litv.intLit(v)
-            }
-            if kind == token.Tok.FloatLit {
-                clean := text.Replace("_", "")
-                f := try clean.ParseFloat() catch { return litv.noLit() }
-                return litv.floatLit(f)
-            }
-            return litv.noLit()
-        }
-        case ast.Expr.Paren(_, y) { return c.fold(y) }
-        case ast.Expr.Unary(_, op, y) {
-            v := c.fold(y)
-            if not v.Ok { return litv.noLit() }
-            if op == token.Tok.Minus {
-                if v.IsFloat { return litv.floatLit(-v.F) }
-                vMag := signMag.magOf(v)
-                n, m := vMag.Neg, vMag.M
-                return litv.ofMag(not n, m) if m != U128(0) else litv.intLit(0)
-            }
-            if op == token.Tok.Tilde and not v.IsFloat and not v.Big {
-                r := litv.intLit(~v.I)
-                r.Hex = v.Hex
-                return r
-            }
-            return litv.noLit()
-        }
-        case ast.Expr.Binary(_, op, a, b) {
-            va := c.foldPart(a)
-            vb := c.foldPart(b)
-            if not va.Ok or not vb.Ok { return litv.noLit() }
-            if va.IsFloat or vb.IsFloat {
-                if va.Big or vb.Big { return litv.noLit() }
-                fa := va.F if va.IsFloat else F64(va.I)
-                fb := vb.F if vb.IsFloat else F64(vb.I)
-                if op == token.Tok.Plus { return litv.floatLit(fa + fb) }
-                if op == token.Tok.Minus { return litv.floatLit(fa - fb) }
-                if op == token.Tok.Star { return litv.floatLit(fa * fb) }
-                if op == token.Tok.Slash { return litv.floatLit(fa / fb) }
-                return litv.noLit()
-            }
-            aMag := signMag.magOf(va)
-            na, ma := aMag.Neg, aMag.M
-            bMag := signMag.magOf(vb)
-            nb, mb := bMag.Neg, bMag.M
-            if op == token.Tok.Plus { return litv.addMag(na, ma, nb, mb) }
-            if op == token.Tok.Minus { return litv.addMag(na, ma, not nb, mb) }
-            if op == token.Tok.Star {
-                if ma != U128(0) and mb > ~U128(0) / ma { return litv.noLit() }
-                p := ma * mb
-                return litv.ofMag(na != nb and p != U128(0), p)
-            }
-            if op == token.Tok.Amp or op == token.Tok.Pipe or op == token.Tok.Caret {
-                if va.Wide or vb.Wide { return wideBits(op, va, vb) }
-                r := va.I & vb.I if op == token.Tok.Amp else va.I | vb.I if op == token.Tok.Pipe else va.I ^ vb.I
-                out := litv.intLit(r)
-                if (va.Big or vb.Big) and r < 0 { out = litv(true, false, true, r, 0.0) }
-                out.Hex = va.Hex or vb.Hex
-                return out
-            }
-            # E4a: a shift by an amount within 128 bits, exactly - a 64-bit pattern shifted left is its bits (L10a)
-            if (op == token.Tok.Shl or op == token.Tok.Shr) and not vb.Big and vb.I >= 0 and vb.I < 128 {
-                y := U128(vb.I)
-                if op == token.Tok.Shl {
-                    if na and va.Hex and not va.Wide { na, ma = false, U128(U64(va.I)) }
-                    if na { return litv.noLit() }
-                    m := ma << y
-                    if (m >> y) != ma { return litv.noLit() }
-                    return litv.ofMag(false, m)
-                }
-                if va.Wide or va.Big or vb.I >= 64 {
-                    # the floor of x over 2^y: a negative one rounds away from zero
-                    if not na { return litv.ofMag(false, ma >> y) }
-                    return litv.ofMag(true, ((ma - 1) >> y) + 1)
-                }
-                return litv.intLit(va.I >> vb.I)
-            }
-            if va.Wide or vb.Wide {
-                # E4a: a quotient or remainder past 64 bits, truncated toward zero as an integer type's is
-                if mb == U128(0) { return litv.noLit() }
-                if op == token.Tok.Slash { return litv.ofMag(na != nb, ma / mb) }
-                if op == token.Tok.Percent { return litv.ofMag(na, ma % mb) }
-                return litv.noLit()
-            }
-            if va.Big or vb.Big { return litv.noLit() }
-            x1 := va.I
-            y1 := vb.I
-            if op == token.Tok.Slash and y1 != 0 and not (x1 == I64(-9223372036854775807) - 1 and y1 == -1) { return litv.intLit(x1 / y1) }
-            if op == token.Tok.Percent and y1 != 0 and y1 != -1 { return litv.intLit(x1 % y1) }
-            return litv.noLit()
-        }
-        case _ { return litv.noLit() }
+        case ast.Expr.Lit(sp, kind): return litv.ofText(c.src(sp), kind)
+        case ast.Expr.Paren(_, y): return c.fold(y)
+        case ast.Expr.Unary(_, op, y): return foldUnary(op, c.fold(y))
+        case ast.Expr.Binary(_, op, a, b): return foldBinary(op, c.foldPart(a), c.foldPart(b))
+        case _: return litv.noLit()
     }
+}
+
+# a literal's value, of its text
+fn litv.ofText(text String&, kind token.Tok) litv {
+    if kind == token.Tok.FloatLit {
+        f := try text.Replace("_", "").ParseFloat() catch { return litv.noLit() }
+        return litv.floatLit(f)
+    }
+    if kind != token.Tok.IntLit: return litv.noLit()
+    if text.Len() > 2 and text[0] == '0' and (text[1] == 'x' or text[1] == 'X' or text[1] == 'b' or text[1] == 'B') {
+        # L10a: a pattern of at most 64 bits keeps both readings; a wider one is its unsigned value
+        u := try text.ParseUint(0) catch { return litv.wide(text) }
+        h := litv.intLit(I64(u))
+        h.Hex = true
+        return h
+    }
+    v := try text.ParseInt(0) catch {
+        u := try text.ParseUint(0) catch { return litv.wide(text) }
+        return litv(true, false, true, I64(u), 0.0)
+    }
+    return litv.intLit(v)
+}
+
+# an integer literal past 64 bits, by its digits
+fn litv.wide(text String&) litv {
+    m := try wideDigits(text) catch { return litv.noLit() }
+    return litv.ofMag(false, m)
+}
+
+fn foldUnary(op token.Tok, v litv) litv {
+    if not v.Ok: return litv.noLit()
+    if op == token.Tok.Minus {
+        if v.IsFloat: return litv.floatLit(-v.F)
+        vMag := signMag.magOf(v)
+        n, m := vMag.Neg, vMag.M
+        return litv.ofMag(not n, m) if m != U128(0) else litv.intLit(0)
+    }
+    if op == token.Tok.Tilde and not v.IsFloat and not v.Big {
+        r := litv.intLit(~v.I)
+        r.Hex = v.Hex
+        return r
+    }
+    return litv.noLit()
+}
+
+fn foldBinary(op token.Tok, va litv, vb litv) litv {
+    if not va.Ok or not vb.Ok: return litv.noLit()
+    if va.IsFloat or vb.IsFloat: return foldFloat(op, va, vb)
+    aMag := signMag.magOf(va)
+    na, ma := aMag.Neg, aMag.M
+    bMag := signMag.magOf(vb)
+    nb, mb := bMag.Neg, bMag.M
+    if op == token.Tok.Plus: return litv.addMag(na, ma, nb, mb)
+    if op == token.Tok.Minus: return litv.addMag(na, ma, not nb, mb)
+    if op == token.Tok.Star {
+        if ma != U128(0) and mb > ~U128(0) / ma: return litv.noLit()
+        p := ma * mb
+        return litv.ofMag(na != nb and p != U128(0), p)
+    }
+    if op == token.Tok.Amp or op == token.Tok.Pipe or op == token.Tok.Caret: return foldBits(op, va, vb)
+    # E4a: a shift by an amount within 128 bits, exactly - a 64-bit pattern shifted left is its bits (L10a)
+    if (op == token.Tok.Shl or op == token.Tok.Shr) and not vb.Big and vb.I >= 0 and vb.I < 128 {
+        return foldShift(op, va, vb, na, ma)
+    }
+    if va.Wide or vb.Wide {
+        # E4a: a quotient or remainder past 64 bits, truncated toward zero as an integer type's is
+        if mb == U128(0): return litv.noLit()
+        if op == token.Tok.Slash: return litv.ofMag(na != nb, ma / mb)
+        if op == token.Tok.Percent: return litv.ofMag(na, ma % mb)
+        return litv.noLit()
+    }
+    if va.Big or vb.Big: return litv.noLit()
+    x1 := va.I
+    y1 := vb.I
+    if op == token.Tok.Slash and y1 != 0 and not (x1 == I64(-9223372036854775807) - 1 and y1 == -1) { return litv.intLit(x1 / y1) }
+    if op == token.Tok.Percent and y1 != 0 and y1 != -1: return litv.intLit(x1 % y1)
+    return litv.noLit()
+}
+
+# a binary operator over literals where one is a float
+fn foldFloat(op token.Tok, va litv, vb litv) litv {
+    if va.Big or vb.Big: return litv.noLit()
+    fa := va.F if va.IsFloat else F64(va.I)
+    fb := vb.F if vb.IsFloat else F64(vb.I)
+    if op == token.Tok.Plus: return litv.floatLit(fa + fb)
+    if op == token.Tok.Minus: return litv.floatLit(fa - fb)
+    if op == token.Tok.Star: return litv.floatLit(fa * fb)
+    if op == token.Tok.Slash: return litv.floatLit(fa / fb)
+    return litv.noLit()
+}
+
+# & | ^ over integer literals
+fn foldBits(op token.Tok, va litv, vb litv) litv {
+    if va.Wide or vb.Wide: return wideBits(op, va, vb)
+    r := va.I & vb.I if op == token.Tok.Amp else va.I | vb.I if op == token.Tok.Pipe else va.I ^ vb.I
+    out := litv.intLit(r)
+    if (va.Big or vb.Big) and r < 0: out = litv(true, false, true, r, 0.0)
+    out.Hex = va.Hex or vb.Hex
+    return out
+}
+
+# a shift of an integer literal (sign na, magnitude ma) by vb, within 128 bits
+fn foldShift(op token.Tok, va litv, vb litv, na0 Bool, ma0 U128) litv {
+    na, ma := na0, ma0
+    y := U128(vb.I)
+    if op == token.Tok.Shl {
+        if na and va.Hex and not va.Wide: na, ma = false, U128(U64(va.I))
+        if na: return litv.noLit()
+        m := ma << y
+        if (m >> y) != ma: return litv.noLit()
+        return litv.ofMag(false, m)
+    }
+    if va.Wide or va.Big or vb.I >= 64 {
+        # the floor of x over 2^y: a negative one rounds away from zero
+        if not na: return litv.ofMag(false, ma >> y)
+        return litv.ofMag(true, ((ma - 1) >> y) + 1)
+    }
+    return litv.intLit(va.I >> vb.I)
 }
 
 # whether a literal-only expression's own type is U64 (T6a): a literal above I64's maximum in it, which the others meet

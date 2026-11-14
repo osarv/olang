@@ -1264,16 +1264,7 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
     match body.Of {
         case typed.BodyOf.Fn(inst) {
             name := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
-            match u {
-                case typed.Expr.Fn(sp, _, f) {
-                    if f == typed.FnVal.Named and I64(f.body) == b {
-                        at = s.fnNameAt(sp)
-                        text := try s.texts.Get(s.B!.File) catch default ""
-                        if I64(at.End) <= text.Len() { name = text[I64(at.Start):I64(at.End)] }
-                    }
-                }
-                case _ { }
-            }
+            at, name = s.namedAt(u, b, at, name)
             s.err(at, msgs.ValueBeyondType($"'" $name "'", does, pl, word) if word != "" else msgs.FuncValueObligations(name, pl))
         }
         case _ {
@@ -1288,6 +1279,20 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
             }
             s.err(at, msgs.LambdaValueObligations(kept, pl) if kept != "" else msgs.LambdaValueRelates(pl))
         }
+    }
+}
+
+# where value u writes body b's function by name, the name's span and its text as written there; else at and name
+fn (s mut Scoper&) namedAt(u typed.Expr&, b I64, at source.Span, name String&) source.Span, String& {
+    match u {
+        case typed.Expr.Fn(sp, _, f) {
+            if f != typed.FnVal.Named or I64(f.body) != b: return at, name
+            nat := s.fnNameAt(sp)
+            text := try s.texts.Get(s.B!.File) catch default ""
+            if I64(nat.End) <= text.Len(): return nat, text[I64(nat.Start):I64(nat.End)]
+            return nat, name
+        }
+        case _: return at, name
     }
 }
 
@@ -1412,7 +1417,7 @@ fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
         case typed.Expr.Try(_, _, t) {
             s.bndRecs(t.X, out)
             for c in t.Clauses {
-                for d in c.Defaults { s.bndRecs(d, out) }
+                for d in c.Defaults: s.bndRecs(d, out)
             }
         }
         case typed.Expr.Fn(_, _, f) {
@@ -1436,20 +1441,23 @@ fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
             ds := try s.bndDefs.Ref(l) catch default Vec<typed.Expr&>()
             for d in ds { s.bndRecs(d, out) }
         }
-        case typed.Expr.Call(_, _, c) {
-            match c.Target {
-                case typed.Callee.Body(id) {
-                    tw := s.plan.Twin(c.Site)
-                    for r in (s.Twins.Sums[tw] if tw >= 0 else s.sum(I64(id))).ResFn.Recs { out.Push(r) }
-                }
-                case typed.Callee.Value(v) {
-                    rs Vec<fnRec>
-                    s.bndRecs(v, rs)
-                    for r in rs {
-                        for g in s.sum(r.Body).ResFn.Recs { out.Push(g) }
-                    }
-                }
-                case _ { }
+        case typed.Expr.Call(_, _, c): s.bndCallRecs(c, out)
+        case _ { }
+    }
+}
+
+# bndRecs of a call: what its callee's returns give
+fn (s mut Scoper&) bndCallRecs(c typed.Call&, out mut Vec<fnRec>&) {
+    match c.Target {
+        case typed.Callee.Body(id) {
+            tw := s.plan.Twin(c.Site)
+            for r in (s.Twins.Sums[tw] if tw >= 0 else s.sum(I64(id))).ResFn.Recs: out.Push(r)
+        }
+        case typed.Callee.Value(v) {
+            rs Vec<fnRec>
+            s.bndRecs(v, rs)
+            for r in rs {
+                for g in s.sum(r.Body).ResFn.Recs: out.Push(g)
             }
         }
         case _ { }

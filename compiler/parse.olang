@@ -3990,29 +3990,34 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
     b := StringBuilder()
     for d in decls {
         if b.Len() > 0 { b.Push("; ") }
-        match d {
-            case ast.Decl.Fn(f) {
-                b.Push("fn " $names.Text(f.Name) ":")
-                if not f.Bodied {
-                    b.Push(" -")
-                } else {
-                    for s in f.Body { b.Push(" " $shapeStmt(s, names, src.Text)) }
-                }
-            }
-            case ast.Decl.Type(_, t) {
-                b.Push("type " $names.Text(t.Name))
-                match t.Body {
-                    case ast.TypeBody.Trait(ms, _, _) {
-                        for m in ms { b.Push(" " $("mut " if m.Recv is not null else "") $names.Text(m.Name)) }
-                    }
-                    case _ { }
-                }
-            }
-            case _ { b.Push("decl") }
-        }
+        b.Push(shapeDecl(d, names, src.Text))
     }
     for s in diags.AllSaid() { b.Push(" !" $s.Rule) }
     return b.ToString()
+}
+
+fn shapeDecl(d ast.Decl&, names source.Names&, text String&) String {
+    match d {
+        case ast.Decl.Fn(f) {
+            if not f.Bodied: return "fn " $names.Text(f.Name) ": -"
+            b := StringBuilder()
+            b.Push("fn " $names.Text(f.Name) ":")
+            for s in f.Body: b.Push(" " $shapeStmt(s, names, text))
+            return b.ToString()
+        }
+        case ast.Decl.Type(_, t) {
+            b := StringBuilder()
+            b.Push("type " $names.Text(t.Name))
+            match t.Body {
+                case ast.TypeBody.Trait(ms, _, _) {
+                    for m in ms: b.Push(" " $("mut " if m.Recv is not null else "") $names.Text(m.Name))
+                }
+                case _ { }
+            }
+            return b.ToString()
+        }
+        case _: return "decl"
+    }
 }
 
 fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
