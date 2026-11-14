@@ -3498,10 +3498,7 @@ fn (w mut walker&) fnValOf(sp source.Span, fv typed.FnVal&) Vec<I64> {
 fn (w mut walker&) textOf(tx typed.Text&) Vec<I64> {
     out Vec<I64>
     for pc in tx.Pieces {
-        match pc {
-            case typed.Piece.Render(r) { w.expr(r) }
-            case _ { }
-        }
+        if pc == typed.Piece.Render: w.expr(pc.x)
     }
     addTo(out, orig(ONew, I64(tx.Site)))
     return out
@@ -3775,10 +3772,7 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
 # mayRegister's text joined: whether a rendering may
 fn (f mut Free&) textMayRegister(tx typed.Text&) Bool {
     for pc in tx.Pieces {
-        match pc {
-            case typed.Piece.Render(r) { if f.mayRegister(r): return true }
-            case _ { }
-        }
+        if pc == typed.Piece.Render and f.mayRegister(pc.x): return true
     }
     return false
 }

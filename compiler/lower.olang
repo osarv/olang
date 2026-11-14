@@ -4434,10 +4434,7 @@ fn (ln mut lowering&) quietClauses(tr typed.Try&) Bool {
 
 fn (ln mut lowering&) quietPieces(tx typed.Text&) Bool {
     for pc in tx.Pieces {
-        match pc {
-            case typed.Piece.Render(x) { if not ln.quietX(x): return false }
-            case _ { }
-        }
+        if pc == typed.Piece.Render and not ln.quietX(pc.x): return false
     }
     return true
 }

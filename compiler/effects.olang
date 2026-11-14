@@ -1192,10 +1192,7 @@ fn (e mut Effects&) scanExpr(x typed.Expr?&) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(y) { e.scanExpr(y) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: e.scanExpr(pc.x)
             }
         }
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.scanPlace(p) }
@@ -1611,10 +1608,7 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
         case typed.Expr.Text(_, _, t) {
             e.cur.Allocates = true
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(y) { e.expr(y) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: e.expr(pc.x)
             }
         }
         case typed.Expr.Collect(_, _, cl) {

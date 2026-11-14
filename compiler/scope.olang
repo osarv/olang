@@ -1667,10 +1667,7 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { s.bndExpr(r, BndOther) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: s.bndExpr(pc.x, BndOther)
             }
         }
         case typed.Expr.Away(_, _, y) { s.bndExpr(y, place) }
@@ -4239,10 +4236,7 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { collectExpr(r, out) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: collectExpr(pc.x, out)
             }
         }
         case typed.Expr.Away(_, _, y) { collectExpr(y, out) }
@@ -5583,10 +5577,7 @@ fn (s mut Scoper&) flExpr(x typed.Expr?&) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { s.flExpr(r) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: s.flExpr(pc.x)
             }
         }
         case typed.Expr.Away(_, _, y) { s.flExpr(y) }
@@ -6506,10 +6497,7 @@ fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { s.kwExpr(r, true) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: s.kwExpr(pc.x, true)
             }
         }
         case typed.Expr.Away(_, _, y) { s.kwExpr(y, inert) }
@@ -10126,10 +10114,7 @@ fn (s mut Scoper&) valSlice(sp source.Span, ty types.TypeId, sl typed.Slice&, de
 fn (s mut Scoper&) valText(t typed.Text&, d Term) Val {
     s.build(t.Site, d)
     for pc in t.Pieces {
-        match pc {
-            case typed.Piece.Render(r) { s.val(r, Term.None) }
-            case _ { }
-        }
+        if pc == typed.Piece.Render: s.val(pc.x, Term.None)
     }
     return Val.fresh(d)
 }

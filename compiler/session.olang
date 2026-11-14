@@ -522,10 +522,7 @@ fn (f mut finder&) expr(x typed.Expr?&) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(rx) { f.expr(rx) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: f.expr(pc.x)
             }
         }
         case typed.Expr.Away(_, _, _) { }
@@ -1207,10 +1204,7 @@ fn (f mut typeFinder&) expr(x typed.Expr?&) {
         case typed.Expr.Try(_, _, t) { f.expr(t.X) }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(rx) { f.expr(rx) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: f.expr(pc.x)
             }
         }
         case _ { }

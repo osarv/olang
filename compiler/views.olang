@@ -1304,10 +1304,7 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { v.expr(r, st, scratch) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: v.expr(pc.x, st, scratch)
             }
         }
         case typed.Expr.Away(_, _, y) { v.expr(y, st, mine) }
@@ -1970,10 +1967,7 @@ fn callsExpr(x typed.Expr?&, out mut Vec<I64>&) {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                match pc {
-                    case typed.Piece.Render(r) { callsExpr(r, out) }
-                    case _ { }
-                }
+                if pc == typed.Piece.Render: callsExpr(pc.x, out)
             }
         }
         case typed.Expr.Away(_, _, y) { callsExpr(y, out) }

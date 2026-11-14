@@ -284,10 +284,7 @@ fn (w mut Walker&) expr1(x typed.Expr&, s State) State {
         case typed.Expr.Text(_, _, t) {
             cur := s
             for p in t.Pieces {
-                match p {
-                    case typed.Piece.Render(y) { cur = w.expr(y, cur) }
-                    case _ { }
-                }
+                if p == typed.Piece.Render: cur = w.expr(p.x, cur)
             }
             return cur
         }
@@ -499,10 +496,7 @@ fn (w mut heldWalker&) expr(x typed.Expr?&, a Bool) {
         }
         case typed.Expr.Text(_, _, t) {
             for p in t.Pieces {
-                match p {
-                    case typed.Piece.Render(y) { w.expr(y, a) }
-                    case typed.Piece.Lit(_) { }
-                }
+                if p == typed.Piece.Render: w.expr(p.x, a)
             }
         }
         case typed.Expr.Away(_, _, y) { w.expr(y, a) }
