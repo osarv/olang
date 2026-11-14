@@ -2386,7 +2386,7 @@ bae117cbb8d65a54 791ac87beeca8926 std/io.olang
 97b2c13c916781da 93bb4972fdcbf562 std/order.olang
 dfb51f12cdc44e13 8e3c30629556d964 std/os.olang
 17c08f79ab55afc4 3582f78520a746d0 std/pair.olang
-80fcd05ced0a737a d772c37e5ec7f13d std/plot.olang
+0a964c6025ee1709 19e8c4a6c63b70e2 std/plot.olang
 fe278ac34f6934dc d7b16cfbfec84733 std/pool.olang
 da51f409b1ec6aad e4bdf373a917a2e6 std/prelude/argument.olang
 d0e426f991622615 103af270287ef10f std/prelude/array.olang
