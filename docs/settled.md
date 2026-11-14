@@ -948,6 +948,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/heap`, `std/utf8`, `std/base64`, `std/hex`, `std/sha256`, `std/crc32`, `std/flags`, `std/regex` (RE2's syntax,
   linear time) - survey items 7-8, the user: "Yes all of that", 2026-10-24; names mine, by the user's naming rule.
   Prelude iterator adapters `Take Skip Enumerate Zip Chain Sum Min Max MinBy MaxBy`.
+- **Quick data science in std (the user's "ye, do the items the way you proposed", 2026-11-13; built 2026-11-14,
+  names mine).** `std/frame` is a data frame over the prelude's `ColumnVec<R>`, no type of its own: `Read<R>(csv)`,
+  `ReadJson<R>`, `Csv`, `Json`, `Head`, `Tail`, `Filter`, `SortBy`/`SortByDescending` (in place, stable, key called once
+  per row), `GroupBy(t, key, value)` giving a `ColumnVec<Group<K, V>>` (Key, Count, Sum, Mean, Min, Max; keys in order
+  of first appearance), an inner `Join` giving `Joined<L, R>`, `Describe` giving a `Summary` per number column (NaN
+  where a statistic has no value, never an error), `Table` as aligned text; callbacks' errors propagate. The prelude:
+  `a.Argsort()`, `a.Cumsum()`, `Array<T>.Linspace(lo, hi, n)`, `Array<T>.Range(start, stop, step)` (`[step != 0]`),
+  and `Columns`/`ColumnVec` display as HTML tables (B23). `stats.Bins(a, k)`; std/rand `Normal(mean, sd)`, `Normals`,
+  `Uniforms`, `Choice`, `Choices`, `Sample` (`rand.Error.Empty`/`TooFew`). Tensors stay oann's.
 - **`extern fn` and C interop (X1-X16; v2 the user's design 2026-10-24).** Across the boundary: Bool, numeric
   primitives, arrays of them, **extern types** (`extern type Db`, held as `Db&`/`Db?&`, X10), plain-data structs by
   reference and by value (X11). `link "name"` only on an extern block or a C import (X9). **Callbacks are `export

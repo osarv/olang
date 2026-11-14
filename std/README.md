@@ -11,7 +11,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `os.olang` | arguments, environment, files and directories, `Exec`/`Start` without a shell, `Exit` |
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
 | `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse`, `After`'s timers, and `Virtual(f)` - a virtual clock for tests |
-| `rand.olang` | seeded xoshiro256** generator |
+| `rand.olang` | seeded xoshiro256** generator; draws over arrays: `Normals`, `Uniforms`, `Choice`, `Choices`, `Sample`, `Shuffle` |
 | `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.List.Of(a)`, `list.List.FromIter(it)`, `list.Error`, `list.Iter` |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
 | `pool.olang` | `Pool<T>`, a slotmap: `h := p.Add(v)` gives a `Handle` (slot and generation), `try p.Get(h)`, `Ref`, `RefMut`, `Remove`, `Take` fail with `pool.Error.Stale` on a handle whose value was removed (its slot reused under a new generation); `for x in p`, `p.Handles()` |
@@ -19,7 +19,8 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `bitset.olang` | `BitSet<T>`, the cases of a payload-free enum (at most 64) in one `U64`: `in`, `\| & - ^`, a walk in case order, `Bits`/`Flags` for C flag words |
 | `order.olang` | `ByFields<T>`, a `less` function for a struct or enum made from its fields (`xs.Sort(order.ByFields<T>)`) |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
-| `stats.olang` | mean, variance, percentiles, histograms (sums, minima and maxima are the arrays' own, E39) |
+| `stats.olang` | mean, variance, percentiles, histograms (sums, minima and maxima are the arrays' own, E39); `Bins(a, k)` - k equal bins over the values, counts and edges |
+| `frame.olang` | data frames: tables of records as `ColumnVec<R>` (T7e) - `Read`/`ReadJson` (CSV, JSON), `Csv`/`Json`, `Head`, `Tail`, `Filter`, `SortBy`/`SortByDescending`, `GroupBy` (a `Group<K, V>` per key: count, sum, mean, min, max), `Join` (`Joined<L, R>`), `Describe` (a `Summary` per number column), `Table` (aligned text); a notebook shows a table as HTML |
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error`; `Saturating<T>`, an integer whose operators clamp at its limits instead of wrapping |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
@@ -36,6 +37,30 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `fuzz.olang` | fuzz targets: `fuzz.Check(fn(data Array<U8>&) { })`, run per input by `olang test -fuzz NAME FILE` (libFuzzer; `-fuzztime`, `-sanitize`), and on every saved input in `testdata/fuzz/SLUG/` by a plain `olang test` - which also takes words naming the tests to run (`olang test FILE Target`, B7a) (B19) |
 | `prop.olang` | property tests: `prop.Check(fn(xs Array<I64>&, p Point) { assert ... }, cases = 100)` - values made by reflection, cases in child processes, a failure shrunk, printed, saved and replayed; driven by the fuzzer's bytes under `-fuzz` (B19a) |
 | `ffi.olang` | a C function called by a name chosen at run time (for `-i`) |
+
+## Data: a table of records
+
+`std/frame` works on the prelude's `ColumnVec<R>` (T7e), a table held one column per field of a record, so a column is
+an array and lane operators apply to it; `std/stats` and the arrays' own methods do the numbers.
+
+```
+import "std/frame"
+import "std/os"
+
+type Trade struct(Sym String, Price F64, Qty I64) { Sym, Price, Qty }
+
+fn main() ? {
+    t := try frame.Read<Trade>(try os.ReadFile("trades.csv"))
+    Println((t.Price * 1.1).Sum())                                      # a whole column at once
+    bySym := frame.GroupBy(t, fn(r): return r.Sym, fn(r): return r.Qty)   # Key, Count, Sum, Mean, Min, Max
+    frame.SortByDescending(bySym, fn(g): return g.Sum)
+    Println(frame.Table(frame.Head(bySym, 3)))
+    Println(frame.Table(frame.Describe(t)))                             # count, mean, std, quartiles per number
+    Println(t.Sym[t.Price.Argsort()[0]])                                # and Cumsum, Array<F64>.Linspace, Array<F64>.Range
+}
+```
+
+In a notebook (`olang jupyter`) a table ending a cell is shown as an HTML table.
 
 ## Calling C: a header import, an extern block, or `std/ffi`
 
