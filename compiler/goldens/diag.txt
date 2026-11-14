@@ -145,9 +145,10 @@ attrmissing.olang:7:12: error[E15]: this call can fail - write 'try', and catch 
       |            ^~~~
 compilation failed with 1 error
 === attrnotbuilt.olang
-attrnotbuilt.olang:7:2: error[G39]: an attribute's value is built while compiling, and this one cannot be: an assertion in it fails, which aborts the program
+attrnotbuilt.olang:7:2: error[G39]: this attribute's value cannot be built while compiling
     7 | @Size(0)
       |  ^~~~~~~
+attrnotbuilt.olang:7:2: note: an assertion in it fails, which aborts the program
 compilation failed with 1 error
 === attrprelude.olang
 attrprelude.olang:3:16: error[G39]: an attribute is a value of a declared type, and this is Vec<I64>
@@ -180,9 +181,10 @@ attrrequire.olang:4:16: error[D17e]: this call breaks Tag's requirement 'v >= 0'
 attrrequire.olang:3:25: note: the condition
     3 | type Tag struct(v I64) [v >= 0] ? { v }
       |                         ^~~~~~
-attrrequire.olang:4:16: error[G39]: an attribute's value is built while compiling, and this one cannot be: an error reaches '!', which ends the program
+attrrequire.olang:4:16: error[G39]: this attribute's value cannot be built while compiling
     4 | type P struct(@Tag(-1) x I64) { x }
       |                ^~~~~~~
+attrrequire.olang:4:16: note: an error reaches '!', which ends the program
 compilation failed with 2 errors
 === attrtwice.olang
 attrtwice.olang:4:25: error[G39]: a declaration takes one attribute of each type, and this is its second Key
@@ -312,9 +314,10 @@ b7atargetunknown.olang:4:6: error[B7a]: a test target 'twise' is none of its fil
 b7atargetunknown.olang:4:6: note: a test names a function, a type or Type.Method of its file
 compilation failed with 1 error
 === b9aminover.olang
-b9aminover.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it divides the most negative value by -1, which overflows (b9aminover.olang:4)
+b9aminover.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling
     4 | if (-9223372036854775807 - 1) / -1 == 0 {
       |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+b9aminover.olang:4:4: note: it divides the most negative value by -1, which overflows (b9aminover.olang:4)
 compilation failed with 1 error
 === b9anomeet.olang
 b9anomeet.olang:5:6: error[T6b]: '>': these numbers' types do not meet - convert one, as I64(n)
@@ -322,9 +325,10 @@ b9anomeet.olang:5:6: error[T6b]: '>': these numbers' types do not meet - convert
       |      ^
 compilation failed with 1 error
 === badcond.olang
-badcond.olang:5:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads a mutable global, whose value is the running program's (badcond.olang:4)
+badcond.olang:5:4: error[B9c]: this top-level condition cannot be decided while compiling
     5 | if f() == 1 {
       |    ^~~~~~~~
+badcond.olang:5:4: note: it reads a mutable global, whose value is the running program's (badcond.olang:4)
 compilation failed with 1 error
 === badform.olang
 badform.olang:2:8: error[M23]: no .olang file at nothere.olang
@@ -342,9 +346,11 @@ baseintodeclared.olang:6:16: error[T6b]: I32 does not flow into Meters - convert
       |                ^
 compilation failed with 1 error
 === becomedefer.olang
-becomedefer.olang:7:5: error[S21]: 'become' leaves the function at once, so not from a block with deferred code registered, which would run before the call - write 'return' and the call
+becomedefer.olang:7:5: error[S21]: 'become' cannot be written here
     7 |     become f(n - 1)
       |     ^~~~~~
+becomedefer.olang:7:5: note: 'become' leaves the function at once, so not from a block with deferred code registered, which would run before the call
+becomedefer.olang:7:5: help: write 'return' and the call
 compilation failed with 1 error
 === becomeerrors.olang
 becomeerrors.olang:11:5: error[S21]: 'become' makes the callee's failure this function's own, and the sets differ
@@ -361,19 +367,25 @@ becomeheldparam.olang:9:12: note: 'become' ends this function before the call, a
 becomeheldparam.olang:9:12: help: hand it on, or write 'return' and the call
 compilation failed with 1 error
 === becomejoin.olang
-becomejoin.olang:7:9: error[S21]: 'become' leaves the function at once, so not from a join block, whose tasks it would leave behind - write 'return' and the call
+becomejoin.olang:7:9: error[S21]: 'become' cannot be written here
     7 |         become f(n - 1)
       |         ^~~~~~
+becomejoin.olang:7:9: note: 'become' leaves the function at once, so not from a join block, whose tasks it would leave behind
+becomejoin.olang:7:9: help: write 'return' and the call
 compilation failed with 1 error
 === becomelambda.olang
-becomelambda.olang:5:26: error[S21]: 'become' ends a function declared with fn, never a lambda or a generator's body - write 'return' and the call
+becomelambda.olang:5:26: error[S21]: 'become' cannot be written in a lambda or a generator's body
     5 |     g := fn(n I64) I64 { become f(n) }
       |                          ^~~~~~
+becomelambda.olang:5:26: note: 'become' ends a function declared with fn
+becomelambda.olang:5:26: help: write 'return' and the call
 compilation failed with 1 error
 === becomemain.olang
-becomemain.olang:4:13: error[S21]: 'become' ends a function declared with fn, never main - write 'return' and the call
+becomemain.olang:4:13: error[S21]: 'become' cannot be written in main
     4 | fn main() { become other() }
       |             ^~~~~~
+becomemain.olang:4:13: note: 'become' ends a function declared with fn
+becomemain.olang:4:13: help: write 'return' and the call
 compilation failed with 1 error
 === becomememory.olang
 becomememory.olang:11:38: error[S21]: 'become' cannot jump here: a parameter or the result is over 128 bytes
@@ -397,9 +409,11 @@ becomesig.olang:4:28: note: the callee is fn&(I64, I64) I64
 becomesig.olang:4:28: help: write 'return' and the call, or give them one signature
 compilation failed with 1 error
 === becometest.olang
-becometest.olang:4:12: error[S21]: 'become' ends a function declared with fn, never a test - write 'return' and the call
+becometest.olang:4:12: error[S21]: 'become' cannot be written in a test
     4 | test "t" { become f(1) }
       |            ^~~~~~
+becometest.olang:4:12: note: 'become' ends a function declared with fn
+becometest.olang:4:12: help: write 'return' and the call
 compilation failed with 1 error
 === becometry.olang
 becometry.olang:5:30: error[S21]: 'become' takes the call alone
@@ -672,9 +686,10 @@ comprref.olang:5:24: error[E27]: a comprehension's elements may not be or hold r
       |                        ^
 compilation failed with 1 error
 === comptimebudget.olang
-comptimebudget.olang:7:20: error[K3]: a comptime is computed while compiling, and this one cannot be: the computation runs longer than compile-time evaluation allows
+comptimebudget.olang:7:20: error[K3]: this comptime cannot be computed while compiling
     7 | fn main() { assert comptime fib(40) > 0 }
       |                    ^~~~~~~~~~~~~~~~~~~~
+comptimebudget.olang:7:20: note: the computation runs longer than compile-time evaluation allows
 compilation failed with 1 error
 === comptimeforelem.olang
 comptimeforelem.olang:6:23: error[K3a]: a comptime for's elements are integers, Bool or Char, found F64
@@ -683,9 +698,10 @@ comptimeforelem.olang:6:23: error[K3a]: a comptime for's elements are integers, 
 comptimeforelem.olang:6:23: help: walk its positions: 'comptime for i in range xs.Len()'
 compilation failed with 1 error
 === comptimeforfails.olang
-comptimeforfails.olang:9:23: error[K3a]: a comptime for's elements are computed while compiling, and these cannot be: an assertion in it fails, which aborts the program
+comptimeforfails.olang:9:23: error[K3a]: a comptime for's elements cannot be computed while compiling
     9 |     comptime for k in boom(2) { t += k }
       |                       ^~~~~~~
+comptimeforfails.olang:9:23: note: an assertion in it fails, which aborts the program
 compilation failed with 1 error
 === comptimeformany.olang
 comptimeformany.olang:5:5: error[K3a]: this comptime for unrolls into 5000 copies, at most 4096
@@ -712,9 +728,10 @@ comptimeforwhile.olang:5:18: error: expected 'for NAME in' after 'comptime', fou
       |                  ^
 compilation failed with 1 error
 === comptimeglobal.olang
-comptimeglobal.olang:5:10: error[K3]: a comptime is computed while compiling, and this one cannot be: it reads a mutable global, whose value is the running program's
+comptimeglobal.olang:5:10: error[K3]: this comptime cannot be computed while compiling
     5 | Table := comptime get()
       |          ^~~~~~~~~~~~~~
+comptimeglobal.olang:5:10: note: it reads a mutable global, whose value is the running program's
 compilation failed with 1 error
 === comptimelocal.olang
 comptimelocal.olang:4:38: error[K3]: 'n' is a local or a parameter, and a comptime is computed while compiling
@@ -1125,9 +1142,10 @@ d3bunread.olang:20:5: error[D3b]: 'n' is declared and never read - read it, or l
       |     ^
 compilation failed with 5 errors
 === d8adefault.olang
-d8adefault.olang:5:14: error[D8a]: a default is computed while compiling, and this one cannot be: it reads a mutable global, whose value is the running program's
+d8adefault.olang:5:14: error[D8a]: this default cannot be computed while compiling
     5 | fn f(n I32 = counter) I32 { return n }
       |              ^~~~~~~
+d8adefault.olang:5:14: note: it reads a mutable global, whose value is the running program's
 d8adefault.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === d8dcount.olang
@@ -2214,14 +2232,16 @@ e33inherit.olang:6:20: error[T29f]: Temp declares no 'Bits', and does not extend
 e33inherit.olang:6:20: help: declare it with 'extends'
 compilation failed with 1 error
 === e33opnan.olang
-e33opnan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a NaN an operation made, whose sign and payload are unspecified (e33opnan.olang:4)
+e33opnan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling
     4 | if (F64(0) / F64(0)).Bits() == 0x7FF8000000000000 {
       |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+e33opnan.olang:4:4: note: it reads the bits of a NaN an operation made, whose sign and payload are unspecified (e33opnan.olang:4)
 compilation failed with 1 error
 === e33snan.olang
-e33snan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a signalling NaN, which moving it may have quieted (e33snan.olang:4)
+e33snan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling
     4 | if F32.FromBits(U32(0x7F800001)).Bits() == 0x7F800001 {
       |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+e33snan.olang:4:4: note: it reads the bits of a signalling NaN, which moving it may have quieted (e33snan.olang:4)
 compilation failed with 1 error
 === e33width.olang
 e33width.olang:4:23: error[E33]: F64.FromBits takes the U64 of its width, and this is a U32
@@ -2240,9 +2260,10 @@ e35spawnbangnothing.olang:6:19: error[E35]: nothing here can fail - write it wit
       |                   ^
 compilation failed with 1 error
 === e36intinf.olang
-e36intinf.olang:4:13: error[E36]: U8 has no limit 'Inf' - its limits are Max and Min
+e36intinf.olang:4:13: error[E36]: U8 has no limit 'Inf'
     4 |     x := U8.Inf
       |             ^~~
+e36intinf.olang:4:13: note: its limits are Max and Min
 compilation failed with 1 error
 === e36noadapt.olang
 e36noadapt.olang:4:13: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
@@ -2250,19 +2271,22 @@ e36noadapt.olang:4:13: error[T6b]: I64 does not flow into I32 - convert it, as I
       |             ^~~~~~~
 compilation failed with 1 error
 === e36nolimit.olang
-e36nolimit.olang:4:14: error[E36]: I64 has no limit 'Biggest' - its limits are Max and Min
+e36nolimit.olang:4:14: error[E36]: I64 has no limit 'Biggest'
     4 |     x := I64.Biggest
       |              ^~~~~~~
+e36nolimit.olang:4:14: note: its limits are Max and Min
 compilation failed with 1 error
 === e36notextended.olang
-e36notextended.olang:5:17: error[E36]: Meters has no limit 'Max' - a declared type has its base's limits only where it extends it and declares no constructor
+e36notextended.olang:5:17: error[E36]: Meters has no limit 'Max'
     5 |     x := Meters.Max
       |                 ^~~
+e36notextended.olang:5:17: note: a declared type has its base's limits only where it extends it and declares no constructor
 compilation failed with 1 error
 === e36notnumber.olang
-e36notnumber.olang:4:15: error[E36]: Bool has no limit 'Max' - it is not a numeric type
+e36notnumber.olang:4:15: error[E36]: Bool has no limit 'Max'
     4 |     x := Bool.Max
       |               ^~~
+e36notnumber.olang:4:15: note: it is not a numeric type
 compilation failed with 1 error
 === e37args.olang
 e37args.olang:5:10: error[E14]: expected 1 argument, found 0
@@ -2533,9 +2557,10 @@ g10dtypeargs.olang:9:22: error[G7]: D is not generic, so it takes no type argume
       |                      ^~~
 compilation failed with 1 error
 === g12explicitbound.olang
-g12explicitbound.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
+g12explicitbound.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T
     5 |     b := sum<Bool>(true)
       |          ^~~~~~~~~
+g12explicitbound.olang:5:10: note: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
 compilation failed with 1 error
 === g12explicitcount.olang
 g12explicitcount.olang:5:14: error[G7]: type arguments for big: expected 1, found 2
@@ -2959,9 +2984,10 @@ itredecl.olang:2:6: error[D3a]: 'Iterator' is a built-in type's name - choose an
       |      ^~~~~~~~
 compilation failed with 1 error
 === k1assertaborts.olang
-k1assertaborts.olang:10:20: error[S18c]: this assertion aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
+k1assertaborts.olang:10:20: error[S18c]: this assertion aborts the program, evaluated while compiling
    10 |     assert half(7) == 3
       |                    ^~
+k1assertaborts.olang:10:20: note: an assertion in it fails, which aborts the program
 k1assertaborts.olang:6:5: note: here
     6 |     assert x % 2 == 0
       |     ^~~~~~~~~~~~~~~~~
@@ -2983,25 +3009,28 @@ k1faultyglobal.olang:7:19: error[E12]: expected Array<Char>, found I64
       |                   ^
 compilation failed with 2 errors
 === k1globalaborts.olang
-k1globalaborts.olang:10:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: it reaches unreachable code, which aborts the program
+k1globalaborts.olang:10:1: error[K2]: this global's initializer aborts the program, evaluated while compiling
    10 | G I32 = pick(5)
       | ^
+k1globalaborts.olang:10:1: note: it reaches unreachable code, which aborts the program
 k1globalaborts.olang:7:16: note: here
     7 |     if x > 3 { unreachable }
       |                ^~~~~~~~~~~
 compilation failed with 1 error
 === k1matchnull.olang
-k1matchnull.olang:16:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: it reaches unreachable code, which aborts the program
+k1matchnull.olang:16:1: error[K2]: this global's initializer aborts the program, evaluated while compiling
    16 | G String = name(N)
       | ^
+k1matchnull.olang:16:1: note: it reaches unreachable code, which aborts the program
 k1matchnull.olang:10:5: note: here
    10 |     match e {
       |     ^~~~~~~~~
 compilation failed with 1 error
 === k2abortsread.olang
-k2abortsread.olang:9:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
+k2abortsread.olang:9:1: error[K2]: this global's initializer aborts the program, evaluated while compiling
     9 | X := mk(5)
       | ^
+k2abortsread.olang:9:1: note: an assertion in it fails, which aborts the program
 k2abortsread.olang:6:5: note: here
     6 |     assert n < 2, "too big"
       |     ^~~~~~~~~~~~~~~~~~~~~~~
@@ -3168,9 +3197,10 @@ l1nul.olang:4:1: error[L1]: NUL byte in the source - is this a text file?
       | ^
 compilation failed with 1 error
 === l20aline.olang
-l20aline.olang:3:17: error[D12]: a declaration's value follows '=' - write 'state Array<F32> = Array<F32>(4)', or 'state := Array<F32>(4)'
+l20aline.olang:3:17: error[D12]: a declaration's value follows '='
     3 | state Array<F32>(4)
       |                 ^
+l20aline.olang:3:17: help: write 'state Array<F32> = Array<F32>(4)', or 'state := Array<F32>(4)'
 compilation failed with 1 error
 === l3crlf.olang
 l3crlf.olang:4:14: error[L3]: carriage return - save the file with LF line endings
@@ -3661,29 +3691,34 @@ nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - 
       |            ^~~~~
 compilation failed with 1 error
 === numtraitbool.olang
-numtraitbool.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
+numtraitbool.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T
     5 |     r := nbTwice(true)
       |          ^~~~~~~
+numtraitbool.olang:5:10: note: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
 compilation failed with 1 error
 === numtraitchar.olang
-numtraitchar.olang:5:10: error[G19, T31a]: Char does not satisfy the constraint Integer on T: Integer is closed, met by I1 to I128, U1 to U128 alone
+numtraitchar.olang:5:10: error[G19, T31a]: Char does not satisfy the constraint Integer on T
     5 |     c := ncNext('a')
       |          ^~~~~~
+numtraitchar.olang:5:10: note: Integer is closed, met by I1 to I128, U1 to U128 alone
 compilation failed with 1 error
 === numtraitclaim.olang
-numtraitclaim.olang:7:10: error[G19, T31a]: nfFake does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
+numtraitclaim.olang:7:10: error[G19, T31a]: nfFake does not satisfy the constraint Float on T
     7 |     h := nfHalf(nfFake(1.0))
       |          ^~~~~~
+numtraitclaim.olang:7:10: note: Float is closed, met by F16, BF16, F32, F64 alone
 compilation failed with 1 error
 === numtraitextends.olang
-numtraitextends.olang:7:10: error[G19, T31a]: ntDist does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
+numtraitextends.olang:7:10: error[G19, T31a]: ntDist does not satisfy the constraint Float on T
     7 |     h := ntHalf(ntDist(4.0))
       |          ^~~~~~
+numtraitextends.olang:7:10: note: Float is closed, met by F16, BF16, F32, F64 alone
 compilation failed with 1 error
 === numtraitsqrtint.olang
-numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
+numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constraint Float on T
     7 |     r := nsRoot(n)
       |          ^~~~~~
+numtraitsqrtint.olang:7:10: note: Float is closed, met by F16, BF16, F32, F64 alone
 compilation failed with 1 error
 === o14returnglobal.olang
 o14returnglobal.olang:8:26: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
@@ -3826,9 +3861,10 @@ p2forincopy.olang:17:32: error[P2]: this argument's storage closes before the jo
       |                                ^
 compilation failed with 1 error
 === p4aclausebreak.olang
-p4aclausebreak.olang:12:50: error[P4a]: 'break' may not leave a task's clause - it runs on the task, outside the spawner's loops
+p4aclausebreak.olang:12:50: error[P4a]: 'break' may not leave a task's clause
    12 |             spawn try work(I32(i) - 2) catch E { break }
       |                                                  ^~~~~
+p4aclausebreak.olang:12:50: note: it runs on the task, outside the spawner's loops
 compilation failed with 1 error
 === p4aclauseerror.olang
 p4aclauseerror.olang:12:42: error[P4a]: an error may not leave a task's clause
@@ -4244,9 +4280,10 @@ r3bownword.olang:3:1: note: it is declared by raising it
 r3bownword.olang:3:1: help: write 'error NotFound' where it is raised, with no declaration
 compilation failed with 1 error
 === r3bpayloaddiffer.olang
-r3bpayloaddiffer.olang:5:34: error[R3b, T19b]: OutOfRange carries (index, limit), as its first raise names them - give the same fields in that order
+r3bpayloaddiffer.olang:5:34: error[R3b, T19b]: OutOfRange carries (index, limit), as its first raise names them
     5 |     if at > 10: error OutOfRange(limit = 10, index = at)
       |                                  ^~~~~~~~~~
+r3bpayloaddiffer.olang:5:34: help: give the same fields in that order
 compilation failed with 1 error
 === r3bpayloadref.olang
 r3bpayloadref.olang:5:35: error[T19b]: payload field node of type Node holds a reference
@@ -4475,9 +4512,10 @@ refltrylist.olang:10:5: note: a list known while compiling is walked with no cal
 refltrylist.olang:10:5: help: write 'for x in ...' without 'try'
 compilation failed with 1 error
 === refltypenotvalue.olang
-refltypenotvalue.olang:9:18: error[G38]: 'Point.Fields[0].Type' is a type, not a value - write it where a type goes: a declaration ('x Point.Fields[0].Type = ...'), a type argument or a match's subject
+refltypenotvalue.olang:9:18: error[G38]: 'Point.Fields[0].Type' is a type, not a value
     9 | fn main() { t := Point.Fields[0].Type }
       |                  ^~~~~~~~~~~~~~~~~~~~
+refltypenotvalue.olang:9:18: help: write it where a type goes: a declaration ('x Point.Fields[0].Type = ...'), a type argument or a match's subject
 compilation failed with 1 error
 === reflunknownhead.olang
 reflunknownhead.olang:5:7: error[M10]: 'zz' is no import here
@@ -4485,9 +4523,10 @@ reflunknownhead.olang:5:7: error[M10]: 'zz' is no import here
       |       ^~
 compilation failed with 1 error
 === retire01assert.olang
-retire01assert.olang:21:20: error[S18c, K1]: evaluated while compiling, this assertion stops on a stale view: it uses a view of a collection's elements taken before the collection grew, which shows the retired buffer - its elements owning storage emptied
+retire01assert.olang:21:20: error[S18c, K1]: evaluated while compiling, this assertion stops on a stale view
    21 |     assert work(5) == 5
       |                    ^~
+retire01assert.olang:21:20: note: it uses a view of a collection's elements taken before the collection grew, which shows the retired buffer - its elements owning storage emptied
 retire01assert.olang:13:12: note: here
    13 |     return head[0]
       |            ^~~~~~~
@@ -4496,9 +4535,10 @@ retire01assert.olang:9:43: note: the Vec grew here, after the view was taken; ta
       |                                           ^~~~~~~~~~~~~~~
 compilation failed with 1 error
 === retire02global.olang
-retire02global.olang:21:1: error[K2, K1]: evaluated while compiling, this global's initializer stops on a stale view: it uses a view of a collection's elements taken before the collection grew, which shows the retired buffer - its elements owning storage emptied
+retire02global.olang:21:1: error[K2, K1]: evaluated while compiling, this global's initializer stops on a stale view
    21 | G I64 = stale(4)
       | ^
+retire02global.olang:21:1: note: it uses a view of a collection's elements taken before the collection grew, which shows the retired buffer - its elements owning storage emptied
 retire02global.olang:14:12: note: here
    14 |     return d[0]
       |            ^~~~
@@ -4826,9 +4866,10 @@ s16dmsgnottext.olang:5:31: error[S18a]: an unreachable's message is text, found 
       |                               ^~~~
 compilation failed with 1 error
 === s17msgbreak.olang
-s17msgbreak.olang:11:44: error[S17]: 'break' may not leave an assert's message - it is evaluated only where it is used
+s17msgbreak.olang:11:44: error[S17]: 'break' may not leave an assert's message
    11 |         assert i > 100, $(try h(i) catch { break } default 0)
       |                                            ^~~~~
+s17msgbreak.olang:11:44: note: it is evaluated only where it is used
 compilation failed with 1 error
 === s17msgerror.olang
 s17msgerror.olang:10:23: error[S17]: an error may not leave an assert's message - catch it here
@@ -4857,9 +4898,10 @@ s18cinstancecall.olang:12:12: note: instantiated here, with a.Len() = 4
       |            ^
 compilation failed with 1 error
 === s19break.olang
-s19break.olang:10:24: error[S19b]: 'break' may not leave deferred code - it runs while its block is left
+s19break.olang:10:24: error[S19b]: 'break' may not leave deferred code
    10 |             if t > 1 { break }
       |                        ^~~~~
+s19break.olang:10:24: note: it runs while its block is left
 compilation failed with 1 error
 === s19byieldindefer.olang
 s19byieldindefer.olang:6:17: error[S19b, S20]: deferred code may not yield - it runs while its block is left
@@ -5997,21 +6039,21 @@ t22afallible.olang:10:16: error[E12]: expected fn&(n I32) I32, found fn&(n I32) 
       |                ^~~
 compilation failed with 1 error
 === t22alambdakeeps.olang
-t22alambdakeeps.olang:12:15: error[T22b]: this lambda keeps 'k' in what it captured, beyond this store's function type
+t22alambdakeeps.olang:12:15: error[T22b]: this lambda keeps 'k' in what it captured
    12 |     c.onEvict = fn(k String&) { goneRef.Push(k) }
       |               ^
 t22alambdakeeps.olang:12:15: note: the function type of this store says nothing of that
 t22alambdakeeps.olang:12:15: help: write 'keeps k' after its signature
 compilation failed with 1 error
 === t22alatelambda.olang
-t22alatelambda.olang:15:9: error[T22b]: this lambda keeps 'b' in what it captured, beyond this call - reached in a loop's next turn by a value assigned after it -'s function type
+t22alatelambda.olang:15:9: error[T22b]: this lambda keeps 'b' in what it captured
    15 |         op(x, N(i))
       |         ^~
 t22alatelambda.olang:15:9: note: the function type of this call - reached in a loop's next turn by a value assigned after it - says nothing of that
 t22alatelambda.olang:15:9: help: write 'keeps b' after its signature
 compilation failed with 1 error
 === t22apushed.olang
-t22apushed.olang:12:8: error[T22b]: 'link' keeps 'b' in 'a', beyond this store's function type
+t22apushed.olang:12:8: error[T22b]: 'link' keeps 'b' in 'a'
    12 |     fs.Push(g)
       |        ^~~~
 t22apushed.olang:12:8: note: the function type of this store says nothing of that
@@ -6027,7 +6069,7 @@ t22apushed.olang:12:8: note: instantiated here, with T = fn&(mut N&, N&)
 t22apushed.olang:12:8: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22areturncycle.olang
-t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a', beyond this return (from a function calling itself, or among several results)'s function type
+t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a'
    10 |     if n == 0 { return link }
       |                        ^~~~
 t22areturncycle.olang:10:24: note: the function type of this return (from a function calling itself, or among several results) says nothing of that
@@ -6048,7 +6090,7 @@ t22bkeepsouter.olang:14:21: note: that scope outlives where the lambda lives, an
 t22bkeepsouter.olang:14:21: help: capture from one scope, or hold the lambda in a local and call it there
 compilation failed with 1 error
 === t22bnoalloc.olang
-t22bnoalloc.olang:9:16: error[T22b]: this lambda may allocate, which its held type promises it does not
+t22bnoalloc.olang:9:16: error[T22b]: this lambda may allocate
     9 |     k := Apply(fn(x I64) I64 {
       |                ^~~~~~~~~~~~~~~
 t22bnoalloc.olang:9:16: note: 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc'
@@ -6065,7 +6107,7 @@ t22bnoblock.olang:8:36: note: which functions it holds is not known here
 t22bnoblock.olang:8:36: help: write 'noblock' after the signature of the type it is held as, or give a function directly
 compilation failed with 1 error
 === t22bnorecurse.olang
-t22bnorecurse.olang:8:24: error[T22b]: 'Count' may call itself, which its held type promises it does not
+t22bnorecurse.olang:8:24: error[T22b]: 'Count' may call itself
     8 | fn main() { assert Run(Count) == 3 }
       |                        ^~~~~
 t22bnorecurse.olang:8:24: note: 'fn&(n I64) I64 norecurse', the type it is held as here, promises 'norecurse'
@@ -6075,7 +6117,7 @@ t22bnorecurse.olang:4:23: note: its call of 'Count' may call itself
 t22bnorecurse.olang:8:24: help: give a function that does not, or hold it as a type without 'norecurse'
 compilation failed with 1 error
 === t22bpure.olang
-t22bpure.olang:10:14: error[T22b]: this lambda may write through what it was not given writably, which its held type promises it does not
+t22bpure.olang:10:14: error[T22b]: this lambda may write through what it was not given writably
    10 |     k := Run(fn(x I64) I64 {
       |              ^~~~~~~~~~~~~~~
 t22bpure.olang:10:14: note: 'fn&(x I64) I64 pure', the type it is held as here, promises 'pure'
@@ -6085,7 +6127,7 @@ t22bpure.olang:11:9: note: it may write through what it was not given writably h
 t22bpure.olang:10:14: help: give a function that does not, or hold it as a type without 'pure'
 compilation failed with 1 error
 === t22breturns.olang
-t22breturns.olang:7:14: error[T22b]: this lambda may end the program, which its held type promises it does not
+t22breturns.olang:7:14: error[T22b]: this lambda may end the program
     7 |     k := Run(fn(x I64) I64 {
       |              ^~~~~~~~~~~~~~~
 t22breturns.olang:7:14: note: 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns'
@@ -6095,7 +6137,7 @@ t22breturns.olang:8:9: note: it may end the program here
 t22breturns.olang:7:14: help: give a function that does not, or hold it as a type without 'returns'
 compilation failed with 1 error
 === t22breturnscycle.olang
-t22breturnscycle.olang:11:9: error[T22b]: this lambda may call through a function value it does not follow, which may not come back, which its held type promises it does not
+t22breturnscycle.olang:11:9: error[T22b]: this lambda may call through a function value it does not follow, which may not come back
    11 |     b.f = fn() { b.f!() }
       |         ^
 t22breturnscycle.olang:11:9: note: 'fn&() returns', the type it is held as here, promises 'returns'
@@ -6120,14 +6162,14 @@ t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
       |                                                ^~~~
 compilation failed with 2 errors
 === t22climit.olang
-t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a', beyond this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) -'s function type
+t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a'
    43 |     put(link16, x, 16)
       |         ^~~~~~
 t22climit.olang:43:9: note: the function type of this argument - not followed into its callee (one of its cycle of calls, or past T22c's limits) - says nothing of that
 t22climit.olang:43:9: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22cstorefollowed.olang
-t22cstorefollowed.olang:13:55: error[T22b]: 'link' keeps 'b' in 'a', beyond this store's function type
+t22cstorefollowed.olang:13:55: error[T22b]: 'link' keeps 'b' in 'a'
    13 | fn stash(h mut Holder&, f fn&(a mut N&, b N&)) { h.cb = f }
       |                                                       ^
 t22cstorefollowed.olang:13:55: note: the function type of this store says nothing of that
@@ -6137,14 +6179,14 @@ t22cstorefollowed.olang:16:5: note: the functions given here followed into it (T
 t22cstorefollowed.olang:13:55: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22dassigned.olang
-t22dassigned.olang:11:17: error[T22b]: this lambda keeps 'x' in what it captured, beyond this argument's function type
+t22dassigned.olang:11:17: error[T22b]: this lambda keeps 'x' in what it captured
    11 |     h := Holder(fn(x N&) { kept.Push(x) })
       |                 ^~
 t22dassigned.olang:11:17: note: the function type of this argument says nothing of that
 t22dassigned.olang:11:17: help: write 'keeps x' after its signature
 compilation failed with 1 error
 === t22dstored.olang
-t22dstored.olang:9:9: error[T22b]: this lambda keeps 'x' in what it captured, beyond this store's function type
+t22dstored.olang:9:9: error[T22b]: this lambda keeps 'x' in what it captured
     9 |     all.Push(h)
       |         ^~~~
 t22dstored.olang:9:9: note: the function type of this store says nothing of that
@@ -6727,9 +6769,10 @@ t31aclosedgenericbare.olang:5:23: error[G7]: type arguments for aBox: expected 1
       |                       ^~~~
 compilation failed with 1 error
 === t31aclosedunmet.olang
-t31aclosedunmet.olang:6:10: error[G19, T31a]: I32 does not satisfy the constraint caSmall on T: caSmall is closed, met by I8, I16 alone
+t31aclosedunmet.olang:6:10: error[G19, T31a]: I32 does not satisfy the constraint caSmall on T
     6 |     k := caKeep(I32(3))
       |          ^~~~~~
+t31aclosedunmet.olang:6:10: note: caSmall is closed, met by I8, I16 alone
 compilation failed with 1 error
 === t31amembermissing.olang
 t31amembermissing.olang:5:31: error[T31a]: I64 is listed by 'caSized' but has no method 'Area' that fits
@@ -6789,9 +6832,10 @@ t32anyconvert.olang:12:40: error[T32a]: an 'any aShape&' is never made an 'any a
       |                                        ^
 compilation failed with 1 error
 === t32anydefaultunmet.olang
-t32anydefaultunmet.olang:17:36: error[G19, T31a]: String does not satisfy the constraint Number on T: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
+t32anydefaultunmet.olang:17:36: error[G19, T31a]: String does not satisfy the constraint Number on T
    17 |     it mut any Iterator<String>& = w
       |                                    ^
+t32anydefaultunmet.olang:17:36: note: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
 t32anydefaultunmet.olang:18:20: note: 'Sum' is called through an 'any Iterator<String>&' here, so aWords needs it
    18 |     io.PutLine($it.Sum())!
       |                    ^~~
@@ -6820,9 +6864,10 @@ t32anynomethod.olang:10:36: error[T32b]: any aShape& has no method 'Side' - an '
       |                                    ^~~~
 compilation failed with 1 error
 === t32anynotmember.olang
-t32anynotmember.olang:16:7: error[T32a, T31a]: aKnob cannot be an 'any aWidget&': aWidget is closed, met by aButton, aSlider alone
+t32anynotmember.olang:16:7: error[T32a, T31a]: aKnob cannot be an 'any aWidget&'
    16 |     f(k)
       |       ^
+t32anynotmember.olang:16:7: note: aWidget is closed, met by aButton, aSlider alone
 compilation failed with 1 error
 === t32anynottrait.olang
 t32anynottrait.olang:3:12: error[T32]: 'any' takes a trait, and I64 is none
@@ -6900,9 +6945,10 @@ t4aextern.olang:3:15: error[X2]: U24 cannot cross the C boundary
 t4aextern.olang:3:15: note: an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
 compilation failed with 1 error
 === t4anomember.olang
-t4anomember.olang:6:10: error[G19, T31a]: F64 does not satisfy the constraint Integer on T: Integer is closed, met by I1 to I128, U1 to U128 alone
+t4anomember.olang:6:10: error[G19, T31a]: F64 does not satisfy the constraint Integer on T
     6 |     y := half(1.5)
       |          ^~~~
+t4anomember.olang:6:10: note: Integer is closed, met by I1 to I128, U1 to U128 alone
 compilation failed with 1 error
 === t4arange.olang
 t4arange.olang:4:12: error[T6]: '128' does not fit U7
@@ -7112,9 +7158,10 @@ typenoctor.olang:8:8: error: type 'Color' has no constructor - an enum's values 
       |        ^~~~~
 compilation failed with 1 error
 === typenotvalue.olang
-typenotvalue.olang:4:10: error[G38]: 'I64' is a type, not a value - write it where a type goes: a declaration ('x I64 = ...'), a type argument or a match's subject
+typenotvalue.olang:4:10: error[G38]: 'I64' is a type, not a value
     4 |     e := I64 > 3
       |          ^~~
+typenotvalue.olang:4:10: help: write it where a type goes: a declaration ('x I64 = ...'), a type argument or a match's subject
 compilation failed with 1 error
 === unknowncascade.olang
 unknowncascade.olang:10:17: error: unknown name 'nope'
@@ -7175,9 +7222,10 @@ unknowntypehint.olang:4:7: error[T4]: unknown type 'Int32' - the numbers are nam
       |       ^~~~~
 compilation failed with 1 error
 === unreachvaluebaked.olang
-unreachvaluebaked.olang:4:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: it reaches unreachable code, which aborts the program
+unreachvaluebaked.olang:4:1: error[K2]: this global's initializer aborts the program, evaluated while compiling
     4 | Half I64 = half(3)
       | ^~~~
+unreachvaluebaked.olang:4:1: note: it reaches unreachable code, which aborts the program
 unreachvaluebaked.olang:3:54: note: here
     3 | fn half(n I64) I64 { return n / 2 if n % 2 == 0 else unreachable "odd" }
       |                                                      ^~~~~~~~~~~~~~~~~
@@ -7410,9 +7458,10 @@ x13lambda.olang:9:21: error[X13]: a C function is given a function by the name o
 x13lambda.olang:9:21: help: declare one with 'export fn' and pass it by name
 compilation failed with 1 error
 === x17broken.olang
-x17broken.olang:3:10: error[X17]: 'bits/waitstatus.h' cannot be imported: "Never include <bits/waitstatus.h> directly; use <sys/wait.h> instead."
+x17broken.olang:3:10: error[X17]: 'bits/waitstatus.h' cannot be imported
     3 | import b "bits/waitstatus.h"
       |          ^~~~~~~~~~~~~~~~~~~
+x17broken.olang:3:10: note: "Never include <bits/waitstatus.h> directly; use <sys/wait.h> instead."
 compilation failed with 1 error
 === x17linkolang.olang
 x17linkolang.olang:3:22: error[X17]: 'link' names the library a C header's declarations are in - an olang module needs none
