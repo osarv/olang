@@ -121,7 +121,7 @@ fn rows(text String&) Vec<String&> {
         close := try line[e:].FindByte(']') catch default -1
         if close < 0 { continue }
         rule := line[e + 8:e + close]
-        if not ownRule(rule) { continue }
+        if not ownRule(rule) or line.Contains(": unknown name ") or line.Contains(": unknown function or type ") { continue }   # the checker's, not names'
         out.Push($c "\t" $head " " $rule)
     }
     return out

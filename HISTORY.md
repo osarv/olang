@@ -37016,3 +37016,14 @@ olang's own arrays, records and files; tensors are oann's. Built here, the names
 Tests: std/frame.olang (every operation, a baked walkthrough checked by a top-level assert, reads after arena churn),
 std/prelude/tests/array.olang and columns.olang (baked beside run-time), std/stats.olang, std/rand.olang - built and
 under `test -interpret`.
+
+## Bare literals of no common own type are an error (E20; 2026-11-14, wt-litmix)
+
+`a := [3, 'h']` was accepted as an `Array<Char>` holding `Char(3)` and `'h'`: the "widest literal type" ranking put
+`Char` lowest, so the number adapted to it. Decided (mine; the user agreed it is a type error): with nothing expected, a
+bare literal's own type is taken among the number kinds (`I64` < `U64` < `F64`, so `[1, 2.5]` is an `Array<F64>`) or
+where all items share one own type; a number beside a `Char`, text or `Bool` literal is an error naming the type to
+write in front (`the items have no common type: 3 is I64 and 'h' is Char`, help `Array<Char>[...]`). Map keys and values
+likewise. Where a type is expected or written (`Array<Char>[3, 'h']`) the number adapts as T6 says. Checker `ownElem`
+(`mixedLit`, `LiteralMixed`), generics' `ownLiteral` answers Unknown so the checker speaks. Tests: tests/barelits.olang
+(run-time and `comptime`), checks/cases/e20litmixed.olang.

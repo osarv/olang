@@ -1,0 +1,6 @@
+# check: fail error[E20]: the items have no common type: 3 is I64 and 'h' is Char
+# E20: with nothing expected, literals of no common own type are an error naming the type to write in front
+fn main() {
+    a := [3, 'h']
+    assert a.Len() == 2
+}

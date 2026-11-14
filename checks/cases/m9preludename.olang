@@ -1,0 +1,7 @@
+# check: fail error[M9]: module std/io declares no 'Println'
+# M9: a name the module lacks but the prelude declares is said with a help row naming the prelude's
+import "std/io"
+
+fn main() {
+    io.Println("x")
+}

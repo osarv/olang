@@ -4363,8 +4363,9 @@ with its length (T7d). Any other literal's type is its made type.
 a numeric literal takes its own (T6a): `[a, b]` an `Array<T>`, and `[k: v]` a `Map<K, V>` (M19d), each entry its
 `MapEntry(k, v)`. `T` - and `K` of the keys, `V` of the values - is the type of the first item that is no literal or
 literal-only expression (E4a), the others fitting it as an argument fits its parameter (T6, T6b); where every item is a
-literal, the widest of their own types, as two literals beside each other adapt (T6: `Char` < `I64` < `U64` < `F64`) -
-`[1, 2.5]` is an `Array<F64>` - written text being a `String` (T29c), each of its own length (T7a): `["a", "bc"]` is an
+literal, their own type where all share one, or the widest where all are numbers (T6: `I64` < `U64` < `F64`) -
+`[1, 2.5]` is an `Array<F64>`; a number literal beside a `Char`, text or `Bool` literal, or any mix with no common own type, is
+an error naming the type to write in front (`[3, 'h']`: write `Array<Char>[3, 'h']`, where the number adapts, T6) - written text being a `String` (T29c), each of its own length (T7a): `["a", "bc"]` is an
 `Array<String>`. A nested literal takes its own type too: `[[1, 2], [3, 4]]` is two rows of two laid out in place
 (T7d), rows of different lengths each their own copy. `[]`, `[:]` and a literal of nothing but `null` have none: each
 is a compile-time error naming the type to write in front (`Array<I64>[]`).

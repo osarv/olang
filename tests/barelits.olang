@@ -162,3 +162,11 @@ test "the evaluator agrees (K1)" {
     assert comptime ["a": 1].Len() == 1
     assert Small == [1, 2, 3] and Squares[3] == 9 and Mixed[2] == 3.0 and Letters[1] == 'b'
 }
+
+test "a number beside a Char adapts only where the type is given (E20, T6)" {
+    a := Array<Char>[3, 'h']
+    b Array<Char> = [3, 'h']
+    assert a.Len() == 2 and a[0] == Char(3) and b[1] == 'h'
+    assert comptime Array<Char>[3, 'h'][0] == Char(3)
+    assert comptime [1, 2.5][0] == 1.0
+}

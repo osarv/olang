@@ -1,5 +1,5 @@
 # check: fail error[S13f]: unknown name 'big'
-# never: error: unknown name
+# never: error[M22]: unknown name
 # S13f: a lone unknown name in a case was meant to take the value - which "case _ if" does. One error: the guard reading
 # the name is not reported again
 import "std/io"

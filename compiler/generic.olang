@@ -2545,6 +2545,8 @@ fn (p mut Program&) ownLiteral(c Context&, known Map<source.NameId, types.TypeId
             et = t
         } else if lit and p.T.IsNumber(et) and p.T.IsNumber(t) and p.Meet(et, t) >= types.TypeId(0) {
             et = p.Meet(et, t)
+        } else if lit and not p.T.Same(et, t) and not (p.T.IsNumber(et) and p.T.IsNumber(t)) {
+            return types.UnknownT   # E20: no common own type - the checker says so
         }
     }
     if p.T.KindOf(et) == types.Kind.Array and p.T.KindOf(p.T.Length(et)) == types.Kind.Const {

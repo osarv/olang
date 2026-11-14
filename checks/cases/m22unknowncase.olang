@@ -1,0 +1,5 @@
+# check: fail error[M22]: unknown function or type 'print' - did you mean 'Print'?
+# M22: a name nothing declares is said with the nearest name allowed, letters compared without their case
+fn main() {
+    print("x")
+}
