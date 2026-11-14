@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "promptkeys", "jupyter", "notebook"]
+                     "prompt", "promptkeys", "jupyter", "notebook", "checkedbuild"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -497,6 +497,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "generators" { try generators(r) }
         case "frameenv" { try frameenv(r) }
         case "testends" { try testends(r) }
+        case "checkedbuild" { try checkedbuild(r) }
         case _ {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.Check
@@ -2877,6 +2878,31 @@ fn scopefind(r mut report&) ? Failed {
 # by an error leaving the body, by a "!" (on a spawned call and a checked index too, E35) - each read back by the test
 # after it; S18d: the error return trace, after an
 # error ends a test, escapes main or reaches a "!", in a -d build and under -i, and a hint to get it in any other
+# E16g: a checked build - test, test -interpret, -debug - stops on an index, a division and a shift the program wrote
+# where they are undefined, saying where and what, the interpreter as the built program; a release build checks none
+test "a checked build stops on an index, a division or a shift out of range; a release build checks none" { assert passed("checkedbuild") }
+
+fn checkedbuild(r mut report&) ? Failed {
+    dir := fresh("checkedbuild")
+    os.Run("cp checks/fixtures/checkedbuild/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build release.olang > out.txt 2>&1 && ./build/release > out.txt") == 0 and
+                 outOf(dir) == "20 0 2 10\n", "the release build", dir)
+    # (before the tests: a test build checks std's modules too)
+    stops String& = "index out of range|division by zero|division overflows|shift amount outside"
+    try r.expect(not irHas(dir, "build/*.ll", stops), "a release build checks an index, a division or a shift", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test checked.olang > out.txt 2>&1") == 1, "checked tests", dir)
+    try r.expect(sh(dir, "cmp -s out.txt checked.want") == 0, "checked tests' output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -interpret checked.olang > out.txt 2>&1") == 1, "checked tests -interpret", dir)
+    try r.expect(sh(dir, "cmp -s out.txt checked.want") == 0, "checked tests' output -interpret", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug release.olang > out.txt 2>&1 && ./build/release.debug > out.txt") == 0 and
+                 outOf(dir) == "20 0 2 10\n", "the debug build in range", dir)
+    try r.expect(irHas(dir, "build/*.debug.ll", stops), "a debug build checks nothing", dir)
+    try r.expect(sh(dir, "./build/release.debug a b c > out.txt 2>&1") != 0 and
+                 outOf(dir).StartsWith("release.olang:10:22: index out of range\n"), "the debug build out of range", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret release.olang a b c > out.txt 2>&1") != 0 and
+                 outOf(dir).StartsWith("release.olang:10:22: index out of range\n"), "interpret out of range", dir)
+}
+
 test "tests that fail on purpose, and where an error went" { assert passed("testends") }
 
 fn testends(r mut report&) ? Failed {

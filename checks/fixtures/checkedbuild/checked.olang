@@ -1,0 +1,38 @@
+# E16g: a checked build (test, -debug, interpret) stops where an index, a division or a shift the program wrote is
+# undefined - each test here fails on one, printing where and what; the last two pass: what is in range runs as
+# written, and a lane operation is never checked
+
+fn pick(xs Array<I64>&, i I64) I64 { return xs[i] }
+fn div(a I64, b I64) I64 { return a / b }
+fn rem(a I32, b I32) I32 { return a % b }
+fn shl(a I64, n I64) I64 { return a << n }
+fn shr(a U8, n U64) U8 { return a >> n }
+fn lanes(a Array<I64>&, b Array<I64>&) I64 { return (a / b).Sum() }
+
+test "index" { assert pick(Array<I64>[1, 2, 3], 3) == 0 }
+test "negative index" { assert pick(Array<I64>[1, 2, 3], -1) == 0 }
+test "string index" {
+    s := "abc"
+    k := s.Len()
+    assert s[k] == 'a'
+}
+test "division by zero" { assert div(1, 0) == 0 }
+test "remainder by zero" { assert rem(1, 0) == 0 }
+test "least by -1" { assert div(I64.Min, -1) == 0 }
+test "compound" {
+    x := 5
+    z := 0
+    x /= z
+    assert x == 0
+}
+test "shift wide" { assert shl(1, 64) == 0 }
+test "shift negative" { assert shl(1, -1) == 0 }
+test "shift u8" { assert shr(1, 8) == 0 }
+test "fine" {
+    assert pick(Array<I64>[1, 2, 3], 2) == 3 and div(7, 2) == 3 and rem(-7, 2) == -1 and shl(1, 63) == I64.Min and shr(128, 7) == 1
+    xs := Array<I64>[2, 4]
+    total := 0
+    for x in xs { total += x }
+    assert total == 6
+}
+test "lanes unchecked" { assert lanes(Array<I64>[2, 4], Array<I64>[1, 2]) == 4 }

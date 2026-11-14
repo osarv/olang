@@ -1,0 +1,24 @@
+== checked.olang ==
+checked.olang:5:45: index out of range
+FAIL - index
+checked.olang:5:45: index out of range
+FAIL - negative index
+checked.olang:17:12: index out of range
+FAIL - string index
+checked.olang:6:35: division by zero
+FAIL - division by zero
+checked.olang:7:35: division by zero
+FAIL - remainder by zero
+checked.olang:6:35: division overflows: the least value by -1
+FAIL - least by -1
+checked.olang:25:5: division by zero
+FAIL - compound
+checked.olang:8:35: shift amount outside the width
+FAIL - shift wide
+checked.olang:8:35: shift amount outside the width
+FAIL - shift negative
+checked.olang:9:33: shift amount outside the width
+FAIL - shift u8
+ok - fine
+ok - lanes unchecked
+2 passed, 10 failed

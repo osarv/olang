@@ -1,0 +1,11 @@
+# E16g: built plain, nothing here is checked (release.main.ll calls no check); built -debug, an index out of range the
+# arguments make stops with where and what
+import "std/os"
+import "std/io"
+
+fn main() ? io.Error {
+    n := os.Args().Len()
+    xs := Array<I64>[10, 20, 30, 40]
+    s U8 = U8(n)
+    try io.PutLine($(xs[n] / n) " " $(xs[0] % n) " " $(s << n) " " $(xs[1] >> n))
+}
