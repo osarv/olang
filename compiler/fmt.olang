@@ -167,7 +167,7 @@ fn (f mut formatter&) run() {
                 f.codes.Push(f.text[line:e])
                 first := true
                 for r < f.real.Len() and I64(f.toks[f.real[r]].Start) < e {
-                    if first { f.level(r) }
+                    if first: f.level(r)
                     first = false
                     f.lastTok = f.real[r]
                     f.track(f.real[r])

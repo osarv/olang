@@ -214,7 +214,7 @@ fn (lw mut Lowerer&) failure(word I64) types.TypeId, I64 {
             if t != types.UnknownT {
                 ws := lw.P.ErrorWords(lw.P.T.DeclOf(t))
                 for i in range ws.Len() {
-                    if lw.P.T.Names.Text(ws[i]) == w { code = (1 << 16) | i }
+                    if lw.P.T.Names.Text(ws[i]) == w: code = (1 << 16) | i
                 }
             }
             lw.failT.Push(t)
@@ -1922,7 +1922,7 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
             case typed.Expr.Cond(_, _, c) { return ln.retCopies(c.A, ty) or ln.retCopies(c.B, ty) }
             case typed.Expr.Match(_, _, m) {
                 for a in m.Arms {
-                    if ln.retCopies(a.Value, ty) { return true }
+                    if ln.retCopies(a.Value, ty): return true
                 }
                 return m.NoMatch is not null and ln.retCopies(m.NoMatch!.Value, ty)
             }
@@ -3272,7 +3272,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
                 if always { break }
                 k := -1
                 for j in range xs.Len() {
-                    if k < 0 and t.Same(t.ErrOf(xs[j]), t.ErrOf(it.Err)) { k = j }
+                    if k < 0 and t.Same(t.ErrOf(xs[j]), t.ErrOf(it.Err)): k = j
                 }
                 if k < 0 { continue }
                 if it.Word < 0 and not covered[k] {

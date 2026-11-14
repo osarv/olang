@@ -251,7 +251,7 @@ fn declare(out mut StringBuilder&, line String&) {
                 sp := try part.FindLast(" ") catch default -1
                 if sp >= 0 and part[sp + 1] == '%' { part = part[:sp].TrimEnd() }
                 if part.Len() > 0 {
-                    if not first { out.Push(", ") }
+                    if not first: out.Push(", ")
                     out.Push(part)
                 }
                 first = false

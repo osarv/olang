@@ -274,7 +274,7 @@ fn (w mut Walker&) expr1(x typed.Expr&, s State) State {
             match f {
                 case typed.FnVal.Lambda(_, caps, _) {
                     cur := s
-                    for k in caps { cur = w.expr(k.Outer, cur) }
+                    for k in caps: cur = w.expr(k.Outer, cur)
                     return cur
                 }
                 case typed.FnVal.Adapter(_, recv, _) { return w.expr(recv, s) }
@@ -365,7 +365,7 @@ fn (w mut heldWalker&) block(bl typed.Block?&, armed Bool) {
                 if l == w.g {
                     a = true
                     id := typed.CalledBody(init)
-                    if id >= 0 { w.callee = id }
+                    if id >= 0: w.callee = id
                 }
                 if l == w.it and a and w.readsG(init) { w.once = true }
             }
@@ -489,7 +489,7 @@ fn (w mut heldWalker&) expr(x typed.Expr?&, a Bool) {
             match f {
                 case typed.FnVal.Named(_) { }
                 case typed.FnVal.Lambda(_, caps, _) {
-                    for k in caps { w.expr(k.Outer, false) }
+                    for k in caps: w.expr(k.Outer, false)
                 }
                 case typed.FnVal.Adapter(_, r, _) { w.expr(r, false) }
             }

@@ -2584,7 +2584,7 @@ fn (c mut Checker&) ctorVarRules(td ast.TypeDecl&, sb ast.StructBody&) {
             ty := vd.Ty
             if ty is null and vd.Values.Len() == 0 and sb.Params.Len() > 0 {
                 for prm in sb.Params {
-                    if prm.Name == vd.Names[i] { ty = prm.Ty }
+                    if prm.Name == vd.Names[i]: ty = prm.Ty
                 }
             }
             if ty is null { continue }
@@ -2665,7 +2665,7 @@ fn (c mut Checker&) traitHeader(mi I64, td ast.TypeDecl?&) {
                 if not check { continue }
                 for x in listed {
                     u := c.P.Missing(x, self, false)
-                    if u.Var >= 0 and u.Named { c.err(m.Span(), msgs.TraitMemberMissing(c.ty(x), c.tok(td.Name), c.tok(u.Method))) }
+                    if u.Var >= 0 and u.Named: c.err(m.Span(), msgs.TraitMemberMissing(c.ty(x), c.tok(td.Name), c.tok(u.Method)))
                 }
             }
             c.pop()
@@ -3446,7 +3446,7 @@ fn (c mut Checker&) orderModule(m I64, out mut Vec<I64>&) {
             if next < 0 {
                 # no cycle after all (it cannot happen): the rest in declaration order
                 for k in range n {
-                    if placed[k] { continue }
+                    if placed[k]: continue
                     placed[k] = true
                     out.Push(gs[k])
                     done++
@@ -3706,10 +3706,10 @@ fn (c mut Checker&) b5aExpr(w mut b5aWalk&, x typed.Expr?&) {
         case typed.Expr.Call(_, _, cl) {
             match cl.Target {
                 case typed.Callee.Body(id) {
-                    if not w.namesOnly { c.b5aFn(w, I64(id)) }
+                    if not w.namesOnly: c.b5aFn(w, I64(id))
                 }
                 case typed.Callee.Value(v) {
-                    if not w.namesOnly { w.through = true }
+                    if not w.namesOnly: w.through = true
                     c.b5aExpr(w, v)
                 }
                 case _ { }
@@ -3758,7 +3758,7 @@ fn (c mut Checker&) b5aExpr(w mut b5aWalk&, x typed.Expr?&) {
                 case typed.FnVal.Named(id) { c.b5aNamed(w, I64(id)) }
                 case typed.FnVal.Lambda(id, caps, _) {
                     c.b5aNamed(w, I64(id))
-                    for cp in caps { c.b5aExpr(w, cp.Outer) }
+                    for cp in caps: c.b5aExpr(w, cp.Outer)
                 }
                 case typed.FnVal.Adapter(id, r, _) {
                     c.b5aNamed(w, I64(id))
@@ -4817,7 +4817,7 @@ fn (c mut Checker&) topSetDecls(mi I64, ds Array<ast.Decl&>&, inIf Bool, live Bo
                 }
                 k I64 = -1
                 for i in range g.Names.Len() {
-                    if g.Names[i] == n { k = i }
+                    if g.Names[i] == n: k = i
                 }
                 if k < 0 or g.NameSps[k].Start > sp.Start {
                     d.Error(diag.Where.Span(file, I64(tsp.Start), I64(tsp.End)), msgs.TopSetTarget(c.src2(file, tsp)))
@@ -4828,7 +4828,7 @@ fn (c mut Checker&) topSetDecls(mi I64, ds Array<ast.Decl&>&, inIf Bool, live Bo
                     continue
                 }
                 if live {
-                    if taken.Has(n) { d.Error(at, msgs.TopSetTwice(c.text(n))) }
+                    if taken.Has(n): d.Error(at, msgs.TopSetTwice(c.text(n)))
                     taken.Put(n, true)
                 }
             }
@@ -5216,11 +5216,11 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?& {
             nm := $c.text(td.Name)
             match td.Body {
                 case ast.TypeBody.Struct(sb) {
-                    if sb.Errs is null or sb.Errs!.Contract is null { return null }
+                    if sb.Errs is null or sb.Errs!.Contract is null: return null
                     return ctSource(sb.Errs!.Contract!, null, sb.Params, mi, nm)
                 }
                 case ast.TypeBody.Over(_, ctor) {
-                    if ctor is null or ctor.S.Contract is null { return null }
+                    if ctor is null or ctor.S.Contract is null: return null
                     return ctSource(ctor.S.Contract!, null, ctor.S.Params, mi, nm)
                 }
                 case _ { return null }
@@ -7863,7 +7863,7 @@ fn (c mut Checker&) tyOf(x typed.Expr&) String {
         case typed.Expr.Data(_, dt, _, k) {
             match k {
                 case typed.Const.Bytes(_) {
-                    if c.isRef(dt) and c.P.T.Referent(dt) == c.textType() { return "String" }
+                    if c.isRef(dt) and c.P.T.Referent(dt) == c.textType(): return "String"
                 }
                 case _ { }
             }
@@ -8092,7 +8092,7 @@ fn (c mut Checker&) literalLocalIn(x typed.Expr?&, ty types.TypeId) I64 {
             match p {
                 case typed.Lvalue.Local(_, _, id) {
                     k := pair.Pair(c.fr().Body, I64(id))
-                    if c.P.T.Same(rt, ty) and (c.litLocals.Has(k) or c.rangeExprs.Has(k)) { return I64(id) }
+                    if c.P.T.Same(rt, ty) and (c.litLocals.Has(k) or c.rangeExprs.Has(k)): return I64(id)
                 }
                 case _ { }
             }
@@ -9962,7 +9962,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
             if c.isEnum(et) and path.Len() >= 2 and targs.Len() == 0 {
                 cn := c.P.T.CaseNames(et)
                 for i in range cn.Len() {
-                    if cn[i] == path[path.Len() - 1] { k = i }
+                    if cn[i] == path[path.Len() - 1]: k = i
                 }
             }
         }
@@ -10650,7 +10650,7 @@ fn (c mut Checker&) rootIn(p typed.Lvalue?&, depth I64) I64 {
             match q {
                 case typed.Lvalue.Local(_, _, id) {
                     o := try c.roFrom.Get(c.roKey(I64(id))) catch default roOrigin(null, false)
-                    if o.P is not null and o.View { return c.rootIn(o.P, depth + 1) }
+                    if o.P is not null and o.View: return c.rootIn(o.P, depth + 1)
                 }
                 case _ { }
             }
@@ -11049,7 +11049,7 @@ fn (c mut Checker&) roDeepPlace(b I64, p typed.Lvalue?&, out mut Vec<I64>&, seen
             if l.Kind == typed.LocalKind.Param {
                 ps := c.Bodies[b].Params
                 for k in range ps.Len() {
-                    if ps[k] == id and c.roByArg(b, k) and not out.Has(k) { out.Push(k) }
+                    if ps[k] == id and c.roByArg(b, k) and not out.Has(k): out.Push(k)
                 }
                 return
             }
@@ -11508,7 +11508,7 @@ fn (c mut Checker&) sigText(inst I64, body I64) String {
             one := true
             for i in range ws.Len() {
                 if i < 64 and (mask & (U64(1) << i)) != 0 {
-                    if not one { b.Push(", ") }
+                    if not one: b.Push(", ")
                     b.Push($name "." $c.text(ws[i]))
                     one = false
                 }
@@ -11544,7 +11544,7 @@ fn (c mut Checker&) wantStr(t types.TypeId, seen mut Map<types.TypeId, Bool>&, d
             for name in Array<String&>["Str", "str"] {
                 m := c.P.MethodOf(t, c.P.T.Names.Intern(name))
                 if m >= 0 {
-                    if c.strAt.Start >= 0 { c.privateRole(m, t, "Str", c.strAt, "'$'") }
+                    if c.strAt.Start >= 0: c.privateRole(m, t, "Str", c.strAt, "'$'")
                     c.strInstance(m, t)
                     return
                 }
@@ -13491,7 +13491,7 @@ fn (c mut Checker&) namedArgs(params Array<ast.Param&>&, args Array<ast.Expr&>&,
                 seen = true
                 j := -1
                 for k in range np {
-                    if params[k].Name == n { j = k }
+                    if params[k].Name == n: j = k
                 }
                 lsp := source.Span(nsp.Start, nsp.Start + I32(c.text(n).Len()))
                 if j < 0 {
@@ -15428,7 +15428,7 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
             if et >= types.TypeId(0) and c.isEnum(et) and c.hasCase(et, n) and not c.viaTypeVar(y) {
                 cn := c.P.T.CaseNames(et)
                 for i in range cn.Len() {
-                    if cn[i] == n { return reflVal(true, RvCase, i, "", et) }
+                    if cn[i] == n: return reflVal(true, RvCase, i, "", et)
                 }
             }
             return c.reflConst(y, n)
@@ -16149,7 +16149,7 @@ fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast
                 bytes[i] = textBytes(c.text(cd.Name))
             } else {
                 sp := try c.textValue(cd.Value!) catch NotText {
-                    if report { c.err(at, msgs.RawNotLiteral(c.ty(rt))) }
+                    if report: c.err(at, msgs.RawNotLiteral(c.ty(rt)))
                     continue
                 }
                 bytes[i] = c.strBytes(sp)
@@ -16157,7 +16157,7 @@ fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast
             set[i] = true
             for j in range i {
                 if set[j] and bytes[j] == bytes[i] {
-                    if report { c.err(at, msgs.RawRepeated(c.text(cd.Name), "\"" $String(bytes[i]) "\"", c.text(cases[j].Name))) }
+                    if report: c.err(at, msgs.RawRepeated(c.text(cd.Name), "\"" $String(bytes[i]) "\"", c.text(cases[j].Name)))
                     break
                 }
             }
@@ -17440,7 +17440,7 @@ fn (c mut Checker&) produced(clauses Array<ast.Catch&>&, mark I64, end I64) {
                 c.P.EntriesOf(et, es)
                 some := false
                 for e in es {
-                    if e != types.UnknownT and c.errAmong(e, have) { some = true }
+                    if e != types.UnknownT and c.errAmong(e, have): some = true
                 }
                 if not some { c.err(c.pathPart(p, 0), msgs.CatchNotProduced(c.ty(et))) }
                 continue
@@ -18236,7 +18236,7 @@ fn (c mut Checker&) errMatch(m ast.Match&) Bool {
         for p in cs.Alts {
             match p {
                 case ast.Pattern.Path(_, y), ast.Pattern.Value(_, y), ast.Pattern.Case(_, y, _) {
-                    if c.errItemPath(y) { return true }
+                    if c.errItemPath(y): return true
                 }
                 case _ { }
             }
@@ -18742,7 +18742,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
             # P4d: code after the join reads targets a failed task left unwritten - a clause taking that failure leaves
             if fr.TargetFails > targetFails {
                 for i in range cls.Len() {
-                    if cls[i].Code is not null and leavesValue(cls[i].Code!) { continue }
+                    if cls[i].Code is not null and leavesValue(cls[i].Code!): continue
                     c.err(c.catchSpan(j.Clauses[i]), msgs.JoinClauseMustLeave())
                     break
                 }
@@ -20560,7 +20560,7 @@ fn (c mut Checker&) lambdaErrs(e typed.Expr?&, errs types.ListId) typed.Expr?& {
         case typed.Expr.Fn(sp, vt, fv) {
             match fv {
                 case typed.FnVal.Lambda(id, _, _) {
-                    if c.P.T.Errors(vt) == errs { return e }
+                    if c.P.T.Errors(vt) == errs: return e
                     b := c.Bodies[I64(id)]
                     b.Ty = c.P.T.Func(c.P.T.Params(b.Ty), c.P.T.Result(b.Ty), errs, c.P.T.ScopesOf(b.Ty))
                     nt := c.P.T.Refunc(vt, c.P.T.Params(vt), c.P.T.Result(vt), errs, c.P.T.ScopesOf(vt), c.P.T.NamesIdOf(vt))
@@ -21622,7 +21622,7 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&, next
         case typed.Expr.Read(_, _, p, _) {
             match p {
                 case typed.Lvalue.Local(_, _, g) {
-                    if c.cur().Local(g).Kind == typed.LocalKind.Var { c.heldWalks.Push(heldCand(c.fr().Body, I64(g), it)) }
+                    if c.cur().Local(g).Kind == typed.LocalKind.Var: c.heldWalks.Push(heldCand(c.fr().Body, I64(g), it))
                 }
                 case _ { }
             }
@@ -22063,7 +22063,7 @@ fn (c mut Checker&) placeAt(p typed.Lvalue&) diag.Where {
                     # an enum case's payload field: its parameter in the case's declaration
                     d := c.P.T.DeclOf(c.deref(pl.Base.Type()))
                     cd := caseDecl(c.P.TypeDecl(d), pl.Tag)
-                    if cd is null or cd.Payload.Len() == 0 or i >= cd.Payload.Len() { return diag.Where.Nowhere }
+                    if cd is null or cd.Payload.Len() == 0 or i >= cd.Payload.Len(): return diag.Where.Nowhere
                     return c.markAt(c.P.DeclModule(d), cd.Payload[i].Ty)
                 }
                 case _ { }
@@ -23842,7 +23842,7 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
         for tr in m.Cases[i].Types {
             if c.isWildType(tr) {
                 for e in seen {
-                    if e.Wild { c.P.L.Diags.ErrorOncePerLine(c.at(tr.Span()), msgs.ReflCaseUnreachable()) }
+                    if e.Wild: c.P.L.Diags.ErrorOncePerLine(c.at(tr.Span()), msgs.ReflCaseUnreachable())
                 }
                 seen.Push(typeCase(true, false, types.UnknownT, 0))
                 if found < 0 { found = i }
@@ -24284,7 +24284,7 @@ fn (c mut Checker&) caseTypeWritten(tr ast.TypeRef&, say Bool = true) Bool {
             if ref.Kind == names.What.Type and ref.Index >= 0 {
                 ad := c.P.DeclFor(ref.Module, ref.Index)
                 if not c.P.ArgsFit(ad, args) {
-                    if say { c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(ad), generic.WrittenTypes(args))) }
+                    if say: c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(ad), generic.WrittenTypes(args)))
                     return false
                 }
             }
@@ -24350,7 +24350,7 @@ fn (c mut Checker&) firstUncovered(rows Vec<Array<ast.Pattern&>&>&, t types.Type
             }
             match p {
                 case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
-                    if c.caseTag(x, t) == k { sub.Push(patTail(r, Array<ast.Pattern&>(0), ps.Len())) }
+                    if c.caseTag(x, t) == k: sub.Push(patTail(r, Array<ast.Pattern&>(0), ps.Len()))
                 }
                 case ast.Pattern.Case(_, path, subs) { if c.caseTag(path, t) == k: c.byFieldRow(sub, r, subs, c.caseFields(t, k, path)) }
                 case _ { }
@@ -24463,11 +24463,11 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
             match r[0] {
                 case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
                     k := c.caseTag(x, t)
-                    if k >= 0 { named[k] = true }
+                    if k >= 0: named[k] = true
                 }
                 case ast.Pattern.Case(_, path, _) {
                     k := c.caseTag(path, t)
-                    if k >= 0 { named[k] = true }
+                    if k >= 0: named[k] = true
                 }
                 case _ { }
             }
@@ -24619,7 +24619,7 @@ fn (c mut Checker&) patBool(p ast.Pattern&) I64 {
         case ast.Pattern.Value(_, x), ast.Pattern.Path(_, x) {
             match x {
                 case ast.Expr.Lit(sp, kind) {
-                    if kind == token.Tok.BoolLit { return 1 if c.src(sp) == "true" else 0 }
+                    if kind == token.Tok.BoolLit: return 1 if c.src(sp) == "true" else 0
                 }
                 case _ { }
             }
@@ -24664,7 +24664,7 @@ fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut Vec<Bool>
             for k in range ms.Len() {
                 if k < covered.Len() and c.P.T.Same(ms[k], mt) {
                     # T34: a type an earlier clause matches whatever it holds is never matched again
-                    if covered[k] or all { c.err(sp, msgs.AnyCaseTwice(c.ty(mt))) }
+                    if covered[k] or all: c.err(sp, msgs.AnyCaseTwice(c.ty(mt)))
                     covered[k] = true
                 }
             }
@@ -25936,7 +25936,7 @@ fn (c mut Checker&) effX(x typed.Expr?&) Bool {
                 case typed.Callee.Body(id) { c.effCalls.Push(I64(id)) }
                 case typed.Callee.Extern(f) {
                     fd := c.P.FnDecl(f)
-                    if not typed.MathExtern(c.text(fd.Name), fd.S.Params.Len()) { return true }
+                    if not typed.MathExtern(c.text(fd.Name), fd.S.Params.Len()): return true
                 }
                 case typed.Callee.Value(_), typed.Callee.Dispatch(_, _, _) { return true }
                 case typed.Callee.Helper(_, _) { }
@@ -25977,7 +25977,7 @@ fn (c mut Checker&) effX(x typed.Expr?&) Bool {
             for cl in tr.Clauses {
                 if c.effB(cl.Code) { return true }
                 for d in cl.Defaults {
-                    if c.effX(d) { return true }
+                    if c.effX(d): return true
                 }
             }
             return false

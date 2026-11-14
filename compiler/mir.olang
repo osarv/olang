@@ -1524,7 +1524,7 @@ fn (v mut verifier&) reach() {
         for st in v.F.Blocks[I64(b)].Stmts {
             match st {
                 case Stmt.Deferred(_, _, e) {
-                    if e != NoBlock { succ.Push(e) }
+                    if e != NoBlock: succ.Push(e)
                 }
                 case _ { }
             }

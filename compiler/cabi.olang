@@ -142,7 +142,7 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
                 b := StringBuilder()
                 b.Push("{ ")
                 for i in range sc.Len() {
-                    if i > 0 { b.Push(", ") }
+                    if i > 0: b.Push(", ")
                     b.Push(ft)
                 }
                 b.Push(" }")

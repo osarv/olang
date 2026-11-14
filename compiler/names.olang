@@ -477,7 +477,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             case ast.Decl.ExternBlock(_, _, ds) {
                 for x in ds {
                     n := externDeclName(x)
-                    if n != source.NameId(0) { t.waiting.Put(n, true) }
+                    if n != source.NameId(0): t.waiting.Put(n, true)
                 }
             }
             case ast.Decl.Import(_, alias, path, _) {
@@ -833,7 +833,7 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
                 r.startItem(mi)
                 for m in members { r.path(m) }
                 for c in cases {
-                    for p in c.Payload { r.typeRef(p.Ty) }
+                    for p in c.Payload: r.typeRef(p.Ty)
                 }
             }
             case ast.Decl.ExternBlock(_, _, ds) { r.bodies(mi, ds) }
@@ -1394,7 +1394,7 @@ fn (r mut Resolver&) namesType(x ast.Expr&) Bool {
             match a {
                 case ast.Expr.Name(_, an) {
                     ref := r.lookup(an)
-                    if ref.Kind != What.Import or ref.Module < 0 { return false }
+                    if ref.Kind != What.Import or ref.Module < 0: return false
                     return r.Tables[ref.Module].types.Has(n)
                 }
                 case _ { return false }
@@ -1711,7 +1711,7 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
                 r.unknownSaid.Push(pair.Pair(head, I64(-1)))
                 near mut msgs.Nearest& = msgs.Nearest(r.text(head))
                 for imp in r.L.Mods[r.mi].Imports {
-                    if imp.Target >= 0 { near.Offer(imp.Alias) }
+                    if imp.Target >= 0: near.Offer(imp.Alias)
                 }
                 r.L.Diags.Error(r.at(r.mi, hsp), msgs.UnknownImport(r.tok(head), near.Hint()))
             }

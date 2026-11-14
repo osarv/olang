@@ -613,7 +613,7 @@ fn varNamed(body Array<ast.Stmt&>&, id source.NameId) I64 {
         match s {
             case ast.Stmt.Var(_, v) {
                 for k in range v.Names.Len() {
-                    if v.Names[k] == id { return I64(v.NameSps[k].Start) }
+                    if v.Names[k] == id: return I64(v.NameSps[k].Start)
                 }
             }
             case _ { }

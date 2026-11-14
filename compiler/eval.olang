@@ -1046,7 +1046,7 @@ fn (m mut Machine&) reachesWritable(ty types.TypeId) Bool {
                                                       t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum) {
                 cs := t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
                 for c in t.Items(cs) {
-                    if c != types.TypeId(0) { yes = yes or m.reachesWritable(c) }
+                    if c != types.TypeId(0): yes = yes or m.reachesWritable(c)
                 }
             }
         }

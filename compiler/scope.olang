@@ -3051,7 +3051,7 @@ fn (s mut Scoper&) recMap(r fnRec, vars Array<I64>&, rv I64) Array<I64> {
                     continue
                 }
                 for v in range vars.Len() {
-                    if vars[v] == j { m[k] = v }
+                    if vars[v] == j: m[k] = v
                 }
             }
             case typed.ScopeVar.Result, typed.ScopeVar.Instance { m[k] = rv }
@@ -3984,7 +3984,7 @@ fn (s mut Scoper&) parts(t types.TypeId) Vec<types.TypeId> {
             if not s.P.T.HasBody(t) { return out }
             match s.P.T.DeclKindOf(s.P.T.DeclOf(t)) {
                 case types.DeclKind.Struct {
-                    for f in s.P.T.Items(s.P.T.Fields(t)) { out.Push(f) }
+                    for f in s.P.T.Items(s.P.T.Fields(t)): out.Push(f)
                 }
                 case types.DeclKind.Enum { s.caseParts(s.P.T.Items(s.P.T.Cases(t)), out) }
                 case types.DeclKind.Over { out.Push(s.P.T.Base(t)) }
@@ -4900,7 +4900,7 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
                 # constant data given for it lives in the program's scope; a variable nothing determines yet is bound
                 # after, by its own obligations or where the result lands (O18b), and constrains nothing here
                 if to == Term.None {
-                    if not s.staticVar(c, i) { continue }
+                    if not s.staticVar(c, i): continue
                     to = Term.Program
                 }
             }
@@ -4909,7 +4909,7 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
             case Term.Derived(p, w) {
                 if p >= 0 {
                     to = s.derivedAt(p, w, c, true, beta)
-                    if not to.Runs() or to == Term.Program { to = s.paramBinding(c, p, beta) }
+                    if not to.Runs() or to == Term.Program: to = s.paramBinding(c, p, beta)
                 }
             }
             case _ { return Term.None }
@@ -5088,7 +5088,7 @@ fn (s mut Scoper&) tiedToBlock(x typed.Expr&) Bool {
                 for i in range c.Args.Len() {
                     k := s.P.T.ShareOf(fty, i)
                     q := k if k >= 0 else i
-                    if v < vars.Len() and vars[v] == q and isBlockTerm(s.peekTerm(c.Args[i])) { return true }
+                    if v < vars.Len() and vars[v] == q and isBlockTerm(s.peekTerm(c.Args[i])): return true
                 }
             }
             case _ { }
@@ -6130,8 +6130,8 @@ fn (s mut Scoper&) aliasBlock(bl typed.Block?&) {
                 # from one is a second name of the cursor)
                 cur := s.isCursorLocal(I64(l))
                 if p >= 0 and not field and not cur and s.isRef(s.B!.Locals[I64(l)].Ty) and s.isRef(s.B!.Locals[p].Ty) {
-                    if s.aliasOf[p] >= 0 { p = s.aliasOf[p] }
-                    if s.regionKind(p) or s.isCursorLocal(p) { s.aliasOf[I64(l)] = p }
+                    if s.aliasOf[p] >= 0: p = s.aliasOf[p]
+                    if s.regionKind(p) or s.isCursorLocal(p): s.aliasOf[I64(l)] = p
                 }
             }
             case typed.Stmt.If(_, i) {
@@ -7108,7 +7108,7 @@ fn ownField(p typed.Lvalue&, l I64) I64 {
         case typed.Lvalue.Field(_, _, base, i) {
             match base {
                 case typed.Lvalue.Deref(_, _, r) {
-                    if isParamRead(r, l) { return i }
+                    if isParamRead(r, l): return i
                 }
                 case _ { }
             }
@@ -7254,7 +7254,7 @@ fn (s mut Scoper&) handedOn(a typed.Expr&, l I64) I64 {
         case typed.Expr.Read(_, _, p, _) {
             match p {
                 case typed.Lvalue.Deref(_, _, r) {
-                    if isParamRead(r, l) { return 3 }
+                    if isParamRead(r, l): return 3
                 }
                 case _ { }
             }
@@ -9422,7 +9422,7 @@ fn (s mut Scoper&) retValue(sp source.Span, x typed.Expr&) {
         match x {
             case typed.Expr.Make(_, _, m) {
                 if m.Kind == typed.MakeKind.Tuple {
-                    for k in range m.Items.Len() { s.retOne(k, m.Items[k]) }
+                    for k in range m.Items.Len(): s.retOne(k, m.Items[k])
                     return
                 }
             }
@@ -10239,7 +10239,7 @@ fn (s mut Scoper&) convertedPlace(x typed.Expr&) typed.Lvalue?& {
             match s.unAway(args[0]) {
                 case typed.Expr.Read(_, at, p, _) {
                     k := s.P.T.KindOf(at)
-                    if k != types.Kind.Array and k != types.Kind.Named or p == typed.Lvalue.Temp { return null }
+                    if k != types.Kind.Array and k != types.Kind.Named or p == typed.Lvalue.Temp: return null
                     return p
                 }
                 case _ { }
@@ -12189,7 +12189,7 @@ fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
                 c := typed.Call.Of(s.unAway(xi)) if xi is not null else null
                 if c is not null and c.Args.Len() > 0 and (s.isMethodCall(c) or s.indexCall(c)) {
                     r := s.shownLocal(flRootExpr(s.unAway(c.Args[0])), depth + 1)
-                    if r >= 0 { return r }
+                    if r >= 0: return r
                 }
             }
             return l if loc.Name != source.NameId(0) else -1
@@ -14113,9 +14113,9 @@ fn (s mut Scoper&) bindingParam(body typed.Body&, f I64) I64 {
         for st in body.Root!.Stmts {
             match st {
                 case typed.Stmt.Let(_, l, x) {
-                    if I64(l) != f { continue }
+                    if I64(l) != f: continue
                     r := flRootExpr(unPassed(s.unAway(x)))
-                    if r >= 0 and body.Locals[r].Kind == typed.LocalKind.Param and s.holds(body.Locals[r].Ty) { return r }
+                    if r >= 0 and body.Locals[r].Kind == typed.LocalKind.Param and s.holds(body.Locals[r].Ty): return r
                 }
                 case _ { }
             }
@@ -14263,10 +14263,10 @@ fn (s mut Scoper&) FoldStats() String {
         for k in range s.Plans[b].Built.Len() {
             match s.Plans[b].Built[k] {
                 case typed.Scope.Block(blk) {
-                    if seen.Has(I64(blk)) { continue }
+                    if seen.Has(I64(blk)): continue
                     seen.Put(I64(blk), true)
                     built++
-                    if I64(blk) < body.Blocks.Len() and body.Blocks[I64(blk)].Kind == typed.BlockKind.Plain { reach++ }
+                    if I64(blk) < body.Blocks.Len() and body.Blocks[I64(blk)].Kind == typed.BlockKind.Plain: reach++
                 }
                 case _ { }
             }

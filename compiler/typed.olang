@@ -404,7 +404,7 @@ fn AnyItemNew(t types.Table&, x Expr?&) Bool {
         case Expr.Try(_, _, tr) {
             for c in tr.Clauses {
                 for d in c.Defaults {
-                    if not AnyItemNew(t, d) { return false }
+                    if not AnyItemNew(t, d): return false
                 }
             }
             return AnyItemNew(t, tr.X)

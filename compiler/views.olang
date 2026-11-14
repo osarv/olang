@@ -333,7 +333,7 @@ fn (v mut Viewer&) walk(b I64, check Bool) {
         case typed.BodyOf.Ctor(_, _) {
             for f in body.Fields {
                 for h in st.Holds {
-                    if h.L == I64(f) { v.passes(h.V) }
+                    if h.L == I64(f): v.passes(h.V)
                 }
             }
         }
@@ -576,7 +576,7 @@ fn (v mut Viewer&) placePlaces(p typed.Lvalue?&, st state&, out mut Vec<place>&)
             # a second name stands for what it names; a parameter given another value is a root of its own
             if v.named(st, I64(id)) {
                 for n in st.Names {
-                    if n.L == I64(id) { placeAdd(out, n.P) }
+                    if n.L == I64(id): placeAdd(out, n.P)
                 }
                 return
             }
@@ -1262,7 +1262,7 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
                 part := Vec<view>()
                 v.expr(args[i], st, part)
                 if typed.PassesRefs(op) and i == 0 {
-                    for r in part { viewAdd(mine, r) }
+                    for r in part: viewAdd(mine, r)
                 }
             }
         }
@@ -1959,7 +1959,7 @@ fn callsExpr(x typed.Expr?&, out mut Vec<I64>&) {
         case typed.Expr.Fn(_, _, f) {
             match f {
                 case typed.FnVal.Lambda(_, caps, _) {
-                    for c in caps { callsExpr(c.Outer, out) }
+                    for c in caps: callsExpr(c.Outer, out)
                 }
                 case typed.FnVal.Adapter(_, r, _) { callsExpr(r, out) }
                 case _ { }

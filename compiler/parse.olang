@@ -3133,7 +3133,7 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&) ast.Expr& ? Fail {
                     x = ast.Expr.Generic(p.from(start), x, targs)
                 } else if p.typeArgsCall(0) or p.spacedTypeArgs(0) {
                     # x.Narrow<I32>(): a method's type arguments, by C#'s rule (G12) - written with spaces, said
-                    if p.spacedTypeArgs(0) { p.report(p.here(), p.lookTok(0).End, msgs.TypeArgsSpaced(p.names.Text(n))) }
+                    if p.spacedTypeArgs(0): p.report(p.here(), p.lookTok(0).End, msgs.TypeArgsSpaced(p.names.Text(n)))
                     targs := try p.typeArgs()
                     x = ast.Expr.Generic(p.from(start), x, targs)
                 }
@@ -3829,7 +3829,7 @@ fn (p Parser&) operandEndAfter(first I64) I64 {
                     depth++
                 } else if kt == closer {
                     depth--
-                    if depth == 0 { break }
+                    if depth == 0: break
                 }
                 t++
             }

@@ -513,9 +513,9 @@ fn (f mut finder&) expr(x typed.Expr?&) {
             match fv {
                 case typed.FnVal.Named(bid) { f.callee(sp, typed.Callee.Body(bid)) }
                 case typed.FnVal.Lambda(bid, caps, _) {
-                    for cp in caps { f.expr(cp.Outer) }
+                    for cp in caps: f.expr(cp.Outer)
                     lb := f.c.Bodies[I64(bid)]
-                    if lb.Root is not null { f.block(lb.Root) }
+                    if lb.Root is not null: f.block(lb.Root)
                 }
                 case typed.FnVal.Adapter(_, recv, _) { f.expr(recv) }
             }

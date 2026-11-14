@@ -250,7 +250,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
                 if r >= 0 and (t.StartsWith("struct ") or t.StartsWith("union ")) {
                     g.recIndex.Put(t, r)
                     g.recs[r].Key = t
-                    if g.recs[r].Typedef == "" { g.recs[r].Typedef = $name }
+                    if g.recs[r].Typedef == "": g.recs[r].Typedef = $name
                 }
             }
             continue
@@ -516,7 +516,7 @@ fn (g mut gen&) declarator(p mut ctp&, base I64, ro Bool, depth I64) I64 {
                     p.pos++
                 } else {
                     pt := g.typeName(p, depth)
-                    if not (g.nodes[pt].Kind == CKind.Void and ps.Len() == 0 and p.at() == ")") { ps.Push(pt) }
+                    if not (g.nodes[pt].Kind == CKind.Void and ps.Len() == 0 and p.at() == ")"): ps.Push(pt)
                 }
                 if p.at() == "," { p.pos++ }
             }
@@ -1068,7 +1068,7 @@ fn cLex(t String&) Vec<String&>& {
                 q := t[j]
                 j++
                 for j < t.Len() and t[j] != q {
-                    if t[j] == '\\' { j++ }
+                    if t[j] == '\\': j++
                     j++
                 }
                 j = j + 1 if j < t.Len() else t.Len()

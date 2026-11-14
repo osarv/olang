@@ -1735,7 +1735,7 @@ fn (t Table&) Embedded(id TypeId) Array<TypeId> {
         case Kind.Named {
             match t.DeclKindOf(t.DeclOf(id)) {
                 case DeclKind.Struct {
-                    for f in t.Items(t.Fields(id)) { out.Push(f) }
+                    for f in t.Items(t.Fields(id)): out.Push(f)
                 }
                 case DeclKind.Enum { pushPayloads(t.Items(t.Cases(id)), out) }
                 case DeclKind.Over { out.Push(t.Base(id)) }
@@ -1823,7 +1823,7 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
                 case DeclKind.Error { size, align = 4, 4 }
                 case DeclKind.Over {
                     b := t.Base(id)
-                    if t.LayoutState(b) != LaidOut { return false }
+                    if t.LayoutState(b) != LaidOut: return false
                     size, align = t.Size(b), t.Align(b)
                 }
                 case DeclKind.Trait, DeclKind.Foreign { return false }

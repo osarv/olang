@@ -2147,7 +2147,7 @@ fn (p mut Program&) globalDecl(mi I64, n source.NameId) ast.VarDecl?& {
         match d {
             case ast.Decl.Global(_, v) {
                 for k in range v.Names.Len() {
-                    if v.Names[k] == n and not mutableGlobal(v) { return v }
+                    if v.Names[k] == n and not mutableGlobal(v): return v
                 }
             }
             case _ { }
@@ -3212,8 +3212,8 @@ fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
             found := -1
             for m >= 0 {
                 if p.recvApplies(m, x) {
-                    if p.recvExact(m) { return m }
-                    if found < 0 { found = m }
+                    if p.recvExact(m): return m
+                    if found < 0: found = m
                 }
                 m = try p.sameKey.Get(m) catch default -1
             }
@@ -4343,7 +4343,7 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = t
             for m in methods {
                 if m.IsBuilder() {
                     # T30b: a builder the type a parameter names must have
-                    if p.meetsBuilder(d, p.T.Args(tr), m) { continue }
+                    if p.meetsBuilder(d, p.T.Args(tr), m): continue
                     return Unmet(0, tr, m.Name, true, false)
                 }
                 if p.meets(t, d, p.T.Args(tr), m) { continue }
@@ -4822,10 +4822,10 @@ fn (p mut Program&) HoldsVarByValue(t types.TypeId, owner I64, v I64, depth I64)
                 if not p.HoldsVarByValue(xs[i], owner, v, depth + 1) { continue }
                 if not p.Body(self) { return true }
                 for f in p.T.Items(p.T.Fields(self)) {
-                    if p.HoldsVarByValue(f, DeclOwner(d), i, depth + 1) { return true }
+                    if p.HoldsVarByValue(f, DeclOwner(d), i, depth + 1): return true
                 }
                 for f in p.T.Items(p.T.Cases(self)) {
-                    if f != types.TypeId(0) and p.HoldsVarByValue(f, DeclOwner(d), i, depth + 1) { return true }
+                    if f != types.TypeId(0) and p.HoldsVarByValue(f, DeclOwner(d), i, depth + 1): return true
                 }
             }
             return false
@@ -5120,7 +5120,7 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
             if n > 0 {
                 b.PushChar('<')
                 for i in range n {
-                    if i > 0 { b.Push(", ") }
+                    if i > 0: b.Push(", ")
                     p.reflName(b, xs[i])
                 }
                 b.PushChar('>')
@@ -5174,7 +5174,7 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
             } else {
                 if es.Len() != 1 { b.PushChar('{') }
                 for i in range es.Len() {
-                    if i > 0 { b.Push(", ") }
+                    if i > 0: b.Push(", ")
                     b.Push(p.text(p.T.DeclName(p.T.DeclOf(p.T.ErrOf(es[i])))))
                 }
                 if es.Len() != 1 { b.PushChar('}') }
@@ -5285,7 +5285,7 @@ fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>& {
             k I64 = 0
             for v in FieldDecls(sb) {
                 for vn in v.Names {
-                    if k == ds.At { return mi, fieldAttrs(sb, v, vn, none) }
+                    if k == ds.At: return mi, fieldAttrs(sb, v, vn, none)
                     k++
                 }
             }
@@ -5640,7 +5640,7 @@ fn (p mut Program&) canonPromises(c mut cursor&) I64 ? {
                 into = try canonNumber(c)
                 if c.eat(".") {
                     start := c.At
-                    for c.At < c.Text.Len() and (c.peek().IsLetter() or c.peek().IsDigit() or c.peek() == '_') { c.At++ }
+                    for c.At < c.Text.Len() and (c.peek().IsLetter() or c.peek().IsDigit() or c.peek() == '_'): c.At++
                     field = I64(p.L.Names.Intern(c.Text[start:c.At]))
                 }
             }
