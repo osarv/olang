@@ -21,8 +21,9 @@ extern { fn ioctl(fd I32, request U64, size mut Array<U16>&) I32 }
 Keep I64 = 1000
 
 # what a byte fed did: the entry is being edited; Enter was pressed (the caller decides whether the entry is complete -
-# Accept - or goes on over a new line - Break); the input ended (Ctrl-D on an empty entry)
-type Event enum { Editing, Enter, End }
+# Accept - or goes on over a new line - Break); a paste ended (the caller accepts the entry where it is complete); the
+# input ended (Ctrl-D on an empty entry)
+type Event enum { Editing, Enter, Pasted, End }
 
 type snap struct(Text String&, At I64) {
     Text
@@ -52,6 +53,7 @@ type Editor struct(Vi Bool = false, Colour Bool = false, Width I64 = 80) {
     inserted Bool = false
     quiet Bool = false           # a character's first bytes typed: drawn when it is whole
     searching Bool = false
+    pasting Bool = false         # inside a bracketed paste: its line ends are the entry's, nothing runs
     viSearch Bool = false        # begun by / or ?: Enter ends the search, not the entry
     back Bool = true             # searching toward older entries
     query String& = ""
@@ -301,7 +303,7 @@ fn (e mut Editor&) Feed(b U8) Event {
     e.quiet = false
     ev := e.step(Char(b))
     if not e.inserted: e.lastEdit = 0
-    if ev == Event.Editing and e.esc == "" and not e.quiet: e.draw()
+    if (ev == Event.Editing or ev == Event.Pasted) and e.esc == "" and not e.quiet: e.draw()
     return ev
 }
 
@@ -320,6 +322,7 @@ fn (e mut Editor&) step(c Char) Event {
         e.esc = "\x1b"
         return Event.Editing
     }
+    if e.pasting: return e.pasted(c)
     if e.searching: return e.searchKey(c)
     if e.Vi and e.Normal: return e.normalKey(c)
     return e.key(c)
@@ -340,8 +343,7 @@ fn (e mut Editor&) escape(c Char) Event {
     seq := e.esc
     e.esc = ""
     if e.searching: e.acceptSearch()
-    e.sequence(seq)
-    return Event.Editing
+    return e.sequence(seq)
 }
 
 fn (e mut Editor&) meta(c Char) Event {
@@ -356,9 +358,11 @@ fn (e mut Editor&) meta(c Char) Event {
 }
 
 # a finished escape sequence: the arrows (with Ctrl or Alt, by words), Home, End, Delete
-fn (e mut Editor&) sequence(seq String&) {
+fn (e mut Editor&) sequence(seq String&) Event {
     final := seq[seq.Len() - 1]
     params := seq[2:seq.Len() - 1]
+    if final == '~' and (params == "200" or params == "201"): return e.bracket(params == "200")
+    if e.pasting: return Event.Editing
     words := params.Len() > 0 and params[params.Len() - 1] != '1' and final != '~'
     if final == 'A': e.up()
     if final == 'B': e.down()
@@ -368,6 +372,29 @@ fn (e mut Editor&) sequence(seq String&) {
     if final == 'F' or (final == '~' and (params == "4" or params == "8")): e.At = lineEnd(e.Text, e.At)
     if final == '~' and params == "3": e.remove(e.At, nextAt(e.Text, e.At), kill = false)
     if e.Normal: e.clamp()
+    return Event.Editing
+}
+
+# a bracketed paste begun or ended (the terminal sends ESC [200~ and ESC [201~ around what is pasted, ESC [?2004h asked
+# for in Read): the pasted text goes into the entry as it is, drawn once at its end, the line ends it ended with left out
+fn (e mut Editor&) bracket(begins Bool) Event {
+    e.pasting = begins
+    e.quiet = begins
+    if begins: return Event.Editing
+    for e.Text.EndsWith("\n") {
+        e.Text = e.Text[:e.Text.Len() - 1]
+        if e.At > e.Text.Len(): e.At = e.Text.Len()
+    }
+    if e.Vi: e.Normal = false
+    return Event.Pasted
+}
+
+fn (e mut Editor&) pasted(c Char) Event {
+    e.quiet = true
+    if c == '\r' or c == '\n': e.insert("\n")
+    if c == '\t': e.insert("    ")
+    if c >= 32 and c != 127: e.insert(one(c))
+    return Event.Editing
 }
 
 # a key in emacs's keys, or vi's insert mode
@@ -857,6 +884,11 @@ fn (e mut Editor&) Read(open fn&(t String&) Bool) String& ? Ended {
     raw.c_cc[termios.VTIME] = 0
     termios.tcsetattr(0, termios.TCSANOW, raw)
     defer termios.tcsetattr(0, termios.TCSANOW, saved)
+    e.Out.Push("\x1b[?2004h")
+    defer {
+        e.Out.Push("\x1b[?2004l")
+        e.flush()
+    }
     e.Width = columns()
     e.Begin()
     for {
@@ -865,6 +897,12 @@ fn (e mut Editor&) Read(open fn&(t String&) Bool) String& ? Ended {
         t := try e.feedPending(open)
         if t is not null: return t
     }
+}
+
+fn (e mut Editor&) done() String& {
+    t := e.Accept()
+    e.flush()
+    return t
 }
 
 fn (e mut Editor&) fill() ? Ended {
@@ -886,14 +924,13 @@ fn (e mut Editor&) feedPending(open fn&(t String&) Bool) String?& ? Ended {
             e.flush()
             error Ended
         }
+        if ev == Event.Pasted and not open(e.Text): return e.done()
         if ev != Event.Enter: continue
         if open(e.Text) {
             e.Break()
             continue
         }
-        t := e.Accept()
-        e.flush()
-        return t
+        return e.done()
     }
     e.Idle()
     return null
@@ -1000,6 +1037,17 @@ test Editor "Up and Down walk the history, and the lines of an entry" {
     assert e.Text.StartsWith("fn g()") and e.At == 8
     e.typed("\x1b[B\x1b[B\x1b[B")
     assert e.Text == "dra"
+}
+
+test Editor "a bracketed paste is one entry, drawn once, run where it is complete" {
+    e := Editor.testing()
+    e.typed("\x1b[200~fn f() I64 {\r\treturn 1\r}\r")
+    assert e.pasting and e.Out.Len() == 0
+    assert e.typed("\x1b[201~") == Event.Pasted
+    assert e.Text == "fn f() I64 {\n    return 1\n}" and e.At == e.Text.Len()
+    assert e.Out.ToString() == "\r\x1b[J>>> fn f() I64 {\r\n...     return 1\r\n... }\r\x1b[5C"
+    e.typed("\x1b[200~\x1b[A\x1b[201~")
+    assert e.Text == "fn f() I64 {\n    return 1\n}"
 }
 
 test Editor "Ctrl-R finds an entry by what it holds" {

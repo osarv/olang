@@ -30,6 +30,7 @@ import "scope"
 import "free"
 import "lineedit"
 import "paint"
+import cpoll "poll.h"
 import typecheck "check"
 
 # ---- what a session holds ----
@@ -820,7 +821,7 @@ fn readEntry(lines mut io.Lines&, tty Bool) String ? Ended {
     b := StringBuilder()
     first := true
     for {
-        if tty: say(">>> " if first else "... ")
+        if tty and not waiting(lines): say(">>> " if first else "... ")
         line := try lines.Next() catch {
             if first: error Ended.Input
             break
@@ -831,6 +832,15 @@ fn readEntry(lines mut io.Lines&, tty Bool) String ? Ended {
         if not Open(b.ToString()): break
     }
     return b.ToString()
+}
+
+# whether a line is there to read already - read, or typed or pasted ahead: no prompt is asked for it
+fn waiting(lines io.Lines&) Bool {
+    if lines.Buffered(): return true
+    p := Array<cpoll.pollfd>(1)
+    p[0].fd = 0
+    p[0].events = I16(cpoll.POLLIN)
+    return cpoll.poll(p, 1, 0) > 0
 }
 
 # a command other than :quit
