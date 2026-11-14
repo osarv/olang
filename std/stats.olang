@@ -6,7 +6,7 @@
 #     sd := try stats.StdDev(prices)
 #     p95 := try stats.Percentile(latencies, 95.0)
 #     counts := stats.Histogram(values, stats.Edges(0.0, 100.0, 20))
-#     counts, edges := stats.Bins(values, 20)                 # 20 bins from the least value to the greatest
+#     counts, edges := try stats.Bins(values, 20)             # 20 bins from the least value to the greatest
 #
 # Each takes an array of any number type - the four floats and the integers - and computes in F64, whatever the
 # elements are: a mean of F16s is not rounded to F16 at every step, and the answer is an F64. A Vec is handed over as v.View(). Ordinary olang, so every function here runs while compiling (K1)
