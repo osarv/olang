@@ -37051,3 +37051,15 @@ evaluate 967, scope judged 1584, scope 1869, lower+emit 3725 (the largest step, 
 compiles and the link - nothing the front end built is given back before clang runs (left for the round that shrinks
 the compiler's memory). So at 8 GB (~6.5 GB usable) the bootstrap needs about 3.7 GB for the compiler plus 512 MB per
 compile the rest holds - six at once there, about 0.9 GB in use - near 4.7 GB.
+
+`make install` became a real install the same day (the user): it had linked `~/.local/bin/olang` to the checkout's
+`build/olang`, so deleting or rebuilding the checkout changed the installed compiler. Now it copies the compiler, std
+(runtime and prelude included) and SPEC.md into `PREFIX/lib/olang` laid out as in the checkout - the compiler finds
+std and the spec from its own file (`load.StdDir`, `diag.SpecPath`: `../std`, `../SPEC.md`; nothing else is read
+beside it but a release's `../llvm`) - by way of `lib/olang.new` renamed into place, and links `PREFIX/bin/olang` to
+it. Where `PREFIX/bin` is not on `PATH` it appends one marked line to the shell's startup file (`~/.bashrc`, `~/.zshrc`
+by the environment's `SHELL`, else `~/.profile`; `PATHFILE` names another, `PATHFILE=none` none), only once. `make
+uninstall` removes the directory, the link where it points into it and the marked line; `~/.cache/olang` (remote
+packages), a Jupyter kernel spec and builds' `build/` are left, being the user's data rather than the install's.
+Tested: installed to a temporary PREFIX, the checkout's `build/` moved away, the installed olang ran, tested and built
+a program and printed `explain B3m`.

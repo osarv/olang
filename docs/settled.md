@@ -853,7 +853,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   one); a ThinLTO link's back ends as many. `OLANG_TIMES` says each phase with its time and the compiler's memory, and
   each compile as `n/m`. `make bootstrap` is two stages - the seed builds a `-quick` compiler, which builds the
   optimized one, installed - each saying its start and duration; the byte-for-byte self-build is `make fixedpoint`,
-  run by `make verify`.
+  run by `make verify`. `make install` copies olang into `PREFIX/lib/olang` (bin, std, SPEC.md; default `~/.local`),
+  links `PREFIX/bin/olang`, adds `PREFIX/bin` to PATH in the shell's startup file once; `make uninstall` undoes it.
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target constants
   `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's call).
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;

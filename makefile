@@ -2,7 +2,8 @@
 #
 #   make             build/olang, built from the committed seed (seed/) with nothing but clang and xz - a few minutes;
 #                    it first checks what the build needs (make prereq) and names what is missing
-#   make install     a link to build/olang in ~/.local/bin (PREFIX=... for another place), so "olang" runs anywhere
+#   make install     olang copied into ~/.local/lib/olang, linked from ~/.local/bin (PREFIX=... for another place)
+#   make uninstall   removes what make install made
 #   make clean       removes build/
 #
 # Everything else here is for working on the compiler: make quick (the suite on the compiler already built), make
@@ -565,26 +566,47 @@ diaggold: $(GOLD_OLANG) build/compiler_tools_diaggold_capture
 clean:
 	rm -rf build
 
-# build/olang linked into PREFIX/bin as olang: the compiler finds the standard library beside where its file is
-# (load.StdDir, through the link), so the link keeps working while the checkout stays where it is. Where PREFIX/bin is
-# not on PATH, one line putting it there is added to the shell's startup file - PATHFILE, by default ~/.bashrc for
-# bash, ~/.zshrc for zsh (by the environment's SHELL; make's own is /bin/sh) and ~/.profile otherwise - unless
-# that very line is there already; PATHFILE=none leaves every file as it is
+# install: olang copied to a place of its own, independent of the checkout - PREFIX/lib/olang holds the compiler
+# (bin/olang), the standard library (std/, its runtime and prelude) and SPEC.md (explain RULE), laid out as in the
+# checkout, since the compiler finds std and the spec from where its file is (load.StdDir, diag.SpecPath: "../std" and
+# "../SPEC.md" from its directory) - and PREFIX/bin/olang links to it. Installing again replaces what was there (by way
+# of PREFIX/lib/olang.new, renamed into place). Where PREFIX/bin is not on PATH, one line putting it there is added to
+# the shell's startup file - PATHFILE, by default ~/.bashrc for bash, ~/.zshrc for zsh (by the environment's SHELL;
+# make's own is /bin/sh) and ~/.profile otherwise - unless that very line is there already; PATHFILE=none leaves every
+# file as it is
 PREFIX ?= $(HOME)/.local
 LOGIN_SHELL := $(shell printenv SHELL)
 PATHFILE ?= $(if $(filter %/bash,$(LOGIN_SHELL)),$(HOME)/.bashrc,$(if $(filter %/zsh,$(LOGIN_SHELL)),$(HOME)/.zshrc,$(HOME)/.profile))
+INSTALL_DIR = $(abspath $(PREFIX))/lib/olang
+PATH_MARK = \# added by olang's make install
 install: build/olang
-	mkdir -p $(PREFIX)/bin
-	ln -sf $(abspath build/olang) $(PREFIX)/bin/olang
-	@echo "install: $(PREFIX)/bin/olang is build/olang"
-	@bin=$(abspath $(PREFIX)/bin); line="export PATH=\"$$bin:\$$PATH\""; \
+	@d=$(INSTALL_DIR); rm -rf $$d.new && mkdir -p $$d.new/bin $(abspath $(PREFIX))/bin && \
+	cp build/olang $$d.new/bin/olang && cp -R std $$d.new/std && cp SPEC.md $$d.new/SPEC.md && \
+	rm -rf $$d && mv $$d.new $$d && ln -sfn $$d/bin/olang $(abspath $(PREFIX))/bin/olang && \
+	echo "install: olang copied into $$d, $(abspath $(PREFIX))/bin/olang links to it"
+	@bin=$(abspath $(PREFIX))/bin; line="export PATH=\"$$bin:\$$PATH\""; \
 	case ":$$PATH:" in *":$$bin:"*) exit 0;; esac; \
 	if [ "$(PATHFILE)" = none ]; then echo "install: $$bin is not on PATH (PATHFILE=none: no file changed)"; exit 0; fi; \
 	if [ -f "$(PATHFILE)" ] && grep -qxF "$$line" "$(PATHFILE)"; then \
 		echo "install: $(PATHFILE) puts $$bin on PATH already - a new terminal (or source $(PATHFILE)) picks it up"; \
 		exit 0; fi; \
-	printf '\n# added by olang'"'"'s make install\n%s\n' "$$line" >> "$(PATHFILE)" && \
+	printf '\n%s\n%s\n' "$(PATH_MARK)" "$$line" >> "$(PATHFILE)" && \
 	echo "install: added $$bin to PATH in $(PATHFILE) - a new terminal (or source $(PATHFILE)) picks it up"
 
+# uninstall: what install made, and nothing else - PREFIX/lib/olang, the PREFIX/bin/olang link where it points into it,
+# and the PATH line install added to PATHFILE (with its comment). What the compiler keeps elsewhere is left: remote
+# packages fetched into ~/.cache/olang (OLANG_CACHE, M23b), a Jupyter kernel spec (jupyter -install), each build's build/
+uninstall:
+	@d=$(INSTALL_DIR); l=$(abspath $(PREFIX))/bin/olang; \
+	case "$$(readlink "$$l" 2> /dev/null)" in "$$d"/*) rm -f "$$l" && echo "uninstall: removed the link $$l";; esac; \
+	if [ -d "$$d" ]; then rm -rf "$$d" && echo "uninstall: removed $$d"; fi; \
+	bin=$(abspath $(PREFIX))/bin; line="export PATH=\"$$bin:\$$PATH\""; f="$(PATHFILE)"; \
+	if [ "$$f" != none ] && [ -f "$$f" ] && grep -qxF "$$line" "$$f"; then \
+		awk -v mark="$(PATH_MARK)" -v line="$$line" '$$0 == mark { held = $$0; next } \
+			held != "" && $$0 == line { held = ""; drop = 1; next } \
+			held != "" { print held; held = "" } { print } END { if (held != "") print held }' "$$f" > "$$f.olang-tmp" && \
+		cat "$$f.olang-tmp" > "$$f" && rm -f "$$f.olang-tmp" && echo "uninstall: removed the PATH line from $$f"; fi; \
+	echo "uninstall: done (left as they are: ~/.cache/olang, a Jupyter kernel spec, builds' build/ directories)"
+
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build prereq install bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
+.PHONY: consistency dumptool all build prereq install uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean

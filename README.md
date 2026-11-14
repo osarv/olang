@@ -46,13 +46,17 @@ build/olang hello.olang       # builds the program quickly (-quick) and runs it;
 build/olang test hello.olang  # runs the file's tests
 build/olang help              # every mode and option
 build/olang                   # the prompt: each entry runs as you type it
-make install                  # links ~/.local/bin/olang to build/olang, so `olang` runs from anywhere
+make install                  # installs olang into ~/.local, so `olang` runs from anywhere
 ```
 
-`make install` also puts `~/.local/bin` on `PATH` where it is not: it adds one line, `export
-PATH="$HOME/.local/bin:$PATH"` (spelled out), to `~/.bashrc` (bash), `~/.zshrc` (zsh) or `~/.profile`, once, and says
-so; a new terminal picks it up. `PREFIX=DIR` installs into `DIR/bin`, `PATHFILE=FILE` names another startup file and
-`PATHFILE=none` changes none.
+`make install` copies the compiler, the standard library and `SPEC.md` into `~/.local/lib/olang` and links
+`~/.local/bin/olang` to it, so the installed olang no longer depends on the checkout: deleting or rebuilding it changes
+nothing, and installing again replaces the old install. Where `~/.local/bin` is not on `PATH`, it adds one line,
+`export PATH="$HOME/.local/bin:$PATH"` (spelled out, under a comment saying make install added it), to `~/.bashrc`
+(bash), `~/.zshrc` (zsh) or `~/.profile`, once, and says so; a new terminal picks it up. `PREFIX=DIR` installs into
+`DIR/lib/olang` and `DIR/bin`, `PATHFILE=FILE` names another startup file and `PATHFILE=none` changes none.
+`make uninstall` (with the same `PREFIX`) removes the install, the link and that line; it leaves remote packages
+fetched into `~/.cache/olang`, a Jupyter kernel spec and builds' `build/` directories.
 
 ### Try it
 
