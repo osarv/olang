@@ -96,3 +96,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	bootfix	opus	medium	done	274	140		targeted		jobs by memory, progress, 2 stages, install copy+editors; Text file busy bug found later
 2026-11-14	muloti	opus	medium	done				targeted		wideMul via umul.with.overflow + weak __muloti4 on aarch64
 2026-11-14	nbrun	sonnet	medium	done				targeted		olang notebook run
+2026-11-14	msgfix	sonnet	medium	done				targeted		TextForLength/CharsForText/BuilderForText helps; t.Bytes()
