@@ -1584,6 +1584,16 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
 
 # a frame for function fi pushed: its own storage, its frame locals made there, its scope variables to be set by the
 # caller. Its index; -1, stopped, past the depth budget
+# a comparison too deep is said where it is written: the call into the first of the frames comparing
+fn (m mut Machine&) stopAtComparison() {
+    k := m.nFs - 1
+    for k > 0 and m.cf[m.fs[k].Fn].Equal { k-- }
+    if k < 0: return
+    f := m.fns.At(m.fs[k].Fn)
+    t := f.Blocks[m.fs[k].Block].T
+    if t == mir.Term.Call: m.stopFile, m.stopSp = f.File, t.sp
+}
+
 fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
     if m.nFs >= m.DepthBudget {
         m.refuse(WhyDepth if m.When == Mode.Compile else WhyRunDepth)
@@ -1593,16 +1603,7 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
     # stops evaluation at stage 0's depths (2,000 while compiling, 100,000 under -i) rather than its memory
     if m.cf[fi].Equal {
         if m.eqDepth >= (2000 if m.When == Mode.Compile else 100000) {
-            # said where the comparison is written: the call into the first of them
-            k := m.nFs - 1
-            for k > 0 and m.cf[m.fs[k].Fn].Equal { k-- }
-            if k >= 0 {
-                f := m.fns.At(m.fs[k].Fn)
-                match f.Blocks[m.fs[k].Block].T {
-                    case mir.Term.Call(csp, _) { m.stopFile, m.stopSp = f.File, csp }
-                    case _ { }
-                }
-            }
+            m.stopAtComparison()
             m.refuse(WhyEqDepth if m.When == Mode.Compile else WhyRunEqDepth)
             return -1
         }

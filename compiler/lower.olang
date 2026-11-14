@@ -1908,26 +1908,8 @@ fn (ln mut lowering&) retOwns(ty types.TypeId) Bool {
 # conditional, a match or a try's default by any value it may give (as stage 0's cgBuiltInResult)
 fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
     if x is null { return false }
-    if ln.valueArray(ty) {
-        match x {
-            case typed.Expr.Cond(_, _, c) { return ln.retCopies(c.A, ty) or ln.retCopies(c.B, ty) }
-            case typed.Expr.Match(_, _, m) {
-                for a in m.Arms {
-                    if ln.retCopies(a.Value, ty): return true
-                }
-                return m.NoMatch is not null and ln.retCopies(m.NoMatch!.Value, ty)
-            }
-            case typed.Expr.Try(_, _, t) {
-                if ln.retCopies(t.X, ty) { return true }
-                for c in t.Clauses {
-                    for df in c.Defaults { if ln.retCopies(df, ty): return true }
-                }
-                return false
-            }
-            case typed.Expr.Seq(_, _, q) { return ln.retCopies(q.X, ty) }
-            case _ { }
-        }
-    }
+    branches := x == typed.Expr.Cond or x == typed.Expr.Match or x == typed.Expr.Try or x == typed.Expr.Seq
+    if branches and ln.valueArray(ty) { return ln.branchesCopy(x, ty) }
     if not ln.copiesArray(x, ty) and not (ln.retOwns(ty) and ln.copiesValue(x)) { return false }
     if typed.FreshTemp(x) { return false }   # (a temporary of a value made for it - a call's, a constructor's)
     # nothing placed (while compiling): every existing array is copied
@@ -1938,20 +1920,46 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
         if lv.Kind == mir.ScopeKind.Join { return true }
     }
     # a conversion names its argument's storage (T29a): the local it reads, under it
-    match ln.unconvert(x) {
-        case typed.Expr.Read(_, _, p, _) {
-            match p {
-                # a local living in the result scope is the result as it is only where nothing else can name it
-                # (O26a: Plan.RetSole); every other one is copied
-                # (a value owning parts is handed back from a whole local as it is, as before retOwns: its local is the
-                # function's own storage - only an array's second names are proved, RetSole)
-                case typed.Lvalue.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or (ln.valueArray(ty) and not ln.plan.RetSole[I64(id)]) }
-                case _ { }
+    u := ln.unconvert(x)
+    if u != typed.Expr.Read: return true
+    p := u.p
+    if p != typed.Lvalue.Local: return true
+    # a local living in the result scope is the result as it is only where nothing else can name it
+    # (O26a: Plan.RetSole); every other one is copied
+    # (a value owning parts is handed back from a whole local as it is, as before retOwns: its local is the
+    # function's own storage - only an array's second names are proved, RetSole)
+    id := I64(p.id)
+    return ln.F.Locals[id].Home != ln.resultScope() or (ln.valueArray(ty) and not ln.plan.RetSole[id])
+}
+
+# retCopies of a value array's branches: a conditional's, a match's arms', a try's value and defaults', a sequence's value
+fn (ln mut lowering&) branchesCopy(x typed.Expr&, ty types.TypeId) Bool {
+    match x {
+        case typed.Expr.Cond(_, _, c) { return ln.retCopies(c.A, ty) or ln.retCopies(c.B, ty) }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if ln.retCopies(a.Value, ty): return true
             }
+            return m.NoMatch is not null and ln.retCopies(m.NoMatch!.Value, ty)
         }
-        case _ { }
+        case typed.Expr.Try(_, _, t) {
+            if ln.retCopies(t.X, ty) { return true }
+            for c in t.Clauses {
+                if ln.someCopies(c.Defaults, ty): return true
+            }
+            return false
+        }
+        case typed.Expr.Seq(_, _, q) { return ln.retCopies(q.X, ty) }
+        case _ { return false }
     }
-    return true
+}
+
+# whether retCopies holds of any of the expressions
+fn (ln mut lowering&) someCopies(xs Array<typed.Expr&>&, ty types.TypeId) Bool {
+    for x in xs {
+        if ln.retCopies(x, ty): return true
+    }
+    return false
 }
 
 # the items of a tuple a return makes, else null

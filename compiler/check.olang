@@ -4630,10 +4630,7 @@ fn (c mut Checker&) bodyAttrs(mi I64, body ast.TypeBody&) {
         case ast.TypeBody.Struct(sb) {
             for prm in sb.Params { c.attrsChecked(mi, prm.Attrs) }
             for st in sb.Body {
-                match st {
-                    case ast.Stmt.Var(_, v) { c.attrsChecked(mi, v.Attrs) }
-                    case _ { }
-                }
+                if st == ast.Stmt.Var: c.attrsChecked(mi, st.v.Attrs)
             }
         }
         case ast.TypeBody.Enum(cases, _) {
@@ -20753,26 +20750,21 @@ fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
         case _: null
     }
     if n is null or not plainLen(n) { return false }
-    match fr.rest[fr.restAt] {
-        case ast.Stmt.ForIn(_, f) {
-            if f.Key != source.NameId(0) or f.Tried or f.Clauses.Len() > 0 or f.Body.Len() == 0 { return false }
-            if not c.countsTo(f.Source, n) { return false }
-            writes := 0
-            for st in f.Body {
-                match st {
-                    case ast.Stmt.Assign(_, op, target, _) if op == token.Tok.Assign and c.indexOf(target, name, f.Name): writes++
-                    case _ { }
-                }
-            }
-            # the counter written nowhere in the body: the store's index is then each element in turn
-            if writes != 1 or assignsName(f.Body, Array<source.NameId>(1, f.Name)) { return false }
-            from, to := f.Body[0].Span().Start, f.Body[f.Body.Len() - 1].Span().End
-            text := c.src(source.Span(from, to))
-            return wordCount(text, c.text(name)) == 1 and wordCount(text, "break") == 0 and
-                   wordCount(text, "continue") == 0 and wordCount(text, "return") == 0
-        }
-        case _ { return false }
+    loop := fr.rest[fr.restAt]
+    if loop != ast.Stmt.ForIn: return false
+    f := loop.f
+    if f.Key != source.NameId(0) or f.Tried or f.Clauses.Len() > 0 or f.Body.Len() == 0 { return false }
+    if not c.countsTo(f.Source, n) { return false }
+    writes := 0
+    for st in f.Body {
+        if st == ast.Stmt.Assign and st.op == token.Tok.Assign and c.indexOf(st.target, name, f.Name): writes++
     }
+    # the counter written nowhere in the body: the store's index is then each element in turn
+    if writes != 1 or assignsName(f.Body, Array<source.NameId>(1, f.Name)) { return false }
+    from, to := f.Body[0].Span().Start, f.Body[f.Body.Len() - 1].Span().End
+    text := c.src(source.Span(from, to))
+    return wordCount(text, c.text(name)) == 1 and wordCount(text, "break") == 0 and
+           wordCount(text, "continue") == 0 and wordCount(text, "return") == 0
 }
 
 # whether an expression is "Array<T>" naming the built-in array (a call of it then makes one)
@@ -24625,42 +24617,38 @@ fn isWild(p ast.Pattern&) Bool {
     }
 }
 
+# cover of a type case, "case Button b", over an any's trait's members (T34)
+fn (c mut Checker&) coverType(sp source.Span, tyr ast.TypeRef&, et types.TypeId, covered mut Vec<Bool>&, all Bool) {
+    if c.P.T.KindOf(et) != types.Kind.Any { return }
+    named := tyr.of if tyr == ast.TypeRef.Ref else tyr
+    mt := c.P.T.Plain(c.resolve(named)) if c.caseTypeWritten(named, false) else types.UnknownT
+    ms := c.P.Members(c.P.T.AnyTrait(et))
+    if mt == types.UnknownT {
+        # a case whose type is wrong (said at it): the match taken as complete, so it is the one error
+        c.caseBroken = true
+        return
+    }
+    for k in range ms.Len() {
+        if k < covered.Len() and c.P.T.Same(ms[k], mt) {
+            # T34: a type an earlier clause matches whatever it holds is never matched again
+            if covered[k] or all: c.err(sp, msgs.AnyCaseTwice(c.ty(mt)))
+            covered[k] = true
+        }
+    }
+}
+
 # which of an enum's cases an unguarded alternative covers whatever its payload holds (S13a)
 fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut Vec<Bool>&, all Bool) {
     if covered.Len() == 0 { return }
     match p {
-        case ast.Pattern.Type(sp, tyr, _, _) {
-            if c.P.T.KindOf(et) != types.Kind.Any { return }
-            named := tyr
-            match tyr {
-                case ast.TypeRef.Ref(_, of, _, _) { named = of }
-                case _ { }
-            }
-            mt := c.P.T.Plain(c.resolve(named)) if c.caseTypeWritten(named, false) else types.UnknownT
-            ms := c.P.Members(c.P.T.AnyTrait(et))
-            if mt == types.UnknownT {
-                # a case whose type is wrong (said at it): the match taken as complete, so it is the one error
-                c.caseBroken = true
-                return
-            }
-            for k in range ms.Len() {
-                if k < covered.Len() and c.P.T.Same(ms[k], mt) {
-                    # T34: a type an earlier clause matches whatever it holds is never matched again
-                    if covered[k] or all: c.err(sp, msgs.AnyCaseTwice(c.ty(mt)))
-                    covered[k] = true
-                }
-            }
-        }
+        case ast.Pattern.Type(sp, tyr, _, _) { c.coverType(sp, tyr, et, covered, all) }
         case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
             k := c.caseTag(x, et)
             if k >= 0 { covered[k] = true }
         }
         case ast.Pattern.Case(_, path, subs) {
             for sub in subs {
-                match sub {
-                    case ast.Pattern.Bind(_, _), ast.Pattern.Wild(_) { }
-                    case _ { return }
-                }
+                if sub != ast.Pattern.Bind and sub != ast.Pattern.Wild: return
             }
             k := c.caseTag(path, et)
             if k >= 0 { covered[k] = true }

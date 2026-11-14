@@ -4249,29 +4249,26 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, 
     if td is null or td.Body is null { return 0 }
     before := Array<types.TypeId>(b.N)
     for i in range b.N { before[i] = b.Vals[i] }
-    match td.Body {
-        case ast.TypeBody.Trait(methods, exts, _) {
-            # T30a: what the traits it extends bind, too
-            for e in exts {
-                p.unifyBound(t, p.Subst(p.Resolve(p.declContext(d), e), DeclOwner(d), p.T.Args(tr)), b, depth + 1)
-            }
-            for m in methods {
-                if m.IsBuilder() { continue }   # T30b: a builder binds nothing through a value
-                f := p.MethodOf(t, m.Name)
-                if f < 0 { continue }
-                have := p.MethodSig(f, t)
-                if have == types.UnknownT { continue }
-                want := p.Subst(p.sigType(p.declContext(d), m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), p.T.Args(tr))
-                hs := p.T.Items(p.T.Params(have))
-                ws := p.T.Items(p.T.Params(want))
-                if hs.Len() != ws.Len() + 1 { continue }
-                for k in range ws.Len() { try p.UnifyArg(ws[k], hs[k + 1], b, false, false) catch { } }
-                try p.UnifyArg(p.T.Result(want), p.T.Result(have), b, false, false) catch { }
-                # QAH: "Next() T ? E, Exhausted" binds E to what the type's Next fails with beyond Exhausted
-                if p.errsHaveVar(p.T.Errors(want), b) { try p.unifyErrs(p.T.Errors(want), p.T.Errors(have), b) catch { } }
-            }
-        }
-        case _ { }
+    body := td.Body!
+    if body != ast.TypeBody.Trait: return changedVals(before, b)
+    # T30a: what the traits it extends bind, too
+    for e in body.exts {
+        p.unifyBound(t, p.Subst(p.Resolve(p.declContext(d), e), DeclOwner(d), p.T.Args(tr)), b, depth + 1)
+    }
+    for m in body.methods {
+        if m.IsBuilder() { continue }   # T30b: a builder binds nothing through a value
+        f := p.MethodOf(t, m.Name)
+        if f < 0 { continue }
+        have := p.MethodSig(f, t)
+        if have == types.UnknownT { continue }
+        want := p.Subst(p.sigType(p.declContext(d), m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), p.T.Args(tr))
+        hs := p.T.Items(p.T.Params(have))
+        ws := p.T.Items(p.T.Params(want))
+        if hs.Len() != ws.Len() + 1 { continue }
+        for k in range ws.Len() { try p.UnifyArg(ws[k], hs[k + 1], b, false, false) catch { } }
+        try p.UnifyArg(p.T.Result(want), p.T.Result(have), b, false, false) catch { }
+        # QAH: "Next() T ? E, Exhausted" binds E to what the type's Next fails with beyond Exhausted
+        if p.errsHaveVar(p.T.Errors(want), b) { try p.unifyErrs(p.T.Errors(want), p.T.Errors(have), b) catch { } }
     }
     return changedVals(before, b)
 }
@@ -4673,21 +4670,18 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>& {
         d := p.T.DeclOf(tr)
         td := p.typeDecl(d)
         if td is null or td.Body is null { continue }
-        match td.Body {
-            case ast.TypeBody.Trait(methods, _, _) {
-                for k in range methods.Len() {
-                    m := methods[k]
-                    if m.IsBuilder() or seen.Has(m.Name) { continue }   # T30b: no builder in a table
-                    seen.Push(m.Name)
-                    want := p.TraitSig(d, m, p.T.Args(tr))
-                    writes := m.Recv is not null
-                    sig := p.WithReceiver(want, p.T.Ref(p.T.Any(r), types.Writable if writes else types.ReadOnly))
-                    sl := AnySlot(m.Name, tr, k, -1, writes, p.T.WithPromises(sig, p.T.ReceiverPromises(want)))
-                    sl.Want = want
-                    out.Push(sl)
-                }
-            }
-            case _ { }
+        body := td.Body!
+        if body != ast.TypeBody.Trait { continue }
+        for k in range body.methods.Len() {
+            m := body.methods[k]
+            if m.IsBuilder() or seen.Has(m.Name) { continue }   # T30b: no builder in a table
+            seen.Push(m.Name)
+            want := p.TraitSig(d, m, p.T.Args(tr))
+            writes := m.Recv is not null
+            sig := p.WithReceiver(want, p.T.Ref(p.T.Any(r), types.Writable if writes else types.ReadOnly))
+            sl := AnySlot(m.Name, tr, k, -1, writes, p.T.WithPromises(sig, p.T.ReceiverPromises(want)))
+            sl.Want = want
+            out.Push(sl)
         }
     }
     for i in range p.defaultFns.Len() {
