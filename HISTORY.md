@@ -37016,3 +37016,6 @@ olang's own arrays, records and files; tensors are oann's. Built here, the names
 Tests: std/frame.olang (every operation, a baked walkthrough checked by a top-level assert, reads after arena churn),
 std/prelude/tests/array.olang and columns.olang (baked beside run-time), std/stats.olang, std/rand.olang - built and
 under `test -interpret`.
+
+Neovim plugin: buffer-local commands :OlangRun, :OlangBuild, :OlangTest, :OlangFormat, :OlangExplain, :OlangRepl and
+<localleader> keymaps (r b t f e i; `vim.g.olang_no_maps = 1` turns them off), in editors/nvim.

@@ -68,4 +68,62 @@ function M.attach(bufnr)
   end
 end
 
+-- a terminal split at the bottom running cmd; the split of the last run is reused
+local function term(cmd)
+  local w = M.term_win
+  if w and vim.api.nvim_win_is_valid(w) then
+    vim.api.nvim_set_current_win(w)
+    vim.cmd("enew")
+  else
+    vim.cmd("botright 12new")
+  end
+  M.term_win = vim.api.nvim_get_current_win()
+  vim.fn.termopen(cmd)
+  vim.cmd("startinsert")
+end
+
+-- run olang with a makeprg of its own, so the errors land in the quickfix list
+local function make(prog, args)
+  local old = vim.bo.makeprg
+  vim.bo.makeprg = prog
+  local ok, err = pcall(vim.cmd, "silent make! " .. args)
+  vim.bo.makeprg = old
+  if not ok then vim.notify(err, vim.log.levels.ERROR) end
+  vim.cmd("cwindow")
+end
+
+-- the buffer-local commands and keymaps (vim.g.olang_no_maps = 1 leaves the keymaps off)
+function M.commands(bufnr)
+  local function cmd(name, fn, nargs)
+    vim.api.nvim_buf_create_user_command(bufnr, name, fn, { nargs = nargs or 0 })
+  end
+  cmd("OlangRun", function(o)
+    vim.cmd("silent write")
+    term(vim.list_extend({ "olang", vim.fn.expand("%:p") }, o.fargs))
+  end, "*")
+  cmd("OlangBuild", function()
+    vim.cmd("silent write")
+    make("olang build %:S", "")
+  end)
+  cmd("OlangTest", function(o)
+    vim.cmd("silent write")
+    make("olang test %:S", o.args)
+  end, "*")
+  cmd("OlangFormat", function() M.format(bufnr) end)
+  cmd("OlangExplain", function()
+    local word = vim.fn.expand("<cword>")
+    local out = vim.fn.systemlist({ "olang", "explain", vim.fn.expand("%:p"), word })
+    vim.lsp.util.open_floating_preview(out, "olang", { border = "rounded", focus_id = "olang_explain" })
+  end)
+  cmd("OlangRepl", function() term({ "olang" }) end)
+  if vim.g.olang_no_maps == 1 then return end
+  local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", e = "OlangExplain", i = "OlangRepl" }
+  for k, c in pairs(keys) do
+    local lhs = "<localleader>" .. k
+    if vim.fn.maparg(lhs, "n") == "" then
+      vim.keymap.set("n", lhs, "<Cmd>" .. c .. "<CR>", { buffer = bufnr, desc = c })
+    end
+  end
+end
+
 return M

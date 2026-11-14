@@ -14,4 +14,5 @@ vim.cmd("compiler olang")
 
 local olang = require("olang")
 olang.attach(0)
+olang.commands(0)
 vim.b.undo_ftplugin = "setlocal et< sw< sts< ts< cms< com< kp< makeprg< errorformat<"

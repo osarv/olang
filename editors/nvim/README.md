@@ -10,6 +10,13 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
 - format on save - through the language server when it runs, else `olang format` on a copy of the buffer;
 - the language server, `olang lsp`: diagnostics as you type, hover (`K`), go to definition (`gd` / `CTRL-]`), document
   symbols, completion, formatting (`vim.lsp.buf.format()`).
+- commands on `.olang` buffers (Neovim wants capitals): `:OlangRun [args]` saves and runs `olang FILE args` in a
+  terminal split at the bottom, reused by the next run; `:OlangBuild` (`olang build FILE`) and `:OlangTest [words]`
+  (`olang test FILE words`) fill the quickfix list through `:make`; `:OlangFormat` formats the buffer, keeping the
+  cursor; `:OlangExplain` shows `olang explain FILE WORD` for the word under the cursor in a floating window;
+  `:OlangRepl` opens plain `olang`, the interactive prompt, in a terminal split.
+  Keymaps under `<localleader>` - `r` run, `b` build, `t` test, `f` format, `e` explain, `i` repl - are set where
+  nothing is mapped already; `vim.g.olang_no_maps = 1` turns them off.
 
 Everything but the last works without the server; all of it needs `olang` on `PATH`.
 
