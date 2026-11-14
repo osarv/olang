@@ -566,12 +566,25 @@ clean:
 	rm -rf build
 
 # build/olang linked into PREFIX/bin as olang: the compiler finds the standard library beside where its file is
-# (load.StdDir, through the link), so the link keeps working while the checkout stays where it is
+# (load.StdDir, through the link), so the link keeps working while the checkout stays where it is. Where PREFIX/bin is
+# not on PATH, one line putting it there is added to the shell's startup file - PATHFILE, by default ~/.bashrc for
+# bash, ~/.zshrc for zsh (by the environment's SHELL; make's own is /bin/sh) and ~/.profile otherwise - unless
+# that very line is there already; PATHFILE=none leaves every file as it is
 PREFIX ?= $(HOME)/.local
+LOGIN_SHELL := $(shell printenv SHELL)
+PATHFILE ?= $(if $(filter %/bash,$(LOGIN_SHELL)),$(HOME)/.bashrc,$(if $(filter %/zsh,$(LOGIN_SHELL)),$(HOME)/.zshrc,$(HOME)/.profile))
 install: build/olang
 	mkdir -p $(PREFIX)/bin
 	ln -sf $(abspath build/olang) $(PREFIX)/bin/olang
-	@echo "install: $(PREFIX)/bin/olang is build/olang - put $(PREFIX)/bin on PATH if it is not"
+	@echo "install: $(PREFIX)/bin/olang is build/olang"
+	@bin=$(abspath $(PREFIX)/bin); line="export PATH=\"$$bin:\$$PATH\""; \
+	case ":$$PATH:" in *":$$bin:"*) exit 0;; esac; \
+	if [ "$(PATHFILE)" = none ]; then echo "install: $$bin is not on PATH (PATHFILE=none: no file changed)"; exit 0; fi; \
+	if [ -f "$(PATHFILE)" ] && grep -qxF "$$line" "$(PATHFILE)"; then \
+		echo "install: $(PATHFILE) puts $$bin on PATH already - a new terminal (or source $(PATHFILE)) picks it up"; \
+		exit 0; fi; \
+	printf '\n# added by olang'"'"'s make install\n%s\n' "$$line" >> "$(PATHFILE)" && \
+	echo "install: added $$bin to PATH in $(PATHFILE) - a new terminal (or source $(PATHFILE)) picks it up"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
 .PHONY: consistency dumptool all build prereq install bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean

@@ -49,6 +49,11 @@ build/olang                   # the prompt: each entry runs as you type it
 make install                  # links ~/.local/bin/olang to build/olang, so `olang` runs from anywhere
 ```
 
+`make install` also puts `~/.local/bin` on `PATH` where it is not: it adds one line, `export
+PATH="$HOME/.local/bin:$PATH"` (spelled out), to `~/.bashrc` (bash), `~/.zshrc` (zsh) or `~/.profile`, once, and says
+so; a new terminal picks it up. `PREFIX=DIR` installs into `DIR/bin`, `PATHFILE=FILE` names another startup file and
+`PATHFILE=none` changes none.
+
 ### Try it
 
 Plain `olang` opens the prompt (SPEC B22). Each entry runs in one session: declarations join it, statements run, a
