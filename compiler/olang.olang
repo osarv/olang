@@ -1422,7 +1422,8 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(Array<String&>["explain", "-asm", "m.olang", "f"]) == "no mistake: explain"
     assert prepared(Array<String&>["explain", "-ir", "-quick", "m.olang", "Box.Get"]) == "no mistake: explain"
     assert prepared(Array<String&>["explain", "-asm", "m.olang"]) ==
-        "olang: error[B11d]: explain -asm takes a program's file and the name of one of its functions, as 'olang explain -asm main.olang main'\n"
+        "olang: error[B11d]: explain -asm takes a program's file and a function's name\n" $
+        "olang: help: write 'olang explain -asm main.olang main'\n"
     assert prepared(Array<String&>["explain", "-asm", "-ir", "m.olang", "f"]) ==
         "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
     assert prepared(Array<String&>["explain", "-caps", "-ir", "m.olang"]) ==

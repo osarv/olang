@@ -2250,7 +2250,7 @@ e89f9ab0af8b30ba d46020297ce8d467 compiler/lower.olang
 9d7590267afd6f65 5faf1c2b65fcfc8f compiler/msgs.olang
 530c89d6315e3846 6eeac44243b67abc compiler/names.olang
 b9520ca5794a662c 23cd6a718f925a1f compiler/needs.olang
-5808f1d715cb758a 944473b7c679f6de compiler/olang.olang
+590a52ac8c712e66 7cd8efd53fadd953 compiler/olang.olang
 b0871112e9a77b06 39c19fd57b1c47be compiler/parse.olang
 4d6bd2444db67352 2239add13b5484af compiler/profile.olang
 7d008be6f43ea4f1 08785f2f45c52657 compiler/records.olang
