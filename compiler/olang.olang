@@ -39,6 +39,7 @@ import "bindgen"
 import "profile"
 import "listing"
 import "session"
+import "prompt"
 import "lsp"
 import "records"
 import "mcp"
@@ -198,6 +199,7 @@ type CommandLine struct() {
     Html String& = ""
     Caps Bool = false
     Listing String& = ""   # B11d: "-asm" or "-ir", explain showing a function's code
+    Prompt Bool = false    # B22: nothing after "olang" - the prompt, interpreting as interpret does
 }
 
 # a mistake in the command line: reported to the diagnostics already
@@ -214,7 +216,11 @@ fn usage(d mut diag.Diagnostics&, m diagmsg.Msg) ? Bad {
 # first mistake is reported and the reading stopped
 fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
     cl := CommandLine()
-    if args.Len() < 2 { try usage(d, msgs.Usage()) }
+    if args.Len() < 2 {
+        cl.Mode = Interp
+        cl.Prompt = true
+        return cl
+    }
     i I64 = 1
     if not args[1].StartsWith("-") and not endsWithOlang(args[1]) {
         m := modeNumber(args[1])
@@ -378,7 +384,7 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     if cl.Mode == Doc and cl.Html == "" and cl.Files.Len() != 1 {
         try usage(d, msgs.ModeOneFile(modeName(cl.Mode)) if cl.Files.Len() > 1 else msgs.ModeNeedsFile(modeName(cl.Mode)))
     }
-    if cl.Files.Len() == 0 and cl.Mode != Lsp and cl.Mode != Mcp and cl.Mode != Doc {
+    if cl.Files.Len() == 0 and cl.Mode != Lsp and cl.Mode != Mcp and cl.Mode != Doc and not cl.Prompt {
         try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode)))
     }
     if cl.Mode == Api and cl.Files.Len() != 3 { try usage(d, msgs.ApiUsage()) }
@@ -490,6 +496,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }
     if cl.Mode == Run { return build.RunProgram(fe, c, files[0], cl.Args.ToArray(), d) }
     if cl.Mode == Profile { return profile.Run(fe, c, files[0], cl.Args.ToArray(), d) }
+    if cl.Prompt: return prompt.Run(c)
     if cl.Mode == Interp {
         # the program's command line is the file, then what follows it (B3f)
         pargs Vec<String&>
@@ -1312,8 +1319,8 @@ fn mistake(words Array<String&>&) String {
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
-    assert mistake(Array<String&>[]) == ("olang: error[B1]: nothing to do - write a file to build and run, as 'olang " $
-            "main.olang', or a mode ('olang help' lists them)\n")
+    # B22: nothing after "olang" opens the prompt, which interprets
+    assert mistake(Array<String&>[]) == "no mistake: interpret"
     assert mistake(Array<String&>["-x"]) ==
         "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"
     assert mistake(Array<String&>["build", "-b", "m.olang"]) ==

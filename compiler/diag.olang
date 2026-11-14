@@ -82,6 +82,11 @@ type Diagnostics struct(Color Bool) {
     Quiet Bool = false              # nothing reported while it is set: a pass walking code a second time (names' survey)
     Lenient Bool = false            # interpret (B3e): what is only untidy - D3b, M5a - is a warning, not an error
     warns := Vec<record>()          # the warnings, in report order
+    # the prompt (B22): a file whose lines are named as the cells they came from - per file, where its lines' names
+    # start in shownPaths and shownLines (-1 for a file named as itself); a line named "" keeps the file's own name
+    shownFrom := Vec<I64>()
+    shownPaths := Vec<String&>()
+    shownLines := Vec<I64>()
 }
 
 Pending I64 = 0
@@ -100,7 +105,27 @@ fn (d mut Diagnostics&) AddFile(path String&, text String&, library Bool = false
     d.library.Push(library)
     d.startsFrom.Push(-1)
     d.startsLen.Push(0)
+    d.shownFrom.Push(-1)
     return d.paths.Len() - 1
+}
+
+# B22: file's lines named as their cells say - line l (from 1) as paths[l - 1], line lines[l - 1]
+fn (d mut Diagnostics&) NameLines(file I64, paths Array<String&>&, lines Array<I64>&) {
+    if file < 0 or file >= d.paths.Len() { return }
+    d.shownFrom[file] = d.shownPaths.Len()
+    for i in range paths.Len() {
+        d.shownPaths.Push(paths[i])
+        d.shownLines.Push(lines[i])
+    }
+}
+
+# the name and number a line of a file is shown with
+fn (d mut Diagnostics&) shown(file I64, line I64) String, I64 {
+    from := d.shownFrom[file]
+    if from < 0: return $d.paths[file], line
+    k := from + line - 1
+    if line < 1 or k >= d.shownPaths.Len() or d.shownPaths[k] == "": return $d.paths[file], line
+    return $d.shownPaths[k], d.shownLines[k]
 }
 
 # the line (from 1) offset at lies on in file, and the offset that line starts at
@@ -142,7 +167,8 @@ fn (d mut Diagnostics&) ColumnAt(file I64, at I64) I64 {
 fn (d mut Diagnostics&) Locate(file I64, at I64) String {
     if file < 0 or file >= d.paths.Len() { return "?" }
     line, start := d.lineOf(file, at)
-    return $d.paths[file] ":" $line ":" $(at - start + 1)
+    p, l := d.shown(file, line)
+    return $p ":" $l ":" $(at - start + 1)
 }
 
 # ---- reporting ----
@@ -747,10 +773,14 @@ fn (d mut Diagnostics&) putLocation(b mut StringBuilder&, at Where) {
     match at {
         case Where.Nowhere { b.Push("olang") }
         case Where.File(f) { b.Push(d.paths[f]) }
-        case Where.Line(f, l) { b.Push($d.paths[f] ":" $l) }
+        case Where.Line(f, l) {
+            p, sl := d.shown(f, l)
+            b.Push($p ":" $sl)
+        }
         case Where.Span(f, s, _) {
             l, ls := d.lineOf(f, s)
-            b.Push($d.paths[f] ":" $l ":" $(s - ls + 1))
+            p, sl := d.shown(f, l)
+            b.Push($p ":" $sl ":" $(s - ls + 1))
         }
     }
     b.Push(": ")
@@ -799,7 +829,8 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
         last := (spanEnd if spanEnd < start + ExcerptAround else start + ExcerptAround) + ExcerptAround
         if last < to { to = last }
     }
-    b.Push($line.PadStart(5) " | ")
+    _, shownLine := d.shown(f, line)
+    b.Push($shownLine.PadStart(5) " | ")
     if from > lineStart { b.Push("...") }
     for i in range from, to { b.PushChar(printable(text[i])) }
     if to < lineEnd { b.Push("...") }

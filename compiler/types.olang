@@ -217,6 +217,9 @@ type Table struct(Names mut source.Names&) {
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
 # from I8 3 to F64 14, Null 15, the inferred set's mark 16, noreturn 17
+# how many types the table holds: TypeId(0) to TypeId(Count() - 1)
+fn (t Table&) Count() I64 { return t.types.Len() }
+
 fn Table.New(names mut source.Names&) Table {
     t := Table(names)
     t.lists.Push(Array<TypeId>(0))

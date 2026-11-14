@@ -115,6 +115,9 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     Root I64 = -1
     # files read from here, by real path, rather than from disk: the text an editor holds (B15)
     Overlay Map<String&, String&>
+    # B22: the root's globals a parameter or local may be named like - the values a prompt's session keeps, which a
+    # later declaration's own names stand in front of
+    Shadowable Map<String&, Bool>
     stdReal String& = ""
     cwd String& = ""
     embedded Map<String&, Array<U8>&>  # E38: every file an embed read, by path - read once in a compilation
