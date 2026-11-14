@@ -95,3 +95,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-14: jupyter merged (verified on its branch, merge identical), pushed. Next per plan: std/frame + std/plot + numeric helpers; then oann.
 - 2026-11-14: user: after std/frame + std/plot land, run the full gates (verify, race, cross aarch64 [install clang-19, libc6-dev-arm64-cross, binutils-aarch64-linux-gnu, qemu-user], scopesan, scopefuzz long, fuzz free long, editfuzz) and call it version 1 (tag v1). Then oann.
 - 2026-11-14: user: tag v1.0.0 (annotated) on master after the gates pass and the MIT LICENSE lands (consistency RootFiles + README line + memory: add Apache before first outside contribution).
+- 2026-11-14: user: HOLD the v1.0.0 tag until the user-interface work is nice (prompt line editing/vi mode/highlighting, install + editor support, nvim commands, error messages). Gates still run now; re-run after those land, then tag.
