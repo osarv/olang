@@ -848,6 +848,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   declined.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); `-debug` is
   `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
+- **Compiles at once and the bootstrap (B3m, the user's approval 2026-11-14, before v1.0.0).** A build runs
+  `OLANG_JOBS` compiles at once, else one per core but no more than `MemAvailable` holds at 512 MB each (at least
+  one); a ThinLTO link's back ends as many. `OLANG_TIMES` says each phase with its time and the compiler's memory, and
+  each compile as `n/m`. `make bootstrap` is two stages - the seed builds a `-quick` compiler, which builds the
+  optimized one, installed - each saying its start and duration; the byte-for-byte self-build is `make fixedpoint`,
+  run by `make verify`.
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target constants
   `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's call).
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;

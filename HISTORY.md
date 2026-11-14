@@ -37016,3 +37016,38 @@ olang's own arrays, records and files; tensors are oann's. Built here, the names
 Tests: std/frame.olang (every operation, a baked walkthrough checked by a top-level assert, reads after arena churn),
 std/prelude/tests/array.olang and columns.olang (baked beside run-time), std/stats.olang, std/rand.olang - built and
 under `test -interpret`.
+
+## The bootstrap's memory: compiles at once from memory, two stages, make fixedpoint (B3m; 2026-11-14, wt-bootfix)
+
+The user's `make boot` in WSL (12 cores, ~7.4 GB visible) was killed for lack of memory at the seed's build of
+`build/olang.1`: a build ran one clang per core online (`Config.width`, nothing set `Jobs`), beside the compiler's own
+~3.7 GB. The user approved three changes before tagging v1.0.0, then asked for the bootstrap's memory to be as small as
+cheap orchestration makes it, and for the compiler's own peak to be measured by phase (shrinking it is a later round).
+
+- **How many compiles at once (B3m).** `OLANG_JOBS=N` where set, else min(cores online, `MemAvailable` / 512 MB), at
+  least one, read when the compiles start - so the compiler's own resident memory is already out of what is available.
+  The budget: clang 19 on the compiler's four largest modules peaked at 99-144 MB (`-O3 -flto=thin` and `-O2`), so 512
+  MB leaves room for a program's larger modules. A ThinLTO link's back ends were one per core too (the linker plugin's
+  default): `-flto-jobs` now gets the same width, added after the link's hash so it never relinks by itself. The link
+  already ran after every compile ended, never beside them.
+- **Progress.** `OLANG_TIMES` (it existed: each phase's milliseconds) now adds the compiler's resident memory and its
+  high-water mark (`/proc/self/status`), says how many objects compile and how many at once, and counts each compile
+  as it ends (`n/m`, an atomic counter across the runner tasks). The bootstrap sets it for its stages and says each
+  stage's start and duration.
+- **Two stages.** The seed builds `build/olang.1` with `-quick` (B2g), which builds `build/olang.2` with the default
+  `-O3` and LTO, installed. The check that the compiler builds itself byte for byte moved to `make fixedpoint`
+  (`build/olang` -> `build/olang.3`, `cmp`), run by `make verify` after boot, so verify checks what it checked; a boot
+  cache entry whose compiler passed is marked `fixed`, so a verify that reuses a bootstrap does not build it again.
+  `olang help` lists the build's environment variables.
+
+Measured on the 4-core container from a clean `build/` (BOOT_FRESH=1, the process tree's resident memory sampled
+every 0.25 s): before, 204 s and 4.23 GB at most (seed 60 s; seed -> olang.1 113 s; the next two builds 14 s each,
+reusing every object); after, 250 s and 4.24 GB (seed 60 s; stage 1 -quick 77 s, its compiles at -O2 with code
+generated 60 s; stage 2 113 s: compiles 26 s, ThinLTO link 69 s), and `make fixedpoint` 15 s. The -quick stage costs
+time here: its objects are not the optimized build's, so stage 2 reuses none, where the old second and third builds
+reused the first's. Peak memory is the compiler's own in every stage: 3.66-3.74 GB resident, the clangs together
+0.57 GB, one clang or the linker at most 0.34 GB. By phase, building compiler/olang.olang: load 172 MB, check 761,
+evaluate 967, scope judged 1584, scope 1869, lower+emit 3725 (the largest step, +1.85 GB), then flat through the
+compiles and the link - nothing the front end built is given back before clang runs (left for the round that shrinks
+the compiler's memory). So at 8 GB (~6.5 GB usable) the bootstrap needs about 3.7 GB for the compiler plus 512 MB per
+compile the rest holds - six at once there, about 0.9 GB in use - near 4.7 GB.
