@@ -7999,16 +7999,16 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
-            | "bindgen" | "profile" | "api"
+            | "bindgen" | "profile" | "api" | "jupyter"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench" | "-install"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20) and `api` (B21). An
+(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21) and `jupyter` (B23). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
@@ -8019,7 +8019,7 @@ beginning with `-` that is no option is an error:
 | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
 | `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |
 | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile | B10, §4 M23c |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile, jupyter | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
@@ -8029,6 +8029,7 @@ beginning with `-` that is no option is an error:
 | `-bench` | test | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
+| `-install` | jupyter | B23 |
 
 `build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
@@ -8936,6 +8937,28 @@ program, is reclaimed when the cell ends.
 
 Commands begin an entry with `:` - `:type EXPR` (the type of the expression's value, as B11b writes types), `:load
 FILE` (the file's text run as a cell), `:help` and `:quit`.
+
+**B23 (the notebook kernel).** `olang jupyter CONNECTION_FILE` is a kernel of Jupyter's messaging protocol (version
+5.3): it reads the connection file (JSON: `ip`, `key`, and `shell_port`, `control_port`, `stdin_port`, `iopub_port`,
+`hb_port`), listens on those five ports, speaks ZeroMQ's wire protocol (ZMTP 3.0, the NULL mechanism) on them, signs
+every message it sends with HMAC-SHA256 under the key and drops every message it reads whose signature does not match.
+Its cells run in one session as the prompt runs them (B22), named `In[N]` in diagnostics (N the cell's
+`execution_count`): what a cell writes to its standard output and standard error is published as `stream` messages, the
+value it shows as an `execute_result` whose data holds `text/plain` (`$` rendering, E11a) and, where the value's type
+declares `Display` (below), that rendering under its MIME type (a PNG's bytes in base64); a cell that does not check, or
+that stops, publishes an `error` (`CompileError` or `RuntimeError`, one traceback row per line of what was said) and
+replies `error`. An `interrupt_request` on the control channel stops the running cell as a failed check does (B22),
+`is_complete_request` answers `incomplete` while an entry would go on at the prompt, `complete_request` offers the
+session's names and the keywords starting with the word before the cursor, and `shutdown_request` ends the kernel with
+status 0. Input is not read (`stdin` is connected, never asked). `olang jupyter -install` takes no file: it writes the
+kernel's spec, `kernels/olang/kernel.json` under `$JUPYTER_DATA_DIR` (else `~/.local/share/jupyter`), naming this
+`olang` and `jupyter {connection_file}` as its command line, so Jupyter offers olang as a kernel.
+
+**Rich display.** The prelude declares `type Display enum { Html(t String)  Markdown(t String)  Latex(t String)
+Svg(t String)  Png(bytes Array<U8>) }`, its `d.Mime()` (`text/html`, `text/markdown`, `text/latex`, `image/svg+xml`,
+`image/png`) and `d.Body()`, and the trait `type Displayable trait { Display() Display }`. A type renders itself richly
+by declaring `fn (x T&) Display() Display`, and so meets `Displayable`; only the kernel calls it, for the value a cell
+shows. The language gives the method no other meaning: `$x` and the prompt still write the text form.
 
 ## 11. External Functions
 
