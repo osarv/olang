@@ -130,6 +130,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `compiler/eval.olang` `runtimeFn` (and `callExtern`'s compile-time list) | a runtime function std calls (`__olang_*`): what the evaluator answers for it, under `interpret` and while compiling (B19b's `__olang_bench_*`) |
 | `compiler/*.olang` that import it | `grep -l 'std/NAME'` - the compiler uses `std/os`, `std/io`, `std/json`, `std/filepath` and others |
 | `docs/` / `tests/` | only where a note or corpus case teaches it |
+| `std/frame.olang` | builds on `csv.Decode`/`Encode`, `json.Decode`/`Encode`, `stats.Percentiles`/`Mean`/`StdDev` and the prelude's `ColumnVec`, `Argsort` and `Display`: a change to one of those changes it |
 | `tools/list_vec.olang` etc. | when a std type moves or is renamed: a migration (below) |
 
 ## A prelude name (a type, method or supplied function of a built-in type)

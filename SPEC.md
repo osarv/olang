@@ -828,7 +828,8 @@ per field of `T` - a **column** - rather than one array of `T`, and `ColumnVec<T
   c.Get(i)` checked (`ArrayError.OutOfRange` for a `Columns`, `VecError.OutOfRange` for a `ColumnVec`), `c[i] = v`
   writes `v`'s fields into the columns (`SetAt`, E31b), `for p in c` walks the rows (S9d), `c.Len()` counts them;
   `Sort(less)` sorts the rows stably, every column moved together; `$c` renders the rows as an array of them with the
-  type in front (`Columns<P>[P(1, 2)]`).
+  type in front (`Columns<P>[P(1, 2)]`), and `c.Display()` (B23) shows them as an HTML table, a column per field headed
+  by its name, the first 50 rows numbered.
 - **Conversions**: `c.ToArray()` and `c.ToVec()` give the rows; `c.ToColumnVec()` and `v.ToColumns()` copy between the
   two; `a.ToColumns()`, `a.ToColumnVec()` on an `Array<T>` or a `Vec<T>` of records lay rows out as columns.
 - Reflection (G32) sees a `Columns` as the struct it is - `T.Kind` is `Struct`, `T.Fields` its columns - and `T.Element`

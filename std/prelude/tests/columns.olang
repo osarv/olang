@@ -98,3 +98,20 @@ test "Columns: reflection sees a struct of columns, its rows' type its Element" 
     assert Columns<P>.Element.Name == "P" and ColumnVec<Tag>.Element.Name == "Tag"
     assert Columns<P>.Fields[0].Type.Element.Name == "F32"
 }
+
+# ---- rich display (B23) ----
+
+fn shownHtml() String {
+    v := ColumnVec<Tag>()
+    v.Push(Tag("a<b", 1))
+    return v.Display().Body()
+}
+ShownHtmlBaked := shownHtml()
+
+test "a ColumnVec shows as an HTML table, its text escaped, while compiling as at run time" {
+    churn()
+    h := shownHtml()
+    assert h.Contains("<th>name</th><th>n</th>") and h.Contains("<td>a&lt;b</td><td>1</td>") and h == ShownHtmlBaked
+    c := Columns<Grid>(60)
+    assert c.Display().Body().Contains("<p>10 more rows</p>") and c.Display().Mime() == "text/html"
+}

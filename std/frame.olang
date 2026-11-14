@@ -1,0 +1,343 @@
+# frame - tables of records, the operations of a data frame over the prelude's ColumnVec<R> (T7e): a table whose rows
+# are records of type R, held one column per field, so "t.Price" is a column - an array of every row's price - and lane
+# operators work on it whole ("t.Price * t.Qty", "(t.Price * t.Qty).Sum()").
+#
+#     type Trade struct(Sym String, Price F64, Qty I64) { Sym, Price, Qty }
+#
+#     t := try frame.Read<Trade>(try os.ReadText("trades.csv"))      # a header, then one record per line
+#     big := try frame.Filter(t, fn(r): return r.Qty > 100)
+#     try frame.SortBy(big, fn(r): return r.Price)                     # in place, stable
+#     bySym := try frame.GroupBy(t, fn(r): return r.Sym, fn(r): return r.Price * F64(r.Qty))
+#     Println(frame.Table(try frame.Describe(t)))                       # count, mean, std, quartiles per number
+#
+# A table is a ColumnVec: everything a ColumnVec does - Push, rows "t[i]", "for r in t", Sort, "$t" - applies, and a
+# notebook shows one as an HTML table (its Display, B23). What these give is a new ColumnVec of records: a group is a
+# Group<K>, a joined row a Joined<L, R>, a column's summary a Summary - so a result is a table like any other, sorted,
+# filtered, shown and written the same way. Functions given as keys and filters may fail; what they fail with, these
+# fail with.
+#
+# Reading and writing go through std/csv and std/json, which build each record through its constructor by reflection:
+# a column is matched to a parameter by name ("@csv.Column", "@json.Key" rename one).
+
+import "std/csv"
+import "std/json"
+import "std/stats"
+
+# ---- reading and writing ----
+
+# the records of CSV text whose first line is its header, as csv.Decode reads them - fails with what it fails with
+fn Read<R>(text String&, sep Char = ',') ColumnVec<R> ? {
+    rows := try csv.Decode<R>(text, sep)
+    return rows.ToColumnVec()
+}
+
+# the records of a JSON array of objects, as json.Decode reads them - fails with what it fails with
+fn ReadJson<R>(text String&) ColumnVec<R> ? {
+    rows := try json.Decode<Array<R>>(text)
+    return rows.ToColumnVec()
+}
+
+# the table as CSV text: a header naming the columns, then a record per row (csv.Encode)
+fn Csv<R>(t ColumnVec<R>&, sep Char = ',') String ? csv.Error { return try csv.Encode(t.ToArray(), sep) }
+
+# the table as a JSON array of objects (json.Encode)
+fn Json<R>(t ColumnVec<R>&) String { return $json.Encode(t.ToArray()) }
+
+# ---- selecting and ordering ----
+
+# the first n rows, a table of their own - all of them where there are fewer
+fn Head<R>(t ColumnVec<R>&, n I64 = 5) ColumnVec<R> { return rowsFrom(t, 0, n.Min(t.Len()).Max(0)) }
+
+# the last n rows, in order
+fn Tail<R>(t ColumnVec<R>&, n I64 = 5) ColumnVec<R> {
+    k := n.Min(t.Len()).Max(0)
+    return rowsFrom(t, t.Len() - k, k)
+}
+
+# k rows of t from row "from", copied into a table of their own
+fn rowsFrom<R>(t ColumnVec<R>&, from I64, k I64) ColumnVec<R> {
+    out := ColumnVec<R>(k)
+    for i in range from, from + k { out.Push(t[i]) }
+    return out
+}
+
+# the rows keep holds for, in order, a table of their own
+fn Filter<R ? E>(t ColumnVec<R>&, keep fn&(r R&) Bool ? E) ColumnVec<R> ? E {
+    out := ColumnVec<R>()
+    for r in t {
+        if try keep(r): out.Push(r)
+    }
+    return out
+}
+
+# sorts the rows in place by what key gives for each, least first - stable, so rows of equal keys keep their order.
+# key is called once per row, and its values compared by "<"
+fn SortBy<R, K ? E>(t mut ColumnVec<R>&, key fn&(r R&) K ? E) ? E {
+    keys := try Array<K>[key(r) for r in t]
+    reorder(t, keys.Argsort())
+}
+
+# ...greatest first, still stable
+fn SortByDescending<R, K ? E>(t mut ColumnVec<R>&, key fn&(r R&) K ? E) ? E {
+    keys := try Array<K>[key(r) for r in t]
+    order := Array<I64>[i for i in range t.Len()]
+    order.Sort(fn(a I64, b I64) Bool: return keys[b] < keys[a])
+    reorder(t, order)
+}
+
+# t's rows laid out in the order given: row i the one that was at order[i]
+fn reorder<R>(t mut ColumnVec<R>&, order Array<I64>&) {
+    was := t.ToColumns()
+    for i, k in order { t[i] = was[k] }
+}
+
+# ---- groups ----
+
+# a group of rows sharing a key, and the values a GroupBy's value function gave for them: how many, their sum, mean,
+# least and greatest - the sum, least and greatest in the values' own type, the mean an F64
+type Group<K, V> struct(Key K, Count I64, Sum V, Mean F64, Min V, Max V) { Key, Count, Sum, Mean, Min, Max }
+
+# the rows grouped by what key gives for each, a Group per key in the order its first row comes, each summing what
+# value gives for its rows (pandas' groupby(key)[value].agg(["count", "sum", "mean", "min", "max"])). Sort the result
+# with SortBy; count rows alone with a value of 1. Keys are compared and hashed (a Map's key)
+fn GroupBy<R, K, V ? E>(t ColumnVec<R>&, key fn&(r R&) K ? E, value fn&(r R&) V ? E) ColumnVec<Group<K, V>> ? E {
+    out := ColumnVec<Group<K, V>>()
+    at := Map<K, I64>()
+    for r in t {
+        k := try key(r)
+        v := try value(r)
+        g := try at.Get(k) catch MapError.Missing {
+            at.Put(k, out.Len())
+            out.Push(Group<K, V>(k, 1, v, 0.0, v, v))
+            continue
+        }
+        out[g] = added(out[g], v)
+    }
+    for i in range out.Len() { out[i] = meanOf(out[i]) }
+    return out
+}
+
+# a group with one value more
+fn added<K, V>(g Group<K, V>, v V) Group<K, V> {
+    return Group<K, V>(g.Key, g.Count + 1, g.Sum + v, 0.0, v if v < g.Min else g.Min, v if g.Max < v else g.Max)
+}
+
+fn meanOf<K, V>(g Group<K, V>) Group<K, V> { return Group<K, V>(g.Key, g.Count, g.Sum, F64(g.Sum) / F64(g.Count), g.Min, g.Max) }
+
+# ---- joins ----
+
+# a row of a join: the left table's row and the right table's it was matched with
+type Joined<L, R> struct(Left L, Right R) { Left, Right }
+
+# the rows of left and right whose keys are equal, paired - an inner join: for each row of left in order, a Joined per
+# row of right with its key, in right's order; a row matched by none is left out. Keys are compared and hashed (a Map's
+# key)
+fn Join<L, R, K ? E>(left ColumnVec<L>&, right ColumnVec<R>&, leftKey fn&(l L&) K ? E, rightKey fn&(r R&) K ? E) ColumnVec<Joined<L, R>> ? E {
+    first := Map<K, I64>()                        # each key's first row of right, and each row's next of the same key
+    next := Array<I64>(right.Len(), -1)
+    last := Map<K, I64>()
+    for i, r in right {
+        k := try rightKey(r)
+        j := try last.Get(k) catch MapError.Missing default -1
+        if j < 0 { first.Put(k, i) } else { next[j] = i }
+        last.Put(k, i)
+    }
+    out := ColumnVec<Joined<L, R>>()
+    for l in left {
+        j := try first.Get(try leftKey(l)) catch MapError.Missing { continue }
+        for j >= 0 {
+            out.Push(Joined<L, R>(l, right[j]))
+            j = next[j]
+        }
+    }
+    return out
+}
+
+# ---- summaries ----
+
+# what Describe says of one column of numbers: its name, how many values, their mean and sample standard deviation,
+# the least, the quartiles (numpy's percentiles 25, 50 and 75) and the greatest. A statistic the values do not have -
+# any of none, the deviation of one - is NaN, as pandas' describe gives it
+type Summary struct(Column String, Count I64, Mean F64, Std F64, Min F64, Q25 F64, Median F64, Q75 F64, Max F64) {
+    Column, Count, Mean, Std, Min, Q25, Median, Q75, Max
+}
+
+# a Summary of every column of numbers, in the fields' order (pandas' describe) - text, Bool and Char columns left out
+fn Describe<R>(t ColumnVec<R>&) ColumnVec<Summary> {
+    out := ColumnVec<Summary>()
+    cols := t.ToColumns()
+    for f in R.Fields {
+        if f.Type.Kind == TypeKind.Integer or f.Type.Kind == TypeKind.Float { out.Push(Summary.of(f.Name, numbers(cols, f.Name))) }
+    }
+    return out
+}
+
+# the column named "name", each value as an F64
+fn numbers<R>(cols Columns<R>&, name String&) Array<F64> {
+    for c in Columns<R>.Fields {
+        if c.Type.Element.Kind == TypeKind.Integer or c.Type.Element.Kind == TypeKind.Float {
+            if c.Name == name { return Array<F64>[F64(x) for x in c.Of(cols)] }
+        }
+    }
+    unreachable
+}
+
+fn Summary.of(name String&, xs Array<F64>&) Summary {
+    q := try stats.Percentiles(xs, Array<F64>[0.0, 25.0, 50.0, 75.0, 100.0]) catch stats.Error default Array<F64>(5, NaN)
+    mean := try stats.Mean(xs) catch stats.Error default NaN
+    sd := try stats.StdDev(xs) catch stats.Error default NaN
+    return Summary($name, xs.Len(), mean, sd, q[0], q[1], q[2], q[3], q[4])
+}
+
+# ---- text ----
+
+# the first "rows" rows as a text table - a column per field, headed by its name, numbers to the right and text to the
+# left, a row per line numbered from 0, and a last line counting the rows left out. What a terminal or a plain prompt
+# shows, where a notebook shows the table's Display
+fn Table<R>(t ColumnVec<R>&, rows I64 = 20) String {
+    shown := rows.Min(t.Len()).Max(0)
+    heads := Vec<String>()
+    cells := Vec<Array<String>>()
+    right := Vec<Bool>()
+    heads.Push("")
+    cells.Push(Array<String>[$i for i in range shown])
+    right.Push(true)
+    for f in R.Fields {
+        heads.Push($f.Name)
+        cells.Push(Array<String>[cellText(f.Of(t[i])) for i in range shown])
+        right.Push(f.Type.Kind == TypeKind.Integer or f.Type.Kind == TypeKind.Float)
+    }
+    widths := Array<I64>[widest(heads[c], cells[c]) for c in range heads.Len()]
+    b := StringBuilder()
+    b.Push(line(Array<String>[heads[c] for c in range heads.Len()], widths, right))
+    for i in range shown { b.Push(line(Array<String>[cells[c][i] for c in range heads.Len()], widths, right)) }
+    if shown < t.Len() { b.Push($"... " $(t.Len() - shown) " more rows\n") }
+    return b.ToString()
+}
+
+# the width of a column: its widest cell, header included
+fn widest(head String&, cells Array<String>&) I64 {
+    w := head.Len()
+    for c in cells { w = w.Max(c.Len()) }
+    return w
+}
+
+# one line of a text table: the cells padded to their columns' widths, two spaces apart
+fn line(cells Array<String>&, widths Array<I64>&, right Vec<Bool>&) String {
+    b := StringBuilder()
+    for c, x in cells {
+        if c > 0: b.Push("  ")
+        b.Push(x.PadStart(widths[c]) if right[c] else x.PadEnd(widths[c]))
+    }
+    return $b.ToString().TrimEnd() "\n"
+}
+
+# a cell's text: text as it is, any other value as "$" renders it
+fn cellText<V>(x V) String {
+    match V {
+        case String { return x }
+        case _ { return $x }
+    }
+}
+
+# ---- tests ----
+
+type trade struct(Sym String, Price F64, Qty I64) { Sym, Price, Qty }
+type firm struct(Sym String, Name String) { Sym, Name }
+
+tradesCsv String& = """
+    Sym,Price,Qty
+    B,1.5,2
+    A,2.0,3
+    C,0.5,1
+    A,2.5,4
+    """
+
+fn churn() {
+    for i in range 200 {
+        s := $i " churn " $(i * 7)
+        assert s.Len() > 0
+    }
+}
+
+# a pass through every operation, the same while compiling as at run time (K2)
+fn walkthrough() F64 {
+    t := try Read<trade>(tradesCsv) catch { return -1.0 }
+    big := Filter(t, fn(r): return r.Qty > 1)
+    SortBy(big, fn(r): return r.Sym)
+    groups := GroupBy(t, fn(r): return r.Sym, fn(r): return r.Qty)
+    firms := try Read<firm>("Sym,Name\nA,Acme\nB,Bolt\nA,Alt\n") catch { return -1.0 }
+    joined := Join(t, firms, fn(l): return l.Sym, fn(r): return r.Sym)
+    d := Describe(t)
+    assert big.Sym[0] == "A" and big.Len() == 3 and groups.Len() == 3 and joined.Len() == 5
+    return (t.Price * F64(1)).Sum() + d[0].Mean + groups[1].Mean + F64(Head(t, 2).Len() + Tail(t, 9).Len())
+}
+WalkthroughBaked := walkthrough()
+assert WalkthroughBaked == 6.5 + 1.625 + 3.5 + 6.0
+
+test Read "reads CSV records into columns; Csv and Json write them back" {
+    t := try Read<trade>(tradesCsv)
+    churn()
+    assert t.Len() == 4 and t.Sym == Array<String>["B", "A", "C", "A"] and t.Price.Sum() == 6.5
+    assert (t.Price * F64(1)).Sum() == 6.5 and walkthrough() == WalkthroughBaked
+    back := try Read<trade>(try Csv(t))
+    assert back == t
+    again := try ReadJson<trade>(Json(t))
+    assert again == t and Json(Head(t, 1)) == "[{\"Sym\":\"B\",\"Price\":1.5,\"Qty\":2}]"
+}
+
+test SortBy "sorts the rows by a key, stably, either way" {
+    t := try Read<trade>(tradesCsv)
+    SortBy(t, fn(r): return r.Sym)
+    assert t.Sym == Array<String>["A", "A", "B", "C"] and t.Qty == Array<I64>[3, 4, 2, 1]
+    SortByDescending(t, fn(r): return r.Price)
+    churn()
+    assert t.Price == Array<F64>[2.5, 2.0, 1.5, 0.5] and t[0] == trade("A", 2.5, 4)
+    SortByDescending(t, fn(r): return r.Sym)
+    assert t.Qty == Array<I64>[1, 2, 4, 3]                 # the two A rows kept in the order the prices put them
+}
+
+test Filter "keeps the rows a function holds for, and fails with what it fails with" {
+    t := try Read<trade>(tradesCsv)
+    cheap := Filter(t, fn(r): return r.Price < 2.0)
+    assert cheap.Sym == Array<String>["B", "C"] and Head(t, 0).Len() == 0 and Tail(t, 2).Sym == Array<String>["C", "A"]
+    failing := try Filter(t, fn(r) Bool ? tooBig {
+        if r.Qty > 3 { error tooBig }
+        return true
+    }) catch tooBig { return }
+    assert false, "a failing filter gave " $failing
+}
+
+test GroupBy "sums, counts, means and bounds per key, in the order keys first come" {
+    t := try Read<trade>(tradesCsv)
+    g := GroupBy(t, fn(r): return r.Sym, fn(r): return r.Price)
+    churn()
+    assert g.Key == Array<String>["B", "A", "C"] and g.Count == Array<I64>[1, 2, 1]
+    assert g[1] == Group<String, F64>("A", 2, 4.5, 2.25, 2.0, 2.5)
+    SortBy(g, fn(r): return r.Key)
+    assert g.Key == Array<String>["A", "B", "C"] and GroupBy(Head(t, 0), fn(r): return r.Qty, fn(r): return 1).Len() == 0
+}
+
+test Join "pairs the rows of two tables whose keys are equal" {
+    t := try Read<trade>(tradesCsv)
+    firms := try Read<firm>("Sym,Name\nA,Acme\nB,Bolt\nA,Alt\nD,Dax\n")
+    j := Join(t, firms, fn(l): return l.Sym, fn(r): return r.Sym)
+    churn()
+    assert j.Len() == 5 and j[0] == Joined<trade, firm>(trade("B", 1.5, 2), firm("B", "Bolt"))
+    assert j[1].Right.Name == "Acme" and j[2].Right.Name == "Alt" and j[4].Left.Qty == 4
+}
+
+test Describe "summarizes each column of numbers" {
+    t := try Read<trade>(tradesCsv)
+    d := Describe(t)
+    assert d.Column == Array<String>["Price", "Qty"] and d[1].Count == 4 and d[1].Mean == 2.5 and d[1].Median == 2.5
+    assert d[0].Min == 0.5 and d[0].Max == 2.5 and d[1].Q25 == 1.75 and d[1].Q75 == 3.25
+    none := Describe(Head(t, 0))
+    assert none.Len() == 2 and none[0].Count == 0 and none[0].Mean.IsNan() and Describe(Head(t, 1))[0].Std.IsNan()
+}
+
+test Table "renders the rows as an aligned text table" {
+    t := try Read<trade>(tradesCsv)
+    assert Table(t, 2) == "   Sym  Price  Qty\n0  B      1.5    2\n1  A        2    3\n... 2 more rows\n"
+    assert t.Display().Body().Contains("<th>Price</th>")
+}

@@ -1446,6 +1446,15 @@
 | ok - Flags.Read: a struct's parameters are flags, its attributes their help
 | ok - the help text lists every flag
 | ok - Error: an error names the flag and what it was given
+=== test std/frame.olang
+| status 0
+| ok - Read: reads CSV records into columns; Csv and Json write them back
+| ok - SortBy: sorts the rows by a key, stably, either way
+| ok - Filter: keeps the rows a function holds for, and fails with what it fails with
+| ok - GroupBy: sums, counts, means and bounds per key, in the order keys first come
+| ok - Join: pairs the rows of two tables whose keys are equal
+| ok - Describe: summarizes each column of numbers
+| ok - Table: renders the rows as an aligned text table
 === test std/fuzz.olang
 | status 0
 | ok - Slug: a test's name as a directory names it
@@ -1627,6 +1636,7 @@
 | ok - Float lies in [0, 1) with the mean of a uniform
 | ok - Normal has mean 0 and standard deviation 1
 | ok - Shuffle permutes, and one seed gives one order
+| ok - Normals, Uniforms, Choice, Choices and Sample draw over arrays, while compiling as at run time
 === test std/regex.olang
 | status 0
 | ok - literals, classes, repetition and alternation
@@ -1653,6 +1663,7 @@
 | ok - pairwise sums keep the mean's error small
 | ok - Median and Percentile interpolate between the closest ranks, as numpy does
 | ok - Min, Max and Histogram
+| ok - Bins: counts the values in bins of equal width from the least to the greatest
 | ok - the statistics computed while compiling equal the run time's
 === test std/sync.olang
 | status 0
@@ -1691,6 +1702,7 @@
 | ok - Chunks cuts an array into consecutive pieces, the last holding what is left
 | ok - a size computed while running is a ChunkSize, refused below one
 | ok - tasks each write their own piece of an array, read back after the join
+| ok - Argsort: the order that sorts, stable; running sums; even spacing; ranges by a step
 === test std/prelude/tests/columns.olang
 | status 0
 | ok - Columns: rows are read and written through the columns
@@ -1699,6 +1711,7 @@
 | ok - ColumnVec.Push: grows every column together
 | ok - ColumnVec: evaluated while compiling as at run time
 | ok - Columns: reflection sees a struct of columns, its rows' type its Element
+| ok - a ColumnVec shows as an HTML table, its text escaped, while compiling as at run time
 === test std/prelude/tests/float.olang
 | status 0
 | ok - Fixed rounds to n digits as %.*f does, while compiling as at run time

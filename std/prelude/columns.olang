@@ -334,6 +334,51 @@ fn (v ColumnVec<T>&) Str() String {
     return "ColumnVec" $r[5:]
 }
 
+# ---- rich display (B23) ----
+
+# how a notebook shows a Columns: an HTML table, a column per field headed by its name and a row per row, numbered -
+# the first 50 rows and the count of the rest. The prompt's text stays "$c"
+fn (c Columns<T>&) Display() Display { return Display.Html(tableHtml(c, c.Len())) }
+
+# ...and a ColumnVec, as its rows
+fn (v ColumnVec<T>&) Display() Display { return Display.Html(tableHtml(v.data, v.n)) }
+
+# the first n rows of c as an HTML table
+fn tableHtml<T>(c Columns<T>&, n I64) String {
+    b := StringBuilder()
+    b.Push("<table><thead><tr><th></th>")
+    for f in T.Fields { b.Push($"<th>" $htmlEscaped(f.Name) "</th>") }
+    b.Push("</tr></thead><tbody>")
+    shown I64 = n if n <= 50 else 50
+    for i in range shown {
+        row := c[i]
+        b.Push($"<tr><th>" $i "</th>")
+        for f in T.Fields { b.Push($"<td>" $htmlEscaped(cellText(f.Of(row))) "</td>") }
+        b.Push("</tr>")
+    }
+    b.Push("</tbody></table>")
+    if shown < n { b.Push($"<p>" $(n - shown) " more rows</p>") }
+    b.Push($"<p>" $n " rows \u{00D7} " $T.Fields.Len() " columns</p>")
+    return b.ToString()
+}
+
+# a cell's text: text as it is, any other value as "$" renders it
+fn cellText<V>(x V) String {
+    match V {
+        case String { return x }
+        case _ { return $x }
+    }
+}
+
+# t with &, < and > written as HTML's entities
+fn htmlEscaped(t String&) String {
+    b := StringBuilder()
+    for ch in t {
+        if ch == '&' { b.Push("&amp;") } else if ch == '<' { b.Push("&lt;") } else if ch == '>' { b.Push("&gt;") } else { b.PushChar(ch) }
+    }
+    return b.ToString()
+}
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 
@@ -353,5 +398,14 @@ if TestBuild {
         v.Push(columnsPt(1.0, 2.0))
         v.Push(columnsPt(3.0, 4.0))
         assert v.Len() == 2 and v.Y[1] == 4.0 and v[0] == columnsPt(1.0, 2.0)
+    }
+
+    test ColumnVec.Display "shows the rows as an HTML table, a column per field" {
+        v := ColumnVec<columnsPt>()
+        v.Push(columnsPt(1.0, 2.5))
+        d := v.Display()
+        assert d.Mime() == "text/html"
+        assert d.Body() == "<table><thead><tr><th></th><th>X</th><th>Y</th></tr></thead><tbody><tr><th>0</th><td>1</td><td>2.5</td></tr></tbody></table><p>1 rows \u{00D7} 2 columns</p>"
+        assert htmlEscaped("a<b & c>") == "a&lt;b &amp; c&gt;"
     }
 }

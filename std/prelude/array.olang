@@ -650,6 +650,43 @@ fn (a Array<T>&) ChunkBy<? E>(same fn&(x T, y T) Bool ? E) Array<Array<T>&>& ? E
     return runs
 }
 
+# the indexes that put the array in order - a[order[0]] its least element, a[order[1]] the next (numpy's argsort):
+# stable, so equal elements keep their order. Elements are compared by "<", their type's Less
+fn (a Array<T>&) Argsort() Array<I64> {
+    order := Array<I64>[k for k in range a.Len()]
+    order.Sort(fn(x I64, y I64) Bool: return a[x] < a[y])
+    return order
+}
+
+# the running totals, in the elements' type: element i the sum of a[0] through a[i] (numpy's cumsum)
+fn (a Array<T>&) Cumsum() Array<T> {
+    if a.Len() == 0 { return Array<T>(0) }
+    out := Array<T>(a.Len(), a[0])
+    for i in range 1, a.Len() { out[i] = out[i - 1] + a[i] }
+    return out
+}
+
+# n values evenly spaced from lo to hi, both included, the last exactly hi (numpy's linspace):
+# "Array<F64>.Linspace(0.0, 1.0, 5)" is 0, 0.25, 0.5, 0.75, 1. One value is lo; none, for n below one
+fn Array<T>.Linspace(lo T, hi T, n I64) Array<T> {
+    if n < 1 { return Array<T>(0) }
+    out := Array<T>(n, lo)
+    if n == 1 { return out }
+    step := (hi - lo) / T(n - 1)
+    for i in range 1, n - 1 { out[i] = lo + T(i) * step }
+    out[n - 1] = hi
+    return out
+}
+
+# the values from start up to but not including stop, step apart (numpy's arange) - "Array<F64>.Range(0.0, 1.0, 0.25)"
+# is 0, 0.25, 0.5, 0.75; a negative step counts down, and a range empty in the step's direction gives none. Value i is
+# start + i * step, so a float step's rounding never accumulates. A step of zero fails with ArgumentError
+fn Array<T>.Range(start T, stop T, step T) [step != T(0)] Array<T> ? ArgumentError {
+    span := (F64(stop) - F64(start)) / F64(step)
+    n I64 = I64(span.Ceil()) if span > 0.0 else 0
+    return Array<T>[start + T(i) * step for i in range n]
+}
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 

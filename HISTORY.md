@@ -36982,3 +36982,37 @@ held as F64 (a Vec is handed over as `v.View()`, as std/stats takes it). Failing
 Auto ranges widen to a multiple of a 1-2-5 tick step; a histogram's y includes 0; a heatmap's row 0 is on top.
 `Display()` returns `Display.Svg`, so a Plot as a cell's value is shown inline (B23). The SVG has a white background
 so it reads in dark notebooks. Tests (built and `-interpret`) check the SVG text for structure, not pixels.
+## Quick data science in std: std/frame, array helpers, draws (2026-11-14, wt-frame)
+
+The user approved the quick data-science items on 2026-11-13 (plan.md, "Quick data science"): std holds what works on
+olang's own arrays, records and files; tensors are oann's. Built here, the names and shapes mine:
+
+- **No frame type.** A table is the prelude's `ColumnVec<R>` (T7e) - already a growable structure of arrays whose
+  columns are arrays (`t.Price * 1.1`, `.Sum()`), with rows, `Sort`, `$` and walks. A `frame.Frame<R>` wrapper would
+  have put every column one field further away (`f.Rows.Price`) to gain only methods; so std/frame is functions over
+  `ColumnVec<R>`, and what it gives back is again a `ColumnVec` of records (`Group<K, V>`, `Joined<L, R>`, `Summary`),
+  sorted, filtered, shown and written as any table is. Methods could not be added to a prelude type from std (M19d)
+  anyway.
+- **Display lives with the type.** The rich display convention (B23) needs a `Display()` method, so `Columns` and
+  `ColumnVec` declare one in the prelude (an HTML table, the first 50 rows, text escaped); the prompt's text stays
+  `$t`, and `frame.Table(t)` gives an aligned text table for a terminal.
+- **Reading reuses std/csv's and std/json's `Decode<T>`** (records built through their constructors by reflection),
+  then lays the rows out as columns (`ToColumnVec`). Writing is `Csv`/`Json` through their encoders.
+- **SortBy** computes each key once and sorts the positions (`Argsort`, stable), then lays the rows out in that order;
+  `SortByDescending` sorts the positions by the reversed comparison, so it stays stable. **GroupBy** takes a key and a
+  value function and gives every aggregate at once (count, sum, mean, min, max) in a typed record, the sum and bounds
+  in the values' own type, keys in order of first appearance (a Map from key to group); pandas' sorted order is a
+  SortBy away. **Join** is an inner hash join, right's rows chained per key so matches come in order. **Describe**
+  gives a `Summary` per integer or float column through std/stats (percentiles 0, 25, 50, 75, 100 in one call); a
+  statistic with no value is NaN as pandas gives it, not an error, since a summary of an empty table is still a summary.
+- **Array helpers in the prelude**: `Argsort` (stable, by `<`), `Cumsum` (in the elements' type), and the builders
+  `Array<T>.Linspace(lo, hi, n)` and `Array<T>.Range(start, stop, step)` (numpy's arange, counting down with a negative
+  step, value i computed as start + i * step so float steps do not drift; a zero step is the contract `[step != 0]`,
+  decided while compiling where the step is known). `stats.Bins(a, k)` is numpy's `histogram(a, bins=k)` beside the
+  existing `Histogram(a, edges)`. std/rand gained `Normal(mean, sd)` (defaults keep the old call), `Normals`,
+  `Uniforms`, `Choice`, `Choices` (with replacement) and `Sample` (without, a partial Fisher-Yates), failing with
+  `rand.Error.Empty`/`TooFew` rather than stopping (R22).
+
+Tests: std/frame.olang (every operation, a baked walkthrough checked by a top-level assert, reads after arena churn),
+std/prelude/tests/array.olang and columns.olang (baked beside run-time), std/stats.olang, std/rand.olang - built and
+under `test -interpret`.
