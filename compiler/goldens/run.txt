@@ -139,6 +139,9 @@
 | ok - Array<T>(n) filled by the loop after it (D14d)
 | ok - a counted fill whose counter is assigned keeps its clear (D14d)
 | ok - definitely assigned references read back after the arena churns (D13d, O2)
+=== test tests/display.olang
+| status 0
+| ok - Table.Display: a table renders as HTML, found through Displayable
 === test tests/drops.olang
 | status 0
 | ok - a by-value holder's destructors run where it lets go, once each
@@ -1546,6 +1549,7 @@
 === test std/net.olang
 | status 0
 | ok - addresses are read and written as text
+| ok - Readable: says which sockets have something to read
 | ok - Error: an address refused carries the text, a name not found the name
 | ok - names are resolved through the C library, numbers read as they are
 | ok - a TCP connection over loopback carries bytes both ways
@@ -1641,6 +1645,7 @@
 === test std/sha256.olang
 | status 0
 | ok - the FIPS 180-4 test vectors
+| ok - Hmac: RFC 4231's test vectors, the data whole or in pieces
 | ok - a Hasher fed in pieces gives the digest of the whole
 === test std/stats.olang
 | status 0
@@ -1670,6 +1675,10 @@
 | status 0
 | ok - code points are written and read back
 | ok - what is not UTF-8 is refused, and walked as replacement characters
+=== test std/zmtp.olang
+| status 0
+| ok - Socket: a DEALER and a ROUTER exchange messages of several frames, short and long
+| ok - Socket: a peer speaking something else is refused
 === test std/prelude/tests/array.olang
 | status 0
 | ok - CountOf counts runs from the start, without overlapping
