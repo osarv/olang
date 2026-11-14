@@ -3387,20 +3387,15 @@ fn (fe mut fnEm&) addr(p mir.Lvalue) String, types.TypeId {
                 tag := "" if payload else fe.E.tbaa(r, elem)
                 ty = rt
                 # a reference to a run-time-length array is the pair the array's value is (T11): the same storage
-                if not fe.runTime(rt) {
-                    at = fe.load("ptr", at, tag)
-                    payload = false
-                    elem = false
-                }
+                if fe.runTime(rt) { continue }
+                at = fe.load("ptr", at, tag)
+                payload = false
+                elem = false
             }
-            case mir.Proj.Payload(_) {
+            case mir.Proj.Payload(k) {
                 at = fe.let("getelementptr " $fe.ty(r) ", ptr " $at ", i32 0, i32 1")
-                ty = types.UnknownT
                 cs := t.Items(fe.casesList(r))
-                match pr {
-                    case mir.Proj.Payload(tag) { ty = cs[tag] }
-                    case _ { }
-                }
+                ty = cs[k]
                 payload = true
             }
         }
@@ -4748,47 +4743,12 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             return fe.let("sext i32 " $fe.load("i32", at, fe.tagRange("i32", n)) " to i64")
         }
         case mir.Rvalue.Aggregate(ty, tag, args) { return fe.aggregate(ty, tag, args) }
-        case mir.Rvalue.New(s, x, ty) {
-            rt := t.Referent(t.Repr(ty))
-            if fe.E.Lw.Gen().IsGen(t, rt) {
-                p := fe.genAlloc(s, rt)
-                fe.put(p, rt, x)
-                l := match x {
-                    case mir.Operand.Copy(q): match q.B {
-                        case mir.Base.Local(y): I64(y) if q.Path.N == I32(0) else -1
-                        case _: -1
-                    }
-                    case _: -1
-                }
-                if l >= 0 and fe.slotOf.Has(l) { fe.genOwn(p, rt, try fe.slotOf.Get(l) catch default "") }
-                return p
-            }
-            if fe.viaMem(rt) {
-                p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
-                fe.put(p, rt, x)
-                return p
-            }
-            v := fe.val(x, rt)
-            if fe.runTime(rt) { return fe.copyArray(s, v, rt) }
-            p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
-            fe.store(fe.ty(rt), v, p)
-            return p
-        }
+        case mir.Rvalue.New(s, x, ty) { return fe.newValue(s, x, ty) }
         case mir.Rvalue.NewArray(s, ty, n, fill) { return fe.newArray(s, ty, n, fill) }
         case mir.Rvalue.Slice(p, lo, hi, ty) { return fe.slice(p, lo, hi, ty) }
         case mir.Rvalue.Closure(code, ty, s, args, caps) { return fe.closure(code, ty, s, args, caps) }
         case mir.Rvalue.Recode(code, from, tl) { return fe.recode(fe.val(code, mir.I32T), from, tl) }
-        case mir.Rvalue.Text(b, into, _) {
-            if fe.directRef(b) { return fe.directText(into) }
-            bp := fe.scope(b)
-            data := fe.load("ptr", bp)
-            n := fe.load("i64", fe.let("getelementptr %olang.builder, ptr " $bp ", i32 0, i32 1"))
-            fe.E.runtime("__olang_scope_alloc")
-            out := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(into) ", i64 " $n ")")
-            fe.E.textCopy()
-            fe.w("call void @olang_textcopy(ptr " $out ", ptr " $data ", i64 " $n ")")
-            return fe.pair(n, out)
-        }
+        case mir.Rvalue.Text(b, into, _) { return fe.builtText(b, into) }
         case mir.Rvalue.Region(s) {
             fe.E.runtime("__olang_region_make")
             r := fe.let("call ptr @__olang_region_make(ptr " $fe.scope(s) ")")
@@ -4842,6 +4802,49 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             return fe.let("call ptr @__olang_weak_word(ptr " $fe.val(x) ")")
         }
     }
+}
+
+# rvalue's text a builder b holds, copied into storage of into (E11b)
+fn (fe mut fnEm&) builtText(b mir.ScopeRef, into mir.ScopeRef) String {
+    if fe.directRef(b) { return fe.directText(into) }
+    bp := fe.scope(b)
+    data := fe.load("ptr", bp)
+    n := fe.load("i64", fe.let("getelementptr %olang.builder, ptr " $bp ", i32 0, i32 1"))
+    fe.E.runtime("__olang_scope_alloc")
+    out := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(into) ", i64 " $n ")")
+    fe.E.textCopy()
+    fe.w("call void @olang_textcopy(ptr " $out ", ptr " $data ", i64 " $n ")")
+    return fe.pair(n, out)
+}
+
+# rvalue's value given storage in s: a generational instance's, laid out in memory, or a run-time array's copy (E12c,
+# O16, O30)
+fn (fe mut fnEm&) newValue(s mir.ScopeRef, x mir.Operand, ty types.TypeId) String {
+    t := fe.E.T
+    rt := t.Referent(t.Repr(ty))
+    if fe.E.Lw.Gen().IsGen(t, rt) {
+        p := fe.genAlloc(s, rt)
+        fe.put(p, rt, x)
+        l := match x {
+            case mir.Operand.Copy(q): match q.B {
+                case mir.Base.Local(y): I64(y) if q.Path.N == I32(0) else -1
+                case _: -1
+            }
+            case _: -1
+        }
+        if l >= 0 and fe.slotOf.Has(l) { fe.genOwn(p, rt, try fe.slotOf.Get(l) catch default "") }
+        return p
+    }
+    if fe.viaMem(rt) {
+        p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
+        fe.put(p, rt, x)
+        return p
+    }
+    v := fe.val(x, rt)
+    if fe.runTime(rt) { return fe.copyArray(s, v, rt) }
+    p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
+    fe.store(fe.ty(rt), v, p)
+    return p
 }
 
 # O8d: the region an owner's value at `at` (of type ty, types.Anchors) is built in: the region the first of its anchors
@@ -6867,31 +6870,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
         }
         fe.E.P.Layout(p)
         w := cabi.Way.Param(t, fe.E.Arch, p, regs)
-        match w.Kind {
-            case cabi.Pass.Direct {
-                args.Push($fe.ty(p) $(" " $w.Attr if w.Attr != "" else "") " " $fe.val(x, p))
-            }
-            case cabi.Pass.Parts {
-                tmp := fe.alloca($"[" $cabi.Span(t, w, p) " x i8]", 8)
-                fe.put(tmp, p, x)
-                for k in range w.Parts.Len() {
-                    if k > 0 { args.Push(", ") }
-                    pt := w.Parts[k].Replace(" alignstack(8)", "")
-                    at := tmp if w.Offs[k] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $w.Offs[k])
-                    args.Push($w.Parts[k] " " $fe.load(pt, at))
-                }
-            }
-            case cabi.Pass.Byval {
-                s := fe.slot(p)
-                fe.put(s, p, x)
-                args.Push($"ptr byval(" $fe.ty(p) ") align " $(t.Align(p).Max(8)) " " $s)
-            }
-            case _ {
-                s := fe.slot(p)
-                fe.put(s, p, x)
-                args.Push("ptr " $s)
-            }
-        }
+        fe.cArg(args, w, p, x)
     }
     # X21: the variable arguments, each at the type the checker promoted it to
     for i in range ps.Len(), I64(c.Args.N) {
@@ -6913,23 +6892,57 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
         fe.w("unreachable")
         return
     }
-    if c.HasDest and res != types.VoidT {
-        at, dt := fe.addr(c.Dest)
-        match rw.Kind {
-            case cabi.Pass.Direct { fe.store(fe.ty(dt), r, at) }
-            case cabi.Pass.Parts {
-                tmp := fe.alloca($"[" $cabi.Span(t, rw, res) " x i8]", 8)
-                for k in range rw.Parts.Len() {
-                    v := r if rw.Parts.Len() == 1 else fe.let($"extractvalue " $rt " " $r ", " $k)
-                    to := tmp if rw.Offs[k] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $rw.Offs[k])
-                    fe.store(rw.Parts[k], v, to)
-                }
-                fe.memmove(at, tmp, fe.size(res))
+    if c.HasDest and res != types.VoidT { fe.cResult(c, rw, r, rt, res, sret) }
+    fe.w("br label %" $blockName(c.Ok))
+}
+
+# cCall's argument x for a parameter of type p, passed as the C ABI's way w says (X11)
+fn (fe mut fnEm&) cArg(args mut StringBuilder&, w cabi.Way&, p types.TypeId, x mir.Operand) {
+    t := fe.E.T
+    match w.Kind {
+        case cabi.Pass.Direct {
+            args.Push($fe.ty(p) $(" " $w.Attr if w.Attr != "" else "") " " $fe.val(x, p))
+        }
+        case cabi.Pass.Parts {
+            tmp := fe.alloca($"[" $cabi.Span(t, w, p) " x i8]", 8)
+            fe.put(tmp, p, x)
+            for k in range w.Parts.Len() {
+                if k > 0 { args.Push(", ") }
+                pt := w.Parts[k].Replace(" alignstack(8)", "")
+                at := tmp if w.Offs[k] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $w.Offs[k])
+                args.Push($w.Parts[k] " " $fe.load(pt, at))
             }
-            case _ { fe.memmove(at, sret, fe.size(res)) }
+        }
+        case cabi.Pass.Byval {
+            s := fe.slot(p)
+            fe.put(s, p, x)
+            args.Push($"ptr byval(" $fe.ty(p) ") align " $(t.Align(p).Max(8)) " " $s)
+        }
+        case _ {
+            s := fe.slot(p)
+            fe.put(s, p, x)
+            args.Push("ptr " $s)
         }
     }
-    fe.w("br label %" $blockName(c.Ok))
+}
+
+# cCall's result r, of type res, stored where the call's value goes, as the C ABI's way rw returned it (X11)
+fn (fe mut fnEm&) cResult(c mir.Call&, rw cabi.Way&, r String&, rt String&, res types.TypeId, sret String&) {
+    t := fe.E.T
+    at, dt := fe.addr(c.Dest)
+    match rw.Kind {
+        case cabi.Pass.Direct { fe.store(fe.ty(dt), r, at) }
+        case cabi.Pass.Parts {
+            tmp := fe.alloca($"[" $cabi.Span(t, rw, res) " x i8]", 8)
+            for k in range rw.Parts.Len() {
+                v := r if rw.Parts.Len() == 1 else fe.let($"extractvalue " $rt " " $r ", " $k)
+                to := tmp if rw.Offs[k] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $rw.Offs[k])
+                fe.store(rw.Parts[k], v, to)
+            }
+            fe.memmove(at, tmp, fe.size(res))
+        }
+        case _ { fe.memmove(at, sret, fe.size(res)) }
+    }
 }
 
 # ---- export fns: the C entries (X12) ----
