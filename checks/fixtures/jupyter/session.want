@@ -1,0 +1,37 @@
+heartbeat: ping
+> kernel_info_request
+  kernel_info_reply: implementation="olang"
+> execute_request
+  iopub execute_input: "x := 41"
+  execute_reply: status="ok"
+> execute_request
+  iopub execute_input: "x + 1"
+  iopub execute_result: {"text/plain":"42"}
+  execute_reply: status="ok"
+> execute_request
+  iopub execute_input: "import \"std/io\"\nio.PutLine(\"hello\")!"
+  iopub stream: stdout "hello\n"
+  execute_reply: status="ok"
+> execute_request
+  iopub execute_input: "import \"display\"\ndisplay.Table(Array<String&>[\"n\", \"square\"], Array<I64>[2, 4, 3, 9])"
+  iopub execute_result: {"text/plain":"display.Table(Array<String&>[\"n\", \"square\"], Array<I64>[2, 4, 3, 9])","text/html":"<table><tr><th>n</th><th>square</th></tr><tr><td>2</td><td>4</td></tr><tr><td>3</td><td>9</td></tr></table>"}
+  execute_reply: status="ok"
+> execute_request
+  iopub execute_input: "y := nothing_here"
+  iopub error: CompileError "In[5]:1:6: error: unknown name 'nothing_here'"
+  execute_reply: status="error"
+> execute_request
+> interrupt_request
+  iopub execute_input: "n := 0\nfor { n++ }"
+  iopub error: RuntimeError "In[6]:2: interrupted"
+  execute_reply: status="error"
+  interrupt_reply: status="ok"
+> is_complete_request
+  is_complete_reply: status="incomplete"
+> is_complete_request
+  is_complete_reply: status="complete"
+> complete_request
+  complete_reply: matches=["x"]
+> shutdown_request
+  shutdown_reply: status="ok"
+kernel ended: 0

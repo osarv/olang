@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt"]
+                     "prompt", "jupyter"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -439,6 +439,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
         case "prompt" { try prompt(r) }
+        case "jupyter" { try jupyter(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
         case "assertloc" { try assertloc(r) }
@@ -1293,6 +1294,19 @@ fn prompt(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/prompt/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" < session.in > out.txt 2>&1") == 0, "the prompt's session did not end with 0", dir)
     try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the prompt's session printed other than session.want", dir)
+}
+
+test "olang jupyter speaks Jupyter's protocol to a front end" { assert passed("jupyter") }
+
+# B23: "olang jupyter CONNECTION_FILE" is a Jupyter kernel - a front end written in olang (fixtures/jupyter/client.olang)
+# drives it over ZeroMQ's wire protocol: heartbeat, kernel_info, cells run as the prompt runs them (a value shown, its
+# rich rendering by Display, output streamed, an error, an interrupted endless loop), is_complete, complete, shutdown
+fn jupyter(r mut report&) ? Failed {
+    dir := fresh("jupyter")
+    os.Run("cp checks/fixtures/jupyter/* tests/display.olang " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build client.olang > out.txt 2>&1") == 0, "the front end did not build", dir)
+    try r.expect(sh(dir, "timeout 120 build/client \"$OLANG\" > out.txt 2>&1") == 0, "the front end did not end with 0", dir)
+    try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the kernel's session printed other than session.want", dir)
 }
 
 fn interp(r mut report&) ? Failed {

@@ -1,0 +1,155 @@
+# a Jupyter front end's side of the kernel's protocol (B23), for checks' "jupyter" scenario: "client OLANG" starts
+# "OLANG jupyter conn.json" on five free ports, connects to it as a notebook does (shell and control DEALERs, an iopub
+# SUB, a heartbeat REQ), and prints, per request, the messages its iopub carries and its reply - kinds and the parts of
+# their contents that do not change from run to run. Messages are signed under the connection file's key
+import "std/os"
+import "std/io"
+import "std/json"
+import "std/net"
+import "std/zmtp"
+import "std/sha256"
+import "std/hex"
+import "std/time"
+
+Key String& = "a5b0c1d2-e3f4"
+Delimiter String& = "<IDS|MSG>"
+
+type client struct(Shell zmtp.Socket, Control zmtp.Socket, IOPub zmtp.Socket, Beat zmtp.Socket) {
+    Shell
+    Control
+    IOPub
+    Beat
+    Sent I64 = 0
+}
+
+fn main() ? {
+    olang := os.Args()[1]
+    ports := Array<I64>[freePort() for _ in range 5]
+    conn := $"{\"transport\":\"tcp\",\"ip\":\"127.0.0.1\",\"key\":\"" $Key "\",\"signature_scheme\":\"hmac-sha256\"," $
+        "\"shell_port\":" $ports[0] ",\"control_port\":" $ports[1] ",\"stdin_port\":" $ports[2] ",\"iopub_port\":" $
+        ports[3] ",\"hb_port\":" $ports[4] "}"
+    try os.WriteFile("conn.json", conn)
+    kernel := try os.Process.Start(olang, "jupyter", "conn.json", capture = false)
+    c := client(dial(ports[0], "DEALER"), dial(ports[1], "DEALER"), dial(ports[3], "SUB"), dial(ports[4], "REQ"))
+    try c.Beat.Send("ping")
+    try io.PutLine($"heartbeat: " $(try c.Beat.Recv())[0])
+    try c.ask(false, "kernel_info_request", "{}", "implementation")
+    try c.run("x := 41")
+    try c.run("x + 1")
+    try c.run("import \"std/io\"\nio.PutLine(\"hello\")!")
+    try c.run("import \"display\"\ndisplay.Table(Array<String&>[\"n\", \"square\"], Array<I64>[2, 4, 3, 9])")
+    try c.run("y := nothing_here")
+    try c.interrupt()
+    try c.ask(false, "is_complete_request", "{\"code\":\"fn f() {\"}", "status")
+    try c.ask(false, "is_complete_request", "{\"code\":\"x := 1\"}", "status")
+    try c.ask(false, "complete_request", "{\"code\":\"print(x\",\"cursor_pos\":7}", "matches")
+    try c.ask(true, "shutdown_request", "{\"restart\":false}", "status")
+    out := try kernel.Wait()
+    try io.PutLine($"kernel ended: " $out.Status)
+}
+
+# a port nothing listens at: one the system gives a listener, let go at once
+fn freePort() I64 {
+    l := net.Listener.Listen(net.Addr.Parse("127.0.0.1:0")!)!
+    a := $l.Addr()!
+    return a[(try a.FindByte(':') catch default 0) + 1:].ParseInt(10)!
+}
+
+# a connection to the kernel's port, tried until it listens (it is starting) for ten seconds
+fn dial(port I64, kind String&) zmtp.Socket {
+    a := net.Addr.Parse($"127.0.0.1:" $port)!
+    for _ in range 200 {
+        s := try zmtp.Socket.Dial(a, kind) catch net.Error {
+            time.Sleep(time.Duration.Millis(50))
+            continue
+        }
+        return s
+    }
+    unreachable "the kernel never listened"
+}
+
+fn sign(h String&, parent String&, meta String&, content String&) String {
+    return hex.Encode(sha256.Hmac(Key, h, parent, meta, content))
+}
+
+# a request of the type kind on shell (or control), its iopub traffic and its reply printed, with the reply content's
+# field shown; the message's id
+fn (c mut client&) ask(control Bool, kind String&, content String&, field String&) ? {
+    try c.answer(control, try c.send(control, kind, content), field)
+}
+
+# a request of the type kind sent on shell (or control): its id
+fn (c mut client&) send(control Bool, kind String&, content String&) String ? {
+    c.Sent++
+    id := $"req-" $c.Sent
+    h := $"{\"msg_id\":\"" $id "\",\"session\":\"client\",\"username\":\"t\",\"date\":\"2026-01-01T00:00:00Z\"," $
+        "\"msg_type\":\"" $kind "\",\"version\":\"5.3\"}"
+    sig := sign(h, "{}", "{}", content)
+    if control: try c.Control.Send(Delimiter, sig, h, "{}", "{}", content)
+    else: try c.Shell.Send(Delimiter, sig, h, "{}", "{}", content)
+    try io.PutLine($"> " $kind)
+    return id
+}
+
+# what iopub carries for the request id sent on shell, then its reply (shell's or control's), the content's field shown
+fn (c mut client&) answer(control Bool, id String&, field String&) ? {
+    if not control: try c.published(id)
+    m := try message.Parse(try c.Control.Recv() if control else try c.Shell.Recv())
+    try io.PutLine($"  " $m.kind ": " $field "=" $json.Encode(try m.content[field]))
+}
+
+# a cell run: execute_request, then what iopub carries and the reply's status
+fn (c mut client&) run(code String&) ? {
+    try c.ask(false, "execute_request", $"{\"code\":" $json.Encode(json.Json.Str(code)) ",\"silent\":false}", "status")
+}
+
+# a cell that never ends stopped by an interrupt_request on control, as a notebook's stop button does
+fn (c mut client&) interrupt() ? {
+    cell := try c.send(false, "execute_request", "{\"code\":\"n := 0\\nfor { n++ }\",\"silent\":false}")
+    time.Sleep(time.Duration.Millis(500))
+    stop := try c.send(true, "interrupt_request", "{}")
+    try c.answer(false, cell, "status")
+    try c.answer(true, stop, "status")
+}
+
+# what iopub publishes in answer to the request id, up to its idle status
+fn (c mut client&) published(id String&) ? {
+    for {
+        m := try message.Parse(try c.IOPub.Recv())
+        if try m.parent["msg_id"].AsStr() != id: continue
+        if m.kind == "status" {
+            state := try m.content["execution_state"].AsStr()
+            if state == "idle": return
+            continue
+        }
+        try io.PutLine($"  iopub " $m.kind ": " $shown(m))
+    }
+}
+
+# the parts of a published message that stay the same from run to run
+fn shown(m message&) String ? {
+    if m.kind == "stream": return $(try m.content["name"].AsStr()) " " $json.Encode(try m.content["text"])
+    if m.kind == "execute_result": return json.Encode(try m.content["data"])
+    if m.kind == "error": return $(try m.content["ename"].AsStr()) " " $json.Encode(try m.content["evalue"])
+    if m.kind == "execute_input": return json.Encode(try m.content["code"])
+    return ""
+}
+
+type message struct(kind String, parent json.Json&, content json.Json&) {
+    kind
+    parent
+    content
+}
+
+type BadMessage error { Unsigned }
+
+# a message's frames read: after the delimiter its signature, checked, header, parent, metadata and content
+fn message.Parse(frames Array<String>&) message ? {
+    d I64 = 0
+    for i, f in frames {
+        if f == Delimiter: d = i
+    }
+    if sign(frames[d + 2], frames[d + 3], frames[d + 4], frames[d + 5]) != frames[d + 1]: error BadMessage.Unsigned
+    h := try json.Json.Parse(frames[d + 2])
+    return message($(try h["msg_type"].AsStr()), try json.Json.Parse(frames[d + 3]), try json.Json.Parse(frames[d + 5]))
+}
