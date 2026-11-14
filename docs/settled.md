@@ -890,9 +890,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`interpret` runs programs as built, and `test -interpret` their tests (B3e, M8; compared in the suite
   2026-11-07).** Scopes reclaimed as they close, destructors run where holders let go; tasks run one after another at
   their join. Every test file and the checks' run cases are compared with the built runs; listed differences only
-  (std/chan's waits for a task, std/net's getaddrinfo, memory-measuring cases, an export fn handed to C). Plain
-  `olang` with nothing after it is to open the interpreter at a prompt, with a Jupyter kernel on top (QCX 6, the user
-  2026-11-07; after "done").
+  (std/chan's waits for a task, std/net's getaddrinfo, memory-measuring cases, an export fn handed to C).
+- **The prompt (B22, QCX 6, the user 2026-11-07 and 2026-11-13 "as easy to use as python"; built 2026-11-14).** Plain
+  `olang` reads cells from the standard input into one session, run as interpret runs a program. Mine: the session is
+  one program checked again for each cell (the latest declaration of each name; the cell's statements a function of
+  its own); a cell's top-level locals are kept as mutable globals of the session, which later declarations' names may
+  stand in front of (a D3a exception); a cell with errors changes nothing, a failing run keeps its declarations but not
+  its new locals; the last expression's value is shown with `$`. Kept values are saved from each cell's machine and
+  restored into the next (eval.Snapshot), so a cell's program and machine are reclaimed as it ends (flat at ~38 MB over
+  60 cells); a value holding a function value, an `any` or a generational instance, or whose type was laid out anew,
+  is let go with a note (values of an old type do not outlive its redefinition). `:type`, `:load`, `:help`, `:quit`.
+  compiler/prompt.olang's `Session.Cell` (text in; diagnostics, shown value, failure out) is what the Jupyter kernel is
+  to drive.
 - **`embed PATH` (E38, the user's decision 2026-10-18).** A file's bytes read while compiling: a read-only
   `Array<U8>&` of constant data; text is `String(embed "f")`. PATH is a literal or an expression reading no local,
   resolved like a relative import, kept inside std or a remote repository.

@@ -46,7 +46,8 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"]
+                     "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
+                     "prompt"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -437,6 +438,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "records" { try records(r) }
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
+        case "prompt" { try prompt(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
         case "assertloc" { try assertloc(r) }
@@ -1280,6 +1282,18 @@ fn embedded(r mut report&) ? Failed {
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping
 # main; it stops, saying where, at what the built program leaves undefined, and at what it does not run yet (tasks)
 test "-i interprets a program as the built program runs" { assert passed("interp") }
+
+test "plain olang runs its input as cells of one session" { assert passed("prompt") }
+
+# B22: plain "olang" reads cells from its standard input - values kept from cell to cell, declarations replaced, the
+# last expression's value shown, errors said and the session going on, a value whose type changed let go, :type,
+# :load, and the destructors of what the session kept run as it ends
+fn prompt(r mut report&) ? Failed {
+    dir := fresh("prompt")
+    os.Run("cp checks/fixtures/prompt/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" < session.in > out.txt 2>&1") == 0, "the prompt's session did not end with 0", dir)
+    try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the prompt's session printed other than session.want", dir)
+}
 
 fn interp(r mut report&) ? Failed {
     dir := fresh("interp")
@@ -2956,7 +2970,8 @@ fn words(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/output/prog.olang " $os.Quote(dir))
     os.Run("cp checks/cases/b14docbuilders.olang " $os.Quote(dir) "/b.olang")
     os.Run("cp checks/fixtures/output/words.olang " $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B1]: nothing to do"), "no arguments", dir)
+    # B22: nothing after it opens the prompt, which ends with its input
+    try r.expect(sh(dir, "\"$OLANG\" < /dev/null > out.txt 2>&1") == 0 and outOf(dir) == "", "no arguments", dir)
     try r.expect(sh(dir, "\"$OLANG\" bild prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("'bild' is not a mode") and outOf(dir).Contains("the modes are build, compile"), "an unknown mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -b prog.olang > out.txt 2>&1") == 1 and

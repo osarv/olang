@@ -110,6 +110,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `compiler/build.olang`, `target.olang` | the option's effect; the object-name hash if it changes code (`.quick`, `.debug`, B4) |
 | `tools/cli_words.olang` | rewrites old spellings; add to it only if an option is renamed |
 | `compiler/goldens/drv.txt` (`make drvgold`), `compiler/tools/drvdiff.olang` | the driver's command-line behaviour |
+| `compiler/prompt.olang` (`Session`, `pieces`, `HelpText`), `checks/fixtures/prompt/session.want` | the prompt (B22): what a cell may hold, its commands, and the session the checks scenario `prompt` replays - a change to interpret's diagnostics or `$` renderings changes `session.want` |
 | `compiler/olang.olang` `Passes.Interpret`, `build.olang` `InterpretTests` | `test -interpret` (B3e): an option saying how to build is refused beside it (`buildWord`) |
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |

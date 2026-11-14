@@ -6079,6 +6079,215 @@ fn (m mut Machine&) Text(p Ptr, ty types.TypeId) String {
     return b.ToString()
 }
 
+# ---- B22: a session's values kept from one cell to the next ----
+#
+# The prompt checks the session again for each cell and runs it on a machine of its own, which goes when the cell is
+# done; the values the session keeps (its globals) are saved from that machine into a Snapshot - each allocation they
+# reach saved once, its pointers as the saved allocations they name, so what two of them shared they still share - and
+# restored into the next cell's machine, in its program's scope. Bytes are saved as they are, so a value is restored
+# only where its type is laid out as it was (Layout, compared by the caller); code - a function value, an "any"'s
+# table - is the old program's and is never saved.
+
+# why a value is not saved: it reaches a function's code (a function value, an "any"), a generational instance
+# (genrefs), another global's storage, or storage that is gone
+type NotSaved error { Code, Generational, Global, Gone }
+
+# saved allocations: each one's words at Starts[i] in Words - its size, kind and whether it is read-only, then its
+# bytes as words, then a word per word naming the allocation a pointer there points into (its index + 1, 0 for none);
+# a value's own storage (a global's) is one of them. Destructor registrations about them: their type's Canon, the
+# allocation and the offset
+type Snapshot struct() {
+    Words Vec<I64>
+    Starts Vec<I64>
+    RegTy Vec<String&>
+    RegAt Vec<I64>
+    RegOff Vec<I64>
+    ids Map<I64, I64>      # while saving: a machine's allocation id, by the index it was saved as
+}
+
+fn (s mut Snapshot&) Clear() {
+    s.Words.Clear()
+    s.Starts.Clear()
+    s.RegTy.Clear()
+    s.RegAt.Clear()
+    s.RegOff.Clear()
+    s.ids.Clear()
+}
+
+# a global's storage and type, by its module and name
+fn (m mut Machine&) GlobalAt(module I64, name source.NameId) Ptr, types.TypeId ? NotSaved {
+    g := try m.globalOf.Get(gkey(module, name)) catch { error NotSaved.Gone }
+    return Ptr(m.globals[g].Store, 0), types.TypeId(I32(m.globals[g].Ty))
+}
+
+# the global set as it is, its initializer never run: a value the prompt restores, or one a cell is to assign
+fn (m mut Machine&) MarkSet(module I64, name source.NameId) {
+    g := try m.globalOf.Get(gkey(module, name)) catch { return }
+    m.globals[g].State = 2
+}
+
+# a type's layout as the bytes of its values and what they reach are laid out - the same text in two machines where a
+# value's bytes mean the same in both: shapes, sizes, offsets and case names, through references and elements
+fn (m mut Machine&) Layout(ty types.TypeId) String {
+    b := StringBuilder()
+    seen Map<String&, Bool>
+    m.layoutOf(ty, b, seen)
+    return b.ToString()
+}
+
+fn (m mut Machine&) layoutOf(ty types.TypeId, b mut StringBuilder&, seen mut Map<String&, Bool>&) {
+    t := m.T
+    key := t.Canon(ty)
+    b.Push(key)
+    if key in seen {
+        b.Push("@")
+        return
+    }
+    seen.Put(key, true)
+    sh := m.shape(ty)
+    b.Push("(" $sh " " $m.size(ty))
+    r := t.Repr(ty)
+    named := t.KindOf(r) == types.Kind.Named
+    if sh == vAgg {
+        for i in range t.Items(m.partList(ty)).Len() {
+            b.Push(" " $m.partOffset(ty, i) ":")
+            m.layoutOf(m.partType(ty, i), b, seen)
+        }
+    }
+    if (sh == vEnum or sh == vOrd) and named {
+        for n in t.CaseNames(r) { b.Push(" " $t.Names.Text(n)) }
+    }
+    if sh == vEnum {
+        for k in range t.Items(t.Cases(r) if named else t.ShapeCases(r)).Len() {
+            pt := m.payloadType(ty, k)
+            if pt != types.TypeId(0): m.layoutOf(pt, b, seen)
+        }
+    }
+    if sh == vPtr and t.KindOf(r) == types.Kind.Ref { m.layoutOf(t.Referent(r), b, seen) }
+    if sh == vPair or sh == vFixed { m.layoutOf(m.elemOf(ty), b, seen) }
+    b.Push(")")
+}
+
+# the global's value saved, and what it reaches: the index of its storage's allocation in s
+fn (m mut Machine&) Save(module I64, name source.NameId, s mut Snapshot&) I64 ? NotSaved {
+    at, _ := try m.GlobalAt(module, name)
+    n, w := s.Starts.Len(), s.Words.Len()
+    root := try m.saveAlloc(at.Id, s, true) catch NotSaved e {
+        s.drop(n, w)
+        error e
+    }
+    k := n
+    for k < s.Starts.Len() {
+        if s.Starts[k] < 0: try m.saveWords(k, s) catch NotSaved e {
+            s.drop(n, w)
+            error e
+        }
+        k++
+    }
+    return root
+}
+
+# what a save that failed added taken away: back to n allocations in w words
+fn (s mut Snapshot&) drop(n I64, w I64) {
+    s.Starts.Truncate(n)
+    s.Words.Truncate(w)
+    kept Map<I64, I64>
+    for e in s.ids.Iter() {
+        if e.Value < n: kept.Put(e.Key, e.Value)
+    }
+    s.ids = kept
+}
+
+# allocation id given an index in s - its words written once saveWords reaches it
+fn (m mut Machine&) saveAlloc(id I64, s mut Snapshot&, root Bool) I64 ? NotSaved {
+    have := try s.ids.Get(id) catch default -1
+    if have >= 0 { return have }
+    a := m.al[id & slotMask]
+    if a.Kind == aFree or a.Gen != id >> slotBits { error NotSaved.Gone }
+    if a.Kind == aCode or a.Extern { error NotSaved.Code }
+    if a.Kind == aGlobal and not root { error NotSaved.Global }
+    if a.Ty != types.TypeId(0) or a.Hdr != 0 { error NotSaved.Generational }
+    k := s.Starts.Len()
+    s.ids.Put(id, k)
+    s.Starts.Push(-id)    # (its id until saveWords writes it)
+    return k
+}
+
+# the k'th saved allocation's words written, the allocations its pointers name saved after it
+fn (m mut Machine&) saveWords(k I64, s mut Snapshot&) ? NotSaved {
+    id := -s.Starts[k]
+    a := m.al[id & slotMask]
+    s.Starts[k] = s.Words.Len()
+    s.Words.Push(a.Size)
+    s.Words.Push(a.Kind)
+    s.Words.Push(1 if a.ReadOnly else 0)
+    nw := (a.Size + 7) / 8
+    for w in range nw { s.Words.Push(m.hw[a.Base / 8 + w]) }
+    for w in range nw {
+        p := m.prov[a.Base / 8 + w]
+        if p == 0 {
+            s.Words.Push(0)
+            continue
+        }
+        s.Words.Push(1 + try m.saveAlloc(p, s, false))
+    }
+}
+
+# the destructor registrations of the program's scope about saved storage, saved - and taken off its list, so its close
+# (EndProgram) runs only those of what was not saved
+fn (m mut Machine&) SaveRegs(s mut Snapshot&) {
+    mine Vec<I64>
+    r := m.scopes[m.program & slotMask].Regs
+    for r >= 0 {
+        mine.Push(r)
+        r = m.regs[r].Next
+    }
+    # oldest first, so the restored list runs them in the order this one would
+    for k in range mine.Len() {
+        slot := mine[mine.Len() - 1 - k]
+        g := m.regs[slot]
+        at := try s.ids.Get(g.Id) catch default -1
+        if g.Kind != gDtor or at < 0: continue
+        s.RegTy.Push(m.T.Canon(types.TypeId(I32(g.Ty))))
+        s.RegAt.Push(at)
+        s.RegOff.Push(g.Off)
+        m.unlinkReg(slot)
+    }
+}
+
+# what s saved made again in this machine: each allocation in the program's scope - but those roots names, a global's
+# storage by the index it was saved as, written into that global's storage - its pointers following; then each
+# registration whose type tys maps (by Canon). The ids made, by index
+fn (m mut Machine&) Restore(s Snapshot&, roots Map<I64, Ptr>&, tys Map<String&, types.TypeId>&) Array<I64> {
+    ids := Array<I64>(s.Starts.Len(), 0)
+    for k in range s.Starts.Len() {
+        at := try roots.Get(k) catch default NullPtr
+        if at.Id != 0 {
+            ids[k] = at.Id
+            continue
+        }
+        base := s.Starts[k]
+        p := m.allocate(s.Words[base], s.Words[base + 1], m.program)
+        m.al[p.Id & slotMask].ReadOnly = s.Words[base + 2] != 0
+        ids[k] = p.Id
+    }
+    for k in range s.Starts.Len() {
+        base := s.Starts[k]
+        nw := (s.Words[base] + 7) / 8
+        to := m.al[ids[k] & slotMask].Base / 8
+        for w in range nw {
+            m.hw[to + w] = s.Words[base + 3 + w]
+            p := s.Words[base + 3 + nw + w]
+            m.prov[to + w] = ids[p - 1] if p > 0 else 0
+        }
+    }
+    for i in range s.RegTy.Len() {
+        ty := try tys.Get(s.RegTy[i]) catch { continue }
+        m.addReg(m.program, gDtor, I64(ty), Ptr(ids[s.RegAt[i]], s.RegOff[i]))
+    }
+    return ids
+}
+
 # the bytes the heap holds and how many allocations and scopes are live, for measuring
 fn (m Machine&) HeapBytes() I64 { return m.top }
 fn (m Machine&) Allocations() I64 { return m.nAl }

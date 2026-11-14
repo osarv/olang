@@ -1,0 +1,817 @@
+# prompt - the interpreter at a prompt (B22): plain "olang" reads entries from the standard input, each a cell run in
+# a session as interpret runs a program (B3e). Session is what holds one, and what a notebook's kernel drives too: a
+# cell's text in; its diagnostics, the value of its last expression and what stopped its run out (Reply). What the cell
+# writes goes to the standard output as it runs.
+#
+# A session is a program the prompt writes again for every cell and checks whole, as interpret checks one: the
+# declarations its cells made (the latest of each name), a global for each value it keeps, and the cell's statements as
+# the body of a function of its own, run on a machine made for the cell. A top-level local of a cell is kept by
+# assigning it, as the cell ends, to a global made for it; the next cell's program declares it as a global of its own
+# name. What the session keeps is saved from the machine when the cell ends (eval.Snapshot) and restored into the next
+# cell's, so what a cell made - its program, its checker, its machine - is reclaimed as it ends, and only what is kept
+# stays.
+
+import "std/os"
+import "std/io"
+import "std/pair"
+import "source"
+import "token"
+import "scan"
+import "diag"
+import "load"
+import "fetch"
+import "types"
+import "typed"
+import "mir"
+import "eval"
+import "interp"
+import "build"
+import "scope"
+import "free"
+import typecheck "check"
+
+# ---- what a session holds ----
+
+# a declaration the session holds: the name it declares (Key: "f", "T", "T.M", "import io"), its text, and where it was
+# written - its cell's label and the line it starts on there
+type Decl struct(Key String&, Text String&, Label String&, Line I64) {
+    Key
+    Text
+    Label
+    Line
+}
+
+# a value the session keeps: a cell's top-level local (Made, Type its type as the program writes it) or a global a cell
+# declared; the allocation its storage was saved as, and its type's layout then (eval.Machine.Layout)
+type Value struct(Name String&, Type String&, Made Bool) {
+    Name
+    Type
+    Made
+    Root I64 = -1
+    Layout String& = ""
+}
+
+# what a cell gave: whether it checked - its declarations and values then the session's - the diagnostics (its errors,
+# or its warnings), the value of its last expression as "$" renders it (Shown where there was one), what stopped its
+# run with the error's trace ("" for none), and a line for each value the session let go
+type Reply struct() {
+    Checked Bool = false
+    Diags String& = ""
+    Shown Bool = false
+    Text String& = ""
+    Failure String& = ""
+    Notes String& = ""
+    gone Vec<String&>      # (the values whose types the cell lays out anew, which it is checked again without)
+}
+
+# the names the session's program gives what it makes: a kept local's global, the shown value's, the cell's function
+KeepPrefix String& = "olangKeep_"
+ShownName String& = "olangShown"
+CellName String& = "olangCell"
+# what the lines the session writes are named in diagnostics
+Synthetic String& = "session"
+
+type Session struct(Cfg mut build.Config&) {
+    Cfg
+    Cells I64 = 0
+    # the program's path: in the working directory, so its imports are found from there as a file's there are; its
+    # text is never written there (load.Loader.Overlay)
+    Root String& = $(try os.Cwd() catch default ".") "/olang-prompt.olang"
+    Decls Vec<Decl>
+    Values Vec<Value>
+    snap eval.Snapshot = eval.Snapshot()
+}
+
+# ---- a cell's pieces ----
+
+# a top-level declaration or statement of a cell: its text [Start, End), the line it starts on (from 1), whether it is
+# a declaration and the name it declares, and the names a statement declares as locals
+type item struct(Start I64, End I64, Line I64) {
+    Start
+    End
+    Line
+    IsDecl Bool = false
+    Key String& = ""
+    Names Vec<String&>
+    Shows Bool = false     # an expression whose value the cell shows, where it is its last
+}
+
+# a cell's text in pieces, by its tokens: a piece ends where its line does with no bracket open - but before an "else"
+# or a "catch" beginning the next line, which goes on with it (S1b, R9b)
+fn pieces(text String&) Vec<item> {
+    ts := scan.Tokens.Scan(text)
+    toks := ts.Toks
+    out Vec<item>
+    depth I64 = 0
+    first I64 = -1
+    for i in range toks.Len() {
+        k := toks[i].Kind
+        if k == token.Tok.Eof: break
+        if first < 0 and k == token.Tok.StmtEnd: continue
+        if first < 0: first = i
+        if opens(k): depth++
+        if closes(k): depth--
+        if depth > 0 or not endsAt(toks, i): continue
+        last := i if k != token.Tok.StmtEnd else i - 1
+        out.Push(item.Of(text, toks, first, last))
+        first = -1
+    }
+    return out
+}
+
+fn opens(k token.Tok) Bool { return k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace }
+fn closes(k token.Tok) Bool { return k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace }
+
+# whether a piece at depth 0 ends with token i: a statement's end, the last token, or a "}" its line ends after - unless
+# what follows goes on with it
+fn endsAt(toks Array<token.Token>&, i I64) Bool {
+    next := toks[i + 1] if i + 1 < toks.Len() else token.Token(token.Tok.Eof, 0, 0, 0)
+    if next.Kind == token.Tok.Eof: return true
+    k := toks[i].Kind
+    if k != token.Tok.StmtEnd and not (k == token.Tok.RBrace and next.Has(token.LineBreak)): return false
+    return next.Kind != token.Tok.Else and next.Kind != token.Tok.Catch
+}
+
+# the piece from token a to token b: what it declares, or the locals it declares and whether it shows a value
+fn item.Of(text String&, toks Array<token.Token>&, a I64, b I64) item {
+    it := item(I64(toks[a].Start), I64(toks[b].End), lineOf(text, I64(toks[a].Start)))
+    key := declKey(text, toks, a, b)
+    if key != "" {
+        it.IsDecl = true
+        it.Key = key
+        return it
+    }
+    names := localNames(text, toks, a, b)
+    for n in names { it.Names.Push(n) }
+    it.Shows = names.Len() == 0 and shows(toks, a, b)
+    return it
+}
+
+fn lineOf(text String&, at I64) I64 {
+    n I64 = 1
+    for i in range at {
+        if text[i] == '\n': n++
+    }
+    return n
+}
+
+fn word(text String&, t token.Token) String { return $text[t.Start:t.End] }
+
+# the name a declaration declares - "f", "T", "T.M", "T.Builder", "import io", a global's name - or "" for a statement
+fn declKey(text String&, toks Array<token.Token>&, a I64, b I64) String {
+    i := a
+    # attributes before it (G39): "@T", "@m.T(...)"
+    for i <= b and toks[i].Kind == token.Tok.At {
+        i++
+        for i <= b and (toks[i].Kind == token.Tok.Iden or toks[i].Kind == token.Tok.Dot) { i++ }
+        if i <= b and toks[i].Kind == token.Tok.LParen: i = matching(toks, i, b) + 1
+    }
+    if i > b: return ""
+    if toks[i].Kind == token.Tok.Iden and word(text, toks[i]) == "export": i++
+    if i > b: return ""
+    k := toks[i].Kind
+    if k == token.Tok.Type and i + 1 <= b: return word(text, toks[i + 1])
+    if k == token.Tok.Fn and i + 1 <= b: return fnKey(text, toks, i + 1, b)
+    if k == token.Tok.Import: return "import " $importName(text, toks, i + 1, b)
+    if k == token.Tok.Extern or k == token.Tok.Test: return $"text " $text[toks[a].Start:toks[b].End]
+    if k == token.Tok.Iden and i + 1 <= b and toks[i + 1].Kind == token.Tok.Mut: return word(text, toks[i])
+    return ""
+}
+
+# a function's key from the token after "fn": "f", "T.Builder", or a method's "T.M" from its receiver "(r mut T&)"
+fn fnKey(text String&, toks Array<token.Token>&, i I64, b I64) String {
+    if toks[i].Kind == token.Tok.Iden {
+        if i + 2 <= b and toks[i + 1].Kind == token.Tok.Dot: return $word(text, toks[i]) "." $word(text, toks[i + 2])
+        return word(text, toks[i])
+    }
+    if toks[i].Kind != token.Tok.LParen: return ""
+    close := matching(toks, i, b)
+    j := i + 2
+    if j <= b and toks[j].Kind == token.Tok.Mut: j++
+    if j + 2 <= b and toks[j + 1].Kind == token.Tok.Dot: j += 2
+    if j > b or close + 1 > b: return ""
+    return $word(text, toks[j]) "." $word(text, toks[close + 1])
+}
+
+# an import's alias, or the name of its file without its extension
+fn importName(text String&, toks Array<token.Token>&, i I64, b I64) String {
+    if i > b: return ""
+    if toks[i].Kind == token.Tok.Iden: return word(text, toks[i])
+    path := word(text, toks[i])
+    path = $path[1:path.Len() - 1] if path.Len() >= 2 else path
+    slash := try path.FindLast("/") catch default -1
+    path = $path[slash + 1:]
+    dot := try path.FindLast(".") catch default -1
+    return $path[:dot] if dot > 0 else path
+}
+
+# the index of the bracket closing the one at i, b where none does before it
+fn matching(toks Array<token.Token>&, i I64, b I64) I64 {
+    depth I64 = 0
+    for j in range i, b + 1 {
+        if opens(toks[j].Kind): depth++
+        if closes(toks[j].Kind): depth--
+        if depth == 0: return j
+    }
+    return b
+}
+
+# the names a statement declares at its start: "x := e", "a, b := f()", "x I64 = 1", "x, y I32"
+fn localNames(text String&, toks Array<token.Token>&, a I64, b I64) Vec<String&> {
+    out Vec<String&>
+    i := a
+    for i <= b and toks[i].Kind == token.Tok.Iden {
+        out.Push(word(text, toks[i]))
+        if i + 1 > b or toks[i + 1].Kind != token.Tok.Comma: break
+        i += 2
+    }
+    if out.Len() == 0 or i + 1 > b: return Vec<String&>()
+    k := toks[i + 1].Kind
+    if k == token.Tok.Define or k == token.Tok.Iden or k == token.Tok.Fn or k == token.Tok.Any: return out
+    return Vec<String&>()
+}
+
+# whether a statement is an expression whose value can be shown: no keyword starting it but "try", "not" or "comptime",
+# and no assignment or step at its top level
+fn shows(toks Array<token.Token>&, a I64, b I64) Bool {
+    k := toks[a].Kind
+    if k == token.Tok.LBrace or (k.Text() != "" and isWord(k.Text()) and k != token.Tok.Try and k != token.Tok.Not and
+        k != token.Tok.Comptime and k != token.Tok.BoolLit and k != token.Tok.NullLit) { return false }
+    depth I64 = 0
+    for i in range a, b + 1 {
+        t := toks[i].Kind
+        if opens(t): depth++
+        if closes(t): depth--
+        if depth == 0 and assigns(t): return false
+    }
+    return true
+}
+
+fn isWord(t String&) Bool { return t.Len() > 0 and t[0] >= 'a' and t[0] <= 'z' }
+
+fn assigns(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Assign, token.Tok.Define, token.Tok.PlusEq, token.Tok.MinusEq, token.Tok.StarEq: true
+        case token.Tok.StarStarEq, token.Tok.SlashEq, token.Tok.PercentEq, token.Tok.ShlEq, token.Tok.ShrEq: true
+        case token.Tok.AmpEq, token.Tok.PipeEq, token.Tok.CaretEq, token.Tok.Inc, token.Tok.Dec: true
+        case _: false
+    }
+}
+
+# whether an entry is still open: a bracket, a raw text or a block comment not closed yet - the prompt reads another
+# line into it
+fn Open(text String&) Bool {
+    ts := scan.Tokens.Scan(text)
+    for d in ts.Diags {
+        if d.Kind == scan.LexError.RawUnclosed or d.Kind == scan.LexError.UnclosedComment: return true
+    }
+    depth I64 = 0
+    for t in ts.Toks {
+        if opens(t.Kind): depth++
+        if closes(t.Kind): depth--
+    }
+    return depth > 0
+}
+
+# ---- the session's program ----
+
+# a program's text being written, and for each of its lines the cell it came from and its line there ("" for a line
+# the session wrote)
+type program struct() {
+    B StringBuilder = StringBuilder()
+    Paths Vec<String&>
+    Lines Vec<I64>
+    Kept Vec<String&>    # the values it keeps as globals, which a declaration's names may stand in front of
+}
+
+
+fn (p mut program&) put(t String&, label String&, line I64) {
+    p.B.Push(t)
+    p.B.PushChar('\n')
+    k I64 = 0
+    for ch in t {
+        if ch == '\n': k++
+    }
+    for i in range k + 1 {
+        p.Paths.Push(label)
+        p.Lines.Push(line + i)
+    }
+}
+
+# a cell as the program holds it: its label, its text and its pieces; the top-level locals it keeps, each with its
+# type as written; whether its last piece's value is shown
+type cell struct(Label String&, Text String&) {
+    Label
+    Text
+    Items Vec<item>
+    Keeps Vec<Value>
+    Show Bool = false
+}
+
+# the session's program with c as its cell: the declarations (imports first), a global for each value kept, a global
+# for each local c keeps (keeping, its types known) and for the value shown, then c's statements as the body of the
+# cell's function
+fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) program {
+    p := program()
+    for d in ds {
+        if d.Key.StartsWith("import "): p.put(d.Text, d.Label, d.Line)
+    }
+    for d in ds {
+        if not d.Key.StartsWith("import "): p.put(d.Text, d.Label, d.Line)
+    }
+    for v in vs {
+        if not v.Made: continue
+        p.Kept.Push(v.Name)
+        p.put($v.Name " mut " $v.Type " = unreachable \"a value the session keeps\"", Synthetic, 0)
+    }
+    if keeping {
+        for v in c.Keeps { p.put($KeepPrefix $v.Name " mut " $v.Type " = unreachable \"a value the cell keeps\"", Synthetic, 0) }
+    }
+    if c.Show: p.put($ShownName " mut String = \"\"", Synthetic, 0)
+    p.put($"fn " $CellName "() ? {", Synthetic, 0)
+    last := c.Items.Len() - 1
+    for i, it in c.Items {
+        if it.IsDecl: continue
+        t := c.Text[it.Start:it.End]
+        # (the value's text starts its own line, so a diagnostic's column is the cell's)
+        if c.Show and i == last: p.put($ShownName " = $(", Synthetic, 0)
+        p.put(t, c.Label, it.Line)
+        if c.Show and i == last: p.put(")", Synthetic, 0)
+    }
+    if keeping {
+        for v in c.Keeps { p.put($KeepPrefix $v.Name " = " $v.Name, c.Label, v.Root) }
+    }
+    p.put("}", Synthetic, 0)
+    return p
+}
+
+# ---- a cell run ----
+
+# a cell's text run in the session (label names it in diagnostics): its declarations added, its statements run, its
+# top-level locals kept - all only where the session's program with it checks
+fn (s mut Session&) Cell(text String&, label String& = "") Reply {
+    s.Cells++
+    c := cell($label if label != "" else $"cell" $s.Cells, text)
+    for it in pieces(text) { c.Items.Push(it) }
+    r := Reply()
+    if c.Items.Len() == 0 {
+        r.Checked = true
+        return r
+    }
+    c.Show = c.Items[c.Items.Len() - 1].Shows
+    # the session's declarations and values as they are with the cell's: what it declares again replacing what had
+    # that name, each where it was
+    ds Vec<Decl>
+    vs Vec<Value>
+    taken Map<String&, Bool>
+    for it in c.Items {
+        if it.IsDecl: taken.Put(it.Key, true)
+        for n in it.Names { taken.Put(n, true) }
+    }
+    for d in s.Decls {
+        if d.Key not in taken: ds.Push(d)
+    }
+    for v in s.Values {
+        if v.Name not in taken: vs.Push(v)
+    }
+    for it in c.Items {
+        if it.IsDecl: ds.Push(Decl($it.Key, $c.Text[it.Start:it.End], $c.Label, it.Line))
+    }
+    notes := StringBuilder()
+    for {
+        r = s.attempt(ds, vs, c)
+        if r.gone.Len() > 0 {
+            # values whose types the cell lays out anew: let go, and the cell checked without them
+            left Vec<Value>
+            for v in vs {
+                if v.Name in r.gone: notes.Push($v.Name " is let go: its type is not laid out as it was\n")
+                else: left.Push(v)
+            }
+            vs = left
+            continue
+        }
+        if r.Checked or not c.Show: break
+        # the last piece gives no value (a call giving nothing), or is wrong whatever it gives: as a statement - the
+        # one with fewer errors told where both are wrong
+        c.Show = false
+        plain := s.attempt(ds, vs, c)
+        if plain.Checked or errorRows(plain.Diags) < errorRows(r.Diags): r = plain
+        break
+    }
+    r.Notes = $notes.ToString() $r.Notes
+    return r
+}
+
+# how many error rows diagnostics' text holds
+fn errorRows(t String&) I64 {
+    n I64 = 0
+    for line in t.Lines() {
+        if not line.StartsWith(" ") and line.Contains(": error"): n++
+    }
+    return n
+}
+
+# the rows of diagnostics' text a cell tells: its errors, wherever they are, and its warnings about the cell itself
+# (label) - not an import nothing reaches yet (M5a: a later cell may), and each row once
+fn cellRows(t String&, label String&) String {
+    b := StringBuilder()
+    seen Map<String&, Bool>
+    row := StringBuilder()
+    for line in t.Lines() {
+        if not line.StartsWith(" ") and (line.Contains(": error") or line.Contains(": warning")) {
+            flushRow(b, row.ToString(), label, seen)
+            row = StringBuilder()
+        }
+        row.Push($line "\n")
+    }
+    flushRow(b, row.ToString(), label, seen)
+    return b.ToString()
+}
+
+fn flushRow(b mut StringBuilder&, row String&, label String&, seen mut Map<String&, Bool>&) {
+    if row == "" or row in seen: return
+    seen.Put(row, true)
+    head := row[:try row.FindByte('\n') catch default row.Len()]
+    if head.Contains(": warning") and (not head.StartsWith($label ":") or head.Contains("warning[M5a]")): return
+    b.Push(row)
+}
+
+# the cell checked with the session's declarations ds and values vs, and run: the probe first where it keeps locals,
+# for their types; the reply
+fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
+    r := Reply()
+    c.Keeps.Clear()
+    probe := false
+    for it in c.Items {
+        if it.Names.Len() > 0: probe = true
+    }
+    if probe {
+        d := diag.Diagnostics(false)
+        d.Lenient = true
+        p := s.write(ds, vs, c, false)
+        ch := s.check(p, d)
+        if ch is null {
+            r.Diags = cellRows(d.Render(), c.Label)
+            return r
+        }
+        s.keptLocals(ch, c)
+    }
+    d := diag.Diagnostics(false)
+    d.Lenient = true
+    p := s.write(ds, vs, c, true)
+    ch := s.check(p, d)
+    if ch is null {
+        r.Diags = cellRows(d.Render(), c.Label)
+        return r
+    }
+    x := s.machine(ch, d, r)
+    if x is null {
+        r.Diags = cellRows(d.Render(), c.Label)
+        return r
+    }
+    for n in s.mismatched(ch, x, vs) { r.gone.Push(n) }
+    if r.gone.Len() > 0: return r
+    r.Checked = true
+    r.Diags = cellRows(d.Warnings(), c.Label)
+    s.run(ch, x, d, ds, vs, c, r)
+    return r
+}
+
+# the program checked as interpret checks one (B3e) - its conditions and asserts the evaluator decides decided - with
+# its lines named as its cells': the checker, or null where it has errors (d holds them)
+fn (s mut Session&) check(p program&, d mut diag.Diagnostics&) mut typecheck.Checker?& {
+    # (copies of what the session holds: the cell's program and all it makes go as the cell ends)
+    root := $s.Root
+    consts := s.Cfg.Consts
+    f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), s.Cfg.Update, false)
+    nm mut source.Names& = source.Names()
+    l mut load.Loader& = load.Loader(load.StdDir(), consts, f, nm, d)
+    l.Clang = $s.Cfg.Clang
+    for v in p.Kept { l.Shadowable.Put(v, true) }
+    l.Overlay.Put(root, p.B.ToString())
+    l.Load(root)
+    if l.Root >= 0: d.NameLines(l.Mods[l.Root].File, p.Paths.ToArray(), p.Lines.ToArray())
+    if d.Errors() > 0: return null
+    c mut typecheck.Checker& = interp.Analyze(l, false)
+    if d.Errors() > 0: return null
+    return c
+}
+
+# the cell's function's body in the checked program, -1 for none
+fn cellBody(c mut typecheck.Checker&) I64 {
+    f := c.P.FnNamed(c.P.L.Root, c.P.L.Names.Intern(CellName))
+    for i in range c.Bodies.Len() {
+        b := c.Bodies[i]
+        match b.Of {
+            case typed.BodyOf.Fn(inst) { if c.P.InstanceFn(inst) == f: return I64(i) }
+            case _ { }
+        }
+    }
+    return -1
+}
+
+# the locals the cell declares at its top level, each with its type as the session's program writes it: a value of a
+# unique type (T13b) kept by reference to it
+fn (s mut Session&) keptLocals(c mut typecheck.Checker&, ce mut cell&, kept Bool = true) {
+    b := cellBody(c)
+    if b < 0: return
+    body := c.Bodies[b]
+    c.SpellFrom(c.P.L.Root)
+    for lc in body.Locals {
+        if lc.In != typed.BlockId(0) or lc.Kind != typed.LocalKind.Var or lc.Name == source.NameId(0): continue
+        ty := c.Ty(lc.Ty)
+        if kept and c.P.T.KindOf(lc.Ty) != types.Kind.Ref and c.P.T.Unique(lc.Ty): ty = $ty "&"
+        v := Value($c.P.L.Names.Text(lc.Name), ty, true)
+        # (where it is declared, for the line its keeping is told at)
+        v.Root = c.P.L.Diags.LineAt(body.File, I64(lc.Sp.Start))
+        ce.Keeps.Push(v)
+    }
+}
+
+# the machine the checked program runs on, as interpret makes it (B3e): its values and asserts decided, held to
+# section 8, the libraries it links loaded - null where any of that fails (d holds why)
+fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r mut Reply&) mut interp.Exec?& {
+    asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
+    clean := d.Errors() == 0
+    if clean: interp.DecideValues(c)
+    interp.DecideAsserts(c, asserts)
+    if clean: interp.Bake(c)
+    if d.Errors() > 0: return null
+    for g in c.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
+    if r.Failure != "": return null
+    for ln in c.P.L.Links() {
+        why := interp.LoadLibrary(ln)
+        if why != "": gap(r, $"the library '" $ln "' cannot be loaded: " $why)
+    }
+    if r.Failure != "": return null
+    x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
+    x.Lw.AssertsTrue = asserts
+    x.Lw.Cleanups = true
+    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
+    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
+    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
+    sc.Run()
+    for g in sc.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) ": it does not judge " $g.What " yet") }
+    if d.Errors() > 0 or r.Failure != "": return null
+    fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
+    fr.Decide(sc.Plans, c.P.L.Root)
+    x.Lw.Plans = fr.Plans
+    for t in range fr.Sc.TwinCount() {
+        x.Lw.TwinPlans.Push(fr.Sc.TwinPlan(t))
+        x.Lw.TwinOwn.Push(fr.Sc.TwinOwn(t))
+        x.Lw.TwinBodies.Push(fr.Sc.TwinBody(t))
+        x.Lw.TwinStable.Push(fr.Sc.TwinStable(t))
+    }
+    x.Lw.Free = fr
+    x.M.Soles = fr.Sole
+    for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First " " $bt.Second, true) }
+    x.M.Args.Push("olang")
+    return x
+}
+
+# what the prompt cannot run, said as interpret says it (B3e)
+fn gap(r mut Reply&, why String&) { r.Failure = $r.Failure "olang: the prompt cannot run this: " $why "\n" }
+
+# the cell's function run on x: the session's values restored into it first, then kept again as it ends - with the
+# cell's locals where it ran to its end - and what nothing keeps let go, destructors run. The reply told what happened
+fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag.Diagnostics&, ds Vec<Decl>&
+    vs Vec<Value>&, ce cell&, r mut Reply&) {
+    b := cellBody(c)
+    k := mir.FnKey.Body(typed.BodyId(I32(b)))
+    x.Need(k)
+    root := c.P.L.Root
+    names := c.P.L.Names
+    notes := StringBuilder()
+    kept := s.restore(c, x, vs)
+    for v in ce.Keeps { x.M.MarkSet(root, names.Intern($KeepPrefix $v.Name)) }
+    st := x.InitGlobals()
+    if st == eval.Stop.None: st = x.M.Eval(k, Array<I64>(0))
+    if st != eval.Stop.None {
+        r.Failure = $x.StopText(st, b, d) "\n" $x.TraceText(d)
+    } else {
+        for v in ce.Keeps {
+            kv := Value(v.Name, v.Type, true)
+            kept.Push(kv)
+        }
+    }
+    if ce.Show and st == eval.Stop.None {
+        at, ty := try x.M.GlobalAt(root, names.Intern(ShownName)) catch eval.NotSaved { return }
+        r.Shown = true
+        r.Text = x.M.Text(at, ty)
+    }
+    # kept again, from this machine
+    s.snap.Clear()
+    vals Vec<Value>
+    for v in kept {
+        gname := $KeepPrefix $v.Name if v.Made and v.Root < 0 else $v.Name
+        _, ty := try x.M.GlobalAt(root, names.Intern(gname)) catch eval.NotSaved { continue }
+        idx := try x.M.Save(root, names.Intern(gname), s.snap) catch eval.NotSaved e {
+            notes.Push($v.Name " is let go: " $notSaved(e) "\n")
+            continue
+        }
+        nv := Value($v.Name, $v.Type, v.Made)
+        nv.Root = idx
+        nv.Layout = x.M.Layout(ty)
+        vals.Push(nv)
+    }
+    # the globals the cell's declarations add, kept from now on
+    for dc in ds {
+        if dc.Key.StartsWith("import ") or dc.Key.StartsWith("text ") or dc.Key.Contains("."): continue
+        if not isGlobal(dc): continue
+        seen := false
+        for v in vals {
+            if v.Name == dc.Key: seen = true
+        }
+        if seen: continue
+        _, ty := try x.M.GlobalAt(root, names.Intern(dc.Key)) catch eval.NotSaved { continue }
+        idx := try x.M.Save(root, names.Intern(dc.Key), s.snap) catch eval.NotSaved e {
+            notes.Push($dc.Key " is let go: " $notSaved(e) "\n")
+            continue
+        }
+        nv := Value($dc.Key, "", false)
+        nv.Root = idx
+        nv.Layout = x.M.Layout(ty)
+        vals.Push(nv)
+    }
+    x.M.SaveRegs(s.snap)
+    # what is not kept goes: the program's scope closed, its destructors run
+    x.M.EndProgram(k)
+    s.Decls = ds
+    s.Values = vals
+    r.Notes = notes.ToString()
+}
+
+# the session's values vs restored into x's globals (mismatched has let go those laid out anew), and their destructors'
+# registrations: the values still kept, and a declared global the session has not kept
+# yet (its initializer runs)
+fn (s mut Session&) restore(c mut typecheck.Checker&, x mut interp.Exec&, vs Vec<Value>&) Vec<Value> {
+    root := c.P.L.Root
+    names := c.P.L.Names
+    roots Map<I64, eval.Ptr>
+    kept Vec<Value>
+    for v in vs {
+        at, _ := try x.M.GlobalAt(root, names.Intern(v.Name)) catch eval.NotSaved { continue }
+        if v.Root < 0 {
+            if not v.Made: kept.Push(v)
+            continue
+        }
+        roots.Put(v.Root, at)
+        x.M.MarkSet(root, names.Intern(v.Name))
+        kept.Push(v)
+    }
+    x.M.Restore(s.snap, roots, x.DropTypes(s.snap.RegTy.ToArray()))
+    return kept
+}
+
+# the values of vs whose types x's program lays out other than they were laid out when they were kept
+fn (s mut Session&) mismatched(c mut typecheck.Checker&, x mut interp.Exec&, vs Vec<Value>&) Vec<String&> {
+    out Vec<String&>
+    x.Need(mir.FnKey.Body(typed.BodyId(I32(cellBody(c)))))    # (the machine's globals defined)
+    for v in vs {
+        if v.Root < 0: continue
+        _, ty := try x.M.GlobalAt(c.P.L.Root, c.P.L.Names.Intern(v.Name)) catch eval.NotSaved { continue }
+        if x.M.Layout(ty) != v.Layout: out.Push($v.Name)
+    }
+    return out
+}
+
+# the session ended: what its values hold that has a destructor ended, as a program's end ends it (O1b)
+fn (s mut Session&) End() {
+    if s.snap.RegTy.Len() == 0: return
+    c := cell("end", "")
+    d := diag.Diagnostics(false)
+    d.Lenient = true
+    ch := s.check(s.write(s.Decls, s.Values, c, false), d)
+    if ch is null: return
+    r := Reply()
+    x := s.machine(ch, d, r)
+    if x is null: return
+    k := mir.FnKey.Body(typed.BodyId(I32(cellBody(ch))))
+    x.Need(k)
+    s.restore(ch, x, s.Values)
+    x.M.EndProgram(k)
+}
+
+# :type EXPR - the type of the expression's value, as the session's program writes it (explain's spelling, B11b)
+fn (s mut Session&) TypeOf(expr String&) Reply {
+    c := cell("type", $"olangType := (" $expr ")")
+    for it in pieces(c.Text) { c.Items.Push(it) }
+    r := Reply()
+    d := diag.Diagnostics(false)
+    d.Lenient = true
+    ch := s.check(s.write(s.Decls, s.Values, c, false), d)
+    if ch is null {
+        r.Diags = d.Render()
+        return r
+    }
+    s.keptLocals(ch, c, false)
+    r.Checked = true
+    for v in c.Keeps {
+        if v.Name != "olangType": continue
+        r.Shown = true
+        r.Text = v.Type
+    }
+    return r
+}
+
+# whether a declaration declares a global: "NAME mut ..."
+fn isGlobal(dc Decl&) Bool {
+    t := dc.Text
+    return t.StartsWith(dc.Key) and t[dc.Key.Len():].TrimStart().StartsWith("mut ")
+}
+
+fn notSaved(e eval.NotSaved) String {
+    return match e {
+        case eval.NotSaved.Code: "it holds a function value or an 'any', whose code went with its cell - a function declared with 'fn' is kept"
+        case eval.NotSaved.Generational: "it holds a generational instance"
+        case eval.NotSaved.Global: "it holds a reference to a global's storage"
+        case _: "its storage is gone"
+    }
+}
+
+# ---- the prompt ----
+
+HelpText String& = """
+    Each entry is a cell: declarations (fn, type, import, a global) join the session, and statements run - their
+    top-level locals kept for the cells after. A cell whose last statement is an expression shows its value. An entry
+    goes on over several lines while a bracket is open. A cell declaring a name again replaces what had it.
+      :type EXPR   the type of the expression's value
+      :load FILE   the file's text as a cell
+      :help        this
+      :quit        leaves (so does the end of the input)
+    """
+
+# the prompt (B22): entries read from the standard input, each run as a cell of one session - ">>> " and "... " asked
+# where the input is a terminal. The status: 0
+fn Run(cfg mut build.Config&) I32 {
+    s := Session(cfg)
+    tty := os.IsTerminal(0)
+    if tty: say("olang - :help for help, :quit to leave\n")
+    lines := io.Lines(0)
+    for {
+        entry := try readEntry(lines, tty) catch Ended { break }
+        t := entry.Trim()
+        if t == "": continue
+        if not t.StartsWith(":") {
+            tell(s.Cell(entry))
+            continue
+        }
+        if t == ":quit" or t == ":q": break
+        command(s, t)
+    }
+    s.End()
+    return 0
+}
+
+type Ended error { Input }
+
+# an entry: a line, and the lines after it while it is open (Open)
+fn readEntry(lines mut io.Lines&, tty Bool) String ? Ended {
+    b := StringBuilder()
+    first := true
+    for {
+        if tty: say(">>> " if first else "... ")
+        line := try lines.Next() catch {
+            if first: error Ended.Input
+            break
+        }
+        if not first: b.PushChar('\n')
+        b.Push(line)
+        first = false
+        if not Open(b.ToString()): break
+    }
+    return b.ToString()
+}
+
+# a command other than :quit
+fn command(s mut Session&, t String&) {
+    if t == ":help" {
+        say($HelpText "\n")
+        return
+    }
+    if t.StartsWith(":type ") {
+        tell(s.TypeOf(t[6:]))
+        return
+    }
+    if t.StartsWith(":load ") {
+        path := t[6:].Trim()
+        text := try os.ReadFile(path) catch os.Error {
+            sayErr($"cannot read " $path "\n")
+            return
+        }
+        tell(s.Cell(text, label = path))
+        return
+    }
+    sayErr($"unknown command " $t " - :help lists them\n")
+}
+
+# a reply told: its diagnostics, what stopped its run and its notes on the standard error, its value on the output
+fn tell(r Reply&) {
+    if r.Diags != "": sayErr(r.Diags)
+    if r.Failure != "": sayErr(r.Failure)
+    if r.Notes != "": sayErr(r.Notes)
+    if r.Shown: say($r.Text "\n")
+}
+
+fn say(t String&) { try io.Put(t) catch io.Error { } }
+fn sayErr(t String&) { try io.PutErr(t) catch io.Error { } }

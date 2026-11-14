@@ -36895,3 +36895,44 @@ runtime text (the evaluator's `why`, a library's refusal) puts it in the note. S
 texts are unchanged. Distribution of headlines (golden, error rows): median 85 -> 55, 90th percentile 162 -> 83, over
 100: 492 -> 8, over 120: 314 -> 2 (what remains is a user's own assertion message or a long type). `checks/cases`
 headers kept matching (each names a headline substring). scope.olang's logic was not touched.
+## The prompt (B22; 2026-11-14, wt-prompt)
+
+The user decided (QCX 6, 2026-11-07; 2026-11-13: "as easy to use as python", "a lot of ML stuff") that plain `olang`
+opens the interpreter at a prompt, a Jupyter kernel on top later. Built in compiler/prompt.olang; my calls:
+
+- **The session is a program, checked whole per cell.** Incremental checking (a module added to a checked program) would
+  need the checker, section 8 and the type table to grow in place; checking the session again costs ~50-80 ms a cell,
+  so each cell writes the program anew: the session's declarations (the latest of each name: `f`, `T`, `T.M`, an
+  import's alias, a global), a global per kept value, and the cell's statements as the body of `olangCell`, run on an
+  `interp.Exec` of its own. Diagnostics name the cell's lines (`cellN:LINE:COL`, diag's `NameLines`).
+- **Locals persist as globals.** A cell's top-level locals (`:=`, typed, several at once) are found syntactically, their
+  types read off a first check (a probe), then assigned at the cell's end to `olangKeep_x` globals; the next program
+  declares `x mut T = unreachable "..."` and the prompt sets its storage. A unique type is kept by reference (T13b
+  refuses a global holding a held value). Because parameters named like a kept value (`fn (p Point) ...` beside a kept
+  `p`) are everyday code, the loader's `Shadowable` lets a declaration's names stand in front of the session's kept
+  values - the one D3a exception, prompt only. A failing cell keeps its declarations and the assignments it made, not
+  its new locals (their keeps never ran).
+- **Values cross cells by snapshot, so memory is reclaimed per cell.** Keeping the machines alive leaked ~25 MB a cell
+  (each cell's checker and machine live in the session's scope); a machine cannot take a new program (its types and code
+  are the old program's, and whatever the session's machine pointed at would be built in the session's scope). So the
+  values are saved (eval.Snapshot: every allocation they reach, bytes and pointer map, sharing kept, the destructor
+  registrations by type Canon) and restored into the next machine's program scope; the old machine's program scope
+  closes, running the destructors of what was not kept. Measured: 38 MB flat over 60 cells (was 500 MB at 20); with an
+  8 MB array kept, 343 MB flat. Two scope ties had to be cut by copying (`$`): the loader's `mut cond.Consts&` into the
+  session's config, and names of kept values held from the checker's interner.
+- **A value is restored only where its type is laid out as it was** (`Machine.Layout`: shapes, sizes, offsets, case
+  names, through references and elements); a cell redefining a type lets go the values laid out by the old one and is
+  checked again without them, so they are unknown names rather than misread bytes. Values reaching code (a function
+  value, an `any`'s table), a generational instance or a global's storage are let go with a note - their code is the
+  old program's.
+- **Shown values**: only the cell's last piece, when it is an expression (no top-level assignment or step); it is
+  assigned to `olangShown` with `$` and read from the machine, so a kernel gets it apart from the output. Where that
+  fails (a call giving nothing, or an error), the cell is checked again as written and the attempt with fewer errors
+  is told. Warnings are told for the cell's own lines, M5a never (an import is for later cells).
+- **Input**: an entry continues while a bracket, raw text or block comment is open (the scanner's tokens); plain
+  stdin, no line editing; prompts only on a terminal. `os.Exit` ends the session. C files imported (X20) are not compiled
+  for the prompt.
+
+Tests: checks scenario `prompt` (checks/fixtures/prompt: a session and its expected output - kept values, redefined
+function and type, failing cell with trace, unique value's destructor at the end, `:type`, `:load`, `:help`). The
+driver golden's empty command line now opens the prompt (status 0 on empty input), and `help` mentions it.

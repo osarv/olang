@@ -751,6 +751,8 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
     t := r.Tables[r.mi]
     name := r.text(n)
     v := try t.values.Get(n) catch default -1
+    # B22: a value the prompt's session keeps is a global a declaration's own names stand in front of
+    if v >= 0 and r.mi == r.L.Root and name in r.L.Shadowable: return
     if v >= 0 {
         e := t.Entries[v]
         rec := r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsFunction(r.tok(n)) if e.Kind == What.Func else

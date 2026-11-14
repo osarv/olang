@@ -1011,6 +1011,25 @@ fn (x mut Exec&) dtor(ty types.TypeId, work mut Vec<mir.FnKey>&) {
     work.Push(dk)
 }
 
+# B22: the types of the program whose Canon is one of canons and that have a drop, each drop defined in the machine -
+# what the registrations a prompt's snapshot restores run (eval.Machine.Restore)
+fn (x mut Exec&) DropTypes(canons Array<String&>&) Map<String&, types.TypeId> {
+    out Map<String&, types.TypeId>
+    if canons.Len() == 0: return out
+    want Map<String&, Bool>
+    for cn in canons { want.Put(cn, true) }
+    for i in range x.P.T.Count() {
+        ty := types.TypeId(I32(i))
+        cn := x.P.T.Canon(ty)
+        if cn not in want or cn in out: continue
+        dk := try mir.FnKey.DropFn(x.P.T, ty, try x.dtorOf.Get(ty) catch default -1) catch { continue }
+        x.M.DefineDestructor(ty, dk)
+        x.Need(dk)
+        out.Put(cn, ty)
+    }
+    return out
+}
+
 fn (x mut Exec&) reach(f mir.Fn&, work mut Vec<mir.FnKey>&) {
     for c in f.Calls { x.callee(c.Target, work) }
     # C11, S20: a generator's captures it ends when its walk is let go unstarted (eval's freshDrops)
