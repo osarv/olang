@@ -20,7 +20,7 @@ OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcar
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
 	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang \
-	compiler/tools/diaggold.olang fuzz/editgen.olang
+	compiler/tools/diaggold.olang compiler/tools/nesting.olang fuzz/editgen.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/olang, which make bootstrap installs (made by it when
 # missing) - "make test OLANG=build/stage1" names another. What it runs - checks/checks.olang, fuzz/, bench/, the tools -
 # reads it from the environment, as an absolute path; unset, each falls back to build/olang

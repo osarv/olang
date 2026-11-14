@@ -80,7 +80,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
   (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldiff.olang` (the built runs
   against `olang test -interpret`'s and `olang interpret`'s, the interpreter's known differences listed by name - in
   `make verify`, a file a target: `interp@FILE`),
-  `consistency.olang` (the parts that must agree, held to each other: `make consistency`, DEPENDENTS.md), `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`.
+  `consistency.olang` (the parts that must agree, held to each other: `make consistency`, DEPENDENTS.md), `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`, `nesting.olang` (every function of compiler/ with its deepest block nesting and its length, worst first: `build/olang build compiler/tools/nesting.olang && build/compiler_tools_nesting [-n N] [FILE...]`).
 - `goldens/` - what stage 0 gave, captured: `drv.txt` (the driver's command lines and whole builds), `run.txt` (the
   corpus's and std's test runs and the checks' run cases, for emitdiff and evaldiff), `tokens.txt`/`tokens.full.txt` and
   `ast.txt`/`ast.full.txt` (a hash per file of the C tokenizer's stream and the C parser's tree, whole for small files

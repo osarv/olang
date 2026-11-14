@@ -1,0 +1,189 @@
+# nesting [-n N] [FILE...] - every top-level function of the files (compiler/*.olang by default) with the deepest
+# nesting of blocks inside its body and its length in lines, worst first (by depth, then length), then how many are
+# over depth 4, 5 and 6 and over 200 lines. A block is a pair of braces in code (a match and each of its clauses
+# are one block each, a lambda's body is one); a `:` one-line body is none. -n N prints only the first N rows.
+#
+#     build/olang build compiler/tools/nesting.olang && build/compiler_tools_nesting [-n N] [FILE...]
+#
+# Run from the repository root. The style rule it measures (at most three blocks nested in a body, four on occasion)
+# is the project's own, for its own code; nothing checks anyone else's.
+
+import "std/io"
+import "std/os"
+
+type Func struct(file String&, line I64, name String&, depth I64, lines I64) {
+    file
+    line
+    name
+    depth
+    lines
+}
+
+# where each byte of text is code: false inside a comment, a text literal (raw text across lines included) or a
+# character literal
+fn codeMask(text String&) Array<Bool> {
+    n := text.Len()
+    code := Array<Bool>(n, true)
+    i I64 = 0
+    for i < n {
+        j := skipped(text, i)
+        if j == i {
+            i++
+            continue
+        }
+        for k in range i, j: code[k] = false
+        i = j
+    }
+    return code
+}
+
+# the index past the comment or literal starting at i, or i where none starts there
+fn skipped(text String&, i I64) I64 {
+    n := text.Len()
+    c := text[i]
+    if c == '#' and text[i:].StartsWith("##"): return closeAfter(text, i + 2, "##")
+    if c == '#': return closeAfter(text, i, "\n") - 1
+    if c == '"' and text[i:].StartsWith("\"\"\""): return closeAfter(text, i + 3, "\"\"\"")
+    if c != '"' and c != '\'': return i
+    j := i + 1
+    for j < n and text[j] != c and text[j] != '\n' {
+        if text[j] == '\\': j++
+        j++
+    }
+    return j + 1 if j < n else n
+}
+
+# the index just past the first `close` at or after i, or the end
+fn closeAfter(text String&, i I64, close String&) I64 {
+    at := try text[i:].Find(close) catch default -1
+    return text.Len() if at < 0 else i + at + close.Len()
+}
+
+# a declaration's name: `fn Name(`, `fn (r T&) Name(`, `fn T.Name(`, `export fn Name(`
+fn declName(line String&) String& {
+    t := line[3:] if line.StartsWith("fn ") else line[10:]
+    if t.StartsWith("(") {
+        close := try t.FindByte(')') catch default 0
+        t = t[close + 2:]
+    }
+    end I64 = 0
+    for end < t.Len() and t[end] != '(' and t[end] != '<' and t[end] != ' ': end++
+    return t[:end]
+}
+
+# the functions of one file
+fn scanFile(path String&, out mut Vec<Func>&) ? os.Error {
+    text := try os.ReadFile(path)
+    code := codeMask(text)
+    n := text.Len()
+    i I64 = 0
+    line I64 = 1
+    for i < n {
+        rest := text[i:]
+        if rest.StartsWith("fn ") or rest.StartsWith("export fn ") {
+            f, end, endLine := measure(text, code, i, line, path)
+            out.Push(f)
+            i = end
+            line = endLine
+            continue
+        }
+        nl := try rest.FindByte('\n') catch default (rest.Len() - 1)
+        i += nl + 1
+        line++
+    }
+}
+
+# the function declared at start (on line): its row, the index after its last line and that line's number
+fn measure(text String&, code Array<Bool>&, start I64, line I64, path String&) Func, I64, I64 {
+    nl := try text[start:].FindByte('\n') catch default (text.Len() - start)
+    name := declName(text[start:start + nl])
+    depth I64 = 0
+    deepest I64 = 0
+    at := line
+    i := start
+    for i < text.Len() {
+        c := text[i]
+        i++
+        if c == '\n' {
+            at++
+            if depth == 0 and deepest > 0: break
+            continue
+        }
+        if not code[i - 1]: continue
+        if c == '{' {
+            depth++
+            if depth > deepest: deepest = depth
+        } else if c == '}' {
+            depth--
+        }
+    }
+    lines := at - line + (1 if i >= text.Len() else 0)
+    return Func(path, line, name, deepest - 1 if deepest > 0 else 0, lines), i, at
+}
+
+fn worse(a Func, b Func) Bool { return a.depth > b.depth or (a.depth == b.depth and a.lines > b.lines) }
+
+fn defaultFiles() Vec<String&> {
+    out := Vec<String&>()
+    names := try os.ReadDir("compiler") catch {
+        io.PutErrLine("nesting: no compiler/ here - run from the repository root")!
+        os.Exit(2)
+    }
+    for f in names {
+        if f.EndsWith(".olang"): out.Push("compiler/" $f)
+    }
+    out.Sort(fn(a String&, b String&) Bool { return a < b })
+    return out
+}
+
+fn main() ? {
+    args := os.Args()
+    limit I64 = -1
+    files := Vec<String&>()
+    i I64 = 1
+    for i < args.Len() {
+        if args[i] == "-n" and i + 1 < args.Len() {
+            limit = try args[i + 1].ParseInt(10)
+            i += 2
+            continue
+        }
+        files.Push(args[i])
+        i++
+    }
+    if files.Len() == 0: files = defaultFiles()
+    funcs := Vec<Func>()
+    for f in files: try scanFile(f, funcs)
+    funcs.Sort(worse)
+    over4, over5, over6, long := 0, 0, 0, 0
+    for f in funcs {
+        if f.depth > 4: over4++
+        if f.depth > 5: over5++
+        if f.depth > 6: over6++
+        if f.lines > 200: long++
+    }
+    for k, f in funcs {
+        if limit >= 0 and k >= limit: break
+        try io.PutLine($f.depth "\t" $f.lines "\t" $f.file ":" $f.line "\t" $f.name)
+    }
+    try io.PutLine(("nesting: " $funcs.Len() " functions; " $over4 " over depth 4, " $over5 " over depth 5, " $over6 " over depth 6, " $long
+        " over 200 lines"))
+}
+
+test declName "reads plain, method and builder declarations" {
+    assert declName("fn plain(a I64) {") == "plain"
+    assert declName("fn (x T&) Method() {") == "Method"
+    assert declName("export fn gen<T>(a T) {") == "gen"
+    assert declName("fn T.Build(a I64) T {") == "T.Build"
+}
+
+test codeMask "leaves braces in comments and text out" {
+    t := "a { # } \n\"}\" '{' b"
+    m := codeMask(t)
+    assert m[2] and not m[6] and m[8] and not m[10] and not m[14] and m[17]
+}
+
+test measure "counts the deepest block and the lines" {
+    t := "fn f() {\n    if a {\n        for {\n        }\n    }\n}\nfn g() { }\n"
+    f, _, _ := measure(t, codeMask(t), 0, 1, "x")
+    assert f.depth == 2 and f.lines == 6
+}
