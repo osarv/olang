@@ -1,0 +1,210 @@
+# zmtp - ZeroMQ's wire protocol: ZMTP 3.0 (rfc.zeromq.org, spec 23) with the NULL mechanism, over std/net's TCP - what
+# a program needs to speak with ZeroMQ sockets (a Jupyter front end's, say) with no libzmq installed. A Socket is one
+# connection, either side's, its greeting and READY exchanged as it is made; a message is a list of frames, each bytes
+# held as text. What ZeroMQ's socket types do across connections is the program's: it holds its Sockets and picks the
+# one to send on - a ROUTER answers on the connection a request came by, a PUB sends to each subscriber, a REP echoes
+# the envelope it was sent. Subscriptions are not filtered (a PUB here sends every message to every SUB), and commands
+# after READY (a ZMTP 3.1 peer's PING, SUBSCRIBE) are read and dropped.
+#
+#     l := try net.Listener.Listen(try net.Addr.Parse("127.0.0.1:5555"))
+#     s := try zmtp.Socket.Accept(l, "ROUTER")
+#     msg := try s.Recv()                      # its frames
+#     try s.Send("<IDS|MSG>", "reply")
+#
+# A Socket closes its connection where its holder lets go (net.Conn's destructor). Imported with `import "std/zmtp"`.
+
+import "net"
+
+# the other side spoke something other than ZMTP 3 with the NULL mechanism
+type Error error { Protocol }
+
+type Socket unique struct(conn net.Conn, Kind String) {
+    conn
+    Kind                     # this side's socket type, as READY names it: ROUTER, DEALER, PUB, SUB, REQ, REP
+    in Vec<U8>               # what has arrived and is not read yet, from at
+    at I64 = 0
+    greeted Bool = false     # the other side's greeting read
+}
+
+# a connection made to l, as a socket of the type kind, the server's side
+fn Socket.Accept(l mut net.Listener&, kind String&) Socket ? net.Error {
+    s := Socket(try l.Accept(), $kind)
+    try s.hello(true)
+    return s
+}
+
+# a connection to a, as a socket of the type kind, the client's side
+fn Socket.Dial(a net.Addr&, kind String&) Socket ? net.Error {
+    s := Socket(try net.Conn.Dial(a), $kind)
+    try s.hello(false)
+    return s
+}
+
+# the descriptor, for waiting on several sockets at once (net.Readable)
+fn (s Socket&) Fd() I32 { return s.conn.Fd() }
+
+# this side's greeting and READY, written as the connection is made: the other side's are read with what comes after
+fn (s Socket&) hello(server Bool) ? net.Error {
+    g := Array<U8>(64)
+    g[0] = 0xff
+    g[9] = 0x7f
+    g[10] = 3
+    for i, c in "NULL": g[12 + i] = U8(c)
+    g[32] = 1 if server else 0
+    out Vec<U8>
+    out.PushAll(g)
+    body Vec<U8>
+    body.Push(5)
+    body.PushAll("READY")
+    property(body, "Socket-Type", s.Kind)
+    frame(out, body.View(), false, true)
+    try s.conn.Write(out.View())
+}
+
+# a property of a READY command: its name and value, each after its length
+fn property(b mut Vec<U8>&, name String&, value String&) {
+    b.Push(U8(name.Len()))
+    b.PushAll(name)
+    for i in range 4: b.Push(U8((value.Len() >> (24 - 8 * i)) & 0xff))
+    b.PushAll(value)
+}
+
+# a frame of body: flags (MORE where more frames of its message follow, COMMAND for a command), its size and its bytes
+fn frame(out mut Vec<U8>&, body Array<U8>&, more Bool, command Bool) {
+    long := body.Len() > 255
+    out.Push(U8((1 if more else 0) | (2 if long else 0) | (4 if command else 0)))
+    if long {
+        for i in range 8: out.Push(U8((body.Len() >> (56 - 8 * i)) & 0xff))
+    } else {
+        out.Push(U8(body.Len()))
+    }
+    out.PushAll(body)
+}
+
+# a message of the frames parts sent
+fn (s Socket&) Send(parts ...String&) ? net.Error {
+    out Vec<U8>
+    for i, p in parts: frame(out, p, i + 1 < parts.Len(), false)
+    try s.conn.Write(out.View())
+}
+
+# what has arrived read in - waiting until something has: a message or more of one, to Next
+fn (s mut Socket&) Fill() ? net.Error {
+    buf := Array<U8>(65536)
+    got := try s.conn.Read(buf)
+    if s.at == s.in.Len() {
+        s.in.Clear()
+        s.at = 0
+    }
+    s.in.PushAll(got)
+}
+
+# the next message whole of what has arrived, its frames - Exhausted where none is whole yet; Protocol where the other
+# side's greeting is not ZMTP 3's with the NULL mechanism
+fn (s mut Socket&) Next() Array<String> ? Exhausted, Error.Protocol {
+    for {
+        if not s.greeted {
+            if s.in.Len() - s.at < 64: error Exhausted.End
+            g := s.in.View()[s.at:s.at + 64]
+            if g[0] != 0xff or g[9] != 0x7f or g[10] < 3 or String(g[12:16]) != "NULL": error Error.Protocol
+            s.at += 64
+            s.greeted = true
+        }
+        end, count := s.whole()
+        if count < 0: error Exhausted.End
+        parts := s.frames(end, count)
+        s.at = end
+        if parts.Len() > 0: return parts
+    }
+    unreachable
+}
+
+# where the first message from at ends, and how many frames it has that are no command (a command alone counts as a
+# message of none); -1 frames where it is not whole yet
+fn (s Socket&) whole() I64, I64 {
+    v := s.in.View()
+    i := s.at
+    count I64 = 0
+    for {
+        if i + 2 > v.Len(): return i, -1
+        flags := v[i]
+        head := 9 if flags & 2 != 0 else 2
+        if i + head > v.Len(): return i, -1
+        size := sizeAt(v, i, flags & 2 != 0)
+        if i + head + size > v.Len(): return i, -1
+        i += head + size
+        if flags & 4 != 0: return i, count
+        count++
+        if flags & 1 == 0: return i, count
+    }
+    unreachable
+}
+
+fn sizeAt(v Array<U8>&, i I64, long Bool) I64 {
+    if not long: return I64(v[i + 1])
+    n I64 = 0
+    for k in range 8: n = (n << 8) | I64(v[i + 1 + k])
+    return n
+}
+
+# the frames of the message from at to end that are no command, count of them, each copied out
+fn (s Socket&) frames(end I64, count I64) Array<String> {
+    out := Array<String>(count)
+    v := s.in.View()
+    i := s.at
+    k I64 = 0
+    for i < end {
+        long := v[i] & 2 != 0
+        command := v[i] & 4 != 0
+        head := 9 if long else 2
+        size := sizeAt(v, i, long)
+        if not command {
+            body := Array<U8>(size)
+            for j in range size: body[j] = v[i + head + j]
+            out[k] = String(body)
+            k++
+        }
+        i += head + size
+    }
+    return out
+}
+
+# the next message, its frames - waiting until one has arrived whole
+fn (s mut Socket&) Recv() Array<String> ? net.Error, Error.Protocol {
+    for {
+        msg := try s.Next() catch Exhausted {
+            try s.Fill()
+            continue
+        }
+        return msg
+    }
+    unreachable
+}
+
+if TestBuild {
+
+test Socket "a DEALER and a ROUTER exchange messages of several frames, short and long" {
+    l := net.Listener.Listen(net.Addr.Parse("127.0.0.1:0")!)!
+    c := Socket.Dial(l.Addr()!, "DEALER")!
+    s := Socket.Accept(l, "ROUTER")!
+    big := String(Array<U8>(300, 'x'))
+    c.Send("<IDS|MSG>", "", big)!
+    got := s.Recv()!
+    assert got.Len() == 3 and got[0] == "<IDS|MSG>" and got[1] == "" and got[2] == big
+    s.Send("one")!
+    s.Send("two", "three")!
+    assert c.Recv()! == Array<String>["one"]
+    assert c.Recv()! == Array<String>["two", "three"]
+    assert net.Readable(Array<I32>[c.Fd()], 0) == Array<Bool>[false]
+}
+
+test Socket "a peer speaking something else is refused" {
+    l := net.Listener.Listen(net.Addr.Parse("127.0.0.1:0")!)!
+    c := net.Conn.Dial(l.Addr()!)!
+    s := Socket.Accept(l, "ROUTER")!
+    c.Write(Array<U8>(64, 'G'))!
+    try s.Recv() catch Error.Protocol { return }
+    unreachable "no Protocol error"
+}
+
+}
