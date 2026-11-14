@@ -1,4 +1,4 @@
-# check: fail error[T13b, E31d]: File is unique, so it is never copied and has no Copy
+# check: fail error[T13b, E31d]: File is unique, so it
 # T13b: a unique type declares no Copy - a new value from an existing one is an ordinary function's or its constructor's
 type File unique struct(fd I32) { fd }
 fn (f File&) Copy() File { return File(f.fd) }

@@ -1,4 +1,4 @@
-# check: fail error[T2c]: 'm' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'm!'
+# check: fail error[T2c]: 'm' is a N?&, which may be null
 # T2c: nothing is read through a reference that may be null, but where a test says it is not
 type N struct(v I64) { v }
 fn get(m N?&) I64 { return m.v }

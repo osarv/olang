@@ -1,4 +1,4 @@
-# check: fail error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
+# check: fail error[E31]: V's Plus takes 2 parameters besides its receiver
 # E31: an operator method's shape - one of another number of parameters is an ordinary method, and the operator says so
 type V struct(x I32) {
     x

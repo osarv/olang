@@ -1,4 +1,4 @@
-# check: fail error[C2a]: field 'n' has a parameter's name - write it bare to take the parameter's value, or name it apart
+# check: fail error[C2a]: field 'n' has a parameter's name
 # also: note: 'n' is declared here
 # also: compilation failed with 1 error
 # C2a: a field taking another value than its same-named parameter's is named apart from it

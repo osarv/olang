@@ -1,4 +1,4 @@
-# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way
+# check: fail error[E31b]: this call writes a copy of x[i]
 # E31b (review 6b F2): a method called through x[i] whose inner block closes a destructor growing the collection is not
 # made on the element in place - the destructor is part of what the call runs, and the write landed in the buffer the
 # growth retired

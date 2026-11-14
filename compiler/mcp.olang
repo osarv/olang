@@ -167,6 +167,7 @@ fn checkResult(a session.Analysis&, d mut diag.Diagnostics&) String {
             if k > 0 { b.PushChar(',') }
             k++
             located(b, a, d, nt)
+            if nt.Help { b.Push(",\"kind\":\"help\"") }
             b.PushChar('}')
         }
         b.Push("]}")

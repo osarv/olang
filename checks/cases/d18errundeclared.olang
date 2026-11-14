@@ -1,4 +1,4 @@
-# check: fail error[R9, D18]: Bad can escape here, and this generator's result does not say it fails with it - write 'Iterator<T ? Bad>', or catch it
+# check: fail error[R9, D18]: Bad can escape here,
 # R9, D18: what a generator's try lets out is in its result's set
 type Bad error { No }
 

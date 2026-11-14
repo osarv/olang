@@ -1,4 +1,4 @@
-# check: fail error[T30c, T22b]: Bag2's 'Put' keeps 'n' in what the instance's 'v' refers to, which no promise of Sink's 'Put' can say - call it directly, or through generic code
+# check: fail error[T30c, T22b]: Bag2's 'Put' keeps 'n' in what the instance's 'v' refers to
 # T30c, O23a: a method keeping its argument in what its instance's reference field refers to is beyond a trait's 'keeps n'
 # (the instance itself) - refused at the conversion to 'any', naming what it does (review B2's p8)
 import "std/io"

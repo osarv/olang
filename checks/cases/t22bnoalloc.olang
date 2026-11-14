@@ -1,4 +1,4 @@
-# check: fail error[T22b]: this lambda may allocate, and 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc'
+# check: fail error[T22b]: this lambda may allocate
 # also: note: its call of 'PutLine' may allocate
 # T22b: a lambda given for a type promising noalloc is judged by what it does - printing allocates its text
 import "std/io"

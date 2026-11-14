@@ -1,4 +1,4 @@
-# check: fail error[G1a]: 'T' is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'
+# check: fail error[G1a]: 'T' is a type variable, not an error set
 # G1a: a type variable stands where a type does - an error set names error types and error-set parameters
 fn keep<T>(x T) T ? T { return x }
 

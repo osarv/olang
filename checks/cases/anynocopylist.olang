@@ -1,4 +1,4 @@
-# check: fail error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+# check: fail error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none
 # T32 (the third any review, finding 4): a default keeping its receiver in a List - through the List's reference to its
 # state - has as little a copy of an any to keep as one holding it in a field; refused at the call, never a List of
 # anys without their marker

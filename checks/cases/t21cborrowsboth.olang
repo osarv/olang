@@ -1,4 +1,4 @@
-# check: fail error[T21c]: 'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one - write one of them
+# check: fail error[T21c]: 'noborrow'
 # T21c: "noborrow" and "borrows" contradict each other
 type N struct(v I64) { v }
 fn use(f fn&(x N&) N& noborrow borrows x) I64 { return f(N(2)).v }

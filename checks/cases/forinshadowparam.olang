@@ -1,4 +1,4 @@
-# check: fail error[D3a, E29]: 's' is already declared, and a for-in declares new names - choose another
+# check: fail error[D3a, E29]: 's' is already declared, and a for-in declares new names
 # D3a/E29: a for-in variable reusing a parameter's name is a reused name - choosing another is the first fix offered
 import "std/io"
 fn count(s I64, options Array<I64>&) I64 {

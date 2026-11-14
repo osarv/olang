@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b: the parameter handed to a function value - its body is not known, so it may write the parameter's storage
 type V struct(d mut Array<I64>&, n I64) {
     d

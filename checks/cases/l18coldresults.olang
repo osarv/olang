@@ -1,4 +1,4 @@
-# check: fail error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list
+# check: fail error[L18c]: these parentheses group nothing
 # D8c: several results are written bare - "fn divmod(a I64, b I64) I64, I64"
 fn divmod(a I64, b I64) (I64, I64) { return a / b, a % b }
 fn main() {

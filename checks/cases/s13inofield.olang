@@ -1,4 +1,4 @@
-# check: fail error[S13i]: Point has no field 'xx' - a struct pattern names the fields it matches, never its constructor's parameters - did you mean 'x'?
+# check: fail error[S13i]: Point has no field 'xx'
 # S13i: an unknown field in a struct pattern, the nearest one suggested
 type Point struct(x I64, y I64) { x, y }
 fn f(p Point) I64 {

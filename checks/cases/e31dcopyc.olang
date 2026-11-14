@@ -1,4 +1,4 @@
-# check: fail error[E31d]: a Copy only builds the new value, and this one calls C
+# check: fail error[E31d]: this Copy calls C
 # E31d: a Copy calls nothing outside the program
 import c "stdlib.h"
 type tree struct(n I64) { n }

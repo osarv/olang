@@ -1,4 +1,4 @@
-# check: fail error[S13b]: an item by position follows one by name - items by position come first, as a call's arguments do
+# check: fail error[S13b]: an item by position follows one by name
 # S13b: a payload pattern gives its items by position first, then by name
 type Shape enum {
     Rect(w I64, h I64)

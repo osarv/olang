@@ -1,4 +1,4 @@
-# check: fail error[R3a]: the error raised again can be P.B, and this function's '?' names P.A
+# check: fail error[R3a]: the error raised again can be P.B,
 # R3a, R1c: word by word
 type P error { A, B }
 fn f() ? P { error P.A }

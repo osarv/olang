@@ -1,4 +1,4 @@
-# check: fail error[E20]: [:] makes the type expected where it stands, and nothing is expected here - write the type in front, as Map<String, I64>[]
+# check: fail error[E20]: [:] makes the type expected where it stands, and nothing is expected here
 # E20: the keyed form's empty literal needs a type expected where it stands
 fn main() {
     m := [:]

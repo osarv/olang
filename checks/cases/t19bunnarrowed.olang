@@ -1,4 +1,4 @@
-# check: fail error[T19b]: e may hold an error that has no field line - test which it holds first
+# check: fail error[T19b]: e may hold an error that has no field line
 type ParseError2 error { Bad(line I64, col I64), Eof }
 fn parse() I64 ? ParseError2 {
     error ParseError2.Bad(3, 4)

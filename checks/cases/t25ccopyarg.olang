@@ -1,4 +1,4 @@
-# check: fail error[T25c]: 'setFirst' writes through or keeps its parameter 'b', and this Box is a read-only copy
+# check: fail error[T25c]: 'setFirst' writes through or keeps its parameter 'b'
 # also: note: 'b' is declared here
 # T25c: a by-value parameter the callee writes through needs a copy it may write - decided from the callee's body
 type Box struct(P mut Array<I64>&) {

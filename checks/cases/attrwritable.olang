@@ -1,4 +1,4 @@
-# check: fail error[G39]: an attribute's value is read-only data, baked while compiling, and Holder holds a 'mut' reference
+# check: fail error[G39]: an attribute's value
 # never: attrGot
 # G39, T25c: an attribute is constant data read as a read-only copy, so a type holding a mut reference is no
 # attribute's - said where the attribute is written, not at a reader

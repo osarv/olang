@@ -1,4 +1,4 @@
-# check: fail error[G32]: Point has no reflected member 'Width' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align
+# check: fail error[G32]: Point has no reflected member 'Width'
 # also: compilation failed with 1 error
 # G32: a type's reflected members are a fixed set; another name is said with the list
 type Point struct(x I64, y I64 = 2) { x, y }

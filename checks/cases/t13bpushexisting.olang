@@ -1,4 +1,4 @@
-# check: fail error[T13b]: File is unique: this value is held elsewhere, and the parameter holds one of its own
+# check: fail error[T13b]: File is unique
 # T13b: Push takes its element by value, so a unique one only fresh - an existing one stays where it is
 type File unique struct(fd I32) { fd }
 fn main() {

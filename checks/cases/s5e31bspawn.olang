@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b (the review of study 5's fixes, F8): a spawned "mut" method on x[i] is refused as the same call unspawned is
 type Acc struct() {
     N I64 = 0

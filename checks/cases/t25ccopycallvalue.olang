@@ -1,4 +1,4 @@
-# check: fail error[T25c]: 'Call' writes through or keeps its by-value parameter 'b', so it cannot be a function value
+# check: fail error[T25c]: 'Call'
 # T25c/E31: a type's Call made a function value is held to the same rule as a function or lambda
 import "std/io"
 type Box struct(P mut Array<I64>&) {

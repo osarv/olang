@@ -4,9 +4,13 @@
 
 import "msgs"
 
-# a diagnostic: which one it is, the rule it applies (empty where no rule states it), and its text
-type Msg struct(Kind msgs.Diag, Rule String&, Text String&) {
+# a diagnostic: which one it is, the rule it applies (empty where no rule states it), and its text - the headline, what
+# is wrong, in about 80 characters. The reason it is wrong is its Note and what to write instead its Help, each a row of
+# its own after the headline (B11); either is empty where the headline says it all
+type Msg struct(Kind msgs.Diag, Rule String&, Text String&, Note String& = "", Help String& = "") {
     Kind
     Rule
     Text
+    Note
+    Help
 }

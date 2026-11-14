@@ -1,4 +1,4 @@
-# check: fail error[T21]: a function type is held only by reference - write 'fn&(x I64) I64', or 'fn?&(x I64) I64' where it may be null
+# check: fail error[T21]: a function type is held only by reference
 # T21: a function type on a place writes its marker on its "fn" - a bare one is no type
 fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }
 fn main() { assert apply(fn(x): return x + 1, 1) == 2 }

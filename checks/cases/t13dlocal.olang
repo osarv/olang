@@ -1,4 +1,4 @@
-# check: fail error[T13d]: Node is generational - a weak reference names it - so its values are held only by reference: write 'Node&' here
+# check: fail error[T13d]: Node is generational
 # T13d: a local laid out for a generational value
 type Node struct(v I64) {
     v

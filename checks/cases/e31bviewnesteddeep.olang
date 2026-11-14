@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b (r1's converse): the field lent on through two more calls to one that repoints its parameter - judged all the way
 import "std/io"
 type M struct(d mut Array<I64>&, off I64) {

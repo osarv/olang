@@ -1,4 +1,4 @@
-# check: fail error[T13b]: 'f' is handed on here, and File is unique - a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
+# check: fail error[T13b]: 'f' is handed on here, and File is unique
 # T13b: a landing in a loop the parameter is declared outside of runs again - the next turn hands on what the first did
 type File unique struct(fd I32) { fd }
 fn fill(v mut Vec<File>&, f File) {

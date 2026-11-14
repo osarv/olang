@@ -1,4 +1,4 @@
-# check: fail error[O15]: 'h' and 'g' may each hold a reference to the other, and both have destructors to run
+# check: fail error[O15]: 'h' and 'g' may each hold a reference to the other
 # O15 (QCZ): a cycle through a step - h holds a list holding g, and g holds h
 Ended mut I64 = 0
 type Hold unique struct(id I64) {

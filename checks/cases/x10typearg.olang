@@ -1,4 +1,4 @@
-# check: fail error[X10]: Db is an extern type, held only by reference - write 'Db&'
+# check: fail error[X10]: Db is an extern type, held only by reference
 # X10: a type argument holding an extern type holds a reference to one
 extern type Db
 

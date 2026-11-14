@@ -36882,3 +36882,16 @@ reach (a result read where it is pushed, `for x in cfg.CFlags()`, lands there an
 compiler/ were refused - so it is narrowed to the cursor assignment, the place the versions are judged. rootPlace now
 reads through a `Deref` with views' own `argPlace` (the same read, already a helper). The case runs under -debug
 -sanitize and `interpret`, read back after a churn. The seed was regenerated, since the compiler's own source now needs the fix to bootstrap.
+## Long diagnostics split into headline, note and help (B11; 2026-11-14, wt-diagsplit)
+
+The user (2026-11-13): long diagnostics split Rust/Elm-style within B11's one-row-per-error format. Of 1278 error rows in
+`compiler/goldens/diag.txt`, 314 were over 120 characters (longest 287), each one sentence of what, why and what to
+write. Now `diagmsg.Msg` has `Note` and `Help` (defaulted to empty): `diag.report` records them as notes marked plain
+(no source excerpt, at the error's place) and help; Render writes the headline and its excerpt, the notes (the
+message's own first, then the contexts' - "instantiated here", "in the library"), then the helps. `Items` (LSP, MCP)
+gets `Help`; the golden reader (`compiler/tools/diaggold.olang`) reads a source-less note or help as the error's own.
+About 300 messages were rewritten by hand, meaning and "what to write instead" kept; a message whose reason was a
+runtime text (the evaluator's `why`, a library's refusal) puts it in the note. Short messages and the `Note*` context
+texts are unchanged. Distribution of headlines (golden, error rows): median 85 -> 55, 90th percentile 162 -> 83, over
+100: 492 -> 8, over 120: 314 -> 2 (what remains is a user's own assertion message or a long type). `checks/cases`
+headers kept matching (each names a headline substring). scope.olang's logic was not touched.

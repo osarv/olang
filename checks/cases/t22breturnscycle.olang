@@ -1,4 +1,4 @@
-# check: fail error[T22b]: this lambda may call through a function value it does not follow, which may not come back, and 'fn&() returns'
+# check: fail error[T22b]: this lambda may call through a function value it does not follow, which may not come back
 # also: note: it calls through a function value here, and what that calls is not followed
 # T22b: returns is judged with no call through a value not followed relied on - the field's own word would vouch for
 # the lambda being stored in it, which calls itself through the field for ever

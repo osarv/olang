@@ -1,4 +1,4 @@
-# check: fail error[T17e]: a case of an enum with raw values may not be named 'From', which makes a case from its raw value
+# check: fail error[T17e]: a case of an enum with raw values may not be named 'From'
 type Way enum String {
     From
     To

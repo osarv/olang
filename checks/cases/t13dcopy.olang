@@ -1,4 +1,4 @@
-# check: fail error[T13d, E31d]: Node is generational and declares a destructor, so it has no Copy - each instance's destructor runs once: make a new one with its constructor
+# check: fail error[T13d, E31d]: Node is generational and declares a destructor, so it has no Copy
 # T13d: a generational type with a destructor has no Copy (a destructor does not make it unique, C11)
 type Node struct(v I64) {
     v

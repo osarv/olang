@@ -1,4 +1,4 @@
-# check: fail error[T13c]: 'h.i' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := h.i') and lend that
+# check: fail error[T13c]: 'h.i' is a field of a packed struct,
 # T13c: a writable receiver is a reference to the field - the call would write bits no place holds
 type Inner packed struct(a U4, b U4) { a, b }
 fn (x mut Inner&) Bump() { x.a++ }

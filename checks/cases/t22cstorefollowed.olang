@@ -1,4 +1,4 @@
-# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
+# check: fail error[T22b]: 'link' keeps 'b' in 'a'
 # also: note: the functions given here followed into it (T22c)
 # T22c: a function value followed into a callee that stores it into a field - the store is a boundary in the twin, said
 # there with the call that asked for the twin

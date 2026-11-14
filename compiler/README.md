@@ -25,7 +25,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `token.olang`, `scan.olang` | tokens as spans, and the hand-written scanner |
 | `ast.olang`, `parse.olang` | the syntax tree (recursive enums), recursive descent plus Pratt expressions |
 | `msgs.olang` | every diagnostic, one function each - the table's source, edited by hand |
-| `diagmsg.olang` | what a diagnostic is (`Msg`: its `msgs.Diag`, its rule, its text) - apart from msgs so msgs's functions are no builders (D19a) |
+| `diagmsg.olang` | what a diagnostic is (`Msg`: its `msgs.Diag`, its rule, its headline, and its note and help) - apart from msgs so msgs's functions are no builders (D19a) |
 | `diag.olang` | collecting, ordering and rendering diagnostics, `explain RULE` |
 | `cond.olang` | build constants and top-level conditions (B9, B10) |
 | `fetch.olang` | remote imports and the lock file (M23) |

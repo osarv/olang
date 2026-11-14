@@ -1,4 +1,4 @@
-# check: fail error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+# check: fail error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none
 # T32 (the second any review, finding 5): an adapter (Take, Skip, Enumerate, Zip, Chain) wraps a copy of the iterator it
 # is made from, and an any - whose instance is of a type not known here - has no copy to give; a limit, said at the call
 type Ups struct(n I64) {

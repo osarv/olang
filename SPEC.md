@@ -8564,7 +8564,10 @@ source line it is about and a caret line marking the token it is about (`^`, the
 states (`expected '}', found 'x'`); several are separated by `, `. An error about a whole file is `path: error[RULE]:
 message`, and one about no file - the command line - is `olang: error[RULE]: message`. A **note**, adding to the error
 before it (where something was declared, which instantiation of a generic was being checked), is a line of its own in
-the same form with `note` in place of `error[RULE]`, followed by its source. A **warning** - what `interpret` says in place of an error that
+the same form with `note` in place of `error[RULE]`, followed by its source. The error's own line is its **headline**,
+what is wrong in about 80 characters; a message with more to say splits it Rust-style into rows of the same form that
+follow it with no source of their own, at the error's place: a `note:` row saying why it is wrong, and a `help:` row,
+after every other note, saying what to write instead. A message that says it all in its headline has neither. A **warning** - what `interpret` says in place of an error that
 is only untidy (B3e) - is a line in the same form with `warning[RULE]` in its place, followed by its source. The message names what it is about - the
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever

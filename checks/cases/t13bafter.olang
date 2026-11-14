@@ -1,4 +1,4 @@
-# check: fail error[T13b]: 'f' is handed on here, and File is unique - a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
+# check: fail error[T13b]: 'f' is handed on here, and File is unique
 # T13b: a by-value parameter hands its value on once, at its last mention - reading it after reads what is held elsewhere
 type File unique struct(fd I32) { fd }
 type Box struct(f File) { f }

@@ -1,4 +1,4 @@
-# check: fail error[E16f]: Array<I64> has one axis - slice it with one range, 'a[lo:hi]'
+# check: fail error[E16f]: Array<I64> has one axis
 # E16f: an array has one axis; ':' or '...' among several items is a type's Slice, never an array's
 fn main() {
     a := Array<I64>[1, 2, 3, 4]

@@ -1,4 +1,4 @@
-# check: fail error[E36]: I64 has no limit 'Biggest' - its limits are Max and Min
+# check: fail error[E36]: I64 has no limit 'Biggest'
 # E36: an integer type's limits are Max and Min
 fn main() {
     x := I64.Biggest

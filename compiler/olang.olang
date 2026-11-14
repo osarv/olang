@@ -1312,14 +1312,15 @@ fn mistake(words Array<String&>&) String {
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
-    assert mistake(Array<String&>[]) == ("olang: error[B1]: nothing to do - write a file to build and run, as 'olang " $
-            "main.olang', or a mode ('olang help' lists them)\n")
+    assert mistake(Array<String&>[]) == ("olang: error[B1]: nothing to do\n" $
+            "olang: help: write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)\n")
     assert mistake(Array<String&>["-x"]) ==
         "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"
     assert mistake(Array<String&>["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
-    assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
-            "interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run\n")
+    assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode\n" $
+            "olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, " $
+            "profile and api, and a file ending in .olang is built and run\n")
     assert mistake(Array<String&>["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
     assert mistake(Array<String&>["test", "-output", "x", "m.olang"]) ==
@@ -1421,7 +1422,8 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(Array<String&>["explain", "-asm", "m.olang", "f"]) == "no mistake: explain"
     assert prepared(Array<String&>["explain", "-ir", "-quick", "m.olang", "Box.Get"]) == "no mistake: explain"
     assert prepared(Array<String&>["explain", "-asm", "m.olang"]) ==
-        "olang: error[B11d]: explain -asm takes a program's file and the name of one of its functions, as 'olang explain -asm main.olang main'\n"
+        "olang: error[B11d]: explain -asm takes a program's file and a function's name\n" $
+        "olang: help: write 'olang explain -asm main.olang main'\n"
     assert prepared(Array<String&>["explain", "-asm", "-ir", "m.olang", "f"]) ==
         "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
     assert prepared(Array<String&>["explain", "-caps", "-ir", "m.olang"]) ==

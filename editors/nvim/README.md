@@ -5,7 +5,7 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
 - syntax highlighting (`syntax/olang.vim`) - keywords, types, literals, `#` and `## ... ##` comments, rule names;
 - indentation as `olang format` writes it (four spaces), `#` comments for `gc`;
 - `:make` through the compiler (`compiler/olang.vim`: `olang compile %` and an `errorformat` for its one-row
-  diagnostics, `path:line:col: error[RULE]: message`), so `:copen` lists them;
+  diagnostics, `path:line:col: error[RULE]: headline`, with their `note:` and `help:` rows), so `:copen` lists them;
 - `K` on a rule name in a diagnostic or a comment (`T6b`) shows that rule of the specification (`olang explain`);
 - format on save - through the language server when it runs, else `olang format` on a copy of the buffer;
 - the language server, `olang lsp`: diagnostics as you type, hover (`K`), go to definition (`gd` / `CTRL-]`), document

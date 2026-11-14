@@ -1,4 +1,4 @@
-# check: fail error[S13f]: 'v' is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'
+# check: fail error[S13f]: 'v' is the value being matched, so this compares it with itself
 # S13f: "case v" with v the matched local compares v with v - true for every value but a NaN, where it silently fails
 import "std/io"
 fn sat(v F64) F64 {

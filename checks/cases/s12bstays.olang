@@ -1,4 +1,4 @@
-# check: fail error[S12b]: a block gives no value - a clause of a match used as a value is 'case P: v'
+# check: fail error[S12b]: a block gives no value
 # S12b: in a match used as a value, a clause is no block, whether or not the block leaves
 fn f(n I32) I32 {
     v I32 = match n {

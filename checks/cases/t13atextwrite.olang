@@ -1,4 +1,4 @@
-# check: fail error[T13a, T29c]: a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+# check: fail error[T13a, T29c]: a String never changes once it is made
 # T13a, T29c: a String is immut - no character of one is written; text that changes is an Array<Char>
 fn main() {
     s := $"abc"

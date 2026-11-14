@@ -1,4 +1,4 @@
-# check: fail error[E19]: Heap<I64>'s FromIter takes no one iterator, so no literal can call it - call it as Heap<I64>.FromIter(...)
+# check: fail error[E19]: Heap<I64>'s FromIter takes no one iterator, so no literal can call it
 # E19, D19: a Heap's FromIter takes its ordering too, so a Heap has no literal
 import "std/heap"
 fn main() {

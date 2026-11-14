@@ -1,4 +1,4 @@
-# check: fail error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
+# check: fail error[T25c]: a copy of a read-only Box cannot be stored where it can be written
 # O25h/O20: a value copied out of a reference keeps its references where the referent is - so assigning one to a local
 # whose references are claimed to be in its block is held to that claim, exactly where something can be stored through
 # them (O25g); it was accepted, and a node built through the local then lived in its block

@@ -1,4 +1,4 @@
-# check: fail error[T7d]: an array of 2 elements stored where 3 are laid out - fixed storage takes an array of its own length
+# check: fail error[T7d]: an array of 2 elements stored where 3 are laid out
 # T7d: two known lengths that differ are a compile-time error, never a truncation or a padding
 type M struct() { a := Array<I32>(3) }
 test "never runs" {

@@ -1,4 +1,4 @@
-# check: fail error[T2d]: a weak place reads null once nothing owning holds what it names, so 'weak' is written before a reference that may be null - write 'weak mut Node?&'
+# check: fail error[T2d]: 'weak' is written before a reference that may be null
 # T2d: "weak" only before the "?&" marker
 type Node struct(v I64) {
     v

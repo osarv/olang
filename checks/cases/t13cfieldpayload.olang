@@ -1,4 +1,4 @@
-# check: fail error[T13c]: a packed struct lays its fields out bit by bit, so Shape (an enum carrying a payload) is no field of one
+# check: fail error[T13c]: Shape (an enum carrying a payload) is no field of a packed struct
 # T13c: only an enum carrying no payload has a width - its cases counted, or its raw type's
 type Shape enum { Dot, Circle(r F64) }
 type P packed struct(s Shape, k U4) { s, k }

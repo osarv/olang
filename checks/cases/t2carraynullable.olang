@@ -1,4 +1,4 @@
-# check: fail error[T2c]: 's' is a String?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 's!'
+# check: fail error[T2c]: 's' is a String?&, which may be null
 # T2c (QCI 4): an array that may be null is written "?&", and nothing is read through it until a test says it is not
 fn count(s String?&) I64 { return s.Len() }
 fn main() { assert count("ab") == 2 }

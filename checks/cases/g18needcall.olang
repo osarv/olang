@@ -1,4 +1,4 @@
-# check: fail g18needcall.olang:15:10: error[G18]: Largest needs Less ('<'), and Point has none - declare it for Point, or call Largest with a type that has it
+# check: fail g18needcall.olang:15:10: error[G18]: Largest needs Less ('<'), and Point has none
 # also: g18needcall.olang:9:40: note: pick needs Less ('<') here
 # also: compilation failed with 1 error
 # never: instantiated here

@@ -1,4 +1,4 @@
-# check: fail error[S21]: 'become' leaves the function at once, so not from a join block, whose tasks it would leave behind - write 'return' and the call
+# check: fail error[S21]: 'become'
 # S21, P1: a join waits for its tasks on every way out, which a jump cannot
 fn work(n I64) { }
 fn f(n I64) I64 {

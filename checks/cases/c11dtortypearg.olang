@@ -1,4 +1,4 @@
-# check: fail error[C11]: Conn has a destructor to run, and List<Conn> keeps values of it where no holder ends them - write Conn&, or keep them in a Vec<Conn>
+# check: fail error[C11]: Conn has a destructor to run, and List<Conn> keeps values of it
 # C11: std/list's List keeps its elements in chunks a reference names - its copies are second holders, so nothing would
 # end them - where a Vec of them, Vec<Conn>, ends them (was the refusal of every type argument until 2026-11-07)
 import "std/list"

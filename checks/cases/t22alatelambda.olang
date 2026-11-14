@@ -1,4 +1,4 @@
-# check: fail error[T22b]: this lambda keeps 'b' in what it captured, and the function type of this call - reached in a loop's next turn by a value assigned after it - says nothing of that - write 'keeps b' after its signature
+# check: fail error[T22b]: this lambda keeps 'b' in what it captured
 # T22a, O25i: a version given in a loop after the call reaches it in the next turn before it is judged - a lambda whose
 # captures' scopes are not known there is judged as at a boundary
 type N struct(v I64) {

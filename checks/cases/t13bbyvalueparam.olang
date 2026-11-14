@@ -1,4 +1,4 @@
-# check: fail error[T13b]: File is unique: this value is held elsewhere, and the parameter holds one of its own
+# check: fail error[T13b]: File is unique
 # T13b: a by-value parameter given an existing value - "f File&" takes a reference, "use(File(3))" a fresh one
 type File unique struct(fd I32) { fd }
 fn use(f File) I32 { return f.fd }

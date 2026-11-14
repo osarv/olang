@@ -1,4 +1,4 @@
-# check: fail error[L18]: a line cannot begin with '+' - the line before ended its statement
+# check: fail error[L18]: a line cannot begin with '+'
 # L18: a line beginning with an operator that only joins two values - the line before ended its statement there
 import "std/io"
 fn sum(a I64, b I64, c I64) I64 {

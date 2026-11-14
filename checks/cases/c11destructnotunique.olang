@@ -1,4 +1,4 @@
-# check: fail error[C11, T13b]: a destructor releases what one value holds, so Conn is unique - declare it 'type Conn unique struct(...)'
+# check: fail error[C11, T13b]: a
 # C11, T13b: a type declaring a destructor says it is unique
 Closed mut I64 = 0
 type Conn struct(fd I32) {

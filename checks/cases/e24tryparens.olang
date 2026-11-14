@@ -1,4 +1,4 @@
-# check: fail error[E24]: these parentheses group nothing - a 'try' covers the whole expression after it
+# check: fail error[E24]: these parentheses group nothing
 # E24: a try takes the whole expression after it, so parentheses directly around that expression are an error
 type E error { A }
 fn f(n I64) I64 ? E { return n }

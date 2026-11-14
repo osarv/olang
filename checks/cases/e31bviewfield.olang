@@ -1,4 +1,4 @@
-# check: fail x[i] gives a copy of the element, which this call would write
+# check: fail x[i] gives a copy
 # E31b: x[i] of a struct element lent to a callee that assigns a field of the parameter's own storage - the write
 # would go into the hidden copy and be lost
 type V struct(d mut Array<I64>&, n I64) {

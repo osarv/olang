@@ -1,4 +1,4 @@
-# check: fail error[T25c]: this lambda writes through or keeps its by-value parameter 'b', so it cannot be a function value
+# check: fail error[T25c]: this lambda
 # T25c: a function value's callers may pass read-only copies, so it may not write through its by-value parameters
 type Box struct(P mut Array<I64>&) {
     P

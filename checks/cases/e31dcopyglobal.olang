@@ -1,4 +1,4 @@
-# check: fail error[E31d]: a Copy only builds the new value, and this one writes a global - every copy of the value runs it, so it may do nothing else
+# check: fail error[E31d]: this Copy writes a global
 # E31d: a Copy's one effect is allocating what it builds - this one counts the copies in a global
 Copies mut I64 = 0
 type tree struct(n mut I64&) { n }

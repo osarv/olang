@@ -1,4 +1,4 @@
-# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this store says nothing of that - write 'keeps b in a' after its signature
+# check: fail error[T22b]: 'link' keeps 'b' in 'a'
 # also: note: the functions given here followed into it (T22c)
 # T22a: a local holding a function with relations, handed on as an argument (here into a Vec's elements): a boundary
 type N struct(v I64) {

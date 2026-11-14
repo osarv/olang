@@ -1,4 +1,4 @@
-# check: fail error[S13i]: Point has no field 'a' - a struct pattern names the fields it matches, never its constructor's parameters
+# check: fail error[S13i]: Point has no field 'a'
 # S13i: a bare name in a struct pattern is a field of that name - Point has none called a
 type Point struct(x I64, y I64) { x, y }
 type Shape enum {

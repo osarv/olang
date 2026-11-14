@@ -1,4 +1,4 @@
-# check: fail error[T22b]: 'Count' may call itself, and 'fn&(n I64) I64 norecurse', the type it is held as here, promises 'norecurse'
+# check: fail error[T22b]: 'Count' may call itself
 # also: note: its call of 'Count' may call itself
 # T22b: a named function is judged by its facts read through its name
 fn Count(n I64) I64 { return 0 if n < 1 else 1 + Count(n - 1) }

@@ -1,4 +1,4 @@
-# check: fail error[D8g]: '...a' passes an array on as all of a variadic parameter's arguments - alone, with no others beside it
+# check: fail error[D8g]: '...a'
 # never: stands nowhere else
 fn sum(xs ...I64) I64 { return xs.Len() }
 

@@ -1,4 +1,4 @@
-# check: fail error[T25c]: 'Wrap' writes through or keeps its parameter 'b', and this Box is a read-only copy
+# check: fail error[T25c]: 'Wrap' writes through or keeps its parameter 'b'
 # T25c: a constructor's pun keeps its parameter in the instance, which may be written
 type Box struct(P mut Array<I64>&) {
     P

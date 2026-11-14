@@ -1,4 +1,4 @@
-# check: fail error[S8d]: a narrowed payload field is read, never written or lent writably - 'e' is narrowed to Shape.Round
+# check: fail error[S8d]: a narrowed payload field is read, never written or lent writably
 # S8d: a payload written whole is read as a copy where its local is narrowed - a mut method on it would grow the copy
 # and lose the write
 import "std/io"

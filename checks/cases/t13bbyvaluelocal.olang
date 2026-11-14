@@ -1,4 +1,4 @@
-# check: fail error[T13b]: File is unique: this value is held elsewhere, and 'g' holds one of its own - write a reference ('File&'), or make a new File here
+# check: fail error[T13b]: File is unique
 # T13b: a local written with the value's type is laid out for a value - given an existing one, it cannot hold a reference
 type File unique struct(fd I32) { fd }
 fn main() {
