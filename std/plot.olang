@@ -6,6 +6,7 @@
 #     try p.Line(runs, times, name = "build")
 #     try p.Scatter(runs, samples, name = "samples")
 #     try p.Save("latency.svg")          # or p.Svg(), the text
+#     try p.Show()                       # saves it to a temporary file and opens that in the default viewer
 #
 # A Plot is a value built up with calls; each call adds a series, in the next colour of the cycle. Data is any number
 # type, held as F64 (a Vec is handed over as v.View()). A call whose data does not fit fails with plot.Error. Axis
@@ -138,6 +139,49 @@ fn (p Plot&) Svg() String {
 
 # the plot as an SVG file
 fn (p Plot&) Save(path String&) ? os.Error { try os.WriteFile(path, p.Svg()) }
+
+# saves the plot's SVG to a new file in the temporary directory (kept, so the viewer can read it) and opens it in the
+# default viewer without waiting for it: wslview (else explorer.exe) on WSL, open on macOS, xdg-open elsewhere. Fails
+# with the os.Error naming the viewer to install, and the file, when none is found
+fn (p Plot&) Show() ? os.Error {
+    dir := try os.MkTemp(prefix = "olang-plot-")
+    path := $dir "/plot.svg"
+    try p.Save(path)
+    wsl := isWsl()
+    distro := try os.Env("WSL_DISTRO_NAME") catch default ""
+    interop := os.Exists("/proc/sys/fs/binfmt_misc/WSLInterop")
+    viewer := try viewerFor(TargetOs, wsl, interop, distro, found("wslview"), found("explorer.exe"), found("open"), found("xdg-open"), path)
+    target := path
+    if viewer == "explorer.exe" {
+        out := try os.Output.Exec("wslpath", "-w", path)
+        target = $out.Stdout.Trim()
+    }
+    try os.Process.Start(viewer, target, capture = false)
+}
+
+# the viewer program for the system: from the facts - the operating system's name, whether it is WSL, and which viewers
+# were found - never looking at the system itself. "file" is named in the error when there is none
+fn viewerFor(system String&, wsl Bool, interop Bool, distro String&, wslview Bool, explorer Bool, open Bool, xdgOpen Bool, file String&) String ? os.Error {
+    if wsl and not interop {
+        win := "\\\\wsl.localhost\\" $distro $file.Replace("/", "\\")
+        error os.Error.NotFound("WSL interop is off, so Windows programs cannot be started: " $file " is at " $win " in Windows. Enable it with [interop] enabled=true in /etc/wsl.conf, or with systemd: echo ':WSLInterop:M::MZ::/init:PF' > /usr/lib/binfmt.d/WSLInterop.conf; then wsl --shutdown")
+    }
+    if wsl and wslview { return "wslview" }
+    if wsl and explorer { return "explorer.exe" }
+    if system == "macos" and open { return "open" }
+    if system != "macos" and not wsl and xdgOpen { return "xdg-open" }
+    want := "open" if system == "macos" else "wslu (wslview)" if wsl else "xdg-utils (xdg-open)"
+    error os.Error.NotFound("no viewer found: install " $want " to open " $file)
+}
+
+# whether this is WSL: the kernel's version text names Microsoft
+fn isWsl() Bool {
+    text := try os.ReadFile("/proc/version") catch default ""
+    return text.Contains("icrosoft")
+}
+
+# whether the program is on the PATH
+fn found(name String&) Bool { return os.Run("command -v " $name " >/dev/null 2>&1") == 0 }
 
 # how a notebook shows a Plot
 fn (p Plot&) Display() Display { return Display.Svg(p.Svg()) }
@@ -389,4 +433,21 @@ test "Save writes the SVG file" {
     try p.Save("build/plot_files/a.svg")
     got := try os.ReadFile("build/plot_files/a.svg")
     assert String(got) == p.Svg()
+}
+
+test "the viewer is chosen from the system's facts" {
+    file := "/tmp/a.svg"
+    assert try viewerFor("linux", true, true, "D", true, true, false, true, file) == "wslview"
+    assert try viewerFor("linux", true, true, "D", false, true, false, true, file) == "explorer.exe"
+    assert try viewerFor("macos", false, true, "", false, false, true, false, file) == "open"
+    assert try viewerFor("linux", false, true, "", false, false, false, true, file) == "xdg-open"
+    n := 0
+    try viewerFor("linux", true, true, "D", false, false, false, true, file) catch os.Error.NotFound { n++ }
+    try viewerFor("linux", false, true, "", false, false, true, false, file) catch os.Error.NotFound { n++ }
+    try viewerFor("macos", false, true, "", false, false, false, true, file) catch os.Error.NotFound { n++ }
+    try viewerFor("linux", true, false, "Deb", true, true, false, true, file) catch os.Error.NotFound e {
+        assert e.path.Contains("\\\\wsl.localhost\\Deb\\tmp\\a.svg") and e.path.Contains("wsl --shutdown")
+        n++
+    }
+    assert n == 4
 }
