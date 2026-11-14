@@ -23,28 +23,34 @@ OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcar
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
 	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang \
-	compiler/tools/diaggold.olang compiler/tools/nesting.olang fuzz/editgen.olang
+	compiler/tools/diaggold.olang compiler/tools/nesting.olang compiler/tools/memgate.olang fuzz/editgen.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/olang, which make bootstrap installs (made by it when
 # missing) - "make test OLANG=build/stage1" names another. What it runs - checks/checks.olang, fuzz/, bench/, the tools -
 # reads it from the environment, as an absolute path; unset, each falls back to build/olang
 OLANG ?= build/olang
 OLANG_ENV = OLANG=$(abspath $(OLANG))
 
-# how many test files, checks and diffs run side by side ("make test PARALLEL=1" runs them one at a time)
-PARALLEL ?= $(shell nproc)
+# how many test files, checks and diffs run side by side, at most: the cores ("make test PARALLEL=1" runs them one at a
+# time). How many of them are in memory at once is the memory gate's to say (below)
+PARALLEL ?= $(shell nproc 2> /dev/null || sysctl -n hw.ncpu)
+# the memory gate (compiler/tools/memgate.olang, docs/testmem.md): each test build, interpreted run and build of a tool
+# starts once the machine has the memory its last run here peaked at (else compiler/tools/peaks.txt's figure) beside
+# what the ones running may still take - read from the machine as each asks, so the suite never asks for more than this
+# machine, container or cgroup has, and runs as many side by side as it can hold. Its key is the target
+MEMGATE = build/compiler_tools_memgate
+GATE = $(MEMGATE) -key $@
 # the test files, each a target of its own (test@FILE) so make runs them side by side, the longest first so the last to
-# finish is a short one - checks/checks.olang, which runs its own checks four at a time, before everything. The test
-# builds holding over a gigabyte each (the compiler's largest modules, the corpus's shared.olang) run in two lanes, one
-# after another in each, so no more than two of them are ever in memory at once (a lane goes on past a failure)
-TEST_LANE_A = compiler/scope.olang compiler/views.olang compiler/olang.olang compiler/emit.olang
-TEST_LANE_B = compiler/lower.olang compiler/check.olang tests/shared.olang compiler/interp.olang
-TEST_HEAVY = checks/checks.olang $(TEST_LANE_A) $(TEST_LANE_B) compiler/load.olang compiler/eval.olang \
+# finish is a short one - checks/checks.olang, which runs its own checks four at a time, before everything; then the
+# test builds of the compiler's modules importing most of it, about 3 GB each (docs/testmem.md)
+TEST_HEAVY = checks/checks.olang compiler/olang.olang compiler/notebook.olang compiler/jupyter.olang \
+	compiler/prompt.olang compiler/lsp.olang compiler/mcp.olang compiler/cells.olang compiler/api.olang \
+	compiler/session.olang compiler/doc.olang compiler/explain.olang compiler/interp.olang compiler/emit.olang \
+	compiler/lower.olang compiler/records.olang compiler/free.olang compiler/scope.olang compiler/views.olang \
+	compiler/needs.olang compiler/check.olang tests/shared.olang compiler/load.olang compiler/eval.olang \
 	compiler/generic.olang
 TEST_RUNS_HEAVY = $(addprefix test@,$(filter $(OLANG_TESTS),$(TEST_HEAVY)))
 TEST_RUNS_REST = $(addprefix test@,$(filter-out $(TEST_HEAVY),$(OLANG_TESTS)))
 TEST_RUNS = $(TEST_RUNS_HEAVY) $(TEST_RUNS_REST)
-# each file of a lane after the one before it (an order-only prerequisite)
-lane = $(if $(word 2,$1),$(eval test@$(word 2,$1): | test@$(word 1,$1))$(call lane,$(wordlist 2,$(words $1),$1)))
 
 # the default: the compiler, build/olang (bootstrapped from the seed by boot, below, when missing or older than its
 # sources), installed (install, below); make build stops at build/olang
@@ -52,17 +58,21 @@ all: build install
 build: build/olang
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
-build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/dump.olang
-	$(OLANG) build compiler/tools/dump.olang
+build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/dump.olang | $(MEMGATE)
+	$(GATE) $(OLANG) build compiler/tools/dump.olang
 
 # the acceptance tools (compiler/tools/NAME.olang, which share toolkit.olang): tokdiff, astdiff, namesdiff, layoutdiff,
 # layoutgold, modgraph, diaggold_capture - each an olang program built by the compiler under test
-build/compiler_tools_%: compiler/tools/%.olang compiler/tools/toolkit.olang $(OLANG)
-	$(OLANG) build $<
+build/compiler_tools_%: compiler/tools/%.olang compiler/tools/toolkit.olang $(OLANG) | $(MEMGATE)
+	$(GATE) $(OLANG) build $<
+
+# the memory gate itself, built ungated (a small program)
+$(MEMGATE): compiler/tools/memgate.olang $(OLANG)
+	$(OLANG) build compiler/tools/memgate.olang
 
 # the formatter (SPEC.md B13): "olang format" builds it into its own cache; this is the copy the tests use
-build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/fmt.olang
-	$(OLANG) build compiler/tools/fmt.olang
+build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/fmt.olang | $(MEMGATE)
+	$(GATE) $(OLANG) build compiler/tools/fmt.olang
 
 # B13's acceptance: every file of the repository formatted reads back as the same tree, keeps its comments, and is its
 # own layout ("fmt -v", compiler/tools/fmt.olang): a line for each file that fails, then a count
@@ -76,8 +86,8 @@ consistency: $(OLANG) build/compiler_tools_consistency
 	build/compiler_tools_consistency $(OLANG) || $(NOTE_FAILED)
 
 # the self-hosted compiler's driver (compiler/olang.olang), built by the compiler under test
-build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
-	$(OLANG) build compiler/olang.olang
+build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang) | $(MEMGATE)
+	$(GATE) $(OLANG) build compiler/olang.olang
 
 # A golden (compiler/goldens/) is captured from the port: the self-hosted passes, and GOLD_OLANG the driver -
 # build/compiler_olang, or name another, "make drvgold GOLD_OLANG=build/stage1". It is captured only by its own target
@@ -161,15 +171,12 @@ emitdiff: build/compiler_tools_emitdump build/compiler_tools_emitdiff
 INTERP_FILES = $(wildcard tests/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/tests/*.olang)
 INTERP_PARTS = 1 2 3 4
 INTERP_RUNS = $(addprefix interp@,$(INTERP_FILES)) $(addprefix interp@cases,$(INTERP_PARTS))
-$(addprefix interp@,$(INTERP_FILES)): interp@%: build/compiler_tools_evaldiff FORCE
-	@$(OLANG_ENV) build/compiler_tools_evaldiff $* || echo "interp@$*" >> build/failed.txt
-$(addprefix interp@cases,$(INTERP_PARTS)): interp@cases%: build/compiler_tools_evaldiff FORCE
-	@$(OLANG_ENV) build/compiler_tools_evaldiff -cases $* $(words $(INTERP_PARTS)) || echo "interp@cases$*" >> build/failed.txt
+$(addprefix interp@,$(INTERP_FILES)): interp@%: build/compiler_tools_evaldiff FORCE | $(MEMGATE)
+	@$(OLANG_ENV) $(GATE) build/compiler_tools_evaldiff $* || echo "interp@$*" >> build/failed.txt
+$(addprefix interp@cases,$(INTERP_PARTS)): interp@cases%: build/compiler_tools_evaldiff FORCE | $(MEMGATE)
+	@$(OLANG_ENV) $(GATE) build/compiler_tools_evaldiff -cases $* $(words $(INTERP_PARTS)) || echo "interp@cases$*" >> build/failed.txt
 # a file's interpreted run after its built one, since both write the same scratch files (std/os's build/os_files)
 $(foreach f,$(filter $(OLANG_TESTS),$(INTERP_FILES)),$(eval interp@$(f): | test@$(f)))
-# the interpreted run holding gigabytes (the corpus's shared.olang, 2.5 GB) waits at the end of a lane of heavy test
-# builds, so no more than two such processes are in memory at once
-interp@tests/shared.olang: | test@compiler/interp.olang
 evaldiff: build/compiler_tools_evaldiff
 	$(OLANG_ENV) build/compiler_tools_evaldiff -v > build/evaldiff.txt; grep '^== total' build/evaldiff.txt
 
@@ -346,7 +353,7 @@ run: $(OLANG)
 # every test file of OLANG_TESTS (usertest.olang, a gitignored scratch file, is never part of the suite), side by side (PARALLEL at a time), each in a compiler process of its own as "olang test" runs them;
 # make's -Otarget prints each file's output whole when it finishes. A failing file does not stop the others (-k), and
 # the failed ones are named at the end
-test: $(OLANG)
+test: $(OLANG) $(MEMGATE)
 	@rm -f build/failed.txt
 	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
 
@@ -354,18 +361,16 @@ FAILED = { echo "failed: $$(sort build/failed.txt 2>/dev/null | tr '\n' ' ')"; e
 # a part of the suite that failed, named in build/failed.txt
 NOTE_FAILED = { echo "$@" >> build/failed.txt; exit 1; }
 
-# a test file that fails is named in build/failed.txt and its target ends as if it passed, so the lane it is in goes on;
+# a test file that fails is named in build/failed.txt and its target ends as if it passed, so the targets after it go on;
 # test and suite fail by build/failed.txt
-$(TEST_RUNS): test@%: FORCE
-	@$(OLANG_ENV) $(OLANG) test $* || echo "$*" >> build/failed.txt
-$(call lane,$(TEST_LANE_A))
-$(call lane,$(TEST_LANE_B))
+$(TEST_RUNS): test@%: FORCE | $(MEMGATE)
+	@$(OLANG_ENV) $(MEMGATE) -key $* $(OLANG) test $* || echo "$*" >> build/failed.txt
 
 FORCE:
 
 # the -c production path end to end: tests/runner.olang built as a program and run
-runner: FORCE
-	@$(OLANG_ENV) $(OLANG) build tests/runner.olang || $(NOTE_FAILED)
+runner: FORCE | $(MEMGATE)
+	@$(OLANG_ENV) $(GATE) $(OLANG) build tests/runner.olang || $(NOTE_FAILED)
 	@./build/tests_runner || $(NOTE_FAILED)
 
 # the port's diffs against the goldens, each named in build/failed.txt when it fails
@@ -373,8 +378,8 @@ DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff consistency dumptoo
 
 # the compiler's dump tools still check (docs/sec8.md decision 19): scopedump's own module compiled - the whole program
 # checked and judged by section 8, ~12 s - which an option kept from a parameter's array once refused (O25i)
-dumptool: $(OLANG)
-	@$(OLANG) compile -quick -output build/dumptool.o compiler/tools/scopedump.olang > build/dumptool.txt 2>&1 \
+dumptool: $(OLANG) | $(MEMGATE)
+	@$(GATE) $(OLANG) compile -quick -output build/dumptool.o compiler/tools/scopedump.olang > build/dumptool.txt 2>&1 \
 		|| { cat build/dumptool.txt; $(NOTE_FAILED); }
 
 # builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
@@ -398,7 +403,7 @@ checkir:
 
 # everything after the compiler is built - every test file, the runner, the diffs - side by side, PARALLEL at a time
 # (-k: a failure stops nothing else; the failed parts are named at the end), then checkir over the IR they wrote
-suite: $(OLANG)
+suite: $(OLANG) $(MEMGATE)
 	@rm -f build/failed.txt
 	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS_HEAVY) runner $(DIFFS) $(TEST_RUNS_REST) $(INTERP_RUNS) \
 		&& [ ! -s build/failed.txt ] || $(FAILED)
@@ -550,8 +555,8 @@ MODULES ?= 3
 editfuzz: $(OLANG)
 	nice -n 19 $(OLANG) build fuzz/fuzz.olang
 	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz edit $(SEED) $(COUNT) $(STEPS) $(MODULES)
-editfuzzcheck: $(OLANG)
-	@$(OLANG) build fuzz/fuzz.olang > /dev/null || $(NOTE_FAILED)
+editfuzzcheck: $(OLANG) | $(MEMGATE)
+	@$(GATE) $(OLANG) build fuzz/fuzz.olang > /dev/null || $(NOTE_FAILED)
 	@$(OLANG_ENV) ./build/fuzz_fuzz edit 1 2 6 3 || $(NOTE_FAILED)
 
 # M2 of the port (compiler/DESIGN.md section 6): the self-hosted compiler's diagnostics - msgs.olang's and diag.olang's own

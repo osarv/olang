@@ -1,0 +1,375 @@
+# memgate [-key KEY] COMMAND ARGS... - runs the command once the machine has the memory it is expected to take, so the
+# suite's builds side by side never ask for more than there is (docs/testmem.md). memgate -table prints the peaks the
+# runs so far measured, a line "KEY MB" each, as compiler/tools/peaks.txt holds them.
+#
+#     build/olang build compiler/tools/memgate.olang && build/compiler_tools_memgate -key FILE build/olang test FILE
+#
+# What a command is expected to take is its key's peak (KEY, the command's last argument where -key is not given): the
+# peak its last run here measured (DIR/peaks.txt), else the one compiler/tools/peaks.txt holds, else DefaultMb. What the
+# machine has is read when the command asks to start, never written down: the memory available (MemAvailable in
+# /proc/meminfo, or vm_stat's free and inactive pages where there is no /proc), and the headroom of every cgroup the
+# process is in (memory.max less memory.current, or cgroup v1's limit less its usage and inactive file pages) where that
+# is less. The commands memgate is running hold reservations (DIR/res.PID: the peak expected, then the memory their
+# process tree holds now, written as they run): a command starts once what is available, less what each running one
+# may still grow by, leaves its expected peak and a margin - or at once where none runs, so a command larger than the
+# machine still runs, alone. Each run's peak (the process tree's resident memory at most, sampled) is written for its
+# key when it ends. DIR is OLANG_MEMGATE, else build/memgate. Its status is the command's.
+
+import "std/io"
+import "std/os"
+import "std/time"
+import unistd "unistd.h"
+
+DefaultMb I64 = 1024   # a key with no peak measured: a test build of a small program, with its compiles, at most
+MarginPercent I64 = 10 # of the memory the commands may use, kept free
+MarginMinMb I64 = 512
+PollMs I64 = 250 # how often a waiting command looks again, and a running one measures its process tree
+Done mut I64 = 0 # set once the command has ended (wait), read by the measuring loop beside it
+
+# one running command's reservation: its gate's process, the peak expected, what its tree holds now
+type Res struct(Pid I64, Mb I64, Now I64) {
+    Pid
+    Mb
+    Now
+}
+
+fn main() {
+    args := os.Args()
+    dir := try os.Env("OLANG_MEMGATE") catch default ""
+    if dir == "": dir = "build/memgate"
+    if args.Len() == 2 and args[1] == "-table" {
+        table(dir)
+        return
+    }
+    from I64 = 1
+    key := ""
+    if args.Len() > 3 and args[1] == "-key" {
+        key = $args[2]
+        from = 3
+    }
+    if args.Len() <= from {
+        try io.PutErrLine("usage: memgate [-key KEY] COMMAND ARGS... | memgate -table") catch io.Error { }
+        os.Exit(2)
+    }
+    cmd := args[from:]
+    if key == "": key = $cmd[cmd.Len() - 1]
+    try os.MkDirAll(dir) catch os.Error { }
+    mb := expected(dir, key)
+    me := I64(unistd.getpid())
+    admit(dir, me, mb)
+    status, peak := run(dir, me, mb, cmd)
+    try os.Remove(resPath(dir, me)) catch os.Error { }
+    record(dir, key, peak)
+    os.Exit(status)
+}
+
+# ---- what a command is expected to take ----
+
+# key's expected peak in MB: its last run's here, else the committed table's, else DefaultMb
+fn expected(dir String&, key String&) I64 {
+    learned := peakIn($dir "/peaks.txt", key)
+    if learned > 0: return learned
+    committed := peakIn("compiler/tools/peaks.txt", key)
+    return committed if committed > 0 else DefaultMb
+}
+
+# the last "KEY MB" line of a file for key, 0 where it has none
+fn peakIn(path String&, key String&) I64 {
+    text := try os.ReadFile(path) catch os.Error { return 0 }
+    mb I64 = 0
+    for line in text.Lines() {
+        w := words(line)
+        if w.Len() == 2 and w[0] == key: mb = try w[1].ParseInt() catch default mb
+    }
+    return mb
+}
+
+# the runs' measured peaks, the latest for each key, sorted by key
+fn table(dir String&) {
+    text := try os.ReadFile($dir "/peaks.txt") catch os.Error { return }
+    last Map<String, I64>
+    for line in text.Lines() {
+        w := words(line)
+        if w.Len() == 2: last.Put($w[0], try w[1].ParseInt() catch default 0)
+    }
+    keys Vec<String&>
+    for k in last.Keys() { keys.Push(k) }
+    keys.Sort(fn(a String&, b String&) Bool { return a < b })
+    for k in keys { try io.PutLine($k " " $(try last.Get(k) catch default 0)) catch io.Error { } }
+}
+
+fn record(dir String&, key String&, peak I64) {
+    locked(dir)
+    defer unlock(dir)
+    old := try os.ReadFile($dir "/peaks.txt") catch os.Error default ""
+    try os.WriteFile($dir "/peaks.txt", $old $key " " $peak "\n") catch os.Error { }
+}
+
+# ---- waiting for the memory ----
+
+# waits until the machine has mb for the command beside what the running commands may still take, then reserves it
+fn admit(dir String&, me I64, mb I64) {
+    for {
+        locked(dir)
+        if fits(dir, mb) {
+            try os.WriteFile(resPath(dir, me), $mb " 0\n") catch os.Error { }
+            unlock(dir)
+            return
+        }
+        unlock(dir)
+        time.Sleep(time.Duration.Millis(PollMs))
+    }
+}
+
+# whether mb fits now: at once where no command runs; else what is available, less what each running command may still
+# grow by (its expected peak less what it holds), leaves mb and the margin
+fn fits(dir String&, mb I64) Bool {
+    rs := reservations(dir)
+    if rs.Len() == 0: return true
+    avail := availableMb()
+    held I64 = 0
+    growing I64 = 0
+    for r in rs {
+        held += r.Now
+        if r.Mb > r.Now: growing += r.Mb - r.Now
+    }
+    margin := (avail + held) * MarginPercent / 100
+    if margin < MarginMinMb: margin = MarginMinMb
+    return avail - growing - mb >= margin
+}
+
+# the reservations of the commands running - a file whose gate has ended (killed before it removed it) is removed
+fn reservations(dir String&) Vec<Res> {
+    out Vec<Res>
+    names := try os.ReadDir(dir) catch os.Error { return out }
+    live := livePids()
+    for name in names {
+        if not name.StartsWith("res."): continue
+        pid := try name[4:].ParseInt() catch default -1
+        if not live.Has(pid) {
+            try os.Remove($dir "/" $name) catch os.Error { }
+            continue
+        }
+        w := words(try os.ReadFile($dir "/" $name) catch os.Error default "")
+        if w.Len() != 2: continue
+        out.Push(Res(pid, try w[0].ParseInt() catch default 0, try w[1].ParseInt() catch default 0))
+    }
+    return out
+}
+
+fn resPath(dir String&, pid I64) String { return $dir "/res." $pid }
+
+# the state directory's lock, taken by making a directory (atomic on every system); one left by a gate killed while
+# holding it - older than a few seconds, when a gate holds it for milliseconds - is taken over
+fn locked(dir String&) {
+    lock := $dir "/lock"
+    since := time.Now()
+    for {
+        try os.MkDir(lock) catch os.Error {
+            if time.Since(since) > 5000000000 {
+                try os.Remove(lock) catch os.Error { }
+                since = time.Now()
+            }
+            time.Sleep(time.Duration.Millis(5))
+            continue
+        }
+        return
+    }
+}
+
+fn unlock(dir String&) { try os.Remove($dir "/lock") catch os.Error { } }
+
+# ---- running the command ----
+
+# the command run, its process tree's resident memory measured as it runs and written into the reservation: its status
+# and its peak in MB
+fn run(dir String&, me I64, mb I64, cmd Array<String&>&) I32, I64 {
+    p mut os.Process& = try os.Process.Start(...cmd, capture = false) catch os.Error e {
+        try io.PutErrLine($"memgate: cannot run " $cmd[0] ": " $e) catch io.Error { }
+        return 127, 0
+    }
+    status I32 = 0
+    peak I64 = 0
+    join {
+        spawn status = wait(p)
+        peak = watch(dir, me, mb)
+    }
+    return status, peak
+}
+
+fn wait(p mut os.Process&) I32 {
+    out := try p.Wait() catch os.Error default os.Output(1, "", "")
+    Done.AtomicStore(1)
+    return out.Status
+}
+
+# until the command ends: what this process's tree holds, the most it held returned
+fn watch(dir String&, me I64, mb I64) I64 {
+    peak I64 = 0
+    for Done.AtomicLoad() == 0 {
+        now := treeMb(me)
+        if now > peak: peak = now
+        try os.WriteFile(resPath(dir, me), $mb " " $now "\n") catch os.Error { }
+        time.Sleep(time.Duration.Millis(PollMs))
+    }
+    return peak
+}
+
+# ---- the machine ----
+
+# the resident memory of pid's descendants, in MB (ps, on Linux and macOS alike). A child with its parent's command is a
+# fork not yet replaced by the program it starts - its pages are its parent's until then, so it is not counted twice
+fn treeMb(pid I64) I64 {
+    out := try os.Output.Exec("ps", "-A", "-o", "pid=,ppid=,rss=,comm=") catch os.Error { return 0 }
+    parent Map<I64, I64>
+    rss Map<I64, I64>
+    comm Map<I64, String>
+    for line in out.Stdout.Lines() {
+        w := words(line)
+        if w.Len() < 4: continue
+        p := try w[0].ParseInt() catch default -1
+        parent.Put(p, try w[1].ParseInt() catch default -1)
+        rss.Put(p, try w[2].ParseInt() catch default 0)
+        comm.Put(p, $w[3])
+    }
+    kb I64 = 0
+    for p in rss.Keys() {
+        if p == pid or not descends(parent, p, pid): continue
+        up := try parent.Get(p) catch default -1
+        if (try comm.Get(p) catch default "") == (try comm.Get(up) catch default "?"): continue
+        kb += try rss.Get(p) catch default 0
+    }
+    return kb / 1024
+}
+
+fn descends(parent Map<I64, I64>&, p I64, root I64) Bool {
+    at := p
+    for _ in range 64 {
+        at = try parent.Get(at) catch default -1
+        if at == root: return true
+        if at <= 1: return false
+    }
+    return false
+}
+
+# the processes alive now
+fn livePids() Map<I64, Bool> {
+    live Map<I64, Bool>
+    out := try os.Output.Exec("ps", "-A", "-o", "pid=") catch os.Error { return live }
+    for line in out.Stdout.Lines() {
+        p := try line.Trim().ParseInt() catch default -1
+        if p > 0: live.Put(p, true)
+    }
+    return live
+}
+
+# the memory available to this process now, in MB: the system's, or a cgroup's headroom where that is less
+fn availableMb() I64 {
+    sys := systemMb()
+    cg := cgroupMb()
+    return cg if cg >= 0 and cg < sys else sys
+}
+
+# MemAvailable, or on a system with no /proc (macOS) vm_stat's free, inactive and speculative pages
+fn systemMb() I64 {
+    info := try os.ReadFile("/proc/meminfo") catch os.Error { return vmStatMb() }
+    for line in info.Lines() {
+        w := words(line)
+        if w.Len() >= 2 and w[0] == "MemAvailable:": return (try w[1].ParseInt() catch default 0) / 1024
+    }
+    return 0
+}
+
+fn vmStatMb() I64 {
+    out := try os.Output.Exec("vm_stat") catch os.Error { return 1 << 20 }
+    page I64 = 4096
+    pages I64 = 0
+    for line in out.Stdout.Lines() {
+        w := words(line.Replace(".", ""))
+        if line.Contains("page size of"): page = try w[w.Len() - 2].ParseInt() catch default page
+        if line.StartsWith("Pages free") or line.StartsWith("Pages inactive") or line.StartsWith("Pages speculative") {
+            pages += try w[w.Len() - 1].ParseInt() catch default 0
+        }
+    }
+    return pages * page / 1048576
+}
+
+# the least headroom of the cgroups this process is in and their parents, in MB; -1 where none limits it
+fn cgroupMb() I64 {
+    groups := try os.ReadFile("/proc/self/cgroup") catch os.Error { return -1 }
+    best I64 = -1
+    for line in groups.Lines() {
+        parts := line.Split(":")
+        if parts.Len() != 3: continue
+        if parts[0] == "0" and parts[1] == "": best = least(best, walkUp("/sys/fs/cgroup", parts[2], true))
+        if "memory" in parts[1].Split(","): best = least(best, walkUp("/sys/fs/cgroup/memory", parts[2], false))
+    }
+    return best
+}
+
+fn least(a I64, b I64) I64 {
+    if a < 0: return b
+    return a if b < 0 or a < b else b
+}
+
+# the least headroom from path up to the root of a cgroup hierarchy, -1 where nothing on the way limits memory
+fn walkUp(root String&, path String&, v2 Bool) I64 {
+    best I64 = -1
+    at := $path
+    for {
+        best = least(best, headroom($root $at, v2))
+        if at == "/" or at == "": return best
+        cut := try at.FindLast("/") catch default 0
+        at = $at[:cut] if cut > 0 else "/"
+    }
+}
+
+# one cgroup's limit less what it uses (cgroup v1 counts the page cache in its usage: its inactive file pages, which the
+# kernel takes back first, are left out), in MB; -1 where it sets none
+fn headroom(dir String&, v2 Bool) I64 {
+    limit := number($dir $("/memory.max" if v2 else "/memory.limit_in_bytes"))
+    if limit < 0 or limit >= 1 << 60: return -1
+    used := number($dir $("/memory.current" if v2 else "/memory.usage_in_bytes"))
+    if used < 0: return -1
+    if not v2: used -= statValue($dir "/memory.stat", "total_inactive_file")
+    return (limit - used) / 1048576
+}
+
+# a file holding one number, -1 where it is missing or "max"
+fn number(path String&) I64 {
+    text := try os.ReadFile(path) catch os.Error { return -1 }
+    return try text.Trim().ParseInt() catch default -1
+}
+
+fn statValue(path String&, key String&) I64 {
+    text := try os.ReadFile(path) catch os.Error { return 0 }
+    for line in text.Lines() {
+        w := words(line)
+        if w.Len() == 2 and w[0] == key: return try w[1].ParseInt() catch default 0
+    }
+    return 0
+}
+
+# a line's words, split at spaces and tabs
+fn words(line String&) Vec<String&> {
+    out Vec<String&>
+    for w in line.Replace("\t", " ").Split(" ") {
+        if w != "": out.Push(w)
+    }
+    return out
+}
+
+test words "splits at runs of spaces and tabs" {
+    w := words("  12 \t 34  56")
+    assert w.Len() == 3 and w[0] == "12" and w[2] == "56"
+}
+
+test descends "follows parents up to the root" {
+    parent := Map<I64, I64>[5: 4, 4: 3, 3: 1, 9: 1]
+    assert descends(parent, 5, 3)
+    assert not descends(parent, 9, 3)
+}
+
+test least "takes the smaller limit, -1 none" {
+    assert least(-1, 7) == 7 and least(3, -1) == 3 and least(5, 2) == 2
+}
