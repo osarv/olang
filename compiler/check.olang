@@ -3097,11 +3097,8 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
             near.Offer($ast.RecvTarget(decl, c.P.L.Names) "." $c.text(decl.Name))
         }
     }
-    if near.Best.Len() > 0 {
-        c.err(target.Sp, msgs.TestTargetUnknownMeant(t, near.Best))
-    } else {
-        c.err(target.Sp, msgs.TestTargetUnknown(t))
-    }
+    if near.Best.Len() > 0: c.err(target.Sp, msgs.TestTargetUnknownMeant(t, near.Best))
+    else: c.err(target.Sp, msgs.TestTargetUnknown(t))
 }
 
 fn (c mut Checker&) testBody(mi I64, sp source.Span, body Array<ast.Stmt&>&, index I64) {
@@ -4846,11 +4843,8 @@ fn (c mut Checker&) topSetDecls(mi I64, ds Array<ast.Decl&>&, inIf Bool, live Bo
 fn (c mut Checker&) topSetIf(mi I64, head ast.TopIf&, ti ast.TopIf&, inIf Bool, live Bool, chosen I64, index I64
                              taken mut Map<source.NameId, Bool>&) {
     if ti.Then is not null { c.topSetDecls(mi, ti.Then!.Decls, true, live and chosen == index, taken) }
-    if ti.ElseIf is not null {
-        c.topSetIf(mi, head, ti.ElseIf!, inIf, live, chosen, index + 1, taken)
-    } else if ti.Else is not null {
-        c.topSetDecls(mi, ti.Else!.Decls, true, live and chosen == index + 1, taken)
-    }
+    if ti.ElseIf is not null: c.topSetIf(mi, head, ti.ElseIf!, inIf, live, chosen, index + 1, taken)
+    else if ti.Else is not null: c.topSetDecls(mi, ti.Else!.Decls, true, live and chosen == index + 1, taken)
     if head != ti { return }
     set Vec<source.NameId>
     chainNames(head, set)
@@ -5021,9 +5015,7 @@ fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block& {
     # bulk review 7, F10)
     c.entryChecks()
     storedIn(body, c.fr().stored)
-    if body.Len() > 0 {
-        c.stmtsOf(body)
-    }
+    if body.Len() > 0: c.stmtsOf(body)
     if c.fr().InCtor and c.P.IsColumns(c.fr().CtorOf) { c.columnsFields(c.fr().CtorOf) }
     # O15: a constructor's fields go on into its instance at its end
     if c.fr().InCtor {
@@ -5792,11 +5784,8 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
         for k in range fr.nulls.Len() {
             nn := fr.nulls[k]
             if nn.Dead or not stmtAssigns(body[i], nn.Path) { continue }
-            if assignsWhole(body[i], nn.Path) {
-                after.Push(k)
-            } else {
-                fr.nulls[k] = nullNarrow(nn.Path, nn.Block, true)
-            }
+            if assignsWhole(body[i], nn.Path): after.Push(k)
+            else: fr.nulls[k] = nullNarrow(nn.Path, nn.Block, true)
         }
         # S8d: a statement assigning a narrowed local ends its narrowing - after its value, where it is that assignment
         afterCase Vec<I64>
@@ -5805,11 +5794,8 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
             if nr.Dead { continue }
             ln := Array<source.NameId>(1, c.cur().Locals[nr.Local].Name)
             if not stmtAssigns(body[i], ln) { continue }
-            if assignsWhole(body[i], ln) {
-                afterCase.Push(k)
-            } else {
-                fr.narrows[k] = nr.Killed()
-            }
+            if assignsWhole(body[i], ln): afterCase.Push(k)
+            else: fr.narrows[k] = nr.Killed()
         }
         # T20: a statement assigning a narrowed error local ends its narrowing
         for k in range fr.errNarrows.Len() {
@@ -5909,11 +5895,8 @@ fn (c mut Checker&) unwind(mark I64) {
     fr := c.fr()
     for fr.undo.Len() > mark {
         p := try fr.undo.Pop() catch { return }
-        if p.Second < 0 {
-            fr.bound.Remove(p.First)
-        } else {
-            fr.bound.Put(p.First, p.Second)
-        }
+        if p.Second < 0: fr.bound.Remove(p.First)
+        else: fr.bound.Put(p.First, p.Second)
     }
 }
 
@@ -5969,11 +5952,8 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
         case typed.Lvalue.Deref(_, _, ref) {
             rt := typeOf(ref)
             if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
-                if c.capturedValue(ref) {
-                    c.err(sp, msgs.CaptureReadOnly())
-                } else {
-                    c.noteWritable(c.err(sp, msgs.ReadOnlyRefWrite()), ref)
-                }
+                if c.capturedValue(ref): c.err(sp, msgs.CaptureReadOnly())
+                else: c.noteWritable(c.err(sp, msgs.ReadOnlyRefWrite()), ref)
             } else if c.isRef(rt) and c.roRoot(readPlace(unwrapped(ref))) >= 0 {
                 # T25c: a read-only copy writes nothing through the writable references it shares
                 rec := c.err(sp, msgs.ReadOnlyCopyWrite())
@@ -6211,13 +6191,9 @@ fn (c mut Checker&) programOrigin() diag.Where {
         if o.File < 0: break
         w := diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End))
         if not c.P.L.Diags.IsLibrary(w): found = w
-        if o.Within >= 0 {
-            o = c.P.InstanceOrigin(o.Within)
-        } else if o.Type != types.VoidT {
-            o = c.P.TypeOrigin(o.Type)
-        } else {
-            break
-        }
+        if o.Within >= 0: o = c.P.InstanceOrigin(o.Within)
+        else if o.Type != types.VoidT: o = c.P.TypeOrigin(o.Type)
+        else: break
     }
     return found
 }
@@ -6270,9 +6246,7 @@ fn (c mut Checker&) src(sp source.Span) String& {
 fn (c mut Checker&) between(a source.Span, b source.Span, n I64) source.Span {
     t := c.P.L.Mods[c.fr().Mi].Src!.Text
     at := I64(a.End)
-    for at < I64(b.Start) and at < t.Len() and (t[at] == ' ' or t[at] == '\n' or t[at] == '\t' or t[at] == ')') {
-        at++
-    }
+    for at < I64(b.Start) and at < t.Len() and (t[at] == ' ' or t[at] == '\n' or t[at] == '\t' or t[at] == ')'): at++
     return source.Span(I32(at), I32(at + n))
 }
 
@@ -7259,11 +7233,8 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr& {
         if (v.F > 1.7976931348623157e308 or v.F < -1.7976931348623157e308) and c.overflowsF64(x) {
             # L12b, E4a: a float literal - or a literal expression of finite operands - beyond F64's range would be an
             # infinity (a division by zero gives one, as IEEE's does)
-            if c.opOf(x) != sp {
-                c.err(c.opOf(x), msgs.LiteralExprRange("F64"))
-            } else {
-                c.err(sp, msgs.FloatLiteralRange(msgs.Tok(c.src(sp))))
-            }
+            if c.opOf(x) != sp: c.err(c.opOf(x), msgs.LiteralExprRange("F64"))
+            else: c.err(sp, msgs.FloatLiteralRange(msgs.Tok(c.src(sp))))
             return c.unknown(sp)
         }
         if not c.P.T.IsFloat(target) {
@@ -7285,11 +7256,8 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr& {
         return c.lit(sp, want, intFloatBits(target, v))
     }
     if not intFits(c.P.T, v, target) {
-        if c.opOf(x) != sp {
-            c.err(c.opOf(x), msgs.LiteralExprRange(c.ty(want)))
-        } else {
-            c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
-        }
+        if c.opOf(x) != sp: c.err(c.opOf(x), msgs.LiteralExprRange(c.ty(want)))
+        else: c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
         return c.unknown(sp)
     }
     if v.Wide {
@@ -8468,13 +8436,9 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId, want types.TypeId = ty
            not c.P.R.ImportSaid(n) {
             # B11: with the name it most likely meant - a number's, said as an unknown type (T4)
             best := c.suggest(c.text(n), true)
-            if best.Len() == 0 {
-                c.err(sp, msgs.UnknownName(c.tok(n)))
-            } else if c.P.T.Prim(best) != types.UnknownT {
-                c.err(sp, msgs.UnknownNumberType(c.tok(n), best))
-            } else {
-                c.err(sp, msgs.UnknownNameMeant(c.tok(n), best))
-            }
+            if best.Len() == 0: c.err(sp, msgs.UnknownName(c.tok(n)))
+            else if c.P.T.Prim(best) != types.UnknownT: c.err(sp, msgs.UnknownNumberType(c.tok(n), best))
+            else: c.err(sp, msgs.UnknownNameMeant(c.tok(n), best))
             c.unknownSaid.Put(pair.Pair(c.fr().Body, I64(n)), true)
         }
         return c.unknown(sp)
@@ -9159,11 +9123,8 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
             return r
         }
         if operatorName(op) != "" and c.notOperator(c.deref(ta), operatorName(op), opSp, msgs.Tok(op.Text()), 1, false) { return c.unknown(sp) }
-        if c.isNumber(ta) or c.isNumber(tb) {
-            c.err(opSp, msgs.OperandsDiffer(msgs.Tok(op.Text()), c.ty(ta), c.ty(tb)))
-        } else {
-            c.needErr(opSp, ta, opNeed(op), msgs.OperandNotNumber(msgs.Tok(op.Text()), c.ty(ta)))
-        }
+        if c.isNumber(ta) or c.isNumber(tb): c.err(opSp, msgs.OperandsDiffer(msgs.Tok(op.Text()), c.ty(ta), c.ty(tb)))
+        else: c.needErr(opSp, ta, opNeed(op), msgs.OperandNotNumber(msgs.Tok(op.Text()), c.ty(ta)))
         return c.unknown(sp)
     }
     if op == token.Tok.Shl or op == token.Tok.Shr {
@@ -9612,17 +9573,11 @@ fn (c mut Checker&) partsEqual(sp source.Span, x typed.Expr&, y typed.Expr&, t t
     }
     k := c.P.T.KindOf(t)
     fs := types.ListId(0)
-    if k == types.Kind.Record or k == types.Kind.Tuple {
-        fs = c.P.T.Parts(t)
-    } else if k == types.Kind.Named and c.declKind(t) == types.DeclKind.Struct {
-        fs = c.P.T.Fields(t)
-    } else if k == types.Kind.Array {
-        return c.arraysEqual(sp, x, y, t)
-    } else if k == types.Kind.Named and c.declKind(t) == types.DeclKind.Enum {
-        return c.enumsEqual(sp, x, y, t)
-    } else {
-        return null
-    }
+    if k == types.Kind.Record or k == types.Kind.Tuple: fs = c.P.T.Parts(t)
+    else if k == types.Kind.Named and c.declKind(t) == types.DeclKind.Struct: fs = c.P.T.Fields(t)
+    else if k == types.Kind.Array: return c.arraysEqual(sp, x, y, t)
+    else if k == types.Kind.Named and c.declKind(t) == types.DeclKind.Enum: return c.enumsEqual(sp, x, y, t)
+    else: return null
     sfrom := c.stmts.Len()
     px := c.heldOf(sp, c.fit(x, t, sp))
     py := c.heldOf(sp, c.fit(y, t, sp))
@@ -9749,11 +9704,8 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
     if not isNullLit(b) {
         # E10c: "is" asks for null and nothing else - a case and a value are compared with "==" (E32, E10)
         op := "!=" if negated else "=="
-        if c.caseWritten(b) {
-            c.err(isp, msgs.IsCaseWritten(op, c.src(a.Span()), c.src(b.Span())))
-        } else {
-            c.err(isp, msgs.IsOnlyNull(op))
-        }
+        if c.caseWritten(b): c.err(isp, msgs.IsCaseWritten(op, c.src(a.Span()), c.src(b.Span())))
+        else: c.err(isp, msgs.IsOnlyNull(op))
         return c.lit(sp, types.BoolT, 0)
     }
     if isNullLit(a) {
@@ -9947,19 +9899,13 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     if k < 0 {
         if xt == types.UnknownT { return c.unknown(sp) }
         # E32: "as" gives an enum case's payload - an array's part is a slice (E16a)
-        if not c.isEnum(et) {
-            c.err(c.between(a.Span(), tr.Span(), 2), msgs.IsAsNotEnum(c.ty(xt)))
-        } else {
-            c.err(tr.Span(), msgs.AsNeedsCase(c.ty(et), "'" $c.src(tr.Span()) "'"))
-        }
+        if not c.isEnum(et): c.err(c.between(a.Span(), tr.Span(), 2), msgs.IsAsNotEnum(c.ty(xt)))
+        else: c.err(tr.Span(), msgs.AsNeedsCase(c.ty(et), "'" $c.src(tr.Span()) "'"))
         return c.unknown(sp)
     }
     base := readPlace(x)
-    if c.isRef(xt) {
-        base = typed.Lvalue.Deref(sp, et, x)
-    } else if base is null {
-        base = typed.Lvalue.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
-    }
+    if c.isRef(xt): base = typed.Lvalue.Deref(sp, et, x)
+    else if base is null: base = typed.Lvalue.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
     # E32: "as" fails as written, with CaseError.WrongCase where the value holds another case
     chk := c.failOp(Array<types.TypeId>[c.wrongCase()], c.between(a.Span(), tr.Span(), 2), true)
     rec := c.P.T.Items(c.P.T.Cases(et))[k]
@@ -10215,11 +10161,8 @@ fn (c mut Checker&) sliceOf(sp source.Span, b typed.Lvalue&, lo ast.Expr?&, hi a
         }
         l := c.lit(sp, c.i64(), 0) if lo is null else c.value(c.exprTo(lo, c.i64()), lo.Span())
         h typed.Expr?& = null
-        if hi is null {
-            h = c.invoke(sp, sp, lm, c.read(sp, base), Array<ast.Expr&>(0), Array<typed.Expr&>(0))
-        } else {
-            h = c.value(c.exprTo(hi, c.i64()), hi.Span())
-        }
+        if hi is null: h = c.invoke(sp, sp, lm, c.read(sp, base), Array<ast.Expr&>(0), Array<typed.Expr&>(0))
+        else: h = c.value(c.exprTo(hi, c.i64()), hi.Span())
         from := c.exprs.Len()
         c.exprs.Push(l)
         c.exprs.Push(h!)
@@ -10387,11 +10330,8 @@ fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr& {
     lit := Array<Bool>(n, false)
     for i in range n {
         lit[i] = c.litLike(ch.Xs[i])
-        if lit[i] {
-            c.exprs.Push(c.hole(sp))
-        } else {
-            c.exprs.Push(c.value(c.expr(ch.Xs[i], types.UnknownT), ch.Xs[i].Span()))
-        }
+        if lit[i]: c.exprs.Push(c.hole(sp))
+        else: c.exprs.Push(c.value(c.expr(ch.Xs[i], types.UnknownT), ch.Xs[i].Span()))
     }
     for i in range n {
         if not lit[i] or folded[i] { continue }
@@ -11297,13 +11237,9 @@ fn (c mut Checker&) unknownType(sp source.Span, n source.NameId) {
     name := c.text(n)
     best := c.suggest(name, false)
     if best.Len() == 0 { best = c.importedTypeNamed(name) }
-    if best.Len() == 0 {
-        c.err(sp, msgs.UnknownType(c.tok(n)))
-    } else if c.P.T.Prim(best) != types.UnknownT {
-        c.err(sp, msgs.UnknownNumberType(c.tok(n), best))
-    } else {
-        c.err(sp, msgs.UnknownTypeMeant(c.tok(n), best))
-    }
+    if best.Len() == 0: c.err(sp, msgs.UnknownType(c.tok(n)))
+    else if c.P.T.Prim(best) != types.UnknownT: c.err(sp, msgs.UnknownNumberType(c.tok(n), best))
+    else: c.err(sp, msgs.UnknownTypeMeant(c.tok(n), best))
 }
 
 # B11: a public type of that very name in a module this one imports, written as reached through its alias ("json.Json")
@@ -12045,13 +11981,9 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             if ref.Kind == names.What.None {
                 # B11: with the name it most likely meant - a number's, said as an unknown type (T4)
                 best := c.suggest(c.text(n), true)
-                if best.Len() == 0 {
-                    c.err(nsp, msgs.UnknownFunction(c.tok(n)))
-                } else if c.P.T.Prim(best) != types.UnknownT {
-                    c.err(nsp, msgs.UnknownNumberType(c.tok(n), best))
-                } else {
-                    c.err(nsp, msgs.UnknownFunctionMeant(c.tok(n), best))
-                }
+                if best.Len() == 0: c.err(nsp, msgs.UnknownFunction(c.tok(n)))
+                else if c.P.T.Prim(best) != types.UnknownT: c.err(nsp, msgs.UnknownNumberType(c.tok(n), best))
+                else: c.err(nsp, msgs.UnknownFunctionMeant(c.tok(n), best))
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
@@ -12448,11 +12380,8 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
             c.err(nsp, msgs.CtorTypeArgsNotInferable(tn, tn))
             return c.unknown(sp)
         }
-        if c.isRef(v) {
-            b.Vals[i] = c.P.T.Ref(c.P.T.Referent(v), types.ReadOnly)
-        } else if c.P.T.KindOf(c.under(v)) == types.Kind.Array {
-            b.Vals[i] = c.P.T.Ref(v, types.ReadOnly)
-        }
+        if c.isRef(v): b.Vals[i] = c.P.T.Ref(c.P.T.Referent(v), types.ReadOnly)
+        else if c.P.T.KindOf(c.under(v)) == types.Kind.Array: b.Vals[i] = c.P.T.Ref(v, types.ReadOnly)
     }
     t := c.P.Instance(d, c.P.T.List(b.Vals))
     if not c.instancesMet(t, nsp) or not c.P.Body(t) { return c.unknown(sp) }
@@ -13079,13 +13008,9 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     c.inWrittenOrder(order, from + (1 if recv is not null else 0))
     errs := types.ListId(0) if decided else c.calleeErrors(target, sig)
     if c.P.T.Items(errs).Len() > 0 and c.fr().Tries == 0 {
-        if opIn.Start >= 0 {
-            c.err(opIn, msgs.MembershipNeedsTry(op))
-        } else if op.Len() > 0 {
-            c.err(nsp, msgs.OperatorCallFails(op))
-        } else {
-            c.err(nsp, msgs.UnhandledFallibleCall())
-        }
+        if opIn.Start >= 0: c.err(opIn, msgs.MembershipNeedsTry(op))
+        else if op.Len() > 0: c.err(nsp, msgs.OperatorCallFails(op))
+        else: c.err(nsp, msgs.UnhandledFallibleCall())
     }
     if c.P.T.Items(errs).Len() > 0 { c.fr().Fallible++ }
     c.leak(errs)
@@ -13437,11 +13362,8 @@ fn (c mut Checker&) namedArgUnknown(lsp source.Span, n source.NameId, params Arr
     for q in params {
         if q.Dflt is not null { near.Offer(c.text(q.Name)) }
     }
-    if near.Best.Len() > 0 {
-        c.err(lsp, msgs.NamedArgUnknownMeant(c.tok(n), msgs.Tok(what), near.Best))
-    } else {
-        c.err(lsp, msgs.NamedArgUnknown(c.tok(n), msgs.Tok(what)))
-    }
+    if near.Best.Len() > 0: c.err(lsp, msgs.NamedArgUnknownMeant(c.tok(n), msgs.Tok(what), near.Best))
+    else: c.err(lsp, msgs.NamedArgUnknown(c.tok(n), msgs.Tok(what)))
 }
 
 fn (c mut Checker&) namedArgs(params Array<ast.Param&>&, args Array<ast.Expr&>&, what String&) Array<ast.Expr&>& {
@@ -13508,11 +13430,8 @@ fn (c mut Checker&) namedArgs(params Array<ast.Param&>&, args Array<ast.Expr&>&,
     c.argOrder.Clear()
     for k in range last + 1 {
         s := slots[k]
-        if s is null {
-            out.Push(ast.Expr.Default(args[0].Span()))
-        } else {
-            out.Push(s)
-        }
+        if s is null: out.Push(ast.Expr.Default(args[0].Span()))
+        else: out.Push(s)
         c.argOrder.Push(order[k])
     }
     return out.ToArray()
@@ -15967,11 +15886,8 @@ fn (c mut Checker&) genericCase(sp source.Span, nsp source.Span, d types.DeclId,
             c.err(nsp, msgs.CaseTypeArgsNotInferable(tn, $tn "." $c.text(n)))
             return c.unknown(sp)
         }
-        if c.isRef(v) {
-            b.Vals[i] = c.P.T.Ref(c.P.T.Referent(v), types.ReadOnly)
-        } else if c.P.T.KindOf(c.under(v)) == types.Kind.Array {
-            b.Vals[i] = c.P.T.Ref(v, types.ReadOnly)
-        }
+        if c.isRef(v): b.Vals[i] = c.P.T.Ref(c.P.T.Referent(v), types.ReadOnly)
+        else if c.P.T.KindOf(c.under(v)) == types.Kind.Array: b.Vals[i] = c.P.T.Ref(v, types.ReadOnly)
     }
     t := c.P.Instance(d, c.P.T.List(b.Vals))
     if not c.instancesMet(t, nsp) or not c.P.Body(t) { return c.unknown(sp) }
@@ -16401,9 +16317,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Lvalue&, items Array<ast.E
     }
     # E16: an index of any integer type - only a literal one is made an I64; a conditional or a match of U64s is a U64
     i := c.value(c.expr(items[0], c.i64() if c.litLike(items[0]) else types.UnknownT), items[0].Span())
-    if not c.isInt(typeOf(i)) and typeOf(i) != types.UnknownT {
-        c.err(items[0].Span(), msgs.IndexNotInt(c.ty(typeOf(i))))
-    }
+    if not c.isInt(typeOf(i)) and typeOf(i) != types.UnknownT: c.err(items[0].Span(), msgs.IndexNotInt(c.ty(typeOf(i))))
     # E16: a constant index outside a fixed array's length is an error where it is written - x.Get(i) fails instead
     lt := c.P.T.Length(at)
     if chk == typed.Check.None and lt != types.TypeId(0) and c.P.T.KindOf(lt) == types.Kind.Const {
@@ -17893,11 +17807,8 @@ fn (c mut Checker&) errValue(sp source.Span, vt types.TypeId, j I64, code I64, p
     for q in range set.Len() {
         pt := c.P.PayloadOf(c.P.T.ErrOf(set[q]))
         if pt == types.UnknownT: continue
-        if q == j and pv is not null {
-            c.exprs.Push(pv)
-        } else {
-            c.exprs.Push(c.lit(sp, pt, 0))
-        }
+        if q == j and pv is not null: c.exprs.Push(pv)
+        else: c.exprs.Push(c.lit(sp, pt, 0))
     }
     return typed.Expr.Make(sp, vt, typed.Make(typed.MakeKind.Tuple, 0, gather(c.exprs, from), null, typed.SiteId(-1), typed.Check.None))
 }
@@ -18075,11 +17986,8 @@ fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, n source.NameId, now V
         case ast.Expr.Binary(_, op, a, b) {
             if op == token.Tok.EqEq or op == token.Tok.NotEq {
                 o := a
-                if c.errLocalName(a) == n {
-                    o = b
-                } else if c.errLocalName(b) != n {
-                    return now
-                }
+                if c.errLocalName(a) == n: o = b
+                else if c.errLocalName(b) != n: return now
                 xs := try c.caughtItems(o) catch NotError { return now }
                 return c.setMeet(now, xs) if (op == token.Tok.EqEq) == holds else c.setLess(now, xs)
             }
@@ -19598,20 +19506,14 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     old := c.read(sp, typed.Lvalue.Target(sp, t))
     v typed.Expr?& = null
     lv := c.fold(value)
-    if lv.Ok {
-        v = c.litOf(value, lv, t)
-    } else {
-        v = c.value(c.expr(value, t), value.Span())
-    }
+    if lv.Ok: v = c.litOf(value, lv, t)
+    else: v = c.value(c.expr(value, t), value.Span())
     vt := typeOf(v)
     if (bop == token.Tok.Shl or bop == token.Tok.Shr) and not c.shiftInRange(t, v!, value.Span()) { return }
     if bop != token.Tok.Shl and bop != token.Tok.Shr and vt != t and vt != types.UnknownT {
         # T6b: a number flows toward its base - a declared one into its base and on (sc U64 += a Code over U16)
-        if c.isNumber(vt) and c.P.Flows(vt, t) {
-            v = c.convert(value.Span(), v!, t)
-        } else {
-            c.err(osp, msgs.NumberDoesNotFlow(c.ty(vt), c.ty(t), c.ty(t)))
-        }
+        if c.isNumber(vt) and c.P.Flows(vt, t): v = c.convert(value.Span(), v!, t)
+        else: c.err(osp, msgs.NumberDoesNotFlow(c.ty(vt), c.ty(t), c.ty(t)))
     }
     c.emit(typed.Stmt.Assign(sp, p, c.prim(sp, t, binaryOp(bop), old, v)))
 }
@@ -19751,11 +19653,8 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         laneK = c.laneLeaf(c.laneArg(value, e))
         ve := c.laneNodes[laneK].Elem
         meth := ""
-        if not c.builtinElem(e) or not c.builtinElem(ve) {
-            meth = "'" $operatorName(compoundOp(op)) "'"
-        } else {
-            meth = c.laneMethodCalled(laneK)
-        }
+        if not c.builtinElem(e) or not c.builtinElem(ve): meth = "'" $operatorName(compoundOp(op)) "'"
+        else: meth = c.laneMethodCalled(laneK)
         if meth != "" {
             c.err(osp, msgs.WriteThroughAtOperator(c.ty(e if not c.builtinElem(e) else ve), meth))
             return true
@@ -20192,9 +20091,7 @@ fn (c mut Checker&) loop(sp source.Span, k ast.Expr?&, body Array<ast.Stmt&>&, p
     if k is not null { c.emit(c.breakUnless(sp, c.cond1(k), id)) }
     # S8d: what the condition says holds in the body, and in the post clause where the body assigns the local nowhere
     if k is not null { c.pushFacts(k, true, id) }
-    if body.Len() > 0 {
-        c.stmtsOf(body)
-    }
+    if body.Len() > 0: c.stmtsOf(body)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
@@ -20239,9 +20136,7 @@ fn (c mut Checker&) doFor(sp source.Span, body Array<ast.Stmt&>&, k ast.Expr&) {
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
     c.fr().exits.Push(id)
-    if body.Len() > 0 {
-        c.stmtsOf(body)
-    }
+    if body.Len() > 0: c.stmtsOf(body)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
@@ -20999,11 +20894,8 @@ fn (c mut Checker&) laneDecl(ks Array<I64>&, e types.TypeId) types.TypeId {
         n := c.laneNodes[k]
         if n.Kind == LaneScalar { continue }
         if n.Decl == types.UnknownT { return types.UnknownT }
-        if d == types.UnknownT {
-            d = n.Decl
-        } else if not c.P.T.Same(d, n.Decl) {
-            return types.UnknownT
-        }
+        if d == types.UnknownT: d = n.Decl
+        else if not c.P.T.Same(d, n.Decl): return types.UnknownT
     }
     if d == types.UnknownT or not c.P.T.Same(c.laneElemOf(d), e) { return types.UnknownT }
     return d
@@ -21104,13 +20996,9 @@ fn (c mut Checker&) laneMethod(sp source.Span, nsp source.Span, name String&, rx
         ea, eb := c.laneNodes[a].Elem, c.laneNodes[b].Elem
         e := types.UnknownT
         if ea != types.UnknownT and eb != types.UnknownT {
-            if c.P.T.Same(ea, eb) {
-                e = ea
-            } else if c.isNumber(ea) and c.isNumber(eb) and c.P.Meet(ea, eb) >= types.TypeId(0) {
-                e = c.P.Meet(ea, eb)
-            } else {
-                c.err(nsp, msgs.OperandsDiffer("'Select'", c.ty(ea), c.ty(eb)))
-            }
+            if c.P.T.Same(ea, eb): e = ea
+            else if c.isNumber(ea) and c.isNumber(eb) and c.P.Meet(ea, eb) >= types.TypeId(0): e = c.P.Meet(ea, eb)
+            else: c.err(nsp, msgs.OperandsDiffer("'Select'", c.ty(ea), c.ty(eb)))
         }
         ks := Array<I64>[k, a, b]
         return c.laneHold(sp, c.laneAdd(laneNode(LaneSel, token.Tok.Plus, sp, nsp, k, a, b, null, e, c.laneLen(ks, nsp), c.laneDecl(Array<I64>[a, b], e))))
@@ -21468,9 +21356,7 @@ fn (c mut Checker&) laneMethodCalled(k I64) String {
 # the body run for each value: the loop's statements, or a comprehension's element yielded where its filter holds
 fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
     if cm is null {
-        if f.Body.Len() > 0 {
-            c.stmtsOf(f.Body)
-        }
+        if f.Body.Len() > 0: c.stmtsOf(f.Body)
         return
     }
     sp := cm.Value.Span()
@@ -21733,9 +21619,7 @@ fn (c mut Checker&) walkRuns(sp source.Span, f ast.ForIn&, src typed.Expr&, runs
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
     c.emit(c.addTo(sp, j, c.lit(sp, c.i64(), 1)))
-    if k >= 0 {
-        c.emit(c.addTo(sp, k, c.lit(sp, c.i64(), 1)))
-    }
+    if k >= 0: c.emit(c.addTo(sp, k, c.lit(sp, c.i64(), 1)))
     pb := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, ib, pb))
     c.emit(c.addTo(sp, at, c.readLocal(sp, n)))
@@ -21830,11 +21714,8 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     }
     rfrom := c.exprs.Len()
     for i in range rargs.Len() {
-        if vals[i] is null {
-            c.exprs.Push(c.litOf(rargs[i], c.fold(rargs[i]), t))
-        } else {
-            c.exprs.Push(c.fit(vals[i]!, t, rargs[i].Span()))
-        }
+        if vals[i] is null: c.exprs.Push(c.litOf(rargs[i], c.fold(rargs[i]), t))
+        else: c.exprs.Push(c.fit(vals[i]!, t, rargs[i].Span()))
     }
     rv := gather(c.exprs, rfrom)
     start := c.lit(sp, t, 0)
@@ -24074,11 +23955,8 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
             if c.bindsType(p) and cs.Alts.Len() > 1 { c.err(p.Span(), msgs.AnyCaseAlone()) }
             binds mut Vec<typed.Bind&>& = Vec<typed.Bind&>()
             tst typed.Expr?& = null
-            if c.caseName(p, subjLocal) {
-                tst = c.lit(p.Span(), types.BoolT, 1)
-            } else {
-                tst = c.pattern(p, place!, st, binds, id)
-            }
+            if c.caseName(p, subjLocal): tst = c.lit(p.Span(), types.BoolT, 1)
+            else: tst = c.pattern(p, place!, st, binds, id)
             c.altNames(binds, firstNames, ai, p)
             alts.Push(typed.Alt(tst!, binds.ToArray()))
             if cs.Guard is null { c.cover(p, et, covered, all) }

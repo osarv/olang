@@ -474,9 +474,7 @@ fn (it mut Iter<T>&) Fold<U ? E>(init U, f fn&(acc U, x T) U ? E) U ? E {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
-        for x in run {
-            acc = try f(acc, x)
-        }
+        for x in run: acc = try f(acc, x)
         it.i += run.Len()
         it.at += run.Len()
     }
@@ -489,9 +487,7 @@ fn (it mut Iter<T>&) Map<U ? E>(f fn&(x T) U ? E) mut Vec<U>& ? E {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
-        for x in run {
-            out.Push(try f(x))
-        }
+        for x in run: out.Push(try f(x))
         it.i += run.Len()
         it.at += run.Len()
     }
@@ -692,16 +688,12 @@ if TestBuild {
 
     test "pushes survive many chunk boundaries, in order" {
         l mut List<I64>& = List<I64>()
-        for i in range 1000 {
-            l.Push(I64(i) * 3)
-        }
+        for i in range 1000: l.Push(I64(i) * 3)
         l.Push(7) # a literal adapts to the list's own T (G9a)
         assert l.Len() == 1001
         a Array<I64>& = l.ToArray()
         assert a.Len() == 1001
-        for i in range 1000 {
-            assert a[i] == I64(i) * 3
-        }
+        for i in range 1000: assert a[i] == I64(i) * 3
         assert a[1000] == 7
     }
 
@@ -726,9 +718,7 @@ if TestBuild {
 
     test "a list of structs" {
         l mut List<listKV>& = List<listKV>()
-        for i in range I32(20) {
-            l.Push(listKV(i, i * i))
-        }
+        for i in range I32(20): l.Push(listKV(i, i * i))
         a Array<listKV>& = l.ToArray()
         assert a[19].v == 361
     }

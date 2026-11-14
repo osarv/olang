@@ -36,11 +36,8 @@ fn anyLineStartsWord(src String&, word String&) Bool {
 # the output of building path: stdout, then stderr, in a directory of its own
 fn build(olang String&, path String&, src String&) String {
     mode := "compile"
-    if anyLineStartsWord(src, "test") {
-        mode = "test"
-    } else if anyLineStartsWord(src, "fn main") {
-        mode = "build"
-    }
+    if anyLineStartsWord(src, "test"): mode = "test"
+    else if anyLineStartsWord(src, "fn main"): mode = "build"
     munged := StringBuilder()
     for c in path {
         munged.PushChar(c if srcmask.IsWord(c) else '_')

@@ -173,11 +173,8 @@ fn importOf(path String&, line String&, std String&) String, String {
     head := srcmask.Strip(line[7:q])
     alias := $head if head.Len() > 0 else $filepath.Base(mod)
     file := ""
-    if mod.StartsWith("std/") {
-        file = $std "/" $mod[4:] ".olang"
-    } else if not ("." in filepath.Base(mod) and "/" in mod) {
-        file = $filepath.Join(filepath.Dir(path), mod) ".olang"
-    }
+    if mod.StartsWith("std/"): file = $std "/" $mod[4:] ".olang"
+    else if not ("." in filepath.Base(mod) and "/" in mod): file = $filepath.Join(filepath.Dir(path), mod) ".olang"
     if file.Len() == 0 or not os.Exists(file) { return "", "" }
     return alias, file
 }

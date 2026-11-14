@@ -418,9 +418,7 @@ fn migrate(src String&, path String&, known Map<String&, Bool>&, report mut Vec<
     edits Vec<Edit>
     reps Vec<String&>
     kinds, starts, ends := items(src, mask)
-    for k in range kinds.Len() {
-        rewriteItem(src, mask, kinds[k], starts[k], ends[k], known, edits, reps, report, path)
-    }
+    for k in range kinds.Len(): rewriteItem(src, mask, kinds[k], starts[k], ends[k], known, edits, reps, report, path)
     n := edits.Len()
     extra Vec<Edit>
     keepCommentColumns(src, mask, edits, reps, extra)

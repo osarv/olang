@@ -1439,11 +1439,8 @@ fn (m mut Machine&) addReg(s I64, kind I64, ty I64, p Ptr) {
 # registration slot taken off the list it is in (C9b)
 fn (m mut Machine&) unlinkReg(slot I64) {
     g := m.regs[slot]
-    if g.Prev >= 0 {
-        m.regs[g.Prev].Next = g.Next
-    } else if m.live(g.In) {
-        m.scopes[g.In & slotMask].Regs = g.Next
-    }
+    if g.Prev >= 0: m.regs[g.Prev].Next = g.Next
+    else if m.live(g.In): m.scopes[g.In & slotMask].Regs = g.Next
     if g.Next >= 0 { m.regs[g.Next].Prev = g.Prev }
 }
 
@@ -1507,11 +1504,8 @@ fn (m mut Machine&) stepClose() {
         m.scopes[sc].Regs = g.Next
         if g.Next >= 0 { m.regs[g.Next].Prev = -1 }
         m.freeRegs.Push(r)
-        if g.Kind == gDtor {
-            m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
-        } else if g.Kind == gGen {
-            m.closeGen(id, g.Ty)
-        }
+        if g.Kind == gDtor: m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
+        else if g.Kind == gGen: m.closeGen(id, g.Ty)
         return
     }
     c := m.scopes[sc].Child
@@ -1639,9 +1633,7 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
     }
     for i in range nl {
         id I64 = 0
-        if ls[i].Home == mir.ScopeRef.Frame {
-            id = m.allocate(m.size(ls[i].Ty), aValue, fr.Store).Id
-        }
+        if ls[i].Home == mir.ScopeRef.Frame: id = m.allocate(m.size(ls[i].Ty), aValue, fr.Store).Id
         m.ws[m.nWs + i] = id
     }
     for i in range nl, need - m.nWs { m.ws[m.nWs + i] = 0 }
@@ -2462,11 +2454,8 @@ fn (m mut Machine&) convertArray(fi I64, dst Ptr, x mir.Operand, to types.TypeId
     data, n := m.arrayView(p, from)
     if m.halted { return }
     if fixedTo {
-        if t.IsRef(t.Repr(to)) {
-            m.wrPtr(dst, data)
-        } else {
-            m.copy(dst, data, m.size(ga))
-        }
+        if t.IsRef(t.Repr(to)): m.wrPtr(dst, data)
+        else: m.copy(dst, data, m.size(ga))
         return
     }
     m.wr(dst, 8, n)
@@ -3068,9 +3057,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
     }
     sh := m.shape(at)
     a := m.scalar(fi, x)
-    if op == typed.PrimOp.Neg or op == typed.PrimOp.BitNot or op == typed.PrimOp.Not {
-        return m.unary(op, a, at, sh)
-    }
+    if op == typed.PrimOp.Neg or op == typed.PrimOp.BitNot or op == typed.PrimOp.Not: return m.unary(op, a, at, sh)
     yt := m.opType(fi, m.arg(fi, args, 1))
     b := m.scalar(fi, m.arg(fi, args, 1))
     if m.halted { return 0 }
@@ -3203,13 +3190,9 @@ fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt typ
                 m.refuse(WhyShift)
                 return 0
             }
-            if op == typed.PrimOp.Shl {
-                r = x << n
-            } else if signed {
-                r = x >> n
-            } else {
-                r = I64(ux >> U64(n))
-            }
+            if op == typed.PrimOp.Shl: r = x << n
+            else if signed: r = x >> n
+            else: r = I64(ux >> U64(n))
         }
         case typed.PrimOp.BitAnd { r = x & y }
         case typed.PrimOp.BitOr { r = x | y }
@@ -3922,11 +3905,8 @@ fn (m mut Machine&) overflowsWide(fi I64, op typed.PrimOp, ty types.TypeId, args
 
 # an integer result of ty written at dst: wide as two words, narrow as its width's bytes
 fn (m mut Machine&) putInt(dst Ptr, ty types.TypeId, lo I64, hi I64) {
-    if m.shape(ty) == vWide {
-        m.wrWide(dst, ty, lo, hi)
-    } else {
-        m.wr(dst, m.width(ty), lo & bmask(m.ibits(ty)))
-    }
+    if m.shape(ty) == vWide: m.wrWide(dst, ty, lo, hi)
+    else: m.wr(dst, m.width(ty), lo & bmask(m.ibits(ty)))
 }
 
 # a float's value, truncated toward zero, as a 128-bit integer (it fits: floatFits said so)
@@ -5239,9 +5219,7 @@ fn (m mut Machine&) failedHere(fi I64, kind I64) {
 # error raised here, the trace started again
 fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
     kind := m.fs[fi].ErrKind
-    if kind < 0 or m.fs[fi].ErrAt != sp.Start {
-        kind = tRaised
-    }
+    if kind < 0 or m.fs[fi].ErrAt != sp.Start: kind = tRaised
     # raised here, or a join's failure: the trace starts again, with its own line (as the built program's does)
     if kind != tCall {
         m.trace.Clear()
@@ -5568,11 +5546,8 @@ fn (m mut Machine&) taskEnded(fr frame) {
                 case _ { }
             }
         }
-        if name == mir.Operand.None {
-            m.stop(Stop.Exited(mir.ExitKind.Error, f.File, k.EndsSp, "unhandled error"))
-        } else {
-            m.exit(waiter, f.File, k.EndsSp, mir.ExitKind.Error, name)
-        }
+        if name == mir.Operand.None: m.stop(Stop.Exited(mir.ExitKind.Error, f.File, k.EndsSp, "unhandled error"))
+        else: m.exit(waiter, f.File, k.EndsSp, mir.ExitKind.Error, name)
         return
     }
     # no clause: kept for the join, re-encoded under its list, where the join holding none from an earlier task
@@ -5623,11 +5598,8 @@ fn (m mut Machine&) loop(base I64) {
         i := m.cf[k].Start[b] + m.fs[fi].Stmt
         if m.fs[fi].Pending {
             m.fs[fi].Pending = false
-            if i < m.cf[k].Start[b + 1] {
-                m.fs[fi].Stmt += 1
-            } else {
-                m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
-            }
+            if i < m.cf[k].Start[b + 1]: m.fs[fi].Stmt += 1
+            else: m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
             continue
         }
         end := m.cf[k].Start[b + 1]
@@ -5648,11 +5620,8 @@ fn (m mut Machine&) loop(base I64) {
             }
             continue
         }
-        if i < end {
-            m.stmtAt(fi, k, i)
-        } else {
-            m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
-        }
+        if i < end: m.stmtAt(fi, k, i)
+        else: m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
     }
 }
 
@@ -6848,11 +6817,8 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
         assert s.Text(src) == "a.olang:2: assertion failed: boom", s.Text(src)
         assert m.Eval(tkey(2), Array<I64>[]).Text(src) == "a.olang:1: unreachable reached"
         ended := m.Eval(tkey(3), Array<I64>[])
-        if mode == Mode.Compile {
-            assert ended == Stop.Refused(WhyEnds, 0, Sp0)
-        } else {
-            assert ended == Stop.Exited(mir.ExitKind.Done, 0, Sp0, "") and ended.Text(src) == ""
-        }
+        if mode == Mode.Compile: assert ended == Stop.Refused(WhyEnds, 0, Sp0)
+        else: assert ended == Stop.Exited(mir.ExitKind.Done, 0, Sp0, "") and ended.Text(src) == ""
     }
 }
 

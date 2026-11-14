@@ -141,9 +141,7 @@ test "a Hasher fed in pieces gives the digest of the whole" {
     big := Array<U8>(1000000, 'a')
     assert hex.Encode(Sum(big)) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
     h := Hasher()
-    for n in Array<I64>[1, 63, 64, 65, 7, 128, 200] {
-        h.Push(big[:n])
-    }
+    for n in Array<I64>[1, 63, 64, 65, 7, 128, 200]: h.Push(big[:n])
     whole := Sum(big[:1 + 63 + 64 + 65 + 7 + 128 + 200])
     assert h.Sum() == whole and h.Sum() == whole
 }

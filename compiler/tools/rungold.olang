@@ -34,9 +34,7 @@ fn main() {
     try os.MkDirAll(work) catch os.Error { toolkit.Die("rungold: cannot make " $work) }
     cases := RunCases().ToArray()
     join {
-        for w in range Workers {
-            spawn capture(olang, work, cases, w)
-        }
+        for w in range Workers: spawn capture(olang, work, cases, w)
     }
     unstable I64 = 0
     for f in cases {

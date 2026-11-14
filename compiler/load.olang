@@ -206,9 +206,7 @@ fn typeNames(text String&, ts scan.Tokens&) Vec<String&>& {
     for i in range toks.Len() - 2 {
         k := toks[i].Kind
         if toks[i + 1].Kind != token.Tok.Iden { continue }
-        if k == token.Tok.Type {
-            out.Push(text[toks[i + 1].Start:toks[i + 1].End])
-        }
+        if k == token.Tok.Type: out.Push(text[toks[i + 1].Start:toks[i + 1].End])
     }
     return out
 }
@@ -605,21 +603,15 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
         }
     } else {
         rel := moduleDir(m.Path)
-        if spec.StartsWith("/") or rel == "." {
-            path = $Normalize($spec ".olang")
-        } else {
-            path = $Normalize($rel "/" $spec ".olang")
-        }
+        if spec.StartsWith("/") or rel == ".": path = $Normalize($spec ".olang")
+        else: path = $Normalize($rel "/" $spec ".olang")
         identity = $filepath.Base(spec) if spec.StartsWith("/") else $relativeIdentity(m.Identity, spec)
         # inside std or a remote repository, a relative import stays inside it
         root := ""
         fromFirst := m.Identity[:(try m.Identity.FindByte('/') catch default m.Identity.Len())]
         remote := fromFirst.Contains(".") and fromFirst != "." and fromFirst != ".."
-        if m.Identity.StartsWith("std/") {
-            root = "std"
-        } else if remote and m.Identity.Contains("/") {
-            root = $firstElems(m.Identity, 3)
-        }
+        if m.Identity.StartsWith("std/"): root = "std"
+        else if remote and m.Identity.Contains("/"): root = $firstElems(m.Identity, 3)
         if root != "" and not identity.StartsWith($root "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
             error unresolved.Import
@@ -684,11 +676,8 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     if text == "" {
         tr := bindgen.Translation.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
         if tr.Why != "" {
-            if tr.NotFound {
-                l.Diags.Error(at, msgs.CHeaderNotFound(spec))
-            } else {
-                l.Diags.Error(at, msgs.CImportFailed(spec, tr.Why))
-            }
+            if tr.NotFound: l.Diags.Error(at, msgs.CHeaderNotFound(spec))
+            else: l.Diags.Error(at, msgs.CImportFailed(spec, tr.Why))
             return -1
         }
         deps := StringBuilder()
@@ -780,20 +769,14 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
     if spec.Len() >= 4096 { return none, "a path of 4096 characters or more" }
     rel := moduleDir(m.Path)
     path := ""
-    if spec.StartsWith("/") or rel == "." {
-        path = $Normalize(spec)
-    } else {
-        path = $Normalize($rel "/" $spec)
-    }
+    if spec.StartsWith("/") or rel == ".": path = $Normalize(spec)
+    else: path = $Normalize($rel "/" $spec)
     # inside std or a remote repository, an embedded file stays inside it, as a relative import does
     fromFirst := m.Identity[:(try m.Identity.FindByte('/') catch default m.Identity.Len())]
     remote := fromFirst.Contains(".") and fromFirst != "." and fromFirst != ".."
     root := ""
-    if m.Identity.StartsWith("std/") {
-        root = "std"
-    } else if remote and m.Identity.Contains("/") {
-        root = $firstElems(m.Identity, 3)
-    }
+    if m.Identity.StartsWith("std/"): root = "std"
+    else if remote and m.Identity.Contains("/"): root = $firstElems(m.Identity, 3)
     if root != "" and (spec.StartsWith("/") or not relativeIdentity(m.Identity, spec).StartsWith($root "/")) {
         return none, $"it leaves " $root
     }
@@ -915,11 +898,8 @@ fn (l mut Loader&) checkReach() {
             if imp.Target < 0 { continue }
             l.closure(imp.Target)
             for r in l.Mods[imp.Target].public {
-                if r in seen {
-                    l.Diags.Error(l.at(m, imp.AliasSp), msgs.ImportReachedTwice(msgs.Tok(imp.Alias)))
-                } else {
-                    seen.Push(r)
-                }
+                if r in seen: l.Diags.Error(l.at(m, imp.AliasSp), msgs.ImportReachedTwice(msgs.Tok(imp.Alias)))
+                else: seen.Push(r)
             }
         }
     }

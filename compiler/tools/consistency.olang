@@ -272,9 +272,7 @@ fn CommandLine.commandLine(compiler String&) CommandLine {
     for m in c.Modes { names.Push(m) }
     names.Push("run")
     for m in names {
-        for o in optionsOf(toolkit.Run(Array<String&>[compiler, "help", m]).Stdout) {
-            addOption(c, o, specMode(m))
-        }
+        for o in optionsOf(toolkit.Run(Array<String&>[compiler, "help", m]).Stdout): addOption(c, o, specMode(m))
     }
     return c
 }

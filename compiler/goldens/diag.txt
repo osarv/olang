@@ -743,8 +743,8 @@ compilation failed with 1 error
 d13czeroref.olang:19:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
    19 |     b := a.Repeat(2)
       |            ^~~~~~
-$ROOT/std/prelude/array.olang:182:12: note: in the standard library's code, here
-  182 |     out := Array<T>(a.Len() * k)
+$ROOT/std/prelude/array.olang:178:12: note: in the standard library's code, here
+  178 |     out := Array<T>(a.Len() * k)
       |            ^~~~~~~~~~~~~~~~~~~~~
 d13czeroref.olang:11:5: note: here
    11 |     Counter++
@@ -3409,11 +3409,11 @@ compilation failed with 1 error
 orderarrayfield.olang:12:22: error[S18c]: this assertion is false, evaluated while compiling: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
    12 |     assert not order.ByFields<Row>(a, b)
       |                      ^~~~~~~~
-$ROOT/std/order.olang:89:12: note: in the standard library's code, here
-   89 |     assert false, "field " $f.Name " (" $V.Name ") has no order - ByFields compares nu...
+$ROOT/std/order.olang:86:12: note: in the standard library's code, here
+   86 |     assert false, "field " $f.Name " (" $V.Name ") has no order - ByFields compares nu...
       |            ^~~~~
-$ROOT/std/order.olang:81:17: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
-   81 |         case _: nested<F, R>(f, x, y)
+$ROOT/std/order.olang:78:17: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
+   78 |         case _: nested<F, R>(f, x, y)
       |                 ^~~~~~~~~~~~
 compilation failed with 1 error
 === ordernotstruct.olang

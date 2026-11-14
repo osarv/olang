@@ -599,17 +599,11 @@ fn (q mut parser&) group() I64 ? SyntaxError {
                 c := q.peek()
                 q.at++
                 if c == ':' { break }
-                if c == '-' {
-                    on = false
-                } else if c == 'i' {
-                    q.fold = on
-                } else if c == 'm' {
-                    q.multi = on
-                } else if c == 's' {
-                    q.dotAll = on
-                } else {
-                    error SyntaxError.BadFlag(q.at)
-                }
+                if c == '-': on = false
+                else if c == 'i': q.fold = on
+                else if c == 'm': q.multi = on
+                else if c == 's': q.dotAll = on
+                else: error SyntaxError.BadFlag(q.at)
             }
         }
     } else {
@@ -929,13 +923,9 @@ fn (m mut machine&) run(from I64, found Bool) Bool {
             }
             if r < 0 { continue }
             ok := false
-            if op == opChar {
-                ok = code[4 * pc + 1] == r
-            } else if op == opClass {
-                ok = p.inClass(pc, r)
-            } else if op == opAny {
-                ok = r != '\n' or code[4 * pc + 2] == 1
-            }
+            if op == opChar: ok = code[4 * pc + 1] == r
+            else if op == opClass: ok = p.inClass(pc, r)
+            else if op == opAny: ok = r != '\n' or code[4 * pc + 2] == 1
             if ok {
                 for k in range m.ncap { m.work[k] = m.clist.caps[j * m.ncap + k] }
                 m.add(m.nlist, pc + 1, i + w)

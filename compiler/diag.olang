@@ -733,13 +733,9 @@ fn (d Diagnostics&) errorWord(rule String&) String {
 # one row - "path:line:col: error[RULE]: text" or "...: note: text" - and the source under it
 fn (d mut Diagnostics&) putRow(b mut StringBuilder&, at Where, word String&, rule String&, text String&) {
     d.putLocation(b, at)
-    if word == "error" {
-        b.Push(d.errorWord(rule))
-    } else if word == "warning" {
-        b.Push($d.sgr("1;35") "warning[" $rule "]:" $d.sgr("0") " ")
-    } else {
-        b.Push($d.sgr("1;36") "note:" $d.sgr("0") " ")
-    }
+    if word == "error": b.Push(d.errorWord(rule))
+    else if word == "warning": b.Push($d.sgr("1;35") "warning[" $rule "]:" $d.sgr("0") " ")
+    else: b.Push($d.sgr("1;36") "note:" $d.sgr("0") " ")
     b.Push(text)
     b.PushChar('\n')
     d.putExcerpt(b, at)

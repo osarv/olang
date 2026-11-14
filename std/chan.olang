@@ -126,14 +126,10 @@ fn withdraw<T>(c mut Chan<T>&) {
 # taken. A condition variable may wake spuriously, so each wait is in a loop re-reading the count under the lock.
 fn Send<T>(c mut Chan<T>&, v T) ? Error {
     pthread.pthread_mutex_lock(c.lock)
-    for c.count == c.size and not c.closed {
-        pthread.pthread_cond_wait(c.notFull, c.lock)
-    }
+    for c.count == c.size and not c.closed: pthread.pthread_cond_wait(c.notFull, c.lock)
     try sendOpen(c)
     ticket := place(c, v)
-    for c.rendezvous and c.taken <= ticket and not c.closed {
-        pthread.pthread_cond_wait(c.notFull, c.lock)
-    }
+    for c.rendezvous and c.taken <= ticket and not c.closed: pthread.pthread_cond_wait(c.notFull, c.lock)
     if c.rendezvous and c.taken <= ticket {
         withdraw(c)
         try sendOpen(c)
@@ -146,9 +142,7 @@ fn Send<T>(c mut Chan<T>&, v T) ? Error {
 fn Recv<T>(c mut Chan<T>&) T ? Error {
     pthread.pthread_mutex_lock(c.lock)
     c.waiting++
-    for c.count == 0 and not c.closed {
-        pthread.pthread_cond_wait(c.notEmpty, c.lock)
-    }
+    for c.count == 0 and not c.closed: pthread.pthread_cond_wait(c.notEmpty, c.lock)
     c.waiting--
     if c.count == 0 {
         pthread.pthread_mutex_unlock(c.lock)
@@ -232,9 +226,7 @@ fn produce(c mut Chan<I32>&, n I32) {
 }
 
 fn consume(c mut Chan<I32>&, n I32, total mut sumBox&) {
-    for _ in range n {
-        total.v = total.v + (Recv(c)!)
-    }
+    for _ in range n: total.v = total.v + (Recv(c)!)
 }
 
 type sumBox struct(start I32) {
@@ -538,9 +530,7 @@ fn (s mut SendOf<T>&) TryNow() Sent ? Error, Exhausted {
         error Exhausted.End
     }
     ticket := place(c, s.v)
-    for c.rendezvous and c.taken <= ticket and not c.closed {
-        pthread.pthread_cond_wait(c.notFull, c.lock)
-    }
+    for c.rendezvous and c.taken <= ticket and not c.closed: pthread.pthread_cond_wait(c.notFull, c.lock)
     if c.rendezvous and c.taken <= ticket {
         withdraw(c)
         try sendOpen(c)

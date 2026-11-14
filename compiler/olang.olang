@@ -471,9 +471,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Explain and cl.Caps { return session.CapsMode(cl.Files[0], c) }
     if cl.Mode == Explain and cl.Listing != "" { return listing.Run(fe, c, cl.Files[0], cl.Word, cl.Listing == "-ir", d) }
     if cl.Mode == Explain {
-        if cl.Files.Len() == 1 {
-            return build.Explain(fe, c, cl.Files[0], cl.Word, d)
-        }
+        if cl.Files.Len() == 1: return build.Explain(fe, c, cl.Files[0], cl.Word, d)
         text := try explainRule(cl.Word, d) catch Bad { return said(d) }
         return write(text)
     }
@@ -1243,11 +1241,8 @@ fn retarget(ir String&, attrs String&) String {
             rest = $rest[:k] $rest[k + key.Len() + e + 1:]
         }
         close := try rest.FindLast("}") catch default -1
-        if close < 0 {
-            b.Push(line)
-        } else {
-            b.Push($rest[:close] $attrs " " $rest[close:])
-        }
+        if close < 0: b.Push(line)
+        else: b.Push($rest[:close] $attrs " " $rest[close:])
         b.PushChar('\n')
     }
     return b.ToString()

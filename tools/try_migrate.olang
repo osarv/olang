@@ -170,13 +170,9 @@ fn trailing(src String&, mask String&, br String&, e I64) Vec<I64> ? Unreadable 
         precs.Push(srcmask.Prec(op))
         for {
             j = srcmask.SkipGap(src, mask, br, j)
-            if j < src.Len() and (src[j] == '-' or src[j] == '~' or src[j] == '$') {
-                j++
-            } else if wordAt(src, mask, j, "not") or wordAt(src, mask, j, "try") {
-                j += 3
-            } else {
-                break
-            }
+            if j < src.Len() and (src[j] == '-' or src[j] == '~' or src[j] == '$'): j++
+            else if wordAt(src, mask, j, "not") or wordAt(src, mask, j, "try"): j += 3
+            else: break
         }
         k := postfixEnd(src, mask, j)
         if k == j { error Unreadable }
@@ -374,15 +370,10 @@ fn main() ? {
     args := os.Args()
     for k in range 1, args.Len() {
         a := args[k]
-        if a == "--old" {
-            old = true
-        } else if a == "--check" {
-            check = true
-        } else if a == "-v" {
-            verbose = true
-        } else {
-            paths.Push($a)
-        }
+        if a == "--old": old = true
+        else if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
     }
     if paths.Len() == 0 {
         srcmask.SayErr("usage: tools_try_migrate [--old] [--check] [-v] FILE|DIR...")

@@ -5245,11 +5245,8 @@ fn (v mut Versions&) stmt(s Stmt&) {
         case Stmt.Spawn(_, sw) {
             for tg in sw.Targets {
                 if tg is null: continue
-                if tg != Lvalue.Local {
-                    v.place(tg)
-                } else if v.counting and I64(tg.id) < v.Cursor.Len() {
-                    v.Cursor[I64(tg.id)] = false
-                }
+                if tg != Lvalue.Local: v.place(tg)
+                else if v.counting and I64(tg.id) < v.Cursor.Len(): v.Cursor[I64(tg.id)] = false
             }
             v.expr(sw.Task)
             for c in sw.Clauses { v.expr(c.Handler) }

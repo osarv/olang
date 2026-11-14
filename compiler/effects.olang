@@ -1323,11 +1323,8 @@ fn (e mut Effects&) finish() {
 # does here
 fn (e mut Effects&) resolve(p pend&) {
     e.parts.Clear()
-    if p.Path.Len() > 0 {
-        e.classifyInst(p.X, p.Path, e.slotType(e.curCalls[p.Site], p.At), 0)
-    } else {
-        e.classify(p.X, 0)
-    }
+    if p.Path.Len() > 0: e.classifyInst(p.X, p.Path, e.slotType(e.curCalls[p.Site], p.At), 0)
+    else: e.classify(p.X, 0)
     was := e.whyNow() if e.whyWord != 0 else true
     for pt in e.parts {
         k := pt.Kind
@@ -1365,11 +1362,8 @@ fn (e mut Effects&) classify(x typed.Expr?&, depth I64) {
     match x {
         case typed.Expr.Away(_, _, y) { e.classify(y, depth + 1) }
         case typed.Expr.Prim(_, _, op, _, args) {
-            if op == typed.PrimOp.Convert and args.Len() == 1 and e.isFn(args[0].Type()) {
-                e.classify(args[0], depth + 1)
-            } else {
-                e.parts.Push(part(GivBound, 0, x.Type(), null))
-            }
+            if op == typed.PrimOp.Convert and args.Len() == 1 and e.isFn(args[0].Type()): e.classify(args[0], depth + 1)
+            else: e.parts.Push(part(GivBound, 0, x.Type(), null))
         }
         case typed.Expr.Cond(_, _, cd) {
             if cd.A is null { e.parts.Push(part(GivBound, 0, x.Type(), null)) } else { e.classify(cd.A!, depth + 1) }

@@ -145,9 +145,7 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
             if k == 1 { return w.block(i.Then, s1) }
             if k == 0 { return w.block(i.Else, s1) }
             a := w.block(i.Then, s1)
-            if i.Else is null {
-                return meet(a, retag(s1, s1, a, Cause.NoElse, sp))
-            }
+            if i.Else is null: return meet(a, retag(s1, s1, a, Cause.NoElse, sp))
             b := w.block(i.Else, s1)
             return meet(retag(a, s1, b, Cause.Branch, w.blockSp(i.Then)), retag(b, s1, a, Cause.Branch, w.blockSp(i.Else!)))
         }

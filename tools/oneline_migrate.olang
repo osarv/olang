@@ -61,12 +61,12 @@ fn simple(s String&) Bool {
     for k in Array<String&>["if", "for", "do", "match", "join", "defer", "errdefer", "become", "yield", "mut", "case", "test", "destruct", "else", "type", "import", "export", "extern", "unique", "immut"] {
         if w == k: return false
     }
-    # a declaration: names, then a type starting with a capital, `fn` or `?` after the first word
+    # a declaration: a word followed by a name or type; only the statement keywords take a word after them
     rest := s[w.Len():]
-    if w.Len() > 0 and rest.Len() > 1 and rest[0] == ' ' {
-        c := rest[1]
-        if c.IsUpper() or c == '?' or rest.StartsWith(" fn"): return false
-        if c == ',' : return false
+    if w == "fn": return false
+    if rest.Len() > 1 and rest[0] == ' ' and (srcmask.IsIdStart(rest[1]) or rest[1] == '?' or rest[1] == ',') {
+        ok := w == "return" or w == "error" or w == "assert" or w == "spawn" or w == "unreachable"
+        if not ok: return false
     }
     if w.Len() > 0 and rest.StartsWith(","): return false
     return true
@@ -109,6 +109,7 @@ fn rewrite(src String&, c mut Count&) String {
 fn chain(lines Array<String&>&, i I64, out mut Vec<String&>&) I64 {
     line := lines[i]
     ind := indentOf(line)
+    if ind == 0: return 0
     t := line[ind:]
     pad := line[:ind]
     isFor := t.StartsWith("for ")

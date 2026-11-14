@@ -62,13 +62,9 @@ fn main() {
         toolkit.Say(r.Row)
         tests += r.Tests
         testsSame += r.Same
-        if r.Broken {
-            broken++
-        } else if r.Equal {
-            same++
-        } else {
-            differ++
-        }
+        if r.Broken: broken++
+        else if r.Equal: same++
+        else: differ++
         try os.RemoveAll(sub) catch os.Error { }
     }
     toolkit.Say(("== total: files " $files.Len() " same " $same " differ " $differ " broken " $broken "; tests " $tests
@@ -200,11 +196,8 @@ fn firstLine(t String&) String {
 fn outcomes(rows Vec<String&>&) Map<String&, String&> {
     m Map<String&, String&>
     for row in rows {
-        if row.StartsWith("ok - ") {
-            m.Put($row[5:], "ok")
-        } else if row.StartsWith("FAIL - ") {
-            m.Put(toolkit.TestName(row[7:]), "FAIL")
-        }
+        if row.StartsWith("ok - "): m.Put($row[5:], "ok")
+        else if row.StartsWith("FAIL - "): m.Put(toolkit.TestName(row[7:]), "FAIL")
     }
     return m
 }

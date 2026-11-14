@@ -31,11 +31,8 @@ fn DiNode.diFind(k I64) DiNode& ? DiErr {
 # a reference never null, assigned in both branches
 fn diPick(c Bool) I64 {
     n DiNode&
-    if c {
-        n = DiNode(1)
-    } else {
-        n = DiNode(2)
-    }
+    if c: n = DiNode(1)
+    else: n = DiNode(2)
     return n.v
 }
 
@@ -55,24 +52,17 @@ fn diTried(k I64) I64 {
     n DiNode&
     n = try DiNode.diFind(k) catch DiErr { return -1 }
     m DiNode&
-    if k > 10 {
-        m = DiNode(10)
-    } else if k > 5 {
-        m = DiNode(5)
-    } else {
-        m = DiNode(0)
-    }
+    if k > 10: m = DiNode(10)
+    else if k > 5: m = DiNode(5)
+    else: m = DiNode(0)
     return n.v + m.v
 }
 
 # an effectful constructor's value assigned on every path: no zero made, so the constructor runs once a call
 fn diEff(c Bool) I64 {
     e DiEff
-    if c {
-        e = DiEff(7)
-    } else {
-        e = DiEff(8)
-    }
+    if c: e = DiEff(7)
+    else: e = DiEff(8)
     return e.v
 }
 
@@ -88,11 +78,8 @@ fn diZero(c Bool) I64 {
 type DiPair struct(big Bool) {
     big
     n DiNode&
-    if big {
-        n = DiNode(100)
-    } else {
-        n = DiNode(1)
-    }
+    if big: n = DiNode(100)
+    else: n = DiNode(1)
 }
 
 # a comprehension of a count known while compiling is a fixed array (T7c); one over a run-time range is exact
@@ -100,9 +87,7 @@ fn diSquares(n I64) Array<I64> { return Array<I64>[i * i for i in range n] }
 
 fn diFill(n I64) Array<F32> {
     a := Array<F32>(n)
-    for i in range n {
-        a[i] = F32(i) * 0.5
-    }
+    for i in range n: a[i] = F32(i) * 0.5
     return a
 }
 
@@ -263,11 +248,8 @@ test "definitely assigned references read back after the arena churns (D13d, O2)
     kept := Vec<DiNode&>()
     for i in range 200 {
         n DiNode&
-        if i % 2 == 0 {
-            n = DiNode(i)
-        } else {
-            n = DiNode(-i)
-        }
+        if i % 2 == 0: n = DiNode(i)
+        else: n = DiNode(-i)
         kept.Push(n)
         junk := Array<I64>(64, i)
         assert junk[0] == i

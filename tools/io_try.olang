@@ -66,11 +66,8 @@ fn main() ? {
     for i in range 1, args.Len() {
         root := args[i]
         info := try os.FileInfo.Stat(root) catch { continue }
-        if info.Kind == os.FileKind.FILE {
-            files.Push($root)
-        } else if info.Kind == os.FileKind.DIR and not inBuildOrGit(root) {
-            srcmask.Walk(root, files)
-        }
+        if info.Kind == os.FileKind.FILE: files.Push($root)
+        else if info.Kind == os.FileKind.DIR and not inBuildOrGit(root): srcmask.Walk(root, files)
     }
     total I64 = 0
     for p in files {

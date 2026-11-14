@@ -22,9 +22,7 @@ fn fannkuch(n I64) I64, I32 {
         flips I32 = 0
         for perm[0] != 0 {
             k := perm[0]
-            for i in range (k + 1) >> 1 {
-                perm[i], perm[k - i] = perm[k - i], perm[i]
-            }
+            for i in range (k + 1) >> 1: perm[i], perm[k - i] = perm[k - i], perm[i]
             flips++
         }
         if flips > maxFlips { maxFlips = flips }

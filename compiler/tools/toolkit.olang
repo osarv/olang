@@ -308,9 +308,7 @@ fn GoldenWrite(path String&, text String&) {
 # FNV-1a over a text's bytes, 64 bits, as 16 hex digits - what a golden stores of a dump too large to keep
 fn Hash(t String&) String {
     h U64 = 0xcbf29ce484222325
-    for c in t {
-        h = (h ^ U64(U8(c))) * 0x100000001b3
-    }
+    for c in t: h = (h ^ U64(U8(c))) * 0x100000001b3
     return h.Format(16).PadStart(16, '0')
 }
 

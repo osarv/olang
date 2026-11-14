@@ -59,11 +59,8 @@ type Lesser<T> trait { Less(o T&) Bool }
 
 # x before y, both the value of the field f
 fn lessThan<F, V>(f F, x V, y V) Bool {
-    if V.Kind == TypeKind.Reference {
-        return lessRef<F, V.Target>(f, x, y)
-    } else {
-        return lessVal(f, x, y)
-    }
+    if V.Kind == TypeKind.Reference: return lessRef<F, V.Target>(f, x, y)
+    else: return lessVal(f, x, y)
 }
 
 fn lessVal<F, V>(f F, x V, y V) Bool {

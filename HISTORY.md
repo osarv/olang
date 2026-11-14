@@ -36852,3 +36852,5 @@ prelude name, so std/io's four became `io.Put`, `io.PutLine`, `io.PutErr`, `io.P
 io.Error`). The coordinator named `Write`/`WriteLine`, but `io.Write(fd, data)` is the raw write and an overload by
 parameters is not allowed (M21), so `Put` it is. `tools/io_rename.olang` (in `olang fix`'s table) migrated every use in the
 tree - 774 files; the old migration tools io_print, io_try and io_fix and their fixture keep the old names, being the record.
+
+- 2026-11-14, S1b migration: tools/oneline_migrate.olang rewrote 320 one-statement blocks (if/else/for) in 82 files of compiler/, std/, tests/, tools/, bench/ to the one-line form; formatter keeps it, goldens recaptured, verify green but diaggold (line numbers, recaptured).

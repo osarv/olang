@@ -362,11 +362,8 @@ fn (lw mut Lowerer&) anyRender(ti I64, top Bool) mir.Fn {
     ln.rdepth = mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(1)))
     place := ln.at(mir.LocalId(0))
     if tab.Stored != tab.Concrete { place = ln.with(place, mir.Proj.Field(0)) }
-    if top {
-        ln.render(mir.ScopeRef.Var(0), mir.Operand.Copy(ln.mk(place)), tab.Concrete, sp)
-    } else {
-        ln.inner(place, tab.Concrete, mir.ScopeRef.Var(0), sp)
-    }
+    if top: ln.render(mir.ScopeRef.Var(0), mir.Operand.Copy(ln.mk(place)), tab.Concrete, sp)
+    else: ln.inner(place, tab.Concrete, mir.ScopeRef.Var(0), sp)
     ln.epilogue(mir.Operand.None)
     lw.Gapped = ln.gapped
     return ln.F
@@ -1007,13 +1004,9 @@ fn (ln mut lowering&) splitParts(p pl, ty types.TypeId, path Array<I64>&, depth 
     fs := ln.partsOf(ty)
     for i in range fs.Len() {
         q := ln.with(p, mir.Proj.Field(i))
-        if i != path[depth] {
-            ln.copyPart(q, fs[i], rest, sp)
-        } else if depth + 1 == path.Len() {
-            ln.copyPart(q, fs[i], at, sp)
-        } else {
-            ln.splitParts(q, fs[i], path, depth + 1, at, rest, sp)
-        }
+        if i != path[depth]: ln.copyPart(q, fs[i], rest, sp)
+        else if depth + 1 == path.Len(): ln.copyPart(q, fs[i], at, sp)
+        else: ln.splitParts(q, fs[i], path, depth + 1, at, rest, sp)
     }
 }
 
@@ -2669,11 +2662,8 @@ fn (ln mut lowering&) liveBlock(lv mut liveness&, bi I64) I64 {
 fn (ln mut lowering&) mentions(lv mut liveness&, bi I64, i I64) {
     lv.uses.Clear()
     lv.defs.Clear()
-    if i < 0 {
-        ln.F.TermMentions(ln.F.Blocks[bi].T, lv.uses, lv.defs)
-    } else if not ln.ownRelease(ln.F.Blocks[bi].Stmts.At(i)) {
-        ln.F.Mentions(ln.F.Blocks[bi].Stmts.At(i), lv.uses, lv.defs)
-    }
+    if i < 0: ln.F.TermMentions(ln.F.Blocks[bi].T, lv.uses, lv.defs)
+    else if not ln.ownRelease(ln.F.Blocks[bi].Stmts.At(i)): ln.F.Mentions(ln.F.Blocks[bi].Stmts.At(i), lv.uses, lv.defs)
 }
 
 # whether s releases a region named by a part of a local's own bytes, through no reference (releaseAt's, of a value a
@@ -7425,9 +7415,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         return $m $ln.spell(t.Referent(ty), true, item) $("?&" if (t.PermOf(ty) & types.Nullable) != 0 else "&")
     }
     if k == types.Kind.Any { return "any " $ln.spell(t.AnyTrait(ty), true, item) }
-    if k == types.Kind.Array {
-        return "Array<" $ln.spell(t.Elem(ty), true, true) ">"
-    }
+    if k == types.Kind.Array: return "Array<" $ln.spell(t.Elem(ty), true, true) ">"
     if k == types.Kind.Const { return $t.ConstValue(ty) }
     if k == types.Kind.ErrVal { return ln.L.ErrValSpelling(ty) }
     if k == types.Kind.Tuple {

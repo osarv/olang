@@ -37,9 +37,7 @@ fn main() {
     # each case in its own directory, four at a time
     all := cases.ToArray()
     join {
-        for w in range Workers {
-            spawn capture(olang, work, all, w)
-        }
+        for w in range Workers: spawn capture(olang, work, all, w)
     }
     gold := StringBuilder()
     for f in cases {

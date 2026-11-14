@@ -122,9 +122,7 @@ fn Pack(words mut Array<U64>&, at I64, bytes Array<U8>&) {
 
 # the bytes words hold from word "at" on, as Pack writes them, read back into "into" - one for each element it has room for
 fn Unpack(words Array<U64>&, at I64, into mut Array<U8>&) {
-    for i in range into.Len() {
-        into[i] = U8((words[at + i / 8] >> (U64(i % 8) * 8)) & 0xFF)
-    }
+    for i in range into.Len(): into[i] = U8((words[at + i / 8] >> (U64(i % 8) * 8)) & 0xFF)
 }
 
 # how many words "bytes" bytes fill
