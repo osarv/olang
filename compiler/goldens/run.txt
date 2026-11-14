@@ -2424,6 +2424,9 @@
 | status 0
 === run o13aloopreturnwrap.olang
 | status 0
+=== run o13readhelper.olang
+| status 0
+| Spot.Local(7)
 === run o14afn.olang
 | status 0
 === run o14bfoldshort.olang

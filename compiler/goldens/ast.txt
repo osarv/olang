@@ -846,6 +846,7 @@ cc996bb81119a5f3 0c5f1eadf3735e65 checks/cases/o13acopywrap.olang
 43ed6f1275c2eaf3 d6f79ee6c9186b65 checks/cases/o13afieldstorewrap.olang
 43157b32a72012be c358129dfcbb8abb checks/cases/o13aloopreturn.olang
 f39e691ce358ab5a e6b2c3953ce4ff19 checks/cases/o13aloopreturnwrap.olang
+2ce3f89c51a2ba31 cb385052101bec9a checks/cases/o13readhelper.olang
 2494e1c8cd68ede3 b7e37d82ddb82437 checks/cases/o14afn.olang
 7cdee1b81dbbedc9 31270cbe20640588 checks/cases/o14bfoldshort.olang
 0c7ccc045766d817 f6b3268a95bdd1a2 checks/cases/o14btypevar.olang
@@ -2256,7 +2257,7 @@ b0871112e9a77b06 3c9164b08b7f7f09 compiler/parse.olang
 7d008be6f43ea4f1 22add2d19219919f compiler/records.olang
 8de75a921a6f99fa ee620dcd8a310b9a compiler/runtime.olang
 0e1c45ced68b083c 9fd198d245d4c110 compiler/scan.olang
-c5d3c03ce40d2d65 855702ffcbc93316 compiler/scope.olang
+fce15ed92df8e549 408b379e65fd5d73 compiler/scope.olang
 ab957133256e366f 19b51c82fe3ac2b2 compiler/session.olang
 a846754911a07a9e 65d90941d2eb0321 compiler/source.olang
 dc92112e41e19da5 686ccb031c2df0f0 compiler/target.olang
@@ -2301,7 +2302,7 @@ b92384ba4792c47b 7caedc74b4ebdd7e compiler/tools/seed.olang
 52e15dbd829ade33 e15d46d4420cf857 compiler/typed.olang
 805793b7d21e6e4d a13fe685dba94444 compiler/types.olang
 d106e9bf2be8c498 2fe842cda5f53e6d compiler/unparse.olang
-a9d9439dbfc8b76f 0022e6a1ce8497e3 compiler/views.olang
+0d28e58add055945 11c929ab7746ed95 compiler/views.olang
 6035ec301bd29104 3959eb706e94c185 docs/genrefs/dlist.olang
 bc2589f6e942648a 3ac0cce1f6b68c00 docs/genrefs/lru.olang
 d34fa4513f30281f 79ed3bea38711f1a docs/genrefs/peak.olang
