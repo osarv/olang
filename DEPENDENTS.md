@@ -140,6 +140,11 @@ intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method 
 `Println`, M19d) is reached bare by M6 alone: `compiler/names.olang` reserves every exported prelude name (D3a) and the
 language server's completion (`session.olang` `moduleNames`) lists it with the other exports.
 
+A diagnostic is a headline row, then a `note:` row (its reason) and a `help:` row (what to write instead), both with no
+source of their own and the help after every note (B11: `diagmsg.Msg`'s `Note` and `Help`, `diag.olang` `pushOwn`/`Render`/
+`Items`); `compiler/lsp.olang` (relatedInformation, help as `help: ...`), `compiler/mcp.olang` (`notes`, `"kind":"help"`),
+`editors/nvim/compiler/olang.vim` (`help:` rows) and `compiler/tools/diaggold.olang` (reads them back) change with the rows.
+
 A diagnostic said as a warning under `interpret` (B3e: D3b, M5a) is named in `compiler/diag.olang` `Untidy`; the row
 `warning[RULE]` is B11's, and `editors/nvim/compiler/olang.vim`'s errorformat reads it.
 

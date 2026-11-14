@@ -2,7 +2,9 @@
 #
 # A function takes what its message names, typed, and returns a Msg: which diagnostic it is (Kind), the rule of the
 # specification it applies (Rule - empty where no rule states it; never an invented one), and the text, lowercase and
-# one line with no period at the end (B11). diag records a Msg against where it is about.
+# one line with no period at the end (B11): the headline, what is wrong, in about 80 characters. A message with more to
+# say gives its reason as a Note and what to write instead as a Help, each a row of its own after the headline. diag
+# records a Msg against where it is about.
 #
 # This file is the table's source, edited by hand: a diagnostic is a case of Diag and a function of the same name, one
 # line each. checks/checks.olang holds this file to the specification.

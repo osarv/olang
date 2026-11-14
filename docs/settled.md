@@ -853,7 +853,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
   an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
   compilation too (S8b); a constant condition not depending on the build is a dead-branch error (S8a).
-- **Diagnostics are one row each (B11/B11a, the user's design).** `path:line:col: error[RULE]: message`, the source
+- **Diagnostics are one row each (B11/B11a, the user's design).** `path:line:col: error[RULE]: headline`, the source
   line and a caret, `note:` rows; one error per cause; `olang explain RULE` prints the spec rule. **Did you mean
   (2026-10-26, the user's request):** every name that names nothing ends with the nearest allowed name. **Typed holes
   (E41, QBP 3, the user's "yes build it", 2026-10-27)**: `_` where a value is wanted is an error naming the type
@@ -861,6 +861,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Compile-time evaluation
 
+- **A long diagnostic is split into headline, note and help (B11, the user's decision 2026-11-13: Rust/Elm-style, within
+  the one-row format).** The error row is a headline of about 80 characters saying what is wrong; the reason is a `note:`
+  row and the fix a `help:` row, after every other note, both at the error's place with no source of their own. A
+  `diagmsg.Msg` carries `Note` and `Help` (empty by default); every message over about 100 characters in
+  `compiler/msgs.olang` was rewritten (median headline 85 -> 55, 90th percentile 162 -> 83; rows over 120: 314 -> 2).
+  The language server sends a note or help as `relatedInformation` (help written `help: ...`), `olang mcp check` lists
+  them under `notes` (a help has `"kind":"help"`), the nvim errorformat reads `help:` rows. `checks/cases` name a
+  diagnostic by a substring of its headline.
 - **Anything computable at compile time may be (K1/K1a, the user's request); no function colouring.** The evaluator
   interprets the checked program with the run time's semantics and refuses only what it must (effects skipping would
   show, externs but libm, undefined behaviour, a step and memory budget). Whether a function is evaluable is a
