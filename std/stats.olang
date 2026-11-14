@@ -6,6 +6,7 @@
 #     sd := try stats.StdDev(prices)
 #     p95 := try stats.Percentile(latencies, 95.0)
 #     counts := stats.Histogram(values, stats.Edges(0.0, 100.0, 20))
+#     counts, edges := stats.Bins(values, 20)                 # 20 bins from the least value to the greatest
 #
 # Each takes an array of any number type - the four floats and the integers - and computes in F64, whatever the
 # elements are: a mean of F16s is not rounded to F16 at every step, and the answer is an F64. A Vec is handed over as v.View(). Ordinary olang, so every function here runs while compiling (K1)
@@ -143,6 +144,27 @@ fn Edges(lo F64, hi F64, bins I64) Array<F64> ? Error {
     for i in range bins { out[i] = lo + F64(i) * step }
     out[bins] = hi
     return out
+}
+
+# a histogram of "bins" bins of equal width spanning the values from the least to the greatest (numpy's histogram(a,
+# bins)): the counts and the bins + 1 edges, as Histogram and Edges give them. Values all equal span them +- 0.5, as
+# numpy's do; a NaN is in no bin. Fails with TooFew where no value is a number and BadEdges for no bin
+fn Bins<T Number>(a Array<T>&, bins I64) Array<I64>, Array<F64> ? Error {
+    if bins < 1 { error Error.BadEdges }
+    lo F64 = Inf
+    hi F64 = -Inf
+    for x in a {
+        v := F64(x)
+        if v < lo { lo = v }
+        if v > hi { hi = v }
+    }
+    if lo > hi { error Error.TooFew }                     # nothing, or only NaNs
+    if lo == hi {
+        lo -= 0.5
+        hi += 0.5
+    }
+    edges := try Edges(lo, hi, bins)
+    return try Histogram(a, edges), edges
 }
 
 # the sum of a[lo:hi] as F64s, pairwise (numpy's pairwise_sum): up to 128 values in eight accumulators, interleaved,
@@ -341,11 +363,21 @@ test "Min, Max and Histogram" {
     assert noBins == Array<F64>[-1.0]
 }
 
+test Bins "counts the values in bins of equal width from the least to the greatest" {
+    counts, edges := try Bins(Array<I64>[1, 2, 2, 3, 5], 4)
+    assert counts == Array<I64>[1, 2, 1, 1] and edges == Array<F64>[1.0, 2.0, 3.0, 4.0, 5.0]
+    same, around := try Bins(Array<F64>[2.0, 2.0, NaN], 2)
+    assert same == Array<I64>[0, 2] and around == Array<F64>[1.5, 2.0, 2.5]
+    none, _ := try Bins(Array<F64>[NaN], 3) catch Error.TooFew { return }
+    assert false, "only NaNs, yet bins " $none
+}
+
 # while compiling as at run time (K2)
 fn statsBaked() F64 {
     a := Array<F64>(301)
     for i in range 301 { a[i] = F64((i * 37) % 101) / 4.0 }
-    return (try Mean(a) catch default 0.0) + (try Variance(a) catch default 0.0) + (try Percentile(a, 37.5) catch default 0.0)
+    counts, _ := try Bins(a, 7) catch { return -1.0 }
+    return (try Mean(a) catch default 0.0) + (try Variance(a) catch default 0.0) + (try Percentile(a, 37.5) catch default 0.0) + F64(counts[3])
 }
 statsBakedValue F64 = statsBaked()
 

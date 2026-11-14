@@ -49,10 +49,13 @@ fn (r Rand&) State() Array<U64> {
     return s
 }
 
-# what SetState fails with: four zeros, which no generator's state is, or other than four words
+# what SetState fails with: four zeros, which no generator's state is, or other than four words; and what a draw from
+# an array fails with: no element to draw (Empty), or more than it has drawn without replacement (TooFew)
 type Error error {
     ZeroState
     WrongLength
+    Empty
+    TooFew
 }
 
 # puts the generator in the state "s", one State gave: from here it draws what the generator State was asked of drew
@@ -88,12 +91,50 @@ fn (r mut Rand&) Uniform(lo F64, hi F64) F64 {
     return lo + (hi - lo) * r.Float()
 }
 
-# a normally distributed F64 with mean 0 and standard deviation 1 (Box-Muller; the second value of each pair is
-# dropped, which costs a logarithm and a square root per number and keeps the generator's state its only state)
-fn (r mut Rand&) Normal() F64 {
+# a normally distributed F64 with the mean and standard deviation given, 0 and 1 by default (Box-Muller; the second
+# value of each pair is dropped, which costs a logarithm and a square root per number and keeps the generator's state
+# its only state)
+fn (r mut Rand&) Normal(mean F64 = 0.0, sd F64 = 1.0) F64 {
     u F64 = 1.0 - r.Float()                       # in (0, 1], so its logarithm is finite
     v := r.Float()
-    return (-2.0 * u.Log()).Sqrt() * (2.0 * Pi * v).Cos()
+    return mean + sd * (-2.0 * u.Log()).Sqrt() * (2.0 * Pi * v).Cos()
+}
+
+# n normally distributed F64s, as Normal draws them one after another (numpy's normal(mean, sd, n))
+fn (r mut Rand&) Normals(n I64, mean F64 = 0.0, sd F64 = 1.0) Array<F64> {
+    return Array<F64>[r.Normal(mean, sd) for _ in range n]
+}
+
+# n uniform F64s in [lo, hi), as Uniform draws them one after another (numpy's uniform(lo, hi, n))
+fn (r mut Rand&) Uniforms(n I64, lo F64 = 0.0, hi F64 = 1.0) Array<F64> {
+    return Array<F64>[r.Uniform(lo, hi) for _ in range n]
+}
+
+# one element of "a", each as likely - failing with Empty where it has none
+fn (r mut Rand&) Choice<T>(a Array<T>&) T ? Error.Empty {
+    if a.Len() == 0 { error Error.Empty }
+    return a[r.Below(a.Len())]
+}
+
+# k elements of "a" drawn with replacement, so one may come again (Python's random.choices) - failing with Empty where
+# it has none and k is above zero
+fn (r mut Rand&) Choices<T>(a Array<T>&, k I64) Array<T> ? Error.Empty {
+    if k > 0 and a.Len() == 0 { error Error.Empty }
+    return Array<T>[a[r.Below(a.Len())] for _ in range k]
+}
+
+# k elements of "a" drawn without replacement, in the order drawn (Python's random.sample): k different positions -
+# failing with TooFew where "a" has fewer than k
+fn (r mut Rand&) Sample<T>(a Array<T>&, k I64) Array<T> ? Error.TooFew {
+    if k > a.Len() { error Error.TooFew }
+    order := Array<I64>[i for i in range a.Len()]
+    for i in range k {
+        j := i + r.Below(a.Len() - i)              # Fisher-Yates, stopped after k places
+        t := order[i]
+        order[i] = order[j]
+        order[j] = t
+    }
+    return Array<T>[a[order[i]] for i in range k]
 }
 
 # puts the elements of "a" in a uniformly random order (Fisher-Yates), in place
@@ -222,4 +263,35 @@ test "Shuffle permutes, and one seed gives one order" {
     again := Rand(11)
     again.Shuffle(b)
     for i in range 1000 { assert a[i] == b[i] }
+}
+
+# draws over arrays, the same while compiling as at run time
+fn drawsOverArrays() F64 {
+    r := Rand(5)
+    xs := r.Normals(4, 10.0, 0.0)               # a deviation of zero: every draw the mean
+    us := r.Uniforms(3, 2.0, 3.0)
+    pick := try r.Choice(Array<I64>[7, 8, 9]) catch { unreachable }
+    many := try r.Choices(Array<I64>[4], 3) catch { unreachable }
+    some := try r.Sample(Array<I64>[1, 2, 3, 4, 5], 5) catch { unreachable }
+    assert xs.Sum() == 40.0 and us.Every(fn(u): return u >= 2.0 and u < 3.0) and pick >= 7 and pick <= 9
+    assert many == Array<I64>[4, 4, 4] and some.Sum() == 15
+    return us[0]
+}
+
+drawsBaked := drawsOverArrays()
+
+test "Normals, Uniforms, Choice, Choices and Sample draw over arrays, while compiling as at run time" {
+    assert drawsOverArrays() == drawsBaked
+    r := Rand(8)
+    xs := r.Normals(100000, 5.0, 2.0)
+    m := xs.Sum() / 100000.0
+    assert m > 4.97 and m < 5.03
+    seen := Array<Bool>(10)
+    for x in try r.Sample(Array<I64>[i for i in range 10], 10) {
+        assert not seen[x]
+        seen[x] = true
+    }
+    empty := Array<I64>(0)
+    got := try r.Choice(empty) catch Error.Empty { return }
+    assert false, "a draw from nothing gave " $got
 }
