@@ -37086,3 +37086,4 @@ installable (Helix and other LSP clients take a configuration line, printed as a
 `make uninstall` removes exactly the two `pack/olang` directories. Tested with a temporary HOME: plain Vim 9.1 sets
 filetype and syntax olang on a `.olang` file and `:compiler olang` sets `makeprg`; no Neovim is in the container, so the
 Neovim package was checked by its files only.
+- 2026-11-14: MIT licence and README Contributing/Licence sections (the user); LICENSE added to the consistency tool's root files.

@@ -563,7 +563,7 @@ fn listedIn(p mut Problems&, dir String&, suffix String&, readme String&) {
 }
 
 # the files the repository's root holds; any other tracked file there was committed by mistake
-RootFiles := Array<String&>[".gitignore", "CLAUDE.md", "DEPENDENTS.md", "HISTORY.md", "PRINCIPLES.md", "README.md", "SPEC.md", "makefile"]
+RootFiles := Array<String&>[".gitignore", "CLAUDE.md", "DEPENDENTS.md", "HISTORY.md", "LICENSE", "PRINCIPLES.md", "README.md", "SPEC.md", "makefile"]
 
 # each tracked file of the root that is not in RootFiles
 fn checkRoot(p mut Problems&) {

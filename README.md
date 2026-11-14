@@ -105,3 +105,12 @@ make verify   # the gate: a clean bootstrap and the whole suite (about 6 minutes
 ```
 
 The top of the `makefile` lists the rest.
+
+## Contributing
+
+Pull requests are welcome: inconsistencies in the language or its tools, bug fixes and feature ideas alike. For a
+larger change, open an issue first so the design can be discussed before the code.
+
+## Licence
+
+olang is licensed under the MIT licence; see [LICENSE](LICENSE).
