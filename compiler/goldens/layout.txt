@@ -4177,7 +4177,7 @@ Array<std/prelude/text:String&, 0>	0 8	[0 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 16>	256 8	[16 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 7>	112 8	[7 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 9>	144 8	[9 x { i64, ptr }]	-	-
-compiler/build:Config	584 8	%"compiler/build:Config"	{ { i64, ptr }, { i64, ptr }, %"compiler/target:Target", %"compiler/cond:Consts", i1, i1, i1, i1, i1, i1, { i64, ptr }, i64, i1, i1, i1, { i64, ptr }, i1, i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i64, i1, i1, { i64, ptr }, { i64, ptr }, i64, i64, i1, { i64, ptr }, { i64, ptr } }	fields 0,16,32,160,384,385,386,387,388,389,392,408,416,417,418,424,440,441,442,448,480,488,489,496,512,528,536,544,552,568
+compiler/build:Config	584 8	%"compiler/build:Config"	{ { i64, ptr }, { i64, ptr }, %"compiler/target:Target", %"compiler/cond:Consts", i1, i1, i1, i1, i1, i1, i1, { i64, ptr }, i64, i1, i1, i1, { i64, ptr }, i1, i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i64, i1, i1, { i64, ptr }, { i64, ptr }, i64, i64, i1, { i64, ptr }, { i64, ptr } }	fields 0,16,32,160,384,385,386,387,388,389,390,392,408,416,417,418,424,440,441,442,448,480,488,489,496,512,528,536,544,552,568
 compiler/build:Config&	8 8	ptr	-	-
 compiler/build:Failed	4 4	i32	-	-
 compiler/build:Kind	4 4	i32	-	-
@@ -8722,7 +8722,7 @@ Array<compiler/emit:Object>&	16 8	{ i64, ptr }	-	-
 compiler/olang:Bad	4 4	i32	-	-
 compiler/olang:CommandLine	248 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, { i64, ptr }, i1, { i64, ptr }, i1, { i64, ptr }, i1, i1, i1 }	fields 0,8,40,72,88,96,128,160,176,192,200,216,224,240,241,242
 compiler/olang:CommandLine&	8 8	ptr	-	-
-compiler/olang:Passes	8 8	%"compiler/olang:Passes"	{ i64 }	fields 0
+compiler/olang:Passes	72 8	%"compiler/olang:Passes"	{ i64, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr } }	fields 0,8,24,40,56
 fn() compiler/olang:CommandLine	16 8	{ ptr, ptr }	-	ret void pass 
 fn() compiler/olang:Passes	16 8	{ ptr, ptr }	-	ret %"compiler/olang:Passes" pass 
 fn(Array<std/prelude/text:String&>&) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
