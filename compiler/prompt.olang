@@ -670,7 +670,6 @@ fn (s mut Session&) mismatched(c mut typecheck.Checker&, x mut interp.Exec&, vs 
     for v in vs {
         if v.Root < 0: continue
         _, ty := try x.M.GlobalAt(c.P.L.Root, c.P.L.Names.Intern(v.Name)) catch eval.NotSaved { continue }
-        if (try os.Env("OLANG_PROMPTDEBUG") catch default "") != "": sayErr($"layout " $v.Name ": " $x.M.Layout(ty) " was " $v.Layout "\n")
         if x.M.Layout(ty) != v.Layout: out.Push($v.Name)
     }
     return out
@@ -723,7 +722,7 @@ fn isGlobal(dc Decl&) Bool {
 
 fn notSaved(e eval.NotSaved) String {
     return match e {
-        case eval.NotSaved.Code: "it holds a function value or an 'any', whose code is the cell's"
+        case eval.NotSaved.Code: "it holds a function value or an 'any', whose code went with its cell - a function declared with 'fn' is kept"
         case eval.NotSaved.Generational: "it holds a generational instance"
         case eval.NotSaved.Global: "it holds a reference to a global's storage"
         case _: "its storage is gone"

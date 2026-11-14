@@ -1,0 +1,4 @@
+# a file :load reads into the session
+fn fromLib(n I64) I64 { return n + 100 }
+
+loaded := fromLib(1)
