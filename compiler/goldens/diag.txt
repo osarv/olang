@@ -241,12 +241,15 @@ b10undefined.olang:12:8: error[B10]: unknown name 'Mode'
    12 |     if Mode == "fast" { }
       |        ^~~~
 b10undefined.olang:12:8: help: if it is a build constant, define it with '-define Mode=VALUE', or declare it with a default
-compilation failed with 2 errors
+b10undefined.olang:12:8: error[M22]: unknown name 'Mode' - did you mean 'Mod'?
+   12 |     if Mode == "fast" { }
+      |        ^~~~
+compilation failed with 3 errors
 === b11near.olang
 b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'First'?
    16 |     if count < 0 { error MyErr.FIRTS }
       |                          ^~~~~~~~~~~
-b11near.olang:17:12: error: unknown name 'cout' - did you mean 'count'?
+b11near.olang:17:12: error[M22]: unknown name 'cout' - did you mean 'count'?
    17 |     return cout
       |            ^~~~
 b11near.olang:22:12: error: Box has no member 'valeu' - did you mean 'value'?
@@ -1670,6 +1673,12 @@ e20emptykeyed.olang:4:10: error[E20]: [:] makes the type expected where it stand
       |          ^~~
 e20emptykeyed.olang:4:10: help: write the type in front, as Map<String, I64>[]
 compilation failed with 1 error
+=== e20litmixed.olang
+e20litmixed.olang:4:14: error[E20]: the items have no common type: 3 is I64 and 'h' is Char
+    4 |     a := [3, 'h']
+      |              ^~~
+e20litmixed.olang:4:14: help: write the type in front, as Array<I64>[...]
+compilation failed with 1 error
 === e20mixed.olang
 e20mixed.olang:5:15: error[E12]: expected String, found F64
     5 |     xs := [s, 2.5]
@@ -2424,10 +2433,10 @@ eqshape.olang:6:12: error[E10a]: Eq takes one parameter of its receiver's own ty
       |            ^~
 compilation failed with 1 error
 === equndeclared.olang
-equndeclared.olang:6:12: error: unknown name 'a'
+equndeclared.olang:6:12: error[M22]: unknown name 'a'
     6 |     assert a == b
       |            ^
-equndeclared.olang:8:28: error: unknown name 'missing'
+equndeclared.olang:8:28: error[M22]: unknown name 'missing' - did you mean 'IsInf'?
     8 |     assert c.Len() == 0 or missing == c
       |                            ^~~~~~~
 compilation failed with 2 errors
@@ -3578,6 +3587,11 @@ m21unknownrecv.olang:12:11: error: unknown type 'Tow'
    12 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
       |           ^~~~~~~~~~~~~
 compilation failed with 1 error
+=== m22unknowncase.olang
+m22unknowncase.olang:4:5: error[M22]: unknown function or type 'print' - did you mean 'Print'?
+    4 |     print("x")
+      |     ^~~~~
+compilation failed with 1 error
 === m23ext.olang
 m23ext.olang:2:8: error[M23]: an import names its file without '.olang'
     2 | import "badform.olang"
@@ -3638,6 +3652,12 @@ m9builderold.olang:12:15: error[M9]: module std/time declares no 'DateOf' - did 
    12 |     d := time.DateOf(0)
       |               ^~~~~~
 compilation failed with 2 errors
+=== m9preludename.olang
+m9preludename.olang:6:8: error[M9]: module std/io declares no 'Println'
+    6 |     io.Println("x")
+      |        ^~~~~~~
+m9preludename.olang:6:8: help: the prelude's 'Println' needs no module: write 'Println(...)'
+compilation failed with 1 error
 === membershipneedstry.olang
 membershipneedstry.olang:12:10: error[E29]: Has can fail here - write 'try x in c'
    12 |     if 3 in r { }
@@ -4925,7 +4945,7 @@ s19error.olang:8:20: error[S19b]: an error may not leave deferred code - catch i
       |                    ^~~~~
 compilation failed with 1 error
 === s19later.olang
-s19later.olang:4:16: error: unknown name 'later'
+s19later.olang:4:16: error[M22]: unknown name 'later' - did you mean 'Iter'?
     4 |     defer z := later
       |                ^~~~~
 compilation failed with 1 error
@@ -5100,7 +5120,7 @@ s8averbose.olang:10:16: error[S8a]: this condition is the same on every build, s
 s8averbose.olang:10:16: help: depend on a build constant, or remove it
 compilation failed with 1 error
 === s8bother.olang
-s8bother.olang:9:13: error: unknown function or type 'onlyOnSmallBuilds'
+s8bother.olang:9:13: error[M22]: unknown function or type 'onlyOnSmallBuilds'
     9 |         x = onlyOnSmallBuilds()
       |             ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
@@ -5243,7 +5263,7 @@ sliceimmutableglobal.olang:12:6: error[T25b]: this writes through a read-only re
       |      ^
 compilation failed with 2 errors
 === stdprivate.olang
-stdprivate.olang:4:12: error: unknown name 'lookupBaked'
+stdprivate.olang:4:12: error[M22]: unknown name 'lookupBaked'
     4 |     assert lookupBaked == 41
       |            ^~~~~~~~~~~
 compilation failed with 1 error
@@ -7160,13 +7180,13 @@ typenotvalue.olang:4:10: error[G38]: 'I64' is a type, not a value
 typenotvalue.olang:4:10: help: write it where a type goes: a declaration ('x I64 = ...'), a type argument or a match's subject
 compilation failed with 1 error
 === unknowncascade.olang
-unknowncascade.olang:10:17: error: unknown name 'nope'
+unknowncascade.olang:10:17: error[M22]: unknown name 'nope' - did you mean 'Some'?
    10 |     assert s == nope
       |                 ^~~~
-unknowncascade.olang:12:16: error: unknown name 'nope2'
+unknowncascade.olang:12:16: error[M22]: unknown name 'nope2'
    12 |     assert not nope2
       |                ^~~~~
-unknowncascade.olang:13:12: error: unknown name 'nope3'
+unknowncascade.olang:13:12: error[M22]: unknown name 'nope3'
    13 |     assert nope3 < 3.5
       |            ^~~~~
 compilation failed with 3 errors
@@ -7176,16 +7196,16 @@ unknownfunchint.olang:3:10: error[T4]: unknown type 'Float64' - the numbers are 
       |          ^~~~~~~
 compilation failed with 1 error
 === unknownlvalue.olang
-unknownlvalue.olang:6:5: error: unknown name 'nope'
+unknownlvalue.olang:6:5: error[M22]: unknown name 'nope' - did you mean 'Some'?
     6 |     nope[0] = 1
       |     ^~~~
-unknownlvalue.olang:7:5: error: unknown name 'nope2'
+unknownlvalue.olang:7:5: error[M22]: unknown name 'nope2'
     7 |     nope2 = 1
       |     ^~~~~
-unknownlvalue.olang:8:5: error: unknown name 'nope3'
+unknownlvalue.olang:8:5: error[M22]: unknown name 'nope3'
     8 |     nope3++
       |     ^~~~~
-unknownlvalue.olang:9:5: error: unknown name 'nope4'
+unknownlvalue.olang:9:5: error[M22]: unknown name 'nope4'
     9 |     nope4.x = 4
       |     ^~~~~
 compilation failed with 4 errors
@@ -7198,7 +7218,7 @@ unknownmethodone.olang:9:12: error[M19]: I32 has no method 'Nope'
       |            ^~~~
 compilation failed with 2 errors
 === unknownnamenomethod.olang
-unknownnamenomethod.olang:8:10: error: unknown name 't'
+unknownnamenomethod.olang:8:10: error[M22]: unknown name 't'
     8 |     u := t + 1
       |          ^
 compilation failed with 1 error

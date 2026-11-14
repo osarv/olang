@@ -173,7 +173,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   constructors keep their names).** One rule for every literal form, as a number literal adapts (T6/T6a): `[a, b]`,
   `[k: v]`, `[]`, `[:]`, a comprehension, a nested literal make the type expected where they stand (declaration,
   argument, result, field, assignment, element, a reference's referent lent); with nothing expected their own (E20):
-  `Array<T>` of the first non-literal item's type, else the literals' widest, `Map<K, V>` for entries; `[]`/`[:]`/all
+  `Array<T>` of the first non-literal item's type, else the literals' one own type (numbers meet at the widest; `[3, 'h']` is an error naming `Array<Char>[...]`, 2026-11-14), `Map<K, V>` for entries; `[]`/`[:]`/all
   `null` with nothing expected are errors naming the type to write. Mine: a bare literal argument of a generic binds
   after the others (E20a), made of its parameter where they bound it whole, else its own type binding it (`Vec<T>` left
   open is not inferred). The type in front stays allowed everywhere.

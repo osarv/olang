@@ -11338,7 +11338,7 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
         own := mi == c.fr().Mi
         for e in c.P.R.Tables[mi].Entries {
             # the prelude's types and constants - its functions are methods, reached through a receiver
-            ok := e.Kind == names.What.Type or (withVars and (e.Kind == names.What.Global or (own and e.Kind == names.What.Func)))
+            ok := e.Kind == names.What.Type or (withVars and (e.Kind == names.What.Global or e.Kind == names.What.Func))
             if not ok { continue }
             t := c.text(e.Name)
             if not own and not load.Public(t) { continue }
@@ -14330,6 +14330,18 @@ fn (c mut Checker&) declaresName(mi I64, n source.NameId) Bool {
     return false
 }
 
+# whether the prelude declares a public function, type or global of exactly this name
+fn (c mut Checker&) preludeDeclares(name String&) Bool {
+    if not load.Public(name) { return false }
+    for mi in range c.P.L.Mods.Len() {
+        if not c.P.L.Mods[mi].Prelude { continue }
+        for e in c.P.R.Tables[mi].Entries {
+            if e.Kind != names.What.Import and c.text(e.Name) == name { return true }
+        }
+    }
+    return false
+}
+
 # a name module at does not declare, said at nsp - a C import's what its translation could not give, with why (X19)
 fn (c mut Checker&) notInModule(at I64, n source.NameId, nsp source.Span) {
     m := c.P.L.Mods[at]
@@ -14344,6 +14356,10 @@ fn (c mut Checker&) notInModule(at I64, n source.NameId, nsp source.Span) {
         if e.Kind == names.What.Import or not (at == c.fr().Mi or load.Public(c.text(e.Name)) or m.C) { continue }
         near.Offer(c.text(e.Name))
         near.OfferBuilder(c.text(e.Name))
+    }
+    if c.preludeDeclares(c.text(n)) {
+        c.err(nsp, msgs.NotInModulePrelude($"module " $m.Identity, c.tok(n), $c.text(n) "(...)"))
+        return
     }
     c.err(nsp, msgs.NotInModule($"module " $m.Identity, c.tok(n), near.Hint()))
 }
@@ -16584,19 +16600,41 @@ fn (c mut Checker&) rowsOf(t types.TypeId) types.TypeId {
 # item says its own error, or null alone is written
 fn (c mut Checker&) ownElem(items Array<ast.Expr&>&, ys mut Array<typed.Expr?&>&) types.TypeId {
     et := types.UnknownT
+    at := 0
     for i in range items.Len() {
         if c.fold(items[i]).Ok { continue }
         ys[i] = c.expr(items[i], types.UnknownT)
         t := c.bindType(ys[i]!)
         if t == types.UnknownT { return t }
-        if et == types.UnknownT and t != types.NoreturnT { et = t }
+        if et == types.UnknownT and t != types.NoreturnT { et, at = t, i }
+        else if et != types.UnknownT and t != et and items[i] == ast.Expr.Lit and items[at] == ast.Expr.Lit { return c.mixedLit(items[at], et, items[i], t) }
+    }
+    if et != types.UnknownT and items[at] == ast.Expr.Lit {
+        # E20: a text, Char or Bool literal first - a number literal beside it has no common own type with it
+        for j in range items.Len() {
+            if not c.fold(items[j]).Ok { continue }
+            jt := c.bindType(c.expr(items[j], types.UnknownT))
+            return c.mixedLit(items[j], jt, items[at], et) if j < at else c.mixedLit(items[at], et, items[j], jt)
+        }
     }
     if et != types.UnknownT { return c.ownChecked(items[0].Span(), et) }
-    for it in items {
-        t := c.bindType(c.expr(it, types.UnknownT))
-        if et == types.UnknownT or c.litRank(t) > c.litRank(et) { et = t }
+    first := 0
+    for i in range items.Len() {
+        t := c.bindType(c.expr(items[i], types.UnknownT))
+        if et == types.UnknownT { et, first = t, i }
+        else if t != et and not (c.litNumber(t) and c.litNumber(et)) { return c.mixedLit(items[first], et, items[i], t) }
+        else if c.litRank(t) > c.litRank(et) { et = t }
     }
     return c.ownChecked(items[0].Span(), et)
+}
+
+# E20: the number kinds a bare literal's own type may be met across: I64, U64, F64
+fn (c mut Checker&) litNumber(t types.TypeId) Bool { return t == c.i64() or t == c.P.T.Prim("U64") or t == c.P.T.Prim("F64") }
+
+# E20: two literals of no common own type - the error names the type to write in front
+fn (c mut Checker&) mixedLit(x ast.Expr&, xt types.TypeId, y ast.Expr&, yt types.TypeId) types.TypeId {
+    c.err(y.Span(), msgs.LiteralMixed($c.src(x.Span()), c.ty(xt), $c.src(y.Span()), c.ty(yt), "Array<" $c.ty(xt) ">[...]"))
+    return types.UnknownT
 }
 
 # T6: of two literals' own types, the wider is the one both adapt to - Char, I64, U64, F64 in that order

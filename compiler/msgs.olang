@@ -663,6 +663,7 @@ type Diag enum {
     LiteralUnique
     LiteralNotMade
     LiteralNoTarget
+    LiteralMixed
     FromIterShape
     LiteralEntries
     ComprWalkFails
@@ -1175,13 +1176,13 @@ fn NameClashesWithImport(tok String&) r.Msg { return r.Msg(Diag.NameClashesWithI
 fn UnknownType(tok String&) r.Msg { return r.Msg(Diag.UnknownType, "", "unknown type " $tok) }
 fn UnknownTypeMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownTypeMeant, "", "unknown type " $tok " - did you mean '" $text "'?") }
 fn UnknownNumberType(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNumberType, "T4", "unknown type " $tok " - the numbers are named by kind and width: did you mean '" $text "'?") }
-fn UnknownName(tok String&) r.Msg { return r.Msg(Diag.UnknownName, "", "unknown name " $tok) }
-fn UnknownNameMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNameMeant, "", "unknown name " $tok " - did you mean '" $text "'?") }
+fn UnknownName(tok String&) r.Msg { return r.Msg(Diag.UnknownName, "M22", "unknown name " $tok) }
+fn UnknownNameMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNameMeant, "M22", "unknown name " $tok " - did you mean '" $text "'?") }
 fn TypedHole(ty String&, fits String&) r.Msg { return r.Msg(Diag.TypedHole, "E41", "'_' holds the place of a value of type " $ty, $("nothing in scope has that type" if fits.Len() == 0 else "in scope: " $fits)) }
 fn TypedHoleUntyped() r.Msg { return r.Msg(Diag.TypedHoleUntyped, "E41", "'_' holds the place of a value, and nothing here says its type") }
 fn TypeNotAValue(name String&) r.Msg { return r.Msg(Diag.TypeNotAValue, "G38", "'" $name "' is a type, not a value", "", "write it where a type goes: a declaration ('x " $name " = ...'), a type argument or a match's subject") }
-fn UnknownFunction(tok String&) r.Msg { return r.Msg(Diag.UnknownFunction, "", "unknown function or type " $tok) }
-fn UnknownFunctionMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownFunctionMeant, "", "unknown function or type " $tok " - did you mean '" $text "'?") }
+fn UnknownFunction(tok String&) r.Msg { return r.Msg(Diag.UnknownFunction, "M22", "unknown function or type " $tok) }
+fn UnknownFunctionMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownFunctionMeant, "M22", "unknown function or type " $tok " - did you mean '" $text "'?") }
 fn UnknownErrorType(tok String&, hint String&) r.Msg { return r.Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok $hint) }
 
 # ---- the error a clause took (R11b, R3a) ----
@@ -1435,6 +1436,7 @@ fn ShadowsType(tok String&) r.Msg { return r.Msg(Diag.ShadowsType, "D3a", $tok "
 fn TypeHasNoConstructor(tok String&) r.Msg { return r.Msg(Diag.TypeHasNoConstructor, "", "type " $tok " has no constructor - an enum's values are its cases") }
 fn MethodCalledAsFunction(tok String&, text String&) r.Msg { return r.Msg(Diag.MethodCalledAsFunction, "M19", $tok " is a method - call it on its receiver: x." $text "(...)") }
 fn NotInModule(text String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NotInModule, "M9", $text " declares no " $tok $hint) }
+fn NotInModulePrelude(text String&, tok String&, call String&) r.Msg { return r.Msg(Diag.NotInModule, "M9", $text " declares no " $tok, "", "the prelude's " $tok " needs no module: write '" $call "'") }
 fn VarIsPrivate(tok String&) r.Msg { return r.Msg(Diag.VarIsPrivate, "M6", $tok " is private to its module") }
 fn ShiftUnadapted() r.Msg { return r.Msg(Diag.ShiftUnadapted, "E8a, E4a", "this shift is past its literal's width, and nothing adapts it to a wider type", "", "convert the literal, as I64(1) << 40") }
 fn ScopeMayNotOutlive() r.Msg { return r.Msg(Diag.ScopeMayNotOutlive, "O10", "this reference lives in a scope that may not outlive where it is put") }
@@ -1749,6 +1751,7 @@ fn LiteralUnique(ty String&, elem String&) r.Msg { return r.Msg(Diag.LiteralUniq
 fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes " $ty ", which has no FromIter", "a literal makes the type written before its '[' or expected where it stands, through that type's FromIter", "for an array of " $ty ", write Array<" $ty ">[...]") }
 fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type written before its '[', and " $ty " is a reference", "", "an array of them is Array<" $ty ">[...], or [...] where one is expected") }
 fn LiteralNoTarget(what String&, write String&) r.Msg { return r.Msg(Diag.LiteralNoTarget, "E20", $what " makes the type expected where it stands, and nothing is expected here", "", "write the type in front, as " $write) }
+fn LiteralMixed(a String&, at String&, b String&, bt String&, write String&) r.Msg { return r.Msg(Diag.LiteralMixed, "E20", "the items have no common type: " $a " is " $at " and " $b " is " $bt, "", "write the type in front, as " $write) }
 fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty "'s FromIter takes no one iterator, so no literal can call it", "", "call it as " $ty ".FromIter(...)") }
 fn LiteralEntries(ty String&) r.Msg { return r.Msg(Diag.LiteralEntries, "E19", "a literal of " $ty " holds no 'key: value' entries - its elements are no MapEntry") }
 fn ComprWalkFails() r.Msg { return r.Msg(Diag.ComprWalkFails, "E27", "this comprehension may fail by calls of its own", "a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them", "write a generator function and call the collection's FromIter with it") }

@@ -657,7 +657,7 @@
 | status 1
 === in a directory of programs: olang build bad.olang
 | stdout:
-| bad.olang:2:10: error: unknown name 'y'
+| bad.olang:2:10: error[M22]: unknown name 'y'
 |     2 |     x := y
 |       |          ^
 | compilation failed with 1 error

@@ -2227,7 +2227,7 @@ cfc2d604776fa139 d2119933f49abf57 compiler/api.olang
 76deda85728295e6 a32c90ffe9decb7d compiler/bindgen.olang
 0391e1c6af039700 dce9e5efc39ae7d8 compiler/build.olang
 3356b65039487057 ef5918803804e565 compiler/cabi.olang
-a9a89e58188f49ec 794ff2eb9cea5895 compiler/check.olang
+500e92826bb05aa2 7e46f42f26c75b06 compiler/check.olang
 55aeb690bfdaa45c c20ab7f5f229b733 compiler/cond.olang
 7036f9705d76ef54 f9c0e5f18cd6aedb compiler/definit.olang
 ebdb38cba173d701 63b967e10e8f5392 compiler/diag.olang
@@ -2242,7 +2242,7 @@ f46d8923b6244e87 671c5ca7a47349d3 compiler/fetch.olang
 6452d8110b8c6372 c37af1bd6aa7daab compiler/fix.olang
 f5bc390f1c96702d 5b4277097b6156b3 compiler/fmt.olang
 dce95730907a70ff 0b191b222515827d compiler/free.olang
-9c670e4a577654e0 aafd2501807b6aba compiler/generic.olang
+e63d8b1c373a2d0e 42feeaae592ff8f5 compiler/generic.olang
 ef8903605bb4229b 52d7affc241e9834 compiler/interp.olang
 726f938631fcf960 ef6bf7532f1a57bd compiler/jupyter.olang
 1b917ea5c57a2975 66afb6bc3e03028b compiler/listing.olang
@@ -2251,7 +2251,7 @@ e89f9ab0af8b30ba 07da4622a648807d compiler/lower.olang
 80831975a021c7d2 12dee153fc27bdc0 compiler/lsp.olang
 78c00122c50d6b84 eaaa84cd3f4e5697 compiler/mcp.olang
 7c840607794c96e1 1415eeec6e37c4ef compiler/mir.olang
-c869bc361d71b5fc 74b62e37447bd23a compiler/msgs.olang
+853a7b3671a007b7 aa8ed1b62ce891b0 compiler/msgs.olang
 8a8b53f139ef9b02 93b30be6689d5e9c compiler/names.olang
 b9520ca5794a662c e90b4dca0bb20d91 compiler/needs.olang
 aaffc95f9212c4f3 11dea3cab086b388 compiler/olang.olang
@@ -2434,7 +2434,7 @@ ebdce43d45bd0f46 4fe0932269cb4550 tests/arraypat.olang
 54af13492897abd5 fbe33446132add60 tests/attrmod.olang
 6e2f4b51cf82ba96 d79947689b5cf178 tests/attrs.olang
 601f484894fccfc9 655f2e0878c57bdf tests/axes.olang
-d37c98fc61c4cd20 0a94056d66b069fa tests/barelits.olang
+80411cf6b54abd6a 4e92018de57b2a30 tests/barelits.olang
 5720df18b7881866 a4f6ab29a66eae92 tests/become.olang
 d8715d8ca6b99158 2067868eb50e4072 tests/bench.olang
 6e9b40f00bf294e2 4a89491b9007c4aa tests/builders.olang
