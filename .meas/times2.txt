@@ -1,0 +1,52 @@
+nbody|469|431|506
+spectral-norm|448|444|522
+mandelbrot|525|519|520
+fannkuch-redux|1025|912|920
+binary-trees|256|237|318
+binary-trees, C arena|286|280|286
+k-nucleotide|379|411|415
+matmul F32|811|808|785
+List push|161|152|168
+sum: for x in List|59|69|60
+sum: List.Iter().Fold|70|66|75
+sum: for x in Array|66|63|50
+sum: Array.Iter().Fold|67|67|109
+parallel, 4 tasks|514|518|531
+text|286|309|291
+sha256|1174|1141|1098
+regex|72|85|87
+Vec: for x in v|43|44|44
+Array: for x in a|45|45|42
+Vec: v[idx[i]]|145|168|159
+Array: a[idx[i]]|148|170|157
+Vec: v[i] = v[i] * 2|45|50|45
+Array: a[i] = a[i] * 2|46|42|42
+Vec: two fields|84|82|84
+Array: two fields|81|75|80
+Vec push|739|780|785
+List push (vec.olang)|583|592|581
+Vec: opaque call|172|162|169
+Array: opaque call|173|201|215
+Vec Sort|71|106|103
+Array Sort|69|102|98
+Array Sort, through an unknown value|93|155|138
+Array Sort, < written in|78|121|106
+dispatch: any Shape&|706|746|740
+dispatch: enum match|542|559|530
+dispatch: one type, direct|42|42|42
+lanes: dot|238|250|246
+lanes: dot, hand loop|242|242|253
+lanes: isum|122|118|118
+lanes: isum, hand loop|122|118|116
+lanes: axpy|118|114|114
+lanes: axpy, hand loop|115|111|116
+lanes: saxpy|170|164|168
+lanes: saxpy, hand loop|155|150|151
+lanes: select|306|302|290
+lanes: select, hand loop|326|322|325
+gen: range|2|2|10
+gen: range, iterator|2|2|2
+gen: range, loop|2|2|1
+gen: filter|102|102|98
+gen: filter, iterator|117|115|130
+gen: filter, loop|110|114|110

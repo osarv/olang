@@ -1,0 +1,23 @@
+build none 92488 ms, IR 97310366 bytes, binary 13928176
+build all 130532 ms, IR 103009945 bytes, binary 15090008
+build hoist 142711 ms, IR 103009945 bytes, binary 15090880
+/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/m/selfb.sh: line 11:  3671 Killed                  OLANG_TIMES=1 $D/bin/olang build -quick -output $S/sb/o $W/compiler/olang.olang > t.log 2>&1
+selfbuild none run1 total 33281 ms; olang: load 2771 ms;olang: evaluate 448 ms;olang: scope records read 3 ms;olang: scope judged 5326 ms;olang: scope records 413 ms;olang: scope 892 ms;olang: facts 5 ms;olang: lower+emit 5089 ms;
+rm: cannot remove '/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/sb/build': Directory not empty
+/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/m/selfb.sh: line 11:  4493 Killed                  OLANG_TIMES=1 $D/bin/olang build -quick -output $S/sb/o $W/compiler/olang.olang > t.log 2>&1
+selfbuild all run1 total 23323 ms; olang: load 2601 ms;olang: evaluate 723 ms;olang: scope records read 0 ms;olang: scope judged 5333 ms;olang: scope records 402 ms;olang: scope 980 ms;olang: facts 8 ms;
+/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/m/selfb.sh: line 11:  4918 Killed                  OLANG_TIMES=1 $D/bin/olang build -quick -output $S/sb/o $W/compiler/olang.olang > t.log 2>&1
+selfbuild hoist run1 total 20696 ms; olang: load 2654 ms;olang: evaluate 510 ms;olang: scope records read 5 ms;olang: scope judged 6178 ms;olang: scope records 431 ms;olang: scope 958 ms;olang: facts 5 ms;
+selfbuild none run2 total 151247 ms; olang: load 356 ms;olang: evaluate 735 ms;olang: scope records read 1 ms;olang: scope judged 5146 ms;olang: scope records 476 ms;olang: scope 1450 ms;olang: facts 7 ms;olang: lower+emit 36378 ms;olang: compile 101580 ms;olang: link 225 ms;
+grep: t.log: No such file or directory
+grep: t.log: No such file or directory
+selfbuild all run2 total 19045 ms; 
+grep: t.log: No such file or directory
+grep: t.log: No such file or directory
+selfbuild hoist run2 total 18019 ms; 
+grep: t.log: No such file or directory
+grep: t.log: No such file or directory
+selfbuild none run3 total 16246 ms; 
+grep: t.log: No such file or directory
+grep: t.log: No such file or directory
+selfbuild all run3 total 18098 ms; 

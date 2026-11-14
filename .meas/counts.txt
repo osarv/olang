@@ -1,0 +1,22 @@
+std 870 546 313 108 278 171
+tests 919 158 598 20 39 262
+compiler 4679 2964 1915 681 1124 959
+bench 189 148 102 31 49 7
+EX std/prelude/array.olang:342:13
+EX std/io.olang:108:16
+EX std/prelude/vec.olang:134:40
+EX std/prelude/array.olang:403:10
+EX std/base64.olang:22:46
+EX std/filepath.olang:92:27
+EX compiler/eval.olang:5888:19
+EX compiler/fmt.olang:47:26
+EX compiler/lower.olang:6640:27
+EX compiler/scope.olang:12019:27
+EX compiler/views.olang:1457:31
+EX compiler/load.olang:281:43
+EX bench/run.olang:224:17
+EX bench/run.olang:232:43
+EX bench/vec.olang:164:28
+EX bench/fannkuch.olang:18:13
+EX bench/vec.olang:193:13
+EX bench/run.olang:233:43
