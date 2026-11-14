@@ -522,6 +522,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     atDest Bool = false                    # the choice val judges next builds its new values at its destination (E28)
     landSite I64 = -1                      # the call an assignment's value is, and its "=" (C2d through a result)
     landSp source.Span = source.Span(0, 0)
+    cursorSite I64 = -1                    # the call a reference local is assigned whole from (O13: a read it gives lives where its argument does)
     # the inference (O28, docs/rework.md 2.3-2.5): quiet judgings gathering what each local's uses
     # need of it - a fit or a callee's obligation the local's claim fails proposing a longer one, liftGrew set where a
     # proposal lengthened one - then the judging that reports, with the claims the gathering found
@@ -8785,7 +8786,10 @@ fn (s mut Scoper&) cursorAssign(sp source.Span, p typed.Lvalue&, x typed.Expr&) 
     savedLand, savedLandSp := s.landSite, s.landSp
     ac := typed.Call.Of(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
+    savedCursor := s.cursorSite
+    s.cursorSite = I64(ac.Site) if ac is not null and s.isRef(loc.Ty) else -1
     got := s.val(x, dest)
+    s.cursorSite = savedCursor
     s.landSite, s.landSp = savedLand, savedLandSp
     s.noteLate(l, x)
     t := Term.None if got.K == ValKind.Null else s.valTerm(got, dest)
@@ -11076,7 +11080,39 @@ fn (s mut Scoper&) callValue(c typed.Call&, ty types.TypeId, callee I64, fty typ
         }
         return Val.existing(Term.Untraced)
     }
+    # ... and one a reference local is assigned whole from, only read out of what one argument refers to: where that
+    # argument does, as the read written in place of the call would be (O13, O25i)
+    if s.cursorSite == I64(c.Site) {
+        bv := s.readFrom(c, callee, ty, vars, rv, owner)
+        if bv >= 0 { return Val.existing(beta[bv]) }
+    }
     return s.liftedVal(Val.fresh(beta[rv] if rv >= 0 else here), sl, want)
+}
+
+# O13: the scope variable of the one argument a call's read-only reference result is read out of - the callee builds
+# nothing where its result lands, and all it requires of that scope is that this argument's referent outlive it - else
+# -1. Its value lives where the argument does, so taking a read out into a function never makes a program refused
+# that has it written in place
+fn (s mut Scoper&) readFrom(c typed.Call&, callee I64, ty types.TypeId, vars Array<I64>&, rv I64, owner Array<I64>&) I64 {
+    if callee < 0 or rv < 0 or not s.isRef(ty) or s.P.T.ArrayRef(ty) or s.admitsStores(ty) or s.calleeBuilds(c, callee, rv) { return -1 }
+    hv := -1
+    for r in s.sum(callee).Rels {
+        if r.Hi == Term.Var(rv) { return -1 }
+        if r.Lo != Term.Var(rv) { continue }
+        if r.Exact or r.Why != 0 { return -1 }
+        v := -1
+        match r.Hi {
+            case Term.Var(i) { v = i }
+            case _ { return -1 }
+        }
+        if hv >= 0 and v != hv { return -1 }
+        hv = v
+    }
+    if hv < 0 or hv >= vars.Len() { return -1 }
+    for o in owner {
+        if o == hv { return hv }
+    }
+    return -1
 }
 
 # T22b: function value y coming to be held as function type ty, whose promises are not its own type's. Where its

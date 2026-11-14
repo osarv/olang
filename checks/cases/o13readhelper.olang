@@ -1,0 +1,57 @@
+# check: run
+# flags: -debug -sanitize
+# O13, O25i (docs/refusals.md): a read out of what an argument refers to, taken out into a function, gives what the
+# read written in place gives - the value lives where the argument does. A reference local walked down a chain through
+# such a helper (the compiler's rootPlace) was refused with O10c, its versions holding the call's landing; read back
+# after a churn
+import "std/io"
+
+type Term enum {
+    Read(p Spot&)
+    Other
+}
+
+type Spot enum {
+    Local(id I64)
+    Field(base Spot&)
+    Deref(r Term&)
+}
+
+fn (r Term&) spot() Spot?& {
+    if r == Term.Read: return r.p
+    return null
+}
+
+fn root(p Spot&) Spot?& {
+    q Spot?& = p
+    for _ in range 8 {
+        if q is null { return null }
+        match q {
+            case Spot.Field(b) { q = b }
+            case Spot.Deref(r) { q = r.spot() }
+            case Spot.Local(_) { return q }
+        }
+    }
+    return null
+}
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn Spot.Chain(id I64) Spot {
+    return Spot.Field(Spot.Deref(Term.Read(Spot.Field(Spot.Local(id)))))
+}
+
+fn main() {
+    d := Spot.Chain(7)
+    q := root(d)
+    churn()
+    assert q is not null
+    assert q == Spot.Local(7)
+    assert root(Spot.Deref(Term.Other)) is null
+    io.PutLine($q)!
+}
