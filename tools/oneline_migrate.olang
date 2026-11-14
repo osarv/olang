@@ -1,0 +1,186 @@
+# oneline_migrate - blocks holding one simple statement rewritten to S1b's one-line form (2026-11-14): `if c {`, one
+# statement, `}` becomes `if c: stmt`; the same for `for ... {` and `else`/`else if` branches. An if chain is converted
+# only when every branch qualifies. A branch qualifies when its body is one line that is an assignment, call,
+# increment, return, break, continue, error, unreachable, assert or spawn with no comment, catch, lambda or open
+# bracket, and the result fits in 120 columns. The forever `for {`, `do` loops, catch clauses, lambdas and match
+# clauses are left alone. Files are rewritten in place and a count printed; --check writes nothing and the exit status
+# says whether anything would change. Reads .olang files. Idempotent.
+#
+#     $OLANG build tools/oneline_migrate.olang && build/tools_oneline_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+MaxWidth I64 = 120
+
+type Count struct() { n I64 = 0 }
+
+fn indentOf(line String&) I64 {
+    n I64 = 0
+    for n < line.Len() and line[n] == ' ': n++
+    return n
+}
+
+# the number of times needle occurs in text
+fn countOf(text String&, needle String&) I64 {
+    n I64 = 0
+    i I64 = 0
+    for i + needle.Len() <= text.Len() {
+        if text[i:i + needle.Len()] == needle {
+            n++
+            i += needle.Len()
+        } else {
+            i++
+        }
+    }
+    return n
+}
+
+# the leading identifier of s, "" if none
+fn firstWord(s String&) String {
+    i I64 = 0
+    for i < s.Len() and srcmask.IsWord(s[i]): i++
+    return $s[:i]
+}
+
+fn balanced(s String&) Bool {
+    depth I64 = 0
+    for c in s {
+        if c == '(' or c == '[' or c == '{': depth++
+        if c == ')' or c == ']' or c == '}': depth--
+    }
+    return depth == 0
+}
+
+# whether the one-line body s (stripped) is a simple statement S1b allows
+fn simple(s String&) Bool {
+    if s.Len() == 0 or s.Contains("#") or s.Contains("\"\"\"") or s.Contains(":=") or s.Contains("catch"): return false
+    if s.Contains("fn(") or s.Contains(" else") or s.Contains("comptime") or s.Contains("embed "): return false
+    if s.EndsWith(",") or s.EndsWith("\\") or s.EndsWith("{") or s.EndsWith("(") or not balanced(s): return false
+    w := firstWord(s)
+    for k in Array<String&>["if", "for", "do", "match", "join", "defer", "errdefer", "become", "yield", "mut", "case", "test", "destruct", "else", "type", "import", "export", "extern", "unique", "immut"] {
+        if w == k: return false
+    }
+    # a declaration: names, then a type starting with a capital, `fn` or `?` after the first word
+    rest := s[w.Len():]
+    if w.Len() > 0 and rest.Len() > 1 and rest[0] == ' ' {
+        c := rest[1]
+        if c.IsUpper() or c == '?' or rest.StartsWith(" fn"): return false
+        if c == ',' : return false
+    }
+    if w.Len() > 0 and rest.StartsWith(","): return false
+    return true
+}
+
+# the head of an opener line (stripped), with its trailing " {" removed, or "" when the line is no convertible head
+fn headOf(t String&, first Bool) String {
+    if not t.EndsWith(" {"): return ""
+    h := t[:t.Len() - 2]
+    if first {
+        if h.StartsWith("if ") or (h.StartsWith("for ") and h != "for"): return $h
+        return ""
+    }
+    if h.StartsWith("} else"): return $h
+    return ""
+}
+
+fn rewrite(src String&, c mut Count&) String {
+    lines := src.Split("\n")
+    out Vec<String&>
+    inText := false
+    i I64 = 0
+    for i < lines.Len() {
+        line := lines[i]
+        if countOf(line, "\"\"\"") % 2 == 1 or (line.StartsWith("##") and countOf(line, "##") % 2 == 1) { inText = not inText }
+        n := 0
+        if not inText: n = chain(lines, i, out)
+        if n > 0 {
+            c.n++
+            i += n
+        } else {
+            out.Push($line)
+            i++
+        }
+    }
+    return out.Join("\n")
+}
+
+# tries to convert the chain starting at lines[i]; pushes the new lines to out and gives how many lines it covered, 0 if none
+fn chain(lines Array<String&>&, i I64, out mut Vec<String&>&) I64 {
+    line := lines[i]
+    ind := indentOf(line)
+    t := line[ind:]
+    pad := line[:ind]
+    isFor := t.StartsWith("for ")
+    head := headOf(t, true)
+    if head == "": return 0
+    mine Vec<String&>
+    j := i
+    for {
+        if j + 2 >= lines.Len(): return 0
+        body := lines[j + 1]
+        if indentOf(body) != ind + 4: return 0
+        stmt := body[ind + 4:]
+        if not simple(stmt): return 0
+        row := $pad $head ": " $stmt
+        if row.Len() > MaxWidth: return 0
+        mine.Push(row)
+        closer := lines[j + 2]
+        if closer == $pad "}" {
+            for r in mine: out.Push($r)
+            return j + 3 - i
+        }
+        if isFor or not closer.StartsWith($pad "} else"): return 0
+        head = headOf(closer[ind:], false)
+        if head == "": return 0
+        head = $head[2:]
+        j += 2
+    }
+    return 0
+}
+
+fn wanted(path String&) Bool { return path.EndsWith(".olang") }
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_oneline_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not wanted(path): continue
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("oneline_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := rewrite(src, total)
+        if out == src: continue
+        changed++
+        if verbose: srcmask.Say(path)
+        if not check {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("oneline_migrate: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.n " blocks")
+    if check and changed > 0: os.Exit(1)
+}

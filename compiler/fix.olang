@@ -32,8 +32,8 @@ ToolNames Array<String&> = Array<String&>["bare_typevars", "perm_mut", "int_lite
     "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
     "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
     "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
-    "textbuild_migrate", "unique_migrate", "builder_migrate", "literal_migrate", "keyword_rename", "destroy_migrate", "io_rename"]
-ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0]
+    "textbuild_migrate", "unique_migrate", "builder_migrate", "literal_migrate", "keyword_rename", "destroy_migrate", "io_rename", "oneline_migrate"]
+ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
@@ -71,11 +71,8 @@ fn walk(dir String&, out mut Vec<String&>&) {
     for n in names {
         if n.StartsWith(".") or n == "build" { continue }
         p := filepath.Join(dir, n)
-        if os.IsDir(p) {
-            walk(p, out)
-        } else if n.EndsWith(".olang") {
-            out.Push(p)
-        }
+        if os.IsDir(p): walk(p, out)
+        else if n.EndsWith(".olang"): out.Push(p)
     }
 }
 
@@ -244,15 +241,10 @@ fn byHand(body String&) I64 {
     n I64 = 0
     under := false
     for line in body.Lines() {
-        if line.StartsWith("by hand:") {
-            n++
-        } else if line == "for a person:" {
-            under = true
-        } else if under and line.StartsWith("  ") {
-            n++
-        } else {
-            under = false
-        }
+        if line.StartsWith("by hand:"): n++
+        else if line == "for a person:": under = true
+        else if under and line.StartsWith("  "): n++
+        else: under = false
     }
     return n
 }
