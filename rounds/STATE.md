@@ -92,3 +92,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-14: refactor pass done (3 rounds): every compiler/ fn depth<=4, none >200 lines, IR byte-identical. Follow-up: O10c over-rejection when extracting rootPlace Deref read into a helper. Next: diagnostics split, then prompt/Jupyter.
 - 2026-11-14: helperrej + diagsplit merged, verified, pushed. Prompt (wt-prompt) running; then Jupyter kernel + display convention.
 - 2026-11-14: prompt merged, verified, pushed. Asked user: keep the prompt-only D3a exception (ledger). Next: Jupyter kernel + display convention.
+- 2026-11-14: jupyter merged (verified on its branch, merge identical), pushed. Next per plan: std/frame + std/plot + numeric helpers; then oann.
