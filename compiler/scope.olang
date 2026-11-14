@@ -7716,28 +7716,10 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     if loc.Kind == typed.LocalKind.Field and not s.isRef(t) and loc.In == typed.BlockId(0) and (s.borrowed(I64(l)) or s.P.T.OwnedPart(t)) {
         # a value field a reference is taken to lives in the instance scope - its slot in the constructor's frame closes
         # as it returns, and the field is copied into the instance from there (C2g)
-        st := s.blockTerm(typed.BlockId(0))
-        if st.Runs() {
-            s.stors[I64(l)] = st
-            s.plan.Stored[I64(l)] = s.scopeOf(st)
-            s.buildsInto(st, sp, s.B!.File, sp)
-        }
+        s.fieldInInstance(sp, l)
     }
     if moved != Term.None {
-        # a local the function returns lives where the result goes, its own storage too (O26a) - but a reference's: its
-        # own storage is a slot nothing can name (no reference to a reference, T11), which stays in its block, a stack
-        # slot (a returned 'm mut Map<K, V>& = Map()' read its slot through the result scope's arena in every turn of a
-        # loop - knucleotide +0.9% of instructions after the flip, which inferred such a local where '&seq' was written)
-        s.terms[I64(l)] = moved
-        if not s.isRef(t) {
-            s.stors[I64(l)] = moved
-            s.plan.Stored[I64(l)] = s.scopeOf(moved)
-            # its slot made there is a build there (E11c: in a borrowed result's home, where a Str's receiver lives)
-            s.buildsInto(moved, x!.Span(), s.B!.File, x!.Span())
-        }
-        v := s.val(x, moved)
-        s.bindLocal(l, x!)
-        if v.K == ValKind.Existing { s.fit(v.T, moved, s.isRef(t) or s.storeThrough(t), x!, FitLocal) }
+        s.letMoved(l, t, x, moved)
         return
     }
     if not s.holds(t) {
@@ -7754,21 +7736,7 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     }
     # the handle a for-in walks that a call gives (users[0][0]): lent as its reference where the call landed (O17b, O18c),
     # its copy in the walk's block
-    if loc.Kind == typed.LocalKind.Hidden and s.isRef(t) {
-        match s.unAway(x) {
-            case typed.Expr.Promote(_, _, pr) {
-                if s.isHandle(pr.X.Type()) and s.isFresh(pr.X) and s.argLands(pr.X) {
-                    s.buildSite(pr.Site, s.blockTerm(loc.In), pr.X.Span())
-                    s.landing = true
-                    v := s.val(pr.X, Term.None)
-                    s.landing = false
-                    s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
-                    return
-                }
-            }
-            case _ { }
-        }
-    }
+    if loc.Kind == typed.LocalKind.Hidden and s.isRef(t) and s.walkHandle(l, loc, x) { return }
     # the array a for-in walks, a literal of constant data reaching a read-only reference: its elements are the constant
     # data itself (T25d), in the program's scope, whatever its own storage is
     if loc.Kind == typed.LocalKind.Hidden and s.staticLiteral(x!) {
@@ -7803,77 +7771,146 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         }
     }
     if s.isRef(t) and loc.Kind != typed.LocalKind.Hidden and loc.Kind != typed.LocalKind.Held { s.splitBorrow(x!) }
-    if s.isRef(t) and loc.Kind == typed.LocalKind.Hidden {
-        # the array a for-in walks, a split value borrowed: each element is given the references' scope, not the
-        # storage's (O17a)
-        match x {
-            case typed.Expr.Borrow(_, _, bp) {
-                # (QCE: a value holding references by value in parts of its own - a Vec of structs holding text - read
-                # where they live too, whatever could be stored through them)
-                if s.splitPlace(bp) or s.splitHeld(bp) { s.splitHome.Put(I64(l), s.partsTerm(bp)) }
-            }
-            case _ { }
-        }
-    }
+    if s.isRef(t) and loc.Kind == typed.LocalKind.Hidden { s.splitWalk(l, x) }
     if claim == Term.None {
-        # ":=", or no marker on a value holding references: the initializer's own term; a temporary is built in the
-        # local's block (O18a), a call's result where its obligations say where decide found that it lands (O18c)
-        # ... where the inference lifted it, its value built or its call landed there (2.4)
-        dest := lift if lift != Term.None else s.blockTerm(loc.In)
-        s.promoteLocal = I64(l)
-        s.caseLocal = I64(l)
-        hc := typed.Call.Of(s.unAway(x!)) if not s.isRef(t) and s.P.T.NeedsDrop(t) else null
-        s.slotCall = I64(hc.Site) if hc is not null else -1
-        s.landing = land and not part and lift == Term.None
-        if part { s.tempLand = 1 if land and lift == Term.None else 0 }
-        s.lastGenArg = Term.None
-        v := s.val(x, dest)
-        s.promoteLocal = -1
-        s.caseLocal = -1
-        s.slotCall = -1
-        s.landing = false
-        s.tempLand = -1
-        s.noteOrigin(I64(l), x!, v)
-        # D18c: a walk of a generator whose elements borrow from a parameter - each element lives where its argument does
-        if s.lastGenArg.Runs() and s.walkLocal(I64(l)) { s.walkElem.Put(I64(l), s.lastGenArg) }
-        # (a walk of such a generator, held, viewing what its argument is - O27's words, through copies of it too)
-        if s.lastGenLocal >= 0 { s.walkSrc.Put(I64(l), s.lastGenLocal) }
-        wr := s.wholeRoot(x!)
-        if wr >= 0 and s.walkSrc.Has(wr) { s.walkSrc.Put(I64(l), try s.walkSrc.Get(wr) catch default -1) }
-        s.lastGenArg = Term.None
-        s.lastGenLocal = -1
-        # (and the element its Next gives, as its view - O27's words)
-        ec := typed.Call.Of(unPassed(s.unAway(x!)))
-        if ec is not null and ec.Args.Len() > 0 {
-            wk := s.argLocal(ec.Args[0])
-            if wk >= 0 and s.walkSrc.Has(wk): s.walkSrc.Put(I64(l), try s.walkSrc.Get(wk) catch default -1)
-        }
-        s.bindLocal(l, x!)
-        s.terms[I64(l)] = s.valTerm(v, dest)
-        # QCE: a call's value owning storage and sharing no reference is the local's own copy (D9h's caller copies it,
-        # T7b's return did) - its parts live where it does, whatever storage the callee read it from
-        if s.ownCall(t, x!) {
-            s.terms[I64(l)] = dest
-            # (D9h: where the call hands back a view, this function copies it where the local keeps it - in the local's
-            # block, wherever the viewed storage lives - so a copy made in a loop turn goes with the turn, O2)
-            oc := typed.Call.Of(x!)
-            if oc is not null { s.build(oc.Site, dest) }
-        }
-        h := try s.splitHome.Get(I64(l)) catch default Term.None
-        if h != Term.None { s.terms[I64(l)] = h }
-        # a field viewing p's referent read through an element: only its container's scope is known, which the local would claim as its
-        # own (C2d, O23)
-        match v.T {
-            case Term.Derived(p, _) {
-                if p < 0 and -p - 1 < s.underElem.Len() and s.underElem[-p - 1] {
-                    s.giveBackExpr(x!)
-                    if s.report { s.err(s.lastName(x!.Span()), msgs.BuildThroughUnknownScope()) }
-                }
-            }
-            case _ { }
-        }
+        s.letInferred(l, loc, x, lift, land, part)
         return
     }
+    s.letClaimed(l, loc, x, claim)
+}
+
+# letBody's value field a reference is taken to: it lives in the instance scope - its slot in the constructor's frame
+# closes as it returns, and the field is copied into the instance from there (C2g)
+fn (s mut Scoper&) fieldInInstance(sp source.Span, l typed.LocalId) {
+    st := s.blockTerm(typed.BlockId(0))
+    if not st.Runs() { return }
+    s.stors[I64(l)] = st
+    s.plan.Stored[I64(l)] = s.scopeOf(st)
+    s.buildsInto(st, sp, s.B!.File, sp)
+}
+
+# letBody's local the function returns, or one the inference lifts whole: it lives where the result goes, or where it
+# is kept (O26a, 2.4)
+fn (s mut Scoper&) letMoved(l typed.LocalId, t types.TypeId, x typed.Expr?&, moved Term) {
+    # a local the function returns lives where the result goes, its own storage too (O26a) - but a reference's: its
+    # own storage is a slot nothing can name (no reference to a reference, T11), which stays in its block, a stack
+    # slot (a returned 'm mut Map<K, V>& = Map()' read its slot through the result scope's arena in every turn of a
+    # loop - knucleotide +0.9% of instructions after the flip, which inferred such a local where '&seq' was written)
+    s.terms[I64(l)] = moved
+    if not s.isRef(t) {
+        s.stors[I64(l)] = moved
+        s.plan.Stored[I64(l)] = s.scopeOf(moved)
+        # its slot made there is a build there (E11c: in a borrowed result's home, where a Str's receiver lives)
+        s.buildsInto(moved, x!.Span(), s.B!.File, x!.Span())
+    }
+    v := s.val(x, moved)
+    s.bindLocal(l, x!)
+    if v.K == ValKind.Existing { s.fit(v.T, moved, s.isRef(t) or s.storeThrough(t), x!, FitLocal) }
+}
+
+# letBody's handle a for-in walks that a call gives (users[0][0]): lent as its reference where the call landed (O17b,
+# O18c), its copy in the walk's block; false where x is no such handle
+fn (s mut Scoper&) walkHandle(l typed.LocalId, loc typed.Local, x typed.Expr?&) Bool {
+    match s.unAway(x) {
+        case typed.Expr.Promote(_, _, pr) {
+            if not (s.isHandle(pr.X.Type()) and s.isFresh(pr.X) and s.argLands(pr.X)) { return false }
+            s.buildSite(pr.Site, s.blockTerm(loc.In), pr.X.Span())
+            s.landing = true
+            v := s.val(pr.X, Term.None)
+            s.landing = false
+            s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
+            return true
+        }
+        case _ { }
+    }
+    return false
+}
+
+# letBody's array a for-in walks, a split value borrowed: each element is given the references' scope, not the
+# storage's (O17a)
+fn (s mut Scoper&) splitWalk(l typed.LocalId, x typed.Expr?&) {
+    match x {
+        case typed.Expr.Borrow(_, _, bp) {
+            # (QCE: a value holding references by value in parts of its own - a Vec of structs holding text - read
+            # where they live too, whatever could be stored through them)
+            if s.splitPlace(bp) or s.splitHeld(bp) { s.splitHome.Put(I64(l), s.partsTerm(bp)) }
+        }
+        case _ { }
+    }
+}
+
+# letBody's ":=", or no marker on a value holding references: the initializer's own term; a temporary is built in the
+# local's block (O18a), a call's result where its obligations say where decide found that it lands (O18c)
+# ... where the inference lifted it, its value built or its call landed there (2.4)
+fn (s mut Scoper&) letInferred(l typed.LocalId, loc typed.Local, x typed.Expr?&, lift Term, land Bool, part Bool) {
+    t := loc.Ty
+    dest := lift if lift != Term.None else s.blockTerm(loc.In)
+    s.promoteLocal = I64(l)
+    s.caseLocal = I64(l)
+    hc := typed.Call.Of(s.unAway(x!)) if not s.isRef(t) and s.P.T.NeedsDrop(t) else null
+    s.slotCall = I64(hc.Site) if hc is not null else -1
+    s.landing = land and not part and lift == Term.None
+    if part { s.tempLand = 1 if land and lift == Term.None else 0 }
+    s.lastGenArg = Term.None
+    v := s.val(x, dest)
+    s.promoteLocal = -1
+    s.caseLocal = -1
+    s.slotCall = -1
+    s.landing = false
+    s.tempLand = -1
+    s.noteOrigin(I64(l), x!, v)
+    s.noteWalk(l, x)
+    s.bindLocal(l, x!)
+    s.terms[I64(l)] = s.valTerm(v, dest)
+    # QCE: a call's value owning storage and sharing no reference is the local's own copy (D9h's caller copies it,
+    # T7b's return did) - its parts live where it does, whatever storage the callee read it from
+    if s.ownCall(t, x!) {
+        s.terms[I64(l)] = dest
+        # (D9h: where the call hands back a view, this function copies it where the local keeps it - in the local's
+        # block, wherever the viewed storage lives - so a copy made in a loop turn goes with the turn, O2)
+        oc := typed.Call.Of(x!)
+        if oc is not null { s.build(oc.Site, dest) }
+    }
+    h := try s.splitHome.Get(I64(l)) catch default Term.None
+    if h != Term.None { s.terms[I64(l)] = h }
+    s.derivedUnknown(v, x)
+}
+
+# letInferred's walks: a generator's elements borrowing from a parameter (D18c), and what a walk views (O27)
+fn (s mut Scoper&) noteWalk(l typed.LocalId, x typed.Expr?&) {
+    # D18c: a walk of a generator whose elements borrow from a parameter - each element lives where its argument does
+    if s.lastGenArg.Runs() and s.walkLocal(I64(l)) { s.walkElem.Put(I64(l), s.lastGenArg) }
+    # (a walk of such a generator, held, viewing what its argument is - O27's words, through copies of it too)
+    if s.lastGenLocal >= 0 { s.walkSrc.Put(I64(l), s.lastGenLocal) }
+    wr := s.wholeRoot(x!)
+    if wr >= 0 and s.walkSrc.Has(wr) { s.walkSrc.Put(I64(l), try s.walkSrc.Get(wr) catch default -1) }
+    s.lastGenArg = Term.None
+    s.lastGenLocal = -1
+    # (and the element its Next gives, as its view - O27's words)
+    ec := typed.Call.Of(unPassed(s.unAway(x!)))
+    if ec is not null and ec.Args.Len() > 0 {
+        wk := s.argLocal(ec.Args[0])
+        if wk >= 0 and s.walkSrc.Has(wk): s.walkSrc.Put(I64(l), try s.walkSrc.Get(wk) catch default -1)
+    }
+}
+
+# letInferred's field viewing p's referent read through an element: only its container's scope is known, which the
+# local would claim as its own (C2d, O23)
+fn (s mut Scoper&) derivedUnknown(v Val, x typed.Expr?&) {
+    match v.T {
+        case Term.Derived(p, _) {
+            if p < 0 and -p - 1 < s.underElem.Len() and s.underElem[-p - 1] {
+                s.giveBackExpr(x!)
+                if s.report { s.err(s.lastName(x!.Span()), msgs.BuildThroughUnknownScope()) }
+            }
+        }
+        case _ { }
+    }
+}
+
+# letBody's local of a claim: written with a mark, or a field of the instance (C2d), or lifted by the inference (2.4)
+fn (s mut Scoper&) letClaimed(l typed.LocalId, loc typed.Local, x typed.Expr?&, claim Term) {
+    t := loc.Ty
     s.terms[I64(l)] = claim
     # a conditional or a match of references a written type declares builds its new values at the claim, as any
     # temporary it is given lands (O18a) - and so is a set where its other values live elsewhere (E28)

@@ -7499,24 +7499,8 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
     }
     # text written in the program adapts to a type declared over text, or to a fixed array of its length (T29a, T7c)
     if isData(x) and hk == types.Kind.Ref {
-        r := c.P.T.Referent(have)
-        w := c.P.T.Referent(want) if wk == types.Kind.Ref else want
-        if not c.P.T.Same(r, w) and c.sameRepr(r, c.under(w)) {
-            # a value of its own where one is wanted: the text read out of the constant, a copy (E12) - converted
-            # whole, the value was the constant's storage, so what was written into it was lost
-            if wk != types.Kind.Ref: return c.fit(c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have))), want, sp)
-            y := c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)))
-            # T25d: going where it may be written, it is judged as text at its own type is - handed over as the
-            # constant itself, a write through it would land in the program's constant data
-            if not c.writable(want): return y
-            c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Copy()'"))
-            return y
-        }
-        u := c.under(w)
-        if c.P.T.KindOf(u) == types.Kind.Array and c.P.T.Length(u) != types.TypeId(0) and c.sameRepr(c.P.T.Elem(c.under(r)), c.P.T.Elem(u)) {
-            y := c.dataAsFixed(x, sp, w, c.P.T.ConstValue(c.P.T.Length(u)))
-            if y is not null { return y }
-        }
+        y := c.fitData(x, have, want, sp)
+        if y is not null { return y }
     }
     # an array literal adapts to a type declared over an array of its elements (T29a)
     if hk == types.Kind.Array and isArrayMake(x) {
@@ -7546,22 +7530,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         a := c.adapter(sp, x, want)
         if a is not null { return a }
     }
-    if have == types.NullT {
-        if c.P.T.IsNullable(want) { return c.nullOf(sp, want) }
-        if c.P.T.ArrayRef(want) {
-            # T2c: an array is never null - an empty one is written as one
-            c.err(sp, msgs.NullToArray(c.ty(c.deref(want)), c.emptyArray(want)))
-            return c.lit(sp, want, 0)
-        }
-        if wk == types.Kind.Ref or wk == types.Kind.Func {
-            # T2c: a reference that may be null says so where its type is written - a function value too (T21)
-            rec := c.err(sp, msgs.NullToNonNull(c.ty(want), c.ty(c.P.T.OrNull(want))))
-            c.declNote(rec)
-            return x
-        }
-        c.err(sp, msgs.TypeMismatch(c.ty(want), "null"))
-        return x
-    }
+    if have == types.NullT: return c.fitNull(x, want, sp)
     # numbers flow toward their base (T6b)
     if c.isNumber(have) and c.isNumber(want) and hk != types.Kind.Ref and wk != types.Kind.Ref {
         if c.P.Flows(have, want) { return c.convert(sp, x, want) }
@@ -7583,94 +7552,13 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
     }
     # a value where a reference is wanted: borrowed where it has storage, else a temporary given some (E12c)
     if wk == types.Kind.Ref and hk != types.Kind.Ref {
-        r := c.P.T.Referent(want)
-        if c.P.T.Same(r, have) {
-            # "try a.Get(i)" with no clause names the element as "a[i]" does (E31b, T1): the element borrowed under the
-            # try, so the write lands
-            b := c.tryBorrowed(x, want, sp)
-            if b is not null { return b }
-            p := readPlace(x)
-            if p is not null and c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
-            if p is not null {
-                if (c.P.T.PermOf(want) & types.Writable) != 0 {
-                    c.mustWrite(p, sp, false)
-                    c.roDeepNeed(x)
-                }
-                # S4d: a borrow of the place being written over, or of storage within it, takes its old value - a copy
-                for q in c.s4d {
-                    if c.within(p, q) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
-                }
-                # ... and so does a compound assignment's or an increment's old value, where its type can hold one
-                if c.targetHoldsRefs(p) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
-                return typed.Expr.Borrow(sp, want, p)
-            }
-            if (c.P.T.PermOf(want) & types.Writable) != 0 {
-                csp := c.chosenAt(x)
-                if csp.Start >= 0 and c.condChoosesPlace(x) {
-                    # E28: a conditional's value is a copy, which the callee would write and drop
-                    c.err(csp, msgs.CondLentWritable())
-                } else {
-                    c.roLend(x, sp)
-                }
-            }
-            return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp)))
-        }
-        if c.flowsInto(have, r) or (c.isNumber(have) and c.isNumber(r) and c.P.Flows(have, r)) {
-            p := readPlace(x)
-            # a fixed array where a reference to one of a run-time length is wanted: the place itself borrowed and the
-            # reference widened, nothing copied (E12, T7c) - the callee writes the caller's elements; and an array whose
-            # elements are held as the wanted one's are (an Array<Char> lent as an Array<U8>&: Char extends U8, T29h) -
-            # it had been copied and the copy lent, so what the callee wrote was lost
-            if p is not null and hk == types.Kind.Array and (c.P.T.Length(have) != types.TypeId(0) or c.sameRepr(have, r)) {
-                if c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(c.fit(x, r, sp), c.site(typed.SiteKind.Promote, sp))) }
-                if (c.P.T.PermOf(want) & types.Writable) != 0 {
-                    c.mustWrite(p, sp, false)
-                    c.roDeepNeed(x)
-                }
-                return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, c.P.T.PermOf(want)), p), want)
-            }
-            # T25d: an array of constants reaching a read-only reference is the constant data itself
-            d := c.staticArray(x, want)
-            if d is not null { return d }
-            v := c.fit(x, r, sp)
-            if p is not null and c.isNamed(have) and c.isOver(have) {
-                # a declared type's place lent as its base names its storage (T29a): written only where the place may
-                # be (S6, T25b, T25c) - a String global as an Array<Char> as much as any
-                if (c.P.T.PermOf(want) & types.Writable) != 0 {
-                    c.mustWrite(p, sp, false)
-                    c.roDeepNeed(x)
-                }
-                return typed.Expr.Borrow(sp, want, p)
-            }
-            return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
-        }
+        y := c.fitBorrow(x, have, want, sp)
+        if y is not null { return y }
     }
     # a reference to a reference: the same referent, writable into read-only (T25c)
     if hk == types.Kind.Ref and wk == types.Kind.Ref {
-        hr := c.P.T.Referent(have)
-        wr := c.P.T.Referent(want)
-        if c.P.T.Same(hr, wr) or c.flowsInto(hr, wr) {
-            # X10: nothing is read or written through an extern type's reference, so its permission says nothing
-            if c.foreignRef(have) and c.P.T.Same(hr, wr) {
-                return c.convert(sp, x, want) if c.P.T.PermOf(have) != c.P.T.PermOf(want) else x
-            }
-            if (c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0 {
-                if isData(x) {
-                    v := c.fit(c.read(sp, typed.Lvalue.Deref(sp, hr, x)), wr, sp)
-                    return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
-                }
-                # T13a: what is read-only because it never changes (a String, a slice of one) says what may be written
-                if c.P.Immut(hr) {
-                    c.err(sp, msgs.TextWrite() if hr == c.textType() else msgs.ImmutWrite(c.ty(hr)))
-                    return x
-                }
-                c.err(sp, msgs.ReadOnlyToWritable())
-                return x
-            }
-            if (c.P.T.PermOf(want) & types.Writable) != 0 and not c.roWritableRef(x, sp) { return x }
-            if c.P.T.Same(hr, wr) { return x }
-            return c.convert(sp, x, want)
-        }
+        y := c.fitRefs(x, have, want, sp)
+        if y is not null { return y }
     }
     # a declared type flows into the type it is declared over (T29a), an array of a fixed length into one of a run-time
     # one (T7c)
@@ -7678,28 +7566,58 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
     # T7d: an array of a run-time length stored into fixed storage is copied through a slice of its length, written -
     # no store is checked for its length implicitly. One whose length is still being computed fits (T7c's undecided)
     if wk == types.Kind.Array and c.P.T.Length(want) != types.TypeId(0) {
-        src := x
-        st := have
-        if hk == types.Kind.Ref {
-            st = c.P.T.Referent(have)
-            src = c.read(sp, typed.Lvalue.Deref(sp, st, x))
-        }
-        su := c.under(st)
-        if c.P.T.KindOf(su) == types.Kind.Array and c.P.T.Length(su) == types.TypeId(0) and c.sameRepr(c.P.T.Elem(su), c.P.T.Elem(want)) {
-            if c.P.T.KindOf(c.P.T.Length(want)) == types.Kind.Const {
-                c.err(sp, msgs.ArrayRunTimeIntoFixed(c.P.T.ConstValue(c.P.T.Length(want))))
-                return x
-            }
-            from := c.exprs.Len()
-            c.exprs.Push(src)
-            return typed.Expr.Prim(sp, want, typed.PrimOp.Convert, typed.Check.Abort, gather(c.exprs, from))
-        }
+        y := c.fitIntoFixed(x, have, want, sp)
+        if y is not null { return y }
     }
     # T7d: two fixed arrays of one element type and two lengths
     if hk == types.Kind.Array and wk == types.Kind.Array and c.P.T.Same(c.P.T.Elem(have), c.P.T.Elem(want)) and c.P.T.KindOf(c.P.T.Length(have)) == types.Kind.Const and c.P.T.KindOf(c.P.T.Length(want)) == types.Kind.Const {
         c.err(sp, msgs.ArraySizeMismatch(c.P.T.ConstValue(c.P.T.Length(have)), c.P.T.ConstValue(c.P.T.Length(want))))
         return x
     }
+    return c.mismatch(x, have, want, sp)
+}
+
+# fit's null: where a reference that may be null is wanted, else T2c's or E12's error
+fn (c mut Checker&) fitNull(x typed.Expr&, want types.TypeId, sp source.Span) typed.Expr& {
+    wk := c.P.T.KindOf(want)
+    if c.P.T.IsNullable(want) { return c.nullOf(sp, want) }
+    if c.P.T.ArrayRef(want) {
+        # T2c: an array is never null - an empty one is written as one
+        c.err(sp, msgs.NullToArray(c.ty(c.deref(want)), c.emptyArray(want)))
+        return c.lit(sp, want, 0)
+    }
+    if wk == types.Kind.Ref or wk == types.Kind.Func {
+        # T2c: a reference that may be null says so where its type is written - a function value too (T21)
+        rec := c.err(sp, msgs.NullToNonNull(c.ty(want), c.ty(c.P.T.OrNull(want))))
+        c.declNote(rec)
+        return x
+    }
+    c.err(sp, msgs.TypeMismatch(c.ty(want), "null"))
+    return x
+}
+
+# fit's array of a run-time length stored into fixed storage (T7d): copied through a slice of its length, written, so
+# an error; one whose length is still being computed fits (T7c's undecided). Null for any other array
+fn (c mut Checker&) fitIntoFixed(x typed.Expr&, have types.TypeId, want types.TypeId, sp source.Span) typed.Expr?& {
+    src := x
+    st := have
+    if c.P.T.KindOf(have) == types.Kind.Ref {
+        st = c.P.T.Referent(have)
+        src = c.read(sp, typed.Lvalue.Deref(sp, st, x))
+    }
+    su := c.under(st)
+    if not (c.P.T.KindOf(su) == types.Kind.Array and c.P.T.Length(su) == types.TypeId(0) and c.sameRepr(c.P.T.Elem(su), c.P.T.Elem(want))) { return null }
+    if c.P.T.KindOf(c.P.T.Length(want)) == types.Kind.Const {
+        c.err(sp, msgs.ArrayRunTimeIntoFixed(c.P.T.ConstValue(c.P.T.Length(want))))
+        return x
+    }
+    from := c.exprs.Len()
+    c.exprs.Push(src)
+    return typed.Expr.Prim(sp, want, typed.PrimOp.Convert, typed.Check.Abort, gather(c.exprs, from))
+}
+
+# fit's E12 error: nothing makes x fit; two types of one name are told apart by the modules declaring them
+fn (c mut Checker&) mismatch(x typed.Expr&, have types.TypeId, want types.TypeId, sp source.Span) typed.Expr& {
     ws := c.ty(want)
     hs := c.tyOf(x)
     if ws == hs and c.isNamed(c.deref(want)) and c.isNamed(c.deref(have)) {
@@ -7709,6 +7627,127 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
     }
     c.err(sp, msgs.TypeMismatch(ws, hs))
     return x
+}
+
+# fit's text written in the program adapting to a type declared over text, or to a fixed array of its length (T29a,
+# T7c); null where neither applies
+fn (c mut Checker&) fitData(x typed.Expr&, have types.TypeId, want types.TypeId, sp source.Span) typed.Expr?& {
+    wk := c.P.T.KindOf(want)
+    r := c.P.T.Referent(have)
+    w := c.P.T.Referent(want) if wk == types.Kind.Ref else want
+    if not c.P.T.Same(r, w) and c.sameRepr(r, c.under(w)) {
+        # a value of its own where one is wanted: the text read out of the constant, a copy (E12) - converted
+        # whole, the value was the constant's storage, so what was written into it was lost
+        if wk != types.Kind.Ref: return c.fit(c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have))), want, sp)
+        y := c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)))
+        # T25d: going where it may be written, it is judged as text at its own type is - handed over as the
+        # constant itself, a write through it would land in the program's constant data
+        if not c.writable(want): return y
+        c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Copy()'"))
+        return y
+    }
+    u := c.under(w)
+    if c.P.T.KindOf(u) == types.Kind.Array and c.P.T.Length(u) != types.TypeId(0) and c.sameRepr(c.P.T.Elem(c.under(r)), c.P.T.Elem(u)) {
+        return c.dataAsFixed(x, sp, w, c.P.T.ConstValue(c.P.T.Length(u)))
+    }
+    return null
+}
+
+# fit's value where a reference is wanted: borrowed where it has storage, else a temporary given some (E12c); null
+# where the value is not of the referent or flows into it
+fn (c mut Checker&) fitBorrow(x typed.Expr&, have types.TypeId, want types.TypeId, sp source.Span) typed.Expr?& {
+    r := c.P.T.Referent(want)
+    if c.P.T.Same(r, have): return c.lendSame(x, want, sp)
+    if not (c.flowsInto(have, r) or (c.isNumber(have) and c.isNumber(r) and c.P.Flows(have, r))): return null
+    p := readPlace(x)
+    # a fixed array where a reference to one of a run-time length is wanted: the place itself borrowed and the
+    # reference widened, nothing copied (E12, T7c) - the callee writes the caller's elements; and an array whose
+    # elements are held as the wanted one's are (an Array<Char> lent as an Array<U8>&: Char extends U8, T29h) - it
+    # had been copied and the copy lent, so what the callee wrote was lost
+    if p is not null and c.P.T.KindOf(have) == types.Kind.Array and (c.P.T.Length(have) != types.TypeId(0) or c.sameRepr(have, r)) {
+        if c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(c.fit(x, r, sp), c.site(typed.SiteKind.Promote, sp))) }
+        c.lentWritable(p, x, want, sp)
+        return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, c.P.T.PermOf(want)), p), want)
+    }
+    # T25d: an array of constants reaching a read-only reference is the constant data itself
+    d := c.staticArray(x, want)
+    if d is not null { return d }
+    v := c.fit(x, r, sp)
+    if p is not null and c.isNamed(have) and c.isOver(have) {
+        # a declared type's place lent as its base names its storage (T29a): written only where the place may be (S6,
+        # T25b, T25c) - a String global as an Array<Char> as much as any
+        c.lentWritable(p, x, want, sp)
+        return typed.Expr.Borrow(sp, want, p)
+    }
+    return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
+}
+
+# fitBorrow's value of the very referent: the element "try a.Get(i)" names, its place borrowed, or a temporary
+fn (c mut Checker&) lendSame(x typed.Expr&, want types.TypeId, sp source.Span) typed.Expr& {
+    # "try a.Get(i)" with no clause names the element as "a[i]" does (E31b, T1): the element borrowed under the try,
+    # so the write lands
+    b := c.tryBorrowed(x, want, sp)
+    if b is not null { return b }
+    p := readPlace(x)
+    if p is not null and c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
+    if p is not null: return c.lendPlace(x, p, want, sp)
+    if (c.P.T.PermOf(want) & types.Writable) != 0 {
+        csp := c.chosenAt(x)
+        if csp.Start >= 0 and c.condChoosesPlace(x) {
+            # E28: a conditional's value is a copy, which the callee would write and drop
+            c.err(csp, msgs.CondLentWritable())
+        } else {
+            c.roLend(x, sp)
+        }
+    }
+    return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp)))
+}
+
+# lendSame's place: borrowed, unless it is being written over (S4d) - then its old value, a copy
+fn (c mut Checker&) lendPlace(x typed.Expr&, p typed.Lvalue&, want types.TypeId, sp source.Span) typed.Expr& {
+    c.lentWritable(p, x, want, sp)
+    # S4d: a borrow of the place being written over, or of storage within it, takes its old value - a copy
+    for q in c.s4d {
+        if c.within(p, q) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
+    }
+    # ... and so does a compound assignment's or an increment's old value, where its type can hold one
+    if c.targetHoldsRefs(p) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
+    return typed.Expr.Borrow(sp, want, p)
+}
+
+# a place lent where a writable reference is wanted must be one that may be written, and all it reaches with it
+fn (c mut Checker&) lentWritable(p typed.Lvalue&, x typed.Expr&, want types.TypeId, sp source.Span) {
+    if (c.P.T.PermOf(want) & types.Writable) == 0 { return }
+    c.mustWrite(p, sp, false)
+    c.roDeepNeed(x)
+}
+
+# fit's reference where a reference is wanted: the same referent, writable into read-only (T25c); null where the
+# referents differ
+fn (c mut Checker&) fitRefs(x typed.Expr&, have types.TypeId, want types.TypeId, sp source.Span) typed.Expr?& {
+    hr := c.P.T.Referent(have)
+    wr := c.P.T.Referent(want)
+    if not (c.P.T.Same(hr, wr) or c.flowsInto(hr, wr)) { return null }
+    # X10: nothing is read or written through an extern type's reference, so its permission says nothing
+    if c.foreignRef(have) and c.P.T.Same(hr, wr) {
+        return c.convert(sp, x, want) if c.P.T.PermOf(have) != c.P.T.PermOf(want) else x
+    }
+    if (c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0 {
+        if isData(x) {
+            v := c.fit(c.read(sp, typed.Lvalue.Deref(sp, hr, x)), wr, sp)
+            return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
+        }
+        # T13a: what is read-only because it never changes (a String, a slice of one) says what may be written
+        if c.P.Immut(hr) {
+            c.err(sp, msgs.TextWrite() if hr == c.textType() else msgs.ImmutWrite(c.ty(hr)))
+            return x
+        }
+        c.err(sp, msgs.ReadOnlyToWritable())
+        return x
+    }
+    if (c.P.T.PermOf(want) & types.Writable) != 0 and not c.roWritableRef(x, sp) { return x }
+    if c.P.T.Same(hr, wr) { return x }
+    return c.convert(sp, x, want)
 }
 
 # fit's array literal of other elements: its elements fitted to elem each, at length n; null for any other expression
