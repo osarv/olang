@@ -1656,21 +1656,24 @@ fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
                 for d in c.Defaults { s.bndExpr(d, place) }
             }
         }
-        case typed.Expr.Fn(_, _, f) {
-            match f {
-                case typed.FnVal.Lambda(lb, caps, _) {
-                    for c in caps { s.bndExpr(c.Outer, BndNone if s.capFollowed.Has(pair.Pair<I64, I64>(I64(lb), I64(c.Inner))) else BndCapture) }
-                }
-                case typed.FnVal.Adapter(_, r, _) { s.bndExpr(r, BndOther) }
-                case _ { }
-            }
-        }
+        case typed.Expr.Fn(_, _, f) { s.bndFn(f) }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
                 if pc == typed.Piece.Render: s.bndExpr(pc.x, BndOther)
             }
         }
         case typed.Expr.Away(_, _, y) { s.bndExpr(y, place) }
+        case _ { }
+    }
+}
+
+# bndExpr's function value: what a lambda captures, an adapter's instance
+fn (s mut Scoper&) bndFn(f typed.FnVal&) {
+    match f {
+        case typed.FnVal.Lambda(lb, caps, _) {
+            for c in caps { s.bndExpr(c.Outer, BndNone if s.capFollowed.Has(pair.Pair<I64, I64>(I64(lb), I64(c.Inner))) else BndCapture) }
+        }
+        case typed.FnVal.Adapter(_, r, _) { s.bndExpr(r, BndOther) }
         case _ { }
     }
 }
@@ -4219,21 +4222,7 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
                 for d in c.Defaults { collectExpr(d, out) }
             }
         }
-        case typed.Expr.Fn(_, _, f) {
-            match f {
-                case typed.FnVal.Named(id) { out.Callees.Push(I64(id)) }
-                case typed.FnVal.Lambda(id, caps, _) {
-                    out.Callees.Push(I64(id))
-                    out.LamIds.Push(I64(id))
-                    out.LamCaps.Push(caps)
-                    for c in caps { collectExpr(c.Outer, out) }
-                }
-                case typed.FnVal.Adapter(id, r, _) {
-                    out.Callees.Push(I64(id))
-                    collectExpr(r, out)
-                }
-            }
-        }
+        case typed.Expr.Fn(_, _, f) { collectFn(f, out) }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
                 if pc == typed.Piece.Render: collectExpr(pc.x, out)
@@ -4241,6 +4230,23 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
         }
         case typed.Expr.Away(_, _, y) { collectExpr(y, out) }
         case _ { }
+    }
+}
+
+# collectExpr's function value: the body it names or makes, what a lambda captures, an adapter's instance
+fn collectFn(f typed.FnVal&, out mut walked&) {
+    match f {
+        case typed.FnVal.Named(id) { out.Callees.Push(I64(id)) }
+        case typed.FnVal.Lambda(id, caps, _) {
+            out.Callees.Push(I64(id))
+            out.LamIds.Push(I64(id))
+            out.LamCaps.Push(caps)
+            for c in caps { collectExpr(c.Outer, out) }
+        }
+        case typed.FnVal.Adapter(id, r, _) {
+            out.Callees.Push(I64(id))
+            collectExpr(r, out)
+        }
     }
 }
 
@@ -5234,11 +5240,9 @@ fn (s mut Scoper&) soleExpr(x typed.Expr?&, strict Bool) {
             for j in range c.Args.Len() {
                 a := c.Args[j]
                 # lent to a call that keeps nothing of it
-                if not strict and s.soleBorrow(a) {
-                    if s.canKeep(c, j): s.soleBad = true
-                    continue
-                }
-                s.soleExpr(a, strict)
+                lent := not strict and s.soleBorrow(a)
+                if lent and s.canKeep(c, j): s.soleBad = true
+                if not lent: s.soleExpr(a, strict)
             }
         }
         case typed.Expr.Make(_, _, m) {
@@ -5247,7 +5251,7 @@ fn (s mut Scoper&) soleExpr(x typed.Expr?&, strict Bool) {
         }
         case typed.Expr.Collect(_, _, c) {
             s.soleExpr(c.Reserve, strict)
-            if strict { s.soleStrictBlock(c.Loop) } else { s.soleBlock(c.Loop) }
+            s.soleBlockBy(c.Loop, strict)
         }
         case typed.Expr.Prim(_, _, op, _, args) {
             for a in args {
@@ -5262,18 +5266,18 @@ fn (s mut Scoper&) soleExpr(x typed.Expr?&, strict Bool) {
             s.soleExpr(c.B, strict)
         }
         case typed.Expr.Seq(_, _, q) {
-            for st in q.Stmts { if strict { s.soleStrictStmt(st) } else { s.soleStmt(st) } }
+            for st in q.Stmts { s.soleStmtBy(st, strict) }
             s.soleExpr(q.X, strict)
         }
         case typed.Expr.Match(_, _, m) {
-            for st in m.Held { if strict { s.soleStrictStmt(st) } else { s.soleStmt(st) } }
+            for st in m.Held { s.soleStmtBy(st, strict) }
             for a in m.Arms { s.soleArm(a, strict) }
             s.soleArm(m.NoMatch, strict)
         }
         case typed.Expr.Try(_, _, t) {
             s.soleExpr(t.X, strict)
             for c in t.Clauses {
-                if strict { s.soleStrictBlock(c.Code) } else { s.soleBlock(c.Code) }
+                s.soleBlockBy(c.Code, strict)
                 for df in c.Defaults { s.soleExpr(df, strict) }
             }
         }
@@ -5302,8 +5306,18 @@ fn (s mut Scoper&) soleArm(a typed.Arm?&, strict Bool) {
         for bd in alt.Binds { s.soleExpr(bd.From, strict) }
     }
     s.soleExpr(a.Guard, strict)
-    if strict { s.soleStrictBlock(a.Code) } else { s.soleBlock(a.Code) }
+    s.soleBlockBy(a.Code, strict)
     s.soleExpr(a.Value, strict)
+}
+
+# a statement judged as soleExpr judges, strictly or not
+fn (s mut Scoper&) soleStmtBy(st typed.Stmt?&, strict Bool) {
+    if strict { s.soleStrictStmt(st) } else { s.soleStmt(st) }
+}
+
+# a block judged as soleExpr judges, strictly or not
+fn (s mut Scoper&) soleBlockBy(b typed.Block?&, strict Bool) {
+    if strict { s.soleStrictBlock(b) } else { s.soleBlock(b) }
 }
 
 # the statements a task or a lambda's capture runs, walked so that any mention of the local is a second name
@@ -5429,10 +5443,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
                 xs Vec<I64>
                 s.carried(x, xs)
                 s.returnedArrays(x, xs)
-                for k in xs {
-                    s.flAdd(k)
-                    if not flHas(s.flDirect, k) { s.flDirect.Push(k) }
-                }
+                s.flAddDirect(xs)
             } else if s.carries(x) {
                 s.flKept = true
             }
@@ -5463,6 +5474,14 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
             if s.flMode == 1 and s.carries(x!) { s.flKept = true }
         }
         case _ { }
+    }
+}
+
+# flStmt's places a return carries: each one followed, and returned directly
+fn (s mut Scoper&) flAddDirect(xs Vec<I64>&) {
+    for k in xs {
+        s.flAdd(k)
+        if not flHas(s.flDirect, k) { s.flDirect.Push(k) }
     }
 }
 
@@ -5791,23 +5810,27 @@ fn (s mut Scoper&) carried(x typed.Expr?&, out mut Vec<I64>&) {
             }
         }
         case typed.Expr.Away(_, _, y) { s.carried(y, out) }
-        case typed.Expr.Fn(_, _, f) {
-            # a lambda returned moves nothing it captured into the result scope: each capture is an obligation (D16d);
-            # an instance adapted through its Call is the value itself (E31)
-            match f {
-                case typed.FnVal.Lambda(_, caps, _) {
-                    # (but for a reference it captures: what that names must outlive the lambda, which it does where the
-                    # local's referent is built where the result goes - a reference local from a built call; and so for a
-                    # function value it captures, a lambda local whose own captures flow so in turn - review 6b F5)
-                    for cp in caps {
-                        ct := cp.Outer.Type()
-                        if s.flCaps or s.isRef(ct) or s.isFunc(ct): s.carried(cp.Outer, out)
-                    }
-                }
-                case typed.FnVal.Adapter(_, r, _) { s.carried(r, out) }
-                case _ { }
+        case typed.Expr.Fn(_, _, f) { s.carriedFn(f, out) }
+        case _ { }
+    }
+}
+
+# carried's function value: a lambda returned moves nothing it captured into the result scope - each capture is an
+# obligation (D16d); an instance adapted through its Call is the value itself (E31)
+fn (s mut Scoper&) carriedFn(f typed.FnVal&, out mut Vec<I64>&) {
+    # a lambda returned moves nothing it captured into the result scope: each capture is an obligation (D16d);
+    # an instance adapted through its Call is the value itself (E31)
+    match f {
+        case typed.FnVal.Lambda(_, caps, _) {
+            # (but for a reference it captures: what that names must outlive the lambda, which it does where the
+            # local's referent is built where the result goes - a reference local from a built call; and so for a
+            # function value it captures, a lambda local whose own captures flow so in turn - review 6b F5)
+            for cp in caps {
+                ct := cp.Outer.Type()
+                if s.flCaps or s.isRef(ct) or s.isFunc(ct): s.carried(cp.Outer, out)
             }
         }
+        case typed.FnVal.Adapter(_, r, _) { s.carried(r, out) }
         case _ { }
     }
 }
@@ -6234,15 +6257,18 @@ fn (s mut Scoper&) rlStmt(st typed.Stmt?&, pass I64) {
             for c in jn.Clauses { s.rlBlock(c.Code, pass) }
         }
         case typed.Stmt.Spawn(_, sw) {
-            if pass == 1 {
-                for p in sw.Targets {
-                    if p is null: continue
-                    if not flThroughRef(p) { s.rlDrop(flRoot(p)) }
-                }
-            }
+            if pass == 1 { s.rlTargets(sw) }
             s.rlExpr(sw.Task, pass)
         }
         case _ { }
+    }
+}
+
+# rlStmt's spawned call's targets, in the first pass: each written by the task
+fn (s mut Scoper&) rlTargets(sw typed.Spawn&) {
+    for p in sw.Targets {
+        if p is null: continue
+        if not flThroughRef(p) { s.rlDrop(flRoot(p)) }
     }
 }
 
@@ -6283,16 +6309,19 @@ fn (s mut Scoper&) rlExpr(x typed.Expr?&, pass I64) {
             s.rlExpr(t.X, pass)
             for c in t.Clauses { s.rlBlock(c.Code, pass) }
         }
-        case typed.Expr.Fn(_, _, f) {
-            match f {
-                case typed.FnVal.Lambda(_, caps, _) {
-                    # a lambda copying a candidate in may write the copy, not the candidate; but a borrow is a lend
-                    for cp in caps { s.rlExpr(cp.Outer, pass) }
-                }
-                case _ { }
-            }
-        }
+        case typed.Expr.Fn(_, _, f) { s.rlFn(f, pass) }
         case typed.Expr.Away(_, _, y) { s.rlExpr(y, pass) }
+        case _ { }
+    }
+}
+
+# rlExpr's function value: what a lambda captures
+fn (s mut Scoper&) rlFn(f typed.FnVal&, pass I64) {
+    match f {
+        case typed.FnVal.Lambda(_, caps, _) {
+            # a lambda copying a candidate in may write the copy, not the candidate; but a borrow is a lend
+            for cp in caps { s.rlExpr(cp.Outer, pass) }
+        }
         case _ { }
     }
 }
@@ -6429,12 +6458,9 @@ fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
     if x is null { return }
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p) {
-            match p {
-                case typed.Lvalue.Local(_, _, id) {
-                    if not inert { s.keepParam(I64(id)) }
-                    return
-                }
-                case _ { }
+            if p == typed.Lvalue.Local {
+                if not inert { s.keepParam(I64(p.id)) }
+                return
             }
             s.kwPlace(p)
         }
@@ -6482,25 +6508,28 @@ fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
                 for df in c.Defaults { s.kwExpr(df, inert) }
             }
         }
-        case typed.Expr.Fn(_, _, f) {
-            match f {
-                case typed.FnVal.Lambda(lb, caps, _) {
-                    # a lambda that never leaves where it is made is judged by its body: a capture is kept where the
-                    # lambda keeps or stores into it (O17, D16c)
-                    tr := s.kwTransient
-                    s.kwTransient = false
-                    for cp in caps { s.kwCapture(I64(lb), cp, tr) }
-                }
-                case typed.FnVal.Adapter(_, r, _) { s.kwExpr(r, false) }
-                case _ { }
-            }
-        }
+        case typed.Expr.Fn(_, _, f) { s.kwFn(f) }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
                 if pc == typed.Piece.Render: s.kwExpr(pc.x, true)
             }
         }
         case typed.Expr.Away(_, _, y) { s.kwExpr(y, inert) }
+        case _ { }
+    }
+}
+
+# kwExpr's function value: a lambda's captures, an adapter's instance
+fn (s mut Scoper&) kwFn(f typed.FnVal&) {
+    match f {
+        case typed.FnVal.Lambda(lb, caps, _) {
+            # a lambda that never leaves where it is made is judged by its body: a capture is kept where the
+            # lambda keeps or stores into it (O17, D16c)
+            tr := s.kwTransient
+            s.kwTransient = false
+            for cp in caps { s.kwCapture(I64(lb), cp, tr) }
+        }
+        case typed.FnVal.Adapter(_, r, _) { s.kwExpr(r, false) }
         case _ { }
     }
 }
@@ -7483,13 +7512,7 @@ fn (s mut Scoper&) ocStmt(st typed.Stmt?&, l I64, passOn Bool) Bool {
         }
         case typed.Stmt.Spawn(_, sw) {
             # a task calling through it takes it to another thread: a use as a value
-            tk := sw.Task
-            if tk == typed.Expr.Call {
-                match tk.c.Target {
-                    case typed.Callee.Value(f) { if flRootExpr(f) == l: return false }
-                    case _ { }
-                }
-            }
+            if taskCallsThrough(sw.Task, l) { return false }
             for p in sw.Targets {
                 if p is null: continue
                 if not s.ocPlace(p, l, passOn) { return false }
@@ -7503,6 +7526,16 @@ fn (s mut Scoper&) ocStmt(st typed.Stmt?&, l I64, passOn Bool) Bool {
         case typed.Stmt.Yield(_, x) { return s.ocExpr(x, l, passOn) }
         case _ { return true }
     }
+}
+
+# whether a task is a call through a function value local l is the root of
+fn taskCallsThrough(tk typed.Expr&, l I64) Bool {
+    if not (tk == typed.Expr.Call) { return false }
+    match tk.c.Target {
+        case typed.Callee.Value(f) { return flRootExpr(f) == l }
+        case _ { }
+    }
+    return false
 }
 
 fn (s mut Scoper&) ocExprs(xs Array<typed.Expr&>&, l I64, passOn Bool) Bool {
