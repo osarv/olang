@@ -293,7 +293,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   immut struct(...)`: nothing of a value of it changes after its constructor (writing it or lending it writably is an
   error); `mut T&` of one is an error; a holder need not be immut; no Copy. **String is immut (the user's decision
   2026-11-03)**: `type String immut extends Array<Char>`; text being written is an `Array<Char>` or a StringBuilder,
-  made a String by `String(chars)`; a type declared over an immut type is immut.
+  made a String by `String(chars)`; a type declared over an immut type is immut. `t.Bytes()` is the text's bytes as a read-only `Array<U8>&`, no copy (2026-11-14). Mismatch help names the way across: text given to `Array<T>(n)`, `Array<Char>`/`Vec<Char>`/`StringBuilder` given for a String, a write into a String.
 - **`unique` types (T13b, the user's decisions 2026-11-03 "unique DECIDED", "Copy and unique DECIDED", "Collections
   DECIDED", "unique vs immut settled").** `type File unique struct(fd I32) { fd }`: a value exists in one place. A
   fresh value (constructor or call result) lands by value where put; any other copy is a reference (`w := f` is a

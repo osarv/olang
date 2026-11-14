@@ -361,6 +361,9 @@ type Diag enum {
     CopyDoesMore
     ImmutWrite
     TextWrite
+    TextForLength
+    CharsForText
+    BuilderForText
     ImmutMutRef
     TextMutRef
     ImmutCopy
@@ -1358,7 +1361,10 @@ fn CopyShape(ty String&) r.Msg { return r.Msg(Diag.CopyShape, "E31d", "this Copy
 fn CopyOnWhat(ty String&) r.Msg { return r.Msg(Diag.CopyOnWhat, "E31d", $ty " cannot declare a Copy", "only a struct or an enum the program declares has a Copy of its own - its supplied Copy is the one") }
 fn CopyDoesMore(what String&) r.Msg { return r.Msg(Diag.CopyDoesMore, "E31d", "this Copy " $what, "a Copy only builds the new value, and every copy of the value runs it, so it may do nothing else") }
 fn ImmutWrite(ty String&) r.Msg { return r.Msg(Diag.ImmutWrite, "T13a", "nothing of " $ty " changes after its constructor (it is immut) - make a new one") }
-fn TextWrite() r.Msg { return r.Msg(Diag.TextWrite, "T13a, T29c", "a String never changes once it is made", "", "write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder") }
+fn TextWrite() r.Msg { return r.Msg(Diag.TextWrite, "T13a, T29c", "a String never changes once it is made", "", "write 'c Array<Char> = t', change 'c', then 'String(c)'; or 'b := StringBuilder()', 'b.Push(t)', 'b.ToString()'") }
+fn TextForLength(ty String&) r.Msg { return r.Msg(Diag.TextForLength, "E12, D14", "expected I64, found " $ty, "Array<T>(n) makes n zeroed elements", "to read the text's bytes, write 't.Bytes()'; its characters, 'c Array<Char> = t'") }
+fn CharsForText(ty String&, want String&) r.Msg { return r.Msg(Diag.CharsForText, "E12, T29c", "expected " $want ", found " $ty, "characters are not text until they are made into a String", "make text from the characters with 'String(x)'") }
+fn BuilderForText(want String&) r.Msg { return r.Msg(Diag.BuilderForText, "E12, T29c", "expected " $want ", found StringBuilder", "a StringBuilder is text being written, not a String", "make text from it with 'b.ToString()'") }
 fn ImmutMutRef(ty String&) r.Msg { return r.Msg(Diag.ImmutMutRef, "T13a", "'mut' on " $ty ", which is immut", "'mut' makes a reference writable, and nothing of " $ty " changes after its constructor", "read it through '" $ty "&'") }
 fn TextMutRef() r.Msg { return r.Msg(Diag.TextMutRef, "T13a, T29c", "'mut' on a String, which never changes once it is made", "'mut' makes a reference writable", "write text through 'mut Array<Char>&', read it through 'String&'") }
 fn ImmutCopy(ty String&) r.Msg { return r.Msg(Diag.ImmutCopy, "T13a, E31d", "a copy of " $ty " shares it, as nothing of it changes (it is immut) - it declares no Copy") }

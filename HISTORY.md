@@ -37160,3 +37160,4 @@ written. Tests: checks scenario `notebook` (checks/fixtures/notebook: a markdown
 output, a value, a std/plot SVG, a compile error, a last cell run only with `-continue`; `-output`, in place, and the
 usage error).
 
+- 2026-11-14: message fixes from the user's first local use. `Array<U8>("text")`, an `Array<Char>`/`Vec<Char>` or a StringBuilder where a String is wanted, and a write into a String each give help rows with the code to write (msgs.TextForLength, CharsForText, BuilderForText, TextWrite; hooked in Checker.mismatch, the length argument found by `lenArgAt`). `fn (t String&) Bytes() Array<U8>&` added to the prelude: `return t` is a view with no copy, since Char extends U8 (T29h) and a String already flows into an `Array<U8>&`. Did-you-mean for methods by synonym (`b.Add` for `Push`) was skipped: the nearest-name list has no synonym table and none was added; StringBuilder's methods are unchanged.

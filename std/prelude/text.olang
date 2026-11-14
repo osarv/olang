@@ -218,6 +218,9 @@ extern type CStr
 extern type CVoid
 
 
+# the text's bytes as a read-only view, nothing copied (T29h: a Char is a U8 of the same layout)
+fn (t String&) Bytes() Array<U8>& { return t }
+
 # the text as C takes a string: its bytes and a NUL after them, as a new array - a "char *" for an extern's
 # "Array<U8>" parameter (X3). A NUL inside the text ends the string C sees there
 fn (t String&) ToC() Array<U8> {
@@ -1298,6 +1301,7 @@ if TestBuild {
         assert r.Eq("42!")
         assert s[2:4].Eq("hi")               # a slice of text is text
         assert takesBytes(s) == 6            # and text goes wherever bytes are wanted
+        assert s.Bytes().Len() == 6 and s.Bytes()[2] == 104   # Bytes() names the view, no copy
         raw := Array<U8>(2, 'z')
         assert String(raw).Eq("zz")          # bytes become text only by saying so
     }

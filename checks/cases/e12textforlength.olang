@@ -1,0 +1,6 @@
+# check: fail error[E12, D14]: expected I64, found
+# E12: Array<T>(n)'s argument is a length - text there is told what to write instead
+fn main() {
+    x := Array<U8>("this is a test")
+    assert x.Len() == 14
+}

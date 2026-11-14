@@ -1,0 +1,7 @@
+# check: fail error[E12, T29c]: expected String&, found StringBuilder
+# E12, T29c: a StringBuilder is made into text by ToString()
+fn show(t String&) I64 { return t.Len() }
+fn main() {
+    b := StringBuilder()
+    assert show(b) == 0
+}
