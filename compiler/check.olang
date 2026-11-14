@@ -14371,41 +14371,9 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return c.prim(sp, r, typed.PrimOp.Bitcast, c.value(rx, sp), null)
     }
     if name == "Value" and c.isEnum(rt) { return c.rawValue(sp, nsp, rt, rx, args) }   # T17e
-    if name == "Set" and c.arrayOf(rt) != types.UnknownT {
-        # E16d: an element stored, its index checked - failing with ArrayError.OutOfRange, as Get's
-        if args.Len() != 2 {
-            c.err(sp, msgs.ArgCount(2, "s", args.Len()))
-            c.dropArgs(args)
-            return c.unknown(sp)
-        }
-        p := readPlace(rx)
-        if p is null { p = typed.Lvalue.Temp(x.Span(), typeOf(rx), rx, c.site(typed.SiteKind.Temp, x.Span())) }
-        chk := c.failOp(Array<types.TypeId>[c.outOfRange()], nsp)
-        ep := c.elemPlace(sp, p!, args[:1], chk)
-        if ep is null {
-            c.expr(args[1], types.UnknownT)
-            return c.unknown(sp)
-        }
-        from := c.stmts.Len()
-        c.notCapture(ep, c.writeAt(x))
-        c.storeInto(sp, ep, args[1], args[1].Span(), null)
-        return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
-    }
+    if name == "Set" and c.arrayOf(rt) != types.UnknownT: return c.suppliedSet(sp, nsp, x, rx, rt, u, name, args)
     if (name == "Get" or name == "SliceOf") and c.arrayOf(rt) != types.UnknownT {
-        # E16d, E16c: an index or a slice checked, written as a call - failing with ArrayError.OutOfRange
-        want I64 = 1 if name == "Get" else 2
-        if args.Len() != want {
-            c.err(sp, msgs.ArgCount(want, "" if want == 1 else "s", args.Len()))
-            c.dropArgs(args)
-            return c.unknown(sp)
-        }
-        p := readPlace(rx)
-        if p is null { p = typed.Lvalue.Temp(x.Span(), typeOf(rx), rx, c.site(typed.SiteKind.Temp, x.Span())) }
-        chk := c.failOp(Array<types.TypeId>[c.outOfRange()], nsp)
-        if name == "SliceOf" { return c.sliceOf(sp, p!, args[0], args[1], chk) }
-        ep := c.elemPlace(sp, p!, args, chk)
-        if ep is null { return c.unknown(sp) }
-        return c.read(sp, ep)
+        return c.suppliedGet(sp, nsp, x, rx, rt, u, name, args)
     }
     if name == "Narrow" and c.isNumber(rt) {
         c.err(nsp, msgs.NarrowNeedsType())
@@ -14413,47 +14381,10 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return c.unknown(sp)
     }
     bop := bitOp(name)
-    if bop != typed.PrimOp.Retire {
-        # E37: an integer's bit operations, supplied
-        if not c.P.T.IsInt(u) {
-            c.err(nsp, msgs.BitOpNotInteger(name, c.ty(rt)))
-            c.dropArgs(args)
-            return c.unknown(sp)
-        }
-        if bop == typed.PrimOp.ByteSwap and c.P.T.Bits(u) % 8 != 0 {
-            c.err(nsp, msgs.ByteSwapWidth(c.ty(rt), c.P.T.Bits(u)))
-            c.dropArgs(args)
-            return c.unknown(sp)
-        }
-        rot := bop == typed.PrimOp.RotateLeft or bop == typed.PrimOp.RotateRight
-        want I64 = 1 if rot else 0
-        if args.Len() != want {
-            c.err(sp, msgs.ArgCount(want, "" if want == 1 else "s", args.Len()))
-            c.dropArgs(args)
-            return c.unknown(sp)
-        }
-        x0 := c.value(rx, sp)
-        if not rot { return c.prim(sp, rt if bop == typed.PrimOp.ByteSwap else c.i64(), bop, x0, null) }
-        n := c.expr(args[0], c.i64())
-        nt := typeOf(n)
-        if nt == types.UnknownT { return c.unknown(sp) }
-        if not c.isInt(nt) {
-            c.err(args[0].Span(), msgs.BitOpCount(c.ty(nt)))
-            return c.unknown(sp)
-        }
-        if c.under(nt) != c.i64() { n = c.prim(args[0].Span(), c.i64(), typed.PrimOp.Convert, n, null) }
-        return c.prim(sp, rt, bop, x0, n)
-    }
+    if bop != typed.PrimOp.Retire: return c.suppliedBitOp(sp, nsp, x, rx, rt, u, name, args)
     sop := satOp(name)
     if sop != typed.PrimOp.Retire and c.P.T.IsInt(u) and c.P.Library(c.fr().Mi) {
-        # E15a: std/arith's Saturating - an integer's operation clamped at its type's limits, the library's alone
-        if args.Len() != 1 {
-            c.err(sp, msgs.ArgCount(1, "", args.Len()))
-            c.dropArgs(args)
-            return c.unknown(sp)
-        }
-        want := c.i64() if sop == typed.PrimOp.SatShl else rt
-        return c.prim(sp, rt, sop, c.value(rx, sp), c.exprTo(args[0], want))
+        return c.suppliedSat(sp, nsp, x, rx, rt, u, name, args)
     }
     if name == "retire" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT and c.P.Library(c.fr().Mi) {
         # M19g: where a collection stops using an array - nothing at run time but under -sanitize (B2f), where its
@@ -14462,124 +14393,16 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return c.prim(sp, types.VoidT, typed.PrimOp.Retire, c.value(rx, sp), null)
     }
     if name == "grown" and args.Len() == 1 and c.isRef(typeOf(rx)) and c.arrayOf(rt) != types.UnknownT and c.P.Library(c.fr().Mi) {
-        # M19d: a collection's buffer grown - a new array of n elements, the first a.Len() moved out of a (each as
-        # vacate moves it) and the rest unwritten, as E39's exact collect leaves none: the prelude's claim that its
-        # collection writes each before reading it (a Vec's room past its count), which the compiler cannot infer
-        c.cur().Cold = true
-        el := c.P.T.Elem(c.arrayOf(rt))
-        at := c.P.T.Array(el, types.TypeId(0))
-        from := c.stmts.Len()
-        h := c.hidden(sp, typeOf(rx))
-        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.value(rx, sp)))
-        nh := c.hidden(sp, c.i64())
-        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(nh)), c.value(c.exprTo(args[0], c.i64()), args[0].Span())))
-        cfrom := c.stmts.Len()
-        cid, couter, cmark := c.open(typed.BlockKind.Collect, sp)
-        i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null))
-        base typed.Lvalue& = typed.Lvalue.Deref(sp, rt, c.readLocal(sp, h))
-        ep := typed.Lvalue.Elem(sp, el, typed.Elem(base, c.readLocal(sp, i), typed.Check.None))
-        c.noteWrite(ep)
-        c.emit(typed.Stmt.Yield(sp, typed.Expr.Take(sp, el, ep)))
-        c.laneLoopClose(sp, i, id, outer, mark, lfrom)
-        b := c.close(cid, couter, cmark, cfrom)
-        r := typed.Expr.Collect(sp, at, typed.Collect(c.readLocal(sp, nh), b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, true))
-        return typed.Expr.Seq(sp, at, typed.Seq(gather(c.stmts, from), r))
+        return c.suppliedGrown(sp, nsp, x, rx, rt, u, name, args)
     }
     if name == "vacate" and args.Len() == 0 and c.P.Library(c.fr().Mi) {
-        # docs/memory.md 3.4, O8d: what a place holds given and the place left empty - as a statement, what it held let
-        # go of, a value with destructors ended there (exprStmt). The library's alone: it says which of a collection's
-        # positions are live, which the compiler cannot infer. A move out of the place (Take), which lowering makes a
-        # plain read where nothing is freed early
-        p := readPlace(rx)
-        if p is null or not c.placeWritable(p) {
-            c.err(c.operandAt(x), msgs.VacateNotPlace())
-            return c.unknown(sp)
-        }
-        c.noteWrite(p)
-        return typed.Expr.Take(sp, p.Type(), p)
+        return c.suppliedVacate(sp, nsp, x, rx, rt, u, name, args)
     }
     if name == "occupy" and args.Len() == 1 and c.P.Library(c.fr().Mi) {
-        # C11, O15: a value stored into a place holding none - a collection's room past its count, a position it vacated
-        # - so nothing is ended there, as a store over a place ends what it held: vacate's other half, the library's alone
-        p := readPlace(rx)
-        if p is null or not c.placeWritable(p) {
-            c.err(c.operandAt(x), msgs.VacateNotPlace())
-            return c.unknown(sp)
-        }
-        from := c.stmts.Len()
-        c.storeInto(sp, p, args[0], args[0].Span(), null, true)
-        return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
+        return c.suppliedOccupy(sp, nsp, x, rx, rt, u, name, args)
     }
-    if name.StartsWith("Atomic") {
-        op := typed.PrimOp.AtomicLoad
-        want I64 = 0
-        if name == "AtomicStore" {
-            op = typed.PrimOp.AtomicStore
-            want = 1
-        } else if name == "AtomicAdd" {
-            op = typed.PrimOp.AtomicAdd
-            want = 1
-        } else if name == "AtomicSwap" {
-            op = typed.PrimOp.AtomicSwap
-            want = 1
-        } else if name == "AtomicCompareSwap" {
-            op = typed.PrimOp.AtomicCompareSwap
-            want = 2
-        } else if name != "AtomicLoad" {
-            return null
-        }
-        if not c.P.T.IsInt(u) {
-            c.err(nsp, msgs.AtomicNotInteger(c.ty(rt)))
-            return c.unknown(sp)
-        }
-        if u > types.TypeId(14) {
-            c.err(nsp, msgs.AtomicWidth(c.ty(rt)))
-            return c.unknown(sp)
-        }
-        p := readPlace(rx)
-        if p is null {
-            c.err(c.operandAt(x), msgs.AtomicNotPlace())
-            return c.unknown(sp)
-        }
-        if c.lendsPacked(p, c.operandAt(x)) { return c.unknown(sp) }
-        if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
-        if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
-            c.err(c.operandAt(x), msgs.AtomicNotWritable())
-            return c.unknown(sp)
-        }
-        if args.Len() != want {
-            c.err(sp, msgs.ArgCount(want, "" if want == 1 else "s", args.Len()))
-            return c.unknown(sp)
-        }
-        from := c.exprs.Len()
-        c.exprs.Push(typed.Expr.Borrow(nsp, c.P.T.Ref(rt, types.Writable), p))
-        for a in args { c.exprs.Push(c.exprTo(a, rt)) }
-        r := types.VoidT if op == typed.PrimOp.AtomicStore else rt
-        return typed.Expr.Prim(sp, r, op, typed.Check.None, gather(c.exprs, from))
-    }
-    if name == "Copy" and args.Len() == 0 {
-        # E31d: the supplied Copy - a value of its own, made as a copy of it is: field by field, deep through values,
-        # shared at references
-        t := typeOf(rx)
-        if c.P.Unique(c.deref(t)) {
-            # T13b: a unique value is never copied
-            c.err(nsp, msgs.UniqueCopy(c.ty(c.deref(t))))
-            return c.unknown(sp)
-        }
-        if c.P.Generational(c.deref(t)) and c.destructs(t) {
-            # T13d: each instance's destructor runs once - a generational type declaring one has no Copy
-            c.err(nsp, msgs.GenCopyDestruct(c.ty(c.deref(t))))
-            return c.unknown(sp)
-        }
-        v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
-        if not existingValue(v) { return v }
-        c.wantCopy(typeOf(v), 0)
-        sp0 := v.Span()
-        from := c.exprs.Len()
-        c.exprs.Push(v)
-        return typed.Expr.Make(sp0, typeOf(v), typed.Make(typed.MakeKind.Copy, 0, gather(c.exprs, from), null
-                                                         c.site(typed.SiteKind.Make, sp0), typed.Check.None))
-    }
+    if name.StartsWith("Atomic"): return c.suppliedAtomic(sp, nsp, x, rx, rt, u, name, args)
+    if name == "Copy" and args.Len() == 0: return c.suppliedCopy(sp, nsp, x, rx, rt, u, name, args)
     if name == "Hash" and args.Len() == 0 {
         c.hashAt = nsp
         c.partHashes(rt, 0)
@@ -14587,6 +14410,232 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return c.callOf(sp, c.i64(), typed.Callee.Helper(typed.Helper.Hash, rt), c.one(c.value(rx, sp)))
     }
     return null
+}
+
+
+# suppliedCall's Set of an array
+fn (c mut Checker&) suppliedSet(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    # E16d: an element stored, its index checked - failing with ArrayError.OutOfRange, as Get's
+    if args.Len() != 2 {
+        c.err(sp, msgs.ArgCount(2, "s", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    p := readPlace(rx)
+    if p is null { p = typed.Lvalue.Temp(x.Span(), typeOf(rx), rx, c.site(typed.SiteKind.Temp, x.Span())) }
+    chk := c.failOp(Array<types.TypeId>[c.outOfRange()], nsp)
+    ep := c.elemPlace(sp, p!, args[:1], chk)
+    if ep is null {
+        c.expr(args[1], types.UnknownT)
+        return c.unknown(sp)
+    }
+    from := c.stmts.Len()
+    c.notCapture(ep, c.writeAt(x))
+    c.storeInto(sp, ep, args[1], args[1].Span(), null)
+    return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
+}
+
+# suppliedCall's Get and SliceOf of an array
+fn (c mut Checker&) suppliedGet(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    # E16d, E16c: an index or a slice checked, written as a call - failing with ArrayError.OutOfRange
+    want I64 = 1 if name == "Get" else 2
+    if args.Len() != want {
+        c.err(sp, msgs.ArgCount(want, "" if want == 1 else "s", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    p := readPlace(rx)
+    if p is null { p = typed.Lvalue.Temp(x.Span(), typeOf(rx), rx, c.site(typed.SiteKind.Temp, x.Span())) }
+    chk := c.failOp(Array<types.TypeId>[c.outOfRange()], nsp)
+    if name == "SliceOf" { return c.sliceOf(sp, p!, args[0], args[1], chk) }
+    ep := c.elemPlace(sp, p!, args, chk)
+    if ep is null { return c.unknown(sp) }
+    return c.read(sp, ep)
+}
+
+# suppliedCall's bit operations of an integer
+fn (c mut Checker&) suppliedBitOp(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                  u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    bop := bitOp(name)
+    # E37: an integer's bit operations, supplied
+    if not c.P.T.IsInt(u) {
+        c.err(nsp, msgs.BitOpNotInteger(name, c.ty(rt)))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    if bop == typed.PrimOp.ByteSwap and c.P.T.Bits(u) % 8 != 0 {
+        c.err(nsp, msgs.ByteSwapWidth(c.ty(rt), c.P.T.Bits(u)))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    rot := bop == typed.PrimOp.RotateLeft or bop == typed.PrimOp.RotateRight
+    want I64 = 1 if rot else 0
+    if args.Len() != want {
+        c.err(sp, msgs.ArgCount(want, "" if want == 1 else "s", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    x0 := c.value(rx, sp)
+    if not rot { return c.prim(sp, rt if bop == typed.PrimOp.ByteSwap else c.i64(), bop, x0, null) }
+    n := c.expr(args[0], c.i64())
+    nt := typeOf(n)
+    if nt == types.UnknownT { return c.unknown(sp) }
+    if not c.isInt(nt) {
+        c.err(args[0].Span(), msgs.BitOpCount(c.ty(nt)))
+        return c.unknown(sp)
+    }
+    if c.under(nt) != c.i64() { n = c.prim(args[0].Span(), c.i64(), typed.PrimOp.Convert, n, null) }
+    return c.prim(sp, rt, bop, x0, n)
+}
+
+# suppliedCall's saturating operations, std/arith's
+fn (c mut Checker&) suppliedSat(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    sop := satOp(name)
+    # E15a: std/arith's Saturating - an integer's operation clamped at its type's limits, the library's alone
+    if args.Len() != 1 {
+        c.err(sp, msgs.ArgCount(1, "", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    want := c.i64() if sop == typed.PrimOp.SatShl else rt
+    return c.prim(sp, rt, sop, c.value(rx, sp), c.exprTo(args[0], want))
+}
+
+# suppliedCall's grown, a collection's buffer grown (the library's alone)
+fn (c mut Checker&) suppliedGrown(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                  u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    # M19d: a collection's buffer grown - a new array of n elements, the first a.Len() moved out of a (each as
+    # vacate moves it) and the rest unwritten, as E39's exact collect leaves none: the prelude's claim that its
+    # collection writes each before reading it (a Vec's room past its count), which the compiler cannot infer
+    c.cur().Cold = true
+    el := c.P.T.Elem(c.arrayOf(rt))
+    at := c.P.T.Array(el, types.TypeId(0))
+    from := c.stmts.Len()
+    h := c.hidden(sp, typeOf(rx))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.value(rx, sp)))
+    nh := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(nh)), c.value(c.exprTo(args[0], c.i64()), args[0].Span())))
+    cfrom := c.stmts.Len()
+    cid, couter, cmark := c.open(typed.BlockKind.Collect, sp)
+    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null))
+    base typed.Lvalue& = typed.Lvalue.Deref(sp, rt, c.readLocal(sp, h))
+    ep := typed.Lvalue.Elem(sp, el, typed.Elem(base, c.readLocal(sp, i), typed.Check.None))
+    c.noteWrite(ep)
+    c.emit(typed.Stmt.Yield(sp, typed.Expr.Take(sp, el, ep)))
+    c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+    b := c.close(cid, couter, cmark, cfrom)
+    r := typed.Expr.Collect(sp, at, typed.Collect(c.readLocal(sp, nh), b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, true))
+    return typed.Expr.Seq(sp, at, typed.Seq(gather(c.stmts, from), r))
+}
+
+# suppliedCall's vacate (the library's alone)
+fn (c mut Checker&) suppliedVacate(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                   u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    # docs/memory.md 3.4, O8d: what a place holds given and the place left empty - as a statement, what it held let
+    # go of, a value with destructors ended there (exprStmt). The library's alone: it says which of a collection's
+    # positions are live, which the compiler cannot infer. A move out of the place (Take), which lowering makes a
+    # plain read where nothing is freed early
+    p := readPlace(rx)
+    if p is null or not c.placeWritable(p) {
+        c.err(c.operandAt(x), msgs.VacateNotPlace())
+        return c.unknown(sp)
+    }
+    c.noteWrite(p)
+    return typed.Expr.Take(sp, p.Type(), p)
+}
+
+# suppliedCall's occupy (the library's alone)
+fn (c mut Checker&) suppliedOccupy(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                   u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    # C11, O15: a value stored into a place holding none - a collection's room past its count, a position it vacated
+    # - so nothing is ended there, as a store over a place ends what it held: vacate's other half, the library's alone
+    p := readPlace(rx)
+    if p is null or not c.placeWritable(p) {
+        c.err(c.operandAt(x), msgs.VacateNotPlace())
+        return c.unknown(sp)
+    }
+    from := c.stmts.Len()
+    c.storeInto(sp, p, args[0], args[0].Span(), null, true)
+    return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
+}
+
+# suppliedCall's atomic operations of an integer place (P9): null for a name no operation has
+fn (c mut Checker&) suppliedAtomic(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                   u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    op := typed.PrimOp.AtomicLoad
+    want I64 = 0
+    if name == "AtomicStore" {
+        op = typed.PrimOp.AtomicStore
+        want = 1
+    } else if name == "AtomicAdd" {
+        op = typed.PrimOp.AtomicAdd
+        want = 1
+    } else if name == "AtomicSwap" {
+        op = typed.PrimOp.AtomicSwap
+        want = 1
+    } else if name == "AtomicCompareSwap" {
+        op = typed.PrimOp.AtomicCompareSwap
+        want = 2
+    } else if name != "AtomicLoad" {
+        return null
+    }
+    if not c.P.T.IsInt(u) {
+        c.err(nsp, msgs.AtomicNotInteger(c.ty(rt)))
+        return c.unknown(sp)
+    }
+    if u > types.TypeId(14) {
+        c.err(nsp, msgs.AtomicWidth(c.ty(rt)))
+        return c.unknown(sp)
+    }
+    p := readPlace(rx)
+    if p is null {
+        c.err(c.operandAt(x), msgs.AtomicNotPlace())
+        return c.unknown(sp)
+    }
+    if c.lendsPacked(p, c.operandAt(x)) { return c.unknown(sp) }
+    if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
+    if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
+        c.err(c.operandAt(x), msgs.AtomicNotWritable())
+        return c.unknown(sp)
+    }
+    if args.Len() != want {
+        c.err(sp, msgs.ArgCount(want, "" if want == 1 else "s", args.Len()))
+        return c.unknown(sp)
+    }
+    from := c.exprs.Len()
+    c.exprs.Push(typed.Expr.Borrow(nsp, c.P.T.Ref(rt, types.Writable), p))
+    for a in args { c.exprs.Push(c.exprTo(a, rt)) }
+    r := types.VoidT if op == typed.PrimOp.AtomicStore else rt
+    return typed.Expr.Prim(sp, r, op, typed.Check.None, gather(c.exprs, from))
+}
+
+# suppliedCall's Copy
+fn (c mut Checker&) suppliedCopy(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&, rt types.TypeId
+                                 u types.TypeId, name String&, args Array<ast.Expr&>&) typed.Expr?& {
+    # E31d: the supplied Copy - a value of its own, made as a copy of it is: field by field, deep through values,
+    # shared at references
+    t := typeOf(rx)
+    if c.P.Unique(c.deref(t)) {
+        # T13b: a unique value is never copied
+        c.err(nsp, msgs.UniqueCopy(c.ty(c.deref(t))))
+        return c.unknown(sp)
+    }
+    if c.P.Generational(c.deref(t)) and c.destructs(t) {
+        # T13d: each instance's destructor runs once - a generational type declaring one has no Copy
+        c.err(nsp, msgs.GenCopyDestruct(c.ty(c.deref(t))))
+        return c.unknown(sp)
+    }
+    v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
+    if not existingValue(v) { return v }
+    c.wantCopy(typeOf(v), 0)
+    sp0 := v.Span()
+    from := c.exprs.Len()
+    c.exprs.Push(v)
+    return typed.Expr.Make(sp0, typeOf(v), typed.Make(typed.MakeKind.Copy, 0, gather(c.exprs, from), null
+                                                     c.site(typed.SiteKind.Make, sp0), typed.Check.None))
 }
 
 # E37: the bit operation a supplied method's name names; Retire for none

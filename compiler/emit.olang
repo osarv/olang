@@ -7066,6 +7066,55 @@ fn (e mut Emitter&) exportEntry(i I64) {
         regs.Int--
     }
     olang Vec<String&>        # the function's arguments, after its hidden ones
+    e.exportParams(fe, ty, cps, regs, olang)
+    # where the result goes: an array's elements into C's buffer, its whole length given back; a value through C's
+    # pointer where the entry gives a code
+    el := types.UnknownT
+    if arr {
+        el = t.Elem(t.Repr(e.arrayOfE(res)))
+        p.Layout(el)
+        cps.Push("ptr %buf")
+        cps.Push("i64 %cap")
+        if errs { cps.Push("ptr %len") }
+    } else if errs and hasRes {
+        cps.Push("ptr %res")
+    }
+    sc := e.threadEntry(fe)
+    out, r := e.exportCall(fe, k, ty, sc, olang)
+    rt := t.RetLlvm(ty)
+    # the code, and the value where there is one
+    code := ""
+    val := ""
+    if errs {
+        code = r if (out != "" or not hasRes) else fe.let($"extractvalue " $rt " " $r ", 0")
+        if hasRes and out == "" { val = fe.let($"extractvalue " $rt " " $r ", 1") }
+    } else if hasRes and out == "" {
+        val = r
+    }
+    if hasRes and out != "" { val = fe.load(e.ty(res), out) }
+    if errs { e.exportFailed(fe, ty, code, sc) }
+    ret := e.exportResult(fe, rw, res, el, val, errs, arr, hasRes)
+    fe.w($"call void @__olang_scope_close(ptr " $sc ")")
+    fe.w($"ret " $(ret if ret != "" else "void"))
+    head := e.exportHead(rw, res, errs, arr, hasRes)
+    b := StringBuilder()
+    b.Push($"define " $head " @" $name "(")
+    for q, c in cps {
+        if q > 0 { b.Push(", ") }
+        b.Push(c)
+    }
+    b.Push(") #0 {\nentry:\n")
+    b.Push(fe.head.ToString())
+    b.Push(fe.code.ToString())
+    b.Push("}\n\n")
+    e.item(name, p.L.Root, b.ToString())
+}
+
+# exportEntry's parameters: C's (cps), and the function's arguments made of them (olang), by C's convention
+fn (e mut Emitter&) exportParams(fe mut fnEm&, ty types.TypeId, cps mut Vec<String&>&, regs mut cabi.Regs&
+                                 olang mut Vec<String&>&) {
+    t := e.T
+    p := e.P
     ps := t.Items(t.Params(ty))
     pass := t.Passing(ty)
     for j in range ps.Len() {
@@ -7116,19 +7165,11 @@ fn (e mut Emitter&) exportEntry(i I64) {
             olang.Push($e.ty(pt) " " $fe.load(e.ty(pt), v))
         }
     }
-    # where the result goes: an array's elements into C's buffer, its whole length given back; a value through C's
-    # pointer where the entry gives a code
-    el := types.UnknownT
-    if arr {
-        el = t.Elem(t.Repr(e.arrayOfE(res)))
-        p.Layout(el)
-        cps.Push("ptr %buf")
-        cps.Push("i64 %cap")
-        if errs { cps.Push("ptr %len") }
-    } else if errs and hasRes {
-        cps.Push("ptr %res")
-    }
-    # a thread C made gets olang's own state first (X12): one load and a compare on every entry
+}
+
+# exportEntry's start: a thread C made gets olang's own state first (X12) - one load and a compare on every entry; the
+# entry's scope, given back
+fn (e mut Emitter&) threadEntry(fe mut fnEm&) String {
     e.define("__olang_self", "@__olang_self = external thread_local(initialexec) global ptr")
     e.runtime("__olang_thread_enter")
     e.runtime("__olang_scope_close")
@@ -7141,6 +7182,14 @@ fn (e mut Emitter&) exportEntry(i I64) {
     fe.code.Push("go:\n")
     sc := fe.alloca("%olang.scope", 8)
     fe.store("%olang.scope", "zeroinitializer", sc)
+    return sc
+}
+
+# exportEntry's call of the function: where its result is put through memory (else "") and the call's value
+fn (e mut Emitter&) exportCall(fe mut fnEm&, k mir.FnKey, ty types.TypeId, sc String&, olang Vec<String&>&) String, String {
+    t := e.T
+    res := t.Result(ty)
+    hasRes := res != types.VoidT and res != types.NoreturnT
     args Vec<String&>
     out := ""
     if hasRes and t.ViaMemory(res) {
@@ -7159,38 +7208,39 @@ fn (e mut Emitter&) exportEntry(i I64) {
     }
     if rt == "void": fe.w($"call void @" $e.sym(k) "(" $al.ToString() ")")
     else: r = fe.let($"call " $rt " @" $e.sym(k) "(" $al.ToString() ")")
-    # the code, and the value where there is one
-    code := ""
-    val := ""
-    if errs {
-        code = r if (out != "" or not hasRes) else fe.let($"extractvalue " $rt " " $r ", 0")
-        if hasRes and out == "" { val = fe.let($"extractvalue " $rt " " $r ", 1") }
-    } else if hasRes and out == "" {
-        val = r
+    return out, r
+}
+
+# exportEntry's way out where the function failed: its scope closed, the payload popped, C given the code
+fn (e mut Emitter&) exportFailed(fe mut fnEm&, ty types.TypeId, code String&, sc String&) {
+    t := e.T
+    bad := fe.let($"icmp ne i32 " $code ", 0")
+    fe.w($"br i1 " $bad ", label %failed, label %done")
+    fe.code.Push("failed:\n")
+    fe.w($"call void @__olang_scope_close(ptr " $sc ")")
+    # T19b: C is given the code alone - the payload its error carries popped, so a failing entry leaves nothing
+    cb := StringBuilder()
+    cw := e.carriesText(cb, code, t.Errors(ty), "xp")
+    if cw != "" {
+        e.runtime("__olang_errpay_pop")
+        fe.code.Push(cb.ToString())
+        fe.w($"br i1 " $cw ", label %xpyes, label %xpno")
+        fe.code.Push("xpyes:\n")
+        fe.w("call void @__olang_errpay_pop()")
+        fe.w("br label %xpno")
+        fe.code.Push("xpno:\n")
     }
-    if hasRes and out != "" { val = fe.load(e.ty(res), out) }
+    lib := t.List(e.ExportErrors().ToArray())
+    fe.w($"ret i32 " $fe.recode(code, t.Errors(ty), lib))
+    fe.code.Push("done:\n")
+}
+
+# exportEntry's result to C: an array's elements copied into C's buffer and its length given; a value through C's
+# pointer where the entry gives a code, else by C's convention - what the entry returns
+fn (e mut Emitter&) exportResult(fe mut fnEm&, rw cabi.Way&, res types.TypeId, el types.TypeId, val String&, errs Bool
+                                 arr Bool, hasRes Bool) String {
+    t := e.T
     ret := ""
-    if errs {
-        bad := fe.let($"icmp ne i32 " $code ", 0")
-        fe.w($"br i1 " $bad ", label %failed, label %done")
-        fe.code.Push("failed:\n")
-        fe.w($"call void @__olang_scope_close(ptr " $sc ")")
-        # T19b: C is given the code alone - the payload its error carries popped, so a failing entry leaves nothing
-        cb := StringBuilder()
-        cw := e.carriesText(cb, code, t.Errors(ty), "xp")
-        if cw != "" {
-            e.runtime("__olang_errpay_pop")
-            fe.code.Push(cb.ToString())
-            fe.w($"br i1 " $cw ", label %xpyes, label %xpno")
-            fe.code.Push("xpyes:\n")
-            fe.w("call void @__olang_errpay_pop()")
-            fe.w("br label %xpno")
-            fe.code.Push("xpno:\n")
-        }
-        lib := t.List(e.ExportErrors().ToArray())
-        fe.w($"ret i32 " $fe.recode(code, t.Errors(ty), lib))
-        fe.code.Push("done:\n")
-    }
     if arr {
         n := fe.let($"extractvalue { i64, ptr } " $val ", 0")
         data := fe.let($"extractvalue { i64, ptr } " $val ", 1")
@@ -7217,9 +7267,11 @@ fn (e mut Emitter&) exportEntry(i I64) {
             case _ { fe.store(e.ty(res), val, "%sret") }
         }
     }
-    fe.w($"call void @__olang_scope_close(ptr " $sc ")")
-    fe.w($"ret " $(ret if ret != "" else "void"))
-    # the header: C's convention for the result
+    return ret
+}
+
+# exportEntry's header: C's convention for the result
+fn (e mut Emitter&) exportHead(rw cabi.Way&, res types.TypeId, errs Bool, arr Bool, hasRes Bool) String {
     head := "void"
     if errs {
         head = "i32"
@@ -7232,17 +7284,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
             case _: "void"
         }
     }
-    b := StringBuilder()
-    b.Push($"define " $head " @" $name "(")
-    for q, c in cps {
-        if q > 0 { b.Push(", ") }
-        b.Push(c)
-    }
-    b.Push(") #0 {\nentry:\n")
-    b.Push(fe.head.ToString())
-    b.Push(fe.code.ToString())
-    b.Push("}\n\n")
-    e.item(name, p.L.Root, b.ToString())
+    return head
 }
 
 # X14: a library's start - run as it is loaded, before its loader goes on: the loading thread made known, each
