@@ -197,8 +197,7 @@ modgold: build/compiler_tools_dump build/compiler_tools_modgraph
 # The seed is the compiler's own LLVM IR, as the compiler writes it of itself for baseline x86-64 Linux: one
 # xz-compressed .ll per object in seed/. "make bootstrap" rebuilds the compiler from it with nothing but clang and xz -
 # no other compiler, in two stages: clang makes the seed into build/olang.seed, which builds compiler/olang.olang into
-# build/olang.1 as a -quick build (B2g: no link-time optimization, the least time and memory), which builds it fully
-# optimized (-O3 and LTO, B2c) into build/olang.2, installed as build/olang. "make fixedpoint" (in verify) has the
+# build/olang.1 at the default (-O3 and LTO, B2c), which builds it again into build/olang.2, installed as build/olang. "make fixedpoint" (in verify) has the
 # installed compiler build itself once more, into build/olang.3, and compares the two byte for byte: each built by a
 # compiler made from the current source, they must be equal. That third build reuses every object of the second (an
 # object is named by its IR) when the two compilers write the same IR, so it costs little. build/olang.1 was built by the
@@ -232,7 +231,7 @@ BOOT_STAGE = @t=$$(date +%s); echo "bootstrap: $(1) ..."; OLANG_TIMES=1 $(2) || 
 	e=$$(( $$(date +%s) - t )); echo "bootstrap: $(1) - done in $$((e / 60))m$$((e % 60))s"
 
 define BOOTSTRAP
-	$(call BOOT_STAGE,stage 1 of 2 - the seed builds the compiler (-quick) into build/olang.1,build/olang.seed build -quick -output build/olang.1 compiler/olang.olang)
+	$(call BOOT_STAGE,stage 1 of 2 - the seed builds the compiler into build/olang.1,build/olang.seed build -output build/olang.1 compiler/olang.olang)
 	$(call BOOT_STAGE,stage 2 of 2 - build/olang.1 builds the compiler fully optimized into build/olang.2,build/olang.1 build -output build/olang.2 compiler/olang.olang)
 	cp build/olang.2 build/olang
 	@echo "bootstrap: build/olang installed (make fixedpoint checks that it builds itself identically)"

@@ -9,8 +9,8 @@ It is how the compiler is rebuilt from nothing (`compiler/DESIGN.md`, section 5)
 compiler is needed - only clang and xz.
 
 ```
-make bootstrap  # clang makes the seed into build/olang.seed; it builds compiler/olang.olang into build/olang.1 with
-                # -quick, which builds it fully optimized into build/olang.2, installed as build/olang
+make bootstrap  # clang makes the seed into build/olang.seed; it builds compiler/olang.olang into build/olang.1,
+                # which builds it again into build/olang.2, installed as build/olang
 make fixedpoint # build/olang builds itself again into build/olang.3, which must be byte for byte equal to it (in verify)
 make seed       # writes the seed again from the current source (compiler/tools/seed.olang): a file whose IR did not
                 # change is left as it is

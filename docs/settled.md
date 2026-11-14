@@ -851,8 +851,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Compiles at once and the bootstrap (B3m, the user's approval 2026-11-14, before v1.0.0).** A build runs
   `OLANG_JOBS` compiles at once, else one per core but no more than `MemAvailable` holds at 512 MB each (at least
   one); a ThinLTO link's back ends as many. `OLANG_TIMES` says each phase with its time and the compiler's memory, and
-  each compile as `n/m`. `make bootstrap` is two stages - the seed builds a `-quick` compiler, which builds the
-  optimized one, installed - each saying its start and duration; the byte-for-byte self-build is `make fixedpoint`,
+  each compile as `n/m`. `make bootstrap` is two stages - the seed builds the compiler, which builds itself again,
+  installed - each saying its start and duration; the byte-for-byte self-build is `make fixedpoint`,
   run by `make verify`. `make install` copies olang into `PREFIX/lib/olang` (bin, std, SPEC.md; default `~/.local`),
   links `PREFIX/bin/olang`, adds `PREFIX/bin` to PATH in the shell's startup file once, installs editors/ as Neovim and Vim packages
   (`pack/olang`, `EDITORS=none` skips); `make uninstall` undoes it.

@@ -37034,8 +37034,8 @@ cheap orchestration makes it, and for the compiler's own peak to be measured by 
   high-water mark (`/proc/self/status`), says how many objects compile and how many at once, and counts each compile
   as it ends (`n/m`, an atomic counter across the runner tasks). The bootstrap sets it for its stages and says each
   stage's start and duration.
-- **Two stages.** The seed builds `build/olang.1` with `-quick` (B2g), which builds `build/olang.2` with the default
-  `-O3` and LTO, installed. The check that the compiler builds itself byte for byte moved to `make fixedpoint`
+- **Two stages.** The seed builds `build/olang.1`, which builds `build/olang.2`, both at the default `-O3` and LTO,
+  installed (stage 1 was `-quick` at first; measured below, it cost time and saved no memory, so it went back). The check that the compiler builds itself byte for byte moved to `make fixedpoint`
   (`build/olang` -> `build/olang.3`, `cmp`), run by `make verify` after boot, so verify checks what it checked; a boot
   cache entry whose compiler passed is marked `fixed`, so a verify that reuses a bootstrap does not build it again.
   `olang help` lists the build's environment variables.
