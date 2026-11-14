@@ -127,6 +127,9 @@ type Config struct() {
     Compiled I64 = 0
     Linked I64 = 0
     Thin Bool = false   # an optimized build of a large program: ThinLTO, its link cached (B2d, ThinFrom)
+    # OLANG_CHECKS=hoist (an experiment, docs/checks-measure.md): each object's IR through LLVM's inductive range check
+    # elimination before clang, so an index check of a counted loop is made once per loop rather than per element
+    Hoist Bool = false
     Store String& = ""  # OLANG_OBJECTS: a directory of objects shared by builds in other directories (B3j); "" for none
     version String& = ""
 }
@@ -521,7 +524,9 @@ type compiles struct() {
 fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d mut diag.Diagnostics&
     hash String& = "", unit I64 = -1) String ? Failed {
     flags := c.DataFlags() if k == UnitKind.Locations else c.CompileFlags(ir)
-    path := c.ObjectPath(base, k, hash if hash != "" else IrHash(ir), flags)
+    hoist := c.Hoist and k != UnitKind.Locations
+    named := hash if hash != "" else IrHash(ir)
+    path := c.ObjectPath(base, k, IrHash($named "|hoist") if hoist else named, flags)
     # B11d: a listing build's object is there only with its remarks beside it (made first, so the object says both are)
     remarks := c.Listing and k != UnitKind.Locations
     if path in j.finals or (os.Exists(path) and (not remarks or os.Exists(RemarksOf(path)))) { return path }
@@ -550,8 +555,8 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     # one: clang keeps that name in the object (a Locations object's FILE symbol reaches the program, an LTO object's
     # bitcode the link), so a build is the same byte for byte whatever process and directory made it
     irTmp := $irPath[:irPath.Len() - 3] "." $unistd.getpid() ".tmp.ll"
-    named := ir.StartsWith("source_filename") or ir.Contains("\nsource_filename")   # a C import's IR names its own
-    text := $ir if named else $"source_filename = \"" $filepath.Base(irPath) "\"\n" $ir
+    sourced := ir.StartsWith("source_filename") or ir.Contains("\nsource_filename")   # a C import's IR names its own
+    text := $ir if sourced else $"source_filename = \"" $filepath.Base(irPath) "\"\n" $ir
     try os.WriteFile(irTmp, text) catch os.Error {
         fileFatal(irPath, msgs.CannotOpen(), d)
         error Failed.Reported
@@ -570,7 +575,8 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     args.Push(tmp)
     args.Push(irTmp)
     if remarks { args.Push($"-foptimization-record-file=" $tmp ".yaml") }
-    j.cmds.Push(args.ToArray())
+    if hoist: j.cmds.Push(hoisted(c.Clang, args.ToArray(), irTmp))
+    else: j.cmds.Push(args.ToArray())
     j.temps.Push(tmp)
     j.records.Push($tmp ".yaml" if remarks else "")
     j.finals.Push(path)
@@ -578,6 +584,21 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     j.irTemps.Push(irTmp)
     j.sizes.Push(ir.Len())
     return path
+}
+
+# OLANG_CHECKS=hoist: the compile of an IR file as a shell command running LLVM's opt on it first - the early
+# simplifications IRCE needs (SROA, CSE, CFG, instcombine, rotated loops with invariant loads hoisted), then IRCE, which
+# splits a counted loop's iterations so its middle part runs with no range check - and clang on what opt wrote
+fn hoisted(clang String&, args Array<String&>&, ir String&) Array<String&> {
+    name := filepath.Base(clang).Replace("clang", "opt")
+    opt := $filepath.Dir(clang) "/" $name if clang.Contains("/") else $name
+    bc := $ir ".bc"
+    passes := "function(sroa,early-cse<memssa>,simplifycfg,instcombine<no-verify-fixpoint>),function(loop-mssa(loop-rotate,licm)),function(irce)"
+    cmd := StringBuilder()
+    cmd.Push($os.Quote(opt) " -passes=" $os.Quote(passes) " " $os.Quote(ir) " -o " $os.Quote(bc) " &&")
+    for a in args { cmd.Push($" " $os.Quote(a if a != ir else bc)) }
+    cmd.Push($"; s=$?; rm -f " $os.Quote(bc) "; exit $s")
+    return Array<String&>["/bin/sh", "-c", cmd.ToString()]
 }
 
 # B11d: where a listing build keeps the optimization remarks of the object at obj - beside it, as YAML
