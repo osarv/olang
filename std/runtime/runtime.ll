@@ -5328,3 +5328,34 @@ entry:
   store ptr %prog, ptr @__olang_prog_scope
   ret void
 }
+
+; E15a: compiler-rt's signed 128-bit overflow multiply, which LLVM calls on aarch64 for an i65-i128 multiply it tests
+; (an "r / b != a" check it recognizes, std/arith's Mul) and which libgcc does not provide - so no target needs
+; compiler-rt. Weak, so a library that brings its own wins; x86-64 expands the multiply inline and has none. The test is
+; on the magnitudes, unsigned (llvm.umul.with.overflow is inline everywhere): it overflows where the unsigned product
+; wraps or exceeds 2^127-1, or 2^127 where the signs differ. *o is 1 on overflow, else 0
+; @if aarch64
+define weak i128 @__muloti4(i128 %a, i128 %b, ptr %o) {
+entry:
+  %na = icmp slt i128 %a, 0
+  %nb = icmp slt i128 %b, 0
+  %a0 = sub i128 0, %a
+  %ma = select i1 %na, i128 %a0, i128 %a
+  %b0 = sub i128 0, %b
+  %mb = select i1 %nb, i128 %b0, i128 %b
+  %v = call { i128, i1 } @llvm.umul.with.overflow.i128(i128 %ma, i128 %mb)
+  %p = extractvalue { i128, i1 } %v, 0
+  %wrapped = extractvalue { i128, i1 } %v, 1
+  %neg = xor i1 %na, %nb
+  %extra = zext i1 %neg to i128
+  %limit = add i128 170141183460469231731687303715884105727, %extra
+  %big = icmp ugt i128 %p, %limit
+  %over = or i1 %wrapped, %big
+  %flag = zext i1 %over to i32
+  store i32 %flag, ptr %o
+  %np = sub i128 0, %p
+  %r = select i1 %neg, i128 %np, i128 %p
+  ret i128 %r
+}
+declare { i128, i1 } @llvm.umul.with.overflow.i128(i128, i128)
+; @end

@@ -1,0 +1,40 @@
+# check: run
+# E15a: std/arith's 128-bit operations, overflowing and not, of both signs, with run-time operands. A signed multiply of
+# more than 64 bits was LLVM's llvm.smul.fix.sat / smul.with.overflow, which aarch64 lowers to compiler-rt's __muloti4,
+# missing from libgcc - the link failed; the compiler now tests the product on the magnitudes
+import "std/arith"
+import "std/os"
+
+fn sat(a I128, b I128) I128 { return (arith.Saturating(a) * b).Value }
+fn usat(a U128, b U128) U128 { return (arith.Saturating(a) * b).Value }
+fn sat100(a I100, b I100) I100 { return (arith.Saturating(a) * b).Value }
+fn chk(a I128, b I128) I128 { return try arith.Mul(a, b) catch default 7 }
+
+fn main() ? {
+    k := os.Args().Len()                        # 1, unknown while compiling
+    big := I128(k) << 100
+    assert sat(big, 3) == big * 3 and sat(big, -3) == big * -3 and sat(-big, -3) == big * 3
+    assert sat(big, big) == I128.Max and sat(big, -big) == I128.Min and sat(-big, -big) == I128.Max
+    assert sat(I128.Min, I128(k)) == I128.Min and sat(I128.Min, -I128(k)) == I128.Max
+    assert sat(I128.Max, -I128(k)) == -I128.Max and sat(I128(k) << 126, -2) == I128.Min
+    assert sat(I128(k) << 126, 2) == I128.Max and sat(0, I128.Min) == 0
+    assert usat(U128(k) << 100, 3) == (U128(k) << 100) * 3 and usat(U128(k) << 100, U128(k) << 28) == U128.Max
+    assert sat100(I100(k) << 90, 3) == (I100(k) << 90) * 3 and sat100(I100(k) << 90, 1024) == I100.Max
+    assert sat100(I100(k) << 90, -512) == I100.Min and sat100(I100(k) << 90, -1024) == I100.Min
+    assert chk(big, -3) == big * -3 and chk(big, big) == 7 and chk(I128.Min, -I128(k)) == 7
+    assert chk(I128(k) << 126, -2) == I128.Min and chk(I128(k) << 126, 2) == 7
+    # the rest of 128 bits: add, sub, neg, shifts, powers, checked and saturating
+    s := arith.Saturating(I128.Max - I128(k))
+    assert (s + 5).Value == I128.Max and (arith.Saturating(I128.Min + I128(k)) - 5).Value == I128.Min
+    assert (-arith.Saturating(I128.Min * I128(k))).Value == I128.Max
+    assert arith.Saturating(I128(k)).ShiftLeft(127).Value == I128.Max and (arith.Saturating(I128(3 * k)) ** 81).Value == I128.Max
+    assert (arith.Saturating(I128(-3 * k)) ** 81).Value == I128.Min and (arith.Saturating(I128(3 * k)) ** 80).Value == I128(3).Pow(80)
+    assert (arith.Saturating(U128(k)) - 2).Value == 0 and (arith.Saturating(U128(3 * k)) ** 82).Value == U128.Max
+    assert (try arith.Add(I128.Max, I128(k)) catch default 1) == 1 and (try arith.Sub(I128.Min, I128(k)) catch default 2) == 2
+    assert (try arith.Neg(I128.Min * I128(k)) catch default 3) == 3 and (try arith.Pow(I128(3 * k), 81) catch default 4) == 4
+    assert arith.Pow(I128(-3 * k), 80)! == I128(3).Pow(80) and (try arith.Pow(U128(2 * k), 128) catch default 5) == 5
+    assert (try arith.ShiftLeft(I128(k), 127) catch default 6) == 6 and arith.ShiftLeft(U128(k), 127)! == U128(1) << 127
+    assert (try arith.Mul(U128(k) << 64, U128(k) << 64) catch default 8) == 8 and arith.Mul(U128(k) << 63, 2)! == U128(1) << 64
+    c := arith.Checked(I128(k) << 120)
+    assert (try c * 128 catch default arith.Checked(I128(0))).Value == 0 and (try c * -128 catch default arith.Checked(I128(0))).Value == I128.Min
+}

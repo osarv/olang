@@ -37130,3 +37130,14 @@ installable (Helix and other LSP clients take a configuration line, printed as a
 filetype and syntax olang on a `.olang` file and `:compiler olang` sets `makeprg`; no Neovim is in the container, so the
 Neovim package was checked by its files only.
 - 2026-11-14: MIT licence and README Contributing/Licence sections (the user); LICENSE added to the consistency tool's root files.
+- 2026-11-14: E15a, no compiler-rt for 128-bit multiplies (bug from the ARM cross gate). checks/cases/s9erangeundertry
+  built for aarch64-linux-gnu failed to link: `std/arith`'s `Saturating<I128>.Mul` was `llvm.smul.fix.sat.i128`, and
+  LLVM lowers a signed overflow multiply of i65-i128 (that intrinsic and `llvm.smul.with.overflow`) to compiler-rt's
+  `__muloti4` on aarch64, which libgcc does not provide; x86-64 expands it inline. The emitter now does a signed
+  multiply of more than 64 bits on the magnitudes (`wideMul`, emit.olang): `llvm.umul.with.overflow` (inline on both
+  targets), overflow where it wraps or the magnitude exceeds 2^(bits-1)-1 (2^(bits-1) when the signs differ), the
+  saturating product the limit by the signs. Chosen over a weak `__muloti4` in the runtime, which LTO may drop before
+  codegen asks for it: on x86-64 the new sequence is shorter (45 against 56 instructions for the overflow test, 57
+  against 64 for the saturating product, clang-19 -O2); checked exhaustively at i8 against LLVM's intrinsics. Run case
+  checks/cases/mul128overflow (I128, U128, I100: saturating and checked multiply of both signs, overflowing and not,
+  and the other 128-bit Checked/Saturating operations), run natively and under qemu-aarch64.

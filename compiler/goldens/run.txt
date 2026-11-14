@@ -2405,6 +2405,8 @@
 | ok
 === run methodnamedlocal.olang
 | status 0
+=== run mul128overflow.olang
+| status 0
 === run nllkeepsunion1.olang
 | status 0
 === run nllkeepsunion2.olang

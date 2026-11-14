@@ -5507,6 +5507,13 @@ fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mi
     y := fe.val(fe.arg(args, 1), fe.otype(fe.arg(args, 1)))
     b := t.Bits(t.Repr(r))
     if op == typed.PrimOp.SatMul and b <= 32 { return fe.satMulWide(s, lt, b, x, y) }
+    if op == typed.PrimOp.SatMul and s == "s" and b > 64 {
+        # not llvm.smul.fix.sat, which needs compiler-rt's __muloti4 on aarch64 (wideMul): the limit by the signs
+        p, over, neg := fe.wideMul(lt, x, y, b)
+        least := fe.let("shl " $lt " 1, " $(b - 1))
+        lim := fe.let("select i1 " $neg ", " $lt " " $least ", " $lt " " $fe.let("sub " $lt " " $least ", 1"))
+        return fe.let("select i1 " $over ", " $lt " " $lim ", " $lt " " $p)
+    }
     if op == typed.PrimOp.SatMul {
         intr := "llvm." $s "mul.fix.sat." $lt
         fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", i32)")
@@ -5783,6 +5790,10 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
                 case typed.PrimOp.Sub: "sub"
                 case _: "mul"
             }
+            if op == typed.PrimOp.Mul and not un and bits > 64 {
+                _, over, _ := fe.wideMul(lt, x, y, bits)
+                return over
+            }
             intr := "llvm." $("u" if un else "s") $name ".with.overflow.i" $bits
             fe.E.declare(intr, "{ " $lt ", i1 } @" $intr "(" $lt ", " $lt ")")
             v := fe.let("call { " $lt ", i1 } @" $intr "(" $lt " " $x ", " $lt " " $y ")")
@@ -5818,6 +5829,29 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
             return "false"
         }
     }
+}
+
+# a signed multiply of more than 64 bits, done on the magnitudes, unsigned, so no target needs compiler-rt: LLVM's
+# signed overflow multiply of i65-i128 (llvm.smul.with.overflow, and llvm.smul.fix.sat through it) becomes a call of
+# __muloti4 on aarch64, which libgcc lacks, while on x86-64 this is shorter than its own expansion. Gives the wrapped
+# product, whether it overflows (the unsigned product wraps, or exceeds 2^(bits-1)-1, or 2^(bits-1) where the signs
+# differ) and whether the signs differ
+fn (fe mut fnEm&) wideMul(lt String&, x String&, y String&, bits I64) String, String, String {
+    nx := fe.let("icmp slt " $lt " " $x ", 0")
+    ny := fe.let("icmp slt " $lt " " $y ", 0")
+    mx := fe.let("select i1 " $nx ", " $lt " " $fe.let("sub " $lt " 0, " $x) ", " $lt " " $x)
+    my := fe.let("select i1 " $ny ", " $lt " " $fe.let("sub " $lt " 0, " $y) ", " $lt " " $y)
+    intr := "llvm.umul.with.overflow.i" $bits
+    fe.E.declare(intr, "{ " $lt ", i1 } @" $intr "(" $lt ", " $lt ")")
+    v := fe.let("call { " $lt ", i1 } @" $intr "(" $lt " " $mx ", " $lt " " $my ")")
+    p := fe.let("extractvalue { " $lt ", i1 } " $v ", 0")
+    wrapped := fe.let("extractvalue { " $lt ", i1 } " $v ", 1")
+    neg := fe.let("xor i1 " $nx ", " $ny)
+    most := fe.let("sub " $lt " " $fe.let("shl " $lt " 1, " $(bits - 1)) ", 1")
+    limit := fe.let("add " $lt " " $most ", " $fe.let("zext i1 " $neg " to " $lt))
+    over := fe.let("or i1 " $wrapped ", " $fe.let("icmp ugt " $lt " " $p ", " $limit))
+    r := fe.let("select i1 " $neg ", " $lt " " $fe.let("sub " $lt " 0, " $p) ", " $lt " " $p)
+    return r, over, neg
 }
 
 fn (e mut Emitter&) pow2(k I64) String { return e.constText(types.TypeId(14), I64(F64(1.0).Bits()) + (k << 52)) }
