@@ -1815,7 +1815,7 @@ the text operations are its methods. A `String` **never changes once it is made*
 written, and no `mut String&` is written; text that is written is an `Array<Char>` - text written in the program adapts
 to one, a value its own copy (`chars Array<Char> = "abc"`) - or is built by a `StringBuilder`, and becomes a `String`
 by `String(chars)`, a copy (left out where nothing could tell, D9i). An `Array<Char>` is no `String`: it goes where a
-`String` is wanted only converted. Text written in the program — a string literal, a `$` rendering
+`String` is wanted only converted (`String(chars)`; a `StringBuilder`'s `b.ToString()`), and the diagnostic says so. `t.Bytes()` is the text's bytes as a read-only `Array<U8>&`, a view of the text itself with nothing copied (T29h: a `Char` is a `U8` of one layout). Text given as `Array<T>(n)`'s length is E12's mismatch, with help naming `t.Bytes()` and `c Array<Char> = t`. Text written in the program — a string literal, a `$` rendering
 (E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
 literal's is `I64` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
 bound to a type variable (G9a), as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`), and as an

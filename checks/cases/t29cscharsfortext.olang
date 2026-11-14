@@ -1,0 +1,7 @@
+# check: fail error[E12, T29c]: expected String&, found Array<Char>
+# E12, T29c: characters being written are not text until String(chars) makes them so
+fn show(t String&) I64 { return t.Len() }
+fn main() {
+    c := Array<Char>(3, 'a')
+    assert show(c) == 3
+}

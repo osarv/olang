@@ -1506,6 +1506,13 @@ e11blongchain.olang:9:20: error[E11b]: a join piece is a text literal or a '$' r
     9 |     try io.PutLine(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
       |                    ^~~~
 compilation failed with 1 error
+=== e12textforlength.olang
+e12textforlength.olang:4:20: error[E12, D14]: expected I64, found String
+    4 |     x := Array<U8>("this is a test")
+      |                    ^~~~~~~~~~~~~~~~
+e12textforlength.olang:4:20: note: Array<T>(n) makes n zeroed elements
+e12textforlength.olang:4:20: help: to read the text's bytes, write 't.Bytes()'; its characters, 'c Array<Char> = t'
+compilation failed with 1 error
 === e13bfieldnotfn.olang
 e13bfieldnotfn.olang:6:10: error[E13b]: I32 is not a function, and declares no Call
     6 |   y := p.x(3)
@@ -5365,19 +5372,19 @@ t13atextmutref.olang:3:12: help: write text through 'mut Array<Char>&', read it 
 t13atextmutref.olang:4:31: error[T13a, T29c]: a String never changes once it is made
     4 |     for i in range t.Len() { t[i] = t[i].ToUpper() }
       |                               ^
-t13atextmutref.olang:4:31: help: write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+t13atextmutref.olang:4:31: help: write 'c Array<Char> = t', change 'c', then 'String(c)'; or 'b := StringBuilder()', 'b.Push(t)', 'b.ToString()'
 compilation failed with 2 errors
 === t13atextslice.olang
 t13atextslice.olang:6:9: error[T13a, T29c]: a String never changes once it is made
     6 |     zap(s[2:4])
       |         ^~~~~~
-t13atextslice.olang:6:9: help: write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+t13atextslice.olang:6:9: help: write 'c Array<Char> = t', change 'c', then 'String(c)'; or 'b := StringBuilder()', 'b.Push(t)', 'b.ToString()'
 compilation failed with 1 error
 === t13atextwrite.olang
 t13atextwrite.olang:5:6: error[T13a, T29c]: a String never changes once it is made
     5 |     s[0] = 'x'
       |      ^
-t13atextwrite.olang:5:6: help: write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+t13atextwrite.olang:5:6: help: write 'c Array<Char> = t', change 'c', then 'String(c)'; or 'b := StringBuilder()', 'b.Push(t)', 'b.ToString()'
 compilation failed with 1 error
 === t13bafter.olang
 t13bafter.olang:6:14: error[T13b]: 'f' is handed on here, and File is unique
@@ -6460,12 +6467,26 @@ t29aconvreadonly.olang:6:11: error[T25c]: a read-only reference cannot become wr
     6 |   w(Bytes(b))
       |           ^
 compilation failed with 1 error
+=== t29cbuilderfortext.olang
+t29cbuilderfortext.olang:6:17: error[E12, T29c]: expected String&, found StringBuilder
+    6 |     assert show(b) == 0
+      |                 ^
+t29cbuilderfortext.olang:6:17: note: a StringBuilder is text being written, not a String
+t29cbuilderfortext.olang:6:17: help: make text from it with 'b.ToString()'
+compilation failed with 1 error
 === t29cbytes.olang
 t29cbytes.olang:5:16: error[M19]: Array<U8> has no method 'Eq'
     5 |     assert raw.Eq("zz")
       |                ^~
 t29cbytes.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
+=== t29cscharsfortext.olang
+t29cscharsfortext.olang:6:17: error[E12, T29c]: expected String&, found Array<Char>
+    6 |     assert show(c) == 3
+      |                 ^
+t29cscharsfortext.olang:6:17: note: characters are not text until they are made into a String
+t29cscharsfortext.olang:6:17: help: make text from the characters with 'String(x)'
+compilation failed with 1 error
 === t29dliteral.olang
 t29dliteral.olang:10:17: error[T29d]: this literal enters Checked through its constructor, which does not run on it while compiling
    10 |     c Checked = -5
