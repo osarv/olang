@@ -2969,7 +2969,8 @@ fn words(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/output/prog.olang " $os.Quote(dir))
     os.Run("cp checks/cases/b14docbuilders.olang " $os.Quote(dir) "/b.olang")
     os.Run("cp checks/fixtures/output/words.olang " $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B1]: nothing to do"), "no arguments", dir)
+    # B22: nothing after it opens the prompt, which ends with its input
+    try r.expect(sh(dir, "\"$OLANG\" < /dev/null > out.txt 2>&1") == 0 and outOf(dir) == "", "no arguments", dir)
     try r.expect(sh(dir, "\"$OLANG\" bild prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("'bild' is not a mode - the modes are build, compile"), "an unknown mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -b prog.olang > out.txt 2>&1") == 1 and
