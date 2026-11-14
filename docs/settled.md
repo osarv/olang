@@ -274,6 +274,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   operations' divisions and shifts are never checked. Release builds (`build`, running a file, `-quick`, `-library`)
   are byte-identical to before: no check, no cost. Mine: the column (several per line), a check kind `typed.Check.Debug`
   lowered to a guaranteed check only when the Lowerer is `Checked`, so the evaluator stops with the built text.
+  **Release stays unchecked (the user, 2026-11-14: "Keep it unchecked")**, after measuring every index checked in every
+  build (docs/checks-measure.md): bench/ 4% slower on average, sorts 40-60%, and the checks moved out of loops did not pay.
 - **Subscripts by axes, NumPy's (E16f, the user's "yes, do them" 2026-11-13, for ML; built 2026-11-13).** `m[0:2, :]`,
   `m[..., 1]`, `c[0, :, 1:]`: a range (`lo:hi`, either end off, bare `:`) or `...` among the items calls the type's
   `Slice` with one prelude `Axis` per item - `Index(i)`, `Range(lo, hi)` (an end off: 0, `I64.Max`), `Rest`; the

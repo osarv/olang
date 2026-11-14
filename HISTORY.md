@@ -37256,3 +37256,10 @@ with `ArrayError.OutOfRange` (`Try`), not stopping. Tests: checks scenario `chec
 checkedbuild: ten failing tests and two passing ones, the same output from `test` and `test -interpret`; a release
 build of `release.olang` carries none of the four texts in any object and runs; its `-debug` build and `interpret`
 stop on the index the arguments push out of range).
+- 2026-11-14, release checks measured and declined. The user's idea was every index checked in every build, the check
+  moved out of loops where it can be. Measured behind `OLANG_CHECKS=all|hoist` (docs/checks-measure.md, no language
+  change): about 35-40% of index sites need no check (LLVM proves them), LLVM's IRCE hoists 12-15%, about a quarter stay
+  per access - indexes from data (sorts, `a[idx[i]]`, cursors) no hoisting reaches. bench/ geometric mean 1.042 per access,
+  1.053 hoisted (IRCE's loop splitting slows as many loops as it speeds); sorts +40-60%, gathers +10-15%; the self-build's
+  front end +10% per access. The user: "Keep it unchecked" - release builds stay unchecked (principle 2), checked builds
+  (above) check test, -debug and interpret. The switch stays as a measuring tool, off by default.
