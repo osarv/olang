@@ -29,7 +29,10 @@ phases, and how long it took; the whole takes a few minutes. (`make fixedpoint`,
 installed compiler build itself once more and checks the two are byte for byte equal.) Before compiling anything, `make` checks for the tools above and
 says which package to install for anything missing (`make prereq` runs only that check).
 
-After a `git pull`, run `make` again: it rebuilds the compiler only when its sources changed.
+`make` then installs it, as `make install` does (below): `olang` on your PATH, std beside it, and the editor support.
+`make build` builds without installing.
+
+After a `git pull`, run `make` again: it rebuilds the compiler only when its sources changed, and installs it.
 
 ## Using it
 

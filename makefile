@@ -1,6 +1,7 @@
 # Building the compiler from a checkout (README.md has the prerequisites):
 #
-#   make             build/olang, built from the committed seed (seed/) with nothing but clang and xz - a few minutes;
+#   make             make build, then make install
+#   make build       build/olang, built from the committed seed (seed/) with nothing but clang and xz - a few minutes;
 #                    it first checks what the build needs (make prereq) and names what is missing
 #   make install     olang copied into ~/.local/lib/olang, linked from ~/.local/bin (PREFIX=... for another place), and
 #                    the editor support of editors/ for Neovim and Vim (EDITORS=none leaves it out)
@@ -46,8 +47,8 @@ TEST_RUNS = $(TEST_RUNS_HEAVY) $(TEST_RUNS_REST)
 lane = $(if $(word 2,$1),$(eval test@$(word 2,$1): | test@$(word 1,$1))$(call lane,$(wordlist 2,$(words $1),$1)))
 
 # the default: the compiler, build/olang (bootstrapped from the seed by boot, below, when missing or older than its
-# sources)
-all: build
+# sources), installed (install, below); make build stops at build/olang
+all: build install
 build: build/olang
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
