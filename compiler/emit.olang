@@ -929,20 +929,14 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
         if merging and e.merged.Has(it) {
             # an alias, naming only what it stands for, which is here - or a wrapper, which declares it
             into := try e.merged.Get(it) catch default it
-            if not e.aliased(it) {
-                w := e.wrapper(it, into)
-                wrapped.Put(it, $w)
-                rw := refsIn(w)
-                for r in range 0, rw.Len(), 3 {
-                    if rw[r] != 1 { continue }
-                    t := try e.tyAt.Get(w[rw[r + 1]:rw[r + 2]]) catch default -1
-                    if t >= 0 and not tyHave.Has(t) { e.wantType(t, tys, tyHave) }
-                }
-                if not have.Has(into) and not declared.Has(into) {
-                    declared.Put(into, true)
-                    decls.Push(e.itemDecl[into])
-                    e.declTypes(e.itemDecl[into], tys, tyHave)
-                }
+            if e.aliased(it) { continue }
+            w := e.wrapper(it, into)
+            wrapped.Put(it, $w)
+            e.typesNamedIn(w, tys, tyHave)
+            if not have.Has(into) and not declared.Has(into) {
+                declared.Put(into, true)
+                decls.Push(e.itemDecl[into])
+                e.declTypes(e.itemDecl[into], tys, tyHave)
             }
             continue
         }
@@ -962,18 +956,17 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
             if h == HomeShared or h == HomeLocal {
                 have.Put(j, true)
                 order.Push(j)
-                if h == HomeLocal {
-                    rename.Put(j, $prefixOf(e.itemSym[j]) $nloc)
-                    nloc++
-                }
-            } else {
-                # homed in another object (another part of this one's home included)
-                declared.Put(j, true)
-                decls.Push(e.itemDecl[j])
-                e.declTypes(e.itemDecl[j], tys, tyHave)
-                if h == HomeInst and inst is not null { inst.Push($e.itemSym[j]) }
-                if h == HomeLoc and locs is not null { locs.Put(j, true) }
+                if h != HomeLocal { continue }
+                rename.Put(j, $prefixOf(e.itemSym[j]) $nloc)
+                nloc++
+                continue
             }
+            # homed in another object (another part of this one's home included)
+            declared.Put(j, true)
+            decls.Push(e.itemDecl[j])
+            e.declTypes(e.itemDecl[j], tys, tyHave)
+            if h == HomeInst and inst is not null { inst.Push($e.itemSym[j]) }
+            if h == HomeLoc and locs is not null { locs.Put(j, true) }
         }
     }
     out := StringBuilder()
@@ -1024,6 +1017,16 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
     if e.dbgCuN >= 0 and meta.Has(e.dbgCuN) { out.Push(dbgTail(metaNumber(meta, e.dbgCuN))) }
     out.Push(e.attributes())
     return out.ToString()
+}
+
+# assemble's types a merged instance's wrapper names, each wanted once
+fn (e mut Emitter&) typesNamedIn(w String&, tys mut Vec<I64>&, tyHave mut Map<I64, Bool>&) {
+    rw := refsIn(w)
+    for r in range 0, rw.Len(), 3 {
+        if rw[r] != 1 { continue }
+        t := try e.tyAt.Get(w[rw[r + 1]:rw[r + 2]]) catch default -1
+        if t >= 0 and not tyHave.Has(t) { e.wantType(t, tys, tyHave) }
+    }
 }
 
 # a debug node's number in the object being assembled: the next one where it is new there
@@ -1207,15 +1210,18 @@ fn (e mut Emitter&) globalOrder(inits Vec<I64>) Vec<I64> {
     out Vec<I64>
     for m in inits {
         for i in e.P.InitOrder {
-            match e.Lw.Bodies[i].Of {
-                case typed.BodyOf.Global(gm, _) {
-                    if gm == m { out.Push(i) }
-                }
-                case _ { }
-            }
+            if e.globalIn(i, m) { out.Push(i) }
         }
     }
     return out
+}
+
+# whether body i is the initializer of a global of module m
+fn (e mut Emitter&) globalIn(i I64, m I64) Bool {
+    return match e.Lw.Bodies[i].Of {
+        case typed.BodyOf.Global(gm, _): gm == m
+        case _: false
+    }
 }
 
 # baked global i's storage defined (K2), at the type its initializer stores
@@ -1359,10 +1365,7 @@ fn (e mut Emitter&) capVars(k mir.FnKey) I64 {
     match k {
         case mir.FnKey.Body(id) {
             for v in e.Lw.Bodies[I64(id)].Vars {
-                match v {
-                    case typed.ScopeVar.Capture(_) { n++ }
-                    case _ { }
-                }
+                if v == typed.ScopeVar.Capture: n++
             }
         }
         case mir.FnKey.Adapter(call) {
@@ -3185,10 +3188,7 @@ fn (fe mut fnEm&) apart(p mir.Lvalue, args mir.Range) Bool {
         match fe.arg(args, i) {
             case mir.Operand.Copy(q) {
                 if fe.derefs(q) or q.BaseIs(dst) { return false }
-                match q.B {
-                    case mir.Base.Local(_) { }
-                    case _ { return false }
-                }
+                if not (q.B == mir.Base.Local) { return false }
             }
             case _ { }
         }
@@ -4252,30 +4252,40 @@ fn (fe mut fnEm&) findDirect() {
         bb := fe.F.Blocks.Ref(k)
         n := bb.Stmts.Len()
         for i in range n {
-            sc := I64(-1)
-            match bb.Stmts[i] {
-                case mir.Stmt.Open(_, s0) {
-                    if fe.F.Scopes[I64(s0)].Kind == mir.ScopeKind.Builder { sc = I64(s0) }
-                }
-                case _ { }
-            }
+            sc := fe.builderOpened(bb.Stmts[i])
             if sc < 0 { continue }
             j := i + 1
             for j < n and fe.plainWrite(bb.Stmts[j], sc) { j++ }
             if j + 1 >= n { continue }
-            textOk := match bb.Stmts[j] {
-                case mir.Stmt.Assign(_, _, rv): match rv {
-                    case mir.Rvalue.Text(b, _, _): fe.refIs(b, sc)
-                    case _: false
-                }
-                case _: false
-            }
+            textOk := fe.textInto(bb.Stmts[j], sc)
             closeOk := match bb.Stmts[j + 1] {
                 case mir.Stmt.Close(_, s1): I64(s1) == sc
                 case _: false
             }
             if textOk and closeOk { fe.direct.Put(sc, true) }
         }
+    }
+}
+
+# findDirect's builder scope a statement opens; -1 where it opens none
+fn (fe mut fnEm&) builderOpened(st mir.Stmt&) I64 {
+    match st {
+        case mir.Stmt.Open(_, s0) {
+            if fe.F.Scopes[I64(s0)].Kind == mir.ScopeKind.Builder { return I64(s0) }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# findDirect's text joined into a builder scope sc's storage
+fn (fe mut fnEm&) textInto(st mir.Stmt&, sc I64) Bool {
+    return match st {
+        case mir.Stmt.Assign(_, _, rv): match rv {
+            case mir.Rvalue.Text(b, _, _): fe.refIs(b, sc)
+            case _: false
+        }
+        case _: false
     }
 }
 
