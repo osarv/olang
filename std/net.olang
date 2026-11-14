@@ -16,7 +16,10 @@ import unistd "unistd.h"
 import netdb "netdb.h"
 import cstring "string.h"
 
-extern { fn __olang_err() I32 }
+extern {
+    fn __olang_err() I32
+    fn poll(fds mut Array<I32>&, count U64, ms I32) I32
+}
 
 afInet I32 = 2
 afInet6 I32 = 10
@@ -438,6 +441,9 @@ fn Listener.Listen(a Addr&, backlog I32 = 128) Listener ? Error {
     return Listener(fd)
 }
 
+# the descriptor, for waiting on several sockets at once (Readable)
+fn (l Listener&) Fd() I32 { return l.fd }
+
 # the address the listener is at - with the port the system chose, where Listen was given 0
 fn (l Listener&) Addr() Addr ? Error { return try Addr.nameOf(l.fd, false) }
 
@@ -495,6 +501,23 @@ fn (c Conn&) Write(data Array<U8>&) ? Error {
 
 # says no more will be written: the other side reads to the end (Closed), and may still write back
 fn (c Conn&) CloseWrite() { sock.shutdown(c.fd, shutWr) }
+
+# the descriptor, for waiting on several sockets at once (Readable)
+fn (c Conn&) Fd() I32 { return c.fd }
+
+# which of the sockets fds name (each a Conn's, a Listener's or a UDP socket's Fd()) have something to read - a
+# connection to accept, bytes, or the other side's close - waiting until one has, or ms milliseconds pass (-1: no
+# limit; then none may be ready). A socket whose descriptor failed reads as ready: its read says why. One server thread
+# serving several sockets waits here, as poll(2) waits
+fn Readable(fds Array<I32>&, ms I64 = -1) Array<Bool> {
+    set := Array<I32>(2 * fds.Len())
+    for i, fd in fds {
+        set[2 * i] = fd
+        set[2 * i + 1] = 1                  # POLLIN; revents in the high half
+    }
+    for poll(set, U64(fds.Len()), I32(ms)) < 0 and interrupted() { }
+    return Array<Bool>[(set[2 * i + 1] >> 16) & 0xffff != 0 for i in range fds.Len()]
+}
 
 # a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default)
 fn (c Conn&) SetTimeout(d time.Duration) {
@@ -592,6 +615,17 @@ test "addresses are read and written as text" {
         try Addr.Parse(bad) catch Error.Address { continue }
         unreachable
     }
+}
+
+test Readable "says which sockets have something to read" {
+    l := Listener.Listen(Addr.Parse("127.0.0.1:0")!)!
+    at := l.Addr()!
+    assert Readable(Array<I32>[l.Fd()], 0) == Array<Bool>[false]
+    c := Conn.Dial(at)!
+    assert Readable(Array<I32>[l.Fd()], 1000) == Array<Bool>[true]
+    s := l.Accept()!
+    c.Write("hi")!
+    assert Readable(Array<I32>[l.Fd(), s.Fd()], 1000) == Array<Bool>[false, true]
 }
 
 # what refusing t says ($e: this file the root here, so unqualified)
