@@ -8001,27 +8001,27 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
-            | "bindgen" | "profile" | "api" | "jupyter"
+            | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench" | "-install"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench" | "-install" | "-continue"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21) and `jupyter` (B23). An
+(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21), `jupyter` (B23) and `notebook` (B24). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
 
 | option | applies to | rule |
 |---|---|---|
-| `-output PATH` | build, compile, bindgen, profile | B3h, §11 X16, B20 |
+| `-output PATH` | build, compile, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
 | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
 | `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |
 | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile, jupyter | B10, §4 M23c |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
@@ -8032,6 +8032,7 @@ beginning with `-` that is no option is an error:
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 | `-install` | jupyter | B23 |
+| `-continue` | notebook | B24 |
 
 `build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
@@ -8991,6 +8992,19 @@ Svg(t String)  Png(bytes Array<U8>) }`, its `d.Mime()` (`text/html`, `text/markd
 `image/png`) and `d.Body()`, and the trait `type Displayable trait { Display() Display }`. A type renders itself richly
 by declaring `fn (x T&) Display() Display`, and so meets `Displayable`; only the kernel calls it, for the value a cell
 shows. The language gives the method no other meaning: `$x` and the prompt still write the text form.
+
+**B24 (running a notebook).** `olang notebook run FILE.ipynb` runs a Jupyter notebook (nbformat 4, JSON) without Jupyter:
+its code cells, in order, in one session as the kernel runs them (B23) - each named `In[N]` in diagnostics, N its
+`execution_count` - and writes the notebook back to FILE (or to `-output PATH`). Each code cell's `outputs` are replaced
+by what Jupyter stores for it: a `stream` for what it wrote to its standard output (`stdout`) and to its standard error
+and diagnostics' warnings (`stderr`), text as the lines it ends; an `execute_result` for the value it shows, its `data`
+as B23's kernel gives it (`text/plain` and the value's `Display` under its MIME type, a PNG in base64) and the cell's
+`execution_count`; an `error` (`ename` `CompileError` or `RuntimeError`, `evalue`, one `traceback` row per line) for a
+cell that does not check or that stops. A code cell with no source is not run and has no output or count; a markdown or
+raw cell, every other member of the notebook and its metadata are written back as read, the metadata's `kernelspec`
+naming olang where it had none. A cell that fails ends the run with status 1, the code cells after it left with no
+output; with `-continue` they run too, the status still 1. A notebook that cannot be read, is no notebook or cannot be
+written is status 2; anything but the word `run` and one file after `notebook` is an error.
 
 ## 11. External Functions
 

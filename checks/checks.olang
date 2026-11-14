@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "promptkeys", "jupyter"]
+                     "prompt", "promptkeys", "jupyter", "notebook"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -441,6 +441,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "prompt" { try prompt(r) }
         case "promptkeys" { try promptkeys(r) }
         case "jupyter" { try jupyter(r) }
+        case "notebook" { try notebook(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
         case "assertloc" { try assertloc(r) }
@@ -1323,6 +1324,22 @@ fn jupyter(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build client.olang > out.txt 2>&1") == 0, "the front end did not build", dir)
     try r.expect(sh(dir, "timeout 120 build/client \"$OLANG\" > out.txt 2>&1") == 0, "the front end did not end with 0", dir)
     try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the kernel's session printed other than session.want", dir)
+}
+
+test "olang notebook run runs a notebook's cells and stores their outputs" { assert passed("notebook") }
+
+# B24: "olang notebook run" runs a notebook's code cells in order as the kernel runs them and writes it back with the
+# outputs Jupyter stores (a stream, a shown value with its MIME types, a plot's SVG, an error) and execution counts: it
+# stops at the first failing cell with status 1 - the cells after it cleared - or, with -continue, runs the rest
+fn notebook(r mut report&) ? Failed {
+    dir := fresh("notebook")
+    os.Run("cp checks/fixtures/notebook/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" notebook run in.ipynb -output out.ipynb > out.txt 2>&1") == 1, "a failing cell did not give status 1", dir)
+    try r.expect(sh(dir, "cmp -s want.ipynb out.ipynb") == 0, "the notebook run was other than want.ipynb", dir)
+    try r.expect(sh(dir, "\"$OLANG\" notebook run -continue in.ipynb -output out.ipynb > out.txt 2>&1") == 1, "-continue did not give status 1", dir)
+    try r.expect(sh(dir, "cmp -s want_continue.ipynb out.ipynb") == 0, "the notebook run with -continue was other than want_continue.ipynb", dir)
+    try r.expect(sh(dir, "\"$OLANG\" notebook in.ipynb > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B24]"), "a notebook named without run", dir)
+    try r.expect(sh(dir, "cp in.ipynb same.ipynb; \"$OLANG\" notebook run same.ipynb > out.txt 2>&1; cmp -s want.ipynb same.ipynb") == 0, "a notebook run in place", dir)
 }
 
 fn interp(r mut report&) ? Failed {
@@ -2927,7 +2944,7 @@ fn output(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -output out prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("is a directory"), "a directory", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -output out/t prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build, compile, bindgen and profile, not to test"), "test -output", dir)
+                 outOf(dir).Contains("-output applies to build, compile, bindgen, profile and notebook, not to test"), "test -output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output out/q prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("not to running a file"), "running a file with -output", dir)
 }

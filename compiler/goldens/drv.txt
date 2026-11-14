@@ -39,7 +39,7 @@
 | status 1
 === olang test -output o main.olang
 | stdout:
-| olang: error[B1]: -output applies to build, compile, bindgen and profile, not to test
+| olang: error[B1]: -output applies to build, compile, bindgen, profile and notebook, not to test
 | stderr:
 | status 1
 === olang format -debug a.olang
@@ -243,13 +243,13 @@
 === olang bogus
 | stdout:
 | olang: error[B1]: 'bogus' is not a mode
-| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api and jupyter, and a file ending in .olang is built and run
+| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang main.txt
 | stdout:
 | olang: error[B1]: 'main.txt' is not a mode
-| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api and jupyter, and a file ending in .olang is built and run
+| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang -debug main.txt
@@ -283,6 +283,7 @@
 |   profile     builds the program with a sampling profiler, runs it with the arguments after the file, and reports where its time went, with a flame graph (B20; interpret's runs are not profiled)
 |   api         lists what a module's exported interface gained, lost and changed between two versions - commits or directories - each change marked as breaking importers or not (B21)
 |   jupyter     serves a Jupyter kernel on the ports CONNECTION_FILE names, each notebook cell run as the prompt runs one (B23)
+|   notebook    runs the code cells of a Jupyter notebook in order, as the prompt runs cells, and writes the notebook back with their outputs as Jupyter stores them (B24)
 | 
 | 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
 | 'olang' with nothing after it opens the prompt, which runs what is typed as it is typed (B22).
@@ -300,7 +301,7 @@
 | builds one program, FILE.olang its root module, into build/ (B3)
 | 
 | options:
-|   -output PATH       writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)
+|   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information (B2c, B2e)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
@@ -334,7 +335,7 @@
 | compiles one module to an object, linking nothing (B2)
 | 
 | options:
-|   -output PATH       writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)
+|   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information (B2c, B2e)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
@@ -442,7 +443,7 @@
 === olang help nope
 | stdout:
 | olang: error[B1]: 'nope' is not a mode
-| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api and jupyter, and a file ending in .olang is built and run
+| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang help build test
@@ -471,27 +472,27 @@
 | ```
 | command   ::= "olang" [ mode-word ] { option } { argument }
 | mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
-|             | "bindgen" | "profile" | "api" | "jupyter"
+|             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench" | "-install"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench" | "-install" | "-continue"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 | an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 | `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-| (B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21) and `jupyter` (B23). An
+| (B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21), `jupyter` (B23) and `notebook` (B24). An
 | **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 | the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 | beginning with `-` that is no option is an error:
 | 
 | | option | applies to | rule |
 | |---|---|---|
-| | `-output PATH` | build, compile, bindgen, profile | B3h, §11 X16, B20 |
+| | `-output PATH` | build, compile, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
 | | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
 | | `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |
 | | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
-| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile, jupyter | B10, §4 M23c |
+| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
 | | `-check` | format, fix | B13, B17 |
 | | `-html DIR` | doc | B14 |
 | | `-library` | build | §11 X14 |
@@ -502,6 +503,7 @@
 | | `-caps` | explain | B11c |
 | | `-asm`, `-ir` | explain | B11d |
 | | `-install` | jupyter | B23 |
+| | `-continue` | notebook | B24 |
 | 
 | `build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 | file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with

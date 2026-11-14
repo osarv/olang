@@ -925,6 +925,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   shutdown; `olang jupyter -install` writes the kernel spec. Rich display is a prelude convention, no language rule:
   `Display` (Html, Markdown, Latex, Svg, Png) and the trait `Displayable`; a type declaring `Display()` is shown by it
   beside its `$` text.
+- **`olang notebook run FILE.ipynb` (B24, the user's approval 2026-11-14; built 2026-11-14).** Runs a notebook's code
+  cells in one session as the kernel runs them and writes the notebook back (or to `-output`) with each code cell's
+  outputs as Jupyter stores them - `stream`, `execute_result` (text/plain plus the Display's MIME type), `error` - and
+  `execution_count` 1..n; the rest of the notebook is kept, `kernelspec` set to olang if absent. Stops at the first
+  failing cell with status 1 (the cells after it cleared); `-continue` runs the rest. compiler/notebook.olang reuses
+  prompt.olang's `Session.Cell` and jupyter.olang's capture and `Data`.
 - **`embed PATH` (E38, the user's decision 2026-10-18).** A file's bytes read while compiling: a read-only
   `Array<U8>&` of constant data; text is `String(embed "f")`. PATH is a literal or an expression reading no local,
   resolved like a relative import, kept inside std or a remote repository.
