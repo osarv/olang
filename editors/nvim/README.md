@@ -15,6 +15,11 @@ Everything but the last works without the server; all of it needs `olang` on `PA
 
 ## Installing
 
+`make install` in the checkout installs it as a Neovim package, `~/.local/share/nvim/site/pack/olang/start/olang`
+(under `XDG_DATA_HOME` where that is set), which Neovim loads by itself with the defaults below; `make uninstall`
+removes it. It installs the Vimscript parts - the syntax, `:compiler olang` and a filetype rule - for plain Vim too, in
+`~/.vim/pack/olang/start/olang`. `EDITORS=none` leaves both out.
+
 With lazy.nvim, from a checkout of olang:
 
 ```lua

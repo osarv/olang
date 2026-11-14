@@ -55,7 +55,10 @@ nothing, and installing again replaces the old install. Where `~/.local/bin` is 
 `export PATH="$HOME/.local/bin:$PATH"` (spelled out, under a comment saying make install added it), to `~/.bashrc`
 (bash), `~/.zshrc` (zsh) or `~/.profile`, once, and says so; a new terminal picks it up. `PREFIX=DIR` installs into
 `DIR/lib/olang` and `DIR/bin`, `PATHFILE=FILE` names another startup file and `PATHFILE=none` changes none.
-`make uninstall` (with the same `PREFIX`) removes the install, the link and that line; it leaves remote packages
+It also installs the editor support (`editors/`): the Neovim plugin as a package Neovim loads by itself
+(`~/.local/share/nvim/site/pack/olang`), and its syntax and `:compiler olang` for Vim (`~/.vim/pack/olang`), each where
+that editor is found; `EDITORS=none` leaves them out. `make uninstall` (with the same `PREFIX`) removes the install,
+the link, the editor packages and that line; it leaves remote packages
 fetched into `~/.cache/olang`, a Jupyter kernel spec and builds' `build/` directories.
 
 ### Try it

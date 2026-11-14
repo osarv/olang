@@ -2,7 +2,8 @@
 #
 #   make             build/olang, built from the committed seed (seed/) with nothing but clang and xz - a few minutes;
 #                    it first checks what the build needs (make prereq) and names what is missing
-#   make install     olang copied into ~/.local/lib/olang, linked from ~/.local/bin (PREFIX=... for another place)
+#   make install     olang copied into ~/.local/lib/olang, linked from ~/.local/bin (PREFIX=... for another place), and
+#                    the editor support of editors/ for Neovim and Vim (EDITORS=none leaves it out)
 #   make uninstall   removes what make install made
 #   make clean       removes build/
 #
@@ -579,7 +580,15 @@ LOGIN_SHELL := $(shell printenv SHELL)
 PATHFILE ?= $(if $(filter %/bash,$(LOGIN_SHELL)),$(HOME)/.bashrc,$(if $(filter %/zsh,$(LOGIN_SHELL)),$(HOME)/.zshrc,$(HOME)/.profile))
 INSTALL_DIR = $(abspath $(PREFIX))/lib/olang
 PATH_MARK = \# added by olang's make install
-install: build/olang
+# the editor support of editors/, installed for the user whatever PREFIX is (EDITORS=none leaves it out): the Neovim
+# plugin as a package Neovim loads by itself, in XDG_DATA_HOME's nvim/site/pack; its Vimscript parts - the syntax and
+# :compiler - as one for Vim, in ~/.vim/pack, with a filetype rule for .olang files; each where that editor is on PATH
+# or its directory is there. Helix and other LSP clients take a line of their own configuration (editors/README.md)
+EDITORS ?=
+NVIM_DATA = $(or $(XDG_DATA_HOME),$(HOME)/.local/share)/nvim
+NVIM_PACK = $(NVIM_DATA)/site/pack/olang
+VIM_PACK = $(HOME)/.vim/pack/olang
+install: build/olang install-editors
 	@d=$(INSTALL_DIR); rm -rf $$d.new && mkdir -p $$d.new/bin $(abspath $(PREFIX))/bin && \
 	cp build/olang $$d.new/bin/olang && cp -R std $$d.new/std && cp SPEC.md $$d.new/SPEC.md && \
 	rm -rf $$d && mv $$d.new $$d && ln -sfn $$d/bin/olang $(abspath $(PREFIX))/bin/olang && \
@@ -593,8 +602,26 @@ install: build/olang
 	printf '\n%s\n%s\n' "$(PATH_MARK)" "$$line" >> "$(PATHFILE)" && \
 	echo "install: added $$bin to PATH in $(PATHFILE) - a new terminal (or source $(PATHFILE)) picks it up"
 
+install-editors:
+	@[ "$(EDITORS)" != none ] || { echo "install: editors left out (EDITORS=none)"; exit 0; }; \
+	if command -v nvim > /dev/null || [ -d "$(NVIM_DATA)" ] || [ -d "$(HOME)/.config/nvim" ]; then \
+		rm -rf "$(NVIM_PACK)" && mkdir -p "$(NVIM_PACK)/start" && cp -R editors/nvim "$(NVIM_PACK)/start/olang" && \
+		echo "install: the Neovim plugin into $(NVIM_PACK)/start/olang (loaded by itself; editors/nvim/README.md)"; \
+	else echo "install: no Neovim here - the plugin is editors/nvim (its README says how to add it)"; fi; \
+	if command -v vim > /dev/null || [ -d "$(HOME)/.vim" ]; then \
+		v="$(VIM_PACK)/start/olang"; rm -rf "$(VIM_PACK)" && mkdir -p "$$v/syntax" "$$v/compiler" "$$v/ftdetect" && \
+		cp editors/nvim/syntax/olang.vim "$$v/syntax/" && cp editors/nvim/compiler/olang.vim "$$v/compiler/" && \
+		printf '%s\n' '" .olang files, and scripts starting "#!/usr/bin/env olang" (installed by olang'"'"'s make install)' \
+			'au BufRead,BufNewFile *.olang setfiletype olang' \
+			'au BufRead,BufNewFile * if getline(1) =~# '"'"'^#!.*\<olang\>'"'"' | setfiletype olang | endif' \
+			> "$$v/ftdetect/olang.vim" && \
+		echo "install: Vim syntax and :compiler olang into $$v"; \
+	else echo "install: no Vim here - its syntax is editors/nvim/syntax/olang.vim"; fi; \
+	echo "install: Helix and other LSP clients: run 'olang lsp' for .olang files (editors/README.md, Other editors)"
+
 # uninstall: what install made, and nothing else - PREFIX/lib/olang, the PREFIX/bin/olang link where it points into it,
-# and the PATH line install added to PATHFILE (with its comment). What the compiler keeps elsewhere is left: remote
+# the PATH line install added to PATHFILE (with its comment), and the editor packages (pack/olang, Neovim's and Vim's;
+# EDITORS=none keeps them). What the compiler keeps elsewhere is left: remote
 # packages fetched into ~/.cache/olang (OLANG_CACHE, M23b), a Jupyter kernel spec (jupyter -install), each build's build/
 uninstall:
 	@d=$(INSTALL_DIR); l=$(abspath $(PREFIX))/bin/olang; \
@@ -606,7 +633,9 @@ uninstall:
 			held != "" && $$0 == line { held = ""; drop = 1; next } \
 			held != "" { print held; held = "" } { print } END { if (held != "") print held }' "$$f" > "$$f.olang-tmp" && \
 		cat "$$f.olang-tmp" > "$$f" && rm -f "$$f.olang-tmp" && echo "uninstall: removed the PATH line from $$f"; fi; \
+	for p in "$(NVIM_PACK)" "$(VIM_PACK)"; do \
+		if [ -d "$$p" ] && [ -z "$(filter none,$(EDITORS))" ]; then rm -rf "$$p" && echo "uninstall: removed $$p"; fi; done; \
 	echo "uninstall: done (left as they are: ~/.cache/olang, a Jupyter kernel spec, builds' build/ directories)"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build prereq install uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
+.PHONY: consistency dumptool all build prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean

@@ -37063,3 +37063,13 @@ uninstall` removes the directory, the link where it points into it and the marke
 packages), a Jupyter kernel spec and builds' `build/` are left, being the user's data rather than the install's.
 Tested: installed to a temporary PREFIX, the checkout's `build/` moved away, the installed olang ran, tested and built
 a program and printed `explain B3m`.
+
+Then (the user) `make install` installs the editor support too: editors/nvim copied as a Neovim package into
+`$XDG_DATA_HOME/nvim/site/pack/olang/start/olang` (default `~/.local/share`), which Neovim loads with no change to
+init.lua, independent of PREFIX; its Vimscript parts (syntax, `:compiler olang`, plus a generated `ftdetect/olang.vim`,
+since the plugin's own filetype rule is Lua) into `~/.vim/pack/olang/start/olang` for plain Vim - each only where that
+editor is on PATH or its directory exists, else a line saying where the files are. editors/ holds nothing else
+installable (Helix and other LSP clients take a configuration line, printed as a pointer). `EDITORS=none` skips it;
+`make uninstall` removes exactly the two `pack/olang` directories. Tested with a temporary HOME: plain Vim 9.1 sets
+filetype and syntax olang on a `.olang` file and `:compiler olang` sets `makeprg`; no Neovim is in the container, so the
+Neovim package was checked by its files only.
