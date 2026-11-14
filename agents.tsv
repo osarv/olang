@@ -94,3 +94,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	lineedit	opus	medium	done	320	131	104	targeted		emacs+vi editing, history, paint, paste
 2026-11-14	litmix	sonnet	medium	done(disk stop, resumed)	177	31		targeted		E20 mixed literal, M22 tag, M9 prelude hint
 2026-11-14	bootfix	opus	medium	done	274	140		targeted		jobs by memory, progress, 2 stages, install copy+editors; Text file busy bug found later
+2026-11-14	muloti	opus	medium	done				targeted		wideMul via umul.with.overflow + weak __muloti4 on aarch64
