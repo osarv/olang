@@ -233,7 +233,7 @@ BOOT_STAGE = @t=$$(date +%s); echo "bootstrap: $(1) ..."; OLANG_TIMES=1 $(2) || 
 define BOOTSTRAP
 	$(call BOOT_STAGE,stage 1 of 2 - the seed builds the compiler into build/olang.1,build/olang.seed build -output build/olang.1 compiler/olang.olang)
 	$(call BOOT_STAGE,stage 2 of 2 - build/olang.1 builds the compiler fully optimized into build/olang.2,build/olang.1 build -output build/olang.2 compiler/olang.olang)
-	cp build/olang.2 build/olang
+	cp build/olang.2 build/olang.new && mv -f build/olang.new build/olang
 	@echo "bootstrap: build/olang installed (make fixedpoint checks that it builds itself identically)"
 endef
 
