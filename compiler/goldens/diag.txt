@@ -14,14 +14,16 @@ anynocopylist.olang:24:12: error[T32]: 'Twice' keeps a copy of the value it is c
       |            ^~~~~
 compilation failed with 1 error
 === arraytypemutual.olang
-arraytypemutual.olang:7:6: error[T29]: B holds itself through the array it is declared over - hold the array in a struct: 'type B struct(items Array<A&>&)'
+arraytypemutual.olang:7:6: error[T29]: B holds itself through the array it is declared over
     7 | type B Array<A&>
       |      ^
+arraytypemutual.olang:7:6: help: hold the array in a struct: 'type B struct(items Array<A&>&)'
 compilation failed with 1 error
 === arraytypeself.olang
-arraytypeself.olang:7:6: error[T29]: Nest holds itself through the array it is declared over - hold the array in a struct: 'type Nest struct(items Array<Nest&>&)'
+arraytypeself.olang:7:6: error[T29]: Nest holds itself through the array it is declared over
     7 | type Nest Array<Nest&>
       |      ^~~~
+arraytypeself.olang:7:6: help: hold the array in a struct: 'type Nest struct(items Array<Nest&>&)'
 compilation failed with 1 error
 === asenumcase.olang
 asenumcase.olang:7:32: error[T17]: T has no case 'C'
@@ -102,29 +104,34 @@ atomicvalue.olang:6:17: error[T6b]: I64 does not flow into I32 - convert it, as 
       |                 ^
 compilation failed with 1 error
 === attrbuiltin.olang
-attrbuiltin.olang:3:2: error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is I64
+attrbuiltin.olang:3:2: error[G39]: an attribute is a value of a declared type, and this is I64
     3 | @I64(3)
       |  ^~~~~~
+attrbuiltin.olang:3:2: note: a struct, an enum's case or a declared number type
 compilation failed with 1 error
 === attrfntype.olang
-attrfntype.olang:4:15: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+attrfntype.olang:4:15: error[G39]: nothing here takes an attribute
     4 | fn call(f fn&(@Key("x") n I64) I64) I64 { return f(1) }
       |               ^~~~~~~~~
+attrfntype.olang:4:15: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
 compilation failed with 1 error
 === attrglobal.olang
-attrglobal.olang:4:1: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+attrglobal.olang:4:1: error[G39]: nothing here takes an attribute
     4 | @Key("x")
       | ^~~~~~~~~
+attrglobal.olang:4:1: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
 compilation failed with 1 error
 === attrlambda.olang
-attrlambda.olang:5:13: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+attrlambda.olang:5:13: error[G39]: nothing here takes an attribute
     5 |     f := fn(@Key("x") n I64) I64 { return n }
       |             ^~~~~~~~~
+attrlambda.olang:5:13: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
 compilation failed with 1 error
 === attrlocal.olang
-attrlocal.olang:5:5: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+attrlocal.olang:5:5: error[G39]: nothing here takes an attribute
     5 |     @Key("x") n := 3
       |     ^~~~~~~~~
+attrlocal.olang:5:5: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
 compilation failed with 1 error
 === attrmissing.olang
 attrmissing.olang:7:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
@@ -137,14 +144,17 @@ attrnotbuilt.olang:7:2: error[G39]: an attribute's value is built while compilin
       |  ^~~~~~~
 compilation failed with 1 error
 === attrprelude.olang
-attrprelude.olang:3:16: error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is Vec<I64>
+attrprelude.olang:3:16: error[G39]: an attribute is a value of a declared type, and this is Vec<I64>
     3 | type P struct(@Vec<I64>() x I64) { x }
       |                ^~~~~~~~~~
+attrprelude.olang:3:16: note: a struct, an enum's case or a declared number type
 compilation failed with 1 error
 === attrpun.olang
-attrpun.olang:5:5: error[G39]: field 'x' is a pun of its parameter, and has the parameter's attributes - write the attribute on the parameter
+attrpun.olang:5:5: error[G39]: field 'x' is a pun of its parameter
     5 |     @Key("x") x
       |     ^~~~~~~~~
+attrpun.olang:5:5: note: it has the parameter's attributes
+attrpun.olang:5:5: help: write the attribute on the parameter
 compilation failed with 1 error
 === attrread.olang
 attrread.olang:7:16: error[G40]: 'Attr' takes the attribute's type and no arguments - 'Attr<json.Key>()'
@@ -152,9 +162,10 @@ attrread.olang:7:16: error[G40]: 'Attr' takes the attribute's type and no argume
       |                ^~~~
 compilation failed with 1 error
 === attrreceiver.olang
-attrreceiver.olang:5:5: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+attrreceiver.olang:5:5: error[G39]: nothing here takes an attribute
     5 | fn (@Key("x") b Box&) Get() I64 { return b.v }
       |     ^~~~~~~~~
+attrreceiver.olang:5:5: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
 compilation failed with 1 error
 === attrrequire.olang
 attrrequire.olang:4:16: error[D17e]: this call breaks Tag's requirement 'v >= 0'
@@ -173,9 +184,11 @@ attrtwice.olang:4:25: error[G39]: a declaration takes one attribute of each type
       |                         ^~~~~~~~~
 compilation failed with 1 error
 === attrwritable.olang
-attrwritable.olang:10:2: error[G39]: an attribute's value is read-only data, baked while compiling, and Holder holds a 'mut' reference no reader could write through - give its type read-only references ('T&')
+attrwritable.olang:10:2: error[G39]: an attribute's value holds a 'mut' reference, and Holder is read-only data
    10 | @Holder(Cell(1))
       |  ^~~~~~~~~~~~~~~
+attrwritable.olang:10:2: note: an attribute's value is baked while compiling, and no reader could write through the reference
+attrwritable.olang:10:2: help: give its type read-only references ('T&')
 compilation failed with 1 error
 === atundeclared.olang
 atundeclared.olang:8:11: error[E31]: Bag& declares SetAt but not At, which reading x[i] calls
@@ -200,9 +213,10 @@ b10cmut.olang:3:1: error[B10c]: 'Port' is a build constant, and a declaration gi
       | ^~~~
 compilation failed with 1 error
 === b10ctype.olang
-b10ctype.olang:3:1: error[B10c]: 'Level' is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found U8
+b10ctype.olang:3:1: error[B10c]: 'Level' is a build constant, and its default is a U8
     3 | Level U8 = 3
       | ^~~~~
+b10ctype.olang:3:1: note: a default for a build constant is a Bool, I32, I64, U64, F64 or String
 compilation failed with 1 error
 === b10hexnodigits.olang
 olang: error[B10]: -define X=0x: not a number - '0x' and '0b' take digits of their own base
@@ -211,16 +225,15 @@ olang: error[B10]: -define X=1e400: beyond F64's range
 === b10negbig.olang
 olang: error[B10]: -define X=-9223372036854775809: below I64's minimum
 === b10undefined.olang
-b10undefined.olang:5:4: error[B10]: unknown name 'Profile' - if it is a build constant, define it with '-define Profile=VALUE', or declare it with a default
+b10undefined.olang:5:4: error[B10]: unknown name 'Profile'
     5 | if Profile == "prod" {
       |    ^~~~~~~
-b10undefined.olang:12:8: error[B10]: unknown name 'Mode' - if it is a build constant, define it with '-define Mode=VALUE', or declare it with a default
+b10undefined.olang:5:4: help: if it is a build constant, define it with '-define Profile=VALUE', or declare it with a default
+b10undefined.olang:12:8: error[B10]: unknown name 'Mode'
    12 |     if Mode == "fast" { }
       |        ^~~~
-b10undefined.olang:12:8: error: unknown name 'Mode'
-   12 |     if Mode == "fast" { }
-      |        ^~~~
-compilation failed with 3 errors
+b10undefined.olang:12:8: help: if it is a build constant, define it with '-define Mode=VALUE', or declare it with a default
+compilation failed with 2 errors
 === b11near.olang
 b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'First'?
    16 |     if count < 0 { error MyErr.FIRTS }
@@ -247,9 +260,12 @@ b11unknownonce.olang:11:11: error: unknown type 'Json' - did you mean 'json.Json
       |           ^~~~
 compilation failed with 1 error
 === b12foreign.olang
-olang: error[B12]: '-target aarch64-linux-gnu:native': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default
+olang: error[B12]: '-target aarch64-linux-gnu:native' names native with another architecture's CPU
+olang: note: native is this machine's CPU
+olang: help: name the other architecture's CPU after ':', or none for its default
 === b12unknown.olang
-olang: error[B12]: unknown target 'pentium9000' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+olang: error[B12]: unknown target 'pentium9000'
+olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
 === b12unsupported.olang
 olang: error[B12]: olang does not build for 'riscv64-linux-gnu' - it builds for x86_64 and aarch64 Linux with the GNU C library
 === b4droppedbranch.olang
@@ -516,9 +532,10 @@ c7aempty.olang:3:46: error[C7a]: this destructor does nothing - remove it
 c7aempty.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c7destructinbody.olang
-c7destructinbody.olang:5:5: error[C7]: 'destruct' follows the constructor's body - close the body first: 'type T unique struct(...) { ... } destruct { ... }'
+c7destructinbody.olang:5:5: error[C7]: 'destruct' follows the constructor's body
     5 |     destruct { assert n >= 0 }
       |     ^~~~~~~~
+c7destructinbody.olang:5:5: help: close the body first: 'type T unique struct(...) { ... } destruct { ... }'
 compilation failed with 1 error
 === callparammut.olang
 callparammut.olang:12:9: error[E12]: expected fn&(n Node&), found Writer
@@ -614,9 +631,10 @@ comptimebudget.olang:7:20: error[K3]: a comptime is computed while compiling, an
       |                    ^~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === comptimeforelem.olang
-comptimeforelem.olang:6:23: error[K3a]: a comptime for's elements are integers, Bool or Char, found F64 - walk its positions: 'comptime for i in range xs.Len()'
+comptimeforelem.olang:6:23: error[K3a]: a comptime for's elements are integers, Bool or Char, found F64
     6 |     comptime for w in Ws { t += w }
       |                       ^~
+comptimeforelem.olang:6:23: help: walk its positions: 'comptime for i in range xs.Len()'
 compilation failed with 1 error
 === comptimeforfails.olang
 comptimeforfails.olang:9:23: error[K3a]: a comptime for's elements are computed while compiling, and these cannot be: an assertion in it fails, which aborts the program
@@ -629,14 +647,17 @@ comptimeformany.olang:5:5: error[K3a]: this comptime for unrolls into 5000 copie
       |     ^~~~~~~~
 compilation failed with 1 error
 === comptimeforsource.olang
-comptimeforsource.olang:5:23: error[K3a]: a comptime for walks a range or an array, found I64 - give it an array: 'comptime for x in xs.View()'
+comptimeforsource.olang:5:23: error[K3a]: a comptime for walks a range or an array, found I64
     5 |     comptime for k in 7 { t += k }
       |                       ^
+comptimeforsource.olang:5:23: help: give it an array: 'comptime for x in xs.View()'
 compilation failed with 1 error
 === comptimefortry.olang
-comptimefortry.olang:5:5: error[K3a]: a comptime for's elements are computed while compiling, so nothing of its walk fails at run time - write 'comptime for x in e'
+comptimefortry.olang:5:5: error[K3a]: a comptime for's walk cannot fail at run time
     5 |     comptime for k in try Array<I64>[1, 2] { t += k } catch { }
       |     ^~~~~~~~
+comptimefortry.olang:5:5: note: its elements are computed while compiling, so nothing of its walk fails at run time
+comptimefortry.olang:5:5: help: write 'comptime for x in e'
 compilation failed with 1 error
 === comptimeforwhile.olang
 comptimeforwhile.olang:5:18: error: expected 'for NAME in' after 'comptime', found 'k'
@@ -649,9 +670,11 @@ comptimeglobal.olang:5:10: error[K3]: a comptime is computed while compiling, an
       |          ^~~~~~~~~~~~~~
 compilation failed with 1 error
 === comptimelocal.olang
-comptimelocal.olang:4:38: error[K3]: a comptime is computed while compiling, and 'n' is a local or a parameter, which only the running program knows - compute it from constants, globals and type parameters, or drop 'comptime'
+comptimelocal.olang:4:38: error[K3]: 'n' is a local or a parameter, and a comptime is computed while compiling
     4 | fn f(n I64) I64 { return comptime sq(n) }
       |                                      ^
+comptimelocal.olang:4:38: note: only the running program knows a local or a parameter
+comptimelocal.olang:4:38: help: compute it from constants, globals and type parameters, or drop 'comptime'
 compilation failed with 1 error
 === condcycle.olang
 condcycle.olang:5:4: error[B9a]: 'A' is defined in terms of itself
@@ -694,9 +717,10 @@ constraintcall.olang:8:10: error[G19]: I64 does not satisfy the constraint CtSha
       |          ^~~~~~
 compilation failed with 1 error
 === constraintnotiface.olang
-constraintnotiface.olang:3:8: error[G6, G19]: I32 is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)
+constraintnotiface.olang:3:8: error[G6, G19]: I32 is not a trait, so it cannot constrain a type variable
     3 | fn f<T I32>(x T) I32 { return 1 }
       |        ^~~
+constraintnotiface.olang:3:8: note: a type parameter's constraint is a trait, and a length is no parameter (T7)
 compilation failed with 1 error
 === copyoutrefs.olang
 copyoutrefs.olang:15:9: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
@@ -1287,12 +1311,14 @@ e10aprivateeq.olang:12:5: note: instantiated here, with K = K, V = I32
       |     ^~~
 compilation failed with 1 error
 === e10bhashshape.olang
-e10bhashshape.olang:11:14: error[G19, E10b]: K does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+e10bhashshape.olang:11:14: error[G19, E10b]: K does not satisfy the constraint Hashable on K
    11 |     m := Map<K, I64>()
       |              ^
+e10bhashshape.olang:11:14: note: it has no Hash
 e10bhashshape.olang:8:11: note: 'Hash' is declared here, with another signature
     8 | fn (k K&) Hash(seed I64) I64 { return k.a + seed }
       |           ^~~~
+e10bhashshape.olang:11:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === e10ciscase.olang
 e10ciscase.olang:6:19: error[E10c, E32]: a case is tested with '==': 's == Shape.Dot'
@@ -1506,9 +1532,11 @@ e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Le
       |              ^~~
 compilation failed with 1 error
 === e24tryparens.olang
-e24tryparens.olang:6:14: error[E24]: these parentheses group nothing - a 'try' covers the whole expression after it, so write it without them
+e24tryparens.olang:6:14: error[E24]: these parentheses group nothing
     6 |     x := try (f(1) + 2)
       |              ^~~~~~~~~~
+e24tryparens.olang:6:14: note: a 'try' covers the whole expression after it
+e24tryparens.olang:6:14: help: write it without them
 compilation failed with 1 error
 === e26bnarrownotnumber.olang
 e26bnarrownotnumber.olang:5:23: error[E26b]: 'Narrow' converts to a number type, and Bool is none
@@ -1911,9 +1939,10 @@ e31opshapeuse.olang:23:1: note: 'Less' is declared here
       | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 8 errors
 === e32asnotry.olang
-e32asnotry.olang:10:13: error[E32]: 'as' fails where the value holds another case - write 'try' before it and catch CaseError, or '(x as C)!'
+e32asnotry.olang:10:13: error[E32]: 'as' fails where the value holds another case
    10 |     r := sh as Shape.Circle
       |             ^~
+e32asnotry.olang:10:13: help: write 'try' before it and catch CaseError, or '(x as C)!'
 compilation failed with 1 error
 === e33args.olang
 e33args.olang:4:17: error[E14]: 'Bits' takes no arguments
@@ -2031,14 +2060,16 @@ e38undecided.olang:5:15: error[E38]: this embed's path cannot be computed while 
       |               ^~~~~~~
 compilation failed with 1 error
 === e41hole.olang
-e41hole.olang:9:17: error[E41]: '_' holds the place of a value of type F64 - in scope: h, x, Scale
+e41hole.olang:9:17: error[E41]: '_' holds the place of a value of type F64
     9 |     return area(_, h) + x + F64(n)
       |                 ^
+e41hole.olang:9:17: note: in scope: h, x, Scale
 compilation failed with 1 error
 === e41nofit.olang
-e41nofit.olang:3:37: error[E41]: '_' holds the place of a value of type Bool - nothing in scope has that type
+e41nofit.olang:3:37: error[E41]: '_' holds the place of a value of type Bool
     3 | fn f(n I64) Bool { return n > 0 and _ }
       |                                     ^
+e41nofit.olang:3:37: note: nothing in scope has that type
 compilation failed with 1 error
 === e41untyped.olang
 e41untyped.olang:4:10: error[E41]: '_' holds the place of a value, and nothing here says its type
@@ -2340,14 +2371,17 @@ g18needmethod.olang:6:39: note: Describe needs Name here
       |                                       ^~~~
 compilation failed with 2 errors
 === g19arrayspell.olang
-g19arrayspell.olang:4:12: error[G19, E10b]: Array<F64> does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+g19arrayspell.olang:4:12: error[G19, E10b]: Array<F64> does not satisfy the constraint Hashable on K
     4 |   m := Map<Array<F64>, I32>()
       |            ^~~~~~~~~~
+g19arrayspell.olang:4:12: note: it has no Hash
+g19arrayspell.olang:4:12: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === g19intersectionnottrait.olang
-g19intersectionnottrait.olang:7:21: error[G6, G19]: iaBox is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)
+g19intersectionnottrait.olang:7:21: error[G6, G19]: iaBox is not a trait, so it cannot constrain a type variable
     7 | fn iaKeep<T iaShape iaBox>(x T) T { return x }
       |                     ^~~~~
+g19intersectionnottrait.olang:7:21: note: a type parameter's constraint is a trait, and a length is no parameter (T7)
 compilation failed with 1 error
 === g19intersectionunmet.olang
 g19intersectionunmet.olang:13:10: error[G19]: iaSq does not satisfy the constraint iaHouse on T: it has no method Rooms that fits
@@ -2355,9 +2389,11 @@ g19intersectionunmet.olang:13:10: error[G19]: iaSq does not satisfy the constrai
       |          ^~~~~~
 compilation failed with 1 error
 === g19methodbody.olang
-g19methodbody.olang:8:14: error[G19, E10b]: K does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+g19methodbody.olang:8:14: error[G19, E10b]: K does not satisfy the constraint Hashable on K
     8 |     m := Map<K, I32>()
       |              ^
+g19methodbody.olang:8:14: note: it has no Hash
+g19methodbody.olang:8:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === g19permission.olang
 g19permission.olang:12:3: error[G19]: S does not satisfy the constraint Filler on T: it has no method Fill that fits
@@ -2368,9 +2404,11 @@ g19permission.olang:9:11: note: 'Fill' is declared here, with another signature
       |           ^~~~
 compilation failed with 1 error
 === g19substituted.olang
-g19substituted.olang:12:14: error[G19, E10b]: F64 does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+g19substituted.olang:12:14: error[G19, E10b]: F64 does not satisfy the constraint Hashable on K
    12 |   b := Keyed.wrap(2.5)
       |              ^~~~
+g19substituted.olang:12:14: note: it has no Hash
+g19substituted.olang:12:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === g19unknowntrait.olang
 g19unknowntrait.olang:5:8: error: unknown type 'Nope'
@@ -2524,9 +2562,11 @@ g9dctorreadonly.olang:15:10: error[T25b]: this writes through a read-only refere
       |          ^
 compilation failed with 1 error
 === g9dhashable.olang
-g9dhashable.olang:11:22: error[G19, E10b]: Res& does not satisfy the constraint Hashable on T: it has no Hash - declare 'Hash() I64', agreeing with '=='
+g9dhashable.olang:11:22: error[G19, E10b]: Res& does not satisfy the constraint Hashable on T
    11 |     try io.PutLine($(hashOf(Res(2)) != 0))
       |                      ^~~~~~
+g9dhashable.olang:11:22: note: it has no Hash
+g9dhashable.olang:11:22: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === genericarray.olang
 genericarray.olang:3:10: error[G6]: only a struct, an enum or a trait takes type parameters
@@ -2544,14 +2584,18 @@ halfmix.olang:6:15: error[T6b]: F16 and BF16 do not meet - neither flows into th
       |               ^
 compilation failed with 1 error
 === hasheqnohash.olang
-hasheqnohash.olang:8:14: error[G19, E10b]: Lbl does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+hasheqnohash.olang:8:14: error[G19, E10b]: Lbl does not satisfy the constraint Hashable on K
     8 |     m := Map<Lbl, I32>()
       |              ^~~
+hasheqnohash.olang:8:14: note: it has no Hash
+hasheqnohash.olang:8:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === hashfloat.olang
-hashfloat.olang:7:14: error[G19, E10b]: Pf does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+hashfloat.olang:7:14: error[G19, E10b]: Pf does not satisfy the constraint Hashable on K
     7 |     m := Map<Pf, I32>()
       |              ^~
+hashfloat.olang:7:14: note: it has no Hash
+hashfloat.olang:7:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === hexnarrow.olang
 hexnarrow.olang:5:13: error[T6]: '0x100000000' does not fit U32
@@ -2672,12 +2716,14 @@ k2abortsread.olang:6:5: note: here
       |     ^~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === keywordlocal.olang
-keywordlocal.olang:4:5: error[L9a]: 'keeps' is a keyword, not a name - a field named by one is reached only after '.', never by the name alone
+keywordlocal.olang:4:5: error[L9a]: 'keeps' is a keyword, not a name
     4 |     keeps := 0
       |     ^~~~~
-keywordlocal.olang:5:5: error[L9a]: 'keeps' is a keyword, not a name - a field named by one is reached only after '.', never by the name alone
+keywordlocal.olang:4:5: note: a field named by one is reached only after '.', never by the name alone
+keywordlocal.olang:5:5: error[L9a]: 'keeps' is a keyword, not a name
     5 |     keeps++
       |     ^~~~~
+keywordlocal.olang:5:5: note: a field named by one is reached only after '.', never by the name alone
 compilation failed with 2 errors
 === l10bdouble.olang
 l10bdouble.olang:4:11: error[L10b]: '_' in a number must stand between two digits
@@ -2782,14 +2828,18 @@ l18bifline.olang:8:10: error: expected '{', found 'else'
       |          ^~~~
 compilation failed with 1 error
 === l18cneedless.olang
-l18cneedless.olang:4:11: error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list - write this without them
+l18cneedless.olang:4:11: error[L18c]: these parentheses group nothing
     4 |     x Vec<(I64)>
       |           ^~~~~
+l18cneedless.olang:4:11: note: parentheses group only a function type holding a comma of its own, as an item of a list
+l18cneedless.olang:4:11: help: write this without them
 compilation failed with 1 error
 === l18coldresults.olang
-l18coldresults.olang:3:25: error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list - write this without them
+l18coldresults.olang:3:25: error[L18c]: these parentheses group nothing
     3 | fn divmod(a I64, b I64) (I64, I64) { return a / b, a % b }
       |                         ^~~~
+l18coldresults.olang:3:25: note: parentheses group only a function type holding a comma of its own, as an item of a list
+l18coldresults.olang:3:25: help: write this without them
 compilation failed with 1 error
 === l18cungrouped.olang
 l18cungrouped.olang:5:11: error[G7]: type arguments for Map: expected 2, found 3
@@ -2835,9 +2885,10 @@ l3crlf.olang:4:14: error[L3]: carriage return - save the file with LF line endin
       |              ^
 compilation failed with 1 error
 === l9keywordfield.olang
-l9keywordfield.olang:6:13: error[L9a]: 'break' is a keyword, not a name - a field named by one is reached only after '.', never by the name alone
+l9keywordfield.olang:6:13: error[L9a]: 'break' is a keyword, not a name
     6 |     left := break
       |             ^~~~~
+l9keywordfield.olang:6:13: note: a field named by one is reached only after '.', never by the name alone
 compilation failed with 1 error
 === l9keywordname.olang
 l9keywordname.olang:3:4: error[L9]: 'join' is a keyword, not a name - choose another
@@ -3274,9 +3325,10 @@ narrowimplicit.olang:5:13: error[T6b]: I64 does not flow into I32 - convert it, 
       |             ^
 compilation failed with 1 error
 === nextflag.olang
-nextflag.olang:6:28: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+nextflag.olang:6:28: error[R23]: a Bool among several results is a flag beside a value
     6 | fn (t mut It&) Next() I32, Bool { return 0, false }
       |                            ^~~~
+nextflag.olang:6:28: help: what can fail says so with '? E' and raises an error instead (error NotFound)
 nextflag.olang:9:14: error[S9a]: It& cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()
     9 |     for _ in t { }
       |              ^
@@ -3498,9 +3550,11 @@ p4cjoinnotried.olang:10:5: error[P4c]: this join's tasks can fail with E - write
       |     ^~~~~~
 compilation failed with 1 error
 === p4cjoinundeclared.olang
-p4cjoinundeclared.olang:12:9: error[R1d]: E.Worse can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
+p4cjoinundeclared.olang:12:9: error[R1d]: E.Worse can escape here, and this function writes no '?'
    12 |     try join {
       |         ^~~~
+p4cjoinundeclared.olang:12:9: note: a function that can fail says so
+p4cjoinundeclared.olang:12:9: help: write '?' after its result (its errors inferred), or catch it
 compilation failed with 1 error
 === p4dtargetfallsthrough.olang
 p4dtargetfallsthrough.olang:15:7: error[P4d]: a task of this join binds a target it leaves unwritten when it fails - this clause must leave
@@ -3590,12 +3644,14 @@ protobothstr.olang:10:10: error[M6b]: K declares Hash twice, public and private 
       |          ^~~~
 compilation failed with 3 errors
 === protoprivhash.olang
-protoprivhash.olang:8:14: error[G19, E10b]: H does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+protoprivhash.olang:8:14: error[G19, E10b]: H does not satisfy the constraint Hashable on K
     8 |     m := Map<H, I32>()
       |              ^
+protoprivhash.olang:8:14: note: it has no Hash
 protoprivhash.olang:6:10: note: 'hash' is private to its module, and only a public Hash meets the constraint
     6 | fn (a H) hash() I64 { return I64(a.n) }
       |          ^~~~
+protoprivhash.olang:8:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === protoprivshape.olang
 protoprivshape.olang:6:10: error[E10a]: Eq takes one parameter of its receiver's own type and gives a Bool
@@ -3632,24 +3688,31 @@ r11bcasenever.olang:9:13: error[R11b]: this case is never reached: the cases bef
       |             ^~~~~~~~~~~~
 compilation failed with 1 error
 === r11bcaughtassigned.olang
-r11bcaughtassigned.olang:6:23: error[R11b]: 'e' names the error this clause took and is never assigned - hold a value that changes in a local of its own ('x := e')
+r11bcaughtassigned.olang:6:23: error[R11b]: 'e' names the error this clause took and is never assigned
     6 |     try f() catch e { e = P.B }
       |                       ^
+r11bcaughtassigned.olang:6:23: help: hold a value that changes in a local of its own ('x := e')
 compilation failed with 1 error
 === r11bcomparewhat.olang
-r11bcomparewhat.olang:6:28: error[T20]: 'e' is compared with an error word, an error type, a named set or another error value - 'e == T.WORD', 'e == T'
+r11bcomparewhat.olang:6:28: error[T20]: 'e' is compared with no error
     6 |     try f() catch e { if e == 3 { } }
       |                            ^~
+r11bcomparewhat.olang:6:28: note: it is compared with an error word, an error type, a named set or another error value
+r11bcomparewhat.olang:6:28: help: write 'e == T.WORD' or 'e == T'
 compilation failed with 1 error
 === r11blonetypo.olang
-r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone - did you mean 'PEr'?
+r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, and nothing uses it
     6 |     try f() catch PErr { }
       |                   ^~~~
+r11blonetypo.olang:6:19: note: so it names the error this clause took
+r11blonetypo.olang:6:19: help: write the error type meant, or 'catch' alone - did you mean 'PEr'?
 compilation failed with 1 error
 === r11bmatchblock.olang
-r11bmatchblock.olang:8:9: error[R11b]: a match on an error value used as a value gives a value in every clause, 'case P: v' - a clause that leaves is written in a match statement
+r11bmatchblock.olang:8:9: error[R11b]: a match on an error value used as a value needs a value in every clause
     8 |         case P.B: return
       |         ^~~~~~~~~~~~~~~~
+r11bmatchblock.olang:8:9: note: each clause is 'case P: v'
+r11bmatchblock.olang:8:9: help: a clause that leaves is written in a match statement
 compilation failed with 1 error
 === r11bmatchmissing.olang
 r11bmatchmissing.olang:7:9: error[R11b]: this match does not cover P.B - add a case for it, or 'case _'
@@ -3662,17 +3725,21 @@ r11bnever.olang:7:33: error[R11b]: 'e' is never Q here - it is P
       |                                 ^
 compilation failed with 1 error
 === r11btask.olang
-r11btask.olang:7:31: error[R11b]: a spawned call's clause runs on the task's thread and names no error - leave 'e' off, or catch it where the join fails
+r11btask.olang:7:31: error[R11b]: a spawned call's clause names no error
     7 |         spawn try f() catch P e { }
       |                               ^
+r11btask.olang:7:31: note: the clause runs on the task's thread
+r11btask.olang:7:31: help: leave 'e' off, or catch it where the join fails
 compilation failed with 1 error
 === r11btry.olang
 r11btry.olang:6:32: error[R11b]: 'e' is an error already caught, not a call - raise it again with 'error e'
     6 |     try f() catch e { x := try e }
       |                                ^
-r11btry.olang:6:19: error[R11b]: 'e' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone
+r11btry.olang:6:19: error[R11b]: 'e' names no error type, and nothing uses it
     6 |     try f() catch e { x := try e }
       |                   ^
+r11btry.olang:6:19: note: so it names the error this clause took
+r11btry.olang:6:19: help: write the error type meant, or 'catch' alone
 compilation failed with 2 errors
 === r11bunused.olang
 r11bunused.olang:6:21: error[R11b]: 'e' names the error this clause took, and nothing uses it - leave the name off
@@ -3736,19 +3803,25 @@ r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.Empty, not thi
       |                          ^~~~
 compilation failed with 1 error
 === r1dcontract.olang
-r1dcontract.olang:3:23: error[R1d, D17]: pick has conditions, so a call fails with ArgumentError where one is false, and it writes no '?' - write '?' after its result, or '? ArgumentError'
+r1dcontract.olang:3:23: error[R1d, D17]: pick has conditions and this function writes no '?'
     3 | fn pick(x I64, y I64) [y > x] I64 { return y - x }
       |                       ^~~~~~~
+r1dcontract.olang:3:23: note: a call fails with ArgumentError where a condition is false
+r1dcontract.olang:3:23: help: write '?' after its result, or '? ArgumentError'
 compilation failed with 1 error
 === r1draise.olang
-r1draise.olang:4:27: error[R1d]: this function raises Odd but writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or '? Odd'
+r1draise.olang:4:27: error[R1d]: this function raises Odd but writes no '?'
     4 |     if n % 2 == 1 { error Odd }
       |                           ^~~
+r1draise.olang:4:27: note: a function that can fail says so
+r1draise.olang:4:27: help: write '?' after its result (its errors inferred), or '? Odd'
 compilation failed with 1 error
 === r1dtry.olang
-r1dtry.olang:5:5: error[R1d]: io.Error can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
+r1dtry.olang:5:5: error[R1d]: io.Error can escape here, and this function writes no '?'
     5 |     try io.PutLine("hi")
       |     ^~~
+r1dtry.olang:5:5: note: a function that can fail says so
+r1dtry.olang:5:5: help: write '?' after its result (its errors inferred), or catch it
 compilation failed with 1 error
 === r1functypeunknown.olang
 r1functypeunknown.olang:3:16: error[R1]: unknown error type 'Nope'
@@ -3771,34 +3844,40 @@ r1unknownerror.olang:3:14: error[R1]: unknown error type 'peErr'
       |              ^~~~~
 compilation failed with 1 error
 === r23aoutparam.olang
-r23aoutparam.olang:3:21: error[R23a]: a function giving a Bool that writes through 'out' gives a flag beside a value - give the value as the result and fail with '? E' instead
+r23aoutparam.olang:3:21: error[R23a]: a function giving a Bool that writes through 'out' gives a flag beside a value
     3 | fn parse(t String&, out mut Vec<I64>&) Bool {
       |                     ^~~~~~~~~~~~~~~~~
+r23aoutparam.olang:3:21: help: give the value as the result and fail with '? E' instead
 compilation failed with 1 error
 === r23boolresult.olang
-r23boolresult.olang:3:37: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+r23boolresult.olang:3:37: error[R23]: a Bool among several results is a flag beside a value
     3 | fn find(xs Array<I64>&, k I64) I64, Bool {
       |                                     ^~~~
+r23boolresult.olang:3:37: help: what can fail says so with '? E' and raises an error instead (error NotFound)
 compilation failed with 1 error
 === r23functype.olang
-r23functype.olang:3:29: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+r23functype.olang:3:29: error[R23]: a Bool among several results is a flag beside a value
     3 | fn apply(f (fn&(x I64) I64, Bool), x I64) I64 {
       |                             ^~~~
+r23functype.olang:3:29: help: what can fail says so with '? E' and raises an error instead (error NotFound)
 compilation failed with 1 error
 === r23reattempt.olang
-r23reattempt.olang:11:20: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+r23reattempt.olang:11:20: error[R23]: a Bool among several results is a flag beside a value
    11 | fn bad(k I64) I64, Bool { return k, true }
       |                    ^~~~
+r23reattempt.olang:11:20: help: what can fail says so with '? E' and raises an error instead (error NotFound)
 compilation failed with 1 error
 === r3areraiseundeclared.olang
-r3areraiseundeclared.olang:7:23: error[R3a]: the error raised again can be Q, which this function does not declare - add it after '?', or test the error first
+r3areraiseundeclared.olang:7:23: error[R3a]: the error raised again can be Q, which this function does not declare
     7 |     try f() catch e { error e }
       |                       ^~~~~
+r3areraiseundeclared.olang:7:23: help: add it after '?', or test the error first
 compilation failed with 1 error
 === r3areraiseword.olang
-r3areraiseword.olang:6:23: error[R3a]: the error raised again can be P.B, and this function's '?' names P.A - add it after '?', or test the error first
+r3areraiseword.olang:6:23: error[R3a]: the error raised again can be P.B, not in this function's '?' P.A
     6 |     try f() catch e { error e }
       |                       ^~~~~
+r3areraiseword.olang:6:23: help: add it after '?', or test the error first
 compilation failed with 1 error
 === r3bareerror.olang
 r3bareerror.olang:4:22: error: expected a name, found '}'
@@ -3811,19 +3890,23 @@ r3bfirstraiseorder.olang:10:17: error[T6b]: I64 does not flow into I32 - convert
       |                 ^
 compilation failed with 1 error
 === r3bnear.olang
-r3bnear.olang:12:22: error[R3b]: no error of this module is named 'NotFond' - did you mean 'NotFound'? To raise a new error of that name, name it after this function's '?'
+r3bnear.olang:12:22: error[R3b]: no error of this module is named 'NotFond' - did you mean 'NotFound'?
    12 |     if k < 0 { error NotFond }
       |                      ^~~~~~~
+r3bnear.olang:12:22: help: to raise a new error of that name, name it after this function's '?'
 compilation failed with 1 error
 === r3bnearcase.olang
-r3bnearcase.olang:9:22: error[R3b]: no error of this module is named 'notFound' - did you mean 'NotFound'? To raise a new error of that name, name it after this function's '?'
+r3bnearcase.olang:9:22: error[R3b]: no error of this module is named 'notFound' - did you mean 'NotFound'?
     9 |     if k < 0 { error notFound }
       |                      ^~~~~~~~
+r3bnearcase.olang:9:22: help: to raise a new error of that name, name it after this function's '?'
 compilation failed with 1 error
 === r3bownword.olang
-r3bownword.olang:3:1: error[R3b]: an error of one word named as its type is declared by raising it - write 'error NotFound' where it is raised, with no declaration
+r3bownword.olang:3:1: error[R3b]: an error of one word named as its type needs no declaration
     3 | type NotFound error { NotFound }
       | ^~~~~~~~
+r3bownword.olang:3:1: note: it is declared by raising it
+r3bownword.olang:3:1: help: write 'error NotFound' where it is raised, with no declaration
 compilation failed with 1 error
 === r3bpayloaddiffer.olang
 r3bpayloaddiffer.olang:5:34: error[R3b, T19b]: OutOfRange carries (index, limit), as its first raise names them - give the same fields in that order
@@ -3831,9 +3914,11 @@ r3bpayloaddiffer.olang:5:34: error[R3b, T19b]: OutOfRange carries (index, limit)
       |                                  ^~~~~~~~~~
 compilation failed with 1 error
 === r3bpayloadref.olang
-r3bpayloadref.olang:5:35: error[T19b]: payload field node of type Node holds a reference - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data
+r3bpayloadref.olang:5:35: error[T19b]: payload field node of type Node holds a reference
     5 |     if n.v < 0: error Lost(node = n)
       |                                   ^
+r3bpayloadref.olang:5:35: note: a payload holds values only
+r3bpayloadref.olang:5:35: help: hold a copy ('$x', 'x.Copy()') or plain data
 compilation failed with 1 error
 === r3bpayloadunnamed.olang
 r3bpayloadunnamed.olang:4:33: error[R3b, T19b]: a field an error raised by name carries is named by the raise: a bare name, or 'name = value'
@@ -3869,9 +3954,11 @@ r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'tr
       |                    ^~~
 compilation failed with 1 error
 === r9arithpartial.olang
-r9arithpartial.olang:5:13: error[R1d]: arith.Error.Overflow can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
+r9arithpartial.olang:5:13: error[R1d]: arith.Error.Overflow can escape here, and this function writes no '?'
     5 |     r I32 = try arith.Div(a, b) catch arith.Error.DivideByZero default 0
       |             ^~~
+r9arithpartial.olang:5:13: note: a function that can fail says so
+r9arithpartial.olang:5:13: help: write '?' after its result (its errors inferred), or catch it
 compilation failed with 1 error
 === r9atrydefaultassign.olang
 r9atrydefaultassign.olang:15:42: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write into the collection itself, 'x[i].f = v'
@@ -3912,9 +3999,11 @@ r9buncaught.olang:10:10: error[R9]: F can escape here, and this function does no
       |          ^~~
 compilation failed with 1 error
 === r9qualified.olang
-r9qualified.olang:7:5: error[R1d]: io.Error can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
+r9qualified.olang:7:5: error[R1d]: io.Error can escape here, and this function writes no '?'
     7 |     try io.PutLine("hello")
       |     ^~~
+r9qualified.olang:7:5: note: a function that can fail says so
+r9qualified.olang:7:5: help: write '?' after its result (its errors inferred), or catch it
 compilation failed with 1 error
 === rangefloat.olang
 rangefloat.olang:4:20: error[S9b]: a range's bounds and step are integers, found F64
@@ -3934,9 +4023,11 @@ redefd.olang:6:4: error[B10]: 'Level' is a build constant - choose another name
       |    ^~~~~
 compilation failed with 1 error
 === reflargcompr.olang
-reflargcompr.olang:11:27: error[G37]: a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'Array<T>[e for x in c]'
+reflargcompr.olang:11:27: error[G37]: a comprehension as a call's arguments must walk a list known while compiling
    11 |     p := Point(x for x in xs)
       |                           ^~
+reflargcompr.olang:11:27: note: 'T.Params', 'T.Fields' ... are such lists
+reflargcompr.olang:11:27: help: write another comprehension in brackets, 'Array<T>[e for x in c]'
 compilation failed with 1 error
 === reflcaseother.olang
 reflcaseother.olang:15:13: error[G34]: this case is Other's, and the value is Shape
@@ -3957,14 +4048,16 @@ refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members ar
       |                                  ^~~~~
 compilation failed with 1 error
 === reflfilterargs.olang
-reflfilterargs.olang:5:67: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
+reflfilterargs.olang:5:67: error[G33]: this comprehension's filter is known only at run time
     5 | fn Point.g(k I64) Point { return Point(k for _ in Point.Params if k > 0) }
       |                                                                   ^~~~~
+reflfilterargs.olang:5:67: note: a comprehension over a list known while compiling keeps an element by a filter decided while compiling
 compilation failed with 1 error
 === reflfilterundecided.olang
-reflfilterundecided.olang:9:84: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
+reflfilterundecided.olang:9:84: error[G33]: this comprehension's filter is known only at run time
     9 | fn g(k I64) Array<String&> { return Array<String&>[f.Name for f in Point.Fields if k > 0] }
       |                                                                                    ^~~~~
+reflfilterundecided.olang:9:84: note: a comprehension over a list known while compiling keeps an element by a filter decided while compiling
 compilation failed with 1 error
 === reflfncall.olang
 reflfncall.olang:6:35: error[G41]: 'Get' is called with 1 arguments (a method's receiver first), found 0
@@ -3982,14 +4075,16 @@ reflindexrange.olang:9:18: error[G33]: index 2 is outside the list, which holds 
       |                  ^~~~~~~~~~~~~~~
 compilation failed with 1 error
 === refllistvalue.olang
-refllistvalue.olang:9:19: error[G33]: Point.Fields is a list known while compiling, no value - walk it with 'for', count it with '.Len()', index it with a constant, or make an array of it with a comprehension
+refllistvalue.olang:9:19: error[G33]: Point.Fields is a list known while compiling, no value
     9 | fn main() { fs := Point.Fields }
       |                   ^~~~~~~~~~~~
+refllistvalue.olang:9:19: help: walk it with 'for', count it with '.Len()', index it with a constant, or make an array of it with a comprehension
 compilation failed with 1 error
 === reflmatchsubject.olang
-reflmatchsubject.olang:8:15: error[G13]: 'match' on a type takes a type known while compiling - a type variable, or a type a reflected member names
+reflmatchsubject.olang:8:15: error[G13]: 'match' on a type takes a type known while compiling
     8 |         match f.Type { case _ { } }
       |               ^~~~~~
+reflmatchsubject.olang:8:15: help: match a type variable, or a type a reflected member names
 compilation failed with 1 error
 === reflnodefault.olang
 reflnodefault.olang:11:12: error[G34]: parameter 'x' of Point has no default - read 'p.Default' only where 'p.HasDefault' holds
@@ -3997,9 +4092,10 @@ reflnodefault.olang:11:12: error[G34]: parameter 'x' of Point has no default - r
       |            ^~~~~~~~~
 compilation failed with 1 error
 === reflnokind.olang
-reflnokind.olang:13:12: error[G32]: E has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one
+reflnokind.olang:13:12: error[G32]: E has no TypeKind
    13 |     k := E.Kind
       |            ^~~~
+reflnokind.olang:13:12: note: only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one
 compilation failed with 1 error
 === reflnolength.olang
 reflnolength.olang:9:24: error[G32]: Point has no Length - only an array whose length is known while compiling has one
@@ -4007,9 +4103,10 @@ reflnolength.olang:9:24: error[G32]: Point has no Length - only an array whose l
       |                        ^~~~~~
 compilation failed with 1 error
 === reflnomember.olang
-reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align
+reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width'
     9 | fn main() { n := Point.Width }
       |                        ^~~~~
+reflnomember.olang:9:24: note: a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align
 compilation failed with 1 error
 === reflnotlist.olang
 reflnotlist.olang:9:18: error[G33]: I64 has no Fields - only a struct and an enum's case have fields
@@ -4032,9 +4129,11 @@ reflofttype.olang:11:29: error[G34]: this field is Point's, and the value is Sha
       |                             ^
 compilation failed with 1 error
 === refltrylist.olang
-refltrylist.olang:10:5: error[G33]: a list known while compiling is walked with no call that can fail - write 'for x in ...' without 'try'
+refltrylist.olang:10:5: error[G33]: 'try' on a walk of a list known while compiling
    10 |     for _ in try Point.Fields { }
       |     ^~~
+refltrylist.olang:10:5: note: a list known while compiling is walked with no call that can fail
+refltrylist.olang:10:5: help: write 'for x in ...' without 'try'
 compilation failed with 1 error
 === refltypenotvalue.olang
 refltypenotvalue.olang:9:18: error[G38]: 'Point.Fields[0].Type' is a type, not a value - write it where a type goes: a declaration ('x Point.Fields[0].Type = ...'), a type argument or a match's subject
@@ -5163,19 +5262,24 @@ t19bpatternalts.olang:11:30: error[T19b, S13b]: a payload pattern binding a name
       |                              ^~~~
 compilation failed with 1 error
 === t19bpatternname.olang
-t19bpatternname.olang:7:14: error[T19b, S13b]: a payload pattern reads the error a local or a catch clause's name holds, and 'Last' is no name - write 'e := ...' first and match 'e'
+t19bpatternname.olang:7:14: error[T19b, S13b]: a payload pattern needs a name, and 'Last' is none
     7 |         case ReadErr.Bad(line) { assert line > 0 }
       |              ^~~~~~~~~~~~~~~~~
+t19bpatternname.olang:7:14: note: it reads the error a local or a catch clause's name holds
+t19bpatternname.olang:7:14: help: write 'e := ...' first and match 'e'
 compilation failed with 1 error
 === t19bpatternvalue.olang
-t19bpatternvalue.olang:10:9: error[T19b, S13b]: a payload pattern binds names only in a match statement - in a value match read the field after the test ('case W: e.field')
+t19bpatternvalue.olang:10:9: error[T19b, S13b]: a payload pattern binds names only in a match statement
    10 |         case ReadErr.Bad(line): line
       |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+t19bpatternvalue.olang:10:9: help: in a value match read the field after the test ('case W: e.field')
 compilation failed with 1 error
 === t19bpayloadref.olang
-t19bpayloadref.olang:3:28: error[T19b]: payload field node of type Node& holds a reference - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data
+t19bpayloadref.olang:3:28: error[T19b]: payload field node of type Node& holds a reference
     3 | type BadError error { Lost(node Node&), Plain }
       |                            ^~~~~~~~~~
+t19bpayloadref.olang:3:28: note: a payload holds values only
+t19bpayloadref.olang:3:28: help: hold a copy ('$x', 'x.Copy()') or plain data
 compilation failed with 1 error
 === t19bplaincalled.olang
 t19bplaincalled.olang:4:23: error[T19b]: ParseError2.Eof carries nothing - write it without '()'
@@ -5183,9 +5287,10 @@ t19bplaincalled.olang:4:23: error[T19b]: ParseError2.Eof carries nothing - write
       |                       ^~~
 compilation failed with 1 error
 === t19bunnarrowed.olang
-t19bunnarrowed.olang:7:52: error[T19b]: e may hold an error that has no field line - test which it holds first ('if e == T.Word')
+t19bunnarrowed.olang:7:52: error[T19b]: e may hold an error that has no field line
     7 |     x := try parse() catch ParseError2 e default e.line
       |                                                    ^~~~
+t19bunnarrowed.olang:7:52: help: test which it holds first ('if e == T.Word')
 compilation failed with 1 error
 === t19bvaluebare.olang
 t19bvaluebare.olang:4:22: error[T19b]: ParseError2.Bad carries line, col - give them: 'ParseError2.Bad(line, col)'
@@ -5233,9 +5338,10 @@ t20errorresult.olang:4:16: error[T20]: E is an error type: an error is raised, n
       |                ^
 compilation failed with 1 error
 === t20errvaluenoop.olang
-t20errvaluenoop.olang:6:12: error[T20]: '+' on P: an error value is no number - it is compared with '==' and '!=', and rendered with '$'
+t20errvaluenoop.olang:6:12: error[T20]: '+' on P: an error value is no number
     6 |     x := e + 1
       |            ^
+t20errvaluenoop.olang:6:12: note: it is compared with '==' and '!=', and rendered with '$'
 compilation failed with 1 error
 === t20matchnoterror.olang
 t20matchnoterror.olang:6:11: error[T20]: the cases name errors, and 'n' is I64, not an error value
@@ -5243,14 +5349,17 @@ t20matchnoterror.olang:6:11: error[T20]: the cases name errors, and 'n' is I64, 
       |           ^
 compilation failed with 1 error
 === t20nevernull.olang
-t20nevernull.olang:8:18: error[T20]: 'e' holds an error here, never null - a caught error, a word written or a value a test says is not null
+t20nevernull.olang:8:18: error[T20]: 'e' holds an error here, never null
     8 |             case null { }
       |                  ^~~~
+t20nevernull.olang:8:18: note: a caught error, a word written or a value a test says is not null
 compilation failed with 1 error
 === t20valuenotheld.olang
-t20valuenotheld.olang:9:7: error[T20]: expected P, found PQ, which can be Q - test it first ('if e == T'), or hold it in a set that has it
+t20valuenotheld.olang:9:7: error[T20]: expected P, found PQ
     9 |     g(v)
       |       ^
+t20valuenotheld.olang:9:7: note: it can be Q
+t20valuenotheld.olang:9:7: help: test it first ('if e == T'), or hold it in a set that has it
 compilation failed with 1 error
 === t21bare.olang
 t21bare.olang:3:12: error[T21]: a function type is held only by reference - write 'fn&(x I64) I64', or 'fn?&(x I64) I64' where it may be null
@@ -5766,12 +5875,14 @@ t29eclash.olang:4:14: error[T29e]: Ints& inherits a method Count from its base -
       |              ^~~~~
 compilation failed with 1 error
 === t29eeqhash.olang
-t29eeqhash.olang:6:12: error[G19, E10b]: Id does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+t29eeqhash.olang:6:12: error[G19, E10b]: Id does not satisfy the constraint Hashable on K
     6 |   m := Map<Id, I32>()
       |            ^~
+t29eeqhash.olang:6:12: note: it has no Hash
 $ROOT/std/prelude/hash.olang:18:12: note: 'Hash' is declared here, with another signature
    18 | fn (n I64) Hash() I64 { return mixHash(n) }
       |            ^~~~
+t29eeqhash.olang:6:12: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === t29fcompound.olang
 t29fcompound.olang:9:5: error[T6b]: I32 does not flow into Pct - convert it, as Pct(x)
@@ -5953,9 +6064,10 @@ t30aextendsitself.olang:4:26: error[T30a]: 'eaTwo' extends itself through the tr
       |                          ^~~~~
 compilation failed with 2 errors
 === t30aextendsnottrait.olang
-t30aextendsnottrait.olang:4:26: error[T30a]: eaBox is not a trait, so a trait cannot extend it - a type takes a trait's methods by declaring them
+t30aextendsnottrait.olang:4:26: error[T30a]: eaBox is not a trait, so a trait cannot extend it
     4 | type eaBad trait extends eaBox { }
       |                          ^~~~~
+t30aextendsnottrait.olang:4:26: help: a type takes a trait's methods by declaring them
 compilation failed with 1 error
 === t30banybuilder.olang
 t30banybuilder.olang:3:15: error[T30b]: Parsed<I64> requires the builder 'Parse', so it has no run-time value - a builder takes no instance to dispatch on; take the type as a constrained variable
@@ -6149,9 +6261,11 @@ t34caseunknown.olang:11:14: error: unknown type 'aBx'
       |              ^~~
 compilation failed with 1 error
 === t4aatomic.olang
-t4aatomic.olang:6:11: error[P9, T4a]: the atomic operations take integers of 8, 16, 32 or 64 bits, and U24 is none - hold the value as one of those
+t4aatomic.olang:6:11: error[P9, T4a]: U24 is no atomic width
     6 |     Count.AtomicAdd(1)
       |           ^~~~~~~~~
+t4aatomic.olang:6:11: note: the atomic operations take integers of 8, 16, 32 or 64 bits
+t4aatomic.olang:6:11: help: hold the value as one of those
 compilation failed with 1 error
 === t4abyteswap.olang
 t4abyteswap.olang:4:17: error[E37, T4a]: U12 has no 'ByteSwap': its 12 bits are no whole number of bytes
