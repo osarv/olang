@@ -1,0 +1,41 @@
+# B23: a type rendering itself richly - a small table shown in a notebook as an HTML table (the Jupyter kernel's
+# display, checks' "jupyter" scenario imports it), its text form still "$t". Each test holds the run time to what the
+# compile-time evaluator bakes (K2)
+
+# a table of named columns and rows of numbers
+type Table struct(Heads Array<String&>, Rows Array<I64>) {
+    Heads
+    Rows
+}
+
+# the rows, Heads.Len() numbers each, as an HTML table
+fn (t Table&) Display() Display {
+    b := StringBuilder()
+    b.Push("<table><tr>")
+    for h in t.Heads: b.Push($"<th>" $h "</th>")
+    b.Push("</tr>")
+    for i, n in t.Rows {
+        if i % t.Heads.Len() == 0: b.Push("<tr>")
+        b.Push($"<td>" $n "</td>")
+        if i % t.Heads.Len() == t.Heads.Len() - 1: b.Push("</tr>")
+    }
+    b.Push("</table>")
+    return Display.Html(b.ToString())
+}
+
+fn mimeOf<T>(v T) String {
+    return match T {
+        case Displayable: v.Display().Mime()
+        case _: "text/plain"
+    }
+}
+
+Baked String = Table(Array<String&>["x", "y"], Array<I64>[1, 2]).Display().Body()
+
+test Table.Display "a table renders as HTML, found through Displayable" {
+    t := Table(Array<String&>["n", "square"], Array<I64>[2, 4, 3, 9])
+    want := "<table><tr><th>n</th><th>square</th></tr><tr><td>2</td><td>4</td></tr><tr><td>3</td><td>9</td></tr></table>"
+    assert t.Display().Body() == want and t.Display().Mime() == "text/html"
+    assert mimeOf(t) == "text/html" and mimeOf("text") == "text/plain"
+    assert Baked == "<table><tr><th>x</th><th>y</th></tr><tr><td>1</td><td>2</td></tr></table>"
+}

@@ -21,6 +21,7 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `geom/` - `rect.olang` and `measure.olang`, two modules that import each other,
   imported by `runner`.
 - `any.olang` - run-time trait values (`any Trait&`, T32-T34).
+- `display.olang` - a type rendering itself richly (Display, B23): a small table shown as HTML in a notebook; checks' `jupyter` scenario imports it.
 - `weak.olang` - weak references and generational types (T2d, T13d, O8e): a list, a tree and an LRU cache with weak
   links, a generational value held by reference, and weak places reading `null` once no owning place holds their node
   (removals, a subtree cut off, an eviction, a Map that grows, a Vec's pop).
