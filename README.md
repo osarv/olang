@@ -12,7 +12,9 @@ with:
 - clang 18, 19 or 20. On Ubuntu 24.04 that is `sudo apt install clang-18`; older releases get it from
   https://apt.llvm.org: `wget https://apt.llvm.org/llvm.sh && sudo bash llvm.sh 18`.
 - make, xz, libffi and the C library's headers: `sudo apt install make xz-utils libffi-dev libc6-dev`.
-- About 3 GB of memory and 1 GB of disk.
+- About 4 GB of memory free and 1 GB of disk. The build runs as many of clang's compiles at once as the memory
+  available holds (512 MB each), never more than one per core; `OLANG_JOBS=N make` sets the number. Under WSL the
+  memory is what `.wslconfig`'s `memory=` gives it (by default half the machine's).
 
 Then, in the checkout:
 
@@ -20,9 +22,11 @@ Then, in the checkout:
 make
 ```
 
-This builds `build/olang` from the committed seed (`seed/` holds the compiler's own LLVM IR). clang compiles the seed
-into a first compiler, which builds the compiler from its source; that one builds it again, and the last two builds
-must be byte for byte equal. It takes a few minutes. Before compiling anything, `make` checks for the tools above and
+This builds `build/olang` from the committed seed (`seed/` holds the compiler's own LLVM IR), in two stages: clang
+compiles the seed into a first compiler, which builds the compiler from its source as a quick build (no link-time
+optimization); that one builds it again fully optimized, and installs it. Each stage says when it starts, its build's
+phases, and how long it took; the whole takes a few minutes. (`make fixedpoint`, part of `make verify`, has the
+installed compiler build itself once more and checks the two are byte for byte equal.) Before compiling anything, `make` checks for the tools above and
 says which package to install for anything missing (`make prereq` runs only that check).
 
 After a `git pull`, run `make` again: it rebuilds the compiler only when its sources changed.

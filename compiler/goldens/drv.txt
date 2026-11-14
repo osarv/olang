@@ -286,6 +286,12 @@
 | 
 | 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
 | 'olang' with nothing after it opens the prompt, which runs what is typed as it is typed (B22).
+| 
+| environment:
+|   OLANG_JOBS=N       runs N of clang's compiles at once; unset, one per core the memory available holds (B3m)
+|   OLANG_TIMES=1      says each phase of a build as it ends, with its time and the compiler's memory (B3m)
+|   OLANG_CLANG=PATH   names the clang a build uses (B12d)
+|   OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)
 | stderr:
 | status 0
 === olang help build

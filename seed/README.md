@@ -9,9 +9,9 @@ It is how the compiler is rebuilt from nothing (`compiler/DESIGN.md`, section 5)
 compiler is needed - only clang and xz.
 
 ```
-make bootstrap  # clang makes the seed into build/olang.seed; it builds compiler/olang.olang into build/olang.1, which
-                # builds it into build/olang.2, which builds it again into build/olang.3; the last two must be byte for
-                # byte equal; build/olang.3 is installed as build/olang (about 6 minutes on 4 cores, 1.6 GB at most)
+make bootstrap  # clang makes the seed into build/olang.seed; it builds compiler/olang.olang into build/olang.1 with
+                # -quick, which builds it fully optimized into build/olang.2, installed as build/olang
+make fixedpoint # build/olang builds itself again into build/olang.3, which must be byte for byte equal to it (in verify)
 make seed       # writes the seed again from the current source (compiler/tools/seed.olang): a file whose IR did not
                 # change is left as it is
 ```
@@ -21,8 +21,8 @@ they are built on, as every olang build is (B12). The standard library is named 
 so no path of the checkout that wrote it is in it.
 
 **When it is written again.** The seed need not be current: an older seed builds the current source as long as that
-source uses nothing the seed's compiler cannot build - `make bootstrap` shows it does. That is why the comparison is of
-the second and third builds: the first is the seed's compiler's work, and equals them only while the seed is current
+source uses nothing the seed's compiler cannot build - `make bootstrap` shows it does. That is why the comparison (`make fixedpoint`) is
+of the second and third builds: the first is the seed's compiler's work, and equals them only while the seed is current
 (a seed older than the code generator gives a first build that differs, as one did on 2026-10-23, 1f7a849's seed against
 b4b7b91's source). It must be written again
 (`make seed`, committed with the change) in the commit that first makes `compiler/` or the std it uses need something

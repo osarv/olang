@@ -15,7 +15,8 @@ while compiling (B9c, S8b, S18c) and as `olang interpret` (`make evaldiff`). The
 `build/compiler_olang`) builds, runs, tests, compiles and interprets through the pipeline, with the runtime filled in
 by `runtime.olang`; built by the C compiler first, it builds itself (`build/compiler_olang build -output build/stage1
 compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but the seed, its own IR
-(`seed/`, written by `tools/seed.olang` - `make seed`). The command line is stage 0's (`build`, `compile`, `test`, ...).
+(`seed/`, written by `tools/seed.olang` - `make seed`), in two stages (the seed's compiler builds a `-quick` compiler,
+which builds the optimized one); `make fixedpoint` checks that compiler builds itself byte for byte (DESIGN.md section 5). The command line is stage 0's (`build`, `compile`, `test`, ...).
 
 ## Modules (one file per pass)
 

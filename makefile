@@ -194,13 +194,16 @@ modgold: build/compiler_tools_dump build/compiler_tools_modgraph
 #
 # The seed is the compiler's own LLVM IR, as the compiler writes it of itself for baseline x86-64 Linux: one
 # xz-compressed .ll per object in seed/. "make bootstrap" rebuilds the compiler from it with nothing but clang and xz -
-# no other compiler: clang makes the seed into build/olang.seed, which builds compiler/olang.olang into
-# build/olang.1, which builds it into build/olang.2, which builds it again into build/olang.3; the last two, each built
-# by a compiler made from the current source, must be byte for byte equal, and build/olang.3 is installed as
-# build/olang. build/olang.1 was built by the seed's compiler, so it equals build/olang.2 only while the seed is current:
-# the seed need not be - an older seed builds the current source as long as that source uses nothing the seed's
-# compiler lacks - and "make seed" writes it again from the current source. The third build reuses every object of the
-# second (an object is named by its IR) when the two compilers write the same IR, so it costs seconds.
+# no other compiler, in two stages: clang makes the seed into build/olang.seed, which builds compiler/olang.olang into
+# build/olang.1 as a -quick build (B2g: no link-time optimization, the least time and memory), which builds it fully
+# optimized (-O3 and LTO, B2c) into build/olang.2, installed as build/olang. "make fixedpoint" (in verify) has the
+# installed compiler build itself once more, into build/olang.3, and compares the two byte for byte: each built by a
+# compiler made from the current source, they must be equal. That third build reuses every object of the second (an
+# object is named by its IR) when the two compilers write the same IR, so it costs little. build/olang.1 was built by the
+# seed's compiler, so the IR it writes equals build/olang.2's only while the seed is current: the seed need not be - an
+# older seed builds the current source as long as that source uses nothing the seed's compiler lacks - and "make seed"
+# writes it again from the current source. Each stage says when it starts and how long it took, and its build says its
+# phases (OLANG_TIMES, B3m): the front end's passes with the compiler's memory, clang's compiles as n/m, the link
 SEED_DIR = seed
 SEED_FILES = $(wildcard $(SEED_DIR)/*.ll.xz)
 SEED_OBJ = $(patsubst $(SEED_DIR)/%.ll.xz,build/seed/%.o,$(SEED_FILES))
@@ -221,13 +224,16 @@ build/olang.seed: $(SEED_OBJ)
 	@test -n "$(SEED_OBJ)" || { echo "bootstrap: no seed in $(SEED_DIR)/ - make seed writes one"; exit 1; }
 	$(SEED_CLANG) $(SEED_OBJ) -o $@ -lm -lpthread -ldl -lffi
 
+# one stage of the bootstrap: $(1) said as it starts and with how long it took as it ends, $(2) run with its build's
+# phases said (OLANG_TIMES)
+BOOT_STAGE = @t=$$(date +%s); echo "bootstrap: $(1) ..."; OLANG_TIMES=1 $(2) || exit 1; \
+	e=$$(( $$(date +%s) - t )); echo "bootstrap: $(1) - done in $$((e / 60))m$$((e % 60))s"
+
 define BOOTSTRAP
-	build/olang.seed build -output build/olang.1 compiler/olang.olang
-	build/olang.1 build -output build/olang.2 compiler/olang.olang
-	build/olang.2 build -output build/olang.3 compiler/olang.olang
-	cmp build/olang.2 build/olang.3
-	cp build/olang.3 build/olang
-	@echo "bootstrap: build/olang.2 and build/olang.3 are byte for byte equal; build/olang installed"
+	$(call BOOT_STAGE,stage 1 of 2 - the seed builds the compiler (-quick) into build/olang.1,build/olang.seed build -quick -output build/olang.1 compiler/olang.olang)
+	$(call BOOT_STAGE,stage 2 of 2 - build/olang.1 builds the compiler fully optimized into build/olang.2,build/olang.1 build -output build/olang.2 compiler/olang.olang)
+	cp build/olang.2 build/olang
+	@echo "bootstrap: build/olang installed (make fixedpoint checks that it builds itself identically)"
 endef
 
 # what the bootstrap needs, checked before anything is compiled so that what is missing is named, with the Debian/Ubuntu
@@ -262,14 +268,16 @@ prereq:
 		"3 GB (WSL: raise memory= in .wslconfig)"; \
 	echo "prereq: clang $$v ($(SEED_CLANG)), xz, libffi, the C headers and LTO linking are all here"
 
-# the seed's objects compiled side by side, then the three builds: the bootstrap from nothing, every time it is asked for
+# the seed's objects compiled side by side, then the two builds: the bootstrap from nothing, every time it is asked for
 bootstrap: prereq
-	$(MAKE) -j$(PARALLEL) build/olang.seed
+	@t=$$(date +%s); echo "bootstrap: clang compiles the seed into build/olang.seed ..."; \
+	$(MAKE) -j$(PARALLEL) build/olang.seed || exit 1; e=$$(( $$(date +%s) - t )); \
+	echo "bootstrap: clang compiles the seed into build/olang.seed - done in $$((e / 60))m$$((e % 60))s"
 	$(BOOTSTRAP)
 
 # build/olang as a file, for OLANG=build/olang: bootstrapped (boot, below) when missing or older than the sources it is
-# built from (what the compiler holds of std included). The seed is not among them: build/olang is the third build of
-# the current source, the same whichever seed started the chain (make bootstrap compares the last two builds)
+# built from (what the compiler holds of std included). The seed is not among them: build/olang is the second build of
+# the current source, by a compiler built from it, the same whichever seed started the chain (make fixedpoint checks it)
 BOOT_SOURCES = $(wildcard compiler/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/*.olang) $(wildcard std/runtime/*.ll)
 build/olang: $(BOOT_SOURCES)
 	$(MAKE) boot
@@ -278,15 +286,17 @@ build/olang: $(BOOT_SOURCES)
 # installed. A bootstrap is a function of its inputs, which the key names: the seed, the compiler's and std's files
 # (all of std, conservatively), this makefile, every clang the compiler may take (B12d) and the linker, the processor (the build is for the machine it
 # runs on, B12) and this checkout's directory (the compiler holds its absolute std paths). The cache, $(BOOT_CACHE), is
-# outside build/, so make clean keeps it; an entry is written only after build/olang.2 and build/olang.3 compared
-# equal, and only the newest $(BOOT_KEEP) are kept. BOOT_FRESH=1 bootstraps whatever the cache holds
+# outside build/, so make clean keeps it; an entry is written only once the bootstrap installed build/olang, and only
+# the newest $(BOOT_KEEP) are kept; fixedpoint marks the entry whose compiler built itself identically. BOOT_FRESH=1
+# bootstraps whatever the cache holds
 BOOT_CACHE ?= .bootcache
 BOOT_KEEP ?= 3
-boot:
-	@key=$$( { echo "$(CURDIR)"; sha256sum $(sort $(SEED_FILES) $(BOOT_SOURCES) $(shell find std -type f) makefile); \
+BOOT_KEY = { echo "$(CURDIR)"; sha256sum $(sort $(SEED_FILES) $(BOOT_SOURCES) $(shell find std -type f) makefile); \
 		$(SEED_CLANG) --version; for c in "$$OLANG_CLANG" clang-20 clang-19 clang-18 clang; do \
 			[ -n "$$c" ] && command -v $$c > /dev/null && $$c --version | head -1; done; ld --version | head -1; \
-		grep -m1 '^model name' /proc/cpuinfo; grep -m1 '^flags' /proc/cpuinfo; } | sha256sum | cut -c1-32 ); \
+		grep -m1 '^model name' /proc/cpuinfo; grep -m1 '^flags' /proc/cpuinfo; } | sha256sum | cut -c1-32
+boot:
+	@key=$$( $(BOOT_KEY) ); \
 	d=$(BOOT_CACHE)/$$key; \
 	if [ -z "$(BOOT_FRESH)" ] && [ -x $$d/olang ]; then \
 		mkdir -p build && cp $$d/olang build/olang.cached && mv build/olang.cached build/olang && \
@@ -296,6 +306,19 @@ boot:
 		cp build/olang $$t/olang && rm -rf $$d && mv $$t $$d && \
 		ls -dt $(BOOT_CACHE)/*/ | tail -n +$$(( $(BOOT_KEEP) + 1 )) | xargs -r rm -rf; \
 	fi
+
+# fixedpoint: the installed compiler builds itself again, into build/olang.3, which must equal it byte for byte - a
+# compiler built from the current source writes the same compiler as the one that built it. Checked once per boot cache
+# entry: the entry whose compiler passed is marked, and a later fixedpoint of the same inputs and compiler says so
+fixedpoint: $(OLANG)
+	@key=$$( $(BOOT_KEY) ); d=$(BOOT_CACHE)/$$key; \
+	if [ -f $$d/fixed ] && cmp -s $$d/olang build/olang; then \
+		echo "fixedpoint: build/olang built itself identically before ($$d)"; exit 0; fi; \
+	t=$$(date +%s); echo "fixedpoint: build/olang builds itself into build/olang.3 ..."; \
+	OLANG_TIMES=1 build/olang build -output build/olang.3 compiler/olang.olang || exit 1; \
+	cmp build/olang build/olang.3 || exit 1; e=$$(( $$(date +%s) - t )); \
+	if [ -x $$d/olang ] && cmp -s $$d/olang build/olang; then touch $$d/fixed; fi; \
+	echo "fixedpoint: build/olang and build/olang.3 are byte for byte equal - done in $$((e / 60))m$$((e % 60))s"
 
 # the seed written again from the current source (compiler/tools/seed.olang), from the repository root and with the
 # standard library named relatively, so no path of this checkout is in it. A file whose IR did not change is left as
@@ -380,13 +403,14 @@ suite: $(OLANG)
 	@$(MAKE) --no-print-directory checkir
 
 # the one command to run before considering any change done, the gate before every merge: a from-scratch build (clean,
-# then the bootstrap from the seed with its fixed point - boot, which reuses only a bootstrap of exactly the same inputs
-# that passed before), then the whole suite: every test{} block of every .olang file, checks/checks.olang (programs that
+# then the bootstrap from the seed - boot, which reuses only a bootstrap of exactly the same inputs that passed before -
+# and its fixed point, the compiler building itself identically), then the whole suite: every test{} block of every .olang file, checks/checks.olang (programs that
 # must not compile, whole builds), tests/runner.olang built as a program and run, the IR's allocas, and the port's
 # diffs against the goldens. Any failure fails it
 verify:
 	$(MAKE) clean
 	$(MAKE) boot
+	$(MAKE) fixedpoint
 	$(MAKE) suite
 	@echo "verify: all checks passed"
 
@@ -550,4 +574,4 @@ install: build/olang
 	@echo "install: $(PREFIX)/bin/olang is build/olang - put $(PREFIX)/bin on PATH if it is not"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build prereq install bootstrap boot seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
+.PHONY: consistency dumptool all build prereq install bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean

@@ -116,6 +116,17 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |
 
+## An environment variable the compiler reads
+
+`OLANG_JOBS`, `OLANG_TIMES`, `OLANG_CLANG`, `OLANG_OBJECTS` and the like:
+
+| place | why |
+|---|---|
+| where it is read (`compiler/build.olang` `width`/`Phase`, `target.olang`, `olang.olang`) | its effect |
+| `SPEC.md` (B3j, B3m, B12d) | the normative text |
+| `compiler/olang.olang` `help` ("environment:"), `compiler/goldens/drv.txt` (`make drvgold`) | `olang help` lists the build's variables |
+| `README.md`, `docs/install.md`, `makefile` (the bootstrap sets `OLANG_TIMES`) | where users are told of it |
+
 ## A std module or API
 
 | place | why |
