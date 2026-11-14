@@ -630,3 +630,25 @@ HelperIr String& = """
       ret void
     }
     """
+
+test rewrite "a cell's start is the worker's to call, and a kept value is named by its storage" {
+    plan := Plan()
+    plan.Rename.Put("G_2er_2ex", "G_2er_2ex.cell2")
+    plan.Extern.Put("G_2er_2ex", true)
+    plan.NoInit.Put("r_2ex_2einit", true)
+    ir := ("@G_2er_2ex = global i64 0\n@llvm.global_ctors = appending global [1 x i8] zeroinitializer\n" $
+        "define internal void @__olang_lib_init() #0 {\nentry:\n  call void @__olang_thread_init()\n" $
+        "  call void @r_2ex_2einit()\n  call void @r_2ey_2einit()\n  ret void\n}\n" $
+        "define void @f() {\n  %a = load i64, ptr @G_2er_2ex\n  %b = load i64, ptr @G_2er_2exy\n}\n")
+    want := ("@G_2er_2ex.cell2 = external global i8\ndefine void @olang_cell_init() #0 {\nentry:\n" $
+        "  call void @r_2ey_2einit()\n  ret void\n}\n" $
+        "define void @f() {\n  %a = load i64, ptr @G_2er_2ex.cell2\n  %b = load i64, ptr @G_2er_2exy\n}\n")
+    assert rewrite(ir, plan) == want
+}
+
+test rewrite "the storage a cell makes is renamed where it is defined too" {
+    plan := Plan()
+    plan.Rename.Put("G_2er_2eolangKeep__v", "G_2er_2eolangKeep__v.cell3")
+    assert rewrite("@G_2er_2eolangKeep__v = global i64 0\n  store i64 1, ptr @G_2er_2eolangKeep__v, align 8\n", plan) ==
+        "@G_2er_2eolangKeep__v.cell3 = global i64 0\n  store i64 1, ptr @G_2er_2eolangKeep__v.cell3, align 8\n"
+}
