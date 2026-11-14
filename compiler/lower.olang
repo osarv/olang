@@ -2959,10 +2959,7 @@ fn (ln mut lowering&) elem(e typed.Elem&, sp source.Span) pl {
         i := ln.asI64(x, ity, sp)
         ln.bounds(i, n, false, e.Checked, mir.ExitKind.SliceBounds, sp)
     }
-    if e.Checked == typed.Check.Debug and ln.L.Checked {
-        n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(base))], sp)
-        ln.bounds(ln.asI64(x, ity, sp), n, false, typed.Check.Abort, mir.ExitKind.IndexBounds, sp)
-    }
+    if e.Checked == typed.Check.Debug and ln.L.Checked: ln.indexCheck(base, e.Base.Type(), x, ity, sp)
     if e.Checked == typed.Check.None or e.Checked == typed.Check.Debug {
         match x {
             case mir.Operand.Const(_, v) {
@@ -2983,6 +2980,19 @@ fn (ln mut lowering&) payload(py typed.Payload&, sp source.Span) pl {
         ln.check(ok, py.Checked, mir.ExitKind.As, WrongCase, sp)
     }
     return ln.with(base, mir.Proj.Payload(py.Tag))
+}
+
+# E16g: an index the program wrote, in a checked build - one unsigned comparison (a negative index reads as one past
+# every length) against the length, known while compiling for a fixed array (whose constant index E16 judged already,
+# and which a packed struct's field holds with no place to read a length from)
+fn (ln mut lowering&) indexCheck(base pl, bt types.TypeId, x mir.Operand, ity types.TypeId, sp source.Span) {
+    fl := ln.fixedLen(ln.arrayOf(bt)) if ln.arrayOf(bt) != types.UnknownT else -1
+    if fl >= 0 and x == mir.Operand.Const: return
+    n := ln.constI64(fl) if fl >= 0 else ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(base))], sp)
+    u := types.TypeId(10)   # U64
+    iu := ln.prim(typed.PrimOp.Convert, u, Array<mir.Operand>[ln.asI64(x, ity, sp)], sp)
+    nu := ln.prim(typed.PrimOp.Convert, u, Array<mir.Operand>[n], sp)
+    ln.check(ln.prim(typed.PrimOp.Lt, types.BoolT, Array<mir.Operand>[iu, nu], sp), typed.Check.Abort, mir.ExitKind.IndexBounds, OutOfBounds, sp)
 }
 
 # 0 <= i < n (or <= n where incl): on to the code after, or to the check's failure
