@@ -88,3 +88,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-13: leftA + leftB merged, verified, pushed (leftA found a use-after-free on a reassigned reference parameter). wt-axes running. Next: target-typed literals, print/println, quick run, warnings; then refactor.
 - 2026-11-14 night: axes, ease, lits merged, verified, pushed. printcap renaming io.Print* -> io.Write* (my call, user asleep).
 - 2026-11-14 01:40 CET: printcap merged, verified, pushed (io.Put* rename). Starting one-liner tool (sonnet low).
+- 2026-11-14 02:25 CET: oneline merged, verified, pushed. Refactor pass round 1 started (wt-refac1).
