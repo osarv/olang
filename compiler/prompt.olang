@@ -61,12 +61,31 @@ type Reply struct() {
     Text String& = ""
     Failure String& = ""
     Notes String& = ""
+    Mime String& = ""      # where the value shown renders itself richly (a Displayable, B23): its MIME type
+    Data String& = ""      # and its rendering, a picture's bytes as they are
     gone Vec<String&>      # (the values whose types the cell lays out anew, which it is checked again without)
 }
 
 # the names the session's program gives what it makes: a kept local's global, the shown value's, the cell's function
 KeepPrefix String& = "olangKeep_"
 ShownName String& = "olangShown"
+RichName String& = "olangShownRich"
+# the shown value's rich rendering (B23) - the cell's program sets the first two by the third where its type is a
+# Displayable
+RichDecls String& = """
+    olangShownMime mut String = ""
+    olangShownData mut String = ""
+    fn olangShownRich<OlangShownType>(v OlangShownType) {
+        match OlangShownType {
+            case Displayable {
+                d := v.Display()
+                olangShownMime = d.Mime()
+                olangShownData = d.Body()
+            }
+            case _ { }
+        }
+    }
+    """
 CellName String& = "olangCell"
 # what the lines the session writes are named in diagnostics
 Synthetic String& = "session"
@@ -327,16 +346,20 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
     if keeping {
         for v in c.Keeps { p.put($KeepPrefix $v.Name " mut " $v.Type " = unreachable \"a value the cell keeps\"", Synthetic, 0) }
     }
-    if c.Show: p.put($ShownName " mut String = \"\"", Synthetic, 0)
+    if c.Show {
+        p.put($ShownName " mut String = \"\"", Synthetic, 0)
+        p.put(RichDecls, Synthetic, 0)
+    }
     p.put($"fn " $CellName "() ? {", Synthetic, 0)
     last := c.Items.Len() - 1
     for i, it in c.Items {
         if it.IsDecl: continue
         t := c.Text[it.Start:it.End]
         # (the value's text starts its own line, so a diagnostic's column is the cell's)
-        if c.Show and i == last: p.put($ShownName " = $(", Synthetic, 0)
+        # (the value is shown as "$" renders it, and richly where its type renders itself, B23)
+        if c.Show and i == last: p.put("{\nolangShownValue := (", Synthetic, 0)
         p.put(t, c.Label, it.Line)
-        if c.Show and i == last: p.put(")", Synthetic, 0)
+        if c.Show and i == last: p.put($")\n" $ShownName " = $olangShownValue\n" $RichName "(olangShownValue)\n}", Synthetic, 0)
     }
     if keeping {
         for v in c.Keeps { p.put($KeepPrefix $v.Name " = " $v.Name, c.Label, v.Root) }
@@ -598,6 +621,8 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
         at, ty := try x.M.GlobalAt(root, names.Intern(ShownName)) catch eval.NotSaved { return }
         r.Shown = true
         r.Text = x.M.Text(at, ty)
+        r.Mime = global(x, c, "olangShownMime")
+        r.Data = global(x, c, "olangShownData") if r.Mime != "" else ""
     }
     # kept again, from this machine
     s.snap.Clear()
@@ -639,6 +664,12 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
     s.Decls = ds
     s.Values = vals
     r.Notes = notes.ToString()
+}
+
+# a String global of the cell's program as the machine holds it, "" where it has none
+fn global(x mut interp.Exec&, c mut typecheck.Checker&, name String&) String {
+    at, ty := try x.M.GlobalAt(c.P.L.Root, c.P.L.Names.Intern(name)) catch eval.NotSaved { return "" }
+    return x.M.Text(at, ty)
 }
 
 # the session's values vs restored into x's globals (mismatched has let go those laid out anew), and their destructors'

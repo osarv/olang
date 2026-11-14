@@ -1,0 +1,65 @@
+# rich display, part of the prelude (B23): what a value shows as where more than text can be shown - a notebook's
+# output. A type renders itself richly by declaring "fn (x T&) Display() Display" (and so meets Displayable): the
+# Jupyter kernel shows a cell's value by it, as a table, a picture or a formula, beside its text, "$x" (E11a). The text
+# form stays "$x" - a type's Str() where it declares one - and is what the plain prompt prints. Nothing else gives the
+# method a meaning: the language never calls it.
+
+# a rendering, by its kind: HTML, Markdown, LaTeX, SVG text, or a PNG picture's bytes
+type Display enum {
+    Html(t String)
+    Markdown(t String)
+    Latex(t String)
+    Svg(t String)
+    Png(bytes Array<U8>)
+}
+
+# what a type rendering itself richly declares
+type Displayable trait {
+    Display() Display
+}
+
+# the rendering's MIME type, as a notebook names it
+fn (d Display&) Mime() String {
+    return match d {
+        case Display.Html(_): "text/html"
+        case Display.Markdown(_): "text/markdown"
+        case Display.Latex(_): "text/latex"
+        case Display.Svg(_): "image/svg+xml"
+        case Display.Png(_): "image/png"
+    }
+}
+
+# what the rendering holds: its text, or a picture's bytes as they are
+fn (d Display&) Body() String {
+    return match d {
+        case Display.Html(t): $t
+        case Display.Markdown(t): $t
+        case Display.Latex(t): $t
+        case Display.Svg(t): $t
+        case Display.Png(b): String(b)
+    }
+}
+
+if TestBuild {
+
+type badge struct(label String) {
+    label
+}
+
+fn (b badge&) Display() Display { return Display.Html($"<b>" $b.label "</b>") }
+
+fn mimeOf<T>(v T) String {
+    return match T {
+        case Displayable: v.Display().Mime()
+        case _: "text/plain"
+    }
+}
+
+test Display "a type renders itself by its Display, which a generic finds through Displayable" {
+    b := badge("new")
+    assert b.Display().Mime() == "text/html" and b.Display().Body() == "<b>new</b>"
+    assert mimeOf(b) == "text/html" and mimeOf(3) == "text/plain"
+    assert Display.Png(Array<U8>[137, 80]).Body().Len() == 2 and Display.Svg("<svg/>").Mime() == "image/svg+xml"
+}
+
+}
