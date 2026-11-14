@@ -10798,26 +10798,90 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     n := c.Args.Len()
     ps := s.P.T.Items(s.P.T.Params(fty))
     beta := Array<Term>(vars.Len())
-    owner := Array<I64>(n) # by argument: the index in vars of its parameter's scope variable, -1 for none
+    owner := s.argOwners(fty, vars, n, ps.Len())   # by argument: the index in vars of its parameter's scope variable, -1 for none
+    # a result borrowed from a parameter (O13) given a temporary lives where the temporary is built: where the result
+    # lands, as a built result does (O18a)
+    ev := -1
+    ef := s.P.T.ResultFrom(fty, 0)
+    if ef >= 0 and ef < n { ev = owner[ef] }
+    # "adj[a].Push(v)" is "inner := adj[a]; inner.Push(v)" (O18c)
+    vals := Array<Val>(n)
+    landed := Array<Bool>(n)
+    firstArg := Array<I64>(vars.Len(), -1)   # by scope variable: the argument that bound it first
+    s.bindArgs(sp, c, fty, ps, owner, ev, dest, j, beta, vals, landed, firstArg)
+    # the inference: what a task is handed proposes lasting until its join (P2, 2.4)
+    if spawned and s.liftGather {
+        for i in range n {
+            if not landed[i] and vals[i].K == ValKind.Existing and not s.lastsUntil(vals[i].T, j) { s.propose(c.Args[i], j) }
+        }
+    }
+    if spawned and s.report { s.taskArgsLast(c, vals, landed, ps, j) }
+    # the result scope: where the call lands (O18a); a task's call stands in its join block (P2)
+    here := j if j.Runs() else s.here()
+    rv := s.resultVarOf(fty)
+    # each record's body's scope variables in this call's numbering, and its obligations in it (5.3)
+    rmaps Vec<Array<I64>>
+    rrels Vec<Vec<rel>>
+    for r in recs.Recs {
+        m := s.recMap(r, vars, rv)
+        rmaps.Push(m)
+        rrels.Push(s.recRels(r, m))
+    }
+    if rrels.Len() > 0 { s.valRelsAt.Put(I64(c.Site), s.unionRels(rrels, recs.Full, fty, vars, rv)) }
+    if rv >= 0 { s.bindResult(sp, ty, c, fty, rv, dest, here, land, partD, beta) }
+    callee := s.bodyOf(c.Target)
+    s.bindRest(callee, vars, recs, rmaps, rrels, rv, ev, dest, here, beta)
+    s.argTemps(c, callee, owner, firstArg, here, spawned, j, beta, vals, landed)
+    # a copy of an element no one holds, for a writable reference parameter, is written and lost (E31b)
+    if s.report {
+        for i in range n {
+            if i < ps.Len() and s.isRef(ps[i]) and (s.P.T.PermOf(ps[i]) & types.Writable) != 0 { s.writtenCopy(c, i, j, sp) }
+        }
+    }
+    # S21: a become's call is made once every scope of the function is closed - it binds none of them, only what the
+    # function was given (its scope variables) and the program's
+    if c.Tail {
+        if s.tailSp.Start < I32(0) { s.tailSp = s.nameSpan(sp) }
+        if s.liftGather and s.resultVar >= 0 { s.tailLifts(c, owner, beta, sp) }
+        if s.report { s.becomeBinds(c, vars, beta, firstArg, sp) }
+    }
+    # ... and an instance with a destructor built in a block a become of the function closes would have it run early
+    # (O16) - a reference to one, or a value that may hold one: a struct holding a "Res&", an any, a type variable's. It
+    # is built in the tail scope instead (S21)
+    if rv >= 0 and isBlockTerm(beta[rv]) and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) and s.resultVar < 0 and s.dtorAt.Start < I32(0) {
+        s.dtorAt = s.nameSpan(sp)
+    }
+    scopes := Array<typed.Scope>(vars.Len())
+    for v in range vars.Len() { scopes[v] = s.passedScope(c, owner, v, beta[v]) }
+    s.plan.Pass(c.Site, scopes)
+    if not spawned { s.passDerived(c, callee, beta) }
+    s.buildsOfCall(sp, ty, c, callee, fty, vars, rv, owner, spawned, beta)
+    s.dischargeCall(sp, c, callee, fty, vars, rv, owner, vals, recs, rrels, rmaps, home, beta)
+    return s.callValue(c, ty, callee, fty, vars, rv, owner, recs, beta, here, sl, want)
+}
+
+# callAs's first step: by argument, the index in vars of its parameter's scope variable (shared with another's where
+# the type says, ShareOf), -1 for none
+fn (s mut Scoper&) argOwners(fty types.TypeId, vars Array<I64>&, n I64, np I64) Array<I64> {
+    owner := Array<I64>(n)
     for i in range n {
         owner[i] = -1
-        if i >= ps.Len() { continue }
+        if i >= np { continue }
         k := s.P.T.ShareOf(fty, i)
         q := k if k >= 0 else i
         for v in range vars.Len() {
             if vars[v] == q { owner[i] = v }
         }
     }
-    # a result borrowed from a parameter (O13) given a temporary lives where the temporary is built: where the result
-    # lands, as a built result does (O18a)
-    ev := -1
-    ef := s.P.T.ResultFrom(fty, 0)
-    if ef >= 0 and ef < n { ev = owner[ef] }
-    # existing arguments determine their scope variables (O17, O25e) - and so does a call's result passed on that lands
-    # where its own obligations say (O18c): "adj[a].Push(v)" is "inner := adj[a]; inner.Push(v)"
-    vals := Array<Val>(n)
-    landed := Array<Bool>(n)
-    firstArg := Array<I64>(vars.Len(), -1)   # by scope variable: the argument that bound it first
+    return owner
+}
+
+# callAs's arguments: existing arguments determine their scope variables (O17, O25e), and so does a call's result
+# passed on that lands where its own obligations say (O18c); two arguments of one variable in different scopes disagree
+fn (s mut Scoper&) bindArgs(sp source.Span, c typed.Call&, fty types.TypeId, ps Array<types.TypeId>&, owner Array<I64>&, ev I64
+                            dest Term, j Term, beta mut Array<Term>&, vals mut Array<Val>&, landed mut Array<Bool>&
+                            firstArg mut Array<I64>&) {
+    n := c.Args.Len()
     for i in range n {
         vals[i] = Val.plain()
         a := c.Args[i]
@@ -10841,50 +10905,35 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
             if rec >= 0 and firstArg[k] >= 0 { s.noteDisagree(rec, c.Args[firstArg[k]], beta[k], a, v.T) }
         }
     }
-    # the inference: what a task is handed proposes lasting until its join (P2, 2.4)
-    if spawned and s.liftGather {
-        for i in range n {
-            if not landed[i] and vals[i].K == ValKind.Existing and not s.lastsUntil(vals[i].T, j) { s.propose(c.Args[i], j) }
-        }
+}
+
+# callAs's result scope: where the call lands (O18a), a destructor's value in the tail scope (S21), else where its
+# obligations need it (O18c)
+fn (s mut Scoper&) bindResult(sp source.Span, ty types.TypeId, c typed.Call&, fty types.TypeId, rv I64, dest Term, here Term
+                              land Bool, partD Bool, beta mut Array<Term>&) {
+    beta[rv] = dest if dest.Runs() or s.finds(dest) else here
+    # S21: a value with a destructor landing in a block a become closes is built in the tail scope instead
+    if isBlockTerm(beta[rv]) and s.resultVar >= 0 and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) {
+        beta[rv] = Term.Var(s.resultVar)
+        s.tailDtorRow(s.nameSpan(sp))
     }
-    if spawned and s.report { s.taskArgsLast(c, vals, landed, ps, j) }
-    # the result scope: where the call lands (O18a); a task's call stands in its join block (P2)
-    here := j if j.Runs() else s.here()
-    rv := -1
-    for v in range vars.Len() {
-        if vars[v] == types.ResultVar { rv = v }
+    # a result nothing puts anywhere lands by its obligations where they need its scope to outlive an argument's
+    # (O18a, O18c) - a constructor's instance is built where it stands, C2d holding it
+    if s.P.T.Role(fty) == types.RoleCtor { land = false }
+    if not land and (dest == Term.None or partD) and s.P.T.Role(fty) != types.RoleCtor {
+        cb := s.bodyOf(c.Target)
+        land = cb >= 0 and s.summed(cb) and s.forced(cb, rv) or c.Target == typed.Callee.Value and s.forcedBy(s.callRels(c), rv)
     }
-    # each record's body's scope variables in this call's numbering, and its obligations in it (5.3)
-    rmaps Vec<Array<I64>>
-    rrels Vec<Vec<rel>>
-    for r in recs.Recs {
-        m := s.recMap(r, vars, rv)
-        rmaps.Push(m)
-        rrels.Push(s.recRels(r, m))
+    if land {
+        t := s.landByObligations(c, rv, beta)
+        if t != Term.None { beta[rv] = t }
     }
-    if rrels.Len() > 0 { s.valRelsAt.Put(I64(c.Site), s.unionRels(rrels, recs.Full, fty, vars, rv)) }
-    if rv >= 0 {
-        beta[rv] = dest if dest.Runs() or s.finds(dest) else here
-        # S21: a value with a destructor landing in a block a become closes is built in the tail scope instead
-        if isBlockTerm(beta[rv]) and s.resultVar >= 0 and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) {
-            beta[rv] = Term.Var(s.resultVar)
-            s.tailDtorRow(s.nameSpan(sp))
-        }
-        # a result nothing puts anywhere lands by its obligations where they need its scope to outlive an argument's
-        # (O18a, O18c) - a constructor's instance is built where it stands, C2d holding it
-        if s.P.T.Role(fty) == types.RoleCtor { land = false }
-        if not land and (dest == Term.None or partD) and s.P.T.Role(fty) != types.RoleCtor {
-            cb := s.bodyOf(c.Target)
-            land = cb >= 0 and s.summed(cb) and s.forced(cb, rv) or c.Target == typed.Callee.Value and s.forcedBy(s.callRels(c), rv)
-        }
-        if land {
-            t := s.landByObligations(c, rv, beta)
-            if t != Term.None { beta[rv] = t }
-        }
-    }
-    # a scope variable no argument determines: where the callee's obligations say it must live (O18b), else where the
-    # call's result lands, else where the call stands (O18a)
-    callee := s.bodyOf(c.Target)
+}
+
+# callAs's scope variables no argument determines: where the callee's obligations say each must live (O18b), else
+# where the call's result lands, else where the call stands (O18a)
+fn (s mut Scoper&) bindRest(callee I64, vars Array<I64>&, recs fnRecs&, rmaps Vec<Array<I64>>&, rrels Vec<Vec<rel>>&, rv I64
+                            ev I64, dest Term, here Term, beta mut Array<Term>&) {
     for v in range vars.Len() {
         if beta[v] != Term.None { continue }
         t := s.requiredBy(callee, v, beta)
@@ -10896,7 +10945,12 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
         if t == Term.None { t = beta[rv] if rv >= 0 else (dest if v == ev and dest.Runs() else here) }
         beta[v] = t
     }
-    # the temporaries built where their scope variable is bound - a task's, what they hold lasting until its join (P2)
+}
+
+# callAs's temporaries, built where their scope variable is bound - a task's, what they hold lasting until its join (P2)
+fn (s mut Scoper&) argTemps(c typed.Call&, callee I64, owner Array<I64>&, firstArg Array<I64>&, here Term, spawned Bool
+                            j Term, beta mut Array<Term>&, vals mut Array<Val>&, landed Array<Bool>&) {
+    n := c.Args.Len()
     for i in range n {
         a := c.Args[i]
         if landed[i] { continue }
@@ -10922,31 +10976,12 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
             vals[i] = s.val(a, Term.Var(s.resultVar) if tailDest else Term.None)
         }
     }
-    # a copy of an element no one holds, for a writable reference parameter, is written and lost (E31b)
-    if s.report {
-        for i in range n {
-            if i < ps.Len() and s.isRef(ps[i]) and (s.P.T.PermOf(ps[i]) & types.Writable) != 0 { s.writtenCopy(c, i, j, sp) }
-        }
-    }
-    # S21: a become's call is made once every scope of the function is closed - it binds none of them, only what the
-    # function was given (its scope variables) and the program's
-    if c.Tail {
-        if s.tailSp.Start < I32(0) { s.tailSp = s.nameSpan(sp) }
-        if s.liftGather and s.resultVar >= 0 { s.tailLifts(c, owner, beta, sp) }
-        if s.report { s.becomeBinds(c, vars, beta, firstArg, sp) }
-    }
-    # ... and an instance with a destructor built in a block a become of the function closes would have it run early
-    # (O16) - a reference to one, or a value that may hold one: a struct holding a "Res&", an any, a type variable's. It
-    # is built in the tail scope instead (S21)
-    if rv >= 0 and isBlockTerm(beta[rv]) and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) and s.resultVar < 0 and s.dtorAt.Start < I32(0) {
-        s.dtorAt = s.nameSpan(sp)
-    }
-    scopes := Array<typed.Scope>(vars.Len())
-    for v in range vars.Len() { scopes[v] = s.passedScope(c, owner, v, beta[v]) }
-    s.plan.Pass(c.Site, scopes)
-    if not spawned { s.passDerived(c, callee, beta) }
-    # what the callee may build into, recorded as this body's building there (O18c, E11c); a task is handed a stand-in for
-    # every scope it binds, made where that scope is (P2)
+}
+
+# callAs: what the callee may build into, recorded as this body's building there (O18c, E11c); a task is handed a
+# stand-in for every scope it binds, made where that scope is (P2)
+fn (s mut Scoper&) buildsOfCall(sp source.Span, ty types.TypeId, c typed.Call&, callee I64, fty types.TypeId, vars Array<I64>&
+                                rv I64, owner Array<I64>&, spawned Bool, beta Array<Term>&) {
     at := s.nameSpan(sp)
     ctor := s.P.T.Role(fty) == types.RoleCtor
     for v in range vars.Len() {
@@ -10967,7 +11002,13 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
             s.buildsThrough(beta[v], s.ownerAt(c, owner, v, at) if isDerived(beta[v]) else at, callee, v)
         }
     }
-    # the callee's obligations, through the bindings (O10c)
+}
+
+# callAs: the callee's obligations, through the bindings (O10c) - the body's, an any's trait method's (T30c), each
+# record's of a value called through (5.3)
+fn (s mut Scoper&) dischargeCall(sp source.Span, c typed.Call&, callee I64, fty types.TypeId, vars Array<I64>&, rv I64
+                                 owner Array<I64>&, vals Array<Val>&, recs fnRecs&, rrels Vec<Vec<rel>>&
+                                 rmaps Vec<Array<I64>>&, home Term, beta Array<Term>&) {
     # a constructor's arguments the instance holds agree on where it lives, said at the first that does not (C2d, O25e)
     agreed := true
     if callee >= 0 and s.report and s.P.T.Role(fty) == types.RoleCtor and rv >= 0 {
@@ -10981,6 +11022,12 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
         for i in range recs.Recs.Len() { s.dischargeRels(sp, rrels[i], recs.Recs[i].Body, s.recBeta(recs.Recs[i], rmaps[i], beta), c, agreed) }
         if not recs.Full { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp, vars.Len()), -1, withHome(beta, home), c, agreed) }
     }
+}
+
+# callAs's value: what its result carries (records, instance, bindings) and where it lives
+fn (s mut Scoper&) callValue(c typed.Call&, ty types.TypeId, callee I64, fty types.TypeId, vars Array<I64>&, rv I64
+                             owner Array<I64>&, recs fnRecs&, beta Array<Term>&, here Term, sl Term, want Term) Val {
+    n := c.Args.Len()
     # what its result carries, where it is a function value (5.2)
     if s.isFunc(ty) { s.siteRecs.Put(I64(c.Site), s.resultRecs(c, callee, recs, vars, rv, beta)) }
     # T22d: the instance it gives - a constructor's, made of its arguments; a callee's returns', through this call
