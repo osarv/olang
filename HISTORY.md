@@ -36854,3 +36854,4 @@ parameters is not allowed (M21), so `Put` it is. `tools/io_rename.olang` (in `ol
 tree - 774 files; the old migration tools io_print, io_try and io_fix and their fixture keep the old names, being the record.
 
 - 2026-11-14, S1b migration: tools/oneline_migrate.olang rewrote 320 one-statement blocks (if/else/for) in 82 files of compiler/, std/, tests/, tools/, bench/ to the one-line form; formatter keeps it, goldens recaptured, verify green but diaggold (line numbers, recaptured).
+- 2026-11-14, refactor round 1: compiler/tools/nesting.olang lists every function's deepest block nesting and length; before: 7368 functions, 154 over depth 4, 6 over depth 5 (all at 6), 6 over 200 lines; the six at depth 6 (check fold, scope bndRecs/bndError, lower reclaimSites, parse shapeOf, eval writesAfter) split into helpers, now at 4 or less (148 over 4, none over 5); the IR the compiler emits for bench/ and tests/ byte-identical before and after.
