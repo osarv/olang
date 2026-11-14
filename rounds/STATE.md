@@ -87,3 +87,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - 2026-11-13 18:40 CET: user allowed burning the rest of this week (0.89 at 17:34 UTC, reset 05:00 CET Sat), olang first as planned. Running: wt-leftA (scope shapes, twin records, p8 msg), wt-leftB (memory leftovers). Then the refactor pass.
 - 2026-11-13: leftA + leftB merged, verified, pushed (leftA found a use-after-free on a reassigned reference parameter). wt-axes running. Next: target-typed literals, print/println, quick run, warnings; then refactor.
 - 2026-11-14 night: axes, ease, lits merged, verified, pushed. printcap renaming io.Print* -> io.Write* (my call, user asleep).
+- 2026-11-14 01:40 CET: printcap merged, verified, pushed (io.Put* rename). Starting one-liner tool (sonnet low).
