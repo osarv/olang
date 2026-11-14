@@ -12,7 +12,9 @@ with:
 - clang 18, 19 or 20. On Ubuntu 24.04 that is `sudo apt install clang-18`; older releases get it from
   https://apt.llvm.org: `wget https://apt.llvm.org/llvm.sh && sudo bash llvm.sh 18`.
 - make, xz, libffi and the C library's headers: `sudo apt install make xz-utils libffi-dev libc6-dev`.
-- About 3 GB of memory and 1 GB of disk.
+- About 4.5 GB of memory free (the compiler builds itself in 3.7 GB, the rest is clang) and 1 GB of disk. The build runs as many of clang's compiles at once as the memory
+  available holds (512 MB each), never more than one per core; `OLANG_JOBS=N make` sets the number. Under WSL the
+  memory is what `.wslconfig`'s `memory=` gives it (by default half the machine's).
 
 Then, in the checkout:
 
@@ -20,9 +22,11 @@ Then, in the checkout:
 make
 ```
 
-This builds `build/olang` from the committed seed (`seed/` holds the compiler's own LLVM IR). clang compiles the seed
-into a first compiler, which builds the compiler from its source; that one builds it again, and the last two builds
-must be byte for byte equal. It takes a few minutes. Before compiling anything, `make` checks for the tools above and
+This builds `build/olang` from the committed seed (`seed/` holds the compiler's own LLVM IR), in two stages: clang
+compiles the seed into a first compiler, which builds the compiler from its source as a quick build (no link-time
+optimization); that one builds it again fully optimized, and installs it. Each stage says when it starts, its build's
+phases, and how long it took; the whole takes a few minutes. (`make fixedpoint`, part of `make verify`, has the
+installed compiler build itself once more and checks the two are byte for byte equal.) Before compiling anything, `make` checks for the tools above and
 says which package to install for anything missing (`make prereq` runs only that check).
 
 After a `git pull`, run `make` again: it rebuilds the compiler only when its sources changed.
@@ -42,8 +46,20 @@ build/olang hello.olang       # builds the program quickly (-quick) and runs it;
 build/olang test hello.olang  # runs the file's tests
 build/olang help              # every mode and option
 build/olang                   # the prompt: each entry runs as you type it
-make install                  # links ~/.local/bin/olang to build/olang, so `olang` runs from anywhere
+make install                  # installs olang into ~/.local, so `olang` runs from anywhere
 ```
+
+`make install` copies the compiler, the standard library and `SPEC.md` into `~/.local/lib/olang` and links
+`~/.local/bin/olang` to it, so the installed olang no longer depends on the checkout: deleting or rebuilding it changes
+nothing, and installing again replaces the old install. Where `~/.local/bin` is not on `PATH`, it adds one line,
+`export PATH="$HOME/.local/bin:$PATH"` (spelled out, under a comment saying make install added it), to `~/.bashrc`
+(bash), `~/.zshrc` (zsh) or `~/.profile`, once, and says so; a new terminal picks it up. `PREFIX=DIR` installs into
+`DIR/lib/olang` and `DIR/bin`, `PATHFILE=FILE` names another startup file and `PATHFILE=none` changes none.
+It also installs the editor support (`editors/`): the Neovim plugin as a package Neovim loads by itself
+(`~/.local/share/nvim/site/pack/olang`), and its syntax and `:compiler olang` for Vim (`~/.vim/pack/olang`), each where
+that editor is found; `EDITORS=none` leaves them out. `make uninstall` (with the same `PREFIX`) removes the install,
+the link, the editor packages and that line; it leaves remote packages
+fetched into `~/.cache/olang`, a Jupyter kernel spec and builds' `build/` directories.
 
 ### Try it
 

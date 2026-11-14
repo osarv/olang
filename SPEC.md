@@ -8335,6 +8335,13 @@ for the module (or the root's code, or the instances) that holds only those text
 optimization (`NAME.HASH.loc.o`). A line added or removed above a function therefore changes no object holding code,
 only the text objects. What is printed is the same either way. `compile`, which makes one object, keeps the texts in it.
 
+**B3m (how many compiles at once).** A build's objects are compiled side by side, and a ThinLTO link's back ends run as
+many at once as they are. How many: the environment variable `OLANG_JOBS`, where it holds a positive number; else one
+per processor online, but no more than the memory available when the compiles start (`MemAvailable`) holds at 512 MB
+each, and at least one. With `OLANG_TIMES` set, a build says on the standard error each phase as it ends - the front
+end's passes, the compiles (each as it ends, `n/m`), the link - with how long it took and the compiler's resident
+memory, now and at most. Neither changes what is built.
+
 ### 10.2 Program entry
 
 **B4.** In `build`, `profile` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:

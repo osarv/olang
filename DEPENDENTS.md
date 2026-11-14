@@ -116,6 +116,17 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |
 
+## An environment variable the compiler reads
+
+`OLANG_JOBS`, `OLANG_TIMES`, `OLANG_CLANG`, `OLANG_OBJECTS` and the like:
+
+| place | why |
+|---|---|
+| where it is read (`compiler/build.olang` `width`/`Phase`, `target.olang`, `olang.olang`) | its effect |
+| `SPEC.md` (B3j, B3m, B12d) | the normative text |
+| `compiler/olang.olang` `help` ("environment:"), `compiler/goldens/drv.txt` (`make drvgold`) | `olang help` lists the build's variables |
+| `README.md`, `docs/install.md`, `makefile` (the bootstrap sets `OLANG_TIMES`) | where users are told of it |
+
 ## A std module or API
 
 | place | why |
@@ -214,4 +225,6 @@ capabilities are described in SPEC B15 and `editors/README.md` by hand.
 `lua/olang/init.lua` (format and LSP commands), `compiler/olang.vim` (makeprg `olang compile %` and errorformat: the diagnostic row
 format `path:line:col: error[RULE]: message` of B11), `ftdetect/olang.lua`, `editors/README.md`, `editors/nvim/README.md`.
 A change to the diagnostic row format, a mode name used there, or a keyword touches all of them. `make release` packs
-`editors/` as is (`makefile` `release`).
+`editors/` as is (`makefile` `release`). `make install` (`install-editors`) copies `editors/nvim` whole as a Neovim
+package and its `syntax/olang.vim` and `compiler/olang.vim` for Vim, with a filetype rule of its own that follows
+`ftdetect/olang.lua`'s: a new Vimscript file, or a change to what ftdetect recognises, changes it.

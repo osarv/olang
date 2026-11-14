@@ -37030,3 +37030,59 @@ write in front (`the items have no common type: 3 is I64 and 'h' is Char`, help 
 likewise. Where a type is expected or written (`Array<Char>[3, 'h']`) the number adapts as T6 says. Checker `ownElem`
 (`mixedLit`, `LiteralMixed`), generics' `ownLiteral` answers Unknown so the checker speaks. Tests: tests/barelits.olang
 (run-time and `comptime`), checks/cases/e20litmixed.olang.
+## The bootstrap's memory: compiles at once from memory, two stages, make fixedpoint (B3m; 2026-11-14, wt-bootfix)
+
+The user's `make boot` in WSL (12 cores, ~7.4 GB visible) was killed for lack of memory at the seed's build of
+`build/olang.1`: a build ran one clang per core online (`Config.width`, nothing set `Jobs`), beside the compiler's own
+~3.7 GB. The user approved three changes before tagging v1.0.0, then asked for the bootstrap's memory to be as small as
+cheap orchestration makes it, and for the compiler's own peak to be measured by phase (shrinking it is a later round).
+
+- **How many compiles at once (B3m).** `OLANG_JOBS=N` where set, else min(cores online, `MemAvailable` / 512 MB), at
+  least one, read when the compiles start - so the compiler's own resident memory is already out of what is available.
+  The budget: clang 19 on the compiler's four largest modules peaked at 99-144 MB (`-O3 -flto=thin` and `-O2`), so 512
+  MB leaves room for a program's larger modules. A ThinLTO link's back ends were one per core too (the linker plugin's
+  default): `-flto-jobs` now gets the same width, added after the link's hash so it never relinks by itself. The link
+  already ran after every compile ended, never beside them.
+- **Progress.** `OLANG_TIMES` (it existed: each phase's milliseconds) now adds the compiler's resident memory and its
+  high-water mark (`/proc/self/status`), says how many objects compile and how many at once, and counts each compile
+  as it ends (`n/m`, an atomic counter across the runner tasks). The bootstrap sets it for its stages and says each
+  stage's start and duration.
+- **Two stages.** The seed builds `build/olang.1`, which builds `build/olang.2`, both at the default `-O3` and LTO,
+  installed (stage 1 was `-quick` at first; measured below, it cost time and saved no memory, so it went back). The check that the compiler builds itself byte for byte moved to `make fixedpoint`
+  (`build/olang` -> `build/olang.3`, `cmp`), run by `make verify` after boot, so verify checks what it checked; a boot
+  cache entry whose compiler passed is marked `fixed`, so a verify that reuses a bootstrap does not build it again.
+  `olang help` lists the build's environment variables.
+
+Measured on the 4-core container from a clean `build/` (BOOT_FRESH=1, the process tree's resident memory sampled
+every 0.25 s): before, 204 s and 4.23 GB at most (seed 60 s; seed -> olang.1 113 s; the next two builds 14 s each,
+reusing every object); after, 250 s and 4.24 GB (seed 60 s; stage 1 -quick 77 s, its compiles at -O2 with code
+generated 60 s; stage 2 113 s: compiles 26 s, ThinLTO link 69 s), and `make fixedpoint` 15 s. The -quick stage costs
+time here: its objects are not the optimized build's, so stage 2 reuses none, where the old second and third builds
+reused the first's. Peak memory is the compiler's own in every stage: 3.66-3.74 GB resident, the clangs together
+0.57 GB, one clang or the linker at most 0.34 GB. By phase, building compiler/olang.olang: load 172 MB, check 761,
+evaluate 967, scope judged 1584, scope 1869, lower+emit 3725 (the largest step, +1.85 GB), then flat through the
+compiles and the link - nothing the front end built is given back before clang runs (left for the round that shrinks
+the compiler's memory). So at 8 GB (~6.5 GB usable) the bootstrap needs about 3.7 GB for the compiler plus 512 MB per
+compile the rest holds - six at once there, about 0.9 GB in use - near 4.7 GB.
+
+`make install` became a real install the same day (the user): it had linked `~/.local/bin/olang` to the checkout's
+`build/olang`, so deleting or rebuilding the checkout changed the installed compiler. Now it copies the compiler, std
+(runtime and prelude included) and SPEC.md into `PREFIX/lib/olang` laid out as in the checkout - the compiler finds
+std and the spec from its own file (`load.StdDir`, `diag.SpecPath`: `../std`, `../SPEC.md`; nothing else is read
+beside it but a release's `../llvm`) - by way of `lib/olang.new` renamed into place, and links `PREFIX/bin/olang` to
+it. Where `PREFIX/bin` is not on `PATH` it appends one marked line to the shell's startup file (`~/.bashrc`, `~/.zshrc`
+by the environment's `SHELL`, else `~/.profile`; `PATHFILE` names another, `PATHFILE=none` none), only once. `make
+uninstall` removes the directory, the link where it points into it and the marked line; `~/.cache/olang` (remote
+packages), a Jupyter kernel spec and builds' `build/` are left, being the user's data rather than the install's.
+Tested: installed to a temporary PREFIX, the checkout's `build/` moved away, the installed olang ran, tested and built
+a program and printed `explain B3m`.
+
+Then (the user) `make install` installs the editor support too: editors/nvim copied as a Neovim package into
+`$XDG_DATA_HOME/nvim/site/pack/olang/start/olang` (default `~/.local/share`), which Neovim loads with no change to
+init.lua, independent of PREFIX; its Vimscript parts (syntax, `:compiler olang`, plus a generated `ftdetect/olang.vim`,
+since the plugin's own filetype rule is Lua) into `~/.vim/pack/olang/start/olang` for plain Vim - each only where that
+editor is on PATH or its directory exists, else a line saying where the files are. editors/ holds nothing else
+installable (Helix and other LSP clients take a configuration line, printed as a pointer). `EDITORS=none` skips it;
+`make uninstall` removes exactly the two `pack/olang` directories. Tested with a temporary HOME: plain Vim 9.1 sets
+filetype and syntax olang on a `.olang` file and `:compiler olang` sets `makeprg`; no Neovim is in the container, so the
+Neovim package was checked by its files only.

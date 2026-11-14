@@ -147,16 +147,40 @@ ThinFrom I64 = 8 << 20
 # 120 s and the front end 5-10% longer), and a program below ThinFrom - every benchmark - does not link by ThinLTO
 ImportLimit I64 = 70
 
-# OLANG_TIMES set in the environment: how long each phase of a build took, in milliseconds, written to the standard
-# error as the phase ends - the front end's passes, clang's compiles, the link; set to "front", the build ends after
+# B3m: the memory one compile is given, in MB, when the number run at once is chosen: clang's peak on the compiler's
+# largest modules measured 100-145 MB (2026-11-14, clang 19, -O3 -flto=thin and -O2), and a ThinLTO back end's about
+# the same per module - four times that, for a program's larger modules and the link's own
+JobMemory I64 = 512
+
+# OLANG_TIMES set in the environment: how long each phase of a build took, in milliseconds, and the compiler's memory
+# as it ended (its resident size, and the most it has been resident), written to the standard error as the phase ends -
+# the front end's passes, clang's compiles (each one's end counted, n/m), the link; set to "front", the build ends after
 # the front end, so the compiler's own speed is measured apart from clang's
 PhaseAt mut I64 = 0
 fn Phase(name String&) {
     v := try os.Env("OLANG_TIMES") catch os.Error { return }
     now := time.Now()
-    if PhaseAt != 0 { sayErr($"olang: " $name " " $((now - PhaseAt) / 1000000) " ms\n") }
+    if PhaseAt != 0 { sayErr($"olang: " $name " " $((now - PhaseAt) / 1000000) " ms, " $memoryNow() "\n") }
     PhaseAt = now
     if v == "front" and name == "lower+emit" { os.Exit(0) }
+}
+
+# whether the build says how far it is (OLANG_TIMES)
+fn timed() Bool { return (try os.Env("OLANG_TIMES") catch os.Error default "") != "" }
+
+# this process's resident memory now and at most so far, in MB, from /proc/self/status
+fn memoryNow() String {
+    status := try os.ReadFile("/proc/self/status") catch os.Error { return "memory unknown" }
+    return $(kbOf(status, "VmRSS:") / 1024) " MB resident (at most " $(kbOf(status, "VmHWM:") / 1024) " MB)"
+}
+
+# the number of kB a /proc file's row named key holds, 0 where it has none
+fn kbOf(text String&, key String&) I64 {
+    for line in text.Lines() {
+        if not line.StartsWith(key) { continue }
+        return try line[key.Len():].Trim().Split(" ")[0].ParseInt() catch default 0
+    }
+    return 0
 }
 
 # the terminal's colour code around text, where colour is on
@@ -273,11 +297,19 @@ fn (c mut Config&) clangVersion() String& {
     return c.version
 }
 
-# how many compiles run at once: Jobs, or one per core this machine has online
+# B3m: how many compiles run at once - Jobs, else OLANG_JOBS, else one per core this machine has online, but no more than
+# the memory available now holds at JobMemory each (at least one)
 fn (c Config&) width() I64 {
     if c.Jobs > 0 { return c.Jobs }
+    asked := try (try os.Env("OLANG_JOBS") catch os.Error default "").Trim().ParseInt() catch default 0
+    if asked > 0 { return asked }
     n := unistd.sysconf(84) # _SC_NPROCESSORS_ONLN
-    return n if n > 0 else 1
+    cores := n if n > 0 else 1
+    meminfo := try os.ReadFile("/proc/meminfo") catch os.Error { return cores }
+    avail := kbOf(meminfo, "MemAvailable:")
+    if avail <= 0 { return cores }
+    fits := avail / (JobMemory * 1024)
+    return 1 if fits < 1 else cores.Min(fits)
 }
 
 # ---- content hashes: SHA-256 (FIPS 180-4) ----
@@ -437,6 +469,8 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I
     chan.Init(queue)
     for k in order { try chan.Send(queue, k) catch chan.Error { unreachable } }
     workers := width if width < n else n
+    Ran = 0
+    if timed() { sayErr($"olang: compiling " $n " objects, " $workers " at once\n") }
     join {
         for _ in range workers { spawn runner(queue, cmds, status, said) }
         chan.Close(queue)
@@ -453,7 +487,19 @@ fn runner(queue mut chan.Chan<I64>&, cmds Array<Array<String&>&>&, status mut Ar
         }
         status[k] = out.Status
         said[k] = $out.Stdout $out.Stderr
+        if timed() { sayErr($"olang: compiled " $(Ran.AtomicAdd(1) + 1) "/" $cmds.Len() " " $filepath.Base(outputOf(cmds[k])) "\n") }
     }
+}
+
+# how many of RunAll's commands have ended (OLANG_TIMES's n/m)
+Ran mut I64 = 0
+
+# what a clang command writes: the argument after its -o
+fn outputOf(cmd Array<String&>&) String& {
+    for i in range cmd.Len() - 1 {
+        if cmd[i] == "-o": return cmd[i + 1]
+    }
+    return cmd[cmd.Len() - 1]
 }
 
 # ---- objects ----
@@ -704,6 +750,9 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     if linkCurrent(bin, stamp, h) { return }
     try os.Remove(stamp) catch os.Error { }
     if c.Clang == "" { error Failed.Unbuilt }
+    # B3m: ThinLTO's back ends side by side as many as compiles run at once, not one per core - left out of the hash,
+    # which says what is linked, not how fast
+    if c.Thin { args.Push($"-flto-jobs=" $c.width()) }
     out := try os.Output.Exec(...args.ToArray(), capture = false) catch os.Error { error Failed.Reported }
     if out.Status != 0 { error Failed.Reported }
     c.Linked++
