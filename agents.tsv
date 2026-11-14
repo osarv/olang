@@ -90,3 +90,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	plot	sonnet	medium	done(goldens left, disk full)	192	47	48	-		std/plot SVG
 2026-11-14	frame	opus	medium	done	227	83		pass(2nd)		std/frame, array helpers, rand distributions
 2026-11-14	nvimcmd	sonnet	low	done				unverified		nvim :Olang* commands + keymaps
+2026-11-14	plotshow	sonnet	low	done				targeted		p.Show viewer choice; WSL interop message
