@@ -21,7 +21,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | mean, variance, percentiles, histograms (sums, minima and maxima are the arrays' own, E39); `Bins(a, k)` - k equal bins over the values, counts and edges |
 | `frame.olang` | data frames: tables of records as `ColumnVec<R>` (T7e) - `Read`/`ReadJson` (CSV, JSON), `Csv`/`Json`, `Head`, `Tail`, `Filter`, `SortBy`/`SortByDescending`, `GroupBy` (a `Group<K, V>` per key: count, sum, mean, min, max), `Join` (`Joined<L, R>`), `Describe` (a `Summary` per number column), `Table` (aligned text); a notebook shows a table as HTML |
-| `plot.olang` | SVG charts: `p := plot.Plot(title = "T")`, `try p.Line(xs, ys, name = "a")`, `Scatter`, `Histogram(v, bins = 10)`, `Heatmap(cells, columns)`, `XRange`/`YRange`; `p.Svg()`, `try p.Save("a.svg")`; shows inline in Jupyter (`Display`) |
+| `plot.olang` | SVG charts: `p := plot.Plot(title = "T")`, `try p.Line(xs, ys, name = "a")`, `Scatter`, `Histogram(v, bins = 10)`, `Heatmap(cells, columns)`, `XRange`/`YRange`; `p.Svg()`, `try p.Save("a.svg")`, `try p.Show()` (temp file, default viewer); shows inline in Jupyter (`Display`) |
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error`; `Saturating<T>`, an integer whose operators clamp at its limits instead of wrapping |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |

@@ -1620,6 +1620,7 @@
 | ok - a histogram counts into equal bins; a heatmap fills cells; ranges can be fixed
 | ok - data that does not fit is an error
 | ok - Save writes the SVG file
+| ok - the viewer is chosen from the system's facts
 === test std/pool.olang
 | status 0
 | ok - Pool.Add: values are added, read and changed through handles

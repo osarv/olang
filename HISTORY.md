@@ -36982,6 +36982,7 @@ held as F64 (a Vec is handed over as `v.View()`, as std/stats takes it). Failing
 Auto ranges widen to a multiple of a 1-2-5 tick step; a histogram's y includes 0; a heatmap's row 0 is on top.
 `Display()` returns `Display.Svg`, so a Plot as a cell's value is shown inline (B23). The SVG has a white background
 so it reads in dark notebooks. Tests (built and `-interpret`) check the SVG text for structure, not pixels.
+`p.Show()` (2026-11-14, the user's request) saves the SVG to a kept temporary file and starts the default viewer without waiting: wslview or explorer.exe (wslpath -w) on WSL, open on macOS, xdg-open elsewhere, else an os.Error naming what to install; the choice is `viewerFor`, a pure function of the facts, tested per branch.
 ## Quick data science in std: std/frame, array helpers, draws (2026-11-14, wt-frame)
 
 The user approved the quick data-science items on 2026-11-13 (plan.md, "Quick data science"): std holds what works on
