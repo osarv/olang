@@ -3331,18 +3331,20 @@ fn (p mut Program&) Unique(t types.TypeId) Bool {
     return p.T.Unique(t)
 }
 
+# partsReady of a declared type's fields, cases or base
+fn (p mut Program&) namedPartsReady(t types.TypeId, depth I64) {
+    match p.T.DeclKindOf(p.T.DeclOf(t)) {
+        case types.DeclKind.Struct { for f in p.T.Items(p.T.Fields(t)) { p.partsReady(f, depth + 1) } }
+        case types.DeclKind.Enum { for f in p.T.Items(p.T.Cases(t)) { p.partsReady(f, depth + 1) } }
+        case types.DeclKind.Over { p.partsReady(p.T.Base(t), depth + 1) }
+        case _ { }
+    }
+}
+
 fn (p mut Program&) partsReady(t types.TypeId, depth I64) {
     if depth > 16 or p.T.IsRef(t): return
     match p.T.KindOf(t) {
-        case types.Kind.Named {
-            if not p.Body(t): return
-            match p.T.DeclKindOf(p.T.DeclOf(t)) {
-                case types.DeclKind.Struct { for f in p.T.Items(p.T.Fields(t)) { p.partsReady(f, depth + 1) } }
-                case types.DeclKind.Enum { for f in p.T.Items(p.T.Cases(t)) { p.partsReady(f, depth + 1) } }
-                case types.DeclKind.Over { p.partsReady(p.T.Base(t), depth + 1) }
-                case _ { }
-            }
-        }
+        case types.Kind.Named { if p.Body(t): p.namedPartsReady(t, depth) }
         case types.Kind.Array { p.partsReady(p.T.Elem(t), depth + 1) }
         case types.Kind.Record { for f in p.T.Items(p.T.Parts(t)) { p.partsReady(f, depth + 1) } }
         case _ { }

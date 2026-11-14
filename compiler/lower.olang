@@ -790,17 +790,8 @@ fn (ln mut lowering&) copyLocal(l mir.LocalId) mir.Operand { return mir.Operand.
 
 # an operand as a local: itself where it is a copy of a local, else held in a temporary
 fn (ln mut lowering&) local(x mir.Operand, ty types.TypeId, sp source.Span) mir.LocalId {
-    match x {
-        case mir.Operand.Copy(p) {
-            if p.Path.N == I32(0) {
-                match p.B {
-                    case mir.Base.Local(l) { return l }
-                    case _ { }
-                }
-            }
-        }
-        case _ { }
-    }
+    whole := wholeLocal(x)
+    if whole >= 0: return mir.LocalId(I32(whole))
     l := ln.temp(ty, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(x)))
     return l
@@ -2790,22 +2781,9 @@ fn has(xs Vec<I64>&, x I64) Bool {
 
 # the local statement i of block bi lets go of - the old value a store's count is taken down for - -1 for none
 fn (ln mut lowering&) letGoOf(bi I64, i I64) I64 {
-    match ln.F.Blocks[bi].Stmts.At(i) {
-        case mir.Stmt.Holders(_, x, by) {
-            if by != mir.Operand.Const(mir.I64T, -1): return -1
-            match x {
-                case mir.Operand.Copy(p) {
-                    if p.Path.N != I32(0): return -1
-                    return match p.B {
-                        case mir.Base.Local(l): I64(l)
-                        case _: -1
-                    }
-                }
-                case _ { return -1 }
-            }
-        }
-        case _ { return -1 }
-    }
+    st := ln.F.Blocks[bi].Stmts.At(i)
+    if st != mir.Stmt.Holders or st.by != mir.Operand.Const(mir.I64T, -1): return -1
+    return wholeLocal(st.x)
 }
 
 # the Reclaim of what dying e names where the locals in lv.cur are in use after it, and what the dying after it name have

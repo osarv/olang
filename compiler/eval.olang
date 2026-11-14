@@ -1162,18 +1162,11 @@ fn (m mut Machine&) retire(fi I64, p Ptr, ty types.TypeId) {
     if slot >= m.nAl or m.al[slot].Kind == aFree or m.al[slot].Retired >= 0 { return }
     file, sp := m.stopFile, m.stopSp
     k := fi
-    for k >= 0 {
+    for k >= 0 and m.Library.Has(m.fns.At(m.fs[k].Fn).File): k--
+    if k >= 0 and k < fi {
         f := m.fns.At(m.fs[k].Fn)
-        if not m.Library.Has(f.File) {
-            if k < fi {
-                match f.Blocks[m.fs[k].Block].T {
-                    case mir.Term.Call(csp, _) { file, sp = f.File, csp }
-                    case _ { }
-                }
-            }
-            break
-        }
-        k--
+        t := f.Blocks[m.fs[k].Block].T
+        if t == mir.Term.Call: file, sp = f.File, t.sp
     }
     m.retiredAt.Push(pair.Pair(file, sp))
     m.al[slot].Retired = m.retiredAt.Len() - 1

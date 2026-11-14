@@ -2624,20 +2624,14 @@ fn (s mut Scoper&) argCall(a typed.Expr&, depth I64) typed.Expr?& {
     x := s.unPromoted(s.unAway(a))
     if typed.Call.Of(x) is not null: return x
     if depth > 4: return null
-    match x {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) {
-            match p {
-                case typed.Lvalue.Temp(_, _, v, _): return s.argCall(v, depth + 1)
-                case typed.Lvalue.Local(_, _, id) {
-                    if not s.held.Has(I64(id)): return null
-                    hx := try s.held.Get(I64(id)) catch { return null }
-                    return s.argCall(hx, depth + 1)
-                }
-                case _: return null
-            }
-        }
-        case _ { return null }
+    p := match x {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q), typed.Expr.Take(_, _, q): q
+        case _: return null
     }
+    if p == typed.Lvalue.Temp: return s.argCall(p.value, depth + 1)
+    if p != typed.Lvalue.Local or not s.held.Has(I64(p.id)): return null
+    hx := try s.held.Get(I64(p.id)) catch { return null }
+    return s.argCall(hx, depth + 1)
 }
 
 # whether any of a value's functions is a generator's walk (D18's rules judge those)
@@ -3318,20 +3312,25 @@ fn (s mut Scoper&) beyondBound(b I64, rels Vec<rel>&, fty types.TypeId, adapter 
 }
 
 # a term of body b's obligations as a position of a function type's bound (beyondBound): PosNone for one no position is
+# posOf of one of a body's scope variables
+fn varPos(body typed.Body&, adapter Bool, v typed.ScopeVar) I64 {
+    match v {
+        case typed.ScopeVar.Param(l) {
+            j := paramIndexIn(body, l)
+            if adapter { return PosHome if j == 0 else (j - 1 if j > 0 else PosNone) }
+            return j if j >= 0 else PosNone
+        }
+        case typed.ScopeVar.Result { return PosResult }
+        case typed.ScopeVar.Capture(_) { return PosHome }
+        case _ { return PosNone }
+    }
+}
+
 fn (s Scoper&) posOf(body typed.Body&, adapter Bool, t Term) I64 {
     match t {
         case Term.Var(k) {
             if k < 0 or k >= body.Vars.Len() { return PosNone }
-            match body.Vars[k] {
-                case typed.ScopeVar.Param(l) {
-                    j := paramIndexIn(body, l)
-                    if adapter { return PosHome if j == 0 else (j - 1 if j > 0 else PosNone) }
-                    return j if j >= 0 else PosNone
-                }
-                case typed.ScopeVar.Result { return PosResult }
-                case typed.ScopeVar.Capture(_) { return PosHome }
-                case _ { return PosNone }
-            }
+            return varPos(body, adapter, body.Vars[k])
         }
         case Term.Derived(p, w) {
             q := p - 1 if adapter else p
@@ -12691,18 +12690,10 @@ fn (s mut Scoper&) noteCondValue(rec I64, x typed.Expr&) {
 
 # the reference parameter whose scope variable a term is, -1 for none
 fn (s mut Scoper&) paramOfTerm(t Term) I64 {
-    match t {
-        case Term.Var(k) {
-            if k < s.B!.Vars.Len() {
-                match s.B!.Vars[k] {
-                    case typed.ScopeVar.Param(l) { return I64(l) if s.B!.Locals[I64(l)].Name != source.NameId(0) else -1 }
-                    case _ { }
-                }
-            }
-        }
-        case _ { }
-    }
-    return -1
+    if t != Term.Var or t.i >= s.B!.Vars.Len(): return -1
+    v := s.B!.Vars[t.i]
+    if v != typed.ScopeVar.Param: return -1
+    return I64(v.local) if s.B!.Locals[I64(v.local)].Name != source.NameId(0) else -1
 }
 
 # B11/O25e: of two arguments in different scopes, the one in a block that closes first is to be made where the other's
@@ -13072,18 +13063,8 @@ fn (s mut Scoper&) valueLocalName(x typed.Expr&) String {
 # whether a place is a part of a temporary, reached without a reference
 # a reference to fixed storage widened to one of a run-time length (E12, T7c): the reference widened
 fn unWidened(x typed.Expr&) typed.Expr& {
-    match x {
-        case typed.Expr.Prim(_, _, op, _, args) {
-            if op == typed.PrimOp.Convert and args.Len() == 1 {
-                match args[0] {
-                    case typed.Expr.Slice(_, _, _) { return args[0] }
-                    case _ { }
-                }
-            }
-        }
-        case _ { }
-    }
-    return x
+    if x != typed.Expr.Prim or x.op != typed.PrimOp.Convert or x.args.Len() != 1: return x
+    return x.args[0] if x.args[0] == typed.Expr.Slice else x
 }
 
 

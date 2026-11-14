@@ -3523,15 +3523,11 @@ fn (c mut Checker&) b5aInit(w mut b5aWalk&, g I64) {
     b := c.Bodies[g]
     if b.Root is null { return }
     for st in b.Root!.Stmts {
-        match st {
-            case typed.Stmt.Assign(_, p, x) {
-                match p {
-                    case typed.Lvalue.Global(_, _, _, _) { c.b5aExpr(w, x) }
-                    case _ { c.b5aStmt(w, st) }
-                }
-            }
-            case _ { c.b5aStmt(w, st) }
+        if st == typed.Stmt.Assign and st.target == typed.Lvalue.Global {
+            c.b5aExpr(w, st.value)
+            continue
         }
+        c.b5aStmt(w, st)
     }
 }
 
@@ -9616,16 +9612,8 @@ fn (c mut Checker&) eqShaped(t types.TypeId, m I64) Bool {
 fn (c mut Checker&) dropArgs(args Array<ast.Expr&>&) {
     if args.Len() == 0 { return }
     for a in args {
-        match a {
-            case ast.Expr.Lambda(_, _) { }
-            case ast.Expr.Named(_, _, x) {
-                match x {
-                    case ast.Expr.Lambda(_, _) { }
-                    case _ { c.expr(x, types.UnknownT) }
-                }
-            }
-            case _ { c.expr(a, types.UnknownT) }
-        }
+        x := a.x if a == ast.Expr.Named else a
+        if x != ast.Expr.Lambda: c.expr(x, types.UnknownT)
     }
 }
 
@@ -9824,23 +9812,20 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
 fn (c mut Checker&) staticArray(x typed.Expr&, want types.TypeId) typed.Expr?& {
     if (c.P.T.PermOf(want) & types.Writable) != 0 or c.P.T.KindOf(c.P.T.Referent(want)) != types.Kind.Array { return null }
     el := c.P.T.Elem(c.P.T.Referent(want))
-    match x {
-        case typed.Expr.Make(msp, mt, m) {
-            if m.Kind != typed.MakeKind.Array or not c.P.T.Same(c.P.T.Elem(mt), el) { return null }
-            if not (c.isNumber(el) or el == types.BoolT or el == c.P.T.Ref(c.textType(), types.ReadOnly)) { return null }
-            ks := Array<typed.Const&>(m.Items.Len(), typed.Const.Bits(0))
-            for i in range m.Items.Len() {
-                match m.Items[i] {
-                    case typed.Expr.Lit(_, lt, _) if lt == types.UnknownT { return null }
-                    case typed.Expr.Lit(_, _, bits) { ks[i] = typed.Const.Bits(bits) }
-                    case typed.Expr.Data(_, _, _, k) { ks[i] = k }
-                    case _ { return null }
-                }
-            }
-            return typed.Expr.Data(msp, want, c.fr().File, typed.Const.Items(ks))
+    if x != typed.Expr.Make: return null
+    m := x.m
+    if m.Kind != typed.MakeKind.Array or not c.P.T.Same(c.P.T.Elem(x.ty), el) { return null }
+    if not (c.isNumber(el) or el == types.BoolT or el == c.P.T.Ref(c.textType(), types.ReadOnly)) { return null }
+    ks := Array<typed.Const&>(m.Items.Len(), typed.Const.Bits(0))
+    for i in range m.Items.Len() {
+        match m.Items[i] {
+            case typed.Expr.Lit(_, lt, _) if lt == types.UnknownT { return null }
+            case typed.Expr.Lit(_, _, bits) { ks[i] = typed.Const.Bits(bits) }
+            case typed.Expr.Data(_, _, _, k) { ks[i] = k }
+            case _ { return null }
         }
-        case _ { return null }
     }
+    return typed.Expr.Data(x.sp, want, c.fr().File, typed.Const.Items(ks))
 }
 
 fn isArrayMake(x typed.Expr&) Bool {
@@ -18296,21 +18281,18 @@ type payloadItem struct(Name source.NameId, Sub ast.Pattern&) { Name, Sub }
 
 fn (c mut Checker&) payloadItems(p ast.Pattern&) Vec<payloadItem> {
     out Vec<payloadItem>
-    match p {
-        case ast.Pattern.Case(_, y, subs) {
-            path := exprPath(y)
-            if path is null: return out
-            w, et := c.errorWord(path)
-            if w < 0: return out
-            fields := c.P.WordFields(c.P.T.DeclOf(et), w)
-            for i, sub in subs {
-                match sub {
-                    case ast.Pattern.Field(_, n, q) { out.Push(payloadItem(n, q)) }
-                    case _ { if i < fields.Len(): out.Push(payloadItem(fields[i].Name, sub)) }
-                }
-            }
+    if p != ast.Pattern.Case: return out
+    path := exprPath(p.path)
+    if path is null: return out
+    w, et := c.errorWord(path)
+    if w < 0: return out
+    fields := c.P.WordFields(c.P.T.DeclOf(et), w)
+    for i, sub in p.subs {
+        if sub == ast.Pattern.Field {
+            out.Push(payloadItem(sub.name, sub.sub))
+        } else if i < fields.Len() {
+            out.Push(payloadItem(fields[i].Name, sub))
         }
-        case _ { }
     }
     return out
 }
