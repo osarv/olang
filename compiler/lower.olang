@@ -71,6 +71,10 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # E16g: a checked build (test, -debug, interpret, the prompt) - an index the program wrote, an integer / or % and a
     # shift (typed.Check.Debug) stop where they would be undefined
     Checked Bool = false
+    # OLANG_CHECKS=all or hoist (an experiment, docs/checks-measure.md): an index the program wrote checked in every
+    # build; IndexSites each such index lowered (its file and where it starts), and whether it is in a loop
+    IndexChecks Bool = false
+    IndexSites Map<pair.Pair<I64, I64>, Bool>
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
     AssertsTrue Map<pair.Pair<I64, I64>, Bool>
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
@@ -2959,7 +2963,7 @@ fn (ln mut lowering&) elem(e typed.Elem&, sp source.Span) pl {
         i := ln.asI64(x, ity, sp)
         ln.bounds(i, n, false, e.Checked, mir.ExitKind.SliceBounds, sp)
     }
-    if e.Checked == typed.Check.Debug and ln.L.Checked: ln.indexCheck(base, e.Base.Type(), x, ity, sp)
+    if e.Checked == typed.Check.Debug and (ln.L.Checked or ln.L.IndexChecks): ln.indexCheck(base, e.Base.Type(), x, ity, sp)
     if e.Checked == typed.Check.None or e.Checked == typed.Check.Debug {
         match x {
             case mir.Operand.Const(_, v) {
@@ -2986,6 +2990,10 @@ fn (ln mut lowering&) payload(py typed.Payload&, sp source.Span) pl {
 # every length) against the length, known while compiling for a fixed array (whose constant index E16 judged already,
 # and which a packed struct's field holds with no place to read a length from)
 fn (ln mut lowering&) indexCheck(base pl, bt types.TypeId, x mir.Operand, ity types.TypeId, sp source.Span) {
+    if ln.L.IndexChecks {
+        key := pair.Pair<I64, I64>(ln.B.File, I64(sp.Start))
+        ln.L.IndexSites.Put(key, ln.loops.Len() > 0 or (try ln.L.IndexSites.Get(key) catch default false))
+    }
     fl := ln.fixedLen(ln.arrayOf(bt)) if ln.arrayOf(bt) != types.UnknownT else -1
     if fl >= 0 and x == mir.Operand.Const: return
     n := ln.constI64(fl) if fl >= 0 else ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(base))], sp)

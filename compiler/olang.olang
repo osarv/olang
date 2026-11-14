@@ -424,6 +424,7 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     c.Output = cl.Output
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
+    c.Hoist = checksMode() == "hoist"
     # the tools that only analyze need no clang, as interpret does not (B12)
     tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Api
     interpreting := cl.Mode == Interp or c.Interpreted or cl.Mode == Jupyter or cl.Mode == Notebook
@@ -629,6 +630,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.AssertsTrue = asserts
     lw.Tests = tests
     lw.Checked = tests or cfg.Debug    # E16g: a checked build
+    lw.IndexChecks = checksMode() != ""   # OLANG_CHECKS: the experiment of docs/checks-measure.md
     lw.ViewDump = (try os.Env("OLANG_VIEWDUMP") catch default "") != ""
     # O8d: early freeing is decided for a program at its root, every module's sites reading the decisions as link-time
     # constants (wholeprog 2.1) - a module compiled on its own is judged as a program of its own, so its sites are
@@ -666,6 +668,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         }
     }
     build.Phase("lower+emit")
+    sitesOut(lw, d)
     if e.Fuzz != "" {
         # B19: the one test the word names, or a mistake in the command line
         if e.FuzzPicked == 0 { d.Error(diag.Where.Nowhere, msgs.FuzzNoTest(e.Fuzz)) }
@@ -763,6 +766,24 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         }
         if e.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
     }
+}
+
+# OLANG_CHECKS (an experiment, docs/checks-measure.md): "all" checks every index the program wrote in every build,
+# "hoist" too with LLVM's range check elimination run first (build.hoisted); "" for neither
+fn checksMode() String {
+    m := try os.Env("OLANG_CHECKS") catch default ""
+    return m if m == "all" or m == "hoist" else ""
+}
+
+# OLANG_CHECKSITES=FILE: each index site lowered with a check, "FILE:LINE:COLUMN<tab>loop" or "...<tab>straight",
+# appended to FILE
+fn sitesOut(lw lower.Lowerer&, d mut diag.Diagnostics&) {
+    path := try os.Env("OLANG_CHECKSITES") catch default ""
+    if path == "" or lw.IndexSites.Len() == 0: return
+    out := StringBuilder()
+    for e in lw.IndexSites { out.Push($d.Locate(e.Key.First, e.Key.Second) "\t" $("loop" if e.Value else "straight") "\n") }
+    old := try os.ReadFile(path) catch default ""
+    try os.WriteFile(path, $old $out.ToString()) catch os.Error { }
 }
 
 # X14: an object's IR for a shared library, which dlopen loads as often as a link does - its thread-locals reached as
