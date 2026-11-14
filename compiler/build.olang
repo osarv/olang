@@ -109,6 +109,7 @@ type Config struct() {
     San Bool = false
     Memory Bool = false # -memory: the early-free report printed after the build (B18)
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
+    Cell Bool = false       # B22: a session's cell - a shared object the cell worker loads, without the runtime (cells.olang)
     Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none
     FuzzTime I64 = 0    # -fuzztime SECONDS: how long it runs, 0 until a failure is found or it is stopped
     Profile Bool = false    # olang profile: frame pointers, line tables and the runtime's sampler (B20)
@@ -198,7 +199,7 @@ fn (c Config&) paint(code String&, text String&) String {
 # ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
 # anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".fuzz" if c.Fuzz != "" else "") $(".prof" if c.Profile else "") $(".listing" if c.Listing else "") $(".bench" if c.Bench else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".cell" if c.Cell else "") $(".fuzz" if c.Fuzz != "" else "") $(".prof" if c.Profile else "") $(".listing" if c.Listing else "") $(".bench" if c.Bench else "")
 }
 
 # what every function of the build carries (B12): the target's CPU and features, and in a profile build (B20) a frame
@@ -232,7 +233,7 @@ fn (c Config&) ModeFlags() Vec<String&> {
         if root != "" { out.Push($"--sysroot=" $root) }
     }
     if c.Target.CpuFlag != "" { out.Push(c.Target.CpuFlag) }
-    if c.Library { out.Push("-fPIC") }      # X14: code a shared library holds, wherever it is loaded
+    if c.Library or c.Cell { out.Push("-fPIC") }      # X14, B22: code a shared library holds, wherever it is loaded
     if c.Fuzz != "" { out.Push("-fsanitize=fuzzer") }   # B19: coverage for libFuzzer, and its main at the link
     if c.Debug {
         out.Push("-O0")

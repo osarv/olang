@@ -1,0 +1,16 @@
+3
+40
+40
+I64
+3
+Vec<I64>[0, 1, 4, 9]
+Map<String, I64>["a": 1, "b": 2]
+7
+unhandled error: TooBig
+cell20:2: raised here
+cell21:1: try passed it on
+cell22:1:1: error[M22]: unknown name 'y'
+    1 | y
+      | ^
+3
+bye 7

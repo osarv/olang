@@ -66,8 +66,10 @@ fetched into `~/.cache/olang`, a Jupyter kernel spec and builds' `build/` direct
 
 ### Try it
 
-Plain `olang` opens the prompt (SPEC B22). Each entry runs in one session: declarations join it, statements run, a
-top-level local stays for the entries after, and an expression's value is shown. An entry goes on while a bracket is
+Plain `olang` opens the prompt (SPEC B22). Each entry runs in one session, compiled as a file run is (a small entry
+answers in a fraction of a second, and a loop runs at full speed): declarations join it, statements run, a top-level
+local stays for the entries after, and an expression's value is shown. Ctrl-C stops a running entry and leaves the
+session as it was before it. An entry goes on while a bracket is
 open; `:type EXPR`, `:load FILE`, `:help`, `:quit`. On a terminal each entry is edited in place and coloured as you
 type: Up and Down (or Ctrl-P, Ctrl-N) bring back earlier entries - a multi-line one whole - to edit and run again,
 Ctrl-R searches them, and they are kept in `~/.local/state/olang/history`. The keys are emacs's, as in bash; `:set vi`
@@ -91,6 +93,8 @@ set `OLANG_CLANG=/path/to/clang` for both `make` and the compiler.
 `~/.local/share/jupyter`); then pick "olang" in JupyterLab, Notebook or VS Code (SPEC B23). Cells run as at the prompt;
 output is streamed, the last expression's value shown, and a type declaring `fn (x T&) Display() Display` (the
 prelude's, e.g. `Display.Html(...)`) is shown richly - a table, a plot, a formula. The stop button interrupts a cell.
+Compiled cells keep their objects in `~/.cache/olang/cells` (`$XDG_CACHE_HOME`); `OLANG_CELLS=interpret` interprets
+them instead.
 
 `olang notebook run FILE.ipynb` runs a notebook with no Jupyter and no Python: its code cells run in order as the kernel
 runs them, and the notebook is written back (in place, or to `-output PATH`) with each cell's output as Jupyter stores

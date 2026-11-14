@@ -37161,3 +37161,65 @@ output, a value, a std/plot SVG, a compile error, a last cell run only with `-co
 usage error).
 
 - 2026-11-14: message fixes from the user's first local use. `Array<U8>("text")`, an `Array<Char>`/`Vec<Char>` or a StringBuilder where a String is wanted, and a write into a String each give help rows with the code to write (msgs.TextForLength, CharsForText, BuilderForText, TextWrite; hooked in Checker.mismatch, the length argument found by `lenArgAt`). `fn (t String&) Bytes() Array<U8>&` added to the prelude: `return t` is a view with no copy, since Char extends U8 (T29h) and a String already flows into an `Array<U8>&`. Did-you-mean for methods by synonym (`b.Add` for `Push`) was skipped: the nearest-name list has no synonym table and none was added; StringBuilder's methods are unchanged.
+
+## Cells run compiled (B22-B24; 2026-11-14, wt-cells)
+
+The user, 2026-11-14: "the notebooks have to run the optimized code. There's no way around that." The prompt, the
+kernel and `notebook run` interpreted each cell, ~900x slower than compiled code (a 240x240 hand-loop matrix product:
+8.3 s interpreted on the user's machine, 19 s in this container, against 0.009 s compiled). Now each cell is built as the
+run form builds a program (-quick, release semantics: no index checks) and run in a worker process
+(compiler/cells.olang; DESIGN.md 1.12 has the design).
+
+My calls, with why:
+- **A shared object per cell, a worker holding the runtime.** The cell's program - the one prompt.olang already wrote
+  and checked - goes through the build's own front end (`Passes.Analyze`, its root's text overlaid; olang.olang hands
+  prompt.olang the build as a function value, `cells.Builder`, since a module cannot import the root) in a `Cell`
+  configuration: `-fPIC`, its own `.cell` objects in a cache shared by sessions (B3i reuses every module's object, so a
+  cell compiles only its root's), started as an X14 library is - by its start, which the worker calls rather than a
+  constructor - and linked `-shared -Bsymbolic` without the runtime, showing nothing but its start, its entry and its
+  storage (a version script: a weak definition another cell's object made must never be found). The worker is a small
+  olang program built once into the cache, its runtime's symbols exported by a dynamic list, with a little IR beside it
+  for what olang cannot say (setjmp around the call, the frames a cell writes, the parked task threads forgotten in a
+  copy). One runtime for the whole session was the point: arenas, the chunk pool, the scope lookup (O29) and the task
+  threads are the runtime's state, and a second copy of it per cell could not touch what the first allocated.
+- **Values stay where they were made.** The interpreter saved what a cell kept and restored it into the next cell's
+  machine; compiled code cannot move a value whose address anything may hold. So a kept value's storage is the global
+  its cell made for it, renamed to a symbol of that cell (`….cellN`), and every later cell's object declares that
+  symbol instead of defining its own (the definition rewritten to `external global`, its initializer left out of the
+  start) - dlopen's `RTLD_GLOBAL` finds it in the cell holding it. Nothing kept is copied, so a reference into a kept
+  value stays good, and function values and `any`s - whose code's object is never unloaded - are kept now, where the
+  interpreter let them go (session.want's "f is let go" row is gone). A value is let go only where its type is laid
+  out anew: the layouts are compared as before (`eval.Machine.Layout`), from a check of the cell's program made first
+  where the cell keeps a local (for its type) or declares anything but a function; a fixed-length array's as the run-
+  time one its global is. A let-go or replaced value's storage, and its destructors, stay until the session ends.
+- **A fork per cell.** Interrupting compiled code costs a check per loop iteration unless something outside the loop
+  stops it. So the worker forks for each cell: the copy loads the object and runs the cell behind the runtime's
+  recovery point (`__olang_jmp_target`, as a test runs; C's `stdout` pointed at a memfd meanwhile, so a failed check's
+  message - written there while a test runs - becomes the cell's failure). A cell ending in order (its end, an error
+  leaving it, a failed check) leaves its copy as the worker, which tells the process before it to go - mutations kept,
+  new locals not, as before. A crash, `os.Exit` or an interrupt ends the copy, and the process before it, holding the
+  session as it was before the cell, says how and goes on: Ctrl-C at the prompt reaches only the cell's process (the
+  compiler and the worker ignore SIGINT while a cell runs), Jupyter's interrupt_request kills it. What that costs: an
+  interrupted cell's effects are all undone (by design: an interrupted cell changes nothing), and a cell writing over
+  big kept data pays copy-on-write for the pages it changes. Interpreted, os.Exit ended the session; compiled it ends
+  the cell.
+- **No early freeing across cells.** The first build crashed in Vec's growth: O8d decides per program, and a cell's
+  program decided Vec<I64>'s buffer sole - so its growth released the old buffer's region - while the Vec it grew was
+  built by an earlier cell's program, in no region. Values outliving the program that decides for them break the
+  premise, so a cell is placed with no root and alone (`placement(..., -1, true)`): nothing is freed early, what a cell
+  lets go of goes when its scope closes.
+- **Output.** The worker writes straight to the prompt's descriptors (a terminal stays one); for the kernel and
+  `notebook run` its output and error are pipes the compiler relays while it waits, so the kernel's per-cell capture
+  holds them. The error return trace (S18d) is kept only in test and debug builds, so a compiled cell's unhandled error
+  says the error alone ("unhandled error: TooBig").
+- **Where.** Objects in `$XDG_CACHE_HOME/olang/cells` (else ~/.cache's): a session's root is named by its process
+  (`olang-prompt-PID`), so its objects are its own and are removed as it ends; the cells' shared objects are in a
+  directory of the session's there. `OLANG_CELLS=interpret` keeps the interpreter, and it is what runs where no cell can
+  be built (no clang, another machine's target), with a note; `OLANG_CELLS_KEEP` keeps a session's objects for
+  debugging. `OLANG_TIMES` times each cell's probe, compile, link and run.
+- Measured (4 cores shared with other builds): a small cell 0.25-0.3 s (front end ~70 ms, probe ~30, clang on the root's
+  object ~120-150 - most of it the prelude's instances the root's object holds - link ~45, run ~1); the first cell
+  0.5 s; the compiler flat at ~90 MB over 120 cells, the worker 2-3 MB.
+- Tests: the checks scenario `prompt` (session.in now ends with the matrix product; interp.in replays its first cells
+  with OLANG_CELLS=interpret against interp.want), `jupyter` (the interrupt now ends the cell's process: "interrupted -
+  the session's values are as they were before the cell"), `notebook` and `promptkeys` unchanged.

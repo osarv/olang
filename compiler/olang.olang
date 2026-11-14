@@ -40,6 +40,7 @@ import "profile"
 import "listing"
 import "session"
 import "prompt"
+import "cells"
 import "lsp"
 import "records"
 import "mcp"
@@ -213,7 +214,7 @@ type CommandLine struct() {
     Html String& = ""
     Caps Bool = false
     Listing String& = ""   # B11d: "-asm" or "-ir", explain showing a function's code
-    Prompt Bool = false    # B22: nothing after "olang" - the prompt, interpreting as interpret does
+    Prompt Bool = false    # B22: nothing after "olang" - the prompt, its cells built and run as a file run is
     Install Bool = false   # B23: jupyter -install
     Continue Bool = false  # B24: notebook run -continue
 }
@@ -451,12 +452,13 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push($"  " $"FILE.olang".PadEnd(11) " " $ModeWhat[Run] "\n")
         for m in range 1, ModeWords.Len() { b.Push($"  " $ModeWords[m].PadEnd(11) " " $ModeWhat[m] "\n") }
         b.Push("\n'olang help MODE' lists a mode's options; 'olang help run' those of running a file.\n")
-        b.Push("'olang' with nothing after it opens the prompt, which runs what is typed as it is typed (B22).\n")
+        b.Push("'olang' with nothing after it opens the prompt, which builds and runs what is typed as it is typed (B22).\n")
         b.Push("\nenvironment:\n")
         b.Push("  OLANG_JOBS=N       runs N of clang's compiles at once; unset, one per core the memory available holds (B3m)\n")
         b.Push("  OLANG_TIMES=1      says each phase of a build as it ends, with its time and the compiler's memory (B3m)\n")
         b.Push("  OLANG_CLANG=PATH   names the clang a build uses (B12d)\n")
         b.Push("  OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)\n")
+        b.Push("  OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)\n")
         return b.ToString()
     }
     m := Run if cl.Word == "run" else modeNumber(cl.Word)
@@ -524,6 +526,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }
     if cl.Mode == Run { return build.RunProgram(fe, c, files[0], cl.Args.ToArray(), d) }
     if cl.Mode == Profile { return profile.Run(fe, c, files[0], cl.Args.ToArray(), d) }
+    cells.Builder = buildCell
     if cl.Prompt: return prompt.Run(c)
     if cl.Mode == Jupyter and cl.Install: return jupyter.Install(try os.ReadLink("/proc/self/exe") catch os.Error default $args[0])
     if cl.Mode == Jupyter: return jupyter.Serve(c, files[0])
@@ -567,6 +570,12 @@ fn drive(args Array<String&>&) I32 {
 # the test harness - compile writing the one module's
 type Passes struct() {
     Loaded I64 = 0
+    # B22: a session's cell (cells.olang) - the text its root stands for, the session's kept values a declaration's
+    # names may stand in front of, and for each of the root's lines the cell it came from and its line there
+    Text String& = ""
+    Shadow Array<String&>& = Array<String&>(0)
+    Paths Array<String&>& = Array<String&>(0)
+    Lines Array<I64>& = Array<I64>(0)
 }
 
 fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&
@@ -594,7 +603,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         try io.PutErr($"olang: incremental check: " $kept.Taken " kept summaries, every one the same\n") catch io.Error { }
     }
     build.Phase($"check (" $c.Rounds " rounds, " $c.Attempts " attempts in the last, views " $c.ViewsMs " ms)")
-    if kind == build.Kind.Program and not cfg.Library { c.CheckMain() }
+    if kind == build.Kind.Program and not cfg.Library and not cfg.Cell { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: on a program that checked cleanly, the values evaluation decides - a literal's constructor, a
     # zero value, a global baked (one that aborts the program an error)
@@ -632,7 +641,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # O8d: early freeing is decided for a program at its root, every module's sites reading the decisions as link-time
     # constants (wholeprog 2.1) - a module compiled on its own is judged as a program of its own, so its sites are
     # written as any build writes them, but no decision of it is emitted: what it reads is the link's
-    fr := try placement(c, cfg, l.Root, kind == build.Kind.Module, keys)
+    # (B22: a session's cell decides nothing - its values outlive its program, read and let go by the cells after it,
+    # which decide otherwise: a place one cell decides sole may hold a value an earlier cell built where none is)
+    fr := try placement(c, cfg, -1 if cfg.Cell else l.Root, kind == build.Kind.Module or cfg.Cell, keys)
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
@@ -697,7 +708,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
                     error build.Failed.Unbuilt
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
-                if e.Library { pir = libraryIr(pir) }
+                if cfg.Library { pir = libraryIr(pir) }
                 u mut build.Unit& = build.Unit(id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
                 u.Hash = $r.Hashes[k]
                 prog.Units.Push(u)
@@ -707,7 +718,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         }
         ir String& = o.Ir
         if ir.Contains("@__olang_dyncall") { dyncall = true }
-        if e.Library { ir = libraryIr(ir) }
+        if cfg.Library { ir = libraryIr(ir) }
         holds := match o.Kind {
             case emit.ObjectKind.Module: build.UnitKind.Module
             case emit.ObjectKind.Main: build.UnitKind.Main
@@ -743,24 +754,24 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # object of their own beside the root's (after the objects a reuse check writes afresh), which the objects reading them (weak, false) meet only at the link
     if kind != build.Kind.Module {
         sole := e.SoleUnit()
-        if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if e.Library else sole)) }
+        if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if cfg.Library else sole)) }
     }
     if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog, kept, fr.Sc.JudgedFiles()) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
-    if e.Library {
+    if cfg.Library {
         for x in e.ExportNames() { prog.Exports.Push(x) }
         prog.Header = e.Header(build.LibName(root), root)
     }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench) catch rt.Bad {
         error build.Failed.Reported
     }
-    if e.Library { prog.Runtime = libraryIr(prog.Runtime) }
+    if cfg.Library { prog.Runtime = libraryIr(prog.Runtime) }
     if dyncall {
         prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench) catch rt.Bad {
             error build.Failed.Reported
         }
-        if e.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
+        if cfg.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
     }
 }
 
@@ -786,7 +797,8 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Lines = cfg.Profile or cfg.Listing
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
-    e.Library = cfg.Library and kind == build.Kind.Program
+    # (a cell, B22, starts as a library does - its globals set by its start, which the cell worker calls)
+    e.Library = (cfg.Library or cfg.Cell) and kind == build.Kind.Program
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
     if cfg.Quick or cfg.Debug { e.PartLimit = emit.PartSizeDev }
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
@@ -1138,10 +1150,26 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
     l.Clang = cfg.Clang
     l.SharedLib = cfg.Library
     for x in cfg.CFlags() { l.CFlags.Push(x) }
+    if p.Text != "" {
+        for v in p.Shadow: l.Shadowable.Put(v, true)
+        l.Overlay.Put(root, p.Text)
+    }
     l.Load(root)
+    if p.Paths.Len() > 0 and l.Root >= 0: d.NameLines(l.Mods[l.Root].File, p.Paths, p.Lines)
     p.Loaded = l.Mods.Len()
     if d.Errors() > 0 { error build.Failed.Reported }
     return l
+}
+
+# B22: a session's program built (prompt.olang, cells.olang) - text standing for its root, as Passes.Text says
+fn buildCell(root String&, text String&, shadow Array<String&>&, paths Array<String&>&, lines Array<I64>&
+    cfg mut build.Config&, prog mut build.Program&, d mut diag.Diagnostics&) ? build.Failed {
+    p := Passes()
+    p.Text = text
+    p.Shadow = shadow
+    p.Paths = paths
+    p.Lines = lines
+    try p.Analyze(root, build.Kind.Program, cfg, prog, d)
 }
 
 # interpret FILE ARGS (B3e): the program checked - its conditions and asserts the evaluator decides decided (B9c, S8b,
@@ -1350,7 +1378,7 @@ fn mistake(words Array<String&>&) String {
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
-    # B22: nothing after "olang" opens the prompt, which interprets
+    # B22: nothing after "olang" opens the prompt (the mode it is said as: interpret's)
     assert mistake(Array<String&>[]) == "no mistake: interpret"
     assert mistake(Array<String&>["-x"]) ==
         "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"

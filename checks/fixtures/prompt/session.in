@@ -43,3 +43,19 @@ z := undefinedName
 :help
 loaded
 fromLib(loaded)
+n := 240
+ma := Array<F64>(n * n)
+mb := Array<F64>(n * n)
+for i in range n * n {
+    ma[i] = F64(i % 7)
+    mb[i] = F64(i % 5)
+}
+mc := Array<F64>(n * n)
+for i in range n {
+    for j in range n {
+        s F64 = 0.0
+        for k in range n { s += ma[i * n + k] * mb[k * n + j] }
+        mc[i * n + j] = s
+    }
+}
+mc[1001]

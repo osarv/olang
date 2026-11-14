@@ -18,6 +18,7 @@ fn Run(cfg mut build.Config&, path String&, out String&, all Bool) I32 {
     doc := try json.Json.Parse(text) catch json.Error e { return fail($path " is no JSON: " $e) }
     cells := try doc["cells"].AsArr() catch json.Error { return fail($path " is no notebook: it has no cells") }
     s := prompt.Session(cfg)
+    s.Relay = true
     n I64 = 0
     failed := false
     done Vec<json.Json&>

@@ -1288,24 +1288,30 @@ test "-i interprets a program as the built program runs" { assert passed("interp
 
 test "plain olang runs its input as cells of one session" { assert passed("prompt") }
 
-# B22: plain "olang" reads cells from its standard input - values kept from cell to cell, declarations replaced, the
-# last expression's value shown, errors said and the session going on, a value whose type changed let go, :type,
-# :load, and the destructors of what the session kept run as it ends
+# B22: plain "olang" reads cells from its standard input, each built and run compiled - values kept from cell to cell,
+# declarations replaced, the last expression's value shown, errors said and the session going on, a value whose type
+# changed let go, :type, :load, a matrix product interpreting would take seconds over, and the destructors of what the
+# session kept run as it ends - and interpreted where OLANG_CELLS says so
 fn prompt(r mut report&) ? Failed {
     dir := fresh("prompt")
     os.Run("cp checks/fixtures/prompt/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" < session.in > out.txt 2>&1") == 0, "the prompt's session did not end with 0", dir)
     try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the prompt's session printed other than session.want", dir)
+    # its cells interpreted where OLANG_CELLS says so (B3e), as before cells were compiled
+    try r.expect(sh(dir, "OLANG_CELLS=interpret \"$OLANG\" < interp.in > out.txt 2>&1") == 0, "the interpreted session did not end with 0", dir)
+    try r.expect(sh(dir, "cmp -s interp.want out.txt") == 0, "the interpreted session printed other than interp.want", dir)
 }
 
 test "on a terminal the prompt edits its entries and keeps their history" { assert passed("promptkeys") }
 
-# B22: on a terminal the prompt edits each entry - a pseudo-terminal (script(1)) is typed into, the keys a pause apart so
-# each finds the terminal in raw mode: an entry recalled with Up, edited and run again, Ctrl-D ending the session; the
-# history then in its file, in the order typed
+# B22: on a terminal the prompt edits each entry - a pseudo-terminal (script(1)) is typed into, each entry's keys sent
+# once the prompt reads it in raw mode (the Nth ESC [?2004h it writes, never a fixed pause: a compiled cell can take
+# seconds on a busy machine): an entry recalled with Up, edited and run again, Ctrl-D ending the session; the history
+# then in its file, in the order typed
 fn promptkeys(r mut report&) ? Failed {
     dir := fresh("promptkeys")
-    keys := """(sleep 2; printf 'x := 1\r'; sleep 1; printf '\033[A\1772\r'; sleep 1; printf 'x\r'; sleep 1; printf '\004')"""
+    wait := """w() { n=0; until [ "$(grep -o '?2004h' out.txt 2>/dev/null | wc -l)" -ge $1 ] || [ $n -ge 600 ]; do sleep 0.1; n=$((n+1)); done; }"""
+    keys := "(" $wait "; " """w 1; printf 'x := 1\r'; w 2; printf '\033[A\1772\r'; w 3; printf 'x\r'; w 4; printf '\004')"""
     run := """XDG_STATE_HOME="$PWD/state" NO_COLOR=1 timeout 60 script -qfec "$OLANG" /dev/null > out.txt 2>&1"""
     try r.expect(sh(dir, $keys " | " $run) == 0, "the prompt on a terminal did not end with 0", dir)
     try r.expect(sh(dir, "tr -d '\\r' < out.txt | sed 's/\\x1b\\[[?0-9;]*[A-Za-z]//g' | grep -qx 2") == 0, "the entry recalled and edited did not run", dir)

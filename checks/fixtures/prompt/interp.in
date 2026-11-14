@@ -1,0 +1,30 @@
+1 + 2
+x := 20
+x * 2
+fn twice(n I64) I64 { return 2 * n }
+twice(x)
+:type twice(x)
+type Point struct(x I64, y I64) { x, y }
+p := Point(1, 2)
+fn (p Point) Sum() I64 { return p.x + p.y }
+p.Sum()
+v := Vec<I64>[]
+for i in range 4 {
+    v.Push(i * i)
+}
+v
+m := Map<String, I64>["a": 1]
+m.Put("b", 2)
+m
+import "std/io"
+type Res unique struct(n I64) { n } destruct { io.PutLine("bye " $n)! }
+r := Res(7)
+r.n
+fn bad(n I64) I64 ? {
+    if n > 2: error TooBig
+    return n
+}
+y := try bad(9)
+y
+fn twice(n I64) I64 { return 3 * n }
+twice(1)
