@@ -50,6 +50,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `api.olang` | `olang api OLD NEW PATH` (B21): two versions' exported interfaces compared, each change breaking or not |
 | `doc.olang` | doc comments (L4b), read from the text by a declaration's span; `olang doc` (B14): a module's documentation as text or HTML |
 | `prompt.olang` | the prompt (B22): a session of cells, each checked with the session as one program and run on a machine of its own, its kept values saved and restored between them; what a notebook's kernel drives |
+| `jupyter.olang` | `olang jupyter` (B23): a Jupyter kernel over std/zmtp - the five channels polled by one thread, messages signed, each cell run through the prompt's session with its output captured and its value shown richly where its type declares `Display`; `-install` writes the kernel spec |
 | `session.olang` | the front end held for a tool: an analysis with an editor's unsaved text standing in for files, what a name at an offset is, symbols, completion, the processes and message framing the servers share |
 | `lsp.olang` | `olang lsp` (B15): the Language Server Protocol, each analysis in a forked worker, keeping and taking the records builds keep (B3i) |
 | `mcp.olang` | `olang mcp` (B16): the Model Context Protocol - check, explain, doc, format, test as tools |
