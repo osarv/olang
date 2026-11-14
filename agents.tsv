@@ -81,3 +81,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	printcap	sonnet	medium	done	212	79		pass(2nd)		Print/Println; io.Put* rename via tool (774 files); len removed
 2026-11-14	oneline	sonnet	low	done				diag golden		320 blocks/82 files converted; catch/lambda skipped
 2026-11-14	refac1	opus	medium	done				pass		nesting tool; only 6 fns >5; 148 at 5 remain
+2026-11-14	refac2	opus	medium	done				pass		148->31 at depth5; 6 long fns split
