@@ -5783,6 +5783,7 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
                 case typed.PrimOp.Sub: "sub"
                 case _: "mul"
             }
+            if op == typed.PrimOp.Mul and not un and bits > 64 { return fe.wideMulOverflows(lt, x, y, bits) }
             intr := "llvm." $("u" if un else "s") $name ".with.overflow.i" $bits
             fe.E.declare(intr, "{ " $lt ", i1 } @" $intr "(" $lt ", " $lt ")")
             v := fe.let("call { " $lt ", i1 } @" $intr "(" $lt " " $x ", " $lt " " $y ")")
@@ -5818,6 +5819,25 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
             return "false"
         }
     }
+}
+
+# a signed multiply of more than 64 bits overflows: tested on the magnitudes, unsigned, so no target needs compiler-rt
+# (llvm.smul.with.overflow of i65-i128 becomes a call of __muloti4 on aarch64, which libgcc lacks; on x86-64 this is
+# shorter than LLVM's own expansion): the unsigned product overflows, or exceeds 2^(bits-1)-1, or 2^(bits-1) when the
+# signs differ
+fn (fe mut fnEm&) wideMulOverflows(lt String&, x String&, y String&, bits I64) String {
+    nx := fe.let("icmp slt " $lt " " $x ", 0")
+    ny := fe.let("icmp slt " $lt " " $y ", 0")
+    mx := fe.let("select i1 " $nx ", " $lt " " $fe.let("sub " $lt " 0, " $x) ", " $lt " " $x)
+    my := fe.let("select i1 " $ny ", " $lt " " $fe.let("sub " $lt " 0, " $y) ", " $lt " " $y)
+    intr := "llvm.umul.with.overflow.i" $bits
+    fe.E.declare(intr, "{ " $lt ", i1 } @" $intr "(" $lt ", " $lt ")")
+    v := fe.let("call { " $lt ", i1 } @" $intr "(" $lt " " $mx ", " $lt " " $my ")")
+    p := fe.let("extractvalue { " $lt ", i1 } " $v ", 0")
+    wrapped := fe.let("extractvalue { " $lt ", i1 } " $v ", 1")
+    neg := fe.let("zext i1 " $fe.let("xor i1 " $nx ", " $ny) " to " $lt)
+    limit := fe.let("add " $lt " " $fe.let("sub " $lt " " $fe.let("shl " $lt " 1, " $(bits - 1)) ", 1") ", " $neg)
+    return fe.let("or i1 " $wrapped ", " $fe.let("icmp ugt " $lt " " $p ", " $limit))
 }
 
 fn (e mut Emitter&) pow2(k I64) String { return e.constText(types.TypeId(14), I64(F64(1.0).Bits()) + (k << 52)) }
