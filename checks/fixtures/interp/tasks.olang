@@ -25,7 +25,6 @@ fn main() ? {
     }
     try io.PutLine("squares " + $out)
     small mut chan.Chan<I32>& = chan.Chan<I32>(8)
-    chan.Init(small)
     t mut Array<I64>& = Array<I64>(1)
     join {
         spawn produce(small, 5)
@@ -34,7 +33,6 @@ fn main() ? {
     try io.PutLine("sum " + $t[0])
     if os.Args().Len() > 1 {
         big mut chan.Chan<I32>& = chan.Chan<I32>(4)
-        chan.Init(big)
         join {
             spawn produce(big, 100)
             spawn consume(big, t)

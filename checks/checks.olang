@@ -129,7 +129,6 @@ fn runAll() Array<String&>& {
     outcomes mut Array<String&>& = Array<String&>(n)
     took mut Array<I64>& = Array<I64>(n)
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
-    chan.Init(queue)
     for k in range Checks.Len() { chan.Send(queue, k)! }
     kept := try os.ReadDir(Store) catch default Array<String&>(0)
     if kept.Len() > StoreMost { os.Run("rm -rf " + $os.Quote(Store)) }

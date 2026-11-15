@@ -60,6 +60,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `nulltest_migrate.olang` | E10c (2026-11-15): the null test is `==` - `is` is no keyword - `x is null` becomes `x == null`, `x is not null` `x != null`, the test parenthesized where a `==`/`!=` before it or an ordering or `in` after it would now take it apart (`a == b is null` -> `a == (b == null)`); code and Markdown's olang blocks and code spans, comments and text left alone; idempotent | `build/tools_nulltest_migrate [--check] [-v] FILE\|DIR...` |
 | `textjoin_migrate.olang` | E11b (2026-11-15): text is joined with `+` - pieces side by side (`"n = " $n "\n"`) become `"n = " + $n + "\n"`, read with the compiler's parser in its old reading (`parse.Adjacent`); a join over several lines keeps its line breaks (the `+` ends the line); a join a tighter operator, `embed` or a catch's `default` would take apart is parenthesized; code and Markdown's olang blocks and code spans, comments and text left alone; idempotent | `build/tools_textjoin_migrate [--std DIR] [--check] [-v] FILE\|DIR...` |
 | `requires_migrate.olang` | D17 (2026-11-15): contracts removed - a function's requirements are the asserts and checks its body begins with; each item of a contract (`fn pick(x I32, y I32) [y > x] I32 ? { ... }`, a constructor's alike) becomes a check at the top of the body, `if not y > x: error ArgumentError.Invalid("pick: y > x")`, failing as the contract did (a one-line body opened onto lines of its own); a trait method's contract, which has no body, dropped and listed `by hand:`, as is one over several lines; code only; idempotent | `build/tools_requires_migrate [--check] [-v] FILE\|DIR...` |
+| `chaninit_migrate.olang` | std/chan (2026-11-15, the AI study): `chan.Init` removed - a channel is ready as made; every line that is only a call `ALIAS.Init(NAME)` of std/chan's alias is deleted; code only; idempotent | `build/tools_chaninit_migrate FILE...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
@@ -106,7 +107,7 @@ compiler has nothing to say about it until the text tools have run:
 `checkerror_rename`, `stutter_rename`, `checked_migrate`, `contracts_migrate`, `try_migrate`, `as_migrate`,
 `errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `question_migrate`, `unused_migrate`, `errorcase_rename`,
 `variadic_migrate`, `scopes_migrate`, `fnref_migrate`, `clone_migrate`, `textbuild_migrate`, `unique_migrate`,
-`builder_migrate`, `literal_migrate`, `keyword_rename`, `destroy_migrate`, `io_rename`, `oneline_migrate`, `nulltest_migrate`, `textjoin_migrate`, `requires_migrate` (the table's order; the tools that read the text run first and those driven by diagnostics after,
+`builder_migrate`, `literal_migrate`, `keyword_rename`, `destroy_migrate`, `io_rename`, `oneline_migrate`, `nulltest_migrate`, `textjoin_migrate`, `requires_migrate`, `chaninit_migrate` (the table's order; the tools that read the text run first and those driven by diagnostics after,
 so `unused_migrate` runs last: D3b is said only of a file with no other error).
 
 **Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and

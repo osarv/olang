@@ -498,7 +498,6 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I
     for k in range n { order[k] = k }
     if weights.Len() > 0 { order.Sort(fn(a I64, b I64) Bool { return weights[a] > weights[b] }) }
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
-    chan.Init(queue)
     for k in order { try chan.Send(queue, k) catch chan.Error { unreachable } }
     workers := width if width < n else n
     Ran = 0
