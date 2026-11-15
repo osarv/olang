@@ -948,11 +948,12 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
     if status != 0 { return status }
     run := try c.runner(d) catch Failed { return finish(d) }
     if c.Timed {
+        # B19b: run as without -bench - the file as written its first argument, where no emulator runs it
         shown Vec<String&>
         for w in run { shown.Push(w) }
-        shown.Push(Shown(c.Built))
+        shown.Push($file if run.Len() == 0 else Shown(c.Built))
         for a in args { shown.Push(a) }
-        return measure.Measure(shown.ToArray(), time.Now() - began, c.Runs.Max(1))
+        return measure.Measure(shown.ToArray(), time.Now() - began, c.Runs.Max(1), Shown(c.Built) if run.Len() == 0 else "")
     }
     av Vec<String&>
     # B12a: another architecture's program runs in an emulator, given the program's path
@@ -1282,10 +1283,8 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     prune(c.Dir, c.Built, RunCacheCap)
     if c.Timed {
         spin.End()
-        argv Vec<String&>
-        argv.Push(c.Built)
-        for a in args[1:] { argv.Push(a) }
-        return measure.Measure(argv.ToArray(), time.Now() - began, c.Runs.Max(1))
+        # B19b: run as ExecInPlace runs it, the file as written its first argument
+        return measure.Measure(args, time.Now() - began, c.Runs.Max(1), c.Built)
     }
     try os.ExecInPlace(c.Built, ...args) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))

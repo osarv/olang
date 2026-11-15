@@ -4457,6 +4457,14 @@ built:
 
 define i32 @__olang_spawn(ptr %args, i64 %count, i32 %in, i32 %out, i32 %err, ptr %dir) {
 entry:
+  %r = call i32 @__olang_spawn_as(ptr null, ptr %args, i64 %count, i32 %in, i32 %out, i32 %err, ptr %dir)
+  ret i32 %r
+}
+
+; B19b: __olang_spawn with the program at %path, its command line's first argument the name it is run by (null: that
+; first argument is the program, found on PATH as posix_spawnp finds it)
+define i32 @__olang_spawn_as(ptr %path, ptr %args, i64 %count, i32 %in, i32 %out, i32 %err, ptr %dir) {
+entry:
   %fa = alloca [@@SPAWN_FILE_ACTIONS_BYTES@@ x i8], align 16
   %pid = alloca i32
   %none = icmp slt i64 %count, 1
@@ -4506,7 +4514,9 @@ dupErr:
   br label %doneErr
 doneErr:
   %env = load ptr, ptr @environ
-  %prog = load ptr, ptr %argv
+  %first = load ptr, ptr %argv
+  %named = icmp eq ptr %path, null
+  %prog = select i1 %named, ptr %first, ptr %path
   %dir0 = load i8, ptr %dir
   %here = icmp eq i8 %dir0, 0
   br i1 %here, label %direct, label %moved
@@ -4532,6 +4542,7 @@ viaShell:
   store ptr %dir, ptr %s3
   %s4 = getelementptr ptr, ptr %argv5, i64 4
   call void @llvm.memcpy.p0.p0.i64(ptr %s4, ptr %argv, i64 %bytes, i1 false)
+  store ptr %prog, ptr %s4
   %rc2 = call i32 @posix_spawn(ptr %pid, ptr @__olang_sh, ptr %fa, ptr null, ptr %argv5, ptr %env)
   call void @free(ptr %argv5)
   br label %spawned
