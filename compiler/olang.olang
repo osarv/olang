@@ -149,7 +149,7 @@ OptValues Array<String&> = Array<String&>["PATH", "", "", "", "NAME", "Name=valu
     ""
     ""
     "COUNT"]
-OptModes Array<I64> = Array<I64>[77846, 31, 31, 31, 1887, 108383, 108383, 2080, 106591, 256, 2, 27, 8, 8, 64, 64, 64, 25, 32768, 65536, 98335, 17]
+OptModes Array<I64> = Array<I64>[77846, 31, 31, 31, 1887, 108383, 108383, 2107, 106591, 256, 2, 27, 8, 8, 64, 64, 64, 25, 32768, 65536, 98335, 17]
 OptWhat Array<String&> = Array<String&>[
     "writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)"
     "builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)"
@@ -158,7 +158,7 @@ OptWhat Array<String&> = Array<String&>[
     "builds for another machine (B12)"
     "defines a build constant (B10)"
     "moves the remote repositories the build reaches to their refs' current commits (M23c)"
-    "rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17)"
+    "rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)"
     "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
     "writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)"
     "builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)"
@@ -278,7 +278,14 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if o == 4 { cl.Spec = $v }
             if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.Usage } }
             if o == 6 { c.Update = true }
-            if o == 7 { cl.Check = true }
+            if o == 7 {
+                cl.Check = true
+                # (B18a: in a build, -memory's report checked - -memory implied)
+                if cl.Mode != Format and cl.Mode != Fix {
+                    c.MemoryCheck = true
+                    c.Memory = true
+                }
+            }
             if o == 8 { c.Quick = true }
             if o == 9 { cl.Html = $v }
             if o == 10 { c.Library = true }
@@ -691,10 +698,13 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
+    lw.DecideBuilds(fr.Spawned())
     lw.DecideGen()
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0: spin.Say(io.Stdout, $fr.Report() + $weakRows(c) + $fr.Sc.PlacedReport())
+    # B18a: -memory -check fails where early freeing does not follow a let-go (O8f)
+    if cfg.Memory and cfg.MemoryCheck and fr.Gaps > 0 and d.Errors() == 0: d.Error(diag.Where.Nowhere, msgs.MemoryGaps(fr.Gaps))
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PutErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)

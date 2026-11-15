@@ -800,7 +800,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   made for an owner part beside other owned parts (a `Map` entry's value beside its text key) is split: the part in
   its region, the rest where the region's parent is. **A text alone (2026-11-13):** where an entry's text key (or text
   value) is the only storage it owns, the text is built in a slot of the map's scope's class lists and put back where
-  the entry is removed - no region per small text.
+  the entry is removed - no region per small text. **Freeing is a guarantee, O8f (the user, 2026-11-15: "It's
+  important that we do actually free when we can, and I want this to be provably the case"; no free or destroy
+  keyword; docs/freeing.md):** where O8d's conditions hold, a let-go IS reclaimed - an assignment of a local, field,
+  global or element, a removal, a `Put` or `SetAt` replacing, a turn left, a destructor value ended; a place keeps only
+  for a condition (not made for it, kept elsewhere, a view in use, a task or C calling back, a destructor to run) or a
+  function value nothing of which is followed and not `pure`. A let-go the compiler does not follow is a gap:
+  `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. Built 2026-11-15:
+  text and array locals and globals are places (`s = s + $i`: 850 MB to 13 MB), an immut array replaced whole (a slice
+  of its old value had read the new), a task whose callee builds nothing given no stand-ins (oann's joinleak), the
+  joiner sharing its pool at each join, a temporary only a call needs built in the block (oann's tempref). Gaps left:
+  docs/freeing.md section 2.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

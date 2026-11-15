@@ -56,3 +56,48 @@ test "an Array<Char> lent as a writable Array<U8>& is written in place" {
     run(t2)
     assert t2 == "ABC"
 }
+
+# T13a, O8f (found with docs/freeing.md's gap 1): a String given another value of the same length is replaced whole -
+# it had been written in place, so a slice of its old value read the new text
+fn sameLength(k I64) String {
+    s := "a" + $k
+    v := s[0:2]
+    s = "x" + $(k + 1)
+    return $v + " " + $s
+}
+
+Same := sameLength(1)
+assert Same == "a1 x2"
+
+test "a String given a value of its own length leaves a slice of the old one as it was" {
+    assert sameLength(1) == Same
+    t := "a1"
+    for i in range 1000 {
+        old := t[0:2]
+        t = "b" + $(i % 10)
+        assert old.Len() == 2 and t[0] == 'b'
+        if i > 0: assert old[0] == 'b'
+    }
+}
+
+# O8f (docs/freeing.md gaps 1-5): text built by reassignment, in a loop - a local and a global - read back after an
+# arena churn of other turns' values; each old value was let go of and freed at its reassignment
+Built mut String = ""
+
+fn grown(n I64) String {
+    s := ""
+    churn := 0
+    for i in range n {
+        s = s + $(i % 10)
+        c := "churn " + $i + " ......................................"
+        churn += c.Len()
+    }
+    return s if churn > 0 else ""
+}
+
+test "text built by reassignment holds what it was given, its old values freed" {
+    s := grown(500)
+    assert s.Len() == 500 and s[0:10] == "0123456789" and s[490:500] == "0123456789"
+    for i in range 300 { Built = Built + $(i % 10) }
+    assert Built.Len() == 300 and Built[290:300] == "0123456789"
+}

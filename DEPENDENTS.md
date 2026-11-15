@@ -93,7 +93,10 @@ A `-memory` row (B18) is said in one place and read in two: early freeing's in `
 (O27, its destructor sentence, O15; a become chain's tail scope, S21, `Placement.Tail`) in `scope.olang`'s
 `Placements`, which `olang.olang`'s `-memory` and `session.olang`'s `Placed` (the language server's hint) both print. A
 change to one: SPEC B18's quoted text, the `checks` scenarios `memoryplaced` (its `tail.olang` for S21) and the
-earlyfree fixtures that grep it.
+earlyfree fixtures that grep it. A gap row (O8f, B18a: `free.olang`'s `gap`, `unfollowed`, `libraryGaps`, counted in
+`Gaps`, which `olang.olang` turns into `msgs.MemoryGaps` under `-check`): SPEC O8f and B18a, docs/freeing.md's gap
+table, the `checks` scenario `freeing` (its `gaps.olang` greps the row; every earlyfree fixture but mapkeys must stay
+gap-free).
 
 A function's hidden scope arguments (`types.ScopeVarsOf`) are read off its type alone; a role that adds one (`RoleTail`,
 S21's tail scope, given in `scope.olang`'s `giveTails` before any body is judged) changes every call's: the scope pass

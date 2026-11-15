@@ -10947,8 +10947,29 @@ fn (s mut Scoper&) bindRest(callee I64, vars Array<I64>&, recs fnRecs&, rmaps Ve
             if u != Term.None { t = u if t == Term.None else s.joinTerm(t, u) }
         }
         if t == Term.None { t = beta[rv] if rv >= 0 else (dest if v == ev and dest.Runs() else here) }
+        # (O8f, oann's tempref: a temporary nothing asks to outlive the call, which the callee builds nothing into and
+        # its result views nothing of, is this block's - not built where the result lands, an outer scope each call)
+        if v != rv and v != ev and rv >= 0 and s.onlyForCall(callee, vars, v) { t = here }
         beta[v] = t
     }
+}
+
+# whether scope variable v of a call of body callee is needed only while the call runs: callee a function (not a
+# constructor, whose instance holds what it is given, C2d) judged to the end, building nothing into v, and its result
+# a view of no parameter of v's (D9h's ViewResults), and no relation of the callee's naming v
+fn (s mut Scoper&) onlyForCall(callee I64, vars Array<I64>&, v I64) Bool {
+    if callee < 0 or not s.sum(callee).Done or s.buildsSum(callee, v): return false
+    for r in s.sum(callee).Rels {
+        if r.Lo == Term.Var(v) or r.Hi == Term.Var(v): return false
+    }
+    inst := match s.Bodies[callee].Of {
+        case typed.BodyOf.Fn(i): I64(i)
+        case _: -1
+    }
+    if inst < 0 or s.P.T.Role(s.Bodies[callee].Ty) == types.RoleCtor: return false
+    m := try s.P.L.ViewResults.Get(inst) catch default I64(0)
+    q := vars[v]
+    return q >= 0 and q < 62 and (m & (I64(1) << q)) == 0 and (m & typed.ViewOther) == 0
 }
 
 # callAs's temporaries, built where their scope variable is bound - a task's, what they hold lasting until its join (P2)
@@ -16124,7 +16145,6 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
         }
         sm := try s.sumOfText(d.Sums[i]) catch typed.Unwritable {
             s.why("sum")
-            if s.whyN.Len() < 6 { s.TraceLog.Push($"sum unread: " + $d.Sums[i]) }
             return null
         }
         run.Plans.Push(pl)

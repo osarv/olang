@@ -1,0 +1,22 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 4): a mutable array local given new arrays of other lengths frees each at once, written
+# after (700 MB at 80,000 turns before)
+N I64 = 20000
+
+fn mk(n I64) Array<I64> {
+    a := Array<I64>(n)
+    for j in range n { a[j] = j }
+    return a
+}
+
+fn main() {
+    a := mk(10)
+    t := 0
+    for i in range N {
+        a = mk(1000 + i % 7)
+        a[0] = i
+        t += a[0] + a.Len()
+    }
+    io.PutLine($t)!
+}

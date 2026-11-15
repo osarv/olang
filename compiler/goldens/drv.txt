@@ -72,7 +72,7 @@
 | status 1
 === olang explain -check B1
 | stdout:
-| olang: error[B1]: -check applies to format and fix, not to explain
+| olang: error[B1]: -check applies to running a file, build, test, run, format and fix, not to explain
 | stderr:
 | status 1
 === olang build main.olang -target
@@ -314,6 +314,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -library           builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
@@ -332,6 +333,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
@@ -368,6 +370,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
@@ -389,6 +392,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
@@ -402,7 +406,7 @@
 | rewrites each file in olang's one layout (B13)
 | 
 | options:
-|   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17)
+|   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 | stderr:
 | status 0
 === olang help explain
@@ -514,7 +518,7 @@
 | | `-checked` | running a file, build, compile, test, run, jupyter, notebook | E16g |
 | | `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
 | | `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
-| | `-check` | format, fix | B13, B17 |
+| | `-check` | format, fix, running a file, build, test, run | B13, B17, B18a |
 | | `-html DIR` | doc | B14 |
 | | `-library` | build | §11 X14 |
 | | `-memory` | running a file, build, test, run | B18 |
@@ -593,7 +597,7 @@
 | status 1
 === olang doc -check main.olang
 | stdout:
-| olang: error[B1]: -check applies to format and fix, not to doc
+| olang: error[B1]: -check applies to running a file, build, test, run, format and fix, not to doc
 | stderr:
 | status 1
 === olang test W/none.olang

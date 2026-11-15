@@ -11907,12 +11907,12 @@ fn evInPlace(k I64) String {
     p = EvOut(k, 3)                  # a struct is written in place, a reference to its field sees it
     x := "abc"
     y := x[1:]
-    x = "xyz"
+    x = "xyz"                               # immut (T13a, T11b): replaced whole, y names the old text
     return $s + " " + $c + " " + $e + " " + $r.v + " " + $y
 }
 EvInPlaceBaked String = evInPlace(7)
 test "T7: an array or struct value is assigned into the storage it has, unless an array's length changes" {
-    assert EvInPlaceBaked == "Array<I64>[7, 8] Array<I64>[7, 7] Array<I64>[1, 1] 7 yz"
+    assert EvInPlaceBaked == "Array<I64>[7, 8] Array<I64>[7, 7] Array<I64>[1, 1] 7 bc"
     assert evInPlace(evRun + 6) == EvInPlaceBaked
 }
 
