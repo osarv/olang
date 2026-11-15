@@ -28,7 +28,7 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
    parentheses; one loop keyword (`for`); one spelling of an error set (`?`); `mut` only where it decides something.
    Reuse a construct before adding one. A spelling that is removed is simply gone, not kept alive by a diagnostic.
 5. **Multi-purpose.** The same language has to serve:
-   - scripting: `interpret`, running a file by naming it, text joined by adjacency, `$x` for any value;
+   - scripting: `interpret`, running a file by naming it, text joined with `+` and `$x` for any value;
    - AI and data: F16/BF16/F8, complex numbers, comprehensions, SIMD-aligned arrays, parallel `join`/`spawn`;
    - systems work: `extern fn`, C layouts;
    - GUIs: run-time trait values (`any Trait&`) for open sets of widgets.

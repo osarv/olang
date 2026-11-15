@@ -117,6 +117,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     Adjacent Bool = false
     Joins Vec<source.Span>
     JoinGaps Vec<I32>
+    TightJoins Vec<I32>                # where a construct taking one unary (a catch's default) read one: a join there is grouped
     # with RecordOperators, the span of every operator's node (binary, chain, in, is) - over one file's tokens, the shape
     # of every expression; tools/precedence_migrate.olang compares two readings by it
     RecordOperators Bool = false
@@ -2838,7 +2839,9 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>& ? Fail {
         if braced { body = try p.block() }
         if p.accept(token.Tok.Default) {
             for {
-                p.exprs.Push(try p.unary())
+                d := try p.unary()
+                if p.Adjacent: p.TightJoins.Push(d.Span().Start)   # a default is one unary (R9a)
+                p.exprs.Push(d)
                 if not listOk or not p.accept(token.Tok.Comma) { break }
             }
         } else if not braced {

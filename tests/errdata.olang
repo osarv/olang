@@ -257,7 +257,7 @@ fn joinOwn(n I64) String ? JoinErr {
     return "none"
 }
 
-fn joinedOwn(n I64) String { return try joinOwn(n) catch JoinErr e default "outer " + $e }
+fn joinedOwn(n I64) String { return try joinOwn(n) catch JoinErr e default ("outer " + $e) }
 
 # the block's own error carrying nothing: the tasks' payloads dropped all the same, so the next payload read is its own
 fn joinHalts(n I64) String ? Halt {

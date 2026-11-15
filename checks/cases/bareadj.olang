@@ -1,7 +1,9 @@
-# check: fail error[E11b]: a join piece is a text literal or a '$' rendering - write '$b'
+# check: fail error[E11b]: '+' joins text, and this is I64
+# also: help: write '$b'
+# E11b: a value joined to text is rendered with '$' - the help writes the rendering
 type E error { X }
-fn f(a Array<U8>&) { }
+fn f(a String&) { }
 fn main() ? E {
-    b := "y"
-    f("a" b)
+    b := 3
+    f("a" + b)
 }

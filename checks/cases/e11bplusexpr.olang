@@ -1,0 +1,8 @@
+# check: fail error[E11b]: '+' joins text, and this is I64
+# also: help: write '$(n * 2)'
+# E11b: an operand "$" would take less of is rendered parenthesized - "$" binds tighter than any binary operator
+fn show(t String&) { }
+fn main() {
+    n := 4
+    show("twice: " + n * 2)
+}

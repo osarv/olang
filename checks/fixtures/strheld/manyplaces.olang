@@ -52,7 +52,7 @@ fn main() ? {
     h := Holder(7)
     h2 := Holder2(8)
     try io.PutLine($h.t + " " + $h2.t)
-    d := try fails(1) catch default $Big(9) + "d"
+    d := try fails(1) catch default ($Big(9) + "d")
     try io.PutLine(d)
     out := Array<I64>(2)
     join { for k in range 2 { spawn out[k] = f(10 + k) } }

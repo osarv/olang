@@ -8067,7 +8067,7 @@ fn (e mut Emitter&) testSym(id I64) String {
             case _ { }
         }
     }
-    return try e.testSyms.Get(id) catch default $"olang_test_" + $id
+    return try e.testSyms.Get(id) catch default ($"olang_test_" + $id)
 }
 
 fn (e mut Emitter&) testName(id I64) String {

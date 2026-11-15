@@ -17101,7 +17101,7 @@ test "P1g: array values tasks give their targets outlive the join" {
     for i in range 3 {
         join {
             spawn x, y = peTwo(sbRun * 7)
-            spawn u, k = try peTwoE(-1) catch default "dflt" + $i, 3
+            spawn u, k = try peTwoE(-1) catch default ("dflt" + $i), 3
         }
         sbChurn()
         assert x == "a7" and y == "b8" and u == "dflt" + $i and k == 3

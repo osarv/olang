@@ -4,8 +4,8 @@
 # is read by the compiler's own parser in its old reading (parse.Adjacent), which records every join and the end of
 # each piece another follows, and " +" is written there - on the piece's own line, so a join running over several lines
 # inside parentheses keeps its line breaks (the "+" ending a line continues it, L18). A join that was the operand of an
-# operator binding tighter than "+" or as tightly (`x * "a" $b`, `embed "d" $f`) is parenthesized, so nothing is read
-# apart. Comments and string literals are never edited. A Markdown file has its "```olang" blocks and its inline code
+# operator binding tighter than "+" or as tightly (`x * "a" $b`, `embed "d" $f`), or a catch's default (one unary,
+# R9a: `catch default "x" $k`), is parenthesized, so nothing is read apart. Comments and string literals are never edited. A Markdown file has its "```olang" blocks and its inline code
 # spans migrated, each read as a file or, where that does not parse, as the body of a function. Files are rewritten in
 # place and a count printed; --check writes nothing and the exit status says whether anything would change.
 # Idempotent: text joined with "+" has no pieces side by side. OLANG_STD names std (default "std", as from the
@@ -37,9 +37,10 @@ type Insert struct(pos I64, rank I64, text String&) {
 }
 
 # the joins of a text in its old reading: their spans, the gaps where "+" goes, and whether it parsed clean
-type Reading struct(joins Vec<source.Span>, gaps Vec<I32>, clean Bool) {
+type Reading struct(joins Vec<source.Span>, gaps Vec<I32>, tight Vec<I32>, clean Bool) {
     joins
     gaps
+    tight
     clean
 }
 
@@ -53,11 +54,11 @@ fn Reading.Of(path String&, text String&, std String&, prelude String&) Reading 
     p := parse.Parser(src, ts, names, o, d, file)
     p.Adjacent = true
     p.File()
-    return Reading(p.Joins, p.JoinGaps, ts.Diags.Len() == 0 and d.AllSaid().Len() == 0)
+    return Reading(p.Joins, p.JoinGaps, p.TightJoins, ts.Diags.Len() == 0 and d.AllSaid().Len() == 0)
 }
 
 # whether an operator before a join takes its first piece alone now: one binding as tightly as "+" or tighter, a
-# prefix operator, "embed"
+# prefix operator, "embed" (a catch's default, one unary too, the parser records)
 fn tightBefore(k token.Tok) Bool {
     return match k {
         case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: true
@@ -97,7 +98,7 @@ fn inserts(text String&, r Reading&, shift I64, n mut Count&, out mut Vec<Insert
     }
     for sp in r.joins {
         n.joins++
-        if not needsGroup(ts.Toks, sp) { continue }
+        if not needsGroup(ts.Toks, sp) and I32(sp.Start) not in r.tight { continue }
         n.wrapped++
         out.Push(Insert(I64(sp.Start) - shift, 2, "("))
         out.Push(Insert(I64(sp.End) - shift, 0, ")"))
@@ -257,6 +258,13 @@ test migrate "a join a tighter operator would take apart is parenthesized" {
     src := "fn f(n I64) I64 {\n    return x * \"a\" $n\n}\n"
     assert migrate("t.olang", src, "", "", n) == "fn f(n I64) I64 {\n    return x * (\"a\" + $n)\n}\n"
     assert n.wrapped == 1
+}
+
+test migrate "a catch's default, one unary, is parenthesized" {
+    n := Count()
+    src := "fn f(m Map<I64, String>, k I64) String {\n    return try m.Get(k) catch default \"no \" $k\n}\n"
+    want := "fn f(m Map<I64, String>, k I64) String {\n    return try m.Get(k) catch default (\"no \" + $k)\n}\n"
+    assert migrate("t.olang", src, "", "", n) == want
 }
 
 test migrate "comments, text, a list's items on lines of their own and code already new are left as they are" {

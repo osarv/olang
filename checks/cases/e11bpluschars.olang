@@ -1,0 +1,9 @@
+# check: fail error[E11b]: '+' joins text, and this is Array<Char>, characters still being written
+# also: help: make it a String first - 'String(chars)' - or build the text in a StringBuilder
+# E11b, E39, T13a: an Array<Char> keeps its lane '+' beside an array, but beside a String it is text still being
+# written - made a String first
+fn show(t String&) { }
+fn main() {
+    chars := Array<Char>['o', 'k']
+    show("say " + chars)
+}
