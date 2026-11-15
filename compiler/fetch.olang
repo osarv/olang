@@ -12,6 +12,7 @@
 # sorted. -u resolves every repository the build reaches as if unlocked, once each.
 import "std/os"
 import "std/io"
+import "spin"
 
 type FetchError error {
     BadName        # M23a: a part of the path git and the cache cannot be trusted with
@@ -56,7 +57,7 @@ fn IsCommit(c String&) Bool {
 
 fn (f mut Fetcher&) say(line String&) {
     f.Said.Push(line)
-    if not f.Quiet { try io.PutErrLine(line) catch io.Error { } }
+    if not f.Quiet { spin.Say(io.Stderr, $line "\n") }
 }
 
 fn (f mut Fetcher&) load() {
@@ -190,6 +191,8 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     }
     try os.MkDirAll(parent) catch os.Error { error FetchError.Failed }
     tmp := try os.MkTemp(parent, ".fetch-") catch os.Error { error FetchError.Failed }
+    spin.Retitle($"fetching " $key)
+    defer spin.Retitle("compiling")
     if hasLine {
         f.say("olang: fetching " $key " into " $cache " at " $locked[:12] ", as olang.lock says")
         dir := $parent "/" $locked

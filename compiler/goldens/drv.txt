@@ -291,6 +291,7 @@
 | environment:
 |   OLANG_JOBS=N       runs N of clang's compiles at once; unset, one per core the memory available holds (B3m)
 |   OLANG_TIMES=1      says each phase of a build as it ends, with its time and the compiler's memory (B3m)
+|   OLANG_SPINNER=0    no busy indicator on the terminal while a build waits (B25)
 |   OLANG_CLANG=PATH   names the clang a build uses (B12d)
 |   OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)
 |   OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)

@@ -18,6 +18,7 @@ import "std/os"
 import "std/io"
 import "std/filepath"
 import "build"
+import "spin"
 import "diag"
 import "msgs"
 import "target"
@@ -39,6 +40,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
     c.Quiet = true
     c.Profile = true
     status := build.BuildProgram(fe, c, file, d)
+    spin.End()
     if status != 0 { return status }
     dir := $c.Dir "/profile"
     try os.MkDirAll(dir) catch os.Error {

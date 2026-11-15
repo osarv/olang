@@ -12,6 +12,7 @@
 
 import "std/os"
 import "std/io"
+import "spin"
 import "build"
 import "diag"
 import "msgs"
@@ -380,6 +381,7 @@ fn (w mut Worker&) relay(which I64) Bool {
     chunk := Array<U8>(65536)
     n := unistd.read(fd, chunk, U64(chunk.Len()))
     if n > 0 {
+        spin.End()     # the cell's own output is never beside the spinner
         try io.Write(I32(which), chunk[:n]) catch io.Error { }
         return true
     }

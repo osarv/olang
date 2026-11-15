@@ -1,0 +1,218 @@
+# spin - the busy indicator (B25): where olang waits - on clang, the link, a fetch, a cell - six dots, three columns by two
+# rows, lying down like the prompt's ":::" marker, one dot of them missing and the gap going once clockwise around the
+# six (top left, top middle, top right, bottom right, bottom middle, bottom left), drawn on the standard error beside what
+# is waited on ("compiling", "linking", "fetching owner/repo"), redrawn in place and erased as the wait ends, so what is on
+# the terminal afterwards is what would be there without it. Each column is a braille character using only its left
+# column's top two dots (U+2803, a dot gone U+2802 or U+2801), so the columns are one character apart and every dot is the
+# same size. Frames is the one place the frames are written; the makefile's loop around clang (the seed) uses the same.
+# Shown only when the standard error is a terminal (and TERM is not "dumb"), OLANG_SPINNER=0 turns it off, and only for a
+# wait lasting longer than StartAfter: a quick build shows nothing.
+#
+# One ticker task draws it, started by drive (Arm, Run) for the life of the process; Begin(what) says a wait has begun,
+# End() that it is over. Everything the compiler writes while it may be up goes through Say, which erases it first; the
+# ticker draws it again below what was written if the wait goes on. End comes before the program a build runs, the tests
+# of a test file and a cell's own output start, so a program's output is never beside it.
+
+import "std/os"
+import "std/io"
+import "std/time"
+
+# the frames, the gap clockwise from the top left
+Frames Array<String&> = Array<String&>["⠂⠃⠃", "⠃⠂⠃", "⠃⠃⠂", "⠃⠃⠁", "⠃⠁⠃", "⠁⠃⠃"]
+
+# a wait must last this long (milliseconds) before anything is drawn, and a frame lasts this long
+StartAfter I64 = 300
+Interval I64 = 90
+
+# how often the ticker looks at the clock and at what it is told (milliseconds): the longest it holds up a process's end
+Poll I64 = 20
+
+# the cursor to the line's start, and the line cleared from there
+Wipe String& = "\r\x1b[K"
+
+# frame n, drawn over whatever the line held: the cursor to the line's start, the frame, the label, the rest cleared
+fn Draw(n I64, label String&) String { return $"\r" $Frames[n % Frames.Len()] " " $label "\x1b[K" }
+
+# ---- state ----
+
+Running mut I64 = 0       # 1 once Arm has decided on a ticker: Begin does nothing without one
+Quit mut I64 = 0          # 1 once the process is ending: the ticker erases and returns
+On mut I64 = 0            # 1 between Begin and End
+Drawn mut I64 = 0         # 1 while something of the spinner is on the screen
+Since mut I64 = 0         # when Begin was called (time.Now)
+Title mut String = ""     # what is waited on
+Lock mut I64 = 0          # held while the screen is written to, so a line and the spinner never mix
+
+fn grab() { for Lock.AtomicCompareSwap(0, 1) != 0 { } }
+fn release() { Lock.AtomicStore(0) }
+
+# whether this process shows a spinner: its standard error is a terminal that takes escapes, and OLANG_SPINNER is not 0
+fn Enabled() Bool {
+    if not os.IsTerminal(io.Stderr): return false
+    if (try os.Env("OLANG_SPINNER") catch os.Error default "") == "0": return false
+    return (try os.Env("TERM") catch os.Error default "") != "dumb"
+}
+
+# decides whether the process has a ticker: true where Enabled says so, and the caller then runs Run beside its work
+# and calls Stop when the work is over
+fn Arm() Bool {
+    if not Enabled(): return false
+    Running.AtomicStore(1)
+    return true
+}
+
+# the ticker: draws the spinner while a wait that began more than StartAfter ago lasts, until Stop
+fn Run() {
+    n I64 = 0
+    next I64 = 0
+    for Quit.AtomicLoad() == 0 {
+        time.Sleep(time.Duration.Millis(Poll))
+        now := time.Now()
+        if now < next: continue
+        grab()
+        if On.AtomicLoad() == 1 and now >= Since + StartAfter * 1000000 {
+            put(io.Stderr, Draw(n, Title))
+            Drawn.AtomicStore(1)
+            n++
+            next = now + Interval * 1000000
+        }
+        release()
+    }
+    erase()
+}
+
+# the process's work is over: the ticker erases what it drew and returns
+fn Stop() { Quit.AtomicStore(1) }
+
+fn put(fd I32, text String&) { try io.Write(fd, text) catch io.Error { } }
+
+# the line erased, where something of the spinner is on it. Called with the lock held
+fn clear() {
+    if Drawn.AtomicLoad() == 0: return
+    put(io.Stderr, Wipe)
+    Drawn.AtomicStore(0)
+}
+
+fn erase() {
+    grab()
+    clear()
+    release()
+}
+
+# a wait on what begins: shown as what, once it has lasted StartAfter
+fn Begin(what String&) {
+    if Running.AtomicLoad() == 0: return
+    grab()
+    Title = $what
+    Since = time.Now()
+    On.AtomicStore(1)
+    release()
+}
+
+# what is waited on is now what: the wait goes on
+fn Retitle(what String&) {
+    if Running.AtomicLoad() == 0: return
+    grab()
+    Title = $what
+    release()
+}
+
+# the wait is over: nothing of the spinner is left on the screen, and nothing is drawn until the next Begin
+fn End() {
+    if Running.AtomicLoad() == 0: return
+    grab()
+    On.AtomicStore(0)
+    clear()
+    release()
+}
+
+# text written to fd (the standard output or error) with the spinner erased first: what the spinner is waiting beside
+# is written where the spinner was, and the spinner, if the wait goes on, is drawn again below it
+fn Say(fd I32, text String&) {
+    if Running.AtomicLoad() == 0 {
+        put(fd, text)
+        return
+    }
+    grab()
+    clear()
+    put(fd, text)
+    release()
+}
+
+# ---- tests ----
+
+# what a terminal shows of text written to it, one line: "\r" returns to the line's start, ESC [ K clears from the
+# cursor on, a line feed starts an empty line, anything else overwrites (the spinner writes only one line)
+fn shown(written String&) String {
+    line Vec<Char>
+    col I64 = 0
+    i I64 = 0
+    for i < written.Len() {
+        ch := written[i]
+        if ch == '\r' {
+            col = 0
+            i++
+            continue
+        }
+        if ch == '\n' {
+            line.Truncate(0)
+            col = 0
+            i++
+            continue
+        }
+        if ch == Char(27) and i + 2 < written.Len() and written[i + 1] == '[' and written[i + 2] == 'K' {
+            line.Truncate(col)
+            i += 3
+            continue
+        }
+        if col < line.Len(): line[col] = ch
+        else: line.Push(ch)
+        col++
+        i++
+    }
+    return String(line.ToArray())
+}
+
+test Draw "frames go round the six dots, one gap each" {
+    assert Frames.Len() == 6
+    assert Frames[0] == "⠂⠃⠃" and Frames[1] == "⠃⠂⠃" and Frames[5] == "⠁⠃⠃"
+    assert Draw(0, "linking") == "\r⠂⠃⠃ linking\x1b[K"
+    assert Draw(6, "linking") == Draw(0, "linking") and Draw(10, "x") == Draw(4, "x")
+    # every frame is three braille characters of the block's first rows (U+2801 to U+2803): one dot of the six missing
+    dots := 0
+    for f in Frames {
+        assert f.Len() == 9
+        for k in range 3 { assert f[3 * k] == Char(0xE2) and f[3 * k + 1] == Char(0xA0) and f[3 * k + 2] >= Char(0x81) and f[3 * k + 2] <= Char(0x83) }
+        dots = 0
+        for k in range 3 { dots += 2 if f[3 * k + 2] == Char(0x83) else 1 }
+        assert dots == 5
+    }
+}
+
+test Draw "a redraw replaces the line and the erase leaves nothing" {
+    written := StringBuilder()
+    for n in range 20 {
+        written.Push(Draw(n, "compiling" if n < 10 else "linking"))
+        # what is on the line is the latest frame and its label, nothing of an earlier, longer label
+        assert shown(written.ToString()) == $Frames[n % Frames.Len()] " " $("compiling" if n < 10 else "linking")
+    }
+    written.Push(Wipe)
+    assert shown(written.ToString()) == ""
+}
+
+test Say "text written beside the spinner starts a clean line" {
+    written := StringBuilder()
+    written.Push(Draw(3, "compiling"))
+    written.Push(Wipe)
+    written.Push("clang: a warning\n")
+    assert shown(written.ToString()) == ""    # the line the cursor is now on is empty, below the warning
+    assert written.ToString().StartsWith($Draw(3, "compiling") "\r\x1b[Kclang")
+}
+
+test Say "without a ticker nothing is drawn and text goes straight through" {
+    assert Running.AtomicLoad() == 0
+    Begin("compiling")
+    assert On.AtomicLoad() == 0 and Drawn.AtomicLoad() == 0
+    End()
+    assert not Enabled() or os.IsTerminal(io.Stderr)
+}

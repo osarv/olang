@@ -27,6 +27,7 @@ import "mir"
 import "eval"
 import "interp"
 import "build"
+import "spin"
 import "scope"
 import "free"
 import "lineedit"
@@ -673,14 +674,18 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
     dir := s.cellDir()
     try os.MkDirAll(dir) catch os.Error { }
     so := $dir "/cell" $n ".so"
+    spin.Begin("compiling")
     try cells.Build(s.cc, s.Root, p.B.ToString(), p.Kept.ToArray(), p.Paths.ToArray(), p.Lines.ToArray(), plan, so, d) catch build.Failed {
+        spin.End()
         r.Diags = cellRows(d.Render(), ce.Label)
         if r.Diags == "": r.Diags = "olang: the cell cannot be built\n"
         return
     }
     r.Checked = true
     r.Diags = cellRows(d.Warnings(), ce.Label)
+    spin.Retitle("running")
     o := s.work.Run(so, s.Watch)
+    spin.End()
     build.Phase("cell run")
     s.Decls = ds
     vals Vec<Value>

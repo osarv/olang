@@ -12,6 +12,7 @@
 import "std/os"
 import "std/io"
 import "std/time"
+import "spin"
 import "build"
 import "target"
 import "cond"
@@ -457,6 +458,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push("\nenvironment:\n")
         b.Push("  OLANG_JOBS=N       runs N of clang's compiles at once; unset, one per core the memory available holds (B3m)\n")
         b.Push("  OLANG_TIMES=1      says each phase of a build as it ends, with its time and the compiler's memory (B3m)\n")
+        b.Push("  OLANG_SPINNER=0    no busy indicator on the terminal while a build waits (B25)\n")
         b.Push("  OLANG_CLANG=PATH   names the clang a build uses (B12d)\n")
         b.Push("  OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)\n")
         b.Push("  OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)\n")
@@ -496,6 +498,19 @@ fn format(cl CommandLine&) I32 { return fmt.Files("-l" if cl.Check else "-f", cl
 
 # runs the command line args with the front end fe, as the process olang is: the status it ends with
 fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
+    status := runWith(args, fe)
+    spin.End()
+    return status
+}
+
+# whether the mode waits on something a spinner may show (B25): not the servers, the prompt, a kernel, help, nor a test of
+# several files (each file's own process shows its own)
+fn waits(cl CommandLine&) Bool {
+    if cl.Prompt or cl.Mode == Help or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Jupyter or cl.Mode == Notebook: return false
+    return not (cl.Mode == Test and cl.Files.Len() > 1)
+}
+
+fn runWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     d := diag.Diagnostics(diag.ColorWanted())
     c := build.Config()
     c.Color = d.Color
@@ -505,6 +520,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         text := try help(cl, d) catch Bad { return said(d) }
         return write(text)
     }
+    if waits(cl): spin.Begin("running tools" if cl.Mode == Fix else "compiling")
     if cl.Mode == Explain and cl.Caps { return session.CapsMode(cl.Files[0], c) }
     if cl.Mode == Explain and cl.Listing != "" { return listing.Run(fe, c, cl.Files[0], cl.Word, cl.Listing == "-ir", d) }
     if cl.Mode == Explain {
@@ -547,19 +563,28 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
 
 # text written to the standard output; 0, or 1 where it could not be
 fn write(text String&) I32 {
+    spin.End()
     try io.Put(text) catch io.Error { return 1 }
     return 0
 }
 
 # a mistake in the command line, written as it was reported: no line counting errors follows it (B11)
 fn said(d mut diag.Diagnostics&) I32 {
+    spin.End()
     write(d.Render())
     return 1
 }
 
 fn drive(args Array<String&>&) I32 {
     fe := Passes()
-    return RunWith(args, fe)
+    if not spin.Arm(): return RunWith(args, fe)
+    status I32 = 0
+    join {
+        spawn spin.Run()
+        status = RunWith(args, fe)
+        spin.Stop()
+    }
+    return status
 }
 
 # ---- the front end ----
@@ -1259,6 +1284,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     fr := try placement(c, cfg, l.Root)
     if d.Errors() > 0 { error build.Failed.Reported }
     # B3e: what is only untidy is said as a warning, on the standard error, and the program runs
+    spin.End()
     if d.Lenient: try io.PutErr(d.Warnings()) catch io.Error { }
     x.Lw.Plans = fr.Plans
     twinsTo(x.Lw, fr)
