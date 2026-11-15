@@ -620,6 +620,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     finalQuiet Bool = false                   # the quiet judging after a body's claims are inferred: its refusals count
     wantDecl Map<I64, Bool>
     wantField Map<pair.Pair<I64, I64>, Bool>
+    landedOn Map<I64, Bool>                # the declarations whose field's derived scope a call's result landed in (O18c)
     promotedF Map<pair.Pair<I64, I64>, I64>   # ... the constructor parameter it binds to
     demotedF Map<pair.Pair<I64, I64>, Bool>
     Unplaced Vec<String&>                     # fields a refusal needed promoted that have no parameter to bind to (open point 4)
@@ -4922,6 +4923,12 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
         }
         match to {
             case Term.Block(_), Term.Var(_) { }
+            # (a parameter's derived scope - what a field of its referent refers to, O23a: a writable reference the
+            # callee hands back from there lands there exactly, as a reference local's version would hold it, O25i)
+            case Term.Derived(p, w) {
+                if p < 0: return Term.None
+                s.noteLanded(p, w)
+            }
             # the program's, only where the callee builds nothing there: nothing is then kept to the end
             case Term.Program {
                 if callee < 0 or s.sumBuilds(callee, rv) { return Term.None }
@@ -11118,8 +11125,9 @@ fn (s mut Scoper&) callValue(c typed.Call&, ty types.TypeId, callee I64, fty typ
     # D18c: a generator whose elements borrow from parameter p: where p's argument lives, for the walk it may make
     if callee >= 0 { s.noteGenArg(callee, beta, owner, c) }
     e := s.P.T.ResultFrom(fty, 0)
-    # D18c: the Next of a walk a for-in makes of such a generator gives elements living where that argument does
-    if n > 0 and s.isRef(ty) {
+    # D18c: the Next of a walk a for-in makes of such a generator gives elements living where that argument does (a
+    # HoldingGenerator's, values whose references live there)
+    if n > 0 and (s.isRef(ty) or s.holds(ty)) {
         wl := s.argLocal(c.Args[0])
         if wl >= 0 and s.walkElem.Has(wl) { return Val.existing(try s.walkElem.Get(wl) catch default Term.Untraced) }
     }
@@ -12021,6 +12029,10 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
         if k != Obliged {
             s.giveBackDerived(hi)
             s.giveBackDerived(lo)
+            # (... and one of the callee's own that the call cannot show: its binding through this argument is not known
+            # here - a writable reference it hands back from there landing there, O18c)
+            s.giveBackCallee(callee, r.Hi)
+            s.giveBackCallee(callee, r.Lo)
             if s.derivedTerm(hi) or s.derivedTerm(lo) {
                 s.giveBackArg(c, r.Hi)
                 s.giveBackArg(c, r.Lo)
@@ -14328,6 +14340,29 @@ fn (s mut Scoper&) giveBackDerived(t Term) {
         }
         case _ { }
     }
+}
+
+# ... the declaration of body callee's parameter whose field viewing its referent the callee's derived term t reads -
+# where a call's result landed in that scope (noteLanded): what the landing asked of its callers they cannot show, so
+# the field goes back as it would have where the result landed in its block (a refusal's own field, never given back
+# for it, is not one of them)
+fn (s mut Scoper&) giveBackCallee(callee I64, t Term) {
+    if callee < 0 or t != Term.Derived or t.p < 0 or t.p >= s.Bodies[callee].Params.Len(): return
+    cb := s.Bodies[callee]
+    d := s.declOf(cb.Locals[I64(cb.Params[t.p])].Ty)
+    if d >= 0 and s.landedOn.Has(d): s.giveBack(d)
+    dd := try s.derivedDecl.Get(pair.Pair<I64, I64>(callee * 65536 + t.p, t.w)) catch default -1
+    if dd >= 0 and s.landedOn.Has(dd): s.giveBack(dd)
+}
+
+# a call's result landed in derived scope Derived(p, w) of the body being judged (landByObligations): the declarations
+# whose field it is read through noted for giveBackCallee
+fn (s mut Scoper&) noteLanded(p I64, w I64) {
+    if p >= s.B!.Params.Len(): return
+    d := s.declOf(s.B!.Locals[I64(s.B!.Params[p])].Ty)
+    if d >= 0: s.landedOn.Put(d, true)
+    dd := try s.derivedDecl.Get(pair.Pair<I64, I64>(s.Id * 65536 + p, w)) catch default -1
+    if dd >= 0: s.landedOn.Put(dd, true)
 }
 
 # ... asked by an exact relation on a call's result, in any judging of the field inference
