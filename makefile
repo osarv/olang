@@ -521,13 +521,10 @@ releasetest:
 	then echo "releasetest: built and ran a program importing C headers, explain read SPEC.md, profile named the hot function, explain -asm showed its code"; rm -rf $$t; \
 	else echo "releasetest: failed ($$t)"; exit 1; fi
 
-# the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
-# intentional data race - the "several tasks may be handed the same instance" test, which exists to show
-# that the language permits one since P3 was withdrawn - so a correct run of this target REPORTS exactly
-# one race, in tests/shared.Tally.readOut, and exits nonzero for it. More than one means something regressed.
+# the whole suite under ThreadSanitizer (P7): every test of every file, where "olang test" itself runs only the tests
+# that start a task so (P7a). The corpus holds no intentional race now, so a correct run reports none and exits zero.
 race: $(OLANG)
-	-$(OLANG) test -race $(filter-out checks/checks.olang, $(OLANG_TESTS))
-	@echo "race: expect exactly one report, in tests/shared.Tally.readOut (the intentional one)"
+	$(OLANG) test -race $(filter-out checks/checks.olang, $(OLANG_TESTS))
 
 # the differential fuzzer (fuzz/, K1): random programs whose every value is computed while compiling, built -O3, built
 # -O0 and interpreted, each run compared. Not part of "verify" - it runs as long as it is asked to. "make fuzz

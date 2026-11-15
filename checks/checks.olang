@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline"]
+                     "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline", "racetests"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -501,6 +501,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "testends" { try testends(r) }
         case "checkedbuild" { try checkedbuild(r) }
         case "linkinline": try linkinline(r)
+        case "racetests": try racetests(r)
         case _ {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.Check
@@ -3024,6 +3025,36 @@ fn testends(r mut report&) ? Failed {
         try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" " $n ".olang > i.txt 2>&1; grep -v '^Aborted' i.txt | cmp -s - " $n ".d.want") == 0
                      $n " -i", dir)
     }
+}
+
+# B3a, P7a: the tests of a file that start a task - directly or through a call - run in a build of the race detector, the
+# others in the ordinary one; a race fails the test it was reported in, the report printed; the counts are said once; words
+# pick tests from either build; -race puts every test in the race build, OLANG_AUTORACE=0 none; a file whose tests start no
+# task is built once
+test "tests that start a task run under the race detector, the others do not" { assert passed("racetests") }
+
+fn racetests(r mut report&) ? Failed {
+    dir := fresh("racetests")
+    os.Run("cp checks/fixtures/racetests/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" test race.olang > out.txt 2>&1") == 1, "a race fails the file", dir)
+    out := outOf(dir)
+    try r.expect(out.Contains("plain: race build false\nok - plain\n") and out.Contains("after: race build false\nok - after\n")
+                 "the others in the ordinary build", dir)
+    try r.expect(out.Contains("own: race build true\nok - tasks writing counters of their own\n") and
+                 out.Contains("through a call: race build true\nok - a call reaching a task\n"), "those that start a task, in the race build", dir)
+    try r.expect(out.Contains("racing: race build true\n") and out.Contains("WARNING: ThreadSanitizer: data race") and
+                 out.Contains("FAIL - two tasks writing one counter: data race\n"), "a race reported and failing its test", dir)
+    try r.expect(out.EndsWith("4 passed, 1 failed\n") and out.Split("passed,").Len() == 2, "one count line", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test race.olang plain own > out.txt 2>&1") == 0 and outOf(dir).EndsWith("2 passed, 0 failed\n") and
+                 not outOf(dir).Contains("ThreadSanitizer"), "words naming tests of both builds, a clean race build passing", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test race.olang nosuch > out.txt 2>&1") == 3 and outOf(dir).Contains("no test is named by 'nosuch'")
+                 "words naming none", dir)
+    try r.expect(sh(dir, "OLANG_AUTORACE=0 \"$OLANG\" test race.olang > out.txt 2>&1") == 0 and not outOf(dir).Contains("race build true")
+                 "OLANG_AUTORACE=0", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -race race.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("plain: race build true\n")
+                 "-race: every test", dir)
+    try r.expect(sh(dir, "rm -f build/*_test.race; \"$OLANG\" test clean.olang > out.txt 2>&1") == 0 and outOf(dir).EndsWith("1 passed, 0 failed\n") and
+                 sh(dir, "ls build/clean_test.race > /dev/null 2>&1") != 0, "a file starting no task is built once", dir)
 }
 
 # B3g: a file written where the mode would stand is built and run - its arguments after it, an option's spelling
