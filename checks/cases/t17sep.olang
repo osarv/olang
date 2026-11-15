@@ -1,4 +1,4 @@
-# check: fail error[M22]: unknown type 'South'
+# check: fail error[T2]: unknown type 'South'
 # T17, T17a: "{ North South }" is not two cases - a case followed by a type on its line carries that type whole, and
 # no type South is known
 type Dir enum { North South }

@@ -1186,9 +1186,9 @@ fn ImportIsPrivate(tok String&) r.Msg { return r.Msg(Diag.ImportIsPrivate, "M14"
 fn ReexportCycle(tok String&) r.Msg { return r.Msg(Diag.ReexportCycle, "M17", "re-exporting " + $tok + " reaches this module again") }
 fn ImportReachedTwice(tok String&) r.Msg { return r.Msg(Diag.ImportReachedTwice, "M16", $tok + " reaches a file another import of this module already reaches") }
 fn NameClashesWithImport(tok String&) r.Msg { return r.Msg(Diag.NameClashesWithImport, "M20", $tok + " is an import's alias in this module - rename one of them") }
-fn UnknownType(tok String&) r.Msg { return r.Msg(Diag.UnknownType, "M22", "unknown type " + $tok) }
-fn UnknownTypeMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownTypeMeant, "M22", "unknown type " + $tok + " - did you mean '" + $text + "'?") }
-fn UnknownTypeStd(tok String&, module String&, name String&) r.Msg { return r.Msg(Diag.UnknownTypeStd, "M22", "unknown type " + $tok + " - std/" + $module + " declares it", "a type of another module is reached through its import (M10)", "write 'import \"std/" + $module + "\"' and '" + $module + "." + $name + "'") }
+fn UnknownType(tok String&) r.Msg { return r.Msg(Diag.UnknownType, "T2", "unknown type " + $tok) }
+fn UnknownTypeMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownTypeMeant, "T2", "unknown type " + $tok + " - did you mean '" + $text + "'?") }
+fn UnknownTypeStd(tok String&, module String&, name String&) r.Msg { return r.Msg(Diag.UnknownTypeStd, "T2", "unknown type " + $tok + " - std/" + $module + " declares it", "a type of another module is reached through its import (M10)", "write 'import \"std/" + $module + "\"' and '" + $module + "." + $name + "'") }
 fn UnknownConstraint(tok String&) r.Msg { return r.Msg(Diag.UnknownConstraint, "G19", "unknown trait " + $tok + " as a constraint", "a type variable needs no constraint: what its body asks of it is what a call must give (G18a)", "write the variable alone ('<T>'), or declare the trait") }
 fn UnknownNumberType(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNumberType, "T4", "unknown type " + $tok + " - the numbers are named by kind and width: did you mean '" + $text + "'?") }
 fn UnknownName(tok String&) r.Msg { return r.Msg(Diag.UnknownName, "M22", "unknown name " + $tok) }

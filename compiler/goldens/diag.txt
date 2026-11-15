@@ -266,7 +266,7 @@ b11near.olang:24:12: error[M9]: module std/io declares no 'PutLin' - did you mea
       |            ^~~~~~
 compilation failed with 6 errors
 === b11unknownonce.olang
-b11unknownonce.olang:11:11: error[M22]: unknown type 'Json' - did you mean 'json.Json'?
+b11unknownonce.olang:11:11: error[T2]: unknown type 'Json' - did you mean 'json.Json'?
    11 | fn kind(j Json&) String {
       |           ^~~~
 compilation failed with 1 error
@@ -2950,7 +2950,7 @@ g7argcount.olang:5:21: error[G7]: type arguments for Box: expected 1, found 2
       |                     ^~~
 compilation failed with 1 error
 === g8bunknown.olang
-g8bunknown.olang:4:17: error[M22]: unknown type 'T'
+g8bunknown.olang:4:17: error[T2]: unknown type 'T'
     4 | fn plain(a I32) T { return a }
       |                 ^
 compilation failed with 1 error
@@ -3681,7 +3681,7 @@ m21twiceplain.olang:6:11: note: 'Area' is declared here
       |           ^~~~
 compilation failed with 1 error
 === m21unknownrecv.olang
-m21unknownrecv.olang:12:11: error[M22]: unknown type 'Tow'
+m21unknownrecv.olang:12:11: error[T2]: unknown type 'Tow'
    12 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
       |           ^~~~~~~~~~~~~
 compilation failed with 1 error
@@ -3691,13 +3691,6 @@ m22methodcall.olang:6:14: error[M22]: unknown function 'max' - it is a method of
       |              ^~~
 m22methodcall.olang:6:14: note: a method is called on its receiver, never as a function (M19)
 m22methodcall.olang:6:14: help: write 'a.Max(b)'
-compilation failed with 1 error
-=== m22stdtype.olang
-m22stdtype.olang:4:10: error[M22]: unknown type 'Deque' - std/deque declares it
-    4 |     q := Deque<I64>()
-      |          ^~~~~~~~~~
-m22stdtype.olang:4:10: note: a type of another module is reached through its import (M10)
-m22stdtype.olang:4:10: help: write 'import "std/deque"' and 'deque.Deque'
 compilation failed with 1 error
 === m22unknowncase.olang
 m22unknowncase.olang:4:5: error[M22]: unknown function or type 'print' - did you mean 'Print'?
@@ -5927,7 +5920,7 @@ t17ewithouttype.olang:3:9: error[T17e]: a raw value needs the enum's raw type, w
       |         ^
 compilation failed with 1 error
 === t17sep.olang
-t17sep.olang:4:23: error[M22]: unknown type 'South'
+t17sep.olang:4:23: error[T2]: unknown type 'South'
     4 | type Dir enum { North South }
       |                       ^~~~~
 compilation failed with 1 error
@@ -6915,6 +6908,13 @@ t2dunheld.olang:5:10: error[T2d]: no owning place of the program holds a Node
 t2dunheld.olang:5:10: note: a field, an element, a payload or a global holding it other than weakly would - so every weak reference to one would read null
 t2dunheld.olang:5:10: help: hold it somewhere owning, or drop 'weak'
 compilation failed with 1 error
+=== t2stdtype.olang
+t2stdtype.olang:4:10: error[T2]: unknown type 'Deque' - std/deque declares it
+    4 |     q := Deque<I64>()
+      |          ^~~~~~~~~~
+t2stdtype.olang:4:10: note: a type of another module is reached through its import (M10)
+t2stdtype.olang:4:10: help: write 'import "std/deque"' and 'deque.Deque'
+compilation failed with 1 error
 === t30aextendedmethod.olang
 t30aextendedmethod.olang:14:10: error[G19]: eaSq does not satisfy the constraint eaDwelling on T: it has no method Rooms (eaHouse's) that fits
    14 |     a := eaArea(eaSq(2))
@@ -7143,7 +7143,7 @@ t34casegenericbare.olang:17:14: error[G7]: type arguments for aBox: expected 1, 
       |              ^~~~
 compilation failed with 1 error
 === t34caseunknown.olang
-t34caseunknown.olang:11:14: error[M22]: unknown type 'aBx'
+t34caseunknown.olang:11:14: error[T2]: unknown type 'aBx'
    11 |         case aBx _ { return 1 }
       |              ^~~
 compilation failed with 1 error
@@ -7374,7 +7374,7 @@ traitnottype.olang:6:8: note: a trait is a constraint on a type variable
 traitnottype.olang:6:8: help: a value of any type meeting it is an 'any S&'
 compilation failed with 1 error
 === traitunknowntype.olang
-traitunknowntype.olang:6:13: error[M22]: unknown type 'Tensor'
+traitunknowntype.olang:6:13: error[T2]: unknown type 'Tensor'
     6 |     Value() Tensor<F32>
       |             ^~~~~~~~~~~
 compilation failed with 1 error
@@ -7433,12 +7433,12 @@ unknownnamenomethod.olang:8:10: error[M22]: unknown name 't'
       |          ^
 compilation failed with 1 error
 === unknownreceiver.olang
-unknownreceiver.olang:9:7: error[M22]: unknown type 'Missing'
+unknownreceiver.olang:9:7: error[T2]: unknown type 'Missing'
     9 | fn (e Missing&) eval() F64 { return 1.0 }
       |       ^~~~~~~
 compilation failed with 1 error
 === unknowntypearg.olang
-unknowntypearg.olang:10:14: error[M22]: unknown type 'Itm' - did you mean 'Item'?
+unknowntypearg.olang:10:14: error[T2]: unknown type 'Itm' - did you mean 'Item'?
    10 |     l := Vec<Itm&>()
       |              ^~~
 compilation failed with 1 error

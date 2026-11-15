@@ -1,4 +1,4 @@
-# check: fail error[M22]: unknown type 'Tensor'
+# check: fail error[T2]: unknown type 'Tensor'
 # also: compilation failed with 1 error
 # T4: an unknown type in a trait method's signature is said at the trait - it once went unreported, and a generic
 # calling the method through an `any` failed in lowering (oann's repro/traittype)

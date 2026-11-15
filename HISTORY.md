@@ -38124,12 +38124,13 @@ an unknown function whose first argument's type has a method of the name (capita
 included) is now `unknown function 'max' - it is a method of its first argument`, help `write 'a.Max(b)'` (M22).
 (2) A std type with no import (`Deque<I64>()`) was a "cannot build this yet" gap, `q Deque<I64>` "unknown type" with no
 rule, and the study saw six cascading errors: `unknown type 'Deque' - std/deque declares it`, help `import "std/deque"`
-and `deque.Deque` (M22; the module named for the type, read only on the error path). (3) T25c said "drop the 'mut'"
+and `deque.Deque` (T2, which every unknown type now names - M22 is names' rule, and namesdiff holds the checker's
+apart; the module named for the type, read only on the error path). (3) T25c said "drop the 'mut'"
 where none was written (`s := xs; s.Sort(...)` on a read-only parameter): now a headline, a note (what is reached
 read-only stays so, `x := r` copies the reference) and a help naming `r.Copy()`. (4) An assumed trait as a constraint
 (`<T Less>`) was "unknown type" with no rule: `unknown trait 'Less' as a constraint` (G19), noting that a type
 variable needs no constraint (G18a). (5) `Lru has no member 'cap'` for a constructor parameter the body never named now
-says it is a parameter, not a field (C2a). Besides: "unknown type" carries M22 everywhere; csv.Decode<Array<Row>> was
+says it is a parameter, not a field (C2a). Besides: csv.Decode<Array<Row>> was
 G33 and E13b inside std's code with its own assertion said last - the record-building line is now under a per-instance
 `if` (G35), so the assertion is said alone, its message naming T. Already fixed on master: E27's help for a Set
 comprehension (`set.Set<I64>[x for x in a if x in b]` builds). Quadratic memory of a self-append (x01): at 40000
