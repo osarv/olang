@@ -1869,7 +1869,8 @@ open; one thing that can be called is a function value (T21).
 of that name whose
 
 - receiver's type is `T` up to reference-shape (`T`, `T&` or `mut T&` — the latitude E12 gives any argument),
-- receiver is a writable reference (`mut T&`) if and only if the signature is declared `mut`,
+- receiver is a writable reference (`mut T&`) only if the signature is declared `mut` - a method that only reads its
+  receiver meets a `mut` signature too, promising more than it asks,
 - remaining parameters agree in count, order and type (T27), a parameter differing only in reference-shape
   included, since the call is a direct one and E12 borrows - and in each parameter's `mut` and a reference's
   permission (T25b), so a method never writes through what its trait only lets it read,

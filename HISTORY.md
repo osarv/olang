@@ -37811,3 +37811,8 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   so `Value() Tensor<F32>` with Tensor unknown was said nowhere, and a generic calling it through an `any` failed in
   lowering ("it does not lower an unknown type"; oann's repro/traittype). traitSets now checks the types each method
   writes, in the trait's context; checks case traitunknowntype.
+- **A read-only method meets a `mut` trait method (T31).** `meets` refused a method whose receiver is `T&` for a
+  signature declared `mut`, though reading only promises more than the trait asks (oann's data/text `Windows.At`).
+  T31 now says "a writable reference only if the signature is `mut`"; a method writing its receiver still meets no
+  signature that only reads it (t32anymutimpl, g19permission). A call through a `mut any` lends the writable receiver
+  read-only, as to any parameter. Test in tests/any.olang, through an `any` and a constrained generic, baked and run.

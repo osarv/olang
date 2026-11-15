@@ -4450,8 +4450,8 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
     hs := p.T.Items(p.T.Params(have))
     ws := p.T.Items(p.T.Params(want))
     if hs.Len() != ws.Len() + 1 { return false }
-    if m.Recv != null and not p.writableRecv(hs[0]) { return false }   # a "mut" method: a writable receiver (T31)
-    # ... and only a "mut" one: a method writing its receiver meets no signature that only reads it (T31)
+    # T31: a method writing its receiver meets no signature that only reads it; one only reading it meets a "mut"
+    # signature too, promising more (a writable receiver is lent read-only, as to any parameter)
     if m.Recv == null and p.T.KindOf(hs[0]) == types.Kind.Ref and (p.T.PermOf(hs[0]) & types.Writable) != 0 { return false }
     for i in range ws.Len() {
         if not p.sameUpToShape(hs[i + 1], ws[i]) { return false }
@@ -4599,10 +4599,6 @@ fn (p mut Program&) sealedBy(t types.TypeId, d types.DeclId, f I64) Bool {
     if p.fns[f].Mi != tm { return false }
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     return p.T.KindOf(x) != types.Kind.Named or p.DeclModule(p.T.DeclOf(x)) == tm
-}
-
-fn (p mut Program&) writableRecv(r types.TypeId) Bool {
-    return p.T.KindOf(r) != types.Kind.Ref or (p.T.PermOf(r) & types.Writable) != 0
 }
 
 fn (p mut Program&) sameUpToShape(a types.TypeId, c types.TypeId) Bool {
