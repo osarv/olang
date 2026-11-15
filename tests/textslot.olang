@@ -16,7 +16,7 @@ fn tsWalk(n I64) String {
         t[0] = Char(U8('a') + U8(i))
         if i % 2 == 0 { tsUpper(t) }
         u := t[1:3]
-        out.Push($t ":" $u " ")
+        out.Push($t + ":" + $u + " ")
         if i == 3 { t = "longer than abc" }
         out.Push($t.Len())
     }
@@ -60,7 +60,7 @@ fn tsChose(t mut Array<Char>&, u Array<Char>&, k I64) String {
     a[0] = 'x'
     b[0] = 'y'
     t[0] = 'z'
-    return $c $d $e $f
+    return $c + $d + $e + $f
 }
 
 fn tsChoseRun() String {

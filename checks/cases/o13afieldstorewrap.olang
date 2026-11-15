@@ -10,7 +10,7 @@ type W struct(h H) {
 }
 fn W.mk(n I64, s String&) W {
     e := H(s)
-    e.r = $n $n
+    e.r = $n + $n
     return W(e)
 }
 fn main() ? {
@@ -24,7 +24,7 @@ fn churn() I64 {
     for i in range 50 {
         a := Array<I64>(64, -7)
         t += a[3]
-        x := $i $i $i $i
+        x := $i + $i + $i + $i
         t += x.Len()
     }
     return t

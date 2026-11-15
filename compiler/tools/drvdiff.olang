@@ -121,11 +121,11 @@ Cases Array<String&> = Array<String&>[
 ProgramNames Array<String&> = Array<String&>["hello.olang", "args.olang", "exit.olang", "fails.olang", "tests.olang"
     "bad.olang", "defs.olang", "ugly.olang"]
 ProgramTexts Array<String&> = Array<String&>[
-    "import \"std/io\"\n\nfn main() {\n    io.PutLine(\"hello \" $(40 + 2))!\n}\n"
+    "import \"std/io\"\n\nfn main() {\n    io.PutLine(\"hello \" + $(40 + 2))!\n}\n"
     ("import \"std/io\"\nimport \"std/os\"\n\nfn main() {\n    for a in os.Args() { io.PutLine(a)! }\n}\n")
     "import \"std/os\"\n\nfn main() {\n    os.Exit(3)\n}\n"
     "type E error {\n    Bad\n}\n\nfn main() ? E {\n    error E.Bad\n}\n"
-    ("test \"one passes\" {\n    assert 1 + 1 == 2\n}\n\nfn two() I64 { return 2 }\n\n" $
+    ("test \"one passes\" {\n    assert 1 + 1 == 2\n}\n\nfn two() I64 { return 2 }\n\n" + $
             "test \"one fails\" {\n    assert two() == 3\n}\n")
     "fn main() {\n    x := y\n}\n"
     "import \"std/io\"\n\nfn main() {\n    io.PutLine($N)!\n}\n"
@@ -152,35 +152,35 @@ fn main() {
     capture := args.Len() == 3 and args[1] == "-capture"
     if args.Len() > 1 and not capture { toolkit.Die("usage: drvdiff [-capture COMPILER]") }
     exe := $args[2] if capture else toolkit.Env("DRVDIFF_DRIVER", "build/compiler_olang")
-    if not toolkit.Built(exe) { toolkit.Die("drvdiff: " $exe " is not built (make " $exe ")") }
+    if not toolkit.Built(exe) { toolkit.Die("drvdiff: " + $exe + " is not built (make " + $exe + ")") }
     gpath := "compiler/goldens/drv.txt"
     g := toolkit.Golden() if capture else toolkit.Golden.Read(gpath, "drvgold")
     here := try os.Cwd() catch os.Error { toolkit.Die("drvdiff: no working directory") }
     work := toolkit.Scratch("drvdiff")
     defer toolkit.Clean(work)
-    try os.MkDir($work "/adir") catch os.Error { toolkit.Die("drvdiff: cannot make " $work "/adir") }
+    try os.MkDir($work + "/adir") catch os.Error { toolkit.Die("drvdiff: cannot make " + $work + "/adir") }
     keys := Vec<String&>()
     got := Vec<String&>()
     for line in Cases {
-        keys.Push($"olang " $line)
+        keys.Push($"olang " + $line)
         got.Push(normal(outcome(exe, line, work), work, "", here))
     }
-    std := $"OLANG_STD=" $here "/std"
-    dir := $work "/programs"
-    try os.MkDir(dir) catch os.Error { toolkit.Die("drvdiff: cannot make " $dir) }
-    for i in range ProgramNames.Len() { toolkit.Write($dir "/" $ProgramNames[i], ProgramTexts[i]) }
-    full := $exe if exe.StartsWith("/") else $here "/" $exe
+    std := $"OLANG_STD=" + $here + "/std"
+    dir := $work + "/programs"
+    try os.MkDir(dir) catch os.Error { toolkit.Die("drvdiff: cannot make " + $dir) }
+    for i in range ProgramNames.Len() { toolkit.Write($dir + "/" + $ProgramNames[i], ProgramTexts[i]) }
+    full := $exe if exe.StartsWith("/") else $here + "/" + $exe
     # stage 0 builds its formatter into its cache the first time, and says so: done once beforehand
     outcome(full, "format -check hello.olang", dir, std, dir)
     for line in Builds {
-        keys.Push($"in a directory of programs: olang " $line)
+        keys.Push($"in a directory of programs: olang " + $line)
         got.Push(normal(outcome(full, line, dir, std, dir), work, dir, here))
     }
     if capture {
         b := StringBuilder()
         for i in range keys.Len() { b.Push(toolkit.GoldenSection(keys[i], got[i])) }
         toolkit.GoldenWrite(gpath, b.ToString())
-        toolkit.Say("drvdiff: " $keys.Len() " command lines captured from " $exe " into " $gpath "\n")
+        toolkit.Say("drvdiff: " + $keys.Len() + " command lines captured from " + $exe + " into " + $gpath + "\n")
         return
     }
     bad I64 = 0
@@ -189,26 +189,26 @@ fn main() {
         ran.Put(keys[i], true)
         want := try g.Bodies.Get(keys[i]) catch {
             bad++
-            toolkit.Say("-- " $keys[i] ": not in " $gpath " (make drvgold)\n")
+            toolkit.Say("-- " + $keys[i] + ": not in " + $gpath + " (make drvgold)\n")
             continue
         }
         if want != got[i] {
             bad++
-            toolkit.Say("-- " $keys[i] " (< golden, > " $exe ")\n")
+            toolkit.Say("-- " + $keys[i] + " (< golden, > " + $exe + ")\n")
             toolkit.Say(toolkit.Head(toolkit.Diff(work, want, got[i]), 12))
         }
     }
     for k in g.Keys {
         if k not in ran {
             bad++
-            toolkit.Say("-- " $k ": in " $gpath " and not run (make drvgold)\n")
+            toolkit.Say("-- " + $k + ": in " + $gpath + " and not run (make drvgold)\n")
         }
     }
     if bad > 0 {
-        toolkit.Say("drvdiff: " $bad " of " $keys.Len() " command lines differ from the golden\n")
+        toolkit.Say("drvdiff: " + $bad + " of " + $keys.Len() + " command lines differ from the golden\n")
         os.Exit(1)
     }
-    toolkit.Say("drvdiff: no difference from the golden over " $keys.Len() " command lines\n")
+    toolkit.Say("drvdiff: no difference from the golden over " + $keys.Len() + " command lines\n")
 }
 
 # an outcome with the directory of programs written D, the scratch directory W and the repository's root $ROOT
@@ -223,10 +223,10 @@ fn outcome(exe String&, line String&, work String&, std String& = "", dir String
     args.Push(exe)
     for w in line.Split(" ") {
         if w == "" { continue }
-        args.Push(w.Replace("W/", $work "/") if w.StartsWith("W/") else $w)
+        args.Push(w.Replace("W/", $work + "/") if w.StartsWith("W/") else $w)
     }
     env := Vec<String&>()
     if std != "" { env.Push($std) }
     o := toolkit.Run(args.ToArray(), env.ToArray(), dir)
-    return $"stdout:\n" $o.Stdout "stderr:\n" $o.Stderr "status " $o.Status "\n"
+    return $"stdout:\n" + $o.Stdout + "stderr:\n" + $o.Stderr + "status " + $o.Status + "\n"
 }

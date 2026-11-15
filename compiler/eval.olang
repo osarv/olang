@@ -59,17 +59,17 @@ type Stop enum {
 fn (s Stop) Text(src source.Source&) String {
     match s {
         case Stop.None { return "" }
-        case Stop.Raised(code) { return "an error escapes, code " $code }
+        case Stop.Raised(code) { return "an error escapes, code " + $code }
         case Stop.Exited(kind, _, sp, msg) {
             if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return "" }
             if mir.Columned(kind) {
                 l, c := src.LineCol(sp.Start)
-                return $src.Path ":" $l ":" $c ": " $mir.ExitText(kind)
+                return $src.Path + ":" + $l + ":" + $c + ": " + $mir.ExitText(kind)
             }
-            if msg == "" { return $src.Path ":" $src.Line(sp.Start) ": " $mir.ExitText(kind) }
-            return $src.Path ":" $src.Line(sp.Start) ": " $mir.ExitText(kind) ": " $msg
+            if msg == "" { return $src.Path + ":" + $src.Line(sp.Start) + ": " + $mir.ExitText(kind) }
+            return $src.Path + ":" + $src.Line(sp.Start) + ": " + $mir.ExitText(kind) + ": " + $msg
         }
-        case Stop.Refused(why, _, sp) { return $src.Path ":" $src.Line(sp.Start) ": " $why }
+        case Stop.Refused(why, _, sp) { return $src.Path + ":" + $src.Line(sp.Start) + ": " + $why }
     }
 }
 
@@ -866,7 +866,7 @@ fn (m mut Machine&) refuse(why String&) { m.stop(Stop.Refused(why, m.stopFile, m
 
 # dead-region mode's stop: a read of storage a release reclaimed - never a refusal to evaluate, at compile time too
 fn (m mut Machine&) freedEarly() {
-    try io.PutErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyFreedEarly "\n") catch io.Error { }
+    try io.PutErr($"olang: internal compiler error: file " + $m.stopFile + " at " + $m.stopSp.Start + ": " + $WhyFreedEarly + "\n") catch io.Error { }
     os.Exit(70)
 }
 
@@ -2257,7 +2257,7 @@ fn (m mut Machine&) reclaim(fi I64, fk I64, x mir.Operand, ty types.TypeId, ks m
         case mir.FnKey.Body(id): I64(id)
         case _: -1
     }
-    if b < 0 or not m.GenOk.Has($b " " $ty): return
+    if b < 0 or not m.GenOk.Has($b + " " + $ty): return
     p := m.rdPtr(m.addr(fi, x, 1))
     if m.halted or p.Id == 0: return
     holding Vec<Ptr>
@@ -2380,7 +2380,7 @@ fn (m mut Machine&) holderCheck(q Ptr) {
         if g.State == 2 and g.Store != 0: m.genWalk(Ptr(g.Store, 0), types.TypeId(I32(g.Ty)), false, look)
     }
     if not m.holderHit: return
-    try io.PutErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyHolderMissed "\n") catch io.Error { }
+    try io.PutErr($"olang: internal compiler error: file " + $m.stopFile + " at " + $m.stopSp.Start + ": " + $WhyHolderMissed + "\n") catch io.Error { }
     os.Exit(70)
 }
 
@@ -4839,7 +4839,7 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
 }
 
 # what a crash while a program is interpreted says (B3e): an extern runs in the compiler's own process (X1a)
-InterpCrash String& = ("olang: internal compiler error: the compiler crashed while interpreting - in a foreign function the "
+InterpCrash String& = ("olang: internal compiler error: the compiler crashed while interpreting - in a foreign function the " +
                        "program calls, if its extern declaration is wrong (X1a), or else a bug in the compiler\n")
 
 fn (m mut Machine&) intArg(fi I64, x mir.Operand) I64 { return m.intValue(m.scalar(fi, x), m.opType(fi, x)) }
@@ -6164,17 +6164,17 @@ fn (m mut Machine&) layoutOf(ty types.TypeId, b mut StringBuilder&, seen mut Map
     }
     seen.Put(key, true)
     sh := m.shape(ty)
-    b.Push("(" $sh " " $m.size(ty))
+    b.Push("(" + $sh + " " + $m.size(ty))
     r := t.Repr(ty)
     named := t.KindOf(r) == types.Kind.Named
     if sh == vAgg {
         for i in range t.Items(m.partList(ty)).Len() {
-            b.Push(" " $m.partOffset(ty, i) ":")
+            b.Push(" " + $m.partOffset(ty, i) + ":")
             m.layoutOf(m.partType(ty, i), b, seen)
         }
     }
     if (sh == vEnum or sh == vOrd) and named {
-        for n in t.CaseNames(r) { b.Push(" " $t.Names.Text(n)) }
+        for n in t.CaseNames(r) { b.Push(" " + $t.Names.Text(n)) }
     }
     if sh == vEnum {
         for k in range t.Items(t.Cases(r) if named else t.ShapeCases(r)).Len() {
@@ -6512,17 +6512,17 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
             for b in xs {
                 s := m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(b)])
                 if (op == typed.PrimOp.Div or op == typed.PrimOp.Rem) and hostBits(b) == 0 {
-                    assert s == Stop.Refused(WhyDivZero, 0, Sp0), $name " " $op " " $a " " $b
+                    assert s == Stop.Refused(WhyDivZero, 0, Sp0), $name + " " + $op + " " + $a + " " + $b
                     continue
                 }
                 if (op == typed.PrimOp.Div or op == typed.PrimOp.Rem) and signed and hostBits(b) == -1 and
                    hostBits(a) == min {
-                    assert s == Stop.Refused(WhyDivMin, 0, Sp0), $name " " $op " " $a " " $b
+                    assert s == Stop.Refused(WhyDivMin, 0, Sp0), $name + " " + $op + " " + $a + " " + $b
                     continue
                 }
-                assert s == Stop.None, $name " " $op " " $a " " $b ": " $s
+                assert s == Stop.None, $name + " " + $op + " " + $a + " " + $b + ": " + $s
                 got := m.Int(m.Result, ty)
-                assert got == hostBits(hostOp(op, a, b)), $name " " $op " " $a " " $b ": " $got
+                assert got == hostBits(hostOp(op, a, b)), $name + " " + $op + " " + $a + " " + $b + ": " + $got
             }
         }
         id++
@@ -6532,7 +6532,7 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
         for a in xs {
             for b in xs {
                 assert m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(b)]) == Stop.None
-                assert (m.Int(m.Result, types.BoolT) == 1) == hostCmp(op, a, b), $name " " $op " " $a " " $b
+                assert (m.Int(m.Result, types.BoolT) == 1) == hostCmp(op, a, b), $name + " " + $op + " " + $a + " " + $b
             }
         }
         id++
@@ -6543,7 +6543,7 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
             for n in ns {
                 assert m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(n)]) == Stop.None
                 want := a << n if op == typed.PrimOp.Shl else a >> n
-                assert m.Int(m.Result, ty) == hostBits(want), $name " " $op " " $a " " $n
+                assert m.Int(m.Result, ty) == hostBits(want), $name + " " + $op + " " + $a + " " + $n
             }
             # a count of the width or more is undefined (E8a)
             assert m.Eval(tkey(id), Array<I64>[hostBits(a), 8 * m.width(ty)]) == Stop.Refused(WhyShift, 0, Sp0)
@@ -6555,7 +6555,7 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
         for a in xs {
             assert m.Eval(tkey(id), Array<I64>[hostBits(a)]) == Stop.None
             want := (xs[0] - xs[0]) - a if op == typed.PrimOp.Neg else ~a
-            assert m.Int(m.Result, ty) == hostBits(want), $name " " $op " " $a
+            assert m.Int(m.Result, ty) == hostBits(want), $name + " " + $op + " " + $a
         }
         id++
     }
@@ -6566,7 +6566,7 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
             for b in xs {
                 assert m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(b)]) == Stop.None
                 got := m.Int(m.Result, types.BoolT) == 1
-                assert got == trueOverflows(op, hostBits(a), hostBits(b), m.width(ty), signed), $name " overflows " $op " " $a " " $b
+                assert got == trueOverflows(op, hostBits(a), hostBits(b), m.width(ty), signed), $name + " overflows " + $op + " " + $a + " " + $b
             }
         }
         id++
@@ -6652,10 +6652,10 @@ fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
                 want := hostFloat(op, a, b)
                 got := m.Bits(m.Result, w)
                 if want != want {
-                    assert isNaNBits(got, name), $name " " $op " " $a " " $b ": " $got " is no NaN"
+                    assert isNaNBits(got, name), $name + " " + $op + " " + $a + " " + $b + ": " + $got + " is no NaN"
                     continue
                 }
-                assert got == fbits(want), $name " " $op " " $a " " $b ": " $got " for " $fbits(want)
+                assert got == fbits(want), $name + " " + $op + " " + $a + " " + $b + ": " + $got + " for " + $fbits(want)
             }
         }
         id++
@@ -6665,7 +6665,7 @@ fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
         for a in xs {
             for b in xs {
                 assert m.Eval(tkey(id), Array<I64>[fbits(a), fbits(b)]) == Stop.None
-                assert (m.Int(m.Result, types.BoolT) == 1) == hostCmp(op, a, b), $name " " $op " " $a " " $b
+                assert (m.Int(m.Result, types.BoolT) == 1) == hostCmp(op, a, b), $name + " " + $op + " " + $a + " " + $b
             }
         }
         id++
@@ -6673,7 +6673,7 @@ fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
     tdefine(t, m, opFn(t, id, typed.PrimOp.Neg, ty, ty, false))
     for a in xs {
         assert m.Eval(tkey(id), Array<I64>[fbits(a)]) == Stop.None
-        assert m.Bits(m.Result, w) == fbits(-a) or a != a, $name " Neg " $a
+        assert m.Bits(m.Result, w) == fbits(-a) or a != a, $name + " Neg " + $a
     }
 }
 
@@ -6732,13 +6732,13 @@ fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn&(x S) I
         for x in xs {
             s := m.Eval(tkey(id), Array<I64>[bits(x)])
             if m.shape(from) == vFloat and m.shape(ty) != vFloat and not floatFits(F64(x), m.ibits(ty), m.shape(ty) == vInt) {
-                assert s == Stop.Refused(WhyConvert, 0, Sp0), $name " " $x " to " $to ": " $s
+                assert s == Stop.Refused(WhyConvert, 0, Sp0), $name + " " + $x + " to " + $to + ": " + $s
                 continue
             }
-            assert s == Stop.None, $name " " $x " to " $to ": " $s
+            assert s == Stop.None, $name + " " + $x + " to " + $to + ": " + $s
             got := m.Bits(m.Result, w)
             want := hostConv(to, x) & m.mask(w)
-            assert got == want or (m.shape(ty) == vFloat and isNaNBits(got, to) and isNaNBits(want, to)), $name " " $x " to " $to ": " $got " for " $want
+            assert got == want or (m.shape(ty) == vFloat and isNaNBits(got, to) and isNaNBits(want, to)), $name + " " + $x + " to " + $to + ": " + $got + " for " + $want
         }
         id++
     }
@@ -6843,14 +6843,14 @@ test "loops and recursion: a loop's scope every turn, calls to depth, a loop tha
         assert m.Eval(tkey(k), Array<I64>[10]) == Stop.None
         heap, allocs, scopes := m.HeapBytes(), m.Allocations(), m.ScopeSlots()
         assert m.Eval(tkey(k), Array<I64>[100000]) == Stop.None and m.Int(m.Result, i64) == 4999950000
-        assert m.HeapBytes() == heap and m.Allocations() == allocs and m.ScopeSlots() == scopes, ("fn " $k ": heap " $heap " -> " $m.HeapBytes() ", allocations " $allocs " -> " $m.Allocations()
-                ", scopes " $scopes " -> " $m.ScopeSlots())
+        assert m.HeapBytes() == heap and m.Allocations() == allocs and m.ScopeSlots() == scopes, ("fn " + $k + ": heap " + $heap + " -> " + $m.HeapBytes() + ", allocations " + $allocs + " -> " + $m.Allocations() +
+                ", scopes " + $scopes + " -> " + $m.ScopeSlots())
     }
 }
 
 # an error type E of the module, and the list naming it alone
 fn terr(t mut types.Table&, names mut source.Names&, name String&) types.TypeId {
-    mod := t.AddModule("eval_test_" $name)
+    mod := t.AddModule("eval_test_" + $name)
     return t.Named(t.AddDecl(mod, names.Intern(name), types.DeclKind.Error, 0), types.ListId(0))
 }
 
@@ -6922,7 +6922,7 @@ test "errors: raised under the function's own list, dispatched by a switch, re-e
     assert m.Eval(tkey(1), Array<I64>[-5]) == Stop.Raised(word2)
     assert m.Eval(tkey(2), Array<I64>[7]) == Stop.None and m.Int(m.Result, i64) == 7
     sx := m.Eval(tkey(2), Array<I64>[-7])
-    assert sx == Stop.None and m.Int(m.Result, i64) == -1, $sx " " $m.Int(m.Result, i64)
+    assert sx == Stop.None and m.Int(m.Result, i64) == -1, $sx + " " + $m.Int(m.Result, i64)
     assert m.Eval(tkey(4), Array<I64>[-7]) == Stop.None and m.Int(m.Result, i64) == -2
     # passed on: under a list naming E second, the same error; under one naming only the default error, that (R17)
     named := t.List(Array<types.TypeId>[e])
@@ -6991,7 +6991,7 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     tdefine(t, m, f4)
     m.StepBudget = 10000
     sx := m.Eval(tkey(4), Array<I64>[])
-    assert sx == Stop.Refused(WhySteps, 0, Sp0) and m.Steps == 10001, $sx " " $m.Steps
+    assert sx == Stop.Refused(WhySteps, 0, Sp0) and m.Steps == 10001, $sx + " " + $m.Steps
     m.StepBudget = 20000000
     # depth: a recursion that never ends, 2,000 frames deep
     i64fn := t.Func(t.List1(i64), i64, types.ListId(0))
@@ -7019,7 +7019,7 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     m.MemBudget = 1 << 20
     live := m.Live
     assert m.Eval(tkey(6), Array<I64>[]) == Stop.Refused(WhyMemory, 0, tspan(19))
-    assert m.Live == live, "live " $live " -> " $m.Live
+    assert m.Live == live, "live " + $live + " -> " + $m.Live
     # and the machine goes on afterwards
     assert m.Eval(tkey(1), Array<I64>[0]) == Stop.None and m.Int(m.Result, i64) == 9
 }
@@ -7053,7 +7053,7 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
 }
 
 fn tdecl(t mut types.Table&, names mut source.Names&, kind types.DeclKind, name String&) types.TypeId {
-    mod := t.AddModule("eval_test_" $name)
+    mod := t.AddModule("eval_test_" + $name)
     return t.Named(t.AddDecl(mod, names.Intern(name), kind, 0), types.ListId(0))
 }
 
@@ -7245,7 +7245,7 @@ test "scopes and destructors under -i: a scope's registrations run as it closes,
     f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(gplace(t, log))))
     tdefine(t, m, f)
     s := m.Eval(tkey(1), Array<I64>[])
-    assert s == Stop.None and m.Int(m.Result, i64) == 321, $s " " $m.Int(m.Result, i64)
+    assert s == Stop.None and m.Int(m.Result, i64) == 321, $s + " " + $m.Int(m.Result, i64)
     # while compiling, building a value whose destructor would run is refused (K1)
     c mut Machine& = Machine.New(t, Mode.Compile)
     c.Define(d)

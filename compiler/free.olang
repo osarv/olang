@@ -787,7 +787,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     # a callee of which changed its summary
     rw := f.mayFixedPoint(order)
     t2 := time.Now()
-    if f.Debug: f.debugOut($"free: " $n " bodies, " $f.keyTy.Len() " places; must " $rm " bodies " $((t1 - t0) / 1000000) " ms; may " $rw " walks " $f.passes " passes " $((t2 - t1) / 1000000) " ms\n")
+    if f.Debug: f.debugOut($"free: " + $n + " bodies, " + $f.keyTy.Len() + " places; must " + $rm + " bodies " + $((t1 - t0) / 1000000) + " ms; may " + $rw + " walks " + $f.passes + " passes " + $((t2 - t1) / 1000000) + " ms\n")
     # destructors, Str, Eq and Hash run where no call is written: one that lets go of a place keeps everything
     for b in range n { f.hiddenLetGo(b) }
     t3 := time.Now()
@@ -801,7 +801,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     f.Done = true
     f.writePlans()
     t5 := time.Now()
-    if f.Debug: f.debugOut($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n")
+    if f.Debug: f.debugOut($"free: final " + $((t4 - t3) / 1000000) + " ms, " + $f.goes.Len() + " let-goes, " + $f.stores.Len() + " stores; decide " + $((t5 - t4) / 1000000) + " ms\n")
 }
 
 # a line of the analysis' account, where it is asked for (f.Debug)
@@ -912,7 +912,7 @@ fn (f mut Free&) hiddenLetGo(b I64) {
     # (Part C: a destructor running only where a value's holder lets go of it is a call there - dtorCalls)
     if f.implicit(b) and not f.modelled(b) {
         if f.letsAll[b] or f.letsVia[b] != 0 { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
-        if f.Debug: f.debugOut($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n")
+        if f.Debug: f.debugOut($"free: hidden let-go in " + $f.fnName(b) + " at " + $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) + "\n")
     }
 }
 
@@ -957,7 +957,7 @@ fn (f mut Free&) classifyHolders() {
             f.holderAt.Push(store(k, st.Body, st.File, st.Sp, st.Kind, st.Of, st.Site, null, null))
         }
         if st.Kind != SFail or (try f.OneHolder.Get(r) catch default "") != "": continue
-        f.OneHolder.Put(r, $f.P.L.Diags.Locate(st.File, I64(st.Sp.Start)) ": note: an existing one is stored into an owning place here, which another may still hold")
+        f.OneHolder.Put(r, $f.P.L.Diags.Locate(st.File, I64(st.Sp.Start)) + ": note: an existing one is stored into an owning place here, which another may still hold")
     }
 }
 
@@ -978,10 +978,10 @@ fn (f mut Free&) holderRows() String {
         why := try f.OneHolder.Get(r) catch default ""
         name := f.T().Names.Text(f.T().DeclName(f.T().DeclOf(r)))
         if why == "" {
-            b.Push($at ": memory: " $name " has one holder: every instance stored into an owning place is a new one\n")
+            b.Push($at + ": memory: " + $name + " has one holder: every instance stored into an owning place is a new one\n")
             continue
         }
-        b.Push($at ": memory: " $name " may be held by two owning places at once, so it has no one holder\n" $why "\n")
+        b.Push($at + ": memory: " + $name + " may be held by two owning places at once, so it has no one holder\n" + $why + "\n")
     }
     return b.ToString()
 }
@@ -1174,7 +1174,7 @@ fn (f mut Free&) bufPlace(k I64) Bool {
 fn (f mut Free&) bufNot(why String&, file I64, sp source.Span) {
     if f.bufNever: return
     f.bufNever = true
-    f.bufWhy = $f.P.L.Diags.Locate(file, I64(sp.Start)) ": note: " $why if file >= 0 else $"note: " $why
+    f.bufWhy = $f.P.L.Diags.Locate(file, I64(sp.Start)) + ": note: " + $why if file >= 0 else $"note: " + $why
 }
 
 # the final step's decisions for the arrays (round 5): the parameters that may be views, to a fixed point over the
@@ -1219,9 +1219,9 @@ fn (f mut Free&) bufDecide() {
         }
     }
     if f.Debug {
-        try io.PutErr($"buf never " $f.bufNever " " $f.bufWhy "\n") catch io.Error { }
+        try io.PutErr($"buf never " + $f.bufNever + " " + $f.bufWhy + "\n") catch io.Error { }
         for b in range n {
-            if f.Bodies[b].Root != null and f.bufAll[b] { try io.PutErr($"buf all " $f.fnName(b) " by " $f.bufBy[b] " taintAll " $f.taintAll[b] "\n") catch io.Error { } }
+            if f.Bodies[b].Root != null and f.bufAll[b] { try io.PutErr($"buf all " + $f.fnName(b) + " by " + $f.bufBy[b] + " taintAll " + $f.taintAll[b] + "\n") catch io.Error { } }
         }
     }
     if f.bufNever: return
@@ -1261,7 +1261,7 @@ fn (w mut walker&) inUseAcross(l I64, st I64, csp source.Span, uses Vec<I64>&) I
 # the types are not listed yet (the walks')
 fn (f mut Free&) genNever(ty I64, why String&, file I64, sp source.Span) {
     if ty == -2: return
-    text := $f.P.L.Diags.Locate(file, I64(sp.Start)) ": note: " $why if file >= 0 else $"note: " $why
+    text := $f.P.L.Diags.Locate(file, I64(sp.Start)) + ": note: " + $why if file >= 0 else $"note: " + $why
     if not f.genListed {
         f.pendTy.Push(ty)
         f.pendWhy.Push(text)
@@ -1395,10 +1395,10 @@ fn (f mut Free&) genDecide() {
     }
     f.genAcross()
     if f.Debug {
-        for i in range f.genTys.Len() { try io.PutErr($"gen " $t.Canon(f.genTys[i]) " ok " $f.genOkTy[i] " " $f.genWhy[i] "\n") catch io.Error { } }
+        for i in range f.genTys.Len() { try io.PutErr($"gen " + $t.Canon(f.genTys[i]) + " ok " + $f.genOkTy[i] + " " + $f.genWhy[i] + "\n") catch io.Error { } }
         for b in range n {
             if f.Bodies[b].Root == null: continue
-            try io.PutErr($"body " $b " " $f.fnName(b) " all " $f.acrossAll[b] " across " $f.across[b].Len() "\n") catch io.Error { }
+            try io.PutErr($"body " + $b + " " + $f.fnName(b) + " all " + $f.acrossAll[b] + " across " + $f.across[b].Len() + "\n") catch io.Error { }
         }
     }
     for b in range n {
@@ -1469,7 +1469,7 @@ fn (f mut Free&) genAcross() {
     for b in range n {
         f.across.Push(Vec<I64>())
         f.acrossAll.Push(f.hiddenCalls(b))
-        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root != null { try io.PutErr($"hidden " $b " " $f.fnName(b) " " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
+        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root != null { try io.PutErr($"hidden " + $b + " " + $f.fnName(b) + " " + $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) + "\n") catch io.Error { } }
     }
     changed := true
     for changed {
@@ -1507,10 +1507,10 @@ fn (f mut Free&) genRows() String {
     for i in range f.genTys.Len() {
         nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
         if f.genOkTy[i] {
-            b.Push($"memory: a " $nm " is reclaimed where the last owning place holding it lets go of it, once no reference to one is in use\n")
+            b.Push($"memory: a " + $nm + " is reclaimed where the last owning place holding it lets go of it, once no reference to one is in use\n")
             continue
         }
-        b.Push($"memory: a " $nm " is kept until its scope closes, never reclaimed early\n" $f.genWhy[i] "\n")
+        b.Push($"memory: a " + $nm + " is kept until its scope closes, never reclaimed early\n" + $f.genWhy[i] + "\n")
     }
     lets := f.genLetsOf()
     d := f.P.L.Diags
@@ -1525,8 +1525,8 @@ fn (f mut Free&) genRows() String {
             if j < 0 or not f.genOkTy[j] or not has(lets[to], ty): continue
             nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[j])))
             at := $d.Locate(f.gcFile[c], f.lineStart(f.gcFile[c], I64(f.gcSp[c].Start)))
-            b.Push($at ": memory: '" $f.textOf(f.gcFile[c], f.gcSp[c]) "' keeps the " $nm "s it lets go of until their scope closes\n")
-            b.Push($d.Locate(f.gcFile[c], I64(f.gcWhy[i].Start)) ": note: '" $f.textOf(f.gcFile[c], f.gcWhy[i]) "', a reference to a " $nm ", is in use across this call\n")
+            b.Push($at + ": memory: '" + $f.textOf(f.gcFile[c], f.gcSp[c]) + "' keeps the " + $nm + "s it lets go of until their scope closes\n")
+            b.Push($d.Locate(f.gcFile[c], I64(f.gcWhy[i].Start)) + ": note: '" + $f.textOf(f.gcFile[c], f.gcWhy[i]) + "', a reference to a " + $nm + ", is in use across this call\n")
         }
     }
     if f.bufOn: b.Push(f.bufRows(lets))
@@ -1552,10 +1552,10 @@ fn (f mut Free&) bufRows(lets Vec<Vec<I64>>&) String {
         if not f.genOkTy[i] or not f.gen.Leaves(t, f.genTys[i]): continue
         nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
         if f.bufNever {
-            b.Push($"memory: the arrays a " $nm " holds in place are kept until their scope closes\n" $f.bufWhy "\n")
+            b.Push($"memory: the arrays a " + $nm + " holds in place are kept until their scope closes\n" + $f.bufWhy + "\n")
             continue
         }
-        b.Push($"memory: the arrays a " $nm " holds in place are put back with it, unless a view of one is in use\n")
+        b.Push($"memory: the arrays a " + $nm + " holds in place are put back with it, unless a view of one is in use\n")
     }
     if f.bufNever: return b.ToString()
     d := f.P.L.Diags
@@ -1564,8 +1564,8 @@ fn (f mut Free&) bufRows(lets Vec<Vec<I64>>&) String {
         to := f.gcTo[c]
         if to < 0 or to >= f.bufBy.Len() or f.bufBy[to] != i or not f.programCode[f.gcFrom[c]] or not f.letsLeaves(lets[to]): continue
         at := $d.Locate(f.gcFile[c], f.lineStart(f.gcFile[c], I64(f.gcSp[c].Start)))
-        b.Push($at ": memory: '" $f.textOf(f.gcFile[c], f.gcSp[c]) "' keeps the arrays of what it reclaims until their scope closes\n")
-        b.Push($d.Locate(f.gcFile[c], I64(f.gvSp[i].Start)) ": note: '" $f.textOf(f.gcFile[c], f.gvSp[i]) "', which may view one, is in use across this call\n")
+        b.Push($at + ": memory: '" + $f.textOf(f.gcFile[c], f.gcSp[c]) + "' keeps the arrays of what it reclaims until their scope closes\n")
+        b.Push($d.Locate(f.gcFile[c], I64(f.gvSp[i].Start)) + ": note: '" + $f.textOf(f.gcFile[c], f.gvSp[i]) + "', which may view one, is in use across this call\n")
     }
     return b.ToString()
 }
@@ -1662,7 +1662,7 @@ fn (f mut Free&) noteDtor(b I64) {
 # a value of type ty registered with a scope (O16): the destructors it runs - its own and its parts' - run as that
 # scope closes, where no call is written
 fn (f mut Free&) register(ty types.TypeId) {
-    if f.Debug and not f.registered.Has(I64(f.T().Repr(ty))) { try io.PutErr($"free: registered " $f.T().Canon(ty) "\n") catch io.Error { } }
+    if f.Debug and not f.registered.Has(I64(f.T().Repr(ty))) { try io.PutErr($"free: registered " + $f.T().Canon(ty) + "\n") catch io.Error { } }
     for p in f.T().ValueParts(ty) { f.registered.Put(I64(p), true) }
 }
 
@@ -1765,7 +1765,7 @@ fn (w mut walker&) escapedHolder(d typed.Block&) {
     if l >= st.Len(): return
     s := st[l]
     own := s == typed.Scope.Frame or s == typed.Scope.Unset or (s == typed.Scope.Block and s.b == b.Locals[l].In)
-    if not own and w.F.Debug { try io.PutErr($"free: escaped holder " $l " in " $w.F.fnName(w.Id) " " $s " in " $b.Locals[l].In "\n") catch io.Error { } }
+    if not own and w.F.Debug { try io.PutErr($"free: escaped holder " + $l + " in " + $w.F.fnName(w.Id) + " " + $s + " in " + $b.Locals[l].In + "\n") catch io.Error { } }
     if not own { w.F.register(b.Locals[l].Ty) }
 }
 
@@ -2353,7 +2353,7 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
     for y in o {
         k := oval(y)
         if (okind(y) == OPl or okind(y) == OMov) and k != but and w.F.IsOwner(k) {
-            w.F.keep(k, RInPlace, w.body().File, sp, $"its value is changed in place, by " $how ": '" $w.text(sp) "'")
+            w.F.keep(k, RInPlace, w.body().File, sp, $"its value is changed in place, by " + $how + ": '" + $w.text(sp) + "'")
         }
     }
 }
@@ -2362,8 +2362,8 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&) {
     if not w.Final or w.quiet > 0 { return }
     for k in w.F.heldPlaces(ty) {
-        if w.F.Debug { try io.PutErr($"untracked " $k " at " $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) "\n") catch io.Error { } }
-        w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " $how ": '" $w.text(sp) "'")
+        if w.F.Debug { try io.PutErr($"untracked " + $k + " at " + $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + "\n") catch io.Error { } }
+        w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " + $how + ": '" + $w.text(sp) + "'")
     }
 }
 
@@ -2675,7 +2675,7 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     if w.Final and w.quiet == 0 {
         for lf in lvs {
             f.stores.Push(store(lf.PlaceId, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
-            f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Copy()'")
+            f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is existing storage: '" + $w.text(x.Span()) + "'; give it new storage - a constructor call, '$...', 'Copy()'")
         }
     }
     return o
@@ -2745,11 +2745,11 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
         k := lf.PlaceId
         if owners.Has(k) {
             f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, site if one else -1, cm, null))
-            if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy holding other owners too: '" $w.text(cm.Span()) "'")
+            if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy holding other owners too: '" + $w.text(cm.Span()) + "'")
             continue
         }
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, cm, null))
-        f.keep(k, RMade, w.body().File, sp, $"its new value is existing storage a copy shares: '" $w.text(cm.Span()) "'")
+        f.keep(k, RMade, w.body().File, sp, $"its new value is existing storage a copy shares: '" + $w.text(cm.Span()) + "'")
     }
 }
 
@@ -2825,13 +2825,13 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
     if owners.Len() == 0 and arrs.Len() == 1: owners.Push(arrs.Pop()!)
     for k in arrs {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
-        f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" $w.text(x.Span()) "'")
+        f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" + $w.text(x.Span()) + "'")
     }
     if owners.Len() == 0 { return }
     one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.splitLeaf(w.Id, I64(c.Site), x.Type(), lvs, owners[0])
     for k in owners {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, I64(c.Site) if one else -1, x, null))
-        if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" $w.text(x.Span()) "'")
+        if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" + $w.text(x.Span()) + "'")
     }
 }
 
@@ -3119,14 +3119,14 @@ fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool,
         if k == OPar and not w.Final and oval(y) != inside {
             if addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
-                if f.Debug: f.debugOut($"esc " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " inside " $inside "\n")
+                if f.Debug: f.debugOut($"esc " + $f.fnName(w.Id) + " par " + $oval(y) + " at " + $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + " inside " + $inside + "\n")
             }
         }
         if k == OPl and w.Final and oval(y) != q {
-            f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is kept here")
+            f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" + $where + "'; store a copy, '$(...)'" if where != "" else "a reference into it is kept here")
         }
         if k == OPl and w.Final and f.bufOn and w.quiet == 0 and f.bufPlace(oval(y)) {
-            f.bufNot($"a view that may be into an array a generational instance holds in place is kept here: '" $w.text(sp) "'", w.body().File, sp)
+            f.bufNot($"a view that may be into an array a generational instance holds in place is kept here: '" + $w.text(sp) + "'", w.body().File, sp)
         }
     }
 }
@@ -3444,7 +3444,7 @@ fn (w mut walker&) promoteOf(pty types.TypeId, pr typed.Promote&) Vec<I64> {
     # place keeps, its values never built in regions no release would reach)
     if dtor and w.Final {
         for y in out {
-            if okind(y) == OMov: w.F.keep(oval(y), RMade, w.body().File, pr.X.Span(), $"a value moved out of it is held where its call lands (O16), where nothing releases it: '" $w.text(pr.X.Span()) "'")
+            if okind(y) == OMov: w.F.keep(oval(y), RMade, w.body().File, pr.X.Span(), $"a value moved out of it is held where its call lands (O16), where nothing releases it: '" + $w.text(pr.X.Span()) + "'")
         }
     }
     addTo(out, orig(ONew, I64(pr.Site)))
@@ -4149,19 +4149,19 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
     # (a parameter's value is judged where it is passed - the callers' stores; a constructor's field its own place's)
     if w.Final and f.bufOn and w.quiet == 0 and w.paramOf(x) < 0 {
         for y in o {
-            if okind(y) == OPl and oval(y) != w.storeInside and f.bufPlace(oval(y)): f.bufNot($"a view that may be into an array a generational instance holds in place is stored here: '" $w.text(sp) "'", w.body().File, sp)
+            if okind(y) == OPl and oval(y) != w.storeInside and f.bufPlace(oval(y)): f.bufNot($"a view that may be into an array a generational instance holds in place is stored here: '" + $w.text(sp) + "'", w.body().File, sp)
         }
     }
     # a view of the place itself stored back into it is said as condition 1 says it, below: the new value lives in the
     # old one's storage
     for y in o {
         if okind(y) == OPl and w.Final and oval(y) != w.storeInside and oval(y) != k {
-            f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
+            f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" + $where + "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
         }
     }
     if w.Final and has(o, orig(OPl, k)) and k != w.storeInside and w.paramOf(x) < 0 {
         w.made(k, x, sp, multi)
-        f.keep(k, RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
+        f.keep(k, RStore, w.body().File, sp, $"a reference into it is stored here, in '" + $where + "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
         return
     }
     j := w.paramOf(x)
@@ -4181,7 +4181,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
             if okind(y) == OParC and oval(y) != w.storeWithin and addTo(f.parEscC[w.Id], oval(y)) > 0 { f.changed = true }
             if okind(y) == OPar and oval(y) != w.storeWithin and addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
-                if f.Debug: f.debugOut($"esc-store " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " within " $w.storeWithin "\n")
+                if f.Debug: f.debugOut($"esc-store " + $f.fnName(w.Id) + " par " + $oval(y) + " at " + $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + " within " + $w.storeWithin + "\n")
             }
         }
         return
@@ -4314,13 +4314,13 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                     kind = SMove
                     of = k
                 }
-                if kind == SFail: why = $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Copy()'"
+                if kind == SFail: why = $"its new value is existing storage: '" + $w.text(x.Span()) + "'; give it new storage - a constructor call, '$...', 'Copy()'"
             }
         }
     }
     if kind == SFresh and f.arr[k] and not f.plainElems(k) and not movesOnly(x) {
         kind = SFail
-        why = $"its elements may hold storage built with it: '" $w.text(x.Span()) "'"
+        why = $"its elements may hold storage built with it: '" + $w.text(x.Span()) + "'"
     }
     if kind == SFresh and multi {
         kind = SFail
@@ -4362,12 +4362,12 @@ fn (w mut walker&) freshSite(x typed.Expr&) I64, String {
                     f.noteAt = b2
                     f.noteFile = body.File
                     f.noteSp = source.Span(body.Sp.Start, body.Sp.Start)
-                    return -1, $"its new value is built where the old one lives: '" $f.fnName(b2) "' borrows its result from '" $pn "'; a built result ('" $f.builtSpell(t.Results(body.Ty)[0]) "') frees the old " $f.what(t.Results(body.Ty)[0])
+                    return -1, $"its new value is built where the old one lives: '" + $f.fnName(b2) + "' borrows its result from '" + $pn + "'; a built result ('" + $f.builtSpell(t.Results(body.Ty)[0]) + "') frees the old " + $f.what(t.Results(body.Ty)[0])
                 }
                 return -1, ""
             }
             if not f.resFresh[b2] {
-                return -1, $"its new value is not all new: '" $f.fnName(b2) "' returns storage it was given"
+                return -1, $"its new value is not all new: '" + $f.fnName(b2) + "' returns storage it was given"
             }
             return I64(c.Site), ""
         }
@@ -4386,7 +4386,7 @@ fn (f mut Free&) fnName(b I64) String {
 fn (f mut Free&) builtSpell(ty types.TypeId) String {
     t := f.T()
     if not t.IsRef(ty) or f.Sc.Spell == null { return "T&" }
-    return $f.Sc.Spell!(t.Referent(ty)) "&"
+    return $f.Sc.Spell!(t.Referent(ty)) + "&"
 }
 
 # what a value of a reference type is called in a note: a tree where it is an enum holding its own kind
@@ -4461,7 +4461,7 @@ fn (w mut walker&) views() {
             for i in range readFrom[s], readFrom[s + 1] {
                 q := reads[i]
                 if (k >= 0 and q != k) or f.whyKind[q] != RNone: continue
-                f.keepView(q, body.File, w.goSp[g], $"a value of it read in this statement is in use when '" $f.textOf(body.File, w.goSp[g]) "' lets go of it; read what you need first", at)
+                f.keepView(q, body.File, w.goSp[g], $"a value of it read in this statement is in use when '" + $f.textOf(body.File, w.goSp[g]) + "' lets go of it; read what you need first", at)
             }
         }
         # in a local used after it
@@ -4477,24 +4477,24 @@ fn (w mut walker&) views() {
             line := f.P.L.Diags.LineAt(body.File, I64(body.Locals[l].Sp.Start))
             gl := f.P.L.Diags.LineAt(body.File, I64(w.goSp[g].Start))
             # a local of the program's own is said by its name; a hidden one - what a for-in walks - by what it holds
-            who := $"'" $name "' (line " $line ")"
-            from := $" from '" $name "'"
+            who := $"'" + $name + "' (line " + $line + ")"
+            from := $" from '" + $name + "'"
             if name == "" {
                 walked := f.textOf(body.File, w.declSp[l])
-                who = $"what the loop on line " $line " walks" $(", '" $walked "'," if walked != "" and not walked.Contains("\n") else "")
+                who = $"what the loop on line " + $line + " walks" + $(", '" + $walked + "'," if walked != "" and not walked.Contains("\n") else "")
                 from = ""
             }
             after := ""
             if kind == LYield {
-                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), where the generator's caller may let go of it; read what you need" $from " before the yield"
+                after = $"after '" + $f.textOf(body.File, w.goSp[g]) + "' (line " + $gl + "), where the generator's caller may let go of it; read what you need" + $from + " before the yield"
             } else if kind == LCall {
-                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), which " $w.removes(k, g) "; read what you need" $from " before the call"
+                after = $"after '" + $f.textOf(body.File, w.goSp[g]) + "' (line " + $gl + "), which " + $w.removes(k, g) + "; read what you need" + $from + " before the call"
             } else {
-                after = $"after it lets go of it (line " $gl "); read what you need" $from " before"
+                after = $"after it lets go of it (line " + $gl + "); read what you need" + $from + " before"
             }
             for q in viewed[l] {
                 if (k < 0 or q == k) and f.whyKind[q] == RNone {
-                    f.keepView(q, body.File, w.useSp[u], $who " is used here, " $after, at)
+                    f.keepView(q, body.File, w.useSp[u], $who + " is used here, " + $after, at)
                 }
             }
             if k >= 0: break
@@ -4549,7 +4549,7 @@ fn (w mut walker&) removes(k I64, g I64) String {
         at := r.Len() - 1
         for at >= 0 and (r[at].IsLetter() or r[at].IsDigit() or r[at] == '_') { at-- }
         nm := r[at + 1:]
-        if nm.Len() > 0: return $"removes " $nm
+        if nm.Len() > 0: return $"removes " + $nm
     }
     return "lets go of it"
 }
@@ -4984,7 +4984,7 @@ fn (f mut Free&) decide() {
     for fc in f.feedCalls {
         if not f.feedFits(fc) {
             fd := f.feeds[fc.Feed]
-            f.keep(fd.PlaceId, RInPlace, f.Bodies[fc.Body].File, f.Bodies[fc.Body].Locals[fd.Local].Sp, $"what is built for it is changed by a call that cannot build where it is: '" $f.P.L.Names.Text(f.Bodies[fc.Body].Locals[fd.Local].Name) "'")
+            f.keep(fd.PlaceId, RInPlace, f.Bodies[fc.Body].File, f.Bodies[fc.Body].Locals[fd.Local].Sp, $"what is built for it is changed by a call that cannot build where it is: '" + $f.P.L.Names.Text(f.Bodies[fc.Body].Locals[fd.Local].Name) + "'")
         }
     }
     # condition 1's stores that cannot be built where they are
@@ -5677,16 +5677,16 @@ fn (f mut Free&) Report() String {
         if g.Kind == LCall and f.goes[first].Kind != LCall { g = f.goes[first] }
         what := ""
         if (f.keyField[k] < 0 and not f.isNamed(k)) or f.isContents(k) {
-            what = $"removed elements of '" $f.collection(k, g.Body, g) "' are kept until " $f.scopeName(g, k) " closes"
+            what = $"removed elements of '" + $f.collection(k, g.Body, g) + "' are kept until " + $f.scopeName(g, k) + " closes"
         } else {
-            what = $"'" $f.placeName(g) "' keeps what it lets go of until " $f.scopeName(g, k) " closes"
+            what = $"'" + $f.placeName(g) + "' keeps what it lets go of until " + $f.scopeName(g, k) + " closes"
         }
         r := f.why[k]
         why := r.Text
         if f.whyKind[k] == RNone { why = "it is let go of only inside calls that may let go of any place" }
         where := $d.Locate(r.File, I64(r.Sp.Start)) if r.File >= 0 else $d.Locate(g.File, at)
         # one row a cause: places let go of together, kept for one reason, are one row
-        text := $d.Locate(g.File, at) ": memory: " $what "\n" $where ": note: " $why "\n"
+        text := $d.Locate(g.File, at) + ": memory: " + $what + "\n" + $where + ": note: " + $why + "\n"
         if text not in rows {
             rows.Push(text)
             b.Push(text)
@@ -5699,7 +5699,7 @@ fn (f mut Free&) Report() String {
         return b.ToString()
     }
     frees := places - kept
-    b.Push($"memory: " $places " place" $("" if places == 1 else "s") " let" $("s" if places == 1 else "") " go of storage in code that runs again - " $frees " free" $("s" if frees == 1 else "") " it at once, " $kept " keep" $("s" if kept == 1 else "") " it" $(" (above)" if kept > 0 else "") "\n")
+    b.Push($"memory: " + $places + " place" + $("" if places == 1 else "s") + " let" + $("s" if places == 1 else "") + " go of storage in code that runs again - " + $frees + " free" + $("s" if frees == 1 else "") + " it at once, " + $kept + " keep" + $("s" if kept == 1 else "") + " it" + $(" (above)" if kept > 0 else "") + "\n")
     return b.ToString()
 }
 
@@ -5812,9 +5812,9 @@ fn (f mut Free&) scopeName(g letGo, k I64) String {
         if isParam {
             ty := t.Repr(body.Locals[l].Ty)
             if t.IsRef(ty) { ty = t.Repr(t.Referent(ty)) }
-            if t.KindOf(ty) == types.Kind.Named { return $"the " $f.P.L.Names.Text(t.DeclName(t.DeclOf(ty))) "'s scope" }
+            if t.KindOf(ty) == types.Kind.Named { return $"the " + $f.P.L.Names.Text(t.DeclName(t.DeclOf(ty))) + "'s scope" }
         }
-        return $f.fnName(g.Body) "'s scope"
+        return $f.fnName(g.Body) + "'s scope"
     }
     return "its scope"
 }
@@ -5833,19 +5833,19 @@ fn (f mut Free&) Dump() String {
             if st.PlaceId == k: sto++
         }
         nm := f.Sc.Spell!(f.keyTy[k]) if f.Sc.Spell != null else $t.Canon(f.keyTy[k])
-        b.Push($"place " $k " " $nm "." $f.keyField[k] $(" handle" if f.handle[k] else "") " sole " $f.IsSole(k) " lets " $lets " stores " $sto " why " $f.whyKind[k] " " $f.why[k].Text "\n")
+        b.Push($"place " + $k + " " + $nm + "." + $f.keyField[k] + $(" handle" if f.handle[k] else "") + " sole " + $f.IsSole(k) + " lets " + $lets + " stores " + $sto + " why " + $f.whyKind[k] + " " + $f.why[k].Text + "\n")
     }
     for st in f.stores {
-        b.Push($"store place " $st.PlaceId " body " $st.Body " kind " $st.Kind " site " $st.Site " at " $f.P.L.Diags.Locate(st.File, I64(st.Sp.Start)) "\n")
+        b.Push($"store place " + $st.PlaceId + " body " + $st.Body + " kind " + $st.Kind + " site " + $st.Site + " at " + $f.P.L.Diags.Locate(st.File, I64(st.Sp.Start)) + "\n")
     }
     for g in f.goes {
-        b.Push($"letgo place " $g.PlaceId " body " $g.Body " kind " $g.Kind " at " $f.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) " " $f.placeName(g) "\n")
+        b.Push($"letgo place " + $g.PlaceId + " body " + $g.Body + " kind " + $g.Kind + " at " + $f.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) + " " + $f.placeName(g) + "\n")
     }
     for i in range f.Bodies.Len() {
         if f.parStored[i].Len() == 0 and f.parEsc[i].Len() == 0 and f.parMulti[i].Len() == 0 and f.parWhole[i].Len() == 0: continue
-        b.Push($"body " $i " " $f.fnName(i) " stored " $f.parStored[i] " esc " $f.parEsc[i] " multi " $f.parMulti[i] " whole " $f.parWhole[i] " res " $f.resFrom[i] "\n")
+        b.Push($"body " + $i + " " + $f.fnName(i) + " stored " + $f.parStored[i] + " esc " + $f.parEsc[i] + " multi " + $f.parMulti[i] + " whole " + $f.parWhole[i] + " res " + $f.resFrom[i] + "\n")
     }
-    b.Push($"tasks " $f.tasks " hidden " $f.hidden "\n")
+    b.Push($"tasks " + $f.tasks + " hidden " + $f.hidden + "\n")
     return b.ToString()
 }
 

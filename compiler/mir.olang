@@ -100,10 +100,10 @@ type Key enum {
 
 fn (k Key) Text() String {
     return match k {
-        case Key.Assert(b, sp): "assert B" $b " " $sp.Start ":" $sp.End
-        case Key.Global(m, n): "global " $m ":" $n
-        case Key.Literal(b, s): "literal B" $b " site " $s
-        case Key.Zero(ty): "zero T" $ty
+        case Key.Assert(b, sp): "assert B" + $b + " " + $sp.Start + ":" + $sp.End
+        case Key.Global(m, n): "global " + $m + ":" + $n
+        case Key.Literal(b, s): "literal B" + $b + " site " + $s
+        case Key.Zero(ty): "zero T" + $ty
     }
 }
 
@@ -923,7 +923,7 @@ fn (g mut GenInfo&) IsGen(t types.Table&, ty types.TypeId) Bool {
 fn (g mut GenInfo&) WeakField(t types.Table&, ty types.TypeId, k I64) Bool {
     r := t.Repr(ty)
     g.note(t, r)
-    return t.KindOf(r) == types.Kind.Named and g.Weak.Has($I64(t.DeclOf(r)) " " $k)
+    return t.KindOf(r) == types.Kind.Named and g.Weak.Has($I64(t.DeclOf(r)) + " " + $k)
 }
 
 # whether ty is a reference to a generational type
@@ -1175,8 +1175,8 @@ type verifier struct(F Fn&, T mut types.Table&) {
 fn (v mut verifier&) bad(text String&) {
     if not v.report { return }
     if v.at < 0: v.out.Push("fn: ")
-    else if v.idx < 0: v.out.Push("bb" $v.at "[term]: ")
-    else: v.out.Push("bb" $v.at "[" $v.idx "]: ")
+    else if v.idx < 0: v.out.Push("bb" + $v.at + "[term]: ")
+    else: v.out.Push("bb" + $v.at + "[" + $v.idx + "]: ")
     v.out.Push(text)
     v.out.PushChar('\n')
 }
@@ -1194,7 +1194,7 @@ fn (v mut verifier&) run() {
 fn (v mut verifier&) itemsBefore(r Range, i I64) {
     for k in range r.N {
         c := v.F.ConstItems[I64(r.At) + k]
-        if c < I32(0) or c >= I32(i) { v.bad("constant " $i " holds constant " $c ", not made before it") }
+        if c < I32(0) or c >= I32(i) { v.bad("constant " + $i + " holds constant " + $c + ", not made before it") }
     }
 }
 
@@ -1211,29 +1211,29 @@ fn (v mut verifier&) shape() Bool {
         return false
     }
     ps := v.T.Items(v.T.Params(f.Ty))
-    if ps.Len() != f.Params.Len(): v.bad("its type has " $ps.Len() " parameters, its Params " $f.Params.Len())
+    if ps.Len() != f.Params.Len(): v.bad("its type has " + $ps.Len() + " parameters, its Params " + $f.Params.Len())
     for i in range f.Params.Len() {
         if v.local(f.Params[i]) {
             l := f.Locals[I64(f.Params[i])]
-            if l.Kind != LocalKind.Param { v.bad("parameter " $i " is local L" $f.Params[i] ", not a Param") }
+            if l.Kind != LocalKind.Param { v.bad("parameter " + $i + " is local L" + $f.Params[i] + ", not a Param") }
             # D8g: a variadic parameter's local is the read-only array its type's "...T" is
             spread := i < ps.Len() and v.T.IsSpread(ps[i]) and v.T.IsRef(l.Ty) and v.T.Same(v.T.Referent(l.Ty), v.T.Referent(ps[i]))
             if i < ps.Len() and not v.T.Same(l.Ty, ps[i]) and not spread {
-                v.bad("parameter " $i " is a " $v.T.Canon(l.Ty) ", its type says " $v.T.Canon(ps[i]))
+                v.bad("parameter " + $i + " is a " + $v.T.Canon(l.Ty) + ", its type says " + $v.T.Canon(ps[i]))
             }
         }
     }
     for c in f.Captures {
-        if v.local(c) and f.Locals[I64(c)].Kind != LocalKind.Capture { v.bad("capture L" $c " is no Capture local") }
+        if v.local(c) and f.Locals[I64(c)].Kind != LocalKind.Capture { v.bad("capture L" + $c + " is no Capture local") }
     }
     for i in range f.Locals.Len() {
         l := f.Locals[i]
-        if l.Ty == types.UnknownT { v.bad("L" $i " has the Unknown type") }
+        if l.Ty == types.UnknownT { v.bad("L" + $i + " has the Unknown type") }
         v.ref(l.Home)
     }
     for i in range f.Scopes.Len() {
         p := f.Scopes[i].Parent
-        if p >= ScopeId(I32(i)) or p < NoScope { v.bad("S" $i "'s parent S" $p " is not opened before it") }
+        if p >= ScopeId(I32(i)) or p < NoScope { v.bad("S" + $i + "'s parent S" + $p + " is not opened before it") }
     }
     for c in f.Calls {
         v.callee(c.Target)
@@ -1298,7 +1298,7 @@ fn (v mut verifier&) shape() Bool {
 
 fn (v mut verifier&) within(r Range, n I64, what String&) Bool {
     if r.At < I32(0) or r.N < I32(0) or I64(r.At) + I64(r.N) > n {
-        v.bad("a range of " $what " out of bounds")
+        v.bad("a range of " + $what + " out of bounds")
         return false
     }
     return true
@@ -1306,7 +1306,7 @@ fn (v mut verifier&) within(r Range, n I64, what String&) Bool {
 
 fn (v mut verifier&) local(l LocalId) Bool {
     if l < LocalId(0) or I64(l) >= v.F.Locals.Len() {
-        v.bad("no local L" $l)
+        v.bad("no local L" + $l)
         return false
     }
     return true
@@ -1314,7 +1314,7 @@ fn (v mut verifier&) local(l LocalId) Bool {
 
 fn (v mut verifier&) block(b BlockId) Bool {
     if b < BlockId(0) or I64(b) >= v.F.Blocks.Len() {
-        v.bad("no block bb" $b)
+        v.bad("no block bb" + $b)
         return false
     }
     return true
@@ -1322,7 +1322,7 @@ fn (v mut verifier&) block(b BlockId) Bool {
 
 fn (v mut verifier&) scope(s ScopeId) Bool {
     if s < ScopeId(0) or I64(s) >= v.F.Scopes.Len() {
-        v.bad("no scope S" $s)
+        v.bad("no scope S" + $s)
         return false
     }
     return true
@@ -1332,7 +1332,7 @@ fn (v mut verifier&) ref(r ScopeRef) {
     match r {
         case ScopeRef.Scope(s) { v.scope(s) }
         case ScopeRef.Var(i) {
-            if i < 0 or i >= v.F.Vars.Len() { v.bad("no scope variable V" $i) }
+            if i < 0 or i >= v.F.Vars.Len() { v.bad("no scope variable V" + $i) }
         }
         case ScopeRef.Held(l) { v.local(l) }
         case _ { }
@@ -1360,7 +1360,7 @@ fn (v mut verifier&) operand(x Operand) {
     match x {
         case Operand.Copy(p) { v.place(p) }
         case Operand.Data(_, c, _, _) {
-            if c < I32(0) or I64(c) >= v.F.Consts.Len() { v.bad("no constant " $c) }
+            if c < I32(0) or I64(c) >= v.F.Consts.Len() { v.bad("no constant " + $c) }
         }
         case _ { }
     }
@@ -1401,7 +1401,7 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
         }
         case Stmt.Spawn(_, j, k) {
             v.scope(j)
-            if k < I32(0) or I64(k) >= v.F.Tasks.Len() { v.bad("no task " $k) }
+            if k < I32(0) or I64(k) >= v.F.Tasks.Len() { v.bad("no task " + $k) }
         }
         case Stmt.Raised(_), Stmt.ErrPop(_) { }
         case Stmt.ErrSet(_, x) { v.operand(x) }
@@ -1479,7 +1479,7 @@ fn (v mut verifier&) termShape(t Term) {
             v.block(o)
         }
         case Term.Call(_, c), Term.Tail(_, c) {
-            if c < I32(0) or I64(c) >= v.F.Calls.Len() { v.bad("no call " $c) }
+            if c < I32(0) or I64(c) >= v.F.Calls.Len() { v.bad("no call " + $c) }
         }
         case Term.Return(_, x), Term.Raise(_, x), Term.Exit(_, _, x) { v.operand(x) }
         case Term.Suspend(_, x, b, held, d) {
@@ -1641,7 +1641,7 @@ fn (v mut verifier&) builtPart(f types.TypeId, k I64, x types.TypeId) types.Type
 }
 
 fn (v mut verifier&) want(from types.TypeId, to types.TypeId, what String&) {
-    if not v.fits(from, to) { v.bad($what " is a " $v.canon(from) ", where a " $v.canon(to) " is wanted") }
+    if not v.fits(from, to) { v.bad($what + " is a " + $v.canon(from) + ", where a " + $v.canon(to) + " is wanted") }
 }
 
 # an array type, past a declared type over one; Unknown for none
@@ -1674,16 +1674,16 @@ fn (v mut verifier&) projected(ty types.TypeId, pr Proj) types.TypeId {
             fl, ok := FieldsOf(v.T, ty), HasFields(v.T, ty)
             fs := t.Items(fl)
             if not ok or k < 0 or k >= fs.Len() {
-                v.bad("no field " $k " in a " $v.canon(ty))
+                v.bad("no field " + $k + " in a " + $v.canon(ty))
                 return types.UnknownT
             }
             return fs[k]
         }
         case Proj.Index(l) {
-            if not t.IsInt(t.Repr(v.localType(l))) { v.bad("an index L" $l " is a " $v.canon(v.localType(l))) }
+            if not t.IsInt(t.Repr(v.localType(l))) { v.bad("an index L" + $l + " is a " + $v.canon(v.localType(l))) }
             a := v.arrayOf(ty)
             if a == types.UnknownT {
-                v.bad("an index into a " $v.canon(ty) ", not an array")
+                v.bad("an index into a " + $v.canon(ty) + ", not an array")
                 return a
             }
             return t.Elem(a)
@@ -1691,18 +1691,18 @@ fn (v mut verifier&) projected(ty types.TypeId, pr Proj) types.TypeId {
         case Proj.At(k) {
             a := v.arrayOf(ty)
             if a == types.UnknownT {
-                v.bad("an index into a " $v.canon(ty) ", not an array")
+                v.bad("an index into a " + $v.canon(ty) + ", not an array")
                 return a
             }
             n := t.Length(a)
             if k < 0 or (n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const and k >= t.ConstValue(n)) {
-                v.bad("constant index " $k " outside a " $v.canon(ty))
+                v.bad("constant index " + $k + " outside a " + $v.canon(ty))
             }
             return t.Elem(a)
         }
         case Proj.Deref {
             if not t.IsRef(ty) {
-                v.bad("a deref of a " $v.canon(ty) ", not a reference")
+                v.bad("a deref of a " + $v.canon(ty) + ", not a reference")
                 return types.UnknownT
             }
             return t.Referent(ty)
@@ -1711,11 +1711,11 @@ fn (v mut verifier&) projected(ty types.TypeId, pr Proj) types.TypeId {
             cl, ok := CasesOf(v.T, ty), HasCases(v.T, ty)
             cs := t.Items(cl)
             if not ok or tag < 0 or tag >= cs.Len() {
-                v.bad("no case " $tag " in a " $v.canon(ty))
+                v.bad("no case " + $tag + " in a " + $v.canon(ty))
                 return types.UnknownT
             }
             if cs[tag] == types.TypeId(0) {
-                v.bad("case " $tag " of a " $v.canon(ty) " has no payload")
+                v.bad("case " + $tag + " of a " + $v.canon(ty) + " has no payload")
                 return types.UnknownT
             }
             return cs[tag]
@@ -1735,7 +1735,7 @@ fn (v mut verifier&) arg(r Range, i I64) Operand { return v.F.Ops[I64(r.At) + i]
 
 # each of a task's targets of the type of its result
 fn (v mut verifier&) taskTargets(task Task&, rs Array<types.TypeId>&) {
-    for i in range task.Targets.N { v.want(rs[i], v.placeType(v.F.Places[I64(task.Targets.At) + i]), "a task's result " $i) }
+    for i in range task.Targets.N { v.want(rs[i], v.placeType(v.F.Places[I64(task.Targets.At) + i]), "a task's result " + $i) }
 }
 
 fn (v mut verifier&) stmtTypes(s Stmt&) {
@@ -1750,21 +1750,21 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
         case Stmt.RegisterDtor(_, _, ty, x) {
             xt := v.operandType(x)
             if not t.IsRef(xt) or not t.Same(t.Referent(xt), ty) {
-                v.bad("a destructor registered for a " $v.canon(xt) ", not a reference to a " $v.canon(ty))
+                v.bad("a destructor registered for a " + $v.canon(xt) + ", not a reference to a " + $v.canon(ty))
             } else if not t.NeedsDrop(ty) and GuardOf(t, ty) == types.UnknownT {
-                v.bad("a destructor registered for a " $v.canon(ty) ", which has none to run")
+                v.bad("a destructor registered for a " + $v.canon(ty) + ", which has none to run")
             }
         }
         # O8d: what a sole place let go of - a reference, its object in a region (or none: null, constant data)
         case Stmt.Release(_, p) {
             pt := v.placeType(p)
             if pt != types.UnknownT and not t.IsRef(pt) and not t.OwnedPart(pt) and t.Anchors(pt).Len() == 0 {
-                v.bad("a release of a " $v.canon(pt) ", not a reference or an owner")
+                v.bad("a release of a " + $v.canon(pt) + ", not a reference or an owner")
             }
         }
         case Stmt.Settle(_, _, p) {
             pt := v.placeType(p)
-            if pt != types.UnknownT and t.Anchors(pt).Len() == 0 and not t.OwnedPart(pt) { v.bad("a settle of a " $v.canon(pt) ", not an owner") }
+            if pt != types.UnknownT and t.Anchors(pt).Len() == 0 and not t.OwnedPart(pt) { v.bad("a settle of a " + $v.canon(pt) + ", not an owner") }
         }
         case Stmt.Write(_, b, how, x) {
             v.builder(b)
@@ -1778,7 +1778,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
                 case WriteKind.Float: t.IsFloat(r)
                 case WriteKind.Bool: r == types.BoolT
             }
-            if not good { v.bad("a " $short($how) " write of a " $v.canon(xt)) }
+            if not good { v.bad("a " + $short($how) + " write of a " + $v.canon(xt)) }
         }
         case Stmt.CopyElems(_, d, src, n) {
             da := v.arrayOf(v.placeType(d))
@@ -1786,19 +1786,19 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
             if da == types.UnknownT or sa == types.UnknownT {
                 v.bad("elements copied between places that are not both arrays")
             } else if not t.Same(t.Repr(t.Elem(da)), t.Repr(t.Elem(sa))) {
-                v.bad("elements copied between a " $v.canon(sa) " and a " $v.canon(da))
+                v.bad("elements copied between a " + $v.canon(sa) + " and a " + $v.canon(da))
             }
             if not t.IsInt(t.Repr(v.operandType(n))) { v.bad("a count of copied elements that is no integer") }
         }
         case Stmt.Spawn(_, j, k) {
-            if v.F.Scopes[I64(j)].Kind != ScopeKind.Join { v.bad("a spawn into S" $j ", which is no join") }
+            if v.F.Scopes[I64(j)].Kind != ScopeKind.Join { v.bad("a spawn into S" + $j + ", which is no join") }
             task := v.F.Tasks[I64(k)]
             ty := v.calleeType(task.Target)
             if ty != types.UnknownT {
                 v.args(task.Target, ty, task.Args, task.Scopes)
                 rs := t.Results(t.Func(t.Params(ty), v.held(ty), t.Errors(ty)))
                 if task.Targets.N > I32(0) and I64(task.Targets.N) != rs.Len() {
-                    v.bad("a task with " $task.Targets.N " targets for " $rs.Len() " results")
+                    v.bad("a task with " + $task.Targets.N + " targets for " + $rs.Len() + " results")
                 } else {
                     v.taskTargets(task, rs)
                 }
@@ -1857,22 +1857,22 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
 
 # what RegionOr reads: a reference - its object's word before names the region
 fn (v mut verifier&) regionOrType(of types.TypeId) types.TypeId {
-    if of != types.UnknownT and not v.T.IsRef(v.T.Repr(of)) { v.bad("the region of a " $v.canon(of)) }
+    if of != types.UnknownT and not v.T.IsRef(v.T.Repr(of)) { v.bad("the region of a " + $v.canon(of)) }
     return I64T
 }
 
 fn (v mut verifier&) intOf(got types.TypeId, want types.TypeId, what String&) types.TypeId {
-    if v.T.Repr(got) != want { v.bad($what " is a " $v.canon(got) ", not a " $v.canon(want)) }
+    if v.T.Repr(got) != want { v.bad($what + " is a " + $v.canon(got) + ", not a " + $v.canon(want)) }
     return want
 }
 
 fn (v mut verifier&) refType(of types.TypeId, ty types.TypeId) types.TypeId {
     t := v.T
     if not t.IsRef(ty) {
-        v.bad("a reference typed " $v.canon(ty))
+        v.bad("a reference typed " + $v.canon(ty))
         return types.UnknownT
     }
-    if of != types.UnknownT and not v.fits(of, t.Referent(ty)): v.bad("a reference " $v.canon(ty) " to a " $v.canon(of))
+    if of != types.UnknownT and not v.fits(of, t.Referent(ty)): v.bad("a reference " + $v.canon(ty) + " to a " + $v.canon(of))
     return ty
 }
 
@@ -1881,7 +1881,7 @@ fn (v mut verifier&) takeType(of types.TypeId) types.TypeId { return of }
 
 fn (v mut verifier&) tagType(of types.TypeId) types.TypeId {
     ok := HasCases(v.T, of)
-    if of != types.UnknownT and not ok { v.bad("the case of a " $v.canon(of) ", not an enum") }
+    if of != types.UnknownT and not ok { v.bad("the case of a " + $v.canon(of) + ", not an enum") }
     return I64T
 }
 
@@ -1897,11 +1897,11 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case _: 2
     }
     if want < 0 {
-        v.bad($short($op) " is a check: a test and a branch in MIR")
+        v.bad($short($op) + " is a check: a test and a branch in MIR")
         return types.UnknownT
     }
     if n != want {
-        v.bad($short($op) " of " $n " operands")
+        v.bad($short($op) + " of " + $n + " operands")
         return types.UnknownT
     }
     a := v.operandType(v.arg(r, 0))
@@ -1910,28 +1910,28 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
     match op {
         case typed.PrimOp.Neg, typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div
              typed.PrimOp.Rem {
-            if not t.IsNumber(ra) { v.bad($short($op) " of a " $v.canon(a)) }
+            if not t.IsNumber(ra) { v.bad($short($op) + " of a " + $v.canon(a)) }
             v.sameArgs(op, r, ty)
         }
         case typed.PrimOp.BitNot, typed.PrimOp.BitAnd, typed.PrimOp.BitOr, typed.PrimOp.BitXor {
-            if not t.IsInt(ra) and ra != types.BoolT { v.bad($short($op) " of a " $v.canon(a)) }
+            if not t.IsInt(ra) and ra != types.BoolT { v.bad($short($op) + " of a " + $v.canon(a)) }
             v.sameArgs(op, r, ty)
         }
         case typed.PrimOp.Shl, typed.PrimOp.Shr {
-            if not t.IsInt(ra) or not t.IsInt(t.Repr(v.operandType(v.arg(r, 1)))) { v.bad($short($op) " of a " $v.canon(a)) }
-            if not v.fits(a, ty) { v.bad($short($op) " of a " $v.canon(a) " typed " $v.canon(ty)) }
+            if not t.IsInt(ra) or not t.IsInt(t.Repr(v.operandType(v.arg(r, 1)))) { v.bad($short($op) + " of a " + $v.canon(a)) }
+            if not v.fits(a, ty) { v.bad($short($op) + " of a " + $v.canon(a) + " typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.Not {
-            if ra != types.BoolT { v.bad("Not of a " $v.canon(a)) }
+            if ra != types.BoolT { v.bad("Not of a " + $v.canon(a)) }
             v.sameArgs(op, r, ty)
         }
         case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge {
             b := v.operandType(v.arg(r, 1))
-            if not t.Same(ra, t.Repr(b)) { v.bad($short($op) " of a " $v.canon(a) " and a " $v.canon(b)) }
+            if not t.Same(ra, t.Repr(b)) { v.bad($short($op) + " of a " + $v.canon(a) + " and a " + $v.canon(b)) }
             if not t.IsNumber(ra) and ra != types.BoolT and op != typed.PrimOp.Eq and op != typed.PrimOp.Ne {
-                v.bad($short($op) " of a " $v.canon(a))
+                v.bad($short($op) + " of a " + $v.canon(a))
             }
-            if ty != types.BoolT { v.bad($short($op) " typed " $v.canon(ty)) }
+            if ty != types.BoolT { v.bad($short($op) + " typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.Same {
             b := v.operandType(v.arg(r, 1))
@@ -1940,71 +1940,71 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             same := t.Same(rb, ra)
             if k == types.Kind.Ref and t.IsRef(rb) { same = v.sameRepr(t.Referent(ra), t.Referent(rb)) }
             if (k != types.Kind.Ref and k != types.Kind.Func) or not same {
-                v.bad("Same of a " $v.canon(a) " and a " $v.canon(b))
+                v.bad("Same of a " + $v.canon(a) + " and a " + $v.canon(b))
             }
-            if ty != types.BoolT { v.bad("Same typed " $v.canon(ty)) }
+            if ty != types.BoolT { v.bad("Same typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.Convert, typed.PrimOp.Bitcast { }
         case typed.PrimOp.Len {
             x := t.Referent(ra) if t.IsRef(ra) else a
-            if v.arrayOf(x) == types.UnknownT { v.bad("Len of a " $v.canon(a)) }
-            if ty != I64T { v.bad("Len typed " $v.canon(ty)) }
+            if v.arrayOf(x) == types.UnknownT { v.bad("Len of a " + $v.canon(a)) }
+            if ty != I64T { v.bad("Len typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount {
-            if not t.IsInt(ra) { v.bad($short($op) " of a " $v.canon(a)) }
-            if ty != I64T { v.bad($short($op) " typed " $v.canon(ty)) }
+            if not t.IsInt(ra) { v.bad($short($op) + " of a " + $v.canon(a)) }
+            if ty != I64T { v.bad($short($op) + " typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.ByteSwap {
-            if not t.IsInt(ra) { v.bad("ByteSwap of a " $v.canon(a)) }
+            if not t.IsInt(ra) { v.bad("ByteSwap of a " + $v.canon(a)) }
             v.sameArgs(op, r, ty)
         }
         case typed.PrimOp.SatAdd, typed.PrimOp.SatSub, typed.PrimOp.SatMul {
-            if not t.IsInt(ra) { v.bad($short($op) " of a " $v.canon(a)) }
+            if not t.IsInt(ra) { v.bad($short($op) + " of a " + $v.canon(a)) }
             v.sameArgs(op, r, ty)
         }
         case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight, typed.PrimOp.SatShl {
-            if not t.IsInt(ra) or t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) " of a " $v.canon(a)) }
-            if not v.fits(a, ty) { v.bad($short($op) " of a " $v.canon(a) " typed " $v.canon(ty)) }
+            if not t.IsInt(ra) or t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) + " of a " + $v.canon(a)) }
+            if not v.fits(a, ty) { v.bad($short($op) + " of a " + $v.canon(a) + " typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.Retire {
             x := t.Referent(ra) if t.IsRef(ra) else a
-            if v.arrayOf(x) == types.UnknownT { v.bad("Retire of a " $v.canon(a)) }
-            if ty != types.VoidT { v.bad("Retire typed " $v.canon(ty)) }
+            if v.arrayOf(x) == types.UnknownT { v.bad("Retire of a " + $v.canon(a)) }
+            if ty != types.VoidT { v.bad("Retire typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.IsCase {
             ok := HasCases(v.T, a)
-            if not ok { v.bad("IsCase of a " $v.canon(a)) }
-            if ty != types.BoolT { v.bad("IsCase typed " $v.canon(ty)) }
+            if not ok { v.bad("IsCase of a " + $v.canon(a)) }
+            if ty != types.BoolT { v.bad("IsCase typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.AnyMake {
             # T32a: a reference to an instance, and its table's index
-            if not t.IsRef(ra) or t.IsAny(ra) { v.bad("AnyMake of a " $v.canon(a)) }
-            if not t.IsAny(t.Repr(ty)) { v.bad("AnyMake typed " $v.canon(ty)) }
+            if not t.IsRef(ra) or t.IsAny(ra) { v.bad("AnyMake of a " + $v.canon(a)) }
+            if not t.IsAny(t.Repr(ty)) { v.bad("AnyMake typed " + $v.canon(ty)) }
             if t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad("AnyMake's table not an I64") }
         }
         case typed.PrimOp.AnyInstance {
-            if not t.IsAny(ra) { v.bad("AnyInstance of a " $v.canon(a)) }
-            if not t.IsRef(t.Repr(ty)) { v.bad("AnyInstance typed " $v.canon(ty)) }
+            if not t.IsAny(ra) { v.bad("AnyInstance of a " + $v.canon(a)) }
+            if not t.IsRef(t.Repr(ty)) { v.bad("AnyInstance typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.AnyIs {
-            if not t.IsAny(ra) { v.bad("AnyIs of a " $v.canon(a)) }
-            if ty != types.BoolT { v.bad("AnyIs typed " $v.canon(ty)) }
+            if not t.IsAny(ra) { v.bad("AnyIs of a " + $v.canon(a)) }
+            if ty != types.BoolT { v.bad("AnyIs typed " + $v.canon(ty)) }
         }
         case typed.PrimOp.Unpack, typed.PrimOp.Repack {
             # T13c: a packed value, a field's position, and for Repack the field's new value
-            if not t.Packed(ra) { v.bad($short($op) " of a " $v.canon(a)) }
-            if t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) "'s field not an I64") }
-            if op == typed.PrimOp.Repack and not t.Same(t.Repr(ty), ra) { v.bad("Repack typed " $v.canon(ty)) }
+            if not t.Packed(ra) { v.bad($short($op) + " of a " + $v.canon(a)) }
+            if t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) + "'s field not an I64") }
+            if op == typed.PrimOp.Repack and not t.Same(t.Repr(ty), ra) { v.bad("Repack typed " + $v.canon(ty)) }
         }
         case _ {
             # the atomics: a writable reference to an integer place, then values of its type
             if not t.IsRef(ra) or not t.IsInt(t.Repr(t.Referent(ra))) or (t.PermOf(ra) & types.Writable) == 0 {
-                v.bad($short($op) " of a " $v.canon(a) ", not a writable reference to an integer")
+                v.bad($short($op) + " of a " + $v.canon(a) + ", not a writable reference to an integer")
             } else {
                 it := t.Referent(ra)
-                for i in range 1, n { v.want(v.operandType(v.arg(r, i)), it, $short($op) "'s operand " $i) }
-                if op == typed.PrimOp.AtomicStore and ty != types.VoidT: v.bad("AtomicStore typed " $v.canon(ty))
-                if op != typed.PrimOp.AtomicStore and not v.fits(it, ty): v.bad($short($op) " typed " $v.canon(ty))
+                for i in range 1, n { v.want(v.operandType(v.arg(r, i)), it, $short($op) + "'s operand " + $i) }
+                if op == typed.PrimOp.AtomicStore and ty != types.VoidT: v.bad("AtomicStore typed " + $v.canon(ty))
+                if op != typed.PrimOp.AtomicStore and not v.fits(it, ty): v.bad($short($op) + " typed " + $v.canon(ty))
             }
         }
     }
@@ -2014,7 +2014,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
 fn (v mut verifier&) sameArgs(op typed.PrimOp, r Range, ty types.TypeId) {
     for i in range r.N {
         x := v.operandType(v.arg(r, i))
-        if not v.T.Same(v.T.Repr(x), v.T.Repr(ty)) { v.bad($short($op) " typed " $v.canon(ty) " of a " $v.canon(x)) }
+        if not v.T.Same(v.T.Repr(x), v.T.Repr(ty)) { v.bad($short($op) + " typed " + $v.canon(ty) + " of a " + $v.canon(x)) }
     }
 }
 
@@ -2026,10 +2026,10 @@ fn (v mut verifier&) overflowsType(op typed.PrimOp, ty types.TypeId, r Range) ty
         case _: false
     }
     if not good {
-        v.bad("no overflow test for " $short($op) " of " $r.N " operands")
+        v.bad("no overflow test for " + $short($op) + " of " + $r.N + " operands")
         return types.BoolT
     }
-    if not t.IsInt(t.Repr(ty)) { v.bad("an overflow test of " $short($op) " to a " $v.canon(ty) ", not an integer") }
+    if not t.IsInt(t.Repr(ty)) { v.bad("an overflow test of " + $short($op) + " to a " + $v.canon(ty) + ", not an integer") }
     return types.BoolT
 }
 
@@ -2040,16 +2040,16 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
     if a != types.UnknownT {
         len := t.Length(a)
         if len == types.TypeId(0) or t.KindOf(len) != types.Kind.Const or t.ConstValue(len) != n {
-            v.bad("a " $v.canon(ty) " made of " $n " elements")
+            v.bad("a " + $v.canon(ty) + " made of " + $n + " elements")
         }
-        for i in range n { v.want(v.operandType(v.arg(r, i)), t.Elem(a), "element " $i) }
+        for i in range n { v.want(v.operandType(v.arg(r, i)), t.Elem(a), "element " + $i) }
         return ty
     }
     cl, isEnum := CasesOf(v.T, ty), HasCases(v.T, ty)
     cs := t.Items(cl)
     if isEnum {
         if tag < 0 or tag >= cs.Len() {
-            v.bad("no case " $tag " in a " $v.canon(ty))
+            v.bad("no case " + $tag + " in a " + $v.canon(ty))
             return ty
         }
         v.parts(ty, t.Parts(cs[tag]) if cs[tag] != types.TypeId(0) else types.ListId(0), r)
@@ -2057,7 +2057,7 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
     }
     fl, ok := FieldsOf(v.T, ty), HasFields(v.T, ty)
     if not ok {
-        v.bad("a " $v.canon(ty) " made of parts")
+        v.bad("a " + $v.canon(ty) + " made of parts")
         return ty
     }
     v.parts(ty, fl, r)
@@ -2067,10 +2067,10 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
 fn (v mut verifier&) parts(ty types.TypeId, fl types.ListId, r Range) {
     fs := v.T.Items(fl)
     if fs.Len() != I64(r.N) {
-        v.bad("a " $v.canon(ty) " of " $fs.Len() " parts made of " $r.N)
+        v.bad("a " + $v.canon(ty) + " of " + $fs.Len() + " parts made of " + $r.N)
         return
     }
-    for i in range fs.Len() { v.want(v.operandType(v.arg(r, i)), fs[i], "part " $i) }
+    for i in range fs.Len() { v.want(v.operandType(v.arg(r, i)), fs[i], "part " + $i) }
 }
 
 fn (v mut verifier&) newArrayType(ty types.TypeId, n Operand, fill Operand) types.TypeId {
@@ -2078,7 +2078,7 @@ fn (v mut verifier&) newArrayType(ty types.TypeId, n Operand, fill Operand) type
     x := t.Referent(t.Repr(ty)) if t.IsRef(t.Repr(ty)) else ty
     a := v.arrayOf(x)
     if a == types.UnknownT or t.Length(a) != types.TypeId(0) {
-        v.bad("a new array typed " $v.canon(ty) ", not a run-time-length array")
+        v.bad("a new array typed " + $v.canon(ty) + ", not a run-time-length array")
         return types.UnknownT
     }
     if not t.IsInt(t.Repr(v.operandType(n))) { v.bad("a new array's length that is no integer") }
@@ -2091,7 +2091,7 @@ fn (v mut verifier&) sliceType(of types.TypeId, lo Operand, hi Operand, ty types
     a := v.arrayOf(of)
     s := v.arrayOf(t.Referent(t.Repr(ty))) if t.IsRef(t.Repr(ty)) else types.UnknownT
     if a == types.UnknownT or s == types.UnknownT or not t.Same(t.Repr(t.Elem(a)), t.Repr(t.Elem(s))) {
-        v.bad("a slice " $v.canon(ty) " of a " $v.canon(of))
+        v.bad("a slice " + $v.canon(ty) + " of a " + $v.canon(of))
     }
     for x in Array<Operand>[lo, hi] {
         if not t.IsInt(t.Repr(v.operandType(x))) { v.bad("a slice's bound that is no integer") }
@@ -2100,13 +2100,13 @@ fn (v mut verifier&) sliceType(of types.TypeId, lo Operand, hi Operand, ty types
 }
 
 fn (v mut verifier&) closureType(ty types.TypeId) types.TypeId {
-    if v.T.KindOf(ty) != types.Kind.Func { v.bad("a function value typed " $v.canon(ty)) }
+    if v.T.KindOf(ty) != types.Kind.Func { v.bad("a function value typed " + $v.canon(ty)) }
     return ty
 }
 
 fn (v mut verifier&) textType(b ScopeRef, ty types.TypeId) types.TypeId {
     v.builder(b)
-    if not v.isText(ty) { v.bad("text typed " $v.canon(ty)) }
+    if not v.isText(ty) { v.bad("text typed " + $v.canon(ty)) }
     return ty
 }
 
@@ -2118,13 +2118,13 @@ fn (v mut verifier&) calleeType(c Callee) types.TypeId {
     }
     match c {
         case Callee.Dispatch(x, _, _) {
-            if not v.T.IsAny(v.T.Repr(v.operandType(x))) { v.bad("a dispatch through a " $v.canon(v.operandType(x))) }
+            if not v.T.IsAny(v.T.Repr(v.operandType(x))) { v.bad("a dispatch through a " + $v.canon(v.operandType(x))) }
         }
         case _ { }
     }
     if ty == types.UnknownT { return ty }
     if v.T.KindOf(ty) != types.Kind.Func {
-        v.bad("a call of a " $v.canon(ty) ", not a function")
+        v.bad("a call of a " + $v.canon(ty) + ", not a function")
         return types.UnknownT
     }
     return ty
@@ -2146,13 +2146,13 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
     }
     # X21: an extern's variable arguments after its parameters
     if ps.Len() != I64(args.N) and not (isExtern and I64(args.N) > ps.Len()) {
-        v.bad("a call of " $args.N " arguments to a function of " $ps.Len() " parameters")
+        v.bad("a call of " + $args.N + " arguments to a function of " + $ps.Len() + " parameters")
     } else {
         for i in range ps.Len() {
             at := v.operandType(v.arg(args, i))
             # X22: a C pointer parameter takes any pointer the checker let through - an array's storage, a reference
             if isExtern and v.pointerLike(ps[i]) and v.pointerLike(at) { continue }
-            v.want(at, ps[i], "argument " $i)
+            v.want(at, ps[i], "argument " + $i)
         }
     }
     want := PassedCount(t, c, ty)
@@ -2161,7 +2161,7 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
         case Callee.Fn(FnKey.Body(_), _), Callee.Fn(FnKey.Twin(_, _), _): I64(scopes.N) > want
         case _: false
     }
-    if want != I64(scopes.N) and not extra { v.bad("a call passing " $scopes.N " scopes for its callee's " $want) }
+    if want != I64(scopes.N) and not extra { v.bad("a call passing " + $scopes.N + " scopes for its callee's " + $want) }
     for i in range scopes.N {
         if v.F.Refs[I64(scopes.At) + i] == ScopeRef.Frame { v.bad("a call passing the frame for a scope variable") }
     }
@@ -2172,7 +2172,7 @@ fn (v mut verifier&) casesOnce(r Range) {
     f := v.F
     for i in range r.N {
         for j in range i {
-            if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value { v.bad("a switch with the value " $f.Cases[I64(r.At) + i].Value " twice") }
+            if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value { v.bad("a switch with the value " + $f.Cases[I64(r.At) + i].Value + " twice") }
         }
     }
 }
@@ -2183,11 +2183,11 @@ fn (v mut verifier&) termTypes(term Term) {
     match term {
         case Term.Branch(c, _, _) {
             ct := v.operandType(c)
-            if t.Repr(ct) != types.BoolT { v.bad("a branch on a " $v.canon(ct)) }
+            if t.Repr(ct) != types.BoolT { v.bad("a branch on a " + $v.canon(ct)) }
         }
         case Term.Switch(x, r, _) {
             xt := v.operandType(x)
-            if not t.IsInt(t.Repr(xt)) { v.bad("a switch on a " $v.canon(xt)) }
+            if not t.IsInt(t.Repr(xt)) { v.bad("a switch on a " + $v.canon(xt)) }
             v.casesOnce(r)
         }
         case Term.Call(_, k) {
@@ -2217,7 +2217,7 @@ fn (v mut verifier&) termTypes(term Term) {
         case Term.Return(_, x) {
             res := t.Result(f.Ty)
             if x == Operand.None {
-                if res != types.VoidT { v.bad("a return with no value from a function giving a " $v.canon(res)) }
+                if res != types.VoidT { v.bad("a return with no value from a function giving a " + $v.canon(res)) }
             } else if res == types.VoidT {
                 v.bad("a return with a value from a function giving none")
             } else {
@@ -2234,7 +2234,7 @@ fn (v mut verifier&) termTypes(term Term) {
         }
         case Term.Wait(_, j, _, code, failed) {
             si := f.Scopes[I64(j)]
-            if si.Kind != ScopeKind.Join { v.bad("a wait for S" $j ", which is no join") }
+            if si.Kind != ScopeKind.Join { v.bad("a wait for S" + $j + ", which is no join") }
             fails := t.Items(si.Errors).Len() > 0
             if fails and failed == NoBlock { v.bad("a wait for a join that can fail with no failed edge") }
             if not fails and failed != NoBlock { v.bad("a failed edge for a join that cannot fail") }
@@ -2244,7 +2244,7 @@ fn (v mut verifier&) termTypes(term Term) {
             if msg != Operand.None {
                 if kind != ExitKind.Assert and kind != ExitKind.Unreachable and kind != ExitKind.Error and
                    kind != ExitKind.Escaped {
-                    v.bad("a message for a " $short($kind) " exit")
+                    v.bad("a message for a " + $short($kind) + " exit")
                 }
                 if not v.isText(v.operandType(msg)) { v.bad("an assert's message that is no text") }
             }
@@ -2328,13 +2328,13 @@ fn (v mut verifier&) enter(b BlockId) {
     if same {
         for k in range v.stack.Len() { same = same and v.stacks[v.stackAt[bi] + k] == v.stack[k] }
     }
-    if not same { v.bad("enters bb" $b " with scopes " $v.stackText() ", where another path has " $v.stackOf(b)) }
+    if not same { v.bad("enters bb" + $b + " with scopes " + $v.stackText() + ", where another path has " + $v.stackOf(b)) }
 }
 
 fn (v mut verifier&) stackText() String {
     out := StringBuilder()
     out.PushChar('[')
-    for k in range v.stack.Len() { out.Push($(" " if k > 0 else "") "S" $v.stack[k]) }
+    for k in range v.stack.Len() { out.Push($(" " if k > 0 else "") + "S" + $v.stack[k]) }
     out.PushChar(']')
     return out.ToString()
 }
@@ -2342,7 +2342,7 @@ fn (v mut verifier&) stackText() String {
 fn (v mut verifier&) stackOf(b BlockId) String {
     out := StringBuilder()
     out.PushChar('[')
-    for k in range v.stackN[I64(b)] { out.Push($(" " if k > 0 else "") "S" $v.stacks[v.stackAt[I64(b)] + k]) }
+    for k in range v.stackN[I64(b)] { out.Push($(" " if k > 0 else "") + "S" + $v.stacks[v.stackAt[I64(b)] + k]) }
     out.PushChar(']')
     return out.ToString()
 }
@@ -2397,7 +2397,7 @@ fn (v mut verifier&) readPlace(p Lvalue) {
 }
 
 fn (v mut verifier&) used(l LocalId) {
-    if not v.init[I64(l)] { v.bad("L" $l " read before it is initialized on every path") }
+    if not v.init[I64(l)] { v.bad("L" + $l + " read before it is initialized on every path") }
 }
 
 fn (v mut verifier&) readArgs(r Range) {
@@ -2409,7 +2409,7 @@ fn (v mut verifier&) readArgs(r Range) {
 fn (v mut verifier&) stores(p Lvalue) {
     match p.B {
         case Base.Local(l) {
-            if not v.live[I64(l)] { v.bad("L" $l " stored into with no storage: its Live not reached") }
+            if not v.live[I64(l)] { v.bad("L" + $l + " stored into with no storage: its Live not reached") }
             if p.Path.N == I32(0): v.init[I64(l)] = true
             else: v.readPlace(p)
         }
@@ -2421,8 +2421,8 @@ fn (v mut verifier&) stores(p Lvalue) {
 fn (v mut verifier&) buildsIn(s ScopeRef) {
     match s {
         case ScopeRef.Scope(x) {
-            if not v.open(x) { v.bad("built in S" $x ", which is not open") }
-            else if v.F.Scopes[I64(x)].Kind == ScopeKind.Inert { v.bad("built in S" $x ", which is inert") }
+            if not v.open(x) { v.bad("built in S" + $x + ", which is not open") }
+            else if v.F.Scopes[I64(x)].Kind == ScopeKind.Inert { v.bad("built in S" + $x + ", which is inert") }
         }
         case ScopeRef.Held(l) { v.used(l) }
         case _ { }
@@ -2433,7 +2433,7 @@ fn (v mut verifier&) buildsIn(s ScopeRef) {
 fn (v mut verifier&) usesScope(s ScopeRef) {
     match s {
         case ScopeRef.Scope(x) {
-            if not v.open(x) { v.bad("S" $x " used where it is not open") }
+            if not v.open(x) { v.bad("S" + $x + " used where it is not open") }
         }
         case ScopeRef.Held(l) { v.used(l) }
         case _ { }
@@ -2459,18 +2459,18 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
         }
         case Stmt.Open(_, x) {
             if v.open(x) {
-                v.bad("S" $x " opened while it is open")
+                v.bad("S" + $x + " opened while it is open")
                 return
             }
             top := v.stack[v.stack.Len() - 1] if v.stack.Len() > 0 else NoScope
             parent := f.Scopes[I64(x)].Parent
-            if parent != top { v.bad("S" $x " opened in " $v.name(top) ", not in its parent " $v.name(parent)) }
+            if parent != top { v.bad("S" + $x + " opened in " + $v.name(top) + ", not in its parent " + $v.name(parent)) }
             v.stack.Push(x)
             v.pend[I64(x)] = false
         }
         case Stmt.Close(_, x) {
             v.pop(x, "closed")
-            if v.pend[I64(x)] { v.bad("join S" $x " closed with tasks not waited for") }
+            if v.pend[I64(x)] { v.bad("join S" + $x + " closed with tasks not waited for") }
         }
         case Stmt.RegisterDtor(_, sc, _, x) {
             v.usesScope(sc)
@@ -2491,7 +2491,7 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
             v.readPlace(d)
         }
         case Stmt.Spawn(_, j, k) {
-            if not v.open(j) { v.bad("a spawn into S" $j ", which is not open") }
+            if not v.open(j) { v.bad("a spawn into S" + $j + ", which is not open") }
             task := f.Tasks[I64(k)]
             for i in range task.Targets.N { v.readPlace(f.Places[I64(task.Targets.At) + i]) }
             v.calleeReads(task.Target)
@@ -2516,18 +2516,18 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
         }
         # a cleanup entered with the state where its deferred code is registered, inside the scope registering it
         case Stmt.Deferred(_, x, e) {
-            if not v.open(x) { v.bad("deferred code registered at S" $x ", which is not open") }
+            if not v.open(x) { v.bad("deferred code registered at S" + $x + ", which is not open") }
             if e != NoBlock { v.enter(e) }
         }
     }
 }
 
-fn (v mut verifier&) name(s ScopeId) String { return "none" if s == NoScope else "S" $s }
+fn (v mut verifier&) name(s ScopeId) String { return "none" if s == NoScope else "S" + $s }
 
 fn (v mut verifier&) pop(x ScopeId, what String&) {
     if v.stack.Len() == 0 or v.stack[v.stack.Len() - 1] != x {
-        if v.open(x): v.bad("S" $x " " $what " while S" $v.stack[v.stack.Len() - 1] ", opened in it, is open")
-        else: v.bad("S" $x " " $what ", but it is not open")
+        if v.open(x): v.bad("S" + $x + " " + $what + " while S" + $v.stack[v.stack.Len() - 1] + ", opened in it, is open")
+        else: v.bad("S" + $x + " " + $what + ", but it is not open")
         return
     }
     try v.stack.Pop() catch { unreachable }
@@ -2609,7 +2609,7 @@ fn (v mut verifier&) termFlow(term Term) {
                     v.enter(c.Err)
                     v.init[I64(c.Code)] = was
                 } else {
-                    v.bad("L" $c.Code " given an error code with no storage")
+                    v.bad("L" + $c.Code + " given an error code with no storage")
                 }
             }
             if c.HasDest { v.stores(c.Dest) }
@@ -2620,11 +2620,11 @@ fn (v mut verifier&) termFlow(term Term) {
             v.calleeReads(c.Target)
             v.readArgs(c.Args)
             for i in range c.Scopes.N { v.usesScope(f.Refs[I64(c.Scopes.At) + i]) }
-            if v.stack.Len() > 0 { v.bad("jumps out of the function with " $v.stackText() " open") }
+            if v.stack.Len() > 0 { v.bad("jumps out of the function with " + $v.stackText() + " open") }
         }
         case Term.Return(_, x), Term.Raise(_, x) {
             v.reads(x)
-            if v.stack.Len() > 0 { v.bad("leaves the function with " $v.stackText() " open") }
+            if v.stack.Len() > 0 { v.bad("leaves the function with " + $v.stackText() + " open") }
         }
         # S20: the function stays where it is, every scope it has open still open, until it is resumed at b - or
         # its walk is let go at d, which closes them
@@ -2634,11 +2634,11 @@ fn (v mut verifier&) termFlow(term Term) {
             v.enter(b)
         }
         case Term.Dropped(_) {
-            if v.stack.Len() > 0 { v.bad("ends a dropped walk with " $v.stackText() " open") }
+            if v.stack.Len() > 0 { v.bad("ends a dropped walk with " + $v.stackText() + " open") }
         }
         case Term.Exit(_, _, x) { v.reads(x) }
         case Term.Wait(_, j, ok, code, failed) {
-            if not v.open(j) { v.bad("a wait for S" $j ", which is not open") }
+            if not v.open(j) { v.bad("a wait for S" + $j + ", which is not open") }
             v.pend[I64(j)] = false
             if failed != NoBlock {
                 was := v.init[I64(code)]
@@ -2675,27 +2675,27 @@ fn (w mut dumper&) line(depth I64, text String&) {
 
 fn (w mut dumper&) all() {
     f := w.F
-    w.line(0, "fn " $w.key(f.Of) ": " $w.T.Canon(f.Ty))
+    w.line(0, "fn " + $w.key(f.Of) + ": " + $w.T.Canon(f.Ty))
     if f.Vars.Len() > 0 {
         vs := StringBuilder()
-        for i in range f.Vars.Len() { vs.Push($(", " if i > 0 else "") "V" $i " " $w.varKind(f.Vars[i])) }
-        w.line(1, "vars " $vs.ToString())
+        for i in range f.Vars.Len() { vs.Push($(", " if i > 0 else "") + "V" + $i + " " + $w.varKind(f.Vars[i])) }
+        w.line(1, "vars " + $vs.ToString())
     }
     for i in range f.Locals.Len() {
         l := f.Locals[i]
         name := w.T.Names.Text(l.Name)
-        home := "" if l.Home == ScopeRef.Frame else " in " $w.ref(l.Home)
-        w.line(1, "L" $i " " $short($l.Kind) $(" " $name if name.Len() > 0 else "") ": " $w.T.Canon(l.Ty) $home)
+        home := "" if l.Home == ScopeRef.Frame else " in " + $w.ref(l.Home)
+        w.line(1, "L" + $i + " " + $short($l.Kind) + $(" " + $name if name.Len() > 0 else "") + ": " + $w.T.Canon(l.Ty) + $home)
     }
     for i in range f.Scopes.Len() {
         s := f.Scopes[i]
-        parent := "" if s.Parent == NoScope else " in S" $s.Parent
-        block := "" if s.Block < typed.BlockId(0) else " block " $s.Block
-        errs := "" if s.Errors == types.ListId(0) else " fails " $w.list(s.Errors)
-        w.line(1, "S" $i " " $short($s.Kind) $parent $block $errs)
+        parent := "" if s.Parent == NoScope else " in S" + $s.Parent
+        block := "" if s.Block < typed.BlockId(0) else " block " + $s.Block
+        errs := "" if s.Errors == types.ListId(0) else " fails " + $w.list(s.Errors)
+        w.line(1, "S" + $i + " " + $short($s.Kind) + $parent + $block + $errs)
     }
     for b in range f.Blocks.Len() {
-        w.line(0, "bb" $b ":")
+        w.line(0, "bb" + $b + ":")
         bb := f.Blocks.Ref(b)
         for s in bb.Stmts { w.line(1, w.stmt(s)) }
         w.line(1, w.term(bb.T))
@@ -2705,38 +2705,38 @@ fn (w mut dumper&) all() {
 fn (w mut dumper&) list(l types.ListId) String {
     out := StringBuilder()
     xs := w.T.Items(l)
-    for i in range xs.Len() { out.Push($(" + " if i > 0 else "") $w.T.Canon(xs[i])) }
+    for i in range xs.Len() { out.Push($(" + " if i > 0 else "") + $w.T.Canon(xs[i])) }
     return out.ToString()
 }
 
 fn (w mut dumper&) key(k FnKey) String {
     return match k {
-        case FnKey.Body(b): "B" $b
-        case FnKey.Adapter(b): "adapter B" $b
-        case FnKey.Copied(b): "copied B" $b
-        case FnKey.Twin(b, t): "B" $b " twin " $t
-        case FnKey.Helper(kind, ty): $short($kind) " " $w.T.Canon(ty)
-        case FnKey.Init(m): "init " $m
-        case FnKey.AnyRender(ti, top): "any render table " $ti $(" top" if top else "")
+        case FnKey.Body(b): "B" + $b
+        case FnKey.Adapter(b): "adapter B" + $b
+        case FnKey.Copied(b): "copied B" + $b
+        case FnKey.Twin(b, t): "B" + $b + " twin " + $t
+        case FnKey.Helper(kind, ty): $short($kind) + " " + $w.T.Canon(ty)
+        case FnKey.Init(m): "init " + $m
+        case FnKey.AnyRender(ti, top): "any render table " + $ti + $(" top" if top else "")
     }
 }
 
 fn (w mut dumper&) varKind(k VarKind) String {
     return match k {
-        case VarKind.Param(i): "param " $i
-        case VarKind.Capture(i): "capture " $i
-        case VarKind.Derived(i): "derived " $i
+        case VarKind.Param(i): "param " + $i
+        case VarKind.Capture(i): "capture " + $i
+        case VarKind.Derived(i): "derived " + $i
         case _: $short($k)
     }
 }
 
 fn (w mut dumper&) ref(s ScopeRef) String {
     return match s {
-        case ScopeRef.Scope(x): "S" $x
-        case ScopeRef.Var(i): "V" $i
+        case ScopeRef.Scope(x): "S" + $x
+        case ScopeRef.Var(i): "V" + $i
         case ScopeRef.Program: "program"
         case ScopeRef.Frame: "frame"
-        case ScopeRef.Held(l): "held(L" $l ")"
+        case ScopeRef.Held(l): "held(L" + $l + ")"
     }
 }
 
@@ -2744,16 +2744,16 @@ fn (w mut dumper&) place(p Lvalue) String {
     out := StringBuilder()
     match p.B {
         case Base.None { out.Push("_") }
-        case Base.Local(l) { out.Push("L" $l) }
-        case Base.Global(m, n, _) { out.Push("G" $m ":" $w.T.Names.Text(n)) }
+        case Base.Local(l) { out.Push("L" + $l) }
+        case Base.Global(m, n, _) { out.Push("G" + $m + ":" + $w.T.Names.Text(n)) }
     }
     for i in range p.Path.N {
         match w.F.Projs[I64(p.Path.At) + i] {
-            case Proj.Field(k) { out.Push("." $k) }
-            case Proj.Index(l) { out.Push("[L" $l "]") }
-            case Proj.At(k) { out.Push("[" $k "]") }
+            case Proj.Field(k) { out.Push("." + $k) }
+            case Proj.Index(l) { out.Push("[L" + $l + "]") }
+            case Proj.At(k) { out.Push("[" + $k + "]") }
             case Proj.Deref { out.Push(".*") }
-            case Proj.Payload(tag) { out.Push(" as " $tag) }
+            case Proj.Payload(tag) { out.Push(" as " + $tag) }
         }
     }
     return out.ToString()
@@ -2762,16 +2762,16 @@ fn (w mut dumper&) place(p Lvalue) String {
 fn (w mut dumper&) operand(x Operand) String {
     return match x {
         case Operand.None: "none"
-        case Operand.Copy(p): "copy " $w.place(p)
-        case Operand.Const(ty, bits): "const " $w.T.Canon(ty) " " $bits
-        case Operand.Data(ty, c, file, sp): "data " $w.T.Canon(ty) " " $w.constant(c) " @" $file ":" $sp.Start
+        case Operand.Copy(p): "copy " + $w.place(p)
+        case Operand.Const(ty, bits): "const " + $w.T.Canon(ty) + " " + $bits
+        case Operand.Data(ty, c, file, sp): "data " + $w.T.Canon(ty) + " " + $w.constant(c) + " @" + $file + ":" + $sp.Start
     }
 }
 
 fn (w mut dumper&) constant(c I32) String {
     return match w.F.Consts[I64(c)] {
         case ConstNode.Bits(v): $v
-        case ConstNode.Bytes(r): "text " $r.N
+        case ConstNode.Bytes(r): "text " + $r.N
         case ConstNode.Items(r): w.constItems(r)
     }
 }
@@ -2779,20 +2779,20 @@ fn (w mut dumper&) constant(c I32) String {
 fn (w mut dumper&) constItems(r Range) String {
     out := StringBuilder()
     out.PushChar('[')
-    for i in range r.N { out.Push($(" " if i > 0 else "") $w.constant(w.F.ConstItems[I64(r.At) + i])) }
+    for i in range r.N { out.Push($(" " if i > 0 else "") + $w.constant(w.F.ConstItems[I64(r.At) + i])) }
     out.PushChar(']')
     return out.ToString()
 }
 
 fn (w mut dumper&) operands(r Range) String {
     out := StringBuilder()
-    for i in range r.N { out.Push($(", " if i > 0 else "") $w.operand(w.F.Ops[I64(r.At) + i])) }
+    for i in range r.N { out.Push($(", " if i > 0 else "") + $w.operand(w.F.Ops[I64(r.At) + i])) }
     return out.ToString()
 }
 
 fn (w mut dumper&) refs(r Range) String {
     out := StringBuilder()
-    for i in range r.N { out.Push($(", " if i > 0 else "") $w.ref(w.F.Refs[I64(r.At) + i])) }
+    for i in range r.N { out.Push($(", " if i > 0 else "") + $w.ref(w.F.Refs[I64(r.At) + i])) }
     return out.ToString()
 }
 
@@ -2800,85 +2800,85 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
     t := w.T
     return match rv {
         case Rvalue.Use(x): w.operand(x)
-        case Rvalue.Ref(p, ty): "ref " $w.place(p) ": " $t.Canon(ty)
-        case Rvalue.Take(p): "take " $w.place(p)
-        case Rvalue.Prim(op, ty, r): $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
-        case Rvalue.Overflows(op, ty, r): "overflows " $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
-        case Rvalue.Tag(p): "tag " $w.place(p)
-        case Rvalue.Aggregate(ty, tag, r): "make " $t.Canon(ty) $(" #" $tag if tag > 0 else "") "(" $w.operands(r) ")"
-        case Rvalue.New(s, x, ty): "new in " $w.ref(s) " " $w.operand(x) ": " $t.Canon(ty)
-        case Rvalue.NewArray(s, ty, n, fill): ("newarray in " $w.ref(s) " " $t.Canon(ty) "(" $w.operand(n) ", "
-                                                 $w.operand(fill) ")")
-        case Rvalue.Slice(p, lo, hi, ty): ("slice " $w.place(p) "[" $w.operand(lo) " : " $w.operand(hi) "]: "
+        case Rvalue.Ref(p, ty): "ref " + $w.place(p) + ": " + $t.Canon(ty)
+        case Rvalue.Take(p): "take " + $w.place(p)
+        case Rvalue.Prim(op, ty, r): $short($op) + " " + $t.Canon(ty) + "(" + $w.operands(r) + ")"
+        case Rvalue.Overflows(op, ty, r): "overflows " + $short($op) + " " + $t.Canon(ty) + "(" + $w.operands(r) + ")"
+        case Rvalue.Tag(p): "tag " + $w.place(p)
+        case Rvalue.Aggregate(ty, tag, r): "make " + $t.Canon(ty) + $(" #" + $tag if tag > 0 else "") + "(" + $w.operands(r) + ")"
+        case Rvalue.New(s, x, ty): "new in " + $w.ref(s) + " " + $w.operand(x) + ": " + $t.Canon(ty)
+        case Rvalue.NewArray(s, ty, n, fill): ("newarray in " + $w.ref(s) + " " + $t.Canon(ty) + "(" + $w.operand(n) + ", " +
+                                                 $w.operand(fill) + ")")
+        case Rvalue.Slice(p, lo, hi, ty): ("slice " + $w.place(p) + "[" + $w.operand(lo) + " : " + $w.operand(hi) + "]: " +
                                              $t.Canon(ty))
-        case Rvalue.Closure(code, ty, s, r, cs): ("closure " $w.key(code) " in " $w.ref(s) "(" $w.operands(r) ")"
-                                                    $(" captures " $w.refs(cs) if cs.N > I32(0) else "") ": " $t.Canon(ty))
-        case Rvalue.Recode(x, from, to): "recode " $w.operand(x) " from " $w.list(from) " to " $w.list(to)
-        case Rvalue.Text(b, into, ty): "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
-        case Rvalue.Region(s): "region in " $w.ref(s)
-        case Rvalue.Slots(s): "slots in " $w.ref(s)
-        case Rvalue.RegionOr(x, s): "region of " $w.operand(x) " or " $w.ref(s)
-        case Rvalue.ScopeOf(x): "scope of " $w.operand(x)
-        case Rvalue.ScopeOr(s, x): "scope " $w.ref(s) " or of " $w.operand(x)
+        case Rvalue.Closure(code, ty, s, r, cs): ("closure " + $w.key(code) + " in " + $w.ref(s) + "(" + $w.operands(r) + ")" +
+                                                    $(" captures " + $w.refs(cs) if cs.N > I32(0) else "") + ": " + $t.Canon(ty))
+        case Rvalue.Recode(x, from, to): "recode " + $w.operand(x) + " from " + $w.list(from) + " to " + $w.list(to)
+        case Rvalue.Text(b, into, ty): "text " + $w.ref(b) + " in " + $w.ref(into) + ": " + $t.Canon(ty)
+        case Rvalue.Region(s): "region in " + $w.ref(s)
+        case Rvalue.Slots(s): "slots in " + $w.ref(s)
+        case Rvalue.RegionOr(x, s): "region of " + $w.operand(x) + " or " + $w.ref(s)
+        case Rvalue.ScopeOf(x): "scope of " + $w.operand(x)
+        case Rvalue.ScopeOr(s, x): "scope " + $w.ref(s) + " or of " + $w.operand(x)
         case Rvalue.ErrPush: "payload push"
-        case Rvalue.Sole(k): "sole place " $k
-        case Rvalue.Handle(s): "handle of " $w.ref(s)
-        case Rvalue.ErrTop(ty): "payload top: " $t.Canon(ty)
-        case Rvalue.Weak(p, ty): "weak " $w.place(p) ": " $t.Canon(ty)
-        case Rvalue.WeakWord(x): "weak word " $w.operand(x)
+        case Rvalue.Sole(k): "sole place " + $k
+        case Rvalue.Handle(s): "handle of " + $w.ref(s)
+        case Rvalue.ErrTop(ty): "payload top: " + $t.Canon(ty)
+        case Rvalue.Weak(p, ty): "weak " + $w.place(p) + ": " + $t.Canon(ty)
+        case Rvalue.WeakWord(x): "weak word " + $w.operand(x)
     }
 }
 
 fn (w mut dumper&) stmt(s Stmt&) String {
     return match s {
-        case Stmt.Assign(_, p, rv): $w.place(p) " = " $w.rvalue(rv)
-        case Stmt.Live(_, l): "live L" $l
-        case Stmt.Dead(_, l): "dead L" $l
-        case Stmt.Open(_, x): "open S" $x
-        case Stmt.Close(_, x): "close S" $x
-        case Stmt.RegisterDtor(_, sc, ty, x): "register dtor " $w.T.Canon(ty) " " $w.operand(x) " in " $w.ref(sc)
-        case Stmt.Release(_, p): "release " $w.place(p)
-        case Stmt.ReleaseSlot(_, p): "release slot " $w.place(p)
-        case Stmt.Settle(_, h, p): "settle L" $I64(h) " by " $w.place(p)
-        case Stmt.Write(_, b, how, x): "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
-        case Stmt.CopyElems(_, d, src, n): "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
-        case Stmt.Spawn(_, j, k): "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])
+        case Stmt.Assign(_, p, rv): $w.place(p) + " = " + $w.rvalue(rv)
+        case Stmt.Live(_, l): "live L" + $l
+        case Stmt.Dead(_, l): "dead L" + $l
+        case Stmt.Open(_, x): "open S" + $x
+        case Stmt.Close(_, x): "close S" + $x
+        case Stmt.RegisterDtor(_, sc, ty, x): "register dtor " + $w.T.Canon(ty) + " " + $w.operand(x) + " in " + $w.ref(sc)
+        case Stmt.Release(_, p): "release " + $w.place(p)
+        case Stmt.ReleaseSlot(_, p): "release slot " + $w.place(p)
+        case Stmt.Settle(_, h, p): "settle L" + $I64(h) + " by " + $w.place(p)
+        case Stmt.Write(_, b, how, x): "write " + $short($how) + " " + $w.operand(x) + " to " + $w.ref(b)
+        case Stmt.CopyElems(_, d, src, n): "copy " + $w.operand(n) + " from " + $w.place(src) + " to " + $w.place(d)
+        case Stmt.Spawn(_, j, k): "spawn in S" + $j + " " + $w.task(w.F.Tasks[I64(k)])
         case Stmt.Raised(_): "raised"
-        case Stmt.ErrSet(_, x): "payload set " $w.operand(x)
+        case Stmt.ErrSet(_, x): "payload set " + $w.operand(x)
         case Stmt.ErrPop(_): "payload pop"
-        case Stmt.Holders(_, x, by): "holders " $w.operand(x) " by " $w.operand(by)
-        case Stmt.Reclaim(_, x, ty, ks): "reclaim " $w.operand(x) ": " $w.T.Canon(ty) " keeping (" $w.operands(ks) ")"
-        case Stmt.Deferred(_, x, e): "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
+        case Stmt.Holders(_, x, by): "holders " + $w.operand(x) + " by " + $w.operand(by)
+        case Stmt.Reclaim(_, x, ty, ks): "reclaim " + $w.operand(x) + ": " + $w.T.Canon(ty) + " keeping (" + $w.operands(ks) + ")"
+        case Stmt.Deferred(_, x, e): "deferred at S" + $x + $(" cleanup bb" + $e if e != NoBlock else " runs")
     }
 }
 
 fn (w mut dumper&) callee(c Callee) String {
     return match c {
         case Callee.Fn(key, _): w.key(key)
-        case Callee.Extern(fx, _): "extern " $fx
-        case Callee.Value(x): "(" $w.operand(x) ")"
-        case Callee.Dispatch(x, k, _): "dispatch#" $k " (" $w.operand(x) ")"
+        case Callee.Extern(fx, _): "extern " + $fx
+        case Callee.Value(x): "(" + $w.operand(x) + ")"
+        case Callee.Dispatch(x, k, _): "dispatch#" + $k + " (" + $w.operand(x) + ")"
     }
 }
 
 fn (w mut dumper&) task(k Task) String {
     out := StringBuilder()
     if k.Targets.N > I32(0) {
-        for i in range k.Targets.N { out.Push($(", " if i > 0 else "") $w.place(w.F.Places[I64(k.Targets.At) + i])) }
+        for i in range k.Targets.N { out.Push($(", " if i > 0 else "") + $w.place(w.F.Places[I64(k.Targets.At) + i])) }
         out.Push(" = ")
     }
-    out.Push($w.callee(k.Target) "(" $w.operands(k.Args) ")")
-    if k.Scopes.N > I32(0) { out.Push(" [" $w.refs(k.Scopes) "]") }
-    if k.Copies.N > I32(0) { out.Push(" copies [" $w.refs(k.Copies) "]") }
+    out.Push($w.callee(k.Target) + "(" + $w.operands(k.Args) + ")")
+    if k.Scopes.N > I32(0) { out.Push(" [" + $w.refs(k.Scopes) + "]") }
+    if k.Copies.N > I32(0) { out.Push(" copies [" + $w.refs(k.Copies) + "]") }
     for i in range k.Clauses.N {
         cl := w.F.Clauses[I64(k.Clauses.At) + i]
         out.Push(" catch")
         if cl.All { out.Push(" all") }
         for j in range cl.Items.N {
             it := w.F.Items[I64(cl.Items.At) + j]
-            out.Push(" " $w.T.Canon(it.Err) $("" if it.Word < 0 else "." $it.Word))
+            out.Push(" " + $w.T.Canon(it.Err) + $("" if it.Word < 0 else "." + $it.Word))
         }
-        if cl.Handler != Operand.None { out.Push(" -> " $w.operand(cl.Handler)) }
+        if cl.Handler != Operand.None { out.Push(" -> " + $w.operand(cl.Handler)) }
     }
     return out.ToString()
 }
@@ -2887,18 +2887,18 @@ fn (w mut dumper&) term(term Term) String {
     f := w.F
     return match term {
         case Term.None: "(no terminator)"
-        case Term.Goto(b): "goto bb" $b
-        case Term.Branch(c, y, n): "branch " $w.operand(c) " bb" $y " bb" $n
-        case Term.Switch(x, r, o): "switch " $w.operand(x) " [" $w.cases(r) "] else bb" $o
+        case Term.Goto(b): "goto bb" + $b
+        case Term.Branch(c, y, n): "branch " + $w.operand(c) + " bb" + $y + " bb" + $n
+        case Term.Switch(x, r, o): "switch " + $w.operand(x) + " [" + $w.cases(r) + "] else bb" + $o
         case Term.Call(_, k): w.call(f.Calls[I64(k)])
-        case Term.Tail(_, k): "become " $w.call(f.Calls[I64(k)])
-        case Term.Return(_, x): "return" $(" " $w.operand(x) if x != Operand.None else "")
-        case Term.Raise(_, x): "raise " $w.operand(x)
-        case Term.Suspend(_, x, b, held, d): "suspend " $w.operand(x) " then bb" $b " holding " $held.N " dropped bb" $d
+        case Term.Tail(_, k): "become " + $w.call(f.Calls[I64(k)])
+        case Term.Return(_, x): "return" + $(" " + $w.operand(x) if x != Operand.None else "")
+        case Term.Raise(_, x): "raise " + $w.operand(x)
+        case Term.Suspend(_, x, b, held, d): "suspend " + $w.operand(x) + " then bb" + $b + " holding " + $held.N + " dropped bb" + $d
         case Term.Dropped(_): "dropped"
-        case Term.Wait(_, j, ok, code, failed): ("wait S" $j " then bb" $ok
-                                                  $(" failed L" $code " bb" $failed if failed != NoBlock else ""))
-        case Term.Exit(_, kind, msg): "exit " $short($kind) $(" " $w.operand(msg) if msg != Operand.None else "")
+        case Term.Wait(_, j, ok, code, failed): ("wait S" + $j + " then bb" + $ok +
+                                                  $(" failed L" + $code + " bb" + $failed if failed != NoBlock else ""))
+        case Term.Exit(_, kind, msg): "exit " + $short($kind) + $(" " + $w.operand(msg) if msg != Operand.None else "")
         case Term.Resume(_): "resume"
     }
 }
@@ -2907,18 +2907,18 @@ fn (w mut dumper&) cases(r Range) String {
     out := StringBuilder()
     for i in range r.N {
         c := w.F.Cases[I64(r.At) + i]
-        out.Push($(", " if i > 0 else "") $c.Value " bb" $c.To)
+        out.Push($(", " if i > 0 else "") + $c.Value + " bb" + $c.To)
     }
     return out.ToString()
 }
 
 fn (w mut dumper&) call(c Call) String {
     out := StringBuilder()
-    if c.HasDest { out.Push($w.place(c.Dest) " = ") }
-    out.Push("call " $w.callee(c.Target) "(" $w.operands(c.Args) ")")
-    if c.Scopes.N > I32(0) { out.Push(" [" $w.refs(c.Scopes) "]") }
-    out.Push(" then bb" $c.Ok)
-    if c.Err != NoBlock { out.Push(" err L" $c.Code " bb" $c.Err) }
+    if c.HasDest { out.Push($w.place(c.Dest) + " = ") }
+    out.Push("call " + $w.callee(c.Target) + "(" + $w.operands(c.Args) + ")")
+    if c.Scopes.N > I32(0) { out.Push(" [" + $w.refs(c.Scopes) + "]") }
+    out.Push(" then bb" + $c.Ok)
+    if c.Err != NoBlock { out.Push(" err L" + $c.Code + " bb" + $c.Err) }
     return out.ToString()
 }
 
@@ -2946,7 +2946,7 @@ fn Fn.tfn(t mut types.Table&, ty types.TypeId) Fn {
 fn expect(t mut types.Table&, f Fn&, want String&) {
     got := f.Verify(t)
     at := try got.Find(want) catch default -1
-    assert at >= 0, "wanted '" $want "' among:\n" $got
+    assert at >= 0, "wanted '" + $want + "' among:\n" + $got
 }
 
 # "fn add(a I32, b I32) I32 { s := a + b; return s }", as lower would make it
@@ -2970,7 +2970,7 @@ test "a function: built, verified and dumped" {
     f := Fn.add(t)
     assert f.Verify(t) == "", f.Verify(t)
     got := f.Dump(t)
-    want := ("fn B9: fn(I32, I32) I32\n  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  S0 Frame block 0\nbb0:\n"
+    want := ("fn B9: fn(I32, I32) I32\n  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  S0 Frame block 0\nbb0:\n" +
              "  open S0\n  L2 = Add I32(copy L0, copy L1)\n  close S0\n  return copy L2\n")
     assert got == want, got
 }
@@ -3018,11 +3018,11 @@ test "control flow: a loop's scope every turn, a call's error edge, an error rai
     f := Fn.loop(t)
     assert f.Verify(t) == "", f.Verify(t)
     got := f.Dump(t)
-    want := ("fn B9: fn(I64) I64 ?\n  L0 Param: I64\n  L1 Var i: I64\n  L2 Temp: Bool\n  L3 Temp: I64\n  L4 Temp: I32\n"
-             "  L5 Temp: I32\n  S0 Frame block 0\n  S1 Loop in S0 block 1\nbb0:\n  open S0\n  L1 = const I64 0\n"
-             "  goto bb1\nbb1:\n  L2 = Lt Bool(copy L1, copy L0)\n  branch copy L2 bb2 bb4\nbb2:\n  open S1\n"
-             "  L3 = call B1(copy L1) then bb3 err L4 bb5\nbb3:\n  L1 = Add I64(copy L1, const I64 1)\n  close S1\n"
-             "  goto bb1\nbb4:\n  close S0\n  return copy L1\nbb5:\n  L5 = recode copy L4 from default to default\n"
+    want := ("fn B9: fn(I64) I64 ?\n  L0 Param: I64\n  L1 Var i: I64\n  L2 Temp: Bool\n  L3 Temp: I64\n  L4 Temp: I32\n" +
+             "  L5 Temp: I32\n  S0 Frame block 0\n  S1 Loop in S0 block 1\nbb0:\n  open S0\n  L1 = const I64 0\n" +
+             "  goto bb1\nbb1:\n  L2 = Lt Bool(copy L1, copy L0)\n  branch copy L2 bb2 bb4\nbb2:\n  open S1\n" +
+             "  L3 = call B1(copy L1) then bb3 err L4 bb5\nbb3:\n  L1 = Add I64(copy L1, const I64 1)\n  close S1\n" +
+             "  goto bb1\nbb4:\n  close S0\n  return copy L1\nbb5:\n  L5 = recode copy L4 from default to default\n" +
              "  close S1\n  close S0\n  raise copy L5\n")
     assert got == want, got
     # the loop's turn left with its scope open: two paths reach the head with different scopes
@@ -3063,8 +3063,8 @@ test "a cleanup: reached from where its deferred code is registered, inside the 
     f := Fn.defer(t)
     assert f.Verify(t) == "", f.Verify(t)
     got := f.Dump(t)
-    want := ("fn B9: fn()\n  L0 Var x: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L0 = const I32 1\n"
-             "  deferred at S0 cleanup bb1\n  L0 = const I32 3\n  deferred at S0 runs\n  L0 = const I32 2\n  close S0\n"
+    want := ("fn B9: fn()\n  L0 Var x: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L0 = const I32 1\n" +
+             "  deferred at S0 cleanup bb1\n  L0 = const I32 3\n  deferred at S0 runs\n  L0 = const I32 2\n  close S0\n" +
              "  return\nbb1:\n  L0 = const I32 2\n  resume\n")
     assert got == want, got
     # registered at a scope that is not open

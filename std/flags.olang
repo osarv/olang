@@ -129,7 +129,7 @@ fn (p Flags&) Message() String& { return p.s.message }
 
 # what Message() says, for the failure about to be raised
 fn (s mut state&) say(what String&) {
-    s.message = $s.program ": " $what " (see --help)"
+    s.message = $s.program + ": " + $what + " (see --help)"
 }
 
 fn (s state&) byName(name String&) mut flag& ? noFlag {
@@ -151,19 +151,19 @@ fn (s mut state&) setValue(f mut flag&, value String&, shown String&) ? Error {
     match f.kind {
         case Kind.Bool {
             if value == "true" { f.b = true } else if value == "false" { f.b = false } else {
-                s.say($shown " takes true or false, not \"" $value "\"")
+                s.say($shown + " takes true or false, not \"" + $value + "\"")
                 error Error.BadValue(shown, value)
             }
         }
         case Kind.Int {
             f.i = try value.ParseInt(0) catch ParseError {
-                s.say($shown " takes an integer, not \"" $value "\"")
+                s.say($shown + " takes an integer, not \"" + $value + "\"")
                 error Error.BadValue(shown, value)
             }
         }
         case Kind.Float {
             f.f = try value.ParseFloat() catch ParseError {
-                s.say($shown " takes a number, not \"" $value "\"")
+                s.say($shown + " takes a number, not \"" + $value + "\"")
                 error Error.BadValue(shown, value)
             }
         }
@@ -182,8 +182,8 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
             a := s.all[i]
             b := s.all[j]
             if a.name == b.name or (a.short != 0 and a.short == b.short) {
-                s.say("--" $a.name " is declared twice")
-                error Error.DeclaredTwice("--" $a.name)
+                s.say("--" + $a.name + " is declared twice")
+                error Error.DeclaredTwice("--" + $a.name)
             }
         }
     }
@@ -210,19 +210,19 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
         f mut flag?& = null
         if long {
             f = try s.byName(key) catch noFlag {
-                s.say("unknown flag --" $key)
-                error Error.Unknown("--" $key)
+                s.say("unknown flag --" + $key)
+                error Error.Unknown("--" + $key)
             }
         } else if key.Len() > 1 and eq < 0 {
             # several one-letter Bools together: "-qv"
             for c in key {
                 g := try s.byShort(c) catch noFlag {
-                    s.say("unknown flag -" $c)
-                    error Error.Unknown("-" $c)
+                    s.say("unknown flag -" + $c)
+                    error Error.Unknown("-" + $c)
                 }
                 if g.kind != Kind.Bool {
-                    s.say("-" $c " takes a value, and is written alone")
-                    error Error.Missing("-" $c)
+                    s.say("-" + $c + " takes a value, and is written alone")
+                    error Error.Missing("-" + $c)
                 }
                 g.b = true
                 g.isSet = true
@@ -230,12 +230,12 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
             continue
         } else {
             f = try s.byShort(key[0]) catch noFlag {
-                s.say("unknown flag -" $key)
-                error Error.Unknown("-" $key)
+                s.say("unknown flag -" + $key)
+                error Error.Unknown("-" + $key)
             }
         }
         fl := f!    # set by both branches that reach here
-        shown := $("--" if long else "-") $key
+        shown := $("--" if long else "-") + $key
         if eq >= 0 {
             try s.setValue(fl, body[eq + 1:], shown)
         } else if fl.kind == Kind.Bool {
@@ -243,7 +243,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
             fl.isSet = true
         } else {
             if i >= args.Len() {
-                s.say($shown " takes a value")
+                s.say($shown + " takes a value")
                 error Error.Missing(shown)
             }
             try s.setValue(fl, args[i], shown)
@@ -305,8 +305,8 @@ fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
     name := dashed(q.Name)
     f := try s.byName(name) catch noFlag { unreachable }
     if not q.HasDefault and not f.isSet {
-        s.say("--" $name " is required")
-        error Error.Required("--" $name)
+        s.say("--" + $name + " is required")
+        error Error.Required("--" + $name)
     }
     match Q.Type {
         case Bool { return f.b }
@@ -318,8 +318,8 @@ fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
         case _ {
             if Q.Type.Kind == TypeKind.Integer {
                 return Q.Type(try f.i.Narrow<Q.Type.Base>() catch NumberError {
-                    s.say("--" $name " takes an integer of " $Q.Type.Name)
-                    error Error.BadValue("--" $name, $f.i)
+                    s.say("--" + $name + " takes an integer of " + $Q.Type.Name)
+                    error Error.BadValue("--" + $name, $f.i)
                 })
             } else {
                 return Q.Type(Q.Type.Base(f.f))
@@ -361,14 +361,14 @@ fn kindWord(k Kind) String {
 fn (p Flags&) Help() String {
     s := p.s
     b := StringBuilder()
-    b.Push($"usage: " $s.program " [flags] [arguments]\n")
-    if s.about.Len() > 0: b.Push($s.about "\n")
+    b.Push($"usage: " + $s.program + " [flags] [arguments]\n")
+    if s.about.Len() > 0: b.Push($s.about + "\n")
     b.Push("\nflags:\n")
     heads := Vec<String&>()
     width I64 = 10
     for f in s.all {
-        lead := ("-" $f.short ", ") if f.short != 0 else "    "
-        heads.Push($lead "--" $f.name $kindWord(f.kind))
+        lead := ("-" + $f.short + ", ") if f.short != 0 else "    "
+        heads.Push($lead + "--" + $f.name + $kindWord(f.kind))
         if heads[heads.Len() - 1].Len() > width: width = heads[heads.Len() - 1].Len()
     }
     heads.Push("-h, --help")
@@ -379,7 +379,7 @@ fn (p Flags&) Help() String {
         if i < s.all.Len() {
             f := s.all[i]
             line.Push(f.help)
-            if f.shown.Len() > 0: line.Push($(" " if f.help.Len() > 0 else "") "(default " $f.shown ")")
+            if f.shown.Len() > 0: line.Push($(" " if f.help.Len() > 0 else "") + "(default " + $f.shown + ")")
         } else {
             line.Push("show this help")
         }
@@ -433,11 +433,11 @@ test Flags.Read "a struct's parameters are flags, its attributes their help" {
     p := Flags("tool", "does things")
     o := p.Read<options>(Array<String&>["tool", "-n", "3", "--out", "x", "--max-len=9", "rest"])!
     assert o.Count == 3 and not o.Verbose and o.MaxLen == 9 and o.Out == "x" and p.Args()[0] == "rest"
-    assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n"
-        "  -n, --count INT    how many (default 10)\n"
-        "      --verbose      say more\n"
-        "      --max-len INT  (default 8)\n"
-        "      --out TEXT\n"
+    assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n" +
+        "  -n, --count INT    how many (default 10)\n" +
+        "      --verbose      say more\n" +
+        "      --max-len INT  (default 8)\n" +
+        "      --out TEXT\n" +
         "  -h, --help         show this help\n")
     q := Flags("tool")
     try q.Read<options>(Array<String&>["tool"]) catch Error.Required { } catch { unreachable }
@@ -452,10 +452,10 @@ test "the help text lists every flag" {
     p.Int("count", 'n', 10, "how many")
     p.Bool("verbose", 0, "say more")
     p.Text("output", 'o', "", "where to write")
-    assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n"
-        "  -n, --count INT    how many (default 10)\n"
-        "      --verbose      say more\n"
-        "  -o, --output TEXT  where to write\n"
+    assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n" +
+        "  -n, --count INT    how many (default 10)\n" +
+        "      --verbose      say more\n" +
+        "  -o, --output TEXT  where to write\n" +
         "  -h, --help         show this help\n")
 }
 

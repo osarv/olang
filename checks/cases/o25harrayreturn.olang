@@ -4,13 +4,13 @@
 # returned
 fn mk(n I64) Array<String&> {
     a := Array<String&>(1)
-    a[0] = $n $n
+    a[0] = $n + $n
     return a
 }
 fn churn() I64 {
     t I64 = 0
     for i in range 300 {
-        s := $i $i $i "-" $(i * 7)
+        s := $i + $i + $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t

@@ -16,5 +16,5 @@ test "fails holding one by value" {
 }
 
 test "after" {
-    assert Ended == 21, "ended: " $Ended
+    assert Ended == 21, "ended: " + $Ended
 }

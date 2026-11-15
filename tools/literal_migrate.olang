@@ -25,7 +25,7 @@ fn main() {
     args := os.Args()
     check := false
     verbose := false
-    std := $srcmask.RepoRoot() "/std"
+    std := $srcmask.RepoRoot() + "/std"
     files Vec<String&>
     k := 1
     for k < args.Len() {
@@ -43,7 +43,7 @@ fn main() {
     changed := 0
     for path in files {
         text := try srcmask.ReadText(path) catch os.Error {
-            srcmask.SayErr("literal_migrate: " $path ": cannot be read")
+            srcmask.SayErr("literal_migrate: " + $path + ": cannot be read")
             continue
         }
         out := migrateMarkdown(text, kn) if path.EndsWith(".md") else migrate(path, text, kn)
@@ -71,13 +71,13 @@ fn known.load(std String&) known {
     k.std = $std
     for p in Prims { k.bare.Put($p, true) }
     for i in range 1, 129 {
-        k.bare.Put($"I" $i, true)
-        k.bare.Put($"U" $i, true)
+        k.bare.Put($"I" + $i, true)
+        k.bare.Put($"U" + $i, true)
     }
-    names := try os.ReadDir($std "/prelude") catch default Array<String&>(0)
+    names := try os.ReadDir($std + "/prelude") catch default Array<String&>(0)
     for n in names {
         if not n.EndsWith(".olang") { continue }
-        text := try srcmask.ReadText($std "/prelude/" $n) catch os.Error { continue }
+        text := try srcmask.ReadText($std + "/prelude/" + $n) catch os.Error { continue }
         for t in declaredTypes(text) { k.bare.Put($t, true) }
     }
     return k
@@ -173,8 +173,8 @@ fn importOf(path String&, line String&, std String&) String, String {
     head := srcmask.Strip(line[7:q])
     alias := $head if head.Len() > 0 else $filepath.Base(mod)
     file := ""
-    if mod.StartsWith("std/"): file = $std "/" $mod[4:] ".olang"
-    else if not ("." in filepath.Base(mod) and "/" in mod): file = $filepath.Join(filepath.Dir(path), mod) ".olang"
+    if mod.StartsWith("std/"): file = $std + "/" + $mod[4:] + ".olang"
+    else if not ("." in filepath.Base(mod) and "/" in mod): file = $filepath.Join(filepath.Dir(path), mod) + ".olang"
     if file.Len() == 0 or not os.Exists(file) { return "", "" }
     return alias, file
 }
@@ -342,7 +342,7 @@ fn migrateMarkdown(text String&, k mut known&) String {
     s := scope()
     names := try os.ReadDir(k.std) catch default Array<String&>(0)
     for n in names {
-        if n.EndsWith(".olang") { s.aliases.Put($n[:n.Len() - 6], $k.std "/" $n) }
+        if n.EndsWith(".olang") { s.aliases.Put($n[:n.Len() - 6], $k.std + "/" + $n) }
     }
     for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { s.vars.Put($c, true) }
     b := StringBuilder()
@@ -404,10 +404,10 @@ test "old fronts become the array they made; new ones are left as they are" {
 
 test "a type of an import declaring a FromIter, and one declaring none (bulk review 8)" {
     dir := os.MkTemp(prefix = "litmig")!
-    os.WriteFile($dir "/bag.olang", "type Bag struct(N I64) { N }\nfn Bag.FromIter<I Iterator<Bag ? E>, ? E>(it mut I&) Bag ? E { return Bag(0) }\ntype Pt struct(x I64) { x }\n")!
+    os.WriteFile($dir + "/bag.olang", "type Bag struct(N I64) { N }\nfn Bag.FromIter<I Iterator<Bag ? E>, ? E>(it mut I&) Bag ? E { return Bag(0) }\ntype Pt struct(x I64) { x }\n")!
     k := known()
     text := "import bag \"bag\"\nfn main() {\n    a := bag.Bag[bag.Bag(2), bag.Bag(3)]\n    b := bag.Pt[bag.Pt(1)]\n}\n"
-    got := migrate($dir "/main.olang", text, k)
+    got := migrate($dir + "/main.olang", text, k)
     want := "import bag \"bag\"\nfn main() {\n    a := bag.Bag[bag.Bag(2), bag.Bag(3)]\n    b := Array<bag.Pt>[bag.Pt(1)]\n}\n"
     os.RemoveAll(dir)!
     assert got == want, got

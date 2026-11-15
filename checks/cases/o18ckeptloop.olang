@@ -13,7 +13,7 @@ type Lexer struct(src String&) {
 fn (lx mut Lexer&) next() Token {
     lx.at++
     if lx.at % 2 == 0 { return Token(1, lx.src[0:3]) }
-    return Token(2, "n" $lx.at)
+    return Token(2, "n" + $lx.at)
 }
 fn keep(n mut Vec<String&>&, s String&) { n.Push(s) }
 fn churn() I64 {

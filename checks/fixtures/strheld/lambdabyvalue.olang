@@ -11,7 +11,7 @@ fn (b VBag) Str() String {
         s := $b.head.v
         return s.Len()
     }
-    return "vbag " $f()
+    return "vbag " + $f()
 }
 fn main() ? {
     try io.PutLine($VBag(Node(3)))

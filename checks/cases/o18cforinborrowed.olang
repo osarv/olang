@@ -16,7 +16,7 @@ fn main() ? {
     l := Vec<String&>()
     for k in m.Keys() { l.Push(k) }
     vm := Map<I64, String&>()
-    vm.Put(1, "a" $l.Len())
+    vm.Put(1, "a" + $l.Len())
     vl := Vec<String&>()
     for v in vm.Values() { vl.Push(v) }
     churn()

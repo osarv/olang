@@ -4,7 +4,7 @@
 import "std/io"
 type Res unique struct(n I64) {
     n
-} destruct { io.PutLine("end " $n)! }
+} destruct { io.PutLine("end " + $n)! }
 fn main() ? {
     out mut Array<I64>& = Array<I64>(4)
     join {

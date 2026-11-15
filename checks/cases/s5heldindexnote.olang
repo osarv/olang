@@ -20,6 +20,6 @@ fn (m mut TMap&) SetAt(k String&, v I64) {
 
 fn main() ? {
     m := TMap()
-    for k in range 3 { m[$k "-key"] += 100 }
+    for k in range 3 { m[$k + "-key"] += 100 }
     assert m.keys.Len() == 3 and m.keys[2] == "2-key" and m.vals[2] == 99
 }

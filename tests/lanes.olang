@@ -139,7 +139,7 @@ fn throughAt(n I64) String {
     w.Push(Array<I64>(3))
     w[0] += 2
     w[0] *= w[0] + n
-    return $v[0].arr " " $v[0].xs " " $w[0]
+    return $v[0].arr + " " + $v[0].xs + " " + $w[0]
 }
 
 # in place, each lane is computed and stored before the next is read, as the loop written by hand: an operand

@@ -15,7 +15,7 @@ type M struct(n I64, data mut Array<F64>& = null) {
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -29,5 +29,5 @@ fn main() {
         ms.Push(M(2, d))
     }
     churn()
-    io.PutLine($ms[0].Data[1] " " $ms[2].Data[1])!
+    io.PutLine($ms[0].Data[1] + " " + $ms[2].Data[1])!
 }

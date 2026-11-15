@@ -10,5 +10,5 @@ fn main() ? {
     ad := try net.ParseAddr("127.0.0.1:80") catch net.Error default net.Addr(ip, 1)
     d := time.DateOf(0)
     l := list.From(Array<I64>[1, 2, 3].Iter())
-    try io.Println($ip " " $ad " " $d.Year " " $l.Len())
+    try io.Println($ip + " " + $ad + " " + $d.Year + " " + $l.Len())
 }

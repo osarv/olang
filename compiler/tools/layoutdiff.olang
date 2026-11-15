@@ -20,15 +20,15 @@ fn main() {
     dump := toolkit.Env("LAYOUTDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/layout.txt"
     deferred := "compiler/goldens/layout.deferred"
-    if not toolkit.Built(dump) { toolkit.Die("layoutdiff: " $dump " is not built (make " $dump ")") }
+    if not toolkit.Built(dump) { toolkit.Die("layoutdiff: " + $dump + " is not built (make " + $dump + ")") }
     o := toolkit.Run(Array<String&>[dump, "layout", golden])
     if o.Status != 0 {
         toolkit.Say(o.Stderr)
-        toolkit.Die("layoutdiff: " $dump " layout failed")
+        toolkit.Die("layoutdiff: " + $dump + " layout failed")
     }
     if o.Stderr.Len() > 0 {
         toolkit.Say(o.Stderr)
-        toolkit.Die("layoutdiff: " $dump " layout wrote diagnostics")
+        toolkit.Die("layoutdiff: " + $dump + " layout wrote diagnostics")
     }
     allowed := Vec<String&>()
     for r in toolkit.Rows(toolkit.Read(deferred)) {
@@ -36,7 +36,7 @@ fn main() {
     }
     report := outcome.compare(toolkit.Rows(toolkit.Read(golden)), toolkit.Rows(o.Stdout), allowed.ToArray())
     toolkit.Say(report.text)
-    toolkit.Say("layoutdiff: " $report.same " types as stage 0 lays them out, " $report.deferred " deferred to the evaluator\n")
+    toolkit.Say("layoutdiff: " + $report.same + " types as stage 0 lays them out, " + $report.deferred + " deferred to the evaluator\n")
     if report.bad > 0 { os.Exit(1) }
 }
 
@@ -72,15 +72,15 @@ fn outcome.compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String
             continue
         }
         r.bad++
-        b.Push("layoutdiff: " $gkey "\n  stage 0:   " $g "\n  self-host: " $row "\n")
+        b.Push("layoutdiff: " + $gkey + "\n  stage 0:   " + $g + "\n  self-host: " + $row + "\n")
     }
     if got.Len() != golden.Len() {
-        b.Push("layoutdiff: " $got.Len() " lines, the golden has " $golden.Len() "\n")
+        b.Push("layoutdiff: " + $got.Len() + " lines, the golden has " + $golden.Len() + "\n")
         r.bad++
     }
     for a in allowed {
         if a not in seen {
-            b.Push("layoutdiff: " $a " is listed as deferred and is laid out - take it off compiler/goldens/layout.deferred\n")
+            b.Push("layoutdiff: " + $a + " is listed as deferred and is laid out - take it off compiler/goldens/layout.deferred\n")
             r.bad++
         }
     }
@@ -151,7 +151,7 @@ fn laidOut(row String&, names Map<String&, String&>&, depth I64) String {
         if n == 0 {
             b.Push(name)
         } else {
-            b.Push("%\"" $name[2:2 + n] "<>\"")
+            b.Push("%\"" + $name[2:2 + n] + "<>\"")
             body := try names.Get(name) catch default "?"
             b.Push(laidOut(body, names, depth + 1) if depth < 16 else "...")
         }

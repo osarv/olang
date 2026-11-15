@@ -211,11 +211,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   standard").** `\x41` (a byte), `\u{1F600}` (a code point, UTF-8). `"""` is the one raw form: no escapes, one line or
   several; across lines the opening `"""` ends its line, the closing one stands alone and its indentation is removed
   from every line (Swift's rules).
-- **Text joins by adjacency; `$x` renders any value (E11a/E11b, the user's design).** A piece is a literal or a `$`
-  rendering, so a missing comma never joins silently. Values render as source writes them; floats shortest
-  round-trip; a type's `Str()` overrides (E11c, the user's call) and is called exactly once per rendering.
-- **More syntax rules worth knowing.** `catch` may begin a following line (R9b); a join continues onto a new line only
-  inside parentheses (E11b); a shift of a literal by a value takes its target's type (E8b) and a literal shift is
+- **Text is joined with `+`; `$x` renders any value (E11a/E11b; `+` the user's decision 2026-11-15: "remove adjacency
+  and add +", reversing the join by adjacency).** `"n = " + $n + "\n"`: `+` with a String on either side is the
+  prelude's `String.Plus` (generics, traits, `s += t` and the evaluator see it), a non-String operand an error naming
+  `$x`, an `Array<Char>` beside a String one naming `String(chars)`. A chain however grouped is one join (every piece
+  measured, one allocation, as the adjacency join was); literals alone are one literal. `$` binds tighter than `+`.
+  Values render as source writes them; floats shortest round-trip; a type's `Str()` overrides (E11c, the user's call)
+  and is called exactly once per rendering. `tools/textjoin_migrate.olang` rewrites old joins.
+- **More syntax rules worth knowing.** `catch` may begin a following line (R9b); a join continues onto a new line, as any
+  binary expression, after a line ending in `+` or inside parentheses (E11b, L18); a shift of a literal by a value takes its target's type (E8b) and a literal shift is
   computed exactly (E4a); `x := 1 + 2` is an `I64`. A one-line declaration of several names shares one type (D12b).
 - **Removed spellings, for anyone tempted to bring them back:** struct literals `T{...}` and field-list structs (T13);
   `T[]`/`T[N]`/`T[expr]` arrays and 2-D arrays (`Array<T>`); `len(a)` (`a.Len()`); scope names `&s` and scope
@@ -226,7 +230,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`docs/memory.md` round 3); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (QP1-
   QP4); `checked`, `CheckError` and the `Checked...` forms (`try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract
   guarantees, named results and `fits`; `error IoError { ... }` declarations (`type IoError error { ... }`, T19);
-  `nomatch` and `=>` (QBQ/QBR); `Clone` (E31d: `Copy()`).
+  `nomatch` and `=>` (QBQ/QBR); `Clone` (E31d: `Copy()`); text joined by adjacency (`"n = " $n`, E11b: `+`).
 
 ### Types
 

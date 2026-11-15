@@ -13,7 +13,7 @@ type Value enum {
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -25,16 +25,16 @@ fn main() ? {
     for i in range 3 {
         inner := Map<String&, Value>()
         inner.Put("x", Value.Num(F64(i)))
-        outer.Put("k" $i, Value.Obj(inner))
+        outer.Put("k" + $i, Value.Obj(inner))
     }
     churn()
     s := 0.0
     for i in range 3 {
-        v := try outer.Get("k" $i)
+        v := try outer.Get("k" + $i)
         if v == Value.Obj {
             w := try v.fields.Get("x")
             if w == Value.Num: s += w.n
         }
     }
-    try io.PutLine($outer.Len() " " $s)
+    try io.PutLine($outer.Len() + " " + $s)
 }

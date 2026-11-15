@@ -67,7 +67,7 @@ fn main() {
 
 # key's expected peak in MB: its last run's here, else the committed table's, else DefaultMb
 fn expected(dir String&, key String&) I64 {
-    learned := peakIn($dir "/peaks.txt", key)
+    learned := peakIn($dir + "/peaks.txt", key)
     if learned > 0: return learned
     committed := peakIn("compiler/tools/peaks.txt", key)
     return committed if committed > 0 else DefaultMb
@@ -86,7 +86,7 @@ fn peakIn(path String&, key String&) I64 {
 
 # the runs' measured peaks, the latest for each key, sorted by key
 fn table(dir String&) {
-    text := try os.ReadFile($dir "/peaks.txt") catch os.Error { return }
+    text := try os.ReadFile($dir + "/peaks.txt") catch os.Error { return }
     last Map<String, I64>
     for line in text.Lines() {
         w := words(line)
@@ -95,14 +95,14 @@ fn table(dir String&) {
     keys Vec<String&>
     for k in last.Keys() { keys.Push(k) }
     keys.Sort(fn(a String&, b String&) Bool { return a < b })
-    for k in keys { try io.PutLine($k " " $(try last.Get(k) catch default 0)) catch io.Error { } }
+    for k in keys { try io.PutLine($k + " " + $(try last.Get(k) catch default 0)) catch io.Error { } }
 }
 
 fn record(dir String&, key String&, peak I64) {
     locked(dir)
     defer unlock(dir)
-    old := try os.ReadFile($dir "/peaks.txt") catch os.Error default ""
-    try os.WriteFile($dir "/peaks.txt", $old $key " " $peak "\n") catch os.Error { }
+    old := try os.ReadFile($dir + "/peaks.txt") catch os.Error default ""
+    try os.WriteFile($dir + "/peaks.txt", $old + $key + " " + $peak + "\n") catch os.Error { }
 }
 
 # ---- waiting for the memory ----
@@ -112,7 +112,7 @@ fn admit(dir String&, me I64, mb I64) {
     for {
         locked(dir)
         if fits(dir, mb) {
-            try os.WriteFile(resPath(dir, me), $mb " 0\n") catch os.Error { }
+            try os.WriteFile(resPath(dir, me), $mb + " 0\n") catch os.Error { }
             unlock(dir)
             return
         }
@@ -147,22 +147,22 @@ fn reservations(dir String&) Vec<Res> {
         if not name.StartsWith("res."): continue
         pid := try name[4:].ParseInt() catch default -1
         if not live.Has(pid) {
-            try os.Remove($dir "/" $name) catch os.Error { }
+            try os.Remove($dir + "/" + $name) catch os.Error { }
             continue
         }
-        w := words(try os.ReadFile($dir "/" $name) catch os.Error default "")
+        w := words(try os.ReadFile($dir + "/" + $name) catch os.Error default "")
         if w.Len() != 2: continue
         out.Push(Res(pid, try w[0].ParseInt() catch default 0, try w[1].ParseInt() catch default 0))
     }
     return out
 }
 
-fn resPath(dir String&, pid I64) String { return $dir "/res." $pid }
+fn resPath(dir String&, pid I64) String { return $dir + "/res." + $pid }
 
 # the state directory's lock, taken by making a directory (atomic on every system); one left by a gate killed while
 # holding it - older than a few seconds, when a gate holds it for milliseconds - is taken over
 fn locked(dir String&) {
-    lock := $dir "/lock"
+    lock := $dir + "/lock"
     since := time.Now()
     for {
         try os.MkDir(lock) catch os.Error {
@@ -177,7 +177,7 @@ fn locked(dir String&) {
     }
 }
 
-fn unlock(dir String&) { try os.Remove($dir "/lock") catch os.Error { } }
+fn unlock(dir String&) { try os.Remove($dir + "/lock") catch os.Error { } }
 
 # ---- running the command ----
 
@@ -185,7 +185,7 @@ fn unlock(dir String&) { try os.Remove($dir "/lock") catch os.Error { } }
 # and its peak in MB
 fn run(dir String&, me I64, mb I64, cmd Array<String&>&) I32, I64 {
     p mut os.Process& = try os.Process.Start(...cmd, capture = false) catch os.Error e {
-        try io.PutErrLine($"memgate: cannot run " $cmd[0] ": " $e) catch io.Error { }
+        try io.PutErrLine($"memgate: cannot run " + $cmd[0] + ": " + $e) catch io.Error { }
         return 127, 0
     }
     status I32 = 0
@@ -209,7 +209,7 @@ fn watch(dir String&, me I64, mb I64) I64 {
     for Done.AtomicLoad() == 0 {
         now := treeMb(me)
         if now > peak: peak = now
-        try os.WriteFile(resPath(dir, me), $mb " " $now "\n") catch os.Error { }
+        try os.WriteFile(resPath(dir, me), $mb + " " + $now + "\n") catch os.Error { }
         time.Sleep(time.Duration.Millis(PollMs))
     }
     return peak
@@ -317,7 +317,7 @@ fn walkUp(root String&, path String&, v2 Bool) I64 {
     best I64 = -1
     at := $path
     for {
-        best = least(best, headroom($root $at, v2))
+        best = least(best, headroom($root + $at, v2))
         if at == "/" or at == "": return best
         cut := try at.FindLast("/") catch default 0
         at = $at[:cut] if cut > 0 else "/"
@@ -327,11 +327,11 @@ fn walkUp(root String&, path String&, v2 Bool) I64 {
 # one cgroup's limit less what it uses (cgroup v1 counts the page cache in its usage: its inactive file pages, which the
 # kernel takes back first, are left out), in MB; -1 where it sets none
 fn headroom(dir String&, v2 Bool) I64 {
-    limit := number($dir $("/memory.max" if v2 else "/memory.limit_in_bytes"))
+    limit := number($dir + $("/memory.max" if v2 else "/memory.limit_in_bytes"))
     if limit < 0 or limit >= 1 << 60: return -1
-    used := number($dir $("/memory.current" if v2 else "/memory.usage_in_bytes"))
+    used := number($dir + $("/memory.current" if v2 else "/memory.usage_in_bytes"))
     if used < 0: return -1
-    if not v2: used -= statValue($dir "/memory.stat", "total_inactive_file")
+    if not v2: used -= statValue($dir + "/memory.stat", "total_inactive_file")
     return (limit - used) / 1048576
 }
 

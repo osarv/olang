@@ -18,7 +18,7 @@ type Holder struct() {
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -29,12 +29,12 @@ fn main() {
     h mut Holder& = Holder()
     t := 0
     for i in range 2000 {
-        n := $i "-name"
+        n := $i + "-name"
         a := Array<I64>(32, i)
         h.p = Person(n, a)
         t += n.Len() + a[0]
         if i % 500 == 0: churn()
     }
     churn()
-    io.PutLine($t " " $h.p.name " " $h.p.tags[31])!
+    io.PutLine($t + " " + $h.p.name + " " + $h.p.tags[31])!
 }

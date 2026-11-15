@@ -42,17 +42,17 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
     status := build.BuildProgram(fe, c, file, d)
     spin.End()
     if status != 0 { return status }
-    dir := $c.Dir "/profile"
+    dir := $c.Dir + "/profile"
     try os.MkDirAll(dir) catch os.Error {
-        d.Fatal(diag.Where.Nowhere, msgs.CannotRun($"its profile's directory " $dir " cannot be made"))
+        d.Fatal(diag.Where.Nowhere, msgs.CannotRun($"its profile's directory " + $dir + " cannot be made"))
         return build.Finish(d)
     }
     # the program's name: its binary's, without the build's mode (".quick.prof")
     name := filepath.Base(c.Built)
     dot := try name.Find(".") catch default name.Len()
     name = name[:dot]
-    samples := $dir "/" $name ".samples"
-    if html == "" { html = $dir "/" $name ".html" }
+    samples := $dir + "/" + $name + ".samples"
+    if html == "" { html = $dir + "/" + $name + ".html" }
     try os.Remove(samples) catch os.Error { }
     status = runProfiled(c.Built, file, args, samples)
     if status < 0 {
@@ -60,11 +60,11 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
         return build.Finish(d)
     }
     bytes := try os.ReadFile(samples) catch os.Error {
-        say($"olang profile: " $name " wrote no profile - it ended by a signal (" $build.SignalName(status - 128) ")\n")
+        say($"olang profile: " + $name + " wrote no profile - it ended by a signal (" + $build.SignalName(status - 128) + ")\n")
         return status
     }
     p := try Profile.Read(bytes) catch Bad {
-        say($"olang profile: " $samples " is not a profile this compiler writes\n")
+        say($"olang profile: " + $samples + " is not a profile this compiler writes\n")
         return status
     }
     tool := Symbolizer()
@@ -72,10 +72,10 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
     say(Report(name, p, places))
     if tool == "" { say("olang profile: no llvm-symbolizer found beside clang or on PATH - functions named by their addresses\n") }
     try os.WriteFile(html, FlameGraph(name, p, places)) catch os.Error {
-        say($"olang profile: " $html " cannot be written\n")
+        say($"olang profile: " + $html + " cannot be written\n")
         return status
     }
-    say($"flame graph: " $build.Shown(html) "\n")
+    say($"flame graph: " + $build.Shown(html) + "\n")
     return status
 }
 
@@ -89,7 +89,7 @@ fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&)
     av Vec<String&>
     av.Push(file)
     for a in args { av.Push(a) }
-    stdlib.setenv("OLANG_PROFILE\0", $samples "\0", 1)
+    stdlib.setenv("OLANG_PROFILE\0", $samples + "\0", 1)
     pid := unistd.fork()
     if pid == 0 {
         try os.ExecInPlace(build.Shown(bin), ...av.ToArray()) catch os.Error { }
@@ -102,7 +102,7 @@ fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&)
     waited := Array<I32>(1)
     for syswait.waitpid(pid, waited, 0) < 0 {
         # EINTR alone; any other failure leaves no child to wait for
-        if not os.Exists($"/proc/" $pid) { break }
+        if not os.Exists($"/proc/" + $pid) { break }
     }
     signal(2, oldInt)
     signal(3, oldQuit)
@@ -338,7 +338,7 @@ fn Symbolizer() String {
     if clang != "" {
         real := try os.RealPath(target.WhereIs(clang)) catch default ""
         if real != "" {
-            beside := $filepath.Dir(real) "/llvm-symbolizer"
+            beside := $filepath.Dir(real) + "/llvm-symbolizer"
             if target.WhereIs(beside) != "" { return beside }
         }
     }
@@ -394,7 +394,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         asked I64 = 0
         for i in range keys.Len() {
             if rel[i] < 0 { continue }
-            ask.Push($"\"" $files[i] "\" 0x" $U64(rel[i]).Format(16) "\n")
+            ask.Push($"\"" + $files[i] + "\" 0x" + $U64(rel[i]).Format(16) + "\n")
             asked++
         }
         if asked > 0 {
@@ -417,7 +417,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
                 at += 2
                 file, line := fileLine(place)
                 if fun == "??" and files[i].StartsWith("/") { fun = symbolIn(syms, files[i], rel[i]) }
-                if fun == "??": fun = $"0x" $U64(keys[i]).Format(16) " (" $filepath.Base(files[i]) ")"
+                if fun == "??": fun = $"0x" + $U64(keys[i]).Format(16) + " (" + $filepath.Base(files[i]) + ")"
                 else: fun = Readable(fun)
                 pl.Frames.Push(Frame(pl.name(fun), pl.name(file), line))
                 frames++
@@ -436,7 +436,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         }
         if frames == 0 {
             where := filepath.Base(files[i]) if files[i] != "" else "no file"
-            pl.Frames.Push(Frame(pl.name($"0x" $U64(keys[i]).Format(16) " (" $where ")"), pl.name("??"), 0))
+            pl.Frames.Push(Frame(pl.name($"0x" + $U64(keys[i]).Format(16) + " (" + $where + ")"), pl.name("??"), 0))
             frames = 1
         }
         pl.Count.Push(frames)
@@ -477,14 +477,14 @@ fn Readable(sym String&) String {
     restColon := try rest.Find(":") catch default -1
     restDot := try rest.Find(".") catch default rest.Len()
     if restColon >= 0 and restColon < restDot { q = "" }
-    return $q $typesRead(rest)
+    return $q + $typesRead(rest)
 }
 
 # a module identity's qualifier as errors print it (load.ErrQualifier) - the prelude's bare
 fn qualifier(id String&) String {
     if id.StartsWith("std/prelude") or id == "" { return "" }
     k := try id.FindLast("/") catch default -1
-    return $id[k + 1:] "."
+    return $id[k + 1:] + "."
 }
 
 # a canonical text's "IDENTITY:Name" types written "base.Name"
@@ -543,7 +543,7 @@ fn Tally.Tallied(p Profile&, pl mut Places&) Tally {
         leaf := pl.Frames[st[0]]
         if not t.Total.Has(leaf.Fn) and not t.Self.Has(leaf.Fn) { t.Fns.Push(leaf.Fn) }
         add(t.Self, leaf.Fn, w)
-        lk := pl.name($pl.Names[leaf.File] ":" $leaf.Line)
+        lk := pl.name($pl.Names[leaf.File] + ":" + $leaf.Line)
         if not t.Lines.Has(lk) { t.LineKeys.Push(lk) }
         add(t.Lines, lk, w)
         t.LineFn.Put(lk, leaf.Fn)
@@ -563,7 +563,7 @@ fn Tally.Tallied(p Profile&, pl mut Places&) Tally {
 # a weight in periods as milliseconds of CPU time, to a tenth
 fn millis(w I64, periodNs I64) String { return (F64(w) * F64(periodNs) / 1e6).Fixed(1) }
 
-fn pct(w I64, total I64) String { return $(F64(w) * 100.0 / F64(total if total > 0 else 1)).Fixed(1) "%" }
+fn pct(w I64, total I64) String { return $(F64(w) * 100.0 / F64(total if total > 0 else 1)).Fixed(1) + "%" }
 
 # the report, as olang profile prints it: what was sampled, the functions by self time (their total beside), the
 # hottest lines, and who calls the hottest functions
@@ -572,8 +572,8 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
     total := p.Total()
     b := StringBuilder()
     secs := F64(total) * F64(p.PeriodNs) / 1e9
-    b.Push($"\nolang profile: " $name " - " $p.Samples.Len() " samples, " $secs.Fixed(3) " s of CPU time on " $p.Threads $(" thread" if p.Threads == 1 else " threads") "\n")
-    if p.Dropped > 0 { b.Push($"  (" $p.Dropped " samples dropped: the buffer was full)\n") }
+    b.Push($"\nolang profile: " + $name + " - " + $p.Samples.Len() + " samples, " + $secs.Fixed(3) + " s of CPU time on " + $p.Threads + $(" thread" if p.Threads == 1 else " threads") + "\n")
+    if p.Dropped > 0 { b.Push($"  (" + $p.Dropped + " samples dropped: the buffer was full)\n") }
     if total == 0 {
         b.Push("  no samples: the program used less CPU time than one period\n")
         return b.ToString()
@@ -594,7 +594,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
         sw := try t.Self.Get(f) catch default 0
         if shown >= 25 or sw * 200 < total { break }
         tw := try t.Total.Get(f) catch default 0
-        b.Push($"  " $pct(sw, total).PadStart(6) " " $pct(tw, total).PadStart(6) "  " $pl.Names[f] "\n")
+        b.Push($"  " + $pct(sw, total).PadStart(6) + " " + $pct(tw, total).PadStart(6) + "  " + $pl.Names[f] + "\n")
         shown++
     }
     lines := t.LineKeys
@@ -616,11 +616,11 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
     for l in hot {
         if shortPath(pl.Names[l]).Len() > width { width = shortPath(pl.Names[l]).Len() }
     }
-    b.Push($"\n   self  " $"line".PadEnd(width) "  function\n")
+    b.Push($"\n   self  " + $"line".PadEnd(width) + "  function\n")
     for l in hot {
         lw := try t.Lines.Get(l) catch default 0
         f := try t.LineFn.Get(l) catch default 0
-        b.Push($"  " $pct(lw, total).PadStart(6) "  " $shortPath(pl.Names[l]).PadEnd(width) "  " $pl.Names[f] "\n")
+        b.Push($"  " + $pct(lw, total).PadStart(6) + "  " + $shortPath(pl.Names[l]).PadEnd(width) + "  " + $pl.Names[f] + "\n")
     }
     b.Push("\n  called from (the five hottest functions)\n")
     shown = 0
@@ -643,9 +643,9 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
         parts Vec<String&>
         for c in callers {
             if parts.Len() >= 4 { break }
-            parts.Push($pl.Names[c] " " $pct(try t.Callers.Get(f * (1 << 24) + c) catch default 0, tw))
+            parts.Push($pl.Names[c] + " " + $pct(try t.Callers.Get(f * (1 << 24) + c) catch default 0, tw))
         }
-        b.Push($"  " $pl.Names[f] "  <-  " $("(the thread's first frame)" if parts.Len() == 0 else parts.Join(", ")) "\n")
+        b.Push($"  " + $pl.Names[f] + "  <-  " + $("(the thread's first frame)" if parts.Len() == 0 else parts.Join(", ")) + "\n")
     }
     return b.ToString()
 }
@@ -653,7 +653,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
 # a place's file written from where olang runs, where it is under it: "src/hot.olang:12"
 fn shortPath(place String&) String {
     cwd := try os.Cwd() catch default ""
-    if cwd != "" and place.StartsWith($cwd "/") { return $place[cwd.Len() + 1:] }
+    if cwd != "" and place.StartsWith($cwd + "/") { return $place[cwd.Len() + 1:] }
     return place
 }
 
@@ -738,22 +738,22 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
     for id in order {
         n := nodes.Ref(id)
         label := "all" if id == 0 else pl.Names[n.Fn]
-        tip := $label " - " $millis(n.Weight, p.PeriodNs) " ms, " $pct(n.Weight, total)
+        tip := $label + " - " + $millis(n.Weight, p.PeriodNs) + " ms, " + $pct(n.Weight, total)
         hue := (label.Hash() & 0xFFFF)
         r := 205 + hue % 50
         g := 90 + (hue / 50) % 140
         bl := (hue / 7000) % 55
         y := height - 20 - (n.Depth + 1) * FrameHeight
-        svg.Push($"<g class=\"f\" data-x=\"" $xs[id] "\" data-w=\"" $n.Weight "\" data-d=\"" $n.Depth "\"><title>" $escapeXml(tip) $
-                 "</title><rect y=\"" $y "\" height=\"" $(FrameHeight - 1) "\" rx=\"2\" fill=\"rgb(" $r "," $g "," $bl ")\"/><text y=\"" $
-                 $(y + 13) "\">" $escapeXml(label) "</text></g>\n")
+        svg.Push($"<g class=\"f\" data-x=\"" + $xs[id] + "\" data-w=\"" + $n.Weight + "\" data-d=\"" + $n.Depth + "\"><title>" + $escapeXml(tip) + $
+                 "</title><rect y=\"" + $y + "\" height=\"" + $(FrameHeight - 1) + "\" rx=\"2\" fill=\"rgb(" + $r + "," + $g + "," + $bl + ")\"/><text y=\"" + $
+                 $(y + 13) + "\">" + $escapeXml(label) + "</text></g>\n")
     }
     b := StringBuilder()
-    b.Push($"<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>" $escapeXml(name) " - olang profile</title>\n")
+    b.Push($"<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>" + $escapeXml(name) + " - olang profile</title>\n")
     b.Push("<style>body{margin:0;padding:10px;font:12px monospace;background:#fff}svg text{font:11px monospace;fill:#000;pointer-events:none}g.f{cursor:pointer}g.f:hover rect{stroke:#000;stroke-width:.5}</style></head><body>\n")
     secs := F64(p.Total()) * F64(p.PeriodNs) / 1e9
-    b.Push($"<div>" $escapeXml(name) ": " $p.Samples.Len() " samples, " $secs.Fixed(3) " s of CPU time - a click on a frame zooms to it, on the bottom bar back</div>\n")
-    b.Push($"<svg id=\"fg\" width=\"" $FlameWidth "\" height=\"" $height "\" data-total=\"" $total "\">\n" $svg.ToString() "</svg>\n")
+    b.Push($"<div>" + $escapeXml(name) + ": " + $p.Samples.Len() + " samples, " + $secs.Fixed(3) + " s of CPU time - a click on a frame zooms to it, on the bottom bar back</div>\n")
+    b.Push($"<svg id=\"fg\" width=\"" + $FlameWidth + "\" height=\"" + $height + "\" data-total=\"" + $total + "\">\n" + $svg.ToString() + "</svg>\n")
     b.Push(FlameScript)
     b.Push("</body></html>\n")
     return b.ToString()

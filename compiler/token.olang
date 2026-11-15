@@ -276,7 +276,7 @@ fn (k Tok) Describe() String {
         case Tok.StrLit: "a string literal"
         case Tok.BoolLit: "a Bool literal"
         case Tok.StmtEnd: "end of line"
-        case _: "'" $k.Text() "'"
+        case _: "'" + $k.Text() + "'"
     }
 }
 
@@ -403,12 +403,12 @@ test "Keyword finds every reserved word and nothing else" {
                  Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.Become, Tok.Comptime, Tok.NullLit
                  Tok.Any, Tok.Unique, Tok.Immut, Tok.Packed, Tok.Commutes, Tok.Returns, Tok.Noalloc, Tok.Noblock, Tok.Nospawn, Tok.Norecurse, Tok.Noextern, Tok.Pure, Tok.Keeps, Tok.Borrows, Tok.Noborrow, Tok.Weak] {
         w := k.Text()
-        assert Tok.Keyword(w, 0, w.Len()) == k, "keyword " $w
+        assert Tok.Keyword(w, 0, w.Len()) == k, "keyword " + $w
     }
     assert Tok.Keyword("true", 0, 4) == Tok.BoolLit
     assert Tok.Keyword("false", 0, 5) == Tok.BoolLit
     for w in Array<String&>["i", "iff", "If", "returnss", "retur", "types", "x", "xo", "unreachables", "tru", "_if", "zz"] {
-        assert Tok.Keyword(w, 0, w.Len()) == Tok.Iden, "not a keyword: " $w
+        assert Tok.Keyword(w, 0, w.Len()) == Tok.Iden, "not a keyword: " + $w
     }
     assert Tok.Keyword("a mut b", 2, 3) == Tok.Mut
 }

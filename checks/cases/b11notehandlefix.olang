@@ -4,7 +4,7 @@
 fn churn() I64 {
     t I64 = 0
     for i in range 2000 {
-        x := "churn " $i " " $(i * 3)
+        x := "churn " + $i + " " + $(i * 3)
         t += x.Len()
     }
     return t
@@ -15,7 +15,7 @@ fn main() ? {
     m.Put(1, Vec<String&>())
     for i in range 40 {
         l := try m.RefMut(i % 2)
-        t String& = "x" $i
+        t String& = "x" + $i
         l.Push(t)
     }
     assert churn() > 0

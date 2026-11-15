@@ -48,7 +48,7 @@ test "text made in a loop, picked through a value and read in the turn" {
     g := longer
     total := 0
     for i in range 50 {
-        t := $"#" $i
+        t := $"#" + $i
         r := g(t, "1")
         total += r.Len()
     }

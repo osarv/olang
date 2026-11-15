@@ -177,7 +177,7 @@ fn (d mut Diagnostics&) Locate(file I64, at I64) String {
     if file < 0 or file >= d.paths.Len() { return "?" }
     line, start := d.lineOf(file, at)
     p, l := d.shown(file, line)
-    return $p ":" $l ":" $(at - start + 1)
+    return $p + ":" + $l + ":" + $(at - start + 1)
 }
 
 # ---- reporting ----
@@ -768,8 +768,8 @@ fn (d mut Diagnostics&) Render() String {
 # the line ending a compilation: how many errors it found, or that it succeeded
 fn (d mut Diagnostics&) Summary() String {
     n := d.Errors()
-    if n == 0 { return $d.sgr("1") "compilation successful" $d.sgr("0") "\n" }
-    return $d.sgr("1;31") "compilation failed with " $n " error" $("" if n == 1 else "s") $d.sgr("0") "\n"
+    if n == 0 { return $d.sgr("1") + "compilation successful" + $d.sgr("0") + "\n" }
+    return $d.sgr("1;31") + "compilation failed with " + $n + " error" + $("" if n == 1 else "s") + $d.sgr("0") + "\n"
 }
 
 # a mistake in the command line, before any compilation: "olang: error[RULE]: text", then its note and help
@@ -786,16 +786,16 @@ fn (d mut Diagnostics&) Usage(m diagmsg.Msg) String {
 
 # "error[RULE]: ", coloured
 fn (d Diagnostics&) errorWord(rule String&) String {
-    if rule.Len() == 0 { return $d.sgr("1;31") "error:" $d.sgr("0") " " }
-    return $d.sgr("1;31") "error[" $rule "]:" $d.sgr("0") " "
+    if rule.Len() == 0 { return $d.sgr("1;31") + "error:" + $d.sgr("0") + " " }
+    return $d.sgr("1;31") + "error[" + $rule + "]:" + $d.sgr("0") + " "
 }
 
 # one row - "path:line:col: error[RULE]: text" or "...: note: text" - and the source under it
 fn (d mut Diagnostics&) putRow(b mut StringBuilder&, at Where, word String&, rule String&, text String&) {
     d.putLocation(b, at)
     if word == "error": b.Push(d.errorWord(rule))
-    else if word == "warning": b.Push($d.sgr("1;35") "warning[" $rule "]:" $d.sgr("0") " ")
-    else: b.Push($d.sgr("1;36") "note:" $d.sgr("0") " ")
+    else if word == "warning": b.Push($d.sgr("1;35") + "warning[" + $rule + "]:" + $d.sgr("0") + " ")
+    else: b.Push($d.sgr("1;36") + "note:" + $d.sgr("0") + " ")
     b.Push(text)
     b.PushChar('\n')
     d.putExcerpt(b, at)
@@ -809,7 +809,7 @@ fn (d mut Diagnostics&) putNote(b mut StringBuilder&, nt note&) {
 # "path:line:col: note: text" (or help) alone on its row
 fn (d mut Diagnostics&) putPlain(b mut StringBuilder&, at Where, word String&, text String&) {
     d.putLocation(b, at)
-    b.Push($d.sgr("1;36") $word ":" $d.sgr("0") " ")
+    b.Push($d.sgr("1;36") + $word + ":" + $d.sgr("0") + " ")
     b.Push(text)
     b.PushChar('\n')
 }
@@ -822,12 +822,12 @@ fn (d mut Diagnostics&) putLocation(b mut StringBuilder&, at Where) {
         case Where.File(f) { b.Push(d.paths[f]) }
         case Where.Line(f, l) {
             p, sl := d.shown(f, l)
-            b.Push($p ":" $sl)
+            b.Push($p + ":" + $sl)
         }
         case Where.Span(f, s, _) {
             l, ls := d.lineOf(f, s)
             p, sl := d.shown(f, l)
-            b.Push($p ":" $sl ":" $(s - ls + 1))
+            b.Push($p + ":" + $sl + ":" + $(s - ls + 1))
         }
     }
     b.Push(": ")
@@ -877,7 +877,7 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
         if last < to { to = last }
     }
     _, shownLine := d.shown(f, line)
-    b.Push($shownLine.PadStart(5) " | ")
+    b.Push($shownLine.PadStart(5) + " | ")
     if from > lineStart { b.Push("...") }
     for i in range from, to { b.PushChar(printable(text[i])) }
     if to < lineEnd { b.Push("...") }
@@ -905,7 +905,7 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
 fn SpecPath() String& {
     exe := try os.ReadLink("/proc/self/exe") catch { return "SPEC.md" }
     slash := try exe.FindLast("/") catch { return "SPEC.md" }
-    return $exe[:slash] "/../SPEC.md"
+    return $exe[:slash] + "/../SPEC.md"
 }
 
 # the section sign, which olang source (ASCII, L1) cannot write: U+00A7 in UTF-8
@@ -1023,7 +1023,7 @@ test "notes follow their error, and a note on an error not reported is dropped" 
     e := d.Error(Where.Span(f, 2, 3), msgs.NoMain())
     d.Note(e, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
     d.Note(-1, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
-    want := "c.olang:2:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    2 | b\n      | ^\n" "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n"
+    want := "c.olang:2:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    2 | b\n      | ^\n" + "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n"
     assert d.Render() == want
 }
 
@@ -1032,7 +1032,7 @@ test "a message's own note and help are rows of their own, the help after the no
     f := d.AddFile("c.olang", "a\nb\n")
     e := d.Error(Where.Span(f, 2, 3), diagmsg.Msg(msgs.Diag.CannotOpen, "T1", "what is wrong", "why it is", "what to write"))
     d.Note(e, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
-    want := "c.olang:2:1: error[T1]: what is wrong\n    2 | b\n      | ^\n" "c.olang:2:1: note: why it is\n" "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n" "c.olang:2:1: help: what to write\n"
+    want := "c.olang:2:1: error[T1]: what is wrong\n    2 | b\n      | ^\n" + "c.olang:2:1: note: why it is\n" + "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n" + "c.olang:2:1: help: what to write\n"
     assert d.Render() == want
     items := d.Items()
     assert items.Len() == 4
@@ -1107,14 +1107,14 @@ test "an error inside an instantiation says where it was asked for; one in the l
     d.Error(Where.Span(lib, 0, 3), msgs.NoMain())
     d.PopContext()
     out := d.Render()
-    want := "main.olang:1:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    1 | use()\n      | ^~~\n" "lib.olang:1:1: note: in the standard library's code, here\n    1 | bad\n      | ^~~\n" "main.olang:1:1: note: instantiated here\n    1 | use()\n      | ^~~\n"
+    want := "main.olang:1:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    1 | use()\n      | ^~~\n" + "lib.olang:1:1: note: in the standard library's code, here\n    1 | bad\n      | ^~~\n" + "main.olang:1:1: note: instantiated here\n    1 | use()\n      | ^~~\n"
     assert out == want
 }
 
 test "only the innermost contexts and the outermost are named" {
     d := Diagnostics(false)
     f := d.AddFile("h.olang", "a b c d e\n")
-    for i in range 5 { d.PushContext(Where.Span(f, i * 2, i * 2 + 1), "at " $i) }
+    for i in range 5 { d.PushContext(Where.Span(f, i * 2, i * 2 + 1), "at " + $i) }
     d.Error(Where.Span(f, 8, 9), msgs.NoMain())
     out := d.Render()
     assert out.Contains("note: at 4") and out.Contains("note: at 3") and out.Contains("note: at 0")
@@ -1130,7 +1130,7 @@ test "a long line is shown as a window around the span; tabs line up and control
     out := d.Render()
     assert out.Contains("\n    1 | ...") and out.Contains("...\n      |    ")
     d2 := Diagnostics(false)
-    t := d2.AddFile("k.olang", "\tab" "\0" "c\n")
+    t := d2.AddFile("k.olang", "\tab" + "\0" + "c\n")
     d2.Error(Where.Span(t, 4, 5), msgs.NoMain())
     assert d2.Render().EndsWith("    1 | \tab?c\n      | \t   ^\n")
 }
@@ -1144,13 +1144,13 @@ test "colour is the terminal's codes around each part" {
     b := StringBuilder()
     b.PushChar(e)
     esc := b.ToString()
-    assert out.StartsWith($esc "[1ml.olang:1:1: " $esc "[0m" $esc "[1;31merror[B4]:" $esc "[0m no main")
-    assert d.Summary() == $esc "[1;31mcompilation failed with 1 error" $esc "[0m\n"
+    assert out.StartsWith($esc + "[1ml.olang:1:1: " + $esc + "[0m" + $esc + "[1;31merror[B4]:" + $esc + "[0m no main")
+    assert d.Summary() == $esc + "[1;31mcompilation failed with 1 error" + $esc + "[0m\n"
 }
 
 test "-e prints a rule under its section's heading, up to the next rule" {
     spec := "# 1 Intro\n\n### 10.1 Modes\n\n**B1.** One.\nMore of it.\n\n**B1a.** Two.\n\n## Other\n- **O25a.** Three.\n\n"
-    assert try Explain(spec, "B1") catch default "" == $section() "10.1 Modes\n\n**B1.** One.\nMore of it.\n"
+    assert try Explain(spec, "B1") catch default "" == $section() + "10.1 Modes\n\n**B1.** One.\nMore of it.\n"
     assert try Explain(spec, "o25a") catch default "" == "Other\n\n- **O25a.** Three.\n"
     missing := false
     try Explain(spec, "B2") catch { missing = true }

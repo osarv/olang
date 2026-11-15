@@ -350,7 +350,7 @@ fn (c mut Counts&) Add(g migration&) {
 }
 
 fn (c Counts&) Describe() String {
-    return $c.results " result lists made bare, " $c.errors " error sets made bare, " $c.wrapped " items parenthesized whole"
+    return $c.results + " result lists made bare, " + $c.errors + " error sets made bare, " + $c.wrapped + " items parenthesized whole"
 }
 
 # src migrated, what it took added to total
@@ -414,7 +414,7 @@ fn main() ? {
     changed I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("results_migrate: cannot read " $path)
+            srcmask.SayErr("results_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -425,16 +425,16 @@ fn main() ? {
         total.wrapped += mine.wrapped
         if out == src { continue }
         changed++
-        if verbose { srcmask.Say($path ": " $mine.Describe()) }
+        if verbose { srcmask.Say($path + ": " + $mine.Describe()) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("results_migrate: cannot write " $path)
+                srcmask.SayErr("results_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.Describe())
+    srcmask.Say($verb + $changed + " files: " + $total.Describe())
     if check and changed > 0 { os.Exit(1) }
 }
 

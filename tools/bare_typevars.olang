@@ -308,7 +308,7 @@ fn bare(src String&, o Occ&) String {
     right := ""
     if o.start > 0 and srcmask.IsWord(src[o.start - 1]) { left = " " }
     if o.end < src.Len() and srcmask.IsWord(src[o.end]) { right = " " }
-    return $left $name $right
+    return $left + $name + $right
 }
 
 # the line a position is on, from 1
@@ -330,8 +330,8 @@ fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known M
         if names.Len() == 0 { return }
         for o in outermost(occurrences(src, mask, after, end, true, names, known)) {
             if o.cstart != NoC {
-                report.Push(($path ":" $lineOf(src, o.start) ": constraint on '" $src[o.nameAt:o.nameEnd]
-                            "' dropped (the header carries it): " $src[o.cstart:o.cend]))
+                report.Push(($path + ":" + $lineOf(src, o.start) + ": constraint on '" + $src[o.nameAt:o.nameEnd] +
+                            "' dropped (the header carries it): " + $src[o.cstart:o.cend]))
             }
             edits.Push(Edit(o.start, o.end, reps.Len()))
             reps.Push(bare(src, o))
@@ -360,11 +360,11 @@ fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known M
             f := occs[fi]
             if f.cstart == NoC {
                 edits.Push(Edit(f.start, f.end, reps.Len()))
-                reps.Push("<" $name " " $src[o.cstart:o.cend] ">")
+                reps.Push("<" + $name + " " + $src[o.cstart:o.cend] + ">")
                 occs[fi].cstart = -1        # moved: a further one is a second constraint
-                report.Push($path ":" $lineOf(src, o.start) ": constraint on '" $name "' moved to its introduction")
+                report.Push($path + ":" + $lineOf(src, o.start) + ": constraint on '" + $name + "' moved to its introduction")
             } else {
-                report.Push(($path ":" $lineOf(src, o.start) ": a second constraint on '" $name "' dropped: "
+                report.Push(($path + ":" + $lineOf(src, o.start) + ": a second constraint on '" + $name + "' dropped: " +
                             $src[o.cstart:o.cend]))
             }
             skipUntil = o.end
@@ -472,7 +472,7 @@ fn typeDecls(text String&, out mut Map<String&, Bool>&) {
 # the type names std declares, and the built-in ones - the prelude's are named bare in every module
 fn stdTypes(known mut Map<String&, Bool>&, stdDir String&) {
     for b in BuiltinTypes { known.Put($b, true) }
-    std := $stdDir if stdDir != "" else $srcmask.RepoRoot() "/std"
+    std := $stdDir if stdDir != "" else $srcmask.RepoRoot() + "/std"
     files Vec<String&>
     srcmask.Walk(std, files)
     for f in files {
@@ -513,7 +513,7 @@ fn main() ? {
     report Vec<String&>
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("bare_typevars: cannot read " $path)
+            srcmask.SayErr("bare_typevars: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -531,16 +531,16 @@ fn main() ? {
         totalEdits += n
         totalFiles++
         totalLines += changed
-        if verbose { srcmask.Say($path ": " $n " rewritten on " $changed " lines") }
+        if verbose { srcmask.Say($path + ": " + $n + " rewritten on " + $changed + " lines") }
         if not check {
             try os.WriteFile(path, changedText) catch {
-                srcmask.SayErr("bare_typevars: cannot write " $path)
+                srcmask.SayErr("bare_typevars: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     for r in report { srcmask.Say(r) }
-    srcmask.Say(($("would rewrite " if check else "rewrote ") $totalEdits " occurrences on " $totalLines " lines in " $totalFiles
+    srcmask.Say(($("would rewrite " if check else "rewrote ") + $totalEdits + " occurrences on " + $totalLines + " lines in " + $totalFiles +
                 " files"))
     if check and totalEdits > 0 { os.Exit(1) }
 }

@@ -4,7 +4,7 @@
 # the loop keeping them has the walk made where the list lives (it was O10c's error); read back after a churn
 fn labels(n I64) Iterator<String&> {
     for i in range n {
-        s String& = $"label " $i
+        s String& = $"label " + $i
         yield s
     }
 }
@@ -13,7 +13,7 @@ import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }

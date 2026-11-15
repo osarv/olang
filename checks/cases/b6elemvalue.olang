@@ -13,7 +13,7 @@ fn main() ? {
     cells := Vec<mut Cell&>()
     for _ in range 3 { cells.Push(Cell()) }
     for i in range 3 {
-        x String& = "w" $i
+        x String& = "w" + $i
         wv := W(x)
         cells[i].w = wv
     }

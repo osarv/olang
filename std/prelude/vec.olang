@@ -308,7 +308,7 @@ fn (v Vec<T>&) Str() String {
         }
         case _ {
             r := $v.data[:v.n]                             # "Array<T>[...]"
-            return "Vec" $r[5:]
+            return "Vec" + $r[5:]
         }
     }
 }
@@ -321,7 +321,7 @@ fn vecCharLiteral(c Char) String {
     if c == '\0' { return "'\\0'" }
     if c == '\\' { return "'\\\\'" }
     if c == '\'' { return "'\\''" }
-    return "'" $c "'"
+    return "'" + $c + "'"
 }
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the

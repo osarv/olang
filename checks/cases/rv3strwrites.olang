@@ -8,10 +8,10 @@ fn bump(c mut Ctr&) { c.n++ }
 type B struct(c mut Ctr&) { c }
 fn (a B&) Str() String {
     bump(a.c)
-    return "b" $a.c.n
+    return "b" + $a.c.n
 }
 fn main() ? {
     b := B(Ctr())
     assert $b == "b1"
-    assert $b " " $b == "b2 b3" and b.c.n == 3
+    assert $b + " " + $b == "b2 b3" and b.c.n == 3
 }

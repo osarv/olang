@@ -58,6 +58,11 @@
 | ok - an axis's bounds
 | ok - nested literals of arrays and Vecs
 | ok - Tensor.Slice: a generic tensor's literal and slices
+| ok - Voxels.At: one to three indexes, read and stored
+| ok - Voxels.At: indexes and value evaluated in order
+| ok - Voxels.SetAt: compound stores and parallel assignment
+| ok - Voxels.SetSlice: a store into a slice takes the axes, then the value
+| ok - Cells.At: fallible, generic and nested in a Vec
 === test tests/barelits.olang
 | status 0
 | ok - a literal with nothing expected takes its own type (E20)
@@ -1284,6 +1289,17 @@
 === test tests/structpat.olang
 | status 0
 | ok - Point: S13i: struct patterns take a struct apart by its fields, at run time and while compiling
+=== test tests/textplus.olang
+| status 0
+| ok - pieces and values joined
+| ok - '$' binds tighter than '+'
+| ok - grouping makes no difference
+| ok - '+=' on a String
+| ok - a long chain - one join
+| ok - a join across lines
+| ok - generics and traits see String's Plus
+| ok - baked and decided while compiling
+| ok - text read back after an arena churn
 === test tests/textslot.olang
 | status 0
 | ok - a text local from a literal starts from the literal every turn, and is written as any array
@@ -1486,6 +1502,8 @@
 | ok - Write reports a failure from the underlying syscall
 | ok - Write succeeds on a real descriptor
 | ok - Put and PutLine write text, PutLine with its line end
+| ok - PutLine: writes any value as $ renders it
+| ok - Writer.PutLine: writes any value as $ renders it, with a line end
 | ok - Show: gives its value back after writing it, with the place of the call, to the standard error
 | ok - Read returns a slice of the caller's own buffer
 | ok - FormatInt renders decimals, including zero and negatives
@@ -1500,6 +1518,15 @@
 | ok - a Writer keeps every byte in order across its buffer's edges
 | ok - a Writer's failed write is Flush's, and every Flush's after it
 | ok - a deferred Flush writes what was written however the function is left
+| ok - Reader.Line: gives lines as Lines does, and Exhausted at the end, each time
+| ok - Reader.Word: skips whitespace, line ends included, across buffer refills
+| ok - Reader.Word: leaves what follows the word, so Line takes the rest of its line
+| ok - Reader.Next: reads a count and that many numbers
+| ok - Reader.Next: reads several types, one word each
+| ok - Reader.Next: fails with ParseError on a bad word, taking it, and with Exhausted at the end
+| ok - Reader.Bytes: gives exactly n bytes, across refills, and Exhausted when the input ends first
+| ok - Reader.All: gives everything left, and the empty text at the end
+| ok - Reader: reports a read that fails
 === test std/json.olang
 | status 0
 | ok - every kind of value, and asking for its parts
@@ -1824,6 +1851,10 @@
 | ok - Format, evaluated while compiling as at run time
 | ok - $ renders a StringBuilder as its text
 | ok - text goes to C NUL-terminated and comes back copied (X15)
+| ok - F64.Parse and the narrower floats round to the type
+| ok - Float Parse names what was wrong
+| ok - Bool.Parse reads true and false exactly
+| ok - the F8 types parse as the float they round
 === test std/prelude/tests/vec.olang
 | status 0
 | ok - Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort, Pop, Truncate, a copy - while compiling and at run time
@@ -2264,6 +2295,8 @@
 | status 0
 | 103 103 0
 === run e10cnullcompared.olang
+| status 0
+=== run e11bpluslanes.olang
 | status 0
 === run e11ctwolevelfield.olang
 | status 0

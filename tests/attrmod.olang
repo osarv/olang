@@ -9,9 +9,9 @@ type Route struct(Path String&) [Path.StartsWith("/")] ? { Path }
 type Command struct(Word String&, Help String& = "") { Word, Help }
 
 @Route("/users")
-fn Users(q String&) String { return "users:" $q }
+fn Users(q String&) String { return "users:" + $q }
 
-@Route("/items") fn Items(q String&) String { return "items:" $q }
+@Route("/items") fn Items(q String&) String { return "items:" + $q }
 
 @Command("add", "adds two numbers")
 fn Add(a I64, b I64 = 10) I64 { return a + b }
@@ -33,7 +33,7 @@ fn (r Rec&) Twice(k I64) I64 { return (r.A + r.B) * k }
 fn OwnWords() String {
     s := ""
     for f in me.Functions {
-        if f.HasAttr<Command>() { s = $s $(f.Attr<Command>()!).Word " " }
+        if f.HasAttr<Command>() { s = $s + $(f.Attr<Command>()!).Word + " " }
     }
     return s
 }

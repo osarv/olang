@@ -1,0 +1,97 @@
+# E11b: text joined with "+" - String's Plus (E31, M19d), a chain of it one join, "+=" on a String, generics and
+# traits seeing it, and the compile-time evaluator computing it (K1)
+
+# decided while compiling (S17a): the evaluator joins text as the run time does
+assert "a" + $1 + "b" + $true == "a1btrue"
+assert "x" + "y" == "xy"
+
+# baked while compiling (K2)
+Greeting := "hello, " + $(2 * 21) + "!"
+
+type Named struct(name String) {
+    name
+}
+
+fn (n Named&) Str() String { return "<" + n.name + ">" }
+
+# a trait asking for "+" - a String meets it through the prelude's Plus
+type Joinable<T> trait {
+    Plus(b T&) T
+}
+
+fn twice<T Joinable<T>>(x T) T { return x + x }
+
+# a generic's body asking "+" of its type variable (G18a): numbers add, text joins
+fn sum<T>(a T, b T, c T) T { return a + b + c }
+
+fn label(n I64) String { return "n=" + $n }
+
+test "pieces and values joined" {
+    n := 7
+    s := "n = " + $n + "\n"
+    assert s == "n = 7\n"
+    t := "abc"
+    assert t + "-" + t[1:3] + "!" == "abc-bc!"
+    assert label(3) + label(4) == "n=3n=4"
+    assert "[" + $Named("x") + "]" == "[<x>]"
+    assert Named("q").Str() + "!" == "<q>!"
+}
+
+test "'$' binds tighter than '+'" {
+    xs := Array<I64>[1, 2, 3]
+    assert "len " + $xs.Len() + "." == "len 3."
+    n := 4
+    assert "twice " + $(n * 2) == "twice 8"
+}
+
+test "grouping makes no difference" {
+    a, b, c := "a", "b", "c"
+    assert a + (b + c) == (a + b) + c
+    assert ("x" + (a + $1)) + (b + "y") == "xa1by"
+}
+
+test "'+=' on a String" {
+    s := "a"
+    for i in range 3: s += "," + $i
+    s += "!"
+    assert s == "a,0,1,2!"
+}
+
+test "a long chain - one join" {
+    a, b, c, d, e := "one", "two", "three", "four", "five"
+    long := a + " " + b + " " + c + " " + d + " " + e + " " + $a.Len() + $b.Len() + $c.Len() + $d.Len() + $e.Len()
+    assert long == "one two three four five 33544"
+    assert long.Len() == 29
+}
+
+test "a join across lines" {
+    n := 2
+    s := ("n is " + $n +
+          " of " + $(n + 1))
+    t := "a" +
+        "b"
+    assert s == "n is 2 of 3" and t == "ab"
+}
+
+test "generics and traits see String's Plus" {
+    assert sum("a", "b", "c") == "abc"
+    assert sum(1, 2, 3) == 6
+    assert twice("ha") == "haha"
+    f := fn(x String&, y String&) String { return x + y }
+    assert f("p", "q") == "pq"
+    assert "u".Plus("v") == "uv"
+}
+
+test "baked and decided while compiling" {
+    assert Greeting == "hello, 42!"
+}
+
+test "text read back after an arena churn" {
+    kept Vec<String>
+    for i in range 50 {
+        junk := Array<I64>(100, i)
+        kept.Push("item " + $i + " sum " + $junk[0])
+    }
+    assert kept[49] == "item 49 sum 49"
+    assert kept[0] + kept[1] == "item 0 sum 0item 1 sum 1"
+}

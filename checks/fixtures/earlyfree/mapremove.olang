@@ -10,7 +10,7 @@ type Rec struct(t String&) {
 fn main() {
     m := Map<String&, Rec&>()
     for i in range N {
-        m.Put($i, Rec("payload " $i " - about sixty bytes of value text ....."))
+        m.Put($i, Rec("payload " + $i + " - about sixty bytes of value text ....."))
         if i >= 100 { m.Remove($(i - 100)) }
     }
     io.PutLine($m.Len())!

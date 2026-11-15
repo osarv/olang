@@ -13,5 +13,5 @@ fn apply(f fn&() I64) I64 { return f() }
 type Bag struct(c Ctr&) {
     c
 }
-fn (b Bag&) Str() String { return "b" $apply(b.c) }
+fn (b Bag&) Str() String { return "b" + $apply(b.c) }
 fn main() ? { try io.PutLine($Bag(Ctr(5))) }

@@ -17,7 +17,7 @@ type H struct() {
     arr Array<Rec> = Array<Rec>(3)
     ns Array<RecN> = Array<RecN>(2)
 }
-fn mkText(k I64) String& { return "t" $k }
+fn mkText(k I64) String& { return "t" + $k }
 fn setName(r mut Rec&, s String&) { r.name = s }
 fn f(a mut Array<Rec>&, s String&) {
     t := a[0]

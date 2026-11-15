@@ -111,18 +111,18 @@ fn run(args Array<String&>&) {
         s := try base.FindLast("/") catch default -1
         base = base[s + 1:]
         if base.EndsWith(".olang") { base = base[:base.Len() - 6] }
-        outPath = "build/" $base ".ll"
+        outPath = "build/" + $base + ".ll"
     }
     fd := try os.Create(outPath) catch os.Error {
-        try io.PutErrLine("emitdump: cannot write " $outPath) catch io.Error { }
+        try io.PutErrLine("emitdump: cannot write " + $outPath) catch io.Error { }
         os.Exit(1)
     }
     w := io.Writer(fd)
     e.Program(w)
     try w.Flush() catch io.Error { os.Exit(1) }
     try os.Close(fd) catch os.Error { }
-    for g in e.Gaps { try io.PutErrLine("gap " $g) catch io.Error { } }
-    for g in lw.Gaps { try io.PutErrLine("lower gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.Error { } }
+    for g in e.Gaps { try io.PutErrLine("gap " + $g) catch io.Error { } }
+    for g in lw.Gaps { try io.PutErrLine("lower gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What) catch io.Error { } }
 }
 
 # the runtime's files filled in for this machine (B12), written into dir: compiler/runtime.olang's, as the driver builds
@@ -133,15 +133,15 @@ fn runtimeFiles(dir String&) {
         os.Exit(1)
     }
     core := try rt.Ir(tg.Triple, tg.Arch, tg.Attrs, false, false) catch rt.Bad { os.Exit(1) }
-    write($dir "/olang_runtime.ll", core)
+    write($dir + "/olang_runtime.ll", core)
     # the dynamic call's object: the runtime as a module carries it, then its own text (S3)
     dc := try rt.DyncallIr(tg.Triple, tg.Arch, tg.Attrs, false, false) catch rt.Bad { os.Exit(1) }
-    write($dir "/olang_dyncall.ll", dc)
+    write($dir + "/olang_dyncall.ll", dc)
 }
 
 fn write(path String&, text String&) {
     try os.WriteFile(path, text) catch os.Error {
-        try io.PutErrLine("emitdump: cannot write " $path) catch io.Error { }
+        try io.PutErrLine("emitdump: cannot write " + $path) catch io.Error { }
         os.Exit(1)
     }
 }

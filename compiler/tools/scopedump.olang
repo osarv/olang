@@ -54,7 +54,7 @@ fn run(args Array<String&>&) {
     }
     for i in range k, args.Len() {
         path := args[i]
-        out.Write("== " $path "\n")
+        out.Write("== " + $path + "\n")
         d := diag.Diagnostics(false)
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
@@ -73,7 +73,7 @@ fn run(args Array<String&>&) {
         s.Spell = fn(t types.TypeId) String { return cr.Ty(t) }
         s.Run()
         out.Write(d.Render())
-        for g in s.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }
+        for g in s.Gaps { out.Write("gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What + "\n") }
         judged I64 = 0
         unjudged I64 = 0
         for b in range c.Bodies.Len() {
@@ -83,9 +83,9 @@ fn run(args Array<String&>&) {
             body := c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
             if (try where.Find(planAt) catch default -1) < 0 { continue }
-            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $varsText(body) $planText(s.Plans[b]) $s.Summary(b))
+            out.Write("-- plan B" + $b + " " + $where + "\n" + $body.Print(p.T) + $varsText(body) + $planText(s.Plans[b]) + $s.Summary(b))
         }
-        out.Write("bodies " $c.Bodies.Len() " judged " $judged " unjudged " $unjudged "\n")
+        out.Write("bodies " + $c.Bodies.Len() + " judged " + $judged + " unjudged " + $unjudged + "\n")
     }
     try out.Flush() catch io.Error { os.Exit(1) }
 }
@@ -93,8 +93,8 @@ fn run(args Array<String&>&) {
 # a body's scope variables as text, in the order a call passes them
 fn varsText(b typed.Body&) String {
     t := StringBuilder()
-    for k in range b.Vars.Len() { t.Push("var " $k " " $b.Vars[k] "\n") }
-    for k in range b.Locals.Len() { t.Push("local " $k " " $b.Locals[k].Kind " " $b.Locals[k].Marked " in " $b.Locals[k].In "\n") }
+    for k in range b.Vars.Len() { t.Push("var " + $k + " " + $b.Vars[k] + "\n") }
+    for k in range b.Locals.Len() { t.Push("local " + $k + " " + $b.Locals[k].Kind + " " + $b.Locals[k].Marked + " in " + $b.Locals[k].In + "\n") }
     return t.ToString()
 }
 
@@ -102,18 +102,18 @@ fn varsText(b typed.Body&) String {
 fn planText(pl typed.Plan&) String {
     b := StringBuilder()
     for i in range pl.Built.Len() {
-        b.Push("site " $i " built " $pl.Built[i])
+        b.Push("site " + $i + " built " + $pl.Built[i])
         n I64 = 0
         for {
             sc := pl.Passed(typed.SiteId(I32(i)), n)
             if sc == typed.Scope.Unset { break }
-            b.Push($(" passes" if n == 0 else ",") " " $sc)
+            b.Push($(" passes" if n == 0 else ",") + " " + $sc)
             n++
         }
         b.PushChar('\n')
     }
     for i in range pl.Stored.Len() {
-        if pl.Stored[i] != typed.Scope.Frame { b.Push("local " $i " stored " $pl.Stored[i] "\n") }
+        if pl.Stored[i] != typed.Scope.Frame { b.Push("local " + $i + " stored " + $pl.Stored[i] + "\n") }
     }
     return b.ToString()
 }

@@ -85,7 +85,7 @@ fn migrateBare(text String&, alias String&) String, I64 {
         if kind == 'm' and isHeader(text, lineStart) { continue }
         if endsInDecl(text[lineStart:i]) { continue }
         out.Push(text[last:i])
-        out.Push($alias "." $Renamed[w] "(")
+        out.Push($alias + "." + $Renamed[w] + "(")
         last = i + Words[w].Len() + 1
         if kind == 'c' { count++ }
     }
@@ -160,14 +160,14 @@ fn migrateTries(text String&, mask String&, alias String&, lo I64, hi I64, out m
         }
         out.Push(text[last:i])
         if allTrivial {
-            out.Push($alias "." $name "(")
+            out.Push($alias + "." + $name + "(")
             migrateTries(text, mask, alias, paren + 1, end - 1, out)
             out.Push(")")
             last = k
             i = k
         } else {
             stream := "Stdout" if name == "Print" else "Stderr"
-            out.Push("try " $alias ".Write(" $alias "." $stream ", ")
+            out.Push("try " + $alias + ".Write(" + $alias + "." + $stream + ", ")
             migrateTries(text, mask, alias, paren + 1, end - 1, out)
             out.Push(")")
             last = end
@@ -196,14 +196,14 @@ fn addImport(text String&) String {
             last = k
         }
     }
-    if last + 1 < count { return $text[:starts[last + 1]] "import \"std/io\"\n" $text[starts[last + 1]:] }
-    return $text "\nimport \"std/io\""
+    if last + 1 < count { return $text[:starts[last + 1]] + "import \"std/io\"\n" + $text[starts[last + 1]:] }
+    return $text + "\nimport \"std/io\""
 }
 
 # migrates one file; whether it changed
 fn migrateFile(path String&, dry Bool) Bool {
     if path == "std/io.olang" or path.EndsWith("/std/io.olang") { return false }
-    text := try srcmask.ReadText(path) catch { srcmask.SayErr("io_print: cannot read " $path)
+    text := try srcmask.ReadText(path) catch { srcmask.SayErr("io_print: cannot read " + $path)
                                                os.Exit(1)
                                                unreachable }
     alias := try srcmask.IoAlias(text, path) catch default ""
@@ -220,11 +220,11 @@ fn migrateFile(path String&, dry Bool) Bool {
     if result == text { return false }
     if not dry {
         try os.WriteFile(path, result) catch {
-            srcmask.SayErr("io_print: cannot write " $path)
+            srcmask.SayErr("io_print: cannot write " + $path)
             os.Exit(1)
         }
     }
-    srcmask.Say($("would migrate " if dry else "migrated ") $path)
+    srcmask.Say($("would migrate " if dry else "migrated ") + $path)
     return true
 }
 
@@ -249,7 +249,7 @@ fn main() ? {
         if k > 0 and f == files[k - 1] { continue }
         if migrateFile(f, dry) { changed++ }
     }
-    srcmask.Say($changed " files " $("would change" if dry else "changed"))
+    srcmask.Say($changed + " files " + $("would change" if dry else "changed"))
 }
 
 test "print words become io's, except in headers, declarations and strings" {

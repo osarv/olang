@@ -72,7 +72,7 @@ fn main() ? {
     total I64 = 0
     for p in files {
         raw := try os.ReadFile(p) catch {
-            srcmask.SayErr("io_try: cannot read " $p)
+            srcmask.SayErr("io_try: cannot read " + $p)
             os.Exit(1)
             unreachable
         }
@@ -82,13 +82,13 @@ fn main() ? {
         changed, n := migrate(text, alias)
         if n > 0 {
             try os.WriteFile(p, changed) catch {
-                srcmask.SayErr("io_try: cannot write " $p)
+                srcmask.SayErr("io_try: cannot write " + $p)
                 os.Exit(1)
             }
             total += n
         }
     }
-    srcmask.Say("added try to " $total " calls")
+    srcmask.Say("added try to " + $total + " calls")
 }
 
 test "try goes before a print call in code only" {

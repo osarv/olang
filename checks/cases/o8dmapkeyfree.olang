@@ -23,21 +23,21 @@ fn peakKb() I64 {
 fn numbers(n I64) I64 {
     m := Map<String, I64>()
     for t in range n {
-        m.Put("key-" $t, t)
-        if t >= 1000: assert m.Remove("key-" $(t - 1000))
+        m.Put("key-" + $t, t)
+        if t >= 1000: assert m.Remove("key-" + $(t - 1000))
     }
-    return m.Get("key-" $(n - 1))! + m.Len()
+    return m.Get("key-" + $(n - 1))! + m.Len()
 }
 
 fn nodes(n I64) I64 {
     m := Map<String, mut Node&>()
     for t in range n {
-        k := "node-" $t
+        k := "node-" + $t
         m.Put(k, Node(k, t))
-        if t >= 1000: assert m.Remove("node-" $(t - 1000))
+        if t >= 1000: assert m.Remove("node-" + $(t - 1000))
     }
-    last := m.Get("node-" $(n - 1))!
-    assert last.key == "node-" $(n - 1)
+    last := m.Get("node-" + $(n - 1))!
+    assert last.key == "node-" + $(n - 1)
     return last.v + m.Len()
 }
 

@@ -455,8 +455,8 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
     b := StringBuilder()
     if not cl.HasWord {
         b.Push("usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]\n\nmodes:\n")
-        b.Push($"  " $"FILE.olang".PadEnd(11) " " $ModeWhat[Run] "\n")
-        for m in range 1, ModeWords.Len() { b.Push($"  " $ModeWords[m].PadEnd(11) " " $ModeWhat[m] "\n") }
+        b.Push($"  " + $"FILE.olang".PadEnd(11) + " " + $ModeWhat[Run] + "\n")
+        for m in range 1, ModeWords.Len() { b.Push($"  " + $ModeWords[m].PadEnd(11) + " " + $ModeWhat[m] + "\n") }
         b.Push("\n'olang help MODE' lists a mode's options; 'olang help file' those of running a file.\n")
         b.Push("'olang' with nothing after it opens the prompt, which builds and runs what is typed as it is typed (B22).\n")
         b.Push("\nenvironment:\n")
@@ -470,14 +470,14 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
     }
     m := Run if cl.Word == "file" else modeNumber(cl.Word)
     if m < 0 { try usage(d, msgs.NotAMode(cl.Word)) }
-    b.Push($"usage: " $ModeUsage[m] "\n" $ModeWhat[m] "\n")
+    b.Push($"usage: " + $ModeUsage[m] + "\n" + $ModeWhat[m] + "\n")
     found := false
     for o in range OptWords.Len() {
         if ((OptModes[o] >> m) & 1) == 0 { continue }
         if not found { b.Push("\noptions:\n") }
         found = true
-        w := $OptWords[o] $(" " if OptValues[o] != "" else "") $OptValues[o]
-        b.Push($"  " $w.PadEnd(18) " " $OptWhat[o] "\n")
+        w := $OptWords[o] + $(" " if OptValues[o] != "" else "") + $OptValues[o]
+        b.Push($"  " + $w.PadEnd(18) + " " + $OptWhat[o] + "\n")
     }
     return b.ToString()
 }
@@ -490,7 +490,7 @@ fn explainRule(rule String&, d mut diag.Diagnostics&) String ? Bad {
         error Bad.Usage
     }
     text := try diag.Explain(String(spec), rule) catch {
-        d.Error(diag.Where.Nowhere, msgs.NoRule($rule[:1].ToUpper() $rule[1:]))
+        d.Error(diag.Where.Nowhere, msgs.NoRule($rule[:1].ToUpper() + $rule[1:]))
         error Bad.Usage
     }
     return text
@@ -630,9 +630,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     if kept.Stale.Len() > 0 { records.CheckIncrFailed(kept) }
     if kept.Afresh and kept.Taken > 0 {
-        try io.PutErr($"olang: incremental check: " $kept.Taken " kept summaries, every one the same\n") catch io.Error { }
+        try io.PutErr($"olang: incremental check: " + $kept.Taken + " kept summaries, every one the same\n") catch io.Error { }
     }
-    build.Phase($"check (" $c.Rounds " rounds, " $c.Attempts " attempts in the last, views " $c.ViewsMs " ms)")
+    build.Phase($"check (" + $c.Rounds + " rounds, " + $c.Attempts + " attempts in the last, views " + $c.ViewsMs + " ms)")
     if kind == build.Kind.Program and not cfg.Library and not cfg.Cell { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: on a program that checked cleanly, the values evaluation decides - a literal's constructor, a
@@ -653,7 +653,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # a construct the checker does not check yet: never built as though it were not there (a store it left out was a
     # lost write - the second bulk review's F3), as lowering's and emission's gaps are not
     if c.Gaps.Len() > 0 {
-        for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
+        for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) + ": it does not check " + $g.What + " yet") }
         error build.Failed.Unbuilt
     }
     # B11d: the function explain -asm or -ir shows, with each of its instances' symbols
@@ -682,7 +682,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.DecideGen()
     lw.Free = fr
     build.Phase("scope")
-    if cfg.Memory and d.Errors() == 0: spin.Say(io.Stdout, $fr.Report() $weakRows(c) $fr.Sc.PlacedReport())
+    if cfg.Memory and d.Errors() == 0: spin.Say(io.Stdout, $fr.Report() + $weakRows(c) + $fr.Sc.PlacedReport())
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PutErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
@@ -719,12 +719,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # D9h: value results handed over as views (a -memory build lowers every module)
     if cfg.Memory {
         for line in lw.CopyLog { try io.PutLine(line) catch io.Error { } }
-        try io.PutLine($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgViews " by-value arguments are read where they are, " $lw.Moves " copies are moves at a last use") catch io.Error { }
+        try io.PutLine($lw.ViewReturns + " returns hand back a view, " + $lw.ViewReads + " calls read one where it stands, " + $lw.ViewCopies + " calls copy one, " + $lw.ArgViews + " by-value arguments are read where they are, " + $lw.Moves + " copies are moves at a last use") catch io.Error { }
     }
-    for v in lw.ViewLog { try io.PutErr($v "\n") catch io.Error { } }
+    for v in lw.ViewLog { try io.PutErr($v + "\n") catch io.Error { } }
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
-        for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
-        for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }
+        for g in e.Gaps { build.Unbuildable($"it does not emit " + $g + " yet") }
+        for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) + ": it does not lower " + $g.What + " yet") }
         error build.Failed.Unbuilt
     }
     if d.Errors() > 0 { error build.Failed.Reported }
@@ -736,8 +736,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             # B3i: a reused module's parts, as its record keeps them, each with its IR's hash
             r := e.Reuse.Ref(o.From)
             for k, id in r.Parts {
-                pir String& = try irs.Get($r.Module " " $k) catch {
-                    build.Unbuildable($"the record of " $l.Mods[r.Module].Identity " lost a part while it was read")
+                pir String& = try irs.Get($r.Module + " " + $k) catch {
+                    build.Unbuildable($"the record of " + $l.Mods[r.Module].Identity + " lost a part while it was read")
                     error build.Failed.Unbuilt
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
@@ -772,22 +772,22 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     for m in l.Mods {
         if m.CUnit == "" { continue }
         ctext := try os.ReadFile(m.CUnit) catch os.Error {
-            build.Unbuildable($"its C import's code " $m.CUnit " was lost while it was read")
+            build.Unbuildable($"its C import's code " + $m.CUnit + " was lost while it was read")
             error build.Failed.Unbuilt
         }
         cir := cIr(m.CUnit, ctext, cfg)
         if cir == "" {
-            build.Unbuildable($"clang cannot compile its C import's code " $m.CUnit)
+            build.Unbuildable($"clang cannot compile its C import's code " + $m.CUnit)
             error build.Failed.Unbuilt
         }
-        prog.Units.Push(build.Unit($"c_" $m.Identity, build.UnitKind.Module, cir))
+        prog.Units.Push(build.Unit($"c_" + $m.Identity, build.UnitKind.Module, cir))
     }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
     # O8d (wholeprog 2.1): the root's decisions - every place decided sole, its link-time constant defined true - in an
     # object of their own beside the root's (after the objects a reuse check writes afresh), which the objects reading them (weak, false) meet only at the link
     if kind != build.Kind.Module {
         sole := e.SoleUnit()
-        if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity "~~sole", build.UnitKind.Instances, libraryIr(sole) if cfg.Library else sole)) }
+        if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity + "~~sole", build.UnitKind.Instances, libraryIr(sole) if cfg.Library else sole)) }
     }
     if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog, kept, fr.Sc.JudgedFiles()) }
     prog.Links = l.Links()
@@ -821,9 +821,9 @@ fn sitesOut(lw lower.Lowerer&, d mut diag.Diagnostics&) {
     path := try os.Env("OLANG_CHECKSITES") catch default ""
     if path == "" or lw.IndexSites.Len() == 0: return
     out := StringBuilder()
-    for e in lw.IndexSites { out.Push($d.Locate(e.Key.First, e.Key.Second) "\t" $("loop" if e.Value else "straight") "\n") }
+    for e in lw.IndexSites { out.Push($d.Locate(e.Key.First, e.Key.Second) + "\t" + $("loop" if e.Value else "straight") + "\n") }
     old := try os.ReadFile(path) catch default ""
-    try os.WriteFile(path, $old $out.ToString()) catch os.Error { }
+    try os.WriteFile(path, $old + $out.ToString()) catch os.Error { }
 }
 
 # X14: an object's IR for a shared library, which dlopen loads as often as a link does - its thread-locals reached as
@@ -837,7 +837,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e mut emit.Emitter& = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
     e.Baked = baked              # K2: the immutable globals the evaluator gives, written as their values
-    e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.FnAttrs()
+    e.Attrs = $("sanitize_thread " if cfg.Race else "") + $cfg.FnAttrs()
     e.Module = kind == build.Kind.Module
     e.Triple = cfg.Target.Triple
     e.Arch = cfg.Target.Arch
@@ -856,7 +856,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     if tests {
         e.Fuzz = cfg.Fuzz
-        e.FuzzCache = $cfg.Dir "/fuzz"
+        e.FuzzCache = $cfg.Dir + "/fuzz"
     }
     return e
 }
@@ -877,11 +877,11 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
 # read naming it - each program reading the module's facts otherwise keeping a record of its own beside it - and "s"
 # where its objects are cut (B3d), so a program cut otherwise keeps its own beside it too
 fn recordPath(cfg build.Config&, identity String&, key String&, reads String&, cut Bool) String {
-    return $recordStem(cfg, identity, key) $("s" if cut else "") $build.IrHash(reads)[:16]
+    return $recordStem(cfg, identity, key) + $("s" if cut else "") + $build.IrHash(reads)[:16]
 }
 
 fn recordStem(cfg build.Config&, identity String&, key String&) String {
-    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20] ".v"
+    return $cfg.Dir + "/rec/" + $build.Readable(identity) + "." + $key[:20] + ".v"
 }
 
 # the modules whose records are here and hold for this program: under each module's key, a record whose every fact read
@@ -907,14 +907,14 @@ LikelyCutSource I64 = 1000000
 fn reusable(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, keys Array<String&>&
     irs mut Map<String, String&>&, cut I64) Vec<emit.Reused> {
     out Vec<emit.Reused>
-    names := try os.ReadDir($cfg.Dir "/rec") catch os.Error { return out }
+    names := try os.ReadDir($cfg.Dir + "/rec") catch os.Error { return out }
     for m in range keys.Len() {
         if keys[m] == "" { continue }
         stem := recordStem(cfg, l.Mods[m].Identity, keys[m])
         lead := stem[cfg.Dir.Len() + 5:]
         for name in names {
             if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
-            r := try takeRecord(c, $cfg.Dir "/rec/" $name, m, irs, cut) catch Stale { continue }
+            r := try takeRecord(c, $cfg.Dir + "/rec/" + $name, m, irs, cut) catch Stale { continue }
             out.Push(r)
             break
         }
@@ -954,9 +954,9 @@ fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, Str
     if not whole or r.Parts.Len() == 0 or not c.P.Facts.Holds(read.ToArray()): error Stale
     if cut >= 0 and r.Split != (cut == 1): error Stale
     for k in range r.Parts.Len() {
-        pir := try os.ReadFile($path ".p" $k ".ll") catch os.Error { error Stale }
+        pir := try os.ReadFile($path + ".p" + $k + ".ll") catch os.Error { error Stale }
         if build.IrHash(pir) != r.Hashes[k]: error Stale
-        irs.Put($m " " $k, pir)
+        irs.Put($m + " " + $k, pir)
     }
     return r
 }
@@ -968,30 +968,30 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
     objs Vec<emit.Object>&, hashes Vec<String&>&) {
     made := e.Made
     if made.Len() == 0 { return }
-    try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
+    try os.MkDirAll($cfg.Dir + "/rec") catch os.Error { return }
     pid := build.Pid()
     for r in made {
         if r.Module >= keys.Len() or keys[r.Module] == "" { continue }
         base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module], reads[r.Module], r.Split)
         b := StringBuilder()
-        b.Push($"olang module record\nsize " $r.Size "\nsplit " $("1" if r.Split else "0") "\n")
+        b.Push($"olang module record\nsize " + $r.Size + "\nsplit " + $("1" if r.Split else "0") + "\n")
         seen Map<String&, Bool>
         for sym in r.Inst {
             if seen.Has(sym) { continue }
             seen.Put(sym, true)
-            b.Push($"inst " $sym "\n")
+            b.Push($"inst " + $sym + "\n")
         }
-        for x in e.TwinLines(r.Inst) { b.Push($"twin " $x "\n") }
-        if reads[r.Module] != "": b.Push($reads[r.Module] "\n")
+        for x in e.TwinLines(r.Inst) { b.Push($"twin " + $x + "\n") }
+        if reads[r.Module] != "": b.Push($reads[r.Module] + "\n")
         ok := true
         for k in range r.Parts.Len() {
-            if not records.PutFile($base ".p" $k ".ll", objs[r.From + k].Ir, pid) { ok = false }
-            b.Push($("locs " if r.Locs[k] else "part ") $hashes[r.From + k] " " $r.Parts[k] "\n")
+            if not records.PutFile($base + ".p" + $k + ".ll", objs[r.From + k].Ir, pid) { ok = false }
+            b.Push($("locs " if r.Locs[k] else "part ") + $hashes[r.From + k] + " " + $r.Parts[k] + "\n")
         }
         if not ok { continue }
         b.Push("end\n")
         body := b.ToString()
-        records.PutFile(base, $body "sum " $build.IrHash(body) "\n", pid)
+        records.PutFile(base, $body + "sum " + $build.IrHash(body) + "\n", pid)
     }
 }
 
@@ -1003,17 +1003,17 @@ fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Arr
     made Map<I64, Bool>
     for r in e.Made { made.Put(r.Module, true) }
     b := StringBuilder()
-    b.Push($"olang: facts " $c.P.Facts.Decided " decided, " $c.P.Facts.Reads " read\n")
+    b.Push($"olang: facts " + $c.P.Facts.Decided + " decided, " + $c.P.Facts.Reads + " read\n")
     for m in range keys.Len() {
         if keys[m] == "" or l.Mods[m].File < 0: continue
         what := "reused " if e.ReusedAt.Has(m) else "lowered " if made.Has(m) else ""
-        if what != "": b.Push($"olang: " $what $l.Mods[m].Identity "\n")
-        if kept.Files.Has(l.Mods[m].File): b.Push($"olang: front kept " $l.Mods[m].Identity "\n")
-        if kept.Lines.Has(l.Mods[m].File): b.Push($"olang: front checked " $l.Mods[m].Identity "\n")
-        if scoped.Has(l.Mods[m].File): b.Push($"olang: scope judged " $l.Mods[m].Identity "\n")
+        if what != "": b.Push($"olang: " + $what + $l.Mods[m].Identity + "\n")
+        if kept.Files.Has(l.Mods[m].File): b.Push($"olang: front kept " + $l.Mods[m].Identity + "\n")
+        if kept.Lines.Has(l.Mods[m].File): b.Push($"olang: front checked " + $l.Mods[m].Identity + "\n")
+        if scoped.Has(l.Mods[m].File): b.Push($"olang: scope judged " + $l.Mods[m].Identity + "\n")
     }
     # each object by its IR's hash: equal objects have equal names (B3j)
-    for u in prog.Units { b.Push($"olang: unit " $u.Identity " " $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) "\n") }
+    for u in prog.Units { b.Push($"olang: unit " + $u.Identity + " " + $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) + "\n") }
     try io.PutErr(b.ToString()) catch io.Error { }
 }
 
@@ -1039,15 +1039,15 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
         if i >= units { break }
         u := prog.Units[i]
         if fresh[i].Identity != u.Identity or fresh[i].Ir != u.Ir {
-            try io.PutErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.Error { }
+            try io.PutErr($"olang: reuse check: " + $fresh[i].Identity + " differs\n") catch io.Error { }
             bad = true
         }
     }
     if bad {
-        try io.PutErr($"olang: reuse check: " $units " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
+        try io.PutErr($"olang: reuse check: " + $units + " objects, " + $fresh.Len() + " written afresh\n") catch io.Error { }
         os.Exit(3)
     }
-    try io.PutErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }
+    try io.PutErr($"olang: reuse check: " + $e.ReusedAt.Len() + " modules reused, every object the same\n") catch io.Error { }
 }
 
 # what the scope inference found, where OLANG_SCOPESTATS asks: to the standard error, or with
@@ -1056,23 +1056,23 @@ fn inferStats(sc mut scope.Scoper&) {
     to := try os.Env("OLANG_SCOPESTATS") catch default ""
     if to == "" { return }
     b := StringBuilder()
-    b.Push($"olang: " $sc.InferStats() "\n")
-    b.Push($"olang: " $sc.FoldStats() "\n")
-    b.Push($"olang: " $sc.RunStats() "\n")
-    b.Push($"olang: " $sc.VerStats() "\n")
-    b.Push($"olang: field rounds " $sc.FieldRounds ", components reused " $sc.Reused " of " $sc.Components() " a round, lone bodies judged again " $sc.Redone "\n")
-    b.Push($"olang: " $sc.TwinStats() "\n")
-    b.Push($"olang: records: " $sc.DiskStats() "\n")
-    for f in sc.PromotedFields() { b.Push($"olang: promoted " $f "\n") }
-    for f in sc.Unplaced { b.Push($"olang: unplaced " $f "\n") }
+    b.Push($"olang: " + $sc.InferStats() + "\n")
+    b.Push($"olang: " + $sc.FoldStats() + "\n")
+    b.Push($"olang: " + $sc.RunStats() + "\n")
+    b.Push($"olang: " + $sc.VerStats() + "\n")
+    b.Push($"olang: field rounds " + $sc.FieldRounds + ", components reused " + $sc.Reused + " of " + $sc.Components() + " a round, lone bodies judged again " + $sc.Redone + "\n")
+    b.Push($"olang: " + $sc.TwinStats() + "\n")
+    b.Push($"olang: records: " + $sc.DiskStats() + "\n")
+    for f in sc.PromotedFields() { b.Push($"olang: promoted " + $f + "\n") }
+    for f in sc.Unplaced { b.Push($"olang: unplaced " + $f + "\n") }
     if to[0] != '/' {
         try io.PutErr(b.ToString()) catch io.Error { }
         return
     }
     head := StringBuilder()
-    for a in os.Args() { head.Push($a " ") }
+    for a in os.Args() { head.Push($a + " ") }
     dir := try os.MkTemp(to, "stats") catch os.Error { return }
-    try os.WriteFile($dir "/stats", $head.ToString() "\n" $b.ToString()) catch os.Error { }
+    try os.WriteFile($dir + "/stats", $head.ToString() + "\n" + $b.ToString()) catch os.Error { }
 }
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
@@ -1097,7 +1097,7 @@ fn twinsTo(lw mut lower.Lowerer&, fr mut free.Free&) {
 
 # B3i (W4): where a module compiled on its own records, in the object store (B3j), that it was compiled apart - by
 # its identity - and what it records: a hash of the module's identity and text
-fn apartPath(cfg build.Config&, md load.Module&) String { return $cfg.Store "/apart/" $build.IrHash(md.Identity)[:16] }
+fn apartPath(cfg build.Config&, md load.Module&) String { return $cfg.Store + "/apart/" + $build.IrHash(md.Identity)[:16] }
 
 fn apartKey(md load.Module&) String {
     parts Vec<String&>
@@ -1110,7 +1110,7 @@ fn apartKey(md load.Module&) String {
 fn markApart(l load.Loader&, cfg build.Config&) {
     if cfg.Store == "" or l.Root < 0: return
     md := l.Mods[l.Root]
-    try os.MkDirAll($cfg.Store "/apart") catch os.Error { return }
+    try os.MkDirAll($cfg.Store + "/apart") catch os.Error { return }
     try os.WriteFile(apartPath(cfg, md), apartKey(md)) catch os.Error { }
 }
 
@@ -1143,7 +1143,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
         c.P.L.Diags.Forget(mark)
         sc.SetFieldMarks(marks)
         if sc.Trace or (try os.Env("OLANG_SCOPESTATS") catch default "") != "" {
-            for t in sc.TraceLog { try io.PutErr($t "\n") catch io.Error { } }
+            for t in sc.TraceLog { try io.PutErr($t + "\n") catch io.Error { } }
         }
         taken := sc.DiskTaken
         sc = scoper(c, cfg, alone)
@@ -1160,11 +1160,11 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     if alone and sc.Gaps.Len() == 0 { markApart(c.P.L, cfg) }
     # a construct section 8 does not judge yet: never built as though it were judged, as the checker's gaps are not
     if sc.Gaps.Len() > 0 {
-        for g in sc.Gaps { build.Unbuildable($c.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) ": it does not judge " $g.What " yet") }
+        for g in sc.Gaps { build.Unbuildable($c.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) + ": it does not judge " + $g.What + " yet") }
         error build.Failed.Unbuilt
     }
     inferStats(sc)
-    for t in sc.TraceLog { try io.PutErr($t "\n") catch io.Error { } }
+    for t in sc.TraceLog { try io.PutErr($t + "\n") catch io.Error { } }
     # and early freeing's decisions written into its plans (O8d), for a program at its root
     fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
@@ -1190,10 +1190,10 @@ fn scopeAfresh(c mut typecheck.Checker&, cfg mut build.Config&, alone Bool, sc m
     c.P.L.Diags.Forget(upTo)
     sc.SetFieldMarks(final)
     if diffs.Len() == 0 {
-        try io.PutErr($"olang: incremental check: scope, " $sc.DiskTaken " judgings taken from records, every one the same\n") catch io.Error { }
+        try io.PutErr($"olang: incremental check: scope, " + $sc.DiskTaken + " judgings taken from records, every one the same\n") catch io.Error { }
         return
     }
-    for x in diffs { try io.PutErr($"olang: incremental check: " $x "\n") catch io.Error { } }
+    for x in diffs { try io.PutErr($"olang: incremental check: " + $x + "\n") catch io.Error { } }
     try io.PutErr($"olang: incremental check: the scope pass with records differs from it without them\n") catch io.Error { }
     os.Exit(3)
 }
@@ -1264,7 +1264,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     # a construct the checker does not check yet stops interpret as it stops a build (B3e; bulk review 7, F11: a store
     # over a value with destructors reached through a call ran with its old value never ended)
     if c.Gaps.Len() > 0 {
-        for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
+        for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) + ": it does not check " + $g.What + " yet") }
         error build.Failed.Unbuilt
     }
     # X9: the libraries the program links, loaded into this process for its externs to be found (B3e)
@@ -1295,13 +1295,13 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     twinsTo(x.Lw, fr)
     x.Lw.Free = fr
     x.M.Soles = fr.Sole
-    for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First " " $bt.Second, true) }
+    for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First + " " + $bt.Second, true) }
     os.OnCrash(eval.InterpCrash)
     status I32 = 0
     if tests {
         cfg.TestHeader(root)
         # the test binary's command line: its path, as test builds it, then the words
-        x.M.Args.Push($"./build/" $build.Readable(l.Mods[l.Root].Identity) "_test")
+        x.M.Args.Push($"./build/" + $build.Readable(l.Mods[l.Root].Identity) + "_test")
         for a in args { x.M.Args.Push(a) }
         status = x.RunTests(d, args)
         for w in x.TestWords { cfg.TestWords.Push(w) }
@@ -1340,10 +1340,10 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     }
     for a in Array<String&>["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push(a) }
     kb := StringBuilder()
-    for a in args { kb.Push($a "\n") }
+    for a in args { kb.Push($a + "\n") }
     kb.Push(cfg.Target.Attrs)
     kb.Push(text)
-    path := $unit[:unit.Len() - 2] "." $sha.Hex(kb.ToString())[:16] ".ll"
+    path := $unit[:unit.Len() - 2] + "." + $sha.Hex(kb.ToString())[:16] + ".ll"
     kept := try os.ReadFile(path) catch os.Error default ""
     if kept != "" { return kept }
     if cfg.Clang == "" { return "" }
@@ -1353,7 +1353,7 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
         return ""
     }
     ir := retarget(out.Stdout, cfg.Target.Attrs)
-    tmp := $path "." $build.Pid() ".tmp"
+    tmp := $path + "." + $build.Pid() + ".tmp"
     try os.WriteFile(tmp, ir) catch os.Error { return ir }
     try os.Rename(tmp, path) catch os.Error { }
     return ir
@@ -1374,11 +1374,11 @@ fn retarget(ir String&, attrs String&) String {
             if k < 0 { continue }
             e := try rest[k + key.Len():].FindByte('"') catch default -1
             if e < 0 { continue }
-            rest = $rest[:k] $rest[k + key.Len() + e + 1:]
+            rest = $rest[:k] + $rest[k + key.Len() + e + 1:]
         }
         close := try rest.FindLast("}") catch default -1
         if close < 0: b.Push(line)
-        else: b.Push($rest[:close] $attrs " " $rest[close:])
+        else: b.Push($rest[:close] + $attrs + " " + $rest[close:])
         b.PushChar('\n')
     }
     return b.ToString()
@@ -1387,7 +1387,7 @@ fn retarget(ir String&, attrs String&) String {
 # a C import's C (X20), for interpret: compiled into a shared library beside it - where it is not there yet, or older -
 # and loaded; "" when it is loaded, else why not
 fn cLibrary(unit String&, cfg build.Config&) String {
-    so := $unit[:unit.Len() - 2] ".so"
+    so := $unit[:unit.Len() - 2] + ".so"
     ui := try os.FileInfo.Stat(unit) catch os.Error { return "its code is lost" }
     si := try os.FileInfo.Stat(so) catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)
     if si.Kind != os.FileKind.FILE or si.ModTime < ui.ModTime {
@@ -1395,10 +1395,10 @@ fn cLibrary(unit String&, cfg build.Config&) String {
         args Vec<String&>
         args.Push(cfg.Clang)
         for f in cfg.CFlags() { args.Push(f) }
-        for a in Array<String&>["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push(a) }
+        for a in Array<String&>["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so + ".tmp", unit] { args.Push(a) }
         out := try os.Output.Exec(...args.ToArray()) catch os.Error { return "clang could not be run" }
-        if out.Status != 0 { return $"clang could not compile it: " $out.Stderr.Trim() }
-        try os.Rename($so ".tmp", so) catch os.Error { return "its library cannot be written" }
+        if out.Status != 0 { return $"clang could not compile it: " + $out.Stderr.Trim() }
+        try os.Rename($so + ".tmp", so) catch os.Error { return "its library cannot be written" }
     }
     return interp.LoadLibrary(so)
 }
@@ -1444,7 +1444,7 @@ fn mistake(words Array<String&>&) String {
     d := diag.Diagnostics(false)
     c := build.Config()
     cl := try CommandLine.Parse(commandLine(words), c, d) catch Bad { return d.Render() }
-    return $"no mistake: " $modeName(cl.Mode)
+    return $"no mistake: " + $modeName(cl.Mode)
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
@@ -1454,8 +1454,8 @@ test "a command line's mistakes are said as stage 0 says them" {
         "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"
     assert mistake(Array<String&>["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
-    assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode\n" $
-            "olang: note: the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, " $
+    assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode\n" + $
+            "olang: note: the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, " + $
             "profile, api, jupyter and notebook, and a file ending in .olang is built and run\n")
     assert mistake(Array<String&>["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
@@ -1530,7 +1530,7 @@ fn prepared(words Array<String&>&) String {
     d := diag.Diagnostics(false)
     c := build.Config()
     cl := try CommandLine.Prepare(commandLine(words), c, d) catch Bad { return d.Render() }
-    return $"no mistake: " $modeName(cl.Mode)
+    return $"no mistake: " + $modeName(cl.Mode)
 }
 
 test "the modes: each said wrong as stage 0 says it" {
@@ -1554,7 +1554,7 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(Array<String&>["explain", "-asm", "m.olang", "f"]) == "no mistake: explain"
     assert prepared(Array<String&>["explain", "-ir", "-quick", "m.olang", "Box.Get"]) == "no mistake: explain"
     assert prepared(Array<String&>["explain", "-asm", "m.olang"]) ==
-        "olang: error[B11d]: explain -asm takes a program's file and a function's name\n" $
+        "olang: error[B11d]: explain -asm takes a program's file and a function's name\n" + $
         "olang: help: write 'olang explain -asm main.olang main'\n"
     assert prepared(Array<String&>["explain", "-asm", "-ir", "m.olang", "f"]) ==
         "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
@@ -1567,32 +1567,32 @@ test "the modes: each said wrong as stage 0 says it" {
     assert armAsm == "no mistake: explain" or armAsm.Contains("error[B12a]: this clang cannot build")
 }
 
-explainedSrc String& = ("type MathError error { Zero }\n"
-                     "type N struct(v I64, next N?&) { v, next }\n"
-                     "fn (n N&) Value() I64 { return n.v }\n"
-                     "type H struct(n N&) { n }\n"
-                     "fn H.wrap(n N&) H { return H(n) }\n"
-                     "fn divmod(a I64, b I64) I64, I64 ? {\n"
-                     "    if b == 0 { error MathError.Zero }\n"
-                     "    return a / b, a % b\n"
-                     "}\n"
-                     "fn big<T>(a T, b T) T { return a if a > b else b }\n"
-                     "type Sh enum {\n    Whole N\n    Parts(a I64, b I64)\n    None\n}\n"
-                     "Answer I64 = 6 * 7\n"
-                     "fn pct(part I64, whole I64) [whole > 0, part >= 0] I64 ? { return part * 100 / whole }\n"
-                     "fn link(a mut N&, b N&) { a.next = b }\n"
-                     "fn main() ? {\n"
-                     "    nn := N(pct(1, 4)!, null)\n"
-                     "    link(nn, nn)\n"
-                     "    q, _ := try divmod(Answer, big(2, 3))\n"
-                     "    assert H.wrap(N(q, null)).n.Value() == 14\n"
+explainedSrc String& = ("type MathError error { Zero }\n" +
+                     "type N struct(v I64, next N?&) { v, next }\n" +
+                     "fn (n N&) Value() I64 { return n.v }\n" +
+                     "type H struct(n N&) { n }\n" +
+                     "fn H.wrap(n N&) H { return H(n) }\n" +
+                     "fn divmod(a I64, b I64) I64, I64 ? {\n" +
+                     "    if b == 0 { error MathError.Zero }\n" +
+                     "    return a / b, a % b\n" +
+                     "}\n" +
+                     "fn big<T>(a T, b T) T { return a if a > b else b }\n" +
+                     "type Sh enum {\n    Whole N\n    Parts(a I64, b I64)\n    None\n}\n" +
+                     "Answer I64 = 6 * 7\n" +
+                     "fn pct(part I64, whole I64) [whole > 0, part >= 0] I64 ? { return part * 100 / whole }\n" +
+                     "fn link(a mut N&, b N&) { a.next = b }\n" +
+                     "fn main() ? {\n" +
+                     "    nn := N(pct(1, 4)!, null)\n" +
+                     "    link(nn, nn)\n" +
+                     "    q, _ := try divmod(Answer, big(2, 3))\n" +
+                     "    assert H.wrap(N(q, null)).n.Value() == 14\n" +
                      "}\n")
 
 # what explain FILE NAME prints of name in the program above, or its diagnostics
 fn explained(name String&) String {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    file := $dir "/m.olang"
+    file := $dir + "/m.olang"
     try os.WriteFile(file, explainedSrc) catch os.Error { unreachable }
     d := diag.Diagnostics(false)
     c := build.Config()
@@ -1619,34 +1619,34 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
 }
 
 test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {
-    assert explained("divmod") == ("fn divmod(a I64, b I64) I64, I64 ? MathError.Zero   # its error set inferred\n" $
-            "    # fits: fn&(a I64, b I64) I64, I64 ? MathError.Zero returns noalloc noblock nospawn norecurse noextern pure\n" $
+    assert explained("divmod") == ("fn divmod(a I64, b I64) I64, I64 ? MathError.Zero   # its error set inferred\n" + $
+            "    # fits: fn&(a I64, b I64) I64, I64 ? MathError.Zero returns noalloc noblock nospawn norecurse noextern pure\n" + $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     # T22a, open point 5: an obligation its type says of every call - n outliving the result - leaves it a value
-    assert explained("H.wrap") == ("fn H.wrap(n N&) H\n    # scopes: n outlives return\n" $
-            "    # fits: fn&(n N&) H returns noalloc noblock nospawn norecurse noextern pure borrows n\n" $
+    assert explained("H.wrap") == ("fn H.wrap(n N&) H\n    # scopes: n outlives return\n" + $
+            "    # fits: fn&(n N&) H returns noalloc noblock nospawn norecurse noextern pure borrows n\n" + $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     # B11b, G18a: a generic's needs and why it is no value; each instance's effects
-    assert explained("big") == ("fn big<T>(a T, b T) T\n    # T needs: Less\n" $
-            "    # not a value: a generic is a value only named with its type arguments, 'big<...>' (G12)\n" $
-            "    instance big<I64>: fn(a I64, b I64) I64\n" $
+    assert explained("big") == ("fn big<T>(a T, b T) T\n    # T needs: Less\n" + $
+            "    # not a value: a generic is a value only named with its type arguments, 'big<...>' (G12)\n" + $
+            "    instance big<I64>: fn(a I64, b I64) I64\n" + $
             "        # fits: fn&(a I64, b I64) I64 returns noalloc noblock nospawn norecurse noextern pure\n        # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
-    assert explained("N") == ("type N struct(v I64, next N?&)\n    v I64\n    next N?&\n    fn (n N&) Value() I64\n" $
+    assert explained("N") == ("type N struct(v I64, next N?&)\n    v I64\n    next N?&\n    fn (n N&) Value() I64\n" + $
             "        # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
-    assert explained("N.Value") == ("fn (n N&) Value() I64\n" $
-            "    # not a value: a method is called as one (M19) - a lambda calling it is a value\n" $
+    assert explained("N.Value") == ("fn (n N&) Value() I64\n" + $
+            "    # not a value: a method is called as one (M19) - a lambda calling it is a value\n" + $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     assert explained("MathError") == "type MathError error\n    Zero\n"
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
     # D17: a contract's conditions as written; a scope relation the body asks among the obligations, inferred (O10b)
     # T19b: a false condition's ArgumentError carries its text, a copy made where it is raised - so it allocates
-    assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n" $
-            "    [part >= 0]\n" $
-            "    # fits: fn&(part I64, whole I64) I64 ? ArgumentError returns noblock nospawn norecurse noextern pure\n" $
+    assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n" + $
+            "    [part >= 0]\n" + $
+            "    # fits: fn&(part I64, whole I64) I64 ? ArgumentError returns noblock nospawn norecurse noextern pure\n" + $
             "    # effects: allocates; never blocks; always ends; may be computed while compiling\n")
-    assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" $
-            "    # fits: fn&(a mut N&, b N&) returns noalloc noblock nospawn norecurse noextern pure keeps b in a   # held in locals and results only (T22a)\n" $
+    assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" + $
+            "    # fits: fn&(a mut N&, b N&) returns noalloc noblock nospawn norecurse noextern pure keeps b in a   # held in locals and results only (T22a)\n" + $
             "    # effects: writes through 'a'; allocates nothing; never blocks; always ends; may be computed while compiling\n")
     assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }

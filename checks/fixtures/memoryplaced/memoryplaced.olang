@@ -16,13 +16,13 @@ fn words(t String&) Iterator<String&> {
 fn main() {
     out := Vec<String&>()
     for i in range 3 {
-        t := $i " a"
+        t := $i + " a"
         for w in words(t) { out.Push(w) }
     }
     firsts := Vec<String&>()
     for k in range 3 {
-        u := $k "-x"
+        u := $k + "-x"
         firsts.Push(u[0:1])
     }
-    io.PutLine($out " " $firsts)!
+    io.PutLine($out + " " + $firsts)!
 }

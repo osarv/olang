@@ -1,0 +1,9 @@
+# check: run
+# E11b, E39: two Array<Char> still add lane by lane - String has the '+' that joins
+fn main() {
+    a := Array<Char>['a', 'b']
+    b := Array<Char>[1, 1]
+    c := a + b
+    assert String(c) == "bc"
+    assert "x" + String(c) + $c.Len() == "xbc2"
+}

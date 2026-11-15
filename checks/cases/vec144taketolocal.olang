@@ -12,19 +12,19 @@ type Lex2 struct() {
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t
 }
 fn viaLocal() Vec<Tok> {
-    t := "x" $5 "-function-block-text"
+    t := "x" + $5 + "-function-block-text"
     l := Lex2()
     l.toks.Push(Tok(t, 1))
     return l.toks
 }
 fn Lex2.viaField() Lex2 {
-    t := "y" $6 "-function-block-text"
+    t := "y" + $6 + "-function-block-text"
     v := Vec<Tok>()
     v.Push(Tok(t, 1))
     l := Lex2()

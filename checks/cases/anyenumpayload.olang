@@ -14,7 +14,7 @@ fn (t Tag) Name() String { return "tag" }
 fn main() {
     xs := Vec<any Named&>()
     for i in range 4 {
-        s := "e" $i
+        s := "e" + $i
         xs.Push(Tag.Txt(s))
     }
 }

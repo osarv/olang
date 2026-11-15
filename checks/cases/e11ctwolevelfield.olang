@@ -4,7 +4,7 @@
 type W struct(ll Vec<Vec<I64>>&) {
     ll
 }
-fn (w W&) Str() String { return "W" $w.ll[0].Len() }
+fn (w W&) Str() String { return "W" + $w.ll[0].Len() }
 fn main() ? {
     ll := Vec<Vec<I64>>()
     ll.Push(Vec<I64>())

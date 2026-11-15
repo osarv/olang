@@ -47,7 +47,7 @@ fn main() {
     changed := 0
     for path in files {
         text := try srcmask.ReadText(path) catch os.Error {
-            srcmask.SayErr("variadic_migrate: " $path ": cannot be read")
+            srcmask.SayErr("variadic_migrate: " + $path + ": cannot be read")
             continue
         }
         r := migrated.migrate(path, text)
@@ -73,8 +73,8 @@ fn migrated.migrate(path String&, text String&) migrated {
     for m in Moved {
         alias := aliasOf(out, m.Module)
         heads Vec<String&>
-        if alias.Len() > 0: heads.Push($alias "." $m.Name "(")
-        if path.EndsWith($m.Module ".olang"): heads.Push($m.Name "(")    # the module's own calls
+        if alias.Len() > 0: heads.Push($alias + "." + $m.Name + "(")
+        if path.EndsWith($m.Module + ".olang"): heads.Push($m.Name + "(")    # the module's own calls
         for head in heads {
             r := migrated.rewriteCalls(path, out, head, m)
             out = r.Text
@@ -91,7 +91,7 @@ fn aliasOf(text String&, module String&) String {
     for line in text.Split("\n") {
         t := srcmask.Strip(line)
         if not t.StartsWith("import ") { continue }
-        path := $module if t.EndsWith($"\"" $module "\"") else ($bare if t.EndsWith($" \"" $bare "\"") else "")
+        path := $module if t.EndsWith($"\"" + $module + "\"") else ($bare if t.EndsWith($" \"" + $bare + "\"") else "")
         if path.Len() == 0 { continue }
         head := srcmask.Strip(t[7:t.Len() - path.Len() - 2])
         if head.Len() > 0 { return $head }
@@ -126,14 +126,14 @@ fn migrated.rewriteCalls(path String&, text String&, head String&, m moved&) mig
         } catch Unchanged {
             continue
         }
-        out = $out[:o + 1] $given $out[close - 1:]
+        out = $out[:o + 1] + $given + $out[close - 1:]
     }
     return migrated(out, hand)
 }
 
 fn sayHand(path String&, text String&, at I64, why String&) {
     line := 1 + text[:at].CountOf("\n")
-    srcmask.SayErr("by hand: " $path ":" $line ": " $why)
+    srcmask.SayErr("by hand: " + $path + ":" + $line + ": " + $why)
 }
 
 # a call's arguments between from and to, split at the commas no bracket holds, each without its surrounding spaces;
@@ -179,8 +179,8 @@ fn newArgs(args Vec<String&>&, m moved&) String ? Unchanged, Unclear {
             seen = true
         } else if p in m.Before {
             before.Push($a)
-        } else if a != "default" and not p.EndsWith($"=" $a) {
-            named.Push($nameOf(p) " = " $a)
+        } else if a != "default" and not p.EndsWith($"=" + $a) {
+            named.Push($nameOf(p) + " = " + $a)
         }
     }
     if not seen { error Unchanged }
@@ -198,7 +198,7 @@ fn spreadOf(a String&) String ? Unchanged, Unclear {
     lb := try a.Find("[") catch default -1
     if lb > 0 and a.EndsWith("]") and typeText(a[:lb]) { return $srcmask.Strip(a[lb + 1:a.Len() - 1]) }
     # a call that gives an array by its name - another call may give a String, the new form's first argument
-    if a.EndsWith(".ToArray()") or a.EndsWith(".View()") or a.StartsWith("Array<") { return $"..." $a }
+    if a.EndsWith(".ToArray()") or a.EndsWith(".View()") or a.StartsWith("Array<") { return $"..." + $a }
     error Unclear
 }
 

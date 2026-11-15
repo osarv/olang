@@ -38,15 +38,15 @@ fn (r mut Rng&) next(n I64) I64 {
 # module k's text
 fn Module(p Prog&, k I64) String {
     b := StringBuilder()
-    b.Push($"# editgen module " $k "\n")
-    if k + 1 < p.n: b.Push($"import onward \"m" $(k + 1) "\"\n")
+    b.Push($"# editgen module " + $k + "\n")
+    if k + 1 < p.n: b.Push($"import onward \"m" + $(k + 1) + "\"\n")
     b.Push(scopegen.Prelude)
     if scopegen.HasDtors(p.seeds[k]): b.Push(scopegen.DtorPrelude)
     if not p.dead[k]: b.Push(scopegen.Scenario(p.seeds[k], k))
     b.Push(p.extra[k])
-    own := "0" if p.dead[k] else $"s" $k "()"
+    own := "0" if p.dead[k] else $"s" + $k + "()"
     rest := " + onward.Total()" if k + 1 < p.n else ""
-    b.Push($"fn Total() I64 { return " $own " + " $p.bump[k] $rest " }\n")
+    b.Push($"fn Total() I64 { return " + $own + " + " + $p.bump[k] + $rest + " }\n")
     return b.ToString()
 }
 
@@ -69,8 +69,8 @@ fn Root(p Prog&) String {
 
 # the program written into dir: its modules and root, main.olang
 fn Write(p Prog&, dir String&) ? os.Error {
-    for k in range p.n { try os.WriteFile($dir "/m" $k ".olang", Module(p, k)) }
-    try os.WriteFile($dir "/main.olang", Root(p))
+    for k in range p.n { try os.WriteFile($dir + "/m" + $k + ".olang", Module(p, k)) }
+    try os.WriteFile($dir + "/main.olang", Root(p))
 }
 
 # one random edit of p at step, named
@@ -80,26 +80,26 @@ fn Edit(p mut Prog&, r mut Rng&, step I64) String {
         case 0 {
             p.seeds[k] = U64(r.next(1000000)) + 1
             p.dead[k] = false
-            return $"m" $k "'s scenario written again"
+            return $"m" + $k + "'s scenario written again"
         }
         case 1 {
-            p.extra[k] = $p.extra[k] "EditG" $step " mut Node?& = null\n"
-            return $"a mutable reference global added to m" $k
+            p.extra[k] = $p.extra[k] + "EditG" + $step + " mut Node?& = null\n"
+            return $"a mutable reference global added to m" + $k
         }
         case 2 {
-            p.extra[k] = $p.extra[k] "fn quiet" $step "() Bool { return not churn.Allocates }\n"
-            return $"a G42 fact read added to m" $k
+            p.extra[k] = $p.extra[k] + "fn quiet" + $step + "() Bool { return not churn.Allocates }\n"
+            return $"a G42 fact read added to m" + $k
         }
         case 4 {
             # W4: a struct whose field views its constructor argument's referent, stored into through an element
             # aliasing an instance - its binding there the body's field set
-            h := $"Hold" $step
-            p.extra[k] = $p.extra[k] "type " $h " struct(of mut Node&) {\n    at mut Node& = of\n}\n" $
-                         "fn widen" $step "() I64 {\n    outer mut Node& = Node(7)\n    keep Node& = outer\n" $
-                         "    for i in range 2 {\n        x mut Node& = Node(i)\n        h := " $h "(outer)\n" $
-                         "        hs Array<mut " $h "&> = Array<" $h "&>[h]\n        hs[0].at = x\n        keep = h.at\n    }\n" $
+            h := $"Hold" + $step
+            p.extra[k] = $p.extra[k] + "type " + $h + " struct(of mut Node&) {\n    at mut Node& = of\n}\n" + $
+                         "fn widen" + $step + "() I64 {\n    outer mut Node& = Node(7)\n    keep Node& = outer\n" + $
+                         "    for i in range 2 {\n        x mut Node& = Node(i)\n        h := " + $h + "(outer)\n" + $
+                         "        hs Array<mut " + $h + "&> = Array<" + $h + "&>[h]\n        hs[0].at = x\n        keep = h.at\n    }\n" + $
                          "    return keep.v\n}\n"
-            return $"a field's set widened in m" $k
+            return $"a field's set widened in m" + $k
         }
         case 3 {
             p.callback = not p.callback
@@ -107,7 +107,7 @@ fn Edit(p mut Prog&, r mut Rng&, step I64) String {
         }
         case _ {
             p.bump[k] += 1
-            return $"a number in m" $k "'s code changed"
+            return $"a number in m" + $k + "'s code changed"
         }
     }
 }
@@ -131,14 +131,14 @@ type Run struct(olang String&, dir String&) {
     dir
 }
 
-fn (u Run&) sh(cmd String&) I32 { return os.Run($"cd " $os.Quote(u.dir) " && OLANG=" $os.Quote(u.olang) " && " $cmd) }
+fn (u Run&) sh(cmd String&) I32 { return os.Run($"cd " + $os.Quote(u.dir) + " && OLANG=" + $os.Quote(u.olang) + " && " + $cmd) }
 
-fn (u Run&) read(name String&) String { return try os.ReadFile($u.dir "/" $name) catch default "" }
+fn (u Run&) read(name String&) String { return try os.ReadFile($u.dir + "/" + $name) catch default "" }
 
 # the program built in sub (OLANG_FACTSTATS's lines with what the build said) and run, into to - whether it built
 fn (u Run&) build(sub String&, to String&) Bool {
-    return u.sh($"cd " $sub " && rm -f build/main && OLANG_FACTSTATS=1 OLANG_CHECKINCR=1 timeout 600 \"$OLANG\" build " $
-                "main.olang > ../" $to " 2>&1 && timeout 120 ./build/main >> ../" $to " 2>&1") == 0
+    return u.sh($"cd " + $sub + " && rm -f build/main && OLANG_FACTSTATS=1 OLANG_CHECKINCR=1 timeout 600 \"$OLANG\" build " + $
+                "main.olang > ../" + $to + " 2>&1 && timeout 120 ./build/main >> ../" + $to + " 2>&1") == 0
 }
 
 # p written and built clean; a scenario the clean build refuses left out, its module named by the diagnostics, until
@@ -146,28 +146,28 @@ fn (u Run&) build(sub String&, to String&) Bool {
 fn (u Run&) step(p mut Prog&, undo Bool) String ? os.Error {
     for _ in range p.n + 1 {
         u.sh("rm -rf clean && mkdir clean")
-        try Write(p, $u.dir "/clean")
+        try Write(p, $u.dir + "/clean")
         if u.build("clean", "there"): break
         said := u.read("there")
         blamed := false
         for k in range p.n {
-            if p.dead[k] or not said.Contains($"m" $k ".olang:"): continue
+            if p.dead[k] or not said.Contains($"m" + $k + ".olang:"): continue
             p.dead[k] = true
             blamed = true
         }
-        if not blamed: return $"does not compile, and no scenario is to blame:\n" $said
+        if not blamed: return $"does not compile, and no scenario is to blame:\n" + $said
     }
-    try Write(p, $u.dir "/inc")
+    try Write(p, $u.dir + "/inc")
     u.build("inc", "here")
     # (what was reused or lowered again, the front end's records taken or checked, the modules the scope pass judged
     # afresh and how many facts were read differ by design; OLANG_CHECKINCR ends a build whose records give what
     # checking afresh does not)
-    u.sh("grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)' here | sort > a; " $
+    u.sh("grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)' here | sort > a; " + $
          "grep -v '^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)' there | sort > b")
-    if u.sh("diff a b > d") != 0: return $"the build in place (<) differs from the clean one (>):\n" $u.read("d")
-    if undo and u.read("here").Contains("olang: lowered "): return $"undoing lowered again:\n" $u.read("here")
-    if undo and u.read("here").Contains("olang: front checked "): return $"undoing checked again:\n" $u.read("here")
-    if undo and u.read("here").Contains("olang: scope judged m"): return $"undoing judged again:\n" $u.read("here")
+    if u.sh("diff a b > d") != 0: return $"the build in place (<) differs from the clean one (>):\n" + $u.read("d")
+    if undo and u.read("here").Contains("olang: lowered "): return $"undoing lowered again:\n" + $u.read("here")
+    if undo and u.read("here").Contains("olang: front checked "): return $"undoing checked again:\n" + $u.read("here")
+    if undo and u.read("here").Contains("olang: scope judged m"): return $"undoing judged again:\n" + $u.read("here")
     return ""
 }
 
@@ -180,7 +180,7 @@ fn Seed(olang String&, dir String&, seed I64, steps I64, n I64) String ? os.Erro
     p := Prog(n)
     for k in range n { p.seeds[k] = U64(seed * 1000 + k) }
     found := try u.step(p, false)
-    if found != "": return $"the first build: " $found
+    if found != "": return $"the first build: " + $found
     before := Copy(p)
     for i in range steps {
         undo := r.next(4) == 0
@@ -192,7 +192,7 @@ fn Seed(olang String&, dir String&, seed I64, steps I64, n I64) String ? os.Erro
             what = Edit(p, r, i)
         }
         found = try u.step(p, undo)
-        if found != "": return $"step " $i " (" $what "): " $found
+        if found != "": return $"step " + $i + " (" + $what + "): " + $found
     }
     return ""
 }

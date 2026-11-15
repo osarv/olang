@@ -32,7 +32,7 @@ type KList struct() {
 fn (l mut KList&) PushBack(i I64) {
     xs := Vec<I64>()
     for k in range i % 5 + 1 { xs.Push(i * 10 + k) }
-    nd := KNode("key-" $i, xs, Tag("tag" $(i * 7), i))
+    nd := KNode("key-" + $i, xs, Tag("tag" + $(i * 7), i))
     t := l.tail
     if t == null { l.head = nd } else {
         t.next = nd

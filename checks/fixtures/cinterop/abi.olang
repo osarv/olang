@@ -72,7 +72,7 @@ export fn add(i I32, ctx mut Ctx&) {
     ctx.sum += I64(i)
     ctx.calls++
     # olang's own storage, made on whatever thread calls (X12)
-    t := $"item " $i
+    t := $"item " + $i
     if t.Len() == 0 { ctx.calls = 0 }
 }
 
@@ -101,22 +101,22 @@ fn main() ? {
     h3.h[0], h3.h[1], h3.h[2] = 1, 2, 3
     try io.PutLine($id_H3(h3))
     p := L3(1, 2, 3)
-    try io.PutLine($sum_l3(p) " " $p)
+    try io.PutLine($sum_l3(p) + " " + $p)
     try io.PutLine($many(1, 2, 3, 4, 5, L2(6, 7)))
     try io.PutLine($many2(1, 2, 3, 4, 5, 6, 7, D2(8, 9)))
     try io.PutLine($ret3(1, 2, 3, 4, 5, L2(6, 7)))
-    try io.PutLine($flip(true) " " $flip(false))
-    try io.PutLine($neg8(5) " " $widen8(-1, 255, -2, 65535))
-    try io.PutLine($halfdbl(1.5) " " $bfadd(1.0, 2.0))
+    try io.PutLine($flip(true) + " " + $flip(false))
+    try io.PutLine($neg8(5) + " " + $widen8(-1, 255, -2, 65535))
+    try io.PutLine($halfdbl(1.5) + " " + $bfadd(1.0, 2.0))
     d := db_open(42)
     o := Array<Db?&>(1)
     assert db_open2(7, o) == 0
-    try io.PutLine($db_n(d) " " $db_n(o[0]) " " $db_n(db_none()) " " $(d == d) " " $(db_none() == null) " " $d)
+    try io.PutLine($db_n(d) + " " + $db_n(o[0]) + " " + $db_n(db_none()) + " " + $(d == d) + " " + $(db_none() == null) + " " + $d)
     db_close(o[0]!)
     db_close(d)
     c := Ctx()
     each(10, add, c)
     e := Ctx()
     each_on_thread(100, add, e)
-    try io.PutLine($c " " $e " " $apply(half, 3.0) " " $half(8.0))
+    try io.PutLine($c + " " + $e + " " + $apply(half, 3.0) + " " + $half(8.0))
 }

@@ -19,7 +19,7 @@ fn f(n mut Node&) mut Node& ? Odd {
 }
 fn (b Bag&) Str() String {
     join { spawn b.head.next = try f(b.head) catch default Node(b.head.v + 100) }
-    return "b" $b.head.v
+    return "b" + $b.head.v
 }
 fn churn(d I64) I64 {
     a := Array<I64>[d, d, d, d, d, d, d, d]
@@ -32,5 +32,5 @@ fn main() ? {
     b := Bag(Node(1))
     try io.PutLine($b)
     t := churn(100)
-    try io.PutLine($b.head.next!.v " " $t)
+    try io.PutLine($b.head.next!.v + " " + $t)
 }

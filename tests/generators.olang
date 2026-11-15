@@ -44,7 +44,7 @@ fn (l Vec<T>&) Twice() Iterator<T> {
 fn words(t String&) Iterator<String> {
     for w in t.Split(" ") {
         if w.Len() == 0 { continue }
-        yield $w "!"
+        yield $w + "!"
     }
 }
 
@@ -175,14 +175,14 @@ test "D18b: a walk stopped part way closes its scopes with the scope the generat
 test "D18: a walk churned between values reads what it made, not reused storage" {
     for w in words("one two three") {
         junk := Vec<I64>()
-        for i in range 50 { junk.Push(($i "-" $i).Len()) }
+        for i in range 50 { junk.Push(($i + "-" + $i).Len()) }
         assert w.EndsWith("!") and junk.Len() == 50
     }
 }
 
 fn logged(n I64, log mut Vec<String&>&) Iterator<I64> {
     for i in range n {
-        log.Push($i "!")
+        log.Push($i + "!")
         yield i
     }
 }
@@ -345,7 +345,7 @@ fn churnText() I64 {
     n I64 = 0
     for i in range 200 {
         junk := Vec<String&>()
-        for k in range 4 { junk.Push($i "-churn-" $k) }
+        for k in range 4 { junk.Push($i + "-churn-" + $k) }
         n += junk[3].Len()
     }
     return n
@@ -354,7 +354,7 @@ fn churnText() I64 {
 SpanTotal := spanTotal("one two three") # baked while compiling (K2)
 
 test "D18c: a generator's elements borrowed from what it was given live where that does" {
-    t := $"alpha beta" " gamma"
+    t := $"alpha beta" + " gamma"
     kept := Vec<String&>()
     keepSpans(t, kept)
     for w in spans(t) {
@@ -392,7 +392,7 @@ fn points(n I64) Iterator<Pt&> {
 
 fn labels(n I64) Iterator<String&> {
     for i in range n {
-        s String& = $"label " $i
+        s String& = $"label " + $i
         yield s
     }
 }
@@ -573,7 +573,7 @@ type Seen struct() {
 
 fn (s Seen&) Text() String {
     b := StringBuilder()
-    for x in s.ids { b.Push(" " $x) }
+    for x in s.ids { b.Push(" " + $x) }
     return b.ToString()
 }
 
@@ -671,7 +671,7 @@ fn walkedFull() String {
     t I64 = 0
     for x in heldAcross(Witness(s), 50) { t += x }
     for x in owned(Held(9, s), 2) { t += x }
-    return $t $s.Text()
+    return $t + $s.Text()
 }
 
 WalkFullBaked := walkedFull()

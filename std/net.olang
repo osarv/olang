@@ -231,7 +231,7 @@ fn IP.Parse(t String&) IP ? Error.Address {
 # how "$" renders an IP: dotted decimal, or RFC 5952's IPv6 text - lowercase, leading zeros dropped, the longest run of
 # two or more zero groups (the first of equal ones) written "::"
 fn (ip IP&) Str() String {
-    if not ip.V6 { return $ip.bytes[0] "." $ip.bytes[1] "." $ip.bytes[2] "." $ip.bytes[3] }
+    if not ip.V6 { return $ip.bytes[0] + "." + $ip.bytes[1] + "." + $ip.bytes[2] + "." + $ip.bytes[3] }
     g := Array<I64>(8)
     for i in range 8 { g[i] = I64(ip.bytes[2 * i]) << 8 | I64(ip.bytes[2 * i + 1]) }
     best I64 = -1
@@ -292,8 +292,8 @@ fn Addr.hostPort(t String&) Addr ? noAddress {
 }
 
 fn (a Addr&) Str() String {
-    if a.Host.V6 { return "[" $a.Host "]:" $a.Port }
-    return $a.Host ":" $a.Port
+    if a.Host.V6 { return "[" + $a.Host + "]:" + $a.Port }
+    return $a.Host + ":" + $a.Port
 }
 
 # a C sockaddr_in or sockaddr_in6 for a, as the bytes the kernel reads: the family in this machine's order, the port

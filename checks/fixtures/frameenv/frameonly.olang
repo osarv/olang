@@ -31,7 +31,7 @@ fn tried(n Node&) I64 ? {
 type Bag struct(head Node&) {
     head
 }
-fn (b Bag&) Str() String { return "b" $peek(b.head) " " $looped(b.head) " " $(try tried(b.head) catch default 0) }
+fn (b Bag&) Str() String { return "b" + $peek(b.head) + " " + $looped(b.head) + " " + $(try tried(b.head) catch default 0) }
 fn main() ? {
     s := $Bag(Node(4))
     assert s == "b8 30 4", s

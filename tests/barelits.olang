@@ -50,7 +50,7 @@ fn pick<T>(fallback T, xs Array<T>&) T { return xs[0] if xs.Len() > 0 else fallb
 
 fn kind(words Array<String&>&) String {
     return match words {
-        case ["test", file, ...rest]: "test " $file " +" $rest.Len()
+        case ["test", file, ...rest]: "test " + $file + " +" + $rest.Len()
         case ["build", ...]: "build"
         case Array<String&>[]: "nothing"
         case _: "other"

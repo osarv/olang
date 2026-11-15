@@ -8,7 +8,7 @@ type E enum {
     F(f Array<I64>)
     N
 }
-fn E.wrap(i I64) E { return E.A($i "-payload") }
+fn E.wrap(i I64) E { return E.A($i + "-payload") }
 fn main() ? io.Error {
     e := E.wrap(1)
     m := match e {

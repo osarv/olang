@@ -16,7 +16,7 @@ fn Node.make(v I64) mut Node& ? E {
 }
 fn real(t String&) String ? E {
     if t.Len() > 3 { error E.Empty }
-    return "real " $t
+    return "real " + $t
 }
 fn churn() {
     for k in range 50 {
@@ -26,7 +26,7 @@ fn churn() {
 }
 fn top(path String&, n I64) String {
     dir := path
-    for i in range n { dir = $dir "/" $i }
+    for i in range n { dir = $dir + "/" + $i }
     return $(try real(dir) catch default dir)
 }
 fn main() ? {
@@ -39,10 +39,10 @@ fn main() ? {
         m := try Node.make(n - 5) catch default d
         m.v = 3
         churn()
-        try io.PutLine($b.v " " $m.v)
+        try io.PutLine($b.v + " " + $m.v)
     }
     t := top("ab", n)
     u := top("abc", 0)
     churn()
-    try io.PutLine($t " " $u)
+    try io.PutLine($t + " " + $u)
 }

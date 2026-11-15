@@ -104,7 +104,7 @@ fn main() ? {
     changed I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("fnref_migrate: cannot read " $path)
+            srcmask.SayErr("fnref_migrate: cannot read " + $path)
             os.Exit(1)
         }
         mine := Count()
@@ -112,15 +112,15 @@ fn main() ? {
         total += mine.N
         if out == src: continue
         changed++
-        if verbose: srcmask.Say($path ": " $mine.N " function types marked")
+        if verbose: srcmask.Say($path + ": " + $mine.N + " function types marked")
         if check: continue
         try os.WriteFile(path, out) catch {
-            srcmask.SayErr("fnref_migrate: cannot write " $path)
+            srcmask.SayErr("fnref_migrate: cannot write " + $path)
             os.Exit(1)
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total " function types marked")
+    srcmask.Say($verb + $changed + " files: " + $total + " function types marked")
     if check and changed > 0: os.Exit(1)
 }
 

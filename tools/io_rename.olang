@@ -39,14 +39,14 @@ fn replaceWord(src String&, from String&, to String&, bare Bool, c mut Count&) S
 }
 
 # the old names, written in pieces so that the tool run over itself changes nothing
-Olds Array<String&> = Array<String&>["Print" "ln", "Print" "Err" "ln", "Print" "Err", "Print"]
+Olds Array<String&> = Array<String&>["Print" + "ln", "Print" + "Err" + "ln", "Print" + "Err", "Print"]
 News Array<String&> = Array<String&>["PutLine", "PutErrLine", "PutErr", "Put"]
 
 fn rename(src String&, path String&, c mut Count&) String {
     out := $src
     own := path.EndsWith("std/io.olang")
     for k in range Olds.Len() {
-        out = replaceWord(out, "io." $Olds[k], "io." $News[k], false, c)
+        out = replaceWord(out, "io." + $Olds[k], "io." + $News[k], false, c)
         if own { out = replaceWord(out, Olds[k], News[k], true, c) }
     }
     return out
@@ -91,7 +91,7 @@ fn main() ? {
     for path in files {
         if not wanted(path) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("io_rename: cannot read " $path)
+            srcmask.SayErr("io_rename: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -101,22 +101,22 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("io_rename: cannot write " $path)
+                srcmask.SayErr("io_rename: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.n " names")
+    srcmask.Say($verb + $changed + " files: " + $total.n + " names")
     if check and changed > 0 { os.Exit(1) }
 }
 
 test "io.Put and its kin become io.Put and its kin; a longer word and a bare name elsewhere are left" {
     n := Count()
-    assert rename("    try io." "Println(\"a\")\n", "x.olang", n) == "    try io.PutLine(\"a\")\n"
-    assert rename("io." "PrintErrln(t) io." "PrintErr(t) io." "Print(t)", "x.olang", n) == "io.PutErrLine(t) io.PutErr(t) io.Put(t)"
-    src := "    Print" "ln(x)\n    myio." "Print(x)\n    io." "Printer := 1\n"
+    assert rename("    try io." + "Println(\"a\")\n", "x.olang", n) == "    try io.PutLine(\"a\")\n"
+    assert rename("io." + "PrintErrln(t) io." + "PrintErr(t) io." + "Print(t)", "x.olang", n) == "io.PutErrLine(t) io.PutErr(t) io.Put(t)"
+    src := "    Print" + "ln(x)\n    myio." + "Print(x)\n    io." + "Printer := 1\n"
     assert rename(src, "x.olang", n) == src
-    assert rename("fn Print" "ln(t String&) ? Error { try Print(t) }\nio." "Print(x)", "std/io.olang", n) == "fn PutLine(t String&) ? Error { try Put(t) }\nio.Put(x)"
+    assert rename("fn Print" + "ln(t String&) ? Error { try Print(t) }\nio." + "Print(x)", "std/io.olang", n) == "fn PutLine(t String&) ? Error { try Put(t) }\nio.Put(x)"
     assert n.n == 7
 }

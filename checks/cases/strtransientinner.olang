@@ -18,7 +18,7 @@ fn (b Bag&) Str() String {
         t := h == h
         return h() if t else 0
     })
-    return "b" $n
+    return "b" + $n
 }
 fn main() ? {
     try io.PutLine($Bag(Node(4)))

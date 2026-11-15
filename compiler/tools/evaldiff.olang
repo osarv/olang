@@ -66,7 +66,7 @@ Skipped Array<String&> = Array<String&>[
 fn main() {
     args := os.Args()
     # absolute, since a case is interpreted in a directory of its own
-    olang := try os.RealPath(toolkit.Compiler()) catch os.Error { toolkit.Die("evaldiff: no compiler " $toolkit.Compiler()) }
+    olang := try os.RealPath(toolkit.Compiler()) catch os.Error { toolkit.Die("evaldiff: no compiler " + $toolkit.Compiler()) }
     verbose := false
     part, parts I64 = 0, 0
     files Vec<String&>
@@ -102,7 +102,7 @@ fn main() {
         else: differ++
     }
     if files.Len() > 1 {
-        toolkit.Say(("== total: files " $files.Len() " same " $same " differing as listed " $known " differing " $differ
+        toolkit.Say(("== total: files " + $files.Len() + " same " + $same + " differing as listed " + $known + " differing " + $differ +
                      "\n"))
     }
     if differ > 0 { os.Exit(1) }
@@ -116,16 +116,16 @@ type result struct() {
 
 fn result.compare(gold toolkit.Golden&, olang String&, f String&, v Bool) result {
     for e in Skipped {
-        if not e.StartsWith($f " - ") { continue }
+        if not e.StartsWith($f + " - ") { continue }
         r := result()
         r.Known = true
-        r.Row = $f ": not interpreted - " $e[f.Len() + 3:] "\n"
+        r.Row = $f + ": not interpreted - " + $e[f.Len() + 3:] + "\n"
         return r
     }
     s0 := toolkit.StoredRun.RunStored(gold, f)
     if not s0.Found {
         r := result()
-        r.Row = $f ": no stored run in compiler/goldens/run.txt (make rungold)\n"
+        r.Row = $f + ": no stored run in compiler/goldens/run.txt (make rungold)\n"
         return r
     }
     return result.program(s0, olang, f) if f.StartsWith("checks/") else result.tests(s0, olang, f, v)
@@ -157,15 +157,15 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
         y := try b.Get(name) catch default "missing"
         if x == y { continue }
         diffs++
-        k := listed($f ": " $name) or listed(f)
+        k := listed($f + ": " + $name) or listed(f)
         if not k { unlisted++ }
-        if v or not k { rows.Push("    " $name ": built " $x ", interpreted " $y $(" (listed)" if k else "") "\n") }
+        if v or not k { rows.Push("    " + $name + ": built " + $x + ", interpreted " + $y + $(" (listed)" if k else "") + "\n") }
     }
     for name in b.Keys() {
         if a.Has(name) { continue }
         diffs++
         if not listed(f) { unlisted++ }
-        rows.Push("    " $name ": not in the built run, interpreted " $(try b.Get(name) catch default "") "\n")
+        rows.Push("    " + $name + ": not in the built run, interpreted " + $(try b.Get(name) catch default "") + "\n")
     }
     # a status differs as the tests that differ say (1 where one fails) - with none differing, only a listed file may
     statusDiffers := p.Status != s0.Status
@@ -173,14 +173,14 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
     r.Equal = diffs == 0 and not statusDiffers
     r.Known = not r.Equal and unlisted == 0
     if r.Equal {
-        r.Row = $f ": same " $a.Len() $stale(f) "\n"
+        r.Row = $f + ": same " + $a.Len() + $stale(f) + "\n"
         return r
     }
     s0ok, s0f := counts(a)
     pok, pf := counts(b)
-    why := "" if b.Len() > 0 else " - " $firstLine($p.Stdout "\n" $p.Stderr)
-    r.Row = ($f ": built " $s0ok " ok " $s0f " fail (status " $s0.Status "); interpreted " $pok " ok " $pf " fail (status "
-             $p.Status "); " $diffs " differ" $(" as listed" if r.Known else "") $why "\n" $rows.ToString())
+    why := "" if b.Len() > 0 else " - " + $firstLine($p.Stdout + "\n" + $p.Stderr)
+    r.Row = ($f + ": built " + $s0ok + " ok " + $s0f + " fail (status " + $s0.Status + "); interpreted " + $pok + " ok " + $pf + " fail (status " +
+             $p.Status + "); " + $diffs + " differ" + $(" as listed" if r.Known else "") + $why + "\n" + $rows.ToString())
     return r
 }
 
@@ -190,11 +190,11 @@ fn result.program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     r := result()
     root := try os.Cwd() catch os.Error { toolkit.Die("evaldiff: no working directory") }
     name := filepath.Base(f)
-    dir := $root "/build/evaldiff/" $name[:name.Len() - 6]
+    dir := $root + "/build/evaldiff/" + $name[:name.Len() - 6]
     try os.RemoveAll(dir) catch os.Error { }
-    try os.MkDirAll(dir) catch os.Error { toolkit.Die("evaldiff: cannot make " $dir) }
+    try os.MkDirAll(dir) catch os.Error { toolkit.Die("evaldiff: cannot make " + $dir) }
     text := toolkit.Read(f)
-    toolkit.Write($dir "/" $name, text)
+    toolkit.Write($dir + "/" + $name, text)
     args := Vec<String&>()
     for a in Array<String&>["timeout", limit(), "env", "OLANG_EVALUATE=1", olang] { args.Push(a) }
     flags := toolkit.Fields(headerLine(text, "# flags: "))
@@ -211,14 +211,14 @@ fn result.program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     r.Equal = sameOut and p.Status == s0.Status
     r.Known = not r.Equal and listed(f)
     if r.Equal {
-        r.Row = $f ": same" $stale(f) "\n"
+        r.Row = $f + ": same" + $stale(f) + "\n"
         try os.RemoveAll(dir) catch os.Error { }
         return r
     }
-    what := "" if sameOut else ", its output (in " $dir ")"
-    toolkit.Write($dir "/interpreted.txt", $out "\n--- standard error\n" $p.Stderr)
-    r.Row = ($f ": differs - status built " $s0.Status ", interpreted " $p.Status $what $(" as listed" if r.Known else "")
-             " - " $firstLine(p.Stderr) "\n")
+    what := "" if sameOut else ", its output (in " + $dir + ")"
+    toolkit.Write($dir + "/interpreted.txt", $out + "\n--- standard error\n" + $p.Stderr)
+    r.Row = ($f + ": differs - status built " + $s0.Status + ", interpreted " + $p.Status + $what + $(" as listed" if r.Known else "") +
+             " - " + $firstLine(p.Stderr) + "\n")
     return r
 }
 
@@ -236,7 +236,7 @@ fn limit() String { return toolkit.Env("EVALTIMEOUT", "600") }
 # whether a difference is listed in Expected: the entry is key, or key and its reason after " - "
 fn listed(key String&) Bool {
     for e in Expected {
-        if e == key or e.StartsWith($key " - ") { return true }
+        if e == key or e.StartsWith($key + " - ") { return true }
     }
     return false
 }
@@ -245,9 +245,9 @@ fn listed(key String&) Bool {
 fn skipped(f String&, a Map<String&, String&>&) Vec<String&> {
     out := Vec<String&>()
     for name in a.Keys() {
-        key := $f ": " $name
+        key := $f + ": " + $name
         for e in Skipped {
-            if e.StartsWith($key " - ") { out.Push(name) }
+            if e.StartsWith($key + " - ") { out.Push(name) }
         }
     }
     return out

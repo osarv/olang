@@ -22,11 +22,11 @@ fn overflowTask() {
 fn main() ? {
     args := os.Args()
     how := args[1] if args.Len() > 1 else ""
-    os.OnCrash("crash.olang crashed: " $how "\n")
+    os.OnCrash("crash.olang crashed: " + $how + "\n")
     c mut Cell& = Cell()
     match how {
         case "overflow" { c.v = deep(100000000) }
-        case "assert" { assert c.v == 1, "c.v is " $c.v }
+        case "assert" { assert c.v == 1, "c.v is " + $c.v }
         case "small" { os.RunOnStack(65536, fn() { c.v = deep(100000000) }) }
         case "task" {
             join { spawn overflowTask() }
@@ -34,7 +34,7 @@ fn main() ? {
         case "deep" {
             n := try args[2].ParseInt() catch default 1000000 if args.Len() > 2 else 1000000
             os.RunOnStack(1 << 30, fn() { c.v = deep(n) + n })
-            try io.PutLine("deep " $c.v)
+            try io.PutLine("deep " + $c.v)
         }
         case "shallow" { c.v = deep(1000000) }
         case _ { try io.PutLine("nothing") }

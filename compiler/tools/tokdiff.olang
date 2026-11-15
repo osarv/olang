@@ -29,7 +29,7 @@ fn main() {
     work := toolkit.Scratch("tokdiff")
     defer toolkit.Clean(work)
     olang := toolkit.Golden.DumpSections(toolkit.RunTool(Dump, "tokens", files))
-    if olang.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " $Dump " printed " $olang.Keys.Len() " of " $files.Len() " files") }
+    if olang.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " + $Dump + " printed " + $olang.Keys.Len() + " of " + $files.Len() + " files") }
     stale := toolkit.HashGoldenStale(g, files)
     isStale := Map<String&, Bool>()
     for f in stale { isStale.Put(f, true) }
@@ -42,23 +42,23 @@ fn main() {
             if bad <= 5 { toolkit.Say(rep) }
         }
     }
-    for f in stale { toolkit.Say("tokdiff: " $f " changed since the golden was captured (make tokgold)\n") }
+    for f in stale { toolkit.Say("tokdiff: " + $f + " changed since the golden was captured (make tokgold)\n") }
     bad += stale.Len()
     if bad > 0 {
-        toolkit.Say("tokdiff: " $bad " of " $files.Len() " files differ\n")
+        toolkit.Say("tokdiff: " + $bad + " of " + $files.Len() + " files differ\n")
         os.Exit(1)
     }
-    toolkit.Say("tokdiff: no difference over " $files.Len() " files\n")
+    toolkit.Say("tokdiff: no difference over " + $files.Len() + " files\n")
 }
 
 # every tracked file's stream, from the scanner, written as the golden
 fn capture() {
     files := toolkit.Tracked("*.olang")
-    if not toolkit.Built(Dump) { toolkit.Die("tokdiff: " $Dump " is not built (make " $Dump ")") }
+    if not toolkit.Built(Dump) { toolkit.Die("tokdiff: " + $Dump + " is not built (make " + $Dump + ")") }
     s := toolkit.Golden.DumpSections(toolkit.RunTool(Dump, "tokens", files))
-    if s.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " $Dump " printed " $s.Keys.Len() " of " $files.Len() " files") }
+    if s.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " + $Dump + " printed " + $s.Keys.Len() + " of " + $files.Len() + " files") }
     toolkit.HashGoldenWrite(Golden, "the C tokenizer's stream (compiler/tools/tokdiff.olang)", files, s, fn(body String&) Bool {
         return body.Len() < 8192 and (body.StartsWith("error ") or (try body.Find("\nerror ") catch default -1) >= 0)
     })
-    toolkit.Say("tokdiff: " $files.Len() " files captured from " $Dump " into " $Golden ".txt\n")
+    toolkit.Say("tokdiff: " + $files.Len() + " files captured from " + $Dump + " into " + $Golden + ".txt\n")
 }

@@ -522,26 +522,26 @@ fn (t Table&) PromiseText(f TypeId) String {
     b := StringBuilder()
     w := t.PromiseWords(f)
     for i in range PromiseNames.Len() {
-        if (w & (I64(1) << i)) != 0 { b.Push(" " $PromiseNames[i]) }
+        if (w & (I64(1) << i)) != 0 { b.Push(" " + $PromiseNames[i]) }
     }
-    for x in t.BorrowsOf(f) { b.Push(" borrows " $t.ParamName(f, x)) }
+    for x in t.BorrowsOf(f) { b.Push(" borrows " + $t.ParamName(f, x)) }
     ks := t.KeepsOf(f)
-    for k in range ks.Len() / 3 { b.Push(" " $t.KeepsText(f, ks[3 * k], ks[3 * k + 1], ks[3 * k + 2])) }
+    for k in range ks.Len() / 3 { b.Push(" " + $t.KeepsText(f, ks[3 * k], ks[3 * k + 1], ks[3 * k + 2])) }
     return b.ToString()
 }
 
 # one "keeps" promise as source writes it: "keeps b", "keeps b in a", "keeps b in a.f"
 fn (t Table&) KeepsText(f TypeId, kept I64, into I64, field I64) String {
-    if into == KeepsHome { return "keeps " $t.ParamName(f, kept) }
-    fs := "." $t.Names.Text(source.NameId(I32(field))) if field != 0 else ""
-    return "keeps " $t.ParamName(f, kept) " in " $t.ParamName(f, into) $fs
+    if into == KeepsHome { return "keeps " + $t.ParamName(f, kept) }
+    fs := "." + $t.Names.Text(source.NameId(I32(field))) if field != 0 else ""
+    return "keeps " + $t.ParamName(f, kept) + " in " + $t.ParamName(f, into) + $fs
 }
 
 # parameter i of a function type by the name it was written with, else by position ("#1" the first)
 fn (t Table&) ParamName(f TypeId, i I64) String {
     ns := t.NamesOf(f)
     if i < ns.Len() { return t.Names.Text(source.NameId(I32(ns[i]))) }
-    return "#" $(i + 1)
+    return "#" + $(i + 1)
 }
 
 # whether a function type may be null ("fn?&(...)", T21)
@@ -633,8 +633,8 @@ fn (t mut Table&) Record(fields ListId) TypeId {
 fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Array<source.NameId>& = Array<source.NameId>(0)) TypeId {
     payloads := t.PlainList(cases)
     key := StringBuilder()
-    for n in names { key.Push($I32(n) ",") }
-    key.Push(":" $I32(payloads))
+    for n in names { key.Push($I32(n) + ",") }
+    key.Push(":" + $I32(payloads))
     k := key.ToString()
     s := try t.shapeKeys.Get(k) catch default -1
     if s < 0 {
@@ -1566,7 +1566,7 @@ fn (t mut Table&) AddModule(identity String&) I64 {
 fn (t mut Table&) AddDecl(m I64, name source.NameId, kind DeclKind, params I32) DeclId {
     id := DeclId(I32(t.decls.Len()))
     t.decls.Push(decl(m, name, kind, params))
-    t.declKeys.Put($t.Modules[m] ":" $t.Names.Text(name), id)
+    t.declKeys.Put($t.Modules[m] + ":" + $t.Names.Text(name), id)
     return id
 }
 
@@ -1914,7 +1914,7 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
     return match d.K {
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
              Kind.BF16, Kind.F32, Kind.F64: $primLlvm[I64(id)]
-        case Kind.Int: "i" $d.A
+        case Kind.Int: "i" + $d.A
         case Kind.DefaultErr: "i32"
         case Kind.ErrVal: "i32" if t.Repr(id) == TypeId(5) else t.Llvm(t.Repr(id))
         case Kind.Noreturn: "void"
@@ -1930,17 +1930,17 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
 
 fn (t mut Table&) arrayLlvm(id TypeId) String {
     if t.Length(id) == TypeId(0) { return "{ i64, ptr }" }
-    return "[" $t.ConstValue(t.Length(id)) " x " $t.Llvm(t.Elem(id)) "]"
+    return "[" + $t.ConstValue(t.Length(id)) + " x " + $t.Llvm(t.Elem(id)) + "]"
 }
 
 fn (t mut Table&) enumLlvm(id TypeId) String {
     if t.PayloadSize(id) < 0 { return "i32" }
-    return "{ i64, [" $(t.PayloadSize(id) / 8) " x i64] }"
+    return "{ i64, [" + $(t.PayloadSize(id) / 8) + " x i64] }"
 }
 
 fn (t mut Table&) namedLlvm(id TypeId) String {
     return match t.DeclKindOf(t.DeclOf(id)) {
-        case DeclKind.Struct: "[" $t.Size(id) " x i8]" if t.Packed(id) else t.structName(id)
+        case DeclKind.Struct: "[" + $t.Size(id) + " x i8]" if t.Packed(id) else t.structName(id)
         case DeclKind.Enum: t.enumLlvm(id)
         case DeclKind.Error: "i32"
         case DeclKind.Over: $t.Llvm(t.Base(id))
@@ -1954,10 +1954,10 @@ fn (t mut Table&) namedLlvm(id TypeId) String {
 # List<Expr&>: every reference is one pointer)
 fn (t mut Table&) structName(id TypeId) String {
     c := t.Canon(id)
-    if t.Args(id) == ListId(0) { return $"%\"" $c "\"" }
+    if t.Args(id) == ListId(0) { return $"%\"" + $c + "\"" }
     lt := try c.Find("<") catch default c.Len()
     h1, h2 := hash128(t.StructBody(id))
-    return $"%\"" $c[:lt] "." $hex16(h1) $hex16(h2) "\""
+    return $"%\"" + $c[:lt] + "." + $hex16(h1) + $hex16(h2) + "\""
 }
 
 # a struct's fields spelled as an LLVM aggregate: "{ i32, ptr }"
@@ -1988,7 +1988,7 @@ fn (t mut Table&) RetLlvm(f TypeId) String {
     if r != VoidT and t.ViaMemory(r) { return "i32" if errs else "void" }
     if not errs { return $t.Llvm(r) }
     if r == VoidT { return "i32" }
-    return "{ i32, " $t.Llvm(r) " }"
+    return "{ i32, " + $t.Llvm(r) + " }"
 }
 
 # how each parameter is passed: "v" as a value, "m" through memory (ViaMemory), "s" a function value split into its
@@ -2021,20 +2021,20 @@ fn (t Table&) canonPromises(b mut StringBuilder&, f TypeId) {
     sep := ""
     for i in range PromiseNames.Len() {
         if (w & (I64(1) << i)) == 0: continue
-        b.Push($sep $PromiseNames[i])
+        b.Push($sep + $PromiseNames[i])
         sep = ", "
     }
     for x in t.BorrowsOf(f) {
-        b.Push($sep "borrows " $x)
+        b.Push($sep + "borrows " + $x)
         sep = ", "
     }
     ks := t.KeepsOf(f)
     for k in range ks.Len() / 3 {
-        b.Push($sep "keeps " $ks[3 * k])
+        b.Push($sep + "keeps " + $ks[3 * k])
         sep = ", "
         if ks[3 * k + 1] == KeepsHome: continue
-        b.Push(" in " $ks[3 * k + 1])
-        if ks[3 * k + 2] != 0 { b.Push("." $t.Names.Text(source.NameId(I32(ks[3 * k + 2])))) }
+        b.Push(" in " + $ks[3 * k + 1])
+        if ks[3 * k + 2] != 0 { b.Push("." + $t.Names.Text(source.NameId(I32(ks[3 * k + 2])))) }
     }
 }
 
@@ -2063,13 +2063,13 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
         case Kind.Noreturn { b.Push("noreturn") }
         case Kind.ErrWords {
             t.canon(b, t.ErrOf(id))
-            b.Push(".#" $t.ErrMask(id))
+            b.Push(".#" + $t.ErrMask(id))
         }
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
              Kind.BF16, Kind.F32, Kind.F64 {
             b.Push("void" if id == VoidT else primNames[I64(id)])
         }
-        case Kind.Int { b.Push($("I" if d.B == 1 else "U") $d.A) }
+        case Kind.Int { b.Push($("I" if d.B == 1 else "U") + $d.A) }
         case Kind.Named { t.canonNamed(b, id) }
         case Kind.Array {
             b.Push("Array<")
@@ -2118,7 +2118,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             }
             b.PushChar('}')
         }
-        case Kind.Var { b.Push("<" $d.A "." $d.B ">") }
+        case Kind.Var { b.Push("<" + $d.A + "." + $d.B + ">") }
         case Kind.Const {
             ty := t.ConstType(id)
             if ty == BoolT {
@@ -2129,7 +2129,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
                 b.Push($d.B)
             }
         }
-        case Kind.ConstExpr { b.Push("<" $t.Pattern(id) ">") }
+        case Kind.ConstExpr { b.Push("<" + $t.Pattern(id) + ">") }
         case Kind.Any {
             b.Push("any ")
             t.canon(b, t.AnyTrait(id))
@@ -2256,7 +2256,7 @@ fn Symbol(text String&) String {
     s := b.ToString()
     if s.Len() <= 120 { return s }
     h1, h2 := hash128(text)
-    return $s[:88] "_H" $hex16(h1) $hex16(h2)
+    return $s[:88] + "_H" + $hex16(h1) + $hex16(h2)
 }
 
 # whether ch is what a symbol olang writes (types.Symbol) holds after "_" as one of its escapes' two digits
@@ -2298,7 +2298,7 @@ fn Demangle(sym String&) String {
     }
     text := b.ToString()
     if not text.Contains(".") { return $sym }
-    return $text "..." if cut else text
+    return $text + "..." if cut else text
 }
 
 fn hex2(v U8) String { return I64(v).Format(16).PadStart(2, '0') }
@@ -2440,7 +2440,7 @@ test "symbols are injective and bounded" {
     assert Symbol("std/prelude/list:List<I64>") == "std_2fprelude_2flist_3aList_3cI64_3e"
     assert Symbol("a_b") != Symbol("a/b") and Symbol("a_2fb") != Symbol("a/b")
     long := "x".Repeat(200)
-    assert Symbol(long).Len() == 122 and Symbol(long) != Symbol($long "y")
+    assert Symbol(long).Len() == 122 and Symbol(long) != Symbol($long + "y")
 }
 
 # a table's words (T32): its instance's type's identity first, then $'s renderings - inside another value's (slot -2)
@@ -2453,7 +2453,7 @@ test Demangle "a symbol olang wrote read back as its text; any other as it is" {
     }
     xs := StringBuilder()
     for _ in range 150 { xs.PushChar('x') }
-    long := $"m." $xs.ToString()
-    assert Symbol(long).Len() == 122 and Demangle(Symbol(long)) == $long[:86] "..."
+    long := $"m." + $xs.ToString()
+    assert Symbol(long).Len() == 122 and Demangle(Symbol(long)) == $long[:86] + "..."
     for sym in Array<String&>["__olang_scope_alloc", "memcpy", "_start", "olang_lambda_3", "main"] { assert Demangle(sym) == sym }
 }

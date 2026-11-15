@@ -93,9 +93,9 @@ fn rewriteAt(text String&, at I64) String {
     # already in parentheses of its own - not a call's - the "!" goes after them
     if a > 0 and text[a - 1] == '(' and e < text.Len() and text[e] == ')' and (a < 2 or not (srcmask.IsWord(text[a - 2]) or text[a - 2] == ']' or text[a - 2] == ')')) {
         if e + 1 < text.Len() and text[e + 1] == '!' { return "" }
-        return $text[:e + 1] "!" $text[e + 1:]
+        return $text[:e + 1] + "!" + $text[e + 1:]
     }
-    return $text[:a] "(" $text[a:e] ")!" $text[e:]
+    return $text[:a] + "(" + $text[a:e] + ")!" + $text[e:]
 }
 
 fn main() ? {
@@ -135,9 +135,9 @@ fn main() ? {
     defer try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp "/w" $k
+        work[k] = $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
-            srcmask.SayErr("as_migrate: cannot make " $work[k])
+            srcmask.SayErr("as_migrate: cannot make " + $work[k])
             os.Exit(1)
         }
     }
@@ -158,12 +158,12 @@ fn main() ? {
             }
         }
         made := apply(requests, left)
-        srcmask.Say("round " $round ": " $made " uses of 'as' given '!'")
+        srcmask.Say("round " + $round + ": " + $made + " uses of 'as' given '!'")
         total += made
         if made == 0 { break }
     }
-    srcmask.Say("total: " $total " uses of 'as' given '!'")
-    for l in left { srcmask.Say("by hand: " $l) }
+    srcmask.Say("total: " + $total + " uses of 'as' given '!'")
+    for l in left { srcmask.Say("by hand: " + $l) }
 }
 
 # the edits applied to their files; how many were made, what could not be in left
@@ -193,7 +193,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
         seen Vec<String&>
         for r in mine {
             # a module imported by several files compiled is reported once by each
-            key := $r.Line ":" $r.Col
+            key := $r.Line + ":" + $r.Col
             if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len() { continue }
             seen.Push($key)
             idx := r.Line - 1
@@ -219,7 +219,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
             if k > 0 { b.PushChar('\n') }
             b.Push(lines[k])
         }
-        try os.WriteFile(path, b.ToString()) catch { srcmask.SayErr("as_migrate: cannot write " $path) }
+        try os.WriteFile(path, b.ToString()) catch { srcmask.SayErr("as_migrate: cannot write " + $path) }
     }
     return made
 }

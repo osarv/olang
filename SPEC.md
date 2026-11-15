@@ -267,7 +267,7 @@ usage := """
     """                         # "olang build FILE\n    builds FILE"
 ```
 
-A `RAW_LIT` is one token, a `STR_LIT` in every other respect: it joins with other pieces (E11b), and a line break inside
+A `RAW_LIT` is one token, a `STR_LIT` in every other respect: it joins with other text (E11b), and a line break inside
 it ends no statement (L18).
 
 **L15.** The escapes are `\n`, `\t`, `\r`, `\0`, `\\`, `\'` (in a `CHAR_LIT`), `\"` (in a `STR_LIT`), and two that
@@ -1750,7 +1750,7 @@ always copied, so there is no single instance for a destructor to release or a r
 
 **T29a (a declared type over an array).** Nominality reaches an **array** too: `type String extends Array<Char>` is a
 distinct type from `Array<U8>`, with its own identity and therefore its own methods. Its *representation* is
-unchanged, so it indexes (E16), slices (E16a), reports `Len()` (E23), joins as text (E11b) when its elements are `Char`, renders under `$`
+unchanged, so it indexes (E16), slices (E16a), reports `Len()` (E23), joins as text (E11b) where it is a `String`, renders under `$`
 (E11a) and marshals across the `extern` boundary (X3) exactly as the array it is declared over. This is how
 a built-in array type is given methods at all.
 
@@ -3383,7 +3383,7 @@ every other byte as it was; `FindLast(sub)`, where the last occurrence starts, f
 is found at `Len()`); `Lines()`, a `LineIter` giving each line as a borrow of the text - what comes before each
 newline, one carriage return just before it dropped, the last line needing no newline after it, so `"a\n"` is the one
 line `"a"` and the empty text has none; and `Less`, so `<` and the comparisons derived from it (E31) order two texts
-bytewise, as `Compare` does.
+bytewise, as `Compare` does; and `Plus`, so `+` joins two texts into a new one (E11b).
 
 Text has `t.ParseFloat() F64 ? ParseError`: the `F64` nearest the decimal number `t` writes, correctly rounded (a tie
 to the even one) - an optional `-` or `+`, digits with an optional `.` (`.5` and `5.` are numbers, `.` is not), and an
@@ -3461,7 +3461,7 @@ fn PutErrLine<T>(x T = "") ? io.Error  # x as $ renders it and a line end, to th
 ```
 
 Each takes one value of any type and writes it as `$` renders it (E11a) - text as it is, `try io.PutLine(n)`, `try
-io.PutLine("n is " $n)` - as the prelude's `Print` and `Println` do.
+io.PutLine("n is " + $n)` - as the prelude's `Print` and `Println` do.
 `PutLine` and `PutErrLine` write the text and its line end as one write. Each call writes at once, with nothing held
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
 `io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
@@ -3627,11 +3627,10 @@ and therefore the method.
 ```
 expr     ::= binary [ "if" binary "else" expr ]   (E28)
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
-unary    ::= "not" binary | text | "embed" unary | { unary-op } power   (embed: E38)
+unary    ::= "not" binary | rendering | "embed" unary | { unary-op } power   (embed: E38)
 power    ::= postfix [ "**" unary ]                                    (E5a)
-unary-op ::= "-" | "~" | "++" | "--" | "$"
-text     ::= text-piece text-piece { text-piece }     (E11b)
-text-piece ::= STR_LIT | "$" { unary-op } postfix
+unary-op ::= "-" | "~" | "++" | "--"
+rendering ::= "$" [ "-" | "~" | "$" ] postfix                         (E11a)
 postfix  ::= primary { index | member | call-on | "++" | "--" | "!" }
 primary  ::= literal | try-expr | comptime-expr | call-expr | struct-literal
            | array-literal | comprehension | enum-value | lambda | match-expr | unreachable-expr | IDEN | "(" expr ")"
@@ -3732,7 +3731,7 @@ operators groups left-to-right):
 | 7 | `^` |
 | 8 | `&` |
 | 9 | `<<` `>>` |
-| 10 | `+` `-` |
+| 10 | `+` `-` (`+` on text joins it, E11b) |
 | 11 (tightest) | `*` `/` `%` `@` (`@` only as a type declares it, E31) |
 
 The bitwise operators bind tighter than the comparisons and looser than the shifts, as in Go and Rust: `x & 1 == 0`
@@ -3798,8 +3797,7 @@ type's. So with `b` a `U8`, `b + 300` is an `I64` (and `b + 3` stays a `U8`, the
 `U64`, since a `U64` flows into no signed type; an integer beside a float literal - the two do not meet, and that is a
 compile-time error: one is converted.
 
-**E6b (withdrawn).** `+` does not apply to arrays; no arithmetic operator does. Text is joined by writing
-its pieces side by side (E11b). `+` with two array operands is a compile-time error that says so.
+**E6b (withdrawn).** `+` on arrays is E39's lanes; on text (a `String`) it is E11b's join.
 
 **E7.** `and or xor` require both operands to be `Bool` and produce `Bool`. `and` and `or`
 **short-circuit**: the left operand is evaluated first, and the right one only when the left has not
@@ -3982,26 +3980,29 @@ its type: the value written the way it would be in source:
 
 Only a call that returns nothing has no rendering.
 
-**E11b (joining text).** Two or more **text pieces** written side by side are joined into one text value:
-`"n is " $n "!"`, `$a ", " $b`. A text piece is a string literal (`STR_LIT`, with nothing applied to it)
-or a `$` rendering; nothing else can stand beside one, so `f("a" b)` is a syntax error rather than a join —
-a value becomes text only through `$`. Pieces are written on one line (a line end ends the statement, L18), except
-inside brackets, where a join may run over several lines (L18a): `("n is " $n` then `"!")` on the next. Text on a
-line of its own outside brackets is a statement that discards its value (S3). A parenthesized value right after a piece
-is a call of that piece (E13b) - `"(" $op (" try" if t else "")` calls `op` - and since neither text nor what a piece
-renders is a function there, it is a compile-time error that says to write the value as `$(...)`.
+**E11b (joining text).** `+` with a `String` on either side joins text: `"n is " + $n + "!"`, `$a + ", " + $b`,
+`name + ".olang"`. Each operand is text - a string literal, a `$` rendering (E11a), a `String` value, a slice of one,
+a reference never null to one; a value of any other type is made text only through `$`, and `+` with one is a
+compile-time error naming the rendering to write (`"n = " + n` asks for `$n`). An array of `Char` that is no `String`
+(`Array<Char>`, text still being written, T13a) keeps its lane `+` (E39) beside another array; beside a `String` it is
+a compile-time error naming `String(chars)` or a `StringBuilder`. `+` binds as it does on numbers (E5) and `$` tighter,
+so `"a" + $x.Len() + "b"` renders `x.Len()`; as any binary expression, a join continues onto the next line after a line
+ending in `+`, or anywhere inside parentheses (L18, L18a); where one unary is wanted - a catch's `default` (R9a) - it
+is parenthesized, `catch default ("none: " + $k)`. `s += t` on a `String` place is `s = s + t`.
 
-String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd"`, joined before anything
-else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
-text **value** (T29c) and a temporary, exactly as `$` is (E11a). Its pieces' operands are evaluated left to right,
-each to its value as any expression's is - a number, a `Bool`, a `Char`, a struct, an enum or a function value as it is
-then, a value holding storage of its own (a `Vec`, a `Map`, a struct holding text, QCE) as its own copy of what it is
-then, a reference as the instance it names, an array as the array it names (T7b) - and only then are the pieces
-rendered, left to right, each once; one allocation of the total is made in the scope the result flows into, so the cost
-is linear in the result however many pieces there are. So a later operand changing what an earlier piece holds shows
-in that piece only through what a reference or an array names: in `$g $bump()`, a `bump` writing `g`'s elements
-shows in `g`'s piece if `g` is an array, and does not if `g` is a struct or a `Vec` value. A `:=` declaration takes its type from a
-join or a `$` rendering (D15), since both are text by construction.
+`+` on text is the prelude's `String.Plus` (E31: an operator is a method, M19d), so a generic's `a + b` (G18a), a
+trait requiring `Plus` and the compile-time evaluator (K1) see it as any operator. A chain of them, however grouped -
+`a + (b + c)` included - is **one join**: a join of literals alone is the literal it writes, constant data as text
+written in the program is (T25d); any other join is a text **value** (T29c) and a temporary, exactly as `$` is (E11a).
+Its operands are evaluated left to right, each to its value as any expression's is - a number, a `Bool`, a `Char`, a
+struct, an enum or a function value as it is then, a value holding storage of its own (a `Vec`, a `Map`, a struct
+holding text, QCE) as its own copy of what it is then, a reference as the instance it names, an array as the array it
+names (T7b) - and only then are the pieces rendered, left to right, each once, and copied into one allocation of the
+total made in the scope the result flows into, so the cost is linear in the result however many pieces there are, with
+no text made in between. So a later operand changing what an earlier piece holds shows in that piece only through what
+a reference or an array names: in `$g + $bump()`, a `bump` writing `g`'s elements shows in `g`'s piece if `g` is an
+array, and does not if `g` is a struct or a `Vec` value. A `:=` declaration takes its type from a join or a `$`
+rendering (D15), since both are text by construction.
 
 **E11c (`Str`).** A type takes over its rendering by declaring the method `Str`, or `str` to keep it to its own module
 (M6b): then `$` on it, or on a value rendering it as a part, is an error anywhere else. No parameters, result `String`,
@@ -4546,7 +4547,7 @@ is `a if c else (b if d else e)`. An `if` with no `else` after its condition doe
 The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
 E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c) - a conditional or match of
 numeric literals counting as one (E4a), so `(1.0 if x > 0.0 else 0.0) if c else f` with `f` an `F32` is an `F32`;
-two numeric literals take the wider of their types, two pieces of written text are two `String`s, and two array literals of one element type are
+two numeric literals take the wider of their types, two texts written in place are two `String`s, and two array literals of one element type are
 two arrays of it, whatever their lengths (T7: the length is no part of the type). A reference and a **new value** of its
 referent type (a temporary, E12c: a call's value, a constructor call, an enum case, an array built here - not existing
 storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
@@ -5718,7 +5719,7 @@ simply parenthesizing `cond` as an ordinary sub-expression. `assert` is valid in
 constructor, or destructor body (§9), not
 only inside `test { }` blocks. The optional second `expr` is the assert's **message**: text - a literal, a join
 or `$x` (E11a/E11b), or any other `String` - evaluated **only when the assert fails**, so its cost and its effects
-are paid only then: `assert n < cap, "n is " $n ", cap " $cap`. The message may not leave: it gives text, and is evaluated only
+are paid only then: `assert n < cap, "n is " + $n + ", cap " + $cap`. The message may not leave: it gives text, and is evaluated only
 where the assert fails. A `return` or an `error` statement in it, a `try` an error can leave it through (in a catch block
 in it too), and a `break` or `continue` other than one inside a loop written in it are compile-time errors, as in
 deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unreachable` and a
@@ -5774,7 +5775,7 @@ ends a run normally; a clause or arm doing one of these; a `yield`). One that so
 the only one there), an arm, a clause, deferred code, a post clause, after a statement that may leave - stays a check at
 run time, failing there only where it is reached. The error carries the assert's message (S17), rendered as the run time
 renders it where that can be computed while compiling - by the evaluator, or from what reflection knows of the instance
-(`"field " $f.Name`, G33, G35) - and otherwise the message as written, saying that it reads what only the running
+(`"field " + $f.Name`, G33, G35) - and otherwise the message as written, saying that it reads what only the running
 program knows. Where the instance decides it (its condition or message reads the instance's lengths, type variables or
 reflected members), and wherever the assert is the standard library's, the error is reported at the call that asked for
 it - the program's own call, the outermost of G16b's chain, through function instances and the constructors of type
@@ -7397,7 +7398,7 @@ scope closes.
 **O27 (storage kept for a view).** A **view** of storage - a slice, a borrow of a part, what a callee hands back of an
 argument's storage (O13), a conversion naming a local's storage (T29a), a closure of what it captured (D16d) - kept
 where that storage does not already live has the storage built where the view is kept, as a whole value kept longer
-is (O28): `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` builds each turn's `t` where `keep` lives, a new one
+is (O28): `for k in range n { t := $k + "-x"; keep.Push(t[0:1]) }` builds each turn's `t` where `keep` lives, a new one
 each turn, kept until that scope closes; a slice of a temporary (E16a) has the temporary built there; a generator's
 element viewing what its argument refers to (D18c) has that argument built there, and one viewing what its walk keeps
 has the walk made there. Nothing is copied for it. `-memory` lists each such placement with the view that keeps it
@@ -7409,7 +7410,7 @@ view shows (`$x`, `x.Copy()`): a by-value parameter's own storage (the call's co
 capture's own copy (S13b, D16c), a generator `Next()`'s result scope (D18b), and storage reached through a derived
 scope or a scope not known here (O23a, O12). Storage holding a value with a destructor to run is built where the view
 is kept like any other storage, and the value goes with it: its destructors run as that scope closes (O15), not where
-its variable's block ends - `for i in range 3 { f := Res($i "-file"); keep.Push(f.name[0:1]) }` keeps each turn's `f`
+its variable's block ends - `for i in range 3 { f := Res($i + "-file"); keep.Push(f.name[0:1]) }` keeps each turn's `f`
 until the scope `keep` lives in closes; `-memory` says so for each (B18). What a body that said such an error of its own requires is not said again at its calls: one cause,
 one error.
 
@@ -7429,7 +7430,7 @@ of them allow, and every judgment of this section is then made of it. So:
   value each time its declaration runs, so a loop's turns never share one; its memory is the kept scope's on every
   turn, kept or not (the placement is the program's, not a turn's);
 - what is kept by any other way is placed the same: a value kept through a call's obligation (O10c) - one a statement
-  holds for itself too, as `m[$k "-key"] += v` holds its index for `At` and `SetAt` and `names[i][0] = t` its borrow
+  holds for itself too, as `m[$k + "-key"] += v` holds its index for `At` and `SetAt` and `names[i][0] = t` its borrow
   of `t` (E31b), and the copy of a call's value a callee keeps a view of; a field or an element read off a call's result
   (O18c), the call then landing where the part is kept and a local declared from the part built there with its own
   storage; an argument an instance holds when a store keeps the instance (C2d); a closure a function-valued local is

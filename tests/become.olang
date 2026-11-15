@@ -40,7 +40,7 @@ fn count(t String&, i I64, n I64) I64 {
 # a built result: an argument made for the callee lives where the result goes, which outlives every frame of the chain
 fn pad(n I64, acc String&) String {
     if n == 0: return $acc
-    become pad(n - 1, $acc ".")
+    become pad(n - 1, $acc + ".")
 }
 
 type Counter struct(step I64) {
@@ -102,7 +102,7 @@ fn narrow(a Array<I64>&, n I64) I64 {
 # text rendered at the become, handed to a by-value type variable
 fn spell<T>(t T, n I64) I64 {
     if n == 0: return t.Len()
-    become spell($t "ab", n - 1)
+    become spell($t + "ab", n - 1)
 }
 
 # instances with a destructor made in the blocks a become closes are ended as the tail scope closes, last made first
@@ -161,7 +161,7 @@ test "a run-time array a generic was given is handed on" {
     a := Array<I64>(k, 2)
     a[k - 1] = 5
     assert ends(a, 100000) == 7 and ends(GivenArray, 3) == 6
-    t := $k " end"
+    t := $k + " end"
     assert ends(t, 10) == I64('7') + I64('d')
 }
 
@@ -199,5 +199,5 @@ test "the evaluator agrees" {
     assert BakedRun == 200 and BakedEnds == 6
     assert sum(100, 0) == 5050                # decided while compiling (S18c)
     assert count("aaa", 0, 0) == 3
-    io.PutLine("become: " $BakedSum)!
+    io.PutLine("become: " + $BakedSum)!
 }

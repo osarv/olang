@@ -19,7 +19,7 @@ fn joins() String {
     y mut Y& = Y(In(5), Array<I64>[1, 2])
     x := X(y)
     v := y.arr
-    return $x " " $y.inner " " $y.inner.n " " $y " " $v " " $x " " $y.arr[0] " " $y.arr
+    return $x + " " + $y.inner + " " + $y.inner.n + " " + $y + " " + $v + " " + $x + " " + $y.arr[0] + " " + $y.arr
 }
 Baked String& = joins()
 fn main() ? {

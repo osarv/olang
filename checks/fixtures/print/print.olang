@@ -4,7 +4,7 @@ fn main() ? io.Error {
     n := 42
     try io.Put("n is ")
     try io.PutLine($n)
-    try io.PutLine("joined " $n " and " $(n + 1))
+    try io.PutLine("joined " + $n + " and " + $(n + 1))
     try io.PutLine()
     try io.PutErr("to the ")
     try io.PutErrLine("standard error")

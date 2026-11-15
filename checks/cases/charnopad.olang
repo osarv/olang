@@ -2,5 +2,5 @@
 # T29f: a Char is no Integer and has no PadStart; the error says how its character is padded
 fn main() ? {
     c := 'q'
-    s := "x" $c.PadStart(3)
+    s := "x" + $c.PadStart(3)
 }

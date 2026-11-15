@@ -32,7 +32,7 @@ fn Node.mk(n I64) Node& ? E {
 }
 fn text(n I64) String ? E {
     if n < 0 { error E.Neg }
-    return "n=" $n
+    return "n=" + $n
 }
 fn many(n I64) Vec<I64> ? E {
     if n < 0 { error E.Neg }
@@ -47,7 +47,7 @@ fn divmod(a I64, b I64) I64, I64 ? E {
 fn churn() I64 {
     t I64 = 0
     for i in range 200 {
-        s := $i $i "-" $(i * 3)
+        s := $i + $i + "-" + $(i * 3)
         t = t + s.Len()
     }
     return t
@@ -125,11 +125,11 @@ fn nested() I64 {
 }
 fn main() ? E, io.Error {
     try io.PutLine($earliest())
-    try io.PutLine($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
-    try io.PutLine($(try sumSq(Array<I64>[1, 2, 3]) catch default -9) " " $(try sumSq(Array<I64>[1, -2, 3000]) catch E.Neg default -1 catch default -2))
+    try io.PutLine($classify(7, 1) + " " + $classify(1, -1) + " " + $classify(7, -1) + " " + $classify(1, 2000))
+    try io.PutLine($(try sumSq(Array<I64>[1, 2, 3]) catch default -9) + " " + $(try sumSq(Array<I64>[1, -2, 3000]) catch E.Neg default -1 catch default -2))
     try io.PutLine(defaulted(Array<I64>[3, -3, 3000, 4]))
     try io.PutLine(counted())
-    try io.PutLine($(try returned() catch E.Neg default 30) " " $broken() " " $nested())
+    try io.PutLine($(try returned() catch E.Neg default 30) + " " + $broken() + " " + $nested())
     a, b String
     p, q Node?&
     l1, l2 Vec<I64>
@@ -145,7 +145,7 @@ fn main() ? E, io.Error {
         spawn d3, d4 = try divmod(17, 0 * run) catch default -1, -2
     }
     churn()
-    try io.PutLine($a " " $b " " $p!.v " " $q!.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
+    try io.PutLine($a + " " + $b + " " + $p!.v + " " + $q!.v + " " + $l1 + " " + $l2.Len() + " " + $d1 + " " + $d2 + " " + $d3 + " " + $d4)
     #...and the earliest failure of a join no clause takes leaves main, reported as an unhandled error
     try join {
         spawn try sq(4 * run)

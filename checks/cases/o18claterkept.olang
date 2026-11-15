@@ -11,7 +11,7 @@ type Src struct(Path String&, Text String&) {
     Text
 }
 
-fn Src.read(path String&) Src { return Src(path, $path "!") }
+fn Src.read(path String&) Src { return Src(path, $path + "!") }
 
 fn retext(s mut Src&, t String&) { s.Text = t }
 

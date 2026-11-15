@@ -80,7 +80,7 @@ fn (w walker&) closer(i I64) I64 {
 }
 
 fn (w mut walker&) say(i I64, what String&) {
-    w.r.hand.Push($lineOf(w.src, I64(w.ts[i].Start)) ": " $what)
+    w.r.hand.Push($lineOf(w.src, I64(w.ts[i].Start)) + ": " + $what)
 }
 
 # the line, from 1, the byte at holds
@@ -189,7 +189,7 @@ fn (w walker&) clauseHeader(i I64) Bool {
 fn migrate(src String&, hand mut Vec<String&>&, path String&) String {
     w := walker(src, scan.Tokens.Scan(src).Toks)
     w.walk()
-    for h in w.r.hand { hand.Push($path ":" $h) }
+    for h in w.r.hand { hand.Push($path + ":" + $h) }
     if w.r.edits.Len() == 0: return src
     es mut Vec<edit>& = w.r.edits
     es.Sort(fn(a edit, b edit): return a.Start < b.Start)
@@ -255,7 +255,7 @@ fn main() ? {
     for path in files {
         if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("match_migrate: cannot read " $path)
+            srcmask.SayErr("match_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -265,13 +265,13 @@ fn main() ? {
         if verbose: srcmask.Say(path)
         if check: continue
         try os.WriteFile(path, out) catch {
-            srcmask.SayErr("match_migrate: cannot write " $path)
+            srcmask.SayErr("match_migrate: cannot write " + $path)
             os.Exit(1)
         }
     }
-    for h in hand { srcmask.Say("by hand: " $h) }
+    for h in hand { srcmask.Say("by hand: " + $h) }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files")
+    srcmask.Say($verb + $changed + " files")
     if check and changed > 0: os.Exit(1)
 }
 

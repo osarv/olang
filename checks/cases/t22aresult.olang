@@ -8,13 +8,13 @@ fn adder(names mut Vec<String&>&) fn&(k String&) {
 }
 fn churn() I64 {
     t := 0
-    for i in range 200 { t += ($i "-" $(i * 3)).Len() }
+    for i in range 200 { t += ($i + "-" + $(i * 3)).Len() }
     return t
 }
 fn main() ? {
     gone := Vec<String&>()
     f := adder(gone)
-    for i in range 4 { f($i "!") }
+    for i in range 4 { f($i + "!") }
     t := churn()
-    try io.PutLine($gone.Join(",") " " $(t > 0))
+    try io.PutLine($gone.Join(",") + " " + $(t > 0))
 }

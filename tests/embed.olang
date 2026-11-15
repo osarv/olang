@@ -7,7 +7,7 @@ TableText := String(embed "embedded/table.txt")
 
 # a path that is no literal: evaluated once the program checks
 Dir := "embedded"
-Word := embed $Dir "/word.txt"
+Word := embed ($Dir + "/word.txt")
 
 # a table parsed from an embedded file while compiling: the sum of its numbers
 fn total(t String&) I64 {

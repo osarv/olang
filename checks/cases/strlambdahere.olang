@@ -18,7 +18,7 @@ fn (b Bag&) Str() String {
             spawn fn() { b.c.v.AtomicAdd(i + 1) }
         }
     }
-    return "b" $b.c.v
+    return "b" + $b.c.v
 }
 fn churn() I64 {
     t I64 = 0

@@ -4,7 +4,7 @@
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t
@@ -22,7 +22,7 @@ fn fresh(n I64) mut Array<I64>& {
 fn main() ? {
     v := Vec<String&>()
     v.Push("a")
-    v.Push($2 "b")
+    v.Push($2 + "b")
     a := v.ToArray()
     b := flat(v)
     c := flat2(v)

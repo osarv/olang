@@ -236,7 +236,7 @@ fn asUnderTry(path String&, src String&, mask String&, o I64, e I64, edits mut V
             continue
         }
         if src[a:b].Contains("(") or src[a:b].Contains("[") {
-            c.left.Push($path ":" $lineOf(src, p) ": an 'as' a try covers ended the program where the value held another case, and fails into the try now: " $srcmask.Strip(lineText(src, p)))
+            c.left.Push($path + ":" + $lineOf(src, p) + ": an 'as' a try covers ended the program where the value held another case, and fails into the try now: " + $srcmask.Strip(lineText(src, p)))
         } else if a > 0 and src[a - 1] == '(' and t < src.Len() and src[t] == ')' and (a < 2 or not (srcmask.IsWord(src[a - 2]) or src[a - 2] == ']' or src[a - 2] == ')')) {
             edits.Push(t + 1)
             texts.Push("!")
@@ -326,7 +326,7 @@ fn migrate(path String&, text String&, old Bool, c mut Result&) String {
             # "try x as T": it read "(try x) as T" - unless clauses follow, which it could not have had
             t := typeEnd(src, srcmask.SkipGap(src, mask, br, n + 2))
             if not wordAt(src, mask, srcmask.SkipGap(src, mask, br, t), "catch") {
-                c.left.Push($path ":" $lineOf(src, i) ": 'try x as T' read '(try x) as T', ending the program where the value held another case, and the 'as' fails into the try now: " $srcmask.Strip(lineText(src, i)))
+                c.left.Push($path + ":" + $lineOf(src, i) + ": 'try x as T' read '(try x) as T', ending the program where the value held another case, and the 'as' fails into the try now: " + $srcmask.Strip(lineText(src, i)))
             }
             i = o
             continue
@@ -353,8 +353,8 @@ fn migrate(path String&, text String&, old Bool, c mut Result&) String {
             at = e
             c.changes++
         } else {
-            after := " after '" $lop "'" if lop.Len() > 0 else ""
-            c.left.Push($path ":" $lineOf(src, i) ": a try" $after " read only up to '" $op "' when written before 2026-10-25, and reads on past it now - write '(try ...)' for the first, nothing for the second: " $srcmask.Strip(lineText(src, i)))
+            after := " after '" + $lop + "'" if lop.Len() > 0 else ""
+            c.left.Push($path + ":" + $lineOf(src, i) + ": a try" + $after + " read only up to '" + $op + "' when written before 2026-10-25, and reads on past it now - write '(try ...)' for the first, nothing for the second: " + $srcmask.Strip(lineText(src, i)))
         }
         i = e
     }
@@ -387,7 +387,7 @@ fn main() ? {
     changed I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("try_migrate: cannot read " $path)
+            srcmask.SayErr("try_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -397,14 +397,14 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("try_migrate: cannot write " $path)
+                srcmask.SayErr("try_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.changes " rewrites")
-    for l in total.left { srcmask.Say("by hand: " $l) }
+    srcmask.Say($verb + $changed + " files: " + $total.changes + " rewrites")
+    for l in total.left { srcmask.Say("by hand: " + $l) }
     if check and changed > 0 { os.Exit(1) }
 }
 

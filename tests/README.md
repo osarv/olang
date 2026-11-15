@@ -39,6 +39,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `barelits.olang` - literals with no type before them (E19-E21, E27, S13h, E20): made as the type expected where they
   stand, else their own (`[1, 2]` an `Array<I64>`, `["a": 1]` a `Map<String, I64>`), beside the type-in-front form;
   generic calls, patterns, baked and decided while compiling beside the run time.
+- `textplus.olang` - text joined with `+` (E11b): pieces and String values, `$` binding tighter, grouping, `+=`, a long
+  chain (one join), joins over lines, generics and a trait seeing `String.Plus`; baked and decided while compiling.
 - `intwidths.olang` - integers of every width, I1 to I128 and U1 to U128 (T4a), at compile time and at run time.
 - `condnull.olang` - a conditional of an array reference and `null` (E28, T2c) given to a generic type's method, a generic
   function, a plain function and a typed local, both branches, decided while compiling beside the run time.

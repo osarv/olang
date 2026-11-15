@@ -33,7 +33,7 @@ fn (s mut Server&) OnRequest(i I64, raw String&) {
 fn main() {
     s := Server(64)
     for k in range N {
-        s.OnRequest(k % 64, "GET /index.html HTTP/1.1\nHost: example.com\nAccept: text/html\nX-Request: " $k "\n")
+        s.OnRequest(k % 64, "GET /index.html HTTP/1.1\nHost: example.com\nAccept: text/html\nX-Request: " + $k + "\n")
     }
     n := try s.conns[5].hdrs.Get("Host") catch { unreachable }
     io.PutLine(n)!

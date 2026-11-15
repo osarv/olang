@@ -31,7 +31,7 @@ fn adder(names mut Vec<String&>&) fn&(k String&) {
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -53,7 +53,7 @@ fn added(n I64) String {
     nr mut Vec<String&>& = names
     add := fn(k String&) { nr.Push(k) }
     for i in range n {
-        t := $i "."
+        t := $i + "."
         add(t)
     }
     churn()

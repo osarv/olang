@@ -2,7 +2,7 @@
 Seed mut I64 = 0
 test "located" {
     Seed = Seed + 1
-    assert Seed == 2, "Seed is " $Seed
+    assert Seed == 2, "Seed is " + $Seed
 }
 test "plain" {
     Seed = Seed + 1

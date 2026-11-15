@@ -9,10 +9,10 @@ fn foldsAll(a Array<I64>&) String {
     v Vec<I64>
     for x in a { v.Push(x) }
     out := StringBuilder()
-    out.Push($a.Iter().Take(4).Sum() " " $a.Iter().Skip(2).Sum() " " $a.Iter().Skip(1).Take(3).Sum() " ")
-    out.Push($(try a.Iter().Take(4).Min() catch Exhausted default -1) " " $(try a.Iter().Skip(2).Max() catch Exhausted default -1) " ")
-    out.Push($a.Iter().Take(5).Count(fn(x): return x > 2) " " $v.Iter().Take(3).Sum() " " $v.Iter().Skip(1).Take(2).Sum() " ")
-    out.Push($a.Iter().Take(0).Sum() " " $a.Iter().Take(-3).Sum() " " $a.Iter().Skip(99).Sum() " " $a.Iter().Skip(2).Take(99).Sum())
+    out.Push($a.Iter().Take(4).Sum() + " " + $a.Iter().Skip(2).Sum() + " " + $a.Iter().Skip(1).Take(3).Sum() + " ")
+    out.Push($(try a.Iter().Take(4).Min() catch Exhausted default -1) + " " + $(try a.Iter().Skip(2).Max() catch Exhausted default -1) + " ")
+    out.Push($a.Iter().Take(5).Count(fn(x): return x > 2) + " " + $v.Iter().Take(3).Sum() + " " + $v.Iter().Skip(1).Take(2).Sum() + " ")
+    out.Push($a.Iter().Take(0).Sum() + " " + $a.Iter().Take(-3).Sum() + " " + $a.Iter().Skip(99).Sum() + " " + $a.Iter().Skip(2).Take(99).Sum())
     return out.ToString()
 }
 
@@ -33,7 +33,7 @@ fn foldsFailing(a Array<I64>&) String {
     e := a.Iter().Take(9)
     f := e.Sum()
     g := try e.Next() catch Exhausted default -7
-    return $r " " $n1 " " $n2 " " $r2 " " $m1 " " $m2 " " $f " " $g
+    return $r + " " + $n1 + " " + $n2 + " " + $r2 + " " + $m1 + " " + $m2 + " " + $f + " " + $g
 }
 
 FoldsBaked String& = foldsAll(Array<I64>[5, 3, 8, 1, 9, 2])

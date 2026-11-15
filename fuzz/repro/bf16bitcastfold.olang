@@ -3,8 +3,8 @@ run mut I32 = 5
 fn reinterp(x I32) String {
     hb := BF16.FromBits(F16(x).Bits())
     bh := F16.FromBits(BF16(x).Bits())
-    return $hb " " $I32(hb) " " $bh " " $I32(bh)
+    return $hb + " " + $I32(hb) + " " + $bh + " " + $I32(bh)
 }
 fn main() ? io.Error {
-    try io.Put($reinterp(run) "\n")      # 2050 2048 2.312 2 - "5 5 2.312 5" from -b before the fix
+    try io.Put($reinterp(run) + "\n")      # 2050 2048 2.312 2 - "5 5 2.312 5" from -b before the fix
 }

@@ -46,9 +46,9 @@ fn points(n I64) Iterator<Pt&> {
 
 fn labels(t String&, n I64) Iterator<String&> {
     for i in range n {
-        s String& = $t "-" $i
+        s String& = $t + "-" + $i
         yield s
-        junk := $i "junk"
+        junk := $i + "junk"
         assert junk.Len() > 4
     }
     for w in spans(t) { yield w }
@@ -63,7 +63,7 @@ fn churn() I64 {
     n I64 = 0
     for i in range 100 {
         v := Vec<String&>()
-        for k in range 3 { v.Push($i "-churn-" $k) }
+        for k in range 3 { v.Push($i + "-churn-" + $k) }
         n += v[2].Len()
     }
     return n
@@ -90,7 +90,7 @@ fn sum() I64 {
 }
 
 fn main() {
-    text := $"alpha beta" " gamma delta"
+    text := $"alpha beta" + " gamma delta"
     kept := Vec<String&>()
     keep(text, kept)
     for w in spans(text) {
@@ -101,14 +101,14 @@ fn main() {
     for h in text.Halves() { kept.Push(h) }
     churn()
     for w in kept { io.PutLine(w)! }
-    io.PutLine("count " $spans(text).Count(fn(w) { return w.Len() > 4 }))!
-    io.PutLine("first " $firstLong(text, 5))!
+    io.PutLine("count " + $spans(text).Count(fn(w) { return w.Len() > 4 }))!
+    io.PutLine("first " + $firstLong(text, 5))!
     g := labels(text, 2)
     a := try g.Next() catch default ""
     b := try g.Next() catch default ""
     churn()
     c := try g.Next() catch default ""
-    io.PutLine($a " " $b " " $c)!
+    io.PutLine($a + " " + $b + " " + $c)!
     seen := Vec<Pt&>()
     pg := points(3)
     for p in pg {
@@ -116,15 +116,15 @@ fn main() {
         seen.Push(p)
     }
     churn()
-    for p in seen { io.PutLine("pt " $p.x)! }
-    io.PutLine("drops " $Drops)!
+    for p in seen { io.PutLine("pt " + $p.x)! }
+    io.PutLine("drops " + $Drops)!
     t I64 = 0
     for p in points(2) {
         if p.x > 10 { break }
         t += p.x
     }
-    io.PutLine("t " $t " drops " $Drops)!
+    io.PutLine("t " + $t + " drops " + $Drops)!
     total I64 = 0
     for _ in range 1000 { total += sum() }
-    io.PutLine("sum " $total " drops " $Drops)!
+    io.PutLine("sum " + $total + " drops " + $Drops)!
 }

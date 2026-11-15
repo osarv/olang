@@ -15,7 +15,7 @@ fn main() ? {
     cells mut Bx<mut Cell&>& = Bx<mut Cell&>()
     for _ in range 3 { cells.l.Push(Cell()) }
     for i in range 3 {
-        x String& = "w" $i
+        x String& = "w" + $i
         cells[i].s = x
     }
 }

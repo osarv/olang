@@ -1268,7 +1268,7 @@ fn (p mut Program&) promisesOf(c Context&, s ast.Sig&, f types.TypeId) I64 {
         a := p.promiseParam(c, s, w, 0)
         if a < 0: continue
         if w.Word == token.Tok.Borrows {
-            if borrowed.Has(a): p.promiseErr(c, w, msgs.PromiseTwice($"borrows " $p.text(w.Names[0])))
+            if borrowed.Has(a): p.promiseErr(c, w, msgs.PromiseTwice($"borrows " + $p.text(w.Names[0])))
             if not p.resultMayHold(f) {
                 p.promiseErr(c, w, msgs.PromiseBorrowsNothing("borrows"))
             } else if not p.mayHold(p.T.Items(p.T.Params(f))[a]) {
@@ -1364,7 +1364,7 @@ fn (p mut Program&) keepsPromise(c Context&, s ast.Sig&, f types.TypeId, w ast.P
         ft := p.T.Items(p.T.Fields(at))
         for i in range fs.Len() {
             if fs[i] == fname and i < ft.Len() and not p.mayHold(ft[i]) {
-                p.promiseErr(c, w, msgs.PromiseKeepsInValue($p.text(w.Names[1]) "." $p.text(fname)))
+                p.promiseErr(c, w, msgs.PromiseKeepsInValue($p.text(w.Names[1]) + "." + $p.text(fname)))
                 return none
             }
         }
@@ -1676,8 +1676,8 @@ fn (p mut Program&) ErrorWordName(d types.DeclId, w I64) String {
     name := p.text(p.T.DeclName(d))
     if p.IsRaisedError(d) { return $name }
     ws := p.ErrorWords(d)
-    if w < 0 or w >= ws.Len() { return $name "." $w }
-    return $name "." $p.text(ws[w])
+    if w < 0 or w >= ws.Len() { return $name + "." + $w }
+    return $name + "." + $p.text(ws[w])
 }
 
 # the members a named error set declares (T19a), in order, as written in its module
@@ -1949,7 +1949,7 @@ fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr?
     if f.St == Unfolded and e != null and c.Owner >= 0 and not p.varsBound(c) { f = folded(Pending, 0, types.UnknownT) }
     if f.St == Pending and e != null {
         sp := e.Span()
-        k := p.T.ConstExpr($c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End ":" $I64(want))
+        k := p.T.ConstExpr($c.Owner + ":" + $c.Mi + ":" + $sp.Start + ":" + $sp.End + ":" + $I64(want))
         p.patterns.Put(p.T.A(k), pattern(e, c.Mi, c.Owner, want))
         return k
     }
@@ -1992,7 +1992,7 @@ fn (p mut Program&) varsBound(c Context&) Bool {
 # instance of a generic computes its own (T7c)
 fn (p mut Program&) LengthKey(c Context&, e ast.Expr&) String {
     b := StringBuilder()
-    b.Push($p.L.Mods[c.Mi].File ":" $e.Span().Start)
+    b.Push($p.L.Mods[c.Mi].File + ":" + $e.Span().Start)
     for v in c.Vars {
         b.Push(" ")
         b.Push(p.T.Canon(v.Value))
@@ -2060,7 +2060,7 @@ fn (p mut Program&) LenKey(f ast.Expr&, args Array<ast.Expr&>&) String {
         case ast.Expr.Member(_, y, n) {
             if p.text(n) != "Len" { return "" }
             k := p.lenPath(y, 0)
-            return "" if k == "" else $k ".Len()"
+            return "" if k == "" else $k + ".Len()"
         }
         case _ { return "" }
     }
@@ -2074,7 +2074,7 @@ fn (p mut Program&) lenPath(y ast.Expr&, depth I64) String {
         case ast.Expr.Index(_, z, items) {
             if items.Len() != 1 { return "" }
             k := p.lenPath(z, depth + 1)
-            return "" if k == "" else $k "[0]"
+            return "" if k == "" else $k + "[0]"
         }
         case _ { return "" }
     }
@@ -2508,7 +2508,6 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Lit(_, kind): p.literalType(kind)
         case ast.Expr.Paren(_, y): p.Infer(c, known, y)
         case ast.Expr.Unary(_, op, y): p.unaryType(c, known, op, y)
-        case ast.Expr.Join(_, _): p.textType()
         case ast.Expr.Name(sp, n): try known.Get(n) catch default p.nameType(c, sp, n)
         case ast.Expr.ArrayLit(_, made, items): p.literalMade(c, known, p.Resolve(c, made), items)
         case ast.Expr.Row(_, items): p.ownLiteral(c, known, items)
@@ -2694,6 +2693,8 @@ fn (p mut Program&) binaryType(c Context&, known Map<source.NameId, types.TypeId
     }
     ta := p.Infer(c, known, a)
     tb := p.Infer(c, known, b)
+    # E11b: "+" with text on either side joins text
+    if op == token.Tok.Plus and (ta == p.textType() or tb == p.textType()) { return p.textType() }
     if ta != tb { return types.UnknownT }
     return ta if p.T.IsNumber(ta) else types.UnknownT
 }
@@ -3307,7 +3308,7 @@ fn (p mut Program&) Generational(t types.TypeId) Bool {
 
 # T2d: whether field index of the struct t is a weak place
 fn (p mut Program&) WeakField(t types.TypeId, index I64) Bool {
-    return p.T.KindOf(t) == types.Kind.Named and p.WeakSlots.Has($I64(p.T.DeclOf(t)) " " $index)
+    return p.T.KindOf(t) == types.Kind.Named and p.WeakSlots.Has($I64(p.T.DeclOf(t)) + " " + $index)
 }
 
 # T13a: the word a declared type's declaration writes before its body - immut, or none (Plain); a type that is no
@@ -3610,7 +3611,7 @@ fn callAround(text String&, from I64, q I64) String, I64 {
 # instances per length that decide it while compiling are kept for it alone. Read from the text, so a length held in a
 # local first decides at run time (no meaning changes: only what is decided while compiling)
 fn LengthDecided(text String&, from I64, to I64, name String&) Bool {
-    pat := $name ".Len()"
+    pat := $name + ".Len()"
     at := from
     for at < to {
         k := try text[at:to].Find(pat) catch { return false }
@@ -5098,7 +5099,7 @@ fn (p mut Program&) ErrValWordText(t types.TypeId, code I64) String {
     w := code & 0xFFFF
     if w >= ws.Len() { return "" }
     dm := p.T.DeclModule(d)
-    return $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.ErrorWordName(d, w)
+    return $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) + $p.ErrorWordName(d, w)
 }
 
 # what a declared type's name is (G32), as its own module writes it: its name and arguments, no module before them
@@ -5454,7 +5455,7 @@ fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path
     for k in range 1, path.Len() {
         if t == types.UnknownT { return t }
         if not p.T.Closed(t) {
-            key := p.T.ConstExpr("refl:" $c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End)
+            key := p.T.ConstExpr("refl:" + $c.Owner + ":" + $c.Mi + ":" + $sp.Start + ":" + $sp.End)
             # its own copy of the path, made where the patterns live
             p.patterns.Put(p.T.A(key), pattern(null, c.Mi, c.Owner, types.UnknownT, ast.TypeRef.Named(sp, Array<source.NameId>[x for x in path], Array<ast.TypeRef&>(0))))
             return key
@@ -5678,12 +5679,12 @@ fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
 
 # a program of one file, main.olang, loaded over the repository's std with the host's build constants
 fn testLoad(dir String&, text String&) load.Loader {
-    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
+    try os.WriteFile($dir + "/main.olang", text) catch os.Error { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+    l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                      source.Names(), diag.Diagnostics(false))
-    l.Load($dir "/main.olang")
+    l.Load($dir + "/main.olang")
     return l
 }
 
@@ -5705,65 +5706,65 @@ fn (p mut Program&) roundTrip(text String&) Bool {
 test "declared types and instances: laid out as C lays them out, their canonical texts read back" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n"
-                       "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\ntype E error { BAD }\n"
+    l := testLoad(dir, ("type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n" +
+                       "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\ntype E error { BAD }\n" +
                        "type Meters extends I32\ntype Buf struct() { a := Array<U8>(5) }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
     m := l.Mods[l.Root].Identity
-    pt := try p.ParseCanon($m ":P") catch { unreachable }
+    pt := try p.ParseCanon($m + ":P") catch { unreachable }
     assert p.Layout(pt) and p.T.Size(pt) == 24 and p.T.Align(pt) == 8, $p.T.Size(pt)
     offs := p.T.Offsets(pt)
     assert offs.Len() == 3 and offs[0] == 0 and offs[1] == 8 and offs[2] == 16
     # an instance is its generic's body substituted, laid out once per instance
-    bx := try p.ParseCanon($m ":Box<U8>") catch { unreachable }
-    bs := try p.ParseCanon($m ":Box<std/prelude/text:String&>") catch { unreachable }
+    bx := try p.ParseCanon($m + ":Box<U8>") catch { unreachable }
+    bs := try p.ParseCanon($m + ":Box<std/prelude/text:String&>") catch { unreachable }
     assert p.Layout(bx) and p.T.Size(bx) == 16 and p.Layout(bs) and p.T.Size(bs) == 24 and bx != bs
     assert p.T.Offsets(bs)[1] == 16
     # an enum: a tag word, then the largest payload in whole words
-    sh := try p.ParseCanon($m ":Shape") catch { unreachable }
+    sh := try p.ParseCanon($m + ":Shape") catch { unreachable }
     assert p.Layout(sh) and p.T.Size(sh) == 24 and p.T.Llvm(sh) == "{ i64, [2 x i64] }"
     # a declared number is its base; an array made with a known length is laid out in place (T7c)
-    mt := try p.ParseCanon($m ":Meters") catch { unreachable }
+    mt := try p.ParseCanon($m + ":Meters") catch { unreachable }
     assert p.Layout(mt) and p.T.Size(mt) == 4
-    bf := try p.ParseCanon($m ":Buf") catch { unreachable }
+    bf := try p.ParseCanon($m + ":Buf") catch { unreachable }
     assert p.Layout(bf) and p.T.Size(bf) == 5 and p.T.Align(bf) == 1
-    for text in Array<String&>["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E"
+    for text in Array<String&>["I32", "Array<U8>", "Array<I64, 4>", $m + ":Box<mut " + $m + ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " + $m + ":E"
                         "fn() (I32, Bool) ?", "(I32, Bool)", "struct(I64, F32)", "enum{A(I32) B}"
-                        "mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
+                        "mut Array<std/prelude/text:String&>&", $m + ":Box<" + $m + ":Box<Array<F64>>>"] {
         assert p.roundTrip(text), text
     }
     # no such type
-    assert not p.roundTrip($m ":Nothing") and not p.roundTrip("Q32") and not p.roundTrip($m ":P<U8>")
+    assert not p.roundTrip($m + ":Nothing") and not p.roundTrip("Q32") and not p.roundTrip($m + ":P<U8>")
     assert l.Diags.Errors() == 0, saidRules(l)
 }
 
 test "T16 and G17: a type holding itself, and instances nesting without end" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type A struct() { b B }\ntype B struct() { a A }\ntype D<T> struct() { n D<Array<T>> }\n"
+    l := testLoad(dir, ("type A struct() { b B }\ntype B struct() { a A }\ntype D<T> struct() { n D<Array<T>> }\n" +
                        "type L struct() { next L& }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
     m := l.Mods[l.Root].Identity
-    a := try p.ParseCanon($m ":A") catch { unreachable }
+    a := try p.ParseCanon($m + ":A") catch { unreachable }
     assert not p.Layout(a) and not p.Layout(a)
     assert saidRules(l) == "T16 ", saidRules(l)
-    d := try p.ParseCanon($m ":D<I32>") catch { unreachable }
+    d := try p.ParseCanon($m + ":D<I32>") catch { unreachable }
     assert not p.Layout(d)
     assert saidRules(l) == "T16 G17 ", saidRules(l)
     # a reference breaks the cycle (T16)
-    lt := try p.ParseCanon($m ":L") catch { unreachable }
+    lt := try p.ParseCanon($m + ":L") catch { unreachable }
     assert p.Layout(lt) and p.T.Size(lt) == 8
 }
 
 test "a known length folds as the program computes it (T7c): typed, wrapping, from globals" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("B U8 = 255\nW I64 = 3\nK := W * 4 + 1\ntype S0 struct() { a := Array<U8>(B + 1) }\n"
-                       "type S1 struct() { a := Array<U8>(K - W) }\ntype S2 struct() { a := Array<U8>((2 << 3) | 1) }\n"
+    l := testLoad(dir, ("B U8 = 255\nW I64 = 3\nK := W * 4 + 1\ntype S0 struct() { a := Array<U8>(B + 1) }\n" +
+                       "type S1 struct() { a := Array<U8>(K - W) }\ntype S2 struct() { a := Array<U8>((2 << 3) | 1) }\n" +
                        "type S3 struct() { a := Array<U8>(I64(B) + 1) }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -5771,8 +5772,8 @@ test "a known length folds as the program computes it (T7c): typed, wrapping, fr
     m := l.Mods[l.Root].Identity
     want := Array<I64>[0, 10, 17, 256]
     for i in range 4 {
-        t := try p.ParseCanon($m ":S" $i) catch { unreachable }
-        assert p.Layout(t) and p.T.Size(t) == want[i], $i " " $p.T.Size(t)
+        t := try p.ParseCanon($m + ":S" + $i) catch { unreachable }
+        assert p.Layout(t) and p.T.Size(t) == want[i], $i + " " + $p.T.Size(t)
     }
     assert l.Diags.Errors() == 0, saidRules(l)
 }
@@ -5813,7 +5814,7 @@ test "inference (G9): literals adapt, numbers widen unless a receiver bound them
     try p.UnifyArg(ps[1], p.T.Prim("F64"), b4, false, false) catch Mismatch { unified = false }
     assert not unified
     # G9d: two references differing only in permission meet at read-only, whichever comes first
-    pt := try p.ParseCanon($m ":P") catch { unreachable }
+    pt := try p.ParseCanon($m + ":P") catch { unreachable }
     b5 := Binding(owner, 1)
     try p.UnifyArg(ps[0], p.T.Ref(pt, types.Writable), b5, false, false)
     try p.UnifyArg(ps[1], p.T.Ref(pt, types.ReadOnly), b5, false, false)
@@ -5822,39 +5823,39 @@ test "inference (G9): literals adapt, numbers widen unless a receiver bound them
     one := p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i64)))
     two := p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i32)))
     assert one != two and one == p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i64)))
-    assert p.InstanceName(one) == types.Symbol($m ".pick<I64>"), p.InstanceName(one)
+    assert p.InstanceName(one) == types.Symbol($m + ".pick<I64>"), p.InstanceName(one)
     assert p.T.Canon(p.InstanceSig(two)) == "fn(I32, I32) I32 ~[0,2,-1,-1,-2]", p.T.Canon(p.InstanceSig(two))
 }
 
 test "constraints (G19): a type satisfies a trait by its methods, checked where a variable is bound" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type K struct() { }\nfn (k K&) Hash() I64 { return 1 }\ntype N struct() { }\n"
-                       "fn (n N&) Hash() I32 { return 1 }\ntype Box<T> struct() { }\nfn (b Box<T>&) Get(x T) T { return x }\n"
+    l := testLoad(dir, ("type K struct() { }\nfn (k K&) Hash() I64 { return 1 }\ntype N struct() { }\n" +
+                       "fn (n N&) Hash() I32 { return 1 }\ntype Box<T> struct() { }\nfn (b Box<T>&) Get(x T) T { return x }\n" +
                        "fn h<T Hashable<T>>(x T) { }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
     m := l.Mods[l.Root].Identity
-    k := try p.ParseCanon($m ":K") catch { unreachable }
-    n := try p.ParseCanon($m ":N") catch { unreachable }
-    hk := try p.ParseCanon("std/prelude/hash:Hashable<" $m ":K>") catch { unreachable }
-    hn := try p.ParseCanon("std/prelude/hash:Hashable<" $m ":N>") catch { unreachable }
+    k := try p.ParseCanon($m + ":K") catch { unreachable }
+    n := try p.ParseCanon($m + ":N") catch { unreachable }
+    hk := try p.ParseCanon("std/prelude/hash:Hashable<" + $m + ":K>") catch { unreachable }
+    hn := try p.ParseCanon("std/prelude/hash:Hashable<" + $m + ":N>") catch { unreachable }
     assert p.Satisfies(k, hk) and not p.Satisfies(n, hn)
     f := p.FnNamed(l.Root, l.Names.Intern("h"))
     p.Sig(f)
     assert p.BoundMet(FnOwner(f), p.T.List(Array<types.TypeId>(1, k)))
     assert not p.BoundMet(FnOwner(f), p.T.List(Array<types.TypeId>(1, n)))
     # a method over a generic type, its receiver's variable bound by the receiver (G9b)
-    bx := try p.ParseCanon($m ":Box<I16>") catch { unreachable }
+    bx := try p.ParseCanon($m + ":Box<I16>") catch { unreachable }
     g := p.MethodOf(bx, l.Names.Intern("Get"))
-    assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16 ~[0,2,-1,-1,-2]", p.T.Canon(p.MethodSig(g, bx))
+    assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" + $m + ":Box<I16>&, I16) I16 ~[0,2,-1,-1,-2]", p.T.Canon(p.MethodSig(g, bx))
 }
 
 test "a closed trait (T31a): the prelude's Float, Integer and Number are met by the built-in numbers alone" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type D extends F64\ntype M I32\ntype Fake struct() { }\nfn (f Fake&) Area() F64 { return 0.0 }\n"
+    l := testLoad(dir, ("type D extends F64\ntype M I32\ntype Fake struct() { }\nfn (f Fake&) Area() F64 { return 0.0 }\n" +
                        "fn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -5875,7 +5876,7 @@ test "a closed trait (T31a): the prelude's Float, Integer and Number are met by 
     ch := try p.ParseCanon("std/prelude/text:Char") catch { unreachable }
     assert not p.Satisfies(bo, nu) and not p.Satisfies(ch, it) and not p.Satisfies(ch, nu)
     for x in Array<String&>[":D", ":M", ":Fake"] {
-        t := try p.ParseCanon($m $x) catch { unreachable }
+        t := try p.ParseCanon($m + $x) catch { unreachable }
         assert not p.Satisfies(t, fl) and not p.Satisfies(t, nu), x
     }
 }
@@ -5883,9 +5884,9 @@ test "a closed trait (T31a): the prelude's Float, Integer and Number are met by 
 test "every reference parameter has a scope variable of its own, a reference result a result scope; instances remember where" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
-                       "fn link(a mut N&, b N&) { }\nfn first(l N&) N& { return l }\nfn make() N& { return N(1) }\n"
-                       "fn (l mut N&) Put(x N&) { }\nfn apply(f fn&(a mut N&, b N&), x mut N&, y N&) { }\n"
+    l := testLoad(dir, ("type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n" +
+                       "fn link(a mut N&, b N&) { }\nfn first(l N&) N& { return l }\nfn make() N& { return N(1) }\n" +
+                       "fn (l mut N&) Put(x N&) { }\nfn apply(f fn&(a mut N&, b N&), x mut N&, y N&) { }\n" +
                        "fn id<T>(x T) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -5898,7 +5899,7 @@ test "every reference parameter has a scope variable of its own, a reference res
     assert p.T.ResultFrom(first, 0) == types.OwnScope and p.ScopeVarsOf(first) == Array<I64>[0, types.ResultVar]
     make := p.Sig(p.FnNamed(l.Root, l.Names.Intern("make")))
     assert p.ScopeVarsOf(make) == Array<I64>[types.ResultVar]
-    nt := try p.ParseCanon($m ":N") catch { unreachable }
+    nt := try p.ParseCanon($m + ":N") catch { unreachable }
     put := p.MethodSig(p.MethodOf(nt, l.Names.Intern("Put")), p.T.Ref(nt, types.Writable))
     assert p.T.ShareOf(put, 1) == types.OwnScope and p.ScopeVarsOf(put) == Array<I64>[0, 1]
     apply := p.Sig(p.FnNamed(l.Root, l.Names.Intern("apply")))
@@ -5913,7 +5914,7 @@ test "every reference parameter has a scope variable of its own, a reference res
     assert p.ScopeVarsOf(p.InstanceSig(atI64)) == Array<I64>[] and p.ScopeVarsOf(p.InstanceSig(atRef)) == Array<I64>[0, types.ResultVar]
     # an instance remembers where it was first asked for (G16b)
     p.Asking = Origin(7, source.Span(3, 9), atI64)
-    bx := try p.ParseCanon($m ":Box<I32>") catch { unreachable }
+    bx := try p.ParseCanon($m + ":Box<I32>") catch { unreachable }
     i := p.FnInstance(f, p.T.List1(p.T.Prim("U8")))
     assert p.TypeOrigin(bx).File == 7 and p.TypeOrigin(bx).Within == atI64 and p.InstanceOrigin(i).Sp.Start == 3
     assert p.InstanceOrigin(atI64).File == -1

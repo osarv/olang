@@ -5,18 +5,18 @@ import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t
 }
 type Doc struct() {
-    title String& = $1 "-title-built-at-run-time"
+    title String& = $1 + "-title-built-at-run-time"
 }
 Docs mut Doc& = Doc()
 T String = Docs.title
 fn main() ? {
-    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    Docs.title = $2 + "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
     try io.PutLine(T)
 }

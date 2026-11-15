@@ -124,7 +124,7 @@ fn migrate(text String&, path String&, notes mut Vec<String&>&) String {
                 if w < text.Len() and (text[w] == '>' or (text[w] == ',' and text[i] == '<')) and (word == "I64" or word == "I32" or word == "U8"
                         or word == "U64" or word == "Bool" or word == "Char" or word == "I16" or word == "U16"
                         or word == "U32" or word == "I8") {
-                    notes.Push($path ":" $lineOf(text, i) ": a constant type parameter '" $text[j:w] "' (G20-G28 are gone)")
+                    notes.Push($path + ":" + $lineOf(text, i) + ": a constant type parameter '" + $text[j:w] + "' (G20-G28 are gone)")
                 }
             }
         }
@@ -149,17 +149,17 @@ fn migrate(text String&, path String&, notes mut Vec<String&>&) String {
         b := i
         for b > 0 and text[b - 1] == ' ' { b-- }
         if b >= 2 and text[b - 2:b] == "as" {
-            notes.Push($path ":" $line ": 'as Array<" $elem ", " $n ">&' - a view is a slice now, 'x[0:" $n "]'")
+            notes.Push($path + ":" + $line + ": 'as Array<" + $elem + ", " + $n + ">&' - a view is a slice now, 'x[0:" + $n + "]'")
             i = e
             continue
         }
         # inside another type's argument list: whether it is held by reference is the person's call (T7a)
         if b > 0 and (text[b - 1] == '<' or text[b - 1] == ',') {
-            notes.Push($path ":" $line ": 'Array<" $elem ", " $n ">' as a type argument - 'Array<" $elem ">&' unless its storage is made where it is declared (T7a)")
+            notes.Push($path + ":" + $line + ": 'Array<" + $elem + ", " + $n + ">' as a type argument - 'Array<" + $elem + ">&' unless its storage is made where it is declared (T7a)")
         }
         if hasAt(text, e, "()") {
             out.Push(text[done:i])
-            out.Push($"Array<" $elem ">(" $n ")")
+            out.Push($"Array<" + $elem + ">(" + $n + ")")
             i = e + 2
             done = i
             continue
@@ -170,16 +170,16 @@ fn migrate(text String&, path String&, notes mut Vec<String&>&) String {
             name := text[at:b - (3 if isMut else 0)]
             out.Push(text[done:at])
             if isMut {
-                out.Push($srcmask.StripEnd(name) " mut Array<" $elem "> = Array<" $elem ">(" $n ")")
+                out.Push($srcmask.StripEnd(name) + " mut Array<" + $elem + "> = Array<" + $elem + ">(" + $n + ")")
             } else {
-                out.Push($srcmask.StripEnd(name) " := Array<" $elem ">(" $n ")")
+                out.Push($srcmask.StripEnd(name) + " := Array<" + $elem + ">(" + $n + ")")
             }
             i = e
             done = i
             continue
         }
         out.Push(text[done:i])
-        out.Push($"Array<" $elem ">")
+        out.Push($"Array<" + $elem + ">")
         i = e
         done = i
     }
@@ -190,18 +190,18 @@ fn migrate(text String&, path String&, notes mut Vec<String&>&) String {
 # a file migrated, notes added to: how many files it changed, 0 or 1
 fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) I64 {
     text := try srcmask.ReadText(path) catch {
-        srcmask.SayErr("arrays_migrate: cannot read " $path)
+        srcmask.SayErr("arrays_migrate: cannot read " + $path)
         return 0
     }
     after := migrate(text, path, notes)
     if after == text { return 0 }
     if not dry {
         try os.WriteFile(path, after) catch {
-            srcmask.SayErr("arrays_migrate: cannot write " $path)
+            srcmask.SayErr("arrays_migrate: cannot write " + $path)
             return 0
         }
     }
-    srcmask.Say($("would migrate " if dry else "migrated ") $path)
+    srcmask.Say($("would migrate " if dry else "migrated ") + $path)
     return 1
 }
 
@@ -224,10 +224,10 @@ fn main() ? {
     notes := Vec<String&>()
     changed := 0
     for f in files: changed += migrateFile(f, dry, notes)
-    srcmask.Say($changed " files " $("would change" if dry else "changed"))
+    srcmask.Say($changed + " files " + $("would change" if dry else "changed"))
     if notes.Len() > 0 {
         srcmask.Say("for a person:")
-        for n in notes { srcmask.Say("  " $n) }
+        for n in notes { srcmask.Say("  " + $n) }
     }
 }
 

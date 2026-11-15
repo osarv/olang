@@ -7,13 +7,13 @@ type aW trait for aBtn, aSl {
     Draw() String
 }
 type aBtn struct(label String&) { label }
-fn (b aBtn&) Draw() String { return "[" $b.label "]" }
+fn (b aBtn&) Draw() String { return "[" + $b.label + "]" }
 type aSl struct(at I64) { at }
-fn (s aSl&) Draw() String { return "<" $s.at ">" }
+fn (s aSl&) Draw() String { return "<" + $s.at + ">" }
 fn main() {
     keep := Vec<aBtn&>()
     for i in range 4 {
-        w any aW& = aBtn("b" $i)
+        w any aW& = aBtn("b" + $i)
         match w {
             case aBtn b { keep.Push(b) }
             case aSl _ { }

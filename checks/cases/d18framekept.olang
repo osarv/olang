@@ -28,7 +28,7 @@ fn viaArray(k I64) Iterator<I64> {
 }
 fn churn() I64 {
     junk := Vec<String>()
-    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    for i in range 2000 { junk.Push($i + "abcdefghijklmnopqrstuvwxyz") }
     return junk.Len() - 2000
 }
 fn main() {
@@ -36,5 +36,5 @@ fn main() {
     for x in viaLambda(5) { t += x + churn() }
     u := 0
     for x in viaArray(5) { u += x + churn() }
-    io.PutLine($t " " $u)!
+    io.PutLine($t + " " + $u)!
 }

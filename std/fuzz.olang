@@ -43,7 +43,7 @@ fn Check<? E>(f fn&(data Array<U8>&) ? E) ? E {
         try f(Array<U8>(0))
         for path in Saved() {
             saved := try os.ReadFile(path) catch os.Error { continue }
-            try io.PutErr($"fuzz: replaying " $path "\n") catch io.Error { }
+            try io.PutErr($"fuzz: replaying " + $path + "\n") catch io.Error { }
             try f(saved)
         }
         return
@@ -117,7 +117,7 @@ fn Save(data Array<U8>&) String {
     if name == "" or file == "" { return "" }
     dir := Corpus(file, name)
     try os.MkDirAll(dir) catch os.Error { return "" }
-    path := filepath.Join(dir, $"input-" $U64(data.HashElements()).Format(16))
+    path := filepath.Join(dir, $"input-" + $U64(data.HashElements()).Format(16))
     try os.WriteFile(path, data) catch os.Error { return "" }
     return path
 }

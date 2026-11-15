@@ -18,7 +18,7 @@ fn powers(z I64) String {
     w **= 3.0
     k := n
     k **= 2
-    return $(x ** 2.0) " " $(-x ** 2.0) " " $(2 ** 3 ** 2) " " $(n ** 3) " " $e " " $(Poly(2.0) ** 10) " " $(2.0 ** 0.5) " " $w " " $k
+    return $(x ** 2.0) + " " + $(-x ** 2.0) + " " + $(2 ** 3 ** 2) + " " + $(n ** 3) + " " + $e + " " + $(Poly(2.0) ** 10) + " " + $(2.0 ** 0.5) + " " + $w + " " + $k
 }
 
 PowersBaked := powers(0)
@@ -28,7 +28,7 @@ fn lanes(z I64) String {
     b := Array<I64>[2, 3, 4 + z]
     sq := a ** 2.0
     a **= 0.5
-    return $sq " " $(b ** 2) " " $a[0]
+    return $sq + " " + $(b ** 2) + " " + $a[0]
 }
 
 LanesBaked := lanes(0)

@@ -6,7 +6,7 @@ import "std/io"
 
 fn walk<T>(a T, n I64) String {
     if n == 0: return $a
-    become walk($n " text " $a, n - 1)
+    become walk($n + " text " + $a, n - 1)
 }
 
 fn churn() {

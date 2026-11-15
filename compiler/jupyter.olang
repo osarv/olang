@@ -68,22 +68,22 @@ type pending struct(J I64, Frames Array<String>) {
 
 # a fresh id: 32 hex digits, from the time and the process
 fn newId() String {
-    return hex.Encode(sha256.Sum($time.Wall() " " $time.Now() " " $getpid()))[:32]
+    return hex.Encode(sha256.Sum($time.Wall() + " " + $time.Now() + " " + $getpid()))[:32]
 }
 
 # the kernel on the connection file's ports, until a shutdown_request: 0, or 1 where the file cannot be read or a port
 # not listened at
 fn Serve(cfg mut build.Config&, file String&) I32 {
     session.IgnoreBrokenPipes()
-    text := try os.ReadFile(file) catch os.Error e { return fail($"cannot read the connection file " $file ": " $e) }
-    conn := try json.Json.Parse(text) catch json.Error e { return fail($"the connection file is no JSON: " $e) }
+    text := try os.ReadFile(file) catch os.Error e { return fail($"cannot read the connection file " + $file + ": " + $e) }
+    conn := try json.Json.Parse(text) catch json.Error e { return fail($"the connection file is no JSON: " + $e) }
     ip := try conn["ip"].AsStr() catch json.Error default "127.0.0.1"
     k mut kernel& = kernel($(try conn["key"].AsStr() catch json.Error default ""))
     ls Vec<net.Listener>
     for key in PortKeys {
-        port := try conn[key].AsInt() catch json.Error e { return fail($"the connection file has no " $key ": " $e) }
-        a := try net.Addr.Parse($ip ":" $port) catch net.Error e { return fail($e) }
-        ls.Push(try net.Listener.Listen(a) catch net.Error e { return fail($"cannot listen at " $a ": " $e) })
+        port := try conn[key].AsInt() catch json.Error e { return fail($"the connection file has no " + $key + ": " + $e) }
+        a := try net.Addr.Parse($ip + ":" + $port) catch net.Error e { return fail($e) }
+        ls.Push(try net.Listener.Listen(a) catch net.Error e { return fail($"cannot listen at " + $a + ": " + $e) })
     }
     s := prompt.Session(cfg)
     s.Relay = true
@@ -110,7 +110,7 @@ fn Serve(cfg mut build.Config&, file String&) I32 {
 }
 
 fn fail(why String&) I32 {
-    try io.PutErr($"olang jupyter: " $why "\n") catch io.Error { }
+    try io.PutErr($"olang jupyter: " + $why + "\n") catch io.Error { }
     return 1
 }
 
@@ -197,7 +197,7 @@ fn (k mut kernel&) handle(s mut prompt.Session&, j I64, frames Array<String>&) {
         case "interrupt_request": k.reply(j, rq, "interrupt_reply", "{\"status\":\"ok\"}")
         case "shutdown_request" {
             restart := try content["restart"].AsBool() catch json.Error default false
-            k.reply(j, rq, "shutdown_reply", $"{\"status\":\"ok\",\"restart\":" $restart "}")
+            k.reply(j, rq, "shutdown_reply", $"{\"status\":\"ok\",\"restart\":" + $restart + "}")
             k.Done = true
         }
         case _ { }
@@ -230,8 +230,8 @@ fn (k kernel&) sign(header String&, parent String&, metadata String&, content St
 fn (k mut kernel&) header(kind String&) String {
     k.Sent++
     b := StringBuilder()
-    b.Push($"{\"msg_id\":\"" $k.Session "-" $k.Sent "\",\"session\":\"" $k.Session "\",\"username\":\"olang\",\"date\":\"")
-    b.Push($isoNow() "\",\"msg_type\":\"" $kind "\",\"version\":\"" $Protocol "\"}")
+    b.Push($"{\"msg_id\":\"" + $k.Session + "-" + $k.Sent + "\",\"session\":\"" + $k.Session + "\",\"username\":\"olang\",\"date\":\"")
+    b.Push($isoNow() + "\",\"msg_type\":\"" + $kind + "\",\"version\":\"" + $Protocol + "\"}")
     return b.ToString()
 }
 
@@ -257,7 +257,7 @@ fn (k mut kernel&) reply(j I64, rq request&, kind String&, content String&) {
 
 # a message to every subscriber of iopub, its topic before it
 fn (k mut kernel&) publish(kind String&, parent String&, content String&) {
-    msg := k.frames(Array<String>[$"kernel." $k.Session "." $kind], kind, parent, content)
+    msg := k.frames(Array<String>[$"kernel." + $k.Session + "." + $kind], kind, parent, content)
     for j in range k.Socks.Len() {
         if k.Roles[j] != IOPub: continue
         try k.Socks.RefMut(j).Send(...msg) catch net.Error { k.Roles[j] = -1 }
@@ -267,14 +267,14 @@ fn (k mut kernel&) publish(kind String&, parent String&, content String&) {
 # the stream of text out of the cell, stdout or stderr, where it wrote any
 fn (k mut kernel&) stream(parent String&, name String&, text String&) {
     if text == "": return
-    k.publish("stream", parent, $"{\"name\":\"" $name "\",\"text\":" $Q(text) "}")
+    k.publish("stream", parent, $"{\"name\":\"" + $name + "\",\"text\":" + $Q(text) + "}")
 }
 
 # ---- the requests ----
 
 fn kernelInfo() String {
     b := StringBuilder()
-    b.Push($"{\"status\":\"ok\",\"protocol_version\":\"" $Protocol "\",\"implementation\":\"olang\",")
+    b.Push($"{\"status\":\"ok\",\"protocol_version\":\"" + $Protocol + "\",\"implementation\":\"olang\",")
     b.Push("\"implementation_version\":\"1\",\"language_info\":{\"name\":\"olang\",\"version\":\"1\",")
     b.Push("\"mimetype\":\"text/x-olang\",\"file_extension\":\".olang\"},")
     b.Push("\"banner\":\"olang - each cell runs in one session, as at the prompt (B22)\",\"help_links\":[]}")
@@ -287,29 +287,29 @@ fn (k mut kernel&) execute(s mut prompt.Session&, j I64, rq request&, content js
     silent := try content["silent"].AsBool() catch json.Error default false
     if not silent: k.Count++
     n := k.Count
-    if not silent: k.publish("execute_input", rq.Header, $"{\"code\":" $Q(code) ",\"execution_count\":" $n "}")
+    if not silent: k.publish("execute_input", rq.Header, $"{\"code\":" + $Q(code) + ",\"execution_count\":" + $n + "}")
     out := Capture(1)
     errs := Capture(2)
-    r := s.Cell(code, label = $"In[" $n "]" if not silent else "silent")
+    r := s.Cell(code, label = $"In[" + $n + "]" if not silent else "silent")
     said := out.End()
     complained := errs.End()
     k.stream(rq.Header, "stdout", said)
     warnings := r.Diags if r.Checked else ""
-    k.stream(rq.Header, "stderr", $complained $warnings $r.Notes)
+    k.stream(rq.Header, "stderr", $complained + $warnings + $r.Notes)
     if r.Shown and not silent {
-        k.publish("execute_result", rq.Header, $"{\"execution_count\":" $n ",\"data\":" $Data(r) ",\"metadata\":{}}")
+        k.publish("execute_result", rq.Header, $"{\"execution_count\":" + $n + ",\"data\":" + $Data(r) + ",\"metadata\":{}}")
     }
     failure := r.Failure if r.Checked else r.Diags
     if failure == "" {
-        k.reply(j, rq, "execute_reply", $"{\"status\":\"ok\",\"execution_count\":" $n ",\"user_expressions\":{},\"payload\":[]}")
+        k.reply(j, rq, "execute_reply", $"{\"status\":\"ok\",\"execution_count\":" + $n + ",\"user_expressions\":{},\"payload\":[]}")
         return
     }
     ename := "RuntimeError" if r.Checked else "CompileError"
     rows Vec<String&>
     for line in failure.TrimEnd().Lines(): rows.Push(Q(line))
-    err := $"\"ename\":\"" $ename "\",\"evalue\":" $Q(FirstLine(failure)) ",\"traceback\":[" $rows.Join(",") "]"
-    k.publish("error", rq.Header, $"{" $err "}")
-    k.reply(j, rq, "execute_reply", $"{\"status\":\"error\",\"execution_count\":" $n "," $err "}")
+    err := $"\"ename\":\"" + $ename + "\",\"evalue\":" + $Q(FirstLine(failure)) + ",\"traceback\":[" + $rows.Join(",") + "]"
+    k.publish("error", rq.Header, $"{" + $err + "}")
+    k.reply(j, rq, "execute_reply", $"{\"status\":\"error\",\"execution_count\":" + $n + "," + $err + "}")
 }
 
 fn FirstLine(t String&) String { return $t[:try t.FindByte('\n') catch default t.Len()] }
@@ -318,10 +318,10 @@ fn FirstLine(t String&) String { return $t[:try t.FindByte('\n') catch default t
 # in base64, as the protocol carries them
 fn Data(r prompt.Reply&) String {
     b := StringBuilder()
-    b.Push($"{\"text/plain\":" $Q(r.Text))
+    b.Push($"{\"text/plain\":" + $Q(r.Text))
     if r.Mime != "" {
         body := base64.Encode(r.Data) if r.Mime == "image/png" else r.Data
-        b.Push($"," $Q(r.Mime) ":" $Q(body))
+        b.Push($"," + $Q(r.Mime) + ":" + $Q(body))
     }
     b.PushChar('}')
     return b.ToString()
@@ -358,7 +358,7 @@ fn complete(s prompt.Session&, content json.Json&) String {
         seen.Put(name, true)
         found.Push(Q(name))
     }
-    return $"{\"status\":\"ok\",\"matches\":[" $found.Join(",") "],\"cursor_start\":" $start ",\"cursor_end\":" $at ",\"metadata\":{}}"
+    return $"{\"status\":\"ok\",\"matches\":[" + $found.Join(",") + "],\"cursor_start\":" + $start + ",\"cursor_end\":" + $at + ",\"metadata\":{}}"
 }
 
 fn str(j json.Json&, key String&) String& { return try j[key].AsStr() catch json.Error default "" }
@@ -405,7 +405,7 @@ fn isoNow() String {
     y, m, d := civil(secs / 86400)
     t := secs % 86400
     micros := $(ns % 1000000000 / 1000)
-    return $y "-" $two(m) "-" $two(d) "T" $two(t / 3600) ":" $two(t / 60 % 60) ":" $two(t % 60) "." $micros.PadStart(6, '0') "Z"
+    return $y + "-" + $two(m) + "-" + $two(d) + "T" + $two(t / 3600) + ":" + $two(t / 60 % 60) + ":" + $two(t % 60) + "." + $micros.PadStart(6, '0') + "Z"
 }
 
 fn two(n I64) String { return $n.PadStart(2, '0') }
@@ -429,14 +429,14 @@ fn civil(days I64) I64, I64, I64 {
 # else ~/.local/share/jupyter - as kernels/olang/kernel.json, running this olang
 fn Install(exe String&, c build.Config&) I32 {
     base := try os.Env("JUPYTER_DATA_DIR") catch default ""
-    if base == "": base = $(try os.Env("HOME") catch default ".") "/.local/share/jupyter"
-    dir := $base "/kernels/olang"
-    try os.MkDirAll(dir) catch os.Error e { return fail($"cannot make " $dir ": " $e) }
-    opts := $(", \"-quick\"" if c.Quick else "") $(", \"-checked\"" if c.Checked else "")     # (B23: the kernel's own options)
-    spec := $"{\n  \"argv\": [" $Q(exe) ", \"jupyter\"" $opts ", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" $
+    if base == "": base = $(try os.Env("HOME") catch default ".") + "/.local/share/jupyter"
+    dir := $base + "/kernels/olang"
+    try os.MkDirAll(dir) catch os.Error e { return fail($"cannot make " + $dir + ": " + $e) }
+    opts := $(", \"-quick\"" if c.Quick else "") + $(", \"-checked\"" if c.Checked else "")     # (B23: the kernel's own options)
+    spec := $"{\n  \"argv\": [" + $Q(exe) + ", \"jupyter\"" + $opts + ", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" + $
         "  \"language\": \"olang\",\n  \"interrupt_mode\": \"message\"\n}\n"
-    try os.WriteFile($dir "/kernel.json", spec) catch os.Error e { return fail($"cannot write " $dir "/kernel.json: " $e) }
-    try io.Put($"olang jupyter: the kernel is installed at " $dir "/kernel.json - pick \"olang\" in a notebook\n") catch io.Error { }
+    try os.WriteFile($dir + "/kernel.json", spec) catch os.Error e { return fail($"cannot write " + $dir + "/kernel.json: " + $e) }
+    try io.Put($"olang jupyter: the kernel is installed at " + $dir + "/kernel.json - pick \"olang\" in a notebook\n") catch io.Error { }
     return 0
 }
 
@@ -446,7 +446,7 @@ test civil "days since 1970 as dates" {
     y, m, d := civil(0)
     assert y == 1970 and m == 1 and d == 1
     y2, m2, d2 := civil(20406)
-    assert y2 == 2025 and m2 == 11 and d2 == 14, $y2 "-" $m2 "-" $d2
+    assert y2 == 2025 and m2 == 11 and d2 == 14, $y2 + "-" + $m2 + "-" + $d2
     y3, m3, d3 := civil(11016)
     assert y3 == 2000 and m3 == 2 and d3 == 29
 }

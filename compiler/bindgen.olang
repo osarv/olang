@@ -289,7 +289,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
             continue
         }
         if kind == "VarDecl" and g.wanted(where) and usable(name) and text(n, "storageClass") != "static" {
-            g.skipped.Push($name ": a variable - an extern variable has no olang form (X1)")
+            g.skipped.Push($name + ": a variable - an extern variable has no olang form (X1)")
         }
     }
 }
@@ -303,7 +303,7 @@ fn (g mut gen&) recordDecl(n json.Json&, name String&, own Bool) {
         r = g.recs.Len() - 1
         g.unnamed.Put(text(n, "id"), r)
     } else {
-        r = g.recordAt($("union " if union else "struct ") $name)
+        r = g.recordAt($("union " if union else "struct ") + $name)
     }
     g.recs[r].Union = union
     if own { g.recs[r].Own = true }
@@ -337,7 +337,7 @@ fn constValue(j json.Json&) String {
 fn (g mut gen&) constant(name String&, v I64) {
     if not usable(name) or name in g.constNames { return }
     ty := "I32" if v >= -2147483648 and v <= 2147483647 else "I64"
-    g.consts.Push($name " " $ty " = " $v)
+    g.consts.Push($name + " " + $ty + " = " + $v)
     g.constNames.Put(name, 0)
     g.taken.Put(name, 0)
 }
@@ -408,7 +408,7 @@ fn (g mut gen&) parseType(t String&, depth I64 = 0) I64 {
     if depth > 32 { return g.bad("a typedef that names itself") }
     p := ctp(ctokens(t))
     r := g.typeName(p, depth)
-    if p.pos < p.toks.Len() { return g.bad($"'" $t "', which is no C type read here") }
+    if p.pos < p.toks.Len() { return g.bad($"'" + $t + "', which is no C type read here") }
     return r
 }
 
@@ -448,12 +448,12 @@ fn (g mut gen&) typeName(p mut ctp&, depth I64) I64 {
     if tag == "enum" {
         base = g.node(CKind.Num, "I32")
     } else if tag != "" {
-        if not usable(named) and not g.all { return g.bad($"'" $tag " " $named "', a " $tag " with no name of its own, or the C compiler's") }
-        if named == "" or named == "(" { return g.bad($"a " $tag " with no name") }
-        base = g.node(CKind.Rec, $tag " " $named)
+        if not usable(named) and not g.all { return g.bad($"'" + $tag + " " + $named + "', a " + $tag + " with no name of its own, or the C compiler's") }
+        if named == "" or named == "(" { return g.bad($"a " + $tag + " with no name") }
+        base = g.node(CKind.Rec, $tag + " " + $named)
     } else if named != "" {
         td := try g.typedefs.Get(named) catch default ""
-        if td == "" { return g.bad($"'" $named "', a type no declaration names") }
+        if td == "" { return g.bad($"'" + $named + "', a type no declaration names") }
         base = g.parseType(td, depth + 1)
     } else {
         base = g.numType(word, signed, longs)
@@ -607,7 +607,7 @@ fn (g mut gen&) packedFields(i I64) Vec<String&> {
         name := g.paramName(r.Names[k], k, used)
         if w >= 0 {
             if w == 0 or n.Kind != CKind.Num or n.Text.StartsWith("F") { return Vec<String&>() }
-            out.Push($"    " $name " " $bitfieldType(n.Text, w) "\n")
+            out.Push($"    " + $name + " " + $bitfieldType(n.Text, w) + "\n")
             bits += w
             continue
         }
@@ -615,13 +615,13 @@ fn (g mut gen&) packedFields(i I64) Vec<String&> {
         if n.Kind == CKind.Arr {
             e := g.nodes[n.To]
             if e.Kind != CKind.Num or e.Text.StartsWith("F") or e.Text == "Bool" or numBits(e.Text) == 0 { return Vec<String&>() }
-            out.Push($"    " $name " := Array<" $("U8" if e.Text == "char" else e.Text) ">(" $n.N ")\n")
+            out.Push($"    " + $name + " := Array<" + $("U8" if e.Text == "char" else e.Text) + ">(" + $n.N + ")\n")
             bits += numBits(e.Text) * n.N
             continue
         }
         # (a _Bool member that is no bitfield takes a byte in C, a Bool field one bit: no packed form)
         if n.Kind != CKind.Num or numBits(n.Text) == 0 or n.Text == "Bool" { return Vec<String&>() }
-        out.Push($"    " $name " " $("U8" if n.Text == "char" else n.Text) "\n")
+        out.Push($"    " + $name + " " + $("U8" if n.Text == "char" else n.Text) + "\n")
         bits += numBits(n.Text)
     }
     return out
@@ -639,8 +639,8 @@ fn (g mut gen&) packedFloat(i I64) Bool {
 # a C bitfield of w bits of a number type's olang name: a Bool for _Bool, else an integer of its width, signed where the
 # type is
 fn bitfieldType(t String&, w I64) String {
-    if t == "Bool" { return "Bool" if w == 1 else "U" $w }
-    return $("I" if t.StartsWith("I") else "U") $w
+    if t == "Bool" { return "Bool" if w == 1 else "U" + $w }
+    return $("I" if t.StartsWith("I") else "U") + $w
 }
 
 # the bits a number type's olang name holds (char as a byte); 0 for a name that is no number's
@@ -694,7 +694,7 @@ fn (g mut gen&) fieldType(t I64) String ? Skip {
             if g.isByte(n.To) { return "CStr?&" }
             if to.Kind == CKind.Rec {
                 i := g.recOf(to.Text)
-                if not g.holdable(i) { return $g.name(i) "?&" }
+                if not g.holdable(i) { return $g.name(i) + "?&" }
             }
             return "CVoid?&"
         }
@@ -721,9 +721,9 @@ fn (g mut gen&) valueType(t I64, callback Bool) String ? Skip {
             if g.isByte(n.To) { return "CStr?&" }
             if to.Kind == CKind.Rec {
                 i := g.recOf(to.Text)
-                if not g.holdable(i) { return $g.name(i) "?&" }
-                if callback { return $("" if n.Ro else "mut ") $g.name(i) "?&" }
-                try g.skip($"a pointer to plain-data struct " $g.name(i) " as a result - an extern gives only an extern type's reference (X2)")
+                if not g.holdable(i) { return $g.name(i) + "?&" }
+                if callback { return $("" if n.Ro else "mut ") + $g.name(i) + "?&" }
+                try g.skip($"a pointer to plain-data struct " + $g.name(i) + " as a result - an extern gives only an extern type's reference (X2)")
             }
             return "CVoid?&"
         }
@@ -751,18 +751,18 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
     match n.Kind {
         case CKind.Num {
             e := "U8" if n.Text == "char" else $n.Text
-            return "Array<" $e ">" if ro else "mut Array<" $e ">&"
+            return "Array<" + $e + ">" if ro else "mut Array<" + $e + ">&"
         }
         case CKind.Rec {
             i := g.recOf(n.Text)
-            return $("" if ro or not g.holdable(i) else "mut ") $g.name(i) "?&"
+            return $("" if ro or not g.holdable(i) else "mut ") + $g.name(i) + "?&"
         }
         case CKind.Ptr {
             to := g.nodes[n.To]
             if g.isChar(n.To) { return "mut Array<CStr?&>&" }
             if to.Kind == CKind.Rec {
                 i := g.recOf(to.Text)
-                if not g.holdable(i) { return "mut Array<" $g.name(i) "?&>&" }
+                if not g.holdable(i) { return "mut Array<" + $g.name(i) + "?&>&" }
             }
             # a pointer to a pointer C gives - to void, or to a struct held in place: C's out parameter of one
             if to.Kind == CKind.Void or to.Kind == CKind.Rec { return "mut Array<CVoid?&>&" }
@@ -775,10 +775,10 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
             b.Push("fn?&(")
             for k in range n.N {
                 if k > 0 { b.Push(", ") }
-                b.Push($"a" $k " " $(try g.valueType(g.params[n.First + k], true)))
+                b.Push($"a" + $k + " " + $(try g.valueType(g.params[n.First + k], true)))
             }
             b.Push(")")
-            if g.nodes[n.To].Kind != CKind.Void { b.Push($" " $(try g.valueType(n.To, true))) }
+            if g.nodes[n.To].Kind != CKind.Void { b.Push($" " + $(try g.valueType(n.To, true))) }
             return b.ToString()
         }
         case CKind.Bad { try g.skip(n.Text) }
@@ -812,8 +812,8 @@ fn (g mut gen&) nameRecord(i I64, td String&) {
         sp := try key.Find(" ") catch default -1
         n = $key[sp + 1:] if sp >= 0 else $key
     }
-    if not usable(n) { n = "c_" $n }
-    for g.taken.Has(n) or preludeName(n) { n = $n "_t" }
+    if not usable(n) { n = "c_" + $n }
+    for g.taken.Has(n) or preludeName(n) { n = $n + "_t" }
     g.recs[i].Name = n
     g.taken.Put(n, 0)
 }
@@ -835,7 +835,7 @@ fn (g mut gen&) paramName(c String&, k I64, used mut Map<String&, I64>&) String 
     i I64 = 0
     for i < c.Len() and c[i] == '_' { i++ }       # C's own spelling of a parameter, "__format": its word
     n := $c[i:]
-    if not usable(n) or n in g.taken or n in used or n == "CVoid" or n == "CStr" { n = "a" $k }
+    if not usable(n) or n in g.taken or n in used or n == "CVoid" or n == "CStr" { n = "a" + $k }
     used.Put(n, 0)
     return n
 }
@@ -849,18 +849,18 @@ fn (g mut gen&) function(f cFunc&) String ? Skip {
     if n.Kind == CKind.Bad { try g.skip(n.Text) }
     if n.Kind != CKind.Fn { try g.skip("its type is no function's") }
     b := StringBuilder()
-    b.Push("fn " $f.Name "(")
+    b.Push("fn " + $f.Name + "(")
     used := Map<String&, I64>()
     for k in range n.N {
         if k > 0 { b.Push(", ") }
         pn := g.paramName(f.Params[k] if k < f.Params.Len() else "", k, used)
-        b.Push($pn " " $(try g.paramType(g.params[n.First + k])))
+        b.Push($pn + " " + $(try g.paramType(g.params[n.First + k])))
     }
     if n.Text == "variadic" { b.Push(", ..." if n.N > 0 else "...") }
     b.Push(")")
     if g.nodes[n.To].Kind != CKind.Void {
         r := try g.valueType(n.To, false)
-        b.Push($" " $r)
+        b.Push($" " + $r)
         if g.nodes[n.To].Kind == CKind.Num and g.numbersOnly(n) { g.fnResults.Put(f.Name, r) }
     } else if noRet {
         b.Push(" noreturn")
@@ -883,19 +883,19 @@ fn (g mut gen&) wrapper(f cFunc&) String ? Skip {
     if ft.Contains("...") { try g.skip("static or inline, and taking a variable number of arguments") }
     res := resultText(ft)
     if res == "" { try g.skip("static or inline, its result's type no olang form wraps") }
-    sym := $"olang_ci_" $g.tag "_" $f.Name
-    g.wrappers.Push($res " " $sym "(")
+    sym := $"olang_ci_" + $g.tag + "_" + $f.Name
+    g.wrappers.Push($res + " " + $sym + "(")
     if f.PTypes.Len() == 0 { g.wrappers.Push("void") }
     for k, pt in f.PTypes {
         if k > 0 { g.wrappers.Push(", ") }
-        g.wrappers.Push($"__typeof__(" $pt ") olang_a" $k)
+        g.wrappers.Push($"__typeof__(" + $pt + ") olang_a" + $k)
     }
     g.wrappers.Push(") { ")
     if res != "void" { g.wrappers.Push("return ") }
-    g.wrappers.Push($f.Name "(")
+    g.wrappers.Push($f.Name + "(")
     for k in range f.PTypes.Len() {
         if k > 0 { g.wrappers.Push(", ") }
-        g.wrappers.Push($"olang_a" $k)
+        g.wrappers.Push($"olang_a" + $k)
     }
     g.wrappers.Push("); }\n")
     return sym
@@ -926,16 +926,16 @@ fn (g mut gen&) structDecl(i I64) String {
     plain := g.plain(i)
     r := g.recs[i]
     if plain and r.Packed {
-        b.Push("type " $r.Name " packed struct() {\n")
+        b.Push("type " + $r.Name + " packed struct() {\n")
         for line in g.packedFields(i) { b.Push(line) }
         b.Push("}\n")
         return b.ToString()
     }
-    b.Push("type " $r.Name " struct() {\n")
+    b.Push("type " + $r.Name + " struct() {\n")
     if not plain {
         # opaque words of its size and alignment (X18): C's to read, the program's to hold in place
         elem := "I64" if r.Align == 8 else "I32" if r.Align == 4 else "I16" if r.Align == 2 else "U8"
-        b.Push($"    bytes := Array<" $elem ">(" $(r.Size / r.Align) ")\n}\n")
+        b.Push($"    bytes := Array<" + $elem + ">(" + $(r.Size / r.Align) + ")\n}\n")
         return b.ToString()
     }
     used := Map<String&, I64>()
@@ -944,10 +944,10 @@ fn (g mut gen&) structDecl(i I64) String {
         ct := g.parseType(r.Types[k])
         if g.nodes[ct].Kind == CKind.Arr {
             e := try g.fieldType(g.nodes[ct].To) catch Skip default "U8"
-            b.Push($"    " $n " := Array<" $e ">(" $g.nodes[ct].N ")\n")
+            b.Push($"    " + $n + " := Array<" + $e + ">(" + $g.nodes[ct].N + ")\n")
         } else {
             ft := try g.fieldType(ct) catch Skip default "U8"
-            b.Push($"    " $n " " $ft "\n")
+            b.Push($"    " + $n + " " + $ft + "\n")
         }
     }
     b.Push("}\n")
@@ -973,62 +973,62 @@ fn (g mut gen&) write(head String&) String {
         if f.Name in seen { continue }
         seen.Put(f.Name, 0)
         if not usable(f.Name) {
-            if not g.all { g.skipped.Push($f.Name ": a name olang cannot declare (a keyword, or beginning with '_')") }
+            if not g.all { g.skipped.Push($f.Name + ": a name olang cannot declare (a keyword, or beginning with '_')") }
             continue
         }
         if preludeName(f.Name) {
-            g.skipped.Push($f.Name ": a name every olang module has already")
+            g.skipped.Push($f.Name + ": a name every olang module has already")
             continue
         }
         if f.Static and not g.all {
-            g.skipped.Push($f.Name ": static or inline in the header - no symbol to link")
+            g.skipped.Push($f.Name + ": static or inline in the header - no symbol to link")
             continue
         }
         if f.Static and g.ownFile.Has(f.Name) {
-            g.skipped.Push($f.Name ": static in its file - C's own to that file")
+            g.skipped.Push($f.Name + ": static in its file - C's own to that file")
             continue
         }
         line := try g.function(f) catch Skip {
-            g.skipped.Push($f.Name ": " $g.why)
+            g.skipped.Push($f.Name + ": " + $g.why)
             continue
         }
         if g.all and (f.Static or f.Symbol != "") {
             sym := f.Symbol
             if f.Static {
                 sym = try g.wrapper(f) catch Skip {
-                    g.skipped.Push($f.Name ": " $g.why)
+                    g.skipped.Push($f.Name + ": " + $g.why)
                     continue
                 }
             }
-            g.symbols.Push($f.Name " " $sym)
+            g.symbols.Push($f.Name + " " + $sym)
         }
-        fns.Push($"    " $line "\n")
+        fns.Push($"    " + $line + "\n")
     }
     g.macroFns()
     out := StringBuilder()
     out.Push(head)
-    for s in g.symbols { out.Push($"# symbol " $s "\n") }
+    for s in g.symbols { out.Push($"# symbol " + $s + "\n") }
     opaque := StringBuilder()
     plains := StringBuilder()
     for i in range g.recs.Len() {
         # (wantRecord and holdable may grow g.recs: each read of a record takes its reference anew - M19g)
         if g.recs.Ref(i).Name == "" or not g.wantRecord(i) { continue }
-        if g.holdable(i): plains.Push($"\n" $g.structDecl(i))
-        else: opaque.Push("    type " $g.recs.Ref(i).Name "\n")
+        if g.holdable(i): plains.Push($"\n" + $g.structDecl(i))
+        else: opaque.Push("    type " + $g.recs.Ref(i).Name + "\n")
     }
-    if opaque.Len() > 0 or fns.Len() > 0 { out.Push($"\nextern {\n" $opaque.ToString() $fns.ToString() "}\n") }
+    if opaque.Len() > 0 or fns.Len() > 0 { out.Push($"\nextern {\n" + $opaque.ToString() + $fns.ToString() + "}\n") }
     out.Push(plains.ToString())
     if g.consts.Len() > 0 {
         out.Push("\n")
-        for c in g.consts { out.Push($c "\n") }
+        for c in g.consts { out.Push($c + "\n") }
     }
     if g.macroDecls.Len() > 0 {
         out.Push("\n")
-        for m in g.macroDecls { out.Push($m "\n") }
+        for m in g.macroDecls { out.Push($m + "\n") }
     }
     if g.skipped.Len() > 0 {
         out.Push("\n# not declared:\n")
-        for s in g.skipped { out.Push("#   " $s "\n") }
+        for s in g.skipped { out.Push("#   " + $s + "\n") }
     }
     return out.ToString()
 }
@@ -1182,7 +1182,7 @@ fn (g mut gen&) expand(toks Array<String&>&, hide mut Vec<String&>&, depth I64) 
             i++
             continue
         }
-        if m.Variadic { try g.skip($"it uses " $t ", which takes a variable number of arguments") }
+        if m.Variadic { try g.skip($"it uses " + $t + ", which takes a variable number of arguments") }
         # the arguments: split at the commas outside parentheses
         args Vec<Vec<String&>>
         cur Vec<String&>
@@ -1203,9 +1203,9 @@ fn (g mut gen&) expand(toks Array<String&>&, hide mut Vec<String&>&, depth I64) 
             }
             j++
         }
-        if j >= toks.Len() { try g.skip($"its use of " $t " is not closed") }
+        if j >= toks.Len() { try g.skip($"its use of " + $t + " is not closed") }
         if cur.Len() > 0 or args.Len() > 0 { args.Push(cur) }
-        if args.Len() != m.Params.Len() { try g.skip($"it gives " $t " another number of arguments") }
+        if args.Len() != m.Params.Len() { try g.skip($"it gives " + $t + " another number of arguments") }
         body Vec<String&>
         for b in m.Body {
             p := try m.Params.FindIndex(fn(x String&) Bool { return x == b }) catch default -1
@@ -1276,11 +1276,11 @@ fn (g mut gen&) cExpr(p mut cparse&) cx ? Skip {
     if p.at() != ":" { try g.skip("a ? with no :") }
     p.pos++
     b := try g.cExpr(p)
-    if a.Kind == KBool and b.Kind == KBool { return cx($"(" $a.Text " if " $g.cBool(c).Text " else " $b.Text ")", KBool, -1, "") }
+    if a.Kind == KBool and b.Kind == KBool { return cx($"(" + $a.Text + " if " + $g.cBool(c).Text + " else " + $b.Text + ")", KBool, -1, "") }
     x := g.cNum(a)
     y := g.cNum(b)
     k := g.cLead(x, y)
-    return cx($"(" $x.Text " if " $g.cBool(c).Text " else " $y.Text ")", k.Kind, k.Var, k.Ty)
+    return cx($"(" + $x.Text + " if " + $g.cBool(c).Text + " else " + $y.Text + ")", k.Kind, k.Var, k.Ty)
 }
 
 fn (g mut gen&) cBinary(p mut cparse&, min I64) cx ? Skip {
@@ -1292,17 +1292,17 @@ fn (g mut gen&) cBinary(p mut cparse&, min I64) cx ? Skip {
         p.pos++
         r := try g.cBinary(p, pr + 1)
         if op == "&&" or op == "||" {
-            l = cx($"(" $g.cBool(l).Text $(" and " if op == "&&" else " or ") $g.cBool(r).Text ")", KBool, -1, "")
+            l = cx($"(" + $g.cBool(l).Text + $(" and " if op == "&&" else " or ") + $g.cBool(r).Text + ")", KBool, -1, "")
         } else if pr == 6 or pr == 7 {
             a := g.cNum(l)
             b := g.cNum(r)
-            l = cx($"(" $a.Text " " $op " " $b.Text ")", KBool, -1, "")
+            l = cx($"(" + $a.Text + " " + $op + " " + $b.Text + ")", KBool, -1, "")
         } else {
             a := g.cNum(l)
             b := g.cNum(r)
             k := a if pr == 8 else g.cLead(a, b)
             if pr == 8 and a.Kind == KInt and b.Kind != KInt { k = cx.lit("", KInt) }
-            l = cx($"(" $a.Text " " $op " " $b.Text ")", k.Kind, k.Var, k.Ty)
+            l = cx($"(" + $a.Text + " " + $op + " " + $b.Text + ")", k.Kind, k.Var, k.Ty)
         }
     }
     return l
@@ -1318,12 +1318,12 @@ fn (g gen&) cLead(a cx, b cx) cx {
 
 fn (g gen&) cBool(x cx) cx {
     if x.Kind == KBool { return x }
-    return cx($"(" $x.Text " != 0)", KBool, -1, "")
+    return cx($"(" + $x.Text + " != 0)", KBool, -1, "")
 }
 
 fn (g gen&) cNum(x cx) cx {
     if x.Kind != KBool { return x }
-    return cx.lit($"(1 if " $x.Text " else 0)", KInt)
+    return cx.lit($"(1 if " + $x.Text + " else 0)", KInt)
 }
 
 fn (g mut gen&) cUnary(p mut cparse&) cx ? Skip {
@@ -1332,12 +1332,12 @@ fn (g mut gen&) cUnary(p mut cparse&) cx ? Skip {
         p.pos++
         x := g.cNum(try g.cUnary(p))
         if t == "+" { return x }
-        return cx($"(" $t $x.Text ")", x.Kind, x.Var, x.Ty)
+        return cx($"(" + $t + $x.Text + ")", x.Kind, x.Var, x.Ty)
     }
     if t == "!" {
         p.pos++
         x := try g.cUnary(p)
-        return cx($"(not " $g.cBool(x).Text ")", KBool, -1, "")
+        return cx($"(not " + $g.cBool(x).Text + ")", KBool, -1, "")
     }
     if t == "(" {
         # a cast: a type's name in parentheses
@@ -1353,7 +1353,7 @@ fn (g mut gen&) cUnary(p mut cparse&) cx ? Skip {
         if ty != "" and p.at() == ")" {
             p.pos++
             x := g.cNum(try g.cUnary(p))
-            return cx($ty "(" $x.Text ")", KType, -1, ty)
+            return cx($ty + "(" + $x.Text + ")", KType, -1, ty)
         }
         p.pos = save
     }
@@ -1387,19 +1387,19 @@ fn (g mut gen&) cPrimary(p mut cparse&) cx ? Skip {
     if t[0] == '\'' { return cx.lit($(try charValue(t)), KInt) }
     if t[0] == '"' { try g.skip("it holds text where an expression is wanted") }
     k := try p.params.FindIndex(fn(x String&) Bool { return x == t }) catch default -1
-    if k >= 0 { return cx($"a" $k, KVar, k, "") }
+    if k >= 0 { return cx($"a" + $k, KVar, k, "") }
     v := try g.enumVals.Get(t) catch default I64.Min
-    if v != I64.Min { return cx.lit($"(" $v ")" if v < 0 else $v, KInt) }
+    if v != I64.Min { return cx.lit($"(" + $v + ")" if v < 0 else $v, KInt) }
     if p.at() == "(" {
         r := try g.fnResults.Get(t) catch default ""
-        if r == "" { try g.skip($"it calls " $t ", which is no function of numbers here") }
+        if r == "" { try g.skip($"it calls " + $t + ", which is no function of numbers here") }
         p.pos++
         b := StringBuilder()
-        b.Push($t "(")
+        b.Push($t + "(")
         n I64 = 0
         for p.at() != ")" {
             if n > 0 {
-                if p.at() != "," { try g.skip($"its call of " $t " is not read") }
+                if p.at() != "," { try g.skip($"its call of " + $t + " is not read") }
                 p.pos++
                 b.Push(", ")
             }
@@ -1410,7 +1410,7 @@ fn (g mut gen&) cPrimary(p mut cparse&) cx ? Skip {
         b.Push(")")
         return cx(b.ToString(), KType if r != "Bool" else KBool, -1, r)
     }
-    try g.skip($"it names " $t ", which has no value here")
+    try g.skip($"it names " + $t + ", which has no value here")
     return cx.lit("", KInt)
 }
 
@@ -1434,7 +1434,7 @@ fn (g mut gen&) cNumber(t String&) cx ? Skip {
         return cx.lit(b.ToString(), KFloat)
     }
     if isHex or d.StartsWith("0b") or d == "0" or not d.StartsWith("0") { return cx.lit(d, KInt) }
-    v := try d[1:].ParseInt(8) catch { try g.skip($"'" $t "', which is no number read here") } default 0
+    v := try d[1:].ParseInt(8) catch { try g.skip($"'" + $t + "', which is no number read here") } default 0
     return cx.lit($v, KInt)
 }
 
@@ -1564,7 +1564,7 @@ fn (g mut gen&) otherConsts() {
         if k == 2 {
             t := textLiteral(body.ToArray())
             if t == "": g.skippedMacro(m.Name, "its text is no olang text literal")
-            else: g.namedConst(m.Name, $m.Name " String = " $t)
+            else: g.namedConst(m.Name, $m.Name + " String = " + $t)
             continue
         }
         if k == 1 {
@@ -1576,7 +1576,7 @@ fn (g mut gen&) otherConsts() {
             if p.pos == body.Len() and x.Kind == KFloat {
                 f32 := body.Len() == 1 and body[0].ToLower().EndsWith("f") or
                        (body.Len() == 3 and body[0] == "(" and body[1].ToLower().EndsWith("f"))
-                g.namedConst(m.Name, $m.Name $(" F32 = " if f32 else " F64 = ") $x.Text)
+                g.namedConst(m.Name, $m.Name + $(" F32 = " if f32 else " F64 = ") + $x.Text)
                 continue
             }
         }
@@ -1586,9 +1586,9 @@ fn (g mut gen&) otherConsts() {
 
 fn (g mut gen&) skippedMacro(name String&, why String&) {
     for s in g.skipped {
-        if s.StartsWith($name ": ") { return }      # said already, as what else it is
+        if s.StartsWith($name + ": ") { return }      # said already, as what else it is
     }
-    g.skipped.Push($name ": a macro - " $why)
+    g.skipped.Push($name + ": a macro - " + $why)
 }
 
 # every function-like macro whose body is an expression becomes a generic function: each parameter a type variable of
@@ -1616,25 +1616,25 @@ fn (g mut gen&) macroFn(m cMacro&) String ? Skip {
     if body.Len() == 0 { try g.skip("its body is empty") }
     p := cparse(body.ToArray(), m.Params)
     x := try g.cExpr(p)
-    if p.pos != body.Len() { try g.skip($"its body is no expression read here, at '" $p.at() "'") }
+    if p.pos != body.Len() { try g.skip($"its body is no expression read here, at '" + $p.at() + "'") }
     b := StringBuilder()
-    b.Push("fn " $m.Name)
+    b.Push("fn " + $m.Name)
     if m.Params.Len() > 0 {
         b.Push("<")
-        for k in range m.Params.Len() { b.Push($(", " if k > 0 else "") "T" $k) }
+        for k in range m.Params.Len() { b.Push($(", " if k > 0 else "") + "T" + $k) }
         b.Push(">")
     }
     b.Push("(")
-    for k in range m.Params.Len() { b.Push($(", " if k > 0 else "") "a" $k " T" $k) }
+    for k in range m.Params.Len() { b.Push($(", " if k > 0 else "") + "a" + $k + " T" + $k) }
     b.Push(") ")
     r := match x.Kind {
-        case KVar: $"T" $x.Var
+        case KVar: $"T" + $x.Var
         case KType: $x.Ty
         case KBool: "Bool"
         case KFloat: "F64"
         case _: "I64"
     }
-    b.Push($r " { return " $x.Text " }")
+    b.Push($r + " { return " + $x.Text + " }")
     return b.ToString()
 }
 
@@ -1679,7 +1679,7 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
     }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     probe := filepath.Join(dir, "probe.c")
-    try os.WriteFile(probe, $include "\n") catch os.Error {
+    try os.WriteFile(probe, $include + "\n") catch os.Error {
         tr.Why = "the probe cannot be written"
         return tr
     }
@@ -1705,8 +1705,8 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
     # the declarations, and each integer macro's value as an enumerator of the probe
     ints := g.intMacros()
     pb := StringBuilder()
-    pb.Push($include "\n")
-    for i, k in ints { pb.Push("enum __olang_m" $i " : long long { __olang_v" $i " = (" $g.macros[k].Name ") };\n") }
+    pb.Push($include + "\n")
+    for i, k in ints { pb.Push("enum __olang_m" + $i + " : long long { __olang_v" + $i + " = (" + $g.macros[k].Name + ") };\n") }
     try os.WriteFile(probe, pb.ToString()) catch os.Error {
         tr.Why = "the probe cannot be written"
         return tr
@@ -1735,9 +1735,9 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
         tr.Why = g.why
         return tr
     }
-    tr.Text = g.write($"# olang's translation of " $display " (X17), made by the compiler: C's declarations as olang declares them\n")
+    tr.Text = g.write($"# olang's translation of " + $display + " (X17), made by the compiler: C's declarations as olang declares them\n")
     if g.wrappers.Len() > 0 or own != "" {
-        tr.C = $"/* olang C import: " $display " */\n" $include "\n" $g.wrappers.ToString()
+        tr.C = $"/* olang C import: " + $display + " */\n" + $include + "\n" + $g.wrappers.ToString()
     }
     return tr
 }
@@ -1779,8 +1779,8 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
     }
     if want.Len() == 0 { return }
     pb := StringBuilder()
-    pb.Push($include "\n")
-    for k, i in want { pb.Push("enum __olang_l" $k " : long long { __olang_z" $k " = sizeof(" $g.spell(i) "), __olang_a" $k " = _Alignof(" $g.spell(i) ") };\n") }
+    pb.Push($include + "\n")
+    for k, i in want { pb.Push("enum __olang_l" + $k + " : long long { __olang_z" + $k + " = sizeof(" + $g.spell(i) + "), __olang_a" + $k + " = _Alignof(" + $g.spell(i) + ") };\n") }
     try os.WriteFile(probe, pb.ToString()) catch os.Error { try g.skip("the probe cannot be written") }
     doc := try g.dump(clang, flags, probe)
     for n in inner(doc) {
@@ -1818,11 +1818,11 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
         return 2
     }
     header := try os.RealPath(path) catch os.Error {
-        said.Write("olang: " $path ": no such file\n")
+        said.Write("olang: " + $path + ": no such file\n")
         return 2
     }
     if not os.Exists(header) {
-        said.Write("olang: " $path ": no such file\n")
+        said.Write("olang: " + $path + ": no such file\n")
         return 2
     }
     dir := try os.MkTemp("", "olang-bindgen") catch os.Error {
@@ -1832,9 +1832,9 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
     defer { try os.RemoveAll(dir) catch os.Error { } }
     probe := filepath.Join(dir, "probe.c")
     g := gen(header)
-    include := $"#include \"" $header "\""
-    try os.WriteFile(probe, $include "\n") catch os.Error {
-        said.Write("olang: bindgen: cannot write " $probe "\n")
+    include := $"#include \"" + $header + "\""
+    try os.WriteFile(probe, $include + "\n") catch os.Error {
+        said.Write("olang: bindgen: cannot write " + $probe + "\n")
         return 2
     }
     pre := try clangSays(Array<String&>[clang, "-E", "-dD", "-x", "c", "-w", probe]) catch Skip {
@@ -1842,21 +1842,21 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
         return 2
     }
     if pre.Status != 0 {
-        said.Write("olang: bindgen: clang could not read " $path ":\n" $pre.Stderr)
+        said.Write("olang: bindgen: clang could not read " + $path + ":\n" + $pre.Stderr)
         return 1
     }
     deps Vec<String&>
     g.readMacros(pre.Stdout, probe, header, deps)
     ints := g.intMacros()
     pb := StringBuilder()
-    pb.Push($include "\n")
-    for i, k in ints { pb.Push("enum __olang_m" $i " : long long { __olang_v" $i " = (" $g.macros[k].Name ") };\n") }
+    pb.Push($include + "\n")
+    for i, k in ints { pb.Push("enum __olang_m" + $i + " : long long { __olang_v" + $i + " = (" + $g.macros[k].Name + ") };\n") }
     try os.WriteFile(probe, pb.ToString()) catch os.Error {
-        said.Write("olang: bindgen: cannot write " $probe "\n")
+        said.Write("olang: bindgen: cannot write " + $probe + "\n")
         return 2
     }
     doc := try g.dump(clang, Array<String&>(0), probe) catch Skip {
-        said.Write("olang: bindgen: clang could not read " $path ": " $g.why "\n")
+        said.Write("olang: bindgen: clang could not read " + $path + ": " + $g.why + "\n")
         return 1
     }
     g.read(doc, probe)
@@ -1876,11 +1876,11 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
     }
     g.otherConsts()
     try g.sizes(clang, Array<String&>(0), probe, include) catch Skip {
-        said.Write("olang: bindgen: clang could not read " $path ": " $g.why "\n")
+        said.Write("olang: bindgen: clang could not read " + $path + ": " + $g.why + "\n")
         return 1
     }
-    head := ($"# Generated by olang bindgen from " $path ":\n" $
-             "# its C declarations as olang declares them (X1-X21) - write the library they are in after \"extern\", as\n" $
+    head := ($"# Generated by olang bindgen from " + $path + ":\n" + $
+             "# its C declarations as olang declares them (X1-X21) - write the library they are in after \"extern\", as\n" + $
              "# 'extern link \"NAME\" {' (X9), or import the header itself (X17).\n")
     result := g.write(head)
     if output == "" {
@@ -1888,7 +1888,7 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
         return 0
     }
     try os.WriteFile(output, result) catch os.Error {
-        said.Write("olang: " $output ": cannot be written\n")
+        said.Write("olang: " + $output + ": cannot be written\n")
         return 2
     }
     return 0

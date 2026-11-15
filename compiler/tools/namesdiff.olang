@@ -14,7 +14,7 @@ import "toolkit"
 fn main() {
     dump := toolkit.Env("NAMESDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/diag.txt"
-    if not toolkit.Built(dump) { toolkit.Die("namesdiff: " $dump " is not built (make " $dump ")") }
+    if not toolkit.Built(dump) { toolkit.Die("namesdiff: " + $dump + " is not built (make " + $dump + ")") }
     root := try os.Cwd() catch os.Error {
         toolkit.Die("namesdiff: no working directory")
         unreachable
@@ -28,14 +28,14 @@ fn main() {
     said := StringBuilder()
     plain := Vec<String&>()
     for c in cases {
-        text := try os.ReadFile("checks/cases/" $c) catch default ""
+        text := try os.ReadFile("checks/cases/" + $c) catch default ""
         args := flagArgs(flagsOf(text))
         if args.Len() == 0: plain.Push(c)
         else: said.Push(names(root, dump, args, Array<String&>[c]))
     }
     if plain.Len() > 0 { said.Push(names(root, dump, Array<String&>(0), plain.ToArray())) }
     n := toolkit.Sections(said.ToString())
-    if n != cases.Len() { toolkit.Die("namesdiff: dump names printed " $n " of " $cases.Len() " cases") }
+    if n != cases.Len() { toolkit.Die("namesdiff: dump names printed " + $n + " of " + $cases.Len() + " cases") }
     new := toolkit.Text(toolkit.Sorted(rows(said.ToString())))
     want := Map<String&, Bool>()
     for c in cases { want.Put(c, true) }
@@ -52,17 +52,17 @@ fn main() {
         toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, old, new)), 40))
         os.Exit(1)
     }
-    toolkit.Say("namesdiff: " $cases.Len() " cases, " $kept.Len() " errors of load's and names' rules, all the same\n")
+    toolkit.Say("namesdiff: " + $cases.Len() + " cases, " + $kept.Len() + " errors of load's and names' rules, all the same\n")
 }
 
 # "dump names" over cases in checks/cases, with args
 fn names(root String&, dump String&, args Array<String&>&, cases Array<String&>&) String {
     full := Vec<String&>()
-    full.Push($root "/" $dump)
+    full.Push($root + "/" + $dump)
     full.Push("names")
     for a in args { full.Push(a) }
     for c in cases { full.Push(c) }
-    return $toolkit.RunShowing(full.ToArray(), Array<String&>["OLANG_STD=" $root "/std"], "checks/cases").Stdout
+    return $toolkit.RunShowing(full.ToArray(), Array<String&>["OLANG_STD=" + $root + "/std"], "checks/cases").Stdout
 }
 
 # what a case's first "# flags:" line says, "" for none
@@ -122,7 +122,7 @@ fn rows(text String&) Vec<String&> {
         if close < 0 { continue }
         rule := line[e + 8:e + close]
         if not ownRule(rule) or line.Contains(": unknown name ") or line.Contains(": unknown function or type ") { continue }   # the checker's, not names'
-        out.Push($c "\t" $head " " $rule)
+        out.Push($c + "\t" + $head + " " + $rule)
     }
     return out
 }

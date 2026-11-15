@@ -31,7 +31,7 @@ Poll I64 = 20
 Wipe String& = "\r\x1b[K"
 
 # frame n, drawn over whatever the line held: the cursor to the line's start, the frame, the label, the rest cleared
-fn Draw(n I64, label String&) String { return $"\r" $Frames[n % Frames.Len()] " " $label "\x1b[K" }
+fn Draw(n I64, label String&) String { return $"\r" + $Frames[n % Frames.Len()] + " " + $label + "\x1b[K" }
 
 # ---- state ----
 
@@ -194,7 +194,7 @@ test Draw "a redraw replaces the line and the erase leaves nothing" {
     for n in range 20 {
         written.Push(Draw(n, "compiling" if n < 10 else "linking"))
         # what is on the line is the latest frame and its label, nothing of an earlier, longer label
-        assert shown(written.ToString()) == $Frames[n % Frames.Len()] " " $("compiling" if n < 10 else "linking")
+        assert shown(written.ToString()) == $Frames[n % Frames.Len()] + " " + $("compiling" if n < 10 else "linking")
     }
     written.Push(Wipe)
     assert shown(written.ToString()) == ""
@@ -206,7 +206,7 @@ test Say "text written beside the spinner starts a clean line" {
     written.Push(Wipe)
     written.Push("clang: a warning\n")
     assert shown(written.ToString()) == "" # the line the cursor is now on is empty, below the warning
-    assert written.ToString().StartsWith($Draw(3, "compiling") "\r\x1b[Kclang")
+    assert written.ToString().StartsWith($Draw(3, "compiling") + "\r\x1b[Kclang")
 }
 
 test Say "without a ticker nothing is drawn and text goes straight through" {

@@ -301,7 +301,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
             bit := Entry(firstLines(explain.FnText(c, sc, f)), Above(text, I64(decl.Sp.Start)), bname)
             bit.File = m.File
             bit.At = I64(decl.Sp.Start)
-            bit.Target = $ast.OwnerTarget(decl, nm) "." $bname
+            bit.Target = $ast.OwnerTarget(decl, nm) + "." + $bname
             md.Items.Push(bit)
             continue
         }
@@ -313,7 +313,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
         it := Entry(line, Above(text, I64(decl.Sp.Start)), name)
         it.File = m.File
         it.At = I64(decl.Sp.Start)
-        it.Target = $ReceiverName(c, f) "." $name
+        it.Target = $ReceiverName(c, f) + "." + $name
         md.Items.Push(it)
     }
     for i in range md.Items.Len() { md.Items[i] = attached(c, mi, md.Items[i], "") }
@@ -334,7 +334,7 @@ fn ReceiverName(c mut typecheck.Checker&, f I64) String {
 # Parent.Member
 fn attached(c mut typecheck.Checker&, mi I64, e Entry, parent String&) Entry {
     r := e
-    if r.Target == "" { r.Target = $r.Name if parent == "" else $parent "." $r.Name }
+    if r.Target == "" { r.Target = $r.Name if parent == "" else $parent + "." + $r.Name }
     if r.Name != "" { r.Examples = ExamplesOf(c, mi, r.Target) }
     ms := Vec<Entry>()
     for m in e.Members { ms.Push(attached(c, mi, m, r.Target if parent == "" else "")) }
@@ -431,7 +431,7 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
     lines := full.TrimEnd().Split("\n")
     at := declAt(c, mi, name)
     isFn := lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ")
-    e := Entry($attrs.ToString() $(firstLines(full) if isFn else $lines[0]), "", name)
+    e := Entry($attrs.ToString() + $(firstLines(full) if isFn else $lines[0]), "", name)
     if at >= 0 { e.Doc = Comment(text, at, true) }
     e.File = m.File
     e.At = at
@@ -451,12 +451,12 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
         # A2.3: a method's effects, the line explain writes under it, are part of its entry
         # T13d: a type's own "# generational: ..." line, before its members, is part of its entry's line
         if line.StartsWith("#") and e.Members.Len() == 0 {
-            e.Line = $e.Line "\n    " $line
+            e.Line = $e.Line + "\n    " + $line
             continue
         }
         if line.StartsWith("#") {
             last := e.Members.Len() - 1
-            e.Members[last].Line = $e.Members[last].Line "\n    " $line
+            e.Members[last].Line = $e.Members[last].Line + "\n    " + $line
             continue
         }
         if line.StartsWith("meets ") {
@@ -500,7 +500,7 @@ fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, 
         name := $c.P.L.Names.Text(c.P.FnDecl(f).Name)
         bi := try Entry.item(c, sc, x, mi, name, all) catch explain.Missing { continue }
         bi.Builder = true
-        bi.Target = $ast.OwnerTarget(c.P.FnDecl(f), c.P.L.Names) "." $c.P.L.Names.Text(c.P.FnDecl(f).Member)   # B7a: its tests
+        bi.Target = $ast.OwnerTarget(c.P.FnDecl(f), c.P.L.Names) + "." + $c.P.L.Names.Text(c.P.FnDecl(f).Member)   # B7a: its tests
         e.Members.Push(bi)
     }
 }
@@ -654,7 +654,7 @@ fn ItemText(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I
 # a module's documentation as text: "module IDENTITY", its own documentation, then each item, a blank line between
 fn (md Module&) Text() String {
     b := StringBuilder()
-    b.Push($"module " $md.Identity "\n")
+    b.Push($"module " + $md.Identity + "\n")
     if md.Doc != "" {
         b.PushChar('\n')
         indented(b, md.Doc, "")
@@ -670,26 +670,26 @@ fn entryText(b mut StringBuilder&, e Entry&, indent String&) {
     mark := "   # deprecated" if Deprecation(e.Doc) != "" else ""
     first := true
     for line in e.Line.Lines() {
-        b.Push($indent $line $(mark if first else "") "\n")
+        b.Push($indent + $line + $(mark if first else "") + "\n")
         first = false
     }
-    if e.Doc != "" { indented(b, e.Doc, $indent "    ") }
+    if e.Doc != "" { indented(b, e.Doc, $indent + "    ") }
     for x in e.Examples {
-        b.Push($indent "    example \"" $x.Desc "\"\n")
-        indented(b, x.Body, $indent "        ")
+        b.Push($indent + "    example \"" + $x.Desc + "\"\n")
+        indented(b, x.Body, $indent + "        ")
     }
     prev := false
     for m in e.Members {
-        if m.Builder and not prev { b.Push($indent "    builders\n") }
+        if m.Builder and not prev { b.Push($indent + "    builders\n") }
         prev = m.Builder
-        entryText(b, m, $indent "    ")
+        entryText(b, m, $indent + "    ")
     }
 }
 
 # text written with each line indented, a paragraph break an empty line
 fn indented(b mut StringBuilder&, text String&, indent String&) {
     for line in text.Lines() {
-        if line == "" { b.PushChar('\n') } else { b.Push($indent $line "\n") }
+        if line == "" { b.PushChar('\n') } else { b.Push($indent + $line + "\n") }
     }
 }
 
@@ -713,17 +713,17 @@ fn PageName(identity String&) String {
     return b.ToString()
 }
 
-Style String& = ("body{font-family:system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;line-height:1.5;" $
-                 "color:#1d1d1f;background:#fff}pre{background:#f5f5f7;padding:.5rem .75rem;border-radius:4px;" $
-                 "overflow-x:auto;margin:.25rem 0}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:.9em}" $
-                 ".dep{text-decoration:line-through}.note{font-weight:bold}.doc{margin:.25rem 0 1rem 1rem}.example{margin:.25rem 0 .5rem 1rem}summary{cursor:pointer}.member{margin-left:1.5rem}h2{border-bottom:1px solid #ddd;" $
-                 "padding-bottom:.25rem;margin-top:2rem}a{color:#0b57d0}@media(prefers-color-scheme:dark){body{" $
+Style String& = ("body{font-family:system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;line-height:1.5;" + $
+                 "color:#1d1d1f;background:#fff}pre{background:#f5f5f7;padding:.5rem .75rem;border-radius:4px;" + $
+                 "overflow-x:auto;margin:.25rem 0}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:.9em}" + $
+                 ".dep{text-decoration:line-through}.note{font-weight:bold}.doc{margin:.25rem 0 1rem 1rem}.example{margin:.25rem 0 .5rem 1rem}summary{cursor:pointer}.member{margin-left:1.5rem}h2{border-bottom:1px solid #ddd;" + $
+                 "padding-bottom:.25rem;margin-top:2rem}a{color:#0b57d0}@media(prefers-color-scheme:dark){body{" + $
                  "color:#e8e8ea;background:#18181b}pre{background:#26262b}a{color:#8ab4f8}h2{border-color:#333}}")
 
 fn page(title String&, body String&) String {
-    return $"<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">" $
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" $
-        "<title>" $Escape(title) "</title><style>" $Style "</style></head><body>\n" $body "</body></html>\n"
+    return $"<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">" + $
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" + $
+        "<title>" + $Escape(title) + "</title><style>" + $Style + "</style></head><body>\n" + $body + "</body></html>\n"
 }
 
 # a doc comment as HTML: each paragraph a <p>, a paragraph of lines indented by four spaces or more a <pre>
@@ -735,9 +735,9 @@ fn docHtml(b mut StringBuilder&, doc String&) {
     flush := fn(p mut StringBuilder&, out mut StringBuilder&, asPre Bool) {
         if p.Len() == 0 { return }
         text := p.ToString()
-        if asPre { out.Push($"<pre>" $Escape(text) "</pre>") }
-        else if text.StartsWith("Deprecated:") { out.Push($"<p class=\"note\">" $Escape(text) "</p>") }
-        else { out.Push($"<p>" $Escape(text) "</p>") }
+        if asPre { out.Push($"<pre>" + $Escape(text) + "</pre>") }
+        else if text.StartsWith("Deprecated:") { out.Push($"<p class=\"note\">" + $Escape(text) + "</p>") }
+        else { out.Push($"<p>" + $Escape(text) + "</p>") }
         p.Clear()
     }
     for line in doc.Lines() {
@@ -759,10 +759,10 @@ fn entryHtml(b mut StringBuilder&, e Entry&, member Bool) {
     if member { b.Push("<div class=\"member\">") }
     id := e.Name
     dep := Deprecation(e.Doc) != ""
-    b.Push($"<pre id=\"" $Escape(id) "\"" $(" class=\"dep\"" if dep else "") ">" $Escape(e.Line) "</pre>\n")
+    b.Push($"<pre id=\"" + $Escape(id) + "\"" + $(" class=\"dep\"" if dep else "") + ">" + $Escape(e.Line) + "</pre>\n")
     docHtml(b, e.Doc)
     for x in e.Examples {
-        b.Push($"<details class=\"example\"><summary>Example: " $Escape(x.Desc) "</summary><pre>" $Escape(x.Body) "</pre></details>\n")
+        b.Push($"<details class=\"example\"><summary>Example: " + $Escape(x.Desc) + "</summary><pre>" + $Escape(x.Body) + "</pre></details>\n")
     }
     prev := false
     for m in e.Members {
@@ -776,14 +776,14 @@ fn entryHtml(b mut StringBuilder&, e Entry&, member Bool) {
 # a module's page
 fn (md Module&) Html() String {
     b := StringBuilder()
-    b.Push($"<p><a href=\"index.html\">index</a></p>\n<h1>" $Escape(md.Identity) "</h1>\n")
-    b.Push($"<pre>import \"" $Escape(md.Identity) "\"</pre>\n")
+    b.Push($"<p><a href=\"index.html\">index</a></p>\n<h1>" + $Escape(md.Identity) + "</h1>\n")
+    b.Push($"<pre>import \"" + $Escape(md.Identity) + "\"</pre>\n")
     docHtml(b, md.Doc)
     if md.Items.Len() > 0 {
         b.Push("<h2>Index</h2>\n<ul>\n")
         for e in md.Items {
             cls := " class=\"dep\"" if Deprecation(e.Doc) != "" else ""
-            b.Push($"<li><a href=\"#" $Escape(e.Name) "\"><code" $cls ">" $Escape(e.Name) "</code></a></li>\n")
+            b.Push($"<li><a href=\"#" + $Escape(e.Name) + "\"><code" + $cls + ">" + $Escape(e.Name) + "</code></a></li>\n")
         }
         b.Push("</ul>\n<h2>Items</h2>\n")
     }
@@ -794,11 +794,11 @@ fn (md Module&) Html() String {
 # the index of the modules written: each a link to its page and its documentation's first sentence
 fn IndexHtml(title String&, mods Array<Module>&) String {
     b := StringBuilder()
-    b.Push($"<h1>" $Escape(title) "</h1>\n<ul>\n")
+    b.Push($"<h1>" + $Escape(title) + "</h1>\n<ul>\n")
     for md in mods {
-        b.Push($"<li><a href=\"" $PageName(md.Identity) "\"><code>" $Escape(md.Identity) "</code></a>")
+        b.Push($"<li><a href=\"" + $PageName(md.Identity) + "\"><code>" + $Escape(md.Identity) + "</code></a>")
         s := firstSentence(md.Doc)
-        if s != "" { b.Push($" - " $Escape(s)) }
+        if s != "" { b.Push($" - " + $Escape(s)) }
         b.Push("</li>\n")
     }
     b.Push("</ul>\n")

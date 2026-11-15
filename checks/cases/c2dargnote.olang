@@ -12,7 +12,7 @@ type R struct() {
     mods Vec<mut Module&>
 }
 fn (r mut R&) load(path String&) {
-    src := "text" $path
+    src := "text" + $path
     m mut Module& = Module(path, path[0:1], src)
     r.mods.Push(m)
 }

@@ -2,5 +2,5 @@
 # S18c/S18a: an assert decided false while compiling says so with its message, when that can be computed too
 fn main() ? {
     x I64 = 3
-    assert x == 4, "x is " $x ", not 4"
+    assert x == 4, "x is " + $x + ", not 4"
 }

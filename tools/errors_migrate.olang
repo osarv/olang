@@ -219,8 +219,8 @@ fn declareError(text String&, line I64, errType String&) String ? {
             for w in code[q + 3:code.Len() - 2].Split(" + ") {
                 if w.Trim() == errType { error Unparsed.Signature }         # already listed
             }
-            if not text.Contains("error " $errType " {") and not text.Contains("type " $errType " error") { error Unparsed.Signature }   # another module's: written by hand
-            return splice(text, at, 0, " + " $errType)
+            if not text.Contains("error " + $errType + " {") and not text.Contains("type " + $errType + " error") { error Unparsed.Signature }   # another module's: written by hand
+            return splice(text, at, 0, " + " + $errType)
         }
         n--
     }
@@ -271,7 +271,7 @@ fn apply(file String&, ds mut Vec<diagnostic>&, left mut Vec<String&>&) I64 ? {
         if edited {
             edits++
             lastLine = d.Line
-        } else { left.Push($d.File ":" $d.Line ":" $d.Col ": [" $d.Rule "] " $d.Msg) }
+        } else { left.Push($d.File + ":" + $d.Line + ":" + $d.Col + ": [" + $d.Rule + "] " + $d.Msg) }
     }
     if edits > 0 { try os.WriteFile(file, text) }
     return edits
@@ -322,7 +322,7 @@ fn main() ? {
             }
             edits += try apply(name, ds, left)
         }
-        try io.PutErrLine("round " $round ": " $edits " edits")
+        try io.PutErrLine("round " + $round + ": " + $edits + " edits")
         if edits == 0 { break }
     }
     for l in left { try io.PutLine(l) }

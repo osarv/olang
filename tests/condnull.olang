@@ -45,7 +45,7 @@ fn viaLocal(have Bool) I64 {
 }
 
 fn all(have Bool) String {
-    return $viaMethod(have) " " $viaFunction(have) " " $viaGeneric(have) " " $viaLocal(have)
+    return $viaMethod(have) + " " + $viaFunction(have) + " " + $viaGeneric(have) + " " + $viaLocal(have)
 }
 
 assert all(true) == "7 4 4 4", "decided while compiling (S17a)"

@@ -27,7 +27,7 @@ fn main() ? {
 }
 
 fn die(why String&) noreturn {
-    try io.PutErrLine($"seed: " $why) catch io.Error { }
+    try io.PutErrLine($"seed: " + $why) catch io.Error { }
     os.Exit(1)
 }
 
@@ -53,12 +53,12 @@ fn run(dir String&) I32 {
         try io.Put(d.Render()) catch io.Error { }
         return 1
     }
-    try os.MkDirAll(dir) catch os.Error { die($"cannot make " $dir) }
-    old := try os.ReadDir(dir) catch os.Error { die($"cannot read " $dir) }
+    try os.MkDirAll(dir) catch os.Error { die($"cannot make " + $dir) }
+    old := try os.ReadDir(dir) catch os.Error { die($"cannot read " + $dir) }
     for f in old {
-        if f.EndsWith(".ll") { try os.Remove($dir "/" $f) catch os.Error { die($"cannot remove " $dir "/" $f) } }
+        if f.EndsWith(".ll") { try os.Remove($dir + "/" + $f) catch os.Error { die($"cannot remove " + $dir + "/" + $f) } }
     }
-    for u in prog.Units { write(dir, $build.Readable(u.Identity) $suffix(u.Holds) ".ll", u.Ir) }
+    for u in prog.Units { write(dir, $build.Readable(u.Identity) + $suffix(u.Holds) + ".ll", u.Ir) }
     write(dir, "olang_runtime.ll", prog.Runtime)
     if prog.Dyncall != "" { write(dir, "olang_dyncall.ll", prog.Dyncall) }
     return 0
@@ -75,6 +75,6 @@ fn suffix(k build.UnitKind) String {
 }
 
 fn write(dir String&, name String&, ir String&) {
-    path := $dir "/" $name
-    try os.WriteFile(path, ir) catch os.Error { die($"cannot write " $path) }
+    path := $dir + "/" + $name
+    try os.WriteFile(path, ir) catch os.Error { die($"cannot write " + $path) }
 }

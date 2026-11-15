@@ -1035,12 +1035,6 @@ fn (w mut writer&) expr(x ast.Expr&) {
             }
             if not c.InCall { w.put("]") }
         }
-        case ast.Expr.Join(_, parts) {
-            for i, y in parts {
-                if i > 0 { w.put(" ") }
-                w.expr(y)
-            }
-        }
         case ast.Expr.Try(_, y, cl) {
             w.put("try ")
             w.expr(y)

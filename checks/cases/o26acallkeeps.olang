@@ -15,15 +15,15 @@ fn (p mut Parser&) parse() mut Ast& {
     return Ast.Pair(Ast.Leaf(p.src.Len()), Ast.Leaf(p.pos))
 }
 fn (p Parser&) describe() String& {
-    return $p.src.Len() "!"
+    return $p.src.Len() + "!"
 }
 fn Ast.Parse(n I64) mut Ast& {
-    src := $n $n $n
+    src := $n + $n + $n
     p := Parser(src)
     return p.parse()
 }
 fn Desc(n I64) String& {
-    src := $n $n
+    src := $n + $n
     p := Parser(src)
     return p.describe()
 }
@@ -45,7 +45,7 @@ fn churn() I64 {
     for i in range 50 {
         a := Array<I64>(64, -7)
         t += a[3]
-        x := $i $i $i $i
+        x := $i + $i + $i + $i
         t += x.Len()
     }
     return t

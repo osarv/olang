@@ -27,9 +27,9 @@ fn bumpedHeld() String {
 }
 
 # a join's operands are evaluated before any piece renders (E11b): mid's result is its own copy before bumped runs
-fn joined(t Array<Char>&) String { return $mid(t) $bumped() }
+fn joined(t Array<Char>&) String { return $mid(t) + $bumped() }
 
-fn joinedHeld(t Array<Char>&) String { return $mid(t) $bumpedHeld() }
+fn joinedHeld(t Array<Char>&) String { return $mid(t) + $bumpedHeld() }
 
 test mid "a view of a mutable global's storage is copied where a call may write the global before it is read" {
     assert joined(heldText) == "bc!"

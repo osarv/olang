@@ -4,14 +4,14 @@
 # into the result, its references with it, so the text lives where the result goes; read back after an arena churn
 fn mk(n I64) Array<String&> {
     a := Array<String&>(2)
-    a[0] = $n $n
+    a[0] = $n + $n
     b := a
     return b[0:1]
 }
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }

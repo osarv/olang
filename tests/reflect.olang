@@ -31,12 +31,12 @@ fn risky(x I64) I64 ? Bad {
 
 # a value's fields written out, by name
 fn fields<T>(v T) String {
-    s := $T.Name "("
+    s := $T.Name + "("
     for i, f in T.Fields {
-        if i > 0 { s = $s ", " }
-        s = $s $f.Name "=" $f.Of(v)
+        if i > 0 { s = $s + ", " }
+        s = $s + $f.Name + "=" + $f.Of(v)
     }
-    return $s ")"
+    return $s + ")"
 }
 
 # an enum's case and its fields, or a struct's one case
@@ -44,7 +44,7 @@ fn caseOf<T>(v T) String {
     for c in T.Cases {
         if v == c {
             s := $c.Name
-            for f in c.Fields { s = $s " " $f.Name "=" $f.Of(v) }
+            for f in c.Fields { s = $s + " " + $f.Name + "=" + $f.Of(v) }
             return s
         }
     }
@@ -73,20 +73,20 @@ fn double<T>(v mut T&) {
 
 fn what<T>() String {
     return match T {
-        case Vec<E>: "a list of " $E.Name
-        case Map<K, V>: "a map from " $K.Name " to " $V.Name
-        case Tree<E>: "a tree of " $E.Name
-        case Hashable: "hashable " $T.Name
-        case _: "something else: " $T.Kind
+        case Vec<E>: "a list of " + $E.Name
+        case Map<K, V>: "a map from " + $K.Name + " to " + $V.Name
+        case Tree<E>: "a tree of " + $E.Name
+        case Hashable: "hashable " + $T.Name
+        case _: "something else: " + $T.Kind
     }
 }
 
 fn call<F>(f F, x I64) I64 ? F.Errors { return try f(x) }
 
 fn sig<F>() String {
-    s := $F.Params.Len() " -> " $F.Results.Len() ":"
-    for p in F.Params { s = $s " " $p.Type.Name if p.Name == "" else $s " " $p.Name }
-    for r in F.Results { s = $s " " $r.Type.Name }
+    s := $F.Params.Len() + " -> " + $F.Results.Len() + ":"
+    for p in F.Params { s = $s + " " + $p.Type.Name if p.Name == "" else $s + " " + $p.Name }
+    for r in F.Results { s = $s + " " + $r.Type.Name }
     return s
 }
 
@@ -175,7 +175,7 @@ test "agrees with the run time: the same walks over values only the run time kno
     k := I64(os.Args().Len())
     q := build<Point>(k + 3)
     assert q.x == k + 3
-    assert fields(Point(k, 2.5, "a")) == "Point(x=" $k ", Y=2.5, label=a)"
+    assert fields(Point(k, 2.5, "a")) == "Point(x=" + $k + ", Y=2.5, label=a)"
 }
 
 # the first field whose type is T's kind, skipping text; the walk stops at it
@@ -252,7 +252,7 @@ type ReflAll error Bad, ReflOops { Late }
 
 fn errWords<T>() String {
     b := StringBuilder()
-    for c in T.Cases { b.Push($c.Name " ") }
+    for c in T.Cases { b.Push($c.Name + " ") }
     return b.ToString()
 }
 

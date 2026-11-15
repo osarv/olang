@@ -130,7 +130,7 @@ fn defaultFiles() Vec<String&> {
         os.Exit(2)
     }
     for f in names {
-        if f.EndsWith(".olang"): out.Push("compiler/" $f)
+        if f.EndsWith(".olang"): out.Push("compiler/" + $f)
     }
     out.Sort(fn(a String&, b String&) Bool { return a < b })
     return out
@@ -163,9 +163,9 @@ fn main() ? {
     }
     for k, f in funcs {
         if limit >= 0 and k >= limit: break
-        try io.PutLine($f.depth "\t" $f.lines "\t" $f.file ":" $f.line "\t" $f.name)
+        try io.PutLine($f.depth + "\t" + $f.lines + "\t" + $f.file + ":" + $f.line + "\t" + $f.name)
     }
-    try io.PutLine(("nesting: " $funcs.Len() " functions; " $over4 " over depth 4, " $over5 " over depth 5, " $over6 " over depth 6, " $long
+    try io.PutLine(("nesting: " + $funcs.Len() + " functions; " + $over4 + " over depth 4, " + $over5 + " over depth 5, " + $over6 + " over depth 6, " + $long +
         " over 200 lines"))
 }
 

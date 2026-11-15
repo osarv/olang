@@ -12,7 +12,7 @@ fn main() ? {
     v := Vec<Tok>()
     v.Push(Tok("a", 1))
     for i in range 3 {
-        t := "w" $i
+        t := "w" + $i
         m := v.ViewMut()
         m[0].text = t
     }

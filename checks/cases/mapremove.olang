@@ -8,7 +8,7 @@ fn main() {
     m := Map<String&, Rec&>()
     total I64 = 0
     for i in range 1000 {
-        m.Put($i, Rec("payload " $i))
+        m.Put($i, Rec("payload " + $i))
         if i >= 100 {
             x := try m.Get($(i - 100)) catch { unreachable }
             m.Remove($(i - 100))

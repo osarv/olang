@@ -64,7 +64,7 @@ fn bodyAt(src String&, line I64) I64 ? Unfixable {
 fn withQuestion(src String&, line I64) String ? Unfixable {
     at := try bodyAt(src, line)
     gap := "" if at > 0 and src[at - 1] == ' ' else " "
-    return $src[:at] $gap "? " $src[at:]
+    return $src[:at] + $gap + "? " + $src[at:]
 }
 
 fn main() {
@@ -102,9 +102,9 @@ fn main() {
     defer try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs.Max(1))
     for k in range work.Len() {
-        work[k] = $tmp "/w" $k
+        work[k] = $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
-            srcmask.SayErr("question_migrate: cannot make " $work[k])
+            srcmask.SayErr("question_migrate: cannot make " + $work[k])
             os.Exit(1)
         }
     }
@@ -122,12 +122,12 @@ fn main() {
             }
         }
         made := apply(requests, left)
-        srcmask.Say("round " $round ": " $made " edits")
+        srcmask.Say("round " + $round + ": " + $made + " edits")
         total += made
         if made == 0: break
     }
-    srcmask.Say("total: " $total " edits")
-    for l in left: srcmask.Say("by hand: " $l)
+    srcmask.Say("total: " + $total + " edits")
+    for l in left: srcmask.Say("by hand: " + $l)
 }
 
 # the edits applied to their files, a file's last first so an edit moves nothing still to do; how many were made, what
@@ -160,7 +160,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
             made++
         }
         if out == src: continue
-        try os.WriteFile(path, out) catch { srcmask.SayErr("question_migrate: cannot write " $path) }
+        try os.WriteFile(path, out) catch { srcmask.SayErr("question_migrate: cannot write " + $path) }
     }
     return made
 }

@@ -41,7 +41,7 @@ fn global(n I64, k I64) {
 
 fn label(h mut holder&, k I64) {
     w := Vec<String>()
-    for i in range 5 { w.Push("n" $(i + k)) }
+    for i in range 5 { w.Push("n" + $(i + k)) }
     h.names = w
 }
 
@@ -85,5 +85,5 @@ fn main() {
         churn()
         s += h.f[6]
     }
-    io.PutLine($s " " $h.names[4] " " $h.d[3] " " $h.a[1])!
+    io.PutLine($s + " " + $h.names[4] + " " + $h.d[3] + " " + $h.a[1])!
 }

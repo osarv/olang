@@ -187,7 +187,7 @@ test "a sealed trait is satisfied only by its own module's types" {
 # M19d: a built-in type's methods are the prelude's and visible everywhere, so nothing is imported for
 # every String here - a literal, a slice, a "$x" rendering - to have them.
 test "the prelude's methods on a built-in type are visible without an import" {
-    greeting String& = "hello, " $3
+    greeting String& = "hello, " + $3
     assert greeting.Eq("hello, 3")
     assert greeting.StartsWith("hello")
     assert "  x ".Trim().Eq("x")

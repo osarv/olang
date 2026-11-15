@@ -95,7 +95,7 @@ fn Args() mut Array<String&>& {
 
 # the value of the environment variable "name" - failing with NOT_FOUND when it is not set (one set to nothing is "")
 fn Env(name String&) String& ? Error {
-    key := $name "\0"
+    key := $name + "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) })
         catch Error { error Error.NotFound(name) }
 }
@@ -136,7 +136,7 @@ fn IsTerminal(fd I32) Bool { return unistd.isatty(fd) == 1 }
 # runs "cmd" through the shell and gives its exit status - 0 for success. A command the shell cannot run at
 # all, or one ended by a signal, is reported as a nonzero status like any other failure.
 fn Run(cmd String&) I32 {
-    status := stdlib.system($cmd "\0")
+    status := stdlib.system($cmd + "\0")
     if status < 0 { return 127 }
     if status % 256 != 0 { return 128 + status % 128 }        # ended by a signal
     return status / 256
@@ -201,7 +201,7 @@ fn ExecInPlace(path String&, args ...String&) ? Error {
         }
         at++
     }
-    __olang_exec($path "\0", line, args.Len())
+    __olang_exec($path + "\0", line, args.Len())
     try raise(__olang_err(), path)
     error Error.Failed(path)
 }
@@ -260,7 +260,7 @@ fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, di
         if e < 0 { try closeAndRaise(out, __olang_err(), "") }
         errs = e
     }
-    pid := __olang_spawn(line, args.Len(), feed, out, errs, $dir "\0")
+    pid := __olang_spawn(line, args.Len(), feed, out, errs, $dir + "\0")
     if pid < 0 {
         code := __olang_err()
         if capture {
@@ -364,7 +364,7 @@ fn readBack(fd I32) String& ? Error {
 # ("os.ReadFile&x(p)" builds it where x lives)
 fn ReadFile(path String&) String& ? Error {
     if IsDir(path) { error Error.IsDir(path) }      # a directory opens, and its size means nothing
-    fd := fcntl.open($path "\0", 0)
+    fd := fcntl.open($path + "\0", 0)
     try check(fd, path)
     # the size is where reading starts from, nothing more: the end is where a read finds it. A byte past the size, so the
     # read that finds the end is the next one, and room doubled for a file longer than it said - one in /proc, or a pipe,
@@ -407,14 +407,14 @@ fn WriteFile(path String&, data Array<U8>&) ? Error {
 # a descriptor to write the file at "path" through (io.Write), created or emptied - 0666 less the process's umask,
 # as C's creat gives it. Close it once written.
 fn Create(path String&) I32 ? Error {
-    fd := fcntl.creat($path "\0", 0x1B6)
+    fd := fcntl.creat($path + "\0", 0x1B6)
     try check(fd, path)
     return fd
 }
 
 # a descriptor to read the file at "path" through (io.Read). Close it once read.
 fn Open(path String&) I32 ? Error {
-    fd := fcntl.open($path "\0", 0)
+    fd := fcntl.open($path + "\0", 0)
     try check(fd, path)
     return fd
 }
@@ -442,7 +442,7 @@ type FileInfo struct(Kind FileKind, Size I64, ModTime I64) {
 # what is at "path", following a symbolic link to what it names
 fn FileInfo.Stat(path String&) FileInfo ? Error {
     out := Array<I64>(3)
-    try check(__olang_stat($path "\0", out), path)
+    try check(__olang_stat($path + "\0", out), path)
     kind := FileKind.OTHER
     if out[0] == 1 { kind = FileKind.FILE }
     if out[0] == 2 { kind = FileKind.DIR }
@@ -452,18 +452,18 @@ fn FileInfo.Stat(path String&) FileInfo ? Error {
 # whether anything is at "path" - a symbolic link counts only when what it names is there
 fn Exists(path String&) Bool {
     out := Array<I64>(3)
-    return __olang_stat($path "\0", out) == 0
+    return __olang_stat($path + "\0", out) == 0
 }
 
 # whether "path" names a directory, directly or through a symbolic link
 fn IsDir(path String&) Bool {
     out := Array<I64>(3)
-    return __olang_stat($path "\0", out) == 0 and out[0] == 2
+    return __olang_stat($path + "\0", out) == 0 and out[0] == 2
 }
 
 # makes the directory "path" - 0777 less the process's umask - whose parent must be there already
 fn MkDir(path String&) ? Error {
-    try check(sysstat.mkdir($path "\0", 0x1FF), path)
+    try check(sysstat.mkdir($path + "\0", 0x1FF), path)
 }
 
 # makes the directory "path" and every one above it that is missing; a directory already there is left as it is, and
@@ -473,7 +473,7 @@ fn MkDirAll(path String&) ? Error {
     for i in range 1, path.Len() + 1 {
         if i < path.Len() and path[i] != '/' { continue }
         part := path[:i]
-        if sysstat.mkdir($part "\0", 0x1FF) != 0 {
+        if sysstat.mkdir($part + "\0", 0x1FF) != 0 {
             code := __olang_err()
             if code != 2 { try raise(code, part) }      # 2 is Exists: fine, when what exists is a directory
             if not IsDir(part) { error Error.NotDir(part) }
@@ -483,7 +483,7 @@ fn MkDirAll(path String&) ? Error {
 
 # removes the file, the symbolic link or the empty directory at "path"
 fn Remove(path String&) ? Error {
-    try check(stdio.remove($path "\0"), path)
+    try check(stdio.remove($path + "\0"), path)
 }
 
 # removes what is at "path" and, when it is a directory, everything in it, depth first - as "rm -rf" does. A symbolic
@@ -504,12 +504,12 @@ fn RemoveAll(path String&) ? Error {
 # "path" and what is under it, gone
 fn removeTree(path String&) ? Error {
     if path.Len() == 0 { return }
-    p := $path "\0"
+    p := $path + "\0"
     if stdio.remove(p) == 0 { return }
     code := __olang_err()
     if code == 1 { return }                            # NotFound: nothing to remove
     if code != 6 and code != 2 { try raise(code, path) }   # NotEmpty, or Exists, which POSIX allows rmdir to say
-    for n in try ReadDir(path) { try removeTree($path "/" $n) }
+    for n in try ReadDir(path) { try removeTree($path + "/" + $n) }
     try check(stdio.remove(p), path)
 }
 
@@ -521,7 +521,7 @@ fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
     if prefix.Contains("/") { error Error.Failed(prefix) }   # a name, never a path below "dir"
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
-    path Array<Char> = $base $sep $prefix "XXXXXX\0"      # (mkdtemp writes the six characters: no String's)
+    path Array<Char> = $base + $sep + $prefix + "XXXXXX\0"      # (mkdtemp writes the six characters: no String's)
     if __olang_mkdtemp(path) != 0 { try raise(__olang_err(), base) }
     return String(path[:path.Len() - 1])
 }
@@ -536,18 +536,18 @@ fn tempDir(dir String&) String {
 
 # moves what is at "from" to "to", in one step, replacing a file already at "to"
 fn Rename(from String&, to String&) ? Error {
-    try check(stdio.rename($from "\0", $to "\0"), from)
+    try check(stdio.rename($from + "\0", $to + "\0"), from)
 }
 
 # a second name, "to", for the file at "from" - a hard link: one file under two names, on one file system. Fails with
 # EXISTS where "to" is taken
 fn Link(from String&, to String&) ? Error {
-    try check(unistd.link($from "\0", $to "\0"), from)
+    try check(unistd.link($from + "\0", $to + "\0"), from)
 }
 
 # what the symbolic link at "path" holds, as it was written - not resolved further
 fn ReadLink(path String&) String& ? Error {
-    p := $path "\0"
+    p := $path + "\0"
     cap I64 = 256
     buf mut Array<U8>& = Array<U8>(cap)
     n := unistd.readlink(p, buf, U64(cap))
@@ -562,7 +562,7 @@ fn ReadLink(path String&) String& ? Error {
 
 # "path" made absolute, with every symbolic link, "." and ".." resolved - what it really names, which must exist
 fn RealPath(path String&) String& ? Error {
-    p := $path "\0"
+    p := $path + "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_realpath(p, buf, buf.Len()) }, path)
 }
 
@@ -573,7 +573,7 @@ fn Cwd() String& ? Error {
 
 # the names in the directory "path", in byte order, without "." and ".."
 fn ReadDir(path String&) Array<String&>& ? Error {
-    p := $path "\0"
+    p := $path + "\0"
     all String& = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) }, path)
     if all.Len() == 0 { return Array<String&>(0) }
     names := all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
@@ -587,11 +587,11 @@ fn Quote(t String&) String& {
     start I64 = 0
     for i in range t.Len() {
         if t[i] == '\'' {
-            out = $out $t[start:i] "'\\''"
+            out = $out + $t[start:i] + "'\\''"
             start = i + 1
         }
     }
-    return $out $t[start:] "'"
+    return $out + $t[start:] + "'"
 }
 
 test "Run gives a command's exit status" {
@@ -618,7 +618,7 @@ test "ReadFile reads to the end, whatever the size says" {
 }
 
 test "Quote survives a quote" {
-    assert Run("test " $Quote("it's") " = \"it's\"") == 0
+    assert Run("test " + $Quote("it's") + " = \"it's\"") == 0
 }
 
 # the command line of this very test binary: its own path, and nothing after it
@@ -785,7 +785,7 @@ test "ReadLink, RealPath and Cwd" {
     try WriteFile("build/os_files/l/target.txt", "t")
     real := try RealPath("build/os_files/l/./link") catch default ""
     cwd := try Cwd() catch default ""
-    assert cwd.StartsWith("/") and real == $cwd "/build/os_files/l/target.txt"
+    assert cwd.StartsWith("/") and real == $cwd + "/build/os_files/l/target.txt"
     assert (try RealPath(".") catch default "") == cwd
 }
 
@@ -800,7 +800,7 @@ test "ReadFile names why it failed" {
 fn churn() I64 {
     t I64 = 0
     for i in range 300 {
-        s := $i "-------------------------------------------------------------"
+        s := $i + "-------------------------------------------------------------"
         t += s.Len()
     }
     return t
@@ -943,7 +943,7 @@ test "Start, Wait, Kill and Pid" {
 
 # what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block
 fn Output.echoed(i I64) Output {
-    return Output.Exec("echo", "run " $i)!
+    return Output.Exec("echo", "run " + $i)!
 }
 
 test "what Exec gives back lives where it is put" {
@@ -981,7 +981,7 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
     assert a.StartsWith("build/os_files/mt/run-") and a.Len() == "build/os_files/mt/run-".Len() + 6
     assert b.StartsWith("build/os_files/mt/run-") and not b.Contains("//") and a != b and IsDir(a) and IsDir(b)
     assert (try ReadDir(a) catch default Array<String&>["x"]).Len() == 0
-    assert Run("test \"$(stat -c %a " $Quote(a) ")\" = 700") == 0
+    assert Run("test \"$(stat -c %a " + $Quote(a) + ")\" = 700") == 0
     plain := try MkTemp("build/os_files/mt") catch default ""
     assert plain.Len() == "build/os_files/mt/".Len() + 6 and IsDir(plain)
     tmp := try MkTemp() catch default ""
@@ -1001,11 +1001,11 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
 test "Exec without capture leaves the program this one's output and error" {
     mine := try ReadLink("/proc/self/fd/1") catch default "none"
     seen := try Output.Exec("sh", "-c", "readlink /proc/$$/fd/1")
-    assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $mine "\n"
+    assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $mine + "\n"
     assert Run("mkdir -p build/os_files") == 0
     free := try Output.Exec("sh", "-c", "r=$(readlink /proc/$$/fd/1); echo \"$r\" > build/os_files/fd1; exit 4", capture = false)
     assert free.Status == 4 and free.Stdout == "" and free.Stderr == ""
-    assert (try ReadFile("build/os_files/fd1") catch default "") == $mine "\n"
+    assert (try ReadFile("build/os_files/fd1") catch default "") == $mine + "\n"
     fed := try Output.Exec("sh", "-c", "cat > build/os_files/fed", input = "fed in", capture = false)
     assert fed.Status == 0 and (try ReadFile("build/os_files/fed") catch default "") == "fed in"
 }

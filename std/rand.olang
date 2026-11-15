@@ -293,5 +293,5 @@ test "Normals, Uniforms, Choice, Choices and Sample draw over arrays, while comp
     }
     empty := Array<I64>(0)
     got := try r.Choice(empty) catch Error.Empty { return }
-    assert false, "a draw from nothing gave " $got
+    assert false, "a draw from nothing gave " + $got
 }

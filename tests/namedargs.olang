@@ -6,12 +6,12 @@
 Live mut I64 = 0
 
 fn connect(host String&, port I64 = 80, timeout I64 = 30, retries I64 = 3) String {
-    return $host ":" $port " t" $timeout " r" $retries
+    return $host + ":" + $port + " t" + $timeout + " r" + $retries
 }
 
 type Conn struct(host String&, port I64 = 80, secure Bool = false) { host, port, secure }
 
-fn (c Conn&) Url(path String& = "/", query String& = "") String { return $c.host ":" $c.port $path $query }
+fn (c Conn&) Url(path String& = "/", query String& = "") String { return $c.host + ":" + $c.port + $path + $query }
 
 # a generic with a defaulted parameter of its own type variable, and one of a fixed type
 fn pad<T>(xs Array<T>&, fill T, width I64 = 4, before Bool = false) Vec<T> {
@@ -62,7 +62,7 @@ fn steps(seed String&) String {
         return b.Len()
     }
     r := connect("o", retries = step("r"), port = step("p"))
-    return $b.ToString() " " $r
+    return $b.ToString() + " " + $r
 }
 
 BakedConnect := connect("h", retries = 5)
@@ -77,7 +77,7 @@ BakedPairs := pairs(3)
 BakedSteps := steps("s")
 
 test "a defaulted parameter is given by name, in any order, after the arguments by position" {
-    assert BakedConnect == "h:80 t30 r5" and connect("h" $Live, retries = 5) == "h0:80 t30 r5"
+    assert BakedConnect == "h:80 t30 r5" and connect("h" + $Live, retries = 5) == "h0:80 t30 r5"
     assert BakedMixed == "h:81 t9 r5" and connect("h", 81 + Live, retries = 5, timeout = 9) == BakedMixed
     assert BakedDefault == "h:80 t1 r3" and connect("h", default, timeout = 1 + Live) == BakedDefault
 }

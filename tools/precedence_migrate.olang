@@ -50,7 +50,7 @@ fn reading(path String&, text String&, std String&, prelude String&, old Bool) S
     p.File()
     if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.Syntax }
     b := StringBuilder()
-    for sp in p.Operators { b.Push($sp.Start ":" $sp.End " ") }
+    for sp in p.Operators { b.Push($sp.Start + ":" + $sp.End + " ") }
     return b.ToString()
 }
 
@@ -106,7 +106,7 @@ fn run() I32 {
     for path in files {
         if not path.EndsWith(".olang") { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("precedence_migrate: cannot read " $path)
+            srcmask.SayErr("precedence_migrate: cannot read " + $path)
             return 1
         }
         if verify {
@@ -114,33 +114,33 @@ fn run() I32 {
             a := try reading(path, src, std, prelude, true) catch Unparsable { continue }
             b := try reading(path, src, std, prelude, false) catch Unparsable { continue }
             if a != b {
-                srcmask.SayErr("precedence_migrate: " $path " reads otherwise at the new precedence")
+                srcmask.SayErr("precedence_migrate: " + $path + " reads otherwise at the new precedence")
                 status = 1
             }
             changed++
             continue
         }
         spans := try mixed(path, src, std, prelude) catch Unparsable {
-            srcmask.SayErr("precedence_migrate: " $path " does not parse - left as it is")
+            srcmask.SayErr("precedence_migrate: " + $path + " does not parse - left as it is")
             status = 1
             continue
         }
         if spans.Len() == 0 { continue }
         wrapped += spans.Len()
         changed++
-        if verbose { srcmask.Say($path ": " $spans.Len()) }
+        if verbose { srcmask.Say($path + ": " + $spans.Len()) }
         if not check {
             try os.WriteFile(path, wrap(src, spans)) catch {
-                srcmask.SayErr("precedence_migrate: cannot write " $path)
+                srcmask.SayErr("precedence_migrate: cannot write " + $path)
                 return 1
             }
         }
     }
     if verify {
-        srcmask.Say($"precedence_migrate: " $changed " files read alike at both precedences" $(" but those named" if status != 0 else ""))
+        srcmask.Say($"precedence_migrate: " + $changed + " files read alike at both precedences" + $(" but those named" if status != 0 else ""))
         return status
     }
-    srcmask.Say($"precedence_migrate: " $wrapped " comparisons wrapped in " $changed " files" $(" (nothing written)" if check else ""))
+    srcmask.Say($"precedence_migrate: " + $wrapped + " comparisons wrapped in " + $changed + " files" + $(" (nothing written)" if check else ""))
     if check and changed > 0 { return 1 }
     return status
 }

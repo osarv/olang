@@ -10,10 +10,10 @@ Live mut I64 = 0
 fn describe(args Array<String&>&) String {
     return match args {
         case Array<String&>[]: "nothing"
-        case Array<String&>["test", file, ...words]: "test " $file " with " $words.Len() " words"
+        case Array<String&>["test", file, ...words]: "test " + $file + " with " + $words.Len() + " words"
         case Array<String&>["run", ...]: "run"
-        case Array<String&>[only]: "one: " $only
-        case Array<String&>[first, ...rest, last]: $first ".." $last " (" $rest.Len() " between)"
+        case Array<String&>[only]: "one: " + $only
+        case Array<String&>[first, ...rest, last]: $first + ".." + $last + " (" + $rest.Len() + " between)"
     }
 }
 
@@ -50,9 +50,9 @@ fn ends(xs Array<I64>&) I64 {
 
 fn shape(t String&) String {
     return match t {
-        case Array<Char>['-', '-', ...name]: "long " $name
-        case Array<Char>['-', c]: "short " $c
-        case _: "word " $t
+        case Array<Char>['-', '-', ...name]: "long " + $name
+        case Array<Char>['-', c]: "short " + $c
+        case _: "word " + $t
     }
 }
 
@@ -63,7 +63,7 @@ type Cmd enum {
 
 fn cmd(c Cmd) String {
     match c {
-        case Cmd.Run(Array<String&>["ls", ...rest]) { return "ls " $rest.Len() }
+        case Cmd.Run(Array<String&>["ls", ...rest]) { return "ls " + $rest.Len() }
         case Cmd.Run(_) { return "run" }
         case Cmd.Quit { return "quit" }
     }
@@ -71,8 +71,8 @@ fn cmd(c Cmd) String {
 
 fn vecs(v Vec<I64>&) String {
     return match v {
-        case Array<I64>[a, b]: "two " $(a + b)
-        case Array<I64>[a, ...]: "many from " $a
+        case Array<I64>[a, b]: "two " + $(a + b)
+        case Array<I64>[a, ...]: "many from " + $a
         case _: "none"
     }
 }
@@ -85,10 +85,10 @@ fn others(z I64) String {
     s2 := vecs(v)
     v.Push(5)
     xs := Array<I64>[1, 2, 3 + z, 4]
-    a := $total(xs) " " $ends(Array<I64>[7, 8, 0]) " " $ends(Array<I64>[7, 8, 9]) " " $ends(Array<I64>[1])
-    b := $shape("--help") " " $shape("-v") " " $shape("go")
-    c := $cmd(Cmd.Run(Array<String&>["ls", "-l"])) " " $cmd(Cmd.Run(Array<String&>["x"])) " " $cmd(Cmd.Quit)
-    return $a " " $b " " $c " " $s0 " " $s2 " " $vecs(v)
+    a := $total(xs) + " " + $ends(Array<I64>[7, 8, 0]) + " " + $ends(Array<I64>[7, 8, 9]) + " " + $ends(Array<I64>[1])
+    b := $shape("--help") + " " + $shape("-v") + " " + $shape("go")
+    c := $cmd(Cmd.Run(Array<String&>["ls", "-l"])) + " " + $cmd(Cmd.Run(Array<String&>["x"])) + " " + $cmd(Cmd.Quit)
+    return $a + " " + $b + " " + $c + " " + $s0 + " " + $s2 + " " + $vecs(v)
 }
 
 OthersBaked := others(0)

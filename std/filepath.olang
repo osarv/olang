@@ -202,7 +202,7 @@ fn Rel(base String&, target String&) String ? Error {
 fn churn() I64 {
     s I64 = 0
     for i in range 300 {
-        x := $i "-------------------------------------------------------------"
+        x := $i + "-------------------------------------------------------------"
         s += x.Len()
     }
     return s
@@ -255,9 +255,9 @@ fn cleanMisses() String {
     b := StringBuilder()
     for i in range 0, cleanCases.Len(), 2 {
         got := Clean(cleanCases[i])
-        if got != cleanCases[i + 1] { b.Push($cleanCases[i] " -> " $got "; ") }
+        if got != cleanCases[i + 1] { b.Push($cleanCases[i] + " -> " + $got + "; ") }
         again := Clean(got)                                     # cleaning a clean path changes nothing
-        if again != got { b.Push($got " again -> " $again "; ") }
+        if again != got { b.Push($got + " again -> " + $again + "; ") }
     }
     return b.ToString()
 }
@@ -307,8 +307,8 @@ fn partMisses() String {
     b := StringBuilder()
     for i in range 0, partCases.Len(), 3 {
         p := partCases[i]
-        if Base(p) != partCases[i + 1] { b.Push("Base(" $p ") = " $Base(p) "; ") }
-        if Dir(p) != partCases[i + 2] { b.Push("Dir(" $p ") = " $Dir(p) "; ") }
+        if Base(p) != partCases[i + 1] { b.Push("Base(" + $p + ") = " + $Base(p) + "; ") }
+        if Dir(p) != partCases[i + 2] { b.Push("Dir(" + $p + ") = " + $Dir(p) + "; ") }
     }
     return b.ToString()
 }
@@ -384,7 +384,7 @@ fn relMisses() String {
     b := StringBuilder()
     for i in range 0, relCases.Len(), 3 {
         got := try Rel(relCases[i], relCases[i + 1]) catch default "!"
-        if got != relCases[i + 2] { b.Push("Rel(" $relCases[i] ", " $relCases[i + 1] ") = " $got "; ") }
+        if got != relCases[i + 2] { b.Push("Rel(" + $relCases[i] + ", " + $relCases[i + 1] + ") = " + $got + "; ") }
     }
     return b.ToString()
 }

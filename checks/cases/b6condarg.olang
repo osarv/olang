@@ -13,7 +13,7 @@ fn main() ? {
     b mut Bag& = Bag()
     outer String& = "outer"
     for i in range 2 {
-        x String& = "w" $i
+        x String& = "w" + $i
         keep(b, x if i == 1 else outer)
     }
     try io.PutLine(b.last)

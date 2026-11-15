@@ -25,7 +25,7 @@ fn R.make(url String&) R ? {
 }
 fn f() String& {
     r := try R.make("u", 3) catch { return "none" }
-    return "<" $(try r.find("a") catch default "-") ">"
+    return "<" + $(try r.find("a") catch default "-") + ">"
 }
 fn main() ? {
     assert f() == "<b>"

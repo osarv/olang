@@ -69,7 +69,7 @@ fn main() ? {
     for _ in range 1000000 {
         x = (x * 1103515245 + 12345) % 2147483648
         k := x % 4000
-        total += c.Get("key-" $k, k)
+        total += c.Get("key-" + $k, k)
     }
     assert total == 1998857408
     kb := peakKb() - base

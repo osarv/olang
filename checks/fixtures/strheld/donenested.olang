@@ -3,14 +3,14 @@
 import "std/io"
 type Res unique struct(k I64) {
     k
-} destruct { try io.PutLine("Res destructed " $k) catch io.Error { } }
+} destruct { try io.PutLine("Res destructed " + $k) catch io.Error { } }
 type Bag struct(n I64) {
     n
 }
 fn (b Bag&) Str() String {
     r Res& = Res(b.n)
     assert b.n != 7, "a Str stops its test"
-    return "b-" $b.n
+    return "b-" + $b.n
 }
 type Outer struct(a Bag, b Bag) {
     a
@@ -22,12 +22,12 @@ test "failing inside a List element's Str" {
     l.Push(Bag(7))
     l.Push(Bag(3))
     s := $l
-    try io.PutLine("not reached " $s) catch io.Error { }
+    try io.PutLine("not reached " + $s) catch io.Error { }
 }
 test "failing inside a field's Str" {
     o := Outer(Bag(2), Bag(7))
-    s := "x" $o "y"
-    try io.PutLine("not reached " $s) catch io.Error { }
+    s := "x" + $o + "y"
+    try io.PutLine("not reached " + $s) catch io.Error { }
 }
 test "after" {
     try io.PutLine("third test runs") catch io.Error { }

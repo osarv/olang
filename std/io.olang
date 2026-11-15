@@ -65,19 +65,19 @@ fn Read(fd I32, buf mut Array<U8>&) Array<U8>& ? Error {
 fn Put<T>(x T) ? Error { try Write(Stdout, $x) }
 
 # x as $ renders it and a line end - to the standard output; with nothing given, a line end alone
-fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x "\n") }
+fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x + "\n") }
 
 # x as $ renders it, then nothing - to the standard error
 fn PutErr<T>(x T) ? Error { try Write(Stderr, $x) }
 
 # x as $ renders it and a line end - to the standard error
-fn PutErrLine<T>(x T = "") ? Error { try Write(Stderr, $x "\n") }
+fn PutErrLine<T>(x T = "") ? Error { try Write(Stderr, $x + "\n") }
 
 # v written to the standard error with the place of the call, "FILE:LINE:COLUMN: $v", and given back - a look at a
 # value in passing, wherever it stands: "y := io.Show(f(x)) + 1". A failed write is ignored, the one call of std that
 # does so: a look that could fail would need a try at every use, and a lost look changes nothing the program computes
 fn Show<T>(v T, at Place = Place.Here) T {
-    try Write(Stderr, $at ": " $v "\n") catch { }
+    try Write(Stderr, $at + ": " + $v + "\n") catch { }
     return v
 }
 
@@ -379,7 +379,7 @@ test "Put and PutLine write text, PutLine with its line end" {
     try PutLine() catch Error { }
     try PutErr("") catch Error { }
     n := 42
-    try PutLine("io.olang: n is " $n) catch Error { }
+    try PutLine("io.olang: n is " + $n) catch Error { }
 }
 
 test PutLine "writes any value as $ renders it" {
@@ -477,7 +477,7 @@ fn bracketed(text String&, size I64) String& {
     fd := reading(text)
     out String& = ""
     for line in try Lines(fd, size) {
-        out = $out "[" $line "]"
+        out = $out + "[" + $line + "]"
     } catch Error { unreachable }
     unistd.close(fd)
     return out
@@ -511,8 +511,8 @@ test "Lines drops the carriage return of a CRLF, and only that one" {
 
 test "Lines reads lines longer than its buffer" {
     long String& = "0123456789abcdefghijklmnopqrstuvwxyz"
-    text := $long "\nab\n\n" $long $long "\r\nc"
-    want := "[" $long "][ab][][" $long $long "][c]"
+    text := $long + "\nab\n\n" + $long + $long + "\r\nc"
+    want := "[" + $long + "][ab][][" + $long + $long + "][c]"
     assert bracketed(text, 4) == want # each long line doubling the buffer, and what follows moved to its front
     assert bracketed(text, 1) == want
     assert bracketed(text, 0) == want  # no room at all is taken as one byte
@@ -550,7 +550,7 @@ test "Next fails with Exhausted once the lines are over, each time it is called"
 fn ioChurn() I64 {
     t I64 = 0
     for i in range 300 {
-        s := $i "-------------------------------------------------------------"
+        s := $i + "-------------------------------------------------------------"
         t += s.Len()
     }
     return t
@@ -573,7 +573,7 @@ test "a line kept is built where it is kept" {
 fn drained(fd I32) String& {
     out String& = ""
     for line in try Lines(fd) {
-        out = $out $line "\n"
+        out = $out + $line + "\n"
     } catch Error { unreachable }
     return out
 }
@@ -606,7 +606,7 @@ test "a Writer keeps every byte in order across its buffer's edges" {
     w := Writer(fds[1], 7)
     want := StringBuilder()
     for i in range 200 {
-        piece := $"x".Repeat(i % 13) $i "\n" # pieces shorter and longer than the buffer
+        piece := $"x".Repeat(i % 13) + $i + "\n" # pieces shorter and longer than the buffer
         w.Write(piece)
         want.Push(piece)
     }
@@ -644,7 +644,7 @@ fn reportTo(fd I32, n I64) ? Error {
     defer w.Flush()!
     for i in range n {
         if i == 3 { error Error.Partial(i) }
-        w.Write("line " $i "\n")
+        w.Write("line " + $i + "\n")
     }
 }
 
@@ -682,7 +682,7 @@ fn words(text String&, size I64) String& {
     out String& = ""
     for {
         w := try r.Word() catch Exhausted { break } catch Error { unreachable }
-        out = $out "[" $w "]"
+        out = $out + "[" + $w + "]"
     }
     unistd.close(fd)
     return out
@@ -743,7 +743,7 @@ test Reader.Next "reads several types, one word each" {
 # what reading a T gives: its value, or the error it failed with
 fn outcome<T>(r mut Reader&) String& {
     v := try r.Next<T>() catch e { return $e }
-    return "ok " $v
+    return "ok " + $v
 }
 
 test Reader.Next "fails with ParseError on a bad word, taking it, and with Exhausted at the end" {

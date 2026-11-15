@@ -8,7 +8,7 @@ import "std/io"
 fn seen(n I64) Iterator<String&> {
     keep := Vec<String>()
     for i in range n {
-        keep.Push($i "-seen")
+        keep.Push($i + "-seen")
         yield keep.Ref(keep.Len() - 1)
     }
 }
@@ -23,6 +23,6 @@ fn main() {
         for w in seen(k) { out.Push(w) }
     }
     junk := Vec<String>()
-    for i in range 100 { junk.Push("zzzzzzzzzzzzzzzzzz" $i) }
-    io.PutLine($out " " $junk.Len())!
+    for i in range 100 { junk.Push("zzzzzzzzzzzzzzzzzz" + $i) }
+    io.PutLine($out + " " + $junk.Len())!
 }

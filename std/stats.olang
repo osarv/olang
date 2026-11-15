@@ -369,7 +369,7 @@ test Bins "counts the values in bins of equal width from the least to the greate
     same, around := try Bins(Array<F64>[2.0, 2.0, NaN], 2)
     assert same == Array<I64>[0, 2] and around == Array<F64>[1.5, 2.0, 2.5]
     none, _ := try Bins(Array<F64>[NaN], 3) catch Error.TooFew { return }
-    assert false, "only NaNs, yet bins " $none
+    assert false, "only NaNs, yet bins " + $none
 }
 
 # while compiling as at run time (K2)

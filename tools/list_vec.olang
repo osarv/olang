@@ -49,7 +49,7 @@ fn (r mut Report&) leave(path String&, src String&, at I64, why String&) {
     for i in range at {
         if src[i] == '\n' { line++ }
     }
-    r.left.Push($path ":" $line ": " $why)
+    r.left.Push($path + ":" + $line + ": " + $why)
 }
 
 # whether the file declares a type of this name, or a method or function of it
@@ -142,7 +142,7 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
     if usedList and not ("\"std/list\"" in src) {
         w := vtokens(res)
         p := importAt(res, w)
-        return $res[:p] "import \"std/list\"\n" $res[p:]
+        return $res[:p] + "import \"std/list\"\n" + $res[p:]
     }
     return res
 }
@@ -215,7 +215,7 @@ fn main() ? {
     for path in files {
         if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("list_vec: cannot read " $path)
+            srcmask.SayErr("list_vec: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -225,20 +225,20 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("list_vec: cannot write " $path)
+                srcmask.SayErr("list_vec: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
-    for l in r.left { srcmask.Say("by hand: " $l) }
+    for l in r.left { srcmask.Say("by hand: " + $l) }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $r.n " names")
+    srcmask.Say($verb + $changed + " files: " + $r.n + " names")
     if check and changed > 0 { os.Exit(1) }
 }
 
 test "List onto Vec: types, the error type and ToList; anything else is left" {
     r := Report()
-    assert rewrite("f", "    l := List<I64>()\n    x := try l.Pop() catch ListError.EMPTY default 0\n    v := a.ToList()\n", false, r) == "    l := Vec<I64>()\n    x := try l.Pop() catch VecError.EMP" "TY default 0\n    v := a.ToVec()\n"
+    assert rewrite("f", "    l := List<I64>()\n    x := try l.Pop() catch ListError.EMPTY default 0\n    v := a.ToList()\n", false, r) == "    l := Vec<I64>()\n    x := try l.Pop() catch VecError.EMP" + "TY default 0\n    v := a.ToVec()\n"
     assert rewrite("f", "fn f(l mut List<List<I64>>&) List<I64> { return l[0] }\n", false, r) == "fn f(l mut Vec<Vec<I64>>&) Vec<I64> { return l[0] }\n"
     src := "    l := list.List<I64>()\n    # a List<I64> here\n    s := \"List<I64>\"\n    List := 3\n    w := a.ToList(3)\n"
     assert rewrite("f", src, false, r) == src

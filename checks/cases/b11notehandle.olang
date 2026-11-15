@@ -10,7 +10,7 @@ fn main() ? {
     m.Put(1, Vec<String&>())
     for i in range 3 {
         l := try m.RefMut(i % 2)
-        t := "x" $i
+        t := "x" + $i
         l.Push(t)
     }
 }

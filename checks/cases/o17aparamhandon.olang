@@ -15,7 +15,7 @@ type Logged unique struct(id I64, log mut Tally&) {
 fn churn() I64 {
     n := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         n += s.Len() + a[3]
     }

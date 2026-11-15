@@ -21,12 +21,12 @@ fn main() ? io.Error {
     for k in range 1, args.Len() {
         path := args[k]
         text := try os.ReadFile(path) catch os.Error {
-            try io.PutErrLine("link_migrate: " $path ": cannot be read")
+            try io.PutErrLine("link_migrate: " + $path + ": cannot be read")
             continue
         }
         out := migrate(text)
         if out != text {
-            try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("link_migrate: " $path ": cannot be written") }
+            try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("link_migrate: " + $path + ": cannot be written") }
             try io.PutLine(path)
         }
     }
@@ -70,14 +70,14 @@ fn migrate(text String&) String {
         if n != "" {
             if n == links[0] and first >= 0 and not placed { continue }    # the block holds it
             if n == links[0] and placed { continue }
-            b.Push($"extern link " $n " { }")
+            b.Push($"extern link " + $n + " { }")
             if n == links[0] { placed = true }
         } else if i == first {
-            b.Push($"extern link " $links[0] " {\n    " $l[7:])
+            b.Push($"extern link " + $links[0] + " {\n    " + $l[7:])
             if first == last { b.Push("\n}") }
             placed = true
         } else if i > first and i <= last and first >= 0 {
-            b.Push($"    " $l[7:] if isExtern(l) else $"    " $l if l != "" else "")
+            b.Push($"    " + $l[7:] if isExtern(l) else $"    " + $l if l != "" else "")
             if i == last { b.Push("\n}") }
         } else {
             b.Push(l)

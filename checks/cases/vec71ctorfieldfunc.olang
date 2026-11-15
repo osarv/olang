@@ -5,13 +5,13 @@
 # argument (C2d, O10c)
 import "std/io"
 type H struct(x String&, n I64) {
-    y String& = $n "-new-text-in-x's-scope"
+    y String& = $n + "-new-text-in-x's-scope"
 }
 fn H.mk(p String&) H { return H(p, 5) }
 fn main() ? {
     h := H.mk("outer")
     for i in range 2 {
-        t := $i "-inner-block-text"
+        t := $i + "-inner-block-text"
         h = H.mk(t)
     }
     churn()
@@ -20,7 +20,7 @@ fn main() ? {
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t

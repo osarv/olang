@@ -37,11 +37,11 @@ fn (b Bag&) Str() String {
         x := try f(b.head) catch default Node.g(5)
         b.head.next = x
     }() }
-    return "b" $b.k
+    return "b" + $b.k
 }
 fn main() ? {
     b := Bag(Node(1), 3)
     try io.PutLine($b)
     t := churn(100)
-    try io.PutLine($nv(b.head) " " $t)
+    try io.PutLine($nv(b.head) + " " + $t)
 }

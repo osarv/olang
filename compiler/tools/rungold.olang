@@ -20,18 +20,18 @@ fn main() {
     args := os.Args()
     given := $args[1] if args.Len() > 1 else toolkit.Compiler()
     root := try os.Cwd() catch os.Error { toolkit.Die("rungold: no working directory") }
-    dir := try os.RealPath(filepath.Dir(given)) catch os.Error { toolkit.Die("rungold: no " $given) }
-    olang := $dir "/" $filepath.Base(given)
+    dir := try os.RealPath(filepath.Dir(given)) catch os.Error { toolkit.Die("rungold: no " + $given) }
+    olang := $dir + "/" + $filepath.Base(given)
     golden := toolkit.Env("RUNGOLD_OUT", "compiler/goldens/run.txt")
     out := StringBuilder()
     for f in TestFiles() {
         o := toolkit.Run(Array<String&>["timeout", "600", olang, "test", f])
         out.Push(toolkit.GoldenSection(toolkit.RunKey(f), toolkit.RunBody(o.Status, false, toolkit.TestEndings(o.Stdout))))
-        toolkit.Say("rungold: " $f " status " $o.Status "\n")
+        toolkit.Say("rungold: " + $f + " status " + $o.Status + "\n")
     }
-    work := $root "/build/rungold"
+    work := $root + "/build/rungold"
     try os.RemoveAll(work) catch os.Error { }
-    try os.MkDirAll(work) catch os.Error { toolkit.Die("rungold: cannot make " $work) }
+    try os.MkDirAll(work) catch os.Error { toolkit.Die("rungold: cannot make " + $work) }
     cases := RunCases().ToArray()
     join {
         for w in range Workers: spawn capture(olang, work, cases, w)
@@ -39,16 +39,16 @@ fn main() {
     unstable I64 = 0
     for f in cases {
         name := filepath.Base(f)
-        cdir := $work "/" $name[0:name.Len() - 6]
-        body := read($cdir "/run.txt")
-        if body == "" { toolkit.Die("rungold: " $name " was not run") }
+        cdir := $work + "/" + $name[0:name.Len() - 6]
+        body := read($cdir + "/run.txt")
+        if body == "" { toolkit.Die("rungold: " + $name + " was not run") }
         if toolkit.StoredRun.RunParse(body).Stable == false { unstable++ }
         out.Push(toolkit.GoldenSection(toolkit.RunKey(f), body.Replace(cdir, "$CASE").Replace(root, "$ROOT")))
     }
     toolkit.GoldenWrite(golden, out.ToString())
     try os.RemoveAll(work) catch os.Error { }
-    toolkit.Say(("rungold: " $TestFiles().Len() " files of tests and " $cases.Len() " cases (" $unstable " unstable) from "
-                 $given " into " $golden "\n"))
+    toolkit.Say(("rungold: " + $TestFiles().Len() + " files of tests and " + $cases.Len() + " cases (" + $unstable + " unstable) from " +
+                 $given + " into " + $golden + "\n"))
 }
 
 # the files of tests emitdiff and evaldiff run by default: the corpus, std, std's prelude's tests
@@ -85,11 +85,11 @@ fn headerLine(text String&, prefix String&) String {
 fn binaryOf(base String&, flags String&) String {
     bin := $base
     for f in toolkit.Fields(flags) {
-        if f == "-debug" { bin = $bin ".debug" }
-        if f == "-race" { bin = $bin ".race" }
+        if f == "-debug" { bin = $bin + ".debug" }
+        if f == "-race" { bin = $bin + ".race" }
     }
     for f in toolkit.Fields(flags) {
-        if f == "-sanitize" { return $bin ".san" }
+        if f == "-sanitize" { return $bin + ".san" }
     }
     return bin
 }
@@ -99,10 +99,10 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
     for k in range w, cases.Len(), Workers {
         name := filepath.Base(cases[k])
         base := name[0:name.Len() - 6]
-        dir := $work "/" $base
+        dir := $work + "/" + $base
         try os.MkDirAll(dir) catch os.Error { continue }
         text := read(cases[k])
-        try os.WriteFile($dir "/" $name, text) catch os.Error { continue }
+        try os.WriteFile($dir + "/" + $name, text) catch os.Error { continue }
         flags := headerLine(text, "# flags: ")
         args := Vec<String&>()
         args.Push(olang)
@@ -112,14 +112,14 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         b := try os.Output.Exec(...args.ToArray(), dir = dir) catch os.Error { continue }
         body String& = ""
         if b.Status != 0 {
-            body = toolkit.RunBody(-1, false, $"did not build\n" $b.Stdout)
+            body = toolkit.RunBody(-1, false, $"did not build\n" + $b.Stdout)
         } else {
-            exe := $dir "/build/" $binaryOf(base, flags)
+            exe := $dir + "/build/" + $binaryOf(base, flags)
             one := try os.Output.Exec("timeout", "600", exe, dir = dir) catch os.Error { continue }
             two := try os.Output.Exec("timeout", "600", exe, dir = dir) catch os.Error { continue }
             body = toolkit.RunBody(one.Status, one.Stdout != two.Stdout or one.Status != two.Status, one.Stdout)
         }
-        try os.WriteFile($dir "/run.txt", body) catch os.Error { }
+        try os.WriteFile($dir + "/run.txt", body) catch os.Error { }
     }
 }
 

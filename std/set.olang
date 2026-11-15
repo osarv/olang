@@ -105,7 +105,7 @@ fn (s Set<T>&) Hash() I64 {
 fn (s Set<T>&) Str() String {
     b := StringBuilder()
     t := $Array<Set<T>>(0)                              # "Array<set.Set<T>>[]"
-    b.Push($t[6:t.Len() - 3] "[")
+    b.Push($t[6:t.Len() - 3] + "[")
     n I64 = 0
     for x in s.m.Keys() {
         if n > 0: b.Push(", ")

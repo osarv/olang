@@ -10,7 +10,7 @@ fn main() ? {
         names[i].Push("init")
     }
     for i in range 3 {
-        t := $i "-loop-text"
+        t := $i + "-loop-text"
         names[i][0] = t
     }
     assert names[2][0] == "2-loop-text" and names[0][0] == "0-loop-text"

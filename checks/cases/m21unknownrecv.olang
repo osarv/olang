@@ -10,7 +10,7 @@ type Box<T> struct(v T) {
     v
 }
 fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
-fn (b Box<I64>&) Describe() String { return "exact " $b.v }
+fn (b Box<I64>&) Describe() String { return "exact " + $b.v }
 fn main() {
     s := Box<I64>(1).Describe()
 }

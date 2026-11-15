@@ -10,7 +10,7 @@ fn (k K&) Eq(o K&) Bool { return k.a == o.a }
 type S struct(n I64) {
     n
 }
-fn (s S&) Str() String { return "S<" $s.n ">" }
+fn (s S&) Str() String { return "S<" + $s.n + ">" }
 type E enum {
     A(x I64)
     B(t String&)
@@ -35,7 +35,7 @@ fn mk() String {
     m6.Put(true, 0.1)
     m7 := Map<I64, pair.Pair<String&, Char>>()
     m7.Put(7, pair.Pair("p", 'c'))
-    return $m1 "\n" $m2 "\n" $m3 "\n" $m4 "\n" $m5 "\n" $m6 "\n" $m7
+    return $m1 + "\n" + $m2 + "\n" + $m3 + "\n" + $m4 + "\n" + $m5 + "\n" + $m6 + "\n" + $m7
 }
 Baked String& = mk()
 fn main() ? {

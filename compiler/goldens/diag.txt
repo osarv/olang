@@ -40,22 +40,22 @@ asnothing.olang:8:13: error[E32]: case B carries nothing for 'as' to give - test
 compilation failed with 1 error
 === assertfalsemsg.olang
 assertfalsemsg.olang:5:14: error[S18c]: this assertion is false, evaluated while compiling: x is 3, not 4
-    5 |     assert x == 4, "x is " $x ", not 4"
+    5 |     assert x == 4, "x is " + $x + ", not 4"
       |              ^~
 compilation failed with 1 error
 === assertfalsepieces.olang
 assertfalsepieces.olang:7:21: error[S18c]: this assertion is false, evaluated while compiling: twice(2) is 4, not 5
-    7 |     assert twice(2) == 5, "twice(2) is " $twice(2) ", not 5"
+    7 |     assert twice(2) == 5, "twice(2) is " + $twice(2) + ", not 5"
       |                     ^~
 compilation failed with 1 error
 === assertfalsewritten.olang
 assertfalsewritten.olang:6:14: error[S18c]: this assertion is false, evaluated while compiling
-    6 |     assert 1 > 2, "n is " $n
+    6 |     assert 1 > 2, "n is " + $n
       |              ^
-assertfalsewritten.olang:6:14: note: its message reads what only the running program knows, so it is shown as written: "n is " $n
+assertfalsewritten.olang:6:14: note: its message reads what only the running program knows, so it is shown as written: "n is " + $n
 compilation failed with 1 error
 === assertmsgnottext.olang
-assertmsgnottext.olang:5:23: error[S18a]: an assert's message is text, found I64 - write it as text: "x is " $x
+assertmsgnottext.olang:5:23: error[S18a]: an assert's message is text, found I64 - write it as text: "x is " + $x
     5 |     assert Seed == 0, Seed
       |                       ^~~~
 compilation failed with 1 error
@@ -262,7 +262,7 @@ b11near.olang:23:16: error[T17]: Shape has no case 'Cricle' - did you mean 'Circ
    23 |     s := Shape.Cricle
       |                ^~~~~~
 b11near.olang:24:12: error[M9]: module std/io declares no 'PutLin' - did you mean 'PutLine'?
-   24 |     try io.PutLin($n $s)
+   24 |     try io.PutLin($n + $s)
       |            ^~~~~~
 compilation failed with 6 errors
 === b11unknownonce.olang
@@ -339,9 +339,11 @@ badform.olang:2:8: error[M23]: no .olang file at nothere.olang
       |        ^~~~~~~~~
 compilation failed with 1 error
 === bareadj.olang
-bareadj.olang:6:11: error[E11b]: a join piece is a text literal or a '$' rendering - write '$b'
-    6 |     f("a" b)
-      |           ^
+bareadj.olang:8:13: error[E11b]: '+' joins text, and this is I64
+    8 |     f("a" + b)
+      |             ^
+bareadj.olang:8:13: note: a value becomes text only through '$'
+bareadj.olang:8:13: help: write '$b'
 compilation failed with 1 error
 === baseintodeclared.olang
 baseintodeclared.olang:6:16: error[T6b]: I32 does not flow into Meters - convert it, as Meters(x)
@@ -610,9 +612,9 @@ cascademember.olang:12:10: error: S has no member 'flag'
       |          ^~~~
 compilation failed with 1 error
 === charnopad.olang
-charnopad.olang:5:17: error[M19, T29f]: Char has no method 'PadStart' - a character is padded as text: '($c).PadStart(n)'
-    5 |     s := "x" $c.PadStart(3)
-      |                 ^~~~~~~~
+charnopad.olang:5:19: error[M19, T29f]: Char has no method 'PadStart' - a character is padded as text: '($c).PadStart(n)'
+    5 |     s := "x" + $c.PadStart(3)
+      |                   ^~~~~~~~
 compilation failed with 1 error
 === columnassigned.olang
 columnassigned.olang:7:5: error[T7e]: a column is assigned whole only alone - 'c.x = v', its length checked against its table's
@@ -1471,43 +1473,25 @@ e10cnullvalue.olang:5:14: error[E10c]: only a reference, a function value or an 
     5 |     assert x != null
       |              ^~
 compilation failed with 1 error
-=== e11bafterrendering.olang
-e11bafterrendering.olang:7:28: error[E11b]: a join piece is a text literal or a '$' rendering - write '$mark'
-    7 |     try io.PutLine("a " $n mark "b")
-      |                            ^~~~
-compilation failed with 1 error
-=== e11bcalledtext.olang
-e11bcalledtext.olang:7:17: error[E11b]: '(' after a piece of text calls it - to join the value inside, write '$(...)'
-    7 |     x := $n "," ("stop" if c else $n)
-      |                 ^
-compilation failed with 1 error
-=== e11bcharpad.olang
-e11bcharpad.olang:7:20: error[E11b]: a join piece is a text literal or a '$' rendering - write '$($'c').PadStart(3)'
-    7 |     io.PutLine("x" 'c'.PadStart(3) "y")!
-      |                    ^~~
-compilation failed with 1 error
-=== e11bjoincall.olang
-e11bjoincall.olang:6:54: error[E11b]: '(' after a piece of text calls it - to join the value inside, write '$(...)'
-    6 | fn a(tried Bool, op String&) String { return "(" $op (" try" if tried else "") }
-      |                                                      ^
-e11bjoincall.olang:7:42: error[E11b]: '(' after a piece of text calls it - to join the value inside, write '$(...)'
-    7 | fn b(negated Bool) String { return "(is" (" not " if negated else " ") }
-      |                                          ^
-compilation failed with 2 errors
-=== e11bjoinfloat.olang
-e11bjoinfloat.olang:8:29: error[E11b]: '(' after a piece of text calls it - to join the value inside, write '$(...)'
-    8 |     text := "alpha " $alpha (" normalized" if normalized else "")
-      |                             ^
-compilation failed with 1 error
 === e11bjoinvalue.olang
-e11bjoinvalue.olang:6:10: error[E11b]: a join piece is a text literal or a '$' rendering - write '$label(3)'
-    6 |     show(label(3) "\n")
-      |          ^~~~~
+e11bjoinvalue.olang:7:10: error[E11b]: '+' joins text, and this is I32
+    7 |     show(label(3) + "\n")
+      |          ^~~~~~~~
+e11bjoinvalue.olang:7:10: note: a value becomes text only through '$'
+e11bjoinvalue.olang:7:10: help: write '$label(3)'
 compilation failed with 1 error
-=== e11blongchain.olang
-e11blongchain.olang:9:20: error[E11b]: a join piece is a text literal or a '$' rendering - write '$(...)'
-    9 |     try io.PutLine(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
-      |                    ^~~~
+=== e11bpluschars.olang
+e11bpluschars.olang:8:19: error[E11b]: '+' joins text, and this is Array<Char>, characters still being written
+    8 |     show("say " + chars)
+      |                   ^~~~~
+e11bpluschars.olang:8:19: help: make it a String first - 'String(chars)' - or build the text in a StringBuilder
+compilation failed with 1 error
+=== e11bplusexpr.olang
+e11bplusexpr.olang:7:22: error[E11b]: '+' joins text, and this is I64
+    7 |     show("twice: " + n * 2)
+      |                      ^~~~~
+e11bplusexpr.olang:7:22: note: a value becomes text only through '$'
+e11bplusexpr.olang:7:22: help: write '$(n * 2)'
 compilation failed with 1 error
 === e12textforlength.olang
 e12textforlength.olang:4:20: error[E12, D14]: expected I64, found String
@@ -2163,6 +2147,30 @@ e31dcopyshape.olang:4:18: error[E31d]: this Copy has the wrong shape
 e31dcopyshape.olang:4:18: note: Copy takes nothing but its receiver, read through a read-only reference, gives a new tree and cannot fail
 e31dcopyshape.olang:4:18: help: write 'fn (x tree&) Copy() tree'
 compilation failed with 1 error
+=== e31esetatfixed.olang
+e31esetatfixed.olang:9:13: error[E31]: Box declares At but not SetAt, which x[i] = v calls
+    9 |     b[1, 2] = 3
+      |             ^
+compilation failed with 1 error
+=== e31esetslicecount.olang
+e31esetslicecount.olang:8:6: error[E16f]: Grid's SetSlice takes 2 axes, 3 written
+    8 |     g[0:2, :, 1] = 4
+      |      ^
+e31esetslicecount.olang:8:6: help: write one item per axis, or declare 'SetSlice(axes ...Axis, v E)'
+compilation failed with 1 error
+=== e31esetslicenoaxis.olang
+e31esetslicenoaxis.olang:10:5: error[E16f]: a slice is not stored into (E16a)
+   10 |     g[0:2, :] = 4
+      |     ^~~~~~~~~
+e31esetslicenoaxis.olang:10:5: help: store through its elements, or declare SetSlice (E31e), which a store into a slice calls with the axes, then the value
+compilation failed with 1 error
+=== e31esetvaluefirst.olang
+e31esetvaluefirst.olang:7:17: error[E31e]: SetAt's value is its last parameter, after a variadic one
+    7 | fn (b mut Box&) SetAt(v I64, i ...I64) { b.n = v }
+      |                 ^~~~~
+e31esetvaluefirst.olang:7:17: note: a store passes the indexes, then the value
+e31esetvaluefirst.olang:7:17: help: write 'fn (x mut T&) SetAt(i ...I64, v E)'
+compilation failed with 1 error
 === e31operatorfails.olang
 e31operatorfails.olang:14:19: error[E31]: this operator calls Minus, which can fail - write 'try' before the expression
    14 |     m := Money(3) - Money(1)
@@ -2807,7 +2815,7 @@ g29handedon.olang:15:12: error[S18c]: this assertion is false, evaluated while c
    15 |     assert wrap(e) == 0
       |            ^~~~
 g29handedon.olang:6:21: note: here
-    6 |     assert xs.Len() > 0, "empty: " $xs.Len()
+    6 |     assert xs.Len() > 0, "empty: " + $xs.Len()
       |                     ^
 g29handedon.olang:10:36: note: instantiated here, with T = I64, xs.Len() = 0
    10 | fn wrap<T>(xs Array<T>) T { return first(xs) }
@@ -3511,9 +3519,9 @@ m19gfnpuregrows.olang:10:5: note: 'v' may grow here, in a call through a functio
       |     ^
 compilation failed with 1 error
 === m19gmapnote.olang
-m19gmapnote.olang:12:22: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
-   12 |     io.PutLine("r " $r.n)!
-      |                      ^
+m19gmapnote.olang:12:24: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
+   12 |     io.PutLine("r " + $r.n)!
+      |                        ^
 m19gmapnote.olang:11:32: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
    11 |     for k in range 2, 3000 { m.Put(k, blk(k)) }
       |                                ^~~
@@ -3829,7 +3837,7 @@ orderarrayfield.olang:12:22: error[S18c]: this assertion is false, evaluated whi
    12 |     assert not order.ByFields<Row>(a, b)
       |                      ^~~~~~~~
 $ROOT/std/order.olang:86:12: note: in the standard library's code, here
-   86 |     assert false, "field " $f.Name " (" $V.Name ") has no order - ByFields compares nu...
+   86 |     assert false, "field " + $f.Name + " (" + $V.Name + ") has no order - ByFields com...
       |            ^~~~~
 $ROOT/std/order.olang:78:17: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
    78 |         case _: nested<F, R>(f, x, y)
@@ -4869,7 +4877,7 @@ s16dmsgerror.olang:11:32: error[S17]: an error may not leave an unreachable's me
       |                                ^~~
 compilation failed with 1 error
 === s16dmsgnottext.olang
-s16dmsgnottext.olang:5:31: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " $x
+s16dmsgnottext.olang:5:31: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " + $x
     5 |     if Seed > 0 { unreachable Seed }
       |                               ^~~~
 compilation failed with 1 error
@@ -5027,10 +5035,11 @@ s3idle.olang:15:5: error[S3]: 'deep(3)' gives a value and does nothing else
 s3idle.olang:15:5: help: use the value (assign it, pass it on), or leave the call out
 compilation failed with 4 errors
 === s3joinnextline.olang
-s3joinnextline.olang:6:9: error[S3, E11b]: text on a line of its own does nothing
-    6 |         " more"
-      |         ^~~~~~~
-s3joinnextline.olang:6:9: note: a join continues onto the next line only inside parentheses
+s3joinnextline.olang:6:9: error[L18]: a line cannot begin with '+'
+    6 |         + " more"
+      |         ^
+s3joinnextline.olang:6:9: note: the line before ended its statement
+s3joinnextline.olang:6:9: help: end that line with '+', or put the expression in parentheses
 compilation failed with 1 error
 === s5atnosetat.olang
 s5atnosetat.olang:15:6: error[E31b]: this call writes a copy of x[i]
@@ -5133,10 +5142,10 @@ s8dassigned.olang:9:22: error[S8d]: Shape is an enum, and its payload's 'r' is r
 s8dassigned.olang:9:22: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
 compilation failed with 1 error
 === s8ddefercase.olang
-s8ddefercase.olang:10:43: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
-   10 |         defer io.PutLine("deferred r " $e.r)!
-      |                                           ^
-s8ddefercase.olang:10:43: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+s8ddefercase.olang:10:45: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
+   10 |         defer io.PutLine("deferred r " + $e.r)!
+      |                                             ^
+s8ddefercase.olang:10:45: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
 compilation failed with 1 error
 === s8dnarrowlentfield.olang
 s8dnarrowlentfield.olang:12:9: error[S8d]: a narrowed payload field is read, never written or lent writably
@@ -5191,16 +5200,16 @@ s8dwideor.olang:4:53: error[S8d]: Shape is an enum, and its payload's 'r' is rea
 s8dwideor.olang:4:53: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
 compilation failed with 1 error
 === s8edefernull.olang
-s8edefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null
-   10 |         defer io.PutLine("deferred reads " $p.V)!
-      |                                             ^
-s8edefernull.olang:10:45: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+s8edefernull.olang:10:47: error[T2c]: 'p' is a Node?&, which may be null
+   10 |         defer io.PutLine("deferred reads " + $p.V)!
+      |                                               ^
+s8edefernull.olang:10:47: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === s8eerrdefernull.olang
-s8eerrdefernull.olang:10:44: error[T2c]: 'p' is a Node?&, which may be null
-   10 |     errdefer io.PutLine("errdefer reads " $p.V)!
-      |                                            ^
-s8eerrdefernull.olang:10:44: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+s8eerrdefernull.olang:10:46: error[T2c]: 'p' is a Node?&, which may be null
+   10 |     errdefer io.PutLine("errdefer reads " + $p.V)!
+      |                                              ^
+s8eerrdefernull.olang:10:46: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === satadd01outside.olang
 satadd01outside.olang:5:12: error[M19]: I16 has no method 'satAdd'
@@ -6158,11 +6167,11 @@ t22btypebeyond.olang:10:13: help: write 'keeps b in a' after the signature of th
 compilation failed with 1 error
 === t22callunsafe.olang
 t22callunsafe.olang:20:29: error[E12]: expected fn&(n P&) I64, found fn&(n mut P&) I64
-   20 |     try io.PutLine($applyRo(w, p) " " $applyRo(R(3), p))
+   20 |     try io.PutLine($applyRo(w, p) + " " + $applyRo(R(3), p))
       |                             ^
-t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
-   20 |     try io.PutLine($applyRo(w, p) " " $applyRo(R(3), p))
-      |                                                ^~~~
+t22callunsafe.olang:20:52: error[E12]: expected fn&(n P&) I64, found R
+   20 |     try io.PutLine($applyRo(w, p) + " " + $applyRo(R(3), p))
+      |                                                    ^~~~
 compilation failed with 2 errors
 === t22climit.olang
 t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a'
@@ -7092,7 +7101,7 @@ topassertif.olang:4:21: error[S17a]: this top-level assert is false, decided whi
 compilation failed with 1 error
 === topassertmsg.olang
 topassertmsg.olang:5:20: error[S17a]: this top-level assert is false, decided while compiling: 3 sizes, 4 names
-    5 | assert Sizes.Len() == Names.Len(), $Sizes.Len() " sizes, " $Names.Len() " names"
+    5 | assert Sizes.Len() == Names.Len(), $Sizes.Len() + " sizes, " + $Names.Len() + " names"
       |                    ^~
 compilation failed with 1 error
 === topassertmut.olang
@@ -7253,7 +7262,7 @@ unreachvaluedecl.olang:4:10: error[D8e]: 'unreachable' gives no value, so ':=' h
       |          ^~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === unreachvaluemsg.olang
-unreachvaluemsg.olang:3:51: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " $x
+unreachvaluemsg.olang:3:51: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " + $x
     3 | fn f(b Bool) I64 { return 1 if b else unreachable 3 }
       |                                                   ^
 compilation failed with 1 error
@@ -7330,7 +7339,7 @@ vec13nominal.olang:17:29: note: 'w' may grow here, in 'Push' - take the view or 
 compilation failed with 1 error
 === vec14nominalconv.olang
 vec14nominalconv.olang:18:21: error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown
-   18 |     try io.PutLine($d[0] " " $d[1])
+   18 |     try io.PutLine($d[0] + " " + $d[1])
       |                     ^
 vec14nominalconv.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
    16 |     for i in range 1000 { w.Push(i + 100) }

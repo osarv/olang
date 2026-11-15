@@ -5,28 +5,28 @@ import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t
 }
 type CB struct() {
-    text String& = $1 "-ttttttttttttttt"
+    text String& = $1 + "-ttttttttttttttt"
 }
-fn mk(n I64) String& { return $n "-new-text" }
+fn mk(n I64) String& { return $n + "-new-text" }
 fn main() ? {
     c := CB()
-    d String& = $5 "-built-in-the-live-region"
+    d String& = $5 + "-built-in-the-live-region"
     e := mk(6)
     churn()
     assert d == "5-built-in-the-live-region"
     assert e == "6-new-text"
-    c.text = $2 "-replaced"
+    c.text = $2 + "-replaced"
     for i in range 3 {
-        f String& = $i "-each-turn"
+        f String& = $i + "-each-turn"
         churn()
-        assert f == $i "-each-turn"
-        c.text = $i "-replaced"
+        assert f == $i + "-each-turn"
+        c.text = $i + "-replaced"
     }
     assert c.text == "2-replaced"
     try io.PutLine("ok")

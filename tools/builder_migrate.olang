@@ -105,8 +105,8 @@ fn (t mut Tool&) target(importer String&, alias String&) I64 {
     slash := try ipath.FindByte('/') catch default -1
     if slash >= 0 { first = ipath[:slash] }
     if (first.Contains(".") and first != "." and first != "..") or ipath.EndsWith(".h") or ipath.EndsWith(".c") { return -1 }
-    if ipath.StartsWith("std/") { return t.load($filepath.Join(t.Std, ipath[4:]) ".olang") }
-    return t.load($filepath.Join(filepath.Dir(importer), ipath) ".olang")
+    if ipath.StartsWith("std/") { return t.load($filepath.Join(t.Std, ipath[4:]) + ".olang") }
+    return t.load($filepath.Join(filepath.Dir(importer), ipath) + ".olang")
 }
 
 fn (t Tool&) indexOf(path String&) I64 {
@@ -227,18 +227,18 @@ fn renamed(m mut Mod&) {
     for e in m.moves.Iter() {
         s := stripped(e.Key, e.Value.Type)
         want.Put(e.Key.Copy(), s.Copy())
-        key := $e.Value.Type "." $s
+        key := $e.Value.Type + "." + $s
         count.Put(key, (try count.Get(key) catch default 0) + 1)
     }
     for e in m.builders.Iter() {
-        key := $e.Value "." $e.Key
+        key := $e.Value + "." + $e.Key
         count.Put(key, (try count.Get(key) catch default 0) + 1)
     }
     keys Vec<String>
     for e in m.moves.Iter() {
         s := try want.Get(e.Key) catch default ""
-        if s == e.Key or $e.Value.Type "." $s in m.cases: continue    # D19: a builder is never named like a case
-        if (try count.Get($e.Value.Type "." $s) catch default 0) == 1 { keys.Push(e.Key.Copy()) }
+        if s == e.Key or $e.Value.Type + "." + $s in m.cases: continue    # D19: a builder is never named like a case
+        if (try count.Get($e.Value.Type + "." + $s) catch default 0) == 1 { keys.Push(e.Key.Copy()) }
     }
     for k in keys {
         mv := try m.moves.Get(k) catch { continue }
@@ -248,11 +248,11 @@ fn renamed(m mut Mod&) {
     # a move whose own name is a case of its type cannot be made: left for a person, said by the run
     gone Vec<String>
     for e in m.moves.Iter() {
-        if $e.Value.Type "." $e.Value.Name in m.cases: gone.Push(e.Key.Copy())
+        if $e.Value.Type + "." + $e.Value.Name in m.cases: gone.Push(e.Key.Copy())
     }
     for k in gone {
         mv := try m.moves.Get(k) catch { continue }
-        m.clashes.Push($k " makes a " $mv.Type ", and " $mv.Type "." $mv.Name " would name a case of it - rename it, then declare it fn " $mv.Type ".NAME")
+        m.clashes.Push($k + " makes a " + $mv.Type + ", and " + $mv.Type + "." + $mv.Name + " would name a case of it - rename it, then declare it fn " + $mv.Type + ".NAME")
         m.moves.Remove(k)
     }
 }
@@ -264,7 +264,7 @@ fn stripped(name String&, ty String&) String {
         end := at + ty.Len()
         before := at == 0 or name[at - 1].IsLower() or name[at - 1].IsDigit()
         after := end == name.Len() or name[end].IsUpper()
-        if before and after { return leftName(name, $name[:at] $name[end:]) }
+        if before and after { return leftName(name, $name[:at] + $name[end:]) }
         at = try name[end:].Find(ty) catch default -1
         if at >= 0 { at += end }
     }
@@ -291,7 +291,7 @@ fn skipMembers(m mut Mod&, td ast.TypeDecl&, names source.Names&) {
         case ast.TypeBody.Enum(cases, _) {
             for c in cases {
                 m.skips.Put(I64(c.Sp.Start), true)
-                m.cases.Put($ty "." $names.Text(c.Name), true)
+                m.cases.Put($ty + "." + $names.Text(c.Name), true)
             }
         }
         case ast.TypeBody.Trait(ms, _, _) { for f in ms { m.skips.Put(I64(f.Sp.Start), true) } }
@@ -592,9 +592,9 @@ fn methodEdits(text String&, toks Array<token.Token>&, out mut Vec<Edit>&) {
         if c < 0 { continue }
         args := $text[toks[at].End:toks[c].Start] if c > at + 1 else ""
         with String& = ""
-        if float { with = $name[:name.Len() - 8] ".FromBits(" $recv ")" }
-        if name == "StringFromC" { with = $"String.FromC(" $recv ", " $args ")" }
-        if name == "ParseAs" { with = $ty ".Parse(" $recv $(", " $args if args.Len() > 0 else "") ")" }
+        if float { with = $name[:name.Len() - 8] + ".FromBits(" + $recv + ")" }
+        if name == "StringFromC" { with = $"String.FromC(" + $recv + ", " + $args + ")" }
+        if name == "ParseAs" { with = $ty + ".Parse(" + $recv + $(", " + $args if args.Len() > 0 else "") + ")" }
         out.Push(Edit(I64(toks[s].Start), I64(toks[c].End), with))
     }
 }
@@ -642,7 +642,7 @@ fn (t mut Tool&) rewrite(i I64) String {
             if prev == token.Tok.Fn {
                 declEdit(text, toks, k, name, mv, edits)
             } else if prev == token.Tok.Test {
-                edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $mv.Type "." $mv.Name))
+                edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $mv.Type + "." + $mv.Name))
             } else {
                 useEdit(text, toks, k, name, mv, edits)
             }
@@ -689,7 +689,7 @@ fn (t Tool&) viaAlias(m Mod&, text String&, toks Array<token.Token>&, k I64, nam
 # rule read backward: "ParseIP" for IP.Parse, "DateOf" for Date.Of, "ListenUDP" for UDP.Listen)
 fn (t Tool&) renamedOf(o Mod&, name String&) Move ? NotRenamed {
     for r in StdRenames {
-        if not o.Path.EndsWith($"/" $r.Module ".olang") or not o.Path.StartsWith(t.stdReal()) or r.Old != name { continue }
+        if not o.Path.EndsWith($"/" + $r.Module + ".olang") or not o.Path.StartsWith(t.stdReal()) or r.Old != name { continue }
         return Move($r.Owner, $r.Type, r.Params.Copy(), r.Moved.Copy(), r.Err, $r.New, true)
     }
     found Vec<Move>
@@ -714,7 +714,7 @@ StdRenames Array<Renamed> = Array<Renamed>[
 
 # "fn name<list>(" becoming "fn Owner.name<rest>(": the owner's variables leave the list
 fn declEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move, edits mut Vec<Edit>&) {
-    edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $mv.Owner "." $mv.Name))
+    edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $mv.Owner + "." + $mv.Name))
     if k + 1 >= toks.Len() or toks[k + 1].Kind != token.Tok.Lt { return }
     some := false
     for b in mv.Moved { some = some or b }
@@ -733,7 +733,7 @@ fn declEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move
     if kept.Len() > 0 or keptErr != "" {
         with.PushChar('<')
         with.Push(kept.Join(", "))
-        if keptErr != "" { with.Push($(" " if kept.Len() > 0 else "") $keptErr) }
+        if keptErr != "" { with.Push($(" " if kept.Len() > 0 else "") + $keptErr) }
         with.PushChar('>')
     }
     edits.Push(Edit(I64(toks[k + 1].Start), I64(toks[g].End), with.ToString()))
@@ -746,7 +746,7 @@ fn useEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move,
     g := angleClose(toks, k + 1) if touching else -1
     if g < 0 {
         # no type arguments: a generic owner's variables inferred (its bare name), any other owner as written
-        edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $(mv.Type if mv.Generic else mv.Owner) "." $mv.Name))
+        edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $(mv.Type if mv.Generic else mv.Owner) + "." + $mv.Name))
         return
     }
     args := splitTop(text[toks[k + 1].End:toks[g].Start])
@@ -767,12 +767,12 @@ fn useEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move,
         if ownerHas(mv.Owner, mv.Params[j]) {
             if a != "" { given.Put($mv.Params[j], a) }
         } else if a != "" {
-            own.Push($("? " if isErr else "") $a)
+            own.Push($("? " if isErr else "") + $a)
         }
     }
     owner := substituted(mv.Owner, given) if given.Len() > 0 else (mv.Type if mv.Generic else mv.Owner)
-    tail := $"<" $own.Join(", ") ">" if own.Len() > 0 else ""
-    edits.Push(Edit(I64(toks[k].Start), I64(toks[g].End), $owner "." $mv.Name $tail))
+    tail := $"<" + $own.Join(", ") + ">" if own.Len() > 0 else ""
+    edits.Push(Edit(I64(toks[k].Start), I64(toks[g].End), $owner + "." + $mv.Name + $tail))
 }
 
 # whether an owner's text names a type variable
@@ -869,7 +869,7 @@ fn run() I32 {
         if not path.EndsWith(".olang") { continue }
         k := t.load($path)
         if k < 0 {
-            srcmask.SayErr("builder_migrate: cannot read " $path)
+            srcmask.SayErr("builder_migrate: cannot read " + $path)
             return 2
         }
         given.Push(k)
@@ -885,7 +885,7 @@ fn run() I32 {
     for k in given {
         m := t.mods[k]
         if not m.ok {
-            srcmask.SayErr("builder_migrate: " $m.Path " does not parse - left as it is")
+            srcmask.SayErr("builder_migrate: " + $m.Path + " does not parse - left as it is")
             status = 1
             continue
         }
@@ -893,18 +893,18 @@ fn run() I32 {
         if m.Text.StartsWith("# check: fail error[D19a]") { continue }
         old := $m.Text
         out := t.rewrite(k)
-        for c in t.mods[k].clashes { srcmask.Say($"by hand: " $m.Path ": " $c) }
+        for c in t.mods[k].clashes { srcmask.Say($"by hand: " + $m.Path + ": " + $c) }
         if out == old { continue }
         changed++
         if verbose { srcmask.Say(m.Path) }
         if not check {
             try os.WriteFile(m.Path, out) catch {
-                srcmask.SayErr("builder_migrate: cannot write " $m.Path)
+                srcmask.SayErr("builder_migrate: cannot write " + $m.Path)
                 return 2
             }
         }
     }
-    srcmask.Say($"builder_migrate: " $changed " files" $(" would change" if check else " changed"))
+    srcmask.Say($"builder_migrate: " + $changed + " files" + $(" would change" if check else " changed"))
     if check and changed > 0 { return 1 }
     return status
 }

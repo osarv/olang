@@ -3,10 +3,10 @@ import "std/io"
 type Bag struct(n I64) {
     n
 }
-fn (b Bag&) Str() String { return "Bag-" $b.n "-0123456789012345678901234567890123456789012345678901234567890123456789" }
+fn (b Bag&) Str() String { return "Bag-" + $b.n + "-0123456789012345678901234567890123456789012345678901234567890123456789" }
 G mut I64 = 0
 fn f(b Bag&, k I64) I64 {
-    defer { s := $b " " $k
+    defer { s := $b + " " + $k
         G = G + s.Len() }
     {
         x := Array<I64>(4, k)

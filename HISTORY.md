@@ -37544,3 +37544,51 @@ the variadic At is not restricted to integers: the compiler gives the indexes an
 names is as valid). New diagnostics: `SetValueLast` and `SetSliceAxis` (E31e/E16f), `SliceNoPlace`'s help names SetSlice.
 tests/axes.olang's Voxels/Plane/Cells types and a top-level assert the compile-time evaluator decides (a false value there is
 a compile error, checked once); checks/cases e31esetvaluefirst, e31esetslicecount, e31esetslicenoaxis, e31esetatfixed.
+
+## 2026-11-15: E11b - text joined with `+`; joining by adjacency removed
+
+The user, 2026-11-15: "remove adjacency and add +". Since E11b was first written, text was joined by writing its pieces
+side by side - `"n = " $n "\n"`, a piece a literal or a `$` rendering - a deliberate choice (no `+` on text, so a value
+never joined silently, and a missing comma was a syntax error). It is reversed: `"n = " + $n + "\n"`. What adjacency
+cost: it was a construct of its own (a `text` production in the grammar, a `Join` node, a family of parser hints that
+read a value written beside text - `"pretty(t) "\n""`, `"," (...)` - and a checker hint for a piece called), and it was
+the one place a value could not be text unless rendered even where it already was text: a `String` variable had to be
+written `$s`. With `+` the join is an ordinary operator: `String.Plus` in the prelude (E31, M19d), so a generic's
+`a + b` adds numbers and joins text (G18a), a trait asking for `Plus` is met by `String`, `s += t` works, and the
+evaluator runs it as it runs any operator.
+
+Decided on the way (mine, by the user's rules):
+- **Performance is the old join's.** The checker turns every `+` with a `String` on either side into the typed tree's
+  `Text` node that adjacency made - a chain however grouped, `a + (b + c)` included, is one join, its operands evaluated
+  left to right and then rendered and copied once into one allocation (E11b's evaluation order is kept word for word).
+  No lowering, scope or evaluator code changed. Measured: the 5-piece `"<" + a + "|" + $n + "|" + b` compiles to IR
+  identical to `"<" $a "|" $n "|" $b`'s on the compiler before (one `__olang_scope_alloc_slow` site, `explain -ir`),
+  and a 2e7-iteration loop of it runs in the same time (0.18-0.23 s user both, loaded machine). A join of literals alone
+  is now the literal (constant data, T25d), which the old join was not (it built `"ab" "cd"` at run time, though SPEC
+  said it cost nothing).
+- **A non-String operand is an error naming its rendering**: `"n = " + n` says `'+' joins text, and this is I64`, help
+  `write '$n'` (`$(n * 2)` where `$` would take less). An `Array<Char>` keeps its lane `+` beside an array (E39), and
+  beside a `String` is an error naming `String(chars)` or a `StringBuilder`. A nullable `String?&` is no text operand.
+- **Lines**: a join continues as any binary expression does - after a line ending in `+`, or anywhere inside
+  parentheses (L18). The brief's "only inside parentheses, as before" would have needed a rule of its own against L18's
+  operator continuation; composing with it is the one rule.
+- **`$` binds tighter than `+`** (it takes a postfix expression, as before), so `"a" + $x.Len()` renders `x.Len()`.
+- **Removed with adjacency**: the `text`/`text-piece` grammar, `ast.Expr.Join`, the parser's E11b hints (`JoinPiece`,
+  `JoinPieceCalled`, the operand walkers behind them), the checker's piece-called hint, and S3's "text on a line of its
+  own" message (`JoinNextLine`) - text standing alone is S3's ordinary error, a line beginning with `+` L18's. Their
+  checks cases went with them (`e11bafterrendering`, `e11bcalledtext`, `e11bcharpad`, `e11bjoincall`, `e11bjoinfloat`,
+  `e11blongchain`); `bareadj`, `e11bjoinvalue`, `s3joinnextline` were rewritten for the new rule, and `e11bplusexpr`,
+  `e11bpluschars`, `e11bpluslanes` and `tests/textplus.olang` (joins, `+=`, a long chain, grouping, generics and a trait
+  over `Plus`, a top-level assert and a baked global the evaluator computes, text read back after churn) added.
+
+**The migration.** `tools/textjoin_migrate.olang` (in `olang fix`'s table) reads each file with the compiler's own
+parser in its old reading, `parse.Adjacent` - kept in the parser for the tool, as `OldBitwise` is for
+`precedence_migrate` - which builds each join as the `+` chain and records where every piece ends and another follows;
+` +` is written there, so a join over lines keeps its breaks. A join was one unary, so where the new `+` would come
+apart it is parenthesized: after an operator binding as tightly or tighter, after `embed`, and as a catch's `default`
+(itself one unary, R9a) - the last found when the first migrated compiler wrote `catch default $"olang_test_" + $id`,
+read as `(try ... catch default $"olang_test_") + $id`, and every test symbol came out wrong. Over the repository: 864
+files, 8112 joins, 24347 `+` written, 5 joins parenthesized; programs written inside string literals (the fuzzers'
+generators, checks.olang's scenarios, drvdiff's, the prompt's and cells' templates) by hand and by a scratch pass.
+Bootstrapped in three steps: the old compiler built the new one from the old-syntax source, which built the migrated
+source, which built itself to the fixed point; the seed was written again.

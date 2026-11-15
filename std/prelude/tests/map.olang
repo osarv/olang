@@ -405,7 +405,7 @@ test "a Map walked in order of its keys: its entries listed, then sorted" {
     es := m.Iter().ToVec()
     es.Sort(fn(a, b) { return a.Key < b.Key })
     b := StringBuilder()
-    for e in es { b.Push($e.Key "=" $e.Value " ") }
+    for e in es { b.Push($e.Key + "=" + $e.Value + " ") }
     assert b.ToString() == "apple=2 fig=3 kiwi=1 pear=1 "
 }
 
@@ -413,15 +413,15 @@ test "a Map walked in order of its keys: its entries listed, then sorted" {
 # any other value - in the order a walk gives them
 fn mapRendered() String {
     b := StringBuilder()
-    b.Push($Map<String&, I64>() " ")
+    b.Push($Map<String&, I64>() + " ")
     m := Map<String&, I64>()
     m.Put("a\"b", 1)
-    b.Push($m " ")
+    b.Push($m + " ")
     c := Map<Char, Vec<Char>>()
     l := Vec<Char>()
     l.Push('\n')
     c.Put('x', l)
-    b.Push($c " ")
+    b.Push($c + " ")
     n := Map<I64, Map<I64, Bool>>()
     n.Put(7, Map<I64, Bool>())
     b.Push($n)
@@ -431,7 +431,7 @@ mapRenderedBaked := mapRendered()
 
 test "$ renders a Map's entries, not its buckets" {
     r := mapRendered()
-    assert r == ("Map<String&, I64>[] Map<String&, I64>[\"a\\\"b\": 1] Map<Char, Vec<Char>>['x': Vec<Char>['\\n']] "
+    assert r == ("Map<String&, I64>[] Map<String&, I64>[\"a\\\"b\": 1] Map<Char, Vec<Char>>['x': Vec<Char>['\\n']] " +
         "Map<I64, Map<I64, Bool>>[7: Map<I64, Bool>[]]")
     assert mapRenderedBaked == r                        # the evaluator renders as the run time does
     m := Map<I64, String&>()
@@ -440,7 +440,7 @@ test "$ renders a Map's entries, not its buckets" {
     expect.Push("Map<I64, String&>[")
     for e in m {                                        # in the order a walk gives
         if expect.Len() > 18 { expect.Push(", ") }
-        expect.Push($e.Key ": \"" $e.Value "\"")
+        expect.Push($e.Key + ": \"" + $e.Value + "\"")
     }
     expect.Push("]")
     assert $m == expect.ToString()
@@ -451,7 +451,7 @@ test "$ renders a Map's entries, not its buckets" {
 # values given by it are the very values put, read after the slot was reused
 fn mapTakes() I64 {
     m := Map<I64, String&>()
-    for i in range 50 { m.Put(i, $i "!") }
+    for i in range 50 { m.Put(i, $i + "!") }
     t I64 = 0
     for i in range 50 {
         if i % 2 == 0 {

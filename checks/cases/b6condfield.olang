@@ -9,7 +9,7 @@ type Bag struct() {
     last String& = ""
 }
 fn set(b mut Bag&, i I64) {
-    x String& = "w" $i
+    x String& = "w" + $i
     b.last = x if i == 1 else "z"
 }
 fn main() ? {

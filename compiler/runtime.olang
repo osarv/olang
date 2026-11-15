@@ -42,7 +42,7 @@ fn fact(name String&, row I64) I64 ? {
 
 # a stop at line n of the runtime file at path: a mistake in the repository, not in the program
 fn malformed(path String&, n I64, why String&) ? Bad {
-    try io.PutErrLine($"olang: " $path ":" $n ": " $why) catch io.Error { }
+    try io.PutErrLine($"olang: " + $path + ":" + $n + ": " + $why) catch io.Error { }
     error Bad.Unreadable
 }
 
@@ -64,9 +64,9 @@ fn directive(line String&) I64 {
 # with the profiler's hooks ("; @prof" lines) or not (B20), and with a benchmark build's counting ("; @bench" lines,
 # B19b) or not
 fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = false) String ? Bad {
-    path := $load.StdDir() "/runtime/" $file
+    path := $load.StdDir() + "/runtime/" + $file
     bytes := try os.ReadFile(path) catch os.Error {
-        try io.PutErrLine($"olang: " $path ": cannot open this file") catch io.Error { }
+        try io.PutErrLine($"olang: " + $path + ": cannot open this file") catch io.Error { }
         error Bad.Unreadable
     }
     text := String(bytes)
@@ -150,8 +150,8 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
 fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false, bench Bool = false) String ? Bad {
     if dyncall { return try Fill("dyncall.ll", arch, san, prof, bench) }
     text := try Fill("runtime.ll", arch, san, prof, bench)
-    if san { text = $text "\n" $(try Fill("san.ll", arch, san, prof, bench)) }
-    if prof { text = $text "\n" $(try Fill("prof.ll", arch, san, prof, bench)) }
+    if san { text = $text + "\n" + $(try Fill("san.ll", arch, san, prof, bench)) }
+    if prof { text = $text + "\n" + $(try Fill("prof.ll", arch, san, prof, bench)) }
     return text
 }
 
@@ -166,7 +166,7 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
         if line.StartsWith("@") {
             sp := try line.Find(" = linkonce_odr ") catch default -1
             if sp > 0 and (try line.Find(" ") catch default -1) == sp {
-                out.Push($"$" $line[1:sp] " = comdat any\n")
+                out.Push($"$" + $line[1:sp] + " = comdat any\n")
                 out.Push(line)
                 out.Push(", comdat\n")
                 continue
@@ -190,8 +190,8 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
         out.Push(line)
         out.PushChar('\n')
     }
-    out.Push($"\nattributes #0 = { null_pointer_is_valid " $("sanitize_thread " if race else "") $attrs " nounwind }\n")
-    out.Push($"attributes #1 = { null_pointer_is_valid " $attrs " nounwind }\n")
+    out.Push($"\nattributes #0 = { null_pointer_is_valid " + $("sanitize_thread " if race else "") + $attrs + " nounwind }\n")
+    out.Push($"attributes #1 = { null_pointer_is_valid " + $attrs + " nounwind }\n")
     return out.ToString()
 }
 
@@ -199,7 +199,7 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
 # runtime's object
 fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false) String ? Bad {
     body := try Text(arch, san, false, prof, bench)
-    return WithAttributes($"target triple = \"" $triple "\"\n\n" $body, attrs, race)
+    return WithAttributes($"target triple = \"" + $triple + "\"\n\n" + $body, attrs, race)
 }
 
 # the end of the type starting at at in line - a bracketed or braced one whole, else one word - in a global's line
@@ -236,7 +236,7 @@ fn declare(out mut StringBuilder&, line String&) {
         line.Contains(" = private ") { return }
     if line.StartsWith("define ") {
         open := try line.Find("(") catch { return }
-        out.Push($"declare " $line[7:open] "(")
+        out.Push($"declare " + $line[7:open] + "(")
         depth I64 = 0
         start := open + 1
         first := true
@@ -263,22 +263,22 @@ fn declare(out mut StringBuilder&, line String&) {
         # what follows the parameters, the brace opening the body left out: the function's attributes
         attrs := line[p + 1:]
         brace := try attrs.FindLast("{") catch default attrs.Len()
-        out.Push($")" $attrs[:brace].TrimEnd() "\n")
+        out.Push($")" + $attrs[:brace].TrimEnd() + "\n")
         return
     }
     if line.StartsWith("@") {
         eq := try line.Find(" = ") catch { return }
-        out.Push($line[:eq] " = external ")
+        out.Push($line[:eq] + " = external ")
         r := line[eq + 3:]
         if r.StartsWith("thread_local(") {
             close := try r.Find(")") catch { return }
-            out.Push($r[:close + 1] " ")
+            out.Push($r[:close + 1] + " ")
             r = r[close + 2:]
         }
         if r.StartsWith("unnamed_addr ") { r = r[13:] }
         sp := try r.Find(" ") catch default r.Len()
         e := typeEnd(r, sp + 1) if sp + 1 < r.Len() else r.Len()
-        out.Push($r[:sp + 1] $r[sp + 1:e] "\n")
+        out.Push($r[:sp + 1] + $r[sp + 1:e] + "\n")
     }
 }
 
@@ -301,7 +301,7 @@ fn Decls(text String&) String {
             out.PushChar('\n')
             if line == "}" { copying = false }
         } else if modulesInline(line) {
-            out.Push($"define available_externally " $line[7:] "\n")
+            out.Push($"define available_externally " + $line[7:] + "\n")
             copying = true
         } else {
             declare(out, line)
@@ -313,7 +313,7 @@ fn Decls(text String&) String {
 
 # the tags the runtime's inlined bodies carry for its scope and chunk headers (T36), which the dynamic call's part
 # inlines too
-HeaderTbaa String& = ("!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\", !20, i64 0}\n" $
+HeaderTbaa String& = ("!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\", !20, i64 0}\n" + $
         "!59 = !{!49, !49, i64 0}\n!60 = !{!50, !50, i64 0}\n")
 
 # the dynamic call's IR (S3), an object of its own linked only into a program declaring it: it reaches the rest of the
@@ -321,7 +321,7 @@ HeaderTbaa String& = ("!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\"
 fn DyncallIr(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false) String ? Bad {
     core := try Text(arch, san, false, prof, bench)
     dc := try Text(arch, san, true, prof, bench)
-    body := $"target triple = \"" $triple "\"\n\n" $Decls(core) $dc "\n!20 = !{!\"olang\"}\n" $HeaderTbaa
+    body := $"target triple = \"" + $triple + "\"\n\n" + $Decls(core) + $dc + "\n!20 = !{!\"olang\"}\n" + $HeaderTbaa
     return WithAttributes(body, attrs, race)
 }
 

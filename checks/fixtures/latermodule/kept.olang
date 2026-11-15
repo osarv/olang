@@ -9,7 +9,7 @@ import "mat"
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -23,5 +23,5 @@ fn main() ? {
         ms.Push(try mat.Mat.View(d, 0, 2, 2))
     }
     churn()
-    io.PutLine($ms[0].Get(1, 1) " " $ms[2].Get(1, 1))!
+    io.PutLine($ms[0].Get(1, 1) + " " + $ms[2].Get(1, 1))!
 }

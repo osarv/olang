@@ -37,9 +37,9 @@ fn replaceWord(src String&, from String&, to String&, c mut Count&) String {
     return out.ToString()
 }
 
-OldName String& = "Builtin" "Error"
+OldName String& = "Builtin" + "Error"
 # the old name and path, written in two pieces so that the tool run over itself changes nothing
-OldPath String& = "std/prelude/" "builtin"
+OldPath String& = "std/prelude/" + "builtin"
 
 fn rename(src String&, c mut Count&) String {
     return replaceWord(replaceWord(src, OldName, "CheckError", c), OldPath, "std/prelude/check", c)
@@ -84,7 +84,7 @@ fn main() ? {
     for path in files {
         if not wanted(path) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("checkerror_rename: cannot read " $path)
+            srcmask.SayErr("checkerror_rename: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -94,21 +94,21 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("checkerror_rename: cannot write " $path)
+                srcmask.SayErr("checkerror_rename: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.n " names")
+    srcmask.Say($verb + $changed + " files: " + $total.n + " names")
     if check and changed > 0 { os.Exit(1) }
 }
 
 test "BuiltinError becomes CheckError and its file's path follows; a longer word is left" {
     n := Count()
-    assert rename("    q := checked (a / b) catch " $OldName ".DIVIDE_BY_ZERO default 0\n", n) == "    q := checked (a / b) catch CheckError.DIVIDE_BY_ZERO default 0\n"
-    assert rename("# " $OldName "'s words (" $OldPath ".olang)\n", n) == "# CheckError's words (std/prelude/check.olang)\n"
-    assert rename("x := PreludeType(\"" $OldPath "\", \"" $OldName "\")", n) == "x := PreludeType(\"std/prelude/check\", \"CheckError\")"
+    assert rename("    q := checked (a / b) catch " + $OldName + ".DIVIDE_BY_ZERO default 0\n", n) == "    q := checked (a / b) catch CheckError.DIVIDE_BY_ZERO default 0\n"
+    assert rename("# " + $OldName + "'s words (" + $OldPath + ".olang)\n", n) == "# CheckError's words (std/prelude/check.olang)\n"
+    assert rename("x := PreludeType(\"" + $OldPath + "\", \"" + $OldName + "\")", n) == "x := PreludeType(\"std/prelude/check\", \"CheckError\")"
     src := "    MyBuiltinError := 3\n    BuiltinErrors := 4\n"
     assert rename(src, n) == src
     assert n.n == 5

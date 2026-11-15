@@ -35,37 +35,37 @@ type Flag struct(on Bool, n I64) { on, n }
 fn where(p Point) String {
     return match p {
         case Point(x = 0, y = 0): "origin"
-        case Point(x = 0, y): "y" $y
-        case Point(x, y = 0): "x" $x
-        case Point(x, y) if x == y: "diag" $x
-        case Point(y, x): $x "," $y # names in any order
+        case Point(x = 0, y): "y" + $y
+        case Point(x, y = 0): "x" + $x
+        case Point(x, y) if x == y: "diag" + $x
+        case Point(y, x): $x + "," + $y # names in any order
     }
 }
 
 fn lines(l Line) String {
     return match l {
-        case Line(start = Point(x = 0, y = 0), end): "from origin to " $where(end)
+        case Line(start = Point(x = 0, y = 0), end): "from origin to " + $where(end)
         case Line(end = Point(x = 0)): "to the y axis"
-        case Line(start): "from " $where(start)
+        case Line(start): "from " + $where(start)
     }
 }
 
 fn temps(t Temp) String {
     return match t {
-        case Temp(Hot = true, Kelvin): "hot " $Kelvin
+        case Temp(Hot = true, Kelvin): "hot " + $Kelvin
         case Temp(Kelvin = 273): "freezing"
-        case Temp(Kelvin): $Kelvin "K"
+        case Temp(Kelvin): $Kelvin + "K"
     }
 }
 
 fn shapes(s Shape) String {
     return match s {
         case Shape.Rect(h = 0): "flat"
-        case Shape.Rect(w, h = 1): "thin " $w
+        case Shape.Rect(w, h = 1): "thin " + $w
         case Shape.Rect(h = 2, w = 2): "square 2"
-        case Shape.Rect(w, h): "rect " $(w * h)
+        case Shape.Rect(w, h): "rect " + $(w * h)
         case Shape.Round(Point(x = 0)): "round on the axis"
-        case Shape.Round(Point(x, y)): "round " $x "," $y
+        case Shape.Round(Point(x, y)): "round " + $x + "," + $y
         case Shape.Dot: "dot"
     }
 }
@@ -79,8 +79,8 @@ fn computed(p Point, k I64) String {
 
 fn firstOnAxis(ps Array<Point>&) String {
     return match ps {
-        case Array<Point>[Point(x = 0, y), ...]: "first on the axis at " $y
-        case Array<Point>[_, Point(y = 0, x), ...]: "second on the x axis at " $x
+        case Array<Point>[Point(x = 0, y), ...]: "first on the axis at " + $y
+        case Array<Point>[_, Point(y = 0, x), ...]: "second on the x axis at " + $x
         case _: "neither"
     }
 }
@@ -88,8 +88,8 @@ fn firstOnAxis(ps Array<Point>&) String {
 fn boxes(b Box<I64>) String {
     return match b {
         case Box(v = 3): "three"
-        case Box<I64>(v = 4, tag): "four " $tag
-        case Box(v, tag = "t"): "t " $v
+        case Box<I64>(v = 4, tag): "four " + $tag
+        case Box(v, tag = "t"): "t " + $v
         case Box(v): $v
     }
 }
@@ -97,8 +97,8 @@ fn boxes(b Box<I64>) String {
 fn nodes(m Node?&) String {
     return match m {
         case Node(n = 0, next = Node(n = 1)): "0 then 1"
-        case Node(n, next = null): "last " $n
-        case Node(n): "node " $n
+        case Node(n, next = null): "last " + $n
+        case Node(n): "node " + $n
         case _: "none"
     }
 }
@@ -131,27 +131,27 @@ fn all(z I64) String {
         b.Push(where(p))
         b.Push(";")
     }
-    b.Push($lines(Line(Point(0, z), Point(3, 3))) ";" $lines(Line(Point(1, 1), Point(0, 9))) ";" $lines(Line(Point(2, 0), Point(5, 5))) ";")
-    b.Push($temps(Temp(40 + z)) ";" $temps(Temp(0)) ";" $temps(Temp(10)) ";")
+    b.Push($lines(Line(Point(0, z), Point(3, 3))) + ";" + $lines(Line(Point(1, 1), Point(0, 9))) + ";" + $lines(Line(Point(2, 0), Point(5, 5))) + ";")
+    b.Push($temps(Temp(40 + z)) + ";" + $temps(Temp(0)) + ";" + $temps(Temp(10)) + ";")
     for s in Array<Shape>[Shape.Rect(5, 0), Shape.Rect(5, 1), Shape.Rect(2, 2), Shape.Rect(3, 4), Shape.Round(Point(0, z)), Shape.Round(Point(1, 2)), Shape.Dot] {
         b.Push(shapes(s))
         b.Push(";")
     }
-    b.Push($computed(Point(3, 0), 2) ";" $computed(Point(3, 0), z) ";")
-    b.Push($firstOnAxis(Array<Point>[Point(0, 7)]) ";" $firstOnAxis(Array<Point>[Point(1, 1), Point(6, 0)]) ";" $firstOnAxis(Array<Point>[Point(1, 1)]) ";")
-    b.Push($boxes(Box(3, "a")) ";" $boxes(Box(4, "b")) ";" $boxes(Box(5, "t")) ";" $boxes(Box(6 + z, "u")) ";")
+    b.Push($computed(Point(3, 0), 2) + ";" + $computed(Point(3, 0), z) + ";")
+    b.Push($firstOnAxis(Array<Point>[Point(0, 7)]) + ";" + $firstOnAxis(Array<Point>[Point(1, 1), Point(6, 0)]) + ";" + $firstOnAxis(Array<Point>[Point(1, 1)]) + ";")
+    b.Push($boxes(Box(3, "a")) + ";" + $boxes(Box(4, "b")) + ";" + $boxes(Box(5, "t")) + ";" + $boxes(Box(6 + z, "u")) + ";")
     last := Node(1, null)
     first := Node(0, last)
-    b.Push($nodes(first) ";" $nodes(last) ";" $nodes(Node(5, first)) ";" $nodes(null) ";")
-    b.Push($byRef(Point(1, 9)) ";" $byRef(Point(2, 9)) ";" $flags(Flag(true, 7)) ";" $flags(Flag(false, 7)) ";")
-    b.Push($either(Shape.Rect(8, 1)) ";" $either(Shape.Round(Point(9, 1))) ";" $either(Shape.Dot))
+    b.Push($nodes(first) + ";" + $nodes(last) + ";" + $nodes(Node(5, first)) + ";" + $nodes(null) + ";")
+    b.Push($byRef(Point(1, 9)) + ";" + $byRef(Point(2, 9)) + ";" + $flags(Flag(true, 7)) + ";" + $flags(Flag(false, 7)) + ";")
+    b.Push($either(Shape.Rect(8, 1)) + ";" + $either(Shape.Round(Point(9, 1))) + ";" + $either(Shape.Dot))
     return b.ToString()
 }
 
 AllBaked := all(0)
 
-Want := ("origin;y5;x3;diag4;1,2;from origin to diag3;to the y axis;from x2;hot 313;freezing;283K;flat;thin 5;"
-    "square 2;rect 12;round on the axis;round 1,2;dot;one past;no;first on the axis at 7;second on the x axis at 6;"
+Want := ("origin;y5;x3;diag4;1,2;from origin to diag3;to the y axis;from x2;hot 313;freezing;283K;flat;thin 5;" +
+    "square 2;rect 12;round on the axis;round 1,2;dot;one past;no;first on the axis at 7;second on the x axis at 6;" +
     "neither;three;four b;t 5;6;0 then 1;last 1;node 5;none;9;2;7;-1;8;9;0")
 
 type Opt<T> enum {

@@ -185,7 +185,7 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
             if hasWord(it, n) { why = "a guarantee" }
         }
         if it.StartsWith("for ") or it.StartsWith("if ") or hasWord(it, "fits") { why = "an item a contract no longer writes" }
-        if why.Len() > 0: c.left.Push($path ":" $line ": " $why " dropped: [" $it "]")
+        if why.Len() > 0: c.left.Push($path + ":" + $line + ": " + $why + " dropped: [" + $it + "]")
         else: kept.Push($it)
     }
     if moved and kept.Len() == items.Len() { return "" }
@@ -254,7 +254,7 @@ fn main() ? {
     changed I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("contracts_migrate: cannot read " $path)
+            srcmask.SayErr("contracts_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -264,14 +264,14 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("contracts_migrate: cannot write " $path)
+                srcmask.SayErr("contracts_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.changes " contracts")
-    for l in total.left { srcmask.Say("by hand: " $l) }
+    srcmask.Say($verb + $changed + " files: " + $total.changes + " contracts")
+    for l in total.left { srcmask.Say("by hand: " + $l) }
     if check and changed > 0 { os.Exit(1) }
 }
 

@@ -30,7 +30,7 @@ type Grip unique struct(id I64) {
 fn churn() I64 {
     n := 0
     for i in range 200 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         n += s.Len()
     }
     return n
@@ -49,5 +49,5 @@ fn main() ? {
     t := Tally()
     twoVecs(t, 4)
     assert t.n == 44
-    try io.PutLine("n " $t.n)
+    try io.PutLine("n " + $t.n)
 }

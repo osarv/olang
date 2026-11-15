@@ -107,7 +107,7 @@ fn migrate(src String&, n mut Count&) String {
         n.n++
         if (looser(v, i) or tighterAfter(src, v, at)) and first < i {
             edits.Push(Edit(v[first].start, v[first].start, "("))
-            edits.Push(Edit(v[i].start, v[at].end, $op ")"))
+            edits.Push(Edit(v[i].start, v[at].end, $op + ")"))
             continue
         }
         edits.Push(Edit(v[i].start, v[at].end, op))
@@ -200,7 +200,7 @@ fn main() ? {
     for path in files {
         if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("nulltest_migrate: cannot read " $path)
+            srcmask.SayErr("nulltest_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -210,12 +210,12 @@ fn main() ? {
         if verbose: srcmask.Say(path)
         if check { continue }
         try os.WriteFile(path, out) catch {
-            srcmask.SayErr("nulltest_migrate: cannot write " $path)
+            srcmask.SayErr("nulltest_migrate: cannot write " + $path)
             os.Exit(1)
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.n " null tests")
+    srcmask.Say($verb + $changed + " files: " + $total.n + " null tests")
     if check and changed > 0: os.Exit(1)
 }
 

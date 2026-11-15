@@ -8,7 +8,7 @@ import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -19,7 +19,7 @@ fn main() ? {
     keep := Vec<String&>()
     for i in range 3 {
         w := Vec<String&>()
-        w.Push($i "x")
+        w.Push($i + "x")
         keep = w
     }
     churn()

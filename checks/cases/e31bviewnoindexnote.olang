@@ -39,5 +39,5 @@ fn main() ? {
     out := Vec<Pt&>()
     for k in range 3 { f(s[k], out) }
     try churn()
-    try io.PutLine($clobber(10) " " $out[0].X)
+    try io.PutLine($clobber(10) + " " + $out[0].X)
 }

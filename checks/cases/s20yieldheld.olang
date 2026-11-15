@@ -18,7 +18,7 @@ fn ids() Iterator<I64> {
 fn churn() I64 {
     n := 0
     for i in range 200 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         n += s.Len()
     }
     return n
@@ -38,5 +38,5 @@ fn main() ? {
         churn()
     }
     assert Closed == 3
-    try io.PutLine("closed " $Closed)
+    try io.PutLine("closed " + $Closed)
 }

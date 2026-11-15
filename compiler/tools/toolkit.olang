@@ -19,7 +19,7 @@ fn Warn(t String&) {
 
 # says why on standard output and ends with status 1: the tool did not run to its end
 fn Die(why String&) noreturn {
-    Say($why "\n")
+    Say($why + "\n")
     os.Exit(1)
 }
 
@@ -35,7 +35,7 @@ fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String
     }
     for a in args { full.Push(a) }
     o := try os.Output.Exec(...full.ToArray(), dir = dir) catch os.Error {
-        Die("cannot run " $args[0])
+        Die("cannot run " + $args[0])
         unreachable
     }
     return o
@@ -128,8 +128,8 @@ fn Fields(t String&) Vec<String&> {
 
 # a new scratch directory; the tool ends if there is none. Removing it is the caller's (Clean)
 fn Scratch(name String&) String& {
-    return try os.MkTemp("", $name ".") catch os.Error {
-        Die($name ": no scratch directory")
+    return try os.MkTemp("", $name + ".") catch os.Error {
+        Die($name + ": no scratch directory")
         unreachable
     }
 }
@@ -141,13 +141,13 @@ fn Clean(dir String&) {
 
 # writes a file; the tool ends if it cannot
 fn Write(path String&, text String&) {
-    try os.WriteFile(path, text) catch os.Error { Die("cannot write " $path) }
+    try os.WriteFile(path, text) catch os.Error { Die("cannot write " + $path) }
 }
 
 # reads a file; the tool ends if it cannot
 fn Read(path String&) String& {
     return try os.ReadFile(path) catch os.Error {
-        Die("cannot read " $path)
+        Die("cannot read " + $path)
         unreachable
     }
 }
@@ -163,7 +163,7 @@ fn Matching(dir String&, suffix String&) Vec<String&> {
     l := Vec<String&>()
     names := try os.ReadDir(dir) catch os.Error { return l }
     for n in names {
-        if n.EndsWith(suffix) { l.Push($dir "/" $n) }
+        if n.EndsWith(suffix) { l.Push($dir + "/" + $n) }
     }
     return l
 }
@@ -194,9 +194,9 @@ fn Compiler() String {
 
 # diff(1)'s report of two texts, "" for none - the texts go through files in dir
 fn Diff(dir String&, a String&, b String&) String {
-    Write($dir "/diff.a", a)
-    Write($dir "/diff.b", b)
-    o := Run(Array<String&>["diff", $dir "/diff.a", $dir "/diff.b"])
+    Write($dir + "/diff.a", a)
+    Write($dir + "/diff.b", b)
+    o := Run(Array<String&>["diff", $dir + "/diff.a", $dir + "/diff.b"])
     return $o.Stdout
 }
 
@@ -250,7 +250,7 @@ type Golden struct() {
 # a section of a golden file, written as Golden.Read reads it back
 fn GoldenSection(key String&, body String&) String {
     b := StringBuilder()
-    b.Push("=== " $key "\n")
+    b.Push("=== " + $key + "\n")
     for r in Rows(body) {
         b.Push("| ")
         b.Push(r)
@@ -283,7 +283,7 @@ fn Golden.Parse(t String&, what String&) Golden {
             body.Clear()
             body.Push(s[:s.Len() - 1] if s.Len() > 0 else s)
         } else {
-            Die($what ": not a golden row: " $r)
+            Die($what + ": not a golden row: " + $r)
         }
     }
     if open { g.Bodies.Put($key, body.ToString()) }
@@ -293,7 +293,7 @@ fn Golden.Parse(t String&, what String&) Golden {
 # the golden at path, read; a missing one ends the tool, naming the target that captures it
 fn Golden.Read(path String&, target String&) Golden {
     t := try os.ReadFile(path) catch os.Error {
-        Die("no golden " $path " - capture it with make " $target)
+        Die("no golden " + $path + " - capture it with make " + $target)
         unreachable
     }
     return Golden.Parse(t, path)
@@ -301,8 +301,8 @@ fn Golden.Read(path String&, target String&) Golden {
 
 # writes a golden whole, through a file beside it renamed into place
 fn GoldenWrite(path String&, text String&) {
-    Write($path ".tmp", text)
-    try os.Rename($path ".tmp", path) catch os.Error { Die("cannot write " $path) }
+    Write($path + ".tmp", text)
+    try os.Rename($path + ".tmp", path) catch os.Error { Die("cannot write " + $path) }
 }
 
 # FNV-1a over a text's bytes, 64 bits, as 16 hex digits - what a golden stores of a dump too large to keep
@@ -337,7 +337,7 @@ test "sorting is by bytes" {
 
 test "a golden section reads back as its body, whatever the body holds" {
     for body in Array<String&>["", "a\n", "a\nb", "=== x\n| y\n\n", "\n\n", "z"] {
-        g := Golden.Parse($GoldenSection("k one", body) $GoldenSection("k2", "x\n"), "test")
+        g := Golden.Parse($GoldenSection("k one", body) + $GoldenSection("k2", "x\n"), "test")
         assert g.Keys.Len() == 2
         assert g.Keys[0] == "k one"
         assert (try g.Bodies.Get("k one") catch default "?") == body
@@ -359,13 +359,13 @@ test "a hash is FNV-1a's" {
 
 # the key a file is stored under: a checks case by its name, a file of tests by its path
 fn RunKey(f String&) String {
-    if f.StartsWith("checks/cases/") { return $"run " $f[13:] }
-    return $"test " $f
+    if f.StartsWith("checks/cases/") { return $"run " + $f[13:] }
+    return $"test " + $f
 }
 
 # a stored run's body
 fn RunBody(status I64, unstable Bool, text String&) String {
-    return $"status " $status $(" unstable" if unstable else "") "\n" $text
+    return $"status " + $status + $(" unstable" if unstable else "") + "\n" + $text
 }
 
 # what a stored run holds: whether there is one, its status, whether its output is held, and the output (a file of
@@ -478,22 +478,22 @@ type HashGolden struct() {
 # the hashed golden at BASE.txt and BASE.full.txt; a missing one ends the tool, naming the target that captures it
 fn HashGolden.Read(base String&, target String&) HashGolden {
     h := HashGolden()
-    table := try os.ReadFile($base ".txt") catch os.Error {
-        Die("no golden " $base ".txt - capture it with make " $target)
+    table := try os.ReadFile($base + ".txt") catch os.Error {
+        Die("no golden " + $base + ".txt - capture it with make " + $target)
         unreachable
     }
     for r in Rows(table) {
         if r.StartsWith("#") or r == "" { continue }
         f := Fields(r)
-        if f.Len() != 3 { Die($base ".txt: not a golden row: " $r) }
+        if f.Len() != 3 { Die($base + ".txt: not a golden row: " + $r) }
         h.Paths.Push($f[2])
         h.Source.Put($f[2], $f[0])
         h.Dump.Put($f[2], $f[1])
     }
-    h.Full = Golden.Read($base ".full.txt", target)
+    h.Full = Golden.Read($base + ".full.txt", target)
     for f in h.Full.Keys {
         if Hash(try h.Full.Bodies.Get(f) catch default "") != (try h.Dump.Get(f) catch default "") {
-            Die($base ".full.txt: " $f "'s section is not the one " $base ".txt hashes - capture it again (make " $target ")")
+            Die($base + ".full.txt: " + $f + "'s section is not the one " + $base + ".txt hashes - capture it again (make " + $target + ")")
         }
     }
     return h
@@ -502,15 +502,15 @@ fn HashGolden.Read(base String&, target String&) HashGolden {
 # writes a hashed golden of the files' sections; full says which sections are kept whole too
 fn HashGoldenWrite(base String&, what String&, files Vec<String&>&, sections Golden&, full fn&(body String&) Bool) {
     table := StringBuilder()
-    table.Push("# " $what " - a row per file: the hash of its text, the hash of its section, its path (compiler/tools/toolkit.olang)\n")
+    table.Push("# " + $what + " - a row per file: the hash of its text, the hash of its section, its path (compiler/tools/toolkit.olang)\n")
     whole := StringBuilder()
     for f in files {
-        body := try sections.Bodies.Get(f) catch { Die($base ": no section for " $f) }
-        table.Push($Hash(Read(f)) " " $Hash(body) " " $f "\n")
+        body := try sections.Bodies.Get(f) catch { Die($base + ": no section for " + $f) }
+        table.Push($Hash(Read(f)) + " " + $Hash(body) + " " + $f + "\n")
         if full(body) { whole.Push(GoldenSection(f, body)) }
     }
-    GoldenWrite($base ".txt", table.ToString())
-    GoldenWrite($base ".full.txt", whole.ToString())
+    GoldenWrite($base + ".txt", table.ToString())
+    GoldenWrite($base + ".full.txt", whole.ToString())
 }
 
 # the files of a list whose text is not the one the golden was captured from (new files included)
@@ -529,9 +529,9 @@ fn HashGoldenCheck(h HashGolden&, dir String&, f String&, body String&) String {
     want := try h.Dump.Get(f) catch default ""
     if Hash(body) == want { return "" }
     whole := try h.Full.Bodies.Get(f) catch {
-        return $"-- " $f ": its section is not the golden's (hash " $Hash(body) ", golden " $want "); it begins\n" $Head(body, 20)
+        return $"-- " + $f + ": its section is not the golden's (hash " + $Hash(body) + ", golden " + $want + "); it begins\n" + $Head(body, 20)
     }
-    return $"-- " $f " (< golden, > now)\n" $Head(Diff(dir, whole, body), 30)
+    return $"-- " + $f + " (< golden, > now)\n" + $Head(Diff(dir, whole, body), 30)
 }
 
 test "dump sections are split at their headers" {

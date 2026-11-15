@@ -541,7 +541,7 @@ fn (r mut Resolver&) payloadEnum(mi I64, sp source.Span, name source.NameId, cas
 }
 
 # T19b: the name of an error type's hidden payload enum - no program can write it
-fn PayloadName(name String&) String { return $name "$payload" }
+fn PayloadName(name String&) String { return $name + "$payload" }
 
 # D2, D8c, B10, B10c, M20: a function or a global (a method is in no namespace of names)
 fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable Bool, isFunc Bool, isMethod Bool
@@ -1461,7 +1461,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             if elem != null { r.typeRef(elem) }
             for e in items { r.expr(e) }
         }
-        case ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+        case ast.Expr.Row(_, items), ast.Expr.Range(_, items) {
             for e in items { r.expr(e) }
         }
         case ast.Expr.Compr(sp, c) {
@@ -1529,7 +1529,7 @@ fn (r mut Resolver&) suggests(name String&) Bool {
     if name.Len() >= 2 and name[name.Len() - 1].IsDigit() {
         k := name.Len()
         for k > 0 and name[k - 1].IsDigit() { k-- }
-        if name.Len() - k < 8 and BuiltinTypeName($name[:1].ToUpper() $name[k:]) { return true }
+        if name.Len() - k < 8 and BuiltinTypeName($name[:1].ToUpper() + $name[k:]) { return true }
     }
     if name == "Byte" { return true }
     best := 2 if name.Len() <= 4 else 3
@@ -1618,7 +1618,7 @@ fn (r Resolver&) ImportSaid(n source.NameId) Bool {
 fn (r mut Resolver&) unknownHead(sp source.Span, n source.NameId) {
     if n in r.Tables[r.mi].waiting { return }
     name := r.text(n)
-    if not os.Exists($r.L.Std "/" $name ".olang") { return }
+    if not os.Exists($r.L.Std + "/" + $name + ".olang") { return }
     for u in r.unknownSaid {
         if u.First == n and u.Second == -1 { return }
     }
@@ -1713,7 +1713,7 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
             # a path whose head names nothing: std's module of that name, else no import (M10)
             said := r.unknownSaid.Len()
             r.unknownHead(hsp, head)
-            if r.unknownSaid.Len() == said and not os.Exists($r.L.Std "/" $r.text(head) ".olang") and not (head in r.Tables[r.mi].waiting) and
+            if r.unknownSaid.Len() == said and not os.Exists($r.L.Std + "/" + $r.text(head) + ".olang") and not (head in r.Tables[r.mi].waiting) and
                not r.ImportSaid(head) {
                 r.unknownSaid.Push(pair.Pair(head, I64(-1)))
                 near mut msgs.Nearest& = msgs.Nearest(r.text(head))
@@ -1752,21 +1752,21 @@ fn testRules(files Array<String&>&, defines Array<String&>&) String {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     for k in range 0, files.Len(), 2 {
-        try os.WriteFile($dir "/" $files[k], files[k + 1]) catch os.Error { }
+        try os.WriteFile($dir + "/" + $files[k], files[k + 1]) catch os.Error { }
     }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
     d := diag.Diagnostics(false)
     for f in defines { try consts.Define(f, d) catch { } }
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+    l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                      source.Names(), d)
-    l.Load($dir "/" $files[0])
+    l.Load($dir + "/" + $files[0])
     r := Resolver(l)
     r.Resolve()
     b := StringBuilder()
     for s in d.AllSaid() {
         line, col := lineCol(files[1], s.Start)
-        b.Push($s.Rule " " $line ":" $col "\n")
+        b.Push($s.Rule + " " + $line + ":" + $col + "\n")
     }
     return b.ToString()
 }

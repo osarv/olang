@@ -8,7 +8,7 @@ type S struct() {
     best I64 = 0
     names Vec<String&> = Vec<String&>()
 }
-fn mk(i I64) String& { return "line " $i }
+fn mk(i I64) String& { return "line " + $i }
 fn sneak(t String&, s mut S&) I64 {
     s.names.Push(t)
     return t.Len()

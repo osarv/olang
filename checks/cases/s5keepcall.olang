@@ -10,7 +10,7 @@ fn main() ? {
     bs := Vec<Box>()
     m := Map<I64, Box>()
     for k in range 4 {
-        t := $k "-text"
+        t := $k + "-text"
         keep(bs, Box.box(t))
         m.Put(k, Box.box(t))
     }

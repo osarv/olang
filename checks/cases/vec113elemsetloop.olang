@@ -11,7 +11,7 @@ fn main() ? {
     v := Vec<Tok>()
     v.Push(Tok("a", 1))
     for i in range 3 {
-        t := "w" $i
+        t := "w" + $i
         v[0] = Tok(t, 2)
     }
     try io.PutLine($v[0].text)

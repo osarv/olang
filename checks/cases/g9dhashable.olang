@@ -3,7 +3,7 @@
 import "std/io"
 type Res unique struct(k I64) {
     k
-} destruct { try io.PutLine("d" $k) catch io.Error { } }
+} destruct { try io.PutLine("d" + $k) catch io.Error { } }
 fn same<T>(a T, b T) Bool { return a == b }
 fn hashOf<T Hashable<T>>(x T) I64 { return x.Hash() }
 fn main() ? {

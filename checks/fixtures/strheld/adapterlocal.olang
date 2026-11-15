@@ -4,7 +4,7 @@ type Ctr struct() {
     v I64 = 3
 }
 fn (c Ctr&) Call() I64 {
-    s := $c.v "x"
+    s := $c.v + "x"
     return s.Len()
 }
 type Bag struct(c mut Ctr&) {
@@ -12,7 +12,7 @@ type Bag struct(c mut Ctr&) {
 }
 fn (b Bag&) Str() String {
     g fn&() I64 = b.c
-    return "b" $g()
+    return "b" + $g()
 }
 fn main() ? {
     b := Bag(Ctr())
