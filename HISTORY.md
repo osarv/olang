@@ -37303,6 +37303,18 @@ with `"`; a rendering of any other value (`$alpha`, an F64) followed by a parent
 not a function". It now also says E11b where the callee is directly after `$` and the `(` that follows opens with a text
 literal (`textArgFollows`). checks/cases/e11bjoinfloat.olang; goldens/diag.txt gained its entry.
 
+## 2026-11-15: E28, T2c - a conditional of a reference and null given to a generic type's method
+
+`known if lacking else null` passed to a parameter `Array<Bool>?&` of a method of a generic type (or of a generic
+function) failed with `E12: expected Array<Bool>, found null`, while a plain function's parameter and a local of that type
+took it. Cause: a call whose callee has type variables checks each argument while inferring (check.olang, invoke ->
+argForInference), against `boundParam`, which gave the parameter's referent (`c.deref(t)`) so a value argument is not
+turned into a reference; for `Array<Bool>?&` that wanted `Array<Bool>`, the conditional took it as its own type and its
+`null` branch had nothing to be. `boundParam` now returns a nullable reference whole (beside the destructor and `any`
+cases that already do), so the conditional meets `null` at the type the parameter says. tests/condnull.olang: a method of
+a generic type, a generic function, a plain function and a typed local, both branches, decided while compiling
+(S17a assert, a baked global) beside the run time.
+
 ## The null test is `==` again; `is` removed (E10c; 2026-11-15, wt-eqnull)
 
 The user, 2026-11-15: "I will just remove the is check. It should just be a normal equals if that doesn't collide with
