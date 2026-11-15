@@ -7,7 +7,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 
 | file | what it is |
 |---|---|
-| `io.olang` | file descriptors, `Print`/`Println`, `Show` (a value written with its place and given back), buffered `Writer`, `Lines` |
+| `io.olang` | file descriptors, `Print`/`Println`, `Show` (a value written with its place and given back), buffered `Writer`, `Lines`, buffered `Reader` (`Line`, `Word`, `Next<T>`, `Bytes`, `All`) |
 | `os.olang` | arguments, environment, files and directories, `Exec`/`Start` without a shell, `Exit` |
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
 | `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse`, `After`'s timers, and `Virtual(f)` - a virtual clock for tests |

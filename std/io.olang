@@ -136,54 +136,159 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 # can be read between them as two lines; one that writes each line whole, its newline included, is read line by line.
 type Lines struct(fd I32, size I64 = 65536) {
     fd
+    src := source(fd, size)
+}
+
+fn (l mut Lines&) Next() String& ? Error, Exhausted { return try l.src.line() }
+
+# whether what was read holds more not yet given as a line - which Next gives without reading
+fn (l Lines&) Buffered() Bool { return l.src.end > l.src.start }
+
+# the buffer under Lines and Reader: what has been read from "fd" and not yet taken, in buf[start:end]. The buffer starts
+# at "size" bytes (one at least) and doubles whenever what is waiting fills it.
+type source struct(fd I32, size I64) {
+    fd
     buf := Array<U8>(size if size > 0 else 1)
-    start I64 = 0                    # buf[start:end] is what has been read and not yet given as a line
+    start I64 = 0
     end I64 = 0
 }
 
-fn (l mut Lines&) Next() String& ? Error, Exhausted {
-    from I64 = l.start               # buf[l.start:from] holds no newline
+# more read after what waits, the waiting bytes moved to the front first and the buffer doubled if they fill it; fails
+# with Exhausted at the end of the input - as it is now, so calling again reads again - and with Error.Failed
+fn (s mut source&) fill() ? Error, Exhausted {
+    waiting := s.end - s.start
+    if s.start > 0 {
+        for k in range waiting { s.buf[k] = s.buf[s.start + k] }
+        s.start = 0
+        s.end = waiting
+    }
+    if s.end == s.buf.Len() {
+        old := s.buf
+        s.buf = String(Array<U8>(old.Len() * 2))
+        for k in range s.end { s.buf[k] = old[k] }
+    }
+    got := unistd.read(s.fd, s.buf[s.end:], U64(s.buf.Len() - s.end))
+    if got < 0: error Error.Failed
+    if got == 0: error Exhausted.End
+    s.end += got
+}
+
+# the next line, as Lines.Next gives it
+fn (s mut source&) line() String& ? Error, Exhausted {
+    from I64 = 0 # buf[start:start + from] holds no newline
     for {
-        for i in range from, l.end {
-            if l.buf[i] == '\n' {
-                first := l.start
-                l.start = i + 1
-                return l.line(first, i)
+        for i in range s.start + from, s.end {
+            if s.buf[i] == '\n' {
+                first := s.start
+                s.start = i + 1
+                return s.text(first, i - (1 if i > first and s.buf[i - 1] == '\r' else 0))
             }
         }
-        from = l.end - l.start
-        if l.start > 0 {             # what is unread to the front, leaving the room after it to read into
-            for k in range from { l.buf[k] = l.buf[l.start + k] }
-            l.start = 0
-            l.end = from
+        from = s.end - s.start
+        try s.fill() catch Exhausted { # the end of the input, as it is now: what is left is its last line
+            if s.start == s.end: error Exhausted.End
+            first := s.start
+            s.start = s.end
+            return s.text(first, s.end - (1 if s.buf[s.end - 1] == '\r' else 0))
         }
-        if l.end == l.buf.Len() {    # one line fills the buffer: twice the room
-            old := l.buf
-            l.buf = String(Array<U8>(old.Len() * 2))
-            for k in range l.end { l.buf[k] = old[k] }
-        }
-        got := unistd.read(l.fd, l.buf[l.end:], U64(l.buf.Len() - l.end))
-        if got < 0 { error Error.Failed }
-        if got == 0 {                # the end of the file, as it is now: what is left is its last line
-            if l.start == l.end { error Exhausted.End }
-            first := l.start
-            l.start = l.end
-            return l.line(first, l.end)
-        }
-        l.end += got
     }
     unreachable
 }
 
-# whether what was read holds more not yet given as a line - which Next gives without reading
-fn (l Lines&) Buffered() Bool { return l.end > l.start }
+# the next run of bytes that are not whitespace, whitespace before it skipped; the whitespace after it is left
+fn (s mut source&) word() String& ? Error, Exhausted {
+    for {
+        for s.start < s.end and Char(s.buf[s.start]).IsSpace(): s.start++
+        if s.start < s.end: break
+        try s.fill()
+    }
+    from I64 = 0 # buf[start:start + from] holds no whitespace
+    for {
+        for i in range s.start + from, s.end {
+            if not Char(s.buf[i]).IsSpace(): continue
+            first := s.start
+            s.start = i
+            return s.text(first, i)
+        }
+        from = s.end - s.start
+        try s.fill() catch Exhausted {
+            first := s.start
+            s.start = s.end
+            return s.text(first, s.end)
+        }
+    }
+    unreachable
+}
 
-# buf[first:last] as new text, a carriage return at its end dropped
-fn (l Lines&) line(first I64, last I64) String& {
-    n I64 = last - first - (1 if last > first and l.buf[last - 1] == '\r' else 0)
-    text := Array<U8>(n)
-    for k in range n { text[k] = l.buf[first + k] }
-    return String(text)
+# buf[first:last] as new text
+fn (s source&) text(first I64, last I64) String& {
+    t := Array<U8>(last - first)
+    for k in range last - first { t[k] = s.buf[first + k] }
+    return String(t)
+}
+
+# input read through a buffer, taken as lines, words, numbers, bytes or all at once: the read counterpart of Writer.
+# Every method fails with Error.Failed where the read under it does, and with Exhausted at the end of the input - as it
+# is now, so after Exhausted a call reads again, as Lines.Next does. Reading "3\n1 2 3\n" (n, then n numbers):
+#
+#     in := io.Reader(io.Stdin)
+#     n := try in.Next<I64>()
+#     total I64 = 0
+#     for _ in range n: total += try in.Next<I64>()
+#
+# The buffer starts at "size" bytes and doubles when one line or word fills it, so memory is that of the longest piece.
+# Line, Word and All give new text, built where the caller puts it, as Lines.Next does. Mixing the methods is fine:
+# each takes what comes next, so Word then Line gives the rest of the line the word was on.
+type Reader struct(fd I32, size I64 = 65536) {
+    fd
+    src := source(fd, size)
+}
+
+# the next line without its line end, a carriage return before it dropped, as Lines.Next gives it
+fn (r mut Reader&) Line() String& ? Error, Exhausted { return try r.src.line() }
+
+# the next run of non-whitespace (space, tab, line ends), whitespace before it skipped, line ends included
+fn (r mut Reader&) Word() String& ? Error, Exhausted { return try r.src.word() }
+
+# the next word as a T: an integer type as T.Parse reads it in base 10, a float as ParseFloat does, a Bool from "true" or
+# "false". The word's own failures are the prelude's ParseError (Empty never: a word is not empty; Invalid, Overflow),
+# so Next's set is Error, Exhausted and ParseError whatever T is. A word that fails to parse is taken all the same, so the
+# next call reads the one after it. Any other T is an error at the call, naming the builder it lacks (G18a).
+fn (r mut Reader&) Next<T>() T ? Error, Exhausted, ParseError {
+    w := try r.src.word()
+    match T {
+        case F16, BF16, F32, F64: return T(try w.ParseFloat())
+        case Bool {
+            if w == "true": return true
+            if w == "false": return false
+            error ParseError.Invalid
+        }
+        case _: return try T.Parse(w)
+    }
+    unreachable
+}
+
+# exactly n bytes. If the input ends first, Exhausted - and the bytes read before it are gone, taken from the input and
+# dropped, so a caller wanting them back reads in pieces; n of zero or less is an empty array without reading
+fn (r mut Reader&) Bytes(n I64) Array<U8>& ? Error, Exhausted {
+    out := Array<U8>(n if n > 0 else 0)
+    got I64 = 0
+    for got < out.Len() {
+        if r.src.start == r.src.end: try r.src.fill()
+        take := (r.src.end - r.src.start).Min(out.Len() - got)
+        for k in range take { out[got + k] = r.src.buf[r.src.start + k] }
+        r.src.start += take
+        got += take
+    }
+    return out
+}
+
+# everything left, to the end of the input
+fn (r mut Reader&) All() String& ? Error {
+    for { try r.src.fill() catch Exhausted { break } }
+    first := r.src.start
+    r.src.start = r.src.end
+    return r.src.text(first, r.src.end)
 }
 
 # text and bytes gathered and written to a descriptor in large pieces - the way to write a lot (a compiler's output, a
@@ -207,8 +312,8 @@ fn (l Lines&) line(first I64, last I64) String& {
 type Writer struct(fd I32, size I64 = 65536) {
     fd
     buf mut Array<U8>& = Array<U8>(size if size > 0 else 1)
-    used I64 = 0                     # buf[:used] waits to be written
-    refused Error = null             # the first write the system refused, null while every write has gone through
+    used I64 = 0         # buf[:used] waits to be written
+    refused Error = null # the first write the system refused, null while every write has gone through
 }
 
 # t, after what is written already
@@ -217,7 +322,7 @@ fn (w mut Writer&) Write(t Array<U8>&) {
     n := t.Len()
     if n > w.buf.Len() - w.used {
         w.drain()
-        if n >= w.buf.Len() {        # as large as the buffer: through as it is, copied nowhere
+        if n >= w.buf.Len() { # as large as the buffer: through as it is, copied nowhere
             w.send(t)
             return
         }
@@ -389,10 +494,10 @@ fn bracketed(text String&, size I64) String& {
 
 test "Lines gives each line, without its newline" {
     assert bracketed("one\ntwo\n\nfour", 65536) == "[one][two][][four]"
-    assert bracketed("one\ntwo\n", 65536) == "[one][two]"           # a newline at the end ends the last line
+    assert bracketed("one\ntwo\n", 65536) == "[one][two]" # a newline at the end ends the last line
     assert bracketed("one\n\n", 65536) == "[one][]"
     assert bracketed("\n", 65536) == "[]"
-    assert bracketed("", 65536) == ""                                  # an empty file has no lines
+    assert bracketed("", 65536) == "" # an empty file has no lines
     assert bracketed("no newline at all", 65536) == "[no newline at all]"
 }
 
@@ -409,7 +514,7 @@ test Lines.Buffered "tells whether a line is there without reading" {
 
 test "Lines drops the carriage return of a CRLF, and only that one" {
     assert bracketed("a\r\nb\r\n\r\nc", 65536) == "[a][b][][c]"
-    assert bracketed("last\r", 65536) == "[last]"                    # before the end of the file as before a newline
+    assert bracketed("last\r", 65536) == "[last]" # before the end of the file as before a newline
     assert bracketed("x\ry\n\r\r\n\r", 65536) == "[x\ry][\r][]"
 }
 
@@ -417,10 +522,10 @@ test "Lines reads lines longer than its buffer" {
     long String& = "0123456789abcdefghijklmnopqrstuvwxyz"
     text := $long "\nab\n\n" $long $long "\r\nc"
     want := "[" $long "][ab][][" $long $long "][c]"
-    assert bracketed(text, 4) == want            # each long line doubling the buffer, and what follows moved to its front
+    assert bracketed(text, 4) == want # each long line doubling the buffer, and what follows moved to its front
     assert bracketed(text, 1) == want
-    assert bracketed(text, 0) == want            # no room at all is taken as one byte
-    assert bracketed(text, 37) == want           # a line exactly as long as the buffer
+    assert bracketed(text, 0) == want  # no room at all is taken as one byte
+    assert bracketed(text, 37) == want # a line exactly as long as the buffer
     assert bracketed(text, 65536) == want
 }
 
@@ -491,13 +596,13 @@ test "a Writer gathers what is written and writes it when flushed" {
     w.Write("")
     w.Write("eta\n")
     try w.Flush()
-    w.Write("this line is longer than the buffer itself\n")       # straight through
+    w.Write("this line is longer than the buffer itself\n") # straight through
     for i in range 30 {
         w.Write($i)
         w.WriteChar('\n' if i % 10 == 9 else ' ')
     }
     try w.Flush()
-    try w.Flush()                           # nothing waiting: nothing written
+    try w.Flush() # nothing waiting: nothing written
     unistd.close(fds[1])
     got := drained(fds[0])
     unistd.close(fds[0])
@@ -510,7 +615,7 @@ test "a Writer keeps every byte in order across its buffer's edges" {
     w := Writer(fds[1], 7)
     want := StringBuilder()
     for i in range 200 {
-        piece := $"x".Repeat(i % 13) $i "\n"            # pieces shorter and longer than the buffer
+        piece := $"x".Repeat(i % 13) $i "\n" # pieces shorter and longer than the buffer
         w.Write(piece)
         want.Push(piece)
     }
@@ -539,7 +644,7 @@ test "a Writer's failed write is Flush's, and every Flush's after it" {
     assert unistd.pipe(fds) == 0
     unistd.close(fds[0])
     unistd.close(fds[1])
-    assert failedFlushes(fds[1]) == 3            # closed: the system refuses the write
+    assert failedFlushes(fds[1]) == 3 # closed: the system refuses the write
 }
 
 # writes "n" lines and fails partway through - what the deferred Flush still writes
@@ -563,4 +668,131 @@ test "a deferred Flush writes what was written however the function is left" {
     got := drained(fds[0])
     unistd.close(fds[0])
     assert got == "line 0\nline 1\nline 0\nline 1\nline 2\n"
+}
+
+test Reader.Line "gives lines as Lines does, and Exhausted at the end, each time" {
+    fd := reading("a\r\nb\n\nlast")
+    r := Reader(fd, 2)
+    assert try r.Line() == "a"
+    assert try r.Line() == "b"
+    assert try r.Line() == ""
+    assert try r.Line() == "last"
+    for _ in range 2 {
+        try r.Line() catch Exhausted { continue }
+        unreachable
+    }
+    unistd.close(fd)
+}
+
+# every word of "text", through a buffer of "size" bytes, each in brackets
+fn words(text String&, size I64) String& {
+    fd := reading(text)
+    r := Reader(fd, size)
+    out String& = ""
+    for {
+        w := try r.Word() catch Exhausted { break } catch Error { unreachable }
+        out = $out "[" $w "]"
+    }
+    unistd.close(fd)
+    return out
+}
+
+test Reader.Word "skips whitespace, line ends included, across buffer refills" {
+    text := "  one\ttwo\r\n\n  three  \nfour"
+    want := "[one][two][three][four]"
+    assert words(text, 65536) == want
+    assert words(text, 1) == want
+    assert words(text, 3) == want
+    assert words("", 4) == ""
+    assert words(" \n\t ", 4) == ""
+    assert words("0123456789abcdef x", 2) == "[0123456789abcdef][x]"
+}
+
+test Reader.Word "leaves what follows the word, so Line takes the rest of its line" {
+    fd := reading("ab cd ef\ngh\n")
+    r := Reader(fd, 2)
+    assert try r.Word() == "ab"
+    assert try r.Line() == " cd ef"
+    assert try r.Word() == "gh"
+    unistd.close(fd)
+}
+
+# the sample of the doc comment: n, then n numbers
+fn sumOf(fd I32) I64 ? Error, Exhausted, ParseError {
+    r := Reader(fd, 2)
+    n := try r.Next<I64>()
+    total I64 = 0
+    for _ in range n: total += try r.Next<I64>()
+    return total
+}
+
+test Reader.Next "reads a count and that many numbers" {
+    fd := reading("3\n1 2 3\n")
+    assert sumOf(fd)! == 6
+    unistd.close(fd)
+}
+
+fn numbers(fd I32) ? Error, Exhausted, ParseError {
+    r := Reader(fd, 4)
+    assert try r.Next<U8>() == 255
+    assert try r.Next<I32>() == -17
+    assert try r.Next<I128>() == -5
+    assert try r.Next<F64>() == 2.5
+    assert try r.Next<F32>() == 1e3
+    assert try r.Next<Bool>()
+    assert not (try r.Next<Bool>())
+}
+
+test Reader.Next "reads several types, one word each" {
+    fd := reading("255 -17\n-5\r\n 2.5 1e3\ntrue false")
+    numbers(fd)!
+    unistd.close(fd)
+}
+
+# what reading a T gives: its value, or the error it failed with
+fn outcome<T>(r mut Reader&) String& {
+    v := try r.Next<T>() catch e { return $e }
+    return "ok " $v
+}
+
+test Reader.Next "fails with ParseError on a bad word, taking it, and with Exhausted at the end" {
+    fd := reading("12 x 300 yes")
+    r := Reader(fd)
+    assert outcome<I64>(r) == "ok 12"
+    assert outcome<I64>(r) == $ParseError.Invalid
+    assert outcome<U8>(r) == $ParseError.Overflow
+    assert outcome<Bool>(r) == $ParseError.Invalid
+    assert outcome<I64>(r) == $Exhausted.End
+    unistd.close(fd)
+}
+
+test Reader.Bytes "gives exactly n bytes, across refills, and Exhausted when the input ends first" {
+    fd := reading("abcdefghij")
+    r := Reader(fd, 3)
+    assert String(try r.Bytes(4)) == "abcd"
+    assert (try r.Bytes(0)).Len() == 0
+    assert String(try r.Bytes(5)) == "efghi"
+    ended := false
+    try r.Bytes(2) catch Exhausted { ended = true } # "j" was taken and dropped
+    assert ended
+    unistd.close(fd)
+}
+
+test Reader.All "gives everything left, and the empty text at the end" {
+    fd := reading("one two\nthree\n")
+    r := Reader(fd, 2)
+    assert try r.Word() == "one"
+    assert try r.All() == " two\nthree\n"
+    assert try r.All() == ""
+    unistd.close(fd)
+}
+
+test Reader "reports a read that fails" {
+    r := Reader(-1)
+    n I64 = 0
+    try r.Line() catch Error { n++ }
+    try r.Word() catch Error { n++ }
+    try r.Bytes(1) catch Error { n++ }
+    try r.All() catch Error { n++ }
+    assert n == 4
 }
