@@ -117,5 +117,9 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	spinner2	sonnet	high	merged, master 360b9901 (bootstrap from seed passes)						finish 3x2 spinner (fresh after restart)
 2026-11-15	int8b	opus	high	running						INT8 inlining (fresh after restart)
 2026-11-15	strplus	opus	high	running						olang: text joins by +, adjacency removed (the user)
-2026-11-15	oannmeasure	sonnet	medium	running						oann round 2: baselines vs DESIGN
+2026-11-15	oannmeasure	sonnet	medium	done, oann master (MNIST 5x slower: rowStep not inlined, same cause as INT8)						oann round 2: baselines vs DESIGN
 2026-11-15	oannplan	opus	high	done, oann master bcd805f (docs/redesign.md)						oann round 2: docs/redesign.md + work packages
+2026-11-15	oanngemm	opus	high	running						oann A2 gemm
+2026-11-15	oanntensor	sonnet	high	running						oann A1 tensor
+2026-11-15	oannelem	sonnet	high	running						oann A3 elem+attention
+2026-11-15	timeit	sonnet	medium	running						std/bench: repeats with spread, Time, Compare
