@@ -37527,7 +37527,10 @@ there being a new error (S8d, "narrowed by a test before the loop around this re
 its next turn; a loop's own condition still narrows its body, and its post clause only where the body calls nothing;
 deferred code is checked under no field path's narrowing; a weak field (T2d) never narrows - its referent is let go
 with no call or store to it; `x.f!` reads the path at its declared type and unwraps it, so the compiler's many `!`s stay
-valid (a later cleanup may drop them). The messages say why a narrowing that held no longer does: T2c's "may be null",
+valid (a later cleanup may drop them). What did change: a local declared `:=` from a narrowed path is now never null,
+as one declared from a narrowed local always was, so a `!` on it is E35's error and a null test of it T2c's - seven
+`c!` in compiler/session.olang (`c := a.C` after `a.C == null` returned) and one `assert h.held != null` after a store
+in tests/shared.olang were all the repository held. The messages say why a narrowing that held no longer does: T2c's "may be null",
 S8d's "is an enum" and T19b's "has no field" get a `note:` naming the assignment or the call since the test.
 Implementation: `nullNarrow`, `narrowed` and `errNarrow` are keyed by path; `calledNow` (called where every call is
 built: `callOf` but for helpers, `callOfBody`, `callBody`, and at a `yield`) ends the field paths' narrowings; the
