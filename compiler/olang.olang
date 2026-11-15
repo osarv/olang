@@ -123,7 +123,7 @@ ModeWhat Array<String&> = Array<String&>[
     "builds one program, FILE.olang its root module, into build/ (B3)"
     "compiles one module to an object, linking nothing (B2)"
     "runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)"
-    "runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)"
+    "builds the program as -quick does, indexes, divisions and shifts checked, into the cache, and runs it with the arguments after the file (B3e)"
     "rewrites each file in olang's one layout (B13)"
     "prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)"
     "lists the modes, or a mode's options"
@@ -141,13 +141,13 @@ ModeWhat Array<String&> = Array<String&>[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = Array<String&>["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-interpret", "-bench", "-install", "-continue"]
+    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-evaluate", "-bench", "-install", "-continue"]
 OptValues Array<String&> = Array<String&>["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""
     ""
     ""
     ""
     ""]
-OptModes Array<I64> = Array<I64>[77830, 15, 15, 15, 1887, 108383, 108383, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64, 8, 8, 32768, 65536]
+OptModes Array<I64> = Array<I64>[77830, 15, 15, 15, 1887, 108383, 108383, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64, 24, 8, 32768, 65536]
 OptWhat Array<String&> = Array<String&>[
     "writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)"
     "builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)"
@@ -166,7 +166,7 @@ OptWhat Array<String&> = Array<String&>[
     "prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)"
     "prints a function's machine code as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
-    "runs the tests by compile-time evaluation instead of building them, as interpret runs a program (B3e)"
+    "runs the program, or the tests, by compile-time evaluation instead of building them - much slower, for checking the evaluator (B3e)"
     "measures the benchmarks the tests run (std/bench): time, allocations and bytes per call (B19b)"
     "writes the kernel's spec into the user's Jupyter kernels, so a notebook offers olang (B23)"
     "with notebook run: goes on past a cell that failed, running the cells after it (B24)"
@@ -283,7 +283,7 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if o == 11 { c.Memory = true }
             if o == 12 { c.Fuzz = $v }
             if o == 14 { cl.Caps = true }
-            if o == 17 { c.Interpreted = true }
+            if o == 17 { c.Evaluated = true }
             if o == 18 { c.Bench = true }
             if o == 19: cl.Install = true
             if o == 20: cl.Continue = true
@@ -299,8 +299,8 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             }
             # B2g: -quick is a level of optimization, as -debug and -race set theirs
             if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
-            # B3e: interpreting builds nothing, so no option saying how to build goes with it
-            if c.Interpreted and buildWord(c) != "" { try usage(d, msgs.InterpretBuilds(buildWord(c))) }
+            # B3e: evaluating builds nothing, so no option saying how to build goes with it
+            if c.Evaluated and buildWord(c) != "" { try usage(d, msgs.InterpretBuilds(buildWord(c))) }
             continue
         }
         if cl.Mode == Doc and cl.Html == "" and cl.Files.Len() == 1 and not endsWithOlang(a) {
@@ -345,7 +345,7 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
     return cl
 }
 
-# the option that says how to build which test -interpret is given with, "" for none (B3e)
+# the option that says how to build which test -evaluate is given with, "" for none (B3e)
 fn buildWord(c build.Config&) String {
     if c.Debug { return "-debug" }
     if c.Race { return "-race" }
@@ -426,13 +426,13 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
     c.Hoist = checksMode() == "hoist"
-    # the tools that only analyze need no clang, as interpret does not (B12)
+    # the tools that only analyze need no clang, as the evaluator does not (B12)
     tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Api
-    interpreting := cl.Mode == Interp or c.Interpreted or cl.Mode == Jupyter or cl.Mode == Notebook
+    interpreting := cl.Mode == Interp or c.Evaluated or cl.Mode == Jupyter or cl.Mode == Notebook
     # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
     # through an emulator; what runs in this process - interpret, the tools - is for this machine only, said before
     # whether this clang can build for it
-    foreignOk := cl.Mode == Compile or cl.Mode == Build or (cl.Mode == Test and not c.Interpreted) or cl.Mode == Run or
+    foreignOk := cl.Mode == Compile or cl.Mode == Build or (cl.Mode == Test and not c.Evaluated) or cl.Mode == Run or
         cl.Listing != ""
     here := modeName(cl.Mode) if not foreignOk and not interpreting else ""
     c.Target = try target.Target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d, here = here)
@@ -539,7 +539,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         for a in cl.Args { pargs.Push(a) }
         return build.Interpret(fe, c, files[0], pargs.ToArray(), d)
     }
-    if files.Len() == 1 and c.Interpreted { return build.InterpretTests(fe, c, files[0], d, cl.Filters.ToArray()) }
+    if files.Len() == 1 and c.Evaluated { return build.InterpretTests(fe, c, files[0], d, cl.Filters.ToArray()) }
     if files.Len() == 1 { return build.TestFile(fe, c, files[0], d, cl.Filters.ToArray()) }
     exe := try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]
     return build.TestFiles(c, exe, cl.Passed.ToArray(), files, cl.Filters.ToArray())
@@ -638,7 +638,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw mut lower.Lowerer& = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
     lw.Tests = tests
-    lw.Checked = tests or cfg.Debug    # E16g: a checked build
+    lw.Checked = tests or cfg.Debug or cfg.Checked     # E16g: a checked build
     lw.IndexChecks = checksMode() != ""   # OLANG_CHECKS: the experiment of docs/checks-measure.md
     lw.ViewDump = (try os.Env("OLANG_VIEWDUMP") catch default "") != ""
     # O8d: early freeing is decided for a program at its root, every module's sites reading the decisions as link-time
@@ -814,6 +814,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Arch = cfg.Target.Arch
     e.San = cfg.San
     e.Debug = cfg.Debug
+    e.Traced = cfg.Checked
     e.Prof = cfg.Profile
     e.Bench = cfg.Bench
     e.Lines = cfg.Profile or cfg.Listing
@@ -1458,14 +1459,15 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(Array<String&>["interpret", "-quick", "m.olang"]) ==
         "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to interpret\n"
     assert mistake(Array<String&>["build", "-quick", "m.olang"]) == "no mistake: build"
-    # B3e: test -interpret builds nothing, so no option saying how to build goes beside it
-    assert mistake(Array<String&>["test", "-interpret", "m.olang", "Box"]) == "no mistake: test"
-    assert mistake(Array<String&>["test", "-interpret", "-quick", "m.olang"]) ==
-        "olang: error[B3e]: -interpret builds nothing, and -quick says how to build - give one\n"
-    assert mistake(Array<String&>["test", "-sanitize", "-interpret", "m.olang"]) ==
-        "olang: error[B3e]: -interpret builds nothing, and -sanitize says how to build - give one\n"
-    assert mistake(Array<String&>["build", "-interpret", "m.olang"]) ==
-        "olang: error[B1]: -interpret applies to test, not to build\n"
+    # B3e: -evaluate builds nothing, so no option saying how to build goes beside it
+    assert mistake(Array<String&>["test", "-evaluate", "m.olang", "Box"]) == "no mistake: test"
+    assert mistake(Array<String&>["interpret", "-evaluate", "m.olang", "-quick"]) == "no mistake: interpret"
+    assert mistake(Array<String&>["test", "-evaluate", "-quick", "m.olang"]) ==
+        "olang: error[B3e]: -evaluate builds nothing, and -quick says how to build - give one\n"
+    assert mistake(Array<String&>["test", "-sanitize", "-evaluate", "m.olang"]) ==
+        "olang: error[B3e]: -evaluate builds nothing, and -sanitize says how to build - give one\n"
+    assert mistake(Array<String&>["build", "-evaluate", "m.olang"]) ==
+        "olang: error[B1]: -evaluate applies to test and interpret, not to build\n"
 }
 
 test "-quick builds at -O2 with no link-time optimization, its objects apart (B2g)" {

@@ -1071,7 +1071,7 @@ fn UnknownFlag(text1 String&, text2 String&, hint String&) r.Msg { return r.Msg(
 fn OptionNotForMode(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.OptionNotForMode, "B1", $text1 " applies to " $text2 ", not to " $text3) }
 fn OptionNeedsValue(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.OptionNeedsValue, "B1", $text1 " needs a value after it: " $text2) }
 fn QuickAlone(text String&) r.Msg { return r.Msg(Diag.QuickAlone, "B2g", "-quick and " $text " each say how much to optimize - give one") }
-fn InterpretBuilds(text String&) r.Msg { return r.Msg(Diag.InterpretBuilds, "B3e", "-interpret builds nothing, and " $text " says how to build - give one") }
+fn InterpretBuilds(text String&) r.Msg { return r.Msg(Diag.InterpretBuilds, "B3e", "-evaluate builds nothing, and " $text " says how to build - give one") }
 fn FuzzTimeNotNumber(text String&) r.Msg { return r.Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" $text "' is none") }
 fn FuzzTimeAlone() r.Msg { return r.Msg(Diag.FuzzTimeAlone, "B19", "-fuzztime says how long -fuzz runs - give -fuzz NAME with it") }
 fn BenchFuzz() r.Msg { return r.Msg(Diag.BenchFuzz, "B19b", "-bench and -fuzz are given together", "-bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs", "give one") }
