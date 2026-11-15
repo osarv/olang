@@ -7,5 +7,6 @@ Build: build/olang0 = baseline compiler (old syntax, built at start); build/olan
 ## Done
 - tool + migration (864 files), catch-default grouping fix, SPEC/settled/PRINCIPLES, checks cases, tests/textplus.olang
 - olang1 = new compiler built from old src by olang0; olang2 = from migrated src by olang1 (-quick)
+- olangC (from all fixes) fixed point OK; tok/ast/layout/diag goldens recaptured; checks subset 89 ok; oann trial done
 ## Next
 - fixed point (build/A.log), targeted tests, goldens, consistency, editors, HISTORY, benchmark/IR proof, oann trial, seed

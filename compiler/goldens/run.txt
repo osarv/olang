@@ -1284,6 +1284,17 @@
 === test tests/structpat.olang
 | status 0
 | ok - Point: S13i: struct patterns take a struct apart by its fields, at run time and while compiling
+=== test tests/textplus.olang
+| status 0
+| ok - pieces and values joined
+| ok - '$' binds tighter than '+'
+| ok - grouping makes no difference
+| ok - '+=' on a String
+| ok - a long chain - one join
+| ok - a join across lines
+| ok - generics and traits see String's Plus
+| ok - baked and decided while compiling
+| ok - text read back after an arena churn
 === test tests/textslot.olang
 | status 0
 | ok - a text local from a literal starts from the literal every turn, and is written as any array
@@ -2264,6 +2275,8 @@
 | status 0
 | 103 103 0
 === run e10cnullcompared.olang
+| status 0
+=== run e11bpluslanes.olang
 | status 0
 === run e11ctwolevelfield.olang
 | status 0
