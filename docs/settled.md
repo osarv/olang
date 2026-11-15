@@ -172,7 +172,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   any part. After a case test a local or parameter is narrowed so `e.r` reads the payload field; a field read where
   nothing narrows is S8d's error. **One narrowing walk (2026-10-26, the user's "Do narrowing")** serves case, null and
   error-value tests: `and`/`or`/`not`, conditionals, after an assert, loops on the test; a narrowing holds until a
-  statement assigns the local. Only locals and parameters narrow, never fields.
+  statement assigns the local. **Field paths narrow too (S8d, the user's "yes this is normal narrowing rules",
+  2026-11-15)**: `x.f`, `x.f.g` (x a local or parameter, each step a field) narrow as a local does, until an assignment
+  to the path or a prefix, or any call (or `yield`) after the test - a call's arguments are read before it; a call in
+  an `if`'s block is none in its `else`; a path narrowed before a loop that calls is not known inside it (an error);
+  weak fields never narrow; `x.f!` stays allowed.
 - **Comprehensions `[e for x in c if p]` (E27, the user's design)** - the type in front optional as for any literal
   (the user, 2026-11-13), brackets; `[k: v for ...]` makes entries; an array's reserved up front from a known length,
   else 100 and doubling (the user's numbers).

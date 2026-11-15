@@ -611,6 +611,7 @@ type Diag enum {
     FieldOfEnum
     CallDoesNothing
     NarrowedWrite
+    NarrowedAcrossLoop
     MayBeNull
     NullToNonNull
     NoteNullableDecl
@@ -1193,22 +1194,22 @@ fn CatchLoneUnused(tok String&, hint String&) r.Msg { return r.Msg(Diag.CatchLon
 fn CatchNameInTask(tok String&) r.Msg { return r.Msg(Diag.CatchNameInTask, "R11b", "a spawned call's clause names no error", "the clause runs on the task's thread", "leave " + $tok + " off, or catch it where the join fails") }
 fn CaughtAssigned(tok String&, text String&) r.Msg { return r.Msg(Diag.CaughtAssigned, "R11b", $tok + " names the error this clause took and is never assigned", "", "hold a value that changes in a local of its own ('x := " + $text + "')") }
 fn CaughtComparedToCaught() r.Msg { return r.Msg(Diag.CaughtComparedToCaught, "T20", "two error types are never compared - compare an error value with each ('e == T')") }
-fn CaughtCompareWhat(tok String&) r.Msg { return r.Msg(Diag.CaughtCompareWhat, "T20", $tok + " is compared with no error", "it is compared with an error word, an error type, a named set or another error value", "write 'e == T.WORD' or 'e == T'") }
-fn ErrComparedNotError(text String&, ty String&, item String&) r.Msg { return r.Msg(Diag.ErrComparedNotError, "T20", "'" + $text + "' is " + $ty + ", not an error value - only an error value is '" + $item + "'") }
-fn ErrValueNoOp(tok String&, ty String&) r.Msg { return r.Msg(Diag.ErrValueNoOp, "T20", $tok + " on " + $ty + ": an error value is no number", "it is compared with '==' and '!=', and rendered with '$'") }
-fn ErrMatchNotError(text String&, ty String&) r.Msg { return r.Msg(Diag.ErrMatchNotError, "T20", "the cases name errors, and '" + $text + "' is " + $ty + ", not an error value") }
-fn ErrNeverNull(tok String&) r.Msg { return r.Msg(Diag.ErrNeverNull, "T20", $tok + " holds an error here, never null", "a caught error, a word written or a value a test says is not null") }
-fn ErrValueNotHeld(ty1 String&, ty2 String&, text String&) r.Msg { return r.Msg(Diag.ErrValueNotHeld, "T20", "expected " + $ty1 + ", found " + $ty2, "it can be " + $text, "test it first ('if e == T'), or hold it in a set that has it") }
-fn CaughtNeverIs(tok String&, text1 String&, text2 String&) r.Msg { return r.Msg(Diag.CaughtNeverIs, "R11b", $tok + " is never " + $text1 + " here - it is " + $text2) }
-fn TryOnCaught(text String&) r.Msg { return r.Msg(Diag.TryOnCaught, "R11b", "'" + $text + "' is an error already caught, not a call - raise it again with 'error " + $text + "'") }
-fn ReraiseUndeclared(ty String&) r.Msg { return r.Msg(Diag.ReraiseUndeclared, "R3a", "the error raised again can be " + $ty + ", which this function does not declare", "", "add it after '?', or test the error first") }
-fn ReraiseWordNotInSet(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ReraiseWordNotInSet, "R3a", "the error raised again can be " + $ty1 + ", not in this function's '?' " + $ty2, "", "add it after '?', or test the error first") }
-fn RaiseNotCaught(tok String&) r.Msg { return r.Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " + $tok + " is neither") }
-fn PayloadHoldsRef(field String&, ty String&, what String&) r.Msg { return r.Msg(Diag.PayloadHoldsRef, "T19b", "payload field " + $field + " of type " + $ty + " holds " + $what, "a payload holds values only", "hold a copy ('$x', 'x.Copy()') or plain data") }
-fn PayloadWordBare(word String&, fields String&) r.Msg { return r.Msg(Diag.PayloadWordBare, "T19b", $word + " carries " + $fields + " - give them: '" + $word + "(" + $fields + ")'") }
-fn PlainWordCalled(word String&) r.Msg { return r.Msg(Diag.PlainWordCalled, "T19b", $word + " carries nothing - write it without '()'") }
-fn PayloadFieldUnnarrowed(name String&, field String&) r.Msg { return r.Msg(Diag.PayloadFieldUnnarrowed, "T19b", $name + " may hold an error that has no field " + $field, "", "test which it holds first ('if " + $name + " == T.Word')") }
-fn PayloadArgs(word String&, want I64, got I64) r.Msg { return r.Msg(Diag.PayloadArgs, "T19b", $word + " carries " + $want + " field" + $("" if want == 1 else "s") + ", " + $got + " given") }
+fn CaughtCompareWhat(tok String&) r.Msg { return r.Msg(Diag.CaughtCompareWhat, "T20", $tok " is compared with no error", "it is compared with an error word, an error type, a named set or another error value", "write 'e == T.WORD' or 'e == T'") }
+fn ErrComparedNotError(text String&, ty String&, item String&) r.Msg { return r.Msg(Diag.ErrComparedNotError, "T20", "'" $text "' is " $ty ", not an error value - only an error value is '" $item "'") }
+fn ErrValueNoOp(tok String&, ty String&) r.Msg { return r.Msg(Diag.ErrValueNoOp, "T20", $tok " on " $ty ": an error value is no number", "it is compared with '==' and '!=', and rendered with '$'") }
+fn ErrMatchNotError(text String&, ty String&) r.Msg { return r.Msg(Diag.ErrMatchNotError, "T20", "the cases name errors, and '" $text "' is " $ty ", not an error value") }
+fn ErrNeverNull(tok String&) r.Msg { return r.Msg(Diag.ErrNeverNull, "T20", $tok " holds an error here, never null", "a caught error, a word written or a value a test says is not null") }
+fn ErrValueNotHeld(ty1 String&, ty2 String&, text String&) r.Msg { return r.Msg(Diag.ErrValueNotHeld, "T20", "expected " $ty1 ", found " $ty2, "it can be " $text, "test it first ('if e == T'), or hold it in a set that has it") }
+fn CaughtNeverIs(tok String&, text1 String&, text2 String&) r.Msg { return r.Msg(Diag.CaughtNeverIs, "R11b", $tok " is never " $text1 " here - it is " $text2) }
+fn TryOnCaught(text String&) r.Msg { return r.Msg(Diag.TryOnCaught, "R11b", "'" $text "' is an error already caught, not a call - raise it again with 'error " $text "'") }
+fn ReraiseUndeclared(ty String&) r.Msg { return r.Msg(Diag.ReraiseUndeclared, "R3a", "the error raised again can be " $ty ", which this function does not declare", "", "add it after '?', or test the error first") }
+fn ReraiseWordNotInSet(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ReraiseWordNotInSet, "R3a", "the error raised again can be " $ty1 ", not in this function's '?' " $ty2, "", "add it after '?', or test the error first") }
+fn RaiseNotCaught(tok String&) r.Msg { return r.Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " $tok " is neither") }
+fn PayloadHoldsRef(field String&, ty String&, what String&) r.Msg { return r.Msg(Diag.PayloadHoldsRef, "T19b", "payload field " $field " of type " $ty " holds " $what, "a payload holds values only", "hold a copy ('$x', 'x.Copy()') or plain data") }
+fn PayloadWordBare(word String&, fields String&) r.Msg { return r.Msg(Diag.PayloadWordBare, "T19b", $word " carries " $fields " - give them: '" $word "(" $fields ")'") }
+fn PlainWordCalled(word String&) r.Msg { return r.Msg(Diag.PlainWordCalled, "T19b", $word " carries nothing - write it without '()'") }
+fn PayloadFieldUnnarrowed(name String&, field String&, why String& = "") r.Msg { return r.Msg(Diag.PayloadFieldUnnarrowed, "T19b", $name " may hold an error that has no field " $field, why, "test which it holds first ('if " $name " == T.Word')") }
+fn PayloadArgs(word String&, want I64, got I64) r.Msg { return r.Msg(Diag.PayloadArgs, "T19b", $word " carries " $want " field" $("" if want == 1 else "s") ", " $got " given") }
 fn RaisedFieldUnnamed() r.Msg { return r.Msg(Diag.RaisedFieldUnnamed, "R3b, T19b", "a field an error raised by name carries is named by the raise: a bare name, or 'name = value'") }
 fn ErrPatternNeedsName(what String&) r.Msg { return r.Msg(Diag.ErrPatternNeedsName, "T19b, S13b", "a payload pattern needs a name, and " + $what + " is none", "it reads the error a local or a catch clause's name holds", "write 'e := ...' first and match 'e'") }
 fn ErrPatternBindValue() r.Msg { return r.Msg(Diag.ErrPatternBindValue, "T19b, S13b", "a payload pattern binds names only in a match statement", "", "in a value match read the field after the test ('case W: e.field')") }
@@ -1619,23 +1620,24 @@ fn NullTestOfValue(ty String&) r.Msg { return r.Msg(Diag.NullTestOfValue, "E10c"
 fn MayBeNull(text String&, ty1 String&, ty2 String&, bang String&) r.Msg { return r.Msg(Diag.MayBeNull, "T2c", "'" + $text + "' is a " + $ty1 + ", which may be null, and " + $ty2 + " never is", "", "test it first ('if x != null'), or write '" + $bang + "!'") }
 fn NullToNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NullToNonNull, "T2c", $ty1 + " is never null - a reference that may be is written " + $ty2) }
 fn NoteNullableDecl() r.Msg { return r.Msg(Diag.NoteNullableDecl, "", "the type is written here - write '?&' for '&' where it may be null") }
-fn NeverNull(text String&, ty String&, val String&) r.Msg { return r.Msg(Diag.NeverNull, "T2c", "'" + $text + "' is a " + $ty + ", never null, so this is always " + $val) }
-fn NoZeroNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoZeroNonNull, "T2c", $ty1 + " is never null, so it has no zero value - give it a value, or write " + $ty2) }
-fn ReadMaybeNull(text String&, ty String&, bang String&) r.Msg { return r.Msg(Diag.ReadMaybeNull, "T2c", "'" + $text + "' is a " + $ty + ", which may be null", "", "read through it where a test says it is not ('if x != null'), or write '" + $bang + "!'") }
-fn NullToArray(ty String&, empty String&) r.Msg { return r.Msg(Diag.NullToArray, "T2c", "an array written '&' is never null", "", "write '" + $empty + "' for an empty " + $ty + ", or '?&' where it may be null") }
-fn ArrayIsNull(text String&, empty String&) r.Msg { return r.Msg(Diag.ArrayIsNull, "T2c", "an array written '&' is never null", "", "test whether it is empty: write '" + $text + $empty + "', or '?&' where it may be null") }
-fn NarrowedWrite(local String&, kase String&) r.Msg { return r.Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written or lent writably", "'" + $local + "' is narrowed to " + $kase + ", and what it reads there is a copy of the payload", "assign the whole case, '" + $local + " = " + $kase + "(...)', or change a copy a match binds and assign the case back") }
-fn CallDoesNothing(call String&) r.Msg { return r.Msg(Diag.CallDoesNothing, "S3", "'" + $call + "' gives a value and does nothing else", "", "use the value (assign it, pass it on), or leave the call out") }
-fn FieldOfEnum(ty String&, f String&) r.Msg { return r.Msg(Diag.FieldOfEnum, "S8d", $ty + " is an enum, and its payload's '" + $f + "' is read through a case", "", "read it where a test narrows a local or a parameter to the case, 'if e == Case { e." + $f + " }', until it is assigned") }
-fn AsNeedsCase(ty String&, text String&) r.Msg { return r.Msg(Diag.AsNeedsCase, "E32", "after 'as' comes a case of " + $ty + ", found " + $text) }
-fn PatternType(ty String&, text String&) r.Msg { return r.Msg(Diag.PatternType, "S13b", "a pattern here names a case of " + $ty + ", found " + $text) }
-fn CaseIsPrivate(tok String&) r.Msg { return r.Msg(Diag.CaseIsPrivate, "M6a", "case " + $tok + " is private to its module") }
-fn AsNothing(text String&) r.Msg { return r.Msg(Diag.AsNothing, "E32", "case " + $text + " carries nothing for 'as' to give - test for it with '=='") }
-fn IsAsNotEnum(ty String&) r.Msg { return r.Msg(Diag.IsAsNotEnum, "E32", "'as' asks for an enum value's payload, and this is " + $ty) }
-fn SliceNeedsLen(ty String&) r.Msg { return r.Msg(Diag.SliceNeedsLen, "E31", "a slice with no end runs to Len(), and " + $ty + " has none") }
-fn AtUndeclared(ty String&) r.Msg { return r.Msg(Diag.AtUndeclared, "E31", $ty + " declares SetAt but not At, which reading x[i] calls") }
-fn SetatUndeclared(ty String&) r.Msg { return r.Msg(Diag.SetatUndeclared, "E31", $ty + " declares At but not SetAt, which x[i] = v calls") }
-fn WriteThroughAtNoSetat(ty String&) r.Msg { return r.Msg(Diag.WriteThroughAtNoSetat, "E31", "this writes through x[i] on " + $ty + ", which declares At but not SetAt", "the copy At gives back is never written back", "declare SetAt") }
+fn NeverNull(text String&, ty String&, val String&) r.Msg { return r.Msg(Diag.NeverNull, "T2c", "'" $text "' is a " $ty ", never null, so this is always " $val) }
+fn NoZeroNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoZeroNonNull, "T2c", $ty1 " is never null, so it has no zero value - give it a value, or write " $ty2) }
+fn ReadMaybeNull(text String&, ty String&, bang String&, why String& = "") r.Msg { return r.Msg(Diag.ReadMaybeNull, "T2c", "'" $text "' is a " $ty ", which may be null", why, "read through it where a test says it is not ('if x != null'), or write '" $bang "!'") }
+fn NullToArray(ty String&, empty String&) r.Msg { return r.Msg(Diag.NullToArray, "T2c", "an array written '&' is never null", "", "write '" $empty "' for an empty " $ty ", or '?&' where it may be null") }
+fn ArrayIsNull(text String&, empty String&) r.Msg { return r.Msg(Diag.ArrayIsNull, "T2c", "an array written '&' is never null", "", "test whether it is empty: write '" $text $empty "', or '?&' where it may be null") }
+fn NarrowedAcrossLoop(text String&) r.Msg { return r.Msg(Diag.NarrowedAcrossLoop, "S8d", "'" $text "' is narrowed by a test before the loop around this read", "a call in the loop may change it before the next turn reads it", "test it inside the loop, or read it into a local before the loop ('v := " $text "')") }
+fn NarrowedWrite(local String&, kase String&) r.Msg { return r.Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written or lent writably", "'" $local "' is narrowed to " $kase ", and what it reads there is a copy of the payload", "assign the whole case, '" $local " = " $kase "(...)', or change a copy a match binds and assign the case back") }
+fn CallDoesNothing(call String&) r.Msg { return r.Msg(Diag.CallDoesNothing, "S3", "'" $call "' gives a value and does nothing else", "", "use the value (assign it, pass it on), or leave the call out") }
+fn FieldOfEnum(ty String&, f String&, why String& = "") r.Msg { return r.Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum, and its payload's '" $f "' is read through a case", why, "read it where a test narrows it to the case, 'if e == Case { e." $f " }'") }
+fn AsNeedsCase(ty String&, text String&) r.Msg { return r.Msg(Diag.AsNeedsCase, "E32", "after 'as' comes a case of " $ty ", found " $text) }
+fn PatternType(ty String&, text String&) r.Msg { return r.Msg(Diag.PatternType, "S13b", "a pattern here names a case of " $ty ", found " $text) }
+fn CaseIsPrivate(tok String&) r.Msg { return r.Msg(Diag.CaseIsPrivate, "M6a", "case " $tok " is private to its module") }
+fn AsNothing(text String&) r.Msg { return r.Msg(Diag.AsNothing, "E32", "case " $text " carries nothing for 'as' to give - test for it with '=='") }
+fn IsAsNotEnum(ty String&) r.Msg { return r.Msg(Diag.IsAsNotEnum, "E32", "'as' asks for an enum value's payload, and this is " $ty) }
+fn SliceNeedsLen(ty String&) r.Msg { return r.Msg(Diag.SliceNeedsLen, "E31", "a slice with no end runs to Len(), and " $ty " has none") }
+fn AtUndeclared(ty String&) r.Msg { return r.Msg(Diag.AtUndeclared, "E31", $ty " declares SetAt but not At, which reading x[i] calls") }
+fn SetatUndeclared(ty String&) r.Msg { return r.Msg(Diag.SetatUndeclared, "E31", $ty " declares At but not SetAt, which x[i] = v calls") }
+fn WriteThroughAtNoSetat(ty String&) r.Msg { return r.Msg(Diag.WriteThroughAtNoSetat, "E31", "this writes through x[i] on " $ty ", which declares At but not SetAt", "the copy At gives back is never written back", "declare SetAt") }
 fn WriteThroughAtBuilds() r.Msg { return r.Msg(Diag.WriteThroughAtBuilds, "E31, O17", "x[i] gives a copy, and the call can build into what it holds", "it builds where the copy is", "hold the elements by reference, or take it in place ('x.RefMut(i)')") }
 fn CondLentWritable() r.Msg { return r.Msg(Diag.CondLentWritable, "E28", "this call would write a copy of what a conditional or a match chose", "a conditional or a match gives a copy of the value it chooses, which the call writes and drops", "call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") }
 fn WriteThroughAtCall() r.Msg { return r.Msg(Diag.WriteThroughAtCall, "E31b", "this call writes a copy of x[i]", "x[i] gives a copy, and the call can reach the collection another way", "call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference") }

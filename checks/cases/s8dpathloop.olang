@@ -1,0 +1,15 @@
+# check: fail error[S8d]: 'h.next' is narrowed by a test before the loop around this read
+# S8d: a call in a loop comes before the next turn's reads - a field path narrowed before the loop is not known in it
+type N struct(v I64, next N?&) { v, next }
+fn touch(h N&) I64 { return h.v }
+fn sum(h N&) I64 {
+    t I64 = 0
+    if h.next != null {
+        for i in range 3 {
+            t += h.next.v
+            t += touch(h)
+        }
+    }
+    return t
+}
+fn main() { assert sum(N(1, N(2, null))) == 9 }

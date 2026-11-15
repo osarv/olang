@@ -903,26 +903,26 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
     file := a.L.Mods[mi].File
     w := WordAt(text, dot)
     if w.Start < w.End and I64(w.End) == dot {
-        ref := c!.P.R.Use(file, w.Start)
-        if ref.Kind == names.What.None { ref = c!.P.R.Member(file, w.End) }
+        ref := c.P.R.Use(file, w.Start)
+        if ref.Kind == names.What.None { ref = c.P.R.Member(file, w.End) }
         if ref.Kind == names.What.Import {
             a.moduleNames(it, ref.Module, false)
             return
         }
         if ref.Kind == names.What.Type and ref.Index >= 0 {
             # D19: a type's builders, after its name
-            self := c!.P.SelfType(c!.P.DeclFor(ref.Module, ref.Index))
-            for f in c!.P.BuildersOf(self) {
-                decl := c!.P.FnDecl(f)
-                bn := c!.P.L.Names.Text(decl.Member)
-                if not doc.Exported(bn) and c!.P.FnModule(f) != mi { continue }
-                it.AddDep(bn, CompMethod, firstLine(explain.FnText(c!, a.Sc!, f)), a.deprecatedAt(c!.P.FnModule(f), I64(decl.Sp.Start), false))
+            self := c.P.SelfType(c.P.DeclFor(ref.Module, ref.Index))
+            for f in c.P.BuildersOf(self) {
+                decl := c.P.FnDecl(f)
+                bn := c.P.L.Names.Text(decl.Member)
+                if not doc.Exported(bn) and c.P.FnModule(f) != mi { continue }
+                it.AddDep(bn, CompMethod, firstLine(explain.FnText(c, a.Sc!, f)), a.deprecatedAt(c.P.FnModule(f), I64(decl.Sp.Start), false))
             }
             return
         }
     }
     t := a.typeEndingAt(file, dot)
-    Log($"completion after a '.' at " + $dot + ": " + $(c!.Ty(t) if t != types.UnknownT else "no type"))
+    Log($"completion after a '.' at " $dot ": " $(c.Ty(t) if t != types.UnknownT else "no type"))
     if t == types.UnknownT { return }
     a.typeMembers(it, t)
 }

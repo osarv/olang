@@ -1,8 +1,11 @@
 # check: fail error[T2c]: 'h.next' is a N?&, which may be null
-# S8e, as S8d: only a local or a parameter is narrowed - a field may change under a call; test it through a local
+# S8d, S8e: a field path narrows as a local does, until a call after the test - the call may write the field through
+# another reference; test it again after the call, or through a local
 type N struct(v I64, next N?&) { v, next }
+fn touch(h N&) I64 { return h.v }
 fn second(h N&) I64 {
     if h.next == null { return 0 }
-    return h.next.v
+    t := touch(h)
+    return h.next.v + t
 }
-fn main() { assert second(N(1, N(2, null))) == 2 }
+fn main() { assert second(N(1, N(2, null))) == 3 }

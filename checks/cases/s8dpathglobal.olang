@@ -1,0 +1,9 @@
+# check: fail error[T2c]: 'g.next' is a N?&, which may be null
+# S8d: a field path begins at a local or a parameter - a global's field never narrows
+type N struct(v I64, next N?&) { v, next }
+g mut N = N(1, N(2, null))
+fn second() I64 {
+    if g.next == null { return 0 }
+    return g.next.v
+}
+fn main() { assert second() == 2 }

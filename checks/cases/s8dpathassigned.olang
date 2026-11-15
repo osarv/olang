@@ -1,0 +1,9 @@
+# check: fail error[T2c]: 'h.next.next' is a N?&, which may be null
+# S8d, S8e: an assignment to a path a narrowed field path starts with ends its narrowing
+type N struct(v I64, next N?&) { v, next }
+fn third(h mut N&, o N&) I64 {
+    if h.next == null or h.next.next == null { return 0 }
+    h.next = o
+    return h.next.next.v
+}
+fn main() { assert third(N(1, N(2, N(3, null))), N(4, null)) == 0 }

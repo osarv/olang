@@ -1,0 +1,156 @@
+# S8d, S8e, T20: a field path - a local or a parameter and the fields read after it, "x.f", "x.f.g" - narrows as a local
+# does: by a null test, a case test or an error-value test, through "and", "or", "not", conditionals, asserts and
+# loops; a call after the test or an assignment to the path or a path it starts with ends it (a call's arguments are
+# read before it). Baked is computed while compiling (K2) and the top-level assert decided there (S17a), so the
+# evaluator agrees with the run time.
+
+type Node struct(v I64, next Node?&) {
+    v
+    next
+}
+
+type Circle struct(rad I64) { rad }
+
+type Shape enum {
+    Dot
+    Ring(r I64)
+    Round Circle
+}
+
+type ReadError error { Bad(line I64), Eof }
+
+type Box struct(head Node?&, s Shape, e ReadError, inner Box?&) {
+    head
+    s
+    e
+    inner
+}
+
+fn twice(x I64) I64 { return x * 2 }
+
+fn touch(n Node&) I64 { return n.v }
+
+fn second(h Node&) I64 {
+    if h.next == null: return -1
+    return h.next.v
+}
+
+fn third(h Node&) I64 {
+    if h.next != null and h.next.next != null: return h.next.next.v
+    return -1
+}
+
+# a call's arguments are read before it: the narrowing holds in them
+fn passed(h Node&) I64 {
+    if h.next != null: return twice(h.next.v)
+    return 0
+}
+
+# after a call, a new test narrows again
+fn retested(h Node&) I64 {
+    if h.next == null: return 0
+    t := touch(h)
+    if h.next == null: return t
+    return t + h.next.v
+}
+
+fn ring(b Box&) I64 {
+    if b.s == Shape.Ring: return b.s.r
+    if b.s == Shape.Round: return b.s.rad
+    return 0
+}
+
+fn deep(b Box&) I64 {
+    if b.inner != null and b.inner.head != null: return b.inner.head.v
+    return -1
+}
+
+fn line(b Box&) I64 {
+    if b.e == ReadError.Bad: return b.e.line
+    return 0 if b.e == null else -1
+}
+
+# "!" on a narrowed path is unneeded, no error
+fn unwrapped(h Node&) I64 {
+    if h.next != null: return h.next!.v
+    return 0
+}
+
+# a loop that calls nothing keeps what was said before it
+fn summed(h Node&) I64 {
+    t I64 = 0
+    if h.next != null {
+        for i in range 3: t += h.next.v + i
+    }
+    return t
+}
+
+# a loop's own condition on the path, re-tested every turn, holds in its body after its calls
+fn walked(h Node&) I64 {
+    t I64 = 0
+    at := h
+    for at.next != null {
+        at = at.next
+        t += touch(at)
+    }
+    return t
+}
+
+# a store of a value never null makes the path known not to be null
+fn stored(h mut Node&) I64 {
+    h.next = Node(7, null)
+    return h.next.v
+}
+
+# a call in the block is none in the else
+fn branched(h Node&, b Bool) I64 {
+    if h.next != null {
+        if b { return touch(h) } else { return h.next.v }
+    }
+    return 0
+}
+
+fn score() I64 {
+    list := Node(1, Node(2, Node(3, null)))
+    t := second(list) + 10 * third(list) + 100 * passed(list) + 1000 * retested(list) + 10000 * unwrapped(list)
+    b := Box(list, Shape.Ring(5), ReadError.Bad(9), Box(null, Shape.Dot, null, null))
+    c := Box(null, Shape.Round(Circle(4)), null, b)
+    t += 100000 * (ring(b) + ring(c)) + 1000000 * (deep(b) + deep(c)) + 10000000 * line(b) + line(c)
+    return t + summed(list) * 1000000000 + walked(list) * 100000000000
+}
+
+Baked I64 = score()
+
+assert score() == Baked
+
+test "a field path narrows by a null test, at depth one and two, and in a call's arguments" {
+    list := Node(1, Node(2, Node(3, null)))
+    assert second(list) == 2 and third(list) == 3 and passed(list) == 4
+    assert second(Node(1, null)) == -1 and third(Node(1, Node(2, null))) == -1
+    assert retested(list) == 3 and unwrapped(list) == 2
+    assert Baked == score()
+}
+
+test "a field path narrows by a case test and an error-value test" {
+    b := Box(Node(1, null), Shape.Ring(5), ReadError.Bad(9), Box(Node(6, null), Shape.Dot, null, null))
+    assert ring(b) == 5 and line(b) == 9 and deep(b) == 6
+    c := Box(null, Shape.Round(Circle(4)), ReadError.Eof, null)
+    assert ring(c) == 4 and line(c) == -1 and deep(c) == -1
+    assert line(Box(null, Shape.Dot, null, null)) == 0
+}
+
+test "a field path narrows through loops, stores and an else" {
+    list := Node(1, Node(2, Node(3, null)))
+    assert summed(list) == 9 and walked(list) == 5 and walked(Node(1, null)) == 0
+    m := Node(1, null)
+    assert stored(m) == 7 and m.next != null and m.next.v == 7
+    assert branched(list, true) == 1 and branched(list, false) == 2
+    # an assert narrows what follows it
+    assert list.next != null
+    assert list.next.v == 2
+    # what the path is read after its store is the new value - an arena churn between
+    for k in range 100 {
+        list.next = Node(k, null)
+        assert list.next.v == k
+    }
+}
