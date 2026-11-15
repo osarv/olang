@@ -24,6 +24,7 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
 |---|---|
 | `source.olang` | a source file: text, and line starts for diagnostics |
 | `token.olang`, `scan.olang` | tokens as spans, and the hand-written scanner |
+| `measure.olang` | `-bench` of a run (B19b): a program or test binary started and waited for with `wait4`, its build and run time, user and system time and peak memory written as one line on the standard error, `-runs N` as a median with spread (std/bench's statistics) |
 | `ast.olang`, `parse.olang` | the syntax tree (recursive enums), recursive descent plus Pratt expressions |
 | `msgs.olang` | every diagnostic, one function each - the table's source, edited by hand |
 | `diagmsg.olang` | what a diagnostic is (`Msg`: its `msgs.Diag`, its rule, its headline, and its note and help) - apart from msgs so msgs's functions are no builders (D19a) |

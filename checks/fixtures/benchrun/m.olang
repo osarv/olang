@@ -1,0 +1,6 @@
+import "std/os"
+
+fn main() {
+    Println(os.Args().Len())
+    if os.Args().Len() == 3: os.Exit(3)
+}
