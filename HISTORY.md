@@ -37417,3 +37417,6 @@ The user, on `io.PutLine(x)` refusing an I64 that `Print(x)` takes: "they should
 then "any printable type really". `io.Put`, `PutLine`, `PutErr` and `PutErrLine` are generic over the value, written as
 `$` renders it (a String as its text), as the prelude's `Print`/`Println` are; still `? io.Error`. Every existing caller
 passed a String and writes the same bytes. M19f in SPEC, std/io.olang's test "writes any value as $ renders it".
+
+The same day (the user, "yes, add it to the Writer"): `io.Writer` gains `Put<T>` and `PutLine<T>`, writing any value as
+`$` renders it into the buffer (PutLine with a line end, written as a second byte so nothing is joined first).

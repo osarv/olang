@@ -190,7 +190,7 @@ fn (l Lines&) line(first I64, last I64) String& {
 # report, a table), where Put and PutLine make one write per call, so the system is entered once for every line:
 #
 #     out := io.Writer(io.Stdout)
-#     for r in rows { out.Write($r.Name ": " $r.Count "\n") }
+#     for r in rows: out.PutLine($r.Name ": " $r.Count)
 #     try out.Flush()
 #
 # What is written waits in a buffer of "size" bytes and goes to the descriptor when the buffer is full, and whatever is
@@ -225,6 +225,15 @@ fn (w mut Writer&) Write(t Array<U8>&) {
     at := w.used
     for i in range n { w.buf[at + i] = t[i] }
     w.used = at + n
+}
+
+# x as $ renders it, after what is written already - any value, as Put takes
+fn (w mut Writer&) Put<T>(x T) { w.Write($x) }
+
+# x as $ renders it and a line end, after what is written already; with nothing given, a line end alone
+fn (w mut Writer&) PutLine<T>(x T = "") {
+    w.Write($x)
+    w.WriteChar('\n')
 }
 
 # one character, after what is written already
@@ -283,6 +292,16 @@ test PutLine "writes any value as $ renders it" {
     try PutLine()
     try PutErrLine(true)
     try PutLine(Array<I64>[1, 2])
+}
+
+test Writer.PutLine "writes any value as $ renders it, with a line end" {
+    w := Writer(Stdout)
+    w.Put(5)
+    w.PutLine()
+    w.PutLine(2.5)
+    w.PutLine(Array<I64>[1, 2])
+    w.PutLine("text")
+    try w.Flush()
 }
 
 test Show "gives its value back after writing it, with the place of the call, to the standard error" {
