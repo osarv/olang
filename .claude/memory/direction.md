@@ -34,7 +34,7 @@ one rule that composes over special cases; fix rough edges found while building.
   settling networks have "unexplored potential", ordinary networks too, "preferably a combination" - "a low parameter,
   high ability reasoning kernel, using any kind of technique", energy-efficient, with optimization algorithms designed
   on top, found by experiment. Built after olang version 1 on the settled language, redesigned keeping what can be kept;
-  held until version 1 is mature. The operand is an N-d tensor (it holds what describes the data; the network and its
+  started 2026-11-15, at the version 1 candidate. The operand is an N-d tensor (it holds what describes the data; the network and its
   structure the transformations), the base of all operations, efficient first (in-place forms, no-copy transposed matmul,
   fused elementwise). Kernels in olang, no BLAS on the CPU; on the GPU our own kernels where they pay and NVIDIA's
   libraries where they win; one model description run eagerly, as a captured graph, or planned while compiling; CPU,

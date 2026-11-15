@@ -143,8 +143,8 @@ slimming of 2026-11-08").
   recursive descent with Pratt expressions, demand-driven checker over an AST of enums), use the C only as reference
   for what olang means. Acceptance is the suite plus the bootstrap fixed point.
 - **Stage 0 (C) is gone** since 2026-10-23; the seed bootstrap stands.
-- **oann waits** until the compiler is mature (version 1 settled, built, verified); no oann or oagent catch-ups before
-  that; the migration tools are kept to catch it up in one go.
+- **oann is under way** since 2026-11-15 (the user: "If we are ready for v1, start building oann whilst I test it
+  out"); the hold until version 1 ended there. oann's work goes to its `master`.
 - **Compile per module, whole program only on top**: facts and code per module, reused when inputs did not change
   (B3i); whole-program steps only in the final link/instances step. A design that makes one edit recompile others states
   that cost and goes to the user; both variants are measured where whole-program facts make memory safety clearly better.
