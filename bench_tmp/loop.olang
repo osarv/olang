@@ -1,0 +1,13 @@
+import "std/io"
+
+fn main() ? io.Error {
+    n := 100000000
+    s F64 = 0.0
+    x F64 = 1.0
+    for _ in range n {
+        x = x * 1.0000001 + 0.5
+        if x > 1000.0: x = x - 999.0
+        s += x
+    }
+    try io.PutLine($s)
+}

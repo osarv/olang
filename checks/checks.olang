@@ -40,7 +40,7 @@ fn workers() I64 {
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
 Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
-                     "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
+                     "scopesan", "frameenv", "crash", "interp", "interpbuilt", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
@@ -438,6 +438,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "records" { try records(r) }
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
+        case "interpbuilt" { try interpbuilt(r) }
         case "prompt" { try prompt(r) }
         case "promptkeys" { try promptkeys(r) }
         case "jupyter" { try jupyter(r) }
@@ -547,7 +548,7 @@ fn earlyfree(r mut report&) ? Failed {
         try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)
         try r.expect(sh(dir, $"(ulimit -v 8192 && ulimit -n 64 && ./build/" $p ") > out.txt 2>&1") == 0, $p " under 8 MB", dir)
         try r.expect(outOf(dir) == full[i], $p " output", dir)
-        try r.expect(sh(dir, $"\"$OLANG\" interpret -define N=" $small[i] " " $p ".olang > out.txt 2>&1") == 0, $p " interpreted", dir)
+        try r.expect(sh(dir, $"\"$OLANG\" interpret -evaluate -define N=" $small[i] " " $p ".olang > out.txt 2>&1") == 0, $p " interpreted", dir)
         try r.expect(outOf(dir) == part[i], $p " interpreted output", dir)
         try split(r, dir, p, full[i])
     }
@@ -663,7 +664,7 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build handles.olang > out.txt 2>&1 && ./build/handles > b.txt 2>&1") == 0, "handles", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug handles.olang > out.txt 2>&1 && ./build/handles.debug > d.txt 2>&1") == 0
                  "handles -d", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret handles.olang > i.txt 2>&1") == 0, "handles -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate handles.olang > i.txt 2>&1") == 0, "handles -i", dir)
     try r.expect(sh(dir, "cmp -s handles.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "handles output", dir)
 }
 
@@ -1254,7 +1255,7 @@ fn embedded(r mut report&) ? Failed {
                     "&& ./build/app > run.txt") == 0, "the build after data.txt's edit", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'lib 119 119' run.txt") == 0
                  "the build after data.txt's edit", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret app.olang > out.txt 2>&1") == 0 and outOf(dir) == "lib 119 119\n"
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate app.olang > out.txt 2>&1") == 0 and outOf(dir) == "lib 119 119\n"
                  "interpret after data.txt's edit", dir)
     # a module of std embedding what is outside it
     try r.expect(sh(dir, "mkdir -p s && cp -r " $os.Quote($root() "/std") " s/std && echo 'X := embed \"../outside.txt\"' > " $
@@ -1283,9 +1284,15 @@ fn embedded(r mut report&) ? Failed {
                  "the remote link's error", dir)
 }
 
-# B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping
-# main; it stops, saying where, at what the built program leaves undefined, and at what it does not run yet (tasks)
-test "-i interprets a program as the built program runs" { assert passed("interp") }
+# B3e: interpret -evaluate runs a program as the built program runs - the same output, exit status and report of an
+# error escaping main; it stops, saying where, at what the built program leaves undefined, and at what it does not run
+# yet (tasks)
+test "interpret -evaluate runs a program as the built program runs" { assert passed("interp") }
+
+# B3e: interpret builds the program as a file run does, but checked (E16g) and keeping the error trace (S18d), into the
+# cache, and runs it in its place - a -debug build's output, status and report, its arguments and input the program's,
+# what is only untidy a warning, nothing left beside it, an unchanged program not built again; -evaluate runs it alike
+test "interpret builds a program checked into the cache and runs it" { assert passed("interpbuilt") }
 
 test "plain olang runs its input as cells of one session" { assert passed("prompt") }
 
@@ -1355,78 +1362,119 @@ fn interp(r mut report&) ? Failed {
     # built -debug, so the error escaping main prints its trace as -i does (S18d)
     try r.expect(sh(dir, "\"$OLANG\" build -debug prog.olang > out.txt 2>&1") == 0, "interp build", dir)
     try r.expect(sh(dir, "./build/prog.debug > want.txt 2>&1") == 1, "prog did not end in Oops.Bad", dir)   # main ends in Oops.Bad
-    try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 1, "-i prog.olang did not end in Oops.Bad", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate prog.olang > out.txt 2>&1") == 1, "-i prog.olang did not end in Oops.Bad", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i printed what the built program did not", dir)
     try r.expect(outOf(dir).Contains("unhandled error: Oops.Bad") and outOf(dir).Contains("read written 10 -1")
                  "-i prog.olang output", dir)
     # B3e: what a build refuses is not run - section 8's errors reported as a build reports them
     # B3e: an unused import and an unread local are warnings under interpret, on the standard error, and it runs
-    try r.expect(sh(dir, "\"$OLANG\" interpret untidy.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n"
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate untidy.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n"
                  "-i untidy.olang did not run", dir)
     warned := try os.ReadFile($dir "/err.txt") catch default ""
     try r.expect(warned.Contains("untidy.olang:2:8: warning[M5a]: ") and warned.Contains("untidy.olang:5:5: warning[D3b]: ")
                  "-i untidy.olang's warnings", dir)
     try r.expect(sh(dir, "\"$OLANG\" build untidy.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[M5a]")
                  "untidy.olang built", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
     try r.expect(outOf(dir).Contains("error[R11, O25]") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
     # ... and a construct the checker does not check yet stops it, as it stops a build (F11)
     try r.expect(sh(dir, "\"$OLANG\" build gap.olang > want.txt 2>&1") == 1, "gap.olang built", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret gap.olang > out.txt 2>&1") == 1, "-i gap.olang ran", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate gap.olang > out.txt 2>&1") == 1, "-i gap.olang ran", dir)
     try r.expect(outOf(dir).Contains("it does not check a slice with no end of a type with no Len") and
                  not outOf(dir).Contains("sliced"), "-i gap.olang output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret ub.olang > out.txt 2>&1") != 0, "-i ub.olang did not stop", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate ub.olang > out.txt 2>&1") != 0, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6:12: index out of range"), "-i ub.olang output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("cyclic.olang:9: the comparison recurses deeper than interpret allows")
                  "-i cyclic.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build tasks.olang > out.txt 2>&1 && ./build/tasks > want.txt 2>&1") == 0, "tasks build", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret tasks.olang > out.txt 2>&1") == 0, "-i tasks.olang failed", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate tasks.olang > out.txt 2>&1") == 0, "-i tasks.olang failed", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran tasks.olang unlike the built program", dir)
     try r.expect(outOf(dir) == "squares Array<I64>[1, 4, 9, 16]\nsum 10\ncleanup ran\n", "-i tasks.olang output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret tasks.olang x > out.txt 2>&1") == 1, "-i tasks.olang x did not stop", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate tasks.olang x > out.txt 2>&1") == 1, "-i tasks.olang x did not stop", dir)
     try r.expect(outOf(dir).Contains("sum 10\ncleanup ran\nolang interpret: ") and outOf(dir).Contains(": it waits for another task") and
                  outOf(dir).Contains("in the task spawned at tasks.olang:39"), "-i tasks.olang x output", dir)
     # ... and an index the program wrote is checked (E16g): the stop is a failed check's, ending the program where it
     # is, as a failed assert does, no deferred code run after it (a stop on what interpret does not run still runs it,
     # tasks.olang x above)
-    try r.expect(sh(dir, "\"$OLANG\" interpret defers.olang > out.txt 2>&1") != 0, "-i defers.olang did not stop", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate defers.olang > out.txt 2>&1") != 0, "-i defers.olang did not stop", dir)
     try r.expect(outOf(dir) == ("reach's\nturn 0\nreach's\nturn 1\nreach's\nturn 2\n" $
                                 "defers.olang:10:12: index out of range\nAborted\n"), "-i defers.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134
                  "ends did not abort", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret ends.olang > out.txt 2>&1") == 134, "-i ends.olang did not abort", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate ends.olang > out.txt 2>&1") == 134, "-i ends.olang did not abort", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ended unlike the built program", dir)
     # X6: os.Exec runs a program through __olang_spawn, which -i provides itself; std/json the same either way
     try r.expect(sh(dir, "\"$OLANG\" build exec.olang > out.txt 2>&1 && ./build/exec > want.txt 2>&1") == 0, "exec build", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret exec.olang > out.txt 2>&1") == 0, "-i exec.olang failed", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate exec.olang > out.txt 2>&1") == 0, "-i exec.olang failed", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran exec.olang unlike the built program", dir)
     try r.expect(outOf(dir).Contains("4 [fed in] [err") and outOf(dir).Contains("missing yes") and
                  outOf(dir).Contains("in /\nlate yes [started] 137\n"), "-i exec.olang output", dir)
-    # test -interpret: a file's tests run as its test binary runs them - the same lines and status, an error leaving a
+    # test -evaluate: a file's tests run as its test binary runs them - the same lines and status, an error leaving a
     # test named with its trace; the words choose tests as the harness's do, none named the status 3
     try r.expect(sh(dir, "\"$OLANG\" test tests.olang > want.txt 2>&1") == 1, "tests.olang's built tests passed", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret tests.olang > out.txt 2>&1") == 1, "test -interpret passed", dir)
-    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "test -interpret ran the tests unlike their binary", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate tests.olang > out.txt 2>&1") == 1, "test -evaluate passed", dir)
+    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "test -evaluate ran the tests unlike their binary", dir)
     try r.expect(outOf(dir).Contains("FAIL - fails: lets its error out: Oops.Bad\ntests.olang:10: raised here\n") and
-                 outOf(dir).Contains("2 passed, 2 failed"), "test -interpret output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret tests.olang doubles > out.txt 2>&1") == 0 and
-                 outOf(dir).Contains("1 passed, 0 failed"), "test -interpret doubles", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret tests.olang nothin > out.txt 2>&1") == 3 and
-                 outOf(dir).Contains("no test is named by 'nothin'"), "test -interpret nothin", dir)
+                 outOf(dir).Contains("2 passed, 2 failed"), "test -evaluate output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate tests.olang doubles > out.txt 2>&1") == 0 and
+                 outOf(dir).Contains("1 passed, 0 failed"), "test -evaluate doubles", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate tests.olang nothin > out.txt 2>&1") == 3 and
+                 outOf(dir).Contains("no test is named by 'nothin'"), "test -evaluate nothin", dir)
     # ... and a failing test is left as its binary leaves it: destructors run by a failed check's unwinding (P1d),
     # deferred code where an error leaves (S19), a "!"'s trace (E35), a word naming none answered with the nearest (B7a)
     try r.expect(sh(dir, "\"$OLANG\" test unwind.olang > want.txt 2>&1") == 1, "unwind.olang's built tests passed", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret unwind.olang > out.txt 2>&1") == 1, "test -interpret unwind passed", dir)
-    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "test -interpret left failing tests unlike their binary", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate unwind.olang > out.txt 2>&1") == 1, "test -evaluate unwind passed", dir)
+    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "test -evaluate left failing tests unlike their binary", dir)
     try r.expect(outOf(dir).Contains("destruct 2\ndestruct 1\nunwind.olang:13: assertion failed: boom\n") and
                  outOf(dir).Contains("errdeferred 3\ndeferred 3\ndestruct 3\nFAIL - inner: lets a payload out: E.Bad(4)\n") and
                  outOf(dir).Contains("unwind.olang:29: E.Bad(6)\nunwind.olang:8: raised here\n") and
-                 outOf(dir).Contains("1 passed, 3 failed"), "test -interpret unwind output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret unwind.olang helpr > out.txt 2>&1") == 3 and
-                 outOf(dir).Contains("no test is named by 'helpr' - did you mean 'helper'?"), "test -interpret helpr", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret -debug tests.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("error[B3e]: -interpret builds nothing, and -debug says how to build"), "test -interpret -debug", dir)
+                 outOf(dir).Contains("1 passed, 3 failed"), "test -evaluate unwind output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate unwind.olang helpr > out.txt 2>&1") == 3 and
+                 outOf(dir).Contains("no test is named by 'helpr' - did you mean 'helper'?"), "test -evaluate helpr", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate -debug tests.olang > out.txt 2>&1") == 1 and
+                 outOf(dir).Contains("error[B3e]: -evaluate builds nothing, and -debug says how to build"), "test -evaluate -debug", dir)
+}
+
+fn interpbuilt(r mut report&) ? Failed {
+    dir := fresh("interpbuilt")
+    os.Run("cp checks/fixtures/interp/* " $os.Quote(dir))
+    run := "XDG_CACHE_HOME=\"$PWD/cache\" \"$OLANG\" interpret "
+    try r.expect(sh(dir, "\"$OLANG\" build -debug prog.olang > out.txt 2>&1 && rm -rf build/rec") == 0, "prog -debug build", dir)
+    try r.expect(sh(dir, "./build/prog.debug > want.txt 2>&1; rm -rf build") == 0, "prog -debug run", dir)
+    try r.expect(sh(dir, $run "prog.olang > out.txt 2>&1") == 1, "interpret prog.olang did not end in Oops.Bad", dir)
+    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "interpret printed what the -debug build did not", dir)
+    try r.expect(sh(dir, "test ! -e build && ls cache/olang/run/prog_olang-*.quick.checked > /dev/null") == 0
+                 "interpret left its build beside the program, or not in the cache", dir)
+    try r.expect(sh(dir, "stat -c '%n %.9Y' cache/olang/run/prog_olang-* > a.txt && " $run "prog.olang > out.txt 2>&1; " $
+                    "stat -c '%n %.9Y' cache/olang/run/prog_olang-* | cmp -s a.txt -") == 0, "an unchanged program built again", dir)
+    try r.expect(sh(dir, $run "untidy.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n", "interpret untidy.olang", dir)
+    warned := try os.ReadFile($dir "/err.txt") catch default ""
+    try r.expect(warned.Contains("untidy.olang:2:8: warning[M5a]: ") and warned.Contains("untidy.olang:5:5: warning[D3b]: ")
+                 "interpret untidy.olang's warnings", dir)
+    try r.expect(sh(dir, $run "refused.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[R11, O25]"), "interpret refused.olang", dir)
+    # E16g: an index the program wrote is checked, the stop a failed check's
+    try r.expect(sh(dir, $run "defers.olang > out.txt 2>&1") == 134 and outOf(dir) == ("reach's\nturn 0\nreach's\nturn 1\n" $
+                 "reach's\nturn 2\ndefers.olang:10:12: index out of range\nAborted\n"), "interpret defers.olang", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134, "ends", dir)
+    try r.expect(sh(dir, $run "ends.olang > out.txt 2>&1") == 134 and sh(dir, "cmp -s want.txt out.txt") == 0, "interpret ends.olang", dir)
+    # B3f: the file and what follows it are the program's command line, its input the program's, its status its own
+    args := """
+        import "std/io"
+        import "std/os"
+
+        fn main() ? io.Error {
+            for a in os.Args(): try io.PutLine(a)
+            lines := io.Lines(io.Stdin)
+            for { try io.PutLine($"in: " $(try lines.Next() catch Exhausted { break })) }
+            os.Exit(7)
+        }
+        """
+    try os.WriteFile($dir "/args.olang", args) catch os.Error { try r.failed("args.olang", dir) }
+    try r.expect(sh(dir, "echo hi | " $run "args.olang -x 'two words' > out.txt 2>&1") == 7 and
+                 outOf(dir) == "args.olang\n-x\ntwo words\nin: hi\n", "interpret args.olang", dir)
+    try r.expect(sh(dir, "echo hi | " $run "-evaluate args.olang a > out.txt 2>&1") == 7 and
+                 outOf(dir) == "args.olang\na\nin: hi\n", "interpret -evaluate args.olang", dir)
 }
 
 # B4a/B3f/X6: a program reads its command line and environment through the runtime, and std/os's file calls work -
@@ -1444,7 +1492,7 @@ fn osargs(r mut report&) ? Failed {
                  "osargs output: the command line", dir)
     try r.expect(outOf(dir).Contains("value: hi\nsize 5 file true dated true\nin work/a: b\nin work/a: g.txt\n")
                  "osargs output: the environment and the files", dir)
-    try r.expect(sh(dir, "rm -rf work && OLANG_CHECK_VALUE=hi \"$OLANG\" interpret osargs.olang" $args) == 0, "osargs -i", dir)
+    try r.expect(sh(dir, "rm -rf work && OLANG_CHECK_VALUE=hi \"$OLANG\" interpret -evaluate osargs.olang" $args) == 0, "osargs -i", dir)
     try r.expect(outOf(dir).Contains("program: osargs.olang\n"), "osargs -i: expected 'program: osargs.olang'", dir)
     try r.expect(sh(dir, "tail -n +2 want.txt > w.txt && tail -n +2 out.txt | cmp -s w.txt -") == 0, "-i differs", dir)
     try r.expect(sh(dir, "rm -rf work && ./build/osargs > out.txt 2>&1") == 0, "osargs with no arguments", dir)
@@ -1461,7 +1509,7 @@ fn osexit(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build osexit.olang > out.txt 2>&1 && ./build/osexit > out.txt 2>&1") == 42
                  "osexit", dir)
     try r.expect(outOf(dir) == "before\n", "osexit output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret osexit.olang > out.txt 2>&1") == 42, "osexit -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate osexit.olang > out.txt 2>&1") == 42, "osexit -i", dir)
     try r.expect(outOf(dir) == "before\n", "osexit -i output", dir)
 }
 
@@ -1478,7 +1526,7 @@ fn printing(r mut report&) ? Failed {
     try r.expect(outOf(dir) == out, "print: the standard output", dir)
     try r.expect((try os.ReadFile($dir "/err.txt") catch default "") == "to the standard error\n"
                  "print: the standard error", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
     try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
     try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 1, "print to a closed output fails", dir)
     try r.expect(outOf(dir).StartsWith("unhandled error: io.Error.Failed\n"), "print to a closed output: the error", dir)
@@ -1486,7 +1534,7 @@ fn printing(r mut report&) ? Failed {
     bare := "n is 42\n\nArray<I64>[1, 2]\n"
     try r.expect(sh(dir, "\"$OLANG\" build bare.olang > out.txt 2>&1 && ./build/bare > out.txt") == 0 and outOf(dir) == bare
                  "Print and Println", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret bare.olang > out.txt") == 0 and outOf(dir) == bare, "Print and Println -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate bare.olang > out.txt") == 0 and outOf(dir) == bare, "Print and Println -i", dir)
     try r.expect(sh(dir, "./build/bare >&- 2> out.txt") == 134 and outOf(dir).Contains("output.Refused")
                  "println to a closed output ends the program", dir)
 }
@@ -1643,9 +1691,9 @@ fn assertloc(r mut report&) ? Failed {
                  outOf(dir).StartsWith("located.olang:6: unreachable reached\n"), "the first unreachable's location", dir)
     try r.expect(sh(dir, "./build/located a b > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("located.olang:7: unreachable reached\n"), "an unreachable's location", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret located.olang > out.txt 2>&1") == 134 and
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate located.olang > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("located.olang:8: assertion failed: n is 1\n"), "-i: an assert's location and message", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret located.olang a b > out.txt 2>&1") == 134 and
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate located.olang a b > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("located.olang:7: unreachable reached\n"), "-i: an unreachable's location", dir)
     # and a check the language guarantees - a slice, an array length, an 'as' under '!' (a copy into fixed storage is never
     # checked: its length is known while compiling, T7d)
@@ -1656,14 +1704,14 @@ fn assertloc(r mut report&) ? Failed {
     args := Array<String&>["", " a", " a b", " a b c", " a b c d e"]
     for i, w in wants {
         try r.expect(sh(dir, "./build/guaranteed" $args[i] " > out.txt 2>&1") == 134 and outOf(dir).StartsWith(w), w, dir)
-        try r.expect(sh(dir, "\"$OLANG\" interpret guaranteed.olang" $args[i] " > out.txt 2>&1") == 134 and
+        try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate guaranteed.olang" $args[i] " > out.txt 2>&1") == 134 and
                      outOf(dir).StartsWith(w), "-i: " $w, dir)
     }
     # T20, R3a: raising a null error - a held error value saying "no error"
     try r.expect(sh(dir, "\"$OLANG\" build nullerror.olang > out.txt 2>&1") == 0, "nullerror did not build", dir)
     try r.expect(sh(dir, "./build/nullerror > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("nullerror.olang:4: raised a null error\n"), "a null error raised", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret nullerror.olang > out.txt 2>&1") == 134 and
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate nullerror.olang > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("nullerror.olang:4: raised a null error\n"), "-i: a null error raised", dir)
     # B7a: a test naming a target is reported by it; words after the file pick the tests to run
     ran := sh(dir, "\"$OLANG\" test targets.olang > out.txt 2>&1")
@@ -1909,7 +1957,7 @@ fn definit(r mut report&) ? Failed {
     }
     try r.expect(bodyHas(dir, ll, "stopped", "scope_alloc_zeroed"), "a loop that may stop early lost its clear", dir)
     try r.expect(irHas(dir, ll, $gsym("definit", "Root") " = constant <\\{ ptr \\}> <\\{ ptr @"), "Root is not baked", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret definit.olang > out.txt 2>&1") == 0, "definit interpreted", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate definit.olang > out.txt 2>&1") == 0, "definit interpreted", dir)
     try r.expect(outOf(dir) == "1 Array<F32>[0, 1, 4, 9] Array<F32>[0, 0.5, 1, 1.5] Array<F32>[1, 1, 1, 0, 0] 7\n", "definit interpreted output", dir)
 }
 
@@ -2030,11 +2078,11 @@ fn nestparse(r mut report&) ? Failed {
     dir := fresh("nestparse")
     lambdas String& = nested("fn k() { }\nfn f(g fn&()) { g() }\nfn main() ? {\n    ", "f(fn() { ", "k()", " })", "\n}\n", 40)
     try os.WriteFile($dir "/lambdas.olang", lambdas) catch { }
-    try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret lambdas.olang > out.txt 2>&1") == 0, "nested lambdas", dir)
+    try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret -evaluate lambdas.olang > out.txt 2>&1") == 0, "nested lambdas", dir)
     tries String& = nested("type E error { X }\nfn k() { }\nfn g() ? E { error E.X }\nfn main() ? {\n    "
                            "try g() catch E { ", "k()", " }", "\n}\n", 40)
     try os.WriteFile($dir "/tries.olang", tries) catch { }
-    try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret tries.olang > out.txt 2>&1") == 0, "nested try-catch", dir)
+    try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret -evaluate tries.olang > out.txt 2>&1") == 0, "nested try-catch", dir)
 }
 
 # every pass recurses once per level of nesting, so a program nested past what the compiler's stack holds is refused by
@@ -2045,7 +2093,7 @@ fn nestdeep(r mut report&) ? Failed {
     dir := fresh("nestdeep")
     ok String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n    assert x == 1\n}\n", 5000)
     try os.WriteFile($dir "/ok.olang", ok) catch { }
-    try r.expect(sh(dir, "\"$OLANG\" interpret ok.olang > out.txt 2>&1") == 0, "5000 parentheses", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate ok.olang > out.txt 2>&1") == 0, "5000 parentheses", dir)
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 25000)
     try os.WriteFile($dir "/deep.olang", deep) catch { }
     try r.expect(sh(dir, "\"$OLANG\" compile deep.olang > out.txt 2>&1") != 0, "25000 parentheses compiled", dir)
@@ -2064,7 +2112,7 @@ fn manyifs(r mut report&) ? Failed {
     many String& = nested("fn g(x I32) I32 { return x }\nfn f(x I32) I64 {\n    s := 0\n"
                           "    if g(x) > 5 { s += 1 }\n", "", "", "    return s\n}\nfn main() ? { assert f(9) == 20000 }\n", 20000)
     try os.WriteFile($dir "/many.olang", many) catch { }
-    try r.expect(sh(dir, "(ulimit -v 2500000 && timeout 60 \"$OLANG\" interpret many.olang) > out.txt 2>&1") == 0
+    try r.expect(sh(dir, "(ulimit -v 2500000 && timeout 60 \"$OLANG\" interpret -evaluate many.olang) > out.txt 2>&1") == 0
                  "20000 local ifs", dir)
 }
 
@@ -2144,10 +2192,10 @@ fn vecalias(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/vecalias/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "30 60 7\n", "good output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7\n", "good under -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7\n", "good under -i", dir)
     # (T22a, docs/sec8.md round 3: 'f := olib.Stash; f(h, n)' is judged as the direct call - 'n' built where 'h' lives)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize p1.olang > out.txt 2>&1 && ./build/p1.debug.san > out.txt") == 0 and outOf(dir) == "42\n", "p1", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret p1.olang > out.txt 2>&1") == 0 and outOf(dir) == "42\n", "p1 under -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate p1.olang > out.txt 2>&1") == 0 and outOf(dir) == "42\n", "p1 under -i", dir)
     try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
     try oneError(r, dir, "n2", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
     try oneError(r, dir, "f3", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
@@ -2168,7 +2216,7 @@ fn vechandle(r mut report&) ? Failed {
                  "handle -debug", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -sanitize handle.olang > out.txt 2>&1 && ./build/handle.san > s.txt") == 0
                  "handle -sanitize", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret handle.olang > i.txt 2> out.txt") == 0, "handle interpreted", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate handle.olang > i.txt 2> out.txt") == 0, "handle interpreted", dir)
     try r.expect(sh(dir, "cmp -s b.txt d.txt && cmp -s b.txt s.txt && cmp -s b.txt i.txt") == 0, "handle outputs differ", dir)
     try r.expect(sh(dir, "grep -q '^1051 1051 51 539924 -1 999$' b.txt") == 0, "handle output", dir)
     plain := "\"$OLANG\" build stale.olang > out.txt 2>&1 && ./build/stale > out.txt 2>&1 && grep -qx 5 out.txt"
@@ -2185,7 +2233,7 @@ fn vechandle(r mut report&) ? Failed {
         try r.expect(sh(dir, $bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced")
                      "stalecopy " $flags " was not reported", dir)
     }
-    try r.expect(sh(dir, "\"$OLANG\" interpret stale.olang > out.txt 2>&1") == 1 and
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate stale.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("stale.olang:12: it uses a view of a collection's elements taken before the collection grew") and
                  outOf(dir).Contains("stale.olang:8: the collection grew here"), "stale interpreted", dir)
 }
@@ -2202,7 +2250,7 @@ fn spawnerr(r mut report&) ? Failed {
     try r.expect(sh(dir, "./build/tasks > b.txt 2>&1") == 1, "tasks did not end in its error", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize tasks.olang > out.txt 2>&1") == 0, "tasks -d -s", dir)
     try r.expect(sh(dir, "./build/tasks.debug.san > d.txt 2>&1") == 1, "tasks -d -s did not end in its error", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret tasks.olang > i.txt 2>&1") == 1, "tasks -i did not end in its error", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate tasks.olang > i.txt 2>&1") == 1, "tasks -i did not end in its error", dir)
     # built plainly the error ends with the hint, built -d and interpreted with its trace (S18d)
     try r.expect(sh(dir, "cmp -s tasks.want b.txt && cmp -s tasks.d.want d.txt && cmp -s d.txt i.txt") == 0, "tasks output"
                  dir)
@@ -2218,7 +2266,7 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build walks.olang > out.txt 2>&1 && ./build/walks > b.txt 2>&1") == 0, "walks", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize walks.olang > out.txt 2>&1") == 0, "walks -d -s", dir)
     try r.expect(sh(dir, "./build/walks.debug.san > d.txt 2>&1") == 0, "walks -d -s run", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret walks.olang > i.txt 2>&1") == 0, "walks -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate walks.olang > i.txt 2>&1") == 0, "walks -i", dir)
     try r.expect(sh(dir, "cmp -s walks.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "walks output", dir)
     # S20: a Next asked inside the generator's own walk - a guaranteed check, failing alike built, -d -s and interpreted
     gone String& = "a generator asked for its next value inside its own walk"
@@ -2226,7 +2274,7 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, $"grep -qx 'reentry.olang:9: " $gone "' b.txt && ! grep -q 'not reached' b.txt") == 0, "reentry's message", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize reentry.olang > out.txt 2>&1 && ./build/reentry.debug.san > d.txt 2>&1") == 134
                  "reentry -d -s", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret reentry.olang > i.txt 2>&1") == 134 and sh(dir, $"grep -q '" $gone "' i.txt") == 0
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate reentry.olang > i.txt 2>&1") == 134 and sh(dir, $"grep -q '" $gone "' i.txt") == 0
                  "reentry -i", dir)
     try r.expect(sh(dir, "\"$OLANG\" test reentryt.olang > t.txt 2>&1") == 1, "reentryt", dir)
     try r.expect(sh(dir, $"grep -q 'reentryt.olang:6: " $gone "' t.txt && grep -q 'FAIL - a generator resumed inside its own walk' t.txt " $
@@ -2237,7 +2285,7 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build exits.olang > out.txt 2>&1 && ./build/exits > b.txt 2>&1") == 0, "exits", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize exits.olang > out.txt 2>&1 && ./build/exits.debug.san > d.txt 2>&1") == 0
                  "exits -d -s", dir)
-    try r.expect(sh(dir, "OLANG_DEADREGIONS=1 \"$OLANG\" interpret exits.olang > i.txt 2>&1") == 0, "exits -i", dir)
+    try r.expect(sh(dir, "OLANG_DEADREGIONS=1 \"$OLANG\" interpret -evaluate exits.olang > i.txt 2>&1") == 0, "exits -i", dir)
     try r.expect(sh(dir, "cmp -s exits.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "exits output", dir)
     try r.expect(sh(dir, "grep -c 'call [^@]*@exits_2eheld\\.walk(' build/exits.main.ll > out.txt; " $
                     "grep -c 'call [^@]*@exits_2eupto\\.walk(' build/exits.main.ll >> out.txt") == 0 and outOf(dir) == "9\n2\n"
@@ -2247,7 +2295,7 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build views.olang > out.txt 2>&1 && ./build/views > b.txt 2>&1") == 0, "views", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize views.olang > out.txt 2>&1 && ./build/views.debug.san > d.txt 2>&1") == 0
                  "views -d -s", dir)
-    try r.expect(sh(dir, "OLANG_DEADREGIONS=1 \"$OLANG\" interpret views.olang > i.txt 2>&1") == 0, "views -i", dir)
+    try r.expect(sh(dir, "OLANG_DEADREGIONS=1 \"$OLANG\" interpret -evaluate views.olang > i.txt 2>&1") == 0, "views -i", dir)
     try r.expect(sh(dir, "cmp -s views.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "views output", dir)
     try r.expect(sh(dir, "grep -c 'call [^@]*@views_2espans\\.walk(' build/views.main.ll > out.txt; " $
                     "grep -c 'call [^@]*@views_2eeach\\.walk(' build/views.main.ll >> out.txt") == 0 and outOf(dir) == "4\n1\n"
@@ -2269,24 +2317,24 @@ fn agree(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/agree/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build agree.olang > out.txt 2>&1 && ./build/agree > b.txt 2>&1") == 0, "agree", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug agree.olang > out.txt 2>&1 && ./build/agree.debug > d.txt 2>&1") == 0, "agree -d", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret agree.olang > i.txt 2>&1") == 0, "agree -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate agree.olang > i.txt 2>&1") == 0, "agree -i", dir)
     try r.expect(sh(dir, "cmp -s agree.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "agree output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build bfrand.olang > out.txt 2>&1 && ./build/bfrand > b.txt 2>&1") == 0, "bfrand", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug bfrand.olang > out.txt 2>&1 && ./build/bfrand.debug > d.txt 2>&1") == 0
                  "bfrand -d", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret bfrand.olang > i.txt 2>&1") == 0, "bfrand -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate bfrand.olang > i.txt 2>&1") == 0, "bfrand -i", dir)
     try r.expect(sh(dir, "cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "bfrand output", dir)
     # X8: the C math library's functions, computed while compiling, by the run time at -O3 and -O0, and under -i
     try r.expect(sh(dir, "\"$OLANG\" build math.olang > out.txt 2>&1 && ./build/math > b.txt 2>&1") == 0, "math", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug math.olang > out.txt 2>&1 && ./build/math.debug > d.txt 2>&1") == 0, "math -d", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret math.olang > i.txt 2>&1") == 0, "math -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate math.olang > i.txt 2>&1") == 0, "math -i", dir)
     try r.expect(sh(dir, "test $(wc -l < b.txt) = 14 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
     mll String& = "build/math.main.ll"
     try r.expect(irHas(dir, mll, "^" $gsym("math", "SqrtTwo") " = constant (double 0x3FF6A09E667F3BCD$|<\\{ \\[8 x i8\\] \\}> <\\{ \\[8 x i8\\] c\"\\\\CD\\\\3B\\\\7F\\\\66\\\\9E\\\\A0\\\\F6\\\\3F\" \\}>, align 8$)"), "math baked", dir)
     try r.expect(irHas(dir, mll, "^declare double @(sqrt\\(double\\) memory\\(none\\) nounwind willreturn|llvm\\.sqrt\\.f64\\(double\\))$"), "math exact", dir)
     try r.expect(irHas(dir, mll, "^declare double @exp\\(double\\) nobuiltin "), "math inexact", dir)
     try r.expect(sh(dir, "\"$OLANG\" build r17.olang > out.txt 2>&1") == 0, "r17", dir)
-    try r.expect(sh(dir, "./build/r17 > b.txt 2>&1") == 1 and sh(dir, "\"$OLANG\" interpret r17.olang > i.txt 2>&1") == 1
+    try r.expect(sh(dir, "./build/r17 > b.txt 2>&1") == 1 and sh(dir, "\"$OLANG\" interpret -evaluate r17.olang > i.txt 2>&1") == 1
                  "r17 did not end in its error, built and interpreted", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug r17.olang > out.txt 2>&1") == 0 and sh(dir, "./build/r17.debug > d.txt 2>&1") == 1
                  "r17 -d did not end in its error", dir)
@@ -2440,16 +2488,16 @@ fn cinterop(r mut report&) ? Failed {
     # loop calling them by the link's optimizer; and interpret, which loads that C as a shared library, agrees
     try r.expect(sh(dir, "\"$OLANG\" build fastuse.olang > out.txt 2>&1 && ./build/fastuse > fast.txt && grep -q '^fast 332334000 7$' fast.txt") == 0, "fastuse", dir)
     try r.expect(sh(dir, "objdump -d build/fastuse | grep 'call' | grep -q 'fast_\\|olang_ci_'") != 0, "fast.c's functions were not inlined into work", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret fastuse.olang > fasti.txt 2>&1 && cmp -s fast.txt fasti.txt") == 0, "fastuse interpreted", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate fastuse.olang > fasti.txt 2>&1 && cmp -s fast.txt fasti.txt") == 0, "fastuse interpreted", dir)
     if os.Exists("/usr/include/zlib.h") {
         # X17: zlib's header imported, the library named on the import: built and interpreted alike
         try r.expect(sh(dir, "\"$OLANG\" build zimport.olang > out.txt 2>&1 && ./build/zimport > zim.txt && grep -q 'back: hello hello' zim.txt") == 0, "zimport", dir)
-        try r.expect(sh(dir, "\"$OLANG\" interpret zimport.olang > zimi.txt 2>&1 && cmp -s zim.txt zimi.txt") == 0, "zimport interpreted", dir)
+        try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate zimport.olang > zimi.txt 2>&1 && cmp -s zim.txt zimi.txt") == 0, "zimport interpreted", dir)
         try r.expect(sh(dir, "\"$OLANG\" bindgen /usr/include/zlib.h -output zlib.olang > out.txt 2>&1 && sed 's/^extern {$/extern link \"z\" {/' zlib.olang | cat - zdemo.part > zdemo.olang") == 0, "bindgen of zlib.h", dir)
         try r.expect(sh(dir, "\"$OLANG\" build zdemo.olang > out.txt 2>&1 && ./build/zdemo > zdemo.txt && grep -q 'back: hello hello' zdemo.txt") == 0, "zdemo", dir)
         # B3e: interpret loads the libraries a program links, and says which it cannot
-        try r.expect(sh(dir, "\"$OLANG\" zinterp.olang > zb.txt 2>&1 && \"$OLANG\" interpret zinterp.olang > zi.txt 2>&1 && cmp -s zb.txt zi.txt && grep -q 'crc 3610a686' zi.txt") == 0, "zinterp", dir)
-        try r.expect(sh(dir, "sed 's/link \"z\"/link \"nosuchlib\"/' zinterp.olang > zbad.olang && \"$OLANG\" interpret zbad.olang > out.txt 2>&1") != 0 and
+        try r.expect(sh(dir, "\"$OLANG\" zinterp.olang > zb.txt 2>&1 && \"$OLANG\" interpret -evaluate zinterp.olang > zi.txt 2>&1 && cmp -s zb.txt zi.txt && grep -q 'crc 3610a686' zi.txt") == 0, "zinterp", dir)
+        try r.expect(sh(dir, "sed 's/link \"z\"/link \"nosuchlib\"/' zinterp.olang > zbad.olang && \"$OLANG\" interpret -evaluate zbad.olang > out.txt 2>&1") != 0 and
                      outOf(dir).Contains("error[B3e]: the library 'nosuchlib' a link names cannot be loaded"), "interpret's missing library", dir)
     }
     if sh(dir, "command -v python3 > /dev/null 2>&1") != 0 { return }
@@ -2500,8 +2548,8 @@ fn target(r mut report&) ? Failed {
     try r.expect(sh(dir, "stat -c '%n %.9Y' $(cut -d' ' -f1 objects.txt) | sort | cmp -s - objects.txt") == 0
                  "native's objects were rebuilt", dir)
     # interpreted: the build constants and the results the built program gives
-    try r.expect(sh(dir, "\"$OLANG\" interpret loop.olang | cmp -s - native.txt") == 0, "-i", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret -target x86-64 loop.olang | cmp -s - base.txt") == 0, "-a x86-64 -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate loop.olang | cmp -s - native.txt") == 0, "-i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate -target x86-64 loop.olang | cmp -s - base.txt") == 0, "-a x86-64 -i", dir)
     # another architecture (B12a): built where this clang can and its C library is installed (else refused, naming
     # why), and run through an emulator where there is one - computing what this machine computed (B12c)
     if sh(dir, "\"$OLANG\" build -target aarch64-linux-gnu loop.olang > out.txt 2>&1") != 0 {
@@ -2719,9 +2767,9 @@ fn crashes(r mut report&) ? Failed {
     d := crashRun(dir, "./build/crash deep")
     try r.expect(d.Status == 0 and d.Stdout == "deep 1000000\n", "RunOnStack deep: status " $d.Status ", " $d.Stdout, dir)
     compiler := olang()
-    i := crashRun(dir, $os.Quote(compiler) " interpret crash.olang deep 20000")
+    i := crashRun(dir, $os.Quote(compiler) " interpret -evaluate crash.olang deep 20000")
     try r.expect(i.Status == 0 and i.Stdout == "deep 20000\n", "RunOnStack -i: " $i.Stdout $i.Stderr, dir)
-    f := crashRun(dir, $os.Quote(compiler) " interpret foreign.olang")
+    f := crashRun(dir, $os.Quote(compiler) " interpret -evaluate foreign.olang")
     try r.expect(f.Status == 139 and f.Stderr.StartsWith("foreign.olang crashed\nolang: internal compiler error") and
                  f.Stderr.Contains("while interpreting"), "OnCrash -i: status " $f.Status ", " $f.Stderr, dir)
     # T2c, E35: "x!" on a null ends the program where it is written, optimized (where the optimizer can see the null)
@@ -2733,7 +2781,7 @@ fn crashes(r mut report&) ? Failed {
         try r.expect(n.Status == 134 and n.Stdout == "start\nafter a push: 4\n" and n.Stderr == "nullpeek.olang:22: null reached\nnullpeek crashed\n"
                      "nullpeek " $flags ": status " $n.Status ", " $n.Stdout $n.Stderr, dir)
     }
-    ni := crashRun(dir, $os.Quote(compiler) " interpret nullpeek.olang")
+    ni := crashRun(dir, $os.Quote(compiler) " interpret -evaluate nullpeek.olang")
     try r.expect(ni.Status == 134 and ni.Stdout == "start\nafter a push: 4\n" and ni.Stderr.StartsWith("nullpeek.olang:22: null reached")
                  "nullpeek -i: status " $ni.Status ", " $ni.Stderr, dir)
     # std/chan: a Send on a closed channel fails with chan.Error.Closed, here escaping main
@@ -2773,7 +2821,7 @@ fn capscope(r mut report&) ? Failed {
     adapter String& = ("awk '/^define .*Adder.*(callfv|_adapter)/ { inl = 1 } inl && match($0, /%[a-z0-9]+ = call ptr @__olang_(scope_mine|capture_scope)/) { split($1, w, \" \"); got = w[1] }"
                        " inl && got != \"\" && $0 ~ (\"Adder(\\\\.|_2e)Call\\\\(ptr \" got \",\") { ok = 1 } inl && /^}/ { inl = 0 } END { exit !ok }'")
     try r.expect(sh(dir, $adapter $ll) == 0, "the Call adapter does not pass Call its scope", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret -define N=200 capscope.olang > out.txt 2>&1") == 0, "capscope -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate -define N=200 capscope.olang > out.txt 2>&1") == 0, "capscope -i", dir)
     try r.expect(outOf(dir) == "capscope: ok\n", "capscope -i output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize capscope.olang > out.txt 2>&1 && ./build/capscope.debug.san > out.txt 2>&1") == 0
                  "capscope -d -s", dir)
@@ -2807,7 +2855,7 @@ fn strheldProgram(r mut report&, n String&) ? Failed {
     try r.expect(sh(dir, ($store() " \"$OLANG\" build -debug " $n ".olang > out.txt 2>&1 && ./build/" $n ".debug > d.txt 2>&1 && cmp -s d.txt "
                     $n ".want")) == 0, $n " -d", dir)
     if n in StrheldNotInterpreted { return }
-    try r.expect(sh(dir, "\"$OLANG\" interpret " $n ".olang > i.txt 2>&1 && cmp -s i.txt " $n ".want") == 0, $n " -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate " $n ".olang > i.txt 2>&1 && cmp -s i.txt " $n ".want") == 0, $n " -i", dir)
 }
 
 fn strheld(r mut report&) ? Failed {
@@ -2839,7 +2887,7 @@ fn frameenv(r mut report&) ? Failed {
         try r.expect(sh(dir, "\"$OLANG\" build " $n ".olang > out.txt 2>&1 && ./build/" $n " > out.txt 2>&1") == 0, n, dir)
         try r.expect(sh(dir, "\"$OLANG\" build -sanitize " $n ".olang > out.txt 2>&1 && ./build/" $n ".san > out.txt 2>&1") == 0
                      $n " -s", dir)
-        try r.expect(sh(dir, "\"$OLANG\" interpret " $n ".olang > out.txt 2>&1") == 0, $n " -i", dir)
+        try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate " $n ".olang > out.txt 2>&1") == 0, $n " -i", dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" build envcheck.olang > out.txt 2>&1") == 0, "envcheck", dir)
     try r.expect(sh(dir, "./build/envcheck build/frameonly.main.ll > out.txt") == 0 and outOf(dir) == "3 0\n"
@@ -2885,7 +2933,7 @@ fn scopefind(r mut report&) ? Failed {
 # by an error leaving the body, by a "!" (on a spawned call and a checked index too, E35) - each read back by the test
 # after it; S18d: the error return trace, after an
 # error ends a test, escapes main or reaches a "!", in a -d build and under -i, and a hint to get it in any other
-# E16g: a checked build - test, test -interpret, -debug - stops on an index, a division and a shift the program wrote
+# E16g: a checked build - test, test -evaluate, -debug - stops on an index, a division and a shift the program wrote
 # where they are undefined, saying where and what, the interpreter as the built program; a release build checks none
 test "a checked build stops on an index, a division or a shift out of range; a release build checks none" { assert passed("checkedbuild") }
 
@@ -2899,14 +2947,14 @@ fn checkedbuild(r mut report&) ? Failed {
     try r.expect(not irHas(dir, "build/*.ll", stops), "a release build checks an index, a division or a shift", dir)
     try r.expect(sh(dir, "\"$OLANG\" test checked.olang > out.txt 2>&1") == 1, "checked tests", dir)
     try r.expect(sh(dir, "cmp -s out.txt checked.want") == 0, "checked tests' output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret checked.olang > out.txt 2>&1") == 1, "checked tests -interpret", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate checked.olang > out.txt 2>&1") == 1, "checked tests -interpret", dir)
     try r.expect(sh(dir, "cmp -s out.txt checked.want") == 0, "checked tests' output -interpret", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug release.olang > out.txt 2>&1 && ./build/release.debug > out.txt") == 0 and
                  outOf(dir) == "20 0 2 10\n", "the debug build in range", dir)
     try r.expect(irHas(dir, "build/*.debug.ll", stops), "a debug build checks nothing", dir)
     try r.expect(sh(dir, "./build/release.debug a b c > out.txt 2>&1") != 0 and
                  outOf(dir).StartsWith("release.olang:10:22: index out of range\n"), "the debug build out of range", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret release.olang a b c > out.txt 2>&1") != 0 and
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate release.olang a b c > out.txt 2>&1") != 0 and
                  outOf(dir).StartsWith("release.olang:10:22: index out of range\n"), "interpret out of range", dir)
 }
 
@@ -2917,8 +2965,8 @@ fn testends(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/testends/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
-    # B3e, P1d: test -interpret leaves them as their binary does (bulk review 8: it had run no destructor, joined no task)
-    try r.expect(sh(dir, "\"$OLANG\" test -interpret ends.olang > out.txt 2>&1") != 0, "ends -interpret", dir)
+    # B3e, P1d: test -evaluate leaves them as their binary does (bulk review 8: it had run no destructor, joined no task)
+    try r.expect(sh(dir, "\"$OLANG\" test -evaluate ends.olang > out.txt 2>&1") != 0, "ends -interpret", dir)
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends -interpret output", dir)
     try r.expect(sh(dir, "\"$OLANG\" test heldends.olang > out.txt 2>&1") != 0, "heldends", dir)
     try r.expect(outOf(dir).Contains("ok - after") and outOf(dir).Contains("1 passed, 1 failed"), "heldends output", dir)
@@ -2930,7 +2978,7 @@ fn testends(r mut report&) ? Failed {
         try r.expect(sh(dir, "\"$OLANG\" build -debug " $n ".olang > out.txt 2>&1") == 0, $n " -d build", dir)
         try r.expect(sh(dir, "./build/" $n ".debug > d.txt 2>&1; grep -v '^Aborted' d.txt | cmp -s - " $n ".d.want") == 0
                      $n " -d", dir)
-        try r.expect(sh(dir, "\"$OLANG\" interpret " $n ".olang > i.txt 2>&1; grep -v '^Aborted' i.txt | cmp -s - " $n ".d.want") == 0
+        try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate " $n ".olang > i.txt 2>&1; grep -v '^Aborted' i.txt | cmp -s - " $n ".d.want") == 0
                      $n " -i", dir)
     }
 }
@@ -3056,7 +3104,7 @@ fn words(r mut report&) ? Failed {
                  outOf(dir).Contains("'bild' is not a mode") and outOf(dir).Contains("the modes are build, compile"), "an unknown mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -b prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("unknown option '-b'"), "an old flag", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret -debug prog.olang > out.txt 2>&1") == 1 and
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate -debug prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("-debug applies to running a file, build, compile and test, not to interpret")
                  "an option for another mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" -debug prog > out.txt 2>&1") == 1 and outOf(dir).Contains("'prog' is no olang file")
@@ -3082,7 +3130,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" explain words.olang words > out.txt 2>&1") == 0 and
                  outOf(dir).Contains("fn words(t String&) Iterator<String&>   # a generator") and
                  outOf(dir).Contains("# scopes: t outlives return"), "explain writes a borrowing generator's result as it is written", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 0 and
+    try r.expect(sh(dir, "\"$OLANG\" interpret -evaluate prog.olang > out.txt 2>&1") == 0 and
                  outOf(dir) == "written where -output said\n", "interpret", dir)
 }
 

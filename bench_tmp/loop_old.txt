@@ -1,0 +1,8 @@
+loop.olang:7:9: warning[D3b]: 'i' is never read - write '_' in its place
+    7 |     for i in range n {
+      |         ^
+50049913749.92726
+
+real	0m55.921s
+user	0m55.326s
+sys	0m0.024s

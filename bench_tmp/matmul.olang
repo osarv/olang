@@ -1,0 +1,19 @@
+import "std/io"
+
+fn main() ? io.Error {
+    n := 200
+    a := Array<F64>(n * n)
+    b := Array<F64>(n * n)
+    c := Array<F64>(n * n)
+    for i in range n * n {
+        a[i] = F64(i % 7) * 0.5
+        b[i] = F64(i % 5) + 1.0
+    }
+    for i in range n {
+        for k in range n {
+            aik := a[i * n + k]
+            for j in range n: c[i * n + j] += aik * b[k * n + j]
+        }
+    }
+    try io.PutLine($c[0] " " $c[n * n - 1])
+}
