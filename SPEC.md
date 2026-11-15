@@ -6880,6 +6880,20 @@ of every module alike: a module's object (B3i) carries each of its sites both wa
 its own and released at the let-go, or built and kept as any value is - and reads the decision as a constant the
 program defines when it is linked, so the object is the same in every program that uses it.
 
+**O8f (the freeing guarantee).** Where O8d's conditions hold, what a place lets go of **is** reclaimed at the let-go;
+an implementation may not keep it until its scope closes. The let-goes are a place given another value (S4) - a local,
+a field, a global, an element of an array or of a collection (`v[i] = x` through `SetAt`, a `Map`'s `Put` replacing a
+value); an entry removed from a collection (M19d's removals); a collection's growth replacing its own storage, where
+the collection is held by a place that reclaims its value whole or by a field; a block or a loop's turn left (O2b); and
+a value with a destructor ended where its holder lets go of it (O15). A place keeps what it lets go of only for a
+condition of O8d's - storage not made for it (1), a reference into it kept elsewhere (2), a thread or C that may call
+back (3), a destructor still to run (4), a view in use across the let-go (6) - or where a fact the conditions need
+cannot be known: a call through a function value none of whose bodies is followed and whose type promises no `pure`
+(T22a). A module compiled on its own is no exception (it frees as the program decides, O8d), nor a function value
+followed. A let-go the implementation does not follow - kept for none of these - is a **gap**: `-memory` names each,
+and `-memory -check` fails the build on one (B18a), so a program building under it frees at every let-go this rule
+names. Reclaiming is unobservable but in memory, as O8d says.
+
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
 below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above - and at least as its element type is, where that is
 more than 8 (an integer of 65 to 128 bits, T4a, and what holds one, are aligned 16: an `Array<I128>` of one element is
@@ -8080,7 +8094,7 @@ beginning with `-` that is no option is an error:
 | `-checked` | running a file, build, compile, test, run, jupyter, notebook | E16g |
 | `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
 | `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
-| `-check` | format, fix | B13, B17 |
+| `-check` | format, fix, running a file, build, test, run | B13, B17, B18a |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
 | `-memory` | running a file, build, test, run | B18 |
@@ -8887,6 +8901,16 @@ kept until its chain's first caller lets go of the result` at the `become` (`a t
 a become closing its block, ...`, ending `- its destructor runs as that scope closes, not at the end of its block` -
 SCOPE `the result scope` where the function has one; a `note:` row naming what would let it go with its step (a value
 handed on instead, or `return` and the call); and a line counting them.
+
+**B18a.** `-check` beside `-memory` (or alone, in a build of a file) prints B18's report and fails the build - status
+1, with `error[B18]: N let-goes early freeing does not follow (O8f)` - where the report holds a **gap** (O8f): a row
+`path:line:column: memory: 'PLACE' ... - kept until its scope closes: a let-go early freeing does not follow (O8f)` at
+an assignment, in code that runs again, of a place holding storage (an array of a run-time length, or a value holding
+one) that no early freeing place follows - an element of an array, a collection's element given a value through
+`SetAt`, a local, a global or a field of a kind it does not follow - or a B18 row of a place kept for no condition of
+O8f's (its value changed in place, a value holding it copied), its row ending `: a let-go early freeing does not follow
+(O8f)`, or a row at a call of the program's own code - a removal, a `Put`, a `SetAt` - whose collection's place keeps
+what it lets go of for a reason in the library's code. A line counts the gaps before B18's count of places.
 
 **B19 (fuzzing).** `test -fuzz NAME FILE` fuzzes one test of one file: the test NAME names - as a word of B3a's
 names a test, by its target, its target's type or text of its description; naming none, or several, is an error at
