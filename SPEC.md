@@ -515,8 +515,7 @@ scope without a containment check. Whether a reference holds none is asked with 
 only a null (E10).
 
 **T2b (memory safety).** A reference is null only where its type says it may be (T2c), and the compiler holds every
-read through one to a test; a narrowing of a field path can still meet a null that a call stored there since the test
-(S8e). Reading or writing a field or element through a null reference **traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
+read through one to a test (S8e) - of a field path, too, ended by any call after it (S8d). Reading or writing a field or element through a null reference **traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
 writing `os.OnCrash`'s message first if one is set (std/os) - and nothing after the access runs. It costs nothing
 per access: null is the all-zero representation and the lowest addresses are never mapped, so the access itself
 faults, and the compiler never assumes that a reference it sees read through is not null, so it never deletes or
@@ -533,7 +532,8 @@ global, or an element or type argument a type stores (`Array<weak Node?&>`, `Vec
 Node?&>`) - at any depth of a type argument, wherever the type it is an argument of is written. A place of that type is
 a **weak place**: it holds its referent without keeping it - it is no owning place (O8e). Reading it gives an ordinary
 `T?&`: the referent while some owning place holds it, `null` from the moment none does (O8e) - narrowed by a test of a
-local (S8e) as any other; while compiling, a read that would give `null` is not evaluated (K1). In
+local (S8e)
+as any other - a weak field is no field path that narrows (S8d), its referent let go with no call or store to it; while compiling, a read that would give `null` is not evaluated (K1). In
 everything else it is a `T?&`: it is given any `T&` or `T?&`, compared by `==` (E10), rendered by `$`, its permission
 the reference's (T25b). The referent's type becomes generational (T13d). Compile-time errors: `weak` before a reference
 that is never null (`weak Node&`) or before no reference, naming `?&`; on a local, a parameter, a receiver, a result or
@@ -1278,7 +1278,8 @@ took (R11b), and it is used in these ways and no others:
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
 - narrowing (S8d): where a condition `e == X` holds (an `if`'s block, the right of `and`, after `assert`, after `if e
   != X { leave }` - every place S8d lists) `e` holds what of `X` it can be; where it fails, its set less `X`; a test for
-  `null` narrows as it does a reference (S8e). Only a local or a parameter narrows, until a statement assigns it;
+  `null` narrows as it does a reference (S8e). A local, a parameter or a field path of one narrows, until a statement
+  assigns it, a field path until a call too (S8d);
 - `match e` (S12, S13): each case's items words, types, named sets or `null`, tried in order; without an unguarded `case _`
   the cases must cover every error `e` can be, and `null` where it can be null. A case naming nothing `e` can be is a
   compile-time error, `case null` where `e` holds an error included - a catch clause's name, a word written, a value a
@@ -3872,7 +3873,7 @@ negation, `null == x` and `null != x` the same tests, and `not x == null` the sa
 null, whatever the type declares. The null test of an `x` that cannot be null - a number, a `Bool`, a struct or enum
 value, an array not marked `?&` (T2c), a reference or a function value never null (T2c, T21), an error value a test
 or a word written says holds one (T20) - and `null == null` are compile-time errors. Where it holds, or fails, it
-narrows a local or a parameter (S8e).
+narrows a local, a parameter or a field path of one (S8e, S8d).
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
 `==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
@@ -5227,7 +5228,9 @@ payloads) declared with an initializer, and nothing anywhere in its function wri
 assignment, `++`/`--`, atomic operation or spawn target names it. Such a local holds its initializer's value
 wherever it can be read, so a condition reading it reads that value. A parameter is never fixed.
 
-**S8d (narrowing).** A condition says things of the locals and parameters it tests: `e == Shape.Circle` (a case
+**S8d (narrowing).** A condition says things of the **paths** it tests - a local or a parameter, and a **field path** of
+one: the local followed by one or more field reads, `x.f`, `x.f.g` (each step a field; a call, an index or a slice
+anywhere in it makes it no path, and a weak field, T2d, is none): `e == Shape.Circle` (a case
 written, E32, `e` on either side) that `e` holds that case; `p != null` that `p` is not null (S8e); an error
 value compared with a word, a type or a set what of its set it holds (R11b, T20). `e != Shape.Circle` and `p == null`
 say the same where the condition is false; `not` turns a condition round; `a and b` says what both say where it holds, `a or b` what both
@@ -5245,12 +5248,22 @@ three, so they hold in the same places. What a condition says holds:
   post clause where the body assigns the local nowhere;
 - after a loop whose condition it is and which holds no `break`, where it fails (`for p == null { p = next() }`): it is
   left only by that condition failing;
-- and, for null alone, after a statement assigning the local a value never null (`p = Node(1)`, S8e).
-It holds from there until a statement assigns the local (an assignment, a compound one, an increment, a target - `p =
-p.next` reading `p.next` before the store), and so inside a loop only up to where the loop assigns it; never inside a
-lambda written there. Deferred code (S19, S19e) runs as its block closes, after the block's later statements: it is
-checked under a narrowing only where no statement after it in its block assigns the local. Only a local or a parameter narrows - a field never does, a call may change it: a field is tested
-through a local (`n := s.head; if n != null { n.v }`) or unwrapped (`s.head!.v`).
+- and, for null alone, after a statement assigning the path a value never null (`p = Node(1)`, `s.head = Node(1)`, S8e).
+It holds from there until a statement assigns the path or a path it starts with (an assignment, a compound one, an
+increment, a target - `p = p.next` reading `p.next` before the store; `x = y` and `x.f = y` both end what `x.f.g` was
+known to be, `x.f.g.v = 3` does not), and so inside a loop only up to where the loop assigns it; never inside a lambda
+written there. Deferred code (S19, S19e) runs as its block closes, after the block's later statements: it is checked
+under a narrowing only where no statement after it in its block assigns the path, and never under a field path's.
+
+A field path's narrowing ends besides at **any call** after its test - of a function, a method, an operator's method
+(E31), a constructor, a function value, a spawned call (P1) - and at a `yield` (S20), since what is called may write
+the field through another reference; reading through a writable or a read-only reference changes nothing. A call's
+arguments are evaluated before it is made, so they are read under the narrowing (`if r.Ty != null { use(r.Ty) }`); a
+call in a condition after the test (`x.f != null and ready(x)`) leaves nothing said of `x.f` past it; a call in an
+`if`'s block is none in its `else`. Inside a loop, a field path narrowed before the loop is known only where nothing
+in the loop - its condition, body and post clause - calls: else a read of it there is a compile-time error, the loop's
+calls coming before its next turn's reads (test it inside the loop, or read it into a local before). A `!` after a
+narrowed field path (`s.head!.v`, E35) reads it at its declared type and unwraps it, unneeded but no error.
 
 Where `e` is known to hold a case, `e.r` reads the payload field `r`. Where the case's payload is one type written whole
 (T17a, `Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The payload's
@@ -5260,10 +5273,11 @@ of them writably (`e.Grow()` with a `mut` receiver, `e.c` or `e` given to a `mut
 error naming the whole-value assignment and a match's binding, a copy of its own. A field of a case the local is not known to hold is no member of an enum,
 and a compile-time error.
 
-**S8e (null narrowing).** A local or a parameter holding a `T?&` known not to be null (S8d) reads as a `T&` (T2c) - an
+**S8e (null narrowing).** A local, a parameter or a field path of one (S8d) holding a `T?&` known not to be null
+(S8d) reads as a `T&` (T2c) - an
 `Array<T>?&` as an `Array<T>&`, a `fn?&(...)` as a `fn&(...)` (T21);
 besides the tests S8d reads, a statement assigning it a value never null (`p = Node(1)`) makes it known not to be null
-from there.
+from there. A written target is of its declared type: `s.head = null` stores a null, as `p = null` does.
 
 **S8b.** A condition the **build decides** — one S8a describes, except that it does read a build constant —
 makes the `if` conditional compilation, exactly as at the top level (B9): only the branch it chooses is

@@ -1,0 +1,11 @@
+# check: fail error[T19b]: b.e may hold an error that has no field line
+# S8d, T20: a field path narrowed to one error word holds it until a call after the test
+type ReadError error { Bad(line I64), Eof }
+type Box struct(e ReadError) { e }
+fn touch(b Box&) I64 { return 1 }
+fn line(b Box&) I64 {
+    if b.e != ReadError.Bad { return 0 }
+    t := touch(b)
+    return b.e.line + t
+}
+fn main() { assert line(Box(ReadError.Bad(4))) == 5 }

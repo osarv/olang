@@ -1,0 +1,9 @@
+# check: fail error[T2c]: 'h.next' is a N?&, which may be null
+# S8d: a call later in the condition comes after the test - nothing is said of the field path past it
+type N struct(v I64, next N?&) { v, next }
+fn ready(h N&) Bool { return h.v > 0 }
+fn second(h N&) I64 {
+    if h.next != null and ready(h) { return h.next.v }
+    return 0
+}
+fn main() { assert second(N(1, N(2, null))) == 2 }

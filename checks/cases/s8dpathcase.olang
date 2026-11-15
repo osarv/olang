@@ -1,0 +1,11 @@
+# check: fail error[S8d]: Shape is an enum
+# S8d: a field path narrowed to a case holds it until a call after the test
+type Shape enum { Dot, Ring(r I64) }
+type Box struct(s Shape) { s }
+fn touch(b Box&) I64 { return 1 }
+fn radius(b Box&) I64 {
+    if b.s != Shape.Ring { return 0 }
+    t := touch(b)
+    return b.s.r + t
+}
+fn main() { assert radius(Box(Shape.Ring(2))) == 3 }
