@@ -259,16 +259,20 @@ fn (c Config&) ModeFlags() Vec<String&> {
     return out
 }
 
-# the flags an object with this IR is compiled with: the mode's, and under -debug LLVM 18's -O0 instruction selector
-# (FastISel) turned off where the IR holds a bfloat, which it keeps wrongly live across a branch (B2c) - everywhere
-# else FastISel is kept, since doing without it costs -O0 compiles 70% (DESIGN.md 3.4)
-fn (c Config&) CompileFlags(ir String&) Vec<String&> {
+# the flags an object with this IR, holding k, is compiled with: the mode's; under full LTO a module's without the
+# vectorizers (B2d, below); and under -debug LLVM 18's -O0 instruction selector (FastISel) turned off where the IR holds a
+# bfloat, which it keeps wrongly live across a branch (B2c) - everywhere else FastISel is kept, since doing without it
+# costs -O0 compiles 70% (DESIGN.md 3.4)
+fn (c Config&) CompileFlags(ir String&, k UnitKind) Vec<String&> {
     out := c.ModeFlags()
-    if c.vectorizesAtLink() {
-        # B2d: under full LTO the link optimizes the whole program again, vectorizer included, so a module's own compile
-        # leaves loops as they are - vectorized there, a small function (a kernel's step) grew past the link's inlining
-        # threshold and stayed a call in an instance compiled in another unit (oann's INT8 tiles, 2026-11-15: 12 GOPS
-        # against 86); ThinLTO's compile vectorizes nothing anyway
+    if k == UnitKind.Module and c.vectorizesAtLink() {
+        # B2d: under full LTO the link optimizes the whole program again, vectorizers included, so a module's own compile
+        # leaves its loops as they are, for the link to inline its functions into the root's code first - vectorized
+        # there, a small function (a kernel's step) grew past the link's inlining threshold and stayed a call in the
+        # instance calling it, compiled in the root's unit (oann's INT8 tiles, 2026-11-15: 12 GOPS against 86). The
+        # root's units (main or the tests, and the instances) vectorize in their own compile as before: left to the
+        # link, linalg's store and epilogue loops ran at half the speed (F32 products of 9 x 16). ThinLTO's compile
+        # vectorizes nothing anyway
         out.Push("-fno-vectorize")
         out.Push("-fno-slp-vectorize")
     }
@@ -291,7 +295,7 @@ fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     return out
 }
 
-# whether a module's object is optimized again at the link with the vectorizers: an optimized build linked by full LTO
+# whether the objects are optimized again at the link with the vectorizers: an optimized build linked by full LTO
 fn (c Config&) vectorizesAtLink() Bool { return not c.Debug and not c.Race and not c.Quick and not c.Thin }
 
 # the flags a Locations object (B3l) is compiled with: the mode's without link-time optimization - it is data alone, which
@@ -536,7 +540,7 @@ type compiles struct() {
 # the object made from ir: its path, and - when no such object is there yet - its compile queued in j, its IR written
 fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d mut diag.Diagnostics&
     hash String& = "", unit I64 = -1) String ? Failed {
-    flags := c.DataFlags() if k == UnitKind.Locations else c.CompileFlags(ir)
+    flags := c.DataFlags() if k == UnitKind.Locations else c.CompileFlags(ir, k)
     hoist := c.Hoist and k != UnitKind.Locations
     named := hash if hash != "" else IrHash(ir)
     path := c.ObjectPath(base, k, IrHash($named "|hoist") if hoist else named, flags)
@@ -1293,7 +1297,7 @@ fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed
     stamp Vec<String&>
     for t in texts {
         stamp.Push(IrHash(t))
-        for f in c.CompileFlags(t) { stamp.Push(f) }
+        for f in c.CompileFlags(t, UnitKind.Module) { stamp.Push(f) }
     }
     stamp.Push($ir)
     stamp.Push(c.clangVersion())
@@ -1313,7 +1317,7 @@ fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed
         }
         args mut Vec<String&>& = Vec<String&>()
         args.Push(c.Clang)
-        for f in c.CompileFlags(text) { args.Push(f) }
+        for f in c.CompileFlags(text, UnitKind.Module) { args.Push(f) }
         args.Push("-S")
         if ir { args.Push("-emit-llvm") }
         for a in Array<String&>["-o", $dir "/u" $i $(".ll" if ir else ".s"), input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push(a) }
@@ -1385,11 +1389,14 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     assert f.Len() == 2 and f[0] == "-O3" and f[1] == "-flto"
     c.Thin = true
     assert c.ModeFlags()[1] == "-flto=thin"
-    assert c.CompileFlags("define void @f() { ret void }").Len() == 2
+    assert c.CompileFlags("define void @f() { ret void }", UnitKind.Module).Len() == 2
     c.Thin = false
-    # full LTO: a module's compile leaves vectorizing to the link, which inlines first
-    v := c.CompileFlags("define void @f() { ret void }")
+    # full LTO: a module's compile leaves vectorizing to the link, which inlines first; the root's units vectorize
+    v := c.CompileFlags("define void @f() { ret void }", UnitKind.Module)
     assert v.Len() == 4 and v[2] == "-fno-vectorize" and v[3] == "-fno-slp-vectorize"
+    for k in Array<UnitKind>[UnitKind.Main, UnitKind.Tests, UnitKind.Instances] {
+        assert c.CompileFlags("define void @f() { ret void }", k).Len() == 2
+    }
     a := c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f)
     assert a.StartsWith("build/m.") and a.EndsWith(".o") and a.Len() == "build/m.".Len() + 16 + 2
     assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f) == a
@@ -1400,8 +1407,8 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     assert d.Len() == 2 and d[0] == "-O0" and d[1] == "-g"
     assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), d).EndsWith(".debug.o")
     # FastISel only where the IR holds a bfloat
-    assert c.CompileFlags("define void @f() { ret void }").Len() == 2
-    assert c.CompileFlags("define bfloat @f(bfloat %x) { ret bfloat %x }").Len() == 4
+    assert c.CompileFlags("define void @f() { ret void }", UnitKind.Module).Len() == 2
+    assert c.CompileFlags("define bfloat @f(bfloat %x) { ret bfloat %x }", UnitKind.Module).Len() == 4
     c.Race = true
     assert c.ModeFlags().Len() == 3
     c.Debug = false
