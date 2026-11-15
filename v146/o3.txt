@@ -1,0 +1,1 @@
+/bin/bash: line 1: /home/user/wt/dwarf/build/olang: No such file or directory
