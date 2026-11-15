@@ -112,17 +112,19 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	int8	opus	high	running						olang: INT8 rowStep no longer inlined (oann int8 5x slower)
 2026-11-15	condnull	sonnet	high	done aacc4597; to be verified within wt-eqnull						olang: c if x else null into a generic method parameter T?&
 2026-11-15	fastinterp	opus	high	merged, master 2a79804d (1e8 loop 55.9 s -> 0.50 s)						olang: interpret runs compiled (-quick, checked); evaluator as -evaluate
-2026-11-15	cellcheck	sonnet	medium	done, merged into wt-merge						olang: cells built checked (E16g); interpret run cache bounded
+2026-11-15	cellcheck	sonnet	medium	merged, master c733d3d9						olang: cells built checked (E16g); interpret run cache bounded
 2026-11-15	eqnull2	opus	high	done; merging (seed rewrite)						finish == null (fresh after restart)
 2026-11-15	spinner2	sonnet	high	merged, master 360b9901 (bootstrap from seed passes)						finish 3x2 spinner (fresh after restart)
 2026-11-15	int8b	opus	high	done, merged into wt-merge						INT8 inlining (fresh after restart)
 2026-11-15	strplus	opus	high	running						olang: text joins by +, adjacency removed (the user)
 2026-11-15	oannmeasure	sonnet	medium	done, oann master (MNIST 5x slower: rowStep not inlined, same cause as INT8)						oann round 2: baselines vs DESIGN
 2026-11-15	oannplan	opus	high	done, oann master bcd805f (docs/redesign.md)						oann round 2: docs/redesign.md + work packages
-2026-11-15	oanngemm	opus	high	running						oann A2 gemm
+2026-11-15	oanngemm	opus	high	done, oann master (M4 parity, Gemv 2-4x, VNNI)						oann A2 gemm
 2026-11-15	oanntensor	sonnet	high	done, oann master (19 tests)						oann A1 tensor
-2026-11-15	oannelem	sonnet	high	done, wt-oannelem 63b1eaa (waits for A2 to merge together)						oann A3 elem+attention
+2026-11-15	oannelem	sonnet	high	merged, oann master						oann A3 elem+attention
 2026-11-15	timeit	sonnet	medium	running						std/bench: repeats with spread, Time, Compare
-2026-11-15	reader	sonnet	medium	running						std/io Reader (Line, Word, Next<T>, Bytes, All)
+2026-11-15	reader	sonnet	medium	merged, master c733d3d9						std/io Reader (Line, Word, Next<T>, Bytes, All)
 2026-11-15	varat	sonnet	high	running						olang: variadic At/SetAt, SetSlice (for oann tensors)
 2026-11-15	dwarf	opus	high	running						olang: full DWARF + nvim-dap (:OlangDebug)
+2026-11-15	lspwarn	sonnet	low	running						olang LSP: unused names as warnings
+2026-11-15	oannmig	sonnet	low	running						oann to olang master (== null via olang fix)
