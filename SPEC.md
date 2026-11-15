@@ -3143,7 +3143,7 @@ caller's place, the trailing parameter `at Place = Place.Here`, E40; in a test, 
 `std/io`'s `Put` and `PutLine` (M19f), which fail with `io.Error`. They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
 of the built-in types and of its own - `String.FromC(p, max)` (X15), the floats' `FromBits` (E33), every integer type's
-`Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
+`Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`), every float's and the F8 types' (`F32.Parse(t)`, as `ParseFloat` reads, rounded to the type, `Overflow` where a finite number does not fit) and `Bool.Parse(t)` ("true" or "false" exactly) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `Axis` enum is what a subscript by axes passes to `Slice` (E16f); its `TypeKind` enum is what
 reflection's `T.Kind` gives (G32), and its `FieldInfo`, `CaseInfo`, `ParamInfo` and `ResultInfo` are the types of
 reflection's descriptors (G34), made only by the compiler. Its collections are `Vec` (the growable array), `Map`,

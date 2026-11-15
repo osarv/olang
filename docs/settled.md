@@ -394,7 +394,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   variable; one result, a value of the owner; never inherited through `extends`. **D19a**: a top-level function
   returning a type its module declares with no parameter naming it is an error naming `fn T.Name`. **T30b**: a trait
   may require a builder. `T.Functions` walks them. The prelude: `String.FromC(p, max)` (X15), `F64.FromBits(u)` (E33),
-  `T.Parse(t, base)`.
+  `T.Parse(t, base)` (integers), `T.Parse(t)` for every float and the F8 types (rounded to the type, `Overflow` where a finite
+  number does not fit), `Bool.Parse(t)`.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
 - **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should
