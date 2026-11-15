@@ -1,0 +1,29 @@
+import "std/io"
+
+N I64 = 2000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 20 { w.Push(i + j) }
+    return w
+}
+
+fn main() {
+    rows := Array<Vec<I64>>(10)
+    for k in range 10: rows[k] = mk(k)
+    t := 0
+    for i in range N {
+        a, b := i % 10, (i * 7 + 3) % 10
+        rows[a], rows[b] = rows[b], rows[a]
+        rows[a] = rows[a]
+        if a != b: rows[b] = rows[a]
+        v := mk(i)
+        rows[(a + 1) % 10] = v
+        v.Push(5)
+        x := rows[(a + 2) % 10]
+        rows[(a + 2) % 10] = mk(i + 1)
+        rows[(a + 3) % 10].Push(i)
+        t += v[20] + x[0] + rows[a][19] + rows[b][0] + rows[(a + 3) % 10].Len()
+    }
+    io.PutLine($t)!
+}

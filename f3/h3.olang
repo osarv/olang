@@ -1,0 +1,14 @@
+import "std/io"
+
+fn main() {
+    m Map<I64, Vec<I64>>
+    m.Put(1, Vec<I64>[1, 2])
+    u := m.Get(1)!
+    u.Push(3)
+    io.PutLine($u.Len())!
+    v Vec<I64>
+    for i in range 4000000 { v.Push(i) }
+    w Vec<I64>
+    for i in range 4000000 { w.Push(i) }
+    io.PutLine($v[3999999] + " " + $w.Len())!
+}

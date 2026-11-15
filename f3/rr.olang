@@ -1,0 +1,22 @@
+import "std/io"
+
+N I64 = 200000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 100 { w.Push(i + j) }
+    return w
+}
+
+fn main() {
+    rows := Array<Vec<I64>>(10)
+    v Vec<Vec<I64>>
+    for _ in range 10: v.Push(Vec<I64>())
+    t := 0
+    for i in range N {
+        rows[i % 10] = mk(i)
+
+        t += rows[i % 10][99]
+    }
+    io.PutLine($t + " " + $rows[3].Len() + " " + $v[3].Len())!
+}

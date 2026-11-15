@@ -1,0 +1,3 @@
+memory: no place lets go of storage in code that runs again
+3 returns hand back a view, 2 calls read one where it stands, 14 calls copy one, 0 by-value arguments are read where they are, 10 copies are moves at a last use
+built ./build/grow

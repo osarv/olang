@@ -1,0 +1,18 @@
+import "std/io"
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    w.Push(i)
+    return w
+}
+
+fn main() {
+    a := mk(0)
+    for i in range 100 { a = mk(i) }
+    io.PutLine($a.Len())!
+    v Vec<I64>
+    for i in range 4000000 { v.Push(i) }
+    w Vec<I64>
+    for i in range 4000000 { w.Push(i) }
+    io.PutLine($v[3999999] + " " + $w.Len())!
+}

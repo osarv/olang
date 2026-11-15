@@ -1,0 +1,26 @@
+import "std/io"
+
+N I64 = 200000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 100 { w.Push(i + j) }
+    return w
+}
+
+type Holder struct(v Vec<I64>) {
+    v
+}
+
+fn main() {
+    a := mk(0)
+    h := Holder(mk(1))
+    m Map<I64, Vec<I64>>
+    for k in range 7 { m.Put(k, mk(k)) }
+    t := 0
+    for i in range N {
+        a = mk(i)
+        t += a[99]
+    }
+    io.PutLine($t + " " + $a.Len() + " " + $h.v.Len())!
+}

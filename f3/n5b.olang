@@ -1,0 +1,20 @@
+import "std/io"
+
+fn mk2(i I64) Vec<Vec<I64>> {
+    vv Vec<Vec<I64>>
+    for k in range 3 {
+        vv.Push(Vec<I64>())
+        for j in range 3 { vv.RefMut(k).Push(i + k * j) }
+    }
+    return vv
+}
+
+fn main() {
+    a := mk2(0)
+    t := 0
+    for i in range 3 {
+        a = mk2(i)
+        t += a.Ref(1).At(0)
+    }
+    io.PutLine($t)!
+}

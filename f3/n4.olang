@@ -1,0 +1,44 @@
+import "std/io"
+
+N I64 = 3000
+
+fn mk2(i I64) Vec<Vec<I64>> {
+    vv Vec<Vec<I64>>
+    for k in range 20 {
+        vv.Push(Vec<I64>())
+        for j in range 30 { vv.RefMut(k).Push(i + k * j) }
+    }
+    return vv
+}
+
+fn mkMap(i I64) Map<I64, Vec<I64>> {
+    m Map<I64, Vec<I64>>
+    for k in range 40 {
+        v Vec<I64>
+        for j in range 25 { v.Push(i * k + j) }
+        m.Put(k, v)
+    }
+    return m
+}
+
+type Box struct(v Vec<I64>, m Map<I64, Vec<I64>>) {
+    v
+    m
+}
+
+fn sum(v Vec<I64>&) I64 {
+    t := 0
+    for x in v { t += x }
+    return t
+}
+fn main() {
+    a := mk2(0)
+    b := Box(Vec<I64>(), mkMap(0))
+    t := 0
+    for i in range N {
+        c := b.m.Get(i % 40)!
+        c.Push(5)
+        t += sum(c)
+    }
+    io.PutLine($t + " " + $a.Len() + " " + $b.v.Len())!
+}

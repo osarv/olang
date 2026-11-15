@@ -1,0 +1,42 @@
+import "std/io"
+import "std/os"
+
+# O8f (docs/freeing.md gap 11): a Vec's growth frees the buffer it replaces in every program - here one with an owner
+# place holding a Vec whole (a) and copies of one made outside any region (m.Get), each of which kept every Vec<I64>'s
+# old buffers before. Two Vecs grown one after the other in one scope: the second grows into the buffers the first
+# let go of, so the peak is three buffers of the last size, not four (the measure: peak resident memory gained, in MB)
+N I64 = 1000000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 10 { w.Push(i + j) }
+    return w
+}
+
+# the peak resident memory, in KB (VmHWM)
+fn peak() I64 {
+    st := try os.ReadFile("/proc/self/status") catch default ""
+    for line in st.Lines() {
+        if line.StartsWith("VmHWM:"): return try line[6:line.Len() - 3].Trim().ParseInt(10) catch default 0
+    }
+    return 0
+}
+
+fn main() {
+    a := mk(0)
+    m Map<I64, Vec<I64>>
+    t := 0
+    for i in range 100 {
+        a = mk(i)
+        m.Put(i % 10, mk(i))
+        u := m.Get(i % 10)!
+        t += a[9] + u[0]
+    }
+    p0 := peak()
+    v Vec<I64>
+    for i in range N { v.Push(i) }
+    w Vec<I64>
+    for i in range N { w.Push(v[i]) }
+    gained := (peak() - p0) / 1024
+    io.PutLine($t + " " + $w[N - 1] + " " + $("three buffers" if gained < 27 else "kept, " + $gained + " MB"))!
+}

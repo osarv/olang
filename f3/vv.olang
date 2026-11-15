@@ -1,0 +1,12 @@
+import "std/io"
+
+fn main() {
+    vv Vec<Vec<I64>>
+    for i in range 200 {
+        vv.Push(Vec<I64>())
+        for j in range 20 { vv.RefMut(i).Push(i * j) }
+    }
+    t := 0
+    for i in range 200 { t += vv.Ref(i).At(19) }
+    io.PutLine($t)!
+}
