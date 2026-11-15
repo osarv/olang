@@ -64,7 +64,7 @@ fn spans(t String&) U64 {
 fn main() ? {
     args := os.Args()
     mode := args[1] if args.Len() > 1 else "view"
-    n := try args[2].ParseInt() catch default 4000000 if args.Len() > 2 else 4000000
+    n := (try args[2].ParseInt() catch default 4000000) if args.Len() > 2 else 4000000
     t := text(n)
     h := U64(t.Len())
     if mode == "view": h = views(t)

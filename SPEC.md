@@ -3991,8 +3991,8 @@ compile-time error naming the rendering to write (`"n = " + n` asks for `$n`). A
 (`Array<Char>`, text still being written, T13a) keeps its lane `+` (E39) beside another array; beside a `String` it is
 a compile-time error naming `String(chars)` or a `StringBuilder`. `+` binds as it does on numbers (E5) and `$` tighter,
 so `"a" + $x.Len() + "b"` renders `x.Len()`; as any binary expression, a join continues onto the next line after a line
-ending in `+`, or anywhere inside parentheses (L18, L18a); where one unary is wanted - a catch's `default` (R9a) - it
-is parenthesized, `catch default ("none: " + $k)`. `s += t` on a `String` place is `s = s + t`.
+ending in `+`, or anywhere inside parentheses (L18, L18a); a catch's `default` takes the whole join after it (R9a),
+`catch default "none: " + $k`. `s += t` on a `String` place is `s = s + t`.
 
 `+` on text is the prelude's `String.Plus` (E31: an operator is a method, M19d), so a generic's `a + b` (G18a), a
 trait requiring `Plus` and the compile-time evaluator (K1) see it as any operator. A chain of them, however grouped -
@@ -4445,8 +4445,9 @@ expression's end, or the first `catch` - and that expression holds something tha
 fallible call and operator in it is covered, arguments and every link of a chain included: `try a.Get(i) + b.Get(j)`
 covers both calls, and `x := 2 * try f() + 1` multiplies by what `try f() + 1` gives. Inside a list the expression ends at the list's
 `,` (`g(try f(x), y)`), as any item does. After the clauses the expression around the `try` goes on, a `default`
-being one `unary` (R9a): `try f() catch default 0 + 1` adds one to what the `try` gives. To cover less, the `try` is
-what is parenthesized: `2 * (try f()) + 1`. Parentheses directly around the whole expression a `try` covers - `try (a
+taking the whole expression after it in turn (R9a): `try f() catch default 0 + 1` gives `1` on an error. To add to
+what the `try` gives, or to cover less, the `try` is
+what is parenthesized: `(try f() catch default 0) + 1`, `2 * (try f()) + 1`. Parentheses directly around the whole expression a `try` covers - `try (a
 + b)` - group nothing, and are a compile-time error saying to leave them out. Usable anywhere a value of its success
 type is expected; its full semantics (error propagation, signature requirements, and catch clauses in value position)
 are specified in §7.
@@ -6559,8 +6560,10 @@ inline element of one reached through no reference, `(try a.Get(i) catch default
 incremented, or given for a writable reference parameter or receiver (E31b), it is a compile-time error - what was
 written would be kept by neither.
 
-- Each default is a `unary` (E1), binding as tightly as the `try` itself: `try f() catch default 0 == 3`
-  compares the result with `3`. A compound default is parenthesized.
+- Each default is an `expr` taking the **whole expression after it**, as the `try` does (E24) - up to its end, the next
+  clause's `catch`, or a `,` where several are written: `try f() catch default n + 1` gives `n + 1` on an error, and
+  `catch default "none: " + $k` the joined text. To use what the `try` gives in a larger expression, the `try` is
+  parenthesized: `(try f() catch default 0) == 3`.
 - There is **one default per result**. A call returning several results (D8c) takes as many defaults,
   separated by commas — which is written only where the `try` is the **entire** value of a destructuring
   (S4b) or of a `return`: `n, m := try f() catch default 3, 2`. Anywhere else a comma ends the expression,
@@ -6593,7 +6596,7 @@ terms too, run on the task's thread.
 
 ### 7.5 `catch`
 
-**R11.** `catch-clause ::= "catch" [ catch-list ] [ IDEN ] [ block ] [ "default" unary { "," unary } ]`, with at
+**R11.** `catch-clause ::= "catch" [ catch-list ] [ IDEN ] [ block ] [ "default" expr { "," expr } ]`, with at
 least one of the block and the default written, where `catch-list ::= catch-item { "," catch-item }` (on one line) and
 `catch-item ::= IDEN { "." IDEN }` — a type name, optionally preceded by one or more alias hops and/or
 followed by `.WORD` to match only that one word; without a trailing word, the item matches every word of

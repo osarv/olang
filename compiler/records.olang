@@ -328,7 +328,7 @@ fn ScopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>
         for name in names {
             if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
             text := try scopeRecord(c, $cfg.Dir + "/rec/" + $name) catch Stale { continue }
-            at := try text.Find("\nrun ") catch default text.Len() - 1
+            at := (try text.Find("\nrun ") catch default text.Len()) - 1
             try sc.AddRecord(l.Mods[m].File, text[at + 1:]) catch typed.Unwritable { continue }
             sc.Eligible.Put(l.Mods[m].File, true)
             loaded.Put(l.Mods[m].File, text)

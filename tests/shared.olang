@@ -6674,7 +6674,7 @@ test "R9a: the default is evaluated only on failure" {
 tdZero mut I32 = 0        # a divisor known only at run time: with a constant one the condition below is fixed (S8a)
 
 test "R9a: a default binds as tightly as the try, and is one value inside an argument list" {
-    if try SafeDiv(1, tdZero) catch default 0 == 0: tdCalls = 100
+    if (try SafeDiv(1, tdZero) catch default 0) == 0: tdCalls = 100
     assert tdCalls == 100
     assert 1 + (try SafeDiv(1, 0) catch default 10) == 11
     assert tdAdd(try SafeDiv(1, 0) catch default 1, 2) == 3
@@ -7457,7 +7457,7 @@ test "T35a: a generic interface, satisfied by a plain type and by a generic one"
     o mut GenOnce<I32>& = GenOnce<I32>(7, false)
     assert genDrain(o) == 7
     c2 mut ForCounter& = ForCounter(0, 4)
-    assert try genFirst(c2) catch default 0 == 1
+    assert (try genFirst(c2) catch default 0) == 1
 }
 
 fn iterTotal<I Iterator<T>, T>(it mut I&) T {
@@ -7468,7 +7468,7 @@ fn iterTotal<I Iterator<T>, T>(it mut I&) T {
 
 test "G9c: a concrete type passed to a generic interface binds its variables through its methods" {
     c mut ForCounter& = ForCounter(0, 4)
-    assert try genFirst(c) catch default 0 == 1
+    assert (try genFirst(c) catch default 0) == 1
     o mut GenOnce<I64>& = GenOnce<I64>(9000000000, false)
     x := try genFirst(o) catch { unreachable }
     assert x == 9000000000
@@ -12553,7 +12553,7 @@ test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes an
     assert a == pair.Pair(I32(1), 2) and a != pair.Pair(I32(2), 2)
     m := Map<pair.Pair<I32, I64>, I32>()
     m.Put(a, 7)
-    assert try m.Get(pair.Pair(I32(1), 2)) catch default 0 == 7
+    assert (try m.Get(pair.Pair(I32(1), 2)) catch default 0) == 7
 }
 
 # E10b: keys with no Hash written - the compiler supplies one from the parts, while compiling as at run time
@@ -12581,9 +12581,9 @@ fn hashKeys() Bool {
     e.Put(hShape.Rect(1, 2), 4)
     e.Put(hShape.Circle(1), 7)
     n String& = ""
-    pts Bool = try m.Get(hPt(1, 2)) catch default 0 == 5 and try m.Get(hPt(2, 1)) catch default 0 == 6
-    tagged Bool = try t.Get(hTagged("ab", hPt(0, 0))) catch default 0 == 1 and hTagged(n, hPt(0, 0)).Hash() == hTagged(n, hPt(0, 0)).Hash()
-    shapes Bool = try e.Get(hShape.Rect(1, 2)) catch default 0 == 4 and not (hShape.Rect(2, 1) in e) and not (hShape.Blank in e)
+    pts Bool = (try m.Get(hPt(1, 2)) catch default 0) == 5 and (try m.Get(hPt(2, 1)) catch default 0) == 6
+    tagged Bool = (try t.Get(hTagged("ab", hPt(0, 0))) catch default 0) == 1 and hTagged(n, hPt(0, 0)).Hash() == hTagged(n, hPt(0, 0)).Hash()
+    shapes Bool = (try e.Get(hShape.Rect(1, 2)) catch default 0) == 4 and not (hShape.Rect(2, 1) in e) and not (hShape.Blank in e)
     arrays Bool = Array<I32>[1, 2].Hash() == Array<I32>[1, 2].Hash() and Array<I32>[1, 2].Hash() != Array<I32>[2, 1].Hash()
     return pts and tagged and shapes and arrays and hPt(1, 2).Hash() != hPt(2, 1).Hash()
 }
@@ -12606,8 +12606,8 @@ fn labelKeys() Bool {
     m.Put(hLabel.Named("ab"), 1)
     m.Put(hLabel.Pos(5, 6), 2)
     m.Put(hLabel.Unnamed, 3)
-    got Bool = try m.Get(hLabel.Named("ab")) catch default 0 == 1 and try m.Get(hLabel.Pos(5, 6)) catch default 0 == 2
-    rest Bool = try m.Get(hLabel.Unnamed) catch default 0 == 3 and not (hLabel.Pos(5, 7) in m)
+    got Bool = (try m.Get(hLabel.Named("ab")) catch default 0) == 1 and (try m.Get(hLabel.Pos(5, 6)) catch default 0) == 2
+    rest Bool = (try m.Get(hLabel.Unnamed) catch default 0) == 3 and not (hLabel.Pos(5, 7) in m)
     u := hLabel.Unnamed
     h := hTagged("ab", hPt(1, 2)).Hash()           # D15: a supplied Hash names its type as a call does
     return got and rest and u.Hash() != hLabel.Named("ab").Hash() and h == hTagged("ab", hPt(1, 2)).Hash()
@@ -12631,8 +12631,8 @@ fn extKeys() Bool {
     m.Put(hExtId(105), 1)
     n := Map<hModId, I32>()
     n.Put(hModId(105), 2)
-    plain Bool = try m.Get(hExtId(105)) catch default 0 == 1 and not (hExtId(5) in m)
-    return plain and try n.Get(hModId(205)) catch default 0 == 2 and $hModId(7) == "mod7"
+    plain Bool = (try m.Get(hExtId(105)) catch default 0) == 1 and not (hExtId(5) in m)
+    return plain and (try n.Get(hModId(205)) catch default 0) == 2 and $hModId(7) == "mod7"
 }
 ExtKeysBaked := extKeys()
 
@@ -18226,15 +18226,20 @@ fn trAll(n I64) I64 { return try trPos(n) + trPos(n + 1) catch default -1 }
 fn trLess(n I64) I64 { return 2 * (try trPos(n) catch default 0) + 1 }
 fn trMore(n I64) I64 { return try 2 * trPos(n) + 1 catch default -1 }
 fn trAfter(n I64) I64 { return try trPos(n) catch default 7 + 1 }
+fn trAfterParen(n I64) I64 { return (try trPos(n) catch default 7) + 1 }
+fn trText(n I64) String { return try $trPos(n) catch default "none: " + $n }
 fn trCond(n I64) I64 { return try trPos(n) if n > 3 else trPos(-n) catch default 9 }
 
 TrReachBaked := trAll(2) * 1000 + trLess(-1) * 100 + trMore(3) * 10 + trAfter(-5)
+TrTextBaked := trText(-2) + " " + trText(3) + " " + $trAfter(4) + " " + $trAfterParen(4)
 
 test "E24: a try covers the whole expression after it, and the evaluator agrees" {
     assert trAll(2) == 5 and trAll(-1) == -1 and trAll(-2) == -1
     assert trLess(3) == 7 and trLess(-1) == 1
     assert trMore(3) == 7 and trMore(-3) == -1
-    assert trAfter(4) == 5 and trAfter(-5) == 8
+    # R9a: a default takes the whole expression after it, as the try does - grouped, the try's value is added to
+    assert trAfter(4) == 4 and trAfter(-5) == 8 and trAfterParen(4) == 5 and trAfterParen(-5) == 8
+    assert trText(-2) == "none: -2" and trText(3) == "3" and TrTextBaked == "none: -2 3 4 5"
     assert trCond(5) == 5 and trCond(2) == 9 and trCond(-2) == 2
     n := 2
     assert TrReachBaked == trAll(n) * 1000 + trLess(-1) * 100 + trMore(3) * 10 + trAfter(-5)

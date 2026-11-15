@@ -37827,3 +37827,16 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   repro/colfields). Found beside it: a local holding a descriptor read only in a type (`z f.Type`, G34) was "never read"
   (D3b) - the resolver's typePath now counts the head of such a path as a read. Test in std/prelude/tests/columns.olang,
   baked and run.
+- **A catch's `default` takes the whole expression after it (R9a, the user's decision via the coordinator).** It took
+  one unary, so with text joined by `+` (E11b) `catch default "none: " + $k` meant `(... default "none: ") + $k`,
+  silently. A default now takes the whole expression after it, as the `try` itself does (E24): up to its end, the next
+  clause's `catch` or a `,` between several defaults; to use what the `try` gives in a larger expression the `try` is
+  parenthesized, `(try f() catch default 0) == 3`. The parser reads `expr` where it read `unary` (one unary still in
+  text read the old way, `Adjacent`, for textjoin_migrate). Nothing changes for the evaluator: the tree it is given is
+  the new one. The repository's sites that leaned on the old binding were found by a scan of every `catch ... default`
+  followed by an operator and parenthesized (19 in tests/shared, compiler/diag, diaggold, errors_migrate; five
+  `default n if c else m` in fuzz/, the crash fixture and the values study, whose conditional would now index past the
+  arguments; records.olang's `default text.Len() - 1`). One site was a bug the new reading fixes: api.olang's stripSig
+  wrote `open + (try line[open:].Find("(") catch default line.Len() - open)`, which on success subtracted `open` again.
+  Not an `olang fix` tool: a migration cannot tell old code from new written the new way, so it would not be
+  idempotent (as precedence_migrate was not). Tests in tests/shared (trAfter, trAfterParen, trText; TrTextBaked baked).
