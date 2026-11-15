@@ -17,7 +17,7 @@ m := Map<String, I64>["a": 1]
 m.Put("b", 2)
 m
 import "std/io"
-type Res unique struct(n I64) { n } destruct { io.PutLine("bye " $n)! }
+type Res unique struct(n I64) { n } destruct { io.PutLine("bye " + $n)! }
 r := Res(7)
 r.n
 fn bad(n I64) I64 ? {

@@ -7,7 +7,7 @@ type Bad error { Word }
 fn id<T>(x T) T { return x }
 
 fn half(n I64) I64 ? Bad, io.Error {
-    if n < 0 { error Bad.Word }
+    if n < 0: error Bad.Word
     return n / 2
 }
 
@@ -19,12 +19,12 @@ fn name(n I64) String {
 }
 
 fn count(s String?&) I64 {
-    if s == null { return 0 }
+    if s == null: return 0
     return s.Len()
 }
 
 fn main() ? io.Error {
-    try io.PutLine("fixed " $id(7))
+    try io.PutLine("fixed " + $id(7))
     r := try half(8) catch Bad default 0
-    try io.PutLine($r " " $name(r + count(null)))
+    try io.PutLine($r + " " + $name(r + count(null)))
 }
