@@ -1742,6 +1742,10 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # by local: a value array the function returns, living in the result scope (O26a), that nothing else can name - so it
     # is returned as it is; every other returned array is copied at its return, so the result is the caller's own (T7b)
     RetSole mut Array<Bool>& = Array<Bool>(Locals)
+    # by local: one Stored in the result scope for O26a's reason alone - returned only whole, by value, its parts built
+    # where the result goes - whose own slot lowering keeps in the frame where nothing may name it past the body (a slot
+    # per call there was gap 19 of docs/freeing.md)
+    RetFrame mut Array<Bool>& = Array<Bool>(Locals)
     # by site: a temporary given storage (Lvalue.Temp) that a view of it kept longer has built where its Built says
     # rather than in the frame (O27 as placement, E16a) - a new object there each time it is made
     TempKept mut Array<Bool>& = Array<Bool>(Sites)
@@ -1974,7 +1978,7 @@ fn (pl Plan&) text(loose Bool, twins Map<I64, I64>&) String ? Unwritable {
     for sc in pl.Built { b.Push($" " + $(try ScopeText(sc))) }
     b.Push(" |")
     for sc in pl.Stored { b.Push($" " + $(try ScopeText(sc))) }
-    b.Push($" | " + $bitsText(pl.MayBuild) + " " + $bitsText(pl.RetSole) + " " + $bitsText(pl.TempKept) + " |")
+    b.Push($" | " + $bitsText(pl.MayBuild) + " " + $bitsText(pl.RetSole) + " " + $bitsText(pl.TempKept) + " " + $bitsText(pl.RetFrame) + " |")
     for i in range pl.Built.Len() {
         if not loose and (pl.RegionKind[i] != 0 or pl.RegionParent[i] != Scope.Unset or pl.RegionRoot[i] != null): error Unwritable.Here
         if not loose and (pl.RegionGuard[i] != -1 or pl.RootGuard[i] != -1): error Unwritable.Here
@@ -2108,10 +2112,11 @@ fn Plan.readHead(b Body&, text String&) Plan ? Unwritable {
     try readScopes(parts[1], pl.Built)
     try readScopes(parts[2], pl.Stored)
     bits := parts[3].Trim().Split(" ").ToVec()
-    if bits.Len() != 3: error Unwritable.Here
+    if bits.Len() != 4: error Unwritable.Here
     try readBits(bits[0], pl.MayBuild)
     try readBits(bits[1], pl.RetSole)
     try readBits(bits[2], pl.TempKept)
+    try readBits(bits[3], pl.RetFrame)
     for w in wordsOf(parts[4]) {
         colon := try w.Find(":") catch { error Unwritable.Here }
         site := try w[:colon].ParseInt() catch { error Unwritable.Here }

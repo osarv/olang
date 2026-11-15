@@ -108,6 +108,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # result storage made for it (freshResult: -1 - body), nothing of what its parameter names (freshParam: below -2^40)
     preserved Map<I64, Bool>
     keptRefs Map<I64, Bool>     # keepsNoRef's answers, by body * 64 + parameter
+    keptLends Map<I64, Bool>    # keepsNoLend's
     CopyLog Vec<String&>         # each of those two, by place, for -memory
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
     ViewLog Vec<String&>
@@ -503,6 +504,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # a constructor's field holding an array of a run-time length that the scope pass keeps in a scope variable (its
     # instance's, QCE): where its elements are made (storageOf), its slot - the pair naming them - staying in the frame
     fieldStor Map<I64, mir.ScopeRef>
+    retFramed Map<I64, Bool>  # O26a's returned locals whose own slot is kept in the frame (Plan.RetFrame, retFrame)
     # R3: the by-value parameters whose copy is made at entry where the scope pass placed it - by the typed local, the
     # MIR parameter the argument arrives in (the local itself where its storage stays in the frame: a run-time array's)
     entryCopies Map<I64, mir.LocalId>
@@ -578,6 +580,7 @@ fn (ln mut lowering&) run() {
     b := ln.B
     t := ln.T
     away := ln.standInAway()
+    framed := ln.retFrames()
     # locals: the typed body's, in its numbering
     for i in range b.Locals.Len() {
         l := b.Locals[i]
@@ -597,6 +600,13 @@ fn (ln mut lowering&) run() {
             }
         }
         if away[i]: home = mir.ScopeRef.Program
+        # (O26a's local returned only whole, by value: its parts go where the result does, its own slot - which a slot
+        # in the result scope per call kept there, gap 19 - only where something may name it past the body)
+        if home != mir.ScopeRef.Frame and not away[i] and framed[i] {
+            ln.fieldStor.Put(i, home)
+            ln.retFramed.Put(i, true)
+            home = mir.ScopeRef.Frame
+        }
         # (a constructor's run-time array field: a reference to it is the pair naming its elements, never its slot, so the
         # slot needs no storage in the instance - only its elements do; one per call there grew where the instance lives)
         if home != mir.ScopeRef.Frame and not away[i] and l.Kind == typed.LocalKind.Field and ln.runArrayLocal(l.Ty) {
@@ -1735,6 +1745,33 @@ fn (ln mut lowering&) placeStorage(p typed.Lvalue&) mir.ScopeRef {
     }
 }
 
+# the locals moved to the result scope for O26a's reason alone (Plan.RetFrame) that keep their own slot in the frame
+fn (ln mut lowering&) retFrames() Array<Bool> {
+    out := Array<Bool>(ln.B.Locals.Len(), false)
+    if not ln.planned or not ln.plan.RetFrame.Some(fn(x Bool): return x): return out
+    u := typed.LocalUses.Uses(ln.T, ln.B)
+    for i in range out.Len() {
+        if i < ln.plan.RetFrame.Len() and ln.plan.RetFrame[i]: out[i] = ln.retFrame(u, i)
+        if ln.L.ViewDump and i < ln.plan.RetFrame.Len() and ln.plan.RetFrame[i] { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) + ": local L" + $i + $(" returned whole, its slot in the frame" if out[i] else " returned whole, its slot named past the body")) }
+    }
+    return out
+}
+
+# whether local i keeps its own slot in the frame (retFrames): a plain value with no destructor whose storage nothing
+# names past the body - no reference to it stored, captured, handed to a task or yielded, no other local naming it, and
+# every lend of it to a body that keeps nothing of it
+fn (ln mut lowering&) retFrame(u typed.LocalUses&, i I64) Bool {
+    l := ln.B.Locals[i]
+    if l.Kind != typed.LocalKind.Var or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty) or ln.arrayOf(l.Ty) != types.UnknownT: return false
+    return not ln.L.namesKept(ln.B, u, i)
+}
+
+# where local id's storage counts as homed for a return: the result scope for one whose slot retFrame keeps in the frame
+fn (ln mut lowering&) retHome(id I64) mir.ScopeRef {
+    if ln.retFramed.Has(id): return ln.resultScope()
+    return ln.F.Locals[id].Home
+}
+
 # the stand-in placement's locals (no plan: a body lowered while compiling, for the evaluator) whose own storage flows
 # out of the body - handed back, held by what is handed back, kept by a callee, captured: given the program's scope,
 # as everything the stand-in builds is, rather than the frame a return closes (the evaluator refused such a program as
@@ -2069,7 +2106,7 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
     # (a value owning parts is handed back from a whole local as it is, as before retOwns: its local is the
     # function's own storage - only an array's second names are proved, RetSole)
     id := I64(p.id)
-    return ln.F.Locals[id].Home != ln.resultScope() or (ln.valueArray(ty) and not ln.plan.RetSole[id])
+    return ln.retHome(id) != ln.resultScope() or (ln.valueArray(ty) and not ln.plan.RetSole[id])
 }
 
 # retCopies of a value array's branches: a conditional's, a match's arms', a try's value and defaults', a sequence's value
@@ -5349,6 +5386,71 @@ fn (lw mut Lowerer&) noRefKept(b typed.Body&, k I64) Bool {
         if u.RefAt[j] == p and not lw.keepsNoRef(u.RefBody[j], u.RefParam[j]): return false
     }
     return true
+}
+
+# whether a body keeps no name of what its parameter k, a writable reference, names past the call: the parameter stored
+# nowhere as a reference, captured by nothing, handed back in no reference result, named by no other local, and lent or
+# given on only to bodies keeping none. Writing what it names - whole, or a part - makes no name of it (retFrame)
+fn (lw mut Lowerer&) keepsNoLend(body I64, k I64) Bool {
+    if body < 0 or body >= lw.Bodies.Len() or k >= 64: return false
+    key := body * 64 + k
+    known := try lw.keptLends.Get(key) catch {
+        lw.keptLends.Put(key, false)
+        ok := lw.noLendKept(lw.Bodies[body], k)
+        lw.keptLends.Put(key, ok)
+        return ok
+    }
+    return known
+}
+
+fn (lw mut Lowerer&) noLendKept(b typed.Body&, k I64) Bool {
+    if b.Root == null or k >= b.Params.Len(): return false
+    u := typed.LocalUses.Uses(lw.P.T, b)
+    return not lw.namesKept(b, u, I64(b.Params[k]))
+}
+
+# whether a name of local root's storage - root, or a local naming it, and so on - may outlive body b: stored as a
+# reference, captured, handed to a task or yielded, handed back in a reference result, or given to a body that may keep
+# it. A reference read out of a part of it names what that part refers to, not its storage (refReadOut)
+fn (lw mut Lowerer&) namesKept(b typed.Body&, u typed.LocalUses&, root I64) Bool {
+    seen := Vec<I64>[root]
+    for at := 0, at < seen.Len(), at++ {
+        x := seen[at]
+        if u.EscHard[x] or u.Ret[x] and lw.T().IsRef(lw.T().Result(b.Ty)): return true
+        for j in range u.RefAt.Len() {
+            if u.RefAt[j] == x and not lw.keepsNoRef(u.RefBody[j], u.RefParam[j]): return true
+        }
+        for j in range u.LendAt.Len() {
+            if u.LendAt[j] == x and not lw.keepsNoLend(u.LendBody[j], u.LendParam[j]): return true
+        }
+        for j in range u.AliasOf.Len() {
+            if u.AliasOf[j] == x and not refReadOut(lw.T(), u.Init[j]) and j not in seen: seen.Push(j)
+        }
+    }
+    return false
+}
+
+# whether a local's value x is a reference read out of a part of what another names (`old := v.data`): it names what
+# that part refers to, never the storage it was read from
+fn refReadOut(t types.Table&, x typed.Expr?&) Bool {
+    if x == null: return false
+    return match x {
+        case typed.Expr.Read(_, ty, p, _): t.IsRef(ty) and p != typed.Lvalue.Local
+        case typed.Expr.Borrow(_, _, p): refPart(t, p)
+        case typed.Expr.Away(_, _, y): refReadOut(t, y)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and refReadOut(t, args[0])
+        case _: false
+    }
+}
+
+# whether place p is a field holding a reference (a borrow of it names what it refers to)
+fn refPart(t types.Table&, p typed.Lvalue&) Bool {
+    if p != typed.Lvalue.Field: return false
+    r := t.Repr(p.base.Type())
+    k := t.KindOf(r)
+    if k != types.Kind.Named and k != types.Kind.Record and k != types.Kind.Tuple: return false
+    ps := t.Items(t.Fields(r) if k == types.Kind.Named else t.Parts(r))
+    return p.index >= 0 and p.index < ps.Len() and t.IsRef(ps[p.index])
 }
 
 # whether block a is block b or one around it - a local declared in a lives as long as one declared in b

@@ -570,13 +570,15 @@ test "every let-go the freeing guarantee names frees, and -memory -check proves 
 fn freeing(r mut report&) ? Failed {
     dir := fresh("freeing")
     os.Run("cp checks/fixtures/freeing/* checks/fixtures/earlyfree/*.olang " + $os.Quote(dir))
-    # (fields: gaps 6-7, elements: 8-9, mapvalues: 10 and 15, unset: 16, vecelems: 17, mapcopy: 18)
-    limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"]
+    # (fields: gaps 6-7, elements: 8-9, mapvalues: 10 and 15, unset: 16, vecelems: 17, mapcopy: 18, returned: 19)
+    limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"
+                              "returned"]
     full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
                     "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
-                    "19999 20000\n", "401980000 100 100\n", "5980000 7\n"]
+                    "19999 20000\n", "401980000 100 100\n", "5980000 7\n", "80001000000 4\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
-                    "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"]
+                    "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"
+                    "20500 4\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
