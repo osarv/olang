@@ -20,7 +20,7 @@ fn made() I64 {
     nx.prev = a
     held := nx.prev == b
     c.next = null
-    return a.v * 100 + c.v * 10 + (1 if held else 0) + (2 if nx.prev is null else 0)
+    return a.v * 100 + c.v * 10 + (1 if held else 0) + (2 if nx.prev == null else 0)
 }
 fn main() ? io.Error {
     r := made()

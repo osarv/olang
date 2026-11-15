@@ -131,7 +131,7 @@ fn run(name String&, file String&, hasText Bool, text String&, item String&, cfg
     d mut diag.Diagnostics& = diag.Diagnostics(false)
     a := session.Analysis.Analyze(path, cfg, d, overlay, kept = true)
     if name == "check" { return checkResult(a, d) }
-    if d.Errors() > 0 or a.C is null or a.Sc is null { return textResult($d.Render() $d.Summary(), true) }
+    if d.Errors() > 0 or a.C == null or a.Sc == null { return textResult($d.Render() $d.Summary(), true) }
     if name == "explain" {
         t := try explain.Item(a.C!, a.Sc!, a.X!, a.L.Root, item) catch explain.Missing {
             return textResult($"'" $item "' is no top-level item of " $path, true)

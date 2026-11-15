@@ -1,0 +1,82 @@
+# E10c: the null test is a comparison with the null literal - "x == null", "x != null", the literal on either side -
+# whether a "?&" reference, a function value or an error value holds none. It never calls a type's Eq (E10a), and the
+# narrowing walk (S8e) keys on it through "and", "or", "not", conditionals, asserts and loops. Baked is computed while
+# compiling (K2) and the top-level assert decided there (S17a), so the evaluator agrees with the run time.
+
+# a type whose Eq would fail on a null operand: the null test never reaches it
+type Cell struct(v I64, next Cell?&) {
+    v
+    next
+}
+fn (a Cell&) Eq(b Cell&) Bool { return a.v == b.v }
+fn (c Cell&) Hash() I64 { return c.v }
+
+type Missing error { Gone }
+
+fn twice(x I64) I64 { return x * 2 }
+
+fn length(c Cell?&) I64 {
+    n I64 = 0
+    at := c
+    for at != null {
+        n++
+        at = at.next
+    }
+    return n
+}
+
+fn first(c Cell?&) I64 {
+    if c == null: return -1
+    return c.v
+}
+
+fn second(c Cell?&) I64 {
+    if c == null: return -1
+    n := c.next
+    return n.v if n != null else -1
+}
+
+fn notNull(c Cell?&) Bool { return not (null == c) }
+
+fn held(e Missing) I64 { return 0 if e == null else 1 }
+
+fn called(f fn?&(x I64) I64) I64 { return f(5) if null != f else 0 }
+
+fn score() I64 {
+    list := Cell(1, Cell(2, Cell(3, null)))
+    t := length(list) + 10 * first(list) + 100 * second(list)
+    if notNull(list) and not notNull(null): t += 1000
+    e Missing = null
+    if held(e) == 0: t += 10000
+    e = Missing.Gone
+    if held(e) == 1: t += 100000
+    t += called(twice) * 100000 + called(null)
+    return t
+}
+
+Baked I64 = score()
+
+assert score() == 1111213
+
+test "the null test is '== null' and '!= null', never Eq, at run time and while compiling" {
+    assert score() == 1111213 and Baked == score()
+    a Cell?& = Cell(4, null)
+    assert a != null
+    c Cell?& = null
+    assert c == null and null == c
+}
+
+test "a test that holds narrows: after an assert, a leaving if, inside and/or, through a loop" {
+    c Cell?& = Cell(7, null)
+    assert c != null
+    assert c.v == 7
+    d Cell?& = c.next
+    if d == null or d.v > 0 { assert d == null or d.v > 0 }
+    walked := 0
+    at Cell?& = c
+    for at != null {
+        walked += at.v
+        at = at.next
+    }
+    assert walked == 7
+}

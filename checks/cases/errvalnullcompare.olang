@@ -1,10 +1,11 @@
-# check: fail error[E10c]: null is tested with 'is', never compared - write 'e is null'
-# also: error[E10c]: null is tested with 'is', never compared - write 'e is not null'
-# T20, E10c: an error value holding no error is tested with 'is null', the one null test - never compared with null
+# check: run
+# T20, E10c: an error value holding no error is tested with "== null", the one null test (an error naming "e is null"
+# until 2026-11-15)
 type PErr error { Bad }
+fn held(e PErr) Bool { return e != null }
+fn empty(e PErr) Bool { return null == e }
 fn main() {
-    e PErr = null
-    a := e == null
-    b := e != null
-    c := e is null
+    none PErr = null
+    assert not held(none) and empty(none)
+    assert held(PErr.Bad)
 }

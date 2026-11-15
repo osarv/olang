@@ -343,7 +343,7 @@ type Widget struct(kind Kind, parent Widget?) {      type Widget struct(kind Kin
 fn click(w mut Widget) I64 {                         fn click(w mut Widget&) I64 {
     depth := 0                                           depth := 0
     at Widget? = w                                       at mut Widget?& = w    # refused today (O25); NLL, decided,
-    for at is not null {                                 for at is not null {   # makes it work
+    for at != null {                                 for at != null {   # makes it work
         if at.kind == Kind.Button {                          if at.kind == Kind.Button {
             at.clicks++                                          at.clicks++
             return depth                                         return depth

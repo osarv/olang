@@ -767,11 +767,11 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     # the candidates: places a body assigns or vacates (a let-go of one needs one of those somewhere)
     for b in range n {
         f.curBody = b
-        if f.Bodies[b].Root is not null { f.findCands(f.Bodies[b].Root!) }
+        if f.Bodies[b].Root != null { f.findCands(f.Bodies[b].Root!) }
     }
     if f.keyTy.Len() == 0 { return }
     for b in range n {
-        if f.Bodies[b].Root is not null { f.findFeeds(b) }
+        if f.Bodies[b].Root != null { f.findFeeds(b) }
     }
     t0 := time.Now()
     # the must-summaries, greatest fixed point - what the may-summaries' stores read (withinOf): every body once,
@@ -1221,7 +1221,7 @@ fn (f mut Free&) bufDecide() {
     if f.Debug {
         try io.PutErr($"buf never " $f.bufNever " " $f.bufWhy "\n") catch io.Error { }
         for b in range n {
-            if f.Bodies[b].Root is not null and f.bufAll[b] { try io.PutErr($"buf all " $f.fnName(b) " by " $f.bufBy[b] " taintAll " $f.taintAll[b] "\n") catch io.Error { } }
+            if f.Bodies[b].Root != null and f.bufAll[b] { try io.PutErr($"buf all " $f.fnName(b) " by " $f.bufBy[b] " taintAll " $f.taintAll[b] "\n") catch io.Error { } }
         }
     }
     if f.bufNever: return
@@ -1296,7 +1296,7 @@ fn (f mut Free&) hiddenCalls(b I64) Bool {
     if i < 0 or f.named[b]: return true
     d := f.P.FnDecl(f.P.InstanceFn(i))
     if d.Export: return true
-    if d.Recv is null: return false
+    if d.Recv == null: return false
     if f.anyMethod(b): return true
     nm := f.P.L.Names.Text(d.Name)
     return protocolName(nm)
@@ -1397,7 +1397,7 @@ fn (f mut Free&) genDecide() {
     if f.Debug {
         for i in range f.genTys.Len() { try io.PutErr($"gen " $t.Canon(f.genTys[i]) " ok " $f.genOkTy[i] " " $f.genWhy[i] "\n") catch io.Error { } }
         for b in range n {
-            if f.Bodies[b].Root is null: continue
+            if f.Bodies[b].Root == null: continue
             try io.PutErr($"body " $b " " $f.fnName(b) " all " $f.acrossAll[b] " across " $f.across[b].Len() "\n") catch io.Error { }
         }
     }
@@ -1469,7 +1469,7 @@ fn (f mut Free&) genAcross() {
     for b in range n {
         f.across.Push(Vec<I64>())
         f.acrossAll.Push(f.hiddenCalls(b))
-        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root is not null { try io.PutErr($"hidden " $b " " $f.fnName(b) " " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
+        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root != null { try io.PutErr($"hidden " $b " " $f.fnName(b) " " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
     }
     changed := true
     for changed {
@@ -1640,7 +1640,7 @@ fn (f mut Free&) entry(b I64) Bool {
     }
     if i < 0 or f.named[b]: return true
     d := f.P.FnDecl(f.P.InstanceFn(i))
-    return d.Recv is not null or d.Export or f.P.L.Names.Text(d.Name) == "main"
+    return d.Recv != null or d.Export or f.P.L.Names.Text(d.Name) == "main"
 }
 
 # ---- Part C: destructors where their holders let go ----
@@ -1809,13 +1809,13 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
         case typed.Stmt.If(_, i) {
             f.findExpr(i.Test)
             f.findCands(i.Then)
-            if i.Else is not null { f.findCands(i.Else!) }
+            if i.Else != null { f.findCands(i.Else!) }
         }
         case typed.Stmt.Loop(_, body, post) {
             f.findCands(body)
-            if post is not null { f.findCands(post) }
+            if post != null { f.findCands(post) }
         }
-        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { if x is not null: f.findExpr(x) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { if x != null: f.findExpr(x) }
         case typed.Stmt.Block(_, b) { f.findCands(b) }
         case typed.Stmt.Defer(_, b) { f.findCands(b) }
         case typed.Stmt.Join(_, j) { f.findCands(j.Code) }
@@ -1850,11 +1850,11 @@ fn (f mut Free&) feedBlock(b I64, bl typed.Block&, last Map<I64, I64>&, u typed.
             }
             case typed.Stmt.If(_, i) {
                 f.feedBlock(b, i.Then, last, u)
-                if i.Else is not null { f.feedBlock(b, i.Else!, last, u) }
+                if i.Else != null { f.feedBlock(b, i.Else!, last, u) }
             }
             case typed.Stmt.Loop(_, body, post) {
                 f.feedBlock(b, body, last, u)
-                if post is not null { f.feedBlock(b, post, last, u) }
+                if post != null { f.feedBlock(b, post, last, u) }
             }
             case typed.Stmt.Block(_, inner) { f.feedBlock(b, inner, last, u) }
             case _ { }
@@ -1935,7 +1935,7 @@ fn (f mut Free&) feedFits(fc feedCall) Bool {
     at := f.Plans.Ref(fc.Body).Passed(typed.SiteId(I32(fc.Site)), u)
     if at != fd.At: return not fc.Writes
     call := f.callAt(fc.Body, fc.Site)
-    if call is null: return not fc.Writes
+    if call == null: return not fc.Writes
     return f.orVars(fc.Body, call, fc.Callee, at, u) >= 0 or not fc.Writes
 }
 
@@ -1953,7 +1953,7 @@ fn (f mut Free&) writeFeedCalls() {
         at := pl.Passed(site, u)
         if at != fd.At: continue
         call := f.callAt(fc.Body, fc.Site)
-        if call is null: continue
+        if call == null: continue
         set := f.orVars(fc.Body, call, fc.Callee, at, u)
         if set < 0: continue
         region := typed.Scope.Region(typed.SiteId(I32(fd.Site)))
@@ -2041,23 +2041,23 @@ fn (f mut Free&) findExpr(x typed.Expr&) {
             for a in c.Args { f.findExpr(a) }
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X is not null { f.findExpr(t.X!) }
+            if t.X != null { f.findExpr(t.X!) }
             for c in t.Clauses {
-                if c.Code is not null { f.findCands(c.Code!) }
+                if c.Code != null { f.findCands(c.Code!) }
             }
         }
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts { f.findStmt(st) }
-            if q.X is not null { f.findExpr(q.X!) }
+            if q.X != null { f.findExpr(q.X!) }
         }
         case typed.Expr.Match(_, _, m) {
             for st in m.Held { f.findStmt(st) }
             for a in m.Arms {
-                if a.Code is not null { f.findCands(a.Code!) }
-                if a.Value is not null { f.findExpr(a.Value!) }
+                if a.Code != null { f.findCands(a.Code!) }
+                if a.Value != null { f.findExpr(a.Value!) }
             }
-            if m.NoMatch is not null {
-                if m.NoMatch!.Code is not null { f.findCands(m.NoMatch!.Code!) }
+            if m.NoMatch != null {
+                if m.NoMatch!.Code != null { f.findCands(m.NoMatch!.Code!) }
             }
         }
         case typed.Expr.Collect(_, _, c) { f.findCands(c.Loop) }
@@ -2153,7 +2153,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
 }
 
 fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
-    if f.wk is null { f.wk = walker(f, b, final) }
+    if f.wk == null { f.wk = walker(f, b, final) }
     w := f.wk!
     w.Id = b
     w.Final = final
@@ -2232,7 +2232,7 @@ fn (f mut Free&) save(w walker&, b I64) {
 
 fn (f mut Free&) walk(b I64, final Bool) {
     body := f.Bodies[b]
-    if body.Root is null { return }
+    if body.Root == null { return }
     # a constructor of a type with a destructor registers its instance in its instance scope (O16)
     t := f.T()
     if t.Role(body.Ty) == types.RoleCtor and t.Results(body.Ty).Len() == 1 {
@@ -2435,7 +2435,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.block(i.Then)
             b := w.no - 1
             c := w.no
-            if i.Else is not null { w.block(i.Else!) }
+            if i.Else != null { w.block(i.Else!) }
             w.thenFrom.Push(a)
             w.thenTo.Push(b)
             w.elseFrom.Push(c)
@@ -2444,7 +2444,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         case typed.Stmt.Loop(_, body, post) {
             w.loops++
             w.block(body)
-            if post is not null { w.block(post) }
+            if post != null { w.block(post) }
             w.loops--
             w.loopAt.Push(n)
             w.loopEnd.Push(w.no - 1)
@@ -2452,7 +2452,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         # D18: a generator's yield (Suspend) gives its value as a return does - to the call of its Next - and the body goes
         # on after it, so it ends no path
         case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
-            if x is not null {
+            if x != null {
                 o := w.expr(x)
                 if not w.Final { w.result(o) }
                 if w.Final and w.F.olIn[w.Id] { w.returnedOwnLocals(o, st.Span()) }
@@ -2466,9 +2466,9 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Assert(_, c, m) {
             w.expr(c)
-            if m is not null: w.expr(m)
+            if m != null: w.expr(m)
         }
-        case typed.Stmt.Exit(_, _, m) { if m is not null: w.expr(m) }
+        case typed.Stmt.Exit(_, _, m) { if m != null: w.expr(m) }
         case typed.Stmt.Block(_, b) { w.block(b) }
         case typed.Stmt.Defer(_, b) {
             if not w.Final: w.escapedHolder(b)
@@ -2482,14 +2482,14 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.F.taskAt[w.Id] = true
             w.block(j.Code)
             for c in j.Clauses {
-                if c.Code is not null: w.block(c.Code!)
+                if c.Code != null: w.block(c.Code!)
             }
         }
         case typed.Stmt.Spawn(_, s) {
             w.F.taskAt[w.Id] = true
             w.expr(s.Task)
             for c in s.Clauses {
-                if c.Handler is not null: w.expr(c.Handler!)
+                if c.Handler != null: w.expr(c.Handler!)
             }
         }
         case typed.Stmt.Yield(sp, x) {
@@ -2523,19 +2523,19 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.targets.Push(p)
     c0 := typed.Call.Of(x)
     outer := w.exemptSite
-    w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
+    w.exemptSite = I64(c0.Site) if c0 != null and p != typed.Lvalue.Local else -1
     outerC := w.copiedCtor
     w.copiedCtor = w.copiedCtorOf(p, c0)
     # Part C: a copy of a value handed on stored into a part held in place - made for its leaves (copyInto)
     cm := w.copyStored(p, x)
     wasE, wasR := w.copyExempt, w.copyRead
-    if cm is not null {
+    if cm != null {
         w.copyExempt = ownCopySite(cm)
         w.copyRead = readLocalOf(x)
     }
     o := w.expr(x)
     # (the copy, read out of its held local, is the value made for those leaves - no view of them)
-    if cm is not null: o = w.F.unowned(o)
+    if cm != null: o = w.F.unowned(o)
     w.copyExempt, w.copyRead = wasE, wasR
     w.exemptSite = outer
     w.copiedCtor = outerC
@@ -2615,7 +2615,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
 # the site of call c0 where it is a constructor viewing what it is given whose instance is copied into struct place p
 # held in place (copyInto's viewCtor), -1 for any other
 fn (w mut walker&) copiedCtorOf(p typed.Lvalue&, c0 typed.Call?&) I64 {
-    if c0 is null or (p != typed.Lvalue.Field and p != typed.Lvalue.Elem): return -1
+    if c0 == null or (p != typed.Lvalue.Field and p != typed.Lvalue.Elem): return -1
     f := w.F
     t := w.T()
     b2 := typed.CalleeBody(c0)
@@ -2635,7 +2635,7 @@ fn (w mut walker&) viewCopied(c typed.Call&, b2 I64, j I64) Bool {
 # a unique value moved out of a parameter (movedPar, no copy cm) stored whole into a struct held in place: the
 # parameter's argument is what the place's leaves are given, judged at each call (parWhole, wholeArg)
 fn (w mut walker&) storedWhole(x typed.Expr&, cm typed.Expr?&) Bool {
-    if cm is not null: return false
+    if cm != null: return false
     j := w.movedPar(x)
     if j < 0: return false
     if not w.Final and addTo(w.F.parWhole[w.Id], j) > 0 { w.F.changed = true }
@@ -2649,13 +2649,13 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
                             cm typed.Expr?& = null) Vec<I64> {
     f := w.F
     t := w.T()
-    if cm is not null {
+    if cm != null {
         w.copyLeaves(lvs, cm, sp)
         return o
     }
     c := typed.Call.Of(x)
-    b2 := typed.CalleeBody(c) if c is not null else -1
-    if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
+    b2 := typed.CalleeBody(c) if c != null else -1
+    if b2 >= 0 and f.Bodies[b2].Root != null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
         # (an instance viewing only unique values moved out of parameters holds them whole, no copy: what their leaves
         # are given is judged at the call, by the constructor's parWhole)
@@ -2856,7 +2856,7 @@ fn (w mut walker&) freshRoot(p typed.Lvalue&) I64 {
 # the parameter every storage a place's container is reached through is reached from, -1 for none (a must-fact)
 fn (w mut walker&) withinOf(p typed.Lvalue&) I64 {
     b := baseOf(p)
-    if b is null { return -1 }
+    if b == null { return -1 }
     v := w.F.withinPlace(w.Id, b)
     return v if v >= 0 and v < MovBase else -1
 }
@@ -2864,7 +2864,7 @@ fn (w mut walker&) withinOf(p typed.Lvalue&) I64 {
 # the place every value a place's container is reached through is a value of, -1 for none (a must-fact)
 fn (w mut walker&) insidePlace(p typed.Lvalue&) I64 {
     r := derefRoot(p)
-    if r is null { return -1 }
+    if r == null { return -1 }
     return w.rootPlace(r)
 }
 
@@ -2872,7 +2872,7 @@ fn (w mut walker&) insidePlace(p typed.Lvalue&) I64 {
 # value, read in one statement with nothing evaluated on the way that could change either (pure paths)
 fn (w mut walker&) sameValue(x typed.Expr&, p typed.Lvalue&) Bool {
     r := derefRoot(p)
-    if r is null { return false }
+    if r == null { return false }
     return reachedThrough(x, r)
 }
 
@@ -2975,7 +2975,7 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
         case _ { }
     }
     c := typed.Call.Of(x)
-    if c is not null {
+    if c != null {
         for y in o {
             if okind(y) == OMov { w.go(oval(y), LDrop, x.Span(), receiverSpan(c), typed.CalleeBody(c)) }
         }
@@ -2996,7 +2996,7 @@ fn (f mut Free&) plainElems(k I64) Bool {
 fn movesOnly(x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Collect(_, _, c): yieldsMoved(c.Loop)
-        case typed.Expr.Seq(_, _, q): q.X is not null and movesOnly(q.X!)
+        case typed.Expr.Seq(_, _, q): q.X != null and movesOnly(q.X!)
         case typed.Expr.Away(_, _, y): movesOnly(y)
         case _: false
     }
@@ -3015,9 +3015,9 @@ fn stmtMoves(st typed.Stmt&) Bool {
             case typed.Expr.Take(_, _, _), typed.Expr.Read(_, _, _, _): true
             case _: false
         }
-        case typed.Stmt.Loop(_, body, post): yieldsMoved(body) and (post is null or yieldsMoved(post))
+        case typed.Stmt.Loop(_, body, post): yieldsMoved(body) and (post == null or yieldsMoved(post))
         case typed.Stmt.Block(_, b): yieldsMoved(b)
-        case typed.Stmt.If(_, i): yieldsMoved(i.Then) and (i.Else is null or yieldsMoved(i.Else!))
+        case typed.Stmt.If(_, i): yieldsMoved(i.Then) and (i.Else == null or yieldsMoved(i.Else!))
         case _: true
     }
 }
@@ -3050,7 +3050,7 @@ fn (w mut walker&) elemRead(p typed.Lvalue&, o mut Vec<I64>&) {
 fn copiedStore(x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Read(_, _, _, _), typed.Expr.Slice(_, _, _): true
-        case typed.Expr.Cond(_, _, k): (k.A is not null and copiedStore(k.A!)) or copiedStore(k.B)
+        case typed.Expr.Cond(_, _, k): (k.A != null and copiedStore(k.A!)) or copiedStore(k.B)
         case typed.Expr.Away(_, _, y): copiedStore(y)
         case _: false
     }
@@ -3154,7 +3154,7 @@ fn (w mut walker&) paramOf(x typed.Expr&) I64 {
 fn (w mut walker&) movedPar(x typed.Expr&) I64 {
     match x {
         case typed.Expr.Seq(_, _, q) {
-            if not q.Gone or q.X is null: return -1
+            if not q.Gone or q.X == null: return -1
             y := q.X!
             j := try w.params.Get(readLocalOf(y)) catch default -1
             if j < 0 or w.T().IsRef(y.Type()) or not w.T().Unique(y.Type()): return -1
@@ -3367,7 +3367,7 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
         case typed.Expr.Call(sp, ty, c) { out = w.call(c, ty, sp) }
         case typed.Expr.Make(sp, ty, m) { out = w.makeOf(sp, ty, m) }
         case typed.Expr.Collect(_, ty, c) {
-            if c.Reserve is not null { w.expr(c.Reserve!) }
+            if c.Reserve != null { w.expr(c.Reserve!) }
             w.yieldTo.Push(w.F.placeKey(w.F.arrayOf(ty), -1))
             w.yieldOrig.Push(Vec<I64>())
             w.block(c.Loop)
@@ -3402,7 +3402,7 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
         }
         case typed.Expr.Cond(_, _, c) {
             w.expr(c.C)
-            if c.A is not null { addAllTo(out, w.expr(c.A!)) }
+            if c.A != null { addAllTo(out, w.expr(c.A!)) }
             addAllTo(out, w.expr(c.B))
         }
         case typed.Expr.Seq(_, _, q) {
@@ -3410,18 +3410,18 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
             # (Part C: a unique value handed on - T13b, O15 - is the callee's from here, moved: the caller holds no view of
             # it in use during the call)
             if q.Gone: w.handing++
-            if q.X is not null { out = w.expr(q.X!) }
+            if q.X != null { out = w.expr(q.X!) }
             if q.Gone: w.handing--
         }
         case typed.Expr.Match(_, _, m) {
             for st in m.Held { w.stmt(st) }
             for a in m.Arms { addAllTo(out, w.arm(a)) }
-            if m.NoMatch is not null { addAllTo(out, w.arm(m.NoMatch!)) }
+            if m.NoMatch != null { addAllTo(out, w.arm(m.NoMatch!)) }
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X is not null { out = w.expr(t.X!) }
+            if t.X != null { out = w.expr(t.X!) }
             for c in t.Clauses {
-                if c.Code is not null { w.block(c.Code!) }
+                if c.Code != null { w.block(c.Code!) }
                 for d in c.Defaults { addAllTo(out, w.expr(d)) }
             }
         }
@@ -3461,7 +3461,7 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
         o := w.expr(it)
         if not dead: addAllTo(out, o)
     }
-    if m.Length is not null { w.expr(m.Length!) }
+    if m.Length != null { w.expr(m.Length!) }
     if m.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(m.Site))) }
     # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
     if m.Kind == typed.MakeKind.Copy { out = w.F.unowned(out) }
@@ -3510,9 +3510,9 @@ fn (w mut walker&) arm(a typed.Arm&) Vec<I64> {
         w.expr(alt.Test)
         for bd in alt.Binds: w.give(I64(bd.To), w.expr(bd.From))
     }
-    if a.Guard is not null { w.expr(a.Guard!) }
-    if a.Code is not null { w.block(a.Code!) }
-    if a.Value is not null { out = w.expr(a.Value!) }
+    if a.Guard != null { w.expr(a.Guard!) }
+    if a.Code != null { w.block(a.Code!) }
+    if a.Value != null { out = w.expr(a.Value!) }
     return out
 }
 
@@ -3551,7 +3551,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     match c.Target {
         case typed.Callee.Body(id) {
             b2 = I64(id)
-            unknown = f.Bodies[b2].Root is null and not f.isCase(b2)
+            unknown = f.Bodies[b2].Root == null and not f.isCase(b2)
             if w.Final and f.genOn and w.quiet == 0 {
                 w.gcStmt.Push(w.cur)
                 w.gcSp.Push(sp)
@@ -3726,7 +3726,7 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
             for it in m.Items {
                 if f.mayRegister(it): return true
             }
-            return m.Length is not null and f.mayRegister(m.Length!)
+            return m.Length != null and f.mayRegister(m.Length!)
         }
         case typed.Expr.Text(_, _, tx) { return f.textMayRegister(tx) }
         case typed.Expr.Call(_, _, c) {
@@ -3744,7 +3744,7 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
         }
         case typed.Expr.Away(_, _, y) { return f.mayRegister(y) }
         case typed.Expr.Cond(_, _, c) {
-            return f.mayRegister(c.C) or (c.A is not null and f.mayRegister(c.A!)) or f.mayRegister(c.B)
+            return f.mayRegister(c.C) or (c.A != null and f.mayRegister(c.A!)) or f.mayRegister(c.B)
         }
         case typed.Expr.Try(_, _, t) { return f.tryMayRegister(t) }
         case typed.Expr.Fn(_, _, fv) {
@@ -3758,10 +3758,10 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
         # kind not walked here taken to register (F6 of the second bulk review)
         case typed.Expr.Seq(_, _, sq) {
             if f.stmtsMayRegister(sq.Stmts) { return true }
-            return sq.X is not null and f.mayRegister(sq.X!)
+            return sq.X != null and f.mayRegister(sq.X!)
         }
         case typed.Expr.Collect(_, _, cl) {
-            if cl.Reserve is not null and f.mayRegister(cl.Reserve!) { return true }
+            if cl.Reserve != null and f.mayRegister(cl.Reserve!) { return true }
             return f.stmtsMayRegister(cl.Loop.Stmts)
         }
         # statements inside a match: not walked here
@@ -3782,7 +3782,7 @@ fn (f mut Free&) calleeMayRegister(t typed.Callee&) Bool {
     match t {
         case typed.Callee.Body(id) {
             b2 := I64(id)
-            if not f.isCase(b2) and (f.Bodies[b2].Root is null or f.regOut[b2]) { return true }
+            if not f.isCase(b2) and (f.Bodies[b2].Root == null or f.regOut[b2]) { return true }
         }
         case typed.Callee.Helper(_, _), typed.Callee.Extern(_) { }
         case _ { return true }
@@ -3792,9 +3792,9 @@ fn (f mut Free&) calleeMayRegister(t typed.Callee&) Bool {
 
 # mayRegister's try: its value, or a clause - one with code taken to
 fn (f mut Free&) tryMayRegister(t typed.Try&) Bool {
-    if t.X is not null and f.mayRegister(t.X!) { return true }
+    if t.X != null and f.mayRegister(t.X!) { return true }
     for cl in t.Clauses {
-        if cl.Code is not null: return true
+        if cl.Code != null: return true
         for d in cl.Defaults {
             if f.mayRegister(d): return true
         }
@@ -3815,11 +3815,11 @@ fn (f mut Free&) stmtsMayRegister(sts Array<typed.Stmt&>&) Bool {
             }
             case typed.Stmt.If(_, i) {
                 if f.mayRegister(i.Test) or f.stmtsMayRegister(i.Then.Stmts): return true
-                if i.Else is not null and f.stmtsMayRegister(i.Else!.Stmts): return true
+                if i.Else != null and f.stmtsMayRegister(i.Else!.Stmts): return true
             }
             case typed.Stmt.Loop(_, b, post) {
                 if f.stmtsMayRegister(b.Stmts): return true
-                if post is not null and f.stmtsMayRegister(post.Stmts): return true
+                if post != null and f.stmtsMayRegister(post.Stmts): return true
             }
             case typed.Stmt.Block(_, b) {
                 if f.stmtsMayRegister(b.Stmts): return true
@@ -3985,7 +3985,7 @@ fn writtenRecs(a typed.Expr&) Vec<I64> ? NotWritten {
     match a {
         case typed.Expr.Away(_, _, y) { return try writtenRecs(y) }
         case typed.Expr.Cond(_, _, k) {
-            if k.A is null: error NotWritten
+            if k.A == null: error NotWritten
             out := try writtenRecs(k.A!)
             for r in try writtenRecs(k.B) { addTo(out, r) }
             return out
@@ -4286,13 +4286,13 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         }
         # (statements before the value - grown()'s hidden locals - build nothing of it)
         case typed.Expr.Seq(_, _, q) {
-            if q.X is not null {
+            if q.X != null {
                 w.made(k, q.X!, sp, multi)
                 return
             }
         }
         case typed.Expr.Try(_, _, t) {
-            plain := t.X is not null
+            plain := t.X != null
             for c in t.Clauses {
                 if c.Defaults.Len() > 0: plain = false
             }
@@ -4309,8 +4309,8 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
             } else if why == "" {
                 # a call handing out a value moved out of the place
                 c := typed.Call.Of(x)
-                b2 := typed.CalleeBody(c) if c is not null else -1
-                if b2 >= 0 and f.Bodies[b2].Root is not null and f.mustRes[b2] == MovBase + k {
+                b2 := typed.CalleeBody(c) if c != null else -1
+                if b2 >= 0 and f.Bodies[b2].Root != null and f.mustRes[b2] == MovBase + k {
                     kind = SMove
                     of = k
                 }
@@ -4351,7 +4351,7 @@ fn (w mut walker&) freshSite(x typed.Expr&) I64, String {
             b2 := typed.CalleeBody(c)
             if b2 < 0 or c.Site < typed.SiteId(0) { return -1, "" }
             body := f.Bodies[b2]
-            if body.Root is null { return -1, "" }
+            if body.Root == null { return -1, "" }
             if t.Role(body.Ty) == types.RoleCtor { return I64(c.Site), "" }
             if t.Results(body.Ty).Len() != 1 { return -1, "" }
             e := t.ResultFrom(body.Ty, 0)
@@ -4385,7 +4385,7 @@ fn (f mut Free&) fnName(b I64) String {
 # a reference result type as a built result writes it: the referent and a bare "&"
 fn (f mut Free&) builtSpell(ty types.TypeId) String {
     t := f.T()
-    if not t.IsRef(ty) or f.Sc.Spell is null { return "T&" }
+    if not t.IsRef(ty) or f.Sc.Spell == null { return "T&" }
     return $f.Sc.Spell!(t.Referent(ty)) "&"
 }
 
@@ -4589,7 +4589,7 @@ fn (f mut Free&) keepView(k I64, file I64, sp source.Span, text String&, g I64) 
 # one), what every result is, and whether every result is new
 fn (f mut Free&) mustOf(b I64) {
     body := f.Bodies[b]
-    if body.Root is null { return }
+    if body.Root == null { return }
     m mut mustW& = mustW(f, b)
     for _ in range body.Locals.Len() {
         m.must.Push(MustTop)
@@ -4699,14 +4699,14 @@ fn (m mut mustW&) stmt(st typed.Stmt&) {
         case typed.Stmt.If(_, i) {
             m.expr(i.Test)
             m.block(i.Then)
-            if i.Else is not null { m.block(i.Else!) }
+            if i.Else != null { m.block(i.Else!) }
         }
         case typed.Stmt.Loop(_, body, post) {
             m.block(body)
-            if post is not null { m.block(post) }
+            if post != null { m.block(post) }
         }
         case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
-            if x is not null {
+            if x != null {
                 m.returned.Push(x)
                 m.expr(x)
             }
@@ -4731,30 +4731,30 @@ fn (m mut mustW&) expr(x typed.Expr&) {
     match x {
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts { m.stmt(st) }
-            if q.X is not null { m.expr(q.X!) }
+            if q.X != null { m.expr(q.X!) }
         }
         case typed.Expr.Match(_, _, mt) {
             for st in mt.Held { m.stmt(st) }
             for a in mt.Arms {
                 for alt in a.Alts { m.binds(alt) }
-                if a.Code is not null { m.block(a.Code!) }
-                if a.Value is not null { m.expr(a.Value!) }
+                if a.Code != null { m.block(a.Code!) }
+                if a.Value != null { m.expr(a.Value!) }
             }
-            if mt.NoMatch is not null {
-                if mt.NoMatch!.Code is not null { m.block(mt.NoMatch!.Code!) }
+            if mt.NoMatch != null {
+                if mt.NoMatch!.Code != null { m.block(mt.NoMatch!.Code!) }
             }
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X is not null { m.expr(t.X!) }
+            if t.X != null { m.expr(t.X!) }
             for c in t.Clauses {
-                if c.Code is not null { m.block(c.Code!) }
+                if c.Code != null { m.block(c.Code!) }
             }
         }
         case typed.Expr.Call(_, _, c) {
             for a in c.Args { m.expr(a) }
         }
         case typed.Expr.Cond(_, _, c) {
-            if c.A is not null { m.expr(c.A!) }
+            if c.A != null { m.expr(c.A!) }
             m.expr(c.B)
         }
         case _ { }
@@ -4790,12 +4790,12 @@ fn (m mut mustW&) placeMust(p typed.Lvalue&) I64 {
 
 fn (m mut mustW&) callMust(c typed.Call&) I64 {
     b2 := typed.CalleeBody(c)
-    if b2 < 0 or m.F.Bodies[b2].Root is null { return MustNone }
+    if b2 < 0 or m.F.Bodies[b2].Root == null { return MustNone }
     return m.F.mustRes[b2]
 }
 
 fn (m mut mustW&) tryMust(t typed.Try&) I64 {
-    if t.X is null { return MustNone }
+    if t.X == null { return MustNone }
     v := m.exprMust(t.X!)
     for c in t.Clauses {
         for d in c.Defaults { v = meet(v, m.exprMust(d)) }
@@ -4824,7 +4824,7 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
         }
         case typed.Expr.Call(_, _, c) {
             b2 := typed.CalleeBody(c)
-            if b2 < 0 or f.Bodies[b2].Root is null { return false }
+            if b2 < 0 or f.Bodies[b2].Root == null { return false }
             body := f.Bodies[b2]
             if t.Role(body.Ty) == types.RoleCtor { return true }
             if t.Results(body.Ty).Len() != 1 { return false }
@@ -4839,7 +4839,7 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
             }
         }
         case typed.Expr.Try(_, _, tr) {
-            if tr.X is null or not m.fresh(tr.X!, depth + 1) { return false }
+            if tr.X == null or not m.fresh(tr.X!, depth + 1) { return false }
             for c in tr.Clauses {
                 for d in c.Defaults {
                     if not m.fresh(d, depth + 1): return false
@@ -4926,7 +4926,7 @@ fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
     if c.Site < typed.SiteId(0) { return }
     for j in range c.Args.Len() {
         r := w.rootOf(c.Args[j])
-        if r is null: continue
+        if r == null: continue
         q := w.rootPlace(r)
         if q < 0: continue
         w.F.ors.Push(orCall(w.Id, I64(c.Site), b2, j, q, r, c.Args[j]))
@@ -4937,7 +4937,7 @@ fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
 # a store into a field reached through a value of a sole place: the value's parts built where that value is
 fn (w mut walker&) orStoreOf(p typed.Lvalue&, x typed.Expr&) {
     r := derefRoot(p)
-    if r is null { return }
+    if r == null { return }
     q := w.rootPlace(r)
     if q < 0 { return }
     w.F.orStores.Push(orStore(w.Id, q, x, r))
@@ -4976,7 +4976,7 @@ fn (f mut Free&) decide() {
         }
     }
     for oc in f.ors {
-        if not f.dtorVal[oc.PlaceId] and (f.Bodies[oc.Callee].Root is null or f.regOut[oc.Callee]) {
+        if not f.dtorVal[oc.PlaceId] and (f.Bodies[oc.Callee].Root == null or f.regOut[oc.Callee]) {
             f.keep(oc.PlaceId, RDtor, -1, source.Span(0, 0), "a call building into what it holds may register an instance whose destructor is still to run (O16)")
         }
     }
@@ -5058,7 +5058,7 @@ fn (f Free&) outerFirst() Vec<I64> {
     out.Sort(fn(a I64, b I64) Bool {
         x, y := f.stores[a], f.stores[b]
         if x.Body != y.Body: return x.Body < y.Body
-        if x.X is null or y.X is null: return a < b
+        if x.X == null or y.X == null: return a < b
         p, q := x.X!.Span(), y.X!.Span()
         if p.Start != q.Start: return p.Start < q.Start
         if p.End != q.End: return p.End > q.End
@@ -5078,7 +5078,7 @@ fn (f mut Free&) siteScope(b I64, x typed.Expr&) typed.Scope {
         case typed.Expr.Collect(_, _, c): pl.Built[I64(c.Site)]
         case typed.Expr.Call(_, _, c): pl.Passed(c.Site, f.resultVar(typed.CalleeBody(c))) if c.Site >= typed.SiteId(0) else typed.Scope.Unset
         case typed.Expr.Away(_, _, y): f.siteScope(b, y)
-        case typed.Expr.Seq(_, _, sq): f.siteScope(b, sq.X!) if sq.X is not null else typed.Scope.Unset
+        case typed.Expr.Seq(_, _, sq): f.siteScope(b, sq.X!) if sq.X != null else typed.Scope.Unset
         case _: typed.Scope.Unset
     }
 }
@@ -5130,7 +5130,7 @@ fn (f mut Free&) placeable(st store) Bool {
         case typed.Expr.Call(_, _, _) { }
         case _ { return true }
     }
-    if c is null { return true }
+    if c == null { return true }
     b2 := typed.CalleeBody(c)
     if b2 < 0 { return true }
     return f.varsFit(st.Body, c, b2, f.siteScope(st.Body, x), f.resultVar(b2)) >= 0
@@ -5144,7 +5144,7 @@ fn (f mut Free&) copiedPlain(c typed.Call&, b2 I64) Bool {
     vs := f.viewsOf(b2)
     if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c, vs): return false
     body := f.Bodies[b2]
-    if f.T().Role(body.Ty) != types.RoleCtor or body.Root is null: return false
+    if f.T().Role(body.Ty) != types.RoleCtor or body.Root == null: return false
     for st in body.Root!.Stmts {
         match st {
             case typed.Stmt.Let(_, _, typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _)) {
@@ -5244,7 +5244,7 @@ fn (f mut Free&) writePlans() {
         at := f.siteScope(os.Body, os.X)
         if not runs(at) and pl.RegionKind[top] == 0: continue
         if pl.RegionKind[top] == 1 {
-            if pl.RegionRoot[top] is null {
+            if pl.RegionRoot[top] == null {
                 pl.RegionRoot[top] = os.Root
                 pl.RootGuard[top] = f.guard(os.Body, os.PlaceId)
             }
@@ -5270,7 +5270,7 @@ fn (f mut Free&) writePlans() {
         at := pl.Passed(site, v)
         if not runs(at): continue
         call := f.callAt(oc.Body, oc.Site)
-        if call is null: continue
+        if call == null: continue
         set := f.orVars(oc.Body, call, oc.Callee, at, v)
         if set < 0: continue
         pl.RegionKind[oc.Site] = 2
@@ -5316,14 +5316,14 @@ fn (f mut Free&) orVars(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64
 # the call at a site of a body, found by walking it
 fn (f mut Free&) callAt(b I64, site I64) typed.Call?& {
     body := f.Bodies[b]
-    if body.Root is null { return null }
+    if body.Root == null { return null }
     return findCallBlock(body.Root!, site)
 }
 
 fn findCallBlock(bl typed.Block&, site I64) typed.Call?& {
     for st in bl.Stmts {
         c := findCallStmt(st, site)
-        if c is not null: return c
+        if c != null: return c
     }
     return null
 }
@@ -5331,11 +5331,11 @@ fn findCallBlock(bl typed.Block&, site I64) typed.Call?& {
 fn findCallStmt(st typed.Stmt&, site I64) typed.Call?& {
     return match st {
         case typed.Stmt.Let(_, _, x): findCall(x, site)
-        case typed.Stmt.Assign(_, p, x): findCall(x, site) if findCall(x, site) is not null else findCallPlace(p, site)
+        case typed.Stmt.Assign(_, p, x): findCall(x, site) if findCall(x, site) != null else findCallPlace(p, site)
         case typed.Stmt.Eval(_, x): findCall(x, site)
         case typed.Stmt.If(_, i): findIf(i, site)
-        case typed.Stmt.Loop(_, body, post): findCallBlock(body, site) if findCallBlock(body, site) is not null else (findCallBlock(post, site) if post is not null else null)
-        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x): findCall(x, site) if x is not null else null
+        case typed.Stmt.Loop(_, body, post): findCallBlock(body, site) if findCallBlock(body, site) != null else (findCallBlock(post, site) if post != null else null)
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x): findCall(x, site) if x != null else null
         case typed.Stmt.Block(_, b): findCallBlock(b, site)
         case typed.Stmt.Defer(_, b): findCallBlock(b, site)
         case _: null
@@ -5344,10 +5344,10 @@ fn findCallStmt(st typed.Stmt&, site I64) typed.Call?& {
 
 fn findIf(i typed.If&, site I64) typed.Call?& {
     c := findCall(i.Test, site)
-    if c is not null { return c }
+    if c != null { return c }
     c = findCallBlock(i.Then, site)
-    if c is not null { return c }
-    if i.Else is not null { return findCallBlock(i.Else!, site) }
+    if c != null { return c }
+    if i.Else != null { return findCallBlock(i.Else!, site) }
     return null
 }
 
@@ -5355,7 +5355,7 @@ fn findCallPlace(p typed.Lvalue&, site I64) typed.Call?& {
     return match p {
         case typed.Lvalue.Deref(_, _, r): findCall(r, site)
         case typed.Lvalue.Field(_, _, b, _): findCallPlace(b, site)
-        case typed.Lvalue.Elem(_, _, e): findCallPlace(e.Base, site) if findCallPlace(e.Base, site) is not null else findCall(e.Index, site)
+        case typed.Lvalue.Elem(_, _, e): findCallPlace(e.Base, site) if findCallPlace(e.Base, site) != null else findCall(e.Index, site)
         case _: null
     }
 }
@@ -5366,7 +5366,7 @@ fn findCall(x typed.Expr&, site I64) typed.Call?& {
             if I64(c.Site) == site { return c }
             for a in c.Args {
                 d := findCall(a, site)
-                if d is not null: return d
+                if d != null: return d
             }
             match c.Target {
                 case typed.Callee.Value(v) { return findCall(v, site) }
@@ -5380,35 +5380,35 @@ fn findCall(x typed.Expr&, site I64) typed.Call?& {
         case typed.Expr.Make(_, _, m) {
             for a in m.Items {
                 d := findCall(a, site)
-                if d is not null: return d
+                if d != null: return d
             }
             return null
         }
         case typed.Expr.Prim(_, _, _, _, args) {
             for a in args {
                 d := findCall(a, site)
-                if d is not null: return d
+                if d != null: return d
             }
             return null
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X is not null { return findCall(t.X!, site) }
+            if t.X != null { return findCall(t.X!, site) }
             return null
         }
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts {
                 d := findCallStmt(st, site)
-                if d is not null: return d
+                if d != null: return d
             }
-            if q.X is not null { return findCall(q.X!, site) }
+            if q.X != null { return findCall(q.X!, site) }
             return null
         }
         case typed.Expr.Cond(_, _, c) {
             d := findCall(c.C, site)
-            if d is not null { return d }
-            if c.A is not null {
+            if d != null { return d }
+            if c.A != null {
                 d = findCall(c.A!, site)
-                if d is not null { return d }
+                if d != null { return d }
             }
             return findCall(c.B, site)
         }
@@ -5428,7 +5428,7 @@ fn (f mut Free&) topSite(x typed.Expr&) I64 {
         case typed.Expr.Away(_, _, y): f.topSite(y)
         # a sequence's value (a lane operation's result, E39): its statements run where it stands, its value built at
         # its own site
-        case typed.Expr.Seq(_, _, sq): f.topSite(sq.X!) if sq.X is not null else -1
+        case typed.Expr.Seq(_, _, sq): f.topSite(sq.X!) if sq.X != null else -1
         case _: -1
     }
 }
@@ -5462,7 +5462,7 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
         }
         case typed.Expr.Call(_, _, c) {
             b2 := typed.CalleeBody(c)
-            if b2 < 0 or c.Site < typed.SiteId(0) or f.Bodies[b2].Root is null { return }
+            if b2 < 0 or c.Site < typed.SiteId(0) or f.Bodies[b2].Root == null { return }
             rv := f.resultVar(b2)
             # a constructor's instance is part of the value; a call's result copied by a promotion is garbage in it
             ctor := f.T().Role(f.Bodies[b2].Ty) == types.RoleCtor
@@ -5481,7 +5481,7 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
         case typed.Expr.Away(_, _, y) { f.redirect(b, y, top, at, self, copied) }
         # a sequence's value is built in the region, its statements where they stand
         case typed.Expr.Seq(_, _, sq) {
-            if sq.X is not null { f.redirect(b, sq.X!, top, at, self, copied) }
+            if sq.X != null { f.redirect(b, sq.X!, top, at, self, copied) }
         }
         case _ { }
     }
@@ -5621,7 +5621,7 @@ fn (f mut Free&) SlotPlace(k I64) Bool {
 fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
     if not f.Done { return -1 }
     b2 := typed.CalleeBody(c)
-    if b2 < 0 or f.Bodies[b2].Root is null { return -1 }
+    if b2 < 0 or f.Bodies[b2].Root == null { return -1 }
     m := f.mustRes[b2]
     if m < MovBase { return -1 }
     return m - MovBase
@@ -5832,7 +5832,7 @@ fn (f mut Free&) Dump() String {
         for st in f.stores {
             if st.PlaceId == k: sto++
         }
-        nm := f.Sc.Spell!(f.keyTy[k]) if f.Sc.Spell is not null else $t.Canon(f.keyTy[k])
+        nm := f.Sc.Spell!(f.keyTy[k]) if f.Sc.Spell != null else $t.Canon(f.keyTy[k])
         b.Push($"place " $k " " $nm "." $f.keyField[k] $(" handle" if f.handle[k] else "") " sole " $f.IsSole(k) " lets " $lets " stores " $sto " why " $f.whyKind[k] " " $f.why[k].Text "\n")
     }
     for st in f.stores {
@@ -5859,13 +5859,13 @@ fn (f mut Free&) withinExpr(locals Vec<I64>&, x typed.Expr&) I64 {
         case typed.Expr.Borrow(_, _, p) { return f.withinPl(locals, p) }
         case typed.Expr.Call(_, _, c) {
             b2 := typed.CalleeBody(c)
-            if b2 < 0 or f.Bodies[b2].Root is null or t.Results(f.Bodies[b2].Ty).Len() != 1 { return MustNone }
+            if b2 < 0 or f.Bodies[b2].Root == null or t.Results(f.Bodies[b2].Ty).Len() != 1 { return MustNone }
             e := t.ResultFrom(f.Bodies[b2].Ty, 0)
             if e < 0 or e >= c.Args.Len() { return MustNone }
             return f.withinExpr(locals, c.Args[e])
         }
         case typed.Expr.Try(_, _, tr) {
-            if tr.X is null { return MustNone }
+            if tr.X == null { return MustNone }
             for cl in tr.Clauses {
                 if cl.Defaults.Len() > 0: return MustNone
             }

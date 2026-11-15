@@ -20,7 +20,7 @@ fn (c mut Cache&) Put(k String&) { c.keys.Push(k) }
 
 fn (c mut Cache&) Evict() {
     for k in c.keys {
-        if c.onEvict is not null { c.onEvict!(k) }
+        if c.onEvict != null { c.onEvict!(k) }
     }
     c.keys.Clear()
 }

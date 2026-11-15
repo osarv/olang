@@ -147,7 +147,7 @@ test "T33: == is the same instance; an any renders its instance" {
     z any Named& = Cat("tom")
     assert x == y and x != z
     m any Named?& = null
-    assert m is null
+    assert m == null
     m = c
     assert m == x
     assert $x == "Cat(\"tom\")"

@@ -283,7 +283,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
         if name.Contains("$") { continue }          # an error type's hidden payload enum (T19b), shown with its words
         if e.Kind == names.What.Func {
             f := c.P.FnNamed(mi, e.Name)
-            if f < 0 or c.P.FnDecl(f).Recv is not null { continue }
+            if f < 0 or c.P.FnDecl(f).Recv != null { continue }
         } else if e.Kind != names.What.Global and e.Kind != names.What.Type {
             continue
         }
@@ -305,7 +305,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
             md.Items.Push(bit)
             continue
         }
-        if c.P.FnModule(f) != mi or decl.Recv is null { continue }
+        if c.P.FnModule(f) != mi or decl.Recv == null { continue }
         name := $nm.Text(decl.Name)
         if not all and not Exported(name) { continue }
         if receiverModule(c, f) == mi { continue }
@@ -359,8 +359,8 @@ fn examplesIn(c mut typecheck.Checker&, ds Array<ast.Decl&>&, text String&, targ
                 out.Push(Example(ast.TestDesc(d, text), bodyText(text, body)))
             }
             case ast.Decl.If(_, ti) {
-                if ti.Then is not null { examplesIn(c, ti.Then!.Decls, text, target, out) }
-                if ti.Else is not null { examplesIn(c, ti.Else!.Decls, text, target, out) }
+                if ti.Then != null { examplesIn(c, ti.Then!.Decls, text, target, out) }
+                if ti.Else != null { examplesIn(c, ti.Else!.Decls, text, target, out) }
             }
             case _ { }
         }
@@ -589,7 +589,7 @@ fn memberAt(c mut typecheck.Checker&, mi I64, d types.DeclId, name String&) I64 
         return WordIn(text, from + open, name)
     }
     td := c.P.TypeDecl(d)
-    if td is null or td.Body is null { return -1 }
+    if td == null or td.Body == null { return -1 }
     match td.Body {
         case ast.TypeBody.Enum(cases, _) {
             for cd in cases {

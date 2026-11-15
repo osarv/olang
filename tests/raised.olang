@@ -34,7 +34,7 @@ test "an error raised by name is caught by its name and is one error wherever it
 test "it prints by its name, is held as a value and compared" {
     assert named(-1) == "Negative" and named(3) == "Odd" and named(2) == "none"
     held Negative = null
-    assert held is null
+    assert held == null
     try half(-2) catch Negative n { held = n }
     assert held == Negative and $held == "Negative"
     got Vec<Odd>

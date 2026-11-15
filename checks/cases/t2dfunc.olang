@@ -4,4 +4,4 @@
 type Box struct() {
     f weak fn?&(x I64) I64 = null
 }
-fn main() { assert Box().f is null }
+fn main() { assert Box().f == null }

@@ -7,5 +7,5 @@ fn main() {
     try f() catch e { y = e }
     assert y == P.A
     z := y
-    assert z is not null
+    assert z != null
 }

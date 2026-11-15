@@ -28,7 +28,7 @@ type Node struct(v I64, next Node?& = null) { v, next }
 fn total(n Node?&) I64 {
     s := 0
     p := n
-    for p is not null {
+    for p != null {
         s += p.v
         p = p.next
     }

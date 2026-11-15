@@ -985,14 +985,14 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                 owner ast.TypeRef?& = null
                 member := source.NameId(0)
                 on := source.NameId(0)
-                if recv is null and p.sees(token.Tok.Iden) and p.look(1) == token.Tok.Dot {
+                if recv == null and p.sees(token.Tok.Iden) and p.look(1) == token.Tok.Dot {
                     ot := p.tk()
                     on = try p.name()
                     owner = ast.TypeRef.Named(source.Span(ot.Start, ot.End), Array<source.NameId>(1, on), Array<ast.TypeRef&>(0))
                     p.advance()
                 }
                 mn := try p.methodName()
-                if owner is not null {
+                if owner != null {
                     member = mn
                     mn = p.names.Intern($p.names.Text(on) "." $p.names.Text(member))
                 }
@@ -1058,7 +1058,7 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
     # variables bare ("fn (l List<T>&) Push(x T)"): names no type has, written as its type's arguments
     tps Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
     if p.sees(token.Tok.Lt) { tps = try p.typeParams() }
-    if recv is not null and recv.Ty is not null { p.receiverVars(recv.Ty!, false) }
+    if recv != null and recv.Ty != null { p.receiverVars(recv.Ty!, false) }
     s := try p.sig(false, false, true)
     braced := p.sees(token.Tok.LBrace)
     body := try p.block() catch {
@@ -1110,7 +1110,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
         }
         case ast.TypeRef.Ref(_, of, _, _) { p.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _) {
-            if of is not null { p.receiverVars(of, inArgs) }
+            if of != null { p.receiverVars(of, inArgs) }
         }
         case _ { }
     }
@@ -1164,7 +1164,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>& ? Fail {
             t := try p.typeExpr()
             p.noGt = wasNoGt
             p.item = wasItem
-            if ty is null { ty = t } else { also.Push(t) }
+            if ty == null { ty = t } else { also.Push(t) }
         }
         l.Push(ast.TypeParam(p.from(pat), pn, ty, also.ToArray()))
         if p.sees(token.Tok.Question) { continue }
@@ -1272,7 +1272,7 @@ fn (p mut Parser&) contractHere() ast.ContractBlock?& ? Fail {
 
 # s with a contract k, null for none
 fn (p mut Parser&) withContract(s ast.Sig&, k ast.ContractBlock?&) ast.Sig& {
-    if k is null { return s }
+    if k == null { return s }
     return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, k, s.Commutes, s.Variadic, s.Promises)
 }
 
@@ -1373,11 +1373,11 @@ fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Boo
     seen := -1
     for i in range ps.Len() {
         ty := ps[i].Ty
-        if seen >= 0 and ps[i].Dflt is null {
+        if seen >= 0 and ps[i].Dflt == null {
             p.report(ps[i].Sp.Start, ps[i].Sp.End, msgs.VariadicNotLast())
             return
         }
-        if ty is null or not isSpreadType(ty) { continue }
+        if ty == null or not isSpreadType(ty) { continue }
         if inExtern or not allowed {
             p.report(ty.Span().Start, ty.Span().End, msgs.VariadicHere("an extern's - C's variable arguments are '...'" if inExtern else "a constructor's or a case's - take an array, 'xs Array<T>&'"))
             return
@@ -1386,7 +1386,7 @@ fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Boo
             p.report(ps[i].Sp.Start, ps[i].Sp.End, msgs.VariadicNotLast())
             return
         }
-        if ps[i].Dflt is not null { p.report(ps[i].Dflt!.Span().Start, ps[i].Dflt!.Span().End, msgs.VariadicDefault()) }
+        if ps[i].Dflt != null { p.report(ps[i].Dflt!.Span().Start, ps[i].Dflt!.Span().End, msgs.VariadicDefault()) }
         seen = i
     }
 }
@@ -1476,7 +1476,7 @@ fn (p mut Parser&) weakType() ast.TypeRef& ? Fail {
     p.advance()
     t := try p.typeExpr()
     w := weakened(t)
-    if w is null {
+    if w == null {
         p.report(at, at + 4, msgs.WeakNotNullable($p.src.Text[I64(at) + 5:I64(p.prevEnd)]))
         return t
     }
@@ -1488,9 +1488,9 @@ fn weakened(t ast.TypeRef&) ast.TypeRef?& {
     match t {
         case ast.TypeRef.Ref(sp, of, nullable, _) { return ast.TypeRef.Ref(sp, of, true, true) if nullable else null }
         case ast.TypeRef.Perm(sp, of, w) {
-            if of is null: return null
+            if of == null: return null
             inner := weakened(of)
-            return ast.TypeRef.Perm(sp, inner, w) if inner is not null else null
+            return ast.TypeRef.Perm(sp, inner, w) if inner != null else null
         }
         case _ { return null }
     }
@@ -1579,7 +1579,7 @@ fn isFuncType(t ast.TypeRef&) Bool { return t.IsFunc() }
 # results or several error items), or one with no error set before the "?" of the signature it is a result of
 fn (p Parser&) grouped(t ast.TypeRef&) Bool {
     s := t.FuncSig()
-    if s is null: return false
+    if s == null: return false
     if s.Results.Len() > 1 or s.Errors.Len() > 1 { return true }
     return not s.HasErrors and p.sees(token.Tok.Question)
 }
@@ -1843,7 +1843,7 @@ fn (p mut Parser&) block() Array<ast.Stmt&>& ? Fail {
 fn (p mut Parser&) fieldAttrs(s ast.Stmt&, attrs Array<ast.Attr&>&) ast.Stmt& {
     match s {
         case ast.Stmt.Var(sp, v) {
-            if v.Field and v.Names.Len() == 1 and (v.Ty is not null or v.Values.Len() > 0) {
+            if v.Field and v.Names.Len() == 1 and (v.Ty != null or v.Values.Len() > 0) {
                 p.declareAttrs(attrs)
                 return ast.Stmt.Var(sp, ast.VarDecl(v.Names, v.NameSps, v.Ty, v.Values, v.Infer, v.Field, attrs))
             }
@@ -2005,7 +2005,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
 # L9a: the keywords a field may be named by
 fn keywordNamesField(k token.Tok) Bool {
     return match k {
-        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or: true
+        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.As, token.Tok.And, token.Tok.Or: true
         case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Type, token.Tok.Struct: true
         case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test: true
         case token.Tok.Extern, token.Tok.Default: true
@@ -2888,7 +2888,7 @@ fn (p Parser&) prec(k token.Tok) I64 {
         case token.Tok.Caret: 5 if p.OldBitwise else 7
         case token.Tok.Amp: 6 if p.OldBitwise else 8
         case token.Tok.EqEq, token.Tok.NotEq: 7 if p.OldBitwise else 4
-        case token.Tok.In, token.Tok.Is, token.Tok.Not: 8 if p.OldBitwise else 5
+        case token.Tok.In, token.Tok.Not: 8 if p.OldBitwise else 5
         case token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge: 0 if p.noGt else (8 if p.OldBitwise else 5)
         case token.Tok.Shl, token.Tok.Shr: 0 if p.noGt else 9
         case token.Tok.Plus, token.Tok.Minus: 10
@@ -2898,13 +2898,13 @@ fn (p Parser&) prec(k token.Tok) I64 {
     }
 }
 
-# whether an expression is a comparison, unparenthesized: ==, !=, an ordering or a chain of them, in, not in, is (E5)
+# whether an expression is a comparison, unparenthesized: ==, !=, an ordering or a chain of them, in, not in (E5)
 fn comparison(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Binary(_, op, _, _) {
             return op == token.Tok.EqEq or op == token.Tok.NotEq or isOrdering(op) or op == token.Tok.In
         }
-        case ast.Expr.Chain(_, _), ast.Expr.NotIn(_, _, _), ast.Expr.Is(_, _, _, _), ast.Expr.IsType(_, _, _, _) {
+        case ast.Expr.Chain(_, _), ast.Expr.NotIn(_, _, _) {
             return true
         }
         case _ { return false }
@@ -2942,19 +2942,6 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
             links++
             continue
         }
-        if k == token.Tok.Is {
-            negated := p.accept(token.Tok.Not)
-            if p.startsType() {
-                t := try p.typeExpr()
-                left = ast.Expr.IsType(source.Span(start, p.prevEnd), left, t, negated)
-            } else {
-                y := try p.binary(pr + 1)
-                left = ast.Expr.Is(source.Span(start, p.prevEnd), left, y, negated)
-            }
-            try p.enter()
-            links++
-            continue
-        }
         right := try p.binary(pr + 1)
         if isOrdering(k) and isOrdering(p.peek()) and p.prec(p.peek()) > 0 {
             # a chain: a < b <= c (E30)
@@ -2985,28 +2972,6 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
         try p.enter()
         links++
     }
-}
-
-# whether what follows "is" is a type by its form: "mut", "fn", type arguments or a marker. A bare path is
-# left to the resolver (DESIGN.md point 1)
-fn (p mut Parser&) startsType() Bool {
-    k := p.peek()
-    if k == token.Tok.Mut or k == token.Tok.Fn { return true }
-    if k != token.Tok.Iden { return false }
-    i I64 = 1
-    for p.look(i) == token.Tok.Dot and p.look(i + 1) == token.Tok.Iden { i += 2 }
-    n := p.look(i)
-    if n == token.Tok.Amp { return not p.lookTok(i).Has(token.Space) }
-    if n == token.Tok.Lt { return p.isTypePath(i) }
-    return false
-}
-
-# whether the path at the next i tokens names a type, by the oracle
-fn (p mut Parser&) isTypePath(n I64) Bool {
-    if n == 1 { return p.oracle.bare.Has(p.names.Intern(p.text(p.tk()))) }
-    t StringBuilder = StringBuilder()
-    for i in range n { t.Push(p.text(p.lookTok(i))) }
-    return p.oracle.qualified.Has(t.ToString())
 }
 
 # unary: "not" binary | text | prefix-op unary | postfix
@@ -3211,7 +3176,7 @@ fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
             }
         }
         p.Subscripts.Push(lb)
-        first := try p.axisItem(p.here() if lo is null else lo.Span().Start, lo)
+        first := try p.axisItem(p.here() if lo == null else lo.Span().Start, lo)
         # E16a: one range alone is the one-axis slice
         if p.sees(token.Tok.RBrack) and isAxis(first) {
             p.advance()
@@ -4010,7 +3975,7 @@ fn shapeDecl(d ast.Decl&, names source.Names&, text String&) String {
             b.Push("type " $names.Text(t.Name))
             match t.Body {
                 case ast.TypeBody.Trait(ms, _, _) {
-                    for m in ms: b.Push(" " $("mut " if m.Recv is not null else "") $names.Text(m.Name))
+                    for m in ms: b.Push(" " $("mut " if m.Recv != null else "") $names.Text(m.Name))
                 }
                 case _ { }
             }
@@ -4025,9 +3990,9 @@ fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
         case ast.Stmt.ExprS(_, x): shapeExpr(x, names, text)
         case ast.Stmt.Return(_, vs): "return" $(" " $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
         case ast.Stmt.Become(_, x): "become " $shapeExpr(x, names, text)
-        case ast.Stmt.Var(_, v): "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty is not null else "")
+        case ast.Stmt.Var(_, v): "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty != null else "")
         case ast.Stmt.Multi(_, m): "multi" $m.Targets.Len() $(":=" if m.Define else "=") $m.Values.Len()
-        case ast.Stmt.If(_, i): "if" $(" else" if i.Else is not null else "")
+        case ast.Stmt.If(_, i): "if" $(" else" if i.Else != null else "")
         case _: "stmt"
     }
 }

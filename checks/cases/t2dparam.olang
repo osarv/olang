@@ -5,5 +5,5 @@ type Node struct(v I64) {
     next mut Node?& = null
     prev weak Node?& = null
 }
-fn first(n weak Node?&) I64 { return 0 if n is null else n.v }
+fn first(n weak Node?&) I64 { return 0 if n == null else n.v }
 fn main() { assert first(null) == 0 }

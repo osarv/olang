@@ -38,16 +38,16 @@ import dlfcn "dlfcn.h"
 fn LoadLibrary(link String&) String {
     path := $("lib" $link[2:] ".so") if link.StartsWith("-l") else $link
     if path.EndsWith(".a") or path.EndsWith(".o") { return "a static library or an object, which only a link takes" }
-    if dlfcn.dlopen(path.ToC(), 258) is not null { return "" }
+    if dlfcn.dlopen(path.ToC(), 258) != null { return "" }
     e := dlfcn.dlerror()
-    why := String.FromC(e, 400) if e is not null else "dlopen failed"
+    why := String.FromC(e, 400) if e != null else "dlopen failed"
     # a library that is a linker script (glibc's libm.so: "GROUP ( /lib/.../libm.so.6 ... )"): the first library it
     # names, as the link takes it
     at := try why.Find(": invalid ELF header") catch { return why }
     script := try os.ReadFile(why[:at]) catch os.Error { return why }
     named := scriptLibrary(script)
     if named == "" { return why }
-    if dlfcn.dlopen(named.ToC(), 258) is not null { return "" }
+    if dlfcn.dlopen(named.ToC(), 258) != null { return "" }
     return why
 }
 
@@ -182,7 +182,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     }
     for t in tops {
         ti := findIf(l.Mods[t.First].Decls, t.Second)
-        if ti is null { continue }
+        if ti == null { continue }
         ch := chained.chain(x, c, t.First, ti)
         chosen, ok, why, at := ch.Chosen, ch.Decided, ch.Why, ch.At
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
@@ -229,7 +229,7 @@ fn chained.chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) c
     file := c.P.L.Mods[mi].File
     k I64 = 0
     link ast.TopIf?& = ti
-    for link is not null {
+    for link != null {
         csp := link.Cond!.Span()
         at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
         b := c.CondBody(mi, link.Cond!)
@@ -243,7 +243,7 @@ fn chained.chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) c
         }
         if x.Held() { return chained(k, true, "", at) }
         k++
-        if link.ElseIf is null { return chained((k if link.Else is not null else load.NoBranch), true, "", at) }
+        if link.ElseIf == null { return chained((k if link.Else != null else load.NoBranch), true, "", at) }
         link = link.ElseIf
     }
     return chained(load.NoBranch, true, "", diag.Where.Span(file, 0, 0))
@@ -263,9 +263,9 @@ fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?& {
     for d in ds {
         match d {
             case ast.Decl.If(_, ti) {
-                if ti.Cond is not null and ti.Cond!.Span().Start == at { return ti }
+                if ti.Cond != null and ti.Cond!.Span().Start == at { return ti }
                 f := findInIf(ti, at)
-                if f is not null { return f }
+                if f != null { return f }
             }
             case _ { }
         }
@@ -274,14 +274,14 @@ fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?& {
 }
 
 fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?& {
-    if ti is null { return null }
-    if ti.Then is not null {
+    if ti == null { return null }
+    if ti.Then != null {
         f := findIf(ti.Then!.Decls, at)
-        if f is not null { return f }
+        if f != null { return f }
     }
-    if ti.Else is not null {
+    if ti.Else != null {
         f := findIf(ti.Else!.Decls, at)
-        if f is not null { return f }
+        if f != null { return f }
     }
     return findInIf(ti.ElseIf, at)
 }
@@ -604,7 +604,7 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
         if of != typed.BodyOf.Global { continue }
         m, n := of.module, of.name
         gd := c.P.GlobalDecl(m, n)
-        if gd is not null and generic.WrittenMut(gd.Ty) {
+        if gd != null and generic.WrittenMut(gd.Ty) {
             mimg := try x.bakeMutable(m, n) catch eval.NotBaked { continue }
             out.Put(i, mimg)
             continue
@@ -639,7 +639,7 @@ fn unbaked(x mut Exec&, c mut typecheck.Checker&, d mut diag.Diagnostics&, i I64
         return
     }
     # G39: an attribute's value is built while compiling, or is an error - never set at startup
-    if av is not null and av.Hidden {
+    if av != null and av.Hidden {
         # one evaluated with nothing to write - of no size, or reaching storage it cannot hold - is built all the same,
         # and set at startup as any global
         why, _, _ := valueWhy(x.M.Stopped, b.Sp)
@@ -905,12 +905,12 @@ fn (x mut Exec&) start() {
         match b.Of {
             case typed.BodyOf.Dtor(t) { x.dtorOf.Put(t, i) }
             case typed.BodyOf.Global(m, n) {
-                if b.Root is null { continue }
+                if b.Root == null { continue }
                 ty := globalType(b, m, n)
                 if ty == types.UnknownT { continue }
                 k := mir.FnKey.Body(typed.BodyId(I32(i)))
                 gd := x.P.GlobalDecl(m, n)
-                mutable := gd is not null and generic.WrittenMut(gd.Ty)
+                mutable := gd != null and generic.WrittenMut(gd.Ty)
                 x.M.DefineGlobal(m, n, ty, mutable, k)
                 if x.buildDefault(m, ty, mutable) { x.M.BuildGlobal(m, n) }
                 x.Globals.Push(i)
@@ -1085,7 +1085,7 @@ fn (x mut Exec&) Entries() Vec<I64>, I64 {
     for i in range x.Bodies.Len() {
         match x.Bodies[i].Of {
             case typed.BodyOf.Test(_) {
-                if x.Bodies[i].Root is not null { tests.Push(i) }
+                if x.Bodies[i].Root != null { tests.Push(i) }
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
@@ -1103,7 +1103,7 @@ fn (x mut Exec&) selected(id I64, words Array<String&>&) Bool {
     if words.Len() == 0 { return true }
     m := x.P.L.Mods[x.P.L.Root]
     d := ast.FindTest(m.Decls, x.Bodies[id].Sp)
-    if d is null { return false }
+    if d == null { return false }
     tg := ast.TestTarget(d, x.P.L.Names)
     ds := ast.TestDesc(d, m.Src!.Text)
     for w in words {
@@ -1116,7 +1116,7 @@ fn (x mut Exec&) selected(id I64, words Array<String&>&) Bool {
 fn (x mut Exec&) TestName(id I64) String {
     m := x.P.L.Mods[x.P.L.Root]
     d := ast.FindTest(m.Decls, x.Bodies[id].Sp)
-    if d is null { return "test" }
+    if d == null { return "test" }
     return ast.TestLabel(d, m.Src!.Text, x.P.L.Names)
 }
 
@@ -1179,7 +1179,7 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
         m := x.P.L.Mods[x.P.L.Root]
         for t in all {
             td := ast.FindTest(m.Decls, x.Bodies[t].Sp)
-            if td is null: continue
+            if td == null: continue
             tg := ast.TestTarget(td, x.P.L.Names)
             if tg != "": x.TestWords.Push(tg)
             x.TestWords.Push(ast.TestDesc(td, m.Src!.Text))

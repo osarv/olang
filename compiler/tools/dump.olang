@@ -432,7 +432,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
             match t.Body {
                 case ast.TypeBody.Struct(s) { w.structBody(s) }
                 case ast.TypeBody.Over(_, ctor) {
-                    if ctor is not null { w.func(ctor) }
+                    if ctor != null { w.func(ctor) }
                 }
                 case _ { }
             }
@@ -467,7 +467,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
             if w.skipped(sp.Start) { return }
             w.line("ASSERT", sp)
             w.expr(k)
-            if msg is not null { w.expr(msg) }
+            if msg != null { w.expr(msg) }
         }
     }
 }
@@ -481,14 +481,14 @@ fn (w mut walker&) structBody(s ast.StructBody&) {
 }
 
 fn (w mut walker&) topIf(i ast.TopIf?&) {
-    if i is null { return }
+    if i == null { return }
     w.topBranch(i.Then)
     w.topIf(i.ElseIf)
     w.topBranch(i.Else)
 }
 
 fn (w mut walker&) topBranch(b ast.TopBranch?&) {
-    if b is null or b.Decls.Len() == 0 { return }
+    if b == null or b.Decls.Len() == 0 { return }
     for d in b.Decls { w.decl(d) }
 }
 
@@ -508,7 +508,7 @@ fn (w mut walker&) vars(v ast.VarDecl&) {
     for k in range v.Names.Len() {
         sp := v.NameSps[k]
         end := sp.End
-        if v.Ty is not null and v.Ty!.Span().End > end { end = v.Ty!.Span().End }
+        if v.Ty != null and v.Ty!.Span().End > end { end = v.Ty!.Span().End }
         if k < v.Values.Len() and v.Values[k].Span().End > end { end = v.Values[k].Span().End }
         w.line(kind, source.Span(sp.Start, end))
     }
@@ -521,7 +521,7 @@ fn (w mut walker&) stmts(body Array<ast.Stmt&>&) {
 }
 
 fn (w mut walker&) stmt(s ast.Stmt?&) {
-    if s is null { return }
+    if s == null { return }
     match s {
         case ast.Stmt.ExprS(sp, x) {
             kind String& = "EXPR"
@@ -557,10 +557,10 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.If(sp, i) {
             w.line("IF", sp)
             w.expr(i.Cond)
-            if i.Then is not null { w.stmts(i.Then!.Body) }
+            if i.Then != null { w.stmts(i.Then!.Body) }
             match i.Else {
                 # a plain else: its block's statements
-                case ast.Stmt.If(_, e) if e.Cond is null { w.stmts(e.Then!.Body) }
+                case ast.Stmt.If(_, e) if e.Cond == null { w.stmts(e.Then!.Body) }
                 case _ { w.stmt(i.Else) }
             }
         }
@@ -614,7 +614,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
                 case _: "UNREACHABLE"
             }
             w.line(kind, sp)
-            if msg is not null { w.expr(msg) }
+            if msg != null { w.expr(msg) }
         }
         case ast.Stmt.Assert(sp, c, msg) {
             w.line("ASSERT", sp)
@@ -673,13 +673,13 @@ fn (w mut walker&) exprs(xs Array<ast.Expr&>&) {
 }
 
 fn (w mut walker&) expr(x ast.Expr?&) {
-    if x is null { return }
+    if x == null { return }
     match x {
-        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.IsType(_, a, _, _)
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a)
              ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _), ast.Expr.Member(_, a, _) {
             w.expr(a)
         }
-        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b) {
             w.expr(a)
             w.expr(b)
         }

@@ -21,7 +21,7 @@ type DList struct() {
 fn (l mut DList&) PushBack(v I64) {
     nd := Node(v)
     t := l.tail
-    if t is null { l.head = nd } else {
+    if t == null { l.head = nd } else {
         t.next = nd
         nd.prev = t
     }
@@ -33,7 +33,7 @@ fn (l mut DList&) PopFront() I64 {
     h := l.head!
     q := h.next
     l.head = q
-    if q is null { l.tail = null } else { q.prev = null }
+    if q == null { l.tail = null } else { q.prev = null }
     l.n--
     return h.v
 }
@@ -42,7 +42,7 @@ fn (l mut DList&) PopFront() I64 {
 fn (l DList&) Forward() I64 {
     s := 0
     at Node?& = l.head
-    for at is not null {
+    for at != null {
         s = s * 10 + at.v
         at = at.next
     }
@@ -52,7 +52,7 @@ fn (l DList&) Forward() I64 {
 fn (l DList&) Backward() I64 {
     s := 0
     at Node?& = l.tail
-    for at is not null {
+    for at != null {
         s = s * 10 + at.v
         at = at.prev
     }
@@ -93,7 +93,7 @@ type Tree struct() {
 
 fn (t mut Tree&) Insert(k I64) mut TNode& {
     r := t.root
-    if r is null {
+    if r == null {
         n := TNode(k, null)
         t.root = n
         return n
@@ -102,7 +102,7 @@ fn (t mut Tree&) Insert(k I64) mut TNode& {
     for {
         if k < at.key {
             l := at.left
-            if l is null {
+            if l == null {
                 n := TNode(k, at)
                 at.left = n
                 return n
@@ -110,7 +110,7 @@ fn (t mut Tree&) Insert(k I64) mut TNode& {
             at = l
         } else {
             g := at.right
-            if g is null {
+            if g == null {
                 n := TNode(k, at)
                 at.right = n
                 return n
@@ -125,7 +125,7 @@ fn (t mut Tree&) Insert(k I64) mut TNode& {
 fn pathUp(n TNode&) I64 {
     s := 0
     at TNode?& = n
-    for at is not null {
+    for at != null {
         s = s * 10 + at.key
         at = at.parent
     }
@@ -161,8 +161,8 @@ type Lru struct(cap I64) {
 fn (c mut Lru&) unlink(n mut Entry&) {
     p := n.prev
     q := n.next
-    if p is null { c.head = q } else { p.next = q }
-    if q is null { c.tail = p } else { q.prev = p }
+    if p == null { c.head = q } else { p.next = q }
+    if q == null { c.tail = p } else { q.prev = p }
     n.prev = null
     n.next = null
 }
@@ -170,7 +170,7 @@ fn (c mut Lru&) unlink(n mut Entry&) {
 fn (c mut Lru&) pushFront(n mut Entry&) {
     h := c.head
     n.next = h
-    if h is null { c.tail = n } else { h.prev = n }
+    if h == null { c.tail = n } else { h.prev = n }
     c.head = n
 }
 
@@ -196,7 +196,7 @@ fn (c mut Lru&) Get(k String&, v I64) I64 {
 fn (c Lru&) Order() String {
     b := StringBuilder()
     at Entry?& = c.head
-    for at is not null {
+    for at != null {
         b.Push(at.key)
         at = at.next
     }
@@ -230,7 +230,7 @@ fn (l mut DList&) RemoveAfter(p mut Node&) {
     n := p.next!
     q := n.next
     p.next = q
-    if q is null { l.tail = p } else { q.prev = p }
+    if q == null { l.tail = p } else { q.prev = p }
 }
 
 # a weak place naming each of five nodes, then the second and the fourth taken out, the head given up and the tail
@@ -243,7 +243,7 @@ fn digits(xs Array<Seen>&) I64 {
     s := 0
     for x in xs {
         at := x.w
-        s = s * 10 + (at.v if at is not null else 0)
+        s = s * 10 + (at.v if at != null else 0)
     }
     return s
 }
@@ -274,7 +274,7 @@ fn cutPath() I64 {
     root := t.root!
     root.left = null                  # 3 cut off, with 1 and 4 below it
     churn()
-    return pathUp(leaf) * 10 + (1 if leaf.parent is not null else 0)
+    return pathUp(leaf) * 10 + (1 if leaf.parent != null else 0)
 }
 
 # an LRU cache's evicted entry, named by a weak place outside it: null once the cache's Map gave it up
@@ -288,10 +288,10 @@ fn evicted() I64 {
     c.Get("a", 1)
     r.last = c.head
     c.Get("b", 2)
-    held := r.last is not null
+    held := r.last != null
     c.Get("c", 3)                     # "a" evicted: the Map removed it
     churn()
-    return (10 if held else 0) + (1 if r.last is null else 0)
+    return (10 if held else 0) + (1 if r.last == null else 0)
 }
 
 # ...and one whose Map grows as it fills (its entries moved into new slots, still held once each): the first entry
@@ -307,7 +307,7 @@ fn grownEvicted() I64 {
     churn()
     f := first.last
     n := newest.last
-    return (10 if f is null else 0) + (n.v if n is not null else -1)
+    return (10 if f == null else 0) + (n.v if n != null else -1)
 }
 
 # a Vec of nodes: a node popped is held by nothing owning, and held again once pushed back - the count follows the
@@ -318,9 +318,9 @@ fn popped() I64 {
     r := Seen(v[2])
     x := v.Pop()!
     churn()
-    gone := r.w is null
+    gone := r.w == null
     v.Push(x)
-    back := r.w is not null
+    back := r.w != null
     return (10 if gone else 0) + (1 if back else 0)
 }
 

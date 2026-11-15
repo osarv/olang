@@ -6,4 +6,4 @@ extern {
 type Box struct() {
     d weak Db?& = null
 }
-fn main() { assert Box().d is null }
+fn main() { assert Box().d == null }

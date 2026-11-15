@@ -515,7 +515,7 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
         d.Lenient = true
         p := s.write(ds, vs, c, false)
         ch := s.check(p, d)
-        if ch is null {
+        if ch == null {
             r.Diags = cellRows(d.Render(), c.Label)
             return r
         }
@@ -525,12 +525,12 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
     d.Lenient = true
     p := s.write(ds, vs, c, true)
     ch := s.check(p, d)
-    if ch is null {
+    if ch == null {
         r.Diags = cellRows(d.Render(), c.Label)
         return r
     }
     x := s.machine(ch, d, r)
-    if x is null {
+    if x == null {
         r.Diags = cellRows(d.Render(), c.Label)
         return r
     }
@@ -549,7 +549,7 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
 fn (s mut Session&) startWorker() {
     if s.work.Running(): return
     why := ""
-    if cells.Builder is null: why = "this compiler builds no cells"
+    if cells.Builder == null: why = "this compiler builds no cells"
     else if s.Cfg.Clang == "": why = "there is no clang to build them with"
     else if s.Cfg.Target.Foreign: why = "they are built for another machine"
     if why == "" {
@@ -581,7 +581,7 @@ fn (s mut Session&) attemptCompiled(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) 
     d := diag.Diagnostics(false)
     d.Lenient = true
     ch := s.check(s.write(ds, vs, c, false), d)
-    if ch is null {
+    if ch == null {
         r.Diags = cellRows(d.Render(), c.Label)
         return r
     }
@@ -876,7 +876,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     x.M.Soles = fr.Sole
     for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First " " $bt.Second, true) }
     x.M.Args.Push("olang")
-    if s.Watch is not null {
+    if s.Watch != null {
         x.M.Watch = s.Watch
         x.M.StepBudget = 0
     }
@@ -1008,10 +1008,10 @@ fn (s mut Session&) End() {
     d := diag.Diagnostics(false)
     d.Lenient = true
     ch := s.check(s.write(s.Decls, s.Values, c, false), d)
-    if ch is null: return
+    if ch == null: return
     r := Reply()
     x := s.machine(ch, d, r)
-    if x is null: return
+    if x == null: return
     k := mir.FnKey.Body(typed.BodyId(I32(cellBody(ch))))
     x.Need(k)
     s.restore(ch, x, s.Values)
@@ -1026,7 +1026,7 @@ fn (s mut Session&) TypeOf(expr String&) Reply {
     d := diag.Diagnostics(false)
     d.Lenient = true
     ch := s.check(s.write(s.Decls, s.Values, c, false), d)
-    if ch is null {
+    if ch == null {
         r.Diags = d.Render()
         return r
     }

@@ -7,4 +7,4 @@ type Shape trait {
 type Box struct() {
     s weak any Shape?& = null
 }
-fn main() { assert Box().s is null }
+fn main() { assert Box().s == null }

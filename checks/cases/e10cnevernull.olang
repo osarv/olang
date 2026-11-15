@@ -1,0 +1,8 @@
+# check: fail error[T2c]: 'p' is a P&, never null, so this is always false
+# E10c, T2c: "== null" of a reference never null decides nothing
+type P struct(v I32) { v }
+fn first(p P&) I32 {
+    if p == null: return 0
+    return p.v
+}
+fn main() { assert first(P(1)) == 1 }

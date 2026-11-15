@@ -39,7 +39,7 @@ fn churn() I64 {
 fn click(w mut Widget&) I64 {
     at mut Widget?& = w
     n := 0
-    for at is not null {
+    for at != null {
         a := at
         if a.kind == Kind.Button {
             a.clicks++
@@ -65,7 +65,7 @@ fn clickDepth() I64 {
 # a list's tail found by a cursor and appended to: what is built through it lives where the list does
 fn appendTail(head mut Node&, v I64) {
     at mut Node& = head
-    for at.next is not null { at = at.next! }
+    for at.next != null { at = at.next! }
     at.next = Node(v)
 }
 
@@ -75,7 +75,7 @@ fn chainSum(n I64) I64 {
     churn()
     s := 0
     at Node?& = head
-    for at is not null {
+    for at != null {
         s = s * 10 + at.v
         at = at.next
     }

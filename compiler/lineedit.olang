@@ -895,7 +895,7 @@ fn (e mut Editor&) Read(open fn&(t String&) Bool) String& ? Ended {
         e.flush()
         if e.pos >= e.pending.Len(): try e.fill()
         t := try e.feedPending(open)
-        if t is not null: return t
+        if t != null: return t
     }
 }
 

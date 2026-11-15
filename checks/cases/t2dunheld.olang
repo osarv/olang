@@ -6,5 +6,5 @@ type Node struct(v I64) {
 }
 fn main() {
     n := Node(1)
-    assert n.prev is null
+    assert n.prev == null
 }

@@ -22,7 +22,7 @@ fn sum(n I64) I64 {
     }
     s := 0
     at Node?& = l.head
-    for at is not null {
+    for at != null {
         s += at.v
         at = at.next
     }

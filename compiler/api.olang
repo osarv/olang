@@ -151,7 +151,7 @@ fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Ve
 fn writeSigs(file String&, scratch String&, cfg mut build.Config&) I32 {
     d mut diag.Diagnostics& = diag.Diagnostics(false)
     a := session.Analysis.Analyze(file, cfg, d, Map<String&, String&>())
-    if d.Errors() > 0 or a.C is null or a.Sc is null {
+    if d.Errors() > 0 or a.C == null or a.Sc == null {
         say(d.Render())
         return 1
     }

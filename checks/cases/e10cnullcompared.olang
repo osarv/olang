@@ -1,7 +1,7 @@
-# check: fail error[E10c]: null is tested with 'is', never compared - write 'p is null'
-# E10c: a null test is "is null", never "== null"
+# check: run
+# E10c: the null test is a comparison with the null literal, "p == null" (an error naming "is null" until 2026-11-15)
 type P struct(v I32) { v }
 fn main() {
     p P?& = null
-    assert p == null
+    assert p == null and null == p
 }

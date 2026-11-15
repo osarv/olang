@@ -305,12 +305,12 @@ fn (w mut Worker&) Run(so String&, watch fn?&() Bool) Outcome {
     asked := false
     for {
         fds := Array<I32>[w.Out, w.Std, w.Err]
-        ready := session.Readable(fds, 50 if watch is not null else -1)
+        ready := session.Readable(fds, 50 if watch != null else -1)
         if ready[1]: w.relay(1)
         if ready[2]: w.relay(2)
         if ready[0]: w.take(o)
         if o.Over: break
-        if watch is null or asked or w.Holder <= 0: continue
+        if watch == null or asked or w.Holder <= 0: continue
         if watch() {
             csignal.kill(w.Holder, 9)
             asked = true
@@ -509,15 +509,15 @@ WorkerSource String& = """
         olang_cell_afterfork()
         say(10, $unistd.getpid())
         h := dlfcn.dlopen(path.ToC(), 258)
-        if h is null {
+        if h == null {
             e := dlfcn.dlerror()
-            say(2, $"the cell cannot be loaded: " $(String.FromC(e, 400) if e is not null else path) "\n")
+            say(2, $"the cell cannot be loaded: " $(String.FromC(e, 400) if e != null else path) "\n")
             say(11, "")
             return
         }
         start := dlfcn.dlsym(h, "olang_cell_init".ToC())
         entry := dlfcn.dlsym(h, "olang_cell_run".ToC())
-        if start is null or entry is null {
+        if start == null or entry == null {
             say(2, "the cell's object has no entry\n")
             say(11, "")
             return

@@ -9,5 +9,5 @@ type Node struct(v I64) {
 fn main() {
     n := Node(1)
     p weak Node?& = n
-    assert p is not null
+    assert p != null
 }

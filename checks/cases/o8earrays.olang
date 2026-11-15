@@ -17,7 +17,7 @@ type List struct() {
 fn (l mut List&) push(i I64) {
     nd := Node("key-" $i)
     t := l.tail
-    if t is null { l.head = nd } else {
+    if t == null { l.head = nd } else {
         t.next = nd
         nd.prev = t
     }
@@ -28,7 +28,7 @@ fn (l mut List&) drop() {
     h := l.head!
     q := h.next
     l.head = q
-    if q is null { l.tail = null } else { q.prev = null }
+    if q == null { l.tail = null } else { q.prev = null }
 }
 
 fn peakKb() I64 {

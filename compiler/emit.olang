@@ -514,7 +514,7 @@ fn (e mut Emitter&) emitAll() {
     for i in range e.Lw.Bodies.Len() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Test(_) {
-                if e.Tests and e.Lw.Bodies[i].Root is not null { tests.Push(i) }
+                if e.Tests and e.Lw.Bodies[i].Root != null { tests.Push(i) }
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
@@ -531,7 +531,7 @@ fn (e mut Emitter&) emitAll() {
         k := mir.FnKey.Body(typed.BodyId(I32(i)))
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
-                if e.Lw.Bodies[i].Root is null { continue }
+                if e.Lw.Bodies[i].Root == null { continue }
                 # K2: a baked global's initializer is never run - its value is its storage's - so it is not written;
                 # its storage is, in its module's object, whatever reads it (an importer's code, or nothing here)
                 if e.Baked.Has(i) {
@@ -965,8 +965,8 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
             declared.Put(j, true)
             decls.Push(e.itemDecl[j])
             e.declTypes(e.itemDecl[j], tys, tyHave)
-            if h == HomeInst and inst is not null { inst.Push($e.itemSym[j]) }
-            if h == HomeLoc and locs is not null { locs.Put(j, true) }
+            if h == HomeInst and inst != null { inst.Push($e.itemSym[j]) }
+            if h == HomeLoc and locs != null { locs.Put(j, true) }
         }
     }
     out := StringBuilder()
@@ -1235,7 +1235,7 @@ fn (e mut Emitter&) bakedStorage(i I64) {
 
 # the type a global's initializer stores into it (check writes one Assign to the global), unknown where none
 fn storedType(b typed.Body&, m I64, n source.NameId) types.TypeId {
-    if b.Root is null { return types.UnknownT }
+    if b.Root == null { return types.UnknownT }
     for s in b.Root!.Stmts {
         match s {
             case typed.Stmt.Assign(_, typed.Lvalue.Global(_, ty, gm, gn), _) {
@@ -1654,7 +1654,7 @@ fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
     for i in range n { out[i] = $i }
     if e.T.KindOf(r) != types.Kind.Named { return out }
     td := e.P.TypeDecl(e.T.DeclOf(r))
-    if td is null or td.Body is null { return out }
+    if td == null or td.Body == null { return out }
     tb := td.Body
     if tb != ast.TypeBody.Struct { return out }
     k I64 = 0
@@ -1719,7 +1719,7 @@ fn (e mut Emitter&) instanceProfName(inst I64) String {
     text := e.P.InstanceText(inst)
     rest := text[id.Len() + 1:] if text.StartsWith(id) and text.Len() > id.Len() else $text
     d := e.P.FnDecl(f)
-    if d.Recv is null { return $load.ErrQualifier(id, m == e.P.L.Root) $e.readableTypes(rest) }
+    if d.Recv == null { return $load.ErrQualifier(id, m == e.P.L.Root) $e.readableTypes(rest) }
     # a method is named by its receiver's type, which names its module; its type arguments are its receiver's unless it
     # has a list of its own
     name := e.text(d.Name)
@@ -1933,7 +1933,7 @@ fn (e mut Emitter&) sole(k I64) String {
 # the root's decisions object (O8d): every candidate place decided sole, its constant defined true - "" for none
 fn (e mut Emitter&) SoleUnit() String {
     fr := e.Lw.Free
-    if fr is null { return "" }
+    if fr == null { return "" }
     names Vec<String&>
     for k in fr.SoleNow() { names.Push(e.soleName(k)) }
     # O8e: where a generational type's instances may be reclaimed, by body and type (genOk)
@@ -7061,7 +7061,7 @@ fn (e mut Emitter&) exportBodies() Vec<I64> {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
-                if p.FnDecl(f).Export and e.Lw.Bodies[i].Root is not null and (not e.Module or p.FnModule(f) == p.L.Root) { out.Push(i) }
+                if p.FnDecl(f).Export and e.Lw.Bodies[i].Root != null and (not e.Module or p.FnModule(f) == p.L.Root) { out.Push(i) }
             }
             case _ { }
         }
@@ -7481,7 +7481,7 @@ fn (e mut Emitter&) signatureText(f I64) String {
     m := e.P.FnModule(f)
     src := e.P.L.Mods[m].Src
     fd := e.P.FnDecl(f)
-    if src is null { return $"fn " $e.text(fd.Name) }
+    if src == null { return $"fn " $e.text(fd.Name) }
     text := src.Text[I64(fd.Sp.Start):I64(fd.Sp.End)]
     at := try text.FindByte('{') catch default text.Len()
     return $text[:at].Trim().Replace("*/", "* /")
@@ -8072,7 +8072,7 @@ fn (e mut Emitter&) testSym(id I64) String {
 fn (e mut Emitter&) testName(id I64) String {
     m := e.P.L.Mods[e.P.L.Root]
     d := ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
-    if d is null { return "test" }
+    if d == null { return "test" }
     return ast.TestLabel(d, m.Src!.Text, e.P.L.Names)
 }
 
@@ -8080,7 +8080,7 @@ fn (e mut Emitter&) testName(id I64) String {
 fn (e mut Emitter&) testParts(id I64) String, String {
     m := e.P.L.Mods[e.P.L.Root]
     d := ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
-    if d is null { return "", "test" }
+    if d == null { return "", "test" }
     return ast.TestTarget(d, e.P.L.Names), ast.TestDesc(d, m.Src!.Text)
 }
 

@@ -409,7 +409,7 @@ One row each (B11), the rule in brackets, a note at the other place where one ex
 | T25e | on a receiver / in a function type / in a payload / in `extern` | `'own' is not written on a receiver: a method is called on a borrow` (and one per place) |
 | T8 | fill of an owning type | `one owner cannot fill every element: build Array<own T&>(n) and give each its own` |
 | O34 | a field, element or global moved without `take` | `moving out of 's.cur' leaves it empty: write 'take s.cur'` |
-| O34 | an owner local read again after an implicit move | `'c' is read again on line N: write 'take c' (it is null after)` |
+| O34 | an owner local read again after an implicit move | `'c' is read again on line N: write 'take c' (it == null after)` |
 | O34 | a borrow or borrowed copy given where an owner goes | `'c' borrows 's.cur' (line N) and owns nothing: take it from where it is owned` |
 | O34 | owner's reach too short for the slot | `the Conn refers to 'buf', which lives shorter than 's.conns': build it where they live` |
 | E34 | `take` of a non-owning, non-generic place | `'take' moves an owner, and 'n' is an I64` |

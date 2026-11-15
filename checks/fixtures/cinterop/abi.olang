@@ -111,7 +111,7 @@ fn main() ? {
     d := db_open(42)
     o := Array<Db?&>(1)
     assert db_open2(7, o) == 0
-    try io.PutLine($db_n(d) " " $db_n(o[0]) " " $db_n(db_none()) " " $(d == d) " " $(db_none() is null) " " $d)
+    try io.PutLine($db_n(d) " " $db_n(o[0]) " " $db_n(db_none()) " " $(d == d) " " $(db_none() == null) " " $d)
     db_close(o[0]!)
     db_close(d)
     c := Ctx()

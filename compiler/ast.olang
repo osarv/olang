@@ -95,10 +95,6 @@ type Expr enum {
     NotIn(sp source.Span, a Expr&, b Expr&)            # a not in b (E29)
     Chain(sp source.Span, c Chain&)                    # a < b <= c (E30)
     Cond(sp source.Span, a Expr&, c Expr&, b Expr&)    # a if c else b (E28)
-    # a type after "is": known to be one by its form - "mut", "fn", "<", type arguments or a marker
-    IsType(sp source.Span, x Expr&, t TypeRef&, negated Bool)
-    # anything else after "is": an identity test, or a bare path the resolver may find to be a type (E10c, E32)
-    Is(sp source.Span, x Expr&, y Expr&, negated Bool)
     As(sp source.Span, x Expr&, t TypeRef&)
     Call(sp source.Span, f Expr&, args Array<Expr&>&)
     Generic(sp source.Span, x Expr&, args Array<TypeRef&>&)                       # Name<args>: Array<I32>(n)
@@ -174,7 +170,7 @@ type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, 
     Alts
     Types
     Guard
-    Body       # empty when the case gives a value (Value is not null)
+    Body       # empty when the case gives a value (Value != null)
     Value
 }
 
@@ -305,11 +301,11 @@ type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body 
 }
 
 # D19: whether a function is a builder - declared on a type, "fn Color.FromHex(...)"
-fn (f Func&) IsBuilder() Bool { return f.Owner is not null }
+fn (f Func&) IsBuilder() Bool { return f.Owner != null }
 
 # D19: a builder's owner's name as written, "Color" for "fn Color.FromHex" and "List" for "fn List<T>.Of"; 0 for none
 fn (f Func&) OwnerName() source.NameId {
-    if f.Owner is null { return source.NameId(0) }
+    if f.Owner == null { return source.NameId(0) }
     match f.Owner! {
         case TypeRef.Named(_, path, _) { return path[path.Len() - 1] }
         case _ { return source.NameId(0) }
@@ -335,7 +331,7 @@ type TypeBody enum {
     Enum(cases Array<CaseDecl&>&, raw TypeRef?&)   # raw: the raw type after "enum" (T17e), null for none
     # a trait's methods, the traits it extends (T30a) and, for a closed one, the types it lists after "for" (T31a)
     Trait(methods Array<Func&>&, exts Array<TypeRef&>&, members Array<TypeRef&>&)
-    # type T I32 / extends ...; a constructor over a primitive (T29d) when Ctor is not null
+    # type T I32 / extends ...; a constructor over a primitive (T29d) when Ctor != null
     Over(base TypeRef&, ctor Func?&)
     Foreign                 # "extern type T" (X10): a C type olang holds only by reference, never reads
 }
@@ -424,7 +420,7 @@ fn (e Expr&) Span() source.Span {
     return match e {
         case Expr.Name(sp, _), Expr.Lit(sp, _), Expr.Paren(sp, _), Expr.Unary(sp, _, _), Expr.Postfix(sp, _, _): sp
         case Expr.Binary(sp, _, _, _), Expr.NotIn(sp, _, _), Expr.Chain(sp, _), Expr.Cond(sp, _, _, _): sp
-        case Expr.IsType(sp, _, _, _), Expr.Is(sp, _, _, _), Expr.As(sp, _, _), Expr.Call(sp, _, _): sp
+        case Expr.As(sp, _, _), Expr.Call(sp, _, _): sp
         case Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _): sp
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _): sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _): sp
@@ -490,13 +486,13 @@ fn (t TypeRef&) FuncSig() Sig?& {
     }
 }
 
-fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() is not null }
+fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() != null }
 
 # T2d: whether t is a weak reference as written - "weak T?&", "weak mut T?&"
 fn (t TypeRef&) IsWeak() Bool {
     return match t {
         case TypeRef.Ref(_, _, _, w): w
-        case TypeRef.Perm(_, of, _): of is not null and of.IsWeak()
+        case TypeRef.Perm(_, of, _): of != null and of.IsWeak()
         case _: false
     }
 }
@@ -505,7 +501,7 @@ fn (t TypeRef&) IsWeak() Bool {
 fn (t TypeRef&) Unweak() TypeRef& {
     return match t {
         case TypeRef.Ref(sp, of, nullable, w): TypeRef.Ref(sp, of, nullable, false) if w else t
-        case TypeRef.Perm(sp, of, w): TypeRef.Perm(sp, of.Unweak(), w) if of is not null else t
+        case TypeRef.Perm(sp, of, w): TypeRef.Perm(sp, of.Unweak(), w) if of != null else t
         case _: t
     }
 }
@@ -545,7 +541,7 @@ fn FirstYield(body Array<Stmt&>&) source.Span {
 }
 
 fn yieldIn(st Stmt?&) source.Span {
-    if st is null { return NoYield }
+    if st == null { return NoYield }
     return match st {
         case Stmt.Yield(sp, _): sp
         case Stmt.ExprS(_, x): yieldInExpr(x)
@@ -574,7 +570,7 @@ fn yieldOr(a source.Span, b source.Span) source.Span { return a if a.Start >= I3
 
 fn yieldInIf(i If&) source.Span {
     y := yieldInExpr(i.Cond)
-    if y.Start < I32(0) and i.Then is not null { y = FirstYield(i.Then!.Body) }
+    if y.Start < I32(0) and i.Then != null { y = FirstYield(i.Then!.Body) }
     return yieldOr(y, yieldIn(i.Else))
 }
 
@@ -606,11 +602,11 @@ fn yieldInExprs(xs Array<Expr&>&) source.Span {
 
 # an expression's statements: a try's clauses, a match value's cases
 fn yieldInExpr(x Expr?&) source.Span {
-    if x is null { return NoYield }
+    if x == null { return NoYield }
     return match x {
         case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Spread(_, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _): yieldInExpr(y)
-        case Expr.IsType(_, y, _, _), Expr.As(_, y, _), Expr.Generic(_, y, _): yieldInExpr(y)
-        case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _): yieldOr(yieldInExpr(a), yieldInExpr(b))
+        case Expr.As(_, y, _), Expr.Generic(_, y, _): yieldInExpr(y)
+        case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b): yieldOr(yieldInExpr(a), yieldInExpr(b))
         case Expr.Cond(_, a, k, b): yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))
         case Expr.Chain(_, ch): yieldInExprs(ch.Xs)
         case Expr.Call(_, f, args), Expr.Index(_, f, args): yieldOr(yieldInExpr(f), yieldInExprs(args))
@@ -643,7 +639,7 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
             }
             case Decl.If(_, ti) {
                 found := Decl.findTestIf(ti, sp)
-                if found is not null { return found }
+                if found != null { return found }
             }
             case _ { }
         }
@@ -652,14 +648,14 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
 }
 
 fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
-    if ti is null { return null }
-    if ti.Then is not null {
+    if ti == null { return null }
+    if ti.Then != null {
         f := FindTest(ti.Then!.Decls, sp)
-        if f is not null { return f }
+        if f != null { return f }
     }
-    if ti.Else is not null {
+    if ti.Else != null {
         f := FindTest(ti.Else!.Decls, sp)
-        if f is not null { return f }
+        if f != null { return f }
     }
     return Decl.findTestIf(ti.ElseIf, sp)
 }
@@ -668,7 +664,7 @@ fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
 fn TestTarget(d Decl&, names source.Names&) String {
     match d {
         case Decl.Test(_, _, _, target) {
-            if target is null { return "" }
+            if target == null { return "" }
             b := StringBuilder()
             for i, n in target.Parts {
                 if i > 0 { b.PushChar('.') }
@@ -684,9 +680,9 @@ fn TestTarget(d Decl&, names source.Names&) String {
 # and a type variable's constraint for a default over one: "Iterator" for "fn (it mut I&) TakeWhile<I Iterator<T>, T>";
 # "" for no receiver or one written otherwise
 fn RecvTarget(f Func&, names source.Names&) String {
-    if f.Recv is null { return "" }
+    if f.Recv == null { return "" }
     t := f.Recv!.Ty
-    for t is not null {
+    for t != null {
         match t {
             case TypeRef.Perm(_, of, _) { t = of }
             case TypeRef.Ref(_, of, _, _) { t = of }
@@ -710,7 +706,7 @@ fn OwnerTarget(f Func&, names source.Names&) String {
 # constrained type variables, "" where its constraint is written otherwise, else n itself
 fn nameOrConstraint(f Func&, n source.NameId, names source.Names&) String {
     for tp in f.TypeParams {
-        if tp.Name != n or tp.Ty is null { continue }
+        if tp.Name != n or tp.Ty == null { continue }
         return match tp.Ty! {
             case TypeRef.Named(_, cpath, _): $names.Text(cpath[cpath.Len() - 1])
             case _: ""

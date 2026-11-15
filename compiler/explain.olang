@@ -107,7 +107,7 @@ fn writtenMethod(c mut typecheck.Checker&, mi I64, owner String&, m source.NameI
     c.P.AllFns()
     for f in range c.P.FnCount() {
         decl := c.P.FnDecl(f)
-        if c.P.FnModule(f) != mi or decl.Recv is null or decl.Name != m: continue
+        if c.P.FnModule(f) != mi or decl.Recv == null or decl.Name != m: continue
         if ast.RecvTarget(decl, c.P.L.Names) == owner: return f
     }
     return -1
@@ -198,8 +198,8 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
     lead := "extern fn " if c.P.FnIsExtern(f) else "fn "
     # D8a: each defaulted parameter with its default as the declaration writes it
     close := firstClose(text)
-    inside := $withDefaults(c, text[3:close], decl.S.Params, c.P.FnModule(f), 1 if decl.Recv is not null else 0) $text[close:]
-    if decl.Recv is null { return $lead $name "(" $inside }
+    inside := $withDefaults(c, text[3:close], decl.S.Params, c.P.FnModule(f), 1 if decl.Recv != null else 0) $text[close:]
+    if decl.Recv == null { return $lead $name "(" $inside }
     end := firstItemEnd(inside)
     recv := inside[:end]
     rest := inside[end + 2:] if inside[end] == ',' else inside[end:]
@@ -209,7 +209,7 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
 # a function type carrying the names its declaration gives its parameters, the receiver's first
 fn named(c mut typecheck.Checker&, sig types.TypeId, recv ast.Param?&, params Array<ast.Param&>&) types.TypeId {
     ids Vec<I64>
-    if recv is not null { ids.Push(I64(recv.Name)) }
+    if recv != null { ids.Push(I64(recv.Name)) }
     if params.Len() > 0 {
         for p in params { ids.Push(I64(p.Name)) }
     }
@@ -263,7 +263,7 @@ fn withDefaults(c mut typecheck.Checker&, list String&, params Array<ast.Param&>
         end := firstItemEnd(rest)
         b.Push(rest[:end])
         j := k - skip
-        if j >= 0 and j < params.Len() and params[j].Dflt is not null {
+        if j >= 0 and j < params.Len() and params[j].Dflt != null {
             dsp := params[j].Dflt!.Span()
             b.Push($" = " $src[I64(dsp.Start):I64(dsp.End)])
         }
@@ -326,7 +326,7 @@ fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
 
 # how many of a method's variables its receiver's type arguments introduce (QW: Go's rule), written by the receiver
 fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
-    if c.P.FnDecl(f).Recv is null { return 0 }
+    if c.P.FnDecl(f).Recv == null { return 0 }
     recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
     if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
     if c.P.T.KindOf(recv) != types.Kind.Named { return 0 }
@@ -336,7 +336,7 @@ fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
 # a contract's conditions (D17), each as written in its brackets
 fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, indent String&) {
     if s.Commutes { b.Push($indent "# commutes: the operator applies with its operands the other way round too (E31c)\n") }
-    if s.Contract is null { return }
+    if s.Contract == null { return }
     src := c.P.L.Mods[mi].Src!.Text
     for it in s.Contract!.Items { b.Push($indent "[" $src[I64(it.Span().Start):I64(it.Span().End)] "]\n") }
 }
@@ -353,7 +353,7 @@ fn effectLine(b mut StringBuilder&, c mut typecheck.Checker&, f I64, body I64, i
     if body < 0 or c.P.FnIsExtern(f) { return }
     decl := c.P.FnDecl(f)
     ps Vec<String&>
-    if decl.Recv is not null { ps.Push($c.P.L.Names.Text(decl.Recv!.Name)) }
+    if decl.Recv != null { ps.Push($c.P.L.Names.Text(decl.Recv!.Name)) }
     for p in decl.S.Params { ps.Push($c.P.L.Names.Text(p.Name)) }
     fx := c.Effects()
     b.Push($indent "# effects: " $effects.Describe(fx.Of(body), ps.ToArray()) "\n")
@@ -426,7 +426,7 @@ fn AsValueWhere(c mut typecheck.Checker&, sc scope.Scoper&, body I64) String {
 fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) String {
     decl := c.P.FnDecl(f)
     name := c.P.L.Names.Text(decl.Name)
-    if decl.Recv is not null { return "a method is called as one (M19) - a lambda calling it is a value" }
+    if decl.Recv != null { return "a method is called as one (M19) - a lambda calling it is a value" }
     if c.P.FnIsExtern(f) { return "an extern fn is called by its name (X1) - a lambda calling it is a value" }
     owner := generic.FnOwner(f)
     written := decl.TypeParams.Len() + (c.P.OwnerVarCount(f) if decl.IsBuilder() else 0)
@@ -454,7 +454,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     self := c.P.SelfType(d)
     c.P.Body(self)
     td0 := c.P.TypeDecl(d)
-    if td0 is not null { attrLines(b, c, c.P.DeclModule(d), td0.Attrs, "") }
+    if td0 != null { attrLines(b, c, c.P.DeclModule(d), td0.Attrs, "") }
     nm := c.P.L.Names
     name := $nm.Text(c.P.T.DeclName(d)) $typeVars(c, generic.DeclOwner(d), 0)
     match c.P.T.DeclKindOf(d) {
@@ -501,7 +501,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
 # typeItem's constructor of a declared primitive, its parameter and errors (T29d)
 fn overCtor(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, self types.TypeId) {
     match c.P.TypeDecl(d)!.Body {
-        case ast.TypeBody.Over(_, ctor) if ctor is not null {
+        case ast.TypeBody.Over(_, ctor) if ctor != null {
             sig := declSig(c, named(c, c.P.CtorSig(self), null, ctor.S.Params))
             close := firstClose(sig)
             b.Push($sig[2:close + 1] $errorsAfter(sig[close + 1:]))
@@ -514,7 +514,7 @@ fn overCtor(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, self
 fn structContract(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
     match c.P.TypeDecl(d)!.Body {
         case ast.TypeBody.Struct(sb) {
-            if sb.Errs is not null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }
+            if sb.Errs != null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }
         }
         case _ { }
     }
@@ -689,7 +689,7 @@ fn methods(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
     c.P.AllFns()
     for f in range c.P.FnCount() {
         decl := c.P.FnDecl(f)
-        if decl.Recv is null or c.P.MethodOf(self, decl.Name) != f { continue }
+        if decl.Recv == null or c.P.MethodOf(self, decl.Name) != f { continue }
         # its own, not one it inherits (T29f)
         recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
         if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
@@ -749,7 +749,7 @@ fn traitsMet(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) 
     for mi in range c.P.R.Tables.Len() {
         tab := c.P.R.Tables[mi]
         for ei in range tab.Entries.Len() {
-            if tab.Entries[ei].Kind != names.What.Type or tab.Entries[ei].Decl is null { continue }
+            if tab.Entries[ei].Kind != names.What.Type or tab.Entries[ei].Decl == null { continue }
             d := c.P.DeclFor(mi, ei)
             if c.P.T.DeclKindOf(d) != types.DeclKind.Trait or c.P.VarCount(generic.DeclOwner(d)) > 0 { continue }
             tr := c.P.SelfType(d)

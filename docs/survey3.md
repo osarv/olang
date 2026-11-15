@@ -427,7 +427,7 @@ has nested patterns too; what a pattern cannot say is a test that is not a case,
 
 ```
 match s {
-    case Slot.Held(p) if p is not null {
+    case Slot.Held(p) if p != null {
         io.PutLine($p.v)!      # error[T2c] today: 'p' is a Node?&, which may be null
     }
     case Slot.Held(_), Slot.Empty { }

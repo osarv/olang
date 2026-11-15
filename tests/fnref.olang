@@ -21,7 +21,7 @@ type Button struct(name String&, on Handler?&, must fn&(n I64) I64 = fn(n): retu
 # a function value that may be null, tested before it is called (S8e)
 fn press(b Button&, n I64) I64 {
     on := b.on
-    if on is null { return b.must(n) }
+    if on == null { return b.must(n) }
     return on(Event(n))
 }
 
@@ -31,13 +31,13 @@ fn fire(h Handler&, e Event) I64 { return h(e) }
 fn longest(words Array<String&>&) String?& {
     best String?& = null
     for w in words {
-        if best is null or w.Len() > best.Len() { best = w }
+        if best == null or w.Len() > best.Len() { best = w }
     }
     return best
 }
 
 fn lenOr(s String?&, d I64) I64 {
-    if s is null { return d }
+    if s == null { return d }
     return s.Len()
 }
 
@@ -52,7 +52,7 @@ fn sample() String {
     hs Vec<Handler&>
     hs.Push(h)
     return ($press(a, 1) " " $press(b, 1) " " $fire(h, Event(3)) " " $h.Twice(Event(4)) " " $f(Event(5)) " "
-            $plain(Event(6)) " " $(longest(Array<String&>["a", "ccc", "bb"])!) " " $(longest(Array<String&>[]) is null) " "
+            $plain(Event(6)) " " $(longest(Array<String&>["a", "ccc", "bb"])!) " " $(longest(Array<String&>[]) == null) " "
             $lenOr(none, -1) " " $lenOr(empty, -1) " " $(none == empty) " " $none " " $empty "|" " " $hs.Len() " "
             $(b.on!(Event(2))))
 }
@@ -72,7 +72,7 @@ fn zeros() String {
     z String?&
     n := Named("a")
     blank Named
-    return $z " " $n.middle " " $blank.middle " " $Array<String?&>(2) " " $(Array<Array<I64>?&>(3)[2] is null) " " $ZeroBaked
+    return $z " " $n.middle " " $blank.middle " " $Array<String?&>(2) " " $(Array<Array<I64>?&>(3)[2] == null) " " $ZeroBaked
 }
 
 ZerosBaked String = zeros()
@@ -113,7 +113,7 @@ test fire "a declared function type is held as its function value, a lambda fitt
 test press "a function value that may be null is called once a test says it is not" {
     assert press(Button("a", null), 7) == 7 and press(Button("b", fn(e): return -e.n), 7) == -7
     on Handler?& = null
-    assert on is null and $on == "null"
+    assert on == null and $on == "null"
     on = fn(e): return e.n                       # narrowed by the assignment (S8e)
     assert on(Event(4)) == 4
     b := Button("c", fn(e): return e.n + 1)
@@ -121,13 +121,13 @@ test press "a function value that may be null is called once a test says it is n
 }
 
 test longest "an array that may be null: null distinct from empty, read once narrowed" {
-    assert longest(Array<String&>["x", "yyy"])! == "yyy" and longest(Array<String&>[]) is null
+    assert longest(Array<String&>["x", "yyy"])! == "yyy" and longest(Array<String&>[]) == null
     n String?& = null
     e String?& = ""
-    assert n is null and e is not null and n != e and e.Len() == 0
+    assert n == null and e != null and n != e and e.Len() == 0
     assert lenOr(n, -1) == -1 and lenOr(e, -1) == 0 and lenOr("abc", -1) == 3
     z String?&                                   # declared with no value, an array that may be null starts as null
-    assert z is null
+    assert z == null
     w String&                                    # one never null starts as the empty array, as a value array does
     assert w.Len() == 0
     assert $n == "null" and $e == "" and $Array<Array<I64>?&>[] == "Array<Array<I64>?&>[]"
@@ -136,12 +136,12 @@ test longest "an array that may be null: null distinct from empty, read once nar
 test sample "the evaluator agrees: baked while compiling as at run time" {
     assert Sampled == sample()
     assert Sampled == "1 101 6 16 10 12 ccc true -1 0 false null | 1 102"
-    assert NullBaked is null and EmptyBaked is not null and EmptyBaked != NullBaked
+    assert NullBaked == null and EmptyBaked != null and EmptyBaked != NullBaked
 }
 
 test zeros "an array that may be null, given no value, starts as null: baked while compiling as at run time" {
     assert zeros() == "null null null Array<String?&>[null, null] true null"
-    assert ZerosBaked == zeros() and ZeroBaked is null
+    assert ZerosBaked == zeros() and ZeroBaked == null
     v := Vec<String?&>()
     v.Push(null)
     v.Push("b")

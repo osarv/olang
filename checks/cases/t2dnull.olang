@@ -16,7 +16,7 @@ fn main() ? io.Error {
     b.back = a
     try io.PutLine($b.back!.v)
     Head = null
-    try io.PutLine($(b.back is null))
+    try io.PutLine($(b.back == null))
     b.next = a
     try io.PutLine($b.back!.v)
 }

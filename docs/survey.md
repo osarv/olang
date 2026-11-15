@@ -91,7 +91,7 @@ orders that only need a yes.
 11. **Using a nullable reference.** `Node?&` is decided. Before it is built, settle the "guard" shape, which Kotlin,
     Swift, C#, TS and Dart users will try first. *Recommendation:* no `?.` or `??`, since `?` already marks error sets
     and natural language argues against symbol chains. Make sure narrowing also holds **after a leaving test**
-    (`if n is null: return 0` and then `n.v`), as Kotlin smart casts and Swift `guard let` do. With `!` and that, the
+    (`if n == null: return 0` and then `n.v`), as Kotlin smart casts and Swift `guard let` do. With `!` and that, the
     common cases are covered.
 12. **Editor support and doc comments.** No LSP exists. Rust, Go, Zig, Gleam and Roc treat an LSP as part of the
     language now, and many people will not try a language without one. *Decide* the doc-comment rule now (doc tests are
@@ -148,7 +148,7 @@ PRINCIPLES.md's five judging questions.
 
 | Feature | What | Who | Fit / conflict | Cost | Verdict |
 |---|---|---|---|---|---|
-| Narrowing after a leaving test | `if n is null: return` then `n.v` | Kotlin, Swift `guard let`, TS, Rust `let-else` | fits the decided narrowing | small | **worth discussing** (shortlist 11) |
+| Narrowing after a leaving test | `if n == null: return` then `n.v` | Kotlin, Swift `guard let`, TS, Rust `let-else` | fits the decided narrowing | small | **worth discussing** (shortlist 11) |
 | `?.` and `??` | `a?.b`, `x ?? d` | Kotlin, Swift, C#, TS, Dart | `?` means error sets; symbols against principle 3 | small | worth discussing, recommend no |
 | Struct patterns in `match` | `case Point(x, 0)` | Rust, Swift, Scala, Python 3.10, C# | enums already have patterns; deferred "if code needs them" | small | later |
 | Range patterns | `case 1..5` | Rust, Swift, Ada, Kotlin | covered by guards (`case _ if 1 <= x <= 5`, a chain) | - | covered |

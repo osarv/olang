@@ -19,7 +19,7 @@ fn gone() Bool {
     n := h.next!
     n.prev = h
     c.head = null
-    return n.prev is null
+    return n.prev == null
 }
 
 assert gone()

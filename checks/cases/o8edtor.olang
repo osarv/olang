@@ -25,5 +25,5 @@ fn main() {
     r.next = Res(2)
     r.next!.back = r
     h.first = null
-    assert r.next!.back is null
+    assert r.next!.back == null
 }

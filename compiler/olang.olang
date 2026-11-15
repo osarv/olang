@@ -868,7 +868,7 @@ fn cutLikely(l load.Loader&, cfg build.Config&) I64 {
     if cfg.Debug: return 1
     src I64 = 0
     for m in l.Mods {
-        if m.Src is not null: src += m.Src!.Text.Len()
+        if m.Src != null: src += m.Src!.Text.Len()
     }
     return 1 if src >= LikelyCutSource else 0
 }
@@ -1072,7 +1072,7 @@ fn apartPath(cfg build.Config&, md load.Module&) String { return $cfg.Store "/ap
 fn apartKey(md load.Module&) String {
     parts Vec<String&>
     parts.Push(md.Identity)
-    parts.Push(md.Src!.Text if md.Src is not null else "")
+    parts.Push(md.Src!.Text if md.Src != null else "")
     return build.HashOf(parts)
 }
 
@@ -1089,7 +1089,7 @@ fn markApart(l load.Loader&, cfg build.Config&) {
 fn apartModules(l load.Loader&, cfg build.Config&, out mut Map<I64, Bool>&) {
     if cfg.Store == "": return
     for m in range l.Mods.Len() {
-        if m == l.Root or l.Mods[m].Src is null: continue
+        if m == l.Root or l.Mods[m].Src == null: continue
         had := try os.ReadFile(apartPath(cfg, l.Mods[m])) catch os.Error { continue }
         if had == apartKey(l.Mods[m]) { out.Put(m, true) }
     }

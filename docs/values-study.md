@@ -140,7 +140,7 @@ fn click(w mut Widget&) I64 {                        fn (u mut Ui&) click(target
     }                                                        w := u.nodes.RefMut(at)
     if w.kind == Kind.Panel: w.clicks++                      if w.kind == Kind.Button {
     p := w.parent                                                w.clicks++
-    if p is null: return 1                                       return depth
+    if p == null: return 1                                       return depth
     return 1 + click(p)                                      }
 }                                                            if w.kind == Kind.Panel: w.clicks++
                                                              depth++

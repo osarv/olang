@@ -124,7 +124,7 @@ with parent links 100.0 MB, an LRU cache 44.4 MB - against 1.8 MB for the same l
    change. Decided from the type's own module, as the coordinator asked.
 3. **A weak word is one word** (4.2): the pointer with the generation it saw in its top 16 bits. Reading a weak place
    compares that with the instance's generation - one load, a compare and a select, measured at 0.5 ns. Values read are
-   ordinary `T?&`; locals, parameters and results are never weak. The `is null` the program writes after is the
+   ordinary `T?&`; locals, parameters and results are never weak. The `== null` the program writes after is the
    ordinary test.
 4. **Reclaiming** (O8e). An instance is reclaimed - its slot back on its scope's free list for its size, its generation
    bumped so every weak place given it reads `null`, what its own owning places hold let go of in turn - where no owning
@@ -386,7 +386,7 @@ place is no holder.
 
 **T2c** gains, after "a narrowing of a field path can still meet a null that a call stored there": "and a weak place
 reads `null` once no owning place holds its referent (O8e), with no store to it - read it into a local and test that (S8e)". S8d
-and S8e are unchanged: a field never narrows, weak or not, so `p := n.prev; if p is not null { p.v }` is the form, as
+and S8e are unchanged: a field never narrows, weak or not, so `p := n.prev; if p != null { p.v }` is the form, as
 for any field, and `n.prev!.v` ends the program on a gone node as on a null one.
 
 **C11**: "A type declaring a destructor is declared `unique` (T13b)" gains "- or is generational (T13d), whose values
@@ -913,7 +913,7 @@ and examples (B7a); any time, independent of the rest.
    structures, and a wrong guess changes reads. Asked as question 1 because it adds a word.
 2. `weak` only with `?&`, only in stored positions (fields, payload fields, elements and stored type arguments,
    globals); never on locals, parameters, results or function types.
-3. **The check is at the read of a weak place**, not at a later `is null`: values read are ordinary `T?&`, so no weak
+3. **The check is at the read of a weak place**, not at a later `== null`: values read are ordinary `T?&`, so no weak
    value reaches code that does not expect one; one check per read, shown by the declaration.
 4. ~~A type is generational by its own module's `weak` references~~ - **revised by the user's answer to question 4**
    (0.1, item 4): a type is generational where any module of the program names it weakly, and its holder facts come

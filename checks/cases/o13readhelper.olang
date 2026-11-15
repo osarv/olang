@@ -25,7 +25,7 @@ fn (r Term&) spot() Spot?& {
 fn root(p Spot&) Spot?& {
     q Spot?& = p
     for _ in range 8 {
-        if q is null { return null }
+        if q == null { return null }
         match q {
             case Spot.Field(b) { q = b }
             case Spot.Deref(r) { q = r.spot() }
@@ -50,8 +50,8 @@ fn main() {
     d := Spot.Chain(7)
     q := root(d)
     churn()
-    assert q is not null
+    assert q != null
     assert q == Spot.Local(7)
-    assert root(Spot.Deref(Term.Other)) is null
+    assert root(Spot.Deref(Term.Other)) == null
     io.PutLine($q)!
 }
