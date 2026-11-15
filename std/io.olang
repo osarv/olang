@@ -58,20 +58,20 @@ fn Read(fd I32, buf mut Array<U8>&) Array<U8>& ? Error {
 
 # Printing: the one way a program writes text to its standard output and error (M19f). Each call writes at once, nothing
 # held back, and a line and its end go as one write, so lines from tasks running at once are not cut into each other. A
-# failed write is an error (Error), written with "try" like any other; one writing a lot uses a Writer. A value is made
-# text where it is written: "try io.PutLine("n is " $n)".
+# failed write is an error (Error), written with "try" like any other; one writing a lot uses a Writer. Put, PutLine,
+# PutErr and PutErrLine take any value and write it as $ renders it: "try io.PutLine(n)", "try io.PutLine("n is " $n)".
 
-# t, then nothing - to the standard output
-fn Put(t String&) ? Error { try Write(Stdout, t) }
+# x as $ renders it, then nothing - to the standard output
+fn Put<T>(x T) ? Error { try Write(Stdout, $x) }
 
-# t and a line end - to the standard output; with no text, a line end alone
-fn PutLine(t String& = "") ? Error { try Write(Stdout, $t "\n") }
+# x as $ renders it and a line end - to the standard output; with nothing given, a line end alone
+fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x "\n") }
 
-# t, then nothing - to the standard error
-fn PutErr(t String&) ? Error { try Write(Stderr, t) }
+# x as $ renders it, then nothing - to the standard error
+fn PutErr<T>(x T) ? Error { try Write(Stderr, $x) }
 
-# t and a line end - to the standard error
-fn PutErrLine(t String& = "") ? Error { try Write(Stderr, $t "\n") }
+# x as $ renders it and a line end - to the standard error
+fn PutErrLine<T>(x T = "") ? Error { try Write(Stderr, $x "\n") }
 
 # v written to the standard error with the place of the call, "FILE:LINE:COLUMN: $v", and given back - a look at a
 # value in passing, wherever it stands: "y := io.Show(f(x)) + 1". A failed write is ignored, the one call of std that
@@ -275,6 +275,14 @@ test "Put and PutLine write text, PutLine with its line end" {
     try PutErr("") catch Error { }
     n := 42
     try PutLine("io.olang: n is " $n) catch Error { }
+}
+
+test PutLine "writes any value as $ renders it" {
+    try PutLine(5)
+    try Put(2.5)
+    try PutLine()
+    try PutErrLine(true)
+    try PutLine(Array<I64>[1, 2])
 }
 
 test Show "gives its value back after writing it, with the place of the call, to the standard error" {

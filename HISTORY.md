@@ -37496,3 +37496,10 @@ remembers whether a cell wrote anything (`Worker.Printed`); the prompt then writ
 the output ended with (the user: `Print(5)` shows `5` and the prompt on the next line, `Println(5)` shows `5`, an empty line, and
 the prompt). A cell that wrote nothing adds nothing. Checked in the `promptkeys` scenario with `Print("hello")` and `Println("hi")`.
 Cells interpreted through `OLANG_CELLS=interpret` write in this process and are not covered.
+
+### 2026-11-15, std/io's printing takes any value
+
+The user, on `io.PutLine(x)` refusing an I64 that `Print(x)` takes: "they should all take integers as well as strings",
+then "any printable type really". `io.Put`, `PutLine`, `PutErr` and `PutErrLine` are generic over the value, written as
+`$` renders it (a String as its text), as the prelude's `Print`/`Println` are; still `? io.Error`. Every existing caller
+passed a String and writes the same bytes. M19f in SPEC, std/io.olang's test "writes any value as $ renders it".

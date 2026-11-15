@@ -3453,13 +3453,14 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 program where a write fails - with no words of the compiler's own:
 
 ```
-fn Put(t String&) ? io.Error            # t, to the standard output
-fn PutLine(t String& = "") ? io.Error     # t and a line end, to the standard output
-fn PutErr(t String&) ? io.Error         # t, to the standard error
-fn PutErrLine(t String& = "") ? io.Error  # t and a line end, to the standard error
+fn Put<T>(x T) ? io.Error             # x as $ renders it, to the standard output
+fn PutLine<T>(x T = "") ? io.Error     # x as $ renders it and a line end, to the standard output
+fn PutErr<T>(x T) ? io.Error          # x as $ renders it, to the standard error
+fn PutErrLine<T>(x T = "") ? io.Error  # x as $ renders it and a line end, to the standard error
 ```
 
-Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.PutLine("n is " $n)`.
+Each takes one value of any type and writes it as `$` renders it (E11a) - text as it is, `try io.PutLine(n)`, `try
+io.PutLine("n is " $n)` - as the prelude's `Print` and `Println` do.
 `PutLine` and `PutErrLine` write the text and its line end as one write. Each call writes at once, with nothing held
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
 `io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
