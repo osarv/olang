@@ -1,0 +1,39 @@
+Size I64 = 8
+Zero I64 = 0
+Wide I64 = 40
+fn a1() F32 {
+    acc := Array<F32>(8)
+    s := F32(0)
+    for i in range 9: s += acc[i]
+    return s
+}
+fn a2() F32 {
+    acc := Array<F32>(Size)
+    return acc[Size]
+}
+fn a3(x I64) I64 { return x / Zero }
+fn a4(x I32) I32 { return x << Wide }
+fn a5() F32 {
+    acc := Array<F32>(8)
+    s := F32(0)
+    for i in range 8: s += acc[i + 1]
+    return s
+}
+fn a6(x I64) I64 {
+    y := x
+    y %= Zero
+    return y
+}
+fn ok1() F32 {
+    acc := Array<F32>(8)
+    s := F32(0)
+    for i in range 10 { if i < 8: s += acc[i] }
+    for i in range 10 {
+        if i >= 8: break
+        s += acc[i]
+    }
+    for i in range 8: s += acc[i]
+    for i in range 1, 9: s += acc[i - 1]
+    return s
+}
+fn main() {}

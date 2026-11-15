@@ -1,0 +1,45 @@
+import "std/io"
+type Box<T> struct(n I64) {
+    n
+    data mut Array<T>& = Array<T>(0)
+}
+fn (b mut Box<T>&) Fill() { b.data = Array<T>(b.n) }
+fn (b Box<T>&) Size() I64 { return b.n }
+type Point struct(x I64) { x }
+fn (p mut Point&) Move() { p.x++ }
+fn (p Point&) Name() String { return "p" + $p.x }
+
+fn count(xs Array<I64>&) I64 {
+    n := xs.Len()
+    join {
+        for x in xs: spawn sq(x)
+    }
+    if n < 0: unreachable "bad count $n of " + $xs.Len()
+    return n
+}
+fn sq(x I64) I64 { return x * x }
+fn hot(x I64) String ? Bad {
+    if x < 0: error Bad.Neg("neg " + $x)
+    return "fine"
+}
+type Bad error { Neg(what String) }
+fn caller(x I64) I64 ? Bad {
+    s := try hot(x)
+    return s.Len()
+}
+fn bail(x I64) I64 {
+    if x < 0 {
+        io.PutErrLine("bad " + $x)!
+        unreachable
+    }
+    return x
+}
+assert not Box<I64>.Size.Allocates
+assert Box<I64>.Fill.Allocates
+assert not Point.Move.Allocates
+assert Point.Name.Allocates
+assert not hot.Allocates
+assert not caller.Allocates
+assert not bail.Allocates
+assert not count.Allocates
+fn main() {}

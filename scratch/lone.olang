@@ -1,0 +1,15 @@
+fn lone(x Array<F32>&) F32 {
+    acc := Array<F32>(8)
+    for j in range 8: acc[j] = x[j]
+    return acc[3]
+}
+fn lone2() F32 {
+    acc := Array<F32>(8)
+    return acc[3]
+}
+fn lone3(x Array<F32>&) F32 {
+    s := F32(0)
+    for j in range 8: s += x[j]
+    return s
+}
+fn main() {}
