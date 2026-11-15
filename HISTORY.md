@@ -37816,3 +37816,8 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   T31 now says "a writable reference only if the signature is `mut`"; a method writing its receiver still meets no
   signature that only reads it (t32anymutimpl, g19permission). A call through a `mut any` lends the writable receiver
   read-only, as to any parameter. Test in tests/any.olang, through an `any` and a constrained generic, baked and run.
+- **An import used only for a method it declares was "unused" (M5a).** A module may declare a method for another
+  module's type (`fn (r lib.Rec&) Twice()`); a call of it names nothing through the importer's alias, yet the import is
+  what brings the method into the program - removing it gives "Rec has no method 'Twice'". unusedImports now counts
+  an import used where the importer's code calls (`.Name`, read off its text, as D3b reads a left-out branch's) a
+  method the imported module declares for a type reached through an alias. typereview scenario, fixtures extend/extuse.
