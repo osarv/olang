@@ -916,7 +916,7 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
                 decl := c.P.FnDecl(f)
                 bn := c.P.L.Names.Text(decl.Member)
                 if not doc.Exported(bn) and c.P.FnModule(f) != mi { continue }
-                it.AddDep(bn, CompMethod, firstLine(explain.FnText(c!, a.Sc!, f)), a.deprecatedAt(c.P.FnModule(f), I64(decl.Sp.Start), false))
+                it.AddDep(bn, CompMethod, firstLine(explain.FnText(c, a.Sc!, f)), a.deprecatedAt(c.P.FnModule(f), I64(decl.Sp.Start), false))
             }
             return
         }
