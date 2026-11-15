@@ -37784,3 +37784,44 @@ into it, names it in no relation, and its result views no parameter of it (D9h's
 onlyForCall. A first version that asked only for no requirement (`requiredBy`) bound json.Parse's temporary text to the
 block, which the parsed tree holds (C2d), and the compiler no longer built itself; with the relations asked too it
 does, to the fixed point, and every checks case passes. 5,580 kB to 72 kB over 100,000 calls.
+
+## 2026-11-15: O8f round 2 - six of the remaining freeing gaps closed (docs/freeing.md)
+
+**A struct local's constructor copy (gaps 6, 7).** `d := Doc("")` - a constructor whose instance views what it is
+given - is copied where it is kept (D9h), and that copy was "a value holding it made with no store into it" (RCopied):
+`Doc.text`'s first value was no region's, so every `Doc`'s text field kept, and `d.text = d.text + $i` reached 1.7 GB.
+A store into a struct held in place already had the answer (viewCtor: the copy built for the one owner leaf, split
+where it owns more); a `:=` of a struct local now takes the same path (free.olang letCtorOf), the call exempt from the
+untracked copy. `Model(v)` and `Model(fill(n))` alike; a struct holding a `Model` by value through a constructor field
+still keeps per declaration (a reference stored, 2.6 item 1), which is a condition, not a gap.
+
+**A local declared with no value (gap 16).** Such a local (D13d) is written nothing until its first assignment, so its
+first let-go would have released whatever its storage held - which is why it was no place. A local place now holds zero
+bits from its declaration (lower.olang's Let, in every program alike: a store of zeros), its first release a no-op, and
+early freeing takes the declaration as a store of nothing (SOk). 274 MB to 13 MB.
+
+**A Map entry's text (gaps 10, 15).** An entry copy is made for its leaves: one owner leaf got the region and every
+other owned part went where the region's parent is - so a key's text beside a `Vec` value was kept at a removal
+(mapkeys, the one earlyfree program out of `-memory -check`), and with two text parts (`Map<String, String>`) neither
+was made for, so `Put` replacing a value kept the old one. Text parts of a prelude struct are slot places (small, never
+grown, put back on their class lists): beside an owner leaf the split copy now builds each in slots of the region's
+parent (free.olang slotSplit, `SlotParts`; lower.olang splitCopy), guarded by the part's own decision; where the text
+parts are all the entry owns, the copy is built in slots whole (slotWhole) and each part released alone. The evaluator
+modelled a slot scope as one region, so releasing a `Map<String, String>` entry's value freed its key with it there
+(a use after free the built program did not have); its slot scope now gives each allocation a region of its own, as
+ReleaseSlot puts back one slot. 52 MB to 13 MB at 400,000 turns.
+
+**An array's text elements (gaps 8, 9).** An element store was never a let-go (the program's copies between elements
+are not known positions, docs/memory.md 2.6 item 7). For text elements that rule holds by itself: an element given a
+read of another element is not made for the place, which then keeps. So an array type's text elements are a candidate
+place - every array of that type, a `Vec<String>`'s buffer included - each value built in a slot (a region per small
+text would cost ~400 bytes), an assignment `a[i] = v` and `SetAt` its let-goes, a removal's vacate too. A copy of such
+an array makes values of the place with no store into it (heldPlaces), and a zero fill makes none (`Array<String>(10)`
+was taken for a copy). 102 MB to 13 MB at 3,200,000 turns. The place is reported where the program's own code assigns
+an element; removals of a Vec held whole by an owner place stay the collection's.
+
+**Left.** A Vec's growth (gap 11): its buffer is one place per `Vec<T>`, freed at each growth where it is sole - but an
+owner place holding a `Vec<T>` whole, or a copy of one built outside any region, keeps it for the whole program (66 MB
+against 98 MB in the measurement). Closing it needs a growth's region released apart from the owner's value region -
+docs/freeing.md 2.1 - a design of its own, asked of the user rather than built here. And an element owning storage that
+is not text (`Array<Vec<I64>>`, gap 17) is still a gap, now the `-memory -check` fixture.
