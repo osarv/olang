@@ -36,7 +36,7 @@ fn run(prog Array<Op>&) ? VmError {
             }
             case Op.Dup: st.Push(st.Last()!)
             case Op.Jmpz(a) {
-                if st.Pop()! == 0 { pc = a }
+                if st.Pop()! == 0: pc = a
             }
             case Op.Jmp(a): pc = a
             case Op.Print: Println($st.Last()!)

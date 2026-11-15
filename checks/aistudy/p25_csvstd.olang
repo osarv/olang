@@ -7,8 +7,8 @@ fn main() ? {
     text := "who,amount\n\"Smith, J\",10.5\nLee,4\n\"Q \"\"x\"\"\",1e1\n"
     rows := try csv.Decode<Row>(text)
     total := 0.0
-    for r in rows { total += r.amount }
-    Println($rows.Len() " " $total " " $rows[0].who)
+    for r in rows: total += r.amount
+    Println($rows.Len() + " " + $total + " " + $rows[0].who)
     more := try csv.Decode<Row>("who,amount\nA,notanumber\n")
     Println($more.Len())
 }

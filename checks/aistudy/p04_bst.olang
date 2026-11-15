@@ -8,8 +8,8 @@ fn insert(t Tree&, x I64) Tree {
     match t {
         case Tree.Leaf: return Tree.Node(Tree.Leaf, x, Tree.Leaf)
         case Tree.Node(l, v, r) {
-            if x < v { return Tree.Node(insert(l, x), v, r) }
-            if x > v { return Tree.Node(l, v, insert(r, x)) }
+            if x < v: return Tree.Node(insert(l, x), v, r)
+            if x > v: return Tree.Node(l, v, insert(r, x))
             return t
         }
     }
@@ -39,9 +39,9 @@ fn height(t Tree&) I64 {
 
 fn main() {
     t := Tree.Leaf
-    for x in [5, 3, 8, 1, 4, 7, 9, 3] { t = insert(t, x) }
+    for x in [5, 3, 8, 1, 4, 7, 9, 3]: t = insert(t, x)
     out := Vec<I64>[]
     walk(t, out)
     Println($out)
-    Println($contains(t, 4) " " $contains(t, 6) " h=" $height(t))
+    Println($contains(t, 4) + " " + $contains(t, 6) + " h=" + $height(t))
 }

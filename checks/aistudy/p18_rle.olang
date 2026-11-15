@@ -4,7 +4,7 @@ fn encode(s String&) String {
     i := 0
     for i < s.Len() {
         j := i
-        for j < s.Len() and s[j] == s[i] { j++ }
+        for j < s.Len() and s[j] == s[i]: j++
         out.Push($(j - i))
         out.PushChar(s[i])
         i = j
@@ -19,7 +19,7 @@ fn decode(s String&) String {
         if c.IsDigit() {
             n = n * 10 + I64(c - '0')
         } else {
-            for _ in range n { out.PushChar(c) }
+            for _ in range n: out.PushChar(c)
             n = 0
         }
     }
@@ -28,7 +28,7 @@ fn decode(s String&) String {
 
 fn main() {
     e := encode("aaabcc")
-    Println($e " " $decode(e))
-    Println($encode("") "|" $decode("12x"))
+    Println($e + " " + $decode(e))
+    Println($encode("") + "|" + $decode("12x"))
     Println($decode("3"))
 }

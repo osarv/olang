@@ -14,12 +14,12 @@ fn lex(src String&) Vec<Token> {
             i++
         } else if c.IsLetter() {
             j := i
-            for j < src.Len() and (src[j].IsLetter() or src[j].IsDigit()) { j++ }
+            for j < src.Len() and (src[j].IsLetter() or src[j].IsDigit()): j++
             out.Push(Token.Ident(src[i:j]))
             i = j
         } else if c.IsDigit() {
             j := i
-            for j < src.Len() and (src[j].IsDigit() or src[j] == '.') { j++ }
+            for j < src.Len() and (src[j].IsDigit() or src[j] == '.'): j++
             out.Push(Token.Num(src[i:j]))
             i = j
         } else {
@@ -31,7 +31,7 @@ fn lex(src String&) Vec<Token> {
 }
 
 fn main() {
-    for t in lex("let x = 12 + foo(3, 4.5)") { Println($t) }
+    for t in lex("let x = 12 + foo(3, 4.5)"): Println($t)
     Println($lex("").Len())
     Println($lex("é").Len())
 }

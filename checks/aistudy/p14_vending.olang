@@ -13,7 +13,7 @@ type Event enum {
 fn step(s State, e Event) State {
     match s {
         case State.Idle {
-            if e == Event.Coin { return State.HasMoney(e.cents) }
+            if e == Event.Coin: return State.HasMoney(e.cents)
             return s
         }
         case State.HasMoney(c) {

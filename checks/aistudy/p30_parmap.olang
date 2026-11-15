@@ -13,5 +13,5 @@ fn main() {
             spawn done.Update(fn(v): return v + 1)
         }
     }
-    Println($out " done=" $done.Get())
+    Println($out + " done=" + $done.Get())
 }

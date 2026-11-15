@@ -5,14 +5,14 @@ type UF struct(n I64) {
 }
 
 fn (u mut UF&) Find(x I64) I64 {
-    if u.parent[x] != x { u.parent[x] = u.Find(u.parent[x]) }
+    if u.parent[x] != x: u.parent[x] = u.Find(u.parent[x])
     return u.parent[x]
 }
 
 fn (u mut UF&) Union(a I64, b I64) Bool {
     ra := u.Find(a)
     rb := u.Find(b)
-    if ra == rb { return false }
+    if ra == rb: return false
     if u.size[ra] < u.size[rb] {
         u.parent[ra] = rb
         u.size[rb] += u.size[ra]
@@ -27,7 +27,7 @@ fn main() {
     u := UF(8)
     comps := 8
     for e in [[0, 1], [1, 2], [3, 4], [2, 0], [5, 6], [6, 7], [7, 8]] {
-        if u.Union(e[0], e[1]) { comps-- }
+        if u.Union(e[0], e[1]): comps--
     }
     Println($comps)
 }

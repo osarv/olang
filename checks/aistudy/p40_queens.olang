@@ -1,13 +1,13 @@
 # spec: N-Queens by backtracking: count solutions for n=1..8 and print one 6x6 solution
 fn safe(cols Array<I64>&, row I64, c I64) Bool {
     for r in range row {
-        if cols[r] == c or (cols[r] - c).Abs() == row - r { return false }
+        if cols[r] == c or (cols[r] - c).Abs() == row - r: return false
     }
     return true
 }
 
 fn solve(cols mut Array<I64>&, row I64, n I64) I64 {
-    if row == n { return 1 }
+    if row == n: return 1
     count := 0
     for c in range n {
         if safe(cols, row, c) {
@@ -21,7 +21,7 @@ fn solve(cols mut Array<I64>&, row I64, n I64) I64 {
 fn main() {
     for n in range 1, 9 {
         cols := Array<I64>(n)
-        Println($n " " $solve(cols, 0, n))
+        Println($n + " " + $solve(cols, 0, n))
     }
     cols := Array<I64>(0)
     Println($solve(cols, 0, 0))

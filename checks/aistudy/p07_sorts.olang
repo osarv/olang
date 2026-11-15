@@ -12,7 +12,7 @@ fn insertion(a mut Array<I64>&) {
 }
 
 fn merge(a Array<I64>&) Array<I64> {
-    if a.Len() <= 1 { return a }
+    if a.Len() <= 1: return a
     mid := a.Len() / 2
     l := merge(a[:mid])
     r := merge(a[mid:])
@@ -40,7 +40,7 @@ fn merge(a Array<I64>&) Array<I64> {
 }
 
 fn quick(a mut Array<I64>&, lo I64, hi I64) {
-    if lo >= hi { return }
+    if lo >= hi: return
     p := a[hi]
     i := lo
     for j in range lo, hi {
@@ -63,7 +63,7 @@ fn find(a Array<I64>&, x I64) I64 {
     hi := a.Len()
     for lo < hi {
         mid := (lo + hi) / 2
-        if a[mid] == x { return mid }
+        if a[mid] == x: return mid
         if a[mid] < x { lo = mid + 1 } else { hi = mid - 1 }
     }
     return -1
@@ -78,7 +78,7 @@ fn main() {
     c := a
     quick(c, 0, c.Len() - 1)
     Println($c)
-    Println($find(c, 7) " " $find(c, 5) " " $find(c, 100))
+    Println($find(c, 7) + " " + $find(c, 5) + " " + $find(c, 100))
     e := Array<I64>(0)
     quick(e, 0, e.Len() - 1)
     Println($merge(e))

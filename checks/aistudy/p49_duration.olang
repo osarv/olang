@@ -3,7 +3,7 @@ fn fmt(secs I64) String {
     h := secs / 3600
     m := secs % 3600 / 60
     s := secs % 60
-    return $h ":" $m.PadStart(2, '0') ":" $s.PadStart(2, '0')
+    return $h + ":" + $m.PadStart(2, '0') + ":" + $s.PadStart(2, '0')
 }
 
 fn parse(t String&) I64 ? ParseError {
@@ -14,7 +14,7 @@ fn parse(t String&) I64 ? ParseError {
 fn clock(secs I64) String { return fmt(secs % 86400) }
 
 fn main() {
-    Println($fmt(3725) " " $fmt(59) " " $fmt(86400))
+    Println($fmt(3725) + " " + $fmt(59) + " " + $fmt(86400))
     Println($parse("1:02:05")!)
     Println($clock(parse("23:30:00")! + 3600))
     Println($clock(-60))

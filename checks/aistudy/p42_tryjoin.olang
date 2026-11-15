@@ -6,9 +6,7 @@ fn parse(s String&) I64 ? ParseError { return try s.ParseInt() }
 fn sumAll(xs Array<String&>&) I64 ? ParseError {
     out := Array<I64>(xs.Len())
     try join {
-        for i in range xs.Len() {
-            spawn out[i] = try parse(xs[i])
-        }
+        for i in range xs.Len(): spawn out[i] = try parse(xs[i])
     }
     return out.Sum()
 }

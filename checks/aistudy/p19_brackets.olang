@@ -8,14 +8,12 @@ fn check(s String&) I64 {
         } else if c == ')' or c == ']' or c == '}' {
             top := st.Pop()!
             ok := (top == '(' and c == ')') or (top == '[' and c == ']') or (top == '{' and c == '}')
-            if not ok { return i }
+            if not ok: return i
         }
     }
     return -1 if st.Len() == 0 else s.Len()
 }
 
 fn main() {
-    for s in ["(a[b]{c})", "(]", "((", "a)"] {
-        Println($s " -> " $check(s))
-    }
+    for s in ["(a[b]{c})", "(]", "((", "a)"]: Println($s + " -> " + $check(s))
 }

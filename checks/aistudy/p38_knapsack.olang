@@ -7,7 +7,7 @@ fn knap(w Array<I64>&, v Array<I64>&, cap I64) I64, Vec<I64> {
             dp[i * (cap + 1) + c] = dp[(i - 1) * (cap + 1) + c]
             if c >= w[i - 1] {
                 alt := dp[(i - 1) * (cap + 1) + c - w[i - 1]] + v[i - 1]
-                if alt > dp[i * (cap + 1) + c] { dp[i * (cap + 1) + c] = alt }
+                if alt > dp[i * (cap + 1) + c]: dp[i * (cap + 1) + c] = alt
             }
         }
     }
@@ -25,7 +25,7 @@ fn knap(w Array<I64>&, v Array<I64>&, cap I64) I64, Vec<I64> {
 
 fn main() {
     best, items := knap([1, 3, 4, 5], [1, 4, 5, 7], 7)
-    Println($best " " $items)
+    Println($best + " " + $items)
     b2, i2 := knap([2], [3], 1)
-    Println($b2 " " $i2)
+    Println($b2 + " " + $i2)
 }

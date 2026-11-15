@@ -28,7 +28,7 @@ fn main() {
     Println($big)
     fib := fn(n I64) I64 { return n }
     fib = fn(n I64) I64 {
-        if n < 2 { return n }
+        if n < 2: return n
         return fib(n - 1) + fib(n - 2)
     }
     Println($fib(20))

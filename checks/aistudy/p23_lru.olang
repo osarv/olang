@@ -7,7 +7,7 @@ type Lru struct(cap I64) {
 
 fn (c mut Lru&) touch(k String&) {
     i := try c.order.IndexOf(k) catch default -1
-    if i >= 0 { c.order.RemoveAt(i)! }
+    if i >= 0: c.order.RemoveAt(i)!
     c.order.Push(k)
 }
 

@@ -4,7 +4,7 @@ import "std/heap"
 type Task struct(name String, prio I64, seq I64) { name, prio, seq }
 
 fn before(a Task, b Task) Bool {
-    if a.prio != b.prio { return a.prio > b.prio }
+    if a.prio != b.prio: return a.prio > b.prio
     return a.seq < b.seq
 }
 
@@ -15,6 +15,6 @@ fn main() {
         h.Push(Task(t[0], t[1].ParseInt()!, seq))
         seq++
     }
-    for h.Len() > 0 { Println($h.Pop()!.name) }
+    for h.Len() > 0: Println($h.Pop()!.name)
     Println($h.Pop()!.name)
 }

@@ -3,7 +3,7 @@ fn solve(a mut Array<F64>&, b mut Array<F64>&, n I64) Array<F64> {
     for col in range n {
         piv := col
         for r in range col + 1, n {
-            if a[r * n + col].Abs() > a[piv * n + col].Abs() { piv = r }
+            if a[r * n + col].Abs() > a[piv * n + col].Abs(): piv = r
         }
         for c in range n {
             t := a[col * n + c]
@@ -15,7 +15,7 @@ fn solve(a mut Array<F64>&, b mut Array<F64>&, n I64) Array<F64> {
         b[piv] = t
         for r in range col + 1, n {
             f := a[r * n + col] / a[col * n + col]
-            for c in range col, n { a[r * n + c] -= f * a[col * n + c] }
+            for c in range col, n: a[r * n + c] -= f * a[col * n + c]
             b[r] -= f * b[col]
         }
     }
@@ -23,7 +23,7 @@ fn solve(a mut Array<F64>&, b mut Array<F64>&, n I64) Array<F64> {
     for i in range n {
         r := n - 1 - i
         s := b[r]
-        for c in range r + 1, n { s -= a[r * n + c] * x[c] }
+        for c in range r + 1, n: s -= a[r * n + c] * x[c]
         x[r] = s / a[r * n + r]
     }
     return x

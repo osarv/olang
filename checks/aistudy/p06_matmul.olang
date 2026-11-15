@@ -6,7 +6,7 @@ fn mul(a Mat&, b Mat&) Mat {
     for i in range a.r {
         for j in range b.c {
             s := 0.0
-            for k in range a.c { s += a.d[i * a.c + k] * b.d[k * b.c + j] }
+            for k in range a.c: s += a.d[i * a.c + k] * b.d[k * b.c + j]
             d[i * b.c + j] = s
         }
     }
@@ -16,7 +16,7 @@ fn mul(a Mat&, b Mat&) Mat {
 fn transpose(a Mat&) Mat {
     d := Array<F64>(a.r * a.c)
     for i in range a.r {
-        for j in range a.c { d[j * a.r + i] = a.d[i * a.c + j] }
+        for j in range a.c: d[j * a.r + i] = a.d[i * a.c + j]
     }
     return Mat(a.c, a.r, d)
 }

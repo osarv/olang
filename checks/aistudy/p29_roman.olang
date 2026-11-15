@@ -38,7 +38,7 @@ fn fromRoman(s String&) I64 {
 fn main() {
     for n in [1, 4, 9, 14, 40, 90, 400, 1994, 3999] {
         r := toRoman(n)
-        Println($n " " $r " " $fromRoman(r))
+        Println($n + " " + $r + " " + $fromRoman(r))
     }
-    Println($toRoman(0) "|" $toRoman(-5) "|" $fromRoman("ABC"))
+    Println($toRoman(0) + "|" + $toRoman(-5) + "|" + $fromRoman("ABC"))
 }

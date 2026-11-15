@@ -7,7 +7,7 @@ fn wrap(text String&, width I64) Vec<String> {
             lines.Push(cur.ToString())
             cur.Clear()
         }
-        if cur.Len() > 0 { cur.Push(" ") }
+        if cur.Len() > 0: cur.Push(" ")
         cur.Push(w)
     }
     lines.Push(cur.ToString())
@@ -15,7 +15,7 @@ fn wrap(text String&, width I64) Vec<String> {
 }
 
 fn main() {
-    for l in wrap("the quick brown fox jumps over the lazy dog", 12) { Println("[" $l.PadEnd(12) "]") }
+    for l in wrap("the quick brown fox jumps over the lazy dog", 12): Println("[" + $l.PadEnd(12) + "]")
     Println($wrap("", 5).Len())
     Println($wrap("a  b", 5))
     Println($wrap("x", 0))

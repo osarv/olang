@@ -5,18 +5,18 @@ fn main() {
     a := set.Set<I64>[1, 2, 3, 4]
     b := set.Set<I64>[3, 4, 5]
     u := set.Set<I64>[]
-    for x in a { u.Add(x) }
-    for x in b { u.Add(x) }
+    for x in a: u.Add(x)
+    for x in b: u.Add(x)
     inter := set.Set<I64>[]
     diff := set.Set<I64>[]
     for x in a {
         if b.Has(x) { inter.Add(x) } else { diff.Add(x) }
     }
-    Println($u.Len() " " $inter.Len() " " $diff.Len())
+    Println($u.Len() + " " + $inter.Len() + " " + $diff.Len())
     words := set.Set<String>[]
-    for w in "to be or not to be".Split(" ") { words.Add(w) }
+    for w in "to be or not to be".Split(" "): words.Add(w)
     ws := Vec<String>[]
-    for w in words { ws.Push(w) }
+    for w in words: ws.Push(w)
     ws.Sort(fn(x, y): return x < y)
     Println($ws)
 }

@@ -29,16 +29,16 @@ fn reverse(l List&) List {
 fn nth(l List&, n I64) I64 {
     cur := l
     for _ in range n {
-        if cur == List.Cons { cur = cur.tail }
+        if cur == List.Cons: cur = cur.tail
     }
-    if cur == List.Cons { return cur.head }
+    if cur == List.Cons: return cur.head
     return 0
 }
 
 fn main() {
     l := List.Nil
-    for i in range 5 { l = push(l, i * i) }
+    for i in range 5: l = push(l, i * i)
     r := reverse(l)
-    Println($length(l) " " $nth(r, 2) " " $nth(r, 4))
+    Println($length(l) + " " + $nth(r, 2) + " " + $nth(r, 4))
     Println($nth(r, 9))
 }

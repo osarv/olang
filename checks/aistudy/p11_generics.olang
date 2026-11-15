@@ -10,7 +10,7 @@ fn (s Stack<T>&) Peek() T ? StackEmpty { return try s.items.Last() catch { error
 fn largest<T>(xs Array<T>&) T {
     best := xs[0]
     for x in xs {
-        if best < x { best = x }
+        if best < x: best = x
     }
     return best
 }
@@ -26,9 +26,9 @@ fn main() {
     t := Stack<String>()
     t.Push("a")
     Println($t.Pop()!)
-    Println($largest([3, 9, 2]) " " $largest(["x", "abc"]))
+    Println($largest([3, 9, 2]) + " " + $largest(["x", "abc"]))
     p, q := swap(1, "one")
-    Println($p " " $q)
+    Println($p + " " + $q)
     e := Array<I64>(0)
     Println($largest(e))
 }

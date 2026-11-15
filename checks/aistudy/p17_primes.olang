@@ -1,7 +1,7 @@
 # spec: sieve of Eratosthenes up to n, count primes, nth prime, prime factorization of a number
 fn sieve(n I64) Array<Bool> {
     is := Array<Bool>(n + 1)
-    for i in range 2, n + 1 { is[i] = true }
+    for i in range 2, n + 1: is[i] = true
     i := 2
     for i * i <= n {
         if is[i] {

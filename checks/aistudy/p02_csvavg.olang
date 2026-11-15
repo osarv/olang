@@ -15,16 +15,16 @@ fn main() ? {
             first = false
             continue
         }
-        if line == "" { continue }
+        if line == "": continue
         people.Push(try Person.parseLine(line))
     }
     total := 0
     oldest := people[0]
     for p in people {
         total += p.age
-        if p.age > oldest.age { oldest = p }
+        if p.age > oldest.age: oldest = p
     }
-    Println("avg " $(total / people.Len()) " oldest " $oldest.name)
+    Println("avg " + $(total / people.Len()) + " oldest " + $oldest.name)
     empty := Vec<Person>[]
-    Println("avg of none " $(total / empty.Len()))
+    Println("avg of none " + $(total / empty.Len()))
 }

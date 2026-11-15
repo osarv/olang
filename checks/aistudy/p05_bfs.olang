@@ -9,7 +9,7 @@ fn main() {
         adj[e[1]].Push(e[0])
     }
     dist := Array<I64>(n)
-    for i in range n { dist[i] = -1 }
+    for i in range n: dist[i] = -1
     q := deque.Deque<I64>[]
     dist[0] = 0
     q.PushBack(0)

@@ -8,7 +8,7 @@ fn main() ? {
     text := json.Encode(items)
     Println(text)
     back := try json.Decode<Array<Item>>(text)
-    Println($back.Len() " " $back[1].Name)
+    Println($back.Len() + " " + $back[1].Name)
     bad := try json.Decode<Array<Item>>("[{\"name\": \"x\"}]")
     Println($bad.Len())
 }

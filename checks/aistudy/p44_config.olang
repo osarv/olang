@@ -8,14 +8,14 @@ fn Config.Parse(text String&) Config ? ParseError {
     section := ""
     for raw in text.Lines() {
         line := raw.Trim()
-        if line == "" or line.StartsWith("#") { continue }
+        if line == "" or line.StartsWith("#"): continue
         if line.StartsWith("[") {
             section = line[1:line.Len() - 1]
             continue
         }
         eq := try line.Find("=") catch { error ParseError.Invalid }
         key := line[:eq].Trim()
-        c.vals.Put($section "." $key, line[eq + 1:].Trim())
+        c.vals.Put($section + "." + $key, line[eq + 1:].Trim())
     }
     return c
 }
@@ -28,6 +28,6 @@ fn (c Config&) Int(key String&, dflt I64) I64 {
 fn main() {
     text := "# demo\n[db]\nhost = localhost\nport = 5432\n[app]\nthreads = four\n"
     c := Config.Parse(text)!
-    Println($c.Int("db.port", 1) " " $c.Int("app.threads", 2) " " $c.Int("x.y", 3))
+    Println($c.Int("db.port", 1) + " " + $c.Int("app.threads", 2) + " " + $c.Int("x.y", 3))
     Println($Config.Parse("[a]\nnovalue\n")!.Int("a.b", 0))
 }

@@ -6,9 +6,7 @@ fn main() {
         counts.Update(w, 0, fn(v): return v + 1)
     }
     keys := Vec<String>[]
-    for e in counts { keys.Push(e.Key) }
+    for e in counts: keys.Push(e.Key)
     keys.Sort(fn(a, b): return (counts.Get(a)! > counts.Get(b)!) or (counts.Get(a)! == counts.Get(b)! and a < b))
-    for i in range 3 {
-        Println($keys[i] " " $counts.Get(keys[i])!)
-    }
+    for i in range 3: Println($keys[i] + " " + $counts.Get(keys[i])!)
 }

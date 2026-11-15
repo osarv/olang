@@ -3,8 +3,8 @@ fn editDistance(a String&, b String&) I64 {
     m := a.Len()
     n := b.Len()
     d := Array<I64>((m + 1) * (n + 1))
-    for i in range m + 1 { d[i * (n + 1)] = i }
-    for j in range n + 1 { d[j] = j }
+    for i in range m + 1: d[i * (n + 1)] = i
+    for j in range n + 1: d[j] = j
     for i in range 1, m + 1 {
         for j in range 1, n + 1 {
             cost := 0 if a[i - 1] == b[j - 1] else 1
@@ -27,6 +27,6 @@ fn lcs(a String&, b String&) I64 {
 }
 
 fn main() {
-    Println($editDistance("kitten", "sitting") " " $editDistance("", "abc") " " $editDistance("same", "same"))
-    Println($lcs("ABCBDAB", "BDCABA") " " $lcs("", "x"))
+    Println($editDistance("kitten", "sitting") + " " + $editDistance("", "abc") + " " + $editDistance("same", "same"))
+    Println($lcs("ABCBDAB", "BDCABA") + " " + $lcs("", "x"))
 }

@@ -2,12 +2,12 @@
 Hits mut I64 = 0
 
 fn work() {
-    for _ in range 1000 { Hits += 1 }
+    for _ in range 1000: Hits += 1
 }
 
 fn main() {
     join {
-        for _ in range 4 { spawn work() }
+        for _ in range 4: spawn work()
     }
     Println($Hits)
 }

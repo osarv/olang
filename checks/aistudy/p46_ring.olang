@@ -7,11 +7,8 @@ type Ring struct(cap I64) {
 
 fn (r mut Ring&) Push(x I64) {
     r.buf[(r.head + r.n) % r.buf.Len()] = x
-    if r.n == r.buf.Len() {
-        r.head = (r.head + 1) % r.buf.Len()
-    } else {
-        r.n++
-    }
+    if r.n == r.buf.Len(): r.head = (r.head + 1) % r.buf.Len()
+    else: r.n++
 }
 
 fn (r mut Ring&) Pop() I64 {
@@ -23,9 +20,9 @@ fn (r mut Ring&) Pop() I64 {
 
 fn main() {
     r := Ring(3)
-    for i in range 5 { r.Push(i) }
-    Println($r.Pop() " " $r.Pop() " " $r.Pop() " " $r.n)
-    Println($r.Pop() " " $r.n)
+    for i in range 5: r.Push(i)
+    Println($r.Pop() + " " + $r.Pop() + " " + $r.Pop() + " " + $r.n)
+    Println($r.Pop() + " " + $r.n)
     z := Ring(0)
     z.Push(1)
     Println($z.n)
