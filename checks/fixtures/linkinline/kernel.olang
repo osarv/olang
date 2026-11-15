@@ -1,0 +1,26 @@
+# B2d: step.Step inlined into every call of the kernel below, each row's accumulators kept in registers - a module's
+# own compile vectorizing nothing under full LTO, the link inlining before it vectorizes
+import "step"
+import "std/io"
+
+fn kernel(depth I64, a Array<U8>&, b Array<I8>&, acc mut Array<I32>&, nr I64) {
+    for k in range depth {
+        o := k * nr
+        step.Step(acc, 0, a[k * 4], b, o, nr)
+        step.Step(acc, nr, a[k * 4 + 1], b, o, nr)
+        step.Step(acc, 2 * nr, a[k * 4 + 2], b, o, nr)
+        step.Step(acc, 3 * nr, a[k * 4 + 3], b, o, nr)
+    }
+}
+
+fn main() ? io.Error {
+    depth := 64
+    nr := 16
+    a := Array<U8>[U8(k % 251) for k in range depth * 4]
+    b := Array<I8>[I8(k % 127 - 63) for k in range depth * nr]
+    acc := Array<I32>(4 * nr)
+    kernel(depth, a, b, acc, nr)
+    total I64 = 0
+    for v in acc: total += v
+    try io.PutLine($"total " $total)
+}

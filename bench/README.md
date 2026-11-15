@@ -24,7 +24,8 @@ Nothing here is part of `make verify` or `make test` - the makefile names the di
 not one of them.
 
 **Fairness.** The C versions are compiled with exactly the flags olang compiles and links its own output with
-(`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization - and, since
+(`clang -O3 -flto`, `addModeFlags` in `main.c`; olang's own modules add `-fno-vectorize -fno-slp-vectorize`, leaving
+vectorizing to the link, B2d): the same compiler, optimizer and link-time optimization - and, since
 olang builds for the machine it runs on (B12, 2026-10-09), `-march=native`, with `-ffp-contract=off`, because clang's
 default would fuse `a*b+c` into an FMA wherever the target has one and change the results - olang never contracts, and
 fuses only where a program writes `x.Fma(a, b)`. The `-x` columns build both for baseline x86-64 (`olang -target x86-64`, C with

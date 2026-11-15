@@ -37302,3 +37302,23 @@ The call-on-a-non-function path (check.olang, callee) said E11b only where the r
 with `"`; a rendering of any other value (`$alpha`, an F64) followed by a parenthesized piece of text fell to E13b "F64 is
 not a function". It now also says E11b where the callee is directly after `$` and the `(` that follows opens with a text
 literal (`textArgFollows`). checks/cases/e11bjoinfloat.olang; goldens/diag.txt gained its entry.
+
+## 2026-11-15: B2d - under full LTO a module's compile leaves vectorizing to the link
+
+oann's INT8 benchmark (bench/int8.olang) ran its products at 10-12 GOPS against the 55-60 its DESIGN.md recorded:
+`quant.rowStep`, the one-row step of the INT8 micro-kernels (a five-line loop), stayed 54 calls in `quant.rowPanel`, the
+tile's accumulators going through memory, and no `vpdpwssd` was made. The cause was the order of LLVM's work across our
+units: every module is compiled `-O3 -flto` on its own, and clang's full-LTO pre-link pipeline runs the loop and SLP
+vectorizers; `rowStep` lives in quant's unit while the micro-kernels, generic over the tile, are instances in the root's
+unit (B3d), so no compile saw both, and by the link `rowStep` was its vectorized form (a 64-wide main loop, an 8-wide
+epilogue, the run-time checks - 224 lines of IR), past the link inliner's threshold. A one-file reproducer inlined because
+there caller and callee shared a unit and the pre-link inliner ran before vectorizing. Fix (build.olang, CompileFlags):
+under full LTO a module's compile adds `-fno-vectorize -fno-slp-vectorize`; the link's LTO pipeline inlines, then
+vectorizes the whole program as before. ThinLTO's pre-link pipeline already vectorizes nothing, so it is unchanged, as are
+`-debug`, `-race` and `-quick`. The flags are in each object's hash, so cached objects are compiled again once.
+Measured (load average 19-23 on 4 cores, interleaved runs): bench_int8 512^3 11.5 -> 77-94 GOPS, 1024^3 11.8 -> 82-88,
+128x784x128 11.4 -> 79-88, 1x1024x1024 12.6 -> 59; rowStep calls 54 -> 0, calls into quant 66 -> 12 (`store`, `Linear`),
+`vpdpwssd` 0 -> 80; the F32 GEMM beside it unchanged (~110-120 GFLOPS). olang's bench/ against C (nbody, spectral,
+mandelbrot, fannkuch, matmul, sha256, lanes) the same or slightly better, olang/C 0.93-1.13 before and after. Check: the
+`linkinline` scenario (checks/fixtures/linkinline: a step function in one module, a kernel in another calling it four times
+per iteration - fails with the old flags).

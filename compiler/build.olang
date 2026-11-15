@@ -263,6 +263,14 @@ fn (c Config&) ModeFlags() Vec<String&> {
 # else FastISel is kept, since doing without it costs -O0 compiles 70% (DESIGN.md 3.4)
 fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     out := c.ModeFlags()
+    if c.vectorizesAtLink() {
+        # B2d: under full LTO the link optimizes the whole program again, vectorizer included, so a module's own compile
+        # leaves loops as they are - vectorized there, a small function (a kernel's step) grew past the link's inlining
+        # threshold and stayed a call in an instance compiled in another unit (oann's INT8 tiles, 2026-11-15: 12 GOPS
+        # against 86); ThinLTO's compile vectorizes nothing anyway
+        out.Push("-fno-vectorize")
+        out.Push("-fno-slp-vectorize")
+    }
     if c.Profile {
         # B20: a frame set up for the whole of each function, so that the sampler's walk finds every caller wherever a
         # sample lands (shrink-wrapping sets it up only on the paths that call, leaving a loop on its caller's) - here
@@ -281,6 +289,9 @@ fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     }
     return out
 }
+
+# whether a module's object is optimized again at the link with the vectorizers: an optimized build linked by full LTO
+fn (c Config&) vectorizesAtLink() Bool { return not c.Debug and not c.Race and not c.Quick and not c.Thin }
 
 # the flags a Locations object (B3l) is compiled with: the mode's without link-time optimization - it is data alone, which
 # no link optimizes and none imports, so a program linking by ThinLTO redoes no module's code when only it changed
@@ -1333,7 +1344,11 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     assert f.Len() == 2 and f[0] == "-O3" and f[1] == "-flto"
     c.Thin = true
     assert c.ModeFlags()[1] == "-flto=thin"
+    assert c.CompileFlags("define void @f() { ret void }").Len() == 2
     c.Thin = false
+    # full LTO: a module's compile leaves vectorizing to the link, which inlines first
+    v := c.CompileFlags("define void @f() { ret void }")
+    assert v.Len() == 4 and v[2] == "-fno-vectorize" and v[3] == "-fno-slp-vectorize"
     a := c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f)
     assert a.StartsWith("build/m.") and a.EndsWith(".o") and a.Len() == "build/m.".Len() + 16 + 2
     assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f) == a

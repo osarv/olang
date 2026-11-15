@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "promptkeys", "jupyter", "notebook", "checkedbuild"]
+                     "prompt", "promptkeys", "jupyter", "notebook", "checkedbuild", "linkinline"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -498,6 +498,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "frameenv" { try frameenv(r) }
         case "testends" { try testends(r) }
         case "checkedbuild" { try checkedbuild(r) }
+        case "linkinline": try linkinline(r)
         case _ {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.Check
@@ -2457,6 +2458,18 @@ fn cinterop(r mut report&) ? Failed {
     try r.expect(sh(dir, "python3 -I use_ctypes.py build/libmylib.so > py.txt 2>&1") == 0, "ctypes", dir)
     py := try os.ReadFile($dir "/py.txt") catch default ""
     try r.expect(py == "add 5\nsum 10\ngreet hello, python!\ncheck 0 42 131073\nmid 2.0 3.0\n", "ctypes printed " $py, dir)
+}
+
+# B2d: under full LTO a small function holding a loop, in another module, is inlined into the loop calling it - each
+# module's own compile leaves vectorizing to the link, which inlines first (oann's INT8 tiles stayed calls, 2026-11-15)
+test "a small function of another module is inlined at the link" { assert passed("linkinline") }
+
+fn linkinline(r mut report&) ? Failed {
+    dir := fresh("linkinline")
+    os.Run("cp checks/fixtures/linkinline/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build kernel.olang > out.txt 2>&1 && ./build/kernel > run.txt") == 0, "kernel", dir)
+    try r.expect((try os.ReadFile($dir "/run.txt") catch default "") == "total 692080\n", "kernel printed", dir)
+    try r.expect(sh(dir, "objdump -d build/kernel | grep -q 'call.*Step'") != 0, "step.Step is called, not inlined", dir)
 }
 
 # B12: a build is for this machine unless -a names another target - its vectors and FMA where it has them, none of
