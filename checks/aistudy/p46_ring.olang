@@ -1,0 +1,32 @@
+# spec: fixed-capacity ring buffer of I64: Push (overwrites oldest when full), Pop oldest, Len; capacity 3
+type Ring struct(cap I64) {
+    buf Array<I64> = Array<I64>(cap)
+    head I64 = 0
+    n I64 = 0
+}
+
+fn (r mut Ring&) Push(x I64) {
+    r.buf[(r.head + r.n) % r.buf.Len()] = x
+    if r.n == r.buf.Len() {
+        r.head = (r.head + 1) % r.buf.Len()
+    } else {
+        r.n++
+    }
+}
+
+fn (r mut Ring&) Pop() I64 {
+    x := r.buf[r.head]
+    r.head = (r.head + 1) % r.buf.Len()
+    r.n--
+    return x
+}
+
+fn main() {
+    r := Ring(3)
+    for i in range 5 { r.Push(i) }
+    Println($r.Pop() " " $r.Pop() " " $r.Pop() " " $r.n)
+    Println($r.Pop() " " $r.n)
+    z := Ring(0)
+    z.Push(1)
+    Println($z.n)
+}

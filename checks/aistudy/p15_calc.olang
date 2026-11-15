@@ -1,0 +1,82 @@
+# spec: small interpreter: tokenize and evaluate infix expressions with + - * / and parentheses, recursive descent
+type CalcError error { BadChar, Unexpected, DivZero }
+
+type Parser struct(text String, pos I64) { text, pos }
+
+fn (p Parser&) peek() Char {
+    if p.pos >= p.text.Len() { return '\0' }
+    return p.text[p.pos]
+}
+
+fn (p mut Parser&) skip() {
+    for p.peek() == ' ' { p.pos++ }
+}
+
+fn (p mut Parser&) number() I64 ? CalcError {
+    p.skip()
+    start := p.pos
+    for p.peek().IsDigit() { p.pos++ }
+    if start == p.pos { error CalcError.Unexpected }
+    return try p.text[start:p.pos].ParseInt() catch { error CalcError.BadChar }
+}
+
+fn (p mut Parser&) atom() I64 ? CalcError {
+    p.skip()
+    if p.peek() == '(' {
+        p.pos++
+        v := try p.expr()
+        p.skip()
+        p.pos++
+        return v
+    }
+    return try p.number()
+}
+
+fn (p mut Parser&) term() I64 ? CalcError {
+    v := try p.atom()
+    for {
+        p.skip()
+        c := p.peek()
+        if c == '*' {
+            p.pos++
+            v *= try p.atom()
+        } else if c == '/' {
+            p.pos++
+            d := try p.atom()
+            if d == 0 { error CalcError.DivZero }
+            v /= d
+        } else { break }
+    }
+    return v
+}
+
+fn (p mut Parser&) expr() I64 ? CalcError {
+    v := try p.term()
+    for {
+        p.skip()
+        c := p.peek()
+        if c == '+' {
+            p.pos++
+            v += try p.term()
+        } else if c == '-' {
+            p.pos++
+            v -= try p.term()
+        } else { break }
+    }
+    return v
+}
+
+fn eval(s String) I64 ? CalcError {
+    p := Parser(s, 0)
+    return try p.expr()
+}
+
+fn main() {
+    for s in ["1 + 2 * 3", "(1 + 2) * 3", "10 / (5 - 5)", "2 * (3 + 4", "", "7 - 10"] {
+        r := try eval(s) catch e { 
+            Println("error " $e)
+            continue
+        }
+        Println($s " = " $r)
+    }
+}

@@ -1,0 +1,17 @@
+# spec: process 8 work items in parallel (square them), count how many were processed with a Mutex-protected counter
+import "std/sync"
+
+fn square(x I64) I64 { return x * x }
+
+fn main() {
+    inputs := [1, 2, 3, 4, 5, 6, 7, 8]
+    out := Array<I64>(inputs.Len())
+    done := sync.Mutex<I64>(0)
+    join {
+        for i in range inputs.Len() {
+            spawn out[i] = square(inputs[i])
+            spawn done.Update(fn(v): return v + 1)
+        }
+    }
+    Println($out " done=" $done.Get())
+}

@@ -1,0 +1,21 @@
+# spec: worker pool: 3 workers read jobs (numbers) from a channel, send squares to a results channel; main collects the sum
+import "std/chan"
+
+fn worker(jobs mut chan.Chan<I64>&, results mut chan.Chan<I64>&) {
+    for j in jobs { chan.Send(results, j * j)! }
+}
+
+fn main() {
+    jobs mut chan.Chan<I64>& = chan.Chan<I64>(8)
+    results mut chan.Chan<I64>& = chan.Chan<I64>(8)
+    chan.Init(jobs)
+    chan.Init(results)
+    total := 0
+    join {
+        for _ in range 3 { spawn worker(jobs, results) }
+        for i in range 1, 11 { chan.Send(jobs, i)! }
+        chan.Close(jobs)
+        for _ in range 10 { total += chan.Recv(results)! }
+    }
+    Println($total)
+}

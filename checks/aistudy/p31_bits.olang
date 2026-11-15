@@ -1,0 +1,30 @@
+# spec: bit tricks on U8/U32: popcount, reverse bits of a byte, is power of two, set/clear/toggle bit, checksum of bytes as U8
+fn reverseByte(b U8) U8 {
+    r := U8(0)
+    for i in range 8 {
+        if (b >> i) & 1 == 1 { r |= U8(1) << (7 - i) }
+    }
+    return r
+}
+
+fn isPow2(x U32) Bool { return x != 0 and x & (x - 1) == 0 }
+
+fn checksum(data Array<U8>&) U8 {
+    s := 0
+    for b in data { s += I64(b) }
+    return U8(s)
+}
+
+fn main() {
+    Println($reverseByte(0b00010110) " " $U8(0b00010110).PopCount())
+    Println($isPow2(64) " " $isPow2(0) " " $isPow2(96))
+    x := U32(0)
+    x |= 1 << 5
+    x ^= 1 << 5
+    x |= 1 << 31
+    Println($x)
+    Println($checksum([200, 100, 50]))
+    n := 40
+    Println($(U32(1) << n))
+    Println($(U8(200) + U8(100)))
+}

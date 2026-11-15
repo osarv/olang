@@ -1,0 +1,14 @@
+# spec: encode a struct list to JSON text and decode it back; check round trip
+import "std/json"
+
+type Item struct(Name String, Qty I64, Price F64) { Name, Qty, Price }
+
+fn main() ? {
+    items := Array<Item>[Item("pen", 3, 1.5), Item("ink", 1, 7.25)]
+    text := json.Encode(items)
+    Println(text)
+    back := try json.Decode<Array<Item>>(text)
+    Println($back.Len() " " $back[1].Name)
+    bad := try json.Decode<Array<Item>>("[{\"name\": \"x\"}]")
+    Println($bad.Len())
+}

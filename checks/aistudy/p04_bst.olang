@@ -1,0 +1,47 @@
+# spec: binary search tree of I64: insert, contains, inorder list, height
+type Tree enum {
+    Leaf
+    Node(l Tree&, v I64, r Tree&)
+}
+
+fn insert(t Tree&, x I64) Tree {
+    match t {
+        case Tree.Leaf: return Tree.Node(Tree.Leaf, x, Tree.Leaf)
+        case Tree.Node(l, v, r) {
+            if x < v { return Tree.Node(insert(l, x), v, r) }
+            if x > v { return Tree.Node(l, v, insert(r, x)) }
+            return t
+        }
+    }
+}
+
+fn contains(t Tree&, x I64) Bool {
+    match t {
+        case Tree.Leaf: return false
+        case Tree.Node(l, v, r): return contains(l, x) if x < v else (contains(r, x) if x > v else true)
+    }
+}
+
+fn walk(t Tree&, out mut Vec<I64>&) {
+    if t == Tree.Node {
+        walk(t.l, out)
+        out.Push(t.v)
+        walk(t.r, out)
+    }
+}
+
+fn height(t Tree&) I64 {
+    match t {
+        case Tree.Leaf: return 0
+        case Tree.Node(l, _, r): return 1 + height(l).Max(height(r))
+    }
+}
+
+fn main() {
+    t := Tree.Leaf
+    for x in [5, 3, 8, 1, 4, 7, 9, 3] { t = insert(t, x) }
+    out := Vec<I64>[]
+    walk(t, out)
+    Println($out)
+    Println($contains(t, 4) " " $contains(t, 6) " h=" $height(t))
+}

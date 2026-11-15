@@ -1,0 +1,37 @@
+# spec: LRU cache with capacity 2: Get moves key to most recent, Put evicts least recent; Map plus a Vec of keys by recency
+type Lru struct(cap I64) {
+    cap
+    vals Map<String, I64> = Map<String, I64>[]
+    order Vec<String> = Vec<String>[]
+}
+
+fn (c mut Lru&) touch(k String&) {
+    i := try c.order.IndexOf(k) catch default -1
+    if i >= 0 { c.order.RemoveAt(i)! }
+    c.order.Push(k)
+}
+
+fn (c mut Lru&) Get(k String&) I64 ? Missing {
+    v := try c.vals.Get(k) catch { error Missing }
+    c.touch(k)
+    return v
+}
+
+fn (c mut Lru&) Put(k String&, v I64) {
+    if not c.vals.Has(k) and c.vals.Len() >= c.cap {
+        c.order.RemoveAt(0)!
+        c.vals.Remove(c.order[0])
+    }
+    c.vals.Put(k, v)
+    c.touch(k)
+}
+
+fn main() {
+    c := Lru(2)
+    c.Put("a", 1)
+    c.Put("b", 2)
+    Println($c.Get("a")!)
+    c.Put("c", 3)
+    Println($(try c.Get("b") catch default -1))
+    Println($c.Get("c")!)
+}

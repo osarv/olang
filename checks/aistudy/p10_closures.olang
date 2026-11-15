@@ -1,0 +1,35 @@
+# spec: closures: a counter factory, function composition, a memoized fib using a captured map, filter by threshold
+type Box struct(n I64) { n }
+
+fn makeCounter() fn&() I64 {
+    b mut Box& = Box(0)
+    return fn() I64 {
+        b.n++
+        return b.n
+    }
+}
+
+fn compose(f fn&(x I64) I64, g fn&(x I64) I64) fn&(x I64) I64 {
+    return fn(x I64) I64 { return g(f(x)) }
+}
+
+fn main() {
+    c := makeCounter()
+    c()
+    c()
+    Println($c())
+    inc := fn(x I64) I64 { return x + 1 }
+    dbl := fn(x I64) I64 { return x * 2 }
+    h := compose(inc, dbl)
+    Println($h(5))
+    limit := 3
+    xs := [1, 5, 2, 8, 3, 9]
+    big := xs.Filter(fn(x): return x > limit)
+    Println($big)
+    fib := fn(n I64) I64 { return n }
+    fib = fn(n I64) I64 {
+        if n < 2 { return n }
+        return fib(n - 1) + fib(n - 2)
+    }
+    Println($fib(20))
+}

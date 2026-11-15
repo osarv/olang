@@ -1,0 +1,27 @@
+# spec: mean, median, variance, standard deviation, min/max of an Array<F64>; normalize to z-scores
+fn mean(xs Array<F64>&) F64 { return xs.Sum() / F64(xs.Len()) }
+
+fn median(xs Array<F64>&) F64 {
+    s := xs.Copy()
+    s.Sort(fn(a, b): return a < b)
+    n := s.Len()
+    if n % 2 == 1 { return s[n / 2] }
+    return (s[n / 2 - 1] + s[n / 2]) / 2.0
+}
+
+fn variance(xs Array<F64>&) F64 {
+    m := mean(xs)
+    d := xs - m
+    return (d * d).Sum() / F64(xs.Len() - 1)
+}
+
+fn main() {
+    xs := [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    Println($mean(xs) " " $median(xs) " " $variance(xs) " " $variance(xs).Sqrt())
+    z := (xs - mean(xs)) / variance(xs).Sqrt()
+    Println($z)
+    one := [3.0]
+    Println($variance(one))
+    none := Array<F64>(0)
+    Println($mean(none))
+}

@@ -1,0 +1,22 @@
+# spec: word-wrap text to a column width, splitting on spaces; words longer than the width stay on their own line
+fn wrap(text String&, width I64) Vec<String> {
+    lines := Vec<String>[]
+    cur := StringBuilder()
+    for w in text.Split(" ") {
+        if cur.Len() + w.Len() + 1 > width and cur.Len() > 0 {
+            lines.Push(cur.ToString())
+            cur.Clear()
+        }
+        if cur.Len() > 0 { cur.Push(" ") }
+        cur.Push(w)
+    }
+    lines.Push(cur.ToString())
+    return lines
+}
+
+fn main() {
+    for l in wrap("the quick brown fox jumps over the lazy dog", 12) { Println("[" $l.PadEnd(12) "]") }
+    Println($wrap("", 5).Len())
+    Println($wrap("a  b", 5))
+    Println($wrap("x", 0))
+}

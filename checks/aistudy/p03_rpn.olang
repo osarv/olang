@@ -1,0 +1,31 @@
+# spec: evaluate a reverse polish expression "3 4 + 2 *" with + - * /; errors for bad token / stack underflow
+type CalcError error { Underflow, BadToken, DivZero }
+
+fn eval(expr String&) I64 ? CalcError {
+    st := Vec<I64>[]
+    for tok in expr.Split(" ") {
+        if tok == "+" or tok == "-" or tok == "*" or tok == "/" {
+            b := try st.Pop() catch { error CalcError.Underflow }
+            a := try st.Pop() catch { error CalcError.Underflow }
+            match tok {
+                case "+": st.Push(a + b)
+                case "-": st.Push(a - b)
+                case "*": st.Push(a * b)
+                case _: st.Push(a / b)
+            }
+        } else {
+            n := try tok.ParseInt() catch { error CalcError.BadToken }
+            st.Push(n)
+        }
+    }
+    return try st.Pop() catch { error CalcError.Underflow }
+}
+
+fn main() {
+    Println($eval("3 4 + 2 *")!)
+    Println($eval("10 2 /")!)
+    r := try eval("1 +") catch default -1
+    Println($r)
+    z := try eval("5 0 /") catch default -2
+    Println($z)
+}

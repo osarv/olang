@@ -1,0 +1,21 @@
+# spec: check balanced brackets ()[]{} in a string using a stack; return index of first error or -1
+fn check(s String&) I64 {
+    st := Vec<Char>[]
+    for i in range s.Len() {
+        c := s[i]
+        if c == '(' or c == '[' or c == '{' {
+            st.Push(c)
+        } else if c == ')' or c == ']' or c == '}' {
+            top := st.Pop()!
+            ok := (top == '(' and c == ')') or (top == '[' and c == ']') or (top == '{' and c == '}')
+            if not ok { return i }
+        }
+    }
+    return -1 if st.Len() == 0 else s.Len()
+}
+
+fn main() {
+    for s in ["(a[b]{c})", "(]", "((", "a)"] {
+        Println($s " -> " $check(s))
+    }
+}
