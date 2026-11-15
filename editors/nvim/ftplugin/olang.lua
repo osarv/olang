@@ -12,9 +12,13 @@ vim.bo.comments = ":#"
 vim.bo.keywordprg = "olang explain"
 -- the sign column always there, so a diagnostic's sign appearing never shifts the text sideways (and rewraps it)
 vim.wo.signcolumn = "yes"
+-- gf, [i and friends follow an import to its file
+vim.bo.include = [[^\s*import\s\+\(\w\+\s\+\)\=]]
+vim.bo.includeexpr = "v:lua.require'olang'.include(v:fname)"
+vim.bo.suffixesadd = ".olang"
 vim.cmd("compiler olang")
 
 local olang = require("olang")
 olang.attach(0)
 olang.commands(0)
-vim.b.undo_ftplugin = "setlocal et< sw< sts< ts< cms< com< kp< makeprg< errorformat< signcolumn<"
+vim.b.undo_ftplugin = "setlocal et< sw< sts< ts< cms< com< kp< makeprg< errorformat< signcolumn< inc< inex< sua<"

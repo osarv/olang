@@ -111,6 +111,23 @@ local function make(prog, args)
   vim.cmd("cwindow")
 end
 
+-- the file an import names, for gf and friends (includeexpr): "std/x" in the standard library (OLANG_STD, else std
+-- beside the olang found on the PATH, as the compiler finds it), anything else beside the importing file; ".olang" added
+function M.include(name)
+  local file = name:match("%.olang$") and name or name .. ".olang"
+  local rest = file:match("^std/(.*)")
+  if rest then
+    local std = vim.env.OLANG_STD
+    if not std or std == "" then
+      local exe = vim.fn.exepath("olang")
+      std = exe ~= "" and vim.fn.fnamemodify(vim.fn.resolve(exe), ":h:h") .. "/std" or ""
+    end
+    return std .. "/" .. rest
+  end
+  if file:sub(1, 1) == "/" then return file end
+  return vim.fn.expand("%:p:h") .. "/" .. file
+end
+
 -- the buffer-local commands and keymaps (vim.g.olang_no_maps = 1 leaves the keymaps off)
 function M.commands(bufnr)
   local function cmd(name, fn, nargs)
