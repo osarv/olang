@@ -25,7 +25,8 @@ make
 This builds `build/olang` from the committed seed (`seed/` holds the compiler's own LLVM IR), in two stages: clang
 compiles the seed into a first compiler, which builds the compiler from its source as a quick build (no link-time
 optimization); that one builds it again fully optimized, and installs it. Each stage says when it starts, its build's
-phases, and how long it took; the whole takes a few minutes. (`make fixedpoint`, part of `make verify`, has the
+phases, and how long it took, and a busy indicator - six dots, a gap going round them - shows while it waits (on a terminal only;
+`OLANG_SPINNER=0` turns it off); the whole takes a few minutes. (`make fixedpoint`, part of `make verify`, has the
 installed compiler build itself once more and checks the two are byte for byte equal.) Before compiling anything, `make` checks for the tools above and
 says which package to install for anything missing (`make prereq` runs only that check).
 

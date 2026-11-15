@@ -278,9 +278,18 @@ prereq:
 	echo "prereq: clang $$v ($(SEED_CLANG)), xz, libffi, the C headers and LTO linking are all here"
 
 # the seed's objects compiled side by side, then the two builds: the bootstrap from nothing, every time it is asked for
+# While clang compiles the seed no olang runs, so this recipe draws the compiler's spinner itself (compiler/spin.olang,
+# B25: the same six dots, the same frames) from a background loop stopped when clang ends - only where the standard error
+# is a terminal, TERM is not dumb and OLANG_SPINNER is not 0; make's own echo of the compiles is then silenced (-s), as it
+# would land beside the spinner
 bootstrap: prereq
 	@t=$$(date +%s); echo "bootstrap: clang compiles the seed into build/olang.seed ..."; \
-	$(MAKE) -j$(PARALLEL) build/olang.seed || exit 1; e=$$(( $$(date +%s) - t )); \
+	sp=; q=; if [ -t 2 ] && [ "$$TERM" != dumb ] && [ "$$OLANG_SPINNER" != 0 ]; then q=-s; \
+		( while :; do for f in "⠂⠃⠃" "⠃⠂⠃" "⠃⠃⠂" "⠃⠃⠁" "⠃⠁⠃" "⠁⠃⠃"; do \
+			printf '\r%s clang compiling the seed\033[K' "$$f" >&2; sleep 0.09; done; done ) & sp=$$!; fi; \
+	$(MAKE) $$q -j$(PARALLEL) build/olang.seed; rc=$$?; \
+	if [ -n "$$sp" ]; then kill $$sp 2> /dev/null; wait $$sp 2> /dev/null; printf '\r\033[K' >&2; fi; \
+	[ $$rc = 0 ] || exit 1; e=$$(( $$(date +%s) - t )); \
 	echo "bootstrap: clang compiles the seed into build/olang.seed - done in $$((e / 60))m$$((e % 60))s"
 	$(BOOTSTRAP)
 

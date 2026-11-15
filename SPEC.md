@@ -8366,6 +8366,14 @@ each, and at least one. With `OLANG_TIMES` set, a build says on the standard err
 end's passes, the compiles (each as it ends, `n/m`), the link - with how long it took and the compiler's resident
 memory, now and at most. Neither changes what is built.
 
+**B25 (the busy indicator).** Where a compiler process waits - on the front end, clang's compiles, the link, a fetch of a
+remote package, a prompt cell's build and run - and its standard error is a terminal (and `TERM` is not `dumb`), it draws on
+that line, once the wait has lasted 300 ms, six dots in three columns by two rows (each column the braille character
+`U+2803`) with the gap going clockwise around them, a frame every 90 ms, beside what is waited on (`compiling`,
+`linking`, `fetching OWNER/REPO`, `running`). It is redrawn in place and erased as the wait ends, and before anything
+else is written to the terminal - a diagnostic, a program's output, a test's - so the output is what it would be
+without it. It is never drawn where the standard error is a file or a pipe, and `OLANG_SPINNER=0` turns it off.
+
 ### 10.2 Program entry
 
 **B4.** In `build`, `profile` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:

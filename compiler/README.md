@@ -69,6 +69,7 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
 | `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build, as stage 0 fills it |
 | `target.olang` | the machine a build is for (B12): clang asked, without clang for `interpret`; which clang (B12d: `OLANG_CLANG`, a release's own, the newest of LLVM 20, 19, 18 on PATH); another architecture's C library and emulator (B12a) |
 | `build.olang` | objects named by their content, compiled side by side, the link, the modes, over a `Frontend` trait |
+| `spin.olang` | the busy indicator (B25): six dots drawn on the terminal beside what is waited on, erased as the wait ends |
 | `olang.olang` | the driver: the command line in words (B1), as stage 0 reads it, and the passes behind it |
 
 ## Subfolders

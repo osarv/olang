@@ -129,6 +129,9 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `SPEC.md` (B3j, B3m, B12d) | the normative text |
 | `compiler/olang.olang` `help` ("environment:"), `compiler/goldens/drv.txt` (`make drvgold`) | `olang help` lists the build's variables |
 | `README.md`, `docs/install.md`, `makefile` (the bootstrap sets `OLANG_TIMES`) | where users are told of it |
+| `OLANG_SPINNER`: `compiler/spin.olang` (`Enabled`), `makefile` (`bootstrap`'s loop around clang), `checks/checks.olang` (the pty scenarios set it to 0) | the busy indicator (B25) |
+
+The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s `bootstrap` loop repeats them (a shell cannot import them).
 
 ## A std module or API
 

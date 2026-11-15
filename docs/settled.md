@@ -51,6 +51,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   signature by polarity (parameter: a restricting word gained or a `keeps` lost breaks; result: the reverse); a
   declared function type's or a field's words changing is breaking either way. `make consistency` checks that every
   effect word has its fact in `Fact.Named` and its rows in SPEC's T21c and G42 tables.
+- **The busy indicator (B25, the user's request 2026-11-15: "Wherever we wait on something those dots should be there").**
+  On a terminal's standard error, after a 300 ms wait, six dots (three columns by two rows, braille `U+2803` each) with
+  the gap going clockwise, beside `compiling`/`linking`/`fetching X`/`running`; erased before any other output.
+  `compiler/spin.olang`; `OLANG_SPINNER=0` turns it off; the seed's clang loop in the makefile draws the same frames.
 - **`explain -asm FILE NAME` and `explain -ir FILE NAME` (B11d, QBP 7, the user's "build it" 2026-10-27; built
   2026-11-07).** A function's machine code or optimized LLVM IR as build compiles it, headed by source lines with
   LLVM's optimization remarks.

@@ -37284,3 +37284,20 @@ stop on the index the arguments push out of range).
   headroom - less what the running ones may still grow by, leaves room for its peak (its last run's here, else
   compiler/tools/peaks.txt) and a margin; one runs alone whatever its size. `make` still runs a job per core (`nproc`,
   else `sysctl hw.ncpu`).
+- 2026-11-15, the busy indicator (B25, wt-spinner). The user: "I want the installer to have the 8 alternating dots in the
+  4 by 2 to indicate its working as well. Wherever we wait on something those dots should be there"; then the shape
+  changed to six dots, 3 by 2 lying down like the prompt's `:::` marker, three braille characters each using only the
+  left column's top two dots (`U+2803`, a gap `U+2802`/`U+2801`), the gap going clockwise, every dot one size and the
+  columns one character apart. `compiler/spin.olang`: one ticker task, started by `drive` for the process's life only
+  where the standard error is a terminal (`Arm`), polling every 20 ms; `Begin(what)`/`Retitle`/`End` say a wait; it draws
+  after 300 ms, a frame per 90 ms, `\r` + frame + label + erase-to-end, and `End` writes `\r` + erase. A lock (an atomic
+  swap) keeps the line and the spinner apart: everything the compiler writes while a wait may be on goes through
+  `spin.Say` (build's `say`, `sayln`, `sayErr`, the fetcher's lines, a cell's relayed output), which erases first - the
+  spinner then comes back below the text if the wait goes on. `End` also comes where the user's program or a test's
+  output begins (`RunProgram`, `TestFile`, `profile`, `interpret`, a failed build's diagnostics), so none is beside it; a
+  test of several files draws none in the parent (each child draws its own). Not the servers, jupyter, notebook runs or
+  help. The ticker is a `spawn` in a `join` in `drive` rather than a thread made through pthread, which would have handed
+  an export fn to C and turned G42's "a C call may call back" on for the whole compiler. The pty scenarios of
+  checks/checks.olang set `OLANG_SPINNER=0` (a pty is a terminal). The makefile's bootstrap draws the same frames from a
+  background shell loop around clang's compile of the seed (silencing make's own echo then), killed when clang ends.
+  Decided without asking: the 300 ms delay, 90 ms frame, the labels, `OLANG_SPINNER=0`, and that `TERM=dumb` shows none.
