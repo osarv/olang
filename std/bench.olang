@@ -68,13 +68,13 @@ fn (m Measurement&) BytesPerOp() I64 { return -1 if m.Bytes < 0 else m.Bytes / m
 fn (m Measurement&) InstructionsPerOp() I64 { return -1 if m.Instructions < 0 else m.Instructions / m.Ops.Max(1) }
 
 # "2048 ops  487113 ns/op  0 allocs/op  0 B/op  1500213 instr/op": what is not counted is left out
-fn (m Measurement&) Str() String { return $m.Ops " ops  " $nanos(m.NanosPerOp()) " ns/op" $m.counts() }
+fn (m Measurement&) Str() String { return $m.Ops + " ops  " + $nanos(m.NanosPerOp()) + " ns/op" + $m.counts() }
 
 # "  0 allocs/op  0 B/op  1500213 instr/op", each part left out where it is not counted
 fn (m Measurement&) counts() String {
     t := ""
-    if m.Allocs >= 0: t = $"  " $m.AllocsPerOp() " allocs/op  " $m.BytesPerOp() " B/op"
-    if m.Instructions >= 0: t = $t "  " $m.InstructionsPerOp() " instr/op"
+    if m.Allocs >= 0: t = $"  " + $m.AllocsPerOp() + " allocs/op  " + $m.BytesPerOp() + " B/op"
+    if m.Instructions >= 0: t = $t + "  " + $m.InstructionsPerOp() + " instr/op"
     return t
 }
 
@@ -144,8 +144,8 @@ fn Run<? E>(body fn&() ? E, label String& = "", budget time.Duration = DefaultBu
         return
     }
     s := try Series.Of(body, budget, runs)
-    name := $running() $("/" if label != "" else "") $label
-    try io.PutLine($"bench " $name "  " $s) catch io.Error { }
+    name := $running() + $("/" if label != "" else "") + $label
+    try io.PutLine($"bench " + $name + "  " + $s) catch io.Error { }
 }
 
 # the runs a measurement is made of unless said
@@ -211,19 +211,19 @@ fn (s Series&) Typical() Measurement {
 # "2048 ops  487113 ± 2104 ns/op (7 runs)  0 allocs/op  0 B/op  1500213 instr/op": the typical run's counts
 fn (s Series&) Str() String {
     m := s.Typical()
-    return $m.Ops " ops  " $nanos(s.Median()) " ± " $nanos(s.Spread()) " ns/op (" $s.Runs.Len() " runs)" $m.counts()
+    return $m.Ops + " ops  " + $nanos(s.Median()) + " ± " + $nanos(s.Spread()) + " ns/op (" + $s.Runs.Len() + " runs)" + $m.counts()
 }
 
 # "487 µs ± 3 µs per call (median of 7 runs × 2048 calls)": the median and spread in the unit the median reads best in
 fn (s Series&) Line() String {
     m := s.Typical()
-    return $Human(s.Median(), s.Spread()) " per call (median of " $s.Runs.Len() " runs × " $m.Ops " calls)"
+    return $Human(s.Median(), s.Spread()) + " per call (median of " + $s.Runs.Len() + " runs × " + $m.Ops + " calls)"
 }
 
 # a notebook shows a series as a small table
 fn (s Series&) Display() Display {
     m := s.Typical()
-    return Display.Markdown($"| median | spread | min | runs | calls per run |\n|---|---|---|---|---|\n| " $Human(s.Median(), s.Spread()) " | | " $Human(s.Min(), 0.0) " | " $s.Runs.Len() " | " $m.Ops " |")
+    return Display.Markdown($"| median | spread | min | runs | calls per run |\n|---|---|---|---|---|\n| " + $Human(s.Median(), s.Spread()) + " | | " + $Human(s.Min(), 0.0) + " | " + $s.Runs.Len() + " | " + $m.Ops + " |")
 }
 
 # "487 µs ± 3 µs": ns and its spread in ns, ns's unit, as many decimals as three digits of ns need
@@ -233,8 +233,8 @@ fn Human(ns F64, spread F64) String {
     else if ns >= 1e6 { unit, div = "ms", 1e6 }
     else if ns >= 1e3 { unit, div = "µs", 1e3 }
     decimals := 0 if ns / div >= 100.0 else 1 if ns / div >= 10.0 else 2
-    shown := $(ns / div).Fixed(decimals) " " $unit
-    return shown if spread == 0.0 else $shown " ± " $(spread / div).Fixed(decimals) " " $unit
+    shown := $(ns / div).Fixed(decimals) + " " + $unit
+    return shown if spread == 0.0 else $shown + " ± " + $(spread / div).Fixed(decimals) + " " + $unit
 }
 
 # body measured (Series.Of) in any build, and one line written to the standard output (Series.Line); gives the median
@@ -269,9 +269,9 @@ fn Compare<? E>(a fn&() ? E, b fn&() ? E, labels Array<String&> = Array<String&>
     budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) F64 ? E {
     c := try Comparison.Of(a, b, budget, runs)
     la, lb := labels[0], labels[1]
-    try io.PutLine($la ": " $c.A.Line()) catch io.Error { }
-    try io.PutLine($lb ": " $c.B.Line()) catch io.Error { }
-    try io.PutLine($lb "/" $la " " $c.Ratio().Fixed(2) " ± " $c.RatioSpread().Fixed(2) " (median of " $c.Ratios.Len() " paired runs)") catch io.Error { }
+    try io.PutLine($la + ": " + $c.A.Line()) catch io.Error { }
+    try io.PutLine($lb + ": " + $c.B.Line()) catch io.Error { }
+    try io.PutLine($lb + "/" + $la + " " + $c.Ratio().Fixed(2) + " ± " + $c.RatioSpread().Fixed(2) + " (median of " + $c.Ratios.Len() + " paired runs)") catch io.Error { }
     return c.Ratio()
 }
 

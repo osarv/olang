@@ -56,11 +56,11 @@ fn Sample.Of(argv Array<String&>&, out I32) Sample ? os.Error {
 # seconds as the line writes them: 1.24 s from a tenth of a second up, else bench's units; nothing is 0 s
 fn secs(ns F64) String {
     if ns < 1.0: return "0 s"
-    return $(ns / 1e9).Fixed(2) " s" if ns >= 1e8 else bench.Human(ns, 0.0)
+    return $(ns / 1e9).Fixed(2) + " s" if ns >= 1e8 else bench.Human(ns, 0.0)
 }
 
 # a time and its spread
-fn secsSpread(ns F64, spread F64) String { return secs(ns) if spread == 0.0 else $secs(ns) " ± " $secs(spread) }
+fn secsSpread(ns F64, spread F64) String { return secs(ns) if spread == 0.0 else $secs(ns) + " ± " + $secs(spread) }
 
 # "built in 0.42 s, ran in 1.24 s (1.20 s user, 0.03 s sys, 182 MB peak)", or with more than one run "ran in 1.24 s ± 0.02 s
 # (median of 9 runs; 1.20 s user, ...)"; built is the nanoseconds the build took
@@ -71,8 +71,8 @@ fn Line(built I64, runs Array<Sample>&) String {
     peak := 0
     for r in runs: peak = peak.Max(r.PeakKb)
     n := runs.Len()
-    ran := $secsSpread(bench.Median(walls), bench.Spread(walls)) " (median of " $n " runs; " if n > 1 else $secs(bench.Median(walls)) " ("
-    return $"built in " $secs(F64(built)) ", ran in " $ran $secs(bench.Median(users)) " user, " $secs(bench.Median(syss)) " sys, " $(peak / 1024) " MB peak)"
+    ran := $secsSpread(bench.Median(walls), bench.Spread(walls)) + " (median of " + $n + " runs; " if n > 1 else $secs(bench.Median(walls)) + " ("
+    return $"built in " + $secs(F64(built)) + ", ran in " + $ran + $secs(bench.Median(users)) + " user, " + $secs(bench.Median(syss)) + " sys, " + $(peak / 1024) + " MB peak)"
 }
 
 # argv run - once, or wanted times - and the line written to the standard error, built the nanoseconds the build took.
@@ -85,14 +85,14 @@ fn Measure(argv Array<String&>&, built I64, wanted I64 = 1) I32 {
     status I64 = 0
     for i in range wanted.Max(1) {
         s := try Sample.Of(argv, -1 if i == 0 else nowhere) catch os.Error {
-            try io.PutErr($"bench: " $argv[0] " could not be started\n") catch io.Error { }
+            try io.PutErr($"bench: " + $argv[0] + " could not be started\n") catch io.Error { }
             return 1
         }
         runs.Push(s)
         status = s.Status
         if status != 0: break
     }
-    try io.PutErr($"bench: " $Line(built, runs.ToArray()) "\n") catch io.Error { }
+    try io.PutErr($"bench: " + $Line(built, runs.ToArray()) + "\n") catch io.Error { }
     return I32(status)
 }
 
@@ -101,7 +101,7 @@ fn Measure(argv Array<String&>&, built I64, wanted I64 = 1) I32 {
 fn Total(files I64, wall I64) String {
     ru := Array<I64>(18)
     getrusage(-1, ru) # RUSAGE_CHILDREN
-    return $"bench: " $files " files in " $secs(F64(wall)) " (" $secs(F64(ru[0] * 1000000000 + ru[1] * 1000)) " user, " $secs(F64(ru[2] * 1000000000 + ru[3] * 1000)) " sys, " $(ru[4] / 1024) " MB peak)"
+    return $"bench: " + $files + " files in " + $secs(F64(wall)) + " (" + $secs(F64(ru[0] * 1000000000 + ru[1] * 1000)) + " user, " + $secs(F64(ru[2] * 1000000000 + ru[3] * 1000)) + " sys, " + $(ru[4] / 1024) + " MB peak)"
 }
 
 test Line "writes one run, and the median with its spread of several" {

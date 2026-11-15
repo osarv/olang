@@ -2465,18 +2465,18 @@ test "-bench reports the time and use of a run (B19b)" { assert passed("benchrun
 
 fn benchrun(r mut report&) ? Failed {
     dir := fresh("benchrun")
-    os.Run("cp checks/fixtures/benchrun/* " $os.Quote(dir))
+    os.Run("cp checks/fixtures/benchrun/* " + $os.Quote(dir))
     once := "^bench: built in [0-9.]+ [a-zµ]+, ran in [0-9.]+ [a-zµ]+ \\([0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$"
     many := "^bench: built in [0-9.]+ [a-zµ]+, ran in [0-9.]+ [a-zµ]+ ± [0-9.]+ [a-zµ]+ \\(median of 3 runs; [0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$"
     try r.expect(sh(dir, "\"$OLANG\" -bench m.olang x y > out.txt 2> err.txt") == 3, "status is the program's", dir)
     try r.expect(outOf(dir) == "3\n", "output untouched", dir)
-    try r.expect(sh(dir, "grep -Eq '" $once "' err.txt && test $(wc -l < err.txt) = 1") == 0, "one run's line", dir)
+    try r.expect(sh(dir, "grep -Eq '" + $once + "' err.txt && test $(wc -l < err.txt) = 1") == 0, "one run's line", dir)
     try r.expect(sh(dir, "\"$OLANG\" run -bench -runs 3 m.olang > out.txt 2> err.txt") == 0, "run -runs status", dir)
     try r.expect(outOf(dir) == "1\n", "only the first run's output", dir)
-    try r.expect(sh(dir, "grep -Eq '" $many "' err.txt") == 0, "median line", dir)
+    try r.expect(sh(dir, "grep -Eq '" + $many + "' err.txt") == 0, "median line", dir)
     try r.expect(sh(dir, "\"$OLANG\" -runs 3 m.olang > out.txt 2>&1") != 0 and outOf(dir).Contains("B19b"), "-runs alone", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -bench t.olang u.olang > out.txt 2> err.txt") == 0, "test -bench", dir)
-    try r.expect(sh(dir, "test $(grep -Ec '" $once "' err.txt) = 2 && grep -Eq '^bench: 2 files in [0-9.]+ [a-zµ]+ \\([0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$' err.txt") == 0
+    try r.expect(sh(dir, "test $(grep -Ec '" + $once + "' err.txt) = 2 && grep -Eq '^bench: 2 files in [0-9.]+ [a-zµ]+ \\([0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$' err.txt") == 0
         "a line a file, a total", dir)
 }
 

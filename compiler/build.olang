@@ -1229,7 +1229,7 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
         if out.Status != 3 { named = true }
         if out.Status != 0 and out.Status != 3 { failed = true }
     }
-    if c.Timed and files.Len() > 1 { sayErr($measure.Total(files.Len(), time.Now() - began) "\n") }
+    if c.Timed and files.Len() > 1 { sayErr($measure.Total(files.Len(), time.Now() - began) + "\n") }
     if not named and filters.Len() > 0 {
         quoted Vec<String&>
         for w in filters { quoted.Push($"'" + $w + "'") }
