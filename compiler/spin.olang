@@ -3,7 +3,7 @@
 # six (top left, top middle, top right, bottom right, bottom middle, bottom left), drawn on the standard error beside what
 # is waited on ("compiling", "linking", "fetching owner/repo"), redrawn in place and erased as the wait ends, so what is on
 # the terminal afterwards is what would be there without it. Each column is a braille character using only its left
-# column's top two dots (U+2803, a dot gone U+2802 or U+2801), so the columns are one character apart and every dot is the
+# column's middle two dots (U+2806, a dot gone U+2804 or U+2802), so they stand centred on the line as ":::" does, so the columns are one character apart and every dot is the
 # same size. Frames is the one place the frames are written; the makefile's loop around clang (the seed) uses the same.
 # Shown only when the standard error is a terminal (and TERM is not "dumb"), OLANG_SPINNER=0 turns it off, and only for a
 # wait lasting longer than StartAfter: a quick build shows nothing.
@@ -18,7 +18,7 @@ import "std/io"
 import "std/time"
 
 # the frames, the gap clockwise from the top left
-Frames Array<String&> = Array<String&>["⠂⠃⠃", "⠃⠂⠃", "⠃⠃⠂", "⠃⠃⠁", "⠃⠁⠃", "⠁⠃⠃"]
+Frames Array<String&> = Array<String&>["⠄⠆⠆", "⠆⠄⠆", "⠆⠆⠄", "⠆⠆⠂", "⠆⠂⠆", "⠂⠆⠆"]
 
 # a wait must last this long (milliseconds) before anything is drawn, and a frame lasts this long
 StartAfter I64 = 300
@@ -175,16 +175,16 @@ fn shown(written String&) String {
 
 test Draw "frames go round the six dots, one gap each" {
     assert Frames.Len() == 6
-    assert Frames[0] == "⠂⠃⠃" and Frames[1] == "⠃⠂⠃" and Frames[5] == "⠁⠃⠃"
-    assert Draw(0, "linking") == "\r⠂⠃⠃ linking\x1b[K"
+    assert Frames[0] == "⠄⠆⠆" and Frames[1] == "⠆⠄⠆" and Frames[5] == "⠂⠆⠆"
+    assert Draw(0, "linking") == "\r⠄⠆⠆ linking\x1b[K"
     assert Draw(6, "linking") == Draw(0, "linking") and Draw(10, "x") == Draw(4, "x")
-    # every frame is three braille characters of the block's first rows (U+2801 to U+2803): one dot of the six missing
+    # every frame is three braille characters of a cell's middle rows (U+2802, U+2804, U+2806): one dot of the six missing
     dots := 0
     for f in Frames {
         assert f.Len() == 9
-        for k in range 3 { assert f[3 * k] == Char(0xE2) and f[3 * k + 1] == Char(0xA0) and f[3 * k + 2] >= Char(0x81) and f[3 * k + 2] <= Char(0x83) }
+        for k in range 3 { assert f[3 * k] == Char(0xE2) and f[3 * k + 1] == Char(0xA0) and f[3 * k + 2] in Array<Char>[Char(0x82), Char(0x84), Char(0x86)] }
         dots = 0
-        for k in range 3 { dots += 2 if f[3 * k + 2] == Char(0x83) else 1 }
+        for k in range 3 { dots += 2 if f[3 * k + 2] == Char(0x86) else 1 }
         assert dots == 5
     }
 }

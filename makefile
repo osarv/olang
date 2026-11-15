@@ -285,7 +285,7 @@ prereq:
 bootstrap: prereq
 	@t=$$(date +%s); echo "bootstrap: clang compiles the seed into build/olang.seed ..."; \
 	sp=; q=; if [ -t 2 ] && [ "$$TERM" != dumb ] && [ "$$OLANG_SPINNER" != 0 ]; then q=-s; \
-		( sleep 0.3; while :; do for f in "⠂⠃⠃" "⠃⠂⠃" "⠃⠃⠂" "⠃⠃⠁" "⠃⠁⠃" "⠁⠃⠃"; do \
+		( sleep 0.3; while :; do for f in "⠄⠆⠆" "⠆⠄⠆" "⠆⠆⠄" "⠆⠆⠂" "⠆⠂⠆" "⠂⠆⠆"; do \
 			printf '\r%s clang compiling the seed\033[K' "$$f" >&2; sleep 0.09; done; done ) & sp=$$!; fi; \
 	$(MAKE) $$q -j$(PARALLEL) build/olang.seed; rc=$$?; \
 	if [ -n "$$sp" ]; then kill $$sp 2> /dev/null; wait $$sp 2> /dev/null; printf '\r\033[K' >&2; fi; \

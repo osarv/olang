@@ -37403,3 +37403,10 @@ either. Measured (4 cores, lightly loaded): a 1e8-iteration float loop 55.9 s ->
 0.09 s (0.29 s with its root rebuilt); hello world 0.05 s -> 0.07 s unchanged, 0.26 s after an edit, 0.84 s on an empty
 cache (std's objects once). Left: the cache is never pruned (as build/ is not), and E16g's list names the prompt and
 kernel as checked builds while B22's cells are built release (-quick, unchecked) - an older disagreement, not changed here.
+
+### 2026-11-15, the spinner's dots moved to the middle rows
+
+The user: the spinner "is the top of a 4*3 and it really doesnt look centered". The frames used each braille cell's top two
+dots (`U+2803`), which sit high on the line beside `:::`; they now use the middle two (`U+2806`, a gap `U+2804` or
+`U+2802`): ⠄⠆⠆ ⠆⠄⠆ ⠆⠆⠄ ⠆⠆⠂ ⠆⠂⠆ ⠂⠆⠆. Same three characters' width as `:::`. compiler/spin.olang's Frames and the
+makefile's clang loop.
