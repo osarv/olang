@@ -30,7 +30,7 @@ MNIST first, NLP and robotics later; genetic algorithms are allowed. Done in oan
   spikes (address-event routing), weights in on-chip memory, time-stepped leaky integrate-and-fire updates. The other
   route - a circuit-describing library run by the compile-time evaluator emitting Verilog (Chisel/Clash style) - kept
   as the alternative for timing-critical parts.
-- **`olang dap`, olang's own debug adapter** (the user, 2026-11-15: "we probably want a debugger option eventually"): after full DWARF and nvim-dap through lldb-dap land (wt-dwarf), a DAP server in olang driving lldb/gdb underneath, showing values as `$x` renders them and evaluating olang expressions at a breakpoint through the evaluator; built once lldb-dap's view proves too C-like in use.
+- **`olang debug FILE` (and `olang debug -dap` for editors), olang's own debugger front and DAP adapter** (the user, 2026-11-15: "we probably want a debugger option eventually"): after full DWARF and nvim-dap through lldb-dap land (wt-dwarf), a DAP server in olang driving lldb/gdb underneath, showing values as `$x` renders them and evaluating olang expressions at a breakpoint through the evaluator; built once lldb-dap's view proves too C-like in use.
 - Serialization (JSON and a compact binary encoder in std, walking fields - never a memory dump) on top of
   compile-time reflection (one generic iterating a type's fields, like `match <T>`); also restores what removing
   struct literals lost - rebuilding a valid value without its validating constructor.
