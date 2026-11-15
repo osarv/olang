@@ -37301,6 +37301,7 @@ stop on the index the arguments push out of range).
   checks/checks.olang set `OLANG_SPINNER=0` (a pty is a terminal). The makefile's bootstrap draws the same frames from a
   background shell loop around clang's compile of the seed (silencing make's own echo then), killed when clang ends.
   Decided without asking: the 300 ms delay, 90 ms frame, the labels, `OLANG_SPINNER=0`, and that `TERM=dumb` shows none.
+  Follow-up, the same day: after merging master's `interpret` that builds and runs (wt-fastinterp), `build.Interpret` shows it as a file run does and `spin.End` comes before the program is exec'd (`-evaluate`: before the checked program's main or tests run); explain -asm/-ir, api, profile, `-memory`'s report and a C import's clang messages write through `spin.Say`; the makefile's loop waits 0.3 s as the compiler does; checks/checks.olang's `spinner` scenario drives a cold build under a pty (drawn, erased right before `built`, not with `OLANG_SPINNER=0` or no terminal).
 
 
 ## 2026-11-15: olang fix and the migration tools' diagnostics (tools/diagedit, null_migrate, oneline_migrate)

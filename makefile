@@ -281,11 +281,11 @@ prereq:
 # While clang compiles the seed no olang runs, so this recipe draws the compiler's spinner itself (compiler/spin.olang,
 # B25: the same six dots, the same frames) from a background loop stopped when clang ends - only where the standard error
 # is a terminal, TERM is not dumb and OLANG_SPINNER is not 0; make's own echo of the compiles is then silenced (-s), as it
-# would land beside the spinner
+# would land beside the spinner. It starts after 0.3 s, as the compiler's does
 bootstrap: prereq
 	@t=$$(date +%s); echo "bootstrap: clang compiles the seed into build/olang.seed ..."; \
 	sp=; q=; if [ -t 2 ] && [ "$$TERM" != dumb ] && [ "$$OLANG_SPINNER" != 0 ]; then q=-s; \
-		( while :; do for f in "⠂⠃⠃" "⠃⠂⠃" "⠃⠃⠂" "⠃⠃⠁" "⠃⠁⠃" "⠁⠃⠃"; do \
+		( sleep 0.3; while :; do for f in "⠂⠃⠃" "⠃⠂⠃" "⠃⠃⠂" "⠃⠃⠁" "⠃⠁⠃" "⠁⠃⠃"; do \
 			printf '\r%s clang compiling the seed\033[K' "$$f" >&2; sleep 0.09; done; done ) & sp=$$!; fi; \
 	$(MAKE) $$q -j$(PARALLEL) build/olang.seed; rc=$$?; \
 	if [ -n "$$sp" ]; then kill $$sp 2> /dev/null; wait $$sp 2> /dev/null; printf '\r\033[K' >&2; fi; \
