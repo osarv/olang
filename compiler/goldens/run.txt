@@ -111,6 +111,9 @@
 | ok - comptime gives constant data
 | ok - comptime for unrolls
 | ok - the evaluator agrees
+=== test tests/condnull.olang
+| status 0
+| ok - all: the null branch arrives as null, the other branch as the array, through every kind of callee
 === test tests/copy.olang
 | status 0
 | ok - an assignment copies by the declared Copy
