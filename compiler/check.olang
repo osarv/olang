@@ -100,6 +100,15 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     # not checked in this instance
     instLeft Bool = false
     nulls Vec<nullNarrow>   # S8e: the paths known not to be null, each held by a block, and dead once assigned
+    # S8d: the calls checked so far (a field path's narrowing ends at the next), how many there were when each test of
+    # a field path, "and" or "or" was checked (by ctKey: a test's narrowing holds only where no call followed it in
+    # its condition), whether any narrowing of a field path was made; the calls when each loop around began, and the
+    # reads inside them of a field path narrowed outside, judged as each loop ends
+    calls I64 = 0
+    testGen Map<I64, I64>
+    pathFacts Bool = false
+    loopCalls Vec<I64>
+    loopUses Vec<loopUse>
     rest Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
     restAt I64 = 0
     # D17: a contract item's body - CtReq, CtEns or CtEntry; in a guarantee's, its results' names, and the entry values
@@ -128,13 +137,18 @@ type errBind struct(Name source.NameId, Local I64, Set types.ListId, Sp source.S
     Sp
 }
 
-# R11b, T20: what of an error local's set a test leaves it in a block - its entries; dead once the local is assigned
-type errNarrow struct(Name source.NameId, Now types.ListId, Block I64, Dead Bool = false) {
-    Name
+# R11b, T20: what of an error local's set a test leaves it in a block - its entries; dead once the local is assigned. Path
+# the local (one name) or a field path of one (S8d), Loops and Why as a nullNarrow's
+type errNarrow struct(Path Array<source.NameId>&, Now types.ListId, Block I64, Loops I64, Dead Bool = false, Why I64 = 0) {
+    Path
     Now
     Block
+    Loops
     Dead
+    Why
 }
+
+fn (n errNarrow) Killed(why I64) errNarrow { return errNarrow(n.Path, n.Now, n.Block, n.Loops, true, why) }
 
 CtReq I64 = 1
 CtEns I64 = 2
@@ -142,26 +156,46 @@ CtEntry I64 = 3
 
 fn ctKey(sp source.Span) I64 { return (I64(sp.Start) << 32) | I64(sp.End) }
 
-# S8d: a local narrowed to one case of its enum - the case, the enum, where its payload fields' copies start in the
-# frame's narrowFields, and the block it holds for
-# S8e: a path - a local or parameter and the fields read after it - known not to be null in a block, until a statement
-# assigns it or a path it starts with (Dead)
-type nullNarrow struct(Path Array<source.NameId>&, Block I64, Dead Bool = false) {
+# S8e: a path - a local or parameter and the fields read after it (S8d) - known not to be null in a block, until a
+# statement assigns it or a path it starts with, or, a field path, until a call (Dead, and Why: WhyAssigned or
+# WhyCalled); Loops the loops around where it was made, so a read inside a loop it was made outside is known
+type nullNarrow struct(Path Array<source.NameId>&, Block I64, Loops I64, Dead Bool = false, Why I64 = 0) {
     Path
     Block
+    Loops
     Dead
+    Why
 }
 
-type narrowed struct(Local I64, Tag I64, Enum types.TypeId, From I64, Block I64, Dead Bool = false) {
+fn (n nullNarrow) Killed(why I64) nullNarrow { return nullNarrow(n.Path, n.Block, n.Loops, true, why) }
+
+# S8d: a read inside a loop of a field path narrowed outside it - where, the loops around the narrowing, the path
+type loopUse struct(Sp source.Span, Loops I64, Text String) {
+    Sp
+    Loops
+    Text
+}
+
+WhyAssigned I64 = 1
+WhyCalled I64 = 2
+
+# S8d: a local or a field path of one (Path; Local the local, -1 for a field path) narrowed to one case of its enum - the
+# case, the enum, where its payload fields' copies start in the frame's narrowFields, and the block it holds for; Loops,
+# Dead and Why as a nullNarrow's
+type narrowed struct(Local I64, Tag I64, Enum types.TypeId, From I64, Block I64, Path Array<source.NameId>&, Loops I64
+    Dead Bool = false, Why I64 = 0) {
     Local
     Tag
     Enum
     From
     Block
+    Path
+    Loops
     Dead
+    Why
 }
 
-fn (n narrowed) Killed() narrowed { return narrowed(n.Local, n.Tag, n.Enum, n.From, n.Block, true) }
+fn (n narrowed) Killed(why I64) narrowed { return narrowed(n.Local, n.Tag, n.Enum, n.From, n.Block, n.Path, n.Loops, true, why) }
 
 # S8d: how many narrowings of each kind a frame holds, to drop what one operand's narrowing added once it is checked
 type factsMark struct(Nulls I64, Cases I64, Errs I64) {
@@ -190,6 +224,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     fx mut effects.Effects?& = null           # A2.3, G42: the effect summaries of this attempt's bodies, made when first asked
     s4d Vec<typed.Lvalue&>                 # S4d: the value places an assignment writes over, while its values are checked
     placeWrite Bool = false                # S8e: the place asked for next is a target written, of its declared type
+    bangTop Bool = false                   # S8e: the expression checked next is x in "x!" - a field path read of its
+                                           # declared type, which "!" unwraps (a narrowing makes "!" unneeded, not wrong)
     enumWanted Bool = false                # S8d: the expression checked next is a case test's, an "as"'s or a match's
                                            # subject - a local narrowed to a payload written whole is read as its enum
     nullDecl diag.Where = diag.Where.Nowhere  # T2c: where the type a value is fitted to is written, for the note naming "?&"
@@ -5688,6 +5724,7 @@ fn (c mut Checker&) readLocal(sp source.Span, l I64) typed.Expr& {
 
 # a call of body giving ty - a zero value's constructor call where zero says (D13c)
 fn (c mut Checker&) callOfBody(sp source.Span, ty types.TypeId, body I64, args Array<typed.Expr&>&, zero Bool = false) typed.Expr& {
+    c.calledNow()   # S8d
     return typed.Expr.Call(sp, ty, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), args, c.site(typed.SiteKind.Call, sp), zero))
 }
 
@@ -5773,31 +5810,9 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
     for i in range body.Len() {
         fr.rest = body
         fr.restAt = i + 1
-        # S8e: a statement assigning a narrowed path ends its narrowing - after its value, where it is that assignment
-        after Vec<I64>
-        for k in range fr.nulls.Len() {
-            nn := fr.nulls[k]
-            if nn.Dead or not stmtAssigns(body[i], nn.Path) { continue }
-            if assignsWhole(body[i], nn.Path): after.Push(k)
-            else: fr.nulls[k] = nullNarrow(nn.Path, nn.Block, true)
-        }
-        # S8d: a statement assigning a narrowed local ends its narrowing - after its value, where it is that assignment
-        afterCase Vec<I64>
-        for k in range fr.narrows.Len() {
-            nr := fr.narrows[k]
-            if nr.Dead { continue }
-            ln := Array<source.NameId>(1, c.cur().Locals[nr.Local].Name)
-            if not stmtAssigns(body[i], ln) { continue }
-            if assignsWhole(body[i], ln): afterCase.Push(k)
-            else: fr.narrows[k] = nr.Killed()
-        }
-        # T20: a statement assigning a narrowed error local ends its narrowing
-        for k in range fr.errNarrows.Len() {
-            en := fr.errNarrows[k]
-            if not en.Dead and stmtAssigns(body[i], Array<source.NameId>(1, en.Name)) {
-                fr.errNarrows[k] = errNarrow(en.Name, en.Now, en.Block, true)
-            }
-        }
+        # S8d, S8e, T20: a statement assigning a narrowed path, or a path it starts with, ends its narrowing - after its
+        # value, where it is that assignment
+        after, afterCase := c.killAssigning(body[i])
         fr.nonNullSet = Array<source.NameId>(0)
         fr.instLeft = false
         c.stmt(body[i])
@@ -5806,19 +5821,44 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
             break
         }
         for k in after {
-            if k < fr.nulls.Len() { fr.nulls[k] = nullNarrow(fr.nulls[k].Path, fr.nulls[k].Block, true) }
+            if k < fr.nulls.Len(): fr.nulls[k] = fr.nulls[k].Killed(WhyAssigned)
         }
         for k in afterCase {
-            if k < fr.narrows.Len() { fr.narrows[k] = fr.narrows[k].Killed() }
+            if k < fr.narrows.Len(): fr.narrows[k] = fr.narrows[k].Killed(WhyAssigned)
         }
         # S8e: a path just given a value never null is known not to be null from here
-        if fr.nonNullSet.Len() > 0 and fr.nonNullSet.Len() == 1 {
-            fr.nulls.Push(nullNarrow(Array<source.NameId>[n for n in fr.nonNullSet], fr.Block))
+        if fr.nonNullSet.Len() > 0 {
+            c.pushNull(Array<source.NameId>[n for n in fr.nonNullSet], fr.Block)
             fr.nonNullSet = Array<source.NameId>(0)
         }
     }
     fr.rest = wasRest
     fr.restAt = wasAt
+}
+
+# S8d, S8e, T20: the narrowings statement st assigns the path of, or a path it starts with, ended - those it assigns as
+# a whole ("p = v") left for after it (their indexes), its value read under them
+fn (c mut Checker&) killAssigning(st ast.Stmt&) Vec<I64>, Vec<I64> {
+    fr := c.fr()
+    after Vec<I64>
+    for k in range fr.nulls.Len() {
+        nn := fr.nulls[k]
+        if nn.Dead or not stmtAssigns(st, nn.Path): continue
+        if assignsWhole(st, nn.Path): after.Push(k)
+        else: fr.nulls[k] = nn.Killed(WhyAssigned)
+    }
+    afterCase Vec<I64>
+    for k in range fr.narrows.Len() {
+        nr := fr.narrows[k]
+        if nr.Dead or not stmtAssigns(st, nr.Path): continue
+        if assignsWhole(st, nr.Path): afterCase.Push(k)
+        else: fr.narrows[k] = nr.Killed(WhyAssigned)
+    }
+    for k in range fr.errNarrows.Len() {
+        en := fr.errNarrows[k]
+        if not en.Dead and stmtAssigns(st, en.Path): fr.errNarrows[k] = en.Killed(WhyAssigned)
+    }
+    return after, afterCase
 }
 
 # deferred code (S19, S19e): pending until its block is left - an errdefer's too, the same list, its code checked alike
@@ -5832,6 +5872,8 @@ fn (c mut Checker&) deferStmt(sp source.Span, inner ast.Stmt&, onError Bool) {
         later := c.fr().rest[c.fr().restAt:c.fr().rest.Len()]
         c.killAssigned(factsMark(0, 0, 0), later)
     }
+    # S8d: and a field path's narrowing does not hold in it - what runs between may call
+    c.killPaths(WhyCalled)
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.ErrDefer if onError else typed.BlockKind.Defer, sp)
     # S19b: deferred code runs while its block is left - nothing may leave it
@@ -6969,6 +7011,11 @@ fn (c mut Checker&) convert(sp source.Span, x typed.Expr&, want types.TypeId) ty
 
 # a call of a known target with checked arguments
 fn (c mut Checker&) callOf(sp source.Span, t types.TypeId, target typed.Callee&, args Array<typed.Expr&>&) typed.Expr& {
+    # S8d: a call ends the narrowings of field paths - a helper calls nothing (it compares or hashes parts)
+    match target {
+        case typed.Callee.Helper(_, _) { }
+        case _ { c.calledNow() }
+    }
     return typed.Expr.Call(sp, t, typed.Call(target, args, c.site(typed.SiteKind.Call, sp)))
 }
 
@@ -7552,7 +7599,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         if v != null and c.P.T.NeedsDrop(want) and c.P.T.Same(typeOf(v), want): return v
         r := c.P.T.Referent(have)
         if c.P.T.Same(r, want) or c.flowsInto(r, want) {
-            if c.P.T.IsNullable(have) { c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(have), bangOf(c.src(x.Span())))) }
+            if c.P.T.IsNullable(have) { c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(have), bangOf(c.src(x.Span())), c.endedWhy(c.src(x.Span())))) }
             return c.fit(c.read(sp, typed.Lvalue.Deref(sp, r, x)), want, sp)
         }
     }
@@ -8334,6 +8381,7 @@ fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr& {
     accept := c.laneAccept
     c.laneAccept = false
     r := c.expr1(x, want, accept)
+    if x != null: c.testChecked(x)   # S8d
     if accept { return r }
     return c.laneOut(r)
 }
@@ -8341,6 +8389,8 @@ fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr& {
 fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Expr& {
     ew := c.enumWanted
     c.enumWanted = false
+    bt := c.bangTop
+    c.bangTop = false
     if x == null { return c.unknown(source.Span(0, 0)) }
     if c.fr().Contract == CtEns and c.fr().ctSubst.Len() > 0 {
         # D17b: a part of a guarantee read at entry - the value kept of it when the call began
@@ -8354,6 +8404,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
         case ast.Expr.Name(sp, n) { return c.name(sp, n, want, ew)! }
         case ast.Expr.Paren(_, y) {
             c.laneAccept = accept
+            c.bangTop = bt
             return c.expr(y, want)
         }
         case ast.Expr.Unary(sp, op, y) { return c.unary(sp, op, y, want)! }
@@ -8368,7 +8419,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
             if pl >= 0 { return c.lit(sp, c.i64(), pl) }
             return c.call(sp, f, args, want)
         }
-        case ast.Expr.Member(sp, y, n) { return c.member(sp, y, n, want) }
+        case ast.Expr.Member(sp, y, n) { return c.member(sp, y, n, want, ew, bt) }
         case ast.Expr.Index(sp, y, items) { return c.index(sp, y, items) }
         case ast.Expr.ArrayLit(sp, made, items) { return c.madeLit(sp, made!.Span(), c.resolve(made!), items) }
         case ast.Expr.Row(sp, items): return c.row(sp, items, want)
@@ -8487,7 +8538,7 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId, want types.TypeId = ty
             c.gap(sp, "a local the checker has not bound")
             return c.unknown(sp)
         }
-        return c.errNarrowed(c.read(sp, c.localPlace(sp, id)), n)   # T20: as narrowing leaves it
+        return c.errNarrowed(c.read(sp, c.localPlace(sp, id)), Array<source.NameId>(1, n))   # T20: as narrowing leaves it
     }
     if ref.Kind == names.What.Global {
         t := c.globalType(ref.Module, n)
@@ -13097,6 +13148,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     c.roCheckCallee(target, r)
     targs := gather(c.exprs, from)
     site := c.site(typed.SiteKind.Call, sp)
+    c.calledNow()   # S8d
     call := typed.Expr.Call(sp, r, typed.Call(target, targs, site))
     # D17e: its callee's contract, decided by the evaluator where it can be, or checked under checked
     cb := c.bodyOfCallee(target)
@@ -13847,7 +13899,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     # T2c: what the compiler supplies, and a function value in a field, are reached through the receiver - not through
     # one that may be null (a method fits its receiver as an argument, which says so there)
     if m < 0 and c.isRef(rt) and c.P.T.IsNullable(rt) and not vacates {
-        c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span()))))
+        c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span())), c.endedWhy(c.src(x.Span()))))
         rt = c.P.T.NonNull(rt)
     }
     if m < 0 and name == "Len" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT {
@@ -14305,7 +14357,7 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
     }
     if c.P.T.FuncNullable(t) {
         # T21: nothing is called through a function value that may be null until a test says it is not
-        c.err(fv.Span(), msgs.ReadMaybeNull(c.src(fv.Span()), c.ty(t), bangOf(c.src(fv.Span()))))
+        c.err(fv.Span(), msgs.ReadMaybeNull(c.src(fv.Span()), c.ty(t), bangOf(c.src(fv.Span())), c.endedWhy(c.src(fv.Span()))))
         t = c.P.T.NonNull(t)
     }
     if c.P.T.KindOf(t) == types.Kind.Func { return c.callBody(sp, fsp, t, typed.Callee.Value(fv), -1, null, args, Array<typed.Expr&>(0)) }
@@ -14715,7 +14767,8 @@ fn (c mut Checker&) baseHas(t types.TypeId, n source.NameId) Bool {
 # ---- members, indices, arrays ----
 
 # x.f: a field of a struct (C2), through references; a case of an enum named by its type (T17); a global of an import
-fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want types.TypeId = types.UnknownT) typed.Expr& {
+fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want types.TypeId = types.UnknownT, ew Bool = false
+    bare Bool = false) typed.Expr& {
     ref := c.P.R.Member(c.fr().File, sp.End)
     nsp := memberSpan(sp, c.text(n).Len())
     if ref.Kind == names.What.Global { return c.read(sp, typed.Lvalue.Global(sp, c.globalType(ref.Module, n), ref.Module, n)) }
@@ -14755,7 +14808,10 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
     if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, Array<ast.Expr&>(0)) }
     gd := c.genericNamed(x)
     if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, Array<ast.Expr&>(0), want) }
-    # S8d: a payload field of a local known to hold one case
+    # S8d: a field path narrowed to a case whose payload is one type written whole is that payload
+    wp := c.wholePath(extended(c.narrowPath(x), n), sp, ew or bare, want)
+    if wp >= 0: return c.readLocal(sp, wp)
+    # S8d: a payload field of a local, or a field path, known to hold one case
     fl := c.narrowedName(x, n)
     if fl >= 0 { return c.readLocal(sp, fl) }
     # T19b: a payload field of an error local narrowed to one word
@@ -14765,7 +14821,11 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
     if p == null { return c.unknown(sp) }
     fp := c.field(sp, nsp, p, n)
     if fp == null { return c.unknown(sp) }
-    return c.read(sp, fp)
+    # S8e: of the type a null test leaves the path - its declared type under "x.f!" (bare), which then unwraps it
+    r := c.read(sp, fp if bare else c.narrowedPlace(sp, x, n, fp))
+    # T20: an error value a field path holds, as narrowing leaves it
+    if not c.P.T.IsErrVal(typeOf(r)) or c.fr().errNarrows.Len() == 0: return r
+    return c.errNarrowed(r, extended(c.narrowPath(x), n))
 }
 
 # a field of what a place holds, through references
@@ -14781,12 +14841,13 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
     if t == types.UnknownT { return null }
     if c.P.T.IsErrVal(t) {
         # T19b: a payload field is read off a local narrowed to one word, and never written
-        c.err(nsp, msgs.PayloadFieldUnnarrowed(c.src(sp)[:I64(nsp.Start - sp.Start) - 1], c.text(n)))
+        txt := c.src(sp)[:I64(nsp.Start - sp.Start) - 1]
+        c.err(nsp, msgs.PayloadFieldUnnarrowed(txt, c.text(n), c.endedWhy(txt)))
         return null
     }
     if c.isEnum(t) {
         # S8d: a payload's field is read where a test narrows the local to its case
-        c.err(nsp, msgs.FieldOfEnum(c.ty(t), c.text(n)))
+        c.err(nsp, msgs.FieldOfEnum(c.ty(t), c.text(n), c.endedWhy(c.src(sp)[:I64(nsp.Start - sp.Start) - 1])))
         return null
     }
     if not c.isStruct(t) {
@@ -15800,10 +15861,10 @@ fn (c mut Checker&) reflOf(sp source.Span, nsp source.Span, dt types.TypeId, arg
     ft, _ := c.P.DescType(ds)
     if c.isStruct(t) { return typed.Lvalue.Field(sp, ft, base, ds.At) }
     # S8d: a case's field read where a test narrows the value to its case
-    lid := c.narrowLocal(args[0])
+    np := c.narrowPath(args[0])
     known := false
     for nr in c.fr().narrows {
-        if nr.Local == lid and nr.Tag == ds.Case and not nr.Dead { known = true }
+        if np.Len() > 0 and samePath(nr.Path, np) and nr.Tag == ds.Case and not nr.Dead { known = true }
     }
     if not known {
         cn := c.P.T.CaseNames(t)
@@ -15813,15 +15874,6 @@ fn (c mut Checker&) reflOf(sp source.Span, nsp source.Span, dt types.TypeId, arg
     rec := c.P.T.Items(c.P.T.Cases(t))[ds.Case]
     pp := typed.Lvalue.Payload(sp, rec, typed.Payload(base, ds.Case, typed.Check.None))
     return typed.Lvalue.Field(sp, ft, pp, ds.At)
-}
-
-# the local or parameter an expression names, -1 for none
-fn (c mut Checker&) narrowLocal(x ast.Expr&) I64 {
-    match x {
-        case ast.Expr.Name(_, n) { return c.localNamed(n) }
-        case ast.Expr.Paren(_, y) { return c.narrowLocal(y) }
-        case _ { return -1 }
-    }
 }
 
 # f(args) with f a function's descriptor (G41): the call its name would be - a method's on its first argument
@@ -16966,6 +17018,9 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Lvalue?& {
             ref := c.P.R.Member(c.fr().File, sp.End)
             if ref.Kind == names.What.Global { return typed.Lvalue.Global(sp, c.globalType(ref.Module, n), ref.Module, n) }
             if ref.Kind == names.What.None and c.typeNamed(y) < types.TypeId(0) {
+                # S8d: a field path narrowed to a payload written whole is the payload's copy, read and never written
+                wp := -1 if w else c.wholePath(extended(c.narrowPath(y), n), sp, false, types.UnknownT)
+                if wp >= 0: return typed.Lvalue.Temp(sp, c.localType(wp), c.readLocal(sp, wp), c.site(typed.SiteKind.Temp, sp))
                 # S8d: a narrowed local's payload field, read - never written, being the payload's copy
                 fl := c.narrowedName(y, n)
                 if fl >= 0 { return typed.Lvalue.Temp(sp, c.localType(fl), c.readLocal(sp, fl), c.site(typed.SiteKind.Temp, sp)) }
@@ -16978,7 +17033,10 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Lvalue?& {
                 }
                 p := c.place(y)
                 if p == null { return null }
-                return c.field(sp, memberSpan(sp, c.text(n).Len()), p, n)
+                fp := c.field(sp, memberSpan(sp, c.text(n).Len()), p, n)
+                # S8e: a target written is of its declared type, a place read of what a null test leaves it
+                if fp == null or w: return fp
+                return c.narrowedPlace(sp, y, n, fp)
             }
         }
         case ast.Expr.Index(sp, _, items) if ast.Slicing(items) {
@@ -17096,6 +17154,7 @@ fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.E
     mark := fr.leaks.Len()
     before := fr.Fallible
     fr.Tries++
+    c.bangTop = isMember(y)
     x := c.expr(y, c.P.T.OrNull(want) if c.isRef(want) or c.P.T.KindOf(want) == types.Kind.Func else want)
     fr.Tries--
     covered := fr.Fallible != before
@@ -17832,21 +17891,37 @@ fn (c mut Checker&) errLocalName(x ast.Expr&) source.NameId {
     }
 }
 
-# what narrowing leaves of error local n here (R11b, T20): what the tests around say, else its type's set
-fn (c mut Checker&) errNow(n source.NameId, set types.ListId) Vec<types.TypeId> {
+# T20: the error local an expression names, or the field path (S8d) holding an error value it is - empty for none
+fn (c mut Checker&) errPath(x ast.Expr&) Array<source.NameId>& {
+    n := c.errLocalName(x)
+    if n != source.NameId(0): return Array<source.NameId>(1, n)
+    if not isMember(x): return Array<source.NameId>(0)
+    p := c.narrowPath(x)
+    if p.Len() < 2: return p
+    pl := c.quietPlace(x)
+    if pl == null or not c.P.T.IsErrVal(pl.Type()): return Array<source.NameId>(0)
+    return p
+}
+
+# what narrowing leaves of error local or field path p here (R11b, T20): what the tests around say, else its type's
+# set (a field path's read at sp)
+fn (c mut Checker&) errNow(p Array<source.NameId>&, set types.ListId, sp source.Span = source.Span(-1, -1)) Vec<types.TypeId> {
     fr := c.fr()
     for j := fr.errNarrows.Len() - 1, j >= 0, j-- {
-        if fr.errNarrows[j].Name == n and not fr.errNarrows[j].Dead { return c.setItems(fr.errNarrows[j].Now) }
+        en := fr.errNarrows[j]
+        if en.Dead or not samePath(en.Path, p): continue
+        if p.Len() > 1: c.pathRead(sp, en.Loops, p)
+        return c.setItems(en.Now)
     }
     return c.setItems(set)
 }
 
 # T20: a read of error local n as narrowing leaves it - recoded to what the tests around leave (R6), so the read is of
 # that set: raised, rendered, matched or stored as only what it can be here
-fn (c mut Checker&) errNarrowed(x typed.Expr&, n source.NameId) typed.Expr& {
+fn (c mut Checker&) errNarrowed(x typed.Expr&, p Array<source.NameId>&) typed.Expr& {
     t := typeOf(x)
-    if not c.P.T.IsErrVal(t) or c.fr().errNarrows.Len() == 0 { return x }
-    now := c.errNow(n, c.P.T.ErrValItems(t))
+    if not c.P.T.IsErrVal(t) or c.fr().errNarrows.Len() == 0 or p.Len() == 0 { return x }
+    now := c.errNow(p, c.P.T.ErrValItems(t), x.Span())
     nt := c.P.ErrValOf(now.ToArray())
     if nt == t { return x }
     return c.prim(x.Span(), nt, typed.PrimOp.Convert, x, null)
@@ -17864,16 +17939,16 @@ fn (c mut Checker&) errHolds(want types.TypeId, have types.TypeId) Bool {
     return c.setLess(c.setItems(c.P.T.ErrValItems(have)), c.setItems(c.P.T.ErrValItems(want))).Len() == 0
 }
 
-# T20, E10c: whether an error value is never null here - a caught error, a word written, a local a test says is not
-# null (S8e)
+# T20, E10c: whether an error value is never null here - a caught error, a word written, a local or a field path a
+# test says is not null (S8e)
 fn (c mut Checker&) errNonNull(ax ast.Expr&, x typed.Expr&) Bool {
     match x {
         case typed.Expr.Lit(_, _, bits) { return bits != 0 }
         case _ { }
     }
     if c.caughtName(ax) >= 0 { return true }
-    n := c.errLocalName(ax)
-    return n != source.NameId(0) and c.nullKnown(Array<source.NameId>(1, n))
+    p := c.errPath(ax)
+    return p.Len() > 0 and c.nullKnown(p, ax.Span())
 }
 
 # a dotted name an expression is ("os.Error.Denied"), null for another expression
@@ -18027,15 +18102,24 @@ fn (c mut Checker&) errCode(x typed.Expr&) typed.Expr& {
     return c.read(sp, typed.Lvalue.Field(sp, i32, typed.Lvalue.Local(sp, t, typed.LocalId(I32(h))), 0))
 }
 
-# T19b: e.f, a payload field of an error value a local holds, read where narrowing leaves it one word - null where x is
-# no error local (the caller goes on)
+# T19b: the place of error local or field path p (x as written) - a caught name marked used
+fn (c mut Checker&) errHolder(x ast.Expr&, p Array<source.NameId>&) typed.Lvalue?& {
+    if p.Len() > 1: return c.quietPlace(x)
+    c.caughtUsed(p[0])
+    id := c.localNamed(p[0])
+    if id < 0: return null
+    return typed.Lvalue.Local(x.Span(), c.localType(id), typed.LocalId(I32(id)))
+}
+
+# T19b: e.f, a payload field of an error value a local or a field path (S8d) holds, read where narrowing leaves it one
+# word - null where x is neither (the caller goes on)
 fn (c mut Checker&) errField(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?& {
-    ln := c.errLocalName(x)
-    if ln == source.NameId(0): return null
-    c.caughtUsed(ln)
-    id := c.localNamed(ln)
-    t := c.localType(id)
-    now := c.errNow(ln, c.P.T.ErrValItems(t))
+    ep := c.errPath(x)
+    if ep.Len() == 0: return null
+    holder := c.errHolder(x, ep)
+    if holder == null: return null
+    t := holder.Type()
+    now := c.errNow(ep, c.P.T.ErrValItems(t), sp)
     w I64 = -1
     et := types.UnknownT
     if now.Len() == 1 {
@@ -18044,7 +18128,8 @@ fn (c mut Checker&) errField(sp source.Span, nsp source.Span, x ast.Expr&, n sou
         if mask != 0 and (mask & (mask - 1)) == 0: w = I64(mask.TrailingZeros())
     }
     if w < 0 {
-        c.err(nsp, msgs.PayloadFieldUnnarrowed(c.text(ln), c.text(n)))
+        txt := c.pathText(ep)
+        c.err(nsp, msgs.PayloadFieldUnnarrowed(txt, c.text(n), c.endedWhy(txt)))
         return c.unknown(sp)
     }
     d := c.P.T.DeclOf(et)
@@ -18070,7 +18155,7 @@ fn (c mut Checker&) errField(sp source.Span, nsp source.Span, x ast.Expr&, n sou
     c.settleRaised(et, pt)
     rec := c.P.T.Items(c.P.T.Cases(pt))[w]
     ft := c.P.T.Items(c.P.T.Parts(rec))[i]
-    base := typed.Lvalue.Field(sp, pt, typed.Lvalue.Local(sp, t, typed.LocalId(I32(id))), f)
+    base := typed.Lvalue.Field(sp, pt, holder, f)
     pp := typed.Lvalue.Payload(sp, rec, typed.Payload(base, w, typed.Check.None))
     return c.read(sp, typed.Lvalue.Field(sp, ft, pp, i))
 }
@@ -18138,70 +18223,100 @@ fn (c mut Checker&) errValues(sp source.Span, opSp source.Span, op token.Tok, x 
     return c.prim(sp, types.BoolT, typed.PrimOp.Eq if op == token.Tok.EqEq else typed.PrimOp.Ne, x, y)
 }
 
-# R11b, T20: what a condition says of an error local, held for a block - where it holds (holds) or does not
+# R11b, T20: what a condition says of an error local or field path (S8d), held for a block - where it holds (holds)
+# or does not
 fn (c mut Checker&) pushErrNarrow(x ast.Expr&, holds Bool, block I64) {
     if c.frames.Len() == 0 { return }
-    n := c.caughtIn(x)
-    if n == source.NameId(0) { return }
-    id := c.localNamed(n)
-    if id < 0 { return }
-    now := c.errNow(n, c.P.T.ErrValItems(c.localType(id)))
-    m := c.caughtNarrow(x, holds, n, now)
-    c.fr().errNarrows.Push(errNarrow(n, c.canonicalErrs(m), block))
+    p := c.caughtIn(x)
+    if p.Len() == 0 or not c.settled(x, p) { return }
+    t := types.UnknownT
+    if p.Len() > 1 {
+        pe := c.pathExpr(x, p)
+        if pe == null { return }
+        pl := c.quietPlace(pe)
+        if pl == null { return }
+        t = pl.Type()
+        c.fr().pathFacts = true
+    } else {
+        id := c.localNamed(p[0])
+        if id < 0 { return }
+        t = c.localType(id)
+    }
+    now := c.errNow(p, c.P.T.ErrValItems(t))
+    m := c.caughtNarrow(x, holds, p, now)
+    c.fr().errNarrows.Push(errNarrow(p, c.canonicalErrs(m), block, c.loopDepth()))
 }
 
-# the error local a condition first compares with an item, NameId(0) for none
-fn (c mut Checker&) caughtIn(x ast.Expr&) source.NameId {
+# T20: the operand of a comparison in condition x that is path p, null for none
+fn (c mut Checker&) pathExpr(x ast.Expr&, p Array<source.NameId>&) ast.Expr?& {
+    match x {
+        case ast.Expr.Paren(_, y): return c.pathExpr(y, p)
+        case ast.Expr.Unary(_, _, y): return c.pathExpr(y, p)
+        case ast.Expr.Binary(_, op, a, b) {
+            if op == token.Tok.And or op == token.Tok.Or {
+                l := c.pathExpr(a, p)
+                return l if l != null else c.pathExpr(b, p)
+            }
+            if samePath(c.narrowPath(a), p): return a
+            if samePath(c.narrowPath(b), p): return b
+            return null
+        }
+        case _: return null
+    }
+}
+
+# the error local or field path a condition first compares with an item, empty for none
+fn (c mut Checker&) caughtIn(x ast.Expr&) Array<source.NameId>& {
     return match x {
         case ast.Expr.Paren(_, y): c.caughtIn(y)
-        case ast.Expr.Unary(_, op, y): c.caughtIn(y) if op == token.Tok.Not else source.NameId(0)
+        case ast.Expr.Unary(_, op, y): c.caughtIn(y) if op == token.Tok.Not else Array<source.NameId>(0)
         case ast.Expr.Binary(_, op, a, b): c.caughtOf(op, a, b)
-        case _: source.NameId(0)
+        case _: Array<source.NameId>(0)
     }
 }
 
-fn (c mut Checker&) caughtOf(op token.Tok, a ast.Expr&, b ast.Expr&) source.NameId {
+fn (c mut Checker&) caughtOf(op token.Tok, a ast.Expr&, b ast.Expr&) Array<source.NameId>& {
     if op == token.Tok.EqEq or op == token.Tok.NotEq {
-        na := c.errLocalName(a)
-        if na != source.NameId(0) and c.errItemPath(b) { return na }
-        nb := c.errLocalName(b)
-        if nb != source.NameId(0) and c.errItemPath(a) { return nb }
-        return source.NameId(0)
+        pa := c.errPath(a)
+        if pa.Len() > 0 and c.errItemPath(b) { return pa }
+        pb := c.errPath(b)
+        if pb.Len() > 0 and c.errItemPath(a) { return pb }
+        return Array<source.NameId>(0)
     }
-    if op != token.Tok.And and op != token.Tok.Or { return source.NameId(0) }
+    if op != token.Tok.And and op != token.Tok.Or { return Array<source.NameId>(0) }
     ka := c.caughtIn(a)
-    return ka if ka != source.NameId(0) else c.caughtIn(b)
+    return ka if ka.Len() > 0 else c.caughtIn(b)
 }
 
-# what of now error local n can be where condition x holds (holds) or not: a comparison of n meets or leaves out what
-# it names, "and", "or" and "not" combine, and anything else says nothing
-fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, n source.NameId, now Vec<types.TypeId>&) Vec<types.TypeId> {
+# what of now error local or field path p can be where condition x holds (holds) or not: a comparison of p meets or
+# leaves out what it names, "and", "or" and "not" combine, and anything else says nothing
+fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, p Array<source.NameId>&, now Vec<types.TypeId>&) Vec<types.TypeId> {
     match x {
-        case ast.Expr.Paren(_, y) { return c.caughtNarrow(y, holds, n, now) }
+        case ast.Expr.Paren(_, y) { return c.caughtNarrow(y, holds, p, now) }
         case ast.Expr.Unary(_, op, y) {
-            if op == token.Tok.Not { return c.caughtNarrow(y, not holds, n, now) }
+            if op == token.Tok.Not { return c.caughtNarrow(y, not holds, p, now) }
         }
         case ast.Expr.Binary(_, op, a, b) {
             if op == token.Tok.EqEq or op == token.Tok.NotEq {
                 o := a
-                if c.errLocalName(a) == n: o = b
-                else if c.errLocalName(b) != n: return now
+                if samePath(c.errPath(a), p): o = b
+                else if not samePath(c.errPath(b), p): return now
                 xs := try c.caughtItems(o) catch NotError { return now }
                 return c.setMeet(now, xs) if (op == token.Tok.EqEq) == holds else c.setLess(now, xs)
             }
             if op == token.Tok.And {
                 if holds {
-                    na := c.caughtNarrow(a, true, n, now)
-                    return c.caughtNarrow(b, true, n, na)
+                    na := c.caughtNarrow(a, true, p, now)
+                    return c.caughtNarrow(b, true, p, na)
                 }
-                return c.setUnion(c.caughtNarrow(a, false, n, now), c.caughtNarrow(b, false, n, now))
+                return c.setUnion(c.caughtNarrow(a, false, p, now), c.caughtNarrow(b, false, p, now))
             }
             if op == token.Tok.Or {
                 if not holds {
-                    na := c.caughtNarrow(a, false, n, now)
-                    return c.caughtNarrow(b, false, n, na)
+                    na := c.caughtNarrow(a, false, p, now)
+                    return c.caughtNarrow(b, false, p, na)
                 }
-                return c.setUnion(c.caughtNarrow(a, true, n, now), c.caughtNarrow(b, true, n, now))
+                return c.setUnion(c.caughtNarrow(a, true, p, now), c.caughtNarrow(b, true, p, now))
             }
         }
         case _ { }
@@ -18576,7 +18691,7 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
     nullable := true
     n := c.errLocalName(m.Subject)
     if n != source.NameId(0) {
-        now = c.errNow(n, c.P.T.ErrValItems(c.localType(c.localNamed(n))))
+        now = c.errNow(Array<source.NameId>(1, n), c.P.T.ErrValItems(c.localType(c.localNamed(n))))
         nullable = c.caughtNamed(n) < 0 and not c.nullKnown(Array<source.NameId>(1, n))
         if c.caughtNamed(n) >= 0 { c.caughtUsed(n) }
     } else {
@@ -19615,7 +19730,7 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, 
     x := c.expr(value, t)
     vt := typeOf(x)
     if target != null and c.P.T.IsNullable(t) and vt != types.UnknownT and vt != types.NullT and not c.P.T.IsNullable(vt) {
-        c.fr().nonNullSet = pathOf(target)
+        c.fr().nonNullSet = c.narrowPath(target)
     }
     wasNull := c.nullDecl
     c.nullDecl = c.placeAt(p)
@@ -20198,8 +20313,11 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt& {
     k := c.cond1(i.Cond!)
     if dead and typeOf(k) == types.BoolT { c.err(c.operatorOf(i.Cond!), msgs.ConditionConstant()) }
     # S8d: what the condition says holds in its block, what it says where it fails in the else
+    live := c.livePaths()
     then := c.narrowedBranch(i.Then!, i.Cond!, true)
     els typed.Block?& = null
+    # S8d: a call in the block is none before the else - what it ended of a field path's narrowing holds there again
+    revived := c.revivePaths(live)
     if i.Else != null {
         match i.Else {
             case ast.Stmt.If(esp, e) {
@@ -20216,6 +20334,7 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt& {
             case _ { c.gap(i.Else!.Span(), "an else of this kind") }
         }
     }
+    c.killRevived(revived)
     return typed.Stmt.If(sp, typed.If(k, then, els))
 }
 
@@ -20296,9 +20415,11 @@ fn (c mut Checker&) loop(sp source.Span, k ast.Expr?&, body Array<ast.Stmt&>&, p
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
     c.fr().exits.Push(id)
+    c.loopEnter()   # S8d: its condition, body and post clause run again after their calls
     if k != null { c.emit(c.breakUnless(sp, c.cond1(k), id)) }
     # S8d: what the condition says holds in the body, and in the post clause where the body assigns the local nowhere
     if k != null { c.pushFacts(k, true, id) }
+    atBody := c.fr().calls
     if body.Len() > 0: c.stmtsOf(body)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -20311,10 +20432,12 @@ fn (c mut Checker&) loop(sp source.Span, k ast.Expr?&, body Array<ast.Stmt&>&, p
             held := c.factsHeld()
             c.pushFacts(k, true, pid)
             c.killAssigned(held, body)
+            if c.fr().calls != atBody: c.killPaths(WhyCalled)   # S8d: and a field path's where the body calls
         }
         c.stmt(post)
         pb = c.close(pid, pouter, pmark, pfrom)
     }
+    c.loopLeave()
     c.emit(typed.Stmt.Loop(sp, b, pb))
     # S8d: a loop left only by its condition failing - nothing in it says "break" - leaves what the condition says
     # where it fails holding after it ("for p == null { p = next() }")
@@ -20344,6 +20467,7 @@ fn (c mut Checker&) doFor(sp source.Span, body Array<ast.Stmt&>&, k ast.Expr&) {
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
     c.fr().exits.Push(id)
+    c.loopEnter()   # S8d: its body and condition run again after their calls
     if body.Len() > 0: c.stmtsOf(body)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -20352,6 +20476,7 @@ fn (c mut Checker&) doFor(sp source.Span, body Array<ast.Stmt&>&, k ast.Expr&) {
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
     c.emit(c.breakUnless(sp, c.cond1(k), id))
     pb := c.close(pid, pouter, pmark, pfrom)
+    c.loopLeave()
     c.emit(typed.Stmt.Loop(sp, b, pb))
 }
 
@@ -21558,6 +21683,12 @@ fn (c mut Checker&) laneMethodCalled(k I64) String {
 
 # the body run for each value: the loop's statements, or a comprehension's element yielded where its filter holds
 fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
+    c.loopEnter()   # S8d: each turn after the first follows the last one's calls
+    c.walkTurn(f, cm, ce)
+    c.loopLeave()
+}
+
+fn (c mut Checker&) walkTurn(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
     if cm == null {
         if f.Body.Len() > 0: c.stmtsOf(f.Body)
         return
@@ -22025,24 +22156,255 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
     c.emit(typed.Stmt.Loop(sp, b, pb))
 }
 
-# return v (S12): the value made to fit the result; several a tuple (D8c)
-# S8e: whether a path is known not to be null where it is read
-fn (c mut Checker&) nullKnown(path Array<source.NameId>&) Bool {
+# S8e: whether a path is known not to be null where it is read (at sp: a field path's read inside a loop it was
+# narrowed outside is judged as the loop ends)
+fn (c mut Checker&) nullKnown(path Array<source.NameId>&, sp source.Span = source.Span(-1, -1)) Bool {
     if path.Len() == 0 { return false }
     for nn in c.fr().nulls {
-        if not nn.Dead and samePath(nn.Path, path) { return true }
+        if nn.Dead or not samePath(nn.Path, path): continue
+        if path.Len() > 1: c.pathRead(sp, nn.Loops, path)
+        return true
     }
     return false
 }
 
+# S8d: the path a narrowing can be of - a local or a parameter, and the fields read after it ("n.next.v"), no call or
+# index in it; empty for anything else
+fn (c mut Checker&) narrowPath(x ast.Expr&) Array<source.NameId>& {
+    match x {
+        case ast.Expr.Paren(_, y): return c.narrowPath(y)
+        case ast.Expr.Name(sp, n) {
+            if c.frames.Len() == 0 or c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local: return Array<source.NameId>(0)
+            return Array<source.NameId>(1, n)
+        }
+        case ast.Expr.Member(sp, y, f) {
+            if c.P.R.Member(c.fr().File, sp.End).Kind != names.What.None: return Array<source.NameId>(0)
+            return extended(c.narrowPath(y), f)
+        }
+        case _: return Array<source.NameId>(0)
+    }
+}
+
+# path p and field f after it; empty where p is
+fn extended(p Array<source.NameId>&, f source.NameId) Array<source.NameId>& {
+    if p.Len() == 0: return p
+    out := Array<source.NameId>(p.Len() + 1, f)
+    for i in range p.Len(): out[i] = p[i]
+    return out
+}
+
+# a path as written, "n.next.v"
+fn (c mut Checker&) pathText(p Array<source.NameId>&) String {
+    b := StringBuilder()
+    for i in range p.Len() {
+        if i > 0: b.Push(".")
+        b.Push(c.text(p[i]))
+    }
+    return b.ToString()
+}
+
+# S8d, S8e, T20: why a narrowing of the path written text that held here no longer does - a statement assigned it, or
+# (a field path) a call came after its test - for the note under an error reading it; "" where none ended
+fn (c mut Checker&) endedWhy(text String&) String {
+    if c.frames.Len() == 0: return ""
+    fr := c.fr()
+    why I64 = 0
+    for nn in fr.nulls {
+        if nn.Dead and nn.Why > 0 and c.pathText(nn.Path) == text: why = nn.Why
+    }
+    for nr in fr.narrows {
+        if nr.Dead and nr.Why > 0 and c.pathText(nr.Path) == text: why = nr.Why
+    }
+    for en in fr.errNarrows {
+        if en.Dead and en.Why > 0 and c.pathText(en.Path) == text: why = en.Why
+    }
+    if why == WhyAssigned: return "a test narrowed it, and an assignment since has ended that"
+    if why == WhyCalled: return "a test narrowed it, and a call since may have changed it - a field path narrows only up to the next call"
+    return ""
+}
+
+# S8d: a call checked - the narrowings of field paths end there, the call able to change a field through another
+# reference (its arguments, checked before, were read under them)
+fn (c mut Checker&) calledNow() {
+    if c.frames.Len() == 0: return
+    c.fr().calls++
+    c.killPaths(WhyCalled)
+}
+
+# S8d: the narrowings of field paths holding now, by kind and index
+type pathMarks struct(Nulls Vec<I64>, Cases Vec<I64>, Errs Vec<I64>) {
+    Nulls
+    Cases
+    Errs
+}
+
+fn (c mut Checker&) livePaths() pathMarks {
+    m := pathMarks(Vec<I64>(), Vec<I64>(), Vec<I64>())
+    if c.frames.Len() == 0 or not c.fr().pathFacts: return m
+    fr := c.fr()
+    for k in range fr.nulls.Len() {
+        if not fr.nulls[k].Dead and fr.nulls[k].Path.Len() > 1: m.Nulls.Push(k)
+    }
+    for k in range fr.narrows.Len() {
+        if not fr.narrows[k].Dead and fr.narrows[k].Path.Len() > 1: m.Cases.Push(k)
+    }
+    for k in range fr.errNarrows.Len() {
+        if not fr.errNarrows[k].Dead and fr.errNarrows[k].Path.Len() > 1: m.Errs.Push(k)
+    }
+    return m
+}
+
+# S8d: of the narrowings m held, those a call has ended since made to hold again - returned, to be ended once more
+fn (c mut Checker&) revivePaths(m pathMarks) pathMarks {
+    out := pathMarks(Vec<I64>(), Vec<I64>(), Vec<I64>())
+    if c.frames.Len() == 0: return out
+    fr := c.fr()
+    for k in m.Nulls {
+        if k >= fr.nulls.Len() or fr.nulls[k].Why != WhyCalled: continue
+        nn := fr.nulls[k]
+        fr.nulls[k] = nullNarrow(nn.Path, nn.Block, nn.Loops)
+        out.Nulls.Push(k)
+    }
+    for k in m.Cases {
+        if k >= fr.narrows.Len() or fr.narrows[k].Why != WhyCalled: continue
+        nr := fr.narrows[k]
+        fr.narrows[k] = narrowed(nr.Local, nr.Tag, nr.Enum, nr.From, nr.Block, nr.Path, nr.Loops)
+        out.Cases.Push(k)
+    }
+    for k in m.Errs {
+        if k >= fr.errNarrows.Len() or fr.errNarrows[k].Why != WhyCalled: continue
+        en := fr.errNarrows[k]
+        fr.errNarrows[k] = errNarrow(en.Path, en.Now, en.Block, en.Loops)
+        out.Errs.Push(k)
+    }
+    return out
+}
+
+fn (c mut Checker&) killRevived(m pathMarks) {
+    if c.frames.Len() == 0: return
+    fr := c.fr()
+    for k in m.Nulls {
+        if k < fr.nulls.Len(): fr.nulls[k] = fr.nulls[k].Killed(WhyCalled)
+    }
+    for k in m.Cases {
+        if k < fr.narrows.Len(): fr.narrows[k] = fr.narrows[k].Killed(WhyCalled)
+    }
+    for k in m.Errs {
+        if k < fr.errNarrows.Len(): fr.errNarrows[k] = fr.errNarrows[k].Killed(WhyCalled)
+    }
+}
+
+# S8d: every narrowing of a field path ended, for why
+fn (c mut Checker&) killPaths(why I64) {
+    fr := c.fr()
+    if not fr.pathFacts: return
+    for k in range fr.nulls.Len() {
+        if not fr.nulls[k].Dead and fr.nulls[k].Path.Len() > 1: fr.nulls[k] = fr.nulls[k].Killed(why)
+    }
+    for k in range fr.narrows.Len() {
+        if not fr.narrows[k].Dead and fr.narrows[k].Path.Len() > 1: fr.narrows[k] = fr.narrows[k].Killed(why)
+    }
+    for k in range fr.errNarrows.Len() {
+        if not fr.errNarrows[k].Dead and fr.errNarrows[k].Path.Len() > 1: fr.errNarrows[k] = fr.errNarrows[k].Killed(why)
+    }
+}
+
+# S8d: the calls checked when x was - a test of a field path, an "and" or an "or" (testGen) - through parentheses and
+# "not"; -1 where none was kept
+fn (c mut Checker&) genOf(x ast.Expr&) I64 {
+    return match x {
+        case ast.Expr.Paren(_, y): c.genOf(y)
+        case ast.Expr.Unary(_, op, y): c.genOf(y) if op == token.Tok.Not else -1
+        case _: try c.fr().testGen.Get(ctKey(x.Span())) catch default -1
+    }
+}
+
+# S8d: x just checked - a test of a field path, an "and" or an "or" keeps the calls checked so far
+fn (c mut Checker&) testChecked(x ast.Expr&) {
+    if c.frames.Len() == 0: return
+    match x {
+        case ast.Expr.Binary(sp, op, a, b) {
+            if op == token.Tok.And or op == token.Tok.Or or ((op == token.Tok.EqEq or op == token.Tok.NotEq) and (isMember(a) or isMember(b))) {
+                c.fr().testGen.Put(ctKey(sp), c.fr().calls)
+            }
+        }
+        case _ { }
+    }
+}
+
+fn isMember(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Paren(_, y): isMember(y)
+        case ast.Expr.Member(_, _, _): true
+        case _: false
+    }
+}
+
+# S8d: whether what condition guard says of field path p holds where it ends - no call checked after a test of p in it
+fn (c mut Checker&) settled(guard ast.Expr&, p Array<source.NameId>&) Bool {
+    if p.Len() < 2: return true
+    end := c.genOf(guard)
+    return end >= 0 and c.testsAt(guard, p, end)
+}
+
+fn (c mut Checker&) testsAt(x ast.Expr&, p Array<source.NameId>&, end I64) Bool {
+    match x {
+        case ast.Expr.Paren(_, y): return c.testsAt(y, p, end)
+        case ast.Expr.Unary(_, op, y): return op != token.Tok.Not or c.testsAt(y, p, end)
+        case ast.Expr.Binary(_, op, a, b) {
+            if op == token.Tok.And or op == token.Tok.Or: return c.testsAt(a, p, end) and c.testsAt(b, p, end)
+            if op != token.Tok.EqEq and op != token.Tok.NotEq: return true
+            if not samePath(c.narrowPath(a), p) and not samePath(c.narrowPath(b), p): return true
+            return c.genOf(x) == end
+        }
+        case _: return true
+    }
+}
+
+# S8d: the loops around now - a narrowing records them, so a read inside a loop it was made outside is known
+fn (c mut Checker&) loopDepth() I64 { return c.fr().loopCalls.Len() if c.frames.Len() > 0 else 0 }
+
+# S8d: a field path p narrowed with loops around it read at sp: inside a loop it was narrowed outside, kept to be judged
+# as that loop ends (a call in the loop could change it before the next turn reads it)
+fn (c mut Checker&) pathRead(sp source.Span, loops I64, p Array<source.NameId>&) {
+    if sp.Start < 0 or loops >= c.loopDepth(): return
+    c.fr().loopUses.Push(loopUse(sp, loops, c.pathText(p)))
+}
+
+# S8d: a loop's condition, body and post clause begin
+fn (c mut Checker&) loopEnter() { c.fr().loopCalls.Push(c.fr().calls) }
+
+# S8d: a loop ends - where a call was checked in it, a field path narrowed outside it and read inside is an error
+fn (c mut Checker&) loopLeave() {
+    fr := c.fr()
+    entry := try fr.loopCalls.Pop() catch { return }
+    d := fr.loopCalls.Len()
+    keep Vec<loopUse>
+    for u in fr.loopUses {
+        if u.Loops > d: continue
+        if fr.calls == entry {
+            if u.Loops < d: keep.Push(u)
+            continue
+        }
+        c.err(u.Sp, msgs.NarrowedAcrossLoop(u.Text))
+    }
+    fr.loopUses = keep
+}
+
+# S8e: path p known not to be null in block b from here
+fn (c mut Checker&) pushNull(p Array<source.NameId>&, b I64) {
+    if p.Len() > 1: c.fr().pathFacts = true
+    c.fr().nulls.Push(nullNarrow(p, b, c.loopDepth()))
+}
+
 # S8e: the paths a condition says are not null (positive) or are when it is false, held in block b - what a statement
-# after them in that block assigns ends one
+# after them in that block assigns ends one, and a call one of a field path (S8d)
 fn (c mut Checker&) pushNulls(guard ast.Expr&, positive Bool, b I64) {
-    paths Vec<Array<source.NameId>&>
-    nullTests(guard, positive, paths)
-    for p in paths {
-        # S8e, as S8d: a local or a parameter only - a field may change under a call
-        if p.Len() == 1 { c.fr().nulls.Push(nullNarrow(Array<source.NameId>[n for n in p], b)) }
+    tested Vec<ast.Expr&>
+    nullTests(guard, positive, tested)
+    for x in tested {
+        p := c.narrowPath(x)
+        if p.Len() > 0 and c.settled(guard, p): c.pushNull(p, b)
     }
 }
 
@@ -22052,25 +22414,27 @@ fn (c mut Checker&) pushNulls(guard ast.Expr&, positive Bool, b I64) {
 fn (c mut Checker&) pushFacts(guard ast.Expr&, positive Bool, b I64) {
     c.pushNulls(guard, positive, b)
     c.pushErrNarrow(guard, positive, b)
-    c.pushCases(guard, positive, b)
+    c.pushCases(guard, guard, positive, b)
 }
 
 # S8d: the case tests a condition holds where it holds (positive) or fails - "e == C" where it holds, "e != C" where it
 # fails, "and" where it holds, "or" where it fails, "not" turning it round
-fn (c mut Checker&) pushCases(x ast.Expr&, positive Bool, b I64) {
+fn (c mut Checker&) pushCases(guard ast.Expr&, x ast.Expr&, positive Bool, b I64) {
     match x {
-        case ast.Expr.Paren(_, y) { c.pushCases(y, positive, b) }
+        case ast.Expr.Paren(_, y) { c.pushCases(guard, y, positive, b) }
         case ast.Expr.Unary(_, op, y) {
-            if op == token.Tok.Not { c.pushCases(y, not positive, b) }
+            if op == token.Tok.Not { c.pushCases(guard, y, not positive, b) }
         }
         case ast.Expr.Binary(sp, op, l, r) {
             if (op == token.Tok.And and positive) or (op == token.Tok.Or and not positive) {
-                c.pushCases(l, positive, b)
-                c.pushCases(r, positive, b)
+                c.pushCases(guard, l, positive, b)
+                c.pushCases(guard, r, positive, b)
                 return
             }
-            id, k := c.narrowOf(x, token.Tok.EqEq if positive else token.Tok.NotEq)
-            if id >= 0 { c.narrow(sp, id, k, b) }
+            want := token.Tok.EqEq if positive else token.Tok.NotEq
+            id, k := c.narrowOf(x, want)
+            if id >= 0: c.narrow(sp, id, k, b)
+            else: c.narrowField(guard, x, want, b)
         }
         case _ { }
     }
@@ -22093,15 +22457,13 @@ fn (c mut Checker&) factsDrop(m factsMark) {
 fn (c mut Checker&) killAssigned(m factsMark, body Array<ast.Stmt&>&) {
     fr := c.fr()
     for j in range m.Nulls, fr.nulls.Len() {
-        nn := fr.nulls[j]
-        if assignsName(body, nn.Path) { fr.nulls[j] = nullNarrow(nn.Path, nn.Block, true) }
+        if assignsName(body, fr.nulls[j].Path): fr.nulls[j] = fr.nulls[j].Killed(WhyAssigned)
     }
     for j in range m.Cases, fr.narrows.Len() {
-        if assignsName(body, Array<source.NameId>(1, c.cur().Locals[fr.narrows[j].Local].Name)) { fr.narrows[j] = fr.narrows[j].Killed() }
+        if assignsName(body, fr.narrows[j].Path): fr.narrows[j] = fr.narrows[j].Killed(WhyAssigned)
     }
     for j in range m.Errs, fr.errNarrows.Len() {
-        en := fr.errNarrows[j]
-        if assignsName(body, Array<source.NameId>(1, en.Name)) { fr.errNarrows[j] = errNarrow(en.Name, en.Now, en.Block, true) }
+        if assignsName(body, fr.errNarrows[j].Path): fr.errNarrows[j] = fr.errNarrows[j].Killed(WhyAssigned)
     }
 }
 
@@ -22130,7 +22492,7 @@ fn (c mut Checker&) nullRead(p typed.Lvalue&) {
     t := p.Type()
     if not c.P.T.IsNullable(t) { return }
     sp := p.Span()
-    c.err(sp, msgs.ReadMaybeNull(c.src(sp), c.ty(t), bangOf(c.src(sp))))
+    c.err(sp, msgs.ReadMaybeNull(c.src(sp), c.ty(t), bangOf(c.src(sp)), c.endedWhy(c.src(sp))))
 }
 
 # T2c: where the type of a place assigned is written, for declNote - a local's or a parameter's, a struct's field's
@@ -23336,6 +23698,7 @@ fn (c mut Checker&) yieldStmt(sp source.Span, x ast.Expr&) {
     # goes - a value read out of a place is one, E31d; refusals 5.7)
     if not c.isRef(rt) and c.ownVar(v) { v = c.ownCopy(v) }
     c.emit(typed.Stmt.Suspend(sp, v))
+    c.calledNow()   # S8d: the walk's consumer runs before it goes on - as a call would
 }
 
 # whether x reads a variable of the body's own whole, its value owning storage it may change - an array of a run-time
@@ -25597,13 +25960,19 @@ fn (c mut Checker&) localCase(nx ast.Expr&, pat ast.Expr&) I64, I64 {
 # S8d: local id known to hold case k from here to the end of the current block: its payload's fields copied into
 # locals of the block, read where e.f is written
 fn (c mut Checker&) narrow(sp source.Span, id I64, k I64, b I64) {
+    place typed.Lvalue& = typed.Lvalue.Local(sp, c.localType(id), typed.LocalId(I32(id)))
+    c.narrowAt(sp, place, Array<source.NameId>(1, c.cur().Locals[id].Name), id, k, b)
+}
+
+# S8d: what place holds (local id, or -1 for a field path) known to hold case k from here to the end of block b: its
+# payload's fields read once, here, into locals of the block
+fn (c mut Checker&) narrowAt(sp source.Span, place typed.Lvalue&, path Array<source.NameId>&, id I64, k I64, b I64) {
     fr := c.fr()
-    t := c.localType(id)
+    t := place.Type()
     et := c.deref(t)
     from := fr.narrowFields.Len()
     ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
     if ps.Len() > 0 {
-        place typed.Lvalue& = typed.Lvalue.Local(sp, t, typed.LocalId(I32(id)))
         base := place
         if c.isRef(t) { base = typed.Lvalue.Deref(sp, et, c.read(sp, place)) }
         rec := c.P.T.Items(c.P.T.Cases(et))[k]
@@ -25616,21 +25985,51 @@ fn (c mut Checker&) narrow(sp source.Span, id I64, k I64, b I64) {
             fr.narrowFields.Push(fl)
         }
     }
-    fr.narrows.Push(narrowed(id, k, et, from, b))
+    if path.Len() > 1: fr.pathFacts = true
+    fr.narrows.Push(narrowed(id, k, et, from, b, path, c.loopDepth()))
+}
+
+# S8d: a field path's case test - "x.f == Shape.Circle" for want ==, "!=" for want !=: the path narrowed to the case in
+# block b, where no call followed the test in its condition guard
+fn (c mut Checker&) narrowField(guard ast.Expr&, x ast.Expr&, want token.Tok, b I64) {
+    match x {
+        case ast.Expr.Binary(sp, op, l, r) {
+            if op != want: return
+            nx := l
+            pat := r
+            if c.caseWritten(l) and not c.caseWritten(r) {
+                nx = r
+                pat = l
+            } else if not c.caseWritten(r): return
+            p := c.narrowPath(nx)
+            if p.Len() < 2 or not c.settled(guard, p): return
+            place := c.quietPlace(nx)
+            if place == null or not c.isEnum(c.deref(place.Type())): return
+            k := c.caseTag(casePath(pat), c.deref(place.Type()))
+            if k >= 0: c.narrowAt(sp, place, p, -1, k, b)
+        }
+        case _ { }
+    }
+}
+
+# the place a field path names, read as it is here, saying nothing (it was checked where written)
+fn (c mut Checker&) quietPlace(x ast.Expr&) typed.Lvalue?& {
+    was := c.P.L.Diags.Quiet
+    c.P.L.Diags.Quiet = true
+    p := c.place(x)
+    c.P.L.Diags.Quiet = was
+    return p
 }
 
 # S8d: a local narrowed to a case whose payload is one type written whole ("Round Circle"): the payload's copy, which
 # the local's name reads where it is narrowed; -1 for none
 fn (c mut Checker&) wholeNarrowed(id I64) I64 {
-    fr := c.fr()
-    for j in range fr.narrows.Len() {
-        nr := fr.narrows[fr.narrows.Len() - 1 - j]
-        if nr.Local != id or nr.Dead { continue }
-        cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
-        if cd == null or not cd.Whole { return -1 }
-        return fr.narrowFields[nr.From]
-    }
-    return -1
+    j := c.caseNarrowing(id, Array<source.NameId>(0))
+    if j < 0 { return -1 }
+    nr := c.fr().narrows[j]
+    cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
+    if cd == null or not cd.Whole { return -1 }
+    return c.fr().narrowFields[nr.From]
 }
 
 fn caseDecl(td ast.TypeDecl?&, k I64) ast.CaseDecl?& {
@@ -25671,37 +26070,84 @@ fn (c mut Checker&) narrowedWrite(sp source.Span, fl I64) {
     cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
     name := c.text(cd.Name) if cd != null else ""
     kase := $(c.ty(nr.Enum)) "." $name
-    c.err(sp, msgs.NarrowedWrite(c.text(c.cur().Locals[nr.Local].Name), kase))
+    c.err(sp, msgs.NarrowedWrite(c.pathText(nr.Path), kase))
 }
 
-# S8d: x.n where x names a narrowed local and n a field of its case's payload: the field's copy, -1 for none
+# S8d: x.n where x names a narrowed local, or is a narrowed field path, and n a field of its case's payload: the field's
+# copy, -1 for none
 fn (c mut Checker&) narrowedName(x ast.Expr&, n source.NameId) I64 {
     match x {
         case ast.Expr.Name(_, en) {
             id := c.localNamed(en)
-            if id >= 0 { return c.narrowedField(id, n) }
+            if id >= 0 { return c.narrowedField(c.caseNarrowing(id, Array<source.NameId>(0)), n) }
+        }
+        case ast.Expr.Member(_, _, _) {
+            p := c.narrowPath(x)
+            if p.Len() < 2: return -1
+            j := c.caseNarrowing(-1, p)
+            if j >= 0: c.pathRead(x.Span(), c.fr().narrows[j].Loops, p)
+            return c.narrowedField(j, n)
         }
         case _ { }
     }
     return -1
 }
 
-# S8d: a payload field of a narrowed local, "e.r": its copy's local, -1 where e is not narrowed or has no such field
-fn (c mut Checker&) narrowedField(id I64, n source.NameId) I64 {
+# S8d: the innermost narrowing to a case holding of local id (id >= 0) or of field path p, -1 for none
+fn (c mut Checker&) caseNarrowing(id I64, p Array<source.NameId>&) I64 {
     fr := c.fr()
     for j in range fr.narrows.Len() {
-        nr := fr.narrows[fr.narrows.Len() - 1 - j]
-        if nr.Local != id or nr.Dead { continue }
-        cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
-        if cd == null or cd.Whole { return -1 }
-        ps := cd.Payload
-        if ps.Len() == 0 { return -1 }
-        for i in range ps.Len() {
-            if ps[i].Name == n { return fr.narrowFields[nr.From + i] }
-        }
-        return -1
+        k := fr.narrows.Len() - 1 - j
+        nr := fr.narrows[k]
+        if nr.Dead: continue
+        if (id >= 0 and nr.Local == id) or (id < 0 and nr.Local < 0 and samePath(nr.Path, p)): return k
     }
     return -1
+}
+
+# S8d: a payload field of the narrowing j (of a local, "e.r", or a field path): its copy's local, -1 where there is no
+# narrowing or no such field
+fn (c mut Checker&) narrowedField(j I64, n source.NameId) I64 {
+    if j < 0: return -1
+    fr := c.fr()
+    nr := fr.narrows[j]
+    cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
+    if cd == null or cd.Whole or cd.Payload.Len() == 0 { return -1 }
+    ps := cd.Payload
+    for i in range ps.Len() {
+        if ps[i].Name == n { return fr.narrowFields[nr.From + i] }
+    }
+    return -1
+}
+
+# S8d: a field path narrowed to a case whose payload is one type written whole: the payload's copy, which the path
+# reads where it is narrowed (read at sp, the enum not wanted, ew and want as name's); -1 for none
+fn (c mut Checker&) wholePath(p Array<source.NameId>&, sp source.Span, ew Bool, want types.TypeId) I64 {
+    if p.Len() < 2: return -1
+    j := c.caseNarrowing(-1, p)
+    if j < 0: return -1
+    nr := c.fr().narrows[j]
+    cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
+    if cd == null or not cd.Whole: return -1
+    # read as its enum where the enum is wanted - a case test's, an "as"'s or a match's subject, or a value of the enum
+    if ew or (want != types.UnknownT and c.P.T.Same(c.deref(want), nr.Enum)): return -1
+    c.pathRead(sp, nr.Loops, p)
+    return c.fr().narrowFields[nr.From]
+}
+
+# S8d, S8e: field n of x read as narrowing leaves it - fp, of the type a null test of the path leaves it (a weak
+# field's never)
+fn (c mut Checker&) narrowedPlace(sp source.Span, x ast.Expr&, n source.NameId, fp typed.Lvalue&) typed.Lvalue& {
+    match fp {
+        case typed.Lvalue.Field(fsp, t, base, i) {
+            # (T2d: a weak field reads null once no owning place holds its referent, with no call or store to it - it
+            # never narrows)
+            if not c.P.T.IsNullable(t) or c.P.WeakField(base.Type(), i): return fp
+            if not c.nullKnown(extended(c.narrowPath(x), n), sp): return fp
+            return typed.Lvalue.Field(fsp, c.P.T.NonNull(t), base, i)
+        }
+        case _: return fp
+    }
 }
 
 fn casePayload(td ast.TypeDecl?&, k I64) Array<ast.Param&>& {
@@ -25842,9 +26288,9 @@ fn assignsWhole(st ast.Stmt&, n Array<source.NameId>&) Bool {
     }
 }
 
-# S8e: the paths a condition says are not null when it is positive (true) or not: "p != null", "p == null" when
+# S8e: the expressions a condition says are not null when it is positive (true) or not: "p != null", "p == null" when
 # false, "and" when true, "or" when false, "not" turning it round
-fn nullTests(x ast.Expr?&, positive Bool, out mut Vec<Array<source.NameId>&>&) {
+fn nullTests(x ast.Expr?&, positive Bool, out mut Vec<ast.Expr&>&) {
     if x == null { return }
     match x {
         case ast.Expr.Paren(_, y) { nullTests(y, positive, out) }
@@ -25860,8 +26306,7 @@ fn nullTests(x ast.Expr?&, positive Bool, out mut Vec<Array<source.NameId>&>&) {
             # "p != null" where it holds, "p == null" where it fails, the null literal on either side (E10c)
             if (op == token.Tok.NotEq) != positive or not (op == token.Tok.EqEq or op == token.Tok.NotEq): return
             if isNullLit(a) == isNullLit(b): return
-            p := pathOf(b if isNullLit(a) else a)
-            if p.Len() > 0 { out.Push(p) }
+            out.Push(b if isNullLit(a) else a)
         }
         case _ { }
     }
@@ -26730,7 +27175,7 @@ fn (c mut Checker&) slotContract(target typed.Callee&) I64 {
 fn (c mut Checker&) anyCall(sp source.Span, x ast.Expr&, rx typed.Expr&, n source.NameId, nsp source.Span, args Array<ast.Expr&>&) typed.Expr& {
     rt := typeOf(rx)
     if c.P.T.IsNullable(rt) {
-        c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span()))))
+        c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span())), c.endedWhy(c.src(x.Span()))))
         rx = c.convert(sp, rx, c.P.T.NonNull(rt))
         rt = typeOf(rx)
     }
