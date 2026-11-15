@@ -290,22 +290,13 @@ fn argument<P>(header Array<String&>&, row Array<String&>&, p P, line I64) P.Typ
 fn value<V>(f String&) V ? badValue {
     match V {
         case String { return $f }
-        case Bool {
-            if f == "true" { return true }
-            if f == "false" { return false }
-            error badValue
-        }
+        case Bool { return try Bool.Parse(f) catch ParseError { error badValue } }
         case Char {
             if f.Len() != 1 { error badValue }
             return f[0]
         }
         case _ {
-            if V.Kind == TypeKind.Integer {
-                return V(try V.Base.Parse(f) catch ParseError { error badValue })
-            } else {
-                assert V.Kind == TypeKind.Float, "a csv column is text, a Char, a Bool or a number"
-                return V(V.Base(try f.ParseFloat() catch ParseError { error badValue }))
-            }
+            return V(try V.Base.Parse(f) catch ParseError { error badValue })
         }
     }
 }

@@ -37517,3 +37517,5 @@ with `ParseError`, and any other T is G18a's error at the call naming `Parse`; n
 fails to parse is consumed. `Bytes` on a short input consumes and drops what it read, then fails Exhausted (keeping it would
 make the buffer grow to n); `All` grows the buffer to the rest. Tests in std/io.olang: words across refills of 1-3 bytes, CRLF,
 numbers of several types, the count-then-numbers sample, ParseError and Exhausted, Bytes at the end, failing reads.
+
+D19: the floats (F16, BF16, F32, F64), the F8 types and Bool got `T.Parse(t)` builders in the prelude (2026-11-15, the user's go-ahead), beside the integers'. A float reads the text as `ParseFloat` does and rounds to the type, failing with Overflow where a finite number becomes infinite in it; Bool reads "true" or "false" exactly (Empty for no text, else Invalid). std/csv's `value<V>`, which special-cased Bool and floats (there is no `Reader.Next<T>` in std/io; csv held the match), now calls `Parse` for Bool and every number. Tests in std/prelude/tests/text.olang, with top-level asserts the evaluator decides.

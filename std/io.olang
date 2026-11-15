@@ -256,16 +256,7 @@ fn (r mut Reader&) Word() String& ? Error, Exhausted { return try r.src.word() }
 # next call reads the one after it. Any other T is an error at the call, naming the builder it lacks (G18a).
 fn (r mut Reader&) Next<T>() T ? Error, Exhausted, ParseError {
     w := try r.src.word()
-    match T {
-        case F16, BF16, F32, F64: return T(try w.ParseFloat())
-        case Bool {
-            if w == "true": return true
-            if w == "false": return false
-            error ParseError.Invalid
-        }
-        case _: return try T.Parse(w)
-    }
-    unreachable
+    return try T.Parse(w)
 }
 
 # exactly n bytes. If the input ends first, Exhausted - and the bytes read before it are gone, taken from the input and
