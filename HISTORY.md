@@ -37821,3 +37821,9 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   what brings the method into the program - removing it gives "Rec has no method 'Twice'". unusedImports now counts
   an import used where the importer's code calls (`.Name`, read off its text, as D3b reads a left-out branch's) a
   method the imported module declares for a type reached through an alias. typereview scenario, fixtures extend/extuse.
+- **`Columns<C>.Fields` was empty for lower-case fields (T7e, M6a).** ReflItems judged a Columns instance's fields
+  private by the module declaring Columns (the prelude), so only capitalized ones were listed outside it. A Columns'
+  fields are its row type's, named as they are: they are now listed where the row's fields are readable (oann's
+  repro/colfields). Found beside it: a local holding a descriptor read only in a type (`z f.Type`, G34) was "never read"
+  (D3b) - the resolver's typePath now counts the head of such a path as a read. Test in std/prelude/tests/columns.olang,
+  baked and run.

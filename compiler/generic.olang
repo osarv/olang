@@ -5350,7 +5350,10 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
     else: return none, "only a struct and an enum's case have fields"
     # M6a: a struct's private fields are its module's; an enum case's fields are read by any module that reads the case
     # (T7e: the prelude, which supplies Columns over any struct, sees every field)
-    own := p.T.DeclModule(p.T.DeclOf(r)) == mi or not p.isStructT(r) or p.L.Mods[p.T.DeclModule(p.T.DeclOf(r))].C or
+    # (a Columns' fields are its row type's, named as they are: read where the row's are - T7e, M6a)
+    of := r
+    if p.IsColumns(r) and p.isStructT(p.ColumnsRow(r)): of = p.ColumnsRow(r)
+    own := p.T.DeclModule(p.T.DeclOf(of)) == mi or not p.isStructT(of) or p.L.Mods[p.T.DeclModule(p.T.DeclOf(of))].C or
            (mi >= 0 and mi < p.L.Mods.Len() and p.L.Mods[mi].Prelude)
     for i in range ns.Len() {
         if own or p.text(ns[i])[0].IsUpper() { out.Push(i) }

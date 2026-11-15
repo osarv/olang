@@ -99,6 +99,28 @@ test "Columns: reflection sees a struct of columns, its rows' type its Element" 
     assert Columns<P>.Fields[0].Type.Element.Name == "F32"
 }
 
+# a generic reaching a column by reflection: Columns<C>.Fields holds C's private fields' columns where C's fields are
+# readable (M6a) - it held none for lower-case fields (oann's repro/colfields)
+fn clearCols<C>(c mut Columns<C>&) {
+    for k, f in C.Fields {
+        z f.Type
+        for i in range c.Len(): Columns<C>.Fields[k].Of(c)[i] = z
+    }
+}
+
+fn clearedGrid() F64 {
+    c := Columns<Grid>(3)
+    c.w[1] = 2.0
+    clearCols(c)
+    return c.w[1]
+}
+ClearedGrid := clearedGrid()
+
+test "Columns: a private field's column is in Fields where the field is read" {
+    assert Columns<Grid>.Fields.Len() == 2 and Columns<Grid>.Fields[1].Name == "w"
+    assert clearedGrid() == 0.0 and ClearedGrid == 0.0
+}
+
 # ---- rich display (B23) ----
 
 fn shownHtml() String {

@@ -1761,6 +1761,8 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
             }
             return
         }
+        # D3b: a local holding a descriptor names a type through it ("z f.Type", G34) - a read
+        r.read(hr)
         # G38: a type's reflected member ("Point.Base", "I64.Element") - the head recorded where its name ends
         if hr.Kind == What.Type or hr.Kind == What.Builtin { r.members.Put(key(r.L.Mods[r.mi].File, hsp.End), hr) }
         return
