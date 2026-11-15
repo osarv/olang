@@ -3471,6 +3471,13 @@ and the value rendered (E11a) - and its line end to the standard error, then giv
 where it stands: `y := io.Show(f(x)) + 1`. A failed write is ignored, the one call of std that does not report one:
 a look that could fail would need a `try` at every use, and a lost look changes nothing the program computes.
 
+The read counterpart of `Writer` is `io.Reader(fd, size = 65536)`, a buffered input also behind `Lines`: `Line()` (the next
+line, as `Lines.Next` gives it), `Word()` (the next run of non-whitespace, line ends skipped), `Next<T>()` (the next word as
+a `T`: an integer by `T.Parse`, a float by `ParseFloat`, a `Bool` from `true`/`false`; failing with `io.Error`, `Exhausted`
+or the prelude's `ParseError`), `Bytes(n)` (exactly `n` bytes; `Exhausted` if the input ends first, the bytes read
+dropped) and `All()` (everything left). A read that fails is `io.Error.Failed`; the end of the input is `Exhausted`, as it
+is now, so a later call reads again.
+
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
 

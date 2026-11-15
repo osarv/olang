@@ -37505,3 +37505,15 @@ then "any printable type really". `io.Put`, `PutLine`, `PutErr` and `PutErrLine`
 passed a String and writes the same bytes. M19f in SPEC, std/io.olang's test "writes any value as $ renders it".
 
 The language server sends the diagnostics of D3b (a local never read) and M5a (an import never used) with severity 2, a warning, as `olang FILE` reports them, and every other rule with severity 1 (B15, 2026-11-15, the user: "show unused as W in the editor"). The rule is the diagnostic's `code`; `severityOf` in compiler/lsp.olang asks diag.Untidy, so the two lists cannot drift. The MCP server is unchanged.
+The same day (the user, "yes, add it to the Writer"): `io.Writer` gains `Put<T>` and `PutLine<T>`, writing any value as
+`$` renders it into the buffer (PutLine with a line end, written as a second byte so nothing is joined first).
+
+M19f, 2026-11-15 (the user's request): `io.Reader(fd, size = 65536)`, the read counterpart of `Writer`. Lines' buffer logic moved
+into a private `source` (fd, buffer, start, end; `fill` compacts, doubles and reads; `line`, `word`, `text`), which Lines and
+Reader both hold, so Lines behaves as before (its tests unchanged). Reader: `Line`, `Word` (whitespace is space, tab, CR, LF),
+`Next<T>`, `Bytes(n)`, `All`. Decisions: `Next<T>` fails with the one set `Error, Exhausted, ParseError` whatever T is - the
+prelude has `T.Parse` for integers only, so a `match T` reads floats by `ParseFloat` and Bool from `true`/`false`, all failing
+with `ParseError`, and any other T is G18a's error at the call naming `Parse`; no error-set parameter was needed. A word that
+fails to parse is consumed. `Bytes` on a short input consumes and drops what it read, then fails Exhausted (keeping it would
+make the buffer grow to n); `All` grows the buffer to the rest. Tests in std/io.olang: words across refills of 1-3 bytes, CRLF,
+numbers of several types, the count-then-numbers sample, ParseError and Exhausted, Bytes at the end, failing reads.
