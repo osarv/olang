@@ -205,6 +205,7 @@ type Worker struct(Relay Bool) {
     Out I32 = -1
     Std I32 = -1
     Err I32 = -1
+    Printed Bool = false     # something was relayed since the prompt last asked: a newline is due before it asks again (the prompt's)
     buf Vec<U8>
 }
 
@@ -376,6 +377,7 @@ fn (w mut Worker&) relay(which I64) Bool {
     n := unistd.read(fd, chunk, U64(chunk.Len()))
     if n > 0 {
         try io.Write(I32(which), chunk[:n]) catch io.Error { }
+        w.Printed = true
         return true
     }
     session.CloseFd(fd)

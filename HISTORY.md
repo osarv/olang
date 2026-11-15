@@ -37361,3 +37361,11 @@ indicative): hello world through `olang FILE` 1.6-2.0 s cold cache, 0.24 s cache
 0.2 s, 0.35-0.9 s); `olang run FILE` 2.2 s first, 0.06 s unchanged, 0.35 s after an edit. A prompt of five small cells took 6.0 s
 cold and 1.7 s on the warm cache, with or without `-quick` and (before) with it unconditionally: link-time optimization costs
 the small cells nothing measurable.
+
+## The prompt's newline after a cell's output (B22, 2026-11-15)
+`Print("hello")` at the terminal prompt showed nothing: the line editor's redraw (`\r\x1b[J>>> `) erased the unfinished line.
+On a terminal the session's worker output is now relayed through this process (`Worker.Relay`, as the kernel's is), which
+remembers whether a cell wrote anything (`Worker.Printed`); the prompt then writes one newline before the next `>>>`, whatever
+the output ended with (the user: `Print(5)` shows `5` and the prompt on the next line, `Println(5)` shows `5`, an empty line, and
+the prompt). A cell that wrote nothing adds nothing. Checked in the `promptkeys` scenario with `Print("hello")` and `Println("hi")`.
+Cells interpreted through `OLANG_CELLS=interpret` write in this process and are not covered.

@@ -8963,7 +8963,7 @@ in a process the session keeps; with `OLANG_CELLS=interpret` set, or where no ce
 is not this machine), they are interpreted as the evaluator (B3e) runs a program (B3e), said once. Where the input is a terminal
 it asks with `>>> `, and
 `... ` while an entry is open: an entry goes on over the next line while a bracket of it, a raw text (L14a) or a block
-comment (L4a) is not closed. The session ends at the end of the input or at `:quit`, with status 0.
+comment (L4a) is not closed. On a terminal, a cell that wrote anything to the standard output or error is followed by one newline before the next prompt, whatever its output ended with, so that the prompt never draws over the line a cell left unfinished. The session ends at the end of the input or at `:quit`, with status 0.
 
 A cell is top-level declarations and statements in any order, split where a line ends with no bracket open (an `else` or
 `catch` beginning the next line goes on with the statement before it, S1b, R9b). Its declarations - `fn`, `type`,
