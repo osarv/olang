@@ -37991,3 +37991,48 @@ But lowering copies a view call's value into a local unless it can make the loca
 a local written, assigned, stored, or lent writably to a body changing its parts never is. Early freeing now asks the
 same: such a local's origins are the copy's (`unowned`), the lowering's `Preserves` given to it by the driver for the
 lends. 24.5 MB to 1.9 MB at 20,000 turns (checks' freeing mapcopy).
+
+## 2026-11-15: section 8, four left over (wt-sect8): learnerarg, genref, freeing gaps 19 and 17's text
+
+**oann's learnerarg (O18c, O23a, O25i, C2d).** The diagnosis of wt-bugs1 held, but the call it found in oann today is
+`size := l.S.Pop(p).Size` in `Learner.shaped` (a for-in over `l.S.E.Pops` is the same call, `Vec.At`): `System.Pop`
+hands back a writable `Population&` read out of its receiver, so its obligations say "s outlives return" and "return
+outlives s" - the result's scope exactly the receiver's. The receiver's scope was `Derived(l, S)` (Learner's promoted
+field), and `landByObligations` took no derived scope, so the result landed in its block, the relation failed, and the
+field inference gave `Learner.S` back; with S bare the instance in `use(sys)` would have to be landed in `sys`'s scope,
+which the inference never does for a value that may hold a destructor - Learner reaches an `any` through `S` - and C2d
+was said. A one-module repro needed exactly that: the `any` reachable from the system (checks case c2dderivedland,
+which also walks `l.S.E.Pops`). The fix: a parameter's derived scope is a landing too (an underestimate's is not). It
+had a cost found by the self-build: lsp's `doc := w.s.Docs[k]` landed in `w.s`'s binding, and what `w.last` then held
+asked the caller of `Run` for an exact relation it could not show (O10c). Where a callee's relation through its own
+derived scope fails at a call, the field it was read through now goes back - but only for a declaration whose derived
+scope some result landed in (`noteLanded`, `giveBackCallee`): giving back on any failed callee relation also gave back
+list.List's fields in rv3roclone, whose O10c error is T25c's read-only guard, and the program built.
+
+**oann's genref (D18c).** A generator yielding a by-value element holding references - `yield g.What`, an enum whose
+case holds `mut any Update&`, out of the receiver's Vec - was GenPerTurn: its `Next` lambda's result held what the
+captured receiver refers to, which `fn&() T ? E` cannot say (T22a's boundary, GenYieldsBorrow). A third kind beside
+Generator and ViewGenerator, built minimally on what D18c already has: `HoldingGenerator<T ? E>` in the prelude, chosen
+where every yield reads out of one reference parameter (`heldElemOf`, genRoots' reading of the yields) and the element
+holds references. Its body is judged as a ViewGenerator's (the parameter's capture is its `GenElem`), its `Next`'s
+result's references are handed back from the receiver as ViewGenerator's `Next`'s are (`viewNext` knows both), and a
+for-in's own walk has its elements live where the argument does (`walkElem`, now for values holding references too).
+Nothing is written and nothing costs more: each value is built per turn as before. explain writes such a result as
+`Iterator<T>`. Test in tests/generators.olang, baked (K2) and run, interpreted alike.
+
+**Freeing gap 19 (O26a).** A value local a function returns lived in the result scope, its own storage too: `w
+Vec<I64>` returned by `mk` left its 32-byte slot in the receiving array's scope every call (90 MB over 4,000,000
+calls). The scope pass now records the reason - `Plan.RetFrame`, set where O26a moved the local for no other reason:
+every return gives it whole, by value (`wholeValueRead`), nothing else carries it there (`flOther`), the inference
+lifted no storage. Lowering keeps such a local's slot in its frame where nothing names its storage past the body - no
+reference to it stored, captured, yielded or handed back, no other local naming it, every lend to a body keeping none
+(`namesKept`, `keepsNoLend`: a reference read out of a part, `old := v.data` in `Vec.room`, names what that part refers
+to, not the storage) - its parts still built where the result goes, and the return still uncopied (`retHome`). 1.6 MB
+flat (checks' freeing returned, which needed 13 MB under 8 MB's limit before).
+
+**Freeing gap 17's text part - analysed, not built.** docs/freeing.md 2.2: the strings of `Array<String>` elements are one
+slot place, kept in gaps.olang only by `Array<Vec<String>>(10)`'s zero fill (untracked copies of an empty Vec); with the
+place sole every string was made for its element, so no per-element tracking is needed at run time - but releasing them
+needs a walk over the old buffer's live elements at the element's let-go, which lowering's fixed release paths cannot
+express (a release helper per holder type, emitted, interpreted and verified), and a fill exemption needing a per-body
+summary of stores into a place. Left as the next round of O8f.
