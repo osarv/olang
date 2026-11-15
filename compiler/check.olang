@@ -12400,7 +12400,8 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     items := gather(c.exprs, from)
     # its length checked once (D14b)
     lchk := typed.Check.Abort
-    nc := c.noClear and args.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array
+    # (SPEC D14d: never for an element that is an array or owns one - a store into it lets go of what it replaces, O8f)
+    nc := c.noClear and args.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array and not c.P.T.OwnsParts(elem)
     c.noClear = false
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0
                                               c.site(typed.SiteKind.Make, sp), lchk, nc))
