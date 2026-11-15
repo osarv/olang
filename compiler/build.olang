@@ -1114,11 +1114,42 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
     sayErr(d.Warnings())
+    prune(c.Dir, c.Built, RunCacheCap)
     try os.ExecInPlace(c.Built, ...args) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
     }
     unreachable
+}
+
+# a cache file's name, size and time written
+type Aged struct(Name String&, Size I64, Time I64) { Name, Size, Time }
+
+# the most the run cache keeps (bytes): interpret's builds grow it by a root's objects with every edit
+RunCacheCap := 1 << 30
+
+# keeps dir within cap bytes (B3e): what was written longest ago goes first - objects, stamps, the binaries of programs
+# no longer run - and never the binary just built (touched, so that a program run again is the newest). Only a cache:
+# what goes is built again where it is wanted
+fn prune(dir String&, keep String&, cap I64) {
+    os.Run("touch " $os.Quote(keep) " 2> /dev/null")
+    names := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    infos Vec<Aged>
+    total := 0
+    for n in names {
+        info := try os.FileInfo.Stat($dir "/" $n) catch os.Error { continue }
+        total += info.Size
+        infos.Push(Aged(n, info.Size, info.ModTime))
+    }
+    if total <= cap: return
+    infos.Sort(fn(a Aged, b Aged) Bool { return a.Time < b.Time })
+    for p in infos {
+        if total <= cap: return
+        path := $dir "/" $p.Name
+        if path == keep or path.StartsWith($keep "."): continue
+        try os.RemoveAll(path) catch os.Error { continue }
+        total -= p.Size
+    }
 }
 
 # where olang keeps what it builds for itself from one run to the next - interpret's programs ("run"), the prompt's
@@ -1577,4 +1608,16 @@ test "listed test files run one after another in processes of their own, a signa
     assert text == ("test -debug a_ok.olang\ntest -debug b_ok.olang\ntest x_kill.olang\ntest y_bad.olang\ntest z_ok.olang\n"
                     "test c_none.olang w\ntest d_ok.olang w\ntest e_none.olang w\ntest f_none.olang w\ntest g_none.olang w\ntest h_bad.olang w\n")
     assert SignalName(9) == "Killed" and SignalName(11) == "Segmentation fault" and SignalName(60) == "Unknown signal 60"
+}
+
+test "B3e: the run cache is kept within its cap, the oldest files going first and the program just built staying" {
+    dir := try os.MkTemp("", "olang-prune-")
+    defer try os.RemoveAll(dir) catch os.Error { }
+    for n in Array<String&>["old", "mid", "new", "app"]: try os.WriteFile($dir "/" $n, "0123456789")
+    os.Run("touch -d @1001 " $os.Quote($dir "/old") " && touch -d @1002 " $os.Quote($dir "/app") " && touch -d @1003 " $os.Quote($dir "/mid") " && touch -d @1004 " $os.Quote($dir "/new"))
+    prune(dir, $dir "/app", 25)
+    left := try os.ReadDir(dir)
+    assert left.Len() == 2 and "new" in left and "app" in left     # old and mid went, the 20 bytes left under the 25
+    prune(dir, $dir "/app", 0)
+    assert try os.ReadDir(dir) == Array<String&>["app"]
 }

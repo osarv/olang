@@ -37329,3 +37329,9 @@ either. Measured (4 cores, lightly loaded): a 1e8-iteration float loop 55.9 s ->
 0.09 s (0.29 s with its root rebuilt); hello world 0.05 s -> 0.07 s unchanged, 0.26 s after an edit, 0.84 s on an empty
 cache (std's objects once). Left: the cache is never pruned (as build/ is not), and E16g's list names the prompt and
 kernel as checked builds while B22's cells are built release (-quick, unchecked) - an older disagreement, not changed here.
+
+## The run cache is bounded (B3e, 2026-11-15)
+`$XDG_CACHE_HOME/olang/run` grew by a root's objects with every edit of an interpreted program and was never pruned. After
+a successful build `interpret` now touches the program's binary and `prune`s the directory to a cap of 1 GiB
+(`RunCacheCap`): the files written longest ago go first, never the program just built. The cache stays a cache - an
+object that goes is built again where wanted. The B3i module store (`Config.Store`) is not pruned by this; it has no cap.

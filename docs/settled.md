@@ -908,7 +908,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`interpret` builds and runs; `-evaluate` runs the evaluator (B3e, the user 2026-11-15: "make olang interpret fast
   as well, we might run some data science work in it"; built 2026-11-15).** `olang interpret FILE` builds as a file run
   does (-quick) but checked (E16g) with the error trace (S18d), into `$XDG_CACHE_HOME/olang/run` (objects reused, B3i;
-  nothing beside the program), D3b/M5a warnings, then execs it: a 1e8-iteration loop 56 s -> 0.5 s, a 200x200 matmul
+  nothing beside the program; the cache is kept within 1 GiB, the oldest files going first), D3b/M5a warnings, then execs it: a 1e8-iteration loop 56 s -> 0.5 s, a 200x200 matmul
   11.4 s -> 0.09 s; hello world 0.05 s -> 0.08 s cached, ~1.2 s on a cold cache. Mine: no fallback without clang (the
   prelude's C imports need it either way); interpret's options stay -target/-define/-update. **`interpret -evaluate`
   and `test -evaluate` (formerly `test -interpret`)** run programs and tests through the evaluator as before (M8;
