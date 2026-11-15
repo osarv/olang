@@ -1,7 +1,0 @@
-# check: fail error[E10c]: 'is' tests for null and nothing else - compare with '=='
-# E10c: "a is b" between two values
-fn main() ? {
-    a I32 = 1
-    b I32 = 1
-    assert a is b
-}

@@ -1,0 +1,250 @@
+# nulltest_migrate - the null test is "==" (E10c, 2026-11-15, the user: "I will just remove the is check. It should just
+# be a normal equals"): "is" is no keyword any more, and a reference, a function value or an error value is tested for
+# null by comparing it with the null literal. This rewrites olang sources written before:
+#   - "x is null" becomes "x == null", "x is not null" becomes "x != null" ("not x is null" stays "not x == null", the
+#     same question, as "not" binds looser than every comparison);
+#   - "is" bound as tightly as "<" and "in", "==" one level looser: where the operand before "is" is the right operand
+#     of a "==" or "!=" ("a == b is null"), or an ordering or "in" follows the null ("x is null < y"), the test is
+#     parenthesized ("a == (b == null)").
+# Code is read with the compiler's scanner: comments and string literals are left alone. A Markdown file has its
+# "```olang" blocks and its inline code spans migrated. Files are rewritten in place and a count printed; --check
+# writes nothing and the exit status says whether anything would change. Idempotent.
+#
+#     $OLANG build tools/nulltest_migrate.olang && build/tools_nulltest_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "../compiler/scan"
+import "../compiler/token"
+
+# a token of the text: kind and span
+type VT struct(k token.Tok, start I64, end I64) {
+    k
+    start
+    end
+}
+
+fn vtokens(src String&) Vec<VT> {
+    ts := scan.Tokens.Scan(src)
+    out Vec<VT>
+    for tk in ts.Toks: out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
+    return out
+}
+
+# one edit: the span start..end replaced by text
+type Edit struct(start I64, end I64, text String&) {
+    start
+    end
+    text
+}
+
+type Count struct() { n I64 = 0 }
+
+# whether token i is the word "is" (an identifier once the keyword is gone, the keyword before), not a member's name
+fn isWord(src String&, v Vec<VT>&, i I64) Bool {
+    t := v[i]
+    if src[t.start:t.end] != "is" { return false }
+    return i == 0 or v[i - 1].k != token.Tok.Dot
+}
+
+# what a token is, read back from the operand before "is": part of it (a name, a literal, a member, an operator binding
+# tighter than "is")
+fn inOperand(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Iden, token.Tok.IntLit, token.Tok.FloatLit, token.Tok.CharLit, token.Tok.StrLit: true
+        case token.Tok.BoolLit, token.Tok.NullLit, token.Tok.Dot, token.Tok.Bang, token.Tok.Question, token.Tok.Dollar: true
+        case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.StarStar, token.Tok.Slash, token.Tok.Percent: true
+        case token.Tok.At, token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Tilde, token.Tok.Shl, token.Tok.Shr: true
+        case _: false
+    }
+}
+
+fn opens(k token.Tok) Bool { return k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace }
+
+fn closes(k token.Tok) Bool { return k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace }
+
+# the index of the token before the operand of "is" at i - the operator binding it from the left, or -1
+fn operandStop(v Vec<VT>&, i I64) I64 {
+    depth I64 = 0
+    j := i - 1
+    for j >= 0 {
+        k := v[j].k
+        if closes(k): depth++
+        else if opens(k) and depth == 0: break
+        else if opens(k): depth--
+        else if depth == 0 and not inOperand(k): break
+        j--
+    }
+    return j
+}
+
+# whether "==" or "!=" binds the operand ending before "is" at i from the left
+fn looser(v Vec<VT>&, i I64) Bool {
+    j := operandStop(v, i)
+    return j >= 0 and (v[j].k == token.Tok.EqEq or v[j].k == token.Tok.NotEq)
+}
+
+# whether what follows the null at i binds at "is"'s level and would now take the null as its left operand
+fn tighterAfter(src String&, v Vec<VT>&, i I64) Bool {
+    if i + 1 >= v.Len() { return false }
+    k := v[i + 1].k
+    if k == token.Tok.Lt or k == token.Tok.Le or k == token.Tok.Gt or k == token.Tok.Ge or k == token.Tok.In: return true
+    if k == token.Tok.Not: return i + 2 < v.Len() and v[i + 2].k == token.Tok.In
+    return isWord(src, v, i + 1)
+}
+
+fn migrate(src String&, n mut Count&) String {
+    v := vtokens(src)
+    edits Vec<Edit>
+    for i in range v.Len() {
+        if not isWord(src, v, i) { continue }
+        at := i + 1
+        negated := at < v.Len() and v[at].k == token.Tok.Not
+        if negated: at++
+        if at >= v.Len() or v[at].k != token.Tok.NullLit { continue }
+        op := "!= null" if negated else "== null"
+        first := operandStop(v, i) + 1
+        n.n++
+        if (looser(v, i) or tighterAfter(src, v, at)) and first < i {
+            edits.Push(Edit(v[first].start, v[first].start, "("))
+            edits.Push(Edit(v[i].start, v[at].end, $op ")"))
+            continue
+        }
+        edits.Push(Edit(v[i].start, v[at].end, op))
+    }
+    if edits.Len() == 0 { return $src }
+    out := StringBuilder()
+    from I64 = 0
+    for ed in edits {
+        out.Push(src[from:ed.start])
+        out.Push(ed.text)
+        from = ed.end
+    }
+    out.Push(src[from:])
+    return out.ToString()
+}
+
+# a line of Markdown outside a code block: its inline code spans migrated, the rest kept
+fn migrateSpans(line String&, n mut Count&) String {
+    out := StringBuilder()
+    from I64 = 0
+    for {
+        a := try line[from:].Find("`") catch default -1
+        if a < 0 { break }
+        b := try line[from + a + 1:].Find("`") catch default -1
+        if b < 0 { break }
+        lo, hi := from + a + 1, from + a + 1 + b
+        out.Push(line[from:lo])
+        out.Push(migrate(line[lo:hi], n))
+        out.PushChar('`')
+        from = hi + 1
+    }
+    out.Push(line[from:])
+    return out.ToString()
+}
+
+# a Markdown file: its olang code blocks and inline code spans migrated, the rest kept
+fn migrateMarkdown(src String&, n mut Count&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    fence := ""
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        if fence == "olang" and line.StartsWith("```") {
+            out.Push(migrate(block.ToString(), n))
+            block.Clear()
+            fence = ""
+        } else if fence == "olang" {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if fence != "" {
+            if line.StartsWith("```"): fence = ""
+        } else if line.StartsWith("```") {
+            fence = "olang" if line.StartsWith("```olang") else "other"
+        } else {
+            out.Push(migrateSpans(line, n))
+            if k < lines.Len() - 1: out.PushChar('\n')
+            continue
+        }
+        out.Push(line)
+        if k < lines.Len() - 1: out.PushChar('\n')
+    }
+    if fence == "olang": out.Push(block.ToString())
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_nulltest_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p): srcmask.Walk(p, files)
+        else: files.Push($p)
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("nulltest_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrateMarkdown(src, total) if path.EndsWith(".md") else migrate(src, total)
+        if out == src { continue }
+        changed++
+        if verbose: srcmask.Say(path)
+        if check { continue }
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("nulltest_migrate: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.n " null tests")
+    if check and changed > 0: os.Exit(1)
+}
+
+test migrate "null tests are '==' and '!='" {
+    n := Count()
+    assert migrate("    if x is null { }\n", n) == "    if x == null { }\n"
+    assert migrate("    if x.next is not null and y { }\n", n) == "    if x.next != null and y { }\n"
+    assert migrate("    b := not s.head!.v is null\n", n) == "    b := not s.head!.v == null\n"
+    assert migrate("    return f(a, b[i]) is not null or g is null\n", n) == "    return f(a, b[i]) != null or g == null\n"
+    assert n.n == 5
+}
+
+test migrate "a test '==' or an ordering would take apart is parenthesized" {
+    n := Count()
+    assert migrate("    b := a == p.q is null\n", n) == "    b := a == (p.q == null)\n"
+    assert migrate("    b := f(x) != (y) is not null\n", n) == "    b := f(x) != ((y) != null)\n"
+    assert migrate("    b := p is null < q\n", n) == "    b := (p == null) < q\n"
+    assert migrate("    b := a < p is null\n", n) == "    b := a < p == null\n"
+}
+
+test migrate "comments, text, a member named is and code already new are left as they are" {
+    n := Count()
+    src := "    # x is null\n    s := \"x is not null\"\n    t := o.is\n    if x == null or y != null { }\n"
+    assert migrate(src, n) == src and n.n == 0
+}
+
+test migrateMarkdown "a Markdown file's olang blocks and code spans" {
+    n := Count()
+    src := "Test it with `p is null`; a reference is null.\n```olang\nif p is not null { }\n```\n```sh\nx is null\n```\n"
+    want := "Test it with `p == null`; a reference is null.\n```olang\nif p != null { }\n```\n```sh\nx is null\n```\n"
+    assert migrateMarkdown(src, n) == want
+}

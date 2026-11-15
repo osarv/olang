@@ -1,5 +1,5 @@
 # written when a type variable was <T> everywhere, an error set joined by +, io's error was IoError, and a match gave
-# its values with "=>" and took the rest with "nomatch"
+# its values with "=>" and took the rest with "nomatch", and null was tested with "is null"
 import "std/io"
 
 error Bad { WORD }
@@ -18,8 +18,13 @@ fn name(n I64) String {
     }
 }
 
+fn count(s String?&) I64 {
+    if s is null { return 0 }
+    return s.Len()
+}
+
 fn main() ? io.IoError {
     try io.Println("fixed " $id(7))
     r := try half(8) catch Bad default 0
-    try io.Println($r " " $name(r))
+    try io.Println($r " " $name(r + count(null)))
 }

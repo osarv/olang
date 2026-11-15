@@ -1,9 +1,0 @@
-# check: fail error[E10c]: 'is' tests for null and nothing else - compare with '!='
-# E10c: "a is not b" - identity is no question for 'is'
-type P struct(v I32) { v }
-type Q struct(v I32) { v }
-fn main() ? {
-    p P& = P(1)
-    q Q& = Q(1)
-    assert p is not q
-}
