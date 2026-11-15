@@ -115,6 +115,8 @@ slimming of 2026-11-08").
   an exclusion needs a real reason, "not built yet" is a gap; it should run everything it can, and designs reach for
   compile-time evaluation and inference wherever they can stand in for a run-time check or written annotation.
 
+- **No warnings on legal code (the user, 2026-11-15: "the programmer decides what is worth catching and what isnt"; "it's legal code, so don't warn on it")**: no lints or editor warnings for constructs the language allows (`!`, a spawned task writing a global); the compiler either rejects a program or accepts it, the one exception being unused names shown as W while editing.
+
 # Code rules
 
 - **Everything in olang**: committed scripts, tools, test servers, generators are olang programs; C only for the stage-0
