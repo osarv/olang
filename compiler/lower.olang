@@ -1069,6 +1069,97 @@ fn (ln mut lowering&) splitCopy(site I64, v mir.Operand, ty types.TypeId, at mir
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
+# O8f: a copy of v made at site in a part region (free.PartSite) where the value owns more than the one array the region
+# is made for (free.PartSplit: a Vec of text's strings, a Vec of Vecs' buffers): that array copied into the region at,
+# everything else it owns - its elements' storage, any other part - into the region's parent, text elements through
+# slots of it where their place is decided sole (gap 17's walk puts them back). A part region then holds its one array,
+# which a let-go releasing it reclaims alone: one holding a copied Vec's elements too was released with an element's
+# let-go while text moved out of it, or the Vec holding the element, still used it. None where the copy is not split
+fn (ln mut lowering&) partCopy(site I64, v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    if not ln.freeing or site < 0 or site >= ln.plan.RegionKind.Len() or ln.plan.RegionKind[site] != 1: return mir.Operand.None
+    path := ln.L.Free!.PartSplit(I64(ln.B.Id), site, ty)
+    if path == null: return mir.Operand.None
+    rest := try ln.regionPar.Get(site) catch { return mir.Operand.None }
+    d := ln.local(ln.into(ty, mir.Rvalue.Use(v), sp), ty, sp)
+    ln.partSplit(pl(mir.Base.Local(d)), ty, path, 0, at, rest, sp)
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
+# partCopy's parts of the bytes copied at p, of type ty: the array path leads to copied into at, its elements' storage
+# and every other part into rest. A Vec's buffer (free.VecFields) has its elements below the count copied and the room
+# after them left empty, as a Vec keeps it - text a copy's room held would be built in a slot no walk puts back
+fn (ln mut lowering&) partSplit(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
+                                sp source.Span) {
+    if depth == path.Len() {
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(ln.splitArray(p, ty, at, rest, mir.Operand.None, sp))))
+        return
+    }
+    fs := ln.partsOf(ty)
+    d, c := ln.L.Free!.VecFields(ty)
+    for i in range fs.Len() {
+        q := ln.with(p, mir.Proj.Field(i))
+        if i != path[depth] {
+            ln.copyPart(q, fs[i], rest, sp)
+            continue
+        }
+        if depth + 1 < path.Len() or i != d or c < 0 {
+            ln.partSplit(q, fs[i], path, depth + 1, at, rest, sp)
+            continue
+        }
+        n := mir.Operand.Copy(ln.mk(ln.with(p, mir.Proj.Field(c))))
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(ln.splitArray(q, fs[i], at, rest, n, sp))))
+    }
+}
+
+# a new array at at of what array a holds, each element's own storage copied into rest - a text element's into a slot of
+# rest where the text place is decided sole (free.SlotPlace), an empty one left empty. Where live is given, the elements
+# from it on are left empty (zero bits) rather than copied
+fn (ln mut lowering&) splitArray(a pl, ty types.TypeId, at mir.ScopeRef, rest mir.ScopeRef, live mir.Operand, sp source.Span) mir.Operand {
+    el := ln.T.Elem(ln.T.Repr(ty))
+    into := rest
+    fr := ln.L.Free!
+    k := fr.ElemPlace(ty)
+    if fr.SlotPlace(k) {
+        g := ln.guardOf(k)
+        if g != free.NotSole {
+            h := ln.temp(mir.I64T, sp)
+            ln.guarded(h, g, mir.Rvalue.Slots(rest), rest, sp)
+            into = mir.ScopeRef.Held(h)
+        }
+    }
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(a))], sp)
+    buf := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
+    text := ln.T.OwnedPart(el)
+    ln.eachIndex(n, sp, fn(i mir.LocalId) {
+        src := ln.with(a, mir.Proj.Index(i))
+        dst := ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i)))
+        if live == mir.Operand.None and not text {
+            ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(ln.copyAt(src, el, into, sp))))
+            return
+        }
+        empty, after := ln.F.NewBlock(), ln.F.NewBlock()
+        if live != mir.Operand.None {
+            more := ln.F.NewBlock()
+            ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Lt, types.BoolT, Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(i)), live], sp), more, empty))
+            ln.start(more)
+        }
+        if text {
+            some := ln.F.NewBlock()
+            n0 := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(src))], sp)
+            ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Gt, types.BoolT, Array<mir.Operand>[n0, ln.constI64(0)], sp), some, empty))
+            ln.start(some)
+        }
+        ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(ln.copyAt(src, el, into, sp))))
+        ln.goto(after)
+        ln.start(empty)
+        ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(mir.Operand.Const(el, 0))))
+        ln.goto(after)
+        ln.start(after)
+    })
+    return mir.Operand.Copy(mir.Lvalue.L(buf))
+}
+
 fn (ln mut lowering&) splitParts(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
                                  sp source.Span, slotted Array<I64> = Array<I64>(0)) {
     fs := ln.partsOf(ty)
@@ -1136,11 +1227,13 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
 
 # what a let-go releases where a place is decided sole: by the fields that reach it from the holder, and a handle's
 # reference, field 0
-type relPath struct(At I64, Path Array<I64>, Slot Bool = false, Part Bool = false) {
+type relPath struct(At I64, Path Array<I64>, Slot Bool = false, Part Bool = false, Data I64 = -1, Count I64 = -1) {
     At
     Path
     Slot        # a text place's value built in a slot (free.SlotPlace): put back on its list, no region released
     Part        # an array place's value built in a part region (free.PartPlace): found from its address, O8f
+    Data        # a Vec of text at Path (free.TextVecs): its buffer's field, whose live elements - below the count in
+    Count       # field Count - are each put back on their slot's list before the buffer goes (O8f, gap 17); -1 for none
 }
 
 # the candidate places a place's let-go releases where each is decided sole: the place itself, or the leaves of a
@@ -1155,6 +1248,11 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath
     # (and an element owning storage only in part places - a Vec<I64> - its parts, O8f's gap 17)
     if assign and p == typed.Lvalue.Elem and not fr.SlotPlace(fr.PlaceOf(p)) {
         if not fr.PartsOnly(p.Type()): return out
+        # (a Vec of text's elements first, each slot put back where the text place is decided sole, then its buffer)
+        for tv in fr.TextVecs(p.Type()) {
+            g := ln.guardOf(tv.Texts)
+            if g != free.NotSole: out.Push(relPath(g, tv.Path, true, false, tv.Data, tv.Count))
+        }
         for r in ln.leafPaths(p.Type()) {
             if r.Part: out.Push(r)
         }
@@ -1215,11 +1313,25 @@ fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<relPath>&, sp source.Sp
         after := ln.whenSole(r.At, true, sp) if r.At >= 0 else mir.NoBlock
         q := pl(mir.Base.Local(l))
         for i in r.Path { q = ln.with(q, mir.Proj.Field(i)) }
+        if r.Data >= 0 {
+            ln.textWalk(q, r, sp)
+            if after != mir.NoBlock: ln.joinAt(after)
+            continue
+        }
         lv := ln.mk(q)
         rel := mir.Stmt.ReleasePart(sp, lv) if r.Part else mir.Stmt.Release(sp, lv)
         ln.emit(mir.Stmt.ReleaseSlot(sp, lv) if r.Slot else rel)
         if after != mir.NoBlock: ln.joinAt(after)
     }
+}
+
+# O8f (gap 17): the Vec of text at q let go of - each element below its count put back on its slot's list (one built
+# anywhere else, in a region with the buffer, is left to that region's release), its buffer released after by its own
+# path
+fn (ln mut lowering&) textWalk(q pl, r relPath, sp source.Span) {
+    data := ln.with(q, mir.Proj.Field(r.Data))
+    n := mir.Operand.Copy(ln.mk(ln.with(q, mir.Proj.Field(r.Count))))
+    ln.eachIndex(n, sp, fn(i mir.LocalId) { ln.emit(mir.Stmt.ReleaseSlot(sp, ln.mk(ln.with(data, mir.Proj.Index(i))))) })
 }
 
 # ---- scopes and the exit sequence ----
@@ -1895,7 +2007,7 @@ fn (ln mut lowering&) valueArrayStore(target typed.Lvalue&, dst mir.Lvalue, v mi
     ln.end(mir.Term.Branch(mir.Operand.Copy(mir.Lvalue.L(g)), yes, no))
     ln.start(yes)
     decided Vec<relPath>
-    for r in rel { decided.Push(relPath(-1, r.Path, r.Slot, r.Part)) }
+    for r in rel { decided.Push(relPath(-1, r.Path, r.Slot, r.Part, r.Data, r.Count)) }
     ln.replaceStore(target, dst, v, value, decided, sp)
     ln.joinAt(after)
     ln.start(no)
@@ -5624,6 +5736,8 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             if ln.noCopy.Has(I64(m.Site)) and not t.RunsCopy(ty) { return v }
             sv := ln.splitCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
             if sv != mir.Operand.None: return sv
+            pv := ln.partCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            if pv != mir.Operand.None: return pv
             return ln.ownCopyOf(v, ty, ln.madeAt(m.Site), sp)
         }
     }

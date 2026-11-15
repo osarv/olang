@@ -377,7 +377,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # lowering builds that part in the site's region and every other owned part where the region's parent is
     splitAt Map<pair.Pair<I64, I64>, Array<I64>>
     slotAt Map<pair.Pair<I64, I64>, Array<I64>>   # O8f: a split copy's slot parts, by (body, site): field << 32 | place
-    partAt Map<pair.Pair<I64, I64>, Bool>   # O8f: the sites a part place's value is built at, in a part region (PartPlace)
+    partAt Map<pair.Pair<I64, I64>, I64>    # O8f: the sites a part place's value is built at, in a part region (PartPlace): the place
     # feeders (findFeeds): value locals built in the region of the owner place they are stored into, from their
     # declarations - by (body, local), the index in feeds; and the calls given one, judged and redirected into it
     feeds Vec<feed>
@@ -2669,11 +2669,13 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 return
             }
             lvs := w.F.leaves(p.Type())
-            # (O8f, gap 17: an element owning storage only in part places - a Vec<I64> - lets go of its parts)
+            # (O8f, gap 17: an element owning storage only in part places - a Vec<I64> - lets go of its parts, and of
+            # the text a Vec of text holds, each live element's slot)
             if w.F.PartsOnly(p.Type()) {
                 for lf in lvs {
                     if w.F.PartPlace(lf.PlaceId): w.go(lf.PlaceId, LLeaf, p.Span(), source.Span(0, 0), -1)
                 }
+                for tv in w.F.TextVecs(p.Type()) { w.go(tv.Texts, LLeaf, p.Span(), source.Span(0, 0), -1) }
             }
             if lvs.Len() > 0 and not w.storedWhole(x, cm) { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
         }
@@ -5523,7 +5525,7 @@ fn (f mut Free&) writePlans() {
         # O29: a value built where its place's storage is found at run time is built there, never in a region of its own
         if at == typed.Scope.Found or at == typed.Scope.Passed: continue
         pl.RegionKind[top] = 3 if f.SlotPlace(k) else 1
-        if f.PartPlace(k): f.partAt.Put(pair.Pair(st.Body, top), true)
+        if f.PartPlace(k): f.partAt.Put(pair.Pair(st.Body, top), k)
         pl.RegionParent[top] = f.feedDest(st.Body, top, at)
         pl.RegionGuard[top] = f.guard(st.Body, k)
         f.redirect(st.Body, x, top, at, true)
@@ -6015,19 +6017,86 @@ fn (f mut Free&) PartsOnly(ty types.TypeId) Bool {
 }
 
 # whether field i of struct type r, of type ft, owns storage only as PartsOnly asks: none, a part place's array of plain
-# elements, or a struct that is PartsOnly in turn
+# elements or a Vec's buffer of text (textBuffer), or a struct that is PartsOnly in turn
 fn (f mut Free&) partsField(r types.TypeId, i I64, ft types.TypeId) Bool {
     t := f.T()
     if t.IsRef(ft) or not (t.OwnedPart(ft) or t.OwnsParts(ft)): return true
     if t.OwnedPart(ft) {
         el := t.Elem(t.Repr(ft))
-        return f.PartPlace(f.placeKey(r, i)) and not t.OwnedPart(el) and not t.OwnsParts(el)
+        if not f.PartPlace(f.placeKey(r, i)): return false
+        return (not t.OwnedPart(el) and not t.OwnsParts(el)) or f.textBuffer(r, i) >= 0
     }
     return f.PartsOnly(ft)
 }
 
-# O8f (gap 17): whether a value holds no storage - constant data or zero bits, or a constructor's value on its zero
-# arguments (D13c, Call.Zero) whose body only declares its fields, each given such a value or a parameter given one (args:
+# O8f (gap 17): where field i of struct type r is the prelude Vec's buffer of text - a String each, built in a slot of
+# the text element place (SlotPlace) - that place, else -1. The Vec's count says which of its elements are live (the
+# rest is room, or what a removal vacated), so its let-go walks them and puts each slot back before the buffer goes
+fn (f mut Free&) textBuffer(r types.TypeId, i I64) I64 {
+    t := f.T()
+    d, _ := f.VecFields(r)
+    if d != i: return -1
+    fs := t.Items(t.Fields(r))
+    el := t.Elem(t.Repr(fs[i]))
+    if not f.slotText(el): return -1
+    q := f.placeKey(t.Array(el, types.TypeId(0)), -1)
+    return q if f.SlotPlace(q) else -1
+}
+
+# the fields of the prelude Vec holding its buffer and its count, by name ("data", "n"); -1, -1 for any other type
+fn (f mut Free&) VecFields(ty types.TypeId) I64, I64 {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if t.KindOf(r) != types.Kind.Named: return -1, -1
+    decl := t.DeclOf(r)
+    if f.P.L.Names.Text(t.DeclName(decl)) != "Vec" or t.Modules[t.DeclModule(decl)] != "std/prelude/vec": return -1, -1
+    names := f.P.FieldNames(r)
+    d, n := -1, -1
+    for j in range names.Len() {
+        if f.P.L.Names.Text(names[j]) == "data": d = j
+        if f.P.L.Names.Text(names[j]) == "n": n = j
+    }
+    return d, n
+}
+
+# O8f (gap 17): a Vec of text a PartsOnly value holds - the fields reaching it from the value, its buffer's and count's
+# fields, and the text element place a let-go of the value puts each live element's slot back into
+type TextVec struct(Path Array<I64>, Data I64, Count I64, Texts I64) {
+    Path
+    Data
+    Count
+    Texts
+}
+
+# every Vec of text (textBuffer) a value of type ty holds by value, through any depth of structs
+fn (f mut Free&) TextVecs(ty types.TypeId) Vec<TextVec> {
+    out Vec<TextVec>
+    f.textVecsAt(ty, Vec<I64>(), out, 0)
+    return out
+}
+
+fn (f mut Free&) textVecsAt(ty types.TypeId, path Vec<I64>&, out mut Vec<TextVec>&, depth I64) {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if depth > 8 or t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return
+    fs := t.Items(t.Fields(r))
+    for i in range fs.Len() {
+        if t.IsRef(fs[i]) or not (t.OwnedPart(fs[i]) or t.OwnsParts(fs[i])): continue
+        if not t.OwnedPart(fs[i]) {
+            sub := path.Copy()
+            sub.Push(i)
+            f.textVecsAt(fs[i], sub, out, depth + 1)
+            continue
+        }
+        q := f.textBuffer(r, i)
+        if q < 0: continue
+        _, n := f.VecFields(r)
+        out.Push(TextVec(path.ToArray(), i, n, q))
+    }
+}
+
+# O8f (gap 17): whether a value holds no storage - constant data or zero bits, or a constructor's value (on its zero
+# arguments, D13c, or any) whose body only declares its fields, each given such a value or a parameter given one (args:
 # the constructor's arguments) - so copies of it, a fill's, make no value of any place
 fn (f mut Free&) emptyValue(x typed.Expr&, args Array<typed.Expr&>?&, depth I64) Bool {
     if depth > 8: return false
@@ -6035,7 +6104,7 @@ fn (f mut Free&) emptyValue(x typed.Expr&, args Array<typed.Expr&>?&, depth I64)
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
         case typed.Expr.Away(_, _, y): f.emptyValue(y, args, depth + 1)
         case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, l), _): f.emptyParam(I64(l), args, depth)
-        case typed.Expr.Call(_, _, c): c.Zero and f.emptyCtor(c, depth)
+        case typed.Expr.Call(_, _, c): f.emptyCtor(c, depth)
         case _: false
     }
 }
@@ -6052,7 +6121,7 @@ fn (f mut Free&) emptyParam(l I64, args Array<typed.Expr&>?&, depth I64) Bool {
     return false
 }
 
-# a constructor called on its zero arguments whose body only declares its fields, each given a value holding no storage
+# a constructor call whose body only declares its fields, each given a value holding no storage
 fn (f mut Free&) emptyCtor(c typed.Call&, depth I64) Bool {
     b := typed.CalleeBody(c)
     if b < 0 or f.Bodies[b].Root == null or f.T().Role(f.Bodies[b].Ty) != types.RoleCtor: return false
@@ -6083,6 +6152,44 @@ fn tempCall(a typed.Expr&) I64 {
 
 # whether the region made at site of body b is a part region (PartPlace)
 fn (f Free&) PartSite(b I64, site I64) Bool { return f.partAt.Has(pair.Pair(b, site)) }
+
+# the candidate place an array type's elements are, -1 for none
+fn (f mut Free&) ElemPlace(arr types.TypeId) I64 { return f.placeKey(arr, -1) if f.Done else -1 }
+
+# O8f: the fields that reach, from a value of type ty built at site of body b in a part region, the array of the part
+# place the region is made for - none for the array itself - and whether the value owns more than that array's own
+# elements' bytes (its elements' storage, another part): a copy made there is then split (lower.partCopy), so that the
+# region holds that one array alone; null where it owns nothing more, or the site is no part site
+fn (f mut Free&) PartSplit(b I64, site I64, ty types.TypeId) Array<I64>?& {
+    k := try f.partAt.Get(pair.Pair(b, site)) catch { return null }
+    t := f.T()
+    path Array<I64>& = Array<I64>(0)
+    if not t.OwnedPart(ty) {
+        found := false
+        for lf in f.leaves(ty) {
+            if lf.PlaceId != k or found: continue
+            path = lf.Path
+            found = true
+        }
+        if not found: return null
+    }
+    return path if f.ownsBeyond(ty, path, 0) else null
+}
+
+# whether a value of type ty owns storage beyond the array path leads to: another part owning storage on the way, or
+# that array's elements owning storage
+fn (f mut Free&) ownsBeyond(ty types.TypeId, path Array<I64>&, depth I64) Bool {
+    t := f.T()
+    if depth == path.Len() {
+        el := t.Elem(t.Repr(ty))
+        return t.OwnedPart(el) or t.OwnsParts(el)
+    }
+    fs := t.Items(t.Fields(t.Plain(t.Repr(ty))))
+    for i in range fs.Len() {
+        if i != path[depth] and not t.IsRef(fs[i]) and (t.OwnedPart(fs[i]) or t.OwnsParts(fs[i])): return true
+    }
+    return f.ownsBeyond(fs[path[depth]], path, depth + 1)
+}
 
 # whether a value of type ty is text a slot holds: an immut array of plain elements (a String)
 fn (f mut Free&) slotText(ty types.TypeId) Bool {
