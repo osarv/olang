@@ -37668,3 +37668,34 @@ calls in files that use spawn". Built so:
   `compiler/target.olang`'s test of an aarch64 mistake is false on this machine's clang (left).
 - Goldens captured again: drv (help lines; the golden of `explain B1` had drifted before), tokens, ast, layout (the Emitter's new
   fields). Fixed point: the compiler built by the new one is byte for byte equal to the one built by that.
+## Debugging from Neovim: DWARF that shows olang values, formatters, nvim-dap (B2e, 2026-11-15)
+The user asked to debug olang programs from Neovim. `-debug` already carried line tables, functions, parameters and
+locals; what a debugger showed was C's picture of them. Now (compiler/emit.olang, "debug information"):
+- Types carry olang's names: each number type is a typedef of its basic type (lldb showed `long` for `I64`), a declared
+  type over another (T29) a typedef of its base (`String`, `Char`, `Meters`), a reference a typedef of its pointer
+  (`Node?&`), and composite names are written as profiles write them, the module left off (`Map<String, I64>`, not
+  `Map<std/prelude/text:String, I64>`).
+- An enum carrying a payload is `{case, payload}` with the payload a union of one member per case, named as the case,
+  holding the case's fields by name (before: the payload's raw words). DWARF variant parts were tried first: gdb 15
+  shows them perfectly, lldb 18 shows an empty `{}`, so the union, which both show, is the form; the formatters pick the
+  case the value is.
+- Error values (T20) are an enumeration of their codes (`Bad.Oops`, `null`); an `any` is `{instance, table}`.
+- Each block, loop body and join is a DILexicalBlock, and a local's dbg.declare carries a location in its block - LLVM
+  reads the variable's scope off that location, not off the variable, which first left every local at the function's
+  scope. A loop's locals are no longer shown after the loop.
+- A local homed in an arena (O26a) is described through its slot with DW_OP_deref (null until its Live).
+- A test's function is named `test TARGET: DESCRIPTION`, so a backtrace says which test (the plan's "a lexical block
+  per test" gap was older: tests have had functions of their own since the harness was split).
+- Bug found on the way, fixed: a default argument written in another file (D8a, `Println`'s `Place.Here`) was lowered
+  with that file's offsets, which this function's file then read as its own lines - every `Println` in a loop made a
+  phantom line, and a breakpoint on that line number stopped inside the loop. Lowering now places a default argument's
+  statements at the call leaving it off (`mir.StmtAt`/`TermAt`, `lowering.away`), which also corrects the place an
+  error trace or a failed check inside such a default names; and `locate` ignores a span outside its function.
+- `editors/debug/olang_lldb.py` and `olang_gdb.py` (debugger plug-ins, so Python - lldb and gdb run no other language):
+  run-time arrays and text, payload cases, `Vec` and `Map` shown as `$` writes them; the lldb module's `render(value)` is
+  reusable by a program driving lldb. editors/nvim gets `:OlangDebug [args]` (build -debug into build/NAME.debug, then
+  nvim-dap with lldb-dap, or lldb-vscode) and `:OlangDebugTest [words]` (`olang test -debug`, then the test binary
+  run with the words); the adapter is named in one place (`require("olang.debug").adapter`, overridable by `setup`), and
+  nvim-dap's signs are given one-character texts for the number column. `make install` copies `editors/debug` beside
+  the compiler. Checked by the `dwarf` scenario (lldb and gdb, each where installed) and by driving lldb-dap through
+  nvim-dap headless. Only `-debug` builds change, but for the default argument's lines.

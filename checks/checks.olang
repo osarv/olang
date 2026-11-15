@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline", "racetests"]
+                     "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline", "racetests", "dwarf"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -419,6 +419,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "fix" { try fixing(r) }
         case "twolists" { try twolists(r) }
         case "clones" { try clones(r) }
+        case "dwarf" { try dwarf(r) }
         case "sidebyside" { try sidebyside(r) }
         case "remote" { try remote(r) }
         case "remotebad" { try remotebad(r) }
@@ -1827,6 +1828,37 @@ fn clones(r mut report&) ? Failed {
                  "the original merge loop calls through the value (the check sees an indirect call)", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug clones.olang > out.txt 2>&1 && ! grep -q '^define .*_clone[0-9]' build/*.debug*.ll") == 0
                  "a -debug build has clones", dir)
+}
+
+# B2e: a -debug build's values read back by lldb and gdb - a struct's fields by name, an enum's case and payload, a
+# fixed array, text, a Vec, a Map, a declared type by its name, an arena-homed local, a loop's locals only in the loop -
+# through editors/debug's formatters. Each debugger is checked where it is installed
+test "a -debug build shows olang values in lldb and gdb" { assert passed("dwarf") }
+
+fn dwarf(r mut report&) ? Failed {
+    dir := fresh("dwarf")
+    os.Run("cp checks/fixtures/dwarf/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build -debug vals.olang > out.txt 2>&1") == 0, "build -debug", dir)
+    py := $root() "/editors/debug/"
+    if sh(dir, "command -v lldb > /dev/null") == 0 {
+        lldb := "lldb --batch -o " $os.Quote($"command script import " $py "olang_lldb.py") " -s lldb.txt build/vals.debug > out.txt 2>&1"
+        try r.expect(sh(dir, lldb) == 0, "lldb", dir)
+        for want in Array<String&>["(I64) inner = 0", "(Point) p = Point(x = 3, y = 4)", "(Shape) s = Shape.Rect(w = 5, h = 6)"
+                                   "(Shape) e = Shape.Empty", "(Color) col = Green", "(I64[3]) fixed = [1, 2, 3]"
+                                   "(String) t = \"hello\"", "(Vec<I64>) v = [10, 20, 30]", "(Map<String, I64>) m = [\"a\": 1]"
+                                   "(Meters) d = 12", "&Point(x = 7, y = 8)", "render Shape.Rect(w = 5, h = 6)"] {
+            try r.expect(outOf(dir).Contains(want), $"lldb shows " $want, dir)
+        }
+        # the loop's locals belong to its lexical block: past the loop, not shown
+        try r.expect(not outOf(dir).Contains("inner = 10"), "lldb shows a loop's local after the loop", dir)
+    }
+    if sh(dir, "command -v gdb > /dev/null") != 0: return
+    gdb := "gdb -batch -x " $os.Quote($py "olang_gdb.py") " -x gdb.txt build/vals.debug > out.txt 2>&1"
+    try r.expect(sh(dir, gdb) == 0, "gdb", dir)
+    for want in Array<String&>["p = {x = 3, y = 4}", "s = Rect = {w = 5, h = 6}", "e = Empty", "col = Green", "fixed = {1, 2, 3}"
+                               "t = \"hello\"", "v = len = 3 = {10, 20, 30}", "m = len = 1 = {[\"a\"] = 1}", "d = 12"] {
+        try r.expect(outOf(dir).Contains(want), $"gdb shows " $want, dir)
+    }
 }
 
 # T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is

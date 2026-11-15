@@ -3,6 +3,7 @@
 --   require("olang").setup({
 --     cmd = { "olang", "lsp" },  -- the server (nil to leave the server off)
 --     format_on_save = true,     -- through the server when it runs, else "olang format" on a copy of the buffer
+--     debug = { adapter = nil },  -- the debug adapter's command (nil: lldb-dap, or lldb-vscode, found on PATH)
 --   })
 --
 -- Without setup the defaults hold. The parts that need no server - filetype, syntax, :make, K, format on save - work
@@ -152,6 +153,9 @@ function M.commands(bufnr)
     vim.lsp.util.open_floating_preview(out, "olang", { border = "rounded", focus_id = "olang_explain" })
   end)
   cmd("OlangRepl", function() term({ "olang" }) end)
+  cmd("OlangDebug", function(o) require("olang.debug").debug(o.fargs) end, "*")
+  cmd("OlangDebugTest", function(o) require("olang.debug").debug_test(o.fargs) end, "*")
+  require("olang.debug").attach()
   vim.api.nvim_buf_create_user_command(bufnr, "OlangFormatOnSave", function(o) M.format_on_save(o.args) end,
     { nargs = "?", complete = function() return { "on", "off" } end })
   if vim.g.olang_no_maps == 1 then return end
@@ -166,7 +170,7 @@ function M.commands(bufnr)
   local function mapgd() vim.keymap.set("n", "gd", gd, { buffer = bufnr, desc = "olang: matching bracket, else definition" }) end
   mapgd()
   vim.api.nvim_create_autocmd("LspAttach", { buffer = bufnr, callback = function() vim.schedule(mapgd) end })
-  local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", F = "OlangFormatOnSave", e = "OlangExplain", i = "OlangRepl" }
+  local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", F = "OlangFormatOnSave", e = "OlangExplain", i = "OlangRepl", d = "OlangDebug" }
   for k, c in pairs(keys) do
     local lhs = "<localleader>" .. k
     if vim.fn.maparg(lhs, "n") == "" then
