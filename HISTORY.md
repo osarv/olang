@@ -37840,3 +37840,8 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   wrote `open + (try line[open:].Find("(") catch default line.Len() - open)`, which on success subtracted `open` again.
   Not an `olang fix` tool: a migration cannot tell old code from new written the new way, so it would not be
   idempotent (as precedence_migrate was not). Tests in tests/shared (trAfter, trAfterParen, trText; TrTextBaked baked).
+- **`make modgraph`'s golden was stale, not wrong.** Its 1,440-line report (17k lines of golden diff) holds only
+  additions: the prelude's display module (B23, 2026-11-14), compiler/spin, measure, effects and std/bench, time, io and
+  os reached from roots that did not import them at the last capture (2026-11-14, before B23), and 17 roots added since
+  (tests/condnull, display, fieldnarrow, nulltest, textplus; compiler/cells, jupyter, prompt ...; std/frame, plot,
+  zmtp). No module or edge left a graph and no graph was lost, so it was captured again (`make modgold`).
