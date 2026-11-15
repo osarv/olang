@@ -35,13 +35,13 @@ fn Draw(n I64, label String&) String { return $"\r" $Frames[n % Frames.Len()] " 
 
 # ---- state ----
 
-Running mut I64 = 0       # 1 once Arm has decided on a ticker: Begin does nothing without one
-Quit mut I64 = 0          # 1 once the process is ending: the ticker erases and returns
-On mut I64 = 0            # 1 between Begin and End
-Drawn mut I64 = 0         # 1 while something of the spinner is on the screen
-Since mut I64 = 0         # when Begin was called (time.Now)
-Title mut String = ""     # what is waited on
-Lock mut I64 = 0          # held while the screen is written to, so a line and the spinner never mix
+Running mut I64 = 0   # 1 once Arm has decided on a ticker: Begin does nothing without one
+Quit mut I64 = 0      # 1 once the process is ending: the ticker erases and returns
+On mut I64 = 0        # 1 between Begin and End
+Drawn mut I64 = 0     # 1 while something of the spinner is on the screen
+Since mut I64 = 0     # when Begin was called (time.Now)
+Title mut String = "" # what is waited on
+Lock mut I64 = 0      # held while the screen is written to, so a line and the spinner never mix
 
 fn grab() { for Lock.AtomicCompareSwap(0, 1) != 0 { } }
 fn release() { Lock.AtomicStore(0) }
@@ -205,7 +205,7 @@ test Say "text written beside the spinner starts a clean line" {
     written.Push(Draw(3, "compiling"))
     written.Push(Wipe)
     written.Push("clang: a warning\n")
-    assert shown(written.ToString()) == ""    # the line the cursor is now on is empty, below the warning
+    assert shown(written.ToString()) == "" # the line the cursor is now on is empty, below the warning
     assert written.ToString().StartsWith($Draw(3, "compiling") "\r\x1b[Kclang")
 }
 
