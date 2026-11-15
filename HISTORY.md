@@ -37496,3 +37496,28 @@ remembers whether a cell wrote anything (`Worker.Printed`); the prompt then writ
 the output ended with (the user: `Print(5)` shows `5` and the prompt on the next line, `Println(5)` shows `5`, an empty line, and
 the prompt). A cell that wrote nothing adds nothing. Checked in the `promptkeys` scenario with `Print("hello")` and `Println("hi")`.
 Cells interpreted through `OLANG_CELLS=interpret` write in this process and are not covered.
+
+## std/bench as a timeit framework; `-bench` of a run (B19b, 2026-11-15)
+The user's timeit idea. (1) A benchmark is a **series** of runs, not one round: `bench.Run` makes `runs` runs (seven), the
+first grown to a seventh of the budget by `Measurement.Of`, the others repeating its call count; `olang test -bench` writes
+`487113 ± 2104 ns/op (7 runs)`, the median with the spread, and the allocation, byte and instruction counts of the run nearest the median. The
+spread is the **median absolute deviation** (unscaled), chosen over the inter-quartile range because with seven runs it
+is stable and one load spike moves neither median nor spread; `Measurement` and `Measurement.Of` are unchanged
+(`Measurement.Str`'s text too). The empty-array statistics are 0. (2) `bench.Time(f)` writes a `%timeit` line in any build
+(units ns/µs/ms/s by the median) and gives the median nanoseconds; (3) `bench.Compare(a, b, labels)` alternates a and b run
+by run (`Comparison.interleave`, tested with counters in the order a a b a a b ...) and writes both lines and the b/a ratio
+with its spread over the pairs' ratios. D19a refused `Time` and `Compare` returning the module's own `Series` and
+`Comparison`, so they give the median and the ratio as `F64`, and `Series.Of` and `Comparison.Of` (builders) give the runs.
+A `Series` has `Display()` (a Markdown table in a notebook, B23). Found along the way: `Run`'s own test asserted one call
+and so failed under `-bench`; it now accepts a benchmark build. (4) The user then asked for a way to time whole runs and,
+after a first design with a separate `-timeit`, for one option ("I dont like how similar it is to -bench, can we merge
+them"): `-bench` means "measure what runs". Given to running a file or `run`, it builds as without it, runs the program
+once with its output untouched and writes `bench: built in 0.42 s, ran in 1.24 s (1.20 s user, 0.03 s sys, 182 MB peak)`
+to the standard error (compiler/measure.olang: the child started with `__olang_spawn` and waited for with `wait4`, so
+user/sys time and peak memory are the kernel's; `wait4` and `getrusage` are declared as externs over `Array<I64>` because
+glibc's `struct rusage` has anonymous unions the C import does not translate); `-runs N` runs it N times, the first's output
+shown and the later ones' discarded, and gives the median with its spread; a failing run ends the series and its status is
+the command's. Under `test`, `-bench` also writes that line per file (build through link, then the run of the test binary) and
+a `bench: N files in ...` line for several files, whose user/sys/peak come from `getrusage(RUSAGE_CHILDREN)`. Cost: the program's
+`argv[0]` is the built binary under `-bench` (a spawn takes its path as its argv[0]; `ExecInPlace` could give another). The
+interactive prompt's and Jupyter's use of `bench.Time` needs no option.

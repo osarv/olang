@@ -425,7 +425,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Benchmarks are tests (B19b, QCX 4, the user's "sure" 2026-11-07; built 2026-11-08).** `bench.Run(fn() { ... })` in
   a test runs the work once in every build; `olang test -bench FILE [WORD...]` grows the calls to a second (Go's rule)
   and writes ns/op, allocs/op, B/op (counted only in that build) and instr/op where a counter exists. `bench.Keep(v)`
-  defeats dead-code elimination; `bench.Measurement.Of(f)` measures in any build.
+  defeats dead-code elimination; `bench.Measurement.Of(f)` measures in any build. **Repeats, `bench.Time`, `bench.Compare` and
+  `-bench` of a run (the user's timeit idea, 2026-11-15; one option, "I dont like how similar it is to -bench, can we merge
+  them").** A measurement is seven runs (each grown to a seventh of the budget): `487113 ± 2104 ns/op (7 runs)`, the median
+  and the median absolute deviation. `bench.Time(f)` prints `487 µs ± 3 µs per call (median of 7 runs × 2048 calls)` in any
+  build; `bench.Compare(a, b, labels)` alternates the runs of a and b and prints the ratio b/a with its spread; `Series`
+  and `Comparison` hold the runs. `olang -bench FILE` / `olang run -bench FILE` builds and runs a program once as normal and
+  writes `bench: built in 0.42 s, ran in 1.24 s (1.20 s user, 0.03 s sys, 182 MB peak)` to stderr (`-runs N`: N runs, later
+  ones' stdout discarded, the median with its spread); `test -bench` adds that line per file and a total for several.
 - **`olang profile FILE [ARGS]` (B20, QBL, the user's decision 2026-10-26).** A built-in sampling profiler; prints
   self/total by function, hot lines and callers, and writes an SVG flame graph. docs/profiling.md.
 - **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
