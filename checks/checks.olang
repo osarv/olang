@@ -563,16 +563,20 @@ fn earlyfree(r mut report&) ? Failed {
 # O8f (docs/freeing.md): the freeing guarantee - each program of the gap list closed frees at every let-go it makes:
 # built, it runs flat (under 8 MB of address space, or reading its own growth where it has threads); interpreted at a
 # smaller size, the evaluator, which stops on a read of a freed region, prints what the built program prints there. B18a:
-# each of them and every earlyfree program but mapkeys (a split entry's key text, a gap) builds under -memory -check,
-# and a program with a gap (an element given new text) fails it naming the element
+# each of them and every earlyfree program builds under -memory -check, and a program with a gap (an element given a
+# new Vec) fails it naming the element
 test "every let-go the freeing guarantee names frees, and -memory -check proves it" { assert passed("freeing") }
 
 fn freeing(r mut report&) ? Failed {
     dir := fresh("freeing")
     os.Run("cp checks/fixtures/freeing/* checks/fixtures/earlyfree/*.olang " + $os.Quote(dir))
-    limited := Array<String&>["append", "global", "arrays"]
-    full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n"]
-    part := Array<String&>["490 490 148890\n", "490\n", "220494\n"]
+    # (fields: gaps 6-7, elements: 8-9, mapvalues: 10 and 15, unset: 16)
+    limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset"]
+    full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
+                    "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
+                    "19999 20000\n"]
+    part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
+                    "1 10 value 193 padded out to some length .........................\n", "199 200\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
@@ -593,12 +597,13 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -check texts.olang > out.txt 2>&1") == 0, "texts", dir)
     try r.expect(outOf(dir).EndsWith("flat 3097784\n"), "texts kept what its tasks built", dir)
     for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"
-                            "vecreassign", "dropvec", "exportquiet", "maptake", "mapput", "mapdrop", "globals", "fieldfeed", "getread"] {
+                            "vecreassign", "dropvec", "exportquiet", "maptake", "mapput", "mapdrop", "globals", "fieldfeed", "getread"
+                            "mapkeys"] {
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps.olang > out.txt 2>&1") == 1, "gaps passed -memory -check", dir)
     o := outOf(dir)
-    try r.expect(o.Contains("gaps.olang:6:27: memory: 'names[i % 10]' lets go of what the element held - kept until its scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
+    try r.expect(o.Contains("gaps.olang:6:27: memory: 'rows[i % 10]' lets go of what the element held - kept until its scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
     try r.expect(o.Contains("error[B18]: 1 let-go early freeing does not follow (O8f)"), "no B18 error", dir)
 }
 

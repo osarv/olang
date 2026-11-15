@@ -810,8 +810,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. Built 2026-11-15:
   text and array locals and globals are places (`s = s + $i`: 850 MB to 13 MB), an immut array replaced whole (a slice
   of its old value had read the new), a task whose callee builds nothing given no stand-ins (oann's joinleak), the
-  joiner sharing its pool at each join, a temporary only a call needs built in the block (oann's tempref). Gaps left:
-  docs/freeing.md section 2.
+  joiner sharing its pool at each join, a temporary only a call needs built in the block (oann's tempref); round 2: a
+  struct local's constructor copy built for its parts (`d.text`, `m.w`), a local declared with no value a place, a `Map`
+  entry's text parts (a key beside a Vec, a text value) and an array's text elements each built in a slot and freed
+  alone (a removal, a `Put`, `a[i] = v`, `SetAt`). Gaps left (docs/freeing.md section 2): a Vec's growth where its
+  buffer place keeps per type (2.1, a decision asked), an element owning storage that is not text.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
