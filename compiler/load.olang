@@ -129,10 +129,17 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     CFlags Vec<String&>                # what it is translated and compiled with: the target's, and the defines (X18)
 }
 
-# where the standard library is: OLANG_STD, else std beside the compiler (its directory's "../std")
+# B1a: the standard library this compiler was built from - its directory, as an absolute path, given by the build of the
+# compiler (the makefile's "-define BuiltStd=$(CURDIR)/std", B10c); "" in a compiler built without it (the seed, a release)
+BuiltStd String = ""
+
+# B1a: where the standard library is: OLANG_STD; else the one the compiler was built from, while it is there; else std
+# beside the compiler (its directory's "../std") - so a compiler copied anywhere reads the std it was built from, and a
+# release's, built with none recorded, the std it is shipped beside
 fn StdDir() String {
     env := try os.Env("OLANG_STD") catch default ""
-    if env != "" { return $env }
+    if env != "": return $env
+    if BuiltStd != "" and os.IsDir(BuiltStd + "/prelude"): return $BuiltStd
     exe := try os.ReadLink("/proc/self/exe") catch os.Error { return "std" }
     return $filepath.Dir(exe) + "/../std"
 }

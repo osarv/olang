@@ -96,8 +96,12 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 `olang fix FILE|DIR...` (SPEC B17) runs these tools, so a file from any earlier time can be brought to the language of
 today in one command: `olang fix -check FILES` lists the files that would change and writes nothing. Each tool changes
 only the forms it was written for, so there is no version in a file and fixing twice changes nothing. The tools are
-built into the cache (`fix/` in `OLANG_CACHE`) the first time, by the compiler that runs `fix`, from `tools/` beside it
-(`OLANG_TOOLS` names another place). The table is in `compiler/fix.olang`, in the order the changes were made, with the
+built side by side into olang's cache (`~/.cache/olang/fix`, `$XDG_CACHE_HOME`) the first time, by the compiler that runs
+`fix`, from `tools/` beside the standard library it reads (`OLANG_TOOLS` names another place), each program keyed by the
+compiler, std and the tool's own sources, so later runs build nothing. A tool runs only where one of its trigger texts
+(`ToolTriggers` in `compiler/fix.olang`, a superset of what it rewrites; a new tool adds one) stands in the files, and
+the driven tools only over the files the compiler reports an error in (on a copy of oann: 555 s cold and 408 s warm
+before, 128 s and 49 s after, 2026-11-15). The table is in `compiler/fix.olang`, in the order the changes were made, with the
 tools that read the text alone first and the ones driven by the compiler's diagnostics (`perm_mut`, `int_literal_i64`,
 `errors_migrate`, `null_migrate`, `as_migrate`, `question_migrate`, `unused_migrate`) after them - an old file does not parse, so the
 compiler has nothing to say about it until the text tools have run:

@@ -2987,7 +2987,8 @@ import - on an olang module's they are a compile-time error, since an olang modu
 alone:
 
 - **std**: `std/PATH` - a file of the standard library, which is located by the implementation (in this one,
-  the `OLANG_STD` environment variable, or `../std` beside the compiler); `std/chan` is the file `chan.olang`
+  the `OLANG_STD` environment variable, else the standard library the compiler was built from while it is there,
+  else `../std` beside the compiler - B1a); `std/chan` is the file `chan.olang`
   at the standard library's root;
 - **remote**: `HOST/OWNER/REPO[@REF]/PATH`, where `HOST` contains a `.` - the file `PATH` within a remote
   version-controlled repository, at the branch or tag `REF` (its default branch when omitted);
@@ -8188,6 +8189,13 @@ file or directory, `test`, `format` and `fix` one or more (`fix` also a director
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
 
+**B1a (where the standard library is).** The compiler reads the standard library at `OLANG_STD` where that is set;
+else at the directory recorded when the compiler itself was built (the build constant `BuiltStd`, B10c, given as
+`-define BuiltStd=DIR` by the repository's build), while that directory holds the standard library; else at `../std`
+beside the compiler's own file. So a compiler copied anywhere reads the standard library it was built from, and one
+built with none recorded (the seed, a release) the one it is shipped beside. `fix`'s tools (B17) are found beside that
+standard library (`tools/` in its parent), else at `../tools` beside the compiler.
+
 **B2.** `compile <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
 linked and no other module's code is generated. Every module `<file>` imports, transitively, is still
 read and analyzed, because that is where their declarations come from (B2a); only code generation is
@@ -8934,9 +8942,14 @@ on code of today changes nothing. It writes the name of each file it changed, on
 place whose meaning the text alone cannot settle, such as a `try` read in the language of today further than when it was
 written (E24) - is written to the standard error, and then a line saying to look at them, and the status is 1, with or
 without `-check`. The status is 2 when a file cannot be read or a tool cannot be built or run. The tools
-are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), a directory of their own for each compiler
-and tools directory, so no two compilers share a program; a tool is built again when the compiler that built it changed,
-or when its sources - the tools, the compiler's modules beside them, the standard library - are newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
+are built when first needed, side by side, into olang's cache of what it builds for itself (`fix/` in
+`$XDG_CACHE_HOME/olang`, else `~/.cache/olang`), each program named by the hash of what it is built from - the compiler
+(its path, size and time), the standard library's files and the tool's own source with every module it imports beside
+it - so a program is built once and found again by every later run with that compiler over those sources. A tool runs
+only where it may have something to do: each names texts its forms cannot be without (`Init(` for removing
+`chan.Init`), and a tool none of whose texts stands in the files is neither built nor run; the tools driven by the
+compiler's diagnostics are given only the files the compiler reports an error in (each compiled alone, `compile
+-quick`), and none runs where there is none. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
 `precedence_migrate`) - is not run.
 
 **B18.** `-memory` prints, after a build's diagnostics, what early freeing (O8d) decided for the program: a row for
