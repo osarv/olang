@@ -37295,3 +37295,10 @@ compile the tools make; null_migrate also leaves an error with an "instantiated 
 line does not write, for a person (`by hand:`), since the advice names the instance's types. `oneline_migrate` converted only
 three-line blocks; the braced one-liner `if c { stmt }` / `for x in xs { stmt }` (80 of agent.olang's) is converted too, and
 `try f()` counts as a call. Tests: `JoinHelp`, null_migrate's generic case, oneline_migrate's own.
+
+## 2026-11-15: E11b - `$alpha (" x")` names `$(...)` again
+
+The call-on-a-non-function path (check.olang, callee) said E11b only where the rendered value was text or the callee began
+with `"`; a rendering of any other value (`$alpha`, an F64) followed by a parenthesized piece of text fell to E13b "F64 is
+not a function". It now also says E11b where the callee is directly after `$` and the `(` that follows opens with a text
+literal (`textArgFollows`). checks/cases/e11bjoinfloat.olang; goldens/diag.txt gained its entry.
