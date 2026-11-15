@@ -1,0 +1,8 @@
+# a kernel's step, small and holding a loop: under full LTO the link inlines it into its callers in other modules (B2d)
+# - compiled vectorized on its own, it grew past the link's threshold and stayed a call
+
+# one row of a tile: acc[base + j] += a b[o + j] for the tile's nr columns
+fn Step(acc mut Array<I32>&, base I64, a U8, b Array<I8>&, o I64, nr I64) {
+    x := I32(a)
+    for j in range nr: acc[base + j] = acc[base + j] + x * I32(b[o + j])
+}

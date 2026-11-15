@@ -260,11 +260,23 @@ fn (c Config&) ModeFlags() Vec<String&> {
     return out
 }
 
-# the flags an object with this IR is compiled with: the mode's, and under -debug LLVM 18's -O0 instruction selector
-# (FastISel) turned off where the IR holds a bfloat, which it keeps wrongly live across a branch (B2c) - everywhere
-# else FastISel is kept, since doing without it costs -O0 compiles 70% (DESIGN.md 3.4)
+# the flags an object with this IR is compiled with: the mode's; under full LTO without the vectorizers and the late
+# unroller (B2d, below); and under -debug LLVM 18's -O0 instruction selector (FastISel) turned off where the IR holds a
+# bfloat, which it keeps wrongly live across a branch (B2c) - everywhere else FastISel is kept, since doing without it
+# costs -O0 compiles 70% (DESIGN.md 3.4)
 fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     out := c.ModeFlags()
+    if c.vectorizesAtLink() {
+        # B2d: under full LTO the link optimizes the whole program again, so an object's own compile leaves its loops for
+        # the link to vectorize after it has inlined across objects, as ThinLTO's compile does: vectorized there, a small
+        # function (a kernel's step) grew past the link's inlining threshold and stayed a call in the instance calling
+        # it, compiled in the root's object (oann's INT8 tiles, 2026-11-15: 12 GOPS against 86). Nor does it unroll a
+        # loop by a factor or with a remainder loop, which only the vectorizer is meant to precede: a loop so unrolled
+        # is no longer one the link vectorizes (linalg's store and epilogue loops, F32 products of 9 x 16 at half speed).
+        # Unrolling a loop whole stays, before either
+        for f in Array<String&>["-fno-vectorize", "-fno-slp-vectorize", "-mllvm", "-unroll-runtime=false", "-mllvm"
+                "-unroll-allow-partial=false"] { out.Push(f) }
+    }
     if c.Profile {
         # B20: a frame set up for the whole of each function, so that the sampler's walk finds every caller wherever a
         # sample lands (shrink-wrapping sets it up only on the paths that call, leaving a loop on its caller's) - here
@@ -283,6 +295,9 @@ fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     }
     return out
 }
+
+# whether the objects are optimized again at the link with the vectorizers: an optimized build linked by full LTO
+fn (c Config&) vectorizesAtLink() Bool { return not c.Debug and not c.Race and not c.Quick and not c.Thin }
 
 # the flags a Locations object (B3l) is compiled with: the mode's without link-time optimization - it is data alone, which
 # no link optimizes and none imports, so a program linking by ThinLTO redoes no module's code when only it changed
@@ -1208,15 +1223,17 @@ fn listFiles(dir String&, ir Bool, out mut Listed&) {
     }
 }
 
-# B11d: the objects linked as Link links them, the plugin writing the code it generates (or, ir, the IR it generates
-# it from) into dir as code, code1 ... - a ThinLTO link's tasks each their own - and its remarks as link.yaml...; IR
-# written as bitcode is turned into text by clang, which reads bitcode and writes it back as text unchanged
+# B11d: the objects linked as Link links them, the plugin writing the code it generates into dir as code, code1 ... - a
+# ThinLTO link's tasks each their own - and its remarks as link.yaml...; or, ir, the IR it generates that code from: the
+# link's own temporaries kept (save-temps), each task's IR as optimized at the link (code.N.5.precodegen.bc) turned into
+# text by clang, which reads bitcode and writes it back as text unchanged, the rest removed - the plugin's emit-llvm
+# would write the IR before the link optimizes it, which under full LTO is not yet vectorized (B2d)
 fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir Bool, out mut Listed&, d mut diag.Diagnostics&) ? Failed {
     args Vec<String&>
     args.Push(c.Clang)
     for f in c.ModeFlags() { args.Push(f) }
     if c.Thin { args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit) }
-    args.Push("-Wl,-plugin-opt=emit-llvm" if ir else "-Wl,-plugin-opt=emit-asm")
+    args.Push("-Wl,-plugin-opt=save-temps" if ir else "-Wl,-plugin-opt=emit-asm")
     args.Push($"-Wl,-plugin-opt=opt-remarks-filename=" $dir "/link.yaml")
     args.Push($"-Wl,-plugin-opt=opt-remarks-passes=" $RemarkPasses)
     args.Push("-o")
@@ -1248,13 +1265,17 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     listFiles(dir, ir, out)
 }
 
-# B11d: each part of bitcode the link wrote into dir (code, code1 ...) written as text beside it (code.ll ...) by clang,
-# no pass run over it, side by side
+# B11d: the IR each task of the link handed its code generator (code.N.5.precodegen.bc) written as text beside it by
+# clang, no pass run over it, side by side; the link's other temporaries, and its program, removed
 fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
     cmds Vec<Array<String&>&>
     listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
     for n in listed {
-        if not n.StartsWith("code") { continue }
+        if not n.StartsWith("code") or n.EndsWith(".ll"): continue
+        if not n.EndsWith(".5.precodegen.bc") {
+            try os.Remove($dir "/" $n) catch os.Error { }
+            continue
+        }
         args mut Vec<String&>& = Vec<String&>()
         args.Push(c.Clang)
         if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
@@ -1269,6 +1290,7 @@ fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
         d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(cmds[i][cmds[i].Len() - 1]))
         error Failed.Reported
     }
+    for cmd in cmds: try os.Remove(cmd[cmd.Len() - 1]) catch os.Error { }
 }
 
 # B11d, -quick: each module's IR (its code - the places a Locations unit holds are data) and the runtime's compiled
@@ -1376,7 +1398,11 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     assert f.Len() == 2 and f[0] == "-O3" and f[1] == "-flto"
     c.Thin = true
     assert c.ModeFlags()[1] == "-flto=thin"
+    assert c.CompileFlags("define void @f() { ret void }").Len() == 2
     c.Thin = false
+    # full LTO: an object's compile leaves vectorizing, and unrolling by a factor, to the link, which inlines first
+    v := c.CompileFlags("define void @f() { ret void }")
+    assert v.Len() == 8 and v[2] == "-fno-vectorize" and v[3] == "-fno-slp-vectorize" and v[5] == "-unroll-runtime=false"
     a := c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f)
     assert a.StartsWith("build/m.") and a.EndsWith(".o") and a.Len() == "build/m.".Len() + 16 + 2
     assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f) == a

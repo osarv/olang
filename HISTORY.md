@@ -37410,3 +37410,50 @@ The user: the spinner "is the top of a 4*3 and it really doesnt look centered". 
 dots (`U+2803`), which sit high on the line beside `:::`; they now use the middle two (`U+2806`, a gap `U+2804` or
 `U+2802`): ⠄⠆⠆ ⠆⠄⠆ ⠆⠆⠄ ⠆⠆⠂ ⠆⠂⠆ ⠂⠆⠆. Same three characters' width as `:::`. compiler/spin.olang's Frames and the
 makefile's clang loop.
+## 2026-11-15: B2d - under full LTO a module's compile leaves vectorizing to the link
+
+oann's INT8 benchmark (bench/int8.olang) ran its products at 10-12 GOPS against the 55-60 its DESIGN.md recorded:
+`quant.rowStep`, the one-row step of the INT8 micro-kernels (a five-line loop), stayed 54 calls in `quant.rowPanel`, the
+tile's accumulators going through memory, and no `vpdpwssd` was made. The cause was the order of LLVM's work across our
+units: every module is compiled `-O3 -flto` on its own, and clang's full-LTO pre-link pipeline runs the loop and SLP
+vectorizers; `rowStep` lives in quant's unit while the micro-kernels, generic over the tile, are instances in the root's
+unit (B3d), so no compile saw both, and by the link `rowStep` was its vectorized form (a 64-wide main loop, an 8-wide
+epilogue, the run-time checks - 224 lines of IR), past the link inliner's threshold. A one-file reproducer inlined because
+there caller and callee shared a unit and the pre-link inliner ran before vectorizing. Fix (build.olang, CompileFlags):
+under full LTO a module's compile adds `-fno-vectorize -fno-slp-vectorize`; the link's LTO pipeline inlines, then
+vectorizes the whole program as before. ThinLTO's pre-link pipeline already vectorizes nothing, so it is unchanged, as are
+`-debug`, `-race` and `-quick`. The flags are in each object's hash, so cached objects are compiled again once.
+Measured (load average 19-23 on 4 cores, interleaved runs): bench_int8 512^3 11.5 -> 77-94 GOPS, 1024^3 11.8 -> 82-88,
+128x784x128 11.4 -> 79-88, 1x1024x1024 12.6 -> 59; rowStep calls 54 -> 0, calls into quant 66 -> 12 (`store`, `Linear`),
+`vpdpwssd` 0 -> 80; the F32 GEMM beside it unchanged (~110-120 GFLOPS). olang's bench/ against C (nbody, spectral,
+mandelbrot, fannkuch, matmul, sha256, lanes) the same or slightly better, olang/C 0.93-1.13 before and after. Check: the
+`linkinline` scenario (checks/fixtures/linkinline: a step function in one module, a kernel in another calling it four times
+per iteration - fails with the old flags). `explain -ir` (B11d) showed the IR the LTO plugin writes under
+`-plugin-opt=emit-llvm`, which is the merged module before the link optimizes it - vectorized only because each module's
+compile had been; its `listing` check failed on the change. The listing link now keeps the link's temporaries
+(`-plugin-opt=save-temps`) and shows each task's `.5.precodegen.bc`, the IR as the link optimized it and handed to the
+code generator, the other temporaries removed - truer than before, and with the link's remarks, which emit-llvm never
+ran. Proved by targeted runs (the coordinator's brief: no full verify): the bootstrap and `make fixedpoint`, checkir,
+build.olang's tests, the `listing`, `target`, `objnames`, `cinterop` and `linkinline` scenarios, tests/lanes, axes,
+bench, cimport, fnvalues and std/sha256, stats, regex.
+
+Taken further the same day, after a container restart: the F32 products beside the INT8 ones had not been unchanged -
+measured shape by shape (load average 5-6), linalg's thin products had lost up to half their speed (100352 x 9 x 16 with
+its bias and ReLU, a convolution's: 32 -> 17 GFLOPS; 1024 x 128 x 512: 138 -> 105), the square ones within noise. The
+profile put it in linalg's `storeTile` and `epilogueAs` loops (`for j in range w`, instances in the root's object), which
+the link now left scalar. The cause: with the vectorizers off, a module's compile still ran LLVM's late `LoopUnroll`,
+which unrolls a loop by a factor with a remainder loop - a step meant to follow the vectorizer, not to precede it - and
+the link's vectorizer then found the unrolled body not worth vectorizing and the remainder too short to version
+(`CantVersionLoopWithOptForSize`, its trip count under 16). Neither a weaker link pipeline (`opt -passes=default<O3>` over
+the merged module was as slow, a loop rotation added no help) nor the inliner. Tried and dropped: vectorizing in the
+root's objects only (main, tests, instances), which restored the F32 products but halved the batch-1 INT8 ones (1 x 1024 x
+1024: ~60 -> ~25 GOPS - the root's micro1 summed its tile with vectors before the link inlined the step writing it).
+Fix: under full LTO every object's compile also passes `-mllvm -unroll-runtime=false -mllvm -unroll-allow-partial=false`;
+unrolling a loop whole stays (before the vectorizer, as it always ran), and the link unrolls by a factor after it
+vectorizes - what ThinLTO's compile, which runs no late unroller, does already. Measured (bench_int8, built with the
+compiler before B2d and with this one, interleaved, load average 17-24): INT8 products 4-9 -> 45-78 GOPS (1 x 1024 x 1024
+8 -> 33-61), F32 the same within the noise (thin 9 x 16: 15-21 both; the isolated thin product 1300-1500 us against
+1300-1600, where the first fix took 2100-2900); `quant.rowStep` calls 54 -> 0, calls into quant 66 -> 4, `vpdpwssd` 0 ->
+80. olang's bench/ against C, before and after (`OLANG_CLANG` a wrapper restoring the old flags): every olang/C ratio the
+same within the noise. Targeted runs: the bootstrap's fixed point, build.olang's tests, the `linkinline`, `listing`,
+`objnames` and `target` scenarios.
