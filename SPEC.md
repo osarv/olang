@@ -1995,7 +1995,10 @@ The prelude also declares `type Generator<T ? E> struct(next (fn&() T ? E, Exhau
 second name for the same walk, as a `Vec`'s copy is the same `Vec`. Beside it, `type ViewGenerator<T ? E> struct(next
 (fn&() T& ? E, Exhausted)) { next }`, whose `Next() T& ? E, Exhausted` gives a read-only reference living where the value
 it is called on does (the one result the compiler knows to be handed back from its receiver, which its body - a call
-through a function value - cannot show): what a generator whose elements are borrowed gives (D18c).
+through a function value - cannot show): what a generator whose elements are borrowed gives (D18c). And `type
+HoldingGenerator<T ? E> struct(next (fn&() T ? E, Exhausted)) { next }`, whose `Next() T ? E, Exhausted` gives a value
+whose references live where the value it is called on does, known the same way: what a generator whose elements are
+values holding views of what a parameter refers to gives (D18c).
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `Integer`, every integer type of every width, `I1` to `I128` and `U1` to
@@ -2606,7 +2609,8 @@ is equivalent to a bare `return` with no value, which is only valid when the fun
 it gives a `Generator<T ? E>`, a value whose `Next()` runs the body on from where it last stopped to its next `yield`,
 whose value that `Next()` gives. `Iterator<T ? E>` is where the declaration says what its caller is given; the
 `Generator<T ? E>` it stands for is the call's type (`g := evens(10)` declares one; a field holds one as
-`Generator<I64>`) - a `ViewGenerator<T ? E>` where its elements are borrowed (D18c). A generator may be a method, and
+`Generator<I64>`) - a `ViewGenerator<T ? E>` where its elements are borrowed, a `HoldingGenerator<T ? E>` where they are
+values holding views of what a parameter refers to (D18c). A generator may be a method, and
 generic.
 
 ```
@@ -2668,6 +2672,14 @@ O14):
   those locals, what is built into them and a temporary yielded; what its arguments refer to outlives it. What is kept there stays
   until the generator's scope closes, however many values the walk gives, and no element outlives the generator. A local
   it yields a view of is built where the generator lives (O27).
+
+- **Holding views of a parameter**: a value element type holding references (`Iterator<Rule>`, `Rule` an enum one of
+  whose cases holds a reference) every `yield` of which gives what one reference parameter `p` refers to - a copy of an
+  element of it, a part of one: `for g in s.rules { if g.When == c: yield g.What }`. Each element is a value of its
+  own, built per value as the first form's, whose references live where what `p` refers to does, as a result handed back
+  from `p` (O13); a `for` or a comprehension walking such a generator called right there has them live where the
+  argument for `p` does. It gives a `HoldingGenerator<T ? E>` (T35b), whose `Next() T ? E, Exhausted` gives a value
+  whose references live where the generator value it is called on does.
 
 Either borrowed form gives a `ViewGenerator<T ? E>` (T35b), `T` the elements' referent: its `Next()` gives a reference
 borrowed from the generator value it is called on, so wherever else it is walked - held in a local, a field, given to
@@ -7356,7 +7368,10 @@ A generator's `Next()` has a result scope of its own per call (D18b); its elemen
 views of storage its walk keeps, live where the generator lives (D18c).
 
 **O26a (a returned local lives where the result goes).** A value local the function returns lives in the **result
-scope** - its own storage, and everything built into it - with nothing written. A local is
+scope** - everything built into it, and its own storage where anything may name that past the body (a reference to it
+kept, stored, captured, handed to a task, or handed back): one every `return` gives whole, by value, whose storage nothing
+names past the body, keeps its own slot in the function's frame, its value copied out as the result (unobservable but in
+memory) - with nothing written. A local is
 returned when, in the rest of the block declaring it, a `return` gives it (or a field read through it, `return b.items`)
 as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
 to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built
@@ -7739,7 +7754,9 @@ in its own block, not where the result lands, O8f); any other follows the result
 
 **O18c (`:=` from a call).** `x := f(...)` takes its initializer's scope (O25a), so a result scope still free to follow
 the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,
-where those are ordered here and none is the program's or a derived one - otherwise in the local's block (or, for a
+where those are ordered here and none is the program's or a derived one but a parameter's (what a field of what it refers
+to refers to, O23a: a writable element read out of `l.S.E.Pops` lands where `l.S`'s binding is) - otherwise in the
+local's block (or, for a
 value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
 not in the loop body. It lands there only where that costs nothing or is needed: the callee builds nothing (what it
 gives is an element or a borrowed part), one of its obligations requires the result scope to **outlive**, or to be, one an

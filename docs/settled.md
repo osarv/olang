@@ -590,7 +590,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   empty set where nothing fallible binds it (then no `try`). Satisfaction is "held by" (T31). Not a stored error (T20).
 - **Generators (D18-D18d, S20, QAG revised, the user's decision 2026-10-18).** A `fn` whose result is `Iterator<T ? E>`
   and whose body holds a `yield` is a generator - no keyword; a bare `return` or an error ends the walk. **Borrowed
-  elements (D18c, QBB, 2026-10-26)**: `Iterator<String&>` yields read-only views. Not allowed: `yield` in a lambda,
+  elements (D18c, QBB, 2026-10-26)**: `Iterator<String&>` yields read-only views. **Values holding views (D18c,
+  2026-11-15, oann's genref)**: an `Iterator<Rule>` whose yields copy out of one reference parameter's referent gives a
+  `HoldingGenerator`, each value its own, its references living where that referent does. Not allowed: `yield` in a lambda,
   deferred code or a join block. **A walk let go part way (S20, refusals question 2, the user's yes 2026-11-08; built
   2026-11-09)** leaves its open blocks as a `return` would - deferred code (not errdefers: no error leaves, nor at the
   walk's end), holders' and by-value parameters' destructors - where its storage is let go; one never started ends
@@ -742,7 +744,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   where the obligation says (O18b/O18c).
 - **A returned local lives where the result goes (O26a).** A value or reference local the function returns, or that
   flows into what it returns, lives in the result scope (Go's escape analysis, static), including through a returned
-  lambda's captures. A constructor field given a conditional or a match is the instance's slot (C2d, E28).
+  lambda's captures; one returned only whole, by value, whose storage nothing names past the body keeps its own slot
+  in the frame (Plan.RetFrame, freeing gap 19, 2026-11-15). A constructor field given a conditional or a match is the
+  instance's slot (C2d, E28). **A call's writable reference result lands in a parameter's derived scope** where its
+  obligations say (O18c, oann's learnerarg, 2026-11-15), a field so landed in going back where its callers cannot show
+  what that asks.
 - **A kept local is built where it is kept (O28, O17, D9i; item 17, the user's decision 2026-11-03: "creating it at
   the scope of the thing we're storing it in").** A value local kept by reference past its block or turn, or copied
   whole at its last mention into longer-lived storage, has its storage placed where it is kept, a new value each time
@@ -834,8 +840,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   only where it is one, and an owner's release reads its anchors' part regions as its own: a Vec's growth frees in every
   program (an owner holding a Vec whole, a copy: no reason to keep), with no cost per operation or per copy (the
   400-byte-per-copy design, asked of the user, was not needed); an element owning storage only as such arrays of plain
-  values (`Array<Vec<I64>>`) frees them where it is given another. Gaps left (docs/freeing.md section 2): an element
-  owning more (`Array<Vec<String>>`'s text), a returned value local built where the result lands (19). A local lowering
+  values (`Array<Vec<I64>>`) frees them where it is given another; a returned value local keeps its slot in the frame,
+  its parts where the result goes (gap 19). Gap left (docs/freeing.md section 2): an element owning more
+  (`Array<Vec<String>>`'s text). A local lowering
   surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they

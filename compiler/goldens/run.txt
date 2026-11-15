@@ -299,6 +299,7 @@
 | ok - D18e: a walk left by a return out of two loops, or by an error, closes its scopes once
 | ok - D18c: a generator's elements borrowed from what it was given live where that does
 | ok - D18c: a generator's elements kept by its walk live where the generator does
+| ok - Marks.On: D18c: a generator's elements holding views of what it was given live as long as that does
 | ok - D18e: a walk a for-in makes is dropped as the loop's block is left, whatever it was given
 | ok - D18e: a generator held in a local and walked once there is dropped as the local's block closes
 | ok - D18: a lambda's environment and a lent array held across yields stay in the generator's frame
@@ -2082,6 +2083,8 @@
 === run c2dctorbuilds.olang
 | status 0
 | ok
+=== run c2dderivedland.olang
+| status 0
 === run c2de25once.olang
 | status 0
 | 102

@@ -174,6 +174,9 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
         g := c.Ty(c.P.T.Result(sig))
         if text.EndsWith(g) and g.StartsWith("Generator") {
             text = $text[:text.Len() - g.Len()] + "Iterator" + $g[9:] + "   # a generator: a call gives a " + $g
+        } else if text.EndsWith(g) and g.StartsWith("HoldingGenerator<") {
+            # D18c: its elements values holding views - written as the element's type is
+            text = $text[:text.Len() - g.Len()] + "Iterator" + $g[16:] + "   # a generator: a call gives a " + $g
         } else if text.EndsWith(g) and g.StartsWith("ViewGenerator<") {
             # D18c: its elements borrowed - a reference after the element's type, as it is written (QCB: where they
             # live is inferred, said by its scopes line)

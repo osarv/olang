@@ -1,0 +1,22 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 19): a function handing back a local by value (O26a) builds the local's parts where the
+# result goes and keeps its own slot in its frame - a slot per call in the result scope, here the array's, grew 32
+# bytes a call before (13 MB at 400,000 turns)
+N I64 = 400000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 4 { w.Push(i + j) }
+    return w
+}
+
+fn main() {
+    rows := Array<Vec<I64>>(10)
+    t := 0
+    for i in range N {
+        rows[i % 10] = mk(i)
+        t += rows[i % 10][3]
+    }
+    io.PutLine($t + " " + $rows[3].Len())!
+}

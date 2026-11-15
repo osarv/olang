@@ -493,6 +493,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # what decide found for the local the next Let declares: the result term it is moved to (O26a), or that a call it
     # is declared from lands by its obligations (O18c); landing is that flag handed to the call
     moveTo Term = Term.None
+    retWhole Bool = false                  # ... and whether the local moved there is returned only whole, by value
     landOK Bool = false
     landing Bool = false
     # QCE: where the comprehensions being judged are built, innermost last - an element owning
@@ -511,6 +512,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # beyond its block (O18c), flMode which of the two is asked, flBlock the local's block, flGrew whether a pass grew fl
     fl Vec<I64>
     flDirect Vec<I64>
+    flOther Vec<I64>                       # ... and those reached other than as a return's whole value (retWhole)
     flKept Bool = false
     flMode I64 = 0
     soleOf I64 = -1                        # soleArray's local, and whether a use of it may be a second name
@@ -618,6 +620,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     finalQuiet Bool = false                   # the quiet judging after a body's claims are inferred: its refusals count
     wantDecl Map<I64, Bool>
     wantField Map<pair.Pair<I64, I64>, Bool>
+    landedOn Map<I64, Bool>                # the declarations whose field's derived scope a call's result landed in (O18c)
     promotedF Map<pair.Pair<I64, I64>, I64>   # ... the constructor parameter it binds to
     demotedF Map<pair.Pair<I64, I64>, Bool>
     Unplaced Vec<String&>                     # fields a refusal needed promoted that have no parameter to bind to (open point 4)
@@ -4581,6 +4584,7 @@ fn (s mut Scoper&) gapAt(sp source.Span, what String&) { s.gap(s.B!.File, sp, wh
 # function returns it (O26a), else whether the call it is declared from lands where its obligations say (O18c)
 fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&, from I64) {
     s.moveTo = Term.None
+    s.retWhole = false
     s.landOK = false
     s.landPart = false
     loc := s.B!.Locals[I64(l)]
@@ -4606,6 +4610,9 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
                 # an array value returned as it is (T7b) only where nothing else can name it - else copied at its return,
                 # so the result is the caller's own value
                 if s.arenaValue(loc.Ty) { s.plan.RetSole[I64(l)] = s.soleArray(I64(l), ss, from) }
+                # (one every return gives whole, by value, and nothing else carries there: its parts are what goes, its
+                # own slot need not - O26a's reason, Plan.RetFrame)
+                s.retWhole = flHas(s.flDirect, I64(l)) and not flHas(s.flOther, I64(l))
                 return
             }
         }
@@ -4916,6 +4923,12 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
         }
         match to {
             case Term.Block(_), Term.Var(_) { }
+            # (a parameter's derived scope - what a field of its referent refers to, O23a: a writable reference the
+            # callee hands back from there lands there exactly, as a reference local's version would hold it, O25i)
+            case Term.Derived(p, w) {
+                if p < 0: return Term.None
+                s.noteLanded(p, w)
+            }
             # the program's, only where the callee builds nothing there: nothing is then kept to the end
             case Term.Program {
                 if callee < 0 or s.sumBuilds(callee, rv) { return Term.None }
@@ -5375,6 +5388,7 @@ fn (s mut Scoper&) flAdd(x I64) {
 fn (s mut Scoper&) flowStart(l typed.LocalId, mode I64) {
     s.fl.Clear()
     s.flDirect.Clear()
+    s.flOther.Clear()
     s.flKept = false
     s.flMode = mode
     s.flBlock = s.B!.Locals[I64(l)].In
@@ -5441,6 +5455,10 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
                 s.carried(x, xs)
                 s.returnedArrays(x, xs)
                 s.flAddDirect(xs)
+                w := wholeValueRead(x)
+                for k in xs {
+                    if k != w and not flHas(s.flOther, k): s.flOther.Push(k)
+                }
             } else if s.carries(x) {
                 s.flKept = true
             }
@@ -5491,7 +5509,10 @@ fn (s mut Scoper&) flInto(r I64, ty types.TypeId, x typed.Expr?&, outside Bool, 
         if r >= 0 and flHas(s.fl, r) and not (whole and s.plainCopyOf(x, ty)) {
             xs Vec<I64>
             s.carried(x, xs)
-            for k in xs { s.flAdd(k) }
+            for k in xs {
+                s.flAdd(k)
+                if not flHas(s.flOther, k): s.flOther.Push(k)
+            }
         }
         return
     }
@@ -5501,6 +5522,15 @@ fn (s mut Scoper&) flInto(r I64, ty types.TypeId, x typed.Expr?&, outside Bool, 
         return
     }
     s.flAdd(r)
+}
+
+# the local a return's value x reads whole, by value (no reference crossed, nothing around it), -1 for any other value
+fn wholeValueRead(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): I64(p.id) if p == typed.Lvalue.Local else -1
+        case typed.Expr.Away(_, _, y): wholeValueRead(y)
+        case _: -1
+    }
 }
 
 # whether x reads a value local as a plain copy of it (O25h)
@@ -7714,6 +7744,7 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     t := loc.Ty
     if x != null { s.inits.Put(I64(l), x) }
     moved := s.moveTo
+    whole := s.retWhole
     land := s.landOK
     part := s.landPart
     if s.vers != null {
@@ -7721,12 +7752,14 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         if s.isCursorLocal(I64(l)) { s.curMoved.Put(I64(l), moved) }
     }
     s.moveTo = Term.None
+    s.retWhole = false
     s.landOK = false
     s.landPart = false
     # the inference's claim (2.4) - its storage with it, a value local kept whole, as O26a moves a returned one
     lift := s.liftOf(I64(l))
     if lift != Term.None and s.liftStor.Has(pair.Pair<I64, I64>(s.Id, I64(l))) {
         moved = s.joinTerm(moved, lift) if moved != Term.None else lift
+        whole = false
     }
     s.stors[I64(l)] = s.blockTerm(loc.In)
     # (QCE: so does a field holding a run-time array by value - its elements the instance's own,
@@ -7737,7 +7770,7 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         s.fieldInInstance(sp, l)
     }
     if moved != Term.None {
-        s.letMoved(l, t, x, moved)
+        s.letMoved(l, t, x, moved, whole)
         return
     }
     if not s.holds(t) {
@@ -7809,7 +7842,9 @@ fn (s mut Scoper&) fieldInInstance(sp source.Span, l typed.LocalId) {
 
 # letBody's local the function returns, or one the inference lifts whole: it lives where the result goes, or where it
 # is kept (O26a, 2.4)
-fn (s mut Scoper&) letMoved(l typed.LocalId, t types.TypeId, x typed.Expr?&, moved Term) {
+# (whole: O26a's alone, the local returned only whole and by value - its own slot is kept where the result goes only for
+# what may name it there, which lowering judges: Plan.RetFrame, gap 19 of docs/freeing.md)
+fn (s mut Scoper&) letMoved(l typed.LocalId, t types.TypeId, x typed.Expr?&, moved Term, whole Bool) {
     # a local the function returns lives where the result goes, its own storage too (O26a) - but a reference's: its
     # own storage is a slot nothing can name (no reference to a reference, T11), which stays in its block, a stack
     # slot (a returned 'm mut Map<K, V>& = Map()' read its slot through the result scope's arena in every turn of a
@@ -7818,6 +7853,7 @@ fn (s mut Scoper&) letMoved(l typed.LocalId, t types.TypeId, x typed.Expr?&, mov
     if not s.isRef(t) {
         s.stors[I64(l)] = moved
         s.plan.Stored[I64(l)] = s.scopeOf(moved)
+        s.plan.RetFrame[I64(l)] = whole and not s.arenaValue(t)
         # its slot made there is a build there (E11c: in a borrowed result's home, where a Str's receiver lives)
         s.buildsInto(moved, x!.Span(), s.B!.File, x!.Span())
     }
@@ -11089,8 +11125,9 @@ fn (s mut Scoper&) callValue(c typed.Call&, ty types.TypeId, callee I64, fty typ
     # D18c: a generator whose elements borrow from parameter p: where p's argument lives, for the walk it may make
     if callee >= 0 { s.noteGenArg(callee, beta, owner, c) }
     e := s.P.T.ResultFrom(fty, 0)
-    # D18c: the Next of a walk a for-in makes of such a generator gives elements living where that argument does
-    if n > 0 and s.isRef(ty) {
+    # D18c: the Next of a walk a for-in makes of such a generator gives elements living where that argument does (a
+    # HoldingGenerator's, values whose references live there)
+    if n > 0 and (s.isRef(ty) or s.holds(ty)) {
         wl := s.argLocal(c.Args[0])
         if wl >= 0 and s.walkElem.Has(wl) { return Val.existing(try s.walkElem.Get(wl) catch default Term.Untraced) }
     }
@@ -11992,6 +12029,10 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
         if k != Obliged {
             s.giveBackDerived(hi)
             s.giveBackDerived(lo)
+            # (... and one of the callee's own that the call cannot show: its binding through this argument is not known
+            # here - a writable reference it hands back from there landing there, O18c)
+            s.giveBackCallee(callee, r.Hi)
+            s.giveBackCallee(callee, r.Lo)
             if s.derivedTerm(hi) or s.derivedTerm(lo) {
                 s.giveBackArg(c, r.Hi)
                 s.giveBackArg(c, r.Lo)
@@ -14299,6 +14340,29 @@ fn (s mut Scoper&) giveBackDerived(t Term) {
         }
         case _ { }
     }
+}
+
+# ... the declaration of body callee's parameter whose field viewing its referent the callee's derived term t reads -
+# where a call's result landed in that scope (noteLanded): what the landing asked of its callers they cannot show, so
+# the field goes back as it would have where the result landed in its block (a refusal's own field, never given back
+# for it, is not one of them)
+fn (s mut Scoper&) giveBackCallee(callee I64, t Term) {
+    if callee < 0 or t != Term.Derived or t.p < 0 or t.p >= s.Bodies[callee].Params.Len(): return
+    cb := s.Bodies[callee]
+    d := s.declOf(cb.Locals[I64(cb.Params[t.p])].Ty)
+    if d >= 0 and s.landedOn.Has(d): s.giveBack(d)
+    dd := try s.derivedDecl.Get(pair.Pair<I64, I64>(callee * 65536 + t.p, t.w)) catch default -1
+    if dd >= 0 and s.landedOn.Has(dd): s.giveBack(dd)
+}
+
+# a call's result landed in derived scope Derived(p, w) of the body being judged (landByObligations): the declarations
+# whose field it is read through noted for giveBackCallee
+fn (s mut Scoper&) noteLanded(p I64, w I64) {
+    if p >= s.B!.Params.Len(): return
+    d := s.declOf(s.B!.Locals[I64(s.B!.Params[p])].Ty)
+    if d >= 0: s.landedOn.Put(d, true)
+    dd := try s.derivedDecl.Get(pair.Pair<I64, I64>(s.Id * 65536 + p, w)) catch default -1
+    if dd >= 0: s.landedOn.Put(dd, true)
 }
 
 # ... asked by an exact relation on a call's result, in any judging of the field inference

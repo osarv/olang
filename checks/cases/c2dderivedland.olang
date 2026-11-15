@@ -1,0 +1,59 @@
+# check: run
+# oann's learnerarg (O18c, O23a, O25i): a call handing back a writable reference its callee reads out of the receiver
+# ("return outlives s", exact) lands where the receiver's derived scope is - here l.S's, a promoted field's binding - not
+# in the block it is written in, which fails the relation and gave Learner.S back to its container's scope; with an
+# "any" reachable through S (so the instance is never landed longer), "use" then said C2d at Learner(sys). A for-in's
+# walk of l.S.E.Pops (Vec.At's element) is the same call
+type Pop<T> struct(size I64) {
+    Size I64 = size
+    Bias mut Array<T>& = Array<T>(size)
+}
+
+type Engine<T> struct() {
+    Pops mut Vec<mut Pop<T>&>& = Vec<mut Pop<T>&>()
+}
+
+type Update trait {
+    mut Apply(x mut Array<F32>&)
+}
+
+type System<T> struct() {
+    E mut Engine<T>& = Engine<T>()
+    rules mut Vec<mut any Update&>& = Vec<mut any Update&>()
+}
+
+fn (s System<T>&) Pop(i I64) mut Pop<T>& { return s.E.Pops[i] }
+
+type Learner<T> struct(s mut System<T>&) {
+    S mut System<T>& = s
+    Lessons I64 = 0
+}
+
+type ShapeError error { Mismatch(what String) }
+
+fn (l Learner<T>&) shaped<Y>(i I64, x Array<Y>&) ? ShapeError {
+    size := l.S.Pop(i).Size
+    if x.Len() != size {
+        error ShapeError.Mismatch("population " + $i + " takes " + $size)
+    }
+}
+
+fn (l Learner<T>&) units() I64 {
+    n := 0
+    for p in l.S.E.Pops: n += p.Size
+    return n
+}
+
+fn use(sys mut System<F32>&) I64 {
+    l := Learner<F32>(sys)
+    return l.Lessons
+}
+
+fn main() {
+    s := System<F32>()
+    s.E.Pops.Push(Pop<F32>(3))
+    assert use(s) == 0
+    l := Learner<F32>(s)
+    l.shaped(0, Array<I64>(3))!
+    assert l.units() == 3
+}

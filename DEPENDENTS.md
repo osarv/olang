@@ -189,7 +189,8 @@ The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s 
 `std/prelude/*.olang` (reserved everywhere by D3a, so grep the whole repository for a clash first: `compiler/`
 once had to rename `Place`); `std/prelude/tests/`; the compiler's hard-coded prelude names - `grep -n '"NAME"'
 compiler/check.olang generic.olang explain.olang bindgen.olang` and `c.P.PreludeFn("std/prelude/...", "fn")` (the
-compiler calls prelude functions by name: `caseIndex`, `attrGot`, `Generator`, `Place`); `eval.olang` for an
+compiler calls prelude functions by name: `caseIndex`, `attrGot`, `Generator`, `Place`; generic.olang's `viewNext` and
+`viewGenTy` know `ViewGenerator` and `HoldingGenerator`'s `Next`, explain.olang writes their results as `Iterator<...>`); `eval.olang` for an
 intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method set is a rule. An exported function of the prelude (`Print`,
 `Println`, M19d) is reached bare by M6 alone: `compiler/names.olang` reserves every exported prelude name (D3a) and the
 language server's completion (`session.olang` `moduleNames`) lists it with the other exports.
