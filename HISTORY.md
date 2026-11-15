@@ -38088,3 +38088,40 @@ place sole every string was made for its element, so no per-element tracking is 
 needs a walk over the old buffer's live elements at the element's let-go, which lowering's fixed release paths cannot
 express (a release helper per holder type, emitted, interpreted and verified), and a fill exemption needing a per-body
 summary of stores into a place. Left as the next round of O8f.
+
+## 2026-11-15: G42 and the stack slots, and gap 17's text part taken one step (wt-freeing5)
+
+**The facts.** oann's repro/tempfacts (`Sh.Make(n).Count()`) and repro/reassignfacts (`u = u.Inner()`) read as
+allocating. The first was the facts disagreeing with lowering: a call's value lent to a read-only reference of a body
+keeping nothing of it already got a stack slot (lowering's stackArg), but effects counted every Promote. The judgement
+(keepsNoRef) moved to typed.olang as `RefsKept.None`, read by both; effects' `onStack` mirrors stackArg's conditions
+(a struct or enum value, no destructor, no storage of its own - so no early-freeing region - not a task's argument, a
+result holding no reference). The second was honest: the reference local was given a new arena object every turn
+(`__olang_scope_alloc_a` in the frame's scope, growing with the loop). Lowering now gives such a local one stack slot of
+its own (`slotted`/`ownSlot`), written over at each value given storage for it, where `RefsKept.OwnSlot` shows the local
+is the slot's one name - no other local aliases it (a reference read out of a field, `x := u.data`, names the array,
+not the slot), nothing stores, captures, returns or writably lends it, read-only lends go to bodies keeping nothing - and
+the value is a struct of numbers, Bools and references to arrays (so no part can be lent but through the local, and no
+reference in it can name a generational instance). The value is made before the slot is written, so `u = u.Inner()`
+reads the old one first. To make keepsNoRef see through `View(v.data, ...)`, LocalUses gained `EscSelf` (an escape of
+the storage itself, not of a reference read out of a part) and `RefPart`; keepsNoRef uses them, so more temporaries
+get stack slots. Found: a reference local kept past its body (`s := mk(); return s` with a reference result) is placed
+where it is kept and allocates while G42 says not (`fn keptLocal(n I64, k Sh&) Sh& { s := Sh.Make(n); return s }`) - the
+facts follow no value local's placement (O28); left open, for the facts to read the scope pass's kept locals. Tests: tests/slotfacts.olang (facts and the runs).
+
+**Gap 17's text part.** Step 1 built: a fill of a value holding no storage (`Array<Vec<String>>(10)`: a constructor on its
+zero arguments whose body only declares fields given constants, zero bits or such parameters - `free.emptyValue`) makes
+no value of any place, and a call's value lent read-only to a call as a temporary (`v[i][0]`, `$v[3].Len()`) is no
+untracked copy (`readArg`) - its parts are never stored by the program but through another copy or store, each judged
+where it is. With them the strings' slot place is sole in checks' gaps.olang and in the Vec-of-text programs measured.
+Step 2, the release walk over the old buffer's live elements (built as a loop in lowering's releaseAt, a slot put back
+per element below the Vec's count), was built and taken out: under `-sanitize`, and by the evaluator, the release hit
+text whose slot belongs to a scope already closed. A Vec of text made in a callee (`mk(i)` building `w` with Push, whose
+slots are in the scope the result lands in - the loop turn's) and handed by value to `SetAt` keeps its strings' slots in
+that shorter scope: the buffer is settled into the element's region (region_settle), the slots are not. Putting such a
+slot back writes a free list of a scope part already reclaimed (gdb: the word before the payload was a later
+allocation's). So releasing text through ReleaseSlot is sound only where the slot was built in the place's own scope; a
+value moved into a longer-lived element breaks that. Closing it needs the value built where the element lives (a call
+whose by-value argument a callee stores into a place landing in the place's scope) or a settle that re-homes the slots,
+a walk at the store. Measured on the fixture of 20 strings per Vec (checks' gaps shape, with SetAt): 169 MB at 20,000
+turns before, 157 MB with step 1 alone (the place sole, nothing released). Left open, docs/freeing.md 2.2.

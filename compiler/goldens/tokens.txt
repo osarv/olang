@@ -2283,7 +2283,7 @@ aa9cd72468522acd 9410604d5599411a compiler/cabi.olang
 75b4a7ebeb624f5c 699a1be48dd42e60 compiler/diag.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 ef46370b593dedc1 be723f6cb4f85f47 compiler/doc.olang
-a2897d699a32d91c c371d68af7820b47 compiler/effects.olang
+3b51f01a2d9a18db cc284d9dd65816c3 compiler/effects.olang
 efa3142d8c25d420 596292eb9df2418f compiler/emit.olang
 1fa8167a8c8919a0 d797bbe79c5830ea compiler/eval.olang
 915265e3f3ca2672 180ec42a5f54b452 compiler/explain.olang
@@ -2291,14 +2291,14 @@ b22bae84a7b13033 a7b3445aa706aacd compiler/facts.olang
 f7a5602488f6fd96 249c46f72780db59 compiler/fetch.olang
 5d172768f0377792 efc0f61f7a1101bd compiler/fix.olang
 2398ff8ee8979fa0 9a1b7e18f968b6f7 compiler/fmt.olang
-b71879512939d7d4 d49982c4360adfa5 compiler/free.olang
+c10c7852bad2b395 f96a35234a0dedba compiler/free.olang
 b372bade41105b4d 2d511578a5f4e96d compiler/generic.olang
 71467cbad5fe0a3c 34cb3a6156bab7db compiler/interp.olang
 1e3d8b1123bd693c adee776fd62eb24f compiler/jupyter.olang
 b0231f57ee965ec6 86894f1336fb6e15 compiler/lineedit.olang
 05cc4dd238ce9baa bf43f5ab4690cb1a compiler/listing.olang
 9503f442e6813083 8513ec7edd10d5bb compiler/load.olang
-71d3d2785d030789 f8b5c853c77c0cc8 compiler/lower.olang
+a67c910169265679 072c2020c6d5ca96 compiler/lower.olang
 ee9859766b9d5817 ff6c9a764e7f3f1d compiler/lsp.olang
 bcee8f3442f5e28b f0af21ece4cd548e compiler/mcp.olang
 f33c5a9677cef2a9 5c55c2031264ec98 compiler/measure.olang
@@ -2359,7 +2359,7 @@ c33a998ee0a9a8ab ac54beb0bb87c852 compiler/tools/scopedump.olang
 e4503bc11d688442 797671334c042c15 compiler/tools/seed.olang
 de8f44f2efb8185b 3e81d521ca35f8aa compiler/tools/tokdiff.olang
 1b2522e00e51396d 29132bc2239a9dd2 compiler/tools/toolkit.olang
-f12b43adb7d28509 847a2d4cfc834e8a compiler/typed.olang
+11715a08bb365b5c 3bdc7fd31c2b8b3a compiler/typed.olang
 dd09d2f6b8939ebb 76c2d467366bc428 compiler/types.olang
 90f9cb09ca64ef52 085fb55d901192e5 compiler/unparse.olang
 0588cc1c800e97e3 edcc9ef4d7ca4fde compiler/views.olang
@@ -2549,6 +2549,7 @@ efdf92b36def4598 8327207635a8a02d tests/reclaimarrays.olang
 31a0e0424638e518 0fe9aacf9feb4817 tests/reflmod.olang
 835ba0f57f4caddd ffb7322c928edb6c tests/runner.olang
 afa025eb5f9ad889 b0b3f6d0cee2d623 tests/shared.olang
+839b2507e5dcf00d f5e9469516f95c16 tests/slotfacts.olang
 c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 0d4b3ba0fcda27dc f54bfde8d599baa6 tests/textplus.olang
 1a961672b4170514 c3b787bed0a72260 tests/textslot.olang

@@ -192,6 +192,17 @@ held is not. What freeing it needs, and what stands in the way:
   walk stops at the Vec's length - which is a Vec's, not an `Array<String>`'s, so the helper is per holder type.
 Cost when built: none per operation; a let-go of such an element walks its old live elements once.
 
+**2026-11-15, wt-freeing5: step 1 built, step 2 found blocked.** The fill exemption (`free.emptyValue`: a constructor on
+its zero arguments whose body only declares fields given constants, zero bits or such parameters makes no value of any
+place) and a temporary lent for reading being no untracked copy (`readArg`, `v[i][0]`) make the slot place sole in
+gaps.olang and its Vec-of-text variants. The walk (a loop in lowering's releaseAt putting back each slot below the Vec's
+count, then the buffer's part release) was built and removed: a Vec of text built in a callee and handed by value into
+an element (`v[i] = mk(i)` through `SetAt`) has its strings' slots in the scope the callee's result landed in (the loop
+turn's), while its buffer is settled into the element's region - a slot put back after that scope closed writes a
+reclaimed scope part's free list (`-sanitize` and the evaluator both stop there). Next: the value built where the
+element lives (the callee's result landing in the place's scope when the callee stores its by-value argument into a
+place), or a settle re-homing the slots; then the walk. Peak at 20,000 turns of 20 strings: 169 MB before, 157 MB now.
+
 ## PROGRESS
 
 - 2026-11-15: gaps 1-4 closed (`compiler/free.olang` ownLocalCand takes array locals; `compiler/lower.olang`

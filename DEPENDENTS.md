@@ -58,6 +58,9 @@ compared with their variance) and `checks/fixtures/apicaps`. **[checked]** by `m
 A kind of code G42 counts as a failing way (`typed.Fails`, `effects.olang`'s `coldBlock`/`coldExpr`) changes SPEC G42's
 paragraph on failing ways, `tests/factsfailing.olang` and the `noalloc` row of T21c; `Fact.Allocates` (every way, read by
 lowering's task scopes) and `Fact.Running` (G42's) must stay apart.
+A stack slot lowering gives a temporary or a reference local (`lower.olang` stackArg, slotted) is counted by G42 through
+the same judgement (`typed.olang` `RefsKept.None`/`OwnSlot`, `effects.olang` `onStack`/`ownSlot`): a change to one
+condition changes the other, SPEC G42's `Allocates` row and `tests/slotfacts.olang`.
 
 ## What folds while compiling
 

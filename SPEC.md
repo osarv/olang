@@ -10284,7 +10284,7 @@ none at its end, while one an error may leave with before the hand-on does):
 
 | fact | holds where it may |
 |---|---|
-| `Allocates` | ask the runtime for storage in any scope, its frame's included, on a way that runs on: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place - `Array<F32>(8)` held by value, but for a fill's own copies of what owns storage - does not count, nor does a failing way's, below) |
+| `Allocates` | ask the runtime for storage in any scope, its frame's included, on a way that runs on: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place - `Array<F32>(8)` held by value, but for a fill's own copies of what owns storage - does not count, nor does a temporary held in a stack slot of the frame - a struct's or an enum's value with no destructor and no storage of its own lent to a read-only reference parameter of a call that keeps nothing of it and hands back nothing holding a reference (`Sh.Make(n).Count()`), or a value given storage for a reference local that is the slot's one name, a struct of numbers, Bools and references to arrays (`u = u.Inner()`) - nor a failing way's, below) |
 | `Blocks` | wait: a join, a lock, a channel, a sleep, a C function not known to return at once |
 | `WritesGlobals` | store into a global's storage, or through a reference a global holds - itself, or by a callee lent it (`G.Push(x)`) |
 | `CallsC` | call an extern or a C import's function, C's math functions (X8) and the runtime's own aside |
