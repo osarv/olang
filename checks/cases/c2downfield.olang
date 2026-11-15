@@ -10,7 +10,7 @@ type W struct(s String&) {
 fn main() ? {
     w := W("a")
     {
-        x := $5 "abc"
+        x := $5 + "abc"
         w = W(x)
     }
     try io.PutLine(w.inner.t)

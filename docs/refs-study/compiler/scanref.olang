@@ -44,7 +44,7 @@ fn (g mut Gen&) pickVar(wantBool Bool) I64 {
 fn (g mut Gen&) leaf(wantBool Bool) {
     v := g.pickVar(wantBool)
     if v >= 0 and g.roll(3) > 0 {
-        g.out.Push("v" $v)
+        g.out.Push("v" + $v)
         return
     }
     if wantBool {
@@ -82,7 +82,7 @@ fn (g mut Gen&) stmt() {
     k := g.roll(10)
     if k < 5 {
         b := g.roll(4) == 0
-        g.out.Push("let v" $g.next " = ")
+        g.out.Push("let v" + $g.next + " = ")
         g.expr(3, b)
         g.vars.Push(GVar(g.next, b))
         g.next++

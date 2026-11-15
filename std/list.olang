@@ -635,14 +635,14 @@ fn (l List<T>&) Str() String {
     b := StringBuilder()
     match T {
         case Char { # an array of Char renders as text, so these are written here
-            b.Push($typeWritten(Array<List<Char>>(0)) "[")
+            b.Push($typeWritten(Array<List<Char>>(0)) + "[")
             for i, c in l {
                 if i > 0 { b.Push(", ") }
                 b.Push(charLiteral(c))
             }
         }
         case _ {
-            b.Push($typeWritten(Array<List<T>>(0)) "[")   # "list.List<T>" outside std/list
+            b.Push($typeWritten(Array<List<T>>(0)) + "[")   # "list.List<T>" outside std/list
             at I64 = 0
             for {
                 run := try l.RunFrom(at) catch Exhausted { break }
@@ -672,7 +672,7 @@ fn charLiteral(c Char) String {
     if c == '\0' { return "'\\0'" }
     if c == '\\' { return "'\\\\'" }
     if c == '\'' { return "'\\''" }
-    return "'" $c "'"
+    return "'" + $c + "'"
 }
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
@@ -1340,7 +1340,7 @@ if TestBuild {
             c := List.FromIter(l.Iter())
             c.Push(1000)
             l.Push(2000)
-            assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "From of " $n
+            assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "From of " + $n
             for i, x in c { s += x * (i + 1) }
         }
         return s
@@ -1355,7 +1355,7 @@ if TestBuild {
         for n in Array<I64>[0, 1, 7, 8, 9, 23, 24, 25, 100] {
             l := List<I64>.listUpTo(100)
             l.Truncate(n)
-            assert l.Len() == n, "Truncate(" $n ")"
+            assert l.Len() == n, "Truncate(" + $n + ")"
             ok := true
             for i, x in l {
                 if x != i { ok = false }
@@ -1432,19 +1432,19 @@ if TestBuild {
     # inside any other value - so text is quoted, a Char is a character literal, a List inside a List renders as a List
     fn listRendered() String {
         b := StringBuilder()
-        b.Push($List<I64>() " ")
-        b.Push($List<I64>.listUpTo(3) " ")
+        b.Push($List<I64>() + " ")
+        b.Push($List<I64>.listUpTo(3) + " ")
         t := List<String&>()
         t.Push("a\"b")
         t.Push("")
-        b.Push($t " ")
+        b.Push($t + " ")
         c := List<Char>()
         for x in "x\n'" { c.Push(x) }
-        b.Push($c " ")
+        b.Push($c + " ")
         n := List<List<I64>>()
         n.Push(List<I64>.listUpTo(2))
         n.Push(List<I64>())
-        b.Push($n " ")
+        b.Push($n + " ")
         p := List<pair.Pair<String&, F64>>()
         p.Push(pair.Pair<String&, F64>("k", 0.5))
         b.Push($p)
@@ -1454,7 +1454,7 @@ if TestBuild {
 
     test "$ renders a List's elements, not its storage" {
         r := listRendered()
-        assert r == ("List<I64>[] List<I64>[0, 1, 2] List<String&>[\"a\\\"b\", \"\"] List<Char>['x', '\\n', '\\''] "
+        assert r == ("List<I64>[] List<I64>[0, 1, 2] List<String&>[\"a\\\"b\", \"\"] List<Char>['x', '\\n', '\\''] " +
             "List<List<I64>>[List<I64>[0, 1], List<I64>[]] List<pair.Pair<String&, F64>>[pair.Pair(\"k\", 0.5)]")
         assert listRenderedBaked == r # the evaluator renders as the run time does
         long := List<I64>.listUpTo(1000)        # many chunks: their spare slots are never shown
@@ -1523,7 +1523,7 @@ if TestBuild {
         c := try l.TakeAt(20) catch default "" # the elements after 20 move down, across chunks
         assert l[0] == "38" and l[7] == "in" and l[8] == "7" and l[20] == "20" and l[37] == "37" and l.Len() == 38
         l.Truncate(30)
-        for i in range 5 { l.Push("t" $i) }
+        for i in range 5 { l.Push("t" + $i) }
         assert l[29] == "29" and l[30] == "t0" and l[34] == "t4"
         n := l.Len()
         l.Clear()

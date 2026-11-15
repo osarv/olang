@@ -46,7 +46,7 @@ type badge struct(label String) {
     label
 }
 
-fn (b badge&) Display() Display { return Display.Html($"<b>" $b.label "</b>") }
+fn (b badge&) Display() Display { return Display.Html($"<b>" + $b.label + "</b>") }
 
 fn mimeOf<T>(v T) String {
     return match T {

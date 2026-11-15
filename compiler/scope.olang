@@ -744,7 +744,7 @@ fn (s mut Scoper&) Run() {
     t0 := time.Now()
     s.components()
     s.sizeComponents()
-    s.Times.Push($"graph " $((time.Now() - t0) / 1000000))
+    s.Times.Push($"graph " + $((time.Now() - t0) / 1000000))
     s.diskRec = (s.DiskOn or s.DiskWrite) and not s.ReuseCheck
     if not s.diskRec { s.DiskOn = false }
     for _ in range s.Bodies.Len() {
@@ -772,7 +772,7 @@ fn (s mut Scoper&) Run() {
     }
     s.anyTables()
     s.exports()
-    s.Times.Push($"after " $((time.Now() - t1) / 1000000))
+    s.Times.Push($"after " + $((time.Now() - t1) / 1000000))
 }
 
 # every body judged, a component at a time, callees first - its errors said where report holds. In a later round of the
@@ -781,7 +781,7 @@ fn (s mut Scoper&) Run() {
 fn (s mut Scoper&) judgeAll(report Bool) {
     t0 := time.Now()
     defer {
-        s.Times.Push($"round " $((time.Now() - t0) / 1000000) " (fresh " $s.freshN " of them recordable " $s.freshRec ", judging " $(s.judgeNs / 1000000) ", finding " $(s.findNs / 1000000) ", taking " $(s.takeNs / 1000000) ")")
+        s.Times.Push($"round " + $((time.Now() - t0) / 1000000) + " (fresh " + $s.freshN + " of them recordable " + $s.freshRec + ", judging " + $(s.judgeNs / 1000000) + ", finding " + $(s.findNs / 1000000) + ", taking " + $(s.takeNs / 1000000) + ")")
         s.freshN = 0
         s.freshRec = 0
         s.judgeNs = 0
@@ -843,7 +843,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
             continue
         }
         s.dropLifts(comp)
-        if s.Trace { s.TraceLog.Push($"rejudged " $k " size " $comp.Len() " first " $comp[0] " " $s.Bodies[comp[0]].Of " sites " $s.Bodies[comp[0]].Sites.Len() " why " $s.whyNot(k)) }
+        if s.Trace { s.TraceLog.Push($"rejudged " + $k + " size " + $comp.Len() + " first " + $comp[0] + " " + $s.Bodies[comp[0]].Of + " sites " + $s.Bodies[comp[0]].Sites.Len() + " why " + $s.whyNot(k)) }
         made := s.judgeOrTake(comp, report)
         if made == null: return
         hist := s.runs.RefMut(k)
@@ -943,10 +943,10 @@ fn (s mut Scoper&) recordReads(run mut compRun&, comp Array<I64>&, mine Map<I64,
     for x in absent.Keys() { run.ReadTexts.Push(x) }
     run.ReadTexts.Sort(fn(a String&, b String&) Bool { return a < b })
     if s.Debug != "" and run.Sig.Contains(s.Debug) {
-        s.TraceLog.Push($"DEBUG judging " $run.Sig " ctx " $run.Ctx " keys " $s.keysOf(comp) " global " $s.globalText())
-        for x in seen.Keys() { s.TraceLog.Push($"DEBUG read " $s.readText(x)) }
-        for m in s.marksOf(run) { s.TraceLog.Push($"DEBUG mark " $m) }
-        s.TraceLog.Push($"DEBUG sum " $(try s.sumText(comp[0]) catch typed.Unwritable default "?"))
+        s.TraceLog.Push($"DEBUG judging " + $run.Sig + " ctx " + $run.Ctx + " keys " + $s.keysOf(comp) + " global " + $s.globalText())
+        for x in seen.Keys() { s.TraceLog.Push($"DEBUG read " + $s.readText(x)) }
+        for m in s.marksOf(run) { s.TraceLog.Push($"DEBUG mark " + $m) }
+        s.TraceLog.Push($"DEBUG sum " + $(try s.sumText(comp[0]) catch typed.Unwritable default "?"))
     }
     for b in comp {
         h := try s.hiddenText(b) catch typed.Unwritable { return }
@@ -992,7 +992,7 @@ fn (s mut Scoper&) judgeOrTake(comp Array<I64>&, report Bool) mut compRun?& {
     } else {
         b := comp[0]
         f := s.Bodies[b].File
-        s.why($"f-" $("unnamed" if s.NameOf(b) == "" else "root" if not s.Keyed.Has(f) else "types" if s.filesOf(b)[0] < 0 else "args"))
+        s.why($"f-" + $("unnamed" if s.NameOf(b) == "" else "root" if not s.Keyed.Has(f) else "types" if s.filesOf(b)[0] < 0 else "args"))
     }
     if s.Restart: return null
     return run
@@ -1036,10 +1036,10 @@ fn (s mut Scoper&) whyNot(k I64) String {
     run := hist[hist.Len() - 1]
     if run.WantHits > 0 and not s.fieldGather { return "hits" }
     for m in run.Marks {
-        if s.fieldMarkOf(m.Ctor, m.Field) != m.Mark { return $"mark " $m.Ctor "." $m.Field " " $s.Bodies[m.Ctor].Of }
+        if s.fieldMarkOf(m.Ctor, m.Field) != m.Mark { return $"mark " + $m.Ctor + "." + $m.Field + " " + $s.Bodies[m.Ctor].Of }
     }
     for r in run.Read {
-        if not sameSummary(s.sum(r.Body), r.Sum) { return $"sum " $r.Body " " $s.Bodies[r.Body].Of " " $summaryDiff(s.sum(r.Body), r.Sum) }
+        if not sameSummary(s.sum(r.Body), r.Sum) { return $"sum " + $r.Body + " " + $s.Bodies[r.Body].Of + " " + $summaryDiff(s.sum(r.Body), r.Sum) }
     }
     return "?"
 }
@@ -1123,8 +1123,8 @@ fn (s mut Scoper&) checkReuse(k I64, comp Array<I64>&, old compRun&, now compRun
     if not now.Diags.Same(old.Diags) { what.Push(" diagnostics") }
     if now.WantHits != old.WantHits { what.Push(" refusals") }
     for i in range comp.Len() {
-        if not sameSummary(now.Sums[i], old.Sums[i]) { what.Push($" summary of " $comp[i] ": " $summaryDiff(now.Sums[i], old.Sums[i])) }
-        if not (now.Plans[i] == old.Plans[i]) { what.Push($" plan of " $comp[i]) }
+        if not sameSummary(now.Sums[i], old.Sums[i]) { what.Push($" summary of " + $comp[i] + ": " + $summaryDiff(now.Sums[i], old.Sums[i])) }
+        if not (now.Plans[i] == old.Plans[i]) { what.Push($" plan of " + $comp[i]) }
     }
     if what.Len() == 0 {
         s.P.L.Diags.Forget(s.P.L.Diags.Count() - now.Diags.Count())
@@ -1132,8 +1132,8 @@ fn (s mut Scoper&) checkReuse(k I64, comp Array<I64>&, old compRun&, now compRun
         s.wantHits -= now.WantHits
         return
     }
-    for b in comp { what.Push($" " $b "@" $s.Bodies[b].File ":" $s.Bodies[b].Sp.Start " " $s.Bodies[b].Of) }
-    assert false, "OLANG_SCOPECHECK: component " $k " taken again but judged differently -" $what.ToString()
+    for b in comp { what.Push($" " + $b + "@" + $s.Bodies[b].File + ":" + $s.Bodies[b].Sp.Start + " " + $s.Bodies[b].Of) }
+    assert false, "OLANG_SCOPECHECK: component " + $k + " taken again but judged differently -" + $what.ToString()
 }
 
 # X12: an export fn is called by C, which no obligation of its body can be held to (O10b) - it requires nothing of its
@@ -1259,14 +1259,14 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
         if s.isRef(t) { t = s.P.T.Referent(t) }
         t = s.P.T.Plain(t)
         name := s.P.L.Names.Text(s.P.T.DeclName(s.P.T.DeclOf(t))) if s.P.T.KindOf(t) == types.Kind.Named else ""
-        s.err(at, msgs.ValueBeyondType($name "'s Call", does, pl, word) if word != "" else msgs.CallValueObligations(name, pl))
+        s.err(at, msgs.ValueBeyondType($name + "'s Call", does, pl, word) if word != "" else msgs.CallValueObligations(name, pl))
         return
     }
     match body.Of {
         case typed.BodyOf.Fn(inst) {
             name := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
             at, name = s.namedAt(u, b, at, name)
-            s.err(at, msgs.ValueBeyondType($"'" $name "'", does, pl, word) if word != "" else msgs.FuncValueObligations(name, pl))
+            s.err(at, msgs.ValueBeyondType($"'" + $name + "'", does, pl, word) if word != "" else msgs.FuncValueObligations(name, pl))
         }
         case _ {
             kept := s.keptParam(body, s.sum(b).Rels)
@@ -1310,13 +1310,13 @@ fn (s mut Scoper&) wordFor(b I64, adapter Bool, fty types.TypeId, k I64) String,
     h := s.posName(fty, body, adapter, hi)
     hb := s.bodyParamName(body, adapter, hi)
     if hb == "" { hb = h }
-    if lo == PosResult { return $"borrows " $h, $"gives back what '" $hb "' refers to" }
-    if lo == PosHome { return $"keeps " $h, $"keeps '" $hb "' in " $("its instance" if adapter else "what it captured") }
-    if lo < PosDerived { return $"keeps " $h " in " $s.posName(fty, body, adapter, lo), $"keeps '" $hb "' in '" $s.bodyParamName(body, adapter, lo) "'" }
+    if lo == PosResult { return $"borrows " + $h, $"gives back what '" + $hb + "' refers to" }
+    if lo == PosHome { return $"keeps " + $h, $"keeps '" + $hb + "' in " + $("its instance" if adapter else "what it captured") }
+    if lo < PosDerived { return $"keeps " + $h + " in " + $s.posName(fty, body, adapter, lo), $"keeps '" + $hb + "' in '" + $s.bodyParamName(body, adapter, lo) + "'" }
     a := (lo - PosDerived) / 65536
     f := s.derivedField(fty, a, (lo - PosDerived) % 65536)
     if f == "" { return "", "" }
-    return $"keeps " $h " in " $s.posName(fty, body, adapter, a) "." $f, $"keeps '" $hb "' in '" $s.bodyParamName(body, adapter, a) "." $f "'"
+    return $"keeps " + $h + " in " + $s.posName(fty, body, adapter, a) + "." + $f, $"keeps '" + $hb + "' in '" + $s.bodyParamName(body, adapter, a) + "." + $f + "'"
 }
 
 # T30c: obligation k of an 'any' table's slot b (its receiver the method's home) as what it does where it keeps a
@@ -1334,7 +1334,7 @@ fn (s mut Scoper&) homeFieldDoes(b I64, fty types.TypeId, k I64) String {
     }
     f := s.derivedField(body.Ty, 0, w) if w >= 0 else ""
     if f == "" { return "" }
-    return $"keeps '" $s.posName(fty, body, true, hi) "' in what the instance's '" $f "' refers to"
+    return $"keeps '" + $s.posName(fty, body, true, hi) + "' in what the instance's '" + $f + "' refers to"
 }
 
 # parameter i of function type fty by the name it was written with, else by body's own parameter's
@@ -1346,7 +1346,7 @@ fn (s mut Scoper&) posName(fty types.TypeId, body typed.Body&, adapter Bool, i I
 
 fn (s mut Scoper&) bodyParamName(body typed.Body&, adapter Bool, i I64) String {
     j := i + 1 if adapter else i
-    return s.P.L.Names.Text(body.Locals[I64(body.Params[j])].Name) if j < body.Params.Len() else $"#" $(i + 1)
+    return s.P.L.Names.Text(body.Locals[I64(body.Params[j])].Name) if j < body.Params.Len() else $"#" + $(i + 1)
 }
 
 # the field of parameter a's type (fty's) whose own binding is its constructor's variable w (O23a), "" for none
@@ -1374,7 +1374,7 @@ fn (s Scoper&) GivesHeld(b I64) String {
     g := try s.gives.Get(b) catch default -1
     if g < 0 { return "" }
     return match s.Bodies[g].Of {
-        case typed.BodyOf.Fn(inst): $"'" $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) "'"
+        case typed.BodyOf.Fn(inst): $"'" + $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) + "'"
         case _: "a lambda"
     }
 }
@@ -1783,8 +1783,8 @@ fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
         if i >= ps.Len() or i >= body.Params.Len() or i >= 62: break
         if not s.isFunc(ps[i]) or not s.followable(c.Args[i], ps[i]): continue
         rs := sortedRecs(s.keyRecs(c.Args[i]).Recs)
-        key.Push($" " $i ":")
-        for r in rs { key.Push($r.Body $("a" if r.Adapter else "") ",") }
+        key.Push($" " + $i + ":")
+        for r in rs { key.Push($r.Body + $("a" if r.Adapter else "") + ",") }
         seeds.Put(I64(body.Params[i]), s.seedOf(rs, i))
         mask |= 1 << i
     }
@@ -1798,8 +1798,8 @@ fn (s mut Scoper&) twinFor(c typed.Call&, b I64, sp source.Span) I64 {
         items Vec<followItem>
         s.followItems(n, "", 0, items)
         if not s.instFollowable(items): continue
-        key.Push($" " $i "i:")
-        for it in items { key.Push($it.Path ":" $it.Key.Body $("a" if it.Key.Adapter else "") ",") }
+        key.Push($" " + $i + "i:")
+        for it in items { key.Push($it.Path + ":" + $it.Key.Body + $("a" if it.Key.Adapter else "") + ",") }
         iseeds.Put(I64(body.Params[i]), s.seedInstOf(n, i, items))
         s.instFollow.Put(pair.Pair<I64, I64>(I64(c.Site), i), items)
         mask |= 1 << i
@@ -2203,8 +2203,8 @@ fn (s Scoper&) TwinCount() I64 { return s.Twins.Body.Len() }
 fn (s Scoper&) TwinStats() String {
     own := s.Twins.Own.View().Count(fn(o): return o)
     keys := StringBuilder()
-    for k in s.Twins.Key { keys.Push($" [" $k "]") }
-    return $"twins " $s.Twins.Body.Len() ", with code of their own " $own ", captures followed " $s.capSeeds.Len() $keys.ToString()
+    for k in s.Twins.Key { keys.Push($" [" + $k + "]") }
+    return $"twins " + $s.Twins.Body.Len() + ", with code of their own " + $own + ", captures followed " + $s.capSeeds.Len() + $keys.ToString()
 }
 
 fn (s Scoper&) TwinBody(t I64) I64 { return s.Twins.Body[t] }
@@ -2226,12 +2226,12 @@ fn (s mut Scoper&) TwinStable(t I64) String {
     for k in range 1, segs.Len() {
         colon := try segs[k].Find(":") catch default -1
         if colon < 1 or segs[k][:colon].EndsWith("i"): return ""
-        out.Push($"\t" $segs[k][:colon + 1])
+        out.Push($"\t" + $segs[k][:colon + 1])
         for id in segs[k][colon + 1:].Split(",") {
             if id.Len() == 0: continue
             n := try (id[:id.Len() - 1] if id.EndsWith("a") else id).ParseInt(10) catch default -1
             if n < 0 or n >= s.Bodies.Len() or s.NameOf(n) == "": return ""
-            out.Push($s.NameOf(n) $("a" if id.EndsWith("a") else "") ",")
+            out.Push($s.NameOf(n) + $("a" if id.EndsWith("a") else "") + ",")
         }
     }
     return out.ToString()
@@ -2250,7 +2250,7 @@ fn (s Scoper&) TwinWords(t I64) String {
         if i < 0 or i >= body.Params.Len() { continue }
         who := $s.P.L.Names.Text(body.Locals[I64(body.Params[i])].Name)
         if inst {
-            out.Push($who " = an instance")
+            out.Push($who + " = an instance")
             continue
         }
         fns Vec<String&>
@@ -2259,14 +2259,14 @@ fn (s Scoper&) TwinWords(t I64) String {
             n := try (id[:id.Len() - 1] if id.EndsWith("a") else id).ParseInt(10) catch default -1
             if n >= 0 and n < s.Bodies.Len() { fns.Push(s.bodyWho(s.Bodies[n])) }
         }
-        out.Push($who " = " $fns.Join(", "))
+        out.Push($who + " = " + $fns.Join(", "))
     }
     return out.Join(", ")
 }
 
 fn (s Scoper&) bodyWho(b typed.Body&) String {
     return match b.Of {
-        case typed.BodyOf.Fn(inst): $"'" $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) "'"
+        case typed.BodyOf.Fn(inst): $"'" + $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) + "'"
         case _: "a lambda"
     }
 }
@@ -2542,7 +2542,7 @@ fn (s mut Scoper&) importInst(from instTree&, n I64, c typed.Call&, beta Array<T
 fn (s mut Scoper&) followItems(n I64, path String&, depth I64, out mut Vec<followItem>&) {
     nd := s.itree.Nodes[n]
     for i in range nd.Fields.Len() {
-        p := $path "." $i
+        p := $path + "." + $i
         if nd.Fields[i].Full and nd.Fields[i].Recs.Len() > 0 {
             ft := s.P.T.Items(s.P.T.Fields(nd.Ty))[i]
             for r in sortedRecs(nd.Fields[i].Recs) { out.Push(followItem(p, r, nd.Fields[i], ft)) }
@@ -3387,7 +3387,7 @@ fn (s mut Scoper&) anyTables() {
             sl := slots[k % slots.Len()]
             if s.valueOK(b, false, sl.Sig) { continue }
             at := diag.Where.Span(tab.File, I64(tab.Sp.Start), I64(tab.Sp.End))
-            name := $"'" $s.P.L.Names.Text(sl.Name) "'"
+            name := $"'" + $s.P.L.Names.Text(sl.Name) + "'"
             ty := s.spell(tab.Concrete)
             tr := s.spell(tab.Trait)
             # (the word as the trait writes it: its receiver the method's home, as an adapter's is)
@@ -8004,7 +8004,7 @@ fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
     s.origin[l] = r if ok else -2
     if s.Trace and not ok {
         shape := $unPassed(s.unAway(x))
-        s.TraceLog.Push($"origin none " $r " " $(shape[:120] if shape.Len() > 120 else shape) " | " $s.traceAt(x.Span().Start))
+        s.TraceLog.Push($"origin none " + $r + " " + $(shape[:120] if shape.Len() > 120 else shape) + " | " + $s.traceAt(x.Span().Start))
     }
 }
 
@@ -8533,13 +8533,13 @@ fn (s mut Scoper&) verEnd() {
         for a in now {
             if s.atomIn(a, s.lateFrom[i], s.lateTo[i]) { continue }
             s.verGrew = true
-            if s.Trace { s.TraceLog.Push($"version " $d " came to " $s.defNow[d] " | " $s.traceAt(s.vers!.DefSp[d].Start)) }
+            if s.Trace { s.TraceLog.Push($"version " + $d + " came to " + $s.defNow[d] + " | " + $s.traceAt(s.vers!.DefSp[d].Start)) }
         }
         # (and valid where the read stood, which it was judged for with what was known then)
         m := s.lateMeet[i]
         if m >= typed.BlockId(0) and not s.openAt(s.defNow[d], m) {
             s.verGrew = true
-            if s.Trace { s.TraceLog.Push($"version " $d " not valid at " $m " | " $s.traceAt(s.vers!.DefSp[d].Start)) }
+            if s.Trace { s.TraceLog.Push($"version " + $d + " not valid at " + $m + " | " + $s.traceAt(s.vers!.DefSp[d].Start)) }
         }
     }
     union := s.verUnion.Has(s.Id)
@@ -8761,7 +8761,7 @@ fn (s mut Scoper&) proposeDef(d I64, t Term) {
             s.defLifts.Put(key, nt)
             s.liftGrew = true
             s.realGrew = true
-            if s.Trace { s.TraceLog.Push($"lift version " $d " to " $nt " | " $s.traceAt(v.DefSp[d].Start)) }
+            if s.Trace { s.TraceLog.Push($"lift version " + $d + " to " + $nt + " | " + $s.traceAt(v.DefSp[d].Start)) }
         }
     }
     saved := s.reachCtx
@@ -11196,12 +11196,12 @@ fn (s mut Scoper&) typeBeyond(have types.TypeId, want types.TypeId) String {
 fn (s mut Scoper&) edgeWord(f types.TypeId, hi I64, lo I64) String {
     if hi < 0 or hi >= PosDerived { return "keeps" }
     h := s.P.T.ParamName(f, hi)
-    if lo == PosResult { return $"borrows " $h }
-    if lo == PosHome { return $"keeps " $h }
+    if lo == PosResult { return $"borrows " + $h }
+    if lo == PosHome { return $"keeps " + $h }
     if lo < PosDerived { return s.P.T.KeepsText(f, hi, lo, 0) }
     a := (lo - PosDerived) / 65536
     fd := s.derivedField(f, a, (lo - PosDerived) % 65536)
-    return $s.P.T.KeepsText(f, hi, a, 0) "." $fd
+    return $s.P.T.KeepsText(f, hi, a, 0) + "." + $fd
 }
 
 # a type as source writes it, for a message
@@ -11525,13 +11525,13 @@ fn (s mut Scoper&) tailRows(c typed.Call&, sp source.Span) {
         l := s.takenLocal(a)
         name := ""
         if l >= 0 and s.isParam(l) and s.copied.Has(l) {
-            name = $"'" $s.P.L.Names.Text(b.Locals[l].Name) "' (its own copy)"
+            name = $"'" + $s.P.L.Names.Text(b.Locals[l].Name) + "' (its own copy)"
         } else if s.claimRoot(a) < 0 and s.madeAt(a) {
             name = "a temporary"
         }
         if name == "": continue
         at := s.nameSpan(sp)
-        text := $name " is built in " $scope ", a new one each time it is made, for the become here, kept until its chain's first caller lets go of the result"
+        text := $name + " is built in " + $scope + ", a new one each time it is made, for the become here, kept until its chain's first caller lets go of the result"
         p := Placement(b.File, I64(at.Start), I64(at.End), I64(a.Span().Start), text)
         p.Tail = true
         s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(a.Span().Start)), p)
@@ -11541,7 +11541,7 @@ fn (s mut Scoper&) tailRows(c typed.Call&, sp source.Span) {
 # -memory's row (B18) for a value with a destructor built in the tail scope at sp, for a become closing its block
 fn (s mut Scoper&) tailDtorRow(sp source.Span) {
     if not s.report: return
-    text := $"a temporary is built in " $s.placedScope(s.Id, Term.Var(s.resultVar)) ", a new one each time it is made, for a become closing its block, kept until the chain's first caller lets go of the result - its destructor runs as that scope closes, not at the end of its block"
+    text := $"a temporary is built in " + $s.placedScope(s.Id, Term.Var(s.resultVar)) + ", a new one each time it is made, for a become closing its block, kept until the chain's first caller lets go of the result - its destructor runs as that scope closes, not at the end of its block"
     p := Placement(s.B!.File, I64(sp.Start), I64(sp.End), I64(sp.Start), text)
     p.Tail = true
     s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(sp.Start)), p)
@@ -11705,7 +11705,7 @@ fn (s mut Scoper&) liftStorage(l I64, t Term) {
     s.liftStor.Put(key, true)
     s.liftGrew = true
     s.realGrew = true
-    if s.Trace { s.TraceLog.Push($"lift split " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $nt " | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+    if s.Trace { s.TraceLog.Push($"lift split " + $s.P.L.Names.Text(s.B!.Locals[l].Name) + " to " + $nt + " | " + $s.traceAt(s.B!.Locals[l].Sp.Start)) }
 }
 
 # the place a borrow reads, read as a value
@@ -12452,7 +12452,7 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
         }
     }
     writable := (s.P.T.PermOf(ty) & types.Writable) != 0 if s.isRef(ty) else true
-    full := $("mut " if writable and not s.isFunc(shown) else "") $s.Spell!(shown)
+    full := $("mut " if writable and not s.isFunc(shown) else "") + $s.Spell!(shown)
     s.note(rec, s.B!.File, at, msgs.NoteDeclareWhere(name, wname, full))
 }
 
@@ -12982,7 +12982,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     # local's that the value outlives, a longer claim for that local
     if (k == FailsBlock or k == FailsUnknown) { s.wantPromotion(x) }
     if s.liftGather and k == FailsBlock {
-        if s.Trace { s.TraceLog.Push($"fails root " $s.wholeRoot(x) " kind " $kind " | " $s.traceAt(x.Span().Start)) }
+        if s.Trace { s.TraceLog.Push($"fails root " + $s.wholeRoot(x) + " kind " + $kind + " | " + $s.traceAt(x.Span().Start)) }
         s.propose(x, slot)
     }
     if s.liftGather and k == Holds and exact and t != slot and s.order(slot, t) == FailsBlock {
@@ -13008,7 +13008,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         }
     }
     if k == Holds { return }
-    if s.Trace and s.report and k != Obliged { s.TraceLog.Push($"fit fails " $t " into " $slot " exact " $exact " kind " $kind " | " $s.traceAt(x.Span().Start)) }
+    if s.Trace and s.report and k != Obliged { s.TraceLog.Push($"fit fails " + $t + " into " + $slot + " exact " + $exact + " kind " + $kind + " | " + $s.traceAt(x.Span().Start)) }
     # (a global holds what lives as long as the program: what lives where a scope variable says is the callers'
     # obligation that it live in the program's scope - built there where they build it, refusals question 1)
     if k == Obliged {
@@ -13072,7 +13072,7 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     # O27: a view of storage kept where the storage does not live
     if s.viewKept(x, s.fitSp if s.fitAt else s.opTok(x), kind == FitReturn or kind == FitOwn) { return }
     if s.partKept(x, s.fitSp if s.fitAt else s.opTok(x)) { return }
-    if s.Trace { s.TraceLog.Push($"fit error kind " $kind " slot " $s.fitSlot " exact " $exact " narrow " $s.fitNarrow " | " $s.traceAt(x.Span().Start)) }
+    if s.Trace { s.TraceLog.Push($"fit error kind " + $kind + " slot " + $s.fitSlot + " exact " + $exact + " narrow " + $s.fitNarrow + " | " + $s.traceAt(x.Span().Start)) }
     # a reference or a function value returned that lives in this function's own scope (O10d); a value referring to it,
     # O26's
     if kind == FitReturn and (s.isRef(x.Type()) or s.isFunc(x.Type())) and not s.capsDiffer(x) { kind = FitOwn }
@@ -13104,7 +13104,7 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         l := s.argLocal(unPassed(x))
         if l >= 0 and s.B!.Locals[l].Kind == typed.LocalKind.Param and not s.isRef(s.B!.Locals[l].Ty) and s.Spell != null {
             name := s.P.L.Names.Text(s.B!.Locals[l].Name)
-            s.note(rec, s.B!.File, s.wordAt(s.B!.Locals[l].Sp, name), msgs.NoteParamCopy(name, $name " " $s.Spell!(s.B!.Locals[l].Ty) "&"))
+            s.note(rec, s.B!.File, s.wordAt(s.B!.Locals[l].Sp, name), msgs.NoteParamCopy(name, $name + " " + $s.Spell!(s.B!.Locals[l].Ty) + "&"))
         }
     }
     # T17c: the payload's storage is to be made where the value is kept - a parameter's (B11)
@@ -13163,7 +13163,7 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
     } else if (kind == FitOwn or kind == FitReturn) and s.inRet and s.genElemTerm() != Term.None {
         # D18c: a yield where the generator's elements live elsewhere than this value can be shown to
         where := "where the generator does"
-        if not s.B!.GenHome: where = "with what '" $s.P.L.Names.Text(s.B!.Locals[I64(s.B!.GenElem)].Name) "' refers to"
+        if not s.B!.GenHome: where = "with what '" + $s.P.L.Names.Text(s.B!.Locals[I64(s.B!.GenElem)].Name) + "' refers to"
         m = msgs.GenYieldShorter(where)
     } else if kind == FitOwn {
         m = msgs.OwnCannotOutlive()
@@ -13733,7 +13733,7 @@ fn (s mut Scoper&) proposeSite(site I64, t Term) {
     s.liftGrew = true
     s.realGrew = true
     if s.viewKind != 0 { s.placed.Put(pair.Pair<I64, I64>(s.Id, -1 - site), placedRow(s.viewAt, s.viewKind)) }
-    if s.Trace { s.TraceLog.Push($"lift site " $site " to " $nt " | " $s.traceAt(s.B!.Sites[site].Sp.Start)) }
+    if s.Trace { s.TraceLog.Push($"lift site " + $site + " to " + $nt + " | " + $s.traceAt(s.B!.Sites[site].Sp.Start)) }
 }
 
 # where the inference lands the call at site, None for where its obligations or where it stands put it
@@ -13853,14 +13853,14 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
         if not s.partsOn { s.partNow = true }
         if s.partsOn and not s.viewPhase { s.viewWanted = true }
         if not s.partsOn or not s.viewPhase {
-            if s.Trace { s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " for a part kept | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+            if s.Trace { s.TraceLog.Push($"no lift " + $s.P.L.Names.Text(s.B!.Locals[l].Name) + " for a part kept | " + $s.traceAt(s.B!.Locals[l].Sp.Start)) }
             return
         }
         s.viewing(PlacePart, s.propAt)
     }
     if l < 0 or l >= s.origin.Len() or s.origin[l] == -2 or not s.liftable(l) or not t.Runs() {
         if s.Trace and l >= 0 and l < s.origin.Len() {
-            s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $t " (origin " $s.origin[l] ") | " $s.traceAt(s.B!.Locals[l].Sp.Start))
+            s.TraceLog.Push($"no lift " + $s.P.L.Names.Text(s.B!.Locals[l].Name) + " to " + $t + " (origin " + $s.origin[l] + ") | " + $s.traceAt(s.B!.Locals[l].Sp.Start))
         }
         return
     }
@@ -13888,7 +13888,7 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     s.realGrew = true
     if s.Trace {
         loc := s.B!.Locals[l]
-        s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " to " $nt $(" with its storage" if stor else "") $(" for a part kept" if s.partFlow else "") " | " $s.traceAt(loc.Sp.Start))
+        s.TraceLog.Push($"lift " + $s.P.L.Names.Text(loc.Name) + " to " + $nt + $(" with its storage" if stor else "") + $(" for a part kept" if s.partFlow else "") + " | " + $s.traceAt(loc.Sp.Start))
     }
 }
 
@@ -13905,7 +13905,7 @@ fn (s mut Scoper&) liftParam(l I64, t Term, stor Bool) Bool {
     s.ownLifts.Put(key, nt)
     s.liftGrew = true
     s.realGrew = true
-    if s.Trace { s.TraceLog.Push($"lift param " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $nt " | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+    if s.Trace { s.TraceLog.Push($"lift param " + $s.P.L.Names.Text(s.B!.Locals[l].Name) + " to " + $nt + " | " + $s.traceAt(s.B!.Locals[l].Sp.Start)) }
     return true
 }
 
@@ -13922,7 +13922,7 @@ fn (s mut Scoper&) liftBinding(l I64, t Term, stor Bool) Bool {
     s.ownLifts.Put(key, nt)
     s.liftGrew = true
     s.realGrew = true
-    if s.Trace { s.TraceLog.Push($"lift binding " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $nt " | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+    if s.Trace { s.TraceLog.Push($"lift binding " + $s.P.L.Names.Text(s.B!.Locals[l].Name) + " to " + $nt + " | " + $s.traceAt(s.B!.Locals[l].Sp.Start)) }
     return true
 }
 
@@ -14032,7 +14032,7 @@ fn (s mut Scoper&) traceAt(at I32) String {
     for k in range start {
         if text[k] == '\n' { line++ }
     }
-    return $"line " $line ": " $text[start:end].Trim()
+    return $"line " + $line + ": " + $text[start:end].Trim()
 }
 
 # ---- the field inference (2.6) ----
@@ -14127,7 +14127,7 @@ fn (s mut Scoper&) promoteDecl(d I64) Bool {
             if s.builtField(body, f) { continue }
             q := s.bindingParam(body, f)
             if q < 0 {
-                note := $"field " $i " of " $s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(d)))) ": no constructor parameter to bind to"
+                note := $"field " + $i + " of " + $s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(d)))) + ": no constructor parameter to bind to"
                 if not s.Unplaced.Has(note) { s.Unplaced.Push(note) }
                 continue
             }
@@ -14310,7 +14310,7 @@ fn (s mut Scoper&) placeDecl(p typed.Lvalue&) I64 {
 
 # what the inference found, for OLANG_SCOPESTATS: the locals it lifted, their storage too, and the W's (2.4)
 fn (s Scoper&) InferStats() String {
-    return $"inferred: " $s.lifts.Len() " locals lifted (" $s.partLifts.Len() " for a part of them kept), " $s.liftStor.Len() " with their storage, " $s.siteLifts.Len() " calls landed, " $s.wLocals.Len() " needing a W, " $(s.promotedF.Len() - s.demotedF.Len()) " fields promoted (" $s.demotedF.Len() " given back), " $s.ViewPhases " second phases for views"
+    return $"inferred: " + $s.lifts.Len() + " locals lifted (" + $s.partLifts.Len() + " for a part of them kept), " + $s.liftStor.Len() + " with their storage, " + $s.siteLifts.Len() + " calls landed, " + $s.wLocals.Len() + " needing a W, " + $(s.promotedF.Len() - s.demotedF.Len()) + " fields promoted (" + $s.demotedF.Len() + " given back), " + $s.ViewPhases + " second phases for views"
 }
 
 # what folding (2.9, not built in round 1) could reach, for OLANG_SCOPESTATS: the plain blocks - a "{ }", a branch, an
@@ -14333,7 +14333,7 @@ fn (s mut Scoper&) FoldStats() String {
             }
         }
     }
-    return $"blocks built into: " $built ", of them plain (what folding could reach): " $reach
+    return $"blocks built into: " + $built + ", of them plain (what folding could reach): " + $reach
 }
 
 # the fields the field inference promoted, "Declaration.field" each, for OLANG_SCOPESTATS
@@ -14342,7 +14342,7 @@ fn (s mut Scoper&) PromotedFields() Vec<String&> {
     for k in s.promotedF.Keys() {
         if s.demotedF.Has(k) { continue }
         name := s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(k.First))))
-        out.Push($name " field " $k.Second)
+        out.Push($name + " field " + $k.Second)
     }
     return out
 }
@@ -14518,7 +14518,7 @@ fn (s Scoper&) Placements() Vec<Placement> {
         t := Term.None
         ends := ""
         if key.Second >= 0 {
-            name = $"'" $s.P.L.Names.Text(body.Locals[key.Second].Name) "'"
+            name = $"'" + $s.P.L.Names.Text(body.Locals[key.Second].Name) + "'"
             at = body.Locals[key.Second].Sp
             t = try s.lifts.Get(key) catch default Term.None
             # (O15: a value holding a destructor goes with its storage, ended as that scope closes)
@@ -14529,7 +14529,7 @@ fn (s Scoper&) Placements() Vec<Placement> {
             if site < body.Sites.Len() { at = body.Sites[site].Sp }
             t = try s.siteLifts.Get(pair.Pair<I64, I64>(b, site)) catch default Term.None
         }
-        text := $name " is built in " $s.placedScope(b, t) ", a new one each time it is made, " $what $ends
+        text := $name + " is built in " + $s.placedScope(b, t) + ", a new one each time it is made, " + $what + $ends
         p := Placement(body.File, I64(row.At.Start), I64(row.At.End), I64(at.Start), text)
         p.Tail = row.Kind == PlaceTail
         if not rows.View().Some(fn(r): return r.File == p.File and r.Start == p.Start and r.Text == p.Text) { rows.Push(p) }
@@ -14552,17 +14552,17 @@ fn (s mut Scoper&) PlacedReport() String {
     out := StringBuilder()
     views := 0
     for r in rows {
-        out.Push($d.Locate(r.File, r.Start) ": memory: " $r.Text "\n")
+        out.Push($d.Locate(r.File, r.Start) + ": memory: " + $r.Text + "\n")
         if r.Tail {
-            out.Push($d.Locate(r.File, r.Decl) ": note: made here - handing on a value instead, or writing 'return' and the call, would let it go with its step\n")
+            out.Push($d.Locate(r.File, r.Decl) + ": note: made here - handing on a value instead, or writing 'return' and the call, would let it go with its step\n")
             continue
         }
         views++
-        out.Push($d.Locate(r.File, r.Decl) ": note: made here - a copy of what is kept ('$x', 'x.Copy()') would let it go with its turn\n")
+        out.Push($d.Locate(r.File, r.Decl) + ": note: made here - a copy of what is kept ('$x', 'x.Copy()') would let it go with its turn\n")
     }
     tails := rows.Len() - views
-    if views > 0 { out.Push($"memory: " $views " placement" $("" if views == 1 else "s") " made for a view kept longer than its storage (O27)\n") }
-    if tails > 0 { out.Push($"memory: " $tails " placement" $("" if tails == 1 else "s") " made for a become's chain, kept as long as its first call's result (S21)\n") }
+    if views > 0 { out.Push($"memory: " + $views + " placement" + $("" if views == 1 else "s") + " made for a view kept longer than its storage (O27)\n") }
+    if tails > 0 { out.Push($"memory: " + $tails + " placement" + $("" if tails == 1 else "s") + " made for a become's chain, kept as long as its first call's result (S21)\n") }
     return out.ToString()
 }
 
@@ -14576,7 +14576,7 @@ fn (s Scoper&) placedScope(b I64, t Term) String {
     }
     return match t {
         case Term.Program: "the program's scope"
-        case Term.Block(bl): $fname "'s scope" if bl == typed.BlockId(0) else $"an outer block of " $fname
+        case Term.Block(bl): $fname + "'s scope" if bl == typed.BlockId(0) else $"an outer block of " + $fname
         case Term.Var(k): s.varScopeName(body, k)
         case _: "a longer-lived scope"
     }
@@ -14585,7 +14585,7 @@ fn (s Scoper&) placedScope(b I64, t Term) String {
 fn (s Scoper&) varScopeName(body typed.Body&, k I64) String {
     if k < 0 or k >= body.Vars.Len() { return "a longer-lived scope" }
     return match body.Vars[k] {
-        case typed.ScopeVar.Param(l): $"the scope of what '" $s.P.L.Names.Text(body.Locals[I64(l)].Name) "' refers to"
+        case typed.ScopeVar.Param(l): $"the scope of what '" + $s.P.L.Names.Text(body.Locals[I64(l)].Name) + "' refers to"
         case typed.ScopeVar.Result: "the tail scope of its become chain" if s.P.T.Role(body.Ty) == types.RoleTail else "the result scope"
         case typed.ScopeVar.Capture(_): "where the generator lives" if body.Gen and body.GenHome else "the scope of what the lambda captured"
         case _: "a longer-lived scope"
@@ -14756,7 +14756,7 @@ fn (s Scoper&) VerStats() String {
         vs := try s.versOf.Get(b) catch { continue }
         defs += vs.DefLocal.Len()
     }
-    return $"versions: " $s.versOf.Len() " bodies with a cursor, " $defs " definitions, " $s.VerRedone " judgings asked again"
+    return $"versions: " + $s.versOf.Len() + " bodies with a cursor, " + $defs + " definitions, " + $s.VerRedone + " judgings asked again"
 }
 
 fn (s Scoper&) RunStats() String {
@@ -14769,17 +14769,17 @@ fn (s Scoper&) RunStats() String {
             diags += r.Diags.Count()
         }
     }
-    return $"runs " $runs " marks " $marks " reads " $reads " diags " $diags
+    return $"runs " + $runs + " marks " + $marks + " reads " + $reads + " diags " + $diags
 }
 
 # body b's summary as text, for compiler/tools/scopedump.olang: its obligations, what it builds into, keeps and stores
 fn (s Scoper&) Summary(b I64) String {
     t := StringBuilder()
     sm := s.sums[b]
-    for r in sm.Rels { t.Push("rel " $r.Hi $(" == " if r.Exact else " >= ") $r.Lo $(" why " $r.Why if r.Why != 0 else "") "\n") }
-    for k in range sm.Builds.Len() { t.Push("var " $k " builds " $sm.Builds[k] " real " $sm.Real[k] "\n") }
-    for k in range sm.Keeps.Len() { t.Push("param " $k " keeps " $sm.Keeps[k] " stores " $sm.Stores[k] " puts " $sm.Puts[k] "\n") }
-    for k in range sm.ResBind.Len() { t.Push("result binds " $k " at " $sm.ResBind[k] "\n") }
+    for r in sm.Rels { t.Push("rel " + $r.Hi + $(" == " if r.Exact else " >= ") + $r.Lo + $(" why " + $r.Why if r.Why != 0 else "") + "\n") }
+    for k in range sm.Builds.Len() { t.Push("var " + $k + " builds " + $sm.Builds[k] + " real " + $sm.Real[k] + "\n") }
+    for k in range sm.Keeps.Len() { t.Push("param " + $k + " keeps " + $sm.Keeps[k] + " stores " + $sm.Stores[k] + " puts " + $sm.Puts[k] + "\n") }
+    for k in range sm.ResBind.Len() { t.Push("result binds " + $k + " at " + $sm.ResBind[k] + "\n") }
     return t.ToString()
 }
 
@@ -14822,7 +14822,7 @@ fn (s Scoper&) Obligations(b I64, nm source.Names&) Array<String&> {
     out Vec<String&>
     if b >= s.sums.Len() { return out.ToArray() }
     for r in s.sums[b].Rels {
-        t := $s.termName(b, r.Hi, nm) " outlives " $s.termName(b, r.Lo, nm)
+        t := $s.termName(b, r.Hi, nm) + " outlives " + $s.termName(b, r.Lo, nm)
         if not out.Has(t) { out.Push(t) }
     }
     return out.ToArray()
@@ -14852,8 +14852,8 @@ fn (s Scoper&) relationWord(body typed.Body&, h String&, lo Term, nm source.Name
 
 fn (s Scoper&) relationVar(body typed.Body&, h String&, v typed.ScopeVar, nm source.Names&) String {
     return match v {
-        case typed.ScopeVar.Result: $"borrows " $h
-        case typed.ScopeVar.Param(l): $"keeps " $h " in " $s.localName(body, l, nm)
+        case typed.ScopeVar.Result: $"borrows " + $h
+        case typed.ScopeVar.Param(l): $"keeps " + $h + " in " + $s.localName(body, l, nm)
         case _: ""
     }
 }
@@ -14878,7 +14878,7 @@ fn (s Scoper&) termName(b I64, t Term, nm source.Names&) String {
     return match t {
         case Term.Var(i): s.varName(body, body.Vars[i], nm)
         case Term.Program: "the program"
-        case Term.Derived(p, _): $"the scope " $s.localName(body, body.Params[p], nm) "'s argument bound"
+        case Term.Derived(p, _): $"the scope " + $s.localName(body, body.Params[p], nm) + "'s argument bound"
         case _: $t
     }
 }
@@ -14978,15 +14978,15 @@ fn (s mut Scoper&) nameOf(b I64, named Array<String&>&, depth I64) String {
     body := s.Bodies[b]
     mod := s.fileIdentity(body.File)
     if mod == "" or depth > 16: return ""
-    at := $mod " " $body.Sp.Start "-" $body.Sp.End
+    at := $mod + " " + $body.Sp.Start + "-" + $body.Sp.End
     return match body.Of {
-        case typed.BodyOf.Fn(inst): $at " fn" $s.argsWord(s.P.InstanceArgs(inst))
-        case typed.BodyOf.Ctor(t, twin): $at " ctor " $s.P.T.CanonNamed(t) $s.argsWord(twin)
-        case typed.BodyOf.Dtor(t): $at " dtor " $s.P.T.CanonNamed(t)
-        case typed.BodyOf.Case(t, tag): $at " case " $s.P.T.CanonNamed(t) " " $tag
-        case typed.BodyOf.Lambda(parent): s.innerName($at " lambda", I64(parent), named, depth)
-        case typed.BodyOf.Contract(of, _, index): s.innerName($at " contract " $index, I64(of), named, depth)
-        case typed.BodyOf.Global(_, name): $mod " global " $s.P.L.Names.Text(name)
+        case typed.BodyOf.Fn(inst): $at + " fn" + $s.argsWord(s.P.InstanceArgs(inst))
+        case typed.BodyOf.Ctor(t, twin): $at + " ctor " + $s.P.T.CanonNamed(t) + $s.argsWord(twin)
+        case typed.BodyOf.Dtor(t): $at + " dtor " + $s.P.T.CanonNamed(t)
+        case typed.BodyOf.Case(t, tag): $at + " case " + $s.P.T.CanonNamed(t) + " " + $tag
+        case typed.BodyOf.Lambda(parent): s.innerName($at + " lambda", I64(parent), named, depth)
+        case typed.BodyOf.Contract(of, _, index): s.innerName($at + " contract " + $index, I64(of), named, depth)
+        case typed.BodyOf.Global(_, name): $mod + " global " + $s.P.L.Names.Text(name)
         case _: ""
     }
 }
@@ -14995,14 +14995,14 @@ fn (s mut Scoper&) nameOf(b I64, named Array<String&>&, depth I64) String {
 fn (s mut Scoper&) innerName(at String&, p I64, named Array<String&>&, depth I64) String {
     if p < 0 or p >= s.Bodies.Len(): return ""
     pn := named[p] if p < s.Bodies.Len() and named[p] != "" else s.nameOf(p, named, depth + 1)
-    return "" if pn == "" else $at " in " $pn
+    return "" if pn == "" else $at + " in " + $pn
 }
 
 fn (s mut Scoper&) argsWord(l types.ListId) String {
     if l == types.ListId(0): return ""
     b := StringBuilder()
     b.Push(" <")
-    for t in s.P.T.Items(l) { b.Push($s.P.T.CanonNamed(t) ";") }
+    for t in s.P.T.Items(l) { b.Push($s.P.T.CanonNamed(t) + ";") }
     b.Push(">")
     return b.ToString().Replace("\t", " ").Replace("\n", " ")
 }
@@ -15018,7 +15018,7 @@ fn (s Scoper&) fileIdentity(file I64) String {
 fn (s mut Scoper&) declWord(d I64) String {
     if d < 0 or d >= s.P.T.DeclCount(): return "-"
     dl := types.DeclId(I32(d))
-    return $s.P.T.Modules[s.P.T.DeclModule(dl)] ":" $s.P.T.Names.Text(s.P.T.DeclName(dl))
+    return $s.P.T.Modules[s.P.T.DeclModule(dl)] + ":" + $s.P.T.Names.Text(s.P.T.DeclName(dl))
 }
 
 fn (s mut Scoper&) declOfWord(w String&) I64 ? typed.Unwritable {
@@ -15083,7 +15083,7 @@ fn (s mut Scoper&) keysOf(comp Array<I64>&) String {
         for f in s.filesOf(b) {
             if seen.Has(f): continue
             seen.Put(f, true)
-            words.Push($s.fileIdentity(f) "=" $(try s.FileKeys.Get(f) catch default "?"))
+            words.Push($s.fileIdentity(f) + "=" + $(try s.FileKeys.Get(f) catch default "?"))
         }
     }
     words.Sort(fn(a String&, b String&) Bool { return a < b })
@@ -15162,13 +15162,13 @@ fn (s mut Scoper&) plainDecl(t types.TypeId) Bool {
 # the component's signature: its bodies' stable names, in its order
 fn (s mut Scoper&) sigOf(comp Array<I64>&) String {
     b := StringBuilder()
-    for x in comp { b.Push($s.NameOf(x) "\n") }
+    for x in comp { b.Push($s.NameOf(x) + "\n") }
     return b.ToString()
 }
 
 # what the round a judging is made in decides of it
 fn (s mut Scoper&) ctxText(report Bool) String {
-    return $"r" $(1 if report else 0) " g" $(1 if s.fieldGather else 0) " p" $(1 if s.partsOn else 0)
+    return $"r" + $(1 if report else 0) + " g" + $(1 if s.fieldGather else 0) + " p" + $(1 if s.partsOn else 0)
 }
 
 # the whole-program sets every judging may read, as words: the fields any body assigns after construction, the bodies a
@@ -15177,10 +15177,10 @@ fn (s mut Scoper&) globalText() String {
     if s.globalMade: return s.globalWords
     lines Vec<String&>
     for k in s.fieldsAssigned.Keys() {
-        lines.Push($"assigned " $s.P.T.CanonNamed(types.TypeId(I32(k.First))) " " $k.Second)
+        lines.Push($"assigned " + $s.P.T.CanonNamed(types.TypeId(I32(k.First))) + " " + $k.Second)
     }
-    for b in s.noDerived.Keys() { lines.Push($"noderived " $(s.NameOf(b) if s.NameOf(b) != "" else $"#" $b)) }
-    for m in s.Apart.Keys() { lines.Push($"apart " $(s.P.L.Mods[m].Identity if m >= 0 and m < s.P.L.Mods.Len() else "?")) }
+    for b in s.noDerived.Keys() { lines.Push($"noderived " + $(s.NameOf(b) if s.NameOf(b) != "" else $"#" + $b)) }
+    for m in s.Apart.Keys() { lines.Push($"apart " + $(s.P.L.Mods[m].Identity if m >= 0 and m < s.P.L.Mods.Len() else "?")) }
     lines.Sort(fn(a String&, b String&) Bool { return a < b })
     s.globalWords = hashText(lines.Join("\n"))
     s.globalMade = true
@@ -15216,7 +15216,7 @@ fn (s mut Scoper&) logLookup(id I64, t types.TypeId, kind String&) {
     }
     c := s.P.T.CanonNamed(t)
     if c.Contains("\n"): s.globalDep = true
-    s.absentLog.Push($kind $c)
+    s.absentLog.Push($kind + $c)
 }
 
 # whether no constructor (kind "-ctor\t") or destructor ("-dtor\t") of the type of canonical text c is in the program
@@ -15268,20 +15268,20 @@ fn (s mut Scoper&) stateOf(b I64) String {
 fn (s mut Scoper&) runId(run mut compRun&) String {
     if run.Id != "": return run.Id
     b := StringBuilder()
-    b.Push($run.Sig "\n" $run.Ctx "\n" $s.globalText() "\n")
+    b.Push($run.Sig + "\n" + $run.Ctx + "\n" + $s.globalText() + "\n")
     for i in range run.InRun.Len() {
         r := run.InRun[i]
-        b.Push($(s.runId(r) if r != null else run.InDisk[i]) "\n")
+        b.Push($(s.runId(r) if r != null else run.InDisk[i]) + "\n")
     }
-    for m in s.marksOf(run) { b.Push($m "\n") }
-    for x in run.ReadTexts { b.Push($x "\n") }
+    for m in s.marksOf(run) { b.Push($m + "\n") }
+    for x in run.ReadTexts { b.Push($x + "\n") }
     run.Id = hashText(b.ToString())
     return run.Id
 }
 
 fn (s mut Scoper&) marksOf(run compRun&) Vec<String&> {
     out Vec<String&>
-    for m in run.Marks { out.Push($s.NameOf(m.Ctor) "\t" $m.Field " " $markWord(m.Mark)) }
+    for m in run.Marks { out.Push($s.NameOf(m.Ctor) + "\t" + $m.Field + " " + $markWord(m.Mark)) }
     out.Sort(fn(a String&, b String&) Bool { return a < b })
     return out
 }
@@ -15299,8 +15299,8 @@ fn (s mut Scoper&) markLines(run compRun&) Vec<String&> {
         ks := e.Value
         ks.Sort(fn(a I64, b I64) Bool { return a < b })
         b := StringBuilder()
-        b.Push($s.NameOf(e.Key) "\t")
-        for i in range ks.Len() { b.Push($(("," if i > 0 else "")) $ks[i]) }
+        b.Push($s.NameOf(e.Key) + "\t")
+        for i in range ks.Len() { b.Push($(("," if i > 0 else "")) + $ks[i]) }
         out.Push(b.ToString())
     }
     out.Sort(fn(a String&, b String&) Bool { return a < b })
@@ -15309,7 +15309,7 @@ fn (s mut Scoper&) markLines(run compRun&) Vec<String&> {
 
 fn (s mut Scoper&) marksText(rs Vec<markRead>&) String {
     lines Vec<String&>
-    for m in rs { lines.Push($s.NameOf(m.Ctor) "\t" $m.Field " " $markWord(m.Mark)) }
+    for m in rs { lines.Push($s.NameOf(m.Ctor) + "\t" + $m.Field + " " + $markWord(m.Mark)) }
     lines.Sort(fn(a String&, b String&) Bool { return a < b })
     return lines.Join("\n")
 }
@@ -15334,7 +15334,7 @@ fn markWord(m typed.Mark) String {
     return match m {
         case typed.Mark.None: "N"
         case typed.Mark.Bare: "B"
-        case typed.Mark.Of(l): $"O" $I64(l)
+        case typed.Mark.Of(l): $"O" + $I64(l)
         case typed.Mark.Return: "R"
         case typed.Mark.Infer: "I"
         case typed.Mark.TypeVar: "T"
@@ -15351,7 +15351,7 @@ fn (s mut Scoper&) readLine(x I64) String {
     t := s.readText(x)
     if t == "?": return "?"
     tab := try t.Find("\t") catch { return "?" }
-    line := $t[:tab] "\t" $hashText(t[tab + 1:])
+    line := $t[:tab] + "\t" + $hashText(t[tab + 1:])
     if settled { s.lineAt.Put(x, line) }
     return line
 }
@@ -15368,7 +15368,7 @@ fn (s mut Scoper&) readText(x I64) String {
     }
     text := try s.sumText(x) catch typed.Unwritable default "?"
     if text == "?": return "?"
-    out := $name "\t" $("j" if s.judged[x] else "n") " " $text
+    out := $name + "\t" + $("j" if s.judged[x] else "n") + " " + $text
     if s.sums[x].Done and not s.sums[x].Judging { s.sumTextAt.Put(x, out) }
     return out
 }
@@ -15378,10 +15378,10 @@ fn (s mut Scoper&) readText(x I64) String {
 fn (s mut Scoper&) termWord(t Term) String ? typed.Unwritable {
     return match t {
         case Term.None: "N"
-        case Term.Block(b): $"B" $I64(b)
-        case Term.Var(i): $"V" $i
+        case Term.Block(b): $"B" + $I64(b)
+        case Term.Var(i): $"V" + $i
         case Term.Program: "P"
-        case Term.Derived(p, w): $"D" $p "/" $w
+        case Term.Derived(p, w): $"D" + $p + "/" + $w
         case Term.Untraced: "U"
         case _: error typed.Unwritable.Here
     }
@@ -15410,7 +15410,7 @@ fn (s mut Scoper&) termOfWord(w String&) Term ? typed.Unwritable {
 fn (s mut Scoper&) termsWord(ts Vec<Term>&) String ? typed.Unwritable {
     b := StringBuilder()
     b.Push("t")
-    for t in ts { b.Push($"," $(try s.termWord(t))) }
+    for t in ts { b.Push($"," + $(try s.termWord(t))) }
     return b.ToString()
 }
 
@@ -15439,7 +15439,7 @@ fn boolsOfWord(w String&, into mut Vec<Bool>&) ? typed.Unwritable {
 fn intsWord(xs Vec<I64>&) String {
     b := StringBuilder()
     b.Push("i")
-    for x in xs { b.Push($"," $x) }
+    for x in xs { b.Push($"," + $x) }
     return b.ToString()
 }
 
@@ -15464,8 +15464,8 @@ fn (s mut Scoper&) sumWords(sm summary&) String ? typed.Unwritable {
     rb := StringBuilder()
     rb.Push("r")
     for r in sm.Rels {
-        rb.Push($";" $(try s.termWord(r.Hi)) "," $(try s.termWord(r.Lo)) "," $(1 if r.Exact else 0) "," $r.At.Start "," $r.At.End)
-        rb.Push($"," $r.Why "," $(1 if r.View else 0) "," $(1 if r.Bind else 0))
+        rb.Push($";" + $(try s.termWord(r.Hi)) + "," + $(try s.termWord(r.Lo)) + "," + $(1 if r.Exact else 0) + "," + $r.At.Start + "," + $r.At.End)
+        rb.Push($"," + $r.Why + "," + $(1 if r.View else 0) + "," + $(1 if r.Bind else 0))
     }
     w.Push(rb.ToString())
     for xs in Array<Vec<Bool>&>[sm.Builds, sm.Real, sm.Keeps, sm.Stores, sm.Puts, sm.CapKeeps, sm.CapStores, sm.CapPuts] { w.Push(boolsWord(xs)) }
@@ -15474,7 +15474,7 @@ fn (s mut Scoper&) sumWords(sm summary&) String ? typed.Unwritable {
     for k in range sm.BuildFile.Len() {
         f := "-" if sm.BuildFile[k] < 0 else s.fileIdentity(sm.BuildFile[k])
         if f == "" or f.Contains(" ") or f.Contains(","): error typed.Unwritable.Here
-        ab.Push($"," $f ":" $sm.BuildAt[k].Start ":" $sm.BuildAt[k].End)
+        ab.Push($"," + $f + ":" + $sm.BuildAt[k].Start + ":" + $sm.BuildAt[k].End)
     }
     w.Push(ab.ToString())
     w.Push(try s.termsWord(sm.ResBind))
@@ -15483,7 +15483,7 @@ fn (s mut Scoper&) sumWords(sm summary&) String ? typed.Unwritable {
     w.Push(intsWord(sm.DerivedP))
     w.Push(intsWord(sm.DerivedW))
     w.Push(try s.recsWord(sm.ResFn))
-    w.Push($"f" $(1 if sm.HandsBack else 0) $(1 if sm.Erred else 0) $(1 if sm.Done else 0) $(1 if sm.Judging else 0))
+    w.Push($"f" + $(1 if sm.HandsBack else 0) + $(1 if sm.Erred else 0) + $(1 if sm.Done else 0) + $(1 if sm.Judging else 0))
     return w.Join(" ")
 }
 
@@ -15491,12 +15491,12 @@ fn (s mut Scoper&) sumWords(sm summary&) String ? typed.Unwritable {
 # adapter flag) and captures
 fn (s mut Scoper&) recsWord(rs fnRecs&) String ? typed.Unwritable {
     b := StringBuilder()
-    b.Push($"c" $(1 if rs.Full else 0) "/" $(intsWord(rs.Late)) "/" $(intsWord(rs.Loose)))
+    b.Push($"c" + $(1 if rs.Full else 0) + "/" + $(intsWord(rs.Late)) + "/" + $(intsWord(rs.Loose)))
     for r in rs.Recs {
         if r.Body < 0 or r.Body >= s.Bodies.Len(): error typed.Unwritable.Here
         name := s.NameOf(r.Body)
         if name == "": error typed.Unwritable.Here
-        b.Push($"/" $(name.Replace(" ", "~")) "=" $(1 if r.Adapter else 0) "=" $(try s.termsWord(r.Caps)))
+        b.Push($"/" + $(name.Replace(" ", "~")) + "=" + $(1 if r.Adapter else 0) + "=" + $(try s.termsWord(r.Caps)))
     }
     return b.ToString()
 }
@@ -15584,43 +15584,43 @@ fn (s Scoper&) fileOfIdentity(identity String&) I64 ? typed.Unwritable {
 fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
     if run.Disk != null: return diskLines(run.Disk!)
     if not run.Recordable or run.Diags.Count() > 0 or run.Gaps.Len() > 0 or run.Sig == "" or run.Hidden.Len() != comp.Len() {
-        s.why($"w-rec" $(1 if run.Recordable else 0) "d" $run.Diags.Count() "g" $run.Gaps.Len())
+        s.why($"w-rec" + $(1 if run.Recordable else 0) + "d" + $run.Diags.Count() + "g" + $run.Gaps.Len())
         return ""
     }
     # (T22c: the twins it reached, numbered as the record numbers them)
     tmap Map<I64, I64>
     for i in range run.Twins.Len() { tmap.Put(run.Twins[i], i) }
     b := StringBuilder()
-    b.Push($"run " $run.Sig.Replace("\n", "\t") "\n")
-    b.Push($"ctx " $run.Ctx "\n")
-    b.Push($"keys " $s.keysOf(comp) "\n")
+    b.Push($"run " + $run.Sig.Replace("\n", "\t") + "\n")
+    b.Push($"ctx " + $run.Ctx + "\n")
+    b.Push($"keys " + $s.keysOf(comp) + "\n")
     for i in range comp.Len() {
         r := run.InRun[i]
-        b.Push($"in " $(s.runId(r) if r != null else run.InDisk[i]) "\n")
+        b.Push($"in " + $(s.runId(r) if r != null else run.InDisk[i]) + "\n")
     }
-    for m in s.markLines(run) { b.Push($"mark " $m "\n") }
-    b.Push($"marks " $hashText(s.marksText(run.Marks)) "\n")
+    for m in s.markLines(run) { b.Push($"mark " + $m + "\n") }
+    b.Push($"marks " + $hashText(s.marksText(run.Marks)) + "\n")
     for x in run.ReadTexts {
         if x == "?" {
             s.why("w-read?")
             return ""
         }
-        b.Push($"read " $x "\n")
+        b.Push($"read " + $x + "\n")
     }
-    for d in run.WantDecl { b.Push($"want decl " $s.declWord(d) "\n") }
-    for f in run.WantField { b.Push($"want field " $s.declWord(f.First) " " $f.Second "\n") }
-    b.Push($"hits " $run.WantHits "\n")
+    for d in run.WantDecl { b.Push($"want decl " + $s.declWord(d) + "\n") }
+    for f in run.WantField { b.Push($"want field " + $s.declWord(f.First) + " " + $f.Second + "\n") }
+    b.Push($"hits " + $run.WantHits + "\n")
     for v in run.Vrs {
         i := indexIn(comp, v.Body)
         if i < 0: return ""
         vb := StringBuilder()
-        vb.Push($"vr " $i " " $v.Site)
+        vb.Push($"vr " + $i + " " + $v.Site)
         for x in v.Recs {
             name := s.NameOf(x / 2)
             if name == "": return ""
-            vb.Push($"\t" $name "=" $(x % 2))
+            vb.Push($"\t" + $name + "=" + $(x % 2))
         }
-        b.Push($vb.ToString() "\n")
+        b.Push($vb.ToString() + "\n")
     }
     for i in range comp.Len() {
         refs := run.Plans[i].Roots.Len() + run.Plans[i].DropAt.Len() + run.Plans[i].DropInAt.Len() > 0
@@ -15633,16 +15633,16 @@ fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
             s.why("w-sum")
             return ""
         }
-        b.Push($"body " $(1 if run.Judged[i] else 0) " " $pl "\n")
-        b.Push($"sum " $sm "\n")
-        b.Push($"hid " $run.Hidden[i] "\n")
+        b.Push($"body " + $(1 if run.Judged[i] else 0) + " " + $pl + "\n")
+        b.Push($"sum " + $sm + "\n")
+        b.Push($"hid " + $run.Hidden[i] + "\n")
     }
     tw := try s.twinLines(run, tmap) catch typed.Unwritable {
         s.why("w-twin")
         return ""
     }
     b.Push(tw)
-    b.Push($"out " $s.runId(run) "\n")
+    b.Push($"out " + $s.runId(run) + "\n")
     return b.ToString()
 }
 
@@ -15662,20 +15662,20 @@ fn (s mut Scoper&) twinLines(run compRun&, tmap Map<I64, I64>&) String ? typed.U
         refs := tw.Plans[t].Roots.Len() + tw.Plans[t].DropAt.Len() + tw.Plans[t].DropInAt.Len() > 0
         nodes := typed.Nodes.Of(s.Bodies[bb]) if refs else typed.Nodes()
         pl := try tw.Plans[t].Text(nodes, fn(x types.TypeId) String { return s.P.T.CanonNamed(x) }, tmap)
-        b.Push($"twin " $at "\t" $tw.At[t].Start "\t" $tw.At[t].End "\t" $key "\n")
-        b.Push($"tplan " $pl "\n")
-        b.Push($"tsum " $(try s.sumWords(tw.Sums[t])) "\n")
+        b.Push($"twin " + $at + "\t" + $tw.At[t].Start + "\t" + $tw.At[t].End + "\t" + $key + "\n")
+        b.Push($"tplan " + $pl + "\n")
+        b.Push($"tsum " + $(try s.sumWords(tw.Sums[t])) + "\n")
     }
     for x in bodies {
         for f in s.filesOf(x) {
             if f < 0 or not s.Keyed.Has(f): error typed.Unwritable.Here
         }
     }
-    b.Push($"tkeys " $s.keysOf(bodies.ToArray()) "\n")
+    b.Push($"tkeys " + $s.keysOf(bodies.ToArray()) + "\n")
     for k in run.CapAdded {
         name := s.NameOf(k.First)
         if name == "": error typed.Unwritable.Here
-        b.Push($"cf " $k.Second "\t" $name "\n")
+        b.Push($"cf " + $k.Second + "\t" + $name + "\n")
     }
     return b.ToString()
 }
@@ -15693,13 +15693,13 @@ fn (s mut Scoper&) twinRecKey(t I64, bodies mut Vec<I64>&) String {
     for k in range 1, segs.Len() {
         colon := try segs[k].Find(":") catch default -1
         if colon < 1 or segs[k][:colon].EndsWith("i"): return ""
-        out.Push($"\t#" $segs[k][:colon])
+        out.Push($"\t#" + $segs[k][:colon])
         for id in segs[k][colon + 1:].Split(",") {
             if id.Len() == 0: continue
             ad := id.EndsWith("a")
             n := try (id[:id.Len() - 1] if ad else id).ParseInt(10) catch default -1
             if n < 0 or n >= s.Bodies.Len() or s.NameOf(n) == "": return ""
-            out.Push($"\t" $("a" if ad else "p") $s.NameOf(n))
+            out.Push($"\t" + $("a" if ad else "p") + $s.NameOf(n))
             if not bodies.Has(n): bodies.Push(n)
         }
     }
@@ -15732,8 +15732,8 @@ fn (s mut Scoper&) twinOfRec(line String&) I64 {
         }
         if p < 0 or p >= body.Params.Len() or rs.Len() == 0: return -1
         sorted := sortedRecs(rs)
-        key.Push($" " $p ":")
-        for r in sorted { key.Push($r.Body $("a" if r.Adapter else "") ",") }
+        key.Push($" " + $p + ":")
+        for r in sorted { key.Push($r.Body + $("a" if r.Adapter else "") + ",") }
         seeds.Put(I64(body.Params[p]), s.seedOf(sorted, p))
     }
     k := key.ToString()
@@ -15754,29 +15754,29 @@ fn indexIn(xs Array<I64>&, x I64) I64 {
 
 fn diskLines(d diskRun&) String {
     b := StringBuilder()
-    b.Push($"run " $d.Sig.Replace("\n", "\t") "\n")
-    b.Push($"ctx " $d.Ctx "\n")
-    b.Push($"keys " $d.Keys "\n")
-    for x in d.In { b.Push($"in " $x "\n") }
-    for x in d.Marks { b.Push($"mark " $x "\n") }
-    b.Push($"marks " $d.MarksHash "\n")
-    for x in d.Reads { b.Push($"read " $x "\n") }
-    for x in d.Wants { b.Push($"want " $x "\n") }
-    b.Push($"hits " $d.Hits "\n")
-    for x in d.Vrs { b.Push($"vr " $x "\n") }
+    b.Push($"run " + $d.Sig.Replace("\n", "\t") + "\n")
+    b.Push($"ctx " + $d.Ctx + "\n")
+    b.Push($"keys " + $d.Keys + "\n")
+    for x in d.In { b.Push($"in " + $x + "\n") }
+    for x in d.Marks { b.Push($"mark " + $x + "\n") }
+    b.Push($"marks " + $d.MarksHash + "\n")
+    for x in d.Reads { b.Push($"read " + $x + "\n") }
+    for x in d.Wants { b.Push($"want " + $x + "\n") }
+    b.Push($"hits " + $d.Hits + "\n")
+    for x in d.Vrs { b.Push($"vr " + $x + "\n") }
     for i in range d.Plans.Len() {
-        b.Push($"body " $(1 if d.Judged[i] else 0) " " $d.Plans[i] "\n")
-        b.Push($"sum " $d.Sums[i] "\n")
-        b.Push($"hid " $d.Hidden[i] "\n")
+        b.Push($"body " + $(1 if d.Judged[i] else 0) + " " + $d.Plans[i] + "\n")
+        b.Push($"sum " + $d.Sums[i] + "\n")
+        b.Push($"hid " + $d.Hidden[i] + "\n")
     }
     for i in range d.Twins.Len() {
-        b.Push($"twin " $d.Twins[i] "\n")
-        b.Push($"tplan " $d.TPlans[i] "\n")
-        b.Push($"tsum " $d.TSums[i] "\n")
+        b.Push($"twin " + $d.Twins[i] + "\n")
+        b.Push($"tplan " + $d.TPlans[i] + "\n")
+        b.Push($"tsum " + $d.TSums[i] + "\n")
     }
-    if d.Twins.Len() > 0: b.Push($"tkeys " $d.TKeys "\n")
-    for x in d.Caps { b.Push($"cf " $x "\n") }
-    b.Push($"out " $d.Out "\n")
+    if d.Twins.Len() > 0: b.Push($"tkeys " + $d.TKeys + "\n")
+    for x in d.Caps { b.Push($"cf " + $x + "\n") }
+    b.Push($"out " + $d.Out + "\n")
     return b.ToString()
 }
 
@@ -15836,22 +15836,22 @@ fn ReadRuns(text String&, into mut Vec<mut diskRun&>&) ? typed.Unwritable {
 fn (s mut Scoper&) Compare(o mut Scoper&) Vec<String&> {
     out Vec<String&>
     if s.Plans.Len() != o.Plans.Len() or s.sums.Len() != o.sums.Len() {
-        out.Push($"scope: " $s.Plans.Len() " plans, " $o.Plans.Len() " judged afresh")
+        out.Push($"scope: " + $s.Plans.Len() + " plans, " + $o.Plans.Len() + " judged afresh")
         return out
     }
     for b in range s.Plans.Len() {
         what := ""
         if s.judged[b] != o.judged[b] { what = "whether it was judged" }
-        if what == "" and s.Plans[b].Shown() != o.Plans[b].Shown() { what = $"its plan: " $s.Plans[b].Shown() " against " $o.Plans[b].Shown() }
+        if what == "" and s.Plans[b].Shown() != o.Plans[b].Shown() { what = $"its plan: " + $s.Plans[b].Shown() + " against " + $o.Plans[b].Shown() }
         mine := try s.sumText(b) catch typed.Unwritable default "?"
         theirs := try o.sumText(b) catch typed.Unwritable default "?"
-        if what == "" and (mine != theirs or not sameSummary(s.sums[b], o.sums[b])) { what = $"its summary: " $mine " against " $theirs }
+        if what == "" and (mine != theirs or not sameSummary(s.sums[b], o.sums[b])) { what = $"its summary: " + $mine + " against " + $theirs }
         if what == "": continue
-        out.Push($"scope: " $(s.NameOf(b) if s.NameOf(b) != "" else $"body " $b) " differs in " $what)
+        out.Push($"scope: " + $(s.NameOf(b) if s.NameOf(b) != "" else $"body " + $b) + " differs in " + $what)
         if out.Len() >= 20: return out
     }
     for e in s.valueRecs {
-        if not o.valueRecs.Has(e.Key) or (try o.valueRecs.Get(e.Key) catch default Array<I64>(0)) != e.Value { out.Push($"scope: the calls through a value of body " $e.Key.First " differ") }
+        if not o.valueRecs.Has(e.Key) or (try o.valueRecs.Get(e.Key) catch default Array<I64>(0)) != e.Value { out.Push($"scope: the calls through a value of body " + $e.Key.First + " differ") }
     }
     if s.valueRecs.Len() != o.valueRecs.Len(): out.Push("scope: the calls through values found differ")
     if s.Gaps.Len() != o.Gaps.Len(): out.Push("scope: the gaps differ")
@@ -15863,8 +15863,8 @@ fn (s mut Scoper&) Compare(o mut Scoper&) Vec<String&> {
 fn (s Scoper&) DiskStats() String {
     n := s.diskAll.Len()
     why := StringBuilder()
-    for e in s.whyN { why.Push($" " $e.Key "=" $e.Value) }
-    return $n " judgings in " $s.Eligible.Len() " modules' records, " $s.DiskTaken " taken, " $s.Restarts " restarts;" $why.ToString() "; ms: " $s.Times.Join(", ")
+    for e in s.whyN { why.Push($" " + $e.Key + "=" + $e.Value) }
+    return $n + " judgings in " + $s.Eligible.Len() + " modules' records, " + $s.DiskTaken + " taken, " + $s.Restarts + " restarts;" + $why.ToString() + "; ms: " + $s.Times.Join(", ")
 }
 
 # a record's judgings given to the pass, from the record of file's module: all of them, or none where a line is out of
@@ -15893,25 +15893,25 @@ fn (s mut Scoper&) hiddenText(b I64) String ? typed.Unwritable {
     fb := try s.fsets.Get(b) catch default fsBody()
     had := s.fsets.Has(b)
     fs := StringBuilder()
-    fs.Push($"fs" $(1 if had else 0))
-    for row in fb.Rows { fs.Push($";" $row.Key ":" $(try s.termWord(row.T))) }
+    fs.Push($"fs" + $(1 if had else 0))
+    for row in fb.Rows { fs.Push($";" + $row.Key + ":" + $(try s.termWord(row.T))) }
     w.Push(fs.ToString())
     for o in fb.Open {
         c := s.P.T.CanonNamed(o.T)
         if c.Contains("\t") or c.Contains("\n") or c == "": error typed.Unwritable.Here
-        w.Push($"o" $(1 if o.Inside else 0) $c)
+        w.Push($"o" + $(1 if o.Inside else 0) + $c)
     }
     for e in s.derivedDecl {
-        if e.Key.First / 65536 == b: w.Push($"dd" $(e.Key.First % 65536) ":" $e.Key.Second ":" $s.declWord(e.Value))
+        if e.Key.First / 65536 == b: w.Push($"dd" + $(e.Key.First % 65536) + ":" + $e.Key.Second + ":" + $s.declWord(e.Value))
     }
     if s.verUnion.Has(b): w.Push("vu")
     for e in s.freshDefs {
-        if e.Key.First == b: w.Push($"fd" $e.Key.Second)
+        if e.Key.First == b: w.Push($"fd" + $e.Key.Second)
     }
     for e in s.capSeen {
         if e.Key.First != b: continue
         rs := try s.capSeeds.Get(e.Key) catch default fnRecs()
-        w.Push($"cs" $e.Key.Second ":" $(try s.recsWord(rs)))
+        w.Push($"cs" + $e.Key.Second + ":" + $(try s.recsWord(rs)))
     }
     out := w.Join("\t")
     return out
@@ -16070,7 +16070,7 @@ fn (s mut Scoper&) freshWhy(comp Array<I64>&) {
         s.why("x-nosig")
         return
     }
-    s.why($"x-cands" $cands.Len())
+    s.why($"x-cands" + $cands.Len())
 }
 
 fn (s mut Scoper&) diskHolds(d diskRun&, comp Array<I64>&) Bool {
@@ -16119,12 +16119,12 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
         nodes := typed.Nodes() if d.Plans[i].EndsWith(" ||") else typed.Nodes.Of(s.Bodies[b])
         pl := try typed.Plan.Read(s.Bodies[b], d.Plans[i], nodes, fn(c String&) types.TypeId { return s.typeOfCanon(c) }, twins) catch typed.Unwritable {
             s.why("plan")
-            if s.whyN.Len() < 6 { s.TraceLog.Push($"plan unread: " $d.Plans[i]) }
+            if s.whyN.Len() < 6 { s.TraceLog.Push($"plan unread: " + $d.Plans[i]) }
             return null
         }
         sm := try s.sumOfText(d.Sums[i]) catch typed.Unwritable {
             s.why("sum")
-            if s.whyN.Len() < 6 { s.TraceLog.Push($"sum unread: " $d.Sums[i]) }
+            if s.whyN.Len() < 6 { s.TraceLog.Push($"sum unread: " + $d.Sums[i]) }
             return null
         }
         run.Plans.Push(pl)
@@ -16233,7 +16233,7 @@ fn (s mut Scoper&) Records() Map<I64, String&> {
         for i in range comp.Len() { comp[i] = s.compNodes[s.compFrom[k] + i] }
         if not s.recordable(comp): continue
         file := s.Bodies[comp[0]].File
-        written.Put($s.sigOf(comp) "\n" $s.keysOf(comp), true)
+        written.Put($s.sigOf(comp) + "\n" + $s.keysOf(comp), true)
         for run in s.runs.Ref(k) {
             text := s.RunRecord(run, comp)
             if text == "": continue
@@ -16252,7 +16252,7 @@ fn (s mut Scoper&) Records() Map<I64, String&> {
     # judge again what the build before them had (an instance's record is its generic's module's)
     kept Map<String, I64>
     for d in s.diskAll {
-        vk := $d.Sig "\n" $d.Keys
+        vk := $d.Sig + "\n" + $d.Keys
         if written.Has(vk) or d.File < 0: continue
         n := try kept.Get(d.Sig) catch default 0
         if n >= DiskVariants: continue
@@ -16322,7 +16322,7 @@ if TestBuild {
     fn rootRules(l mut load.Loader&) String {
         b := StringBuilder()
         for d in l.Diags.AllSaid() {
-            if d.File == l.Mods[l.Root].File { b.Push($d.Rule " ") }
+            if d.File == l.Mods[l.Root].File { b.Push($d.Rule + " ") }
         }
         return b.ToString()
     }
@@ -16332,41 +16332,41 @@ if TestBuild {
         root := l.Mods[l.Root].File
         for k in range bodies.Len() {
             body := bodies[k]
-            if body.File == root and l.Diags.Locate(body.File, I64(body.Sp.Start)).EndsWith(":" $n ":1") { return k }
+            if body.File == root and l.Diags.Locate(body.File, I64(body.Sp.Start)).EndsWith(":" + $n + ":1") { return k }
         }
         return -1
     }
 
-    nllVersions String& = ("type N struct(v I64) {\n"
-                           "    v\n"
-                           "    next mut N?& = null\n"
-                           "}\n"
-                           "fn walk(h mut N&, k I64) I64 {\n"
-                           "    at mut N& = h\n"
-                           "    if k > 0 { at = N(1) }\n"
-                           "    t := at.v\n"
-                           "    for at.next != null {\n"
-                           "        at = at.next!\n"
-                           "    }\n"
-                           "    u := at.v\n"
-                           "    for i in range k {\n"
-                           "        u += at.v\n"
-                           "        at = N(i)\n"
-                           "    }\n"
-                           "    at = N(2)\n"
-                           "    return at.v + t + u\n"
-                           "}\n"
-                           "fn fails(k I64) ? {\n"
-                           "    if k > 1 { error Gone }\n"
-                           "}\n"
-                           "fn pick(k I64) I64 {\n"
-                           "    a := N(1)\n"
-                           "    c mut N& = a\n"
-                           "    try fails(k) catch { c = N(5) }\n"
-                           "    return c.v\n"
-                           "}\n"
-                           "fn main() {\n"
-                           "    assert walk(N(0), 2) + pick(3) > 0\n"
+    nllVersions String& = ("type N struct(v I64) {\n" +
+                           "    v\n" +
+                           "    next mut N?& = null\n" +
+                           "}\n" +
+                           "fn walk(h mut N&, k I64) I64 {\n" +
+                           "    at mut N& = h\n" +
+                           "    if k > 0 { at = N(1) }\n" +
+                           "    t := at.v\n" +
+                           "    for at.next != null {\n" +
+                           "        at = at.next!\n" +
+                           "    }\n" +
+                           "    u := at.v\n" +
+                           "    for i in range k {\n" +
+                           "        u += at.v\n" +
+                           "        at = N(i)\n" +
+                           "    }\n" +
+                           "    at = N(2)\n" +
+                           "    return at.v + t + u\n" +
+                           "}\n" +
+                           "fn fails(k I64) ? {\n" +
+                           "    if k > 1 { error Gone }\n" +
+                           "}\n" +
+                           "fn pick(k I64) I64 {\n" +
+                           "    a := N(1)\n" +
+                           "    c mut N& = a\n" +
+                           "    try fails(k) catch { c = N(5) }\n" +
+                           "    return c.v\n" +
+                           "}\n" +
+                           "fn main() {\n" +
+                           "    assert walk(N(0), 2) + pick(3) > 0\n" +
                            "}\n")
 
     # the offset of text in nllVersions - a statement's start, the key its reaching sets are kept under
@@ -16377,7 +16377,7 @@ if TestBuild {
         out := StringBuilder()
         for d in v.Reaching(nllAt(text), l) {
             for t in defs {
-                if v.DefOf(nllAt(t), l) == d: out.Push($"[" $t "]")
+                if v.DefOf(nllAt(t), l) == d: out.Push($"[" + $t + "]")
             }
         }
         return out.ToString()
@@ -16386,12 +16386,12 @@ if TestBuild {
     test "versions: the definitions of a reference local reaching each statement, through branches, loops and a catch clause, and the loops they cross (O25i)" {
         dir := try os.MkTemp() catch os.Error { unreachable }
         defer { try os.RemoveAll(dir) catch os.Error { } }
-        try os.WriteFile($dir "/main.olang", nllVersions) catch os.Error { }
+        try os.WriteFile($dir + "/main.olang", nllVersions) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+        l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                          source.Names(), diag.Diagnostics(false))
-        l.Load($dir "/main.olang")
+        l.Load($dir + "/main.olang")
         r := names.Resolver(l)
         r.Resolve()
         p := generic.Program(l, r)
@@ -16432,47 +16432,47 @@ if TestBuild {
         assert got == "[c mut N& = a][c = N(5)]", got
     }
 
-    jpTasks String& = ("type P struct(v I64) { v }\n"
-                       "fn work(p P&) I64 { return p.v }\n"
-                       "fn spawnOne() I64 {\n"
-                       "    r I64 = 0\n"
-                       "    join {\n"
-                       "        spawn r = work(P(1))\n"
-                       "    }\n"
-                       "    return r\n"
-                       "}\n"
-                       "fn keep(l mut Vec<P&>&, n I64) {\n"
-                       "    for i in range n { l.Push(P(i)) }\n"
-                       "}\n"
-                       "fn grow(l mut Vec<P&>&) { l.Push(P(1)) }\n"
-                       "fn peek(l Vec<P&>&) I64 { return l.Len() }\n"
-                       "fn fanPeek(l Vec<P&>&) {\n"
-                       "    join {\n"
-                       "        spawn peek(l)\n"
-                       "    }\n"
-                       "}\n"
-                       "fn fanGrow(l mut Vec<P&>&) {\n"
-                       "    join {\n"
-                       "        spawn grow(l)\n"
-                       "    }\n"
-                       "}\n"
-                       "fn main() {\n"
-                       "    l := Vec<P&>()\n"
-                       "    keep(l, 3)\n"
-                       "    fanPeek(l)\n"
-                       "    fanGrow(l)\n"
-                       "    assert spawnOne() == 1\n"
+    jpTasks String& = ("type P struct(v I64) { v }\n" +
+                       "fn work(p P&) I64 { return p.v }\n" +
+                       "fn spawnOne() I64 {\n" +
+                       "    r I64 = 0\n" +
+                       "    join {\n" +
+                       "        spawn r = work(P(1))\n" +
+                       "    }\n" +
+                       "    return r\n" +
+                       "}\n" +
+                       "fn keep(l mut Vec<P&>&, n I64) {\n" +
+                       "    for i in range n { l.Push(P(i)) }\n" +
+                       "}\n" +
+                       "fn grow(l mut Vec<P&>&) { l.Push(P(1)) }\n" +
+                       "fn peek(l Vec<P&>&) I64 { return l.Len() }\n" +
+                       "fn fanPeek(l Vec<P&>&) {\n" +
+                       "    join {\n" +
+                       "        spawn peek(l)\n" +
+                       "    }\n" +
+                       "}\n" +
+                       "fn fanGrow(l mut Vec<P&>&) {\n" +
+                       "    join {\n" +
+                       "        spawn grow(l)\n" +
+                       "    }\n" +
+                       "}\n" +
+                       "fn main() {\n" +
+                       "    l := Vec<P&>()\n" +
+                       "    keep(l, 3)\n" +
+                       "    fanPeek(l)\n" +
+                       "    fanGrow(l)\n" +
+                       "    assert spawnOne() == 1\n" +
                        "}\n")
 
     test "plans and summaries: a task's temporary built in its join block, an element where its list lives (O18b), a build through a stand-in apart from one into the scope itself (P2)" {
         dir := try os.MkTemp() catch os.Error { unreachable }
         defer { try os.RemoveAll(dir) catch os.Error { } }
-        try os.WriteFile($dir "/main.olang", jpTasks) catch os.Error { }
+        try os.WriteFile($dir + "/main.olang", jpTasks) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+        l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                          source.Names(), diag.Diagnostics(false))
-        l.Load($dir "/main.olang")
+        l.Load($dir + "/main.olang")
         r := names.Resolver(l)
         r.Resolve()
         p := generic.Program(l, r)
@@ -16515,55 +16515,55 @@ if TestBuild {
         assert not s.sum(fp).Real[0], "fanPeek builds into no real scope"
     }
 
-    jpArrays String& = ("type E enum {\n"
-                        "    Leaf(n I64)\n"
-                        "    Pair(a E&, b E&)\n"
-                        "}\n"
-                        "type P struct() {\n"
-                        "    n I64 = 0\n"
-                        "}\n"
-                        "fn (p mut P&) mark(t E&) E& { return t }\n"
-                        "fn (p mut P&) build(n I64) E& {\n"
-                        "    nt := E.Leaf(n)\n"
-                        "    return p.mark(nt)\n"
-                        "}\n"
-                        "fn shout(n I64) String {\n"
-                        "    out := String(Array<Char>(n, 'a'))\n"
-                        "    return out\n"
-                        "}\n"
-                        "fn label(n I64) String { return $n \"!\" }\n"
-                        "fn pickArm(n I64, c Bool) String {\n"
-                        "    if n > 0 {\n"
-                        "        both := label(n)\n"
-                        "        return both if c else label(n + 1)\n"
-                        "    }\n"
-                        "    return \"\"\n"
-                        "}\n"
-                        "fn twoLambdas(n I64) I64 {\n"
-                        "    l mut Vec<I64>& = Vec<I64>()\n"
-                        "    add := fn(x I64) { l.Push(x) }\n"
-                        "    has := fn(x I64) Bool { return l.Len() > x }\n"
-                        "    add(n)\n"
-                        "    return 1 if has(0) else 0\n"
-                        "}\n"
-                        "fn main() {\n"
-                        "    p := P()\n"
-                        "    assert p.build(4) == E.Leaf(4)\n"
-                        "    assert shout(3).Len() == 3\n"
-                        "    assert label(5).Len() == 2\n"
-                        "    assert pickArm(3, true).Len() == 2\n"
-                        "    assert twoLambdas(4) == 1\n"
+    jpArrays String& = ("type E enum {\n" +
+                        "    Leaf(n I64)\n" +
+                        "    Pair(a E&, b E&)\n" +
+                        "}\n" +
+                        "type P struct() {\n" +
+                        "    n I64 = 0\n" +
+                        "}\n" +
+                        "fn (p mut P&) mark(t E&) E& { return t }\n" +
+                        "fn (p mut P&) build(n I64) E& {\n" +
+                        "    nt := E.Leaf(n)\n" +
+                        "    return p.mark(nt)\n" +
+                        "}\n" +
+                        "fn shout(n I64) String {\n" +
+                        "    out := String(Array<Char>(n, 'a'))\n" +
+                        "    return out\n" +
+                        "}\n" +
+                        "fn label(n I64) String { return $n \"!\" }\n" +
+                        "fn pickArm(n I64, c Bool) String {\n" +
+                        "    if n > 0 {\n" +
+                        "        both := label(n)\n" +
+                        "        return both if c else label(n + 1)\n" +
+                        "    }\n" +
+                        "    return \"\"\n" +
+                        "}\n" +
+                        "fn twoLambdas(n I64) I64 {\n" +
+                        "    l mut Vec<I64>& = Vec<I64>()\n" +
+                        "    add := fn(x I64) { l.Push(x) }\n" +
+                        "    has := fn(x I64) Bool { return l.Len() > x }\n" +
+                        "    add(n)\n" +
+                        "    return 1 if has(0) else 0\n" +
+                        "}\n" +
+                        "fn main() {\n" +
+                        "    p := P()\n" +
+                        "    assert p.build(4) == E.Leaf(4)\n" +
+                        "    assert shout(3).Len() == 3\n" +
+                        "    assert label(5).Len() == 2\n" +
+                        "    assert pickArm(3, true).Len() == 2\n" +
+                        "    assert twoLambdas(4) == 1\n" +
                         "}\n")
 
     test "plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there, as one a conditional's arm returns (O26a); a lambda may build only into what it builds into (decision 48)" {
         dir := try os.MkTemp() catch os.Error { unreachable }
         defer { try os.RemoveAll(dir) catch os.Error { } }
-        try os.WriteFile($dir "/main.olang", jpArrays) catch os.Error { }
+        try os.WriteFile($dir + "/main.olang", jpArrays) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+        l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                          source.Names(), diag.Diagnostics(false))
-        l.Load($dir "/main.olang")
+        l.Load($dir + "/main.olang")
         r := names.Resolver(l)
         r.Resolve()
         p := generic.Program(l, r)
@@ -16593,9 +16593,9 @@ if TestBuild {
             built := false
             for i in range c.Bodies[k].Sites.Len() {
                 if s.Plans[k].Built[i] == typed.Scope.Var(0) { built = true }
-                assert s.Plans[k].Built[i] != typed.Scope.Block(typed.BlockId(0)), "a site of line " $n " built in its frame"
+                assert s.Plans[k].Built[i] != typed.Scope.Block(typed.BlockId(0)), "a site of line " + $n + " built in its frame"
             }
-            assert built, "a site of line " $n " built in the result scope"
+            assert built, "a site of line " + $n + " built in the result scope"
         }
         # a local a conditional's arm returns is what is returned: it lives in the result scope (O26a)
         k := bodyAt(l, c.Bodies, 18)
@@ -16621,36 +16621,36 @@ if TestBuild {
                 case _ { }
             }
         }
-        assert building == 1 and reading == 1, $building " " $reading
+        assert building == 1 and reading == 1, $building + " " + $reading
     }
 
     # a task's built result into a field of a parameter (a derived scope) judged as the plain assignment it is (C2d) - it
     # was stored with none of an assignment's checks, built in the join's scope (review port1 l03); inferred, both are
     # built where the field lives (O28)
-    spDerived String& = ("type Node struct(v I64) {\n"
-                         "    v\n"
-                         "    next mut Node?& = null\n"
-                         "}\n"
-                         "type Holder struct(src mut Node&) {\n"
-                         "    r mut Node& = src\n"
-                         "}\n"
-                         "fn Node.mk(i I64) mut Node& { return Node(i) }\n"
-                         "fn setIt(h mut Holder&, i I64) {\n"
-                         "    join { spawn h.r = Node.mk(i) }\n"
-                         "}\n"
-                         "fn setOne(h mut Holder&, i I64) {\n"
-                         "    h.r = Node.mk(i)\n"
+    spDerived String& = ("type Node struct(v I64) {\n" +
+                         "    v\n" +
+                         "    next mut Node?& = null\n" +
+                         "}\n" +
+                         "type Holder struct(src mut Node&) {\n" +
+                         "    r mut Node& = src\n" +
+                         "}\n" +
+                         "fn Node.mk(i I64) mut Node& { return Node(i) }\n" +
+                         "fn setIt(h mut Holder&, i I64) {\n" +
+                         "    join { spawn h.r = Node.mk(i) }\n" +
+                         "}\n" +
+                         "fn setOne(h mut Holder&, i I64) {\n" +
+                         "    h.r = Node.mk(i)\n" +
                          "}\n")
 
     test "C2d, P1g: a task's built result stored into a field of a parameter is built where the field lives, as the assignment's is" {
         dir := try os.MkTemp() catch os.Error { unreachable }
         defer { try os.RemoveAll(dir) catch os.Error { } }
-        try os.WriteFile($dir "/main.olang", spDerived) catch os.Error { }
+        try os.WriteFile($dir + "/main.olang", spDerived) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+        l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                          source.Names(), diag.Diagnostics(false))
-        l.Load($dir "/main.olang")
+        l.Load($dir + "/main.olang")
         r := names.Resolver(l)
         r.Resolve()
         p := generic.Program(l, r)

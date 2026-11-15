@@ -31,5 +31,5 @@ fn main() ? {
     again := work(5)
     afterMain := rssKb()
     assert out[0] + out[1] + out[2] + out[3] == 10 * 512 and again == 5 * 512
-    assert afterJoin > 0 and afterMain - afterJoin < 4096, "the main thread grew by " $(afterMain - afterJoin) "kB"
+    assert afterJoin > 0 and afterMain - afterJoin < 4096, "the main thread grew by " + $(afterMain - afterJoin) + "kB"
 }

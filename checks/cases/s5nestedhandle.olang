@@ -10,7 +10,7 @@ fn main() ? {
     users.Push(list.List<list.List<String&>>())
     users[0].Push(list.List<String&>())
     for k in range 3 {
-        t := $k "-loop-text"
+        t := $k + "-loop-text"
         users[0][0].Push(t)
     }
 }

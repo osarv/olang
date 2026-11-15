@@ -127,13 +127,13 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
 fn (lw mut Lowerer&) genValue(d I64) String {
     b := StringBuilder()
     b.Push("gen" if lw.P.Gens.Has(d) else "plain")
-    at := $d " "
+    at := $d + " "
     ks Vec<String&>
     for k in lw.P.WeakSlots.Keys() {
         if k.StartsWith(at): ks.Push($k[at.Len():])
     }
     ks.Sort(fn(x String&, y String&) Bool { return x < y })
-    for k in ks { b.Push($" weak " $k) }
+    for k in ks { b.Push($" weak " + $k) }
     return b.ToString()
 }
 
@@ -141,7 +141,7 @@ fn (lw mut Lowerer&) genValue(d I64) String {
 fn (lw mut Lowerer&) declName(d I64) String {
     m := lw.P.T.DeclModule(types.DeclId(I32(d)))
     mod := lw.P.L.Mods[m].Identity if m >= 0 and m < lw.P.L.Mods.Len() else "?"
-    return $mod "." $lw.P.T.Names.Text(lw.P.T.DeclName(types.DeclId(I32(d))))
+    return $mod + "." + $lw.P.T.Names.Text(lw.P.T.DeclName(types.DeclId(I32(d))))
 }
 
 # ...decided for every struct and enum the program declares, before any module's record is read: a record reused names
@@ -158,7 +158,7 @@ fn (lw mut Lowerer&) decideGen(mi I64, ds Array<ast.Decl&>&) {
                 if ei < 0: continue
                 k := I64(lw.P.DeclFor(mi, ei))
                 lw.genDecided.Put(k, true)
-                lw.P.Facts.Decide($"T13d " $lw.declName(k), lw.genValue(k), true)
+                lw.P.Facts.Decide($"T13d " + $lw.declName(k), lw.genValue(k), true)
             }
             case ast.Decl.If(_, ti) {
                 if ti.Then != null: lw.decideGen(mi, ti.Then!.Decls)
@@ -181,7 +181,7 @@ fn (lw mut Lowerer&) ReadGen(file I64) {
     for d in g.Asked.Keys() {
         # (a type no module's source declares - a C header's struct, never named weakly (T2d) - has no fact)
         if not lw.genDecided.Has(d): continue
-        name := $"T13d " $lw.declName(d)
+        name := $"T13d " + $lw.declName(d)
         lw.P.Facts.Decide(name, lw.genValue(d), true)
         try lw.P.Facts.Read(file, name) catch { }
     }
@@ -303,8 +303,8 @@ fn (lw Lowerer&) planOf(k mir.FnKey) typed.Plan& {
 # only where the count is what it read. "" for a body that never takes any
 fn (lw Lowerer&) derivedFact(id I64) String {
     return match lw.Bodies[id].Of {
-        case typed.BodyOf.Fn(inst): $"O23a " $lw.P.InstanceName(inst)
-        case typed.BodyOf.Dtor(t): $"O23a dtor " $lw.P.T.Canon(t)
+        case typed.BodyOf.Fn(inst): $"O23a " + $lw.P.InstanceName(inst)
+        case typed.BodyOf.Dtor(t): $"O23a dtor " + $lw.P.T.Canon(t)
         case _: ""
     }
 }
@@ -3076,7 +3076,7 @@ fn (ln mut lowering&) withPayload(c mir.Operand, name mir.Operand, from types.Li
     b := ln.F.AddScope(mir.ScopeKind.Builder, mir.NoScope if closed else ln.top().S, typed.BlockId(-1), sp)
     ln.emit(mir.Stmt.Open(sp, b))
     bref := mir.ScopeRef.Scope(b)
-    ln.word(bref, $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.ErrorWordName(d, w), sp)
+    ln.word(bref, $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) + $p.ErrorWordName(d, w), sp)
     rt := t.Ref(pt, types.ReadOnly)
     r := ln.local(ln.into(rt, mir.Rvalue.ErrTop(rt), sp), rt, sp)
     ln.renderPayload(ln.with(pl(mir.Base.Local(r)), mir.Proj.Deref), w, t.Items(t.Cases(pt))[w], bref, sp)
@@ -3100,7 +3100,7 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         ws := ln.L.P.ErrorWords(d)
         for w in range ws.Len() {
             out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
-            out.Push(ln.textData($q $ln.L.P.ErrorWordName(d, w), sp))
+            out.Push(ln.textData($q + $ln.L.P.ErrorWordName(d, w), sp))
         }
     }
     return out.ToArray()
@@ -4108,7 +4108,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     # D9h: a function handing back a view of what it is given - copied into where its result goes, as the
     # function would have, unless the value is only read here before anything can change what it views
     if ln.viewCall(c, ty) {
-        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $("read" if ln.reads.Has(I64(c.Site)) else "kept") $(" stable" if ln.stableViews(c) else "")) }
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": " + $("read" if ln.reads.Has(I64(c.Site)) else "kept") + $(" stable" if ln.stableViews(c) else "")) }
         # (E31d: a value whose copy runs a declared Copy is copied whatever reads it)
         inPlace := not t.RunsCopy(ty) and (ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)))
         if inPlace or ln.freshCtor(c) {
@@ -4614,7 +4614,7 @@ fn (ln mut lowering&) viewTemps(u typed.LocalUses&) {
         ln.vlIn = u.TempIn[k]
         held := kept and ln.heldViews(u, c)
         if held { ln.L.ViewLocals++ }
-        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(u.TempX[k].Span().Start)) ": a temporary " $("holds views" if held else "copies" if kept else "copies (lent to a body that may change its parts)")) }
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(u.TempX[k].Span().Start)) + ": a temporary " + $("holds views" if held else "copies" if kept else "copies (lent to a body that may change its parts)")) }
     }
 }
 
@@ -4660,14 +4660,14 @@ fn (ln mut lowering&) viewLocals(u typed.LocalUses&) {
     for i in range ln.B.Locals.Len() {
         if ln.rvl.Has(i): continue
         if not ln.viewCand(u, i) {
-            if ln.L.ViewDump and u.Init[i] != null and typed.HoldsOwned(ln.T, ln.B.Locals[i].Ty) { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) ": local L" $i " no candidate" $ln.whyNot(u, i)) }
+            if ln.L.ViewDump and u.Init[i] != null and typed.HoldsOwned(ln.T, ln.B.Locals[i].Ty) { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) + ": local L" + $i + " no candidate" + $ln.whyNot(u, i)) }
             continue
         }
         x := u.Init[i]
         if x == null: continue
         ln.vlIn = ln.B.Locals[i].In
         held := ln.viewInit(u, x, i)
-        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) ": local L" $i $(" holds views" if held else " copies")) }
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) + ": local L" + $i + $(" holds views" if held else " copies")) }
         if held {
             ln.vl.Put(i, true)
             ln.L.ViewLocals++
@@ -4690,7 +4690,7 @@ fn (ln mut lowering&) viewCand(u typed.LocalUses&, i I64) Bool {
 
 # why local i holds no views (OLANG_VIEWDUMP)
 fn (ln mut lowering&) whyNot(u typed.LocalUses&, i I64) String {
-    return $(" escapes" $ln.escWhy(u, i) if ln.escapes(u, i) else "") $(" returned" if u.Ret[i] else "") $(" written" if u.WrOther[i] else "") $(" assigned" if u.Whole[i] else "") $(" lent" if not ln.lendsKeep(u, i) else "")
+    return $(" escapes" + $ln.escWhy(u, i) if ln.escapes(u, i) else "") + $(" returned" if u.Ret[i] else "") + $(" written" if u.WrOther[i] else "") + $(" assigned" if u.Whole[i] else "") + $(" lent" if not ln.lendsKeep(u, i) else "")
 }
 
 # whether every writable lend of local i whole goes to a body keeping its parts as they are (a walk's Next, which
@@ -4836,7 +4836,7 @@ fn (ln mut lowering&) movesAtLastUse(u typed.LocalUses&) {
         ln.noCopy.Put(w.CopySite[k], true)
         ln.moved.Put(w.CopySite[k], l)
         ln.L.Moves++
-        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[l].Sp.Start)) ": local L" $l " moved at its last use") }
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[l].Sp.Start)) + ": local L" + $l + " moved at its last use") }
     }
 }
 
@@ -5160,7 +5160,7 @@ fn (ln mut lowering&) escWhy(u typed.LocalUses&, i I64) String {
     b := StringBuilder()
     if u.EscHard[i]: b.Push(" (stored, captured or handed on)")
     for k in range u.RefAt.Len() {
-        if u.RefAt[k] == i and not ln.L.keepsNoRef(u.RefBody[k], u.RefParam[k]) { b.Push($" (given to body " $u.RefBody[k] " parameter " $u.RefParam[k] ")") }
+        if u.RefAt[k] == i and not ln.L.keepsNoRef(u.RefBody[k], u.RefParam[k]) { b.Push($" (given to body " + $u.RefBody[k] + " parameter " + $u.RefParam[k] + ")") }
     }
     return b.ToString()
 }
@@ -6202,7 +6202,7 @@ fn (ln mut lowering&) renderErr(b mir.ScopeRef, v mir.Operand, ty types.TypeId, 
         for w in range ws.Len() {
             if w < 64 and (t.ErrMask(es[j]) & (U64(1) << w)) == 0 { continue }
             codes.Push(((j + 1) << 16) | w)
-            texts.Push($q $p.ErrorWordName(d, w))
+            texts.Push($q + $p.ErrorWordName(d, w))
             carried := pt != types.UnknownT and p.WordFields(d, w).Len() > 0
             pays.Push(p.PayloadField(ty, j) if carried else 0)
             tags.Push(w)
@@ -6950,7 +6950,7 @@ fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mi
     es := t.Items(t.ErrValItems(ty))
     for j in range es.Len() {
         d := t.DeclOf(t.ErrOf(es[j]))
-        key := stableKey($p.L.Mods[t.DeclModule(d)].Identity "." $t.Names.Text(t.DeclName(d)))
+        key := stableKey($p.L.Mods[t.DeclModule(d)].Identity + "." + $t.Names.Text(t.DeclName(d)))
         hit := ln.prim(typed.PrimOp.Eq, types.BoolT, Array<mir.Operand>[hi, ln.constI64(j + 1)], sp)
         yes, no := ln.F.NewBlock(), ln.F.NewBlock()
         ln.end(mir.Term.Branch(hit, yes, no))
@@ -7290,7 +7290,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
     cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
-        if t.KindOf(r) == types.Kind.Named { ln.word(b, $ln.L.errQualifier(t.DeclOf(r)) $ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
+        if t.KindOf(r) == types.Kind.Named { ln.word(b, $ln.L.errQualifier(t.DeclOf(r)) + $ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
         ln.word(b, "(", sp)
         for i in range parts.Len() {
             if i > 0 { ln.word(b, ", ", sp) }
@@ -7300,7 +7300,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     } else if isEnum {
         caseNames := t.CaseNames(r) if t.KindOf(r) == types.Kind.Named else t.ShapeNames(r)
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
-        prefix := "" if t.KindOf(r) != types.Kind.Named else $ln.L.errQualifier(t.DeclOf(r)) $ln.T.Names.Text(t.DeclName(t.DeclOf(r))) "."
+        prefix := "" if t.KindOf(r) != types.Kind.Named else $ln.L.errQualifier(t.DeclOf(r)) + $ln.T.Names.Text(t.DeclName(t.DeclOf(r))) + "."
         after := ln.F.NewBlock()
         cs := Array<mir.Case>(cases.Len())
         bs := Array<mir.BlockId>(cases.Len())
@@ -7312,14 +7312,14 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         for k in range cases.Len() {
             ln.start(bs[k])
             name := ln.T.Names.Text(caseNames[k]) if caseNames.Len() > 0 and k < caseNames.Len() else $k
-            ln.word(b, $prefix $name, sp)
+            ln.word(b, $prefix + $name, sp)
             if cases[k] != types.TypeId(0) { ln.renderPayload(a, k, cases[k], b, sp) }
             ln.goto(after)
         }
         ln.start(after)
     } else if ln.arrayOf(ty) != types.UnknownT {
         el := t.Elem(ln.arrayOf(ty))
-        ln.word(b, "Array<" $ln.spell(ln.readOnly(el), true, true) ">[", sp)   # the literal making it (E11a, E19)
+        ln.word(b, "Array<" + $ln.spell(ln.readOnly(el), true, true) + ">[", sp)   # the literal making it (E11a, E19)
         n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(a))], sp)
         ln.eachIndex(n, sp, fn(i mir.LocalId) {
             first := ln.prim(typed.PrimOp.Eq, types.BoolT, Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(i)), ln.constI64(0)], sp)
@@ -7446,7 +7446,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
     k := t.KindOf(ty)
     if k == types.Kind.Named {
         # as source writes it outside its module (E11a, B5): "list.List<I64>", the prelude's and the root's own bare
-        name := $ln.L.errQualifier(t.DeclOf(ty)) $ln.T.Names.Text(t.DeclName(t.DeclOf(ty)))
+        name := $ln.L.errQualifier(t.DeclOf(ty)) + $ln.T.Names.Text(t.DeclName(t.DeclOf(ty)))
         args := t.Items(t.Args(ty))
         if args.Len() == 0 { return $name }
         out := StringBuilder()
@@ -7461,10 +7461,10 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
     }
     if k == types.Kind.Ref {
         m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
-        return $m $ln.spell(t.Referent(ty), true, item) $("?&" if (t.PermOf(ty) & types.Nullable) != 0 else "&")
+        return $m + $ln.spell(t.Referent(ty), true, item) + $("?&" if (t.PermOf(ty) & types.Nullable) != 0 else "&")
     }
-    if k == types.Kind.Any { return "any " $ln.spell(t.AnyTrait(ty), true, item) }
-    if k == types.Kind.Array: return "Array<" $ln.spell(t.Elem(ty), true, true) ">"
+    if k == types.Kind.Any { return "any " + $ln.spell(t.AnyTrait(ty), true, item) }
+    if k == types.Kind.Array: return "Array<" + $ln.spell(t.Elem(ty), true, true) + ">"
     if k == types.Kind.Const { return $t.ConstValue(ty) }
     if k == types.Kind.ErrVal { return ln.L.ErrValSpelling(ty) }
     if k == types.Kind.Tuple {
@@ -7480,7 +7480,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
     }
     if k == types.Kind.Func and t.FuncTag(ty) != types.UnknownT {
         # T21b: a declared function type, as it is held - "Handler&"
-        return $ln.spell(t.FuncTag(ty), true) $("?&" if t.FuncNullable(ty) else "&")
+        return $ln.spell(t.FuncTag(ty), true) + $("?&" if t.FuncNullable(ty) else "&")
     }
     if k == types.Kind.Func {
         out := StringBuilder()
@@ -7496,21 +7496,21 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         ns := t.NamesOf(ty)
         for i in range ps.Len() {
             if i > 0 { out.Push(", ") }
-            if ns.Len() == ps.Len() { out.Push($t.Names.Text(source.NameId(I32(ns[i]))) " ") }
+            if ns.Len() == ps.Len() { out.Push($t.Names.Text(source.NameId(I32(ns[i]))) + " ") }
             out.Push(ln.spell(ps[i], true, true))
         }
         out.PushChar(')')
         if t.KindOf(res) == types.Kind.Tuple {
             # several results, bare (D8c)
             parts := t.Items(t.Parts(res))
-            for i in range parts.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(parts[i], true, true)) }
+            for i in range parts.Len() { out.Push($(", " if i > 0 else " ") + $ln.spell(parts[i], true, true)) }
         } else if res != types.VoidT {
             g := es.Len() > 0 and t.KindOf(res) == types.Kind.Func and t.Items(t.Errors(res)).Len() == 0 and t.PromisesOf(res) == 0
-            out.Push(" " $ln.spell(res, true, true, g))
+            out.Push(" " + $ln.spell(res, true, true, g))
         }
         if es.Len() > 0 {
             out.Push(" ?")
-            for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
+            for i in range es.Len() { out.Push($(", " if i > 0 else " ") + $ln.spell(t.ErrOf(es[i]), true)) }
         }
         out.Push(t.PromiseText(ty))   # T21c: its promises after its signature
         if wrap { out.PushChar(')') }
@@ -7525,14 +7525,14 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
 fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
     t types.Table& = lw.P.T
     nd := t.ErrValName(ty)
-    if nd >= types.DeclId(0) { return $lw.errQualifier(nd) $t.Names.Text(t.DeclName(nd)) }
+    if nd >= types.DeclId(0) { return $lw.errQualifier(nd) + $t.Names.Text(t.DeclName(nd)) }
     es := t.Items(t.ErrValItems(ty))
     out := StringBuilder()
     if es.Len() != 1 { out.PushChar('{') }
     k := 0
     for e in es {
         et := t.ErrOf(e)
-        name := $lw.errQualifier(t.DeclOf(et)) $t.Names.Text(t.DeclName(t.DeclOf(et)))
+        name := $lw.errQualifier(t.DeclOf(et)) + $t.Names.Text(t.DeclName(t.DeclOf(et)))
         if t.KindOf(e) != types.Kind.ErrWords {
             if k > 0 { out.Push(", ") }
             out.Push(name)
@@ -7543,7 +7543,7 @@ fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
         for i in range ws.Len() {
             if i < 64 and (t.ErrMask(e) & (U64(1) << i)) != 0 {
                 if k > 0 { out.Push(", ") }
-                out.Push($name if lw.P.IsRaisedError(t.DeclOf(et)) else $name "." $t.Names.Text(ws[i]))
+                out.Push($name if lw.P.IsRaisedError(t.DeclOf(et)) else $name + "." + $t.Names.Text(ws[i]))
                 k++
             }
         }
@@ -7915,9 +7915,9 @@ fn (lw Lowerer&) CloneSumKeys() Vec<mir.FnKey> {
 fn (lw mut Lowerer&) CloneSumText(k mir.FnKey) String {
     s := lw.cloneSums[lw.cloneSum(k)]
     b := StringBuilder()
-    b.Push($"ok " $s.Ok " size " $s.Size " loop")
-    for x in s.Loop { b.Push($" " $x) }
-    for h in s.Hands { b.Push($" hand " $h.From "->" $h.To "@" $h.At " d" $h.Depth) }
+    b.Push($"ok " + $s.Ok + " size " + $s.Size + " loop")
+    for x in s.Loop { b.Push($" " + $x) }
+    for h in s.Hands { b.Push($" hand " + $h.From + "->" + $h.To + "@" + $h.At + " d" + $h.Depth) }
     return b.ToString()
 }
 
@@ -7977,7 +7977,7 @@ fn (lw mut Lowerer&) noteCloneCall(s mut CloneSum&, f mir.Fn&, call mir.Call, kn
 
 # a clone's key: its base, parameter, code and type
 fn cloneKey(base mir.FnKey, param I64, code mir.FnKey, ty types.TypeId) String {
-    return $base " " $param " " $code " " $ty
+    return $base + " " + $param + " " + $code + " " + $ty
 }
 
 # the clone of base for code given at its parameter param, -1 for none
@@ -8078,12 +8078,12 @@ fn (lw mut Lowerer&) fits(st CloneSite, plans Vec<pair.Pair<mir.FnKey, I64>>&, l
 fn lowerText(text String&, dumps Array<String&>&) String, String {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
+    try os.WriteFile($dir + "/main.olang", text) catch os.Error { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+    l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                      source.Names(), diag.Diagnostics(false))
-    l.Load($dir "/main.olang")
+    l.Load($dir + "/main.olang")
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -8103,11 +8103,11 @@ fn lowerText(text String&, dumps Array<String&>&) String, String {
         }
         dump := body.File == root and name in dumps
         bad, shown := try lw.Verified(b, dump) catch GapMet {
-            problems.Push("B" $b ": gapped\n")
+            problems.Push("B" + $b + ": gapped\n")
             continue
         }
         for line in bad.Split("\n") {
-            if line.Len() > 0 { problems.Push("B" $b ": " $line "\n") }
+            if line.Len() > 0 { problems.Push("B" + $b + ": " + $line + "\n") }
         }
         out.Push(shown)
     }
@@ -8117,14 +8117,14 @@ fn lowerText(text String&, dumps Array<String&>&) String, String {
         key := lw.Wanted[w]
         w++
         bad, _ := try lw.VerifiedKey(key, false) catch GapMet {
-            problems.Push($key ": gapped\n")
+            problems.Push($key + ": gapped\n")
             continue
         }
         for line in bad.Split("\n") {
-            if line.Len() > 0 { problems.Push($key ": " $line "\n") }
+            if line.Len() > 0 { problems.Push($key + ": " + $line + "\n") }
         }
     }
-    for g in lw.Gaps { problems.Push("gap " $g.What "\n") }
+    for g in lw.Gaps { problems.Push("gap " + $g.What + "\n") }
     return problems.ToString(), out.ToString()
 }
 
@@ -8132,31 +8132,31 @@ test "a function lowers to straight-line MIR: its operands in temporaries, its f
     problems, dump := lowerText("fn add(a I32, b I32) I32 {\n    s := a + b\n    return s\n}\nfn main() { x := add(1, 2) }\n"
                                 Array<String&>["add"])
     assert problems == "", problems
-    want := ("  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  L3 Temp: I32\n  L4 Temp: I32\n  L5 Temp: I32\n"
-             "  L6 Temp: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L3 = copy L0\n  L4 = copy L1\n  L5 = Add I32(copy L3, copy L4)\n"
+    want := ("  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  L3 Temp: I32\n  L4 Temp: I32\n  L5 Temp: I32\n" +
+             "  L6 Temp: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L3 = copy L0\n  L4 = copy L1\n  L5 = Add I32(copy L3, copy L4)\n" +
              "  L2 = copy L5\n  L6 = copy L2\n  close S0\n  return copy L6\n")
     assert (try dump.Find(want) catch default -1) > 0, dump
 }
 
 test "control flow verifies clean: ifs, loops with break and continue, ranges, for-in, matches, tries, defers" {
-    text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
-             "type E error {\n    Bad\n    Worse\n}\n"
-             "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.Bad }\n    if n > 100 { error E.Worse }\n    return n\n}\n"
-             "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r): 3 * r * r\n        case Shape.Square: 1\n    }\n}\n"
-             "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"
-             "        if x > 50 { break }\n        t += try pick(x) catch E.Bad default 0\n    }\n    for i in range 3 { t += i }\n"
-             "    return t\n}\n"
-             "fn main() ? E {\n    s := try walk(Array<I64>[1, 2, 3]) + area(Shape.Circle(2))\n    assert s > 0, \"positive\"\n"
+    text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n" +
+             "type E error {\n    Bad\n    Worse\n}\n" +
+             "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.Bad }\n    if n > 100 { error E.Worse }\n    return n\n}\n" +
+             "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r): 3 * r * r\n        case Shape.Square: 1\n    }\n}\n" +
+             "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n" +
+             "        if x > 50 { break }\n        t += try pick(x) catch E.Bad default 0\n    }\n    for i in range 3 { t += i }\n" +
+             "    return t\n}\n" +
+             "fn main() ? E {\n    s := try walk(Array<I64>[1, 2, 3]) + area(Shape.Circle(2))\n    assert s > 0, \"positive\"\n" +
              "    q := try I64(s * 2).Narrow<I32>() catch default 0\n    assert $q \" \" $Shape.Square != \"\"\n}\n")
     problems, _ := lowerText(text, Array<String&>[])
     assert problems == "", problems
 }
 
 test "helpers: == on a struct, its Hash, its rendering; a comprehension; a join of tasks" {
-    text := ("type Point struct(x I64, y I64) {\n    x, y\n}\n"
-             "fn sq(n I64) I64 { return n * n }\n"
-             "fn main() {\n    p := Point(1, 2)\n    assert p == Point(1, 2) and p.Hash() == Point(1, 2).Hash()\n"
-             "    t := $p\n    a := Array<I64>[x * 2 for x in Array<I64>[1, 2, 3] if x > 1]\n    out := Array<I64>(3)\n"
+    text := ("type Point struct(x I64, y I64) {\n    x, y\n}\n" +
+             "fn sq(n I64) I64 { return n * n }\n" +
+             "fn main() {\n    p := Point(1, 2)\n    assert p == Point(1, 2) and p.Hash() == Point(1, 2).Hash()\n" +
+             "    t := $p\n    a := Array<I64>[x * 2 for x in Array<I64>[1, 2, 3] if x > 1]\n    out := Array<I64>(3)\n" +
              "    join {\n        for i in range 3 { spawn out[i] = sq(i) }\n    }\n    assert a.Len() == 2 and out[2] == 4 and t.Len() > 0\n}\n")
     problems, _ := lowerText(text, Array<String&>[])
     assert problems == "", problems
@@ -8166,12 +8166,12 @@ test "helpers: == on a struct, its Hash, its rendering; a comprehension; a join 
 fn readCloneSums(text String&, fns Array<String&>&) String {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
+    try os.WriteFile($dir + "/main.olang", text) catch os.Error { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+    l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                      source.Names(), diag.Diagnostics(false))
-    l.Load($dir "/main.olang")
+    l.Load($dir + "/main.olang")
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -8184,7 +8184,7 @@ fn readCloneSums(text String&, fns Array<String&>&) String {
             if c.Bodies[b].File != l.Mods[l.Root].File or not lw.HasCode(b): continue
             match c.Bodies[b].Of {
                 case typed.BodyOf.Fn(inst) {
-                    if p.L.Names.Text(p.FnDecl(p.InstanceFn(inst)).Name) == name: out.Push($name ": " $lw.CloneSumText(mir.FnKey.Body(typed.BodyId(I32(b)))) "\n")
+                    if p.L.Names.Text(p.FnDecl(p.InstanceFn(inst)).Name) == name: out.Push($name + ": " + $lw.CloneSumText(mir.FnKey.Body(typed.BodyId(I32(b)))) + "\n")
                 }
                 case _ { }
             }
@@ -8194,9 +8194,9 @@ fn readCloneSums(text String&, fns Array<String&>&) String {
 }
 
 test "a clone reads the loops a call through a parameter is in, and the calls handing it on" {
-    text := ("fn apply(xs Array<I64>&, f fn&(x I64) I64) I64 {\n    t I64 = 0\n    for x in xs {\n        for k in range 2 { t += f(x + k) }\n    }\n    return t\n}\n"
-             "fn pass(xs Array<I64>&, f fn&(x I64) I64) I64 { return apply(xs, f) }\n"
-             "fn reset(f fn&(x I64) I64, g fn&(x I64) I64) I64 {\n    f = g\n    return f(1)\n}\n"
+    text := ("fn apply(xs Array<I64>&, f fn&(x I64) I64) I64 {\n    t I64 = 0\n    for x in xs {\n        for k in range 2 { t += f(x + k) }\n    }\n    return t\n}\n" +
+             "fn pass(xs Array<I64>&, f fn&(x I64) I64) I64 { return apply(xs, f) }\n" +
+             "fn reset(f fn&(x I64) I64, g fn&(x I64) I64) I64 {\n    f = g\n    return f(1)\n}\n" +
              "fn main() {\n    a := Array<I64>[1, 2]\n    assert pass(a, fn(x I64) I64: return x * 2) == reset(fn(x I64) I64: return x, fn(x I64) I64: return x)\n}\n")
     got := readCloneSums(text, Array<String&>["apply", "pass", "reset"])
     assert got.Contains("apply: ok true size ") and got.Contains(" loop 0 2\n"), got

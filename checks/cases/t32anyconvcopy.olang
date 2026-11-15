@@ -16,7 +16,7 @@ type aNums extends Array<I64>
 fn main() {
     xs := Vec<any aSized&>()
     for i in range 3 {
-        t := "lab" $i
+        t := "lab" + $i
         xs.Push(aLab(t))
         c := Array<I64>[i, 7]
         xs.Push(aNums(c[0:2]))
@@ -29,5 +29,5 @@ fn main() {
     s := "hello"
     b mut any aBump& = aLab(s)
     b.Bump()
-    io.PutLine($s " " $b)!
+    io.PutLine($s + " " + $b)!
 }

@@ -17,7 +17,7 @@ type Res unique struct(n I64) {
 # that scope closes
 type Node struct(v I64) {
     v
-    t String& = $"node " $v " with some text ............................................"
+    t String& = $"node " + $v + " with some text ............................................"
     Res(v)
 }
 
@@ -29,7 +29,7 @@ fn main() {
     h := Holder()
     for i in range 5 {
         h.n = Node(i + 1)        # lets go of the old node
-        io.PutLine($"turn " $i ": " $Ends " ended")!
+        io.PutLine($"turn " + $i + ": " + $Ends + " ended")!
     }
-    io.PutLine($"before the close: " $Ends " ended")!
+    io.PutLine($"before the close: " + $Ends + " ended")!
 }

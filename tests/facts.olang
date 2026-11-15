@@ -22,7 +22,7 @@ fn Fact(n I64) I64 { return 1 if n < 2 else n * Fact(n - 1) }
 
 fn Shout(t String&) ? io.Error { try io.PutLine(t) }
 
-fn Label(n I64) String { return $"#" $n }
+fn Label(n I64) String { return $"#" + $n }
 
 fn Settle(x I64) I64 {
     v := x

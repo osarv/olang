@@ -62,7 +62,7 @@ fn (b bag&) Str() String {
     r res& = res(1)
     q := res(2)
     if b.n == 7 { unreachable }
-    return "b" $r.k $q.k
+    return "b" + $r.k + $q.k
 }
 test "fails inside a Str" {
     s := $bag(7)
@@ -130,7 +130,7 @@ test "after" { assert true }
 Asked mut I64 = 0
 fn reason(n I64) String {
     Asked += 1
-    return "n is " $n
+    return "n is " + $n
 }
 fn pick(n I64) I64 {
     if n < 10 { return n }

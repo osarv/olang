@@ -33,7 +33,7 @@ fn fetch(n I64) I64 ? AnyErr {
 fn loadAgain(n I64) I64 ? os.Error, ParseErr, LoadErr { return try load(n) }
 
 fn label(n I64) String {
-    return try $load(n) catch e default ("failed: " $e)
+    return try $load(n) catch e default ("failed: " + $e)
 }
 
 fn kind(n I64) I64 {

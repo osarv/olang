@@ -81,10 +81,10 @@ fn (c mut Counts&) Add(d Counts&) {
 }
 
 fn (c Counts&) Describe() String {
-    a := $c.commas " line-end commas removed, " $c.joined " lines joined, " $c.moved " operators moved up, " $c.wrapped " items parenthesized, "
-    b := $c.errPluses " '+' in error sets, " $c.errParens " function-type error sets parenthesized, "
-    d := $c.catchPluses " '+' in catch items, " $c.fnLists " type parameter lists, " $c.recvBare " receiver variables bare, "
-    return $a $b $d $c.ctorLists " constructor lists"
+    a := $c.commas + " line-end commas removed, " + $c.joined + " lines joined, " + $c.moved + " operators moved up, " + $c.wrapped + " items parenthesized, "
+    b := $c.errPluses + " '+' in error sets, " + $c.errParens + " function-type error sets parenthesized, "
+    d := $c.catchPluses + " '+' in catch items, " + $c.fnLists + " type parameter lists, " + $c.recvBare + " receiver variables bare, "
+    return $a + $b + $d + $c.ctorLists + " constructor lists"
 }
 
 # ---- tokens ----
@@ -189,7 +189,7 @@ fn (g migration&) lineOf(pos I64) I64 {
 }
 
 fn (g mut migration&) note(pos I64, what String&) {
-    g.report.Push($g.path ":" $g.lineOf(pos) ": " $what)
+    g.report.Push($g.path + ":" + $g.lineOf(pos) + ": " + $what)
 }
 
 # the first token of the line the token at i is on, or of the line before it when that line ends in a comma
@@ -255,7 +255,7 @@ fn (g mut migration&) listing() {
             closer := g.m[f.open]
             if f.list and not f.compr and p.k != token.Tok.Comma and i != closer and p.k.EndsStatement() {
                 if movable(t) {
-                    g.edit(p.end, p.end, $" " $g.src[t.start:t.end])
+                    g.edit(p.end, p.end, $" " + $g.src[t.start:t.end])
                     blankEnd := t.end
                     if blankEnd < g.src.Len() and g.src[blankEnd] == ' ' { blankEnd++ }
                     g.edit(t.start, blankEnd, "")
@@ -574,7 +574,7 @@ fn (g migration&) bareInPlace(o occ&) String {
     name := g.src[g.v[o.name].start:g.v[o.name].end]
     left := " " if s > 0 and srcmask.IsWord(g.src[s - 1]) else ""
     right := " " if e < g.src.Len() and srcmask.IsWord(g.src[e]) else ""
-    return $left $name $right
+    return $left + $name + $right
 }
 
 # rewrites the type variables written from index lo to hi: each to its bare name, the list after index at - those of
@@ -598,7 +598,7 @@ fn (g mut migration&) typeList(lo I64, hi I64, at I64, recvLo I64, recvHi I64, c
         if name in names { continue }
         names.Push(name)
         if o.cs == o.ce: entries.Push(name)
-        else: entries.Push($name " " $g.bareText(occs, o.cs, o.ce))
+        else: entries.Push($name + " " + $g.bareText(occs, o.cs, o.ce))
     }
     if entries.Len() > 0 {
         b := StringBuilder()
@@ -733,7 +733,7 @@ fn main() ? {
     changedFiles I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("syntax_migrate: cannot read " $path)
+            srcmask.SayErr("syntax_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -742,17 +742,17 @@ fn main() ? {
         total.Add(mine)
         if out == src { continue }
         changedFiles++
-        if verbose { srcmask.Say($path ": " $mine.Describe()) }
+        if verbose { srcmask.Say($path + ": " + $mine.Describe()) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("syntax_migrate: cannot write " $path)
+                srcmask.SayErr("syntax_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     for r in report { srcmask.Say(r) }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changedFiles " files: " $total.Describe())
+    srcmask.Say($verb + $changedFiles + " files: " + $total.Describe())
     if check and changedFiles > 0 { os.Exit(1) }
 }
 

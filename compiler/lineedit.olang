@@ -208,14 +208,14 @@ fn (e Editor&) promptOf(i I64) String& {
 }
 
 fn (e Editor&) status() String {
-    if e.viSearch: return $("/" if e.back else "?") $e.query
-    return $("(failed search) " if e.failed else "(search) ") $e.query
+    if e.viSearch: return $("/" if e.back else "?") + $e.query
+    return $("(failed search) " if e.failed else "(search) ") + $e.query
 }
 
 # the entry drawn again from its first row, the cursor put where At is - or, while searching, at the end of the search
 # line below it
 fn (e mut Editor&) draw() {
-    if e.row > 0: e.Out.Push($"\x1b[" $e.row "A")
+    if e.row > 0: e.Out.Push($"\x1b[" + $e.row + "A")
     e.Out.Push("\r\x1b[J")
     lines := e.Text.Split("\n")
     painted := (paint.Source(e.Text) if e.Colour else $e.Text).Split("\n")
@@ -229,7 +229,7 @@ fn (e mut Editor&) draw() {
         p := e.promptOf(i)
         if i > 0: top += (c - 1) / w + 1
         if i > 0: e.Out.Push("\r\n")
-        e.Out.Push($p $painted[i])
+        e.Out.Push($p + $painted[i])
         c = cells(p) + cells(lines[i])
         if e.At >= start and e.At <= start + lines[i].Len() {
             k := cells(p) + cells(lines[i][:e.At - start])
@@ -240,15 +240,15 @@ fn (e mut Editor&) draw() {
     if e.searching {
         top += (c - 1) / w + 1
         s := e.status()
-        e.Out.Push($"\r\n" $s)
+        e.Out.Push($"\r\n" + $s)
         c = cells(s)
         curRow, curCol = top + c / w, c % w
     }
     if c > 0 and c % w == 0: e.Out.Push("\r\n")
     up := top + c / w - curRow
-    if up > 0: e.Out.Push($"\x1b[" $up "A")
+    if up > 0: e.Out.Push($"\x1b[" + $up + "A")
     e.Out.Push("\r")
-    if curCol > 0: e.Out.Push($"\x1b[" $curCol "C")
+    if curCol > 0: e.Out.Push($"\x1b[" + $curCol + "C")
     e.row = curRow
 }
 
@@ -290,7 +290,7 @@ fn (e mut Editor&) Break() {
     for i < e.At and e.Text[i] == ' ': i++
     indent := " ".Repeat(i - ls)
     more := e.At > ls and (e.Text[e.At - 1] == '{' or e.Text[e.At - 1] == '(' or e.Text[e.At - 1] == '[')
-    e.insert($"\n" $indent $("    " if more else ""))
+    e.insert($"\n" + $indent + $("    " if more else ""))
     e.Normal = false
     e.draw()
 }
@@ -334,7 +334,7 @@ fn (e mut Editor&) escape(c Char) Event {
         e.esc = ""
         return e.meta(c)
     }
-    e.esc = $e.esc $one(c)
+    e.esc = $e.esc + $one(c)
     if e.esc.Len() <= 2 or c < 0x40 or c > 0x7E: return Event.Editing
     if e.esc.Len() > 16 {
         e.esc = ""
@@ -503,7 +503,7 @@ fn (e mut Editor&) insert(s String&) {
     if s == "": return
     e.save(1 if s.Len() == 1 else 2)
     e.inserted = true
-    e.Text = $e.Text[:e.At] $s $e.Text[e.At:]
+    e.Text = $e.Text[:e.At] + $s + $e.Text[e.At:]
     e.At += s.Len()
 }
 
@@ -512,7 +512,7 @@ fn (e mut Editor&) remove(a I64, b I64, kill Bool = false) {
     if b <= a: return
     e.save(2)
     if kill: e.killed = $e.Text[a:b]
-    e.Text = $e.Text[:a] $e.Text[b:]
+    e.Text = $e.Text[:a] + $e.Text[b:]
     e.At = a
 }
 
@@ -559,7 +559,7 @@ fn (e mut Editor&) searchKey(c Char) Event {
         return Event.Editing
     }
     if c >= 32 {
-        e.query = $e.query $one(c)
+        e.query = $e.query + $one(c)
         e.find(e.found if e.found < e.History.Len() else e.found - 1)
         return Event.Editing
     }
@@ -767,8 +767,8 @@ fn (e mut Editor&) paste(after Bool, n I64) {
 # $XDG_STATE_HOME/olang/history, else ~/.local/state/olang/history
 fn HistoryPath() String {
     dir := try os.Env("XDG_STATE_HOME") catch default ""
-    if dir == "": return $(try os.Env("HOME") catch default ".") "/.local/state/olang/history"
-    return $dir "/olang/history"
+    if dir == "": return $(try os.Env("HOME") catch default ".") + "/.local/state/olang/history"
+    return $dir + "/olang/history"
 }
 
 # an entry on one line of the file: '\' and line ends escaped
@@ -805,7 +805,7 @@ fn (e mut Editor&) Load(path String&) {
     e.walk = e.History.Len()
     if n <= 2 * Keep: return
     b := StringBuilder()
-    for h in e.History.View(): b.Push($encode(h) "\n")
+    for h in e.History.View(): b.Push($encode(h) + "\n")
     try os.WriteFile(path, b.ToString()) catch os.Error { }
 }
 
@@ -823,9 +823,9 @@ fn appendLine(path String&, line String&) {
     slash := path.Len() - 1
     for slash > 0 and path[slash] != '/': slash--
     if slash > 0: try os.MkDirAll(path[:slash]) catch os.Error { }
-    fd := fcntl.open($path "\0", fcntl.O_WRONLY | fcntl.O_CREAT | fcntl.O_APPEND, 384)    # 0600
+    fd := fcntl.open($path + "\0", fcntl.O_WRONLY | fcntl.O_CREAT | fcntl.O_APPEND, 384)    # 0600
     if fd < 0: return
-    try io.Write(fd, $line "\n") catch io.Error { }
+    try io.Write(fd, $line + "\n") catch io.Error { }
     unistd.close(fd)
 }
 
@@ -834,8 +834,8 @@ fn appendLine(path String&, line String&) {
 # $XDG_CONFIG_HOME/olang/prompt, else ~/.config/olang/prompt: the prompt's settings, a line "edit vi" or "edit emacs"
 fn ConfigPath() String {
     dir := try os.Env("XDG_CONFIG_HOME") catch default ""
-    if dir == "": return $(try os.Env("HOME") catch default ".") "/.config/olang/prompt"
-    return $dir "/olang/prompt"
+    if dir == "": return $(try os.Env("HOME") catch default ".") + "/.config/olang/prompt"
+    return $dir + "/olang/prompt"
 }
 
 # whether vi's keys are chosen: OLANG_EDIT=vi or emacs, else the settings' file, else emacs's
@@ -1205,7 +1205,7 @@ test Editor "vi: j and k walk the history, / and n search it" {
 
 test Remember "keeps the history in its file, escaped, and the most recent entries" {
     dir := try os.MkTemp(prefix = "lineedit")
-    path := $dir "/state/olang/history"
+    path := $dir + "/state/olang/history"
     e := Editor()
     e.Load(path)
     e.Remember("a \\ b")

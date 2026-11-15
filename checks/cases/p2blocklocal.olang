@@ -5,7 +5,7 @@
 import "std/io"
 type Node struct(n I64) {
     n
-    name String& = "node" $n
+    name String& = "node" + $n
 }
 type Holder struct() {
     cur mut Node?&

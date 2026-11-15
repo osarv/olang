@@ -24,7 +24,7 @@ fn churn() I64 {
     for i in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i $i $i "-" $(i * 7)
+        s := $i + $i + $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t
@@ -36,6 +36,6 @@ fn main() ? {
         w((i if j < 0 else o).m.inner)
     }
     churn()
-    try io.PutLine($o.m.inner.k " " $o.m.inner.l.Len() " " $o.m.inner.l[19])
+    try io.PutLine($o.m.inner.k + " " + $o.m.inner.l.Len() + " " + $o.m.inner.l[19])
     try io.PutLine($o.m.inner.l.ToArray()[:3])
 }

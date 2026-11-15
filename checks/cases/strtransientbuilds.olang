@@ -13,7 +13,7 @@ type Bag struct(head Node&) {
 fn apply(f fn&() I64) I64 { return f() }
 fn peek(n Node&) I64 {
     return apply(fn() I64 {
-        s := $n.v "x"
+        s := $n.v + "x"
         return s.Len()
     })
 }
@@ -26,7 +26,7 @@ fn peek2(n Node&) I64 {
 type Bag2 struct(head Node&) {
     head
 }
-fn (b Bag&) Str() String { return "b" $peek(b.head) }
+fn (b Bag&) Str() String { return "b" + $peek(b.head) }
 
-fn (b Bag2&) Str() String { return "b" $peek2(b.head) }
-fn main() ? { try io.PutLine($Bag(Node(4)) $Bag2(Node(4))) }
+fn (b Bag2&) Str() String { return "b" + $peek2(b.head) }
+fn main() ? { try io.PutLine($Bag(Node(4)) + $Bag2(Node(4))) }

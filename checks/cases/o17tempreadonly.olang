@@ -31,5 +31,5 @@ fn main() ? {
         try churn()
     }
     try churn()
-    try io.PutLine("seed " $sum(seed))
+    try io.PutLine("seed " + $sum(seed))
 }

@@ -23,9 +23,9 @@ fn local(n I64) I64 {
     for i in range n {
         v := Vec<I64>()
         for j in range 10 { v.Push(j + i) }
-        words.Put("k" $(i % 3), v)
+        words.Put("k" + $(i % 3), v)
         churn()
-        s += words.Get("k" $(i % 3))![9]
+        s += words.Get("k" + $(i % 3))![9]
     }
     return s + words.Len()
 }
@@ -35,14 +35,14 @@ fn global(n I64) I64 {
     for i in range n {
         v := Vec<I64>()
         for j in range 10 { v.Push(j * i) }
-        table.Put("g" $(i % 4), v)
+        table.Put("g" + $(i % 4), v)
         if i % 4 == 3: table.Remove("g1")
         churn()
-        s += table.Get("g" $(i % 4))![9]
+        s += table.Get("g" + $(i % 4))![9]
     }
     return s + table.Len()
 }
 
 fn main() {
-    io.PutLine($local(40) " " $global(40))!
+    io.PutLine($local(40) + " " + $global(40))!
 }

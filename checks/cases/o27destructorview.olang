@@ -7,7 +7,7 @@
 import "std/io"
 type Res unique struct(n String&) {
     name := $n
-} destruct { io.PutLine("end " $name)! }
+} destruct { io.PutLine("end " + $name)! }
 fn churn() {
     for k in range 50 {
         x := Array<I64>(100, k)
@@ -17,7 +17,7 @@ fn churn() {
 fn main() {
     keep := Vec<String&>()
     for i in range 3 {
-        f := Res($i "-file")
+        f := Res($i + "-file")
         keep.Push(f.name[0:1])
     }
     churn()

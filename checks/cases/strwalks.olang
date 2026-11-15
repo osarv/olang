@@ -24,14 +24,14 @@ fn (b Bag&) Str() String {
     for x in b.l { n += x }
     it := b.mk()
     direct := It(b)
-    return $n "/" $b.m.Len() "/" $it.slot.v "/" $direct.n "/" $b.l.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
+    return $n + "/" + $b.m.Len() + "/" + $it.slot.v + "/" + $direct.n + "/" + $b.l.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
 }
 fn churn() I64 {
     t I64 = 0
     for i in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i $i "-" $(i * 7)
+        s := $i + $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t

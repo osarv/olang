@@ -36,9 +36,9 @@ fn say(text String&) { spin.Say(io.Stdout, text) }
 
 # what a listing says of how its code was made
 fn how(c build.Config&, ir Bool) String {
-    what := "optimized LLVM IR" if ir else $c.Target.Arch " machine code"
+    what := "optimized LLVM IR" if ir else $c.Target.Arch + " machine code"
     level := "-O2, each module on its own (-quick)" if c.Quick else "-O3, optimized again as the program is linked"
-    return $what " as build compiles it: " $level ", for " $c.Target.Cpu
+    return $what + " as build compiles it: " + $level + ", for " + $c.Target.Cpu
 }
 
 # how the code's own language writes a comment: IR's ";", AArch64 assembly's "//", x86-64's "#"
@@ -99,7 +99,7 @@ fn unquote(v String&) String {
 
 # the value of key in a flow map as the remark writer writes a place: "{ File: v.olang, Line: 6, Column: 31 }"
 fn field(m String&, key String&) String {
-    at := try m.Find($key ": ") catch default -1
+    at := try m.Find($key + ": ") catch default -1
     if at < 0 { return "" }
     rest := m[at + key.Len() + 2:]
     if rest.StartsWith("'") or rest.StartsWith("\"") {
@@ -125,7 +125,7 @@ fn keyValue(line String&) String, String {
 
 # whether name - a function a remark names, a label - is sym's own code: sym, or a part of it the compiler split off or
 # renamed ("sym.cold.1", ThinLTO's "sym.llvm.123")
-fn ofSym(name String&, sym String&) Bool { return name == sym or name.StartsWith($sym ".") }
+fn ofSym(name String&, sym String&) Bool { return name == sym or name.StartsWith($sym + ".") }
 
 fn ofAny(name String&, syms Array<String&>&) Bool {
     for s in syms {
@@ -222,8 +222,8 @@ fn (n Namer&) Name(sym String&) String {
     if sym == "main" { return "startup" }       # the program's entry, as a profile names it (B20a)
     # a function made a value (emit's thunkSym), an adapter of one, a copy of one, by what it is of
     fv := try sym.Find("_fv_") catch default -1
-    if fv > 0 { return $n.Name(sym[:fv]) " as a function value" }
-    if sym.EndsWith("_adapter") { return $n.Name(sym[:sym.Len() - 8]) " adapted" }
+    if fv > 0 { return $n.Name(sym[:fv]) + " as a function value" }
+    if sym.EndsWith("_adapter") { return $n.Name(sym[:sym.Len() - 8]) + " adapted" }
     if sym.EndsWith("_copied") { return n.Name(sym[:sym.Len() - 7]) }
     text := types.Demangle(sym)
     if text == sym { return $sym }
@@ -232,7 +232,7 @@ fn (n Namer&) Name(sym String&) String {
     lead := text[:dot] if dot > 0 else ""
     if lead != "" and not lead.Contains("<") and not lead.Contains(":") and not lead.Contains("(") {
         rest := text[dot + 1:]
-        text = $rest if rest.Contains(":") else $load.ErrQualifier(lead, lead == n.root) $rest
+        text = $rest if rest.Contains(":") else $load.ErrQualifier(lead, lead == n.root) + $rest
     }
     return n.typesNamed(text)
 }
@@ -287,7 +287,7 @@ fn (s mut Sources&) Text(path String&, n I64) String {
 
 # a file as the listing names it
 fn (s Sources&) Shown(name String&) String {
-    return $"std/" $name[s.std.Len() + 1:] if s.std != "" and name.StartsWith($s.std "/") else $name
+    return $"std/" + $name[s.std.Len() + 1:] if s.std != "" and name.StartsWith($s.std + "/") else $name
 }
 
 # ---- rendering ----
@@ -299,7 +299,7 @@ fn Render(li Inputs&) String {
     src := Sources.Make()
     parts := readParts(li.Files.Parts)
     if li.Prog.Named.Len() == 0 {
-        b.Push($li.Comment " " $li.Prog.Named.Len() " instances: the program makes no instance of it, so it has no code\n")
+        b.Push($li.Comment + " " + $li.Prog.Named.Len() + " instances: the program makes no instance of it, so it has no code\n")
         return b.ToString()
     }
     for i, code in li.Prog.Named {
@@ -322,8 +322,8 @@ fn readParts(paths Vec<String&>&) Vec<String&> {
 fn instance(li Inputs&, code build.Code&, parts Vec<String&>&, names Namer&, src mut Sources&) String {
     b := StringBuilder()
     cm := li.Comment
-    b.Push($cm " " $code.Label "\n")
-    b.Push($cm " " $src.Shown(code.File) ":" $code.Line " - " $li.How "\n")
+    b.Push($cm + " " + $code.Label + "\n")
+    b.Push($cm + " " + $src.Shown(code.File) + ":" + $code.Line + " - " + $li.How + "\n")
     chain Vec<String&>
     chain.Push(code.Symbol)
     sym := found(parts, code.Symbol, li.Ir)
@@ -339,15 +339,15 @@ fn instance(li Inputs&, code build.Code&, parts Vec<String&>&, names Namer&, src
             b.Push(noCode(cm, said, callers, names))
             return b.ToString()
         }
-        said = $said $(" inlined at every call, into " if said == "" else ", and that into ") $names.Name(callers[0])
+        said = $said + $(" inlined at every call, into " if said == "" else ", and that into ") + $names.Name(callers[0])
         chain.Push($callers[0])
         sym = found(parts, callers[0], li.Ir)
     }
     if sym == "" {
-        b.Push($cm " no code of its own:" $said "\n")
+        b.Push($cm + " no code of its own:" + $said + "\n")
         return b.ToString()
     }
-    b.Push($cm " no code of its own:" $said ", whose code follows\n")
+    b.Push($cm + " no code of its own:" + $said + ", whose code follows\n")
     b.Push(body(li, sym, sym, chain.ToArray(), parts, names, src))
     return b.ToString()
 }
@@ -356,10 +356,10 @@ fn instance(li Inputs&, code build.Code&, parts Vec<String&>&, names Namer&, src
 fn noCode(cm String&, said String&, callers Vec<String&>&, names Namer&) String {
     shown Vec<String&>
     for k in callers { shown.Push(names.Name(k)) }
-    if said == "" and callers.Len() == 0 { return $cm " no code: nothing in the program calls it, so the link kept none\n" }
-    if said == "" { return $cm " no code of its own: inlined at every call, into " $shown.Join(", ") "\n" }
-    if callers.Len() == 0 { return $cm " no code of its own:" $said ", which has none either\n" }
-    return $cm " no code of its own:" $said ", which is inlined in turn into " $shown.Join(", ") "\n"
+    if said == "" and callers.Len() == 0 { return $cm + " no code: nothing in the program calls it, so the link kept none\n" }
+    if said == "" { return $cm + " no code of its own: inlined at every call, into " + $shown.Join(", ") + "\n" }
+    if callers.Len() == 0 { return $cm + " no code of its own:" + $said + ", which has none either\n" }
+    return $cm + " no code of its own:" + $said + ", which is inlined in turn into " + $shown.Join(", ") + "\n"
 }
 
 # the functions the inliner put sym into, in the order its remarks name them
@@ -386,15 +386,15 @@ fn found(parts Vec<String&>&, sym String&, ir Bool) String {
 fn definedIn(text String&, sym String&, ir Bool) String {
     for line in text.Lines() {
         if ir and line.StartsWith("define ") and irDefines(line, sym) { return $sym }
-        if ir and line.StartsWith($"@" $sym " = ") and line.Contains(" alias ") { return aliasee(line) }
-        if not ir and line.StartsWith(sym) and (line.StartsWith($sym ":") or line.StartsWith($sym ".llvm.")) { return $sym }
-        if not ir and line.Trim().StartsWith($".set\t" $sym ", ") { return $line.Trim()[sym.Len() + 7:].Trim() }
+        if ir and line.StartsWith($"@" + $sym + " = ") and line.Contains(" alias ") { return aliasee(line) }
+        if not ir and line.StartsWith(sym) and (line.StartsWith($sym + ":") or line.StartsWith($sym + ".llvm.")) { return $sym }
+        if not ir and line.Trim().StartsWith($".set\t" + $sym + ", ") { return $line.Trim()[sym.Len() + 7:].Trim() }
     }
     return ""
 }
 
 # whether a "define" line defines sym - by its name, or as ThinLTO renamed it once it promoted it ("sym.llvm.123")
-fn irDefines(line String&, sym String&) Bool { return line.Contains($"@" $sym "(") or line.Contains($"@" $sym ".llvm.") }
+fn irDefines(line String&, sym String&) Bool { return line.Contains($"@" + $sym + "(") or line.Contains($"@" + $sym + ".llvm.") }
 
 # the function an IR alias line names: its last "@name"
 fn aliasee(line String&) String {
@@ -426,10 +426,10 @@ fn body(li Inputs&, sym String&, own String&, chain Array<String&>&, parts Vec<S
             inlined.Push(names.Name(r.Callee))
         }
     }
-    head := $li.Comment " " $w.count $(" IR instructions" if li.Ir else " instructions")
-    if sym != own { head = $head " (its code merged with " $names.Name(sym) "'s, which is the same)" }
-    if inlined.Len() > 0 { head = $head "; inlined into it: " $inlined.Join(", ") }
-    b.Push($head "\n")
+    head := $li.Comment + " " + $w.count + $(" IR instructions" if li.Ir else " instructions")
+    if sym != own { head = $head + " (its code merged with " + $names.Name(sym) + "'s, which is the same)" }
+    if inlined.Len() > 0 { head = $head + "; inlined into it: " + $inlined.Join(", ") }
+    b.Push($head + "\n")
     b.Push(w.out.ToString())
     b.Push(w.leftover())
     return b.ToString()
@@ -466,7 +466,7 @@ fn (w mut Writer&) reach(name String&, path String&, line I64) {
 fn (w mut Writer&) code(line String&, instruction Bool) {
     if instruction and w.pendLine >= 0 and (w.pendLine != w.lastLine or w.pendFile != w.lastFile) { w.place() }
     if instruction { w.count++ }
-    w.out.Push($line "\n")
+    w.out.Push($line + "\n")
 }
 
 # the pending place as a comment - its file, line and text, or that no line of the program holds the code - and the
@@ -474,10 +474,10 @@ fn (w mut Writer&) code(line String&, instruction Bool) {
 fn (w mut Writer&) place() {
     cm := w.Comment
     generated := w.pendLine == 0 or w.pendFile == "" or w.pendFile.StartsWith("<")
-    if generated and w.lastLine != 0 { w.out.Push($cm " (no line of the program)\n") }
+    if generated and w.lastLine != 0 { w.out.Push($cm + " (no line of the program)\n") }
     if not generated {
-        w.out.Push($cm " " $w.src.Shown(w.pendFile) ":" $w.pendLine "  " $w.src.Text(w.pendPath, w.pendLine).Trim() "\n")
-        w.out.Push(w.remarksAt($w.pendFile ":" $w.pendLine, "    "))
+        w.out.Push($cm + " " + $w.src.Shown(w.pendFile) + ":" + $w.pendLine + "  " + $w.src.Text(w.pendPath, w.pendLine).Trim() + "\n")
+        w.out.Push(w.remarksAt($w.pendFile + ":" + $w.pendLine, "    "))
     }
     w.lastFile = w.pendFile
     w.lastLine = 0 if generated else w.pendLine
@@ -485,7 +485,7 @@ fn (w mut Writer&) place() {
 
 # where a remark was made, as "FILE:LINE" - "" where no line of the program holds it (no place, the compiler's own
 # code, line 0)
-fn placeOf(r Remark&) String { return "" if r.File == "" or r.File.StartsWith("<") or r.Line <= 0 else $r.File ":" $r.Line }
+fn placeOf(r Remark&) String { return "" if r.File == "" or r.File.StartsWith("<") or r.Line <= 0 else $r.File + ":" + $r.Line }
 
 # the remarks made at place (placeOf's) not said yet, each once with how many times it was made, marked said
 fn (w mut Writer&) remarksAt(place String&, indent String&) String {
@@ -502,7 +502,7 @@ fn (w mut Writer&) remarksAt(place String&, indent String&) String {
                 n++
             }
         }
-        b.Push($w.Comment $indent $r.Kind.PadEnd(9) $r.Pass ": " $r.Message $(" (x" $n ")" if n > 1 else "") "\n")
+        b.Push($w.Comment + $indent + $r.Kind.PadEnd(9) + $r.Pass + ": " + $r.Message + $(" (x" + $n + ")" if n > 1 else "") + "\n")
     }
     return b.ToString()
 }
@@ -524,11 +524,11 @@ fn (w mut Writer&) leftover() String {
     # by file and line, what no line holds last
     places.Sort(fn(a String&, b String&) Bool { return b == "" and a != "" or (a != "" and b != "" and placeLess(a, b)) })
     b := StringBuilder()
-    b.Push($w.Comment " remarks on lines left with no code here:\n")
+    b.Push($w.Comment + " remarks on lines left with no code here:\n")
     for key in places {
         colon := try key.FindLast(":") catch default 0
-        where := "(no line of the program)" if key == "" else $w.src.Shown(key[:colon]) $key[colon:]
-        b.Push($w.Comment "   " $where "\n")
+        where := "(no line of the program)" if key == "" else $w.src.Shown(key[:colon]) + $key[colon:]
+        b.Push($w.Comment + "   " + $where + "\n")
         b.Push(w.remarksAt(key, "      "))
     }
     return b.ToString()
@@ -575,7 +575,7 @@ fn (w mut Writer&) asmLine(line String&, t String&, files Map<I64, String&>&, di
         f, n := locOf(t)
         name := try files.Get(f) catch default ""
         dir := try dirs.Get(f) catch default ""
-        w.reach(name, name if name.StartsWith("/") or dir == "" else $dir "/" $name, n)
+        w.reach(name, name if name.StartsWith("/") or dir == "" else $dir + "/" + $name, n)
         return
     }
     for skip in Array<String&>[".cfi_", ".p2align", "#DEBUG_VALUE", ".file", ".type", ".size"] {
@@ -648,7 +648,7 @@ fn (w mut Writer&) irLine(line String&, meta Map<I64, String&>&) {
         for end < line.Len() and line[end].IsDigit() { end++ }
         n := try line[at + 6:end].ParseInt(10) catch default -1
         from := at - 2 if at >= 2 and line[at - 2] == ',' else at - 1
-        shown = $line[:from] $line[end:]
+        shown = $line[:from] + $line[end:]
         if line.StartsWith("  ") { w.irPlace(n, meta) }
     }
     w.code(shown, line.StartsWith("  ") and not line.Trim().StartsWith(";"))
@@ -664,14 +664,14 @@ fn (w mut Writer&) irPlace(n I64, meta Map<I64, String&>&) {
     file := try meta.Get(try metaField(sc, "file")[1:].ParseInt(10) catch default -1) catch default ""
     name := metaField(file, "filename")
     dir := metaField(file, "directory")
-    w.reach(name, name if name.StartsWith("/") or dir == "" else $dir "/" $name, line)
+    w.reach(name, name if name.StartsWith("/") or dir == "" else $dir + "/" + $name, line)
 }
 
 # the value of key in a metadata node's text: "line: 6" -> "6", "file: !12" -> "!12", "filename: "v.olang"" -> v.olang
 fn metaField(text String&, key String&) String {
-    at := try text.Find($key ": ") catch default -1
+    at := try text.Find($key + ": ") catch default -1
     for at > 0 and (text[at - 1].IsLetter() or text[at - 1].IsDigit()) {
-        next := try text[at + 1:].Find($key ": ") catch default -1
+        next := try text[at + 1:].Find($key + ": ") catch default -1
         at = -1 if next < 0 else at + 1 + next
     }
     if at < 0 { return "" }
@@ -688,12 +688,12 @@ fn metaField(text String&, key String&) String {
 # ---- tests ----
 
 test "a remark's YAML read: its kind, pass, place, function and message, the inliner's call site left out" {
-    yaml := ("--- !Passed\nPass:            inline\nName:            Inlined\nDebugLoc:        { File: v.olang, Line: 6, Column: 31 }\n" $
-             "Function:        v_2escale\nArgs:\n  - String:          ''''\n  - Callee:          v_2etwice\n" $
-             "    DebugLoc:        { File: v.olang, Line: 3, Column: 0 }\n  - String:          ''' inlined into '''\n" $
-             "  - Caller:          v_2escale\n  - String:          ''''\n  - String:          ' with '\n" $
-             "  - String:          '(cost='\n  - Cost:            '-15000'\n  - String:          ')'\n" $
-             "  - String:          ' at callsite '\n  - String:          scale\n  - String:          ';'\n...\n" $
+    yaml := ("--- !Passed\nPass:            inline\nName:            Inlined\nDebugLoc:        { File: v.olang, Line: 6, Column: 31 }\n" + $
+             "Function:        v_2escale\nArgs:\n  - String:          ''''\n  - Callee:          v_2etwice\n" + $
+             "    DebugLoc:        { File: v.olang, Line: 3, Column: 0 }\n  - String:          ''' inlined into '''\n" + $
+             "  - Caller:          v_2escale\n  - String:          ''''\n  - String:          ' with '\n" + $
+             "  - String:          '(cost='\n  - Cost:            '-15000'\n  - String:          ')'\n" + $
+             "  - String:          ' at callsite '\n  - String:          scale\n  - String:          ';'\n...\n" + $
              "--- !Missed\nPass:            gvn\nName:            LoadClobbered\nFunction:        other\nArgs:\n  - String: x\n...\n")
     out Vec<Remark>
     n := Namer()
@@ -712,7 +712,7 @@ test "a symbol named as source writes it outside its module" {
     assert n.Name(types.Symbol("std/prelude/vec.std/prelude/vec:Vec<v:Point>.Push")) == "Vec<Point>.Push"
     assert n.Name(types.Symbol("std/net.std/net:Conn.Read")) == "net.Conn.Read"
     assert n.Name("main") == "startup" and n.Name("memcpy") == "memcpy"
-    assert n.Name($types.Symbol("v.scale") "_fv_x") == "scale as a function value"
+    assert n.Name($types.Symbol("v.scale") + "_fv_x") == "scale as a function value"
 }
 
 test "YAML scalars and places as the remark writer writes them" {

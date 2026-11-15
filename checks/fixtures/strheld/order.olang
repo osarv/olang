@@ -41,7 +41,7 @@ fn joins() String {
     b Array<I64> = Array<I64>[1, 2]
     f Array<I64> = Array<I64>[5, 6]
     h mut H& = H(S(1), Array<I64>[3, 3])
-    return $s " " $bumpS(s) " " $e $bumpE(e) " " $a $growArr(a) " " $b $sameArr(b) " " $h.s $h.v $f $bumpH(h) $bumpF(f) " " $s $e $a $b $h.s $f
+    return $s + " " + $bumpS(s) + " " + $e + $bumpE(e) + " " + $a + $growArr(a) + " " + $b + $sameArr(b) + " " + $h.s + $h.v + $f + $bumpH(h) + $bumpF(f) + " " + $s + $e + $a + $b + $h.s + $f
 }
 fn bumpF(f mut Array<I64>&) I64 {
     f[1] = 66

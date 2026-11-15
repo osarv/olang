@@ -10,7 +10,7 @@ type holder struct(v Vec<I64>&) { v }
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -27,5 +27,5 @@ fn main() {
     churn()
     s := 0
     for h in hs { s += h.v.Len() + h.v[h.v.Len() - 1] }
-    io.PutLine("vec lens and lasts " $s " (25)")!
+    io.PutLine("vec lens and lasts " + $s + " (25)")!
 }

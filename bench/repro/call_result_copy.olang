@@ -6,7 +6,7 @@
 import "std/io"
 import "std/os"
 
-fn mk(i I64) String { return "item " $i " of many" }
+fn mk(i I64) String { return "item " + $i + " of many" }
 fn ln(t String&) I64 { return t.Len() + I64(t[0]) }
 
 fn main() ? {

@@ -8,7 +8,7 @@ fn boxes(s String&) Array<Box> { return Array<Box>[Box(s)] }
 fn main() ? {
     bs := Vec<Box>()
     for k in range 4 {
-        t := $k "-text"
+        t := $k + "-text"
         bs.Push(boxes(t)[0])
     }
     assert bs[0].s == "0-text" and bs[3].s == "3-text"

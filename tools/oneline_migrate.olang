@@ -123,7 +123,7 @@ fn braces(lines Array<String&>&, i I64) String {
     stmt := t[k + 3:t.Len() - 2]
     if not simple(stmt): return ""
     if i + 1 < lines.Len() and lines[i + 1][indentOf(lines[i + 1]):].StartsWith("else"): return ""
-    row := $line[:ind] $t[:k] ": " $stmt
+    row := $line[:ind] + $t[:k] + ": " + $stmt
     return "" if row.Len() > MaxWidth else row
 }
 
@@ -145,15 +145,15 @@ fn chain(lines Array<String&>&, i I64, out mut Vec<String&>&) I64 {
         if indentOf(body) != ind + 4: return 0
         stmt := body[ind + 4:]
         if not simple(stmt): return 0
-        row := $pad $head ": " $stmt
+        row := $pad + $head + ": " + $stmt
         if row.Len() > MaxWidth: return 0
         mine.Push(row)
         closer := lines[j + 2]
-        if closer == $pad "}" {
+        if closer == $pad + "}" {
             for r in mine: out.Push($r)
             return j + 3 - i
         }
-        if isFor or not closer.StartsWith($pad "} else"): return 0
+        if isFor or not closer.StartsWith($pad + "} else"): return 0
         head = headOf(closer[ind:], false)
         if head == "": return 0
         head = $head[2:]
@@ -199,7 +199,7 @@ fn main() ? {
     for path in files {
         if not wanted(path): continue
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("oneline_migrate: cannot read " $path)
+            srcmask.SayErr("oneline_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -209,12 +209,12 @@ fn main() ? {
         if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("oneline_migrate: cannot write " $path)
+                srcmask.SayErr("oneline_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.n " blocks")
+    srcmask.Say($verb + $changed + " files: " + $total.n + " blocks")
     if check and changed > 0: os.Exit(1)
 }

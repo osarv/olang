@@ -29,7 +29,7 @@ test "Enumerate, Zip and Chain" {
     assert n == 3
     names := Array<String&>["a", "b"]
     s := StringBuilder()
-    for p in names.Iter().Zip(a.Iter()) { s.Push($p.First $p.Second) }
+    for p in names.Iter().Zip(a.Iter()) { s.Push($p.First + $p.Second) }
     assert s.ToString() == "a10b20"
     assert a.Iter().Chain(upTo(2).Iter()).ToVec().ToArray() == Array<I64>[10, 20, 30, 0, 1]
     assert upTo(0).Iter().Chain(a.Iter()).Count(fn(x I64) Bool { return x > 15 }) == 2

@@ -69,7 +69,7 @@ fn made() String {
     d := deque.Deque<I64>[9]
     c := bitset.BitSet<Color>[Color.Red, Color.Blue]
     t := Columns<Pt>[Pt(1, 2), Pt(3, 4)]
-    return $a " " $v " " $w " " $m " " $e " " $l " " $s.Len() " " $d " " $c " " $t
+    return $a + " " + $v + " " + $w + " " + $m + " " + $e + " " + $l + " " + $s.Len() + " " + $d + " " + $c + " " + $t
 }
 
 Made String = made()
@@ -80,7 +80,7 @@ fn bags() String {
     p := Pairs["a": 1, "b": 2, "c": 3]
     ok := try Strict[1, 2, 3] catch default Strict()
     bad := try Strict[1, -2] catch Negative default Strict(-1)
-    return $b.Len() " " $b.reserved " " $g.Len() " " $p.sum " " $ok.total " " $bad.total
+    return $b.Len() + " " + $b.reserved + " " + $g.Len() + " " + $p.sum + " " + $ok.total + " " + $bad.total
 }
 
 Bags String = bags()
@@ -88,25 +88,25 @@ Bags String = bags()
 fn shapes(xs Array<I64>&) String {
     return match xs {
         case Array<I64>[]: "none"
-        case Array<I64>[only]: "one " $only
-        case Array<I64>[first, ...rest]: "first " $first " then " $rest.Len()
+        case Array<I64>[only]: "one " + $only
+        case Array<I64>[first, ...rest]: "first " + $first + " then " + $rest.Len()
     }
 }
 
 fn vecShape(v Vec<I64>&) String {
     return match v {
         case Vec<I64>[]: "empty"
-        case Vec<I64>[x, ...]: "starts " $x
+        case Vec<I64>[x, ...]: "starts " + $x
     }
 }
 
 test "literals make the type before their bracket" {
-    want := "Array<I64>[1, 2, 3] Vec<I64>[4, 5, 6] Vec<I64>[1, 4, 9] Map<String, I64>[\"a\": 1, \"b\": 2] Map<String, I64>[] " "list.List<I64>[7, 8] 2 deque.Deque<I64>[9] bitset.BitSet<Color>[Color.Red, Color.Blue] Columns<Pt>[Pt(1, 2), Pt(3, 4)]"
+    want := "Array<I64>[1, 2, 3] Vec<I64>[4, 5, 6] Vec<I64>[1, 4, 9] Map<String, I64>[\"a\": 1, \"b\": 2] Map<String, I64>[] " + "list.List<I64>[7, 8] 2 deque.Deque<I64>[9] bitset.BitSet<Color>[Color.Red, Color.Blue] Columns<Pt>[Pt(1, 2), Pt(3, 4)]"
     assert made() == want, made()
     assert Made == want                                 # the evaluator makes them as the run time does (K2)
 }
 
-assert Made == "Array<I64>[1, 2, 3] Vec<I64>[4, 5, 6] Vec<I64>[1, 4, 9] Map<String, I64>[\"a\": 1, \"b\": 2] Map<String, I64>[] " "list.List<I64>[7, 8] 2 deque.Deque<I64>[9] bitset.BitSet<Color>[Color.Red, Color.Blue] Columns<Pt>[Pt(1, 2), Pt(3, 4)]", "decided while compiling (S17a)"
+assert Made == "Array<I64>[1, 2, 3] Vec<I64>[4, 5, 6] Vec<I64>[1, 4, 9] Map<String, I64>[\"a\": 1, \"b\": 2] Map<String, I64>[] " + "list.List<I64>[7, 8] 2 deque.Deque<I64>[9] bitset.BitSet<Color>[Color.Red, Color.Blue] Columns<Pt>[Pt(1, 2), Pt(3, 4)]", "decided while compiling (S17a)"
 
 test "a program's FromIter: generic, concrete, keyed, fallible" {
     assert bags() == "3 3 3 6 6 -1", bags()
@@ -148,7 +148,7 @@ fn walked(k I64, xs Array<I64>&) String {
     c := Columns<Pt>[Pt(x, -x) for x in xs]
     total := 0
     for r in l { total += r.Len() }
-    return $s.Len() " " $total " " $d " " $c
+    return $s.Len() + " " + $total + " " + $d + " " + $c
 }
 
 Walked String = walked(10, Array<I64>[1, 2, 3])
@@ -170,6 +170,6 @@ test Strict.FromIter "takes a comprehension through the array its elements make"
     assert strictSum(4)! == 0 + 1 + 9
     assert StrictSum == 10
     churn := 0
-    for i in range 1000 { churn += ($"x" $i).Len() }
+    for i in range 1000 { churn += ($"x" + $i).Len() }
     assert strictSum(5)! == 26 and churn > 0
 }

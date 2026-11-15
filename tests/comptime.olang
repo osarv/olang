@@ -103,10 +103,10 @@ test "comptime gives constant data" {
     assert Table[3] == 9 and Table.Len() == 8
     assert hot(2) == 1 + 2 * 6765
     assert size<I32>() == 8 and size<I64>() == 16
-    s := comptime "ab" "cd"
+    s := comptime "ab" + "cd"
     assert s == "abcd"
     assert fixedLocal() == 8
-    io.PutLine("comptime: " $hot(3))!
+    io.PutLine("comptime: " + $hot(3))!
 }
 
 test "comptime for unrolls" {

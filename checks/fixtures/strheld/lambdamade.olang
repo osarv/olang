@@ -9,7 +9,7 @@ fn (b Bag&) Str() String {
         return s.Len()
     }
     assert f == f    # made, never called
-    return "bag " $b.k
+    return "bag " + $b.k
 }
 fn main() ? {
     try io.PutLine($Bag(3))

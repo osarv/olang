@@ -4,7 +4,7 @@
 type Pt struct(n I32) {
     n
 }
-fn (p Pt&) Str(n I32) String { return "pt" $n }
+fn (p Pt&) Str(n I32) String { return "pt" + $n }
 fn main() ? {
     assert $Pt(1) == "Pt(1)"
     assert Pt(1).Str(7) == "pt7"

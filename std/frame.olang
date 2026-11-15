@@ -211,7 +211,7 @@ fn Table<R>(t ColumnVec<R>&, rows I64 = 20) String {
     b := StringBuilder()
     b.Push(line(Array<String>[heads[c] for c in range heads.Len()], widths, right))
     for i in range shown { b.Push(line(Array<String>[cells[c][i] for c in range heads.Len()], widths, right)) }
-    if shown < t.Len() { b.Push($"... " $(t.Len() - shown) " more rows\n") }
+    if shown < t.Len() { b.Push($"... " + $(t.Len() - shown) + " more rows\n") }
     return b.ToString()
 }
 
@@ -229,7 +229,7 @@ fn line(cells Array<String>&, widths Array<I64>&, right Vec<Bool>&) String {
         if c > 0: b.Push("  ")
         b.Push(x.PadStart(widths[c]) if right[c] else x.PadEnd(widths[c]))
     }
-    return $b.ToString().TrimEnd() "\n"
+    return $b.ToString().TrimEnd() + "\n"
 }
 
 # a cell's text: text as it is, any other value as "$" renders it
@@ -255,7 +255,7 @@ tradesCsv String& = """
 
 fn churn() {
     for i in range 200 {
-        s := $i " churn " $(i * 7)
+        s := $i + " churn " + $(i * 7)
         assert s.Len() > 0
     }
 }
@@ -305,7 +305,7 @@ test Filter "keeps the rows a function holds for, and fails with what it fails w
         if r.Qty > 3 { error tooBig }
         return true
     }) catch tooBig { return }
-    assert false, "a failing filter gave " $failing
+    assert false, "a failing filter gave " + $failing
 }
 
 test GroupBy "sums, counts, means and bounds per key, in the order keys first come" {

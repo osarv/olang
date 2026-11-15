@@ -13,13 +13,13 @@ fn clr(m mut Map<String&, Vec<I64>>&) I64 {
 fn pop(l mut Vec<I64>&) I64 { return try l.Pop() catch default -1 }
 fn joins() String {
     l := Vec<String&>()
-    for i in range 20 { l.Push("item" $i) }
+    for i in range 20 { l.Push("item" + $i) }
     m := Map<String&, Vec<I64>>()
     v := Vec<I64>()
     for i in range 30 { v.Push(i) }
     m.Put("k", v)
     a := v.ToArray()
-    return $l " " $m " " $v " " $a " " $shrink(l) $clr(m) $pop(v) $pop(v) " " $l " " $m " " $v
+    return $l + " " + $m + " " + $v + " " + $a + " " + $shrink(l) + $clr(m) + $pop(v) + $pop(v) + " " + $l + " " + $m + " " + $v
 }
 Baked String& = joins()
 fn main() ? {

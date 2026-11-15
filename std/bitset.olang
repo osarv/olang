@@ -176,7 +176,7 @@ fn (it mut Iter<T>&) Next() T ? Exhausted {
 fn (s BitSet<T>&) Str() String {
     b := StringBuilder()
     t := $Array<BitSet<T>>(0)                           # "Array<bitset.BitSet<T>>[]"
-    b.Push($t[6:t.Len() - 3] "[")
+    b.Push($t[6:t.Len() - 3] + "[")
     n I64 = 0
     for c in T.Cases {
         # a case with a payload is no BitSet's (check's assert says so at the program's use): built only where it has none
@@ -218,7 +218,7 @@ test BitSet "set algebra by operators" {
 test BitSet "a walk gives the cases in declaration order" {
     s := BitSet.Of(Array<Color>[Color.Blue, Color.Red])
     seen := ""
-    for c in s { seen = $seen $c " " }
+    for c in s { seen = $seen + $c + " " }
     assert seen == "Color.Red Color.Blue "
     assert $s == "BitSet<Color>[Color.Red, Color.Blue]" and $BitSet<Color>.Empty() == "BitSet<Color>[]"
 }

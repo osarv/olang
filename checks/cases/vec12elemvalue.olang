@@ -8,7 +8,7 @@ type Tok struct(text String&, k I64) {
 fn churn() I64 {
     t := 0
     for i in range 2000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz"
+        s := $i + "abcdefghijklmnopqrstuvwxyz"
         t += s.Len()
     }
     return t
@@ -17,7 +17,7 @@ fn main() ? {
     v := Vec<Tok>()
     v.Push(Tok("a", 1))
     first := v[0]
-    for i in range 40 { v.Push(Tok("t" $i, i)) }
+    for i in range 40 { v.Push(Tok("t" + $i, i)) }
     churn()
     v.Sort(fn(a Tok, b Tok) Bool { return a.text < b.text })
     churn()

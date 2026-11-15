@@ -62,7 +62,7 @@ fn Pt.Diag(n I64) Pt { return Pt(n, n) }
 
 fn names<T>() String {
     b := StringBuilder()
-    for f in T.Functions { b.Push($f.Name " ") }
+    for f in T.Functions { b.Push($f.Name + " ") }
     return b.ToString()
 }
 

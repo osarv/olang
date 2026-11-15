@@ -26,7 +26,7 @@ export fn sum(xs Array<I64>&) I64 {
 
 export fn seen() I64 { return Seen.Len() }
 
-export fn greet(name String&) String { return $"hello, " $name "!" }
+export fn greet(name String&) String { return $"hello, " + $name + "!" }
 
 export fn parse(t String&) I64 ? ParseError { return try t.ParseInt() }
 

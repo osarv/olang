@@ -91,7 +91,7 @@ fn main() ? {
     for path in files {
         if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("errortype_migrate: cannot read " $path)
+            srcmask.SayErr("errortype_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -101,19 +101,19 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("errortype_migrate: cannot write " $path)
+                srcmask.SayErr("errortype_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.n " declarations")
+    srcmask.Say($verb + $changed + " files: " + $total.n + " declarations")
     if check and changed > 0 { os.Exit(1) }
 }
 
 test "an error type declared with its keyword first becomes a type; statements and new declarations are left" {
     n := Count()
-    assert migrate("error IoError { FU" "LL, DEN" "IED }\n", n) == "type IoError error " "{ FU" "LL, DEN" "IED }\n"
+    assert migrate("error IoError { FU" + "LL, DEN" + "IED }\n", n) == "type IoError error " + "{ FU" + "LL, DEN" + "IED }\n"
     assert migrate("error E {\n    A\n    B\n}\nfn f() ? E { error E.A }\n", n) == "type E error {\n    A\n    B\n}\nfn f() ? E { error E.A }\n"
     assert migrate("if TestBuild {\n    error T { X }\n}\n", n) == "if TestBuild {\n    type T error { X }\n}\n"
     src := "type E error { A }\ntype L error io.Error, E { T }\ntype M error E {\n    U\n}\nfn g() ? L {\n    try f() catch E e { error e }\n}\n# error X { Y }\ns := \"error Z { W }\"\n"

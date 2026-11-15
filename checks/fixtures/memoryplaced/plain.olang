@@ -3,6 +3,6 @@ import "std/io"
 
 fn main() {
     out := Vec<String>()
-    for i in range 3 { out.Push($i " a") }
+    for i in range 3 { out.Push($i + " a") }
     io.PutLine($out)!
 }

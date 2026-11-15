@@ -12,10 +12,10 @@ type output error {
 }
 
 # x as "$x" renders it, then nothing - to the standard output
-fn Print<T>(x T, at Place = Place.Here) { try writeOut($x) catch e { assert false, $at ": " $e } }
+fn Print<T>(x T, at Place = Place.Here) { try writeOut($x) catch e { assert false, $at + ": " + $e } }
 
 # x as "$x" renders it and a line end - to the standard output; with nothing, a line end alone
-fn Println<T>(x T = "", at Place = Place.Here) { try writeOut($x "\n") catch e { assert false, $at ": " $e } }
+fn Println<T>(x T = "", at Place = Place.Here) { try writeOut($x + "\n") catch e { assert false, $at + ": " + $e } }
 
 # every byte of t to the standard output, retrying a short write on the rest
 fn writeOut(t String&) ? output {

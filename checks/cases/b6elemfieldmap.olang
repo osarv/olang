@@ -9,7 +9,7 @@ fn main() ? {
     m := Map<I64, mut Cell&>()
     for i in range 3 { m.Put(i, Cell()) }
     for i in range 3 {
-        x String& = "w" $i
+        x String& = "w" + $i
         (try m.Get(i)).s = x
     }
 }

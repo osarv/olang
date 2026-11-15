@@ -131,7 +131,7 @@ fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
     if want < 1 { want = 1 }
     pad := StringBuilder()
     for _ in range want { pad.PushChar(' ') }
-    lines[k] = $text[:gap] $pad.ToString() $text[hashAt:]
+    lines[k] = $text[:gap] + $pad.ToString() + $text[hashAt:]
 }
 
 # a checks/cases header (one of the first twelve lines starting "# check: fail" or "# also:") naming LINE:COL on a line an
@@ -160,7 +160,7 @@ fn ShiftExpected(lines mut Array<String&>&, shLine Vec<I64>&, shAt Vec<I64>&, sh
                         for s in range shLine.Len() {
                             if shLine[s] == ln and col - 1 > shAt[s] { col += shDelta[s] }
                         }
-                        out.Push($ln ":" $col ":")
+                        out.Push($ln + ":" + $col + ":")
                         p = b + 1
                         continue
                     }
@@ -186,7 +186,7 @@ fn RealPathOf(path String&) String {
 # whether path is one of the allowed paths or below one
 fn Allowed(path String&, allowed Vec<String&>&) Bool {
     for a in allowed {
-        if path == a or path.StartsWith($a "/") { return true }
+        if path == a or path.StartsWith($a + "/") { return true }
     }
     return false
 }
@@ -230,7 +230,7 @@ fn compileOne(olang String&, file String&, dir String&, testLines Bool) String {
     mode := "compile"
     if src.Contains("TestBuild") or (testLines and hasTestLine(src)) { mode = "test" }
     out := try srcmask.Capture(Array<String&>[olang, mode, file], dir, 900000) catch os.Error {
-        srcmask.SayErr("could not run " $olang)
+        srcmask.SayErr("could not run " + $olang)
         os.Exit(1)
         unreachable
     } catch default ""
@@ -258,7 +258,7 @@ fn JoinHelp(out String&) String {
     for row in out.Split("\n") {
         h := helpText(row)
         if h.Len() > 0 and last >= 0 {
-            rows[last] = $rows[last] ": " $h
+            rows[last] = $rows[last] + ": " + $h
             continue
         }
         if isErrorRow(row): last = rows.Len()

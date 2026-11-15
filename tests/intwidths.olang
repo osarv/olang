@@ -10,47 +10,47 @@ import "std/arith"
 fn i1Case(n I64) String {
     a I1 = -1
     b := a + I1(n) # -1 + 1 wraps to 0 when n is odd, else stays -1
-    return $a " " $b " " $I1.Min " " $I1.Max " " $(a * a) " " $U1.Max
+    return $a + " " + $b + " " + $I1.Min + " " + $I1.Max + " " + $(a * a) + " " + $U1.Max
 }
 
 fn u7Case(n I64) String {
     a U7 = 100
     b := a + U7(n) # 100 + 50 = 150, wrapping to 22
     c := a * 3     # 300 wraps to 44
-    return $b " " $c " " $(~a) " " $(a >> 2) " " $U7.Max " " $(U7(0) - 1) " " $(a / U7(n)) " " $(a % U7(n))
+    return $b + " " + $c + " " + $(~a) + " " + $(a >> 2) + " " + $U7.Max + " " + $(U7(0) - 1) + " " + $(a / U7(n)) + " " + $(a % U7(n))
 }
 
 fn i24Case(n I64) String {
     a I24 = 8000000
     b := a * I24(n) # 16000000 wraps to -777216 for n = 2
     c := -I24.Min   # the most negative negated is itself
-    return $b " " $c " " $I24.Max " " $(a >> 20) " " $(I24(-5) >> 1) " " $(I24(-7) / 2) " " $(I24(-7) % 2)
+    return $b + " " + $c + " " + $I24.Max + " " + $(a >> 20) + " " + $(I24(-5) >> 1) + " " + $(I24(-7) / 2) + " " + $(I24(-7) % 2)
 }
 
 fn u63Case(n I64) String {
     a U63 = 1
     b := a << U63(n) # 2^62 for n = 62
     c := b * 2       # 2^63 wraps to 0 at 63 bits
-    return $b " " $c " " $U63.Max " " $(U63.Max + 1) " " $(b >> 61)
+    return $b + " " + $c + " " + $U63.Max + " " + $(U63.Max + 1) + " " + $(b >> 61)
 }
 
 fn i65Case(n I64) String {
     a I65 = -5
     b := a * I65(n) # -15 for n = 3
     big := I65.Max  # 2^64 - 1
-    return $b " " $big " " $(big + 1) " " $I65.Min " " $(I65.Min / 3) " " $(big >> 63) " " $(I65(n) << 63)
+    return $b + " " + $big + " " + $(big + 1) + " " + $I65.Min + " " + $(I65.Min / 3) + " " + $(big >> 63) + " " + $(I65(n) << 63)
 }
 
 fn u128Case(n I64) String {
     k U128 = 18446744073709551615 # 2^64 - 1
     m := k * k                    # 2^128 - 2^65 + 1
     p := U128(1) << U128(n)       # 2^100 for n = 100
-    return $(m >> 64) " " $(m / k) " " $(m % 1000000007) " " $p " " $U128.Max " " $(U128.Max / 7) " " $(p * p)
+    return $(m >> 64) + " " + $(m / k) + " " + $(m % 1000000007) + " " + $p + " " + $U128.Max + " " + $(U128.Max / 7) + " " + $(p * p)
 }
 
 fn i128Case(n I64) String {
     a := I128(n) * 1000000000000000000 * 1000000000000000000 # 10^36 times n
-    return ($a " " $(a / 7) " " $(a % 7) " " $(-a >> 70) " " $I128.Min " " $I128.Max " " $(I128.Min - 1) " "
+    return ($a + " " + $(a / 7) + " " + $(a % 7) + " " + $(-a >> 70) + " " + $I128.Min + " " + $I128.Max + " " + $(I128.Min - 1) + " " +
         $(I128(-7) / 2))
 }
 
@@ -67,7 +67,7 @@ fn litCase(n I64) String {
     h U128 = (1 << 127) | 5
     k F64 = 1 << 100
     m := I128(n) * (1 << 100) + 340282366920938463463374607431768211 # n is 2
-    return ($a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $k " " $m " " $(a == U128.Max) " "
+    return ($a + " " + $b + " " + $c + " " + $d + " " + $e + " " + $f + " " + $g + " " + $h + " " + $k + " " + $m + " " + $(a == U128.Max) + " " +
         $(c == I128.Min))
 }
 
@@ -80,8 +80,8 @@ fn padCase(n I64) String {
     e U7 = U7(n) * 25
     f I24 = I24(n) * 1000
     u U8 = 7
-    return ($a.Sqrt() " " $c.Sqrt() " " $(try d.Sqrt() catch default -1) " " $e.Sqrt() " " $(try b.Sqrt() catch default -1)
-        " " $(try f.Sqrt() catch default -1) " " $e.PadStart(6, '0') " " $b.PadStart(5, '0') " " $a.PadEnd(32, '.') " "
+    return ($a.Sqrt() + " " + $c.Sqrt() + " " + $(try d.Sqrt() catch default -1) + " " + $e.Sqrt() + " " + $(try b.Sqrt() catch default -1) +
+        " " + $(try f.Sqrt() catch default -1) + " " + $e.PadStart(6, '0') + " " + $b.PadStart(5, '0') + " " + $a.PadEnd(32, '.') + " " +
         $u.PadStart(3, '0'))
 }
 
@@ -89,7 +89,7 @@ fn padCase(n I64) String {
 fn convCase(n I64) String {
     w := U128(1) << U128(n) | 1 # 2^100 + 1
     f := I12(-3)
-    return ($I24(w) " " $U7(I128(n)) " " $F64(w) " " $F32(w) " " $BF16(I128.Max) " " $F16(f) " " $I128(1.5e30) " "
+    return ($I24(w) + " " + $U7(I128(n)) + " " + $F64(w) + " " + $F32(w) + " " + $BF16(I128.Max) + " " + $F16(f) + " " + $I128(1.5e30) + " " +
         $U100(F32(n)))
 }
 
@@ -98,9 +98,9 @@ fn methodCase(n I64) String {
     r := U24(0xABCDEF)
     q := U128(0x0102030405060708) << U128(n - 100)
     s := I24(-5)
-    return ($r.ByteSwap().Format(16) " " $r.RotateLeft(4).Format(16) " " $r.RotateRight(-4).Format(16) " "
-        $r.PopCount() " " $r.LeadingZeros() " " $q.ByteSwap().Format(16) " " $q.TrailingZeros() " " $s.Abs() " "
-        $s.Min(I24(3)) " " $U12(4000).Pow(2) " " $I128.Min.Format(16) " " $s.Format(2))
+    return ($r.ByteSwap().Format(16) + " " + $r.RotateLeft(4).Format(16) + " " + $r.RotateRight(-4).Format(16) + " " +
+        $r.PopCount() + " " + $r.LeadingZeros() + " " + $q.ByteSwap().Format(16) + " " + $q.TrailingZeros() + " " + $s.Abs() + " " +
+        $s.Min(I24(3)) + " " + $U12(4000).Pow(2) + " " + $I128.Min.Format(16) + " " + $s.Format(2))
 }
 
 fn parseCase(n I64) String {
@@ -111,7 +111,7 @@ fn parseCase(n I64) String {
     e := try U7.Parse("128") catch default U7(1)
     f := try I2.Parse("-3") catch default I2(0)
     g := try U9.Parse("0x_FF", 0) catch default U9(2)
-    return $a " " $b " " $c " " $d " " $e " " $f " " $g
+    return $a + " " + $b + " " + $c + " " + $d + " " + $e + " " + $f + " " + $g
 }
 
 # std/arith at the new widths: an overflow is an error, a result that fits is the result
@@ -123,7 +123,7 @@ fn arithCase(n I64) String {
     e := try arith.Sub(U100(3), U100(n - 22)) catch default U100(7)
     f := try I64(n * 5).Narrow<U7>() catch default U7(9)
     g := try I64(n).Narrow<U7>() catch default U7(9)
-    return $a " " $b " " $c " " $d " " $e " " $f " " $g
+    return $a + " " + $b + " " + $c + " " + $d + " " + $e + " " + $f + " " + $g
 }
 
 # T6b: a narrower integer widens into a wider one implicitly, as the eight always did - U7 into I8, I24 into I65
@@ -132,7 +132,7 @@ fn widen(a I8, b I65) I65 { return b + a }
 fn flowCase(n I64) String {
     u U7 = 127
     s I24 = -8388608
-    return $widen(u, s) " " $widen(I8(n), I65.Max - 1) " " $(U7(n) + U9(500))
+    return $widen(u, s) + " " + $widen(I8(n), I65.Max - 1) + " " + $(U7(n) + U9(500))
 }
 
 # hashing agrees with == at every width, a Map keyed by the wide types holding what was put
@@ -166,24 +166,24 @@ WantI1 := "-1 0 -1 0 -1 1"
 WantU7 := "22 44 27 25 127 127 2 0"
 WantI24 := "-777216 -8388608 8388607 7 -3 -3 -1"
 WantU63 := "4611686018427387904 0 9223372036854775807 0 2"
-WantI65 := ("-15 18446744073709551615 -18446744073709551616 -18446744073709551616 -6148914691236517205 "
+WantI65 := ("-15 18446744073709551615 -18446744073709551616 -18446744073709551616 -6148914691236517205 " +
     "1 -9223372036854775808")
-WantU128 := ("18446744073709551614 18446744073709551615 114944269 1267650600228229401496703205376 "
+WantU128 := ("18446744073709551614 18446744073709551615 114944269 1267650600228229401496703205376 " +
     "340282366920938463463374607431768211455 48611766702991209066196372490252601636 0")
-WantI128 := ("5000000000000000000000000000000000000 714285714285714285714285714285714285 5 "
-    "-4235164736271502 -170141183460469231731687303715884105728 "
+WantI128 := ("5000000000000000000000000000000000000 714285714285714285714285714285714285 5 " +
+    "-4235164736271502 -170141183460469231731687303715884105728 " +
     "170141183460469231731687303715884105727 170141183460469231731687303715884105727 -3")
 WantConv := "1 100 1.2676506002282294e+30 1.2676506e+30 1.7e+38 -3 1499999999999999889089448902656 100"
-WantMethod := ("efcdab bcdefa bcdefa 17 0 8070605040302010000000000000000 3 5 -5 1024 "
+WantMethod := ("efcdab bcdefa bcdefa 17 0 8070605040302010000000000000000 3 5 -5 1024 " +
     "-80000000000000000000000000000000 -101")
 WantParse := "-170141183460469231731687303715884105728 340282366920938463463374607431768211455 9 127 1 0 2"
 WantArith := "127 0 536870912 -1 7 9 27"
 WantFlow := "-8388481 -18446744073709551614 504"
-WantPad := ("70368744177664 18446744073709551615 13043817825332782212 10 -1 63 000100 -0004 "
+WantPad := ("70368744177664 18446744073709551615 13043817825332782212 10 -1 63 000100 -0004 " +
     "4951760157141521099596496896.... 007")
-WantLit := ("340282366920938463463374607431768211455 1267650600228229401496703205376 "
-    "-170141183460469231731687303715884105728 340282366920938463444927863358058659840 "
-    "633825300114114700748351602687 422550200076076467165567735124 -158456325028528675187087900672 "
+WantLit := ("340282366920938463463374607431768211455 1267650600228229401496703205376 " +
+    "-170141183460469231731687303715884105728 340282366920938463444927863358058659840 " +
+    "633825300114114700748351602687 422550200076076467165567735124 -158456325028528675187087900672 " +
     "170141183460469231731687303715884105733 1.2676506002282294e+30 340284902222138919922177600838178963 true true")
 
 # the inputs again, read at run time
@@ -286,7 +286,7 @@ test "T4a: an array of a new width made in a function is read back after an aren
     w := wides(Four)
     assert churn() > 0
     assert $w == "Array<U100>[0, 1237940039285380274899124224, 2475880078570760549798248448, 3713820117856140824697372672]"
-    assert $(w + w) == ("Array<U100>[0, 2475880078570760549798248448, 4951760157141521099596496896, "
+    assert $(w + w) == ("Array<U100>[0, 2475880078570760549798248448, 4951760157141521099596496896, " +
         "7427640235712281649394745344]")
     assert w.Sum() == U100(6) << 90
 }
@@ -297,7 +297,7 @@ fn powCase(n I64) String {
     a := I1(n)  # -1 for an odd n
     b := I1(0)
     u := U1(n)
-    return $a.Pow(0) " " $a.Pow(1) " " $a.Pow(2) " " $a.Pow(3) " " $b.Pow(0) " " $b.Pow(5) " " $u.Pow(0) " " $u.Pow(9)
+    return $a.Pow(0) + " " + $a.Pow(1) + " " + $a.Pow(2) + " " + $a.Pow(3) + " " + $b.Pow(0) + " " + $b.Pow(5) + " " + $u.Pow(0) + " " + $u.Pow(9)
 }
 
 PowBaked := powCase(1)
@@ -321,11 +321,11 @@ fn wideParseCase(n I64) String {
     g := try I128.Parse("-0x80000000000000000000000000000000", 0) catch default I128(n)
     h := try I128.Parse("0x80000000000000000000000000000000", 0) catch ParseError.Overflow default I128(n) catch default I128(1)
     k := try U128.Parse("-0x1FFFFFFFFFFFFFFFF", 0) catch ParseError.Invalid default U128(n) catch default U128(1)
-    return $a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $k
+    return $a + " " + $b + " " + $c + " " + $d + " " + $e + " " + $f + " " + $g + " " + $h + " " + $k
 }
 
 WideParseBaked := wideParseCase(3)
-WantWideParse := ("36893488147419103231 -18446744073709551616 -1 3 36893488147419103231 3 "
+WantWideParse := ("36893488147419103231 -18446744073709551616 -1 3 36893488147419103231 3 " +
     "-170141183460469231731687303715884105728 3 3")
 
 test "L10a: T.Parse reads a prefixed literal of up to 128 bits" {

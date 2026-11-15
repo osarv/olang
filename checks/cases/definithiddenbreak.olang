@@ -52,7 +52,7 @@ fn text() I64 {
     d Node&
     i I64 = 0
     for {
-        sink(("v" $(try g(i) catch { break })).Len())
+        sink(("v" + $(try g(i) catch { break })).Len())
         i++
     }
     return d.v

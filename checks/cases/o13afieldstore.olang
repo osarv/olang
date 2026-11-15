@@ -7,13 +7,13 @@ type H struct(r String&) {
 }
 fn H.mk(n I64, s String&) H {
     e := H(s)
-    e.r = $n $n
+    e.r = $n + $n
     return e
 }
 fn churn() I64 {
     t I64 = 0
     for i in range 300 {
-        s := $i $i $i "-" $(i * 7)
+        s := $i + $i + $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t

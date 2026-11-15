@@ -71,7 +71,7 @@ fn migrate(src String&, n mut Counts&, path String&) String {
         e := pathEnd(v, at)
         op := "!=" if negated else "=="
         if e < 0 {
-            n.listed.Push($path ": 'is' before no name, by hand: " $src[t.start:(v[(at).Min(v.Len() - 1)].end).Min(src.Len())])
+            n.listed.Push($path + ": 'is' before no name, by hand: " + $src[t.start:(v[(at).Min(v.Len() - 1)].end).Min(src.Len())])
             continue
         }
         last := src[v[e - 1].start:v[e - 1].end]
@@ -79,7 +79,7 @@ fn migrate(src String&, n mut Counts&, path String&) String {
             n.cases++
         } else {
             n.identities++
-            n.listed.Push($path ": identity made '" $op "', check the type declares no Eq: " $src[t.start:v[e - 1].end])
+            n.listed.Push($path + ": identity made '" + $op + "', check the type declares no Eq: " + $src[t.start:v[e - 1].end])
         }
         edits.Push(Edit(t.start, v[at - 1].end, op))
     }
@@ -146,7 +146,7 @@ fn main() ? {
     for path in files {
         if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("equality_migrate: cannot read " $path)
+            srcmask.SayErr("equality_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -156,14 +156,14 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("equality_migrate: cannot write " $path)
+                srcmask.SayErr("equality_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     for l in total.listed { srcmask.Say(l) }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.cases " case tests, " $total.identities " identities")
+    srcmask.Say($verb + $changed + " files: " + $total.cases + " case tests, " + $total.identities + " identities")
     if check and changed > 0 { os.Exit(1) }
 }
 

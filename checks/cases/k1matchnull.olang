@@ -9,7 +9,7 @@ type E enum {
 fn name(e E?&) String {
     match e {
         case E.A { return "a" }
-        case E.B(v) { return "b" $v }
+        case E.B(v) { return "b" + $v }
     }
 }
 N E?& = null

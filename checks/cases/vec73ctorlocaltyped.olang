@@ -5,13 +5,13 @@
 # given that local
 import "std/io"
 type H struct(x String&, n I64) {
-    t String& = $n "-new-text-in-x's-scope"
+    t String& = $n + "-new-text-in-x's-scope"
     y := t
 }
 fn main() ? {
     h := H("outer", 1)
     for i in range 2 {
-        s := $i "-inner-block-text"
+        s := $i + "-inner-block-text"
         h = H(s, 5 + i)
     }
     churn()
@@ -20,7 +20,7 @@ fn main() ? {
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t

@@ -17,7 +17,7 @@ fn first(b Box) I64 {
 fn churn() I64 {
     t I64 = 0
     for i in range 2000 {
-        x := "churn " $i " " $(i * 3)
+        x := "churn " + $i + " " + $(i * 3)
         t += x.Len()
     }
     return t
@@ -36,5 +36,5 @@ fn main() ? {
         }
     }
     n := churn()
-    try io.PutLine($out[0] " " $out[1] " " $out[2] " " $out[3] " " $out2[0] " " $out2[3] " " $(n > 0))
+    try io.PutLine($out[0] + " " + $out[1] + " " + $out[2] + " " + $out[3] + " " + $out2[0] + " " + $out2[3] + " " + $(n > 0))
 }

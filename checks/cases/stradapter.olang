@@ -15,7 +15,7 @@ fn churn() I64 {
     for i in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t

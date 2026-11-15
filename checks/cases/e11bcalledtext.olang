@@ -4,6 +4,6 @@ import "std/io"
 fn main() ? {
     n := 5
     c := true
-    x := $n "," ("stop" if c else $n)
+    x := $n + "," ("stop" if c else $n)
     try io.PutLine(x)
 }

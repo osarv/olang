@@ -124,12 +124,12 @@ fn (p Plot&) Svg() String {
     heat := p.items.Len() > 0 and p.items.View()[0].kind == form.Heat
     c := canvas(F64(p.width), F64(p.height), xlo, xhi, ylo, yhi, heat)
     w, h := $p.width, $p.height
-    b.Push(("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" $w "\" height=\"" $h "\" viewBox=\"0 0 " $w " " $h
+    b.Push(("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + $w + "\" height=\"" + $h + "\" viewBox=\"0 0 " + $w + " " + $h +
         "\" font-family=\"sans-serif\" font-size=\"12\">\n"))
     b.Push("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>\n")
     c.drawAxes(b, p)
-    b.Push(("<clipPath id=\"area\"><rect x=\"" $f(c.left) "\" y=\"" $f(c.top) "\" width=\"" $f(c.right - c.left)
-        "\" height=\"" $f(c.bottom - c.top) "\"/></clipPath>\n<g clip-path=\"url(#area)\">\n"))
+    b.Push(("<clipPath id=\"area\"><rect x=\"" + $f(c.left) + "\" y=\"" + $f(c.top) + "\" width=\"" + $f(c.right - c.left) +
+        "\" height=\"" + $f(c.bottom - c.top) + "\"/></clipPath>\n<g clip-path=\"url(#area)\">\n"))
     for i, s in p.items.View() { c.drawSeries(b, s, i) }
     b.Push("</g>\n")
     c.drawLegend(b, p)
@@ -145,7 +145,7 @@ fn (p Plot&) Save(path String&) ? os.Error { try os.WriteFile(path, p.Svg()) }
 # with the os.Error naming the viewer to install, and the file, when none is found
 fn (p Plot&) Show() ? os.Error {
     dir := try os.MkTemp(prefix = "olang-plot-")
-    path := $dir "/plot.svg"
+    path := $dir + "/plot.svg"
     try p.Save(path)
     wsl := isWsl()
     distro := try os.Env("WSL_DISTRO_NAME") catch default ""
@@ -161,15 +161,15 @@ fn (p Plot&) Show() ? os.Error {
 # were found - never looking at the system itself. "file" is named in the error when there is none
 fn viewerFor(system String&, wsl Bool, interop Bool, distro String&, wslview Bool, explorer Bool, open Bool, xdgOpen Bool, file String&) String ? os.Error {
     if wsl and not interop {
-        win := "\\\\wsl.localhost\\" $distro $file.Replace("/", "\\")
-        error os.Error.NotFound("WSL interop is off, so Windows programs cannot be started: " $file " is at " $win " in Windows. Enable it with [interop] enabled=true in /etc/wsl.conf, or with systemd: echo ':WSLInterop:M::MZ::/init:PF' > /usr/lib/binfmt.d/WSLInterop.conf; then wsl --shutdown")
+        win := "\\\\wsl.localhost\\" + $distro + $file.Replace("/", "\\")
+        error os.Error.NotFound("WSL interop is off, so Windows programs cannot be started: " + $file + " is at " + $win + " in Windows. Enable it with [interop] enabled=true in /etc/wsl.conf, or with systemd: echo ':WSLInterop:M::MZ::/init:PF' > /usr/lib/binfmt.d/WSLInterop.conf; then wsl --shutdown")
     }
     if wsl and wslview { return "wslview" }
     if wsl and explorer { return "explorer.exe" }
     if system == "macos" and open { return "open" }
     if system != "macos" and not wsl and xdgOpen { return "xdg-open" }
     want := "open" if system == "macos" else "wslu (wslview)" if wsl else "xdg-utils (xdg-open)"
-    error os.Error.NotFound("no viewer found: install " $want " to open " $file)
+    error os.Error.NotFound("no viewer found: install " + $want + " to open " + $file)
 }
 
 # whether this is WSL: the kernel's version text names Microsoft
@@ -179,7 +179,7 @@ fn isWsl() Bool {
 }
 
 # whether the program is on the PATH
-fn found(name String&) Bool { return os.Run("command -v " $name " >/dev/null 2>&1") == 0 }
+fn found(name String&) Bool { return os.Run("command -v " + $name + " >/dev/null 2>&1") == 0 }
 
 # how a notebook shows a Plot
 fn (p Plot&) Display() Display { return Display.Svg(p.Svg()) }
@@ -274,13 +274,13 @@ fn esc(t String&) String {
 # a heat cell's colour: white-blue for the least, deep blue for the greatest
 fn shade(t F64) String {
     k := min2(max2(t, 0.0), 1.0)
-    return "#" $hex(247.0 - 239.0 * k) $hex(251.0 - 203.0 * k) $hex(255.0 - 148.0 * k)
+    return "#" + $hex(247.0 - 239.0 * k) + $hex(251.0 - 203.0 * k) + $hex(255.0 - 148.0 * k)
 }
 
 fn hex(v F64) String {
     n := I64(v + 0.5)
     t := n.Format(16)
-    return ("0" $t) if n < 16 else t
+    return ("0" + $t) if n < 16 else t
 }
 
 # the drawing area and how data maps onto it
@@ -309,16 +309,16 @@ fn (c canvas&) drawAxes(b mut StringBuilder&, p Plot&) {
     b.Push("<g stroke=\"#e0e0e0\">\n")
     xv, xt := ticks(c.xlo, c.xhi)
     yv, yt := ticks(c.ylo, c.yhi)
-    for v in xv { b.Push("<line x1=\"" $f(c.X(v)) "\" y1=\"" $f(c.top) "\" x2=\"" $f(c.X(v)) "\" y2=\"" $f(c.bottom) "\"/>\n") }
-    for v in yv { b.Push("<line x1=\"" $f(c.left) "\" y1=\"" $f(c.Y(v)) "\" x2=\"" $f(c.right) "\" y2=\"" $f(c.Y(v)) "\"/>\n") }
+    for v in xv { b.Push("<line x1=\"" + $f(c.X(v)) + "\" y1=\"" + $f(c.top) + "\" x2=\"" + $f(c.X(v)) + "\" y2=\"" + $f(c.bottom) + "\"/>\n") }
+    for v in yv { b.Push("<line x1=\"" + $f(c.left) + "\" y1=\"" + $f(c.Y(v)) + "\" x2=\"" + $f(c.right) + "\" y2=\"" + $f(c.Y(v)) + "\"/>\n") }
     b.Push("</g>\n<g fill=\"#333333\">\n")
-    for i, v in xv { b.Push("<text x=\"" $f(c.X(v)) "\" y=\"" $f(c.bottom + 16.0) "\" text-anchor=\"middle\">" $esc(xt[i]) "</text>\n") }
-    for i, v in yv { b.Push("<text x=\"" $f(c.left - 6.0) "\" y=\"" $f(c.Y(v) + 4.0) "\" text-anchor=\"end\">" $esc(yt[i]) "</text>\n") }
+    for i, v in xv { b.Push("<text x=\"" + $f(c.X(v)) + "\" y=\"" + $f(c.bottom + 16.0) + "\" text-anchor=\"middle\">" + $esc(xt[i]) + "</text>\n") }
+    for i, v in yv { b.Push("<text x=\"" + $f(c.left - 6.0) + "\" y=\"" + $f(c.Y(v) + 4.0) + "\" text-anchor=\"end\">" + $esc(yt[i]) + "</text>\n") }
     mid := (c.left + c.right) / 2.0
-    b.Push("<text x=\"" $f(mid) "\" y=\"22\" text-anchor=\"middle\" font-size=\"16\" font-weight=\"bold\">" $esc(p.title) "</text>\n")
-    b.Push("<text x=\"" $f(mid) "\" y=\"" $f(c.height - 10.0) "\" text-anchor=\"middle\">" $esc(p.xlabel) "</text>\n")
-    b.Push("<text transform=\"translate(16 " $f((c.top + c.bottom) / 2.0) ") rotate(-90)\" text-anchor=\"middle\">" $esc(p.ylabel) "</text>\n")
-    b.Push(("</g>\n<rect x=\"" $f(c.left) "\" y=\"" $f(c.top) "\" width=\"" $f(c.right - c.left) "\" height=\"" $f(c.bottom - c.top)
+    b.Push("<text x=\"" + $f(mid) + "\" y=\"22\" text-anchor=\"middle\" font-size=\"16\" font-weight=\"bold\">" + $esc(p.title) + "</text>\n")
+    b.Push("<text x=\"" + $f(mid) + "\" y=\"" + $f(c.height - 10.0) + "\" text-anchor=\"middle\">" + $esc(p.xlabel) + "</text>\n")
+    b.Push("<text transform=\"translate(16 " + $f((c.top + c.bottom) / 2.0) + ") rotate(-90)\" text-anchor=\"middle\">" + $esc(p.ylabel) + "</text>\n")
+    b.Push(("</g>\n<rect x=\"" + $f(c.left) + "\" y=\"" + $f(c.top) + "\" width=\"" + $f(c.right - c.left) + "\" height=\"" + $f(c.bottom - c.top) +
         "\" fill=\"none\" stroke=\"#333333\"/>\n"))
 }
 
@@ -331,13 +331,13 @@ fn (c canvas&) drawSeries(b mut StringBuilder&, s series&, i I64) {
 }
 
 fn (c canvas&) drawLine(b mut StringBuilder&, s series&, colour String) {
-    b.Push("<polyline fill=\"none\" stroke=\"" $colour "\" stroke-width=\"2\" points=\"")
-    for i, x in s.xs { b.Push($f(c.X(x)) "," $f(c.Y(s.ys[i])) " ") }
+    b.Push("<polyline fill=\"none\" stroke=\"" + $colour + "\" stroke-width=\"2\" points=\"")
+    for i, x in s.xs { b.Push($f(c.X(x)) + "," + $f(c.Y(s.ys[i])) + " ") }
     b.Push("\"/>\n")
 }
 
 fn (c canvas&) drawDots(b mut StringBuilder&, s series&, colour String) {
-    for i, x in s.xs { b.Push("<circle cx=\"" $f(c.X(x)) "\" cy=\"" $f(c.Y(s.ys[i])) "\" r=\"3\" fill=\"" $colour "\"/>\n") }
+    for i, x in s.xs { b.Push("<circle cx=\"" + $f(c.X(x)) + "\" cy=\"" + $f(c.Y(s.ys[i])) + "\" r=\"3\" fill=\"" + $colour + "\"/>\n") }
 }
 
 fn (c canvas&) drawBars(b mut StringBuilder&, s series&, colour String) {
@@ -345,8 +345,8 @@ fn (c canvas&) drawBars(b mut StringBuilder&, s series&, colour String) {
     for i, n in s.ys {
         x0, x1 := c.X(s.xs[i]), c.X(s.xs[i + 1])
         y := c.Y(n)
-        b.Push(("<rect x=\"" $f(x0) "\" y=\"" $f(min2(y, base)) "\" width=\"" $f(x1 - x0) "\" height=\"" $f((y - base).Abs())
-            "\" fill=\"" $colour "\" fill-opacity=\"0.85\" stroke=\"#ffffff\"/>\n"))
+        b.Push(("<rect x=\"" + $f(x0) + "\" y=\"" + $f(min2(y, base)) + "\" width=\"" + $f(x1 - x0) + "\" height=\"" + $f((y - base).Abs()) +
+            "\" fill=\"" + $colour + "\" fill-opacity=\"0.85\" stroke=\"#ffffff\"/>\n"))
     }
 }
 
@@ -356,8 +356,8 @@ fn (c canvas&) drawCells(b mut StringBuilder&, s series&) {
     for i, v in s.ys {
         x0, y0 := c.X(F64(i % s.cols)), c.Y(F64(i / s.cols))
         x1, y1 := c.X(F64(i % s.cols + 1)), c.Y(F64(i / s.cols + 1))
-        b.Push(("<rect x=\"" $f(x0) "\" y=\"" $f(y0) "\" width=\"" $f(x1 - x0) "\" height=\"" $f(y1 - y0)
-            "\" fill=\"" $shade((v - lo) / span) "\"/>\n"))
+        b.Push(("<rect x=\"" + $f(x0) + "\" y=\"" + $f(y0) + "\" width=\"" + $f(x1 - x0) + "\" height=\"" + $f(y1 - y0) +
+            "\" fill=\"" + $shade((v - lo) / span) + "\"/>\n"))
     }
 }
 
@@ -367,8 +367,8 @@ fn (c canvas&) drawLegend(b mut StringBuilder&, p Plot&) {
     for i, s in p.items.View() {
         if s.name.Len() == 0: continue
         y := c.top + 14.0 + 18.0 * F64(row)
-        b.Push(("<rect x=\"" $f(c.right - 120.0) "\" y=\"" $f(y - 9.0) "\" width=\"12\" height=\"12\" fill=\"" $palette[i % palette.Len()]
-            "\"/><text x=\"" $f(c.right - 102.0) "\" y=\"" $f(y + 2.0) "\" fill=\"#333333\">" $esc(s.name) "</text>\n"))
+        b.Push(("<rect x=\"" + $f(c.right - 120.0) + "\" y=\"" + $f(y - 9.0) + "\" width=\"12\" height=\"12\" fill=\"" + $palette[i % palette.Len()] +
+            "\"/><text x=\"" + $f(c.right - 102.0) + "\" y=\"" + $f(y + 2.0) + "\" fill=\"#333333\">" + $esc(s.name) + "</text>\n"))
         row++
     }
 }

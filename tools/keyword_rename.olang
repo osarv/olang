@@ -24,12 +24,12 @@ fn main() ? io.Error {
     for k in range 1, args.Len() {
         path := args[k]
         text := try os.ReadFile(path) catch os.Error {
-            try io.PutErrLine("keyword_rename: " $path ": cannot be read")
+            try io.PutErrLine("keyword_rename: " + $path + ": cannot be read")
             continue
         }
         out := migrate(text)
         if out == text: continue
-        try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("keyword_rename: " $path ": cannot be written") }
+        try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("keyword_rename: " + $path + ": cannot be written") }
         try io.PutLine(path)
     }
 }
@@ -148,7 +148,7 @@ fn fnTypeBefore(before String&) Bool {
 
 # a field declared at its line's start, in a file that reads the field after a dot (L9a)
 fn fieldAt(text String&, w String&, before String&) Bool {
-    return srcmask.Strip(before) == "" and text.Contains("." $w)
+    return srcmask.Strip(before) == "" and text.Contains("." + $w)
 }
 
 fn lineStart(text String&, i I64) I64 {

@@ -10,7 +10,7 @@ type E struct(A String&, B String&) {
     B
 }
 
-fn mk(s String&) String { return $s "-made" }
+fn mk(s String&) String { return $s + "-made" }
 
 fn E.viaLocal(t String&, at I64) E {
     e := E($t, mk(t) if at >= 0 else "")
@@ -40,5 +40,5 @@ fn main() {
         churn()
         if a.B == "x-made" and b.B == "y-made" and c.B == "z-made" { n += 1 }
     }
-    io.PutLine($n " " $E.viaLocal("w", -1).B.Len())!
+    io.PutLine($n + " " + $E.viaLocal("w", -1).B.Len())!
 }

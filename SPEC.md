@@ -3459,7 +3459,7 @@ fn PutErr(t String&) ? io.Error         # t, to the standard error
 fn PutErrLine(t String& = "") ? io.Error  # t and a line end, to the standard error
 ```
 
-Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.PutLine("n is " $n)`.
+Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.PutLine("n is " + $n)`.
 `PutLine` and `PutErrLine` write the text and its line end as one write. Each call writes at once, with nothing held
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
 `io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
@@ -3974,15 +3974,15 @@ its type: the value written the way it would be in source:
 Only a call that returns nothing has no rendering.
 
 **E11b (joining text).** Two or more **text pieces** written side by side are joined into one text value:
-`"n is " $n "!"`, `$a ", " $b`. A text piece is a string literal (`STR_LIT`, with nothing applied to it)
+`"n is " + $n + "!"`, `$a + ", " + $b`. A text piece is a string literal (`STR_LIT`, with nothing applied to it)
 or a `$` rendering; nothing else can stand beside one, so `f("a" b)` is a syntax error rather than a join —
 a value becomes text only through `$`. Pieces are written on one line (a line end ends the statement, L18), except
-inside brackets, where a join may run over several lines (L18a): `("n is " $n` then `"!")` on the next. Text on a
+inside brackets, where a join may run over several lines (L18a): `("n is " + $n` then `"!")` on the next. Text on a
 line of its own outside brackets is a statement that discards its value (S3). A parenthesized value right after a piece
-is a call of that piece (E13b) - `"(" $op (" try" if t else "")` calls `op` - and since neither text nor what a piece
+is a call of that piece (E13b) - `"(" + $op (" try" if t else "")` calls `op` - and since neither text nor what a piece
 renders is a function there, it is a compile-time error that says to write the value as `$(...)`.
 
-String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd"`, joined before anything
+String literals that are adjacent are one literal: `"ab" + "cd"` is exactly `"abcd"`, joined before anything
 else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
 text **value** (T29c) and a temporary, exactly as `$` is (E11a). Its pieces' operands are evaluated left to right,
 each to its value as any expression's is - a number, a `Bool`, a `Char`, a struct, an enum or a function value as it is
@@ -3990,7 +3990,7 @@ then, a value holding storage of its own (a `Vec`, a `Map`, a struct holding tex
 then, a reference as the instance it names, an array as the array it names (T7b) - and only then are the pieces
 rendered, left to right, each once; one allocation of the total is made in the scope the result flows into, so the cost
 is linear in the result however many pieces there are. So a later operand changing what an earlier piece holds shows
-in that piece only through what a reference or an array names: in `$g $bump()`, a `bump` writing `g`'s elements
+in that piece only through what a reference or an array names: in `$g + $bump()`, a `bump` writing `g`'s elements
 shows in `g`'s piece if `g` is an array, and does not if `g` is a struct or a `Vec` value. A `:=` declaration takes its type from a
 join or a `$` rendering (D15), since both are text by construction.
 
@@ -5680,7 +5680,7 @@ simply parenthesizing `cond` as an ordinary sub-expression. `assert` is valid in
 constructor, or destructor body (§9), not
 only inside `test { }` blocks. The optional second `expr` is the assert's **message**: text - a literal, a join
 or `$x` (E11a/E11b), or any other `String` - evaluated **only when the assert fails**, so its cost and its effects
-are paid only then: `assert n < cap, "n is " $n ", cap " $cap`. The message may not leave: it gives text, and is evaluated only
+are paid only then: `assert n < cap, "n is " + $n + ", cap " + $cap`. The message may not leave: it gives text, and is evaluated only
 where the assert fails. A `return` or an `error` statement in it, a `try` an error can leave it through (in a catch block
 in it too), and a `break` or `continue` other than one inside a loop written in it are compile-time errors, as in
 deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unreachable` and a
@@ -5736,7 +5736,7 @@ ends a run normally; a clause or arm doing one of these; a `yield`). One that so
 the only one there), an arm, a clause, deferred code, a post clause, after a statement that may leave - stays a check at
 run time, failing there only where it is reached. The error carries the assert's message (S17), rendered as the run time
 renders it where that can be computed while compiling - by the evaluator, or from what reflection knows of the instance
-(`"field " $f.Name`, G33, G35) - and otherwise the message as written, saying that it reads what only the running
+(`"field " + $f.Name`, G33, G35) - and otherwise the message as written, saying that it reads what only the running
 program knows. Where the instance decides it (its condition or message reads the instance's lengths, type variables or
 reflected members), and wherever the assert is the standard library's, the error is reported at the call that asked for
 it - the program's own call, the outermost of G16b's chain, through function instances and the constructors of type
@@ -7359,7 +7359,7 @@ scope closes.
 **O27 (storage kept for a view).** A **view** of storage - a slice, a borrow of a part, what a callee hands back of an
 argument's storage (O13), a conversion naming a local's storage (T29a), a closure of what it captured (D16d) - kept
 where that storage does not already live has the storage built where the view is kept, as a whole value kept longer
-is (O28): `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` builds each turn's `t` where `keep` lives, a new one
+is (O28): `for k in range n { t := $k + "-x"; keep.Push(t[0:1]) }` builds each turn's `t` where `keep` lives, a new one
 each turn, kept until that scope closes; a slice of a temporary (E16a) has the temporary built there; a generator's
 element viewing what its argument refers to (D18c) has that argument built there, and one viewing what its walk keeps
 has the walk made there. Nothing is copied for it. `-memory` lists each such placement with the view that keeps it
@@ -7371,7 +7371,7 @@ view shows (`$x`, `x.Copy()`): a by-value parameter's own storage (the call's co
 capture's own copy (S13b, D16c), a generator `Next()`'s result scope (D18b), and storage reached through a derived
 scope or a scope not known here (O23a, O12). Storage holding a value with a destructor to run is built where the view
 is kept like any other storage, and the value goes with it: its destructors run as that scope closes (O15), not where
-its variable's block ends - `for i in range 3 { f := Res($i "-file"); keep.Push(f.name[0:1]) }` keeps each turn's `f`
+its variable's block ends - `for i in range 3 { f := Res($i + "-file"); keep.Push(f.name[0:1]) }` keeps each turn's `f`
 until the scope `keep` lives in closes; `-memory` says so for each (B18). What a body that said such an error of its own requires is not said again at its calls: one cause,
 one error.
 
@@ -7391,7 +7391,7 @@ of them allow, and every judgment of this section is then made of it. So:
   value each time its declaration runs, so a loop's turns never share one; its memory is the kept scope's on every
   turn, kept or not (the placement is the program's, not a turn's);
 - what is kept by any other way is placed the same: a value kept through a call's obligation (O10c) - one a statement
-  holds for itself too, as `m[$k "-key"] += v` holds its index for `At` and `SetAt` and `names[i][0] = t` its borrow
+  holds for itself too, as `m[$k + "-key"] += v` holds its index for `At` and `SetAt` and `names[i][0] = t` its borrow
   of `t` (E31b), and the copy of a call's value a callee keeps a view of; a field or an element read off a call's result
   (O18c), the call then landing where the part is kept and a local declared from the part built there with its own
   storage; an argument an instance holds when a store keeps the instance (C2d); a closure a function-valued local is

@@ -11,7 +11,7 @@ fn put(s mut Store&, k String&, v String&) {
     s.keys.Push(k)
     s.keys.Push(v)
 }
-fn mk(n I64) String& { return $n "x" }
+fn mk(n I64) String& { return $n + "x" }
 fn Store.load(n I64) Store& {
     st mut Store& = Store()
     text := mk(n)
@@ -21,7 +21,7 @@ fn Store.load(n I64) Store& {
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }

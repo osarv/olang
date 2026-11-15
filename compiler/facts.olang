@@ -44,7 +44,7 @@ fn (t mut Table&) Decide(name String&, value String&, carried Bool) {
 fn (t mut Table&) Read(reader I64, name String&) String ? Undecided {
     v := try t.values.Get(name) catch { error Undecided }
     t.Reads++
-    t.reads.Put($reader " " $name, true)
+    t.reads.Put($reader + " " + $name, true)
     return v
 }
 
@@ -69,13 +69,13 @@ fn (t mut Table&) Forget(kind String&) {
 # reader's record: a "read VALUE NAME" line for each fact it read (only those an importer carries, without own),
 # sorted - "" for none. VALUE is the value where it is short and a word, else "#" and its hash
 fn (t Table&) Record(reader I64, own Bool) String {
-    at := $reader " "
+    at := $reader + " "
     lines Vec<String&>
     for rk in t.reads.Keys() {
         if not rk.StartsWith(at): continue
         k := rk[at.Len():]
         if not own and not t.carried.Has(k): continue
-        lines.Push($"read " $Token(try t.values.Get(k) catch default "") " " $k)
+        lines.Push($"read " + $Token(try t.values.Get(k) catch default "") + " " + $k)
     }
     lines.Sort(fn(a String&, b String&) Bool { return a < b })
     return lines.Join("\n")
@@ -97,7 +97,7 @@ fn (t Table&) Holds(lines Array<String&>&) Bool {
 # a value as a record writes it: itself where it is short and holds no space, else "#" and the start of its hash
 fn Token(v String&) String {
     if v.Len() > 0 and v.Len() <= 40 and not v.Contains(" ") and not v.Contains("\n") and not v.StartsWith("#"): return v
-    return $"#" $sha.Hex(v)[:32]
+    return $"#" + $sha.Hex(v)[:32]
 }
 
 test Table "records only what was read, and holds a record only where every value read is the same" {

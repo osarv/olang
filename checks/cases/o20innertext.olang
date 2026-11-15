@@ -6,7 +6,7 @@ import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t
@@ -21,7 +21,7 @@ fn main() ? {
     c := CB()
     b := c.box
     for i in range 3 {
-        s := $i "-new-text"
+        s := $i + "-new-text"
         b.s = s
     }
     try io.PutLine(b.s)

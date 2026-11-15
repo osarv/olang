@@ -14,7 +14,7 @@ fn keep(v mut Vec<Tok>&, t String&) {
 fn main() ? {
     v := Vec<Tok>()
     for i in range 3 {
-        t := "w" $i
+        t := "w" + $i
         keep(v, t)
     }
     try io.PutLine($v[0].text)

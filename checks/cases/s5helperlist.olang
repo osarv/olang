@@ -12,7 +12,7 @@ fn one(s String&) Vec<String&> {
 fn main() ? {
     rows := Vec<Vec<String&>>()
     for k in range 4 {
-        t := $k "-text"
+        t := $k + "-text"
         rows.Push(one(t))
     }
     for r in rows { try io.PutLine(r[0]) }

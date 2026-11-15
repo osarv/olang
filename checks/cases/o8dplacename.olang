@@ -15,7 +15,7 @@ fn churn() I64 {
     for i in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        s := $i + $i + $i + "-" + $(i * 7) + " some more text to fill the chunk ......"
         t += s.Len()
     }
     return t
@@ -40,7 +40,7 @@ fn main() {
         t += x
     }
     io.PutLine($t)!
-    for k in range 6 { h.l.Push($"text item " $k " padded out ...................................") }
+    for k in range 6 { h.l.Push($"text item " + $k + " padded out ...................................") }
     for y in eachText(h) {
         try h.l.Pop() catch { }                             # lets go of the last element
         churn()

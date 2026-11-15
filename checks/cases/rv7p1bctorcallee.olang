@@ -14,13 +14,13 @@ fn poke2(p mut Cur2&) { p.c.v++ }
 fn (b Bag&) Str() String {
     cur := Cur2(b.c)
     poke2(cur)
-    return "b" $b.c.v
+    return "b" + $b.c.v
 }
 fn render(k I64) String {
     b := Bag(Cell())
     b.c.v += k
     t := $b
-    return $t " " $b " v=" $b.c.v
+    return $t + " " + $b + " v=" + $b.c.v
 }
 Baked := render(0)
 Zero mut I64 = 0                        # read at run time: the call below is made there

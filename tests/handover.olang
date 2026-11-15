@@ -19,7 +19,7 @@ fn twice(t Array<Char>&) Array<Char> { return inner(inner(t)) }
 fn pick(a Array<Char>&, b Array<Char>&, k I64) Array<Char> {
     if k == 0: return a
     if k == 1: return b[1:]
-    return $a $b
+    return $a + $b
 }
 
 fn count(t Array<Char>&) I64 { return t.Len() }
@@ -46,7 +46,7 @@ test inner "hands a view over where the caller only reads it, and copies it wher
     s[2] = 'X'
     assert kept == "bc"
     assert twice(s) == "Xc"
-    assert $inner(s) "!" == "aXcd!"
+    assert $inner(s) + "!" == "aXcd!"
 }
 
 test pick "copies a view kept beside new text, whatever it gives" {
@@ -94,7 +94,7 @@ fn skipSpaces(t Array<Char>&, i I64) Array<Char> {
 }
 
 # ... and one viewing new text, which no caller can know: copied at every call (ViewOther)
-fn spacedOut(t Array<Char>&, i I64) Array<Char> { become skipSpaces($" " $t, i) }
+fn spacedOut(t Array<Char>&, i I64) Array<Char> { become skipSpaces($" " + $t, i) }
 
 test cutWith "copies the view an adapter's Call hands back" {
     t Array<Char> = $"abcdef"
@@ -131,7 +131,7 @@ fn fired(s sink&) Array<Char> {
 }
 
 # a join's operands are evaluated before any piece renders (E11b): mid's result is its own copy before fired runs
-fn joinedFired(t Array<Char>&, s sink&) Array<Char> { return $inner(t) $fired(s) }
+fn joinedFired(t Array<Char>&, s sink&) Array<Char> { return $inner(t) + $fired(s) }
 
 test joinedFired "copies a view where a closure an argument holds may write what it views before it is read" {
     text Array<Char> = $"[abcd]"

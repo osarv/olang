@@ -26,7 +26,7 @@ test "Place.Here is where it is written" {
     p := Place.Here
     assert p.Line == 26 and p.Column == 10
     assert p.File.EndsWith("place.olang")
-    assert $p == $p.File ":26:10"
+    assert $p == $p.File + ":26:10"
 }
 
 test "a default Place.Here is the call's place" {
@@ -51,7 +51,7 @@ test "baked and run time agree" {
     assert BakedHere.Line == 22 and BakedWritten.Line == 23 and BakedWritten.Column == 22
     now := here()
     assert now.File == BakedHere.File
-    assert $BakedHere == $BakedHere.File ":22:19"
+    assert $BakedHere == $BakedHere.File + ":22:19"
 }
 
 test "Place renders and compares as its fields" {
@@ -60,5 +60,5 @@ test "Place renders and compares as its fields" {
     assert a != b and a.File == b.File and a.Line + 1 == b.Line
     c := Place(a.File, a.Line, a.Column)
     assert c == a and c.Hash() == a.Hash()
-    io.PutLine("place: " $a)!
+    io.PutLine("place: " + $a)!
 }

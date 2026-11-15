@@ -19,7 +19,7 @@ fn fill(h mut holder&, n I64, k I64) {
 
 fn label(h mut holder&, n I64, k I64) {
     w := Vec<String>()
-    for i in range n { w.Push("name " $(i + k)) }
+    for i in range n { w.Push("name " + $(i + k)) }
     h.names = w
 }
 
@@ -31,5 +31,5 @@ fn main() {
         label(h, 100, k)
         t += h.d[9999] + h.names.Len()
     }
-    io.PutLine($t " " $h.names[99])!
+    io.PutLine($t + " " + $h.names[99])!
 }

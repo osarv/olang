@@ -5,7 +5,7 @@ import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t
@@ -14,7 +14,7 @@ type N struct(k I64) { k }
 fn main() ? {
     w := Vec<String&>()
     w.Push("a")
-    w.Push($2 "b")
+    w.Push($2 + "b")
     c := w
     c.Push("x")
     for _ in range 100 { w.Push("y") }
@@ -25,5 +25,5 @@ fn main() ? {
     m := ns
     ns.Push(N(5))
     churn()
-    try io.PutLine($m.Len() " " $m[0].k " " $ns.Len())
+    try io.PutLine($m.Len() + " " + $m[0].k + " " + $ns.Len())
 }

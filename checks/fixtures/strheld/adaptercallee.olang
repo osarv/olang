@@ -4,7 +4,7 @@ type Ctr struct(v I64) {
     v
 }
 fn (c Ctr&) Call() I64 {
-    s := $c.v "x"
+    s := $c.v + "x"
     return s.Len()
 }
 fn hh(c Ctr&) I64 {
@@ -14,5 +14,5 @@ fn hh(c Ctr&) I64 {
 type Bag struct(c Ctr&) {
     c
 }
-fn (b Bag&) Str() String { return "b" $hh(b.c) }
+fn (b Bag&) Str() String { return "b" + $hh(b.c) }
 fn main() ? { try io.PutLine($Bag(Ctr(5))) }

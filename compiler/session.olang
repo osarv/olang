@@ -67,7 +67,7 @@ fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&
     for e in overlay { l.Overlay.Put(e.Key, e.Value) }
     t0 := time.Now()
     l.Load(root)
-    Log($"loaded " $root " (" $l.Mods.Len() " modules) in " $(time.Since(t0) / 1000000) " ms")
+    Log($"loaded " + $root + " (" + $l.Mods.Len() + " modules) in " + $(time.Since(t0) / 1000000) + " ms")
     a mut Analysis& = Analysis(l)
     if l.Root < 0 or d.HasFatal() { return a }
     # (kept: the records under each module's key - the front records' summaries (W3a), and Hold's judgings (W3b) - as
@@ -88,7 +88,7 @@ fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&
     baked mut Map<I64, eval.Image>& = Map<I64, eval.Image>()
     if clean { baked = interp.Bake(c) }
     if clean and kept { records.KeepFront(l, c, cfg, a.Keys, fr, baked) }
-    Log($"checked in " $(time.Since(t0) / 1000000) " ms")
+    Log($"checked in " + $(time.Since(t0) / 1000000) + " ms")
     if held { Hold(a, cfg) }
     return a
 }
@@ -115,7 +115,7 @@ fn Hold(a mut Analysis&, cfg mut build.Config&) {
         sc.Run()
     }
     if rec and c!.P.L.Diags.Errors() == 0 and sc.Gaps.Len() == 0 { records.KeepScope(c!, cfg, a.Keys, sc, loaded) }
-    Log($"held to section 8 in " $(time.Since(t0) / 1000000) " ms (" $sc.DiskTaken " judgings from records)")
+    Log($"held to section 8 in " + $(time.Since(t0) / 1000000) + " ms (" + $sc.DiskTaken + " judgings from records)")
     a.Sc = sc
     x mut interp.Exec& = interp.Exec(c!.P, c!.Bodies, eval.Mode.Compile)
     x.Faulty = c!.Faulty
@@ -274,33 +274,33 @@ fn (a Analysis&) describe(tg Target) Found ? Nothing {
         case Target.Item(mi, name) {
             line := try explain.Item(c!, a.Sc!, a.X!, mi, name) catch explain.Missing { error Nothing.Here }
             at := declOf(c!, mi, name)
-            text := $hover(line, doc.Comment(a.TextOf(mi), at, true) if at >= 0 else "") $exampleText(c!, mi, name)
+            text := $hover(line, doc.Comment(a.TextOf(mi), at, true) if at >= 0 else "") + $exampleText(c!, mi, name)
             return Found(text, $a.L.Mods[mi].Real, at)
         }
         case Target.Method(f) {
             mi := c!.P.FnModule(f)
             at := I64(c!.P.FnDecl(f).Sp.Start)
             fd := c!.P.FnDecl(f)
-            tgt := $ast.OwnerTarget(fd, c!.P.L.Names) "." $c!.P.L.Names.Text(fd.Member) if fd.IsBuilder() else $doc.ReceiverName(c!, f) "." $c!.P.L.Names.Text(fd.Name)
+            tgt := $ast.OwnerTarget(fd, c!.P.L.Names) + "." + $c!.P.L.Names.Text(fd.Member) if fd.IsBuilder() else $doc.ReceiverName(c!, f) + "." + $c!.P.L.Names.Text(fd.Name)
             ex := exampleText(c!, mi, tgt)
-            return Found($hover(explain.FnText(c!, a.Sc!, f), doc.Above(a.TextOf(mi), at)) $ex, $a.L.Mods[mi].Real, at)
+            return Found($hover(explain.FnText(c!, a.Sc!, f), doc.Above(a.TextOf(mi), at)) + $ex, $a.L.Mods[mi].Real, at)
         }
         case Target.Field(t, index) {
             fd := try a.field(t, index)
-            return Found(hover($fd.Name " " $c!.Ty(fd.Ty), fd.Doc), fd.Real, fd.At)
+            return Found(hover($fd.Name + " " + $c!.Ty(fd.Ty), fd.Doc), fd.Real, fd.At)
         }
         case Target.Local(bi, id) {
             b := c!.Bodies[bi]
             l := b.Locals[I64(id)]
             mi := a.moduleOfFile(b.File)
             kind := "parameter " if l.Kind == typed.LocalKind.Param else ""
-            text := hover($kind $c!.P.L.Names.Text(l.Name) " " $c!.Ty(l.Ty), "")
+            text := hover($kind + $c!.P.L.Names.Text(l.Name) + " " + $c!.Ty(l.Ty), "")
             return Found(text, $a.L.Mods[mi].Real if mi >= 0 else "", I64(l.Sp.Start))
         }
         case Target.Decl(mi, at, docText, line) { return Found(hover(line, docText), $a.L.Mods[mi].Real, at) }
         case Target.Module(mi) {
             m := a.L.Mods[mi]
-            return Found(hover($"import \"" $m.Identity "\"", doc.ModuleDoc(m.Src!.Text)), m.Real, 0)
+            return Found(hover($"import \"" + $m.Identity + "\"", doc.ModuleDoc(m.Src!.Text)), m.Real, 0)
         }
         case Target.None { error Nothing.Here }
     }
@@ -319,16 +319,16 @@ fn exampleText(c mut typecheck.Checker&, mi I64, target String&) String {
     xs := doc.ExamplesOf(c, mi, target)
     if xs.Len() == 0 { return "" }
     b := StringBuilder()
-    b.Push($"\n\nExample: " $xs[0].Desc "\n```olang\n" $xs[0].Body "\n```")
-    if xs.Len() > 1 { b.Push($"\n\n+" $(xs.Len() - 1) " more test" $("" if xs.Len() == 2 else "s")) }
+    b.Push($"\n\nExample: " + $xs[0].Desc + "\n```olang\n" + $xs[0].Body + "\n```")
+    if xs.Len() > 1 { b.Push($"\n\n+" + $(xs.Len() - 1) + " more test" + $("" if xs.Len() == 2 else "s")) }
     return b.ToString()
 }
 
 # a hover: the signature as olang code, then the doc comment
 fn hover(sig String&, docText String&) String {
     b := StringBuilder()
-    b.Push($"```olang\n" $sig.TrimEnd() "\n```")
-    if docText != "" { b.Push($"\n\n" $docText) }
+    b.Push($"```olang\n" + $sig.TrimEnd() + "\n```")
+    if docText != "" { b.Push($"\n\n" + $docText) }
     return b.ToString()
 }
 
@@ -647,7 +647,7 @@ fn utf16Units(t String&, from I64, to I64) I64 {
 fn (p Positions&) Range(b mut StringBuilder&, from I64, to I64) {
     l1, c1 := p.Pos(from)
     l2, c2 := p.Pos(to)
-    b.Push($"{\"start\":{\"line\":" $l1 ",\"character\":" $c1 "},\"end\":{\"line\":" $l2 ",\"character\":" $c2 "}}")
+    b.Push($"{\"start\":{\"line\":" + $l1 + ",\"character\":" + $c1 + "},\"end\":{\"line\":" + $l2 + ",\"character\":" + $c2 + "}}")
 }
 
 # ---- symbols ----
@@ -684,7 +684,7 @@ fn (w mut symWriter&) open(b mut StringBuilder&, name String&, kind I64, from I6
     w.n++
     b.Push("{\"name\":")
     JsonStr(b, name if name != "" else "?")
-    b.Push($",\"kind\":" $kind ",\"range\":")
+    b.Push($",\"kind\":" + $kind + ",\"range\":")
     w.p.Range(b, from, to)
     b.Push(",\"selectionRange\":")
     w.p.Range(b, nameAt, nameEnd)
@@ -753,7 +753,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             b.Push("]}")
         }
         case ast.Decl.Test(sp, nsp, _, _) {
-            w.leaf(b, $"test " $t[I64(nsp.Start):I64(nsp.End)], KindFunction, I64(sp.Start), I64(sp.End), I64(nsp.Start), I64(nsp.End), "")
+            w.leaf(b, $"test " + $t[I64(nsp.Start):I64(nsp.End)], KindFunction, I64(sp.Start), I64(sp.End), I64(nsp.Start), I64(nsp.End), "")
         }
         case ast.Decl.If(_, ti) { w.topIf(b, ti, nm) }
         case ast.Decl.ExternBlock(_, _, xs) {
@@ -884,7 +884,7 @@ fn (it mut Items&) AddDep(label String&, kind I64, detail String&, dep Bool) {
     it.n++
     it.B.Push("{\"label\":")
     JsonStr(it.B, label)
-    it.B.Push($",\"kind\":" $kind)
+    it.B.Push($",\"kind\":" + $kind)
     if detail != "" {
         it.B.Push(",\"detail\":")
         JsonStr(it.B, detail)
@@ -922,7 +922,7 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
         }
     }
     t := a.typeEndingAt(file, dot)
-    Log($"completion after a '.' at " $dot ": " $(c!.Ty(t) if t != types.UnknownT else "no type"))
+    Log($"completion after a '.' at " + $dot + ": " + $(c!.Ty(t) if t != types.UnknownT else "no type"))
     if t == types.UnknownT { return }
     a.typeMembers(it, t)
 }
@@ -947,7 +947,7 @@ fn (a Analysis&) Placed(real String&) Vec<Use> {
     for p in a.Sc!.Placements() {
         if p.File != file { continue }
         hint := " - handing on a value instead would let it go with its step" if p.Tail else " - a copy of what is kept ('$x') would let it go with its turn"
-        out.Push(Use(p.Start, p.End, $p.Text $hint))
+        out.Push(Use(p.Start, p.End, $p.Text + $hint))
     }
     return out
 }
@@ -1296,7 +1296,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
     for f in files { roots.Push(f) }
     if roots.Len() == 0 { stdModules(roots) }
     try os.MkDirAll(html) catch os.Error {
-        say($"olang: " $html ": cannot be made\n")
+        say($"olang: " + $html + ": cannot be made\n")
         return 1
     }
     status I32 = 0
@@ -1314,7 +1314,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
     mods.Sort(fn(x doc.Module, y doc.Module) Bool { return x.Identity < y.Identity })
     index := filepath.Join(html, "index.html")
     try os.WriteFile(index, doc.IndexHtml("olang standard library" if files.Len() == 0 else "olang", mods.ToArray())) catch os.Error {
-        say($"olang: " $index ": cannot be written\n")
+        say($"olang: " + $index + ": cannot be written\n")
         return 1
     }
     return status
@@ -1332,7 +1332,7 @@ fn docPage(root String&, cfg mut build.Config&, html String&) I32 {
     md := doc.Module.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
     path := filepath.Join(html, doc.PageName(md.Identity))
     try os.WriteFile(path, md.Html()) catch os.Error {
-        say($"olang: " $path ": cannot be written\n")
+        say($"olang: " + $path + ": cannot be written\n")
         return 1
     }
     return 0
@@ -1345,13 +1345,13 @@ fn IdentityOf(path String&) String {
     cwd := try os.Cwd() catch default "."
     under := ""
     prefix := ""
-    if real.StartsWith($std "/") {
+    if real.StartsWith($std + "/") {
         under = $real[std.Len() + 1:]
         prefix = "std/"
-    } else if real.StartsWith($cwd "/") {
+    } else if real.StartsWith($cwd + "/") {
         under = $real[cwd.Len() + 1:]
     }
-    id := $prefix $under if under != "" else $filepath.Base(real)
+    id := $prefix + $under if under != "" else $filepath.Base(real)
     return $id[:id.Len() - 6] if id.EndsWith(".olang") else id
 }
 
@@ -1360,7 +1360,7 @@ fn IdentityOf(path String&) String {
 # a line for whoever reads the tool's standard error, where OLANG_TOOL_LOG is set (B15, B16): what it is doing, timed
 fn Log(text String&) {
     if (try os.Env("OLANG_TOOL_LOG") catch default "") == "" { return }
-    try io.PutErr($"olang: " $text "\n") catch io.Error { }
+    try io.PutErr($"olang: " + $text + "\n") catch io.Error { }
 }
 
 # signal.h's own signal takes a handler function, and SIG_IGN is a cast of 1 to one, which olang cannot write (X19)
@@ -1486,7 +1486,7 @@ fn (r mut Reader&) drop(k I64) {
 
 # body written to fd as one framed message (LSP's)
 fn WriteFramed(fd I32, body String&) {
-    try io.Write(fd, $"Content-Length: " $body.Len() "\r\n\r\n" $body) catch io.Error { }
+    try io.Write(fd, $"Content-Length: " + $body.Len() + "\r\n\r\n" + $body) catch io.Error { }
 }
 
 # what work writes, run in a child process: the text, and the child's status (ExitStatus's); where no child can be
@@ -1533,8 +1533,8 @@ fn ExitStatus(raw I32) I32 {
 
 # the file of a module named by its import path, "std/json" (M23): std's own; any other path with ".olang" after it
 fn StdModule(spec String&) String {
-    if spec.StartsWith("std/") { return $filepath.Join(load.StdDir(), spec[4:]) ".olang" }
-    return $spec ".olang"
+    if spec.StartsWith("std/") { return $filepath.Join(load.StdDir(), spec[4:]) + ".olang" }
+    return $spec + ".olang"
 }
 
 # every module of the standard library: std's files, then the prelude's

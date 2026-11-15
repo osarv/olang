@@ -9,7 +9,7 @@ fn chars(t String&) Iterator<Char> {
 fn main() ? {
     g := chars("init")
     {
-        s := $5 "abc"
+        s := $5 + "abc"
         g = chars(s)
     }
     for _ in g {

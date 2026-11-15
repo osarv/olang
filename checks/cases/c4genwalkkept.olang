@@ -18,6 +18,6 @@ fn main() {
     g := pieces(x)
     for w in g { out.Push(w) }
     junk := Vec<String>()
-    for i in range 100 { junk.Push("zzzzzzzzzzzzzzzzzz" $i) }
-    io.PutLine($out " " $junk.Len())!
+    for i in range 100 { junk.Push("zzzzzzzzzzzzzzzzzz" + $i) }
+    io.PutLine($out + " " + $junk.Len())!
 }

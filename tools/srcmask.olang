@@ -177,8 +177,8 @@ fn ReadText(path String&) String ? os.Error {
 # a and b made one path: b below a, with one "/" between - and nothing else changed, "./x" staying "./x"
 fn PathJoin(a String&, b String&) String {
     if a.Len() == 0 { return $b }
-    if a.EndsWith("/") { return $a $b }
-    return $a "/" $b
+    if a.EndsWith("/") { return $a + $b }
+    return $a + "/" + $b
 }
 
 # "path" made absolute and cleaned, as Python's os.path.abspath does
@@ -222,7 +222,7 @@ fn RepoRoot() String {
 fn Compiler() String {
     given := try os.Env("OLANG") catch default ""
     if given.Len() > 0 { return AbsPath(given) }
-    return $RepoRoot() "/build/olang"
+    return $RepoRoot() + "/build/olang"
 }
 
 # ---- running the compiler ----
@@ -232,19 +232,19 @@ fn Compiler() String {
 # cancel.Stopped when the time ran out
 fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.Error, cancel.Stopped {
     out := try os.Output.ExecUntil(cancel.Token.After(timeoutMs), ...args, dir = dir)
-    return $out.Stdout $out.Stderr
+    return $out.Stdout + $out.Stderr
 }
 
 # ---- output ----
 
 # a line to the standard output
 fn Say(t String&) {
-    io.Write(io.Stdout, $t "\n")!
+    io.Write(io.Stdout, $t + "\n")!
 }
 
 # a line to the standard error
 fn SayErr(t String&) {
-    io.Write(io.Stderr, $t "\n")!
+    io.Write(io.Stderr, $t + "\n")!
 }
 
 # ---- expressions, as the try and checked migrations read them ----

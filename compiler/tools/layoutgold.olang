@@ -23,15 +23,15 @@ fn main() {
 fn fromPort(out String&) {
     dump := toolkit.Env("LAYOUTDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/layout.txt"
-    if not toolkit.Built(dump) { toolkit.Die("layoutgold: " $dump " is not built (make " $dump ")") }
+    if not toolkit.Built(dump) { toolkit.Die("layoutgold: " + $dump + " is not built (make " + $dump + ")") }
     o := toolkit.Run(Array<String&>[dump, "layout", golden])
     if o.Status != 0 or o.Stderr.Len() > 0 {
         toolkit.Say(o.Stderr)
-        toolkit.Die("layoutgold: " $dump " layout failed")
+        toolkit.Die("layoutgold: " + $dump + " layout failed")
     }
     old := toolkit.Rows(toolkit.Read(golden))
     got := toolkit.Rows(o.Stdout)
-    if got.Len() != old.Len() { toolkit.Die("layoutgold: " $dump " gave " $got.Len() " rows for the golden's " $old.Len()) }
+    if got.Len() != old.Len() { toolkit.Die("layoutgold: " + $dump + " gave " + $got.Len() + " rows for the golden's " + $old.Len()) }
     allowed := Map<String, Bool>()
     for r in toolkit.Rows(toolkit.Read("compiler/goldens/layout.deferred")) {
         if not r.StartsWith("#") and r != "": allowed.Put($r, true)
@@ -43,7 +43,7 @@ fn fromPort(out String&) {
         row := got[i]
         gone := row.EndsWith("\tunparsed") or row.EndsWith("\tdeferred") and typeOf(row) not in allowed
         if gone {
-            toolkit.Say("layoutgold: dropped, no longer a type: " $typeOf(row) "\n")
+            toolkit.Say("layoutgold: dropped, no longer a type: " + $typeOf(row) + "\n")
             dropped++
             continue
         }
@@ -55,7 +55,7 @@ fn fromPort(out String&) {
         b.PushChar('\n')
     }
     toolkit.Write(out, b.ToString())
-    toolkit.Say("layoutgold: " $old.Len() " rows laid out by " $dump " into " $out " (" $kept " left as the golden had them, " $dropped " no longer types)\n")
+    toolkit.Say("layoutgold: " + $old.Len() + " rows laid out by " + $dump + " into " + $out + " (" + $kept + " left as the golden had them, " + $dropped + " no longer types)\n")
 }
 
 # a row's type: the text before its first tab

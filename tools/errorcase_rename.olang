@@ -246,7 +246,7 @@ fn walk(dir String&, out mut Vec<String&>&, all Bool) {
 
 fn read(path String&) String {
     return try srcmask.ReadText(path) catch {
-        srcmask.SayErr("errorcase_rename: cannot read " $path)
+        srcmask.SayErr("errorcase_rename: cannot read " + $path)
         os.Exit(1)
     }
 }
@@ -300,43 +300,43 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if check { continue }
         try os.WriteFile(path, out) catch {
-            srcmask.SayErr("errorcase_rename: cannot write " $path)
+            srcmask.SayErr("errorcase_rename: cannot write " + $path)
             os.Exit(1)
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.n " words")
+    srcmask.Say($verb + $changed + " files: " + $total.n + " words")
     if check and changed > 0 { os.Exit(1) }
 }
 
 # the old spellings are written in pieces, so the tool run over itself changes nothing
-Full := "FU" "LL"
-Range := "OUT_OF" "_RANGE"
-Denied := "DEN" "IED"
+Full := "FU" + "LL"
+Range := "OUT_OF" + "_RANGE"
+Denied := "DEN" + "IED"
 
 test Camel "an upper-case word becomes its parts, each capitalized" {
-    assert Camel(Full) == "Full" and Camel(Range) == "OutOfRange" and Camel("HTTP" "2") == "Http2"
+    assert Camel(Full) == "Full" and Camel(Range) == "OutOfRange" and Camel("HTTP" + "2") == "Http2"
     assert upperWord(Full) and upperWord(Range) and not upperWord("A") and not upperWord("X1")
     assert not upperWord("Full") and not upperWord("notFound") and not upperWord("_X")
 }
 
 test rename "a declaration's words and their qualified uses are renamed; a bare word and another type's are not" {
-    src := ("type IoError error " "{ " $Full ", " $Denied " }\nfn f() ? IoError { error IoError." $Full " }\n# io.IoError." $Full
-        " and " $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
+    src := ("type IoError error " + "{ " + $Full + ", " + $Denied + " }\nfn f() ? IoError { error IoError." + $Full + " }\n# io.IoError." + $Full +
+        " and " + $Full + " and Other." + $Full + "\nx := \"IoError." + $Range + "\"\n")
     ws := Words()
     collect(src, ws)
     n := Count()
     out := rename(src, ws, n)
-    want := ("type IoError error " "{ Full, Denied }\nfn f() ? IoError { error IoError.Full }\n# io.IoError.Full and "
-        $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
+    want := ("type IoError error " + "{ Full, Denied }\nfn f() ? IoError { error IoError.Full }\n# io.IoError.Full and " +
+        $Full + " and Other." + $Full + "\nx := \"IoError." + $Range + "\"\n")
     assert out == want, out
     assert n.n == 4
     assert rename(out, ws, n) == out
 }
 
 test rename "a type of one word that is its own name is an error raised by name: its declaration dropped" {
-    src := ("# what Find fails with\ntype NotFound error " "{ NOT" "_FOUND }\nfn f() ? NotFound { error NotFound.NOT" "_FOUND }\n"
-        "x := try f() catch regex.NotFound.NOT" "_FOUND default 0\n")
+    src := ("# what Find fails with\ntype NotFound error " + "{ NOT" + "_FOUND }\nfn f() ? NotFound { error NotFound.NOT" + "_FOUND }\n" +
+        "x := try f() catch regex.NotFound.NOT" + "_FOUND default 0\n")
     ws := Words()
     collect(src, ws)
     n := Count()
@@ -347,13 +347,13 @@ test rename "a type of one word that is its own name is an error raised by name:
 }
 
 test rename "a set's own words, words across lines and a declaration in a string" {
-    src := ("type L error os.Error, P " "{ " $Full " }\ntype P error " "{\n    " $Range "\n    A\n}\nt := \"type Q error " "{ "
-        $Full " }\\nfn f() ? Q { error Q." $Full " }\"\n")
+    src := ("type L error os.Error, P " + "{ " + $Full + " }\ntype P error " + "{\n    " + $Range + "\n    A\n}\nt := \"type Q error " + "{ " +
+        $Full + " }\\nfn f() ? Q { error Q." + $Full + " }\"\n")
     ws := Words()
     collect(src, ws)
     n := Count()
     out := rename(src, ws, n)
-    want := ("type L error os.Error, P " "{ Full }\ntype P error " "{\n    OutOfRange\n    A\n}\nt := \"type Q error " "{ Full"
+    want := ("type L error os.Error, P " + "{ Full }\ntype P error " + "{\n    OutOfRange\n    A\n}\nt := \"type Q error " + "{ Full" +
         " }\\nfn f() ? Q { error Q.Full }\"\n")
     assert out == want, out
 }

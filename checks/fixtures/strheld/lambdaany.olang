@@ -8,7 +8,7 @@ type Item struct(id I64) {
 }
 fn (it Item&) Str() String {
     hit := it.tags.Iter().Some(fn(t String&) Bool { return t == $it.id })
-    return $it.id " " $hit
+    return $it.id + " " + $hit
 }
 fn main() ? {
     it := Item(7)

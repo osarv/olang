@@ -45,7 +45,7 @@ fn caseKeys<T>() String {
         b.Push(k.Name)
         for f in c.Fields {
             fk := try f.Attr<Key>() catch default Key(f.Name)
-            b.Push($"." $fk.Name)
+            b.Push($"." + $fk.Name)
         }
         b.Push(" ")
     }
@@ -73,7 +73,7 @@ fn commands(x I64) String {
     for f in attrmod.Functions {
         if f.HasAttr<attrmod.Command>() {
             c := f.Attr<attrmod.Command>()!
-            s = $s $c.Word "=" $f(x) " "
+            s = $s + $c.Word + "=" + $f(x) + " "
         }
     }
     return s
@@ -83,11 +83,11 @@ fn commands(x I64) String {
 fn shapes() String {
     s := ""
     for f in attrmod.Functions {
-        s = $s $f.Name "(" $f.Params.Len() "):" $f.Type.Name
+        s = $s + $f.Name + "(" + $f.Params.Len() + "):" + $f.Type.Name
         for p in f.Params {
-            s = $s " " $p.Name $("=" if p.HasDefault else "")
+            s = $s + " " + $p.Name + $("=" if p.HasDefault else "")
         }
-        s = $s ";"
+        s = $s + ";"
     }
     return s
 }
@@ -96,7 +96,7 @@ fn shapes() String {
 fn methods(r attrmod.Rec) String {
     s := ""
     for m in attrmod.Rec.Methods {
-        if m.HasAttr<attrmod.Command>() { s = $s $m.Name "=" $m(r, 3) " " } else { s = $s $m.Name "=" $m(r) " " }
+        if m.HasAttr<attrmod.Command>() { s = $s + $m.Name + "=" + $m(r, 3) + " " } else { s = $s + $m.Name + "=" + $m(r) + " " }
     }
     return s
 }

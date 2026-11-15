@@ -2,5 +2,5 @@
 # S17a: a false top-level assert says its message, computed while compiling
 Sizes Array<I64> = Array<I64>[1, 2, 3]
 Names Array<String&> = Array<String&>["a", "b", "c", "d"]
-assert Sizes.Len() == Names.Len(), $Sizes.Len() " sizes, " $Names.Len() " names"
+assert Sizes.Len() == Names.Len(), $Sizes.Len() + " sizes, " + $Names.Len() + " names"
 fn main() { }

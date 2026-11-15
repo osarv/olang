@@ -5,12 +5,12 @@
 # that parameter - the instance may not outlive the argument's block (C2d)
 import "std/io"
 type H struct(x String&, n I64) {
-    y String& = $n "-new-text-in-x's-scope"
+    y String& = $n + "-new-text-in-x's-scope"
 }
 fn main() ? {
     h := H("outer", 1)
     for i in range 2 {
-        t := $i "-inner-block-text"
+        t := $i + "-inner-block-text"
         h = H(t, 5 + i)
     }
     churn()
@@ -19,7 +19,7 @@ fn main() ? {
 fn churn() I64 {
     t := 0
     for i in range 3000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        s := $i + "abcdefghijklmnopqrstuvwxyz0123456789"
         t += s.Len()
     }
     return t

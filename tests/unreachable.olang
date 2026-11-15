@@ -4,7 +4,7 @@ import "std/io"
 
 type Shape enum { Circle(r F64), Square(s F64) }
 
-fn pick(s String&, b Bool) String& { return s if b else unreachable "never " $b }
+fn pick(s String&, b Bool) String& { return s if b else unreachable "never " + $b }
 
 fn area(sh Shape) F64 {
     return match sh {
@@ -14,7 +14,7 @@ fn area(sh Shape) F64 {
 }
 
 fn get(m Map<String&, I64>&, k String&) I64 {
-    return try m.Get(k) catch default unreachable "missing " $k
+    return try m.Get(k) catch default unreachable "missing " + $k
 }
 
 fn sum(xs Array<I64>&) I64 {
@@ -35,7 +35,7 @@ fn sign(n I64) I64 {
     }
 }
 
-fn half(n I64) I64 { return n / 2 if n % 2 == 0 else unreachable "odd: " $n }
+fn half(n I64) I64 { return n / 2 if n % 2 == 0 else unreachable "odd: " + $n }
 
 BakedSum I64 = sum(Array<I64>[1, 2, 3])
 BakedHalf I64 = twice(half(10) if true else unreachable)

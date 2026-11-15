@@ -35,7 +35,7 @@ fn Node.fallback() Node& {
 fn churn() I64 {
     t I64 = 0
     for i in range 200 {
-        s := $i $i $i "-" $(i * 7)
+        s := $i + $i + $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t

@@ -44,14 +44,14 @@ fn calls(z I64) String {
     g := sum
     h fn&(xs ...I64) I64 = sum
     f := fn(xs ...String&) I64 { return xs.Len() }
-    return $sum() " " $sum(1 + z) " " $sum(1, 2, 3) " " $sum(...a) " " $sum(...v.View()) " " $t.n " " $g(7, 8) " " $h() " " $f("a", "b")
+    return $sum() + " " + $sum(1 + z) + " " + $sum(1, 2, 3) + " " + $sum(...a) + " " + $sum(...v.View()) + " " + $t.n + " " + $g(7, 8) + " " + $h() + " " + $f("a", "b")
 }
 
 CallsBaked := calls(0)
 
 fn texts(z I64) String {
     w := "w" if z == 0 else "?"
-    return $joined("-", "a", w, "c") " " $joined(",") " " $joined(",", "x", "y", upper = true) " " $largest(3, 9, 2) " " $largest(1.5, 0.5) " " $largest("b", "a", "c")
+    return $joined("-", "a", w, "c") + " " + $joined(",") + " " + $joined(",", "x", "y", upper = true) + " " + $largest(3, 9, 2) + " " + $largest(1.5, 0.5) + " " + $largest("b", "a", "c")
 }
 
 TextsBaked := texts(0)
@@ -60,7 +60,7 @@ TextsBaked := texts(0)
 Log mut String = ""
 
 fn note(s String&, v I64) I64 {
-    Log = $Log $s
+    Log = $Log + $s
     return v
 }
 
@@ -69,7 +69,7 @@ fn tag(head I64, xs ...I64, tail I64 = 0) I64 { return head * 100 + sum(...xs) *
 fn order(z I64) String {
     Log = ""
     r := tag(note("h", 1 + z), note("a", 2), note("b", 3), tail = note("t", 4))
-    return $r " " $Log
+    return $r + " " + $Log
 }
 
 OrderBaked := order(0)
@@ -92,7 +92,7 @@ fn countAll(xs Array<I64>&) I64 { return xs.Len() }
 fn forms(z I64) String {
     f fn&(xs Array<I64>&) I64 = sum
     g fn&(xs ...I64) I64 = countAll
-    return $f(Array<I64>[1, 2 + z]) " " $g(5, 6, 7)
+    return $f(Array<I64>[1, 2 + z]) + " " + $g(5, 6, 7)
 }
 
 FormsBaked := forms(0)
@@ -124,7 +124,7 @@ fn constrained<T Adder>(t T) I64 { return t.Add(1, 2) }
 fn traits(z I64) String {
     b := Base(10 + z)
     w any Adder& = b
-    return $w.Add(1, 2, 3) " " $w.Add() " " $constrained(b)
+    return $w.Add(1, 2, 3) + " " + $w.Add() + " " + $constrained(b)
 }
 
 TraitsBaked := traits(0)

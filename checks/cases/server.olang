@@ -27,7 +27,7 @@ fn (s mut Server&) OnRequest(i I64, raw String&) {
 
 fn main() {
     s := Server(64)
-    for k in range 1000 { s.OnRequest(k % 64, "GET / HTTP/1.1\nHost: example.com\nX-Request: " $k "\n") }
+    for k in range 1000 { s.OnRequest(k % 64, "GET / HTTP/1.1\nHost: example.com\nX-Request: " + $k + "\n") }
     assert s.lastHost == "example.com"
 }
 # also: server.olang:24:5: memory: 's.conns[i].hdrs' keeps what it lets go of until the Server's scope closes

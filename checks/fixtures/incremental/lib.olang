@@ -37,11 +37,11 @@ type Log struct() {
     last String& = ""
 }
 
-fn (l mut Log&) Note(n I64) { l.last = "note " $n }
+fn (l mut Log&) Note(n I64) { l.last = "note " + $n }
 
 fn (l Log&) Last() String& { return l.last }
 
-fn Said() String { return $deep.Quiet() " " $deep.Run() " " $deep.Data.Trim() }
+fn Said() String { return $deep.Quiet() + " " + $deep.Run() + " " + $deep.Data.Trim() }
 
 # T22c: a function value's parameter a caller's function may be followed into (the edit "a twin added")
 fn Apply(f fn&(a mut Vec<String&>&, s String&), a mut Vec<String&>&) { f(a, "applied") }

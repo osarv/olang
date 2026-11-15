@@ -4,11 +4,11 @@
 import "std/io"
 type Nums Array<I64>
 type Rec struct(n I64) {
-    t := $n "-text"
+    t := $n + "-text"
     a Nums = Nums(Array<I64>(n, 7))
 }
 fn Rec.mk(n I64) Rec { return Rec(n) }
 fn main() ? io.Error {
     k := Rec.mk(4)
-    try io.PutLine($k.t " " $k.a[3])
+    try io.PutLine($k.t + " " + $k.a[3])
 }

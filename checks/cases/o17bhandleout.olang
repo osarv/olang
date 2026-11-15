@@ -23,7 +23,7 @@ fn bump(src mut W&, v I64) {
 fn churn() I64 {
     t I64 = 0
     for i in range 2000 {
-        x := "churn " $i
+        x := "churn " + $i
         n := Node()
         n.v = i
         t += x.Len() + n.v

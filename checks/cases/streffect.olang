@@ -7,7 +7,7 @@ type Pt struct(n I32) {
 }
 fn (p Pt&) Str() String {
     Shown++
-    Seen = $Seen $p.n
+    Seen = $Seen + $p.n
     return "pt"
 }
 type Two struct(a Pt, b Pt) {
@@ -17,7 +17,7 @@ type Two struct(a Pt, b Pt) {
 fn main() ? {
     s := $Pt(1)
     assert s == "pt" and Shown == 1
-    t := $Pt(2) "," $Pt(3) "," $Pt(4)
+    t := $Pt(2) + "," + $Pt(3) + "," + $Pt(4)
     assert t == "pt,pt,pt" and Shown == 4 and Seen == "1234"
     u := $Two(Pt(5), Pt(6))
     assert u == "Two(pt, pt)" and Shown == 6 and Seen == "123456"

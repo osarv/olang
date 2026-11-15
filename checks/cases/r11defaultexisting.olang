@@ -17,9 +17,9 @@ fn churn() {
 }
 fn main() ? {
     empty := Vec<String&>()
-    empty.Push("kept " $empty.Len())
+    empty.Push("kept " + $empty.Len())
     n := (try validate("x") catch default empty).Len()
     got := try validate("") catch default empty
     churn()
-    try io.PutLine($n " " $got.Len() " " $got[0])
+    try io.PutLine($n + " " + $got.Len() + " " + $got[0])
 }

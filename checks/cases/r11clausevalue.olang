@@ -18,5 +18,5 @@ fn main() ? {
         -1
     }
     b := try half(5) catch { 0 }
-    try io.PutLine($a " " $b)
+    try io.PutLine($a + " " + $b)
 }

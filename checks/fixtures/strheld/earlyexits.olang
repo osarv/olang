@@ -16,14 +16,14 @@ fn g(i I64) I64 ? {
     return i
 }
 fn h(b Big&, i I64) I64 ? {
-    s := $b " " $(try g(i)) " " $b
+    s := $b + " " + $(try g(i)) + " " + $b
     return s.Len()
 }
 fn main() ? {
     b := Big(1)
     t I64 = 0
     for i in range 20000 {
-        s := $b $(try g(i) catch { continue })
+        s := $b + $(try g(i) catch { continue })
         t += s.Len()
         t += try h(b, i) catch default 0
     }

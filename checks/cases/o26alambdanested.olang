@@ -24,7 +24,7 @@ fn twice(k I64) fn&() I64 {
 }
 fn churn() I64 {
     junk := Vec<String>()
-    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    for i in range 2000 { junk.Push($i + "abcdefghijklmnopqrstuvwxyz") }
     return junk.Len() - 2000
 }
 Baked := nested(6)() + twice(2)()
@@ -34,5 +34,5 @@ fn main() {
     b := nested(6)
     c := twice(2)
     n := churn()
-    io.PutLine($a() " " $b() " " $c() " " $(Baked + n))!
+    io.PutLine($a() + " " + $b() + " " + $c() + " " + $(Baked + n))!
 }

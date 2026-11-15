@@ -61,7 +61,7 @@ fn (a String&) Eq(b String&) Bool {
 
 # E11b: the two texts joined, a new String - "+" on text, as any operator is a method (E31); a chain of them is one
 # join, each piece copied once
-fn (a String&) Plus(b String&) String { return $a $b }
+fn (a String&) Plus(b String&) String { return a + b }
 
 # bytewise lexicographic order: -1, 0 or 1. A proper prefix sorts first.
 fn (a String&) Compare(b String&) I32 {
@@ -362,7 +362,7 @@ fn (n T) PadEnd<T Integer>(width I64, fill Char = ' ') String { return ($n).PadE
 # a number's text padded before: zeros after its sign
 fn padNumber(digits String&, width I64, fill Char) String {
     if fill != '0' or digits[0] != '-' { return digits.PadStart(width, fill) }
-    return "-" $digits[1:].PadStart(width - 1, '0')
+    return "-" + $digits[1:].PadStart(width - 1, '0')
 }
 
 # ---- integers as text, in any base ----
@@ -1189,7 +1189,7 @@ if TestBuild {
         assert not a.Eq("hell")
         assert not a.Eq("hellO")
         assert "".Eq("")
-        assert ("x = " $42).Eq("x = 42")        # a rendering is text like any other
+        assert ("x = " + $42).Eq("x = 42")        # a rendering is text like any other
         c String& = b                # E10a: String declares Eq, so "==" compares what two texts say
         d String& = "hello"
         assert a == c and c == "hello" and "hello" == d and a != "hell"
@@ -1301,7 +1301,7 @@ if TestBuild {
     test "T29c: written text is a String, and a String is still its bytes" {
         s := "  hi  "                        # ":=" from text declares a String
         assert s.Trim().Eq("hi")             # so it has text's methods
-        r := $42 "!"                         # a rendering and a join are text too
+        r := $42 + "!"                         # a rendering and a join are text too
         assert r.Eq("42!")
         assert s[2:4].Eq("hi")               # a slice of text is text
         assert takesBytes(s) == 6            # and text goes wherever bytes are wanted

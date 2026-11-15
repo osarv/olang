@@ -3,7 +3,7 @@
 # higher-order call and after the arena has been churned, the ones the Vec still holds read back at the end
 type Frame struct(d I64) {
     depth I64 = d
-    name String = "frame " $d
+    name String = "frame " + $d
 }
 type Interp struct(s fn&(x I64) I64 pure) {
     frames Vec<mut Frame&>
@@ -12,7 +12,7 @@ type Interp struct(s fn&(x I64) I64 pure) {
 fn churn() I64 {
     t I64 = 0
     for i in range 2000 {
-        x := "churn " $i " " $(i * 3)
+        x := "churn " + $i + " " + $(i * 3)
         t += x.Len()
     }
     return t
@@ -38,7 +38,7 @@ fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
     g := fn(x I64) I64 { return x * 3 }
     r += g(d)
     assert churn() > 0
-    assert f.depth == d + 1 and f.name == "frame " $(d + 1)
+    assert f.depth == d + 1 and f.name == "frame " + $(d + 1)
     got := f.depth
     try it.frames.Pop() catch { unreachable }
     return r + got
@@ -50,6 +50,6 @@ fn main() {
     for i in range 300 { s += it.step(i, xs) }
     assert churn() > 0
     assert it.frames.Len() == 300
-    for i in range 300 { assert it.frames[i].depth == i and it.frames[i].name == "frame " $i }
+    for i in range 300 { assert it.frames[i].depth == i and it.frames[i].name == "frame " + $i }
     assert s == 300 * (12 + 9) + 2 * 6 * 300 + 2 * 3 * (299 * 300 / 2) + 3 * (299 * 300 / 2) + (299 * 300 / 2) + 300
 }

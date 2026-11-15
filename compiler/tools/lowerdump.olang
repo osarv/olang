@@ -84,7 +84,7 @@ fn run(args Array<String&>&) {
     all := totals()
     for i in range k, args.Len() {
         path := args[i]
-        out.Write("== " $path "\n")
+        out.Write("== " + $path + "\n")
         d := diag.Diagnostics(false)
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
@@ -121,7 +121,7 @@ fn run(args Array<String&>&) {
             body := c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
             if typedAt.Len() > 0 and (try where.Find(typedAt) catch default -1) >= 0 {
-                out.Write("-- typed B" $b " " $where "\n" $body.Print(p.T))
+                out.Write("-- typed B" + $b + " " + $where + "\n" + $body.Print(p.T))
             }
             gaps := lw.Gaps.Len()
             wantDump := mirAt.Len() > 0 and (try where.Find(mirAt) catch default -1) >= 0
@@ -131,7 +131,7 @@ fn run(args Array<String&>&) {
                 continue
             }
             n.lowered++
-            if wantDump { out.Write("-- mir B" $b " " $where "\n" $dump) }
+            if wantDump { out.Write("-- mir B" + $b + " " + $where + "\n" + $dump) }
             if problems.Len() == 0 {
                 n.clean++
                 continue
@@ -139,7 +139,7 @@ fn run(args Array<String&>&) {
             n.bad++
             for line in problems.Split("\n") {
                 if line.Len() == 0 { continue }
-                out.Write("bad " $where " B" $b ": " $line "\n")
+                out.Write("bad " + $where + " B" + $b + ": " + $line + "\n")
                 if not verbose { break }
             }
         }
@@ -155,20 +155,20 @@ fn run(args Array<String&>&) {
                 n.madeGapped++
                 continue
             }
-            if dump.Len() > 0 { out.Write("-- mir " $key "\n" $dump) }
+            if dump.Len() > 0 { out.Write("-- mir " + $key + "\n" + $dump) }
             if problems.Len() == 0 {
                 n.madeClean++
                 continue
             }
             for line in problems.Split("\n") {
                 if line.Len() == 0 { continue }
-                out.Write("bad " $key ": " $line "\n")
+                out.Write("bad " + $key + ": " + $line + "\n")
                 if not verbose { break }
             }
         }
         for g in lw.Gaps {
             if g.What.StartsWith("an unknown type") { continue }
-            out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n")
+            out.Write("gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What + "\n")
             at := -1
             for j in range all.whats.Len() {
                 if all.whats[j] == g.What { at = j }
@@ -180,8 +180,8 @@ fn run(args Array<String&>&) {
                 all.counts[at] = all.counts[at] + 1
             }
         }
-        out.Write(("errors " $errs " bodies " $n.bodies " lowered " $n.lowered " clean " $n.clean " bad " $n.bad " gapped " $n.gapped
-                   " unchecked " $n.unchecked "; made " $n.made " clean " $n.madeClean " gapped " $n.madeGapped "\n"))
+        out.Write(("errors " + $errs + " bodies " + $n.bodies + " lowered " + $n.lowered + " clean " + $n.clean + " bad " + $n.bad + " gapped " + $n.gapped +
+                   " unchecked " + $n.unchecked + "; made " + $n.made + " clean " + $n.madeClean + " gapped " + $n.madeGapped + "\n"))
         try out.Flush() catch io.Error { os.Exit(1) }
         all.bodies += n.bodies
         all.lowered += n.lowered
@@ -193,9 +193,9 @@ fn run(args Array<String&>&) {
         all.madeClean += n.madeClean
         all.madeGapped += n.madeGapped
     }
-    out.Write(("== total: bodies " $all.bodies " lowered " $all.lowered " clean " $all.clean " bad " $all.bad " gapped "
-               $all.gapped " unchecked " $all.unchecked "; made " $all.made " clean " $all.madeClean " gapped " $all.madeGapped
+    out.Write(("== total: bodies " + $all.bodies + " lowered " + $all.lowered + " clean " + $all.clean + " bad " + $all.bad + " gapped " +
+               $all.gapped + " unchecked " + $all.unchecked + "; made " + $all.made + " clean " + $all.madeClean + " gapped " + $all.madeGapped +
                "\n"))
-    for j in range all.whats.Len() { out.Write("  " $all.counts[j] " " $all.whats[j] "\n") }
+    for j in range all.whats.Len() { out.Write("  " + $all.counts[j] + " " + $all.whats[j] + "\n") }
     try out.Flush() catch io.Error { os.Exit(1) }
 }

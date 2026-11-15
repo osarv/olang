@@ -14,7 +14,7 @@ fn Pairish.pairish(s String&) Pairish { return Pairish(Box(s), 1) }
 fn main() ? {
     bs := Vec<Box>()
     for k in range 4 {
-        t := $k "-text"
+        t := $k + "-text"
         bs.Push(Pairish.pairish(t).a)
     }
     assert bs[0].s == "0-text" and bs[3].s == "3-text"

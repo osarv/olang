@@ -25,8 +25,8 @@ import "std/os"
 import "srcmask"
 
 # the word, written in two pieces so that the tool run over itself changes nothing
-Word String& = "check" "ed"
-OldError String& = "Check" "Error"
+Word String& = "check" + "ed"
+OldError String& = "Check" + "Error"
 
 Numbers Array<String&> = Array<String&>["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
 
@@ -116,18 +116,18 @@ fn rewrite(src String&, mask String&, parts Vec<I64>&) String, String {
             lo := srcmask.Strip(src[last + 1:colon])
             hi := srcmask.Strip(src[colon + 1:end - 1])
             if lo.Len() == 0 { lo = "0" }
-            if hi.Len() == 0 { hi = $base ".Len()" }
-            return $base ".SliceOf(" $lo ", " $hi ")", "ArrayError"
+            if hi.Len() == 0 { hi = $base + ".Len()" }
+            return $base + ".SliceOf(" + $lo + ", " + $hi + ")", "ArrayError"
         }
         if topLevel(src, mask, last + 1, end - 1, ',') >= 0 or inner.Len() == 0 { return "", "" }
-        return $base ".Get(" $inner ")", "ArrayError"
+        return $base + ".Get(" + $inner + ")", "ArrayError"
     }
     if n == 3 and src[last] == '(' and isNumber(src[parts[0]:last]) {
         x := srcmask.Strip(src[last + 1:end - 1])
         if x.Len() == 0 or topLevel(src, mask, last + 1, end - 1, ',') >= 0 { return "", "" }
         t := src[parts[0]:last]
-        if simple(x) and chainCovers(x) { return $x ".Narrow<" $t ">()", "NumberError" }
-        return $"(" $x ").Narrow<" $t ">()", "NumberError"
+        if simple(x) and chainCovers(x) { return $x + ".Narrow<" + $t + ">()", "NumberError" }
+        return $"(" + $x + ").Narrow<" + $t + ">()", "NumberError"
     }
     # a checked call of a function with a contract (D17): its requirements are checked on entry now, failing with
     # ArgumentError.Invalid, so it is tried as any call that can fail is - Pow's checked form is std/arith's, by hand
@@ -194,10 +194,10 @@ fn chainCovers(x String&) Bool {
 fn renameWords(seg String&, kind String&, c mut Result&) String {
     if kind.Len() == 0 { return $seg }
     s := $seg
-    pairs := Array<String&>[$OldError ".OUT_OF_BOUNDS", "ArrayError.OutOfRange", $OldError ".WRONG_CASE", "CaseError.WrongCase"
-                     $OldError ".OVERFLOW", "NumberError.Overflow", $OldError ".INVALID", "NumberError.Invalid"]
+    pairs := Array<String&>[$OldError + ".OUT_OF_BOUNDS", "ArrayError.OutOfRange", $OldError + ".WRONG_CASE", "CaseError.WrongCase"
+                     $OldError + ".OVERFLOW", "NumberError.Overflow", $OldError + ".INVALID", "NumberError.Invalid"]
     if kind == "ArgumentError" {
-        contract := $OldError ".CONTRACT"
+        contract := $OldError + ".CONTRACT"
         for s.Contains(contract) {
             s = s.Replace(contract, "ArgumentError.Invalid")
             c.changes++
@@ -211,9 +211,9 @@ fn renameWords(seg String&, kind String&, c mut Result&) String {
         }
     }
     if kind.Len() > 0 {
-        bare := $OldError " "
-        if s.Contains("catch " $bare) {
-            s = s.Replace("catch " $bare, "catch " $kind " ")
+        bare := $OldError + " "
+        if s.Contains("catch " + $bare) {
+            s = s.Replace("catch " + $bare, "catch " + $kind + " ")
             c.changes++
         }
     }
@@ -274,12 +274,12 @@ fn migrate(path String&, src String&, c mut Result&) String {
                 bang := i > 0 and src[i - 1] == '(' and src[close:].StartsWith(")!")
                 out.Push(renameWords(src[at:i - 1 if bang else i], kind if renameTo >= 0 else "", c))
                 if bang {
-                    out.Push("(" $ax ")!")
+                    out.Push("(" + $ax + ")!")
                     at = close + 2
                 } else {
                     n := srcmask.SkipGap(src, mask, br, close)
                     wrap := srcmask.OpAt(src[n:]).Len() > 0
-                    out.Push("(try " $ax ")" if wrap else "try " $ax)
+                    out.Push("(try " + $ax + ")" if wrap else "try " + $ax)
                     at = close
                 }
                 c.changes++
@@ -288,7 +288,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
                 i = at
                 continue
             }
-            if src[w + 1] == '(' { c.left.Push($path ":" $lineOf(src, i) ": " $srcmask.Strip(lineText(src, i))) }
+            if src[w + 1] == '(' { c.left.Push($path + ":" + $lineOf(src, i) + ": " + $srcmask.Strip(lineText(src, i))) }
             i++
             continue
         }
@@ -298,13 +298,13 @@ fn migrate(path String&, src String&, c mut Result&) String {
             after.StartsWith("*=") or after.StartsWith("++") or after.StartsWith("--")
         op, k := rewrite(src, mask, parts)
         if store or op.Len() == 0 {
-            c.left.Push($path ":" $lineOf(src, i) ": " $srcmask.Strip(lineText(src, i)))
+            c.left.Push($path + ":" + $lineOf(src, i) + ": " + $srcmask.Strip(lineText(src, i)))
             i = endOp
             continue
         }
         # E15a checked every operation of its operand; what is written now checks the outermost one alone
         if innerChecks(src, mask, w + 1, endOp, parts) {
-            c.left.Push($path ":" $lineOf(src, i) ": " $Word " also checked the operations inside it - arithmetic, a conversion, an index, an 'as' - which " $op " does not; check those that must not fail with std/arith, Narrow and Get: " $srcmask.Strip(lineText(src, i)))
+            c.left.Push($path + ":" + $lineOf(src, i) + ": " + $Word + " also checked the operations inside it - arithmetic, a conversion, an index, an 'as' - which " + $op + " does not; check those that must not fail with std/arith, Narrow and Get: " + $srcmask.Strip(lineText(src, i)))
         }
         bang := i > 0 and src[i - 1] == '(' and src[endOp:].StartsWith(")!")
         segEnd := i - 1 if bang else i
@@ -336,8 +336,8 @@ fn migrate(path String&, src String&, c mut Result&) String {
     out.Push(src[at:])
     res := out.ToString()
     # CheckError's WrongCase is CaseError's wherever it is written; whatever else of it is left is listed
-    if res.Contains($OldError ".WRONG_CASE") {
-        res = res.Replace($OldError ".WRONG_CASE", "CaseError.WrongCase")
+    if res.Contains($OldError + ".WRONG_CASE") {
+        res = res.Replace($OldError + ".WRONG_CASE", "CaseError.WrongCase")
         c.changes++
     }
     rm := srcmask.Mask(res, true)
@@ -345,7 +345,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
     for j < res.Len() {
         k := try res[j:].Find(OldError) catch default -1
         if k < 0 { break }
-        if rm[j + k] == 'c' { c.left.Push($path ":" $lineOf(res, j + k) ": " $srcmask.Strip(lineText(res, j + k))) }
+        if rm[j + k] == 'c' { c.left.Push($path + ":" + $lineOf(res, j + k) + ": " + $srcmask.Strip(lineText(res, j + k))) }
         j += k + OldError.Len()
     }
     return res
@@ -381,7 +381,7 @@ fn main() ? {
     changed I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("checked_migrate: cannot read " $path)
+            srcmask.SayErr("checked_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -392,70 +392,70 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("checked_migrate: cannot write " $path)
+                srcmask.SayErr("checked_migrate: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.changes " rewrites")
-    for l in total.left { srcmask.Say("by hand: " $l) }
+    srcmask.Say($verb + $changed + " files: " + $total.changes + " rewrites")
+    for l in total.left { srcmask.Say("by hand: " + $l) }
     if check and changed > 0 { os.Exit(1) }
 }
 
 test "an index, a slice and a narrowing rewritten, their errors renamed" {
     r := Result()
-    src := "x := " $Word " a[i + 1] catch " $OldError ".OUT_OF_BOUNDS default 0\n"
+    src := "x := " + $Word + " a[i + 1] catch " + $OldError + ".OUT_OF_BOUNDS default 0\n"
     assert migrate("f", src, r) == "x := try a.Get(i + 1) catch ArrayError.OutOfRange default 0\n"
-    src2 := "s := " $Word " b.c[2:] catch default d\n"
+    src2 := "s := " + $Word + " b.c[2:] catch default d\n"
     assert migrate("f", src2, r) == "s := try b.c.SliceOf(2, b.c.Len()) catch default d\n"
-    src3 := "n := " $Word " U8(v + 1)\n    catch " $OldError ".OVERFLOW { }\n"
+    src3 := "n := " + $Word + " U8(v + 1)\n    catch " + $OldError + ".OVERFLOW { }\n"
     assert migrate("f", src3, r) == "n := try (v + 1).Narrow<U8>()\n    catch NumberError.Overflow { }\n"
-    src4 := "y := (" $Word " a[0])! + 1\n"
+    src4 := "y := (" + $Word + " a[0])! + 1\n"
     assert migrate("f", src4, r) == "y := a.Get(0)! + 1\n"
-    lit := "w := " $Word " I32[x * 2 for x in l]\n"
+    lit := "w := " + $Word + " I32[x * 2 for x in l]\n"
     assert migrate("f", lit, r) == lit
-    src6 := "w := " $Word " f(a, b) catch " $OldError ".CONTRACT default 0\n"
+    src6 := "w := " + $Word + " f(a, b) catch " + $OldError + ".CONTRACT default 0\n"
     assert migrate("f", src6, r) == "w := try f(a, b) catch ArgumentError.Invalid default 0\n"
-    src5 := "z := " $Word " I32(q.n) catch " $OldError " { }\n"
+    src5 := "z := " + $Word + " I32(q.n) catch " + $OldError + " { }\n"
     assert migrate("f", src5, r) == "z := try q.n.Narrow<I32>() catch NumberError { }\n"
 }
 
 test "what is not mechanical is listed and left as it was, and a second run changes nothing" {
     r := Result()
-    src := "a := " $Word " (x + y)\n" $Word " g[1] = 5\n"
+    src := "a := " + $Word + " (x + y)\n" + $Word + " g[1] = 5\n"
     assert migrate("f", src, r) == src
     assert r.left.Len() == 2 and r.left[0].StartsWith("f:1:") and r.left[1].StartsWith("f:2:")
     r2 := Result()
-    done := migrate("f", "x := " $Word " a[i]\n", r2)
+    done := migrate("f", "x := " + $Word + " a[i]\n", r2)
     r3 := Result()
     assert migrate("f", done, r3) == done and r3.changes == 0
     # a word that only ends in it, and the word as a name, are left alone
-    keep := "un" $Word " x\n" $Word " := true\n"
+    keep := "un" + $Word + " x\n" + $Word + " := true\n"
     assert migrate("f", keep, r3) == keep
 }
 
 test "a try written inside an operator expression is parenthesized, and the checks it no longer makes listed" {
     r := Result()
-    assert migrate("f", "    x := 2 * " $Word " a[n] + 1\n", r) == "    x := 2 * (try a.Get(n)) + 1\n" and r.left.Len() == 0
-    assert migrate("f", "    x := " $Word " a[n] catch default 0\n", r) == "    x := try a.Get(n) catch default 0\n"
-    assert migrate("f", "    x := (" $Word " a[n]\n        + 1)\n", r) == "    x := ((try a.Get(n))\n        + 1)\n"
-    assert migrate("f", "    v := " $Word " a[i - K] catch default -1\n", r) == "    v := try a.Get(i - K) catch default -1\n"
+    assert migrate("f", "    x := 2 * " + $Word + " a[n] + 1\n", r) == "    x := 2 * (try a.Get(n)) + 1\n" and r.left.Len() == 0
+    assert migrate("f", "    x := " + $Word + " a[n] catch default 0\n", r) == "    x := try a.Get(n) catch default 0\n"
+    assert migrate("f", "    x := (" + $Word + " a[n]\n        + 1)\n", r) == "    x := ((try a.Get(n))\n        + 1)\n"
+    assert migrate("f", "    v := " + $Word + " a[i - K] catch default -1\n", r) == "    v := try a.Get(i - K) catch default -1\n"
     assert r.left.Len() == 1
-    assert migrate("f", "    v := " $Word " I32(x * x) catch default -1\n", r) == "    v := try (x * x).Narrow<I32>() catch default -1\n"
+    assert migrate("f", "    v := " + $Word + " I32(x * x) catch default -1\n", r) == "    v := try (x * x).Narrow<I32>() catch default -1\n"
     assert r.left.Len() == 2
-    assert migrate("f", "    v := " $Word " a[b[i]]\n", r) == "    v := try a.Get(b[i])\n" and r.left.Len() == 3
+    assert migrate("f", "    v := " + $Word + " a[b[i]]\n", r) == "    v := try a.Get(b[i])\n" and r.left.Len() == 3
     # a sign, a plain name, a call's arguments that compute nothing: nothing more was checked
-    assert migrate("f", "    v := " $Word " a[-1] + " $Word " g(x, y)\n", r) == "    v := (try a.Get(-1)) + try g(x, y)\n" and r.left.Len() == 3
+    assert migrate("f", "    v := " + $Word + " a[-1] + " + $Word + " g(x, y)\n", r) == "    v := (try a.Get(-1)) + try g(x, y)\n" and r.left.Len() == 3
 }
 
 test "a checked 'as' is the try of today, where nothing else in it was checked" {
     r := Result()
-    assert migrate("f", "    r := " $Word " (s as Shape.Circle) catch default -1.0\n", r) == "    r := try s as Shape.Circle catch default -1.0\n"
-    assert migrate("f", "    r := " $Word " (s as Shape.Circle) catch " $OldError ".WRONG_CASE default -1.0\n", r) == "    r := try s as Shape.Circle catch CaseError.WrongCase default -1.0\n"
-    assert migrate("f", "    r := 2.0 * " $Word " (a.s as Shape.Circle) + 1.0\n", r) == "    r := 2.0 * (try a.s as Shape.Circle) + 1.0\n"
-    assert migrate("f", "    r := (" $Word " (s as Shape.Circle))!\n", r) == "    r := (s as Shape.Circle)!\n"
+    assert migrate("f", "    r := " + $Word + " (s as Shape.Circle) catch default -1.0\n", r) == "    r := try s as Shape.Circle catch default -1.0\n"
+    assert migrate("f", "    r := " + $Word + " (s as Shape.Circle) catch " + $OldError + ".WRONG_CASE default -1.0\n", r) == "    r := try s as Shape.Circle catch CaseError.WrongCase default -1.0\n"
+    assert migrate("f", "    r := 2.0 * " + $Word + " (a.s as Shape.Circle) + 1.0\n", r) == "    r := 2.0 * (try a.s as Shape.Circle) + 1.0\n"
+    assert migrate("f", "    r := (" + $Word + " (s as Shape.Circle))!\n", r) == "    r := (s as Shape.Circle)!\n"
     assert r.left.Len() == 0
-    t := "    r := " $Word " (s[i + 1] as Shape.Circle) catch default -1.0\n"
+    t := "    r := " + $Word + " (s[i + 1] as Shape.Circle) catch default -1.0\n"
     assert migrate("f", t, r) == t and r.left.Len() == 1
 }

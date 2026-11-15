@@ -21,6 +21,6 @@ fn main() ? {
     b := Box(2)
     n := b.valeu + b.Aera()
     s := Shape.Cricle
-    try io.PutLin($n $s)
+    try io.PutLin($n + $s)
     try pick(1)
 }

@@ -15,7 +15,7 @@ fn (a mut Acc&) Add(x I64, f fn&(x I64) I64 pure) {
 fn churn() I64 {
     t I64 = 0
     for i in range 2000 {
-        x := "churn " $i " " $(i * 3)
+        x := "churn " + $i + " " + $(i * 3)
         t += x.Len()
     }
     return t

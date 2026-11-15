@@ -120,10 +120,10 @@ fn options.parse(args Array<String&>&) options {
                     v = $args[i]
                 }
                 o.reps = try v.ParseInt() catch default 0
-                if o.reps < 1 { benchlib.Fail("run: bad repetition count " $v, 2) }
+                if o.reps < 1 { benchlib.Fail("run: bad repetition count " + $v, 2) }
                 break
             } else {
-                benchlib.Fail("run: illegal option -- " $Char(c), 2)
+                benchlib.Fail("run: illegal option -- " + $Char(c), 2)
             }
             j++
         }
@@ -152,9 +152,9 @@ fn main() {
             }
         }
     }
-    if rows.Len() == 0: benchlib.Fail("no benchmark matches " $o.names.ToArray().Join(" "), 2)
+    if rows.Len() == 0: benchlib.Fail("no benchmark matches " + $o.names.ToArray().Join(" "), 2)
     olang := benchlib.Compiler()
-    try os.MkDirAll($benchlib.Dir "/build") catch os.Error { benchlib.Fail("cannot make bench/build", 1) }
+    try os.MkDirAll($benchlib.Dir + "/build") catch os.Error { benchlib.Fail("cannot make bench/build", 1) }
     build(olang, rows, o.base)
     benchlib.TakeLock()
     check(rows, o.base)
@@ -172,19 +172,19 @@ fn build(olang String&, rows Vec<String&>&, base Bool) {
         f := row.Split("|")
         prog := $f[1]
         cprog := $f[2]
-        if "o." $prog not in built {
+        if "o." + $prog not in built {
             if base {
                 # baseline x86-64
                 buildOlang(olang, prog, Array<String&>["-target", "x86-64"])
-                try os.Output.Exec("cp", "build/" $prog, "build/" $prog ".base", dir = benchlib.Dir) catch os.Error { }
+                try os.Output.Exec("cp", "build/" + $prog, "build/" + $prog + ".base", dir = benchlib.Dir) catch os.Error { }
             }
             buildOlang(olang, prog, Array<String&>(0))
-            built.Put("o." $prog, true)
+            built.Put("o." + $prog, true)
         }
-        if "c." $cprog not in built {
-            clang(cflags(), "build/" $cprog "_c", cprog)
-            if base { clang(baseFlags(), "build/" $cprog "_c.base", cprog) }
-            built.Put("c." $cprog, true)
+        if "c." + $cprog not in built {
+            clang(cflags(), "build/" + $cprog + "_c", cprog)
+            if base { clang(baseFlags(), "build/" + $cprog + "_c.base", cprog) }
+            built.Put("c." + $cprog, true)
         }
     }
 }
@@ -194,16 +194,16 @@ fn buildOlang(olang String&, prog String&, extra Array<String&>&) {
     args.Push(olang)
     args.Push("build")
     for e in extra { args.Push($e) }
-    args.Push($prog ".olang")
+    args.Push($prog + ".olang")
     o := benchlib.Capture(args.ToArray(), benchlib.Dir)
-    if o.Status != 0 { benchlib.Fail("olang build of " $prog " failed", 1) }
+    if o.Status != 0 { benchlib.Fail("olang build of " + $prog + " failed", 1) }
 }
 
 fn clang(opts Array<String&>&, out String&, cprog String&) {
     args := Vec<String&>()
     args.Push("clang")
     for f in opts { args.Push($f) }
-    for a in Array<String&>["-o", out, "c/" $cprog ".c", "-lm", "-lpthread"] { args.Push($a) }
+    for a in Array<String&>["-o", out, "c/" + $cprog + ".c", "-lm", "-lpthread"] { args.Push($a) }
     benchlib.Must(args.ToArray())
 }
 
@@ -225,15 +225,15 @@ fn check(rows Vec<String&>&, base Bool) {
         cprog := f[2]
         args := f[3]
         variants := Vec<String&>()
-        variants.Push("build/" $prog "|build/" $cprog "_c")
-        if base { variants.Push("build/" $prog ".base|build/" $cprog "_c.base") }
+        variants.Push("build/" + $prog + "|build/" + $cprog + "_c")
+        if base { variants.Push("build/" + $prog + ".base|build/" + $cprog + "_c.base") }
         for v in variants {
             pair := v.Split("|")
             a := benchlib.Capture(command(pair[0], args), benchlib.Dir)
             b := benchlib.Capture(command(pair[1], args), benchlib.Dir)
             if a.Stderr.Len() > 0 { benchlib.Warn(a.Stderr) }
             if b.Stderr.Len() > 0 { benchlib.Warn(b.Stderr) }
-            if a.Stdout != b.Stdout: benchlib.Fail("OUTPUTS DIFFER: " $name " (" $v " " $args ")", 1)
+            if a.Stdout != b.Stdout: benchlib.Fail("OUTPUTS DIFFER: " + $name + " (" + $v + " " + $args + ")", 1)
         }
     }
     benchlib.Warn("outputs agree\n")
@@ -245,7 +245,7 @@ fn check(rows Vec<String&>&, base Bool) {
 fn timing(rows Vec<String&>&, base Bool, reps I64) Map<String&, Vec<I64>> {
     times := Map<String&, Vec<I64>>()
     for r in range 1, reps + 1 {
-        benchlib.Warn("repetition " $r "/" $reps "\n")
+        benchlib.Warn("repetition " + $r + "/" + $reps + "\n")
         for row in rows {
             f := row.Split("|")
             name := f[0]
@@ -253,15 +253,15 @@ fn timing(rows Vec<String&>&, base Bool, reps I64) Map<String&, Vec<I64>> {
             cprog := f[2]
             args := f[3]
             bins := Vec<String&>()
-            bins.Push("o|build/" $prog)
-            bins.Push("c|build/" $cprog "_c")
+            bins.Push("o|build/" + $prog)
+            bins.Push("c|build/" + $cprog + "_c")
             if base {
-                bins.Push("on|build/" $prog ".base")
-                bins.Push("cn|build/" $cprog "_c.base")
+                bins.Push("on|build/" + $prog + ".base")
+                bins.Push("cn|build/" + $cprog + "_c.base")
             }
             for b in bins {
                 bar := try b.FindByte('|') catch default 0
-                key := $name "|" $b[0:bar]
+                key := $name + "|" + $b[0:bar]
                 t0 := time.Now()
                 o := benchlib.Capture(command(b[bar + 1:], args), benchlib.Dir)
                 t1 := time.Now()
@@ -296,21 +296,21 @@ fn right(t String&, w I64) String { return t.PadStart(w) }
 
 fn report(rows Vec<String&>&, base Bool, reps I64, times Map<String&, Vec<I64>>&) {
     out := StringBuilder()
-    out.Push($left("benchmark", 26) " " $right("olang", 9) " " $right("C", 9) " " $right("olang/C", 7))
-    if base { out.Push(" " $right("olang x86-64", 10) " " $right("C x86-64", 10) " " $right("ratio", 7)) }
-    out.Push("     (median of " $reps "; min in parentheses)\n")
+    out.Push($left("benchmark", 26) + " " + $right("olang", 9) + " " + $right("C", 9) + " " + $right("olang/C", 7))
+    if base { out.Push(" " + $right("olang x86-64", 10) + " " + $right("C x86-64", 10) + " " + $right("ratio", 7)) }
+    out.Push("     (median of " + $reps + "; min in parentheses)\n")
     for row in rows {
         name := row.Split("|")[0]
-        om, omin := stat(try times.Get($name "|o") catch default Vec<I64>())
-        cm, cmin := stat(try times.Get($name "|c") catch default Vec<I64>())
-        out.Push($left(name, 26) " " $right(secs(om), 9) " " $right(secs(cm), 9) " " $right(ratio(om, cm), 7))
+        om, omin := stat(try times.Get($name + "|o") catch default Vec<I64>())
+        cm, cmin := stat(try times.Get($name + "|c") catch default Vec<I64>())
+        out.Push($left(name, 26) + " " + $right(secs(om), 9) + " " + $right(secs(cm), 9) + " " + $right(ratio(om, cm), 7))
         if base {
-            onm, _ := stat(try times.Get($name "|on") catch default Vec<I64>())
-            cnm, _ := stat(try times.Get($name "|cn") catch default Vec<I64>())
-            out.Push(" " $right(secs(onm), 10) " " $right(secs(cnm), 10) " " $right(ratio(onm, cnm), 7))
+            onm, _ := stat(try times.Get($name + "|on") catch default Vec<I64>())
+            cnm, _ := stat(try times.Get($name + "|cn") catch default Vec<I64>())
+            out.Push(" " + $right(secs(onm), 10) + " " + $right(secs(cnm), 10) + " " + $right(ratio(onm, cnm), 7))
         }
-        out.Push("     (" $secs(omin) " / " $secs(cmin) ")\n")
+        out.Push("     (" + $secs(omin) + " / " + $secs(cmin) + ")\n")
     }
     benchlib.Say(out.ToString())
-    try os.WriteFile($benchlib.Dir "/build/results.txt", out.ToString()) catch os.Error { }
+    try os.WriteFile($benchlib.Dir + "/build/results.txt", out.ToString()) catch os.Error { }
 }

@@ -12,7 +12,7 @@ fn (b Bag&) Str() String {
         case 0: "empty"
         case _: b.name
     }
-    return $name "/" $kind
+    return $name + "/" + $kind
 }
 fn pick(t String&, c Bool) String& { return t if c else "same" }
 Baked := pick("x", false) == pick("y", false)

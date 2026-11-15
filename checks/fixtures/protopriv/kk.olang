@@ -4,7 +4,7 @@ type Key struct(n I32) {
 }
 fn (a Key) eq(b Key) Bool { return a.N % 10 == b.N % 10 }
 fn (a Key) hash() I64 { return I64(a.N % 10) }
-fn (k Key) str() String { return "K" $k.N }
+fn (k Key) str() String { return "K" + $k.N }
 
 type Vec2 struct(x I32) {
     X I32 = x

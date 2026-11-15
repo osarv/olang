@@ -12,7 +12,7 @@ type Named trait {
 type Cat struct(n String&) {
     n
 }
-fn (c Cat&) Name() String { return "cat " $c.n }
+fn (c Cat&) Name() String { return "cat " + $c.n }
 
 type Lev enum {
     Low
@@ -21,10 +21,10 @@ type Lev enum {
 fn (l Lev) Name() String { return "low" if l == Lev.Low else "high" }
 
 type Count extends I64
-fn (c Count) Name() String { return "count " $I64(c) }
+fn (c Count) Name() String { return "count " + $I64(c) }
 
 type Label extends String
-fn (l Label&) Name() String { return "label " $String(l) }
+fn (l Label&) Name() String { return "label " + $String(l) }
 
 # the arena worked hard enough that a dangling reference reads what came after it
 fn churn() I64 {
@@ -33,7 +33,7 @@ fn churn() I64 {
         l := Vec<I64>()
         for j in range 40 { l.Push(i + j) }
         t += l.Len()
-        c := Cat("junk " $i)
+        c := Cat("junk " + $i)
         t += c.n.Len()
     }
     return t
@@ -50,7 +50,7 @@ fn names(xs Vec<any Named&>&) String {
 
 fn kept() Vec<any Named&> {
     xs := Vec<any Named&>()
-    for i in range 3 { xs.Push(Cat("c" $i)) }
+    for i in range 3 { xs.Push(Cat("c" + $i)) }
     xs.Push(Count(7))
     xs.Push(Lev.Low)
     return xs
@@ -167,20 +167,20 @@ type Widget trait for Button, Slider, Level {
 type Button struct(label String&) {
     label
 }
-fn (b Button&) Draw() String { return "[" $b.label "]" }
+fn (b Button&) Draw() String { return "[" + $b.label + "]" }
 type Slider struct(at I64) {
     at
 }
-fn (s Slider&) Draw() String { return "<" $s.at ">" }
+fn (s Slider&) Draw() String { return "<" + $s.at + ">" }
 type Level extends I64
-fn (l Level) Draw() String { return "L" $I64(l) }
+fn (l Level) Draw() String { return "L" + $I64(l) }
 
 fn kind(w any Widget&) String {
     match w {
-        case Button b { return "button " $b.label }
+        case Button b { return "button " + $b.label }
         case Slider s if s.at > 50 { return "slider far" }
-        case Slider s { return "slider " $s.at }
-        case Level n { return "level " $I64(n) }
+        case Slider s { return "slider " + $s.at }
+        case Level n { return "level " + $I64(n) }
     }
 }
 
@@ -265,7 +265,7 @@ fn mix(n I64) String {
     xs := Vec<any Named&>()
     xs.Push(Count(n))
     xs.Push(Lev.High if n > 2 else Lev.Low)
-    xs.Push(Cat("n" $n))
+    xs.Push(Cat("n" + $n))
     return names(xs)
 }
 fn widgets(n I64) I64 {
@@ -309,14 +309,14 @@ fn bumped(k I64) String {
     l.Push(BLab(s))
     l.Push(BNums(a))
     for x in l { x.Bump() }
-    return $s " " $a " " $b
+    return $s + " " + $a + " " + $b
 }
 BakedBumped String = bumped(3)
 
 fn labels(n I64) String {
     xs := Vec<any Named&>()
     for i in range n {
-        t := "lab" $i "-" $(i * 7)
+        t := "lab" + $i + "-" + $(i * 7)
         xs.Push(Label(t))
     }
     churn()
@@ -344,8 +344,8 @@ fn chBad(k I64) String ? ChOops {
 fn chosen(n I64) String {
     xs := Vec<any Named&>()
     for i in range n {
-        s := "s" $i
-        u := "u" $i
+        s := "s" + $i
+        u := "u" + $i
         xs.Push(Label(s if s.Len() > 1 else u))
         xs.Push(Label(match s.Len() { case 0: u case _: s }))
         xs.Push(Label(try chBad(i) catch default s))
@@ -366,7 +366,7 @@ fn chosenBump(k I64) String {
     b.Bump()
     c mut any Bump& = BLab(try chBad(k) catch default d)
     c.Bump()
-    return $s " " $m " " $d " " $a " " $b " " $c
+    return $s + " " + $m + " " + $d + " " + $a + " " + $b + " " + $c
 }
 BakedChosenBump String = chosenBump(3)
 
@@ -403,12 +403,12 @@ fn chains(n I64) String {
     self mut RNode& = RNode(7)
     self.next = self
     s any Named& = self
-    return $h "|" $p "|" $s
+    return $h + "|" + $p + "|" + $s
 }
 BakedChains String = chains(12)
 
 test "E11a: $ counts an any as a reference, 8 deep" {
-    want := "RNode(0, RNode(11, RNode(10, RNode(9, RNode(8, RNode(7, RNode(6, RNode(5, RNode(4, ...)))))))))|" "RPlain(0, RPlain(11, RPlain(10, RPlain(9, RPlain(8, RPlain(7, RPlain(6, RPlain(5, RPlain(4, ...)))))))))|" "RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, ...))))))))"
+    want := "RNode(0, RNode(11, RNode(10, RNode(9, RNode(8, RNode(7, RNode(6, RNode(5, RNode(4, ...)))))))))|" + "RPlain(0, RPlain(11, RPlain(10, RPlain(9, RPlain(8, RPlain(7, RPlain(6, RPlain(5, RPlain(4, ...)))))))))|" + "RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, ...))))))))"
     assert BakedChains == want
     churn()
     assert chains(Live + 9) == want
@@ -424,7 +424,7 @@ type Words struct(n I64) {
 fn (w mut Words&) Next() String ? Exhausted {
     if w.at >= w.n { error Exhausted.End }
     w.at += 1
-    return "w" $w.at
+    return "w" + $w.at
 }
 type WPt struct(x I64) { x }
 type WPtIt struct(n I64) {
@@ -468,19 +468,19 @@ type GDot struct(k I64) { k }
 fn (d GDot&) Area() I64 { return d.k }
 fn gkind(s any GShape&) String {
     match s {
-        case GBox<I64> b { return "box " $(b.v + b.Area()) }
-        case GBox<String&> t { return "text " $t.v }
+        case GBox<I64> b { return "box " + $(b.v + b.Area()) }
+        case GBox<String&> t { return "text " + $t.v }
         case GDot _ { return "dot" }
     }
 }
 fn gkinds(n I64) String {
     xs := Vec<any GShape&>()
     xs.Push(GBox<I64>(n, 2))
-    xs.Push(GBox<String&>("t" $n, 3))
+    xs.Push(GBox<String&>("t" + $n, 3))
     xs.Push(GDot(4))
     churn()
     b := StringBuilder()
-    for x in xs { b.Push($gkind(x) " ") }
+    for x in xs { b.Push($gkind(x) + " ") }
     return b.ToString()
 }
 BakedGKinds String = gkinds(5)
@@ -501,7 +501,7 @@ fn drawnGen<S Drawn>(s S) I64 { return s.Draw() }
 fn drawn(n I64) String {
     b := DBtn(n)
     w any Drawn& = b
-    return $w.Draw() " " $b.Draw() " " $drawnGen(b) " " $drawnGen(w) " " $w.Draw(3)
+    return $w.Draw() + " " + $b.Draw() + " " + $drawnGen(b) + " " + $drawnGen(w) + " " + $w.Draw(3)
 }
 BakedDrawn String = drawn(10)
 
@@ -512,10 +512,10 @@ test "D8a: a trait's defaults through an any" {
 
 # E19, E11a (the any review, finding 6): an array of anys is written as $ renders it, "any Named&[...]", and reads back
 fn listed(n I64) String {
-    c := Cat("c" $n)
+    c := Cat("c" + $n)
     xs := Array<any Named&>[c, Count(n), Lev.High]
     ys := Array<any Named?&>[null, c]
-    return $xs " " $ys " " $xs.Len()
+    return $xs + " " + $ys + " " + $xs.Len()
 }
 BakedListed String = listed(4)
 
@@ -530,20 +530,20 @@ test "E19: an array literal of anys, rendered as written" {
 type IShape trait {
     Area() I64
 }
-fn (s S) Describe<S IShape>() String { return "default " $s.Area() }
+fn (s S) Describe<S IShape>() String { return "default " + $s.Area() }
 type IBox<T> struct(v T, n I64) {
     v
     n
 }
 fn (b IBox<T>&) Area() I64 { return b.n }
-fn (b IBox<String&>&) Describe() String { return "text box " $b.v }
+fn (b IBox<String&>&) Describe() String { return "text box " + $b.v }
 fn describeGen<S IShape>(s S) String { return s.Describe() }
 fn described(n I64) String {
     a := IBox<I64>(5, n)
-    t := IBox<String&>("t" $n, n)
+    t := IBox<String&>("t" + $n, n)
     x any IShape& = a
     y any IShape& = t
-    return $a.Describe() "|" $describeGen(a) "|" $x.Describe() "|" $t.Describe() "|" $describeGen(t) "|" $y.Describe()
+    return $a.Describe() + "|" + $describeGen(a) + "|" + $x.Describe() + "|" + $t.Describe() + "|" + $describeGen(t) + "|" + $y.Describe()
 }
 BakedDescribed String = described(2)
 
@@ -560,18 +560,18 @@ type KBox<T> struct(v T, n I64) {
     n
 }
 fn (b KBox<T>&) Area() I64 { return b.n }
-fn (b KBox<String&>&) Describe() String { return "text box " $b.v }
-fn (b KBox<I64>&) Describe() String { return "int box " $b.v }
+fn (b KBox<String&>&) Describe() String { return "text box " + $b.v }
+fn (b KBox<I64>&) Describe() String { return "int box " + $b.v }
 type JBox<T> struct(v T, n I64) {
     v
     n
 }
 fn (b JBox<T>&) Area() I64 { return b.n }
-fn (b JBox<I64>&) Describe() String { return "int jbox " $b.v }
-fn (b JBox<T>&) Describe() String { return "jbox " $b.n }
+fn (b JBox<I64>&) Describe() String { return "int jbox " + $b.v }
+fn (b JBox<T>&) Describe() String { return "jbox " + $b.n }
 fn twoInstances(n I64) String {
     a := KBox<I64>(5, n)
-    t := KBox<String&>("t" $n, n)
+    t := KBox<String&>("t" + $n, n)
     j := JBox<I64>(7, n)
     k := JBox<Bool>(true, n)
     xs := Vec<any IShape&>()
@@ -580,8 +580,8 @@ fn twoInstances(n I64) String {
     xs.Push(j)
     xs.Push(k)
     b := StringBuilder()
-    b.Push($a.Describe() "|" $t.Describe() "|" $describeGen(a) "|" $describeGen(t) "|" $j.Describe() "|" $k.Describe())
-    for x in xs { b.Push("|" $x.Describe()) }
+    b.Push($a.Describe() + "|" + $t.Describe() + "|" + $describeGen(a) + "|" + $describeGen(t) + "|" + $j.Describe() + "|" + $k.Describe())
+    for x in xs { b.Push("|" + $x.Describe()) }
     return b.ToString()
 }
 BakedTwoInstances String = twoInstances(2)
@@ -613,8 +613,8 @@ fn anyGeneric(n I64) String {
     s := ASrc<I64>(AUps(n + 1))
     f := try s.First() catch default -1
     m mut any Iterator<I64>& = AUps(n)
-    mapped := m.Map(fn(x I64) String& { return "m" $x })
-    return $anyCount(a) " " $f " " $s.Rest() " " $mapped
+    mapped := m.Map(fn(x I64) String& { return "m" + $x })
+    return $anyCount(a) + " " + $f + " " + $s.Rest() + " " + $mapped
 }
 BakedAnyGeneric String = anyGeneric(2)
 
@@ -627,16 +627,16 @@ test "T32: a type variable in an any's trait, substituted and inferred; Map to a
 
 # T32a, E25 (the third any review, finding 1): a call given a scope argument builds its array where that says, not
 # where the box lands - so the box copies it, and a block's scope argument does not leave the box dangling
-fn sArg(i I64) String { return "text" $i "-" $(i * 7) }
+fn sArg(i I64) String { return "text" + $i + "-" + $(i * 7) }
 fn sArgStash(l mut Vec<any Named&>&, i I64) String {
     l.Push(Label(sArg(i)))
-    return "r" $i
+    return "r" + $i
 }
 fn scopeArgs(n I64) String {
     xs := Vec<any Named&>()
     for i in range n {
         xs.Push(Label(sArg(i)))
-        xs.Push(Label(sArg(i) if i >= 0 else "x" $i))
+        xs.Push(Label(sArg(i) if i >= 0 else "x" + $i))
         sArgStash(xs, i)
     }
     churn()
@@ -655,12 +655,12 @@ test "T32a: a call's array a scope argument puts elsewhere is copied into the bo
 # compiling exactly as at run time
 type RsH struct(s Array<Char>&) { s }
 fn rsKeep(k mut RsH&, i I64) Array<Char> {
-    s Array<Char> = "abc" $i
+    s Array<Char> = "abc" + $i
     k.s = s
     return s
 }
 fn rsLog(log mut Vec<Array<Char>&>&, i I64) Array<Char> {
-    s Array<Char> = "item" $i
+    s Array<Char> = "item" + $i
     log.Push(s)
     return s
 }
@@ -677,7 +677,7 @@ fn retShared(i I64) String {
     c mut any Bump& = BLab(rsLog(log, i + 1))
     c.Bump()
     churn()
-    return $h.s " " $x " " $h2.s " " $y " " $log
+    return $h.s + " " + $x + " " + $h2.s + " " + $y + " " + $log
 }
 BakedRetShared String = retShared(1)
 
@@ -701,7 +701,7 @@ fn instanceEq(k I64) String {
     n := Map<EqBox<Bool>, I64>()
     n.Put(EqBox<Bool>(true), 1)
     n.Put(EqBox<Bool>(k > 0), 2)
-    return $m.Len() " " $n.Len() " " $(EqBox<I64>(13) == EqBox<I64>(23)) " " $(EqBox<Bool>(true) == EqBox<Bool>(false))
+    return $m.Len() + " " + $n.Len() + " " + $(EqBox<I64>(13) == EqBox<I64>(23)) + " " + $(EqBox<Bool>(true) == EqBox<Bool>(false))
 }
 BakedInstanceEq String = instanceEq(0)
 
@@ -735,7 +735,7 @@ fn aScoped(n I64) String {
     xs := Vec<any Named&>()
     out := ""
     for i in range n {
-        t := "inner" $i
+        t := "inner" + $i
         xs.Push(Label(saText(t, i)))
         xs.Push(Label(saChain(t, i)))
         a := saLocal(i)
@@ -743,16 +743,16 @@ fn aScoped(n I64) String {
         c := saNums(t, i)
         d := saTry(i)
         churn()
-        out = $out $a " " $b " " $k " " $c " " $d "; "
+        out = $out + $a + " " + $b + " " + $k + " " + $c + " " + $d + "; "
     }
     churn()
-    return $out $names(xs)
+    return $out + $names(xs)
 }
 BakedAScoped String = aScoped(2)
 
 test "T7b, E25: a scoped call's array of plain data is copied where it is returned or boxed" {
     want := "text0-0 text0-0 0 Array<I64>[0, 0] text0-0; text1-7 text1-7 1 Array<I64>[1, 2] text1-7; "
-    want = $want "label text0-0, label text0-0, label text1-7, label text1-7"
+    want = $want + "label text0-0, label text0-0, label text1-7, label text1-7"
     assert BakedAScoped == want
     assert aScoped(Live - 1) == want
 }
@@ -764,24 +764,24 @@ test "T7b, E25: a scoped call's array of plain data is copied where it is return
 type SnK struct(s Array<Char>&) { s }
 fn (k mut SnK&) Set(t Array<Char>&) { k.s = t }
 fn snAlias(lst mut Vec<Array<Char>&>&, i I64) Array<Char> {
-    s Array<Char> = "abc" $i
+    s Array<Char> = "abc" + $i
     l := lst
     l.Push(s)
     return s
 }
 fn snHandle(lst mut Vec<Array<Char>&>&, i I64) Array<Char> {
-    s Array<Char> = "hnd" $i
+    s Array<Char> = "hnd" + $i
     l mut Vec<Array<Char>&>& = lst
     l.Push(s)
     return s
 }
 fn snElem(ks mut Vec<mut SnK&>&, i I64) Array<Char> {
-    s Array<Char> = "elm" $i
+    s Array<Char> = "elm" + $i
     ks[0].Set(s)
     return s
 }
 fn snChain(k mut SnK&, i I64) Array<Char> {
-    s Array<Char> = "chn" $i
+    s Array<Char> = "chn" + $i
     r1 Array<Char>& = ""
     r2 Array<Char>& = ""
     r3 Array<Char>& = ""
@@ -805,7 +805,7 @@ fn snChain(k mut SnK&, i I64) Array<Char> {
 }
 type SnRes unique struct(r mut Array<Char>&) { r } destruct { r[0] = 'Z' }
 fn snDtor(i I64) Array<Char> {
-    s Array<Char> = "dtr" $i
+    s Array<Char> = "dtr" + $i
     d := SnRes(s)
     return s
 }
@@ -825,7 +825,7 @@ fn secondNames(i I64) String {
     w[0] = 'Q'
     v := snDtor(i)
     churn()
-    return $a " " $x " " $b " " $y " " $ks[0].s " " $z " " $k.s " " $w " " $v
+    return $a + " " + $x + " " + $b + " " + $y + " " + $ks[0].s + " " + $z + " " + $k.s + " " + $w + " " + $v
 }
 BakedSecondNames String = secondNames(1)
 
@@ -848,7 +848,7 @@ fn spawnScoped(k I64) String {
         spawn y = SpP.spMk(k * 11 + 2)
     }
     churn()
-    return $x!.n " " $y!.n
+    return $x!.n + " " + $y!.n
 }
 
 test "E25, P1g: a spawn target set by a call given a scope argument" {
@@ -858,10 +858,10 @@ test "E25, P1g: a spawn target set by a call given a scope argument" {
 # P1g, T11b (the fifth any review, 1): a spawn target holding an array by value is stored as the assignment it is
 # judged as - a scoped call's array copied where the target's storage is, on the task's thread; one of several results,
 # a catch default and an array of numbers alike; a target of the same length written in place, as T11b says
-fn spTwo(i I64) String, I64 { return "two" $i "-" $(i * 7), i }
+fn spTwo(i I64) String, I64 { return "two" + $i + "-" + $(i * 7), i }
 fn spTry(i I64) String ? ChOops {
     if i > 100 { error ChOops.Bad }
-    return "try" $i "-" $(i * 7)
+    return "try" + $i + "-" + $(i * 7)
 }
 fn spNums(i I64) Array<I64> { return Array<I64>[i, i * 7, i * 11] }
 fn spawnStores(k I64) String {
@@ -882,7 +882,7 @@ fn spawnStores(k I64) String {
         join { spawn same = sArg(1) }
     }
     churn()
-    return $a " " $n " " $b " " $c " " $same " " $before
+    return $a + " " + $n + " " + $b + " " + $c + " " + $same + " " + $before
 }
 BakedSpawnStores String = spawnStores(2)
 
@@ -910,22 +910,22 @@ fn shTie(l mut Vec<ShTxt&>&, x ShTxt&) I64 {
     return 2
 }
 fn ShTxt.shAdd(h mut ShHolder&, i I64) ShTxt {
-    s := ShTxt("abc" $i)
+    s := ShTxt("abc" + $i)
     h.Add(s)
     return s
 }
 fn shTieRet(keep mut Vec<ShTxt&>&, i I64) ShTxt {
-    s := ShTxt("def" $i)
+    s := ShTxt("def" + $i)
     shTie(keep, s)
     return s
 }
 fn ShTxt.shSlice(h mut ShHolder&, i I64) ShTxt {
-    s := ShTxt("ghi" $i)
+    s := ShTxt("ghi" + $i)
     h.Add(s[0:2])
     return s
 }
 fn ShTxt.shMethod(h mut ShHolder&, i I64) ShTxt {
-    s := ShTxt("jkl" $i)
+    s := ShTxt("jkl" + $i)
     s.AddTo(h)
     return s
 }
@@ -941,7 +941,7 @@ fn sharedKeep(i I64) String {
     y := ShTxt.shMethod(h, i)
     y[0] = 'T'
     churn()
-    return $keep " " $v " " $w " " $x " " $y
+    return $keep + " " + $v + " " + $w + " " + $x + " " + $y
 }
 BakedSharedKeep String = sharedKeep(1)
 
@@ -957,20 +957,20 @@ test "O26a, T7b: a callee sharing a parameter's scope keeps it, so the returned 
 # borrow of it writes the place - for a conditional, a match, a catch default and one of several results too, and boxed
 # into an any; an immutable global is never written through one (a String's conversion is a copy)
 type CvLab extends Array<Char>
-fn (l CvLab&) Name() String { return "cv " $String(l) }
+fn (l CvLab&) Name() String { return "cv " + $String(l) }
 type CvPath Array<Char>
 CvG := "global"
 fn CvLab.cvLocal(i I64) CvLab {
-    s Array<Char> = "abc" $i
+    s Array<Char> = "abc" + $i
     return CvLab(s)
 }
 fn CvLab.cvCond(i I64) CvLab {
-    s Array<Char> = "cond" $i
-    u Array<Char> = "else" $i
+    s Array<Char> = "cond" + $i
+    u Array<Char> = "else" + $i
     return CvLab(s) if i % 2 == 0 else CvLab(u)
 }
 fn CvLab.cvMatch(i I64) CvLab {
-    s Array<Char> = "match" $i
+    s Array<Char> = "match" + $i
     return match i { case 0: CvLab(s) case _: CvLab(s) }
 }
 fn CvLab.cvBad(k I64) CvLab ? ChOops {
@@ -978,11 +978,11 @@ fn CvLab.cvBad(k I64) CvLab ? ChOops {
     return CvLab("never")
 }
 fn CvLab.cvTry(i I64) CvLab {
-    s Array<Char> = "dflt" $i
+    s Array<Char> = "dflt" + $i
     return try CvLab.cvBad(i) catch default CvLab(s)
 }
 fn cvTup(i I64) CvLab, I64 {
-    s Array<Char> = "tup" $i
+    s Array<Char> = "tup" + $i
     return CvLab(s), i
 }
 fn CvPath.cvGlobal() CvPath { return CvPath(CvG) }
@@ -1006,12 +1006,12 @@ fn conversions(i I64) String {
     x[1] = 'X'
     cvWr(CvLab(s))
     churn()
-    return $cvKept " " $names(xs) " " $a " " $b " " $c " " $d " " $n " " $g " " $CvG " " $s " " $x
+    return $cvKept + " " + $names(xs) + " " + $a + " " + $b + " " + $c + " " + $d + " " + $n + " " + $g + " " + $CvG + " " + $s + " " + $x
 }
 BakedConversions String = conversions(0)
 
 test "T29a: a conversion of a place to a type over characters names its storage" {
-    want := ("Vec<CvLab&>[\"abc0\", \"abc1\", \"abc2\"] cv abc0, cv abc1, cv abc2 else1 match2 dflt3 tup4 4 Qlobal global Wbc "
+    want := ("Vec<CvLab&>[\"abc0\", \"abc1\", \"abc2\"] cv abc0, cv abc1, cv abc2 else1 match2 dflt3 tup4 4 Qlobal global Wbc " +
              "aXc")
     assert BakedConversions == want
     assert conversions(Live - 3) == want
@@ -1027,16 +1027,16 @@ fn chBadChars(k I64) Array<Char> ? ChOops {
     return "never"
 }
 fn evalCopies(i I64) String {
-    s Array<Char> = "cond" $i
+    s Array<Char> = "cond" + $i
     x := evPick(s, s, i > 0)
     x[0] = 'Q'
-    t Array<Char> = "match" $i
+    t Array<Char> = "match" + $i
     y := evPickM(t, i)
     y[0] = 'Q'
-    u Array<Char> = "dflt" $i
+    u Array<Char> = "dflt" + $i
     z := evPickT(u, i)
     z[0] = 'Q'
-    return $s " " $t " " $u " " $x " " $y " " $z
+    return $s + " " + $t + " " + $u + " " + $x + " " + $y + " " + $z
 }
 BakedEvalCopies String = evalCopies(1)
 
@@ -1048,7 +1048,7 @@ test "T7b, K1: a returned conditional, match or catch default is copied while co
 }
 
 # E25, O25a (the fifth any review, 5): a local a call given a scope argument declares lives where the argument puts it
-fn soMk(i I64) Array<Char> { return "mk" $i }
+fn soMk(i I64) Array<Char> { return "mk" + $i }
 fn soReturn(keep mut Vec<Array<Char>&>&, i I64) Array<Char> {
     x := soMk(i)
     keep.Push(x)
@@ -1066,7 +1066,7 @@ fn scopedLocals(i I64) String {
     a[0] = 'Q'
     b[0] = 'R'
     churn()
-    return $keep " " $a " " $b
+    return $keep + " " + $a + " " + $b
 }
 
 test "E25, O25a: a local a scoped call declares lives where the argument puts it" {

@@ -13,5 +13,5 @@ fn main() ? {
     c mut C& = C()
     b := B(c)
     s := $b
-    assert $s " " $c.n == "b 1"
+    assert $s + " " + $c.n == "b 1"
 }

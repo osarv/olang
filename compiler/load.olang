@@ -134,7 +134,7 @@ fn StdDir() String {
     env := try os.Env("OLANG_STD") catch default ""
     if env != "" { return $env }
     exe := try os.ReadLink("/proc/self/exe") catch os.Error { return "std" }
-    return $filepath.Dir(exe) "/../std"
+    return $filepath.Dir(exe) + "/../std"
 }
 
 # M23b: the lock file sits beside the root module
@@ -166,13 +166,13 @@ fn (l Loader&) rootIdentity(path String&) String {
     real := $r if r != "" else $path
     under := ""
     prefix := ""
-    if real.StartsWith($l.stdReal "/") {
+    if real.StartsWith($l.stdReal + "/") {
         under = $real[l.stdReal.Len() + 1:]
         prefix = "std/"
-    } else if real.StartsWith($l.cwd "/") {
+    } else if real.StartsWith($l.cwd + "/") {
         under = $real[l.cwd.Len() + 1:]
     }
-    id := $prefix $under if under != "" else $filepath.Base(real)
+    id := $prefix + $under if under != "" else $filepath.Base(real)
     return $id[:id.Len() - 6] if id.EndsWith(".olang") else id
 }
 
@@ -199,7 +199,7 @@ fn (l mut Loader&) LoadPrelude() {
 fn ErrQualifier(identity String&, inRoot Bool) String {
     if inRoot or identity.StartsWith("std/prelude") { return "" }
     k := try identity.FindLast("/") catch default -1
-    return $identity[k + 1:] "."
+    return $identity[k + 1:] + "."
 }
 
 # a file's type names, error types and sets included, in every branch: "type Name"
@@ -571,7 +571,7 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
     path := ""
     identity := ""
     if spec.StartsWith("std/") {
-        path = $Normalize($l.Std "/" $spec[4:] ".olang")
+        path = $Normalize($l.Std + "/" + $spec[4:] + ".olang")
         identity = $Normalize(spec)
         if not identity.StartsWith("std/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot("std"))
@@ -600,14 +600,14 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
         path = $Normalize(b.ToString())
         identity = $Normalize(spec)
         root := key(parts)
-        if not identity.StartsWith($root "/") {
+        if not identity.StartsWith($root + "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
             error unresolved.Import
         }
     } else {
         rel := moduleDir(m.Path)
-        if spec.StartsWith("/") or rel == ".": path = $Normalize($spec ".olang")
-        else: path = $Normalize($rel "/" $spec ".olang")
+        if spec.StartsWith("/") or rel == ".": path = $Normalize($spec + ".olang")
+        else: path = $Normalize($rel + "/" + $spec + ".olang")
         identity = $filepath.Base(spec) if spec.StartsWith("/") else $relativeIdentity(m.Identity, spec)
         # inside std or a remote repository, a relative import stays inside it
         root := ""
@@ -615,7 +615,7 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
         remote := fromFirst.Contains(".") and fromFirst != "." and fromFirst != ".."
         if m.Identity.StartsWith("std/"): root = "std"
         else if remote and m.Identity.Contains("/"): root = $firstElems(m.Identity, 3)
-        if root != "" and not identity.StartsWith($root "/") {
+        if root != "" and not identity.StartsWith($root + "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
             error unresolved.Import
         }
@@ -644,7 +644,7 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     spec := imp.Spec
     isC := spec.EndsWith(".c")
     rel := moduleDir(m.Path)
-    local := $Normalize(spec) if spec.StartsWith("/") or rel == "." else $Normalize($rel "/" $spec)
+    local := $Normalize(spec) if spec.StartsWith("/") or rel == "." else $Normalize($rel + "/" + $spec)
     if spec.StartsWith("/") { local = $spec }
     include := ""
     own := ""
@@ -652,15 +652,15 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     if os.Exists(local) and not os.IsDir(local) {
         real := try os.RealPath(local) catch default ""
         r := $real if real != "" else $local
-        include = $"#include \"" $r "\""
+        include = $"#include \"" + $r + "\""
         if isC { own = $r }
         identity = $filepath.Base(spec) if spec.StartsWith("/") else $relativeIdentity(m.Identity, spec)
     } else if isC or spec.StartsWith("/") or spec.StartsWith("./") or spec.StartsWith("../") {
         l.Diags.Error(at, msgs.CFileNotFound(local))
         return -1
     } else {
-        include = $"#include <" $spec ">"
-        identity = $"<" $spec ">"
+        include = $"#include <" + $spec + ">"
+        identity = $"<" + $spec + ">"
     }
     # a loader made by a tool, given no clang or flags: the build's defaults, so a C import means what it does in a build
     if l.Clang == "" { l.Clang = target.FindClang() }
@@ -668,13 +668,13 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     # the tag naming its wrapper functions comes from what the import says alone, so the code built of it is the same
     # whichever compiler or clang made it (the bootstrap's fixed point); the cache key adds both
     kb := StringBuilder()
-    kb.Push($CImportFormat "\n" $include "\n" $own "\n")
-    for f in l.CFlags { kb.Push($f "\n") }
+    kb.Push($CImportFormat + "\n" + $include + "\n" + $own + "\n")
+    for f in l.CFlags { kb.Push($f + "\n") }
     tag := sha256.Hex(kb.ToString())[:12]
-    kb.Push($fileStamp(l.Clang) "\n" $fileStamp("/proc/self/exe") "\n")
+    kb.Push($fileStamp(l.Clang) + "\n" + $fileStamp("/proc/self/exe") + "\n")
     ck := sha256.Hex(kb.ToString())[:32]
-    dir := $fetch.CacheDir() "/cimport"
-    base := $dir "/" $ck
+    dir := $fetch.CacheDir() + "/cimport"
+    base := $dir + "/" + $ck
     text := cachedTranslation(base)
     if text == "" {
         tr := bindgen.Translation.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
@@ -686,21 +686,21 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
         deps := StringBuilder()
         for d in tr.Deps {
             info := try os.FileInfo.Stat(d) catch os.Error { continue }
-            deps.Push($info.Size " " $info.ModTime " " $d "\n")
+            deps.Push($info.Size + " " + $info.ModTime + " " + $d + "\n")
         }
         stamp := sha256.Hex(deps.ToString())[:16]
-        c := "" if tr.C == "" else $"/* " $stamp " */\n" $tr.C
-        if not keepFile(dir, $base ".olang", tr.Text) or not keepFile(dir, $base ".c", c) or not keepFile(dir, $base ".deps", deps.ToString()) {
-            l.Diags.Error(at, msgs.CImportFailed(spec, $"its translation cannot be written into " $dir))
+        c := "" if tr.C == "" else $"/* " + $stamp + " */\n" + $tr.C
+        if not keepFile(dir, $base + ".olang", tr.Text) or not keepFile(dir, $base + ".c", c) or not keepFile(dir, $base + ".deps", deps.ToString()) {
+            l.Diags.Error(at, msgs.CImportFailed(spec, $"its translation cannot be written into " + $dir))
             return -1
         }
         text = tr.Text
     }
-    i := l.load($base ".olang", identity, false, true)
+    i := l.load($base + ".olang", identity, false, true)
     if i < 0 { return -1 }
     t := l.Mods[i]
-    if os.Exists($base ".c") and (try os.FileInfo.Stat($base ".c") catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)).Size > 0 {
-        t.CUnit = $base ".c"
+    if os.Exists($base + ".c") and (try os.FileInfo.Stat($base + ".c") catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)).Size > 0 {
+        t.CUnit = $base + ".c"
     }
     skipping := false
     for line in text.Lines() {
@@ -725,7 +725,7 @@ fn (l Loader&) CSymbol(mi I64, name String&) String {
 
 # a translation kept at base: its text where every file it was made from is as it was then, else ""
 fn cachedTranslation(base String&) String {
-    deps := try os.ReadFile($base ".deps") catch os.Error { return "" }
+    deps := try os.ReadFile($base + ".deps") catch os.Error { return "" }
     for line in deps.Lines() {
         if line == "" { continue }
         a := try line.FindByte(' ') catch { return "" }
@@ -735,13 +735,13 @@ fn cachedTranslation(base String&) String {
         info := try os.FileInfo.Stat(line[a + 2 + b:]) catch os.Error { return "" }
         if info.Size != size or info.ModTime != time { return "" }
     }
-    return try os.ReadFile($base ".olang") catch os.Error default ""
+    return try os.ReadFile($base + ".olang") catch os.Error default ""
 }
 
 # text written at path, through a file of this process's own renamed into place: whether it was
 fn keepFile(dir String&, path String&, text String&) Bool {
     try os.MkDirAll(dir) catch os.Error { return false }
-    tmp := $path "." $target.Pid() ".tmp"
+    tmp := $path + "." + $target.Pid() + ".tmp"
     try os.WriteFile(tmp, text) catch os.Error { return false }
     try os.Rename(tmp, path) catch os.Error {
         try os.Remove(tmp) catch os.Error { }
@@ -756,7 +756,7 @@ fn fileStamp(clang String&) String {
     real := try os.RealPath(target.WhereIs(clang)) catch default ""
     if real == "" { return $clang }
     info := try os.FileInfo.Stat(real) catch os.Error { return $real }
-    return $real " " $info.Size " " $info.ModTime
+    return $real + " " + $info.Size + " " + $info.ModTime
 }
 
 # ---- E38: embedded files ----
@@ -773,15 +773,15 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
     rel := moduleDir(m.Path)
     path := ""
     if spec.StartsWith("/") or rel == ".": path = $Normalize(spec)
-    else: path = $Normalize($rel "/" $spec)
+    else: path = $Normalize($rel + "/" + $spec)
     # inside std or a remote repository, an embedded file stays inside it, as a relative import does
     fromFirst := m.Identity[:(try m.Identity.FindByte('/') catch default m.Identity.Len())]
     remote := fromFirst.Contains(".") and fromFirst != "." and fromFirst != ".."
     root := ""
     if m.Identity.StartsWith("std/"): root = "std"
     else if remote and m.Identity.Contains("/"): root = $firstElems(m.Identity, 3)
-    if root != "" and (spec.StartsWith("/") or not relativeIdentity(m.Identity, spec).StartsWith($root "/")) {
-        return none, $"it leaves " $root
+    if root != "" and (spec.StartsWith("/") or not relativeIdentity(m.Identity, spec).StartsWith($root + "/")) {
+        return none, $"it leaves " + $root
     }
     # ...and so does the file it really is: a link inside the repository may name any file (F7) - judged by real
     # paths, the repository's own root as it really is
@@ -796,12 +796,12 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
             top = $(try os.RealPath(dir) catch default dir)
         }
         real := try os.RealPath(path) catch default ""
-        if real == "" or not real.StartsWith($top "/") { return none, $"it leaves " $root ", through a link" }
+        if real == "" or not real.StartsWith($top + "/") { return none, $"it leaves " + $root + ", through a link" }
     }
     if not l.embedded.Has(path) {
-        if not os.Exists(path) { return none, $"no file " $path }
-        if os.IsDir(path) { return none, $path " is a directory" }
-        text := try os.ReadFile(path) catch os.Error { return none, $path " cannot be read" }
+        if not os.Exists(path) { return none, $"no file " + $path }
+        if os.IsDir(path) { return none, $path + " is a directory" }
+        text := try os.ReadFile(path) catch os.Error { return none, $path + " cannot be read" }
         bytes := Array<U8>(text.Len())
         for i, ch in text { bytes[i] = U8(ch) }
         l.embedded.Put(path, bytes)
@@ -818,7 +818,7 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
 fn (l Loader&) Embedded(path String&) Array<U8>& { return try l.embedded.Get(path) catch default Array<U8>(0) }
 
 # host/owner/repo[@ref] of a remote import's parts
-fn key(parts Array<String&>&) String { return $parts[0] "/" $parts[1] "/" $parts[2] }
+fn key(parts Array<String&>&) String { return $parts[0] + "/" + $parts[1] + "/" + $parts[2] }
 
 fn firstElems(p String&, n I64) String& {
     count I64 = 0
@@ -842,7 +842,7 @@ fn moduleDir(path String&) String {
 fn relativeIdentity(from String&, spec String&) String {
     slash := try from.FindLast("/") catch default -1
     if slash < 0 { return Normalize(spec) }
-    return Normalize($from[:slash] "/" $spec)
+    return Normalize($from[:slash] + "/" + $spec)
 }
 
 # "." and ".." collapsed lexically, so one file reached by two spellings prints one way; a leading ".." stays
@@ -925,10 +925,10 @@ fn (l mut Loader&) chains(o mut parse.Oracle&, mi I64, prefix String&, depth I64
     if depth >= 4 { return }
     for imp in l.Mods[mi].Imports {
         if imp.Target < 0 { continue }
-        chain := $prefix $imp.Alias
+        chain := $prefix + $imp.Alias
         for t in l.Mods[imp.Target].Types { o.Add(l.Names, chain, t) }
         for t in l.Mods[imp.Target].Generics { o.AddFn(l.Names, chain, t) }
-        l.chains(o, imp.Target, $chain ".", depth + 1)
+        l.chains(o, imp.Target, $chain + ".", depth + 1)
     }
 }
 
@@ -1042,7 +1042,7 @@ fn (l mut Loader&) addLink(mi I64, path source.Span, out mut Vec<String&>&, seen
     if LinkIsFile(text) {
         arg = $(text if filepath.IsAbs(text) else filepath.Join(filepath.Dir(m.Real), text))
     } else if LinkName(text) {
-        arg = $"-l" $text
+        arg = $"-l" + $text
     } else {
         l.Diags.Error(diag.Where.Span(m.File, I64(path.Start), I64(path.End)), msgs.LinkName(msgs.Tok(text)))
         return
@@ -1127,10 +1127,10 @@ fn (l Loader&) Graph() String {
     b := StringBuilder()
     for i in order {
         m := l.Mods[i]
-        b.Push("module " $m.Identity "\n")
+        b.Push("module " + $m.Identity + "\n")
         lines Vec<String&>
         for imp in m.Imports {
-            if imp.Target >= 0 { lines.Push("  " $imp.Alias " " $l.Mods[imp.Target].Identity "\n") }
+            if imp.Target >= 0 { lines.Push("  " + $imp.Alias + " " + $l.Mods[imp.Target].Identity + "\n") }
         }
         lines.Sort(fn(x String&, y String&) Bool { return x < y })
         for t in lines { b.Push(t) }
@@ -1144,12 +1144,12 @@ fn (l Loader&) Graph() String {
 fn Loader.test(lock String&) Loader {
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    return Loader("std", consts, fetch.Fetcher(lock, $lock ".cache", "file:///nowhere/", false, true), source.Names()
+    return Loader("std", consts, fetch.Fetcher(lock, $lock + ".cache", "file:///nowhere/", false, true), source.Names()
                   diag.Diagnostics(false))
 }
 
 fn write(dir String&, name String&, text String&) {
-    p := $dir "/" $name
+    p := $dir + "/" + $name
     try os.MkDirAll(filepath.Dir(p)) catch os.Error { }
     try os.WriteFile(p, text) catch os.Error { }
 }
@@ -1170,8 +1170,8 @@ test "a program's modules: relative imports, a cycle, the prelude and identities
     write(dir, "lib/util.olang", "import \"helper\"\ntype Box struct() { }\n")
     write(dir, "lib/helper.olang", "import \"util\"\nfn H() I64 { return 1 }\n")
     write(dir, "lib/pub.olang", "import \"std/stats\"\n")
-    l := Loader.test($dir "/olang.lock")
-    root := l.Load($dir "/main.olang")
+    l := Loader.test($dir + "/olang.lock")
+    root := l.Load($dir + "/main.olang")
     assert root >= 0 and l.Diags.Errors() == 0, rules(l)
     g := l.Graph()
     assert g.Contains("module main\n  Pub lib/pub\n  util lib/util\n"), g
@@ -1187,13 +1187,13 @@ test "imports that are wrong are reported where they are written" {
     write(dir, "a.olang", "")
     write(dir, "b/a.olang", "")
     write(dir, "main.olang", "import \"a.olang\"\nimport \"nothere\"\nimport \"a\"\nimport \"b/a\"\nimport \"std/../x\"\n")
-    l := Loader.test($dir "/olang.lock")
-    l.Load($dir "/main.olang")
+    l := Loader.test($dir + "/olang.lock")
+    l.Load($dir + "/main.olang")
     r := rules(l)
     assert r.Contains("M23") and r.Contains("M5"), r
     assert l.Diags.Errors() == 4, r
-    l2 := Loader.test($dir "/olang.lock")
-    assert l2.Load($dir "/absent.olang") < 0 and l2.Diags.Errors() == 1
+    l2 := Loader.test($dir + "/olang.lock")
+    assert l2.Load($dir + "/absent.olang") < 0 and l2.Diags.Errors() == 1
 }
 
 test "a top-level if decides which imports exist, and a pending one waits for Decide" {
@@ -1203,8 +1203,8 @@ test "a top-level if decides which imports exist, and a pending one waits for De
     write(dir, "win.olang", "")
     write(dir, "late.olang", "")
     write(dir, "main.olang", "Big := 3\nif TargetOs == \"linux\" and Big > 2 {\n    import \"lin\"\n} else {\n    import \"win\"\n}\nif f() {\n    import \"late\"\n}\nfn f() Bool { return true }\n")
-    l := Loader.test($dir "/olang.lock")
-    root := l.Load($dir "/main.olang")
+    l := Loader.test($dir + "/olang.lock")
+    root := l.Load($dir + "/main.olang")
     assert l.Diags.Errors() == 0, rules(l)
     g := l.Graph()
     assert g.Contains("  lin lin\n") and not g.Contains("module win") and not g.Contains("module late"), g
@@ -1220,13 +1220,13 @@ test "M16 and M17: one file reached twice, and a re-export back to its importer"
     write(dir, "c.olang", "")
     write(dir, "b.olang", "import C \"c\"\n")
     write(dir, "main.olang", "import B \"b\"\nimport \"c\"\n")
-    l := Loader.test($dir "/olang.lock")
-    l.Load($dir "/main.olang")
+    l := Loader.test($dir + "/olang.lock")
+    l.Load($dir + "/main.olang")
     assert rules(l).Contains("M16"), rules(l)
     write(dir, "x.olang", "import Y \"y\"\n")
     write(dir, "y.olang", "import X \"x\"\n")
-    l2 := Loader.test($dir "/olang.lock")
-    l2.Load($dir "/x.olang")
+    l2 := Loader.test($dir + "/olang.lock")
+    l2.Load($dir + "/x.olang")
     assert rules(l2).Contains("M17"), rules(l2)
 }
 
@@ -1238,7 +1238,7 @@ fn git(dir String&, args Array<String&>&) Bool {
 test "a remote import is fetched, locked, and its relative imports stay inside it" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    repo := $dir "/remote/example.com/me/tools"
+    repo := $dir + "/remote/example.com/me/tools"
     write(repo, "lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
     write(repo, "part/inner.olang", "import \"../lib\"\n")
     ok := git(repo, Array<String&>["git", "init", "-q"]) and
@@ -1249,14 +1249,14 @@ test "a remote import is fetched, locked, and its relative imports stay inside i
     write(dir, "main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    f := fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file://" $dir "/remote/", false, true)
+    f := fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file://" + $dir + "/remote/", false, true)
     l := Loader("std", consts, f, source.Names(), diag.Diagnostics(false))
-    l.Load($dir "/main.olang")
+    l.Load($dir + "/main.olang")
     assert l.Diags.Errors() == 0, rules(l)
     g := l.Graph()
     assert g.Contains("module main\n  T example.com/me/tools/lib\n"), g
     assert g.Contains("module example.com/me/tools/lib\n  inner example.com/me/tools/part/inner\n"), g
     assert g.Contains("module example.com/me/tools/part/inner\n  lib example.com/me/tools/lib\n"), g
-    lock := try os.ReadFile($dir "/olang.lock") catch default ""
+    lock := try os.ReadFile($dir + "/olang.lock") catch default ""
     assert lock.Contains("example.com/me/tools "), lock
 }

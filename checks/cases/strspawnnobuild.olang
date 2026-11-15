@@ -17,5 +17,5 @@ fn hjoin(n Node&) I64 {
     join { spawn x = hr(n) }
     return x
 }
-fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
+fn (b Bag&) Str() String { return "b" + $hjoin(b.head) }
 fn main() ? { try io.PutLine($Bag(Node(6))) }

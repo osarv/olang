@@ -7,7 +7,7 @@ type Summary struct() {
     best I64 = 0
     names Vec<String&> = Vec<String&>()
 }
-fn line(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
+fn line(i I64) String& { return "line " + $i + " took " + $(i % 97) + "ms" }
 fn measure(t String&) I64 { return t.Len() }
 fn Summary.scan(n I64) Summary {
     s := Summary()

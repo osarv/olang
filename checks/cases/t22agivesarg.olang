@@ -11,7 +11,7 @@ fn main() {
     use(adder(gone))
     for i in range 100 {
         v := Vec<String>()
-        v.Push($"t" $i)
+        v.Push($"t" + $i)
     }
     assert gone.Len() == 1 and gone[0] == "z"
 }

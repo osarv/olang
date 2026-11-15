@@ -1304,13 +1304,13 @@ if TestBuild {
 
     # why text is not JSON, as "WORD LINE:COL", or "ok"
     fn problem(text String&) String& {
-        try Json.Parse(text) catch Error.Unexpected e { return "UNEXPECTED " $e.line ":" $e.col }
-            catch Error.Unterminated e { return "UNTERMINATED " $e.line ":" $e.col }
-            catch Error.BadEscape e { return "BAD_ESCAPE " $e.line ":" $e.col }
-            catch Error.BadNumber e { return "BAD_NUMBER " $e.line ":" $e.col }
-            catch Error.BadUtf8 e { return "BAD_UTF8 " $e.line ":" $e.col }
-            catch Error.Trailing e { return "TRAILING " $e.line ":" $e.col }
-            catch Error.Depth e { return "DEPTH " $e.line ":" $e.col }
+        try Json.Parse(text) catch Error.Unexpected e { return "UNEXPECTED " + $e.line + ":" + $e.col }
+            catch Error.Unterminated e { return "UNTERMINATED " + $e.line + ":" + $e.col }
+            catch Error.BadEscape e { return "BAD_ESCAPE " + $e.line + ":" + $e.col }
+            catch Error.BadNumber e { return "BAD_NUMBER " + $e.line + ":" + $e.col }
+            catch Error.BadUtf8 e { return "BAD_UTF8 " + $e.line + ":" + $e.col }
+            catch Error.Trailing e { return "TRAILING " + $e.line + ":" + $e.col }
+            catch Error.Depth e { return "DEPTH " + $e.line + ":" + $e.col }
             catch Error { return "OTHER" }
         return "ok"
     }
@@ -1388,7 +1388,7 @@ if TestBuild {
 
     test "strings: escapes, \\u and surrogate pairs to UTF-8" {
         s := try (try Json.Parse("\"a\\\"b\\\\c\\/d\\b\\f\\n\\r\\t\"")).AsStr()
-        assert s == "a\"b\\c/d" $Char(8) $Char(12) "\n\r\t"
+        assert s == "a\"b\\c/d" + $Char(8) + $Char(12) + "\n\r\t"
         e := try (try Json.Parse("\"\\u00e9\\u4e2d\\ud83d\\ude00\\u0000!\"")).AsStr()
         assert e.Len() == 2 + 3 + 4 + 1 + 1
         assert e[0] == 0xC3 and e[1] == 0xA9 and e[2] == 0xE4 and e[3] == 0xB8 and e[4] == 0xAD
@@ -1428,10 +1428,10 @@ if TestBuild {
         assert problem(deep.ToString()) == "ok"
         deeper := StringBuilder()
         for _ in range MaxDepth + 1 { deeper.Push("{\"a\":") }
-        assert problem(deeper.ToString()) == "DEPTH 1:" $(5 * MaxDepth + 1)
+        assert problem(deeper.ToString()) == "DEPTH 1:" + $(5 * MaxDepth + 1)
         flood := StringBuilder()
         for _ in range 100000 { flood.PushChar('[') }
-        assert problem(flood.ToString()) == "DEPTH 1:" $(MaxDepth + 1)
+        assert problem(flood.ToString()) == "DEPTH 1:" + $(MaxDepth + 1)
     }
 
     test "Encode writes compact and indented text" {
@@ -1441,7 +1441,7 @@ if TestBuild {
         assert Encode(doc, "\t").StartsWith("{\n\t\"a\": [\n\t\t1,")
         assert $doc == Encode(doc)
         control := Json.Str(String(Array<U8>['"', '\\', 1, 0x1F, 0x7F, 'q']))
-        assert Encode(control) == "\"\\\"\\\\\\u0001\\u001f" $Char(0x7F) "q\""
+        assert Encode(control) == "\"\\\"\\\\\\u0001\\u001f" + $Char(0x7F) + "q\""
         nums := Array<Json&>[Json.Num(0.1), Json.Num(100.0), Json.Num(-0.0), Json.Num(1e21), Json.Num(1.5e-7), Json.Num(5e-324)
             Json.Num(123456789.125), Json.Num(1e16), Json.Num(1e17), Json.Num(0.0 / 0.0), Json.Num(1.0 / 0.0)]
         assert Encode(Json.Arr(nums)) == "[0.1,100,-0,1e+21,1.5e-07,5e-324,123456789.125,10000000000000000,1e+17,null,null]"
@@ -1473,13 +1473,13 @@ if TestBuild {
         big.PushChar('{')
         for i in range 500 {
             if i > 0 { big.PushChar(',') }
-            big.Push("\"key" $i "\": " $(i * i))
+            big.Push("\"key" + $i + "\": " + $(i * i))
         }
         big.Push(", \"key7\": -1}")
         o := try Json.Parse(big.ToString())
         for i in range 500 {
             want F64 = F64(i * i) if i != 7 else -1.0
-            assert (try o["key" $i] as Json.Num catch default -2.0) == want
+            assert (try o["key" + $i] as Json.Num catch default -2.0) == want
         }
         assert "key499" in o and "key500" not in o and "" not in o
         assert (try o.AsObj()).Len() == 501
@@ -1513,14 +1513,14 @@ if TestBuild {
     fn churn() I64 {
         t I64 = 0
         for i in range 300 {
-            s := $i "-------------------------------------------------------------"
+            s := $i + "-------------------------------------------------------------"
             t += s.Len()
         }
         return t
     }
 
     fn Json.parsed(n I64) Json& {
-        return Json.Parse("{\"n\": " $n ", \"s\": \"value " $n "\", \"a\": [" $n ", {\"deep\": \"x\\ty\"}]}")!
+        return Json.Parse("{\"n\": " + $n + ", \"s\": \"value " + $n + "\", \"a\": [" + $n + ", {\"deep\": \"x\\ty\"}]}")!
     }
 
     test "a tree lives where its caller puts it, and no longer needs the text" {
@@ -1530,7 +1530,7 @@ if TestBuild {
         assert churn() > 0
         assert Encode(doc) == "{\"n\":7,\"s\":\"value 7\",\"a\":[7,{\"deep\":\"x\\ty\"}]}"
         for i, k in kept {
-            assert (try k["s"] as Json.Str catch default "") == "value " $i
+            assert (try k["s"] as Json.Str catch default "") == "value " + $i
             assert (try k["a"][1]["deep"] as Json.Str catch default "") == "x\ty"
         }
     }
@@ -1685,7 +1685,7 @@ if TestBuild {
     errBack jsErr = (try Decode<jsRec>(errText) catch default jsRec(0, jsErr.Empty, null, Vec<jsErr>())).E
 
     test "error values are written as their words, and read back" {
-        want := "{\"N\":3,\"E\":\"" $jsErr.Bad "\",\"A\":\"" $jsAny.Timeout "\",\"Seen\":[\"" $jsErr.Bad "\",null]}"
+        want := "{\"N\":3,\"E\":\"" + $jsErr.Bad + "\",\"A\":\"" + $jsAny.Timeout + "\",\"Seen\":[\"" + $jsErr.Bad + "\",null]}"
         assert errText == want and errBack == jsErr.Bad
         r := try Decode<jsRec>(Encode(jsRec(4, null, jsAny.Timeout, jsSeen())))
         assert r.N == 4 and r.E == null and r.A == jsAny.Timeout and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad

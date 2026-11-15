@@ -670,7 +670,7 @@ fn Files(mode String&, files Array<String&>&, std String&) I32 {
     status I32 = 0
     for path in files {
         src := try source.Source.Read(path) catch os.Error {
-            errs.Write("olang: " $path ": cannot be read\n")
+            errs.Write("olang: " + $path + ": cannot be read\n")
             status = 1
             continue
         }
@@ -683,14 +683,14 @@ fn Files(mode String&, files Array<String&>&, std String&) I32 {
         if mode == "-f" {
             if text != src.Text {
                 try os.WriteFile(path, text) catch os.Error {
-                    errs.Write("olang: " $path ": cannot be written\n")
+                    errs.Write("olang: " + $path + ": cannot be written\n")
                     status = 1
                 }
             }
         } else if mode == "-p" {
             out.Write(text)
         } else if text != src.Text {
-            out.Write($path "\n")
+            out.Write($path + "\n")
             status = 1
         }
     }
@@ -748,8 +748,8 @@ fn (l loader&) target(importer String&, ipath String&) String {
     slash := try ipath.FindByte('/') catch default -1
     if slash >= 0 { first = ipath[:slash] }
     if (first.Contains(".") and first != "." and first != "..") { return "" }
-    if ipath.StartsWith("std/") { return $filepath.Join(l.std, ipath[4:]) ".olang" }
-    return $filepath.Join(filepath.Dir(importer), ipath) ".olang"
+    if ipath.StartsWith("std/") { return $filepath.Join(l.std, ipath[4:]) + ".olang" }
+    return $filepath.Join(filepath.Dir(importer), ipath) + ".olang"
 }
 
 # the module at path, loaded once, its imports with it; -1 where there is no such file
@@ -778,7 +778,7 @@ fn (l mut loader&) load(path String&) I64 {
         }
         # a generic function, "fn:name": "name<" lists type arguments (G12)
         if k == token.Tok.Fn and named and i + 2 < n and toks[i + 2].Kind == token.Tok.Lt {
-            b.Push($"fn:" $src.Text[toks[i + 1].Start:toks[i + 1].End])
+            b.Push($"fn:" + $src.Text[toks[i + 1].Start:toks[i + 1].End])
             b.PushChar(' ')
         }
         if k == token.Tok.Import {
@@ -830,9 +830,9 @@ fn (l loader&) chains(o mut parse.Oracle&, names mut source.Names&, m I64, prefi
     if depth >= 4 { return }
     for i in range l.impMod.Len() {
         if l.impMod[i] != m or l.impTarget[i] < 0 { continue }
-        chain := $prefix $l.impAlias[i]
+        chain := $prefix + $l.impAlias[i]
         l.addNames(o, names, chain, l.types[l.impTarget[i]])
-        l.chains(o, names, l.impTarget[i], $chain ".", depth + 1)
+        l.chains(o, names, l.impTarget[i], $chain + ".", depth + 1)
     }
 }
 

@@ -9,7 +9,7 @@ fn (b Bag&) Str() String {
         s := $(x + b.k)
         return a + s.Len()
     })
-    return "b" $n
+    return "b" + $n
 }
 fn main() ? {
     b := Bag(1)

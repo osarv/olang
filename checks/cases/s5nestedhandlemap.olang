@@ -11,7 +11,7 @@ fn main() ? {
     mm.Put(0, list.List<list.List<String&>>())
     (try mm.Get(0)).Push(list.List<String&>())
     for k in range 3 {
-        t := $k "-loop-text"
+        t := $k + "-loop-text"
         (try mm.Get(0))[0].Push(t)
         pushFn((try mm.Get(0))[0], t)
     }

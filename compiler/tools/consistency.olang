@@ -20,12 +20,12 @@ import "toolkit"
 # the rows of the report
 type Problems struct() { Rows Vec<String&> }
 
-fn (p mut Problems&) Add(row String&) { p.Rows.Push($"consistency: " $row) }
+fn (p mut Problems&) Add(row String&) { p.Rows.Push($"consistency: " + $row) }
 
 fn main() {
     args := os.Args()
     compiler := $args[1] if args.Len() > 1 else toolkit.Compiler()
-    if not toolkit.Built(compiler) { toolkit.Die("consistency: " $compiler " is not built (make build/olang)") }
+    if not toolkit.Built(compiler) { toolkit.Die("consistency: " + $compiler + " is not built (make build/olang)") }
     p := Problems()
     checkKeywords(p)
     checkPromises(p)
@@ -34,9 +34,9 @@ fn main() {
     checkMcpTools(p)
     checkReadmes(p)
     checkRoot(p)
-    for row in p.Rows { toolkit.Say($row "\n") }
+    for row in p.Rows { toolkit.Say($row + "\n") }
     if p.Rows.Len() > 0 {
-        toolkit.Say("consistency: " $p.Rows.Len() " places out of step (DEPENDENTS.md says what goes with what)\n")
+        toolkit.Say("consistency: " + $p.Rows.Len() + " places out of step (DEPENDENTS.md says what goes with what)\n")
         os.Exit(1)
     }
     toolkit.Say("consistency: the keywords, the command line, the fix tools, the MCP tools, the READMEs and the root's files are in step\n")
@@ -114,10 +114,10 @@ fn section(path String&, start String&, stop String&) Vec<String&> {
 # the first of two sets' differences: what each side has that the other has not
 fn compare(p mut Problems&, what String&, mine String&, ours Vec<String&>&, other String&, theirs Vec<String&>&) {
     for w in ours {
-        if not has(theirs, w) { p.Add($other " lacks " $w ", which " $mine " has" $what) }
+        if not has(theirs, w) { p.Add($other + " lacks " + $w + ", which " + $mine + " has" + $what) }
     }
     for w in theirs {
-        if not has(ours, w) { p.Add($other " has " $w ", which " $mine " has not" $what) }
+        if not has(ours, w) { p.Add($other + " has " + $w + ", which " + $mine + " has not" + $what) }
     }
 }
 
@@ -205,16 +205,16 @@ fn checkPromises(p mut Problems&) {
     named := Vec<String&>()
     for w in PromiseFacts { named.Push($w.Split(" ")[0]) }
     for w in names {
-        if w != "noborrow" and not has(named, w) { p.Add($"types.olang's PromiseNames has " $w ", which this check's table of facts (compiler/tools/consistency.olang PromiseFacts) has not") }
+        if w != "noborrow" and not has(named, w) { p.Add($"types.olang's PromiseNames has " + $w + ", which this check's table of facts (compiler/tools/consistency.olang PromiseFacts) has not") }
     }
     spec := toolkit.Read("SPEC.md")
     effects := toolkit.Read("compiler/effects.olang")
     for pf in PromiseFacts {
         parts := pf.Split(" ")
-        if not has(names, parts[0]) { p.Add($"PromiseNames lacks " $parts[0] ", which PromiseFacts has") }
-        if not effects.Contains($"case \"" $parts[1] "\": Fact." $parts[1]) { p.Add($"effects.olang's Fact.Named lacks " $parts[1] ", the fact " $parts[0] " promises") }
-        if not spec.Contains($"| `" $parts[0] "` |") { p.Add($"SPEC's T21c table has no row for " $parts[0]) }
-        if not spec.Contains($"| `" $parts[1] "` |") { p.Add($"SPEC's G42 table has no row for " $parts[1] ", the fact " $parts[0] " promises") }
+        if not has(names, parts[0]) { p.Add($"PromiseNames lacks " + $parts[0] + ", which PromiseFacts has") }
+        if not effects.Contains($"case \"" + $parts[1] + "\": Fact." + $parts[1]) { p.Add($"effects.olang's Fact.Named lacks " + $parts[1] + ", the fact " + $parts[0] + " promises") }
+        if not spec.Contains($"| `" + $parts[0] + "` |") { p.Add($"SPEC's T21c table has no row for " + $parts[0]) }
+        if not spec.Contains($"| `" + $parts[1] + "` |") { p.Add($"SPEC's G42 table has no row for " + $parts[1] + ", the fact " + $parts[0] + " promises") }
     }
 }
 
@@ -280,7 +280,7 @@ fn CommandLine.commandLine(compiler String&) CommandLine {
 fn addOption(c mut CommandLine&, option String&, mode String&) {
     for i in range c.Options.Len() {
         if c.Options[i] == option {
-            c.Applies[i] = $c.Applies[i] ", " $mode
+            c.Applies[i] = $c.Applies[i] + ", " + $mode
             return
         }
     }
@@ -314,7 +314,7 @@ fn checkSpecB1(c CommandLine&, p mut Problems&) {
     compare(p, " (SPEC B1)", "olang help", c.Modes, "SPEC B1's mode-word", modes)
     compare(p, " (SPEC B1)", "olang help", c.Options, "SPEC B1's option grammar", options)
     for o in c.Options {
-        if not has(tabled, o) { p.Add("SPEC B1's table has no row for " $o) }
+        if not has(tabled, o) { p.Add("SPEC B1's table has no row for " + $o) }
     }
 }
 
@@ -329,12 +329,12 @@ fn checkTableRow(c CommandLine&, row String&, p mut Problems&, tabled mut Vec<St
         tabled.Push($o)
         want := modesAt(c, o)
         if want == "" {
-            p.Add("SPEC B1's table has the option " $o ", which olang help does not list")
+            p.Add("SPEC B1's table has the option " + $o + ", which olang help does not list")
             continue
         }
         got := joined(modes)
         if got != joined(split(want)) {
-            p.Add("SPEC B1's table gives " $o " the modes " $got ", olang help " $joined(split(want)))
+            p.Add("SPEC B1's table gives " + $o + " the modes " + $got + ", olang help " + $joined(split(want)))
         }
     }
 }
@@ -382,7 +382,7 @@ fn checkCommand(c CommandLine&, where String&, command String&, p mut Problems&)
     if has(c.Modes, first) { mode = $first }
     else if first.StartsWith("-") or isPlaceholder(first) or first == "run" { mode = "run" }
     else {
-        p.Add($where " writes `olang " $first "`, and " $first " is no mode")
+        p.Add($where + " writes `olang " + $first + "`, and " + $first + " is no mode")
         return
     }
     own := mode == "run" or mode == "interpret" or mode == "profile"
@@ -393,9 +393,9 @@ fn checkCommand(c CommandLine&, where String&, command String&, p mut Problems&)
         name := w[:try w.FindByte('=') catch default w.Len()]
         want := modesAt(c, name)
         if want == "" {
-            p.Add($where " writes `olang " $mode " ... " $name "`, and " $name " is no option (olang help)")
+            p.Add($where + " writes `olang " + $mode + " ... " + $name + "`, and " + $name + " is no option (olang help)")
         } else if not has(split(want), specMode(mode)) {
-            p.Add($where " writes `olang " $mode " ... " $name "`, and " $name " applies to " $want " only")
+            p.Add($where + " writes `olang " + $mode + " ... " + $name + "`, and " + $name + " applies to " + $want + " only")
         }
     }
 }
@@ -409,7 +409,7 @@ fn checkCommandLine(compiler String&, p mut Problems&) {
         for row in toolkit.Rows(toolkit.Read(f)) {
             n++
             if row.StartsWith("```") { fenced = not fenced }
-            for command in commandsIn(row, fenced) { checkCommand(c, $f ":" $n, command, p) }
+            for command in commandsIn(row, fenced) { checkCommand(c, $f + ":" + $n, command, p) }
         }
     }
 }
@@ -468,7 +468,7 @@ fn readmeList(startsWith String&) Vec<String&> {
 fn checkFixTools(p mut Problems&) {
     names := fixNames()
     if fixKinds() != names.Len() {
-        p.Add("compiler/fix.olang has " $names.Len() " ToolNames and " $fixKinds() " ToolKinds")
+        p.Add("compiler/fix.olang has " + $names.Len() + " ToolNames and " + $fixKinds() + " ToolKinds")
     }
     files := Vec<String&>()
     for f in toolkit.Matching("tools", ".olang") { files.Push($f["tools/".Len():f.Len() - 6]) }
@@ -486,7 +486,7 @@ fn checkFixTools(p mut Problems&) {
     compare(p, " (tools/*.olang)", "compiler/fix.olang's table, tools/README.md's not-run list and the shared modules", known, "the tools folder", files)
     rows := readmeRows()
     for f in files {
-        if not has(shared, f) and not has(rows, f) { p.Add("tools/README.md has no table row for tools/" $f ".olang") }
+        if not has(shared, f) and not has(rows, f) { p.Add("tools/README.md has no table row for tools/" + $f + ".olang") }
     }
     order := Vec<String&>()
     for w in readmeList("`bare_typevars`") {
@@ -519,8 +519,8 @@ fn checkMcpTools(p mut Problems&) {
     spec := section("SPEC.md", "**B16.**", "**B17.**")
     readme := toolkit.Read("editors/README.md")
     for t in tools {
-        if not specMentions(spec, t) { p.Add("SPEC B16 does not name the MCP tool " $t) }
-        if not mentions(readme, t) { p.Add("editors/README.md does not name the MCP tool " $t) }
+        if not specMentions(spec, t) { p.Add("SPEC B16 does not name the MCP tool " + $t) }
+        if not mentions(readme, t) { p.Add("editors/README.md does not name the MCP tool " + $t) }
     }
 }
 
@@ -541,7 +541,7 @@ fn checkReadmes(p mut Problems&) {
     }
     for d in folders {
         if d.StartsWith(".") { continue }
-        if not os.Exists($d "/README.md") { p.Add("the folder " $d " has no README.md (every top-level folder is a thing of its own)") }
+        if not os.Exists($d + "/README.md") { p.Add("the folder " + $d + " has no README.md (every top-level folder is a thing of its own)") }
     }
     if not os.Exists("editors/nvim/README.md") { p.Add("editors/nvim has no README.md") }
     listedIn(p, "std", ".olang", "std/README.md")
@@ -558,7 +558,7 @@ fn listedIn(p mut Problems&, dir String&, suffix String&, readme String&) {
         name := f[dir.Len() + 1:]
         if name == "README.md" { continue }
         stem := name[:name.Len() - suffix.Len()]
-        if not mentions(text, stem if dir == "compiler/tools" else name) { p.Add($readme " does not name " $f) }
+        if not mentions(text, stem if dir == "compiler/tools" else name) { p.Add($readme + " does not name " + $f) }
     }
 }
 
@@ -569,6 +569,6 @@ RootFiles := Array<String&>[".gitignore", "CLAUDE.md", "DEPENDENTS.md", "HISTORY
 fn checkRoot(p mut Problems&) {
     for f in toolkit.Tracked("*") {
         if f.Contains("/") or f in RootFiles: continue
-        p.Add($f " is none of the root's files - committed by mistake, or add it to RootFiles in compiler/tools/consistency.olang")
+        p.Add($f + " is none of the root's files - committed by mistake, or add it to RootFiles in compiler/tools/consistency.olang")
     }
 }

@@ -7,7 +7,7 @@ type Grid extends Array<Array<I64>>
 type Box struct(rows Array<Array<I64>>) {
     rows
 }
-fn (g Grid&) Show() String { return "g " $g[0][0] $g[1][1] }
+fn (g Grid&) Show() String { return "g " + $g[0][0] + $g[1][1] }
 fn Grid.grid() Grid {
     a := Array<Array<I64>>(2, Array<I64>(2, 5))
     a[1][1] = 7

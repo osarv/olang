@@ -36,7 +36,7 @@ import dlfcn "dlfcn.h"
 # (RTLD_NOW | RTLD_GLOBAL), so the externs interpret calls find it as the linked program would: "" when it is loaded,
 # else why not. A static library or an object cannot be loaded
 fn LoadLibrary(link String&) String {
-    path := $("lib" $link[2:] ".so") if link.StartsWith("-l") else $link
+    path := $("lib" + $link[2:] + ".so") if link.StartsWith("-l") else $link
     if path.EndsWith(".a") or path.EndsWith(".o") { return "a static library or an object, which only a link takes" }
     if dlfcn.dlopen(path.ToC(), 258) != null { return "" }
     e := dlfcn.dlerror()
@@ -237,8 +237,8 @@ fn chained.chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) c
         s := x.CondStop(b)
         match s {
             case eval.Stop.None { }
-            case eval.Stop.Refused(why, f, sp) { return chained(0, false, $why " (" $line(d, f, sp) ")", at) }
-            case eval.Stop.Exited(kind, f, sp, _) { return chained(0, false, $AbortWhy(kind) " (" $line(d, f, sp) ")", at) }
+            case eval.Stop.Refused(why, f, sp) { return chained(0, false, $why + " (" + $line(d, f, sp) + ")", at) }
+            case eval.Stop.Exited(kind, f, sp, _) { return chained(0, false, $AbortWhy(kind) + " (" + $line(d, f, sp) + ")", at) }
             case eval.Stop.Raised(_) { return chained(0, false, "it fails with an error no clause handles", at) }
         }
         if x.Held() { return chained(k, true, "", at) }
@@ -431,7 +431,7 @@ fn decideTopAsserts(c mut typecheck.Checker&, x mut Exec&) I64 {
                     rec := d.Error(at, msgs.AssertStale(why))
                     staleNotes(x, d, rec, file, sp)
                 } else {
-                    d.Error(at, msgs.TopAssertUndecidable($why " (" $line(d, file, sp) ")"))
+                    d.Error(at, msgs.TopAssertUndecidable($why + " (" + $line(d, file, sp) + ")"))
                 }
             }
             case eval.Stop.Raised(_) { d.Error(at, msgs.TopAssertUndecidable("it fails with an error no clause handles")) }
@@ -568,7 +568,7 @@ fn zeroFix(text String&, i I64, ty String&, from I64, to I64) String {
     gt := i + ty.Len()
     for gt < to and text[gt] != '>' { gt++ }
     if text[lt] != '<' or gt >= text.Len() { return "" }
-    return $text[st:i + ty.Len()] "&" $text[i + ty.Len():gt + 1]
+    return $text[st:i + ty.Len()] + "&" + $text[i + ty.Len():gt + 1]
 }
 
 # why an evaluation giving a value decided while compiling gave none, and where: "" for a value. The constructor's
@@ -842,7 +842,7 @@ fn (x mut Exec&) unrolled(a typecheck.UnrollAsk&) Unrolled {
         }
         if r[2] <= 0: return Unrolled.Refused("its range's step is not positive")
         n := (r[1] - r[0] + r[2] - 1) / r[2] if r[1] > r[0] else 0
-        if n > 1 << 20: return Unrolled.Refused($"its range holds " $n " elements")
+        if n > 1 << 20: return Unrolled.Refused($"its range holds " + $n + " elements")
         return Unrolled.Values(Array<I64>[r[0] + k * r[2] for k in range n])
     }
     k := mir.FnKey.Body(typed.BodyId(I32(a.Source)))
@@ -1124,18 +1124,18 @@ fn (x mut Exec&) TestName(id I64) String {
 fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
     match s {
         case eval.Stop.None { return "" }
-        case eval.Stop.Raised(code) { return "an error escapes, code " $code }
+        case eval.Stop.Raised(code) { return "an error escapes, code " + $code }
         case eval.Stop.Exited(kind, file, sp, msg) {
             what := mir.ExitText(kind)
             # E35: an error a "!" took, where the "!" is - as a debug build says it
-            if kind == mir.ExitKind.Error { return $line(d, file, sp) ": " $msg }
-            if kind == mir.ExitKind.Unhandled { return "unhandled error: " $msg }
+            if kind == mir.ExitKind.Error { return $line(d, file, sp) + ": " + $msg }
+            if kind == mir.ExitKind.Unhandled { return "unhandled error: " + $msg }
             if what == "" { return $msg }
-            if mir.Columned(kind) { return $d.Locate(file, I64(sp.Start)) ": " $what }   # E16g
-            if msg == "" { return $line(d, file, sp) ": " $what }
-            return $line(d, file, sp) ": " $what ": " $msg
+            if mir.Columned(kind) { return $d.Locate(file, I64(sp.Start)) + ": " + $what }   # E16g
+            if msg == "" { return $line(d, file, sp) + ": " + $what }
+            return $line(d, file, sp) + ": " + $what + ": " + $msg
         }
-        case eval.Stop.Refused(why, file, sp) { return $line(d, file, sp) ": " $why }
+        case eval.Stop.Refused(why, file, sp) { return $line(d, file, sp) + ": " + $why }
     }
 }
 
@@ -1200,27 +1200,27 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
         if s != eval.Stop.None and x.M.Detached { detachedEnd(x.StopText(s, t, d)) }
         if s == eval.Stop.None {
             pass++
-            say("ok - " $name "\n")
+            say("ok - " + $name + "\n")
             continue
         }
         fail++
         # S16: an error left the test - its FAIL line names it, the trace after it with the place it left, as the
         # harness's (S18d)
         if s == eval.Stop.Exited(mir.ExitKind.Escaped, _, _, _) {
-            say("FAIL - " $name ": " $s.msg "\n" $x.TraceText(d) $line(d, s.file, s.sp) ": left the test\n")
+            say("FAIL - " + $name + ": " + $s.msg + "\n" + $x.TraceText(d) + $line(d, s.file, s.sp) + ": left the test\n")
             continue
         }
         if s == eval.Stop.Raised {
-            say("FAIL - " $name ": " $x.errorName(s.code, x.Bodies[t].Ty) "\n" $x.TraceText(d))
+            say("FAIL - " + $name + ": " + $x.errorName(s.code, x.Bodies[t].Ty) + "\n" + $x.TraceText(d))
             continue
         }
         text := x.StopText(s, t, d)
-        if text != "" { say($text "\n") }
+        if text != "" { say($text + "\n") }
         # E35, S18d: a "!" that failed the test - where the error it took came from, as the harness prints it
         if s == eval.Stop.Exited(mir.ExitKind.Error, _, _, _) { say(x.TraceText(d)) }
-        say("FAIL - " $name "\n")
+        say("FAIL - " + $name + "\n")
     }
-    say($pass " passed, " $fail " failed\n")
+    say($pass + " passed, " + $fail + " failed\n")
     return 1 if fail > 0 else 0
 }
 
@@ -1243,29 +1243,29 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
     match s {
         case eval.Stop.None { return 0 }
         case eval.Stop.Raised(_) {
-            sayErr($x.StopText(s, entry, d) "\n")
+            sayErr($x.StopText(s, entry, d) + "\n")
             sayErr(x.TraceText(d))
             x.M.EndProgram(k)
             return 1
         }
         case eval.Stop.Refused(why, _, _) {
             # what interpret cannot run, or the built program leaves undefined: interpret's own stop (B3e)
-            sayErr("olang interpret: " $x.StopText(s, entry, d) "\n")
+            sayErr("olang interpret: " + $x.StopText(s, entry, d) + "\n")
             # M19g: a stale view - and where the program grew its Vec
             if why == eval.WhyStale {
                 gf, gsp := x.M.StaleGrewAt()
-                if gf >= 0 { sayErr("olang interpret: " $line(d, gf, gsp) ": the collection grew here\n") }
+                if gf >= 0 { sayErr("olang interpret: " + $line(d, gf, gsp) + ": the collection grew here\n") }
             }
             return 1
         }
         case eval.Stop.Exited(kind, _, _, _) {
-            sayErr($x.StopText(s, entry, d) "\n")
+            sayErr($x.StopText(s, entry, d) + "\n")
             # E35, S18d: where the error a "!" took came from, as a debug build prints it
             if kind == mir.ExitKind.Error or kind == mir.ExitKind.Unhandled { sayErr(x.TraceText(d)) }
             return 1 if kind == mir.ExitKind.Unhandled else 134   # T19b: main's escaping error, its payload said
         }
         case _ {
-            sayErr($x.StopText(s, entry, d) "\n")
+            sayErr($x.StopText(s, entry, d) + "\n")
             return 134
         }
     }
@@ -1275,11 +1275,11 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
 # error: T.W", its code under b's error list
 fn (x mut Exec&) StopText(s eval.Stop, b I64, d mut diag.Diagnostics&) String {
     match s {
-        case eval.Stop.Raised(code) { return "unhandled error: " $x.errorName(code, x.Bodies[b].Ty) }
+        case eval.Stop.Raised(code) { return "unhandled error: " + $x.errorName(code, x.Bodies[b].Ty) }
         case eval.Stop.Refused(why, _, _) {
             # a wait for another task, in a task: which one (B3e)
             if why == eval.WhyWaits and x.M.WaitTaskFile >= 0 {
-                return $StopText(s, d) " - here in the task spawned at " $line(d, x.M.WaitTaskFile, x.M.WaitTaskSp)
+                return $StopText(s, d) + " - here in the task spawned at " + $line(d, x.M.WaitTaskFile, x.M.WaitTaskSp)
             }
             return StopText(s, d)
         }
@@ -1291,12 +1291,12 @@ fn (x mut Exec&) StopText(s eval.Stop, b I64, d mut diag.Diagnostics&) String {
 # where more than 32 were recorded, then a "FILE:LINE: what" line a place, oldest first
 fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
     b := StringBuilder()
-    if x.M.TraceDropped > 0 { b.Push("(" $x.M.TraceDropped " earlier places not kept)\n") }
+    if x.M.TraceDropped > 0 { b.Push("(" + $x.M.TraceDropped + " earlier places not kept)\n") }
     for i in range x.M.TraceLen() {
         file, at, kind := x.M.TraceAt(i)
         what := "raised here" if kind == 0 else "try passed it on" if kind == 1 else "a task failed, and its join passed it on"
         if x.M.TraceWhat(i).Len() > 0 { what = $x.M.TraceWhat(i) }
-        b.Push($line(d, file, source.Span(I32(at), I32(at))) ": " $what "\n")
+        b.Push($line(d, file, source.Span(I32(at), I32(at))) + ": " + $what + "\n")
     }
     return b.ToString()
 }
@@ -1306,16 +1306,16 @@ fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
 fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     errs := x.P.T.Items(x.P.T.Errors(ty))
     i := (code >> 16) - 1
-    if i < 0 or i >= errs.Len() { return "error " $code }
+    if i < 0 or i >= errs.Len() { return "error " + $code }
     et := x.P.T.ErrOf(errs[i])
     dl := x.P.T.DeclOf(et)
     dm := x.P.T.DeclModule(dl)
-    return $load.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) $x.P.ErrorWordName(dl, code & 0xFFFF)   # B5
+    return $load.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) + $x.P.ErrorWordName(dl, code & 0xFFFF)   # B5
 }
 
 # a detached test's child stopped (B19): what stopped it said, then the process ends as an abort does
 fn detachedEnd(text String&) noreturn {
-    if text != "" { sayErr($text "\n") }
+    if text != "" { sayErr($text + "\n") }
     os.Exit(134)
 }
 

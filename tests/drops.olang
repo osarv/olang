@@ -96,7 +96,7 @@ fn order() String {
 
 Order := order()
 
-assert Order == "1235467891011", "decided while compiling: " $Order
+assert Order == "1235467891011", "decided while compiling: " + $Order
 
 test "a by-value holder's destructors run where it lets go, once each" {
     assert order() == "1235467891011"
@@ -206,9 +206,9 @@ fn flowedOut() String {
         s := Shelf()
         shelve(s, 7, t)
         f := closeOver(8, t)
-        seen = $a.id $b.r.id $s.items[0].id $f() "/" $t.Text()
+        seen = $a.id + $b.r.id + $s.items[0].id + $f() + "/" + $t.Text()
     }
-    return $seen "/" $t.Text()
+    return $seen + "/" + $t.Text()
 }
 
 test Res.mkRef "ends a holder whose storage flowed out where that storage lives" {
@@ -238,7 +238,7 @@ fn leftBehind() String {
     handOverClause(Res(2, t), true)
     b := t.Text()
     handOverClause(Res(3, t), false)
-    return $a "/" $b "/" $t.Text()
+    return $a + "/" + $b + "/" + $t.Text()
 }
 
 test handOver "ends a value handed on to a call that is never made" {
@@ -247,7 +247,7 @@ test handOver "ends a value handed on to a call that is never made" {
 
 LeftBehind := leftBehind()
 
-assert LeftBehind == "1/12/123", "decided while compiling: " $LeftBehind
+assert LeftBehind == "1/12/123", "decided while compiling: " + $LeftBehind
 
 # a requirement failing the call ends the by-value parameters it took (D17; bulk review 7, F10)
 type Guarded struct(r Res, n I64) [n > 0] ? {
@@ -262,9 +262,9 @@ fn refused() String {
     a := t.Text()
     {
         g Guarded = try Guarded(Res(1, t), 0) catch ArgumentError default Guarded(Res(2, t), 1)!
-        a = $a "/" $t.Text() "/" $g.r.id
+        a = $a + "/" + $t.Text() + "/" + $g.r.id
     }
-    return $k "/" $a "/" $t.Text()
+    return $k + "/" + $a + "/" + $t.Text()
 }
 
 test guarded "ends what a failed requirement's call was given" {
@@ -273,7 +273,7 @@ test guarded "ends what a failed requirement's call was given" {
 
 Refused := refused()
 
-assert Refused == "-1/3/31/2/312", "decided while compiling: " $Refused
+assert Refused == "-1/3/31/2/312", "decided while compiling: " + $Refused
 
 # a store over a holder - or a declaration - from what a try, a "!" or a catch default gives is a fresh value, as from
 # the call alone: the old value ended after the new one is made (bulk review 7, F14)
@@ -301,7 +301,7 @@ test Res.mkFresh "stores over a holder what a try gives" {
 
 StoredOver := storedOver()
 
-assert StoredOver == "12467", "decided while compiling: " $StoredOver
+assert StoredOver == "12467", "decided while compiling: " + $StoredOver
 
 # a holder left by a return, an error left with the holder returned instead, and a holder given a new value in a block
 # and in a loop: each ends only what it holds when it lets go
@@ -330,7 +330,7 @@ fn ended() String {
         for i in range 2 { y = Res(7 + i, t) }
         assert y.id == 8
     }
-    return $n "/" $t.Text()
+    return $n + "/" + $t.Text()
 }
 
 test deferredEnd "ends a held value as its function is left, and a holder given a new one" {
@@ -339,7 +339,7 @@ test deferredEnd "ends a held value as its function is left, and a holder given 
 
 Ended := ended()
 
-assert Ended == "7/13425678", "decided while compiling: " $Ended
+assert Ended == "7/13425678", "decided while compiling: " + $Ended
 
 # a by-value parameter handed on on every path lets go of nothing at its end: effects read a holder's drop where its
 # flag may be set (A5), so a holder's declared Copy may call such a function - and one handing it on in one branch only
@@ -417,7 +417,7 @@ type Logged unique struct(id I64, log mut Tally&) {
 fn churn() I64 {
     n := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         n += s.Len() + a[3]
     }
@@ -437,7 +437,7 @@ fn logged() String {
     churn()
     s := 0
     for x in t.seen { s += x }
-    return $t.seen.Len() "/" $s
+    return $t.seen.Len() + "/" + $s
 }
 
 test Logged "builds through its field from its destructor, the instance made in an inner block" {
@@ -471,7 +471,7 @@ fn heldTwos() String {
         s += caseHeld(Res(k + 3, t))
     }
     churn()
-    return $s "/" $t.Text()
+    return $s + "/" + $t.Text()
 }
 
 test heldTwo "holds a parameter's reference where the parameter's references live, ended at its end" {
@@ -522,7 +522,7 @@ fn vecEnds() String {
 }
 
 VecEnds := vecEnds()
-assert VecEnds == "1.2.3.9.8.6.0.5.4.7.12.11.10.13", "decided while compiling: " $VecEnds
+assert VecEnds == "1.2.3.9.8.6.0.5.4.7.12.11.10.13", "decided while compiling: " + $VecEnds
 
 test vecEnds "ends what a Vec of destructor values removes, the last first, and every element where it is let go" {
     assert vecEnds() == "1.2.3.9.8.6.0.5.4.7.12.11.10.13"
@@ -553,7 +553,7 @@ fn mapEnds() String {
 }
 
 MapEnds := mapEnds()
-assert MapEnds == "2.1.3.4.6.5.8.9.7.10", "decided while compiling: " $MapEnds
+assert MapEnds == "2.1.3.4.6.5.8.9.7.10", "decided while compiling: " + $MapEnds
 
 test mapEnds "ends what a Map of destructor values removes or replaces, and its live entries where it is let go" {
     assert mapEnds() == "2.1.3.4.6.5.8.9.7.10"
@@ -582,7 +582,7 @@ fn dequeEnds() String {
 }
 
 DequeEnds := dequeEnds()
-assert DequeEnds == "20.22.19.33.32.31.30.29.28.27.26.25.24.21.23.40.41.42", "decided while compiling: " $DequeEnds
+assert DequeEnds == "20.22.19.33.32.31.30.29.28.27.26.25.24.21.23.40.41.42", "decided while compiling: " + $DequeEnds
 
 test dequeEnds "a Deque of destructor values ends its ring back to front, and what Clear removes" {
     assert dequeEnds() == "20.22.19.33.32.31.30.29.28.27.26.25.24.21.23.40.41.42"
@@ -620,7 +620,7 @@ fn nestedEnds() String {
 }
 
 NestedEnds := nestedEnds()
-assert NestedEnds == "7.6.5.4.3.2.1", "decided while compiling: " $NestedEnds
+assert NestedEnds == "7.6.5.4.3.2.1", "decided while compiling: " + $NestedEnds
 
 test nestedEnds "a collection held in a collection or a value is let go with its holder" {
     assert nestedEnds() == "7.6.5.4.3.2.1"
@@ -655,7 +655,7 @@ fn passedVecs() String {
 }
 
 PassedVecs := passedVecs()
-assert PassedVecs == "2.1.0.5.4.3.0.7.6", "decided while compiling: " $PassedVecs
+assert PassedVecs == "2.1.0.5.4.3.0.7.6", "decided while compiling: " + $PassedVecs
 
 test destroyedVec "a Vec of destructor values ended by its function, by its by-value parameter, by its caller" {
     assert passedVecs() == "2.1.0.5.4.3.0.7.6"
@@ -671,7 +671,7 @@ fn namedKept() String {
     b := StringBuilder()
     {
         v Vec<Named> = Vec<Named>()
-        for i in range 5 { v.Push(Named($i "-" $(i * 11), t)) }
+        for i in range 5 { v.Push(Named($i + "-" + $(i * 11), t)) }
         churn()
         for x in v {
             b.Push(x.name)
@@ -679,7 +679,7 @@ fn namedKept() String {
         }
     }
     churn()
-    return $b.ToString() "/" $t.Listed()
+    return $b.ToString() + "/" + $t.Listed()
 }
 
 test Named "a Vec of destructor values built in a loop reads its elements back after a churn" {
@@ -722,7 +722,7 @@ fn throughCall() String {
 }
 
 ThroughCall := throughCall()
-assert ThroughCall == "1.3", "decided while compiling: " $ThroughCall
+assert ThroughCall == "1.3", "decided while compiling: " + $ThroughCall
 
 test getBox "a store over a holder's part through what a call gives ends the old value, once" {
     assert throughCall() == "1.3"
@@ -739,7 +739,7 @@ fn loopDestroyed() String {
 }
 
 LoopDestroyed := loopDestroyed()
-assert LoopDestroyed == "0.1.2", "decided while compiling: " $LoopDestroyed
+assert LoopDestroyed == "0.1.2", "decided while compiling: " + $LoopDestroyed
 
 test loopDestroyed "ends a holder its loop's body declares, every turn" {
     assert loopDestroyed() == "0.1.2"
@@ -839,7 +839,7 @@ fn holders() String {
 }
 
 HoldersEnded := holders()
-assert HoldersEnded == "11.2.31.4.9.51.6.71.8.31.2.51.4.7.6", "decided while compiling: " $HoldersEnded
+assert HoldersEnded == "11.2.31.4.9.51.6.71.8.31.2.51.4.7.6", "decided while compiling: " + $HoldersEnded
 
 test "a holder is ended before what it holds - stored, through a call, past deferred code, through a shelf, in a closure" {
     assert holders() == "11.2.31.4.9.51.6.71.8.31.2.51.4.7.6"
@@ -877,7 +877,7 @@ fn gripsHeld() String {
 }
 
 GripsHeld := gripsHeld()
-assert GripsHeld == "11.2.31.4.51.6", "decided while compiling: " $GripsHeld
+assert GripsHeld == "11.2.31.4.51.6", "decided while compiling: " + $GripsHeld
 
 test gripsHeld "ends a collection by value before what its elements hold" {
     assert gripsHeld() == "11.2.31.4.51.6"
@@ -925,7 +925,7 @@ fn deferredHandOn() String {
 }
 
 DeferredHandOn := deferredHandOn()
-assert DeferredHandOn == "2031", "decided while compiling: " $DeferredHandOn
+assert DeferredHandOn == "2031", "decided while compiling: " + $DeferredHandOn
 
 test deferPush "hands its by-value parameter on from deferred code, once" {
     assert deferredHandOn() == "2031"
@@ -938,7 +938,7 @@ test deferPush "hands its by-value parameter on from deferred code, once" {
 # turn ends, last declared first (O15), so 's' before 'r'
 type Viewed unique struct(id I64, log mut Tally&) {
     id, log
-    name := "n" $id
+    name := "n" + $id
 } destruct { log.seen.Push(id) }
 
 fn nameOf(r Viewed&) String& { return r.name }
@@ -955,9 +955,9 @@ fn viewsKept() String {
             keep.Push(nameOf(s))
         }
         t.seen.Push(0)
-        for k in keep { seen = $seen $k }
+        for k in keep { seen = $seen + $k }
     }
-    return $seen "/" $t.Text()
+    return $seen + "/" + $t.Text()
 }
 
 test Viewed "is ended where the storage a view of it is kept in lives" {

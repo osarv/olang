@@ -429,7 +429,7 @@ itemsBaked String = try Encode(Array<item>[item("pen", 1.5, 3, "x")]) catch defa
 
 test Decode "records read as structs by their header's names, written back by Encode" {
     assert itemsBaked == "Name,price,Count,Fresh\npen,1.5,3,true\n"
-    assert $(try Header<item>()) $(try RecordOf(item("pen", 1.5, 3, "x"))) == itemsBaked
+    assert $(try Header<item>()) + $(try RecordOf(item("pen", 1.5, 3, "x"))) == itemsBaked
     xs := try Decode<item>("price,Name,Fresh\n2.25,ink,false\n0.5,\"a, b\",true\n")
     assert xs.Len() == 2 and xs[0].Name == "ink" and xs[0].Cost == 2.25 and not xs[0].Fresh and xs[0].Count == 1
     assert xs[1].Name == "a, b" and xs[1].Note == "-"
@@ -437,7 +437,7 @@ test Decode "records read as structs by their header's names, written back by En
     assert (try Encode(xs.View())) == "Name,price,Count,Fresh\nink,2.25,1,false\n\"a, b\",0.5,1,true\n"
     bad := ""
     try Decode<item>("price,Name\nlots,ink\n") catch Error.BadValue { bad = "value" }
-    try Decode<item>("Name\nink\n") catch Error.NoColumn { bad = $bad " column" }
+    try Decode<item>("Name\nink\n") catch Error.NoColumn { bad = $bad + " column" }
     assert bad == "value column"
     assert (try Decode<item>("")).Len() == 0
 }

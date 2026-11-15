@@ -41,7 +41,7 @@ fn (c mut Counts&) Add(o Counts&) {
 }
 
 fn (c Counts&) Describe() String {
-    return $c.markers " markers made bare, " $c.calls " scope arguments dropped, " $c.chains " outlives chains dropped"
+    return $c.markers + " markers made bare, " + $c.calls + " scope arguments dropped, " + $c.chains + " outlives chains dropped"
 }
 
 # the text's tokens, statement ends dropped; the last is Eof
@@ -153,7 +153,7 @@ fn (g mut migration&) chains() {
         c := g.closeOf(o)
         if c < 0: continue
         if g.spansLines(o, c) {
-            g.c.byHand.Push($"a contract block across lines holding an outlives chain, at byte " $g.v[o].start)
+            g.c.byHand.Push($"a contract block across lines holding an outlives chain, at byte " + $g.v[o].start)
             continue
         }
         g.dropChains(o, c)
@@ -181,7 +181,7 @@ fn (g mut migration&) dropChains(o I64, c I64) {
         g.edits.Push(Edit(g.v[o - 1].end, g.v[c].end, ""))
         return
     }
-    g.edits.Push(Edit(g.v[o].start, g.v[c].end, $"[" $kept.Join(", ") "]"))
+    g.edits.Push(Edit(g.v[o].start, g.v[c].end, $"[" + $kept.Join(", ") + "]"))
 }
 
 # the text with every edit made, in order; one overlapping an earlier is left out
@@ -260,24 +260,24 @@ fn main() ? {
     changed I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("scopes_migrate: cannot read " $path)
+            srcmask.SayErr("scopes_migrate: cannot read " + $path)
             os.Exit(1)
         }
         mine := Counts()
         out := migrateMarkdown(src, mine) if path.EndsWith(".md") else migrate(src, mine)
-        for h in mine.byHand: srcmask.Say($"by hand: " $path ": " $h)
+        for h in mine.byHand: srcmask.Say($"by hand: " + $path + ": " + $h)
         total.Add(mine)
         if out == src: continue
         changed++
-        if verbose: srcmask.Say($path ": " $mine.Describe())
+        if verbose: srcmask.Say($path + ": " + $mine.Describe())
         if check: continue
         try os.WriteFile(path, out) catch {
-            srcmask.SayErr("scopes_migrate: cannot write " $path)
+            srcmask.SayErr("scopes_migrate: cannot write " + $path)
             os.Exit(1)
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.Describe())
+    srcmask.Say($verb + $changed + " files: " + $total.Describe())
     if check and changed > 0: os.Exit(1)
 }
 

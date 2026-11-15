@@ -14,7 +14,7 @@ G mut Holder& = Holder()
 
 # C calls this by its name: it lets go of the global holder's text
 export fn olang_reset(i I64) {
-    G.t = $"text number " $i " padded out to many bytes ........................................"
+    G.t = $"text number " + $i + " padded out to many bytes ........................................"
 }
 
 fn churn() I64 {
@@ -22,7 +22,7 @@ fn churn() I64 {
     for i in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        s := $i + $i + $i + "-" + $(i * 7) + " some more text to fill the chunk ......"
         t += s.Len()
     }
     return t

@@ -84,15 +84,15 @@ fn (d Duration) Str() String {
     if n == 0 { return "0s" }
     sign := "-" if n < 0 else ""
     u U64 = U64(-n) if n < 0 else U64(n)            # the most negative I64 too
-    if u < 1000 { return $sign $u "ns" }
-    if u < 1000000 { return $sign $fraction(u, 1000) "us" }
-    if u < 1000000000 { return $sign $fraction(u, 1000000) "ms" }
+    if u < 1000 { return $sign + $u + "ns" }
+    if u < 1000000 { return $sign + $fraction(u, 1000) + "us" }
+    if u < 1000000000 { return $sign + $fraction(u, 1000000) + "ms" }
     h := u / 3600000000000
     m := u / 60000000000 % 60
     s := fraction(u % 60000000000, 1000000000)
-    if h > 0 { return $sign $h "h" $m "m" $s "s" }
-    if m > 0 { return $sign $m "m" $s "s" }
-    return $sign $s "s"
+    if h > 0 { return $sign + $h + "h" + $m + "m" + $s + "s" }
+    if m > 0 { return $sign + $m + "m" + $s + "s" }
+    return $sign + $s + "s"
 }
 
 # u / unit with its remainder as decimals, trailing zeros dropped: fraction(1500, 1000) is "1.5"
@@ -105,7 +105,7 @@ fn fraction(u U64, unit U64) String {
         digits.PushChar(Char('0' + rest / f))
         rest = rest % f
     }
-    return $whole "." $digits.ToString()
+    return $whole + "." + $digits.ToString()
 }
 
 
@@ -320,7 +320,7 @@ fn twoDigits(n I64) String { return n.PadStart(2, '0') }
 fn (d Date&) Str() String {
     b := StringBuilder()
     b.Push(d.Year.PadStart(4, '0'))
-    b.Push(("-" $twoDigits(d.Month) "-" $twoDigits(d.Day) "T" $twoDigits(d.Hour) ":" $twoDigits(d.Minute) ":"
+    b.Push(("-" + $twoDigits(d.Month) + "-" + $twoDigits(d.Day) + "T" + $twoDigits(d.Hour) + ":" + $twoDigits(d.Minute) + ":" +
         $twoDigits(d.Second)))
     if d.Nano != 0 {
         b.PushChar('.')
@@ -334,7 +334,7 @@ fn (d Date&) Str() String {
     } else {
         o := d.Offset if d.Offset > 0 else -d.Offset
         b.PushChar('+' if d.Offset > 0 else '-')
-        b.Push($twoDigits(o / 60) ":" $twoDigits(o % 60))
+        b.Push($twoDigits(o / 60) + ":" + $twoDigits(o % 60))
     }
     return b.ToString()
 }

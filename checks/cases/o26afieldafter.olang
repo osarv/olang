@@ -7,7 +7,7 @@ type Holder struct() {
     name String& = ""
 }
 fn Holder.make() Holder {
-    a := "alpha" $3
+    a := "alpha" + $3
     h := Holder()
     h.name = a
     return h
@@ -16,7 +16,7 @@ fn churn() I64 {
     t I64 = 0
     for i in range 4000 {
         b := Array<I64>(5, i)
-        x := "churn " $i
+        x := "churn " + $i
         t += b[0] + x.Len()
     }
     return t

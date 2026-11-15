@@ -229,7 +229,7 @@ fn (m Map<K, V>&) Hash() I64 {
 # other value: text quoted, a Char as a character literal, a value whose type declares Str as its Str says (once each)
 fn (m Map<K, V>&) Str() String {
     b := StringBuilder()
-    b.Push("Map<" $typeWritten(Array<K>(0)) ", " $typeWritten(Array<V>(0)) ">[")
+    b.Push("Map<" + $typeWritten(Array<K>(0)) + ", " + $typeWritten(Array<V>(0)) + ">[")
     n I64 = 0
     # (the slots read where they are: an entry made of a value holding "mut" references, read through this read-only
     # receiver, would be a read-only copy, QC)

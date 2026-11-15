@@ -40,7 +40,7 @@ fn person.stored() person {
 fn words() Array<Array<Char>> {
     out := Array<Array<Char>>(3)
     for i in range 3 {
-        w Array<Char> = $"w" $i
+        w Array<Char> = $"w" + $i
         out[i] = w
         w[0] = 'z'
     }
@@ -75,7 +75,7 @@ test "a part store copies its value in" {
 test "a Vec and a Map own what they hold" {
     v := Vec<Array<Char>>()
     for i in range 4 {
-        t Array<Char> = $"n" $i
+        t Array<Char> = $"n" + $i
         v.Push(t)
         t[0] = '?'
     }
@@ -116,7 +116,7 @@ type node struct(v I64) { v }
 fn churn() I64 {
     n I64 = 0
     for i in range 100 {
-        s := $"xyzw" $i
+        s := $"xyzw" + $i
         n += s.Len()
     }
     return n
@@ -124,7 +124,7 @@ fn churn() I64 {
 
 test "a comprehension's elements are its own" {
     ws := Array<Array<Char>>["ab", "c", "def"]
-    up := Array<String>[$w "!" for w in ws]
+    up := Array<String>[$w + "!" for w in ws]
     same := Array<Array<Char>>[w for w in ws]
     some := Array<Array<Char>>[w for w in ws if w.Len() > 1]
     ns := Array<node>[node(i) for i in range 3]

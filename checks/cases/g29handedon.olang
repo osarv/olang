@@ -3,7 +3,7 @@
 # G29, D9a (bulk review 8): a generic handing its by-value array on whole to a function deciding on its length takes
 # the length from its own call, so the assert is decided while compiling, as a direct call's is
 fn first<T>(xs Array<T>) T {
-    assert xs.Len() > 0, "empty: " $xs.Len()
+    assert xs.Len() > 0, "empty: " + $xs.Len()
     return xs[xs.Len() - 1]
 }
 

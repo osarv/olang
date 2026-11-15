@@ -730,5 +730,5 @@ fn TestDesc(d Decl&, text String&) String {
 fn TestLabel(d Decl&, text String&, names source.Names&) String {
     t := TestTarget(d, names)
     if t.Len() == 0 { return TestDesc(d, text) }
-    return $t ": " $TestDesc(d, text)
+    return $t + ": " + $TestDesc(d, text)
 }

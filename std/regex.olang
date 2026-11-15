@@ -1404,7 +1404,7 @@ if TestBuild {
 fn firstOf(pattern String&, text String&) String {
     re := try Regex.Compile(pattern) catch SyntaxError { return "error" }
     m := try re.Find(text) catch NotFound { return "-" }
-    return $m.Start "-" $m.End ":" $m.Text()
+    return $m.Start + "-" + $m.End + ":" + $m.Text()
 }
 
 # every group of the first match, "(a)(b)" -> "a|b", a group taking no part written "?"
@@ -1466,7 +1466,7 @@ test "literals, classes, repetition and alternation" {
     ]
     for k := 0, k < cases.Len(), k += 3 {
         got := firstOf(cases[k], cases[k + 1])
-        assert got == cases[k + 2], ($cases[k] " on " $cases[k + 1] ": " $got)
+        assert got == cases[k + 2], ($cases[k] + " on " + $cases[k + 1] + ": " + $got)
     }
 }
 
@@ -1532,7 +1532,7 @@ fn spans(re Regex&, t String&, dfaToo Bool) String {
     for from <= t.Len() {
         if not sr.next(from) { break }
         if not (best[0] == best[1] and best[0] == lastEnd) {
-            for v in best { b.Push($v ",") }
+            for v in best { b.Push($v + ",") }
             b.PushChar(';')
             lastEnd = best[1]
         }
@@ -1556,7 +1556,7 @@ test "the DFAs find the matches the Pike VM finds" {
     }
     for pat in patterns {
         re := Regex.Compile(pat)!
-        for t in texts { assert spans(re, t, true) == spans(re, t, false), ($pat " on " $t) }
+        for t in texts { assert spans(re, t, true) == spans(re, t, false), ($pat + " on " + $t) }
     }
 }
 

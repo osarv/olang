@@ -9,7 +9,7 @@ type SV<T> struct() {
 fn churn() I64 {
     t := 0
     for i in range 2000 {
-        s := $i "abcdefghijklmnopqrstuvwxyz"
+        s := $i + "abcdefghijklmnopqrstuvwxyz"
         t += s.Len()
     }
     return t
@@ -17,7 +17,7 @@ fn churn() I64 {
 fn main() ? {
     b := SV<P>()
     b.data = Array<P>(2)
-    b.data[0] = P("x" $3, 3)
+    b.data[0] = P("x" + $3, 3)
     b.data[1] = P("y", 4)
     k := b.data[0]
     b.data = Array<P>(1)

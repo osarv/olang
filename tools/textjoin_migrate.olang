@@ -135,7 +135,7 @@ fn migrateFragment(src String&, n mut Count&) String {
         return apply(src, ins)
     }
     head := "fn fragment() {\n"
-    wrapped := $head $src "\n}\n"
+    wrapped := $head + $src + "\n}\n"
     inserts(wrapped, Reading.Of("fragment.olang", wrapped, "", ""), head.Len(), n, ins)
     return apply(src, ins)
 }
@@ -218,7 +218,7 @@ fn main() ? {
     for path in files {
         if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("textjoin_migrate: cannot read " $path)
+            srcmask.SayErr("textjoin_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -228,12 +228,12 @@ fn main() ? {
         if verbose: srcmask.Say(path)
         if check { continue }
         try os.WriteFile(path, out) catch {
-            srcmask.SayErr("textjoin_migrate: cannot write " $path)
+            srcmask.SayErr("textjoin_migrate: cannot write " + $path)
             os.Exit(1)
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.joins " joins, " $total.plus " '+' written, " $total.wrapped " parenthesized")
+    srcmask.Say($verb + $changed + " files: " + $total.joins + " joins, " + $total.plus + " '+' written, " + $total.wrapped + " parenthesized")
     if check and changed > 0: os.Exit(1)
 }
 

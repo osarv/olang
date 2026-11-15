@@ -7,7 +7,7 @@ import "std/io"
 
 type Node struct(v I64) {
     v
-    t String& = $"node " $v " with text padded out to a fair length ..........................."
+    t String& = $"node " + $v + " with text padded out to a fair length ..........................."
     next mut Node?& = null
 }
 
@@ -20,7 +20,7 @@ fn churn() I64 {
     for i in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        s := $i + $i + $i + "-" + $(i * 7) + " some more text to fill the chunk ......"
         t += s.Len()
     }
     return t

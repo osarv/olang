@@ -124,7 +124,7 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
     made I64 = 0
     for path in paths {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("null_migrate: cannot read " $path)
+            srcmask.SayErr("null_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -145,7 +145,7 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
         shAt Vec<I64>
         shDelta Vec<I64>
         for r in mine {
-            key := $r.Line ":" $r.Col
+            key := $r.Line + ":" + $r.Col
             if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len() { continue }
             seen.Push($key)
             idx := r.Line - 1
@@ -158,26 +158,26 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
                 delta := I64(0)
                 if kind == "dropbang" {
                     if text[at] != '!' { continue }
-                    replaced = $text[:at] $text[at + 1:]
+                    replaced = $text[:at] + $text[at + 1:]
                     delta = -1
                 } else if kind == "empty" {
                     if not text[at:].StartsWith("null") { continue }
                     # in a generic's instance the advice names the instance's type, which this line does not write
                     if r.Arg.EndsWith("(0)") and not text.Contains(r.Arg[:r.Arg.Len() - 3]) { continue }
-                    replaced = $text[:at] $r.Arg $text[at + 4:]
+                    replaced = $text[:at] + $r.Arg + $text[at + 4:]
                     delta = r.Arg.Len() - 4
                 } else {
                     # "X is null" / "X is not null", the error at "is", rewritten as the test the message writes
                     neg := r.Arg.EndsWith("> 0")
                     x := r.Arg[:r.Arg.Len() - (10 if neg else 11)]
-                    old := $x $(" is not null" if neg else " is null")
+                    old := $x + $(" is not null" if neg else " is null")
                     from := at - x.Len() - 1
                     if from < 0 or not text[from:].StartsWith(old) { continue }
                     # "x is null or x.Len() == 0", written for an array that was nullable, is the length test once
                     rest := text[from + old.Len():]
-                    dup := $(" and " if neg else " or ") $r.Arg
+                    dup := $(" and " if neg else " or ") + $r.Arg
                     if rest.StartsWith(dup) { rest = rest[dup.Len():] }
-                    replaced = $text[:from] $r.Arg $rest
+                    replaced = $text[:from] + $r.Arg + $rest
                     delta = replaced.Len() - text.Len()
                 }
                 lines[idx] = $replaced
@@ -191,7 +191,7 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
             if kind == "nullable" {
                 # the "&" the note points at, not made nullable already
                 if text[at] != '&' or (at > 0 and text[at - 1] == '?') { continue }
-                replaced = $text[:at] "?" $text[at:]
+                replaced = $text[:at] + "?" + $text[at:]
             } else {
                 # the expression quoted, written at the column, followed by no "!" already; one that is no postfix
                 # chain is parenthesized, since a "!" after it would bind to its last operand
@@ -200,14 +200,14 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
                     continue
                 }
                 if postfixChain(r.Arg) {
-                    replaced = $text[:e] "!" $text[e:]
+                    replaced = $text[:e] + "!" + $text[e:]
                     lines[idx] = $replaced
                     diagedit.Realign(lines, idx, 1, e)
                     shLine.Push(r.Line)
                     shAt.Push(e)
                     shDelta.Push(1)
                 } else {
-                    replaced = $text[:at] "(" $text[at:e] ")!" $text[e:]
+                    replaced = $text[:at] + "(" + $text[at:e] + ")!" + $text[e:]
                     lines[idx] = $replaced
                     diagedit.Realign(lines, idx, 3, e)
                     shLine.Push(r.Line)
@@ -226,7 +226,7 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
         }
         diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
         try os.WriteFile(path, lines.Join("\n")) catch {
-            srcmask.SayErr("null_migrate: cannot write " $path)
+            srcmask.SayErr("null_migrate: cannot write " + $path)
             os.Exit(1)
         }
     }
@@ -242,7 +242,7 @@ fn main() ? {
     for i < args.Len() {
         if args[i] == "--olang" or args[i] == "-j" {
             if i + 1 >= args.Len() {
-                srcmask.SayErr("null_migrate: " $args[i] " needs a value")
+                srcmask.SayErr("null_migrate: " + $args[i] + " needs a value")
                 os.Exit(1)
             }
             if args[i] == "--olang" {
@@ -282,9 +282,9 @@ fn main() ? {
     defer try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp "/w" $k
+        work[k] = $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
-            srcmask.SayErr("null_migrate: cannot make " $work[k])
+            srcmask.SayErr("null_migrate: cannot make " + $work[k])
             os.Exit(1)
         }
     }
@@ -301,12 +301,12 @@ fn main() ? {
         nullable := apply(requests, "nullable") if arrays == 0 else 0
         bangs I64 = 0
         if nullable == 0 and arrays == 0 { bangs = apply(requests, "bang") }
-        srcmask.Say("round " $round ": " $arrays " arrays never null, " $nullable " types made nullable, " $bangs " '!' written")
+        srcmask.Say("round " + $round + ": " + $arrays + " arrays never null, " + $nullable + " types made nullable, " + $bangs + " '!' written")
         totalNullable += nullable
         totalBang += bangs
         if arrays == 0 and nullable == 0 and bangs == 0 { break }
     }
-    srcmask.Say("total: " $totalNullable " types made nullable, " $totalBang " '!' written")
+    srcmask.Say("total: " + $totalNullable + " types made nullable, " + $totalBang + " '!' written")
     seen Vec<String&>
     for u in unanswered {
         expect Vec<String&>
@@ -314,7 +314,7 @@ fn main() ? {
         diagedit.ExpectedTexts(text, expect)
         if not (u.Why in seen) and not diagedit.ContainsAny(u.Why, expect) {
             seen.Push($u.Why)
-            srcmask.Say("by hand: " $u.Why)
+            srcmask.Say("by hand: " + $u.Why)
         }
     }
 }
@@ -326,8 +326,8 @@ test "a note's & is made nullable, a quoted read gets a !" {
     left Vec<diagedit.Request>
     allowed Vec<String&>
     allowed.Push("/a.olang")
-    out := ("/a.olang:3:9: error[T2c]: N& is never null - a reference that may be is written N?&\n"
-            "/a.olang:1:27: note: the type is written here - write '?&' for '&' where it may be null\n"
+    out := ("/a.olang:3:9: error[T2c]: N& is never null - a reference that may be is written N?&\n" +
+            "/a.olang:1:27: note: the type is written here - write '?&' for '&' where it may be null\n" +
             "/a.olang:5:10: error[T2c]: 'h' is a N?&, which may be null - read through it where a test says it is not\n")
     diagsFrom(out, allowed, edits, left)
     assert edits.Len() == 2 and edits[0].Kind == "nullable" and edits[0].Col == 27 and edits[1].Kind == "bang"

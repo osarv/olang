@@ -16,7 +16,7 @@ fn walk(a Array<I64>&) I64 {
     {
         defer say("walk's block")
         for i in range 4 {
-            defer say("turn " $i)
+            defer say("turn " + $i)
             t += reach(a, i)
         }
     }
@@ -27,5 +27,5 @@ fn main() {
     defer say("main's first")
     defer say("main's second")
     a := Array<I64>(3, 5)
-    io.PutLine("sum " $walk(a))!
+    io.PutLine("sum " + $walk(a))!
 }

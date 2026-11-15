@@ -25,7 +25,7 @@ fn Lines(c mut typecheck.Checker&, f I64) Array<String&> {
     for k in range w.found.Len() {
         kept := w.unpromised(k)
         if kept.Len() == 0 { continue }
-        out.Push($c.P.L.Names.Text(c.P.VarAt(owner, k).Name) " needs: " $kept.Join(", "))
+        out.Push($c.P.L.Names.Text(c.P.VarAt(owner, k).Name) + " needs: " + $kept.Join(", "))
     }
     return out.ToArray()
 }
@@ -142,7 +142,7 @@ fn (w mut walker&) traitMethods(tr types.TypeId, out mut Vec<String&>&) {
     match td.Body {
         case ast.TypeBody.Trait(ms, _, _) {
             for m in ms {
-                if m.IsBuilder() { out.Push($w.C.P.L.Names.Text(m.Member) " (a builder)") } else { out.Push($w.C.P.L.Names.Text(m.Name)) }
+                if m.IsBuilder() { out.Push($w.C.P.L.Names.Text(m.Member) + " (a builder)") } else { out.Push($w.C.P.L.Names.Text(m.Name)) }
             }
         }
         case _ { }
@@ -328,7 +328,7 @@ fn (w mut walker&) expr(x ast.Expr?&) {
         }
         case ast.Expr.Call(_, f, args) { w.call(f, args) }
         case ast.Expr.Member(_, y, n) {
-            w.need(w.valOf(y), $"a field '" $w.C.P.L.Names.Text(n) "'")
+            w.need(w.valOf(y), $"a field '" + $w.C.P.L.Names.Text(n) + "'")
             w.expr(y)
         }
         case ast.Expr.Index(_, y, items) {
@@ -394,7 +394,7 @@ fn (w mut walker&) call(f ast.Expr&, args Array<ast.Expr&>&) {
     match f {
         case ast.Expr.Member(_, ast.Expr.Name(_, tn), n) if w.vars.Has(tn) {
             # D19: a builder through the variable's name, "T.Parse(t)"
-            w.need(try w.vars.Get(tn) catch default -1, $w.C.P.L.Names.Text(n) " (a builder)")
+            w.need(try w.vars.Get(tn) catch default -1, $w.C.P.L.Names.Text(n) + " (a builder)")
         }
         case ast.Expr.Member(_, y, n) {
             w.need(w.valOf(y), $w.C.P.L.Names.Text(n))

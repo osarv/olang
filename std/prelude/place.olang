@@ -10,4 +10,4 @@ type Place struct(File String&, Line I64, Column I64) {
 }
 
 # "FILE:LINE:COLUMN", as a diagnostic names a place
-fn (p Place) Str() String { return $p.File ":" $p.Line ":" $p.Column }
+fn (p Place) Str() String { return $p.File + ":" + $p.Line + ":" + $p.Column }

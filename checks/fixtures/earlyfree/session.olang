@@ -8,7 +8,7 @@ type Session struct() {
 }
 
 fn (s mut Session&) tick(n I64) {
-    s.status = "line " $n " of the file - a status text padded out to about a hundred bytes ......................"
+    s.status = "line " + $n + " of the file - a status text padded out to about a hundred bytes ......................"
 }
 
 fn main() {

@@ -840,7 +840,7 @@ fn (c mut Checker&) settleUnset() {
         d.Drop(u.Group)
         name := c.text(b.Locals[u.Local].Name)
         fix := ""
-        if c.neverNull(u.Ty) { fix = ", or write '" $c.ty(c.P.T.OrNull(u.Ty)) "'" }
+        if c.neverNull(u.Ty) { fix = ", or write '" + $c.ty(c.P.T.OrNull(u.Ty)) + "'" }
         rec I64 = -1
         if u.Field {
             rec = d.Error(diag.Where.Span(b.File, I64(u.Sp.Start), I64(u.Sp.End)), msgs.FieldUnassigned(name, c.ty(u.Ty), fix))
@@ -1437,13 +1437,13 @@ fn (c mut Checker&) ownerWritten(f I64, o types.TypeId, osp source.Span) Bool {
     vars Vec<String>
     errs := ""
     for tp in td.Params {
-        if tp.ErrSet: errs = $" ? " $c.text(tp.Name)
+        if tp.ErrSet: errs = $" ? " + $c.text(tp.Name)
         else: vars.Push($c.text(tp.Name))
     }
-    every := $name "<" $vars.Join(", ") $errs ">"
+    every := $name + "<" + $vars.Join(", ") + $errs + ">"
     r := c.P.T.Plain(c.deref(c.P.T.Result(c.P.Sig(f))))
     one := c.ty(r) if c.P.T.KindOf(r) == types.Kind.Named and c.P.T.DeclOf(r) == c.P.T.DeclOf(o) and c.ty(r) != every else
-           $name "<I64>"
+           $name + "<I64>"
     c.err(osp, msgs.BuilderOwnerBare(name, every, one, c.text(fd.Member)))
     return false
 }
@@ -1529,7 +1529,7 @@ fn (c mut Checker&) errorMethod(f I64, rt types.TypeId, name String&) {
     }
     if c.P.T.DeclModule(d) != c.P.FnModule(f) {
         dm := c.P.T.DeclModule(d)
-        c.err(c.nameSpan(fd), msgs.MethodOnForeignType($load.ErrQualifier(c.P.L.Mods[dm].Identity, dm == c.P.L.Root) $c.text(c.P.T.DeclName(d))))
+        c.err(c.nameSpan(fd), msgs.MethodOnForeignType($load.ErrQualifier(c.P.L.Mods[dm].Identity, dm == c.P.L.Root) + $c.text(c.P.T.DeclName(d))))
         return
     }
     for x in Array<String&>["Eq", "eq", "Hash", "hash", "Str", "str", "Copy", "copy"] {
@@ -1616,7 +1616,7 @@ fn (c mut Checker&) methodOverlap(f I64) {
     c.pop()
     gd := c.P.FnDecl(g)
     c.push(-1, c.P.FnModule(g), types.VoidT, types.ListId(0))
-    c.P.L.Diags.Note(rec, c.at(c.nameSpan(gd)), msgs.NoteDeclaredHere("'" $c.text(gd.Name) "'"))
+    c.P.L.Diags.Note(rec, c.at(c.nameSpan(gd)), msgs.NoteDeclaredHere("'" + $c.text(gd.Name) + "'"))
     c.pop()
 }
 
@@ -1766,11 +1766,11 @@ fn (c mut Checker&) commutesRule(f I64, fd ast.Func&, cap String&) {
     if not c.P.T.Same(c.P.T.Plain(c.deref(ps2[1])), recv) { return }
     if c.P.FnDecl(m2).S.Commutes and m2 > f { return }   # the later of two commuting ones is said
     opTok := "'+'" if cap == "Plus" else ("'*'" if cap == "Mul" else ("'&'" if cap == "BitAnd" else ("'|'" if cap == "BitOr" else "'^'")))
-    c.err(at, msgs.CommutesClash(opTok, c.ty(recv), c.ty(other), $c.ty(other) "." $c.text(c.P.FnDecl(m2).Name)))
+    c.err(at, msgs.CommutesClash(opTok, c.ty(recv), c.ty(other), $c.ty(other) + "." + $c.text(c.P.FnDecl(m2).Name)))
 }
 
 # the operator role a method's name claims (E31, M6b): its capitalized spelling
-fn (c mut Checker&) operatorRole(name String&) String { return $name[0].ToUpper() $name[1:] }
+fn (c mut Checker&) operatorRole(name String&) String { return $name[0].ToUpper() + $name[1:] }
 
 fn opShapeOf(cap String&) I64 {
     for i in range OpShapes.Len() {
@@ -2165,7 +2165,7 @@ fn (c mut Checker&) genDecls(mi I64, ds Array<ast.Decl&>&) {
         match d {
             case ast.Decl.Type(_, td) { c.genTypeDecl(mi, td) }
             case ast.Decl.Global(_, v) {
-                for n in v.Names { c.genMarks(generic.Context(mi, -1), v.Ty, "'" $c.text(n) "'", -1, -1, true) }
+                for n in v.Names { c.genMarks(generic.Context(mi, -1), v.Ty, "'" + $c.text(n) + "'", -1, -1, true) }
             }
             case ast.Decl.If(_, ti) {
                 if ti.Then != null { c.genDecls(mi, ti.Then!.Decls) }
@@ -2187,14 +2187,14 @@ fn (c mut Checker&) genTypeDecl(mi I64, td ast.TypeDecl?&) {
             k I64 = 0
             for vd in generic.FieldDecls(sb) {
                 for n in vd.Names {
-                    c.genMarks(ctx, vd.Ty, "'" $c.text(n) "'", I64(d), k, true)
+                    c.genMarks(ctx, vd.Ty, "'" + $c.text(n) + "'", I64(d), k, true)
                     k++
                 }
             }
         }
         case ast.TypeBody.Enum(cases, _) {
             for cd in cases {
-                for prm in cd.Payload { c.genMarks(ctx, prm.Ty, "'" $c.text(prm.Name) "'", -1, -1, true) }
+                for prm in cd.Payload { c.genMarks(ctx, prm.Ty, "'" + $c.text(prm.Name) + "'", -1, -1, true) }
             }
         }
         case _ { }
@@ -2218,8 +2218,8 @@ fn (c mut Checker&) genMarks(ctx generic.Context&, tr ast.TypeRef?&, label Strin
             }
             if not c.genWeakAt.Has(key): c.genWeakAt.Put(key, c.at(c.weakWord(tr)))
             had := try c.P.Gens.Get(key) catch default ""
-            if not had.Contains(label): c.P.Gens.Put(key, label if had == "" else $had ", " $label)
-            if top and d >= 0: c.P.WeakSlots.Put($d " " $k, true)
+            if not had.Contains(label): c.P.Gens.Put(key, label if had == "" else $had + ", " + $label)
+            if top and d >= 0: c.P.WeakSlots.Put($d + " " + $k, true)
             if top: c.weakPlaces.Push(weakPlace(c.at(c.weakWord(tr)), label, key))
         }
         case ast.TypeRef.Perm(_, of, _) { c.genMarks(ctx, of, label, d, k, top) }
@@ -2246,7 +2246,7 @@ fn (c mut Checker&) genHolds(key I64, label String&, top Bool) {
     c.genOwned.Put(key, true)
     if not top: return
     had := try c.P.GenOwners.Get(key) catch default ""
-    if not had.Contains(label): c.P.GenOwners.Put(key, label if had == "" else $had ", " $label)
+    if not had.Contains(label): c.P.GenOwners.Put(key, label if had == "" else $had + ", " + $label)
 }
 
 # T2d: an owning place holding what the written reference of names - a type argument's, a local's element
@@ -2351,12 +2351,12 @@ fn (c mut Checker&) newInstance(value ast.Expr&) types.TypeId {
 fn (c mut Checker&) weakRow(w weakPlace) String {
     ty := c.ty(c.P.SelfType(types.DeclId(I32(w.Key))))
     owners := try c.P.GenOwners.Get(w.Key) catch default ""
-    by := " - " $owners " -" if owners != "" else ""
+    by := " - " + $owners + " -" if owners != "" else ""
     at := match w.At {
         case diag.Where.Span(file, start, _): c.P.L.Diags.Locate(file, start)
         case _: ""
     }
-    return $at ": memory: " $w.Label " is weak: a " $ty " is held by its owning places" $by " and " $w.Label " reads null once none holds it\n"
+    return $at + ": memory: " + $w.Label + " is weak: a " + $ty + " is held by its owning places" + $by + " and " + $w.Label + " reads null once none holds it\n"
 }
 
 # T2d, once the program is checked: a weak reference to a type no owning place of the program holds - every one of
@@ -3031,7 +3031,7 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
         text.Push(c.text(n))
     }
     t := text.ToString()
-    key := $"\x00" $t "\n" $c.src(nsp) "\x00"
+    key := $"\x00" + $t + "\n" + $c.src(nsp) + "\x00"
     if c.testKeys.ToString().Contains(key) {
         c.err(target.Sp, msgs.TestTargetTwice(msgs.Tok(t)))
         return
@@ -3091,14 +3091,14 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
     c.P.AllFns()
     for f in range c.P.FnCount() {
         decl := c.P.FnDecl(f)
-        if decl.IsBuilder() and c.P.FnModule(f) == mi { near.Offer($ast.OwnerTarget(decl, c.P.L.Names) "." $c.text(decl.Member)) }
+        if decl.IsBuilder() and c.P.FnModule(f) == mi { near.Offer($ast.OwnerTarget(decl, c.P.L.Names) + "." + $c.text(decl.Member)) }
         if decl.Recv == null or c.P.FnModule(f) != mi { continue }
         ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
         if ps.Len() == 0 { continue }
         if c.isNamed(c.deref(ps[0])) {
-            near.Offer($c.text(c.P.T.DeclName(c.P.T.DeclOf(c.deref(ps[0])))) "." $c.text(decl.Name))
+            near.Offer($c.text(c.P.T.DeclName(c.P.T.DeclOf(c.deref(ps[0])))) + "." + $c.text(decl.Name))
         } else if ast.RecvTarget(decl, c.P.L.Names) != "" {
-            near.Offer($ast.RecvTarget(decl, c.P.L.Names) "." $c.text(decl.Name))
+            near.Offer($ast.RecvTarget(decl, c.P.L.Names) + "." + $c.text(decl.Name))
         }
     }
     if near.Best.Len() > 0: c.err(target.Sp, msgs.TestTargetUnknownMeant(t, near.Best))
@@ -3495,7 +3495,7 @@ fn (c mut Checker&) b5aCycle(gs Vec<I64>&, path Vec<I64>&, at I64) {
         return
     }
     b := StringBuilder()
-    for p in range at, path.Len() { b.Push($c.b5aName(gs[path[p]]) " -> ") }
+    for p in range at, path.Len() { b.Push($c.b5aName(gs[path[p]]) + " -> ") }
     b.Push(c.b5aName(gs[path[at]]))
     c.P.L.Diags.Error(w, msgs.GlobalsCycle(b.ToString()))
 }
@@ -4316,7 +4316,7 @@ fn (c mut Checker&) comptime(sp source.Span, y ast.Expr&, want types.TypeId) typ
     }
     ctx := c.comptimeCtx()
     home := fr.Mi if ctx == "" else c.P.L.Root
-    n := c.P.L.Names.Intern($"comptime." $c.P.L.Mods[fr.Mi].Identity ":" $sp.Start $ctx)
+    n := c.P.L.Names.Intern($"comptime." + $c.P.L.Mods[fr.Mi].Identity + ":" + $sp.Start + $ctx)
     key := pair.Pair(home, I64(n))
     id := try c.globalBodies.Get(key) catch default -1
     if id < 0 { id = c.comptimeBody(sp, y, want, home, n) }
@@ -4332,11 +4332,11 @@ fn (c mut Checker&) comptime(sp source.Span, y ast.Expr&, want types.TypeId) typ
 fn (c mut Checker&) comptimeCtx() String {
     b := StringBuilder()
     for v in c.fr().Ctx.Vars {
-        b.Push(" " $c.text(v.Key) "=")
+        b.Push(" " + $c.text(v.Key) + "=")
         b.Push(c.P.T.Canon(v.Value))
     }
     for r in c.fr().Ctx.Refl {
-        b.Push(" " $c.text(r.Key) "=")
+        b.Push(" " + $c.text(r.Key) + "=")
         b.Push(c.P.T.Canon(r.Value))
     }
     return b.ToString()
@@ -4407,7 +4407,7 @@ fn (c mut Checker&) comptimeFor(sp source.Span, f ast.ForIn&) {
         c.unrollOnce(sp, f)
         return
     }
-    key := $"u:" $c.P.LengthKey(c.fr().Ctx, f.Source)
+    key := $"u:" + $c.P.LengthKey(c.fr().Ctx, f.Source)
     if c.P.UnrollWhy.Has(key) {
         c.err(f.Source.Span(), msgs.ComptimeForUnknown(try c.P.UnrollWhy.Get(key) catch default ""))
         c.unrollOnce(sp, f)
@@ -5224,7 +5224,7 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?& {
             d := c.P.T.DeclOf(c.P.AnySlots(tr)[k].Trait)
             recv := m.Recv
             if recv == null { recv = ast.Param(m.Sp, source.NameId(0), ast.TypeRef.Perm(m.Sp, null, false), null) }
-            return ctSource(m.S.Contract!, recv, m.S.Params, c.P.T.DeclModule(d), $c.ty(tr) "." $c.text(m.Name))
+            return ctSource(m.S.Contract!, recv, m.S.Params, c.P.T.DeclModule(d), $c.ty(tr) + "." + $c.text(m.Name))
         }
         case _ { return null }
     }
@@ -5320,12 +5320,12 @@ fn (c mut Checker&) contractChecks(b I64, args Vec<I64>&, gen Bool) {
         bfrom := c.stmts.Len()
         id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
         c.leaks1(raised)
-        c.argumentPush(sp, ae, word, $info.Name ": " $info.ReqTexts[i])
+        c.argumentPush(sp, ae, word, $info.Name + ": " + $info.ReqTexts[i])
         c.stmts.Push(typed.Stmt.Raise(sp, ae, word))
         blk := c.close(id, outer, bmark, bfrom)
         c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, x), blk, null)))
         c.cur().RaiseAt.Push(sp.Start)
-        c.cur().RaiseWhat.Push($info.Name ": " $info.ReqTexts[i])
+        c.cur().RaiseWhat.Push($info.Name + ": " + $info.ReqTexts[i])
     }
 }
 
@@ -5510,14 +5510,14 @@ fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), v))
         bfrom := c.stmts.Len()
         id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
-        c.argumentPush(sp, ae, 0, $info.Name ": " $info.ReqTexts[i])
+        c.argumentPush(sp, ae, 0, $info.Name + ": " + $info.ReqTexts[i])
         blk := c.close(id, outer, bmark, bfrom)
         c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, c.readLocal(sp, h)), blk, null)))
         from := c.exprs.Len()
         c.exprs.Push(c.readLocal(sp, h))
         c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.BoolT, typed.PrimOp.Holds, typed.Check.Try, gather(c.exprs, from))))
         c.cur().RaiseAt.Push(sp.Start)
-        c.cur().RaiseWhat.Push($info.Name ": " $info.ReqTexts[i])
+        c.cur().RaiseWhat.Push($info.Name + ": " + $info.ReqTexts[i])
     }
     efrom := c.exprs.Len()
     for i in range args.Len() { c.exprs.Push(c.heldArg(args, held, i)) }
@@ -6208,7 +6208,7 @@ fn (c mut Checker&) checkedInst() I64 {
 # G18: what an operator needs of its left operand's type, as a generic's need is said - "Less ('<')"
 fn opNeed(op token.Tok) String {
     name := operatorName(op)
-    return $msgs.Tok(op.Text()) if name == "" else $name " (" $msgs.Tok(op.Text()) ")"
+    return $msgs.Tok(op.Text()) if name == "" else $name + " (" + $msgs.Tok(op.Text()) + ")"
 }
 
 # T2c: the note at the type a null or a nullable value is fitted to, where it is written - what to make "?&"
@@ -6347,9 +6347,9 @@ fn (c mut Checker&) notOperator(t types.TypeId, cap String&, sp source.Span, wha
     if m < 0 { return false }
     got := c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() - 1
     if (got >= want if atLeast else got == want) { return false }
-    have := "no parameters" if got == 0 else ("one parameter" if got == 1 else $got " parameters")
+    have := "no parameters" if got == 0 else ("one parameter" if got == 1 else $got + " parameters")
     n := "one" if want == 1 else $want
-    arity := "none" if want == 0 else ($"at least " $n if atLeast else n)
+    arity := "none" if want == 0 else ($"at least " + $n if atLeast else n)
     rec := c.err(sp, msgs.NotTheOperator(c.ty(t), c.text(c.P.FnDecl(m).Name), have, what, arity))
     fd := c.P.FnDecl(m)
     file := c.P.L.Mods[c.P.FnModule(m)].File
@@ -6432,14 +6432,14 @@ fn (c mut Checker&) spellErrWords(b mut StringBuilder&, t types.TypeId) {
     # R1c: "T.W, T.V", as a signature writes the words it names
     et := c.P.T.ErrOf(t)
     name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
-    if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) $name }
+    if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) + $name }
     ws := c.P.ErrorWords(c.P.T.DeclOf(et))
     mask := c.P.T.ErrMask(t)
     first := true
     for i in range ws.Len() {
         if i < 64 and (mask & (U64(1) << i)) != 0 {
             if not first { b.Push(", ") }
-            b.Push($name if c.P.IsRaisedError(c.P.T.DeclOf(et)) else $name "." $c.text(ws[i]))
+            b.Push($name if c.P.IsRaisedError(c.P.T.DeclOf(et)) else $name + "." + $c.text(ws[i]))
             first = false
         }
     }
@@ -7628,8 +7628,8 @@ fn (c mut Checker&) mismatch(x typed.Expr&, have types.TypeId, want types.TypeId
     hs := c.tyOf(x)
     if ws == hs and c.isNamed(c.deref(want)) and c.isNamed(c.deref(have)) {
         # two types of one name, declared by two modules - two C imports translating one header among them (X18)
-        ws = $ws " of " $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(want)))].Identity
-        hs = $hs " of " $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(have)))].Identity
+        ws = $ws + " of " + $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(want)))].Identity
+        hs = $hs + " of " + $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(have)))].Identity
     }
     hd := c.ty(c.deref(have))
     if c.lenArgAt == sp.Start and ws == "I64" and c.deref(have) == c.textType() {
@@ -7658,7 +7658,7 @@ fn (c mut Checker&) fitData(x typed.Expr&, have types.TypeId, want types.TypeId,
         # T25d: going where it may be written, it is judged as text at its own type is - handed over as the
         # constant itself, a write through it would land in the program's constant data
         if not c.writable(want): return y
-        c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Copy()'"))
+        c.err(sp, msgs.ConstToMutRef("'$" + $c.src(sp) + "'" if c.P.T.Same(r, c.textType()) else "'" + $c.src(sp) + ".Copy()'"))
         return y
     }
     u := c.under(w)
@@ -8319,7 +8319,7 @@ fn bangOf(t String&) String {
     for ch in t {
         if ch == '(' or ch == '[' { depth++ }
         if ch == ')' or ch == ']' { depth-- }
-        if ch == ' ' and depth == 0 { return "(" $t ")" }
+        if ch == ' ' and depth == 0 { return "(" + $t + ")" }
     }
     return t
 }
@@ -8376,7 +8376,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
         case ast.Expr.Postfix(sp, op, y) if op == token.Tok.Bang { return c.bang(sp, y, want) }
         case ast.Expr.Postfix(sp, op, y) {
             # S3a: an increment stands alone
-            c.err(c.opAfter(y.Span(), 2), msgs.IncdecInExpression("'" $op.Text() "'"))
+            c.err(c.opAfter(y.Span(), 2), msgs.IncdecInExpression("'" + $op.Text() + "'"))
             return c.unknown(sp)
         }
         case ast.Expr.As(sp, a, tr) { return c.asCase(sp, a, tr) }
@@ -8705,7 +8705,7 @@ fn (c mut Checker&) noBuilder(nsp source.Span, x ast.Expr&, t types.TypeId, n so
     for f in c.P.BuildersOf(t) {
         if c.P.FnModule(f) == c.fr().Mi or load.Public(c.text(c.P.FnDecl(f).Member)) { near.Offer(c.text(c.P.FnDecl(f).Member)) }
     }
-    c.needErr(nsp, t, $"a builder " $c.tok(n), msgs.NoBuilder(c.ty(t), c.tok(n), near.Hint()))
+    c.needErr(nsp, t, $"a builder " + $c.tok(n), msgs.NoBuilder(c.ty(t), c.tok(n), near.Hint()))
 }
 
 # E33: F64.FromBits(u) - the float whose bit pattern an unsigned integer of its width is, nothing computed; an argument
@@ -8771,7 +8771,7 @@ fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>&
     sig := c.P.InstanceSig(inst)
     # an inferred set is what the value fails with (R1a)
     if c.infersErrs(sig) { sig = c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), c.bodyErrors(id), c.P.T.ScopesOf(sig)) }
-    c.roFns.Push(roFn(id, 0, c.at(sp), "'" $c.text(c.P.FnDecl(f).Name) "'"))   # T25c
+    c.roFns.Push(roFn(id, 0, c.at(sp), "'" + $c.text(c.P.FnDecl(f).Name) + "'"))   # T25c
     # its parameters' names, which "$" renders the value with (E11a)
     d := c.P.FnDecl(f)
     if d.Recv == null and d.S.Params.Len() == c.P.T.Items(c.P.T.Params(sig)).Len() { sig = c.P.T.WithNames(sig, c.P.SigNames(d.S)) }
@@ -8803,10 +8803,10 @@ fn (c mut Checker&) adapter(sp source.Span, x typed.Expr&, want types.TypeId) ty
     # T22: the errors in order, as the function type lists them - a call through the value reads its codes by position
     es := c.bodyErrors(id) if c.infersErrs(sig) else c.P.T.Errors(sig)
     if es != c.P.T.Errors(want) and c.P.T.Items(es) != c.P.T.Items(c.P.T.Errors(want)) {
-        fix := "write the function type '" $c.ty(c.P.T.Func(c.P.T.Params(want), c.P.T.Result(want), es, c.P.T.ScopesOf(want))) "', or pass a lambda handling them" if c.P.T.Items(es).Len() > 0 else "pass a lambda calling it"
+        fix := "write the function type '" + $c.ty(c.P.T.Func(c.P.T.Params(want), c.P.T.Result(want), es, c.P.T.ScopesOf(want))) + "', or pass a lambda handling them" if c.P.T.Items(es).Len() > 0 else "pass a lambda calling it"
         c.err(sp, msgs.CallValueErrors(c.ty(dt), c.errsText(es), c.errsText(c.P.T.Errors(want)), fix))
     }
-    c.roFns.Push(roFn(id, 1, c.at(sp), "'" $c.text(c.P.FnDecl(m).Name) "'"))   # T25c
+    c.roFns.Push(roFn(id, 1, c.at(sp), "'" + $c.text(c.P.FnDecl(m).Name) + "'"))   # T25c
     recv := c.fit(x, hp[0], sp)
     return typed.Expr.Fn(sp, want, typed.FnVal.Adapter(typed.BodyId(I32(id)), recv, c.site(typed.SiteKind.Closure, sp)))
 }
@@ -8891,7 +8891,7 @@ fn (c mut Checker&) unaryOn(sp source.Span, op token.Tok, x typed.Expr&) typed.E
         # E31: a method of that name shaped otherwise is an ordinary one, and this operator has none
         if c.notOperator(c.deref(t), mname, sp, msgs.Tok(op.Text()), 0, false) { return c.unknown(sp) }
         if c.isNumber(t) {
-            c.err(sp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $mname "'"))
+            c.err(sp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" + $mname + "'"))
             return c.unknown(sp)
         }
     }
@@ -9201,7 +9201,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         if not c.isInt(ta) { c.err(opSp, msgs.OperandNotInt(msgs.Tok(op.Text()), c.ty(ta))) }
         if not c.isInt(tb) { c.err(opSp, msgs.OperandNotInt(msgs.Tok(op.Text()), c.ty(tb))) }
         if not compares(op) and c.isNamed(ta) and not c.P.Extends(ta) {
-            c.err(opSp, msgs.NotExtendedOp(c.ty(ta), msgs.Tok(op.Text()), "'" $operatorName(op) "'"))
+            c.err(opSp, msgs.NotExtendedOp(c.ty(ta), msgs.Tok(op.Text()), "'" + $operatorName(op) + "'"))
             return c.unknown(sp)
         }
         if not c.shiftInRange(ta, y, bSp) { return c.unknown(sp) }
@@ -9222,7 +9222,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         return c.unknown(sp)
     }
     if not compares(op) and c.isNamed(m) and not c.P.Extends(m) {
-        c.err(opSp, msgs.NotExtendedOp(c.ty(m), msgs.Tok(op.Text()), "'" $operatorName(op) "'"))
+        c.err(opSp, msgs.NotExtendedOp(c.ty(m), msgs.Tok(op.Text()), "'" + $operatorName(op) + "'"))
         return c.unknown(sp)
     }
     if compares(op) { return c.prim(sp, types.BoolT, binaryOp(op), x, y) }
@@ -9299,7 +9299,7 @@ fn (c mut Checker&) powValues(sp source.Span, opSp source.Span, x typed.Expr&, y
     if t == types.UnknownT or typeOf(y) == types.UnknownT { return c.unknown(sp) }
     m := c.powMethod(t, opSp)
     if m < 0 {
-        hint := " - declare 'fn (x " $c.ty(t) ") Pow(y E) " $c.ty(t) "'" if c.isNamed(t) and not c.isNumber(t) else ""
+        hint := " - declare 'fn (x " + $c.ty(t) + ") Pow(y E) " + $c.ty(t) + "'" if c.isNamed(t) and not c.isNumber(t) else ""
         c.err(opSp, msgs.PowNone(c.ty(t), hint))
         return c.unknown(sp)
     }
@@ -9788,7 +9788,7 @@ fn (c mut Checker&) nullTest(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
     if c.P.T.IsErrVal(xt) {
         # T20: an error value is null where it holds no error
         if c.errNonNull(a, x) {
-            c.err(isp, msgs.ErrNeverNull("'" $c.src(a.Span()) "'"))
+            c.err(isp, msgs.ErrNeverNull("'" + $c.src(a.Span()) + "'"))
             return c.lit(sp, types.BoolT, 1 if negated else 0)
         }
         r := c.prim(sp, types.BoolT, typed.PrimOp.Eq, x, c.lit(sp, xt, 0))
@@ -9967,7 +9967,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
         if xt == types.UnknownT { return c.unknown(sp) }
         # E32: "as" gives an enum case's payload - an array's part is a slice (E16a)
         if not c.isEnum(et): c.err(c.between(a.Span(), tr.Span(), 2), msgs.IsAsNotEnum(c.ty(xt)))
-        else: c.err(tr.Span(), msgs.AsNeedsCase(c.ty(et), "'" $c.src(tr.Span()) "'"))
+        else: c.err(tr.Span(), msgs.AsNeedsCase(c.ty(et), "'" + $c.src(tr.Span()) + "'"))
         return c.unknown(sp)
     }
     base := readPlace(x)
@@ -10369,7 +10369,7 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     if m < 0 and c.notOperator(ct, name, c.between(a.Span(), b.Span(), 2), "'x in c'", 1, false) { return c.lit(sp, types.BoolT, 0) }
     if m < 0 {
         # E29: x of the collection's own type asks Contains - a sub-collection
-        c.needErr(c.between(a.Span(), b.Span(), 2), ct, $name " ('in')", msgs.MembershipNoMethod(name, c.ty(ct)))
+        c.needErr(c.between(a.Span(), b.Span(), 2), ct, $name + " ('in')", msgs.MembershipNoMethod(name, c.ty(ct)))
         return c.lit(sp, types.BoolT, 0)
     }
     # E29: a Has or Contains that can fail is written under try - said at "in"
@@ -10592,7 +10592,7 @@ fn (c mut Checker&) renderingOf(x ast.Expr&) String {
         case ast.Expr.Index(_, _, _), ast.Expr.Paren(_, _), ast.Expr.Generic(_, _, _), ast.Expr.Slice(_, _, _, _): true
         case _: false
     }
-    return $"$" $w if tight else $"$(" $w ")"
+    return $"$" + $w if tight else $"$(" + $w + ")"
 }
 
 # a String value as a piece of a join: its characters copied where the join renders it (E11a)
@@ -10841,7 +10841,7 @@ fn (c mut Checker&) roLet(id I64, x typed.Expr&) {
 # Copy shares what the value refers to)
 fn (c mut Checker&) roFix(n source.NameId, t types.TypeId) String {
     if not c.P.T.DeclaresCopy(c.deref(t)) { return "from its parts" }
-    if n != source.NameId(0) { return "with '" $c.text(n) ".Copy()'" }
+    if n != source.NameId(0) { return "with '" + $c.text(n) + ".Copy()'" }
     return "with 'Copy()'"
 }
 
@@ -11344,7 +11344,7 @@ fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
     top := c.P.VarAt(owner, u.Var).Bound
     shown := name
     if c.P.T.KindOf(top) == types.Kind.Named and c.P.T.DeclOf(top) != c.P.T.DeclOf(u.Trait) {
-        shown = $name " (" $tn "'s)"
+        shown = $name + " (" + $tn + "'s)"
         tn = c.text(c.P.T.DeclName(c.P.T.DeclOf(top)))
     }
     if name.Contains(".") {
@@ -11438,7 +11438,7 @@ fn (c mut Checker&) importedTypeNamed(name String&) String {
                 k := try imp.Spec.FindLast("/") catch default -1
                 alias = imp.Spec[k + 1:]
             }
-            return $alias "." $name
+            return $alias + "." + $name
         }
     }
     return ""
@@ -11451,7 +11451,7 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
     k := name.Len()
     for k > 0 and name[k - 1].IsDigit() { k-- }
     if name.Len() >= 2 and k < name.Len() and name.Len() - k < 8 {
-        cand := $(name[0].ToUpper()) $name[k:]
+        cand := $(name[0].ToUpper()) + $name[k:]
         if c.P.T.Prim(cand) != types.UnknownT { return cand }
     }
     if name == "Byte" { return "U8" }
@@ -11596,7 +11596,7 @@ fn (c mut Checker&) sigText(inst I64, body I64) String {
         if c.P.T.KindOf(x) == types.Kind.ErrWords {
             et := c.P.T.ErrOf(x)
             name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
-            if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) $name }
+            if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) + $name }
             ws := c.P.ErrorWords(c.P.T.DeclOf(et))
             mask := c.P.T.ErrMask(x)
             all := true
@@ -11611,7 +11611,7 @@ fn (c mut Checker&) sigText(inst I64, body I64) String {
             for i in range ws.Len() {
                 if i < 64 and (mask & (U64(1) << i)) != 0 {
                     if not one: b.Push(", ")
-                    b.Push($name "." $c.text(ws[i]))
+                    b.Push($name + "." + $c.text(ws[i]))
                     one = false
                 }
             }
@@ -14046,7 +14046,7 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
         held = true
     }
     if held and (not c.plainArgs(c.atIndices(tv)) or c.callArgs(tv).Len() == 0 or c.atValue(c.callArgs(tv)[0]) != null): return call
-    key := $c.fr().File ":" $sp.Start
+    key := $c.fr().File + ":" + $sp.Start
     if c.inPlaceCopied(key, sp): return call
     bodies := c.inPlaceBodies(cl)
     if bodies.Len() == 0: return call
@@ -14471,10 +14471,10 @@ fn (c mut Checker&) notInModule(at I64, n source.NameId, nsp source.Span) {
         near.OfferBuilder(c.text(e.Name))
     }
     if c.preludeDeclares(c.text(n)) {
-        c.err(nsp, msgs.NotInModulePrelude($"module " $m.Identity, c.tok(n), $c.text(n) "(...)"))
+        c.err(nsp, msgs.NotInModulePrelude($"module " + $m.Identity, c.tok(n), $c.text(n) + "(...)"))
         return
     }
-    c.err(nsp, msgs.NotInModule($"module " $m.Identity, c.tok(n), near.Hint()))
+    c.err(nsp, msgs.NotInModule($"module " + $m.Identity, c.tok(n), near.Hint()))
 }
 
 fn (c mut Checker&) importPath(x ast.Expr&) Bool {
@@ -14893,7 +14893,7 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
     }
     i := c.fieldIndex(t, n)
     if i < 0 {
-        c.needErr(nsp, t, $"a field " $c.tok(n), msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, true)))
+        c.needErr(nsp, t, $"a field " + $c.tok(n), msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, true)))
         return null
     }
     fs := c.P.T.Items(c.P.T.Fields(t))
@@ -15208,7 +15208,7 @@ fn (c mut Checker&) limit(sp source.Span, nsp source.Span, t types.TypeId, n sou
     k := limitIndex(name)
     if k < 0 or (k > 1 and not fl) {
         have := "Max, Min, Inf, NaN, Epsilon and SmallestNormal" if fl else "Max and Min"
-        c.err(nsp, msgs.NoLimit(c.ty(t), name, " - its limits are " $have))
+        c.err(nsp, msgs.NoLimit(c.ty(t), name, " - its limits are " + $have))
         return c.unknown(sp)
     }
     if not fl and c.P.T.Bits(u) > 64 {
@@ -15478,7 +15478,7 @@ fn (c mut Checker&) reflTextOf(x ast.Expr&) String ? Unrendered {
         }
         case ast.Expr.Paren(_, y) { return try c.reflTextOf(y) }
         case ast.Expr.Binary(_, op, a, b) {
-            if op == token.Tok.Plus { return $(try c.reflTextOf(a)) $(try c.reflTextOf(b)) }
+            if op == token.Tok.Plus { return $(try c.reflTextOf(a)) + $(try c.reflTextOf(b)) }
         }
         case ast.Expr.Unary(_, op, y) {
             if op == token.Tok.Dollar { return try c.reflRendered(y) }
@@ -15886,7 +15886,7 @@ fn (c mut Checker&) reflOf(sp source.Span, nsp source.Span, dt types.TypeId, arg
     }
     if not known {
         cn := c.P.T.CaseNames(t)
-        c.err(args[0].Span(), msgs.FieldOfEnum(c.ty(t), $c.text(cn[ds.Case]) "'s " $c.descName(ds)))
+        c.err(args[0].Span(), msgs.FieldOfEnum(c.ty(t), $c.text(cn[ds.Case]) + "'s " + $c.descName(ds)))
         return null
     }
     rec := c.P.T.Items(c.P.T.Cases(t))[ds.Case]
@@ -16137,7 +16137,7 @@ fn (c mut Checker&) genericCase(sp source.Span, nsp source.Span, d types.DeclId,
         }
         if v == types.UnknownT {
             tn := c.text(c.P.T.DeclName(d))
-            c.err(nsp, msgs.CaseTypeArgsNotInferable(tn, $tn "." $c.text(n)))
+            c.err(nsp, msgs.CaseTypeArgsNotInferable(tn, $tn + "." + $c.text(n)))
             return c.unknown(sp)
         }
         if c.isRef(v): b.Vals[i] = c.P.T.Ref(c.P.T.Referent(v), types.ReadOnly)
@@ -16302,7 +16302,7 @@ fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast
             set[i] = true
             for j in range i {
                 if set[j] and bytes[j] == bytes[i] {
-                    if report: c.err(at, msgs.RawRepeated(c.text(cd.Name), "\"" $String(bytes[i]) "\"", c.text(cases[j].Name)))
+                    if report: c.err(at, msgs.RawRepeated(c.text(cd.Name), "\"" + $String(bytes[i]) + "\"", c.text(cases[j].Name)))
                     break
                 }
             }
@@ -16369,7 +16369,7 @@ fn textBytes(t String&) Array<U8> {
 }
 
 fn litText(v litv) String {
-    if v.Wide { return "-" $v.W if v.Neg else $v.W }
+    if v.Wide { return "-" + $v.W if v.Neg else $v.W }
     return $U64(v.I) if v.Big else $v.I
 }
 
@@ -16735,7 +16735,7 @@ fn (c mut Checker&) litNumber(t types.TypeId) Bool { return t == c.i64() or t ==
 
 # E20: two literals of no common own type - the error names the type to write in front
 fn (c mut Checker&) mixedLit(x ast.Expr&, xt types.TypeId, y ast.Expr&, yt types.TypeId) types.TypeId {
-    c.err(y.Span(), msgs.LiteralMixed($c.src(x.Span()), c.ty(xt), $c.src(y.Span()), c.ty(yt), "Array<" $c.ty(xt) ">[...]"))
+    c.err(y.Span(), msgs.LiteralMixed($c.src(x.Span()), c.ty(xt), $c.src(y.Span()), c.ty(yt), "Array<" + $c.ty(xt) + ">[...]"))
     return types.UnknownT
 }
 
@@ -18180,7 +18180,7 @@ fn (c mut Checker&) errCompareItem(sp source.Span, op token.Tok, o ast.Expr&, it
     xs := try c.caughtItems(it) catch NotError { return c.lit(sp, types.BoolT, 0) }
     now := c.setItems(c.P.T.ErrValItems(t))
     if c.setMeet(now, xs).Len() == 0 {
-        c.err(it.Span(), msgs.CaughtNeverIs("'" $c.src(o.Span()) "'", c.setText(xs), c.setText(now)))
+        c.err(it.Span(), msgs.CaughtNeverIs("'" + $c.src(o.Span()) + "'", c.setText(xs), c.setText(now)))
         return c.lit(sp, types.BoolT, 0)
     }
     from := c.stmts.Len()
@@ -18206,7 +18206,7 @@ fn (c mut Checker&) errValues(sp source.Span, opSp source.Span, op token.Tok, x 
     }
     if not c.P.T.IsErrVal(ta) or not c.P.T.IsErrVal(tb) {
         ev := x if c.P.T.IsErrVal(ta) else y
-        c.err(opSp, msgs.CaughtCompareWhat("'" $c.src(ev.Span()) "'"))
+        c.err(opSp, msgs.CaughtCompareWhat("'" + $c.src(ev.Span()) + "'"))
         return c.lit(sp, types.BoolT, 0)
     }
     if ta != tb {
@@ -18650,7 +18650,7 @@ fn (c mut Checker&) caughtAlts(cs ast.Case&, what String&, now Vec<types.TypeId>
 
 fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
     fr := c.fr()
-    what := "'" $c.src(m.Subject.Span()) "'"
+    what := "'" + $c.src(m.Subject.Span()) + "'"
     now Vec<types.TypeId>
     nullable := true
     n := c.errLocalName(m.Subject)
@@ -18685,7 +18685,7 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
     if ok and not all {
         left := c.setLess(now, covered)
         txt := c.setText(left) if left.Len() > 0 else "null"
-        if left.Len() > 0 and not nullDone { txt = $txt " and null" }
+        if left.Len() > 0 and not nullDone { txt = $txt + " and null" }
         c.err(source.Span(sp.Start, sp.Start + 5), msgs.CaughtMatchMissing(txt))
         ok = false
     }
@@ -19306,7 +19306,7 @@ fn (c mut Checker&) declName(v ast.VarDecl&, i I64, declared types.TypeId, mark 
             t = typeOf(x)
         } else {
             moved = c.uniqueMoved(x!)
-            x = c.uniqueLand(x!, "'" $c.text(v.Names[i]) "'")
+            x = c.uniqueLand(x!, "'" + $c.text(v.Names[i]) + "'")
         }
     }
     # T13d: a generational value is held by reference - ":=" names a new instance
@@ -19777,7 +19777,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
             vt := typeOf(v)
             if vt == types.UnknownT { return }
             if c.P.T.Same(vt, t) {
-                c.err(osp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $operatorName(bop) "'"))
+                c.err(osp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" + $operatorName(bop) + "'"))
             } else {
                 m := c.under(t) if c.litLike(value) else c.P.Meet(c.under(t), c.under(vt))
                 c.err(osp, msgs.NumberDoesNotFlow(c.ty(m), c.ty(t), c.ty(t)))
@@ -19942,7 +19942,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         laneK = c.laneLeaf(c.laneArg(value, e))
         ve := c.laneNodes[laneK].Elem
         meth := ""
-        if not c.builtinElem(e) or not c.builtinElem(ve): meth = "'" $operatorName(compoundOp(op)) "'"
+        if not c.builtinElem(e) or not c.builtinElem(ve): meth = "'" + $operatorName(compoundOp(op)) + "'"
         else: meth = c.laneMethodCalled(laneK)
         if meth != "" {
             c.err(osp, msgs.WriteThroughAtOperator(c.ty(e if not c.builtinElem(e) else ve), meth))
@@ -20088,7 +20088,7 @@ fn (c mut Checker&) writeBackNoNumber(sp source.Span, op token.Tok, pt types.Typ
             return
         }
     }
-    c.err(osp, msgs.WriteThroughAtOperator(c.ty(pt), "'" $name "'"))
+    c.err(osp, msgs.WriteThroughAtOperator(c.ty(pt), "'" + $name + "'"))
 }
 
 # whether x reads a local's own value (not through a reference it holds)
@@ -21515,7 +21515,7 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
     e := n.Elem
     if e == types.UnknownT { return c.laneSay(sp, k) }
     if (name == "Some" or name == "Every") and e != types.BoolT {
-        c.err(nsp, msgs.LaneMaskBool("'" $name "()'", c.ty(e)))
+        c.err(nsp, msgs.LaneMaskBool("'" + $name + "()'", c.ty(e)))
         return c.unknown(sp)
     }
     from := c.stmts.Len()
@@ -21631,7 +21631,7 @@ fn (c mut Checker&) laneMethodCalled(k I64) String {
         if m != "" { return m }
         te := c.laneNodes[sub].Elem
         if te != types.BoolT and (not c.isNumber(te) or (c.isNamed(te) and not c.P.Extends(te))) {
-            return "'" $operatorName(n.Op) "'" if n.Kind == LaneBin else "operator method"
+            return "'" + $operatorName(n.Op) + "'" if n.Kind == LaneBin else "operator method"
         }
     }
     return ""
@@ -22243,8 +22243,8 @@ fn (c mut Checker&) emptyArray(t types.TypeId) String {
     if r == c.textType() { return "\"\"" }
     was := c.spellQualified
     c.spellQualified = true
-    e := "Array<" $c.ty(c.P.T.Elem(c.under(r))) ">(0)"
-    out := $c.ty(r) "(" $e ")" if c.isNamed(r) else e
+    e := "Array<" + $c.ty(c.P.T.Elem(c.under(r))) + ">(0)"
+    out := $c.ty(r) + "(" + $e + ")" if c.isNamed(r) else e
     c.spellQualified = was
     return out
 }
@@ -22262,13 +22262,13 @@ fn (c mut Checker&) qualifierFor(m I64) String {
             k := try imp.Spec.FindLast("/") catch default -1
             alias = imp.Spec[k + 1:]
         }
-        return $alias "."
+        return $alias + "."
     }
     # a module this one does not import (reached through another): by its file's name, as an import of it would alias it
     if m >= 0 and m < c.P.L.Mods.Len() and not c.P.L.Mods[m].Prelude {
         id := c.P.L.Mods[m].Identity
         k := try id.FindLast("/") catch default -1
-        return $id[k + 1:] "."
+        return $id[k + 1:] + "."
     }
     return ""
 }
@@ -22496,9 +22496,9 @@ fn (c mut Checker&) mutGlobalsValue(files Vec<I64>&) String {
     for g in c.P.L.MutGlobals { tys.Push(c.ty(types.TypeId(I32(g)))) }
     tys.Sort(fn(a String&, b String&) Bool { return a < b })
     b := StringBuilder()
-    b.Push($tys.Join(", ") "\n")
+    b.Push($tys.Join(", ") + "\n")
     for m in range mods.Len() {
-        if seen[m]: b.Push($mods[m].Identity "\n" $(mods[m].Src!.Text if mods[m].Src != null else "") "\n")
+        if seen[m]: b.Push($mods[m].Identity + "\n" + $(mods[m].Src!.Text if mods[m].Src != null else "") + "\n")
     }
     return b.ToString()
 }
@@ -22758,8 +22758,8 @@ fn (c mut Checker&) uniqueRef(x typed.Expr&, sp source.Span, written Bool = true
 # T13b: what a slot a store gives a value is, for its diagnostic
 fn (c mut Checker&) slotWhat(p typed.Lvalue&) String {
     return match p {
-        case typed.Lvalue.Local(_, _, id): "'" $c.text(c.cur().Local(id).Name) "'"
-        case typed.Lvalue.Global(_, _, _, n): "the global '" $c.text(n) "'"
+        case typed.Lvalue.Local(_, _, id): "'" + $c.text(c.cur().Local(id).Name) + "'"
+        case typed.Lvalue.Global(_, _, _, n): "the global '" + $c.text(n) + "'"
         case typed.Lvalue.Field(_, _, _, _): "a field"
         case typed.Lvalue.Elem(_, _, _): "an element"
         case typed.Lvalue.Payload(_, _, _): "a payload"
@@ -23821,7 +23821,7 @@ fn (c mut Checker&) settleBy(pt types.TypeId, given Array<ast.Expr&>&, fields Ar
 fn (c mut Checker&) wordText(et types.TypeId, w I64) String {
     d := c.P.T.DeclOf(et)
     if c.P.IsRaisedError(d): return c.ty(et)
-    return $c.ty(et) "." $c.text(c.P.ErrorWords(d)[w])
+    return $c.ty(et) + "." + $c.text(c.P.ErrorWords(d)[w])
 }
 
 # a word's payload fields as source writes their names: "line, col"
@@ -24350,7 +24350,7 @@ fn (c mut Checker&) sayUncovered(m ast.Match&, st types.TypeId, rows Vec<Array<a
         # S13h: the first length no case matches, past the longest written "or more"
         n := try c.seqUncovered(rows) catch Covered default -1
         if n >= 0 {
-            what := $n " element" $("" if n == 1 else "s") $(" or more" if n > c.seqLongest(rows) else "")
+            what := $n + " element" + $("" if n == 1 else "s") + $(" or more" if n > c.seqLongest(rows) else "")
             c.err(source.Span(m.Sp.Start, m.Sp.Start + 5), msgs.MatchLengthUncovered(c.ty(st), what))
             return
         }
@@ -25751,7 +25751,7 @@ fn (c mut Checker&) narrowedWrite(sp source.Span, fl I64) {
     nr := c.fr().narrows[c.narrowOwner(fl)]
     cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
     name := c.text(cd.Name) if cd != null else ""
-    kase := $(c.ty(nr.Enum)) "." $name
+    kase := $(c.ty(nr.Enum)) + "." + $name
     c.err(sp, msgs.NarrowedWrite(c.text(c.cur().Locals[nr.Local].Name), kase))
 }
 
@@ -26289,7 +26289,7 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
     if c.P.FnIsExtern(f) {
         # (whether C may call the program back, decided over the whole program, says what a C call may do: settled as a
         # body's facts are)
-        xv := try c.factPresets.Get($"extern " $f ":" $name) catch default c.Effects().OfExtern(f).Holds(k)
+        xv := try c.factPresets.Get($"extern " + $f + ":" + $name) catch default c.Effects().OfExtern(f).Holds(k)
         xr := factRead(-1, f, name, xv, c.fr().File, sp, $c.src(sp))
         c.factReads.Push(xr)
         return c.lit(sp, types.BoolT, 1 if c.readFact(xr) else 0)
@@ -26300,7 +26300,7 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
         return c.unknown(sp)
     }
     c.fnBody(inst)    # checked in this attempt, so its facts are found once it ends
-    key := $inst ":" $name
+    key := $inst + ":" + $name
     v := try c.factPresets.Get(key) catch default effects.Conservative(k)
     r := factRead(inst, -1, name, v, c.fr().File, sp, $c.src(sp))
     c.factReads.Push(r)
@@ -26311,8 +26311,8 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
 # the reading module's record holds the value it read (facts.olang). Named by where it is read, by the module's
 # identity, and by the function read, which an instance of a generic body may name otherwise
 fn (c mut Checker&) readFact(r factRead&) Bool {
-    of := c.P.InstanceName(r.Inst) if r.Fn < 0 else $"extern " $c.text(c.P.FnDecl(r.Fn).Name)
-    name := $"G42 " $c.fileIdentity(r.File) "@" $r.Sp.Start " " $r.Fact " " $of
+    of := c.P.InstanceName(r.Inst) if r.Fn < 0 else $"extern " + $c.text(c.P.FnDecl(r.Fn).Name)
+    name := $"G42 " + $c.fileIdentity(r.File) + "@" + $r.Sp.Start + " " + $r.Fact + " " + $of
     c.P.Facts.Decide(name, $r.Value, true)
     return (try c.P.Facts.Read(r.File, name) catch default "") == "true"
 }
@@ -26321,7 +26321,7 @@ fn (c mut Checker&) readFact(r factRead&) Bool {
 # facts, read through the table as readFact's are (an importer's code never carries it)
 fn (c mut Checker&) inPlaceCopied(key String&, sp source.Span) Bool {
     file := c.fr().File
-    name := $"E31b " $c.fileIdentity(file) "@" $sp.Start
+    name := $"E31b " + $c.fileIdentity(file) + "@" + $sp.Start
     c.P.Facts.Decide(name, "copy" if c.inPlaceRefused.Has(key) else "place", false)
     return (try c.P.Facts.Read(file, name) catch default "") == "copy"
 }
@@ -26437,7 +26437,7 @@ fn (c mut Checker&) settleFacts() Bool {
     for r in c.factReads {
         found := c.factFound(r)
         if found == r.Value { continue }
-        c.factPresets.Put($r.Inst ":" $r.Fact if r.Fn < 0 else $"extern " $r.Fn ":" $r.Fact, found)
+        c.factPresets.Put($r.Inst + ":" + $r.Fact if r.Fn < 0 else $"extern " + $r.Fn + ":" + $r.Fact, found)
         moved = true
     }
     return moved
@@ -26682,7 +26682,7 @@ fn (c mut Checker&) checkThunk(id I64, ti I64, slot I64) {
     } else if sl.Default >= 0 {
         # what is wrong with the default for this type said with where a call through an "any" first reached it
         at := try c.slotsCalled.Get(c.P.SlotKey(tab.Trait, k)) catch default diag.Where.Nowhere
-        if at != diag.Where.Nowhere { c.P.L.Diags.PushContext(at, "'" $name "' is called through an 'any " $c.ty(tab.Trait) "&' here, so " $c.ty(t) " needs it") }
+        if at != diag.Where.Nowhere { c.P.L.Diags.PushContext(at, "'" + $name + "' is called through an 'any " + $c.ty(tab.Trait) + "&' here, so " + $c.ty(t) + " needs it") }
         x = c.invoke(sp, sp, sl.Default, rx, Array<ast.Expr&>(0), pre)
         if at != diag.Where.Nowhere { c.P.L.Diags.PopContext() }
     } else if name == "Hash" {
@@ -26861,12 +26861,12 @@ fn (c mut Checker&) defaultCopiesRecv(f I64) Bool {
 
 # a program of one file, main.olang, loaded over the repository's std with the host's build constants
 fn testLoad(dir String&, text String&) load.Loader {
-    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
+    try os.WriteFile($dir + "/main.olang", text) catch os.Error { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+    l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
                      source.Names(), diag.Diagnostics(false))
-    l.Load($dir "/main.olang")
+    l.Load($dir + "/main.olang")
     return l
 }
 
@@ -26897,8 +26897,8 @@ fn rootGaps(c Checker&, file I64) String {
 test "a small program checks clean, and its main is checked" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("fn add(a I32, b I32) I32 { return a + b }\n"
-                       "fn main() ? {\n    x I32 = 3\n    y := add(x, 4)\n    for i in range 10 { y += I32(i) }\n"
+    l := testLoad(dir, ("fn add(a I32, b I32) I32 { return a + b }\n" +
+                       "fn main() ? {\n    x I32 = 3\n    y := add(x, 4)\n    for i in range 10 { y += I32(i) }\n" +
                        "    if y > 3 { y = y - 1 } else { y = 0 }\n    z I64 = y\n    assert z > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -26914,7 +26914,7 @@ test "a small program checks clean, and its main is checked" {
 test "type errors: E12, T6b, D10a, S3" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("fn f(x Bool) I32 {\n    if x { return 1 }\n}\n"
+    l := testLoad(dir, ("fn f(x Bool) I32 {\n    if x { return 1 }\n}\n" +
                        "fn main() ? {\n    a I32 = true\n    b I64 = 3\n    c I32 = b\n    a + c\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -26928,10 +26928,10 @@ test "type errors: E12, T6b, D10a, S3" {
 test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9a, S9c, S9d, S9f, E27)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n"
-                       "fn main() ? {\n    l := Vec<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n"
-                       "    for k, x in l.Iter() { t += x + k }\n    for x in Ix() { t += x }\n"
-                       "    a := Array<I64>[x * 2 for x in range 4 if x > 1]\n    b := Array<I64>[x for x in l]\n"
+    l := testLoad(dir, ("type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n" +
+                       "fn main() ? {\n    l := Vec<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n" +
+                       "    for k, x in l.Iter() { t += x + k }\n    for x in Ix() { t += x }\n" +
+                       "    a := Array<I64>[x * 2 for x in range 4 if x > 1]\n    b := Array<I64>[x for x in l]\n" +
                        "    for x in a { if x > 3 { break }\n        t += x }\n    assert t + b.Len() > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -26946,12 +26946,12 @@ test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9
 test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16c, G9a, G9c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("fn apply(f fn&(x I64) I64, v I64) I64 { return f(v) }\n"
-                       "fn main() ? {\n    k I64 = 3\n    a := apply(fn(x) { return x + k }, 4)\n"
-                       "    g := fn(x I64) { return x * 2 }\n    b := g(5)\n"
-                       "    xs := Array<I64>[1, 2, 3]\n    n := xs.Count(fn(x) { return x > 1 })\n"
-                       "    t := xs.Fold(0, fn(acc I32, x I64) I32 { return acc + I32(x) })\n"
-                       "    m := xs.Iter().Count(fn(x) { return x > k })\n"
+    l := testLoad(dir, ("fn apply(f fn&(x I64) I64, v I64) I64 { return f(v) }\n" +
+                       "fn main() ? {\n    k I64 = 3\n    a := apply(fn(x) { return x + k }, 4)\n" +
+                       "    g := fn(x I64) { return x * 2 }\n    b := g(5)\n" +
+                       "    xs := Array<I64>[1, 2, 3]\n    n := xs.Count(fn(x) { return x > 1 })\n" +
+                       "    t := xs.Fold(0, fn(acc I32, x I64) I32 { return acc + I32(x) })\n" +
+                       "    m := xs.Iter().Count(fn(x) { return x > k })\n" +
                        "    assert a + b + n + I64(t) + m > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -26966,8 +26966,8 @@ test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16
 test "a literal reaching a constrained variable takes the type the constraint names (G9a, G19, T35c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("fn sq<T Float>(x T) T { return x }\nfn half<T Float>(x T, y T) T { return x }\n"
-                       "fn main() ? {\n    a F64 = sq(4)\n    b F64 = sq(2 + 2)\n    c F64 = half(1, 3)\n"
+    l := testLoad(dir, ("fn sq<T Float>(x T) T { return x }\nfn half<T Float>(x T, y T) T { return x }\n" +
+                       "fn main() ? {\n    a F64 = sq(4)\n    b F64 = sq(2 + 2)\n    c F64 = half(1, 3)\n" +
                        "    d F32 = sq(F32(1))\n    assert a + b + c + F64(d) > 0.0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -26979,7 +26979,7 @@ test "a literal reaching a constrained variable takes the type the constraint na
     assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
     dir2 := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir2) catch os.Error { } }
-    l2 := testLoad(dir2, ("fn sq<T Float>(x T) T { return x }\nfn whole<T Integer>(x T) T { return x }\n"
+    l2 := testLoad(dir2, ("fn sq<T Float>(x T) T { return x }\nfn whole<T Integer>(x T) T { return x }\n" +
                          "fn main() ? {\n    n I64 = 4\n    a := sq(n)\n    b := whole(2.5)\n}\n"))
     r2 := names.Resolver(l2)
     r2.Resolve()
@@ -26993,7 +26993,7 @@ test "a literal reaching a constrained variable takes the type the constraint na
 test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("fn main() ? {\n    k I64 = 3\n    g := fn(x) { return x }\n"
+    l := testLoad(dir, ("fn main() ? {\n    k I64 = 3\n    g := fn(x) { return x }\n" +
                        "    h := fn() { k = k + 4 }\n    h()\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27007,9 +27007,9 @@ test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
 test "x[i] through At and SetAt: reads, stores, compound stores and increments written back (E31, E31b)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type P struct(x I64, y I64) { x\n    y }\n"
-                       "fn main() ? {\n    l := Vec<P>()\n    l.Push(P(1, 2))\n    l[0].x = 5\n    l[0].y += 3\n"
-                       "    n := Vec<I64>()\n    n.Push(4)\n    n[0] += 2\n    n[0]++\n    n[0] = 9\n"
+    l := testLoad(dir, ("type P struct(x I64, y I64) { x\n    y }\n" +
+                       "fn main() ? {\n    l := Vec<P>()\n    l.Push(P(1, 2))\n    l[0].x = 5\n    l[0].y += 3\n" +
+                       "    n := Vec<I64>()\n    n.Push(4)\n    n[0] += 2\n    n[0]++\n    n[0] = 9\n" +
                        "    assert l[0].x + l[0].y + n[0] > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27024,10 +27024,10 @@ test "x[i] through At and SetAt: reads, stores, compound stores and increments w
 test "join and spawn: targets, failing tasks, clauses on the task, try join (P1, P1a, P1g, P4, P4a-P4c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type E error {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
-                       "fn work(n I64) { }\n"
-                       "fn main() ? {\n    out := Array<I64>(3)\n    join {\n        for i in range 3 { spawn out[i] = try sq(i) catch E.A default 0 catch E.B default 1 }\n    }\n"
-                       "    x I64 = 0\n    try join {\n        spawn x = try sq(4)\n        spawn work(2)\n        spawn fn() { work(3) }\n    } catch E { return }\n"
+    l := testLoad(dir, ("type E error {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n" +
+                       "fn work(n I64) { }\n" +
+                       "fn main() ? {\n    out := Array<I64>(3)\n    join {\n        for i in range 3 { spawn out[i] = try sq(i) catch E.A default 0 catch E.B default 1 }\n    }\n" +
+                       "    x I64 = 0\n    try join {\n        spawn x = try sq(4)\n        spawn work(2)\n        spawn fn() { work(3) }\n    } catch E { return }\n" +
                        "    assert out[2] + x > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27042,7 +27042,7 @@ test "join and spawn: targets, failing tasks, clauses on the task, try join (P1,
 test "join and spawn errors (P1, P1a, P4, P4c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type E error {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n"
+    l := testLoad(dir, ("type E error {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n" +
                        "fn main() ? {\n    spawn g()\n    join { g() }\n    join {\n        spawn f()\n    }\n    join {\n        spawn try f()\n    }\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27056,13 +27056,13 @@ test "join and spawn errors (P1, P1a, P4, P4c)" {
 test "errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (R1a, R1c, E26b, D8e, E35)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type E error {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
-                       "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n"
-                       "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n"
-                       "fn half(a I32, b I32) I32 ? E.B { return try I64(a).Narrow<I32>() catch NumberError default 0 }\n"
-                       "fn never() ? { }\n"
-                       "fn pick(n I64) I64 {\n    if n > 0 { return n }\n    die()\n}\n"
-                       "fn main() {\n    never()\n    x := try even(4) catch E.A default false\n"
+    l := testLoad(dir, ("type E error {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n" +
+                       "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n" +
+                       "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n" +
+                       "fn half(a I32, b I32) I32 ? E.B { return try I64(a).Narrow<I32>() catch NumberError default 0 }\n" +
+                       "fn never() ? { }\n" +
+                       "fn pick(n I64) I64 {\n    if n > 0 { return n }\n    die()\n}\n" +
+                       "fn main() {\n    never()\n    x := try even(4) catch E.A default false\n" +
                        "    y := odd(3)!\n    z := try half(1, 0) catch E.B default die()\n    assert x or y or z > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27077,10 +27077,10 @@ test "errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (
 test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type E error {\n    A\n    B\n}\ntype F error {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
-                       "fn g() I32 ? E.A { error E.B }\nfn h() I32 { return try f() catch E.A default 1 }\n"
-                       "fn k() ? E { try f() catch F { } }\nfn m() ? E {\n    try f() catch { } catch E { }\n}\n"
-                       "fn n() I32 { return try 1 + 2 catch default 0 }\nfn q() I32 { return 3! }\n"
+    l := testLoad(dir, ("type E error {\n    A\n    B\n}\ntype F error {\n    C\n}\nfn f() I32 ? E { error E.A }\n" +
+                       "fn g() I32 ? E.A { error E.B }\nfn h() I32 { return try f() catch E.A default 1 }\n" +
+                       "fn k() ? E { try f() catch F { } }\nfn m() ? E {\n    try f() catch { } catch E { }\n}\n" +
+                       "fn n() I32 { return try 1 + 2 catch default 0 }\nfn q() I32 { return 3! }\n" +
                        "fn s() noreturn { }\nfn main() { }\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27094,8 +27094,8 @@ test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11,
 test "writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn P.mk() P { return P(1) }\n"
-                       "fn f(p P&, q mut P&) {\n    q.x = 2\n    p.x = 3\n}\n"
+    l := testLoad(dir, ("type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn P.mk() P { return P(1) }\n" +
+                       "fn f(p P&, q mut P&) {\n    q.x = 2\n    p.x = 3\n}\n" +
                        "fn main() ? {\n    M = 5\n    G = 6\n    P.mk().x = 4\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27109,7 +27109,7 @@ test "writes: an immutable global, a read-only reference, a value a call gave ba
 test "a destructor reads its fields bare (C9, C10)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("Closed mut I64 = 0\ntype R unique struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n    if bad { Closed = 0 }\n}\n"
+    l := testLoad(dir, ("Closed mut I64 = 0\ntype R unique struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n    if bad { Closed = 0 }\n}\n" +
                        "fn main() ? {\n    r := R(3)\n    assert r.n == 3\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27128,7 +27128,7 @@ test "a destructor reads its fields bare (C9, C10)" {
 test "a top-level condition is checked with no body around it (B9c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("fn f() I64 { return 1 }\nG I64 = 2\nif f() == 1 and G > 1 { fn g() I64 { return 1 } }\n"
+    l := testLoad(dir, ("fn f() I64 { return 1 }\nG I64 = 2\nif f() == 1 and G > 1 { fn g() I64 { return 1 } }\n" +
                        "fn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -27239,7 +27239,7 @@ fn (c mut Checker&) handleLine(b typed.Body&, l typed.Local&, mi I64, kind Strin
     ty := c.ty(l.Ty)
     c.spellQualified = was
     c.spellMod = -1
-    try io.PutErrLine("handles: " $c.P.L.Diags.Locate(b.File, I64(l.Sp.Start)) ": " $kind " " $c.text(l.Name) "|" $ty "|" $root) catch io.Error { }
+    try io.PutErrLine("handles: " + $c.P.L.Diags.Locate(b.File, I64(l.Sp.Start)) + ": " + $kind + " " + $c.text(l.Name) + "|" + $ty + "|" + $root) catch io.Error { }
 }
 
 # the local a place's storage belongs to - through fields, payloads, the elements of an array held by value and a

@@ -20,11 +20,11 @@ type Count struct() { n I64 = 0 }
 # the module (its file std/NAME.olang), the old error type and its new name. Each old name is written in two pieces so
 # that the tool run over itself changes nothing
 Modules Array<String&> = Array<String&>["io", "os", "json", "csv", "stats", "rand", "http", "chan", "ffi", "filepath"]
-OldNames Array<String&> = Array<String&>["Io" "Error", "Os" "Error", "Json" "Error", "Csv" "Error", "Stats" "Error", "Rand" "Error", "Http" "Error", "Chan" "Error", "Ffi" "Error", "Path" "Error"]
+OldNames Array<String&> = Array<String&>["Io" + "Error", "Os" + "Error", "Json" + "Error", "Csv" + "Error", "Stats" + "Error", "Rand" + "Error", "Http" + "Error", "Chan" + "Error", "Ffi" + "Error", "Path" + "Error"]
 
 fn isDeclaringFile(path String&, module String&) Bool {
-    file := "std/" $module ".olang"
-    return path == file or path.EndsWith("/" $file)
+    file := "std/" + $module + ".olang"
+    return path == file or path.EndsWith("/" + $file)
 }
 
 # every whole word old in src that is written after a "." - or anywhere, when bare is set - replaced by to
@@ -98,7 +98,7 @@ fn main() ? {
     for path in files {
         if not wanted(path) { continue }
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("stutter_rename: cannot read " $path)
+            srcmask.SayErr("stutter_rename: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -108,32 +108,32 @@ fn main() ? {
         if verbose { srcmask.Say(path) }
         if not check {
             try os.WriteFile(path, out) catch {
-                srcmask.SayErr("stutter_rename: cannot write " $path)
+                srcmask.SayErr("stutter_rename: cannot write " + $path)
                 os.Exit(1)
             }
         }
     }
     verb := "would change " if check else "changed "
-    srcmask.Say($verb $changed " files: " $total.n " names")
+    srcmask.Say($verb + $changed + " files: " + $total.n + " names")
     if check and changed > 0 { os.Exit(1) }
 }
 
 test "a qualified name is renamed everywhere; the bare one only in its module's own file" {
     n := Count()
     old := OldNames[0]
-    assert rename("app.olang", "fn f() ? io." $old " { }\n# fails with io." $old "\n", n) == "fn f() ? io.Error { }\n# fails with io.Error\n"
-    assert rename("app.olang", "error " $old " { A }\n", n) == "error " $old " { A }\n"
-    assert rename("std/io.olang", "error " $old " { A }\nfn f() ? " $old " { }\n", n) == "error Error { A }\nfn f() ? Error { }\n"
-    assert rename("/x/std/io.olang", "e " $old, n) == "e Error"
-    assert rename("std/os.olang", "e " $old, n) == "e " $old
+    assert rename("app.olang", "fn f() ? io." + $old + " { }\n# fails with io." + $old + "\n", n) == "fn f() ? io.Error { }\n# fails with io.Error\n"
+    assert rename("app.olang", "error " + $old + " { A }\n", n) == "error " + $old + " { A }\n"
+    assert rename("std/io.olang", "error " + $old + " { A }\nfn f() ? " + $old + " { }\n", n) == "error Error { A }\nfn f() ? Error { }\n"
+    assert rename("/x/std/io.olang", "e " + $old, n) == "e Error"
+    assert rename("std/os.olang", "e " + $old, n) == "e " + $old
     assert n.n == 5
 }
 
 test "a longer word is left, every module is covered, and a second run changes nothing" {
     n := Count()
-    src := "x My" $OldNames[1] " := 1\nh := json." $OldNames[2] " + ffi." $OldNames[8] " + chan." $OldNames[7] "s\n"
+    src := "x My" + $OldNames[1] + " := 1\nh := json." + $OldNames[2] + " + ffi." + $OldNames[8] + " + chan." + $OldNames[7] + "s\n"
     out := rename("a.olang", src, n)
-    assert out == "x My" $OldNames[1] " := 1\nh := json.Error + ffi.Error + chan." $OldNames[7] "s\n"
+    assert out == "x My" + $OldNames[1] + " := 1\nh := json.Error + ffi.Error + chan." + $OldNames[7] + "s\n"
     assert rename("a.olang", out, n) == out
     assert Modules.Len() == OldNames.Len()
 }

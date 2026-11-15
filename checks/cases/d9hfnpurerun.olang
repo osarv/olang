@@ -5,7 +5,7 @@ fn twice(f fn&(x I64) I64 pure, x I64) I64 { return f(f(x)) }
 fn churn() I64 {
     t I64 = 0
     for i in range 200 {
-        x := "churn " $i " " $(i * 3)
+        x := "churn " + $i + " " + $(i * 3)
         t += x.Len()
     }
     return t

@@ -78,7 +78,7 @@ fn (d Diag) Rule() String& {
 fn (d Diag) Message() String {
     b := d.Byte
     return match d.Kind {
-        case LexError.UnknownChar: "unexpected character '" $b "'"
+        case LexError.UnknownChar: "unexpected character '" + $b + "'"
         case LexError.NonAscii: "non-ASCII byte - olang source is ASCII"
         case LexError.NulByte: "NUL byte in the source - is this a text file?"
         case LexError.CarriageReturn: "carriage return - save the file with LF line endings"
@@ -91,7 +91,7 @@ fn (d Diag) Message() String {
         case LexError.CharNewline: "character literal not closed on its line"
         case LexError.EmptyChar: "empty character literal"
         case LexError.LongChar: "character literal holds more than one character - text is written in \"\""
-        case LexError.BadEscape: "unknown escape '\\" $b "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\" \\xHH \\u{H}"
+        case LexError.BadEscape: "unknown escape '\\" + $b + "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\" \\xHH \\u{H}"
         case LexError.BadHexEscape: "'\\x' needs two hexadecimal digits, as \\x41"
         case LexError.BadUnicodeEscape: "'\\u' needs one to six hexadecimal digits in braces, as \\u{1F600}"
         case LexError.BadCodePoint: "a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)"
@@ -102,8 +102,8 @@ fn (d Diag) Message() String {
         case LexError.RawIndent: "a line of raw text begins with the indentation of its closing '\"\"\"'"
         case LexError.HexNoDigits: "'0x' needs hexadecimal digits"
         case LexError.BinNoDigits: "'0b' needs binary digits"
-        case LexError.HexDigit: "'" $b "' is not a hexadecimal digit"
-        case LexError.BinDigit: "'" $b "' is not a binary digit"
+        case LexError.HexDigit: "'" + $b + "' is not a hexadecimal digit"
+        case LexError.BinDigit: "'" + $b + "' is not a binary digit"
         case LexError.DigitSeparator: "'_' in a number must stand between two digits"
         case LexError.PointNoDigit: "a decimal point needs a digit after it"
         case LexError.TwoPoints: "a number has at most one decimal point"
@@ -921,7 +921,7 @@ test "literals are checked as they are read" {
                      LexError.PointNoDigit, LexError.TwoPoints, LexError.DigitSeparator, LexError.UnclosedComment]
     for k, c in cases {
         ts := Tokens.Scan(c)
-        assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " $k ": " $c
+        assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " + $k + ": " + $c
     }
     assert Tokens.Scan("1.5.Hash() 1e_x").Diags.Len() == 0
 }
@@ -944,9 +944,9 @@ test "escapes by number and raw text (L15, L14a)" {
                      LexError.RawAfterOpen, LexError.RawIndent, LexError.RawCloseNotAlone, LexError.RawUnclosed]
     for k, c in cases {
         ts := Tokens.Scan(c)
-        assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " $k ": " $c
+        assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " + $k + ": " + $c
     }
-    assert String(LiteralBytes("\"\\x41\\u{E9}\\n\"")) == "A" $Char(0xC3) $Char(0xA9) "\n"
+    assert String(LiteralBytes("\"\\x41\\u{E9}\\n\"")) == "A" + $Char(0xC3) + $Char(0xA9) + "\n"
     assert String(LiteralBytes("\"\"\"a\\n\"\"\"")) == "a\\n" and LiteralBytes("'\\x7F'")[0] == 127
     assert String(LiteralBytes("\"\"\"\n    x\n\n      y\n    \"\"\"")) == "x\n\n  y"
     t := "s := \"\"\"\n  a\n  \"\"\"\nn := 1"

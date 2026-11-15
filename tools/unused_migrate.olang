@@ -44,7 +44,7 @@ fn bareAt(text String&, at I64) String {
     if at >= text.Len() or not srcmask.IsIdStart(text[at]) { return "" }
     e := at
     for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
-    return $text[:at] "_" $text[e:]
+    return $text[:at] + "_" + $text[e:]
 }
 
 # whether the code of a line - comments aside - opens and closes its brackets alike, and ends no block it did not open
@@ -151,7 +151,7 @@ fn DeclEdit.declEdit(text String&, at I64) DeclEdit {
         # a try statement takes no default (R11): a declaration whose value has one is left for a person
         if text[k:].StartsWith("try ") {
             if codeOf(text[k:]).Contains(" default ") { return DeclEdit.Leave }
-            return DeclEdit.Keep($text[:at] $text[k:])
+            return DeclEdit.Keep($text[:at] + $text[k:])
         }
     }
     code := codeOf(text)
@@ -166,7 +166,7 @@ fn DeclEdit.declEdit(text String&, at I64) DeclEdit {
         }
     }
     if not value.Contains("(") and not value.Contains("!") and not value.Contains("{") { return DeclEdit.Drop }
-    if oneCall(value) { return DeclEdit.Keep($text[:at] $value) }
+    if oneCall(value) { return DeclEdit.Keep($text[:at] + $value) }
     return DeclEdit.Leave
 }
 
@@ -210,9 +210,9 @@ fn main() ? {
     defer try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp "/w" $k
+        work[k] = $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
-            srcmask.SayErr("unused_migrate: cannot make " $work[k])
+            srcmask.SayErr("unused_migrate: cannot make " + $work[k])
             os.Exit(1)
         }
     }
@@ -236,12 +236,12 @@ fn main() ? {
             }
         }
         made := apply(requests, left)
-        srcmask.Say("round " $round ": " $made " edits")
+        srcmask.Say("round " + $round + ": " + $made + " edits")
         total += made
         if made == 0 { break }
     }
-    srcmask.Say("total: " $total " edits")
-    for l in left { srcmask.Say("by hand: " $l) }
+    srcmask.Say("total: " + $total + " edits")
+    for l in left { srcmask.Say("by hand: " + $l) }
 }
 
 # whether the block a declaration on line idx (its name at column index at) stands in names it again after it - an
@@ -315,7 +315,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
         seen Vec<String&>
         for r in mine {
             # a module imported by several files compiled is reported once by each
-            key := $r.Line ":" $r.Col
+            key := $r.Line + ":" + $r.Col
             if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len() { continue }
             seen.Push($key)
             idx := r.Line - 1
@@ -377,7 +377,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
             b.Push(lines[k])
             first = false
         }
-        try os.WriteFile(path, b.ToString()) catch { srcmask.SayErr("unused_migrate: cannot write " $path) }
+        try os.WriteFile(path, b.ToString()) catch { srcmask.SayErr("unused_migrate: cannot write " + $path) }
     }
     return made
 }

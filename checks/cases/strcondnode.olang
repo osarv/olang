@@ -13,7 +13,7 @@ fn churn() I64 {
     for i in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t
@@ -29,7 +29,7 @@ fn (b Bag&) Str() String {
         case 0: b.head
         case _: Node(2, null)
     }
-    return $x.v " " $y.v
+    return $x.v + " " + $y.v
 }
 fn main() ? {
     b := Bag(Node(4, null), "bag", 1)

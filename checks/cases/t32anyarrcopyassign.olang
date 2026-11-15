@@ -13,7 +13,7 @@ fn main() {
     h := aHolder()
     for i in range 3 {
         a := Array<String&>(1, "x")
-        a[0] = "e" $i
+        a[0] = "e" + $i
         h.s = a
     }
 }

@@ -51,9 +51,9 @@ fn sample() String {
     empty String?& = ""
     hs Vec<Handler&>
     hs.Push(h)
-    return ($press(a, 1) " " $press(b, 1) " " $fire(h, Event(3)) " " $h.Twice(Event(4)) " " $f(Event(5)) " "
-            $plain(Event(6)) " " $(longest(Array<String&>["a", "ccc", "bb"])!) " " $(longest(Array<String&>[]) == null) " "
-            $lenOr(none, -1) " " $lenOr(empty, -1) " " $(none == empty) " " $none " " $empty "|" " " $hs.Len() " "
+    return ($press(a, 1) + " " + $press(b, 1) + " " + $fire(h, Event(3)) + " " + $h.Twice(Event(4)) + " " + $f(Event(5)) + " " +
+            $plain(Event(6)) + " " + $(longest(Array<String&>["a", "ccc", "bb"])!) + " " + $(longest(Array<String&>[]) == null) + " " +
+            $lenOr(none, -1) + " " + $lenOr(empty, -1) + " " + $(none == empty) + " " + $none + " " + $empty + "|" + " " + $hs.Len() + " " +
             $(b.on!(Event(2))))
 }
 
@@ -72,7 +72,7 @@ fn zeros() String {
     z String?&
     n := Named("a")
     blank Named
-    return $z " " $n.middle " " $blank.middle " " $Array<String?&>(2) " " $(Array<Array<I64>?&>(3)[2] == null) " " $ZeroBaked
+    return $z + " " + $n.middle + " " + $blank.middle + " " + $Array<String?&>(2) + " " + $(Array<Array<I64>?&>(3)[2] == null) + " " + $ZeroBaked
 }
 
 ZerosBaked String = zeros()
@@ -92,7 +92,7 @@ fn nested() String {
     v.Push("x")
     m Maybe
     w Wrap
-    return $Held(z, null) " " $v " " $Array<String?&>[z, "y"] " " $Maybe.Some(z, 1) " " $m " " $w
+    return $Held(z, null) + " " + $v + " " + $Array<String?&>[z, "y"] + " " + $Maybe.Some(z, 1) + " " + $m + " " + $w
 }
 
 NestedBaked String = nested()

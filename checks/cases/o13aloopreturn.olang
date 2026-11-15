@@ -9,14 +9,14 @@ fn H.mk(n I64, s String&) H {
     e := H(s)
     for i in range 3 {
         if i == 2 { return e }
-        e = H($n $n)
+        e = H($n + $n)
     }
     return H(s)
 }
 fn churn() I64 {
     t I64 = 0
     for i in range 300 {
-        s := $i $i $i "-" $(i * 7)
+        s := $i + $i + $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t

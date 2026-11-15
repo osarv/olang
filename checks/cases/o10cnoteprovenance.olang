@@ -16,7 +16,7 @@ fn (s mut Stats&) add(e Entry) { s.names.Put(e.service, 1) }
 fn run(lines Array<String&>&) I64 {
     s := Stats()
     for l in lines {
-        line := $l "!"
+        line := $l + "!"
         e := Entry.parse(line)
         s.add(e)
     }

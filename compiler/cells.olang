@@ -84,9 +84,9 @@ fn Build(cfg mut build.Config&, root String&, text String&, shadow Array<String&
     for f in cfg.ModeFlags(): args.Push(f)
     # (what it shows: its start, its entry and the storage it holds for the cells after it - nothing else, so that a
     # symbol its objects leave undefined, a weak one above all, is never found in another cell's)
-    vs := $so ".map"
+    vs := $so + ".map"
     try os.WriteFile(vs, "{\n  global: olang_cell_init; olang_cell_run; *.cell[0-9]*;\n  local: *;\n};\n") catch os.Error { }
-    for f in Array<String&>["-shared", "-Wl,-Bsymbolic", $"-Wl,--version-script=" $vs, "-o", so]: args.Push(f)
+    for f in Array<String&>["-shared", "-Wl,-Bsymbolic", $"-Wl,--version-script=" + $vs, "-o", so]: args.Push(f)
     for o in objs: args.Push(o)
     for x in prog.Links: args.Push(x)
     for f in Array<String&>["-lm", "-lpthread", "-ldl"]: args.Push(f)
@@ -102,7 +102,7 @@ fn link(args Vec<String&>&, out String&, d mut diag.Diagnostics&) ? build.Failed
         error build.Failed.Reported
     }
     if r.Status == 0: return
-    try io.PutErr($r.Stdout $r.Stderr) catch io.Error { }
+    try io.PutErr($r.Stdout + $r.Stderr) catch io.Error { }
     d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(out))
     error build.Failed.Reported
 }
@@ -124,7 +124,7 @@ fn rewrite(ir String&, plan Plan&) String {
         if line.StartsWith("@") {
             name := symbolAt(line, 1)
             if name in plan.Extern {
-                b.Push($"@" $plan.Rename.Get(name)! " = external global i8\n")
+                b.Push($"@" + $plan.Rename.Get(name)! + " = external global i8\n")
                 continue
             }
         }
@@ -214,7 +214,7 @@ fn (w mut Worker&) Start(cfg mut build.Config&) String {
     c build.Config = cfg
     c.Cell = false
     exe := try workerExe(c, d) catch build.Failed {
-        return $"its worker cannot be built: " $d.Render().Trim()
+        return $"its worker cannot be built: " + $d.Render().Trim()
     }
     session.IgnoreBrokenPipes()
     cin, cinW := session.Pipe()
@@ -253,21 +253,21 @@ fn (w mut Worker&) Start(cfg mut build.Config&) String {
 fn workerExe(c mut build.Config&, d mut diag.Diagnostics&) String ? build.Failed {
     try os.MkDirAll(c.Dir) catch os.Error { error build.Failed.Reported }
     prog := build.Program()
-    root := $c.Dir "/olang-cellworker.olang"
+    root := $c.Dir + "/olang-cellworker.olang"
     none := Array<String&>(0)
     lines := Array<I64>(0)
     cc build.Config = c
     try Builder!(root, WorkerSource, none, none, lines, cc, prog, d)
     if d.Errors() > 0: error build.Failed.Reported
-    prog.Units.Push(build.Unit("olang_cellhelp", build.UnitKind.Module, $"target triple = \"" $c.Target.Triple "\"\n" $HelperIr))
+    prog.Units.Push(build.Unit("olang_cellhelp", build.UnitKind.Module, $"target triple = \"" + $c.Target.Triple + "\"\n" + $HelperIr))
     objs := try c.Objects(prog, d)
     names := StringBuilder()
-    for o in objs: names.Push($o " ")
-    exe := $c.Dir "/olang-cellworker." $build.IrHash(names.ToString())[:16]
+    for o in objs: names.Push($o + " ")
+    exe := $c.Dir + "/olang-cellworker." + $build.IrHash(names.ToString())[:16]
     if os.Exists(exe): return exe
-    list := $exe ".list"
+    list := $exe + ".list"
     try os.WriteFile(list, "{ __olang_*; __muloti4; olang_cell_*; };\n") catch os.Error { error build.Failed.Reported }
-    tmp := $exe "." $unistd.getpid()
+    tmp := $exe + "." + $unistd.getpid()
     args Vec<String&>
     args.Push(c.Clang)
     for f in c.ModeFlags(): args.Push(f)
@@ -275,7 +275,7 @@ fn workerExe(c mut build.Config&, d mut diag.Diagnostics&) String ? build.Failed
     args.Push(tmp)
     for o in objs: args.Push(o)
     for x in prog.Links: args.Push(x)
-    for f in Array<String&>[$"-Wl,--dynamic-list=" $list, "-lm", "-lpthread", "-ldl"]: args.Push(f)
+    for f in Array<String&>[$"-Wl,--dynamic-list=" + $list, "-lm", "-lpthread", "-ldl"]: args.Push(f)
     if prog.Dyncall != "": args.Push("-lffi")
     try link(args, exe, d)
     try os.Rename(tmp, exe) catch os.Error { error build.Failed.Reported }
@@ -289,7 +289,7 @@ fn (w Worker&) Running() Bool { return w.In >= 0 }
 # now and then whether to stop it (a notebook's interrupt), which ends the copy running it
 fn (w mut Worker&) Run(so String&, watch fn?&() Bool) Outcome {
     o := Outcome()
-    try io.Write(w.In, $"cell " $so "\n") catch io.Error {
+    try io.Write(w.In, $"cell " + $so + "\n") catch io.Error {
         w.lost(o)
         return o
     }
@@ -349,7 +349,7 @@ fn frame(o mut Outcome&, kind I64, text String&, w mut Worker&) {
     }
     if kind == FrameMime: o.Mime = text
     if kind == FrameData: o.Data = text
-    if kind == FrameFailure: o.Failure = $o.Failure $text
+    if kind == FrameFailure: o.Failure = $o.Failure + $text
     if kind == FrameStopped: o.Stopped = text
     o.Over = kind == FrameDone or kind == FrameStopped
 }
@@ -632,12 +632,12 @@ test rewrite "a cell's start is the worker's to call, and a kept value is named 
     plan.Rename.Put("G_2er_2ex", "G_2er_2ex.cell2")
     plan.Extern.Put("G_2er_2ex", true)
     plan.NoInit.Put("r_2ex_2einit", true)
-    ir := ("@G_2er_2ex = global i64 0\n@llvm.global_ctors = appending global [1 x i8] zeroinitializer\n" $
-        "define internal void @__olang_lib_init() #0 {\nentry:\n  call void @__olang_thread_init()\n" $
-        "  call void @r_2ex_2einit()\n  call void @r_2ey_2einit()\n  ret void\n}\n" $
+    ir := ("@G_2er_2ex = global i64 0\n@llvm.global_ctors = appending global [1 x i8] zeroinitializer\n" + $
+        "define internal void @__olang_lib_init() #0 {\nentry:\n  call void @__olang_thread_init()\n" + $
+        "  call void @r_2ex_2einit()\n  call void @r_2ey_2einit()\n  ret void\n}\n" + $
         "define void @f() {\n  %a = load i64, ptr @G_2er_2ex\n  %b = load i64, ptr @G_2er_2exy\n}\n")
-    want := ("@G_2er_2ex.cell2 = external global i8\ndefine void @olang_cell_init() #0 {\nentry:\n" $
-        "  call void @r_2ey_2einit()\n  ret void\n}\n" $
+    want := ("@G_2er_2ex.cell2 = external global i8\ndefine void @olang_cell_init() #0 {\nentry:\n" + $
+        "  call void @r_2ey_2einit()\n  ret void\n}\n" + $
         "define void @f() {\n  %a = load i64, ptr @G_2er_2ex.cell2\n  %b = load i64, ptr @G_2er_2exy\n}\n")
     assert rewrite(ir, plan) == want
 }

@@ -149,7 +149,7 @@ fn (d Deque<T>&) Str() String {
     r := $d.ToArray()                                    # "Array<T>[...]"
     t := $Array<Deque<T>>(0)                             # "Array<deque.Deque<T>>[]"
     o := try r.FindByte('[') catch default 0
-    return $t[6:t.Len() - 3] $r[o:]                      # the literal making it (E19)
+    return $t[6:t.Len() - 3] + $r[o:]                      # the literal making it (E19)
 }
 
 if TestBuild {

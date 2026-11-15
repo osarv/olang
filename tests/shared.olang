@@ -766,7 +766,7 @@ fn renderParenReturn(k I32) String {
     first mut RendBox& = RendBox(k)
     shown RendBox& = RendBox(0)
     shown = first
-    return $(shown) " " $(k)
+    return $(shown) + " " + $(k)
 }
 
 test "O26a: a parenthesized rendering returned does not move what it renders" {
@@ -860,7 +860,7 @@ test "E6d: a literal the other operand cannot hold meets it at the literal's own
 # E11a: a float renders as the shortest decimal text reading back as the same value of its own type, laid out as
 # "%.17g" would: positional for a decimal exponent in [-4, 17), "d.ddde+XX" otherwise. The fixed values' renderings
 # are made while compiling (S18c) and the baked global's (K2); the mutable global's at run time, identically.
-RenderShortBaked String = $0.1 " " $F32(0.1) " " $F16(0.1) " " $BF16(0.1) " " $(0.1 + 0.2) " " $F32(1.0 / 3.0)
+RenderShortBaked String = $0.1 + " " + $F32(0.1) + " " + $F16(0.1) + " " + $BF16(0.1) + " " + $(0.1 + 0.2) + " " + $F32(1.0 / 3.0)
 RenderShortSeen mut F64 = 0
 RenderShortSeen32 mut F32 = 0
 RenderShortSeen16 mut F16 = 0
@@ -876,7 +876,7 @@ test "E11a: a float renders as the shortest text that reads back as it, in its o
     RenderShortSeen = RenderShortSeen + 0.2                 # mutable: rendered at run time
     RenderShortSeen32 = 0.1
     RenderShortSeen16 = 0.1
-    assert $RenderShortSeen " " $RenderShortSeen32 " " $RenderShortSeen16 == "0.30000000000000004 0.1 0.1"
+    assert $RenderShortSeen + " " + $RenderShortSeen32 + " " + $RenderShortSeen16 == "0.30000000000000004 0.1 0.1"
     RenderShortSeen = 1e17
     assert $RenderShortSeen == "1e+17"
     RenderShortSeen = -0.000123
@@ -1993,11 +1993,11 @@ test "E11a: a declared type renders from its fields, whatever methods it has" {
 }
 
 test "E11b: text pieces side by side are joined" {
-    assert bytesEq("ab" "cd", "abcd")
-    assert bytesEq("a" "b" "c" "d", "abcd")
+    assert bytesEq("ab" + "cd", "abcd")
+    assert bytesEq("a" + "b" + "c" + "d", "abcd")
     n I32 = 7
-    assert bytesEq("n is " $n "!", "n is 7!")
-    assert bytesEq($n $n, "77")
+    assert bytesEq("n is " + $n + "!", "n is 7!")
+    assert bytesEq($n + $n, "77")
 }
 
 # E11a: every value renders, from what it holds and the way it would be written: a struct as Name(fields),
@@ -2079,7 +2079,7 @@ fn renderTwo() I32, String& { return 1, "x" }
 
 test "E11a: a call's several results render together" {
     assert bytesEq($renderTwo(), "(1, \"x\")")
-    assert bytesEq("r=" $renderTwo(), "r=(1, \"x\")")
+    assert bytesEq("r=" + $renderTwo(), "r=(1, \"x\")")
 }
 
 test "E11a: functions render as signatures" {
@@ -2110,8 +2110,8 @@ test "E11a: '$' on text is a copy - it is a value, not a second name for the sto
 # E11a/E11b: a rendering and a join are TEMPORARIES - they have no storage of their own, so they
 # are built in the TARGET's scope exactly as a struct literal is (E12c). Building them in the block the
 # expression sits in instead made every string-building function impossible.
-fn greet3(name String&) String& { return "Hello, " $name "!" }
-fn label3(n I32, tag String&) String& { return $tag "=" $n }
+fn greet3(name String&) String& { return "Hello, " + $name + "!" }
+fn label3(n I32, tag String&) String& { return $tag + "=" + $n }
 
 test "E11a/E11b: a function can build text and return it into its caller's scope" {
     assert bytesEq(greet3("world"), "Hello, world!")
@@ -2131,7 +2131,7 @@ test "T11: a literal passed to a 'Array<T>&' parameter" {
 
 test "E11b: a join is a value in the block's own scope, usable like any other array" {
     n I32 = 3
-    msg := "x=" $n
+    msg := "x=" + $n
     assert msg.Len() == 3
     assert msg[0] == 'x'
     assert msg[2] == '3'
@@ -2193,7 +2193,7 @@ test "T29: and the built-in operators still reach it - it IS an array" {
     assert t.Len() == 6
     assert t[1] == 'b'
     assert bytesEq(t[1:3], "bc")
-    assert bytesEq($t "!", "abcdef!")
+    assert bytesEq($t + "!", "abcdef!")
     assert bytesEq($t, "abcdef")
 }
 
@@ -5806,8 +5806,8 @@ test "a match used as a value" {
 fn mtLabel(k I32) String& {
     return match k {
         case 1: "one"
-        case 2: $k " two"
-        case _: $k "+" $(k * 2)
+        case 2: $k + " two"
+        case _: $k + "+" + $(k * 2)
     }
 }
 fn Crate.mtCrate(k I32) Crate& {
@@ -5821,7 +5821,7 @@ test "a match's value is built where it lands" {
     d := Crate.mtCrate(7)
     t I32 = 0
     for i in range 100 {
-        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        s := $i + "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         t += I32(s.Len())
     }
     assert t > 0
@@ -7342,7 +7342,7 @@ RangeSumTen := rangeSum(10)
 
 fn rangeText(end I32, start I32, step I32) String& {
     t String& = ""
-    for v in range start, end, step { t = $t $v "," }
+    for v in range start, end, step { t = $t + $v + "," }
     return t
 }
 
@@ -7398,7 +7398,7 @@ test "E7: and/or skip their right side once the left decides" {
 test "D15a: a reference declared from a literal can be repointed at an array of another length" {
     x String& = "q"
     assert x.Len() == 1        # it has the literal's length - held beside the pointer, not in the type
-    x = "longer" $x
+    x = "longer" + $x
     assert x.Len() == 7
     assert bytesEq(x, "longerq")
     x = ""
@@ -7607,7 +7607,7 @@ fn comprNothing(n I32) String {
     re Array<U16>& = e
     r Array<U16> = Array<U16>[2 for _ in range n]
     rr Array<U16>& = r
-    return $ra " " $(ra.Len() == 0) " " $re " " $(re.Len() == 0) " " $rr " " $(rr.Len() == 0)
+    return $ra + " " + $(ra.Len() == 0) + " " + $re + " " + $(re.Len() == 0) + " " + $rr + " " + $(rr.Len() == 0)
 }
 
 ComprNothingBaked String = comprNothing(0)
@@ -7713,17 +7713,17 @@ fn fzIndex(k I64) I64 {
     u := U64(k)
     return a[(match k { case 1: U64(2) case _: u })] + a[(U64(1) if k > 0 else u)]
 }
-fn fzLeast() String { return $(-9223372036854775808) " " $((-9223372036854775808)) }
+fn fzLeast() String { return $(-9223372036854775808) + " " + $((-9223372036854775808)) }
 fn fzArrays(k I64) Bool {
     a := Array<I64>[1, 2]
     b := Array<I64>[k]
     return a != b and not (b == a)
 }
-FzBaked String = $fzChain(3, 9) " " $fzIndex(1) " " $fzLeast() " " $fzArrays(1)
+FzBaked String = $fzChain(3, 9) + " " + $fzIndex(1) + " " + $fzLeast() + " " + $fzArrays(1)
 
 test "E30: literals in chains adapt; indexes of any integer type; arrays of two lengths compared" {
     assert FzBaked == "true 50 -9223372036854775808 -9223372036854775808 true"
-    assert $fzChain(U64(FzLive), U64(FzLive) * 3) " " $fzIndex(FzLive - 2) " " $fzLeast() " " $fzArrays(FzLive - 2) == FzBaked
+    assert $fzChain(U64(FzLive), U64(FzLive) * 3) + " " + $fzIndex(FzLive - 2) + " " + $fzLeast() + " " + $fzArrays(FzLive - 2) == FzBaked
     assert not fzChain(U64(FzLive - 3), 9)
 }
 
@@ -7750,7 +7750,7 @@ test "E30, G12: a chain spaced as comparisons is one, never type arguments" {
 # E30 (the second any review, finding 4): a literal in a chain is typed in each comparison beside that comparison's
 # other operand, as the chain written out with "and" is - an F32 and an F64 neighbour each take it at their own type,
 # and an I8 and a U64 neighbour need not meet; an operand that runs is still evaluated once - baked and run alike
-fn chEach(f F32, g F64) String { return $(f < 0.1 < g) " " $(f < 0.1 and 0.1 < g) }
+fn chEach(f F32, g F64) String { return $(f < 0.1 < g) + " " + $(f < 0.1 and 0.1 < g) }
 fn chMeet(a I8, b U64) Bool { return a < 5 < b and 300 < 400 < b }
 ChCalls mut I64 = 0
 fn chCount(x I64) I64 {
@@ -7760,7 +7760,7 @@ fn chCount(x I64) I64 {
 fn chOnce() String {
     before := ChCalls
     r := 1 < 2 < chCount(5) < 300 < chCount(400)
-    return $r " " $(ChCalls - before)
+    return $r + " " + $(ChCalls - before)
 }
 ChEachBaked String = chEach(F32(0.05), 0.1000000001)
 ChMeetBaked Bool = chMeet(1, 700)
@@ -8634,11 +8634,11 @@ test "T35a: Iterator<T> is built in, and a type satisfying it is walked by for-i
 # what the allocation between the call and the read does here.
 fn joinWrap(t String&) String& {
     out String& = "<"
-    return $out $t ">"
+    return $out + $t + ">"
 }
 
 fn joinChurn() String& {
-    return "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" $"yyyyyyyyyyyyyyyyyyyy"
+    return "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" + $"yyyyyyyyyyyyyyyyyyyy"
 }
 
 fn joinBare(dir String&) Bool {
@@ -9388,7 +9388,7 @@ fn ctRender(k I32) String {
     f F64 = 2.5
     b U8 = 'q'
     word := "say \"hi\"\n"
-    return $p " " $Array<I32>[k, 2] " " $CtShape.Rect(3, 4) " " $CtShape.Empty " " $n " " $f " " $b " " $true " " $word " " $CtW(word)
+    return $p + " " + $Array<I32>[k, 2] + " " + $CtShape.Rect(3, 4) + " " + $CtShape.Empty + " " + $n + " " + $f + " " + $b + " " + $true + " " + $word + " " + $CtW(word)
 }
 
 CtArea I32 = ctArea(CtShape.Rect(3, 4)) + ctArea(CtShape.Circle(2))
@@ -9412,7 +9412,7 @@ fn ctPick(k I32) fn&(n I32) I32 {
     return ctThrice
 }
 fn ctFaces(k I32) String {
-    return $ctTwice " " $ctPick(k)
+    return $ctTwice + " " + $ctPick(k)
 }
 CtFaces := ctFaces(0)
 CtSameFn Bool = ctPick(0) == ctPick(0) and ctPick(0) != ctPick(1)
@@ -9445,7 +9445,7 @@ CtMixed3 := CtMixed.ctMixed(3)
 CtMixedIn := CtMixedBox(CtMixed.ctMixed(3), 7)
 
 # T29c: written text declares a String with ":=" wherever ":=" is written - a global too
-CtWritten := "n=" $3
+CtWritten := "n=" + $3
 
 CtWrittenIs Bool = CtWritten == "n=3" and "n=4" != CtWritten
 
@@ -9460,13 +9460,13 @@ CtSplitLast String& = "k=v".Split("=")[1]
 
 test "Split's pieces live with the text, and the evaluator splits as the run time does" {
     k I32 = ctRuntimeZero
-    line String& = "x" $k ",yy,zzz"
+    line String& = "x" + $k + ",yy,zzz"
     parts Array<String&>& = line.Split("!")
     if k == 0: parts = line.Split(",")
     assert churnArena() == 2469000
     assert parts.Len() == 3 and parts[0].Eq("x0") and parts[2].Eq("zzz")
     assert CtSplitN == 4 and CtSplitLast.Eq("v")
-    assert CtSplitN == ("a,b,,c" $"").Split(",").Len()
+    assert CtSplitN == ("a,b,,c" + $"").Split(",").Len()
 }
 
 # T29c: written text beside a String value in "==" is a String too - compared by content, since a String
@@ -9492,7 +9492,7 @@ fn ctConv(n I32) String& {
     b := CtConvBox()
     v := CtChars(b.buf)
     b.buf[1] = 'z'
-    return $copied " " $h.s " " $CtChars(raw) " " $v
+    return $copied + " " + $h.s + " " + $CtChars(raw) + " " + $v
 }
 CtConvBaked := ctConv(1)
 
@@ -9987,9 +9987,9 @@ test "E10a: == consults a declared Eq at every depth, while compiling and at run
 type StrMoney struct(cents I64) {
     cents
 }
-fn (m StrMoney&) Str() String { return "$" $(m.cents / 100) "." $(m.cents % 100) }
+fn (m StrMoney&) Str() String { return "$" + $(m.cents / 100) + "." + $(m.cents % 100) }
 type StrCents I64
-fn (c StrCents) Str() String { return $I64(c) "c" }
+fn (c StrCents) Str() String { return $I64(c) + "c" }
 type StrOrder struct(id I32, price StrMoney, tip StrMoney&, parts Array<StrMoney>&) {
     id
     price
@@ -10161,7 +10161,7 @@ fn adoptFresh(n I64) I64 {
     h.rows[0] = Array<I64>[x * 2 for x in range n]
     h.rows[1] = h.rows[0]
     h.rows[1][1] = 40
-    h.s = $(n * 11) "!"
+    h.s = $(n * 11) + "!"
     assert first != h.a and first[0] == 0 and h.a.Len() == n and h.rows[0] == h.rows[1]
     return h.a[0] + h.rows[0][1] + h.rows[0][2] + I64(h.s.Len())
 }
@@ -10282,9 +10282,9 @@ fn renderInts(k I64) String {
     lo I64 = -9223372036854775807 - k
     edges := Array<I64>[0, 9, 10, 99, 100, 999999999, 1000000000, 999999999999999999, 1000000000000000000, -1, -10, -100]
     t := StringBuilder()
-    for v in edges { t.Push($v " ") }
-    t.Push($lo " " $(lo + 1) " " $(U64(0) - U64(k)) " " $U64(10000000000000000000) " " $U8(200) " " $I8(-128) " ")
-    t.Push($I32(-2147483647 - k) " " $U32(4294967295) " " $U16(65535) " " $I16(-32768) " " $(I64(9223372036854775807) * k))
+    for v in edges { t.Push($v + " ") }
+    t.Push($lo + " " + $(lo + 1) + " " + $(U64(0) - U64(k)) + " " + $U64(10000000000000000000) + " " + $U8(200) + " " + $I8(-128) + " ")
+    t.Push($I32(-2147483647 - k) + " " + $U32(4294967295) + " " + $U16(65535) + " " + $I16(-32768) + " " + $(I64(9223372036854775807) * k))
     return t.ToString()
 }
 RenderIntsBaked := renderInts(1)
@@ -10308,7 +10308,7 @@ fn halfZero(n I32) Bool {
     k BF16 = 0
     d F16 = F16(n) - F16(n)
     e BF16 = BF16(n) - BF16(n)
-    return h == d and k == e and $h $k $d $e == "0000" and $F16(-0.0) == "-0" and F64(d) == 0.0
+    return h == d and k == e and $h + $k + $d + $e == "0000" and $F16(-0.0) == "-0" and F64(d) == 0.0
 }
 HalfZeroBaked := halfZero(1)
 
@@ -10533,11 +10533,11 @@ fn textsAll(one I64) Bool {
     uni Bool = "\u{41}" == "A" and "\u{E9}".Len() == 2 and U8("\u{E9}"[0]) == 0xC3 and U8("\u{E9}"[1]) == 0xA9
     uni2 Bool = "\u{20AC}".Len() == 3 and "\u{1F600}".Len() == 4 and U8("\u{1F600}"[0]) == 0xF0 and U8("\u{10FFFF}"[3]) == 0xBF
     ch Bool = '\u{7A}' == 'z' and '\u{0}' == '\0'
-    raw Bool = """C:\dir\n""".Len() == 8 and """a"b""" == "a" $Char(34) "b" and """""" == ""
+    raw Bool = """C:\dir\n""".Len() == 8 and """a"b""" == "a" + $Char(34) + "b" and """""" == ""
     lines Bool = TxRaw == "olang build FILE\n    builds FILE\n\ndone" and TxRaw.Len() == 38
     e := """
         """
-    joined := """x""" $one """y"""
+    joined := """x""" + $one + """y"""
     return hex and uni and uni2 and ch and raw and lines and e == "" and joined == "x1y"
 }
 TextsBaked := textsAll(1)
@@ -11138,7 +11138,7 @@ test "O18b: a temporary pushed from a doubly nested block, and text pushed in a 
         }
     }
     words mut Vec<String&>& = Vec<String&>()
-    for i in range 5 { words.Push($i "-" $(i * i)) }
+    for i in range 5 { words.Push($i + "-" + $(i * i)) }
     obChurn()
     s I64 = 0
     for n in l { s += n.v }
@@ -11301,11 +11301,11 @@ fn wlArr(n I64) Array<I64> {
 }
 fn wlCopy(a Array<I64>&) Array<I64> { return a }
 fn wlText(n I64) String {
-    s := "item-" $n
+    s := "item-" + $n
     return s
 }
 fn wlPadded(n I64) String {
-    s := "  item-" $n "  "
+    s := "  item-" + $n + "  "
     return s
 }
 
@@ -11315,7 +11315,7 @@ fn wlFirst(a Array<I64>&) I64 {
     return a[0] + junk[1]
 }
 fn wlIsItem(t String&) Bool {
-    pad := "...................................................." $t.Len()
+    pad := "...................................................." + $t.Len()
     return t == "item-5" and pad.Len() > 0
 }
 
@@ -11341,7 +11341,7 @@ fn WlNode.wlMkNode(v I64) mut WlNode& { return WlNode(v) }
 fn WlBox.wlMkBox(v I64) WlBox { return WlBox(WlNode(v)) }
 fn wlSetGlobals(n I64) {
     WlGA = WlNode(n)
-    WlGS = "v=" $n
+    WlGS = "v=" + $n
     WlGB = WlBox.wlMkBox(n + 1)
     WlGW = Array<I64>(4, n)
 }
@@ -11704,7 +11704,7 @@ evRun mut I64 = 1
 # E11a: "$" of a negative zero is "-0" (the run time added +0.0, giving 0); T4: an integer rounds once to a float (the
 # evaluator and a literal's adaptation went through a double, rounding twice)
 fn evNeg(x F64) F64 { return -x }
-fn evNegText(z F64) String { return $evNeg(z) " " $F32(evNeg(z)) " " $F16(evNeg(z)) " " $BF16(evNeg(z)) }
+fn evNegText(z F64) String { return $evNeg(z) + " " + $F32(evNeg(z)) + " " + $F16(evNeg(z)) + " " + $BF16(evNeg(z)) }
 EvNegBaked String = evNegText(0.0)
 test "E11a: a negative zero renders as -0 in every float type, while compiling and at run time" {
     assert EvNegBaked == "-0 -0 -0 -0"
@@ -11735,7 +11735,7 @@ fn evIdentity(n I64) String {
     x Array<I32>
     y Array<I32>
     none Array<I32>& = Array<I32>(0)
-    return $(a == b) " " $(b == g) " " $(c == d) " " $(e == f) " " $(a == g) " " $(x[:] == y[:]) " " $(c == none)
+    return $(a == b) + " " + $(b == g) + " " + $(c == d) + " " + $(e == f) + " " + $(a == g) + " " + $(x[:] == y[:]) + " " + $(c == none)
 }
 EvIdentityBaked String = evIdentity(2)
 test "E10: arrays compare by what they hold - lengths, then elements - the empty array included (T2c)" {
@@ -11755,7 +11755,7 @@ fn evCopies(n I64) String {
     b := EvP(n)
     x Array<I64>& = Array<I64>[n, 2]
     y := Array<I64>[n, 2]
-    return $(evCopyOut(a) == b) " " $(b == evCopyOut(a)) " " $(evCopyArr(x) == y) " " $(evCopyOut(a) != b)
+    return $(evCopyOut(a) == b) + " " + $(b == evCopyOut(a)) + " " + $(evCopyArr(x) == y) + " " + $(evCopyOut(a) != b)
 }
 EvCopiesBaked String = evCopies(3)
 if evCopyOut(EvP(4)) == EvP(4) {
@@ -11789,7 +11789,7 @@ fn evClasses(n I64) String {
     a := evClassify(n)
     b := evClassify(n + 1)
     evChurn()
-    return $a " " $b " " $evClassify(n) " " $evClassify(n - 5)
+    return $a + " " + $b + " " + $evClassify(n) + " " + $evClassify(n - 5)
 }
 EvClassesBaked String = evClasses(7)
 test "S12b: text a match gives as its value is built where the value lands" {
@@ -11820,7 +11820,7 @@ fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }   # E10c: "==" 
 fn evSites(n I64) String {
     l := Vec<String&>()
     for _ in range n { l.Push("hello") }
-    return $evTwo(l[0], l[1]) " " $evTwo("hey", "hey") " " $evTwoArr(Array<I32>[1, 2], Array<I32>[1, 2])
+    return $evTwo(l[0], l[1]) + " " + $evTwo("hey", "hey") + " " + $evTwoArr(Array<I32>[1, 2], Array<I32>[1, 2])
 }
 EvSitesBaked String = evSites(2)
 test "T25d/E10: static literals compare by what they hold, wherever they were written" {
@@ -11862,7 +11862,7 @@ test "B5a: a global is set after the globals its initializer reads, directly or 
 # records the order the initializers ran in)
 EvOrdLog mut String& = ""
 fn evOrdNote(s String&) I64 {
-    EvOrdLog = $EvOrdLog $s
+    EvOrdLog = $EvOrdLog + $s
     return 1
 }
 fn evOrdTwice(n I64) I64 { return n * 2 + EvOrdBase }
@@ -11901,7 +11901,7 @@ fn evInPlace(k I64) String {
     x := "abc"
     y := x[1:]
     x = "xyz"
-    return $s " " $c " " $e " " $r.v " " $y
+    return $s + " " + $c + " " + $e + " " + $r.v + " " + $y
 }
 EvInPlaceBaked String = evInPlace(7)
 test "T7: an array or struct value is assigned into the storage it has, unless an array's length changes" {
@@ -12034,13 +12034,13 @@ test "a local named like a method calls the method" {
 fn fzBoolText(k I64) String& { return "true" if k == 0 else "false" }
 fn fzChurn(n I64) I64 {
     b := StringBuilder()
-    for i in range n { b.Push("x" $i) }
+    for i in range n { b.Push("x" + $i) }
     return b.Len()
 }
 fn fzTextCond(k I64) String& {
     c String& = fzBoolText(k)
     j := fzChurn(50)
-    return "(" $c " " $j ")"
+    return "(" + $c + " " + $j + ")"
 }
 FzTextCondBaked String& = fzTextCond(1)
 test "E28: text chosen by a conditional and returned is built where the result lives" {
@@ -12076,7 +12076,7 @@ fn fzFill(n I64) String {
     c := Array<I32>(n, 7)
     d := Array<mut Array<I32>&>(n, c)
     d[0][1] = 9
-    return $a " " $b " " $(b[1] == b[2]) " " $d " " $(d[0] == d[1]) " " $c
+    return $a + " " + $b + " " + $(b[1] == b[2]) + " " + $d + " " + $(d[0] == d[1]) + " " + $c
 }
 FzFillBaked String = fzFill(3)
 test "T8: an array filled with a reference names one instance in every element" {
@@ -12088,7 +12088,7 @@ test "T8: an array filled with a reference names one instance in every element" 
 # T4/E26: an integer converted to F16 rounds once, overflowing to infinity past 65504 - at -O3 LLVM 18 folded the F16
 # away whenever the integer had few significant bits ("x << 24"), and the program printed 1644167168 where the evaluator
 # said inf (fuzz/repro/f16fold.olang, f16fold.ll)
-fn fzF16Of(x I32) String { return $F16(x << 24) " " $F16(U64(x) << 40) " " $(F16(x << 24) * 0.5) " " $F16(x << 15) }
+fn fzF16Of(x I32) String { return $F16(x << 24) + " " + $F16(U64(x) << 40) + " " + $(F16(x << 24) * 0.5) + " " + $F16(x << 15) }
 FzF16OfBaked String = fzF16Of(98)
 test "T4: an integer converted to F16 overflows to infinity, at -O3 too" {
     assert FzF16OfBaked == "inf inf inf inf" and fzF16Of(98) == FzF16OfBaked
@@ -12101,7 +12101,7 @@ test "T4: an integer converted to F16 overflows to infinity, at -O3 too" {
 fn fzReinterp(x I32) String {
     hb := BF16.FromBits(F16(x).Bits())
     bh := F16.FromBits(BF16(x).Bits())
-    return $hb " " $F64(hb) " " $I32(hb) " " $bh " " $F64(bh) " " $I32(bh) " " $(hb + hb) " " $(bh < F16(3))
+    return $hb + " " + $F64(hb) + " " + $I32(hb) + " " + $bh + " " + $F64(bh) + " " + $I32(bh) + " " + $(hb + hb) + " " + $(bh < F16(3))
 }
 FzReinterpBaked String = fzReinterp(5)
 test "E33: the bits of one 16-bit float made into the other are read as the other" {
@@ -12150,7 +12150,7 @@ test "T4: an F32 narrows to a BF16 inline, rounded once, ties to even" {
 # and 2^-126 / 2^-126 a NaN (fuzz/repro/bf16shrink.olang, .ll)
 fn fzShrink(b BF16) String {
     w F32 = b
-    return $F16(w / w) " " $F16(F32(b) * 2.0) " " $F16(F64(b) + 1.0) " " $F16(b) " " $(b < BF16(1.0))
+    return $F16(w / w) + " " + $F16(F32(b) * 2.0) + " " + $F16(F64(b) + 1.0) + " " + $F16(b) + " " + $(b < BF16(1.0))
 }
 FzShrinkBaked String = fzShrink(1.1754943508222875e-38)
 test "T4: a BF16 below F16's range, widened and computed on, narrows to F16 as computed" {
@@ -12189,22 +12189,22 @@ type fzShape enum {
 fn (s fzShape&) Str() String {
     match s {
         case fzShape.Dot { return "dot" }
-        case fzShape.Bar(n) { return "bar" $n }
+        case fzShape.Bar(n) { return "bar" + $n }
     }
 }
 fn fzShapeName(s fzShape?&) String {
     match s {
         case fzShape.Dot { return "Dot" }
-        case fzShape.Bar(n) { return "Bar" $n }
+        case fzShape.Bar(n) { return "Bar" + $n }
         case null { return "none" }
     }
 }
 FzShapeBar fzShape& = fzShape.Bar(3)
-FzShapeBaked String = $FzShapeBar " " $fzShapeName(FzShapeBar) " " $fzShapeName(null)
+FzShapeBaked String = $FzShapeBar + " " + $fzShapeName(FzShapeBar) + " " + $fzShapeName(null)
 test "K1/S13a: a function with an exhaustive match over an enum reference is evaluated while compiling" {
     assert FzShapeBaked == "bar3 Bar3 none" and $FzShapeBar == "bar3"
     b fzShape& = fzShape.Bar(I64(fzRun) + 2)
-    assert $b " " $fzShapeName(b) == "bar3 Bar3"
+    assert $b + " " + $fzShapeName(b) == "bar3 Bar3"
 }
 
 # K1/P9: an atomic operation is evaluated while compiling as the plain operation on its place - nothing runs beside an
@@ -12223,7 +12223,7 @@ fn fzAtomics(start I32) String {
     k.v.AtomicAdd(250)
     xs := Array<U8>(2, U8(start))
     xs[1].AtomicAdd(U8(250))
-    return $a " " $b " " $c " " $d " " $x.AtomicLoad() " " $k.v " " $xs
+    return $a + " " + $b + " " + $c + " " + $d + " " + $x.AtomicLoad() + " " + $k.v + " " + $xs
 }
 FzAtomicsBaked String = fzAtomics(1)
 FzAtomicsGlobal mut I32 = 4
@@ -12254,7 +12254,7 @@ fn fzTasks(n I64) String {
         for i in range n { spawn fzAddTo(t, i) }
         defer { t.v.AtomicAdd(1000) }
     }
-    return $out " " $q " " $r " " $t.v
+    return $out + " " + $q + " " + $r + " " + $t.v
 }
 FzTasksBaked String = fzTasks(4)
 test "K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time" {
@@ -12304,7 +12304,7 @@ fn fzNullArr(n I64) String {
     rd Array<U16>& = d
     e Array<U16> = Array<U16>(n - n)
     re Array<U16>& = e
-    return $rd " " $(rd.Len() == 0) " " $re " " $(re.Len() == 0)
+    return $rd + " " + $(rd.Len() == 0) + " " + $re + " " + $(re.Len() == 0)
 }
 FzNullArrBaked String = fzNullArr(3)
 test "E10, T2c: a reference to an array with no storage renders as the empty array" {
@@ -12420,8 +12420,8 @@ test "L18a: lists, literals, comprehensions and joins run over several lines ins
     w := xs.Fold(0, fn(acc I32, x I32) I32 {
         return acc + x
     })
-    text := ("s=" $s
-             " t=" $t)
+    text := ("s=" + $s +
+             " t=" + $t)
     assert xs.Len() == 3 and ys.Len() == 2 and ys[1] == 6 and s == 3 and t == 3 and w == 6 and CbListsBaked == 3
     assert text == "s=3 t=3"
 }
@@ -12618,7 +12618,7 @@ type hExtId extends I64
 type hModId extends I64
 fn (a hModId) Eq(b hModId) Bool { return I64(a) % 100 == I64(b) % 100 }
 fn (a hModId) Hash() I64 { return I64(a) % 100 }
-fn (a hModId) Str() String { return "mod" $(I64(a) % 100) }
+fn (a hModId) Str() String { return "mod" + $(I64(a) % 100) }
 fn extKeys() Bool {
     m := Map<hExtId, I32>()
     m.Put(hExtId(105), 1)
@@ -12663,7 +12663,7 @@ sbRun mut I64 = 1
 fn sbChurn() I64 {
     t I64 = 0
     for i in range 300 {
-        s := $i $i $i $i "-" $(i * 7)
+        s := $i + $i + $i + $i + "-" + $(i * 7)
         t += s.Len() + I64(s[0]) + I64(s[s.Len() - 1])
     }
     return t + I64(getpid() * 0)        # an opaque call: nothing read after it is forwarded from before it
@@ -12692,7 +12692,7 @@ fn sbMost(xs Array<sbWC>&) sbWC {
 }
 fn sbRecords(n I64) String& {
     a := Array<sbWC>(4)
-    for i in range 4 { a[i] = sbWC($(n + i) "w", (i * 3) % 4) }
+    for i in range 4 { a[i] = sbWC($(n + i) + "w", (i * 3) % 4) }
     sbSwap(a, 0, 3)
     sbSwap2(a, 1, 2)
     a.Sort(fn(x sbWC, y sbWC) Bool { return x.count < y.count })
@@ -12700,7 +12700,7 @@ fn sbRecords(n I64) String& {
     for wc in a { if wc.count % 2 == 1 { odd.Push(wc.word) } }
     m := sbMost(a)
     sbChurn()
-    return $a[0].word $a[3].word "/" $odd[0] $odd[1] "/" $m.word
+    return $a[0].word + $a[3].word + "/" + $odd[0] + $odd[1] + "/" + $m.word
 }
 test "O25h: copies of records holding text are swapped, sorted, pushed outward and kept as an argmin" {
     r := $sbRecords(sbRun)
@@ -12749,11 +12749,11 @@ test "O18c: an element of a list of lists, used as a receiver and as a loop's so
     adj.Push(Vec<String&>())
     adj.Push(Vec<String&>())
     for i in range 3 {
-        t String& = $(i + sbRun) "."
+        t String& = $(i + sbRun) + "."
         sbAdd(adj, i % 2, t)
     }
     sbChurn()
-    a := $sbJoin(adj, 0) "|" $sbJoin(adj, 1)
+    a := $sbJoin(adj, 0) + "|" + $sbJoin(adj, 1)
     assert a == "1.3.|2."
 }
 
@@ -12826,7 +12826,7 @@ fn sbBump(w mut sbWidget&) {
     }
 }
 test "O25h: an enum field's case rebuilt from its own payload" {
-    w mut sbWidget& = sbWidget(sbKind.Button($sbRun "OK", 0))
+    w mut sbWidget& = sbWidget(sbKind.Button($sbRun + "OK", 0))
     sbBump(w)
     sbBump(w)
     sbChurn()
@@ -12850,7 +12850,7 @@ fn sbLongest(n I64) String& {
     words := Vec<String&>()
     arr := Array<String&>(3)
     for i in range 3 {
-        full String& = $(n * 10) "abcd"
+        full String& = $(n * 10) + "abcd"
         t String& = full[:I64(i) * 2 + 1]
         words.Push($t)         # a view of a turn's text kept past the turn is a copy (O27)
         arr[i] = $t
@@ -12858,7 +12858,7 @@ fn sbLongest(n I64) String& {
     a := words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
     b := sbTextIt(arr).Fold(arr[0], fn(best, w) { return best if best.Len() >= w.Len() else w })
     sbChurn()
-    return $a "/" $b
+    return $a + "/" + $b
 }
 test "O14b/T22a: Fold keeping one of its elements" {
     r := $sbLongest(sbRun)
@@ -12866,8 +12866,8 @@ test "O14b/T22a: Fold keeping one of its elements" {
 }
 test "O25a: Fold with a reference accumulator" {
     words := Vec<String&>()
-    for i in range 3 { words.Push($(i + sbRun) "x") }
-    all := words.Iter().Fold(words[0], fn(acc String&, w String&) String& { return $acc $w })
+    for i in range 3 { words.Push($(i + sbRun) + "x") }
+    all := words.Iter().Fold(words[0], fn(acc String&, w String&) String& { return $acc + $w })
     sbChurn()
     r := $all
     assert r == "1x1x2x3x"
@@ -12883,7 +12883,7 @@ fn sbNames() Array<String&>& {
 test "T25d: a static literal's elements stored into a longer-lived array" {
     a := sbNames()
     sbChurn()
-    r := $a[0] $a[1]
+    r := $a[0] + $a[1]
     assert r == "alphabeta"
 }
 
@@ -12892,7 +12892,7 @@ test "T25d: a static literal's elements stored into a longer-lived array" {
 sbG mut Array<sbWC> = Array<sbWC>(2)
 fn sbPut(n I64) {
     best := sbG[0]
-    best = sbWC($n $n, n)
+    best = sbWC($n + $n, n)
     sbG[1] = best
 }
 test "O1b: a copy of a global's element keeps building in the program's scope" {
@@ -12906,11 +12906,11 @@ test "O1b: a copy of a global's element keeps building in the program's scope" {
 # the same shapes, evaluated while compiling (K2) as at run time - a scope rule changes what compiles, never what runs
 fn sbSorted(n I64) String& {
     a := Array<sbWC>(3)
-    for i in range 3 { a[i] = sbWC($(n + i) "w", (i * 2) % 3) }
+    for i in range 3 { a[i] = sbWC($(n + i) + "w", (i * 2) % 3) }
     sbSwap(a, 0, 2)
     a.Sort(fn(x sbWC, y sbWC) Bool { return x.count < y.count })
     best := sbMost(a)
-    return $a[0].word $a[1].word $a[2].word "/" $best.word
+    return $a[0].word + $a[1].word + $a[2].word + "/" + $best.word
 }
 SbSortedBaked String& = sbSorted(1)
 SbComposeBaked I64 = sbCompose(sbInc, sbTwice(sbInc))(1)
@@ -12927,11 +12927,11 @@ fn sbRegroup(n I64) String& {
     for i in range 4 {
         if i not in groups { groups.Put(i, Vec<String&>()) }
         g := try groups.Get(i) catch { unreachable }
-        g.Push($(i + n) "g")
+        g.Push($(i + n) + "g")
     }
     if not groups.Remove(1) { return "lost" }
     fresh mut Vec<String&>& = Vec<String&>()
-    fresh.Push($n "new")
+    fresh.Push($n + "new")
     groups.Put(9, fresh)
     sbChurn()
     b := StringBuilder()
@@ -12994,7 +12994,7 @@ type sbJNode struct(v I64) {
 fn sbFields(n I64) Vec<pair.Pair<String&, sbJNode&>>& {
     fields mut Vec<pair.Pair<String&, sbJNode&>>& = Vec<pair.Pair<String&, sbJNode&>>()
     for i in range n {
-        key String& = $i "k"
+        key String& = $i + "k"
         value sbJNode& = sbJNode(I64(i) * 10)
         fields.Push(pair.Pair<String&, sbJNode&>(key, value))
     }
@@ -13004,7 +13004,7 @@ test "O25h/O10c: pairs holding text and nodes pushed where their list lives" {
     f := sbFields(sbRun + 2)
     sbChurn()
     last := f[2]
-    r := $last.First $last.Second.v
+    r := $last.First + $last.Second.v
     assert r == "2k20"
 }
 
@@ -13017,7 +13017,7 @@ type lbKey struct(n I32) {
 }
 fn (a lbKey) eq(b lbKey) Bool { return a.N % 10 == b.N % 10 }
 fn (a lbKey) hash() I64 { return I64(a.N % 10) }
-fn (k lbKey) str() String { return "K" $k.N }
+fn (k lbKey) str() String { return "K" + $k.N }
 type lbBox struct(k lbKey) {
     K lbKey = k
 }
@@ -13196,7 +13196,7 @@ GvBaked I64 = gvPass("abc") + gvBump(GvHey)
 test "a generic's by-value array parameter: borrowed for a call, and its own copy where its body writes it" {
     assert gvEq("x", "x") and not gvEq("x", "y") and gvPass("abcd") == 4 and GvBaked == 6
     GvSeen = GvSeen + 1
-    s String = $GvSeen "bc"
+    s String = $GvSeen + "bc"
     assert gvEq("1bc", s) and gvPass(s) == 3
     w Array<Char> = s
     assert gvBump(w) == 3 and w == "1bc"
@@ -13255,15 +13255,15 @@ test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
 AsMsgCalls mut I64 = 0
 fn asMsg(i I64) String {
     AsMsgCalls = AsMsgCalls + 1
-    return "message " $i
+    return "message " + $i
 }
 test "S18a: an assert's message is evaluated only when it fails" {
     for i in range AsMsgCalls + 3 {
         assert i < 3, asMsg(i)
-        assert i >= 0, "i is " $i
-        assert AsMsgCalls == 0, $asMsg(i) " " $AsMsgCalls
+        assert i >= 0, "i is " + $i
+        assert AsMsgCalls == 0, $asMsg(i) + " " + $AsMsgCalls
     }
-    assert(AsMsgCalls == 0), "the message ran " $AsMsgCalls " times"
+    assert(AsMsgCalls == 0), "the message ran " + $AsMsgCalls + " times"
 }
 
 # E11a: a float's text is computed directly (Schubfach) rather than by up to seventeen snprintf/strtod tries - the
@@ -13271,22 +13271,22 @@ test "S18a: an assert's message is evaluated only when it fails" {
 # subnormals (still by the tries), powers of two (whose interval is lopsided: 2^-1017 and the BF16 2^-119 are a digit
 # shorter than the nearest decimal of their length would be), the largest, and the narrow types' edges; baked while
 # compiling (K2, FloatShortest) and rendered at run time (@__olang_fmt_float), identically
-RsWant String = ("5e-324 1e-323 1.5e-323 8.98846567431158e+307 2.2250738585072014e-308 9.223372036854776e+18 "
-                  "9.332636185032189e-302 7.120236347223045e-307 1e+23 0.3 1.2345678901234568e+17 5e-05 0.0001 1e+17 "
-                  "99999999999999980 "
-                  "1e-45 4e-45 1.1754944e-38 1.7014118e+38 3.4028235e+38 7.888609e-31 16777216 0.1 "
+RsWant String = ("5e-324 1e-323 1.5e-323 8.98846567431158e+307 2.2250738585072014e-308 9.223372036854776e+18 " +
+                  "9.332636185032189e-302 7.120236347223045e-307 1e+23 0.3 1.2345678901234568e+17 5e-05 0.0001 1e+17 " +
+                  "99999999999999980 " +
+                  "1e-45 4e-45 1.1754944e-38 1.7014118e+38 3.4028235e+38 7.888609e-31 16777216 0.1 " +
                   "6e-08 2e-07 6.104e-05 65500 1 0.3333 3.05e-05 9e-41 1.18e-38 3.39e+38 1 0.2 1.51e-36 ")
 fn rsText(z U64) String {
     s := StringBuilder()
     for b in Array<U64>[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000
                  0x0060000000000000] {
-        s.Push($(F64.FromBits(b + z)) " ")
+        s.Push($(F64.FromBits(b + z)) + " ")
     }
-    for x in Array<F64>[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) " ") }
-    for b in Array<U32>[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($(F32.FromBits(b + U32(z))) " ") }
-    for x in Array<F32>[16777216, 0.1] { s.Push($(x + F32(z)) " ") }
-    for b in Array<U16>[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($(F16.FromBits(b + U16(z))) " ") }
-    for b in Array<U16>[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($(BF16.FromBits(b + U16(z))) " ") }
+    for x in Array<F64>[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) + " ") }
+    for b in Array<U32>[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($(F32.FromBits(b + U32(z))) + " ") }
+    for x in Array<F32>[16777216, 0.1] { s.Push($(x + F32(z)) + " ") }
+    for b in Array<U16>[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($(F16.FromBits(b + U16(z))) + " ") }
+    for b in Array<U16>[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($(BF16.FromBits(b + U16(z))) + " ") }
     return s.ToString()
 }
 RsBaked String = rsText(0)
@@ -13296,7 +13296,7 @@ test "E11a: a float's text, computed directly, is the shortest that reads back -
     assert rsText(RsZero) == RsWant, rsText(RsZero)
     assert $F64(5e-324) == "5e-324" and $F32(1e-45) == "1e-45" and $(0.1 + 0.2) == "0.30000000000000004"
     f, e := try F64.FromBits(0x0060000000000000 + RsZero).ShortestDecimal() catch { unreachable }
-    assert $f "e" $e == "7120236347223045e-322"         # the prelude's digits are $'s
+    assert $f + "e" + $e == "7120236347223045e-322"         # the prelude's digits are $'s
 }
 
 # ---- QP1-QP4: arrays - lengths inferred where an array is made, arrays by value (T7c, T7d, D9a, G29, G30) ----
@@ -13446,14 +13446,14 @@ fn kLenNamed(a Array<I32>) String {
         case 0 { return "none" }
         case _ { }
     }
-    return "first " $a[0]
+    return "first " + $a[0]
 }
 fn kKindOf<T>(x T) String {
     match T {
         case I64 { return "int" }
         case _ { }
     }
-    return "other " $x.Len()
+    return "other " + $x.Len()
 }
 KFirstSumBaked := kFirstSum(Array<I64>[3, 4])
 test "G30: what follows a decided if that leaves is not checked in that instance" {
@@ -13729,7 +13729,7 @@ fn c3Sum(l Vec<I64>&) I64 {
 }
 fn c3Table(n I64) Map<I64, String&> {
     m := Map<I64, String&>()
-    for i in range n { m.Put(i, $i "!") }
+    for i in range n { m.Put(i, $i + "!") }
     return m
 }
 type c3Box struct(name String&) {
@@ -13769,14 +13769,14 @@ fn c3RefResult(n I64) Vec<I64>& {
 }
 fn c3Texts(n I64) Array<String&> {
     items := Array<String&>(1)
-    if n > 0 { items = Array<String&>["x" $n, "y" $n] }
+    if n > 0 { items = Array<String&>["x" + $n, "y" + $n] }
     return items
 }
 C3Baked I64 = c3Sum(c3MkList(10)) + c3Sum(c3Box.c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3))
 test "O26a: a returned List, Map, struct, conditional, destructured local and reference result outlive the call" {
     l := c3MkList(sbRun * 100)
     m := c3Table(sbRun * 20)
-    b := c3Box.c3MakeBox("box" $sbRun, sbRun * 10)
+    b := c3Box.c3MakeBox("box" + $sbRun, sbRun * 10)
     p := c3Pick(sbRun * 5, false)
     d := c3Destructured(sbRun * 5)
     r := c3RefResult(sbRun * 5)
@@ -13795,7 +13795,7 @@ test "O26a: a returned List, Map, struct, conditional, destructured local and re
 
 # O26a/T7b: text a function returns from a conditional's or a match's value, or a try's default, holding a local made in
 # an inner block (the port built it in that block and returned it from there)
-fn c3Mk(i I64) String { return "v" $i }
+fn c3Mk(i I64) String { return "v" + $i }
 type c3Held struct(s String&) { s }
 fn c3PickArm(i I64, eq Bool) String {
     if i >= 0 {
@@ -13833,7 +13833,7 @@ fn c3PickTry(i I64) String {
     }
     return "none"
 }
-C3Arms String = $c3PickArm(3, true) $c3PickMatch(4) $c3PickField(5) $c3PickTry(6)
+C3Arms String = $c3PickArm(3, true) + $c3PickMatch(4) + $c3PickField(5) + $c3PickTry(6)
 test "O26a: a local a conditional, a match or a try's default returns outlives the call" {
     a := c3PickArm(sbRun * 3, true)
     b := c3PickArm(sbRun * 3, false)
@@ -13859,7 +13859,7 @@ fn c3Where(r c3Root, path String&) String {
         case _: "?"
     }
     sbChurn()
-    return $name $path
+    return $name + $path
 }
 C3Where String = c3Where(c3Root.Global(1), "/g")
 test "S12b: text a match value's arm renders outlives the arm" {
@@ -13911,7 +13911,7 @@ fn c3HasDot(path String&) Bool {
 }
 test "T29f: a slice of a String has the array methods String inherits" {
     assert c3Dots("a.cd") == 1 and c3HasDot("a.cd") and not c3HasDot("abc.")
-    s := "a." $sbRun "cd"
+    s := "a." + $sbRun + "cd"
     assert c3Dots(s) == 1 and c3HasDot(s)
 }
 
@@ -14155,7 +14155,7 @@ fn s3Kind(s s3Shape) I32 {
         case _ { return 2 }                       # covers the rest, so the match leaves (D10a)
     }
 }
-S3MatchBaked := $s3Classify(40000.0) " " $s3Classify(0.0 / 0.0) " " $s3Saturate(99) $s3Saturate(-99) $s3Saturate(3) " " $s3Kind(s3Shape.Square(1.0))
+S3MatchBaked := $s3Classify(40000.0) + " " + $s3Classify(0.0 / 0.0) + " " + $s3Saturate(99) + $s3Saturate(-99) + $s3Saturate(3) + " " + $s3Kind(s3Shape.Square(1.0))
 
 type s3Grid struct(n I64) {
     cells mut Array<I64>& = Array<I64>(n)
@@ -14302,9 +14302,9 @@ fn sc3Expr.sc3ParseTyped(src String&) sc3Expr& {
 }
 Sc3PrattBaked I64 = sc3Eval(sc3Expr.sc3Parse("1 + 2 * (3 - -4) - 6 / 2"))
 test "O26a: a Pratt parser's reference locals, rebuilt in a loop and returned, outlive the call" {
-    src := "1 + 2 * (3 - -4) - " $(sbRun * 6) " / 2"
+    src := "1 + 2 * (3 - -4) - " + $(sbRun * 6) + " / 2"
     e := sc3Expr.sc3Parse(src)
-    f := sc3Expr.sc3ParseTyped("2 * 3 + 4 - " $sbRun)
+    f := sc3Expr.sc3ParseTyped("2 * 3 + 4 - " + $sbRun)
     sbChurn()
     assert sc3Eval(e) == 12
     assert sc3Eval(f) == 9
@@ -14351,7 +14351,7 @@ test "O17: a value whose references live elsewhere, lent to callees that read it
     sc3Bump(w.age, 0)
     sbChurn()
     assert w.age.values[0] == 3
-    assert sc3Count("x" $sbRun) == 2
+    assert sc3Count("x" + $sbRun) == 2
     assert sc3CountdownSum(sbRun * 4) == 10
     assert Sc3LendBaked == 210
 }
@@ -14397,13 +14397,13 @@ fn sc3MapKeys(n I64) I64 {
     l := Vec<String&>()
     for k in m.Keys() { l.Push(k) }
     vm := Map<I64, String&>()
-    vm.Put(1, "a" $n)
+    vm.Put(1, "a" + $n)
     vl := Vec<String&>()
     for v in vm.Values() { vl.Push(v) }
     sbChurn()
     t I64 = 0
     for k in l { t += try k.ParseInt() catch default 0 }
-    return t * 10 + vl.Len() + (1 if vl[0] == "a" $n else 0) * 100
+    return t * 10 + vl.Len() + (1 if vl[0] == "a" + $n else 0) * 100
 }
 test "O23a: Map.Keys and Map.Values hand out what lives where the map's entries do" {
     assert sc3MapKeys(sbRun * 4) == 161
@@ -14487,7 +14487,7 @@ fn sc3Bag.sc3BagOf(text String&) sc3Bag ? sc3Bad {
 }
 fn sc3Keep(text String&) Vec<String&> {
     l := try sc3Validate(text) catch default Vec<String&>()
-    for i in range 50 { l.Push("p" $i) }
+    for i in range 50 { l.Push("p" + $i) }
     return l
 }
 fn sc3Defaults(text String&) I64 {
@@ -15101,7 +15101,7 @@ type o26nSummary struct() {
     best I64 = 0
     longest Vec<String&> = Vec<String&>()
 }
-fn o26nLine(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
+fn o26nLine(i I64) String& { return "line " + $i + " took " + $(i % 97) + "ms" }
 fn o26nMeasure(t String&) I64 { return t.Len() }
 fn o26nSummary.o26nScan(n I64) o26nSummary {
     s := o26nSummary()
@@ -15132,7 +15132,7 @@ type o26bNote struct(code I64, note String&) {
 type o26bView struct(xs Array<I64>&) { xs }
 fn o26bNote.o26bCheck(n I64) o26bNote {
     note := ""
-    if n > 3 { note = "big: " $n }
+    if n > 3 { note = "big: " + $n }
     return o26bNote(n, note)
 }
 fn o26bView.o26bSlice(n I64) o26bView {
@@ -15184,7 +15184,7 @@ type o26sCounts struct() {
 }
 fn o26sLine(i I64) String& ? {
     if i < 0 { error Oops.Bad }
-    return "k" $(i % 5) " tail " $i
+    return "k" + $(i % 5) + " tail " + $i
 }
 fn o26sCounts.o26sCollect(n I64) o26sCounts {
     s := o26sCounts()
@@ -15216,7 +15216,7 @@ fn o17bGroup(n I64) Map<I64, Vec<String&>> ? {
         k := i % 3
         if not m.Has(k) { m.Put(k, Vec<String&>()) }
         l := try m.RefMut(k)
-        l.Push("v" $i)
+        l.Push("v" + $i)
         sbChurn()
     }
     return m
@@ -15229,24 +15229,24 @@ fn o17bAliases() String& ? {
     for i in range 4 {
         l2 mut Vec<String&>& = l
         l2.Push($i)
-        o17bAddTo(l2, "a" $i)
+        o17bAddTo(l2, "a" + $i)
         m2 mut Map<I64, I64>& = m
         o17bPutIn(m2, i)
         sbChurn()
     }
     out := ""
-    for t in l { out = $out $t }
-    return $out " " $m.Len() " " $(try m.Get(3))
+    for t in l { out = $out + $t }
+    return $out + " " + $m.Len() + " " + $(try m.Get(3))
 }
 fn o17bBuilders() String& ? {
     m := Map<I64, StringBuilder>()
     for k in range 2 { m.Put(k, StringBuilder()) }
     for i in range 6 {
         b := try m.RefMut(i % 2)
-        b.Push("<" $i ">")
+        b.Push("<" + $i + ">")
         sbChurn()
     }
-    return $(try m.Get(0)).ToString() $(try m.Get(1)).ToString()
+    return $(try m.Get(0)).ToString() + $(try m.Get(1)).ToString()
 }
 fn o17bCounters() I64 ? {
     m := Map<I64, o17bH>()
@@ -15264,7 +15264,7 @@ test "O17b: a handle is lent as its reference" {
     t := ""
     for k in range 3 {
         l := try g.Ref(k) catch { unreachable }
-        for x in l { t = $t $x }
+        for x in l { t = $t + $x }
     }
     assert t == "v0v3v6v1v4v7v2v5v8"
     assert (try o17bAliases() catch default "") == "0a01a12a23a3 4 9"
@@ -15291,7 +15291,7 @@ fn (m mut o20Mk&) parse(text String&) {
 test "O20: a value copied out of a reference holds what its referent holds" {
     m := o20Mk()
     for i in range 20 {
-        text String& = "t" $i " a" $i " b" $i "\nu" $i " c" $i
+        text String& = "t" + $i + " a" + $i + " b" + $i + "\nu" + $i + " c" + $i
         m.parse(text)
     }
     sbChurn()
@@ -15442,7 +15442,7 @@ fn rv3Churn(n I64) I64 {
     for i in range n {
         a := Array<I64>(64, -7)
         t += a[3]
-        s := $i $i $i "-" $(i * 7)
+        s := $i + $i + $i + "-" + $(i * 7)
         t += s.Len()
     }
     return t
@@ -15572,12 +15572,12 @@ fn (b s6Bag&) Str() String {
     sb := StringBuilder()
     for e in b.m {
         sb.Push(e.Key)
-        sb.Push("=" $e.Value " ")
+        sb.Push("=" + $e.Value + " ")
     }
     cur := s6Cur(b)
     s6Step2(cur)
     s6Step2(cur)
-    sb.Push($cur.n $cur.at.k $cur.c.v)
+    sb.Push($cur.n + $cur.at.k + $cur.c.v)
     return sb.ToString()
 }
 fn s6WalkText(k I64) String {
@@ -15607,7 +15607,7 @@ type strOnceTick struct(name String&, c mut strOnceCounter&) {
 }
 fn (t strOnceTick&) Str() String {
     t.c.n++
-    return $t.name $t.c.n
+    return $t.name + $t.c.n
 }
 type strOnceTwo struct(a strOnceTick, b strOnceTick) {
     a
@@ -15620,7 +15620,7 @@ type strOnceMaybe enum {
 fn strOnceTrace(k I64) String {
     c := strOnceCounter()
     one := $strOnceTick("a", c)
-    three := $strOnceTick("x", c) "-" $strOnceTick("y", c) "-" $strOnceTick("z", c)
+    three := $strOnceTick("x", c) + "-" + $strOnceTick("y", c) + "-" + $strOnceTick("z", c)
     l := Vec<strOnceTick>()
     l.Push(strOnceTick("p", c))
     l.Push(strOnceTick("q", c))
@@ -15632,10 +15632,10 @@ fn strOnceTrace(k I64) String {
     m := Map<I64, strOnceTick>()
     m.Put(1 + k, strOnceTick("v", c))
     mapped := $m
-    return $one "|" $three "|" $listed "|" $two "|" $arr "|" $some "|" $mapped "|" $c.n
+    return $one + "|" + $three + "|" + $listed + "|" + $two + "|" + $arr + "|" + $some + "|" + $mapped + "|" + $c.n
 }
 StrOnceBaked := strOnceTrace(0)
-StrOnceWant String& = ("a1|x2-y3-z4|Vec<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|Array<strOnceTick>[e10, e11]|"
+StrOnceWant String& = ("a1|x2-y3-z4|Vec<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|Array<strOnceTick>[e10, e11]|" +
                        "strOnceMaybe.Some(s12, 7)|Map<I64, strOnceTick>[1: v13]|13")
 
 # ...and a Str changing the value being rendered part way through changes nothing already read: an enum is read whole
@@ -15668,7 +15668,7 @@ fn strOnceChanged(k I64) String {
     after := $h.e
     h2 := strOnceHolder()
     o := strOnceOuter(strOnceSwap(h2), h2)
-    return $before "|" $after "|" $o
+    return $before + "|" + $after + "|" + $o
 }
 StrChangedBaked := strOnceChanged(0)
 
@@ -15682,20 +15682,20 @@ fn (k strOnceKey) Hash() I64 { return k.n }
 fn (k strOnceKey) Eq(o strOnceKey) Bool { return k.n == o.n }
 fn (k strOnceKey) Str() String {
     StrOnceCalls++
-    StrOnceOrder = $StrOnceOrder $k.n
-    return "k" $k.n
+    StrOnceOrder = $StrOnceOrder + $k.n
+    return "k" + $k.n
 }
 
 test "E11c: Str is called once per rendering, in order - while compiling as at run time" {
     assert StrOnceBaked == StrOnceWant and strOnceTrace(I64(ctRuntimeZero)) == StrOnceWant
-    want := ("strOnceCase.Pair(swap, 3)|strOnceCase.Num(99)|"
+    want := ("strOnceCase.Pair(swap, 3)|strOnceCase.Num(99)|" +
              "strOnceOuter(swap, strOnceHolder(strOnceCase.Num(99), strOnceCase.Num(99), 5))")
     assert StrChangedBaked == want and strOnceChanged(I64(ctRuntimeZero)) == want
 }
 
 test "E11c: a Str writing a global is called once per rendering - keys and values of a Map included" {
     calls := StrOnceCalls
-    s := $strOnceKey(1) "," $strOnceKey(2)
+    s := $strOnceKey(1) + "," + $strOnceKey(2)
     assert s == "k1,k2" and StrOnceCalls == calls + 2
     m := Map<strOnceKey, strOnceKey>()
     m.Put(strOnceKey(3), strOnceKey(4))
@@ -15721,7 +15721,7 @@ fn joinOrder(k I64) String {
     s := joinOpS(5 + k)
     a := Array<I64>[1, 2]
     x I64 = 3
-    return $x $s $a $joinOpBump(s, a) $s $a
+    return $x + $s + $a + $joinOpBump(s, a) + $s + $a
 }
 JoinOrderBaked := joinOrder(0)
 
@@ -15750,7 +15750,7 @@ fn (b strWalkBag&) Str() String {
     for e in b.m { n += e.Value }
     for x in b.l { n += x }
     it := strWalkIt(b)
-    return $n "/" $it.slot.v "/" $b.l.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
+    return $n + "/" + $it.slot.v + "/" + $b.l.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
 }
 
 test "E11c: a Str walking a Map and a List of its receiver renders the same after the arena churned" {
@@ -16035,7 +16035,7 @@ fn renChars(c Char) String {
     b := RenPlain(c)
     o := RenOver(b)
     ls := Array<RenLetter>[a, RenLetter(c)]
-    return $a " " $b " " $o " " $ls " " $RenHolder(a, Array<Array<I64>>[Array<I64>[1, 2, 3]])
+    return $a + " " + $b + " " + $o + " " + $ls + " " + $RenHolder(a, Array<Array<I64>>[Array<I64>[1, 2, 3]])
 }
 RenCharsBaked String = renChars('a')
 test "E11a: a declared type over Char renders as a character, extends or not, alone and inside another value" {
@@ -16051,11 +16051,11 @@ fn renRows(n I64) String {
     l.Push(aa[0])
     r Array<Array<I32>&> = Array<Array<I32>&>[Array<I32>[1], Array<I32>[]]
     cs Array<Array<Char>> = Array<Array<Char>>["ab", "cd"]
-    return $aa " " $l.ToArray() " " $r " " $cs " " $Array<Array<I64>&>(0)
+    return $aa + " " + $l.ToArray() + " " + $r + " " + $cs + " " + $Array<Array<I64>&>(0)
 }
 RenRowsBaked String = renRows(1)
 test "E11a/E21: an array of arrays writes each element as an array of its own, its element type whole" {
-    assert RenRowsBaked == ("Array<Array<I64>>[Array<I64>[1, 2, 3], Array<I64>[4, 5, 6]] Array<Array<I64>&>[Array<I64>[1, 2, 3]] "
+    assert RenRowsBaked == ("Array<Array<I64>>[Array<I64>[1, 2, 3], Array<I64>[4, 5, 6]] Array<Array<I64>&>[Array<I64>[1, 2, 3]] " +
         "Array<Array<I32>&>[Array<I32>[1], Array<I32>[]] Array<Array<Char>>[\"ab\", \"cd\"] Array<Array<I64>&>[]")
     assert renRows(RenRunN) == RenRowsBaked
 }
@@ -16066,11 +16066,11 @@ fn renPerms(n I64) String {
     refs Array<mut RenNode&> = Array<RenNode&>[node]
     nested Array<Array<mut RenNode&>&> = Array<Array<mut RenNode&>&>[refs]
     f := fn(b RenBox<mut RenNode&>&) mut RenNode& { return RenNode(2) }
-    return $boxes " " $refs " " $nested " " $f
+    return $boxes + " " + $refs + " " + $nested + " " + $f
 }
 RenPermsBaked String = renPerms(1)
 test "E11a/T25b: a rendered type writes each inner level's mut, as source writes it" {
-    assert RenPermsBaked == ("Array<RenBox<mut RenNode&>>[RenBox(RenNode(1))] Array<RenNode&>[RenNode(1)] Array<Array<mut RenNode&>&>[Array<RenNode&>[RenNode(1)]] "
+    assert RenPermsBaked == ("Array<RenBox<mut RenNode&>>[RenBox(RenNode(1))] Array<RenNode&>[RenNode(1)] Array<Array<mut RenNode&>&>[Array<RenNode&>[RenNode(1)]] " +
         "fn&(b RenBox<mut RenNode&>&) mut RenNode&")
     assert renPerms(RenRunN) == RenPermsBaked
 }
@@ -16091,12 +16091,12 @@ fn s5Kept(n I64) I64 {
     rows := Vec<Vec<String&>>()
     outer := "outer"
     for k in range n {
-        t String& = $k "-kept-text"
+        t String& = $k + "-kept-text"
         bs.Push(s5Box.s5MkBox(t))
         bs.Push(s5Box.s5MkBox(outer))
         rows.Push(s5One(t))
         rec mut Vec<String&>& = Vec<String&>()
-        rec.Push($k "-in-rec")
+        rec.Push($k + "-in-rec")
         rows.Push(rec)
         sbChurn()
     }
@@ -16115,7 +16115,7 @@ fn s5KeptField(n I64) I64 {
     ss := Vec<String&>()
     outer := "outer-field"
     for k in range n {
-        t String& = $k "-field"
+        t String& = $k + "-field"
         ss.Push(s5Box.s5MkBox(t).s)
         ss.Push(s5Box.s5MkBox(outer).s)
         sbChurn()
@@ -16257,7 +16257,7 @@ test "O26a: a for-in element pushed into a returned list" {
 # E25 (study 5, r04): a scope argument puts a call's results where it says, destructured or not
 fn s5Mk2(n I64) Vec<String&>, I64 {
     l := Vec<String&>()
-    for i in range n + 1 { l.Push($i "-made") }
+    for i in range n + 1 { l.Push($i + "-made") }
     return l, n + 1
 }
 fn s5Destructured(n I64) I64 {
@@ -16291,7 +16291,7 @@ fn s5Captures(n I64) F64 {
     outer := s5Reading("outer-text", 2.0)
     fs := Vec<fn&() I64>()
     for k in range n {
-        t := $k "-capture-text"
+        t := $k + "-capture-text"
         x := s5Reading(t, 1.5)
         f := fn() I64 { return x.Sensor.Len() }
         assert f() == t.Len()
@@ -16643,7 +16643,7 @@ fn rv9EmptyText() String {
     x3 := Array<I16>(0)
     r Array<I16>& = x3
     e Array<I16>& = x3[0:0]
-    return $e " " $(e.Len() == 0) " " $(r.Len() == 0) " " $(e.Len() == 0)
+    return $e + " " + $(e.Len() == 0) + " " + $(r.Len() == 0) + " " + $(e.Len() == 0)
 }
 Rv9EmptyBaked String = rv9EmptyText()
 rv9EmptyRun mut I64 = 0
@@ -16801,7 +16801,7 @@ type c5Module struct(name String&) {
 fn c5Report(mods Vec<c5Module>&, i I64) String {
     b := StringBuilder()
     b.Push($mods[i].name)
-    for d in mods[i].deps { b.Push(" " $d) }
+    for d in mods[i].deps { b.Push(" " + $d) }
     return b.ToString()
 }
 type c5In struct(s String&) { s }
@@ -16818,7 +16818,7 @@ fn c5Inners(st c5Shelf&, keep mut Vec<c5In>&) {
 }
 test "O18c: a field or a payload read off a call's result, and a walk of a read-only copy's reference" {
     toks := Vec<c5Token>()
-    for i in range 3 { toks.Push(c5Token(I32(i), "w" $(i * sbRun))) }
+    for i in range 3 { toks.Push(c5Token(I32(i), "w" + $(i * sbRun))) }
     p := c5Parser(toks)
     got := p.names()
     args := Vec<c5Value&>()
@@ -16828,10 +16828,10 @@ test "O18c: a field or a payload read off a call's result, and a walk of a read-
     c5PushItem(args)
     mods := Vec<c5Module>()
     mods.Push(c5Module("a"))
-    mods[0].deps.Push("x" $sbRun)
+    mods[0].deps.Push("x" + $sbRun)
     mods[0].deps.Push("y")
     shelf := c5Shelf()
-    for i in range 3 { shelf.items.Push(c5Out(c5In("s" $(i + sbRun)))) }
+    for i in range 3 { shelf.items.Push(c5Out(c5In("s" + $(i + sbRun)))) }
     keep := Vec<c5In>()
     c5Inners(shelf, keep)
     sbChurn()
@@ -16874,7 +16874,7 @@ test "O4b: a Map whose values hold Maps of themselves" {
         inner mut Map<String&, c5Dyn>& = Map<String&, c5Dyn>()
         inner.Put("x", c5Dyn.Num(F64(i * sbRun)))
         inner.Put("y", c5Dyn.Num(0.5))
-        outer.Put("k" $i, c5Dyn.Obj(inner))
+        outer.Put("k" + $i, c5Dyn.Obj(inner))
     }
     env := c5Env()
     env.vars.Put(1, c5Fn.Nil)
@@ -17059,7 +17059,7 @@ fn peNode.peMk(n I64) peNode& ? peErr {
 }
 fn peText(n I64) String ? peErr {
     if n < 0 { error peErr.Neg }
-    return "n=" $n
+    return "n=" + $n
 }
 fn peMany(n I64) Vec<I64> ? peErr {
     if n < 0 { error peErr.Neg }
@@ -17089,10 +17089,10 @@ test "P4a: defaults holding references outlive the join" {
 # P1g/T11b: an array value a task gives its target takes the result's storage, so the call builds it where the target's
 # own storage is - not in the join block, which closes at the join (the port built it there); of several targets, where
 # the longest-lived is
-fn peTwo(n I64) String, String { return "a" $n, "b" $(n + 1) }
+fn peTwo(n I64) String, String { return "a" + $n, "b" + $(n + 1) }
 fn peTwoE(n I64) String, I64 ? peErr {
     if n < 0 { error peErr.Neg }
-    return "c" $n, n
+    return "c" + $n, n
 }
 test "P1g: array values tasks give their targets outlive the join" {
     x, y String
@@ -17101,10 +17101,10 @@ test "P1g: array values tasks give their targets outlive the join" {
     for i in range 3 {
         join {
             spawn x, y = peTwo(sbRun * 7)
-            spawn u, k = try peTwoE(-1) catch default "dflt" $i, 3
+            spawn u, k = try peTwoE(-1) catch default "dflt" + $i, 3
         }
         sbChurn()
-        assert x == "a7" and y == "b8" and u == "dflt" $i and k == 3
+        assert x == "a7" and y == "b8" and u == "dflt" + $i and k == 3
     }
     sbChurn()
     assert x == "a7" and y == "b8" and u == "dflt2"
@@ -17244,17 +17244,17 @@ type b6Cell struct() {
 test "O18c/O20: a store through an element At, Get, First or Last hands back is judged where the collection lives" {
     cells mut Vec<mut b6Cell&>& = Vec<mut b6Cell&>()
     for _ in range 3 { cells.Push(b6Cell()) }
-    outer String& = "outer" $b6Run
+    outer String& = "outer" + $b6Run
     for i in range 3 {
-        cells[i].s = "w" $i "-" $(i * 7)
+        cells[i].s = "w" + $i + "-" + $(i * 7)
         sbChurn()
     }
     sbChurn()
     assert cells[0].s == "w0-0" and cells[1].s == "w1-7" and cells[2].s == "w2-14"
     k I64 = 0
     for i in range 3 {
-        (try cells.First() catch { unreachable }).s = "f" $i
-        (try cells.Last() catch { unreachable }).s, k = "l" $i, k + i
+        (try cells.First() catch { unreachable }).s = "f" + $i
+        (try cells.Last() catch { unreachable }).s, k = "l" + $i, k + i
         sbChurn()
     }
     cells[1].s = outer
@@ -17263,7 +17263,7 @@ test "O18c/O20: a store through an element At, Get, First or Last hands back is 
     m := Map<I64, mut b6Cell&>()
     for i in range 3 { m.Put(i, b6Cell()) }
     for i in range 3 {
-        (try m.Get(i) catch { unreachable }).s = "m" $i $i
+        (try m.Get(i) catch { unreachable }).s = "m" + $i + $i
         sbChurn()
     }
     sbChurn()
@@ -17271,7 +17271,7 @@ test "O18c/O20: a store through an element At, Get, First or Last hands back is 
     rows := Vec<mut Array<String&>&>()
     for _ in range 2 { rows.Push(Array<String&>(2)) }
     for i in range 2 {
-        rows[i][0] = "r" $i
+        rows[i][0] = "r" + $i
         rows[i][1] = outer
         sbChurn()
     }
@@ -17288,7 +17288,7 @@ type b6Bag struct() {
 B6Text String& = "global"
 test "E28/O12: a conditional of references from different scopes, each value fitting the store" {
     b mut b6Bag& = b6Bag()
-    outer String& = "outer" $b6Run
+    outer String& = "outer" + $b6Run
     for i in range 3 {
         b.last = outer if i == 1 else "z"
         sbChurn()
@@ -17301,7 +17301,7 @@ test "E28/O12: a conditional of references from different scopes, each value fit
     sbChurn()
     assert b.last == "outer1"
     for i in range 2 {
-        x String& = "x" $i
+        x String& = "x" + $i
         q String& = x if i == 0 else outer
         assert q.Len() == 2 or q == "outer1"
     }
@@ -17372,7 +17372,7 @@ fn b6Pars() I64 {
     a, k = b6PNode.b6PMake(2), k + 1
     a, k = b6PNode.b6PMake(3), k + 1
     s String& = ""
-    s, k = "t" $k, k + 1
+    s, k = "t" + $k, k + 1
     return a.v * 100 + k * 10 + s.Len()
 }
 B6ParsBaked := b6Pars()
@@ -17388,7 +17388,7 @@ test "S4c: several parallel assignments in one function" {
     a, k = b6PNode.b6PMake(3), k + 1
     a, k = b6PNode.b6PMake(4), k + 1
     s String& = ""
-    s, k = "t" $k, k + 1
+    s, k = "t" + $k, k + 1
     assert a.v == 4 and k == 5 and s == "t4" and l.Len() == 0
 }
 
@@ -17746,7 +17746,7 @@ fn r2Kinds(s R2Shape) String {
     return ("round" if s == R2Shape.Round else "box" if s == R2Shape.Box(_, 2.0) else "other")
 }
 R2Baked F64 = r2Area(R2Shape.Round(R2Disk(1.0))) + r2Area(R2Shape.Box(2.0, 3.0)) + F64(r2Sum(R2Tree.r2Tree(4)))
-R2KindsBaked String& = $r2Kinds(R2Shape.Round(R2Disk(2.0))) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0))
+R2KindsBaked String& = $r2Kinds(R2Shape.Round(R2Disk(2.0))) + " " + $r2Kinds(R2Shape.Box(1.0, 2.0)) + " " + $r2Kinds(R2Shape.Box(1.0, 3.0))
 R2ListBaked Bool = Array<I64>[1, 2].ToVec() == Array<I64>[1, 2].ToVec() and Array<I64>[1, 2].ToVec() != Array<I64>[1, 3].ToVec()
 R2Run mut I64 = 4
 test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling" {
@@ -17768,7 +17768,7 @@ test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole p
     assert n != R2Tree.Leaf and n == null
     assert R2Baked == 3.0 + 1.0 + 6.0 + 10.0 and R2Baked == r2Area(R2Shape.Round(R2Disk(1.0))) + 6.0 + F64(r2Sum(t))
     assert R2KindsBaked == "round box other"
-    assert R2KindsBaked == ($r2Kinds(r) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0)))
+    assert R2KindsBaked == ($r2Kinds(r) + " " + $r2Kinds(R2Shape.Box(1.0, 2.0)) + " " + $r2Kinds(R2Shape.Box(1.0, 3.0)))
     assert R2ListBaked
 }
 
@@ -17936,7 +17936,7 @@ type UcHolder struct(N I64) {
     L Vec<String&>
 }
 fn (h mut UcHolder&) Keep(s String&) { h.L.Push(s) }
-fn ucMk(s String&) String { return $s "-made" }
+fn ucMk(s String&) String { return $s + "-made" }
 fn UcPair.ucCond(t String&, at I64) UcPair {
     e := UcPair($t, ucMk(t) if at >= 0 else "")
     return e
@@ -17954,7 +17954,7 @@ fn UcPair.ucMatch(t String&, k UcKind) UcPair {
 fn UcPair.ucBoth(t String&, k UcKind) UcPair {
     e := UcPair($t, match k {
         case UcKind.New: ucMk(t)
-        case UcKind.Empty: $t "-empty"
+        case UcKind.Empty: $t + "-empty"
     })
     return e
 }
@@ -18030,7 +18030,7 @@ type trWide trait for trSmall, I64 { }
 type trWalk<T> trait extends Iterator<T> { }
 
 fn trBoth<T trShape trHouse>(x T) I64 { return x.Area() + x.Rooms() }
-fn trDescribe<T trDwelling>(x T) String { return $x.Label() " " $x.Area() " " $x.Rooms() }
+fn trDescribe<T trDwelling>(x T) String { return $x.Label() + " " + $x.Area() + " " + $x.Rooms() }
 fn trTwice<T trWide>(x T) I64 {
     match T {
         case I8 { return I64(x) + 1 }
@@ -18239,7 +18239,7 @@ test "E24: a try covers the whole expression after it, and the evaluator agrees"
 DestroyLog mut I64 = 0
 type DestroyRes unique struct(id I64) {
     id
-    text String& = $"res " $id " - its text built where it lives"
+    text String& = $"res " + $id + " - its text built where it lives"
 } destruct {
     DestroyLog = DestroyLog * 10 + id
 }
@@ -18341,15 +18341,15 @@ type LetGoHolder struct() {
 
 fn letGoGen(h mut LetGoHolder&, n I64) Iterator<I64> {
     for i in range n {
-        h.cur = $"turn " $i " of the walk, built for the place"
+        h.cur = $"turn " + $i + " of the walk, built for the place"
         churnArena()
         yield h.cur.Len()
     }
 }
 
 fn letGoOnError(h mut LetGoHolder&, i I64) I64 ? DestroyFail {
-    errdefer h.cur = $"reset after " $i
-    h.cur = $"value " $i " held for a while"
+    errdefer h.cur = $"reset after " + $i
+    h.cur = $"value " + $i + " held for a while"
     churnArena()
     if i < 0 { error DestroyFail.Neg }
     return h.cur.Len()
@@ -18405,7 +18405,7 @@ type BulkHolder struct() {
     t String& = ""
 }
 
-fn (h mut BulkHolder&) set(i I64) { h.t = $"bulk text " $i " padded out to many bytes ........................................" }
+fn (h mut BulkHolder&) set(i I64) { h.t = $"bulk text " + $i + " padded out to many bytes ........................................" }
 
 # F1: a view held in a generator's frame across a yield, the consumer letting go of what it names in between
 fn bulkWalk(h BulkHolder&) Iterator<I64> {
@@ -18438,7 +18438,7 @@ test "O8d, F1: a view a generator holds across a yield keeps what it names" {
 # F2: one value of a place stored inside another value of the same place - a place's key names every instance's field
 type BulkNode struct(v I64) {
     v
-    t String& = $"node " $v " with text padded out to a fair length ..........................."
+    t String& = $"node " + $v + " with text padded out to a fair length ..........................."
     next mut BulkNode?& = null
 }
 
@@ -18501,7 +18501,7 @@ type BulkRes unique struct(n I64) {
 
 type BulkResNode struct(v I64) {
     v
-    t String& = $"node " $v " with some text ............................................"
+    t String& = $"node " + $v + " with some text ............................................"
     BulkRes(v)
 }
 
@@ -18559,7 +18559,7 @@ fn bulk3Texts() String {
     t Array<Char> = "hello"
     bulk3Zap(t)
     bulk3Zap(Bulk3Text)
-    return $t " " $Bulk3Text
+    return $t + " " + $Bulk3Text
 }
 
 Bulk3TextsBaked := bulk3Texts()
@@ -18590,7 +18590,7 @@ test "E31b: a mutating call through x[i] is made on the element in place, as the
     assert InPlaceCallsBaked == want
     # read back after an arena churn: the elements' buffers grew where the elements live
     churn := Vec<String>()
-    for i in range 200 { churn.Push($"churn " $i) }
+    for i in range 200 { churn.Push($"churn " + $i) }
     assert churn.Len() == 200 and inPlaceCalls() == want
 }
 
@@ -18613,7 +18613,7 @@ fn s4cSwaps(n I64) String {
     g := mxGrid(2, 2)
     g[0, 1], g[1, 0] = 5, 6
     g[0, 1], g[1, 0] = g[1, 0], g[0, 1]         # two indices each
-    return $ps " " $v " " $g[0, 1] " " $g[1, 0] " " $i
+    return $ps + " " + $v + " " + $g[0, 1] + " " + $g[1, 0] + " " + $i
 }
 S4cSwapsBaked := s4cSwaps(3)
 test "S4c, E31: a parallel assignment of elements stores through SetAt" {

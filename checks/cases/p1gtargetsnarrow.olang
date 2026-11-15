@@ -12,7 +12,7 @@ fn pick(n Node&) Node&, I64 { return n, 1 }
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -28,5 +28,5 @@ fn main() ? {
         spawn x, k = pick(m)
     }
     churn()
-    try io.PutLine($x.v " " $k)
+    try io.PutLine($x.v + " " + $k)
 }

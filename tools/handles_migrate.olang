@@ -132,7 +132,7 @@ fn asReference(line String&, e edit&) String ? NoEdit {
     j := declAfter(line, e.Col, e.Name)
     if j == 0 or e.Root == "": error NoEdit
     perm := "mut " if e.Kind == "mut" else ""
-    return $line[:e.Col - 1 + e.Name.Len()] " " $perm $e.Type "&" $e.Root " =" $line[j + 2:]
+    return $line[:e.Col - 1 + e.Name.Len()] + " " + $perm + $e.Type + "&" + $e.Root + " =" + $line[j + 2:]
 }
 
 # the line with an element or a value read where its collection holds it: "x := a[i]" or "x := a.At(i)" as
@@ -150,7 +150,7 @@ fn asRef(line String&, e edit&) String ? NoEdit {
     }
     if e.Root == "Get" {
         g := try rhs.Find(".Get(") catch { error NoEdit }
-        return $line[:j + 2] $rhs[:g] $m $rhs[g + 5:] $note
+        return $line[:j + 2] + $rhs[:g] + $m + $rhs[g + 5:] + $note
     }
     if e.Root != "At": error NoEdit
     a := try rhs.Find(".At(") catch {
@@ -168,9 +168,9 @@ fn asRef(line String&, e edit&) String ? NoEdit {
             k--
         }
         if k <= 0: error NoEdit
-        return $line[:j + 2] $t[:k] $m $t[k + 1:t.Len() - 1] ")" $rhs[t.Len():] $note
+        return $line[:j + 2] + $t[:k] + $m + $t[k + 1:t.Len() - 1] + ")" + $rhs[t.Len():] + $note
     }
-    return $line[:j + 2] $rhs[:a] $m $rhs[a + 4:] $note
+    return $line[:j + 2] + $rhs[:a] + $m + $rhs[a + 4:] + $note
 }
 
 # the line with the parameter at col lent writably: "name T" as "name mut T&"
@@ -194,7 +194,7 @@ fn asLent(line String&, e edit&) String ? NoEdit {
     }
     ty := srcmask.StripEnd(line[t0:k])
     if ty.EndsWith("&") or ty.StartsWith("mut "): error NoEdit
-    return $line[:t0] "mut " $ty "&" $line[t0 + ty.Len():]
+    return $line[:t0] + "mut " + $ty + "&" + $line[t0 + ty.Len():]
 }
 
 # the line with the element "x[i]" at col - its "[", or the member read out of it - taken where its collection holds it:
@@ -229,7 +229,7 @@ fn asElem(line String&, e edit&) String ? NoEdit {
         j++
     }
     if j >= line.Len(): error NoEdit
-    return $line[:i] ".RefMut(" $line[i + 1:j] ")" $line[j + 1:]
+    return $line[:i] + ".RefMut(" + $line[i + 1:j] + ")" + $line[j + 1:]
 }
 
 # the line with ".Clone()" at col left out
@@ -241,7 +241,7 @@ fn asValue(line String&, e edit&) String ? NoEdit {
         k := try line[:i].FindLast(":=") catch default -1
         if k >= 0 and srcmask.Strip(line[k + 2:i]).Len() > 0 and not line[k + 2:i].Contains("("): error NoEdit
     }
-    return $line[:i] $line[i + 8:]
+    return $line[:i] + $line[i + 8:]
 }
 
 # each file's edits applied, the latest column on a line first; what could not be done listed for a person
@@ -270,16 +270,16 @@ fn applyFile(path String&, eds Vec<edit>&, left mut Vec<String&>&, cloned mut Ve
         if key == last or e.Line < 1 or e.Line > lines.Len(): continue
         last = key
         line := lines[e.Line - 1]
-        at := $path ":" $e.Line
+        at := $path + ":" + $e.Line
         # (a line whose Clone was left out keeps its copy: a later round's report of it is no handle's copy)
         if e.Kind != "clone" and cloned.Has(at): continue
         if (e.Kind == "ref" or e.Kind == "mut") and reassigned(lines, e.Line - 1, declValue(line, e)) {
             # (a copy kept as the old value: it means what it did)
-            if e.Kind == "mut": left.Push($path ":" $e.Line ":" $e.Col ": a copy written, its place assigned later: " $e.Name)
+            if e.Kind == "mut": left.Push($path + ":" + $e.Line + ":" + $e.Col + ": a copy written, its place assigned later: " + $e.Name)
             continue
         }
         out := try changed(line, e) catch NoEdit {
-            if (e.Kind != "ref" or e.Root != "") and e.Root != "?": left.Push($path ":" $e.Line ":" $e.Col ": " $e.Kind " " $e.Name " " $e.Type " " $e.Root)
+            if (e.Kind != "ref" or e.Root != "") and e.Root != "?": left.Push($path + ":" + $e.Line + ":" + $e.Col + ": " + $e.Kind + " " + $e.Name + " " + $e.Type + " " + $e.Root)
             continue
         }
         lines[e.Line - 1] = $out
@@ -287,7 +287,7 @@ fn applyFile(path String&, eds Vec<edit>&, left mut Vec<String&>&, cloned mut Ve
         done++
     }
     if done > 0 {
-        try os.WriteFile(path, lines.Join("\n")) catch { srcmask.SayErr("handles_migrate: cannot write " $path) }
+        try os.WriteFile(path, lines.Join("\n")) catch { srcmask.SayErr("handles_migrate: cannot write " + $path) }
     }
     return done
 }
@@ -308,7 +308,7 @@ fn compileOne(olang String&, file String&, dir String&) String {
     src := try srcmask.ReadText(file) catch { return "" }
     mode := "test" if src.Contains("TestBuild") or src.Contains("\ntest ") or src.StartsWith("test ") else "compile"
     out := try os.Output.ExecUntil(cancel.Token.After(900000), "env", "OLANG_HANDLES=1", olang, mode, file, dir = dir) catch { return "" }
-    return $out.Stdout $out.Stderr
+    return $out.Stdout + $out.Stderr
 }
 
 fn worker(olang String&, files Array<String&>&, dir String&, outputs mut Array<String&>&) {
@@ -363,7 +363,7 @@ fn main() ? {
     defer try os.RemoveAll(tmp) catch { }
     work Vec<String&>
     for k in range jobs.Max(1) {
-        work.Push($tmp "/w" $k)
+        work.Push($tmp + "/w" + $k)
         try os.MkDirAll(work[k])
     }
     total I64 = 0
@@ -381,14 +381,14 @@ fn main() ? {
         }
         left.Clear()
         n := apply(eds, left, cloned)
-        srcmask.Say("round " $round ": " $n " edits")
+        srcmask.Say("round " + $round + ": " + $n + " edits")
         total += n
         if n == 0: break
     }
-    srcmask.Say("total: " $total " edits")
+    srcmask.Say("total: " + $total + " edits")
     if left.Len() > 0 {
         srcmask.Say("for a person:")
-        for l in left { srcmask.Say("  " $l) }
+        for l in left { srcmask.Say("  " + $l) }
     }
 }
 

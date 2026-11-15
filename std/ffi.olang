@@ -75,7 +75,7 @@ fn width(c U8) I64 {
 
 # whether "name" is a function the process can call this way - in what it has loaded, or in the C math library
 fn Has(name String&) Bool {
-    return __olang_dyncall_check($name "\0", Array<U8>[0], 0) != 1
+    return __olang_dyncall_check($name + "\0", Array<U8>[0], 0) != 1
 }
 
 # calls the C function "name" with the arguments "words" holds, as "kinds" describes them, and gives its result's bits
@@ -100,7 +100,7 @@ fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0, fi
     if need > words.Len() { error Error.BadArguments }
     ended := Array<U8>(kinds.Len() + 1)
     for i, k in kinds { ended[i] = k }
-    named := $name "\0"
+    named := $name + "\0"
     if fixed > kinds.Len() { error Error.BadArguments }
     match __olang_dyncall_var_check(named, ended, result, fixed) {
         case 1 { error Error.NotFound }

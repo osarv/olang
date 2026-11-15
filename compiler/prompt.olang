@@ -103,7 +103,7 @@ type Session struct(Cfg mut build.Config&) {
     Cells I64 = 0
     # the program's path: in the working directory, so its imports are found from there as a file's there are; its
     # text is never written there (load.Loader.Overlay)
-    Root String& = $(try os.Cwd() catch default ".") "/olang-prompt.olang"
+    Root String& = $(try os.Cwd() catch default ".") + "/olang-prompt.olang"
     Decls Vec<Decl>
     Values Vec<Value>
     snap eval.Snapshot = eval.Snapshot()
@@ -208,8 +208,8 @@ fn declKey(text String&, toks Array<token.Token>&, a I64, b I64) String {
     k := toks[i].Kind
     if k == token.Tok.Type and i + 1 <= b: return word(text, toks[i + 1])
     if k == token.Tok.Fn and i + 1 <= b: return fnKey(text, toks, i + 1, b)
-    if k == token.Tok.Import: return "import " $importName(text, toks, i + 1, b)
-    if k == token.Tok.Extern or k == token.Tok.Test: return $"text " $text[toks[a].Start:toks[b].End]
+    if k == token.Tok.Import: return "import " + $importName(text, toks, i + 1, b)
+    if k == token.Tok.Extern or k == token.Tok.Test: return $"text " + $text[toks[a].Start:toks[b].End]
     if k == token.Tok.Iden and i + 1 <= b and toks[i + 1].Kind == token.Tok.Mut: return word(text, toks[i])
     return ""
 }
@@ -217,7 +217,7 @@ fn declKey(text String&, toks Array<token.Token>&, a I64, b I64) String {
 # a function's key from the token after "fn": "f", "T.Builder", or a method's "T.M" from its receiver "(r mut T&)"
 fn fnKey(text String&, toks Array<token.Token>&, i I64, b I64) String {
     if toks[i].Kind == token.Tok.Iden {
-        if i + 2 <= b and toks[i + 1].Kind == token.Tok.Dot: return $word(text, toks[i]) "." $word(text, toks[i + 2])
+        if i + 2 <= b and toks[i + 1].Kind == token.Tok.Dot: return $word(text, toks[i]) + "." + $word(text, toks[i + 2])
         return word(text, toks[i])
     }
     if toks[i].Kind != token.Tok.LParen: return ""
@@ -226,7 +226,7 @@ fn fnKey(text String&, toks Array<token.Token>&, i I64, b I64) String {
     if j <= b and toks[j].Kind == token.Tok.Mut: j++
     if j + 2 <= b and toks[j + 1].Kind == token.Tok.Dot: j += 2
     if j > b or close + 1 > b: return ""
-    return $word(text, toks[j]) "." $word(text, toks[close + 1])
+    return $word(text, toks[j]) + "." + $word(text, toks[close + 1])
 }
 
 # an import's alias, or the name of its file without its extension
@@ -358,17 +358,17 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
     for v in vs {
         if not v.Made: continue
         p.Kept.Push(v.Name)
-        p.put($v.Name " mut " $v.Type " = unreachable \"a value the session keeps\"", Synthetic, 0)
+        p.put($v.Name + " mut " + $v.Type + " = unreachable \"a value the session keeps\"", Synthetic, 0)
     }
     if keeping {
-        for v in c.Keeps { p.put($KeepPrefix $v.Name " mut " $v.Type " = unreachable \"a value the cell keeps\"", Synthetic, 0) }
+        for v in c.Keeps { p.put($KeepPrefix + $v.Name + " mut " + $v.Type + " = unreachable \"a value the cell keeps\"", Synthetic, 0) }
     }
     if c.Show {
-        p.put($ShownName " mut String = \"\"", Synthetic, 0)
+        p.put($ShownName + " mut String = \"\"", Synthetic, 0)
         p.put(RichDecls, Synthetic, 0)
     }
     if not s.Interp: p.put(SayDecl, Synthetic, 0)
-    p.put($"fn " $CellName "() ? {", Synthetic, 0)
+    p.put($"fn " + $CellName + "() ? {", Synthetic, 0)
     last := c.Items.Len() - 1
     for i, it in c.Items {
         if it.IsDecl: continue
@@ -377,10 +377,10 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
         # (the value is shown as "$" renders it, and richly where its type renders itself, B23)
         if c.Show and i == last: p.put("{\nolangShownValue := (", Synthetic, 0)
         p.put(t, c.Label, it.Line)
-        if c.Show and i == last: p.put($")\n" $ShownName " = $olangShownValue\n" $RichName "(olangShownValue)\n}", Synthetic, 0)
+        if c.Show and i == last: p.put($")\n" + $ShownName + " = $olangShownValue\n" + $RichName + "(olangShownValue)\n}", Synthetic, 0)
     }
     if keeping {
-        for v in c.Keeps { p.put($KeepPrefix $v.Name " = " $v.Name, c.Label, v.Root) }
+        for v in c.Keeps { p.put($KeepPrefix + $v.Name + " = " + $v.Name, c.Label, v.Root) }
     }
     if c.Show and not s.Interp: p.put(SayShown, Synthetic, 0)
     p.put("}", Synthetic, 0)
@@ -415,7 +415,7 @@ CellEntry String& = """
 # top-level locals kept - all only where the session's program with it checks
 fn (s mut Session&) Cell(text String&, label String& = "") Reply {
     s.Cells++
-    c := cell($label if label != "" else $"cell" $s.Cells, text)
+    c := cell($label if label != "" else $"cell" + $s.Cells, text)
     for it in pieces(text) { c.Items.Push(it) }
     r := Reply()
     if c.Items.Len() == 0 {
@@ -448,7 +448,7 @@ fn (s mut Session&) Cell(text String&, label String& = "") Reply {
             # values whose types the cell lays out anew: let go, and the cell checked without them
             left Vec<Value>
             for v in vs {
-                if v.Name in r.gone: notes.Push($v.Name " is let go: its type is not laid out as it was\n")
+                if v.Name in r.gone: notes.Push($v.Name + " is let go: its type is not laid out as it was\n")
                 else: left.Push(v)
             }
             vs = left
@@ -462,7 +462,7 @@ fn (s mut Session&) Cell(text String&, label String& = "") Reply {
         if plain.Checked or errorRows(plain.Diags) < errorRows(r.Diags): r = plain
         break
     }
-    r.Notes = $notes.ToString() $r.Notes
+    r.Notes = $notes.ToString() + $r.Notes
     return r
 }
 
@@ -486,7 +486,7 @@ fn cellRows(t String&, label String&) String {
             flushRow(b, row.ToString(), label, seen)
             row = StringBuilder()
         }
-        row.Push($line "\n")
+        row.Push($line + "\n")
     }
     flushRow(b, row.ToString(), label, seen)
     return b.ToString()
@@ -496,7 +496,7 @@ fn flushRow(b mut StringBuilder&, row String&, label String&, seen mut Map<Strin
     if row == "" or row in seen: return
     seen.Put(row, true)
     head := row[:try row.FindByte('\n') catch default row.Len()]
-    if head.Contains(": warning") and (not head.StartsWith($label ":") or head.Contains("warning[M5a]")): return
+    if head.Contains(": warning") and (not head.StartsWith($label + ":") or head.Contains("warning[M5a]")): return
     b.Push(row)
 }
 
@@ -556,14 +556,14 @@ fn (s mut Session&) startWorker() {
     if why == "" {
         # (a root of this session's own: what its cells' objects are named by is no other session's, which takes its
         # own away as it ends)
-        if not s.cc.Cell: s.Root = $s.Root[:s.Root.Len() - 6] "-" $build.Pid() ".olang"
+        if not s.cc.Cell: s.Root = $s.Root[:s.Root.Len() - 6] + "-" + $build.Pid() + ".olang"
         s.cc = cells.Config(s.Cfg)
         s.work = cells.Worker(s.Relay)
         why = s.work.Start(s.cc)
         if why == "": return
     }
     s.Interp = true
-    sayErr($"olang: the cells are interpreted: " $why "\n")
+    sayErr($"olang: the cells are interpreted: " + $why + "\n")
 }
 
 # the cell checked with the session's declarations ds and values vs, then built and run by the worker: checked first
@@ -645,8 +645,8 @@ fn layoutKey(x mut interp.Exec&, c mut typecheck.Checker&, ty types.TypeId, byRe
         return layoutKey(x, c, c.P.T.Array(c.P.T.Elem(ty), types.TypeId(0)), byRef)
     }
     r := c.P.T.Repr(ty)
-    if c.P.T.KindOf(r) == types.Kind.Ref: return $"&" $x.M.Layout(c.P.T.Referent(r))
-    return $("&" if byRef else "") $x.M.Layout(ty)
+    if c.P.T.KindOf(r) == types.Kind.Ref: return $"&" + $x.M.Layout(c.P.T.Referent(r))
+    return $("&" if byRef else "") + $x.M.Layout(ty)
 }
 
 # the cell's program built as a shared object - each value the session keeps named by its storage, the cell's kept
@@ -662,7 +662,7 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
         plan.NoInit.Put(s.initSym(v.Name), true)
     }
     for v in ce.Keeps {
-        k := $KeepPrefix $v.Name
+        k := $KeepPrefix + $v.Name
         plan.Rename.Put(s.globalSym(k), s.storeOf(k, n))
         plan.NoInit.Put(s.initSym(k), true)
     }
@@ -673,7 +673,7 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
     d.Lenient = true
     dir := s.cellDir()
     try os.MkDirAll(dir) catch os.Error { }
-    so := $dir "/cell" $n ".so"
+    so := $dir + "/cell" + $n + ".so"
     spin.Begin("compiling")
     try cells.Build(s.cc, s.Root, p.B.ToString(), p.Kept.ToArray(), p.Paths.ToArray(), p.Lines.ToArray(), plan, so, d) catch build.Failed {
         spin.End()
@@ -702,7 +702,7 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
     }
     r.Failure = places(o.Failure, p, s.Root)
     if o.Failure == "" {
-        for v in ce.Keeps: vals.Push(s.kept(v.Name, v.Type, true, $KeepPrefix $v.Name, lay))
+        for v in ce.Keeps: vals.Push(s.kept(v.Name, v.Type, true, $KeepPrefix + $v.Name, lay))
         for g in fresh: vals.Push(s.kept(g, "", false, g, lay))
         r.Shown = o.Shown
         r.Text = o.Text
@@ -734,29 +734,29 @@ fn freshGlobals(ds Vec<Decl>&, vs Vec<Value>&) Vec<String&> {
 }
 
 # the symbol of the session's program's global name, of its initializer, and of the storage cell n gives it
-fn (s Session&) globalSym(name String&) String { return types.Symbol($"G." $s.ident "." $name) }
-fn (s Session&) initSym(name String&) String { return types.Symbol($s.ident "." $name ".init") }
-fn (s Session&) storeOf(name String&, n I64) String { return $s.globalSym(name) ".cell" $n }
+fn (s Session&) globalSym(name String&) String { return types.Symbol($"G." + $s.ident + "." + $name) }
+fn (s Session&) initSym(name String&) String { return types.Symbol($s.ident + "." + $name + ".init") }
+fn (s Session&) storeOf(name String&, n I64) String { return $s.globalSym(name) + ".cell" + $n }
 
 # where this session's cells' objects are linked, taken away as it ends
-fn (s Session&) cellDir() String { return $s.cc.Dir "/s" $build.Pid() }
+fn (s Session&) cellDir() String { return $s.cc.Dir + "/s" + $build.Pid() }
 
 # what stopped a cell's process, said: the session's values as they were before it
 fn stopped(how String&) String {
     what := match how {
         case "interrupted": "interrupted"
-        case _ if how.StartsWith("exited "): $"the cell ended the program with status " $how[7:]
-        case _ if how.StartsWith("signal "): $"the cell's run crashed (signal " $how[7:] ")"
+        case _ if how.StartsWith("exited "): $"the cell ended the program with status " + $how[7:]
+        case _ if how.StartsWith("signal "): $"the cell's run crashed (signal " + $how[7:] + ")"
         case _: $how
     }
-    return $what " - the session's values are as they were before the cell\n"
+    return $what + " - the session's values are as they were before the cell\n"
 }
 
 # a run's text with the places in the session's program (root, as the build names it) given as their cells' places
 fn places(t String&, p program&, root String&) String {
     if t == "": return ""
     b := StringBuilder()
-    lead := $root ":"
+    lead := $root + ":"
     at I64 = 0
     for {
         i := try t[at:].Find(lead) catch { break }
@@ -770,7 +770,7 @@ fn places(t String&, p program&, root String&) String {
             at = j
             continue
         }
-        b.Push($p.Paths[line] ":" $p.Lines[line])
+        b.Push($p.Paths[line] + ":" + $p.Lines[line])
         at = k
     }
     b.Push(t[at:])
@@ -787,7 +787,7 @@ fn (s mut Session&) endCompiled() {
     base := build.Readable(s.ident)
     names := try os.ReadDir(s.cc.Dir) catch os.Error { return }
     for name in names {
-        if name.StartsWith($base ".") or name.StartsWith($base "__"): try os.Remove($s.cc.Dir "/" $name) catch os.Error { }
+        if name.StartsWith($base + ".") or name.StartsWith($base + "__"): try os.Remove($s.cc.Dir + "/" + $name) catch os.Error { }
     }
 }
 
@@ -834,7 +834,7 @@ fn (s mut Session&) keptLocals(c mut typecheck.Checker&, ce mut cell&, kept Bool
     for lc in body.Locals {
         if lc.In != typed.BlockId(0) or lc.Kind != typed.LocalKind.Var or lc.Name == source.NameId(0): continue
         ty := c.Ty(lc.Ty)
-        if kept and c.P.T.KindOf(lc.Ty) != types.Kind.Ref and c.P.T.Unique(lc.Ty): ty = $ty "&"
+        if kept and c.P.T.KindOf(lc.Ty) != types.Kind.Ref and c.P.T.Unique(lc.Ty): ty = $ty + "&"
         v := Value($c.P.L.Names.Text(lc.Name), ty, true)
         # (where it is declared, for the line its keeping is told at)
         v.Root = c.P.L.Diags.LineAt(body.File, I64(lc.Sp.Start))
@@ -851,11 +851,11 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     interp.DecideAsserts(c, asserts)
     if clean: interp.Bake(c)
     if d.Errors() > 0: return null
-    for g in c.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
+    for g in c.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) + ": it does not check " + $g.What + " yet") }
     if r.Failure != "": return null
     for ln in c.P.L.Links() {
         why := interp.LoadLibrary(ln)
-        if why != "": gap(r, $"the library '" $ln "' cannot be loaded: " $why)
+        if why != "": gap(r, $"the library '" + $ln + "' cannot be loaded: " + $why)
     }
     if r.Failure != "": return null
     x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
@@ -866,7 +866,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Run()
-    for g in sc.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) ": it does not judge " $g.What " yet") }
+    for g in sc.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) + ": it does not judge " + $g.What + " yet") }
     if d.Errors() > 0 or r.Failure != "": return null
     fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Decide(sc.Plans, c.P.L.Root)
@@ -879,7 +879,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     }
     x.Lw.Free = fr
     x.M.Soles = fr.Sole
-    for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First " " $bt.Second, true) }
+    for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First + " " + $bt.Second, true) }
     x.M.Args.Push("olang")
     if s.Watch != null {
         x.M.Watch = s.Watch
@@ -889,7 +889,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
 }
 
 # what the prompt cannot run, said as interpret says it (B3e)
-fn gap(r mut Reply&, why String&) { r.Failure = $r.Failure "olang: the prompt cannot run this: " $why "\n" }
+fn gap(r mut Reply&, why String&) { r.Failure = $r.Failure + "olang: the prompt cannot run this: " + $why + "\n" }
 
 # the cell's function run on x: the session's values restored into it first, then kept again as it ends - with the
 # cell's locals where it ran to its end - and what nothing keeps let go, destructors run. The reply told what happened
@@ -902,11 +902,11 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
     names := c.P.L.Names
     notes := StringBuilder()
     kept := s.restore(c, x, vs)
-    for v in ce.Keeps { x.M.MarkSet(root, names.Intern($KeepPrefix $v.Name)) }
+    for v in ce.Keeps { x.M.MarkSet(root, names.Intern($KeepPrefix + $v.Name)) }
     st := x.InitGlobals()
     if st == eval.Stop.None: st = x.M.Eval(k, Array<I64>(0))
     if st != eval.Stop.None {
-        r.Failure = $x.StopText(st, b, d) "\n" $x.TraceText(d)
+        r.Failure = $x.StopText(st, b, d) + "\n" + $x.TraceText(d)
     } else {
         for v in ce.Keeps {
             kv := Value(v.Name, v.Type, true)
@@ -924,10 +924,10 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
     s.snap.Clear()
     vals Vec<Value>
     for v in kept {
-        gname := $KeepPrefix $v.Name if v.Made and v.Root < 0 else $v.Name
+        gname := $KeepPrefix + $v.Name if v.Made and v.Root < 0 else $v.Name
         _, ty := try x.M.GlobalAt(root, names.Intern(gname)) catch eval.NotSaved { continue }
         idx := try x.M.Save(root, names.Intern(gname), s.snap) catch eval.NotSaved e {
-            notes.Push($v.Name " is let go: " $notSaved(e) "\n")
+            notes.Push($v.Name + " is let go: " + $notSaved(e) + "\n")
             continue
         }
         nv := Value($v.Name, $v.Type, v.Made)
@@ -946,7 +946,7 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
         if seen: continue
         _, ty := try x.M.GlobalAt(root, names.Intern(dc.Key)) catch eval.NotSaved { continue }
         idx := try x.M.Save(root, names.Intern(dc.Key), s.snap) catch eval.NotSaved e {
-            notes.Push($dc.Key " is let go: " $notSaved(e) "\n")
+            notes.Push($dc.Key + " is let go: " + $notSaved(e) + "\n")
             continue
         }
         nv := Value($dc.Key, "", false)
@@ -1025,7 +1025,7 @@ fn (s mut Session&) End() {
 
 # :type EXPR - the type of the expression's value, as the session's program writes it (explain's spelling, B11b)
 fn (s mut Session&) TypeOf(expr String&) Reply {
-    c := cell("type", $"olangType := (" $expr ")")
+    c := cell("type", $"olangType := (" + $expr + ")")
     for it in pieces(c.Text) { c.Items.Push(it) }
     r := Reply()
     d := diag.Diagnostics(false)
@@ -1142,7 +1142,7 @@ fn command(s mut Session&, ed mut lineedit.Editor&, t String&) {
         return
     }
     if t == ":help" {
-        say($HelpText "\n")
+        say($HelpText + "\n")
         return
     }
     if t.StartsWith(":type ") {
@@ -1152,13 +1152,13 @@ fn command(s mut Session&, ed mut lineedit.Editor&, t String&) {
     if t.StartsWith(":load ") {
         path := t[6:].Trim()
         text := try os.ReadFile(path) catch os.Error {
-            sayErr($"cannot read " $path "\n")
+            sayErr($"cannot read " + $path + "\n")
             return
         }
         tell(s.Cell(text, label = path))
         return
     }
-    sayErr($"unknown command " $t " - :help lists them\n")
+    sayErr($"unknown command " + $t + " - :help lists them\n")
 }
 
 # a reply told: its diagnostics, what stopped its run and its notes on the standard error, its value on the output
@@ -1167,7 +1167,7 @@ fn tell(r Reply&) {
     if r.Diags != "": sayErr(paint.Diagnostics(r.Diags) if colourErr else $r.Diags)
     if r.Failure != "": sayErr(paint.Diagnostics(r.Failure) if colourErr else $r.Failure)
     if r.Notes != "": sayErr(r.Notes)
-    if r.Shown: say($(paint.Source(r.Text) if paint.Wanted(1) else $r.Text) "\n")
+    if r.Shown: say($(paint.Source(r.Text) if paint.Wanted(1) else $r.Text) + "\n")
 }
 
 fn say(t String&) { try io.Put(t) catch io.Error { } }

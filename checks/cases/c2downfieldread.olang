@@ -17,10 +17,10 @@ fn main() ? {
     w := W(h0)
     {
         h := H()
-        x := $5 "abc"
+        x := $5 + "abc"
         h.kid = Node(x)
         w = W(h)
     }
     a := Array<I64>(64, 9)
-    try io.PutLine($w.inner.t " " $a[0])
+    try io.PutLine($w.inner.t + " " + $a[0])
 }

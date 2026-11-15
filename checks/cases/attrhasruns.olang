@@ -7,12 +7,12 @@ fn describe<T>() String {
     s := ""
     for f in T.Fields {
         if f.HasAttr<Key>() {
-            s = $s $(f.Attr<Key>()!).Name
+            s = $s + $(f.Attr<Key>()!).Name
         } else if f.HasAttr<Weight>() {
             w F64 = f.Attr<Weight>()!
-            s = $s $w
+            s = $s + $w
         } else {
-            s = $s "-"
+            s = $s + "-"
         }
     }
     return s

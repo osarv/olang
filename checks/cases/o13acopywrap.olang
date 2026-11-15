@@ -11,7 +11,7 @@ type W struct(h H) {
 }
 fn W.mk(n I64, s String&) W {
     e := H(s)
-    e.r = $n $n
+    e.r = $n + $n
     f := e
     return W(f)
 }

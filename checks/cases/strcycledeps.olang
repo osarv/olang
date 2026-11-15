@@ -21,7 +21,7 @@ fn cb(n mut Node&, c I64) {
 }
 fn (b Bag&) Str() String {
     ca(fn(x mut Node&) { }, b.head, 2)
-    return "b" $b.head.v
+    return "b" + $b.head.v
 }
 fn churn(d I64) I64 {
     a := Array<I64>[d, d, d, d, d, d, d, d]
@@ -34,5 +34,5 @@ fn main() ? {
     t := churn(200)
     l := Vec<Node&>()
     for i in range 50 { l.Push(Node(i)) }
-    try io.PutLine($b.head.next!.v " " $t)
+    try io.PutLine($b.head.next!.v + " " + $t)
 }

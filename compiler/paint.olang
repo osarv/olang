@@ -41,8 +41,8 @@ fn has(name String&) Bool {
 
 # a shade's SGR parameters, in 24-bit colour where deep, else from the 256
 fn sgr(c Shade&, deep Bool) String {
-    fg := $"38;2;" $c.Rgb if deep else $"38;5;" $c.Cube
-    return fg if c.Style == "" else $c.Style ";" $fg
+    fg := $"38;2;" + $c.Rgb if deep else $"38;5;" + $c.Cube
+    return fg if c.Style == "" else $c.Style + ";" + $fg
 }
 
 # whether what is written to fd is coloured: it is a terminal and NO_COLOR is unset or empty (no-color.org)
@@ -54,8 +54,8 @@ fn Wanted(fd I32) Bool {
 
 # t in colour code, the colour ended at each line end and taken up again after it, so each line stands alone
 fn coloured(code String&, t String&) String {
-    on := $"\x1b[" $code "m"
-    return $on $String(t.Replace("\n", $"\x1b[0m\n" $on)) "\x1b[0m"
+    on := $"\x1b[" + $code + "m"
+    return $on + $String(t.Replace("\n", $"\x1b[0m\n" + $on)) + "\x1b[0m"
 }
 
 # olang text coloured token by token, as the scanner reads it; what lies between tokens is coloured as a comment from
@@ -82,7 +82,7 @@ fn source(text String&, deep Bool) String {
 # what stands between two tokens: blanks, then a comment from its first '#'
 fn gap(t String&, deep Bool) String {
     for i in range t.Len() {
-        if t[i] == '#': return $t[:i] $coloured(sgr(commentColour, deep), t[i:])
+        if t[i] == '#': return $t[:i] + $coloured(sgr(commentColour, deep), t[i:])
     }
     return $t
 }
@@ -125,7 +125,7 @@ fn row(line String&, deep Bool) String {
     codes := Array<String>[sgr(errorWord, deep), sgr(warningWord, deep), sgr(noteWord, deep), sgr(helpWord, deep)]
     for i in range words.Len() {
         at := kindAt(line, words[i])
-        if at >= 0: return $line[:at] $coloured(codes[i], words[i]) $line[at + words[i].Len():]
+        if at >= 0: return $line[:at] + $coloured(codes[i], words[i]) + $line[at + words[i].Len():]
     }
     return $line
 }
@@ -151,7 +151,7 @@ fn startsAt(t String&, w String&, i I64) Bool {
 
 test Source "colours each token by its kind, and only adds escape codes" {
     assert source("x := 1", false) == "x \x1b[38;5;117m:=\x1b[0m \x1b[38;5;209m1\x1b[0m"
-    assert source("fn F() T # done", false) == "\x1b[38;5;177mfn\x1b[0m \x1b[38;5;221mF\x1b[0m() \x1b[38;5;221mT\x1b[0m " $
+    assert source("fn F() T # done", false) == "\x1b[38;5;177mfn\x1b[0m \x1b[38;5;221mF\x1b[0m() \x1b[38;5;221mT\x1b[0m " + $
         "\x1b[3;38;5;250m# done\x1b[0m"
     assert source("\"a\"", true) == "\x1b[38;2;195;232;141m\"a\"\x1b[0m"
     assert source("f(x) g (y)", false) == "\x1b[38;5;116mf\x1b[0m(x) g (y)"
@@ -160,12 +160,12 @@ test Source "colours each token by its kind, and only adds escape codes" {
 
 test Source "ends a colour at a line end and takes it up again" {
     g := "\x1b[38;5;150m"
-    assert source("\"\"\"\n    a\n    \"\"\"", false) == $g "\"\"\"\x1b[0m\n" $g "    a\x1b[0m\n" $g "    \"\"\"\x1b[0m"
+    assert source("\"\"\"\n    a\n    \"\"\"", false) == $g + "\"\"\"\x1b[0m\n" + $g + "    a\x1b[0m\n" + $g + "    \"\"\"\x1b[0m"
 }
 
 test Diagnostics "colours the kind of each row" {
     d := diagnostics("cell1:1:1: error[D3b]: no\n    1 | x\nnote: see\ncell2:1:1: warning: w", false)
-    assert d == "cell1:1:1: \x1b[1;38;5;203merror\x1b[0m[D3b]: no\n    1 | x\n\x1b[1;38;5;117mnote\x1b[0m: see\n" $
+    assert d == "cell1:1:1: \x1b[1;38;5;203merror\x1b[0m[D3b]: no\n    1 | x\n\x1b[1;38;5;117mnote\x1b[0m: see\n" + $
         "cell2:1:1: \x1b[1;38;5;221mwarning\x1b[0m: w"
     assert diagnostics("an error: here", true) == "an error: here"
 }

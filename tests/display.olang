@@ -12,11 +12,11 @@ type Table struct(Heads Array<String&>, Rows Array<I64>) {
 fn (t Table&) Display() Display {
     b := StringBuilder()
     b.Push("<table><tr>")
-    for h in t.Heads: b.Push($"<th>" $h "</th>")
+    for h in t.Heads: b.Push($"<th>" + $h + "</th>")
     b.Push("</tr>")
     for i, n in t.Rows {
         if i % t.Heads.Len() == 0: b.Push("<tr>")
-        b.Push($"<td>" $n "</td>")
+        b.Push($"<td>" + $n + "</td>")
         if i % t.Heads.Len() == t.Heads.Len() - 1: b.Push("</tr>")
     }
     b.Push("</table>")

@@ -35,7 +35,7 @@ type Linker fn(a mut N&, b N&) keeps b in a
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -50,7 +50,7 @@ fn evicted(n I64) String {
     c := Cache()
     c.onEvict = fn(k String&) { goneRef.Push(k) }
     for i in range n {
-        t := "k" $i
+        t := "k" + $i
         c.Put(t)
     }
     c.Evict()
@@ -111,7 +111,7 @@ fn add(h Holder&, s String&) { h.items.Push(s) }
 
 fn addAll(f fn&(h Holder&, s String&) keeps s in h.items, h Holder&, n I64) {
     for i in range n {
-        t := "item" $i
+        t := "item" + $i
         f(h, t)
     }
 }

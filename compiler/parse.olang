@@ -33,13 +33,13 @@ type Oracle struct() {
 
 fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
     if alias == "": o.bare.Put(names.Intern(name), true)
-    else: o.qualified.Put($alias "." $name, true)
+    else: o.qualified.Put($alias + "." + $name, true)
 }
 
 # a generic function's name: "name<I64>" names its instance (G12)
 fn (o mut Oracle&) AddFn(names mut source.Names&, alias String&, name String&) {
     if alias == "": o.fns.Put(names.Intern(name), true)
-    else: o.fnsQualified.Put($alias "." $name, true)
+    else: o.fnsQualified.Put($alias + "." + $name, true)
 }
 
 # the generic functions a file declares: "fn name<", by name
@@ -680,7 +680,7 @@ fn (p mut Parser&) attrs() Array<ast.Attr&>& ? Fail {
             x = ast.Expr.Call(p.from(xat), x, args)
         }
         sp := p.from(at)
-        l.Push(ast.Attr(sp, x, p.names.Intern("@" $at)))
+        l.Push(ast.Attr(sp, x, p.names.Intern("@" + $at)))
         p.skipEnds()
     }
     return l.ToArray()
@@ -999,7 +999,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                 mn := try p.methodName()
                 if owner != null {
                     member = mn
-                    mn = p.names.Intern($p.names.Text(on) "." $p.names.Text(member))
+                    mn = p.names.Intern($p.names.Text(on) + "." + $p.names.Text(member))
                 }
                 # D17f: a trait's method may state the contract every call through an "any" is held to
                 s := try p.sig(false, false, true, true)
@@ -1054,7 +1054,7 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
         owner = ast.TypeRef.Named(p.from(ot.Start), Array<source.NameId>(1, on), oargs)
         try p.want(token.Tok.Dot)
         member = try p.methodName()
-        name = p.names.Intern($p.names.Text(on) "." $p.names.Text(member))
+        name = p.names.Intern($p.names.Text(on) + "." + $p.names.Text(member))
         p.receiverVars(owner, false)
     } else {
         name = try p.name()
@@ -3764,7 +3764,7 @@ fn (p mut Parser&) valueAfterEq(f I64) Bool {
         close++
     }
     if close >= n { return false }
-    value := $line[typeStart:typeEnd] $line[at:close + 1]
+    value := $line[typeStart:typeEnd] + $line[at:close + 1]
     p.reportAt(f, msgs.ValueAfterEq(line[nameStart:typeEnd], value, line[nameStart:nameEnd], value))
     return true
 }
@@ -3791,25 +3791,25 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
         if b.Len() > 0 { b.Push("; ") }
         b.Push(shapeDecl(d, names, src.Text))
     }
-    for s in diags.AllSaid() { b.Push(" !" $s.Rule) }
+    for s in diags.AllSaid() { b.Push(" !" + $s.Rule) }
     return b.ToString()
 }
 
 fn shapeDecl(d ast.Decl&, names source.Names&, text String&) String {
     match d {
         case ast.Decl.Fn(f) {
-            if not f.Bodied: return "fn " $names.Text(f.Name) ": -"
+            if not f.Bodied: return "fn " + $names.Text(f.Name) + ": -"
             b := StringBuilder()
-            b.Push("fn " $names.Text(f.Name) ":")
-            for s in f.Body: b.Push(" " $shapeStmt(s, names, text))
+            b.Push("fn " + $names.Text(f.Name) + ":")
+            for s in f.Body: b.Push(" " + $shapeStmt(s, names, text))
             return b.ToString()
         }
         case ast.Decl.Type(_, t) {
             b := StringBuilder()
-            b.Push("type " $names.Text(t.Name))
+            b.Push("type " + $names.Text(t.Name))
             match t.Body {
                 case ast.TypeBody.Trait(ms, _, _) {
-                    for m in ms: b.Push(" " $("mut " if m.Recv != null else "") $names.Text(m.Name))
+                    for m in ms: b.Push(" " + $("mut " if m.Recv != null else "") + $names.Text(m.Name))
                 }
                 case _ { }
             }
@@ -3822,11 +3822,11 @@ fn shapeDecl(d ast.Decl&, names source.Names&, text String&) String {
 fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
     return match s {
         case ast.Stmt.ExprS(_, x): shapeExpr(x, names, text)
-        case ast.Stmt.Return(_, vs): "return" $(" " $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
-        case ast.Stmt.Become(_, x): "become " $shapeExpr(x, names, text)
-        case ast.Stmt.Var(_, v): "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty != null else "")
-        case ast.Stmt.Multi(_, m): "multi" $m.Targets.Len() $(":=" if m.Define else "=") $m.Values.Len()
-        case ast.Stmt.If(_, i): "if" $(" else" if i.Else != null else "")
+        case ast.Stmt.Return(_, vs): "return" + $(" " + $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
+        case ast.Stmt.Become(_, x): "become " + $shapeExpr(x, names, text)
+        case ast.Stmt.Var(_, v): "var" + $v.Names.Len() + $(" :=" if v.Infer else "") + $(" typed" if v.Ty != null else "")
+        case ast.Stmt.Multi(_, m): "multi" + $m.Targets.Len() + $(":=" if m.Define else "=") + $m.Values.Len()
+        case ast.Stmt.If(_, i): "if" + $(" else" if i.Else != null else "")
         case _: "stmt"
     }
 }
@@ -3836,13 +3836,13 @@ fn shapeExpr(x ast.Expr&, names source.Names&, text String&) String {
         case ast.Expr.Name(_, n): $names.Text(n)
         case ast.Expr.Lit(sp, _): $text[sp.Start:sp.End]
         case ast.Expr.Paren(_, y): shapeExpr(y, names, text)
-        case ast.Expr.Unary(_, op, y): "(" $op.Text() " " $shapeExpr(y, names, text) ")"
-        case ast.Expr.Binary(_, op, a, b): "(" $op.Text() " " $shapeExpr(a, names, text) " " $shapeExpr(b, names, text) ")"
-        case ast.Expr.Chain(_, c): "(chain " $c.Ops.Len() ")"
-        case ast.Expr.Cond(_, a, c, b): ("(if " $shapeExpr(c, names, text) " " $shapeExpr(a, names, text) " "
-                                           $shapeExpr(b, names, text) ")")
-        case ast.Expr.Call(_, f, args): "(call " $shapeExpr(f, names, text) " " $args.Len() ")"
-        case ast.Expr.Generic(_, y, args): "(generic " $shapeExpr(y, names, text) " " $args.Len() ")"
+        case ast.Expr.Unary(_, op, y): "(" + $op.Text() + " " + $shapeExpr(y, names, text) + ")"
+        case ast.Expr.Binary(_, op, a, b): "(" + $op.Text() + " " + $shapeExpr(a, names, text) + " " + $shapeExpr(b, names, text) + ")"
+        case ast.Expr.Chain(_, c): "(chain " + $c.Ops.Len() + ")"
+        case ast.Expr.Cond(_, a, c, b): ("(if " + $shapeExpr(c, names, text) + " " + $shapeExpr(a, names, text) + " " +
+                                           $shapeExpr(b, names, text) + ")")
+        case ast.Expr.Call(_, f, args): "(call " + $shapeExpr(f, names, text) + " " + $args.Len() + ")"
+        case ast.Expr.Generic(_, y, args): "(generic " + $shapeExpr(y, names, text) + " " + $args.Len() + ")"
         case _: "expr"
     }
 }
@@ -3915,7 +3915,7 @@ test "a statement met at the limit is too deep at its first token, and one that 
         }
         for stmt in Array<String&>["x++", "y := 2", "z I64 = 1", "try f()", "{ }"] {
             s := atLimit(stmt)
-            assert s == "fn f: -; fn g: !L21", $stmt ": " $s
+            assert s == "fn f: -; fn g: !L21", $stmt + ": " + $s
         }
     })
 }

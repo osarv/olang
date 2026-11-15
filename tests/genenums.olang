@@ -75,8 +75,8 @@ fn Tree<I64>.build(n I64) Tree<I64>& {
 
 fn side(e Either<I64, String&>) String {
     return match e {
-        case Either.Left(a): $"left " $a
-        case Either.Right(b): $"right " $b
+        case Either.Left(a): $"left " + $a
+        case Either.Right(b): $"right " + $b
     }
 }
 
@@ -94,7 +94,7 @@ fn all(k I64) Bool {
     strs Bool = firstLeaf(s) == "a" and s.Size() == 2 and $s == "Tree.Node(Tree.Leaf(\"a\"), Tree.Leaf(\"b\"))"
     o Opt<I64> = Opt.None
     p Opt<I64> = Opt.Some(k)
-    opts Bool = o != p and p == Opt<I64>.Some(k) and p.Or(0) == k and o.Or(9) == 9 and $p == $"Opt.Some(" $k ")"
+    opts Bool = o != p and p == Opt<I64>.Some(k) and p.Or(0) == k and o.Or(9) == 9 and $p == $"Opt.Some(" + $k + ")"
     q := Opt.Some(2.5)                  # an Opt<F64>, from its argument
     floats Bool = q.Or(0.0) == 2.5
     ll Bool = Opt.leftLeaf(Tree<I64>.build(1)) == Opt.Some(I64(0)) and Opt.leftLeaf(Tree<I64>.Leaf(5)) == Opt<I64>.None
@@ -141,13 +141,13 @@ fn churn() I64 {
 }
 
 fn Tree<String&>.leafOf(i I64) Tree<String&>& {
-    s := $"x" $i
+    s := $"x" + $i
     return Tree.Leaf(s)
 }
 
 fn leaves(n I64) Vec<Tree<String&>&> {
     out Vec<Tree<String&>&>
-    for i in range n { out.Push(Tree.Leaf($"leaf " $i)) }
+    for i in range n { out.Push(Tree.Leaf($"leaf " + $i)) }
     return out
 }
 

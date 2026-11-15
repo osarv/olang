@@ -30,5 +30,5 @@ fn main() ? {
     try churn()
     n := 0
     for x Node?& = seed.head, x != null, x = x.next { n = n * 10 + x.v }
-    try io.PutLine("chain " $n)
+    try io.PutLine("chain " + $n)
 }

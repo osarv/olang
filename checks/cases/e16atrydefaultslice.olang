@@ -26,5 +26,5 @@ fn main() ? {
     try churn()
     x := v[0]
     y := v[1]
-    try io.PutLine("v " $x " " $y " t " $t)
+    try io.PutLine("v " + $x + " " + $y + " t " + $t)
 }

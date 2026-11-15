@@ -10,7 +10,7 @@ type Tok struct(text String&, line I64) {
 fn main() ? {
     v := Vec<Tok>()
     for i in range 3 {
-        t := "w" $i
+        t := "w" + $i
         v.Push(Tok(t, i))
     }
     try io.PutLine($v[0].text)

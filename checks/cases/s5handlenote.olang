@@ -8,7 +8,7 @@ fn main() ? {
     names.Push(Vec<String&>())
     names[0].Push("x")
     for k in range 3 {
-        t := $k "-loop-text-of-moderate-length"
+        t := $k + "-loop-text-of-moderate-length"
         names[0][0] = t
     }
     assert names[0][0] == "2-loop-text-of-moderate-length"

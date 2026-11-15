@@ -6,7 +6,7 @@
 import "std/io"
 fn words(xs Array<I64>&, v Vec<I64>&) Iterator<String> {
     for x in xs {
-        yield "w" $x " " $v.Len() " " $Array<I64>[x, x]
+        yield "w" + $x + " " + $v.Len() + " " + $Array<I64>[x, x]
     }
 }
 fn churn(d I64) I64 {

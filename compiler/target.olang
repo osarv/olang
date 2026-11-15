@@ -83,8 +83,8 @@ fn FindClang() String {
     exe := try os.ReadLink("/proc/self/exe") catch default ""
     slash := try exe.FindLast("/") catch default -1
     if slash >= 0 {
-        bundled := $exe[:slash] "/../llvm/bin/clang"
-        if unistd.access($bundled "\0", unistd.X_OK) == 0 { return bundled }
+        bundled := $exe[:slash] + "/../llvm/bin/clang"
+        if unistd.access($bundled + "\0", unistd.X_OK) == 0 { return bundled }
     }
     for name in Clangs {
         if executable(name) { return $name }
@@ -107,12 +107,12 @@ fn executable(name String&) Bool { return whereIs(name) != "" }
 # the file a command's name runs - a path, or a name found on PATH as the system finds it - "" where there is none
 # this process may run
 fn whereIs(name String&) String {
-    if name.Contains("/") { return $name if unistd.access($name "\0", unistd.X_OK) == 0 else "" }
+    if name.Contains("/") { return $name if unistd.access($name + "\0", unistd.X_OK) == 0 else "" }
     path := try os.Env("PATH") catch default ""
     dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
     for dir in dirs.Split(":") {
-        cand := $dir "/" $name if dir != "" else $name
-        if unistd.access($cand "\0", unistd.X_OK) == 0 { return cand }
+        cand := $dir + "/" + $name if dir != "" else $name
+        if unistd.access($cand + "\0", unistd.X_OK) == 0 { return cand }
     }
     return ""
 }
@@ -138,12 +138,12 @@ fn (t Target&) Runner() Array<String&> ? Bad {
         out[0] = whereIs(out[0]) # run by its path: the program is put in this process's place by it
         return out.ToArray()
     }
-    for name in Array<String&>[$"qemu-" $t.Arch, $"qemu-" $t.Arch "-static"] {
+    for name in Array<String&>[$"qemu-" + $t.Arch, $"qemu-" + $t.Arch + "-static"] {
         at := whereIs(name)
         if at == "" { continue }
         out.Push(at)
         root := Sysroot()
-        if root == "" and os.IsDir($"/usr/" $t.Arch "-linux-gnu") { root = $"/usr/" $t.Arch "-linux-gnu" }
+        if root == "" and os.IsDir($"/usr/" + $t.Arch + "-linux-gnu") { root = $"/usr/" + $t.Arch + "-linux-gnu" }
         if root != "" {
             out.Push("-L")
             out.Push(root)
@@ -216,8 +216,8 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     # the probe: one empty C function compiled to IR for the target, whose attributes say what clang made of it
     args Vec<String&>
     args.Push(clang)
-    if triple != "" { args.Push($"--target=" $triple) }
-    if hasCpu { args.Push($ArchCpuFlags[ai] $cpu) }
+    if triple != "" { args.Push($"--target=" + $triple) }
+    if hasCpu { args.Push($ArchCpuFlags[ai] + $cpu) }
     for a in Array<String&>["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
     out := try ClangSays(args.ToArray(), "void olang_target_probe(void) { }\n", not interpreting) catch os.Error {
         try refuse(d, msgs.TargetUnknown(spec))
@@ -229,7 +229,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     # another architecture is built for only where this clang can generate all the code the runtime holds - BF16 among
     # it, which LLVM 18's AArch64 back end cannot select: an object it could not compile at the link is not built
     if t.Foreign and not canCompileBf16(clang, t.Triple) { try refuse(d, msgs.TargetNoBackend(spec)) }
-    t.CpuFlag = $ArchCpuFlags[ai] $t.Cpu # resolved: native is looked up once
+    t.CpuFlag = $ArchCpuFlags[ai] + $t.Cpu # resolved: native is looked up once
     return t
 }
 
@@ -269,16 +269,16 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     # vector width - told to the code generator outright, so the width the program reads (TargetVectorBits) is the one
     # its loops are vectorized for, whatever a CPU's own tuning would have preferred
     tune := try attrValue(al, "tune-cpu") catch default ""
-    tuneAttr := $" \"tune-cpu\"=\"" $tune "\"" if tune != "" else ""
+    tuneAttr := $" \"tune-cpu\"=\"" + $tune + "\"" if tune != "" else ""
     vsAttr String& = ""
     vs := try al.Find("vscale_range(") catch default -1
     if vs >= 0 {
         close := try al[vs:].FindByte(')') catch default -1
-        if close >= 0 { vsAttr = $" " $al[vs:vs + close + 1] }
+        if close >= 0 { vsAttr = $" " + $al[vs:vs + close + 1] }
     }
     width := t.VectorBits if t.VectorBits > 0 else 128
-    t.Attrs = ($"\"target-cpu\"=\"" $t.Cpu "\" \"target-features\"=\"" $features "\"" $tuneAttr $vsAttr
-        " \"prefer-vector-width\"=\"" $width "\"")
+    t.Attrs = ($"\"target-cpu\"=\"" + $t.Cpu + "\" \"target-features\"=\"" + $features + "\"" + $tuneAttr + $vsAttr +
+        " \"prefer-vector-width\"=\"" + $width + "\"")
 }
 
 # the text after key up to the next '"'
@@ -291,7 +291,7 @@ fn field(out String&, key String&) String& ? {
 
 # the value of attribute "name"="..." in an attribute line
 fn attrValue(line String&, name String&) String& ? {
-    return try field(line, $"\"" $name "\"=\"")
+    return try field(line, $"\"" + $name + "\"=\"")
 }
 
 # whether a feature list (clang's: "+a,+b,-c") turns feature f on
@@ -321,9 +321,9 @@ fn StripUnsafe(features String&) String {
 
 # B12a: whether clang can generate BF16 code for triple - its back end compiling a function using it
 fn canCompileBf16(clang String&, triple String&) Bool {
-    ir := "define float @f(float %x) {\n  %b = fptrunc float %x to bfloat\n  %c = fadd bfloat %b, %b\n" $
+    ir := "define float @f(float %x) {\n  %b = fptrunc float %x to bfloat\n  %c = fadd bfloat %b, %b\n" + $
         "  %r = fpext bfloat %c to float\n  ret float %r\n}\n"
-    args := Array<String&>[$clang, $"--target=" $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
+    args := Array<String&>[$clang, $"--target=" + $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
     out := try os.Output.Exec(...args, input = ir) catch os.Error { return false }
     return out.Status == 0
 }
@@ -339,7 +339,7 @@ fn canCompileBf16(clang String&, triple String&) Bool {
 # Only an answer with status 0 is kept, and only where keep is (interpret writes no file)
 fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Error {
     key := probeKey(args, input)
-    path := $probeDir() "/" $U64(key.Hash()).Format(16) if key != "" else ""
+    path := $probeDir() + "/" + $U64(key.Hash()).Format(16) if key != "" else ""
     if path != "" {
         text := try os.ReadFile(path) catch default ""
         if text.Len() > key.Len() and text.StartsWith(key) { return os.Output(0, $text[key.Len():], "") }
@@ -347,8 +347,8 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Erro
     out := try os.Output.Exec(...args, input = input)
     if out.Status == 0 and path != "" and keep {
         try os.MkDirAll(probeDir()) catch os.Error { return out }
-        tmp := $path "." $unistd.getpid() ".tmp"
-        try os.WriteFile(tmp, $key $out.Stdout) catch os.Error { return out }
+        tmp := $path + "." + $unistd.getpid() + ".tmp"
+        try os.WriteFile(tmp, $key + $out.Stdout) catch os.Error { return out }
         try os.Rename(tmp, path) catch os.Error { try os.Remove(tmp) catch os.Error { } }
     }
     return out
@@ -356,9 +356,9 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Erro
 
 fn probeDir() String {
     c := try os.Env("OLANG_CACHE") catch default ""
-    if c != "" { return $c "/probe" }
+    if c != "" { return $c + "/probe" }
     home := try os.Env("HOME") catch default "."
-    return $home "/.cache/olang/probe"
+    return $home + "/.cache/olang/probe"
 }
 
 # what a question to clang is asked under ("" where clang's own file cannot be found): clang's real path, size and
@@ -370,9 +370,9 @@ fn probeKey(args Array<String&>&, input String&) String {
     real := try os.RealPath(exe) catch default ""
     info := try os.FileInfo.Stat(real) catch os.Error { return "" }
     b := StringBuilder()
-    b.Push($"olang probe 1\n" $real " " $info.Size " " $info.ModTime "\n")
-    for a in args[1:] { b.Push($a "\n") }
-    b.Push($"input " $input.Len() "\n" $input "\n" $cpuModel() "\n" $cpuFlags() "\n=====\n")
+    b.Push($"olang probe 1\n" + $real + " " + $info.Size + " " + $info.ModTime + "\n")
+    for a in args[1:] { b.Push($a + "\n") }
+    b.Push($"input " + $input.Len() + "\n" + $input + "\n" + $cpuModel() + "\n" + $cpuFlags() + "\n=====\n")
     return b.ToString()
 }
 
@@ -393,7 +393,7 @@ fn cpuFlags() String {
     for line in info.Lines() {
         if line.StartsWith("flags") {
             colon := try line.FindByte(':') catch { return "" }
-            return $" " $line[colon + 1:].Trim() " "
+            return $" " + $line[colon + 1:].Trim() + " "
         }
     }
     return ""
@@ -408,7 +408,7 @@ fn X86Level(flags String&) I64 {
     level I64 = 1
     for i, need in LevelFlags {
         for f in need.Split(" ") {
-            if not flags.Contains($" " $f " ") { return level }
+            if not flags.Contains($" " + $f + " ") { return level }
         }
         level = i + 2
     }
@@ -418,7 +418,7 @@ fn X86Level(flags String&) I64 {
 # B12: the target without clang (interpret only): "native" or an x86-64 level on an x86_64 machine - native the level
 # the processor whose flags are given supports - and "native" or "generic" on an aarch64 one. False for any other
 fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
-    t.Triple = $t.Arch "-unknown-linux-gnu"
+    t.Triple = $t.Arch + "-unknown-linux-gnu"
     if t.Arch == "aarch64" {
         if cpu != "native" and cpu != "generic" { return false }
         t.Cpu = "generic"
@@ -435,7 +435,7 @@ fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
         case _: 0
     }
     if level == 0 { return false }
-    t.Cpu = "x86-64" if level == 1 else $"x86-64-v" $level
+    t.Cpu = "x86-64" if level == 1 else $"x86-64-v" + $level
     t.VectorBits = 512 if level == 4 else (256 if level == 3 else 128)
     t.Fma = level >= 3
     return true
@@ -444,9 +444,9 @@ fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
 # ---- tests ----
 
 # what a probe of a skylake-avx512 machine prints, cut down to what is read
-SkylakeProbe := "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\n" $
-    "target triple = \"x86_64-pc-linux-gnu\"\n" $
-    "attributes #0 = { noinline nounwind \"target-cpu\"=\"skylake-avx512\" " $
+SkylakeProbe := "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\n" + $
+    "target triple = \"x86_64-pc-linux-gnu\"\n" + $
+    "attributes #0 = { noinline nounwind \"target-cpu\"=\"skylake-avx512\" " + $
     "\"target-features\"=\"+avx,+avx512bf16,+avx512f,+fma,-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" }\n"
 
 fn quiet() diag.Diagnostics { return diag.Diagnostics(false) }
@@ -458,7 +458,7 @@ test "a probe gives the triple, the CPU, the features without the IEEE-unsafe on
     assert t.Triple == "x86_64-pc-linux-gnu"
     assert t.Cpu == "skylake-avx512"
     assert t.VectorBits == 512 and t.Fma
-    assert t.Attrs == "\"target-cpu\"=\"skylake-avx512\" \"target-features\"=\"+avx,-avx512bf16,+avx512f,+fma," $
+    assert t.Attrs == "\"target-cpu\"=\"skylake-avx512\" \"target-features\"=\"+avx,-avx512bf16,+avx512f,+fma," + $
         "-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" \"prefer-vector-width\"=\"512\""
     # a 32-bit machine's layout, and no attributes at all
     assert probeOutcome(SkylakeProbe.Replace("e-m:e-p270", "e-m:e-p:32:32-p270")) == "unsupported"
@@ -480,9 +480,9 @@ test "features read as clang lists them, and the x86-64 levels read from /proc/c
     assert X86Level(" sse2 ") == 1
     v2 := " cx16 lahf_lm popcnt sse4_1 sse4_2 ssse3 "
     assert X86Level(v2) == 2
-    v3 := $v2 "avx avx2 bmi1 bmi2 f16c fma abm movbe xsave "
+    v3 := $v2 + "avx avx2 bmi1 bmi2 f16c fma abm movbe xsave "
     assert X86Level(v3) == 3
-    assert X86Level($v3 "avx512f avx512bw avx512cd avx512dq avx512vl ") == 4
+    assert X86Level($v3 + "avx512f avx512bw avx512cd avx512dq avx512vl ") == 4
     t := Target()
     t.Arch = "x86_64"
     assert t.withoutClang("native", v3) and t.Cpu == "x86-64-v3" and t.VectorBits == 256 and t.Fma
@@ -503,15 +503,15 @@ fn mistake(spec String&, clang String&, interpreting Bool, hostOs String&, hostA
 test "what cannot be built for is said as stage 0 says it, before clang is asked anything" {
     # no clang is named, so every one of these is decided from the spec alone
     assert mistake("mips-linux-gnu", "", false, "linux", "x86_64") ==
-        "olang: error[B12]: olang does not build for 'mips-linux-gnu'\n" $
+        "olang: error[B12]: olang does not build for 'mips-linux-gnu'\n" + $
         "olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library\n"
     assert mistake("aarch64-apple-darwin", "", false, "linux", "x86_64").Contains("does not build for")
     assert mistake("aarch64-linux-gnu:native", "", false, "linux", "x86_64").Contains("native is this machine's CPU")
     assert mistake("aarch64-linux-gnu:", "", false, "linux", "x86_64").Contains("unknown target")
     assert mistake("a:b", "", false, "linux", "x86_64").Contains("unknown target 'a:b'")
     assert mistake("aarch64-linux-gnu", "", true, "linux", "x86_64") ==
-        "olang: error[B12a]: interpret runs on this machine, not on '-target aarch64-linux-gnu'\n" $
-        "olang: note: '-target aarch64-linux-gnu' is another architecture or system\n" $
+        "olang: error[B12a]: interpret runs on this machine, not on '-target aarch64-linux-gnu'\n" + $
+        "olang: note: '-target aarch64-linux-gnu' is another architecture or system\n" + $
         "olang: help: build, compile and test build for it\n"
     assert mistake("native", "", false, "linux", "x86_64").Contains("clang not found on PATH")
     assert mistake("native", "", false, "linux", "riscv64").Contains("does not build for 'riscv64'")
@@ -529,8 +529,8 @@ test "with clang, native is this machine's CPU, a triple of this machine its bas
     d := quiet()
     t := try Target.Resolve("native", clang, false, d) catch Bad { unreachable }
     assert t.Arch == "x86_64" and not t.Foreign and t.Cpu != "" and t.Cpu != "native"
-    assert t.CpuFlag == $"-march=" $t.Cpu and t.Attrs.StartsWith($"\"target-cpu\"=\"" $t.Cpu "\"")
-    assert t.Attrs.EndsWith($"\"prefer-vector-width\"=\"" $t.VectorBits "\"")
+    assert t.CpuFlag == $"-march=" + $t.Cpu and t.Attrs.StartsWith($"\"target-cpu\"=\"" + $t.Cpu + "\"")
+    assert t.Attrs.EndsWith($"\"prefer-vector-width\"=\"" + $t.VectorBits + "\"")
     base := try Target.Resolve("x86_64-linux-gnu", clang, false, d) catch Bad { unreachable }
     assert base.Cpu == "x86-64" and base.VectorBits == 128 and not base.Fma and base.CpuFlag == "-march=x86-64"
     v3 := try Target.Resolve("x86-64-v3", clang, false, d) catch Bad { unreachable }

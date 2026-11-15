@@ -4,7 +4,7 @@ type P struct(x I64, name String&) {
     x
     name
 }
-fn (p P&) Str() String { return "P<" $p.x ":" $p.name ">" }
+fn (p P&) Str() String { return "P<" + $p.x + ":" + $p.name + ">" }
 type Box struct(items Vec<P&>, m Map<I64, P&>) {
     items
     m
@@ -12,12 +12,12 @@ type Box struct(items Vec<P&>, m Map<I64, P&>) {
 fn (b Box&) Str() String {
     n I64 = 0
     for p in b.items { n += p.x }
-    return "Box(" $n " " $b.items " " $b.m ")"
+    return "Box(" + $n + " " + $b.items + " " + $b.m + ")"
 }
 fn work(b Box&, k I64) I64 {
     t I64 = 0
     for _ in range 4 {
-        s := $b " " $k " " $b.items
+        s := $b + " " + $k + " " + $b.items
         t += s.Len()
     }
     return t
@@ -26,7 +26,7 @@ fn main() ? {
     items := Vec<P&>()
     m := Map<I64, P&>()
     for i in range 4 {
-        p P& = P(i, "name-" $i)
+        p P& = P(i, "name-" + $i)
         items.Push(p)
         m.Put(i, p)
     }

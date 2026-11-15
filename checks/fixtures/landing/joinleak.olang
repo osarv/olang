@@ -19,8 +19,8 @@ fn main() ? {
     box := Big(big)
     n I64 = 0
     for i in range 500000 {
-        s := $big $(try g(i) catch { continue })
-        t := $box $big $(try g(i + 2) catch { continue })
+        s := $big + $(try g(i) catch { continue })
+        t := $box + $big + $(try g(i + 2) catch { continue })
         n += s.Len() + t.Len()
     }
     try io.PutLine($n)

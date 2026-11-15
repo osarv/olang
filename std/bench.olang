@@ -62,9 +62,9 @@ fn (m Measurement&) InstructionsPerOp() I64 { return -1 if m.Instructions < 0 el
 
 # "2048 ops  487113 ns/op  0 allocs/op  0 B/op  1500213 instr/op": what is not counted is left out
 fn (m Measurement&) Str() String {
-    t := $m.Ops " ops  " $nanos(m.NanosPerOp()) " ns/op"
-    if m.Allocs >= 0: t = $t "  " $m.AllocsPerOp() " allocs/op  " $m.BytesPerOp() " B/op"
-    if m.Instructions >= 0: t = $t "  " $m.InstructionsPerOp() " instr/op"
+    t := $m.Ops + " ops  " + $nanos(m.NanosPerOp()) + " ns/op"
+    if m.Allocs >= 0: t = $t + "  " + $m.AllocsPerOp() + " allocs/op  " + $m.BytesPerOp() + " B/op"
+    if m.Instructions >= 0: t = $t + "  " + $m.InstructionsPerOp() + " instr/op"
     return t
 }
 
@@ -133,8 +133,8 @@ fn Run<? E>(body fn&() ? E, label String& = "", budget time.Duration = DefaultBu
         return
     }
     m := try Measurement.Of(body, budget)
-    name := $running() $("/" if label != "" else "") $label
-    try io.PutLine($"bench " $name "  " $m) catch io.Error { }
+    name := $running() + $("/" if label != "" else "") + $label
+    try io.PutLine($"bench " + $name + "  " + $m) catch io.Error { }
 }
 
 # the running test's name, as its run reports it ("Sum: a million numbers"), "" outside a test

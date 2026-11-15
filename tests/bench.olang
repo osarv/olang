@@ -32,7 +32,7 @@ fn counts(words Array<String>&) Map<String, I64> {
 }
 
 test counts "a thousand words into a map" {
-    words := Array<String>["word" $(i % 100) for i in range 1000]
+    words := Array<String>["word" + $(i % 100) for i in range 1000]
     bench.Run(fn() { bench.Keep(counts(words).Len()) })
     bench.Run(fn() { bench.Keep(counts(words[:10]).Len()) }, label = "ten")
     assert counts(words).Len() == 100 and counts(words).Get("word7")! == 10

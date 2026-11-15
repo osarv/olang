@@ -136,7 +136,7 @@ fn parallel() String {
     c := Big(Array<I64>(2, 0))
     b, c = g, g
     b.xs[0] = 7
-    return $g.xs $m.xs $n.xs $v $w $u $p.gen $q.gen $r.gen $s.gen $b.xs $c.xs
+    return $g.xs + $m.xs + $n.xs + $v + $w + $u + $p.gen + $q.gen + $r.gen + $s.gen + $b.xs + $c.xs
 }
 
 Parallel := parallel()
@@ -161,7 +161,7 @@ fn captured() String {
     v[0] = 7
     e := Gen(1)
     f := fn() I64 { return e.gen }
-    return $h() $k() $q() $f()
+    return $h() + $k() + $q() + $f()
 }
 
 Captured := captured()

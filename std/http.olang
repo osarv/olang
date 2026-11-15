@@ -102,7 +102,7 @@ fn Response.Send(method String&, url String&, headers Array<Header>&, body Array
         if h.Value.Some(fn(c Char) Bool { return c == '\r' or c == '\n' or c == 0 }) { error Error.Invalid }
         typed = typed or sameName(h.Name, "Content-Type")
         args.Push("-H")
-        args.Push($h.Name ": " $h.Value)
+        args.Push($h.Name + ": " + $h.Value)
     }
     sending Bool = not head and method != "GET"
     if sending {
@@ -205,7 +205,7 @@ if TestBuild {
         missing := false
         try plain.Header("X-None") catch { missing = true }
         assert missing
-        chain := "HTTP/1.1 200 Connection established\r\n\r\nHTTP/1.1 100 Continue\r\n\r\n" "HTTP/1.1 302 Found\r\nLocation: /b\r\n\r\nHTTP/2 404 \r\nserver: x\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\r\n"
+        chain := "HTTP/1.1 200 Connection established\r\n\r\nHTTP/1.1 100 Continue\r\n\r\n" + "HTTP/1.1 302 Found\r\nLocation: /b\r\n\r\nHTTP/2 404 \r\nserver: x\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\r\n"
         last := try Response.response(chain, "")
         assert last.Status == 404 and last.Headers.Len() == 3 and (try last.Header("Set-Cookie") catch default "") == "a=1"
         assert last.Headers[2].Value == "b=2" and "Location" != last.Headers[0].Name
@@ -227,7 +227,7 @@ if TestBuild {
         assert failure("GET", "http://127.0.0.1:1/", Array<Header>[Header("X-A", "one\r\nX-B: two")], 0) == "INVALID"
         assert failure("GET", "http://127.0.0.1:1/", Array<Header>[Header("X:A", "v")], 0) == "INVALID"
         assert failure("GET", "http://127.0.0.1:1/", Array<Header>[Header("", "v")], 0) == "INVALID"
-        assert failure("GET", "http://127.0.0.1:1/" $Char(0), none, 0) == "INVALID"
+        assert failure("GET", "http://127.0.0.1:1/" + $Char(0), none, 0) == "INVALID"
     }
 
     # the port the test server, started in the background, answers on - or -1 when curl is missing, or -2 when the
@@ -237,7 +237,7 @@ if TestBuild {
         try os.Remove("build/http_port") catch { }      # a port written by an earlier run is not this server's
         given := try os.Env("OLANG") catch default "build/olang"
         compiler := try os.RealPath(given) catch { return -2 }
-        if os.Run($os.Quote(compiler) " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
+        if os.Run($os.Quote(compiler) + " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
         os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")
         for _ in range 200 {
             if os.Exists("build/http_port") { break }
@@ -249,33 +249,33 @@ if TestBuild {
 
     # one request of each kind against the test server - skipped, as passed, where curl is missing
     fn live(port I64) ? Error {
-        base := "http://127.0.0.1:" $port
-        hello := try Response.Get($base "/hello")
+        base := "http://127.0.0.1:" + $port
+        hello := try Response.Get($base + "/hello")
         assert hello.Status == 200 and hello.Body == "hello" and (try hello.Header("x-test") catch default "") == "a"
         assert hello.Headers.Count(fn(h Header) Bool { return h.Name == "X-Test" }) == 2
-        echo := try Response.Post($base "/echo", "application/json", "{\"a\":1}", Header("X-Ask", "yes"))
+        echo := try Response.Post($base + "/echo", "application/json", "{\"a\":1}", Header("X-Ask", "yes"))
         assert echo.Body == "{\"a\":1}" and (try echo.Header("X-Seen") catch default "") == "yes"
         assert (try echo.Header("X-Type") catch default "") == "application/json"
-        put := try Response.Send("PUT", $base "/echo", Array<Header>(0), "data")
+        put := try Response.Send("PUT", $base + "/echo", Array<Header>(0), "data")
         assert put.Body == "data" and (try put.Header("X-Method") catch default "") == "PUT"
         assert (try put.Header("X-Type") catch default "") == "-"                 # curl's form type left out
-        gone := try Response.Send("DELETE", $base "/echo", Array<Header>(0), "")
+        gone := try Response.Send("DELETE", $base + "/echo", Array<Header>(0), "")
         assert gone.Status == 200 and (try gone.Header("X-Method") catch default "") == "DELETE"
-        head := try Response.Send("HEAD", $base "/hello", Array<Header>(0), "")
+        head := try Response.Send("HEAD", $base + "/hello", Array<Header>(0), "")
         assert head.Status == 200 and head.Body == "" and (try head.Header("Content-Length") catch default "") == "5"
-        missing := try Response.Get($base "/status/404")
+        missing := try Response.Get($base + "/status/404")
         assert missing.Status == 404 and missing.Body == "status 404"
-        broken := try Response.Get($base "/status/500")
+        broken := try Response.Get($base + "/status/500")
         assert broken.Status == 500
-        moved := try Response.Get($base "/redirect")
+        moved := try Response.Get($base + "/redirect")
         assert moved.Status == 200 and moved.Body == "hello"
-        data := try Response.Get($base "/json")
+        data := try Response.Get($base + "/json")
         doc := try json.Json.Parse(data.Body) catch json.Error { error Error.Failed }
         assert (try doc["a"][1] as json.Json.Num catch default 0.0) == 2.5
-        assert failure("GET", $base "/slow", Array<Header>(0), 300) == "TIMEOUT"
-        assert failure("GET", "ftp://127.0.0.1:" $port "/", Array<Header>(0), 0) == "BAD_URL"
+        assert failure("GET", $base + "/slow", Array<Header>(0), 300) == "TIMEOUT"
+        assert failure("GET", "ftp://127.0.0.1:" + $port + "/", Array<Header>(0), 0) == "BAD_URL"
         assert failure("GET", "http://127.0.0.1:1/", Array<Header>(0), 0) == "CONNECT"
-        try Response.Get($base "/quit")
+        try Response.Get($base + "/quit")
     }
 
     test "requests against a local server" {

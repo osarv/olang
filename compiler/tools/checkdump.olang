@@ -47,7 +47,7 @@ fn run(args Array<String&>&) {
     }
     for i in range k, args.Len() {
         path := args[i]
-        out.Write("== " $path "\n")
+        out.Write("== " + $path + "\n")
         d := diag.Diagnostics(false)
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
@@ -63,8 +63,8 @@ fn run(args Array<String&>&) {
         vw := views.Viewer(p, c.Bodies)
         if d.Count() == 0 { vw.Run() } # M19g, on a program that checked cleanly
         out.Write(d.Render())
-        for g in c.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }
-        out.Write("bodies " $c.Bodies.Len() "\n")
+        for g in c.Gaps { out.Write("gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What + "\n") }
+        out.Write("bodies " + $c.Bodies.Len() + "\n")
     }
     try out.Flush() catch io.Error { os.Exit(1) }
 }

@@ -80,7 +80,7 @@ fn (g mut goldenRun&) file(path String&) I64 {
     for i in range g.paths.Len() {
         if g.paths[i] == path { return i }
     }
-    real := "checks/cases/" $path
+    real := "checks/cases/" + $path
     if path.StartsWith("$ROOT/") { real = $(path[6:]) }
     text := try os.ReadFile(real) catch default ""
     g.paths.Push($path)
@@ -130,7 +130,7 @@ fn readRows(g mut goldenRun&, c golden&) Vec<goldRow>, String& {
         e := try line.Find(": error") catch default -1
         n := try line.Find(": note: ") catch default -1
         h := try line.Find(": help: ") catch default -1
-        if e < 0 and n < 0 and h < 0 { return out, $"unreadable row: " $line }
+        if e < 0 and n < 0 and h < 0 { return out, $"unreadable row: " + $line }
         kind := "error"
         at := e
         if n >= 0 and (e < 0 or n < e) {
@@ -189,16 +189,16 @@ fn check(c golden&) String {
             if all[j].excerpt { g.d.Note(rec, all[j].where, diagmsg.Msg(msgs.Diag.Expected, "", all[j].text)) }
         }
     }
-    got := $g.d.Render() $(g.d.Summary() if summary.Len() > 0 else "")
+    got := $g.d.Render() + $(g.d.Summary() if summary.Len() > 0 else "")
     if got == c.text { return "" }
     # the first row that differs
     want := c.text.Split("\n")
     have := got.Split("\n")
     for k in range want.Len() {
-        if k >= have.Len() { return "line " $(k + 1) ": missing '" $(want[k]) "'" }
-        if have[k] != want[k] { return "line " $(k + 1) ": want '" $(want[k]) "', got '" $(have[k]) "'" }
+        if k >= have.Len() { return "line " + $(k + 1) + ": missing '" + $(want[k]) + "'" }
+        if have[k] != want[k] { return "line " + $(k + 1) + ": want '" + $(want[k]) + "', got '" + $(have[k]) + "'" }
     }
-    return "extra line '" $(have[want.Len()]) "'"
+    return "extra line '" + $(have[want.Len()]) + "'"
 }
 
 test "diag renders stage 0's diagnostics on every checks/cases program byte for byte" {
@@ -210,12 +210,12 @@ test "diag renders stage 0's diagnostics on every checks/cases program byte for 
         count++
         why := check(c)
         if why.Len() > 0 {
-            try io.PutErrLine($c.name ": " $why) catch io.Error { }
+            try io.PutErrLine($c.name + ": " + $why) catch io.Error { }
             bad++
         }
     }
     assert count > 800
-    assert bad == 0, $bad " of " $count " cases render otherwise"
+    assert bad == 0, $bad + " of " + $count + " cases render otherwise"
 }
 
 # every rule msgs.olang's messages name, each once
@@ -246,24 +246,24 @@ test "-e prints each rule a message names as stage 0 does" {
     count := 0
     for r in rules(src) {
         count++
-        os.Run($os.Quote(olang) " explain " $r " > " $os.Quote($out "/e.txt") " 2>&1")
-        want := try os.ReadFile($out "/e.txt") catch default ""
+        os.Run($os.Quote(olang) + " explain " + $r + " > " + $os.Quote($out + "/e.txt") + " 2>&1")
+        want := try os.ReadFile($out + "/e.txt") catch default ""
         got := try diag.Explain(spec, r) catch default "(none)"
         if got != want {
-            try io.PutErrLine("-e " $r ": differs") catch io.Error { }
+            try io.PutErrLine("-e " + $r + ": differs") catch io.Error { }
             bad++
         }
     }
     # a first letter in lowercase is read as uppercase; a rule the specification does not state is a usage error
-    os.Run($os.Quote(olang) " explain t6b > " $os.Quote($out "/e.txt") " 2>&1")
-    assert try diag.Explain(spec, "t6b") catch default "" == try os.ReadFile($out "/e.txt") catch default "-"
-    os.Run($os.Quote(olang) " explain Q99 > " $os.Quote($out "/e.txt") " 2>&1")
+    os.Run($os.Quote(olang) + " explain t6b > " + $os.Quote($out + "/e.txt") + " 2>&1")
+    assert try diag.Explain(spec, "t6b") catch default "" == try os.ReadFile($out + "/e.txt") catch default "-"
+    os.Run($os.Quote(olang) + " explain Q99 > " + $os.Quote($out + "/e.txt") + " 2>&1")
     nowhere := false
     try diag.Explain(spec, "Q99") catch { nowhere = true }
     assert nowhere
     d := diag.Diagnostics(false)
-    assert d.Usage(msgs.NoRule("Q99")) == try os.ReadFile($out "/e.txt") catch default "-"
+    assert d.Usage(msgs.NoRule("Q99")) == try os.ReadFile($out + "/e.txt") catch default "-"
     try os.RemoveAll(out) catch { }
     assert count > 150
-    assert bad == 0, $bad " of " $count " rules print otherwise"
+    assert bad == 0, $bad + " of " + $count + " rules print otherwise"
 }

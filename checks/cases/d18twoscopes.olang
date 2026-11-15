@@ -11,7 +11,7 @@ fn main() ? {
     a := "hello"
     g Generator<String>
     {
-        b := $a "x"
+        b := $a + "x"
         g = both(a, b)
     }
     for _ in g {

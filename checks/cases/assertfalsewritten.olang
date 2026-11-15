@@ -3,7 +3,7 @@
 # S18c: a decided false assert whose message reads what only the running program knows (a parameter) carries the
 # message as written, saying so
 fn check(n I64) {
-    assert 1 > 2, "n is " $n
+    assert 1 > 2, "n is " + $n
 }
 fn main() {
     check(3)

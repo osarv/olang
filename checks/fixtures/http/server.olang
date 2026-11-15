@@ -130,9 +130,9 @@ fn Request.parse(text String&) Request ? {
 # one response, as bytes to send
 fn response(code I64, headers Vec<String&>, body String&, withBody Bool) String {
     out := StringBuilder()
-    out.Push("HTTP/1.1 " $code " " $reason(code) "\r\n")
-    for h in headers { out.Push($h "\r\n") }
-    out.Push("Content-Length: " $body.Len() "\r\nConnection: close\r\n\r\n")
+    out.Push("HTTP/1.1 " + $code + " " + $reason(code) + "\r\n")
+    for h in headers { out.Push($h + "\r\n") }
+    out.Push("Content-Length: " + $body.Len() + "\r\nConnection: close\r\n\r\n")
     if withBody { out.Push(body) }
     return out.ToString()
 }
@@ -150,7 +150,7 @@ fn serve(fd I32) {
     path := req.Path
     method := req.Method
     if not (method in Array<String&>["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]) {
-        send(fd, response(501, Vec<String&>(), "unsupported method " $method, true))
+        send(fd, response(501, Vec<String&>(), "unsupported method " + $method, true))
         return
     }
     if path == "/hello" {
@@ -159,13 +159,13 @@ fn serve(fd I32) {
         headers.Push("X-Test: b")
         body = "hello"
     } else if path == "/echo" {
-        headers.Push("X-Method: " $method)
-        headers.Push("X-Seen: " $req.Header("X-Ask", "-"))
-        headers.Push("X-Type: " $req.Header("Content-Type", "-"))
+        headers.Push("X-Method: " + $method)
+        headers.Push("X-Seen: " + $req.Header("X-Ask", "-"))
+        headers.Push("X-Type: " + $req.Header("Content-Type", "-"))
         body = req.Body
     } else if path.StartsWith("/status/") {
         code = try path[8:].ParseInt() catch default 400
-        body = "status " $path[8:]
+        body = "status " + $path[8:]
     } else if path == "/redirect" {
         code = 302
         headers.Push("Location: /hello")
@@ -181,7 +181,7 @@ fn serve(fd I32) {
         os.Exit(0)
     } else {
         code = 404
-        body = "no " $path
+        body = "no " + $path
     }
     send(fd, response(code, headers, body, method != "HEAD"))
 }
@@ -210,11 +210,11 @@ fn main() ? {
         os.Exit(1)
     }
     port := I64(addr[2]) * 256 + I64(addr[3])
-    try os.WriteFile($args[1] ".tmp", $port) catch {
+    try os.WriteFile($args[1] + ".tmp", $port) catch {
         try io.PutErrLine("server: cannot write the port")
         os.Exit(1)
     }
-    try os.Rename($args[1] ".tmp", args[1]) catch {
+    try os.Rename($args[1] + ".tmp", args[1]) catch {
         try io.PutErrLine("server: cannot write the port")
         os.Exit(1)
     }

@@ -97,11 +97,11 @@ fn negated(c String&) String {
     ne := try code.Find(" != ") catch default -1
     plain := (wordAt(code, "and", 0) < 0 and wordAt(code, "or", 0) < 0 and wordAt(code, "xor", 0) < 0
               and wordAt(code, "if", 0) < 0 and wordAt(code, "not", 0) < 0 and code.CountOf("==") + code.CountOf("!=") == 1)
-    if plain and eq >= 0 { return $t[:eq] " != " $t[eq + 4:] }
-    if plain and ne >= 0 { return $t[:ne] " == " $t[ne + 4:] }
+    if plain and eq >= 0 { return $t[:eq] + " != " + $t[eq + 4:] }
+    if plain and ne >= 0 { return $t[:ne] + " == " + $t[ne + 4:] }
     loose := (wordAt(code, "and", 0) >= 0 or wordAt(code, "or", 0) >= 0 or wordAt(code, "xor", 0) >= 0
               or wordAt(code, "if", 0) >= 0)
-    return ("not (" $t ")") if loose else ("not " $t)
+    return ("not (" + $t + ")") if loose else ("not " + $t)
 }
 
 # one line migrated; inTest whether it is in a test body, inMain whether in main; the line unchanged when nothing
@@ -117,11 +117,11 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
         t := tryBefore(code, k + 1)
         if inTest {
             # the clause dropped - with whatever spaces stood before it
-            out = $out[:k + 1] $out[at + 14:]
+            out = $out[:k + 1] + $out[at + 14:]
         } else if t >= 0 and (try code[t:at].Find(" catch ") catch default -1) < 0 {
-            out = $out[:t] $out[t + 4:k + 1] "!" $out[at + 14:]
+            out = $out[:t] + $out[t + 4:k + 1] + "!" + $out[at + 14:]
         } else {
-            left.Push($where ": try ... catch { fail } - its operand was not found")
+            left.Push($where + ": try ... catch { fail } - its operand was not found")
             break
         }
     }
@@ -131,7 +131,7 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
         f := try code.Find(" { fail }") catch default -1
         c := try code.FindLast(" catch ") catch default -1
         if f >= 0 and c >= 0 and c < f and code[f + 9:].Trim().Len() == 0 {
-            out = $out[:c] $out[f + 9:]
+            out = $out[:c] + $out[f + 9:]
             code = codeOf(out)
         }
     }
@@ -141,7 +141,7 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
         ind := code.Len() - code.TrimStart().Len()
         s := ind + 3
         e := code.TrimEnd().Len() - 9
-        out = $out[:ind] "assert " $negated(out[s:e])
+        out = $out[:ind] + "assert " + $negated(out[s:e])
         code = codeOf(out)
     }
     # done: "return" in a test or main
@@ -149,9 +149,9 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
         d := wordAt(code, "done", 0)
         lone := code.Trim() == "done" or (try code.Find("{ done }") catch default -1) >= 0
         if (inTest or inMain) and lone {
-            out = $out[:d] "return" $out[d + 4:]
+            out = $out[:d] + "return" + $out[d + 4:]
             code = codeOf(out)
-        } else if lone { left.Push($where ": done - outside a test or main") }
+        } else if lone { left.Push($where + ": done - outside a test or main") }
     }
     # what is left of fail in a test, and abort anywhere: unreachable
     f := wordAt(code, "fail", 0)
@@ -159,13 +159,13 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
                         (try code.Find("=> fail") catch default -1) >= 0)
     if lone {
         if inTest {
-            out = $out[:f] "unreachable" $out[f + 4:]
+            out = $out[:f] + "unreachable" + $out[f + 4:]
             code = codeOf(out)
-        } else { left.Push($where ": fail - outside a test") }
+        } else { left.Push($where + ": fail - outside a test") }
     }
     a := wordAt(code, "abort", 0)
     if a >= 0 and (code.Trim() == "abort" or (try code.Find("{ abort }") catch default -1) >= 0) {
-        out = $out[:a] "unreachable" $out[a + 5:]
+        out = $out[:a] + "unreachable" + $out[a + 5:]
     }
     return out
 }
@@ -186,7 +186,7 @@ fn migrate(file String&, left mut Vec<String&>&) I64 ? {
         tl := l.Trim()
         if testAt < 0 and tl.StartsWith("test \"") { testAt = depth }
         if mainAt < 0 and tl.StartsWith("fn main()") { mainAt = depth }
-        m := migrateLine(l, testAt >= 0, mainAt >= 0, $file ":" $n, left)
+        m := migrateLine(l, testAt >= 0, mainAt >= 0, $file + ":" + $n, left)
         if m != l { changed++ }
         b.Push(m)
         for c in codeOf(l) {
@@ -227,7 +227,7 @@ fn main() ? {
         if f.EndsWith("donefail_migrate.olang") { continue }
         total += try migrate(f, left)
     }
-    try io.PutLine($total " lines changed")
+    try io.PutLine($total + " lines changed")
     for l in left { try io.PutLine(l) }
 }
 

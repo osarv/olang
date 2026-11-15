@@ -23,7 +23,7 @@ fn main() ? io.Error {
     for k in range 1, args.Len() {
         path := args[k]
         text := try os.ReadFile(path) catch os.Error {
-            try io.PutErrLine("cli_words: " $path ": cannot be read")
+            try io.PutErrLine("cli_words: " + $path + ": cannot be read")
             continue
         }
         b := StringBuilder()
@@ -37,7 +37,7 @@ fn main() ? io.Error {
         }
         out := b.ToString()
         if out != text {
-            try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("cli_words: " $path ": cannot be written") }
+            try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("cli_words: " + $path + ": cannot be written") }
             try io.PutLine(path)
         }
     }
@@ -69,8 +69,8 @@ fn migrateLine(line String&) String {
         rest := line[8:]
         at I64 = 0
         for at < rest.Len() and rest[at] == ' ' { at++ }
-        conv := convert(" " $rest[at:])
-        if conv != "" { return "# flags:" $conv }
+        conv := convert(" " + $rest[at:])
+        if conv != "" { return "# flags:" + $conv }
         return $line
     }
     # right to left, so rewriting one invocation never moves another
@@ -80,7 +80,7 @@ fn migrateLine(line String&) String {
         e := invoker(out, i)
         if e >= 0 {
             conv := convert(out[e:])
-            if conv != "" { out = $out[:e] $conv }
+            if conv != "" { out = $out[:e] + $conv }
         }
         i--
     }
@@ -146,7 +146,7 @@ fn convert(rest String&) String {
         if isMode and mode == "" {
             mode = word(f)
         } else if f == "-d" or f == "-r" or f == "-s" or f == "-u" {
-            opts.Push(" " $word(f))
+            opts.Push(" " + $word(f))
         } else if (f == "-a" or f == "-D") and tail == "" {
             # a value follows, as the next word
             k := e
@@ -157,11 +157,11 @@ fn convert(rest String&) String {
             v := rest[k:ve]
             vn := valueLen(v)
             if vn == 0 { break }
-            opts.Push(" " $word(f) " " $v[:vn])
+            opts.Push(" " + $word(f) + " " + $v[:vn])
             tail = v[vn:]
             e = ve
         } else if f.StartsWith("-D") and f.Len() > 2 and f.Contains("=") {
-            opts.Push(" -define " $f[2:])
+            opts.Push(" -define " + $f[2:])
         } else {
             break
         }
@@ -173,6 +173,6 @@ fn convert(rest String&) String {
         }
     }
     if not found { return "" }
-    head := (" " $mode) if mode != "" else ""
-    return $head $opts.ToString() $trail $rest[i:]
+    head := (" " + $mode) if mode != "" else ""
+    return $head + $opts.ToString() + $trail + $rest[i:]
 }

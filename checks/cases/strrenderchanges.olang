@@ -12,7 +12,7 @@ fn (r Re&) Str() String {
     Seen++
     if r.n == 1 { Rs = Array<Re>[Re(7), Re(8)] }         # new storage, another length (T11b)
     if r.n == 8 { Rs[1] = Re(9) }
-    return "r" $r.n
+    return "r" + $r.n
 }
 fn main() ? {
     assert $Rs == "Array<Re>[r1, r2, r3]" and Seen == 3

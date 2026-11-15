@@ -8,12 +8,12 @@ type E struct(A String&, B String&) {
     B
 }
 
-fn mk(s String&) String { return $s "-made" }
+fn mk(s String&) String { return $s + "-made" }
 
 fn main() {
     e := E("a", "b")
     for i in range 2 {
-        t := $i "-inner"
+        t := $i + "-inner"
         e = E("a", mk(t) if i > 5 else t)
     }
     assert e.B.Len() > 0

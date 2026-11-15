@@ -166,7 +166,7 @@ test "ShortestDecimal gives the fewest digits that read back" {
     assert failed
     for x in Array<F64>[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 123.456, 3.141592653589793] {
         d, p := try x.ShortestDecimal() catch { unreachable }
-        assert float($d "e" $p) == x
+        assert float($d + "e" + $p) == x
     }
 }
 
@@ -212,7 +212,7 @@ test "ParseInt and ParseUint read the digits of any base from 2 to 36" {
     assert intIn("0x10", 16) == "INVALID" and intIn("1_000", 10) == "INVALID"     # no prefix, no separators
     assert uintIn("ffffffffffffffff", 16) == "18446744073709551615" and uintIn("10000000000000000", 16) == "OVERFLOW"
     assert uintIn("18446744073709551615", 10) == "18446744073709551615" and uintIn("18446744073709551616", 10) == "OVERFLOW"
-    assert uintIn("1" $"0".Repeat(64), 2) == "OVERFLOW" and uintIn("1".Repeat(64), 2) == "18446744073709551615"
+    assert uintIn("1" + $"0".Repeat(64), 2) == "OVERFLOW" and uintIn("1".Repeat(64), 2) == "18446744073709551615"
     assert uintIn("+7", 10) == "7" and uintIn("-7", 10) == "INVALID" and uintIn("-0", 10) == "INVALID"
     assert uintIn("", 10) == "EMPTY" and uintIn("+", 10) == "INVALID" and intIn("-", 16) == "INVALID"
     assert uintIn("42", 10) == "42" and (try "42".ParseUint() catch default 0) == 42      # base 10 unless another is given
@@ -228,7 +228,7 @@ test "base 0 reads an integer as olang writes its literal (L10)" {
     assert intIn("-9223372036854775808", 0) == "-9223372036854775808"
     assert uintIn("18446744073709551615", 0) == "18446744073709551615" and uintIn("18_446_744_073_709_551_616", 0) == "OVERFLOW"
     assert uintIn("0xFFFF_FFFF_FFFF_FFFF", 0) == "18446744073709551615" and uintIn("0x1_0000_0000_0000_0000", 0) == "OVERFLOW"
-    assert uintIn("0b" $"1".Repeat(64), 0) == "18446744073709551615" and uintIn("0b1" $"0".Repeat(64), 0) == "OVERFLOW"
+    assert uintIn("0b" + $"1".Repeat(64), 0) == "18446744073709551615" and uintIn("0b1" + $"0".Repeat(64), 0) == "OVERFLOW"
     # a '_' stands between two digits (L10b), and a prefix needs digits of its own base after it
     for bad in Array<String&>["0x", "0b", "0x_FF", "0b_1", "1_", "_1", "1__0", "1_x", "0xFG", "0b12", "1e3", "1.0", "0o7", " 1"
                        "0x-1", "--1", "0_x1"] {
@@ -285,7 +285,7 @@ test "the integers pad as numbers, zeros after a sign" {
     assert b.PadStart(6, '0') == "-00128" and h.PadStart(4) == " 300" and u.PadEnd(6) == "65535 "
     assert w.PadStart(11, '0') == "04000000000" and q.PadStart(21) == " 18446744073709551615" and q.PadEnd(3) == $q
     line I32 = 7
-    caret := $line.PadStart(4) " | " $" ".Repeat(5) "^"
+    caret := $line.PadStart(4) + " | " + $" ".Repeat(5) + "^"
     assert caret == "   7 |      ^"
 }
 
@@ -295,7 +295,7 @@ test "Format writes an integer in any base from 2 to 36, read back by ParseInt a
     big I64 = 9223372036854775807
     least I64 = -9223372036854775807 - 1
     assert big.Format(16) == "7fffffffffffffff" and least.Format(16) == "-8000000000000000"
-    assert least.Format(2) == "-1" $"0".Repeat(63) and least.Format() == $least
+    assert least.Format(2) == "-1" + $"0".Repeat(63) and least.Format() == $least
     top U64 = 18446744073709551615
     assert top.Format(16) == "ffffffffffffffff" and top.Format(36) == "3w5e11264sgsf" and top.Format() == $top
     b I8 = -128
@@ -348,7 +348,7 @@ fn builderRendered() String {
     b.PushChar('2')
     l := Vec<StringBuilder>()
     l.Push(b)
-    return $b "|" $l "|" $StringBuilder()
+    return $b + "|" + $l + "|" + $StringBuilder()
 }
 builderRenderedBaked := builderRendered()
 

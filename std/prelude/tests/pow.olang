@@ -3,15 +3,15 @@
 # by the evaluator (the baked globals), and every other exponent pow's.
 
 fn pwCases(x F64) String {
-    return $x.Pow(0.0) " " $x.Pow(-0.0) " " $x.Pow(1.0) " " $x.Pow(2.0) " " $x.Pow(-1.0) " " $x.Pow(0.5) " " $x.Pow(3.0) " " $x.Pow(-2.0) " " $x.Pow(16.0) " " $x.Pow(17.0) " " $x.Pow(2.5)
+    return $x.Pow(0.0) + " " + $x.Pow(-0.0) + " " + $x.Pow(1.0) + " " + $x.Pow(2.0) + " " + $x.Pow(-1.0) + " " + $x.Pow(0.5) + " " + $x.Pow(3.0) + " " + $x.Pow(-2.0) + " " + $x.Pow(16.0) + " " + $x.Pow(17.0) + " " + $x.Pow(2.5)
 }
 
 fn pwEdges() String {
     nan := F64.NaN
-    return $nan.Pow(0.0) " " $nan.Pow(2.0) " " $(-0.0).Pow(0.5) " " $(-F64.Inf).Pow(0.5) " " $(-4.0).Pow(0.5) " " $(0.0).Pow(-1.0) " " $(-0.0).Pow(-1.0) " " $(-0.0).Pow(3.0) " " $(-0.0).Pow(-3.0) " " $(-2.0).Pow(3.0) " " $F64.Inf.Pow(-2.0)
+    return $nan.Pow(0.0) + " " + $nan.Pow(2.0) + " " + $(-0.0).Pow(0.5) + " " + $(-F64.Inf).Pow(0.5) + " " + $(-4.0).Pow(0.5) + " " + $(0.0).Pow(-1.0) + " " + $(-0.0).Pow(-1.0) + " " + $(-0.0).Pow(3.0) + " " + $(-0.0).Pow(-3.0) + " " + $(-2.0).Pow(3.0) + " " + $F64.Inf.Pow(-2.0)
 }
 
-fn pw32(x F32) String { return $x.Pow(2.0) " " $x.Pow(-1.0) " " $x.Pow(0.5) " " $x.Pow(4.0) " " $F16(x).Pow(2.0) " " $BF16(x).Pow(3.0) }
+fn pw32(x F32) String { return $x.Pow(2.0) + " " + $x.Pow(-1.0) + " " + $x.Pow(0.5) + " " + $x.Pow(4.0) + " " + $F16(x).Pow(2.0) + " " + $BF16(x).Pow(3.0) }
 
 PwBaked String& = pwCases(1.5)
 PwEdgesBaked String& = pwEdges()

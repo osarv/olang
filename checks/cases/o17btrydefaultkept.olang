@@ -31,5 +31,5 @@ fn main() ? {
     try churn()
     t := 0
     for st in kept { if st.head != null { t = t * 10 + st.head!.v } }
-    assert kept.Len() == 3 and t == 1, $kept.Len() " " $t
+    assert kept.Len() == 3 and t == 1, $kept.Len() + " " + $t
 }

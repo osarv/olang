@@ -370,8 +370,8 @@ fn (v mut Viewer&) text(n source.NameId) String& { return v.P.L.Names.Text(n) }
 fn (v mut Viewer&) quoted(b I64) String {
     if b < 0 { return "a call through a function value" }
     return match v.Bodies[b].Of {
-        case typed.BodyOf.Fn(inst): "'" $v.text(v.P.FnDecl(v.P.InstanceFn(inst)).Name) "'"
-        case typed.BodyOf.Ctor(t, _): "'" $v.text(v.P.T.DeclName(v.P.T.DeclOf(t))) "'"
+        case typed.BodyOf.Fn(inst): "'" + $v.text(v.P.FnDecl(v.P.InstanceFn(inst)).Name) + "'"
+        case typed.BodyOf.Ctor(t, _): "'" + $v.text(v.P.T.DeclName(v.P.T.DeclOf(t))) + "'"
         case _: "a lambda"
     }
 }
@@ -386,7 +386,7 @@ fn (v mut Viewer&) where(p place) String {
     }
     path := v.strs[p.Path]
     show := p.Show if p.Show >= 0 and p.Show <= path.Len() else path.Len()
-    return $name $path[:show]
+    return $name + $path[:show]
 }
 
 # a struct's field i's name; its position for a tuple's or a record's
@@ -560,7 +560,7 @@ fn (v mut Viewer&) callPlaces(c typed.Call&, st state&, out mut Vec<place>&) {
                 placeAdd(out, q)
                 continue
             }
-            path := v.str($v.strs[q.Path] $ElemSeg)
+            path := v.str($v.strs[q.Path] + $ElemSeg)
             placeAdd(out, place(q.R, path, v.strs[path].Len(), false))
         }
     }
@@ -589,13 +589,13 @@ fn (v mut Viewer&) placePlaces(p typed.Lvalue?&, st state&, out mut Vec<place>&)
         case typed.Lvalue.Field(_, _, b, i) {
             base Vec<place>
             v.placePlaces(b, st, base)
-            seg := "." $v.fieldName(b.Type(), i)
+            seg := "." + $v.fieldName(b.Type(), i)
             for q in base {
                 if q.Any {
                     placeAdd(out, q)
                     continue
                 }
-                path := v.str($v.strs[q.Path] $seg)
+                path := v.str($v.strs[q.Path] + $seg)
                 placeAdd(out, place(q.R, path, v.strs[path].Len(), false))
             }
         }
@@ -682,7 +682,7 @@ fn (v mut Viewer&) bufferElem(p typed.Lvalue&, st state&, out mut Vec<place>&) ?
 fn (v mut Viewer&) below(a place, path I64, show I64, found Bool) place {
     if a.Any { return a }
     s := v.strs[a.Path].Len() + show if show > 0 else a.Show
-    return place(a.R, v.str($v.strs[a.Path] $v.strs[path]), s, found)
+    return place(a.R, v.str($v.strs[a.Path] + $v.strs[path]), s, found)
 }
 
 # whether path a is path b, or a place above it, at a field's boundary
@@ -1507,13 +1507,13 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
 # how to copy what a view shows, for a message naming the collection w: a Map's value (of: view.Of 2), else the
 # elements of a Vec, the only other collection a view is of
 fn copyHint(of I64, w String&) String {
-    if of == 2 { return $"copy the value first ('" $w ".Get(k)')" }
-    return $"copy the elements first ('" $w ".ToArray()')"
+    if of == 2 { return $"copy the value first ('" + $w + ".Get(k)')" }
+    return $"copy the elements first ('" + $w + ".ToArray()')"
 }
 
 fn taskCopy(of I64, w String&) String {
-    if of == 2 { return $"a copy of the value: '" $w ".Get(k)'" }
-    return $"a copy: '" $w ".ToArray()'"
+    if of == 2 { return $"a copy of the value: '" + $w + ".Get(k)'" }
+    return $"a copy: '" + $w + ".ToArray()'"
 }
 
 # the first growth g of grows that may grow the Vec a view of p is of, -1 for none
@@ -1590,7 +1590,7 @@ fn (k mut Kept&) TakeHolding(holds fn&(reads Array<String&>&) Bool) {
         k.Files.Put(c.File, i)
         for line in c.Bodies {
             tab := try line.Find("\t") catch { continue }
-            k.Given.Put($c.File " " $line[:tab], $line[tab + 1:])
+            k.Given.Put($c.File + " " + $line[:tab], $line[tab + 1:])
         }
     }
 }
@@ -1616,7 +1616,7 @@ fn (v mut Viewer&) BodyKeys() Array<String&>& {
     seen Map<String, I64>
     for b in range n {
         if keys[b] == "": continue
-        k := $v.Bodies[b].File " " $keys[b]
+        k := $v.Bodies[b].File + " " + $keys[b]
         had := try seen.Get(k) catch {
             seen.Put(k, b)
             continue
@@ -1629,14 +1629,14 @@ fn (v mut Viewer&) BodyKeys() Array<String&>& {
 
 fn (v mut Viewer&) bodyKey(b I64, keys Array<String&>&) String {
     body := v.Bodies[b]
-    at := $body.Sp.Start "-" $body.Sp.End
+    at := $body.Sp.Start + "-" + $body.Sp.End
     return match body.Of {
-        case typed.BodyOf.Fn(inst): $"fn " $at if v.P.InstanceArgs(inst) == types.ListId(0) else ""
-        case typed.BodyOf.Ctor(t, twin): $"ctor " $at if twin == types.ListId(0) and v.plainType(t) else ""
-        case typed.BodyOf.Dtor(t): $"dtor " $at if v.plainType(t) else ""
-        case typed.BodyOf.Lambda(parent): $"lambda " $at if v.keyedBefore(I64(parent), b, keys) else ""
-        case typed.BodyOf.Global(_, name): $"global " $v.text(name)
-        case typed.BodyOf.Contract(of, _, index): $"contract " $at " " $index if v.keyedBefore(I64(of), b, keys) else ""
+        case typed.BodyOf.Fn(inst): $"fn " + $at if v.P.InstanceArgs(inst) == types.ListId(0) else ""
+        case typed.BodyOf.Ctor(t, twin): $"ctor " + $at if twin == types.ListId(0) and v.plainType(t) else ""
+        case typed.BodyOf.Dtor(t): $"dtor " + $at if v.plainType(t) else ""
+        case typed.BodyOf.Lambda(parent): $"lambda " + $at if v.keyedBefore(I64(parent), b, keys) else ""
+        case typed.BodyOf.Global(_, name): $"global " + $v.text(name)
+        case typed.BodyOf.Contract(of, _, index): $"contract " + $at + " " + $index if v.keyedBefore(I64(of), b, keys) else ""
         case _: ""
     }
 }
@@ -1657,7 +1657,7 @@ fn (v mut Viewer&) Summaries(file I64) Vec<String&> {
     for b in range v.Bodies.Len() {
         if v.Keys[b] == "" or v.Bodies[b].File != file: continue
         text := try v.SummaryText(b) catch Unwritable { continue }
-        out.Push($v.Keys[b] "\t" $text)
+        out.Push($v.Keys[b] + "\t" + $text)
     }
     out.Sort(fn(a String&, b String&) Bool { return a < b })
     return out
@@ -1675,7 +1675,7 @@ fn (v mut Viewer&) SummaryText(b I64) String ? Unwritable {
     passes := StringBuilder()
     passes.Push("p")
     for i, p in sm.Passes {
-        if p: passes.Push($"," $i)
+        if p: passes.Push($"," + $i)
     }
     w.Push(passes.ToString())
     for f in sm.Grows { w.Push(try v.factText("grows", f)) }
@@ -1688,7 +1688,7 @@ fn (v mut Viewer&) factText(kind String&, f fact) String ? Unwritable {
     module := try v.moduleWord(f.Module)
     file := try v.fileWord(f.File)
     name := "-" if f.Name == source.NameId(0) else $v.text(f.Name)
-    words := Array<String&>[kind, $f.Param, module, name, $"." $v.strs[f.Path], $f.Show, "1" if f.Any else "0", file
+    words := Array<String&>[kind, $f.Param, module, name, $"." + $v.strs[f.Path], $f.Show, "1" if f.Any else "0", file
         $f.At.Start, $f.At.End, $f.Into]
     for x in words {
         if x == "" or x.Contains(" ") or x.Contains("\t") or x.Contains("\n") or x.Contains("|"): error Unwritable.Here
@@ -1715,7 +1715,7 @@ fn (v mut Viewer&) take(k mut Kept&) {
     if k.Given.Len() == 0: return
     for b in range v.Bodies.Len() {
         if v.Keys[b] == "": continue
-        text := try k.Given.Get($v.Bodies[b].File " " $v.Keys[b]) catch { continue }
+        text := try k.Given.Get($v.Bodies[b].File + " " + $v.Keys[b]) catch { continue }
         sm := try v.readSummary(b, text) catch Unwritable { continue }
         v.sums[b] = sm
         v.given.Put(b, true)
@@ -1779,13 +1779,13 @@ fn (v mut Viewer&) compare(k mut Kept&) {
     if not v.Summed: return
     for b in range v.Bodies.Len() {
         if v.Keys[b] == "": continue
-        key := $v.Bodies[b].File " " $v.Keys[b]
+        key := $v.Bodies[b].File + " " + $v.Keys[b]
         given := try k.Given.Get(key) catch { continue }
         k.Taken++
         found := try v.SummaryText(b) catch Unwritable default "(unwritable)"
         if found == given: continue
         file := try v.fileWord(v.Bodies[b].File) catch Unwritable default "?"
-        k.Stale.Push($"M19g summary of " $file " " $v.Keys[b] " was '" $given "', is '" $found "'")
+        k.Stale.Push($"M19g summary of " + $file + " " + $v.Keys[b] + " was '" + $given + "', is '" + $found + "'")
     }
 }
 
@@ -1991,12 +1991,12 @@ if TestBuild {
     fn said(text String&) String {
         dir := try os.MkTemp() catch os.Error { unreachable }
         defer { try os.RemoveAll(dir) catch os.Error { } }
-        try os.WriteFile($dir "/main.olang", text) catch os.Error { }
+        try os.WriteFile($dir + "/main.olang", text) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+        l := load.Loader("std", consts, fetch.Fetcher($dir + "/olang.lock", $dir + "/cache", "file:///nowhere/", false, true)
             source.Names(), diag.Diagnostics(false))
-        l.Load($dir "/main.olang")
+        l.Load($dir + "/main.olang")
         r := names.Resolver(l)
         r.Resolve()
         p := generic.Program(l, r)
@@ -2008,56 +2008,56 @@ if TestBuild {
         for d in l.Diags.AllSaid() {
             if d.File == l.Mods[l.Root].File {
                 at := l.Diags.Locate(d.File, d.Start)
-                b.Push($at[(try at.Find(":") catch default 0) + 1:] " " $d.Rule " ")
+                b.Push($at[(try at.Find(":") catch default 0) + 1:] + " " + $d.Rule + " ")
             }
         }
         return b.ToString()
     }
 
     test "a view used after its Vec grows, in the function, through a second name or a call, is an error at the use" {
-        got := said(("fn fill(w mut Vec<I64>&) { for i in range 9 { w.Push(i) } }\n"
-            "fn first(d Array<I64>&) I64 { return d[0] }\n"
-            "fn main() {\n"
-            "    v := Vec<I64>()\n"
-            "    v.Push(1)\n"
-            "    d := v.View()\n"
-            "    v.Push(2)\n"
-            "    assert first(d) == 1\n"
-            "    w mut Vec<I64>& = v\n"
-            "    e := v.View()\n"
-            "    w.Push(3)\n"
-            "    assert e[0] == 1\n"
-            "    f := v.View()\n"
-            "    fill(v)\n"
-            "    assert f.Len() > 0\n"
+        got := said(("fn fill(w mut Vec<I64>&) { for i in range 9 { w.Push(i) } }\n" +
+            "fn first(d Array<I64>&) I64 { return d[0] }\n" +
+            "fn main() {\n" +
+            "    v := Vec<I64>()\n" +
+            "    v.Push(1)\n" +
+            "    d := v.View()\n" +
+            "    v.Push(2)\n" +
+            "    assert first(d) == 1\n" +
+            "    w mut Vec<I64>& = v\n" +
+            "    e := v.View()\n" +
+            "    w.Push(3)\n" +
+            "    assert e[0] == 1\n" +
+            "    f := v.View()\n" +
+            "    fill(v)\n" +
+            "    assert f.Len() > 0\n" +
             "}\n"))
         assert got == "8:18 M19g 12:12 M19g 15:12 M19g ", got
     }
 
     test "a view given to a call that may grow its Vec, or held by a task while it grows; nothing else" {
-        got := said(("fn grow(w mut Vec<I64>&, d Array<I64>&) I64 {\n"
-            "    w.Push(1)\n"
-            "    return d[0]\n"
-            "}\n"
-            "fn look(d Array<I64>&) I64 { return d[0] }\n"
-            "fn main() {\n"
-            "    v := Vec<I64>()\n"
-            "    v.Push(4)\n"
-            "    assert grow(v, v.View()) == 4\n"
-            "    d := v.View()\n"
-            "    join {\n"
-            "        spawn look(d)\n"
-            "        v.Push(5)\n"
-            "    }\n"
-            "    o := Vec<I64>()\n"
-            "    e := v.View()\n"
-            "    o.Push(1)\n"
-            "    assert look(e) == 4\n"
-            "    for i in range 3 {\n"
-            "        x := v.View()\n"
-            "        assert look(x) == 4\n"
-            "        v.Push(i)\n"
-            "    }\n"
+        got := said(("fn grow(w mut Vec<I64>&, d Array<I64>&) I64 {\n" +
+            "    w.Push(1)\n" +
+            "    return d[0]\n" +
+            "}\n" +
+            "fn look(d Array<I64>&) I64 { return d[0] }\n" +
+            "fn main() {\n" +
+            "    v := Vec<I64>()\n" +
+            "    v.Push(4)\n" +
+            "    assert grow(v, v.View()) == 4\n" +
+            "    d := v.View()\n" +
+            "    join {\n" +
+            "        spawn look(d)\n" +
+            "        v.Push(5)\n" +
+            "    }\n" +
+            "    o := Vec<I64>()\n" +
+            "    e := v.View()\n" +
+            "    o.Push(1)\n" +
+            "    assert look(e) == 4\n" +
+            "    for i in range 3 {\n" +
+            "        x := v.View()\n" +
+            "        assert look(x) == 4\n" +
+            "        v.Push(i)\n" +
+            "    }\n" +
             "}\n"))
         assert got == "9:22 M19g 13:11 M19g ", got
     }

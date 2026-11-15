@@ -43,14 +43,14 @@ fn build(olang String&, path String&, src String&) String {
         munged.PushChar(c if srcmask.IsWord(c) else '_')
     }
     tmp := try os.Env("TMPDIR") catch default ""
-    dir := $(tmp if tmp.Len() > 0 else "/tmp") "/olang_io_fix/" $munged.ToString()
+    dir := $(tmp if tmp.Len() > 0 else "/tmp") + "/olang_io_fix/" + $munged.ToString()
     try os.MkDirAll(dir) catch {
-        srcmask.SayErr("io_fix: cannot make " $dir)
+        srcmask.SayErr("io_fix: cannot make " + $dir)
         os.Exit(1)
     }
     args := Array<String&>[olang, mode, srcmask.AbsPath(path)]
     return try srcmask.Capture(args, dir, 600000) catch {
-        srcmask.SayErr("io_fix: " $olang " " $mode " " $path " did not run to its end")
+        srcmask.SayErr("io_fix: " + $olang + " " + $mode + " " + $path + " did not run to its end")
         os.Exit(1)
         unreachable
     }
@@ -119,14 +119,14 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
         at := col - 1
         if ln < 0 or ln >= lines.Len() or at < 0 or at > lines[ln].Len() { continue }
         if code == "E15" {
-            lines[ln] = $lines[ln][:at] "try " $lines[ln][at:]
+            lines[ln] = $lines[ln][:at] + "try " + $lines[ln][at:]
             TryFixes++
             return 1
         }
         if code != "R9" and code != "R13" { continue }
         k := container(lines, ln)
         if k < 0 {
-            srcmask.Say("MANUAL " $path " " $(ln + 1) " " $srcmask.Prefix(msg, 60))
+            srcmask.Say("MANUAL " + $path + " " + $(ln + 1) + " " + $srcmask.Prefix(msg, 60))
             continue
         }
         head := lines[k]
@@ -146,21 +146,21 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
             named := msg.StartsWith("Error ")
             if "?" in tail {
                 if not named {
-                    srcmask.Say("MANUAL " $path " " $(ln + 1) " " $srcmask.Prefix(msg, 60))
+                    srcmask.Say("MANUAL " + $path + " " + $(ln + 1) + " " + $srcmask.Prefix(msg, 60))
                     return 2
                 }
                 if srcmask.Strip(tail).EndsWith("?") {
-                    pre = $pre " " $alias ".Error"
-                } else if tail.Contains($alias ".Error") {
-                    srcmask.Say("STUCK " $path " " $(ln + 1))
+                    pre = $pre + " " + $alias + ".Error"
+                } else if tail.Contains($alias + ".Error") {
+                    srcmask.Say("STUCK " + $path + " " + $(ln + 1))
                     return 2
                 } else {
-                    pre = $pre " + " $alias ".Error"
+                    pre = $pre + " + " + $alias + ".Error"
                 }
             } else {
-                pre = $pre " ?" $(" " $alias ".Error" if named else "")
+                pre = $pre + " ?" + $(" " + $alias + ".Error" if named else "")
             }
-            lines[j] = $pre " " $lines[j][b:]
+            lines[j] = $pre + " " + $lines[j][b:]
             SigFixes++
             return 1
         }
@@ -185,11 +185,11 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
             i++
         }
         if end > 0 and not srcmask.StripStart(text[end:]).StartsWith("catch") {
-            lines[ln] = $text[:end] " catch " $alias ".Error { }" $text[end:]
+            lines[ln] = $text[:end] + " catch " + $alias + ".Error { }" + $text[end:]
             CatchFixes++
             return 1
         }
-        srcmask.Say("MANUAL " $path " " $(ln + 1) " " $srcmask.Prefix(msg, 60))
+        srcmask.Say("MANUAL " + $path + " " + $(ln + 1) + " " + $srcmask.Prefix(msg, 60))
     }
     return 0
 }
@@ -198,7 +198,7 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
 fn fixFile(olang String&, path String&, alias String&) {
     for _ in range 40 {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("io_fix: cannot read " $path)
+            srcmask.SayErr("io_fix: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -211,14 +211,14 @@ fn fixFile(olang String&, path String&, alias String&) {
                     p, line, _, code, msg := try parseDiag(row) catch { continue }
                     if srcmask.AbsPath(p) != srcmask.AbsPath(path) { continue }
                     if code != "R9" and code != "R13" and code != "E15" {
-                        srcmask.Say("OTHER " $path " " $line " " $code " " $srcmask.Prefix(msg, 70))
+                        srcmask.Say("OTHER " + $path + " " + $line + " " + $code + " " + $srcmask.Prefix(msg, 70))
                     }
                 }
             }
             return
         }
         try os.WriteFile(path, lines.Join("\n")) catch {
-            srcmask.SayErr("io_fix: cannot write " $path)
+            srcmask.SayErr("io_fix: cannot write " + $path)
             os.Exit(1)
         }
     }
@@ -233,12 +233,12 @@ fn main() ? {
     olang := srcmask.AbsPath(args[1])
     for i in range 2, args.Len() {
         text := try srcmask.ReadText(args[i]) catch {
-            srcmask.SayErr("io_fix: cannot read " $args[i])
+            srcmask.SayErr("io_fix: cannot read " + $args[i])
             os.Exit(1)
             unreachable
         }
         alias := try srcmask.IoAlias(text, args[i]) catch { continue }
         fixFile(olang, args[i], alias)
     }
-    srcmask.Say("{'sig': " $SigFixes ", 'try': " $TryFixes ", 'catch': " $CatchFixes "}")
+    srcmask.Say("{'sig': " + $SigFixes + ", 'try': " + $TryFixes + ", 'catch': " + $CatchFixes + "}")
 }

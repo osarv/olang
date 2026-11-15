@@ -16,10 +16,10 @@ fn mk(i I64) Vec<I64> {
 fn main() {
     m := Map<String, Vec<I64>>()
     for i in range N {
-        m.Put("key " $(i % 50), mk(i))
-        if i % 7 == 0 { m.Remove("key " $((i + 3) % 50)) }
+        m.Put("key " + $(i % 50), mk(i))
+        if i % 7 == 0 { m.Remove("key " + $((i + 3) % 50)) }
     }
     t I64 = 0
-    for k in range 50 { t += (try m.Get("key " $k) catch { continue }).Len() }
-    io.PutLine($m.Len() " " $t)!
+    for k in range 50 { t += (try m.Get("key " + $k) catch { continue }).Len() }
+    io.PutLine($m.Len() + " " + $t)!
 }

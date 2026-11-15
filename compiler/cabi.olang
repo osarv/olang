@@ -148,7 +148,7 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
                 b.Push(" }")
                 parts.Push(b.ToString())
             } else {
-                parts.Push($"[" $sc.Len() " x " $ft "] alignstack(8)")
+                parts.Push($"[" + $sc.Len() + " x " + $ft + "] alignstack(8)")
             }
             offs.Push(0)
             sizes.Push(sc.Len() * sc[0].Size)
@@ -156,7 +156,7 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
         }
         if size > 16 { return Way(Pass.Sret if result else Pass.Copy, parts, offs, sizes, "") }
         if size <= 8 {
-            parts.Push($"i" $(size * 8) if result else "i64")
+            parts.Push($"i" + $(size * 8) if result else "i64")
             sizes.Push(size if result else 8)
         } else {
             parts.Push("[2 x i64]")
@@ -233,10 +233,10 @@ fn intAt(sc Vec<Scalar>&, off I64, size I64) String, I64 {
     if i >= 0 and not sc[i].IsFloat {
         s := sc[i]
         if s.Llvm == "ptr" or s.Size == 8 { return s.Llvm, 8 }
-        if not data(sc, off + s.Size, off + 8) { return $"i" $(s.Size * 8), s.Size }
+        if not data(sc, off + s.Size, off + 8) { return $"i" + $(s.Size * 8), s.Size }
     }
     n := (size - off).Min(8)
-    return $"i" $(n * 8), n
+    return $"i" + $(n * 8), n
 }
 
 # an SSE eightbyte's type (clang's GetSSETypeAtOffset): float, double, <2 x float>, a 16-bit float or a vector of them
@@ -250,11 +250,11 @@ fn sseAt(sc Vec<Scalar>&, off I64) String, I64 {
     if not data(sc, off + 4, off + 8) {
         if t0 == "half" or t0 == "bfloat" {
             if not data(sc, off + 2, off + 4) { return t0, 2 }
-            return $"<2 x " $t0 ">", 4
+            return $"<2 x " + $t0 + ">", 4
         }
         return t0, 4
     }
-    if half != "" { return $"<4 x " $half ">", 8 }
+    if half != "" { return $"<4 x " + $half + ">", 8 }
     j := at(sc, off + 4)
     if t0 == "float" and j >= 0 and sc[j].Llvm == "float" { return "<2 x float>", 8 }
     return t0, 8
@@ -305,7 +305,7 @@ fn testDecl(t mut types.Table&, arch String&, ty types.TypeId) String {
         case Pass.Copy: "ptr"
         case Pass.Sret: "?"
     })
-    return $ret "(" $ps.ToString() ")"
+    return $ret + "(" + $ps.ToString() + ")"
 }
 
 test "a struct crosses to C as clang 18 passes it, on x86-64 and on AArch64 (X11)" {

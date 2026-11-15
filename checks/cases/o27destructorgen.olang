@@ -8,10 +8,10 @@
 import "std/io"
 type Res unique struct(n String&) {
     name := $n
-} destruct { io.PutLine("end " $name)! }
+} destruct { io.PutLine("end " + $name)! }
 fn names(n I64) Iterator<String&> {
     for i in range n {
-        f := Res($i "-file")
+        f := Res($i + "-file")
         yield f.name[0:1]
     }
 }

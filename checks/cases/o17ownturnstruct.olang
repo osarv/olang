@@ -12,7 +12,7 @@ type ah struct(a Array<I64>&) { a }
 fn churn() I64 {
     t := 0
     for i in range 300 {
-        s := $i "-" $(i * 7)
+        s := $i + "-" + $(i * 7)
         a := Array<I64>(64, -7)
         t += s.Len() + a[3]
     }
@@ -32,8 +32,8 @@ fn main() {
     }
     churn()
     out := ""
-    for h in hs { out = $out $h.r.s }
+    for h in hs { out = $out + $h.r.s }
     s := 0
     for h in ahs { s += h.a.Len() + h.a[0] }
-    io.PutLine("recs " $out " (12345) arrays " $s " (30)")!
+    io.PutLine("recs " + $out + " (12345) arrays " + $s + " (30)")!
 }

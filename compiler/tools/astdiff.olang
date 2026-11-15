@@ -36,20 +36,20 @@ fn main() {
     work String& = ""
     if keep != "" {
         work = keep
-        try os.MkDirAll(work) catch os.Error { toolkit.Die("astdiff: cannot make " $work) }
+        try os.MkDirAll(work) catch os.Error { toolkit.Die("astdiff: cannot make " + $work) }
     } else {
         work = toolkit.Scratch("astdiff")
     }
     defer {
         if keep == "" { toolkit.Clean(work) }
     }
-    if not toolkit.Built(dump) { toolkit.Die("astdiff: " $dump " is not built (make " $dump ")") }
+    if not toolkit.Built(dump) { toolkit.Die("astdiff: " + $dump + " is not built (make " + $dump + ")") }
     g := toolkit.HashGolden.Read(Golden, "astgold")
     oraw := toolkit.RunTool(dump, "ast", files)
-    toolkit.Write($work "/olang.raw", oraw)
-    sections(oraw, files.Len(), $dump " ast")
+    toolkit.Write($work + "/olang.raw", oraw)
+    sections(oraw, files.Len(), $dump + " ast")
     olang := normalize(oraw)
-    toolkit.Write($work "/olang", olang)
+    toolkit.Write($work + "/olang", olang)
     o := toolkit.Golden.DumpSections(olang)
     stale := toolkit.HashGoldenStale(g, files)
     isStale := Map<String&, Bool>()
@@ -63,17 +63,17 @@ fn main() {
             if bad <= 5 { toolkit.Say(rep) }
         }
     }
-    for f in stale { toolkit.Say("astdiff: " $f " changed since the golden was captured (make astgold)\n") }
+    for f in stale { toolkit.Say("astdiff: " + $f + " changed since the golden was captured (make astgold)\n") }
     bad += stale.Len()
     if bad > 0 {
-        toolkit.Say("astdiff: the trees of " $bad " of " $files.Len() " files differ\n")
+        toolkit.Say("astdiff: the trees of " + $bad + " of " + $files.Len() + " files differ\n")
         os.Exit(1)
     }
-    toolkit.Say("astdiff: no difference over " $files.Len() " files\n")
+    toolkit.Say("astdiff: no difference over " + $files.Len() + " files\n")
     # each tree written back as source holds the file's tokens, and reads back as itself
     rt := toolkit.RunTool(dump, "roundtrip", files)
-    toolkit.Write($work "/rt", rt)
-    sections(rt, files.Len(), $dump " roundtrip")
+    toolkit.Write($work + "/rt", rt)
+    sections(rt, files.Len(), $dump + " roundtrip")
     broken := false
     header String& = ""
     for line in toolkit.Rows(rt) {
@@ -82,7 +82,7 @@ fn main() {
             continue
         }
         if line == "ok" or line.StartsWith("skipped") { continue }
-        toolkit.Say($header "\n" $line "\n")
+        toolkit.Say($header + "\n" + $line + "\n")
         broken = true
     }
     if broken {
@@ -95,20 +95,20 @@ fn main() {
 # every tracked file's tree, normalized, from the self-hosted parser, written as the golden
 fn capture(dump String&) {
     files := toolkit.Tracked("*.olang")
-    if not toolkit.Built(dump) { toolkit.Die("astdiff: " $dump " is not built (make " $dump ")") }
+    if not toolkit.Built(dump) { toolkit.Die("astdiff: " + $dump + " is not built (make " + $dump + ")") }
     raw := toolkit.RunTool(dump, "ast", files)
     sections(raw, files.Len(), dump)
     s := toolkit.Golden.DumpSections(normalize(raw))
     toolkit.HashGoldenWrite(Golden, "the C parser's trees, normalized (compiler/tools/astdiff.olang)", files, s, fn(body String&) Bool {
         return body.Len() < 8192 and (try body.Find("\nerror") catch default -1) >= 0
     })
-    toolkit.Say("astdiff: " $files.Len() " files captured from " $dump " into " $Golden ".txt\n")
+    toolkit.Say("astdiff: " + $files.Len() + " files captured from " + $dump + " into " + $Golden + ".txt\n")
 }
 
 # a tool that stops early prints fewer sections than files: that is a failure, never an empty match
 fn sections(text String&, files I64, who String&) {
     n := toolkit.Sections(text)
-    if n != files { toolkit.Die("astdiff: " $who " printed " $n " of " $files " files") }
+    if n != files { toolkit.Die("astdiff: " + $who + " printed " + $n + " of " + $files + " files") }
 }
 
 # a position "LINE:COL" as one number
@@ -162,7 +162,7 @@ fn (n mut norm&) emit(rule String&, at String&) {
         if not n.kept(pos(at)) { n.rows.Push("error L21") }
         return
     }
-    n.rows.Push("error " $rule " " $at)
+    n.rows.Push("error " + $rule + " " + $at)
 }
 
 # "error RULE LINE:COL" of the self-hosted parser's rendering: the rule may be several ("T17, T19, C2") or none
@@ -200,7 +200,7 @@ fn (n mut norm&) cDiag(line String&) {
             return
         }
     }
-    n.rows.Push("error " $rule " 0:0")
+    n.rows.Push("error " + $rule + " 0:0")
 }
 
 # each file's sections sorted; the C rows reduced to "error RULE LINE:COL"

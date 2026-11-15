@@ -207,10 +207,10 @@ fn migrate(text String&, alias String&, first I64, notes mut Vec<String&>&) Stri
             args[0] = args[1]
             args[1] = t
         } else if recvLit and otherValue {
-            notes.Push($line ": " $name " of the literal " $args[0] " - a receiver of its own type now; convert it if another is meant")
+            notes.Push($line + ": " + $name + " of the literal " + $args[0] + " - a receiver of its own type now; convert it if another is meant")
         }
-        if isSignedLit(args[0]) and isIntLit(args[0]) and not AnyNumber.Has(name) { args[0] = $args[0] ".0" }
-        recv := args[0] if simple(args[0]) else $("(" $args[0] ")")
+        if isSignedLit(args[0]) and isIntLit(args[0]) and not AnyNumber.Has(name) { args[0] = $args[0] + ".0" }
+        recv := args[0] if simple(args[0]) else $("(" + $args[0] + ")")
         out.Push(text[last:i])
         out.Push(recv)
         out.PushChar('.')
@@ -233,23 +233,23 @@ fn migrate(text String&, alias String&, first I64, notes mut Vec<String&>&) Stri
 fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) I64 {
     if path == "std/math.olang" or path.EndsWith("/std/math.olang") { return 0 }
     text := try srcmask.ReadText(path) catch {
-        srcmask.SayErr("math_methods: cannot read " $path)
+        srcmask.SayErr("math_methods: cannot read " + $path)
         os.Exit(1)
         unreachable
     }
     alias, from, to := mathImport(text, path)
     if alias.Len() == 0 { return 0 }
     mine Vec<String&>
-    result := migrate($text[:from] $text[to:], alias, 1, mine)
-    for n in mine { notes.Push($path ":" $n) }
+    result := migrate($text[:from] + $text[to:], alias, 1, mine)
+    for n in mine { notes.Push($path + ":" + $n) }
     if result == text { return 0 }
     if not dry {
         try os.WriteFile(path, result) catch {
-            srcmask.SayErr("math_methods: cannot write " $path)
+            srcmask.SayErr("math_methods: cannot write " + $path)
             os.Exit(1)
         }
     }
-    srcmask.Say($("would migrate " if dry else "migrated ") $path)
+    srcmask.Say($("would migrate " if dry else "migrated ") + $path)
     return 1
 }
 
@@ -275,10 +275,10 @@ fn main() ? {
         if k > 0 and f == files[k - 1] { continue }
         changed += migrateFile(f, dry, notes)
     }
-    srcmask.Say($changed " files " $("would change" if dry else "changed"))
+    srcmask.Say($changed + " files " + $("would change" if dry else "changed"))
     if notes.Len() > 0 {
         srcmask.Say("for a person:")
-        for n in notes { srcmask.Say("  " $n) }
+        for n in notes { srcmask.Say("  " + $n) }
     }
 }
 

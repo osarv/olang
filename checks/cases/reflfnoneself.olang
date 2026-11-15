@@ -8,7 +8,7 @@ fn pick<T>(x T) T { return x }
 fn main() {
     s := ""
     for f in me.Functions {
-        if f.HasAttr<Cmd>() { s = $s $(f.Attr<Cmd>()!).Word "=" $f() " " }
+        if f.HasAttr<Cmd>() { s = $s + $(f.Attr<Cmd>()!).Word + "=" + $f() + " " }
     }
     assert s == "hi=hello bye=bye " and pick(1) == 1
 }

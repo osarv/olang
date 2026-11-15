@@ -186,7 +186,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
     adds I64 = 0
     for path in paths {
         src := try srcmask.ReadText(path) catch {
-            srcmask.SayErr("perm_mut: cannot read " $path)
+            srcmask.SayErr("perm_mut: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
@@ -208,7 +208,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
         shDelta Vec<I64>
         for r in mine {
             if diagedit.ContainsAny(r.Why, expect) { continue }
-            key := $r.Line ":" $r.Col ":" $r.Kind
+            key := $r.Line + ":" + $r.Col + ":" + $r.Kind
             if key in seen or r.Line - 1 >= lines.Len() { continue }
             seen.Push($key)
             idx := r.Line - 1
@@ -222,9 +222,9 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
                     # nothing after it: take the space before instead
                     start := at
                     for start > 0 and (text[start - 1] == ' ' or text[start - 1] == '\t') { start-- }
-                    lines[idx] = $text[:start] $text[at + 3:]
+                    lines[idx] = $text[:start] + $text[at + 3:]
                 } else {
-                    lines[idx] = $text[:at] $text[end:]
+                    lines[idx] = $text[:at] + $text[end:]
                 }
             } else {
                 name := r.Arg
@@ -242,7 +242,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
                     after = p
                 }
                 if diagedit.Sub(text, after, after + 4) == " mut" { continue }
-                lines[idx] = $text[:after] " mut" $text[after:]
+                lines[idx] = $text[:after] + " mut" + $text[after:]
             }
             diagedit.Realign(lines, idx, lines[idx].Len() - text.Len(), at)
             shLine.Push(r.Line)
@@ -252,7 +252,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
         }
         diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
         try os.WriteFile(path, lines.Join("\n")) catch {
-            srcmask.SayErr("perm_mut: cannot write " $path)
+            srcmask.SayErr("perm_mut: cannot write " + $path)
             os.Exit(1)
         }
     }
@@ -268,7 +268,7 @@ fn main() ? {
     for i < args.Len() {
         if args[i] == "--olang" or args[i] == "-j" {
             if i + 1 >= args.Len() {
-                srcmask.SayErr("perm_mut: " $args[i] " needs a value")
+                srcmask.SayErr("perm_mut: " + $args[i] + " needs a value")
                 os.Exit(1)
             }
             if args[i] == "--olang" {
@@ -303,7 +303,7 @@ fn main() ? {
     puns I64 = 0
     for f in files {
         src := try srcmask.ReadText(f) catch {
-            srcmask.SayErr("perm_mut: cannot read " $f)
+            srcmask.SayErr("perm_mut: cannot read " + $f)
             os.Exit(1)
             unreachable
         }
@@ -311,13 +311,13 @@ fn main() ? {
         changed, n := dropPunMut(src)
         if n > 0 {
             try os.WriteFile(f, changed) catch {
-                srcmask.SayErr("perm_mut: cannot write " $f)
+                srcmask.SayErr("perm_mut: cannot write " + $f)
                 os.Exit(1)
             }
             puns += n
         }
     }
-    srcmask.Say("puns: " $puns " 'mut' removed")
+    srcmask.Say("puns: " + $puns + " 'mut' removed")
 
     tmp := try os.MkTemp("", "perm_mut") catch {
         srcmask.SayErr("perm_mut: cannot make a temporary directory")
@@ -327,9 +327,9 @@ fn main() ? {
     defer try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp "/w" $k
+        work[k] = $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
-            srcmask.SayErr("perm_mut: cannot make " $work[k])
+            srcmask.SayErr("perm_mut: cannot make " + $work[k])
             os.Exit(1)
         }
     }
@@ -341,12 +341,12 @@ fn main() ? {
         requests Vec<diagedit.Request>
         for o in outputs { editsFrom(o, allowed, requests) }
         drops, adds := apply(requests)
-        srcmask.Say("round " $round ": " $drops " 'mut' removed, " $adds " 'mut' added")
+        srcmask.Say("round " + $round + ": " + $drops + " 'mut' removed, " + $adds + " 'mut' added")
         totalDrop += drops
         totalAdd += adds
         if drops == 0 and adds == 0 { break }
     }
-    srcmask.Say("total: " $puns " pun 'mut' removed, " $totalDrop " other 'mut' removed, " $totalAdd " 'mut' added to locals")
+    srcmask.Say("total: " + $puns + " pun 'mut' removed, " + $totalDrop + " other 'mut' removed, " + $totalAdd + " 'mut' added to locals")
 }
 
 test "a pun loses its mut, a keyword list does not" {

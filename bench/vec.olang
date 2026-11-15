@@ -289,5 +289,5 @@ fn main() ? {
     } else {
         error Usage.Mode
     }
-    try io.Put($total "\n")
+    try io.Put($total + "\n")
 }

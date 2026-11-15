@@ -10,6 +10,6 @@ type Bag struct(words Array<String&>&) {
 }
 fn (b Bag&) Str() String {
     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
-    return "n" $long
+    return "n" + $long
 }
 fn main() ? { try io.PutLine($Bag(Array<String&>["ab", "c"])) }

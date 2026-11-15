@@ -144,7 +144,7 @@ fn columnOf<T, D>(a Array<T>&, d D) Array<D.Type> {
 # how "$" renders a Columns (E11c): as an array of its rows renders, the type named in front - "Columns<P>[P(1, 2)]"
 fn (c Columns<T>&) Str() String {
     r := $c.ToArray()                                    # "Array<T>[...]"
-    return "Columns" $r[5:]
+    return "Columns" + $r[5:]
 }
 
 # ---- ColumnVec ----
@@ -331,7 +331,7 @@ fn (v ColumnVec<T>&) Hash() I64 {
 # how "$" renders a ColumnVec (E11c): as its rows render, the type named in front - "ColumnVec<P>[P(1, 2)]"
 fn (v ColumnVec<T>&) Str() String {
     r := $v.ToArray()                                    # "Array<T>[...]"
-    return "ColumnVec" $r[5:]
+    return "ColumnVec" + $r[5:]
 }
 
 # ---- rich display (B23) ----
@@ -347,18 +347,18 @@ fn (v ColumnVec<T>&) Display() Display { return Display.Html(tableHtml(v.data, v
 fn tableHtml<T>(c Columns<T>&, n I64) String {
     b := StringBuilder()
     b.Push("<table><thead><tr><th></th>")
-    for f in T.Fields { b.Push($"<th>" $htmlEscaped(f.Name) "</th>") }
+    for f in T.Fields { b.Push($"<th>" + $htmlEscaped(f.Name) + "</th>") }
     b.Push("</tr></thead><tbody>")
     shown I64 = n if n <= 50 else 50
     for i in range shown {
         row := c[i]
-        b.Push($"<tr><th>" $i "</th>")
-        for f in T.Fields { b.Push($"<td>" $htmlEscaped(cellText(f.Of(row))) "</td>") }
+        b.Push($"<tr><th>" + $i + "</th>")
+        for f in T.Fields { b.Push($"<td>" + $htmlEscaped(cellText(f.Of(row))) + "</td>") }
         b.Push("</tr>")
     }
     b.Push("</tbody></table>")
-    if shown < n { b.Push($"<p>" $(n - shown) " more rows</p>") }
-    b.Push($"<p>" $n " rows \u{00D7} " $T.Fields.Len() " columns</p>")
+    if shown < n { b.Push($"<p>" + $(n - shown) + " more rows</p>") }
+    b.Push($"<p>" + $n + " rows \u{00D7} " + $T.Fields.Len() + " columns</p>")
     return b.ToString()
 }
 

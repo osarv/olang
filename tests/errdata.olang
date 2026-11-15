@@ -16,13 +16,13 @@ Live mut I64 = 0
 fn parse(n I64) I64 ? ParseErr {
     if n == 0: error ParseErr.Eof
     if n < 0: error ParseErr.Bad(n, 7)
-    if n > 100: error ParseErr.Named("big " $n)
+    if n > 100: error ParseErr.Named("big " + $n)
     return n * 2
 }
 
 fn fetch(n I64) I64 ? NetErr {
     if n == 1001: error NetErr.Slow
-    error NetErr.Gone("host" $n)
+    error NetErr.Gone("host" + $n)
 }
 
 fn load(n I64) I64 ? LoadErr {
@@ -109,7 +109,7 @@ test "a value kept outlives the clause and the scopes after it" {
     ks := kept(Array<I64>[Live, Live - 2, Live + 300, Live + 1000, Live + 1001])
     for i in range 50 {
         v := Vec<String>()
-        v.Push("churn" $i)
+        v.Push("churn" + $i)
     }
     assert ks.Len() == 5
     assert $ks[0] == "ParseErr.Eof" and $ks[1] == "ParseErr.Bad(-2, 7)"
@@ -184,7 +184,7 @@ test "an error raised by name carries what its raise names" {
 
 # T20: an error type's own methods, declared in its module; a named set has methods of its own, none of its members'
 fn (e ParseErr) Where() String {
-    if e == ParseErr.Bad: return $e.line ":" $e.col
+    if e == ParseErr.Bad: return $e.line + ":" + $e.col
     return "nowhere"
 }
 
@@ -222,7 +222,7 @@ fn kind(n I64) String {
         match e {
             case ParseErr.Bad(_, col = 0): return "no column"
             case ParseErr.Bad(-1, _): return "line -1"
-            case ParseErr.Bad(at, c) { return "bad " $at ":" $c }
+            case ParseErr.Bad(at, c) { return "bad " + $at + ":" + $c }
             case ParseErr.Named(what) { return what }
             case ParseErr.Eof: return "eof"
         }
@@ -242,7 +242,7 @@ test "a payload is matched by position and by name" {
 type JoinErr error { Task(msg String), Own(n I64, msg String) }
 type Halt error { Now }
 
-fn task(i I64) I64 ? JoinErr { error JoinErr.Task("task " $i) }
+fn task(i I64) I64 ? JoinErr { error JoinErr.Task("task " + $i) }
 
 fn ownFails(n I64) ? JoinErr { error JoinErr.Own(n, "own") }
 
@@ -252,12 +252,12 @@ fn joinOwn(n I64) String ? JoinErr {
         for i in range 4: spawn out[i] = try task(i + n)
         try ownFails(n)
     } catch JoinErr e {
-        return "inner " $e
+        return "inner " + $e
     }
     return "none"
 }
 
-fn joinedOwn(n I64) String { return try joinOwn(n) catch JoinErr e default "outer " $e }
+fn joinedOwn(n I64) String { return try joinOwn(n) catch JoinErr e default "outer " + $e }
 
 # the block's own error carrying nothing: the tasks' payloads dropped all the same, so the next payload read is its own
 fn joinHalts(n I64) String ? Halt {
@@ -269,14 +269,14 @@ fn joinHalts(n I64) String ? Halt {
         spawn out[0] = try task(n)
         if n >= 0: error Halt.Now
     } catch JoinErr e {
-        return "inner " $e
+        return "inner " + $e
     }
     return "none"
 }
 
 fn haltedThenRead(n I64) String {
     a := try joinHalts(n) catch Halt e default $e
-    return $a " " $(try $parse(-n - 1) catch ParseErr e default $e)
+    return $a + " " + $(try $parse(-n - 1) catch ParseErr e default $e)
 }
 
 JoinOwnBaked String = joinedOwn(3)
@@ -285,8 +285,8 @@ assert haltedThenRead(2) == "Halt.Now ParseErr.Bad(-3, 7)"
 test "a join block's own error leaves with its own payload, the tasks' dropped" {
     assert JoinOwnBaked == "outer JoinErr.Own(3, \"own\")" and joinedOwn(Live + 3) == JoinOwnBaked
     for i in range 50 {
-        assert joinedOwn(Live + i) == "outer JoinErr.Own(" $i ", \"own\")"
-        assert haltedThenRead(Live + i) == "Halt.Now ParseErr.Bad(" $(-i - 1) ", 7)"
+        assert joinedOwn(Live + i) == "outer JoinErr.Own(" + $i + ", \"own\")"
+        assert haltedThenRead(Live + i) == "Halt.Now ParseErr.Bad(" + $(-i - 1) + ", 7)"
     }
 }
 
@@ -322,11 +322,11 @@ type Inner error { Bad(msg String) }
 type Nested error { At(at Where), Kind(s Shape), Many(names Array<String>), Wrap(inner Inner) }
 
 fn nested(i I64) ? Nested {
-    t := $"f" $i
-    if i % 4 == 0: error Nested.At(Where($t ".olang", i))
-    if i % 4 == 1: error Nested.Kind(Shape.Named($"n" $t))
-    if i % 4 == 2: error Nested.Many(Array<String>[$t, $"x" $i])
-    error Nested.Wrap(Inner.Bad($"inner " $t))
+    t := $"f" + $i
+    if i % 4 == 0: error Nested.At(Where($t + ".olang", i))
+    if i % 4 == 1: error Nested.Kind(Shape.Named($"n" + $t))
+    if i % 4 == 2: error Nested.Many(Array<String>[$t, $"x" + $i])
+    error Nested.Wrap(Inner.Bad($"inner " + $t))
 }
 
 fn nestedSaid(i I64) String {
@@ -340,7 +340,7 @@ fn nestedKept(n I64) Vec<Nested> {
         try nested(i) catch Nested e { out.Push(e) }
         for _ in range 20 {
             v := Vec<String>()
-            v.Push("churn" $i)
+            v.Push("churn" + $i)
         }
     }
     return out

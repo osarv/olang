@@ -2,7 +2,7 @@
 # E28: a conditional whose values are calls giving an array value - text here - is copied into storage of its own where
 # the conditional's value is built; the result type's tag is the callee's, which no frame holds (the compiler crashed)
 fn lc(n I64) String {
-    return $n ":" $(n + 1)
+    return $n + ":" + $(n + 1)
 }
 
 fn pick(k I64) String {

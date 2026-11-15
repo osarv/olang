@@ -12,9 +12,9 @@ fn (i Idle) Name() String { return "idle" }
 type Busy struct(n I64) {
     n
 }
-fn (b Busy) Name() String { return "busy " $b.n }
+fn (b Busy) Name() String { return "busy " + $b.n }
 
-fn both<A Named, B Named>(a A, b B = Idle()) String { return $a.Name() " " $b.Name() }
+fn both<A Named, B Named>(a A, b B = Idle()) String { return $a.Name() + " " + $b.Name() }
 
 type Nothing enum { }
 

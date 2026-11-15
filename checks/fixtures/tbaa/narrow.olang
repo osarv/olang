@@ -115,7 +115,7 @@ fn main() ? {
     assert y16 == 997000, $y16
     assert yu32 == 99902997000, $yu32
     assert a.c8 == -24, $a.c8
-    assert a.c16 == 2000 and a.cu16 == 3000 and a.cu32 == 4000 and a.cu64 == 5000, $a.c16 " " $a.cu16
+    assert a.c16 == 2000 and a.cu16 == 3000 and a.cu32 == 4000 and a.cu64 == 5000, $a.c16 + " " + $a.cu16
     assert a.ch == 1000.0, $a.ch
     assert a.cb == 256.0, $a.cb
     c := a.codes

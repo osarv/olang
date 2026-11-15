@@ -15,7 +15,7 @@ fn Count(k I64) I64 {
 
 fn churn() {
     for i in range 200 {
-        s := $i " churn " $(i * 7)
+        s := $i + " churn " + $(i * 7)
         assert s.Len() > 0
     }
 }
