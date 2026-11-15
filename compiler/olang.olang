@@ -1213,7 +1213,7 @@ fn buildCell(root String&, text String&, shadow Array<String&>&, paths Array<Str
 
 # interpret FILE ARGS (B3e): the program checked - its conditions and asserts the evaluator decides decided (B9c, S8b,
 # S18c) - and its main run by the evaluator, its globals set first, the program given its file and ARGS as its command
-# line; the status main ends with. For test -interpret (cfg.Tests) the file's tests run instead, as its test binary
+# line; the status main ends with. For test -evaluate (cfg.Tests) the file's tests run instead, as its test binary
 # runs them - ARGS the words naming the tests to run (B7a)
 fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&
     d mut diag.Diagnostics&) I32 ? build.Failed {

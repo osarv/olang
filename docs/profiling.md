@@ -60,7 +60,7 @@ What it measures, and what it does not:
   frame pointer (glibc's do not).
 - A crash (a segmentation fault) writes no samples; `SIGINT`, `SIGTERM` and `SIGHUP` do, when the program leaves them to
   end it (a background job of a non-interactive shell ignores `SIGINT`, so it is not interrupted at all).
-- `interpret` is not profiled - its time is the evaluator's.
+- `interpret` is not profiled - its build is a checked one (E16g); under `-evaluate` its time is the evaluator's.
 - Allocation profiling (bytes per allocating site, which the arena could count) is future work.
 
 **What it costs** (`bench/`, best of five, 2026-10-27; plain build / profile build not sampling / sampling):

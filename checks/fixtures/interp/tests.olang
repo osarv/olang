@@ -1,4 +1,4 @@
-# B3e: test -interpret runs a file's tests as its test binary runs them - the same lines, the same status
+# B3e: test -evaluate runs a file's tests as its test binary runs them - the same lines, the same status
 
 type Oops error { Bad }
 
