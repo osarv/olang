@@ -5120,23 +5120,27 @@ compilation failed with 1 error
 s8dassignclause.olang:15:18: error[S8d]: Shape is an enum, and its payload's 'p' is read through a case
    15 |         return e.p.v + x
       |                  ^
-s8dassignclause.olang:15:18: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.p }', until it is assigned
+s8dassignclause.olang:15:18: note: a test narrowed it, and an assignment since has ended that
+s8dassignclause.olang:15:18: help: read it where a test narrows it to the case, 'if e == Case { e.p }'
 s8dassignclause.olang:22:16: error[T2c]: 'q' is a N?&, which may be null
    22 |         return q.v
       |                ^
+s8dassignclause.olang:22:16: note: a test narrowed it, and an assignment since has ended that
 s8dassignclause.olang:22:16: help: read through it where a test says it is not ('if x != null'), or write 'q!'
 compilation failed with 2 errors
 === s8dassigned.olang
 s8dassigned.olang:9:22: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     9 |         assert t + s.r == 4
       |                      ^
-s8dassigned.olang:9:22: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+s8dassigned.olang:9:22: note: a test narrowed it, and an assignment since has ended that
+s8dassigned.olang:9:22: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8ddefercase.olang
 s8ddefercase.olang:10:43: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
    10 |         defer io.PutLine("deferred r " $e.r)!
       |                                           ^
-s8ddefercase.olang:10:43: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+s8ddefercase.olang:10:43: note: a test narrowed it, and an assignment since has ended that
+s8ddefercase.olang:10:43: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dnarrowlentfield.olang
 s8dnarrowlentfield.olang:12:9: error[S8d]: a narrowed payload field is read, never written or lent writably
@@ -5166,40 +5170,76 @@ s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never w
 s8dnarrowwrite.olang:9:30: note: 's' is narrowed to Shape.Ring, and what it reads there is a copy of the payload
 s8dnarrowwrite.olang:9:30: help: assign the whole case, 's = Shape.Ring(...)', or change a copy a match binds and assign the case back
 compilation failed with 1 error
+=== s8dpathassigned.olang
+s8dpathassigned.olang:7:12: error[T2c]: 'h.next.next' is a N?&, which may be null
+    7 |     return h.next.next.v
+      |            ^~~~~~~~~~~
+s8dpathassigned.olang:7:12: note: a test narrowed it, and an assignment since has ended that
+s8dpathassigned.olang:7:12: help: read through it where a test says it is not ('if x != null'), or write 'h.next.next!'
+compilation failed with 1 error
+=== s8dpathcase.olang
+s8dpathcase.olang:9:16: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
+    9 |     return b.s.r + t
+      |                ^
+s8dpathcase.olang:9:16: note: a test narrowed it, and a call since may have changed it - a field path narrows only up to the next call
+s8dpathcase.olang:9:16: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
+compilation failed with 1 error
+=== s8dpathcondcall.olang
+s8dpathcondcall.olang:6:45: error[T2c]: 'h.next' is a N?&, which may be null
+    6 |     if h.next != null and ready(h) { return h.next.v }
+      |                                             ^~~~~~
+s8dpathcondcall.olang:6:45: help: read through it where a test says it is not ('if x != null'), or write 'h.next!'
+compilation failed with 1 error
+=== s8dpathglobal.olang
+s8dpathglobal.olang:7:12: error[T2c]: 'g.next' is a N?&, which may be null
+    7 |     return g.next.v
+      |            ^~~~~~
+s8dpathglobal.olang:7:12: help: read through it where a test says it is not ('if x != null'), or write 'g.next!'
+compilation failed with 1 error
+=== s8dpathloop.olang
+s8dpathloop.olang:9:18: error[S8d]: 'h.next' is narrowed by a test before the loop around this read
+    9 |             t += h.next.v
+      |                  ^~~~~~
+s8dpathloop.olang:9:18: note: a call in the loop may change it before the next turn reads it
+s8dpathloop.olang:9:18: help: test it inside the loop, or read it into a local before the loop ('v := h.next')
+compilation failed with 1 error
 === s8dunnarrowed.olang
 s8dunnarrowed.olang:4:35: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     4 | fn radius(s Shape) I64 { return s.r }
       |                                   ^
-s8dunnarrowed.olang:4:35: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+s8dunnarrowed.olang:4:35: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dwidecond.olang
 s8dwidecond.olang:4:56: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     4 | fn r(s Shape) I64 { return 0 if s == Shape.Ring else s.r }
       |                                                        ^
-s8dwidecond.olang:4:56: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+s8dwidecond.olang:4:56: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dwidekill.olang
 s8dwidekill.olang:7:14: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     7 |     return s.r
       |              ^
-s8dwidekill.olang:7:14: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+s8dwidekill.olang:7:14: note: a test narrowed it, and an assignment since has ended that
+s8dwidekill.olang:7:14: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dwideor.olang
 s8dwideor.olang:4:53: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     4 | fn wide(s Shape) Bool { return s == Shape.Ring or s.r > 2 }
       |                                                     ^
-s8dwideor.olang:4:53: help: read it where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+s8dwideor.olang:4:53: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8edefernull.olang
 s8edefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null
    10 |         defer io.PutLine("deferred reads " $p.V)!
       |                                             ^
+s8edefernull.olang:10:45: note: a test narrowed it, and an assignment since has ended that
 s8edefernull.olang:10:45: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === s8eerrdefernull.olang
 s8eerrdefernull.olang:10:44: error[T2c]: 'p' is a Node?&, which may be null
    10 |     errdefer io.PutLine("errdefer reads " $p.V)!
       |                                            ^
+s8eerrdefernull.olang:10:44: note: a test narrowed it, and an assignment since has ended that
 s8eerrdefernull.olang:10:44: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === satadd01outside.olang
@@ -5793,6 +5833,13 @@ compilation failed with 1 error
 t19bnofield.olang:7:56: error: ParseError2.Bad has no member 'coll' - did you mean 'col'?
     7 |     x := try parse() catch ParseError2.Bad e default e.coll
       |                                                        ^~~~
+compilation failed with 1 error
+=== t19bpathcall.olang
+t19bpathcall.olang:9:16: error[T19b]: b.e may hold an error that has no field line
+    9 |     return b.e.line + t
+      |                ^~~~
+t19bpathcall.olang:9:16: note: a test narrowed it, and a call since may have changed it - a field path narrows only up to the next call
+t19bpathcall.olang:9:16: help: test which it holds first ('if b.e == T.Word')
 compilation failed with 1 error
 === t19bpatternalts.olang
 t19bpatternalts.olang:11:30: error[T19b, S13b]: a payload pattern binding a name stands alone in its case
@@ -6567,10 +6614,11 @@ t2cdefaultnull.olang:4:13: error[T2c]: N& is never null - a reference that may b
       |             ^~~~
 compilation failed with 1 error
 === t2cfieldnarrow.olang
-t2cfieldnarrow.olang:6:12: error[T2c]: 'h.next' is a N?&, which may be null
-    6 |     return h.next.v
+t2cfieldnarrow.olang:9:12: error[T2c]: 'h.next' is a N?&, which may be null
+    9 |     return h.next.v + t
       |            ^~~~~~
-t2cfieldnarrow.olang:6:12: help: read through it where a test says it is not ('if x != null'), or write 'h.next!'
+t2cfieldnarrow.olang:9:12: note: a test narrowed it, and a call since may have changed it - a field path narrows only up to the next call
+t2cfieldnarrow.olang:9:12: help: read through it where a test says it is not ('if x != null'), or write 'h.next!'
 compilation failed with 1 error
 === t2cmapkey.olang
 t2cmapkey.olang:5:14: error[T2c]: String?& may be null, so it meets no trait
@@ -6589,6 +6637,7 @@ compilation failed with 1 error
 t2cnarrowkill.olang:8:12: error[T2c]: 'p' is a N?&, which may be null
     8 |     return p.v
       |            ^
+t2cnarrowkill.olang:8:12: note: a test narrowed it, and an assignment since has ended that
 t2cnarrowkill.olang:8:12: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === t2cnevernull.olang
