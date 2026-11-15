@@ -112,10 +112,10 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	int8	opus	high	running						olang: INT8 rowStep no longer inlined (oann int8 5x slower)
 2026-11-15	condnull	sonnet	high	done aacc4597; to be verified within wt-eqnull						olang: c if x else null into a generic method parameter T?&
 2026-11-15	fastinterp	opus	high	merged, master 2a79804d (1e8 loop 55.9 s -> 0.50 s)						olang: interpret runs compiled (-quick, checked); evaluator as -evaluate
-2026-11-15	cellcheck	sonnet	medium	running						olang: cells built checked (E16g); interpret run cache bounded
+2026-11-15	cellcheck	sonnet	medium	done, merged into wt-merge						olang: cells built checked (E16g); interpret run cache bounded
 2026-11-15	eqnull2	opus	high	done; merging (seed rewrite)						finish == null (fresh after restart)
 2026-11-15	spinner2	sonnet	high	merged, master 360b9901 (bootstrap from seed passes)						finish 3x2 spinner (fresh after restart)
-2026-11-15	int8b	opus	high	running						INT8 inlining (fresh after restart)
+2026-11-15	int8b	opus	high	done, merged into wt-merge						INT8 inlining (fresh after restart)
 2026-11-15	strplus	opus	high	running						olang: text joins by +, adjacency removed (the user)
 2026-11-15	oannmeasure	sonnet	medium	done, oann master (MNIST 5x slower: rowStep not inlined, same cause as INT8)						oann round 2: baselines vs DESIGN
 2026-11-15	oannplan	opus	high	done, oann master bcd805f (docs/redesign.md)						oann round 2: docs/redesign.md + work packages
