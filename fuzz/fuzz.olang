@@ -82,7 +82,7 @@ fn main() ? {
         if args.Len() > 3 { Scenarios = try args[3].ParseInt() catch default 12 }
         if args.Len() > 5 and args[5] == "avoid" { scopegen.AvoidKnown = true }
         keep := Array<Bool>(0)
-        only := try args[4].ParseInt() catch default -1 if args.Len() > 4 else -1    # (-1: every scenario)
+        only := (try args[4].ParseInt() catch default -1) if args.Len() > 4 else -1    # (-1: every scenario)
         if only >= 0 and only < Scenarios {
             keep = Array<Bool>(Scenarios)
             keep[only] = true
@@ -292,8 +292,8 @@ fn finding(dir String&, seed I64, ci I64, what String&, detail String&) ? io.Err
 fn editMain(args Array<String&>&) ? io.Error {
     start := try args[2].ParseInt() catch default 1
     count := try args[3].ParseInt() catch default 1
-    steps := try args[4].ParseInt() catch default 8 if args.Len() > 4 else 8
-    mods := try args[5].ParseInt() catch default 3 if args.Len() > 5 else 3
+    steps := (try args[4].ParseInt() catch default 8) if args.Len() > 4 else 8
+    mods := (try args[5].ParseInt() catch default 3) if args.Len() > 5 else 3
     try newRun()
     for seed in range start, start + count {
         found := try editgen.Seed(Olang, Run, seed, steps, mods) catch os.Error default "cannot write the program"

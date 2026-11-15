@@ -1,0 +1,6 @@
+# M5a: "extend" is imported only for the method it declares for lib.Rec - a call of it uses the import
+import "lib"
+import "extend"
+fn main() {
+  Println($lib.Rec(4).Twice())
+}

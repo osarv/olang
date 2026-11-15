@@ -6,8 +6,11 @@
 # One meaning changes, and is listed for a person rather than rewritten silently: std/list's List is a handle, so its
 # Copy() is a second name for the same list where its Clone() was a list of its own - write "list.From(l.Iter())" for
 # that. A file importing std/list has each line it rewrote listed (status 1 then), since only a person can tell a List's
-# Clone() from an array's. Code only: comments and literals are left alone. Re-runnable: a file with no ".Clone()"
-# changes nothing.
+# Clone() from an array's. A type may still declare a method named Clone (oann's Tensor and Matrix do: a deep copy, where
+# the supplied Copy() shares at references), and a call of it is no supplied Clone: a file declaring one, or importing
+# a module of the files given that does, is left as it is, its ".Clone()" lines listed for a person (status 1) - only
+# the compiler knows which receiver a call has. Code only: comments and literals are left alone. Re-runnable: a file
+# with no ".Clone()" changes nothing.
 #
 #     olang build tools/clone_migrate.olang && build/tools_clone_migrate FILE...    rewrites the files, naming each one changed
 
@@ -17,11 +20,30 @@ import "srcmask"
 
 fn main() ? io.Error {
     args := os.Args()
+    texts Vec<String>
+    for k in range 1, args.Len() {
+        texts.Push(try os.ReadFile(args[k]) catch os.Error {
+            try io.PutErrLine("clone_migrate: " + $args[k] + ": cannot be read")
+            texts.Push("")
+            continue
+        })
+    }
+    # the modules among the files given that declare a Clone() of their own, by their names as an import names them
+    owners Vec<String>
+    for k in range 1, args.Len() {
+        if declaresClone(texts[k - 1]): owners.Push(moduleName(args[k]))
+    }
     listed := 0
     for k in range 1, args.Len() {
         path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
-            try io.PutErrLine("clone_migrate: " + $path + ": cannot be read")
+        text := texts[k - 1]
+        if text.Len() == 0: continue
+        if owners.Len() > 0 and (declaresClone(text) or importsAny(text, owners)) {
+            for n in cloneLines(text) {
+                if listed == 0: try io.PutErrLine("for a person: these call a Clone(), and a module here declares one of its own - Copy() is the supplied one, shared at references:")
+                try io.PutErrLine("  " + $path + ":" + $n)
+                listed++
+            }
             continue
         }
         out := migrate(text)
@@ -55,6 +77,43 @@ fn migrate(text String&) String {
     return b.ToString()
 }
 
+# whether text declares a method named Clone ("fn (t Tensor<T>&) Clone() Tensor<T>"), in code
+fn declaresClone(text String&) Bool {
+    for l in text.Lines() {
+        t := srcmask.StripStart(l)
+        if not t.StartsWith("fn ("): continue
+        close := try t.Find(") Clone(") catch { continue }
+        if not t[4:close].Contains(")"): return true
+    }
+    return false
+}
+
+# the name an import gives a file: its base name without ".olang"
+fn moduleName(path String&) String {
+    b := path[(try path.FindLast("/") catch default -1) + 1:]
+    return $(b[:b.Len() - 6] if b.EndsWith(".olang") else b)
+}
+
+# whether text imports a module named one of names (the last part of its path)
+fn importsAny(text String&, names Vec<String>&) Bool {
+    for l in text.Lines() {
+        if not l.StartsWith("import "): continue
+        q := try l.Find("\"") catch { continue }
+        e := try l[q + 1:].Find("\"") catch { continue }
+        spec := l[q + 1:q + 1 + e]
+        last := spec[(try spec.FindLast("/") catch default -1) + 1:]
+        for n in names {
+            if n == last: return true
+        }
+    }
+    return false
+}
+
+# the line numbers (from 1) holding ".Clone()" in code
+fn cloneLines(text String&) Vec<I64> {
+    return changedLines(text, migrate(text))
+}
+
 # the line numbers (from 1) where two texts of as many lines differ
 fn changedLines(a String&, b String&) Vec<I64> {
     xs := a.Split("\n")
@@ -77,4 +136,18 @@ test migrate "a Clone() in code becomes Copy(), comments and text left as they a
 test changedLines "the lines a rewrite changed" {
     ns := changedLines("a\nb.Clone()\nc\n", "a\nb.Copy()\nc\n")
     assert ns.Len() == 1 and ns[0] == 2
+}
+
+test declaresClone "a type's own Clone is found; a call is no declaration" {
+    assert declaresClone("type M struct() { }\nfn (m M&) Clone() M { return M() }\n")
+    assert declaresClone("fn (t Tensor<T>&) Clone() Tensor<T> {\n")
+    assert not declaresClone("fn f(a Array<I64>&) { b := a.Clone() }\n")
+    assert not declaresClone("# fn (m M&) Clone() M\n")
+}
+
+test importsAny "an import is matched by its last part" {
+    names := Vec<String>["tensor"]
+    assert importsAny("import \"../tensor\"\nfn main() { }\n", names)
+    assert importsAny("import t \"oann/tensor\"\n", names)
+    assert not importsAny("import \"std/io\"\n", names) and moduleName("a/b/tensor.olang") == "tensor"
 }

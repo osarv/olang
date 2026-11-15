@@ -37785,6 +37785,84 @@ onlyForCall. A first version that asked only for no requirement (`requiredBy`) b
 block, which the parsed tree holds (C2d), and the compiler no longer built itself; with the relations asked too it
 does, to the fixed point, and every checks case passes. 5,580 kB to 72 kB over 100,000 calls.
 
+## 2026-11-15: a batch of compiler bugs (wt-bugs1)
+
+Found by oann's work and by the suite; each fixed with a test or checks case that failed before.
+
+- **A stray trace line (scope.olang).** `takeDisk` pushed `plan unread: ...` into the scope pass's trace log whenever a
+  kept plan could not be read back, so a build printed it to the standard error; its twin `sum unread:` went with the
+  earlyfree merge. Removed: the reason is still counted in `whyN` (`OLANG_SCOPESTATS`).
+- **`olang fix` renamed a type's own Clone (B17, E31d).** clone_migrate rewrote every `.Clone()` in code to `.Copy()`,
+  so oann's Tensor and Matrix, which declare a deep-copying `Clone()`, had their calls turned into the supplied Copy,
+  shared at references. A text tool cannot tell a call's receiver, so a file declaring a Clone of its own, or importing a
+  module of the files given that does, is now left as it is and its `.Clone()` lines listed for a person (status 1).
+- **A stale test, not clang (B12a).** compiler/target.olang's test of `-target aarch64-linux-gnu` while interpreting
+  expected the message from before B3g merged interpret into running a file ("interpret runs on this machine ...");
+  the compiler says "running a file runs on this machine ..." with "build, compile, test and run build for it". The
+  assert, decided while compiling (S18c), failed the file's build on every clang; it now expects today's message.
+- **The `output` scenario's drift** was already gone: B3g updated its expected `-output` message to name `run`, and the
+  scenario passes as it stands.
+- **S17a said false for nothing (G42).** A program with any other error - an unused import in oann's
+  repro/factcascade - ends checking before settleFacts settles the function facts, so each read kept its conservative
+  value (Allocates true) and every top-level `assert not f.Allocates`, in the module and in those it imports, was said
+  false: 36 spurious errors behind one unneeded `try`. Asserts are no longer decided where facts were read in a program
+  with other errors (`Checker.FactsUnsettled`), as D3b says nothing there; checks case s17afactcascade.
+- **An unknown type in a trait method's signature went unreported (T4).** No body checks a trait method's signature,
+  so `Value() Tensor<F32>` with Tensor unknown was said nowhere, and a generic calling it through an `any` failed in
+  lowering ("it does not lower an unknown type"; oann's repro/traittype). traitSets now checks the types each method
+  writes, in the trait's context; checks case traitunknowntype.
+- **A read-only method meets a `mut` trait method (T31).** `meets` refused a method whose receiver is `T&` for a
+  signature declared `mut`, though reading only promises more than the trait asks (oann's data/text `Windows.At`).
+  T31 now says "a writable reference only if the signature is `mut`"; a method writing its receiver still meets no
+  signature that only reads it (t32anymutimpl, g19permission). A call through a `mut any` lends the writable receiver
+  read-only, as to any parameter. Test in tests/any.olang, through an `any` and a constrained generic, baked and run.
+- **An import used only for a method it declares was "unused" (M5a).** A module may declare a method for another
+  module's type (`fn (r lib.Rec&) Twice()`); a call of it names nothing through the importer's alias, yet the import is
+  what brings the method into the program - removing it gives "Rec has no method 'Twice'". unusedImports now counts
+  an import used where the importer's code calls (`.Name`, read off its text, as D3b reads a left-out branch's) a
+  method the imported module declares for a type reached through an alias. typereview scenario, fixtures extend/extuse.
+- **`Columns<C>.Fields` was empty for lower-case fields (T7e, M6a).** ReflItems judged a Columns instance's fields
+  private by the module declaring Columns (the prelude), so only capitalized ones were listed outside it. A Columns'
+  fields are its row type's, named as they are: they are now listed where the row's fields are readable (oann's
+  repro/colfields). Found beside it: a local holding a descriptor read only in a type (`z f.Type`, G34) was "never read"
+  (D3b) - the resolver's typePath now counts the head of such a path as a read. Test in std/prelude/tests/columns.olang,
+  baked and run.
+- **A catch's `default` takes the whole expression after it (R9a, the user's decision via the coordinator).** It took
+  one unary, so with text joined by `+` (E11b) `catch default "none: " + $k` meant `(... default "none: ") + $k`,
+  silently. A default now takes the whole expression after it, as the `try` itself does (E24): up to its end, the next
+  clause's `catch` or a `,` between several defaults; to use what the `try` gives in a larger expression the `try` is
+  parenthesized, `(try f() catch default 0) == 3`. The parser reads `expr` where it read `unary` (one unary still in
+  text read the old way, `Adjacent`, for textjoin_migrate). Nothing changes for the evaluator: the tree it is given is
+  the new one. The repository's sites that leaned on the old binding were found by a scan of every `catch ... default`
+  followed by an operator and parenthesized (19 in tests/shared, compiler/diag, diaggold, errors_migrate; five
+  `default n if c else m` in fuzz/, the crash fixture and the values study, whose conditional would now index past the
+  arguments; records.olang's `default text.Len() - 1`). One site was a bug the new reading fixes: api.olang's stripSig
+  wrote `open + (try line[open:].Find("(") catch default line.Len() - open)`, which on success subtracted `open` again.
+  Not an `olang fix` tool: a migration cannot tell old code from new written the new way, so it would not be
+  idempotent (as precedence_migrate was not). Tests in tests/shared (trAfter, trAfterParen, trText; TrTextBaked baked).
+- **`make modgraph`'s golden was stale, not wrong.** Its 1,440-line report (17k lines of golden diff) holds only
+  additions: the prelude's display module (B23, 2026-11-14), compiler/spin, measure, effects and std/bench, time, io and
+  os reached from roots that did not import them at the last capture (2026-11-14, before B23), and 17 roots added since
+  (tests/condnull, display, fieldnarrow, nulltest, textplus; compiler/cells, jupyter, prompt ...; std/frame, plot,
+  zmtp). No module or edge left a graph and no graph was lost, so it was captured again (`make modgold`).
+- **Goldens moved by the batch:** tokens and trees of the 23 files it edited, and the tree of compiler/api.olang, which
+  it did not edit - its `catch default line.Len() - open` is now one default (R9a, above).
+- **Left: oann's genref (D18c, T22a).** A method generator yielding an enum read from its receiver's Vec, once the enum
+  has a reference-holding case, is a GenPerTurn generator (genElemOf: its element is no reference), so its Next is a
+  lambda whose result's references live where the captured receiver's referent does, and the Generator's field type
+  `fn&() T ? E, Exhausted` says nothing of that (T22a's boundary). It is not a false refusal of the judging but a form
+  the generator types cannot state: a by-value element holding views of a parameter needs a third kind beside
+  Generator and ViewGenerator - its Next's result's references in the receiver's scope (as viewNext gives
+  ViewGenerator), its own storage per turn - and the walk's element handling (walkElem) taught it. Section-8 design,
+  left for a round of its own.
+- **Left: oann's learnerarg (C2d), diagnosed.** Not a cross-module effect: copied into one module with the method
+  instances it uses it fails the same way. Learner's field `S` is promoted (bound to its constructor's parameter) by
+  the field inference, then given back for good (giveBackDecl) by `Homeostasis`, whose `for p in l.S.E.Pops` calls
+  `Vec<mut Population<T>&>.At` with the relation hi = Block (where the element reference lands, the loop's block) over
+  lo = Derived(l, S) (the elements' scope, a field of l's referent): FailsBlock, so dischargeRels gives Learner back.
+  With `S` bare again the instance in `use` is placed in the argument's scope and C2d is said there. The fault is the
+  landing: a writable reference element read through a derived scope should land in a version holding that scope
+  (O25i), not the loop's block. In scope.olang's call discharge, beside the freeing work; left for a round of its own.
 ## 2026-11-15: O8f round 2 - six of the remaining freeing gaps closed (docs/freeing.md)
 
 **A struct local's constructor copy (gaps 6, 7).** `d := Doc("")` - a constructor whose instance views what it is

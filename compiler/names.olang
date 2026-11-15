@@ -181,9 +181,46 @@ fn (r mut Resolver&) unusedImports(mi I64) {
         for st in r.skippedTop {
             if st.First == mi and Mentions(m.Src!.Text, st.Second, imp.Alias) { named = true }
         }
-        if named { continue }
+        if named or r.methodsNamed(m.Src!.Text, imp.Target) { continue }
         r.L.Diags.Error(r.at(mi, imp.Sp), msgs.ImportUnused(r.tok(n), imp.Spec))
     }
+}
+
+# M5a: whether text names a method module ti declares for a type of another module (a receiver written through an
+# alias, "fn (t a.T&) Extra()") - a call of one names nothing through the alias, yet needs the import, which brings
+# the method into the program. The call is found in the text, as a word after a '.', since methods are the checker's
+fn (r mut Resolver&) methodsNamed(text String&, ti I64) Bool {
+    for d in r.L.Mods[ti].Decls {
+        match d {
+            case ast.Decl.Fn(f) {
+                if f.Recv == null or not foreignRecv(f.Recv!.Ty): continue
+                if mentionsMember(text, r.text(f.Name)): return true
+            }
+            case _ { }
+        }
+    }
+    return false
+}
+
+# whether a receiver's written type names a type through an alias
+fn foreignRecv(t ast.TypeRef?&) Bool {
+    if t == null: return false
+    return match t {
+        case ast.TypeRef.Named(_, path, _): path.Len() > 1
+        case ast.TypeRef.Ref(_, of, _, _): foreignRecv(of)
+        case ast.TypeRef.Perm(_, of, _): foreignRecv(of)
+        case _: false
+    }
+}
+
+# whether text holds ".name" followed by no identifier character
+fn mentionsMember(text String&, name String&) Bool {
+    if name.Len() == 0 { return false }
+    for i := 1, i + name.Len() <= text.Len(), i++ {
+        if text[i - 1] != '.' or text[i] != name[0] or text[i:i + name.Len()] != name { continue }
+        if i + name.Len() == text.Len() or not identChar(text[i + name.Len()]) { return true }
+    }
+    return false
 }
 
 # D3b, M5a: whether the text in sp names name - as a word, not inside a longer one
@@ -1724,6 +1761,8 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
             }
             return
         }
+        # D3b: a local holding a descriptor names a type through it ("z f.Type", G34) - a read
+        r.read(hr)
         # G38: a type's reflected member ("Point.Base", "I64.Element") - the head recorded where its name ends
         if hr.Kind == What.Type or hr.Kind == What.Builtin { r.members.Put(key(r.L.Mods[r.mi].File, hsp.End), hr) }
         return

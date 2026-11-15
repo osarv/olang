@@ -256,7 +256,7 @@ test "-e prints each rule a message names as stage 0 does" {
     }
     # a first letter in lowercase is read as uppercase; a rule the specification does not state is a usage error
     os.Run($os.Quote(olang) + " explain t6b > " + $os.Quote($out + "/e.txt") + " 2>&1")
-    assert try diag.Explain(spec, "t6b") catch default "" == try os.ReadFile($out + "/e.txt") catch default "-"
+    assert (try diag.Explain(spec, "t6b") catch default "") == try os.ReadFile($out + "/e.txt") catch default "-"
     os.Run($os.Quote(olang) + " explain Q99 > " + $os.Quote($out + "/e.txt") + " 2>&1")
     nowhere := false
     try diag.Explain(spec, "Q99") catch { nowhere = true }

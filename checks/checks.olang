@@ -2263,7 +2263,8 @@ fn cgreview(r mut report&) ? Failed {
 # a review of the type checker (2026-10-09): what only several modules show. A case named after "is", "as" or in a
 # pattern is resolved through its alias chain and is the case of that module's own enum, visible from here; and a
 # name refused across the boundary - a private case, error word, method or type, an alias reused by a lambda - is one
-# error, not the start of several
+# error, not the start of several; and an import used only for a method it declares for another module's type is used
+# (M5a)
 test "the type checker's review fixes, across modules" { assert passed("typereview") }
 
 # prog.olang must not build, with exactly one error: one saying "want"
@@ -2278,6 +2279,9 @@ fn typereview(r mut report&) ? Failed {
     os.Run("cp -r checks/fixtures/cases/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "14 1 3 true 4\n", "good output", dir)
+    # M5a: an import used only for a method it declares for another module's type is used
+    try r.expect(sh(dir, "\"$OLANG\" build extuse.olang > out.txt 2>&1 && ./build/extuse > out.txt") == 0, "extuse", dir)
+    try r.expect(outOf(dir) == "8\n", "extuse output", dir)
     try oneError(r, dir, "isother", "error[E32]: lib.Other.Dir.North is no case of Dir")
     try oneError(r, dir, "matchother", "a pattern here names a case of")
     try oneError(r, dir, "isprivate", "error[M6a]: case")

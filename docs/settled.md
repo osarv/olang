@@ -643,7 +643,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.Negative`. Language guarantees still abort.
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
   value position each clause leaves or gives its own `default`; errors no clause names propagate. `try f() default d`
-  is gone.
+  is gone. **A default takes the whole expression after it (R9a, 2026-11-15, the user's decision via the
+  coordinator)**, as a `try` does: `catch default "none: " + $k` is the joined text; `(try f() catch default 0) + 1` adds.
 - **Error types are declared as types; named sets; a clause names what it took (T19, T19a, R11b, R3a, 2026-10-25, the
   user's decisions QAM and the clause-only names of the same day).** `type IoError error { Full, Denied }` (at least
   one word); `type LoadError error os.Error, ParseError { Timeout }` is a **named set** - members (flattened in order)

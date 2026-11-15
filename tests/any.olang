@@ -1072,3 +1072,34 @@ fn scopedLocals(i I64) String {
 test "E25, O25a: a local a scoped call declares lives where the argument puts it" {
     assert scopedLocals(Live - 2) == "Vec<Array<Char>&>[\"mk1\", \"mk2\"] Qk1 Rk2"
 }
+
+# T31: a method only reading its receiver meets a "mut" trait method - it promises more than the trait asks; through
+# a "mut any" and a constrained generic alike, built and while compiling (oann's B3)
+type Stepper trait {
+    mut Step(n I64) I64
+}
+type Fixed struct(base String&) { base }
+fn (f Fixed&) Step(n I64) I64 { return f.base.Len() + n }
+type Moving struct(at I64) { at }
+fn (m mut Moving&) Step(n I64) I64 {
+    m.at += n
+    return m.at
+}
+fn stepAll<T Stepper>(s mut T&, n I64) I64 { return s.Step(n) }
+fn readOnlyMeetsMut(n I64) String {
+    f := Fixed("abc")
+    m := Moving(10)
+    xs := Vec<mut any Stepper&>()
+    xs.Push(f)
+    xs.Push(m)
+    churn()
+    t := ""
+    for x in xs { t = t + $x.Step(n) + " " }
+    return t + $stepAll(f, n) + " " + $stepAll(m, n)
+}
+BakedReadOnlyMut String = readOnlyMeetsMut(2)
+
+test "T31: a method only reading its receiver meets a mut trait method" {
+    assert readOnlyMeetsMut(Live - 1) == "5 12 5 14"
+    assert BakedReadOnlyMut == "5 12 5 14"
+}

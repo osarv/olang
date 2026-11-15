@@ -1150,8 +1150,8 @@ test "colour is the terminal's codes around each part" {
 
 test "-e prints a rule under its section's heading, up to the next rule" {
     spec := "# 1 Intro\n\n### 10.1 Modes\n\n**B1.** One.\nMore of it.\n\n**B1a.** Two.\n\n## Other\n- **O25a.** Three.\n\n"
-    assert try Explain(spec, "B1") catch default "" == $section() + "10.1 Modes\n\n**B1.** One.\nMore of it.\n"
-    assert try Explain(spec, "o25a") catch default "" == "Other\n\n- **O25a.** Three.\n"
+    assert (try Explain(spec, "B1") catch default "") == $section() + "10.1 Modes\n\n**B1.** One.\nMore of it.\n"
+    assert (try Explain(spec, "o25a") catch default "") == "Other\n\n- **O25a.** Three.\n"
     missing := false
     try Explain(spec, "B2") catch { missing = true }
     assert missing

@@ -1,0 +1,3 @@
+# a module declaring a method for another module's type (M19)
+import "lib"
+fn (r lib.Rec&) Twice() I32 { return r.Id * 2 }

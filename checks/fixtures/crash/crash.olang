@@ -32,7 +32,7 @@ fn main() ? {
             join { spawn overflowTask() }
         }
         case "deep" {
-            n := try args[2].ParseInt() catch default 1000000 if args.Len() > 2 else 1000000
+            n := (try args[2].ParseInt() catch default 1000000) if args.Len() > 2 else 1000000
             os.RunOnStack(1 << 30, fn() { c.v = deep(n) + n })
             try io.PutLine("deep " + $c.v)
         }

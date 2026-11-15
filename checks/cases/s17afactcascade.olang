@@ -1,0 +1,17 @@
+# check: fail error[M5a]: nothing here is reached through 'os'
+# never: S17a
+# also: compilation failed with 1 error
+# S17a, G42: a program with another error (an unused import here) leaves its function facts unsettled, so an assert
+# deciding on one is not said false (oann's repro/factcascade: 36 spurious S17a errors behind one unneeded `try`)
+import "std/os"
+
+fn add(a mut Array<F32>&) {
+    for i in range a.Len(): a[i] = a[i] + 1.0
+}
+
+assert not add.Allocates, "add allocates"
+
+fn main() {
+    a := Array<F32>(4)
+    add(a)
+}

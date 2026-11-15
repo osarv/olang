@@ -294,6 +294,8 @@ fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?& {
 # How many were decided
 fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&) I64 {
     if c.AssertAsks.Len() == 0 and c.ContractAsks.Len() == 0 and c.TopAsserts.Len() == 0 { return 0 }
+    # (facts read in a program with other errors are unsettled: nothing is decided on them, as D3b says nothing there)
+    if c.FactsUnsettled(): return 0
     d := c.P.L.Diags
     x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
