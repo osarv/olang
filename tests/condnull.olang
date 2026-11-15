@@ -8,17 +8,17 @@ type Box<T> struct(n I64) {
 
 fn (b mut Box<T>&) Take(obs Array<T>&, terminal Bool = false
         known Array<Bool>?& = null) I64 {
-    if known is null: return -1
+    if known == null: return -1
     return known.Len() + obs.Len()
 }
 
 fn lenOf(known Array<Bool>?&) I64 {
-    if known is null: return -1
+    if known == null: return -1
     return known.Len()
 }
 
 fn tagged<T>(x T, known Array<Bool>?&) I64 {
-    if known is null: return -1
+    if known == null: return -1
     return known.Len()
 }
 
