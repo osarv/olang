@@ -815,7 +815,7 @@ ff511251415fb432 f5c866de4f867bf6 checks/cases/m6bprivatelen.olang
 0f561b208e09299d dc6052bb2ee70958 checks/cases/m9preludename.olang
 dd318c71b57b61da 9e0b6ed678be7c7c checks/cases/mapchurn.olang
 959f1de86b6ed1b1 e302c0ff528d3517 checks/cases/mapremove.olang
-9482d482ac3b862f 815d9a9b731d70e7 checks/cases/matchholdcall.olang
+ee874cd7ad0c48d4 ddc9db2c4c4add75 checks/cases/matchholdcall.olang
 dacf55dd7d18be62 b650a9d73d2205fa checks/cases/membershipneedstry.olang
 04088aada0690999 6fea71e87cdcc368 checks/cases/methodnamedlocal.olang
 00d22272f50758d4 78b47e45c6a037b4 checks/cases/mul128overflow.olang
@@ -2251,7 +2251,7 @@ b510b5156c92fb63 d95e139e8b70291a compiler/api.olang
 0cdf547131468267 69e661eaa6edf395 compiler/build.olang
 aa9cd72468522acd 0d59db96842bd659 compiler/cabi.olang
 86d62fb0c42ac8b1 4e66714f3539c132 compiler/cells.olang
-546e4407c4e35df6 7534e19c3ab684d6 compiler/check.olang
+a7089acb7401e0ce 10b3887efba1c422 compiler/check.olang
 9bfde7101377f290 79f7e1238be1f0ea compiler/cond.olang
 23397e0e6b6e5b92 ae8ec170cce81a28 compiler/definit.olang
 d2008dc90df9ae88 3e0c9f56ce584c8d compiler/diag.olang

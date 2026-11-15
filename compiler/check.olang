@@ -122,6 +122,9 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     errBinds Vec<errBind>
     errUsed Vec<Bool>
     errNarrows Vec<errNarrow>
+    # S8d, T20: whether a field path holds an error value, by its span - its place found once, so a long path's
+    # members do not each find every shorter one's again
+    errPaths Map<I64, Bool>
     # T20: a match's subject held once, the AST its chain of tests names it by, and whether it is never null
     errPinSp source.Span = source.Span(-1, -1)
     errPinLocal I64 = -1
@@ -18033,9 +18036,13 @@ fn (c mut Checker&) errPath(x ast.Expr&) Array<source.NameId>& {
     if not isMember(x): return Array<source.NameId>(0)
     p := c.narrowPath(x)
     if p.Len() < 2: return p
-    pl := c.quietPlace(x)
-    if pl == null or not c.P.T.IsErrVal(pl.Type()): return Array<source.NameId>(0)
-    return p
+    sp := x.Span()
+    key := sp.Start * (1 << 32) + sp.End
+    if not c.fr().errPaths.Has(key) {
+        pl := c.quietPlace(x)
+        c.fr().errPaths.Put(key, pl != null and c.P.T.IsErrVal(pl.Type()))
+    }
+    return p if (try c.fr().errPaths.Get(key) catch default false) else Array<source.NameId>(0)
 }
 
 # what narrowing leaves of error local or field path p here (R11b, T20): what the tests around say, else its type's

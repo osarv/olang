@@ -37624,6 +37624,12 @@ Implementation: `nullNarrow`, `narrowed` and `errNarrow` are keyed by path; `cal
 built: `callOf` but for helpers, `callOfBody`, `callBody`, and at a `yield`) ends the field paths' narrowings; the
 checks case `t2cfieldnarrow` now has a call between its test and its read. The evaluator reads the typed program the
 checker makes and needed nothing (tests/fieldnarrow.olang bakes a global from it and decides a top-level assert).
+Found at the merge onto master: the checks case `vec146deepok` (a field path 70 deep) no longer compiled - the
+checker went past 12 GB. `errPath`, asked at every member read whether the path before it holds an error value, found
+that path's place, and the read then found it again, so each level doubled the work. Whether a path holds an error value
+is now kept per span in the checker's frame (`errPaths`), found once; the case builds in 113 MB. And `matchholdcall`'s
+`o!` is now `o`: `s.cur` was narrowed by its assignment, so the match gives a never-null `Hold&` (E35's "nothing here
+can fail").
 
 ## `olang test` runs the tests that start a task under the race detector (P7a, B3a, 2026-11-15)
 

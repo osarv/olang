@@ -2464,12 +2464,8 @@
 === run mapchurn.olang
 | status 0
 === run matchholdcall.olang
-| status -1
-| did not build
-| matchholdcall.olang:22:28: error[E35]: nothing here can fail - write it without '!'
-|    22 |         setN(Node(9 + i), o!)
-|       |                            ^
-| compilation failed with 1 error
+| status 0
+| ok
 === run methodnamedlocal.olang
 | status 0
 === run mul128overflow.olang
@@ -3714,8 +3710,7 @@
 === run vec144taketolocal.olang
 | status 0
 === run vec146deepok.olang
-| status -1
-| did not build
+| status 0
 === run vec156getterfresh.olang
 | status 0
 === run vec157convcond.olang
