@@ -247,7 +247,6 @@ fn (w mut writer&) sig(s ast.Sig&) {
     w.params(s.Params)
     if s.Variadic { w.put(", ..." if s.Params.Len() > 0 else "...") }
     w.put(")")
-    w.contract(s)
     if s.NoReturn { w.put(" noreturn") }
     was := w.item
     w.item = true
@@ -272,27 +271,6 @@ fn (w mut writer&) promises(ps Array<ast.Promise&>&) {
             w.put(" " if i == 0 else (" in " if i == 1 else "."))
             w.name(n)
         }
-    }
-}
-
-# a contract (D17): " [item, ...]" - its conditions
-fn (w mut writer&) contract(s ast.Sig&) {
-    if s.Contract == null { return }
-    k := s.Contract!
-    w.put(" [")
-    first := true
-    for st in k.Items {
-        if not first { w.put(", ") }
-        first = false
-        w.contractItem(st)
-    }
-    w.put("]")
-}
-
-fn (w mut writer&) contractItem(st ast.Stmt&) {
-    match st {
-        case ast.Stmt.Assert(_, c, _) { w.expr(c) }
-        case _ { }
     }
 }
 
@@ -400,7 +378,6 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.put("(")
             w.params(s.Params)
             w.put(")")
-            w.contract(s.Errs!)
             w.errors(s.Errs!)
             w.put(" ")
             w.block(s.Body)
@@ -475,7 +452,6 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
                 w.params(ctor.S.Params)
                 w.put(")")
                 w.errors(ctor.S)
-                w.contract(ctor.S)
                 w.put(" ")
                 w.block(ctor.Body)
             }

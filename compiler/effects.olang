@@ -1289,7 +1289,7 @@ fn (e mut Effects&) walkBody(b I64) {
     if body.Root == null {
         # a payload's constructor has no code (T17c); a function, a constructor or a test with none did not check
         match body.Of {
-            case typed.BodyOf.Case(_, _), typed.BodyOf.Slot(_, _) { }
+            case typed.BodyOf.Case(_, _) { }
             case _ { e.cur.Unchecked = true }
         }
     } else {

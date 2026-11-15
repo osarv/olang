@@ -1901,7 +1901,6 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast: 1
         case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance: 1
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap: 1
-        case typed.PrimOp.Holds: -1
         case typed.PrimOp.AtomicCompareSwap, typed.PrimOp.Repack: 3
         case _: 2
     }

@@ -72,8 +72,7 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     text
     toks
     argOpen mut Array<I64>& = Array<I64>(toks.Len())
-    # a "(" grouping a function type in a list (L18c), a contract's "[" and an item's ":" (D17), an attribute's "@"
-    # (G39): spaced as written below
+    # a "(" grouping a function type in a list (L18c), an attribute's "@" (G39): spaced as written below
     group mut Array<Bool>& = Array<Bool>(toks.Len())
     closes mut Array<I64>& = Array<I64>(toks.Len())
     bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
@@ -541,7 +540,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     if kb == token.Tok.Dot and f.ellipsisAt(b) { return " " }
     if ka == token.Tok.Dot or kb == token.Tok.Dot { return "" }
     if kb == token.Tok.Bang { return "" }    # "!" is postfix only (E35)
-    if ka == token.Tok.Colon and (f.bodyColon[a] or f.group[a] or f.entryColon[a]) { return " " }
+    if ka == token.Tok.Colon and (f.bodyColon[a] or f.entryColon[a]) { return " " }
     if ka == token.Tok.Comma and kb == token.Tok.Colon: return " "    # "m[i, :]" (E16f)
     if ka == token.Tok.Colon or kb == token.Tok.Colon { return "" }
     if f.prefix(a, rb - 1) {
@@ -573,7 +572,6 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
         return " "
     }
     if kb == token.Tok.LBrack {
-        if f.group[b] { return " " }      # a contract (D17)
         if ka == token.Tok.RBrace { return f.asWritten(b) }
         if f.operandEnd(a) and ka != token.Tok.Inc and ka != token.Tok.Dec and ka != token.Tok.IntLit and
            ka != token.Tok.FloatLit {

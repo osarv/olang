@@ -37945,3 +37945,40 @@ An element owning more (a `Vec<String>`'s text) is still a gap, now the `-memory
 origins are those of the view `Get` hands back, though D9h copies it where it is kept - so a `Put` loop beside it grew to
 230 MB (gap 18). And a returned value local is allocated where the call's result goes (O26a) and copied out: 32 bytes a
 call kept in an array's scope by `rows[i % 10] = mk(i)` (gap 19, a placement, no let-go). Both recorded, not built.
+
+## 2026-11-15: Contracts removed - requirements read off the body (D17)
+
+**The decision.** The user, 2026-11-15: "Remove contracts yes". The bracketed block after a parameter list (D17-D17g,
+`fn pick(x I32, y I32) [y > x] I32 ? ...`, `type Percent struct(v I64) [v >= 0 and v <= 100] ? { v }`) was a second
+way to write what a leading check already says - it ran on entry, failed with `ArgumentError.Invalid` carrying its text,
+and could be decided at calls the evaluator computes. All of that is kept, with the syntax gone: a function's
+requirements are the asserts and checks its body begins with (a check: `if C: error ArgumentError...`, alone in its
+branch). They mean only what the statements mean; what they add is reading: explain, doc and hover print `# requires:
+C`, D17e decides them at calls whose arguments are computed (an assert's false requirement an error whatever catches
+the call; a check's as before, unless a catch at the call takes `ArgumentError`), and `olang api` compares them as a set
+(gained or changed breaks, dropped does not).
+
+**What went.** D17a-D17d and D17f: the on-entry checks the checker generated (`entryChecks`, `contractChecks`), the
+requirement on a written error set to list `ArgumentError` and on a function with conditions to write `?` (now plain R3
+and R1d of the check's raise), a generator's first-`Next` checks (its body's first statements do it), and a trait
+method's contract with its checks before dispatch (`dispatchChecks`, `slotContract`, `BodyOf.Slot`, `SlotContracts`,
+`PrimOp.Holds` and lowering's `Contract` failure) - a trait states no requirement; each implementation checks its own.
+The unused guarantee machinery left from 2026-10-25 (`CtEns`, `CtEntry`, `ctSubst`) went with it. A contract written
+today is a parse error (`expected '{', found '['`), no diagnostic of its own (PRINCIPLES 4).
+
+**What stayed.** The requirement bodies (`BodyOf.Contract`, one per requirement, a `fn(params) Bool`) and the asks at
+calls (`contractAt`, `askBody`, interp's `decideContracts`) are made the same way, from `ast.Requirements(body)` rather
+than the block; they are made only at a call whose arguments are all closed, and one whose condition does not check as a
+body of its own (its diagnostics are the function's to say) is dropped, left to the run time. A leading assert reading
+no parameter (std/bitset's `assert T.Kind == TypeKind.Enum`, a constant) is no requirement - S18c decides it where it
+is written, and asking it at every call doubled the error. An assert's false requirement at a call that K2 or S18c
+evaluates whole is left to them (`evaluatedWhole`: k1assertaborts, k2abortsread, s18cinstancecall would each have said
+it twice), and a callee with an error of its own decides nothing (s17msgerror). D17g, filed under
+contracts but about conversions, is E26c of its own (`checks/cases/e26cconvfit`, `e26cconvglobal`).
+
+**Migration.** `tools/requires_migrate.olang`, last in fix's table: each item becomes `if not C: error
+ArgumentError.Invalid("f: C")` at the top of the body (parenthesized after `not` where `C` holds `and`/`or`/`xor`/`if`
+or starts with `try`/`not`), a one-line body opened onto lines of its own; 37 contracts in 26 files of std, tests and
+checks. The one trait method's (tests/any.olang) was dropped and its test rewritten. Checks cases: d17needsargerror and
+d18contract went with D17b (their errors are plain R3 now), r1dcontract names R1d's own message, d17syntax (the removed
+form) and d17assertcaught (an assert's requirement no catch takes) are new.

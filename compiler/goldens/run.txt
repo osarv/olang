@@ -9,7 +9,7 @@
 | ok - T32c: an any of another module's trait, its default through the table, generic code over it
 | ok - T33: == is the same instance; an any renders its instance
 | ok - T34: type cases bind the instance itself; as gives it, or fails under checked
-| ok - D17f: a trait's contract and the instance's own, checked through an any
+| ok - D17: the instance's own requirement, checked through an any
 | ok - T32b: an any Iterator walked by for-in and its defaults
 | ok - K2: anys evaluated while compiling agree with the run time
 | ok - T32a: arrays and conversions of them are copied into the box
@@ -31,6 +31,7 @@
 | ok - T29a: a conversion of a place to a type over characters names its storage
 | ok - T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time
 | ok - E25, O25a: a local a scoped call declares lives where the argument puts it
+| ok - T31: a method only reading its receiver meets a mut trait method
 | ok - E25, P1g: a spawn target set by a call given a scope argument
 | ok - P1g, T11b: a spawn target holding an array by value is stored as its assignment
 === test tests/arraypat.olang
@@ -1221,9 +1222,10 @@
 | ok - D17e: requirements hold where the evaluator computes the calls - baked and run
 | ok - D17e: a closed call whose ArgumentError is caught fails as written - baked, decided and run
 | ok - D17: requirements checked on entry, in every build, failing with ArgumentError.Invalid
-| ok - D17a: conditions calling functions and lambdas, a call in one failing as itself, a constructor's contract
+| ok - D17a: conditions calling functions and lambdas, a call in one failing as itself, a constructor's checks
+| ok - D17: a leading assert and a check without not, decided while compiling and run
 | ok - D17d, D17f: written scope relations are obligations; a function with value conditions is a value, checked
-| ok - D17g: a conversion checked at run time keeps its own words
+| ok - E26c: a conversion checked at run time keeps its own words
 | ok - E24: a try covers the whole expression after it, and the evaluator agrees
 | ok - O15: destructors run where their holders let go, in reverse construction order
 | ok - O15: a value ended by an error leaving, by its function, and by its block after a call that keeps nothing
@@ -1773,6 +1775,7 @@
 | ok - ColumnVec.Push: grows every column together
 | ok - ColumnVec: evaluated while compiling as at run time
 | ok - Columns: reflection sees a struct of columns, its rows' type its Element
+| ok - Columns: a private field's column is in Fields where the field is read
 | ok - a ColumnVec shows as an HTML table, its text escaped, while compiling as at run time
 === test std/prelude/tests/float.olang
 | status 0

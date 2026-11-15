@@ -246,7 +246,9 @@ test "S19e: an errdefer in a generator's body runs when the walk fails, not when
 
 # D18, D17 (the bulk review's F9): a generator's conditions are checked as its first Next begins - a false one is that
 # Next's ArgumentError, and the walk is over after it; the call making the generator runs none of them
-fn halves(n I64, d I64) [n >= 0, d > 0] Iterator<I64 ? ArgumentError> {
+fn halves(n I64, d I64) Iterator<I64 ? ArgumentError> {
+    if not n >= 0: error ArgumentError.Invalid("halves: n >= 0")
+    if not d > 0: error ArgumentError.Invalid("halves: d > 0")
     for i in range n { yield i / d }
 }
 

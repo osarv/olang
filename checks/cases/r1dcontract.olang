@@ -1,4 +1,7 @@
-# check: fail error[R1d, D17]: pick has conditions
-# R1d, D17b: a function with conditions fails where one is false, so it writes '?'
-fn pick(x I64, y I64) [y > x] I64 { return y - x }
+# check: fail error[R1d]: this function raises ArgumentError but writes no '?'
+# R1d, D17: a function whose check raises ArgumentError fails where its requirement is false, so it writes '?'
+fn pick(x I64, y I64) I64 {
+    if not y > x: error ArgumentError.Invalid("pick: y > x")
+    return y - x
+}
 fn main() { assert pick(1, 2) == 1 }

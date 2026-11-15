@@ -133,7 +133,7 @@ test "Has finds the C library's functions, and the math library's" {
 }
 
 test "Call passes numbers and gives each kind of result" {
-    m42 I64 = -42           # its bits read unsigned (D17g: a constant -42 does not fit U64)
+    m42 I64 = -42           # its bits read unsigned (E26c: a constant -42 does not fit U64)
     w := Array<U64>[U64(m42)]
     assert I64(try Call("labs", Array<U8>[Code(Kind.I64)], w, Code(Kind.I64)) catch default 0) == 42
     x := Array<U64>[F64(6.25).Bits()]

@@ -111,11 +111,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     loopUses Vec<loopUse>
     rest Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
     restAt I64 = 0
-    # D17: a contract item's body - CtReq, CtEns or CtEntry; in a guarantee's, its results' names, and the entry values
-    # it reads by where each is written (ctKey), each one of its parameters
+    # D17: a requirement's body (CtReq), 0 for any other
     Contract I64 = 0
-    ctResults Map<source.NameId, Bool>
-    ctSubst Map<I64, I64>
     ctFrom I64 = 0          # where its statements start on the statement stack
     # R11b: the names the catch clauses around gave the errors they took, innermost last, whether each is used, and what
     # narrowing leaves of each here, innermost last
@@ -154,8 +151,6 @@ type errNarrow struct(Path Array<source.NameId>&, Now types.ListId, Block I64, L
 fn (n errNarrow) Killed(why I64) errNarrow { return errNarrow(n.Path, n.Now, n.Block, n.Loops, true, why) }
 
 CtReq I64 = 1
-CtEns I64 = 2
-CtEntry I64 = 3
 
 fn ctKey(sp source.Span) I64 { return (I64(sp.Start) << 32) | I64(sp.End) }
 
@@ -391,9 +386,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     comprLetAt I64 = -1
     lenArgAt I64 = -1           # E12: where Array<T>(n)'s length argument starts, for the message a text there gets
     noClear Bool = false        # D14d: the Array<T>(n) being checked is filled by the loop after it - made with no clear
-    # D17: each function's or constructor's body's contract, its items made bodies of their own, by body - made the
-    # first time it is asked for (ctDone says it was, Contracts holds it where there is one); the calls whose
-    # requirements the evaluator decides, each a body of its own; the conversions likewise (D17g)
+    # D17: each function's or constructor's requirements, inferred from its body's leading asserts and checks, made
+    # bodies of their own, by body - made the first time a call whose arguments the evaluator computes asks (ctDone
+    # says it was, Contracts holds them where there are some); the calls whose requirements the evaluator decides, each
+    # a body of its own; the conversions likewise (E26c)
     Contracts Map<I64, typed.ContractInfo>
     ctDone Map<I64, Bool>
     ContractAsks Vec<ContractAsk>
@@ -486,12 +482,13 @@ type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I
     CtxText
 }
 
-# a call's requirement the evaluator decides while compiling (D17e), or a conversion's (D17g): the body giving the
+# a call's requirement the evaluator decides while compiling (D17e), or a conversion's (E26c): the body giving the
 # condition's value (BodyOf.Cond), where the call is (its file and span), where the condition is written (its file and
 # span; the argument's for a conversion), the function diagnostics name ("" for a conversion), the condition as written
-# (the argument for a conversion), the instance it was asked in (G16b), and for a conversion the type
+# (the argument for a conversion), the instance it was asked in (G16b), for a conversion the type, and whether the
+# requirement is an assert's - which no catch at the call takes - the body the call is in and the one it calls
 type ContractAsk struct(Body I64, File I64, At source.Span, CondFile I64, CondSp source.Span, Name String&, Text String&
-    Ctx diag.Where, CtxText String&, Ty String& = "") {
+    Ctx diag.Where, CtxText String&, Ty String& = "", Assert Bool = false, Caller I64 = -1, Callee I64 = -1) {
     Body
     File
     At
@@ -502,6 +499,9 @@ type ContractAsk struct(Body I64, File I64, At source.Span, CondFile I64, CondSp
     Ctx
     CtxText
     Ty
+    Assert
+    Caller
+    Callee
 }
 
 # a value the evaluator decides while compiling (T29d, D13c): what it is, where it is needed (its file and span), its
@@ -1867,7 +1867,6 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 c.declaredCtor(mi, td)
                 c.traitSets(mi, td)
                 c.traitHeader(mi, td)
-                c.traitContracts(mi, td)
             }
             case ast.Decl.Fn(_) { c.declAttrs(mi, d) }
             case ast.Decl.Assert(sp, k, msg) {
@@ -3864,11 +3863,6 @@ fn (c mut Checker&) check(id I64) {
         case _ { }
     }
     c.state[id] = 2
-    # D17: its contract checked with it, so what is wrong in it is said whether a call asks for it or not
-    match c.Bodies[id].Of {
-        case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _) { c.contractChecked(id) }
-        case _ { }
-    }
     if c.instanceBody(id) { c.roSettleResults(id) }   # T25c: what its calls' results copy, before a caller asks
 }
 
@@ -5051,9 +5045,6 @@ fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block& {
     for p in c.cur().Params {
         if not punned.Has(c.cur().Local(p).Name): c.dropOnExit(I64(p), c.cur().Local(p).Sp, true)
     }
-    # (D17, after the holders are registered: a requirement failing the call ends the by-value parameters it took -
-    # bulk review 7, F10)
-    c.entryChecks()
     storedIn(body, c.fr().stored)
     if body.Len() > 0: c.stmtsOf(body)
     if c.fr().InCtor and c.P.IsColumns(c.fr().CtorOf) { c.columnsFields(c.fr().CtorOf) }
@@ -5214,25 +5205,23 @@ fn storedExpr(x ast.Expr?&, out mut Map<source.NameId, Bool>&) {
     }
 }
 
-# ---- contracts (D17) ----
+# ---- requirements (D17) ----
 
-# where body b's contract is written - its function's or constructor's declaration: the contract, the receiver and
-# parameters it reads, the results' names, the module, the context its types are read in, the name diagnostics call
-# it by
-type ctSource struct(K ast.ContractBlock&, Recv ast.Param?&, Params Array<ast.Param&>&, Mi I64, Name String&) {
-    K
+# where body b's requirements are written - its function's or constructor's declaration: the asserts and checks its body
+# begins with, the receiver and parameters they read, the module, the name diagnostics call it by
+type ctSource struct(Reqs Array<ast.Req&>&, Recv ast.Param?&, Params Array<ast.Param&>&, Mi I64, Name String&) {
+    Reqs
     Recv
     Params
     Mi
     Name
 }
 
-# the context a contract is checked in: its function's instance's, its constructor's
+# the context a requirement is checked in: its function's instance's, its constructor's
 fn (c mut Checker&) ctContext(b I64) generic.Context {
     match c.Bodies[b].Of {
         case typed.BodyOf.Fn(inst) { return c.P.FnContext(c.P.InstanceFn(inst), c.P.InstanceArgs(inst)) }
         case typed.BodyOf.Ctor(t, twin) { return c.P.CtorContext(t, twin) }
-        case typed.BodyOf.Slot(tr, k) { return c.P.InstanceContext(c.P.AnySlots(tr)[k].Trait) }
         case _ { return generic.Context(c.fr().Mi, -1) }
     }
 }
@@ -5242,8 +5231,11 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?& {
         case typed.BodyOf.Fn(inst) {
             f := c.P.InstanceFn(inst)
             fd := c.P.FnDecl(f)
-            if fd.S.Contract == null { return null }
-            return ctSource(fd.S.Contract!, fd.Recv, fd.S.Params, c.P.FnModule(f), $c.text(fd.Name))
+            # a generator's are its first Next's (D18), which no call of it runs
+            if not fd.Bodied or c.P.IsGenerator(f): return null
+            mi := c.P.FnModule(f)
+            reqs := ast.Requirements(fd.Body, c.P.L.Names, c.P.L.Mods[mi].Src!.Text, fd.S.Params, fd.Recv)
+            return ctSource(reqs, fd.Recv, fd.S.Params, mi, $c.text(fd.Name))
         }
         case typed.BodyOf.Ctor(t, _) {
             d := c.P.T.DeclOf(t)
@@ -5251,161 +5243,58 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?& {
             if td == null or td.Body == null { return null }
             mi := c.P.T.DeclModule(d)
             nm := $c.text(td.Name)
+            text := c.P.L.Mods[mi].Src!.Text
             match td.Body {
-                case ast.TypeBody.Struct(sb) {
-                    if sb.Errs == null or sb.Errs!.Contract == null: return null
-                    return ctSource(sb.Errs!.Contract!, null, sb.Params, mi, nm)
-                }
+                case ast.TypeBody.Struct(sb): return ctSource(ast.Requirements(sb.Body, c.P.L.Names, text, sb.Params, null), null, sb.Params, mi, nm)
                 case ast.TypeBody.Over(_, ctor) {
-                    if ctor == null or ctor.S.Contract == null: return null
-                    return ctSource(ctor.S.Contract!, null, ctor.S.Params, mi, nm)
+                    if ctor == null: return null
+                    return ctSource(ast.Requirements(ctor.Body, c.P.L.Names, text, ctor.S.Params, null), null, ctor.S.Params, mi, nm)
                 }
                 case _ { return null }
             }
-        }
-        case typed.BodyOf.Slot(tr, k) {
-            # D17f: the contract a trait writes on its method, for a call through an "any" - its receiver unnamed
-            m := c.traitMethod(c.P.AnySlots(tr)[k])
-            if m == null or m.S.Contract == null { return null }
-            d := c.P.T.DeclOf(c.P.AnySlots(tr)[k].Trait)
-            recv := m.Recv
-            if recv == null { recv = ast.Param(m.Sp, source.NameId(0), ast.TypeRef.Perm(m.Sp, null, false), null) }
-            return ctSource(m.S.Contract!, recv, m.S.Params, c.P.T.DeclModule(d), $c.ty(tr) + "." + $c.text(m.Name))
         }
         case _ { return null }
     }
 }
 
-# whether body b has a contract with conditions, its items checked and made bodies of their own the first time it is
-# asked for (Contracts holds them, ctDone says it was asked)
+# whether body b has requirements, each made a body of its own the first time it is asked for (Contracts holds them,
+# ctDone says it was asked). One that does not check as a body of its own - its condition's errors are the function's
+# to say - is left to the run time
 fn (c mut Checker&) hasContract(b I64) Bool {
     if b < 0 or b >= c.Bodies.Len() { return false }
     if c.ctDone.Has(b) { return c.Contracts.Has(b) }
     c.ctDone.Put(b, true)
     src := c.ctSourceOf(b)
-    if src == null { return false }
+    if src == null or src.Reqs.Len() == 0 { return false }
     sr := src
-    k := sr.K
     sig := c.Bodies[b].Ty
-    if k.Items.Len() == 0 { return false }
-    c.Contracts.Put(b, typed.ContractInfo(sr.Name, c.P.L.Mods[sr.Mi].File))
-    for i in range k.Items.Len() {
-        it := k.Items[i]
-        id := c.ctBody(b, i, sig, it.Span())
-        c.ctItems(it)
+    text := c.P.L.Mods[sr.Mi].Src!.Text
+    info := typed.ContractInfo(sr.Name, c.P.L.Mods[sr.Mi].File)
+    d := c.P.L.Diags
+    for i in range sr.Reqs.Len() {
+        r := sr.Reqs[i]
+        mark, gaps := d.Count(), c.Gaps.Len()
+        id := c.ctBody(b, i, sig, r.Sp)
+        c.ctItem(r)
         c.ctFinish(id)
-        # (the requirements in the map's own record - a requirement's check may ask for it while the rest are read)
-        info := try c.Contracts.RefMut(b) catch { return true }
+        if d.Count() > mark or c.Gaps.Len() > gaps {
+            d.Forget(mark)
+            c.Gaps.Truncate(gaps)
+            c.Bodies[id].Root = null
+            break
+        }
         info.Reqs.Push(id)
-        info.ReqSps.Push(it.Span())
-        info.ReqTexts.Push($c.P.L.Mods[sr.Mi].Src!.Text[I64(it.Span().Start):I64(it.Span().End)])
+        info.ReqSps.Push(r.Cond.Span())
+        info.ReqTexts.Push(ast.ReqText(r, text))
+        info.Asserts.Push(not r.Negated)
     }
+    if info.Reqs.Len() == 0 { return false }
+    c.Contracts.Put(b, info)
     return true
 }
 
-# D17: a function's or a constructor's requirements checked on entry, in the order written, in every build: each its
-# body called on the parameters, "if not cond { error ArgumentError.Invalid }", the error's trace naming the function
-# and the condition ("pick: y > x", S18d). What a call in a condition fails with leaves the function as itself, as
-# through a try written there
-fn (c mut Checker&) entryChecks() {
-    b := c.fr().Body
-    if b < 0 { return }
-    match c.cur().Of {
-        case typed.BodyOf.Fn(i) { if c.P.IsGenerator(c.P.InstanceFn(i)) { return } }    # its first Next's (D18)
-        case typed.BodyOf.Ctor(_, _) { }
-        case _ { return }
-    }
-    params Vec<I64>
-    for l in c.cur().Params { params.Push(I64(l)) }
-    c.contractChecks(b, params, false)
-}
-
-# function b's conditions checked here, each called on locals args - b's own parameters, or (gen) a generator's Next
-# beginning: its parameters' locals, its first Next failing where one is false (D18)
-fn (c mut Checker&) contractChecks(b I64, args Vec<I64>&, gen Bool) {
-    if not c.hasContract(b) { return }
-    # (a copy: checking a requirement's body may ask for another contract, growing c.Contracts - M19g)
-    info := try c.Contracts.Get(b) catch { return }
-    if info.Reqs.Len() == 0 { return }
-    fr := c.fr()
-    ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
-    if ae == types.UnknownT { return }
-    ws := c.P.ErrorWords(c.P.T.DeclOf(ae))
-    word I64 = 0
-    for i in range ws.Len() {
-        if c.text(ws[i]) == "Invalid" { word = i }
-    }
-    raised := c.P.T.ErrWords(ae, U64(1) << word)
-    src := c.ctSourceOf(b)
-    # a written set names ArgumentError, which every call of a function with value conditions may fail with
-    if not fr.InferErrors and not fr.InTest and c.uncovered(fr.Errors, raised) != types.UnknownT and src != null {
-        m := msgs.ContractNeedsArgumentError(info.Name)
-        if gen { m = msgs.GenContractNeedsArgumentError(info.Name) } else if c.P.T.Items(fr.Errors).Len() == 0 { m = msgs.ContractNeedsQuestion(info.Name) }
-        c.ctErr(src.Mi, src.K.Sp, m)
-    }
-    for i in range info.Reqs.Len() {
-        sp := info.ReqSps[i]
-        from := c.exprs.Len()
-        for l in args { c.exprs.Push(c.readLocal(sp, l)) }
-        req := info.Reqs[i]
-        # the call at the condition's end, the raise at its start: a trace tells passing an error of a call in the
-        # condition on from the requirement failing (S18d)
-        csp := source.Span(sp.End - 1, sp.End)
-        x typed.Expr& = c.callOf(csp, types.BoolT, typed.Callee.Body(typed.BodyId(I32(req))), gather(c.exprs, from))
-        errs := c.bodyErrors(req)
-        if c.P.T.Items(errs).Len() > 0 {
-            mark := fr.leaks.Len()
-            fr.Tries++
-            c.leak(errs)
-            fr.Fallible++
-            fr.Tries--
-            k := c.caught(mark, fr.leaks.Len(), Vec<typed.Clause&>())
-            c.escapes(sp, mark, k)
-            x = typed.Expr.Try(csp, types.BoolT, typed.Try(x, Array<typed.Clause&>(0), Left = k > 0))
-        }
-        bfrom := c.stmts.Len()
-        id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
-        c.leaks1(raised)
-        c.argumentPush(sp, ae, word, $info.Name + ": " + $info.ReqTexts[i])
-        c.stmts.Push(typed.Stmt.Raise(sp, ae, word))
-        blk := c.close(id, outer, bmark, bfrom)
-        c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, x), blk, null)))
-        c.cur().RaiseAt.Push(sp.Start)
-        c.cur().RaiseWhat.Push($info.Name + ": " + $info.ReqTexts[i])
-    }
-}
-
-# D17, T19b: a false requirement's ArgumentError.Invalid carries the condition, "f: cond" - pushed before it is raised
-fn (c mut Checker&) argumentPush(sp source.Span, ae types.TypeId, word I64, what String&) {
-    pt := c.P.PayloadOf(ae)
-    if pt == types.UnknownT: return
-    x := typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(what))
-    pv := c.enumCase(sp, sp, pt, c.P.ErrorWords(c.P.T.DeclOf(ae))[word], Array<ast.Expr&>[ast.Expr.Lit(sp, token.Tok.StrLit)], Array<typed.Expr&>[x])
-    c.stmts.Push(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrPush, pv, null)))
-}
-
-# a function's own check asks for its contract (checkFn, ctorChecked) - one made first where its errors were forgotten
-# (a probe asking for it held its diagnostics back) made again, so they are said
-fn (c mut Checker&) contractChecked(b I64) {
-    if not c.ctDone.Has(b) {
-        c.hasContract(b)
-        return
-    }
-    info := try c.Contracts.Ref(b) catch { return }
-    faulty := false
-    for id in info.Reqs { faulty = faulty or c.Faulty.Has(id) }
-    if not faulty { return }
-    src := c.ctSourceOf(b)
-    if src == null { return }
-    sp := src.K.Sp
-    if c.P.L.Diags.ErrorWithin(info.File, I64(sp.Start), I64(sp.End), 0) { return }
-    c.ctDone.Remove(b)
-    c.Contracts.Remove(b)
-    c.hasContract(b)
-}
-
 # a requirement's body begun (D17): its function's parameters - read-only, a condition writing nothing - and the frame
-# checking it pushed; what a call in it fails with is its own set, inferred, which the call it guards fails with too
+# checking it pushed; what a call in it fails with is its own set, inferred
 fn (c mut Checker&) ctBody(b I64, index I64, sig types.TypeId, sp source.Span) I64 {
     sr := c.ctSourceOf(b)!
     ps := c.P.T.Items(c.P.T.Params(sig))
@@ -5440,10 +5329,17 @@ fn (c mut Checker&) ctBody(b I64, index I64, sig types.TypeId, sp source.Span) I
     return id
 }
 
-# a requirement's statements (D17a): "if not c { return false }", and true at the end
-fn (c mut Checker&) ctItems(it ast.Stmt&) {
-    c.stmt(it)
-    c.stmts.Push(typed.Stmt.Return(it.Span(), c.lit(it.Span(), types.BoolT, 1)))
+# a requirement's statements: "if not c { return false }" for an assert's, "if c { return false }" for a check's, and
+# true at the end
+fn (c mut Checker&) ctItem(r ast.Req&) {
+    sp := r.Sp
+    x := c.cond1(r.Cond)
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Plain, sp)
+    c.stmts.Push(typed.Stmt.Return(sp, c.lit(sp, types.BoolT, 0)))
+    blk := c.close(id, outer, mark, from)
+    c.emit(typed.Stmt.If(sp, typed.If(x if r.Negated else c.negate(sp, x), blk, null)))
+    c.stmts.Push(typed.Stmt.Return(sp, c.lit(sp, types.BoolT, 1)))
 }
 
 # a requirement's body finished
@@ -5453,17 +5349,7 @@ fn (c mut Checker&) ctFinish(id I64) {
     c.state[id] = 2
 }
 
-# a condition of a contract (D17a): "if not c { return false }"
-fn (c mut Checker&) ctCond(sp source.Span, k ast.Expr&) {
-    x := c.cond1(k)
-    from := c.stmts.Len()
-    id, outer, mark := c.open(typed.BlockKind.Plain, sp)
-    c.stmts.Push(typed.Stmt.Return(sp, c.lit(sp, types.BoolT, 0)))
-    blk := c.close(id, outer, mark, from)
-    c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, x), blk, null)))
-}
-
-# whether a number fits a number type, as a Bool: its conversion checked, a failure false (D17g)
+# whether a number fits a number type, as a Bool: its conversion checked, a failure false (E26c)
 fn (c mut Checker&) fitsTest(sp source.Span, x typed.Expr&, t types.TypeId) typed.Expr& {
     xt := typeOf(x)
     if c.under(xt) == c.under(t) or c.convWords(xt, t).Len() == 0 { return c.lit(sp, types.BoolT, 1) }
@@ -5479,100 +5365,32 @@ fn (c mut Checker&) fitsTest(sp source.Span, x typed.Expr&, t types.TypeId) type
     return typed.Expr.Try(sp, types.BoolT, typed.Try(seq, Array<typed.Clause&>[cl], false, false))
 }
 
-# an error said in a contract, in the module it is written in whatever frame asked for the contract
-fn (c mut Checker&) ctErr(mi I64, sp source.Span, m diagmsg.Msg) I64 {
-    return c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(sp.Start), I64(sp.End)), m)
+# ---- requirements at calls (D17e, E26c) ----
+
+# whether a call's arguments are all values the evaluator computes, read of nothing of the body (closedExpr)
+fn allClosed(args Array<typed.Expr&>&) Bool {
+    for a in args {
+        if not closedExpr(a) { return false }
+    }
+    return true
 }
 
-# ---- contracts at calls (D17e, D17g) ----
-
-# a call to a function with a contract: each requirement asked of the evaluator where every argument is one it can
-# compute (a false one an error at the call); a call through an "any" checked against its trait's here (D17f), as a
-# function checks its own on entry
-fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, call typed.Expr&, target typed.Callee&
-    args Array<typed.Expr&>&, site typed.SiteId, cb I64) typed.Expr& {
-    info := try c.Contracts.Get(cb) catch { return call }    # (a copy: see contractChecks)
+# a call, every argument one the evaluator computes, to a function with requirements: each asked of the evaluator (a
+# false one an error at the call, D17e)
+fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, args Array<typed.Expr&>&, cb I64) {
+    info := try c.Contracts.Get(cb) catch { return }    # (a copy: an ask may ask for another's, growing c.Contracts - M19g)
     # a body only the evaluator runs (an assert's condition, S18c) asks nothing: its call is asked where it is written
-    if info.Reqs.Len() == 0 or c.fr().Body < 0 or c.evalOnly() { return call }
-    # a generator's are its first Next's (D18), which this call does not run
-    match c.Bodies[cb].Of {
-        case typed.BodyOf.Fn(i) { if c.P.IsGenerator(c.P.InstanceFn(i)) { return call } }
-        case _ { }
-    }
-    out := call
-    match target {
-        case typed.Callee.Dispatch(_, _, _) { out = c.dispatchChecks(sp, r, target, args, site, info) }
-        case _ { }
-    }
-    for a in args {
-        if not closedExpr(a) { return out }
-    }
+    if info.Reqs.Len() == 0 or c.fr().Body < 0 or c.evalOnly() { return }
     fr := c.fr()
     mi, file := fr.Mi, fr.File
     old := fr.Body
     cw, ct := c.P.L.Diags.TopContext()
     for i in range info.Reqs.Len() {
         ask := c.askBody(mi, sp, old, info.Reqs[i], args)
-        c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, ct))
+        c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, ct
+                                        Assert = info.Asserts[i], Caller = old, Callee = cb))
         c.contractCallers.Push(old)
     }
-    return out
-}
-
-# D17f: a call through an "any" with its trait's requirements checked before it - its arguments held (a literal read
-# again), each requirement's body called on them, a false one failing the call with ArgumentError.Invalid, the trace
-# naming the trait's method and the condition (S18d)
-fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.Callee&, args Array<typed.Expr&>&
-    site typed.SiteId, info typed.ContractInfo) typed.Expr& {
-    fr := c.fr()
-    sfrom := c.stmts.Len()
-    held Vec<I64>
-    for a in args {
-        match a {
-            case typed.Expr.Lit(_, _, _) { held.Push(-1) }
-            case _ {
-                h := c.local(source.NameId(0), a.Span(), typeOf(a), typed.LocalKind.Held, typed.Mark.None)
-                c.emit(typed.Stmt.Let(a.Span(), typed.LocalId(I32(h)), a))
-                held.Push(h)
-            }
-        }
-    }
-    ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
-    for i in range info.Reqs.Len() {
-        q := info.Reqs[i]
-        v typed.Expr& = c.bodyCall(sp, q, types.BoolT, args, held, Vec<I64>())
-        errs := c.bodyErrors(q)
-        if c.P.T.Items(errs).Len() > 0 {
-            c.leak(errs)
-            fr.Fallible++
-            v = typed.Expr.Try(sp, types.BoolT, typed.Try(v, Array<typed.Clause&>(0)))
-        }
-        if ae == types.UnknownT { continue }
-        c.leaks1(ae)
-        fr.Fallible++
-        # D17, T19b: false, the call fails with ArgumentError.Invalid carrying the condition - pushed, then failed to
-        # the innermost try (Holds: an expression's failure, which a raise statement here would not reach)
-        h := c.hidden(sp, types.BoolT)
-        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), v))
-        bfrom := c.stmts.Len()
-        id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
-        c.argumentPush(sp, ae, 0, $info.Name + ": " + $info.ReqTexts[i])
-        blk := c.close(id, outer, bmark, bfrom)
-        c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, c.readLocal(sp, h)), blk, null)))
-        from := c.exprs.Len()
-        c.exprs.Push(c.readLocal(sp, h))
-        c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.BoolT, typed.PrimOp.Holds, typed.Check.Try, gather(c.exprs, from))))
-        c.cur().RaiseAt.Push(sp.Start)
-        c.cur().RaiseWhat.Push($info.Name + ": " + $info.ReqTexts[i])
-    }
-    efrom := c.exprs.Len()
-    for i in range args.Len() { c.exprs.Push(c.heldArg(args, held, i)) }
-    inner := typed.Expr.Call(sp, r, typed.Call(target, gather(c.exprs, efrom), site))
-    if r == types.VoidT or r == types.NoreturnT {
-        c.emit(typed.Stmt.Eval(sp, inner))
-        return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), null))
-    }
-    return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), inner))
 }
 
 # a body giving the value of condition body body called on args - copies of the arguments of a call in body old, which
@@ -5746,7 +5564,7 @@ fn (c mut Checker&) bodyCall(sp source.Span, body I64, ty types.TypeId, args Arr
     return c.callOfBody(sp, ty, body, gather(c.exprs, from))
 }
 
-# D17g: a conversion to a number type of a value the evaluator computes is asked of it, so a constant out of range is
+# E26c: a conversion to a number type of a value the evaluator computes is asked of it, so a constant out of range is
 # an error at the conversion
 fn (c mut Checker&) conversionAt(sp source.Span, argSp source.Span, x typed.Expr&, t types.TypeId) {
     fr := c.fr()
@@ -8402,11 +8220,6 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
     bt := c.bangTop
     c.bangTop = false
     if x == null { return c.unknown(source.Span(0, 0)) }
-    if c.fr().Contract == CtEns and c.fr().ctSubst.Len() > 0 {
-        # D17b: a part of a guarantee read at entry - the value kept of it when the call began
-        l := try c.fr().ctSubst.Get(ctKey(x.Span())) catch default -1
-        if l >= 0 { return c.readLocal(x.Span(), l) }
-    }
     v := c.fold(x)
     if v.Ok { return c.litOf(x, v, want) }
     match x {
@@ -12549,7 +12362,7 @@ fn (c mut Checker&) conversion(sp source.Span, t types.TypeId, args Array<ast.Ex
         c.err(args[0].Span(), msgs.TypeMismatch(c.ty(t), c.ty(xt)))
         return c.unknown(sp)
     }
-    # D17g: a value that does not fit is an error where the evaluator computes it
+    # E26c: a value that does not fit is an error where the evaluator computes it
     if c.convWords(xt, t).Len() > 0 { c.conversionAt(sp, args[0].Span(), x, t) }
     return c.convert(sp, x, t)
 }
@@ -13287,10 +13100,9 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     site := c.site(typed.SiteKind.Call, sp)
     c.calledNow()   # S8d
     call := typed.Expr.Call(sp, r, typed.Call(target, targs, site))
-    # D17e: its callee's contract, decided by the evaluator where it can be, or checked under checked
+    # D17e: its callee's requirements, decided by the evaluator where it computes every argument
     cb := c.bodyOfCallee(target)
-    if cb < 0 { cb = c.slotContract(target) }
-    if cb >= 0 and c.fr().Contract == 0 and c.hasContract(cb) { call = c.contractAt(sp, nsp, r, call, target, targs, site, cb) }
+    if cb >= 0 and c.fr().Contract == 0 and allClosed(targs) and c.hasContract(cb) { c.contractAt(sp, nsp, targs, cb) }
     if c.stmts.Len() > sfrom { call = typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return c.held(sp, call)
 }
@@ -15154,7 +14966,7 @@ fn (c mut Checker&) notRecord(row types.TypeId) String {
 # a statement other than a field, no fields, a parameter that is no field - "" for none
 fn recordBody(s ast.StructBody&) String {
     es := s.Errs
-    if es != null and (es.HasErrors or es.Contract != null): return "has a constructor that checks or fails"
+    if es != null and es.HasErrors: return "has a constructor that checks or fails"
     puns I64 = 0
     for st in s.Body {
         if st != ast.Stmt.Var: return "has a constructor that does more than declare its fields"
@@ -17269,7 +17081,8 @@ fn (c mut Checker&) handlesContracts(ask I64, cls Vec<typed.Clause&>&) {
     ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
     if ae == types.UnknownT or c.left(ae, cls) == ae { return }
     for i in range ask, c.ContractAsks.Len() {
-        if c.contractCallers[i] == c.fr().Body and c.ContractAsks[i].Name != "" { c.ContractHandled.Put(i, true) }
+        a := c.ContractAsks[i]
+        if c.contractCallers[i] == c.fr().Body and a.Name != "" and not a.Assert { c.ContractHandled.Put(i, true) }
     }
 }
 
@@ -18901,7 +18714,6 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Yield(sp, x) { c.yieldStmt(sp, x) }
         case ast.Stmt.MatchS(sp, m) { c.matchStmt(sp, m) }
         case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
-        case ast.Stmt.Assert(sp, k, _) if c.fr().Contract != 0 { c.ctCond(sp, k) }
         case ast.Stmt.Assert(sp, k, msg) { c.assertStmt(sp, k, msg) }
         case ast.Stmt.Raise(sp, word, args) { c.raise(sp, word, args) }
         case ast.Stmt.Defer(sp, inner, onError) { c.deferStmt(sp, inner, onError) }
@@ -24038,16 +23850,11 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId, el I64, home I64) t
         b.GenHome = true
         fr.GenHome = inner
     }
-    args Vec<I64>
-    whole := true
     k I64 = -1
     for p in pb.Params {
         k++
         pl := pb.Locals[I64(p)]
-        if pl.Name == source.NameId(0) or c.text(pl.Name) == "_" {
-            whole = false
-            continue
-        }
+        if pl.Name == source.NameId(0) or c.text(pl.Name) == "_" { continue }
         cap := c.captureIn(c.frames.Len() - 1, pl.Name, pl.Sp)
         if cap < 0 { continue }
         # D18c: the parameter its elements borrow from - where what it refers to lives (genElemOf names only a reference
@@ -24065,11 +23872,6 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId, el I64, home I64) t
         # C11, S20: a by-value parameter with destructors to run is the walk's - ended where its body ends, or where
         # the walk is let go part way (its drop path), or, never started, with its captures (lowering's GenFresh)
         c.dropOnExit(l, pl.Sp, true)
-        args.Push(l)
-    }
-    # its contract (D17): checked as its first Next begins, a false condition that Next's ArgumentError (D18)
-    if c.hasContract(parent.Body) {
-        if whole { c.contractChecks(parent.Body, args, true) } else { c.gap(sp, "a generator with a contract and an unnamed parameter") }
     }
     storedIn(fd.Body, c.fr().stored)
     if fd.Body.Len() > 0 { c.stmtsOf(fd.Body) }
@@ -27340,42 +27142,6 @@ fn (c mut Checker&) thunkModule(id I64) I64 {
 
 # s.M(args) on an "any" (T32b): through its table, M's slot - or, for a default of the trait introducing type variables
 # of its own, the default instantiated for the "any" (T32c)
-# D17f: a non-generic trait's methods' contracts checked with the trait, whether a call asks for them or not
-fn (c mut Checker&) traitContracts(mi I64, td ast.TypeDecl?&) {
-    if td == null or td.Body == null or td.Params.Len() > 0 { return }
-    match td.Body {
-        case ast.TypeBody.Trait(ms, _, _) {
-            has := false
-            for m in ms {
-                has = has or m.S.Contract != null
-                c.traitArgumentError(mi, m)
-            }
-            if not has { return }
-            ei := c.P.TypeEntry(mi, td.Name)
-            if ei < 0 { return }
-            self := c.P.SelfType(c.P.DeclFor(mi, ei))
-            slots := c.P.AnySlots(self)
-            for k in range slots.Len() {
-                if slots[k].Method < 0 or c.P.T.DeclOf(slots[k].Trait) != c.P.T.DeclOf(self) { continue }
-                b := c.slotContract(typed.Callee.Dispatch(self, k, slots[k].Sig))
-                if b >= 0 { c.hasContract(b) }
-            }
-        }
-        case _ { }
-    }
-}
-
-# D17, R1b: a trait's method with conditions writes ArgumentError among its errors - a call through an any fails with it
-# where one is false, and a trait's method writes its set
-fn (c mut Checker&) traitArgumentError(mi I64, m ast.Func&) {
-    if m.S.Contract == null or m.S.Contract!.Items.Len() == 0 { return }
-    for e in m.S.Errors {
-        if c.text(e.Parts[e.Parts.Len() - 1]) == "ArgumentError" { return }
-    }
-    sp := m.S.Contract!.Sp
-    c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(sp.Start), I64(sp.End)), msgs.ContractNeedsArgumentError(c.text(m.Name)))
-}
-
 # whether a task's call is through an "any"'s table (T32b)
 fn dispatched(x typed.Expr&) Bool {
     match x {
@@ -27398,28 +27164,6 @@ fn (c mut Checker&) traitMethod(sl generic.AnySlot) ast.Func?& {
     match td.Body {
         case ast.TypeBody.Trait(ms, _, _) { return ms[sl.Method] if sl.Method < ms.Len() else null }
         case _ { return null }
-    }
-}
-
-# the owner of the contract a dispatch's trait method has (D17f), -1 for none - made once a trait and slot
-fn (c mut Checker&) slotContract(target typed.Callee&) I64 {
-    match target {
-        case typed.Callee.Dispatch(r, slot, _) {
-            k := slot % c.P.AnySlots(r).Len()
-            key := c.P.SlotKey(r, k)
-            have := try c.P.SlotContracts.Get(key) catch default -2
-            if have != -2 { return have }
-            id := -1
-            m := c.traitMethod(c.P.AnySlots(r)[k])
-            if m != null and m.S.Contract != null {
-                d := c.P.T.DeclOf(c.P.AnySlots(r)[k].Trait)
-                id = c.newBody(typed.BodyOf.Slot(r, k), c.P.AnySlots(r)[k].Sig, c.P.T.DeclModule(d), m.Sp)
-                c.state[id] = 2
-            }
-            c.P.SlotContracts.Put(key, id)
-            return id
-        }
-        case _ { return -1 }
     }
 }
 

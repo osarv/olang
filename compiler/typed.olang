@@ -75,30 +75,27 @@ type BodyOf enum {
     # a condition the build decides that B9a could not evaluate (B9c, S8b), as a fn() Bool giving its value, checked in
     # its module's context for the evaluator: at the offset the condition starts at in the module's file
     Cond(module I64, at I32)
-    # one item of a function's or constructor's contract as a function of its own (D17), body its body: a requirement
-    # (Req) or a guarantee (Ensures) giving a Bool, or an entry value a guarantee reads (Entry) giving it; index its
-    # place among the body's items of that kind
+    # one of a function's or constructor's requirements as a function of its own (D17), body its body: a Bool, for the
+    # evaluator to decide at a call (D17e); index its place among the body's requirements
     Contract(body BodyId, kind ContractKind, index I64)
     # a table's slot (T32b): the function an "any"'s call reaches - its parameters the slot's, the instance first as a
     # reference to the type it is stored as - calling the instance's type's method, or the default it takes
     Thunk(table I64, slot I64)
-    # a trait's method as an "any" calls it (T32b): its slot's signature and no code, the owner of the contract the
-    # trait writes on the method (D17f)
-    Slot(tr types.TypeId, slot I64)
 }
 
 type ContractKind enum {
     Req        # fn(the function's parameters) Bool ?, its errors those of the calls in it
 }
 
-# a body's contract (D17), its conditions made bodies of their own: each requirement's body, where it is written and
-# its text; what diagnostics name the function and the file its contract is written in
+# a body's requirements (D17), made bodies of their own: each one's body, where its condition is written, its text and
+# whether it is an assert's (else a check's); what diagnostics name the function and the file it is written in
 type ContractInfo struct(Name String&, File I64) {
     Name
     File
     Reqs Vec<I64>
     ReqSps Vec<source.Span>
     ReqTexts Vec<String&>
+    Asserts Vec<Bool>
 }
 
 # one of a body's scope variables: what its hidden scope arguments, and its environment's scopes, stand for. The ones
@@ -1338,8 +1335,6 @@ type PrimOp enum {
     RotateLeft
     RotateRight
     ByteSwap
-    # args [b]: b, once it holds - a contract's condition checked (D17e), failing with ArgumentError.Invalid
-    Holds
     # E39: args [n, m], two lanes' lengths: n, once they are equal - checked Abort, once per lane operation
     LaneLen
     # E39: args [n], a length: nothing, once it is above zero - a total that needs an element (Min, Max), checked Try:

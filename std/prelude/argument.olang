@@ -1,6 +1,6 @@
-# what a call fails with when an argument breaks its function's contract (D17): a requirement in the block after the
-# parameter list false on entry, carrying it as its function's name and the condition, "pick: y > x" (T19b). Part of the
-# prelude, since any function with value conditions can fail with it
+# what a call fails with when an argument breaks its function's requirement (D17): a check its body begins with,
+# "if not y > x: error ArgumentError.Invalid("pick: y > x")", carrying the function's name and the condition (T19b).
+# Part of the prelude, since any function may check its arguments with it
 type ArgumentError error {
     Invalid(what String)
 }

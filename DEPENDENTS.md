@@ -111,6 +111,15 @@ S21's tail scope, given in `scope.olang`'s `giveTails` before any body is judged
 (`call`, `retOne`), lowering (`passed`), `emit.olang`'s header and its function-value `thunk` (a scope made for the
 call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 
+## What a requirement is (D17)
+
+A function's requirements are read off its body by one function, `compiler/ast.olang` `Requirements` (which leading
+statements count: asserts and checks raising `ArgumentError`) and `ReqText` (how one is said). Its readers change with it:
+`check.olang` (`ctSourceOf`, `hasContract`: the bodies the evaluator decides at a call, D17e), `explain.olang`
+(`# requires:`, which doc and the language server's hover print), `api.olang` (`pushRequires`, `change.requires`, B21),
+`tools/requires_migrate.olang` (the check it writes must be one `Requirements` reads), SPEC D17/D17e/B11b/B21, and the
+cases `checks/cases/d17*.olang`.
+
 ## A command-line mode or option
 
 | place | why |

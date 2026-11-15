@@ -1,6 +1,9 @@
 # check: fail error[R9]: ParseError
-# D17a: a condition's own fallible call leaves the function with its error, which the caller then handles
-fn positive(t String&) [try t.ParseInt() > 0] I64 ? ArgumentError { return 1 }
+# D17: a check's own fallible call leaves the function with its error, which its set must declare
+fn positive(t String&) I64 ? ArgumentError {
+    if not (try t.ParseInt() > 0): error ArgumentError.Invalid("positive: try t.ParseInt() > 0")
+    return 1
+}
 
 fn main() ? {
     t := "5"

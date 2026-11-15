@@ -80,4 +80,4 @@ subsections:
 - **Compile-time evaluation**: the evaluator, `comptime`, constant contexts, decided asserts, `interpret`, `embed`.
 - **std**: text, math, collections, printing, libraries, `extern fn` and C interop, naming rule.
 - **Codegen and runtime**: the runtime, cold paths, no per-operation checks, optimizations, testing.
-- **The C compiler and the port**: stage 0 removed, the port, numeric traits, traits, contracts, `olang fix`, definite initialisation, the formal spec.
+- **The C compiler and the port**: stage 0 removed, the port, numeric traits, traits, requirements (contracts removed), `olang fix`, definite initialisation, the formal spec.
