@@ -234,6 +234,9 @@
 | status 0
 | ok - facts through function values: what is called through a parameter is what each call gives it
 | ok - facts are constants the running program reads too
+=== test tests/factsfailing.olang
+| status 0
+| ok - Checked: a failing way still builds its text, and the error carries it
 === test tests/fieldnarrow.olang
 | status 0
 | ok - a field path narrows by a null test, at depth one and two, and in a call's arguments
@@ -452,6 +455,9 @@
 | ok - keptPast: keeps a result written 'noborrow' past both arguments
 | ok - addAll: keeps what is kept in a field's referent where the field refers
 | ok - spelled: writes a function type's promises
+=== test tests/proven.olang
+| status 0
+| ok - what is not proven stays legal, and runs as written
 === test tests/raised.olang
 | status 0
 | ok - an error raised by name is caught by its name and is one error wherever it is raised
@@ -1296,6 +1302,10 @@
 | ok - E31a: try on a fallible Call
 | ok - P4a/D16d: a task's default holding a lambda, while compiling and at run time
 | ok - P4a/D16d: a task's default may hold a lambda capturing only values
+=== test tests/slotfacts.olang
+| status 0
+| ok - viaTemp: a call's value lent to a read-only reference is read where it stands
+| ok - reassigned: a reference local's own slot holds each value it is given in turn
 === test tests/structpat.olang
 | status 0
 | ok - Point: S13i: struct patterns take a struct apart by its fields, at run time and while compiling
