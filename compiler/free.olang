@@ -237,6 +237,10 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     leafAsked Map<types.TypeId, Vec<leaf>>
     ownersAsked Map<types.TypeId, Vec<I64>>    # heldPlaces, by type
     refsAsked Map<types.TypeId, Bool>           # refsBeyondParts, by type
+    # D9h: whether a body keeps its parameter k's referent's parts as they are (lowering's preserves) - null where the
+    # driver gives none; and by body, the locals lowering surely copies a view call's value into (copiedLocals)
+    Keeps fn?&(b I64, k I64) Bool = null
+    copiedAt Map<I64, Array<Bool>>
     # by body: its module, whether its code is emitted in the root's object - lowered by every build, so the decisions are
     # written into it as they are, where every other body's code reads them as link-time constants - whether it is the
     # program's own (not std)
@@ -2460,6 +2464,10 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
                 o = w.F.unowned(o)
                 w.viewCtor(w.F.leaves(x.Type()), lc, x, sp)
             }
+            # (O8f, gap 18: a view call's value a local holds that lowering surely copies - written, assigned, stored or
+            # lent to a body changing its parts, so never a view local - owns its parts anew: no value of the places the
+            # view was of)
+            if lc == null and w.copiedView(I64(l), x): o = w.F.unowned(o)
             if fieldCopy {
                 o = w.F.unowned(o)
                 w.copyLeaves(w.F.leaves(x.Type()), x, sp)
@@ -2672,6 +2680,41 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if fr < 0 { w.escape(o, sp, w.text(p.Span()), true, w.withinOf(p), w.storeInside) }
     w.storeWithin = -1
     w.storeInside = -1
+}
+
+# whether local l, declared with x, holds a copy of a view call's value (D9h) that lowering surely makes: the call hands
+# back a view (not a constructor's instance viewing only what was made for it) and the local can be no view local
+fn (w mut walker&) copiedView(l I64, x typed.Expr&) Bool {
+    f := w.F
+    if w.T().IsRef(w.body().Locals[l].Ty): return false
+    c := typed.Call.Of(x)
+    if c == null: return false
+    b2 := typed.CalleeBody(c)
+    if b2 < 0 or f.Bodies[b2].Root == null or f.viewsOf(b2) == 0 or f.freshCtor(c, b2, w.Id): return false
+    return f.copiedLocals(w.Id)[l]
+}
+
+# by local of body b: whether lowering can never make it a view local (lower.viewCand) - it is written but in a scalar
+# field, assigned whole, stored, or lent writably to a body changing its parts (Keeps; any lend counts as keeping where
+# no Keeps is given)
+fn (f mut Free&) copiedLocals(b I64) Array<Bool> {
+    if f.copiedAt.Has(b): return try f.copiedAt.Get(b) catch default Array<Bool>(0)
+    u := typed.LocalUses.Uses(f.P.T, f.Bodies[b])
+    n := f.Bodies[b].Locals.Len()
+    out := Array<Bool>(n, false)
+    for i in range n {
+        if i < u.WrOther.Len() and (u.WrOther[i] or u.Whole[i]): out[i] = true
+    }
+    for i in u.StoreAt {
+        if i >= 0 and i < n: out[i] = true
+    }
+    for j in range u.LendAt.Len() {
+        i := u.LendAt[j]
+        if i < 0 or i >= n or f.Keeps == null: continue
+        if not f.Keeps!(u.LendBody[j], u.LendParam[j]): out[i] = true
+    }
+    f.copiedAt.Put(b, out)
+    return out
 }
 
 # O8f: the constructor call local l is declared with where its instance views what it is given and its caller copies it

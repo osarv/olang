@@ -5376,7 +5376,10 @@ fn (ln mut lowering&) immutableGlobal(mi I64, n source.NameId) Bool {
 
 # a body keeping its parameter k's referent's parts as they are: it writes nothing through it but scalar
 # fields, assigns it nowhere, lends it to nothing, keeps it nowhere, hands it back nowhere - a walk's Next writing its
-# position. Asked once a body and parameter
+# position. Asked once a body and parameter - Preserves for early freeing, which asks it of the locals lent whole
+# (free.copiedLocals)
+fn (lw mut Lowerer&) Preserves(body I64, k I64) Bool { return lw.preserves(body, k) }
+
 fn (lw mut Lowerer&) preserves(body I64, k I64) Bool {
     if body < 0 or body >= lw.Bodies.Len() or k >= 64: return false
     key := body * 64 + k

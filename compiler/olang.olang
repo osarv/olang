@@ -694,7 +694,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # written as any build writes them, but no decision of it is emitted: what it reads is the link's
     # (B22: a session's cell decides nothing - its values outlive its program, read and let go by the cells after it,
     # which decide otherwise: a place one cell decides sole may hold a value an earlier cell built where none is)
-    fr := try placement(c, cfg, -1 if cfg.Cell else l.Root, kind == build.Kind.Module or cfg.Cell, keys)
+    fr := try placement(c, cfg, -1 if cfg.Cell else l.Root, kind == build.Kind.Module or cfg.Cell, keys
+                        fn(b I64, k I64): return lw.Preserves(b, k))
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
@@ -1184,7 +1185,7 @@ fn apartModules(l load.Loader&, cfg build.Config&, out mut Map<I64, Bool>&) {
 }
 
 fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false
-    keys Array<String&>& = Array<String&>(0)) mut free.Free& ? build.Failed {
+    keys Array<String&>& = Array<String&>(0), parts fn?&(b I64, k I64) Bool = null) mut free.Free& ? build.Failed {
     sc mut scope.Scoper& = scoper(c, cfg, alone)
     # B3i (W3b): the judgings records of earlier builds give, under each module's key - not for -memory, which lists
     # what every judging placed
@@ -1228,6 +1229,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
     fr.Tests = cfg.Tests
     fr.Alone = alone
+    fr.Keeps = parts
     fr.Decide(sc.Plans, root)
     return fr
 }
