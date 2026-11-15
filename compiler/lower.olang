@@ -1403,7 +1403,10 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             # a fixed array widened is made where the local keeps it, the local's own (T7b, T7c)
             v := ln.fitAt(init, ty, sp, ln.storageOf(l))
             ln.walkSite = typed.SiteId(-1)
-            if ln.copiesArray(init, ty) and not ln.fits(init, ty) and not ln.widens(init, ty) and not ln.dead and not ln.noLetCopy.Has(I64(l)) {
+            # (O8d: a sole immut array local's constant value is the constant itself - nothing writes it - so its first
+            # let-go releases no storage that is not a region's)
+            constHeld := ln.freeing and ln.L.Free!.ConstLocal(I64(ln.B.Id), I64(l), init)
+            if ln.copiesArray(init, ty) and not ln.fits(init, ty) and not ln.widens(init, ty) and not ln.dead and not ln.noLetCopy.Has(I64(l)) and not constHeld {
                 n := ln.slotLen(l, init)
                 v = ln.slotCopy(v, ty, n, sp) if n >= 0 else ln.arrayCopy(v, ty, sp, ln.storageOf(l))
             }
@@ -1421,7 +1424,11 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             }
             # (QCE: a part holding an array by value takes the copy check made, or the new storage
             # it is given, as it is - never written over in place, since the part may be room a Vec has not filled)
-            if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) {
+            # (T13a: an immut array is replaced whole, never written into - a view of its old value keeps it, and a
+            # sole local's old value is released, O8d)
+            if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) and ln.L.P.Immut(target.Type()) {
+                ln.immutStore(target, ln.mk(p), v, value, sp)
+            } else if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) {
                 copies := ln.copiesArray(value, target.Type())
                 ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
             } else {
@@ -1746,6 +1753,25 @@ fn (ln mut lowering&) arrayStore(dst mir.Lvalue, v mir.Operand, ty types.TypeId,
     ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
     ln.goto(after)
     ln.start(after)
+}
+
+# an immut value array place given another value (T13a): replaced whole - the new value's storage taken, or a copy of
+# existing storage made where the place keeps it (T7b) - never written into, so a view of the old value still reads
+# it. A sole local place (O8d) releases the old value once it holds the new, and takes constant data as it is
+# (free.ConstLocal: nothing writes it)
+fn (ln mut lowering&) immutStore(target typed.Lvalue&, dst mir.Lvalue, v mir.Operand, value typed.Expr&, sp source.Span) {
+    ty := target.Type()
+    rel := ln.releases(target, true)
+    old := mir.NoLocal
+    if rel.Len() > 0 {
+        old = ln.temp(ty, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(old), mir.Rvalue.Use(mir.Operand.Copy(dst))))
+    }
+    w := v
+    keepConst := rel.Len() > 0 and free.ConstRead(value)
+    if ln.copiesArray(value, ty) and not keepConst: w = ln.arrayCopy(v, ty, sp, ln.placeStorage(target))
+    ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
+    if old != mir.NoLocal: ln.releaseAt(old, rel, sp)
 }
 
 fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {

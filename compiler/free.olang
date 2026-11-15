@@ -1984,9 +1984,11 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
             # (one declared with no value, D13d, holds nothing written before its first assignment - no old value)
             loc := f.Bodies[f.curBody].Locals[I64(l)]
             if f.ownLocalOf.Has(key) or loc.Kind != typed.LocalKind.Var or loc.Unset: return
-            if not f.ownerCand(ty): return
+            ow := f.ownerCand(ty)
+            if not ow and not f.arrayCand(ty): return
             k := f.newPlace(ty, -3, false, ty, false)
-            f.owner[k] = true
+            f.owner[k] = ow
+            f.arr[k] = not ow
             f.olBody[k] = f.curBody
             f.olLocal[k] = I64(l)
             f.ownLocalOf.Put(key, k)
@@ -4268,6 +4270,11 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     of := -1
     site := -1
     why := ""
+    # (constant text an immut array local is given: held as it is, ConstLocal)
+    if f.isOwnLocal(k) and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(x) {
+        f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
+        return
+    }
     match x {
         case typed.Expr.Lit(_, _, _) { kind = SOk }
         case typed.Expr.Data(_, _, _, _) { kind = SOk }
@@ -5565,6 +5572,28 @@ fn (f Free&) FeedSite(b I64, l I64) I64 {
 fn (f Free&) SplitPath(b I64, site I64) Array<I64> {
     if not f.Done: return Array<I64>(0)
     return try f.splitAt.Get(pair.Pair(b, site)) catch default Array<I64>(0)
+}
+
+# whether x is constant data (a text literal, T25d) read whole, through conversions: what an immut array local given it
+# holds as it is - nothing writes it (T13a) - so it is no storage made for the place, and its let-go releases nothing
+fn ConstRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Away(_, _, y): ConstRead(y)
+        case typed.Expr.Prim(_, _, op, _, args): isConversion(op, args) and ConstRead(args[0])
+        case typed.Expr.Read(_, _, p, _): match p {
+            case typed.Lvalue.Deref(_, _, r): ConstRead(r)
+            case _: false
+        }
+        case _: false
+    }
+}
+
+# whether local l of body b is an immut array local place (an own local holding text) declared with constant data:
+# lowering leaves the constant uncopied (in every program alike: no decision is read)
+fn (f mut Free&) ConstLocal(b I64, l I64, init typed.Expr&) Bool {
+    k := f.LocalPlaceOf(b, l)
+    return k >= 0 and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(init)
 }
 
 # the owner local place local l of body b is, -1 for none
