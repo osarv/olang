@@ -79,7 +79,7 @@ slimming of 2026-11-08").
 # How to decide and record
 - **Once decided, build it (the user, 2026-11-15: "dont me ask if you get to build something, when we decided what to build, just build it")**: a decided feature, fix or plan is built and merged without asking for a go-ahead; questions go to the user only for open decisions.
 
-- **The seed is regenerated only when needed (the user, 2026-11-15: "Do we really need new seeds for all of these?")**: an older seed builds the current source as long as that source uses nothing its compiler lacks. A merge regenerates `seed/` only when `make bootstrap` from the committed seed fails; otherwise it is refreshed at the weekly verify. Each regeneration adds about 10 MB to git history.
+- **The seed (seed/README.md, "When it is written again")**: written again only in the commit that first needs it; briefs say so, never "regenerate the seed" by default.
 
 - **Decide details myself** (spellings, edge cases, API names, error words, which of two reasonable semantics), by
   direction.md, and record them in settled.md/HISTORY.md as decisions. Ask only about direction: what changes the
