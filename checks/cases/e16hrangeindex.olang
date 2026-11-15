@@ -1,0 +1,21 @@
+# check: fail error[E16h]: index 'i + 1' reaches 8 in this loop, outside the array's 8 elements
+# also: note: every turn of the loop reaches it, and its range is known while compiling
+# never: index 'i' reaches
+# E16h: an index by a range's variable that some turn puts outside the array is an error where every turn reaches it;
+# under a condition, or in a loop that may stop early, it is left as written
+fn sum(xs Array<F32>&) F32 {
+    acc := Array<F32>(8)
+    for i in range 8: acc[i] = xs[i]
+    s := F32(0)
+    for i in range 10 {
+        if i < 8: s += acc[i]
+    }
+    for i in range 10 {
+        if i == 8: break
+        s += acc[i]
+    }
+    for i in range 8: s += acc[i + 1]
+    return s
+}
+
+fn main() { }

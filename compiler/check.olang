@@ -251,6 +251,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     rangeExprs Map<pair.Pair<I64, I64>, Bool>        # ... whose end is a literal-only expression, not one literal
     rangeEnd source.Span = source.Span(-1, -1)       # the range being walked, while its variable is declared
     rangeEndLit Bool = false
+    rangeKnown Map<pair.Pair<I64, I64>, knownRange>  # E16h: (body, local): a for-in's variable over a range known here
+    rangeNow knownRange = knownRange(0, -1, -1)      # ... the range being walked, while its variable is declared
+    rangeIdx Vec<rangeIndex>                         # E16h: indices by such a variable, decided as their loop closes
     exprs Vec<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts Vec<typed.Stmt&>
     atRecs Vec<atRec>                     # each x[i] read through At as a place: what writing back through it needs
@@ -777,6 +780,8 @@ fn (c mut Checker&) reset() {
     c.litLocals = Map<pair.Pair<I64, I64>, Bool>()
     c.rangeEnds = Map<pair.Pair<I64, I64>, source.Span>()
     c.rangeExprs = Map<pair.Pair<I64, I64>, Bool>()
+    c.rangeKnown = Map<pair.Pair<I64, I64>, knownRange>()
+    c.rangeIdx = Vec<rangeIndex>()
     c.exprs = Vec<typed.Expr&>()
     c.stmts = Vec<typed.Stmt&>()
     c.atRecs = Vec<atRec>()
@@ -8836,6 +8841,12 @@ fn (c mut Checker&) opnd(op token.Tok, x ast.Expr&, want types.TypeId) typed.Exp
 # a binary operator: "and"/"or" a conditional (E7); on numbers a Prim at the type its operands meet at (T6b, E6d) - a
 # literal adapting to the other operand where it fits it; on Bools "==", "!=" and xor
 fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr& {
+    r := c.binaryOf(sp, op, a, b, want)
+    if op == token.Tok.Slash or op == token.Tok.Percent or op == token.Tok.Shl or op == token.Tok.Shr: c.provenOperand(r, b)
+    return r
+}
+
+fn (c mut Checker&) binaryOf(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr& {
     if op == token.Tok.StarStar { return c.power(sp, a, b, want) }
     # E11b: "+" with text written on either side joins text
     if op == token.Tok.Plus and (textWritten(a) or textWritten(b)) { return c.textPlus(sp, a, b) }
@@ -10200,6 +10211,135 @@ fn (c mut Checker&) knownInt(x ast.Expr&) types.TypeId {
     k := c.P.FoldKnown(c.fr().Ctx, x, c.i64())
     if c.P.T.KindOf(k) == types.Kind.Const { return k }
     return types.TypeId(-1)
+}
+
+# ---- what is proven out of range while compiling (E16h) ----
+
+# a for-in's range whose bounds are known while compiling: the first value and the last (Last < Lo: none), the loop's
+# body block (Loop -1: none known; 0 while its variable is being declared)
+type knownRange struct(Lo I64, Last I64, Loop I64) {
+    Lo
+    Last
+    Loop
+}
+
+# an index by such a variable reaching Value, outside an array of Len elements, decided as Loop closes: At its span,
+# Sp the element's
+type rangeIndex struct(Loop I64, Sp source.Span, At source.Span, Text String, Value I64, Len I64) {
+    Loop
+    Sp
+    At
+    Text
+    Value
+    Len
+}
+
+# the range of "range [start,] end [, step]" where every bound is known while compiling and the step is positive
+fn (c mut Checker&) knownBounds(rargs Array<ast.Expr&>&) knownRange {
+    none := knownRange(0, -1, -1)
+    known := Array<I64>(rargs.Len(), 0)
+    for i in range rargs.Len() {
+        kv := c.knownInt(rargs[i])
+        if kv < types.TypeId(0): return none
+        known[i] = c.P.T.ConstValue(kv)
+    }
+    lo := known[0] if rargs.Len() > 1 else 0
+    hi := known[1] if rargs.Len() > 1 else known[0]
+    st := known[2] if rargs.Len() > 2 else 1
+    if st <= 0 or hi <= lo: return none
+    return knownRange(lo, lo + (hi - lo - 1) / st * st, 0)
+}
+
+# an index known while compiling, or a range variable's (plus or minus what is known), outside an array of n
+# elements: an error where it is known (E16h), a candidate decided as the loop closes where it is a range's
+fn (c mut Checker&) provenIndex(x ast.Expr&, n I64, sp source.Span) {
+    k := c.knownInt(x)
+    if k >= types.TypeId(0) {
+        v := c.P.T.ConstValue(k)
+        if v < 0 or v >= n: c.err(x.Span(), msgs.IndexProven(c.src(x.Span()), v, n))
+        return
+    }
+    r := c.rangeOf(x, 0)
+    if r.Loop < 0 or (r.Lo >= 0 and r.Last < n): return
+    bad := r.Last if r.Last >= n else r.Lo
+    c.rangeIdx.Push(rangeIndex(r.Loop, sp, x.Span(), c.src(x.Span()), bad, n))
+}
+
+# the values x takes where it is a range variable known here, plus or minus a value known while compiling
+fn (c mut Checker&) rangeOf(x ast.Expr&, depth I64) knownRange {
+    none := knownRange(0, -1, -1)
+    if depth > 4: return none
+    match x {
+        case ast.Expr.Paren(_, y): return c.rangeOf(y, depth + 1)
+        case ast.Expr.Name(_, nm) {
+            id := c.localNamed(nm)
+            if id < 0: return none
+            return try c.rangeKnown.Get(pair.Pair(c.fr().Body, id)) catch default none
+        }
+        case ast.Expr.Binary(_, op, a, b) if op == token.Tok.Plus or op == token.Tok.Minus {
+            r := c.rangeOf(a, depth + 1)
+            kb := c.knownInt(b)
+            if r.Loop >= 0 and kb >= types.TypeId(0) {
+                d := c.P.T.ConstValue(kb) if op == token.Tok.Plus else -c.P.T.ConstValue(kb)
+                return knownRange(r.Lo + d, r.Last + d, r.Loop)
+            }
+            if op == token.Tok.Minus: return none
+            ka := c.knownInt(a)
+            r = c.rangeOf(b, depth + 1)
+            if r.Loop < 0 or ka < types.TypeId(0): return none
+            return knownRange(r.Lo + c.P.T.ConstValue(ka), r.Last + c.P.T.ConstValue(ka), r.Loop)
+        }
+        case _: return none
+    }
+}
+
+# E16h, as a for-in over a known range closes: each index by its variable outside its array is an error where every
+# turn reaches it - written at the body's top level, under no condition, in a body that cuts no turn short and never
+# assigns the variable
+fn (c mut Checker&) rangeDecide(loop I64, b typed.Block&, f ast.ForIn&) {
+    if c.rangeIdx.Len() == 0: return
+    keep Vec<rangeIndex>
+    whole := not typed.CutsShort(b) and not assignsName(f.Body, Array<source.NameId>(1, f.Name))
+    for r in c.rangeIdx {
+        if r.Loop != loop {
+            keep.Push(r)
+            continue
+        }
+        if whole and typed.EveryTurn(b, r.Sp): c.err(r.At, msgs.IndexReaches(r.Text, r.Value, r.Len))
+    }
+    c.rangeIdx = keep
+}
+
+# E16h: an integer division or shift r, as checked, by an operand b known while compiling - zero, or outside the
+# shifted type's width - an error where it is written (a literal one is E6a's and E8a's)
+fn (c mut Checker&) provenOperand(r typed.Expr&, b ast.Expr&) {
+    match r {
+        case typed.Expr.Prim(_, ty, op, _, _) {
+            if not c.isInt(ty) or c.fold(b).Ok: return
+            shift := op == typed.PrimOp.Shl or op == typed.PrimOp.Shr
+            if not shift and op != typed.PrimOp.Div and op != typed.PrimOp.Rem: return
+            c.provenAmount(token.Tok.Shl if shift else token.Tok.Slash, ty, b)
+        }
+        case _ { }
+    }
+}
+
+# whether op's operand b, beside a value of integer type t, is known while compiling to be undefined there - said
+fn (c mut Checker&) provenAmount(op token.Tok, t types.TypeId, b ast.Expr&) Bool {
+    shift := op == token.Tok.Shl or op == token.Tok.Shr
+    if not shift and op != token.Tok.Slash and op != token.Tok.Percent: return false
+    k := c.knownInt(b)
+    if k < types.TypeId(0): return false
+    v := c.P.T.ConstValue(k)
+    if not shift {
+        if v != 0: return false
+        c.err(b.Span(), msgs.DivisorProven(c.src(b.Span())))
+        return true
+    }
+    w := c.P.T.Bits(c.under(t))
+    if v >= 0 and v < w: return false
+    c.err(b.Span(), msgs.ShiftProven(c.ty(t), c.src(b.Span()), v, w))
+    return true
 }
 
 # whether two expressions read the same name, or the same chain of fields, written twice (E16a's lo and lo + k)
@@ -16505,6 +16645,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Lvalue&, items Array<ast.E
         v := c.fold(items[0])
         n := c.P.T.ConstValue(lt)
         if v.Ok and not v.IsFloat and not v.Big and (v.I < 0 or v.I >= n) { c.err(items[0].Span(), msgs.IndexOutOfRange(v.I, n)) }
+        if not v.Ok: c.provenIndex(items[0], n, sp)
     }
     # E16g: an index the program wrote is checked in a checked build
     return typed.Lvalue.Elem(sp, c.P.T.Elem(at), typed.Elem(base, i, typed.Check.Debug if chk == typed.Check.None else chk))
@@ -19871,6 +20012,12 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     else: v = c.value(c.expr(value, t), value.Span())
     vt := typeOf(v)
     if (bop == token.Tok.Shl or bop == token.Tok.Shr) and not c.shiftInRange(t, v!, value.Span()) { return }
+    if not lv.Ok and c.isInt(t) and c.provenAmount(bop, t, value): return
+    # E6a: "x /= 0" as "x / 0" is
+    if lv.Ok and not lv.IsFloat and not lv.Big and lv.I == 0 and (bop == token.Tok.Slash or bop == token.Tok.Percent) and c.isInt(t) {
+        c.err(value.Span(), msgs.DivideByZero())
+        return
+    }
     if bop != token.Tok.Shl and bop != token.Tok.Shr and vt != t and vt != types.UnknownT {
         # T6b: a number flows toward its base - a declared one into its base and on (sc U64 += a Code over U16)
         if c.isNumber(vt) and c.P.Flows(vt, t): v = c.convert(value.Span(), v!, t)
@@ -22153,6 +22300,7 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
             if st0 > 0 { c.comprKnown = (hi0 - lo0 + st0 - 1) / st0 if hi0 > lo0 else 0 }
         }
     }
+    c.rangeNow = c.knownBounds(rargs)
     c.counted(sp, f, k, n, -1, types.UnknownT, lo, st, cm, ce)
     return c.readLocal(sp, n)
 }
@@ -22203,10 +22351,13 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
     }
     c.roLet(x, e!) # T25c: an element of a collection reached read-only is a read-only copy
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), e!))
+    if c.rangeNow.Loop == 0 and coll < 0: c.rangeKnown.Put(pair.Pair(c.fr().Body, x), knownRange(c.rangeNow.Lo, c.rangeNow.Last, id))
+    c.rangeNow = knownRange(0, -1, -1)
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
+    c.rangeDecide(id, b, f)
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
     next := c.prim(sp, kt, typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, kt, 1))
@@ -26709,7 +26860,11 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
     }
     inst := c.factInst(x, f)
     if inst < 0 {
-        c.err(nsp, msgs.FactOfGeneric(c.text(c.P.FnDecl(f).Name), name))
+        fname := c.text(c.P.FnDecl(f).Name)
+        form := $fname + "<T>." + $name
+        o := c.factOwner(x, f)
+        if o != "": form = $o + "<T>." + $fname + "." + $name
+        c.err(nsp, msgs.FactOfGeneric(fname, form))
         return c.unknown(sp)
     }
     c.fnBody(inst)    # checked in this attempt, so its facts are found once it ends
@@ -26778,6 +26933,8 @@ fn (c mut Checker&) factFn(x ast.Expr&) I64 {
     if f >= 0 { return f }
     f = c.builderNamed(x)
     if f >= 0 { return f }
+    f = c.methodNamed(x)
+    if f >= 0: return f
     dt := c.descTypeOf(x)
     if dt < types.TypeId(0) or dt == types.UnknownT { return -1 }
     ds := c.P.DescOf(dt)
@@ -26790,6 +26947,8 @@ fn (c mut Checker&) factInst(x ast.Expr&, f I64) I64 {
     owner := generic.FnOwner(f)
     if c.P.VarCount(owner) == 0 { return c.P.FnInstance(f, types.ListId(0)) }
     if c.P.FnDecl(f).IsBuilder() { return c.builderFactInst(x, f) }
+    mi := c.methodFactInst(x, f)
+    if mi != -2: return mi
     match x {
         case ast.Expr.Generic(sp, _, targs) {
             given := c.explicitArgs(f, targs, sp)
@@ -26808,6 +26967,45 @@ fn (c mut Checker&) factInst(x ast.Expr&, f I64) I64 {
     recv := c.deref(ps[0])
     if not c.isNamed(recv) or c.P.T.Items(c.P.T.Args(recv)).Len() != c.P.VarCount(owner) { return -1 }
     return c.P.FnInstance(f, c.P.T.Args(recv))
+}
+
+# G42: the method "Owner.n" names through its type, for its facts ("Point.Move", "Box<I64>.Fill"); -1 where x is no
+# such name
+fn (c mut Checker&) methodNamed(x ast.Expr&) I64 {
+    match x {
+        case ast.Expr.Member(_, y, n) {
+            o := c.ownerOf(y)
+            if o.T == types.UnknownT: return -1
+            m := c.P.MethodOf(o.T, n)
+            if m < 0 or c.P.FnDecl(m).Recv == null: return -1
+            return m
+        }
+        case _: return -1
+    }
+}
+
+# G42: the owner a method named through its generic type is written with, "" for none
+fn (c mut Checker&) factOwner(x ast.Expr&, f I64) String {
+    if c.methodNamed(x) != f: return ""
+    match x {
+        case ast.Expr.Member(_, y, _): return c.src(y.Span())
+        case _: return ""
+    }
+}
+
+# G42: the instance of method f "Owner<A>.n" names - its receiver's variables bound by the owner's arguments; -1 for an
+# owner named bare or a method with variables of its own; -2 where x names no method through its type
+fn (c mut Checker&) methodFactInst(x ast.Expr&, f I64) I64 {
+    if c.P.FnDecl(f).Recv == null or c.methodNamed(x) != f: return -2
+    o := ownerAt(types.UnknownT, false)
+    match x {
+        case ast.Expr.Member(_, y, _): o = c.ownerOf(y)
+        case _: return -2
+    }
+    if o.Bare: return -1
+    args := c.P.T.Args(c.deref(o.T))
+    if c.P.T.Items(args).Len() != c.P.VarCount(generic.FnOwner(f)): return -1
+    return c.P.FnInstance(f, args)
 }
 
 # D19: the builder "Owner.n" names, for its facts (G42); -1 where x is no such name

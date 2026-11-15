@@ -1,0 +1,13 @@
+# check: fail error[E16h]: 'None' is zero, so this division is undefined
+# also: help: divide by a value that is not zero, or test it first
+# E16h: an integer divisor known to be zero while compiling - an immutable global's - is an error where it is written,
+# in a compound assignment too
+None I64 = 0
+
+fn mean(total I64) I64 {
+    m := total
+    m %= None
+    return total / None + m
+}
+
+fn main() { }

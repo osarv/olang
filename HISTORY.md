@@ -37991,3 +37991,53 @@ But lowering copies a view call's value into a local unless it can make the loca
 a local written, assigned, stored, or lent writably to a body changing its parts never is. Early freeing now asks the
 same: such a local's origins are the copy's (`unowned`), the lowering's `Preserves` given to it by the driver for the
 lends. 24.5 MB to 1.9 MB at 20,000 turns (checks' freeing mapcopy).
+
+## 2026-11-15: G42's precision, and E16h - what is proven undefined while compiling (wt-facts2)
+
+**Function facts too coarse for oann's pins** (oann repro/allocfacts.olang, methodfacts.olang, found pinning
+ad/graph's Forward and Backward allocation-free). Three things read `Allocates` true, or refused to read it:
+
+1. A local fixed array, `acc := Array<F32>(8)`. The checker gives every `Array<T>(n)` a site (`typed.Make.Site`), and
+   effects counted any Make with a site as allocating, though lowering lays a fixed-length fill or literal held by
+   value out in place (an aggregate, no runtime call). `effects.inPlace` now says so: a Fill or Array Make of a type
+   whose length is a constant, not a reference, and - for a fill - not of elements owning storage (QCE's own copies,
+   which are made where it is). G42's table already said "a fixed array in place does not count"; the code now agrees.
+2. An error carrying text (`error Bad.Mismatch("negative " + $x)`), an `unreachable "lost $n"`, an assert's message.
+   These allocate only on a way that fails. **Decided (mine, the brief asking "decide whether the fact should exclude
+   cold, failing paths"): it should.** The guarantee `assert not step.Allocates` is asked for is about the work a call
+   does when it comes back with a result; a failing way leaves the work, as the error or the ending does, and the text
+   is the failure's report. So G42's `Allocates` counts the ways that run on. Cold code is a block every way through
+   which ends in an error raised or an ending (`typed.Fails`: its last statement raises, re-raises, exits or calls a
+   noreturn function, or is a block or an `if` whose branches all do, and nothing before it returns, jumps or yields -
+   a walk of `leaveWalk` in a new `normal` mode, where an error passed on is no way out), and the message of an
+   `unreachable` or `assert`. What cold code allocates goes to a new `Facts.FailAllocates`, and the calls made there
+   are recorded per body (`Effects.colds`), so settling merges a cold callee's allocation as `FailAllocates`
+   (`MergeCold`). Every other fact counts cold code as before. The consequence, stated in G42: a caller that catches the
+   error and goes on may still have had the callee allocate. The build's own use stays sound: lowering decides a task's
+   scopes (P2, O8f's joinleak fix) by `Fact.Allocates`, which still counts every way; G42's reading, `explain`'s
+   effects and T21c's `noalloc` use the new `Fact.Running`. A `noalloc` function type's bound now says
+   `FailAllocates` (its functions may build on a failing way). `explain` prints `allocates only where it fails`.
+3. `Box<I64>.Fill.Allocates`, a method named through a generic type's instance, failed at build ("it does not check a
+   generic name as a value yet"): `factFn` found functions, builders and descriptors, not methods named through a
+   type, so the member fell through to an expression check of `Box<I64>`. `methodNamed`/`methodFactInst` find the
+   method (`Program.MethodOf`) and its instance from the owner's type arguments - `Point.Move.Allocates` for a plain
+   type works the same way; a generic owner written bare is G42's FactOfGeneric, whose help now names the method's
+   form (`Box<T>.Fill.Allocates`). Corpus: tests/factsfailing.olang; checks: g42methodgeneric.
+
+**E16h (the user's yes, 2026-11-15: compile-time range and constant analysis).** E16 (a constant index out of a
+known length), E6a (a literal zero divisor) and E8a (a literal shift past the width) checked literals only (`fold`).
+E16h widens them to every integer known while compiling as T7c's lengths are (`knownInt`, the program's `FoldKnown`:
+immutable globals and build constants that fold, `comptime for` variables, by-value array lengths), and adds the one
+range analysis that is proof rather than guess: an index by a `for i in range` variable whose bounds are known, plus or
+minus a known value. That index is outside on some turn, but the turn may never reach it - under an `if`, after a
+`break` - so it is an error only where every turn reaches it: it is written at the body's top level or in a block of
+it, in what every evaluation of the statement evaluates (`typed.EveryTurn`, which never enters a condition, arm,
+clause, nested loop or lambda), the body holds no way to cut a turn short (`typed.CutsShort`: `leaveWalk` in an `ends`
+mode over the body but its guard - a break or continue of the loop, a return, an error passed on, a yield, an assert,
+an unreachable, a `!`, a noreturn call) and never assigns the variable (`assignsName`). Candidates are recorded at the
+index (`provenIndex`, `rangeOf`) and decided as the loop closes (`rangeDecide`). Divisors and shift amounts are judged
+on the checked Prim after `binary` (`provenOperand`) and in a compound assignment (`provenAmount`); a literal one stays
+E6a's or E8a's. Found on the way: `x /= 0` with a literal zero was not an error (E6a says "wherever it is written");
+it is now. No run-time check is added anywhere, and nothing not proven changes. Corpus: tests/proven.olang (each legal
+shape, baked as globals and decided by asserts while compiling, beside the run); checks: e16hknownindex,
+e16hrangeindex, e16hdivisor, e16hshift, e6acompound.

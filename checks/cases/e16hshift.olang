@@ -1,0 +1,10 @@
+# check: fail error[E16h]: shifting I32 by 'Bits', which is 32, is outside its width of 32 bits
+# also: help: shift by 0 to 31, or convert the value to a wider type first
+# never: 'Half'
+# E16h: a shift amount known while compiling outside the shifted type's width is an error where it is written
+Bits I64 = 32
+Half I64 = 16
+
+fn mask(x I32) I32 { return (x << Half) | (x >> Bits) }
+
+fn main() { }
