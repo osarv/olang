@@ -10234,12 +10234,39 @@ type rangeIndex struct(Loop I64, Sp source.Span, At source.Span, Text String, Va
     Len
 }
 
+# E16h: an integer x is known to be while compiling, the same in every instance of the body it is in - a literal-only
+# expression, an immutable global's value, a comptime for's variable - as a Const; -1 for none. A by-value array's
+# length (G29) is not one: an instance of one length is often guarded by what the others need
+fn (c mut Checker&) provenInt(x ast.Expr&) types.TypeId {
+    if c.readsLength(x, 0): return types.TypeId(-1)
+    return c.knownInt(x)
+}
+
+# whether a constant expression reads a by-value array's length (G29's x.Len())
+fn (c mut Checker&) readsLength(x ast.Expr&, depth I64) Bool {
+    if depth > 16: return true
+    return match x {
+        case ast.Expr.Call(_, f, args): c.P.LenKey(f, args) != "" or c.anyReadsLength(args, depth)
+        case ast.Expr.Paren(_, y), ast.Expr.Unary(_, _, y): c.readsLength(y, depth + 1)
+        case ast.Expr.Binary(_, _, a, b): c.readsLength(a, depth + 1) or c.readsLength(b, depth + 1)
+        case ast.Expr.Cond(_, a, k, b): c.readsLength(a, depth + 1) or c.readsLength(k, depth + 1) or c.readsLength(b, depth + 1)
+        case _: false
+    }
+}
+
+fn (c mut Checker&) anyReadsLength(xs Array<ast.Expr&>&, depth I64) Bool {
+    for y in xs {
+        if c.readsLength(y, depth + 1): return true
+    }
+    return false
+}
+
 # the range of "range [start,] end [, step]" where every bound is known while compiling and the step is positive
 fn (c mut Checker&) knownBounds(rargs Array<ast.Expr&>&) knownRange {
     none := knownRange(0, -1, -1)
     known := Array<I64>(rargs.Len(), 0)
     for i in range rargs.Len() {
-        kv := c.knownInt(rargs[i])
+        kv := c.provenInt(rargs[i])
         if kv < types.TypeId(0): return none
         known[i] = c.P.T.ConstValue(kv)
     }
@@ -10253,7 +10280,7 @@ fn (c mut Checker&) knownBounds(rargs Array<ast.Expr&>&) knownRange {
 # an index known while compiling, or a range variable's (plus or minus what is known), outside an array of n
 # elements: an error where it is known (E16h), a candidate decided as the loop closes where it is a range's
 fn (c mut Checker&) provenIndex(x ast.Expr&, n I64, sp source.Span) {
-    k := c.knownInt(x)
+    k := c.provenInt(x)
     if k >= types.TypeId(0) {
         v := c.P.T.ConstValue(k)
         if v < 0 or v >= n: c.err(x.Span(), msgs.IndexProven(c.src(x.Span()), v, n))
@@ -10278,13 +10305,13 @@ fn (c mut Checker&) rangeOf(x ast.Expr&, depth I64) knownRange {
         }
         case ast.Expr.Binary(_, op, a, b) if op == token.Tok.Plus or op == token.Tok.Minus {
             r := c.rangeOf(a, depth + 1)
-            kb := c.knownInt(b)
+            kb := c.provenInt(b)
             if r.Loop >= 0 and kb >= types.TypeId(0) {
                 d := c.P.T.ConstValue(kb) if op == token.Tok.Plus else -c.P.T.ConstValue(kb)
                 return knownRange(r.Lo + d, r.Last + d, r.Loop)
             }
             if op == token.Tok.Minus: return none
-            ka := c.knownInt(a)
+            ka := c.provenInt(a)
             r = c.rangeOf(b, depth + 1)
             if r.Loop < 0 or ka < types.TypeId(0): return none
             return knownRange(r.Lo + c.P.T.ConstValue(ka), r.Last + c.P.T.ConstValue(ka), r.Loop)
@@ -10328,7 +10355,7 @@ fn (c mut Checker&) provenOperand(r typed.Expr&, b ast.Expr&) {
 fn (c mut Checker&) provenAmount(op token.Tok, t types.TypeId, b ast.Expr&) Bool {
     shift := op == token.Tok.Shl or op == token.Tok.Shr
     if not shift and op != token.Tok.Slash and op != token.Tok.Percent: return false
-    k := c.knownInt(b)
+    k := c.provenInt(b)
     if k < types.TypeId(0): return false
     v := c.P.T.ConstValue(k)
     if not shift {

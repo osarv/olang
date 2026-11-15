@@ -300,7 +300,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   build (docs/checks-measure.md): bench/ 4% slower on average, sorts 40-60%, and the checks moved out of loops did not pay.
 - **Proven undefined while compiling is an error (E16h, the user's yes 2026-11-15; built 2026-11-15).** E16's, E6a's
   and E8a's literal checks widened to every integer known while compiling as T7c's lengths are (literal-only
-  expressions, immutable globals and build constants that fold, `comptime for` variables, by-value array lengths): a
+  expressions, immutable globals and build constants that fold, `comptime for` variables - not a by-value array's
+  length, which differs per instance and is often guarded): a
   known index outside a known length, a known zero divisor (`/`, `%`, `/=`, `%=`), a known shift amount outside the
   width. And an index by a `for i in range` variable with known bounds (`i`, `i + k`, `k + i`, `i - k`) that some turn
   puts outside, where every turn reaches it (the body's top level, no condition; no break, continue, return, error,

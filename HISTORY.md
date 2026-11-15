@@ -38027,7 +38027,7 @@ ad/graph's Forward and Backward allocation-free). Three things read `Allocates` 
 **E16h (the user's yes, 2026-11-15: compile-time range and constant analysis).** E16 (a constant index out of a
 known length), E6a (a literal zero divisor) and E8a (a literal shift past the width) checked literals only (`fold`).
 E16h widens them to every integer known while compiling as T7c's lengths are (`knownInt`, the program's `FoldKnown`:
-immutable globals and build constants that fold, `comptime for` variables, by-value array lengths), and adds the one
+immutable globals and build constants that fold, `comptime for` variables), and adds the one
 range analysis that is proof rather than guess: an index by a `for i in range` variable whose bounds are known, plus or
 minus a known value. That index is outside on some turn, but the turn may never reach it - under an `if`, after a
 `break` - so it is an error only where every turn reaches it: it is written at the body's top level or in a block of
@@ -38038,6 +38038,8 @@ an unreachable, a `!`, a noreturn call) and never assigns the variable (`assigns
 index (`provenIndex`, `rangeOf`) and decided as the loop closes (`rangeDecide`). Divisors and shift amounts are judged
 on the checked Prim after `binary` (`provenOperand`) and in a compound assignment (`provenAmount`); a literal one stays
 E6a's or E8a's. Found on the way: `x /= 0` with a literal zero was not an error (E6a says "wherever it is written");
-it is now. No run-time check is added anywhere, and nothing not proven changes. Corpus: tests/proven.olang (each legal
+it is now. A by-value array's length (G29's `xs.Len()`, which `knownInt` folds per instance) is left out (`provenInt`):
+checks' g29handedon showed why - `assert xs.Len() > 0` guards `xs[xs.Len() - 1]`, and the length-0 instance would
+have been an error for code its own assert stops first. No run-time check is added anywhere, and nothing not proven changes. Corpus: tests/proven.olang (each legal
 shape, baked as globals and decided by asserts while compiling, beside the run); checks: e16hknownindex,
 e16hrangeindex, e16hdivisor, e16hshift, e6acompound.

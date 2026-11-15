@@ -1591,6 +1591,39 @@ e16getnotry.olang:5:12: error[E15]: this call can fail - write 'try', and catch 
     5 |     x := a.Get(1)
       |            ^~~
 compilation failed with 1 error
+=== e16hdivisor.olang
+e16hdivisor.olang:9:10: error[E16h]: 'None' is zero, so this division is undefined
+    9 |     m %= None
+      |          ^~~~
+e16hdivisor.olang:9:10: note: the divisor is known while compiling
+e16hdivisor.olang:9:10: help: divide by a value that is not zero, or test it first
+e16hdivisor.olang:10:20: error[E16h]: 'None' is zero, so this division is undefined
+   10 |     return total / None + m
+      |                    ^~~~
+e16hdivisor.olang:10:20: note: the divisor is known while compiling
+e16hdivisor.olang:10:20: help: divide by a value that is not zero, or test it first
+compilation failed with 2 errors
+=== e16hknownindex.olang
+e16hknownindex.olang:11:33: error[E16h]: index 'Lanes' is 8, outside the array's 8 elements
+   11 |     return acc[Lanes - 1] + acc[Lanes]
+      |                                 ^~~~~
+e16hknownindex.olang:11:33: note: its value is known while compiling
+e16hknownindex.olang:11:33: help: index within 0 to 7, or write '.Get(i)' to have it checked where it runs
+compilation failed with 1 error
+=== e16hrangeindex.olang
+e16hrangeindex.olang:17:32: error[E16h]: index 'i + 1' reaches 8 in this loop, outside the array's 8 elements
+   17 |     for i in range 8: s += acc[i + 1]
+      |                                ^~~~~
+e16hrangeindex.olang:17:32: note: every turn of the loop reaches it, and its range is known while compiling
+e16hrangeindex.olang:17:32: help: bound the range by the array's length ('range a.Len()'), or test the index first
+compilation failed with 1 error
+=== e16hshift.olang
+e16hshift.olang:8:49: error[E16h]: shifting I32 by 'Bits', which is 32, is outside its width of 32 bits
+    8 | fn mask(x I32) I32 { return (x << Half) | (x >> Bits) }
+      |                                                 ^~~~
+e16hshift.olang:8:49: note: the amount is known while compiling
+e16hshift.olang:8:49: help: shift by 0 to 31, or convert the value to a wider type first
+compilation failed with 1 error
 === e16slicenumber.olang
 e16slicenumber.olang:4:19: error[E16]: I64 cannot be indexed
     4 | fn main() { x := $Live[:1] }
@@ -2440,6 +2473,11 @@ e5apowshape.olang:6:11: error[E31]: Pow gives one result
     6 | fn (p Pt) Pow(n U32) { }
       |           ^~~
 compilation failed with 1 error
+=== e6acompound.olang
+e6acompound.olang:5:10: error[E6a]: division by zero
+    5 |     y /= 0
+      |          ^
+compilation failed with 1 error
 === e6dnomeet.olang
 e6dnomeet.olang:6:15: error[E6d]: this literal does not fit U64, and U64 does not flow into I64 - convert one
     6 |     v U64 = u - (-1)
@@ -2841,6 +2879,12 @@ compilation failed with 1 error
 g42factvalue.olang:6:8: error[S17a]: this top-level assert is false, decided while compiling: anything it calls may allocate
     6 | assert not Apply.Allocates, "anything it calls may allocate"
       |        ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== g42methodgeneric.olang
+g42methodgeneric.olang:12:17: error[G42]: Fill is generic, and each of its instances has facts of its own
+   12 | assert Box.Fill.Allocates
+      |                 ^~~~~~~~~
+g42methodgeneric.olang:12:17: help: name one with its type arguments: 'Box<T>.Fill.Allocates'
 compilation failed with 1 error
 === g4resultonly.olang
 g4resultonly.olang:6:18: error[G4]: type variable T of mk appears in no parameter's type

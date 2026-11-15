@@ -4238,7 +4238,9 @@ build. The compile-time evaluator (K1) refuses the same operations as undefined.
 operation the program writes is undefined (E6a, E8a, E16), it is a **compile-time error** where it is written - the
 literal cases of E6a, E8a and E16 widened to the integers known while compiling as T7c's lengths are: a literal-only
 expression (E4a), an immutable global whose value folds (K2; a build constant as the build gives it, B10c), a `comptime
-for` copy's variable (K3a), a by-value array's length (G29), and arithmetic on these. It is an error where
+for` copy's variable (K3a), and arithmetic on these - the same in every instance of the body it is written in, so not
+a by-value array's length (G29), which an instance of one length is often guarded against by what the others need. It
+is an error where
 
 - **an index** `base[index]` into an array whose length is known (T7c) is known, and outside `[0, base.Len())`
   (`acc[Size]` with `acc := Array<F32>(Size)`);
