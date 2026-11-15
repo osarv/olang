@@ -37503,3 +37503,33 @@ The user, on `io.PutLine(x)` refusing an I64 that `Print(x)` takes: "they should
 then "any printable type really". `io.Put`, `PutLine`, `PutErr` and `PutErrLine` are generic over the value, written as
 `$` renders it (a String as its text), as the prelude's `Print`/`Println` are; still `? io.Error`. Every existing caller
 passed a String and writes the same bytes. M19f in SPEC, std/io.olang's test "writes any value as $ renders it".
+
+## Field paths narrow (S8d, S8e, T20, 2026-11-15)
+The user, on the compiler's own `if recv != null and recv.Ty != null { p.receiverVars(recv.Ty!, false) }`: "yes this is
+normal narrowing rules". Until now only locals and parameters narrowed - a field "may change under a call" - so every
+tested field was read again through `!` or copied into a local first. The rule now: a **field path** - a local or a
+parameter followed by field reads, `x.f`, `x.f.g` (no call, index or slice in it) - narrows exactly as a local does, by
+the one narrowing walk: a null test, a case test (its payload fields copied where the narrowing begins, `x.f.r` read off
+the copy, a payload written whole read as `x.f`), an error-value test (`x.e == ReadError.Bad`, then `x.e.line`), through
+`and`/`or`/`not`, conditionals, asserts, leaving `if`s and loops on the test, and a store of a value never null
+(`x.f = Node(1)`). It ends where a local's would - a statement assigning the path or a path it starts with (`x = y`,
+`x.f = y` end `x.f.g`; `x.f.g.v = 3` does not) - and besides at **any call** after the test: a function, a method, an
+operator's method, a constructor, a function value, a spawned call, and a `yield`, since what is called may write the
+field through another reference (whether the path is read writably or read-only makes no difference). A call's arguments
+are evaluated before it, so `use(r.Ty)` right after the test reads it narrowed.
+
+Decided (mine) on the way, as the rule's consequences: a call later in the same condition (`x.f != null and ready(x)`)
+leaves nothing said of `x.f` past it - the checker keeps, per frame, the count of calls checked when each field-path
+test, `and` and `or` was, and a test's narrowing is made only where no call came after it in its condition; a call in an
+`if`'s block is none in its `else` (what it ended holds again there, and is ended after the `if`); a loop is judged as
+a whole - a field path narrowed before a loop whose condition, body or post clause calls is not known inside it, a read
+there being a new error (S8d, "narrowed by a test before the loop around this read"), since the loop's calls come before
+its next turn; a loop's own condition still narrows its body, and its post clause only where the body calls nothing;
+deferred code is checked under no field path's narrowing; a weak field (T2d) never narrows - its referent is let go
+with no call or store to it; `x.f!` reads the path at its declared type and unwraps it, so the compiler's many `!`s stay
+valid (a later cleanup may drop them). The messages say why a narrowing that held no longer does: T2c's "may be null",
+S8d's "is an enum" and T19b's "has no field" get a `note:` naming the assignment or the call since the test.
+Implementation: `nullNarrow`, `narrowed` and `errNarrow` are keyed by path; `calledNow` (called where every call is
+built: `callOf` but for helpers, `callOfBody`, `callBody`, and at a `yield`) ends the field paths' narrowings; the
+checks case `t2cfieldnarrow` now has a call between its test and its read. The evaluator reads the typed program the
+checker makes and needed nothing (tests/fieldnarrow.olang bakes a global from it and decides a top-level assert).
