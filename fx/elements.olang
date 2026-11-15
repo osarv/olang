@@ -1,0 +1,12 @@
+import "std/io"
+
+N I64 = 3200000
+
+fn main() {
+    names := Array<String>(10)
+    for i in range N { names[i % 10] = "name " + $i }
+    v Vec<String>
+    for _ in range 10: v.Push("")
+    for i in range N { v[i % 10] = "value " + $i }
+    io.PutLine($names[3] + " " + $v[3])!
+}

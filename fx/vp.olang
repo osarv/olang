@@ -1,0 +1,12 @@
+type team struct(title String) {
+    title
+    members Vec<String> = Vec<String>()
+    tags Array<String> = Array<String>["a", "bc"]
+}
+
+fn main() {
+    tm := team($"t")
+    tm.members.Push($"m1")
+    tm.tags[0] = $"z"
+    assert tm.members.Len() == 1 and tm.members[0] == "m1" and tm.title == "t" and tm.tags[0] == "z"
+}

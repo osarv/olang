@@ -1,0 +1,12 @@
+import "std/io"
+
+N I64 = 20000
+
+fn main() {
+    s String
+    for i in range N { s = s + $i }
+    t String
+    if N > 3 { t = "a" } else { t = "b" }
+    for i in range N { t = t + $i }
+    io.PutLine($s.Len() + " " + $t.Len())!
+}

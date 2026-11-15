@@ -1,0 +1,10 @@
+import "std/io"
+type team struct(title String) {
+    title
+    tags Array<String> = Array<String>["a", "bc"]
+}
+fn main() {
+    tm := team($"t")
+    tm.tags[0] = $"z"
+    io.PutLine(tm.tags[0])!
+}

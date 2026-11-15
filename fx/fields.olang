@@ -1,0 +1,33 @@
+import "std/io"
+
+N I64 = 20000
+
+type Doc struct(text String) { text }
+
+type Model struct(n I64) {
+    w Vec<F64> = fill(n)
+}
+
+fn fill(n I64) Vec<F64> {
+    out Vec<F64>
+    for _ in range n: out.Push(0.0)
+    return out
+}
+
+fn step(w Vec<F64>&) Vec<F64> {
+    out Vec<F64>
+    for x in w { out.Push(x + 1.0) }
+    return out
+}
+
+fn grow(d mut Doc&, i I64) { d.text = d.text + $i }
+
+fn main() {
+    d := Doc("")
+    for i in range N { d.text = d.text + $i }
+    e := Doc("")
+    for i in range N { grow(e, i) }
+    m := Model(100)
+    for _ in range N { m.w = step(m.w) }
+    io.PutLine($d.text.Len() + " " + $e.text.Len() + " " + $m.w[0])!
+}

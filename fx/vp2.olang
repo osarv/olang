@@ -1,0 +1,6 @@
+import "std/io"
+fn main() {
+    tags := Array<String>["a", "bc"]
+    tags[0] = $"z"
+    io.PutLine(tags[0])!
+}

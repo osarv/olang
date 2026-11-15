@@ -1,0 +1,15 @@
+import "std/io"
+
+N I64 = 4000000
+
+fn fill(n I64) I64 {
+    v Vec<I64>
+    for i in range n: v.Push(i)
+    return v[n - 1]
+}
+
+fn main() {
+    t := 0
+    for k in range 3 { t += fill(N + k) }
+    io.PutLine($t)!
+}

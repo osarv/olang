@@ -1,0 +1,6 @@
+gaps.olang:6:27: memory: 'rows[i % 10]' lets go of what the element held - kept until its scope closes: a let-go early freeing does not follow (O8f)
+memory: 1 let-go early freeing does not follow (above, O8f)
+memory: no place lets go of storage in code that runs again
+olang: error[B18]: 1 let-go early freeing does not follow (O8f) - the report above names each
+olang: help: keep what is let go of in a place early freeing follows: a local, a field, a global
+compilation failed with 1 error

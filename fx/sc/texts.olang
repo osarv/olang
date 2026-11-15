@@ -1,0 +1,30 @@
+import "std/io"
+import "std/os"
+
+# O8f, O8b (docs/freeing.md gap 14): the text tasks build into a loop turn's locals is reused, turn after turn, by the
+# workers that build it - the joiner shares its pool beyond a batch at each join (160 MB peak here before: the joiner's
+# pool grew while the workers asked the system for more). Flat is a peak under 60 MB
+N I64 = 20000
+
+fn mk(i I64) String { return "value " + $i + " padded out to some length ........................................" }
+
+fn peak() I64 {
+    for line in (try os.ReadFile("/proc/self/status") catch default "").Lines() {
+        if line.StartsWith("VmHWM:"): return try line[6:].Trim().Split(" ")[0].ParseInt(10) catch default -1
+    }
+    return -1
+}
+
+fn main() {
+    t := 0
+    for i in range N {
+        a String
+        b String
+        join {
+            spawn a = mk(i)
+            spawn b = mk(i + 1)
+        }
+        t += a.Len() + b.Len()
+    }
+    io.PutLine($("flat" if peak() < 60000 else "peak " + $peak() + " KB") + " " + $t)!
+}

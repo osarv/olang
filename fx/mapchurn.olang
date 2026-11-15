@@ -1,0 +1,20 @@
+import "std/io"
+
+N I64 = 400000
+
+fn mk(i I64) Vec<I64> {
+    v := Vec<I64>()
+    for j in range 10 { v.Push(i + j) }
+    return v
+}
+
+fn main() {
+    m := Map<String, Vec<I64>>()
+    s := Map<String, String>()
+    for i in range N {
+        m.Put("key number " + $i + " padded out to some length ......", mk(i))
+        if i > 0 { m.Remove("key number " + $(i - 1) + " padded out to some length ......") }
+        s.Put("k" + $(i % 10), "value " + $i + " padded out to some length .........................")
+    }
+    io.PutLine($m.Len() + " " + $s.Len() + " " + s.Get("k3")!)!
+}

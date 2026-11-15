@@ -1,0 +1,9 @@
+import "std/io"
+
+N I64 = 320000
+
+fn main() {
+    m Map<String, String>
+    for i in range N { m.Put("k" + $(i % 10), "value " + $i) }
+    io.PutLine(m.Get("k3")!)!
+}

@@ -1,0 +1,33 @@
+import "std/io"
+
+N I64 = 20000
+
+type Model struct(w Vec<F64>) { w }
+
+type Net struct(name String, m Model) {
+    name
+    m
+}
+
+fn fill(n I64) Vec<F64> {
+    out Vec<F64>
+    for _ in range n: out.Push(0.0)
+    return out
+}
+
+fn step(w Vec<F64>&) Vec<F64> {
+    out Vec<F64>
+    for x in w { out.Push(x + 1.0) }
+    return out
+}
+
+fn main() {
+    m := Model(fill(100))
+    for _ in range N { m.w = step(m.w) }
+    v := fill(100)
+    m2 := Model(v)
+    for _ in range N { m2.w = step(m2.w) }
+    n := Net("a", Model(fill(10)))
+    for _ in range N { n.m.w = step(n.m.w) }
+    io.PutLine($m.w[0] + " " + $m2.w[0] + " " + $n.m.w[0])!
+}

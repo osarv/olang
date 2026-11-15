@@ -1,0 +1,17 @@
+import "std/io"
+
+N I64 = 4000000
+fn mk(i I64) Vec<I64> {
+    v Vec<I64>
+    for j in range 10: v.Push(i + j)
+    return v
+}
+fn main() {
+    a := mk(0)
+    for i in range 100 { a = mk(i) }
+    v Vec<I64>
+    for i in range N: v.Push(i)
+    u Vec<I64>
+    for i in range N / 2: u.Push(i)
+    io.PutLine($v.Len() + " " + $u.Len() + " " + $a[0])!
+}

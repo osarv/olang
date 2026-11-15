@@ -1,0 +1,6 @@
+import "std/io"
+fn main() {
+    m Vec<String>
+    m.Push($"m1")
+    io.PutLine(m[0])!
+}

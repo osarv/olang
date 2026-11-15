@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8f (docs/freeing.md gaps 1-3): text built by reassignment frees what each value let go of - a local in main, one in
+# a function through '+=', a call's new text each turn (the AI study's x01: 850 MB at 20,000 turns before)
+N I64 = 20000
+
+fn built(n I64) I64 {
+    s := ""
+    for i in range n { s += $i }
+    return s.Len()
+}
+
+fn mk(i I64) String { return "value " + $i + " padded out to some length ......................................" }
+
+fn main() {
+    s := ""
+    for i in range N { s = s + $i }
+    x := mk(0)
+    t := 0
+    for i in range N * 10 {
+        x = mk(i)
+        t += x.Len()
+    }
+    io.PutLine($s.Len() + " " + $built(N) + " " + $t)!
+}

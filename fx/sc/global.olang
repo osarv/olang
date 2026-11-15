@@ -1,0 +1,14 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 5): a mutable global given new text in a function frees what it held (2.2 GB at 32,000
+# calls before)
+N I64 = 20000
+
+Log mut String = ""
+
+fn add(i I64) { Log = Log + $i }
+
+fn main() {
+    for i in range N { add(i) }
+    io.PutLine($Log.Len())!
+}
