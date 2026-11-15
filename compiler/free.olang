@@ -2014,9 +2014,11 @@ fn (f mut Free&) globalCand(p typed.Lvalue&) {
             }
             ow := f.ownerCand(ty)
             hd := not ow and f.handleCand(ty)
-            if not ow and not hd and not f.refCand(ty): return
+            ar := not ow and not hd and f.arrayCand(ty)
+            if not ow and not hd and not ar and not f.refCand(ty): return
             k := f.newPlace(ty, -4, hd, ty, false)
             f.owner[k] = ow
+            f.arr[k] = ar
             f.glModule[k] = m
             f.glName[k] = I64(n)
             f.globalOf.Put(key, k)
@@ -4274,7 +4276,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     site := -1
     why := ""
     # (constant text an immut array local is given: held as it is, ConstLocal)
-    if f.isOwnLocal(k) and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(x) {
+    if f.isNamed(k) and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(x) {
         f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
         return
     }
