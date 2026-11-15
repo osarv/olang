@@ -37503,3 +37503,5 @@ The user, on `io.PutLine(x)` refusing an I64 that `Print(x)` takes: "they should
 then "any printable type really". `io.Put`, `PutLine`, `PutErr` and `PutErrLine` are generic over the value, written as
 `$` renders it (a String as its text), as the prelude's `Print`/`Println` are; still `? io.Error`. Every existing caller
 passed a String and writes the same bytes. M19f in SPEC, std/io.olang's test "writes any value as $ renders it".
+
+The language server sends the diagnostics of D3b (a local never read) and M5a (an import never used) with severity 2, a warning, as `olang FILE` reports them, and every other rule with severity 1 (B15, 2026-11-15, the user: "show unused as W in the editor"). The rule is the diagnostic's `code`; `severityOf` in compiler/lsp.olang asks diag.Untidy, so the two lists cannot drift. The MCP server is unchanged.
