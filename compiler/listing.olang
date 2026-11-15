@@ -11,6 +11,7 @@
 # under their lines.
 import "std/os"
 import "std/io"
+import "spin"
 import "build"
 import "diag"
 import "load"
@@ -31,7 +32,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, name Stri
     return 0
 }
 
-fn say(text String&) { try io.Put(text) catch io.Error { } }
+fn say(text String&) { spin.Say(io.Stdout, text) }
 
 # what a listing says of how its code was made
 fn how(c build.Config&, ir Bool) String {

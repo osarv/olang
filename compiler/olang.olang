@@ -678,7 +678,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.DecideGen()
     lw.Free = fr
     build.Phase("scope")
-    if cfg.Memory and d.Errors() == 0 { try io.Put($fr.Report() $weakRows(c) $fr.Sc.PlacedReport()) catch io.Error { } }
+    if cfg.Memory and d.Errors() == 0: spin.Say(io.Stdout, $fr.Report() $weakRows(c) $fr.Sc.PlacedReport())
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PutErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
@@ -1345,7 +1345,7 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     if cfg.Clang == "" { return "" }
     out := try os.Output.Exec(...args.ToArray(), input = text) catch os.Error { return "" }
     if out.Status != 0 {
-        try io.PutErr(out.Stderr) catch io.Error { }
+        spin.Say(io.Stderr, out.Stderr)
         return ""
     }
     ir := retarget(out.Stdout, cfg.Target.Attrs)

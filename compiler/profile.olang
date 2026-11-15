@@ -79,7 +79,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
     return status
 }
 
-fn say(text String&) { try io.Put(text) catch io.Error { } }
+fn say(text String&) { spin.Say(io.Stdout, text) }
 
 # the program at bin run with file and args as its command line, in a process of its own that has this one's input,
 # output and error streams, and OLANG_PROFILE naming where its samples go: its status (128 and the signal for one ended

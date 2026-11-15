@@ -6,6 +6,7 @@
 # name.
 
 import "std/io"
+import "spin"
 import "std/os"
 import "std/filepath"
 import "build"
@@ -63,7 +64,7 @@ fn Mode(old String&, now String&, path String&, cfg mut build.Config&) I32 {
     return 1 if broken > 0 else 0
 }
 
-fn say(text String&) { try io.Put(text) catch io.Error { } }
+fn say(text String&) { spin.Say(io.Stdout, text) }
 
 fn said(d mut diag.Diagnostics&) I32 {
     say(d.Render())
