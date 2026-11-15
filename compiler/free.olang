@@ -1984,9 +1984,10 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
     match p {
         case typed.Lvalue.Local(_, ty, l) {
             key := pair.Pair(f.curBody, I64(l))
-            # (one declared with no value, D13d, holds nothing written before its first assignment - no old value)
+            # (one declared with no value, D13d, holds zero bits until its first assignment - lowering writes them for a
+            # candidate, so its first let-go releases nothing)
             loc := f.Bodies[f.curBody].Locals[I64(l)]
-            if f.ownLocalOf.Has(key) or loc.Kind != typed.LocalKind.Var or loc.Unset: return
+            if f.ownLocalOf.Has(key) or loc.Kind != typed.LocalKind.Var: return
             ow := f.ownerCand(ty)
             if not ow and not f.arrayCand(ty): return
             k := f.newPlace(ty, -3, false, ty, false)
@@ -2418,8 +2419,21 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
                          w.F.viewsOf(w.Id) == 0
             exemptWas := w.copyExempt
             if site >= 0 or fieldCopy: w.copyExempt = ownCopySite(x)
-            o := w.expr(x)
+            # (O8f: a struct local given a constructor's instance viewing what it is given - the copy D9h makes is its
+            # leaves' new value, made for them as a store into a struct held in place makes it, viewCtor)
+            lc := w.letCtorOf(I64(l), x)
+            outerE, outerC := w.exemptSite, w.copiedCtor
+            if lc != null: w.exemptSite, w.copiedCtor = I64(lc.Site), I64(lc.Site)
+            # (D13d: one declared with no value holds zero bits until its first assignment - nothing made, nothing to
+            # release, as null is)
+            unset := w.body().Locals[I64(l)].Unset
+            o := Vec<I64>() if unset else w.expr(x)
             w.copyExempt = exemptWas
+            w.exemptSite, w.copiedCtor = outerE, outerC
+            if lc != null {
+                o = w.F.unowned(o)
+                w.viewCtor(w.F.leaves(x.Type()), lc, x, sp)
+            }
             if fieldCopy {
                 o = w.F.unowned(o)
                 w.copyLeaves(w.F.leaves(x.Type()), x, sp)
@@ -2429,7 +2443,8 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             if k >= 0 { w.storeField(k, x, o, sp) }
             if k >= 0 { w.wholeField(k, x) }
             ol := w.ownLocal(I64(l))
-            if ol >= 0 { w.store(ol, x, o, sp, w.localName(I64(l))) }
+            if ol >= 0 and unset and w.Final and w.quiet == 0: w.F.stores.Push(store(ol, w.Id, w.body().File, sp, SOk, -1, -1, x, null))
+            else if ol >= 0: w.store(ol, x, o, sp, w.localName(I64(l)))
             fd := w.feeder(I64(l))
             if fd >= 0 and w.Final and w.quiet == 0 {
                 w.made(w.F.feeds[fd].PlaceId, x, sp, false)
@@ -2623,6 +2638,21 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if fr < 0 { w.escape(o, sp, w.text(p.Span()), true, w.withinOf(p), w.storeInside) }
     w.storeWithin = -1
     w.storeInside = -1
+}
+
+# O8f: the constructor call local l is declared with where its instance views what it is given and its caller copies it
+# (D9h) into a struct local with candidate leaves - the copy is their new value, as at a store into a struct held in
+# place (viewCtor) - null for any other declaration
+fn (w mut walker&) letCtorOf(l I64, x typed.Expr&) typed.Call?& {
+    if w.body().Locals[l].Kind != typed.LocalKind.Var or w.ownLocal(l) >= 0: return null
+    c0 := typed.Call.Of(x)
+    if c0 == null: return null
+    f := w.F
+    b2 := typed.CalleeBody(c0)
+    if b2 < 0 or f.Bodies[b2].Root == null or w.T().Role(f.Bodies[b2].Ty) != types.RoleCtor or f.leaves(x.Type()).Len() == 0: return null
+    vs := f.viewsOf(b2)
+    if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c0, vs) or f.freshCtor(c0, b2, w.Id): return null
+    return c0
 }
 
 # the site of call c0 where it is a constructor viewing what it is given whose instance is copied into struct place p

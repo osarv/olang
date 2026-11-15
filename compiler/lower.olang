@@ -1438,7 +1438,11 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 # D13d: assigned on every path before any read - nothing is written for its declaration; its storage
                 # is marked set with no value (Use(None) writes nothing), so element stores may follow
                 if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
-                ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(mir.LocalId(I32(l))), mir.Rvalue.Use(mir.Operand.None)))
+                # (O8d: a local place - one early freeing follows - holds zero bits until then, its first let-go
+                # releasing nothing, in every program alike)
+                none := mir.Operand.None
+                if ln.freeing and ln.L.Free!.LocalPlaceOf(I64(ln.B.Id), I64(l)) >= 0: none = mir.Operand.Const(ty, 0)
+                ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(mir.LocalId(I32(l))), mir.Rvalue.Use(none)))
                 return
             }
             # D18e: a for-in's own generator, made by a direct call - the call marked as the walk this block finishes
