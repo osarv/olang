@@ -777,6 +777,9 @@ type LocalUses struct(T types.Table&, B Body&) {
     Whole Vec<Bool>
     Esc Vec<Bool>
     EscHard Vec<Bool>    # Esc but for the read-only references given a body's call (RefAt)
+    # EscHard but for a reference read out of a part of its storage (`v.data`), which names what that part refers to,
+    # never the storage: what escapes is the local's storage itself (RefsKept)
+    EscSelf Vec<Bool>
     Ret Vec<Bool>
     AliasOf Vec<I64>
     Init Vec<Expr?&>
@@ -790,6 +793,7 @@ type LocalUses struct(T types.Table&, B Body&) {
     RefAt Vec<I64>
     RefBody Vec<I64>
     RefParam Vec<I64>
+    RefPart Vec<Bool>    # ... whether what is given is a reference read out of a part of it (not its storage)
     Rets Vec<Expr&>      # every value a return hands back
     # the temporaries lent writably whole as an argument of a body's call (a walk made by a call and lent to a helper,
     # "a.Iter().Fold(...)"): each one's value, the body and the parameter
@@ -799,6 +803,7 @@ type LocalUses struct(T types.Table&, B Body&) {
     TempIn Vec<BlockId>     # ... the block its statement is in
     spawning I64 = 0
     at BlockId = BlockId(0) # the block being walked
+    partRef Bool = false    # whether the use walked is of a reference read out of a part (EscSelf)
 }
 
 # the uses of b's locals
@@ -810,6 +815,7 @@ fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
         u.Whole.Push(false)
         u.Esc.Push(false)
         u.EscHard.Push(false)
+        u.EscSelf.Push(false)
         u.Ret.Push(false)
         u.AliasOf.Push(-1)
         u.Init.Push(null)
@@ -819,6 +825,100 @@ fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
     for f in b.Fields { u.Ret[I64(f)] = true }
     u.closeAliases()
     return u
+}
+
+# whether a body keeps no reference to what its parameter k, a reference, names past the call: stored nowhere, captured
+# by nothing, handed back in no reference result (a value result's view, which its caller copies where it keeps it, is
+# no keeping), named by no other local, lent writably to nothing, and given only to bodies keeping none - lowering's
+# stack slot for a temporary lent to such a call (stackArg) and G42's count of it (effects), one answer for both. The
+# answers are kept by body * 64 + k; one asked again while it is being found is no
+type RefsKept struct() {
+    known Map<I64, Bool>
+}
+
+fn (r mut RefsKept&) None(t types.Table&, bodies Vec<mut Body&>&, body I64, k I64) Bool {
+    if body < 0 or body >= bodies.Len() or k >= 64: return false
+    key := body * 64 + k
+    known := try r.known.Get(key) catch {
+        r.known.Put(key, false)
+        ok := r.noneIn(t, bodies, bodies[body], k)
+        r.known.Put(key, ok)
+        return ok
+    }
+    return known
+}
+
+fn (r mut RefsKept&) noneIn(t types.Table&, bodies Vec<mut Body&>&, b Body&, k I64) Bool {
+    if b.Root == null or k >= b.Params.Len(): return false
+    u := LocalUses.Uses(t, b)
+    p := I64(b.Params[k])
+    if u.EscSelf[p] or u.WrOther[p] or u.Whole[p]: return false
+    if u.Ret[p] and t.IsRef(t.Result(b.Ty)): return false
+    return r.namedOnly(t, bodies, u, p)
+}
+
+# whether nothing but local l names its storage: no other local but one holding a reference read out of a part of it,
+# lent writably to nothing, stored into by nothing, and given read-only only to bodies keeping none - its parts'
+# references given on name what they refer to
+fn (r mut RefsKept&) namedOnly(t types.Table&, bodies Vec<mut Body&>&, u LocalUses&, l I64) Bool {
+    if l in u.LendAt or l in u.StoreAt: return false
+    for j in range u.AliasOf.Len() {
+        if u.AliasOf[j] == l and not RefReadOut(t, u.Init[j]): return false
+    }
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == l and not u.RefPart[j] and not r.None(t, bodies, u.RefBody[j], u.RefParam[j]): return false
+    }
+    return true
+}
+
+# whether reference local l of body b (u its uses) may take each value given storage for it - a temporary assigned it,
+# `u = u.Inner()` - in one stack slot of the frame, each written over the last (lowering's ownSlot, G42's count of it):
+# the slot's value is a struct of numbers, Bools and references to arrays alone, with no destructor - so no part of it can be lent
+# but through l - and l is the slot's one name: aliased by no local, handed back by no return, stored, captured,
+# lent writably and kept by nothing, read-only references to it given only to bodies keeping none. The value written
+# is made before the slot is written, from what l named then, and nothing else names what it is written over
+fn (r mut RefsKept&) OwnSlot(t types.Table&, bodies Vec<mut Body&>&, b Body&, u LocalUses&, l I64) Bool {
+    if b.Gen or l < 0 or l >= b.Locals.Len(): return false
+    ty := b.Locals[l].Ty
+    if not t.IsRef(ty) or not plainStruct(t, t.Referent(ty)): return false
+    if u.EscSelf[l] or u.Ret[l]: return false
+    return r.namedOnly(t, bodies, u, l)
+}
+
+# whether a local's value x is a reference read out of a part of what another names (`old := v.data`): it names what
+# that part refers to, never the storage it was read from
+fn RefReadOut(t types.Table&, x Expr?&) Bool {
+    if x == null: return false
+    return match x {
+        case Expr.Read(_, ty, p, _): t.IsRef(ty) and p != Lvalue.Local
+        case Expr.Borrow(_, _, p): RefField(t, p)
+        case Expr.Away(_, _, y): RefReadOut(t, y)
+        case Expr.Prim(_, _, op, _, args): op == PrimOp.Convert and args.Len() == 1 and RefReadOut(t, args[0])
+        case _: false
+    }
+}
+
+# whether place p is a field holding a reference (a borrow of it names what it refers to)
+fn RefField(t types.Table&, p Lvalue&) Bool {
+    if p != Lvalue.Field: return false
+    r := t.Repr(p.base.Type())
+    k := t.KindOf(r)
+    if k != types.Kind.Named and k != types.Kind.Record and k != types.Kind.Tuple: return false
+    ps := t.Items(t.Fields(r) if k == types.Kind.Named else t.Parts(r))
+    return p.index >= 0 and p.index < ps.Len() and t.IsRef(ps[p.index])
+}
+
+# a struct whose fields are numbers, Bools and references to arrays alone, with no destructor (OwnSlot) - no reference
+# in it to a struct, which may be a generational instance's (genrefs: an owning place counted)
+fn plainStruct(t types.Table&, o types.TypeId) Bool {
+    r := t.Repr(o)
+    if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.NeedsDrop(r): return false
+    if t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
+    for f in t.Items(t.Fields(r)) {
+        if t.IsNumber(f) or t.KindOf(f) == types.Kind.Bool: continue
+        if not t.IsRef(f) or t.KindOf(t.Repr(t.Referent(f))) != types.Kind.Array: return false
+    }
+    return true
 }
 
 # what an alias does to its storage, its source's: written or escaping, through chains of aliases
@@ -837,11 +937,16 @@ fn (u mut LocalUses&) aliasInto(i I64, a I64) {
     if u.WrScalar[i]: u.WrScalar[a] = true
     if u.Esc[i] or u.Ret[i]: u.Esc[a] = true
     if u.EscHard[i] or u.Ret[i]: u.EscHard[a] = true
+    # (an alias holding a reference read out of a part names what that part refers to: its escape is no escape of
+    # the source's storage)
+    part := RefReadOut(u.T, u.Init[i])
+    if (u.EscSelf[i] or u.Ret[i]) and not part: u.EscSelf[a] = true
     for k in range u.RefAt.Len() {
         if u.RefAt[k] != i: continue
         u.RefAt.Push(a)
         u.RefBody.Push(u.RefBody[k])
         u.RefParam.Push(u.RefParam[k])
+        u.RefPart.Push(u.RefPart[k] or part)
     }
     # (a lend of the alias whole lends its storage: the source's, to the same parameter)
     n := u.LendAt.Len()
@@ -1068,8 +1173,7 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
         return
     }
     if u.spawning > 0 {
-        u.Esc[root] = true
-        u.EscHard[root] = true
+        u.escape(root)
         return
     }
     match ctx {
@@ -1087,13 +1191,20 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
 fn (u mut LocalUses&) escape(root I64) {
     u.Esc[root] = true
     u.EscHard[root] = true
+    if not u.partRef: u.EscSelf[root] = true
 }
 
 fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
     if x == null: return
     match x {
         case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
-        case Expr.Read(_, ty, p, _) { if not scalarType(u.T, ty): u.use(p, ctx, u.T.IsRef(ty)) }
+        case Expr.Read(_, ty, p, _) {
+            if scalarType(u.T, ty): return
+            was := u.partRef
+            u.partRef = u.T.IsRef(ty) and p != Lvalue.Local
+            u.use(p, ctx, u.T.IsRef(ty))
+            u.partRef = was
+        }
         case Expr.Borrow(_, ty, p) { u.borrow(p, ty, ctx) }
         case Expr.Take(_, _, p) { u.write(p, false) }
         case Expr.Promote(_, _, pr) { u.expr(pr.X, ctx) }
@@ -1225,6 +1336,7 @@ fn (u mut LocalUses&) refArg(a Expr&, body I64, k I64) Bool {
     u.RefAt.Push(root)
     u.RefBody.Push(body)
     u.RefParam.Push(k)
+    u.RefPart.Push(a == Expr.Read and p != Lvalue.Local)
     return true
 }
 

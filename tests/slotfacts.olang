@@ -1,0 +1,114 @@
+# G42's Allocates and the stack slots lowering gives a value made for a reference: a call's value lent to a read-only
+# parameter of a body keeping nothing of it (lowering's stackArg), and a reference local's own slot, written over at each
+# value given storage for it (`u = u.Inner()`, lowering's slotted) - neither asks the runtime for storage, and the facts
+# say so; where something keeps the reference, both do (oann's repro/tempfacts and repro/reassignfacts)
+
+type Sh struct(rank I64) {
+    rank
+}
+
+fn (s Sh&) Count() I64 { return s.rank }
+
+fn (s Sh&) Self() Sh& { return s }
+
+fn count(s Sh&) I64 { return s.rank }
+
+fn keep(s Sh&, n I64) Sh& { return s }
+
+fn Sh.Make(n I64) Sh { return Sh(n) }
+
+fn viaLocal(n I64) I64 {
+    s := Sh.Make(n)
+    return s.Count()
+}
+
+fn viaTemp(n I64) I64 { return Sh.Make(n).Count() }
+
+fn viaArg(n I64) I64 { return count(Sh.Make(n)) }
+
+fn viaLoop(n I64) I64 {
+    t := 0
+    for i in range n { t += Sh(i).Count() }
+    return t
+}
+
+# kept: the temporary is handed back by reference, so it lives where the result goes
+fn keptSelf(n I64) I64 { return Sh.Make(n).Self().rank }
+
+fn keptArg(n I64) I64 { return keep(Sh.Make(n), 1).rank }
+
+assert not viaLocal.Allocates, "a local lent to a method allocates nothing"
+assert not viaTemp.Allocates, "a call's value lent to a method allocates nothing"
+assert not viaArg.Allocates, "a call's value lent to a function allocates nothing"
+assert not viaLoop.Allocates, "a constructor's value lent in a loop allocates nothing"
+assert keptSelf.Allocates and keptArg.Allocates, "a temporary handed back by reference is given storage"
+
+type View struct(data mut Array<F32>&, depth I64) {
+    data
+    depth
+}
+
+fn (v View&) Inner() View { return View(v.data, v.depth - 1) }
+
+fn (v View&) Depth() I64 { return v.depth }
+
+type Pair struct(a View&, b View&) {
+    a
+    b
+}
+
+fn reassigned(v View&) I64 {
+    u := v
+    for u.depth > 0: u = u.Inner()
+    return u.depth
+}
+
+fn fresh(v View&) I64 {
+    u := v.Inner()
+    return u.depth
+}
+
+fn walked(v View&) I64 {
+    u := v
+    s := 0
+    for u.depth > 0 {
+        u = u.Inner()
+        s = s * 10 + u.Depth()
+    }
+    return s
+}
+
+# named by another local, or kept in a struct: each value has storage of its own
+fn aliased(v View&) I64 {
+    u := v
+    u = u.Inner()
+    w := u
+    u = u.Inner()
+    return w.depth * 10 + u.depth
+}
+
+fn kept(v View&) I64 {
+    u := v
+    u = u.Inner()
+    p := Pair(u, v)
+    u = u.Inner()
+    return p.a.depth * 10 + p.b.depth + u.depth * 100
+}
+
+assert not reassigned.Allocates, "a local reassigned from its own view allocates nothing"
+assert not fresh.Allocates, "a new local from a view allocates nothing"
+assert not walked.Allocates, "a local reassigned in a loop, lent between, allocates nothing"
+assert aliased.Allocates and kept.Allocates, "a value another name keeps is given storage"
+
+test viaTemp "a call's value lent to a read-only reference is read where it stands" {
+    assert viaLocal(3) == 3 and viaTemp(4) == 4 and viaArg(5) == 5 and viaLoop(4) == 6
+    assert keptSelf(6) == 6 and keptArg(7) == 7
+}
+
+test reassigned "a reference local's own slot holds each value it is given in turn" {
+    d := Array<F32>(4)
+    v := View(d, 3)
+    assert reassigned(v) == 0 and fresh(v) == 2 and walked(v) == 210
+    assert aliased(v) == 21 and kept(v) == 123
+    assert v.depth == 3
+}

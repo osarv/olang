@@ -624,7 +624,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `unreachable`'s or an `assert`'s message, and the calls made there allocate for the failure, not the work (the
   build's own bookkeeping still counts them: a task's scopes, `Fact.Allocates` in effects.olang, `Running` is G42's);
   a fixed array held in place (`Array<F32>(8)`) allocates nothing; a method is named through its type,
-  `Point.Move.Allocates`, `Box<I64>.Fill.Allocates`. explain prints `allocates only where it fails`.
+  `Point.Move.Allocates`, `Box<I64>.Fill.Allocates`. explain prints `allocates only where it fails`. **Stack slots
+  (2026-11-15, oann's tempfacts/reassignfacts; mine)**: a call's value lent to a read-only reference of a body keeping
+  nothing of it (`Sh.Make(n).Count()`) and a value given storage for a reference local that is its slot's one name
+  (`u = u.Inner()`, now built in one stack slot written over each time, not an arena a loop grows) allocate nothing -
+  lowering and the facts read one judgement (typed.RefsKept).
 
 ### Errors
 
