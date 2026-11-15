@@ -371,6 +371,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # the copies made for an owner leaf whose value owns storage beside it (splitLeaf), by (body, site): the leaf's path -
     # lowering builds that part in the site's region and every other owned part where the region's parent is
     splitAt Map<pair.Pair<I64, I64>, Array<I64>>
+    slotAt Map<pair.Pair<I64, I64>, Array<I64>>   # O8f: a split copy's slot parts, by (body, site): field << 32 | place
     # feeders (findFeeds): value locals built in the region of the owner place they are stored into, from their
     # declarations - by (body, local), the index in feeds; and the calls given one, judged and redirected into it
     feeds Vec<feed>
@@ -2822,6 +2823,62 @@ fn (f mut Free&) splitLeaf(b I64, site I64, ty types.TypeId, lvs Vec<leaf>&, k I
     return false
 }
 
+# whether the array leaves arrs of a struct type ty are slot places (SlotPlace) that are its own fields, and every other
+# field it holds by value owns no storage: a copy of a value of it built in slots whole frees each one alone
+fn (f mut Free&) slotWhole(ty types.TypeId, lvs Vec<leaf>&, arrs Vec<I64>&) Bool {
+    if arrs.Len() < 2: return false
+    idx := f.slotFields(lvs, arrs)
+    return idx.Len() == arrs.Len() and f.onlyOwning(ty, idx, -1)
+}
+
+# whether the array leaves arrs beside the owner leaf a copy made at site of body b is split for (SplitPath) are slot
+# places that are fields of struct type ty, every other field it holds by value owning no storage: recorded for the copy
+# (SlotParts), each built in slots
+fn (f mut Free&) slotSplit(b I64, site I64, ty types.TypeId, lvs Vec<leaf>&, arrs Vec<I64>&) Bool {
+    path := try f.splitAt.Get(pair.Pair(b, site)) catch default Array<I64>(0)
+    if arrs.Len() == 0 or path.Len() == 0: return false
+    idx := f.slotFields(lvs, arrs)
+    if idx.Len() != arrs.Len() or not f.onlyOwning(ty, idx, path[0]): return false
+    parts := Array<I64>(idx.Len())
+    for i in range idx.Len() { parts[i] = (idx[i] << 32) | arrs[i] }
+    f.slotAt.Put(pair.Pair(b, site), parts)
+    return true
+}
+
+# the field each of arrs is, where it is a slot place that is a field of the struct itself - none past the first that is not
+fn (f mut Free&) slotFields(lvs Vec<leaf>&, arrs Vec<I64>&) Vec<I64> {
+    out Vec<I64>
+    for k in arrs {
+        if not f.SlotPlace(k): return out
+        for lf in lvs {
+            if lf.PlaceId == k and lf.Path.Len() == 1: out.Push(lf.Path[0])
+        }
+        if out.Len() == 0 or f.leafAt(lvs, out[out.Len() - 1]) != k: return out
+    }
+    return out
+}
+
+fn (f Free&) leafAt(lvs Vec<leaf>&, i I64) I64 {
+    for lf in lvs {
+        if lf.Path.Len() == 1 and lf.Path[0] == i: return lf.PlaceId
+    }
+    return -1
+}
+
+# whether every field of struct type ty owning storage by value is one of idx, or field but (-1: none)
+fn (f mut Free&) onlyOwning(ty types.TypeId, idx Vec<I64>&, but I64) Bool {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
+    if t.DeclaresCopy(r): return false
+    fs := t.Items(t.Fields(r))
+    for i in range fs.Len() {
+        if i == but or idx.Has(i) or t.IsRef(fs[i]): continue
+        if t.OwnedPart(fs[i]) or t.OwnsParts(fs[i]): return false
+    }
+    return true
+}
+
 fn (f mut Free&) splitPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
     t := f.T()
     r := t.Plain(t.Repr(ty))
@@ -2866,12 +2923,25 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
     # an array leaf that is the only storage the copy owns (a Map entry's key text beside a reference) is made for as an
     # owner leaf is: built in its region, released where the entry is removed
     if owners.Len() == 0 and arrs.Len() == 1: owners.Push(arrs.Pop()!)
+    # (O8f: text leaves of a prelude struct - a Map entry's key and value - are built in slots, each freed alone: where
+    # they are all the storage the copy owns, the copy is built in slots whole)
+    if owners.Len() == 0 and c.Site >= typed.SiteId(0) and f.slotWhole(x.Type(), lvs, arrs) {
+        for k in arrs { f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh, -1, I64(c.Site), x, null)) }
+        return
+    }
+    one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.splitLeaf(w.Id, I64(c.Site), x.Type(), lvs, owners[0])
+    # (...and beside one owner leaf, split out of its region into slots of the region's parent - SlotParts - so a removal
+    # frees a Map entry's key text with its value: each is made for its place, the slots' a value null is as good as)
+    slotted := one and f.slotSplit(w.Id, I64(c.Site), x.Type(), lvs, arrs)
     for k in arrs {
+        if slotted {
+            f.stores.Push(store(k, w.Id, w.body().File, sp, SOk, -1, -1, x, null))
+            continue
+        }
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
         f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" + $w.text(x.Span()) + "'")
     }
     if owners.Len() == 0 { return }
-    one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.splitLeaf(w.Id, I64(c.Site), x.Type(), lvs, owners[0])
     for k in owners {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, I64(c.Site) if one else -1, x, null))
         if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" + $w.text(x.Span()) + "'")
@@ -5647,6 +5717,12 @@ fn (f Free&) FeedSite(b I64, l I64) I64 {
     if not f.Done: return -1
     i := try f.feedOf.Get(pair.Pair(b, l)) catch default -1
     return f.feeds[i].Site if i >= 0 else -1
+}
+
+# the parts of a split copy (SplitPath) built in slots of the region's parent, each field << 32 | its slot place
+fn (f Free&) SlotParts(b I64, site I64) Array<I64> {
+    if not f.Done: return Array<I64>(0)
+    return try f.slotAt.Get(pair.Pair(b, site)) catch default Array<I64>(0)
 }
 
 # the path of the owner leaf a copy made at site of body b is split for (splitLeaf): its part built in the site's
