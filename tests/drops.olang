@@ -250,11 +250,15 @@ LeftBehind := leftBehind()
 assert LeftBehind == "1/12/123", "decided while compiling: " + $LeftBehind
 
 # a requirement failing the call ends the by-value parameters it took (D17; bulk review 7, F10)
-type Guarded struct(r Res, n I64) [n > 0] ? {
+type Guarded struct(r Res, n I64) ? {
+    if not n > 0: error ArgumentError.Invalid("Guarded: n > 0")
     r
 }
 
-fn guarded(r Res, n I64) [n > 0] I64 ? { return r.id }
+fn guarded(r Res, n I64) I64 ? {
+    if not n > 0: error ArgumentError.Invalid("guarded: n > 0")
+    return r.id
+}
 
 fn refused() String {
     t := Tally()

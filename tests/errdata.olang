@@ -203,7 +203,10 @@ test "an error type's methods read what it carries" {
 }
 
 # D17, T19b: a false requirement's ArgumentError.Invalid carries the function's name and the condition
-fn half(n I64) [n % 2 == 0] I64 ? { return n / 2 }
+fn half(n I64) I64 ? {
+    if not n % 2 == 0: error ArgumentError.Invalid("half: n % 2 == 0")
+    return n / 2
+}
 
 fn why(n I64) String { return try $half(n) catch ArgumentError e default $e }
 

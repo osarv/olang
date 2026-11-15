@@ -1,0 +1,4 @@
+# check: fail expected '{', found '['
+# D17: a requirement is written in the body - the bracketed contract after the parameters is gone
+fn pick(x I64, y I64) [y > x] I64 ? { return y - x }
+fn main() { }

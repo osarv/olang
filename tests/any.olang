@@ -216,27 +216,27 @@ test "T34: type cases bind the instance itself; as gives it, or fails under chec
     assert t == 4 + 3 + 2 + 4
 }
 
-# D17f: a trait's requirements held to every call through an any, before dispatch; the instance's own on its entry
+# D17: a trait writes no requirement; the method an instance supplies checks its own, on its entry, through an any too
 type Account trait {
-    mut Withdraw(n I64) [n > 0] I64 ? ArgumentError
+    mut Withdraw(n I64) I64 ? ArgumentError
 }
 type Wallet struct(cash I64) {
     cash
 }
-fn (w mut Wallet&) Withdraw(n I64) [n <= 100] I64 ? ArgumentError {
+fn (w mut Wallet&) Withdraw(n I64) I64 ? ArgumentError {
+    if not n <= 100: error ArgumentError.Invalid("Withdraw: n <= 100")
     w.cash -= n
     return w.cash
 }
 fn draw(a mut any Account&, n I64) I64 { return try a.Withdraw(n) catch ArgumentError.Invalid default -1 }
 
-test "D17f: a trait's contract and the instance's own, checked through an any" {
+test "D17: the instance's own requirement, checked through an any" {
     w := Wallet(500)
     assert draw(w, 10) == 490
-    assert draw(w, 0) == -1          # the trait's requirement
     assert draw(w, 200) == -1        # the wallet's own, on its entry
     assert w.cash == 490
     v := Wallet(50)
-    assert draw(v, 60) == -10        # both hold: the call is made
+    assert draw(v, 60) == -10
     assert v.cash == -10
 }
 

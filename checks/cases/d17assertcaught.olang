@@ -1,0 +1,13 @@
+# check: fail error[D17e]: this call breaks half's requirement 'n % 2 == 0'
+# also: note: the condition
+# D17e: a leading assert is a requirement, decided at a call the evaluator computes - a false one is an error there
+# even where a catch at the call takes ArgumentError, which an assert never raises
+fn half(n I64) I64 ? {
+    assert n % 2 == 0
+    if n > 1000: error ArgumentError.Invalid("half: n <= 1000")
+    return n / 2
+}
+fn main() {
+    h := try half(3) catch ArgumentError default -1
+    h++
+}

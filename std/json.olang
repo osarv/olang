@@ -871,7 +871,10 @@ type Naming enum {
 }
 
 # a member's key, whatever the policy: "@json.Key("id")" on a field, a constructor's parameter or a case
-type Key struct(Name String&) [Name.Len() > 0] ? { Name }
+type Key struct(Name String&) ? {
+    if not Name.Len() > 0: error ArgumentError.Invalid("Key: Name.Len() > 0")
+    Name
+}
 
 # a field left out: never written, and on reading its parameter takes its default (a parameter with none is a
 # compile-time error - Decode could not build the value)
@@ -1574,7 +1577,10 @@ if TestBuild {
         Gust(Speed F64, Dir Char)
     }
     type Report struct(Who Member, Air Wind, Days Array<I32>&, Ok Bool) { Who, Air, Days, Ok }
-    type Percent struct(V I64) [V >= 0 and V <= 100] ? { V }
+    type Percent struct(V I64) ? {
+        if not (V >= 0 and V <= 100): error ArgumentError.Invalid("Percent: V >= 0 and V <= 100")
+        V
+    }
     type Hidden struct(Open I64, shut I64) { Open, shut }
 
     fn Report.sample() Report { return Report(Member(7, "ada"), Wind.Gust(2.5, 'N'), Array<I32>[1, 2], true) }

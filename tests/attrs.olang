@@ -6,7 +6,10 @@ import "attrmod"
 # a key for a member, a mark that leaves one out, and a number its constructor checks - built while compiling (G39)
 type Key struct(Name String&) { Name }
 type Skip struct() { }
-type Tag struct(V I64) [V >= 0] ? { V }
+type Tag struct(V I64) ? {
+    if not V >= 0: error ArgumentError.Invalid("Tag: V >= 0")
+    V
+}
 type Level enum { Low, High }
 type Weight extends F64
 

@@ -1,0 +1,311 @@
+# requires_migrate - contracts removed (D17, 2026-11-15, the user: "Remove contracts yes"): a function's requirements
+# are the asserts and checks its body begins with. Each item of a contract - the "[...]" right after a declaration's
+# parameters - becomes a check at the top of the body, failing as the contract did, with ArgumentError.Invalid
+# carrying the function and the condition as written:
+#
+#     fn pick(x I32, y I32) [y > x] I32 ? { return y - x }   ->   fn pick(x I32, y I32) I32 ? {
+#                                                                      if not y > x: error ArgumentError.Invalid("pick: y > x")
+#                                                                      return y - x
+#                                                                  }
+#
+# A constructor's ("type P struct(v I64) [v >= 0] ? { v }") likewise. A trait method's contract, which has no body,
+# is dropped and listed `by hand:` - each implementation checks its own; so is a contract over several lines, or one
+# whose body does not open on its line. Code only; a contract written inside a string is left. Files are rewritten in
+# place; --check writes nothing and the exit status says whether anything would change. Idempotent.
+#
+#     $OLANG build tools/requires_migrate.olang && build/tools_requires_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+type Result struct() {
+    changes I64 = 0
+    left Vec<String&>
+}
+
+# where the code line starting at i ends: its "\n", or the text's end
+fn lineEnd(src String&, i I64) I64 {
+    k := try src[i:].FindByte('\n') catch default (src.Len() - i)
+    return i + k
+}
+
+# the name a declaration's line gives what it declares - a function's, a method's, a builder's ("Array.Range"), a
+# type's - and where its parameter list opens; -1 where the line declares none
+fn declAt(src String&, a I64, b I64) String, I64 {
+    t := srcmask.StripStart(src[a:b])
+    i := b - t.Len()
+    if t.StartsWith("type ") {
+        j := i + 5
+        n := j
+        for n < b and srcmask.IsWord(src[n]) { n++ }
+        k := try src[i:b].Find(" struct(") catch default -1
+        if k < 0: return "", -1
+        return $src[j:n], i + k + 7
+    }
+    if t.StartsWith("fn ") {
+        j := i + 3
+        if j < b and src[j] == '(' {
+            k := closeParen(src, j, b)
+            if k < 0: return "", -1
+            j = k
+            for j < b and src[j] == ' ' { j++ }
+        }
+        out := StringBuilder()
+        for j < b and src[j] != '(' {
+            if src[j] == '<' {
+                k := closeAngle(src, j, b)
+                if k < 0: return "", -1
+                j = k
+                continue
+            }
+            out.PushChar(src[j])
+            j++
+        }
+        if j >= b: return "", -1
+        return out.ToString(), j
+    }
+    # a trait's method: "mut Name(" or "Name(" at the line's start
+    j := i
+    if t.StartsWith("mut ") { j += 4 }
+    if j >= b or not src[j].IsUpper() { return "", -1 }
+    n := j
+    for j < b and srcmask.IsWord(src[j]) { j++ }
+    if j >= b or src[j] != '(': return "", -1
+    return $src[n:j], j
+}
+
+# the index past the ")" closing the "(" at i, -1 for none before b
+fn closeParen(src String&, i I64, b I64) I64 {
+    depth I64 = 0
+    for k in range i, b {
+        if src[k] == '(' { depth++ }
+        if src[k] == ')' {
+            depth--
+            if depth == 0 { return k + 1 }
+        }
+    }
+    return -1
+}
+
+# the index past the ">" closing the "<" at i, -1 for none before b
+fn closeAngle(src String&, i I64, b I64) I64 {
+    depth I64 = 0
+    for k in range i, b {
+        if src[k] == '<' { depth++ }
+        if src[k] == '>' {
+            depth--
+            if depth == 0 { return k + 1 }
+        }
+    }
+    return -1
+}
+
+# src[a:b] split at the commas outside every bracket
+fn splitTop(src String&, mask String&, a I64, b I64) Vec<String&> {
+    out Vec<String&>
+    depth I64 = 0
+    at := a
+    for k in range a, b {
+        if mask[k] != 'c' { continue }
+        x := src[k]
+        if x == '(' or x == '[' or x == '{' {
+            depth++
+        } else if x == ')' or x == ']' or x == '}' {
+            depth--
+        } else if x == ',' and depth == 0 {
+            out.Push(srcmask.Strip(src[at:k]))
+            at = k + 1
+        }
+    }
+    last := srcmask.Strip(src[at:b])
+    if last.Len() > 0 { out.Push(last) }
+    return out
+}
+
+# whether an item is to be parenthesized after "not": one holding a word that binds looser than "not" does, or
+# beginning with a word that takes what follows it
+fn needsParens(it String&) Bool {
+    if it.StartsWith("try ") or it.StartsWith("not ") or it.StartsWith("comptime ") { return true }
+    for w in Array<String&>[" and ", " or ", " xor ", " if "] {
+        if it.Contains(w) { return true }
+    }
+    return false
+}
+
+# text written inside a string literal
+fn quoted(t String&) String {
+    out := StringBuilder()
+    for ch in t {
+        if ch == '"' or ch == '\\' { out.PushChar('\\') }
+        out.PushChar(ch)
+    }
+    return out.ToString()
+}
+
+# the check a contract's item becomes
+fn check(name String&, it String&) String {
+    cond := "not (" + $it + ")" if needsParens(it) else "not " + $it
+    return "if " + $cond + ": error ArgumentError.Invalid(\"" + $quoted($name + ": " + $it) + "\")"
+}
+
+# the code's first "{" on src[a:b] outside every bracket, -1 for none
+fn braceAt(src String&, mask String&, a I64, b I64) I64 {
+    q := a
+    for q < b {
+        if mask[q] != 'c' {
+            q++
+            continue
+        }
+        x := src[q]
+        if x == '{' { return q }
+        if x == '(' or x == '[' {
+            e := srcmask.CloseOf(src, mask, q)
+            if e < 0 or e > b { return -1 }
+            q = e
+            continue
+        }
+        q++
+    }
+    return -1
+}
+
+# one declaration's line from a to b rewritten, and where the text it replaced ends - "" where it has no contract
+fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c mut Result&) String, I64 {
+    name, p := declAt(src, a, b)
+    if p < 0 { return "", b }
+    pe := srcmask.CloseOf(src, mask, p)
+    if pe < 0 or pe > b { return "", b }
+    k := pe
+    for k < b and src[k] == ' ' { k++ }
+    if k >= b or src[k] != '[' or mask[k] != 'c' { return "", b }
+    ke := srcmask.CloseOf(src, mask, k)
+    where := $path + ":" + $line + ": "
+    if ke < 0 or ke > b {
+        c.left.Push($where + "a contract over several lines")
+        return "", b
+    }
+    items := splitTop(src, mask, k + 1, ke - 1)
+    head := $src[a:pe] + $src[ke:b]     # the line without its contract
+    br := braceAt(src, mask, ke, b)
+    c.changes++
+    if br < 0 {
+        c.left.Push($where + "a requirement with no body to check it, dropped: [" + $src[k + 1:ke - 1] + "]")
+        return head, b
+    }
+    t := srcmask.StripStart(src[a:b])
+    indent := $src[a:b - t.Len()]
+    inner := $indent + "    "
+    checks := StringBuilder()
+    for it in items { checks.Push($inner + $check(name, it) + "\n") }
+    hb := br - a - (ke - pe)    # the body's "{" in head
+    rest := srcmask.Strip(src[br + 1:b])
+    if rest.Len() == 0 or rest.StartsWith("#") { return $head + "\n" + $checks.ToString().TrimEnd(), b }
+    be := srcmask.CloseOf(src, mask, br)
+    if be < 0 or be > b {
+        c.left.Push($where + "a body opening on its declaration's line and going on after it")
+        c.changes--
+        return "", b
+    }
+    out := StringBuilder()
+    out.Push(head[:hb + 1])
+    out.PushChar('\n')
+    out.Push(checks.ToString())
+    body := srcmask.Strip(src[br + 1:be - 1])
+    if body.Len() > 0 { out.Push($inner + $body + "\n") }
+    out.Push($indent + "}" + $src[be:b])
+    return out.ToString(), b
+}
+
+fn migrate(path String&, src String&, c mut Result&) String {
+    mask := srcmask.Mask(src, true)
+    out := StringBuilder()
+    a I64 = 0
+    line I64 = 1
+    for a < src.Len() {
+        b := lineEnd(src, a)
+        r, _ := moveLine(path, src, mask, a, b, line, c)
+        out.Push(r if r.Len() > 0 else src[a:b])
+        if b < src.Len() { out.PushChar('\n') }
+        a = b + 1
+        line++
+    }
+    return out.ToString()
+}
+
+fn main() ? {
+    checkOnly := false
+    verbose := false
+    paths Vec<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check": checkOnly = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_requires_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Result()
+    changed I64 = 0
+    for path in files {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("requires_migrate: cannot read " + $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrate(path, src, total)
+        if out == src { continue }
+        changed++
+        if verbose { srcmask.Say(path) }
+        if not checkOnly {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("requires_migrate: cannot write " + $path)
+                os.Exit(1)
+            }
+        }
+    }
+    verb := "would change " if checkOnly else "changed "
+    srcmask.Say($verb + $changed + " files: " + $total.changes + " contracts")
+    for l in total.left { srcmask.Say("by hand: " + $l) }
+    if checkOnly and changed > 0 { os.Exit(1) }
+}
+
+test "a contract becomes checks at the top of the body" {
+    r := Result()
+    assert migrate("f", "fn pick(x I32, y I32) [y > x] I32 ? { return y - x }\n", r) ==
+        "fn pick(x I32, y I32) I32 ? {\n    if not y > x: error ArgumentError.Invalid(\"pick: y > x\")\n    return y - x\n}\n"
+    assert migrate("f", "fn p(a I64, b I64) [b > 0, a >= 0 and a < b] I64 ? {\n    return a\n}\n", r) ==
+        "fn p(a I64, b I64) I64 ? {\n    if not b > 0: error ArgumentError.Invalid(\"p: b > 0\")\n" +
+        "    if not (a >= 0 and a < b): error ArgumentError.Invalid(\"p: a >= 0 and a < b\")\n    return a\n}\n"
+    assert migrate("f", "    type K struct(Name String&) [Name.StartsWith(\"/\")] ? { Name }\n", r) ==
+        "    type K struct(Name String&) ? {\n        if not Name.StartsWith(\"/\"): error ArgumentError.Invalid(\"K: Name.StartsWith(\\\"/\\\")\")\n" +
+        "        Name\n    }\n"
+    assert migrate("f", "fn (l mut Vec<I64>&) Push2(x I64) [x < 100] ? { }\n", r) ==
+        "fn (l mut Vec<I64>&) Push2(x I64) ? {\n    if not x < 100: error ArgumentError.Invalid(\"Push2: x < 100\")\n}\n"
+    assert migrate("f", "fn Array<T>.Range(s T, step T) [step != T(0)] Array<T> ? ArgumentError {\n", r) ==
+        "fn Array<T>.Range(s T, step T) Array<T> ? ArgumentError {\n" +
+        "    if not step != T(0): error ArgumentError.Invalid(\"Array.Range: step != T(0)\")\n"
+    assert migrate("f", "fn d(t String&) [try t.ParseInt() > 0] I64 ? { return 1 }\n", r) ==
+        "fn d(t String&) I64 ? {\n    if not (try t.ParseInt() > 0): error ArgumentError.Invalid(\"d: try t.ParseInt() > 0\")\n" +
+        "    return 1\n}\n"
+    assert migrate("f", "x I64 = 1\nfn h(n I64) [n > 0] ? { }\n", r) ==
+        "x I64 = 1\nfn h(n I64) ? {\n    if not n > 0: error ArgumentError.Invalid(\"h: n > 0\")\n}\n"
+    assert r.changes == 7 and r.left.Len() == 0
+}
+
+test "a trait method's contract is dropped and listed; what has none is left alone" {
+    r := Result()
+    assert migrate("f", "    mut Withdraw(n I64) [n > 0] I64 ? ArgumentError\n", r) == "    mut Withdraw(n I64) I64 ? ArgumentError\n"
+    assert r.left.Len() == 1
+    for t in Array<String&>["fn f(a Array<I64>&) I64 { return a[0] }\n", "x := a[1] { }\n"
+                            "fn g() Array<I64> { return Array<I64>[1] }\n", "s := \"fn f(x I64) [x > 0] { }\"\n"] {
+        assert migrate("f", t, r) == t
+    }
+    assert r.changes == 1
+}
