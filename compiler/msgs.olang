@@ -235,6 +235,9 @@ type Diag enum {
     TypeNotAValue
     UnknownFunction
     UnknownFunctionMeant
+    UnknownFunctionMethod
+    UnknownTypeStd
+    UnknownConstraint
     UnknownErrorType
     FuncTypeErrsUnwritten
     TraitErrsUnwritten
@@ -1183,8 +1186,10 @@ fn ImportIsPrivate(tok String&) r.Msg { return r.Msg(Diag.ImportIsPrivate, "M14"
 fn ReexportCycle(tok String&) r.Msg { return r.Msg(Diag.ReexportCycle, "M17", "re-exporting " + $tok + " reaches this module again") }
 fn ImportReachedTwice(tok String&) r.Msg { return r.Msg(Diag.ImportReachedTwice, "M16", $tok + " reaches a file another import of this module already reaches") }
 fn NameClashesWithImport(tok String&) r.Msg { return r.Msg(Diag.NameClashesWithImport, "M20", $tok + " is an import's alias in this module - rename one of them") }
-fn UnknownType(tok String&) r.Msg { return r.Msg(Diag.UnknownType, "", "unknown type " + $tok) }
-fn UnknownTypeMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownTypeMeant, "", "unknown type " + $tok + " - did you mean '" + $text + "'?") }
+fn UnknownType(tok String&) r.Msg { return r.Msg(Diag.UnknownType, "M22", "unknown type " + $tok) }
+fn UnknownTypeMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownTypeMeant, "M22", "unknown type " + $tok + " - did you mean '" + $text + "'?") }
+fn UnknownTypeStd(tok String&, module String&, name String&) r.Msg { return r.Msg(Diag.UnknownTypeStd, "M22", "unknown type " + $tok + " - std/" + $module + " declares it", "a type of another module is reached through its import (M10)", "write 'import \"std/" + $module + "\"' and '" + $module + "." + $name + "'") }
+fn UnknownConstraint(tok String&) r.Msg { return r.Msg(Diag.UnknownConstraint, "G19", "unknown trait " + $tok + " as a constraint", "a type variable needs no constraint: what its body asks of it is what a call must give (G18a)", "write the variable alone ('<T>'), or declare the trait") }
 fn UnknownNumberType(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNumberType, "T4", "unknown type " + $tok + " - the numbers are named by kind and width: did you mean '" + $text + "'?") }
 fn UnknownName(tok String&) r.Msg { return r.Msg(Diag.UnknownName, "M22", "unknown name " + $tok) }
 fn UnknownNameMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownNameMeant, "M22", "unknown name " + $tok + " - did you mean '" + $text + "'?") }
@@ -1192,6 +1197,7 @@ fn TypedHole(ty String&, fits String&) r.Msg { return r.Msg(Diag.TypedHole, "E41
 fn TypedHoleUntyped() r.Msg { return r.Msg(Diag.TypedHoleUntyped, "E41", "'_' holds the place of a value, and nothing here says its type") }
 fn TypeNotAValue(name String&) r.Msg { return r.Msg(Diag.TypeNotAValue, "G38", "'" + $name + "' is a type, not a value", "", "write it where a type goes: a declaration ('x " + $name + " = ...'), a type argument or a match's subject") }
 fn UnknownFunction(tok String&) r.Msg { return r.Msg(Diag.UnknownFunction, "M22", "unknown function or type " + $tok) }
+fn UnknownFunctionMethod(tok String&, meant String&) r.Msg { return r.Msg(Diag.UnknownFunctionMethod, "M22", "unknown function " + $tok + " - it is a method of its first argument", "a method is called on its receiver, never as a function (M19)", "write '" + $meant + "'") }
 fn UnknownFunctionMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownFunctionMeant, "M22", "unknown function or type " + $tok + " - did you mean '" + $text + "'?") }
 fn UnknownErrorType(tok String&, hint String&) r.Msg { return r.Msg(Diag.UnknownErrorType, "R1", "unknown error type " + $tok + $hint) }
 
@@ -1461,7 +1467,7 @@ fn TypeMismatch(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.TypeMismatch
 fn NumberDoesNotFlow(ty1 String&, ty2 String&, ty3 String&) r.Msg { return r.Msg(Diag.NumberDoesNotFlow, "T6b", $ty1 + " does not flow into " + $ty2 + " - convert it, as " + $ty3 + "(x)") }
 fn LiteralExprRange(ty String&) r.Msg { return r.Msg(Diag.LiteralExprRange, "E4a", "this literal expression's value does not fit " + $ty) }
 fn LiteralNeedsCtor(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.LiteralNeedsCtor, "T29d", "a value of " + $ty1 + " is made by its constructor - write " + $ty2 + "(...)") }
-fn ReadOnlyToWritable() r.Msg { return r.Msg(Diag.ReadOnlyToWritable, "T25c", "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") }
+fn ReadOnlyToWritable() r.Msg { return r.Msg(Diag.ReadOnlyToWritable, "T25c", "a read-only reference cannot become writable", "what is reached read-only stays so - a read-only parameter, and a local copied from one (x := r copies the reference, not what it names)", "pass a writable reference, change a copy of your own ('r.Copy()'), or, where a 'mut' parameter asks for it, make that parameter read-only") }
 fn ReadOnlyCopyDecl(ty String&, text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyDecl, "T25c", "this copies a read-only " + $ty + ", and a written type declares a writable one", "", "declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own " + $text) }
 fn ReadOnlyCopyGlobal(ty String&, text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyGlobal, "T25c", "a mutable global holds no copy of a read-only " + $ty, "", "give it one of its own, made " + $text + ", or drop its 'mut'") }
 fn ReadOnlyCopyStored(ty String&, text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyStored, "T25c", "a copy of a read-only " + $ty + " cannot be stored where it can be written", "", "store one of its own, made " + $text) }

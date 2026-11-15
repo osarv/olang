@@ -1,0 +1,10 @@
+# check: fail help: pass a writable reference, change a copy of your own ('r.Copy()')
+# T25c (the AI study): 's := xs; s.Sort(...)' on a read-only parameter was told to 'drop the mut', which it did not write
+fn sorted(xs Array<I64>&) Array<I64> {
+    s := xs
+    s.Sort(fn(a I64, b I64) Bool { return a < b })
+    return s
+}
+fn main() {
+    Println($sorted(Array<I64>[3, 1, 2]))
+}

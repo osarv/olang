@@ -1,0 +1,9 @@
+# check: fail error: Lru has no member 'cap' - it is a parameter of the constructor, not a field (C2a)
+# C2a (the AI study): a constructor parameter is no field until the body names it, which the message did not say
+type Lru struct(cap I64) {
+    n I64 = 0
+}
+fn (l Lru&) Room() I64 { return l.cap - l.n }
+fn main() {
+    Println($Lru(3).Room())
+}

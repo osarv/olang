@@ -1,0 +1,7 @@
+# check: fail error[M22]: unknown function 'max' - it is a method of its first argument
+# M22, M19 (the AI study): 'max(a, b)' was answered 'did you mean Max?', then 'did you mean Map?' - the call is a method's
+fn main() {
+    a := 3
+    b := 4
+    Println($max(a, b))
+}

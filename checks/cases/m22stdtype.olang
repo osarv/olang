@@ -1,0 +1,7 @@
+# check: fail error[M22]: unknown type 'Deque' - std/deque declares it
+# M22, M10 (the AI study): a std type used without its import was 'cannot build this yet' (a generic call) or six cascading errors; one error naming the import
+fn main() {
+    q := Deque<I64>()
+    q.PushBack(1)
+    Println($q.Len())
+}

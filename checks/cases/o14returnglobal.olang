@@ -1,4 +1,4 @@
-# check: fail error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+# check: fail error[T25c]: a read-only reference cannot become writable
 # O14: a built result is new storage its caller may write (T25c) - a reference to an immutable global's storage handed
 # out as one would let "x mut Array<Char>& = Show()" write the global, so it is refused where it is returned, naming
 # the by-value result, which copies it
