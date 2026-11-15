@@ -1,0 +1,6 @@
+# extra probe: build a string by appending to itself in a loop (s = $s $i); memory grows quadratically
+fn main() {
+    s := ""
+    for i in range 8000: s = $s + $i
+    Println($s.Len())
+}

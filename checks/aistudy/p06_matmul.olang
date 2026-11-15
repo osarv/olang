@@ -1,0 +1,31 @@
+# spec: dense matrices as flat F64 arrays: multiply, transpose, identity check
+type Mat struct(r I64, c I64, d Array<F64>) { r, c, d }
+
+fn mul(a Mat&, b Mat&) Mat {
+    d := Array<F64>(a.r * b.c)
+    for i in range a.r {
+        for j in range b.c {
+            s := 0.0
+            for k in range a.c: s += a.d[i * a.c + k] * b.d[k * b.c + j]
+            d[i * b.c + j] = s
+        }
+    }
+    return Mat(a.r, b.c, d)
+}
+
+fn transpose(a Mat&) Mat {
+    d := Array<F64>(a.r * a.c)
+    for i in range a.r {
+        for j in range a.c: d[j * a.r + i] = a.d[i * a.c + j]
+    }
+    return Mat(a.c, a.r, d)
+}
+
+fn main() {
+    a := Mat(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    b := transpose(a)
+    c := mul(a, b)
+    Println($c.d)
+    bad := mul(a, a)
+    Println($bad.d)
+}

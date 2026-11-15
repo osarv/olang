@@ -249,7 +249,7 @@ emit changes what a bootstrap needs, `make seed`); `docs/optsurvey.md` / `bench/
 | place | why |
 |---|---|
 | `tools/NAME.olang` (+ tests; it may import `srcmask`/`diagedit`) | the rewrite; idempotent on code of today, or listed as not run |
-| `compiler/fix.olang`: `ToolNames` and `ToolKinds` (same length), in the order the changes were made **[checked]** | what `olang fix` runs; text tools first, driven ones after |
+| `compiler/fix.olang`: `ToolNames`, `ToolKinds` and `ToolTriggers` (same length; a trigger a superset of the tool's forms, `""` for always), in the order the changes were made **[checked]** | what `olang fix` runs; text tools first, driven ones after |
 | `tools/README.md`: a table row, the order paragraph, the not-run list **[checked]** | |
 | `SPEC.md` B17 | if the set of tools is described |
 | `makefile` `OLANG_TESTS` | picks up `tools/*.olang` by wildcard already |

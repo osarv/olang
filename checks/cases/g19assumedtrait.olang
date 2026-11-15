@@ -1,0 +1,6 @@
+# check: fail error[G19]: unknown trait 'Less' as a constraint
+# G19, G18a (the AI study): an assumed trait as a constraint was "unknown type" with no rule; a type variable needs none
+fn big<T Less>(a T, b T) T { return a if b < a else b }
+fn main() {
+    Println($big(1, 2))
+}

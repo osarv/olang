@@ -38125,3 +38125,73 @@ value moved into a longer-lived element breaks that. Closing it needs the value 
 whose by-value argument a callee stores into a place landing in the place's scope) or a settle that re-homes the slots,
 a walk at the store. Measured on the fixture of 20 strings per Vec (checks' gaps shape, with SetAt): 169 MB at 20,000
 turns before, 157 MB with step 1 alone (the place sole, nothing released). Left open, docs/freeing.md 2.2.
+
+## 2026-11-15: the AI study's bugs, `olang fix` speed, the std a compiler reads, -bench's argv[0] (wt-aistudy2)
+
+**The study merged.** wt-aistudy (docs/aistudy.md, checks/aistudy/) had never been merged; its LSP and editor commits
+(unused names as warnings, nvim signs in the number column, gd before Neovim 0.10) had reached master through the
+lspwarn merge, so only the study's three commits came in. The 50 programs, written before text joined with `+`, were
+brought to today by `olang fix checks/aistudy` (the new fix's first real run).
+
+**A recursive lambda's own capture (D16c, p10).** `fib = fn(n I64) I64 { ... fib(n - 1) ... }` copied `fib` as the
+lambda was made, so the lambda called the earlier function (`fib(20)` was 37). Captures stay copies (D16c); a lambda
+assigned to a variable it captures is now an error naming the two ways to write recursion - a top-level `fn`, or a
+captured reference holding the function (`h.f = fn ... h.f(n - 1) ...`, which reads the field at the call). Considered
+and not taken: letting `fib := fn ... fib(...)` name itself, which needs a self-reference in lowering (another
+agent's files tonight) and a new scope rule for a declaration's own name; the error says what to write meanwhile. The
+check is the checker's (`storeLambdaInto`: `captureIn` notes a capture of the assigned name by the lambda's own frame).
+Nothing for the evaluator: a program it refuses is no program. Cases lambdaselfcapture (fails), lambdaselfholder (runs).
+
+**json.Encode of private fields (p24).** Another module's private fields are invisible to reflection (G32), so a struct
+whose fields were all lower case was written `{}` and Decode then failed with Missing. Encode's struct branch now
+asserts `T.Fields.Len() > 0 or T.Size == 0`, decided per instance while compiling (S18c), naming the fix (capitalize
+the fields). A struct with some public fields still writes those (privacy is the rule); one with no fields at all writes
+`{}`. Case jsonprivatefields.
+
+**chan.Chan needed Init (p22).** `chan.Init` initialised the lock and the conditions with pthread_*_init. Their zero
+value - which a constructor's field takes (D13c) - is pthread's static initializer on Linux (glibc's and musl's
+`PTHREAD_MUTEX_INITIALIZER` and `PTHREAD_COND_INITIALIZER` are all zero bits), the one OS olang targets, and a
+statically initialised mutex may be copied while unused. So a channel is ready as made and `Init` was removed:
+tools/chaninit_migrate (in `olang fix`) deletes the calls; std/chan's tests, the compiler's build.olang, checks and fuzz
+were migrated. A new test makes 50 channels each after a block left its arena dirty. The study's hang did not reproduce
+on master with or without `Init` (nor under `-race`).
+
+**Five misleading diagnostics (B11).** (1) `max(a, b)` and `Max(a, b)` were answered "did you mean 'Max'", then "'Map'":
+an unknown function whose first argument's type has a method of the name (capitalized, or as written; trait defaults
+included) is now `unknown function 'max' - it is a method of its first argument`, help `write 'a.Max(b)'` (M22).
+(2) A std type with no import (`Deque<I64>()`) was a "cannot build this yet" gap, `q Deque<I64>` "unknown type" with no
+rule, and the study saw six cascading errors: `unknown type 'Deque' - std/deque declares it`, help `import "std/deque"`
+and `deque.Deque` (T2, which every unknown type now names - M22 is names' rule, and namesdiff holds the checker's
+apart; the module named for the type, read only on the error path). (3) T25c said "drop the 'mut'"
+where none was written (`s := xs; s.Sort(...)` on a read-only parameter): now a headline, a note (what is reached
+read-only stays so, `x := r` copies the reference) and a help naming `r.Copy()`. (4) An assumed trait as a constraint
+(`<T Less>`) was "unknown type" with no rule: `unknown trait 'Less' as a constraint` (G19), noting that a type
+variable needs no constraint (G18a). (5) `Lru has no member 'cap'` for a constructor parameter the body never named now
+says it is a parameter, not a field (C2a). Besides: csv.Decode<Array<Row>> was
+G33 and E13b inside std's code with its own assertion said last - the record-building line is now under a per-instance
+`if` (G35), so the assertion is said alone, its message naming T. Already fixed on master: E27's help for a Set
+comprehension (`set.Set<I64>[x for x in a if x in b]` builds). Quadratic memory of a self-append (x01): at 40000
+iterations its peak is 13 MB on master (3.6 GB in the study).
+
+**`olang fix` speed (B17).** On oann it took over 25 minutes; on a copy of oann (88 files) the old fix took 555 s cold
+and 408 s warm. Three changes: (1) each tool's program is cached in `~/.cache/olang/fix` (build.CacheDir) under the
+hash of what it is built from - the compiler (path, size, time), std's files, the tool's source and the modules it
+imports beside it (srcmask, diagedit, the compiler's) - and built when missing, three at a time; the old cache rebuilt a
+tool when any file of compiler/ or std was newer, and built serially. (2) Each tool has trigger texts
+(`ToolTriggers`, a superset of its forms: `Init(`, `Destroy`, `nomatch|=>`, ...; `""` for tools no text tells); a
+tool none of whose texts stands in the files is neither built nor run. (3) The driven tools (seven, each compiling every
+file at least once) are given only the files `compile -quick` reports an error in, compiled once each, four at a time.
+After: 128 s cold (74 s of it building 37 tools), 49 s warm, the same files written. `OLANG_TIMES` says each tool's time.
+
+**The std a compiler reads (B1a).** A compiler copied out of its checkout looked for `../std` beside itself. It now
+records the std it was built from: `BuiltStd`, a build constant with a default (B10c) in load.olang, given by the
+makefile's self-builds (`SELF_STD`: stage 2 of the bootstrap, fixedpoint, quickolang); `StdDir` reads `OLANG_STD`, else
+`BuiltStd` while it holds a prelude, else `../std` beside the binary - so the seed and a release (built without it)
+read the std shipped beside them. `fix` finds its tools beside that std.
+
+**std/bench's loose ends (B19b).** `-bench` ran the built binary with its path as argv[0], where running a file without
+it gives the file as written: the runtime's `__olang_spawn` gained `__olang_spawn_as(path, ...)` (argv[0] the name,
+the program at path; `__olang_spawn` calls it with null), measure's `Sample.Of` and `Measure` take the program apart
+from argv, and the evaluator calls it as it calls `__olang_spawn`. Not added: the name to effects.olang's process list
+(another agent's file tonight; the compiler's own module only). The evaluator disagreement on `-runs`'s parse (the
+timeit agent's note) does not reproduce: the two command-line tests pass under `OLANG_EVALUATE=1`.

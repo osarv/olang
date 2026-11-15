@@ -1,0 +1,85 @@
+# spec: implement insertion sort, merge sort, quicksort on Array<I64>; binary search; compare to builtin sort
+fn insertion(a mut Array<I64>&) {
+    for i in range 1, a.Len() {
+        k := a[i]
+        j := i - 1
+        for j >= 0 and a[j] > k {
+            a[j + 1] = a[j]
+            j--
+        }
+        a[j + 1] = k
+    }
+}
+
+fn merge(a Array<I64>&) Array<I64> {
+    if a.Len() <= 1: return a
+    mid := a.Len() / 2
+    l := merge(a[:mid])
+    r := merge(a[mid:])
+    out := Vec<I64>[]
+    i := 0
+    j := 0
+    for i < l.Len() and j < r.Len() {
+        if l[i] <= r[j] {
+            out.Push(l[i])
+            i++
+        } else {
+            out.Push(r[j])
+            j++
+        }
+    }
+    for i < l.Len() {
+        out.Push(l[i])
+        i++
+    }
+    for j < r.Len() {
+        out.Push(r[j])
+        j++
+    }
+    return out.ToArray()
+}
+
+fn quick(a mut Array<I64>&, lo I64, hi I64) {
+    if lo >= hi: return
+    p := a[hi]
+    i := lo
+    for j in range lo, hi {
+        if a[j] < p {
+            t := a[i]
+            a[i] = a[j]
+            a[j] = t
+            i++
+        }
+    }
+    t := a[i]
+    a[i] = a[hi]
+    a[hi] = t
+    quick(a, lo, i - 1)
+    quick(a, i + 1, hi)
+}
+
+fn find(a Array<I64>&, x I64) I64 {
+    lo := 0
+    hi := a.Len()
+    for lo < hi {
+        mid := (lo + hi) / 2
+        if a[mid] == x: return mid
+        if a[mid] < x { lo = mid + 1 } else { hi = mid - 1 }
+    }
+    return -1
+}
+
+fn main() {
+    a := [9, 4, 7, 1, 8, 2, 2, 6]
+    b := a
+    insertion(b)
+    Println($b)
+    Println($merge(a))
+    c := a
+    quick(c, 0, c.Len() - 1)
+    Println($c)
+    Println($find(c, 7) + " " + $find(c, 5) + " " + $find(c, 100))
+    e := Array<I64>(0)
+    quick(e, 0, e.Len() - 1)
+    Println($merge(e))
+}

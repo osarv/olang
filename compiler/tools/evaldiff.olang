@@ -25,6 +25,7 @@ import "toolkit"
 Expected Array<String&> = Array<String&>[
     # B3e: a join's tasks run one after another at the join, so a wait for another task stops the run, saying so
     "std/chan.olang: a bounded channel carries values between two tasks - a task waits for another (B3e)"
+    "std/chan.olang: Chan: a channel needs nothing but its constructor, on storage used before - a task waits for another (B3e)"
     "std/chan.olang: a channel carries any element type - a task waits for another (B3e)"
     "std/chan.olang: a channel of capacity 0 is a rendezvous - a task waits for another (B3e)"
     "std/chan.olang: for v in c receives until the channel is closed and drained - a task waits for another (B3e)"

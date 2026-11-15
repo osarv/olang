@@ -1,4 +1,4 @@
-# check: fail error: unknown type 'Json' - did you mean 'json.Json'?
+# check: fail error[T2]: unknown type 'Json' - did you mean 'json.Json'?
 # never: unknown name 'v'
 # never: unknown name 's'
 # never: no import here

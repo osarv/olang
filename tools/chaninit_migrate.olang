@@ -1,0 +1,77 @@
+# chaninit_migrate - chan.Init removed (2026-11-15, the AI study's p22): a channel is ready as its constructor makes it,
+# its lock and conditions starting as pthread's static initializers. Every line that is only a call "ALIAS.Init(NAME)",
+# ALIAS the name std/chan is imported by (its base name "chan" where the import has no alias), is deleted; in
+# std/chan.olang itself, a line "Init(NAME)". Code only: comments and text are left alone. Re-runnable: a file calling no
+# Init changes nothing.
+#
+#     olang build tools/chaninit_migrate.olang && build/tools_chaninit_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+fn main() ? io.Error {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PutErrLine("chaninit_migrate: " + $path + ": cannot be read")
+            continue
+        }
+        out := migrate(text, path.EndsWith("std/chan.olang"))
+        if out == text: continue
+        try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("chaninit_migrate: " + $path + ": cannot be written") }
+        try io.PutLine(path)
+    }
+}
+
+# the text without its lines calling chan's Init - "Init(" itself where own (std/chan.olang)
+fn migrate(text String&, own Bool) String {
+    call := "Init(" if own else aliasOf(text) + ".Init("
+    if call == ".Init(" or not text.Contains(call): return $text
+    mask := srcmask.Mask(text, true)
+    b := StringBuilder()
+    at I64 = 0
+    for line in text.Lines() {
+        end := at + line.Len()
+        if not initLine(line, mask[at:end], call): b.Push(text[at:(end + 1).Min(text.Len())])
+        at = end + 1
+    }
+    return b.ToString()
+}
+
+# the name std/chan is imported by, "" where it is not imported
+fn aliasOf(text String&) String {
+    for line in text.Lines() {
+        t := srcmask.Strip(line)
+        if not t.StartsWith("import ") or not t.EndsWith("\"std/chan\""): continue
+        words := t.Split(" ")
+        return $words[1] if words.Len() == 3 else "chan"
+    }
+    return ""
+}
+
+# whether a line is code holding only call, one name in its parentheses
+fn initLine(line String&, mask String&, call String&) Bool {
+    t := srcmask.Strip(line)
+    if not t.StartsWith(call) or not t.EndsWith(")"): return false
+    lead := line.Len() - srcmask.StripStart(line).Len()
+    if mask[lead] != 'c': return false
+    name := t[call.Len():t.Len() - 1]
+    if name.Len() == 0: return false
+    for ch in name {
+        if not srcmask.IsWord(ch): return false
+    }
+    return true
+}
+
+test migrate "a line calling chan's Init goes, through its alias; comments, text and other calls stay" {
+    a := "import \"std/chan\"\nfn main() {\n    c mut chan.Chan<I64>& = chan.Chan<I64>(4)\n    chan.Init(c)\n    go(c)\n}\n"
+    assert migrate(a, false) == "import \"std/chan\"\nfn main() {\n    c mut chan.Chan<I64>& = chan.Chan<I64>(4)\n    go(c)\n}\n"
+    b := "import ch \"std/chan\"\n    ch.Init(q)\n    # ch.Init(q)\n    x := \"ch.Init(q)\"\n    ch.Init(q.r)\n"
+    assert migrate(b, false) == "import ch \"std/chan\"\n    # ch.Init(q)\n    x := \"ch.Init(q)\"\n    ch.Init(q.r)\n"
+    assert migrate("    Init(c)\n    Init(d)", true) == ""
+    none := "fn main() {\n    chan.Init(c)\n}\n"
+    assert migrate(none, false) == none
+    assert migrate(migrate(a, false), false) == migrate(a, false)
+}

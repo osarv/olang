@@ -238,9 +238,13 @@ build/olang.seed: $(SEED_OBJ)
 BOOT_STAGE = @t=$$(date +%s); echo "bootstrap: $(1) ..."; OLANG_TIMES=1 $(2) || exit 1; \
 	e=$$(( $$(date +%s) - t )); echo "bootstrap: $(1) - done in $$((e / 60))m$$((e % 60))s"
 
+# B1a: the compiler records the standard library it is built from, so a copy of it anywhere reads that std (OLANG_STD
+# overrides; a release, built without it, reads the std beside it)
+SELF_STD = -define BuiltStd=$(CURDIR)/std
+
 define BOOTSTRAP
 	$(call BOOT_STAGE,stage 1 of 2 - the seed builds the compiler into build/olang.1,build/olang.seed build -output build/olang.1 compiler/olang.olang)
-	$(call BOOT_STAGE,stage 2 of 2 - build/olang.1 builds the compiler fully optimized into build/olang.2,build/olang.1 build -output build/olang.2 compiler/olang.olang)
+	$(call BOOT_STAGE,stage 2 of 2 - build/olang.1 builds the compiler fully optimized into build/olang.2,build/olang.1 build $(SELF_STD) -output build/olang.2 compiler/olang.olang)
 	cp build/olang.2 build/olang.new && mv -f build/olang.new build/olang
 	@echo "bootstrap: build/olang installed (make fixedpoint checks that it builds itself identically)"
 endef
@@ -333,7 +337,7 @@ fixedpoint: $(OLANG)
 	if [ -f $$d/fixed ] && cmp -s $$d/olang build/olang; then \
 		echo "fixedpoint: build/olang built itself identically before ($$d)"; exit 0; fi; \
 	t=$$(date +%s); echo "fixedpoint: build/olang builds itself into build/olang.3 ..."; \
-	OLANG_TIMES=1 build/olang build -output build/olang.3 compiler/olang.olang || exit 1; \
+	OLANG_TIMES=1 build/olang build $(SELF_STD) -output build/olang.3 compiler/olang.olang || exit 1; \
 	cmp build/olang build/olang.3 || exit 1; e=$$(( $$(date +%s) - t )); \
 	if [ -x $$d/olang ] && cmp -s $$d/olang build/olang; then touch $$d/fixed; fi; \
 	echo "fixedpoint: build/olang and build/olang.3 are byte for byte equal - done in $$((e / 60))m$$((e % 60))s"
@@ -443,7 +447,7 @@ quickolang:
 	@if [ ! -x build/olang ]; then $(MAKE) --no-print-directory boot; \
 	elif [ -n "$$(find $(BOOT_SOURCES) -newer build/olang)" ]; then \
 		echo "quick: build/olang rebuilt by itself"; \
-		build/olang build -output build/olang.next compiler/olang.olang && mv build/olang.next build/olang; fi
+		build/olang build $(SELF_STD) -output build/olang.next compiler/olang.olang && mv build/olang.next build/olang; fi
 
 # B12a: the corpus's, std's and the prelude's tests and the checks' cases built for another architecture,
 # CROSS_TARGET, and run through its emulator (qemu-user; olang finds it, OLANG_EMULATOR names another), with a clang

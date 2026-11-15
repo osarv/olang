@@ -1,0 +1,34 @@
+# spec: run-length encode/decode a string: "aaabcc" -> "3a1b2c" and back
+fn encode(s String&) String {
+    out := StringBuilder()
+    i := 0
+    for i < s.Len() {
+        j := i
+        for j < s.Len() and s[j] == s[i]: j++
+        out.Push($(j - i))
+        out.PushChar(s[i])
+        i = j
+    }
+    return out.ToString()
+}
+
+fn decode(s String&) String {
+    out := StringBuilder()
+    n := 0
+    for c in s {
+        if c.IsDigit() {
+            n = n * 10 + I64(c - '0')
+        } else {
+            for _ in range n: out.PushChar(c)
+            n = 0
+        }
+    }
+    return out.ToString()
+}
+
+fn main() {
+    e := encode("aaabcc")
+    Println($e + " " + $decode(e))
+    Println($encode("") + "|" + $decode("12x"))
+    Println($decode("3"))
+}

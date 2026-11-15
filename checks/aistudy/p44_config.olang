@@ -1,0 +1,33 @@
+# spec: parse an ini-like config: [section] headers, key = value lines, # comments; lookup with default; typed getters
+type Config struct() {
+    vals Map<String, String> = Map<String, String>[]
+}
+
+fn Config.Parse(text String&) Config ? ParseError {
+    c := Config()
+    section := ""
+    for raw in text.Lines() {
+        line := raw.Trim()
+        if line == "" or line.StartsWith("#"): continue
+        if line.StartsWith("[") {
+            section = line[1:line.Len() - 1]
+            continue
+        }
+        eq := try line.Find("=") catch { error ParseError.Invalid }
+        key := line[:eq].Trim()
+        c.vals.Put($section + "." + $key, line[eq + 1:].Trim())
+    }
+    return c
+}
+
+fn (c Config&) Int(key String&, dflt I64) I64 {
+    v := try c.vals.Get(key) catch { return dflt }
+    return try v.ParseInt() catch default dflt
+}
+
+fn main() {
+    text := "# demo\n[db]\nhost = localhost\nport = 5432\n[app]\nthreads = four\n"
+    c := Config.Parse(text)!
+    Println($c.Int("db.port", 1) + " " + $c.Int("app.threads", 2) + " " + $c.Int("x.y", 3))
+    Println($Config.Parse("[a]\nnovalue\n")!.Int("a.b", 0))
+}

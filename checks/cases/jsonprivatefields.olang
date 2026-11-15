@@ -1,0 +1,11 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: json.Encode: every field of Item is private to its module, so it would be written as {} - capitalize the fields json writes
+# json.Encode (the AI study, docs/aistudy.md p24): a struct whose fields are all private to its module was written as
+# "{}" with no word, and Decode then failed with Missing; another module's private fields are invisible to reflection
+# (G32), so a struct with storage and no field json may read is refused while compiling, naming the fix
+import "std/json"
+
+type Item struct(name String, qty I64) { name, qty }
+
+fn main() {
+    Println(json.Encode(Array<Item>[Item("pen", 3), Item("ink", 1)]))
+}

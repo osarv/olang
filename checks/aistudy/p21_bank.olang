@@ -1,0 +1,28 @@
+# spec: bank accounts: deposit, withdraw (insufficient funds error), transfer between two accounts; balances never negative
+type BankError error { Insufficient, BadAmount }
+
+type Account struct(owner String, balance I64) { owner, balance }
+
+fn (a mut Account&) Deposit(n I64) ? BankError {
+    if n <= 0: error BankError.BadAmount
+    a.balance += n
+}
+
+fn (a mut Account&) Withdraw(n I64) ? BankError {
+    if n > a.balance: error BankError.Insufficient
+    a.balance -= n
+}
+
+fn transfer(from mut Account&, to mut Account&, n I64) ? BankError {
+    try from.Withdraw(n)
+    try to.Deposit(n)
+}
+
+fn main() {
+    a := Account("ann", 100)
+    b := Account("bob", 20)
+    try transfer(a, b, 30) catch e { Println("failed " + $e) }
+    try transfer(a, b, 500) catch e { Println("failed " + $e) }
+    try transfer(a, b, 0) catch e { Println("failed " + $e) }
+    Println($a.balance + " " + $b.balance)
+}

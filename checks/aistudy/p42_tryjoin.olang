@@ -1,0 +1,18 @@
+# spec: run several parse tasks in parallel, each parsing a string to int; if any fails report the error, else sum
+type SumError error { Bad }
+
+fn parse(s String&) I64 ? ParseError { return try s.ParseInt() }
+
+fn sumAll(xs Array<String&>&) I64 ? ParseError {
+    out := Array<I64>(xs.Len())
+    try join {
+        for i in range xs.Len(): spawn out[i] = try parse(xs[i])
+    }
+    return out.Sum()
+}
+
+fn main() {
+    Println($sumAll(["1", "2", "3"])!)
+    r := try sumAll(["1", "x", "3"]) catch default -1
+    Println($r)
+}

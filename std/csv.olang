@@ -253,13 +253,14 @@ fn cell<V>(x V) String {
 # its default. Fails with what Rows fails with, NoColumn where a parameter with no default has no column and BadValue
 # where a field is no value of its type - and with what the constructor fails with
 fn Decode<T>(text String&, sep Char = ',') Vec<T> ? {
-    assert T.Kind == TypeKind.Struct, "csv reads a struct's fields as columns"
+    assert T.Kind == TypeKind.Struct, "csv.Decode<T> gives a Vec of T, one record: T is a struct with a field for each column, and " + T.Name + " is none"
     out Vec<T>
     rows := Rows(text, sep)
     header := try rows.Next() catch Exhausted { return out }
     for {
         row := try rows.Next() catch Exhausted { break }
-        out.Push(try T(try argument(header, row, p, rows.Line) for p in T.Params))
+        # decided while compiling (G35): for another T only the assertion above is said
+        if T.Kind == TypeKind.Struct: out.Push(try T(try argument(header, row, p, rows.Line) for p in T.Params))
     }
     return out
 }

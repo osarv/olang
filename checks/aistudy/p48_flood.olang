@@ -1,0 +1,34 @@
+# spec: flood fill on a text grid: count connected regions of '#' cells (4-neighbour), using an explicit stack
+fn regions(rows Array<String>&) I64 {
+    h := rows.Len()
+    w := rows[0].Len()
+    seen := Array<Bool>(h * w)
+    count := 0
+    for y in range h {
+        for x in range w {
+            if rows[y][x] != '#' or seen[y * w + x]: continue
+            count++
+            st := Vec<I64>[y * w + x]
+            for st.Len() > 0 {
+                p := st.Pop()!
+                if seen[p]: continue
+                seen[p] = true
+                py := p / w
+                px := p % w
+                for d in [[0, 1], [1, 0], [0, -1], [-1, 0]] {
+                    ny := py + d[0]
+                    nx := px + d[1]
+                    if rows[ny][nx] == '#': st.Push(ny * w + nx)
+                }
+            }
+        }
+    }
+    return count
+}
+
+fn main() {
+    g := ["##..#", "#...#", "..#..", "....#"]
+    Println($regions(g))
+    Println($regions(["#"]))
+    Println($regions(Array<String>[]))
+}

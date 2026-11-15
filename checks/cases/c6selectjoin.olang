@@ -9,9 +9,7 @@ fn take(c mut chan.Chan<I64>&, got mut box&) {
 }
 fn main() ? {
     r := chan.Chan<I64>(0)
-    chan.Init(r)
     full := chan.Chan<I64>(1)
-    chan.Init(full)
     try chan.Send(full, 1)
     got mut box& = box(0)
     join {

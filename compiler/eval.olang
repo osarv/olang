@@ -4750,6 +4750,7 @@ extern {
     fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
     fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
     fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+    fn __olang_spawn_as(path Array<U8>, args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
     fn __olang_mkdtemp(template Array<U8>) I32
     fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
     fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
@@ -4798,6 +4799,10 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
         case "__olang_spawn" {
             v = I64(__olang_spawn(m.bytesOf(fi, x(0)), m.intArg(fi, x(1)), I32(m.intArg(fi, x(2))), I32(m.intArg(fi, x(3)))
                                   I32(m.intArg(fi, x(4))), m.bytesOf(fi, x(5))))
+        }
+        case "__olang_spawn_as" {
+            v = I64(__olang_spawn_as(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), m.intArg(fi, x(2)), I32(m.intArg(fi, x(3)))
+                                     I32(m.intArg(fi, x(4))), I32(m.intArg(fi, x(5))), m.bytesOf(fi, x(6))))
         }
         case "__olang_exec" { v = I64(__olang_exec(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), m.intArg(fi, x(2)))) }
         case "__olang_mkdtemp" {

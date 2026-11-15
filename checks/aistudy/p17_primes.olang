@@ -1,0 +1,40 @@
+# spec: sieve of Eratosthenes up to n, count primes, nth prime, prime factorization of a number
+fn sieve(n I64) Array<Bool> {
+    is := Array<Bool>(n + 1)
+    for i in range 2, n + 1: is[i] = true
+    i := 2
+    for i * i <= n {
+        if is[i] {
+            j := i * i
+            for j <= n {
+                is[j] = false
+                j += i
+            }
+        }
+        i++
+    }
+    return is
+}
+
+fn factors(n I64) Vec<I64> {
+    out := Vec<I64>[]
+    m := n
+    d := 2
+    for m > 1 {
+        for m % d == 0 {
+            out.Push(d)
+            m /= d
+        }
+        d++
+    }
+    return out
+}
+
+fn main() {
+    s := sieve(100)
+    Println($s.Count(fn(b): return b))
+    Println($factors(360))
+    Println($factors(97))
+    Println($factors(0))
+    Println($sieve(-1).Len())
+}

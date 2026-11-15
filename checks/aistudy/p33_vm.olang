@@ -1,0 +1,57 @@
+# spec: stack bytecode VM: PUSH n, ADD, MUL, SUB, DUP, JMPZ addr, JMP addr, PRINT, HALT; run a countdown loop program
+type Op enum {
+    Push(n I64)
+    Add
+    Sub
+    Mul
+    Dup
+    Jmpz(addr I64)
+    Jmp(addr I64)
+    Print
+    Halt
+}
+
+fn run(prog Array<Op>&) ? VmError {
+    st := Vec<I64>[]
+    pc := 0
+    for {
+        op := prog[pc]
+        pc++
+        match op {
+            case Op.Push(n): st.Push(n)
+            case Op.Add {
+                b := st.Pop()!
+                a := st.Pop()!
+                st.Push(a + b)
+            }
+            case Op.Sub {
+                b := st.Pop()!
+                a := st.Pop()!
+                st.Push(a - b)
+            }
+            case Op.Mul {
+                b := st.Pop()!
+                a := st.Pop()!
+                st.Push(a * b)
+            }
+            case Op.Dup: st.Push(st.Last()!)
+            case Op.Jmpz(a) {
+                if st.Pop()! == 0: pc = a
+            }
+            case Op.Jmp(a): pc = a
+            case Op.Print: Println($st.Last()!)
+            case Op.Halt: return
+        }
+    }
+}
+
+type VmError error { Bad }
+
+fn main() {
+    prog := Array<Op>[Op.Push(3), Op.Print, Op.Push(1), Op.Sub, Op.Dup, Op.Jmpz(7), Op.Jmp(1), Op.Halt]
+    run(prog)!
+    bad := Array<Op>[Op.Add]
+    run(bad)!
+    runaway := Array<Op>[Op.Push(1), Op.Jmp(5)]
+    run(runaway)!
+}

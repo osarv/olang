@@ -1,0 +1,37 @@
+# spec: inventory: Map of name -> (qty, price); Add, Remove(qty) failing when not enough or unknown, Total value
+type InvError error { Unknown, NotEnough }
+
+type Item struct(qty I64, price F64) { qty, price }
+
+type Inventory struct() {
+    items Map<String, Item> = Map<String, Item>[]
+}
+
+fn (inv mut Inventory&) Add(name String&, qty I64, price F64) {
+    cur := try inv.items.Get(name) catch default Item(0, price)
+    inv.items.Put(name, Item(cur.qty + qty, price))
+}
+
+fn (inv mut Inventory&) Remove(name String&, qty I64) ? InvError {
+    cur := try inv.items.Get(name) catch { error InvError.Unknown }
+    if cur.qty < qty: error InvError.NotEnough
+    inv.items.Put(name, Item(cur.qty - qty, cur.price))
+}
+
+fn (inv Inventory&) Total() F64 {
+    t := 0.0
+    for e in inv.items: t += F64(e.Value.qty) * e.Value.price
+    return t
+}
+
+fn main() {
+    inv := Inventory()
+    inv.Add("bolt", 100, 0.25)
+    inv.Add("nut", 50, 0.1)
+    inv.Add("bolt", 20, 0.3)
+    Println($inv.Total())
+    try inv.Remove("bolt", 500) catch e { Println("err " + $e) }
+    try inv.Remove("gear", 1) catch e { Println("err " + $e) }
+    try inv.Remove("nut", 50) catch e { Println("err " + $e) }
+    Println($inv.Total())
+}

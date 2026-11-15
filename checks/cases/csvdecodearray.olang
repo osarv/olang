@@ -1,0 +1,16 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: csv.Decode<T> gives a Vec of T, one record
+# std/csv (the AI study): csv.Decode<Array<Row>> was G33 and E13b inside std's code, its assertion said last; now the assertion alone
+# spec: read CSV with quoted fields and embedded commas using std/csv, sum the 'amount' column
+import "std/csv"
+
+type Row struct(who String, amount F64) { who, amount }
+
+fn main() ? {
+    text := "who,amount\n\"Smith, J\",10.5\nLee,4\n\"Q \"\"x\"\"\",1e1\n"
+    rows := try csv.Decode<Array<Row>>(text)
+    total := 0.0
+    for r in rows: total += r.amount
+    Println($rows.Len() + " " + $total + " " + $rows[0].who)
+    more := try csv.Decode<Row>("who,amount\nA,notanumber\n")
+    Println($more.Len())
+}

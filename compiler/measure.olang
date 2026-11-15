@@ -22,14 +22,16 @@ extern {
     fn wait4(pid I32, status Array<I32>, options I32, usage Array<I64>) I32
     fn getrusage(who I32, usage Array<I64>) I32
     fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+    fn __olang_spawn_as(path Array<U8>, args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
 }
 
 # one run: its wall time, user and system time (nanoseconds), the peak resident memory (kilobytes), and its status
 # (128 and the signal where a signal ended it)
 type Sample struct(Wall I64, User I64, Sys I64, PeakKb I64, Status I64) { Wall, User, Sys, PeakKb, Status }
 
-# argv run, its standard output going to out (-1: this process's own), and waited for; fails where it cannot be started
-fn Sample.Of(argv Array<String&>&, out I32) Sample ? os.Error {
+# argv run - the program at program, argv[0] the name it is run by, or, with program "", argv[0] itself - its standard
+# output going to out (-1: this process's own), and waited for; fails where it cannot be started
+fn Sample.Of(argv Array<String&>&, out I32, program String& = "") Sample ? os.Error {
     size := 0
     for a in argv: size += a.Len() + 1
     line := Array<U8>(size)
@@ -42,7 +44,7 @@ fn Sample.Of(argv Array<String&>&, out I32) Sample ? os.Error {
         at++
     }
     start := time.Now()
-    pid := __olang_spawn(line, argv.Len(), -1, out, -1, "\0")
+    pid := __olang_spawn(line, argv.Len(), -1, out, -1, "\0") if program == "" else __olang_spawn_as(program + "\0", line, argv.Len(), -1, out, -1, "\0")
     if pid < 0: error os.Error.Failed(argv[0])
     waited := Array<I32>(1)
     ru := Array<I64>(18) # struct rusage: two timevals (seconds, microseconds), then the peak in kilobytes
@@ -75,16 +77,16 @@ fn Line(built I64, runs Array<Sample>&) String {
     return $"built in " + $secs(F64(built)) + ", ran in " + $ran + $secs(bench.Median(users)) + " user, " + $secs(bench.Median(syss)) + " sys, " + $(peak / 1024) + " MB peak)"
 }
 
-# argv run - once, or wanted times - and the line written to the standard error, built the nanoseconds the build took.
+# argv run (the program at program where it is not argv[0], as Sample.Of) - once, or wanted times - and the line written to the standard error, built the nanoseconds the build took.
 # The program's output is its own: the first run's is shown, a later one's is discarded. Gives the status of the first
 # run that did not succeed (the others are not made, and the line is of the runs made), else 0, or 1 where it cannot be started
-fn Measure(argv Array<String&>&, built I64, wanted I64 = 1) I32 {
+fn Measure(argv Array<String&>&, built I64, wanted I64 = 1, program String& = "") I32 {
     nowhere := fcntl.open("/dev/null\0", 1)
     defer unistd.close(nowhere)
     runs Vec<Sample>
     status I64 = 0
     for i in range wanted.Max(1) {
-        s := try Sample.Of(argv, -1 if i == 0 else nowhere) catch os.Error {
+        s := try Sample.Of(argv, -1 if i == 0 else nowhere, program) catch os.Error {
             try io.PutErr($"bench: " + $argv[0] + " could not be started\n") catch io.Error { }
             return 1
         }
@@ -119,4 +121,11 @@ test Sample.Of "runs a program, waits for it and reads what it used" {
 test Measure "gives the first failing status and the line of the runs made" {
     assert Measure(Array<String&>["/bin/sh", "-c", "exit 4"], 1000, 3) == 4
     assert Measure(Array<String&>["/bin/sh", "-c", "exit 0"], 1000, 2) == 0
+}
+
+test Sample.Of "runs the program at its path under the name it is given, as running a file does (B19b)" {
+    s := try Sample.Of(Array<String&>["m.olang", "-c", "test \"$0\" = m.olang"], -1, "/bin/sh") catch os.Error { unreachable }
+    assert s.Status == 0
+    t := try Sample.Of(Array<String&>["m.olang", "-c", "test \"$0\" = other"], -1, "/bin/sh") catch os.Error { unreachable }
+    assert t.Status == 1
 }

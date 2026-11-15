@@ -1,0 +1,17 @@
+# spec: producer/consumer with a bounded channel: one task sends 1..10, main receives and sums until closed
+import "std/chan"
+
+fn produce(c mut chan.Chan<I64>&) {
+    for i in range 1, 11: chan.Send(c, i)!
+    chan.Close(c)
+}
+
+fn main() {
+    c mut chan.Chan<I64>& = chan.Chan<I64>(4)
+    total := 0
+    join {
+        spawn produce(c)
+        for v in c: total += v
+    }
+    Println($total)
+}

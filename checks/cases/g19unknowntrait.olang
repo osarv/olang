@@ -1,4 +1,4 @@
-# check: fail unknown type 'Nope'
+# check: fail error[G19]: unknown trait 'Nope' as a constraint
 # never: is not a trait
 # G19: an unknown name in a constraint is one error - the stand-in type it recovers with is never named
 import "std/io"

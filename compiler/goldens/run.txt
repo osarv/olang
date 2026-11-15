@@ -2468,6 +2468,9 @@
 === run l9aowntake.olang
 | status 0
 | 4
+=== run lambdaselfholder.olang
+| status 0
+| 6765
 === run listscopetext.olang
 | status 0
 === run m19g20allowed.olang

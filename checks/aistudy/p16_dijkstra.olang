@@ -1,0 +1,38 @@
+# spec: Dijkstra shortest paths on a weighted directed graph using a heap
+import "std/heap"
+
+type Edge struct(to I64, w I64) { to, w }
+type Item struct(d I64, v I64) { d, v }
+
+fn dijkstra(adj Array<Vec<Edge>>&, src I64) Array<I64> {
+    dist := Array<I64>(adj.Len())
+    for i in range adj.Len(): dist[i] = I64.Max
+    dist[src] = 0
+    h := heap.Heap<Item>(fn(a, b): return a.d < b.d)
+    h.Push(Item(0, src))
+    for h.Len() > 0 {
+        it := h.Pop()!
+        if it.d > dist[it.v]: continue
+        for e in adj[it.v] {
+            nd := it.d + e.w
+            if nd < dist[e.to] {
+                dist[e.to] = nd
+                h.Push(Item(nd, e.to))
+            }
+        }
+    }
+    return dist
+}
+
+fn main() {
+    adj := Array<Vec<Edge>>(5)
+    adj[0].Push(Edge(1, 4))
+    adj[0].Push(Edge(2, 1))
+    adj[2].Push(Edge(1, 2))
+    adj[1].Push(Edge(3, 1))
+    adj[2].Push(Edge(3, 5))
+    Println($dijkstra(adj, 0))
+    # the probe that hung (a negative cycle, never terminates): left out so the program ends
+    # adj[1].Push(Edge(0, -10))
+    # Println($dijkstra(adj, 0))
+}

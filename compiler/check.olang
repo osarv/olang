@@ -226,6 +226,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
                                            # declared type, which "!" unwraps (a narrowing makes "!" unneeded, not wrong)
     enumWanted Bool = false                # S8d: the expression checked next is a case test's, an "as"'s or a match's
                                            # subject - a local narrowed to a payload written whole is read as its enum
+    selfFrame I64 = -1                    # D16c: the frame of "x = fn ...", while the lambda is checked, and x
+    selfName source.NameId = source.NameId(0)
+    selfCaught Bool = false               # the lambda captured x: it would hold x's earlier value
     nullDecl diag.Where = diag.Where.Nowhere  # T2c: where the type a value is fitted to is written, for the note naming "?&"
     Bodies Vec<mut typed.Body&>
     Gaps Vec<Gap>
@@ -1300,7 +1303,7 @@ fn (c mut Checker&) fnTypeParams(f I64) {
             # G19: a constraint naming no type at all
             match tp.Ty {
                 case ast.TypeRef.Named(usp, upath, _) if upath.Len() == 1 and c.P.R.Use(c.P.L.Mods[mi].File, usp.Start).Kind == names.What.None {
-                    c.unknownType(usp, upath[0])
+                    c.unknownType(usp, upath[0], constraint = true)
                     continue
                 }
                 case _ { }
@@ -5929,6 +5932,7 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     if id >= 0 or fr.Parent < 0 { return id }
     outer := c.captureIn(fr.Parent, n, sp)
     if outer < 0 { return -1 }
+    if fr.Parent == c.selfFrame and n == c.selfName: c.selfCaught = true
     ot := c.Bodies[c.frames[fr.Parent].Body].Locals[outer].Ty
     op typed.Lvalue& = typed.Lvalue.Local(sp, ot, typed.LocalId(I32(outer)))
     it := ot
@@ -9305,6 +9309,12 @@ fn (c mut Checker&) privateRole(m I64, t types.TypeId, cap String&, at source.Sp
     return true
 }
 
+fn upperFirst(t String&) String {
+    b := StringBuilder()
+    for i in range t.Len(): b.PushChar(t[i].ToUpper() if i == 0 else t[i])
+    return b.ToString()
+}
+
 fn lowerFirst(t String&) String {
     b := StringBuilder()
     for i in range t.Len() { b.PushChar(t[i].ToLower() if i == 0 else t[i]) }
@@ -11466,16 +11476,33 @@ fn (c mut Checker&) listMet(l types.ListId, sp source.Span, depth I64) Bool {
 }
 
 # T4, B11: an unknown type, said once in a module, with the type it most likely meant
-fn (c mut Checker&) unknownType(sp source.Span, n source.NameId) {
+fn (c mut Checker&) unknownType(sp source.Span, n source.NameId, constraint Bool = false) {
     key := pair.Pair(c.fr().Mi, I64(n))
     if c.unknownTypes.Has(key) { return }
     c.unknownTypes.Put(key, true)
     name := c.text(n)
     best := c.suggest(name, false)
     if best.Len() == 0 { best = c.importedTypeNamed(name) }
-    if best.Len() == 0: c.err(sp, msgs.UnknownType(c.tok(n)))
+    std := c.stdTypeModule(name) if best.Len() == 0 else ""
+    if std != "": c.err(sp, msgs.UnknownTypeStd(c.tok(n), std, name))
+    else if best.Len() == 0 and constraint: c.err(sp, msgs.UnknownConstraint(c.tok(n)))
+    else if best.Len() == 0: c.err(sp, msgs.UnknownType(c.tok(n)))
     else if c.P.T.Prim(best) != types.UnknownT: c.err(sp, msgs.UnknownNumberType(c.tok(n), best))
     else: c.err(sp, msgs.UnknownTypeMeant(c.tok(n), best))
+}
+
+# M10, B11: the std module named for a type of that name that declares it ("Deque": "deque"), "" for none
+fn (c mut Checker&) stdTypeModule(name String&) String {
+    if name.Len() == 0 or not name[0].IsUpper(): return ""
+    module := lowerAll(name)
+    text := try os.ReadFile(c.P.L.Std + "/" + $module + ".olang") catch default ""
+    return $module if text.Contains("\ntype " + $name + " ") or text.Contains("\ntype " + $name + "<") else ""
+}
+
+fn lowerAll(t String&) String {
+    b := StringBuilder()
+    for ch in t: b.PushChar(ch.ToLower())
+    return b.ToString()
 }
 
 # B11: a public type of that very name in a module this one imports, written as reached through its alias ("json.Json")
@@ -12288,6 +12315,30 @@ fn (c mut Checker&) callMember(sp source.Span, f ast.Expr&, msp source.Span, x a
     return c.methodCall(sp, x, n, nsp, args)
 }
 
+# f(a, ...) naming no function: the method of its first argument's type of that name, capitalized or as written, written
+# as the call it would be ("max(a, b)" or "Max(a, b)": "a.Max(b)", M19 calls a method only as one) - "" for none. The
+# arguments are checked here
+fn (c mut Checker&) methodMeant(n source.NameId, args Array<ast.Expr&>&) String {
+    if args.Len() == 0 or args[0] == ast.Expr.Named or args[0] == ast.Expr.Lambda {
+        c.dropArgs(args)
+        return ""
+    }
+    t := typeOf(c.expr(args[0], types.UnknownT))
+    c.dropArgs(args[1:])
+    name := c.text(n)
+    spelled := upperFirst(name) if c.hasMethod(t, upperFirst(name)) else $name
+    if t == types.UnknownT or not c.hasMethod(t, spelled): return ""
+    rest := Vec<String&>()
+    for a in args[1:]: rest.Push(c.src(a.Span()))
+    return c.src(args[0].Span()) + "." + spelled + "(" + rest.Join(", ") + ")"
+}
+
+# whether a value of type t has a method of that name: its own, or a trait default it meets (M19e)
+fn (c mut Checker&) hasMethod(t types.TypeId, name String&) Bool {
+    k := c.P.L.Names.Intern(name)
+    return c.P.MethodOf(c.deref(t), k) >= 0 or c.P.DefaultMethods(c.deref(t), k).Len() > 0
+}
+
 # call's function written as a name: a function, a type's constructor or conversion, a local or global function value,
 # a case descriptor (G34), a type variable's bound type (G8b)
 fn (c mut Checker&) callNamed(sp source.Span, f ast.Expr&, nsp source.Span, n source.NameId, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
@@ -12301,12 +12352,22 @@ fn (c mut Checker&) callNamed(sp source.Span, f ast.Expr&, nsp source.Span, n so
         return c.construct(sp, nsp, t, args)
     }
     if ref.Kind == names.What.None {
-        # B11: with the name it most likely meant - a number's, said as an unknown type (T4)
+        # M19: a method of the first argument's, written as a function; else (B11) with the name it most likely meant - a
+        # number's, said as an unknown type (T4)
+        meant := c.methodMeant(n, args)
+        if meant != "" {
+            c.err(nsp, msgs.UnknownFunctionMethod(c.tok(n), meant))
+            return c.unknown(sp)
+        }
+        std := c.stdTypeModule(c.text(n))
+        if std != "" {
+            c.unknownType(nsp, n)
+            return c.unknown(sp)
+        }
         best := c.suggest(c.text(n), true)
         if best.Len() == 0: c.err(nsp, msgs.UnknownFunction(c.tok(n)))
         else if c.P.T.Prim(best) != types.UnknownT: c.err(nsp, msgs.UnknownNumberType(c.tok(n), best))
         else: c.err(nsp, msgs.UnknownFunctionMeant(c.tok(n), best))
-        c.dropArgs(args)
         return c.unknown(sp)
     }
     if ref.Kind == names.What.Local {
@@ -12449,6 +12510,12 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
     match g {
         case ast.Expr.Name(nsp, n) {
             ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if ref.Kind == names.What.None {
+                # M22: Name<args>(...) naming nothing - with the std module declaring it, where one does
+                c.unknownType(nsp, n)
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
             if ref.Kind == names.What.Builtin and c.text(n) == "Array" and targs.Len() == 1 { return c.arrayCall(sp, targs[0], args, want) }
             if ref.Kind == names.What.Builtin and c.text(n) == "Array" and targs.Len() > 1 {
                 # G8, T7: Array's one argument is its element type - Array<T>(n) makes n elements
@@ -15233,6 +15300,10 @@ fn (c mut Checker&) memberHint(t types.TypeId, n source.NameId, fields Bool) Str
     sb := c.structBody(c.P.T.DeclOf(dt)) if fields and c.isStruct(dt) else null
     if sb == null { return near.Hint() }
     mine := c.P.DeclModule(c.P.T.DeclOf(dt)) == c.fr().Mi
+    # C2a: a constructor's parameter is no field until the body names it
+    for p in sb.Params {
+        if mine and p.Name == n: return " - it is a parameter of the constructor, not a field (C2a): name it alone on a line of the constructor's body"
+    }
     for v in generic.FieldDecls(sb) {
         for vn in v.Names {
             if mine or c.text(vn)[0].IsUpper() { near.Offer(c.text(vn)) }
@@ -19944,6 +20015,20 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, 
     c.storeOver(sp, p, c.storeCopy(p, x))
 }
 
+# x = v, v checked against x - and, where v is a lambda capturing x itself, D16c's error: the capture is a copy made as
+# the lambda is, so it holds x's earlier value, never the lambda (a recursive lambda reads a stale function)
+fn (c mut Checker&) storeLambdaInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, osp source.Span, target ast.Expr&) {
+    if value != ast.Expr.Lambda or target != ast.Expr.Name {
+        c.storeInto(sp, p, value, osp, target)
+        return
+    }
+    sf, sn, sc := c.selfFrame, c.selfName, c.selfCaught
+    c.selfFrame, c.selfName, c.selfCaught = c.frames.Len() - 1, target.name, false
+    c.storeInto(sp, p, value, osp, target)
+    if c.selfCaught: c.err(target.Span(), msgs.LambdaCapturesItself(c.text(target.name)))
+    c.selfFrame, c.selfName, c.selfCaught = sf, sn, sc
+}
+
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
     if op == token.Tok.Assign and c.assignSlice(sp, target, value) { return }
     if slicedTarget(target) {
@@ -19982,7 +20067,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     t := p.Type()
     if op == token.Tok.Assign {
         c.weakFresh(p, value)   # T2d
-        c.storeInto(sp, p, value, osp, target)
+        c.storeLambdaInto(sp, p, value, osp, target)
         return
     }
     bop := compoundOp(op)
