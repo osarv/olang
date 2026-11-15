@@ -37825,3 +37825,45 @@ owner place holding a `Vec<T>` whole, or a copy of one built outside any region,
 against 98 MB in the measurement). Closing it needs a growth's region released apart from the owner's value region -
 docs/freeing.md 2.1 - a design of its own, asked of the user rather than built here. And an element owning storage that
 is not text (`Array<Vec<I64>>`, gap 17) is still a gap, now the `-memory -check` fixture.
+
+## 2026-11-15: O8f round 3 - part regions: a Vec's growth frees in every program, with no cost per operation or copy (docs/freeing.md 2.1)
+
+**The question.** A Vec's buffer is one place per `Vec<T>`. Where an owner place held a `Vec<T>` whole, or a copy of one
+was made outside any region (`m.Get(k)`, a copied argument), growth stopped freeing for the whole program - two Vecs of
+4,000,000 grown one after the other peaked at 130 MB against 97 MB. Round 2's design closed it with a region per copy,
+about 400 bytes of run time each, and the user was asked whether to pay it. This round looked for a design with none.
+
+**What the two causes share.** Both rest on one assumption: every value of a sole array place is the only thing in its
+region, so its let-go may release the region the word before it names. A copy's buffer is in no region (the word before
+it is anything), and an owner's first buffer is in the owner value's region beside the rest of it. Splitting the place
+per owner or per field would not do - one `Vec<T>.room` body serves them all. Dropping the assumption costs nothing:
+- an array place a struct holds by value that is no slot place (a Vec's buffer, a Map's slots, a text field) is a
+  **part place**; its values made for it are built in a **part region**, which says so in its header (160 bytes, not
+  152);
+- its let-go (`ReleasePart`) finds the region through the array's address - O29's chunk lookup, which already finds the
+  scope of any storage - and releases it only where it is a part region. A copy's array, or an owner's first buffer, is
+  left where it is, reclaimed with what it was built in (condition 1). An empty array names nothing: an inner Vec copied
+  in from a closed temporary scope held a dangling pointer to no elements, which the first version read (the
+  sanitizer's fault in `__olang_chunk_of`, found by a `Vec<Vec<I64>>` built in an owner's value);
+- an owner's release and settle read an anchor in a part region as part of the region it is a kid of
+  (`__olang_region_home`) - what the value grew while it was built is released with it, and a settle no longer takes the
+  owner's region for empty because its buffer moved to a kid.
+So "owners win" and the untracked copy are no reasons for a part place to keep. Three judgements that only ever met the
+same buffer were made precise on the way: a value stored or held whole through no reference holds its own part arrays
+(the store into `a` of `mk(i)`'s Vec was "a reference into it stored elsewhere"; a Vec local used after another Vec's
+growth was "a view in use"; a borrow of a Vec place to `Push` was a view read in the statement), and a call's own result
+is made after what the call lets go of (a `Vec<I64>[1, 2]` literal grows inside its own statement). A region found from
+an address needed one runtime fix: a region's first block taken from `aligned_alloc` where no slot is left (an
+address-space limit) is now entered in the large table, as an `aligned_alloc` chunk is - else earlyfree's dropvec ran
+out of 8 MB.
+
+**Gap 17 on the same footing.** An element owning storage only as part arrays of plain values (`Array<Vec<I64>>`, and
+`SetAt` on a `Vec<Vec<I64>>`) lets go of those parts where it is given another value - no region per element, which is
+what had kept it open: 106 MB to 3 MB at 50,000 turns. Part leaves need no value made for them (a copy into the
+element is in no part region), and the prelude's element stores over vacated slots release an empty array, nothing.
+An element owning more (a `Vec<String>`'s text) is still a gap, now the `-memory -check` fixture.
+
+**Found.** A `Map` value copied out and changed (`u := m.Get(k); u.Push(x)`) keeps the entry's value place - its
+origins are those of the view `Get` hands back, though D9h copies it where it is kept - so a `Put` loop beside it grew to
+230 MB (gap 18). And a returned value local is allocated where the call's result goes (O26a) and copied out: 32 bytes a
+call kept in an array's scope by `rows[i % 10] = mk(i)` (gap 19, a placement, no let-go). Both recorded, not built.
