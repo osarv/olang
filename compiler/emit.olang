@@ -1511,6 +1511,7 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     r := t.Repr(ty)
     # T29: a declared type over another is its base's description under its own name (String, Char, Meters)
     if ty != r and t.KindOf(ty) == types.Kind.Named: return e.dbgTypedef(ty, t.Base(ty))
+    if t.KindOf(ty) == types.Kind.ErrVal and not t.ErrCarries(ty): return e.dbgErrVal(ty)
     if r >= types.BoolT and r <= types.TypeId(14) or t.KindOf(r) == types.Kind.Int {
         if e.dbgBasics.Has(I64(r)) { return try e.dbgBasics.Get(I64(r)) catch default -1 }
         # the basic type under a typedef of the same name, so that a debugger shows "I64", never C's "long"
@@ -1529,14 +1530,18 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     k := t.KindOf(r)
     if k == types.Kind.Ref {
         rt := t.Referent(r)
+        if t.KindOf(t.Repr(rt)) == types.Kind.Any { return e.dbgPair(r, "instance", types.UnknownT, "table", types.UnknownT) }
         if e.ty(r) != "ptr" { return e.dbgPair(r, "len", t.Prim("I64"), "data", t.Elem(t.Repr(rt))) }
-        n := e.dbgNew()
+        # a pointer, under a typedef named as olang writes the reference ("Node?&")
+        n, pn := e.dbgNew(), e.dbgNew()
         e.dbgTypes.Put(I64(r), n)
         b := e.dbgType(rt)
-        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " $("!" $b if b >= 0 else "null") ", size: 64)")
+        e.dbgShared(pn, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " $("!" $b if b >= 0 else "null") ", size: 64)")
+        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" $escape(e.dbgTypeName(r)) "\", baseType: !" $pn ")")
         return n
     }
     if k == types.Kind.Func { return e.dbgPair(r, "code", types.UnknownT, "env", types.UnknownT) }
+    if k == types.Kind.Any { return e.dbgPair(r, "instance", types.UnknownT, "table", types.UnknownT) }    # T32
     e.P.Layout(r)
     size := t.Size(r) * 8
     if k == types.Kind.Array {
@@ -1661,6 +1666,35 @@ fn (e mut Emitter&) dbgCase(r types.TypeId, k I64, ct types.TypeId, name String&
     n := e.dbgNew()
     e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "." $escape(name) $
                 "\", size: " $(t.Size(ct) * 8) ", elements: !" $el ")")
+    return n
+}
+
+# an error value (T20) as an enumeration of its code: null, and each word of its set as "Type.Word"
+fn (e mut Emitter&) dbgErrVal(ty types.TypeId) I64 {
+    if e.dbgTypes.Has(I64(ty)) { return try e.dbgTypes.Get(I64(ty)) catch default -1 }
+    t := e.T
+    n := e.dbgNew()
+    e.dbgTypes.Put(I64(ty), n)
+    es StringBuilder
+    z := e.dbgNew()
+    e.dbgShared(z, "!DIEnumerator(name: \"null\", value: 0)")
+    es.Push($"!" $z)
+    items := t.Items(t.ErrValItems(ty))
+    for i in range items.Len() {
+        et := t.ErrOf(items[i])
+        ws := e.P.ErrorWords(t.DeclOf(et))
+        for j in range ws.Len() {
+            if ((t.ErrMask(items[i]) >> U64(j)) & U64(1)) == U64(0): continue
+            m := e.dbgNew()
+            name := $e.errQualifier(et) $e.P.ErrorWordName(t.DeclOf(et), j)
+            e.dbgShared(m, $"!DIEnumerator(name: \"" $escape(name) "\", value: " $(((i + 1) << 16) | j) ")")
+            es.Push($", !" $m)
+        }
+    }
+    el := e.dbgNew()
+    e.dbgShared(el, $"!{" $es.ToString() "}")
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" $escape(e.dbgTypeName(ty)) "\", size: 32, baseType: !" $
+                e.dbgBasic(t.Prim("I32")) ", elements: !" $el ")")
     return n
 }
 
@@ -1819,7 +1853,7 @@ fn (e mut Emitter&) readableTypes(text String&) String {
 }
 
 # what may stand before a type in a canonical text
-fn typeDelim(ch Char) Bool { return ch == '<' or ch == ',' or ch == ' ' or ch == '(' or ch == '[' or ch == '&' or ch == '?' }
+fn typeDelim(ch Char) Bool { return ch == '<' or ch == '{' or ch == ',' or ch == ' ' or ch == '(' or ch == '[' or ch == '&' or ch == '?' }
 
 # the function's subprogram, where it has source to point at
 fn (fe mut fnEm&) subprogram() {

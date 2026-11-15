@@ -1,0 +1,8 @@
+breakpoint set -f vals.olang -l 25
+run
+frame variable i inner
+breakpoint delete -f
+breakpoint set -f vals.olang -l 27
+continue
+frame variable
+script import olang_lldb; print("render", olang_lldb.render(lldb.frame.FindVariable("s")))

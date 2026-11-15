@@ -153,11 +153,21 @@ def render(v, depth=0):
         if p is None:
             return head
         fs = _payload_fields(v)
+        if len(fs) == 1 and fs[0].GetName() == name:
+            return head + "(" + render(fs[0], depth + 1) + ")"     # a case carrying one type whole
         return head + "(" + ", ".join(_field(f, depth) for f in fs) + ")"
+    if t.GetCanonicalType().GetTypeClass() == lldb.eTypeClassEnumeration:
+        # a case's name, or an error value's word ("Bad.Oops", or null), written whole
+        val = v.GetValue() or str(v.GetValueAsSigned())
+        return val if "." in val or val == "null" else _strip(t).GetName() + "." + val
     if t.GetCanonicalType().GetTypeClass() == lldb.eTypeClassArray:
         n = v.GetNumChildren()
         return _list([v.GetChildAtIndex(i) for i in range(min(n, SUMMARY_ITEMS))], n, depth)
     fs = _fields(t)
+    if fs is not None and [f.GetName() for f in fs] == ["code", "env"]:
+        return _function(v)
+    if fs is not None and [f.GetName() for f in fs] == ["instance", "table"]:
+        return _any(v, depth)
     if fs is not None and not t.GetCanonicalType().GetName().startswith("Array<"):
         return _strip(t).GetName() + "(" + ", ".join(_field(v.GetChildAtIndex(i), depth) for i in range(len(fs))) + ")"
     tn = _strip(t).GetName()
@@ -168,6 +178,49 @@ def render(v, depth=0):
         a = v.GetValueAsUnsigned()
         return "null" if a == 0 else "&" + render(v.Dereference(), depth + 1)
     return v.GetValue() or v.GetSummary() or "?"
+
+
+def _function(v):
+    """A function value, by the function its code is."""
+    a = v.GetChildMemberWithName("code").GetValueAsUnsigned()
+    if a == 0:
+        return "null"
+    addr = lldb.SBAddress(a, v.GetTarget())
+    f = addr.GetFunction()
+    if f.IsValid():
+        return "fn " + f.GetName()
+    sym = addr.GetSymbol()
+    return "fn " + (sym.GetName() if sym.IsValid() else "0x%x" % a)
+
+
+def _demangle(sym):
+    """A symbol's text as the compiler wrote it: each _HH the byte HH."""
+    out, i = [], 0
+    while i < len(sym):
+        if sym[i] == "_" and i + 2 < len(sym) and all(c in "0123456789abcdef" for c in sym[i + 1:i + 3]):
+            out.append(chr(int(sym[i + 1:i + 3], 16)))
+            i += 3
+        else:
+            out.append(sym[i])
+            i += 1
+    return "".join(out)
+
+
+def _any(v, depth):
+    """An any (T32): its instance, as the type its table is for ("olang.table.MODULE:Type|MODULE:Trait")."""
+    inst = v.GetChildMemberWithName("instance").GetValueAsUnsigned()
+    if inst == 0:
+        return "null"
+    sym = lldb.SBAddress(v.GetChildMemberWithName("table").GetValueAsUnsigned(), v.GetTarget()).GetSymbol()
+    name = _demangle(sym.GetName()) if sym.IsValid() else ""
+    if name.startswith("olang.table."):
+        tn = name[len("olang.table."):].split("|")[0]
+        tn = tn[tn.rfind(":") + 1:] if ":" in tn else tn
+        t = v.GetTarget().FindFirstType(tn)
+        if t.IsValid():
+            return "any " + render(v.CreateValueFromAddress("instance", inst, t), depth + 1)
+        return "any " + tn
+    return "any 0x%x" % inst
 
 
 def _field(f, depth):
@@ -181,23 +234,16 @@ def _list(items, n, depth):
 
 # ---- the formatters ----
 
-def array_summary(v, _dict):
-    v = v.GetNonSyntheticValue()
-    if is_text(v.GetType()):
-        return text_of(v)
-    return "len = %d" % v.GetChildMemberWithName("len").GetValueAsSigned()
+def is_struct(t, _dict=None):
+    """Any other struct (a struct, a tuple, a record), or a fixed array: summarized as olang writes it."""
+    c = t.GetCanonicalType()
+    if c.GetTypeClass() == lldb.eTypeClassArray:
+        return True
+    return _fields(t) is not None and not (is_array(t) or is_enum(t) or is_vec(t) or is_map(t))
 
 
-def vec_summary(v, _dict):
-    return "len = %d" % v.GetNonSyntheticValue().GetChildMemberWithName("n").GetValueAsSigned()
-
-
-def map_summary(v, _dict):
-    return "len = %d" % v.GetNonSyntheticValue().GetChildMemberWithName("count").GetValueAsSigned()
-
-
-def enum_summary(v, _dict):
-    return enum_case(v.GetNonSyntheticValue())[0]
+def summary(v, _dict):
+    return render(v)
 
 
 class _Children:
@@ -258,14 +304,13 @@ class EnumChildren(_Children):
 
 def register(debugger, module=__name__):
     cat = "olang"
-    for test, summary, children in (("is_array", "array_summary", "ArrayChildren"),
-                                     ("is_vec", "vec_summary", "VecChildren"),
-                                     ("is_map", "map_summary", "MapChildren"),
-                                     ("is_enum", "enum_summary", "EnumChildren")):
-        debugger.HandleCommand("type summary add -e -w %s -F %s.%s --recognizer-function %s.%s"
-                               % (cat, module, summary, module, test))
-        debugger.HandleCommand("type synthetic add -w %s -l %s.%s --recognizer-function %s.%s"
-                               % (cat, module, children, module, test))
+    for test, children in (("is_array", "ArrayChildren"), ("is_vec", "VecChildren"), ("is_map", "MapChildren"),
+                           ("is_enum", "EnumChildren"), ("is_struct", None)):
+        debugger.HandleCommand("type summary add -e -w %s -F %s.summary --recognizer-function %s.%s"
+                               % (cat, module, module, test))
+        if children:
+            debugger.HandleCommand("type synthetic add -w %s -l %s.%s --recognizer-function %s.%s"
+                                   % (cat, module, children, module, test))
     debugger.HandleCommand("type category enable %s" % cat)
 
 
