@@ -1727,7 +1727,12 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # B1.1: the loops of a for-in over an array or a range, by their body block - each runs at most a count known
     # before it starts (check.counted), which Terminates (compiler/effects.olang) takes as bounded
     Bounded Vec<BlockId>
+    # C11: the stores occupy makes, by their span's start - into room holding no value, so letting go of nothing (O8f)
+    Rooms Vec<I32>
 }
+
+# whether the store at sp is one occupy makes (Rooms)
+fn (b Body&) Room(sp source.Span) Bool { return I32(sp.Start) in b.Rooms }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {
     b.Locals.Push(l)

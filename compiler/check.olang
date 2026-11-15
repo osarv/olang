@@ -14783,6 +14783,8 @@ fn (c mut Checker&) suppliedOccupy(sp source.Span, nsp source.Span, x ast.Expr&,
     }
     from := c.stmts.Len()
     c.storeInto(sp, p, args[0], args[0].Span(), null, true)
+    # (O8f: no let-go - early freeing releases nothing there)
+    c.cur().Rooms.Push(I32(sp.Start))
     return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
 }
 
