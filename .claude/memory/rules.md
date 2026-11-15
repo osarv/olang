@@ -118,7 +118,8 @@ slimming of 2026-11-08").
 
 - **Everything in olang**: committed scripts, tools, test servers, generators are olang programs; C only for the stage-0
   era bootstrap, bench counterparts and C runtime tests; Python and shell never (throwaway scratch scripts excepted,
-  never committed). Tools run as `build/out build tools/X.olang && build/tools_X ARGS`.
+  never committed); except independent correctness and benchmark references, which may be Python (the user,
+  2026-11-15: "its fine to keep correctness and benchmark references in python" - oann's bench/ref). Tools run as `build/out build tools/X.olang && build/tools_X ARGS`.
 - **A README per folder** that is a thing of its own, in the commit that creates it; kept current.
 - **Keep old tests**: the suite is additive; touch an old test only when the language change invalidates it.
 - **Nesting depth: three blocks, four at most** (mine and my agents' code only): guard clauses, `:` one-liners, helpers.
