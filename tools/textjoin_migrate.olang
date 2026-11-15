@@ -1,0 +1,273 @@
+# textjoin_migrate - text is joined with "+" (E11b, 2026-11-15, the user: "remove adjacency and add +"): pieces side by
+# side - a text literal or a "$" rendering, `"n = " $n "\n"` - were one join; now the join is written with "+",
+# `"n = " + $n + "\n"`, and pieces side by side are no expression. This rewrites olang sources written before: each join
+# is read by the compiler's own parser in its old reading (parse.Adjacent), which records every join and the end of
+# each piece another follows, and " +" is written there - on the piece's own line, so a join running over several lines
+# inside parentheses keeps its line breaks (the "+" ending a line continues it, L18). A join that was the operand of an
+# operator binding tighter than "+" or as tightly (`x * "a" $b`, `embed "d" $f`) is parenthesized, so nothing is read
+# apart. Comments and string literals are never edited. A Markdown file has its "```olang" blocks and its inline code
+# spans migrated, each read as a file or, where that does not parse, as the body of a function. Files are rewritten in
+# place and a count printed; --check writes nothing and the exit status says whether anything would change.
+# Idempotent: text joined with "+" has no pieces side by side. OLANG_STD names std (default "std", as from the
+# repository root), which says the parser which names are types.
+#
+#     $OLANG build tools/textjoin_migrate.olang && build/tools_textjoin_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "../compiler/source"
+import "../compiler/scan"
+import "../compiler/token"
+import "../compiler/parse"
+import "../compiler/diag"
+import layout "../compiler/fmt"
+
+# what a run did: joins rewritten, "+" written, joins parenthesized
+type Count struct() {
+    joins I64 = 0
+    plus I64 = 0
+    wrapped I64 = 0
+}
+
+# one insertion: text written before the byte at pos (in order of pos, then of rank)
+type Insert struct(pos I64, rank I64, text String&) {
+    pos
+    rank
+    text
+}
+
+# the joins of a text in its old reading: their spans, the gaps where "+" goes, and whether it parsed clean
+type Reading struct(joins Vec<source.Span>, gaps Vec<I32>, clean Bool) {
+    joins
+    gaps
+    clean
+}
+
+fn Reading.Of(path String&, text String&, std String&, prelude String&) Reading {
+    src := source.Source($path, $text)
+    names := source.Names()
+    d := diag.Diagnostics(false)
+    o := layout.OracleFor(path, std, prelude, names) if std != "" else parse.Oracle()
+    file := d.AddFile(src.Path, src.Text)
+    ts := scan.Tokens.Scan(src.Text)
+    p := parse.Parser(src, ts, names, o, d, file)
+    p.Adjacent = true
+    p.File()
+    return Reading(p.Joins, p.JoinGaps, ts.Diags.Len() == 0 and d.AllSaid().Len() == 0)
+}
+
+# whether an operator before a join takes its first piece alone now: one binding as tightly as "+" or tighter, a
+# prefix operator, "embed"
+fn tightBefore(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: true
+        case token.Tok.StarStar, token.Tok.Tilde, token.Tok.Embed, token.Tok.Inc, token.Tok.Dec: true
+        case _: false
+    }
+}
+
+# whether an operator after a join takes its last piece alone now: one binding tighter than "+"
+fn tightAfter(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At, token.Tok.StarStar: true
+        case _: false
+    }
+}
+
+# whether the join over sp must be parenthesized: what stands just before or after it would now take a piece alone
+fn needsGroup(toks Array<token.Token>&, sp source.Span) Bool {
+    for i in range toks.Len() {
+        if toks[i].Start != sp.Start { continue }
+        if i > 0 and tightBefore(toks[i - 1].Kind) { return true }
+        for j in range i, toks.Len() {
+            if toks[j].Start < sp.End { continue }
+            return tightAfter(toks[j].Kind)
+        }
+        return false
+    }
+    return false
+}
+
+# the insertions a reading asks for, at positions shifted by -shift (a reading of a text wrapped in a function)
+fn inserts(text String&, r Reading&, shift I64, n mut Count&, out mut Vec<Insert>&) {
+    ts := scan.Tokens.Scan(text)
+    for g in r.gaps {
+        out.Push(Insert(I64(g) - shift, 1, " +"))
+        n.plus++
+    }
+    for sp in r.joins {
+        n.joins++
+        if not needsGroup(ts.Toks, sp) { continue }
+        n.wrapped++
+        out.Push(Insert(I64(sp.Start) - shift, 2, "("))
+        out.Push(Insert(I64(sp.End) - shift, 0, ")"))
+    }
+}
+
+fn apply(src String&, ins mut Vec<Insert>&) String {
+    if ins.Len() == 0 { return $src }
+    ins.Sort(fn(a, b): return a.pos < b.pos or (a.pos == b.pos and a.rank < b.rank))
+    out := StringBuilder()
+    from I64 = 0
+    for e in ins {
+        if e.pos < from or e.pos > src.Len() { continue }
+        out.Push(src[from:e.pos])
+        out.Push(e.text)
+        from = e.pos
+    }
+    out.Push(src[from:])
+    return out.ToString()
+}
+
+# an olang file's text migrated
+fn migrate(path String&, src String&, std String&, prelude String&, n mut Count&) String {
+    ins Vec<Insert>
+    inserts(src, Reading.Of(path, src, std, prelude), 0, n, ins)
+    return apply(src, ins)
+}
+
+# a piece of olang in Markdown - a file, or else statements: read as a file where that parses, else as a function body
+fn migrateFragment(src String&, n mut Count&) String {
+    whole := Reading.Of("fragment.olang", src, "", "")
+    ins Vec<Insert>
+    if whole.clean or whole.joins.Len() > 0 {
+        inserts(src, whole, 0, n, ins)
+        return apply(src, ins)
+    }
+    head := "fn fragment() {\n"
+    wrapped := $head $src "\n}\n"
+    inserts(wrapped, Reading.Of("fragment.olang", wrapped, "", ""), head.Len(), n, ins)
+    return apply(src, ins)
+}
+
+# a line of Markdown outside a code block: its inline code spans migrated, the rest kept
+fn migrateSpans(line String&, n mut Count&) String {
+    out := StringBuilder()
+    from I64 = 0
+    for {
+        a := try line[from:].Find("`") catch default -1
+        if a < 0 { break }
+        b := try line[from + a + 1:].Find("`") catch default -1
+        if b < 0 { break }
+        lo, hi := from + a + 1, from + a + 1 + b
+        out.Push(line[from:lo])
+        out.Push(migrateFragment(line[lo:hi], n))
+        out.PushChar('`')
+        from = hi + 1
+    }
+    out.Push(line[from:])
+    return out.ToString()
+}
+
+# a Markdown file: its olang code blocks and inline code spans migrated, the rest kept
+fn migrateMarkdown(src String&, n mut Count&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    fence := ""
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        if fence == "olang" and line.StartsWith("```") {
+            out.Push(migrateFragment(block.ToString(), n))
+            block.Clear()
+            fence = ""
+        } else if fence == "olang" {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if fence != "" {
+            if line.StartsWith("```"): fence = ""
+        } else if line.StartsWith("```") {
+            fence = "olang" if line.StartsWith("```olang") else "other"
+        } else {
+            out.Push(migrateSpans(line, n))
+            if k < lines.Len() - 1: out.PushChar('\n')
+            continue
+        }
+        out.Push(line)
+        if k < lines.Len() - 1: out.PushChar('\n')
+    }
+    if fence == "olang": out.Push(block.ToString())
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_textjoin_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    std := try os.Env("OLANG_STD") catch default "std"
+    prelude := layout.PreludeTypes(std)
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p): srcmask.Walk(p, files)
+        else: files.Push($p)
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("textjoin_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrateMarkdown(src, total) if path.EndsWith(".md") else migrate(path, src, std, prelude, total)
+        if out == src { continue }
+        changed++
+        if verbose: srcmask.Say(path)
+        if check { continue }
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("textjoin_migrate: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.joins " joins, " $total.plus " '+' written, " $total.wrapped " parenthesized")
+    if check and changed > 0: os.Exit(1)
+}
+
+test migrate "pieces side by side are joined with '+'" {
+    n := Count()
+    src := "fn f(n I64) String {\n    s := \"n = \" $n \"\\n\"\n    return $s.Len() \"!\"\n}\n"
+    want := "fn f(n I64) String {\n    s := \"n = \" + $n + \"\\n\"\n    return $s.Len() + \"!\"\n}\n"
+    assert migrate("t.olang", src, "", "", n) == want
+    assert n.joins == 2 and n.plus == 3 and n.wrapped == 0
+}
+
+test migrate "a join over several lines keeps its line breaks" {
+    n := Count()
+    src := "fn f(n I64) String {\n    return (\"n is \" $n\n            \" of \" $n)\n}\n"
+    want := "fn f(n I64) String {\n    return (\"n is \" + $n +\n            \" of \" + $n)\n}\n"
+    assert migrate("t.olang", src, "", "", n) == want
+}
+
+test migrate "a join a tighter operator would take apart is parenthesized" {
+    n := Count()
+    src := "fn f(n I64) I64 {\n    return x * \"a\" $n\n}\n"
+    assert migrate("t.olang", src, "", "", n) == "fn f(n I64) I64 {\n    return x * (\"a\" + $n)\n}\n"
+    assert n.wrapped == 1
+}
+
+test migrate "comments, text, a list's items on lines of their own and code already new are left as they are" {
+    n := Count()
+    src := "fn f(n I64) {\n    # \"a\" $n\n    xs := Array<String>[\n        \"a\"\n        \"b\"\n    ]\n    s := \"x \\\"y\\\" $n\" + $n\n}\n"
+    assert migrate("t.olang", src, "", "", n) == src and n.joins == 0
+}
+
+test migrateMarkdown "a Markdown file's olang blocks and code spans" {
+    n := Count()
+    src := "Join it: `\"n is \" $n \"!\"`.\n```olang\nfn f(n I64) String { return $n \"x\" }\n```\n```sh\necho \"a\" $b\n```\n"
+    want := "Join it: `\"n is \" + $n + \"!\"`.\n```olang\nfn f(n I64) String { return $n + \"x\" }\n```\n```sh\necho \"a\" $b\n```\n"
+    assert migrateMarkdown(src, n) == want
+}

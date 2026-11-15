@@ -1461,7 +1461,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             if elem != null { r.typeRef(elem) }
             for e in items { r.expr(e) }
         }
-        case ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+        case ast.Expr.Row(_, items), ast.Expr.Range(_, items) {
             for e in items { r.expr(e) }
         }
         case ast.Expr.Compr(sp, c) {

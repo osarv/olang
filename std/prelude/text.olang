@@ -59,6 +59,10 @@ fn (a String&) Eq(b String&) Bool {
     return true
 }
 
+# E11b: the two texts joined, a new String - "+" on text, as any operator is a method (E31); a chain of them is one
+# join, each piece copied once
+fn (a String&) Plus(b String&) String { return $a $b }
+
 # bytewise lexicographic order: -1, 0 or 1. A proper prefix sorts first.
 fn (a String&) Compare(b String&) I32 {
     n I64 = a.Len()

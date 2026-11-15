@@ -194,7 +194,6 @@ type Diag enum {
     KeywordAsName
     KeywordFieldRead
     DestructInBody
-    JoinPiece
     TrailingComma
     NeedlessGroup
     VarListCount
@@ -559,6 +558,8 @@ type Diag enum {
     OperandNotBool
     OperandNotInt
     OperandNotNumber
+    TextPlusValue
+    TextPlusChars
     TupleNotAValue
     LiteralExprNoValue
     LiteralNoOwnType
@@ -581,7 +582,6 @@ type Diag enum {
     MembershipNeedsTry
     IncdecInExpression
     NotCallable
-    JoinPieceCalled
     UnhandledFallibleCall
     OperatorCallFails
     PowNone
@@ -693,7 +693,6 @@ type Diag enum {
     MutOnLocal
     MutOnInferredLocal
     NotAStatement
-    JoinNextLine
     ConditionConstant
     RangeNotInt
     RangeStep
@@ -1146,7 +1145,6 @@ fn Nesting(n I64) r.Msg { return r.Msg(Diag.Nesting, "L21", "nested more than " 
 fn KeywordAsName(tok String&) r.Msg { return r.Msg(Diag.KeywordAsName, "L9", $tok " is a keyword, not a name - choose another") }
 fn KeywordFieldRead(tok String&) r.Msg { return r.Msg(Diag.KeywordFieldRead, "L9a", $tok " is a keyword, not a name", "a field named by one is reached only after '.', never by the name alone") }
 fn DestructInBody() r.Msg { return r.Msg(Diag.DestructInBody, "C7", "'destruct' follows the constructor's body", "", "close the body first: 'type T unique struct(...) { ... } destruct { ... }'") }
-fn JoinPiece(text String&) r.Msg { return r.Msg(Diag.JoinPiece, "E11b", "a join piece is a text literal or a '$' rendering - write '$" $text "'") }
 fn NeedlessGroup() r.Msg { return r.Msg(Diag.NeedlessGroup, "L18c", "these parentheses group nothing", "parentheses group only a function type holding a comma of its own, as an item of a list", "write this without them") }
 fn TrailingComma(tok String&) r.Msg { return r.Msg(Diag.TrailingComma, "L18a", "a comma before " $tok " separates nothing - remove it") }
 fn VarListCount(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.VarListCount, "D12b", $n1 " names need as many values, found " $n2) }
@@ -1567,6 +1565,8 @@ fn NegLiteralTooLarge(tok String&) r.Msg { return r.Msg(Diag.NegLiteralTooLarge,
 fn OperandNotBool(tok String&, ty String&) r.Msg { return r.Msg(Diag.OperandNotBool, "E7", $tok " takes a Bool, found " $ty) }
 fn OperandNotInt(tok String&, ty String&) r.Msg { return r.Msg(Diag.OperandNotInt, "E8", $tok " takes an integer, found " $ty) }
 fn OperandNotNumber(tok String&, ty String&) r.Msg { return r.Msg(Diag.OperandNotNumber, "E6", $tok " takes numbers, found " $ty) }
+fn TextPlusValue(ty String&, rendering String&) r.Msg { return r.Msg(Diag.TextPlusValue, "E11b", "'+' joins text, and this is " $ty, "a value becomes text only through '$'", "write '" $rendering "'") }
+fn TextPlusChars(ty String&, x String&) r.Msg { return r.Msg(Diag.TextPlusChars, "E11b", "'+' joins text, and this is " $ty ", characters still being written", "", "make it a String first - 'String(" $x ")' - or build the text in a StringBuilder") }
 fn TupleNotAValue() r.Msg { return r.Msg(Diag.TupleNotAValue, "D8c", "several results are not one value", "", "destructure them ('a, b := f()'), or pass them as all of a call's arguments") }
 fn LiteralExprNoValue() r.Msg { return r.Msg(Diag.LiteralExprNoValue, "E4a", "this literal expression has no value", "no integer type holds it, from I128's least to U128's greatest") }
 fn LiteralNoOwnType(what String&) r.Msg { return r.Msg(Diag.LiteralNoOwnType, "T6a, E4a", $what " needs more than 64 bits, and a literal's own type is at most U64", "", "give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'") }
@@ -1589,7 +1589,6 @@ fn MembershipNotBool(text String&) r.Msg { return r.Msg(Diag.MembershipNotBool, 
 fn MembershipNeedsTry(text String&) r.Msg { return r.Msg(Diag.MembershipNeedsTry, "E29", $text " can fail here - write 'try x in c'") }
 fn IncdecInExpression(tok String&) r.Msg { return r.Msg(Diag.IncdecInExpression, "S3a", $tok " is a statement of its own, never part of an expression") }
 fn NotCallable(ty String&) r.Msg { return r.Msg(Diag.NotCallable, "E13b", $ty " is not a function, and declares no Call") }
-fn JoinPieceCalled() r.Msg { return r.Msg(Diag.JoinPieceCalled, "E11b", "'(' after a piece of text calls it - to join the value inside, write '$(...)'") }
 fn UnhandledFallibleCall() r.Msg { return r.Msg(Diag.UnhandledFallibleCall, "E15", "this call can fail - write 'try', and catch or pass on its errors") }
 fn VariadicNotLast() r.Msg { return r.Msg(Diag.VariadicNotLast, "D8g", "a variadic parameter is the last one but defaulted ones", "one variadic parameter, and only parameters with a default after it, given by name") }
 fn VariadicHere(what String&) r.Msg { return r.Msg(Diag.VariadicHere, "D8g", "a variadic parameter is a function's, not " $what) }
@@ -1782,7 +1781,6 @@ fn ValueRefsOutlived() r.Msg { return r.Msg(Diag.ValueRefsOutlived, "O25h", "thi
 fn MutOnLocal(ty String&) r.Msg { return r.Msg(Diag.MutOnLocal, "D11a", "a local is always writable - 'mut' is for a reference, and " $ty " is none") }
 fn MutOnInferredLocal() r.Msg { return r.Msg(Diag.MutOnInferredLocal, "D11a", "':=' gives a local its initializer's permission", "", "remove 'mut', or write the type: 'x mut T& = ...'") }
 fn NotAStatement() r.Msg { return r.Msg(Diag.NotAStatement, "S3", "this computes a value and discards it - only a call, '++' or '--' stands alone") }
-fn JoinNextLine() r.Msg { return r.Msg(Diag.JoinNextLine, "S3, E11b", "text on a line of its own does nothing", "a join continues onto the next line only inside parentheses") }
 fn ConditionConstant() r.Msg { return r.Msg(Diag.ConditionConstant, "S8a", "this condition is the same on every build, so one branch is dead", "", "depend on a build constant, or remove it") }
 fn RangeNotInt(ty String&) r.Msg { return r.Msg(Diag.RangeNotInt, "S9b", "a range's bounds and step are integers, found " $ty) }
 fn RangeStep() r.Msg { return r.Msg(Diag.RangeStep, "S9b", "a range only counts upward, so its step is positive") }

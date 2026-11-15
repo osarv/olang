@@ -112,6 +112,11 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # bitwise-tighter precedence (2026-10-24) reads the text otherwise; tools/precedence_migrate.olang wraps them
     Mixed Vec<source.Span>
     OldBitwise Bool = false            # read with E5's precedence before 2026-10-24, for tools/precedence_migrate.olang
+    # read text joined by adjacency, as before 2026-11-15 (E11b), for tools/textjoin_migrate.olang: each join is read as
+    # the "+" chain writing it now, its span in Joins and the end of each piece another follows in JoinGaps
+    Adjacent Bool = false
+    Joins Vec<source.Span>
+    JoinGaps Vec<I32>
     # with RecordOperators, the span of every operator's node (binary, chain, in, is) - over one file's tokens, the shape
     # of every expression; tools/precedence_migrate.olang compares two readings by it
     RecordOperators Bool = false
@@ -2974,9 +2979,8 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
     }
 }
 
-# unary: "not" binary | text | prefix-op unary | postfix
-# a prefix operator adds no level of its own, as text pieces do not: what nests is the operand postfix reads, and "not"
-# (L21, as stage 0 counts)
+# unary: "not" binary | "$" rendering | prefix-op unary | postfix
+# a prefix operator adds no level of its own: what nests is the operand postfix reads, and "not" (L21, as stage 0 counts)
 fn (p mut Parser&) unary() ast.Expr& ? Fail {
     at := p.here()
     if p.ellipsis() { return try p.spread() }
@@ -3001,17 +3005,10 @@ fn (p mut Parser&) unary() ast.Expr& ? Fail {
             return ast.Expr.Unary(p.from(at), k, x)
         }
         case token.Tok.StrLit, token.Tok.Dollar {
-            # a literal with something else after it is a postfix primary ("a b".Split(" ")), else a piece of text
-            if p.sees(token.Tok.StrLit) {
-                k2 := p.look(1)
-                if k2 != token.Tok.StrLit and k2 != token.Tok.Dollar { return try p.postfix() }
-            }
-            first := try p.piece()
-            if not p.sees(token.Tok.StrLit) and not p.sees(token.Tok.Dollar) { return first }
-            from := p.exprs.Len()
-            p.exprs.Push(first)
-            for p.sees(token.Tok.StrLit) or p.sees(token.Tok.Dollar) { p.exprs.Push(try p.piece()) }
-            return ast.Expr.Join(p.from(at), gather(p.exprs, from))
+            # Adjacent: text read as before 2026-11-15, its pieces side by side (tools/textjoin_migrate.olang)
+            if p.Adjacent { return try p.adjacent(at) }
+            if p.sees(token.Tok.StrLit) { return try p.postfix() }
+            return try p.rendering()
         }
         case _ { return try p.power() }
     }
@@ -3044,16 +3041,35 @@ fn (p mut Parser&) power() ast.Expr& ? Fail {
     return ast.Expr.Binary(sp, token.Tok.StarStar, x, y)
 }
 
-# a piece of text: a literal, or "$" rendering what follows
-fn (p mut Parser&) piece() ast.Expr& ? Fail {
-    at := p.here()
-    if p.sees(token.Tok.StrLit) {
-        # a literal piece is an operand, a level as any is
-        try p.enter()
-        p.leave()
-        p.advance()
-        return ast.Expr.Lit(p.from(at), token.Tok.StrLit)
+# text read the way it was written before 2026-11-15 (Adjacent), for tools/textjoin_migrate.olang: pieces - a literal or
+# a "$" rendering - side by side are one join, read as the "+" chain that writes it now; Joins records each join's span
+# and JoinGaps the end of every piece another follows, where the tool writes " +"
+fn (p mut Parser&) adjacent(at I32) ast.Expr& ? Fail {
+    # a literal with something else after it is a postfix primary ("a b".Split(" "))
+    if p.sees(token.Tok.StrLit) and p.look(1) != token.Tok.StrLit and p.look(1) != token.Tok.Dollar { return try p.postfix() }
+    x := try p.oldPiece()
+    for p.sees(token.Tok.StrLit) or p.sees(token.Tok.Dollar) {
+        p.JoinGaps.Push(p.prevEnd)
+        y := try p.oldPiece()
+        x = ast.Expr.Binary(p.from(at), token.Tok.Plus, x, y)
     }
+    if x != ast.Expr.Binary: return x
+    p.Joins.Push(p.from(at))
+    return x
+}
+
+fn (p mut Parser&) oldPiece() ast.Expr& ? Fail {
+    if not p.sees(token.Tok.StrLit): return try p.rendering()
+    at := p.here()
+    try p.enter()
+    p.leave()
+    p.advance()
+    return ast.Expr.Lit(p.from(at), token.Tok.StrLit)
+}
+
+# "$x" (E11a): the rendering of a postfix expression, a prefix operator's operand as "-" and "~" take one
+fn (p mut Parser&) rendering() ast.Expr& ? Fail {
+    at := p.here()
     try p.want(token.Tok.Dollar)
     k := p.peek()
     if k == token.Tok.Minus or k == token.Tok.Tilde or k == token.Tok.Dollar {
@@ -3662,17 +3678,6 @@ fn (p mut Parser&) hint(want String&) Bool {
         p.reportAt(f, msgs.DestructInBody())
         return true
     }
-    # E11b: a value joined to text has to be rendered - "pretty(t) "\n"" or ""n=" n"
-    if (fk == token.Tok.StrLit or fk == token.Tok.Dollar) and pl == fl and p.isOperandEnd(pr) and
-       p.joinPieceHint(p.operandStartBefore(pr), pr) {
-        return true
-    }
-    if (pk == token.Tok.StrLit or p.endsRendering(pr)) and pl == fl and (isOperandEndTok(fk) or fk == token.Tok.LParen) and
-       fk != token.Tok.RParen and fk != token.Tok.RBrack and not (pk == token.Tok.StrLit and fk == token.Tok.LParen) and
-       p.joinPieceHint(f, p.operandEndAfter(f)) {
-        return true
-    }
-    if p.textPieceCalled(f) { return true }
     # L18a: "f(a, b,)" - a comma before a list's closing bracket separates nothing
     if (fk == token.Tok.RParen or fk == token.Tok.RBrack) and pk == token.Tok.Comma and pl == fl {
         p.reportAt(pr, msgs.TrailingComma(p.named(f)))
@@ -3718,177 +3723,6 @@ fn (p Parser&) lineStartsCase(t I64) Bool {
     s := t
     for s > 0 and p.lineAt(s - 1) == line { s-- }
     return p.kindAt(s) == token.Tok.Case
-}
-
-fn isOperandEndTok(k token.Tok) Bool {
-    return k == token.Tok.Iden or k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.IntLit or
-           k == token.Tok.FloatLit or k == token.Tok.CharLit or k == token.Tok.BoolLit or k == token.Tok.NullLit
-}
-
-# ...or a member named by a keyword, "s.done" (L9a)
-fn (p Parser&) isOperandEnd(i I64) Bool {
-    return isOperandEndTok(p.kindAt(i)) or (p.isKw(i) and p.kindAt(i - 1) == token.Tok.Dot)
-}
-
-fn isOperandTail(k token.Tok) Bool { return k == token.Tok.Iden or k == token.Tok.RParen or k == token.Tok.RBrack }
-
-# the bracket matching the closing one at i, searching back: -1 for none
-fn (p Parser&) openerOf(i I64) I64 {
-    closer := p.kindAt(i)
-    opener := token.Tok.LParen if closer == token.Tok.RParen else token.Tok.LBrack
-    depth I64 = 0
-    t := i
-    for t >= 0 {
-        k := p.kindAt(t)
-        if k == closer {
-            depth++
-        } else if k == opener {
-            depth--
-            if depth == 0 { return t }
-        }
-        t--
-    }
-    return -1
-}
-
-# the first token of the postfix operand ending at last - "a.b(c)[d]" from its "]" - or -1 where it is not one (a
-# rendering's "$" before it makes it a join piece already)
-fn (p Parser&) operandStartBefore(last I64) I64 {
-    t := last
-    for _ in range 256 {
-        k := p.kindAt(t)
-        if k == token.Tok.RParen or k == token.Tok.RBrack {
-            t = p.openerOf(t)
-            if t < 0 { return -1 }
-            b := t - 1
-            if p.lineAt(b) == p.lineAt(t) and isOperandTail(p.kindAt(b)) {
-                t = b
-                continue
-            }
-        } else if p.isOperandEnd(t) {
-            if p.kindAt(t - 1) == token.Tok.Dot and isOperandTail(p.kindAt(t - 2)) {
-                t = t - 2
-                continue
-            }
-        } else {
-            return -1
-        }
-        return -1 if p.kindAt(t - 1) == token.Tok.Dollar else t
-    }
-    return -1
-}
-
-# the last token of the postfix operand starting at first - "a.b(c)[d]" from its "a"
-fn (p Parser&) operandEndAfter(first I64) I64 {
-    t := first
-    n := p.ts.Toks.Len()
-    for _ in range 256 {
-        k := p.kindAt(t)
-        if k == token.Tok.LParen or k == token.Tok.LBrack {
-            opener := k
-            closer := token.Tok.RParen if k == token.Tok.LParen else token.Tok.RBrack
-            depth I64 = 0
-            for t < n {
-                kt := p.kindAt(t)
-                if kt == opener {
-                    depth++
-                } else if kt == closer {
-                    depth--
-                    if depth == 0: break
-                }
-                t++
-            }
-            if t >= n { return first }
-        }
-        nx := t + 1
-        if p.lineAt(nx) != p.lineAt(t) { return t }
-        if p.kindAt(nx) == token.Tok.Dot and (p.kindAt(nx + 1) == token.Tok.Iden or p.isKw(nx + 1)) {
-            t = nx + 1
-            continue
-        }
-        if p.kindAt(nx) == token.Tok.LParen or p.kindAt(nx) == token.Tok.LBrack {
-            t = nx
-            continue
-        }
-        return t
-    }
-    return t
-}
-
-# E11b: "f(x "a")", "f("a" x)" - a value beside text with no "$": the hint shows the rendering to write
-fn (p mut Parser&) joinPieceHint(from I64, to I64) Bool {
-    if from < 0 or to < 0 or p.lineAt(from) != p.lineAt(to) { return false }
-    a := p.ts.Toks[from]
-    b := p.ts.Toks[to]
-    # a long operand - a chain holding a lambda, say - is rendered whole by parenthesizing it
-    if b.End > a.Start and b.End - a.Start <= 60 and a.Kind == token.Tok.CharLit and p.padsChar(from, to) {
-        # a character is padded as its text (T29f): "'c'.PadStart(3)" is rendered "($'c').PadStart(3)"
-        p.reportAt(from, msgs.JoinPiece($"($" $p.text(a) ")" $p.src.Text[a.End:b.End]))
-    } else if b.End > a.Start and b.End - a.Start <= 60 {
-        p.reportAt(from, msgs.JoinPiece(p.src.Text[a.Start:b.End]))
-    } else if from == to {
-        p.reportAt(from, msgs.JoinPiece(p.text(a)))
-    } else {
-        p.reportAt(from, msgs.JoinPiece("(...)"))
-    }
-    return true
-}
-
-# whether the operand from..to is a character literal's PadStart or PadEnd - a method of its text, not of the Char
-fn (p Parser&) padsChar(from I64, to I64) Bool {
-    if to < from + 2 or p.kindAt(from + 1) != token.Tok.Dot { return false }
-    m := p.text(p.ts.Toks[from + 2])
-    return m == "PadStart" or m == "PadEnd"
-}
-
-# E11b: whether i ends a "$" rendering - "$n", "$a.b(c)" - a join piece another piece may follow
-fn (p Parser&) endsRendering(i I64) Bool {
-    if not p.isOperandEnd(i) { return false }
-    s := i
-    for _ in range 256 {
-        k := p.kindAt(s)
-        if k == token.Tok.RParen or k == token.Tok.RBrack {
-            s = p.openerOf(s)
-            if s < 0 { return false }
-            b := s - 1
-            if p.kindAt(b) == token.Tok.Dollar { return true }
-            if p.lineAt(b) == p.lineAt(s) and isOperandTail(p.kindAt(b)) {
-                s = b
-                continue
-            }
-            return false
-        }
-        b := s - 1
-        if p.kindAt(b) == token.Tok.Dollar { return true }
-        if p.kindAt(b) == token.Tok.Dot and isOperandTail(p.kindAt(s - 2)) {
-            s = s - 2
-            continue
-        }
-        return false
-    }
-    return false
-}
-
-# E11b: a text literal called - "$n "," (...)" - is a piece of text with "(" after it, which can only be a value to join
-fn (p mut Parser&) textPieceCalled(f I64) Bool {
-    fl := p.lineAt(f)
-    from := f
-    t := f
-    for t >= 0 and p.lineAt(t) >= fl - 1 {
-        from = t
-        t--
-    }
-    t = from
-    for t < p.ts.Toks.Len() and p.lineAt(t) <= fl {
-        nx := t + 1
-        if p.kindAt(t) == token.Tok.StrLit and p.kindAt(nx) == token.Tok.LParen and p.lineAt(nx) == p.lineAt(t) {
-            p.reportAt(nx, msgs.JoinPieceCalled())
-            return true
-        }
-        if nx == f { break }
-        t++
-    }
-    return false
 }
 
 # D12: "state Array<F32>(n)" - a declaration's value follows '=': the hint writes both spellings out of the line

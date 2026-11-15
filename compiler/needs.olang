@@ -359,7 +359,7 @@ fn (w mut walker&) parts(x ast.Expr&) {
             w.expr(cd)
             w.expr(b)
         }
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Range(_, items) {
             for y in items { w.expr(y) }
         }
         case ast.Expr.Try(_, y, cls) {

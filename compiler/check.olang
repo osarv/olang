@@ -980,7 +980,7 @@ fn (c mut Checker&) readsFixed(x ast.Expr?&) Bool {
         case ast.Expr.Index(_, a, items): c.readsFixed(a) and c.allFixed(items)
         case ast.Expr.Slice(_, a, lo, hi): c.readsFixed(a) and c.readsFixed(lo) and c.readsFixed(hi)
         case ast.Expr.Axis(_, lo, hi): c.readsFixed(lo) and c.readsFixed(hi)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.allFixed(items)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Range(_, items): c.allFixed(items)
         case ast.Expr.Try(_, a, clauses): c.readsFixed(a) and (clauses.Len() == 0)
         case ast.Expr.Unreachable(_, msg): msg == null or c.readsFixed(msg)
         case _: false
@@ -3295,7 +3295,7 @@ fn (c mut Checker&) declaresNames(x ast.Expr?&) Bool {
         case ast.Expr.Index(_, a, items): c.declaresNames(a) or c.anyDeclaresNames(items)
         case ast.Expr.Slice(_, a, lo, hi): c.declaresNames(a) or c.declaresNames(lo) or c.declaresNames(hi)
         case ast.Expr.Axis(_, lo, hi): c.declaresNames(lo) or c.declaresNames(hi)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.anyDeclaresNames(items)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Range(_, items): c.anyDeclaresNames(items)
         case ast.Expr.Try(_, a, clauses): c.declaresNames(a) or (clauses.Len() > 0)
         case ast.Expr.Unreachable(_, msg): c.declaresNames(msg)
         case _: true
@@ -5153,7 +5153,7 @@ fn storedExpr(x ast.Expr?&, out mut Map<source.NameId, Bool>&) {
             storedExpr(lo, out)
             storedExpr(hi, out)
         }
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) { storedExprs(items, out) }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Range(_, items) { storedExprs(items, out) }
         case ast.Expr.Try(_, y, cs) {
             storedExpr(y, out)
             storedCatches(cs, out)
@@ -8372,7 +8372,6 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
         case ast.Expr.Index(sp, y, items) { return c.index(sp, y, items) }
         case ast.Expr.ArrayLit(sp, made, items) { return c.madeLit(sp, made!.Span(), c.resolve(made!), items) }
         case ast.Expr.Row(sp, items): return c.row(sp, items, want)
-        case ast.Expr.Join(sp, parts) { return c.join(sp, parts) }
         case ast.Expr.Try(sp, y, clauses) { return c.tryExpr(sp, y, clauses, want) }
         case ast.Expr.Postfix(sp, op, y) if op == token.Tok.Bang { return c.bang(sp, y, want) }
         case ast.Expr.Postfix(sp, op, y) {
@@ -8964,6 +8963,8 @@ fn (c mut Checker&) opnd(op token.Tok, x ast.Expr&, want types.TypeId) typed.Exp
 # literal adapting to the other operand where it fits it; on Bools "==", "!=" and xor
 fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr& {
     if op == token.Tok.StarStar { return c.power(sp, a, b, want) }
+    # E11b: "+" with text written on either side joins text
+    if op == token.Tok.Plus and (textWritten(a) or textWritten(b)) { return c.textPlus(sp, a, b) }
     if op == token.Tok.EqEq or op == token.Tok.NotEq {
         # E10c: a comparison with the null literal is the null test, never a call of Eq (E10a)
         if isNullLit(a) or isNullLit(b): return c.nullTest(sp, a, b, op == token.Tok.NotEq)
@@ -9023,14 +9024,14 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
             fits0 := c.litLikeFits(b, tb0)
             y0 := c.opnd(op, b, tb0 if fits0 else types.UnknownT)
             if not fits0 and c.noMeet(opSp, typeOf(x0), typeOf(y0)) { return c.unknown(sp) }
-            return c.opValues(sp, opSp, op, x0, y0, a.Span(), b.Span())
+            return c.opAst(sp, opSp, op, x0, y0, a, b)
         }
         y1 := c.value(c.opnd(op, b, types.UnknownT), b.Span())
         ta1 := c.literalBeside(typeOf(y1)) if c.isNumber(typeOf(y1)) or c.laneArray(typeOf(y1)) else types.UnknownT
         fits1 := c.litLikeFits(a, ta1)
         x1 := c.opnd(op, a, ta1 if fits1 else types.UnknownT)
         if not fits1 and c.noMeet(opSp, typeOf(y1), typeOf(x1)) { return c.unknown(sp) }
-        return c.opValues(sp, opSp, op, x1, y1, a.Span(), b.Span())
+        return c.opAst(sp, opSp, op, x1, y1, a, b)
     }
     x typed.Expr?& = null
     y typed.Expr?& = null
@@ -9067,7 +9068,14 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
         x = c.value(c.opnd(op, a, types.UnknownT), a.Span())
         y = c.value(c.opnd(op, b, types.UnknownT), b.Span())
     }
-    return c.opValues(sp, opSp, op, x!, y!, a.Span(), b.Span())
+    return c.opAst(sp, opSp, op, x!, y!, a, b)
+}
+
+# a binary operator on two checked operands written a and b: a "+" with a String on either side joins text (E11b)
+fn (c mut Checker&) opAst(sp source.Span, opSp source.Span, op token.Tok, x typed.Expr&, y typed.Expr&, a ast.Expr&
+                          b ast.Expr&) typed.Expr& {
+    if op == token.Tok.Plus and (c.isText(typeOf(x)) or c.isText(typeOf(y))) { return c.textValues(sp, a, x, b, y) }
+    return c.opValues(sp, opSp, op, x, y, a.Span(), b.Span())
 }
 
 # a literal operand (folded as v) beside the other operand of a binary operator: adapted to its type (T6), or where it
@@ -10460,28 +10468,146 @@ fn (c mut Checker&) chainCmp(sp source.Span, ch ast.Chain&, i I64, x typed.Expr?
 # ---- text (E11a, E11b) ----
 
 # "a" $b "c": text joined from its pieces (E11b)
-fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr& {
+# E11b: "+" joining text - one join for the whole chain however it is grouped, each operand evaluated left to right, then
+# every piece rendered and copied once into one allocation (typed.Text, as "$" makes): a literal is a piece of its
+# own, "$x" a rendering, a String value its characters
+fn (c mut Checker&) textPlus(sp source.Span, a ast.Expr&, b ast.Expr&) typed.Expr& {
     ps mut Vec<typed.Piece&>& = Vec<typed.Piece&>()
-    for p in parts {
-        ok := false
-        match p {
-            case ast.Expr.Lit(lsp, kind) {
-                if kind == token.Tok.StrLit {
-                    ps.Push(typed.Piece.Lit(c.strBytes(lsp)))
-                    ok = true
-                }
-            }
-            case ast.Expr.Unary(_, op, y) {
-                if op == token.Tok.Dollar {
-                    ps.Push(c.renderPiece(p.Span(), y))
-                    ok = true
-                }
-            }
-            case _ { }
+    c.textPieces(a, ps)
+    c.textPieces(b, ps)
+    return c.textOf(sp, ps)
+}
+
+# the join of pieces ps: literals side by side made one, and a join of literals alone the literal it writes - constant
+# data, as text written in the program is (T25d)
+fn (c mut Checker&) textOf(sp source.Span, ps Vec<typed.Piece&>&) typed.Expr& {
+    merged mut Vec<typed.Piece&>& = Vec<typed.Piece&>()
+    for pc in ps {
+        n := merged.Len()
+        last := merged[n - 1] if n > 0 else pc
+        if n > 0 and pc == typed.Piece.Lit and last == typed.Piece.Lit {
+            merged[n - 1] = typed.Piece.Lit(joinBytes(last.bytes, pc.bytes))
+            continue
         }
-        if not ok { c.gap(p.Span(), "a join piece of this kind (E11b)") }
+        merged.Push(pc)
     }
-    return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
+    only := merged[0] if merged.Len() == 1 else typed.Piece.Lit(Array<U8>[])
+    if merged.Len() == 1 and only == typed.Piece.Lit {
+        return typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(only.bytes))
+    }
+    return typed.Expr.Text(sp, c.textType(), typed.Text(merged.ToArray(), c.site(typed.SiteKind.Text, sp)))
+}
+
+fn joinBytes(a Array<U8>&, b Array<U8>&) Array<U8> {
+    out := Array<U8>(a.Len() + b.Len())
+    for i in range a.Len(): out[i] = a[i]
+    for i in range b.Len(): out[a.Len() + i] = b[i]
+    return out
+}
+
+# whether x is text by how it is written: a literal, a "$" rendering, or a "+" chain holding one
+fn textWritten(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(_, kind): kind == token.Tok.StrLit
+        case ast.Expr.Unary(_, op, _): op == token.Tok.Dollar
+        case ast.Expr.Binary(_, op, a, b): op == token.Tok.Plus and (textWritten(a) or textWritten(b))
+        case _: false
+    }
+}
+
+# the pieces operand x of a join adds: a "+" chain's own operands in order, a literal, a rendering, else its value
+fn (c mut Checker&) textPieces(x ast.Expr&, ps mut Vec<typed.Piece&>&) {
+    match x {
+        case ast.Expr.Lit(lsp, kind) {
+            if kind == token.Tok.StrLit {
+                ps.Push(typed.Piece.Lit(c.strBytes(lsp)))
+                return
+            }
+        }
+        case ast.Expr.Unary(_, op, y) {
+            if op == token.Tok.Dollar {
+                ps.Push(c.renderPiece(x.Span(), y))
+                return
+            }
+        }
+        case ast.Expr.Binary(_, op, a, b) {
+            if op == token.Tok.Plus and textWritten(x) {
+                c.textPieces(a, ps)
+                c.textPieces(b, ps)
+                return
+            }
+        }
+        case _ { }
+    }
+    c.textOperand(x, c.value(c.expr(x, types.UnknownT), x.Span()), ps)
+}
+
+# a checked operand v of a join written as x: a join's pieces taken in, a String's characters, else an error naming
+# what to write
+fn (c mut Checker&) textOperand(x ast.Expr&, v typed.Expr&, ps mut Vec<typed.Piece&>&) {
+    t := typeOf(v)
+    if t == types.UnknownT { return }
+    if c.isText(t) {
+        match v {
+            case typed.Expr.Text(_, _, tx) { for pc in tx.Pieces: ps.Push(pc) }
+            case typed.Expr.Data(_, _, _, typed.Const.Bytes(bs)): ps.Push(typed.Piece.Lit(bs))
+            case _: ps.Push(c.valuePiece(v))
+        }
+        return
+    }
+    at := x.Span()
+    if c.charsOf(t) {
+        c.err(at, msgs.TextPlusChars(c.ty(t), c.src(at)))
+        return
+    }
+    c.err(at, msgs.TextPlusValue(c.ty(t), c.renderingOf(x)))
+}
+
+# a value of a "+" with a String on either side (E11b): the two checked operands joined
+fn (c mut Checker&) textValues(sp source.Span, a ast.Expr&, x typed.Expr&, b ast.Expr&, y typed.Expr&) typed.Expr& {
+    ps mut Vec<typed.Piece&>& = Vec<typed.Piece&>()
+    c.textOperand(a, x, ps)
+    c.textOperand(b, y, ps)
+    return c.textOf(sp, ps)
+}
+
+# whether a value of type t is text a join takes as it is: a String, a reference never null to one
+fn (c mut Checker&) isText(t types.TypeId) Bool {
+    if c.P.T.IsNullable(t) { return false }
+    return c.P.T.Same(c.deref(t), c.textType())
+}
+
+# whether t is an array of characters that is no String (an Array<Char>, a slice of one)
+fn (c mut Checker&) charsOf(t types.TypeId) Bool {
+    a := c.arrayOf(t)
+    return a != types.UnknownT and c.P.T.Same(c.P.T.Elem(a), c.charType())
+}
+
+# "$x" for an operand written x, "$(x)" where "$" would take less than x
+fn (c mut Checker&) renderingOf(x ast.Expr&) String {
+    w := c.src(x.Span())
+    if w.Len() > 60 { return "$(...)" }
+    tight := match x {
+        case ast.Expr.Name(_, _), ast.Expr.Lit(_, _), ast.Expr.Member(_, _, _), ast.Expr.Call(_, _, _): true
+        case ast.Expr.Index(_, _, _), ast.Expr.Paren(_, _), ast.Expr.Generic(_, _, _), ast.Expr.Slice(_, _, _, _): true
+        case _: false
+    }
+    return $"$" $w if tight else $"$(" $w ")"
+}
+
+# a String value as a piece of a join: its characters copied where the join renders it (E11a)
+fn (c mut Checker&) valuePiece(x typed.Expr&) typed.Piece& {
+    p := readPlace(x)
+    xt := typeOf(x)
+    # E11b, T7b: an operand naming a fixed array is a borrow of it, its elements read when its piece renders - as a
+    # run-time array's pair already names its storage
+    if p != null and c.P.T.KindOf(xt) == types.Kind.Array and c.P.T.Length(xt) != types.TypeId(0) {
+        return typed.Piece.Render(typed.Expr.Borrow(x.Span(), c.P.T.Ref(xt, types.ReadOnly), p))
+    }
+    # QCE: a value owning storage (a Vec, a Map, a struct holding text) read out of a place is the operand's own copy -
+    # a later operand changing the place changes nothing it renders (lowering leaves the copy out where nothing could)
+    if p != null and c.P.T.OwnsParts(xt) { return typed.Piece.Render(c.ownCopy(x)) }
+    return typed.Piece.Render(x)
 }
 
 # ---- read-only copies (T25c) ----
@@ -11427,17 +11553,7 @@ fn (c mut Checker&) renderPiece(sp source.Span, y ast.Expr&) typed.Piece& {
         }
         case _ { }
     }
-    # E11b, T7b: an operand naming a fixed array is a borrow of it, its elements read when its piece renders - as a
-    # run-time array's pair already names its storage
-    p := readPlace(x)
-    xt := typeOf(x)
-    if p != null and c.P.T.KindOf(xt) == types.Kind.Array and c.P.T.Length(xt) != types.TypeId(0) {
-        return typed.Piece.Render(typed.Expr.Borrow(x.Span(), c.P.T.Ref(xt, types.ReadOnly), p))
-    }
-    # QCE: a value owning storage (a Vec, a Map, a struct holding text) read out of a place is the operand's own copy -
-    # a later operand changing the place changes nothing it renders (lowering leaves the copy out where nothing could)
-    if p != null and c.P.T.OwnsParts(xt) { return typed.Piece.Render(c.ownCopy(x)) }
-    return typed.Piece.Render(x)
+    return c.valuePiece(x)
 }
 
 # a function instance's signature as "$" writes it (E11a): its name, its parameters named, its result (a borrowed one
@@ -14313,34 +14429,9 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
     if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("call")) }
     c.privateRole(m, t, "Call", fsp, msgs.Tok(c.src(fsp)))
     if m >= 0 { return c.invoke(sp, fsp, m, fv, args, Array<typed.Expr&>(0)) }
-    # E11b: a "(" after a rendering in a join calls what it renders - the value inside is joined with '$(...)'
-    tx := c.P.L.Mods[c.fr().Mi].Src!.Text
-    pb := I64(fsp.Start) - 1
-    for pb > 0 and tx[pb] == ' ' { pb-- }
-    if fsp.Start > 0 and tx[I64(fsp.Start)] == '(' and tx[pb] == '"' {
-        c.err(source.Span(fsp.Start, fsp.Start + 1), msgs.JoinPieceCalled())
-        c.dropArgs(args)
-        return c.unknown(sp)
-    }
-    if fsp.Start > 0 and ((tx[I64(fsp.Start) - 1] == '$' and (c.deref(t) == c.textType() or c.textArgFollows(tx, I64(fsp.End)))) or tx[I64(fsp.Start)] == '"') {
-        c.err(c.opAfter(fsp, 1), msgs.JoinPieceCalled())
-        c.dropArgs(args)
-        return c.unknown(sp)
-    }
     c.err(fsp, msgs.NotCallable(c.ty(t)))
     c.dropArgs(args)
     return c.unknown(sp)
-}
-
-# E11b: whether the "(" after the callee ending at e opens a piece of text - its first token a text literal - as in
-# '$alpha (" x")', a rendering followed by text, not a call
-fn (c mut Checker&) textArgFollows(tx String&, e I64) Bool {
-    k := e
-    for k < tx.Len() and tx[k] == ' ': k++
-    if k >= tx.Len() or tx[k] != '(': return false
-    k++
-    for k < tx.Len() and tx[k] == ' ': k++
-    return k < tx.Len() and tx[k] == '"'
 }
 
 # whether a path is an import's alias, or reaches through one (M4)
@@ -15386,20 +15477,8 @@ fn (c mut Checker&) reflTextOf(x ast.Expr&) String ? Unrendered {
             if kind == token.Tok.StrLit { return String(c.strBytes(sp)) }
         }
         case ast.Expr.Paren(_, y) { return try c.reflTextOf(y) }
-        case ast.Expr.Join(_, parts) {
-            out := ""
-            for p in parts { out = $out $(try c.reflPiece(p)) }
-            return out
-        }
-        case _ { }
-    }
-    error Unrendered
-}
-
-fn (c mut Checker&) reflPiece(p ast.Expr&) String ? Unrendered {
-    match p {
-        case ast.Expr.Lit(sp, kind) {
-            if kind == token.Tok.StrLit { return String(c.strBytes(sp)) }
+        case ast.Expr.Binary(_, op, a, b) {
+            if op == token.Tok.Plus { return $(try c.reflTextOf(a)) $(try c.reflTextOf(b)) }
         }
         case ast.Expr.Unary(_, op, y) {
             if op == token.Tok.Dollar { return try c.reflRendered(y) }
@@ -18761,13 +18840,7 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
     }
     e := c.expr(x, types.UnknownT)
     if typeOf(e) == types.UnknownT { return }
-    # S3, E11b: text standing alone - most often a join meant to continue from the line before
-    textAlone := match x {
-        case ast.Expr.Lit(_, kind): kind == token.Tok.StrLit
-        case ast.Expr.Join(_, _): true
-        case _: false
-    }
-    c.err(c.notStmtSpan(x), msgs.JoinNextLine() if textAlone else msgs.NotAStatement())
+    c.err(c.notStmtSpan(x), msgs.NotAStatement())
 }
 
 # where S3 points: a binary's operator, a member's name, else the expression
@@ -19673,6 +19746,14 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         return
     }
     bop := compoundOp(op)
+    if bop == token.Tok.Plus and c.isText(t) {
+        # E11b: "s += t" is "s = s + t", one join of the text held and every piece of the value
+        ps mut Vec<typed.Piece&>& = Vec<typed.Piece&>()
+        ps.Push(c.valuePiece(c.read(sp, typed.Lvalue.Target(sp, t))))
+        c.textPieces(value, ps)
+        c.emit(typed.Stmt.Assign(sp, p, c.fit(c.textOf(sp, ps), t, sp)))
+        return
+    }
     if bop == token.Tok.StarStar and not c.laneArray(t) {
         # E5a: "x **= y" is "x = x ** y", the exponent adapting to Pow's parameter
         if t == types.UnknownT { return }
@@ -25822,7 +25903,7 @@ fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
         }
         case ast.Expr.Slice(_, y, lo, hi) { return exprAssigns(y, n) or exprAssigns(lo, n) or exprAssigns(hi, n) }
         case ast.Expr.Axis(_, lo, hi): return exprAssigns(lo, n) or exprAssigns(hi, n)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Range(_, items) {
             return exprsAssign(items, n)
         }
         case ast.Expr.Compr(_, cm) {

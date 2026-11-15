@@ -2508,7 +2508,6 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Lit(_, kind): p.literalType(kind)
         case ast.Expr.Paren(_, y): p.Infer(c, known, y)
         case ast.Expr.Unary(_, op, y): p.unaryType(c, known, op, y)
-        case ast.Expr.Join(_, _): p.textType()
         case ast.Expr.Name(sp, n): try known.Get(n) catch default p.nameType(c, sp, n)
         case ast.Expr.ArrayLit(_, made, items): p.literalMade(c, known, p.Resolve(c, made), items)
         case ast.Expr.Row(_, items): p.ownLiteral(c, known, items)
@@ -2694,6 +2693,8 @@ fn (p mut Program&) binaryType(c Context&, known Map<source.NameId, types.TypeId
     }
     ta := p.Infer(c, known, a)
     tb := p.Infer(c, known, b)
+    # E11b: "+" with text on either side joins text
+    if op == token.Tok.Plus and (ta == p.textType() or tb == p.textType()) { return p.textType() }
     if ta != tb { return types.UnknownT }
     return ta if p.T.IsNumber(ta) else types.UnknownT
 }
