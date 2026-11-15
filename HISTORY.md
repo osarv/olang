@@ -37356,3 +37356,24 @@ code generator, the other temporaries removed - truer than before, and with the 
 ran. Proved by targeted runs (the coordinator's brief: no full verify): the bootstrap and `make fixedpoint`, checkir,
 build.olang's tests, the `listing`, `target`, `objnames`, `cinterop` and `linkinline` scenarios, tests/lanes, axes,
 bench, cimport, fnvalues and std/sha256, stats, regex.
+
+Taken further the same day, after a container restart: the F32 products beside the INT8 ones had not been unchanged -
+measured shape by shape (load average 5-6), linalg's thin products had lost up to half their speed (100352 x 9 x 16 with
+its bias and ReLU, a convolution's: 32 -> 17 GFLOPS; 1024 x 128 x 512: 138 -> 105), the square ones within noise. The
+profile put it in linalg's `storeTile` and `epilogueAs` loops (`for j in range w`, instances in the root's object), which
+the link now left scalar. The cause: with the vectorizers off, a module's compile still ran LLVM's late `LoopUnroll`,
+which unrolls a loop by a factor with a remainder loop - a step meant to follow the vectorizer, not to precede it - and
+the link's vectorizer then found the unrolled body not worth vectorizing and the remainder too short to version
+(`CantVersionLoopWithOptForSize`, its trip count under 16). Neither a weaker link pipeline (`opt -passes=default<O3>` over
+the merged module was as slow, a loop rotation added no help) nor the inliner. Tried and dropped: vectorizing in the
+root's objects only (main, tests, instances), which restored the F32 products but halved the batch-1 INT8 ones (1 x 1024 x
+1024: ~60 -> ~25 GOPS - the root's micro1 summed its tile with vectors before the link inlined the step writing it).
+Fix: under full LTO every object's compile also passes `-mllvm -unroll-runtime=false -mllvm -unroll-allow-partial=false`;
+unrolling a loop whole stays (before the vectorizer, as it always ran), and the link unrolls by a factor after it
+vectorizes - what ThinLTO's compile, which runs no late unroller, does already. Measured (bench_int8, built with the
+compiler before B2d and with this one, interleaved, load average 17-24): INT8 products 4-9 -> 45-78 GOPS (1 x 1024 x 1024
+8 -> 33-61), F32 the same within the noise (thin 9 x 16: 15-21 both; the isolated thin product 1300-1500 us against
+1300-1600, where the first fix took 2100-2900); `quant.rowStep` calls 54 -> 0, calls into quant 66 -> 4, `vpdpwssd` 0 ->
+80. olang's bench/ against C, before and after (`OLANG_CLANG` a wrapper restoring the old flags): every olang/C ratio the
+same within the noise. Targeted runs: the bootstrap's fixed point, build.olang's tests, the `linkinline`, `listing`,
+`objnames` and `target` scenarios.

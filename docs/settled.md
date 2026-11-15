@@ -857,7 +857,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
   declined.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); under full
-  LTO a module's own compile vectorizes nothing, so the link inlines across modules before it vectorizes (2026-11-15);
+  LTO a module's own compile neither vectorizes nor unrolls a loop by a factor, so the link inlines across modules before
+  it vectorizes (2026-11-15);
   `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
 - **Compiles at once and the bootstrap (B3m, the user's approval 2026-11-14, before v1.0.0).** A build runs
   `OLANG_JOBS` compiles at once, else one per core but no more than `MemAvailable` holds at 512 MB each (at least
