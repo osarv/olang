@@ -11,8 +11,8 @@ keywordColour String& = "35"       # magenta: keywords, true, false, null
 typeNameColour String& = "36"      # cyan: a capitalized name
 numberColour String& = "33"        # yellow
 textColour String& = "32"          # green: text and character literals
-commentColour String& = "90"       # bright black
-operatorColour String& = "34"      # blue
+commentColour String& = "2;3"      # faint italic: the terminal's own text colour, dimmed (bright black is near black in some themes)
+operatorColour String& = "94"      # bright blue (plain blue is a deep blue in some themes, hard to read on black)
 errorWord String& = "1;31"
 warningWord String& = "1;33"
 noteWord String& = "1;36"
@@ -119,8 +119,8 @@ fn startsAt(t String&, w String&, i I64) Bool {
 
 test Source "colours each token by its kind, and only adds escape codes" {
     out := Source("x := 1")
-    assert out == "x \x1b[34m:=\x1b[0m \x1b[33m1\x1b[0m"
-    assert Source("fn F() T # done") == "\x1b[35mfn\x1b[0m \x1b[36mF\x1b[0m() \x1b[36mT\x1b[0m \x1b[90m# done\x1b[0m"
+    assert out == "x \x1b[94m:=\x1b[0m \x1b[33m1\x1b[0m"
+    assert Source("fn F() T # done") == "\x1b[35mfn\x1b[0m \x1b[36mF\x1b[0m() \x1b[36mT\x1b[0m \x1b[2;3m# done\x1b[0m"
     assert Source("\"a\"") == "\x1b[32m\"a\"\x1b[0m"
     assert Source("") == ""
 }
