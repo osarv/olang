@@ -3032,6 +3032,17 @@ itredecl.olang:2:6: error[D3a]: 'Iterator' is a built-in type's name - choose an
     2 | type Iterator struct(x I32) { x }
       |      ^~~~~~~~
 compilation failed with 1 error
+=== jsonprivatefields.olang
+jsonprivatefields.olang:10:18: error[S18c]: this assertion is false, evaluated while compiling: json.Encode: every field of Item is private to its module, so it would be written as {} - capitalize the fields json writes
+   10 |     Println(json.Encode(Array<Item>[Item("pen", 3), Item("ink", 1)]))
+      |                  ^~~~~~
+$ROOT/std/json.olang:1196:43: note: in the standard library's code, here
+ 1196 |                 assert T.Fields.Len() > 0 or T.Size == 0, "json.Encode: every field of " + T.Name + " is private t...
+      |                                           ^~
+$ROOT/std/json.olang:1188:23: note: instantiated here, with T = Item
+ 1188 |                     w.any(x, depth + 1)
+      |                       ^~~
+compilation failed with 1 error
 === k1assertaborts.olang
 k1assertaborts.olang:10:20: error[S18c]: this assertion aborts the program, evaluated while compiling
    10 |     assert half(7) == 3

@@ -840,7 +840,8 @@ fn writeNumber(sb mut StringBuilder&, v F64) { sb.Push($v) }
 # Text is written as it is, UTF-8 left alone, with '"', '\' and the control characters escaped.
 #
 # Any other value is written by its type (G32-G38, compile-time reflection): a struct as an object of its fields by
-# name (in their order; another module's private fields are not written), an enum's case with no fields as its name in
+# name (in their order; another module's private fields are not written, and a struct every field of which is private -
+# with storage, but nothing json may read - is a compile-time error, not "{}"), an enum's case with no fields as its name in
 # quotes ("North") and one with fields as an object of one member, the case's name, holding its fields
 # ({"Circle":{"r":2}}), an array, a List and a Vec as an array, a Map with text keys as an object, text as a string, a
 # Char as a string of it, numbers and Bools as themselves, a reference as what it names, an error value (T20) as "$"
@@ -1192,6 +1193,7 @@ fn (w mut writer&) any<T>(v T, depth I64) {
                 t T.Target = v
                 w.any(t, depth)
             } else if T.Kind == TypeKind.Struct {
+                assert T.Fields.Len() > 0 or T.Size == 0, "json.Encode: every field of " + T.Name + " is private to its module, so it would be written as {} - capitalize the fields json writes"
                 w.fields(v, T.Fields.Len(), depth)
             } else if T.Kind == TypeKind.Error {
                 # an error value (T20) as "$" writes it, "io.Error.Failed"; null for none
