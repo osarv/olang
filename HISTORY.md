@@ -37410,3 +37410,10 @@ The user: the spinner "is the top of a 4*3 and it really doesnt look centered". 
 dots (`U+2803`), which sit high on the line beside `:::`; they now use the middle two (`U+2806`, a gap `U+2804` or
 `U+2802`): ⠄⠆⠆ ⠆⠄⠆ ⠆⠆⠄ ⠆⠆⠂ ⠆⠂⠆ ⠂⠆⠆. Same three characters' width as `:::`. compiler/spin.olang's Frames and the
 makefile's clang loop.
+
+### 2026-11-15, std/io's printing takes any value
+
+The user, on `io.PutLine(x)` refusing an I64 that `Print(x)` takes: "they should all take integers as well as strings",
+then "any printable type really". `io.Put`, `PutLine`, `PutErr` and `PutErrLine` are generic over the value, written as
+`$` renders it (a String as its text), as the prelude's `Print`/`Println` are; still `? io.Error`. Every existing caller
+passed a String and writes the same bytes. M19f in SPEC, std/io.olang's test "writes any value as $ renders it".
