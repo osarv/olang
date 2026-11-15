@@ -145,3 +145,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	oannmodels	sonnet	high	running
 2026-11-15	oannbridge	opus	high	running
 2026-11-15	oannbake	sonnet	medium	running
+2026-11-15	merge3	opus	medium	running
