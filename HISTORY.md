@@ -37284,3 +37284,21 @@ stop on the index the arguments push out of range).
   headroom - less what the running ones may still grow by, leaves room for its peak (its last run's here, else
   compiler/tools/peaks.txt) and a margin; one runs alone whatever its size. `make` still runs a job per core (`nproc`,
   else `sysctl hw.ncpu`).
+
+## 2026-11-15: olang fix and the migration tools' diagnostics (tools/diagedit, null_migrate, oneline_migrate)
+
+B11's split of a diagnostic into headline, note and help rows (1db6cadc) put "write 'x'" advice on a `help:` row the tools'
+`Row.Parse` does not read, so `null_migrate` took an empty advice and sliced past it (tools/null_migrate.olang:162, any
+`T2c` array error, not only one in a generic's instance); the crash stopped `olang fix` before the tools after it.
+`diagedit.JoinHelp` now appends each help row to the error row before it (the form the tools read), applied to every
+compile the tools make; null_migrate also leaves an error with an "instantiated here" note, or advice naming a type its
+line does not write, for a person (`by hand:`), since the advice names the instance's types. `oneline_migrate` converted only
+three-line blocks; the braced one-liner `if c { stmt }` / `for x in xs { stmt }` (80 of agent.olang's) is converted too, and
+`try f()` counts as a call. Tests: `JoinHelp`, null_migrate's generic case, oneline_migrate's own.
+
+## 2026-11-15: E11b - `$alpha (" x")` names `$(...)` again
+
+The call-on-a-non-function path (check.olang, callee) said E11b only where the rendered value was text or the callee began
+with `"`; a rendering of any other value (`$alpha`, an F64) followed by a parenthesized piece of text fell to E13b "F64 is
+not a function". It now also says E11b where the callee is directly after `$` and the `(` that follows opens with a text
+literal (`textArgFollows`). checks/cases/e11bjoinfloat.olang; goldens/diag.txt gained its entry.

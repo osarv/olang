@@ -54,7 +54,7 @@ fn balanced(s String&) Bool {
 
 # whether the one-line body s (stripped) is a simple statement S1b allows
 fn simple(s String&) Bool {
-    if s.Len() == 0 or s.Contains("#") or s.Contains("\"\"\"") or s.Contains(":=") or s.Contains("catch"): return false
+    if s.Len() == 0 or s.Contains("#") or s.Contains(";") or s.Contains("\"\"\"") or s.Contains(":=") or s.Contains("catch"): return false
     if s.Contains("fn(") or s.Contains(" else") or s.Contains("comptime") or s.Contains("embed "): return false
     if s.EndsWith(",") or s.EndsWith("\\") or s.EndsWith("{") or s.EndsWith("(") or not balanced(s): return false
     w := firstWord(s)
@@ -65,7 +65,7 @@ fn simple(s String&) Bool {
     rest := s[w.Len():]
     if w == "fn": return false
     if rest.Len() > 1 and rest[0] == ' ' and (srcmask.IsIdStart(rest[1]) or rest[1] == '?' or rest[1] == ',') {
-        ok := w == "return" or w == "error" or w == "assert" or w == "spawn" or w == "unreachable"
+        ok := w == "return" or w == "error" or w == "assert" or w == "spawn" or w == "unreachable" or w == "try"
         if not ok: return false
     }
     if w.Len() > 0 and rest.StartsWith(","): return false
@@ -94,7 +94,12 @@ fn rewrite(src String&, c mut Count&) String {
         if countOf(line, "\"\"\"") % 2 == 1 or (line.StartsWith("##") and countOf(line, "##") % 2 == 1) { inText = not inText }
         n := 0
         if not inText: n = chain(lines, i, out)
-        if n > 0 {
+        braced := "" if inText or n > 0 else braces(lines, i)
+        if braced.Len() > 0 {
+            out.Push($braced)
+            c.n++
+            i++
+        } else if n > 0 {
             c.n++
             i += n
         } else {
@@ -103,6 +108,23 @@ fn rewrite(src String&, c mut Count&) String {
         }
     }
     return out.Join("\n")
+}
+
+# the one-line braced form `if c { stmt }` / `for x in xs { stmt }` at lines[i] as `if c: stmt`, "" if the line is not one:
+# its head begins `if `/`for `, one `{` and the closing `}` end it, the body qualifies, the next line is no `else`
+fn braces(lines Array<String&>&, i I64) String {
+    line := lines[i]
+    ind := indentOf(line)
+    t := line[ind:]
+    if ind == 0 or not (t.StartsWith("if ") or t.StartsWith("for ")) or not t.EndsWith(" }"): return ""
+    if countOf(t, "{") != 1 or countOf(t, "}") != 1: return ""
+    k := try t.Find(" { ") catch { return "" }
+    if k + 3 > t.Len() - 2 or t[:k] == "for": return ""
+    stmt := t[k + 3:t.Len() - 2]
+    if not simple(stmt): return ""
+    if i + 1 < lines.Len() and lines[i + 1][indentOf(lines[i + 1]):].StartsWith("else"): return ""
+    row := $line[:ind] $t[:k] ": " $stmt
+    return "" if row.Len() > MaxWidth else row
 }
 
 # tries to convert the chain starting at lines[i]; pushes the new lines to out and gives how many lines it covered, 0 if none
@@ -138,6 +160,17 @@ fn chain(lines Array<String&>&, i I64, out mut Vec<String&>&) I64 {
         j += 2
     }
     return 0
+}
+
+test "a block of one statement, and a braced one-liner, become S1b's one-line form" {
+    c := Count()
+    src := "fn f(x I64) I64 {\n    if x < 0 {\n        return 0\n    }\n    for i in range x { x += i }\n    return x\n}\n"
+    want := "fn f(x I64) I64 {\n    if x < 0: return 0\n    for i in range x: x += i\n    return x\n}\n"
+    assert rewrite(src, c) == want and c.n == 2
+    # kept: a branch chain, a forever loop, a block of two statements, a comment, a declaration
+    keep := "fn g(x I64) {\n    if x < 0 { x = 1 } else { x = 2 }\n    for { x++ }\n    if x > 1 { x++ ; y++ }\n    if x > 2 { x++ }   # c\n    if x > 3 { y := 1 }\n}\n"
+    c2 := Count()
+    assert rewrite(keep, c2) == keep and c2.n == 0
 }
 
 fn wanted(path String&) Bool { return path.EndsWith(".olang") }
