@@ -564,19 +564,19 @@ fn earlyfree(r mut report&) ? Failed {
 # built, it runs flat (under 8 MB of address space, or reading its own growth where it has threads); interpreted at a
 # smaller size, the evaluator, which stops on a read of a freed region, prints what the built program prints there. B18a:
 # each of them and every earlyfree program builds under -memory -check, and a program with a gap (an element given a
-# new Vec) fails it naming the element
+# new Vec of text) fails it naming the element
 test "every let-go the freeing guarantee names frees, and -memory -check proves it" { assert passed("freeing") }
 
 fn freeing(r mut report&) ? Failed {
     dir := fresh("freeing")
     os.Run("cp checks/fixtures/freeing/* checks/fixtures/earlyfree/*.olang " + $os.Quote(dir))
-    # (fields: gaps 6-7, elements: 8-9, mapvalues: 10 and 15, unset: 16)
-    limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset"]
+    # (fields: gaps 6-7, elements: 8-9, mapvalues: 10 and 15, unset: 16, vecelems: 17)
+    limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems"]
     full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
                     "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
-                    "19999 20000\n"]
+                    "19999 20000\n", "401980000 100 100\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
-                    "1 10 value 193 padded out to some length .........................\n", "199 200\n"]
+                    "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
@@ -594,6 +594,11 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).EndsWith("flat flat 0\n"), "tempref kept its calls' temporaries", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=100 tempref.olang > out.txt 2>&1") == 0, "tempref interpreted", dir)
     try r.expect(outOf(dir) == "flat flat 0\n", "tempref interpreted output", dir)
+    # (growth, gap 11: a Vec's growth frees in a program with an owner holding a Vec whole and a copy of one - its peak)
+    try r.expect(sh(dir, "\"$OLANG\" -check growth.olang > out.txt 2>&1") == 0, "growth", dir)
+    try r.expect(outOf(dir).EndsWith(" three buffers\n"), "growth kept the buffers its Vecs grew out of", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=1000 growth.olang > out.txt 2>&1") == 0, "growth interpreted", dir)
+    try r.expect(outOf(dir) == "10800 999 three buffers\n", "growth interpreted output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -check texts.olang > out.txt 2>&1") == 0, "texts", dir)
     try r.expect(outOf(dir).EndsWith("flat 3097784\n"), "texts kept what its tasks built", dir)
     for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"
@@ -603,7 +608,7 @@ fn freeing(r mut report&) ? Failed {
     }
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps.olang > out.txt 2>&1") == 1, "gaps passed -memory -check", dir)
     o := outOf(dir)
-    try r.expect(o.Contains("gaps.olang:6:27: memory: 'rows[i % 10]' lets go of what the element held - kept until its scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
+    try r.expect(o.Contains("gaps.olang:7:27: memory: 'rows[i % 10]' lets go of what the element held - kept until its scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
     try r.expect(o.Contains("error[B18]: 1 let-go early freeing does not follow (O8f)"), "no B18 error", dir)
 }
 
@@ -3045,7 +3050,8 @@ fn frameenv(r mut report&) ? Failed {
 
 # the runtime's regions (docs/memory.md 3.4), driven from C: what is built in a region, small and large, its destructors
 # run once as it is released, regions left in their scope closed with it, constant data and null naming none, and
-# 200,000 regions nested in one another closed with constant stack - apart from the analysis that has lowering make them
+# 200,000 regions nested in one another closed with constant stack, part regions (O8f) released only where an array is
+# in one and read as part of the region they are kids of - apart from the analysis that has lowering make them
 test "the runtime's regions make, release and hand back what they hold" { assert passed("regions") }
 
 fn regions(r mut report&) ? Failed {
@@ -3054,7 +3060,7 @@ fn regions(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
     try r.expect(sh(dir, "clang -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
                  "drive.c did not link", dir)
-    for want in Array<String&>["small 2 0", "large 2 0", "null 0 0", "kept 4 0", "chain 200000 0"] {
+    for want in Array<String&>["small 2 0", "large 2 0", "null 0 0", "kept 4 0", "chain 200000 0", "part 6 0"] {
         mode := want[:try want.FindByte(' ') catch default 0]
         try r.expect(sh(dir, "./drive " + $mode + " > out.txt 2>&1") == 0 and outOf(dir) == $want + "\n", "drive " + $mode, dir)
     }
