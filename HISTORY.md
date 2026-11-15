@@ -37845,3 +37845,5 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   os reached from roots that did not import them at the last capture (2026-11-14, before B23), and 17 roots added since
   (tests/condnull, display, fieldnarrow, nulltest, textplus; compiler/cells, jupyter, prompt ...; std/frame, plot,
   zmtp). No module or edge left a graph and no graph was lost, so it was captured again (`make modgold`).
+- **Goldens moved by the batch:** tokens and trees of the 23 files it edited, and the tree of compiler/api.olang, which
+  it did not edit - its `catch default line.Len() - open` is now one default (R9a, above).
