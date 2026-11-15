@@ -14320,7 +14320,7 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
         c.dropArgs(args)
         return c.unknown(sp)
     }
-    if fsp.Start > 0 and ((tx[I64(fsp.Start) - 1] == '$' and c.deref(t) == c.textType()) or tx[I64(fsp.Start)] == '"') {
+    if fsp.Start > 0 and ((tx[I64(fsp.Start) - 1] == '$' and (c.deref(t) == c.textType() or c.textArgFollows(tx, I64(fsp.End)))) or tx[I64(fsp.Start)] == '"') {
         c.err(c.opAfter(fsp, 1), msgs.JoinPieceCalled())
         c.dropArgs(args)
         return c.unknown(sp)
@@ -14328,6 +14328,17 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
     c.err(fsp, msgs.NotCallable(c.ty(t)))
     c.dropArgs(args)
     return c.unknown(sp)
+}
+
+# E11b: whether the "(" after the callee ending at e opens a piece of text - its first token a text literal - as in
+# '$alpha (" x")', a rendering followed by text, not a call
+fn (c mut Checker&) textArgFollows(tx String&, e I64) Bool {
+    k := e
+    for k < tx.Len() and tx[k] == ' ': k++
+    if k >= tx.Len() or tx[k] != '(': return false
+    k++
+    for k < tx.Len() and tx[k] == ' ': k++
+    return k < tx.Len() and tx[k] == '"'
 }
 
 # whether a path is an import's alias, or reaches through one (M4)
