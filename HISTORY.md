@@ -37592,3 +37592,51 @@ files, 8112 joins, 24347 `+` written, 5 joins parenthesized; programs written in
 generators, checks.olang's scenarios, drvdiff's, the prompt's and cells' templates) by hand and by a scratch pass.
 Bootstrapped in three steps: the old compiler built the new one from the old-syntax source, which built the migrated
 source, which built itself to the fixed point; the seed was written again.
+
+## 2026-11-15: O8f - freeing early is a guarantee, and `-memory -check` proves it (docs/freeing.md)
+
+The user: "It's important that we do actually free when we can, and I want this to be provably the case", with no
+`free` or `destroy` ("I don't want to add a free or destroy keyword if we can avoid it"). O8d had made freeing before
+a scope closes the compiler's optimization - "may be reclaimed". The AI study's x01 (`s = $s $i` in a loop: a 189 KB
+text peaking at 3.6 GB) showed how far the optimization was from what a reader of O8d would expect: a text local was
+no place at all, so nothing it let go of was ever freed.
+
+**The rule (O8f).** Where O8d's conditions hold, what a place lets go of is reclaimed at the let-go; an implementation
+may not keep it. The let-goes are named (assignments of locals, fields, globals and elements, `SetAt`, a `Put` that
+replaces, removals, growth of a collection held by a place, a turn left, a destructor value ended), and so are the only
+reasons to keep: O8d's conditions, each one a reader can check in the code, and one fact that cannot be known - a call
+through a function value none of whose bodies is followed and whose type promises no `pure`. A module compiled on its
+own stopped being an exception with W2 (its code reads the program's decisions as link-time constants); followed
+function values with fnvalues rounds 4-10.
+
+**The proof (B18a).** `-memory` now names the let-goes the compiler does not follow - an element given new text, a
+`SetAt`, a place kept because a value holding it was copied or changed in place, a library place (a `Map` entry's
+value) kept by the library's own code - as gap rows, and `-memory -check` (or `-check` alone in a build) fails the
+build on one. A program that builds under it frees at every let-go the rule names; the other half - nothing freed that
+is still used - stays the scope sanitizer's, scopefuzz's and the evaluator's, which stops on a read of a released
+region. Every earlyfree program but mapkeys passes `-memory -check`; mapkeys is a gap (a split entry's key text, built
+where the map lives, is kept at a removal).
+
+**Built.** A local or a mutable global holding an array of a run-time length (text above all) is a place, as owner
+locals and globals were: its values built in regions of their own, the old one released at the assignment once the
+new is held. An immut array local given constant text holds the constant itself (nothing writes it; its zero word says
+it is no region's), so its first release reads none. An assignment of a value array wrote the new elements in place
+where the lengths agreed - so `v := s[0:2]; s = "x" + $2` made `v` read `x2`, a String changing after its constructor
+(T13a). An immut array is now replaced whole, a sole local of any array replaced and its old value released; a place
+that is not sole and not immut keeps writing in place. `s = s + $i` at 20,000 turns went from 850 MB to 13 MB, a text
+global from 2.2 GB to 13 MB, an array local from 700 MB to 13 MB.
+
+**The joins (oann's joinleak, and a task's text).** Every task was given a stand-in for each scope variable of its
+callee, made in the scope it stands for - two of 56 bytes per join, in the spawner's caller's scope, for a callee
+(`work(xs, ...)`) that builds nothing anywhere: 22 MB over 200,000 joins. A callee that, through all it may call,
+allocates nothing and starts no task (effects' Allocates and Spawns) is now given the program's scope, which it never
+builds into - a whole-program fact (`P2 NAME`) the spawner's code reads through the facts table (B3i), decided before
+any module is reused. And the text tasks build into a loop turn's locals came back to the joiner's pool as the turn
+closed while the workers asked the system for new chunks: the joiner now shares its pool beyond a batch at each join,
+as a finishing worker does (160 MB to 13 MB at 20,000 turns).
+
+**Left (docs/freeing.md section 2):** a field replaced in a struct a constructor's copied value made (`d.text`, `m.w`:
+RCopied), elements and `SetAt`, a `Map<String, String>`'s `Put`, a split entry's key at removal, a local Vec's growth,
+a local declared with no value, and oann's tempref (a scope variable no argument and no obligation determines is bound
+where the call's result lands, `scope.olang` bindRest - a `Dims(4)` temporary built in the caller's referent's scope
+on every call).
