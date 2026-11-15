@@ -142,3 +142,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	oannlearn	opus	high	running						oann B2b learning rules
 2026-11-15	oannboard	sonnet	high	running						oann B4 board backend
 2026-11-15	oannnn	sonnet	high	running						oann B3 nn layers/optim/train
+2026-11-15	oannmodels	sonnet	high	running
+2026-11-15	oannbridge	opus	high	running
+2026-11-15	oannbake	sonnet	medium	running
