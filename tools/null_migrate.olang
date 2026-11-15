@@ -65,6 +65,7 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
     current := ""
     currentRule := ""
     answered := false
+    mark := 0
     for row in output.Split("\n") {
         parsed := try diagedit.Row.Parse(row) catch { continue }
         path, line, col, isError, rule, msg := parsed.Path, parsed.Line, parsed.Col, parsed.IsError, parsed.Rule, parsed.Msg
@@ -77,6 +78,7 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
             current = $row
             currentRule = $rule
             answered = false
+            mark = edits.Len()
             # an array is never null (T2c): its "?&" made "&", a null it is given its empty array, a test for null a
             # test for empty - each as the message writes it
             # a '!' on what can neither fail nor be null - an array's, one a narrowing made redundant - comes off
@@ -95,6 +97,12 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
                 if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, "bang", quoted(msg), $row)) }
                 answered = true
             }
+            continue
+        }
+        # an error inside a generic's instance: its advice names the instance's types, so it is no edit of the text here
+        if current.Len() > 0 and msg.StartsWith("instantiated here") {
+            for edits.Len() > mark { try edits.Pop() catch { break } }
+            answered = false
             continue
         }
         if current.Len() > 0 and msg == NoteNullable {
@@ -154,6 +162,8 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
                     delta = -1
                 } else if kind == "empty" {
                     if not text[at:].StartsWith("null") { continue }
+                    # in a generic's instance the advice names the instance's type, which this line does not write
+                    if r.Arg.EndsWith("(0)") and not text.Contains(r.Arg[:r.Arg.Len() - 3]) { continue }
                     replaced = $text[:at] $r.Arg $text[at + 4:]
                     delta = r.Arg.Len() - 4
                 } else {
@@ -323,4 +333,19 @@ test "a note's & is made nullable, a quoted read gets a !" {
     assert edits.Len() == 2 and edits[0].Kind == "nullable" and edits[0].Col == 27 and edits[1].Kind == "bang"
     assert edits[1].Arg == "h" and left.Len() == 0
     assert postfixChain("a.b[c d](e, f)") and not postfixChain("try f() catch default x")
+}
+
+test "an array error joined with its help is an edit, one inside a generic's instance is left" {
+    edits Vec<diagedit.Request>
+    left Vec<diagedit.Request>
+    allowed Vec<String&>
+    allowed.Push("/a.olang")
+    plain := diagedit.JoinHelp("/a.olang:2:10: error[T2c]: an array written '&' is never null\n    2 | if v is null\n/a.olang:2:10: help: test whether it is empty: write 'v.Len() == 0', or '?&' where it may be null\n")
+    diagsFrom(plain, allowed, edits, left)
+    assert edits.Len() == 1 and edits[0].Kind == "isempty" and edits[0].Arg == "v.Len() == 0" and left.Len() == 0
+    inst := diagedit.JoinHelp("/a.olang:10:45: error[T2c]: an array written '&' is never null\n/a.olang:14:14: note: instantiated here, with T = F64\n/a.olang:10:45: help: test whether it is empty: write 'values.Len() > 0', or '?&' where it may be null\n")
+    edits2 Vec<diagedit.Request>
+    left2 Vec<diagedit.Request>
+    diagsFrom(inst, allowed, edits2, left2)
+    assert edits2.Len() == 0 and left2.Len() == 1
 }

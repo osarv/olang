@@ -23,7 +23,7 @@ fn BuildInputs(cfg build.Config&, tests Bool) String {
     info := try os.FileInfo.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" bench" if cfg.Bench else "") "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" bench" if cfg.Bench else "") $(" checked" if cfg.Checked else "") "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 

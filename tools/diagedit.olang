@@ -234,7 +234,37 @@ fn compileOne(olang String&, file String&, dir String&, testLines Bool) String {
         os.Exit(1)
         unreachable
     } catch default ""
-    return $out
+    return JoinHelp(out)
+}
+
+fn isErrorRow(row String&) Bool {
+    r := try Row.Parse(row) catch { return false }
+    return r.IsError
+}
+
+# the text of a "PATH:LINE:COL: help: TEXT" row, "" for any other row
+fn helpText(row String&) String {
+    k := try row.Find(": help: ") catch { return "" }
+    p := row[:k]
+    if p.Len() == 0 or not p[p.Len() - 1].IsDigit(): return ""
+    return $row[k + 8:]
+}
+
+# a compiler output with each help row (B11: what to write instead, a row of its own after the notes) appended to the
+# message of the error row before it as ": TEXT", the form the migration tools read their advice from
+fn JoinHelp(out String&) String {
+    rows Vec<String&>
+    last := -1
+    for row in out.Split("\n") {
+        h := helpText(row)
+        if h.Len() > 0 and last >= 0 {
+            rows[last] = $rows[last] ": " $h
+            continue
+        }
+        if isErrorRow(row): last = rows.Len()
+        rows.Push($row)
+    }
+    return rows.Join("\n")
 }
 
 # one worker: takes the next file to compile until there are none
@@ -255,6 +285,12 @@ fn CompileAll(olang String&, files Array<String&>&, workDirs Array<String&>&, te
         for w in range workDirs.Len() { spawn worker(olang, files, workDirs[w], testLines, outputs) }
     }
     return outputs
+}
+
+test "JoinHelp appends a help row to its error" {
+    out := "a.olang:2:10: error[T2c]: never null\n    2 | x\n      | ^\na.olang:2:10: help: write 'v.Len() == 0'\nfailed"
+    want := "a.olang:2:10: error[T2c]: never null: write 'v.Len() == 0'\n    2 | x\n      | ^\nfailed"
+    assert JoinHelp(out) == want
 }
 
 test "ParseRow reads errors and notes" {

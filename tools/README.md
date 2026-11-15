@@ -5,7 +5,7 @@ kept so other code (a branch, oann) can be migrated the same way. They edit file
 
 They are olang programs (they were Python scripts; the ports give the same edits and the same output). Build one with
 `build/olang build tools/NAME.olang` (from the repository root), which writes `build/tools_NAME`, and run that with the
-arguments below. `build/olang interpret tools/NAME.olang ARGS` runs one without building, which is fine for a few files.
+arguments below. `build/olang interpret tools/NAME.olang ARGS` builds one into olang's cache, checked, and runs it, leaving nothing in `build/`.
 `srcmask.olang` is the module they share: telling code from comments and literals, reading files as Python's text mode
 did, walking a directory for `.olang` files; `diagedit.olang` is what the two driven by the compiler's diagnostics share
 (reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/olang test
@@ -56,7 +56,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `destroy_migrate.olang` | O15 (2026-11-08): `x.Destroy()` removed - a line `defer x.Destroy()` or `errdefer x.Destroy()` and a line `x.Destroy()` that is the last statement of the block declaring `x` are deleted (the holder's end does it); every other use is listed `by hand:` for a person (a block of its own, or a helper function, around the part of the code the value lives in); code only; idempotent | `build/tools_destroy_migrate FILE...` |
 | `handles_migrate.olang` | QCE (handles as values): Vec, Map, Set, Deque, Heap and StringBuilder hold their storage by value - a copy the program relied on sharing becomes a `&` place (a local, a parameter, a field), a `Clone()` a value copy, an element changed through a copy `x.Ref(i)`/`x.RefMut(i)` (`try m.RefMut(k)` for a Map) - driven by the compiler's `OLANG_HANDLES=1` report, M19's missing-`Clone` and E31b's element rows, in rounds | `build/tools_handles_migrate [--via PATH] [--olang PATH] [-j N] FILE\|DIR...` |
 | `io_rename.olang` | M19f (2026-11-13): std/io's `Print`, `Println`, `PrintErr`, `PrintErrln` renamed `Put`, `PutLine`, `PutErr`, `PutErrLine` so none shares a name with the prelude's `Print`/`Println` (D3a) - every `io.` use, in code, comments and text, and the bare names inside std/io.olang; idempotent | `build/tools_io_rename [--check] [-v] FILE\|DIR...` |
-| `oneline_migrate.olang` | S1b (2026-11-14): blocks holding one simple statement rewritten to the one-line form (`if c: stmt`, `for x in xs: stmt`, `else: stmt`; an if chain only when every branch qualifies, within 120 columns, no comment inside); idempotent | `build/tools_oneline_migrate [--check] [-v] FILE|DIR...` |
+| `oneline_migrate.olang` | S1b (2026-11-14): blocks holding one simple statement rewritten to the one-line form (also the braced one-liner `if c { stmt }`; `if c: stmt`, `for x in xs: stmt`, `else: stmt`; an if chain only when every branch qualifies, within 120 columns, no comment inside); idempotent | `build/tools_oneline_migrate [--check] [-v] FILE|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.

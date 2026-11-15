@@ -1,4 +1,4 @@
-# P1d, S16, S19, E35, B7a (bulk review 8): test -interpret leaves a failing test as its binary does - a failed check
+# P1d, S16, S19, E35, B7a (bulk review 8): test -evaluate leaves a failing test as its binary does - a failed check
 # closes every scope still open, their destructors run, and no deferred code; an error leaving the test runs its
 # deferred code and destructors first; a "!" that fails it prints its error's trace
 import "std/io"

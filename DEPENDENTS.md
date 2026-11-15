@@ -9,7 +9,7 @@ Records for every change: `SPEC.md` (the rule), `docs/settled.md` (current-state
 `.claude/memory/decisions.md` (a question left open).
 
 Every change to what olang means keeps the interpreter comparison green (`interp@FILE` and `interp@casesK` in the
-suite): `interpret` runs each test file and run case as the build does, held to `compiler/goldens/run.txt`. A test
+suite): `test -evaluate` and `interpret -evaluate` run each test file and run case as the build does, held to `compiler/goldens/run.txt`. A test
 added or a run case changing what it prints means `make rungold` (the built runs captured again, each difference
 explained first); a difference the interpreter must have is listed in `compiler/tools/evaldiff.olang`'s `Expected`
 (or, never ending interpreted, `Skipped`) with its reason - and fixed in `compiler/eval.olang`/`interp.olang` wherever it
@@ -115,7 +115,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `compiler/lineedit.olang`, `compiler/paint.olang`, the checks scenario `promptkeys` | the prompt's editing on a terminal (B22): a key, a setting or the history's file changed changes SPEC B22's list, `HelpText` (and `session.want`, which prints it), README "Try it"; paint colours by `token.Tok`, so a token kind added (a keyword) is coloured by its spelling with nothing to change |
 | `compiler/jupyter.olang`, `checks/fixtures/jupyter/` (`client.olang`, `session.want`), `tests/display.olang` | the notebook kernel (B23) drives the prompt's `Session.Cell`: a change to what a cell shows or says, or to the prelude's `Display`, changes `session.want`; `README.md` "Notebooks" quotes `jupyter -install` |
 | `compiler/notebook.olang`, `checks/fixtures/notebook/` (`in.ipynb`, `want.ipynb`, `want_continue.ipynb`) | `notebook run` (B24) reuses jupyter.olang's `Capture`, `Data`, `Q` and prompt.olang's `Session.Cell`: a change to what a cell shows or says changes the two `want` notebooks as well as `session.want`; `README.md` "Notebooks" quotes `notebook run` |
-| `compiler/olang.olang` `Passes.Interpret`, `build.olang` `InterpretTests` | `test -interpret` (B3e): an option saying how to build is refused beside it (`buildWord`) |
+| `compiler/olang.olang` `Passes.Interpret`, `build.olang` `Interpret`, `InterpretTests` | `interpret` (B3e) builds as a file run does, checked (`Config.Checked`: the Lowerer's checks, the emitter's trace, the record key and the `.checked` name), into `build.CacheDir("run")`; `-evaluate` runs the evaluator, and beside `test` an option saying how to build is refused (`buildWord`); the checks scenarios `interp` (the evaluator) and `interpbuilt` |
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |
 
@@ -144,7 +144,7 @@ The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s 
 | `tools/stutter_rename.olang` | the naming rule (no module name repeated in a type: `io.Error`, never `io.IoError`) |
 | `tools/io_rename.olang` | a std/io function renamed: no `io` function shares a name with a prelude one (D3a), `Put`, `PutLine`, `PutErr`, `PutErrLine` |
 | `std/runtime/*.ll` and `compiler/runtime.olang` | a new runtime function or C-library fact; `emit.olang` declares runtime functions from the runtime's text |
-| `compiler/eval.olang` `runtimeFn` (and `callExtern`'s compile-time list) | a runtime function std calls (`__olang_*`): what the evaluator answers for it, under `interpret` and while compiling (B19b's `__olang_bench_*`) |
+| `compiler/eval.olang` `runtimeFn` (and `callExtern`'s compile-time list) | a runtime function std calls (`__olang_*`): what the evaluator answers for it, under `-evaluate` and while compiling (B19b's `__olang_bench_*`) |
 | `compiler/*.olang` that import it | `grep -l 'std/NAME'` - the compiler uses `std/os`, `std/io`, `std/json`, `std/filepath` and others |
 | `docs/` / `tests/` | only where a note or corpus case teaches it |
 | `std/frame.olang` | builds on `csv.Decode`/`Encode`, `json.Decode`/`Encode`, `stats.Percentiles`/`Mean`/`StdDev` and the prelude's `ColumnVec`, `Argsort` and `Display`: a change to one of those changes it |

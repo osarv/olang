@@ -1496,6 +1496,11 @@ e11bjoincall.olang:7:42: error[E11b]: '(' after a piece of text calls it - to jo
     7 | fn b(negated Bool) String { return "(is" (" not " if negated else " ") }
       |                                          ^
 compilation failed with 2 errors
+=== e11bjoinfloat.olang
+e11bjoinfloat.olang:8:29: error[E11b]: '(' after a piece of text calls it - to join the value inside, write '$(...)'
+    8 |     text := "alpha " $alpha (" normalized" if normalized else "")
+      |                             ^
+compilation failed with 1 error
 === e11bjoinvalue.olang
 e11bjoinvalue.olang:6:10: error[E11b]: a join piece is a text literal or a '$' rendering - write '$label(3)'
     6 |     show(label(3) "\n")

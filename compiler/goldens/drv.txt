@@ -57,9 +57,9 @@
 | olang: error[B1]: -bench applies to test, not to build
 | stderr:
 | status 1
-=== olang test -bench -interpret main.olang
+=== olang test -bench -evaluate main.olang
 | stdout:
-| olang: error[B3e]: -interpret builds nothing, and -bench says how to build - give one
+| olang: error[B3e]: -evaluate builds nothing, and -bench says how to build - give one
 | stderr:
 | status 1
 === olang test -bench -fuzz x main.olang
@@ -271,7 +271,7 @@
 |   build       builds one program, FILE.olang its root module, into build/ (B3)
 |   compile     compiles one module to an object, linking nothing (B2)
 |   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
-|   interpret   runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)
+|   interpret   builds the program as -quick does, indexes, divisions and shifts checked, into the cache, and runs it with the arguments after the file (B3e)
 |   format      rewrites each file in olang's one layout (B13)
 |   explain     prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)
 |   help        lists the modes, or a mode's options
@@ -363,19 +363,20 @@
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
 |   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
-|   -interpret         runs the tests by compile-time evaluation instead of building them, as interpret runs a program (B3e)
+|   -evaluate          runs the program, or the tests, by compile-time evaluation instead of building them - much slower, for checking the evaluator (B3e)
 |   -bench             measures the benchmarks the tests run (std/bench): time, allocations and bytes per call (B19b)
 | stderr:
 | status 0
 === olang help interpret
 | stdout:
 | usage: olang interpret [OPTION...] FILE.olang [ARGUMENT...]
-| runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)
+| builds the program as -quick does, indexes, divisions and shifts checked, into the cache, and runs it with the arguments after the file (B3e)
 | 
 | options:
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -evaluate          runs the program, or the tests, by compile-time evaluation instead of building them - much slower, for checking the evaluator (B3e)
 | stderr:
 | status 0
 === olang help format
@@ -477,7 +478,7 @@
 |             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench" | "-install" | "-continue"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-evaluate" | "-bench" | "-install" | "-continue"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -500,7 +501,7 @@
 | | `-library` | build | §11 X14 |
 | | `-memory` | running a file, build, test | B18 |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| | `-interpret` | test | B3e |
+| | `-evaluate` | test, interpret | B3e |
 | | `-bench` | test | B19b |
 | | `-caps` | explain | B11c |
 | | `-asm`, `-ir` | explain | B11d |

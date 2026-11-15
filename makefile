@@ -163,8 +163,8 @@ emitdiff: build/compiler_tools_emitdump build/compiler_tools_emitdiff
 	build/compiler_tools_emitdiff -v > build/emitdiff.txt
 	grep '^== total' build/emitdiff.txt
 
-# B3e, in the suite: the interpreter held to the built programs - each file of tests of the corpus and std run by
-# "olang test -interpret" (interp@FILE), the checks' run cases by "olang interpret" in four parts (interp@casesK), each
+# B3e, in the suite: the evaluator held to the built programs - each file of tests of the corpus and std run by
+# "olang test -evaluate" (interp@FILE), the checks' run cases by "olang interpret -evaluate" in four parts (interp@casesK), each
 # compared with the built run compiler/goldens/run.txt stores (compiler/tools/evaldiff.olang, which lists by name the
 # differences the interpreter is known to have and the tests it is not given). A difference not listed is a failure,
 # named in build/failed.txt. "make evaldiff" runs the whole comparison alone, its rows in build/evaldiff.txt

@@ -476,7 +476,7 @@ type Machine struct(T mut types.Table&, When Mode) {
     StaleAt I64 = -1
     Library Map<I64, Bool>
     Args Vec<String&>          # -i: the interpreted program's command line, its file first (B3e)
-    # test -interpret (B3e, B19): the file whose tests run and the running test, as the test harness names them to std
+    # test -evaluate (B3e, B19): the file whose tests run and the running test, as the test harness names them to std
     # (fuzz, prop) - "" where none is set; Detached once a forked child took its test's recovery point away, so a failed
     # check ends the process as the built child's does
     TestFile String& = ""

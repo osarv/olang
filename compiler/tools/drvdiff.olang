@@ -34,7 +34,7 @@ Cases Array<String&> = Array<String&>[
     "format -debug a.olang"
     "interpret -race p.olang"
     "build -bench main.olang"
-    "test -bench -interpret main.olang"
+    "test -bench -evaluate main.olang"
     "test -bench -fuzz x main.olang"
     "help -debug"
     "explain -check B1"
