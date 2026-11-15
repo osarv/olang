@@ -60,7 +60,9 @@ paragraph on failing ways, `tests/factsfailing.olang` and the `noalloc` row of T
 lowering's task scopes) and `Fact.Running` (G42's) must stay apart.
 A stack slot lowering gives a temporary or a reference local (`lower.olang` stackArg, slotted) is counted by G42 through
 the same judgement (`typed.olang` `RefsKept.None`/`OwnSlot`, `effects.olang` `onStack`/`ownSlot`): a change to one
-condition changes the other, SPEC G42's `Allocates` row and `tests/slotfacts.olang`.
+condition changes the other, SPEC G42's `Allocates` row and `tests/slotfacts.olang`. A value local the scope pass may
+place where it is kept (`scope.olang` letMoved, paramLift, ownLifts: O26a, O28, R3) is counted by `typed.olang`'s
+`RefsKept.Kept` (`effects.olang` keptLocals): a new reason to place a local off the frame changes Kept.
 
 ## What folds while compiling
 
@@ -117,7 +119,13 @@ a `Vec`'s buffer, a `Map`'s slots, a text field; `free.olang` PartPlace, PartSit
 `mir.Stmt.ReleasePart` (`__olang_region_release_part`, which finds it from the array's address through
 `__olang_chunk_of`); an owner's anchor in one is read as part of its parent (`__olang_region_home`, in `emit.olang`'s
 `anchorRegion`): the evaluator's part scopes (`eval.olang` `releaseHeld`, `regionHomeOf`) and the C-driven region test
-(`checks/fixtures/regions/drive.c`, its `part` mode) change with them.
+(`checks/fixtures/regions/drive.c`, its `part` mode) change with them. A slot release puts back only a slot - text in a
+region is left to it - in the runtime (`__olang_slot_release`, the chunk's owner read first) and the evaluator
+(`releaseHeld`'s `slotRegion`) alike. An element's let-go of a Vec it walks (O8f gap 17: `free.olang` VecWalks, PartsLet,
+VecFields - the prelude Vec's `data` and `n` by name, so renaming them changes these and `emit.olang`'s and `views.olang`'s
+`data`) is lowered by `lower.olang`'s partReleases and textWalk; a copy made in a part region is split by its partCopy
+(free.PartSplit), so a part region holds one array - a change to how a Copy helper builds parts changes it. The stores
+`occupy` makes are listed in `typed.Body.Rooms` (check.suppliedOccupy) and are no let-go in free.olang or lower.olang.
 
 A function's hidden scope arguments (`types.ScopeVarsOf`) are read off its type alone; a role that adds one (`RoleTail`,
 S21's tail scope, given in `scope.olang`'s `giveTails` before any body is judged) changes every call's: the scope pass

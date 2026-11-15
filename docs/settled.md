@@ -628,7 +628,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (2026-11-15, oann's tempfacts/reassignfacts; mine)**: a call's value lent to a read-only reference of a body keeping
   nothing of it (`Sh.Make(n).Count()`) and a value given storage for a reference local that is its slot's one name
   (`u = u.Inner()`, now built in one stack slot written over each time, not an arena a loop grows) allocate nothing -
-  lowering and the facts read one judgement (typed.RefsKept).
+  lowering and the facts read one judgement (typed.RefsKept). **Kept locals (2026-11-15, wt-freeing6; mine)**: a value
+  local or parameter whose storage may be named past its block - handed back by a reference result (`s :=
+  Sh.Make(n); return s`), a reference to it escaping, lent to a body that may keep it - is placed where it is kept
+  (O26a, O28) and allocates (typed.RefsKept.Kept); before, G42 said it did not, and a task calling such a function was
+  given no scopes to build in (P2's stand-ins read `Allocates`). An over-estimate where the keeper is itself local.
 
 ### Errors
 
@@ -845,9 +849,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   program (an owner holding a Vec whole, a copy: no reason to keep), with no cost per operation or per copy (the
   400-byte-per-copy design, asked of the user, was not needed); an element owning storage only as such arrays of plain
   values (`Array<Vec<I64>>`) frees them where it is given another; a returned value local keeps its slot in the frame,
-  its parts where the result goes (gap 19). Gap left (docs/freeing.md section 2): an element owning more
-  (`Array<Vec<String>>`'s text). A local lowering
-  surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18).
+  its parts where the result goes (gap 19). A local lowering
+  surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18). Round 6
+  (wt-freeing6): an element holding a Vec of text or a Vec of Vecs frees it all where it is given another - each live
+  element's slot or parts released (a walk at the let-go, none per operation), a copy built in a part region split so
+  the region holds its one array (its elements' storage in slots or part regions of their own), an occupy letting go of
+  nothing (gap 17: 150 MB to 13 MB, 376 MB to 13 MB at 80,000 turns). Gap left (docs/freeing.md section 2): an element
+  owning a Map; a program copying a Vec of text keeps the text place.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
