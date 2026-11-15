@@ -133,3 +133,7 @@ fails naming its element.
   a gemm join per step - the joinleak pattern). The run with this branch's compiler could not be made: oann master is
   written with adjacency joins and an older error syntax this branch no longer reads; it is to be rerun once oann is
   migrated (the joinleak repro itself is flat: 98 pages at 200,000 and 800,000 joins).
+- 2026-11-15, verified on the branch's compiler (stage 1 from the final source, which built itself byte for byte): every
+  checks case; the scenarios earlyfree, freeing, memoryplaced, regions, landing, chunkpool, scopefind, fieldset, twins,
+  scopesan, weakmods; tests/*.olang under `-debug -sanitize` (1232 passed); scopefuzz seed 7, 150 programs, 0 findings;
+  the corpus and std tests built (tests/shared.olang's T11b expectation updated: an immut String is replaced whole).
