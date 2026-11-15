@@ -1,0 +1,62 @@
+# spec: Matrix type with At/SetAt via m[i, j], Mul and Plus operators, identity, determinant by cofactor expansion
+type Matrix struct(n I64) {
+    n
+    d Array<F64> = Array<F64>(n * n)
+}
+
+fn (m Matrix&) At(i I64, j I64) F64 { return m.d[i * m.n + j] }
+fn (m mut Matrix&) SetAt(i I64, j I64, v F64) { m.d[i * m.n + j] = v }
+
+fn (a Matrix&) Mul(b Matrix&) Matrix {
+    c := Matrix(a.n)
+    for i in range a.n {
+        for j in range a.n {
+            s := 0.0
+            for k in range a.n { s += a[i, k] * b[k, j] }
+            c[i, j] = s
+        }
+    }
+    return c
+}
+
+fn Matrix.identity(n I64) Matrix {
+    m := Matrix(n)
+    for i in range n { m[i, i] = 1.0 }
+    return m
+}
+
+fn minor(m Matrix&, r I64, c I64) Matrix {
+    out := Matrix(m.n - 1)
+    oi := 0
+    for i in range m.n {
+        if i == r { continue }
+        oj := 0
+        for j in range m.n {
+            if j == c { continue }
+            out[oi, oj] = m[i, j]
+            oj++
+        }
+        oi++
+    }
+    return out
+}
+
+fn det(m Matrix&) F64 {
+    if m.n == 1 { return m[0, 0] }
+    s := 0.0
+    sign := 1.0
+    for j in range m.n {
+        s += sign * m[0, j] * det(minor(m, 0, j))
+        sign = -sign
+    }
+    return s
+}
+
+fn main() {
+    a := Matrix(3)
+    for i in range 3 {
+        for j in range 3 { a[i, j] = F64(i * 3 + j + (1 if i == j else 0)) }
+    }
+    Println($det(a) " " $det(a * Matrix.identity(3)) " " $det(Matrix.identity(4)))
+    Println($det(Matrix(0)))
+}

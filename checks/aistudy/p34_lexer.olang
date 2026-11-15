@@ -1,0 +1,37 @@
+# spec: tokenizer for "let x = 12 + foo(3, 4.5)" producing Ident, Num, Op, Paren, Comma tokens; print them
+type Token enum {
+    Ident(name String)
+    Num(text String)
+    Sym(c Char)
+}
+
+fn lex(src String&) Vec<Token> {
+    out := Vec<Token>[]
+    i := 0
+    for i < src.Len() {
+        c := src[i]
+        if c == ' ' {
+            i++
+        } else if c.IsLetter() {
+            j := i
+            for j < src.Len() and (src[j].IsLetter() or src[j].IsDigit()) { j++ }
+            out.Push(Token.Ident(src[i:j]))
+            i = j
+        } else if c.IsDigit() {
+            j := i
+            for j < src.Len() and (src[j].IsDigit() or src[j] == '.') { j++ }
+            out.Push(Token.Num(src[i:j]))
+            i = j
+        } else {
+            out.Push(Token.Sym(c))
+            i++
+        }
+    }
+    return out
+}
+
+fn main() {
+    for t in lex("let x = 12 + foo(3, 4.5)") { Println($t) }
+    Println($lex("").Len())
+    Println($lex("é").Len())
+}

@@ -1,0 +1,39 @@
+# spec: solve a linear system Ax=b by Gaussian elimination with partial pivoting on a 3x3 system; detect singular matrix
+fn solve(a mut Array<F64>&, b mut Array<F64>&, n I64) Array<F64> {
+    for col in range n {
+        piv := col
+        for r in range col + 1, n {
+            if a[r * n + col].Abs() > a[piv * n + col].Abs() { piv = r }
+        }
+        for c in range n {
+            t := a[col * n + c]
+            a[col * n + c] = a[piv * n + c]
+            a[piv * n + c] = t
+        }
+        t := b[col]
+        b[col] = b[piv]
+        b[piv] = t
+        for r in range col + 1, n {
+            f := a[r * n + col] / a[col * n + col]
+            for c in range col, n { a[r * n + c] -= f * a[col * n + c] }
+            b[r] -= f * b[col]
+        }
+    }
+    x := Array<F64>(n)
+    for i in range n {
+        r := n - 1 - i
+        s := b[r]
+        for c in range r + 1, n { s -= a[r * n + c] * x[c] }
+        x[r] = s / a[r * n + r]
+    }
+    return x
+}
+
+fn main() {
+    a := [2.0, 1.0, -1.0, -3.0, -1.0, 2.0, -2.0, 1.0, 2.0]
+    b := [8.0, -11.0, -3.0]
+    Println($solve(a, b, 3))
+    s := [1.0, 2.0, 3.0, 2.0, 4.0, 6.0, 1.0, 1.0, 1.0]
+    sb := [1.0, 2.0, 3.0]
+    Println($solve(s, sb, 3))
+}

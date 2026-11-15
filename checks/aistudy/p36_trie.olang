@@ -1,0 +1,42 @@
+# spec: trie of words: insert, contains, count words with a prefix; nodes stored in a Vec with child index map
+type Node struct(done Bool) {
+    done
+    kids Map<Char, I64> = Map<Char, I64>[]
+}
+
+type Trie struct() {
+    nodes Vec<Node> = Vec<Node>[Node(false)]
+}
+
+fn (t mut Trie&) Insert(w String&) {
+    cur := 0
+    for c in w {
+        next := try t.nodes[cur].kids.Get(c) catch default -1
+        if next < 0 {
+            t.nodes.Push(Node(false))
+            next = t.nodes.Len() - 1
+            t.nodes.RefMut(cur).kids.Put(c, next)
+        }
+        cur = next
+    }
+    t.nodes.RefMut(cur).done = true
+}
+
+fn (t Trie&) find(w String&) I64 {
+    cur := 0
+    for c in w {
+        cur = try t.nodes[cur].kids.Get(c) catch default -1
+    }
+    return cur
+}
+
+fn (t Trie&) Contains(w String&) Bool {
+    n := t.find(w)
+    return n >= 0 and t.nodes[n].done
+}
+
+fn main() {
+    t := Trie()
+    for w in ["car", "cat", "cart", "dog"] { t.Insert(w) }
+    Println($t.Contains("car") " " $t.Contains("ca") " " $t.Contains("zebra") " " $t.Contains(""))
+}
