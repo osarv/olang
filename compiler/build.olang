@@ -965,7 +965,7 @@ fn (c Config&) racesSpawners() Bool {
 
 # the note said, once for a run of tests, where the race detector's runtime is not installed
 fn (c Config&) noRaceRuntime() String {
-    return c.paint("33", $"olang: tests that start a task run under the race detector (P7), but clang's ThreadSanitizer runtime is not installed (libclang_rt.tsan-" $c.Target.Arch ".a, in Debian and Ubuntu libclang-rt-N-dev): they run without it")
+    return c.paint("33", $"olang: tests that start a task run under the race detector (P7), but clang's ThreadSanitizer runtime is not installed (libclang_rt.tsan-" + $c.Target.Arch + ".a, in Debian and Ubuntu libclang-rt-N-dev): they run without it")
 }
 
 # whether this run of tests is cut in two (B3a, P7): the detector's runtime found, else the note said once
@@ -987,7 +987,7 @@ fn (c mut Config&) testBinary<F Frontend>(fe mut F&, file String&, d mut diag.Di
     Phase("compile")
     bin := $c.Dir + "/" + $Readable(prog.rootIdentity()) + "_test" + $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
-        sayln(c.paint("31", $file ": native compilation failed"))
+        sayln(c.paint("31", $file + ": native compilation failed"))
         return 1, ""
     }
     Phase("link")
@@ -1002,14 +1002,14 @@ fn (c Config&) runTests(run Array<String&>&, bin String&, file String&, filters 
     if counts != "" {
         try os.Remove(counts) catch os.Error { }
         cmd.Push("env")
-        cmd.Push($"OLANG_TEST_COUNTS=" $counts)
+        cmd.Push($"OLANG_TEST_COUNTS=" + $counts)
     }
     for w in run { cmd.Push(w) }
     cmd.Push(Shown(bin))
     # B7a: the words naming the tests to run, read by the test binary's harness
     for w in filters { cmd.Push(w) }
     out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
-    if out.Status > 128: sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
+    if out.Status > 128: sayln(c.paint("31", $file + ": the tests ended by a signal (" + $SignalName(out.Status - 128) + ")"))
     if out.Status == 3 and filters.Len() > 0 { return 3 }
     return 0 if out.Status == 0 else 1
 }
@@ -1072,11 +1072,11 @@ fn (c Config&) runParts(run Array<String&>&, plain String&, race String&, file S
     first I32 = 3
     counts Vec<String&>
     if plain != "" {
-        counts.Push($plain ".counts")
+        counts.Push($plain + ".counts")
         first = c.runTests(run, plain, file, filters, counts[0])
     }
-    second := c.runTests(run, race, file, filters, $race ".counts")
-    counts.Push($race ".counts")
+    second := c.runTests(run, race, file, filters, $race + ".counts")
+    counts.Push($race + ".counts")
     passed I64 = 0
     failed I64 = 0
     for f in counts {
@@ -1086,7 +1086,7 @@ fn (c Config&) runParts(run Array<String&>&, plain String&, race String&, file S
         passed += try fields[0].ParseInt() catch default 0
         failed += try fields[1].ParseInt() catch default 0
     }
-    if first != 3 or second != 3 { sayln($passed " passed, " $failed " failed") }
+    if first != 3 or second != 3 { sayln($passed + " passed, " + $failed + " failed") }
     if first == 1 or second == 1: return 1
     return c.testsEnded(3 if first == 3 and second == 3 else 0, file, filters, words)
 }

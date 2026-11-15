@@ -7843,8 +7843,8 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         if tg != "" { e.TestWords.Push($tg) }
         e.TestWords.Push($ds)
         if not e.InPart(id) { continue }
-        fnp := $"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
-        ts.Push($"{ ptr, ptr, ptr, ptr } { " $fnp ", ptr " $e.cstr(e.testName(id)) ", ptr " $e.cstr(tg) ", ptr " $e.cstr(ds) " }")
+        fnp := $"ptr @" + $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
+        ts.Push($"{ ptr, ptr, ptr, ptr } { " + $fnp + ", ptr " + $e.cstr(e.testName(id)) + ", ptr " + $e.cstr(tg) + ", ptr " + $e.cstr(ds) + " }")
     }
     b := StringBuilder()
     # P7: ThreadSanitizer calls this, if the program has it, with each report it makes; the harness counts them, and
@@ -7853,7 +7853,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("@olang.race.reports = internal global i32 0\n")
         b.Push("define void @__tsan_on_report(ptr %r) nounwind {\nentry:\n  atomicrmw add ptr @olang.race.reports, i32 1 monotonic\n  ret void\n}\n")
     }
-    if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" $gs.Len() " x ptr] [" $gs.Join(", ") "]\n") }
+    if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" + $gs.Len() + " x ptr] [" + $gs.Join(", ") + "]\n") }
     if ts.Len() > 0 {
         b.Push($"@olang.harness.tests = private constant [" + $ts.Len() + " x { ptr, ptr, ptr, ptr }] [" + $ts.Join(", ") + "]\n")
         e.declare("strcmp", "i32 @strcmp(ptr, ptr)")
@@ -7922,7 +7922,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
             b.Push("  %rr1 = load atomic i32, ptr @olang.race.reports monotonic, align 4\n  %raced = icmp ne i32 %rr1, %rr0\n")
             b.Push("  br i1 %raced, label %trace, label %tpass\ntrace:\n")
             b.Push("  %rf = load volatile i32, ptr %fail\n  %rff = add i32 %rf, 1\n  store volatile i32 %rff, ptr %fail\n")
-            b.Push($"  call i32 (ptr, ...) @printf(ptr " $e.cstr("FAIL - %s: data race\n") ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
+            b.Push($"  call i32 (ptr, ...) @printf(ptr " + $e.cstr("FAIL - %s: data race\n") + ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
             b.Push("  br label %tnext\ntpass:\n")
         }
         b.Push("  %p = load volatile i32, ptr %pass\n  %pp = add i32 %p, 1\n  store volatile i32 %pp, ptr %pass\n")
@@ -7944,14 +7944,14 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         e.declare("fopen", "ptr @fopen(ptr, ptr)")
         e.declare("fclose", "i32 @fclose(ptr)")
         e.declare("fprintf", "i32 @fprintf(ptr, ptr, ...)")
-        b.Push($"  %cf = call ptr @getenv(ptr " $e.cstr("OLANG_TEST_COUNTS") ")\n  %hascf = icmp ne ptr %cf, null\n")
+        b.Push($"  %cf = call ptr @getenv(ptr " + $e.cstr("OLANG_TEST_COUNTS") + ")\n  %hascf = icmp ne ptr %cf, null\n")
         b.Push("  br i1 %hascf, label %tofile, label %say\ntofile:\n")
-        b.Push($"  %fh = call ptr @fopen(ptr %cf, ptr " $e.cstr("w") ")\n  %fhok = icmp ne ptr %fh, null\n")
+        b.Push($"  %fh = call ptr @fopen(ptr %cf, ptr " + $e.cstr("w") + ")\n  %fhok = icmp ne ptr %fh, null\n")
         b.Push("  br i1 %fhok, label %wrote, label %say\nwrote:\n")
-        b.Push($"  call i32 (ptr, ...) @fprintf(ptr %fh, ptr " $e.cstr("%d %d\n") ", i32 %np, i32 %nf)\n")
+        b.Push($"  call i32 (ptr, ...) @fprintf(ptr %fh, ptr " + $e.cstr("%d %d\n") + ", i32 %np, i32 %nf)\n")
         b.Push("  call i32 @fclose(ptr %fh)\n  br label %fin\nsay:\n")
     }
-    b.Push("  call i32 (ptr, ...) @printf(ptr " $e.cstr("%d passed, %d failed\n") ", i32 %np, i32 %nf)\n")
+    b.Push("  call i32 (ptr, ...) @printf(ptr " + $e.cstr("%d passed, %d failed\n") + ", i32 %np, i32 %nf)\n")
     if e.TestPart != 0 { b.Push("  br label %fin\nfin:\n") }
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
     e.item("main", e.P.L.Root, b.ToString())

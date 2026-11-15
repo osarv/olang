@@ -8,7 +8,7 @@ fn bump(c mut Counter&, times I64) {
 }
 
 fn says(what String&) {
-    Println($what ": race build " $RaceBuild)
+    Println($what + ": race build " + $RaceBuild)
 }
 
 test "plain" {

@@ -333,8 +333,8 @@ fn canCompileBf16(clang String&, triple String&) Bool {
 # changes when a package is installed
 fn HasRaceRuntime(clang String&, arch String&) Bool {
     if clang == "": return false
-    name := $"libclang_rt.tsan-" $arch ".a"
-    out := try ClangSays(Array<String&>[$clang, $"-print-file-name=" $name], "", false) catch os.Error { return false }
+    name := $"libclang_rt.tsan-" + $arch + ".a"
+    out := try ClangSays(Array<String&>[$clang, $"-print-file-name=" + $name], "", false) catch os.Error { return false }
     return out.Status == 0 and out.Stdout.Contains("/")
 }
 

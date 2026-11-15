@@ -865,7 +865,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     if tests {
         e.Fuzz = cfg.Fuzz
-        e.FuzzCache = $cfg.Dir "/fuzz"
+        e.FuzzCache = $cfg.Dir + "/fuzz"
         e.TestPart = cfg.TestPart
         if cfg.TestPart != 0 { partOf(c, cfg, e) }
     }

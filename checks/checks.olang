@@ -3006,7 +3006,7 @@ test "tests that fail on purpose, and where an error went" { assert passed("test
 
 fn testends(r mut report&) ? Failed {
     dir := fresh("testends")
-    os.Run("cp checks/fixtures/testends/* " $os.Quote(dir))
+    os.Run("cp checks/fixtures/testends/* " + $os.Quote(dir))
     # (OLANG_AUTORACE=0: some of these tests read what the one before left in a global - one that starts a task and the next - and
     # the evaluator's run below keeps the file's order, which the want file holds; the race build is the racetests scenario's, P7a)
     try r.expect(sh(dir, "OLANG_AUTORACE=0 \"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
@@ -3037,7 +3037,7 @@ test "tests that start a task run under the race detector, the others do not" { 
 
 fn racetests(r mut report&) ? Failed {
     dir := fresh("racetests")
-    os.Run("cp checks/fixtures/racetests/* " $os.Quote(dir))
+    os.Run("cp checks/fixtures/racetests/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test race.olang > out.txt 2>&1") == 1, "a race fails the file", dir)
     out := outOf(dir)
     try r.expect(out.Contains("plain: race build false\nok - plain\n") and out.Contains("after: race build false\nok - after the race\n")
