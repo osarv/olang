@@ -39,6 +39,7 @@ one rule that composes over special cases; fix rough edges found while building.
   fused elementwise). Kernels in olang, no BLAS on the CPU; on the GPU our own kernels where they pay and NVIDIA's
   libraries where they win; one model description run eagerly, as a captured graph, or planned while compiling; CPU,
   FPGA and GPU all needed.
+- **What is public (the user, 2026-11-15):** "make the framework public, hide the weights (and similarly)": oann holds every mechanism, settling ones included; oagent holds the AGI model being bootstrapped - its configuration, weights, data, recipes and experiments.
 - **I am the research agent:** reading papers, compiling them and trying things is part of the job ("feel free to use the
   Arxiv connector frivolously"); paper notes in oagent's papers/.
 - **GPUs are local:** the user's own machine (RTX 4060 8 GB, sm_89 first; Ryzen 5 7600 with AVX-512; 16 GB RAM, 7.4 GiB
