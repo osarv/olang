@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "promptkeys", "jupyter", "notebook", "checkedbuild"]
+                     "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -441,6 +441,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "interpbuilt" { try interpbuilt(r) }
         case "prompt" { try prompt(r) }
         case "promptkeys" { try promptkeys(r) }
+        case "spinner" { try spinner(r) }
         case "jupyter" { try jupyter(r) }
         case "notebook" { try notebook(r) }
         case "osargs" { try osargs(r) }
@@ -1325,6 +1326,24 @@ fn promptkeys(r mut report&) ? Failed {
     try r.expect(sh(dir, "tr -d '\\r' < out.txt | sed 's/\\x1b\\[[?0-9;]*[A-Za-z]//g' | grep -qx 2") == 0, "the entry recalled and edited did not run", dir)
     want := "printf 'x := 1\\nx := 2\\nx\\n' | cmp -s - state/olang/history"
     try r.expect(sh(dir, want) == 0, "the history's file holds other than the entries typed", dir)
+}
+
+test "a wait on a terminal shows the spinner, erased before the output, and nowhere else" { assert passed("spinner") }
+
+# B25: a cold build of a small program takes well over the 300 ms a wait must last, so under a pseudo-terminal (script(1))
+# the six dots are drawn, and the line is erased (CR, ESC [ K) right before the build's own line; OLANG_SPINNER=0 on a
+# terminal, and a standard error that is no terminal, draw none. Each build runs in a directory of its own, so each is cold
+fn spinner(r mut report&) ? Failed {
+    dir := fresh("spinner")
+    os.Run("for d in on off pipe; do mkdir " $os.Quote(dir) "/$d && printf 'fn main() { Println(\"hi\") }\n' > " $os.Quote(dir) "/$d/hello.olang; done")
+    run := """TERM=xterm NO_COLOR=1 script -qfec "$OLANG build hello.olang" /dev/null > ../out.txt 2>&1"""
+    try r.expect(sh($dir "/on", run) == 0, "the build on a terminal did not end with 0", dir)
+    try r.expect(sh(dir, "grep -aq 'compiling' out.txt && grep -aq \"$(printf '\\342\\240\\203')\" out.txt") == 0, "the spinner was not drawn on a terminal", dir)
+    try r.expect(sh(dir, "grep -aqP '\\r\\x1b\\[Kbuilt ' out.txt") == 0, "the spinner was not erased right before the build's line", dir)
+    try r.expect(sh($dir "/off", "OLANG_SPINNER=0 " $run) == 0, "the build with OLANG_SPINNER=0 did not end with 0", dir)
+    try r.expect(sh(dir, "! grep -aq \"$(printf '\\342\\240')\" out.txt") == 0, "OLANG_SPINNER=0 still drew the spinner", dir)
+    try r.expect(sh($dir "/pipe", "\"$OLANG\" build hello.olang > ../out.txt 2>&1") == 0, "the build with no terminal did not end with 0", dir)
+    try r.expect(sh(dir, "! grep -aq \"$(printf '\\342\\240')\" out.txt && ! grep -aq \"$(printf '\\033')\" out.txt") == 0, "a standard error that is no terminal got the spinner", dir)
 }
 
 test "olang jupyter speaks Jupyter's protocol to a front end" { assert passed("jupyter") }
