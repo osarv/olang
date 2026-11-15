@@ -37802,3 +37802,8 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   assert, decided while compiling (S18c), failed the file's build on every clang; it now expects today's message.
 - **The `output` scenario's drift** was already gone: B3g updated its expected `-output` message to name `run`, and the
   scenario passes as it stands.
+- **S17a said false for nothing (G42).** A program with any other error - an unused import in oann's
+  repro/factcascade - ends checking before settleFacts settles the function facts, so each read kept its conservative
+  value (Allocates true) and every top-level `assert not f.Allocates`, in the module and in those it imports, was said
+  false: 36 spurious errors behind one unneeded `try`. Asserts are no longer decided where facts were read in a program
+  with other errors (`Checker.FactsUnsettled`), as D3b says nothing there; checks case s17afactcascade.

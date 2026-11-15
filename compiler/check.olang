@@ -27050,6 +27050,10 @@ fn (c mut Checker&) settleFacts() Bool {
     return moved
 }
 
+# G42: whether a fact was read in a program with other errors - settleFacts settles none there, so each read its
+# conservative value and an assert deciding on one (S17a, S18c) would be said false for nothing (oann's factcascade)
+fn (c Checker&) FactsUnsettled() Bool { return c.factReads.Len() > 0 and c.P.L.Diags.Errors() > 0 }
+
 # G42: facts still read as other than found after the last attempt - each changes the code it is read from
 fn (c mut Checker&) factsUndecided() {
     for r in c.factReads {
