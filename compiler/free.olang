@@ -387,6 +387,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     curBody I64 = -1           # the body the pre-pass is in
     Done Bool = false          # whether Decide ran with a root (else every decision is "keep")
     Debug Bool = false
+    ctorAsked I64 = -1     # the constructor emptyValue is reading the body of
     # Part C: a test build (its guards run destructors where a failed check unwinds - where no call is written); by
     # type (representation), its destructor's body; the types whose values may be registered with a scope (O16) - their
     # destructors run as it closes, where no call is written
@@ -2147,6 +2148,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     # local first (by local, the copy); the copy whose site is exempt from untracked, the held local read as the store's
     heldCopy Map<I64, typed.Expr&>
     copyExempt I64 = -1
+    readArg I64 = -1           # the call whose value is the argument walked, a temporary lent read-only (tempCall)
     copyRead I64 = -1
     # Part C: by let-go, the Defer statement whose block's end it stands at (a holder's drop), -1 for its own statement;
     # by block, the types of the values registered with its scope (O16) - their destructors walked as calls at its close
@@ -3719,6 +3721,8 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     exempt := m.Kind == typed.MakeKind.Copy and w.copyExempt >= 0 and I64(m.Site) == w.copyExempt
     # (a fill of the zero value, D13c, makes nothing: no storage of any place)
     filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() > 0
+    # (gap 17: nor does a fill of a value holding no storage - `Array<Vec<String>>(10)`'s ten empty Vecs)
+    if filled and w.F.emptyValue(m.Items[0], null, 0): filled = false
     if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
     w.makeStores(m, ty, sp)
     return out
@@ -3836,9 +3840,13 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         case _ { }
     }
     args Vec<Vec<I64>>
+    ps := w.T().Items(w.T().Params(f.Bodies[b2].Ty)) if b2 >= 0 else Array<types.TypeId>(0)
     for j in range c.Args.Len() {
         a := c.Args[j]
+        wasRead := w.readArg
+        w.readArg = tempCall(a) if j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) else -1
         o := w.expr(a)
+        w.readArg = wasRead
         # (a feeder handed to a call the body of which is known: what it builds there is built in its region - feedFits)
         fd := w.feederArg(a) if b2 >= 0 and not unknown and c.Site >= typed.SiteId(0) else -1
         wr := w.writable(a.Type())
@@ -3851,7 +3859,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     # made where the place's value is; a callee not known may hand back any copy)
     fresh := b2 >= 0 and not unknown and f.viewsOf(b2) != 0 and f.freshCtor(c, b2, w.Id)
     if fresh and w.Final: f.freshAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
-    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
+    # (nor a temporary only lent for reading: what it holds is no value any store gives a place - gap 17)
+    lent := I64(c.Site) == w.readArg and c.Site >= typed.SiteId(0)
+    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent { w.untracked(ty, sp, "a call's value copied") }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {
             for a in args { addAllTo(out, a) }
@@ -6014,6 +6024,61 @@ fn (f mut Free&) partsField(r types.TypeId, i I64, ft types.TypeId) Bool {
         return f.PartPlace(f.placeKey(r, i)) and not t.OwnedPart(el) and not t.OwnsParts(el)
     }
     return f.PartsOnly(ft)
+}
+
+# O8f (gap 17): whether a value holds no storage - constant data or zero bits, or a constructor's value on its zero
+# arguments (D13c, Call.Zero) whose body only declares its fields, each given such a value or a parameter given one (args:
+# the constructor's arguments) - so copies of it, a fill's, make no value of any place
+fn (f mut Free&) emptyValue(x typed.Expr&, args Array<typed.Expr&>?&, depth I64) Bool {
+    if depth > 8: return false
+    return match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Away(_, _, y): f.emptyValue(y, args, depth + 1)
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, l), _): f.emptyParam(I64(l), args, depth)
+        case typed.Expr.Call(_, _, c): c.Zero and f.emptyCtor(c, depth)
+        case _: false
+    }
+}
+
+# a parameter read in a constructor's body, args its call's arguments: one given a value holding no storage
+fn (f mut Free&) emptyParam(l I64, args Array<typed.Expr&>?&, depth I64) Bool {
+    if args == null: return false
+    b := f.ctorAsked
+    if b < 0: return false
+    ps := f.Bodies[b].Params
+    for i in range ps.Len() {
+        if I64(ps[i]) == l: return i < args.Len() and f.emptyValue(args[i], null, depth + 1)
+    }
+    return false
+}
+
+# a constructor called on its zero arguments whose body only declares its fields, each given a value holding no storage
+fn (f mut Free&) emptyCtor(c typed.Call&, depth I64) Bool {
+    b := typed.CalleeBody(c)
+    if b < 0 or f.Bodies[b].Root == null or f.T().Role(f.Bodies[b].Ty) != types.RoleCtor: return false
+    was := f.ctorAsked
+    f.ctorAsked = b
+    ok := true
+    for st in f.Bodies[b].Root!.Stmts {
+        if not ok: break
+        ok = match st {
+            case typed.Stmt.Let(_, _, v): f.emptyValue(v, c.Args, depth + 1)
+            case _: false
+        }
+    }
+    f.ctorAsked = was
+    return ok
+}
+
+# the site of the call whose value an argument lends as a temporary (given storage for the call), -1 for none
+fn tempCall(a typed.Expr&) I64 {
+    return match a {
+        case typed.Expr.Promote(_, _, pr): tempCall(pr.X)
+        case typed.Expr.Borrow(_, _, typed.Lvalue.Temp(_, _, v, _)): tempCall(v)
+        case typed.Expr.Away(_, _, y): tempCall(y)
+        case typed.Expr.Call(_, _, c): I64(c.Site)
+        case _: -1
+    }
 }
 
 # whether the region made at site of body b is a part region (PartPlace)
