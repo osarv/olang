@@ -1426,11 +1426,8 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             # it is given, as it is - never written over in place, since the part may be room a Vec has not filled)
             # (T13a: an immut array is replaced whole, never written into - a view of its old value keeps it, and a
             # sole local's old value is released, O8d)
-            if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) and ln.L.P.Immut(target.Type()) {
-                ln.immutStore(target, ln.mk(p), v, value, sp)
-            } else if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) {
-                copies := ln.copiesArray(value, target.Type())
-                ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
+            if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) {
+                ln.valueArrayStore(target, ln.mk(p), v, value, sp)
             } else {
                 # O8d: a sole place given another value releases what it held, once it holds the new one
                 rel := ln.releases(target, true)
@@ -1755,20 +1752,50 @@ fn (ln mut lowering&) arrayStore(dst mir.Lvalue, v mir.Operand, ty types.TypeId,
     ln.start(after)
 }
 
-# an immut value array place given another value (T13a): replaced whole - the new value's storage taken, or a copy of
-# existing storage made where the place keeps it (T7b) - never written into, so a view of the old value still reads
-# it. A sole local place (O8d) releases the old value once it holds the new, and takes constant data as it is
-# (free.ConstLocal: nothing writes it)
-fn (ln mut lowering&) immutStore(target typed.Lvalue&, dst mir.Lvalue, v mir.Operand, value typed.Expr&, sp source.Span) {
+# a value array place given another value (T7b): an immut one (T13a) is replaced whole - the new value's storage taken,
+# or a copy of existing storage made where the place keeps it - never written into, so a view of the old value still
+# reads it; a sole local place (O8d) is replaced too, nothing reaching its old value, which it releases once it holds
+# the new; any other is written in place where the lengths agree (arrayStore)
+fn (ln mut lowering&) valueArrayStore(target typed.Lvalue&, dst mir.Lvalue, v mir.Operand, value typed.Expr&, sp source.Span) {
     ty := target.Type()
     rel := ln.releases(target, true)
+    fixed := ln.L.P.Immut(ty)
+    if fixed or (rel.Len() > 0 and rel[0].At < 0) {
+        ln.replaceStore(target, dst, v, value, rel, sp)
+        return
+    }
+    copies := ln.copiesArray(value, ty)
+    if rel.Len() == 0 {
+        ln.arrayStore(dst, v, ty, copies, sp, ln.placeStorage(target))
+        return
+    }
+    # (decided where the program is linked: both ways, the sole one releasing as decided here)
+    g := ln.temp(types.BoolT, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(g), mir.Rvalue.Sole(rel[0].At)))
+    yes, no, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(mir.Operand.Copy(mir.Lvalue.L(g)), yes, no))
+    ln.start(yes)
+    decided Vec<relPath>
+    for r in rel { decided.Push(relPath(-1, r.Path, r.Slot)) }
+    ln.replaceStore(target, dst, v, value, decided, sp)
+    ln.joinAt(after)
+    ln.start(no)
+    ln.arrayStore(dst, v, ty, copies, sp, ln.placeStorage(target))
+    ln.joinAt(after)
+}
+
+# the store of a value array replaced whole: what the place held released at rel once it holds the new value, constant
+# text an immut local place is given held as it is (free.ConstLocal: nothing writes it)
+fn (ln mut lowering&) replaceStore(target typed.Lvalue&, dst mir.Lvalue, v mir.Operand, value typed.Expr&, rel Vec<relPath>&
+    sp source.Span) {
+    ty := target.Type()
     old := mir.NoLocal
     if rel.Len() > 0 {
         old = ln.temp(ty, sp)
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(old), mir.Rvalue.Use(mir.Operand.Copy(dst))))
     }
     w := v
-    keepConst := rel.Len() > 0 and free.ConstRead(value)
+    keepConst := rel.Len() > 0 and ln.L.P.Immut(ty) and free.ConstRead(value)
     if ln.copiesArray(value, ty) and not keepConst: w = ln.arrayCopy(v, ty, sp, ln.placeStorage(target))
     ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
     if old != mir.NoLocal: ln.releaseAt(old, rel, sp)
