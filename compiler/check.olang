@@ -26305,7 +26305,7 @@ fn (c mut Checker&) narrowedWrite(sp source.Span, fl I64) {
     nr := c.fr().narrows[c.narrowOwner(fl)]
     cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
     name := c.text(cd.Name) if cd != null else ""
-    kase := $(c.ty(nr.Enum)) "." $name
+    kase := $(c.ty(nr.Enum)) + "." + $name
     c.err(sp, msgs.NarrowedWrite(c.pathText(nr.Path), kase))
 }
 

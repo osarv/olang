@@ -922,7 +922,7 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
         }
     }
     t := a.typeEndingAt(file, dot)
-    Log($"completion after a '.' at " $dot ": " $(c.Ty(t) if t != types.UnknownT else "no type"))
+    Log($"completion after a '.' at " + $dot + ": " + $(c.Ty(t) if t != types.UnknownT else "no type"))
     if t == types.UnknownT { return }
     a.typeMembers(it, t)
 }
