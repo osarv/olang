@@ -107,5 +107,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	fixbugs	sonnet	medium	merged, master 25659695 (tool tests pass)						olang: null_migrate crash, E11b join message (from oann)
 2026-11-15	eqnull	opus	high	running						olang: null test by == null, is removed (the user, reversing E10c)
 2026-11-15	oannex	sonnet	high	running						oann round 1e: examples (wt-oannex)
-2026-11-15	oannbench	sonnet	high	running						oann round 1f: bench programs (wt-oannbench)
+2026-11-15	oannbench	sonnet	high	done, merged into wt-oannport 8b05bee (11 compile; INT8 5x slower: rowStep not inlined)						oann round 1f: bench programs (wt-oannbench)
 2026-11-15	spinner	sonnet	high	running						olang: braille spinner wherever we wait, the installer too
+2026-11-15	int8	opus	high	running						olang: INT8 rowStep no longer inlined (oann int8 5x slower)
