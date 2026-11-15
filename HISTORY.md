@@ -37637,6 +37637,13 @@ as a finishing worker does (160 MB to 13 MB at 20,000 turns).
 
 **Left (docs/freeing.md section 2):** a field replaced in a struct a constructor's copied value made (`d.text`, `m.w`:
 RCopied), elements and `SetAt`, a `Map<String, String>`'s `Put`, a split entry's key at removal, a local Vec's growth,
-a local declared with no value, and oann's tempref (a scope variable no argument and no obligation determines is bound
-where the call's result lands, `scope.olang` bindRest - a `Dims(4)` temporary built in the caller's referent's scope
-on every call).
+a local declared with no value.
+
+**oann's tempref.** `read(o.View())`, where `Owner.View` returns `View.Make(o.mem, Dims(4))`, grew by 56 bytes a call:
+a scope variable of a call that no argument determines and no obligation names (`View.Make`'s `s Dims&`, given a
+temporary) was bound where the call's result lands, and the result of `o.View()` lands in o's scope, so each call's
+`Dims` was built there for good. Such a variable is now this block's where the callee, judged to the end, builds nothing
+into it, names it in no relation, and its result views no parameter of it (D9h's ViewResults) - `scope.olang`
+onlyForCall. A first version that asked only for no requirement (`requiredBy`) bound json.Parse's temporary text to the
+block, which the parsed tree holds (C2d), and the compiler no longer built itself; with the relations asked too it
+does, to the fixed point, and every checks case passes. 5,580 kB to 72 kB over 100,000 calls.

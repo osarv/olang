@@ -7683,7 +7683,10 @@ that scope, and the temporary is built there: `l.Push(Node(i))` in a loop builds
 requires its element to outlive the list, and the loop body's own scope would close under it. A variable the result
 names follows the result (O18a) instead, and nothing is built this way into a derived scope (O23a); where the
 determined scope is the program's (a global argument, O25e), the temporary is built in the program's scope:
-`GL.Push(Leaf(i))` in a function, with `GL` a global list.
+`GL.Push(Leaf(i))` in a function, with `GL` a global list. A variable no obligation of the callee's names at all -
+one it builds nothing into, whose result is a view of no argument of it (D9h) - is the block the call stands in: its
+temporary is needed only while the call runs (`read(o.View())`, where `View.Make(o.mem, Dims(4))` builds the `Dims`
+in its own block, not where the result lands, O8f); any other follows the result as before.
 
 **O18c (`:=` from a call).** `x := f(...)` takes its initializer's scope (O25a), so a result scope still free to follow
 the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,

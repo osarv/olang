@@ -90,7 +90,7 @@ Measured 2026-11-15 on master e6232af1 (peak resident memory, KB; baseline ~13 M
 | 11 | a `Vec` local growing | 2x its final size | old buffer freed at each growth | an array place only for a Vec held in a sole place | open - outside O8f as written (growth is a let-go only of a collection held by a place that reclaims its value whole, or by a field) |
 | 15 | a `Map` entry's text key beside a `Vec` value, at a removal (earlyfree's mapkeys) | the key's text kept | freed with the entry | a split entry's key is built where the map lives, not in a slot | open (a `-memory -check` gap) |
 | 16 | a local declared with no value (D13d) given new text in a loop | kept | one text | an unset local is no place (its storage holds nothing written before its first assignment) | open (a `-memory -check` gap) |
-| 12 | oann's tempref: a temporary given to a `&` parameter whose callee copies it into a struct holding a reference | +56 B per call, without bound | nothing kept | a scope variable no argument and no obligation determines is bound where the call's result lands (`scope.olang` bindRest): `View.Make(o.mem, Dims(4))`'s `Dims` built in the result's scope, which `read(o.View())` lands in o's | open |
+| 12 | oann's tempref: a temporary given to a `&` parameter whose callee copies it into a struct holding a reference | +5,580 kB over 100,000 calls | nothing kept | a scope variable no argument and no obligation determines was bound where the call's result lands (`scope.olang` bindRest): `View.Make(o.mem, Dims(4))`'s `Dims` built in the result's scope, which `read(o.View())` lands in o's | **fixed**: +72 kB (bound to the block where the callee builds nothing into it, names it in no relation, and its result views no parameter of it - onlyForCall) |
 | 13 | oann's joinleak: a `join` with spawns | +110 B per join | nothing kept | every task given a stand-in per scope variable, made in the spawner's caller's scope (56 B each) - for a callee building nothing | **fixed**: flat (98 pages at 200,000 and 800,000 joins) |
 | 14 | text a task builds into a loop turn's local (g09) | +8 KB per turn | nothing kept | the task's chunks are folded into the joiner's pool (O8b), workers ask the OS for new ones | **fixed**: the joiner shares its pool beyond a batch at each join, 160 MB to 13 MB |
 
@@ -126,5 +126,10 @@ fails naming its element.
   taskPassed/buildsFact, a `P2 NAME` fact), 14 (`runtime.ll`: the joiner shares its pool at each join) closed. SPEC O8f
   and B18a; `-memory -check` built (`free.olang` gap/unfollowed/libraryGaps, `msgs.MemoryGaps`); checks' `freeing`
   scenario; corpus tests in tests/immut.olang. Self-build fixed point; scenarios earlyfree, freeing, memoryplaced,
-  regions, landing, chunkpool pass. Next, by cost to real programs: 12 (tempref, scope.olang bindRest), 6-7
-  (RCopied), 10 and 15 (Map entries' text), 8-9 (elements), 11, 16.
+  regions, landing, chunkpool pass. Gap 12 (tempref) closed (`scope.olang` onlyForCall); the self-build fixed point
+  and every checks case pass with it. Next, by cost to real programs: 6-7 (RCopied), 10 and 15 (Map entries' text),
+  8-9 (elements), 11, 16.
+- oann's AdamW "a step allocates nothing" (nn/optim.olang) fails 3 of 3 runs with olangcur's compiler (~100 B a step,
+  a gemm join per step - the joinleak pattern). The run with this branch's compiler could not be made: oann master is
+  written with adjacency joins and an older error syntax this branch no longer reads; it is to be rerun once oann is
+  migrated (the joinleak repro itself is flat: 98 pages at 200,000 and 800,000 joins).
