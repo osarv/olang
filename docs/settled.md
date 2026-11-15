@@ -605,7 +605,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`f.Name`, `f.Type`, `f.Offset`, `f.Of(v)`, `c(args)`). Conditions over reflected constants decide `if`s, asserts
   and `match` per instance (G35); `match T` takes trait and generic cases (G36); `T(arg(p) for p in T.Params)` builds
   through the constructor (G37). A struct's private fields are in `T.Fields` only in its module. `json.Encode(v)`/
-  `json.Decode<T>(text)` take any value.
+  `json.Decode<T>(text)` take any value; a struct with storage and no field Encode may read is a compile-time error
+  (2026-11-15, the AI study: it was written `{}`).
 - **Typed attributes and function reflection (G39-G41, R8, QBN, QBO, the user's decisions 2026-10-26).** `@Type(args)` /
   `@Type` before a type, function, enum case, constructor field or parameter: a value of a type the program declares,
   built while compiling; the compiler gives none a meaning. Read by `try x.Attr<A>()` and `x.HasAttr<A>()`.
@@ -904,7 +905,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Atomics are methods on integer places (P9, E10c, the user: "I don't like built-ins very much"):** `AtomicLoad`,
   `AtomicStore`, `AtomicAdd`, `AtomicSwap`, `AtomicCompareSwap`, sequentially consistent.
 - **Runtime:** 1:1 threads, cached (at most 64 idle); no fixed pool and no M:N (P1e/P1f). Cancellation and timeout are
-  `std/cancel` (the user's call: "both"); channels are `std/chan`. `spawn` is for parallelism, not I/O concurrency.
+  `std/cancel` (the user's call: "both"); channels are `std/chan`, ready as made (`chan.Init` removed 2026-11-15, the AI
+  study: a channel made without it hung). `spawn` is for parallelism, not I/O concurrency.
 
 ### Modules and the build
 
@@ -1170,7 +1172,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the evaluator computes that does not fit (`U8(300)`) is a compile error naming `x.Narrow<T>()`.
 - **`olang fix FILE|DIR...` (B17, B1, 2026-10-24, the user: "runs every idempotent migration tool in order; no version
   marker").** Runs the migration tools of `tools/` over the files in the order the changes were made; `-check` lists
-  what would change, status 1 where any would, 2 on failure. Not every tool is idempotent (tools/README.md).
+  what would change, status 1 where any would, 2 on failure. Not every tool is idempotent (tools/README.md). Each tool
+  is built once into olang's cache, keyed by its sources, std and the compiler; one runs only where a trigger text of
+  its forms stands in the files, the driven ones only over files the compiler reports an error in (2026-11-15: oann 555 s
+  to 128 s cold, 408 s to 49 s warm).
+- **The std a compiler reads (B1a, 2026-11-15).** `OLANG_STD`, else the std it was built from (`-define BuiltStd=...`,
+  given by the makefile's self-builds) while it is there, else `../std` beside it; `fix`'s tools beside that std.
 - **Error names print qualified (B5, S16, S18d, E35, 2026-10-24).** Wherever the compiler or runtime prints an
   error's name it is written as source writes it outside its module (`io.Error.Failed`).
 - **Definite initialisation; arrays written once with no clear (D13d, D13e, D14d, E27, T7c, 2026-10-26, the user's QBA
