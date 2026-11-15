@@ -116,7 +116,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	eqnull2	opus	high	done; merging (seed rewrite)						finish == null (fresh after restart)
 2026-11-15	spinner2	sonnet	high	merged, master 360b9901 (bootstrap from seed passes)						finish 3x2 spinner (fresh after restart)
 2026-11-15	int8b	opus	high	done, merged into wt-merge						INT8 inlining (fresh after restart)
-2026-11-15	strplus	opus	high	done, merging (wt-merge 69684b08)						olang: text joins by +, adjacency removed (the user)
+2026-11-15	strplus	opus	high	merged, master e6232af1						olang: text joins by +, adjacency removed (the user)
 2026-11-15	oannmeasure	sonnet	medium	done, oann master (MNIST 5x slower: rowStep not inlined, same cause as INT8)						oann round 2: baselines vs DESIGN
 2026-11-15	oannplan	opus	high	done, oann master bcd805f (docs/redesign.md)						oann round 2: docs/redesign.md + work packages
 2026-11-15	oanngemm	opus	high	done, oann master (M4 parity, Gemv 2-4x, VNNI)						oann A2 gemm
@@ -137,3 +137,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	oannio	sonnet	medium	done, oann master						oann A6 data+io
 2026-11-15	oannad	opus	high	running						oann B1 autodiff
 2026-11-15	oanndyn	opus	high	running						oann B2a dyn core
+2026-11-15	merge2	opus	medium	running						merge fieldnarrow, racetests, dwarf, timeit onto + joins
+2026-11-15	earlyfree	opus	high	running						O8d: early freeing as a provable guarantee (design, then build)
