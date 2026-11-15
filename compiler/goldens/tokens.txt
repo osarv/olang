@@ -449,6 +449,10 @@ baa99c193ee1346e aa2daea09ff1341f checks/cases/e16faxiscount.olang
 95ec501b36bfa19a ac42bc849b1ef3d1 checks/cases/e16fnoaxisslice.olang
 84fbb6d4d24db2c4 14a7e2f06a3e6d46 checks/cases/e16fslicestore.olang
 e350a312ff54fe56 e7bca6c541b32267 checks/cases/e16getnotry.olang
+7dd1b3a684aff62f 6489041384019b21 checks/cases/e16hdivisor.olang
+8a25ce103434bb4c 307a904dc8dbaadf checks/cases/e16hknownindex.olang
+5c31b2ed70a9b5a8 9290d129fe97e75f checks/cases/e16hrangeindex.olang
+774bec52f68707bc 14f99b6483cb1e3f checks/cases/e16hshift.olang
 66588af211ef2d65 474e9fd7b9ced06e checks/cases/e16slicenumber.olang
 a91446bbcfe01c93 4bd1c8885c8886d8 checks/cases/e19bareentries.olang
 0864bcfa75193d06 8cddfffb52476d62 checks/cases/e19barenofromiter.olang
@@ -591,6 +595,7 @@ ef25585815c5f00f 8e16f4f155f7231b checks/cases/e5apowexponent.olang
 305521e9064c0aee 4e0afe07d079a125 checks/cases/e5apowfails.olang
 95eb0bfc3a5954bc 5da8ee0f9ce3c0c9 checks/cases/e5apownone.olang
 ff622369931c1fb6 7b32a4a86b6e99e1 checks/cases/e5apowshape.olang
+7d9dc568f21b10bc fe28c98dd26dedb0 checks/cases/e6acompound.olang
 569fb2795a9e9622 2f3b65bb490225ab checks/cases/e6dnomeet.olang
 d0a5fbb84c11356a 99bd4427884bd1a9 checks/cases/enumcomma.olang
 544c1c154c8174cd db4333b7327882b7 checks/cases/eof.olang
@@ -668,6 +673,7 @@ b5ee3292186097ac 178530c020cc07bf checks/cases/g42exportquiet.olang
 b59cf1e1f2b1d273 acd6fdc78100a6e6 checks/cases/g42factgeneric.olang
 268483aad5cec5e6 74b8d0325af72e1a checks/cases/g42factvalue.olang
 e3f920766a3c02b4 793dcfa5dccf7356 checks/cases/g42factvaluewords.olang
+10b74a8f99f169f6 37455d04e4741def checks/cases/g42methodgeneric.olang
 110b6a9ce9e21429 6dfed9fc1bfe6d5c checks/cases/g4resultbare.olang
 2e790ceb28eb6a6c b282a968765a8c34 checks/cases/g4resultonly.olang
 8e8767507b067c1f 2f2fb722c7348872 checks/cases/g4resultwritten.olang
@@ -2271,13 +2277,13 @@ e6de7b7311f59884 24f4ca642bb69364 compiler/api.olang
 cf2850413421b4e8 97be2a0aed26ee18 compiler/build.olang
 aa9cd72468522acd 9410604d5599411a compiler/cabi.olang
 86d62fb0c42ac8b1 4c97eaf489c61861 compiler/cells.olang
-f1ff5391aecf8ab2 ba6335b1104a17d4 compiler/check.olang
+3d440394353a31f2 42ce55d3ace2eda4 compiler/check.olang
 9bfde7101377f290 0547374433d854b9 compiler/cond.olang
 23397e0e6b6e5b92 e8de207d3d679c4c compiler/definit.olang
 75b4a7ebeb624f5c 699a1be48dd42e60 compiler/diag.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 ef46370b593dedc1 be723f6cb4f85f47 compiler/doc.olang
-2694dbdfc722bba6 fe6b5a02412e66e7 compiler/effects.olang
+a2897d699a32d91c c371d68af7820b47 compiler/effects.olang
 efa3142d8c25d420 596292eb9df2418f compiler/emit.olang
 1fa8167a8c8919a0 d797bbe79c5830ea compiler/eval.olang
 915265e3f3ca2672 180ec42a5f54b452 compiler/explain.olang
@@ -2297,7 +2303,7 @@ ee9859766b9d5817 ff6c9a764e7f3f1d compiler/lsp.olang
 bcee8f3442f5e28b f0af21ece4cd548e compiler/mcp.olang
 f33c5a9677cef2a9 5c55c2031264ec98 compiler/measure.olang
 99d39591115abf17 7804677c844fb7a7 compiler/mir.olang
-31d08940a6b8f801 577f8374c3584cde compiler/msgs.olang
+848a5c79efbc10a0 9db56c4ddddc07b6 compiler/msgs.olang
 ae94d0533994be54 c9caeafbda3b644f compiler/names.olang
 008dc2c34504eb28 ba18392f65f77200 compiler/needs.olang
 8c0126f803fe9900 3d8dcaa37df36f12 compiler/notebook.olang
@@ -2332,7 +2338,7 @@ e80657e77bb89289 8e3e279943847a78 compiler/testdata/lex/strateof.olang
 1d948114201b1ace 357332eb7459a716 compiler/token.olang
 d5f32ce86b032f0a 07dde0e264452bc6 compiler/tools/astdiff.olang
 44e2d5dd49988f74 c71cd9d292d78051 compiler/tools/checkdump.olang
-b4916592fbe5ad7b 22f6d4277f9d2a3b compiler/tools/consistency.olang
+b7037f1c05417617 74826eb0b95c03f5 compiler/tools/consistency.olang
 c63f204faee1b505 5109345fe476196f compiler/tools/diaggold.olang
 80a864d76bf8474c fcfa5bf43495bff6 compiler/tools/diaggold_capture.olang
 4632f0b7c89c24ba 9227fca8b41f77b6 compiler/tools/drvdiff.olang
@@ -2353,7 +2359,7 @@ c33a998ee0a9a8ab ac54beb0bb87c852 compiler/tools/scopedump.olang
 e4503bc11d688442 797671334c042c15 compiler/tools/seed.olang
 de8f44f2efb8185b 3e81d521ca35f8aa compiler/tools/tokdiff.olang
 1b2522e00e51396d 29132bc2239a9dd2 compiler/tools/toolkit.olang
-2454c5b13310efe9 76f1de6bfea3229f compiler/typed.olang
+f12b43adb7d28509 847a2d4cfc834e8a compiler/typed.olang
 dd09d2f6b8939ebb 76c2d467366bc428 compiler/types.olang
 90f9cb09ca64ef52 085fb55d901192e5 compiler/unparse.olang
 0588cc1c800e97e3 edcc9ef4d7ca4fde compiler/views.olang
@@ -2502,6 +2508,7 @@ d1a0ced4c7332f30 ab599ed972eea74a tests/errdata.olang
 b2d974520d3d8244 de5b3dce62a3db88 tests/errsets.olang
 1ae1c2868017d966 bf1d61a95fec058d tests/errvalues.olang
 0c3b0d7d029dbffd 9867a387beddc79b tests/facts.olang
+6d6daa6124ea4557 a97f20663031d39c tests/factsfailing.olang
 93aaa73eb85eac03 bddb19a4bd8aba28 tests/fieldnarrow.olang
 d206b4be2121ce77 8d3149a15e69f0ad tests/filtered.olang
 bf23c277da27dff0 e9f34c7c9869ae67 tests/fnref.olang
@@ -2531,6 +2538,7 @@ d26f956fb86d5f9c 9e10aebc5906dece tests/nulltest.olang
 e74919ca65adb103 9f625ae59a3134e0 tests/place.olang
 8f560a1f364f74c0 6364747a17c23682 tests/power.olang
 4bdcdb2f74c56de1 f65a709a10db54e4 tests/promises.olang
+65a92945a50a6b59 c71030653ca4b275 tests/proven.olang
 4ea3b4ba35b6ff11 8ded866955cd777b tests/raised.olang
 f30146f2d3929763 82cfa2876223eca4 tests/raisedlex.olang
 cf02ae4f8e9eda2d 7b7e50617a887cd7 tests/reads.olang
