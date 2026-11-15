@@ -679,6 +679,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
+    lw.DecideBuilds(fr.Spawned())
     lw.DecideGen()
     lw.Free = fr
     build.Phase("scope")

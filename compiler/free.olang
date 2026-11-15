@@ -352,6 +352,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # owner locals (keyField -3): a local holding an owner by value (ownerCand) - a Vec, a Map - given another value
     # somewhere in its body, a place of its own: by (body, local), and by body whether it has one
     ownLocalOf Map<pair.Pair<I64, I64>, I64>
+    spawned Vec<I64>          # the bodies a task calls directly (Spawned)
     olBody Vec<I64>           # by place: an owner local's body and local, -1 for any other place
     olLocal Vec<I64>
     olIn Vec<Bool>
@@ -2489,6 +2490,8 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Spawn(_, s) {
             w.F.taskAt[w.Id] = true
+            tc := typed.Call.Of(taskCall(s.Task))
+            if tc != null and typed.CalleeBody(tc) >= 0: addTo(w.F.spawned, typed.CalleeBody(tc))
             w.expr(s.Task)
             for c in s.Clauses {
                 if c.Handler != null: w.expr(c.Handler!)
@@ -5595,6 +5598,17 @@ fn (f mut Free&) ConstLocal(b I64, l I64, init typed.Expr&) Bool {
     k := f.LocalPlaceOf(b, l)
     return k >= 0 and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(init)
 }
+
+# a task's call, its "!" taken off (E35)
+fn taskCall(x typed.Expr&) typed.Expr& {
+    return match x {
+        case typed.Expr.Try(_, _, t): t.X! if t.Ends and t.X != null else x
+        case _: x
+    }
+}
+
+# the bodies a task calls directly, for the spawners' stand-in facts (lowering's buildsFact)
+fn (f Free&) Spawned() Vec<I64> { return f.spawned }
 
 # the owner local place local l of body b is, -1 for none
 fn (f mut Free&) LocalPlaceOf(b I64, l I64) I64 {

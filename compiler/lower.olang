@@ -43,6 +43,7 @@ import "typed"
 import "mir"
 import "check"
 import "free"
+import "effects"
 
 # a construct met and not lowered yet: where, and what
 type Gap struct(File I64, Sp source.Span, What String&) {
@@ -56,6 +57,8 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     P
     Bodies
     Plans Vec<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
+    fx mut effects.Effects?& = null    # P2: what a task's callee may do (buildsFact), made when first asked
+    buildsDecided Map<I64, Bool>       # ...the bodies whose fact is decided
     # T22c: by twin (scope.twinTab), its plan, and whether it has code of its own (else a call of it reaches the body's)
     TwinPlans Vec<typed.Plan>
     TwinOwn Vec<Bool>
@@ -307,6 +310,27 @@ fn (lw Lowerer&) derivedFact(id I64) String {
         case typed.BodyOf.Dtor(t): $"O23a dtor " + $lw.P.T.Canon(t)
         case _: ""
     }
+}
+
+# P2, O8f: the fact naming whether body id, through all it may call, builds nothing anywhere and starts no task ("none",
+# else "builds") - read by a spawner's code (taskPassed); "" for a body no fact names
+fn (lw mut Lowerer&) buildsFact(id I64) String {
+    name := match lw.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): $"P2 " + $lw.P.InstanceName(inst)
+        case _: ""
+    }
+    if name == "" or lw.buildsDecided.Has(id): return name
+    lw.buildsDecided.Put(id, true)
+    if lw.fx == null: lw.fx = effects.Effects(lw.P, lw.Bodies)
+    f := lw.fx!.Of(id)
+    quiet := not f.Holds(effects.Fact.Allocates) and not f.Holds(effects.Fact.Spawns)
+    lw.P.Facts.Decide(name, "none" if quiet else "builds", false)
+    return name
+}
+
+# ...decided for every body a task calls, before any module's code is reused (B3i)
+fn (lw mut Lowerer&) DecideBuilds(spawned Vec<I64>&) {
+    for b in spawned { lw.buildsFact(b) }
 }
 
 # ...decided for every body, once the scope pass has placed them
@@ -858,6 +882,27 @@ fn (ln mut lowering&) passed(n I64, site typed.SiteId = typed.SiteId(-1)) mir.Ra
         }
     }
     return ln.F.ScopeRefs(xs)
+}
+
+# P2, O8f: the scopes a task is given - each a stand-in the spawner makes in the scope it stands for, held as long as that
+# scope (a closure the task makes may hold it past the join) - none for a callee that builds nothing anywhere, nor
+# starts a task, through anything it may call (effects.Fact.Allocates, Spawns): it is given the program's (null), which
+# it never builds into, so a join of such tasks in a loop keeps nothing (oann's joinleak: two stand-ins of 56 bytes
+# kept in the spawner's scope per join). A whole-program fact (B3i): the caller's code reads it through the table
+fn (ln mut lowering&) taskPassed(callee mir.Callee, fty types.TypeId, site typed.SiteId) mir.Range {
+    n := mir.PassedCount(ln.T, callee, fty)
+    b := match callee {
+        case mir.Callee.Fn(k, _): match k {
+            case mir.FnKey.Body(id): I64(id)
+            case _: -1
+        }
+        case _: -1
+    }
+    if n == 0 or b < 0: return ln.passed(n, site)
+    name := ln.L.buildsFact(b)
+    if name == "": return ln.passed(n, site)
+    v := try ln.L.P.Facts.Read(ln.B.File, name) catch default "builds"
+    return ln.passed(n) if v == "none" else ln.passed(n, site)
 }
 
 # what a call passes (passed), and after it, for a callee that is a body taking derived scopes, what the call knows of
@@ -2266,7 +2311,7 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             # a target holding an array by value is stored as the assignment it is judged as (P1g, T11b): a copy where
             # that assignment copies, made where the target's storage is
             cps := ln.targetCopies(sw, task) if ln.valueTargets(sw) else mir.Range(0, 0)
-            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty), c.Site), places, cls, ends
+            k := ln.F.AddTask(callee, args, ln.taskPassed(callee, ty, c.Site), places, cls, ends
                               sw.Task.Span(), cps)
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }

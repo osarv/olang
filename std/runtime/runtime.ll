@@ -2757,6 +2757,10 @@ done:
   %res = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]
   %resrec = phi ptr [ null, %entry ], [ %accrec1, %aftermerge ]
   call void @__olang_errpay_attach(ptr %resrec, i1 %keep)
+  ; O8b, O8f: the joiner, too, keeps at most a batch of its pool: what its tasks built comes back to it as the scopes
+  ; their stand-ins were folded into close, and the workers that built it ask the shared pool - so a loop of joins
+  ; reuses that storage rather than the joiner's pool growing to its bound while the workers ask the system
+  call void @__olang_pool_share()
   ret i64 %res
 }
 
