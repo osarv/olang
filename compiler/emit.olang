@@ -1523,12 +1523,12 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         b := e.dbgNew()
         n := e.dbgNew()
         e.dbgBasics.Put(I64(r), n)
-        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" $t.Canon(r) "\", baseType: !" $b ")")
+        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" + $t.Canon(r) + "\", baseType: !" + $b + ")")
         enc := "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
         # a byte as a character, as C's unsigned char, so that text's elements print as text
         if t.Bits(r) == 8 and t.IsUnsigned(r) { enc = "DW_ATE_unsigned_char" }
         bits := 8 if r == types.BoolT else (t.Bits(r) + 7) / 8 * 8     # T4a: an odd width the bytes its store writes
-        e.dbgShared(b, $"!DIBasicType(name: \"" $t.Canon(r) "\", size: " $bits ", encoding: " $enc ")")
+        e.dbgShared(b, $"!DIBasicType(name: \"" + $t.Canon(r) + "\", size: " + $bits + ", encoding: " + $enc + ")")
         return n
     }
     if e.dbgTypes.Has(I64(r)) { return try e.dbgTypes.Get(I64(r)) catch default -1 }
@@ -1541,8 +1541,8 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         n, pn := e.dbgNew(), e.dbgNew()
         e.dbgTypes.Put(I64(r), n)
         b := e.dbgType(rt)
-        e.dbgShared(pn, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " $("!" $b if b >= 0 else "null") ", size: 64)")
-        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" $escape(e.dbgTypeName(r)) "\", baseType: !" $pn ")")
+        e.dbgShared(pn, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " + $("!" + $b if b >= 0 else "null") + ", size: 64)")
+        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" + $escape(e.dbgTypeName(r)) + "\", baseType: !" + $pn + ")")
         return n
     }
     if k == types.Kind.Func { return e.dbgPair(r, "code", types.UnknownT, "env", types.UnknownT) }
@@ -1603,19 +1603,19 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         words := e.enumWords(r)
         tag := n if not words else e.dbgNew()
         tbase := e.dbgBasic(t.Prim("I64") if words else t.Prim("I32"))
-        e.dbgShared(tag, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $
-                    (64 if words else 32) ", baseType: !" $tbase ", elements: !" $el ")")
+        e.dbgShared(tag, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" + $escape(e.dbgTypeName(r)) + "\", size: " + $
+                    (64 if words else 32) + ", baseType: !" + $tbase + ", elements: !" + $el + ")")
         if not words { return n }
         # the case, then the payload as a union of each case's fields by name and offset (gdb and lldb show every case
         # of it; editors/debug's formatters show the case the value is)
         m0, m1, ml := e.dbgNew(), e.dbgNew(), e.dbgNew()
         pu := e.dbgPayload(r, cs, cn)
-        e.dbgShared(m0, $"!DIDerivedType(tag: DW_TAG_member, name: \"case\", baseType: !" $tag ", size: 64, offset: 0)")
-        e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"payload\", baseType: !" $pu ", size: " $
-                    (t.PayloadSize(r) * 8) ", offset: 64)")
-        e.dbgShared(ml, $"!{!" $m0 ", !" $m1 "}")
-        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $size $
-                    ", elements: !" $ml ")")
+        e.dbgShared(m0, $"!DIDerivedType(tag: DW_TAG_member, name: \"case\", baseType: !" + $tag + ", size: 64, offset: 0)")
+        e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"payload\", baseType: !" + $pu + ", size: " + $
+                    (t.PayloadSize(r) * 8) + ", offset: 64)")
+        e.dbgShared(ml, $"!{!" + $m0 + ", !" + $m1 + "}")
+        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" + $escape(e.dbgTypeName(r)) + "\", size: " + $size + $
+                    ", elements: !" + $ml + ")")
         return n
     }
     return -1
@@ -1636,15 +1636,15 @@ fn (e mut Emitter&) dbgPayload(r types.TypeId, cs Array<types.TypeId>&, cn Array
         ct := e.dbgType(cs[i]) if t.KindOf(cs[i]) != types.Kind.Record else e.dbgCase(r, i, cs[i], name)
         if ct < 0 { continue }
         m := e.dbgNew()
-        e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $escape(name) "\", baseType: !" $ct ", size: " $
-                    (t.Size(cs[i]) * 8) ", offset: 0)")
+        e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" + $escape(name) + "\", baseType: !" + $ct + ", size: " + $
+                    (t.Size(cs[i]) * 8) + ", offset: 0)")
         if ms.Len() > 0: ms.Push(", ")
-        ms.Push($"!" $m)
+        ms.Push($"!" + $m)
     }
     el := e.dbgNew()
-    e.dbgShared(el, $"!{" $ms.ToString() "}")
+    e.dbgShared(el, $"!{" + $ms.ToString() + "}")
     n := e.dbgNew()
-    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_union_type, size: " $(t.PayloadSize(r) * 8) ", elements: !" $el ")")
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_union_type, size: " + $(t.PayloadSize(r) * 8) + ", elements: !" + $el + ")")
     return n
 }
 
@@ -1661,16 +1661,16 @@ fn (e mut Emitter&) dbgCase(r types.TypeId, k I64, ct types.TypeId, name String&
         if mt < 0: mt = e.dbgBytes()
         m := e.dbgNew()
         fname := e.text(names[i]) if i < names.Len() else $i
-        e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $escape(fname) "\", baseType: !" $mt ", size: " $
-                    (t.Size(fs[i]) * 8) ", offset: " $(offs[i] * 8) ")")
+        e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" + $escape(fname) + "\", baseType: !" + $mt + ", size: " + $
+                    (t.Size(fs[i]) * 8) + ", offset: " + $(offs[i] * 8) + ")")
         if i > 0: ms.Push(", ")
-        ms.Push($"!" $m)
+        ms.Push($"!" + $m)
     }
     el := e.dbgNew()
-    e.dbgShared(el, $"!{" $ms.ToString() "}")
+    e.dbgShared(el, $"!{" + $ms.ToString() + "}")
     n := e.dbgNew()
-    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "." $escape(name) $
-                "\", size: " $(t.Size(ct) * 8) ", elements: !" $el ")")
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" + $escape(e.dbgTypeName(r)) + "." + $escape(name) + $
+                "\", size: " + $(t.Size(ct) * 8) + ", elements: !" + $el + ")")
     return n
 }
 
@@ -1683,7 +1683,7 @@ fn (e mut Emitter&) dbgErrVal(ty types.TypeId) I64 {
     es StringBuilder
     z := e.dbgNew()
     e.dbgShared(z, "!DIEnumerator(name: \"null\", value: 0)")
-    es.Push($"!" $z)
+    es.Push($"!" + $z)
     items := t.Items(t.ErrValItems(ty))
     for i in range items.Len() {
         et := t.ErrOf(items[i])
@@ -1691,15 +1691,15 @@ fn (e mut Emitter&) dbgErrVal(ty types.TypeId) I64 {
         for j in range ws.Len() {
             if ((t.ErrMask(items[i]) >> U64(j)) & U64(1)) == U64(0): continue
             m := e.dbgNew()
-            name := $e.errQualifier(et) $e.P.ErrorWordName(t.DeclOf(et), j)
-            e.dbgShared(m, $"!DIEnumerator(name: \"" $escape(name) "\", value: " $(((i + 1) << 16) | j) ")")
-            es.Push($", !" $m)
+            name := $e.errQualifier(et) + $e.P.ErrorWordName(t.DeclOf(et), j)
+            e.dbgShared(m, $"!DIEnumerator(name: \"" + $escape(name) + "\", value: " + $(((i + 1) << 16) | j) + ")")
+            es.Push($", !" + $m)
         }
     }
     el := e.dbgNew()
-    e.dbgShared(el, $"!{" $es.ToString() "}")
-    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" $escape(e.dbgTypeName(ty)) "\", size: 32, baseType: !" $
-                e.dbgBasic(t.Prim("I32")) ", elements: !" $el ")")
+    e.dbgShared(el, $"!{" + $es.ToString() + "}")
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" + $escape(e.dbgTypeName(ty)) + "\", size: 32, baseType: !" + $
+                e.dbgBasic(t.Prim("I32")) + ", elements: !" + $el + ")")
     return n
 }
 
@@ -1710,7 +1710,7 @@ fn (e mut Emitter&) dbgTypedef(ty types.TypeId, base types.TypeId) I64 {
     if b < 0: return -1
     n := e.dbgNew()
     e.dbgTypes.Put(I64(ty), n)
-    e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" $escape(e.dbgTypeName(ty)) "\", baseType: !" $b ")")
+    e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" + $escape(e.dbgTypeName(ty)) + "\", baseType: !" + $b + ")")
     return n
 }
 
@@ -1781,8 +1781,8 @@ fn (e mut Emitter&) dbgName(k mir.FnKey) String {
                 case typed.BodyOf.Ctor(ty, _): $t.Canon(ty)
                 case typed.BodyOf.Dtor(ty): $t.Canon(ty) + ".dtor"
                 case typed.BodyOf.Lambda(_): "lambda"
-                case typed.BodyOf.Test(_): $"test " $e.testName(I64(id))
-                case typed.BodyOf.Global(_, n): $e.text(n) ".init"
+                case typed.BodyOf.Test(_): $"test " + $e.testName(I64(id))
+                case typed.BodyOf.Global(_, n): $e.text(n) + ".init"
                 case _: e.sym(k)
             }
         }
@@ -1869,9 +1869,9 @@ fn (fe mut fnEm&) subprogram() {
     line := e.D.LineAt(f.File, I64(f.Sp.Start))
     fe.dbgSp = e.dbgNew()
     name := e.ProfName(f.Of) if e.Lines and not e.Debug else e.dbgName(f.Of)
-    fe.dbgMeta.Push($"!" $fe.dbgSp " = distinct !DISubprogram(name: \"" $escape(name) "\", scope: !" $file $
-                    ", file: !" $file ", line: " $line ", type: !" $e.dbgSubTy() ", scopeLine: " $line $
-                    ", spFlags: DISPFlagDefinition, unit: !" $e.dbgCu() ")\n")
+    fe.dbgMeta.Push($"!" + $fe.dbgSp + " = distinct !DISubprogram(name: \"" + $escape(name) + "\", scope: !" + $file + $
+                    ", file: !" + $file + ", line: " + $line + ", type: !" + $e.dbgSubTy() + ", scopeLine: " + $line + $
+                    ", spFlags: DISPFlagDefinition, unit: !" + $e.dbgCu() + ")\n")
     if not e.Debug: return
     # a lexical block per block, loop body and join it opens, so a debugger shows a local only where it is in scope
     for _ in range f.Scopes.Len(): fe.dbgBlocks.Push(-2)
@@ -1892,7 +1892,7 @@ fn (fe mut fnEm&) dbgBlockOf(i I64, file I64) I64 {
     n := fe.E.dbgNew()
     fe.dbgBlocks[i] = n
     line := fe.E.D.LineAt(fe.F.File, I64(sc.Sp.Start))
-    fe.dbgMeta.Push($"!" $n " = distinct !DILexicalBlock(scope: !" $up ", file: !" $file ", line: " $line ")\n")
+    fe.dbgMeta.Push($"!" + $n + " = distinct !DILexicalBlock(scope: !" + $up + ", file: !" + $file + ", line: " + $line + ")\n")
     return n
 }
 
@@ -1925,7 +1925,7 @@ fn (fe mut fnEm&) dbgLine(line I64, i I64 = -1) String {
         n = fe.E.dbgNew()
         fe.dbgLocs.Put(key, n)
         sc := fe.dbgSp if i < 0 else fe.dbgBlocks[i]
-        fe.dbgMeta.Push($"!" $n " = !DILocation(line: " $line ", column: 1, scope: !" $sc ")\n")
+        fe.dbgMeta.Push($"!" + $n + " = !DILocation(line: " + $line + ", column: 1, scope: !" + $sc + ")\n")
     }
     return ", !dbg !" + $n
 }
@@ -1966,21 +1966,21 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
         if dt < 0 { continue }
         n := e.dbgNew()
         line := e.D.LineAt(f.File, I64(l.Sp.Start)) if l.Sp.Start != I32(0) else e.D.LineAt(f.File, I64(f.Sp.Start))
-        argText := ", arg: " $arg if l.Kind == mir.LocalKind.Param else ""
+        argText := ", arg: " + $arg if l.Kind == mir.LocalKind.Param else ""
         # a local in its block's lexical block - which LLVM reads off the location its declare carries
         si := -1 if l.Kind == mir.LocalKind.Param else fe.scopeAt(l.Sp.Start)
         sc := fe.dbgBlockOf(si, file)
-        fe.dbgMeta.Push($"!" $n " = !DILocalVariable(name: \"" $escape(name) "\"" $argText ", scope: !" $sc $
-                        ", file: !" $file ", line: " $line ", type: !" $dt ")\n")
+        fe.dbgMeta.Push($"!" + $n + " = !DILocalVariable(name: \"" + $escape(name) + "\"" + $argText + ", scope: !" + $sc + $
+                        ", file: !" + $file + ", line: " + $line + ", type: !" + $dt + ")\n")
         e.declare("llvm.dbg.declare", "void @llvm.dbg.declare(metadata, metadata, metadata)")
         # a local whose storage is in an arena (O26a): its slot holds where, null until its Live makes it
-        slot, expr := $"%l" $i, $"!DIExpression()"
+        slot, expr := $"%l" + $i, $"!DIExpression()"
         if not fe.isFrame(l.Home) {
-            slot, expr = $"%lp" $i, $"!DIExpression(DW_OP_deref)"
-            b.Push("  store ptr null, ptr %lp" $i "\n")
+            slot, expr = $"%lp" + $i, $"!DIExpression(DW_OP_deref)"
+            b.Push("  store ptr null, ptr %lp" + $i + "\n")
         }
-        b.Push("  call void @llvm.dbg.declare(metadata ptr " $slot ", metadata !" $n ", metadata " $expr ")" $
-               fe.dbgLine(e.D.LineAt(f.File, I64(f.Sp.Start)), si) "\n")
+        b.Push("  call void @llvm.dbg.declare(metadata ptr " + $slot + ", metadata !" + $n + ", metadata " + $expr + ")" + $
+               fe.dbgLine(e.D.LineAt(f.File, I64(f.Sp.Start)), si) + "\n")
     }
 }
 
