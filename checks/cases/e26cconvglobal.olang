@@ -1,0 +1,8 @@
+# check: fail error[E26c]: Big does not fit I32
+# E26c: an immutable global the evaluator computes is a constant argument too
+Big I64 = 5000000000
+
+fn main() {
+    n := I32(Big)
+    n++
+}

@@ -1,7 +1,10 @@
 # check: run
-# D17a: a requirement is checked on entry at run time, where the evaluator cannot decide it
+# D17: a requirement is checked by the body at run time, where the evaluator cannot decide it at the call
 import "std/os"
-fn pick(x I32, y I32) [y > x] I32 ? { return y - x }
+fn pick(x I32, y I32) I32 ? {
+    if not y > x: error ArgumentError.Invalid("pick: y > x")
+    return y - x
+}
 
 fn main() ? {
     a := I32(5)

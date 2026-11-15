@@ -175,16 +175,16 @@ attrreceiver.olang:5:5: error[G39]: nothing here takes an attribute
 attrreceiver.olang:5:5: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
 compilation failed with 1 error
 === attrrequire.olang
-attrrequire.olang:4:16: error[D17e]: this call breaks Tag's requirement 'v >= 0'
-    4 | type P struct(@Tag(-1) x I64) { x }
+attrrequire.olang:7:16: error[D17e]: this call breaks Tag's requirement 'v >= 0'
+    7 | type P struct(@Tag(-1) x I64) { x }
       |                ^~~
-attrrequire.olang:3:25: note: the condition
-    3 | type Tag struct(v I64) [v >= 0] ? { v }
-      |                         ^~~~~~
-attrrequire.olang:4:16: error[G39]: this attribute's value cannot be built while compiling
-    4 | type P struct(@Tag(-1) x I64) { x }
+attrrequire.olang:4:8: note: the condition
+    4 |     if not v >= 0: error ArgumentError.Invalid("Tag: v >= 0")
+      |        ^~~~~~~~~~
+attrrequire.olang:7:16: error[G39]: this attribute's value cannot be built while compiling
+    7 | type P struct(@Tag(-1) x I64) { x }
       |                ^~~~~~~
-attrrequire.olang:4:16: note: an error reaches '!', which ends the program
+attrrequire.olang:7:16: note: an error reaches '!', which ends the program
 compilation failed with 2 errors
 === attrtwice.olang
 attrtwice.olang:4:25: error[G39]: a declaration takes one attribute of each type, and this is its second Key
@@ -438,52 +438,52 @@ compilation failed with 1 error
 bitsetctorbits.olang:10:10: error[D17e]: this call breaks BitSet's requirement 'bits & ~mask<T>() == 0'
    10 |     s := bitset.BitSet<Color>(12)!
       |          ^~~~~~~~~~~~~
-$ROOT/std/bitset.olang:18:38: note: the condition
-   18 | type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] ? {
-      |                                      ^~~~~~~~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:19:8: note: the condition
+   19 |     if not bits & ~mask<T>() == 0: error ArgumentError.Invalid("BitSet: bits & ~mask<T>() == 0")
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === bitsetnotenum.olang
 bitsetnotenum.olang:10:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over an enum's cases
    10 |     s := bitset.BitSet<P>.Empty()
       |          ^~~~~~~~~~~~~~~~
-$ROOT/std/bitset.olang:30:19: note: in the standard library's code, here
-   30 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
+$ROOT/std/bitset.olang:31:19: note: in the standard library's code, here
+   31 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
       |                   ^~
-$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = P
-   19 |     check<T>()
+$ROOT/std/bitset.olang:20:5: note: instantiated here, with T = P
+   20 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsetpayload.olang
 bitsetpayload.olang:11:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
    11 |     s := bitset.BitSet<Shape>.Empty()
       |          ^~~~~~~~~~~~~~~~~~~~
-$ROOT/std/bitset.olang:32:36: note: in the standard library's code, here
-   32 |     assert T.Kind != TypeKind.Enum or comptime plain<T>(), "a BitSet is over cases that carry no payload"
+$ROOT/std/bitset.olang:33:36: note: in the standard library's code, here
+   33 |     assert T.Kind != TypeKind.Enum or comptime plain<T>(), "a BitSet is over cases that carry no payload"
       |                                    ^~
-$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Shape
-   19 |     check<T>()
+$ROOT/std/bitset.olang:20:5: note: instantiated here, with T = Shape
+   20 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsetpayloadlater.olang
 bitsetpayloadlater.olang:13:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
    13 |     s := bitset.BitSet<Shape>.Empty()
       |          ^~~~~~~~~~~~~~~~~~~~
-$ROOT/std/bitset.olang:32:36: note: in the standard library's code, here
-   32 |     assert T.Kind != TypeKind.Enum or comptime plain<T>(), "a BitSet is over cases that carry no payload"
+$ROOT/std/bitset.olang:33:36: note: in the standard library's code, here
+   33 |     assert T.Kind != TypeKind.Enum or comptime plain<T>(), "a BitSet is over cases that carry no payload"
       |                                    ^~
-$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Shape
-   19 |     check<T>()
+$ROOT/std/bitset.olang:20:5: note: instantiated here, with T = Shape
+   20 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsettoomany.olang
 bitsettoomany.olang:74:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet holds at most 64 cases
    74 |     s := bitset.BitSet<Big>.Empty()
       |          ^~~~~~~~~~~~~~~~~~
-$ROOT/std/bitset.olang:31:36: note: in the standard library's code, here
-   31 |     assert T.Kind != TypeKind.Enum or T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
+$ROOT/std/bitset.olang:32:36: note: in the standard library's code, here
+   32 |     assert T.Kind != TypeKind.Enum or T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
       |                                    ^~
-$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Big
-   19 |     check<T>()
+$ROOT/std/bitset.olang:20:5: note: instantiated here, with T = Big
+   20 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === blockcomment.olang
@@ -625,11 +625,11 @@ columnassigned.olang:7:10: error[T7e]: a column is assigned whole only alone - '
       |          ^~~
 compilation failed with 2 errors
 === columnscontract.olang
-columnscontract.olang:5:18: error[T7e]: Columns<Pos> takes a record for its rows, and Pos has a constructor that checks or fails
-    5 |     c := Columns<Pos>(1, Pos(1)!)
+columnscontract.olang:8:18: error[T7e]: Columns<Pos> takes a record for its rows, and Pos has a constructor that checks or fails
+    8 |     c := Columns<Pos>(1, Pos(1)!)
       |                  ^~~
-columnscontract.olang:5:18: note: a record is a struct whose constructor declares exactly its fields, each a parameter written bare
-columnscontract.olang:5:18: help: write 'type P struct(X F32, Y F32) { X, Y }'
+columnscontract.olang:8:18: note: a record is a struct whose constructor declares exactly its fields, each a parameter written bare
+columnscontract.olang:8:18: help: write 'type P struct(X F32, Y F32) { X, Y }'
 compilation failed with 1 error
 === columnsnamedmethod.olang
 columnsnamedmethod.olang:5:18: error[T7e]: R's field 'Len' would be a column of Columns<R> named like its method
@@ -919,49 +919,44 @@ d16untyped.olang:4:13: error[D16a]: lambda parameter 'x' has no type, and nothin
     4 |     f := fn(x) { return x }
       |             ^
 compilation failed with 1 error
+=== d17assertcaught.olang
+d17assertcaught.olang:11:14: error[D17e]: this call breaks half's requirement 'n % 2 == 0'
+   11 |     h := try half(3) catch ArgumentError default -1
+      |              ^~~~
+d17assertcaught.olang:6:12: note: the condition
+    6 |     assert n % 2 == 0
+      |            ^~~~~~~~~~
+compilation failed with 1 error
 === d17callnotry.olang
-d17callnotry.olang:7:10: error[E15]: this call can fail - write 'try', and catch or pass on its errors
-    7 |     b := pick(a, 2)
+d17callnotry.olang:10:10: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+   10 |     b := pick(a, 2)
       |          ^~~~
 compilation failed with 1 error
 === d17condfails.olang
-d17condfails.olang:3:25: error[R9]: ParseError can escape here, and this function does not declare it - add it after '?', or catch it
-    3 | fn positive(t String&) [try t.ParseInt() > 0] I64 ? ArgumentError { return 1 }
-      |                         ^~~~~~~~~~~~~~~~~~~~
-compilation failed with 1 error
-=== d17convfit.olang
-d17convfit.olang:4:10: error[D17g]: 300 does not fit U8
-    4 |     b := U8(300)
-      |          ^~~~~~~
-d17convfit.olang:4:10: help: write a value that fits, or 'try x.Narrow<U8>()' to fail with an error
-compilation failed with 1 error
-=== d17convglobal.olang
-d17convglobal.olang:6:10: error[D17g]: Big does not fit I32
-    6 |     n := I32(Big)
-      |          ^~~~~~~~
-d17convglobal.olang:6:10: help: write a value that fits, or 'try x.Narrow<I32>()' to fail with an error
-compilation failed with 1 error
-=== d17needsargerror.olang
-d17needsargerror.olang:4:16: error[D17]: half has conditions, so a call fails with ArgumentError where one is false
-    4 | fn half(n I64) [n >= 0] I64 ? Odd {
-      |                ^~~~~~~~
-d17needsargerror.olang:4:16: help: add it after '?'
+d17condfails.olang:4:13: error[R9]: ParseError can escape here, and this function does not declare it - add it after '?', or catch it
+    4 |     if not (try t.ParseInt() > 0): error ArgumentError.Invalid("positive: try t.ParseInt() > 0")
+      |             ^~~
 compilation failed with 1 error
 === d17notbool.olang
-d17notbool.olang:3:14: error: a condition is a Bool, found I64
-    3 | fn f(x I64) [x + 1] ? { }
-      |              ^~~~~
-d17notbool.olang:6:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
-    6 |     f(3)
+d17notbool.olang:4:12: error[E7]: 'not' takes a Bool, found I64
+    4 |     if not x + 1: error ArgumentError.Invalid("f: x + 1")
+      |            ^~~~~
+d17notbool.olang:8:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    8 |     f(3)
       |     ^
 compilation failed with 2 errors
 === d17reqfalse.olang
-d17reqfalse.olang:10:10: error[D17e]: this call breaks percent's requirement 'whole > 0'
-   10 |     p := percent(5, Whole)!
+d17reqfalse.olang:14:10: error[D17e]: this call breaks percent's requirement 'whole > 0'
+   14 |     p := percent(5, Whole)!
       |          ^~~~~~~
-d17reqfalse.olang:5:34: note: the condition
-    5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 ? { return part * 100 / whole }
-      |                                  ^~~~~~~~~
+d17reqfalse.olang:6:8: note: the condition
+    6 |     if not whole > 0: error ArgumentError.Invalid("percent: whole > 0")
+      |        ^~~~~~~~~~~~~
+compilation failed with 1 error
+=== d17syntax.olang
+d17syntax.olang:3:23: error: expected '{', found '['
+    3 | fn pick(x I64, y I64) [y > x] I64 ? { return y - x }
+      |                       ^
 compilation failed with 1 error
 === d18canyborrowed.olang
 d18canyborrowed.olang:16:32: error[T32a, T22]: ViewGenerator<String>'s 'Next' cannot be called through an 'any Iterator<String&>&'
@@ -971,13 +966,6 @@ d18canyborrowed.olang:16:32: note: it says where its references live as Iterator
 $ROOT/std/prelude/iterator.olang:35:34: note: 'Next' is declared here
    35 | fn (g mut ViewGenerator<T ? E>&) Next() T& ? E, Exhausted { return try g.next() }
       |                                  ^~~~
-compilation failed with 1 error
-=== d18contract.olang
-d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next can fail with ArgumentError
-    3 | fn evens(n I64) [n >= 0] Iterator<I64> {
-      |                 ^~~~~~~~
-d18contract.olang:3:17: note: it fails where a condition is false
-d18contract.olang:3:17: help: add it to its result's errors, 'Iterator<T ? ArgumentError>'
 compilation failed with 1 error
 === d18cviewwrite.olang
 d18cviewwrite.olang:13:27: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
@@ -1706,6 +1694,18 @@ e26bnarrownotry.olang:5:12: error[E15]: this call can fail - write 'try', and ca
     5 |     m := n.Narrow<I32>()
       |            ^~~~~~
 compilation failed with 1 error
+=== e26cconvfit.olang
+e26cconvfit.olang:4:10: error[E26c]: 300 does not fit U8
+    4 |     b := U8(300)
+      |          ^~~~~~~
+e26cconvfit.olang:4:10: help: write a value that fits, or 'try x.Narrow<U8>()' to fail with an error
+compilation failed with 1 error
+=== e26cconvglobal.olang
+e26cconvglobal.olang:6:10: error[E26c]: Big does not fit I32
+    6 |     n := I32(Big)
+      |          ^~~~~~~~
+e26cconvglobal.olang:6:10: help: write a value that fits, or 'try x.Narrow<I32>()' to fail with an error
+compilation failed with 1 error
 === e27walkfails.olang
 e27walkfails.olang:9:36: error[E27]: this comprehension may fail by calls of its own
     9 |     s := try set.Set<I64>[parse(x) for x in Array<I64>[1, 2]]
@@ -2049,11 +2049,11 @@ e31bviewvalue.olang:15:18: note: the callee is no view of the element because of
 e31bviewvalue.olang:19:8: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === e31callerrs.olang
-e31callerrs.olang:10:16: error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing
-   10 |     assert run(g, 1) == 1
+e31callerrs.olang:13:16: error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing
+   13 |     assert run(g, 1) == 1
       |                ^
-e31callerrs.olang:10:16: note: the errors must be the same, in the same order
-e31callerrs.olang:10:16: help: write the function type 'fn&(I64) I64 ? ArgumentError', or pass a lambda handling them
+e31callerrs.olang:13:16: note: the errors must be the same, in the same order
+e31callerrs.olang:13:16: help: write the function type 'fn&(I64) I64 ? ArgumentError', or pass a lambda handling them
 compilation failed with 1 error
 === e31callerrs2.olang
 e31callerrs2.olang:9:17: error[T22, E31]: Gate's Call fails with nothing where the function type says E
@@ -4190,11 +4190,11 @@ r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.Empty, not thi
       |                          ^~~~
 compilation failed with 1 error
 === r1dcontract.olang
-r1dcontract.olang:3:23: error[R1d, D17]: pick has conditions and this function writes no '?'
-    3 | fn pick(x I64, y I64) [y > x] I64 { return y - x }
-      |                       ^~~~~~~
-r1dcontract.olang:3:23: note: a call fails with ArgumentError where a condition is false
-r1dcontract.olang:3:23: help: write '?' after its result, or '? ArgumentError'
+r1dcontract.olang:4:25: error[R1d]: this function raises ArgumentError but writes no '?'
+    4 |     if not y > x: error ArgumentError.Invalid("pick: y > x")
+      |                         ^~~~~~~~~~~~~
+r1dcontract.olang:4:25: note: a function that can fail says so
+r1dcontract.olang:4:25: help: write '?' after its result (its errors inferred), or '? ArgumentError'
 compilation failed with 1 error
 === r1draise.olang
 r1draise.olang:4:27: error[R1d]: this function raises Odd but writes no '?'
@@ -4880,6 +4880,11 @@ compilation failed with 1 error
 s16dmsgnottext.olang:5:31: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " + $x
     5 |     if Seed > 0 { unreachable Seed }
       |                               ^~~~
+compilation failed with 1 error
+=== s17afactcascade.olang
+s17afactcascade.olang:6:8: error[M5a]: nothing here is reached through 'os' - remove 'import "std/os"'
+    6 | import "std/os"
+      |        ^~~~~~~~
 compilation failed with 1 error
 === s17msgbreak.olang
 s17msgbreak.olang:11:44: error[S17]: 'break' may not leave an assert's message
@@ -7226,6 +7231,11 @@ traitnottype.olang:6:8: error[T30, T32]: S& is a trait, not a type
       |        ^
 traitnottype.olang:6:8: note: a trait is a constraint on a type variable
 traitnottype.olang:6:8: help: a value of any type meeting it is an 'any S&'
+compilation failed with 1 error
+=== traitunknowntype.olang
+traitunknowntype.olang:6:13: error: unknown type 'Tensor'
+    6 |     Value() Tensor<F32>
+      |             ^~~~~~~~~~~
 compilation failed with 1 error
 === typenoctor.olang
 typenoctor.olang:8:8: error: type 'Color' has no constructor - an enum's values are its cases

@@ -168,6 +168,7 @@ fn itemSigs(b mut StringBuilder&, it doc.Entry&) {
     kind := itemKind(line)
     b.Push($it.Name + "\t" + $kind + "\t" + $line + "\t" + $depMark(it) + "\n")
     pushFits(b, it.Name, it)
+    pushRequires(b, it.Name, it)
     for m in it.Members {
         ml := sigLine(m.Line)
         if ml.StartsWith("meets ") {
@@ -176,7 +177,26 @@ fn itemSigs(b mut StringBuilder&, it doc.Entry&) {
         }
         b.Push($it.Name + "." + $m.Name + "\t" + $memberKind(kind, ml, m.Builder) + "\t" + $ml + "\t" + $depMark(m) + "\n")
         pushFits(b, $it.Name + "." + $m.Name, m)
+        pushRequires(b, $it.Name + "." + $m.Name, m)
     }
+}
+
+# a function's or constructor's "# requires:" lines (D17) as a row of its own - its key the item's and " requires", its
+# line the requirements joined by "; ": what a caller must meet, inferred from the body, is the importer's to rely on
+fn pushRequires(b mut StringBuilder&, key String&, it doc.Entry&) {
+    rs := requiresOf(it.Line)
+    if rs.Len() == 0: return
+    b.Push($key + " requires\trequires\t" + $rs.Join("; ") + "\t\n")
+}
+
+# the requirements a doc entry's lines state, each as written
+fn requiresOf(text String&) Array<String&> {
+    out Vec<String&>
+    for line in text.Lines() {
+        t := line.TrimStart()
+        if t.StartsWith("# requires: "): out.Push($t[12:].Trim())
+    }
+    return out.ToArray()
 }
 
 # a function's "# fits:" line (B11b) as a row of its own - its key the function's and " fits", its line the type: how
@@ -232,7 +252,8 @@ fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
     for s in olds { was.Put(s.Key, s) }
     for n in news {
         o := try was.Get(n.Key) catch MapError {
-            if n.Kind != "fits": out.Push(change(addBreaks(n.Kind), $"added " + $n.Kind, "", n.Line))
+            if n.Kind == "requires": out.Push(change(true, "requirements gained (a call meeting none may now fail)", "", n.Line))
+            else if n.Kind != "fits": out.Push(change(addBreaks(n.Kind), $"added " + $n.Kind, "", n.Line))
             continue
         }
         if o.Line != n.Line { pushChange(out, o, n) }
@@ -241,7 +262,9 @@ fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
     now Map<String&, Bool>
     for n in news { now.Put(n.Key, true) }
     for o in olds {
-        if not now.Has(o.Key) and o.Kind != "fits": out.Push(change(true, $"removed " + $o.Kind, o.Line, ""))
+        if now.Has(o.Key) or o.Kind == "fits": continue
+        if o.Kind == "requires": out.Push(change(false, "requirements dropped", o.Line, ""))
+        else: out.Push(change(true, $"removed " + $o.Kind, o.Line, ""))
     }
     return out
 }
@@ -260,6 +283,10 @@ fn addBreaks(kind String&) Bool { return kind == "case" or kind == "word" or kin
 # a changed line's change, if it is one: a function's own fits row only by its words (T21c: an importer holds the
 # function as a type with the words it had)
 fn pushChange(out mut Vec<change>&, o sig, n sig) {
+    if n.Kind == "requires" {
+        out.Push(change.requires(o, n))
+        return
+    }
     if n.Kind != "fits" {
         out.Push(change.changed(o, n))
         return
@@ -283,6 +310,16 @@ fn change.fits(o sig, n sig) change {
     if lost.Len() > 0 { return change(true, "promise words lost by fn (a function type may rely on them)", o.Line, n.Line) }
     if gained.Len() > 0 { return change(false, "promise words gained by fn", o.Line, n.Line) }
     return change(false, "", "", "")
+}
+
+# a function's changed requirements (D17): one it did not have before breaks a caller that met the old ones; only
+# dropping some breaks nothing
+fn change.requires(o sig, n sig) change {
+    was := o.Line.Split("; ")
+    for r in n.Line.Split("; ") {
+        if not was.Has(r): return change(true, "requirements changed (a call meeting the old ones may now fail)", o.Line, n.Line)
+    }
+    return change(false, "requirements dropped", o.Line, n.Line)
 }
 
 fn relation(w String&) Bool { return w.StartsWith("keeps ") or w.StartsWith("borrows ") }
@@ -490,6 +527,19 @@ fn valueless(line String&) String {
 }
 
 if TestBuild {
+
+test compare "a requirement gained or changed breaks a caller, one dropped does not (D17)" {
+    olds Vec<sig>
+    news Vec<sig>
+    olds.Push(sig("f requires", "requires", "x > 0", false))
+    olds.Push(sig("g requires", "requires", "a > 0; b > 0", false))
+    olds.Push(sig("h requires", "requires", "n > 0", false))
+    news.Push(sig("f requires", "requires", "x > 1", false))
+    news.Push(sig("g requires", "requires", "a > 0", false))
+    news.Push(sig("k requires", "requires", "k > 0", false))
+    cs := compare(olds, news)
+    assert cs.Len() == 4 and cs[0].Breaks and not cs[1].Breaks and cs[2].Breaks and not cs[3].Breaks
+}
 
 test itemKind "an error raised by name is an error, not a global (bulk review 8)" {
     assert itemKind("error Raised(n I64)") == "error"

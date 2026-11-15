@@ -126,8 +126,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # tools/fnref_migrate.olang writes the "&"
     BareFuncs Vec<I32>
     # the tokens the formatter spaces as the grammar places them, by token index: each "(" grouping a function type in a
-    # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17), each "@" beginning an
-    # attribute (G39)
+    # list (L18c), each "@" beginning an attribute (G39)
     TypeGroups Vec<I64>
     variadicOk Bool = false            # an extern's parameters being read: "..." may end them (X21)
     noAttrs Bool = false               # reading a function type's parameters or a receiver: no attribute is written there
@@ -925,8 +924,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
             if p.sees(token.Tok.Lt) { tps = try p.typeParams() }      # G10d: "struct<T>(g Graph<T>&)" (QW)
             try p.want(token.Tok.LParen)
             params := try p.params(false)
-            k := try p.contractHere()
-            errs := p.withContract(try p.errorSet(), k)
+            errs := try p.errorSet()
             p.ctorBody = true
             body := try p.block()
             dsp := source.Span(0, 0)
@@ -1003,7 +1001,6 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                     member = mn
                     mn = p.names.Intern($p.names.Text(on) + "." + $p.names.Text(member))
                 }
-                # D17f: a trait's method may state the contract every call through an "any" is held to
                 s := try p.sig(false, false, true, true)
                 methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false, false
                                       Array<ast.Attr&>(0), owner, member))
@@ -1019,10 +1016,9 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
             if p.sees(token.Tok.LParen) {      # a constructor over a primitive (T29d)
                 cat := p.advance()
                 cp := try p.params(false)
-                ck := try p.contractHere()
-                ce := p.withContract(try p.errorSet(), ck)
+                ce := try p.errorSet()
                 cb := try p.block()
-                s := ast.Sig(cp, Array<ast.TypeRef&>(0), ce.HasErrors, ce.Errors, false, ce.Contract)
+                s := ast.Sig(cp, Array<ast.TypeRef&>(0), ce.HasErrors, ce.Errors)
                 return ast.TypeBody.Over(base, ast.Func(p.from(cat), null, source.NameId(0), s, cb))
             }
             return ast.TypeBody.Over(base, null)
@@ -1202,8 +1198,6 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTr
     p.noAttrs = wasNo
     variadic := p.sawVariadic
     p.sawVariadic = false
-    k ast.ContractBlock?& = null
-    if named { k = try p.contractHere() }        # D17: a declaration's contract, right after its parameters
     results Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0)
     noReturn := p.accept(token.Tok.Noreturn)      # D8e: where a result would stand
     if not noReturn and p.startsResult() {
@@ -1235,8 +1229,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTr
         w := words[0]
         p.report(w.Sp.Start, w.Sp.End, msgs.PromiseMisplaced(w.Word.Text()))
     }
-    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, k
-                   swaps, variadic, words)
+    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, swaps, variadic, words)
 }
 
 # T21c: the promises after a signature - read for as long as a token on its line begins one: a word, "borrows NAME",
@@ -1269,47 +1262,6 @@ fn promiseWord(k token.Tok) Bool {
         case token.Tok.Noextern, token.Tok.Pure, token.Tok.Keeps, token.Tok.Borrows, token.Tok.Noborrow: true
         case _: false
     }
-}
-
-# ---- contracts (D17) ----
-
-# the contract written here, if one is (D17): "[" items "]" right after a declaration's parameters, on the line of
-# their ")"; null for none
-fn (p mut Parser&) contractHere() ast.ContractBlock?& ? Fail {
-    if not p.sees(token.Tok.LBrack) { return null }
-    return try p.contract()
-}
-
-# s with a contract k, null for none
-fn (p mut Parser&) withContract(s ast.Sig&, k ast.ContractBlock?&) ast.Sig& {
-    if k == null { return s }
-    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, k, s.Commutes, s.Variadic, s.Promises)
-}
-
-fn (p mut Parser&) contract() ast.ContractBlock& ? Fail {
-    p.TypeGroups.Push(p.skipFrom(p.pos))
-    at := try p.want(token.Tok.LBrack)
-    wasItem, wasSkip := p.item, p.skip
-    p.item = false
-    p.skip = false
-    p.brackets++
-    defer {
-        p.item = wasItem
-        p.skip = wasSkip
-        p.brackets--
-    }
-    from := p.stmts.Len()
-    p.skipEnds()
-    for not p.sees(token.Tok.RBrack) {
-        iat := p.here()
-        x := try p.expr()
-        p.stmts.Push(ast.Stmt.Assert(p.from(iat), x, null))
-        if not try p.sep(token.Tok.RBrack) { break }
-    }
-    p.skipEnds()
-    items := gather(p.stmts, from)
-    try p.want(token.Tok.RBrack)
-    return ast.ContractBlock(p.from(at), items)
 }
 
 # whether a signature's result type follows its parameters

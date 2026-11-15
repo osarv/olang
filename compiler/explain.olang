@@ -131,7 +131,7 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
         inst := c.P.FnInstance(f, types.ListId(0))
         body := c.BodyOfInstance(inst)
         b.Push($fnLine(c, f, c.P.InstanceSig(inst), body) + "\n")
-        contract(b, c, c.P.FnDecl(f).S, c.P.FnModule(f), "    ")
+        requires(b, c, c.P.FnDecl(f), c.P.FnModule(f), "    ")
         obligations(b, c, sc, body, "    ")
         noValue(b, c, sc, f, body, "    ")
         effectLine(b, c, f, body, "    ")
@@ -139,7 +139,7 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
         return b.ToString()
     }
     b.Push($fnLine(c, f, c.P.Sig(f), -1) + "\n")
-    contract(b, c, c.P.FnDecl(f).S, c.P.FnModule(f), "    ")
+    requires(b, c, c.P.FnDecl(f), c.P.FnModule(f), "    ")
     for line in needs.Lines(c, f) { b.Push($"    # " + $line + "\n") }
     noValue(b, c, sc, f, -1, "    ")
     decl := c.P.FnDecl(f)
@@ -333,12 +333,17 @@ fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
     return c.P.T.Items(c.P.T.Args(recv)).Len()
 }
 
-# a contract's conditions (D17), each as written in its brackets
-fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, indent String&) {
-    if s.Commutes { b.Push($indent + "# commutes: the operator applies with its operands the other way round too (E31c)\n") }
-    if s.Contract == null { return }
+# a function's requirements (D17), inferred from the asserts and checks its body begins with, one a line:
+# "# requires: y > x"
+fn requires(b mut StringBuilder&, c mut typecheck.Checker&, f ast.Func&, mi I64, indent String&) {
+    if f.S.Commutes { b.Push($indent + "# commutes: the operator applies with its operands the other way round too (E31c)\n") }
+    reqLines(b, c, f.Body, f.S.Params, f.Recv, mi, indent)
+}
+
+fn reqLines(b mut StringBuilder&, c mut typecheck.Checker&, body Array<ast.Stmt&>&, params Array<ast.Param&>&
+            recv ast.Param?&, mi I64, indent String&) {
     src := c.P.L.Mods[mi].Src!.Text
-    for it in s.Contract!.Items { b.Push($indent + "[" + $src[I64(it.Span().Start):I64(it.Span().End)] + "]\n") }
+    for r in ast.Requirements(body, c.P.L.Names, src, params, recv) { b.Push($indent + "# requires: " + $ast.ReqText(r, src) + "\n") }
 }
 
 # its scope obligations, inferred from the body (O10b, QCB: none is written) - what every call is held to - one a line:
@@ -481,13 +486,14 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             # T29d: its constructor's parameter and errors
             overCtor(b, c, d, self)
             b.PushChar('\n')
+            ctorRequires(b, c, d)
         }
         case types.DeclKind.Struct {
             sig := declSig(c, named(c, c.P.CtorSig(self), null, ctorParams(c.P.TypeDecl(d)!)))
             close := firstClose(sig)
             ps := withDefaults(c, sig[3:close], ctorParams(c.P.TypeDecl(d)!), c.P.DeclModule(d), 0)
             b.Push($"type " + $name + $declWord(c, self) + $(" packed" if c.P.T.Packed(self) else "") + " struct(" + $ps + ")" + $errorsAfter(sig[close + 1:]) + "\n")
-            structContract(b, c, d)
+            ctorRequires(b, c, d)
             genLine(b, c, d)
             fields(b, c, self)
         }
@@ -510,12 +516,11 @@ fn overCtor(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, self
     }
 }
 
-# typeItem's struct's contract (D17), as written
-fn structContract(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
+# typeItem's constructor's requirements (D17), from its body
+fn ctorRequires(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
     match c.P.TypeDecl(d)!.Body {
-        case ast.TypeBody.Struct(sb) {
-            if sb.Errs != null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }
-        }
+        case ast.TypeBody.Struct(sb): reqLines(b, c, sb.Body, sb.Params, null, c.P.DeclModule(d), "    ")
+        case ast.TypeBody.Over(_, ctor) if ctor != null: reqLines(b, c, ctor.Body, ctor.S.Params, null, c.P.DeclModule(d), "    ")
         case _ { }
     }
 }

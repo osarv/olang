@@ -232,8 +232,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   an `Iterable` interface (T35b: `xs.Iter()`); labeled break; interface switch dispatch (dropped by the user, "it gains
   very little and causes a lot of problems"); Str purity (E11c); `done`, `fail`, `abort` (QU); `own` and `take`
   (`docs/memory.md` round 3); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (QP1-
-  QP4); `checked`, `CheckError` and the `Checked...` forms (`try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract
-  guarantees, named results and `fits`; `error IoError { ... }` declarations (`type IoError error { ... }`, T19);
+  QP4); `checked`, `CheckError` and the `Checked...` forms (`try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contracts
+  (the bracketed block after the parameters, its guarantees, named results and `fits`: D17 reads requirements off the
+  body); `error IoError { ... }` declarations (`type IoError error { ... }`, T19);
   `nomatch` and `=>` (QBQ/QBR); `Clone` (E31d: `Copy()`); text joined by adjacency (`"n = " $n`, E11b: `+`).
 
 ### Types
@@ -463,7 +464,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Traits are constraints; `any Trait&` is the run-time form (T30-T35, G19, the user's calls 2026-10-08 and
   2026-10-24).** `trait` declares method signatures, satisfied implicitly (Go-style); a bare trait written as a type
   is an error naming `any R&`. Defaults are methods on a constrained type variable, overridable (M19e).
-- **`any Trait&` (T32-T34, D17f, 2026-10-24, the user's design; layout confirmed 2026-11-01 "keep it that way").** Two
+- **`any Trait&` (T32-T34, 2026-10-24, the user's design; layout confirmed 2026-11-01 "keep it that way").** Two
   words, the instance and a static table per (type, trait). A struct or enum variable is borrowed, a temporary built
   where the any lands, a number/Bool/Char/array copied. Calls dispatch through the table; `mut` only through `mut
   any`; `==` is identity. A closed trait's any is matched by type cases `case Button b`; an open trait's never (the
@@ -636,7 +637,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Operators may fail (E31, E31a, the user's calls).** A plain operator method (all but `Len`, `Eq`, `Str`) may
   declare errors, making the operator fallible as written (`try a - b`, `try x[i]`).
 - **The prelude's errors of the language's own operations (R20, 2026-10-25):** `ArrayError.OutOfRange`,
-  `NumberError.Overflow`/`Invalid`, `CaseError.WrongCase`, `ArgumentError.Invalid` (a false contract condition, D17);
+  `NumberError.Overflow`/`Invalid`, `CaseError.WrongCase`, `ArgumentError.Invalid` (a function's check of a requirement, D17);
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
   may ever exit").** `ListError`/`VecError`, `MapError.Missing`, `TextError`, `ArrayError.NotFound`, `ChanError.CLOSED`,
@@ -1130,14 +1131,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   trait extends Shape, House { ... }` has its methods and every extended trait's. `type Float trait for F16, BF16, F32,
   F64 { }` is **closed**: met by the very types it lists and nothing else. `<T Shape House>` is an intersection. A
   `match T` over a closed trait's types needs no `case _`.
-- **Contracts (D17-D17g; the user's design 2026-10-24, revised by the user 2026-10-25).** One bracketed block after the
-  parameter list: `fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { }`, `type Percent struct(v I64) [v >= 0 and v <=
-  100] { v }`. A condition is any `Bool` expression over the parameters and what a body reads at its top level.
-  **Checked on entry in every build**: a false one fails the call with `ArgumentError.Invalid` carrying the function
-  and condition (the failed condition's text, the user 2026-11-07); `ArgumentError` is in the function's set. Decided
-  while compiling where the evaluator can. Scope relations are no condition (O10b). A trait method's contract is
-  checked before dispatch. D17g: a conversion the evaluator computes that does not fit (`U8(300)`) is a compile error
-  naming `x.Narrow<T>()`.
+- **Requirements, read off the body (D17, D17e; contracts removed, the user 2026-11-15: "Remove contracts yes").** A
+  function's, method's or constructor's requirements are the asserts and checks its body begins with - a check being
+  `if not C: error ArgumentError.Invalid("f: C")` (or `if C: ...`, requiring `not C`); no syntax of their own, the body
+  checks them as it checks any statement. explain, doc and hover show `# requires: C`; at a call whose arguments the
+  evaluator computes each is decided while compiling (D17e: a false one an error at the call, unless it is a check's and
+  a catch there takes ArgumentError); `olang api` reports a gained or changed requirement as breaking. A trait method
+  states none. `olang fix` (requires_migrate) turns each old contract item into such a check. **E26c**: a conversion
+  the evaluator computes that does not fit (`U8(300)`) is a compile error naming `x.Narrow<T>()`.
 - **`olang fix FILE|DIR...` (B17, B1, 2026-10-24, the user: "runs every idempotent migration tool in order; no version
   marker").** Runs the migration tools of `tools/` over the files in the order the changes were made; `-check` lists
   what would change, status 1 where any would, 2 on failure. Not every tool is idempotent (tools/README.md).

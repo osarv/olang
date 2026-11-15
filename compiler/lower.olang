@@ -206,13 +206,12 @@ OutOfBounds I64 = 0    # ArrayError.OutOfRange: an index or a slice outside its 
 Overflow I64 = 1       # NumberError.Overflow: a narrowing that changes the value (E26b)
 Invalid I64 = 2        # NumberError.Invalid: a NaN or an infinity narrowed to an integer
 WrongCase I64 = 3      # CaseError.WrongCase: an "as" naming a case the value is not (E32)
-Contract I64 = 4       # ArgumentError.Invalid: a call's requirement false on entry (D17)
-Empty I64 = 5          # ArrayError.Empty: a total that needs an element of an array that has none (E39)
+Empty I64 = 4          # ArrayError.Empty: a total that needs an element of an array that has none (E39)
 
 FailIds Array<String&> = Array<String&>["std/prelude/array", "std/prelude/number", "std/prelude/number", "std/prelude/enums"
-                                 "std/prelude/argument", "std/prelude/array"]
-FailTypes Array<String&> = Array<String&>["ArrayError", "NumberError", "NumberError", "CaseError", "ArgumentError", "ArrayError"]
-FailWords Array<String&> = Array<String&>["OutOfRange", "Overflow", "Invalid", "WrongCase", "Invalid", "Empty"]
+                                 "std/prelude/array"]
+FailTypes Array<String&> = Array<String&>["ArrayError", "NumberError", "NumberError", "CaseError", "ArrayError"]
+FailWords Array<String&> = Array<String&>["OutOfRange", "Overflow", "Invalid", "WrongCase", "Empty"]
 
 # a check's word: its error type and the code it fails with under that type alone
 fn (lw mut Lowerer&) failure(word I64) types.TypeId, I64 {
@@ -5868,13 +5867,6 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         ok := ln.prim(typed.PrimOp.Gt, types.BoolT, Array<mir.Operand>[n, ln.constI64(0)], sp)
         ln.check(ok, chk if chk != typed.Check.None else typed.Check.Try, mir.ExitKind.ArrayLength, Empty, sp)
         return mir.Operand.None
-    }
-    if op == typed.PrimOp.Holds {
-        # D17e: a contract's condition under checked - true, or CheckError.CONTRACT to the innermost try
-        v := ln.val(args[0])
-        if ln.dead { return mir.Operand.None }
-        ln.check(v, chk if chk != typed.Check.None else typed.Check.Try, mir.ExitKind.Assert, Contract, sp)
-        return v
     }
     # a fixed array a reference names, as a run-time-length array value: the pair naming that storage, not a copy of it
     # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a

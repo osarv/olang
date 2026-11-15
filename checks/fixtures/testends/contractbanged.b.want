@@ -1,2 +1,2 @@
-contractbanged.olang:5: ArgumentError.Invalid("pick: y > x")
+contractbanged.olang:8: ArgumentError.Invalid("pick: y > x")
 (build with -debug to see where it came from)

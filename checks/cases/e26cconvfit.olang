@@ -1,0 +1,6 @@
+# check: fail error[E26c]: 300 does not fit U8
+# E26c: a conversion to a number type requires its value fits - a constant that does not is an error at the conversion
+fn main() {
+    b := U8(300)
+    b++
+}

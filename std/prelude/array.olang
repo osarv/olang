@@ -681,7 +681,8 @@ fn Array<T>.Linspace(lo T, hi T, n I64) Array<T> {
 # the values from start up to but not including stop, step apart (numpy's arange) - "Array<F64>.Range(0.0, 1.0, 0.25)"
 # is 0, 0.25, 0.5, 0.75; a negative step counts down, and a range empty in the step's direction gives none. Value i is
 # start + i * step, so a float step's rounding never accumulates. A step of zero fails with ArgumentError
-fn Array<T>.Range(start T, stop T, step T) [step != T(0)] Array<T> ? ArgumentError {
+fn Array<T>.Range(start T, stop T, step T) Array<T> ? ArgumentError {
+    if not step != T(0): error ArgumentError.Invalid("Array.Range: step != T(0)")
     span := (F64(stop) - F64(start)) / F64(step)
     n I64 = I64(span.Ceil()) if span > 0.0 else 0
     return Array<T>[start + T(i) * step for i in range n]

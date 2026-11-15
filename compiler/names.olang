@@ -902,18 +902,9 @@ fn (r mut Resolver&) topConds(ti ast.TopIf&) {
 fn (r mut Resolver&) func(f ast.Func&) {
     m := r.mark()
     r.sig(f, true)
-    r.contract(f.S)
     r.pushSig(f.S)
     if f.Body.Len() > 0 { r.block(f.Body) }
     r.popSig()
-    r.popTo(m)
-}
-
-# a contract's names (D17), its parameters already declared: each condition's
-fn (r mut Resolver&) contract(s ast.Sig&) {
-    if s.Contract == null { return }
-    m := r.mark()
-    r.block(s.Contract!.Items)
     r.popTo(m)
 }
 
@@ -1040,7 +1031,6 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
                 if p.Dflt != null { r.expr(p.Dflt) }
                 r.param(p, true)
             }
-            if s.Errs != null { r.contract(s.Errs!) }
             if s.Body.Len() > 0 { r.block(s.Body) }
             r.popTo(m)
             r.popTo(m0)
@@ -1063,9 +1053,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             for e in members { r.typeRef(e) }
             for f in methods {
                 m := r.mark()
-                # D17f: a method's contract reads its parameters, declared for it
-                r.sig(f, f.S.Contract != null)
-                r.contract(f.S)
+                r.sig(f, false)
                 r.popTo(m)
             }
         }

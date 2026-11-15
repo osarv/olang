@@ -896,8 +896,6 @@ type Diag enum {
     FromPayload
     FromCaseName
     ContractFalse
-    ContractNeedsArgumentError
-    GenContractNeedsArgumentError
     ConversionDoesNotFit
     NoteContractCondition
     NotAnErrorType
@@ -935,7 +933,6 @@ type Diag enum {
     FlagWithOutParam
     RaiseNeedsQuestion
     TryNeedsQuestion
-    ContractNeedsQuestion
     RaiseWholeType
     RaisedWordOwnName
     CaughtMatchBlock
@@ -1225,7 +1222,6 @@ fn RaisedFieldsDiffer(name String&, first String&) r.Msg { return r.Msg(Diag.Rai
 fn RaiseNearError(tok String&, near String&) r.Msg { return r.Msg(Diag.RaiseNearError, "R3b", "no error of this module is named " + $tok + " - did you mean " + $near + "?", "", "to raise a new error of that name, name it after this function's '?'") }
 fn RaiseNeedsQuestion(ty String&) r.Msg { return r.Msg(Diag.RaiseNeedsQuestion, "R1d", "this function raises " + $ty + " but writes no '?'", "a function that can fail says so", "write '?' after its result (its errors inferred), or '? " + $ty + "'") }
 fn TryNeedsQuestion(ty String&) r.Msg { return r.Msg(Diag.TryNeedsQuestion, "R1d", $ty + " can escape here, and this function writes no '?'", "a function that can fail says so", "write '?' after its result (its errors inferred), or catch it") }
-fn ContractNeedsQuestion(name String&) r.Msg { return r.Msg(Diag.ContractNeedsQuestion, "R1d, D17", $name + " has conditions and this function writes no '?'", "a call fails with ArgumentError where a condition is false", "write '?' after its result, or '? ArgumentError'") }
 fn FlagAmongResults() r.Msg { return r.Msg(Diag.FlagAmongResults, "R23", "a Bool among several results is a flag beside a value", "", "what can fail says so with '? E' and raises an error instead (error NotFound)") }
 fn FlagWithOutParam(tok String&) r.Msg { return r.Msg(Diag.FlagWithOutParam, "R23a", "a function giving a Bool that writes through " + $tok + " gives a flag beside a value", "", "give the value as the result and fail with '? E' instead") }
 fn RaiseWholeType(tok String&) r.Msg { return r.Msg(Diag.RaiseWholeType, "R3", $tok + " is an error type of words - raise one of them, 'error " + $(tok[1:tok.Len() - 1]) + ".Word'") }
@@ -1994,12 +1990,10 @@ fn ModuleIdentityClash(text String&) r.Msg { return r.Msg(Diag.ModuleIdentityCla
 
 # ---- tests ----
 
-# ---- contracts (D17) ----
+# ---- requirements (D17) and conversions (E26c) ----
 
-fn ContractNeedsArgumentError(name String&) r.Msg { return r.Msg(Diag.ContractNeedsArgumentError, "D17", $name + " has conditions, so a call fails with ArgumentError where one is false", "", "add it after '?'") }
-fn GenContractNeedsArgumentError(name String&) r.Msg { return r.Msg(Diag.GenContractNeedsArgumentError, "D18, D17", $name + " has conditions, so its first Next can fail with ArgumentError", "it fails where a condition is false", "add it to its result's errors, 'Iterator<T ? ArgumentError>'") }
 fn ContractFalse(cond String&, name String&) r.Msg { return r.Msg(Diag.ContractFalse, "D17e", $"this call breaks " + $name + "'s requirement '" + $cond + "'") }
-fn ConversionDoesNotFit(value String&, ty String&) r.Msg { return r.Msg(Diag.ConversionDoesNotFit, "D17g", $value + " does not fit " + $ty, "", "write a value that fits, or 'try x.Narrow<" + $ty + ">()' to fail with an error") }
+fn ConversionDoesNotFit(value String&, ty String&) r.Msg { return r.Msg(Diag.ConversionDoesNotFit, "E26c", $value + " does not fit " + $ty, "", "write a value that fits, or 'try x.Narrow<" + $ty + ">()' to fail with an error") }
 fn NoteContractCondition() r.Msg { return r.Msg(Diag.NoteContractCondition, "", "the condition") }
 fn GenericNeeds(text String&, need String&, ty String&) r.Msg { return r.Msg(Diag.GenericNeeds, "G18", $text + " needs " + $need + ", and " + $ty + " has none", "", "declare it for " + $ty + ", or call " + $text + " with a type that has it") }
 fn NoteGenericNeeds(text String&, need String&) r.Msg { return r.Msg(Diag.NoteGenericNeeds, "", $text + " needs " + $need + " here") }

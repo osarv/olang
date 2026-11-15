@@ -1660,7 +1660,11 @@ explainedSrc String& = ("type MathError error { Zero }\n" +
                      "fn big<T>(a T, b T) T { return a if a > b else b }\n" +
                      "type Sh enum {\n    Whole N\n    Parts(a I64, b I64)\n    None\n}\n" +
                      "Answer I64 = 6 * 7\n" +
-                     "fn pct(part I64, whole I64) [whole > 0, part >= 0] I64 ? { return part * 100 / whole }\n" +
+                     "fn pct(part I64, whole I64) I64 ? {\n" +
+                     "    if not whole > 0: error ArgumentError.Invalid(\"pct: whole > 0\")\n" +
+                     "    assert part >= 0\n" +
+                     "    return part * 100 / whole\n" +
+                     "}\n" +
                      "fn link(a mut N&, b N&) { a.next = b }\n" +
                      "fn main() ? {\n" +
                      "    nn := N(pct(1, 4)!, null)\n" +
@@ -1720,11 +1724,12 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("MathError") == "type MathError error\n    Zero\n"
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
-    # D17: a contract's conditions as written; a scope relation the body asks among the obligations, inferred (O10b)
-    # T19b: a false condition's ArgumentError carries its text, a copy made where it is raised - so it allocates
-    assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n" + $
-            "    [part >= 0]\n" + $
-            "    # fits: fn&(part I64, whole I64) I64 ? ArgumentError returns noblock nospawn norecurse noextern pure\n" + $
+    # D17: its requirements, the check and the assert its body begins with; a scope relation the body asks among the
+    # obligations, inferred (O10b). T19b: the check's ArgumentError carries its text, a copy made where it is raised -
+    # so it allocates
+    assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError.Invalid   # its error set inferred\n" + $
+            "    # requires: whole > 0\n    # requires: part >= 0\n" + $
+            "    # fits: fn&(part I64, whole I64) I64 ? ArgumentError.Invalid noblock nospawn norecurse noextern pure\n" + $
             "    # effects: allocates; never blocks; always ends; may be computed while compiling\n")
     assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" + $
             "    # fits: fn&(a mut N&, b N&) returns noalloc noblock nospawn norecurse noextern pure keeps b in a   # held in locals and results only (T22a)\n" + $
