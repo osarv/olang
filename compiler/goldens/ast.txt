@@ -2272,7 +2272,7 @@ d2008dc90df9ae88 3e0c9f56ce584c8d compiler/diag.olang
 ef46370b593dedc1 4e0e2538eb97469d compiler/doc.olang
 baccd788536f02a4 647245ec1a0b8045 compiler/effects.olang
 3832d3bbdd4cb55a 40c4473cfb10f27b compiler/emit.olang
-06ea4360aa73963d e89a995b3d9da8cb compiler/eval.olang
+d4625c8b7f36369c 2f926f400636a4f7 compiler/eval.olang
 db847a41ea4c0921 08023442c89e9a81 compiler/explain.olang
 b22bae84a7b13033 2489eda0d46e1d20 compiler/facts.olang
 f7a5602488f6fd96 3b2ad92f72881ec7 compiler/fetch.olang

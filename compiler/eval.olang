@@ -1546,9 +1546,12 @@ fn (m mut Machine&) stepClose() {
 # O8d: the reference at p, of type ty, let go of: the region its object was built in closed - none for null or constant
 # data - and p left null. A read through the reference afterwards finds its allocation freed and stops (K1): the
 # evaluator's own check of an early free
-# A part release (O8f) closes only a part region: an array built anywhere else stays where it was built
+# A part release (O8f) closes only a part region, and none for an empty array: an array built anywhere else stays where
+# it was built
 fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId, part Bool = false) {
+    empty := part and m.rd(p, 8) == 0
     region := m.regionOfObject(m.objectAt(p, ty)) if m.T.IsRef(ty) or m.T.OwnedPart(ty) else m.anchorRegion(p, ty)
+    if empty: region = 0
     if m.halted { return }
     m.zero(p, m.size(ty))
     if region == 0 { return }
