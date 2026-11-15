@@ -820,8 +820,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   program (an owner holding a Vec whole, a copy: no reason to keep), with no cost per operation or per copy (the
   400-byte-per-copy design, asked of the user, was not needed); an element owning storage only as such arrays of plain
   values (`Array<Vec<I64>>`) frees them where it is given another. Gaps left (docs/freeing.md section 2): an element
-  owning more (`Array<Vec<String>>`'s text), a `Map` value copied and changed (18), a returned value local built where the
-  result lands (19).
+  owning more (`Array<Vec<String>>`'s text), a returned value local built where the result lands (19). A local lowering
+  surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

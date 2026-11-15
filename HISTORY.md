@@ -37982,3 +37982,12 @@ or starts with `try`/`not`), a one-line body opened onto lines of its own; 37 co
 checks. The one trait method's (tests/any.olang) was dropped and its test rewritten. Checks cases: d17needsargerror and
 d18contract went with D17b (their errors are plain R3 now), r1dcontract names R1d's own message, d17syntax (the removed
 form) and d17assertcaught (an assert's requirement no catch takes) are new.
+
+## 2026-11-15: O8f gap 18 - a copied view local owns its parts
+
+`u := m.Get(k); u.Push(x)` kept every value a `Put` beside it replaced (230 MB over 200,000 turns): `Get` hands back a
+view of the entry's value, so `u`'s origins named the entry's place, and `u.Push` read as that value changed in place.
+But lowering copies a view call's value into a local unless it can make the local a view local (`lower.viewCand`), which
+a local written, assigned, stored, or lent writably to a body changing its parts never is. Early freeing now asks the
+same: such a local's origins are the copy's (`unowned`), the lowering's `Preserves` given to it by the driver for the
+lends. 24.5 MB to 1.9 MB at 20,000 turns (checks' freeing mapcopy).

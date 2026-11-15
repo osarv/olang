@@ -1,0 +1,23 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 18): a Map's value copied out and changed beside Put replacing values frees each replaced
+# value - the copy is lowering's (D9h), no view of the entry (230 MB at 200,000 turns before)
+N I64 = 20000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 100 { w.Push(i + j) }
+    return w
+}
+
+fn main() {
+    m Map<I64, Vec<I64>>
+    t := 0
+    for i in range N {
+        m.Put(i % 7, mk(i))
+        u := m.Get(i % 7)!
+        for j in range 50 { u.Push(j) }
+        t += u[149] + u.Len() + m.Get(i % 7)!.Len()
+    }
+    io.PutLine($t + " " + $m.Len())!
+}
