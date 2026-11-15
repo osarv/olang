@@ -37792,3 +37792,7 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
 - **A stray trace line (scope.olang).** `takeDisk` pushed `plan unread: ...` into the scope pass's trace log whenever a
   kept plan could not be read back, so a build printed it to the standard error; its twin `sum unread:` went with the
   earlyfree merge. Removed: the reason is still counted in `whyN` (`OLANG_SCOPESTATS`).
+- **`olang fix` renamed a type's own Clone (B17, E31d).** clone_migrate rewrote every `.Clone()` in code to `.Copy()`,
+  so oann's Tensor and Matrix, which declare a deep-copying `Clone()`, had their calls turned into the supplied Copy,
+  shared at references. A text tool cannot tell a call's receiver, so a file declaring a Clone of its own, or importing a
+  module of the files given that does, is now left as it is and its `.Clone()` lines listed for a person (status 1).
