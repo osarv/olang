@@ -367,6 +367,9 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     instSome Map<I64, Bool>
     callAt Map<I64, I64>                 # by call site: its index among the body's calls
     retInst Bool = false                 # whether the body walked gives an instance with fixed function fields
+    taskCall Bool = false                # whether the call walked next is a task's (spawn): its arguments read beside it
+    refsKept typed.RefsKept              # what bodies keep of what a parameter names (onStack)
+    slotted Map<I64, Bool>               # by reference local of the body walked: whether it has a slot of its own
 }
 
 type pair struct(A I64, B I64) {
@@ -1297,6 +1300,7 @@ fn (e mut Effects&) walkBody(b I64) {
     if e.instDefs.Len() > 0: e.instDefs.Clear()
     if e.instSome.Len() > 0: e.instSome.Clear()
     if e.callAt.Len() > 0: e.callAt.Clear()
+    if e.slotted.Len() > 0: e.slotted.Clear()
     e.paramAt = Map<I64, I64>()
     e.derived = Map<I64, I64>()
     for i in range body.Params.Len() { e.paramAt.Put(I64(body.Params[i]), i) }
@@ -1578,7 +1582,8 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         case typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.expr(x) }
         case typed.Stmt.Assign(_, t, v) {
             e.place(t, true)
-            e.expr(v)
+            # (a reference local's own stack slot, lowering's slotted: its value's making counted, no storage)
+            if t == typed.Lvalue.Local and v == typed.Expr.Promote and e.ownSlot(I64(t.id)) { e.expr(v.pr.X) } else { e.expr(v) }
             # (a reference's slots read off its declaration's value alone, as before; every value where Pure is asked)
             if t == typed.Lvalue.Local and (e.WantPure or e.isFn(t.ty) or e.instType(t.ty)): e.define(I64(t.id), v)
         }
@@ -1629,7 +1634,9 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
                 e.place(t, true)
                 if t == typed.Lvalue.Local: e.spawnedInto(I64(t.id))
             }
+            e.taskCall = true
             e.expr(s.Task)
+            e.taskCall = false
             for cl in s.Clauses { e.expr(cl.Handler) }
         }
     }
@@ -1837,7 +1844,42 @@ fn (e mut Effects&) call(cl typed.Call&) {
         }
         case typed.Callee.Helper(_, _) { }
     }
-    for a in cl.Args { e.expr(a) }
+    task := e.taskCall
+    e.taskCall = false
+    for i in range cl.Args.Len() {
+        a := cl.Args[i]
+        # (a temporary lowering gives a stack slot of the frame, stackArg: its value's making counted, no storage)
+        if not task and a == typed.Expr.Promote and e.onStack(cl, i) { e.expr(a.pr.X) } else { e.expr(a) }
+    }
+}
+
+# whether reference local l of the body walked takes what is given storage for it in a stack slot of its own
+# (typed.RefsKept.OwnSlot, lowering's slotted)
+fn (e mut Effects&) ownSlot(l I64) Bool {
+    if e.slotted.Has(l): return try e.slotted.Get(l) catch default false
+    b := e.Bodies[e.curBody]
+    ok := e.refsKept.OwnSlot(e.P.T, e.Bodies, b, typed.LocalUses.Uses(e.P.T, b), l)
+    e.slotted.Put(l, ok)
+    return ok
+}
+
+# whether argument i of a call is a temporary lowering lends from a stack slot of the frame (stackArg): a struct's or
+# an enum's value with no destructor and no storage of its own, given a read-only reference parameter of a body's call
+# that keeps nothing of it and hands back nothing holding a reference - no storage asked of the runtime (G42)
+fn (e mut Effects&) onStack(cl typed.Call&, i I64) Bool {
+    a := cl.Args[i]
+    if a != typed.Expr.Promote: return false
+    id := typed.CalleeBody(cl)
+    if id < 0: return false
+    fty := e.Bodies[id].Ty
+    ps := e.P.T.Items(e.P.T.Params(fty))
+    if i >= ps.Len() or not e.P.T.IsRef(ps[i]) or (e.P.T.PermOf(ps[i]) & types.Writable) != 0: return false
+    if e.P.T.HoldsRefs(e.P.T.Result(fty)): return false
+    o := e.P.T.Referent(a.ty) if e.P.T.IsRef(a.ty) else types.UnknownT
+    if o == types.UnknownT or e.P.T.KindOf(e.P.T.Repr(o)) != types.Kind.Named or e.P.T.NeedsDrop(o): return false
+    # (storage of its own - a part an early-freeing region may hold, O8d - is left counted)
+    if e.P.T.OwnedPart(o) or e.P.T.OwnsParts(o): return false
+    return e.refsKept.None(e.P.T, e.Bodies, id, i)
 }
 
 # the destructor of type t, where it has one, as a body this one may call (C9, O16)

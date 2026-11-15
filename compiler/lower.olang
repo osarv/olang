@@ -107,7 +107,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # ... per body: whether it keeps its parameter's referent's parts as they are (preserves: body * 64 + k), its reference
     # result storage made for it (freshResult: -1 - body), nothing of what its parameter names (freshParam: below -2^40)
     preserved Map<I64, Bool>
-    keptRefs Map<I64, Bool>     # keepsNoRef's answers, by body * 64 + parameter
+    refsKept typed.RefsKept     # keepsNoRef's answers (typed.RefsKept)
     keptLends Map<I64, Bool>    # keepsNoLend's
     CopyLog Vec<String&>         # each of those two, by place, for -memory
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
@@ -559,6 +559,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     qSelf I64 = -1             # ... and windowQuiet's view call: its own try's clauses run only where it gave no view
     qWrites Map<I64, Bool>     # ... and writesCover's answers for it, by type (false while a type is being walked)
     noLetCopy Map<I64, Bool>
+    ownSlots Map<I64, mir.LocalId>   # by reference local: its own slot (ownSlot), NoLocal where it has none
     vlSites Map<I64, Bool>
     vlIn typed.BlockId = typed.BlockId(0)   # ... the block of the local being asked about (viewLocals)
     stmts Vec<typed.Stmt&>       # ... the statements being lowered, innermost last, and whether each writes nothing
@@ -1506,7 +1507,8 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
         case typed.Stmt.Assign(sp, target, value) {
             p := ln.place(target)
             ln.targets.Push(p)
-            v := ln.fit(ln.val(value), value, target.Type(), sp)
+            v := ln.slotted(target, value, sp)
+            if v == mir.Operand.None { v = ln.fit(ln.val(value), value, target.Type(), sp) }
             try ln.targets.Pop() catch { }
             if p.Pk >= 0 {
                 if not ln.dead { ln.packedWrite(p, v, sp) }
@@ -4194,6 +4196,31 @@ fn (ln mut lowering&) handedOver(a typed.Expr&, gone mut Vec<typed.Stmt&>&) type
     }
 }
 
+# a value given storage for a reference local it is assigned to (`u = u.Inner()`) put in the local's own stack slot of
+# the frame, over the value the slot held, rather than in an arena a loop would grow every turn - where the local is
+# the slot's one name (typed.RefsKept.OwnSlot, which G42 counts by too); None where it is no such promote
+fn (ln mut lowering&) slotted(target typed.Lvalue&, value typed.Expr&, sp source.Span) mir.Operand {
+    if not ln.planned or target != typed.Lvalue.Local or value != typed.Expr.Promote: return mir.Operand.None
+    pr := value.pr
+    if pr.Site < typed.SiteId(0) or I64(pr.Site) >= ln.plan.Built.Len() or ln.plan.Built[I64(pr.Site)] == typed.Scope.Region: return mir.Operand.None
+    h := ln.ownSlot(I64(target.id))
+    if h == mir.NoLocal: return mir.Operand.None
+    v := ln.val(pr.X)
+    if ln.dead { return mir.Operand.None }
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Use(v)))
+    return ln.into(target.Type(), mir.Rvalue.Ref(mir.Lvalue.L(h), target.Type()), sp)
+}
+
+# reference local l's own slot, made once - NoLocal where it may have none
+fn (ln mut lowering&) ownSlot(l I64) mir.LocalId {
+    if ln.ownSlots.Has(l): return try ln.ownSlots.Get(l) catch default mir.NoLocal
+    h := mir.NoLocal
+    u := typed.LocalUses.Uses(ln.T, ln.B)
+    if ln.L.refsKept.OwnSlot(ln.T, ln.L.Bodies, ln.B, u, l) { h = ln.temp(ln.T.Referent(ln.B.Locals[l].Ty), ln.B.Locals[l].Sp) }
+    ln.ownSlots.Put(l, h)
+    return h
+}
+
 # a value given storage for a read-only reference parameter of a call that keeps nothing of it and hands back nothing
 # holding a reference (`inside(v[k], x, y)`): the storage a stack slot of this frame, needed only while the call runs,
 # rather than an arena's, which a loop turn would allocate and close every turn. A struct's or an enum's value, with no
@@ -5353,40 +5380,7 @@ fn (ln mut lowering&) escapes(u typed.LocalUses&, i I64) Bool {
 # whether a body keeps nothing of the read-only reference its parameter k is given: the parameter stored nowhere,
 # captured by nothing, handed back by no return, named by no other local, and given on only to bodies keeping nothing
 # of it. Asked once a body and parameter (a body reaching itself keeps what it is given, as proved by nothing)
-fn (lw mut Lowerer&) keepsNoRef(body I64, k I64) Bool {
-    if body < 0 or body >= lw.Bodies.Len() or k >= 64: return false
-    key := body * 64 + k
-    known := try lw.keptRefs.Get(key) catch {
-        lw.keptRefs.Put(key, false)
-        ok := lw.noRefKept(lw.Bodies[body], k)
-        lw.keptRefs.Put(key, ok)
-        return ok
-    }
-    return known
-}
-
-fn (lw mut Lowerer&) noRefKept(b typed.Body&, k I64) Bool {
-    if b.Root == null or k >= b.Params.Len(): return false
-    u := typed.LocalUses.Uses(lw.P.T, b)
-    p := I64(b.Params[k])
-    # (handed back in a value result - a view the D9h handover gives where the parameter is read, which its caller copies
-    # where it keeps it - is no keeping; in a reference result it is)
-    if u.EscHard[p] or u.WrOther[p] or u.Whole[p]: return false
-    if u.Ret[p] and lw.T().IsRef(lw.T().Result(b.Ty)): return false
-    for j in range u.AliasOf.Len() {
-        if u.AliasOf[j] == p: return false
-    }
-    for j in range u.LendAt.Len() {
-        if u.LendAt[j] == p: return false
-    }
-    for j in range u.StoreAt.Len() {
-        if u.StoreAt[j] == p: return false
-    }
-    for j in range u.RefAt.Len() {
-        if u.RefAt[j] == p and not lw.keepsNoRef(u.RefBody[j], u.RefParam[j]): return false
-    }
-    return true
-}
+fn (lw mut Lowerer&) keepsNoRef(body I64, k I64) Bool { return lw.refsKept.None(lw.P.T, lw.Bodies, body, k) }
 
 # whether a body keeps no name of what its parameter k, a writable reference, names past the call: the parameter stored
 # nowhere as a reference, captured by nothing, handed back in no reference result, named by no other local, and lent or
@@ -5411,7 +5405,7 @@ fn (lw mut Lowerer&) noLendKept(b typed.Body&, k I64) Bool {
 
 # whether a name of local root's storage - root, or a local naming it, and so on - may outlive body b: stored as a
 # reference, captured, handed to a task or yielded, handed back in a reference result, or given to a body that may keep
-# it. A reference read out of a part of it names what that part refers to, not its storage (refReadOut)
+# it. A reference read out of a part of it names what that part refers to, not its storage (typed.RefReadOut)
 fn (lw mut Lowerer&) namesKept(b typed.Body&, u typed.LocalUses&, root I64) Bool {
     seen := Vec<I64>[root]
     for at := 0, at < seen.Len(), at++ {
@@ -5424,33 +5418,10 @@ fn (lw mut Lowerer&) namesKept(b typed.Body&, u typed.LocalUses&, root I64) Bool
             if u.LendAt[j] == x and not lw.keepsNoLend(u.LendBody[j], u.LendParam[j]): return true
         }
         for j in range u.AliasOf.Len() {
-            if u.AliasOf[j] == x and not refReadOut(lw.T(), u.Init[j]) and j not in seen: seen.Push(j)
+            if u.AliasOf[j] == x and not typed.RefReadOut(lw.T(), u.Init[j]) and j not in seen: seen.Push(j)
         }
     }
     return false
-}
-
-# whether a local's value x is a reference read out of a part of what another names (`old := v.data`): it names what
-# that part refers to, never the storage it was read from
-fn refReadOut(t types.Table&, x typed.Expr?&) Bool {
-    if x == null: return false
-    return match x {
-        case typed.Expr.Read(_, ty, p, _): t.IsRef(ty) and p != typed.Lvalue.Local
-        case typed.Expr.Borrow(_, _, p): refPart(t, p)
-        case typed.Expr.Away(_, _, y): refReadOut(t, y)
-        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and refReadOut(t, args[0])
-        case _: false
-    }
-}
-
-# whether place p is a field holding a reference (a borrow of it names what it refers to)
-fn refPart(t types.Table&, p typed.Lvalue&) Bool {
-    if p != typed.Lvalue.Field: return false
-    r := t.Repr(p.base.Type())
-    k := t.KindOf(r)
-    if k != types.Kind.Named and k != types.Kind.Record and k != types.Kind.Tuple: return false
-    ps := t.Items(t.Fields(r) if k == types.Kind.Named else t.Parts(r))
-    return p.index >= 0 and p.index < ps.Len() and t.IsRef(ps[p.index])
 }
 
 # whether block a is block b or one around it - a local declared in a lives as long as one declared in b
