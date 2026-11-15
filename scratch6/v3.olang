@@ -1,0 +1,16 @@
+import "std/io"
+
+N I64 = 20000
+
+fn main() {
+    rows := Array<Vec<String>>(10)
+    v Vec<Vec<String>>
+    for _ in range 10: v.Push(Vec<String>())
+    t := 0
+    for i in range N {
+        rows[i % 10] = Vec<String>[$i, $i + " a", $i + " some longer text here", "constant"]
+        v[i % 10] = Vec<String>[$i + " b", "constant", $i]
+        t += rows[i % 10][2].Len() + v[i % 10][0].Len()
+    }
+    io.PutLine($t + " " + $rows[3][0] + " " + $v[3][2])!
+}

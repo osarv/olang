@@ -1,0 +1,3 @@
+#!/bin/bash
+export OLANG_STD=/home/user/wt/freeing6/std
+exec /home/user/wt/freeing6/build/stage2 "$@"

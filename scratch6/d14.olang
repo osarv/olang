@@ -1,0 +1,24 @@
+import "std/io"
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 5 { w.Push(i + j) }
+    return w
+}
+
+fn junk(i I64) I64 {
+    a := Array<I64>(4000)
+    for j in range 4000 { a[j] = i * 7919 + j * 104729 }
+    return a[i % 4000]
+}
+
+fn main() {
+    t := 0
+    for k in range 200 {
+        t += junk(k)
+        rows := Array<Vec<I64>>(10)
+        for i in range 10: rows[i] = mk(i + k)
+        t += rows[3][2]
+    }
+    io.PutLine($t)!
+}

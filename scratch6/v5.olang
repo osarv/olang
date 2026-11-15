@@ -1,0 +1,23 @@
+import "std/io"
+
+N I64 = 2000
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 5 { w.Push($i + "-" + $j + " padded text") }
+    return w
+}
+
+fn first(v Vec<String>&) String& { return v.Ref(0) }
+
+fn main() {
+    rows := Array<Vec<String>>(10)
+    for i in range 10: rows[i] = mk(i)
+    t := 0
+    for i in range N {
+        s := first(rows[i % 10])
+        rows[i % 10] = mk(i)
+        t += s.Len()
+    }
+    io.PutLine($t + " " + $rows[3][0])!
+}

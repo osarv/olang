@@ -1,0 +1,28 @@
+import "std/io"
+
+N I64 = 2000
+
+fn inner(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 6 { w.Push(i + j) }
+    return w
+}
+
+fn outer(i I64) Vec<Vec<I64>> {
+    o Vec<Vec<I64>>
+    for j in range 4 { o.Push(inner(i + j)) }
+    return o
+}
+
+fn main() {
+    h Vec<Vec<Vec<I64>>>
+    for _ in range 3: h.Push(Vec<Vec<I64>>())
+    t := 0
+    for i in range N {
+        h[i % 3] = outer(i)
+        h.RefMut(i % 3)[1] = inner(i * 2)
+        h.RefMut(i % 3)[2] = inner(i * 3)
+        t += h[i % 3][0][5] + h[i % 3][1][0] + h[i % 3][3][2]
+    }
+    io.PutLine($t)!
+}

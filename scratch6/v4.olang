@@ -1,0 +1,35 @@
+import "std/io"
+
+N I64 = 20000
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 12 { w.Push($i + "-" + $j + " padded text") }
+    return w
+}
+
+type Rec struct(n I64, names Vec<String>, ids Vec<I64>) {
+    n
+    names
+    ids
+}
+
+fn main() {
+    rows := Array<Vec<String>>(10)
+    recs := Array<Rec>(4, Rec(0, Vec<String>(), Vec<I64>()))
+    t := 0
+    keep := ""
+    for i in range N {
+        w := mk(i)
+        w.Pop()!
+        w.RemoveAt(0)!
+        rows[i % 10] = w
+        rows[(i + 1) % 10].Push("more " + $i)
+        c := rows[(i + 3) % 10]
+        recs[i % 4] = Rec(i, mk(i + 7), Vec<I64>[i, i + 1])
+        rows[(i + 3) % 10] = mk(i + 2)
+        if c.Len() > 0 { keep = c[0] }
+        t += rows[i % 10][3].Len() + recs[i % 4].names[1].Len() + recs[i % 4].ids[1]
+    }
+    io.PutLine($t + " " + $keep + " " + $rows[3].Len() + " " + $recs[1].names[2])!
+}

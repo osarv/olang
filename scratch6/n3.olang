@@ -1,0 +1,27 @@
+import "std/io"
+
+N I64 = 20000
+
+fn inner(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 30 { w.Push(i + j) }
+    return w
+}
+
+fn outer(i I64) Vec<Vec<I64>> {
+    o Vec<Vec<I64>>
+    for j in range 5 { o.Push(inner(i + j)) }
+    return o
+}
+
+fn main() {
+    rows := Array<Vec<Vec<I64>>>(10)
+    v Vec<Vec<Vec<I64>>>
+    for _ in range 10: v.Push(Vec<Vec<I64>>())
+    t := 0
+    for i in range N {
+        rows[i % 10] = outer(i)
+        t += rows[i % 10][4][29]
+    }
+    io.PutLine($t)!
+}

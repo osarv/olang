@@ -1,0 +1,25 @@
+import "std/io"
+
+fn junk(i I64) I64 {
+    w Vec<String>
+    for j in range 300 { w.Push($i + "-" + $j + " xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") }
+    return w.Len()
+}
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 9 { w.Push($i + "-" + $j) }
+    return w
+}
+
+fn main() {
+    t := 0
+    for i in range 2000 {
+        t += junk(i)
+        a := mk(i)
+        c := a
+        c.Push("x")
+        t += c.Len() + a[3].Len()
+    }
+    io.PutLine($t)!
+}

@@ -1,0 +1,18 @@
+import "std/io"
+
+N I64 = 20000
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 20 { w.Push($i + "-" + $j + " padded text") }
+    return w
+}
+
+fn main() {
+    v Vec<Vec<String>>
+    for _ in range 10: v.Push(Vec<String>())
+    for i in range N {
+        v[i % 10] = mk(i)
+    }
+    io.PutLine($v[3].Len())!
+}

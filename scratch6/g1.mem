@@ -1,0 +1,5 @@
+g1.olang:16:9: memory: 'v[i % 10] = mk(i)' lets go of what the element held - kept until its scope closes: a let-go early freeing does not follow (O8f)
+memory: 1 let-go early freeing does not follow (above, O8f)
+memory: 1 place lets go of storage in code that runs again - 1 frees it at once, 0 keep it
+5 returns hand back a view, 4 calls read one where it stands, 15 calls copy one, 0 by-value arguments are read where they are, 10 copies are moves at a last use
+built ./build/g1

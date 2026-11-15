@@ -1,0 +1,11 @@
+import "std/io"
+
+fn main() {
+    o Vec<Vec<I64>>
+    for i in range 100 {
+        w Vec<I64>
+        for k in range 4 { w.Push(i + k) }
+        o.Push(w)
+    }
+    io.PutLine($o.Len())!
+}

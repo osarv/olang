@@ -1,0 +1,30 @@
+import "std/io"
+
+N I64 = 2000
+
+type Rec struct(a Vec<I64>, b Vec<I64>) {
+    a
+    b
+}
+
+fn Rec.Mk(i I64) Rec {
+    a Vec<I64>
+    b Vec<I64>
+    for j in range 30 {
+        a.Push(i + j)
+        b.Push(i * j)
+    }
+    return Rec(a, b)
+}
+
+fn main() {
+    v Vec<Rec>
+    for i in range 10: v.Push(Rec.Mk(i))
+    t := 0
+    for i in range N {
+        r := Rec.Mk(i)
+        v[i % 10] = r
+        t += v[i % 10].a[3] + v[i % 10].b[29] + r.a[0]
+    }
+    io.PutLine($t)!
+}

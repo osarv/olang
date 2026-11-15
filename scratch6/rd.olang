@@ -1,0 +1,15 @@
+import "std/io"
+
+N I64 = 20000
+
+fn main() {
+    v Vec<Vec<Vec<I64>>>
+    for _ in range 10 {
+        o Vec<Vec<I64>>
+        for j in range 5 { o.Push(Vec<I64>[j, j + 1, j + 2]) }
+        v.Push(o)
+    }
+    t := 0
+    for i in range N { t += v[i % 10][2][0] }
+    io.PutLine($t)!
+}

@@ -1,0 +1,11 @@
+import "std/io"
+
+fn main() {
+    o Vec<String>
+    for i in range 100 {
+        s := "x" + $i
+        o.Push(s)
+        o[i % 3] = "y" + $i
+    }
+    io.PutLine($o.Len())!
+}

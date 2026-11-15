@@ -1,0 +1,32 @@
+import "std/io"
+
+type Sh struct(rank I64) {
+    rank
+}
+
+fn Sh.Make(n I64) Sh { return Sh(n) }
+
+type Box struct(s Sh&) {
+    s
+}
+
+fn keptInValue(n I64) I64 {
+    s := Sh.Make(n)
+    b := Box(s)
+    return b.s.rank
+}
+
+fn keptLocal(n I64, k Sh&) Sh& {
+    s := Sh.Make(n)
+    return s
+}
+
+fn main() {
+    k := Sh(1)
+    io.PutLine($keptInValue(3) + " " + $keptLocal(4, k).rank + " " + $Box.Of(5).s.rank)!
+}
+
+fn Box.Of(n I64) Box {
+    s := Sh.Make(n)
+    return Box(s)
+}
