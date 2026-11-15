@@ -129,9 +129,9 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	lspwarn	sonnet	low	merged, master						olang LSP: unused names as warnings
 2026-11-15	oannmig	sonnet	low	done, oann master (234 ok; fix renamed Clone wrongly - reverted)						oann to olang master (== null via olang fix)
 2026-11-15	fieldnarrow	opus	high	done, wt-fieldnarrow (merge after strplus; recapture goldens)						olang: field-path narrowing
-2026-11-15	racetests	sonnet	high	running						olang test: spawning tests under -race
+2026-11-15	racetests	sonnet	high	done, wt-racetests 7ec7192d (merge after strplus)						olang test: spawning tests under -race
 2026-11-15	parse	sonnet	low	merged into wt-merge						prelude: F*.Parse, Bool.Parse
 2026-11-15	aistudy	sonnet	low	done, wt-aistudy (docs/aistudy.md; 30/50 programs failed at run time)						50 AI-written programs study
 2026-11-15	oannsparse	sonnet	high	running						oann A4 sparse+conv
-2026-11-15	oannscan	sonnet	high	running						oann A5 scan
-2026-11-15	oannio	sonnet	medium	running						oann A6 data+io
+2026-11-15	oannscan	sonnet	high	done, oann master						oann A5 scan
+2026-11-15	oannio	sonnet	medium	done, oann master						oann A6 data+io
