@@ -98,7 +98,13 @@ earlyfree fixtures that grep it. A gap row (O8f, B18a: `free.olang`'s `gap`, `un
 table, the `checks` scenario `freeing` (its `gaps.olang` greps the row; every earlyfree fixture must stay gap-free). A
 part built in slots (a `Map` entry's text, an array's text element: `free.olang` SlotPlace, SlotParts) is released by
 `mir.Stmt.ReleaseSlot` and modelled by the evaluator's slot scope (`eval.olang`, each allocation a region of its own):
-a change to one changes the other.
+a change to one changes the other. A part place's value (O8f: an array a struct holds by value that is no slot place -
+a `Vec`'s buffer, a `Map`'s slots, a text field; `free.olang` PartPlace, PartSite, PartsOnly) is built in a part region
+(`mir.Rvalue.Part`, the runtime's `__olang_region_make_part`, a flag in the region header) and released by
+`mir.Stmt.ReleasePart` (`__olang_region_release_part`, which finds it from the array's address through
+`__olang_chunk_of`); an owner's anchor in one is read as part of its parent (`__olang_region_home`, in `emit.olang`'s
+`anchorRegion`): the evaluator's part scopes (`eval.olang` `releaseHeld`, `regionHomeOf`) and the C-driven region test
+(`checks/fixtures/regions/drive.c`, its `part` mode) change with them.
 
 A function's hidden scope arguments (`types.ScopeVarsOf`) are read off its type alone; a role that adds one (`RoleTail`,
 S21's tail scope, given in `scope.olang`'s `giveTails` before any body is judged) changes every call's: the scope pass

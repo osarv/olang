@@ -6872,8 +6872,13 @@ an `Array<String>`, a `Vec<String>`'s buffer): each value built alone, reclaimed
 A collection's **own storage** - a `Vec`'s buffer, a `Map`'s slot arrays, any array of a run-time length a struct holds
 by value - is a place too: what the collection's growth replaces is reclaimed as it grows, where the conditions hold -
 no view of the old storage in use across the growth (`View()`, `Ref()`, an element's reference, condition 6), every
-array it is given built for it with no element reaching into its own storage - except where the collection is itself
-such a value held in a place that reclaims it whole.
+array it is given built for it with no element reaching into its own storage - whatever holds the collection: a local,
+a field, an element, a value a place reclaims whole (what that value grew while it was built is reclaimed with it). An
+array of it not built for it - a copy's, built where the copy lands; the first array of a value built whole for a place
+that reclaims it whole - is reclaimed with what it was built in (condition 1), so neither a copy nor such a holder makes
+the place keep. Such an array held by value, through no reference, in a value stored or read whole is that value's own,
+no reference into it kept elsewhere. An element owning storage only so - as arrays of plain values a collection holds
+(an `Array<Vec<I64>>`'s) - lets go of them where it is given another value (`a[i] = v`, `SetAt`).
 
 A reference read from what a place holds that is still in use after the place lets go - in the function holding the
 reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each
@@ -6902,8 +6907,8 @@ program defines when it is linked, so the object is the same in every program th
 **O8f (the freeing guarantee).** Where O8d's conditions hold, what a place lets go of **is** reclaimed at the let-go;
 an implementation may not keep it until its scope closes. The let-goes are a place given another value (S4) - a local,
 a field, a global, an element of an array or of a collection (`v[i] = x` through `SetAt`, a `Map`'s `Put` replacing a
-value); an entry removed from a collection (M19d's removals); a collection's growth replacing its own storage, where
-the collection is held by a place that reclaims its value whole or by a field; a block or a loop's turn left (O2b); and
+value); an entry removed from a collection (M19d's removals); a collection's growth replacing its own storage, wherever
+the collection is held; a block or a loop's turn left (O2b); and
 a value with a destructor ended where its holder lets go of it (O15). A place keeps what it lets go of only for a
 condition of O8d's - storage not made for it (1), a reference into it kept elsewhere (2), a thread or C that may call
 back (3), a destructor still to run (4), a view in use across the let-go (6) - or where a fact the conditions need
@@ -8934,7 +8939,8 @@ handed on instead, or `return` and the call); and a line counting them.
 `path:line:column: memory: 'PLACE' ... - kept until its scope closes: a let-go early freeing does not follow (O8f)` at
 an assignment, in code that runs again, of a place holding storage (an array of a run-time length, or a value holding
 one) that no early freeing place follows - an element of an array, a collection's element given a value through
-`SetAt`, a local, a global or a field of a kind it does not follow - or a B18 row of a place kept for no condition of
+`SetAt` (but text, or a value owning storage only as a collection's arrays of plain values, O8d), a local, a global or
+a field of a kind it does not follow - or a B18 row of a place kept for no condition of
 O8f's (its value changed in place, a value holding it copied), its row ending `: a let-go early freeing does not follow
 (O8f)`, or a row at a call of the program's own code - a removal, a `Put`, a `SetAt` - whose collection's place keeps
 what it lets go of for a reason in the library's code. A line counts the gaps before B18's count of places.

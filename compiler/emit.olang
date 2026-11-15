@@ -4376,6 +4376,16 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             fe.w("call void @__olang_region_release(ptr " + $fe.objectPtr(v, pty) + ")")
             fe.store(fe.ty(pty), fe.E.constText(pty, 0), at)
         }
+        case mir.Stmt.ReleasePart(_, p) {
+            # O8f: the array a part place let go of, its part region released - found from its address, so that one
+            # built anywhere else is left where it is
+            at, pty := fe.addr(p)
+            v := fe.load(fe.ty(pty), at)
+            fe.E.runtime("__olang_region_release_part")
+            n := fe.let("extractvalue { i64, ptr } " + $v + ", 0")
+            fe.w("call void @__olang_region_release_part(ptr " + $fe.objectPtr(v, pty) + ", i64 " + $n + ")")
+            fe.store(fe.ty(pty), fe.E.constText(pty, 0), at)
+        }
         case mir.Stmt.ReleaseSlot(_, p) {
             # O8d: the text a sole text place let go of, put back on its slot's class list
             at, pty := fe.addr(p)
@@ -4685,7 +4695,7 @@ fn (u mut scopeUse&) stmt(st mir.Stmt) {
                     u.use(into)
                 }
                 # a region's parent (O8d): its kids close with it, and its registrations go on its list (C9b)
-                case mir.Rvalue.Region(r), mir.Rvalue.Slots(r), mir.Rvalue.RegionOr(_, r) { u.use(r) }
+                case mir.Rvalue.Region(r), mir.Rvalue.Part(r), mir.Rvalue.Slots(r), mir.Rvalue.RegionOr(_, r) { u.use(r) }
                 case _ { }
             }
         }
@@ -4927,6 +4937,11 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             r := fe.let("call ptr @__olang_region_make(ptr " + $fe.scope(s) + ")")
             return fe.let("ptrtoint ptr " + $r + " to i64")
         }
+        case mir.Rvalue.Part(s) {
+            fe.E.runtime("__olang_region_make_part")
+            r := fe.let("call ptr @__olang_region_make_part(ptr " + $fe.scope(s) + ")")
+            return fe.let("ptrtoint ptr " + $r + " to i64")
+        }
         case mir.Rvalue.Slots(s) {
             # a slot scope building into s (as a copy's arrays are made, slotCopy): its allocations slots of s's lists
             ss := fe.alloca("%olang.slotscope")
@@ -5021,10 +5036,13 @@ fn (fe mut fnEm&) newValue(s mir.ScopeRef, x mir.Operand, ty types.TypeId) Strin
 }
 
 # O8d: the region an owner's value at `at` (of type ty, types.Anchors) is built in: the region the first of its anchors
-# holding storage names - each one's found while all are live - else null
+# holding storage names - each one's found while all are live - else null. An owner's anchor in a part region (an array
+# it grew while it was built, O8f) names the region that one is a kid of (__olang_region_home)
 fn (fe mut fnEm&) anchorRegion(at String&, ty types.TypeId) String {
     t := fe.E.T
+    home := not t.OwnedPart(ty)
     fe.E.runtime("__olang_region_or")
+    if home: fe.E.runtime("__olang_region_home")
     r := "null"
     anchors := t.Anchors(ty)
     if t.OwnedPart(ty) { anchors.Push(Array<I64>(0)) }   # (an array place's value: its own one anchor)
@@ -5036,7 +5054,8 @@ fn (fe mut fnEm&) anchorRegion(at String&, ty types.TypeId) String {
             qt = t.Items(fe.fieldList(t.Repr(qt)))[k]
         }
         o := fe.objectPtr(fe.load(fe.ty(qt), q), qt)
-        ri := fe.let("call ptr @__olang_region_or(ptr " + $o + ", ptr null)")
+        ri0 := fe.let("call ptr @__olang_region_or(ptr " + $o + ", ptr null)")
+        ri := fe.let("call ptr @__olang_region_home(ptr " + $ri0 + ")") if home else ri0
         some := fe.let("icmp ne ptr " + $ri + ", null")
         r = fe.let("select i1 " + $some + ", ptr " + $ri + ", ptr " + $r)
     }
