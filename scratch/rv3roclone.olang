@@ -1,0 +1,12 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# T25c, O10c: a list built from a read-only List of Lists' elements would share the inner lists - refused (the
+# elements live where the read-only list's do, which the new list may outlive); with I64 elements a read-only list is enough
+# (std/list's List, a handle: its Clone went with E31d, a list of its own is built by From)
+import "std/list"
+fn f(ro list.List<list.List<I64>>&, ok list.List<I64>&) I64 {
+    a := list.List.FromIter(ok.Iter())
+    c := list.List.FromIter(ro.Iter())
+    return a.Len() + c.Len()
+}
+fn main() ? {
+}

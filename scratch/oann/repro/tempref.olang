@@ -1,0 +1,62 @@
+# repro/tempref - a temporary passed to a `&` parameter of a function whose result copies it into a struct that also
+# holds a reference (View.Make(o.mem, Dims(4)) below), when that result is itself a temporary passed on by reference, is
+# allocated in the scope of what the reference names - o's - and never reclaimed: every call grows the resident memory
+# (about 56 bytes here), without bound. The same call bound to a local first (`v := o.View()`, then `read(v)`) allocates
+# nothing. oann's ad/graph passed g.Value(x) - tensor.Tensor.Strided(storage, offset, dims, strides)! - to its
+# operations this way: a training step of the transformer grew by 12 kB.
+#   olang repro/tempref.olang   prints the growth over 100,000 calls each way; both should be about 0 kB
+
+import "std/io"
+import "std/os"
+
+type Dims struct(Rank I64) {
+    Rank
+    d Array<I64> = Array<I64>(6)
+}
+
+type View struct(Shape Dims, data mut Array<F64>&) {
+    Shape
+    data
+}
+
+type Bad error { Range(at I64) }
+
+fn View.Make(data mut Array<F64>&, s Dims&) View ? Bad {
+    if s.Rank > data.Len(): error Bad.Range(s.Rank)
+    return View(s, data)
+}
+
+type Owner struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+}
+
+fn (o Owner&) View() View { return View.Make(o.mem, Dims(4))! }
+
+fn read(v View&) F64 { return v.data[v.Shape.Rank] }
+
+fn temporary(o Owner&) F64 { return read(o.View()) }
+
+fn bound(o Owner&) F64 {
+    v := o.View()
+    return read(v)
+}
+
+fn resident() I64 ? os.Error {
+    for line in (try os.ReadFile("/proc/self/status")).Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        kb := try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+        return kb
+    }
+    return 0
+}
+
+fn main() ? io.Error, os.Error {
+    o := Owner(16)
+    t F64 = 0.0
+    a := try resident()
+    for _ in range 100000: t += temporary(o)
+    b := try resident()
+    for _ in range 100000: t += bound(o)
+    c := try resident()
+    try io.Put("a temporary passed: +" + $(b - a) + " kB; bound to a local first: +" + $(c - b) + " kB (" + $t + ")\n")
+}

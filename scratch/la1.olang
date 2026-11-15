@@ -1,0 +1,36 @@
+type Pop struct(size I64) {
+    Size I64 = size
+    Bias mut Array<F32>& = Array<F32>(size)
+}
+
+type Engine struct() {
+    Pops mut Vec<mut Pop&>& = Vec<mut Pop&>()
+}
+
+type System struct() {
+    E mut Engine& = Engine()
+}
+
+type Learner struct(s mut System&) {
+    S mut System& = s
+    Lessons I64 = 0
+    slope mut Array<F32>& = Array<F32>(4)
+}
+
+fn (l mut Learner&) slopes() {
+    for p in l.S.E.Pops {
+        p.Bias[0] = l.slope[0]
+    }
+}
+
+fn use(sys mut System&) I64 {
+    l := Learner(sys)
+    l.slopes()
+    return l.Lessons
+}
+
+fn main() {
+    s := System()
+    s.E.Pops.Push(Pop(3))
+    assert use(s) == 0
+}

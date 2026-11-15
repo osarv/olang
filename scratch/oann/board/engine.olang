@@ -1,0 +1,2483 @@
+# board/engine - the settling engine of the PYNQ-Z2 board (docs/settling.md 4.2) as a backend of dyn (docs/redesign.md
+# 1.4, decision 3): a planned System<T>, compacted - its retired units dropped, its sparse blocks squeezed - lowered to
+# Q-format saturating integers, its sweeps simulated bit for bit. It is the reference an HLS or a hardware implementation
+# of the engine is checked against, and the way to see what a system does on the board before there is one.
+#
+# The engine runs the settles of a planned rate or spiking system from data alone: a descriptor table (a few words per
+# region and per block), the weights, the biases and three tables, and per settle the drives, classes and targets.
+# Engine.Lower(s) makes one from a system and quantizes its weights and biases into it; Load(s) quantizes them again
+# (the processing system's push after a learning step), Inputs(s) pushes the drives, classes and targets, Store(s, p) puts
+# a phase's state back into the system's named state; Settle, Warm, Nudge and Lesson mirror dyn's own. Nothing in a
+# settle is floating point, and no sweep allocates (the assertions below pin it while compiling). The integer
+# arithmetic is board.olang's, bit for bit: that module's tests and golden vectors are this one's (its tests compare).
+#
+# Formats - every quantity an integer whose value is the integer times a power of two:
+#
+#   weight, activity s                      Q1.15   16 bits   [-1, 1 - 2^-15], step 2^-15
+#   potential v, total, constant, bias,     Q4.14   18 bits   [-8, 8 - 2^-14], step 2^-14
+#     drive
+#   target                                  Q1.15   16 bits
+#   product w s                             Q2.30   summed exactly in a 48-bit accumulator: |w s| <= 2^30, and each
+#                                                   neuron's fan-in (a synapse counted 2^shift times) is checked to be
+#                                                   at most 2^16, so no sum and constant overflows it
+#   probability p, force                    Q.16    17 bits   (a probability of 1 is 2^16)
+#   dt                                      Q.16    17 bits, unsigned (1 is 2^16)
+#   nudge strength beta                     Q.14    signed
+#   1 / temperature                         Q.10
+#
+# A block whose largest weight would not fit Q1.15 - a folded input block, which the certificate does not bound - is
+# stored scaled down by 2^shift and its sums shifted back up as they are accumulated; a certified recurrent block has
+# shift 0. The processing system quantizes a value to its format rounding to the nearest, ties to even (its float
+# unit's default), and saturates.
+#
+# Arithmetic, integer and exact, so the order of a sum changes nothing and an engine's lanes and adder tree, summing in
+# any order, match this bit for bit:
+#
+#   rnd(x, k) = (x + 2^(k-1)) >> k       to the nearest, halves up (an arithmetic shift)
+#   sat18, sat16                         saturate to the 18- and 16-bit ranges (a count is kept: Saturations)
+#   per settle, every relaxing neuron:   constant = sat18(rnd((drive + bias) << 16 + sum over folded blocks of
+#                                                  (sum_j w_j s_j) << shift, 16))
+#              every input neuron:       v = drive, s = act(drive) - a linear input's s = sat16(2 drive)
+#   per sweep, every relaxing neuron:    total = sat18(rnd(constant << 16 + sum over recurrent blocks of
+#                                                  (sum_j w_j s_j) << shift, 16)) - a reciprocal block's sums run over
+#                                                  its rows into post and over its columns into pre
+#              in a nudged phase:        total = sat18(total + rnd(beta force, 16)) on a readout
+#                                        r = total - v; a row's residual is max |r| over its relaxing neurons, and the
+#                                        state qualifies when no row's exceeds the tolerance (an integer)
+#              else:                     v = sat18(v + rnd(dt r, 16)), s = act(v)
+#   act(v): 1024 segments over [-8, 8): i = (v + 2^17) >> 8, f = the low 8 bits, act = base_i + rnd(delta_i f, 8), with
+#           base_i = q15(rho(-8 + i / 64)), delta_i = base_(i+1) - base_i - linear between knots of rho rounded to Q1.15
+#   a cross-entropy group's force: m = max s_j, z_j = max(rnd((s_j - m) invT, 11), -16 << 14) (Q5.14), e_j = the
+#           exponential's table at z_j (1024 segments over [-16, 0], knots q16(exp), the same interpolation),
+#           S = sum e_j, p_j = (e_j << 16 + S / 2) / S (a divider), force_j = ([j = class] << 16) - p_j
+#   a squared error's force: force_j = 2 (target_j - s_j)
+#
+# The settle loop is dyn's (dyn/settle): sweeps until every row qualifies, at most the budget, damping by
+# halving dt over the budget's parts, a nudged phase stepping at Dt / (1 + beta lambda); a refusal leaves the committed
+# state as it was. The tolerance is an integer, at least FloorLsb (docs/settling.md 4.2: the board's tolerance is
+# max(tau, 3e-4)).
+#
+# Spiking systems (docs/settling.md 4.6): Lif hidden and readout neurons, a time step per sweep, dyn's own dynamics
+# (neuron.LifStep) in integers. Per neuron: a membrane potential u and a synaptic current syn (Q4.14), the last
+# step's spike (a bit), a rate trace tr (Q.24, in [0, 1]) and the window's spike count; per region its leak and
+# synapse rates (Q.16 unsigned) and its threshold (Q4.14). The inputs stay rate-coded: their activities are folded into
+# the per-settle constant as for rate neurons. One step, every Lif neuron of every row in use:
+#
+#   events:    acc = the weights of the synapses whose source spiked at the step before, each << shift - every recurrent
+#              block's column of a spiking pre neuron into post, and for a reciprocal block the row of a spiking post
+#              neuron into pre: additions only, exact in the 48-bit accumulator (a sum of at most 2^16 weights)
+#   current:   syn = sat18(syn + rnd(synapse (sat18(rnd(acc, 1)) - syn), 16)),  I = sat18(constant + syn)
+#   nudge:     I = sat18(I + rnd(beta force, 16)) on a readout, the force taken at the rate traces (as at activities)
+#   potential: u = sat18(u + rnd(leak (I - u), 16)); a spike when u >= threshold, and then u = u - threshold
+#   trace:     tr = tr + rnd(follow ([spike] << 24 - tr), 24), follow = min(1, 4 / window), both Q.24 (unsigned)
+#              - finer than an activity, since a trace following over a long window moves by less than a step of
+#              Q1.15 a step; the force reads it as an activity, min(rnd(tr, 9), 2^15 - 1)
+#
+# A settle runs whole windows: at a window's end each Lif neuron's activity becomes its rate, s = min((count << 15 +
+# window / 2) / window, 2^15 - 1) (a divider, to the nearest), and a row's residual is the largest change of a rate
+# since the window before, in Q1.15; the tolerance is in those units (at least 1). Commit, refusal and warm starts are
+# the rate engine's.
+#
+# Validation against the floating-point system is docs/settling.md 5.6 and the tests below: the engine's equilibrium
+# is within (tau_board + delta + tau_float) / (1 - kappa) of the float one, delta being the error one evaluation of the
+# map can make (Delta, below) - Bound derives it from a system, its weights' rounding and its structure included.
+
+import "std/os"
+import "../kernels/mat"
+import "../dyn/neuron"
+import "../dyn/conn"
+import "../dyn/settle"
+import "../dyn/system"
+
+# the formats' limits and scales
+ActOne I64 = 32768                          # 2^15: an activity or weight of 1 (one past the largest)
+ActMax I64 = 32767
+ActMin I64 = -32768
+PotOne I64 = 16384                          # 2^14: a potential of 1
+PotMax I64 = 131071
+PotMin I64 = -131072
+FloorLsb I64 = 5                            # the board's least tolerance: 5 steps of Q4.14, 3.05e-4
+TraceOne I64 = 16777216                     # 2^24: a spiking neuron's rate trace of 1
+
+# the readout temperature of a supervised system meant for the board (docs/settling.md 6, decision 55): a certified
+# system bounds each readout's input, and a low temperature lets the softmax separate classes all the same - measured
+# on MNIST, 0.05 beat 0.1 by 0.2 points and 0.25 by 2.6 at the same sweeps a lesson as 0.1. An agent's policy needs
+# T >= 40 x the board's floor / (1 - kappa), about 0.12 at kappa 0.9, for its life tolerance to be above the floor
+Temperature F64 = 0.05
+
+# words of a region's descriptor: role (0 input, 1 hidden, 2 readout), first column, size, activation table (0 tanh,
+# 1 the hard sigmoid, -1 linear - inputs only, -3 Lif: spiking), fit (0 none, 1 cross-entropy, 2 squared),
+# 1 / temperature (Q.10), groups, where its classes start in Labels; for a Lif region its leak (Q.16), threshold (Q4.14)
+# and synapse rate (Q.16); one word unused
+RegionWords I64 = 12
+# words of a block's descriptor: pre's first column and size, post's first column and size, reciprocal (0 or 1),
+# folded (0 or 1), shift, where its weights start in Weights ([post, pre], row by row)
+BlockWords I64 = 8
+
+# the engine and everything it holds: descriptors, weights, biases, tables, inputs and the state of four phases (two
+# slots each: committed and candidate), all integers - for a spiking system also each phase's synaptic currents,
+# spikes and rate traces, and a window's spike counts
+type Engine struct(Rows I64, Neurons I64, regions I64, blocks I64, weights I64, labels I64, spiking Bool = false) {
+    Rows
+    Neurons
+    Spiking Bool = spiking
+    RegionCount I64 = regions
+    BlockCount I64 = blocks
+    RegionDesc mut Array<I64>& = Array<I64>(regions * RegionWords)
+    BlockDesc mut Array<I64>& = Array<I64>(blocks * BlockWords)
+    Weights mut Array<I16>& = Array<I16>(weights)
+    Biases mut Array<I32>& = Array<I32>(Neurons)
+    Origin mut Array<I32>& = Array<I32>(Neurons)           # each neuron's unit in its population of the system
+    Tables mut Array<I32>& = Array<I32>(3 * 2048)          # tanh, the hard sigmoid, the exponential: base, delta
+    Drives mut Array<I32>& = Array<I32>(Rows * Neurons)
+    Labels mut Array<I32>& = Array<I32>(labels)
+    Targets mut Array<I32>& = Array<I32>(Rows * Neurons)
+    V mut Array<I32>& = Array<I32>(8 * Rows * Neurons)     # phase p's slot k at (2 p + k) Rows Neurons
+    S mut Array<I16>& = Array<I16>(8 * Rows * Neurons)
+    Constant mut Array<I32>& = Array<I32>(Rows * Neurons)
+    Total mut Array<I32>& = Array<I32>(Rows * Neurons)
+    Residuals mut Array<I64>& = Array<I64>(Rows)
+    Syn mut Array<I32>& = Array<I32>(8 * Rows * Neurons if spiking else 0)     # synaptic currents, Q4.14
+    Spk mut Array<U8>& = Array<U8>(8 * Rows * Neurons if spiking else 0)       # the last step's spikes, 0 or 1
+    Tr mut Array<I32>& = Array<I32>(8 * Rows * Neurons if spiking else 0)      # rate traces, Q.24
+    Counts mut Array<I32>& = Array<I32>(Rows * Neurons if spiking else 0)      # the window's spike counts
+    traceAct mut Array<I16>& = Array<I16>(Rows * Neurons if spiking else 0)    # the readouts' traces as activities
+    Window I64 = 1                                          # a spiking system's window, in steps
+    FollowQ I64 = 0                                         # its rate traces' step, Q.24
+    current mut Array<I64>& = Array<I64>(4)
+    betas mut Array<I64>& = Array<I64>(4)                  # each phase's nudge, Q.14
+    acc mut Array<I64>& = Array<I64>(Rows * Neurons)
+    column mut Array<I64>& = Array<I64>(Neurons)
+    N I64 = Rows                                            # the rows in use
+    DtQ I64 = 65536                                         # the step of a sweep, Q.16 (the system's Dt)
+    Attempts I64 = 1
+    Lambda F64 = 0.0                                        # the nudge's largest self-slope, per unit of beta
+    Last settle.Settlement = settle.Settlement()
+    Dt F64 = 1.0                                            # the step the last settle ended at
+    Sweeps I64 = 0
+    Saturations I64 = 0                                     # saturated totals, potentials and biases, ever
+    Clipped I64 = 0                                         # saturated constants, ever (a drive beyond the range)
+    Constants I64 = 0                                       # constants made, ever
+    ActError F64 = 0.0                                      # the activation tables' largest error, over every v
+    ExpError F64 = 0.0                                      # the exponential table's largest error (exp(0) = 1)
+    Steps I64 = 0                                           # a spiking engine's time steps, every row counted, ever
+    Spikes I64 = 0                                          # its spikes, ever
+    Events I64 = 0                                          # its synaptic events (a spike's weights added), ever
+}
+
+# an engine that is asked something it cannot do: stops with what is wrong (the text is the caller's whole, so that the
+# call allocates nothing)
+fn wrong(what String&) noreturn {
+    unreachable what
+}
+
+# ---- integer arithmetic ----
+
+# to the nearest, halves up: (x + 2^(k-1)) >> k
+fn rnd(x I64, k I64) I64 {
+    return (x + (I64(1) << (k - 1))) >> k
+}
+
+fn clamp(x I64, lo I64, hi I64) I64 {
+    return lo if x < lo else (hi if x > hi else x)
+}
+
+# x times 2^bits, rounded to the nearest (ties to even) and saturated to [lo, hi]: the processing system's quantizer
+fn quantize(x F64, bits I64, lo I64, hi I64) I64 {
+    y F64 = (x * F64(I64(1) << bits)).RoundEven()
+    if not (y >= F64(lo)): return lo
+    if y > F64(hi): return hi
+    return I64(y)
+}
+
+# ---- making one ----
+
+# what a system cannot be lowered to: a model, wiring or structure the board has no form for, or a sum its accumulator
+# would overflow
+type LowerError error {
+    Unsupported(what String)
+    FanIn(what String)
+}
+
+# a settle the board refuses: the budget ran out before every row qualified (the committed state is as it was)
+type NotSettled error {
+    Budget
+}
+
+# the activation table of a rate neuron's Rho, -2 where the board has none
+fn tableOf(f neuron.Rho) I64 {
+    return match f {
+        case neuron.Rho.Tanh: 0
+        case neuron.Rho.HardSigmoid: 1
+        case neuron.Rho.Linear: -1
+        case _: -2
+    }
+}
+
+# the engine for planned system s (its rows, populations and connections), with s's weights and biases loaded. The
+# structure is compacted as it is lowered: a retired unit is dropped from its population and from every block, a
+# sparse block (Csr, Tiles - after Compact the entries a pruning masked are gone) and an event-driven or low-rank one
+# are stored densely, their absent synapses as zeros. The engine runs rate neurons whose activation is tanh or the hard
+# sigmoid (an input may be linear), or Lif neurons (a spiking system, its inputs rate neurons as always)
+fn Engine.Lower<T>(s system.System<T>&) mut Engine& ? LowerError {
+    if not s.Planned: error LowerError.Unsupported("a system lowered before Plan")
+    pops := s.E.Pops
+    links := s.E.Links
+    sizes := Array<I64>(pops.Len())                             # the units each population keeps
+    neurons I64 = 0
+    labels I64 = 0
+    for k in range pops.Len() {
+        p := pops[k]
+        sizes[k] = p.Size - p.Retired
+        neurons += sizes[k]
+        if p.Role == neuron.Role.Readout and p.Retired > 0: error LowerError.Unsupported("a readout with retired units: its softmax would change")
+        labels += s.Batch * settle.GroupsOf(p.Role)
+    }
+    weights I64 = 0
+    for l in links: weights += sizes[l.Post] * sizes[l.Pre]
+    e mut Engine& = Engine(s.Batch, neurons, pops.Len(), links.Len(), weights, labels, s.E.Spiking)
+    column I64 = 0
+    labelAt I64 = 0
+    for k in range pops.Len() {
+        p := pops[k]
+        d I64 = k * RegionWords
+        role := p.Role
+        e.RegionDesc[d] = 0 if role == neuron.Role.Input else (1 if role == neuron.Role.Hidden else 2)
+        e.RegionDesc[d + 1] = column
+        e.RegionDesc[d + 2] = sizes[k]
+        e.RegionDesc[d + 6] = 1
+        n I64 = 0
+        for j in range p.Size {
+            if not p.Alive[j]: continue
+            e.Origin[column + n] = I32(j)
+            n++
+        }
+        column += sizes[k]
+        table I64 = -2
+        match p.Model {
+            case neuron.Neuron.Rate(f) { table = tableOf(f) }
+            case neuron.Neuron.Lif(leak, threshold, synapse, window) {
+                table = -3
+                e.RegionDesc[d + 8] = quantize(leak, 16, 1, 65536)
+                e.RegionDesc[d + 9] = quantize(threshold, 14, 1, PotMax)
+                e.RegionDesc[d + 10] = quantize(synapse, 16, 0, 65536)
+                e.Window = window
+                e.FollowQ = quantize((4.0 / F64(window)).Min(1.0), 24, 1, TraceOne)
+            }
+            case _ { error LowerError.Unsupported("population " + $k + ": a custom model has no board form") }
+        }
+        if table == -2 or (table == -1 and not (role == neuron.Role.Input)) {
+            error LowerError.Unsupported("population " + $k + ": the board's neurons are tanh, the hard sigmoid or Lif (an input may be linear)")
+        }
+        e.RegionDesc[d + 3] = table
+        if role != neuron.Role.Readout: continue
+        match role.cost {
+            case neuron.Cost.CrossEntropy(temperature, groups) {
+                e.RegionDesc[d + 4] = 1
+                e.RegionDesc[d + 5] = quantize(1.0 / temperature, 10, 1, I64(1) << 30)
+                e.RegionDesc[d + 6] = groups
+                e.RegionDesc[d + 7] = labelAt
+                labelAt += s.Batch * groups
+                e.Lambda = e.Lambda.Max(0.25 / temperature)
+            }
+            case neuron.Cost.Squared {
+                e.RegionDesc[d + 4] = 2
+                e.Lambda = e.Lambda.Max(1.0)
+            }
+        }
+    }
+    at I64 = 0
+    for k in range links.Len() {
+        l := links[k]
+        d I64 = k * BlockWords
+        e.BlockDesc[d] = e.RegionDesc[l.Pre * RegionWords + 1]
+        e.BlockDesc[d + 1] = sizes[l.Pre]
+        e.BlockDesc[d + 2] = e.RegionDesc[l.Post * RegionWords + 1]
+        e.BlockDesc[d + 3] = sizes[l.Post]
+        e.BlockDesc[d + 4] = 1 if l.Both else 0
+        e.BlockDesc[d + 5] = 1 if l.Folded else 0
+        e.BlockDesc[d + 7] = at
+        at += sizes[l.Pre] * sizes[l.Post]
+    }
+    e.tables()
+    try e.Load(s)
+    return e
+}
+
+# the leak, threshold and synapse rate of a Lif region (descriptor d), as values: what the engine runs, so that a
+# floating-point system compared with it can be made with exactly these (LifOf)
+fn (e Engine&) LifOf(region I64) neuron.Neuron {
+    d I64 = region * RegionWords
+    if e.RegionDesc[d + 3] != -3: wrong("LifOf a region that is not spiking")
+    return neuron.Neuron.Lif(F64(e.RegionDesc[d + 8]) / 65536.0, F64(e.RegionDesc[d + 9]) / F64(PotOne)
+        F64(e.RegionDesc[d + 10]) / 65536.0, e.Window)
+}
+
+# the activation tables (tanh, the hard sigmoid) and the exponential's, and their largest errors over every input
+fn (e mut Engine&) tables() {
+    for t in range 2 {
+        for i in range 1024 {
+            a := knot(t, I64(i))
+            b := knot(t, I64(i + 1))
+            e.Tables[t * 2048 + i] = I32(a)
+            e.Tables[t * 2048 + 1024 + i] = I32(b - a)
+        }
+    }
+    for i in range 1024 {
+        a := quantize((-16.0 + F64(i) / 64.0).Exp(), 16, 0, 65536)
+        b := quantize((-16.0 + F64(i + 1) / 64.0).Exp(), 16, 0, 65536)
+        e.Tables[2 * 2048 + i] = I32(a)
+        e.Tables[2 * 2048 + 1024 + i] = I32(b - a)
+    }
+    worst F64 = 0.0
+    for v in range PotMin, PotMax + 1 {
+        x F64 = F64(v) / F64(PotOne)
+        worst = worst.Max((F64(e.act(0, v)) / F64(ActOne) - x.Tanh()).Abs())
+        worst = worst.Max((F64(e.act(1, v)) / F64(ActOne) - x.Clamp(0.0, 1.0)).Abs())
+    }
+    e.ActError = worst
+    worst = 0.0
+    for z in range -16 * PotOne, 1: worst = worst.Max((F64(e.exp(z)) / 65536.0 - (F64(z) / F64(PotOne)).Exp()).Abs())
+    e.ExpError = worst
+}
+
+# knot i of activation table t: rho(-8 + i / 64) in Q1.15
+fn knot(t I64, i I64) I64 {
+    x F64 = -8.0 + F64(i) / 64.0
+    y F64 = x.Tanh() if t == 0 else x.Clamp(0.0, 1.0)
+    return quantize(y, 15, ActMin, ActMax)
+}
+
+# the activation unit: s = act(v), table t (-1: linear, s = sat16(2 v))
+fn (e Engine&) act(t I64, v I64) I64 {
+    if t < 0: return clamp(2 * v, ActMin, ActMax)
+    u I64 = v + 131072
+    i I64 = u >> 8
+    f I64 = u & 255
+    at I64 = t * 2048 + i
+    return I64(e.Tables[at]) + rnd(I64(e.Tables[at + 1024]) * f, 8)
+}
+
+# the exponential's unit: exp(z / 2^14) in Q.16 for z in [-16 2^14, 0]
+fn (e Engine&) exp(z I64) I64 {
+    u I64 = z + 16 * PotOne
+    i I64 = u >> 8
+    if i > 1023: i = 1023
+    f I64 = u - (i << 8)
+    at I64 = 2 * 2048 + i
+    return I64(e.Tables[at]) + rnd(I64(e.Tables[at + 1024]) * f, 8)
+}
+
+# ---- the processing system's side: quantizing in, reading out ----
+
+# the dense [post, pre] weights (the connection's own sizes) a connection that is not a plain block stands for - empty
+# for a plain one, whose weights are read from the parameter region as they lie
+fn expand<T>(l conn.Link<T>&, params Array<T>&) Array<F64> {
+    if l.Kind == conn.Wiring.Dense or l.Kind == conn.Wiring.Symmetric: return Array<F64>(0)
+    post, pre := l.PostSize, l.PreSize
+    w := Array<F64>(post * pre)
+    match l.Kind {
+        case conn.Wiring.Csr {
+            c := l.Csr!
+            for i in range post {
+                for x in range c.Ptr[i], c.Ptr[i + 1]: w[i * pre + I64(c.Idx[x])] = F64(c.Values[x])
+            }
+        }
+        case conn.Wiring.Tiles {
+            m := Array<T>(post * pre)
+            l.Tiles!.Dense(mat.Mat<T>(m, 0, post, pre, pre))
+            for x in range post * pre: w[x] = F64(m[x])
+        }
+        case conn.Wiring.Events {
+            for j in range pre {
+                for i in range post: w[i * pre + j] = F64(params[l.Off + j * post + i])
+            }
+        }
+        case conn.Wiring.LowRank(rank) {
+            for i in range post {
+                for j in range pre {
+                    for k in range rank: w[i * pre + j] += F64(l.W[i, k]) * F64(l.B[k, j])
+                }
+            }
+        }
+        case _ { }
+    }
+    return w
+}
+
+# weight (i, j) of a connection: dense where expand made one, else as the parameter region holds it
+fn element<T>(l conn.Link<T>&, params Array<T>&, dense Array<F64>&, i I64, j I64) F64 {
+    return F64(params[l.Off + i * l.PreSize + j]) if dense.Len() == 0 else dense[i * l.PreSize + j]
+}
+
+# s's weights and biases, quantized into the engine: what the processing system pushes after a learning step. Each
+# block's shift is the least that fits its largest weight in Q1.15; a bias beyond Q4.14's range saturates (counted)
+fn (e mut Engine&) Load<T>(s system.System<T>&) ? LowerError {
+    params := s.E.Params
+    for k in range e.BlockCount {
+        l := s.Link(system.Conn(k))
+        d I64 = k * BlockWords
+        pre I64 = e.BlockDesc[d + 1]
+        post I64 = e.BlockDesc[d + 3]
+        pc I64 = e.BlockDesc[d]
+        qc I64 = e.BlockDesc[d + 2]
+        at I64 = e.BlockDesc[d + 7]
+        dense := expand(l, params)
+        top F64 = 0.0
+        for i in range post {
+            for j in range pre: top = top.Max(element(l, params, dense, I64(e.Origin[qc + i]), I64(e.Origin[pc + j])).Abs())
+        }
+        shift I64 = 0
+        for top * F64(I64(1) << (15 - shift)) >= 32767.5: shift++
+        e.BlockDesc[d + 6] = shift
+        scale I64 = 15 - shift
+        for i in range post {
+            for j in range pre {
+                w := element(l, params, dense, I64(e.Origin[qc + i]), I64(e.Origin[pc + j]))
+                e.Weights[at + i * pre + j] = I16(quantize(w, scale, ActMin, ActMax))
+            }
+        }
+    }
+    for k in range e.RegionCount {
+        d I64 = k * RegionWords
+        if e.RegionDesc[d] == 0: continue
+        pop := s.Pop(system.Pop(k))
+        col I64 = e.RegionDesc[d + 1]
+        for j in range e.RegionDesc[d + 2] {
+            q := quantize(F64(params[pop.Bias + I64(e.Origin[col + j])]), 14, PotMin, PotMax)
+            if q == PotMin or q == PotMax: e.Saturations++
+            e.Biases[col + j] = I32(q)
+        }
+    }
+    e.DtQ = quantize(s.E.Dt, 16, 1, 65536)
+    try e.checkRange()
+}
+
+# every sum the engine makes fits its 48-bit accumulator: a product is at most 2^30 in magnitude, so each neuron's
+# fan-in - its folded synapses for the constant, its recurrent ones for a total, each weighted by its block's 2^shift -
+# must stay at most 2^16, which keeps a sum within 2^46 and leaves room for the constant's 2^33
+fn (e Engine&) checkRange() ? LowerError {
+    sums := Array<I64>(2 * e.Neurons)             # the folded fan-ins, then the recurrent ones
+    for k in range e.BlockCount {
+        d I64 = k * BlockWords
+        pre I64 = e.BlockDesc[d]
+        preSize I64 = e.BlockDesc[d + 1]
+        post I64 = e.BlockDesc[d + 2]
+        postSize I64 = e.BlockDesc[d + 3]
+        shift I64 = e.BlockDesc[d + 6]
+        at I64 = 0 if e.BlockDesc[d + 5] == 1 else e.Neurons
+        for i in range postSize: sums[at + post + i] = sums[at + post + i] + (preSize << shift)
+        if e.BlockDesc[d + 4] == 1 {
+            for j in range preSize: sums[at + pre + j] = sums[at + pre + j] + (postSize << shift)
+        }
+    }
+    for i in range 2 * e.Neurons {
+        if sums[i] > 65536: error LowerError.FanIn("neuron " + $(i % e.Neurons) + ": its fan-in, each synapse weighted by its block's 2^shift, is at most 2^16 on the board")
+    }
+}
+
+# s's drives, classes and targets for its first n rows (0: every row), quantized into the engine - what the processing
+# system pushes before a settle - and those rows put in use
+fn (e mut Engine&) Inputs<T>(s system.System<T>&, n I64 = 0) {
+    e.Use(n if n > 0 else e.Rows)
+    rows := e.Neurons
+    for k in range e.RegionCount {
+        pop := s.Pop(system.Pop(k))
+        d I64 = k * RegionWords
+        col I64 = e.RegionDesc[d + 1]
+        size I64 = e.RegionDesc[d + 2]
+        for b in range e.N {
+            for j in range size {
+                from := b * pop.Size + I64(e.Origin[col + j])
+                e.Drives[b * rows + col + j] = I32(quantize(F64(pop.Drive[from]), 14, PotMin, PotMax))
+                if e.RegionDesc[d + 4] == 2: e.Targets[b * rows + col + j] = I32(quantize(F64(pop.Target[from]), 15, ActMin, ActMax))
+            }
+        }
+        if e.RegionDesc[d + 4] != 1: continue
+        for i in range e.N * e.RegionDesc[d + 6]: e.Labels[e.RegionDesc[d + 7] + i] = pop.Labels[i]
+    }
+}
+
+# the rows the next settles run on
+fn (e mut Engine&) Use(n I64) {
+    if n < 1 or n > e.Rows: wrong("Use: the rows in use are between 1 and the engine's rows")
+    e.N = n
+}
+
+# phase p's committed state, every row in use, put into s's committed state of p as values: v / 2^14, s / 2^15 - what
+# the processing system reads back to learn from - and for a spiking system the synaptic currents (/ 2^14), the last
+# step's spikes and the rate traces (/ 2^15) as well, so that a settle of s can go on from where the board's ended. A
+# unit the engine dropped keeps what s holds
+fn (e Engine&) Store<T>(s system.System<T>&, p settle.Phase) {
+    pi := phaseIndex(p)
+    at I64 = e.slot(pi, e.current[pi])
+    for k in range e.RegionCount {
+        pop := s.Pop(system.Pop(k))
+        d I64 = k * RegionWords
+        col I64 = e.RegionDesc[d + 1]
+        if pop.Spiking {
+            cells := s.State<neuron.LifCell<T>>(system.Pop(k))
+            for b in range e.N {
+                for j in range e.RegionDesc[d + 2] {
+                    x I64 = b * e.Neurons + col + j
+                    to := (pi * s.Batch + b) * pop.Size + I64(e.Origin[col + j])
+                    cells.V[to] = T(F64(e.V[at + x]) / F64(PotOne))
+                    cells.S[to] = T(F64(e.S[at + x]) / F64(ActOne))
+                    cells.Syn[to] = T(F64(e.Syn[at + x]) / F64(PotOne))
+                    cells.Spike[to] = T(F64(e.Spk[at + x]))
+                    cells.Trace[to] = T(F64(e.Tr[at + x]) / F64(TraceOne))
+                }
+            }
+            continue
+        }
+        cells := s.State<neuron.RateCell<T>>(system.Pop(k))
+        for b in range e.N {
+            for j in range e.RegionDesc[d + 2] {
+                x I64 = b * e.Neurons + col + j
+                to := (pi * s.Batch + b) * pop.Size + I64(e.Origin[col + j])
+                cells.U[to] = T(F64(e.V[at + x]) / F64(PotOne))
+                cells.S[to] = T(F64(e.S[at + x]) / F64(ActOne))
+            }
+        }
+    }
+}
+
+# phase p's potential and activity of neuron j in row b, as values
+fn (e Engine&) Potential(p settle.Phase, b I64, j I64) F64 {
+    pi := phaseIndex(p)
+    return F64(e.V[e.slot(pi, e.current[pi]) + b * e.Neurons + j]) / F64(PotOne)
+}
+
+fn (e Engine&) Activity(p settle.Phase, b I64, j I64) F64 {
+    pi := phaseIndex(p)
+    return F64(e.S[e.slot(pi, e.current[pi]) + b * e.Neurons + j]) / F64(ActOne)
+}
+
+# the tolerance the board settles to for a requested one, in steps of Q4.14: max(tau, FloorLsb steps)
+fn Tolerance(tau F64) I64 {
+    q := I64((tau * F64(PotOne)).Floor())
+    return q if q > FloorLsb else FloorLsb
+}
+
+# a spiking engine's tolerance for a requested one: the largest change of a rate between windows, in steps of Q1.15,
+# at least one step
+fn SpikeTolerance(tau F64) I64 {
+    q := I64((tau * F64(ActOne)).Floor())
+    return q if q > 1 else 1
+}
+
+# this engine's tolerance for tau: Tolerance's, or SpikeTolerance's for a spiking system
+fn (e Engine&) tolerance(tau F64) I64 {
+    return SpikeTolerance(tau) if e.Spiking else Tolerance(tau)
+}
+
+# the cycles a sweep takes on the board's 64-lane engine at one row (docs/settling.md 4.2: every recurrent block
+# 2 x short x ceil(long / 64) - one direction for a one-way block - plus 40 of pipeline), and the cycles of the folded
+# blocks once per settle
+fn (e Engine&) SweepCycles() I64 {
+    sum I64 = 40
+    for k in range e.BlockCount {
+        d I64 = k * BlockWords
+        if e.BlockDesc[d + 5] == 1: continue
+        sum += (1 + e.BlockDesc[d + 4]) * lanesCycles(e.BlockDesc[d + 1], e.BlockDesc[d + 3])
+    }
+    return sum
+}
+
+fn (e Engine&) ConstantCycles() I64 {
+    sum I64 = 0
+    for k in range e.BlockCount {
+        d I64 = k * BlockWords
+        if e.BlockDesc[d + 5] == 1: sum += lanesCycles(e.BlockDesc[d + 1], e.BlockDesc[d + 3])
+    }
+    return sum
+}
+
+fn lanesCycles(a I64, b I64) I64 {
+    short I64 = a if a < b else b
+    long I64 = b if a < b else a
+    return short * ((long + 63) / 64)
+}
+
+# ---- state ----
+
+fn phaseIndex(p settle.Phase) I64 { return p.Index() }
+
+fn (e Engine&) slot(pi I64, k I64) I64 {
+    return (pi * 2 + k) * e.Rows * e.Neurons
+}
+
+# phase p's committed state set to from's
+fn (e mut Engine&) Warm(p settle.Phase, from settle.Phase) {
+    pi := phaseIndex(p)
+    fi := phaseIndex(from)
+    if pi == fi: return
+    e.copySlot(e.slot(fi, e.current[fi]), e.slot(pi, e.current[pi]))
+}
+
+# the state of the slot at a copied to the slot at b: potentials and activities, and a spiking engine's currents,
+# spikes and traces
+fn (e mut Engine&) copySlot(a I64, b I64) {
+    for i in range e.Rows * e.Neurons {
+        e.V[b + i] = e.V[a + i]
+        e.S[b + i] = e.S[a + i]
+    }
+    if not e.Spiking: return
+    for i in range e.Rows * e.Neurons {
+        e.Syn[b + i] = e.Syn[a + i]
+        e.Spk[b + i] = e.Spk[a + i]
+        e.Tr[b + i] = e.Tr[a + i]
+    }
+}
+
+# phase p's committed state set to zero
+fn (e mut Engine&) Reset(p settle.Phase) {
+    pi := phaseIndex(p)
+    b := e.slot(pi, e.current[pi])
+    for i in range e.Rows * e.Neurons {
+        e.V[b + i] = 0
+        e.S[b + i] = 0
+    }
+    if not e.Spiking: return
+    for i in range e.Rows * e.Neurons {
+        e.Syn[b + i] = 0
+        e.Spk[b + i] = 0
+        e.Tr[b + i] = 0
+    }
+}
+
+# phase p's nudge strength beta (quantized to Q.14); 0 is none
+fn (e mut Engine&) Nudge(p settle.Phase, beta F64) {
+    e.betas[phaseIndex(p)] = quantize(beta, 14, -(I64(1) << 40), I64(1) << 40)
+}
+
+# the step of a sweep in a phase nudged with beta, Q.16: Dt, and Dt / (1 + beta lambda) when beta > 0
+fn (e Engine&) stepFor(beta F64) I64 {
+    dt F64 = F64(e.DtQ) / 65536.0
+    return e.DtQ if beta <= 0.0 else quantize(dt / (1.0 + beta * e.Lambda), 16, 1, 65536)
+}
+
+# ---- one sweep ----
+
+fn (e mut Engine&) sat18(x I64) I64 {
+    if x > PotMax {
+        e.Saturations++
+        return PotMax
+    }
+    if x < PotMin {
+        e.Saturations++
+        return PotMin
+    }
+    return x
+}
+
+# the per-settle part, into the slot at at: the input neurons' states and every relaxing neuron's constant
+fn (e mut Engine&) prepare(at I64) {
+    n := e.Neurons
+    for b in range e.N {
+        row I64 = b * n
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            col I64 = e.RegionDesc[d + 1]
+            size I64 = e.RegionDesc[d + 2]
+            if e.RegionDesc[d] == 0 {
+                t I64 = e.RegionDesc[d + 3]
+                for j in range size {
+                    x I64 = I64(e.Drives[row + col + j])
+                    e.V[at + row + col + j] = I32(x)
+                    e.S[at + row + col + j] = I16(e.act(t, x))
+                }
+            } else {
+                for j in range size { e.acc[row + col + j] = (I64(e.Drives[row + col + j]) + I64(e.Biases[col + j])) << 16 }
+            }
+        }
+        for k in range e.BlockCount {
+            d I64 = k * BlockWords
+            if e.BlockDesc[d + 5] == 0: continue
+            e.rowSums(d, at + row, row)
+        }
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            for j in range e.RegionDesc[d + 2] {
+                x I64 = rnd(e.acc[row + col + j], 16)
+                if x > PotMax or x < PotMin: e.Clipped++
+                e.Constant[row + col + j] = I32(clamp(x, PotMin, PotMax))
+            }
+            e.Constants += e.RegionDesc[d + 2]
+        }
+    }
+}
+
+# block d's sums over its rows, (sum_j w_ij s_j) << shift, added to the accumulators of its post neurons: the
+# activities at s, the accumulators at a (each a row's start)
+fn (e mut Engine&) rowSums(d I64, s I64, a I64) {
+    pre I64 = e.BlockDesc[d]
+    preSize I64 = e.BlockDesc[d + 1]
+    post I64 = e.BlockDesc[d + 2]
+    postSize I64 = e.BlockDesc[d + 3]
+    shift I64 = e.BlockDesc[d + 6]
+    w I64 = e.BlockDesc[d + 7]
+    for i in range postSize {
+        sum I64 = 0
+        wi I64 = w + i * preSize
+        for j in range preSize: sum += I64(e.Weights[wi + j]) * I64(e.S[s + pre + j])
+        e.acc[a + post + i] = e.acc[a + post + i] + (sum << shift)
+    }
+}
+
+# block d's sums over its columns, (sum_i w_ij s_i) << shift, added to the accumulators of its pre neurons
+fn (e mut Engine&) columnSums(d I64, s I64, a I64) {
+    pre I64 = e.BlockDesc[d]
+    preSize I64 = e.BlockDesc[d + 1]
+    post I64 = e.BlockDesc[d + 2]
+    postSize I64 = e.BlockDesc[d + 3]
+    shift I64 = e.BlockDesc[d + 6]
+    w I64 = e.BlockDesc[d + 7]
+    for j in range preSize: e.column[j] = 0
+    for i in range postSize {
+        x I64 = I64(e.S[s + post + i])
+        wi I64 = w + i * preSize
+        for j in range preSize: e.column[j] = e.column[j] + I64(e.Weights[wi + j]) * x
+    }
+    for j in range preSize: e.acc[a + pre + j] = e.acc[a + pre + j] + (e.column[j] << shift)
+}
+
+# the totals of every relaxing neuron from the activities in the slot at at: the constant and every recurrent block's
+# sums, rounded once; then, in a nudged phase (betaQ not 0), each readout's force
+fn (e mut Engine&) transport(at I64, betaQ I64) {
+    n := e.Neurons
+    for b in range e.N {
+        row I64 = b * n
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            for j in range e.RegionDesc[d + 2]: e.acc[row + col + j] = I64(e.Constant[row + col + j]) << 16
+        }
+        for k in range e.BlockCount {
+            d I64 = k * BlockWords
+            if e.BlockDesc[d + 5] == 1: continue
+            e.rowSums(d, at + row, row)
+            if e.BlockDesc[d + 4] == 1: e.columnSums(d, at + row, row)
+        }
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            for j in range e.RegionDesc[d + 2]: e.Total[row + col + j] = I32(e.sat18(rnd(e.acc[row + col + j], 16)))
+            if betaQ != 0 and e.RegionDesc[d] == 2: e.nudge(d, b, e.S, at, betaQ)
+        }
+    }
+}
+
+# total += rnd(beta force, 16) on readout d's neurons in row b, the force taken at the activities in act's slot at at
+# (the activities, or a spiking system's rate traces)
+fn (e mut Engine&) nudge(d I64, b I64, act Array<I16>&, at I64, betaQ I64) {
+    n := e.Neurons
+    row I64 = b * n
+    col I64 = e.RegionDesc[d + 1]
+    size I64 = e.RegionDesc[d + 2]
+    if e.RegionDesc[d + 4] == 2 {
+        for j in range size {
+            force I64 = 2 * (I64(e.Targets[row + col + j]) - I64(act[at + row + col + j]))
+            e.Total[row + col + j] = I32(e.sat18(I64(e.Total[row + col + j]) + rnd(betaQ * force, 16)))
+        }
+        return
+    }
+    groups I64 = e.RegionDesc[d + 6]
+    w I64 = size / groups
+    invT I64 = e.RegionDesc[d + 5]
+    for g in range groups {
+        first I64 = at + row + col + g * w
+        top I64 = I64(act[first])
+        for j in range 1, w { top = top if top >= I64(act[first + j]) else I64(act[first + j]) }
+        sum I64 = 0
+        for j in range w {
+            z I64 = rnd((I64(act[first + j]) - top) * invT, 11)
+            e.column[j] = e.exp(z if z > -16 * PotOne else -16 * PotOne)
+            sum += e.column[j]
+        }
+        class I64 = I64(e.Labels[e.RegionDesc[d + 7] + b * groups + g])
+        for j in range w {
+            p I64 = ((e.column[j] << 16) + sum / 2) / sum
+            force I64 = (65536 if j == class else 0) - p
+            to I64 = row + col + g * w + j
+            e.Total[to] = I32(e.sat18(I64(e.Total[to]) + rnd(betaQ * force, 16)))
+        }
+    }
+}
+
+# each row's largest |total - v| over the relaxing neurons, the potentials in the slot at at; gives the largest
+fn (e mut Engine&) measure(at I64) I64 {
+    n := e.Neurons
+    worst I64 = 0
+    for b in range e.N {
+        row I64 = b * n
+        best I64 = 0
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            for j in range e.RegionDesc[d + 2] {
+                r I64 = I64(e.Total[row + col + j]) - I64(e.V[at + row + col + j])
+                a I64 = r if r >= 0 else -r
+                best = best if best >= a else a
+            }
+        }
+        e.Residuals[b] = best
+        worst = worst if worst >= best else best
+    }
+    return worst
+}
+
+# one sweep's step, v += rnd(dt r, 16) and s = act(v), for every relaxing neuron of every row in use
+fn (e mut Engine&) step(at I64, dtQ I64) {
+    n := e.Neurons
+    for b in range e.N {
+        row I64 = b * n
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            t I64 = e.RegionDesc[d + 3]
+            for j in range e.RegionDesc[d + 2] {
+                i I64 = at + row + col + j
+                v I64 = I64(e.V[i])
+                x I64 = e.sat18(v + rnd(dtQ * (I64(e.Total[row + col + j]) - v), 16))
+                e.V[i] = I32(x)
+                e.S[i] = I16(e.act(t, x))
+            }
+        }
+    }
+}
+
+# ---- settling ----
+
+# settles phase p from its committed state, as dyn's Settle does, to the board's tolerance for tolerance
+# (Tolerance(tolerance) steps of Q4.14, or for a spiking system SpikeTolerance(tolerance) steps of Q1.15): a qualified
+# state is committed, else NotSettled and nothing changes
+fn (e mut Engine&) Settle(p settle.Phase, budget I64, tolerance F64) settle.Settlement ? NotSettled {
+    return try e.relax(p, budget, e.tolerance(tolerance), true)
+}
+
+# Settle, the per-settle part made afresh or kept (a lesson's nudged phases keep the free phase's), to a tolerance of
+# tolQ steps
+fn (e mut Engine&) relax(p settle.Phase, budget I64, tolQ I64, fresh Bool) settle.Settlement ? NotSettled {
+    pi := phaseIndex(p)
+    at := e.slot(pi, 1 - e.current[pi])
+    e.copySlot(e.slot(pi, e.current[pi]), at)
+    if fresh: e.prepare(at)
+    if e.Spiking: return try e.spikes(pi, at, budget, tolQ, true)
+    betaQ := e.betas[pi]
+    beta F64 = F64(betaQ) / F64(PotOne)
+    parts I64 = e.Attempts if e.Attempts > 1 else 1
+    base := e.stepFor(beta)
+    dtQ I64 = base
+    for k in range budget + 1 {
+        e.transport(at, betaQ)
+        worst := e.measure(at)
+        if worst <= tolQ {
+            e.current[pi] = 1 - e.current[pi]
+            e.Sweeps += k
+            e.Dt = F64(dtQ) / 65536.0
+            e.Last = settle.Settlement(k, F64(worst) / F64(PotOne), true)
+            return e.Last
+        }
+        if k == budget {
+            e.Dt = F64(dtQ) / 65536.0
+            e.Last = settle.Settlement(k, F64(worst) / F64(PotOne), false)
+            error NotSettled.Budget
+        }
+        dtQ = base >> (k * parts / budget)
+        e.step(at, dtQ if dtQ > 0 else 1)
+    }
+    unreachable
+}
+
+# runs phase p for sweeps sweeps with no stopping test and commits the state reached, reporting its residual - for a
+# spiking system whole windows of steps, at least one
+fn (e mut Engine&) Run(p settle.Phase, sweeps I64) settle.Settlement {
+    pi := phaseIndex(p)
+    at := e.slot(pi, 1 - e.current[pi])
+    e.copySlot(e.slot(pi, e.current[pi]), at)
+    e.prepare(at)
+    if e.Spiking { return try e.spikes(pi, at, sweeps, 0, false) catch { unreachable } }
+    betaQ := e.betas[pi]
+    dtQ := e.stepFor(F64(betaQ) / F64(PotOne))
+    for _ in range sweeps {
+        e.transport(at, betaQ)
+        e.step(at, dtQ)
+    }
+    e.transport(at, betaQ)
+    worst := e.measure(at)
+    e.current[pi] = 1 - e.current[pi]
+    e.Dt = F64(dtQ) / 65536.0
+    e.Last = settle.Settlement(sweeps, F64(worst) / F64(PotOne), false)
+    return e.Last
+}
+
+# ---- spiking ----
+
+# the windows of a spiking settle of phase pi in the slot at at: each window's steps, then the rates and each row's
+# residual (the largest change of a rate, Q1.15); with check the first window within tolQ in every row is committed (a
+# refusal when none is within the budget's windows), without the last one is
+fn (e mut Engine&) spikes(pi I64, at I64, budget I64, tolQ I64, check Bool) settle.Settlement ? NotSettled {
+    betaQ := e.betas[pi]
+    w := e.Window
+    windows I64 = budget / w if budget >= w else 1
+    steps I64 = 0
+    for k in range windows {
+        for i in range e.N * e.Neurons: e.Counts[i] = 0
+        for _ in range w: e.spikeStep(at, betaQ)
+        steps += w
+        worst := e.spikeRates(at)
+        if (check and worst <= tolQ) or k == windows - 1 {
+            if check and worst > tolQ {
+                e.Dt = 1.0
+                e.Last = settle.Settlement(steps, F64(worst) / F64(ActOne), false)
+                error NotSettled.Budget
+            }
+            e.current[pi] = 1 - e.current[pi]
+            e.Sweeps += steps
+            e.Dt = 1.0
+            e.Last = settle.Settlement(steps, F64(worst) / F64(ActOne), worst <= tolQ)
+            return e.Last
+        }
+    }
+    unreachable
+}
+
+# one time step of every Lif neuron of every row in use, the state in the slot at at (the header's step): the events
+# of the spikes of the step before, the synaptic currents and input currents, a nudged readout's force at its rate
+# traces, the potentials and spikes, the window's counts and the traces
+fn (e mut Engine&) spikeStep(at I64, betaQ I64) {
+    n := e.Neurons
+    for b in range e.N {
+        row I64 = b * n
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            for j in range e.RegionDesc[d + 2]: e.acc[row + col + j] = 0
+        }
+        for k in range e.BlockCount {
+            d I64 = k * BlockWords
+            if e.BlockDesc[d + 5] == 1: continue
+            e.events(d, at + row, row)
+        }
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            synQ := e.RegionDesc[d + 10]
+            for j in range e.RegionDesc[d + 2] {
+                x I64 = row + col + j
+                i I64 = at + x
+                y I64 = I64(e.Syn[i])
+                y = e.sat18(y + rnd(synQ * (e.sat18(rnd(e.acc[x], 1)) - y), 16))
+                e.Syn[i] = I32(y)
+                e.Total[x] = I32(e.sat18(I64(e.Constant[x]) + y))
+            }
+            if betaQ != 0 and e.RegionDesc[d] == 2 {
+                for j in range e.RegionDesc[d + 2] {
+                    x I64 = row + col + j
+                    y I64 = rnd(I64(e.Tr[at + x]), 9)
+                    e.traceAct[x] = I16(y if y < ActMax else ActMax)
+                }
+                e.nudge(d, b, e.traceAct, 0, betaQ)
+            }
+        }
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            leakQ := e.RegionDesc[d + 8]
+            th := e.RegionDesc[d + 9]
+            for j in range e.RegionDesc[d + 2] {
+                x I64 = row + col + j
+                i I64 = at + x
+                u I64 = I64(e.V[i])
+                u = e.sat18(u + rnd(leakQ * (I64(e.Total[x]) - u), 16))
+                fired Bool = u >= th
+                if fired {
+                    u -= th
+                    e.Counts[x] = e.Counts[x] + 1
+                    e.Spikes++
+                }
+                e.V[i] = I32(u)
+                e.Spk[i] = 1 if fired else 0
+                target I64 = TraceOne if fired else 0
+                tr I64 = I64(e.Tr[i])
+                e.Tr[i] = I32(tr + rnd(e.FollowQ * (target - tr), 24))
+            }
+        }
+    }
+    e.Steps += e.N
+}
+
+# block d's events in the row whose state is at s and accumulators at a: each pre neuron that spiked at the step
+# before adds its column of weights (<< shift) to the post neurons' accumulators, and for a reciprocal block each post
+# neuron that spiked adds its row to the pre neurons' - additions only
+fn (e mut Engine&) events(d I64, s I64, a I64) {
+    pre I64 = e.BlockDesc[d]
+    preSize I64 = e.BlockDesc[d + 1]
+    post I64 = e.BlockDesc[d + 2]
+    postSize I64 = e.BlockDesc[d + 3]
+    shift I64 = e.BlockDesc[d + 6]
+    w I64 = e.BlockDesc[d + 7]
+    for j in range preSize {
+        if e.Spk[s + pre + j] == 0: continue
+        for i in range postSize { e.acc[a + post + i] = e.acc[a + post + i] + (I64(e.Weights[w + i * preSize + j]) << shift) }
+        e.Events += postSize
+    }
+    if e.BlockDesc[d + 4] == 0: return
+    for i in range postSize {
+        if e.Spk[s + post + i] == 0: continue
+        wi I64 = w + i * preSize
+        for j in range preSize: e.acc[a + pre + j] = e.acc[a + pre + j] + (I64(e.Weights[wi + j]) << shift)
+        e.Events += preSize
+    }
+}
+
+# a window's end: each Lif neuron's activity becomes its rate, (count << 15 + window / 2) / window at most 2^15 - 1,
+# and each row's residual the largest change of a rate; gives the largest of the rows
+fn (e mut Engine&) spikeRates(at I64) I64 {
+    n := e.Neurons
+    w := e.Window
+    worst I64 = 0
+    for b in range e.N {
+        row I64 = b * n
+        best I64 = 0
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] == 0: continue
+            col I64 = e.RegionDesc[d + 1]
+            for j in range e.RegionDesc[d + 2] {
+                x I64 = row + col + j
+                r I64 = ((I64(e.Counts[x]) << 15) + w / 2) / w
+                r = r if r < ActMax else ActMax
+                change I64 = r - I64(e.S[at + x])
+                change = change if change >= 0 else -change
+                best = best if best >= change else change
+                e.S[at + x] = I16(r)
+            }
+        }
+        e.Residuals[b] = best
+        worst = worst if worst >= best else best
+    }
+    return worst
+}
+
+# one lesson's settles of s on the board: its drives, classes and targets pushed (the first n rows, 0: every row), the
+# free phase and the nudged ones settled on the engine (to the board's tolerance for tolerance, within budget sweeps -
+# 0 for either takes s's lesson tolerance and its certified budget), their states stored back into s: what
+# learn.Tick(s, Clock.Step) takes its contrast from, in s's own precision. Gives the sweeps
+fn (e mut Engine&) Lesson<T>(s mut system.System<T>&, beta F64 = 0.5, centered Bool = true, n I64 = 0, tolerance F64 = 0.0
+        budget I64 = 0) I64 ? NotSettled {
+    e.Inputs(s, n)
+    tol F64 = tolerance if tolerance > 0.0 else s.LessonTolerance(beta)
+    sweeps I64 = budget if budget > 0 else s.BudgetFor(tol, beta).Sweeps
+    tolQ := e.tolerance(tol)
+    e.Nudge(settle.Phase.Free, 0)
+    total I64 = (try e.relax(settle.Phase.Free, sweeps, tolQ, true)).Sweeps
+    e.Warm(settle.Phase.Plus, settle.Phase.Free)
+    e.Nudge(settle.Phase.Plus, beta)
+    total += (try e.relax(settle.Phase.Plus, sweeps, tolQ, false)).Sweeps
+    e.Store(s, settle.Phase.Free)
+    e.Store(s, settle.Phase.Plus)
+    if not centered: return total
+    e.Warm(settle.Phase.Minus, settle.Phase.Free)
+    e.Nudge(settle.Phase.Minus, -beta)
+    total += (try e.relax(settle.Phase.Minus, sweeps, tolQ, false)).Sweeps
+    e.Store(s, settle.Phase.Minus)
+    return total
+}
+
+# the error one evaluation of a phase's map can make on the board, against the same system in exact arithmetic with
+# the board's weights, biases and inputs (docs/settling.md 5.6): the constant's rounding and the total's (2^-15 each),
+# the activation tables' error through the recurrent weights (gain kappa) and through the folded ones (folded, for
+# inputs that are not linear), and in a phase nudged with beta the force's: its rounding (2^-15) and beta times the
+# force's error. A squared error's force errs by an activity's table error (its targets are exact). A cross-entropy
+# group's of width neurons at temperature T: the activities' table error through the softmax (whose slope sums to at
+# most 1 / (2 T)), the exponentials' error - the table's and z's rounding to 2^-14, through p = e / S with S >= 1
+# (the largest is exp(0), exact), at most (1 + width) times it, over 1 - width times it - and the divider's rounding
+fn (e Engine&) Delta(kappa F64, folded F64, beta F64, temperature F64 = 0, width I64 = 0) F64 {
+    unit F64 = 1.0 / F64(I64(1) << 15)
+    d F64 = 2.0 * unit + (kappa + folded) * e.ActError
+    if beta == 0.0: return d
+    force F64 = e.ActError
+    if temperature > 0.0 {
+        x F64 = e.ExpError + unit
+        force = e.ActError / (2.0 * temperature) + F64(1 + width) * x / (1.0 - F64(width) * x) + 1.0 / 131072.0
+    }
+    return d + unit + beta.Abs() * force
+}
+
+# the derived bound on how far a settle's potentials end from the floating-point system's equilibrium (docs/settling.md
+# 5.6): (tau_board + delta + tau_float) / (1 - kappa), kappa the system's gain (Gain: the largest incoming mass of a
+# relaxing unit times the largest slope), tau_board = tolQ steps of Q4.14, tau_float the float settle's tolerance, delta
+# the error one evaluation of the map can make - Delta's, with the folded mass of the inputs that are not linear, and the
+# largest force of a readout when beta is not 0 - and, with rounded (the float system holds its own unrounded weights,
+# biases and drives, as it does before StoreParams and StoreInputs), the quantization's: each weight of a block is off
+# by at most half a step of its block, 2^(shift - 16), through activities of at most 1; a bias and a drive by 2^-15
+# each; an input's drive, through its folded weights, by 2^-15. The activities of linear inputs are taken within
+# [-1, 1]. Infinite for a spiking system and where kappa is not below 1. In a nudged phase the divisor is still the free
+# gain's, as 5.6 measures it (the damped step has the same fixed point); the saturations stay 0 for the bound to hold
+fn (e Engine&) Bound<T>(s mut system.System<T>&, tolQ I64 = FloorLsb, beta F64 = 0.0, floatTol F64 = 0.0, rounded Bool = true) F64 {
+    kappa := s.Gain()
+    if e.Spiking or not (kappa < 1.0): return Inf
+    unit F64 = 1.0 / F64(ActOne)
+    params := s.E.Params
+    folded := Array<F64>(e.Neurons)               # the weights of the folded blocks from inputs with a table, into each neuron
+    inputs := Array<F64>(e.Neurons)               # and from every input
+    off := Array<F64>(e.Neurons)                  # the weights' rounding, through activities of at most 1
+    for k in range e.BlockCount {
+        l := s.Link(system.Conn(k))
+        d I64 = k * BlockWords
+        pre I64 = e.BlockDesc[d + 1]
+        post I64 = e.BlockDesc[d + 3]
+        pc I64 = e.BlockDesc[d]
+        qc I64 = e.BlockDesc[d + 2]
+        half F64 = F64(I64(1) << e.BlockDesc[d + 6]) / F64(2 * ActOne)
+        table := e.RegionDesc[l.Pre * RegionWords + 3]
+        dense := expand(l, params)
+        for i in range post {
+            for j in range pre {
+                w := element(l, params, dense, I64(e.Origin[qc + i]), I64(e.Origin[pc + j])).Abs()
+                off[qc + i] += half
+                if e.BlockDesc[d + 4] == 1: off[pc + j] += half
+                if e.BlockDesc[d + 5] == 0: continue
+                inputs[qc + i] += w
+                if table >= 0: folded[qc + i] += w
+            }
+        }
+    }
+    through F64 = 0.0
+    reach F64 = 0.0
+    spread F64 = 0.0
+    for i in range e.Neurons {
+        through = through.Max(folded[i])
+        reach = reach.Max(inputs[i])
+        spread = spread.Max(off[i])
+    }
+    delta F64 = e.Delta(kappa, through, 0.0)
+    if beta != 0.0 {
+        for k in range e.RegionCount {
+            d I64 = k * RegionWords
+            if e.RegionDesc[d] != 2: continue
+            squared := e.RegionDesc[d + 4] == 2
+            width I64 = e.RegionDesc[d + 2] / e.RegionDesc[d + 6]
+            temperature F64 = 0.0 if squared else 1024.0 / F64(e.RegionDesc[d + 5])
+            delta = delta.Max(e.Delta(kappa, through, beta, temperature, width))
+        }
+    }
+    extra F64 = (spread + 2.0 * unit + reach * unit) if rounded else 0.0
+    return (F64(tolQ) / F64(PotOne) + delta + extra + floatTol) / (1.0 - kappa)
+}
+
+# ---- golden vectors ----
+
+# the engine's image and its last settle, in the safetensors layout (an 8-byte little-endian header length, a JSON
+# header naming every tensor's dtype, shape and byte range, the tensors little-endian): the descriptor tables, the
+# weights, biases and tables, the inputs, every phase's committed state and the settle's residuals - and for a spiking
+# system every phase's synaptic currents, spikes and rate traces and the window's counts - what a testbench feeds an
+# HLS or hardware engine and compares its result with, bit for bit
+fn (e Engine&) Image() Array<U8> {
+    count I64 = 17 if e.Spiking else 13
+    names := Array<String&>["regions", "blocks", "weights", "biases", "tables", "drives", "labels", "targets", "v", "s"
+        "constant", "residuals", "scalars", "syn", "spikes", "traces", "counts"]
+    sizes := Array<I64>(17)
+    widths := Array<I64>[8, 8, 2, 4, 4, 4, 4, 4, 4, 2, 4, 8, 8, 4, 1, 4, 4]
+    phases := Array<I64>(4)
+    for p in range 4: phases[p] = e.slot(I64(p), e.current[p])
+    whole I64 = e.Rows * e.Neurons
+    sizes[0] = e.RegionDesc.Len()
+    sizes[1] = e.BlockDesc.Len()
+    sizes[2] = e.Weights.Len()
+    sizes[3] = e.Biases.Len()
+    sizes[4] = e.Tables.Len()
+    sizes[5] = whole
+    sizes[6] = e.Labels.Len()
+    sizes[7] = whole
+    sizes[8] = 4 * whole
+    sizes[9] = 4 * whole
+    sizes[10] = whole
+    sizes[11] = e.Rows
+    sizes[12] = 10
+    sizes[13] = 4 * whole
+    sizes[14] = 4 * whole
+    sizes[15] = 4 * whole
+    sizes[16] = whole
+    header := StringBuilder()
+    header.Push("{\"__metadata__\":{\"format\":\"oann.board\",\"version\":\"2\"}")
+    offset I64 = 0
+    for k in range count {
+        dtype := "I64" if widths[k] == 8 else ("I32" if widths[k] == 4 else ("I16" if widths[k] == 2 else "U8"))
+        header.Push((",\"" + $names[k] + "\":{\"dtype\":\"" + $dtype + "\",\"shape\":[" + $(sizes[k]) + "],\"data_offsets\":[" + $offset + "," +
+            $(offset + widths[k] * sizes[k]) + "]}"))
+        offset += widths[k] * sizes[k]
+    }
+    header.PushChar('}')
+    for header.Len() % 8 != 0: header.PushChar(' ')
+    text := header.ToString()
+    out := Array<U8>(8 + text.Len() + offset)
+    put(out, 0, text.Len(), 8)
+    for i in range text.Len(): out[8 + i] = U8(text[i])
+    at I64 = 8 + text.Len()
+    for i in range sizes[0]: at = put(out, at, e.RegionDesc[i], 8)
+    for i in range sizes[1]: at = put(out, at, e.BlockDesc[i], 8)
+    for i in range sizes[2]: at = put(out, at, I64(e.Weights[i]), 2)
+    for i in range sizes[3]: at = put(out, at, I64(e.Biases[i]), 4)
+    for i in range sizes[4]: at = put(out, at, I64(e.Tables[i]), 4)
+    for i in range whole: at = put(out, at, I64(e.Drives[i]), 4)
+    for i in range sizes[6]: at = put(out, at, I64(e.Labels[i]), 4)
+    for i in range whole: at = put(out, at, I64(e.Targets[i]), 4)
+    for p in range 4 {
+        for i in range whole: at = put(out, at, I64(e.V[phases[p] + i]), 4)
+    }
+    for p in range 4 {
+        for i in range whole: at = put(out, at, I64(e.S[phases[p] + i]), 2)
+    }
+    for i in range whole: at = put(out, at, I64(e.Constant[i]), 4)
+    for i in range e.Rows: at = put(out, at, e.Residuals[i], 8)
+    scalars := Array<I64>[e.Rows, e.Neurons, e.N, e.DtQ, e.Attempts, e.Last.Sweeps, 1 if e.Last.Converged else 0, e.Saturations
+        e.Window, e.FollowQ]
+    for i in range 10: at = put(out, at, scalars[i], 8)
+    if e.Spiking {
+        for p in range 4 {
+            for i in range whole: at = put(out, at, I64(e.Syn[phases[p] + i]), 4)
+        }
+        for p in range 4 {
+            for i in range whole: at = put(out, at, I64(e.Spk[phases[p] + i]), 1)
+        }
+        for p in range 4 {
+            for i in range whole: at = put(out, at, I64(e.Tr[phases[p] + i]), 4)
+        }
+        for i in range whole: at = put(out, at, I64(e.Counts[i]), 4)
+    }
+    return out
+}
+
+# the image written to path
+fn (e Engine&) Dump(path String&) ? os.Error {
+    try os.WriteFile(path, e.Image())
+}
+
+# x's low width bytes, little-endian, at out[at ..]; gives where they end
+fn put(out mut Array<U8>&, at I64, x I64, width I64) I64 {
+    u := U64(x)
+    for k in range width: out[at + k] = U8((u >> U64(8 * k)) & 255)
+    return at + width
+}
+
+# the unit of population k's board neurons: the engine's neuron of each of the system's units, -1 for one dropped
+fn (e Engine&) inverse(k I64, units I64) Array<I64> {
+    at := Array<I64>(units, -1)
+    col I64 = e.RegionDesc[k * RegionWords + 1]
+    for j in range e.RegionDesc[k * RegionWords + 2]: at[I64(e.Origin[col + j])] = j
+    return at
+}
+
+# the board's weights and biases, as values, into s: s becomes the system the board runs, in exact arithmetic - what the
+# board is compared with (docs/settling.md 5.6). A plain block, a Csr one (its stored entries) and an event-driven one
+# have the form; a tiled or low-rank one has not
+fn (e Engine&) StoreParams<T>(s system.System<T>&) ? LowerError {
+    params := s.E.Params
+    for k in range e.BlockCount {
+        l := s.Link(system.Conn(k))
+        d I64 = k * BlockWords
+        pre I64 = e.BlockDesc[d + 1]
+        post I64 = e.BlockDesc[d + 3]
+        pc I64 = e.BlockDesc[d]
+        qc I64 = e.BlockDesc[d + 2]
+        at I64 = e.BlockDesc[d + 7]
+        scale F64 = F64(I64(1) << e.BlockDesc[d + 6]) / F64(ActOne)
+        match l.Kind {
+            case conn.Wiring.Dense, conn.Wiring.Symmetric {
+                for i in range post {
+                    for j in range pre {
+                        params[l.Off + I64(e.Origin[qc + i]) * l.PreSize + I64(e.Origin[pc + j])] = T(F64(e.Weights[at + i * pre + j]) * scale)
+                    }
+                }
+            }
+            case conn.Wiring.Events {
+                for i in range post {
+                    for j in range pre {
+                        params[l.Off + I64(e.Origin[pc + j]) * l.PostSize + I64(e.Origin[qc + i])] = T(F64(e.Weights[at + i * pre + j]) * scale)
+                    }
+                }
+            }
+            case conn.Wiring.Csr {
+                c := l.Csr!
+                toPost := e.inverse(l.Post, l.PostSize)
+                toPre := e.inverse(l.Pre, l.PreSize)
+                for i in range l.PostSize {
+                    for x in range c.Ptr[i], c.Ptr[i + 1] {
+                        if toPost[i] < 0 or toPre[I64(c.Idx[x])] < 0: continue
+                        c.Values[x] = T(F64(e.Weights[at + toPost[i] * pre + toPre[I64(c.Idx[x])]]) * scale)
+                    }
+                }
+            }
+            case _ { error LowerError.Unsupported("connection " + $k + ": a tiled or low-rank block has no stored form to write the board's weights into") }
+        }
+    }
+    for k in range e.RegionCount {
+        d I64 = k * RegionWords
+        if e.RegionDesc[d] == 0: continue
+        pop := s.Pop(system.Pop(k))
+        for j in range e.RegionDesc[d + 2] {
+            params[pop.Bias + I64(e.Origin[e.RegionDesc[d + 1] + j])] = T(F64(e.Biases[e.RegionDesc[d + 1] + j]) / F64(PotOne))
+        }
+    }
+}
+
+# the board's drives and targets for the rows in use, as values, into s
+fn (e Engine&) StoreInputs<T>(s system.System<T>&) {
+    n := e.Neurons
+    for k in range e.RegionCount {
+        pop := s.Pop(system.Pop(k))
+        d I64 = k * RegionWords
+        col I64 = e.RegionDesc[d + 1]
+        for b in range e.N {
+            for j in range e.RegionDesc[d + 2] {
+                to := b * pop.Size + I64(e.Origin[col + j])
+                pop.Drive[to] = T(F64(e.Drives[b * n + col + j]) / F64(PotOne))
+                if e.RegionDesc[d + 4] == 2: pop.Target[to] = T(F64(e.Targets[b * n + col + j]) / F64(ActOne))
+            }
+        }
+    }
+}
+
+# the synapses the engine holds that are not zero: what a compacted system keeps of its dense blocks
+fn (e Engine&) Nonzero() I64 {
+    count I64 = 0
+    for w in e.Weights {
+        if w != 0: count++
+    }
+    return count
+}
+
+# ---- what must not allocate, decided while compiling (S17a, G42): every piece of a sweep and of a settle, the pushes
+# and pulls between settles ----
+
+fn prepareOf(e mut Engine&) { e.prepare(0) }
+fn transportOf(e mut Engine&) { e.transport(0, 0) }
+fn nudgedOf(e mut Engine&) { e.transport(0, 5) }
+fn measureOf(e mut Engine&) I64 { return e.measure(0) }
+fn stepOf(e mut Engine&) { e.step(0, 65536) }
+fn spikeStepOf(e mut Engine&) { e.spikeStep(0, 5) }
+fn spikeRatesOf(e mut Engine&) I64 { return e.spikeRates(0) }
+fn settleOf(e mut Engine&) { try e.relax(settle.Phase.Free, 8, 5, true) catch { } }
+fn runOf(e mut Engine&) settle.Settlement { return e.Run(settle.Phase.Plus, 4) }
+fn restOf(e mut Engine&) {
+    e.Reset(settle.Phase.Free)
+    e.Warm(settle.Phase.Plus, settle.Phase.Free)
+    e.Nudge(settle.Phase.Plus, 0.5)
+}
+fn pushOf(e mut Engine&, s system.System<F32>&) { e.Inputs(s, 1) }
+fn pullOf(e Engine&, s system.System<F32>&) { e.Store(s, settle.Phase.Free) }
+
+assert not prepareOf.Allocates, "a settle's constants allocate"
+assert not transportOf.Allocates, "a sweep's totals allocate"
+assert not nudgedOf.Allocates, "a nudged sweep's totals allocate"
+assert not measureOf.Allocates, "a sweep's residual allocates"
+assert not stepOf.Allocates, "a sweep's step allocates"
+assert not spikeStepOf.Allocates, "a time step of spiking neurons allocates"
+assert not spikeRatesOf.Allocates, "a window's end allocates"
+assert not settleOf.Allocates, "a settle allocates"
+assert not runOf.Allocates, "a run of sweeps allocates"
+assert not restOf.Allocates, "a cold start, a warm start or a nudge allocates"
+assert not pushOf.Allocates, "pushing a batch in allocates"
+assert not pullOf.Allocates, "reading a phase's state back allocates"
+
+# ---- tests (docs/settling.md 5.6), the floating-point side in F64 ----
+
+import "std/io"
+import "std/rand"
+
+# a system of one tanh population, h, of n units with a lateral block read both ways
+fn lateral(batch I64, n I64, r mut rand.Rand&) system.System<F64> {
+    s := system.System<F64>(batch)
+    h := s.Population(s.Root(), "h", n, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    s.Connect(h, h, conn.Wiring.Dense, reciprocal = true)
+    s.Plan(r)!
+    return s
+}
+
+test "the activation tables and the exponential's: their largest errors over every input" {
+    r := rand.Rand(1)
+    s := lateral(1, 2, r)
+    e := Engine.Lower(s)!
+    # tanh: linear interpolation over steps of 1/64 errs by at most h^2 / 8 max |tanh''| = 2.4e-5, the knots' rounding
+    # and the interpolation's by at most 2^-16 each
+    bound F64 = 0.77 / (8.0 * 64.0 * 64.0) + 2.0 / 65536.0
+    # the exponential's: (1/64)^2 / 8 max exp'' = 3.1e-5, and 2^-17 for each rounding
+    expBound F64 = 1.0 / (8.0 * 64.0 * 64.0) + 2.0 / 131072.0
+    try io.PutLine(("activation tables: largest error " + $(e.ActError) + " (" + $(e.ActError * 32768.0) + " steps of Q1.15; bound " + $bound +
+        "); exponential's: " + $(e.ExpError) + " (bound " + $expBound + ")"))
+    assert e.ActError <= bound and e.ExpError <= expBound
+    # every table entry is a 16-bit activity, and the tables are monotone - so is act
+    last I64 = ActMin
+    for v in range PotMin, PotMax + 1 {
+        x := e.act(0, v)
+        assert x >= last and x >= ActMin and x <= ActMax
+        last = x
+    }
+}
+
+# phase's potential and activity of unit j of population p in row b, in s's committed state
+fn potential(s system.System<F64>&, phase settle.Phase, p I64, b I64, j I64) F64 {
+    size := s.Pop(system.Pop(p)).Size
+    return s.State<neuron.RateCell<F64>>(system.Pop(p)).U[(phase.Index() * s.Batch + b) * size + j]
+}
+
+fn activity(s system.System<F64>&, phase settle.Phase, p I64, b I64, j I64) F64 {
+    size := s.Pop(system.Pop(p)).Size
+    return s.State<neuron.RateCell<F64>>(system.Pop(p)).S[(phase.Index() * s.Batch + b) * size + j]
+}
+
+# the largest difference, over the rows in use and the relaxing units, of phase's potentials and of its activities on
+# the board and in s
+fn gap(e Engine&, s system.System<F64>&, phase settle.Phase) F64, F64 {
+    pv F64 = 0.0
+    ps F64 = 0.0
+    for k in range e.RegionCount {
+        d I64 = k * RegionWords
+        if e.RegionDesc[d] == 0: continue
+        col := e.RegionDesc[d + 1]
+        for b in range e.N {
+            for j in range e.RegionDesc[d + 2] {
+                orig := I64(e.Origin[col + j])
+                pv = pv.Max((e.Potential(phase, b, col + j) - potential(s, phase, k, b, orig)).Abs())
+                ps = ps.Max((e.Activity(phase, b, col + j) - activity(s, phase, k, b, orig)).Abs())
+            }
+        }
+    }
+    return pv, ps
+}
+
+# the free phase settled from rest in floating point, tightly
+fn exact(s mut system.System<F64>&) {
+    s.Reset(settle.Phase.Free)
+    assert s.Settle(settle.Phase.Free, settle.Budget(20000, 1e-13)).Converged
+}
+
+# a certified system for the board's checks, as board.olang's circuit: three inputs (tanh when tanhIn, else linear) one-way into
+# five hidden units with a lateral block, a readout of three (cross-entropy at T = 0.25, or squared error toward random
+# targets), every recurrent block read both ways, certified at kappa, with biases, drives and classes drawn from r
+fn fixture(batch I64, r mut rand.Rand&, kappa F64, tanhIn Bool, squared Bool) system.System<F64> {
+    s := system.System<F64>(batch)
+    root := s.Root()
+    x := s.Population(root, "x", 3, neuron.Neuron.Rate(neuron.Rho.Tanh if tanhIn else neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 5, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(root, "y", 3, neuron.Neuron.Rate(neuron.Rho.Tanh)
+        neuron.Role.Readout(neuron.Cost.Squared if squared else neuron.Cost.Classes(0.25)))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, h, conn.Wiring.Dense, reciprocal = true)
+    s.Connect(h, y, conn.Wiring.Dense, reciprocal = true)
+    s.Plan(r)!
+    s.Certify(kappa)
+    for k in range 3 {
+        pop := s.Pop(system.Pop(k))
+        if k > 0 {
+            for j in range pop.Size: s.E.Params[pop.Bias + j] = r.Uniform(-0.5, 0.5)
+        }
+        for j in range pop.Drive.Len(): pop.Drive[j] = r.Uniform(-0.9, 0.9)
+    }
+    if squared {
+        for j in range s.Pop(y).Target.Len(): s.Pop(y).Target[j] = r.Uniform(-0.8, 0.8)
+    } else {
+        for b in range batch: s.Pop(y).Labels[b] = I32(r.Below(3))
+    }
+    return s
+}
+
+# the root of v = w tanh(v) + d, by bisection
+fn bisect(w F64, d F64) F64 {
+    lo F64 = -100.0
+    hi F64 = 100.0
+    for _ in range 200 {
+        mid F64 = 0.5 * (lo + hi)
+        if mid - w * mid.Tanh() - d > 0.0 { hi = mid } else { lo = mid }
+    }
+    return 0.5 * (lo + hi)
+}
+
+test "one neuron on the board settles to the root of v = w tanh(v) + d within the bound" {
+    ds := Array<F64>[0.3, -1.2, 2.0, 0.0]
+    for w in Array<F64>[0.5, -0.8, 0.9, -0.3] {
+        r := rand.Rand(1)
+        s := lateral(4, 1, r)
+        s.Weights(system.Conn(0)).Fill(0.5 * w)               # a lateral block of one: the effective weight is 2 W
+        for b in range 4: s.Pop(system.Pop(0)).Drive[b] = ds[b]
+        e := Engine.Lower(s)!
+        e.Inputs(s)
+        st := try e.relax(settle.Phase.Free, 2000, FloorLsb, true)
+        bound := e.Bound(s, FloorLsb)
+        worst F64 = 0.0
+        for b in range 4: worst = worst.Max((e.Potential(settle.Phase.Free, b, 0) - bisect(w, ds[b])).Abs())
+        try io.PutLine("w " + $w + ": " + $(st.Sweeps) + " sweeps to a residual of " + $(st.Residual) + ", within " + $worst + " of the root (the bound " + $bound + ")")
+        assert worst <= bound
+    }
+}
+
+# the engine for s, and s made the system the board runs, in exact arithmetic: its weights, biases, drives and targets the
+# board's values
+fn Engine.boardOf(s mut system.System<F64>&) mut Engine& {
+    e mut Engine& = Engine.Lower(s)!
+    e.StoreParams(s)!
+    e.Inputs(s)
+    e.StoreInputs(s)
+    return e
+}
+
+test "the board's free equilibrium is the exact system's within (tau_board + delta + tau) / (1 - kappa)" {
+    r := rand.Rand(2)
+    worst F64 = 0.0
+    reached I64 = 0
+    for trial in range 12 {
+        kappa F64 = Array<F64>[0.5, 0.8, 0.9][trial % 3]
+        s := fixture(4, r, kappa, trial % 2 == 1, trial % 4 < 2)
+        e := Engine.boardOf(s)
+        exact(s)
+        for tolQ in Array<I64>[0, 1, 5] {
+            e.Reset(settle.Phase.Free)
+            ok Bool = true
+            st := try e.relax(settle.Phase.Free, 2000, tolQ, true) catch NotSettled { ok = false } default settle.Settlement()
+            if not ok {
+                assert tolQ == 0                    # an exact fixed point need not exist; a cycle of a step or two does
+                continue
+            }
+            if tolQ == 0: reached++
+            pv, ps := gap(e, s, settle.Phase.Free)
+            bound := e.Bound(s, tolQ, 0.0, 1e-13, false)
+            assert e.Saturations == 0 and e.Clipped == 0 and st.Residual <= F64(tolQ) / F64(PotOne)
+            assert pv <= bound and ps <= bound + e.ActError
+            worst = worst.Max(pv / bound)
+            if trial < 3 {
+                try io.PutLine(("kappa " + $kappa + ", board tolerance " + $tolQ + " steps: " + $(st.Sweeps) + " sweeps; potentials within " + $pv +
+                    ", activities within " + $ps + " - the bound " + $bound))
+            }
+        }
+    }
+    try io.PutLine("the largest gap as a fraction of its bound, over 12 systems: " + $worst + "; an exact fixed point reached in " + $reached)
+}
+
+test "against the system before quantization: the weights' rounding adds its fan-in times 2^-16 to delta" {
+    r := rand.Rand(7)
+    for trial in range 6 {
+        s := fixture(4, r, Array<F64>[0.5, 0.9][trial % 2], false, trial % 4 < 2)
+        e := Engine.Lower(s)!
+        e.Inputs(s)
+        exact(s)
+        try e.relax(settle.Phase.Free, 2000, 1, true)
+        pv, ps := gap(e, s, settle.Phase.Free)
+        bound := e.Bound(s, 1, 0.0, 1e-13)
+        assert pv <= bound and ps <= bound + e.ActError
+        if trial < 2 { try io.PutLine("the board against the unquantized system (kappa " + $(s.Gain()) + "): potentials within " + $pv + ", the bound " + $bound) }
+    }
+}
+
+test "nudged phases on the board: squared error and cross-entropy forces, within the bound" {
+    r := rand.Rand(3)
+    for trial in range 8 {
+        squared Bool = trial % 2 == 0
+        s := fixture(3, r, 0.8, false, squared)
+        e := Engine.boardOf(s)
+        exact(s)
+        try e.relax(settle.Phase.Free, 2000, 1, true)
+        assert s.Nudged(settle.Budget(20000, 1e-13), 0.5, true).Converged
+        for beta in Array<F64>[0.5, -0.5] {
+            phase := settle.Phase.Plus if beta > 0.0 else settle.Phase.Minus
+            e.Warm(phase, settle.Phase.Free)
+            e.Nudge(phase, beta)
+            st := try e.relax(phase, 4000, 2, false)
+            pv, ps := gap(e, s, phase)
+            bound := e.Bound(s, 2, beta, 1e-13, false)
+            if trial < 2 {
+                try io.PutLine(($("squared" if squared else "cross-entropy") + " beta " + $beta + ": " + $(st.Sweeps) + " sweeps at dt " + $(e.Dt) +
+                    ", potentials within " + $pv + " of the exact, the bound " + $bound))
+            }
+            assert pv <= bound and ps <= bound + e.ActError
+        }
+    }
+}
+
+test "a lesson on the board: its three phases' states, stored back into the system, are the exact ones within the bound" {
+    r := rand.Rand(4)
+    s := fixture(4, r, 0.9, false, false)
+    e := Engine.boardOf(s)
+    exact(s)
+    assert s.Nudged(settle.Budget(20000, 1e-13), 0.5, true).Converged
+    # the exact system's states, kept before the board's lesson overwrites them
+    kept := Array<F64>(3 * 4 * 5)
+    for p in range 3 {
+        for b in range 4 {
+            for j in range 5: kept[(p * 4 + b) * 5 + j] = potential(s, settle.Phase.Free if p == 0 else (settle.Phase.Plus if p == 1 else settle.Phase.Minus), 1, b, j)
+        }
+    }
+    sweeps := try e.Lesson(s, 0.5, true, 0, 2.0 / F64(PotOne), 4000)
+    worst F64 = 0.0
+    for p in range 3 {
+        for b in range 4 {
+            for j in range 5 {
+                phase := settle.Phase.Free if p == 0 else (settle.Phase.Plus if p == 1 else settle.Phase.Minus)
+                worst = worst.Max((potential(s, phase, 1, b, j) - kept[(p * 4 + b) * 5 + j]).Abs())
+            }
+        }
+    }
+    bound := e.Bound(s, 2, 0.5, 1e-13, false)
+    try io.PutLine("a lesson on the board: " + $sweeps + " sweeps, the hidden potentials of the three phases within " + $worst + " of the exact ones (the bound " + $bound + ")")
+    assert worst <= bound
+}
+
+test "a settle the budget refuses leaves the board's committed state as it was (dyn commits the state it reached)" {
+    r := rand.Rand(5)
+    s := lateral(2, 4, r)
+    s.Weights(system.Conn(0)).Fill(0.375)          # effective weights 0.75: kappa 3, bistable
+    d := s.Pop(system.Pop(0)).Drive
+    for j in range d.Len(): d[j] = r.Uniform(-0.3, 0.3)
+    e := Engine.Lower(s)!
+    e.Inputs(s)
+    refused I64 = 0
+    accepted I64 = 0
+    for trial in range 20 {
+        before := Array<I32>(e.Rows * e.Neurons)
+        at := e.slot(0, e.current[0])
+        for i in range before.Len(): before[i] = e.V[at + i]
+        ok Bool = true
+        try e.relax(settle.Phase.Free, trial, 0, true) catch NotSettled {
+            ok = false
+            refused++
+            at2 := e.slot(0, e.current[0])
+            for i in range before.Len(): assert e.V[at2 + i] == before[i]
+        }
+        if ok: accepted++
+    }
+    assert refused > 0 and accepted > 0
+}
+
+# ---- parity with board.olang (removed with it, when circuit goes: the golden digests below carry what these check) ----
+
+import "std/json"
+import "../board"
+import "../circuit"
+import "../optim"
+
+fn rhoOf(f neuron.Rho) circuit.Rho {
+    return match f {
+        case neuron.Rho.Tanh: circuit.Rho.Tanh
+        case neuron.Rho.HardSigmoid: circuit.Rho.HardSigmoid
+        case neuron.Rho.Linear: circuit.Rho.Linear
+        case _: unreachable
+    }
+}
+
+# a circuit with the populations, connections and values of s (plain blocks, rate or spiking neurons), for board.olang
+# to run: what Engine.Lower(s) must agree with bit for bit
+fn circuitOf(s system.System<F64>&) circuit.Circuit<F64> {
+    c := circuit.Circuit<F64>(s.Batch)
+    for p in s.E.Pops {
+        model := match p.Model {
+            case neuron.Neuron.Rate(f): circuit.Neuron.Rate(rhoOf(f))
+            case neuron.Neuron.Lif(leak, threshold, synapse, window): circuit.Neuron.Lif(leak, threshold, synapse, window)
+            case _: unreachable
+        }
+        role := p.Role
+        if role == neuron.Role.Readout {
+            match role.cost {
+                case neuron.Cost.CrossEntropy(temperature, groups) { c.Readout(p.Size, circuit.Cost.CrossEntropy(temperature), model, groups) }
+                case neuron.Cost.Squared { c.Readout(p.Size, circuit.Cost.Squared, model) }
+            }
+        } else if role == neuron.Role.Hidden {
+            c.Hidden(p.Size, model)
+        } else {
+            c.Input(p.Size, model)
+        }
+    }
+    for l in s.E.Links: c.Project(circuit.Region(l.Pre), circuit.Region(l.Post), circuit.Wiring.Reciprocal if l.Both else circuit.Wiring.OneWay)
+    r := rand.Rand(1)
+    c.Plan(r)
+    c.Dt = s.E.Dt
+    pull(c, s)
+    for k in range s.E.Pops.Len() {
+        pop := s.Pop(system.Pop(k))
+        reg := circuit.Region(k)
+        for j in range pop.Drive.Len(): c.DriveData(reg)[j] = pop.Drive[j]
+        if pop.Role == neuron.Role.Readout and settle.GroupsOf(pop.Role) > 0 {
+            for j in range pop.Labels.Len(): c.LabelData(reg)[j] = pop.Labels[j]
+        } else if pop.Role == neuron.Role.Readout {
+            for j in range pop.Target.Len(): c.TargetData(reg)[j] = pop.Target[j]
+        }
+    }
+    return c
+}
+
+# s's weights and biases into c (the same structure): a learning step's result pushed to the other side
+fn pull<T>(c mut circuit.Circuit<T>&, s system.System<T>&) {
+    for k in range s.E.Links.Len() {
+        l := s.E.Links[k]
+        w := c.Weights(circuit.Projection(k))
+        for i in range l.PostSize {
+            for j in range l.PreSize: w.Set(i, j, s.E.Params[l.Off + i * l.PreSize + j])
+        }
+    }
+    for k in range s.E.Pops.Len() {
+        pop := s.Pop(system.Pop(k))
+        if pop.Role == neuron.Role.Input: continue
+        for j in range pop.Size: c.Bias(circuit.Region(k))[j] = s.E.Params[pop.Bias + j]
+    }
+}
+
+# the other way: c's weights and biases into s
+fn push<T>(s system.System<T>&, c circuit.Circuit<T>&) {
+    for k in range s.E.Links.Len() {
+        l := s.E.Links[k]
+        w := c.Weights(circuit.Projection(k))
+        for i in range l.PostSize {
+            for j in range l.PreSize: s.E.Params[l.Off + i * l.PreSize + j] = w.Get(i, j)
+        }
+    }
+    for k in range s.E.Pops.Len() {
+        pop := s.Pop(system.Pop(k))
+        if pop.Role == neuron.Role.Input: continue
+        for j in range pop.Size: s.E.Params[pop.Bias + j] = c.Bias(circuit.Region(k))[j]
+    }
+}
+
+# a's image and last settle are b's, every integer
+fn same(a board.Engine&, b Engine&) {
+    assert a.Rows == b.Rows and a.Neurons == b.Neurons and a.N == b.N and a.Spiking == b.Spiking
+    assert a.RegionDesc == b.RegionDesc and a.BlockDesc == b.BlockDesc and a.Weights == b.Weights and a.Biases == b.Biases
+    assert a.Tables == b.Tables and a.Drives == b.Drives and a.Labels == b.Labels and a.Targets == b.Targets
+    assert a.V == b.V and a.S == b.S and a.Constant == b.Constant and a.Total == b.Total and a.Residuals == b.Residuals
+    assert a.Syn == b.Syn and a.Spk == b.Spk and a.Tr == b.Tr and a.Counts == b.Counts
+    assert a.DtQ == b.DtQ and a.Attempts == b.Attempts and a.Window == b.Window and a.FollowQ == b.FollowQ
+    assert a.Sweeps == b.Sweeps and a.Saturations == b.Saturations and a.Clipped == b.Clipped and a.Constants == b.Constants
+    assert a.Steps == b.Steps and a.Spikes == b.Spikes and a.Events == b.Events and a.Lambda == b.Lambda
+    assert a.ActError == b.ActError and a.ExpError == b.ExpError
+    assert a.Last.Sweeps == b.Last.Sweeps and a.Last.Qualified == b.Last.Converged and a.Last.Residual == b.Last.Residual
+}
+
+# the golden vectors of a and b written and read back: the same bytes
+fn sameBytes(a board.Engine&, b Engine&, name String&) {
+    pa := "build/engine_parity_a_" + $name + ".safetensors"
+    pb := "build/engine_parity_b_" + $name + ".safetensors"
+    a.Dump(pa)!
+    b.Dump(pb)!
+    ta := os.ReadFile(pa)!
+    tb := os.ReadFile(pb)!
+    assert ta == tb and ta.Len() > 0
+    try os.Remove(pa) catch { }
+    try os.Remove(pb) catch { }
+}
+
+# a system of x (2 inputs) -> h (the model, 5) <-> y (2, squared error toward the targets), the Lif fixture of
+# board.olang's spiking tests: every relaxing neuron biased above its threshold
+fn lifFixture(batch I64, model neuron.Neuron, r mut rand.Rand&) system.System<F64> {
+    s := system.System<F64>(batch)
+    root := s.Root()
+    x := s.Population(root, "x", 2, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 5, model)
+    y := s.Population(root, "y", 2, model, neuron.Role.Readout(neuron.Cost.Squared))
+    s.Connect(x, h, conn.Wiring.Dense)
+    l := s.Connect(h, y, conn.Wiring.Dense, reciprocal = true)
+    s.Plan(r)!
+    for i in range s.Link(l).Count: s.E.Params[s.Link(l).Off + i] *= 2.0
+    for j in range 5: s.E.Params[s.Pop(h).Bias + j] = 1.3 + 0.1 * F64(j)
+    for j in range 2: s.E.Params[s.Pop(y).Bias + j] = 1.5
+    for j in range s.Pop(x).Drive.Len(): s.Pop(x).Drive[j] = r.Uniform(0.0, 1.0)
+    for b in range batch {
+        for j in range 2: s.Pop(y).Target[b * 2 + j] = 0.15 if (j == b % 2) else 0.02
+    }
+    return s
+}
+
+test "board.olang's parity: the same image, the same settles and the same golden vectors, rate systems" {
+    r := rand.Rand(6)
+    for trial in range 6 {
+        s := fixture(3, r, Array<F64>[0.5, 0.9][trial % 2], trial % 2 == 1, trial % 4 < 2)
+        c := circuitOf(s)
+        a := board.Engine.Board(c)
+        e := Engine.Lower(s)!
+        same(a, e)
+        a.Inputs(c)
+        e.Inputs(s)
+        same(a, e)
+        try a.Settle(circuit.Phase.Free, 1000, 1e-4)
+        try e.Settle(settle.Phase.Free, 1000, 1e-4)
+        same(a, e)
+        sameBytes(a, e, "rate")
+        for beta in Array<F64>[0.5, -0.5] {
+            a.Warm(circuit.Phase.Plus, circuit.Phase.Free)
+            e.Warm(settle.Phase.Plus, settle.Phase.Free)
+            a.Nudge(circuit.Phase.Plus, beta)
+            e.Nudge(settle.Phase.Plus, beta)
+            try a.Settle(circuit.Phase.Plus, 1000, 2.0 / F64(PotOne))
+            try e.Settle(settle.Phase.Plus, 1000, 2.0 / F64(PotOne))
+            same(a, e)
+        }
+        sameBytes(a, e, "rate")
+        for j in range e.Neurons: assert a.Potential(circuit.Phase.Plus, 0, j) == e.Potential(settle.Phase.Plus, 0, j)
+    }
+}
+
+test "board.olang's parity: a lesson's settles, the three phases, bit for bit; readout groups" {
+    r := rand.Rand(8)
+    # a readout of two groups of three beside the fixture's kind: x -> h <-> y
+    s := system.System<F64>(3)
+    root := s.Root()
+    x := s.Population(root, "x", 3, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 5, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(root, "y", 6, neuron.Neuron.Rate(neuron.Rho.HardSigmoid), neuron.Role.Readout(neuron.Cost.CrossEntropy(0.25, 2)))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, h, conn.Wiring.Dense, reciprocal = true)
+    s.Connect(h, y, conn.Wiring.Dense, reciprocal = true)
+    s.Plan(r)!
+    s.Certify(0.8)
+    for j in range s.Pop(x).Drive.Len(): s.Pop(x).Drive[j] = r.Uniform(-0.9, 0.9)
+    for j in range s.Pop(y).Labels.Len(): s.Pop(y).Labels[j] = I32(r.Below(3))
+    c := circuitOf(s)
+    a := board.Engine.Board(c)
+    e := Engine.Lower(s)!
+    same(a, e)
+    tol := 2.0 / F64(PotOne)
+    for beta in Array<F64>[0.5, 1.0] {
+        try a.Teach(c, 3, circuit.Lesson(beta, tol, 4000))
+        try e.Lesson(s, beta, true, 0, tol, 4000)
+        same(a, e)
+    }
+    sameBytes(a, e, "lesson")
+    # the stored states are the engine's values: phase p's potentials and activities in the system
+    for p in range 3 {
+        phase := settle.Phase.Free if p == 0 else (settle.Phase.Plus if p == 1 else settle.Phase.Minus)
+        for b in range 3 {
+            for j in range 5 {
+                assert potential(s, phase, 1, b, j) == e.Potential(phase, b, e.RegionDesc[RegionWords + 1] + j)
+                assert activity(s, phase, 1, b, j) == e.Activity(phase, b, e.RegionDesc[RegionWords + 1] + j)
+            }
+        }
+    }
+}
+
+test "board.olang's parity: XOR learned with its settles on both engines - identical after every lesson" {
+    s := system.System<F64>(4)
+    root := s.Root()
+    x := s.Population(root, "x", 2, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 8, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    o := s.Population(root, "o", 2, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Classes(0.25)))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, o, conn.Wiring.Dense, reciprocal = true)
+    r := rand.Rand(1)
+    s.Plan(r)!
+    for b in range 4 {
+        s.Pop(x).Drive[2 * b] = 1.0 if b / 2 == 1 else -1.0
+        s.Pop(x).Drive[2 * b + 1] = 1.0 if b % 2 == 1 else -1.0
+        s.Pop(o).Labels[b] = I32((b / 2) ^ (b % 2))
+    }
+    c := circuitOf(s)
+    c.Certify(0.9)
+    push(s, c)
+    a := board.Engine.Board(c)
+    e := Engine.Lower(s)!
+    opt := optim.FlatAdamW<F64>(c.ParamCount, 0.05)
+    same(a, e)
+    sweeps I64 = 0
+    for _ in range 400 {
+        tol := c.LessonTolerance(0.5)
+        budget := c.Budget(tol, 0.5)
+        taught := try a.Teach(c, 4, circuit.Lesson(0.5, tol, budget))
+        assert taught == (try e.Lesson(s, 0.5, true, 0, tol, budget))
+        sweeps += taught
+        same(a, e)
+        opt.Step(c.ParamData(), c.GradData())
+        c.Restrain(0.9)
+        a.Load(c)
+        push(s, c)
+        e.Load(s)!
+        same(a, e)
+    }
+    # answered on the board
+    a.Inputs(c)
+    e.Inputs(s)
+    a.Nudge(circuit.Phase.Free, 0)
+    e.Nudge(settle.Phase.Free, 0)
+    try a.Settle(circuit.Phase.Free, 1000, 1e-4)
+    try e.Settle(settle.Phase.Free, 1000, 1e-4)
+    same(a, e)
+    right I64 = 0
+    for b in range 4 {
+        col := e.RegionDesc[2 * RegionWords + 1]
+        pick I64 = 1 if e.Activity(settle.Phase.Free, b, col + 1) > e.Activity(settle.Phase.Free, b, col) else 0
+        if pick == I64(s.Pop(o).Labels[b]): right++
+    }
+    try io.PutLine("XOR, 400 lessons settled on both engines, identical after every one: " + $right + "/4 right, " + $(F64(sweeps) / 400.0) + " sweeps a lesson")
+    assert right == 4
+}
+
+# a and b are the same engine: every integer of the image and of the last settle (but where each neuron came from)
+fn alike(a Engine&, b Engine&) {
+    assert a.Rows == b.Rows and a.Neurons == b.Neurons and a.N == b.N and a.Spiking == b.Spiking
+    assert a.RegionDesc == b.RegionDesc and a.BlockDesc == b.BlockDesc and a.Weights == b.Weights and a.Biases == b.Biases
+    assert a.Drives == b.Drives and a.Labels == b.Labels and a.Targets == b.Targets
+    assert a.V == b.V and a.S == b.S and a.Constant == b.Constant and a.Total == b.Total and a.Residuals == b.Residuals
+    assert a.Syn == b.Syn and a.Spk == b.Spk and a.Tr == b.Tr and a.Counts == b.Counts
+    assert a.DtQ == b.DtQ and a.Window == b.Window and a.FollowQ == b.FollowQ and a.Sweeps == b.Sweeps
+    assert a.Saturations == b.Saturations and a.Clipped == b.Clipped and a.Spikes == b.Spikes and a.Events == b.Events
+    assert a.Last == b.Last
+}
+
+# a system of the structure of a with every connection a plain block holding the weights it stands for, and the same
+# biases, drives, classes and targets
+fn twinDense(a system.System<F64>&) system.System<F64> {
+    b := system.System<F64>(a.Batch)
+    for p in a.E.Pops: b.Population(b.Root(), "p", p.Size, p.Model, p.Role)
+    for l in a.E.Links: b.Connect(system.Pop(l.Pre), system.Pop(l.Post), conn.Wiring.Dense, false, l.Both)
+    r := rand.Rand(1)
+    b.Plan(r)!
+    for k in range a.E.Links.Len() {
+        l := a.E.Links[k]
+        dense := expand(l, a.E.Params)
+        for x in range l.PostSize * l.PreSize: b.E.Params[b.E.Links[k].Off + x] = element(l, a.E.Params, dense, x / l.PreSize, x % l.PreSize)
+    }
+    for k in range a.E.Pops.Len() {
+        p := a.E.Pops[k]
+        q := b.E.Pops[k]
+        for j in range p.Size: b.E.Params[q.Bias + j] = a.E.Params[p.Bias + j]
+        for j in range p.Drive.Len(): q.Drive[j] = p.Drive[j]
+        for j in range p.Labels.Len(): q.Labels[j] = p.Labels[j]
+        for j in range p.Target.Len(): q.Target[j] = p.Target[j]
+    }
+    return b
+}
+
+# x (4 inputs) -> h (6) <-> h, h <-> o (5, squared error), the last block wired as given, certified at 0.8 with biases,
+# drives and targets drawn from r
+fn wired(w conn.Wiring, both Bool, r mut rand.Rand&) system.System<F64> {
+    s := system.System<F64>(3)
+    root := s.Root()
+    x := s.Population(root, "x", 4, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 6, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    o := s.Population(root, "o", 5, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Squared))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, h, conn.Wiring.Dense, reciprocal = true)
+    s.Connect(h, o, w, reciprocal = both)
+    s.Plan(r)!
+    s.Certify(0.8)
+    for k in range 3 {
+        pop := s.Pop(system.Pop(k))
+        for j in range pop.Drive.Len(): pop.Drive[j] = r.Uniform(-0.9, 0.9)
+        for j in range pop.Target.Len(): pop.Target[j] = r.Uniform(-0.8, 0.8)
+        if k > 0 {
+            for j in range pop.Size: s.E.Params[pop.Bias + j] = r.Uniform(-0.3, 0.3)
+        }
+    }
+    return s
+}
+
+test "every wiring lowers to the dense block it stands for - as built, pruned, then compacted - bit for bit, settles and lessons too" {
+    for w in Array<conn.Wiring>[conn.Wiring.Csr(0.5), conn.Wiring.Tiles(2, 0.7), conn.Wiring.Events(0.0), conn.Wiring.LowRank(2)] {
+        r := rand.Rand(12)
+        a := wired(w, w != conn.Wiring.Events, r)
+        weights := Array<I64>(3)
+        for round in range 3 {
+            if round == 1 {
+                keep := Array<Bool>(a.Link(system.Conn(2)).Keep.Len(), true)
+                for x in range 0, keep.Len(), 3: keep[x] = false
+                a.Prune(system.Conn(2), keep)
+            }
+            if round == 2: a.Compact()
+            b := twinDense(a)
+            ea := Engine.Lower(a)!
+            eb := Engine.Lower(b)!
+            alike(ea, eb)
+            weights[round] = ea.Nonzero()
+            ea.Inputs(a)
+            eb.Inputs(b)
+            try ea.Settle(settle.Phase.Free, 1000, 1e-4)
+            try eb.Settle(settle.Phase.Free, 1000, 1e-4)
+            alike(ea, eb)
+            try ea.Lesson(a, 0.5, true, 0, 2.0 / F64(PotOne), 4000)
+            try eb.Lesson(b, 0.5, true, 0, 2.0 / F64(PotOne), 4000)
+            alike(ea, eb)
+            pa, sa := gap(ea, a, settle.Phase.Plus)
+            pb, sb := gap(eb, b, settle.Phase.Plus)
+            assert pa == pb and sa == sb
+        }
+        assert weights[1] <= weights[0] and weights[2] == weights[1]
+        try io.PutLine(("lowered " + $w + ": " + $(weights[0]) + " stored synapses, " + $(weights[1]) + " after pruning, " + $(weights[2]) + " after compacting - the dense twin's engine each time"))
+    }
+}
+
+test "retired units are dropped: the engine of a system with units retired is the engine of one built without them" {
+    r := rand.Rand(13)
+    a := system.System<F64>(3)
+    root := a.Root()
+    x := a.Population(root, "x", 3, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := a.Population(root, "h", 6, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    o := a.Population(root, "o", 3, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Squared))
+    a.Connect(x, h, conn.Wiring.Dense)
+    a.Connect(h, h, conn.Wiring.Dense, reciprocal = true)
+    a.Connect(h, o, conn.Wiring.Dense, reciprocal = true)
+    a.Plan(r)!
+    a.Certify(0.8)
+    for k in range 3 {
+        pop := a.Pop(system.Pop(k))
+        for j in range pop.Drive.Len(): pop.Drive[j] = r.Uniform(-0.9, 0.9)
+        for j in range pop.Target.Len(): pop.Target[j] = r.Uniform(-0.8, 0.8)
+        if k > 0 {
+            for j in range pop.Size: a.E.Params[pop.Bias + j] = r.Uniform(-0.3, 0.3)
+        }
+    }
+    a.Retire(h, 1)
+    a.Retire(h, 4)
+    # the same system built with four hidden units: those of a that are alive
+    alive := Array<I64>[0, 2, 3, 5]
+    b := system.System<F64>(3)
+    bx := b.Population(b.Root(), "x", 3, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    bh := b.Population(b.Root(), "h", 4, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    bo := b.Population(b.Root(), "o", 3, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Squared))
+    b.Connect(bx, bh, conn.Wiring.Dense)
+    b.Connect(bh, bh, conn.Wiring.Dense, reciprocal = true)
+    b.Connect(bh, bo, conn.Wiring.Dense, reciprocal = true)
+    rb := rand.Rand(2)
+    b.Plan(rb)!
+    for i in range 4 {
+        for j in range 3: b.E.Params[b.E.Links[0].Off + i * 3 + j] = a.E.Params[a.E.Links[0].Off + alive[i] * 3 + j]
+        for j in range 4: b.E.Params[b.E.Links[1].Off + i * 4 + j] = a.E.Params[a.E.Links[1].Off + alive[i] * 6 + alive[j]]
+        for k in range 3: b.E.Params[b.E.Links[2].Off + k * 4 + i] = a.E.Params[a.E.Links[2].Off + k * 6 + alive[i]]
+        b.E.Params[b.Pop(bh).Bias + i] = a.E.Params[a.Pop(h).Bias + alive[i]]
+        for row in range 3: b.Pop(bh).Drive[row * 4 + i] = a.Pop(h).Drive[row * 6 + alive[i]]
+    }
+    for j in range 3 {
+        b.E.Params[b.Pop(bo).Bias + j] = a.E.Params[a.Pop(o).Bias + j]
+        for row in range 3 {
+            b.Pop(bx).Drive[row * 3 + j] = a.Pop(x).Drive[row * 3 + j]
+            b.Pop(bo).Drive[row * 3 + j] = a.Pop(o).Drive[row * 3 + j]
+            b.Pop(bo).Target[row * 3 + j] = a.Pop(o).Target[row * 3 + j]
+        }
+    }
+    ea := Engine.Lower(a)!
+    eb := Engine.Lower(b)!
+    assert ea.Neurons == 3 + 4 + 3 and ea.Neurons == eb.Neurons
+    alike(ea, eb)
+    ea.Inputs(a)
+    eb.Inputs(b)
+    try ea.Settle(settle.Phase.Free, 1000, 1e-4)
+    try eb.Settle(settle.Phase.Free, 1000, 1e-4)
+    alike(ea, eb)
+    # and dyn holds the retired units at rest: its equilibrium is the board's, within the bound (its residual still counts
+    # a retired unit's total against its zero - it never reports converging, so a fixed number of sweeps stands in)
+    a.Reset(settle.Phase.Free)
+    a.Settle(settle.Phase.Free, settle.Budget(600, 1e-13))
+    pv, ps := gap(ea, a, settle.Phase.Free)
+    bound := ea.Bound(a, FloorLsb, 0.0, 1e-13)
+    try io.PutLine("two of six hidden units retired: dropped from the engine (" + $(ea.Neurons) + " neurons), the potentials within " + $pv + " of dyn's, the bound " + $bound)
+    assert pv <= bound and ps <= bound + ea.ActError
+    # a readout's retired unit is no board system
+    a2 := system.System<F64>(1)
+    p := a2.Population(a2.Root(), "o", 3, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Classes(0.25)))
+    a2.Connect(p, p, conn.Wiring.Dense, reciprocal = true)
+    r2 := rand.Rand(1)
+    a2.Plan(r2)!
+    a2.Retire(p, 0)
+    lowered Bool = true
+    try Engine.Lower(a2) catch LowerError { lowered = false }
+    assert not lowered
+}
+
+# ---- spiking (docs/settling.md 4.6) ----
+
+# a Lif neuron's leak and threshold
+fn lifOf(model neuron.Neuron) F64, F64 {
+    match model {
+        case neuron.Neuron.Lif(leak, threshold, _, _) { return leak, threshold }
+        case _ { unreachable }
+    }
+}
+
+test "a Lif neuron on the board fires at the analytic rate of its quantized drive, leak and threshold" {
+    window I64 = 4000
+    r := rand.Rand(14)
+    s := system.System<F64>(6)
+    h := s.Population(s.Root(), "h", 1, neuron.Neuron.Lif(0.05, 1.0, 1.0, window))
+    s.Plan(r)!
+    drives := Array<F64>[0.5, 0.98, 1.05, 1.5, 2.5, 6.0]
+    for b in range 6: s.Pop(h).Drive[b] = drives[b]
+    e := Engine.Lower(s)!
+    e.Inputs(s)
+    st := try e.Settle(settle.Phase.Free, 40 * window, 2.0 / F64(window))
+    assert st.Converged and st.Sweeps >= 2 * window
+    leak, threshold := lifOf(e.LifOf(0))
+    # one rounding of u a step, at most 2^-15, is the step of a drive off by 2^-15 / leak: the rate lies between those
+    # of the drives that far either side, each within f^2 / (1 - f) + 1 / window of the continuous formula (dyn's own
+    # test), and the rate's rounding to Q1.15 adds 2^-15
+    off F64 = 1.0 / 32768.0 / leak
+    unit F64 = 1.0 / 32768.0
+    for b in range 6 {
+        drive F64 = F64(e.Drives[b]) / F64(PotOne)
+        rate := e.Activity(settle.Phase.Free, b, 0)
+        lo := neuron.LifRateOf(drive - off, leak, threshold)
+        hi := neuron.LifRateOf(drive + off, leak, threshold)
+        try io.PutLine("drive " + $drive + ": " + $rate + " spikes a step on the board, analytic " + $(neuron.LifRateOf(drive, leak, threshold)))
+        if hi == 0.0 {
+            assert rate == 0.0
+        } else {
+            assert rate >= lo - lo * lo / (1.0 - lo) - 1.0 / F64(window) - unit
+            assert rate <= hi + hi * hi / (1.0 - hi) + 1.0 / F64(window) + unit
+        }
+    }
+    assert e.Saturations == 0
+}
+
+test "a spiking system on the board settles where dyn's floating-point one does, and where the rate model it approximates does" {
+    window I64 = 8000
+    a := lifFixture(2, neuron.Neuron.Spiking(0.1, 1.0, 0.1, window), rand.Rand(21))
+    e := Engine.Lower(a)!
+    e.Inputs(a)
+    # the same system in floating point with the board's leak, threshold and synapse rate, weights, biases and inputs
+    lif := e.LifOf(1)
+    b := lifFixture(2, lif, rand.Rand(21))
+    e.StoreParams(b)!
+    e.StoreInputs(b)
+    # and its rate model: rate neurons with the Lif rate curve, the mean field both are near
+    leak, threshold := lifOf(lif)
+    m := lifFixture(2, neuron.Neuron.Rate(neuron.Rho.LifRate(leak, threshold)), rand.Rand(21))
+    e.StoreParams(m)!
+    e.StoreInputs(m)
+    try e.Settle(settle.Phase.Free, 40 * window, 2.0 / F64(window))
+    assert b.Settle(settle.Phase.Free, settle.Budget(40 * window, 2.0 / F64(window))).Converged
+    exact(m)
+    floatGap F64 = 0.0
+    boardGap F64 = 0.0
+    between F64 = 0.0
+    for row in range 2 {
+        for p in range 1, 3 {
+            size := b.Pop(system.Pop(p)).Size
+            for u in range size {
+                rate := e.Activity(settle.Phase.Free, row, e.RegionDesc[p * RegionWords + 1] + u)
+                twin := b.State<neuron.LifCell<F64>>(system.Pop(p)).S[row * size + u]
+                model := activity(m, settle.Phase.Free, p, row, u)
+                floatGap = floatGap.Max((twin - model).Abs())
+                boardGap = boardGap.Max((rate - model).Abs())
+                between = between.Max((rate - twin).Abs())
+            }
+        }
+    }
+    try io.PutLine(("spiking on the board: rates within " + $boardGap + " of the rate model (dyn's floating point: " + $floatGap + ") and " + $between +
+        " of dyn's floating-point system"))
+    assert boardGap < 0.015 and floatGap < 0.015 and between < 0.005
+    assert e.Saturations == 0
+}
+
+test "board.olang's parity, spiking: the same image, settles, lessons and golden vectors; an engine deterministic, refusing as board.olang does" {
+    window I64 = 64
+    r := rand.Rand(31)
+    s := lifFixture(2, neuron.Neuron.Spiking(0.1, 1.0, 0.25, window), r)
+    c := circuitOf(s)
+    a := board.Engine.Board(c)
+    e := Engine.Lower(s)!
+    same(a, e)
+    a.Inputs(c)
+    e.Inputs(s)
+    try a.Settle(circuit.Phase.Free, 40 * window, 2.0 / F64(window))
+    try e.Settle(settle.Phase.Free, 40 * window, 2.0 / F64(window))
+    same(a, e)
+    sameBytes(a, e, "spiking")
+    assert e.Spikes > 0 and e.Events > 0
+    # a lesson, three phases of windows
+    try a.Teach(c, 2, circuit.Lesson(1.0, 2.0 / F64(window), 40 * window))
+    try e.Lesson(s, 1.0, true, 0, 2.0 / F64(window), 40 * window)
+    same(a, e)
+    sameBytes(a, e, "spiking")
+    # a second engine of the same system settles bit for bit alike
+    f := Engine.Lower(s)!
+    f.Inputs(s)
+    try f.Settle(settle.Phase.Free, 40 * window, 2.0 / F64(window))
+    try f.Lesson(s, 1.0, true, 0, 2.0 / F64(window), 40 * window)
+    g := Engine.Lower(s)!
+    g.Inputs(s)
+    try g.Settle(settle.Phase.Free, 40 * window, 2.0 / F64(window))
+    try g.Lesson(s, 1.0, true, 0, 2.0 / F64(window), 40 * window)
+    alike(f, g)
+    # a settle with no window to spare and a tolerance of none refuses, and leaves the committed state as it was
+    at := e.slot(0, e.current[0])
+    v := Array<I32>(e.Rows * e.Neurons)
+    syn := Array<I32>(e.Rows * e.Neurons)
+    tr := Array<I32>(e.Rows * e.Neurons)
+    for i in range v.Len() {
+        v[i] = e.V[at + i]
+        syn[i] = e.Syn[at + i]
+        tr[i] = e.Tr[at + i]
+    }
+    refused Bool = false
+    try e.relax(settle.Phase.Free, window, 0, true) catch NotSettled { refused = true }
+    assert refused
+    at = e.slot(0, e.current[0])
+    for i in range v.Len(): assert e.V[at + i] == v[i] and e.Syn[at + i] == syn[i] and e.Tr[at + i] == tr[i]
+    try io.PutLine("a spiking settle and lesson: " + $(e.Spikes) + " spikes over " + $(e.Steps) + " row-steps, " + $(e.Events) + " synaptic events")
+}
+
+test "board.olang's parity, spiking: XOR learned with its settles on both engines - identical after every lesson" {
+    lif := neuron.Neuron.Spiking(0.1, 1.0, 0.25, 256)
+    s := system.System<F64>(4)
+    root := s.Root()
+    x := s.Population(root, "x", 2, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 8, lif)
+    o := s.Population(root, "o", 2, lif, neuron.Role.Readout(neuron.Cost.Squared))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, o, conn.Wiring.Dense, reciprocal = true)
+    r := rand.Rand(1)
+    s.Plan(r)!
+    for j in range 8: s.E.Params[s.Pop(h).Bias + j] = 1.2
+    for j in range 2: s.E.Params[s.Pop(o).Bias + j] = 1.0
+    for b in range 4 {
+        s.Pop(x).Drive[2 * b] = 1.0 if b / 2 == 1 else -1.0
+        s.Pop(x).Drive[2 * b + 1] = 1.0 if b % 2 == 1 else -1.0
+        s.Pop(o).Target[2 * b + ((b / 2) ^ (b % 2))] = 0.2
+    }
+    c := circuitOf(s)
+    a := board.Engine.Board(c)
+    e := Engine.Lower(s)!
+    opt := optim.FlatAdamW<F64>(c.ParamCount, 0.02)
+    steps I64 = 0
+    for _ in range 40 {
+        taught := try a.Teach(c, 4, circuit.Lesson(1.0, c.LessonTolerance(1.0), c.Budget(c.LessonTolerance(1.0), 1.0)))
+        assert taught == (try e.Lesson(s, 1.0, true, 0, c.LessonTolerance(1.0), c.Budget(c.LessonTolerance(1.0), 1.0)))
+        steps += taught
+        same(a, e)
+        opt.Step(c.ParamData(), c.GradData())
+        a.Load(c)
+        push(s, c)
+        e.Load(s)!
+        same(a, e)
+    }
+    try io.PutLine("spiking XOR, 40 lessons on both engines, identical after every one: " + $(steps / 40) + " steps a lesson")
+}
+
+# ---- golden digests: what board.olang's golden vectors were, kept when it is gone ----
+
+import "std/sha256"
+
+# the scenarios' systems: 0 a cross-entropy one with tanh inputs, 1 a squared-error one with linear inputs, 2 a spiking one
+fn scenario(kind I64) system.System<F64> {
+    if kind == 2: return lifFixture(2, neuron.Neuron.Spiking(0.1, 1.0, 0.25, 64), rand.Rand(31))
+    r := rand.Rand(U64(11 + kind))
+    return fixture(4, r, 0.9 - 0.1 * F64(kind), kind == 0, kind == 1)
+}
+
+# a scenario's engine after its settles: the free phase, then both nudged ones (a spiking scenario: a settle and a lesson)
+fn Engine.golden(kind I64) mut Engine& {
+    s := scenario(kind)
+    e mut Engine& = Engine.Lower(s)!
+    e.Inputs(s)
+    if kind == 2 {
+        e.Settle(settle.Phase.Free, 40 * 64, 2.0 / 64.0)!
+        e.Lesson(s, 1.0, true, 0, 2.0 / 64.0, 40 * 64)!
+        return e
+    }
+    e.Settle(settle.Phase.Free, 1000, 1e-4)!
+    for beta in Array<F64>[0.5, -0.5] {
+        phase := settle.Phase.Plus if beta > 0.0 else settle.Phase.Minus
+        e.Warm(phase, settle.Phase.Free)
+        e.Nudge(phase, beta)
+        e.Settle(phase, 1000, 2.0 / F64(PotOne))!
+    }
+    return e
+}
+
+# the same scenario on board.olang: the digest of the golden vectors it dumps
+fn boardDigest(kind I64) String {
+    s := scenario(kind)
+    c := circuitOf(s)
+    a := board.Engine.Board(c)
+    a.Inputs(c)
+    if kind == 2 {
+        a.Settle(circuit.Phase.Free, 40 * 64, 2.0 / 64.0)!
+        a.Teach(c, 2, circuit.Lesson(1.0, 2.0 / 64.0, 40 * 64))!
+    } else {
+        a.Settle(circuit.Phase.Free, 1000, 1e-4)!
+        for beta in Array<F64>[0.5, -0.5] {
+            phase := circuit.Phase.Plus if beta > 0.0 else circuit.Phase.Minus
+            a.Warm(phase, circuit.Phase.Free)
+            a.Nudge(phase, beta)
+            a.Settle(phase, 1000, 2.0 / F64(PotOne))!
+        }
+    }
+    path := "build/engine_golden.safetensors"
+    a.Dump(path)!
+    text := os.ReadFile(path)!
+    bytes := Array<U8>(text.Len())
+    for i in range text.Len(): bytes[i] = U8(text[i])
+    try os.Remove(path) catch { }
+    return sha256.Hex(bytes)
+}
+
+# the digests (sha256) of those scenarios' images, as board.olang's golden vectors dump them
+fn digest(kind I64) String {
+    return Array<String&>["dc02a1c88742b07e3381a3fbec4ad4e233b95c111d6d4c5be0b1ebd7b9d7e999"
+        "08b0d6b603c43f14e82a8a476a1e74152f033115c6d57e6272ca7bec11934d4b"
+        "f5bc2042ca8cc1f80703f4df564d9a2376c58d3f578ef4706c30dfac28b26135"][kind]
+}
+
+test "the golden vectors: each scenario's image has the digest board.olang's golden vectors had" {
+    got := Array<String>(3)
+    for kind in range 3 {
+        got[kind] = sha256.Hex(Engine.golden(kind).Image())
+        try io.PutLine("scenario " + $kind + ": " + $(got[kind]))
+    }
+    for kind in range 3: assert got[kind] == digest(kind)
+}
+
+test "board.olang's parity: its golden vectors of each scenario have those digests" {
+    for kind in range 3: assert boardDigest(kind) == digest(kind)
+}
+
+test "the golden vectors read back as they were written; the engine is deterministic" {
+    ea := Engine.golden(0)
+    eb := Engine.golden(0)
+    assert ea.V == eb.V and ea.S == eb.S and ea.Image() == eb.Image()
+    path := "build/engine_vectors_test.safetensors"
+    ea.Dump(path)!
+    text := try os.ReadFile(path)
+    n I64 = 0
+    for k in range 8: n = n | (I64(U8(text[k])) << (8 * k))
+    doc := try json.Json.Parse(text[8:8 + n])
+    entry := try doc["v"]
+    offsets := try (try entry["data_offsets"]).AsArr()
+    from := try offsets[0].AsInt()
+    at := ea.slot(0, ea.current[0])
+    for i in range ea.Rows * ea.Neurons {
+        x I64 = 0
+        for k in range 4: x = x | (I64(U8(text[8 + n + from + 4 * i + k])) << (8 * k))
+        x = (x << 32) >> 32
+        assert x == I64(ea.V[at + i])
+    }
+    try os.Remove(path) catch { }
+    try io.PutLine("a sweep of this system takes " + $(ea.SweepCycles()) + " cycles on the board, its constant " + $(ea.ConstantCycles()))
+}
+
+test "what the board cannot run is refused when lowering, saying why" {
+    r := rand.Rand(3)
+    # a rectifier has no table
+    s := system.System<F64>(1)
+    s.Population(s.Root(), "h", 2, neuron.Neuron.Rate(neuron.Rho.Relu))
+    s.Plan(r)!
+    refused Bool = false
+    try Engine.Lower(s) catch LowerError { refused = true }
+    assert refused
+    # a linear neuron that is not an input
+    t := system.System<F64>(1)
+    t.Population(t.Root(), "h", 2, neuron.Neuron.Rate(neuron.Rho.Linear))
+    t.Plan(r)!
+    refused = false
+    try Engine.Lower(t) catch LowerError { refused = true }
+    assert refused
+    # a system not yet planned
+    u := system.System<F64>(1)
+    u.Population(u.Root(), "h", 2, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    refused = false
+    try Engine.Lower(u) catch LowerError { refused = true }
+    assert refused
+    # a neuron with more than 2^16 synapses reaching it: its sum would overflow the accumulator
+    v := system.System<F64>(1)
+    h := v.Population(v.Root(), "h", 70000, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    g := v.Population(v.Root(), "g", 1, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    v.Connect(h, g, conn.Wiring.Dense, reciprocal = true)
+    v.Plan(r)!
+    refused = false
+    try Engine.Lower(v) catch LowerError { refused = true }
+    assert refused
+}
+
+# ---- MNIST through the board (M11) ----
+
+import "std/time"
+import "../data/loader"
+import "../data/mnist"
+import "../dyn/learn"
+
+# the test set answered on the board and by dyn in F32, by free settles: the board's accuracy, dyn's, the fraction of
+# samples both answer alike, and the sweeps a settle took on the board (a refused settle counts as wrong)
+fn answer<D>(s mut system.System<F32>&, e mut Engine&, l mut loader.Loader<D>&, pixels system.Pop, digits system.Pop) F64, F64, F64, F64 {
+    l.Epoch()
+    classes := Array<I32>(s.Batch)
+    floatAnswers := Array<I32>(s.Batch)
+    right, floatRight, agree, seen, sweeps, settles := 0, 0, 0, 0, 0, 0
+    tol := s.LessonTolerance(0.5)
+    budget := s.BudgetFor(tol).Sweeps
+    col := e.RegionDesc[I64(digits) * RegionWords + 1]
+    e.Nudge(settle.Phase.Free, 0)
+    for b in range l.Batches() {
+        n := l.Fill(b, s.Pop(pixels).Drive, classes)
+        seen += n
+        s.Settle(settle.Phase.Free, settle.Budget(budget, tol))
+        s.Predict(settle.Phase.Free, digits, floatAnswers)
+        e.Inputs(s, n)
+        ok Bool = true
+        try e.Settle(settle.Phase.Free, budget, tol) catch NotSettled { ok = false }
+        sweeps += e.Last.Sweeps
+        settles++
+        for i in range n {
+            best I64 = 0
+            for j in range 1, 10 {
+                if e.Activity(settle.Phase.Free, i, col + j) > e.Activity(settle.Phase.Free, i, col + best): best = j
+            }
+            boardRight := ok and I32(best) == classes[i]
+            if boardRight: right++
+            if floatAnswers[i] == classes[i]: floatRight++
+            if ok and I32(best) == floatAnswers[i]: agree++
+        }
+    }
+    return F64(right) / F64(seen), F64(floatRight) / F64(seen), F64(agree) / F64(seen), F64(sweeps) / F64(settles)
+}
+
+test "MNIST through the board (M11): a certified 784-128-10 taught at T = 0.25, its test set answered by the engine lowered from a dyn system" {
+    if not os.Exists("data/mnist/t10k-images-idx3-ubyte") {
+        try io.PutLine("MNIST is not fetched (make data): skipped")
+        return
+    }
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    batch I64 = 32
+    # the system the board runs, taught by dyn's equilibrium propagation (learn.Learner: Adam 1e-3, beta 0.5, held in the
+    # certified set after every step, as docs/settling.md 5.9 ran it), and the engine lowered from it
+    s := system.System<F32>(batch)
+    x := s.Population(s.Root(), "pixels", 784, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(s.Root(), "hidden", 128, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(s.Root(), "digits", 10, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Classes(0.25)))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, y, conn.Wiring.Dense, reciprocal = true)
+    s.Plan(rand.Rand(1))!
+    s.Certify(0.9)
+    l := learn.Learner<F32>(s)!
+    e := Engine.Lower(s)!
+    opt := optim.FlatAdamW<F32>(s.E.Params.Len(), 0.001)
+    trainSet := loader.Loader(data.Train, batch, 1)
+    testSet := loader.Loader(data.Test, batch, 1, false)
+    last F64 = 0.0
+    for epoch in range 1, 4 {
+        t0 := time.Now()
+        trainSet.Epoch()
+        for b in range trainSet.Batches() {
+            if trainSet.Fill(b, s.Pop(x).Drive, s.Pop(y).Labels) < batch: continue
+            taught := true
+            try l.Lesson(s.Root(), 0.5) catch { taught = false }
+            if not taught: continue
+            opt.Step(s.E.Params, s.E.Grads)
+            s.Restrain(0.9)
+        }
+        trained := F64(time.Since(t0)) * 1e-9
+        e.Load(s)!
+        t1 := time.Now()
+        boardAccuracy, floatAccuracy, agree, sweeps := answer(s, e, testSet, x, y)
+        try io.PutLine(("MNIST epoch " + $epoch + ": test accuracy " + $(100.0 * boardAccuracy).Fixed(2) + "% on the board, " + $(100.0 * floatAccuracy).Fixed(2) +
+            "% in dyn's F32, the answers agreeing on " + $(100.0 * agree).Fixed(2) + "%; " + $sweeps.Fixed(1) + " sweeps a settle on the board; trained in " +
+            $trained.Fixed(1) + " s, answered in " + $(F64(time.Since(t1)) * 1e-9).Fixed(1) + " s; saturated " + $(e.Saturations) + " times, constants clipped " +
+            $(100.0 * F64(e.Clipped) / F64(e.Constants)).Fixed(2) + "%"))
+        last = boardAccuracy
+        assert agree > 0.995 and (boardAccuracy - floatAccuracy).Abs() < 0.005
+    }
+    assert last > 0.905 and last < 0.92
+}

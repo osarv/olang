@@ -1,0 +1,130 @@
+# MNIST by a settling circuit: 784 pixel inputs (one-way into the hidden region, folded into a constant once per
+# settle), a hidden region of tanh neurons, ten readout neurons (cross-entropy at T = 0.25), the hidden and readout
+# reciprocal - taught by equilibrium propagation (circuit.Teach: a free settle, nudged ones at +beta and -beta, their
+# contrast) and Adam, then measured on the test set, where an answer is a free settle. Arguments, all optional: the
+# epochs (1), the training samples used (60000), the hidden neurons (128), the batch (32), the seed (1), Adam's rate
+# (0.001), beta (0.5), 1 to project the weights back into the certified set after every step (0), and a window of
+# steps to make the hidden and readout neurons spiking (0: rate neurons). A spiking readout is taught by squared error
+# toward 0.2 spikes a step for the class and none for the others.
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../circuit"
+import "../optim"
+import "../datasets/idx"
+import "../datasets/loader"
+import "../datasets/mnist"
+
+fn number(args Array<String&>&, i I64, fallback F64) F64 ? json.Error {
+    if i >= args.Len(): return fallback
+    return try json.Json.Parse(args[i]).AsNum()
+}
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError, json.Error {
+    args := os.Args()
+    epochs := I64(try number(args, 1, 1))
+    samples := I64(try number(args, 2, 60000))
+    hidden := I64(try number(args, 3, 128))
+    batch := I64(try number(args, 4, 32))
+    seed := U64(try number(args, 5, 1))
+    rate := try number(args, 6, 0.001)
+    beta := try number(args, 7, 0.5)
+    restrain Bool = try number(args, 8, 0) == 1.0
+    window := I64(try number(args, 9, 0))
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    part := loader.Labeled(data.Train.Features[:samples * 784], data.Train.Labels[:samples], 784, 10)
+
+    c := circuit.Circuit<F32>(batch)
+    pixels := c.Input(784)
+    lif := circuit.Neuron.LifNeuron(0.1, 1.0, 0.25, window if window > 0 else 1)
+    inner := c.Hidden(hidden, lif) if window > 0 else c.Hidden(hidden)
+    digits := c.Readout(10, circuit.Cost.Squared, lif) if window > 0 else c.Readout(10)
+    c.Project(pixels, inner, circuit.Wiring.OneWay)
+    c.Project(inner, digits)
+    r := rand.Rand(seed)
+    c.Plan(r)
+    if window > 0 {
+        for j in range hidden: c.Bias(inner)[j] = 1.0
+        for j in range 10: c.Bias(digits)[j] = 1.0
+        c.Weights(circuit.Projection(1)).Scale(0.3)
+    } else {
+        c.Certify(0.9)
+    }
+    classes := Array<I32>(batch)
+    opt := optim.FlatAdamW<F32>(c.ParamCount, rate)
+    lesson := circuit.Lesson(beta)
+    try io.Put(("784-" + $hidden + "-10 settling circuit, " + $(c.ParamCount) + " parameters, " + $samples + " training samples, batches of " +
+        $batch + ", beta " + $beta + ", lesson tolerance " + $(c.LessonTolerance(beta)) + ", budget " + $(c.Budget(c.LessonTolerance(beta), beta)) + "\n"))
+
+    trainSet := loader.Loader(part, batch, seed)
+    testSet := loader.Loader(data.Test, batch, seed, false)
+    for e in range 1, epochs + 1 {
+        t0 := time.Now()
+        trainSet.Epoch()
+        sweeps I64 = 0
+        seen I64 = 0
+        refused I64 = 0
+        loss F64 = 0.0
+        for b in range trainSet.Batches() {
+            n := trainSet.Fill(b, c.DriveData(pixels), classes)
+            label(c, digits, classes, n, window > 0)
+            taught := try c.Teach(n, lesson) catch circuit.NotSettled { refused++ } default -1
+            if taught < 0: continue
+            sweeps += taught
+            loss += c.Loss(circuit.Phase.Free) * F64(n)
+            seen += n
+            opt.Step(c.ParamData(), c.GradData())
+            if restrain: c.Restrain(0.9)
+        }
+        spent F64 = F64(time.Since(t0)) * 1e-9
+        accuracy, testSweeps := evaluate(c, testSet, pixels, digits, c.LessonTolerance(beta), classes)
+        try io.Put(("epoch " + $e + ": train loss " + $(loss / F64(seen)).Fixed(4) + ", " + $(F64(sweeps) / F64(trainSet.Batches() - refused)).Fixed(1) +
+            " sweeps a lesson (three settles), " + $refused + " lessons refused, gain " + $(c.Gain()).Fixed(2) + ", " + $spent.Fixed(1) + " s; test accuracy " +
+            $(100.0 * accuracy).Fixed(2) + "%, " + $testSweeps.Fixed(1) + " sweeps an answer\n"))
+    }
+}
+
+# the batch's classes where the readout learns from them: as they are for a cross-entropy readout, as target rows of
+# 0.2 spikes a step for the class for a spiking one
+fn label(c mut circuit.Circuit<F32>&, digits circuit.Region, classes Array<I32>&, n I64, spiking Bool) {
+    if not spiking {
+        for i in range n: c.LabelData(digits)[i] = classes[i]
+        return
+    }
+    t := c.TargetData(digits)
+    for i in range n {
+        for j in range 10: t[i * 10 + j] = 0.2 if I64(classes[i]) == j else 0.0
+    }
+}
+
+# the fraction of l's samples whose free settle answers their class, and the mean sweeps an answer took; a refused
+# settle counts as wrong
+fn evaluate<D>(c mut circuit.Circuit<F32>&, l mut loader.Loader<D>&, pixels circuit.Region, digits circuit.Region, tolerance F64
+        classes mut Array<I32>&) F64, F64 {
+    l.Epoch()
+    predicted := Array<I32>(c.Rows)
+    right I64 = 0
+    seen I64 = 0
+    sweeps I64 = 0
+    settles I64 = 0
+    budget := c.Budget(tolerance)
+    c.Nudge(circuit.Phase.Free, 0)
+    for b in range l.Batches() {
+        n := l.Fill(b, c.DriveData(pixels), classes)
+        seen += n
+        c.Use(n)
+        ok Bool = true
+        try c.Settle(circuit.Phase.Free, budget, tolerance) catch circuit.NotSettled { ok = false }
+        if not ok: continue
+        sweeps += c.Last.Sweeps
+        settles++
+        c.Predict(circuit.Phase.Free, digits, predicted)
+        for i in range n {
+            if predicted[i] == classes[i]: right++
+        }
+    }
+    return F64(right) / F64(seen), F64(sweeps) / F64(settles)
+}

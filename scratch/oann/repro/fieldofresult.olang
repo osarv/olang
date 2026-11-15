@@ -1,0 +1,35 @@
+# O10d refuses a field of a call's value result passed straight to a call when the receiver is a reference parameter:
+# in a function given g G&, sum(g.params().Data) - params giving a value that holds a reference borrowed from g - is
+# "this value lives in this function's own scope, which closes first", though the callee only reads its parameter and
+# keeps nothing and the referent lives in g's scope (with g a local of main it compiles). Naming the result first
+# (p := g.params(); sum(p.Data)) compiles and runs. Found catching up to olang ada716d: nn.Graph's
+# Params(), ParamGrads() and Masters() are such views, and optim's AdamW and Sgd, the consolidator's night and the
+# agent's checkpoints passed their Data on (olang efdb82c took them); worked around by naming each result first.
+# Expected: builds and prints "ok". Actual (olang ada716d): error[O10d] at '.Data' in total.
+# Status (olang 374c1e3c): FIXED - builds and prints ok (region inference, QCB, replaced O10d). Kept as a regression case.
+type V struct(Data mut Array<F64>&) {
+    Data
+}
+
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+}
+
+fn (g G&) params() V { return V(g.mem) }
+
+fn sum(p Array<F64>&) F64 {
+    s F64 = 0.0
+    for x in p: s += x
+    return s
+}
+
+fn total(g G&) F64 {
+    return sum(g.params().Data)
+}
+
+fn main() ? {
+    g := G(4)
+    g.mem[0] = 1.5
+    assert total(g) == 1.5
+    Println("ok")
+}

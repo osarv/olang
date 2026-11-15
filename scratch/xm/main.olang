@@ -1,0 +1,14 @@
+import "lib"
+
+fn use(sys mut lib.System<F32>&) I64 {
+    l := lib.Learner<F32>(sys)
+    return l.Lessons
+}
+
+fn main() {
+    s := lib.System<F32>()
+    s.E.Pops.Push(lib.Pop<F32>(3))
+    assert use(s) == 0
+    l := lib.Learner<F32>(s)
+    l.Shaped(0, Array<I64>(3))!
+}

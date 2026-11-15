@@ -1,0 +1,1062 @@
+# kernels/elem - element-wise kernels: the activations and their gradients, softmax, the layer and RMS normalizations,
+# and the reductions over rows and columns. Functions over raw arrays and over `mat.Mat` rows, independent of Tensor.
+#
+# Every kernel is generic over the storage type S its arrays hold (F64, F32, F16, BF16, F8) and computes in A - the type
+# itself for F64, F32 for everything narrower - reading each stored element up once and rounding each result down once,
+# so a BF16 kernel is the F32 one with a conversion at each end. A kernel checks nothing per element: lengths are the
+# caller's, checked once where the arrays are made. A destination does not overlap its sources: a loop reading one array and
+# writing another is vectorized behind a check that they are apart, and when they are one array it runs scalar, three times
+# as slowly - so the in-place forms (ActInPlace, ActGradInPlace, RowSoftmaxInPlace, SoftmaxRun) take one array.
+#
+# The exponential and the hyperbolic tangent are written here from arithmetic and bit operations only, so a loop with
+# one inlined into it runs in vector registers (the C library's are a call per element). Each approximation states its
+# maximum error, measured against the C library's function in F64 and held by a test:
+#
+#   FastExp      relative error  <= 3.0e-7 in F32 (2.5 ulp),  <= 6.0e-16 in F64; F16 and BF16 computed in F32, rounded once
+#   FastTanh     absolute error  <= 2.0e-7 in F32,            <= 3.0e-16 in F64
+#   FastSigmoid  absolute error  <= 1.0e-7 in F32,            <= 2.5e-16 in F64
+#   GeluTanh     the tanh form 0.5 x (1 + tanh(sqrt(2 / pi) (x + 0.044715 x^3))) to <= 1.5e-7 (F32), <= 5e-16 (F64) times
+#                max(1, |x|) at |x| <= 10, against the formula computed with the C library's tanh in F64; the formula
+#                itself is within 5e-4 of GELU's exact x Phi(x)
+#   Silu, Softplus  as FastSigmoid and FastExp (Softplus' log is the library's)
+#
+# (the numbers are the tests' limits: kernels/elem.olang's test blocks measure them at every one of 200,001 points).
+
+import "mat"
+
+# the activations are mat.Act (declared beside the operand, shared with a product's epilogue): Relu max(x, 0); Gelu x Phi(x),
+# exactly, through the library's erfc; GeluTanh GELU's tanh form (GPT-2's, PyTorch's approximate="tanh"), vectorized; Silu
+# x sigmoid(x); Sigmoid, Tanh; Softplus log(1 + e^x)
+
+# ---- the exponential, tanh and sigmoid that vectorize ----
+
+# 1 / k! for k < n, each rounded once to F64 (1 / k! with k! exact in F64 up to k = 18): the exponential's Taylor
+# coefficients, made while compiling and rounded to the type computed in where they are used
+fn taylor(n I64) Array<F64> {
+    out := Array<F64>(n)
+    f F64 = 1.0
+    for k in range n {
+        if k > 0: f = f * F64(k)
+        out[k] = 1.0 / f
+    }
+    return out
+}
+
+expTaylor Array<F64> = comptime taylor(13)
+
+# e to the power x: x = k ln 2 + r with |r| <= ln 2 / 2, e^r by its Taylor series (to r^6 in F32, r^12 in F64) and 2^k
+# made from its bits. Beyond the range of the type: infinity or zero (a result below the smallest normal number is zero);
+# a NaN gives a NaN. Maximum relative error 3.0e-7 in F32, 6.0e-16 in F64 (an F16 or BF16 goes through F32, rounded once)
+fn FastExp<T Float>(x T) T {
+    return match T {
+        case F32: fastExp32(x)
+        case F64: fastExp64(x)
+        case F16: F16(fastExp32(F32(x)))
+        case BF16: BF16(fastExp32(F32(x)))
+    }
+}
+
+fn fastExp32(x F32) F32 {
+    t F32 = x if x > -87.33654 else -87.33654
+    t = t if t < 88.72283 else 88.72283
+    # k, the nearest whole number to t / ln 2, by adding 1.5 * 2^23 (whose last bits then hold k) and taking it away
+    kb F32 = t * 1.44269504 + 12582912.0
+    k F32 = kb - 12582912.0
+    ki U32 = kb.Bits() - U32(0x4B400000)
+    r F32 = t - k * 0.693145751953125 - k * 1.428606765330187e-06
+    p F32 = F32(expTaylor[6])
+    comptime for i in range 6: p = p * r + F32(expTaylor[5 - i])
+    # 2^k from its bits - as 2^(k - 1) * 2 for k > 0, so that 2^128 never has to be made
+    up Bool = k > 0.0
+    scale F32 = F32.FromBits((ki - (U32(1) if up else U32(0)) + 127) << 23)
+    e F32 = p * scale * (2.0 if up else 1.0)
+    e = e if x < 88.72283 else F32(Inf)
+    e = e if x > -87.33654 else 0.0
+    return e if x == x else x
+}
+
+fn fastExp64(x F64) F64 {
+    t F64 = x if x > -708.3964185322641 else -708.3964185322641
+    t = t if t < 709.782712893384 else 709.782712893384
+    kb F64 = t * 1.4426950408889634 + 6755399441055744.0        # 1.5 * 2^52
+    k F64 = kb - 6755399441055744.0
+    ki U64 = kb.Bits() - U64(0x4338000000000000)
+    r F64 = t - k * 0.6931471803691238 - k * 1.9082149292705877e-10
+    p F64 = expTaylor[12]
+    comptime for i in range 12: p = p * r + expTaylor[11 - i]
+    up Bool = k > 0.0
+    scale F64 = F64.FromBits((ki - (U64(1) if up else U64(0)) + 1023) << 52)
+    e F64 = p * scale * (2.0 if up else 1.0)
+    e = e if x < 709.782712893384 else Inf
+    e = e if x > -708.3964185322641 else 0.0
+    return e if x == x else x
+}
+
+# the hyperbolic tangent: 1 - 2 / (e^(2|x|) + 1), with x's sign. |x| is held below the point past which tanh rounds to 1
+# in the type (10 in F32, 20 in F64) so that e^(2|x|) stays finite; a NaN gives a NaN. Maximum absolute error 2.0e-7 in
+# F32, 3.0e-16 in F64 (near zero the relative error is larger)
+fn FastTanh<T Float>(x T) T {
+    match T {
+        case F16 { return F16(FastTanh(F32(x))) }
+        case BF16 { return BF16(FastTanh(F32(x))) }
+        case _ { }
+    }
+    limit T = match T {
+        case F64: 20.0
+        case _: 10.0
+    }
+    a T = x.Abs()
+    a = limit if a > limit else a
+    v T = 1.0 - 2.0 / (FastExp(a + a) + 1.0)
+    return v.CopySign(x)
+}
+
+# the logistic function 1 / (1 + e^-x). Maximum absolute error 1.0e-7 in F32, 2.5e-16 in F64
+fn FastSigmoid<T Float>(x T) T {
+    return match T {
+        case F16: F16(FastSigmoid(F32(x)))
+        case BF16: BF16(FastSigmoid(F32(x)))
+        case _: 1.0 / (1.0 + FastExp(-x))
+    }
+}
+
+# GELU's tanh form 0.5 x (1 + tanh(u)), u = sqrt(2 / pi) (x + 0.044715 x^3), written as x / (1 + e^-2u): the same function
+# with one exponential and no cancellation for negative x. Maximum error against the formula computed in F64 with the
+# library's tanh: 1.5e-7 (F32), 5e-16 (F64) times max(1, |x|), at |x| <= 10 (beyond it the result is x or 0 to the type's precision)
+fn FastGeluTanh<T Float>(x T) T {
+    return match T {
+        case F16: F16(FastGeluTanh(F32(x)))
+        case BF16: BF16(FastGeluTanh(F32(x)))
+        case _: x / (1.0 + FastExp(-2.0 * geluArg(x)))
+    }
+}
+
+fn geluArg<A Float>(x A) A {
+    return 0.7978845608028654 * (x + 0.044715 * x * x * x)
+}
+
+# ---- the activations of one element, computed in A (F32 or F64) ----
+
+fn relu<A Float>(x A) A {
+    z A
+    return z if x < z else x
+}
+
+fn softplus<A Float>(x A) A {
+    return x.Max(0.0) + FastExp(-x.Abs()).Log1p()
+}
+
+# GELU exactly: x Phi(x) = x erfc(-x / sqrt(2)) / 2, the library's erfc, accurate for negative x as 1 + erf is not
+fn geluExact<A Float>(x A) A {
+    return 0.5 * x * (-x * 0.7071067811865476).Erfc()
+}
+
+# act(x)
+fn Apply<A Float>(x A, a mat.Act) A {
+    return match a {
+        case mat.Act.Relu: relu(x)
+        case mat.Act.Gelu: geluExact(x)
+        case mat.Act.GeluTanh: FastGeluTanh(x)
+        case mat.Act.Silu: x * FastSigmoid(x)
+        case mat.Act.Sigmoid: FastSigmoid(x)
+        case mat.Act.Tanh: FastTanh(x)
+        case mat.Act.Softplus: softplus(x)
+    }
+}
+
+# act'(x): Relu's 1 where x > 0 and 0 elsewhere (at 0 too, as PyTorch has it); Gelu's Phi(x) + x phi(x); GeluTanh's
+# s + 2 x s (1 - s) u' with s = sigmoid(2u), u' = sqrt(2 / pi) (1 + 3 0.044715 x^2); Silu's s (1 + x (1 - s)); Sigmoid's
+# s (1 - s); Tanh's 1 - tanh(x)^2; Softplus' sigmoid(x) - all from x, the activation's input
+fn Slope<A Float>(x A, a mat.Act) A {
+    return match a {
+        case mat.Act.Relu: 1.0 if x > 0.0 else 0.0
+        case mat.Act.Gelu: geluExactSlope(x)
+        case mat.Act.GeluTanh: geluTanhSlope(x)
+        case mat.Act.Silu: siluSlope(x)
+        case mat.Act.Sigmoid: sigmoidSlope(x)
+        case mat.Act.Tanh: tanhSlope(x)
+        case mat.Act.Softplus: FastSigmoid(x)
+    }
+}
+
+fn geluExactSlope<A Float>(x A) A {
+    cdf A = 0.5 * (-x * 0.7071067811865476).Erfc()
+    pdf A = 0.3989422804014327 * (-0.5 * x * x).Exp()
+    return cdf + x * pdf
+}
+
+fn geluTanhSlope<A Float>(x A) A {
+    s A = 1.0 / (1.0 + FastExp(-2.0 * geluArg(x)))
+    return s + 2.0 * x * s * (1.0 - s) * 0.7978845608028654 * (1.0 + 0.134145 * x * x)
+}
+
+fn siluSlope<A Float>(x A) A {
+    s A = FastSigmoid(x)
+    return s * (1.0 + x * (1.0 - s))
+}
+
+fn sigmoidSlope<A Float>(x A) A {
+    s A = FastSigmoid(x)
+    return s * (1.0 - s)
+}
+
+fn tanhSlope<A Float>(x A) A {
+    t A = FastTanh(x)
+    return 1.0 - t * t
+}
+
+# ---- activations over arrays ----
+
+# dst[i] = act(x[i]), computed in F32 (F64 for F64), rounded once. dst must not overlap x: a loop over two arrays is
+# vectorized behind a check that they are apart, and given the same array twice it runs scalar - correct, but three times as
+# slowly; ActInPlace is the form for x over itself
+fn Act<T>(dst mut Array<T>&, x Array<T>&, a mat.Act) {
+    match T {
+        case F64 { act<T, F64>(dst, x, a) }
+        case _ { act<T, F32>(dst, x, a) }
+    }
+}
+
+# one loop per activation, so each is a straight vectorizable pass
+fn act<S, A>(dst mut Array<S>&, x Array<S>&, a mat.Act) {
+    n := x.Len()
+    match a {
+        case mat.Act.Relu { for i in range n: dst[i] = S(relu(A(x[i]))) }
+        case mat.Act.Gelu { for i in range n: dst[i] = S(geluExact(A(x[i]))) }
+        case mat.Act.GeluTanh { for i in range n: dst[i] = S(FastGeluTanh(A(x[i]))) }
+        case mat.Act.Silu { for i in range n: dst[i] = S(A(x[i]) * FastSigmoid(A(x[i]))) }
+        case mat.Act.Sigmoid { for i in range n: dst[i] = S(FastSigmoid(A(x[i]))) }
+        case mat.Act.Tanh { for i in range n: dst[i] = S(FastTanh(A(x[i]))) }
+        case mat.Act.Softplus { for i in range n: dst[i] = S(softplus(A(x[i]))) }
+    }
+}
+
+# x[i] = act(x[i]), computed as Act does
+fn ActInPlace<T>(x mut Array<T>&, a mat.Act) {
+    match T {
+        case F64 { actInPlace<T, F64>(x, a) }
+        case _ { actInPlace<T, F32>(x, a) }
+    }
+}
+
+fn actInPlace<S, A>(x mut Array<S>&, a mat.Act) {
+    n := x.Len()
+    match a {
+        case mat.Act.Relu { for i in range n: x[i] = S(relu(A(x[i]))) }
+        case mat.Act.Gelu { for i in range n: x[i] = S(geluExact(A(x[i]))) }
+        case mat.Act.GeluTanh { for i in range n: x[i] = S(FastGeluTanh(A(x[i]))) }
+        case mat.Act.Silu { for i in range n: x[i] = S(A(x[i]) * FastSigmoid(A(x[i]))) }
+        case mat.Act.Sigmoid { for i in range n: x[i] = S(FastSigmoid(A(x[i]))) }
+        case mat.Act.Tanh { for i in range n: x[i] = S(FastTanh(A(x[i]))) }
+        case mat.Act.Softplus { for i in range n: x[i] = S(softplus(A(x[i]))) }
+    }
+}
+
+# dx[i] = dy[i] act'(x[i]), or dx[i] += that where add; x is what the activation was applied to. dx must not overlap dy or x
+# (ActGradInPlace is the form for dy over itself)
+fn ActGrad<T>(dx mut Array<T>&, dy Array<T>&, x Array<T>&, a mat.Act, add Bool) {
+    match T {
+        case F64 { actGrad<T, F64>(dx, dy, x, a, add) }
+        case _ { actGrad<T, F32>(dx, dy, x, a, add) }
+    }
+}
+
+fn actGrad<S, A>(dx mut Array<S>&, dy Array<S>&, x Array<S>&, a mat.Act, add Bool) {
+    match a {
+        case mat.Act.Relu { gradLoop<S, A>(dx, dy, x, add, fn(v): return 1.0 if v > 0.0 else 0.0) }
+        case mat.Act.Gelu { gradLoop<S, A>(dx, dy, x, add, fn(v): return geluExactSlope(v)) }
+        case mat.Act.GeluTanh { gradLoop<S, A>(dx, dy, x, add, fn(v): return geluTanhSlope(v)) }
+        case mat.Act.Silu { gradLoop<S, A>(dx, dy, x, add, fn(v): return siluSlope(v)) }
+        case mat.Act.Sigmoid { gradLoop<S, A>(dx, dy, x, add, fn(v): return sigmoidSlope(v)) }
+        case mat.Act.Tanh { gradLoop<S, A>(dx, dy, x, add, fn(v): return tanhSlope(v)) }
+        case mat.Act.Softplus { gradLoop<S, A>(dx, dy, x, add, fn(v): return FastSigmoid(v)) }
+    }
+}
+
+# dy[i] = dy[i] act'(x[i]): the gradient of the activation's output made the gradient of its input, in place
+fn ActGradInPlace<T>(dy mut Array<T>&, x Array<T>&, a mat.Act) {
+    match T {
+        case F64 { actGradInPlace<T, F64>(dy, x, a) }
+        case _ { actGradInPlace<T, F32>(dy, x, a) }
+    }
+}
+
+fn actGradInPlace<S, A>(dy mut Array<S>&, x Array<S>&, a mat.Act) {
+    match a {
+        case mat.Act.Relu { gradIn<S, A>(dy, x, fn(v): return 1.0 if v > 0.0 else 0.0) }
+        case mat.Act.Gelu { gradIn<S, A>(dy, x, fn(v): return geluExactSlope(v)) }
+        case mat.Act.GeluTanh { gradIn<S, A>(dy, x, fn(v): return geluTanhSlope(v)) }
+        case mat.Act.Silu { gradIn<S, A>(dy, x, fn(v): return siluSlope(v)) }
+        case mat.Act.Sigmoid { gradIn<S, A>(dy, x, fn(v): return sigmoidSlope(v)) }
+        case mat.Act.Tanh { gradIn<S, A>(dy, x, fn(v): return tanhSlope(v)) }
+        case mat.Act.Softplus { gradIn<S, A>(dy, x, fn(v): return FastSigmoid(v)) }
+    }
+}
+
+fn gradIn<S, A>(dy mut Array<S>&, x Array<S>&, slope fn&(v A) A) {
+    for i in range x.Len(): dy[i] = S(A(dy[i]) * slope(A(x[i])))
+}
+
+fn gradLoop<S, A>(dx mut Array<S>&, dy Array<S>&, x Array<S>&, add Bool, slope fn&(v A) A) {
+    n := x.Len()
+    if add {
+        for i in range n: dx[i] = S(A(dx[i]) + A(dy[i]) * slope(A(x[i])))
+        return
+    }
+    for i in range n: dx[i] = S(A(dy[i]) * slope(A(x[i])))
+}
+
+# ---- sums and dot products in eight lanes ----
+# Floating-point addition may not be reordered behind the program's back, so a sum is written as eight partial sums
+# (lane j takes elements j, j + 8, ...) added pairwise at the end: what lets it run in vector registers, with the rounding
+# error of a long sum near that of pairwise summation. The order is fixed, so a sum is the same on every run.
+
+# the eight lanes added pairwise
+fn total8<A>(v Array<A>&) A {
+    h := v[0:4] + v[4:8]
+    g := h[0:2] + h[2:4]
+    return g[0] + g[1]
+}
+
+# the sum of x[from + i] for i < n, in A
+fn SumIn<S, A>(x Array<S>&, from I64, n I64) A {
+    acc := Array<A>(8)
+    whole := n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc[j] += A(x[from + i + j])
+    }
+    rest A
+    for i in range whole, n: rest += A(x[from + i])
+    return total8(acc) + rest
+}
+
+# the sum of x[xf + i] y[yf + i] for i < n, in A
+fn DotIn<S, A>(x Array<S>&, xf I64, y Array<S>&, yf I64, n I64) A {
+    acc := Array<A>(8)
+    whole := n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc[j] += A(x[xf + i + j]) * A(y[yf + i + j])
+    }
+    rest A
+    for i in range whole, n: rest += A(x[xf + i]) * A(y[yf + i])
+    return total8(acc) + rest
+}
+
+# the sum of x[from + i] for i < n, in x's own type
+fn Sum<T>(x Array<T>&, from I64, n I64) T {
+    return match T {
+        case F64: SumIn<T, F64>(x, from, n)
+        case _: T(SumIn<T, F32>(x, from, n))
+    }
+}
+
+# the sum of x[xf + i] y[yf + i] for i < n, in the type computed in, rounded once
+fn Dot<T>(x Array<T>&, xf I64, y Array<T>&, yf I64, n I64) T {
+    return match T {
+        case F64: DotIn<T, F64>(x, xf, y, yf, n)
+        case _: T(DotIn<T, F32>(x, xf, y, yf, n))
+    }
+}
+
+# the sum of the squares of x's elements, in F64: a long sum of small terms in F32 drops their low bits and comes out
+# low (by 3.5e-5 of a transformer's gradient norm, measured against numpy)
+fn SquaresF64<T>(x Array<T>&) F64 {
+    acc := Array<F64>(8)
+    n := x.Len()
+    whole := n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc[j] += F64(x[i + j]) * F64(x[i + j])
+    }
+    rest F64
+    for i in range whole, n: rest += F64(x[i]) * F64(x[i])
+    return total8(acc) + rest
+}
+
+# y[yf + i] += alpha x[xf + i] for i < n - BLAS's axpy on two runs
+fn Axpy<T>(y mut Array<T>&, yf I64, alpha T, x Array<T>&, xf I64, n I64) {
+    for i in range n: y[yf + i] += alpha * x[xf + i]
+}
+
+# ---- softmax ----
+
+# softmax in place of a run: row[from + j] = exp((row[from + j] - max) inv) / sum over j < n, the largest element taken out
+# first so nothing overflows; inv = 1 / temperature. The exponentials are FastExp (3.0e-7 relative in F32), a pass of their
+# own that vectorizes, and their sum a second pass in eight lanes: a running sum beside the exponential kept the loop
+# scalar. Rounded to S after the exponential and again after the scaling. (One array on purpose: a loop reading `src` and
+# writing `dst` passed as two arrays is vectorized behind a check that they do not overlap, and when they are the same array
+# the check fails and the scalar loop runs, three times as slowly)
+fn SoftmaxRun<S, A>(row mut Array<S>&, from I64, n I64, inv A) {
+    if n == 0: return
+    top A = A(row[from])
+    for j in range 1, n {
+        v A = A(row[from + j])
+        top = v if v > top else top
+    }
+    for j in range n: row[from + j] = S(FastExp((A(row[from + j]) - top) * inv))
+    softmaxScale<S, A>(row, from, n)
+}
+
+# the same from src to dst, which must not overlap src (or be it, slowly): row r of a Mat softmax with a destination
+fn SoftmaxRunTo<S, A>(dst mut Array<S>&, d I64, src Array<S>&, s I64, n I64, inv A) {
+    if n == 0: return
+    top A = A(src[s])
+    for j in range 1, n {
+        v A = A(src[s + j])
+        top = v if v > top else top
+    }
+    for j in range n: dst[d + j] = S(FastExp((A(src[s + j]) - top) * inv))
+    softmaxScale<S, A>(dst, d, n)
+}
+
+fn softmaxScale<S, A>(row mut Array<S>&, from I64, n I64) {
+    scale A = 1.0 / SumIn<S, A>(row, from, n)
+    for j in range n: row[from + j] = S(A(row[from + j]) * scale)
+}
+
+# dst's row r = the softmax of src's row r over temperature (> 0), row by row; dst must not overlap src (RowSoftmaxInPlace is
+# for x over itself: the same array given twice works, three times as slowly)
+fn RowSoftmax<T>(dst mut mat.Mat<T>&, src mat.Mat<T>&, temperature T) {
+    match T {
+        case F64 { rowSoftmax<T, F64>(dst, src, temperature) }
+        case _ { rowSoftmax<T, F32>(dst, src, temperature) }
+    }
+}
+
+fn rowSoftmax<S, A>(dst mut mat.Mat<S>&, src mat.Mat<S>&, temperature S) {
+    inv A = 1.0 / A(temperature)
+    for r in range src.Rows: SoftmaxRunTo<S, A>(dst.Data, dst.Off + r * dst.Ld, src.Data, src.Off + r * src.Ld, src.Cols, inv)
+}
+
+# x's rows replaced by their softmax over temperature (> 0)
+fn RowSoftmaxInPlace<T>(x mut mat.Mat<T>&, temperature T) {
+    match T {
+        case F64 { rowSoftmaxInPlace<T, F64>(x, temperature) }
+        case _ { rowSoftmaxInPlace<T, F32>(x, temperature) }
+    }
+}
+
+fn rowSoftmaxInPlace<S, A>(x mut mat.Mat<S>&, temperature S) {
+    inv A = 1.0 / A(temperature)
+    for r in range x.Rows: SoftmaxRun<S, A>(x.Data, x.Off + r * x.Ld, x.Cols, inv)
+}
+
+# the sum of exp((x[from + j] - top) inv) for j < n: the exponentials a block of 64 at a time into a stack block, a
+# pass that vectorizes, and the block added in eight lanes
+fn expSum<S, A>(x Array<S>&, from I64, n I64, top A, inv A) A {
+    blk := Array<A>(64)
+    acc := Array<A>(8)
+    for b in range 0, n, 64 {
+        w := 64 if b + 64 <= n else n - b
+        for j in range w: blk[j] = FastExp((A(x[from + b + j]) - top) * inv)
+        for j in range w, 64: blk[j] = 0.0
+        for j in range 0, 64, 8: acc += blk[j:j + 8]
+    }
+    return total8(acc)
+}
+
+# out[r] = log(sum exp(src row r)) - the row's log-sum-exp, the largest element taken out first
+fn RowLogSumExp<T>(out mut Array<T>&, src mat.Mat<T>&) {
+    match T {
+        case F64 { rowLogSumExp<T, F64>(out, src) }
+        case _ { rowLogSumExp<T, F32>(out, src) }
+    }
+}
+
+fn rowLogSumExp<S, A>(out mut Array<S>&, src mat.Mat<S>&) {
+    for r in range src.Rows {
+        s := src.Off + r * src.Ld
+        top A = A(src.Data[s])
+        for j in range 1, src.Cols {
+            v A = A(src.Data[s + j])
+            top = v if v > top else top
+        }
+        out[r] = S(top + expSum<S, A>(src.Data, s, src.Cols, top, 1.0).Log())
+    }
+}
+
+# ---- normalization ----
+
+# the sum of (x[from + i] - mean)^2 for i < n, in eight lanes
+fn deviationSquares<S, A>(x Array<S>&, from I64, n I64, mean A) A {
+    acc := Array<A>(8)
+    whole := n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc[j] += (A(x[from + i + j]) - mean) * (A(x[from + i + j]) - mean)
+    }
+    rest A
+    for i in range whole, n: rest += (A(x[from + i]) - mean) * (A(x[from + i]) - mean)
+    return total8(acc) + rest
+}
+
+# each row's mean and 1 / sqrt(variance + eps) - the biased variance over the row's columns, as PyTorch's LayerNorm takes
+# it. With rms the mean is not taken out (mean[r] = 0) and the variance is the mean square: root-mean-square
+# normalization (Zhang and Sennrich). The variance is the sum of squared deviations from the mean, in two passes
+fn RowNormStats<T>(mean mut Array<T>&, inv mut Array<T>&, x mat.Mat<T>&, eps T, rms Bool) {
+    match T {
+        case F64 { rowNormStats<T, F64>(mean, inv, x, eps, rms) }
+        case _ { rowNormStats<T, F32>(mean, inv, x, eps, rms) }
+    }
+}
+
+fn rowNormStats<S, A>(mean mut Array<S>&, inv mut Array<S>&, x mat.Mat<S>&, eps S, rms Bool) {
+    n A = A(x.Cols)
+    for r in range x.Rows {
+        s := x.Off + r * x.Ld
+        m A = 0.0 if rms else SumIn<S, A>(x.Data, s, x.Cols) / n
+        var A = deviationSquares<S, A>(x.Data, s, x.Cols, m) / n
+        mean[r] = S(m)
+        inv[r] = S(1.0 / (var + A(eps)).Sqrt())
+    }
+}
+
+# the rows of y = (x - mean[r]) inv[r] gain + bias; bias may be empty (RMS norm); y must not overlap x (the same array works, slower, as Act explains)
+fn RowNormApply<T>(y mut mat.Mat<T>&, x mat.Mat<T>&, mean Array<T>&, inv Array<T>&, gain Array<T>&, bias Array<T>&) {
+    match T {
+        case F64 { rowNormApply<T, F64>(y, x, mean, inv, gain, bias) }
+        case _ { rowNormApply<T, F32>(y, x, mean, inv, gain, bias) }
+    }
+}
+
+fn rowNormApply<S, A>(y mut mat.Mat<S>&, x mat.Mat<S>&, mean Array<S>&, inv Array<S>&, gain Array<S>&, bias Array<S>&) {
+    for r in range x.Rows {
+        s := x.Off + r * x.Ld
+        d := y.Off + r * y.Ld
+        m A = A(mean[r])
+        k A = A(inv[r])
+        if bias.Len() == 0 {
+            for c in range x.Cols: y.Data[d + c] = S((A(x.Data[s + c]) - m) * k * A(gain[c]))
+        } else {
+            for c in range x.Cols: y.Data[d + c] = S((A(x.Data[s + c]) - m) * k * A(gain[c]) + A(bias[c]))
+        }
+    }
+}
+
+# the gradient of RowNormApply with respect to x: with xhat = (x - mean) inv and g = dy gain,
+# dx = inv (g - mean(g) - xhat mean(g xhat)), row by row (mean(g) is left out where rms: the mean was not taken out);
+# dx += that where add. dx must not overlap dy or x (the same array works, slower)
+fn RowNormGrad<T>(dx mut mat.Mat<T>&, dy mat.Mat<T>&, x mat.Mat<T>&, mean Array<T>&, inv Array<T>&, gain Array<T>&, rms Bool, add Bool) {
+    match T {
+        case F64 { rowNormGrad<T, F64>(dx, dy, x, mean, inv, gain, rms, add) }
+        case _ { rowNormGrad<T, F32>(dx, dy, x, mean, inv, gain, rms, add) }
+    }
+}
+
+fn rowNormGrad<S, A>(dx mut mat.Mat<S>&, dy mat.Mat<S>&, x mat.Mat<S>&, mean Array<S>&, inv Array<S>&, gain Array<S>&, rms Bool, add Bool) {
+    n A = A(x.Cols)
+    for r in range x.Rows {
+        s := x.Off + r * x.Ld
+        g := dy.Off + r * dy.Ld
+        d := dx.Off + r * dx.Ld
+        m A = A(mean[r])
+        k A = A(inv[r])
+        sg := Array<A>(8)
+        sgx := Array<A>(8)
+        for c in range x.Cols {
+            gc A = A(dy.Data[g + c]) * A(gain[c])
+            sg[c % 8] += gc
+            sgx[c % 8] += gc * (A(x.Data[s + c]) - m) * k
+        }
+        mg A = 0.0 if rms else total8(sg) / n
+        mgx A = total8(sgx) / n
+        for c in range x.Cols {
+            v A = k * (A(dy.Data[g + c]) * A(gain[c]) - mg - (A(x.Data[s + c]) - m) * k * mgx)
+            dx.Data[d + c] = S(v + A(dx.Data[d + c])) if add else S(v)
+        }
+    }
+}
+
+# the gradients of gain and bias: dgain[c] = sum over rows of dy xhat, dbias[c] = sum of dy, each added to what is there
+# where add, else written; an empty dgain or dbias is not computed
+fn RowNormParamGrad<T>(dgain mut Array<T>&, dbias mut Array<T>&, dy mat.Mat<T>&, x mat.Mat<T>&, mean Array<T>&, inv Array<T>&, add Bool) {
+    match T {
+        case F64 { rowNormParamGrad<T, F64>(dgain, dbias, dy, x, mean, inv, add) }
+        case _ { rowNormParamGrad<T, F32>(dgain, dbias, dy, x, mean, inv, add) }
+    }
+}
+
+fn rowNormParamGrad<S, A>(dgain mut Array<S>&, dbias mut Array<S>&, dy mat.Mat<S>&, x mat.Mat<S>&, mean Array<S>&, inv Array<S>&, add Bool) {
+    ag := Array<A>(64)
+    ab := Array<A>(64)
+    for c0 in range 0, x.Cols, 64 {
+        w := 64 if c0 + 64 <= x.Cols else x.Cols - c0
+        for j in range 64 {
+            ag[j] = 0.0
+            ab[j] = 0.0
+        }
+        for r in range x.Rows {
+            s := x.Off + r * x.Ld + c0
+            g := dy.Off + r * dy.Ld + c0
+            m A = A(mean[r])
+            k A = A(inv[r])
+            for j in range w {
+                ag[j] += A(dy.Data[g + j]) * (A(x.Data[s + j]) - m) * k
+                ab[j] += A(dy.Data[g + j])
+            }
+        }
+        for j in range w {
+            if dgain.Len() > 0: dgain[c0 + j] = S(ag[j] + A(dgain[c0 + j])) if add else S(ag[j])
+            if dbias.Len() > 0: dbias[c0 + j] = S(ab[j] + A(dbias[c0 + j])) if add else S(ab[j])
+        }
+    }
+}
+
+# ---- reductions over rows and columns ----
+
+# out[r] = the largest absolute value in row r - each row's max norm (a settle's residual); a NaN where the row holds one
+fn RowMaxAbs<T>(out mut Array<T>&, x mat.Mat<T>&) {
+    for r in range x.Rows {
+        s := x.Off + r * x.Ld
+        best T = x.Data[s].Abs()
+        for c in range 1, x.Cols: best = best.Max(x.Data[s + c].Abs())
+        out[r] = best
+    }
+}
+
+# out[r] = the sum of row r, in the type computed in
+fn RowSums<T>(out mut Array<T>&, x mat.Mat<T>&) {
+    for r in range x.Rows: out[r] = Sum(x.Data, x.Off + r * x.Ld, x.Cols)
+}
+
+# out[c] = the sum of column c over x's rows + beta out[c]: a bias's gradient, summed over the batch. Sixty-four columns
+# at a time, every row added into a stack block, so nothing is allocated and the adds are vector adds. beta 0 overwrites
+# (out may then hold anything, a NaN included)
+fn ColumnSums<T>(out mut Array<T>&, x mat.Mat<T>&, beta T) {
+    match T {
+        case F64 { columnSums<T, F64>(out, x, beta) }
+        case _ { columnSums<T, F32>(out, x, beta) }
+    }
+}
+
+fn columnSums<S, A>(out mut Array<S>&, x mat.Mat<S>&, beta S) {
+    acc := Array<A>(64)
+    b A = A(beta)
+    for c0 in range 0, x.Cols, 64 {
+        w := 64 if c0 + 64 <= x.Cols else x.Cols - c0
+        for j in range 64: acc[j] = 0.0
+        for r in range x.Rows {
+            s := x.Off + r * x.Ld + c0
+            for j in range w: acc[j] += A(x.Data[s + j])
+        }
+        for j in range w: out[c0 + j] = S(acc[j] + b * A(out[c0 + j])) if b != 0.0 else S(acc[j])
+    }
+}
+
+# ---- tests ----
+
+import "std/rand"
+
+# the points of a sweep: i of n over [lo, hi]
+fn grid(i I64, n I64, lo F64, hi F64) F64 {
+    return lo + (hi - lo) * F64(i) / F64(n)
+}
+
+fn fill<T>(a mut Array<T>&, r mut rand.Rand&, sd F64) {
+    for i in range a.Len(): a[i] = T(r.Normal() * sd)
+}
+
+# act(x) in F64 with the C library's functions, the formulas written as the definitions give them
+fn reference(x F64, a mat.Act) F64 {
+    return match a {
+        case mat.Act.Relu: 0.0 if x < 0.0 else x
+        case mat.Act.Gelu: 0.5 * x * (1.0 + (x * 0.7071067811865476).Erf())
+        case mat.Act.GeluTanh: 0.5 * x * (1.0 + (0.7978845608028654 * (x + 0.044715 * x * x * x)).Tanh())
+        case mat.Act.Silu: x / (1.0 + (-x).Exp())
+        case mat.Act.Sigmoid: 1.0 / (1.0 + (-x).Exp())
+        case mat.Act.Tanh: x.Tanh()
+        case mat.Act.Softplus: (1.0 + x.Exp()).Log()
+    }
+}
+
+allActs Array<mat.Act> = Array<mat.Act>[mat.Act.Relu, mat.Act.Gelu, mat.Act.GeluTanh, mat.Act.Silu, mat.Act.Sigmoid, mat.Act.Tanh, mat.Act.Softplus]
+
+test FastExp "stays within 3.0e-7 (F32) and 6.0e-16 (F64) relative to the C library's exp, and saturates" {
+    n := 200000
+    e32 F64
+    e64 F64
+    for i in range n + 1 {
+        x32 := F32(grid(i, n, -87.0, 88.0))
+        want := F64(x32).Exp()
+        e32 = e32.Max(((F64(FastExp(x32)) - want) / want).Abs())
+        x64 := grid(i, n, -708.0, 709.0)
+        e64 = e64.Max(((FastExp(x64) - x64.Exp()) / x64.Exp()).Abs())
+    }
+    assert e32 <= 3.0e-7, "F32 relative error " + $e32
+    assert e64 <= 6.0e-16, "F64 relative error " + $e64
+    assert FastExp(F32(100.0)) == F32(Inf) and FastExp(F32(-100.0)) == 0.0
+    assert FastExp(1000.0) == Inf and FastExp(-1000.0) == 0.0
+    nan F32 = F32(NaN)
+    assert FastExp(nan) != FastExp(nan)
+    assert FastExp(F32(0.0)) == 1.0 and FastExp(0.0) == 1.0
+    assert FastExp(BF16(1.0)) == BF16(FastExp(F32(1.0))) and FastExp(F16(1.0)) == F16(FastExp(F32(1.0)))
+}
+
+test FastTanh "stays within 2.0e-7 (F32) and 3.0e-16 (F64) of the C library's tanh; FastSigmoid within 1.0e-7 and 2.5e-16" {
+    n := 200000
+    t32 F64
+    t64 F64
+    s32 F64
+    s64 F64
+    for i in range n + 1 {
+        x32 := F32(grid(i, n, -12.0, 12.0))
+        t32 = t32.Max((F64(FastTanh(x32)) - F64(x32).Tanh()).Abs())
+        s32 = s32.Max((F64(FastSigmoid(x32)) - 1.0 / (1.0 + (-F64(x32)).Exp())).Abs())
+        x64 := grid(i, n, -25.0, 25.0)
+        t64 = t64.Max((FastTanh(x64) - x64.Tanh()).Abs())
+        s64 = s64.Max((FastSigmoid(x64) - 1.0 / (1.0 + (-x64).Exp())).Abs())
+    }
+    assert t32 <= 2.0e-7, "tanh F32 " + $t32
+    assert t64 <= 3.0e-16, "tanh F64 " + $t64
+    assert s32 <= 1.0e-7, "sigmoid F32 " + $s32
+    assert s64 <= 2.5e-16, "sigmoid F64 " + $s64
+    assert FastTanh(F32(100.0)) == 1.0 and FastTanh(F32(-100.0)) == -1.0 and FastTanh(F32(-0.0)).Bits() == F32(-0.0).Bits()
+}
+
+test FastGeluTanh "stays within 1.5e-7 (F32) and 5e-16 (F64) times max(1, |x|) of the tanh formula in F64, |x| <= 10" {
+    n := 200000
+    g32 F64
+    g64 F64
+    for i in range n + 1 {
+        x32 := F32(grid(i, n, -10.0, 10.0))
+        g32 = g32.Max((F64(FastGeluTanh(x32)) - reference(F64(x32), mat.Act.GeluTanh)).Abs() / F64(x32).Abs().Max(1.0))
+        x64 := grid(i, n, -10.0, 10.0)
+        g64 = g64.Max((FastGeluTanh(x64) - reference(x64, mat.Act.GeluTanh)).Abs() / x64.Abs().Max(1.0))
+    }
+    assert g32 <= 1.5e-7, "F32 " + $g32
+    assert g64 <= 5.0e-16, "F64 " + $g64
+    assert FastGeluTanh(F32(40.0)) == 40.0 and FastGeluTanh(F32(-40.0)) == 0.0
+}
+
+# a stated bound for each activation in each type: relative to max(1, |reference|)
+fn actWithin<T>(bound F64, r mut rand.Rand&) {
+    x := Array<T>(1001)
+    y := Array<T>(1001)
+    for i in range x.Len(): x[i] = T(grid(i, 1000, -9.0, 9.0))
+    for a in allActs {
+        Act(y, x, a)
+        worst F64
+        for i in range x.Len() {
+            want := reference(F64(x[i]), a)
+            worst = worst.Max((F64(y[i]) - want).Abs() / want.Abs().Max(1.0))
+        }
+        assert worst <= bound, $a + " in " + $T.Name + ": " + $worst
+    }
+}
+
+test Act "every activation is its formula: F64 to 1e-14, F32 to 1e-6, F16 to 2e-3, BF16 to 1e-2 (relative to max(1, |value|))" {
+    r := rand.Rand(1)
+    actWithin<F64>(1.0e-14, r)
+    actWithin<F32>(1.0e-6, r)
+    actWithin<F16>(2.0e-3, r)
+    actWithin<BF16>(1.0e-2, r)
+}
+
+test Act "in place gives what a separate destination gives" {
+    x := Array<F32>[F32(grid(i, 39, -5.0, 5.0)) for i in range 40]
+    y := Array<F32>(40)
+    for a in allActs {
+        Act(y, x, a)
+        z := x.Copy()
+        ActInPlace(z, a)
+        assert z == y
+        w := x.Copy()
+        Act(w, w, a)
+        assert w == y
+    }
+}
+
+test ActGrad "equals the central difference of the activation, in F64, with add and in place" {
+    h := 1.0e-6
+    x := Array<F64>[grid(i, 60, -6.0, 6.0) + 0.0137 for i in range 61]
+    dy := Array<F64>[1.0 + F64(i % 5) * 0.25 for i in range 61]
+    dx := Array<F64>(61)
+    for a in allActs {
+        ActGrad(dx, dy, x, a, false)
+        for i in range 61 {
+            want := (reference(x[i] + h, a) - reference(x[i] - h, a)) / (2.0 * h) * dy[i]
+            assert (dx[i] - want).Abs() <= 1.0e-6 * want.Abs().Max(1.0), $a + " at " + $x[i] + ": " + $dx[i] + " against " + $want
+        }
+        again := Array<F64>[1.0 for _ in range 61]
+        ActGrad(again, dy, x, a, true)
+        for i in range 61: assert (again[i] - (1.0 + dx[i])).Abs() <= 1.0e-12 * dx[i].Abs().Max(1.0)
+        inplace := dy.Copy()
+        ActGradInPlace(inplace, x, a)
+        assert inplace == dx
+        aliased := dy.Copy()
+        ActGrad(aliased, aliased, x, a, false)
+        assert aliased == dx
+    }
+}
+
+test ActGrad "in F32 and BF16 follows the F64 slope" {
+    x := Array<F32>[F32(grid(i, 60, -6.0, 6.0)) for i in range 61]
+    xb := Array<BF16>[BF16(v) for v in x]
+    ones32 := Array<F32>[F32(1.0) for _ in range 61]
+    onesb := Array<BF16>[BF16(1.0) for _ in range 61]
+    d32 := Array<F32>(61)
+    db := Array<BF16>(61)
+    for a in allActs {
+        ActGrad(d32, ones32, x, a, false)
+        ActGrad(db, onesb, xb, a, false)
+        for i in range 61 {
+            e := (Slope(F64(x[i]), a) - F64(d32[i])).Abs()
+            assert e <= 2.0e-6 * Slope(F64(x[i]), a).Abs().Max(1.0), $a + " F32 at " + $x[i] + ": " + $e
+            eb := (Slope(F64(xb[i]), a) - F64(db[i])).Abs()
+            assert eb <= 2.0e-2 * Slope(F64(xb[i]), a).Abs().Max(1.0), $a + " BF16 at " + $xb[i] + ": " + $eb
+        }
+    }
+}
+
+# a rows x cols matrix at offset 3, row stride cols + 5: strided and not at the start of its storage
+fn strided<T>(data mut Array<T>&, rows I64, cols I64) mat.Mat<T> {
+    return mat.Mat<T>(data, 3, rows, cols, cols + 5)
+}
+
+fn softmaxReference(x Array<F64>&, from I64, n I64, t F64) Array<F64> {
+    top := x[from]
+    for j in range 1, n: top = top.Max(x[from + j])
+    e := Array<F64>[((x[from + j] - top) / t).Exp() for j in range n]
+    total := e.Sum()
+    return Array<F64>[v / total for v in e]
+}
+
+fn softmaxWithin<T>(bound F64, scale F64, r mut rand.Rand&) {
+    rows := 7
+    cols := 37
+    data := Array<T>(3 + rows * (cols + 5))
+    out := Array<T>(3 + rows * (cols + 5))
+    fill(data, r, scale)
+    src := strided(data, rows, cols)
+    dst := strided(out, rows, cols)
+    RowSoftmax(dst, src, T(0.8))
+    ref := Array<F64>[F64(v) for v in data]
+    for i in range rows {
+        want := softmaxReference(ref, 3 + i * (cols + 5), cols, F64(T(0.8)))
+        total F64
+        for j in range cols {
+            total += F64(out[3 + i * (cols + 5) + j])
+            assert (F64(out[3 + i * (cols + 5) + j]) - want[j]).Abs() <= bound, "row " + $i + " col " + $j + " of " + $T.Name
+        }
+        assert (total - 1.0).Abs() <= bound * F64(cols), "row " + $i + " sums to " + $total
+    }
+    RowSoftmaxInPlace(src, T(0.8))
+    for i in range rows {
+        for j in range cols: assert data[3 + i * (cols + 5) + j] == out[3 + i * (cols + 5) + j]
+    }
+}
+
+test RowSoftmax "equals the F64 softmax on strided rows, in place too: F64 1e-14, F32 2e-6, BF16 1e-2" {
+    r := rand.Rand(2)
+    softmaxWithin<F64>(1.0e-14, 3.0, r)
+    softmaxWithin<F32>(2.0e-6, 3.0, r)
+    softmaxWithin<BF16>(1.0e-2, 3.0, r)
+}
+
+test RowSoftmax "large and small scores neither overflow nor vanish: the largest is taken out first" {
+    d := Array<F32>[1000.0, 1001.0, 1002.0, -1.0e4, 5.0e4, 5.0e4]
+    m := mat.Mat<F32>(d, 0, 2, 3, 3)
+    RowSoftmaxInPlace(m, 1.0)
+    want := softmaxReference(Array<F64>[1000.0, 1001.0, 1002.0], 0, 3, 1.0)
+    for j in range 3: assert (F64(d[j]) - want[j]).Abs() <= 2.0e-6
+    assert d[3] == 0.0 and (d[4] - 0.5).Abs() <= 1.0e-6 and d[4] == d[5]
+}
+
+test SoftmaxRun "a run of a row leaves the rest alone" {
+    x := Array<F32>[9.0, 1.0, 2.0, 3.0, 9.0]
+    y := Array<F32>[7.0, 7.0, 7.0, 7.0, 7.0]
+    SoftmaxRunTo<F32, F32>(y, 1, x, 1, 3, 1.0)
+    assert y[0] == 7.0 and y[4] == 7.0
+    assert (y[1] + y[2] + y[3] - 1.0).Abs() <= 1.0e-6 and y[1] < y[2] and y[2] < y[3]
+}
+
+test RowLogSumExp "equals log of the sum of exponentials in F64: F64 1e-14, F32 2e-6" {
+    r := rand.Rand(3)
+    rows := 5
+    cols := 70
+    a := Array<F64>(3 + rows * (cols + 5))
+    b := Array<F32>(a.Len())
+    fill(a, r, 4.0)
+    for i in range a.Len(): b[i] = F32(a[i])
+    o64 := Array<F64>(rows)
+    o32 := Array<F32>(rows)
+    RowLogSumExp(o64, strided(a, rows, cols))
+    RowLogSumExp(o32, strided(b, rows, cols))
+    for i in range rows {
+        s F64
+        for j in range cols: s += F64(b[3 + i * (cols + 5) + j]).Exp()
+        s32 F64
+        for j in range cols: s32 += a[3 + i * (cols + 5) + j].Exp()
+        assert (o64[i] - s32.Log()).Abs() <= 1.0e-14 * s32.Log().Abs().Max(1.0), "F64 row " + $i
+        assert (F64(o32[i]) - s.Log()).Abs() <= 2.0e-6 * s.Log().Abs().Max(1.0), "F32 row " + $i
+    }
+}
+
+# the normalized rows and the loss sum(w y) of a rows x cols matrix, all in T
+fn normLoss<T>(x Array<T>&, w Array<T>&, gain Array<T>&, bias Array<T>&, rows I64, cols I64, rms Bool) F64 {
+    mean := Array<T>(rows)
+    inv := Array<T>(rows)
+    y := Array<T>(rows * cols)
+    m := mat.Mat<T>(x.Copy(), 0, rows, cols, cols)
+    RowNormStats(mean, inv, m, T(1.0e-5), rms)
+    RowNormApply(mat.Mat<T>(y, 0, rows, cols, cols), m, mean, inv, gain, bias)
+    loss F64
+    for i in range y.Len(): loss += F64(w[i]) * F64(y[i])
+    return loss
+}
+
+fn normReference(x Array<F64>&, from I64, n I64, rms Bool) Array<F64> {
+    mean := 0.0 if rms else Array<F64>[x[from + j] for j in range n].Sum() / F64(n)
+    var := Array<F64>[(x[from + j] - mean) * (x[from + j] - mean) for j in range n].Sum() / F64(n)
+    return Array<F64>[(x[from + j] - mean) / (var + 1.0e-5).Sqrt() for j in range n]
+}
+
+fn normWithin<T>(bound F64, rms Bool, r mut rand.Rand&) {
+    rows := 5
+    cols := 29
+    data := Array<T>(3 + rows * (cols + 5))
+    fill(data, r, 2.0)
+    gain := Array<T>[T(1.0 + 0.1 * F64(j)) for j in range cols]
+    bias := Array<T>[T(0.05 * F64(j)) for j in range cols] if not rms else Array<T>(0)
+    mean := Array<T>(rows)
+    inv := Array<T>(rows)
+    x := strided(data, rows, cols)
+    RowNormStats(mean, inv, x, T(1.0e-5), rms)
+    out := Array<T>(3 + rows * (cols + 5))
+    RowNormApply(strided(out, rows, cols), x, mean, inv, gain, bias)
+    ref := Array<F64>[F64(v) for v in data]
+    for i in range rows {
+        want := normReference(ref, 3 + i * (cols + 5), cols, rms)
+        for j in range cols {
+            w := want[j] * F64(gain[j]) + (0.0 if rms else F64(bias[j]))
+            assert (F64(out[3 + i * (cols + 5) + j]) - w).Abs() <= bound * w.Abs().Max(1.0), "row " + $i + " col " + $j + " of " + $T.Name
+        }
+    }
+}
+
+test RowNormStats "layer and RMS normalization equal the F64 formulas on strided rows: F64 1e-13, F32 2e-5, BF16 4e-2" {
+    r := rand.Rand(4)
+    for rms in Array<Bool>[false, true] {
+        normWithin<F64>(1.0e-13, rms, r)
+        normWithin<F32>(2.0e-5, rms, r)
+        normWithin<BF16>(4.0e-2, rms, r)
+    }
+}
+
+test RowNormGrad "dx, dgain and dbias equal the central differences of sum(w y), layer and RMS, F64" {
+    r := rand.Rand(5)
+    rows := 4
+    cols := 9
+    n := rows * cols
+    h := 1.0e-6
+    for rms in Array<Bool>[false, true] {
+        x := Array<F64>(n)
+        w := Array<F64>(n)
+        gain := Array<F64>(cols)
+        bias := Array<F64>(cols) if not rms else Array<F64>(0)
+        fill(x, r, 1.5)
+        fill(w, r, 1.0)
+        for j in range cols: gain[j] = 1.0 + 0.2 * F64(j % 3)
+        for j in range bias.Len(): bias[j] = 0.1 * F64(j)
+        mean := Array<F64>(rows)
+        inv := Array<F64>(rows)
+        xm := mat.Mat<F64>(x, 0, rows, cols, cols)
+        RowNormStats(mean, inv, xm, 1.0e-5, rms)
+        dx := Array<F64>(n)
+        RowNormGrad(mat.Mat<F64>(dx, 0, rows, cols, cols), mat.Mat<F64>(w, 0, rows, cols, cols), xm, mean, inv, gain, rms, false)
+        dgain := Array<F64>(cols)
+        dbias := Array<F64>(cols) if not rms else Array<F64>(0)
+        RowNormParamGrad(dgain, dbias, mat.Mat<F64>(w, 0, rows, cols, cols), xm, mean, inv, false)
+        for i in range n {
+            hi := x.Copy()
+            hi[i] += h
+            lo := x.Copy()
+            lo[i] -= h
+            want := (normLoss(hi, w, gain, bias, rows, cols, rms) - normLoss(lo, w, gain, bias, rows, cols, rms)) / (2.0 * h)
+            assert (dx[i] - want).Abs() <= 1.0e-7 * want.Abs().Max(1.0), "dx[" + $i + "] " + $dx[i] + " against " + $want
+        }
+        for j in range cols {
+            hi := gain.Copy()
+            hi[j] += h
+            lo := gain.Copy()
+            lo[j] -= h
+            want := (normLoss(x, w, hi, bias, rows, cols, rms) - normLoss(x, w, lo, bias, rows, cols, rms)) / (2.0 * h)
+            assert (dgain[j] - want).Abs() <= 1.0e-7 * want.Abs().Max(1.0), "dgain[" + $j + "] " + $dgain[j] + " against " + $want
+        }
+        for j in range bias.Len() {
+            col F64
+            for i in range rows: col += w[i * cols + j]
+            assert (dbias[j] - col).Abs() <= 1.0e-12
+        }
+        # added to what is there, and written over what is there
+        again := dx.Copy()
+        RowNormGrad(mat.Mat<F64>(again, 0, rows, cols, cols), mat.Mat<F64>(w, 0, rows, cols, cols), xm, mean, inv, gain, rms, true)
+        for i in range n: assert (again[i] - 2.0 * dx[i]).Abs() <= 1.0e-12 * dx[i].Abs().Max(1.0)
+    }
+}
+
+test RowMaxAbs "RowMaxAbs, RowSums and ColumnSums (beta 0 overwrites, beta adds) on a strided matrix" {
+    rows := 6
+    cols := 70
+    data := Array<F32>(3 + rows * (cols + 5))
+    r := rand.Rand(6)
+    fill(data, r, 3.0)
+    x := strided(data, rows, cols)
+    best := Array<F32>(rows)
+    sums := Array<F32>(rows)
+    RowMaxAbs(best, x)
+    RowSums(sums, x)
+    cs := Array<F32>(cols)
+    for j in range cols: cs[j] = F32(NaN)
+    ColumnSums(cs, x, 0.0)
+    again := cs.Copy()
+    ColumnSums(again, x, 1.0)
+    for i in range rows {
+        b F64
+        s F64
+        for j in range cols {
+            v := F64(data[3 + i * (cols + 5) + j])
+            b = b.Max(v.Abs())
+            s += v
+        }
+        assert F64(best[i]) == b and (F64(sums[i]) - s).Abs() <= 1.0e-5
+    }
+    for j in range cols {
+        c F64
+        for i in range rows: c += F64(data[3 + i * (cols + 5) + j])
+        assert (F64(cs[j]) - c).Abs() <= 1.0e-5 and (F64(again[j]) - 2.0 * c).Abs() <= 2.0e-5
+    }
+}
+
+test Dot "Dot, Sum, SquaresF64 and Axpy over runs at an offset, F32, BF16 in F32, F64" {
+    x := Array<F64>[F64(i % 7) - 3.0 for i in range 103]
+    y := Array<F64>[F64(i % 5) * 0.5 for i in range 103]
+    d F64
+    s F64
+    q F64
+    for i in range 100 {
+        d += x[2 + i] * y[1 + i]
+        s += x[2 + i]
+        q += x[i] * x[i]
+    }
+    assert Dot(x, 2, y, 1, 100) == d and Sum(x, 2, 100) == s
+    x32 := Array<F32>[F32(v) for v in x]
+    y32 := Array<F32>[F32(v) for v in y]
+    assert F64(Dot(x32, 2, y32, 1, 100)) == d and F64(Sum(x32, 2, 100)) == s
+    xb := Array<BF16>[BF16(v) for v in x]
+    assert F64(Sum(xb, 2, 100)) == s
+    assert (SquaresF64(x32[0:100]) - q).Abs() <= 1.0e-9
+    z := Array<F64>(103)
+    Axpy(z, 3, 2.0, x, 5, 90)
+    assert z[3] == 2.0 * x[5] and z[92] == 2.0 * x[94] and z[93] == 0.0 and z[2] == 0.0
+}
+
+test FastExp "the evaluator and the run time agree: comptime values equal the run's, bit for bit" {
+    a := Array<F64>[0.75, -3.5]
+    b := Array<F32>[0.75, -3.5]
+    assert (comptime FastExp<F32>(0.75)).Bits() == FastExp(b[0]).Bits()
+    assert (comptime FastExp<F64>(-3.5)).Bits() == FastExp(a[1]).Bits()
+    assert (comptime FastTanh<F64>(0.75)).Bits() == FastTanh(a[0]).Bits()
+    assert (comptime FastTanh<F32>(-3.5)).Bits() == FastTanh(b[1]).Bits()
+    assert (comptime FastSigmoid<F32>(-3.5)).Bits() == FastSigmoid(b[1]).Bits()
+    assert (comptime FastGeluTanh<F32>(-3.5)).Bits() == FastGeluTanh(b[1]).Bits()
+    assert (comptime FastGeluTanh<F64>(0.75)).Bits() == FastGeluTanh(a[0]).Bits()
+}

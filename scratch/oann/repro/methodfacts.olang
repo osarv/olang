@@ -1,0 +1,21 @@
+# repro/methodfacts - G42 names a method of a generic type's instance (`Box<I64>.Of.Allocates`), but reading a fact
+# through one is refused by the self-hosted compiler while building: "it does not check a generic name as a value yet".
+# Found pinning ad/graph's Graph<F32>.Forward allocation-free; the workaround is a plain function calling the method,
+# whose fact is read.
+#   olang test repro/methodfacts.olang   is refused at the assert; expected: it checks (Fill allocates, so the assert
+#   as written fails with S17a - `not` dropped it would pass)
+
+type Box<T> struct(n I64) {
+    n
+    data mut Array<T>& = Array<T>(0)
+}
+
+fn (b mut Box<T>&) Fill() { b.data = Array<T>(b.n) }
+
+assert Box<I64>.Fill.Allocates, "Fill makes an array"
+
+test Box "fills" {
+    b := Box<I64>(3)
+    b.Fill()
+    assert b.data.Len() == 3
+}

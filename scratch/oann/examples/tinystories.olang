@@ -1,0 +1,182 @@
+# The first yardstick run (M13 of docs/redesign.md 4.3): a GPT (models/gpt) and an SSM (models/ssm), each about 10 million
+# parameters, on TinyStories (Eldan and Li) - the same data, tokens, schedule and budget, so their losses and speeds
+# compare. Two steps, from the repository's root:
+#
+#   olang build -output build/examples_tinystories examples/tinystories.olang
+#   build/examples_tinystories prep [MEGABYTES [VOCABULARY]]
+#   build/examples_tinystories gpt|mamba|delta [TOKENS [CONTEXT [SEQUENCES [SEED [THREADS [EVAL]]]]]] [bf16]
+#   build/examples_tinystories sample gpt|mamba|delta [TOKENS [CONTEXT]]
+#
+# prep: fetches TinyStories' validation file and the first 300 MB of its training file into data/tinystories (from the
+# Hugging Face hub, once), learns a byte-level BPE vocabulary (4096) from the first 8 MB of the training text, and writes
+# the first MEGABYTES (60) of training text and the validation file's first 5 MB as token files (data/tokens, 2 bytes an
+# id) - the stories' own "<|endoftext|>" markers kept as text. The tokenizer is data/tinystories/bpe.json.
+#
+# gpt, mamba, delta: trains the model for TOKENS tokens (2 000 000) in batches of SEQUENCES (16) windows of CONTEXT (256)
+# tokens drawn at random: AdamW (beta2 0.95, weight decay 0.1) at 1e-3 warmed up over 5% of the steps and down a cosine to
+# 1e-4, the gradient clipped to norm 1, the next batch read from the token file while this one trains. The validation
+# loss (nats a token, the same EVAL (8) batches of the held-out file's windows) is measured every 10% of the steps; the run's
+# record is build/tinystories-MODEL.jsonl and its checkpoint data/tinystories/MODEL.ckpt (F32; BF16 runs write the F32
+# masters). sample: TOKENS (200) tokens of text from a checkpoint at temperature 0.8, the GPT through its key-value cache,
+# the others running the context again.
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/tokens"
+import "../models/gpt"
+import "../models/ssm"
+import "../nn/generate"
+import "../nn/optim"
+import "../nn/train"
+import "../tokenizer"
+
+dir String = "data/tinystories"
+source String = "https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+type Failure error {
+    Download
+    Usage
+}
+
+fn main() ? {
+    all := os.Args()
+    bf16 := all.Len() > 1 and all[all.Len() - 1] == "bf16"
+    args := all[:all.Len() - 1] if bf16 else all
+    if args.Len() < 2: error Failure.Usage
+    if args[1] == "prep" {
+        try prep(try number(args, 2, 60), try number(args, 3, 4096))
+        return
+    }
+    if args[1] == "sample" and args.Len() > 2 {
+        try sample(args[2], try number(args, 3, 200), try number(args, 4, 256))
+        return
+    }
+    if args[1] != "gpt" and args[1] != "mamba" and args[1] != "delta": error Failure.Usage
+    budget := try number(args, 2, 2000000)
+    ctx := try number(args, 3, 256)
+    sequences := try number(args, 4, 16)
+    seed := try number(args, 5, 1)
+    threads := try number(args, 6, 1)
+    evals := try number(args, 7, 8)
+    tk := try tokenizer.Tokenizer.Load($dir + "/bpe.json") catch { error Failure.Usage }
+    if bf16 {
+        g := graph.Graph<BF16>(sequences, threads)
+        try go(g, args[1], tk, ctx, budget, seed, evals)
+    } else {
+        g := graph.Graph<F32>(sequences, threads)
+        try go(g, args[1], tk, ctx, budget, seed, evals)
+    }
+}
+
+# the data: the files fetched, the vocabulary learned, the text encoded
+fn prep(megabytes I64, vocab I64) ? {
+    try os.MkDirAll(dir)
+    for file in Array<String&>["TinyStories-valid.txt", "TinyStories-train.txt"] {
+        path := $dir + "/" + $file
+        if os.Exists(path): continue
+        cut := " -r 0-299999999" if file.Contains("train") else ""
+        if os.Run("curl -fsSL --retry 3" + $cut + " -o " + $os.Quote(path) + " " + $os.Quote($source + $file)) != 0: error Failure.Download
+    }
+    corpus := try os.ReadFile($dir + "/TinyStories-train.txt")
+    valid := try os.ReadFile($dir + "/TinyStories-valid.txt")
+    part := corpus[:(megabytes * 1000000).Min(corpus.Len())]
+    held := valid[:5000000.Min(valid.Len())]
+    t0 := time.Now()
+    tk := tokenizer.Tokenizer.Train(part[:8000000.Min(part.Len())], vocab)
+    try io.Put("a BPE vocabulary of " + $tk.Size() + " learned from " + $(8000000.Min(part.Len())) + " bytes in " + $(F64(time.Since(t0)) * 1e-9).Fixed(1) + " s\n")
+    try tk.Save($dir + "/bpe.json")
+    for set in range 2 {
+        text := part if set == 0 else held
+        t1 := time.Now()
+        ids := tk.Encode(text)
+        name := $dir + "/" + $("train" if set == 0 else "valid") + ".bin"
+        try tokens.Write(name, ids)
+        try io.Put(($name + ": " + $text.Len() + " bytes, " + $ids.Len() + " tokens (" + $(F64(text.Len()) / F64(ids.Len())).Fixed(2) + " bytes a token), " +
+            $(F64(time.Since(t1)) * 1e-9).Fixed(1) + " s\n"))
+    }
+}
+
+# the model by name on g, trained, measured and sampled
+fn go<T>(g mut graph.Graph<T>&, name String&, tk tokenizer.Tokenizer&, ctx I64, budget I64, seed I64, evals I64) ? {
+    steps := budget / (g.Batch * ctx)
+    if name == "gpt" {
+        cfg := gpt.GptConfig.Yardstick(tk.Size(), ctx)
+        m := gpt.Gpt.New(g, cfg).Lm(g)
+        try io.Put("GPT: " + $cfg.Layers + " layers of " + $cfg.Dim + " in " + $cfg.Heads + " heads, rotary positions, RMS norms, SwiGLU, " + $cfg.Params() + " parameters\n")
+        try run(g, name, m, tk, steps, seed, evals)
+        return
+    }
+    cfg := ssm.SsmConfig.Yardstick(tk.Size(), ctx)
+    cfg.Kind = ssm.Mixer.Delta if name == "delta" else ssm.Mixer.Mamba
+    m := ssm.Ssm.New(g, cfg).Lm(g)
+    try io.Put("SSM (" + $name + "): " + $cfg.Layers + " layers of " + $cfg.Dim + ", " + $cfg.Params() + " parameters\n")
+    try run(g, name, m, tk, steps, seed, evals)
+}
+
+fn run<T>(g mut graph.Graph<T>&, name String&, m train.LanguageModel&, tk tokenizer.Tokenizer&, steps I64, seed I64, evals I64) ? {
+    try g.Plan(rand.Rand(U64(seed)))
+    trainSet := try tokens.Tokens.Open($dir + "/train.bin", m.Ctx, 2, U64(seed))
+    try io.Put(($g.ParamCount + " parameters on the graph, batches of " + $g.Batch + " x " + $m.Ctx + ", " + $steps + " steps = " + $(steps * g.Batch * m.Ctx) +
+        " tokens, " + $g.Threads + " threads, " + $("BF16 with F32 masters" if g.HasMasters() else "F32") + ", an arena of " +
+        $(F64(g.ArenaBytes()) / 1048576.0).Fixed(1) + " MB\n"))
+    cfg := train.Config(steps, optim.WarmupCosine(1e-3, (steps / 20).Max(1), steps, 1e-4), Every = (steps / 40).Max(1)
+        EvalEvery = (steps / 10).Max(1), EvalBatches = evals, Name = "tinystories-" + $name, Seed = seed
+        Checkpoint = $dir + "/" + $name + ".ckpt", Log = "build/tinystories-" + $name + ".jsonl")
+    {
+        validSet := try tokens.Tokens.Open($dir + "/valid.bin", m.Ctx, 2, U64(seed))
+        match T {
+            case BF16 {
+                o := optim.AdamW(g.Masters(), g.ParamGrads(), beta2 = 0.95, decay = 0.1, spans = optim.Spans(g))
+                try fit(g, m, trainSet, validSet, o, cfg)
+            }
+            case _ {
+                o := optim.AdamW(g.Params(), g.ParamGrads(), beta2 = 0.95, decay = 0.1, spans = optim.Spans(g))
+                try fit(g, m, trainSet, validSet, o, cfg)
+            }
+        }
+    }
+}
+
+fn fit<T, O>(g mut graph.Graph<T>&, m train.LanguageModel&, trainSet mut tokens.Tokens&, validSet mut tokens.Tokens&, o mut O&
+    cfg train.Config&) ? {
+    first := try train.LmEvaluate(g, m, validSet, cfg.EvalBatches)
+    try io.Put("step 0: validation loss " + $first.Fixed(4) + "\n")
+    last := try train.Fit(g, m, trainSet, validSet, o, cfg, fn(p) {
+        io.Put(("step " + $p.Step + " (" + $(p.Step * g.Batch * m.Ctx) + " tokens): train loss " + $p.Loss.Fixed(4) + ", norm " + $p.Norm.Fixed(2) +
+            ", rate " + $p.Rate.Fixed(6) + ", " + $(F64(p.Step * g.Batch * m.Ctx) / p.Seconds).Fixed(0) + " tokens a second" +
+            $((", validation loss " + $p.Validation.Fixed(4)) if p.Validation == p.Validation else "") + "\n"))!
+    })
+    try io.Put(("trained " + $cfg.Steps + " steps in " + $last.Seconds.Fixed(1) + " s: " + $(F64(cfg.Steps * g.Batch * m.Ctx) / last.Seconds).Fixed(0) +
+        " tokens a second, final validation loss " + $last.Validation.Fixed(4) + "\n"))
+}
+
+# "count" tokens of text from the trained model "name" (its checkpoint in data/tinystories), after a story's first words
+fn sample(name String&, count I64, ctx I64) ? {
+    tk := try tokenizer.Tokenizer.Load($dir + "/bpe.json")
+    r := rand.Rand(1)
+    prompt := tk.Encode("Once upon a time")
+    path := $dir + "/" + $name + ".ckpt"
+    if name == "gpt" {
+        g := graph.Graph<F32>(1, 1, graph.Mode.Captured, true)
+        m := gpt.Gpt.New(g, gpt.GptConfig.Yardstick(tk.Size(), ctx)).Lm(g, false)
+        try g.Plan(r)
+        try g.Load(path)
+        try io.Put($(try tk.Decode(generate.CachedTokens(g, m, prompt, count, 0.8, r))) + "\n")
+        return
+    }
+    cfg := ssm.SsmConfig.Yardstick(tk.Size(), ctx)
+    cfg.Kind = ssm.Mixer.Delta if name == "delta" else ssm.Mixer.Mamba
+    g := graph.Graph<F32>(1)
+    m := ssm.Ssm.New(g, cfg).Lm(g, false)
+    try g.Plan(r)
+    try g.Load(path)
+    try io.Put($(try tk.Decode(generate.RerunTokens(g, m, prompt, count, 0.8, r))) + "\n")
+}

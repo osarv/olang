@@ -1,0 +1,176 @@
+# MNIST trained in F32, then run in INT8 (nn/quant, M12 of docs/redesign.md 4.3): the 784-128-10 perceptron (models/mlp)
+# or the small convolutional network (models/cnn) is trained with AdamW, quantized - weights per output channel,
+# activations per tensor - and measured on the test set three ways: in F32 by the graph, in INT8 with each layer's input
+# quantized over its own batch's range (dynamic), and over ranges calibrated on 1280 training samples (static). Then the
+# parameters' size, and samples a second at batch 1 and a whole batch: the graph's F32 forward against the INT8 model's,
+# interleaved, medians.
+# Arguments, all optional: the network (mlp or cnn), the epochs (5 for mlp, 2 for cnn), the seed (1), the threads (1),
+# the timing rounds (7).
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/idx"
+import "../data/loader"
+import "../data/mnist"
+import "../kernels/conv"
+import "../models/cnn"
+import "../models/mlp"
+import "../nn/optim"
+import "../nn/quant"
+import "../nn/train"
+import "../tensor"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn median(xs mut Array<F64>&) F64 {
+    xs.Sort(fn(a, b) { return a < b })
+    return xs[xs.Len() / 2]
+}
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError, ParseError, conv.GeometryError, tensor.ShapeError {
+    args := os.Args()
+    isCnn Bool = args.Len() > 1 and args[1] == "cnn"
+    epochs := try number(args, 2, 2 if isCnn else 5)
+    seed := U64(try number(args, 3, 1))
+    threads := try number(args, 4, 1)
+    rounds := try number(args, 5, 7)
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    batch I64 = 128
+    g := graph.Graph<F32>(batch, threads)
+    # the network, F32 trained, and its INT8 form: the graph is planned and trained before the form reads its values
+    if isCnn {
+        m := try cnn.Cnn.New(g, cnn.CnnConfig.Mnist())
+        c := m.Task(g)
+        try g.Plan(rand.Rand(seed))
+        try fit(g, c, data, epochs, seed, "conv 3x3 1->16, relu, pool; conv 3x3 16->32, relu, pool; dense 1568->10")
+        q := m.Int8(g, batch, threads)
+        try compare(g, c, data, q, seed, rounds)
+    } else {
+        m := mlp.Mlp.New(g, mlp.MlpConfig.Mnist())
+        c := m.Task(g)
+        try g.Plan(rand.Rand(seed))
+        try fit(g, c, data, epochs, seed, "784-128-10, relu")
+        q := m.Int8(g, batch, threads)
+        try compare(g, c, data, q, seed, rounds)
+    }
+}
+
+# the network trained for "epochs" epochs with AdamW
+fn fit(g mut graph.Graph<F32>&, c train.Classifier&, data mnist.Mnist&, epochs I64, seed U64, shape String&) ? io.Error {
+    o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 0.001, decay = 0.01, spans = optim.Spans(g))
+    trainSet := loader.Loader(data.Train, g.Batch, seed)
+    try io.Put($shape + ", " + $g.ParamCount + " parameters, AdamW, " + $epochs + " epochs\n")
+    for e in range 1, epochs + 1 {
+        t0 := time.Now()
+        trainLoss := train.Epoch(g, c, trainSet, o)
+        try io.Put("epoch " + $e + ": train loss " + $trainLoss.Fixed(4) + ", " + $(F64(time.Since(t0)) * 1e-9).Fixed(2) + " s\n")
+    }
+}
+
+# the INT8 model q of the trained network g measured against it: size, accuracy, speed
+fn compare(g mut graph.Graph<F32>&, c train.Classifier&, data mnist.Mnist&, q mut quant.Model&, seed U64, rounds I64) ? io.Error {
+    batch := g.Batch
+    qb, fb := q.Bytes()
+    try io.Put("parameters: F32 " + $fb + " bytes, INT8 " + $qb + " bytes (" + $(F64(fb) / F64(qb)).Fixed(2) + "x smaller)\n")
+    testSet := loader.Loader(data.Test, batch, seed, false)
+    trainSet := loader.Loader(data.Train, batch, seed)
+
+    # accuracy: F32, then INT8 dynamic, then static over ranges calibrated on ten training batches
+    _, f32Accuracy := train.Evaluate(g, c, testSet)
+    out := Array<F32>(batch * 10)
+    dyn, dynAgree := measure(q, g, c, testSet, out)
+    trainSet.Epoch()
+    xs := g.Data(c.X).Flat()!
+    ys := g.Ints(c.Y).Flat()!
+    for b in range 10: q.Calibrate(trainSet.Fill(b, xs, ys), xs, out)
+    q.Static = true
+    stat, statAgree := measure(q, g, c, testSet, out)
+    try io.Put(("test accuracy: F32 " + $(100.0 * f32Accuracy).Fixed(2) + "%, INT8 dynamic " + $(100.0 * dyn).Fixed(2) +
+        "% (the same class as F32 for " + $(100.0 * dynAgree).Fixed(2) + "%), INT8 static " + $(100.0 * stat).Fixed(2) +
+        "% (" + $(100.0 * statAgree).Fixed(2) + "%)\n"))
+
+    # throughput, interleaved: the graph's forward in F32, the model in INT8 dynamic and static, at batch 1 and batch
+    testSet.Epoch()
+    testSet.Fill(0, xs, ys)
+    for size in Array<I64>[1, 64, batch] {
+        reps I64 = 1
+        for {
+            t0 := time.Now()
+            for _ in range reps: g.Forward(size)
+            if time.Since(t0) > 20000000 or reps > 1000000: break
+            reps = reps * 2
+        }
+        f32s := Array<F64>(rounds)
+        dyns := Array<F64>(rounds)
+        stats := Array<F64>(rounds)
+        for t in range rounds {
+            t0 := time.Now()
+            for _ in range reps: g.Forward(size)
+            f32s[t] = F64(time.Since(t0)) / F64(reps)
+            q.Static = false
+            t1 := time.Now()
+            for _ in range reps: q.Forward(size, xs, out)
+            dyns[t] = F64(time.Since(t1)) / F64(reps)
+            q.Static = true
+            t2 := time.Now()
+            for _ in range reps: q.Forward(size, xs, out)
+            stats[t] = F64(time.Since(t2)) / F64(reps)
+        }
+        f := median(f32s)
+        d := median(dyns)
+        s := median(stats)
+        try io.Put(("batch " + $size + ": F32 " + $(f * 1e-3).Fixed(1) + " us (" + $(F64(size) * 1e9 / f).Fixed(0) +
+            " samples/s), INT8 dynamic " + $(d * 1e-3).Fixed(1) + " us (" + $(F64(size) * 1e9 / d).Fixed(0) + ", " +
+            $(f / d).Fixed(2) + "x), static " + $(s * 1e-3).Fixed(1) + " us (" + $(F64(size) * 1e9 / s).Fixed(0) + ", " +
+            $(f / s).Fixed(2) + "x)\n"))
+    }
+}
+
+# the INT8 model's accuracy over the test set, and how often it picks the class the F32 graph picks. "out" is its logits
+fn measure<D>(q mut quant.Model&, g mut graph.Graph<F32>&, c train.Classifier&, l mut loader.Loader<D>&, out mut Array<F32>&) F64, F64 {
+    l.Epoch()
+    xs := g.Data(c.X).Flat()!
+    ys := g.Ints(c.Y).Flat()!
+    right I64 = 0
+    same I64 = 0
+    seen I64 = 0
+    classes := q.Outputs()
+    for b in range l.Batches() {
+        n := l.Fill(b, xs, ys)
+        q.Forward(n, xs, out)
+        g.Forward(n)
+        z := g.Value(c.Logits)
+        for i in range n {
+            mine := argmax(out, i * classes, classes)
+            theirs := argmaxOf(z, i, classes)
+            if mine == I64(ys[i]): right++
+            if mine == theirs: same++
+        }
+        seen += n
+    }
+    return F64(right) / F64(seen), F64(same) / F64(seen)
+}
+
+# the index of the largest of x[at ...] over n values
+fn argmax(x Array<F32>&, at I64, n I64) I64 {
+    best I64 = 0
+    for k in range 1, n {
+        if x[at + k] > x[at + best]: best = k
+    }
+    return best
+}
+
+# the index of the largest of row i of z
+fn argmaxOf(z tensor.Tensor<F32>&, i I64, n I64) I64 {
+    best I64 = 0
+    for k in range 1, n {
+        if z.Get(i, k) > z.Get(i, best): best = k
+    }
+    return best
+}

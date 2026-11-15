@@ -1,0 +1,688 @@
+# checkpoint - tensors as safetensors, Hugging Face's format: eight bytes holding the header's length (an unsigned
+# little-endian integer), the header - JSON naming every tensor's dtype, shape and byte range,
+#     {"__metadata__": {"format": "pt"},
+#      "wte.weight": {"dtype": "F32", "shape": [512, 128], "data_offsets": [0, 262144]}, ...}
+# padded with spaces to a multiple of eight bytes - then every tensor's elements, row-major, little-endian, at its
+# byte range of what follows the header. PyTorch, JAX, numpy and Hugging Face read and write it, so this is how a model
+# leaves oann or comes into it.
+#
+# Writing: a Writer takes tensors by name, each rounded once to the dtype it is stored in (its own type's, or the one
+# AddAs names), and Save or Bytes gives the file. Reading: a File is a file's bytes with its header read - a view,
+# nothing of the data is copied - and gives a tensor by name, into a tensor the caller has (Read: the shape must be
+# the stored one, nothing is allocated) or a new one (Get). Elements are converted into the reader's type as a
+# conversion D(x) does, rounded to nearest, ties to even, so a file of one dtype reads into a tensor of another.
+#
+# Dtypes: F64 F32 F16 BF16 F8E4M3 F8E5M2 (safetensors' "F8_E4M3" and "F8_E5M2") and I64 I32 I16 I8 U64 U32 U16 U8 - every
+# element type a Tensor holds but Bool. A header naming another dtype is a Dtype error.
+
+import "std/json"
+import "std/os"
+import "../tensor"
+
+type SafetensorsError error {
+    Malformed          # not a safetensors file: too short, a header that is not Json of tensors, data out of range
+    Missing(name String) # no tensor of that name in the file
+    Dtype              # a dtype this module does not hold
+    Duplicate(name String) # two tensors added under one name
+}
+
+# how the elements of a tensor are stored
+type Dtype enum {
+    F64
+    F32
+    F16
+    BF16
+    F8E4M3
+    F8E5M2
+    I64
+    I32
+    I16
+    I8
+    U64
+    U32
+    U16
+    U8
+}
+
+# every dtype, in declaration order
+AllDtypes Array<Dtype>& = Array<Dtype>[Dtype.F64, Dtype.F32, Dtype.F16, Dtype.BF16, Dtype.F8E4M3, Dtype.F8E5M2, Dtype.I64, Dtype.I32
+    Dtype.I16, Dtype.I8, Dtype.U64, Dtype.U32, Dtype.U16, Dtype.U8]
+
+# the name the header gives the dtype
+fn (d Dtype) Name() String& {
+    return match d {
+        case Dtype.F64: "F64"
+        case Dtype.F32: "F32"
+        case Dtype.F16: "F16"
+        case Dtype.BF16: "BF16"
+        case Dtype.F8E4M3: "F8_E4M3"
+        case Dtype.F8E5M2: "F8_E5M2"
+        case Dtype.I64: "I64"
+        case Dtype.I32: "I32"
+        case Dtype.I16: "I16"
+        case Dtype.I8: "I8"
+        case Dtype.U64: "U64"
+        case Dtype.U32: "U32"
+        case Dtype.U16: "U16"
+        case Dtype.U8: "U8"
+    }
+}
+
+# the dtype a header's name says
+fn Dtype.Named(name String&) Dtype ? SafetensorsError {
+    for d in AllDtypes {
+        if d.Name() == name: return d
+    }
+    error SafetensorsError.Dtype
+}
+
+# bytes per element
+fn (d Dtype) Width() I64 {
+    return match d {
+        case Dtype.F64, Dtype.I64, Dtype.U64: 8
+        case Dtype.F32, Dtype.I32, Dtype.U32: 4
+        case Dtype.F16, Dtype.BF16, Dtype.I16, Dtype.U16: 2
+        case Dtype.F8E4M3, Dtype.F8E5M2, Dtype.I8, Dtype.U8: 1
+    }
+}
+
+# the dtype that holds an element type exactly
+fn Dtype.Of<T>() Dtype {
+    return match T {
+        case F64: Dtype.F64
+        case F32: Dtype.F32
+        case F16: Dtype.F16
+        case BF16: Dtype.BF16
+        case F8E4M3: Dtype.F8E4M3
+        case F8E5M2: Dtype.F8E5M2
+        case I64: Dtype.I64
+        case I32: Dtype.I32
+        case I16: Dtype.I16
+        case I8: Dtype.I8
+        case U64: Dtype.U64
+        case U32: Dtype.U32
+        case U16: Dtype.U16
+        case U8: Dtype.U8
+    }
+}
+
+# ---- elements as bytes ----
+
+fn putBits(out mut Array<U8>&, at I64, v U64, width I64) {
+    for b in range width: out[at + b] = U8((v >> U64(8 * b)) & 255)
+}
+
+fn getBits(data Array<U8>&, at I64, width I64) U64 {
+    v U64 = 0
+    for b in range width: v = v | (U64(data[at + b]) << U64(8 * b))
+    return v
+}
+
+# 2 to the e, for the exponents an F8E4M3 has
+fn pow2(e I64) F64 { return F64.FromBits(U64(e + 1023) << 52) }
+
+# the value of an F8E4M3's bits: 4 exponent bits (bias 7), 3 mantissa bits, no infinity, the one NaN all ones
+fn e4m3(b U8) F64 {
+    ex := I64((b >> 3) & 15)
+    m := F64(b & 7)
+    v := m * pow2(-9) if ex == 0 else (1.0 + m / 8.0) * pow2(ex - 7)
+    if b & 127 == 127: return 0.0 / 0.0
+    return -v if b >= 128 else v
+}
+
+# x's bits in dtype d, rounded once from x's own type
+fn bitsOf<T>(x T, d Dtype) U64 {
+    return match d {
+        case Dtype.F64: tensor.Cast(x, 0.0).Bits()
+        case Dtype.F32: U64(tensor.Cast(x, F32(0)).Bits())
+        case Dtype.F16: U64(tensor.Cast(x, F16(0)).Bits())
+        case Dtype.BF16: U64(tensor.Cast(x, BF16(0)).Bits())
+        case Dtype.F8E4M3: U64(tensor.Cast(x, F8E4M3(0)).Bits)
+        case Dtype.F8E5M2: U64(tensor.Cast(x, F8E5M2(0)).Bits)
+        case Dtype.I64: U64(tensor.Cast(x, I64(0)))
+        case Dtype.I32: U64(tensor.Cast(x, I32(0)))
+        case Dtype.I16: U64(tensor.Cast(x, I16(0)))
+        case Dtype.I8: U64(tensor.Cast(x, I8(0)))
+        case Dtype.U64: tensor.Cast(x, U64(0))
+        case Dtype.U32: U64(tensor.Cast(x, U32(0)))
+        case Dtype.U16: U64(tensor.Cast(x, U16(0)))
+        case Dtype.U8: U64(tensor.Cast(x, U8(0)))
+    }
+}
+
+# the element of dtype d at raw[at:], converted into the type of "like"
+fn elementAt<T>(raw Array<U8>&, at I64, d Dtype, like T) T {
+    bits := getBits(raw, at, d.Width())
+    return match d {
+        case Dtype.F64: tensor.Cast(F64.FromBits(bits), like)
+        case Dtype.F32: tensor.Cast(F32.FromBits(U32(bits)), like)
+        case Dtype.F16: tensor.Cast(F16.FromBits(U16(bits)), like)
+        case Dtype.BF16: tensor.Cast(BF16.FromBits(U16(bits)), like)
+        case Dtype.F8E4M3: tensor.Cast(e4m3(U8(bits)), like)
+        case Dtype.F8E5M2: tensor.Cast(F16.FromBits(U16(bits) << 8), like)
+        case Dtype.I64: tensor.Cast(I64(bits), like)
+        case Dtype.I32: tensor.Cast(I32(bits), like)
+        case Dtype.I16: tensor.Cast(I16(bits), like)
+        case Dtype.I8: tensor.Cast(I8(bits), like)
+        case Dtype.U64: tensor.Cast(bits, like)
+        case Dtype.U32: tensor.Cast(U32(bits), like)
+        case Dtype.U16: tensor.Cast(U16(bits), like)
+        case Dtype.U8: tensor.Cast(U8(bits), like)
+    }
+}
+
+# ---- writing ----
+
+# where one tensor is in the file: its dtype, shape and byte range of the data
+type Entry struct(Key String, Type Dtype, Shape Array<I64>, Begin I64, End I64) {
+    Key
+    Type
+    Shape
+    Begin
+    End
+}
+
+# tensors added by name, encoded as they come
+type Writer struct() {
+    entries Vec<Entry> = Vec<Entry>()
+    body Vec<U8> = Vec<U8>()
+    meta Vec<String> = Vec<String>()       # key, value, key, value ...
+}
+
+# a metadata pair of the header (beside "format": "pt")
+fn (w mut Writer&) Meta(key String&, value String&) {
+    w.meta.Push($key)
+    w.meta.Push($value)
+}
+
+# t added as "name", in the dtype of its own type
+fn (w mut Writer&) Add<T>(name String&, t tensor.Tensor<T>&) ? SafetensorsError {
+    try w.AddAs(name, t, Dtype.Of<T>())
+}
+
+# t added as "name", every element rounded once to dtype d
+fn (w mut Writer&) AddAs<T>(name String&, t tensor.Tensor<T>&, d Dtype) ? SafetensorsError {
+    for e in w.entries.View() {
+        if e.Key == name: error SafetensorsError.Duplicate($name)
+    }
+    c := t if t.Contiguous() else t.Clone()
+    w.encode(name, try c.Flat() catch { unreachable }, t.Dims, d)
+}
+
+fn (w mut Writer&) encode<T>(name String&, elements Array<T>&, dims tensor.Shape&, d Dtype) {
+    width := d.Width()
+    out := Array<U8>(elements.Len() * width)
+    for i, x in elements: putBits(out, i * width, bitsOf(x, d), width)
+    begin := w.body.Len()
+    w.body.PushAll(out)
+    w.entries.Push(Entry(name, d, Array<I64>[dims[a] for a in range dims.Rank], begin, w.body.Len()))
+}
+
+# the name a field of a record has in a file when it is not the field's own
+type Name struct(Value String&) { Value }
+
+# the tensors held by the fields of r, named by the path to each: a field "q" of a field "attn" of PREFIX is
+# "PREFIX.attn.q" (the name an @checkpoint.Name("c_attn") on a field replaces), an element i of an array of records
+# or tensors is ".i". Fields that hold no tensor - sizes, flags, a seed - are not written. The dtype is each tensor's
+# own type's
+fn (w mut Writer&) AddFields<R>(prefix String&, r R&) ? SafetensorsError {
+    for f in R.Fields: try w.AddValue(dotted(prefix, fieldName(f)), f.Of(r))
+}
+
+# v as "name": a tensor is added, a record's fields and an array's elements follow it, anything else is passed over
+fn (w mut Writer&) AddValue<V>(name String&, v V) ? SafetensorsError {
+    match V {
+        case tensor.Tensor<E> {
+            view tensor.Tensor<E>& = v
+            try w.Add(name, view)
+        }
+        case Array<E> {
+            for i, x in v: try w.AddValue(dotted(name, $i), x)
+        }
+        case _ {
+            if V.Kind == TypeKind.Struct: try w.AddFields(name, v)
+        }
+    }
+}
+
+fn dotted(prefix String&, name String&) String {
+    if prefix.Len() == 0: return $name
+    return $prefix + "." + $name
+}
+
+# a field's name in a file
+fn fieldName<F>(f F) String& {
+    if f.HasAttr<Name>(): return (f.Attr<Name>()!).Value
+    return f.Name
+}
+
+# the file: header, padded, then the data
+fn (w Writer&) Bytes() Array<U8> {
+    sb := StringBuilder()
+    sb.Push("{\"__metadata__\":{")
+    sb.Push("\"format\":\"pt\"")
+    for i in range 0, w.meta.Len(), 2 {
+        sb.Push("," + $json.Encode(json.Json.Str(w.meta[i])) + ":" + $json.Encode(json.Json.Str(w.meta[i + 1])))
+    }
+    sb.Push("}")
+    for e in w.entries.View() {
+        sb.Push(",")
+        sb.Push(($json.Encode(json.Json.Str(e.Key)) + ":{\"dtype\":\"" + $e.Type.Name() + "\",\"shape\":[" + $dimsText(e.Shape) +
+            "],\"data_offsets\":[" + $e.Begin + "," + $e.End + "]}"))
+    }
+    sb.PushChar('}')
+    for sb.Len() % 8 != 0: sb.PushChar(' ')
+    header := sb.ToString()
+    out := Array<U8>(8 + header.Len() + w.body.Len())
+    putBits(out, 0, U64(header.Len()), 8)
+    for i in range header.Len(): out[8 + i] = U8(header[i])
+    base := 8 + header.Len()
+    for i, b in w.body.View(): out[base + i] = b
+    return out
+}
+
+# the dimensions as a JSON list's items
+fn dimsText(dims Array<I64>&) String {
+    sb := StringBuilder()
+    for i, d in dims {
+        if i > 0: sb.PushChar(',')
+        sb.Push($d)
+    }
+    return sb.ToString()
+}
+
+# the file at "path"
+fn (w Writer&) Save(path String&) ? os.Error {
+    try os.WriteFile(path, w.Bytes())
+}
+
+# ---- reading ----
+
+# a file's bytes with the header read: where each tensor is. The bytes are the caller's, viewed, never copied
+type File struct(bytes Array<U8>&, Entries Array<Entry>&, Meta Map<String, String>, base I64) {
+    bytes
+    Entries
+    Meta
+    base
+    index Map<String, I64> = Map<String, I64>()
+    for i, e in Entries: index.Put(e.Key, i)
+}
+
+# the file held in "bytes"
+fn File.Parse(bytes Array<U8>&) File ? SafetensorsError {
+    if bytes.Len() < 10: error SafetensorsError.Malformed
+    hl := getBits(bytes, 0, 8)
+    if hl < 2 or hl > U64(bytes.Len() - 8): error SafetensorsError.Malformed
+    base I64 = 8 + I64(hl)
+    doc := try json.Json.Parse(String(bytes[8:base])) catch { error SafetensorsError.Malformed }
+    obj := try doc.AsObj() catch { error SafetensorsError.Malformed }
+    entries Vec<Entry> = Vec<Entry>()
+    meta Map<String, String> = Map<String, String>()
+    for i, key in obj.Keys {
+        if key == "__metadata__": try readMeta(obj.Values[i], meta)
+        else: entries.Push(try Entry.Parse(key, obj.Values[i], bytes.Len() - base))
+    }
+    return File(bytes, entries.ToArray(), meta, base)
+}
+
+fn readMeta(j json.Json&, meta mut Map<String, String>&) ? SafetensorsError {
+    o := try j.AsObj() catch { error SafetensorsError.Malformed }
+    for i, key in o.Keys: meta.Put(key, try o.Values[i].AsStr() catch { error SafetensorsError.Malformed })
+}
+
+# a header entry's member - a malformed header when it is missing
+fn member(j json.Json&, name String&) json.Json& ? SafetensorsError {
+    return try j[name] catch { error SafetensorsError.Malformed }
+}
+
+# one header entry: its dtype, shape and byte range, which must lie in the data (size bytes) and hold the shape's
+# elements exactly
+fn Entry.Parse(name String&, j json.Json&, size I64) Entry ? SafetensorsError {
+    d := try Dtype.Named(try (try member(j, "dtype")).AsStr() catch { error SafetensorsError.Malformed })
+    shape := try (try member(j, "shape")).AsArr() catch { error SafetensorsError.Malformed }
+    offsets := try (try member(j, "data_offsets")).AsArr() catch { error SafetensorsError.Malformed }
+    if offsets.Len() != 2: error SafetensorsError.Malformed
+    dims Array<I64> = Array<I64>(shape.Len())
+    count I64 = 1
+    for i, s in shape {
+        dims[i] = try s.AsInt() catch { error SafetensorsError.Malformed }
+        if dims[i] < 0: error SafetensorsError.Malformed
+        count *= dims[i]
+    }
+    first := try offsets[0].AsInt() catch { error SafetensorsError.Malformed }
+    last := try offsets[1].AsInt() catch { error SafetensorsError.Malformed }
+    if first < 0 or last < first or last > size or last - first != count * d.Width(): error SafetensorsError.Malformed
+    return Entry($name, d, dims, first, last)
+}
+
+# the file at "path", read whole
+fn File.Load(path String&) File ? os.Error, SafetensorsError {
+    bytes Array<U8>& = try os.ReadFile(path)
+    return try File.Parse(bytes)
+}
+
+# the tensors' names, in the file's order
+fn (f File&) Names() Array<String> {
+    return Array<String>[e.Key for e in f.Entries]
+}
+
+fn (f File&) Has(name String&) Bool { return f.index.Has(name) }
+
+# where the tensor of this name is
+fn (f File&) Find(name String&) Entry ? SafetensorsError {
+    i := try f.index.Get(name) catch { error SafetensorsError.Missing($name) }
+    return f.Entries[i]
+}
+
+# the tensor "name" read into dst, which must be contiguous and of the stored shape; each element is converted to T
+fn (f File&) Read<T>(name String&, dst mut tensor.Tensor<T>&) ? SafetensorsError, tensor.ShapeError {
+    e := try f.Find(name)
+    if not dst.Contiguous() or dst.Rank() != e.Shape.Len() or Array<I64>[dst.Dim(a) for a in range dst.Rank()] != e.Shape {
+        error tensor.ShapeError.Mismatch($name + " is stored with shape " + $e.Shape + ", not " + $dst.Dims)
+    }
+    like T
+    out := try dst.Flat()
+    width := e.Type.Width()
+    for i in range out.Len(): out[i] = elementAt(f.bytes, f.base + e.Begin + i * width, e.Type, like)
+}
+
+# the tensor "name" as a new tensor of element type T, of the stored shape
+fn (f File&) Get<T>(name String&) tensor.Tensor<T> ? SafetensorsError {
+    e := try f.Find(name)
+    out := tensor.Tensor<T>.Zeros(...e.Shape)
+    try f.Read(name, out) catch { unreachable }
+    return out
+}
+
+# the tensors of r's fields read from the file by the names AddFields gives them, each into the tensor the field holds
+# (a tensor is a view: reading writes the record's own elements), each of the stored shape - strict as PyTorch's
+# load_state_dict is: a name missing from the file is Missing, a shape that differs a ShapeError
+fn (f File&) ReadFields<R>(prefix String&, r R&) ? SafetensorsError, tensor.ShapeError {
+    for g in R.Fields: try f.ReadValue(dotted(prefix, fieldName(g)), g.Of(r))
+}
+
+fn (f File&) ReadValue<V>(name String&, v V) ? SafetensorsError, tensor.ShapeError {
+    match V {
+        case tensor.Tensor<E> {
+            into := v.Copy()
+            try f.Read(name, into)
+        }
+        case Array<E> {
+            for i, x in v: try f.ReadValue(dotted(name, $i), x)
+        }
+        case _ {
+            if V.Kind == TypeKind.Struct: try f.ReadFields(name, v)
+        }
+    }
+}
+
+# ---- tests ----
+
+import "std/rand"
+
+# a tensor of type T holding the F64 values, each rounded once to T
+fn tensorOf<T>(vs Array<F64>&, dims ...I64) tensor.Tensor<T> {
+    like T
+    return try tensor.Tensor<T>.Of(Array<T>[tensor.Cast(v, like) for v in vs], ...dims) catch { unreachable }
+}
+
+# the file a writer holding t as "x" in dtype d makes, read back as a tensor of type U
+fn roundTrip<T, U>(t tensor.Tensor<T>&, d Dtype) tensor.Tensor<U> {
+    w := Writer()
+    try w.AddAs("x", t, d) catch { unreachable }
+    f := try File.Parse(w.Bytes()) catch { unreachable }
+    return try f.Get<U>("x") catch { unreachable }
+}
+
+test Writer "every dtype is stored exactly as its own type, and reads back equal, shape kept" {
+    vs := Array<F64>[0.0, 1.0, -2.0, 3.5, 100.0, -0.5, 12.0, 7.0, 6.0, 0.25, 40.0, 5.0]
+    us := Array<F64>[0.0, 1.0, 2.0, 3.0, 100.0, 255.0, 12.0, 7.0, 6.0, 0.0, 40.0, 5.0]     # what unsigned types hold
+    assert roundTrip<F64, F64>(tensorOf<F64>(vs, 3, 4), Dtype.F64) == tensorOf<F64>(vs, 3, 4)
+    assert roundTrip<F32, F32>(tensorOf<F32>(vs, 3, 4), Dtype.F32) == tensorOf<F32>(vs, 3, 4)
+    assert roundTrip<F16, F16>(tensorOf<F16>(vs, 2, 6), Dtype.F16) == tensorOf<F16>(vs, 2, 6)
+    assert roundTrip<BF16, BF16>(tensorOf<BF16>(vs, 12), Dtype.BF16) == tensorOf<BF16>(vs, 12)
+    assert roundTrip<F8E4M3, F8E4M3>(tensorOf<F8E4M3>(vs, 4, 3), Dtype.F8E4M3) == tensorOf<F8E4M3>(vs, 4, 3)
+    assert roundTrip<F8E5M2, F8E5M2>(tensorOf<F8E5M2>(vs, 2, 2, 3), Dtype.F8E5M2) == tensorOf<F8E5M2>(vs, 2, 2, 3)
+    assert roundTrip<I64, I64>(tensorOf<I64>(vs, 3, 4), Dtype.I64) == tensorOf<I64>(vs, 3, 4)
+    assert roundTrip<I32, I32>(tensorOf<I32>(vs, 3, 4), Dtype.I32) == tensorOf<I32>(vs, 3, 4)
+    assert roundTrip<I16, I16>(tensorOf<I16>(vs, 3, 4), Dtype.I16) == tensorOf<I16>(vs, 3, 4)
+    assert roundTrip<I8, I8>(tensorOf<I8>(vs, 3, 4), Dtype.I8) == tensorOf<I8>(vs, 3, 4)
+    assert roundTrip<U64, U64>(tensorOf<U64>(us, 3, 4), Dtype.U64) == tensorOf<U64>(us, 3, 4)
+    assert roundTrip<U32, U32>(tensorOf<U32>(us, 3, 4), Dtype.U32) == tensorOf<U32>(us, 3, 4)
+    assert roundTrip<U16, U16>(tensorOf<U16>(us, 3, 4), Dtype.U16) == tensorOf<U16>(us, 3, 4)
+    assert roundTrip<U8, U8>(tensorOf<U8>(us, 3, 4), Dtype.U8) == tensorOf<U8>(us, 3, 4)
+}
+
+test Writer "integers keep their sign and their top bits through every width" {
+    i64 := try tensor.Tensor<I64>.Of(Array<I64>[I64.Min, -1, 0, 1, I64.Max, -123456789012], 6)
+    assert roundTrip<I64, I64>(i64, Dtype.I64) == i64
+    u64 := try tensor.Tensor<U64>.Of(Array<U64>[0, 1, U64.Max, 1 << 63, 9007199254740993], 5)
+    assert roundTrip<U64, U64>(u64, Dtype.U64) == u64
+    i8 := try tensor.Tensor<I8>.Of(Array<I8>[I8.Min, -1, 0, 1, I8.Max], 5)
+    assert roundTrip<I8, I8>(i8, Dtype.I8) == i8
+    i16 := try tensor.Tensor<I16>.Of(Array<I16>[I16.Min, -1, I16.Max], 3)
+    assert roundTrip<I16, I16>(i16, Dtype.I16) == i16
+    i32 := try tensor.Tensor<I32>.Of(Array<I32>[I32.Min, -1, I32.Max], 3)
+    assert roundTrip<I32, I32>(i32, Dtype.I32) == i32
+}
+
+test Writer "an element is rounded once into the dtype it is stored in, ties to even" {
+    vs := Array<F64>[0.1, 1.0 / 3.0, 65519.0, 65520.0, 1e-8, 3.0e38, -2.5, 1.00390625, 1e300]
+    t := tensorOf<F64>(vs, 9)
+    f32 := roundTrip<F64, F64>(t, Dtype.F32)
+    f16 := roundTrip<F64, F64>(t, Dtype.F16)
+    bf16 := roundTrip<F64, F64>(t, Dtype.BF16)
+    e4 := roundTrip<F64, F64>(t, Dtype.F8E4M3)
+    e5 := roundTrip<F64, F64>(t, Dtype.F8E5M2)
+    for i, v in vs {
+        assert f32.Get(i) == F64(F32(v)), "F32 " + $v
+        assert f16.Get(i) == F64(F16(v)), "F16 " + $v
+        assert bf16.Get(i) == F64(BF16(v)), "BF16 " + $v
+        assert e4.Get(i) == F8E4M3(v).F64(), "F8E4M3 " + $v
+        assert e5.Get(i) == F8E5M2(v).F64(), "F8E5M2 " + $v
+    }
+}
+
+test File.Get "a file of one dtype reads into a tensor of another, converted as D(x) does" {
+    t := tensorOf<F64>(Array<F64>[1.5, -2.25, 300.0, 0.1], 2, 2)
+    assert roundTrip<F64, F32>(t, Dtype.F64) == tensorOf<F32>(Array<F64>[1.5, -2.25, 300.0, 0.1], 2, 2)
+    assert roundTrip<F64, BF16>(t, Dtype.F32) == tensorOf<BF16>(Array<F64>[1.5, -2.25, 300.0, 0.1], 2, 2)
+    assert roundTrip<F64, I32>(t, Dtype.F64) == tensorOf<I32>(Array<F64>[1.0, -2.0, 300.0, 0.0], 2, 2)
+    assert roundTrip<I8, F32>(tensorOf<I8>(Array<F64>[-3.0, 100.0], 2), Dtype.I8) == tensorOf<F32>(Array<F64>[-3.0, 100.0], 2)
+}
+
+test Dtype "F8's two formats hold all 256 bit patterns as the prelude's types do" {
+    for b in range 256 {
+        raw := Array<U8>[U8(b)]
+        v4 := elementAt(raw, 0, Dtype.F8E4M3, 0.0)
+        v5 := elementAt(raw, 0, Dtype.F8E5M2, 0.0)
+        if b & 127 != 127: assert F8E4M3(v4).Bits == U8(b) or v4 == 0.0, "E4M3 " + $b
+        assert (b & 127) < 124 or v5 != v5 or v5 > 57344.0 or v5 < -57344.0 or F8E5M2(v5).Bits == U8(b), "E5M2 " + $b
+        assert (b & 127 == 127) == (v4 != v4)
+    }
+    assert elementAt(Array<U8>[0x38], 0, Dtype.F8E4M3, 0.0) == 1.0 and elementAt(Array<U8>[0x7E], 0, Dtype.F8E4M3, 0.0) == 448.0
+    assert elementAt(Array<U8>[0x3C], 0, Dtype.F8E5M2, 0.0) == 1.0 and elementAt(Array<U8>[0x7B], 0, Dtype.F8E5M2, 0.0) == 57344.0
+    assert elementAt(Array<U8>[0xC0], 0, Dtype.F8E4M3, 0.0) == -2.0 and elementAt(Array<U8>[0x01], 0, Dtype.F8E4M3, 0.0) == 0.001953125
+}
+
+test File.Read "tensors are read by name, in any order, into the caller's own tensor; the header is padded and named as safetensors names it" {
+    w := Writer()
+    w.Meta("producer", "oann")
+    try w.Add("b.bias", tensorOf<F32>(Array<F64>[1.0, 2.0, 3.0], 3))
+    try w.AddAs("a.weight", tensorOf<F32>(Array<F64>[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3), Dtype.F8E4M3)
+    try w.Add("c", tensorOf<I16>(Array<F64>[-7.0], 1))
+    bytes := w.Bytes()
+    header := String(bytes[8:8 + I64(getBits(bytes, 0, 8))])
+    assert (8 + header.Len()) % 8 == 0 and header[0] == '{'
+    assert (try header.Find("\"a.weight\":{\"dtype\":\"F8_E4M3\",\"shape\":[2,3],\"data_offsets\":[12,18]}") catch default -1) > 0
+    assert (try header.Find("\"__metadata__\":{\"format\":\"pt\",\"producer\":\"oann\"}") catch default -1) > 0
+    f := try File.Parse(bytes)
+    assert f.Names() == Array<String>["b.bias", "a.weight", "c"] and f.Has("c") and not f.Has("d")
+    assert (try f.Meta.Get("producer")) == "oann"
+    into := tensor.Tensor<F32>.Zeros(2, 3)
+    try f.Read("a.weight", into)
+    assert into == tensorOf<F32>(Array<F64>[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3)
+    bias := try f.Get<F64>("b.bias")
+    assert bias == tensorOf<F64>(Array<F64>[1.0, 2.0, 3.0], 3)
+    e := try f.Find("a.weight")
+    assert e.Type == Dtype.F8E4M3 and e.Shape == Array<I64>[2, 3] and e.End - e.Begin == 6
+}
+
+test File.Read "a tensor of the wrong shape, a missing name and a duplicate are errors naming what is wrong" {
+    w := Writer()
+    try w.Add("w", tensorOf<F32>(Array<F64>[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3))
+    f := try File.Parse(w.Bytes())
+    wrong := tensor.Tensor<F32>.Zeros(3, 2)
+    shaped := false
+    try f.Read("w", wrong) catch tensor.ShapeError.Mismatch { shaped = true } catch { }
+    assert shaped
+    missing := false
+    try f.Read("v", wrong) catch SafetensorsError.Missing { missing = true } catch { }
+    assert missing
+    twice := false
+    try w.Add("w", tensorOf<F32>(Array<F64>[1.0], 1)) catch SafetensorsError.Duplicate { twice = true } catch { }
+    assert twice
+}
+
+test Writer.Add "a view is written row-major whatever its strides: a transpose, a column, a slice" {
+    t := tensorOf<F32>(Array<F64>[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3)
+    w := Writer()
+    try w.Add("t", try t.Permute(1, 0))
+    try w.Add("col", try t.Select(1, 2))
+    try w.Add("tail", try t.Slice(1, 1, 3))
+    f := try File.Parse(w.Bytes())
+    assert (try f.Get<F32>("t")) == tensorOf<F32>(Array<F64>[1.0, 4.0, 2.0, 5.0, 3.0, 6.0], 3, 2)
+    assert (try f.Get<F32>("col")) == tensorOf<F32>(Array<F64>[3.0, 6.0], 2)
+    assert (try f.Get<F32>("tail")) == tensorOf<F32>(Array<F64>[2.0, 3.0, 5.0, 6.0], 2, 2)
+}
+
+# whether Parse refuses the bytes with the error word
+fn refuses(bytes Array<U8>&, word SafetensorsError) Bool {
+    try File.Parse(bytes) catch SafetensorsError e { return e == word } catch { }
+    return false
+}
+
+# a file with this header text (padded as a writer pads) and these data bytes
+fn withHeader(header String&, data Array<U8>&) Array<U8> {
+    h := $header
+    for h.Len() % 8 != 0: h = $h + " "
+    out := Array<U8>(8 + h.Len() + data.Len())
+    putBits(out, 0, U64(h.Len()), 8)
+    for i in range h.Len(): out[8 + i] = U8(h[i])
+    for i, b in data: out[8 + h.Len() + i] = b
+    return out
+}
+
+test File.Parse "refuses what is not a safetensors file, and a dtype it does not hold" {
+    ok := "{\"x\":{\"dtype\":\"F32\",\"shape\":[2],\"data_offsets\":[0,8]}}"
+    assert not refuses(withHeader(ok, Array<U8>(8)), SafetensorsError.Malformed)
+    assert refuses(Array<U8>[1, 2, 3], SafetensorsError.Malformed)
+    assert refuses(withHeader(ok, Array<U8>(7)), SafetensorsError.Malformed)                  # data past the end
+    assert refuses(withHeader("{\"x\":{\"dtype\":\"F32\",\"shape\":[3],\"data_offsets\":[0,8]}}", Array<U8>(8)), SafetensorsError.Malformed)
+    assert refuses(withHeader("[1, 2]", Array<U8>(8)), SafetensorsError.Malformed)
+    assert refuses(withHeader("{\"x\":{\"dtype\":\"F32\"}}", Array<U8>(8)), SafetensorsError.Malformed)
+    assert refuses(withHeader("{\"x\":{\"dtype\":\"BOOL\",\"shape\":[2],\"data_offsets\":[0,2]}}", Array<U8>(2)), SafetensorsError.Dtype)
+    big := Array<U8>(16)
+    putBits(big, 0, 1 << 40, 8)
+    assert refuses(big, SafetensorsError.Malformed)
+}
+
+test File.Load "a saved file loads from disk" {
+    try os.MkDirAll("build/io_checkpoint_files")
+    w := Writer()
+    try w.Add("m", tensorOf<BF16>(Array<F64>[1.0, 2.0], 1, 2))
+    try w.Save("build/io_checkpoint_files/m.safetensors")
+    f := try File.Load("build/io_checkpoint_files/m.safetensors")
+    assert (try f.Get<F32>("m")) == tensorOf<F32>(Array<F64>[1.0, 2.0], 1, 2)
+    gone := false
+    try File.Load("build/io_checkpoint_files/none") catch os.Error.NotFound { gone = true } catch { }
+    assert gone
+}
+
+# the values' exact decimals, as the reader numpy needs them: "name": [..]
+fn valuesJson(name String&, t tensor.Tensor<F64>&) String {
+    sb := StringBuilder()
+    sb.Push("\"" + $name + "\": [")
+    flat := try t.Flat() catch { unreachable }
+    for i, x in flat {
+        if i > 0: sb.Push(", ")
+        sb.Push($x)
+    }
+    sb.Push("]")
+    return sb.ToString()
+}
+
+test File "numpy reads what is written here bit for bit, and what numpy writes reads back exactly" {
+    if os.Run("python3 -c 'import numpy' > /dev/null 2>&1") != 0: return
+    dir := "build/io_checkpoint_files/ref"
+    try os.MkDirAll(dir)
+    r := rand.Rand(51)
+    edges := Array<F64>[0.0, -0.0, 1e-40, 65504.0, 65519.0, 65520.0, 1e-30, 3.0e38, -2.5, 1.00390625, 0.1, 1.0 / 3.0]
+    scales := Array<F64>[1e-3, 1.0, 1e3, 1e-6]
+    vals := Array<F64>[edges[i] if i < edges.Len() else r.Normal() * scales[i % 4] for i in range 30]
+    # F32's values are exact F32s; the reader rounds them itself
+    wide := tensorOf<F32>(vals, 5, 6).To<F64>()
+    bias := try tensor.Tensor<F64>.Of(Array<F64>[0.5, -1.0, 2.0], 3)
+    narrow := tensor.Tensor<F32>.Zeros(5, 6)
+    try narrow.Convert(wide)
+    for d in Array<Dtype>[Dtype.F32, Dtype.F16, Dtype.BF16] {
+        w := Writer()
+        try w.AddAs("layer.weight", narrow, d)
+        try w.AddAs("layer.bias", tensorOf<F32>(Array<F64>[0.5, -1.0, 2.0], 3), d)
+        try w.Save($dir + "/oann_" + $d.Name().ToLower() + ".safetensors")
+    }
+    w := Writer()
+    wide64 := tensorOf<F64>(vals, 5, 6)
+    try w.Add("layer.weight", wide64)
+    try w.Add("layer.bias", bias)
+    try w.Save($dir + "/oann_f64.safetensors")
+    text := ("{\"f32\": {" + $valuesJson("layer.weight", wide) + ", " + $valuesJson("layer.bias", bias) + "},\n\"f64\": {" +
+        $valuesJson("layer.weight", wide64) + ", " + $valuesJson("layer.bias", bias) + "}}\n")
+    try os.WriteFile($dir + "/oann_values.json", text)
+    assert os.Run("python3 -I bench/ref/safetensors_check.py " + $os.Quote(dir) + " > " + $os.Quote($dir + "/check.log") + " 2>&1") == 0
+    f := try File.Load($dir + "/py.safetensors")
+    doc := try json.Json.Parse(try os.ReadFile($dir + "/py_values.json"))
+    assert f.Names().Len() == 4
+    for name in f.Names() {
+        want := try (try doc[name]).AsArr()
+        got := try (try f.Get<F64>(name)).Flat() catch { unreachable }
+        assert got.Len() == want.Len()
+        for i, x in got: assert x.Bits() == (try want[i].AsNum()).Bits(), $name + " " + $i
+    }
+}
+
+# a model's parts, as a record of tensors: the names come from the fields
+type Attn struct(q tensor.Tensor<F32>, k tensor.Tensor<F32>, @Name("c_proj") out tensor.Tensor<F32>) { q, k, out }
+
+type Block struct(attn Attn, bias tensor.Tensor<F32>, heads I64) { attn, bias, heads }
+
+type Model struct(wte tensor.Tensor<F32>, blocks Array<Block>, seed I64) { wte, blocks, seed }
+
+fn filled(n I64, first F64) tensor.Tensor<F32> {
+    return tensorOf<F32>(Array<F64>[first + F64(i) for i in range n], n)
+}
+
+fn Block.Sample(first F64, b I64) Block {
+    attn := Attn(filled(2, first + 1.0), filled(2, first + 2.0), filled(3, first + 3.0))
+    return Block(attn, filled(2, first + 4.0 + F64(b)), 4)
+}
+
+fn Model.Sample(first F64) Model {
+    return Model(filled(3, first), Array<Block>[Block.Sample(first, 0), Block.Sample(first, 1)], 9)
+}
+
+test Writer.AddFields "a record's tensors are named by the path through its fields, and read back by the same names" {
+    m := Model.Sample(10.0)
+    w := Writer()
+    try w.AddFields("", m)
+    f := try File.Parse(w.Bytes())
+    assert f.Names() == Array<String>["wte", "blocks.0.attn.q", "blocks.0.attn.k", "blocks.0.attn.c_proj", "blocks.0.bias"
+        "blocks.1.attn.q", "blocks.1.attn.k", "blocks.1.attn.c_proj", "blocks.1.bias"]
+    assert (try f.Get<F32>("blocks.1.attn.c_proj")) == filled(3, 13.0)
+    z := Model.Sample(0.0)
+    try f.ReadFields("", z)
+    assert z.wte == m.wte and z.blocks[1].attn.out == m.blocks[1].attn.out and z.blocks[0].bias == m.blocks[0].bias
+    other := Writer()
+    try other.AddFields("net", z)
+    assert (try File.Parse(other.Bytes())).Has("net.blocks.0.attn.q")
+}

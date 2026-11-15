@@ -1,0 +1,201 @@
+# Loader - the batches training reads from a dataset: a fresh random order each epoch (seeded, so a run can be repeated
+# exactly), each sample's features written as a row of the batch and its class beside it. What it reads is any
+# Dataset - a type giving how many samples it has, the features of each, and sample i - and Labeled, a dataset held as
+# bytes, is one. Every buffer is the caller's or made once: filling a batch allocates nothing. A training loop may fill
+# the next batch on a task while the current one trains (train.Epoch, with a graph whose inputs are double-buffered).
+
+import "std/rand"
+import "../kernels"
+
+# what a Loader reads: Size() samples, each Dim() features and a class. Get writes sample i's features into "features"
+# (Dim() of them, F32 - a loader rounds them to the batch's type) and gives its class. Get may run on a task while
+# training reads the batch before, so it must not change the dataset
+type Dataset trait {
+    Size() I64
+    Dim() I64
+    Get(i I64, features mut Array<F32>&) I32
+}
+
+# Count samples of Width unsigned-byte features each, and a class in [0, Classes) per sample. A feature reads as
+# F32(byte) * Scale + Shift - so the defaults put a byte into [0, 1], and a mean m and standard deviation s of those
+# are taken out by Scale = 1 / (255 s), Shift = -m / s
+type Labeled struct(Features Array<U8>&, Labels Array<U8>&, Width I64, Classes I64, Scale F32 = 1.0 / 255.0
+    Shift F32 = 0.0) {
+    Features
+    Labels
+    Width
+    Classes
+    Scale
+    Shift
+    Count I64 = Labels.Len()
+}
+
+# sample i's features, as stored
+fn (s Labeled&) Row(i I64) Array<U8>& {
+    return s.Features[i * s.Width:(i + 1) * s.Width]
+}
+
+# ---- Labeled as a Dataset ----
+
+fn (s Labeled&) Size() I64 { return s.Count }
+
+fn (s Labeled&) Dim() I64 { return s.Width }
+
+# sample i's features scaled and shifted into "features", its class given
+fn (s Labeled&) Get(i I64, features mut Array<F32>&) I32 {
+    row := s.Features[i * s.Width:(i + 1) * s.Width]
+    for j in range row.Len(): features[j] = F32(row[j]) * s.Scale + s.Shift
+    return I32(s.Labels[i])
+}
+
+# batches of "Size" samples from a dataset: in a new random order each epoch when "shuffle", in the stored order
+# otherwise. The last batch of an epoch holds what is left - fewer than Size when Size does not divide the dataset's
+# Size()
+type Loader<D Dataset> struct(set D&, Size I64, seed U64 = 1, shuffle Bool = true) {
+    set
+    Size
+    shuffle
+    rng rand.Rand = rand.Rand(seed)
+    order mut Array<I64>& = Array<I64>(set.Size())
+    row mut Array<F32>& = Array<F32>(set.Dim()) # a sample's features before they are rounded to a batch's type
+    filled Bool = false
+}
+
+# the number of batches an epoch has
+fn (l Loader<D>&) Batches() I64 {
+    return (l.set.Size() + l.Size - 1) / l.Size
+}
+
+# starts an epoch: a new order for the batches to come, when shuffling
+fn (l mut Loader<D>&) Epoch() {
+    if not l.filled {
+        for i in range l.order.Len(): l.order[i] = i
+        l.filled = true
+    }
+    if l.shuffle: l.rng.Shuffle(l.order)
+}
+
+# sample i's features into out, rounded to its type, and its class: the dataset's own row for F32, else the loader's own
+# row, rounded once
+fn (l Loader<D>&) sample<T>(i I64, out mut Array<T>&) I32 {
+    match T {
+        case F32: return l.set.Get(i, out)
+        case _ {
+            like T
+            class := l.set.Get(i, l.row)
+            row := l.row # out of the loader first, as nn's SyncParams takes the arena
+            for j in range out.Len(): out[j] = kernels.Down(row[j], like)
+            return class
+        }
+    }
+}
+
+# fills x with batch b's features, one row of the dataset's Dim() after another, and y with their classes, and gives
+# how many samples the batch holds. x must have room for Size rows and y for Size classes. Features come from the
+# dataset in F32 and are rounded once to x's type - BF16 for a mixed-precision graph. One fill at a time: a fill into
+# anything but F32 goes through the loader's own row
+fn (l Loader<D>&) Fill<T>(b I64, x mut Array<T>&, y mut Array<I32>&) I64 {
+    first I64 = b * l.Size
+    n := l.Size.Min(l.set.Size() - first)
+    w := l.set.Dim()
+    for k in range n {
+        i I64 = l.order[first + k] if l.filled else first + k
+        y[k] = l.sample(i, x[k * w:(k + 1) * w])
+    }
+    return n
+}
+
+# a set of n samples of width w whose features are the sample's index and whose class is the index modulo 10
+fn Labeled.countingSet(n I64, w I64) Labeled {
+    features mut Array<U8>& = Array<U8>(n * w)
+    labels mut Array<U8>& = Array<U8>(n)
+    for i in range n {
+        for j in range w: features[i * w + j] = U8(i)
+        labels[i] = U8(i % 10)
+    }
+    return Labeled(features, labels, w, 10)
+}
+
+test "a Labeled set knows its samples" {
+    s := Labeled.countingSet(25, 4)
+    assert s.Count == 25 and s.Width == 4
+    assert s.Row(7)[3] == 7 and s.Labels[13] == 3
+}
+
+test "an unshuffled Loader gives the samples in order, the last batch short" {
+    s := Labeled.countingSet(25, 4)
+    l := Loader(s, 10, shuffle = false)
+    assert l.Batches() == 3
+    l.Epoch()
+    x := Array<F32>(40)
+    y := Array<I32>(10)
+    assert l.Fill(0, x, y) == 10
+    assert x[0] == 0.0 and x[4] == s.Scale and y[9] == 9
+    assert l.Fill(2, x, y) == 5
+    assert x[0] == F32(20) * s.Scale and x[19] == F32(24) * s.Scale and y[0] == 0 and y[4] == 4
+}
+
+test "a shuffled Loader gives every sample once an epoch, in an order its seed decides" {
+    s := Labeled.countingSet(100, 3)
+    l := Loader(s, 8, 5)
+    x := Array<F32>(24)
+    y := Array<I32>(8)
+    first := Array<I32>(100)
+    for epoch in range 2 {
+        l.Epoch()
+        seen := Array<Bool>(100)
+        for b in range l.Batches() {
+            n := l.Fill(b, x, y)
+            for k in range n {
+                i := I64(x[3 * k] * 255.0 + 0.5)
+                assert not seen[i] and I64(y[k]) == i % 10
+                seen[i] = true
+                if epoch == 0: first[b * 8 + k] = I32(i)
+            }
+        }
+        assert seen.Every(fn(v) { return v })
+    }
+    same := Loader(s, 8, 5)
+    same.Epoch()
+    same.Fill(0, x, y)
+    for k in range 8: assert I32(x[3 * k] * 255.0 + 0.5) == first[k]
+}
+
+test "Scale and Shift standardize the features" {
+    s := Labeled.countingSet(4, 2)
+    t := Labeled(s.Features, s.Labels, 2, 10, 0.5, -1.0)
+    l := Loader(t, 4, shuffle = false)
+    l.Epoch()
+    x := Array<F32>(8)
+    y := Array<I32>(4)
+    l.Fill(0, x, y)
+    assert x[0] == -1.0 and x[2] == -0.5 and x[7] == 0.5
+}
+
+# a dataset of n samples made up as it is read: sample i is d features i, i + 1, ... and the class i modulo 3
+type counting struct(n I64, d I64) {
+    n
+    d
+}
+
+fn (c counting&) Size() I64 { return c.n }
+
+fn (c counting&) Dim() I64 { return c.d }
+
+fn (c counting&) Get(i I64, features mut Array<F32>&) I32 {
+    for j in range c.d: features[j] = F32(i + j)
+    return I32(i % 3)
+}
+
+test "a Loader reads any Dataset, and fills a batch of another type through its row" {
+    c := counting(7, 3)
+    l := Loader(c, 4, shuffle = false)
+    l.Epoch()
+    x := Array<F32>(12)
+    y := Array<I32>(4)
+    assert l.Batches() == 2 and l.Fill(1, x, y) == 3
+    assert x[0] == 4.0 and x[8] == 8.0 and y[0] == 1 and y[2] == 0
+    xb := Array<BF16>(12)
+    assert l.Fill(1, xb, y) == 3
+    assert F32(xb[0]) == 4.0 and F32(xb[8]) == 8.0
+}

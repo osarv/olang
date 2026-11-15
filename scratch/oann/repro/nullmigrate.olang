@@ -1,0 +1,16 @@
+# olang fix crashes in tools/null_migrate.olang (line 162, "slice bounds out of range") on a file whose T2c error is
+# reported only inside a generic's instance: a nullable-looking array default in a generic constructor. The compiler's
+# row for the 'is not null' test sits at the instance's position, which the tool takes for the one in this text - so
+# 'x := r.Arg[:r.Arg.Len() - ...]' slices past its end. Found migrating sparse.olang's Csr<T> (values mut Array<T>& =
+# null). Run: build/olang fix repro/nullmigrate.olang.
+# Expected: the tool leaves what it cannot place alone (or writes '?&'). Actual (olang 374c1e3c): the crash, and every
+# later driven tool of fix (as_migrate onward) is not run on the files given with it. Workaround: write '?&' by hand
+# (values mut Array<T>?& = null) and run fix again.
+type Csr<T> struct(values mut Array<T>& = null) {
+    Values mut Array<T>& = values if values != null else Array<T>(3)
+}
+
+fn main() ? {
+    w := Csr<F64>()
+    assert w.Values.Len() == 3
+}

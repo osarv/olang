@@ -1,0 +1,97 @@
+# where a convolution's time goes: each pass of examples/mnist_cnn.olang's two convolutions on a batch of 128 - the
+# forward as conv.Conv2d makes it (std/linalg's GemmPatches: the product of the patches packed straight from the
+# images, with the bias) and, beside it, as it was made before (im2col, the product, the bias); then the backward's
+# bias sums, im2col, dW's product, dcols' product and col2im - timed alone, with the products' rate. The two forwards
+# alternate in every repetition, and their outputs are compared. Arguments: repetitions (20), threads (1).
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../linalg"
+import "../conv"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn ms(ns I64, reps I64) String {
+    return $(F64(ns) * 1e-6 / F64(reps)).Fixed(2)
+}
+
+fn gflops(m I64, n I64, k I64, ns I64, reps I64) String {
+    return $(2.0 * F64(m * n * k) * F64(reps) / F64(ns)).Fixed(1)
+}
+
+# one convolution's nine timed passes, in nanoseconds each, summed over the repetitions; and whether the two forwards agreed
+type Run struct(times Array<I64>, same Bool) { times, same }
+
+fn Run.Measure(s conv.Shape&, B I64, reps I64, threads I64, r mut rand.Rand&) Run {
+    m I64 = B * s.Positions()
+    x := linalg.Matrix<F32>(B, s.H * s.W * s.C)
+    x.FillNormal(r, 0.0, 1.0)
+    w := linalg.Matrix<F32>(s.OutC, s.Patch())
+    w.FillNormal(r, 0.0, 0.1)
+    b := linalg.Matrix<F32>(1, s.OutC)
+    y := linalg.Matrix<F32>(B, s.Positions() * s.OutC)
+    dx := linalg.Matrix<F32>(B, s.H * s.W * s.C)
+    dw := linalg.Matrix<F32>(s.OutC, s.Patch())
+    db := linalg.Matrix<F32>(1, s.OutC)
+    cols := linalg.Matrix<F32>(m, s.Patch())
+    ws := linalg.GemmWorkspace<F32>()
+    out := y.Reshape(m, s.OutC)!
+    y2 := linalg.Matrix<F32>(B, s.Positions() * s.OutC)
+    out2 := y2.Reshape(m, s.OutC)!
+    times := Array<I64>(9)
+    for _ in range reps {
+        t0 := time.Now()
+        conv.Conv2d(y, x, w, b, s, threads, ws)
+        t1 := time.Now()
+        conv.Im2col(x, s, cols, threads)
+        t2 := time.Now()
+        ws.Gemm(out2, cols, false, w, true, 1, 0, threads)!
+        t3 := time.Now()
+        out2.AddRow(b)!
+        t4 := time.Now()
+        out.ColumnSums(db, 0)!
+        t5 := time.Now()
+        conv.Im2col(x, s, cols, threads)
+        t6 := time.Now()
+        ws.Gemm(dw, out, true, cols, false, 1, 0, threads)!
+        t7 := time.Now()
+        ws.Gemm(cols, out, false, w, false, 1, 0, threads)!
+        t8 := time.Now()
+        conv.Col2im(cols, s, dx, false, threads)
+        t9 := time.Now()
+        for k, d in Array<I64>[t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t6 - t5, t7 - t6, t8 - t7, t9 - t8]: times[k] += d
+    }
+    return Run(times, y == y2)
+}
+
+fn report(s conv.Shape&, B I64, reps I64, run Run&) ? io.Error {
+    t := run.times
+    m I64 = B * s.Positions()
+    total I64 = t[0] + t[4:].Sum()
+    before I64 = total - t[0] + t[1] + t[2] + t[3]
+    try io.Put(("conv " + $(s.C) + "->" + $(s.OutC) + " " + $(s.K) + "x" + $(s.K) + " on " + $(s.H) + "x" + $(s.W) + ", batch " + $B +
+        ": forward by GemmPatches " + $ms(t[0], reps) + " ms (" + $gflops(m, s.OutC, s.Patch(), t[0], reps) +
+        " GFLOPS), as before " + $ms(t[1] + t[2] + t[3], reps) + " (im2col " + $ms(t[1], reps) +
+        ", product " + $ms(t[2], reps) + " - " + $gflops(m, s.OutC, s.Patch(), t[2], reps) + " GFLOPS, bias " +
+        $ms(t[3], reps) + "), outputs " + $("equal" if run.same else "DIFFERENT") + "; backward: bias sums " +
+        $ms(t[4], reps) + ", im2col " + $ms(t[5], reps) + ", dW " + $ms(t[6], reps) + " (" +
+        $gflops(s.OutC, s.Patch(), m, t[6], reps) + "), dcols " + $ms(t[7], reps) + " (" +
+        $gflops(m, s.Patch(), s.OutC, t[7], reps) + "), col2im " + $ms(t[8], reps) + "; a step " + $ms(total, reps) +
+        " ms (" + $ms(before, reps) + " as before)\n"))
+}
+
+fn main() ? io.Error, ParseError {
+    args := os.Args()
+    reps := try number(args, 1, 20)
+    threads := try number(args, 2, 1)
+    B I64 = 128
+    r := rand.Rand(1)
+    for s in Array<conv.Shape>[conv.Shape(1, 28, 28, 16, 3, 1, 1), conv.Shape(16, 14, 14, 32, 3, 1, 1)] {
+        try report(s, B, reps, Run.Measure(s, B, reps, threads, r))
+    }
+}

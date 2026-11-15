@@ -1,0 +1,243 @@
+# a sparse projection against a dense one (docs/settling.md 2.12, 5.9). First the kernels: an n x n block of F32
+# weights at a density, its transport in both directions for a batch (as a sweep runs it: the batch's rows
+# sample-major, the sparse block's product on the batch transposed into feature-major and back, the transposes counted)
+# and its contrast (two TN products of the batch - two outer products at one row - or the same sampled at the block's
+# entries) - the dense block's through std/linalg's Gemm with a workspace, zeros included. Then whole circuits: 256
+# inputs into 2048 hidden neurons with a lateral block at a density, reciprocal with 10 readouts, stored Dense or
+# Sparse - a lesson at 32 rows and a free settle at one, the same weights either way. Interleaved: every round times
+# each variant once; the median of the rounds is printed. Arguments: rounds (7), threads for the dense products (1).
+
+import "std/io"
+import "../linalg"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../sparse"
+import "../circuit"
+import "std/list"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn median(x mut Array<I64>&) F64 {
+    x.Sort(fn(a, b): return a < b)
+    return F64(x[x.Len() / 2])
+}
+
+# a's rows transposed into t: t[j * b + i] = a[i * n + j]
+fn transpose(a Array<F32>&, rows I64, cols I64, t mut Array<F32>&) {
+    for i in range rows {
+        for j in range cols: t[j * rows + i] = a[i * cols + j]
+    }
+}
+
+# y[i * cols + j] += t[j * rows + i]
+fn addTransposed(t Array<F32>&, rows I64, cols I64, y mut Array<F32>&) {
+    for i in range rows {
+        for j in range cols: y[i * cols + j] = y[i * cols + j] + t[j * rows + i]
+    }
+}
+
+# one block at a density with a batch's two sides (x, y), the buffers a transport and a contrast use, and the dense copy
+type Rig struct(n I64, b I64, d F64, r mut rand.Rand&) {
+    n
+    b
+    x := Array<F32>(b * n)
+    y := Array<F32>(b * n)
+    for i in range x.Len() {
+        x[i] = F32(r.Uniform(-1.0, 1.0))
+        y[i] = F32(r.Uniform(-1.0, 1.0))
+    }
+    total := Array<F32>(b * n)
+    back := Array<F32>(b * n)
+    xt := Array<F32>(b * n)
+    yt := Array<F32>(b * n)
+    tt := Array<F32>(b * n)
+    bt := Array<F32>(b * n)
+    ptr := Array<I64>(n + 1)
+    idx := list.List<I32>()
+    sparse.DrawPattern(n, n, d, r, ptr, idx)
+    w := sparse.Csr<F32>(n, n, ptr, idx.ToArray())
+    for e in range w.Nnz(): w.Values[e] = F32(r.Uniform(-0.05, 0.05))
+    dense := linalg.Matrix<F32>(n, n)
+    w.Dense(dense.Data)
+    g := linalg.Matrix<F32>(n, n)
+    gs := Array<F32>(w.Nnz())
+}
+
+# both directions through the dense block (the matrices are views of the rig's arrays, made on each call)
+fn (k mut Rig&) denseTransport(ws mut linalg.GemmWorkspace<F32>&, threads I64) {
+    xm := linalg.Matrix.View(k.x, 0, k.b, k.n)!
+    ym := linalg.Matrix.View(k.y, 0, k.b, k.n)!
+    tm := linalg.Matrix.View(k.total, 0, k.b, k.n)!
+    bm := linalg.Matrix.View(k.back, 0, k.b, k.n)!
+    ws.Gemm(tm, xm, false, k.dense, true, 1, 1, threads)!
+    ws.Gemm(bm, ym, false, k.dense, false, 1, 1, threads)!
+}
+
+# both directions through the sparse block: at batch one directly, else on the batch transposed into feature-major and back
+fn (k mut Rig&) sparseTransport() {
+    if k.b == 1 {
+        k.w.MulAdd(k.x, 0, 1, k.total, 0, 1, 1, 1)
+        k.w.MulAddT(k.y, 0, 1, k.back, 0, 1, 1, 1)
+        return
+    }
+    transpose(k.x, k.b, k.n, k.xt)
+    transpose(k.y, k.b, k.n, k.yt)
+    for i in range k.tt.Len() {
+        k.tt[i] = 0.0
+        k.bt[i] = 0.0
+    }
+    k.w.MulAdd(k.xt, 0, k.b, k.tt, 0, k.b, k.b, 1)
+    k.w.MulAddT(k.yt, 0, k.b, k.bt, 0, k.b, k.b, 1)
+    addTransposed(k.tt, k.b, k.n, k.total)
+    addTransposed(k.bt, k.b, k.n, k.back)
+}
+
+# the dense contrast: two TN products of the batch - at one row two outer products
+fn (k mut Rig&) denseContrast(ws mut linalg.GemmWorkspace<F32>&, threads I64) {
+    if k.b == 1 {
+        linalg.Ger2(k.g, k.y, k.x, k.x, k.y, 1, 0)!
+        return
+    }
+    xm := linalg.Matrix.View(k.x, 0, k.b, k.n)!
+    ym := linalg.Matrix.View(k.y, 0, k.b, k.n)!
+    ws.Gemm(k.g, ym, true, xm, false, 1, 0, threads)!
+    ws.Gemm(k.g, xm, true, ym, false, 1, 1, threads)!
+}
+
+# the same sampled at the block's entries
+fn (k mut Rig&) sparseContrast() {
+    if k.b == 1 {
+        k.w.Sampled(k.gs, 0, k.y, 0, 1, k.x, 0, 1, 1, 1, false)
+        k.w.Sampled(k.gs, 0, k.x, 0, 1, k.y, 0, 1, 1, 1, true)
+        return
+    }
+    transpose(k.x, k.b, k.n, k.xt)
+    transpose(k.y, k.b, k.n, k.yt)
+    k.w.Sampled(k.gs, 0, k.yt, 0, k.b, k.xt, 0, k.b, k.b, 1, false)
+    k.w.Sampled(k.gs, 0, k.xt, 0, k.b, k.yt, 0, k.b, k.b, 1, true)
+}
+
+# the sampled contrast against the dense one at the entries: the largest difference
+fn (k Rig&) contrastDifference() F64 {
+    worst F64 = 0.0
+    for i in range k.n {
+        for e in range k.w.Ptr[i], k.w.Ptr[i + 1] {
+            worst = worst.Max((F64(k.gs[e]) - F64(k.g.Get(i, I64(k.w.Idx[e])))).Abs())
+        }
+    }
+    return worst
+}
+
+# one line of the table: the block's four timings, the median of the rounds each
+fn row(n I64, b I64, d F64, rounds I64, threads I64, r mut rand.Rand&) ? io.Error {
+    k := Rig(n, b, d, r)
+    ws := linalg.GemmWorkspace<F32>()
+    dt := Array<I64>(rounds)
+    st := Array<I64>(rounds)
+    dc := Array<I64>(rounds)
+    sc := Array<I64>(rounds)
+    for i in range rounds {
+        t0 := time.Now()
+        k.denseTransport(ws, threads)
+        t1 := time.Now()
+        k.sparseTransport()
+        t2 := time.Now()
+        k.denseContrast(ws, threads)
+        t3 := time.Now()
+        k.sparseContrast()
+        t4 := time.Now()
+        dt[i] = t1 - t0
+        st[i] = t2 - t1
+        dc[i] = t3 - t2
+        sc[i] = t4 - t3
+    }
+    assert k.contrastDifference() < 1e-3
+    a := median(dt) * 1e-3
+    s := median(st) * 1e-3
+    c := median(dc) * 1e-3
+    e := median(sc) * 1e-3
+    try io.PutLine(($n.PadStart(5) + " " + $b.PadStart(3) + " " + $d.Fixed(2).PadStart(6) + " " + $a.Fixed(1).PadStart(10) + " " + $s.Fixed(1).PadStart(10) + " " +
+        $(a / s).Fixed(2).PadStart(7) + " " + $c.Fixed(1).PadStart(10) + " " + $e.Fixed(1).PadStart(10) + " " + $(c / e).Fixed(2).PadStart(7)))
+}
+
+fn main() ? io.Error, ParseError {
+    args := os.Args()
+    rounds := try number(args, 1, 7)
+    threads := try number(args, 2, 1)
+    r := rand.Rand(1)
+    try io.PutLine("n x n block, batch b, density d: microseconds a transport (both directions) and a contrast; median of " + $rounds + " interleaved rounds")
+    try io.PutLine("    n   b      d   dense-tr  sparse-tr   ratio   dense-ct  sparse-ct   ratio")
+    for n in Array<I64>[1024, 4096] {
+        for b in Array<I64>[1, 32] {
+            for d in Array<F64>[0.01, 0.02, 0.05, 0.1, 0.2, 0.5]: try row(n, b, d, rounds, threads, r)
+        }
+    }
+    try circuits(rounds)
+}
+
+# the circuit of the second part, its lateral block at density d stored as store, planned from seed 1 and certified
+fn big(rows I64, d F64, store circuit.Layout) mut circuit.Circuit<F32>& {
+    c mut circuit.Circuit<F32>& = circuit.Circuit<F32>(rows)
+    x := c.Input(256)
+    h := c.Hidden(2048)
+    o := c.Readout(10)
+    c.Project(x, h, circuit.Wiring.OneWay)
+    c.Project(h, h, circuit.Wiring.Reciprocal, d, false, store)
+    c.Project(h, o)
+    r := rand.Rand(1)
+    c.Plan(r)
+    c.Certify(0.9)
+    for j in range c.DriveData(x).Len(): c.DriveData(x)[j] = F32(r.Uniform(0.0, 1.0))
+    for b in range rows: c.LabelData(o)[b] = I32(b % 10)
+    return c
+}
+
+# one line of the circuits' table: a lesson at 32 rows and a free settle at one, the block Dense then Sparse
+fn circuitRow(d F64, rounds I64) ? io.Error {
+    ld := big(32, d, circuit.Layout.Dense)
+    ls := big(32, d, circuit.Layout.Sparse)
+    sd := big(1, d, circuit.Layout.Dense)
+    ss := big(1, d, circuit.Layout.Sparse)
+    a := Array<I64>(rounds)
+    b := Array<I64>(rounds)
+    e := Array<I64>(rounds)
+    f := Array<I64>(rounds)
+    sweeps I64 = 0
+    lesson := circuit.Lesson(0.5)
+    for k in range rounds {
+        t0 := time.Now()
+        sweeps = try ld.Teach(32, lesson) catch default 0
+        t1 := time.Now()
+        try ls.Teach(32, lesson) catch { }
+        t2 := time.Now()
+        sd.Reset(circuit.Phase.Free)
+        try sd.Settle(circuit.Phase.Free, 1000, 1e-4) catch { }
+        t3 := time.Now()
+        ss.Reset(circuit.Phase.Free)
+        try ss.Settle(circuit.Phase.Free, 1000, 1e-4) catch { }
+        t4 := time.Now()
+        a[k] = t1 - t0
+        b[k] = t2 - t1
+        e[k] = t3 - t2
+        f[k] = t4 - t3
+    }
+    # the two layouts are one circuit: the same equilibrium
+    assert ld.Potential(circuit.Phase.Free).MaxAbsDifference(ls.Potential(circuit.Phase.Free))! < 1e-3
+    la := median(a) * 1e-6
+    lb := median(b) * 1e-6
+    sa := median(e) * 1e-6
+    sb := median(f) * 1e-6
+    try io.PutLine(($d.Fixed(2).PadStart(7) + " " + $la.Fixed(2).PadStart(14) + " " + $lb.Fixed(2).PadStart(14) + " " + $(la / lb).Fixed(2).PadStart(7) + " " +
+        $sa.Fixed(3).PadStart(14) + " " + $sb.Fixed(3).PadStart(14) + " " + $(sa / sb).Fixed(2).PadStart(7) + " " + $sweeps.PadStart(8)))
+}
+
+fn circuits(rounds I64) ? io.Error {
+    try io.PutLine("")
+    try io.PutLine("256 -> 2048 (lateral block at density d) <-> 10: milliseconds a lesson at 32 rows and a free settle at one, the block Dense or Sparse")
+    try io.PutLine("      d   lesson-dense  lesson-sparse   ratio   settle-dense  settle-sparse   ratio   sweeps")
+    for d in Array<F64>[0.01, 0.05, 0.1, 0.25, 0.5]: try circuitRow(d, rounds)
+}

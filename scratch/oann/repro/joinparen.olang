@@ -1,0 +1,14 @@
+# in a text join, a parenthesized piece after a rendering is read as a call of what was rendered: '$alpha (" x")' is
+# '$(alpha(" x"))' - error[E13b] "F64 is not a function, and declares no Call". Correct by E13b ("(args) after any
+# postfix expression calls"), but a trap where pieces are written side by side; '$alpha $(...)' or two prints work
+# Status: a deliberate rule (E13b), kept as a record of the trap; olang db2af5d, 999ae6c and ada716d report it at the
+# parenthesis, as 472373d did, as error[E11b] "'(' after a piece of text calls it - to join the value inside, write
+# '$(...)'", which names the way out.
+# Status (olang 374c1e3c): still reproduces - now as error[E13b] 'F64 is not a function' at '$alpha', not the E11b that named the
+# way out ('$(...)'): the message got worse. A deliberate rule (E13b), kept as a record of the trap.
+fn main() ? {
+    alpha F64 = 0.5
+    normalized := true
+    text := "alpha " + $alpha (" normalized" if normalized else "")
+    assert text.Len() > 0
+}

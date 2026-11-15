@@ -1,0 +1,108 @@
+# Idx - the IDX file format, the one MNIST and its relatives are distributed in (LeCun et al.). A file is a 4-byte
+# magic number - two zero bytes, a byte naming the element type, a byte giving the number of dimensions - then each
+# dimension's size as a 4-byte big-endian integer, outermost first, then the elements in row-major order. Only
+# unsigned bytes (type 0x08) are read here, which is what every image and label file of the MNIST family holds.
+
+import "std/os"
+
+type IdxError error {
+    Truncated # the file ends before its header or its elements do
+    BadMagic  # the first two bytes are not zero: not an Idx file at all
+    BadType   # an element type other than unsigned bytes
+}
+
+# an IDX file's contents: the size of each dimension, outermost first, and the elements, row-major. Data is a view of
+# the bytes the file was read into - parsing copies nothing
+type Idx struct(Dims Array<I64>&, Data Array<U8>&) {
+    Dims
+    Data
+}
+
+# how many elements the dimensions describe
+fn (x Idx&) Count() I64 {
+    n I64 = 1
+    for d in x.Dims: n *= d
+    return n
+}
+
+# the big-endian unsigned 32-bit integer at b[at:at+4]
+fn be32(b Array<U8>&, at I64) I64 {
+    return (I64(b[at]) << 24) | (I64(b[at + 1]) << 16) | (I64(b[at + 2]) << 8) | I64(b[at + 3])
+}
+
+# the IDX file held in "bytes"; its Data is a view of them. Bytes past the elements the header describes are ignored
+fn Idx.Parse(bytes Array<U8>&) Idx ? IdxError {
+    if bytes.Len() < 4: error IdxError.Truncated
+    if bytes[0] != 0 or bytes[1] != 0: error IdxError.BadMagic
+    if bytes[2] != 0x08: error IdxError.BadType
+    rank := I64(bytes[3])
+    start I64 = 4 + 4 * rank
+    if bytes.Len() < start: error IdxError.Truncated
+    dims mut Array<I64>& = Array<I64>(rank)
+    count I64 = 1
+    for i in range rank {
+        dims[i] = be32(bytes, 4 + 4 * i)
+        count *= dims[i]
+    }
+    if bytes.Len() - start < count: error IdxError.Truncated
+    return Idx(dims, bytes[start:start + count])
+}
+
+# the IDX file at "path", read whole
+fn Idx.Load(path String&) Idx ? IdxError, os.Error {
+    bytes Array<U8>& = try os.ReadFile(path)
+    return try Idx.Parse(bytes)
+}
+
+# an IDX file of unsigned bytes with the given dimensions and elements, as Parse reads it - for writing test data
+fn Encode(dims Array<I64>&, data Array<U8>&) Array<U8> {
+    out := Array<U8>(4 + 4 * dims.Len() + data.Len())
+    out[2] = 0x08
+    out[3] = U8(dims.Len())
+    for i, d in dims {
+        for k in range 4: out[4 + 4 * i + k] = U8(d >> (24 - 8 * k))
+    }
+    start I64 = 4 + 4 * dims.Len()
+    for i, x in data: out[start + i] = x
+    return out
+}
+
+test "Parse reads the dimensions and views the elements" {
+    file := Encode(Array<I64>[2, 3], Array<U8>[1, 2, 3, 4, 5, 255])
+    x := try Idx.Parse(file)
+    assert x.Dims.Len() == 2 and x.Dims[0] == 2 and x.Dims[1] == 3
+    assert x.Count() == 6 and x.Data.Len() == 6
+    assert x.Data[0] == 1 and x.Data[5] == 255
+}
+
+test "Parse reads big-endian sizes past 16 bits" {
+    file := Encode(Array<I64>[70000], Array<U8>(70000, 7))
+    assert file[4] == 0 and file[5] == 1 and file[6] == 0x11 and file[7] == 0x70
+    x := try Idx.Parse(file)
+    assert x.Dims[0] == 70000 and x.Data.Len() == 70000 and x.Data[69999] == 7
+}
+
+# whether Parse refuses bytes with the error word
+fn refuses(bytes Array<U8>&, word IdxError) Bool {
+    try Idx.Parse(bytes) catch IdxError e { return e == word }
+    return false
+}
+
+test "Parse refuses what is not an IDX file of bytes" {
+    assert refuses(Array<U8>[0, 0, 8], IdxError.Truncated)
+    assert refuses(Array<U8>[0, 0, 8, 2, 0, 0, 0, 1], IdxError.Truncated)
+    assert refuses(Array<U8>[0, 0, 8, 1, 0, 0, 0, 3, 9, 9], IdxError.Truncated)
+    assert refuses(Array<U8>[1, 0, 8, 0], IdxError.BadMagic)
+    assert refuses(Array<U8>[0, 0, 0x0D, 0], IdxError.BadType)
+    assert not refuses(Array<U8>[0, 0, 8, 0, 7], IdxError.Truncated)
+}
+
+test "Load reads a file from disk" {
+    assert os.Run("mkdir -p build/data_idx_files") == 0
+    try os.WriteFile("build/data_idx_files/x.idx", Encode(Array<I64>[2, 2], Array<U8>[10, 20, 30, 40]))
+    x := try Idx.Load("build/data_idx_files/x.idx")
+    assert x.Dims[0] == 2 and x.Data[3] == 40
+    missing := false
+    try Idx.Load("build/data_idx_files/none") catch os.Error.NotFound { missing = true } catch { }
+    assert missing
+}

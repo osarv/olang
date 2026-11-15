@@ -1,0 +1,241 @@
+# models/gpt - the decoder-only transformer (GPT-2's, Radford et al.), with the options modern ones have: rotary
+# positions in place of learned ones, RMS norms, a gated SwiGLU perceptron, a head of its own in place of the tied one.
+# The reference model of M2, M3 (the character transformer: 4 layers of 128 in 4 heads over 64 characters, learned
+# positions and layer norms, validation loss 1.80 on tiny Shakespeare after 2000 steps - docs/redesign.md 4.3) and of M13's
+# yardstick (`GptConfig.Yardstick`: about 10 million parameters).
+#
+# A model is a config and the layers made from it; `Gpt.New` registers them on a graph before `Plan`, in GPT-2's order -
+# embedding, positions, blocks, final norm, head - which is also `train.LanguageModel.Gpt`'s, so a checkpoint of either
+# loads into the other. `Lm` records the tokens in, the targets, the logits and the loss and gives the handles nn/train's
+# loops and nn/generate's decoders take (a graph made for decoding - `graph.Graph<E>(1, 1, Mode.Captured, true)` - builds
+# the same model with `loss = false` and generates through its key-value cache).
+
+import "../ad/graph"
+import "../nn/layers"
+import "../nn/train"
+
+# a vocabulary, a width and its heads, layers, the context a sequence has; the perceptron's hidden width (0: 4 D, or
+# 8 D / 3 rounded up to a multiple of 8 where gated); rotary positions (none learned), RMS norms (no biases) and a gated
+# perceptron; tied output head; dropout on the embeddings and both branches of a block
+type GptConfig struct(Vocab I64, Dim I64, Layers I64, Heads I64, Ctx I64, Ffn I64 = 0, Rope Bool = false, Rms Bool = false
+    Gated Bool = false, Tied Bool = true, Dropout F64 = 0.0) {
+    Vocab
+    Dim
+    Layers
+    Heads
+    Ctx
+    Ffn
+    Rope
+    Rms
+    Gated
+    Tied
+    Dropout
+}
+
+# round 2's character transformer: GPT-2's blocks, 4 layers of 128 in 4 heads over 64 characters
+fn GptConfig.Char(vocab I64, dropout F64 = 0.0) GptConfig {
+    return GptConfig(vocab, 128, 4, 4, 64, Dropout = dropout)
+}
+
+# M13's yardstick: 5 layers of 384 in 6 heads, rotary positions, RMS norms and a SwiGLU perceptron over contexts of ctx
+# tokens - 10.4 million parameters at a vocabulary of 4096
+fn GptConfig.Yardstick(vocab I64, ctx I64) GptConfig {
+    return GptConfig(vocab, 384, 5, 6, ctx, Rope = true, Rms = true, Gated = true)
+}
+
+# the perceptron's hidden width
+fn (c GptConfig&) Hidden() I64 {
+    if c.Ffn > 0: return c.Ffn
+    return (8 * c.Dim / 3 + 7) / 8 * 8 if c.Gated else 4 * c.Dim
+}
+
+# the parameters of the whole model - the graph's `ParamCount` after the model is made
+fn (c GptConfig&) Params() I64 {
+    d := c.Dim
+    h := c.Hidden()
+    norm := d if c.Rms else 2 * d
+    attention := 4 * (d * d + d)
+    feed := 3 * d * h if c.Gated else d * h + h + h * d + d
+    block := 2 * norm + attention + feed
+    positions := 0 if c.Rope else c.Ctx * d
+    head := 0 if c.Tied else c.Vocab * d
+    return c.Vocab * d + positions + c.Layers * block + norm + head
+}
+
+type Gpt struct(Config GptConfig, Embed layers.Embedding, Positions graph.Var, Blocks Array<layers.AttentionBlock>, Final layers.Norm
+    Head layers.Embedding) {
+    Config
+    Embed
+    Positions
+    Blocks
+    Final
+    Head
+}
+
+# the model's layers on g, GPT-2's starting values (0.02, the projections back into the stream scaled by 1 / sqrt(2 layers))
+fn Gpt.New<T>(g mut graph.Graph<T>&, c GptConfig) Gpt {
+    emb := layers.Embedding.New(g, c.Vocab, c.Dim)
+    pos := graph.None if c.Rope else g.Param(graph.Init.Normal(0.0, 0.02), true, c.Ctx, c.Dim)
+    blocks := Vec<layers.AttentionBlock>()
+    for _ in range c.Layers: blocks.Push(layers.AttentionBlock.New(g, c.Dim, c.Heads, c.Layers, c.Dropout, c.Rms, c.Rope, c.Gated, c.Ffn))
+    final := layers.Norm.New(g, c.Dim, c.Rms)
+    head := emb if c.Tied else layers.Embedding.New(g, c.Vocab, c.Dim)
+    return Gpt(c, emb, pos, blocks.ToArray(), final, head)
+}
+
+# the logits of each position's next token, from a Tokens() node: [batch, ctx, Vocab]
+fn (m Gpt&) Logits<T>(g mut graph.Graph<T>&, tokens graph.Var) graph.Var {
+    e := m.Embed.Apply(g, tokens)
+    h := e if m.Positions == graph.None else g.Positions(e, m.Positions)
+    if m.Config.Dropout > 0.0: h = g.Dropout(h, m.Config.Dropout)
+    for b in m.Blocks: h = b.Apply(g, h)
+    return m.Head.Logits(g, m.Final.Apply(g, h))
+}
+
+# the loops' handles: the tokens, targets, logits and loss of sequences of Ctx tokens; "loss" false for a graph that
+# only decodes
+fn (m Gpt&) Lm<T>(g mut graph.Graph<T>&, loss Bool = true) train.LanguageModel {
+    tok := g.Tokens(m.Config.Ctx)
+    logits := m.Logits(g, tok)
+    if not loss: return train.LanguageModel(tok, graph.None, logits, graph.None, m.Config.Ctx)
+    y := g.Classes(m.Config.Ctx)
+    return train.LanguageModel(tok, y, logits, g.CrossEntropy(logits, y), m.Config.Ctx)
+}
+
+# ---- tests ----
+
+import "std/os"
+import "std/rand"
+import "../data/text"
+import "../nn/optim"
+
+# the model of config c, a language model on a graph of "batch" sequences, planned from seed
+fn made<T>(c GptConfig, batch I64, seed U64, decode Bool = false) graph.Graph<T>, Gpt, train.LanguageModel {
+    g mut graph.Graph<T>& = graph.Graph<T>(batch, 1, graph.Mode.Captured, decode)
+    m := Gpt.New(g, c)
+    lm := m.Lm(g, not decode)
+    g.Plan(rand.Rand(seed))!
+    return g, m, lm
+}
+
+# a vocabulary of 4, a context of 8, width 16 in 2 heads, 2 layers, with the options a variant turns on
+fn GptConfig.Variant(v I64) GptConfig {
+    c := GptConfig(4, 16, 2, 2, 8)
+    return match v {
+        case 0: c
+        case 1: GptConfig(4, 16, 2, 2, 8, Rope = true, Rms = true, Gated = true)
+        case 2: GptConfig(4, 16, 2, 2, 8, Tied = false, Ffn = 40)
+        case _: GptConfig(4, 16, 2, 2, 8, Gated = true, Dropout = 0.1)
+    }
+}
+
+test GptConfig "the parameter count is the graph's, for every option, and the yardstick is 10.4 million at 4096 tokens" {
+    for v in range 4 {
+        c := GptConfig.Variant(v)
+        g, _, _ := made<F32>(c, 2, 1)
+        assert g.ParamCount == c.Params(), "variant " + $v + ": " + $g.ParamCount + " against " + $c.Params()
+    }
+    y := GptConfig.Yardstick(4096, 256)
+    assert y.Params() > 10300000 and y.Params() < 10500000
+    assert y.Hidden() == 1024 and GptConfig.Char(65).Hidden() == 512
+}
+
+test Gpt "is train.LanguageModel.Gpt's model: the same parameters and logits from one seed" {
+    g, _, lm := made<F32>(GptConfig(11, 16, 2, 2, 8), 2, 9)
+    h mut graph.Graph<F32>& = graph.Graph<F32>(2)
+    other := train.LanguageModel.Gpt(h, 11, 8, 16, 2, 2)
+    h.Plan(rand.Rand(9))!
+    assert g.Params().Flat()! == h.Params().Flat()!
+    a := g.Ints(lm.Tokens).Flat()!
+    b := h.Ints(other.Tokens).Flat()!
+    for i in range 16 {
+        a[i] = I32((i * 5) % 11)
+        b[i] = a[i]
+    }
+    g.Training = false
+    h.Training = false
+    g.Forward(2)
+    h.Forward(2)
+    assert g.Value(lm.Logits).Flat()! == h.Value(other.Logits).Flat()!
+}
+
+# the loss before any training and after "steps" steps of AdamW on a corpus that repeats 0 1 2 3
+fn learn<T>(c GptConfig, steps I64) F64, F64 {
+    g, _, lm := made<T>(c, 4, 5)
+    src := text.Windows(Array<I32>[I32(i % 4) for i in range 800], 8, 1)
+    valid := text.Windows(Array<I32>[I32(i % 4) for i in range 800], 8, 2)
+    before := train.LmEvaluate(g, lm, valid, 5)!
+    match T {
+        case BF16 {
+            o := optim.AdamW(g.Masters(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+            for _ in range steps: train.LmStep(g, lm, src, o, 5e-3, 1.0)!
+        }
+        case _ {
+            o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+            for _ in range steps: train.LmStep(g, lm, src, o, 5e-3, 1.0)!
+        }
+    }
+    return before, train.LmEvaluate(g, lm, valid, 5)!
+}
+
+test Gpt "learns a cycle: the validation loss falls from ln 4 to nearly 0 in every variant, F32 and BF16" {
+    for v in range 4 {
+        before, after := learn<F32>(GptConfig.Variant(v), 150)
+        assert (before - 4.0.Log()).Abs() < 0.3 and after < 0.15, "variant " + $v + ": " + $before + " to " + $after
+    }
+    _, rope := learn<BF16>(GptConfig.Variant(1), 150)
+    _, plain := learn<BF16>(GptConfig.Variant(0), 150)
+    assert rope < 0.2 and plain < 0.15
+}
+
+test Gpt "decodes through the key-value cache to the logits the whole sequence gives, rotary positions and a gated perceptron too" {
+    for v in range 2 {
+        c := GptConfig(11, 16, 2, 2, 8, Rope = v == 1, Rms = v == 1, Gated = v == 1)
+        full, _, lm := made<F64>(c, 1, 31)
+        dec, _, dm := made<F64>(c, 1, 31, true)
+        p := full.Params().Flat()!
+        for i in range p.Len(): p[i] = p[i] * 20.0
+        dec.Params().Convert(full.Params())!
+        seq := full.Ints(lm.Tokens).Flat()!
+        r := rand.Rand(5)
+        for i in range 8: seq[i] = I32(r.Below(11))
+        full.Training = false
+        full.Forward(1)
+        want := full.Value(lm.Logits)
+        ids := dec.Ints(dm.Tokens).Flat()!
+        worst F64 = 0.0
+        for t in range 8 {
+            dec.Pos = t
+            ids[0] = seq[t]
+            dec.Forward(1)
+            for k in range 11: worst = worst.Max((dec.Value(dm.Logits).Get(0, 0, k) - want.Get(0, t, k)).Abs())
+        }
+        assert worst < 1e-10, "variant " + $v + ": decoded logits differ by " + $worst
+        assert (want.Get(0, 0, 0) - want.Get(0, 0, 1)).Abs() > 0.1
+    }
+}
+
+# this process's resident memory in kB (VmRSS, Linux)
+fn resident() I64 {
+    status := try os.ReadFile("/proc/self/status") catch { return 0 }
+    for line in status.Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        return try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+    }
+    return 0
+}
+
+test Gpt "a step allocates nothing: the resident memory does not grow over 20 steps after the first, rotary and gated, F32 and BF16" {
+    a, _, am := made<F32>(GptConfig.Variant(1), 4, 5)
+    b, _, bm := made<BF16>(GptConfig.Variant(1), 4, 5)
+    src := text.Windows(Array<I32>[I32(i % 4) for i in range 800], 8, 1)
+    adam := optim.AdamW(a.Params(), a.ParamGrads(), spans = optim.Spans(a))
+    mixed := optim.AdamW(b.Masters(), b.ParamGrads(), spans = optim.Spans(b))
+    before I64 = 0
+    for step in range 24 {
+        if step == 3: before = resident()
+        train.LmStep(a, am, src, adam, 1e-3, 1.0)
+        train.LmStep(b, bm, src, mixed, 1e-3, 1.0)
+    }
+    assert resident() == before, "grew by " + $(resident() - before) + " kB"
+}

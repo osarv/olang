@@ -1,0 +1,68 @@
+# The recurrent counterpart of examples/charlm.olang: models/ssm's language model - Mamba's selective scan or the gated
+# delta rule, 8 blocks of width 128 - on tiny Shakespeare with the same batches (16 x 64 characters), AdamW, schedule,
+# clipping and validation windows, so the two models' losses compare (docs/redesign.md 4.3, M3 and M13). It generates
+# by running the context again (a recurrence keeps no state between forward passes). The checkpoint is
+# data/shakespeare/charlm_KIND.ckpt, the run's record build/charlm_KIND.jsonl.
+# Arguments, all optional: the kind (mamba or delta), the steps (2000), the seed (1), the threads (1), the characters to
+# generate (300). From the repository's root:
+#   olang build -output build/examples_charlm_ssm examples/charlm_ssm.olang && build/examples_charlm_ssm mamba 2000
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/text"
+import "../models/ssm"
+import "../nn/generate"
+import "../nn/optim"
+import "../nn/train"
+
+sequences I64 = 16
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn main() ? {
+    args := os.Args()
+    kind := args[1] if args.Len() > 1 else "mamba"
+    steps := try number(args, 2, 2000)
+    seed := try number(args, 3, 1)
+    threads := try number(args, 4, 1)
+    count := try number(args, 5, 300)
+    try os.MkDirAll("data/shakespeare")
+    try text.Fetch("data/shakespeare/input.txt", text.Shakespeare)
+    c := try text.Corpus.Load("data/shakespeare/input.txt")
+    cfg := ssm.SsmConfig(c.Size(), 128, 8, 64)
+    cfg.Kind = ssm.Mixer.Delta if kind == "delta" else ssm.Mixer.Mamba
+    g := graph.Graph<F32>(sequences, threads)
+    m := ssm.Ssm.New(g, cfg).Lm(g)
+    try g.Plan(rand.Rand(U64(seed)))
+    o := optim.AdamW(g.Params(), g.ParamGrads(), beta2 = 0.99, decay = 0.1, spans = optim.Spans(g))
+    trainSet := text.Windows(c.Train(), cfg.Ctx, U64(seed))
+    valSet := text.Windows(c.Val(), cfg.Ctx)
+    try io.Put(("tiny Shakespeare, " + $kind + " blocks: " + $cfg.Layers + " of width " + $cfg.Dim + ", context " + $cfg.Ctx + ", batches of " +
+        $sequences + " x " + $cfg.Ctx + ", " + $g.ParamCount + " parameters, " + $g.Threads + " threads, an arena of " +
+        $(F64(g.ArenaBytes()) / 1048576.0).Fixed(1) + " MB\n"))
+    try io.Put("step 0: validation loss " + $train.LmEvaluate(g, m, valSet, 10).Fixed(4) + "\n")
+    path := "data/shakespeare/charlm_" + $kind + ".ckpt"
+    tcfg := train.Config(steps, optim.WarmupCosine(1e-3, 100, steps, 1e-4), Name = "charlm_" + $kind, Seed = seed, Checkpoint = path
+        Log = "build/charlm_" + $kind + ".jsonl")
+    last := try train.Fit(g, m, trainSet, valSet, o, tcfg, fn(p) {
+        io.Put(("step " + $p.Step + ": train loss " + $p.Loss.Fixed(4) + ", gradient norm " + $p.Norm.Fixed(3) + ", " + $(p.Seconds * 1e3 / F64(p.Step)).Fixed(1) +
+            " ms a step" + $((", validation loss " + $p.Validation.Fixed(4)) if p.Validation == p.Validation else "") + "\n"))!
+    })
+    try io.Put(("trained " + $steps + " steps in " + $last.Seconds.Fixed(1) + " s: " + $(F64(steps * g.Batch * cfg.Ctx) / last.Seconds).Fixed(0) +
+        " tokens a second\n"))
+    once := graph.Graph<F32>(1)
+    om := ssm.Ssm.New(once, cfg).Lm(once, false)
+    r := rand.Rand(U64(seed))
+    try once.Plan(r)
+    try once.Load(path)
+    t1 := time.Now()
+    sample := try generate.Rerun(once, om, c, "\n", count, 0.8, r)
+    try io.Put(("--- " + $count + " characters, temperature 0.8, " + $(F64(count) / (F64(time.Since(t1)) * 1e-9)).Fixed(0) +
+        " characters a second (the context run again) ---\n" + $sample + "\n---\n"))
+}

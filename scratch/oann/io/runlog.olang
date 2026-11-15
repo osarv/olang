@@ -1,0 +1,193 @@
+# runlog - the record of a run, one JSON object per line (JSON lines), kept beside every bench and experiment so that a
+# number can be traced to the code, seed and settings that made it. A line is flat:
+#     {"run":"mnist-mlp","seed":1,"step":120,"oann":"8890f1c65b96","olang":"c733d3d9a1be","loss":0.213,"acc":0.94,
+#      "time_step":0.0031,"time_gemm":0.0019}
+# - the run's name, its seed, the step (an epoch, a sweep, a lesson - the caller's count), the commits of oann and olang
+# the numbers were measured with ("-dirty" after a commit when its tree has changes), then the run's metrics under
+# their own names and its timings, in seconds, as "time_NAME". The first line of a run also carries "config", the
+# settings it was started with, written as JSON from any value.
+#
+# A Log appends, a line a write, so lines of runs going on at once never cut into one another, and keeps nothing in
+# memory: a step costs the line's bytes. Read gathers the lines of a file into a ColumnVec of the record type the
+# caller declares - `type Row struct(step I64, loss F64) { step, loss }` gives `rows.loss`, a column - and passes over
+# the members it does not name. A number that is not finite (a diverged loss) is written null, as JSON has no NaN.
+
+import "std/io"
+import "std/json"
+import "std/os"
+import unistd "unistd.h"
+import fcntl "fcntl.h"
+
+type RunLogError error {
+    Reserved(name String)  # a metric named like a member of every line: run, seed, step, oann, olang, config, or time_...
+    Open(path String)      # the file could not be opened for appending
+}
+
+# the members every line has
+Fixed Array<String&>& = Array<String&>["run", "seed", "step", "oann", "olang", "config"]
+
+# the commit of the repository at "dir" - twelve hexadecimal digits, "-dirty" after them when its tree has changes -
+# or "unknown" where there is no git or no repository
+fn Commit(dir String&) String {
+    head := try os.Output.Exec("git", "-C", dir, "rev-parse", "--short=12", "HEAD") catch { return "unknown" }
+    if head.Status != 0: return "unknown"
+    status := try os.Output.Exec("git", "-C", dir, "status", "--porcelain", "--untracked-files=no") catch { return "unknown" }
+    dirty := "-dirty" if status.Stdout.Len() > 0 else ""
+    return $head.Stdout.Trim() + $dirty
+}
+
+# a line being made: the numbers of one step
+type Step struct(step I64) {
+    step
+    names Vec<String> = Vec<String>()
+    values Vec<F64> = Vec<F64>()
+}
+
+# the metric "name" measured as v
+fn (s mut Step&) Metric(name String&, v F64) {
+    s.names.Push($name)
+    s.values.Push(v)
+}
+
+# the time "name" took, in seconds: the member "time_NAME"
+fn (s mut Step&) Time(name String&, seconds F64) {
+    s.names.Push("time_" + $name)
+    s.values.Push(seconds)
+}
+
+# the number as JSON writes it, null where it is not finite
+fn number(v F64) String {
+    return "null" if v != v or v == F64.Inf or v == -F64.Inf else json.Encode(v)
+}
+
+# a run's log: lines appended to a file, which is closed where its holder lets go
+type Log unique struct(fd I32, run String, seed I64, oann String, olang String, config String) {
+    fd
+    run
+    seed
+    oann
+    olang
+    config
+    opened Bool = false
+} destruct {
+    unistd.close(fd)
+}
+
+# the file at "path" opened for appending (made when it is not there), for the run named "run" of this seed, the
+# settings it started with "config" - any value, written as JSON on the run's first line - and the commits of the
+# repositories at oannDir and olangDir
+fn Log.Open<C>(path String&, run String&, seed I64, config C, oannDir String& = ".", olangDir String& = "../olang") Log ? RunLogError {
+    fd := fcntl.open($path + "\0", fcntl.O_WRONLY | fcntl.O_CREAT | fcntl.O_APPEND, 0x1B6)
+    if fd < 0: error RunLogError.Open($path)
+    return Log(fd, $run, seed, Commit(oannDir), Commit(olangDir), json.Encode(config))
+}
+
+# the line of a step
+fn (l Log&) line(s Step&) String ? RunLogError {
+    sb := StringBuilder()
+    sb.Push("{\"run\":" + $json.Encode(json.Json.Str(l.run)) + ",\"seed\":" + $l.seed + ",\"step\":" + $s.step)
+    sb.Push(",\"oann\":\"" + $l.oann + "\",\"olang\":\"" + $l.olang + "\"")
+    if not l.opened: sb.Push(",\"config\":" + $l.config)
+    for i, name in s.names.View() {
+        if Fixed.Has(name): error RunLogError.Reserved($name)
+        sb.Push("," + $json.Encode(json.Json.Str(name)) + ":" + $number(s.values[i]))
+    }
+    sb.Push("}\n")
+    return sb.ToString()
+}
+
+# appends the step's line
+fn (l mut Log&) Add(s Step&) ? RunLogError, io.Error {
+    try io.Write(l.fd, try l.line(s))
+    l.opened = true
+}
+
+# the lines of the file at "path" as rows of R, every line a JSON object, R's members read by name
+fn Read<R>(path String&) ColumnVec<R> ? os.Error, json.Error {
+    rows := ColumnVec<R>()
+    text := try os.ReadFile(path)
+    for line in text.Lines() {
+        if line.Trim().Len() == 0: continue
+        rows.Push(try json.Decode<R>(line))
+    }
+    return rows
+}
+
+# ---- tests ----
+
+type Row struct(run String, seed I64, step I64, loss F64, time_step F64) {
+    run
+    seed
+    step
+    loss
+    time_step
+}
+
+type Settings struct(Lr F64, Layers I64, Name String) {
+    Lr
+    Layers
+    Name
+}
+
+fn append(log mut Log&, step I64, loss F64, seconds F64) ? RunLogError, io.Error {
+    s := Step(step)
+    s.Metric("loss", loss)
+    s.Time("step", seconds)
+    try log.Add(s)
+}
+
+test Log "lines are appended, one per step, the first carrying the config and every one the run, seed and commits" {
+    try os.MkDirAll("build/runlog_test")
+    path := "build/runlog_test/a.jsonl"
+    try os.WriteFile(path, "")
+    {
+        log := try Log.Open(path, "xor", 7, Settings(0.5, 2, "net"))
+        try append(log, 0, 1.5, 0.002)
+        try append(log, 1, 0.75, 0.0025)
+    }
+    {
+        log := try Log.Open(path, "xor-again", 8, Settings(0.1, 3, "net"))     # a file is appended to, never truncated
+        try append(log, 0, F64.NaN, 0.003)
+    }
+    text := try os.ReadFile(path)
+    lines := Vec<String>()
+    for l in text.Lines(): lines.Push($l)
+    assert lines.Len() == 3
+    first := try json.Json.Parse(lines[0])
+    assert (try (try first["run"]).AsStr()) == "xor" and (try (try first["seed"]).AsInt()) == 7
+    assert (try (try (try first["config"])["Layers"]).AsInt()) == 2 and (try (try (try first["config"])["Lr"]).AsNum()) == 0.5
+    assert (try (try first["oann"]).AsStr()).Len() >= 7 and (try first["olang"]).IsNull() == false
+    second := try json.Json.Parse(lines[1])
+    assert not second.Has("config") and (try (try second["loss"]).AsNum()) == 0.75
+    third := try json.Json.Parse(lines[2])
+    assert (try third["loss"]).IsNull() and (try (try (try third["config"])["Lr"]).AsNum()) == 0.1
+}
+
+test Read "the lines read back as a ColumnVec of the caller's record: a column per member, the rest passed over" {
+    path := "build/runlog_test/b.jsonl"
+    try os.WriteFile(path, "")
+    log := try Log.Open(path, "lm", 3, Settings(0.001, 4, "gpt"))
+    for i in range 5: try append(log, 10 * i, 4.0 / F64(i + 1), 0.001 * F64(i + 1))
+    rows := try Read<Row>(path)
+    assert rows.Len() == 5
+    assert rows.step == Array<I64>[0, 10, 20, 30, 40] and rows.seed[2] == 3
+    assert rows.loss[3] == 1.0 and rows.time_step[4] == 0.005 and rows[1].run == "lm"
+}
+
+test Log.Add "a metric named like a member of every line is refused, naming it" {
+    path := "build/runlog_test/c.jsonl"
+    try os.WriteFile(path, "")
+    log := try Log.Open(path, "x", 1, Settings(0.0, 0, ""))
+    s := Step(0)
+    s.Metric("seed", 1.0)
+    reserved := false
+    try log.Add(s) catch RunLogError.Reserved { reserved = true } catch { }
+    assert reserved
+    assert (try os.ReadFile(path)).Len() == 0
+}
+
+test Commit "a repository's commit is twelve digits, a directory that is not one is unknown" {
+    c := Commit(".")
+    assert c == "unknown" or c.Len() >= 12
+    assert Commit("/") == "unknown"
+}

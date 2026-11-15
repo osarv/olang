@@ -1,0 +1,104 @@
+# The character transformer examples/charlm.olang trained (data/shakespeare/charlm.ckpt), run with its linear layers in
+# INT8 (nn/quant's `Quantize`: the attention's projections and the perceptrons, weights per output channel, each input
+# quantized over its own range; the embeddings, attention scores and the tied head stay F32). Measured three ways
+# against the same graph in F32: the validation loss over ten batches of 16 x 64, greedy text from one prompt (how long
+# the two agree), and characters a second generated with the key-value cache, interleaved, medians (M12).
+# Arguments, all optional: the characters to time (500), the timing rounds (5), the threads (1)
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/text"
+import "../io/checkpoint"
+import "../models/gpt"
+import "../nn/generate"
+import "../nn/quant"
+import "../nn/train"
+import "../tensor"
+
+sequences I64 = 16
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn median(xs mut Array<F64>&) F64 {
+    xs.Sort(fn(a, b) { return a < b })
+    return xs[xs.Len() / 2]
+}
+
+fn main() ? io.Error, os.Error, text.CorpusError, ParseError, checkpoint.SafetensorsError, tensor.ShapeError {
+    args := os.Args()
+    count := try number(args, 1, 500)
+    rounds := try number(args, 2, 5)
+    threads := try number(args, 3, 1)
+    c := try text.Corpus.Load("data/shakespeare/input.txt")
+    cfg := gpt.GptConfig.Char(c.Size())
+    r := rand.Rand(1)
+
+    # the validation loss, F32 then INT8, and the time of one forward over 16 x 64 characters
+    g := graph.Graph<F32>(sequences, threads)
+    m := gpt.Gpt.New(g, cfg).Lm(g)
+    try g.Plan(r)
+    try g.Load("data/shakespeare/charlm.ckpt")
+    valSet := text.Windows(c.Val(), cfg.Ctx)
+    f32Loss := train.LmEvaluate(g, m, valSet, 10)
+    quant.Quantize(g)
+    int8Loss := train.LmEvaluate(g, m, valSet, 10)
+    qb, fb := quant.LinearBytes(g)
+    try io.Put(("validation loss over 10 batches: F32 " + $f32Loss.Fixed(4) + ", INT8 " + $int8Loss.Fixed(4) + " (" +
+        $(int8Loss - f32Loss).Fixed(4) + "); the linear layers' weights " + $qb + " bytes against " + $fb + " (" + $(F64(fb) / F64(qb)).Fixed(2) + "x)\n"))
+    f32s := Array<F64>(rounds)
+    int8s := Array<F64>(rounds)
+    for t in range rounds {
+        g.Int8 = false
+        t0 := time.Now()
+        g.Forward(g.Batch)
+        f32s[t] = F64(time.Since(t0))
+        g.Int8 = true
+        t1 := time.Now()
+        g.Forward(g.Batch)
+        int8s[t] = F64(time.Since(t1))
+    }
+    fwd := median(f32s)
+    fwdInt8 := median(int8s)
+    try io.Put(("a forward over " + $(g.Batch * cfg.Ctx) + " characters: F32 " + $(fwd * 1e-6).Fixed(2) + " ms, INT8 " + $(fwdInt8 * 1e-6).Fixed(2) +
+        " ms (" + $(fwd / fwdInt8).Fixed(2) + "x)\n"))
+
+    # generation one character at a time through the cache
+    dec := graph.Graph<F32>(1, threads, graph.Mode.Captured, true)
+    dm := gpt.Gpt.New(dec, cfg).Lm(dec, false)
+    try dec.Plan(r)
+    try dec.Load("data/shakespeare/charlm.ckpt")
+    quant.Quantize(dec)
+    dec.Int8 = false
+    greedy := try generate.Cached(dec, dm, c, "ROMEO:", cfg.Ctx - 6, 0.0, r)
+    dec.Int8 = true
+    greedyInt8 := try generate.Cached(dec, dm, c, "ROMEO:", cfg.Ctx - 6, 0.0, r)
+    same I64 = 0
+    for { if same >= greedy.Len() or greedy[same] != greedyInt8[same] { break } else { same++ } }
+    try io.Put(("greedy from \"ROMEO:\": the same for " + $same + " of " + $greedy.Len() + " characters\n--- F32 ---\n" + $greedy +
+        "\n--- INT8 ---\n" + $greedyInt8 + "\n---\n"))
+    cached := Array<F64>(rounds)
+    cachedInt8 := Array<F64>(rounds)
+    for t in range rounds {
+        dec.Int8 = false
+        ra := rand.Rand(U64(t + 1))
+        t0 := time.Now()
+        a := try generate.Cached(dec, dm, c, "\n", count, 0.8, ra)
+        cached[t] = F64(time.Since(t0))
+        dec.Int8 = true
+        rb := rand.Rand(U64(t + 1))
+        t1 := time.Now()
+        b := try generate.Cached(dec, dm, c, "\n", count, 0.8, rb)
+        cachedInt8[t] = F64(time.Since(t1))
+        assert a.Len() == b.Len()
+    }
+    cf := median(cached)
+    ci := median(cachedInt8)
+    try io.Put(($count + " characters with the cache: F32 " + $(F64(count) / (cf * 1e-9)).Fixed(0) + " a second, INT8 " +
+        $(F64(count) / (ci * 1e-9)).Fixed(0) + " (" + $(cf / ci).Fixed(2) + "x)\n"))
+}

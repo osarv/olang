@@ -1,0 +1,494 @@
+# dyn/bridge - a settle as one operation of the autodiff graph (ad/graph's Custom), so a transformer and a settling
+# core train together: docs/redesign.md sections 1.4 ("the bridge") and 4.1 (C2).
+#
+# A Bridge<T> wraps a planned rate system and names two of its populations: In, whose drive the operation's input is
+# (an input population's state, or any other's added drive), and Out, whose activities at the free fixed point are the
+# operation's output. A second input, where given, is the starting state: the potentials of every relaxing population
+# (every one but the inputs, in the order they were made, StateSize of them a row) - an amortizer's guess of the fixed
+# point, so the settle starts near where it ends. Without one every settle starts cold (at rest).
+#
+# Forward: the input's rows into In's drive (rows past them zero), the free phase reset (and the potentials set from
+# the guess, the activities rho of them), settled within Budget; Out's activities out. The input may have any leading
+# axes - [batch, t, size] is batch * t rows - and at most the system's batch of rows.
+#
+# Backward: the gradient of the output is dL/ds of Out's activities, and the system's learn.Learner turns it into the
+# gradient of In's drive (the operation's input gradient) and of every parameter of the system (written into its
+# ParamGrads, for an optimizer over Params) - by the Implicit the bridge was made with: Exact (the adjoint solved on the
+# transposed Jacobian), Jfb (the feedback ignored) or Ep (two phases nudged through Out's drive, their contrast). The
+# starting state's gradient is zero: at a fixed point the output does not depend on where the settle started. dz is
+# scaled to a largest element of 1 before it reaches the learner and the gradients scaled back after: the adjoint's
+# tolerance and EP's nudge are then relative to the gradient, whatever the loss's scale (a mean over a large batch
+# gives small elements, which an absolute tolerance would read as already solved). A backward the learner refuses (an
+# adjoint or a nudged phase that does not settle) writes zero gradients and is counted in Refused.
+#
+# The amortizer is trained by regression on the fixed point: Settled(b) is an operation whose value is the relaxing
+# populations' potentials at the last settle (reading the bridge's output, so it runs after it) and whose gradient is zero, so
+# g.Mse(guess, g.Custom(settled, y)) pulls the guess toward the fixed point and nothing else; Detach (a copy whose
+# gradient is zero) keeps that loss from reaching the amortizer's input. Apply records the three: the bridge's output
+# and the amortizer's loss.
+#
+# Counts for M14 (docs/redesign.md 4.3): Settles, Sweeps (every forward settle's), Unsettled (forward settles that ended
+# outside the budget's tolerance), Backs and AdjointSweeps (the backward passes and the sweeps of their adjoint
+# iterations or nudged phases; none for JFB), and the last forward settle and backward adjoint.
+#
+# T is the system's element: F32 inside a graph (the graph's Custom is F32), F64 for the checks below, which call
+# Run and Grad - what Forward and Backward call - directly.
+
+import "../tensor"
+import "../ad/graph"
+import "neuron"
+import "settle"
+import "system"
+import "learn"
+
+# a settle of system s as an operation: its input In's drive, its output Out's activities, its gradient by how. Budget
+# is a forward settle's, 1e-4 by default
+type Bridge<T> struct(s mut system.System<T>&, inp system.Pop, out system.Pop, how system.Implicit) ? learn.LearnError {
+    S mut system.System<T>& = s
+    L mut learn.Learner<T>& = try learn.Learner<T>(s)
+    In system.Pop = inp
+    Out system.Pop = out
+    How system.Implicit = how
+    Budget settle.Budget = s.BudgetFor(1e-4)
+    Settles I64 = 0
+    Sweeps I64 = 0
+    Unsettled I64 = 0
+    Refused I64 = 0
+    Backs I64 = 0
+    AdjointSweeps I64 = 0
+    Last settle.Settlement = settle.Settlement()
+    Adjoint settle.Settlement = settle.Settlement()
+    inSize I64 = s.Pop(inp).Size
+    outSize I64 = s.Pop(out).Size
+    StateSize I64 = relaxing(s)
+    dz mut Array<T>& = Array<T>(s.Batch * outSize)
+    dx mut Array<T>& = Array<T>(s.Batch * inSize)
+}
+
+# the rows a tensor of the bridge's input holds: its elements over the input population's size
+fn (b Bridge<T>&) rowsOf(x tensor.Tensor<T>&, size I64) I64 {
+    rows := x.Count() / size
+    assert rows * size == x.Count() and rows <= b.S.Batch, "a bridge's operand of " + $x.Dims + " is not rows of " + $size + ", at most " + $b.S.Batch
+    return rows
+}
+
+# settles the free phase on input x ([..., In's size]) from rest, Out's activities into out ([..., Out's size])
+fn (b mut Bridge<T>&) Run(x tensor.Tensor<T>&, out mut tensor.Tensor<T>&) {
+    b.prepare(x)
+    b.finish(out)
+}
+
+# the units of the relaxing populations: a starting state's row
+fn relaxing<T>(s system.System<T>&) I64 {
+    n I64 = 0
+    for p in s.E.Pops: n += 0 if p.Role == neuron.Role.Input else p.Size
+    return n
+}
+
+# settles the free phase on input x from the starting potentials z0 ([..., StateSize]); Out's activities into out
+fn (b mut Bridge<T>&) RunFrom(x tensor.Tensor<T>&, z0 tensor.Tensor<T>&, out mut tensor.Tensor<T>&) {
+    rows := b.prepare(x)
+    assert b.rowsOf(z0, b.StateSize) == rows, "the starting state's rows are the input's"
+    from := z0.Flat()!
+    at I64 = 0
+    for p in b.S.E.Pops {
+        if p.Role == neuron.Role.Input: continue
+        model := p.Model
+        rho := model.rho if model == neuron.Neuron.Rate else neuron.Rho.Linear
+        scatter(from, b.StateSize, at, p.R0.U, p.Size, rows)
+        neuron.ActivateRun(rho, p.R0.U, p.R0.S, 0, rows * p.Size)
+        at += p.Size
+    }
+    b.finish(out)
+}
+
+# u's rows (size wide) from columns at .. at + size of z's rows (width wide)
+fn scatter<T>(z Array<T>&, width I64, at I64, u mut Array<T>&, size I64, rows I64) {
+    for r in range rows {
+        for j in range size: u[r * size + j] = z[r * width + at + j]
+    }
+}
+
+# columns at .. at + size of z's rows (width wide) from u's rows (size wide)
+fn gather<T>(u Array<T>&, size I64, z mut Array<T>&, width I64, at I64, rows I64) {
+    for r in range rows {
+        for j in range size: z[r * width + at + j] = u[r * size + j]
+    }
+}
+
+# x into In's drive (the rows past it zero) and the free phase at rest; gives x's rows
+fn (b mut Bridge<T>&) prepare(x tensor.Tensor<T>&) I64 {
+    rows := b.rowsOf(x, b.inSize)
+    drive := b.S.Pop(b.In).Drive
+    from := x.Flat()!
+    for i in range from.Len(): drive[i] = from[i]
+    for i in range from.Len(), drive.Len(): drive[i] = T(0)
+    b.S.Reset(settle.Phase.Free)
+    return rows
+}
+
+# the settle, counted, and Out's activities of out's rows into out
+fn (b mut Bridge<T>&) finish(out mut tensor.Tensor<T>&) {
+    b.Last = b.S.Settle(settle.Phase.Free, b.Budget)
+    b.Settles++
+    b.Sweeps += b.Last.Sweeps
+    if not b.Last.Converged: b.Unsettled++
+    to := out.Flat()!
+    from := b.S.Pop(b.Out).Activity(0)
+    for i in range to.Len(): to[i] = from[i]
+}
+
+# the gradients at the fixed point last settled, given dout = dL/ds of Out's activities ([..., Out's size]): In's drive's
+# into dx ([..., In's size]) and every parameter's into the system's ParamGrads (written), by How
+fn (b mut Bridge<T>&) Grad(dout tensor.Tensor<T>&, dx mut tensor.Tensor<T>&) {
+    from := dout.Flat()!
+    into := dx.Flat()!
+    largest F64 = 0.0
+    for i in range from.Len() {
+        largest = largest.Max(F64(from[i]).Abs())
+        b.dz[i] = from[i]
+    }
+    for i in range from.Len(), b.dz.Len(): b.dz[i] = T(0)
+    grads := b.S.E.Grads
+    if largest == 0.0 or not (largest <= F64.Max) {
+        clear(grads)
+        clear(into)
+        return
+    }
+    k := T(1.0 / largest)
+    for i in range from.Len(): b.dz[i] = b.dz[i] * k
+    dzT := tensor.Tensor<T>.Over(b.dz, 0, b.S.Batch, b.outSize)!
+    dxT := tensor.Tensor<T>.Over(b.dx, 0, b.S.Batch, b.inSize)!
+    b.Adjoint = try b.L.ImplicitGrad(b.Out, dzT, b.How, b.In, dxT) catch learn.LearnError {
+        b.Refused++
+        clear(grads)
+        clear(into)
+        return
+    } catch tensor.ShapeError {
+        unreachable "the bridge's staging is laid out for its system"
+    }
+    b.Backs++
+    b.AdjointSweeps += b.Adjoint.Sweeps
+    back := T(largest)
+    for i in range grads.Len(): grads[i] = grads[i] * back
+    for i in range into.Len(): into[i] = b.dx[i] * back
+}
+
+fn clear<T>(a mut Array<T>&) {
+    for i in range a.Len(): a[i] = T(0)
+}
+
+# ---- the graph's operation (ad/graph.Function) ----
+
+# the output's shape: the input's, its last axis Out's size
+fn (b Bridge<T>&) Shape(inputs Array<tensor.Shape>&) tensor.Shape { return lastAxis(inputs[0], b.outSize) }
+
+fn lastAxis(s tensor.Shape&, n I64) tensor.Shape {
+    dims := Array<I64>[s[i] for i in range s.Rank]
+    dims[s.Rank - 1] = n
+    return tensor.Shape(s.Rank, dims)
+}
+
+# the settle: inputs[0] the input, inputs[1] (where given) the starting state
+fn (b mut Bridge<T>&) Forward(out mut tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&) {
+    match T {
+        case F32 {
+            if inputs.Len() > 1 {
+                b.RunFrom(inputs[0], inputs[1], out)
+                return
+            }
+            b.Run(inputs[0], out)
+        }
+        case _ { unreachable "a bridge in a graph settles a System<F32>" }
+    }
+}
+
+# the input's gradient by How, the starting state's zero, the system's parameters' into its ParamGrads
+fn (b mut Bridge<T>&) Backward(dout tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&, dinputs mut Array<tensor.Tensor<F32>>&) {
+    match T {
+        case F32 {
+            b.Grad(dout, dinputs[0])
+            if dinputs.Len() > 1: dinputs[1].Fill(0.0)
+        }
+        case _ { unreachable "a bridge in a graph settles a System<F32>" }
+    }
+}
+
+# the relaxing populations' potentials at the bridge's last settle ([..., StateSize]), as an operation reading the bridge's output (so it runs after the
+# settle) with a zero gradient: the amortizer's regression target
+type Settled<T> struct(b mut Bridge<T>&) {
+    B mut Bridge<T>& = b
+}
+
+fn (s Settled<T>&) Shape(inputs Array<tensor.Shape>&) tensor.Shape { return lastAxis(inputs[0], s.B.StateSize) }
+
+fn (s mut Settled<T>&) Forward(out mut tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&) {
+    match T {
+        case F32 { s.Into(out) }
+        case _ { unreachable "a bridge in a graph settles a System<F32>" }
+    }
+}
+
+# the potentials into out's rows
+fn (s Settled<T>&) Into(out mut tensor.Tensor<T>&) {
+    to := out.Flat()!
+    rows := to.Len() / s.B.StateSize
+    at I64 = 0
+    for p in s.B.S.E.Pops {
+        if p.Role == neuron.Role.Input: continue
+        gather(p.R0.U, p.Size, to, s.B.StateSize, at, rows)
+        at += p.Size
+    }
+}
+
+fn (s mut Settled<T>&) Backward(dout tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&, dinputs mut Array<tensor.Tensor<F32>>&) {
+    dinputs[0].Fill(0.0)
+}
+
+# x unchanged, its gradient zero: what is computed from it trains nothing before it
+type Detach struct() { }
+
+fn (d Detach&) Shape(inputs Array<tensor.Shape>&) tensor.Shape { return inputs[0] }
+
+fn (d mut Detach&) Forward(out mut tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&) {
+    try out.Convert(inputs[0]) catch { unreachable }
+}
+
+fn (d mut Detach&) Backward(dout tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&, dinputs mut Array<tensor.Tensor<F32>>&) {
+    dinputs[0].Fill(0.0)
+}
+
+# the settle of b recorded on g on input x: from rest where guess is None, else from guess (the relaxing populations' potentials,
+# of x's rows). Gives the output and the amortizer's loss - the mean squared distance of guess from the fixed point, whose
+# gradient reaches guess alone (None without a guess)
+fn Apply(g mut graph.Graph<F32>&, b mut Bridge<F32>&, s mut Settled<F32>&, x graph.Var, guess graph.Var = graph.None) graph.Var, graph.Var {
+    if guess == graph.None: return g.Custom(b, x), graph.None
+    y := g.Custom(b, x, guess)
+    return y, g.Mse(guess, g.Custom(s, y))
+}
+
+# ---- tests ----
+
+import "std/io"
+import "std/rand"
+import "conn"
+
+# x (3 linear inputs) -> a (5 tanh) <-> h (4 tanh) <-> y (3 tanh): the input folded, a reciprocal sparse block and a
+# low-rank one between a and h, a lateral tiled block at a, a symmetric block between h and y; the recurrent weights
+# doubled, then certified at 0.8; random biases
+fn recurrent<T>(batch I64, r mut rand.Rand&) system.System<T> {
+    s := system.System<T>(batch)
+    root := s.Root()
+    x := s.Population(root, "x", 3, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    a := s.Population(root, "a", 5, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    h := s.Population(root, "h", 4, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(root, "y", 3, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    s.Connect(x, a, conn.Wiring.Dense)
+    s.Connect(a, h, conn.Wiring.Csr(0.6), reciprocal = true)
+    s.Connect(a, h, conn.Wiring.LowRank(2), reciprocal = true)
+    s.Connect(a, a, conn.Wiring.Tiles(2, 0.7), reciprocal = true)
+    s.Connect(h, y, conn.Wiring.Symmetric)
+    s.Plan(r)!
+    for lk in s.E.Links {
+        if lk.Folded: continue
+        for i in range lk.Off, lk.Off + lk.Count: s.E.Params[i] = T(2) * s.E.Params[i]
+    }
+    s.Certify(0.8)
+    for p in s.E.Pops {
+        if p.Role == neuron.Role.Input: continue
+        for j in range p.Size: s.E.Params[p.Bias + j] = T(r.Uniform(-0.5, 0.5))
+    }
+    return s
+}
+
+# x (3 linear inputs) -> y (3 tanh), nothing fed back: a system whose JFB gradient is its gradient
+fn direct<T>(batch I64, r mut rand.Rand&) system.System<T> {
+    s := system.System<T>(batch)
+    root := s.Root()
+    x := s.Population(root, "x", 3, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    y := s.Population(root, "y", 3, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    s.Connect(x, y, conn.Wiring.Dense)
+    s.Plan(r)!
+    for j in range 3: s.E.Params[s.Pop(y).Bias + j] = T(r.Uniform(-0.5, 0.5))
+    return s
+}
+
+# L = sum dout y for the output y the bridge settles on x
+fn readOut(b mut Bridge<F64>&, x tensor.Tensor<F64>&, dout tensor.Tensor<F64>&) F64 {
+    y := tensor.Tensor<F64>.Zeros(2, 2, b.outSize)
+    b.Run(x, y)
+    return dot(dout.Flat()!, y.Flat()!)
+}
+
+# the central differences, step 1e-5, of L in every element of a
+fn differences(b mut Bridge<F64>&, a mut Array<F64>&, x tensor.Tensor<F64>&, dout tensor.Tensor<F64>&) Array<F64> {
+    out := Array<F64>(a.Len())
+    for i in range a.Len() {
+        old := a[i]
+        a[i] = old + 1e-5
+        up := readOut(b, x, dout)
+        a[i] = old - 1e-5
+        down := readOut(b, x, dout)
+        a[i] = old
+        out[i] = (up - down) / 2e-5
+    }
+    readOut(b, x, dout)
+    return out
+}
+
+fn dot<T>(a Array<T>&, b Array<T>&) F64 {
+    total F64 = 0.0
+    for i in range a.Len(): total += F64(a[i]) * F64(b[i])
+    return total
+}
+
+# |a - b| / |b|
+fn relative<T>(a Array<T>&, b Array<T>&) F64 {
+    d := Array<F64>[F64(a[i]) - F64(b[i]) for i in range a.Len()]
+    return (dot(d, d) / dot(b, b)).Sqrt()
+}
+
+# the bridge's gradient by how - the system's parameters' and the input's - at the input x and output gradient dout
+fn gradientOf(b mut Bridge<F64>&, how system.Implicit, x tensor.Tensor<F64>&, dout tensor.Tensor<F64>&) Array<F64>, Array<F64> {
+    b.How = how
+    readOut(b, x, dout)
+    dx := tensor.Tensor<F64>.Zeros(2, 2, b.inSize)
+    b.Grad(dout, dx)
+    return b.S.E.Grads.Copy(), dx.Flat()!.Copy()
+}
+
+# a bridge of F64 over sys (batch 4) for the checks: settles and gradients solved to 1e-14, an input [2, 2, 3] and an
+# output gradient [2, 2, 3] drawn - two leading axes, four rows
+fn checked(sys mut system.System<F64>&, r mut rand.Rand&) Bridge<F64>, tensor.Tensor<F64>, tensor.Tensor<F64> {
+    b := Bridge<F64>(sys, system.Pop(0), system.Pop(sys.E.Pops.Len() - 1), system.Implicit.Jfb)!
+    b.Budget = settle.Budget(20000, 1e-14)
+    b.L.Tol = 1e-13
+    b.L.Sweeps = 20000
+    x := tensor.Tensor<F64>.Zeros(2, 2, 3)
+    x.FillUniform(r, -1.0, 1.0)
+    dout := tensor.Tensor<F64>.Zeros(2, 2, 3)
+    dout.FillUniform(r, -1.0, 1.0)
+    return b, x, dout
+}
+
+test Bridge.Grad "exact and EP gradients of a recurrent settle against central differences of its output, in the parameters and the input" {
+    r := rand.Rand(51)
+    sys := recurrent<F64>(4, r)
+    b, x, dout := checked(sys, r)
+    params := differences(b, sys.E.Params, x, dout)
+    inputs := differences(b, x.Flat()!, x, dout)
+    g, dx := gradientOf(b, system.Implicit.Exact(1e-14, 20000), x, dout)
+    assert b.Adjoint.Converged and relative(g, params) < 1e-7 and relative(dx, inputs) < 1e-7, $b.Adjoint + " " + $relative(g, params) + " " + $relative(dx, inputs)
+    e, ex := gradientOf(b, system.Implicit.Ep(1e-3), x, dout)
+    assert relative(e, params) < 1e-5 and relative(ex, inputs) < 1e-5, $relative(e, params) + " " + $relative(ex, inputs)
+    j, _ := gradientOf(b, system.Implicit.Jfb, x, dout)
+    cosine := dot(j, params) / (dot(j, j) * dot(params, params)).Sqrt()
+    try io.PutLine("bridge: exact " + $relative(g, params) + " / " + $relative(dx, inputs) + ", EP(1e-3) " + $relative(e, params) + " / " + $relative(ex, inputs) + " against differences; JFB's cosine " + $cosine)
+    assert cosine > 0.5, "JFB's cosine with the gradient " + $cosine
+    assert b.Refused == 0 and b.Unsettled == 0
+}
+
+test Bridge.Grad "JFB is the gradient where nothing feeds back into the output: against central differences" {
+    r := rand.Rand(52)
+    sys := direct<F64>(4, r)
+    b, x, dout := checked(sys, r)
+    params := differences(b, sys.E.Params, x, dout)
+    inputs := differences(b, x.Flat()!, x, dout)
+    j, jx := gradientOf(b, system.Implicit.Jfb, x, dout)
+    assert relative(j, params) < 1e-8 and relative(jx, inputs) < 1e-8, $relative(j, params) + " " + $relative(jx, inputs)
+}
+
+test Bridge.RunFrom "a settle started at its fixed point takes no sweep and ends where a cold one does; the gradient's scale is the loss's" {
+    r := rand.Rand(53)
+    sys := recurrent<F64>(4, r)
+    b, x, dout := checked(sys, r)
+    cold := tensor.Tensor<F64>.Zeros(2, 2, 3)
+    b.Run(x, cold)
+    assert b.Last.Sweeps > 20, "a cold settle took " + $b.Last.Sweeps
+    fixed := tensor.Tensor<F64>.Zeros(2, 2, b.StateSize)
+    Settled<F64>(b).Into(fixed)
+    warm := tensor.Tensor<F64>.Zeros(2, 2, 3)
+    b.RunFrom(x, fixed, warm)
+    assert b.Last.Sweeps <= 1 and relative(warm.Flat()!, cold.Flat()!) < 1e-12, $b.Last
+    # a gradient a thousand times smaller gives gradients a thousand times smaller, by every mode
+    for how in Array<system.Implicit>[system.Implicit.Exact(1e-10, 20000), system.Implicit.Ep(1e-3), system.Implicit.Jfb] {
+        g, dx := gradientOf(b, how, x, dout)
+        small := dout.Clone()
+        try small.Scale(dout, 1e-3)
+        gs, dxs := gradientOf(b, how, x, small)
+        for i in range g.Len(): assert (gs[i] * 1e3 - g[i]).Abs() <= 1e-9 * (1.0 + g[i].Abs()), $how
+        for i in range dx.Len(): assert (dxs[i] * 1e3 - dx[i]).Abs() <= 1e-9 * (1.0 + dx[i].Abs()), $how
+    }
+}
+
+# the graph's loss, its parameters' gradient and the system's after a Forward and a Backward
+fn stepOf(g mut graph.Graph<F32>&, loss graph.Var, sys system.System<F32>&) F64, Array<F32>, Array<F32> {
+    g.Forward(4)
+    g.Backward(loss)
+    return g.Scalar(loss), g.ParamGrads().Flat()!.Copy(), sys.E.Grads.Copy()
+}
+
+# the central differences, step 1e-2, of the graph's loss in every element of a
+fn graphDifferences(g mut graph.Graph<F32>&, loss graph.Var, a mut Array<F32>&) Array<F32> {
+    out := Array<F32>(a.Len())
+    for i in range a.Len() {
+        old := a[i]
+        a[i] = old + 1e-2
+        g.Forward(4)
+        up := g.Scalar(loss)
+        a[i] = old - 1e-2
+        g.Forward(4)
+        down := g.Scalar(loss)
+        a[i] = old
+        out[i] = F32((up - down) / 2e-2)
+    }
+    return out
+}
+
+# x [4, 2, 3] -> Linear -> the settle (from rest, or from an amortizer's guess) -> Linear -> the squared distance to a
+# target, in F32: the graph's gradient and the system's against central differences of the graph's loss; and, with an
+# amortizer, the gradient of its loss in its weights against central differences of that loss (the fixed point does
+# not depend on the guess, so the stopped gradient is the whole one there)
+fn throughGraph(feedback Bool, how system.Implicit, amortize Bool, seed U64) F64, F64, F64 {
+    r := rand.Rand(seed)
+    sys := recurrent<F32>(8, r) if feedback else direct<F32>(8, r)
+    b := Bridge<F32>(sys, system.Pop(0), system.Pop(sys.E.Pops.Len() - 1), how)!
+    b.Budget = settle.Budget(5000, 1e-6)
+    b.L.Tol = 1e-6
+    b.L.Sweeps = 5000
+    fixed := Settled<F32>(b)
+    cut := Detach()
+    g := graph.Graph<F32>(4)
+    x := g.Input(2, 3)
+    h := g.Linear(x, g.Param(graph.Init.Normal(0.0, 0.7), true, 3, 3))
+    wa := g.Param(graph.Init.Normal(0.0, 0.3), true, b.StateSize, 3)
+    guess := g.Linear(g.Custom(cut, h), wa) if amortize else graph.None
+    y, fit := Apply(g, b, fixed, h, guess)
+    t := g.Input(2, 2)
+    loss := g.Mse(g.Linear(y, g.Param(graph.Init.Normal(0.0, 0.7), true, 2, 3)), t)
+    g.Plan(r)!
+    g.Value(x).FillUniform(r, -1.0, 1.0)
+    g.Value(t).FillUniform(r, -0.5, 0.5)
+    _, gw, gs := stepOf(g, loss, sys)
+    dw := graphDifferences(g, loss, g.Params().Flat()!)
+    ds := graphDifferences(g, loss, sys.E.Params)
+    assert b.Refused == 0 and b.Unsettled == 0
+    if not amortize: return relative(gw, dw), relative(gs, ds), 0.0
+    g.Forward(4)
+    g.Backward(fit)
+    ga := g.Grad(wa).Flat()!.Copy()
+    da := graphDifferences(g, fit, g.Value(wa).Flat()!)
+    return relative(gw, dw), relative(gs, ds), relative(ga, da)
+}
+
+test Bridge.Backward "through the graph (F32), from rest and from an amortizer's guess: the gradients of the graph's parameters and the system's against central differences of the loss, every mode; the amortizer's against its loss's" {
+    for amortize in Array<Bool>[false, true] {
+        ew, es, ea := throughGraph(true, system.Implicit.Exact(1e-6, 5000), amortize, 54)
+        pw, ps, pa := throughGraph(true, system.Implicit.Ep(0.01), amortize, 54)
+        jw, js, ja := throughGraph(false, system.Implicit.Jfb, amortize, 55)
+        if amortize: try io.Put("amortized, ")
+        try io.PutLine("through the graph: exact " + $ew + " / " + $es + ", EP(0.01) " + $pw + " / " + $ps + ", JFB (no feedback) " + $jw + " / " + $js + "; the amortizer " + $ea + " / " + $pa + " / " + $ja)
+        assert ew < 1e-2 and es < 1e-2 and pw < 1e-2 and ps < 1e-2 and jw < 1e-2 and js < 1e-2
+        assert ea < 1e-2 and pa < 1e-2 and ja < 1e-2
+    }
+}

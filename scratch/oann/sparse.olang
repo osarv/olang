@@ -1,0 +1,445 @@
+# sparse - the sparse kernels settling circuits need and std/linalg does not have (docs/settling.md section 3, items
+# 8-10): matrices in compressed sparse row form (CSR) and their products - the matrix times a batch, its transpose
+# times a batch, and the product of two batches sampled at the matrix's own entries (a contrast at existing synapses
+# only) - and, for the sparse-code store, a top-k selection and the two products that touch only the k selected rows
+# of a table.
+#
+# A batch here is laid out feature-major: element (j, t) of a batch of width columns is x[at + j * stride + t], so row
+# j holds feature j of every sample, contiguous, and a product with one entry of the matrix is one run of width
+# multiply-adds that vectorizes - each entry's index and value are read once for the whole batch. A circuit's state is
+# sample-major ([rows, neurons]) and is transposed into this layout once per sweep. With width 1 the products are a
+# matrix-vector product, its transpose and an outer product sampled at the entries.
+
+import "std/rand"
+import "std/list"
+
+# eight partial sums, combined pairwise at the end - what lets a sum of floats run in vector registers (olang keeps a
+# float sum in the order written, so a single accumulator would not vectorize)
+type lanes<A> struct() {
+    v := Array<A>(8)
+}
+
+fn (l lanes<A>&) total() A {
+    return ((l.v[0] + l.v[4]) + (l.v[2] + l.v[6])) + ((l.v[1] + l.v[5]) + (l.v[3] + l.v[7]))
+}
+
+# a Rows x Cols matrix holding only some entries: row i's are at the columns Idx[Ptr[i] .. Ptr[i + 1]), increasing,
+# with the values Values[Ptr[i] .. Ptr[i + 1]). Ptr has Rows + 1 elements, Ptr[0] = 0. Values is new zero-filled
+# storage unless given - a circuit gives a view of its parameter region, so an optimizer steps the entries in place
+type Csr<T> struct(Rows I64, Cols I64, ptr Array<I64>&, idx Array<I32>&, values mut Array<T>?& = null) {
+    Rows
+    Cols
+    Ptr Array<I64>& = ptr
+    Idx Array<I32>& = idx
+    assert Ptr.Len() == Rows + 1 and Ptr[0] == 0 and Ptr[Rows] == Idx.Len()
+    Values mut Array<T>& = values if values != null else Array<T>(idx.Len())
+    assert Values.Len() == Idx.Len()
+}
+
+# the entries it holds
+fn (w Csr<T>&) Nnz() I64 { return w.Idx.Len() }
+
+# the fraction of its Rows x Cols entries it holds
+fn (w Csr<T>&) Density() F64 {
+    return 0.0 if w.Rows * w.Cols == 0 else F64(w.Nnz()) / F64(w.Rows * w.Cols)
+}
+
+# row i's entries times the entries of x they name, summed in eight lanes, so the gathers and multiply-adds run in
+# vector registers
+fn (w Csr<T>&) rowDot(i I64, x Array<T>&, xo I64, xs I64) T {
+    z T
+    acc := lanes<T>()
+    lo := w.Ptr[i]
+    hi := w.Ptr[i + 1]
+    whole I64 = hi - (hi - lo) % 8
+    for e in range lo, whole, 8 {
+        for u in range 8: acc.v[u] += w.Values[e + u] * x[xo + I64(w.Idx[e + u]) * xs]
+    }
+    rest T = z
+    for e in range whole, hi: rest += w.Values[e] * x[xo + I64(w.Idx[e]) * xs]
+    return acc.total() + rest
+}
+
+# Y += alpha W X: X is Cols rows of width (x[xo + j * xs + t]), Y Rows rows of width (y[yo + i * ys + t]). Row i of
+# Y gathers the rows of X its entries name
+fn (w Csr<T>&) MulAdd(x Array<T>&, xo I64, xs I64, y mut Array<T>&, yo I64, ys I64, width I64, alpha T) {
+    for i in range w.Rows {
+        yi I64 = yo + i * ys
+        if width == 1 {
+            y[yi] = y[yi] + alpha * w.rowDot(i, x, xo, xs)
+            continue
+        }
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            a T = alpha * w.Values[e]
+            xj I64 = xo + I64(w.Idx[e]) * xs
+            for t in range width: y[yi + t] += a * x[xj + t]
+        }
+    }
+}
+
+# Y += alpha W^T X: X is Rows rows of width, Y Cols rows of width. Row i of X is scattered, scaled, into the rows of Y
+# its entries name - one stored matrix read in the other direction, as a reciprocal projection reads its block
+fn (w Csr<T>&) MulAddT(x Array<T>&, xo I64, xs I64, y mut Array<T>&, yo I64, ys I64, width I64, alpha T) {
+    for i in range w.Rows {
+        xi I64 = xo + i * xs
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            yj I64 = yo + I64(w.Idx[e]) * ys
+            if width == 1 {
+                y[yj] = y[yj] + alpha * x[xi] * w.Values[e]
+                continue
+            }
+            a T = alpha * w.Values[e]
+            for t in range width: y[yj + t] += a * x[xi + t]
+        }
+    }
+}
+
+# the dot product of a[ai .. ai + width) and b[bj .. bj + width), summed in eight lanes
+fn dot<T>(a Array<T>&, ai I64, b Array<T>&, bj I64, width I64) T {
+    z T
+    whole I64 = width - width % 8
+    acc := lanes<T>()
+    for t in range 0, whole, 8 {
+        for u in range 8: acc.v[u] += a[ai + t + u] * b[bj + t + u]
+    }
+    rest T = z
+    for t in range whole, width: rest += a[ai + t] * b[bj + t]
+    return acc.total() + rest
+}
+
+# g[go + e] = alpha (A B^T)[i, j] (+ g[go + e] when accumulate), for each entry e = (i, j): the product of two batches
+# sampled at the matrix's entries - A is Rows rows of width, B Cols rows of width - a contrast's sum over the batch of
+# post x pre, computed only where a synapse exists
+fn (w Csr<T>&) Sampled(g mut Array<T>&, go I64, a Array<T>&, ao I64, sa I64, b Array<T>&, bo I64, sb I64, width I64
+    alpha T, accumulate Bool) {
+    z T
+    for i in range w.Rows {
+        ai I64 = ao + i * sa
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            d := alpha * dot(a, ai, b, bo + I64(w.Idx[e]) * sb, width)
+            g[go + e] = (g[go + e] if accumulate else z) + d
+        }
+    }
+}
+
+# the absolute sums of each row into rows (Rows of them, added to) and of each column into cols (Cols, added to)
+fn (w Csr<T>&) AbsSums(rows mut Array<T>&, ro I64, cols mut Array<T>&, co I64) {
+    z T
+    for i in range w.Rows {
+        acc T = z
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            a T = w.Values[e].Abs()
+            acc += a
+            j I64 = co + I64(w.Idx[e])
+            cols[j] += a
+        }
+        rows[ro + i] += acc
+    }
+}
+
+# the matrix with its absent entries as zeros: Rows x Cols, row-major, into out
+fn (w Csr<T>&) Dense(out mut Array<T>&) {
+    z T
+    for e in range w.Rows * w.Cols: out[e] = z
+    for i in range w.Rows {
+        for e in range w.Ptr[i], w.Ptr[i + 1]: out[i * w.Cols + I64(w.Idx[e])] = w.Values[e]
+    }
+}
+
+# ---- patterns ----
+
+# a random pattern of rows x cols in which each entry is present with probability density, independently of the
+# others: its row starts into ptr (rows + 1 of them, the first 0) and its columns appended to idx. Drawn by geometric
+# gaps between entries along the rows, one after another - a draw per entry, not per position, so a pattern of 10^6
+# entries among 10^9 positions costs 10^6 draws; density 1 is every position, with no draw
+fn DrawPattern(rows I64, cols I64, density F64, r mut rand.Rand&, ptr mut Array<I64>&, idx mut list.List<I32>&) {
+    assert density > 0.0 and density <= 1.0 and ptr.Len() == rows + 1
+    start := idx.Len()
+    total I64 = rows * cols
+    at I64 = -1
+    row I64 = 0
+    ptr[0] = 0
+    lnq F64 = (-density).Log1p() if density < 1.0 else 0.0
+    for {
+        # 1 - Float() is in (0, 1]
+        gap := 0.0 if density >= 1.0 else ((1.0 - r.Float()).Log() / lnq).Floor()
+        if gap >= F64(total): break
+        at += 1 + I64(gap)
+        if at >= total: break
+        for row < at / cols {
+            row++
+            ptr[row] = idx.Len() - start
+        }
+        idx.Push(I32(at % cols))
+    }
+    for row < rows {
+        row++
+        ptr[row] = idx.Len() - start
+    }
+}
+
+# the columns order[lo .. hi) in increasing order (insertion sort: rows are short), none twice
+fn sortRow(order mut Array<I32>&, lo I64, hi I64) {
+    for a in range lo + 1, hi {
+        x := order[a]
+        b I64 = a - 1
+        for b >= lo and order[b] > x {
+            order[b + 1] = order[b]
+            b--
+        }
+        order[b + 1] = x
+    }
+    for a in range lo + 1, hi: assert order[a] != order[a - 1], "a synapse given twice"
+}
+
+# the pattern of the given (row, col) pairs (rows x cols, each pair once): row starts into ptr, columns appended to
+# idx in row order, increasing within a row. A pair out of range or given twice stops with what is wrong
+fn PatternOf(rows I64, cols I64, pairRows Array<I32>&, pairCols Array<I32>&, ptr mut Array<I64>&, idx mut list.List<I32>&) {
+    assert pairRows.Len() == pairCols.Len() and ptr.Len() == rows + 1
+    n := pairRows.Len()
+    count := Array<I64>(rows + 1)
+    for k in range n {
+        i I64 = I64(pairRows[k])
+        j I64 = I64(pairCols[k])
+        assert i >= 0 and i < rows and j >= 0 and j < cols, "a synapse outside its projection's block"
+        count[i + 1]++
+    }
+    for i in range rows: count[i + 1] += count[i]
+    for i in range rows + 1: ptr[i] = count[i]
+    order := Array<I32>(n)
+    fill := Array<I64>(rows)
+    for k in range n {
+        i I64 = I64(pairRows[k])
+        order[count[i] + fill[i]] = pairCols[k]
+        fill[i]++
+    }
+    for i in range rows: sortRow(order, count[i], count[i + 1])
+    for k in range n: idx.Push(order[k])
+}
+
+# ---- selection and the sparse-code products ----
+
+# the positions of the k largest of x[at .. at + n) into out (k of them, in increasing order of position), ties
+# broken toward the earlier position; work must hold n elements. Linear time on average: a quickselect on a copy in
+# work for the k-th largest value, then one pass counting the larger ones and one collecting
+fn TopK<T>(x Array<T>&, at I64, n I64, k I64, out mut Array<I32>&, work mut Array<T>&) {
+    assert k >= 1 and k <= n and work.Len() >= n and out.Len() >= k
+    for i in range n: work[i] = x[at + i]
+    # the k-th largest is the element at position n - k of the ascending order
+    want I64 = n - k
+    lo I64 = 0
+    hi I64 = n - 1
+    for lo < hi {
+        mid I64 = lo + (hi - lo) / 2
+        # the median of three at lo, mid, hi as the pivot
+        a := work[lo]
+        b := work[mid]
+        c := work[hi]
+        pivot := b if (a <= b) == (b <= c) else (a if (b <= a) == (a <= c) else c)
+        i I64 = lo
+        j I64 = hi
+        for i <= j {
+            for work[i] < pivot: i++
+            for work[j] > pivot: j--
+            if i <= j {
+                work[i], work[j] = work[j], work[i]
+                i++
+                j--
+            }
+        }
+        if want <= j: hi = j
+        else if want >= i: lo = i
+        else: break
+    }
+    threshold := work[want]
+    above I64 = 0
+    for i in range n {
+        if x[at + i] > threshold: above++
+    }
+    equal I64 = k - above
+    m I64 = 0
+    for i in range n {
+        v := x[at + i]
+        if v > threshold or (v == threshold and equal > 0) {
+            if v <= threshold: equal--
+            out[m] = I32(i)
+            m++
+        }
+    }
+}
+
+# out = sum over j < k of w[j] table[idx[j]] - the read of a sparse code: k rows of a table of rows of width
+# out.Len(), weighted
+fn GatherRowsWeighted<T>(out mut Array<T>&, table Array<T>&, idx Array<I32>&, w Array<T>&, k I64) {
+    z T
+    m := out.Len()
+    for t in range m: out[t] = z
+    for j in range k {
+        row I64 = I64(idx[j]) * m
+        a := w[j]
+        for t in range m: out[t] += a * table[row + t]
+    }
+}
+
+# table[idx[j]] += rate w[j] err for j < k - the delta rule's write at a sparse code's rows: a rank-1 update of k rows
+# of a table of rows of width err.Len()
+fn ScatterRank1<T>(table mut Array<T>&, idx Array<I32>&, w Array<T>&, k I64, err Array<T>&, rate T) {
+    m := err.Len()
+    for j in range k {
+        row I64 = I64(idx[j]) * m
+        a T = rate * w[j]
+        for t in range m: table[row + t] += a * err[t]
+    }
+}
+
+# ---- tests ----
+
+# a random rows x cols matrix with entries at density, its values uniform in [-1, 1)
+fn Csr<F64>.random(rows I64, cols I64, density F64, r mut rand.Rand&) Csr<F64> {
+    ptr mut Array<I64>& = Array<I64>(rows + 1)
+    idx := list.List<I32>()
+    DrawPattern(rows, cols, density, r, ptr, idx)
+    w mut Csr<F64>& = Csr<F64>(rows, cols, ptr, idx.ToArray())
+    for e in range w.Nnz(): w.Values[e] = r.Uniform(-1.0, 1.0)
+    return w
+}
+
+test "a drawn pattern: columns increase along a row, every row's entries are counted, and the density is as asked" {
+    r := rand.Rand(1)
+    for density in Array<F64>[1.0, 0.5, 0.05, 0.003] {
+        ptr := Array<I64>(201)
+        idx := list.List<I32>()
+        DrawPattern(200, 300, density, r, ptr, idx)
+        assert ptr[0] == 0 and ptr[200] == idx.Len()
+        for i in range 200 {
+            assert ptr[i] <= ptr[i + 1]
+            for e in range ptr[i] + 1, ptr[i + 1]: assert idx[e] > idx[e - 1]
+            for e in range ptr[i], ptr[i + 1]: assert idx[e] >= 0 and idx[e] < 300
+        }
+        expect F64 = density * 60000.0
+        sd F64 = (expect * (1.0 - density)).Sqrt()
+        assert (F64(idx.Len()) - expect).Abs() <= 5.0 * sd + 1e-9
+    }
+    # and the same generator state draws the same pattern
+    a := rand.Rand(7)
+    b := rand.Rand(7)
+    pa := Array<I64>(41)
+    pb := Array<I64>(41)
+    ia := list.List<I32>()
+    ib := list.List<I32>()
+    DrawPattern(40, 50, 0.1, a, pa, ia)
+    DrawPattern(40, 50, 0.1, b, pb, ib)
+    assert ia.Len() == ib.Len()
+    for e in range ia.Len(): assert ia[e] == ib[e]
+}
+
+test "a pattern from pairs: sorted into rows, any order in, the same pattern out" {
+    ptr := Array<I64>(4)
+    idx := list.List<I32>()
+    PatternOf(3, 5, Array<I32>[2, 0, 2, 0, 1], Array<I32>[4, 3, 0, 1, 2], ptr, idx)
+    assert ptr[0] == 0 and ptr[1] == 2 and ptr[2] == 3 and ptr[3] == 5
+    want := Array<I32>[1, 3, 2, 0, 4]
+    for e in range 5: assert idx[e] == want[e]
+}
+
+test "the products: W X, W^T X and the sampled product agree with the dense matrix's" {
+    r := rand.Rand(2)
+    for width in Array<I64>[1, 5] {
+        w := Csr<F64>.random(7, 9, 0.4, r)
+        dense := Array<F64>(63)
+        w.Dense(dense)
+        stride I64 = width + 2 # rows of the batches with a gap
+        x := Array<F64>(9 * stride)
+        xt := Array<F64>(7 * stride)
+        for i in range x.Len(): x[i] = r.Uniform(-1.0, 1.0)
+        for i in range xt.Len(): xt[i] = r.Uniform(-1.0, 1.0)
+        y := Array<F64>(7 * stride, 0.5)
+        w.MulAdd(x, 0, stride, y, 0, stride, width, 2.0)
+        yt := Array<F64>(9 * stride, 0.25)
+        w.MulAddT(xt, 0, stride, yt, 0, stride, width, -1.0)
+        for t in range width {
+            for i in range 7 {
+                want F64 = 0.5
+                for j in range 9: want += 2.0 * dense[i * 9 + j] * x[j * stride + t]
+                assert (y[i * stride + t] - want).Abs() < 1e-14
+            }
+            for j in range 9 {
+                want F64 = 0.25
+                for i in range 7: want -= dense[i * 9 + j] * xt[i * stride + t]
+                assert (yt[j * stride + t] - want).Abs() < 1e-14
+            }
+        }
+        # the sampled product: (xt x^T)[i, j] at each entry, accumulated onto a first term
+        g := Array<F64>(w.Nnz())
+        w.Sampled(g, 0, xt, 0, stride, x, 0, stride, width, 1.0, false)
+        w.Sampled(g, 0, xt, 0, stride, x, 0, stride, width, 0.5, true)
+        for i in range 7 {
+            for e in range w.Ptr[i], w.Ptr[i + 1] {
+                j I64 = I64(w.Idx[e])
+                want F64 = 0.0
+                for t in range width: want += xt[i * stride + t] * x[j * stride + t]
+                assert (g[e] - 1.5 * want).Abs() < 1e-14
+            }
+        }
+        rows := Array<F64>(7)
+        cols := Array<F64>(9)
+        w.AbsSums(rows, 0, cols, 0)
+        for i in range 7 {
+            want F64 = 0.0
+            for j in range 9: want += dense[i * 9 + j].Abs()
+            assert (rows[i] - want).Abs() < 1e-14
+        }
+        for j in range 9 {
+            want F64 = 0.0
+            for i in range 7: want += dense[i * 9 + j].Abs()
+            assert (cols[j] - want).Abs() < 1e-14
+        }
+    }
+}
+
+test "TopK: the k largest positions, ties to the earlier, in increasing order" {
+    r := rand.Rand(3)
+    work := Array<F64>(500)
+    out := Array<I32>(500)
+    for trial in range 40 {
+        n I64 = 1 + r.Below(500)
+        k I64 = 1 + r.Below(n)
+        x := Array<F64>(n)
+        for i in range n: x[i] = F64(r.Below(30)) if trial % 2 == 0 else r.Uniform(-1.0, 1.0) # with many ties, then none
+        TopK(x, 0, n, k, out, work)
+        # the reference: a position is chosen when fewer than k elements beat it (larger, or equal and earlier)
+        m I64 = 0
+        for i in range n {
+            beaten I64 = 0
+            for j in range n {
+                if x[j] > x[i] or (x[j] == x[i] and j < i): beaten++
+            }
+            if beaten < k {
+                assert out[m] == I32(i)
+                m++
+            }
+        }
+        assert m == k
+    }
+    # a sorted and a reversed input, the quickselect's classic worst shapes
+    x := Array<F64>(300)
+    for i in range 300: x[i] = F64(i)
+    TopK(x, 0, 300, 10, out, work)
+    for j in range 10: assert out[j] == I32(290 + j)
+    for i in range 300: x[i] = F64(300 - i)
+    TopK(x, 0, 300, 10, out, work)
+    for j in range 10: assert out[j] == I32(j)
+}
+
+test "the sparse-code products: a weighted gather of k rows, and a rank-1 write to them" {
+    table := Array<F64>(6 * 3)
+    for i in range table.Len(): table[i] = F64(i)
+    idx := Array<I32>[4, 1]
+    w := Array<F64>[0.5, -2.0]
+    out := Array<F64>(3)
+    GatherRowsWeighted(out, table, idx, w, 2)
+    for t in range 3: assert out[t] == 0.5 * F64(12 + t) - 2.0 * F64(3 + t)
+    err := Array<F64>[1.0, 0.0, -1.0]
+    ScatterRank1(table, idx, w, 2, err, 0.1)
+    assert table[12] == 12.0 + 0.05 and table[14] == 14.0 - 0.05 and table[3] == 3.0 - 0.2 and table[0] == 0.0
+}

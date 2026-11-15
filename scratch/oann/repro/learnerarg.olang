@@ -1,0 +1,26 @@
+# repro/learnerarg - a struct of another module holding a reference parameter, made in a function from ITS reference
+# parameter, is refused: "C2d: this instance holds a reference to an argument it would outlive" - though the instance
+# is a local the function drops, so it lives shorter than the argument. dyn/learn's Learner (and dyn/bridge's Bridge,
+# which holds one) cannot be made inside a helper taking the system by reference; made where the system is a local, or
+# returned to the caller, it is accepted (dyn/bridge's tests build the system inside the helper for this). The same
+# struct, its fields and helpers copied verbatim into the root module, builds: the refusal comes only across modules.
+# Expected: builds, and prints nothing.
+# Status: reproduces (new), the compiler of 2026-11-15 (olangcur).
+#   olang build repro/learnerarg.olang
+
+import "std/rand"
+import "../dyn/system"
+import "../dyn/neuron"
+import "../dyn/learn"
+
+fn use(sys mut system.System<F32>&) I64 {
+    l := learn.Learner<F32>(sys)!
+    return l.Lessons
+}
+
+fn main() {
+    s := system.System<F32>(4)
+    s.Population(s.Root(), "x", 3, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    s.Plan(rand.Rand(1))!
+    assert use(s) == 0
+}

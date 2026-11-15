@@ -1,0 +1,98 @@
+# the INT8 layer of nn/quant (M12 of docs/redesign.md 4.3) against kernels/gemm's F32 product with its bias and ReLU, on
+# the shapes of oann's networks and a square one - interleaved, the median of each over rounds: F32; INT8 with the input
+# quantized over its own batch's range each time (quant.Model's dense layer, dynamic); INT8 over a calibrated range
+# (static). The convolutions' products are written as products of their patches (rows = positions of the batch). Arguments:
+# rounds (7), threads (1). From the repository's root: olang build -output build/bench_int8 bench/int8.olang &&
+# build/bench_int8
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../kernels/gemm"
+import "../kernels/mat"
+import "../nn/quant"
+import "../tensor"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn median(xs mut Array<F64>&) F64 {
+    xs.Sort(fn(a, b): return a < b)
+    return xs[xs.Len() / 2]
+}
+
+# the F32 product with its bias and ReLU
+fn f32Product(ws mut gemm.Workspace<F32>&, y mut mat.Mat<F32>&, x mat.Mat<F32>&, w mat.Mat<F32>&, bias Array<F32>&) {
+    gemm.Gemm(ws, y, x, false, w, true, 1.0, 0.0, gemm.Epilogue.BiasAct(bias, mat.Act.Relu))
+}
+
+# one shape's medians, in nanoseconds a product: F32, INT8 dynamic, INT8 static
+type Medians struct(f32 F64, dynamic F64, static F64) { f32, dynamic, static }
+
+fn Medians.Measure(m I64, k I64, n I64, rounds I64, threads I64, r mut rand.Rand&) Medians {
+    x := Array<F32>[F32(r.Float()) for _ in range m * k]
+    w := tensor.Tensor<F32>.Zeros(n, k)
+    w.FillUniform(r, -0.2, 0.2)
+    bias := Array<F32>[F32(r.Float() * 0.2 - 0.1) for _ in range n]
+    q := quant.Model(m, k, threads)
+    q.DenseOf(w, bias, true)
+    y := Array<F32>(m * n)
+    ws := gemm.Workspace<F32>(threads)
+    wm := w.Mat()!
+    xm := mat.Mat<F32>(x, 0, m, k, k)
+    ym := mat.Mat<F32>(y, 0, m, n, n)
+    q.Forward(m, x, y)
+    q.Calibrate(m, x, y)
+    # repeat each timing until it takes about 20 ms
+    reps I64 = 1
+    for {
+        t0 := time.Now()
+        for _ in range reps: f32Product(ws, ym, xm, wm, bias)
+        if time.Since(t0) > 20000000 or reps > 1000000: break
+        reps = reps * 2
+    }
+    f32s := Array<F64>(rounds)
+    dyns := Array<F64>(rounds)
+    stats := Array<F64>(rounds)
+    for t in range rounds {
+        t0 := time.Now()
+        for _ in range reps: f32Product(ws, ym, xm, wm, bias)
+        f32s[t] = F64(time.Since(t0)) / F64(reps)
+        q.Static = false
+        t1 := time.Now()
+        for _ in range reps: q.Forward(m, x, y)
+        dyns[t] = F64(time.Since(t1)) / F64(reps)
+        q.Static = true
+        t2 := time.Now()
+        for _ in range reps: q.Forward(m, x, y)
+        stats[t] = F64(time.Since(t2)) / F64(reps)
+    }
+    return Medians(median(f32s), median(dyns), median(stats))
+}
+
+# the perceptron's layers at batch 1, 64 and 128; the CNN's two convolutions (patches x kernels) at batch 128; the
+# character transformer's perceptron (1024 rows: 16 sequences of 64) and its decoding step (one row); squares
+# (m, k and n of each product)
+Shapes Array<I64> = Array<I64>[1, 784, 128, 64, 784, 128, 128, 784, 128, 128, 128, 10, 100352, 9, 16, 25088, 144, 32
+    1024, 128, 512, 1024, 512, 128, 1, 128, 512, 1, 512, 128, 1, 128, 128, 512, 512, 512, 1024, 1024, 1024, 1, 1024, 1024]
+
+fn main() ? io.Error, ParseError {
+    args := os.Args()
+    rounds := try number(args, 1, 7)
+    threads := try number(args, 2, 1)
+    r := rand.Rand(1)
+    for i in range 0, Shapes.Len(), 3 {
+        m := Shapes[i]
+        k := Shapes[i + 1]
+        n := Shapes[i + 2]
+        t := Medians.Measure(m, k, n, rounds, threads, r)
+        ops F64 = 2.0 * F64(m) * F64(n) * F64(k)
+        try io.Put(($m + " x " + $k + " x " + $n + ": F32 " + $(t.f32 * 1e-3).Fixed(2) + " us (" + $(ops / t.f32).Fixed(1) +
+            " GFLOPS), INT8 dynamic " + $(t.dynamic * 1e-3).Fixed(2) + " us (" + $(ops / t.dynamic).Fixed(1) +
+            " GOPS, " + $(t.f32 / t.dynamic).Fixed(2) + "x), static " + $(t.static * 1e-3).Fixed(2) + " us (" +
+            $(ops / t.static).Fixed(1) + " GOPS, " + $(t.f32 / t.static).Fixed(2) + "x)\n"))
+    }
+}

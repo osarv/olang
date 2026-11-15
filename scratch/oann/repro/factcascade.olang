@@ -1,0 +1,21 @@
+# repro/factcascade - one unrelated error in a program makes every `assert not f.Allocates` (S17a, G42) of it read
+# false: an unused import (M5a) here; in oann, an unneeded `try` or `!` in a program importing dyn/ or nn/optim gave
+# 38 errors, 36 of them "this top-level assert is false ... allocates" in modules that build cleanly on their own
+# (found writing models/hybrid.olang and bench/hybrid.olang). Remove the import and it builds.
+# Expected: the M5a error alone - an assert decided on facts the failed check left unfinished is not reported, as D3b's
+# unused locals are said only of a program with no other error.
+# Status: reproduces (new), the compiler of 2026-11-15 (olangcur).
+#   olang build repro/factcascade.olang
+
+import "std/os"
+
+fn add(a mut Array<F32>&) {
+    for i in range a.Len(): a[i] = a[i] + 1.0
+}
+
+assert not add.Allocates, "add allocates"
+
+fn main() {
+    a := Array<F32>(4)
+    add(a)
+}

@@ -1,0 +1,78 @@
+# kernels/elem against the code it replaces (ops.olang and linalg.olang), interleaved, medians, ns an element: GELU through
+# tanh forward and backward, row softmax, in F32 and BF16 on a 1024 x 512 matrix. Arguments: rounds (9)
+
+import "std/os"
+import ctime "time.h"
+import "../linalg"
+import "../ops"
+import "../kernels/mat"
+import "../kernels/elem"
+
+# the process's CPU time in nanoseconds: on a machine shared with others it is steadier than the wall clock
+fn cpu() I64 {
+    ts := ctime.timespec()
+    ctime.clock_gettime(2, ts)
+    return ts.tv_sec * 1000000000 + ts.tv_nsec
+}
+
+fn median(xs mut Array<F64>&) F64 {
+    xs.Sort(fn(a, b): return a < b)
+    return xs[xs.Len() / 2]
+}
+
+fn view<T>(m linalg.Matrix<T>&) mat.Mat<T> {
+    return mat.Mat<T>(m.Data, 0, m.Rows, m.Cols, m.Cols)
+}
+
+# old and new, ten passes each, round after round
+fn run<T>(like T, name String&, rounds I64) {
+    z F32 = 0.0
+    x := linalg.Matrix<T>(1024, 512)
+    dy := linalg.Matrix<T>(1024, 512)
+    y := linalg.Matrix<T>(1024, 512)
+    y2 := linalg.Matrix<T>(1024, 512)
+    for i in range x.Data.Len() {
+        x.Data[i] = T(F64(i % 97) * 0.02 - 1.0)
+        dy.Data[i] = T(F64(i % 89) * 0.01 - 0.4)
+    }
+    xm := view(x)
+    dym := view(dy)
+    y2m := view(y2)
+    names := Array<String&>["GELU forward", "GELU backward (acc)", "softmax"]
+    n := F64(x.Data.Len() * 10)
+    for kind in range 3 {
+        old := Array<F64>(rounds)
+        new := Array<F64>(rounds)
+        for t in range rounds {
+            t0 := cpu()
+            for _ in range 10 {
+                match kind {
+                    case 0: ops.GeluTanh(y, x, z)
+                    case 1: ops.GeluTanhBackward(dy, x, y, true, z)
+                    case _: ops.Softmax(y, x, z)
+                }
+            }
+            old[t] = F64(cpu() - t0) / n
+            t1 := cpu()
+            for _ in range 10 {
+                match kind {
+                    case 0: elem.Act(y2m.Data, xm.Data, mat.Act.GeluTanh)
+                    case 1: elem.ActGrad(y2m.Data, dym.Data, xm.Data, mat.Act.GeluTanh, true)
+                    case _: elem.RowSoftmax(y2m, xm, T(1.0))
+                }
+            }
+            new[t] = F64(cpu() - t1) / n
+        }
+        Println($name + " " + $names[kind] + ": ops/linalg " + $median(old).Fixed(3) + " ns an element (CPU time), kernels/elem " + $median(new).Fixed(3))
+    }
+}
+
+fn main() {
+    rounds := 9
+    args := os.Args()
+    if args.Len() > 1: rounds = args[1].ParseInt()!
+    f F32 = 0.0
+    h BF16 = 0.0
+    run(f, "F32", rounds)
+    run(h, "BF16", rounds)
+}

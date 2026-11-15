@@ -1,0 +1,28 @@
+# Status: reproduces (new). Every join with spawned tasks keeps about 110 bytes that are never given back while the
+# program runs: a loop of 200 000 joins of two tasks grows the resident set by about 22 MB, whether the task is a
+# method on a long-lived value or a plain function given an array. One thread (no join) stays flat. Expected: the
+# join's records reclaimed when the join (or the function holding it) ends - a settle joins once a sweep, so a
+# long run in tasks grows without end (dyn/settle; kernels' products in tasks alike).
+import "std/os"
+
+fn resident() I64 {
+    stat := try os.ReadFile("/proc/self/statm") catch { unreachable }
+    return try stat.Split(" ")[1].ParseInt(10) catch { unreachable }
+}
+
+fn work(xs mut Array<F64>&, t I64, tasks I64) {
+    for i in range t, xs.Len(), tasks: xs[i] += 1.0
+}
+
+fn run(xs mut Array<F64>&, tasks I64) {
+    join {
+        for t in range tasks: spawn work(xs, t, tasks)
+    }
+}
+
+fn main() {
+    xs := Array<F64>(1000)
+    before := resident()
+    for _ in range 200000: run(xs, 2)
+    Println("grew by " + $(resident() - before) + " pages over 200000 joins")
+}

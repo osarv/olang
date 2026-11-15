@@ -1,0 +1,465 @@
+# checkpoint - a graph's parameters as safetensors, Hugging Face's format for tensors: eight bytes holding the header's
+# length (an unsigned little-endian integer), the header - JSON naming every tensor's dtype, shape and byte range,
+#     {"__metadata__": {"format": "pt"},
+#      "wte.weight": {"dtype": "F32", "shape": [512, 128], "data_offsets": [0, 262144]}, ...}
+# padded with spaces to a multiple of eight bytes - then every tensor's elements, row by row, little-endian, at its
+# byte range of what follows the header. PyTorch, JAX, numpy and Hugging Face read and write it, so this is how a model
+# leaves oann or comes into it; nn's Save and Load keep the parameter region as it is, for oann alone.
+#
+# A tensor is a parameter, named by a Names: AddDense, AddNorm, AddMlp and AddTransformer give a layer's parameters
+# PyTorch's names ("0.weight", "h.3.attn.q_proj.bias"); a parameter left unnamed is "param.K", K its place among the
+# parameters. Weights are in PyTorch's nn.Linear layout, [out, in]; a parameter of one row - a bias, a normalization's
+# gain - is written as a vector, [cols], as PyTorch holds it, and either form reads back. A tied head is the embedding
+# itself, so it is one tensor, as Hugging Face writes tied weights.
+#
+# Elements are written as F64, F32, F16 or BF16 (Dtype; Same, the default, is the graph's own type), rounded once to
+# the nearest, ties to even, and read back from any of the four into the graph's type the same way. Loading is strict,
+# as PyTorch's load_state_dict is by default: every parameter must be in the file with its shape, and the file may
+# hold nothing else.
+
+import "std/json"
+import "linalg"
+import "std/os"
+import "nn"
+import "layers"
+
+type SafetensorsError error {
+    Malformed          # not a safetensors file: too short, a header that is not Json of tensors, data out of range
+    Missing            # a parameter's name is not in the file
+    Shape              # a tensor whose shape or size is not its parameter's
+    Dtype              # a tensor of a type other than F64, F32, F16 and Bf16
+    Unexpected         # a tensor no parameter is named for
+    Duplicate          # two parameters given one name
+}
+
+# how the elements are stored
+type Dtype enum {
+    Same               # the graph's own element type
+    F64
+    F32
+    F16
+    BF16
+}
+
+fn dtypeName(d Dtype) String& {
+    return match d {
+        case Dtype.F64: "F64"
+        case Dtype.F32: "F32"
+        case Dtype.F16: "F16"
+        case Dtype.BF16: "BF16"
+        case Dtype.Same: "F32"
+    }
+}
+
+fn Dtype.dtypeNamed(name String&) Dtype ? SafetensorsError {
+    if name == "F64": return Dtype.F64
+    if name == "F32": return Dtype.F32
+    if name == "F16": return Dtype.F16
+    if name == "BF16": return Dtype.BF16
+    error SafetensorsError.Dtype
+}
+
+fn widthOf(d Dtype) I64 {
+    return match d {
+        case Dtype.F64: 8
+        case Dtype.F16, Dtype.BF16: 2
+        case _: 4
+    }
+}
+
+# Same made the graph's own type
+fn concrete<T>(d Dtype, like T) Dtype {
+    if not (d == Dtype.Same): return d
+    return match T {
+        case F32, BF16: Dtype.F32          # a BF16 graph's parameters are its F32 masters
+        case F64: Dtype.F64
+    }
+}
+
+# x's bits in dtype d, rounded once: x is exact as an F64 whatever the graph's type
+fn bitsOf(x F64, d Dtype) U64 {
+    return match d {
+        case Dtype.F64: x.Bits()
+        case Dtype.F32: U64(F32(x).Bits())
+        case Dtype.F16: U64(F16(x).Bits())
+        case Dtype.BF16: U64(BF16(x).Bits())
+        case Dtype.Same: unreachable
+    }
+}
+
+# the value dtype d's bits hold - exact as an F64
+fn valueOf(bits U64, d Dtype) F64 {
+    return match d {
+        case Dtype.F64: F64.FromBits(bits)
+        case Dtype.F32: F64(F32.FromBits(U32(bits)))
+        case Dtype.F16: F64(F16.FromBits(U16(bits)))
+        case Dtype.BF16: F64(BF16.FromBits(U16(bits)))
+        case Dtype.Same: unreachable
+    }
+}
+
+fn putBits(out mut Array<U8>&, at I64, v U64, width I64) {
+    for b in range width: out[at + b] = U8((v >> U64(8 * b)) & 255)
+}
+
+fn getBits(data String&, at I64, width I64) U64 {
+    v U64 = 0
+    for b in range width: v = v | (U64(U8(data[at + b])) << U64(8 * b))
+    return v
+}
+
+# ---- names ----
+
+# what each parameter is called in a file: names given by Add in any order, one per parameter
+type Names struct() {
+    vars mut list.List<I64>& = list.List<I64>()      # the parameter's node
+    ends mut list.List<I64>& = list.List<I64>()      # name i is chars[ends[i - 1] ... ends[i] - 1]
+    chars mut list.List<Char>& = list.List<Char>()
+}
+
+# parameter v called "name" - a later name for the same parameter replaces an earlier one
+fn (n mut Names&) Add(v nn.Var, name String&) {
+    n.vars.Push(I64(v))
+    for c in name: n.chars.Push(c)
+    n.ends.Push(n.chars.Len())
+}
+
+# what parameter v is called, the K-th parameter: its name, or "param.K"
+fn (n Names&) Of(v nn.Var, K I64) String {
+    i I64 = n.vars.Len() - 1
+    for i >= 0 {
+        if n.vars[i] == I64(v) {
+            first I64 = n.ends[i - 1] if i > 0 else 0
+            out := Array<Char>(n.ends[i] - first)
+            for j in range out.Len(): out[j] = n.chars[first + j]
+            return String(out)
+        }
+        i--
+    }
+    return "param." + $K
+}
+
+fn dotted(prefix String&, name String&) String {
+    if prefix.Len() == 0: return $name
+    return $prefix + "." + $name
+}
+
+# a dense layer's weight and bias: PREFIX.weight, PREFIX.bias - nn.Linear's
+fn (n mut Names&) AddDense(d layers.Dense&, prefix String&) {
+    n.Add(d.W, dotted(prefix, "weight"))
+    n.Add(d.B, dotted(prefix, "bias"))
+}
+
+# a normalization's gain and bias: PREFIX.weight, PREFIX.bias (none for RMS normalization) - nn.LayerNorm's
+fn (n mut Names&) AddNorm(m layers.Norm&, prefix String&) {
+    n.Add(m.Gain, dotted(prefix, "weight"))
+    if not m.Rms: n.Add(m.Bias, dotted(prefix, "bias"))
+}
+
+# a perceptron's layers as nn.Sequential numbers them, an activation between every two: PREFIX.0, PREFIX.2, ...
+fn (n mut Names&) AddMlp(m layers.Mlp&, prefix String&) {
+    for i in range m.Layers.Len(): n.AddDense(m.Layers[i], dotted(prefix, $(2 * i)))
+}
+
+# a transformer's parameters, by GPT-2's names where it has them: wte and wpe the token and position embeddings,
+# h.I the blocks - ln_1, attn.q_proj, attn.k_proj, attn.v_proj, attn.c_proj, ln_2, mlp.c_fc, mlp.c_proj - ln_f the
+# final normalization, and lm_head when the head is not the embedding
+fn (n mut Names&) AddTransformer(t layers.Transformer&, prefix String&) {
+    n.Add(t.Embedding, dotted(prefix, "wte.weight"))
+    n.Add(t.Positions, dotted(prefix, "wpe.weight"))
+    for i in range t.Blocks.Len() {
+        b := t.Blocks[i]
+        h := dotted(prefix, "h." + $i)
+        n.AddNorm(b.Norm1, dotted(h, "ln_1"))
+        n.AddDense(b.Q, dotted(h, "attn.q_proj"))
+        n.AddDense(b.K, dotted(h, "attn.k_proj"))
+        n.AddDense(b.V, dotted(h, "attn.v_proj"))
+        n.AddDense(b.O, dotted(h, "attn.c_proj"))
+        n.AddNorm(b.Norm2, dotted(h, "ln_2"))
+        n.AddDense(b.Up, dotted(h, "mlp.c_fc"))
+        n.AddDense(b.Down, dotted(h, "mlp.c_proj"))
+    }
+    n.AddNorm(t.Final, dotted(prefix, "ln_f"))
+    if t.Head != t.Embedding: n.Add(t.Head, dotted(prefix, "lm_head.weight"))
+}
+
+# ---- writing and reading ----
+
+# the graph's parameters, each with its name - in the order they were registered
+fn paramsOf<T>(g nn.Graph<T>&, names Names&) list.List<I64>&, list.List<String&>& ? SafetensorsError {
+    vars mut list.List<I64>& = list.List<I64>()
+    called mut list.List<String&>& = list.List<String&>()
+    seen := Map<String&, I64>()
+    for i in range g.Size() {
+        if g.Info(nn.Var(i)).Kind == nn.Op.Param {
+            name String& = names.Of(nn.Var(i), vars.Len())
+            if seen.Has(name): error SafetensorsError.Duplicate
+            seen.Put(name, i)
+            vars.Push(i)
+            called.Push(name)
+        }
+    }
+    return vars, called
+}
+
+# the parameters of g written to "path" as safetensors, named by "names", in dtype d (the graph's own by default)
+fn Save<T>(g nn.Graph<T>&, path String&, names Names&, d Dtype = Dtype.Same) ? os.Error, SafetensorsError {
+    like T
+    dt := concrete(d, like)
+    width := widthOf(dt)
+    vars, called := try paramsOf(g, names)
+    sb := StringBuilder()
+    sb.Push("{\"__metadata__\":{\"format\":\"pt\"}")
+    at I64 = 0
+    for k in range vars.Len() {
+        nd := g.Info(nn.Var(vars[k]))
+        shape := $(nd.Cols)
+        if nd.Rows != 1: shape = $(nd.Rows) + "," + $(nd.Cols)
+        size I64 = nd.Rows * nd.Cols * width
+        sb.Push(("," + $json.Encode(json.Json.Str(called[k])) + ":{\"dtype\":\"" + $dtypeName(dt) + "\",\"shape\":[" + $shape +
+            "],\"data_offsets\":[" + $at + "," + $(at + size) + "]}"))
+        at += size
+    }
+    sb.PushChar('}')
+    for sb.Len() % 8 != 0: sb.PushChar(' ')
+    header := sb.ToString()
+    base I64 = 8 + header.Len()
+    out := Array<U8>(base + at)
+    putBits(out, 0, U64(header.Len()), 8)
+    for i in range header.Len(): out[8 + i] = U8(header[i])
+    p I64 = base
+    for v in vars {
+        match T {
+            case BF16: p = putMatrix(out, p, g.Master(nn.Var(v)), dt, width)
+            case _: p = putMatrix(out, p, g.Value(nn.Var(v)), dt, width)
+        }
+    }
+    try os.WriteFile(path, out)
+}
+
+# m's elements written at out[at:] in dtype d, row by row; gives where they end
+fn putMatrix<E>(out mut Array<U8>&, at I64, m linalg.Matrix<E>&, d Dtype, width I64) I64 {
+    p I64 = at
+    for r in range m.Rows {
+        row := m.Row(r)
+        for x in row {
+            putBits(out, p, bitsOf(F64(x), d), width)
+            p += width
+        }
+    }
+    return p
+}
+
+# a header entry's member - a malformed header when it is missing
+fn member(entry json.Json&, name String&) json.Json& ? SafetensorsError {
+    return try entry[name] catch { error SafetensorsError.Malformed }
+}
+
+# the parameters of g read from the safetensors file at "path", named by "names": every parameter must be there with
+# its shape, and nothing else may be
+fn Load<T>(g mut nn.Graph<T>&, path String&, names Names&) ? os.Error, SafetensorsError {
+    data := try os.ReadFile(path)
+    if data.Len() < 10: error SafetensorsError.Malformed
+    hl := getBits(data, 0, 8)
+    if hl > U64(data.Len() - 8) or hl < 2: error SafetensorsError.Malformed
+    base I64 = 8 + I64(hl)
+    doc := try json.Json.Parse(data[8:base]) catch { error SafetensorsError.Malformed }
+    tensors := try doc.AsObj() catch { error SafetensorsError.Malformed }
+    vars, called := try paramsOf(g, names)
+    for k in range vars.Len() {
+        v := nn.Var(vars[k])
+        nd := g.Info(v)
+        entry := try tensors[called[k]] catch { error SafetensorsError.Missing }
+        d := try Dtype.dtypeNamed(try (try member(entry, "dtype")).AsStr() catch { error SafetensorsError.Malformed })
+        shape := try (try member(entry, "shape")).AsArr() catch { error SafetensorsError.Malformed }
+        offsets := try (try member(entry, "data_offsets")).AsArr() catch { error SafetensorsError.Malformed }
+        if offsets.Len() != 2: error SafetensorsError.Malformed
+        dims := Array<I64>(shape.Len())
+        for i, s in shape { dims[i] = try s.AsInt() catch { error SafetensorsError.Malformed } }
+        fits Bool = ((dims.Len() == 2 and dims[0] == nd.Rows and dims[1] == nd.Cols) or
+            (dims.Len() == 1 and nd.Rows == 1 and dims[0] == nd.Cols))
+        if not fits: error SafetensorsError.Shape
+        first := try offsets[0].AsInt() catch { error SafetensorsError.Malformed }
+        last := try offsets[1].AsInt() catch { error SafetensorsError.Malformed }
+        width := widthOf(d)
+        if first < 0 or last < first or base + last > data.Len(): error SafetensorsError.Malformed
+        if last - first != nd.Rows * nd.Cols * width: error SafetensorsError.Shape
+        match T {
+            case BF16: getMatrix(g.Master(v), data, base + first, d, width)
+            case _: getMatrix(g.Value(v), data, base + first, d, width)
+        }
+    }
+    g.SyncParams()
+    count I64 = 0
+    for key in tensors.Keys {
+        if key != "__metadata__": count++
+    }
+    if count != vars.Len(): error SafetensorsError.Unexpected
+}
+
+# m's elements read from data[at:] in dtype d, row by row, each converted to m's type
+fn getMatrix<E>(m linalg.Matrix<E>&, data String&, at I64, d Dtype, width I64) {
+    like E
+    p I64 = at
+    for r in range m.Rows {
+        row := m.Row(r)
+        for c in range row.Len() {
+            row[c] = linalg.Cast(valueOf(getBits(data, p, width), d), like)
+            p += width
+        }
+    }
+}
+
+# ---- tests ----
+
+import "std/rand"
+import "std/list"
+
+test "a graph saved as safetensors loads back: exactly in its own type, rounded once in a narrower one" {
+    g := nn.Graph<F32>(2)
+    x := g.Input(3)
+    m := layers.Mlp.New(g, Array<I64>[3, 4, 2])
+    m.Apply(g, x)
+    r := rand.Rand(41)
+    g.Plan(r)
+    names := Names()
+    names.AddMlp(m, "net")
+    for d in Array<Dtype>[Dtype.Same, Dtype.F32, Dtype.F16, Dtype.BF16, Dtype.F64] {
+        try Save(g, "build/checkpoint_test.safetensors", names, d) catch { unreachable }
+        h := nn.Graph<F32>(5)
+        hx := h.Input(3)
+        hm := layers.Mlp.New(h, Array<I64>[3, 4, 2])
+        hm.Apply(h, hx)
+        h.Plan(r)
+        hn := Names()
+        hn.AddMlp(hm, "net")
+        try Load(h, "build/checkpoint_test.safetensors", hn) catch { unreachable }
+        a := g.Params()
+        b := h.Params()
+        for i in range a.Cols {
+            want F32 = a.Data[i]
+            if d == Dtype.F16: want = F32(F16(a.Data[i]))
+            if d == Dtype.BF16: want = F32(BF16(a.Data[i]))
+            assert b.Data[i].Bits() == want.Bits(), "element " + $i + " of " + $dtypeName(d)
+        }
+    }
+    # the names are PyTorch's, and a bias is a vector
+    data := try os.ReadFile("build/checkpoint_test.safetensors") catch { unreachable }
+    header := data[8:8 + I64(getBits(data, 0, 8))]
+    assert (try header.Find("\"net.2.weight\":{\"dtype\":\"F64\",\"shape\":[2,4]") catch default -1) > 0
+    assert (try header.Find("\"net.0.bias\":{\"dtype\":\"F64\",\"shape\":[4]") catch default -1) > 0
+    assert (8 + header.Len()) % 8 == 0
+}
+
+test "a BF16 graph saves its F32 masters, and loads them back - from its own file or an F32 graph's" {
+    g := nn.Graph<BF16>(2)
+    x := g.Input(3)
+    m := layers.Mlp.New(g, Array<I64>[3, 4, 2])
+    m.Apply(g, x)
+    r := rand.Rand(42)
+    g.Plan(r)
+    for i in range g.ParamCount { g.Masters().Data[i] = g.Masters().Data[i] + 1e-5 }     # more than BF16 holds
+    g.SyncParams()
+    names := Names()
+    names.AddMlp(m, "net")
+    try Save(g, "build/checkpoint_bf16.safetensors", names) catch { unreachable }
+    data := try os.ReadFile("build/checkpoint_bf16.safetensors") catch { unreachable }
+    header := data[8:8 + I64(getBits(data, 0, 8))]
+    assert (try header.Find("\"net.0.weight\":{\"dtype\":\"F32\"") catch default -1) > 0
+    h := nn.Graph<F32>(4)
+    hm := layers.Mlp.New(h, Array<I64>[3, 4, 2])
+    hm.Apply(h, h.Input(3))
+    h.Plan(r)
+    hn := Names()
+    hn.AddMlp(hm, "net")
+    try Load(h, "build/checkpoint_bf16.safetensors", hn) catch { unreachable }
+    assert try h.Params().MaxAbsDifference(g.Masters()) == 0.0
+    k := nn.Graph<BF16>(4)
+    km := layers.Mlp.New(k, Array<I64>[3, 4, 2])
+    km.Apply(k, k.Input(3))
+    k.Plan(r)
+    kn := Names()
+    kn.AddMlp(km, "net")
+    try Load(k, "build/checkpoint_bf16.safetensors", kn) catch { unreachable }
+    assert try k.Masters().MaxAbsDifference(g.Masters()) == 0.0 and try k.Params().MaxAbsDifference(g.Params()) == 0.0
+}
+
+test "loading is strict: a missing name, another shape, an extra tensor and a broken file are errors" {
+    g := nn.Graph<F64>(1)
+    w := g.Param(2, 3, nn.Init.Normal(0.0, 1.0), true)
+    b := g.Param(1, 3, nn.Init.Zeros, false)
+    r := rand.Rand(42)
+    g.Plan(r)
+    names := Names()
+    names.Add(w, "w")
+    names.Add(b, "b")
+    try Save(g, "build/checkpoint_strict.safetensors", names) catch { unreachable }
+
+    other := Names()
+    other.Add(w, "w")                              # b unnamed: "param.1", not in the file
+    missing := false
+    try Load(g, "build/checkpoint_strict.safetensors", other)
+        catch SafetensorsError.Missing { missing = true }
+        catch { }
+    assert missing
+
+    h := nn.Graph<F64>(1)
+    hw := h.Param(3, 2, nn.Init.Zeros, true)
+    hb := h.Param(1, 3, nn.Init.Zeros, false)
+    h.Plan(r)
+    hn := Names()
+    hn.Add(hw, "w")
+    hn.Add(hb, "b")
+    shape := false
+    try Load(h, "build/checkpoint_strict.safetensors", hn) catch SafetensorsError.Shape { shape = true } catch { }
+    assert shape
+
+    k := nn.Graph<F64>(1)
+    kw := k.Param(2, 3, nn.Init.Zeros, true)
+    k.Plan(r)
+    kn := Names()
+    kn.Add(kw, "w")
+    extra := false
+    try Load(k, "build/checkpoint_strict.safetensors", kn) catch SafetensorsError.Unexpected { extra = true } catch { }
+    assert extra
+
+    same := Names()
+    same.Add(w, "x")
+    same.Add(b, "x")
+    twice := false
+    try Save(g, "build/checkpoint_twice.safetensors", same) catch SafetensorsError.Duplicate { twice = true } catch { }
+    assert twice
+
+    data := try os.ReadFile("build/checkpoint_strict.safetensors") catch { unreachable }
+    try os.WriteFile("build/checkpoint_short.safetensors", data[:data.Len() - 4]) catch { unreachable }
+    short := false
+    try Load(g, "build/checkpoint_short.safetensors", names) catch SafetensorsError.Malformed { short = true } catch { }
+    assert short
+    try Load(g, "build/checkpoint_strict.safetensors", names) catch { unreachable }
+}
+
+test "a transformer's names are GPT-2's, its tied head one tensor" {
+    g := nn.Graph<F32>(8)
+    t := layers.Transformer.New(g, 11, 4, 8, 2, 2)
+    t.Apply(g, g.Tokens())
+    r := rand.Rand(43)
+    g.Plan(r)
+    names := Names()
+    names.AddTransformer(t, "")
+    try Save(g, "build/checkpoint_gpt.safetensors", names) catch { unreachable }
+    data := try os.ReadFile("build/checkpoint_gpt.safetensors") catch { unreachable }
+    header := data[8:8 + I64(getBits(data, 0, 8))]
+    for name in Array<String&>["wte.weight", "wpe.weight", "h.0.ln_1.weight", "h.1.attn.q_proj.bias", "h.1.mlp.c_proj.weight"
+            "ln_f.bias"] {
+        assert (try header.Find("\"" + $name + "\"") catch default -1) > 0, name
+    }
+    assert (try header.Find("lm_head") catch default -1) < 0
+    h := nn.Graph<F32>(8)
+    u := layers.Transformer.New(h, 11, 4, 8, 2, 2)
+    u.Apply(h, h.Tokens())
+    h.Plan(r)
+    hn := Names()
+    hn.AddTransformer(u, "")
+    try Load(h, "build/checkpoint_gpt.safetensors", hn) catch { unreachable }
+    assert try h.Params().MaxAbsDifference(g.Params()) == 0.0
+}

@@ -1,0 +1,19 @@
+# try reaches every operation inside its operand (E15a/E16d), including an array index that is only an argument of the
+# call being tried: in "try doc[names[k]]", meant to guard the JSON lookup, names[k] is a checked index too, so the try
+# can also fail with CheckError.OUT_OF_BOUNDS and the function must declare or catch it. Found writing
+# bench/safetensors.olang. Expected (or wished): the index of a local array inside a call's argument stays unchecked,
+# as it is without try. Actual: error[R9] "CheckError can escape here". Workaround: name the element first
+# (name := names[k]; try doc[name]). Spec-conforming; recorded as friction.
+# Status: spec-conforming (E15a/E16d, R9), kept as a record of the friction; olang db2af5d, 999ae6c and ada716d report it
+# as before.
+# Status (olang 374c1e3c): FIXED - builds and runs: a try no longer makes an array index inside it a checked one (indexing is
+# unchecked and 'try a.Get(i)' is the checked form, E16). Kept as a regression case.
+import "std/json"
+
+fn main() ? json.Error {
+    doc := try json.Json.Parse("{\"a\": 1, \"b\": 2}")
+    names := Array<String&>["a", "b"]
+    total F64 = 0.0
+    for k in range 2: total += try (try doc[names[k]]).AsNum()
+    assert total == 3.0
+}

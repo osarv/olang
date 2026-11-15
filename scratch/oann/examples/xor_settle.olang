@@ -1,0 +1,69 @@
+# XOR learned by a settling system of dyn: two inputs, a hidden population of tanh units, a readout of two classes, the
+# hidden and readout units reciprocal - taught by equilibrium propagation (learn.Learner.Lesson: a free settle, two nudged
+# ones, their contrast) and nn/optim's AdamW. Arguments, all optional: the lessons (300), the hidden units (8), the seed
+# (1), the learning rate (0.05), beta (0.5).
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "../dyn/system"
+import "../dyn/neuron"
+import "../dyn/conn"
+import "../dyn/settle"
+import "../dyn/learn"
+import "../nn/optim"
+
+fn number(args Array<String&>&, i I64, fallback F64) F64 ? json.Error {
+    if i >= args.Len(): return fallback
+    return try json.Json.Parse(args[i]).AsNum()
+}
+
+fn main() ? io.Error, json.Error {
+    args := os.Args()
+    lessons := I64(try number(args, 1, 300))
+    hidden := I64(try number(args, 2, 8))
+    seed := U64(try number(args, 3, 1))
+    rate := try number(args, 4, 0.05)
+    beta := try number(args, 5, 0.5)
+    s := system.System<F32>(4)
+    x := s.Population(s.Root(), "x", 2, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(s.Root(), "h", hidden, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(s.Root(), "y", 2, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Classes()))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, y, conn.Wiring.Symmetric)
+    s.Plan(rand.Rand(seed))!
+    s.Certify(0.9)
+    for b in range 4 {
+        p := b / 2
+        q := b % 2
+        s.Pop(x).Drive[2 * b] = 1.0 if p == 1 else -1.0
+        s.Pop(x).Drive[2 * b + 1] = 1.0 if q == 1 else -1.0
+        s.Pop(y).Labels[b] = I32(p ^ q)
+    }
+    l := learn.Learner<F32>(s)!
+    opt := optim.AdamW(s.Params(), s.ParamGrads(), rate = rate)
+    predicted := Array<I32>(4)
+    sweeps I64 = 0
+    refused I64 = 0
+    for k in range 1, lessons + 1 {
+        ok := true
+        lesson := try l.Lesson(s.Root(), beta) catch { ok = false } default learn.Taught()
+        if ok {
+            sweeps += lesson.Sweeps
+            opt.Step()
+        } else {
+            refused++
+        }
+        if k % 25 == 0 or k == lessons {
+            s.Settle(settle.Phase.Free, settle.Budget())
+            s.Predict(settle.Phase.Free, y, predicted)
+            right I64 = 0
+            for b in range 4 {
+                if I64(predicted[b]) == ((b / 2) ^ (b % 2)): right++
+            }
+            try io.Put(("lesson " + $k + ": loss " + $s.Loss(settle.Phase.Free).Fixed(4) + ", " + $right + "/4 right, gain " +
+                $s.Gain().Fixed(3) + ", sweeps per lesson " + $(F64(sweeps) / F64((k - refused).Max(1))).Fixed(1) + ", refused " + $refused + "\n"))
+        }
+    }
+}

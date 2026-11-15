@@ -1,0 +1,113 @@
+# bench/arena_ad - M9 (docs/redesign.md 4.3) for ad/graph: round 2's character transformer (4 layers of 128, 4 heads,
+# context 64, batches of 16 sequences, a vocabulary of 65, tied embeddings) planned with its activation storage reused by
+# liveness and with every buffer apart - the arena of each - then 20 training steps of the reused one on random tokens:
+# the step time and the resident memory after every step (it must not grow after the first). Arguments, all optional:
+# steps (20), threads (1), and "bf16" last for a Graph<BF16>. Build and run from the repository's root:
+#   olang build -output build/bench_arena_ad bench/arena_ad.olang && build/bench_arena_ad 20 1
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../kernels/mat"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn main() ? io.Error, os.Error, ParseError {
+    all := os.Args()
+    bf16 := all.Len() > 1 and all[all.Len() - 1] == "bf16"
+    args := all[:all.Len() - 1] if bf16 else all
+    steps := try number(args, 1, 20)
+    threads := try number(args, 2, 1)
+    if bf16 {
+        a := graph.Graph<BF16>(16, threads)
+        b := graph.Graph<BF16>(16, threads)
+        try measure(a, b, steps)
+    } else {
+        a := graph.Graph<F32>(16, threads)
+        b := graph.Graph<F32>(16, threads)
+        try measure(a, b, steps)
+    }
+}
+
+fn measure<T>(g mut graph.Graph<T>&, apart mut graph.Graph<T>&, steps I64) ? io.Error, os.Error {
+    tok, y, loss := gpt(g)
+    gpt(apart)
+    apart.Reuse = false
+    try g.Plan(rand.Rand(1)) catch { unreachable }
+    try apart.Plan(rand.Rand(1)) catch { unreachable }
+    mb := fn(b I64): return (F64(b) / 1048576.0).Fixed(1)
+    try io.Put("transformer 4 x 128, 4 heads, context 64, batches of 16, " + $T.Name + ", " + $g.ParamCount + " parameters, " + $g.Size() + " nodes\n")
+    try io.Put("arena, activations reused by liveness: " + $mb(g.ArenaBytes()) + " MB (activations " + $mb(g.ActivationSize * T.Size) + " MB)\n")
+    try io.Put("arena, every buffer apart:            " + $mb(apart.ArenaBytes()) + " MB (activations " + $mb(apart.ActivationSize * T.Size) + " MB)\n")
+    r := rand.Rand(2)
+    first I64 = 0
+    total I64 = 0
+    for s in range steps {
+        fill(g, tok, y, r)
+        t0 := time.Now()
+        g.Forward(16)
+        g.Backward(loss)
+        spent := time.Since(t0)
+        if s > 0: total += spent
+        rss := try resident()
+        if s == 0: first = rss
+        try io.Put("step " + $(s + 1) + ": loss " + $g.Scalar(loss).Fixed(4) + ", " + $(F64(spent) * 1e-6).Fixed(1) + " ms, resident " + $rss + " kB (+" + $(rss - first) + " since step 1)\n")
+    }
+    if steps > 1: try io.Put("mean step after the first: " + $(F64(total) * 1e-6 / F64(steps - 1)).Fixed(1) + " ms\n")
+}
+
+# round 2's GPT (layers.Transformer) on the new graph: its tokens, targets and loss
+fn gpt<T>(g mut graph.Graph<T>&) graph.Var, graph.Var, graph.Var {
+    v I64 = 65
+    d I64 = 128
+    ctx I64 = 64
+    w := graph.Init.Normal(0.0, 0.02)
+    out := graph.Init.Normal(0.0, 0.02 / 8.0.Sqrt())
+    tok := g.Tokens(ctx)
+    y := g.Classes(ctx)
+    emb := g.Param(w, true, v, d)
+    h := g.Positions(g.Embedding(tok, emb), g.Param(w, true, ctx, d))
+    for _ in range 4 {
+        n := norm(g, h, d)
+        q := linear(g, n, d, d, w)
+        k := linear(g, n, d, d, w)
+        vv := linear(g, n, d, d, w)
+        h = g.Add(h, linear(g, g.Attention(q, k, vv, 4, true), d, d, out))
+        m := g.Act(linear(g, norm(g, h, d), d, 4 * d, w), mat.Act.GeluTanh)
+        h = g.Add(h, linear(g, m, 4 * d, d, out))
+    }
+    logits := g.MatMul(norm(g, h, d), emb, false, true)
+    return tok, y, g.CrossEntropy(logits, y)
+}
+
+fn linear<T>(g mut graph.Graph<T>&, x graph.Var, inputs I64, outputs I64, init graph.Init) graph.Var {
+    return g.Linear(x, g.Param(init, true, outputs, inputs), g.Param(graph.Init.Zeros, false, outputs))
+}
+
+fn norm<T>(g mut graph.Graph<T>&, x graph.Var, d I64) graph.Var {
+    return g.Norm(x, g.Param(graph.Init.Constant(1.0), false, d), g.Param(graph.Init.Zeros, false, d))
+}
+
+fn fill<T>(g mut graph.Graph<T>&, tok graph.Var, y graph.Var, r mut rand.Rand&) {
+    t := g.Ints(tok).Flat()!
+    c := g.Ints(y).Flat()!
+    for i in range t.Len() {
+        t[i] = I32(r.Below(65))
+        c[i] = I32(r.Below(65))
+    }
+}
+
+# this process's resident memory in kB (VmRSS)
+fn resident() I64 ? os.Error {
+    for line in (try os.ReadFile("/proc/self/status")).Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        kb := try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+        return kb
+    }
+    return 0
+}

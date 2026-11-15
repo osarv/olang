@@ -1,0 +1,20 @@
+# D3a through C2a: a constructor's fields are its locals, so a struct's field may not share its name with a function
+# of the module. circuit.olang wanted a field "Spiking" (whether the circuit spikes) beside a helper "Spiking()" making
+# a spiking neuron; the helper had to become LifNeuron(). Per the spec, not a bug - but a type's public field names
+# and its module's function names share one namespace, which is easy to trip over in a library.
+# Actual: error[D3a] on the field (a local named like the function).
+# Status: a deliberate rule (D3a), kept as a record of the friction; olang db2af5d, 999ae6c and ada716d report it as
+# 472373d did, with a note at the function.
+# Status (olang 374c1e3c): still reproduces - error[D3a] on the field. A deliberate rule, kept as a record of the friction.
+type Box struct() {
+    Spiking Bool = false
+}
+
+fn Spiking() Bool {
+    return true
+}
+
+fn main() ? {
+    b := Box()
+    assert not b.Spiking and Spiking()
+}

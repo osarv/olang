@@ -1,0 +1,348 @@
+# tools/gradcheck - gradient checks: the gradient a graph's Backward gives every parameter and every watched input,
+# against the central difference of the loss, in F64 where the difference is precise. GradientError is the check; the
+# tests below hold every operation of ad/graph.olang to it, each on a small network built around it (one test per
+# operation), on a full batch and a short one.
+#
+# A loss is made from any output by Weigh: the sum of the output times a fixed random tensor of its shape, so that each
+# element of the output has a gradient of its own (a plain sum would give every element 1 and miss a permutation).
+
+import "../ad/graph"
+import "../tensor"
+import "../kernels/mat"
+import "../kernels/conv"
+import "std/rand"
+
+# the largest relative difference between the gradient Backward gives and the central difference (step h) of the loss,
+# over every parameter and every element of a watched node, on the first n entries of the batch. Every Forward starts
+# from the same dropout generator, so a network with dropout is checked against one fixed mask
+fn GradientError(g mut graph.Graph<F64>&, loss graph.Var, n I64, h F64 = 1e-6) F64 {
+    rng := g.Rng
+    g.Forward(n)
+    g.Backward(loss)
+    worst := against(g, loss, n, h, rng, g.Params(), g.ParamGrads().Clone())
+    for i in range g.Size() {
+        v := graph.Var(i)
+        if not g.Info(v).Watch: continue
+        worst = worst.Max(against(g, loss, n, h, rng, g.Value(v), g.Grad(v).Clone()))
+    }
+    return worst
+}
+
+# the worst difference over the elements of values, whose gradients Backward gave as analytic (an input's values are
+# its whole planned batch, its gradient the entries in use: the first ones)
+fn against(g mut graph.Graph<F64>&, loss graph.Var, n I64, h F64, rng rand.Rand, values tensor.Tensor<F64>, analytic tensor.Tensor<F64>&) F64 {
+    p := values.Flat()!
+    a := analytic.Flat()!
+    worst F64 = 0.0
+    for i in range a.Len() {
+        old := p[i]
+        p[i] = old + h
+        g.Rng = rng
+        g.Forward(n)
+        up := g.Scalar(loss)
+        p[i] = old - h
+        g.Rng = rng
+        g.Forward(n)
+        down := g.Scalar(loss)
+        p[i] = old
+        numeric := (up - down) / (2.0 * h)
+        # relative, with a floor: a gradient near zero is compared absolutely, below the difference's own rounding
+        # (about 1e-16 loss / h) but far above any mistake in a backward
+        scale := (numeric.Abs() + a[i].Abs()).Max(1e-3)
+        worst = worst.Max((numeric - a[i]).Abs() / scale)
+    }
+    g.Rng = rng
+    return worst
+}
+
+# a scalar loss from y: the sum of y times a random tensor of its shape (an input where y is batched, filled by Fill)
+fn Weigh(g mut graph.Graph<F64>&, y graph.Var) graph.Var {
+    d := g.Info(y).Dims
+    batched := g.Info(y).Batched
+    rest := Array<I64>[d[a] for a in range 1, d.Rank]
+    all := Array<I64>[d[a] for a in range d.Rank]
+    w := g.Input(...rest) if batched else g.Param(graph.Init.Normal(0.0, 1.0), false, ...all)
+    p := g.Mul(y, w)
+    if not batched: return g.Sum(g.Reshape(p, d.Count()))
+    return g.Sum(g.Sum(g.Reshape(p, d.Count() / d[0])))
+}
+
+# every input filled from r, N(0, 1)
+fn Fill(g mut graph.Graph<F64>&, r mut rand.Rand&) {
+    for i in range g.Size() {
+        v := graph.Var(i)
+        if g.Info(v).Kind != graph.Op.Input: continue
+        t := g.Value(v)
+        t.FillNormal(r, 0.0, 1.0)
+    }
+}
+
+# a parameter of these dims drawn from N(0, sd^2)
+fn Normal(g mut graph.Graph<F64>&, dims ...I64) graph.Var { return g.Param(graph.Init.Normal(0.0, 1.0), true, ...dims) }
+
+# y's loss planned with r, the inputs filled, and the worst gradient error on the full batch and on its first n
+fn Check(g mut graph.Graph<F64>&, y graph.Var, seed U64, n I64, h F64 = 1e-6) F64 {
+    loss := Weigh(g, y)
+    r := rand.Rand(seed)
+    try g.Plan(r) catch { unreachable "the graph's shapes: " + $g.Info(y).Dims }
+    Fill(g, r)
+    return GradientError(g, loss, g.Batch, h).Max(GradientError(g, loss, n, h))
+}
+
+# ---- one test per operation ----
+
+test Check "x w^T + b over the last axis of a rank 3 input, with and without a bias, the input's gradient too" {
+    g := graph.Graph<F64>(3)
+    x := g.Input(2, 4)
+    g.Watch(x)
+    y := g.Linear(g.Linear(x, Normal(g, 5, 4), Normal(g, 5)), Normal(g, 3, 5))
+    assert Check(g, y, 1, 2) < 1e-6
+}
+
+test Check "every transpose of rank 2 operands" {
+    for ta in Array<Bool>[false, true] {
+        for tb in Array<Bool>[false, true] {
+            g := graph.Graph<F64>(1)
+            a := Normal(g, 4, 3) if ta else Normal(g, 3, 4)
+            b := Normal(g, 2, 4) if tb else Normal(g, 4, 2)
+            assert Check(g, g.MatMul(a, b, ta, tb), 2, 1) < 1e-6
+        }
+    }
+}
+
+test Check "batched over one and two leading axes, transposed, and a batch by a shared matrix" {
+    for ta in Array<Bool>[false, true] {
+        for tb in Array<Bool>[false, true] {
+            g := graph.Graph<F64>(3)
+            a := g.Input(4, 3) if ta else g.Input(3, 4)
+            b := g.Input(2, 4) if tb else g.Input(4, 2)
+            g.Watch(a)
+            g.Watch(b)
+            assert Check(g, g.MatMul(a, b, ta, tb), 3, 2) < 1e-6
+        }
+    }
+    g := graph.Graph<F64>(2)
+    a := g.Input(2, 3, 4)
+    b := g.Input(2, 4, 5)
+    g.Watch(a)
+    g.Watch(b)
+    s := g.MatMul(g.MatMul(a, b), Normal(g, 5, 3))
+    assert Check(g, s, 4, 1) < 1e-6
+}
+
+test Check "Add, Sub, Mul and Scale, a value used twice" {
+    g := graph.Graph<F64>(3)
+    a := g.Input(4)
+    g.Watch(a)
+    b := g.Linear(a, Normal(g, 4, 4))
+    y := g.Mul(g.Add(g.Sub(a, b), g.Scale(b, 0.7)), g.Mul(b, b))
+    assert Check(g, y, 5, 2) < 1e-6
+}
+
+test Check "every activation, and the leaky ReLU" {
+    for a in Array<mat.Act>[mat.Act.Relu, mat.Act.Gelu, mat.Act.GeluTanh, mat.Act.Silu, mat.Act.Sigmoid, mat.Act.Tanh, mat.Act.Softplus] {
+        g := graph.Graph<F64>(3)
+        x := g.Input(6)
+        g.Watch(x)
+        y := g.Act(g.Scale(g.Linear(x, Normal(g, 6, 6)), 1.5), a)
+        assert Check(g, y, 6, 2) < 1e-6, "activation " + $a
+    }
+    g := graph.Graph<F64>(3)
+    x := g.Input(6)
+    g.Watch(x)
+    assert Check(g, g.LeakyRelu(x, 0.1), 7, 1) < 1e-6
+}
+
+test Check "softmax and log-softmax over the last axis" {
+    g := graph.Graph<F64>(3)
+    x := g.Input(2, 5)
+    g.Watch(x)
+    y := g.Add(g.Softmax(x), g.LogSoftmax(g.Scale(x, 2.0)))
+    assert Check(g, y, 8, 2) < 1e-6
+}
+
+test Check "layer normalization with a bias and without, RMS normalization" {
+    g := graph.Graph<F64>(3)
+    x := g.Input(2, 6)
+    g.Watch(x)
+    a := g.Norm(x, Normal(g, 6), Normal(g, 6))
+    b := g.Norm(g.Act(a, mat.Act.Tanh), Normal(g, 6), graph.None)
+    c := g.Norm(b, Normal(g, 6), graph.None, true)
+    assert Check(g, c, 9, 2) < 1e-6
+}
+
+test Check "the mean over the counted entries, an ignored one adding nothing" {
+    g := graph.Graph<F64>(3)
+    x := g.Input(2, 5)
+    g.Watch(x)
+    y := g.Classes(2)
+    z := g.Linear(x, Normal(g, 5, 5))
+    loss := g.CrossEntropy(z, y)
+    r := rand.Rand(10)
+    try g.Plan(r)
+    Fill(g, r)
+    c := g.Ints(y).Flat()!
+    for i in range 6: c[i] = Array<I32>[1, 3, -1, 4, 0, 2][i]
+    assert GradientError(g, loss, 3) < 1e-6 and GradientError(g, loss, 1) < 1e-6
+    g.Forward(3)
+    with := g.Scalar(loss)
+    c[2] = 2
+    g.Forward(3)
+    assert g.Scalar(loss) != with
+}
+
+test Check "the mean of the squared differences, both sides' gradients" {
+    g := graph.Graph<F64>(3)
+    a := g.Input(4)
+    b := g.Input(4)
+    g.Watch(a)
+    g.Watch(b)
+    loss := g.Mse(g.Act(a, mat.Act.Tanh), b)
+    r := rand.Rand(11)
+    try g.Plan(r)
+    Fill(g, r)
+    assert GradientError(g, loss, 3) < 1e-6 and GradientError(g, loss, 2) < 1e-6
+}
+
+test Check "embedding and learned positions, the table tied to the output" {
+    g := graph.Graph<F64>(2)
+    tok := g.Tokens(3)
+    table := Normal(g, 5, 4)
+    e := g.Positions(g.Embedding(tok, table), Normal(g, 3, 4))
+    logits := g.MatMul(g.Reshape(e, 3, 4), table, false, true)
+    y := g.Classes(3)
+    loss := g.CrossEntropy(g.Reshape(logits, 3, 5), y)
+    r := rand.Rand(12)
+    try g.Plan(r)
+    t := g.Ints(tok).Flat()!
+    for i in range 6: t[i] = Array<I32>[3, 1, 3, 0, 4, 3][i]
+    c := g.Ints(y).Flat()!
+    for i in range 6: c[i] = Array<I32>[1, 3, -1, 4, 4, 0][i]
+    assert GradientError(g, loss, 2) < 1e-6 and GradientError(g, loss, 1) < 1e-6
+}
+
+test Check "rotary positions, two heads" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(5, 8)
+    g.Watch(x)
+    y := g.Rope(g.Linear(x, Normal(g, 8, 8)), 2)
+    assert Check(g, g.Add(y, g.Rope(y, 1, 100.0)), 13, 1) < 1e-6
+}
+
+test Check "causal and not, several heads, itself as q, k and v" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(3, 4)
+    g.Watch(x)
+    q := g.Linear(x, Normal(g, 4, 4))
+    k := g.Linear(x, Normal(g, 4, 4))
+    v := g.Linear(x, Normal(g, 4, 4))
+    a := g.Attention(q, k, v, 2, true)
+    b := g.Attention(a, a, a, 1, false)
+    y := g.Add(b, g.Attention(q, k, v, 4, false))
+    assert Check(g, y, 14, 1) < 1e-6
+}
+
+test Check "longer sequences, the causal products confined to their triangles" {
+    for t in Array<I64>[8, 130] {
+        g := graph.Graph<F64>(2)
+        x := g.Input(t, 16)
+        q := g.Linear(x, g.Param(graph.Init.Normal(0.0, 0.25), true, 16, 16))
+        k := g.Linear(x, g.Param(graph.Init.Normal(0.0, 0.25), true, 16, 16))
+        v := g.Linear(x, g.Param(graph.Init.Normal(0.0, 0.25), true, 16, 16))
+        heads I64 = 2 if t == 8 else 1
+        y := g.Add(g.Attention(q, k, v, heads, true), g.Attention(q, k, v, heads, false))
+        assert Check(g, y, 15, 1, 1e-5) < 1e-6
+    }
+}
+
+test Check "a fixed mask's gradient; the kept scaled up; nothing dropped when not training" {
+    g := graph.Graph<F64>(1)
+    w := Normal(g, 8, 16)
+    th := g.Act(w, mat.Act.Tanh)
+    g.Keep(th)
+    d := g.Dropout(th, 0.25)
+    assert Check(g, d, 16, 1) < 1e-6
+    g.Forward(1)
+    t := g.Value(th).Flat()!
+    out := g.Value(d).Flat()!
+    dropped I64 = 0
+    for i in range 128 {
+        if out[i] == 0.0 { dropped++ } else { assert (out[i] - t[i] / 0.75).Abs() < 1e-12 }
+    }
+    assert dropped > 16 and dropped < 50
+    g.Training = false
+    g.Forward(1)
+    for i in range 128: assert g.Value(d).Flat()![i] == t[i]
+}
+
+test Check "convolutions with a bias, padding and a stride, and max pooling" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(6, 5, 2)
+    g.Watch(x)
+    s := try conv.Shape(2, 6, 5, 3, 3, 1, 1) catch { unreachable }
+    c := g.Conv2d(x, Normal(g, 3, 18), Normal(g, 3), s)
+    s2 := try conv.Shape(3, 6, 5, 2, 2, 2, 0) catch { unreachable }
+    c2 := g.Conv2d(g.Act(c, mat.Act.Tanh), Normal(g, 2, 12), graph.None, s2)
+    p := try conv.Pool(3, 6, 5, 2, 2) catch { unreachable }
+    m := g.MaxPool2d(c, p)
+    y := g.Add(g.Reshape(c2, 12), g.Slice(g.Reshape(m, 18), 1, 0, 12))
+    assert Check(g, y, 17, 1) < 1e-6
+}
+
+test Check "the gated scan h = a h + b x" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(5, 3)
+    g.Watch(x)
+    a := g.Act(g.Linear(x, Normal(g, 3, 3)), mat.Act.Sigmoid)
+    b := g.Linear(x, Normal(g, 3, 3))
+    assert Check(g, g.Scan(x, a, b), 18, 1) < 1e-6
+}
+
+test Check "Mamba's selective scan, with the skip and without" {
+    for skip in Array<Bool>[true, false] {
+        g := graph.Graph<F64>(2)
+        x := g.Input(5, 3)
+        g.Watch(x)
+        delta := g.Act(g.Linear(x, Normal(g, 3, 3)), mat.Act.Softplus)
+        a := g.Param(graph.Init.Uniform(-1.0, -0.2), false, 4, 3)
+        b := g.Linear(x, Normal(g, 4, 3))
+        c := g.Linear(x, Normal(g, 4, 3))
+        sk := Normal(g, 3) if skip else graph.None
+        assert Check(g, g.SelectiveScan(x, delta, a, b, c, sk), 19, 1) < 1e-6
+    }
+}
+
+test Check "the delta rule, gated, in two heads" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(5, 4)
+    g.Watch(x)
+    q := g.Scale(g.Linear(x, Normal(g, 4, 4)), 0.5)
+    k := g.Scale(g.Act(g.Linear(x, Normal(g, 4, 4)), mat.Act.Tanh), 0.5)
+    v := g.Linear(x, Normal(g, 6, 4))
+    beta := g.Act(g.Linear(x, Normal(g, 2, 4)), mat.Act.Sigmoid)
+    gate := g.Act(g.Linear(x, Normal(g, 2, 4)), mat.Act.Sigmoid)
+    assert Check(g, g.DeltaRule(q, k, v, beta, gate), 20, 1) < 1e-6
+}
+
+test Check "views: Reshape, Permute, Slice and Expand copy nothing, and their gradients go back through them" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(3, 4)
+    g.Watch(x)
+    p := g.Permute(x, 0, 2, 1)
+    s := g.Slice(p, 2, 1, 3)
+    m := g.Input(4, 1)
+    g.Watch(m)
+    y := g.Mul(s, g.Expand(m, 4, 2))
+    z := g.Linear(y, g.Expand(Normal(g, 2), 4, 2))
+    r := g.Reshape(g.Permute(x, 0, 2, 1), 12)
+    out := g.Add(g.Linear(g.Reshape(z, 16), Normal(g, 4, 16)), g.Linear(r, Normal(g, 4, 12)))
+    assert Check(g, out, 21, 1) < 1e-6
+}
+
+test Check "the sum and the mean over the last axis" {
+    g := graph.Graph<F64>(3)
+    x := g.Input(4, 5)
+    g.Watch(x)
+    y := g.Add(g.Sum(x), g.Mean(g.Act(x, mat.Act.Tanh)))
+    assert Check(g, y, 22, 2) < 1e-6
+}

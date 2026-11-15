@@ -1,0 +1,479 @@
+# dyn/energy - energies written as a struct of known terms (docs/redesign.md 1.4, docs/settling.md 1.2). An
+# Energy<E> holds a struct E whose fields are terms - a neuron model's potential, a connection's bilinear coupling, a
+# linear field (biases, drives, a population's constant), a squared cost, a Hopfield log-sum-exp - and its value, its
+# gradient in the state and its parameters' gradient are assembled while compiling by walking E's fields (`for f in
+# E.Fields`, unrolled: G32-G38): no tape, no dispatch, no hand-summed derivative to get wrong. A term is any type with
+#
+#     Value(z Array<T>&) F64                       its value at the state z
+#     AddGrad(dz mut Array<T>&, z Array<T>&)       dz += its gradient in z
+#     AddParamGrad(z Array<T>&, scale F64)         its parameters' gradient times scale, added into its gradient region
+#
+# (needs, not a trait: G18a). E's fields are capitalized - a struct's private fields are not in T.Fields outside its
+# module. The state z is one row's activities, every unit of a system at its place (StateOf), so the built-in terms
+# are made from a planned system's populations and connections (Potential.Of, Bilinear.Of, Linear.Bias, Linear.Constant)
+# and read its parameter region in place; a term of one's own works the same way.
+#
+# The energy of a system (docs/settling.md 1.2): with s = rho(u) and the activities z = s,
+#
+#     E(s) = sum_i G(s_i) - sum over connections s_post^T W s_pre - sum_i h_i s_i,      G' = rho^-1, h the constant
+#
+# which the settle descends where every recurrent connection is reciprocal (its equilibria are E's stationary points);
+# a nudged phase descends E + beta C. Of evaluates it for a phase's row of a planned system directly, in the
+# potentials (circuit.olang's form, which needs no rho^-1).
+
+import "neuron"
+import "conn"
+import "settle"
+import "system"
+import "../kernels/gemm"
+
+# a term asked of something that has none: a spiking or custom population, a one-way recurrent connection, a sparse
+# connection made a dense term
+type EnergyError error {
+    NoTerm(what String)
+}
+
+# an energy: the sum of the terms that are E's fields
+type Energy<E> struct(terms E) {
+    Terms E = terms
+}
+
+# the energy at z
+fn (e Energy<E>&) Value<T>(z Array<T>&) F64 {
+    total F64 = 0.0
+    for f in E.Fields: total += f.Of(e.Terms).Value(z)
+    return total
+}
+
+# dz += the energy's gradient at z
+fn (e Energy<E>&) AddGrad<T>(dz mut Array<T>&, z Array<T>&) {
+    for f in E.Fields: f.Of(e.Terms).AddGrad(dz, z)
+}
+
+# every term's parameters' gradient at z, times scale, added into its gradient region
+fn (e mut Energy<E>&) AddParamGrad<T>(z Array<T>&, scale F64) {
+    for f in E.Fields: f.Of(e.Terms).AddParamGrad(z, scale)
+}
+
+# one step of gradient flow, z <- z - eta grad E(z), dz the room for the gradient (z's length); gives the gradient's
+# sup norm before the step
+fn (e Energy<E>&) Descend<T>(z mut Array<T>&, dz mut Array<T>&, eta F64) F64 {
+    for i in range dz.Len(): dz[i] = T(0)
+    e.AddGrad(dz, z)
+    worst F64 = 0.0
+    for i in range z.Len() {
+        worst = worst.Max(F64(dz[i]).Abs())
+        z[i] = z[i] - T(eta) * dz[i]
+    }
+    return worst
+}
+
+# ---- the terms ----
+
+# a population's potential, sum_i G(z_i) over n units at At with G' = rho^-1: z^2 / 2 for linear (hard sigmoid and
+# ReLU units inside their range), s atanh(s) + ln(1 - s^2) / 2 for tanh units
+type Potential struct(rho neuron.Rho, at I64, n I64) {
+    Rho neuron.Rho = rho
+    At I64 = at
+    N I64 = n
+}
+
+# population p's potential, where the system's state is laid out by StateOf
+fn Potential.Of<T>(s system.System<T>&, p system.Pop) Potential ? EnergyError {
+    pop := s.Pop(p)
+    model := pop.Model
+    if model != neuron.Neuron.Rate: error EnergyError.NoTerm("population " + $I64(p) + " is not of rate neurons")
+    if model.rho == neuron.Rho.LifRate: error EnergyError.NoTerm("LifRate neurons have no potential here")
+    return Potential(model.rho, pop.Unit, pop.Size)
+}
+
+fn (p Potential&) Value<T>(z Array<T>&) F64 {
+    total F64 = 0.0
+    for i in range p.At, p.At + p.N: total += potentialOf(p.Rho, F64(z[i]))
+    return total
+}
+
+fn (p Potential&) AddGrad<T>(dz mut Array<T>&, z Array<T>&) {
+    if p.Rho != neuron.Rho.Tanh {
+        for i in range p.At, p.At + p.N: dz[i] += z[i]
+        return
+    }
+    for i in range p.At, p.At + p.N {
+        x := F64(z[i])
+        dz[i] += T(0.5 * ((1.0 + x) / (1.0 - x)).Log())
+    }
+}
+
+fn (p mut Potential&) AddParamGrad<T>(z Array<T>&, scale F64) { }
+
+# G(x) with G' = rho^-1
+fn potentialOf(f neuron.Rho, x F64) F64 {
+    if f != neuron.Rho.Tanh: return 0.5 * x * x
+    return x * (0.5 * ((1.0 + x) / (1.0 - x)).Log()) + 0.5 * (1.0 - x * x).Log()
+}
+
+# a coupling -z_post^T W z_pre, W a Rows x Cols block at Off in W's array (the parameter region), the post units at
+# Post and the pre ones at Pre in z; its gradient region G laid out like W's (none when empty)
+type Bilinear<T> struct(w mut Array<T>&, off I64, rows I64, cols I64, post I64, pre I64, g mut Array<T>&) {
+    W mut Array<T>& = w
+    Off I64 = off
+    Rows I64 = rows
+    Cols I64 = cols
+    Post I64 = post
+    Pre I64 = pre
+    G mut Array<T>& = g
+}
+
+# connection c's coupling, a dense or symmetric one (a symmetric one read both ways is this one term: its effective
+# matrix is W + W^T)
+fn Bilinear<T>.Of(s system.System<T>&, c system.Conn) Bilinear<T> ? EnergyError {
+    l := s.Link(c)
+    kind := l.Kind
+    if kind != conn.Wiring.Dense and kind != conn.Wiring.Symmetric: error EnergyError.NoTerm("connection " + $I64(c) + " is not dense")
+    post, pre := s.E.Pops[l.Post], s.E.Pops[l.Pre]
+    return Bilinear<T>(s.E.Params, l.Off, l.PostSize, l.PreSize, post.Unit, pre.Unit, s.E.Grads)
+}
+
+fn (b Bilinear<T>&) Value(z Array<T>&) F64 {
+    total F64 = 0.0
+    for i in range b.Rows {
+        at := b.Off + i * b.Cols
+        row F64 = 0.0
+        for j in range b.Cols: row += F64(b.W[at + j]) * F64(z[b.Pre + j])
+        total -= F64(z[b.Post + i]) * row
+    }
+    return total
+}
+
+fn (b Bilinear<T>&) AddGrad(dz mut Array<T>&, z Array<T>&) {
+    for i in range b.Rows {
+        at := b.Off + i * b.Cols
+        zi := z[b.Post + i]
+        row T = T(0)
+        for j in range b.Cols {
+            row += b.W[at + j] * z[b.Pre + j]
+            dz[b.Pre + j] -= b.W[at + j] * zi
+        }
+        dz[b.Post + i] -= row
+    }
+}
+
+fn (b mut Bilinear<T>&) AddParamGrad(z Array<T>&, scale F64) {
+    if b.G.Len() == 0: return
+    for i in range b.Rows {
+        k := T(-scale) * z[b.Post + i]
+        at := b.Off + i * b.Cols
+        for j in range b.Cols: b.G[at + j] += k * z[b.Pre + j]
+    }
+}
+
+# a linear field -h^T z over N units at At, h at Off in H's array; its gradient region G laid out like H's (none when
+# empty)
+type Linear<T> struct(h mut Array<T>&, off I64, at I64, n I64, g mut Array<T>&) {
+    H mut Array<T>& = h
+    Off I64 = off
+    At I64 = at
+    N I64 = n
+    G mut Array<T>& = g
+}
+
+# population p's biases
+fn Linear<T>.Bias(s system.System<T>&, p system.Pop) Linear<T> {
+    pop := s.Pop(p)
+    return Linear<T>(s.E.Params, pop.Bias, pop.Unit, pop.Size, s.E.Grads)
+}
+
+# population p's constant in batch row row - its drive, its biases and the carries of the inputs folded into it, as the
+# last settle made them; no parameter of its own
+fn Linear<T>.Constant(s system.System<T>&, p system.Pop, row I64) Linear<T> {
+    pop := s.Pop(p)
+    return Linear<T>(pop.Const, row * pop.Size, pop.Unit, pop.Size, Array<T>(0))
+}
+
+fn (l Linear<T>&) Value(z Array<T>&) F64 {
+    total F64 = 0.0
+    for i in range l.N: total -= F64(l.H[l.Off + i]) * F64(z[l.At + i])
+    return total
+}
+
+fn (l Linear<T>&) AddGrad(dz mut Array<T>&, z Array<T>&) {
+    for i in range l.N: dz[l.At + i] -= l.H[l.Off + i]
+}
+
+fn (l mut Linear<T>&) AddParamGrad(z Array<T>&, scale F64) {
+    if l.G.Len() == 0: return
+    for i in range l.N: l.G[l.Off + i] -= T(scale) * z[l.At + i]
+}
+
+# a squared cost beta / 2 |z - y|^2 over N units at At, the targets y at Off in Y's array
+type Squared<T> struct(y mut Array<T>&, off I64, at I64, n I64, beta F64) {
+    Y mut Array<T>& = y
+    Off I64 = off
+    At I64 = at
+    N I64 = n
+    Beta F64 = beta
+}
+
+fn (c Squared<T>&) Value(z Array<T>&) F64 {
+    total F64 = 0.0
+    for i in range c.N {
+        d := F64(z[c.At + i] - c.Y[c.Off + i])
+        total += d * d
+    }
+    return 0.5 * c.Beta * total
+}
+
+fn (c Squared<T>&) AddGrad(dz mut Array<T>&, z Array<T>&) {
+    for i in range c.N: dz[c.At + i] += T(c.Beta) * (z[c.At + i] - c.Y[c.Off + i])
+}
+
+fn (c mut Squared<T>&) AddParamGrad(z Array<T>&, scale F64) { }
+
+# a Hopfield log-sum-exp, -(1 / Beta) ln sum_k exp(Beta x_k . z) over K patterns x_k of N units (a K x N block at Off
+# in X's array) read at the units at At: its gradient in z is -X^T softmax(Beta X z), in x_k -softmax_k z; its
+# gradient region G laid out like X's (none when empty)
+type LogSumExp<T> struct(x mut Array<T>&, off I64, k I64, at I64, n I64, beta F64, g mut Array<T>&) {
+    X mut Array<T>& = x
+    Off I64 = off
+    K I64 = k
+    At I64 = at
+    N I64 = n
+    Beta F64 = beta
+    G mut Array<T>& = g
+}
+
+# Beta x_k . z
+fn (h LogSumExp<T>&) score(k I64, z Array<T>&) F64 {
+    at := h.Off + k * h.N
+    d F64 = 0.0
+    for i in range h.N: d += F64(h.X[at + i]) * F64(z[h.At + i])
+    return h.Beta * d
+}
+
+# the largest score and the log of the sum of exp(score - top)
+fn (h LogSumExp<T>&) normalizer(z Array<T>&) F64, F64 {
+    top := h.score(0, z)
+    for k in range 1, h.K: top = top.Max(h.score(k, z))
+    sum F64 = 0.0
+    for k in range h.K: sum += (h.score(k, z) - top).Exp()
+    return top, sum.Log()
+}
+
+fn (h LogSumExp<T>&) Value(z Array<T>&) F64 {
+    top, log := h.normalizer(z)
+    return -(top + log) / h.Beta
+}
+
+fn (h LogSumExp<T>&) AddGrad(dz mut Array<T>&, z Array<T>&) {
+    top, log := h.normalizer(z)
+    for k in range h.K {
+        p := T((h.score(k, z) - top - log).Exp())
+        at := h.Off + k * h.N
+        for i in range h.N: dz[h.At + i] -= p * h.X[at + i]
+    }
+}
+
+fn (h mut LogSumExp<T>&) AddParamGrad(z Array<T>&, scale F64) {
+    if h.G.Len() == 0: return
+    top, log := h.normalizer(z)
+    for k in range h.K {
+        p := T(-scale * (h.score(k, z) - top - log).Exp())
+        at := h.Off + k * h.N
+        for i in range h.N: h.G[at + i] += p * z[h.At + i]
+    }
+}
+
+# ---- a system's state and energy ----
+
+# the activities of batch row row of phase, every unit at its place (Unit), into z (the system's units long)
+fn StateOf<T>(s system.System<T>&, phase settle.Phase, row I64, z mut Array<T>&) {
+    for pop in s.E.Pops {
+        a := pop.Activity(0)
+        at := (phase.Index() * s.Batch + row) * pop.Size
+        for j in range pop.Size: z[pop.Unit + j] = a[at + j]
+    }
+}
+
+# the energy of a rate system's committed state, batch row row of phase (without the nudge's beta C), in the
+# potentials: sum_i int_0^u_i x rho'(x) dx - sum_i c_i s_i - sum over the recurrent connections s_post^T W s_pre, c a
+# population's constant. Refuses spiking, custom and LifRate populations and one-way recurrent connections. A
+# diagnostic: it makes its own room
+fn Of<T>(s mut system.System<T>&, phase settle.Phase, row I64) F64 ? EnergyError {
+    e := s.E
+    r := phase.Index() * s.Batch + row
+    total F64 = 0.0
+    for p in e.Pops {
+        if p.Role == neuron.Role.Input: continue
+        total += try potentials(p, r, row)
+    }
+    widest I64 = 1
+    for p in e.Pops: widest = widest.Max(p.Size)
+    ws := gemm.Workspace<T>(1)
+    sc := conn.Scratch<T>(widest, 1, widest)
+    for l in e.Links {
+        if l.Folded: continue
+        if not l.Both: error EnergyError.NoTerm("a one-way recurrent connection has no energy")
+        post := e.Pops[l.Post]
+        carry := Array<T>((r + 1) * l.PostSize)
+        l.Forward(ws, sc, carry, e.Pops[l.Pre].Activity(0), r, r + 1)
+        a := post.Activity(0)
+        for i in range l.PostSize: total -= F64(a[r * l.PostSize + i]) * F64(carry[r * l.PostSize + i])
+    }
+    return total
+}
+
+# a population's part: its potentials' integrals less its constant's field, in state row r (batch row b)
+fn potentials<T>(p settle.Population<T>&, r I64, b I64) F64 ? EnergyError {
+    model := p.Model
+    if model != neuron.Neuron.Rate: error EnergyError.NoTerm("a spiking or custom population has no energy")
+    total F64 = 0.0
+    for j in range p.Size {
+        u := F64(p.R0.U[r * p.Size + j])
+        total += try integral(model.rho, u) - F64(p.Const[b * p.Size + j]) * F64(p.R0.S[r * p.Size + j])
+    }
+    return total
+}
+
+# int_0^u x rho'(x) dx
+fn integral(f neuron.Rho, u F64) F64 ? EnergyError {
+    return match f {
+        case neuron.Rho.Linear: 0.5 * u * u
+        case neuron.Rho.Tanh: u * u.Tanh() - logCosh(u)
+        case neuron.Rho.HardSigmoid: 0.5 * u.Clamp(0.0, 1.0) * u.Clamp(0.0, 1.0)
+        case neuron.Rho.Relu: 0.5 * u.Max(0.0) * u.Max(0.0)
+        case neuron.Rho.LifRate: error EnergyError.NoTerm("LifRate neurons have no energy here")
+    }
+}
+
+# ln cosh x without overflow
+fn logCosh(x F64) F64 {
+    a := x.Abs()
+    return a + (-2.0 * a).Exp().Log1p() - 0.6931471805599453
+}
+
+# ---- what must not allocate, decided while compiling (S17a, G42): an energy's value, gradient, parameters' gradient
+# and descent, every built-in term (the walk over E's fields is unrolled; Of makes its own room and is not pinned) ----
+
+type pinned struct(p Potential, b Bilinear<F32>, l Linear<F32>, c Squared<F32>, h LogSumExp<F32>) {
+    P Potential = p
+    B Bilinear<F32> = b
+    L Linear<F32> = l
+    C Squared<F32> = c
+    H LogSumExp<F32> = h
+}
+
+fn valueOf(e Energy<pinned>&, z Array<F32>&) F64 { return e.Value(z) }
+fn gradOf(e Energy<pinned>&, dz mut Array<F32>&, z Array<F32>&) { e.AddGrad(dz, z) }
+fn paramGradOf(e mut Energy<pinned>&, z Array<F32>&) { e.AddParamGrad(z, 1.0) }
+fn descendOf(e Energy<pinned>&, z mut Array<F32>&, dz mut Array<F32>&) F64 { return e.Descend(z, dz, 0.1) }
+
+assert not valueOf.Allocates, "an energy's value allocates"
+assert not gradOf.Allocates, "an energy's gradient allocates"
+assert not paramGradOf.Allocates, "an energy's parameters' gradient allocates"
+assert not descendOf.Allocates, "a step of gradient flow allocates"
+
+# ---- tests ----
+
+import "std/rand"
+
+# a potential, a coupling and a Hopfield log-sum-exp over seven units: a tanh potential on them all, a 4 x 3 coupling
+# of units 0 .. 4 with 4 .. 7, five patterns over all seven
+type three struct(p Potential, b Bilinear<F64>, h LogSumExp<F64>) {
+    P Potential = p
+    B Bilinear<F64> = b
+    H LogSumExp<F64> = h
+}
+
+# the largest difference of a gradient from the central differences of f over x, relative to the largest of those
+fn againstDifferences(x mut Array<F64>&, grad Array<F64>&, f fn&() F64) F64 {
+    h F64 = 1e-6
+    worst, top := 0.0, 0.0
+    for i in range x.Len() {
+        old := x[i]
+        x[i] = old + h
+        up := f()
+        x[i] = old - h
+        down := f()
+        x[i] = old
+        d := (up - down) / (2.0 * h)
+        worst = worst.Max((d - grad[i]).Abs())
+        top = top.Max(d.Abs())
+    }
+    return worst / top
+}
+
+test Energy.AddGrad "an energy of three terms: its gradient in the state and in its parameters against central differences" {
+    r := rand.Rand(1)
+    params := Array<F64>(12 + 35)
+    grads := Array<F64>(47)
+    for i in range 47: params[i] = r.Uniform(-1.0, 1.0)
+    e := Energy<three>(three(Potential(neuron.Rho.Tanh, 0, 7), Bilinear<F64>(params, 0, 4, 3, 0, 4, grads), LogSumExp<F64>(params, 12, 5, 0, 7, 2.0, grads)))
+    z := Array<F64>(7)
+    for i in range 7: z[i] = r.Uniform(-0.8, 0.8)
+    dz := Array<F64>(7)
+    e.AddGrad(dz, z)
+    inState := againstDifferences(z, dz, fn() { return e.Value(z) })
+    e.AddParamGrad(z, 1.0)
+    inParams := againstDifferences(params, grads, fn() { return e.Value(z) })
+    assert inState < 1e-8 and inParams < 1e-8, "state " + $inState + ", parameters " + $inParams
+}
+
+# x (3 linear inputs) -> h (5 tanh) <-> y (2 tanh, a squared readout), h with a symmetric lateral block, F64, one phase
+fn symmetric(r mut rand.Rand&) system.System<F64> {
+    s := system.System<F64>(2, 1, 1)
+    root := s.Root()
+    x := s.Population(root, "x", 3, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 5, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(root, "y", 2, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Squared))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, y, conn.Wiring.Symmetric)
+    s.Connect(h, h, conn.Wiring.Symmetric)
+    s.Plan(r)!
+    for i in range 6: s.Pop(x).Drive[i] = r.Uniform(-1.0, 1.0)
+    for j in range 7: s.E.Params[s.Pop(h).Bias + j] = r.Uniform(-0.3, 0.3)
+    s.Certify(0.8)
+    return s
+}
+
+# the system's energy as a struct of the terms its populations and connections supply
+type small struct(ph Potential, py Potential, hy Bilinear<F64>, hh Bilinear<F64>, ch Linear<F64>, cy Linear<F64>) {
+    Ph Potential = ph
+    Py Potential = py
+    Hy Bilinear<F64> = hy
+    Hh Bilinear<F64> = hh
+    Ch Linear<F64> = ch
+    Cy Linear<F64> = cy
+}
+
+test Energy.AddGrad "a settled symmetric system is a stationary point of the energy its populations and connections supply, which Of evaluates alike" {
+    s := symmetric(rand.Rand(2))
+    out := s.Settle(settle.Phase.Free, settle.Budget(5000, 1e-13))
+    assert out.Converged
+    h, y := system.Pop(1), system.Pop(2)
+    for row in range 2 {
+        e := Energy<small>(small(Potential.Of(s, h)!, Potential.Of(s, y)!, Bilinear<F64>.Of(s, system.Conn(1))!, Bilinear<F64>.Of(s, system.Conn(2))!
+            Linear<F64>.Constant(s, h, row), Linear<F64>.Constant(s, y, row)))
+        z := Array<F64>(10)
+        StateOf(s, settle.Phase.Free, row, z)
+        dz := Array<F64>(10)
+        e.AddGrad(dz, z)
+        for i in range 3, 10: assert dz[i].Abs() < 1e-10, "unit " + $i + ": " + $dz[i]
+        assert (e.Value(z) - Of(s, settle.Phase.Free, row)!).Abs() < 1e-10
+    }
+}
+
+test Of "small steps of the settle descend the energy, and a step at the equilibrium leaves it" {
+    s := symmetric(rand.Rand(3))
+    s.Step(0.25)
+    last := Of(s, settle.Phase.Free, 0)!
+    for _ in range 60 {
+        s.Settle(settle.Phase.Free, settle.Budget(1, 0.0))
+        now := Of(s, settle.Phase.Free, 0)!
+        assert now <= last + 1e-12, $now + " after " + $last
+        last = now
+    }
+    s.Settle(settle.Phase.Free, settle.Budget(5000, 1e-13))
+    at := Of(s, settle.Phase.Free, 0)!
+    s.Settle(settle.Phase.Free, settle.Budget(1, 0.0))
+    assert (Of(s, settle.Phase.Free, 0)! - at).Abs() < 1e-12
+}

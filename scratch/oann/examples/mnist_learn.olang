@@ -1,0 +1,105 @@
+# MNIST by a settling system of dyn (docs/redesign.md 4.3, M8): 784 pixel inputs (one-way into the hidden units,
+# folded into a constant once a settle), a population of tanh units, ten readouts (cross-entropy at T = 0.25), the
+# hidden and readout units connected symmetrically - taught by equilibrium propagation (learn.Learner.Lesson: a free
+# settle, the nudged phases at +beta and -beta side by side, their contrast) and Adam, then measured on the test set,
+# where an answer is a free settle. The optimizer is nn/optim's AdamW over the system's flat parameter region. Arguments, all
+# optional: the epochs (1), the training samples used (60000), the hidden units (128), the batch (32), the seed (1),
+# Adam's rate (0.001), beta (0.5), the threads a sweep may be split over (1).
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../dyn/system"
+import "../dyn/neuron"
+import "../dyn/conn"
+import "../dyn/settle"
+import "../dyn/learn"
+import "../nn/optim"
+import "../data/idx"
+import "../data/loader"
+import "../data/mnist"
+
+fn number(args Array<String&>&, i I64, fallback F64) F64 ? json.Error {
+    if i >= args.Len(): return fallback
+    return try json.Json.Parse(args[i]).AsNum()
+}
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError, json.Error {
+    args := os.Args()
+    epochs := I64(try number(args, 1, 1))
+    samples := I64(try number(args, 2, 60000))
+    hidden := I64(try number(args, 3, 128))
+    batch := I64(try number(args, 4, 32))
+    seed := U64(try number(args, 5, 1))
+    rate := try number(args, 6, 0.001)
+    beta := try number(args, 7, 0.5)
+    threads := I64(try number(args, 8, 1))
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    part := loader.Labeled(data.Train.Features[:samples * 784], data.Train.Labels[:samples], 784, 10)
+
+    s := system.System<F32>(batch, threads)
+    pixels := s.Population(s.Root(), "pixels", 784, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    inner := s.Population(s.Root(), "hidden", hidden, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    digits := s.Population(s.Root(), "digits", 10, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Classes()))
+    s.Connect(pixels, inner, conn.Wiring.Dense)
+    s.Connect(inner, digits, conn.Wiring.Symmetric)
+    s.Plan(rand.Rand(seed))!
+    s.Certify(0.9)
+    l := learn.Learner<F32>(s)!
+    opt := optim.AdamW(s.Params(), s.ParamGrads(), rate = rate)
+    tol := s.LessonTolerance(beta)
+    try io.Put(("784-" + $hidden + "-10 settling system (dyn), " + $s.Params().Count() + " parameters, " + $samples + " training samples, batches of " +
+        $batch + ", beta " + $beta + ", lesson tolerance " + $tol + ", budget " + $s.BudgetFor(tol, beta).Sweeps + " sweeps, " + $threads + " threads\n"))
+
+    trainSet := loader.Loader(part, batch, seed)
+    testSet := loader.Loader(data.Test, batch, seed, false)
+    labels := Array<I32>(batch)
+    for e in range 1, epochs + 1 {
+        t0 := time.Now()
+        trainSet.Epoch()
+        sweeps, taught, refused := 0, 0, 0
+        loss F64 = 0.0
+        for b in range trainSet.Batches() {
+            if trainSet.Fill(b, s.Pop(pixels).Drive, s.Pop(digits).Labels) < batch: continue
+            ok := true
+            lesson := try l.Lesson(s.Root(), beta) catch { ok = false } default learn.Taught()
+            if not ok {
+                refused++
+                continue
+            }
+            sweeps += lesson.Sweeps
+            taught++
+            loss += s.Loss(settle.Phase.Free)
+            opt.Step()
+        }
+        spent := F64(time.Since(t0)) * 1e-9
+        accuracy, answer := evaluate(s, testSet, pixels, digits, tol, labels)
+        try io.Put(("epoch " + $e + ": train loss " + $(loss / F64(taught)).Fixed(4) + ", " + $(F64(sweeps) / F64(taught)).Fixed(1) +
+            " sweeps a lesson (free, then both nudged side by side), " + $refused + " lessons refused, gain " + $s.Gain().Fixed(2) + ", " +
+            $spent.Fixed(1) + " s; test accuracy " + $(100.0 * accuracy).Fixed(2) + "%, " + $answer.Fixed(1) + " sweeps an answer\n"))
+    }
+}
+
+# the fraction of l's samples whose free settle answers their class, and the mean sweeps an answer took; a settle that
+# does not converge counts as wrong
+fn evaluate<D>(s mut system.System<F32>&, l mut loader.Loader<D>&, pixels system.Pop, digits system.Pop, tol F64, labels mut Array<I32>&) F64, F64 {
+    l.Epoch()
+    predicted := Array<I32>(s.Batch)
+    right, seen, sweeps, settles := 0, 0, 0, 0
+    b := s.BudgetFor(tol)
+    for k in range l.Batches() {
+        n := l.Fill(k, s.Pop(pixels).Drive, labels)
+        seen += n
+        out := s.Settle(settle.Phase.Free, b)
+        if not out.Converged: continue
+        sweeps += out.Sweeps
+        settles++
+        s.Predict(settle.Phase.Free, digits, predicted)
+        for i in range n {
+            if predicted[i] == labels[i]: right++
+        }
+    }
+    return F64(right) / F64(seen), F64(sweeps) / F64(settles)
+}

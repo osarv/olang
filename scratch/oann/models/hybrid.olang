@@ -1,0 +1,179 @@
+# models/hybrid - a transformer with a settling block (docs/redesign.md 1.4, "the bridge"; C2 of section 4.1): the
+# reference model in which the backprop path and the dynamical-system core train together, and the measure of what an
+# amortizer saves (M14).
+#
+# The stream is GPT-2's - a token embedding plus a learned position, attention blocks - and then the settle block: the
+# stream, normalized, is the drive of a settling system's inputs (dyn/bridge's Custom operation over every position of
+# every sequence, a row each); the system - Units tanh units with a symmetric lateral block, Dim tanh outputs read back
+# symmetrically into them, certified at Kappa - settles, and its outputs, projected, are added back into the stream; a
+# final norm and the tied head give the logits. The system's weights are a region of their own (`sys.Params()`,
+# `sys.ParamGrads()`), stepped by an optimizer of their own and restrained into the certified set after every step, so
+# every settle converges; its gradients come from the bridge's backward, by the config's Implicit.
+#
+# The amortizer (Amortize) is a perceptron reading the same normalized stream - detached, so its loss trains it alone -
+# that guesses the system's fixed point (every relaxing unit's potential); the settle starts there, and the guess is
+# regressed on the fixed point reached (the loss's Fit term, weighted by Fit). Without one every settle starts at rest.
+# The output does not depend on where a settle starts (within the tolerance); the sweeps it takes do - M14.
+#
+# A model is made in four pieces the program holds: the system (`c.System(batch, r)`), the bridge over it and its two
+# helpers (`bridge.Bridge`, `bridge.Settled`, `bridge.Detach`), and the graph - each referring to the one before, so none
+# can hold another - then `Hybrid.New` records the layers on the graph before `Plan`. `Step` is one training step of both
+# regions; nn/train's `LmEvaluate` measures `m.Lm` (the task's loss alone).
+
+import "std/rand"
+import "../ad/graph"
+import "../kernels/mat"
+import "../nn/layers"
+import "../nn/optim"
+import "../nn/train"
+import "../dyn/system"
+import "../dyn/neuron"
+import "../dyn/conn"
+import "../dyn/bridge"
+
+# a vocabulary, the stream's width, its attention layers and heads, the context; the settle block's units, whether an
+# amortizer starts its settles, how its gradient is taken, the gain it is certified at, a forward settle's tolerance,
+# and the amortizer's loss's weight
+type HybridConfig struct(Vocab I64, Dim I64, Layers I64, Heads I64, Ctx I64, Units I64, Amortize Bool = true
+        How system.Implicit = system.Implicit.Exact(1e-3, 400), Kappa F64 = 0.9, Tol F64 = 1e-3, Fit F64 = 1.0) {
+    Vocab
+    Dim
+    Layers
+    Heads
+    Ctx
+    Units
+    Amortize
+    How
+    Kappa
+    Tol
+    Fit
+}
+
+# the settle block's system for batch sequences (a row per position): Dim linear inputs, Units tanh units, Dim tanh
+# outputs; the inputs into the units (folded into their constant), a symmetric lateral block at the units, the units and
+# the outputs connected symmetrically; planned and certified at Kappa
+fn (c HybridConfig&) System(batch I64, r mut rand.Rand&) system.System<F32> {
+    s := system.System<F32>(batch * c.Ctx)
+    root := s.Root()
+    x := s.Population(root, "x", c.Dim, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", c.Units, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(root, "y", c.Dim, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, h, conn.Wiring.Symmetric)
+    s.Connect(h, y, conn.Wiring.Symmetric)
+    s.Plan(r)!
+    s.Certify(c.Kappa)
+    return s
+}
+
+# the bridge over the config's system: the inputs in, the outputs out, the config's gradient and tolerance
+fn (c HybridConfig&) Bridge(s mut system.System<F32>&) bridge.Bridge<F32> {
+    b := bridge.Bridge<F32>(s, system.Pop(0), system.Pop(2), c.How)!
+    b.Budget = s.BudgetFor(c.Tol)
+    return b
+}
+
+# the layers and the handles a loop needs: Lm's loss is the task's (cross-entropy), Train's the one stepped (the task's
+# plus Fit times the amortizer's); Fit is the amortizer's loss (None without one)
+type Hybrid struct(Config HybridConfig, Embed layers.Embedding, Positions graph.Var, Blocks Array<layers.AttentionBlock>
+        Pre layers.Norm, Guess layers.Mlp, Out layers.Dense, Final layers.Norm, Lm train.LanguageModel, Train train.LanguageModel
+        Fit graph.Var) {
+    Config
+    Embed
+    Positions
+    Blocks
+    Pre
+    Guess
+    Out
+    Final
+    Lm
+    Train
+    Fit
+}
+
+# the model's layers on g, before Plan: b the bridge over the config's system, fixed and cut its helpers
+fn Hybrid.New(g mut graph.Graph<F32>&, c HybridConfig, b mut bridge.Bridge<F32>&, fixed mut bridge.Settled<F32>&
+        cut mut bridge.Detach&) Hybrid {
+    tok := g.Tokens(c.Ctx)
+    emb := layers.Embedding.New(g, c.Vocab, c.Dim)
+    pos := g.Param(graph.Init.Normal(0.0, 0.02), true, c.Ctx, c.Dim)
+    blocks := Array<layers.AttentionBlock>[layers.AttentionBlock.New(g, c.Dim, c.Heads, c.Layers + 1) for _ in range c.Layers]
+    pre := layers.Norm.New(g, c.Dim)
+    guess := layers.Mlp.New(g, Array<I64>[c.Dim, 2 * c.Dim, b.StateSize], mat.Act.Tanh)
+    out := layers.Dense.New(g, c.Dim, c.Dim)
+    final := layers.Norm.New(g, c.Dim)
+    h := g.Positions(emb.Apply(g, tok), pos)
+    for blk in blocks: h = blk.Apply(g, h)
+    n := pre.Apply(g, h)
+    start := guess.Apply(g, g.Custom(cut, n)) if c.Amortize else graph.None
+    y, fit := bridge.Apply(g, b, fixed, n, start)
+    logits := emb.Logits(g, final.Apply(g, g.Add(h, out.Apply(g, y))))
+    targets := g.Classes(c.Ctx)
+    task := g.CrossEntropy(logits, targets)
+    g.Keep(task)
+    loss := task if fit == graph.None else g.Add(task, g.Scale(fit, c.Fit))
+    lm := train.LanguageModel(tok, targets, logits, task, c.Ctx)
+    stepped := train.LanguageModel(tok, targets, logits, loss, c.Ctx)
+    return Hybrid(c, emb, pos, blocks, pre, guess, out, final, lm, stepped, fit)
+}
+
+# one training step on g.Batch sequences drawn by src: the graph's (nn/train.LmStep: forward, backward, its gradients
+# clipped to clip, o's step at rate), then the system's - its gradients clipped alike, so's step at rate, its weights
+# restrained into the certified set. Gives the task's loss
+fn Step<S, O, P>(g mut graph.Graph<F32>&, m Hybrid&, sys mut system.System<F32>&, src mut S&, o mut O&, so mut P&, rate F64
+        clip F64) F64 ? {
+    try train.LmStep(g, m.Train, src, o, rate, clip)
+    if clip > 0.0: optim.ClipNorm(sys.ParamGrads(), clip)
+    so.SetRate(rate)
+    so.Step()
+    sys.Restrain(m.Config.Kappa)
+    return g.Scalar(m.Lm.Loss)
+}
+
+# ---- tests ----
+
+import "std/io"
+import "../data/text"
+
+# a corpus that repeats 0 1 2 3 two hundred times, windows of ctx over it
+fn cycle(ctx I64, seed U64) text.Windows {
+    return text.Windows(Array<I32>[I32(i % 4) for i in range 800], ctx, seed)
+}
+
+# a small hybrid on the cycle (4 sequences of 8, width 16, one block, 16 units) trained for steps steps: its validation
+# loss before and after, and the sweeps per settle over the last 20 steps
+fn learned(amortize Bool, how system.Implicit, steps I64) F64, F64, F64 {
+    c := HybridConfig(4, 16, 1, 2, 8, 16, amortize, how)
+    r := rand.Rand(7)
+    sys := c.System(4, r)
+    b := c.Bridge(sys)
+    fixed := bridge.Settled<F32>(b)
+    cut := bridge.Detach()
+    g := graph.Graph<F32>(4)
+    m := Hybrid.New(g, c, b, fixed, cut)
+    g.Plan(r)!
+    o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+    so := optim.AdamW(sys.Params(), sys.ParamGrads(), rate = 5e-3)
+    src := cycle(8, 1)
+    valid := cycle(8, 2)
+    before := train.LmEvaluate(g, m.Lm, valid, 5)
+    settles, sweeps := I64(0), I64(0)
+    for i in range steps {
+        if i == steps - 20: settles, sweeps = b.Settles, b.Sweeps
+        Step(g, m, sys, src, o, so, 5e-3, 1.0)
+    }
+    per := F64(b.Sweeps - sweeps) / F64(b.Settles - settles)
+    assert b.Refused == 0, "backward refused " + $b.Refused + " times"
+    return before, train.LmEvaluate(g, m.Lm, valid, 5), per
+}
+
+test Step "a hybrid trains on a cycle: its validation loss falls from ln 4 to nearly 0, cold and amortized, every gradient" {
+    for how in Array<system.Implicit>[system.Implicit.Exact(1e-3, 400), system.Implicit.Jfb, system.Implicit.Ep(0.05)] {
+        b0, cold, coldSweeps := learned(false, how, 150)
+        _, warm, warmSweeps := learned(true, how, 150)
+        try io.PutLine($how + ": validation loss " + $b0 + " -> " + $cold + " cold, " + $warm + " amortized; sweeps a settle " + $coldSweeps + " cold, " + $warmSweeps + " amortized")
+        assert (b0 - 4.0.Log()).Abs() < 0.3, "an untrained model's loss is about ln 4, was " + $b0
+        assert cold < 0.1 and warm < 0.1, $how + ": cold " + $cold + ", amortized " + $warm
+        assert warmSweeps < coldSweeps, $how + ": sweeps a settle, cold " + $coldSweeps + ", amortized " + $warmSweeps
+    }
+}

@@ -1,0 +1,212 @@
+# attention's forward and backward as ops.olang computes them - one std/linalg GemmBatch per product over every
+# sequence and head at once, a causal one confined to its triangle - against a Gemm per sequence and head on the heads'
+# strided views, the way it was computed before (kept here as the reference: the whole T x T square of the scores
+# computed, a right operand transposed into scratch first so that products under 64^3 are packed, the sequences spread
+# over tasks with a workspace each). Both are timed over B sequences of T rows, D columns in "heads" heads, on
+# "threads" tasks, in alternating rounds - a median of each - and their outputs and gradients compared. Arguments: B,
+# T, D, heads, repetitions per round, rounds, causal (1 or 0), threads (16 64 128 4 10 9 1 1)
+
+import "../linalg"
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ops"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+# ---- the reference: a Gemm per sequence and head ----
+
+fn parallel(count I64, threads I64, body fn&(task I64, lo I64, hi I64)) {
+    tasks I64 = threads if threads < count else count
+    if tasks <= 1 {
+        body(0, 0, count)
+        return
+    }
+    share I64 = (count + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo I64 = t * share
+            hi I64 = lo + share if lo + share < count else count
+            if lo < hi: spawn body(t, lo, hi)
+        }
+    }
+}
+
+fn transpose(dst linalg.Matrix<F32>&, src linalg.Matrix<F32>&) {
+    for i in range src.Rows {
+        row := src.Row(i)
+        for j in range src.Cols: dst.Data[j * dst.Stride + i] = row[j]
+    }
+}
+
+fn softmax(s linalg.Matrix<F32>&, causal Bool) {
+    for i in range s.Rows {
+        row := s.Row(i)
+        last I64 = i + 1 if causal else s.Cols
+        top F32 = row[0]
+        for j in range 1, last {
+            if row[j] > top: top = row[j]
+        }
+        total F32 = 0.0
+        for j in range last {
+            e F32 = (row[j] - top).Exp()
+            row[j] = e
+            total = total + e
+        }
+        inv F32 = 1.0 / total
+        for j in range last: row[j] = row[j] * inv
+        for j in range last, s.Cols: row[j] = 0.0
+    }
+}
+
+fn headForward(y linalg.Matrix<F32>&, q linalg.Matrix<F32>&, k linalg.Matrix<F32>&, v linalg.Matrix<F32>&
+        probs linalg.Matrix<F32>&, p0 I64, r0 I64, c0 I64, dh I64, T I64, causal Bool, scale F64
+        tr linalg.Matrix<F32>&, ws mut linalg.GemmWorkspace<F32>&) {
+    p := probs.RowRange(p0, p0 + T)!
+    ws.Gemm(p, q.Block(r0, c0, T, dh), false, k.Block(r0, c0, T, dh), true, scale, 0, 1)!
+    softmax(p, causal)
+    transpose(tr, v.Block(r0, c0, T, dh))!
+    ws.Gemm(y.Block(r0, c0, T, dh), p, false, tr, true, 1, 0, 1)!
+}
+
+fn headBackward(dy linalg.Matrix<F32>&, q linalg.Matrix<F32>&, k linalg.Matrix<F32>&, v linalg.Matrix<F32>&
+        probs linalg.Matrix<F32>&, p0 I64, r0 I64, c0 I64, dh I64, T I64, causal Bool, scale F64
+        dq linalg.Matrix<F32>&, dk linalg.Matrix<F32>&, dv linalg.Matrix<F32>&, ds mut linalg.Matrix<F32>&
+        tr linalg.Matrix<F32>&, ws mut linalg.GemmWorkspace<F32>&) {
+    p := probs.RowRange(p0, p0 + T)!
+    dO := dy.Block(r0, c0, T, dh)!
+    ws.Gemm(ds, dO, false, v.Block(r0, c0, T, dh), true, 1, 0, 1)!
+    for i in range T {
+        d := ds.Row(i)
+        pr := p.Row(i)
+        last I64 = i + 1 if causal else T
+        dot F32 = 0.0
+        for j in range last: dot = dot + d[j] * pr[j]
+        for j in range last: d[j] = F32(scale) * pr[j] * (d[j] - dot)
+        for j in range last, T: d[j] = 0.0
+    }
+    transpose(tr, k.Block(r0, c0, T, dh))!
+    ws.Gemm(dq.Block(r0, c0, T, dh), ds, false, tr, true, 1, 0, 1)!
+    transpose(tr, q.Block(r0, c0, T, dh))!
+    ws.Gemm(dk.Block(r0, c0, T, dh), ds, true, tr, true, 1, 0, 1)!
+    transpose(tr, dO)
+    ws.Gemm(dv.Block(r0, c0, T, dh), p, true, tr, true, 1, 0, 1)!
+}
+
+fn perHead(y linalg.Matrix<F32>&, q linalg.Matrix<F32>&, k linalg.Matrix<F32>&, v linalg.Matrix<F32>&, heads I64
+        T I64, causal Bool, probs linalg.Matrix<F32>&, scratch mut Array<F32>&, threads I64
+        wss mut Array<linalg.GemmWorkspace<F32>>&) {
+    dh I64 = q.Cols / heads
+    scale F64 = 1.0 / F64(dh).Sqrt()
+    per I64 = T * T + dh * T
+    parallel(q.Rows / T, threads, fn(task, lo, hi) {
+        tr := linalg.Matrix.View(scratch, task * per + T * T, dh, T)!
+        for s in range lo, hi {
+            for h in range heads {
+                headForward(y, q, k, v, probs, (s * heads + h) * T, s * T, h * dh, dh, T, causal, scale, tr, wss[task])
+            }
+        }
+    })
+}
+
+fn perHeadBackward(dy linalg.Matrix<F32>&, q linalg.Matrix<F32>&, k linalg.Matrix<F32>&, v linalg.Matrix<F32>&
+        heads I64, T I64, causal Bool, probs linalg.Matrix<F32>&, dq linalg.Matrix<F32>&, dk linalg.Matrix<F32>&
+        dv linalg.Matrix<F32>&, scratch mut Array<F32>&, threads I64, wss mut Array<linalg.GemmWorkspace<F32>>&) {
+    dh I64 = q.Cols / heads
+    scale F64 = 1.0 / F64(dh).Sqrt()
+    per I64 = T * T + dh * T
+    parallel(q.Rows / T, threads, fn(task, lo, hi) {
+        ds := linalg.Matrix.View(scratch, task * per, T, T)!
+        tr := linalg.Matrix.View(scratch, task * per + T * T, dh, T)!
+        for s in range lo, hi {
+            for h in range heads {
+                headBackward(dy, q, k, v, probs, (s * heads + h) * T, s * T, h * dh, dh, T, causal, scale, dq, dk, dv
+                    ds, tr, wss[task])
+            }
+        }
+    })
+}
+
+fn median(xs Array<I64>&) I64 {
+    s := xs.Copy()
+    s.Sort(fn(a, b): return a < b)
+    return s[s.Len() / 2]
+}
+
+fn ms(ns I64, reps I64) String {
+    return $(F64(ns) * 1e-6 / F64(reps)).Fixed(2)
+}
+
+fn main() ? io.Error, ParseError {
+    args := os.Args()
+    B := try number(args, 1, 16)
+    T := try number(args, 2, 64)
+    D := try number(args, 3, 128)
+    heads := try number(args, 4, 4)
+    reps := try number(args, 5, 10)
+    rounds := try number(args, 6, 9)
+    causal Bool = try number(args, 7, 1) != 0
+    threads := try number(args, 8, 1)
+    r := rand.Rand(1)
+    n I64 = B * T
+    dh I64 = D / heads
+    q := linalg.Matrix<F32>(n, D)
+    k := linalg.Matrix<F32>(n, D)
+    v := linalg.Matrix<F32>(n, D)
+    q.FillNormal(r, 0.0, 1.0)
+    k.FillNormal(r, 0.0, 1.0)
+    v.FillNormal(r, 0.0, 1.0)
+    dy := linalg.Matrix<F32>(n, D)
+    dy.FillNormal(r, 0.0, 1.0)
+    y := linalg.Matrix<F32>(n, D)
+    y2 := linalg.Matrix<F32>(n, D)
+    probs := linalg.Matrix<F32>(n * heads, T)
+    probs2 := linalg.Matrix<F32>(n * heads, T)
+    dq := linalg.Matrix<F32>(n, D)
+    dk := linalg.Matrix<F32>(n, D)
+    dv := linalg.Matrix<F32>(n, D)
+    dq2 := linalg.Matrix<F32>(n, D)
+    dk2 := linalg.Matrix<F32>(n, D)
+    dv2 := linalg.Matrix<F32>(n, D)
+    scratch := Array<F32>(threads * (T * T + dh * T))
+    scratch2 := Array<F32>(ops.AttentionScratch(n, heads, T))
+    wss := Array<linalg.GemmWorkspace<F32>>(threads, linalg.GemmWorkspace<F32>())
+    ws := linalg.GemmWorkspace<F32>()
+    z F32 = 0.0
+    # once each, outside the timing: every workspace grown to what its products need
+    perHead(y, q, k, v, heads, T, causal, probs, scratch, threads, wss)
+    perHeadBackward(dy, q, k, v, heads, T, causal, probs, dq, dk, dv, scratch, threads, wss)
+    ops.Attention(y2, q, k, v, heads, T, causal, probs2, threads, ws, z)
+    ops.AttentionBackward(dy, q, k, v, heads, T, causal, probs2, dq2, false, dk2, false, dv2, false, scratch2, threads, ws
+        z)
+    times := Array<I64>(4 * rounds)               # the reference's forward, the batches', then the two backwards, by round
+    for round in range rounds {
+        t0 := time.Now()
+        for _ in range reps: perHead(y, q, k, v, heads, T, causal, probs, scratch, threads, wss)
+        t1 := time.Now()
+        for _ in range reps: ops.Attention(y2, q, k, v, heads, T, causal, probs2, threads, ws, z)
+        t2 := time.Now()
+        for _ in range reps: perHeadBackward(dy, q, k, v, heads, T, causal, probs, dq, dk, dv, scratch, threads, wss)
+        t3 := time.Now()
+        for _ in range reps {
+            ops.AttentionBackward(dy, q, k, v, heads, T, causal, probs2, dq2, false, dk2, false, dv2, false, scratch2
+                threads, ws, z)
+        }
+        t4 := time.Now()
+        times[0 * rounds + round] = t1 - t0
+        times[1 * rounds + round] = t2 - t1
+        times[2 * rounds + round] = t3 - t2
+        times[3 * rounds + round] = t4 - t3
+    }
+    diffs := Array<F32>[y.MaxAbsDifference(y2)!, dq.MaxAbsDifference(dq2)!, dk.MaxAbsDifference(dk2)!, dv.MaxAbsDifference(dv2)!]
+    worst := diffs.Max()!
+    try io.PutLine(("B " + $B + ", T " + $T + ", D " + $D + ", " + $heads + " heads, " + $("causal" if causal else "not causal") + ", " + $threads +
+        " threads, medians of " + $rounds + " rounds of " + $reps + ": forward " + $ms(median(times[0 * rounds:1 * rounds]), reps) +
+        " ms by a Gemm per head, " + $ms(median(times[1 * rounds:2 * rounds]), reps) + " by batches; backward " +
+        $ms(median(times[2 * rounds:3 * rounds]), reps) + " by a Gemm per head, " + $ms(median(times[3 * rounds:4 * rounds]), reps) +
+        " by batches; outputs and gradients differ by at most " + $worst))
+}

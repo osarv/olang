@@ -1,0 +1,627 @@
+# nn/optim - optimizers: what turns gradients into a step for parameters. An optimizer steps ONE FLAT REGION - an array
+# of parameters and an array of their gradients laid out alike - in one fused pass, with its state (momentum, the moment
+# estimates) laid out the same and made once, when the optimizer is. A graph's region is `g.Params()` and
+# `g.ParamGrads()`; a dynamical system's is `s.Params()` and `s.ParamGrads()`; anything else with two tensors works the
+# same. Nothing about the optimizers knows what made the region, so graphs and systems share them.
+#
+#     opt := optim.AdamW(g.Params(), g.ParamGrads(), rate = 3e-4, decay = 0.1, spans = optim.Spans(g))
+#     ...
+#     g.Forward(n)
+#     g.Backward(loss)
+#     optim.ClipNorm(g.ParamGrads(), 1.0)
+#     opt.Step()
+#     g.SyncParams()                                    # nothing for a graph without masters
+#
+# Mixed precision. A BF16 or F16 graph keeps its parameters' F32 masters beside the arena (`g.Masters()`): the region to
+# step is then the masters, from the BF16 gradients - `optim.AdamW(g.Masters(), g.ParamGrads(), ...)`, the type of the
+# parameters A (F32) and of the gradients G (BF16) being the optimizer's two type arguments - and `g.SyncParams()`
+# rounds the result into the graph. The moments are kept in A.
+#
+# Weight decay. A decayed element shrinks by rate * decay each step (decoupled, AdamW's), the others do not: a region
+# is cut into runs, each of which decays or not (a graph's weights decay, its biases and gains do not - `Spans(g)`);
+# with no runs given the whole region decays.
+#
+# The input projection (`Projector`) is the other regularizer: in place of weight decay, every dense layer of a graph
+# takes the delta rule's step W <- W (I - alpha x x^T) on its inputs. It is graph-specific, so it is a step of its own,
+# taken before the optimizer's.
+
+import "../tensor"
+import "../ad/graph"
+import "../kernels/mat"
+import "../kernels/elem"
+import "../kernels/gemm"
+import "../io/checkpoint"
+
+# what a training loop asks of an optimizer: a step from the gradients the last Backward left, and the learning rate to
+# take the next one with - a schedule's
+type Optimizer trait {
+    mut Step()
+    mut SetRate(rate F64)
+}
+
+# a run of a region: elements Lo ... Hi - 1, which decay or do not
+type Span struct(Lo I64, Hi I64, Decay Bool) {
+    Lo
+    Hi
+    Decay
+}
+
+# the runs of g's parameter region: each parameter one, decaying where the graph says weight decay applies to it
+fn Spans<T>(g graph.Graph<T>&) Array<Span> {
+    runs := Vec<Span>()
+    for i in range g.Size() {
+        nd := g.Info(graph.Var(i))
+        if nd.Kind != graph.Op.Param: continue
+        runs.Push(Span(nd.Offset, nd.Offset + nd.Dims.Count(), g.Decays(graph.Var(i))))
+    }
+    return runs.ToArray()
+}
+
+# the runs a region is stepped in: the ones given, or the whole of it decaying
+fn runsOf(spans Array<Span>?&, count I64) Array<Span>& {
+    if spans == null: return Array<Span>[Span(0, count, true)]
+    return spans
+}
+
+# ---- schedules and clipping ----
+
+# the learning rate at step 0, 1, ...: rising linearly to peak over the first "warmup" steps, then down half a cosine
+# to "floor" at step "total", and floor after - GPT-3's schedule (Brown et al.), as nanoGPT has it. A function value,
+# so a loop asks it for each step's rate and an optimizer knows nothing of it
+fn WarmupCosine(peak F64, warmup I64, total I64, floor F64 = 0.0) fn&(step I64) F64 {
+    return fn(step) {
+        if step < warmup: return peak * F64(step + 1) / F64(warmup)
+        if step >= total: return floor
+        progress F64 = F64(step - warmup) / F64(total - warmup)
+        return floor + 0.5 * (1.0 + (Pi * progress).Cos()) * (peak - floor)
+    }
+}
+
+# the same warmup, then down a straight line to "floor" at step "total"
+fn WarmupLinear(peak F64, warmup I64, total I64, floor F64 = 0.0) fn&(step I64) F64 {
+    return fn(step) {
+        if step < warmup: return peak * F64(step + 1) / F64(warmup)
+        if step >= total: return floor
+        return floor + (peak - floor) * F64(total - step) / F64(total - warmup)
+    }
+}
+
+# scales every gradient down, all by one factor, so that their Euclidean norm together is at most "max" - PyTorch's
+# clip_grad_norm_ (max / (norm + 1e-6) when the norm is above max). Gives the norm before clipping, summed in F64
+fn ClipNorm<G>(grads tensor.Tensor<G>&, max F64) F64 {
+    d := grads.Flat()!
+    norm F64 = elem.SquaresF64(d).Sqrt()
+    if norm > max: scaleBy(d, max / (norm + 1e-6))
+    return norm
+}
+
+# every element times k, in F32 (F64 for F64): BF16 and F16 are widened for the product and rounded once
+fn scaleBy<G>(d mut Array<G>&, k F64) {
+    match G {
+        case F64 { for i in range d.Len(): d[i] = d[i] * k }
+        case _ {
+            f F32 = F32(k)
+            for i in range d.Len(): d[i] = G(F32(d[i]) * f)
+        }
+    }
+}
+
+# ---- AdamW ----
+
+# Adam with decoupled weight decay, as PyTorch's AdamW computes it: for each parameter p with gradient g, at step t,
+#   m <- beta1 m + (1 - beta1) g,   v <- beta2 v + (1 - beta2) g^2
+#   p <- p - rate (decay p)         (decoupled decay, on the runs that decay)
+#   p <- p - rate (m / (1 - beta1^t)) / (sqrt(v / (1 - beta2^t)) + eps)
+# Rate may be changed between steps - a schedule. M and V are readable, for a checkpoint
+type AdamW<A, G> struct(params tensor.Tensor<A>, grads tensor.Tensor<G>, rate F64 = 0.001, beta1 F64 = 0.9
+        beta2 F64 = 0.999, eps F64 = 1e-8, decay F64 = 0.0, spans Array<Span>?& = null) {
+    Rate F64 = rate
+    Beta1 F64 = beta1
+    Beta2 F64 = beta2
+    Eps F64 = eps
+    Decay F64 = decay
+    Steps I64 = 0                                   # the steps taken
+    p mut Array<A>& = params.Flat()!
+    gr Array<G>& = grads.Flat()!
+    M mut Array<A>& = Array<A>(params.Count())
+    V mut Array<A>& = Array<A>(params.Count())
+    runs Array<Span>& = runsOf(spans, params.Count())
+}
+
+fn (o mut AdamW<A, G>&) SetRate(rate F64) { o.Rate = rate }
+
+# one step from the gradients the last Backward left
+fn (o mut AdamW<A, G>&) Step() {
+    o.Steps++
+    corr1 F64 = 1.0 - o.Beta1.Pow(F64(o.Steps))
+    corr2 F64 = 1.0 - o.Beta2.Pow(F64(o.Steps))
+    b1 A = A(o.Beta1)
+    b2 A = A(o.Beta2)
+    c1 A = A(1.0 - o.Beta1)
+    c2 A = A(1.0 - o.Beta2)
+    step A = A(o.Rate / corr1)                      # the learning rate with the first moment's correction
+    root A = A(1.0 / corr2.Sqrt())                  # sqrt(v / corr2) is sqrt(v) times this
+    eps A = A(o.Eps)
+    for r in o.runs {
+        keep A = A(1.0 - o.Rate * o.Decay) if r.Decay else A(1.0)
+        adamRun(o.p, o.gr, o.M, o.V, r.Lo, r.Hi, b1, b2, c1, c2, keep, step, root, eps)
+    }
+}
+
+# the moments and the step count added to a checkpoint as "adam.m", "adam.v" and the metadata "adam.steps" - what a run
+# needs to resume where it stopped
+fn (o AdamW<A, G>&) Save(w mut checkpoint.Writer&) ? checkpoint.SafetensorsError {
+    try w.Add("adam.m", tensor.Tensor<A>.Over(o.M, 0, o.M.Len())!)
+    try w.Add("adam.v", tensor.Tensor<A>.Over(o.V, 0, o.V.Len())!)
+    w.Meta("adam.steps", $o.Steps)
+}
+
+# the state Save wrote, read back from a file (the same region, so the same sizes)
+fn (o mut AdamW<A, G>&) Load(f checkpoint.File&) ? checkpoint.SafetensorsError, tensor.ShapeError {
+    try f.Read("adam.m", tensor.Tensor<A>.Over(o.M, 0, o.M.Len())!)
+    try f.Read("adam.v", tensor.Tensor<A>.Over(o.V, 0, o.V.Len())!)
+    o.Steps = try steps(f, "adam.steps")
+}
+
+# the integer metadata "key" of a checkpoint
+fn steps(f checkpoint.File&, key String&) I64 ? checkpoint.SafetensorsError {
+    text := try f.Meta.Get(key) catch { error checkpoint.SafetensorsError.Missing($key) }
+    return try text.ParseInt() catch { error checkpoint.SafetensorsError.Malformed }
+}
+
+# the AdamW update of p[lo:hi] from the gradients gr, the moments m and v laid out as p: keep is 1 - rate decay, step
+# the rate over the first moment's correction, root one over the square root of the second's. Computed in p's type,
+# the gradients widened into it
+fn adamRun<A, G>(p mut Array<A>&, gr Array<G>&, m mut Array<A>&, v mut Array<A>&, lo I64, hi I64, b1 A, b2 A
+        c1 A, c2 A, keep A, step A, root A, eps A) {
+    for k in range lo, hi {
+        gk A = A(gr[k])
+        mk A = b1 * m[k] + c1 * gk
+        vk A = b2 * v[k] + c2 * gk * gk
+        m[k] = mk
+        v[k] = vk
+        p[k] = keep * p[k] - step * mk / (vk.Sqrt() * root + eps)
+    }
+}
+
+# ---- SGD ----
+
+# stochastic gradient descent as PyTorch's SGD computes it: g <- g + decay p (weight decay as an L2 term, on the runs
+# that decay), u <- momentum u + g, and p <- p - rate u - or, with nesterov, p <- p - rate (g + momentum u)
+type Sgd<A, G> struct(params tensor.Tensor<A>, grads tensor.Tensor<G>, rate F64 = 0.01, momentum F64 = 0.0
+        nesterov Bool = false, decay F64 = 0.0, spans Array<Span>?& = null) {
+    Rate F64 = rate
+    Momentum F64 = momentum
+    Nesterov Bool = nesterov
+    Decay F64 = decay
+    p mut Array<A>& = params.Flat()!
+    gr Array<G>& = grads.Flat()!
+    U mut Array<A>& = Array<A>(params.Count() if momentum != 0.0 else 0)
+    runs Array<Span>& = runsOf(spans, params.Count())
+}
+
+fn (o mut Sgd<A, G>&) SetRate(rate F64) { o.Rate = rate }
+
+fn (o mut Sgd<A, G>&) Step() {
+    rate A = A(o.Rate)
+    mu A = A(o.Momentum)
+    for r in o.runs {
+        l2 A = A(o.Decay) if r.Decay else A(0.0)
+        sgdRun(o.p, o.gr, o.U, r.Lo, r.Hi, rate, mu, l2, o.Momentum != 0.0, o.Nesterov)
+    }
+}
+
+# the momentum added to a checkpoint as "sgd.u" (nothing without momentum)
+fn (o Sgd<A, G>&) Save(w mut checkpoint.Writer&) ? checkpoint.SafetensorsError {
+    if o.U.Len() > 0: try w.Add("sgd.u", tensor.Tensor<A>.Over(o.U, 0, o.U.Len())!)
+}
+
+fn (o mut Sgd<A, G>&) Load(f checkpoint.File&) ? checkpoint.SafetensorsError, tensor.ShapeError {
+    if o.U.Len() > 0: try f.Read("sgd.u", tensor.Tensor<A>.Over(o.U, 0, o.U.Len())!)
+}
+
+# the SGD update of p[lo:hi] from the gradients gr (plus l2 p), with momentum mu in u laid out as p when momentum
+fn sgdRun<A, G>(p mut Array<A>&, gr Array<G>&, u mut Array<A>&, lo I64, hi I64, rate A, mu A, l2 A, momentum Bool
+        nesterov Bool) {
+    if not momentum {
+        for k in range lo, hi: p[k] = p[k] - rate * (A(gr[k]) + l2 * p[k])
+    } else if nesterov {
+        for k in range lo, hi {
+            gk A = A(gr[k]) + l2 * p[k]
+            uk A = mu * u[k] + gk
+            u[k] = uk
+            p[k] = p[k] - rate * (gk + mu * uk)
+        }
+    } else {
+        for k in range lo, hi {
+            uk A = mu * u[k] + A(gr[k]) + l2 * p[k]
+            u[k] = uk
+            p[k] = p[k] - rate * uk
+        }
+    }
+}
+
+# ---- what must not allocate, decided while compiling (S17a, G42): a step of either optimizer, in either precision ----
+
+fn adamOf(o mut AdamW<F32, F32>&) { o.Step() }
+fn adamMixedOf(o mut AdamW<F32, BF16>&) { o.Step() }
+fn sgdOf(o mut Sgd<F32, F32>&) { o.Step() }
+fn sgdMixedOf(o mut Sgd<F32, BF16>&) { o.Step() }
+fn scaleOf(d mut Array<BF16>&) { scaleBy(d, 0.5) }
+
+assert not adamOf.Allocates, "a step of AdamW allocates"
+assert not adamMixedOf.Allocates, "a step of AdamW on masters allocates"
+assert not sgdOf.Allocates, "a step of Sgd allocates"
+assert not sgdMixedOf.Allocates, "a step of Sgd on masters allocates"
+assert not scaleOf.Allocates, "scaling the gradients allocates"
+
+# ---- the input projection ----
+
+# a dense layer the projection steps: its output y = x w^T + b and the three handles it reads
+type linked struct(y graph.Var, x graph.Var, w graph.Var, b graph.Var) {
+    y
+    x
+    w
+    b
+}
+
+# Delta-rule input projection in place of weight decay: every dense layer y = x W^T + b takes the step
+# W <- W (I - alpha x x^T) on each input row x of the batch - for the batch, W <- W - (alpha / n) (W X^T) X, X the
+# layer's n input rows - one product, since W X^T is the layer's output less its bias, which the forward pass already
+# computed. It shrinks W only along the directions its inputs come from (Behrouz et al., "Nested Learning: The Illusion
+# of Deep Learning Architectures"). Normalized divides each row's term by |x|^2, making alpha a fraction of the
+# projection onto x instead of a rate scaled by |x|^2. Made on a graph BEFORE its Plan (every dense layer's output is
+# kept to the step's end for it, an intermediate's storage being reused otherwise); Project(g) after a Backward and
+# before the optimizer's Step, which changes W. Steps W in the graph's own type, so not for a graph keeping masters
+type Projector<T> struct(g mut graph.Graph<T>&, alpha F64 = 0.001, normalized Bool = true) {
+    Alpha F64 = alpha
+    Normalized Bool = normalized
+    layers Array<linked> = denseLayers(g)
+    m mut Array<T>& = Array<T>(largest(g, layers))
+    ws gemm.Workspace<T> = gemm.Workspace<T>(g.Threads)
+}
+
+# every dense layer of g, its output and its input kept
+fn denseLayers<T>(g mut graph.Graph<T>&) Array<linked> {
+    if g.HasMasters(): unreachable "oann: the projection regularizer is not built for a BF16 graph - use weight decay"
+    found := Vec<linked>()
+    for i in range g.Size() {
+        kind := g.Info(graph.Var(i)).Kind
+        if kind != graph.Op.Linear: continue
+        found.Push(linked(graph.Var(i), kind.x, kind.w, kind.b))
+        g.Keep(graph.Var(i))
+        g.Keep(kind.x)
+    }
+    return found.ToArray()
+}
+
+# the largest product's output elements, for the batch the graph is planned for
+fn largest<T>(g graph.Graph<T>&, layers Array<linked>&) I64 {
+    most I64 = 0
+    for l in layers: most = most.Max(g.Info(l.y).Dims.Count())
+    return most
+}
+
+# W <- W - (alpha / n) (W X^T) X for every dense layer, from what the last Forward computed
+fn (p mut Projector<T>&) Project(g graph.Graph<T>&) {
+    for l in p.layers: p.layer(g, l)
+}
+
+fn (p mut Projector<T>&) layer(g graph.Graph<T>&, l linked&) {
+    x := g.Value(l.x).Mat()!
+    y := g.Value(l.y).Mat()!
+    w := g.Value(l.w).Mat()!
+    m := mat.Mat<T>(p.m, 0, y.Rows, y.Cols, y.Cols)
+    for r in range y.Rows {
+        for c in range y.Cols: m[r, c] = y[r, c]
+    }
+    if l.b != graph.None: subtractRows(m, g.Value(l.b))
+    if p.Normalized: scaleByNorms(x, m)
+    gemm.Gemm(p.ws, w, m, true, x, false, T(-p.Alpha / F64(x.Rows)), T(1.0))
+}
+
+# the bias taken from every row of m
+fn subtractRows<T>(m mut mat.Mat<T>&, bias tensor.Tensor<T>&) {
+    for r in range m.Rows {
+        for c in range m.Cols: m[r, c] = m[r, c] - bias.Get(c)
+    }
+}
+
+# each row of m divided by the squared norm of x's row, a row of norm zero left as it is
+fn scaleByNorms<T>(x mat.Mat<T>&, m mut mat.Mat<T>&) {
+    for r in range x.Rows {
+        n2 T = elem.Dot(x.Data, x.Off + r * x.Ld, x.Data, x.Off + r * x.Ld, x.Cols)
+        if not (n2 > 0.0): continue
+        inv T = T(1.0) / n2
+        for c in range m.Cols: m[r, c] = m[r, c] * inv
+    }
+}
+
+# ---- tests ----
+
+import "std/os"
+import "std/rand"
+
+# a graph whose loss is the mean of (w - t)^2 over two elements, so w's gradient is w - t
+fn quadratic(w0 F64, w1 F64) graph.Graph<F64>, graph.Var, graph.Var {
+    g mut graph.Graph<F64>& = graph.Graph<F64>(1)
+    w := g.Param(graph.Init.Zeros, true, 2)
+    t := g.Constant(2)
+    loss := g.Mse(w, t)
+    g.Plan(rand.Rand(1))!
+    g.Value(w).Set(w0, 0)
+    g.Value(w).Set(w1, 1)
+    g.Value(t).Set(1.0, 0)
+    g.Value(t).Set(-2.0, 1)
+    return g, w, loss
+}
+
+test AdamW "takes PyTorch's steps, decaying only the runs that decay" {
+    g, w, loss := quadratic(3.0, 0.5)
+    o := AdamW(g.Params(), g.ParamGrads(), rate = 0.1, decay = 0.5, spans = Spans(g))
+    p F64 = 3.0
+    m F64 = 0.0
+    v F64 = 0.0
+    for step in range 1, 4 {
+        g.Forward(1)
+        g.Backward(loss)
+        grad F64 = p - 1.0
+        o.Step()
+        m = 0.9 * m + 0.1 * grad
+        v = 0.999 * v + 0.001 * grad * grad
+        p = p * (1.0 - 0.1 * 0.5)
+        p = p - 0.1 * (m / (1.0 - 0.9.Pow(F64(step)))) / ((v / (1.0 - 0.999.Pow(F64(step)))).Sqrt() + 1e-8)
+        assert (g.Value(w).Get(0) - p).Abs() < 1e-12
+    }
+}
+
+test AdamW "a run that does not decay is stepped without decay, one that does with it; no runs given, all decay" {
+    for variant in range 3 {
+        g, w, loss := quadratic(2.0, 2.0)
+        runs Array<Span>?& = null
+        if variant == 1: runs = Array<Span>[Span(0, 1, true), Span(1, 2, false)]
+        if variant == 2: runs = Array<Span>[Span(0, 2, false)]
+        o := AdamW(g.Params(), g.ParamGrads(), rate = 0.1, decay = 0.5, spans = runs)
+        g.Forward(1)
+        g.Backward(loss)
+        o.Step()
+        # the first step moves each element by the rate (m / sqrt(v) is the gradient's sign), after the decay
+        decayed := 2.0 * 0.95 - 0.1
+        plain := 2.0 - 0.1
+        assert (g.Value(w).Get(0) - (plain if variant == 2 else decayed)).Abs() < 1e-7
+        assert (g.Value(w).Get(1) - (decayed if variant == 0 else plain)).Abs() < 1e-7
+    }
+}
+
+test Sgd "with momentum takes PyTorch's steps" {
+    g, w, loss := quadratic(3.0, 0.5)
+    o := Sgd(g.Params(), g.ParamGrads(), rate = 0.1, momentum = 0.9)
+    p F64 = 3.0
+    u F64 = 0.0
+    for _ in range 3 {
+        g.Forward(1)
+        g.Backward(loss)
+        o.Step()
+        u = 0.9 * u + (p - 1.0)
+        p = p - 0.1 * u
+        assert (g.Value(w).Get(0) - p).Abs() < 1e-12
+    }
+}
+
+test Sgd "Nesterov's step and an L2 decay, as PyTorch computes them" {
+    g, w, loss := quadratic(3.0, 0.5)
+    o := Sgd(g.Params(), g.ParamGrads(), rate = 0.1, momentum = 0.9, nesterov = true, decay = 0.2)
+    p F64 = 3.0
+    u F64 = 0.0
+    for _ in range 3 {
+        g.Forward(1)
+        g.Backward(loss)
+        o.Step()
+        grad F64 = (p - 1.0) + 0.2 * p
+        u = 0.9 * u + grad
+        p = p - 0.1 * (grad + 0.9 * u)
+        assert (g.Value(w).Get(0) - p).Abs() < 1e-12
+    }
+}
+
+test Projector "takes W <- W - (alpha / n) (W X^T) X, in place of weight decay, then a plain gradient step follows" {
+    g := graph.Graph<F64>(3)
+    x := g.Input(2)
+    w := g.Param(graph.Init.Zeros, true, 2, 2)
+    b := g.Param(graph.Init.Zeros, false, 2)
+    y := g.Linear(x, w, b)
+    t := g.Input(2)
+    loss := g.Mse(y, t)
+    proj := Projector(g, 0.05, false)
+    try g.Plan(rand.Rand(1))
+    xd := g.Data(x).Flat()!
+    for i in range 6: xd[i] = F64(i + 1) * 0.5
+    wm := g.Value(w)
+    wm.Set(1.0, 0, 0)
+    wm.Set(-1.0, 0, 1)
+    wm.Set(0.5, 1, 0)
+    wm.Set(2.0, 1, 1)
+    g.Value(b).Fill(0.25)
+    g.Forward(3)
+    g.Backward(loss)
+    # expected: the projection first, from W as Forward used it, then a plain gradient step
+    want := Array<F64>(4)
+    for i in range 2 {
+        for j in range 2 {
+            step F64 = 0.0
+            for n in range 3 {
+                wx F64 = wm.Get(i, 0) * g.Value(x).Get(n, 0) + wm.Get(i, 1) * g.Value(x).Get(n, 1)
+                step += wx * g.Value(x).Get(n, j)
+            }
+            want[i * 2 + j] = wm.Get(i, j) - 0.05 / 3.0 * step - 0.1 * g.Grad(w).Get(i, j)
+        }
+    }
+    o := Sgd(g.Params(), g.ParamGrads(), rate = 0.1)
+    proj.Project(g)
+    o.Step()
+    for i in range 4: assert (wm.Get(i / 2, i % 2) - want[i]).Abs() < 1e-12
+}
+
+test Projector "normalized, each row's term divides by |x|^2: a unit-norm input is projected exactly as the unnormalized form" {
+    for normalized in range 2 {
+        g := graph.Graph<F64>(1)
+        x := g.Input(2)
+        w := g.Param(graph.Init.Zeros, true, 1, 2)
+        g.Linear(x, w)
+        proj := Projector(g, 0.5, normalized == 1)
+        try g.Plan(rand.Rand(1))
+        g.Data(x).Set(0.6, 0, 0)
+        g.Data(x).Set(0.8, 0, 1)
+        g.Value(w).Set(1.0, 0, 0)
+        g.Value(w).Set(1.0, 0, 1)
+        g.Forward(1)
+        proj.Project(g)
+        # W X^T = 1.4: W - 0.5 * 1.4 * (0.6, 0.8), the same at |x| = 1
+        assert (g.Value(w).Get(0, 0) - (1.0 - 0.7 * 0.6)).Abs() < 1e-12
+        assert (g.Value(w).Get(0, 1) - (1.0 - 0.7 * 0.8)).Abs() < 1e-12
+    }
+}
+
+test AdamW "any two tensors are a region: stepped as a graph's parameters are, Sgd too" {
+    g, w, loss := quadratic(3.0, 0.5)
+    o := AdamW(g.Params(), g.ParamGrads(), rate = 0.1, decay = 0.5)
+    p := tensor.Tensor<F64>.Of(Array<F64>[3.0, 0.5], 2)!
+    grads := tensor.Tensor<F64>.Zeros(2)
+    flat := AdamW(p, grads, rate = 0.1, decay = 0.5)
+    h, hw, hloss := quadratic(3.0, 0.5)
+    s := Sgd(h.Params(), h.ParamGrads(), rate = 0.1, momentum = 0.9, nesterov = true)
+    q := tensor.Tensor<F64>.Of(Array<F64>[3.0, 0.5], 2)!
+    flatSgd := Sgd(q, grads, rate = 0.1, momentum = 0.9, nesterov = true)
+    for _ in range 4 {
+        g.Forward(1)
+        g.Backward(loss)
+        o.Step()
+        grads.Set(p.Get(0) - 1.0, 0)
+        grads.Set(p.Get(1) + 2.0, 1)
+        flat.Step()
+        assert g.Value(w).Get(0) == p.Get(0) and g.Value(w).Get(1) == p.Get(1)
+        h.Forward(1)
+        h.Backward(hloss)
+        s.Step()
+        grads.Set(q.Get(0) - 1.0, 0)
+        grads.Set(q.Get(1) + 2.0, 1)
+        flatSgd.Step()
+        assert h.Value(hw).Get(0) == q.Get(0) and h.Value(hw).Get(1) == q.Get(1)
+    }
+}
+
+test AdamW "on a BF16 graph steps the F32 masters: steps too small for BF16 add up there, then show in the graph" {
+    for which in range 2 {
+        g := graph.Graph<BF16>(1)
+        w := g.Param(graph.Init.Constant(1.0), true, 2)
+        t := g.Constant(2)                          # zeros: the loss is the mean of w^2
+        loss := g.Mse(w, t)
+        try g.Plan(rand.Rand(1))
+        adam := AdamW(g.Masters(), g.ParamGrads(), rate = 1e-4)
+        sgd := Sgd(g.Masters(), g.ParamGrads(), rate = 1e-4, momentum = 0.9)
+        for step in range 1, 101 {
+            g.Forward(1)
+            g.Backward(loss)
+            if which == 0: adam.Step()
+            else: sgd.Step()
+            g.SyncParams()
+            assert g.Masters().Get(0) < 1.0
+            if step == 1: assert g.Value(w).Get(0) == 1.0   # 1 - 1e-4 rounds back to 1 in BF16
+        }
+        assert g.Value(w).Get(0) < 1.0 and F32(g.Value(w).Get(0)) == F32(BF16(g.Masters().Get(0)))
+    }
+}
+
+test WarmupCosine "warms up linearly, follows half a cosine down to its floor and stays there" {
+    rate := WarmupCosine(1.0, 10, 110, 0.1)
+    assert rate(0) == 0.1 and rate(4) == 0.5 and rate(9) == 1.0
+    assert rate(10) == 1.0 and (rate(60) - 0.55).Abs() < 1e-12
+    assert rate(110) == 0.1 and rate(1000) == 0.1
+    assert rate(30) > rate(31)
+}
+
+test WarmupLinear "warms up linearly, falls on a straight line to its floor and stays there" {
+    rate := WarmupLinear(1.0, 10, 110, 0.1)
+    assert rate(4) == 0.5 and rate(9) == 1.0 and rate(10) == 1.0
+    assert (rate(60) - 0.55).Abs() < 1e-12 and rate(110) == 0.1 and rate(1000) == 0.1
+}
+
+test ClipNorm "scales the gradients to the norm asked for, and leaves smaller ones alone" {
+    g, w, loss := quadratic(4.0, 2.0)               # gradients w - t: 3 and 4, norm 5 (Mse: (2/2) (w - t))
+    g.Forward(1)
+    g.Backward(loss)
+    assert (ClipNorm(g.ParamGrads(), 10.0) - 5.0).Abs() < 1e-12
+    assert g.Grad(w).Get(0) == 3.0
+    assert (ClipNorm(g.ParamGrads(), 1.0) - 5.0).Abs() < 1e-12
+    assert (ClipNorm(g.ParamGrads(), 100.0) - 1.0).Abs() < 1e-6
+    assert (g.Grad(w).Get(1) / g.Grad(w).Get(0) - 4.0 / 3.0).Abs() < 1e-12
+}
+
+test ClipNorm "of BF16 gradients is computed in F32 and rounded once" {
+    g := graph.Graph<BF16>(1)
+    w := g.Param(graph.Init.Constant(4.0), true, 2)
+    t := g.Constant(2)
+    loss := g.Mse(w, t)
+    try g.Plan(rand.Rand(1))
+    g.Forward(1)
+    g.Backward(loss)                                # gradients w - t = 4, 4: norm 5.657
+    norm := ClipNorm(g.ParamGrads(), 1.0)
+    assert (norm - 32.0.Sqrt()).Abs() < 0.05
+    assert (ClipNorm(g.ParamGrads(), 100.0) - 1.0).Abs() < 0.02
+}
+
+# this process's resident memory in kB (VmRSS, Linux)
+fn resident() I64 {
+    text := try os.ReadFile("/proc/self/status") catch { return 0 }
+    for line in text.Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        kb := try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+        return kb
+    }
+    return 0
+}
+
+# a perceptron of some size on a graph in F32 or BF16: its input, classes and loss, a batch of random data in them
+fn perceptron<T>(g mut graph.Graph<T>&, r mut rand.Rand&) graph.Var {
+    x := g.Input(64)
+    y := g.Classes()
+    w1 := g.Param(graph.Init.Normal(0.0, 0.1), true, 128, 64)
+    b1 := g.Param(graph.Init.Zeros, false, 128)
+    w2 := g.Param(graph.Init.Normal(0.0, 0.1), true, 10, 128)
+    h := g.Act(g.Linear(x, w1, b1), mat.Act.Relu)
+    loss := g.CrossEntropy(g.Linear(h, w2), y)
+    g.Plan(r)!
+    xs := g.Data(x).Flat()!
+    for i in range xs.Len(): xs[i] = T(r.Normal())
+    ys := g.Ints(y).Flat()!
+    for i in range ys.Len(): ys[i] = I32(r.Below(10))
+    return loss
+}
+
+test AdamW "a step allocates nothing: the resident memory does not grow over 20 steps after the first, AdamW and Sgd, F32 and BF16" {
+    r := rand.Rand(6)
+    a := graph.Graph<F32>(16)
+    aloss := perceptron(a, r)
+    b := graph.Graph<BF16>(16)
+    bloss := perceptron(b, r)
+    adam := AdamW(a.Params(), a.ParamGrads(), rate = 1e-3, decay = 0.1, spans = Spans(a))
+    sgda := Sgd(a.Params(), a.ParamGrads(), rate = 1e-2, momentum = 0.9)
+    adamb := AdamW(b.Masters(), b.ParamGrads(), rate = 1e-3)
+    sgdb := Sgd(b.Masters(), b.ParamGrads(), rate = 1e-2, momentum = 0.9, nesterov = true)
+    before I64 = 0
+    for step in range 22 {
+        if step == 2: before = resident()
+        a.Forward(16)
+        a.Backward(aloss)
+        ClipNorm(a.ParamGrads(), 1.0)
+        if step % 2 == 0: adam.Step()
+        else: sgda.Step()
+        b.Forward(16)
+        b.Backward(bloss)
+        ClipNorm(b.ParamGrads(), 1.0)
+        if step % 2 == 0: adamb.Step()
+        else: sgdb.Step()
+        b.SyncParams()
+    }
+    assert resident() == before, "grew by " + $(resident() - before) + " kB"
+}

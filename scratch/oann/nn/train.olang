@@ -1,0 +1,493 @@
+# nn/train - the loops around a graph: batches fed from a loader or a token source, a step of an optimizer after each,
+# the measure of a model on data it does not train on, a run's checkpoint and its record. Nothing here allocates per step:
+# a batch is written straight into the graph's input storage, and every other buffer is the graph's or the optimizer's.
+#
+# The loops are generic over the optimizer and over where batches come from, each by what it is asked: an optimizer is
+# anything with Step() and SetRate(rate) (nn/optim's AdamW and Sgd); a batch source of a language model is anything with
+# `Random(tokens, targets, B)` filling B windows at random places and `At(first, tokens, targets, B)` filling B in order
+# (data/text's Windows, data/tokens' Tokens - which can fail, so a loop over them can). After a step of a graph with
+# masters the optimizer has stepped them, and the loops round them into the graph (`g.SyncParams()`, nothing otherwise).
+#
+# Checkpoints (`Save`, `Resume`) are safetensors files through io/checkpoint: the graph's parameters as `g.Save` writes
+# them (the masters of a BF16 graph, F32), the optimizer's moments and step count, and the step the run had reached - so
+# a run resumes where it stopped, bit for bit. The run record (`Fit`) is one JSON line per report through io/runlog.
+
+import "std/io"
+import "std/os"
+import "std/time"
+import "../ad/graph"
+import "../data/loader"
+import "../io/checkpoint"
+import "../io/runlog"
+import "../kernels/mat"
+import "../tensor"
+import "layers"
+import "optim"
+
+# ---- classifiers ----
+
+# the handles a classifier's loop needs: its input, the classes, the logits and the loss
+type Classifier struct(X graph.Var, Y graph.Var, Logits graph.Var, Loss graph.Var) {
+    X
+    Y
+    Logits
+    Loss
+}
+
+# the loss of logits against y recorded and the logits kept to the step's end, to be read after it. Before Plan
+fn Classifier.On<T>(g mut graph.Graph<T>&, x graph.Var, y graph.Var, logits graph.Var) Classifier {
+    g.Keep(logits)
+    return Classifier(x, y, logits, g.CrossEntropy(logits, y))
+}
+
+# one epoch: every batch of l once, in a new order, forward, backward and a step of o after each. Gives the mean loss
+fn Epoch<T, D, O>(g mut graph.Graph<T>&, c Classifier&, l mut loader.Loader<D>&, o mut O&) F64 {
+    l.Epoch()
+    xs := g.Data(c.X).Flat()!
+    ys := g.Ints(c.Y).Flat()!
+    total F64 = 0.0
+    seen I64 = 0
+    for b in range l.Batches() {
+        n := l.Fill(b, xs, ys)
+        g.Forward(n)
+        g.Backward(c.Loss)
+        o.Step()
+        g.SyncParams()
+        total += g.Scalar(c.Loss) * F64(n)
+        seen += n
+    }
+    return total / F64(seen)
+}
+
+# the mean loss and the fraction classified right over every sample of l, forward only
+fn Evaluate<T, D>(g mut graph.Graph<T>&, c Classifier&, l mut loader.Loader<D>&) F64, F64 {
+    l.Epoch()
+    xs := g.Data(c.X).Flat()!
+    ys := g.Ints(c.Y).Flat()!
+    total F64 = 0.0
+    right I64 = 0
+    seen I64 = 0
+    for b in range l.Batches() {
+        n := l.Fill(b, xs, ys)
+        g.Forward(n)
+        total += g.Scalar(c.Loss) * F64(n)
+        right += correct(g.Value(c.Logits).Mat()!, ys, n)
+        seen += n
+    }
+    return total / F64(seen), F64(right) / F64(seen)
+}
+
+# how many of the first n rows of z have their largest score at the row's class
+fn correct<T>(z mat.Mat<T>&, classes Array<I32>&, n I64) I64 {
+    right I64 = 0
+    for i in range n {
+        best I64 = 0
+        for k in range 1, z.Cols {
+            if F64(z[i, k]) > F64(z[i, best]): best = k
+        }
+        if best == I64(classes[i]): right++
+    }
+    return right
+}
+
+# ---- language models ----
+
+# the handles a language model's loop needs: the tokens in, the targets (each token's next one), the logits and the
+# loss (None for a model built to decode only). The graph's batch is the sequences of Ctx tokens a step reads
+type LanguageModel struct(Tokens graph.Var, Targets graph.Var, Logits graph.Var, Loss graph.Var, Ctx I64) {
+    Tokens
+    Targets
+    Logits
+    Loss
+    Ctx
+}
+
+# a GPT (layers.Transformer, tied embeddings) on g for a vocabulary of "vocab" tokens and sequences of ctx: its tokens,
+# targets, logits and loss; "loss" false for a graph that only decodes. Before Plan
+fn LanguageModel.Gpt<E>(g mut graph.Graph<E>&, vocab I64, ctx I64, width I64, heads I64, depth I64, dropout F64 = 0.0
+        loss Bool = true) LanguageModel {
+    tok := g.Tokens(ctx)
+    logits := layers.Transformer.New(g, vocab, ctx, width, heads, depth, true, dropout).Apply(g, tok)
+    if not loss: return LanguageModel(tok, graph.None, logits, graph.None, ctx)
+    y := g.Classes(ctx)
+    return LanguageModel(tok, y, logits, g.CrossEntropy(logits, y), ctx)
+}
+
+# one training step on g.Batch sequences drawn by src: forward, backward, the gradients clipped to norm "clip" (none when
+# 0), and a step of o at "rate". Gives the loss and the gradients' norm before clipping
+fn LmStep<E, S, O>(g mut graph.Graph<E>&, m LanguageModel&, src mut S&, o mut O&, rate F64, clip F64) F64, F64 ? {
+    g.Training = true
+    try src.Random(g.Ints(m.Tokens).Flat()!, g.Ints(m.Targets).Flat()!, g.Batch)
+    g.Forward(g.Batch)
+    g.Backward(m.Loss)
+    norm F64 = optim.ClipNorm(g.ParamGrads(), clip) if clip > 0.0 else 0.0
+    o.SetRate(rate)
+    o.Step()
+    g.SyncParams()
+    return g.Scalar(m.Loss), norm
+}
+
+# the mean loss over the first "batches" batches of src's ordered pass (all of it when it is shorter), dropout off - the
+# same windows every time, so two evaluations compare
+fn LmEvaluate<E, S>(g mut graph.Graph<E>&, m LanguageModel&, src mut S&, batches I64) F64 ? {
+    g.Training = false
+    defer g.Training = true
+    ids := g.Ints(m.Tokens).Flat()!
+    targets := g.Ints(m.Targets).Flat()!
+    total F64 = 0.0
+    seen I64 = 0
+    for b in range batches {
+        n := try src.At(b * g.Batch, ids, targets, g.Batch)
+        if n == 0: break
+        g.Forward(n)
+        total += g.Scalar(m.Loss) * F64(n)
+        seen += n
+    }
+    return total / F64(seen)
+}
+
+# ---- a run ----
+
+# what a run is: how many steps, the learning rate of each (a schedule's), the clipping norm (none when 0), how often it
+# reports and measures, the checkpoint it writes every "checkpointEvery" steps and at the end (none when ""), the run's name
+# and seed for its record, and the record's file (none when ""). From is the step it starts at: a resumed run's
+type Config struct(Steps I64, Rate fn&(step I64) F64, Clip F64 = 1.0, Every I64 = 50, EvalEvery I64 = 250
+        EvalBatches I64 = 10, Checkpoint String = "", CheckpointEvery I64 = 0, Name String = "lm", Seed I64 = 1
+        Log String = "", From I64 = 0) {
+    Steps
+    Rate
+    Clip
+    Every
+    EvalEvery
+    EvalBatches
+    Checkpoint
+    CheckpointEvery
+    Name
+    Seed
+    Log
+    From
+}
+
+# the settings a run's record starts with: the config's numbers (a schedule is a function, and is not written)
+type Settings struct(Steps I64, Clip F64, Every I64, EvalEvery I64, EvalBatches I64, From I64, Batch I64) {
+    Steps
+    Clip
+    Every
+    EvalEvery
+    EvalBatches
+    From
+    Batch
+}
+
+# a report: the step just taken (counting from 1), the mean training loss since the last report, the gradients' norm
+# and the learning rate at this step, the seconds the steps took in all (training only), and the validation loss where
+# it was measured (NaN where it was not)
+type Progress struct(Step I64, Loss F64, Norm F64, Rate F64, Seconds F64, Validation F64) {
+    Step
+    Loss
+    Norm
+    Rate
+    Seconds
+    Validation
+}
+
+# trains m for cfg.Steps steps from step cfg.From: batches from "train", the validation loss measured on "valid" every
+# cfg.EvalEvery steps (and at the end), a report to "on" and a line in the run's record every cfg.Every steps, the
+# checkpoint written as cfg asks. Gives the last report
+fn Fit<E, S, V, O>(g mut graph.Graph<E>&, m LanguageModel&, train mut S&, valid mut V&, o mut O&, cfg Config&
+        on fn&(p Progress&)) Progress ? {
+    log := try runlog.Log.Open(cfg.Log if cfg.Log != "" else "/dev/null", cfg.Name, cfg.Seed
+        Settings(cfg.Steps, cfg.Clip, cfg.Every, cfg.EvalEvery, cfg.EvalBatches, cfg.From, g.Batch))
+    spent I64 = 0
+    window F64 = 0.0
+    last := Progress(cfg.From, 0.0, 0.0, 0.0, 0.0, F64.NaN)
+    for step in range cfg.From, cfg.Steps {
+        t0 := time.Now()
+        rate := cfg.Rate(step)
+        loss, norm := try LmStep(g, m, train, o, rate, cfg.Clip)
+        spent += time.Since(t0)
+        window += loss
+        due := (step + 1) % cfg.Every == 0 or step + 1 == cfg.Steps
+        measured := (step + 1) % cfg.EvalEvery == 0 or step + 1 == cfg.Steps
+        if due {
+            checked := try LmEvaluate(g, m, valid, cfg.EvalBatches) if measured else F64.NaN
+            seen := (step + 1) % cfg.Every if (step + 1) % cfg.Every != 0 else cfg.Every
+            last = Progress(step + 1, window / F64(seen), norm, rate, F64(spent) * 1e-9, checked)
+            window = 0.0
+            on(last)
+            try record(log, last)
+        }
+        if cfg.CheckpointEvery > 0 and (step + 1) % cfg.CheckpointEvery == 0: try Save(cfg.Checkpoint, g, o, step + 1)
+    }
+    if cfg.Checkpoint != "": try Save(cfg.Checkpoint, g, o, cfg.Steps)
+    return last
+}
+
+# the line of a report
+fn record(log mut runlog.Log&, p Progress&) ? runlog.RunLogError, io.Error {
+    s := runlog.Step(p.Step)
+    s.Metric("loss", p.Loss)
+    s.Metric("gradient_norm", p.Norm)
+    s.Metric("rate", p.Rate)
+    s.Metric("validation", p.Validation)                    # null where it was not measured
+    s.Time("training", p.Seconds)
+    try log.Add(s)
+}
+
+# ---- checkpoints ----
+
+# the run at "step": g's parameters (a graph with masters writes them, F32) as g.Save names them, o's state, and the step.
+# Written whole to a file of its own and renamed into place, so a run stopped inside a save leaves the last one
+fn Save<E, O>(path String&, g graph.Graph<E>&, o O&, step I64) ? os.Error, checkpoint.SafetensorsError {
+    w := checkpoint.Writer()
+    k I64 = 0
+    for i in range g.Size() {
+        if g.Info(graph.Var(i)).Kind != graph.Op.Param: continue
+        if g.HasMasters() { try w.Add("param." + $k, g.Master(graph.Var(i))) } else { try w.Add("param." + $k, g.Value(graph.Var(i))) }
+        k++
+    }
+    try o.Save(w)
+    w.Meta("step", $step)
+    part := $path + ".part"
+    try w.Save(part)
+    try os.Rename(part, path)
+}
+
+# the run a checkpoint holds loaded into g and o, which are built as the saved ones were (the same graph, an optimizer
+# of the same kind): gives the step it had reached
+fn Resume<E, O>(path String&, g mut graph.Graph<E>&, o mut O&) I64 ? os.Error, checkpoint.SafetensorsError, tensor.ShapeError {
+    try g.Load(path)
+    f := try checkpoint.File.Load(path)
+    try o.Load(f)
+    return try (try f.Meta.Get("step") catch { error checkpoint.SafetensorsError.Missing("step") }).ParseInt() catch { error checkpoint.SafetensorsError.Malformed }
+}
+
+# ---- tests ----
+
+import "std/rand"
+import "std/json"
+import "std/list"
+import "../data/text"
+
+# a perceptron classifier on a graph: 6 features, 3 classes, batches of 8; the optimizer made by the caller
+fn small() graph.Graph<F32>, Classifier {
+    g mut graph.Graph<F32>& = graph.Graph<F32>(8)
+    x := g.Input(6)
+    y := g.Classes()
+    logits := layers.Mlp.New(g, Array<I64>[6, 5, 3]).Apply(g, x)
+    c := Classifier.On(g, x, y, logits)
+    g.Plan(rand.Rand(3))!
+    return g, c
+}
+
+# n samples of 6 features: class c lights features 2c and 2c + 1
+fn lit(n I64, seed U64) loader.Labeled {
+    r := rand.Rand(seed)
+    features mut Array<U8>& = Array<U8>(n * 6)
+    labels mut Array<U8>& = Array<U8>(n)
+    for i in range n {
+        labels[i] = U8(i % 3)
+        for j in range 6: features[i * 6 + j] = U8(r.Below(60)) + (U8(180) if j / 2 == i % 3 else U8(0))
+    }
+    return loader.Labeled(features, labels, 6, 3)
+}
+
+test Epoch "trains a classifier: the loss falls, a held-out set is classified right, and a run repeats bit for bit" {
+    sets := lit(60, 1)
+    held := lit(45, 2)
+    lasts := Array<F64>(2)
+    for run in range 2 {
+        g, c := small()
+        o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 0.02)
+        l := loader.Loader(sets, 8, 5)
+        first := Epoch(g, c, l, o)
+        last F64 = first
+        for _ in range 15: last = Epoch(g, c, l, o)
+        assert last < first * 0.5
+        hl := loader.Loader(held, 8, 1, false)
+        loss, right := Evaluate(g, c, hl)
+        assert right > 0.95 and loss < 0.3
+        lasts[run] = last
+        # the second loader's last batch is short (45 = 5 * 8 + 5): every sample is counted once
+        assert hl.Batches() == 6
+    }
+    assert lasts[0] == lasts[1]
+}
+
+test Epoch "a BF16 graph steps its F32 masters and rounds them into the graph after each step" {
+    g := graph.Graph<BF16>(8)
+    x := g.Input(6)
+    y := g.Classes()
+    c := Classifier.On(g, x, y, layers.Mlp.New(g, Array<I64>[6, 5, 3]).Apply(g, x))
+    try g.Plan(rand.Rand(3))
+    o := optim.AdamW(g.Masters(), g.ParamGrads(), rate = 0.02)
+    l := loader.Loader(lit(60, 1), 8, 5)
+    first := Epoch(g, c, l, o)
+    last F64 = first
+    for _ in range 15: last = Epoch(g, c, l, o)
+    loss, right := Evaluate(g, c, loader.Loader(lit(45, 2), 8, 1, false))
+    assert last < first * 0.6 and right > 0.9
+    assert loss < 0.5
+}
+
+# a corpus that repeats 0 1 2 3 two hundred times, and windows over it
+fn cycle(ctx I64, seed U64) text.Windows {
+    return text.Windows(Array<I32>[I32(i % 4) for i in range 800], ctx, seed)
+}
+
+# a GPT on a graph of 4 sequences of 8 tokens over a vocabulary of 4: its model and an AdamW stepping what the graph
+# trains (the masters of a graph that keeps them), the loop run by the caller
+fn lm<T>(seed U64, loss Bool = true) graph.Graph<T>, LanguageModel {
+    g mut graph.Graph<T>& = graph.Graph<T>(4)
+    m := LanguageModel.Gpt(g, 4, 8, 16, 2, 1, 0.0, loss)
+    g.Plan(rand.Rand(seed))!
+    return g, m
+}
+
+# the validation loss after "steps" steps of AdamW on the cycle corpus
+fn learn<T>(steps I64) F64 {
+    g, m := lm<T>(5)
+    train := cycle(8, 1)
+    valid := cycle(8, 2)
+    before := LmEvaluate(g, m, valid, 5)
+    assert (before - 4.0.Log()).Abs() < 0.3, "an untrained model's loss is about ln 4, was " + $before
+    match T {
+        case BF16 {
+            o := optim.AdamW(g.Masters(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+            for _ in range steps: LmStep(g, m, train, o, 5e-3, 1.0)
+        }
+        case _ {
+            o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+            for _ in range steps: LmStep(g, m, train, o, 5e-3, 1.0)
+        }
+    }
+    return LmEvaluate(g, m, valid, 5)
+}
+
+test LmStep "trains a language model on a cycle: its validation loss falls from ln 4 to nearly 0, in F32 and in BF16" {
+    assert learn<F32>(150) < 0.1
+    assert learn<BF16>(150) < 0.15
+}
+
+test LmEvaluate "measures the same windows every time, dropout off, and leaves the model training" {
+    g, m := lm<F32>(5)
+    valid := cycle(8, 2)
+    a := LmEvaluate(g, m, valid, 3)
+    assert a == LmEvaluate(g, m, valid, 3) and g.Training
+    # 800 tokens make 99 windows of 8: a pass of 40 batches of 4 stops at the data's end, and the mean is still a mean
+    assert (LmEvaluate(g, m, valid, 1000) - a).Abs() < 0.3
+}
+
+# the last 5 steps of a run saved after 3 steps (as a, with g1) and resumed in a graph built with other starting values
+# (g3): steps 3 ... 5 of g3 equal steps 3 ... 5 of g1, which never stopped - the parameters, the masters of a graph that
+# keeps them and the next loss, exactly
+fn resumes<T, O>(m LanguageModel&, g1 mut graph.Graph<T>&, o1 mut O&, g2 mut graph.Graph<T>&, o2 mut O&, g3 mut graph.Graph<T>&
+        o3 mut O&, path String&) ? {
+    rate := fn(step I64): return 0.002 + 0.001 * F64(step)
+    never := cycle(8, 1)
+    stopped := cycle(8, 1)
+    for step in range 6: try LmStep(g1, m, never, o1, rate(step), 1.0)
+    for step in range 3: try LmStep(g2, m, stopped, o2, rate(step), 1.0)
+    try Save(path, g2, o2, 3)
+    assert (try Resume(path, g3, o3)) == 3
+    for step in range 3, 6: try LmStep(g3, m, stopped, o3, rate(step), 1.0)
+    p := g1.Params().Flat()!
+    q := g3.Params().Flat()!
+    assert p == q
+    assert not g1.HasMasters() or g1.Masters().Flat()! == g3.Masters().Flat()!
+}
+
+test Resume "a run saved after three steps and resumed in a fresh graph continues as if never stopped: AdamW and Sgd, F32, and AdamW on a BF16 graph's masters" {
+    try os.MkDirAll("build/nntrain_test")
+    g1, m := lm<F32>(5)
+    g2, _ := lm<F32>(5)
+    g3, _ := lm<F32>(99)
+    assert g1.Params().Flat()! != g3.Params().Flat()!
+    adam1 := optim.AdamW(g1.Params(), g1.ParamGrads(), spans = optim.Spans(g1))
+    adam2 := optim.AdamW(g2.Params(), g2.ParamGrads(), spans = optim.Spans(g2))
+    adam3 := optim.AdamW(g3.Params(), g3.ParamGrads(), spans = optim.Spans(g3))
+    try resumes(m, g1, adam1, g2, adam2, g3, adam3, "build/nntrain_test/adam.ckpt")
+    h1, _ := lm<F32>(5)
+    h2, _ := lm<F32>(5)
+    h3, _ := lm<F32>(99)
+    sgd1 := optim.Sgd(h1.Params(), h1.ParamGrads(), momentum = 0.9)
+    sgd2 := optim.Sgd(h2.Params(), h2.ParamGrads(), momentum = 0.9)
+    sgd3 := optim.Sgd(h3.Params(), h3.ParamGrads(), momentum = 0.9)
+    try resumes(m, h1, sgd1, h2, sgd2, h3, sgd3, "build/nntrain_test/sgd.ckpt")
+    b1, _ := lm<BF16>(5)
+    b2, _ := lm<BF16>(5)
+    b3, _ := lm<BF16>(99)
+    mix1 := optim.AdamW(b1.Masters(), b1.ParamGrads())
+    mix2 := optim.AdamW(b2.Masters(), b2.ParamGrads())
+    mix3 := optim.AdamW(b3.Masters(), b3.ParamGrads())
+    try resumes(m, b1, mix1, b2, mix2, b3, mix3, "build/nntrain_test/bf16.ckpt")
+}
+
+type Row struct(run String, seed I64, step I64, loss F64) {
+    run
+    seed
+    step
+    loss
+}
+
+test Fit "reports and measures as the config asks, writes the run's record and a checkpoint, and a run resumed from it ends where one never stopped" {
+    try os.MkDirAll("build/nntrain_test")
+    try os.WriteFile("build/nntrain_test/fit.jsonl", "")
+    g1, m := lm<F32>(5)
+    g2, _ := lm<F32>(99)
+    o1 := optim.AdamW(g1.Params(), g1.ParamGrads(), spans = optim.Spans(g1))
+    o2 := optim.AdamW(g2.Params(), g2.ParamGrads(), spans = optim.Spans(g2))
+    rate := optim.WarmupCosine(5e-3, 5, 40, 5e-4)
+    reports mut list.List<Progress>& = list.List<Progress>()
+    never := cycle(8, 1)
+    valid := cycle(8, 2)
+    cfg := Config(40, rate, Every = 10, EvalEvery = 20, EvalBatches = 3, Name = "cycle", Seed = 7, Log = "build/nntrain_test/fit.jsonl")
+    last := try Fit(g1, m, never, valid, o1, cfg, fn(p): reports.Push(p))
+    assert reports.Len() == 4 and last.Step == 40 and last.Rate == rate(39)
+    assert reports[0].Validation != reports[0].Validation and reports[1].Step == 20 and reports[1].Validation == reports[1].Validation
+    assert reports[3].Loss < reports[0].Loss and last.Validation < 0.5
+    rows := try runlog.Read<Row>("build/nntrain_test/fit.jsonl")
+    assert rows.Len() == 4 and rows.step == Array<I64>[10, 20, 30, 40] and rows.seed[0] == 7 and rows.run[3] == "cycle"
+    assert rows.loss[2] == reports[2].Loss
+    lines := Vec<String>()
+    for l in (try os.ReadFile("build/nntrain_test/fit.jsonl")).Lines(): lines.Push($l)
+    assert (try (try json.Json.Parse(lines[0]))["validation"]).IsNull()
+    assert (try (try (try json.Json.Parse(lines[1]))["validation"]).AsNum()) == reports[1].Validation
+    # the first half, checkpointed, then a fresh graph picks it up
+    stopped := cycle(8, 1)
+    g3, _ := lm<F32>(5)
+    o3 := optim.AdamW(g3.Params(), g3.ParamGrads(), spans = optim.Spans(g3))
+    half := Config(20, rate, Every = 10, EvalEvery = 20, EvalBatches = 3, Checkpoint = "build/nntrain_test/fit.ckpt")
+    try Fit(g3, m, stopped, valid, o3, half, fn(p): reports.Push(p))
+    at := try Resume("build/nntrain_test/fit.ckpt", g2, o2)
+    assert at == 20
+    rest := Config(40, rate, Every = 10, EvalEvery = 20, EvalBatches = 3, From = at)
+    try Fit(g2, m, stopped, valid, o2, rest, fn(p): reports.Push(p))
+    assert g1.Params().Flat()! == g2.Params().Flat()!
+}
+
+# this process's resident memory in kB (VmRSS, Linux)
+fn resident() I64 {
+    status := try os.ReadFile("/proc/self/status") catch { return 0 }
+    for line in status.Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        kb := try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+        return kb
+    }
+    return 0
+}
+
+test LmStep "a training step allocates nothing: the resident memory does not grow over 20 steps after the first, F32 and BF16" {
+    a, m := lm<F32>(5)
+    b, _ := lm<BF16>(5)
+    src := cycle(8, 1)
+    adam := optim.AdamW(a.Params(), a.ParamGrads(), spans = optim.Spans(a))
+    mixed := optim.AdamW(b.Masters(), b.ParamGrads(), spans = optim.Spans(b))
+    before I64 = 0
+    for step in range 24 {
+        if step == 3: before = resident()
+        LmStep(a, m, src, adam, 1e-3, 1.0)
+        LmStep(b, m, src, mixed, 1e-3, 1.0)
+    }
+    assert resident() == before, "grew by " + $(resident() - before) + " kB"
+}

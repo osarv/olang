@@ -1,0 +1,1345 @@
+# tensor - Tensor<T>, the storage every layer above it shares: an N-d strided view over an array, up to MaxRank axes,
+# row-major, the last axis contiguous by default.
+#
+# A tensor is a VIEW - its shape (Dims), its strides and a slice of storage - so copying one (t.Copy(), "u := t")
+# copies the view and shares the elements, and Clone() is what copies the elements. A view made over existing storage
+# (Over, Strided, Slice, Select, Permute, Expand, Reshape, Rows, Flat) allocates nothing; Zeros and Clone make storage
+# of their own, where the caller's result lands (O18a). Element (i0, i1, ...) is data[Offset + i0 Strides[0] + i1
+# Strides[1] + ...].
+#
+# Nothing is broadcast. An operation wants operands of equal shape, and a broadcast is a view written by hand: Expand
+# gives a size-1 or missing axis stride 0, so one element reads as many, and no element is copied. Permute reorders the
+# axes (a transpose is a Permute) and moves only strides.
+#
+# Two kinds of operation, as in linalg:
+# - forms with a DESTINATION write into a tensor the caller has and allocate nothing: Fill, FillNormal, FillUniform,
+#   Convert, Map/Map2/Map3, Add, Sub, Hadamard, Divide, Scale, AddScaled, Clamp. A step of a training loop is written
+#   with these (or with the kernels, which read Mat() and Flat()).
+# - operators and the rest (a + b, a * b, a @ b, -a, Clone, To) build a new tensor each time: for scripts, tests and
+#   eager runs.
+#
+# Shapes the caller gives - Over, Strided, Reshape, Permute, Expand, Slice, an operation's operands - are checked once,
+# where they are given, and a mismatch is a ShapeError carrying what did not fit. Element access is unchecked, as an
+# array index is (E16). A shape built with Shape.Of or Zeros is the caller's own invariant: a rank above MaxRank or a
+# negative dimension ends the program (an assert), as an array length out of range does.
+#
+# Element types: every numeric type. F16, BF16 and the F8 types are storage the arithmetic widens: sums and products
+# accumulate in F32 and round once. Conversions between element types (Convert, To) round to nearest, ties to even,
+# and wrap or saturate as the conversions D(x) do (T4; the F8 types saturate).
+
+import "std/rand"
+import "kernels/mat"
+
+# the most axes a tensor has
+MaxRank I64 = 6
+
+# a shape that does not fit the operation: operands of different shapes, a layout the operation cannot read, a
+# rank or an axis out of range, a range outside an axis
+type ShapeError error {
+    Mismatch(what String)
+    Rank(want I64, got I64)
+    Range(axis I64, lo I64, hi I64)
+}
+
+# ---- the shape ----
+
+# the sizes of up to MaxRank axes, held in place: a Shape is a value, copied as a number is
+type Shape struct(Rank I64, dims Array<I64>) {
+    Rank
+    d Array<I64> = Array<I64>(6)
+    for i in range Rank: d[i] = dims[i]
+}
+
+# the shape with these dimensions: Shape.Of(2, 3) is a 2 x 3 matrix's. More than MaxRank of them or a negative one is
+# an error of the program
+fn Shape.Of(dims ...I64) Shape {
+    assert dims.Len() <= 6, "a shape has at most 6 axes"
+    for n in dims: assert n >= 0, "a dimension is not negative"
+    return Shape(dims.Len(), dims)
+}
+
+# the size of axis i, unchecked
+fn (s Shape&) At(i I64) I64 { return s.d[i] }
+
+fn (s Shape&) Len() I64 { return s.Rank }
+
+# the number of elements a tensor of this shape holds: the product of its dimensions (1 for no axes)
+fn (s Shape&) Count() I64 {
+    n I64 = 1
+    for a in range s.Rank: n *= s.d[a]
+    return n
+}
+
+# "(2, 3)"
+fn (s Shape&) Str() String {
+    b := StringBuilder()
+    b.PushChar('(')
+    for a in range s.Rank {
+        if a > 0: b.Push(", ")
+        b.Push($s.d[a])
+    }
+    if s.Rank == 1: b.PushChar(',')
+    b.PushChar(')')
+    return b.ToString()
+}
+
+# the row-major strides of a tensor of this shape: the last axis contiguous
+fn rowMajor(s Shape&) Shape {
+    st := Array<I64>(6)
+    n I64 = 1
+    for a := s.Rank - 1, a >= 0, a-- {
+        st[a] = n
+        n *= s.d[a]
+    }
+    return Shape(s.Rank, st)
+}
+
+# s with axis a of size n
+fn (s Shape&) with(a I64, n I64) Shape {
+    d := Array<I64>(6)
+    for i in range s.Rank: d[i] = s.d[i]
+    d[a] = n
+    return Shape(s.Rank, d)
+}
+
+# the first n axes of s
+fn (s Shape&) head(n I64) Shape { return Shape(n, s.d) }
+
+# s without axis a
+fn (s Shape&) without(a I64) Shape {
+    d := Array<I64>(6)
+    for i in range s.Rank - 1 { d[i] = s.d[i] if i < a else s.d[i + 1] }
+    return Shape(s.Rank - 1, d)
+}
+
+# whether dims are the dimensions of a shape: at most MaxRank, none negative
+fn checkDims(dims Array<I64>&) ? ShapeError {
+    if dims.Len() > 6: error ShapeError.Rank(6, dims.Len())
+    for n in dims {
+        if n < 0: error ShapeError.Mismatch("a dimension is negative: " + $n)
+    }
+}
+
+# ---- the tensor ----
+
+# the elements of a tensor of shape Dims, element (i0, i1, ...) at data[Offset + i0 Strides[0] + i1 Strides[1] + ...]
+# - a view: copying it shares data, and writing a copy writes the original. data is private: Flat and Mat give the
+# elements to the kernels, once their layout is checked
+type Tensor<T> struct(Dims Shape, Strides Shape, data mut Array<T>&, Offset I64 = 0) {
+    Dims
+    Strides
+    data
+    Offset
+}
+
+# a new zero-filled tensor of these dimensions, its storage where the caller's result lands
+fn Tensor<T>.Zeros(dims ...I64) Tensor<T> {
+    s := Shape.Of(...dims)
+    return Tensor<T>(s, rowMajor(s), Array<T>(s.Count()))
+}
+
+# a new tensor of these dimensions holding a copy of values, which must be as many as the tensor has elements
+fn Tensor<T>.Of(values Array<T>&, dims ...I64) Tensor<T> ? ShapeError {
+    try checkDims(dims)
+    s := Shape.Of(...dims)
+    if s.Count() != values.Len() { error ShapeError.Mismatch("a tensor of shape " + $s + " holds " + $s.Count() + " elements, not " + $values.Len()) }
+    out := Tensor<T>(s, rowMajor(s), Array<T>(values.Len()))
+    for i in range values.Len(): out.data[i] = values[i]
+    return out
+}
+
+# a tensor of these dimensions over the caller's storage, row-major from data[offset]: a view, nothing allocated;
+# writing it writes data. A dimension negative, more than MaxRank of them, or more than data holds is a ShapeError
+fn Tensor<T>.Over(data mut Array<T>&, offset I64, dims ...I64) Tensor<T> ? ShapeError {
+    try checkDims(dims)
+    s := Shape.Of(...dims)
+    return try Tensor<T>.Strided(data, offset, s, rowMajor(s))
+}
+
+# a tensor of shape dims and these strides over the caller's storage, from data[offset]: every element it reaches must
+# be inside data, else ShapeError. A stride is an element count and may be 0 (an Expand's) or negative
+fn Tensor<T>.Strided(data mut Array<T>&, offset I64, dims Shape&, strides Shape&) Tensor<T> ? ShapeError {
+    if dims.Rank != strides.Rank: error ShapeError.Rank(dims.Rank, strides.Rank)
+    if dims.Count() == 0 {
+        if offset < 0 or offset > data.Len(): error ShapeError.Range(0, offset, data.Len())
+        return Tensor<T>(dims, strides, data, offset)
+    }
+    lo := offset
+    hi := offset
+    for a in range dims.Rank {
+        reach := (dims[a] - 1) * strides[a]
+        if reach > 0 { hi += reach } else { lo += reach }
+    }
+    if lo < 0 or hi >= data.Len(): error ShapeError.Range(0, lo, hi + 1)
+    return Tensor<T>(dims, strides, data, offset)
+}
+
+# the size of axis a, unchecked
+fn (t Tensor<T>&) Dim(a I64) I64 { return t.Dims[a] }
+
+# the number of axes
+fn (t Tensor<T>&) Rank() I64 { return t.Dims.Rank }
+
+# the number of elements
+fn (t Tensor<T>&) Count() I64 { return t.Dims.Count() }
+
+# whether the elements are one run, row-major, with no gap: Flat and Reshape want it. Axes of size 1 have no stride
+fn (t Tensor<T>&) Contiguous() Bool {
+    n I64 = 1
+    for a := t.Dims.Rank - 1, a >= 0, a-- {
+        if t.Dims[a] == 1: continue
+        if t.Strides[a] != n: return t.Count() == 0
+        n *= t.Dims[a]
+    }
+    return true
+}
+
+# the element at these indices, one per axis - unchecked, as an array index is (E16)
+fn (t Tensor<T>&) Get(idx ...I64) T { return t.data[t.at(idx)] }
+
+# sets the element at these indices - unchecked
+fn (t mut Tensor<T>&) Set(v T, idx ...I64) { t.data[t.at(idx)] = v }
+
+fn (t Tensor<T>&) at(idx Array<I64>&) I64 {
+    o := t.Offset
+    for a in range idx.Len(): o += idx[a] * t.Strides[a]
+    return o
+}
+
+fn (t Tensor<T>&) axis(a I64) ? ShapeError {
+    if a < 0 or a >= t.Dims.Rank: error ShapeError.Mismatch("axis " + $a + " of a tensor of rank " + $t.Dims.Rank)
+}
+
+# ---- views: none of these allocates ----
+
+# indices lo .. hi (hi not included) of axis a, sharing t's storage
+fn (t Tensor<T>&) Slice(a I64, lo I64, hi I64) Tensor<T> ? ShapeError {
+    try t.axis(a)
+    if lo < 0 or lo > hi or hi > t.Dims[a]: error ShapeError.Range(a, lo, hi)
+    return Tensor<T>(t.Dims.with(a, hi - lo), t.Strides, t.data, t.Offset + lo * t.Strides[a])
+}
+
+# index i of axis a, the axis gone: Select(0, i) of a matrix is its row i, Select(1, j) its column j
+fn (t Tensor<T>&) Select(a I64, i I64) Tensor<T> ? ShapeError {
+    try t.axis(a)
+    if i < 0 or i >= t.Dims[a]: error ShapeError.Range(a, i, i + 1)
+    return Tensor<T>(t.Dims.without(a), t.Strides.without(a), t.data, t.Offset + i * t.Strides[a])
+}
+
+# the same elements in the order axes[0], axes[1], ... - result axis k is t's axis axes[k]: only strides move.
+# Permute(1, 0) of a matrix is its transpose
+fn (t Tensor<T>&) Permute(axes ...I64) Tensor<T> ? ShapeError {
+    r := t.Dims.Rank
+    if axes.Len() != r: error ShapeError.Rank(r, axes.Len())
+    seen := Array<Bool>(6)
+    dims := Array<I64>(6)
+    strides := Array<I64>(6)
+    for k, a in axes {
+        try t.axis(a)
+        if seen[a]: error ShapeError.Mismatch("Permute names axis " + $a + " twice")
+        seen[a] = true
+        dims[k] = t.Dims[a]
+        strides[k] = t.Strides[a]
+    }
+    return Tensor<T>(Shape(r, dims), Shape(r, strides), t.data, t.Offset)
+}
+
+# the same elements as a tensor of these dimensions, sharing t's storage: t must be contiguous and the dimensions as
+# many elements as it has. Never copies
+fn (t Tensor<T>&) Reshape(dims ...I64) Tensor<T> ? ShapeError {
+    try checkDims(dims)
+    s := Shape.Of(...dims)
+    if s.Count() != t.Count(): error ShapeError.Mismatch("Reshape of " + $t.Dims + " (" + $t.Count() + " elements) to " + $s)
+    if not t.Contiguous() { error ShapeError.Mismatch("Reshape wants a contiguous tensor; Clone it first") }
+    return Tensor<T>(s, rowMajor(s), t.data, t.Offset)
+}
+
+# t read as a tensor of these dimensions, a broadcast written out: the axes of t line up with the last of dims (new
+# leading axes first), and an axis of size 1 - or a new one - read at every index of its new size has stride 0, so one
+# element is read many times and none is copied. An axis not of size 1 must keep its size. Writing through the result
+# writes the shared element
+fn (t Tensor<T>&) Expand(dims ...I64) Tensor<T> ? ShapeError {
+    try checkDims(dims)
+    r := t.Dims.Rank
+    lead := dims.Len() - r
+    if lead < 0: error ShapeError.Rank(r, dims.Len())
+    strides := Array<I64>(6)
+    for k in range r {
+        want := dims[lead + k]
+        have := t.Dims[k]
+        if have == want { strides[lead + k] = t.Strides[k] }
+        else if have != 1 { error ShapeError.Mismatch("Expand of axis " + $k + " of size " + $have + " to " + $want) }
+    }
+    return Tensor<T>(Shape.Of(...dims), Shape(dims.Len(), strides), t.data, t.Offset)
+}
+
+# the leading axes folded into one, the last kept: a matrix of Count / last rows (a rank 1 tensor is one row, a rank 0
+# one element). The folded axes must be laid out so that it is a view: ShapeError where they are not (Clone first)
+fn (t Tensor<T>&) Rows() Tensor<T> ? ShapeError {
+    r := t.Dims.Rank
+    if r == 2: return t
+    last := t.Dims[r - 1] if r > 0 else 1
+    lastStride := t.Strides[r - 1] if r > 0 else 1
+    rows I64 = 1
+    stride I64 = last * lastStride
+    for a := r - 2, a >= 0, a-- {
+        d := t.Dims[a]
+        if d == 1: continue
+        if rows > 1 and t.Strides[a] != rows * stride { error ShapeError.Mismatch("Rows of a tensor whose leading axes do not fold; Clone it first") }
+        if rows == 1: stride = t.Strides[a]
+        rows *= d
+    }
+    return Tensor<T>(Shape.Of(rows, last), Shape.Of(stride, lastStride), t.data, t.Offset)
+}
+
+# the kernels' operand over t's elements, no copy: Rows() with the columns contiguous. ShapeError where the leading
+# axes do not fold or the last axis has a stride
+fn (t Tensor<T>&) Mat() mat.Mat<T> ? ShapeError {
+    m := try t.Rows()
+    if m.Strides[1] != 1 and m.Dims[1] > 1 { error ShapeError.Mismatch("Mat wants the last axis contiguous; Clone it first") }
+    return mat.Mat<T>(t.data, m.Offset, m.Dims[0], m.Dims[1], m.Strides[0])
+}
+
+# the elements in row-major order as an array over the storage: t must be contiguous. Writing it writes the tensor
+fn (t Tensor<T>&) Flat() mut Array<T>& ? ShapeError {
+    if not t.Contiguous() { error ShapeError.Mismatch("Flat wants a contiguous tensor; Clone it first") }
+    return t.data[t.Offset:t.Offset + t.Count()]
+}
+
+# a copy with storage of its own, contiguous
+fn (t Tensor<T>&) Clone() Tensor<T> {
+    out := Tensor<T>(t.Dims, rowMajor(t.Dims), Array<T>(t.Count()))
+    try out.Convert(t) catch { unreachable }
+    return out
+}
+
+# ---- walking: the elements of tensors of one shape together ----
+
+# the rows of up to four tensors of one shape, walked in row-major order: a row is a run along the last axis, and
+# off[j] is where operand j's row starts, inner[j] its stride along the row. Where every operand is contiguous the walk
+# is folded into one row of every element. The kernels below step the axes with it and run each row themselves
+type walker struct(shape Shape, folded Bool) {
+    folded
+    outer I64 = 0 if folded or shape.Rank == 0 else shape.Rank - 1 # the axes stepped over, all but the last
+    n I64 = shape.Count() if folded else (shape[shape.Rank - 1] if shape.Rank > 0 else 1)
+    live Bool = shape.Count() > 0
+    dm Array<I64> = Array<I64>(6)
+    idx Array<I64> = Array<I64>(6)
+    off Array<I64> = Array<I64>(4)
+    st Array<I64> = Array<I64>(24)
+    inner Array<I64> = Array<I64>(4)
+    for a in range outer: dm[a] = shape[a]
+}
+
+# operand j: a tensor of the walk's shape with these strides, its element 0 at offset
+fn (w mut walker&) bind(j I64, strides Shape&, offset I64) {
+    w.off[j] = offset
+    for a in range w.outer: w.st[j * 6 + a] = strides[a]
+    w.inner[j] = 1 if w.folded else (strides[strides.Rank - 1] if strides.Rank > 0 else 0)
+}
+
+# to the next row, or the end of the walk
+fn (w mut walker&) advance() {
+    for a := w.outer - 1, a >= 0, a-- {
+        w.idx[a]++
+        for j in range 4: w.off[j] += w.st[j * 6 + a]
+        if w.idx[a] < w.dm[a]: return
+        for j in range 4: w.off[j] -= w.dm[a] * w.st[j * 6 + a]
+        w.idx[a] = 0
+    }
+    w.live = false
+}
+
+# the walk of t alone, or of t and u together where both are contiguous
+fn walker.over1<T>(t Tensor<T>&) walker {
+    w := walker(t.Dims, t.Contiguous())
+    w.bind(0, t.Strides, t.Offset)
+    return w
+}
+
+fn walker.over2<T, U>(t Tensor<T>&, u Tensor<U>&) walker {
+    w := walker(t.Dims, t.Contiguous() and u.Contiguous())
+    w.bind(0, t.Strides, t.Offset)
+    w.bind(1, u.Strides, u.Offset)
+    return w
+}
+
+fn walker.over3<T>(t Tensor<T>&, u Tensor<T>&, v Tensor<T>&) walker {
+    w := walker(t.Dims, t.Contiguous() and u.Contiguous() and v.Contiguous())
+    w.bind(0, t.Strides, t.Offset)
+    w.bind(1, u.Strides, u.Offset)
+    w.bind(2, v.Strides, v.Offset)
+    return w
+}
+
+fn walker.over4<T>(t Tensor<T>&, u Tensor<T>&, v Tensor<T>&, x Tensor<T>&) walker {
+    w := walker(t.Dims, t.Contiguous() and u.Contiguous() and v.Contiguous() and x.Contiguous())
+    w.bind(0, t.Strides, t.Offset)
+    w.bind(1, u.Strides, u.Offset)
+    w.bind(2, v.Strides, v.Offset)
+    w.bind(3, x.Strides, x.Offset)
+    return w
+}
+
+# a ShapeError where two shapes differ
+fn same(a Shape, b Shape) ? ShapeError {
+    if a != b: error ShapeError.Mismatch("shapes " + $a + " and " + $b + " differ")
+}
+
+# ---- element kernels: one pass, in row-major order, a function value applied to each element ----
+#
+# Each writes its destination and allocates nothing. The function is a lambda written at the call, inlined into the
+# loop. A destination may be one of the operands itself - each element is read before it is written - but not another
+# view overlapping one. A function that can fail makes the operation fail with what it fails with.
+
+# dst = f(a), element by element
+fn (dst mut Tensor<T>&) Map<? E>(a Tensor<T>&, f fn&(x T) T ? E) ? ShapeError, E {
+    try same(dst.Dims, a.Dims)
+    try dst.mapInto(a, f)
+}
+
+fn (dst mut Tensor<T>&) mapInto<? E>(a Tensor<T>&, f fn&(x T) T ? E) ? E {
+    w := walker.over2(dst, a)
+    ds := w.inner[0]
+    xs := w.inner[1]
+    for w.live {
+        d := w.off[0]
+        x := w.off[1]
+        for c in range w.n: dst.data[d + c * ds] = try f(a.data[x + c * xs])
+        w.advance()
+    }
+}
+
+# dst = f(a, b), element by element
+fn (dst mut Tensor<T>&) Map2<? E>(a Tensor<T>&, b Tensor<T>&, f fn&(x T, y T) T ? E) ? ShapeError, E {
+    try same(dst.Dims, a.Dims)
+    try same(dst.Dims, b.Dims)
+    try dst.map2Into(a, b, f)
+}
+
+fn (dst mut Tensor<T>&) map2Into<? E>(a Tensor<T>&, b Tensor<T>&, f fn&(x T, y T) T ? E) ? E {
+    w := walker.over3(dst, a, b)
+    ds := w.inner[0]
+    xs := w.inner[1]
+    ys := w.inner[2]
+    for w.live {
+        d := w.off[0]
+        x := w.off[1]
+        y := w.off[2]
+        for c in range w.n: dst.data[d + c * ds] = try f(a.data[x + c * xs], b.data[y + c * ys])
+        w.advance()
+    }
+}
+
+# dst = f(a, b, c), element by element - a fused update of three operands, an optimizer's step say
+fn (dst mut Tensor<T>&) Map3<? E>(a Tensor<T>&, b Tensor<T>&, c Tensor<T>&, f fn&(x T, y T, z T) T ? E) ? ShapeError, E {
+    try same(dst.Dims, a.Dims)
+    try same(dst.Dims, b.Dims)
+    try same(dst.Dims, c.Dims)
+    w := walker.over4(dst, a, b, c)
+    ds := w.inner[0]
+    xs := w.inner[1]
+    ys := w.inner[2]
+    zs := w.inner[3]
+    for w.live {
+        d := w.off[0]
+        x := w.off[1]
+        y := w.off[2]
+        z := w.off[3]
+        for i in range w.n: dst.data[d + i * ds] = try f(a.data[x + i * xs], b.data[y + i * ys], c.data[z + i * zs])
+        w.advance()
+    }
+}
+
+# every element v
+fn (t mut Tensor<T>&) Fill(v T) {
+    w := walker.over1(t)
+    ts := w.inner[0]
+    for w.live {
+        o := w.off[0]
+        for c in range w.n: t.data[o + c * ts] = v
+        w.advance()
+    }
+}
+
+# dst = a + b, element by element
+fn (dst mut Tensor<T>&) Add(a Tensor<T>&, b Tensor<T>&) ? ShapeError { try dst.Map2(a, b, fn(x, y) { return x + y }) }
+
+# dst = a - b
+fn (dst mut Tensor<T>&) Sub(a Tensor<T>&, b Tensor<T>&) ? ShapeError { try dst.Map2(a, b, fn(x, y) { return x - y }) }
+
+# dst = a * b, element by element (the Hadamard product; the matrix product is "@")
+fn (dst mut Tensor<T>&) Hadamard(a Tensor<T>&, b Tensor<T>&) ? ShapeError { try dst.Map2(a, b, fn(x, y) { return x * y }) }
+
+# dst = a / b, element by element
+fn (dst mut Tensor<T>&) Divide(a Tensor<T>&, b Tensor<T>&) ? ShapeError { try dst.Map2(a, b, fn(x, y) { return x / y }) }
+
+# dst = k a
+fn (dst mut Tensor<T>&) Scale(a Tensor<T>&, k T) ? ShapeError { try dst.Map(a, fn(x) { return x * k }) }
+
+# dst += alpha x - BLAS's axpy
+fn (dst mut Tensor<T>&) AddScaled(x Tensor<T>&, alpha T) ? ShapeError { try dst.Map2(dst, x, fn(a, b) { return a + alpha * b }) }
+
+# every element min(max(x, lo), hi): a cap on every weight
+fn (t mut Tensor<T>&) Clamp(lo T, hi T) { t.mapInto(t, fn(x) { return lo if x < lo else (hi if x > hi else x) }) }
+
+# ---- conversions between element types ----
+
+# x as a D, rounded or wrapped as a conversion D(x) does (T4): to nearest, ties to even; a float into an integer type
+# truncates and wraps, a float beyond the F8 types' range saturates. From or to an F8 type it goes through F64, the F8
+# types' own way in and out, which holds every value of each exactly
+fn Cast<S, D>(x S, like D) D {
+    match S {
+        case F8E4M3, F8E5M2 { return Cast(x.F64(), like) }
+        case _ {
+            return match D {
+                case F8E4M3: F8E4M3(F64(x))
+                case F8E5M2: F8E5M2(F64(x))
+                case F16: F16(x)
+                case BF16: BF16(x)
+                case F32: F32(x)
+                case F64: F64(x)
+                case I8: I8(x)
+                case I16: I16(x)
+                case I32: I32(x)
+                case I64: I64(x)
+                case U8: U8(x)
+                case U16: U16(x)
+                case U32: U32(x)
+                case U64: U64(x)
+            }
+        }
+    }
+}
+
+# dst = src with every element converted to dst's element type, rounded as Cast says - F64, F32, F16, BF16 and the F8
+# types among themselves round to nearest, ties to even. Both are of one shape; dst and src may not overlap
+fn (dst mut Tensor<T>&) Convert<S>(src Tensor<S>&) ? ShapeError {
+    try same(dst.Dims, src.Dims)
+    like T
+    w := walker.over2(dst, src)
+    ds := w.inner[0]
+    ss := w.inner[1]
+    for w.live {
+        d := w.off[0]
+        s := w.off[1]
+        for c in range w.n: dst.data[d + c * ds] = Cast(src.data[s + c * ss], like)
+        w.advance()
+    }
+}
+
+# the tensor with its elements converted, into a new tensor: t.To<F32>()
+fn (t Tensor<T>&) To<D>() Tensor<D> {
+    out := Tensor<D>(t.Dims, rowMajor(t.Dims), Array<D>(t.Count()))
+    try out.Convert(t) catch { unreachable }
+    return out
+}
+
+# ---- random fills, from the caller's generator (std/rand), so that one seed decides a whole run ----
+
+# every element drawn uniformly from [lo, hi), in row-major order
+fn (t mut Tensor<T>&) FillUniform(r mut rand.Rand&, lo F64, hi F64) {
+    like T
+    w := walker.over1(t)
+    ts := w.inner[0]
+    for w.live {
+        o := w.off[0]
+        for c in range w.n: t.data[o + c * ts] = Cast(r.Uniform(lo, hi), like)
+        w.advance()
+    }
+}
+
+# every element drawn from the normal distribution with this mean and standard deviation, in row-major order
+fn (t mut Tensor<T>&) FillNormal(r mut rand.Rand&, mean F64, sd F64) {
+    like T
+    w := walker.over1(t)
+    ts := w.inner[0]
+    for w.live {
+        o := w.off[0]
+        for c in range w.n: t.data[o + c * ts] = Cast(mean + sd * r.Normal(), like)
+        w.advance()
+    }
+}
+
+# ---- reductions ----
+
+# the sum of every element: the 16-bit and 8-bit floats accumulate in F32 and round once, the integers wrap
+fn (t Tensor<T>&) Sum() T {
+    z T
+    return match T {
+        case F16, BF16, F8E4M3, F8E5M2: Cast(sumWith(t, F32(0)), z)
+        case _: sumWith(t, z)
+    }
+}
+
+fn sumWith<T, A>(t Tensor<T>&, acc A) A {
+    w := walker.over1(t)
+    ts := w.inner[0]
+    for w.live {
+        o := w.off[0]
+        for c in range w.n: acc += Cast(t.data[o + c * ts], acc)
+        w.advance()
+    }
+    return acc
+}
+
+# the greatest element; an empty tensor has none
+fn (t Tensor<T>&) Max() T ? ShapeError {
+    if t.Count() == 0: error ShapeError.Mismatch("Max of an empty tensor")
+    best := t.data[t.Offset]
+    w := walker.over1(t)
+    ts := w.inner[0]
+    for w.live {
+        o := w.off[0]
+        for c in range w.n { best = t.data[o + c * ts] if t.data[o + c * ts] > best else best }
+        w.advance()
+    }
+    return best
+}
+
+# the least element; an empty tensor has none
+fn (t Tensor<T>&) Min() T ? ShapeError {
+    if t.Count() == 0: error ShapeError.Mismatch("Min of an empty tensor")
+    best := t.data[t.Offset]
+    w := walker.over1(t)
+    ts := w.inner[0]
+    for w.live {
+        o := w.off[0]
+        for c in range w.n { best = t.data[o + c * ts] if t.data[o + c * ts] < best else best }
+        w.advance()
+    }
+    return best
+}
+
+# ---- new tensors: the operators, for scripts and one-off results ----
+#
+# Each builds its result where it lands (O18a). A tensor operand must have the receiver's shape - nothing is broadcast,
+# an Expand is written - and a scalar operand is of the element type exactly (a literal does not adapt through the
+# operator's generic operand): t * F32(0.5), or in place t.Scale(t, 0.5)
+
+fn (a Tensor<T>&) Plus<U>(b U) Tensor<T> ? ShapeError {
+    out := Tensor<T>(a.Dims, rowMajor(a.Dims), Array<T>(a.Count()))
+    match U {
+        case Tensor<T>, Tensor<T>& { try out.Map2(a, b, fn(x, y) { return x + y }) }
+        case T { out.mapInto(a, fn(x) { return x + b }) }
+    }
+    return out
+}
+
+fn (a Tensor<T>&) Minus<U>(b U) Tensor<T> ? ShapeError {
+    out := Tensor<T>(a.Dims, rowMajor(a.Dims), Array<T>(a.Count()))
+    match U {
+        case Tensor<T>, Tensor<T>& { try out.Map2(a, b, fn(x, y) { return x - y }) }
+        case T { out.mapInto(a, fn(x) { return x - b }) }
+    }
+    return out
+}
+
+# element by element (the Hadamard product) - the matrix product is "@"
+fn (a Tensor<T>&) Mul<U>(b U) Tensor<T> ? ShapeError {
+    out := Tensor<T>(a.Dims, rowMajor(a.Dims), Array<T>(a.Count()))
+    match U {
+        case Tensor<T>, Tensor<T>& { try out.Map2(a, b, fn(x, y) { return x * y }) }
+        case T { out.mapInto(a, fn(x) { return x * b }) }
+    }
+    return out
+}
+
+fn (a Tensor<T>&) Div<U>(b U) Tensor<T> ? ShapeError {
+    out := Tensor<T>(a.Dims, rowMajor(a.Dims), Array<T>(a.Count()))
+    match U {
+        case Tensor<T>, Tensor<T>& { try out.Map2(a, b, fn(x, y) { return x / y }) }
+        case T { out.mapInto(a, fn(x) { return x / b }) }
+    }
+    return out
+}
+
+fn (a Tensor<T>&) Neg() Tensor<T> {
+    out := Tensor<T>(a.Dims, rowMajor(a.Dims), Array<T>(a.Count()))
+    out.mapInto(a, fn(x) { return -x })
+    return out
+}
+
+# f applied to every element, into a new tensor
+fn (t Tensor<T>&) Mapped<? E>(f fn&(x T) T ? E) Tensor<T> ? E {
+    out := Tensor<T>(t.Dims, rowMajor(t.Dims), Array<T>(t.Count()))
+    try out.mapInto(t, f)
+    return out
+}
+
+# the matrix product of the last two axes, batched over the leading ones: a is [..., m, k], b [..., k, n], the result
+# [..., m, n]. The leading axes must be equal (nothing is broadcast) and the inner ones agree, else ShapeError. The
+# 16-bit and 8-bit floats accumulate in F32 and round once. For scripts and tests; the products of a program are
+# kernels' (kernels/gemm)
+fn (a Tensor<T>&) MatMul(b Tensor<T>&) Tensor<T> ? ShapeError {
+    r := a.Dims.Rank
+    if r < 2: error ShapeError.Rank(2, r)
+    if b.Dims.Rank != r: error ShapeError.Rank(r, b.Dims.Rank)
+    for x in range r - 2 {
+        if a.Dims[x] != b.Dims[x] { error ShapeError.Mismatch("MatMul of " + $a.Dims + " and " + $b.Dims + ": the leading axes differ") }
+    }
+    if a.Dims[r - 1] != b.Dims[r - 2] { error ShapeError.Mismatch("MatMul of " + $a.Dims + " and " + $b.Dims + ": the inner axes differ") }
+    dims := a.Dims.with(r - 1, b.Dims[r - 1])
+    out := Tensor<T>(dims, rowMajor(dims), Array<T>(dims.Count()))
+    z T
+    match T {
+        case F16, BF16, F8E4M3, F8E5M2 { matmulWith(out, a, b, F32(0), z) }
+        case _ { matmulWith(out, a, b, z, z) }
+    }
+    return out
+}
+
+# out = a @ b with the shapes agreed: a walk over the leading axes, each matrix a row-by-row accumulation in A
+fn matmulWith<T, A>(out mut Tensor<T>&, a Tensor<T>&, b Tensor<T>&, za A, zt T) {
+    r := a.Dims.Rank
+    w := walker(a.Dims.head(r - 2), false)
+    w.bind(0, out.Strides.head(r - 2), out.Offset)
+    w.bind(1, a.Strides.head(r - 2), a.Offset)
+    w.bind(2, b.Strides.head(r - 2), b.Offset)
+    acc := Array<A>(b.Dims[r - 1])
+    for w.live {
+        for c in range w.n {
+            matmulOne(out, w.off[0] + c * w.inner[0], a, w.off[1] + c * w.inner[1], b, w.off[2] + c * w.inner[2], acc, za, zt)
+        }
+        w.advance()
+    }
+}
+
+# one matrix of the product: out[o ..] = a[p ..] @ b[q ..], acc a row of the result's width in the accumulator type
+fn matmulOne<T, A>(out mut Tensor<T>&, o I64, a Tensor<T>&, p I64, b Tensor<T>&, q I64, acc mut Array<A>&, za A, zt T) {
+    r := a.Dims.Rank
+    m := a.Dims[r - 2]
+    k := a.Dims[r - 1]
+    n := b.Dims[r - 1]
+    for i in range m {
+        for j in range n: acc[j] = za
+        for l in range k {
+            x := Cast(a.data[p + i * a.Strides[r - 2] + l * a.Strides[r - 1]], za)
+            for j in range n: acc[j] += x * Cast(b.data[q + l * b.Strides[r - 2] + j * b.Strides[r - 1]], za)
+        }
+        for j in range n: out.data[o + i * out.Strides[r - 2] + j * out.Strides[r - 1]] = Cast(acc[j], zt)
+    }
+}
+
+# ---- rendering, equality and hashing ----
+
+# the elements as nested brackets, as numpy prints an array:
+#   [[1, 2, 3],
+#    [4, 5, 6]]
+# with only the first and last three entries of an axis longer than ten (the rest as "..."), and a blank line between
+# the blocks of a rank 3 or more tensor
+fn (t Tensor<T>&) Str() String {
+    b := StringBuilder()
+    render(b, t, 0, t.Offset)
+    return b.ToString()
+}
+
+fn render<T>(b mut StringBuilder&, t Tensor<T>&, a I64, off I64) {
+    if a == t.Dims.Rank {
+        b.Push($t.data[off])
+        return
+    }
+    n := t.Dims[a]
+    b.PushChar('[')
+    for i in range n {
+        if n > 10 and i >= 3 and i < n - 3 {
+            if i == 3 {
+                separate(b, a, t.Dims.Rank)
+                b.Push("...")
+            }
+            continue
+        }
+        if i > 0: separate(b, a, t.Dims.Rank)
+        render(b, t, a + 1, off + i * t.Strides[a])
+    }
+    b.PushChar(']')
+}
+
+# what stands between the entries of axis a of a tensor of this rank
+fn separate(b mut StringBuilder&, a I64, rank I64) {
+    if a == rank - 1 {
+        b.Push(", ")
+        return
+    }
+    b.Push(",\n")
+    if rank - a > 2: b.Push("\n")
+    for _ in range a + 1: b.PushChar(' ')
+}
+
+# the same shape and equal elements, compared as "==" compares them - so a tensor holding a NaN is equal to nothing
+fn (a Tensor<T>&) Eq(b Tensor<T>&) Bool {
+    if a.Dims != b.Dims: return false
+    w := walker.over2(a, b)
+    xs := w.inner[0]
+    ys := w.inner[1]
+    for w.live {
+        x := w.off[0]
+        y := w.off[1]
+        for c in range w.n {
+            if a.data[x + c * xs] != b.data[y + c * ys]: return false
+        }
+        w.advance()
+    }
+    return true
+}
+
+# agrees with Eq: the shape and every element - a float by its bits, with -0 taken as 0, since the two are equal
+fn (t Tensor<T>&) Hash() I64 {
+    h I64 = 1099511627776 + t.Dims.Rank
+    for a in range t.Dims.Rank: h = h * 1099511628211 + t.Dims[a]
+    w := walker.over1(t)
+    ts := w.inner[0]
+    for w.live {
+        o := w.off[0]
+        for c in range w.n: h = h * 1099511628211 + elementHash(t.data[o + c * ts])
+        w.advance()
+    }
+    return h
+}
+
+fn elementHash<T>(x T) I64 {
+    return match T {
+        case F64: 0 if x == 0 else I64(x.Bits())
+        case F32, F16, BF16: 0 if x == 0 else I64(x.Bits())
+        case F8E4M3, F8E5M2: 0 if x.F64() == 0 else I64(x.Bits)
+        case _: x.Hash()
+    }
+}
+
+# ---- tests ----
+#
+# under TestBuild, so that a program importing this module compiles none of it
+if TestBuild {
+    # the elements 0, 1, 2, ... in row-major order, as F64
+    fn Tensor<F64>.counting(dims ...I64) Tensor<F64> {
+        t := Tensor<F64>.Zeros(...dims)
+        f := try t.Flat() catch { unreachable }
+        for i in range f.Len(): f[i] = F64(i)
+        return t
+    }
+
+    # the indices of element `flat` of a tensor of this shape, row-major
+    fn indices(s Shape&, flat I64) Array<I64> {
+        idx := Array<I64>(s.Rank)
+        rest := flat
+        for a := s.Rank - 1, a >= 0, a-- {
+            idx[a] = rest % s[a]
+            rest = rest / s[a]
+        }
+        return idx
+    }
+
+    # whether t holds, at every index, what want gives for it - the loop the operation is checked against
+    fn holds(t Tensor<F64>&, want fn&(idx Array<I64>&) F64) Bool {
+        for flat in range t.Count() {
+            idx := indices(t.Dims, flat)
+            if t.Get(...idx) != want(idx): return false
+        }
+        return true
+    }
+
+    test Shape "a shape: rank, dimensions, count, rendering, equality" {
+        s := Shape.Of(2, 3, 4)
+        assert s.Rank == 3 and s[0] == 2 and s[2] == 4 and s.Count() == 24 and s.Len() == 3
+        assert $s == "(2, 3, 4)" and $Shape.Of(5) == "(5,)" and $Shape.Of() == "()" and Shape.Of().Count() == 1
+        assert s == Shape.Of(2, 3, 4) and s != Shape.Of(2, 3) and s != Shape.Of(2, 3, 5)
+        assert rowMajor(s) == Shape.Of(12, 4, 1) and s.with(1, 7) == Shape.Of(2, 7, 4) and s.without(0) == Shape.Of(3, 4)
+        sum := 0
+        for n in s: sum += n
+        assert sum == 9
+    }
+
+    test Tensor.Zeros "a view: Zeros, Get and Set, copies sharing the elements, Clone not" {
+        t := Tensor<F32>.Zeros(2, 3)
+        assert t.Dims == Shape.Of(2, 3) and t.Strides == Shape.Of(3, 1) and t.Offset == 0 and t.Rank() == 2
+        assert t.Dim(1) == 3 and t.Count() == 6 and t.Contiguous()
+        t.Set(7.0, 1, 2)
+        assert t.Get(1, 2) == 7.0 and t.Get(0, 2) == 0.0
+        u := t
+        u.Set(5.0, 0, 0)
+        c := t.Clone()
+        c.Set(9.0, 0, 1)
+        assert t.Get(0, 0) == 5.0 and t.Get(0, 1) == 0.0 and c.Get(0, 0) == 5.0 and c.Get(1, 2) == 7.0
+        assert $t == "[[5, 0, 0],\n [0, 0, 7]]" and Tensor<I32>.Zeros().Count() == 1 and Tensor<I32>.Zeros(0, 3).Count() == 0
+    }
+
+    test Tensor.Of "Of copies values into a tensor; Over views storage, checked once" {
+        v := try Tensor<I32>.Of(Array<I32>[1, 2, 3, 4, 5, 6], 3, 2)
+        assert v.Get(2, 1) == 6 and v.Get(1, 0) == 3 and v.Strides == Shape.Of(2, 1)
+        data := Array<I32>(10)
+        o := try Tensor<I32>.Over(data, 2, 2, 3)
+        o.Set(8, 1, 1)
+        assert data[2 + 3 + 1] == 8 and o.Offset == 2
+        edge := try Tensor<I32>.Over(data, 4, 2, 3)
+        assert edge.Count() == 6
+        wrong := 0
+        try Tensor<I32>.Of(Array<I32>[1, 2, 3], 2, 2) catch ShapeError.Mismatch { wrong++ }
+        try Tensor<I32>.Over(data, 5, 2, 3) catch ShapeError.Range e1 { wrong += 10 if e1.hi == 11 else 0 }
+        try Tensor<I32>.Over(data, -1, 2) catch ShapeError.Range { wrong += 100 }
+        try Tensor<I32>.Over(data, 0, 1, 1, 1, 1, 1, 1, 1) catch ShapeError.Rank e2 { wrong += 1000 if e2.want == 6 and e2.got == 7 else 0 }
+        try Tensor<I32>.Over(data, 0, 2, -3) catch ShapeError.Mismatch { wrong += 10000 }
+        assert wrong == 11111
+        # strides given by hand: a column of every third element, and a stride that reaches beyond the storage
+        col := try Tensor<I32>.Strided(data, 1, Shape.Of(3), Shape.Of(3))
+        assert col.Strides == Shape.Of(3) and col.Offset == 1
+        reached := false
+        try Tensor<I32>.Strided(data, 0, Shape.Of(4), Shape.Of(4)) catch ShapeError.Range { reached = true }
+        assert reached
+    }
+
+    test Tensor.Slice "Slice and Select: the offset and the dimensions move, the strides stay" {
+        t := Tensor<F64>.counting(2, 3, 4)
+        s := try t.Slice(1, 1, 3)
+        assert s.Dims == Shape.Of(2, 2, 4) and s.Strides == t.Strides and s.Offset == 4
+        assert holds(s, fn(i) { return t.Get(i[0], i[1] + 1, i[2]) })
+        r := try t.Select(1, 2)
+        assert r.Dims == Shape.Of(2, 4) and r.Strides == Shape.Of(12, 1) and r.Offset == 8
+        assert holds(r, fn(i) { return t.Get(i[0], 2, i[1]) })
+        last := try t.Select(2, 3)
+        assert last.Dims == Shape.Of(2, 3) and last.Strides == Shape.Of(12, 4) and last.Get(1, 2) == 23.0
+        point := try (try t.Select(0, 1)).Select(0, 2)
+        assert point.Dims.Rank == 1 and point.Get(3) == 23.0
+        empty := try t.Slice(0, 1, 1)
+        assert empty.Count() == 0
+        # writing a view writes the tensor
+        s.Set(-1.0, 0, 0, 0)
+        assert t.Get(0, 1, 0) == -1.0
+        bad := 0
+        try t.Slice(0, 1, 3) catch ShapeError.Range e3 { bad += 1 if e3.axis == 0 and e3.lo == 1 and e3.hi == 3 else 0 }
+        try t.Slice(0, 2, 1) catch ShapeError.Range { bad += 10 }
+        try t.Slice(3, 0, 1) catch ShapeError.Mismatch { bad += 100 }
+        try t.Select(2, 4) catch ShapeError.Range { bad += 1000 }
+        assert bad == 1111
+    }
+
+    test Tensor.Permute "Permute moves strides: the transpose and a rank 3 rotation against hand-built strides" {
+        m := Tensor<F64>.counting(3, 5)
+        tr := try m.Permute(1, 0)
+        assert tr.Dims == Shape.Of(5, 3) and tr.Strides == Shape.Of(1, 5) and tr.Offset == 0 and not tr.Contiguous()
+        assert holds(tr, fn(i) { return m.Get(i[1], i[0]) })
+        t := Tensor<F64>.counting(2, 3, 4)
+        p := try t.Permute(2, 0, 1)
+        assert p.Dims == Shape.Of(4, 2, 3) and p.Strides == Shape.Of(1, 12, 4)
+        assert p.Get(3, 1, 2) == 23.0 and holds(p, fn(i) { return t.Get(i[1], i[2], i[0]) })
+        back := try (try p.Permute(1, 2, 0)).Permute(0, 1, 2)
+        assert back.Dims == t.Dims and back.Strides == t.Strides and back == t
+        # the same view, written through
+        p.Set(-5.0, 0, 0, 0)
+        assert t.Get(0, 0, 0) == -5.0
+        bad := 0
+        try t.Permute(0, 1) catch ShapeError.Rank e4 { bad += 1 if e4.want == 3 and e4.got == 2 else 0 }
+        try t.Permute(0, 1, 1) catch ShapeError.Mismatch { bad += 10 }
+        try t.Permute(0, 1, 3) catch ShapeError.Mismatch { bad += 100 }
+        assert bad == 111
+    }
+
+    test Tensor.Expand "Expand: stride 0 on new and size-1 axes, one element read many times, nothing copied" {
+        col := Tensor<F64>.counting(3, 1)
+        e := try col.Expand(2, 3, 4)
+        assert e.Dims == Shape.Of(2, 3, 4) and e.Strides == Shape.Of(0, 1, 0) and e.Offset == 0
+        assert holds(e, fn(i) { return col.Get(i[1], 0) })
+        row := Tensor<F64>.counting(4)
+        b := try row.Expand(3, 4)
+        assert b.Strides == Shape.Of(0, 1) and b.Get(2, 3) == 3.0 and not b.Contiguous()
+        plain := try row.Expand(4)
+        assert plain.Strides == Shape.Of(1) and plain.Contiguous()
+        # a broadcast written out feeds an operator: a column added to every column of a matrix
+        m := Tensor<F64>.counting(3, 4)
+        sum := try m + (try col.Expand(3, 4))
+        assert holds(sum, fn(i) { return m.Get(i[0], i[1]) + F64(i[0]) })
+        bad := 0
+        try col.Expand(3) catch ShapeError.Rank e5 { bad += 1 if e5.want == 2 and e5.got == 1 else 0 }
+        try row.Expand(3, 5) catch ShapeError.Mismatch { bad += 10 }
+        try m.Expand(3, 5) catch ShapeError.Mismatch { bad += 100 }
+        try row.Expand(1, 1, 1, 1, 1, 1, 4) catch ShapeError.Rank { bad += 1000 }
+        assert bad == 1111
+    }
+
+    test Tensor.Reshape "Reshape: contiguous only, never copies, the elements keep their order" {
+        t := Tensor<F64>.counting(2, 3, 4)
+        r := try t.Reshape(6, 4)
+        assert r.Dims == Shape.Of(6, 4) and r.Strides == Shape.Of(4, 1) and r.Get(5, 3) == 23.0
+        f := try t.Reshape(24)
+        assert f.Strides == Shape.Of(1) and f.Get(13) == 13.0
+        r.Set(-1.0, 0, 0)
+        assert t.Get(0, 0, 0) == -1.0
+        # the second matrix of the batch is contiguous, with an offset
+        second := try t.Slice(0, 1, 2)
+        flat := try second.Reshape(12)
+        assert flat.Offset == 12 and flat.Get(0) == 12.0
+        # a transpose, a column and an expansion are not
+        bad := 0
+        try (try t.Permute(2, 0, 1)).Reshape(24) catch ShapeError.Mismatch { bad += 1 }
+        try (try t.Slice(2, 0, 2)).Reshape(12) catch ShapeError.Mismatch { bad += 10 }
+        try (try Tensor<F64>.counting(1, 4).Expand(3, 4)).Reshape(12) catch ShapeError.Mismatch { bad += 100 }
+        try t.Reshape(5, 5) catch ShapeError.Mismatch { bad += 1000 }
+        assert bad == 1111
+        assert (try Tensor<F32>.Zeros(3, 1, 2).Reshape(2, 3)).Dims == Shape.Of(2, 3)
+    }
+
+    test Tensor.Rows "Rows folds the leading axes, Mat and Flat give the kernels what they read" {
+        t := Tensor<F64>.counting(2, 3, 4)
+        r := try t.Rows()
+        assert r.Dims == Shape.Of(6, 4) and r.Strides == Shape.Of(4, 1) and r.Offset == 0
+        m := try t.Mat()
+        assert m.Rows == 6 and m.Cols == 4 and m.Ld == 4 and m.Off == 0 and m[5, 3] == 23.0
+        # a block of columns of a matrix: a Mat with a wider row stride, the same storage
+        block := try Tensor<F64>.counting(5, 8).Slice(1, 2, 5)
+        bm := try block.Mat()
+        assert bm.Rows == 5 and bm.Cols == 3 and bm.Ld == 8 and bm.Off == 2 and bm[4, 2] == 36.0
+        # the leading axes of a batch of such blocks fold only where they line up
+        batch := Tensor<F64>.counting(2, 3, 8)
+        cols := try batch.Slice(2, 1, 4)
+        folded := try cols.Rows()
+        assert folded.Dims == Shape.Of(6, 3) and folded.Strides == Shape.Of(8, 1) and folded.Offset == 1
+        flat := try t.Flat()
+        flat[0] = -9.0
+        assert flat.Len() == 24 and t.Get(0, 0, 0) == -9.0 and flat[23] == 23.0
+        bad := 0
+        try (try t.Slice(1, 0, 2)).Rows() catch ShapeError.Mismatch { bad += 1 }
+        try (try t.Slice(1, 0, 2)).Flat() catch ShapeError.Mismatch { bad += 10 }
+        try (try t.Permute(0, 2, 1)).Mat() catch ShapeError.Mismatch { bad += 100 }
+        assert bad == 111
+        assert (try Tensor<F32>.Zeros(5).Rows()).Dims == Shape.Of(1, 5) and (try Tensor<F32>.Zeros().Rows()).Dims == Shape.Of(1, 1)
+    }
+
+    # x rounded to a binary float of mant mantissa bits whose smallest normal exponent is emin: the nearest value,
+    # ties to the even one - worked out in F64, where the scaling by a power of two and the division are exact, as the
+    # reference the conversions are held to. Beyond largest it is largest (saturating) or infinity
+    fn rounded(x F64, mant I64, emin I64, largest F64, saturate Bool) F64 {
+        if x == 0: return x
+        a := x.Abs()
+        e := I64((a.Bits() >> 52) & 2047).Max(1023 + emin) - 1023
+        ulp := 2.0.Pow(F64(e - mant))
+        r := (a / ulp).RoundEven() * ulp
+        if r > largest { r = largest if saturate else Inf }
+        return r if x > 0 else -r
+    }
+
+    # the format's reference: F16, BF16, F8E4M3, F8E5M2 in turn
+    fn reference(f I64, x F64) F64 {
+        return match f {
+            case 0: rounded(x, 10, -14, 65504.0, false)
+            case 1: rounded(x, 7, -126, 3.3895313892515355e38, false)
+            case 2: rounded(x, 3, -6, 448.0, true)
+            case _: rounded(x, 2, -14, 57344.0, true)
+        }
+    }
+
+    # x converted to the format and back to F64, by Cast
+    fn viaCast(f I64, x F64) F64 {
+        return match f {
+            case 0: Cast(Cast(x, F16(0)), 0.0)
+            case 1: Cast(Cast(x, BF16(0)), 0.0)
+            case 2: Cast(Cast(x, F8E4M3(0.0)), 0.0)
+            case _: Cast(Cast(x, F8E5M2(0.0)), 0.0)
+        }
+    }
+
+    # the values the conversions are tried on: random ones across the format's exponents, exact ties between two
+    # neighbours, and values a hair either side of a tie (the double-rounding trap: a tie only after rounding to F32)
+    fn probes(f I64, r mut rand.Rand&) Array<F64> {
+        mant := 10 if f == 0 else (7 if f == 1 else (3 if f == 2 else 2))
+        emin := -14 if f == 0 else (-126 if f == 1 else (-6 if f == 2 else -14))
+        emax := 15 if f == 0 else (120 if f == 1 else (9 if f == 2 else 16))
+        out := Vec<F64>()
+        for _ in range 3000 {
+            k := emin - mant - 2 + I64(r.Uniform(0.0, F64(emax - emin + mant + 3)))
+            ulp := 2.0.Pow(F64(k.Max(emin) - mant))
+            n := F64(I64(r.Uniform(0.0, F64(1 << (mant + 1)))))
+            sign := 1.0 if r.Uniform(0.0, 1.0) < 0.5 else -1.0
+            tie := sign * (n + 0.5) * ulp
+            out.Push(sign * r.Uniform(1.0, 2.0) * 2.0.Pow(F64(k)))
+            out.Push(tie)
+            out.Push(tie * (1.0 + 1.0 / 1099511627776.0))
+            out.Push(tie * (1.0 - 1.0 / 1099511627776.0))
+        }
+        return out.ToArray()
+    }
+
+    test Cast "conversions to F16, BF16 and both F8s round to nearest, ties to even, against a reference worked out in F64" {
+        r := rand.Rand(11)
+        for f in range 4 {
+            xs := probes(f, r)
+            for x in xs {
+                assert viaCast(f, x) == reference(f, x)
+                assert viaCast(f, F64(F32(x))) == reference(f, F64(F32(x)))
+            }
+        }
+    }
+
+    test Cast "the edges: ties, saturation, NaN, infinities, signed zero" {
+        # 1 + 2^-11 is the tie between 1 and 1 + 2^-10 in F16: to the even one, 1
+        assert viaCast(0, 1.0 + 1.0 / 2048.0) == 1.0 and viaCast(0, 1.0 + 3.0 / 2048.0) == 1.0 + 1.0 / 512.0
+        # the F64 value above the tie by less than F32 can see: rounds up, as it must - no double rounding
+        assert viaCast(0, 1.0 + 1.0 / 2048.0 + 1.0 / 1099511627776.0) == 1.0 + 1.0 / 1024.0
+        assert viaCast(1, 1.0 + 1.0 / 256.0 + 1.0 / 1099511627776.0) == 1.0 + 1.0 / 128.0
+        assert viaCast(1, 1.0 + 1.0 / 256.0) == 1.0 and viaCast(1, 1.0 + 3.0 / 256.0) == 1.0 + 1.0 / 64.0
+        assert viaCast(2, 1.0625) == 1.0 and viaCast(2, 1.1875) == 1.25 and viaCast(3, 1.125) == 1.0 and viaCast(3, 1.375) == 1.5
+        # F16 and BF16 overflow to infinity, the F8s saturate
+        assert viaCast(0, 65520.0) == Inf and viaCast(0, -1.0e9) == -Inf and viaCast(1, 1.0e39) == Inf
+        assert viaCast(2, 1.0e9) == 448.0 and viaCast(2, -Inf) == -448.0 and viaCast(3, Inf) == 57344.0
+        for f in range 4 {
+            assert viaCast(f, NaN).IsNan() and viaCast(f, 0.0) == 0.0 and viaCast(f, -0.0).Bits() == (-0.0).Bits()
+        }
+        # F8 values go out through every width exactly, and back
+        assert Cast(F8E4M3(-1.5), F32(0)) == -1.5 and Cast(F8E5M2(0.375), BF16(0)) == BF16(0.375) and Cast(F16(0.5), F8E4M3(0.0)) == F8E4M3(0.5)
+        # integers wrap and a float truncates, as T4's conversions do
+        assert Cast(300, U8(0)) == 44 and Cast(F32(-1.9), I32(0)) == -1 and Cast(I64(7), F16(0)) == F16(7.0)
+    }
+
+    test Tensor.Convert "Convert and To: every storage type among the others, strided views included, shapes checked" {
+        r := rand.Rand(5)
+        for f in range 4 {
+            xs := probes(f, r)
+            n := 64
+            src := try Tensor<F64>.Of(xs[:n * 6], 6, n)
+            view := try src.Permute(1, 0)
+            want := Array<F64>(n * 6)
+            for i in range n {
+                for j in range 6: want[i * 6 + j] = reference(f, src.Get(j, i))
+            }
+            got := match f {
+                case 0: view.To<F16>().To<F64>()
+                case 1: view.To<BF16>().To<F64>()
+                case 2: view.To<F8E4M3>().To<F64>()
+                case _: view.To<F8E5M2>().To<F64>()
+            }
+            assert got.Dims == Shape.Of(n, 6) and got.Contiguous() and (try got.Flat()) == want
+        }
+        # into a view: a column block of a wider tensor takes the converted values, the rest is not touched
+        wide := Tensor<F16>.Zeros(2, 5)
+        part := try wide.Slice(1, 1, 4)
+        try part.Convert(Tensor<F32>.Of(Array<F32>[1.5, 2.5, 1.0 / 3.0, 4.0, 5.0, 6.0], 2, 3))
+        assert wide.Get(0, 0) == F16(0) and wide.Get(0, 3) == F16(F32(1.0 / 3.0)) and wide.Get(1, 1) == F16(4.0) and wide.Get(1, 4) == F16(0)
+        shaped := false
+        try part.Convert(Tensor<F32>.Zeros(3, 2)) catch ShapeError.Mismatch { shaped = true }
+        assert shaped
+    }
+
+    test Tensor.Plus "the operators and destination forms against loops, on contiguous, transposed and expanded operands" {
+        a := Tensor<F64>.counting(2, 3, 4)
+        b := Tensor<F64>.counting(4, 2, 3)
+        pb := try b.Permute(1, 2, 0) # (2, 3, 4), strides (3, 1, 6)
+        assert pb.Dims == a.Dims and not pb.Contiguous()
+        assert holds(try a + pb, fn(i) { return a.Get(i[0], i[1], i[2]) + b.Get(i[2], i[0], i[1]) })
+        assert holds(try a - pb, fn(i) { return a.Get(i[0], i[1], i[2]) - b.Get(i[2], i[0], i[1]) })
+        assert holds(try pb * a, fn(i) { return a.Get(i[0], i[1], i[2]) * b.Get(i[2], i[0], i[1]) })
+        assert holds(try (a + 1.0) / pb, fn(i) { return (a.Get(i[0], i[1], i[2]) + 1.0) / b.Get(i[2], i[0], i[1]) })
+        assert holds(try a * 2.5, fn(i) { return a.Get(i[0], i[1], i[2]) * 2.5 })
+        assert holds(try a - 1.0, fn(i) { return a.Get(i[0], i[1], i[2]) - 1.0 })
+        assert holds(try pb + 0.5, fn(i) { return b.Get(i[2], i[0], i[1]) + 0.5 })
+        assert holds(-pb, fn(i) { return -b.Get(i[2], i[0], i[1]) })
+        assert holds(pb.Mapped(fn(x) { return x * x }), fn(i) { return b.Get(i[2], i[0], i[1]) * b.Get(i[2], i[0], i[1]) })
+        # an expanded operand: one row against every row
+        row := Tensor<F64>.counting(4)
+        wide := try row.Expand(2, 3, 4)
+        assert holds(try a + wide, fn(i) { return a.Get(i[0], i[1], i[2]) + F64(i[2]) })
+        # the destination forms write where they are told, a transposed view included
+        out := Tensor<F64>.Zeros(4, 3, 2)
+        view := try out.Permute(2, 1, 0)
+        try view.Add(a, pb)
+        assert holds(view, fn(i) { return a.Get(i[0], i[1], i[2]) + b.Get(i[2], i[0], i[1]) })
+        assert out.Get(3, 2, 1) == a.Get(1, 2, 3) + b.Get(3, 1, 2)
+        try view.Sub(a, pb)
+        try view.Hadamard(view, a)
+        assert holds(view, fn(i) { return (a.Get(i[0], i[1], i[2]) - b.Get(i[2], i[0], i[1])) * a.Get(i[0], i[1], i[2]) })
+        c := Tensor<F64>.counting(2, 3, 4)
+        try c.Scale(c, 3.0)
+        try c.AddScaled(a, -1.0)
+        assert holds(c, fn(i) { return 2.0 * a.Get(i[0], i[1], i[2]) })
+        try c.Divide(c, (try a + 1.0))
+        assert holds(c, fn(i) { return 2.0 * a.Get(i[0], i[1], i[2]) / (a.Get(i[0], i[1], i[2]) + 1.0) })
+        c.Clamp(0.5, 1.5)
+        assert c.Min()! == 0.5 and c.Max()! == 1.5 and c.Get(0, 0, 0) == 0.5
+        d := Tensor<F64>.Zeros(2, 3, 4)
+        try d.Map3(a, pb, c, fn(x, y, z) { return x * y + z })
+        assert holds(d, fn(i) { return a.Get(i[0], i[1], i[2]) * b.Get(i[2], i[0], i[1]) + c.Get(i[0], i[1], i[2]) })
+        d.Fill(4.0)
+        assert d.Sum() == 96.0 and d.Max()! == 4.0
+        # a fill of a strided view leaves the rest alone
+        z := Tensor<F64>.Zeros(3, 4)
+        try z.Slice(1, 1, 3).Fill(1.0) catch { unreachable }
+        assert z.Sum() == 6.0 and z.Get(0, 0) == 0.0 and z.Get(2, 2) == 1.0
+    }
+
+    test Tensor.Plus "operators on shapes that differ fail with ShapeError; nothing is broadcast" {
+        a := Tensor<F32>.Zeros(2, 3)
+        bad := 0
+        try a + Tensor<F32>.Zeros(3, 2) catch ShapeError.Mismatch { bad += 1 }
+        try a + Tensor<F32>.Zeros(3) catch ShapeError.Mismatch { bad += 10 }
+        try a * Tensor<F32>.Zeros(1, 3) catch ShapeError.Mismatch { bad += 100 }
+        dst := Tensor<F32>.Zeros(2, 3)
+        try dst.Add(a, Tensor<F32>.Zeros(2, 2)) catch ShapeError.Mismatch { bad += 1000 }
+        try dst.Map3(a, a, Tensor<F32>.Zeros(2, 4), fn(x, y, z) { return x }) catch ShapeError.Mismatch { bad += 10000 }
+        assert bad == 11111
+        # a function that fails makes the operation fail with what it fails with
+        failed := false
+        try dst.Map(a, fn(x) ? ShapeError { error ShapeError.Mismatch("by hand") }) catch ShapeError.Mismatch { failed = true }
+        assert failed
+    }
+
+    test Tensor.MatMul "@ is batched over the leading axes: against triple loops, with transposed and sliced operands" {
+        a := Tensor<F64>.counting(2, 3, 4)
+        b := Tensor<F64>.counting(2, 4, 5)
+        c := try a @ b
+        assert c.Dims == Shape.Of(2, 3, 5) and c.Contiguous()
+        assert holds(c, fn(i) {
+            s := 0.0
+            for l in range 4: s += a.Get(i[0], i[1], l) * b.Get(i[0], l, i[2])
+            return s
+        })
+        # a transposed left operand and a column block on the right
+        at := try Tensor<F64>.counting(2, 4, 3).Permute(0, 2, 1)
+        wide := Tensor<F64>.counting(2, 4, 9)
+        bs := try wide.Slice(2, 3, 7)
+        d := try at @ bs
+        assert d.Dims == Shape.Of(2, 3, 4) and holds(d, fn(i) {
+            s := 0.0
+            for l in range 4: s += at.Get(i[0], i[1], l) * bs.Get(i[0], l, i[2])
+            return s
+        })
+        # a matrix times a matrix, and a 4-axis batch
+        m := try Tensor<F64>.counting(3, 4) @ Tensor<F64>.counting(4, 2)
+        assert m == (try Tensor<F64>.Of(Array<F64>[28.0, 34.0, 76.0, 98.0, 124.0, 162.0], 3, 2))
+        q := try Tensor<F64>.counting(2, 2, 3, 3) @ Tensor<F64>.counting(2, 2, 3, 3)
+        assert q.Dims == Shape.Of(2, 2, 3, 3) and q.Get(1, 1, 2, 2) == 3270.0 and q.Get(0, 1, 0, 0) == 9.0 * 9.0 + 10.0 * 12.0 + 11.0 * 15.0
+        # an empty inner axis gives zeros
+        z := try Tensor<F32>.Zeros(2, 0) @ Tensor<F32>.Zeros(0, 3)
+        assert z.Dims == Shape.Of(2, 3) and z.Sum() == 0.0
+        bad := 0
+        try a @ Tensor<F64>.counting(2, 5, 5) catch ShapeError.Mismatch { bad += 1 }
+        try a @ Tensor<F64>.counting(3, 4, 5) catch ShapeError.Mismatch { bad += 10 }
+        try a @ Tensor<F64>.counting(4, 5) catch ShapeError.Rank { bad += 100 }
+        try Tensor<F64>.counting(4) @ Tensor<F64>.counting(4) catch ShapeError.Rank { bad += 1000 }
+        assert bad == 1111
+    }
+
+    test Tensor.MatMul "products in every element type: F16, BF16 and F8 accumulate in F32, integers wrap" {
+        # 4096 ones: beyond F16's own precision as a running sum, exact in F32
+        ones := Tensor<F16>.Zeros(1, 4096)
+        ones.Fill(1.0)
+        col := Tensor<F16>.Zeros(4096, 1)
+        col.Fill(1.0)
+        assert (try ones @ col).Get(0, 0) == F16(4096.0)
+        bones := Tensor<BF16>.Zeros(1, 4096)
+        bones.Fill(1.0)
+        bcol := Tensor<BF16>.Zeros(4096, 1)
+        bcol.Fill(1.0)
+        assert (try bones @ bcol).Get(0, 0) == BF16(4096.0)
+        a := Tensor<F64>.counting(3, 4)
+        b := Tensor<F64>.counting(4, 2)
+        want := try a @ b
+        assert (try a.To<F32>() @ b.To<F32>()).To<F64>() == want
+        assert (try a.To<F16>() @ b.To<F16>()).To<F64>() == want
+        assert (try a.To<BF16>() @ b.To<BF16>()).To<F64>() == (try a.To<BF16>().To<F64>() @ b.To<BF16>().To<F64>()).To<BF16>().To<F64>()
+        e := Tensor<F8E4M3>.Zeros(2, 2)
+        e.Fill(F8E4M3(0.5))
+        assert (try e @ e).Get(1, 1) == F8E4M3(0.5)
+        ai := Tensor<I32>.Zeros(1, 2)
+        ai.Fill(I32.Max)
+        bi := Tensor<I32>.Zeros(2, 1)
+        bi.Fill(2)
+        assert (try ai @ bi).Get(0, 0) == I32.Max * 2 + I32.Max * 2
+    }
+
+    test Tensor.Str "rendering like numpy's, equality by shape and elements, a hash that agrees" {
+        m := Tensor<F64>.counting(2, 2)
+        assert $(try m + 0.5) == "[[0.5, 1.5],\n [2.5, 3.5]]"
+        long := Tensor<F64>.counting(12, 1)
+        assert $long == "[[0],\n [1],\n [2],\n ...,\n [9],\n [10],\n [11]]"
+        assert $Tensor<F64>.counting(12) == "[0, 1, 2, ..., 9, 10, 11]" and $Tensor<I32>.Zeros() == "0" and $Tensor<I32>.Zeros(0) == "[]"
+        assert $Tensor<F64>.counting(2, 2, 2) == "[[[0, 1],\n  [2, 3]],\n\n [[4, 5],\n  [6, 7]]]"
+        t := Tensor<F64>.counting(2, 3)
+        tt := try t.Permute(1, 0)
+        assert $tt == "[[0, 3],\n [1, 4],\n [2, 5]]"
+        assert t == t.Clone() and t != (try t * 2.0) and t != Tensor<F64>.counting(3, 2) and t != Tensor<F64>.counting(6)
+        assert tt == (try t.Permute(1, 0)) and tt == tt.Clone() and tt != t.Clone().Reshape(3, 2)!
+        assert t.Hash() == t.Clone().Hash() and tt.Hash() == tt.Clone().Hash() and t.Hash() != tt.Hash()
+        z := Tensor<F32>.Zeros(1)
+        nz := Tensor<F32>.Zeros(1)
+        nz.Fill(F32(-0.0))
+        assert z == nz and z.Hash() == nz.Hash()
+        nan := Tensor<F32>.Zeros(1)
+        nan.Fill(F32(NaN))
+        assert nan != nan
+        assert Tensor<F8E4M3>.Zeros(2) == Tensor<F8E4M3>.Zeros(2) and Tensor<F8E5M2>.Zeros(2).Hash() == Tensor<F8E5M2>.Zeros(2).Hash()
+    }
+
+    test Tensor.FillNormal "random fills are reproducible from the seed, drawn in row-major order of the view" {
+        r := rand.Rand(42)
+        a := Tensor<F32>.Zeros(100, 100)
+        a.FillNormal(r, 1.0, 2.0)
+        mean := a.Sum() / 10000.0
+        dev := (try a - mean).Mapped(fn(x) { return x * x }).Sum() / 10000.0
+        assert mean > 0.9 and mean < 1.1 and dev > 3.8 and dev < 4.2
+        again := rand.Rand(42)
+        b := Tensor<F32>.Zeros(100, 100)
+        b.FillNormal(again, 1.0, 2.0)
+        assert a == b
+        u := Tensor<F64>.Zeros(50, 50)
+        u.FillUniform(r, -1.0, 3.0)
+        assert u.Min()! >= -1.0 and u.Max()! < 3.0 and u.Sum() / 2500.0 > 0.9 and u.Sum() / 2500.0 < 1.1
+        # filling a transposed view draws in the view's order: its rows are the columns of the storage
+        s1 := rand.Rand(3)
+        s2 := rand.Rand(3)
+        plain := Tensor<F64>.Zeros(3, 4)
+        plain.FillUniform(s1, 0.0, 1.0)
+        stored := Tensor<F64>.Zeros(4, 3)
+        view := try stored.Permute(1, 0)
+        view.FillUniform(s2, 0.0, 1.0)
+        assert view == plain and stored != plain
+        h := Tensor<BF16>.Zeros(8)
+        h.FillNormal(rand.Rand(1), 0.0, 1.0)
+        assert h.To<F64>().Max()! != 0.0
+    }
+
+    test Tensor.Zeros "empty tensors, rank 0 and rank 6: the walks, the reductions and the views hold" {
+        e := Tensor<F32>.Zeros(0, 3)
+        e.Fill(1.0)
+        assert e.Count() == 0 and e.Sum() == 0.0 and (try e + e).Count() == 0 and e == e.Clone() and $e == "[]"
+        failed := false
+        try e.Max() catch ShapeError.Mismatch { failed = true }
+        assert failed
+        s := Tensor<I32>.Zeros()
+        s.Set(5)
+        assert s.Get() == 5 and s.Sum() == 5 and (try s + s).Get() == 10 and s.Count() == 1
+        six := Tensor<I32>.Zeros(1, 2, 1, 3, 1, 2)
+        assert six.Dims.Rank == 6 and six.Count() == 12 and six.Strides == Shape.Of(12, 6, 6, 2, 2, 1)
+        six.Fill(2)
+        p := try six.Permute(5, 4, 3, 2, 1, 0)
+        assert p.Dims == Shape.Of(2, 1, 3, 1, 2, 1) and (try p + six.Permute(5, 4, 3, 2, 1, 0)).Sum() == 48
+        folds := true
+        try p.Rows() catch ShapeError.Mismatch { folds = false }
+        assert not folds and (try p.Clone().Rows()).Dims == Shape.Of(12, 1)
+    }
+
+    # ---- the compile-time evaluator agrees (K1) ----
+    #
+    # decided while compiling (S17a): a false one is a compile error, so these hold for the evaluator as the tests
+    # above hold for the build - the views' strides, an Expand, a batched product, a conversion's rounding, a rendering
+    assert (Tensor<I32>.Zeros(2, 3, 4).Permute(2, 0, 1))!.Strides == Shape.Of(1, 12, 4)
+    assert (Tensor<F32>.Zeros(3, 1).Expand(2, 3, 4))!.Strides == Shape.Of(0, 1, 0)
+    assert (Tensor<F32>.Zeros(2, 3, 4).Slice(1, 1, 3))!.Offset == 4
+    assert (Tensor<F64>.counting(2, 3, 4).Select(1, 2))!.Get(1, 3) == 23.0
+    assert (Tensor<F64>.counting(2, 3, 4).Permute(2, 0, 1))!.Get(3, 1, 2) == 23.0
+    assert (Tensor<F64>.counting(2, 3, 4) @ Tensor<F64>.counting(2, 4, 1))!.Get(1, 2, 0) == 20.0 * 4.0 + 21.0 * 5.0 + 22.0 * 6.0 + 23.0 * 7.0
+    assert (Tensor<F64>.counting(2, 3, 4).Permute(0, 2, 1))!.To<F16>().To<F64>() == (Tensor<F64>.counting(2, 3, 4).Permute(0, 2, 1))!
+    assert Cast(Cast(1.0 + 1.0 / 2048.0 + 1.0 / 1099511627776.0, F16(0)), 0.0) == 1.0 + 1.0 / 1024.0
+    assert Cast(Cast(1.0625, F8E4M3(0.0)), 0.0) == 1.0 and Cast(Cast(1.0e9, F8E4M3(0.0)), 0.0) == 448.0
+    assert $Tensor<F64>.counting(2, 2) == "[[0, 1],\n [2, 3]]"
+    assert Tensor<F64>.counting(2, 2, 2).Sum() == 28.0 and Tensor<F32>.Zeros(2, 2) == Tensor<F32>.Zeros(2, 2)
+
+    # a global baked as data (K2): the product of two tensors, computed while compiling, read at run time
+    Baked F64 = comptime (Tensor<F64>.counting(3, 4) @ Tensor<F64>.counting(4, 2))!.Sum()
+    BakedStrides Shape = comptime (Tensor<I32>.Zeros(2, 3, 4).Permute(1, 2, 0))!.Strides
+
+    test Tensor.MatMul "the evaluator's tensors are the run time's: a baked product, strides and rounding agree" {
+        assert Baked == (try Tensor<F64>.counting(3, 4) @ Tensor<F64>.counting(4, 2)).Sum() and Baked == 28.0 + 34.0 + 76.0 + 98.0 + 124.0 + 162.0
+        assert BakedStrides == Shape.Of(4, 1, 12)
+        at := comptime (Tensor<F64>.counting(2, 6).Reshape(3, 4))!.Get(2, 3)
+        assert at == 11.0
+        narrow := comptime Cast(Cast(1.0 + 1.0 / 256.0 + 1.0 / 1099511627776.0, BF16(0)), 0.0)
+        assert narrow == 1.0 + 1.0 / 128.0
+    }
+}

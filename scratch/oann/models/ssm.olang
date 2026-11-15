@@ -1,0 +1,236 @@
+# models/ssm - the recurrent language model: a token embedding, blocks that mix a position with those before it by a
+# recurrence instead of attention, a final norm and the tied head. The blocks are Mamba's selective state-space scan
+# (Gu and Dao 2023: `layers.SsmBlock`) or the gated delta rule (DeltaNet, Yang et al. 2024: `layers.DeltaBlock`), each a
+# residual block with its own norm; there are no positions to learn - the recurrence is the order. A block costs half
+# a transformer block's parameters (about 6 D^2 against 12 D^2), so a model of equal size has twice the layers.
+# The reference model of M13's SSM half (`SsmConfig.Yardstick`: about 10 million parameters).
+#
+# A recurrence keeps no state between `Forward` calls (the scan runs a sequence from a zero state), so a model with
+# these blocks generates by `generate.Rerun`, not the key-value cache. Same shape as models/gpt: `Ssm.New` registers
+# the layers before `Plan`, `Lm` records the language model's handles.
+
+import "../ad/graph"
+import "../nn/layers"
+import "../nn/train"
+
+# the recurrence a block is
+type Mixer enum {
+    Mamba
+    Delta
+}
+
+# a vocabulary, a width, layers of blocks of "kind" over sequences of Ctx tokens; Mamba's N states per channel and
+# its channel expansion, the heads of the delta rule; RMS norms (layer norms where false)
+type SsmConfig struct(Vocab I64, Dim I64, Layers I64, Ctx I64, Kind Mixer = Mixer.Mamba, States I64 = 16, Expand I64 = 2
+    Heads I64 = 4, Rms Bool = true) {
+    Vocab
+    Dim
+    Layers
+    Ctx
+    Kind
+    States
+    Expand
+    Heads
+    Rms
+}
+
+# M13's yardstick: 9 layers of 384, 16 states and a channel expansion of 2 - 10.2 million parameters at a vocabulary of 4096
+fn SsmConfig.Yardstick(vocab I64, ctx I64) SsmConfig {
+    return SsmConfig(vocab, 384, 9, ctx)
+}
+
+# the parameters of one block
+fn (c SsmConfig&) Block() I64 {
+    d := c.Dim
+    norm := d if c.Rms else 2 * d
+    if c.Kind == Mixer.Delta: return norm + 4 * d * d + 2 * (d * c.Heads + c.Heads) + 2 * (d / c.Heads)
+    e := c.Expand * d
+    rank := (d / 16).Max(1)
+    return norm + 3 * d * e + e * rank + rank * e + e + 2 * e * c.States + c.States * e + e
+}
+
+# the parameters of the whole model - the graph's `ParamCount` after the model is made
+fn (c SsmConfig&) Params() I64 {
+    norm := c.Dim if c.Rms else 2 * c.Dim
+    return c.Vocab * c.Dim + c.Layers * c.Block() + norm
+}
+
+# a block of either kind
+type Block enum {
+    Mamba(b layers.SsmBlock)
+    Delta(b layers.DeltaBlock)
+}
+
+type Ssm struct(Config SsmConfig, Embed layers.Embedding, Blocks Array<Block>, Final layers.Norm) {
+    Config
+    Embed
+    Blocks
+    Final
+}
+
+# the model's layers on g: GPT-2's starting values for the embedding and the projections, Mamba's for the state
+fn Ssm.New<T>(g mut graph.Graph<T>&, c SsmConfig) Ssm {
+    emb := layers.Embedding.New(g, c.Vocab, c.Dim)
+    blocks := Vec<Block>()
+    for _ in range c.Layers {
+        if c.Kind == Mixer.Delta { blocks.Push(Block.Delta(layers.DeltaBlock.New(g, c.Dim, c.Heads, c.Layers, c.Rms))) }
+        else { blocks.Push(Block.Mamba(layers.SsmBlock.New(g, c.Dim, c.States, c.Expand, c.Layers, c.Rms))) }
+    }
+    return Ssm(c, emb, blocks.ToArray(), layers.Norm.New(g, c.Dim, c.Rms))
+}
+
+# a block applied to x [batch, t, Dim]
+fn (b Block&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    return match b {
+        case Block.Mamba(s): s.Apply(g, x)
+        case Block.Delta(d): d.Apply(g, x)
+    }
+}
+
+# the logits of each position's next token, from a Tokens() node: [batch, ctx, Vocab]
+fn (m Ssm&) Logits<T>(g mut graph.Graph<T>&, tokens graph.Var) graph.Var {
+    h := m.Embed.Apply(g, tokens)
+    for b in m.Blocks: h = b.Apply(g, h)
+    return m.Embed.Logits(g, m.Final.Apply(g, h))
+}
+
+# the loops' handles: the tokens, targets, logits and loss of sequences of Ctx tokens; "loss" false for a graph that
+# only generates
+fn (m Ssm&) Lm<T>(g mut graph.Graph<T>&, loss Bool = true) train.LanguageModel {
+    tok := g.Tokens(m.Config.Ctx)
+    logits := m.Logits(g, tok)
+    if not loss: return train.LanguageModel(tok, graph.None, logits, graph.None, m.Config.Ctx)
+    y := g.Classes(m.Config.Ctx)
+    return train.LanguageModel(tok, y, logits, g.CrossEntropy(logits, y), m.Config.Ctx)
+}
+
+# ---- tests ----
+
+import "std/os"
+import "std/rand"
+import "../data/text"
+import "../nn/generate"
+import "../nn/optim"
+import "../tools/gradcheck"
+
+# the model of config c, a language model on a graph of "batch" sequences, planned from seed
+fn made<T>(c SsmConfig, batch I64, seed U64, loss Bool = true) graph.Graph<T>, train.LanguageModel {
+    g mut graph.Graph<T>& = graph.Graph<T>(batch)
+    lm := Ssm.New(g, c).Lm(g, loss)
+    g.Plan(rand.Rand(seed))!
+    return g, lm
+}
+
+# a vocabulary of 4, a context of 8, width 16, 2 layers of either mixer
+fn SsmConfig.Tiny(delta Bool = false) SsmConfig {
+    return SsmConfig(4, 16, 2, 8, Mixer.Delta if delta else Mixer.Mamba, 4, 2, 2)
+}
+
+test SsmConfig "the parameter count is the graph's, for either mixer and either norm, and the yardstick is 10.2 million at 4096 tokens" {
+    for v in range 4 {
+        c := SsmConfig(4, 16, 2, 8, Mixer.Delta if v % 2 == 1 else Mixer.Mamba, 4, 2, 2, v < 2)
+        g, _ := made<F32>(c, 2, 1)
+        assert g.ParamCount == c.Params(), "variant " + $v + ": " + $g.ParamCount + " against " + $c.Params()
+    }
+    y := SsmConfig.Yardstick(4096, 256)
+    assert y.Params() > 10100000 and y.Params() < 10300000, "" + $y.Params()
+}
+
+test Ssm "gradients agree with central differences through the whole model, either mixer" {
+    for delta in Array<Bool>[false, true] {
+        g mut graph.Graph<F64>& = graph.Graph<F64>(2)
+        m := Ssm.New(g, SsmConfig.Tiny(delta))
+        tok := g.Tokens(6)
+        y := g.Classes(6)
+        loss := g.CrossEntropy(m.Logits(g, tok), y)
+        r := rand.Rand(21)
+        g.Plan(r)!
+        p := g.Params().Flat()!
+        for i in range p.Len(): p[i] = p[i] + 0.3 * r.Normal()
+        td := g.Ints(tok).Flat()!
+        yd := g.Ints(y).Flat()!
+        for i in range 12 {
+            td[i] = I32(r.Below(4))
+            yd[i] = I32(r.Below(4))
+        }
+        assert gradcheck.GradientError(g, loss, 2) < 1e-5
+    }
+}
+
+# the loss before any training and after "steps" steps of AdamW on a corpus that repeats 0 1 2 3
+fn learn<T>(c SsmConfig, steps I64) F64, F64 {
+    g, lm := made<T>(c, 4, 5)
+    src := text.Windows(Array<I32>[I32(i % 4) for i in range 800], 8, 1)
+    valid := text.Windows(Array<I32>[I32(i % 4) for i in range 800], 8, 2)
+    before := train.LmEvaluate(g, lm, valid, 5)!
+    match T {
+        case BF16 {
+            o := optim.AdamW(g.Masters(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+            for _ in range steps: train.LmStep(g, lm, src, o, 5e-3, 1.0)!
+        }
+        case _ {
+            o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+            for _ in range steps: train.LmStep(g, lm, src, o, 5e-3, 1.0)!
+        }
+    }
+    return before, train.LmEvaluate(g, lm, valid, 5)!
+}
+
+test Ssm "learns a cycle: the validation loss falls from ln 4 to nearly 0, either mixer, F32 and BF16" {
+    for delta in Array<Bool>[false, true] {
+        before, after := learn<F32>(SsmConfig.Tiny(delta), 200)
+        assert (before - 4.0.Log()).Abs() < 0.3 and after < 0.2, "delta " + $delta + ": " + $before + " to " + $after
+    }
+    _, mixed := learn<BF16>(SsmConfig.Tiny(), 200)
+    assert mixed < 0.25
+}
+
+test Ssm "generates the cycle it was trained on by running the context again" {
+    g, lm := made<F32>(SsmConfig.Tiny(), 4, 5)
+    src := text.Windows(Array<I32>[I32(i % 4) for i in range 800], 8, 1)
+    o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 5e-3, spans = optim.Spans(g))
+    for _ in range 250: train.LmStep(g, lm, src, o, 5e-3, 1.0)
+    once mut graph.Graph<F32>& = graph.Graph<F32>(1)
+    om := Ssm.New(once, SsmConfig.Tiny()).Lm(once, false)
+    once.Plan(rand.Rand(1))!
+    once.Params().Convert(g.Params())!
+    out := generate.RerunTokens(once, om, Array<I32>[0, 1, 2], 9, 0.0, rand.Rand(1))
+    assert out == Array<I32>[I32(i % 4) for i in range 12]
+}
+
+test Ssm "trains past one chunk of the scan: batches of 16 sequences of 64, 100 and 130 tokens, a forward after the step too" {
+    for ctx in Array<I64>[64, 100, 130] {
+        c := SsmConfig(30, 16, 2, ctx, Mixer.Mamba, 4, 2, 2)
+        g, lm := made<F32>(c, 16, 3)
+        src := text.Windows(Array<I32>[I32(i % 30) for i in range 2000], ctx, 1)
+        o := optim.AdamW(g.Params(), g.ParamGrads(), spans = optim.Spans(g))
+        for _ in range 2: train.LmStep(g, lm, src, o, 1e-3, 1.0)
+        valid := text.Windows(Array<I32>[I32(i % 30) for i in range 2000], ctx, 2)
+        assert train.LmEvaluate(g, lm, valid, 2) < 30.0.Log() + 0.5
+    }
+}
+
+# this process's resident memory in kB (VmRSS, Linux)
+fn resident() I64 {
+    status := try os.ReadFile("/proc/self/status") catch { return 0 }
+    for line in status.Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        return try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+    }
+    return 0
+}
+
+test Ssm "a step allocates nothing: the resident memory does not grow over 20 steps after the first, either mixer, F32 and BF16" {
+    a, am := made<F32>(SsmConfig.Tiny(), 4, 5)
+    b, bm := made<BF16>(SsmConfig.Tiny(true), 4, 5)
+    src := text.Windows(Array<I32>[I32(i % 4) for i in range 800], 8, 1)
+    adam := optim.AdamW(a.Params(), a.ParamGrads(), spans = optim.Spans(a))
+    mixed := optim.AdamW(b.Masters(), b.ParamGrads(), spans = optim.Spans(b))
+    before I64 = 0
+    for step in range 24 {
+        if step == 3: before = resident()
+        train.LmStep(a, am, src, adam, 1e-3, 1.0)
+        train.LmStep(b, bm, src, mixed, 1e-3, 1.0)
+    }
+    assert resident() == before, "grew by " + $(resident() - before) + " kB"
+}

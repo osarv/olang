@@ -1,0 +1,85 @@
+# the MNIST pipeline end to end on the real files: fetched into ../data/mnist when not there, parsed, checked against
+# what is known about the dataset, and timed - parsing in MB of file per second, an epoch of shuffled batches in MB of
+# F32 features filled per second
+
+import "std/io"
+import "std/os"
+import "std/time"
+import "../datasets/idx"
+import "../datasets/loader"
+import "../datasets/mnist"
+
+fn mb(bytes I64, seconds F64) F64 {
+    return F64(bytes) / 1e6 / seconds
+}
+
+fn secs(t I64) F64 {
+    return F64(t) * 1e-9
+}
+
+fn histogram(labels Array<U8>&) Array<I64> {
+    h := Array<I64>(10)
+    for c in labels: h[I64(c)]++
+    return h
+}
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError {
+    dir := "data/mnist"
+    t0 := time.Now()
+    try mnist.Fetch(dir, mnist.Source)
+    t1 := time.Now()
+    m := try mnist.Mnist.Load(dir, mnist.Source)
+    t2 := time.Now()
+    fileBytes I64 = m.Train.Features.Len() + m.Train.Labels.Len() + m.Test.Features.Len() + m.Test.Labels.Len()
+    try io.Put("fetch " + $secs(t1 - t0).Fixed(3) + " s, load " + $secs(t2 - t1).Fixed(3) + " s: " + $mb(fileBytes, secs(t2 - t1)).Fixed(0) + " MB/s parsed\n")
+
+    # what MNIST is known to hold
+    assert m.Train.Count == 60000 and m.Test.Count == 10000 and m.Train.Width == 784 and m.Test.Width == 784
+    assert m.Train.Labels[0] == 5 and m.Train.Labels[1] == 0 and m.Train.Labels[2] == 4 and m.Train.Labels[59999] == 8
+    assert m.Test.Labels[0] == 7 and m.Test.Labels[1] == 2 and m.Test.Labels[9999] == 6
+    trainCounts := Array<I64>[5923, 6742, 5958, 6131, 5842, 5421, 5918, 6265, 5851, 5949]
+    testCounts := Array<I64>[980, 1135, 1032, 1010, 982, 892, 958, 1028, 974, 1009]
+    th := histogram(m.Train.Labels)
+    eh := histogram(m.Test.Labels)
+    for d in range 10: assert th[d] == trainCounts[d] and eh[d] == testCounts[d]
+
+    # an epoch of shuffled batches of 128, features in [0, 1]
+    l := loader.Loader(m.Train, 128, 42)
+    x := Array<F32>(128 * 784)
+    y := Array<I32>(128)
+    sum F64 = 0.0
+    sq F64 = 0.0
+    labelSum I64 = 0
+    t3 := time.Now()
+    l.Epoch()
+    for b in range l.Batches() {
+        n := l.Fill(b, x, y)
+        for k in range n * 784 {
+            v := F64(x[k])
+            sum += v
+            sq += v * v
+        }
+        for k in range n: labelSum += I64(y[k])
+    }
+    t4 := time.Now()
+    count := F64(60000 * 784)
+    mean F64 = sum / count
+    sd := (sq / count - mean * mean).Sqrt()
+    try io.Put("pixel mean " + $mean.Fixed(5) + " sd " + $sd.Fixed(5) + " (MNIST's: 0.1307, 0.3081)\n")
+    assert mean > 0.1306 and mean < 0.1308 and sd > 0.3080 and sd < 0.3082
+    expect I64 = 0
+    for d in range 10: expect += I64(d) * trainCounts[d]
+    assert labelSum == expect
+
+    # filling alone, best of five epochs
+    best F64 = 1e9
+    for _ in range 5 {
+        a := time.Now()
+        l.Epoch()
+        for b in range l.Batches(): l.Fill(b, x, y)
+        e F64 = secs(time.Now() - a)
+        if e < best: best = e
+    }
+    try io.Put("epoch of shuffled batches of 128 (checked) " + $secs(t4 - t3).Fixed(3) + " s; filling alone " + $best.Fixed(4) + " s: ")
+    try io.Put($mb(60000 * 784 * 4, best).Fixed(0) + " MB/s of F32, " + $(60000.0 / best).Fixed(0) + " samples/s\n")
+}

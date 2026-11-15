@@ -1,0 +1,115 @@
+# where an epoch of the MNIST perceptron's training goes: the time in filling batches, Forward, Backward and the
+# optimizer's Step, summed over an epoch (best of three); then train.Epoch timed on a graph planned Ahead - the next
+# batch filled on a task while this one trains - against one that is not, in alternating rounds (medians of five).
+# Arguments: threads (1); a last argument "bf16" runs it in mixed precision (nn's Graph<BF16>)
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../nn"
+import "../layers"
+import "../optim"
+import "../train"
+import "../datasets/idx"
+import "../datasets/loader"
+import "../datasets/mnist"
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError, ParseError {
+    all := os.Args()
+    bf16 Bool = all.Len() > 1 and all[all.Len() - 1] == "bf16"
+    args := all[:all.Len() - 1] if bf16 else all
+    if bf16 {
+        like BF16 = 0.0
+        try run(args, like)
+    } else {
+        like F32 = 0.0
+        try run(args, like)
+    }
+}
+
+fn run<T>(args Array<String&>&, like T) ? io.Error, os.Error, mnist.MnistError, idx.IdxError, ParseError {
+    threads I64 = 1
+    if args.Len() > 1: threads = try args[1].ParseInt()
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    g := nn.Graph<T>(128, threads)
+    x := g.Input(784)
+    y := g.Classes()
+    net := layers.Mlp.New(g, Array<I64>[784, 128, 10])
+    loss := g.SoftmaxCrossEntropy(net.Apply(g, x), y)
+    r := rand.Rand(1)
+    g.Plan(r)
+    o mut optim.AdamW<T>& = optim.AdamW<T>(g)
+    l := loader.Loader(data.Train, 128, 1)
+    best := Array<I64>(4, 9223372036854775807)
+    for _ in range 3 {
+        spent := Array<I64>(4)
+        l.Epoch()
+        for b in range l.Batches() {
+            t0 := time.Now()
+            n := l.Fill(b, g.InputData(x), g.ClassData(y))
+            t1 := time.Now()
+            g.Forward(n)
+            t2 := time.Now()
+            g.Backward(loss)
+            t3 := time.Now()
+            o.Step(g)
+            t4 := time.Now()
+            spent[0] += t1 - t0
+            spent[1] += t2 - t1
+            spent[2] += t3 - t2
+            spent[3] += t4 - t3
+        }
+        for i in range 4 {
+            if spent[i] < best[i]: best[i] = spent[i]
+        }
+    }
+    names := Array<String&>["fill", "forward", "backward", "step"]
+    total I64 = 0
+    for i in range 4: total += best[i]
+    for i in range 4 {
+        try io.Put($names[i] + " " + $(F64(best[i]) * 1e-9).Fixed(3) + " s (" + $(100.0 * F64(best[i]) / F64(total)).Fixed(1) + "%)\n")
+    }
+    try io.Put("epoch " + $(F64(total) * 1e-9).Fixed(3) + " s\n")
+    # train.Epoch, filling ahead and not
+    plain := classifier(like, threads, false)
+    ahead := classifier(like, threads, true)
+    po mut optim.AdamW<T>& = optim.AdamW<T>(plain)
+    ao mut optim.AdamW<T>& = optim.AdamW<T>(ahead)
+    pc := train.Classifier(nn.Var(0), nn.Var(1), nn.Var(plain.Size() - 2), nn.Var(plain.Size() - 1))
+    pl := loader.Loader(data.Train, 128, 1)
+    al := loader.Loader(data.Train, 128, 1)
+    seq := Array<I64>(5)
+    par := Array<I64>(5)
+    for round in range 5 {
+        t0 := time.Now()
+        train.Epoch(plain, pc, pl, po)
+        t1 := time.Now()
+        train.Epoch(ahead, pc, al, ao)
+        t2 := time.Now()
+        seq[round] = t1 - t0
+        par[round] = t2 - t1
+    }
+    try io.Put(("train.Epoch: " + $(F64(median(seq)) * 1e-9).Fixed(3) + " s filling in turn, " + $(F64(median(par)) * 1e-9).Fixed(3) +
+        " s filling ahead on a task (medians of 5, alternating)\n"))
+}
+
+# the perceptron on a graph of T planned Ahead or not: its input, classes, logits and loss are its first two and last
+# two nodes
+fn classifier<T>(like T, threads I64, ahead Bool) nn.Graph<T> {
+    g mut nn.Graph<T>& = nn.Graph<T>(128, threads)
+    g.Ahead = ahead
+    x := g.Input(784)
+    y := g.Classes()
+    net := layers.Mlp.New(g, Array<I64>[784, 128, 10])
+    g.SoftmaxCrossEntropy(net.Apply(g, x), y)
+    r := rand.Rand(1)
+    g.Plan(r)
+    return g
+}
+
+fn median(xs Array<I64>&) I64 {
+    s := xs.Copy()
+    s.Sort(fn(a, b): return a < b)
+    return s[s.Len() / 2]
+}

@@ -1,0 +1,14 @@
+# One mistake, two errors: reading a struct's constructor parameter that is not a field (no pun, so not a member) as a
+# member gives "S has no member 'flag'" and then, at the same place, "a condition is a Bool, found I32" - the unknown
+# member recovers as an I32 and the condition is checked against it. Found building store.olang's familiarity table
+# (a constructor parameter read as s.Familiarity before it was punned). Expected: the first error alone (one error per
+# cause). Actual (olang ada716d): both. Fix in the program: pun the parameter (a line "flag" in the body).
+# Status (olang 374c1e3c): FIXED - one error, "S has no member 'flag'", and no second one. Kept as a regression case.
+type S struct(flag Bool = false) {
+    n I64 = 0
+}
+
+fn main() ? {
+    s := S()
+    if s.flag: Println("yes")
+}

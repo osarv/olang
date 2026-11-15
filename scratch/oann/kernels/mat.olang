@@ -1,0 +1,39 @@
+# mat - the kernels' operand: a two-dimensional strided view over an array, as every kernel in kernels/ reads and
+# writes one. Element (r, c) is Data[Off + r * Ld + c]: rows Ld apart, the columns of a row contiguous. A Mat is a view
+# - copying one copies the view, never the elements - and it checks nothing: its shape is checked once, by whoever
+# makes it (Tensor's Mat(), a plan), never by the kernels (docs/redesign.md, section 3, decision 1).
+
+# Rows x Cols elements of Data, from Data[Off], row r at Off + r * Ld
+type Mat<S> struct(Data mut Array<S>&, Off I64, Rows I64, Cols I64, Ld I64) {
+    Data
+    Off
+    Rows
+    Cols
+    Ld
+}
+
+# m[r, c], unchecked as an array index is (E16)
+fn (m Mat<S>&) At(r I64, c I64) S { return m.Data[m.Off + r * m.Ld + c] }
+
+# m[r, c] = v, unchecked
+fn (m mut Mat<S>&) SetAt(r I64, c I64, v S) { m.Data[m.Off + r * m.Ld + c] = v }
+
+test Mat "a view: element (r, c) at Off + r Ld + c, and writing it writes the storage" {
+    d := Array<F32>(12)
+    m := Mat<F32>(d, 1, 2, 3, 5)
+    m[1, 2] = 7.0
+    assert d[8] == 7.0 and m[1, 2] == 7.0 and m.Rows == 2 and m.Cols == 3
+}
+
+# the activations every kernel shares: applied by elem's Act and ActGrad, and by a product's epilogue (gemm's
+# Epilogue.BiasAct) as it finishes each block of its result. Here, beside the operand, so that both import it and
+# neither imports the other
+type Act enum {
+    Relu            # max(x, 0)
+    Gelu            # x Phi(x), Phi the standard normal's distribution function
+    GeluTanh        # 0.5 x (1 + tanh(sqrt(2 / pi) (x + 0.044715 x^3))), GPT-2's
+    Silu            # x sigmoid(x)
+    Sigmoid         # 1 / (1 + exp(-x))
+    Tanh
+    Softplus        # log(1 + exp(x))
+}

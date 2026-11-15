@@ -1,0 +1,62 @@
+# byte-level BPE on tiny Shakespeare: training a vocabulary on the first 90% of the text, timed; encoding both parts,
+# timed, with the characters a token covers; the tokenizer saved as JSON, loaded back and checked to encode the same.
+# With a second argument, the merges and the validation part's tokens are written there one per line for
+# bench/ref/bpe.py to compare against. Arguments: the vocabulary (512), the file to write to (none).
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/time"
+import "../tokenizer"
+import "../datasets/text"
+
+fn main() ? io.Error, os.Error, text.CorpusError, ParseError, tokenizer.TokenizerError, json.Error {
+    args := os.Args()
+    vocab I64 = 512
+    if args.Len() > 1: vocab = try args[1].ParseInt()
+    try os.MkDirAll("data/shakespeare")
+    try text.Fetch("data/shakespeare/input.txt", text.Shakespeare)
+    all := try os.ReadFile("data/shakespeare/input.txt")
+    split I64 = I64(F64(all.Len()) * 0.9)
+    trainText := all[:split]
+    valText := all[split:]
+
+    t0 := time.Now()
+    tk := tokenizer.Tokenizer.Train(trainText, vocab)
+    trainNs := time.Since(t0)
+    t1 := time.Now()
+    trainIds := tk.Encode(trainText)
+    encodeNs := time.Since(t1)
+    t2 := time.Now()
+    valIds := tk.Encode(valText)
+    valNs := time.Since(t2)
+    back := try tk.Decode(valIds)
+    same := "decodes back exactly" if back == valText else "DECODES DIFFERENTLY"
+    try io.Put(("tiny Shakespeare, " + $all.Len() + " bytes; a vocabulary of " + $tk.Size() + " learned from the first " +
+        $split + " in " + $(F64(trainNs) * 1e-6).Fixed(1) + " ms\n"))
+    try io.Put(("training part: " + $trainIds.Len() + " tokens, " + $(F64(split) / F64(trainIds.Len())).Fixed(3) +
+        " characters a token, encoded in " + $(F64(encodeNs) * 1e-6).Fixed(1) + " ms (" +
+        $(F64(split) / (F64(encodeNs) * 1e-9) * 1e-6).Fixed(1) + " MB/s)\n"))
+    try io.Put(("validation part: " + $valIds.Len() + " tokens, " + $(F64(valText.Len()) / F64(valIds.Len())).Fixed(3) +
+        " characters a token, encoded in " + $(F64(valNs) * 1e-6).Fixed(1) + " ms; " + $same + "\n"))
+
+    path := "data/shakespeare/bpe" + $vocab + ".json"
+    try tk.Save(path)
+    loaded := try tokenizer.Tokenizer.Load(path)
+    again := loaded.Encode(valText)
+    agree := again == valIds
+    try io.Put("saved to " + $path + " and loaded back: " + $("the same tokens" if agree else "DIFFERENT TOKENS") + "\n")
+    try io.Put("the first merges:")
+    for k in range 12: try io.Put(" " + $tk.Token(256 + k))
+    try io.Put("\nthe last merges:")
+    for k in range tk.Size() - 268, tk.Size() - 256: try io.Put(" " + $tk.Token(256 + k))
+    try io.Put("\n")
+
+    if args.Len() > 2 {
+        sb := StringBuilder()
+        for pair in tk.Merges: sb.Push($(pair >> 32) + " " + $(pair & 0xFFFFFFFF) + "\n")
+        sb.Push("--\n")
+        for id in valIds: sb.Push($id + "\n")
+        try os.WriteFile(args[2], sb.ToString())
+    }
+}

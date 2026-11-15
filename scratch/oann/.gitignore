@@ -1,0 +1,6 @@
+build/
+/data/mnist/
+/data/shakespeare/
+.work/
+/data/tinystories/
+/logs/

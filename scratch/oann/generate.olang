@@ -1,0 +1,142 @@
+# generate - text from a trained language model, one token at a time: each new token drawn from the softmax of the
+# logits at the last position (divided by a temperature), appended, and the model run again.
+#
+# Rerun runs the whole context through the model for every token - a graph planned for one sequence of T rows, its
+# parameters copied from the trained graph - so a token costs a forward pass of T rows. Cached runs each token once,
+# on a graph planned for Decoding: every attention keeps the keys and values of the positions so far in the graph's
+# arena (a key-value cache), so a token costs a forward pass of one row and attention over the positions before it.
+# When the context is full, the last T / 2 tokens are run again to start a fresh cache.
+
+import "std/rand"
+import "nn"
+import "train"
+import "datasets/text"
+
+# a token drawn from the softmax of logits / temperature - the most likely one when temperature is 0
+fn Sample(logits Array<F32>&, temperature F64, r mut rand.Rand&) I32 {
+    best I64 = 0
+    for i in range 1, logits.Len() {
+        if logits[i] > logits[best]: best = i
+    }
+    if temperature <= 0.0: return I32(best)
+    total F64 = 0.0
+    for x in logits: total += ((F64(x) - F64(logits[best])) / temperature).Exp()
+    u F64 = r.Float() * total
+    for i in range logits.Len() {
+        u -= ((F64(logits[i]) - F64(logits[best])) / temperature).Exp()
+        if u < 0.0: return I32(i)
+    }
+    return I32(best)
+}
+
+# "prompt" and "count" tokens after it, generated on g - a graph of the model planned for one sequence (Batch = T),
+# its parameters those of the trained one - running the last T tokens (all of them while there are fewer) through it
+# for each new token
+fn Rerun(g mut nn.Graph<F32>&, m train.LanguageModel&, c text.Corpus&, prompt String&, count I64, temperature F64
+        r mut rand.Rand&) String ? text.CorpusError {
+    T := m.T
+    ids := try c.Encode(prompt)
+    all := list.List<I32>()
+    for id in ids: all.Push(id)
+    g.Training = false
+    tokens := g.TokenData(m.Tokens)
+    targets := g.ClassData(m.Targets)
+    for i in range T: targets[i] = -1
+    for _ in range count {
+        n := all.Len()
+        L I64 = n if n < T else T
+        for t in range T: tokens[t] = all[n - L + t] if t < L else 0
+        g.Forward(T)
+        all.Push(Sample(g.Value(m.Logits).Row(L - 1), temperature, r))
+    }
+    return c.Decode(all.ToArray())
+}
+
+# "prompt" and "count" tokens after it, generated on g - a graph of the model planned for Decoding one sequence
+# (Batch = T), its parameters those of the trained one: the prompt (its last T tokens) run once, then each new token
+# alone, attending to the cache. A full context starts again from its last T / 2 tokens
+fn Cached(g mut nn.Graph<F32>&, m train.LanguageModel&, c text.Corpus&, prompt String&, count I64, temperature F64
+        r mut rand.Rand&) String ? text.CorpusError {
+    ids := try c.Encode(prompt)
+    return c.Decode(CachedTokens(g, m, ids, count, temperature, r))
+}
+
+# Cached on token ids: the prompt's tokens (at least one) and "count" generated after them - for any tokenizer
+fn CachedTokens(g mut nn.Graph<F32>&, m train.LanguageModel&, prompt Array<I32>&, count I64, temperature F64
+        r mut rand.Rand&) Array<I32> {
+    T := m.T
+    all := list.List<I32>()
+    for id in prompt: all.Push(id)
+    g.Training = false
+    tokens := g.TokenData(m.Tokens)
+    targets := g.ClassData(m.Targets)
+    for i in range T: targets[i] = -1
+    cached := prefill(g, tokens, all, T if all.Len() > T else all.Len())
+    last I64 = cached - 1
+    for _ in range count {
+        next := Sample(g.Value(m.Logits).Row(last), temperature, r)
+        all.Push(next)
+        if cached == T {
+            cached = prefill(g, tokens, all, T / 2)
+            last = cached - 1
+        } else {
+            g.Pos = cached
+            tokens[0] = next
+            g.Forward(1)
+            cached++
+            last = 0
+        }
+    }
+    g.Pos = 0
+    out Array<I32>& = all.ToArray()
+    return out
+}
+
+# the last n tokens of "all" run from position 0, starting the cache again; gives n
+fn prefill(g mut nn.Graph<F32>&, tokens mut Array<I32>&, all list.List<I32>&, n I64) I64 {
+    g.Pos = 0
+    for t in range n: tokens[t] = all[all.Len() - n + t]
+    g.Forward(n)
+    return n
+}
+
+# ---- tests ----
+
+import "layers"
+import "std/list"
+
+test "decoding with the cache gives the logits of running the whole sequence, a prefill and then token by token" {
+    T I64 = 8
+    full := nn.Graph<F64>(2 * T)
+    ft := full.Tokens()
+    fl := layers.Transformer.New(full, 11, T, 16, 4, 2).Apply(full, ft)
+    r := rand.Rand(31)
+    full.Plan(r)
+    dec := nn.Graph<F64>(T, 1, true)
+    dt := dec.Tokens()
+    dl := layers.Transformer.New(dec, 11, T, 16, 4, 2).Apply(dec, dt)
+    dec.Plan(r)
+    p := full.Params()
+    for i in range p.Cols: p.Data[i] = p.Data[i] * 20.0
+    dec.Params().CopyFrom(full.Params())!
+    seq := full.TokenData(ft)
+    for i in range 2 * T: seq[i] = I32(r.Below(11))
+    full.Training = false
+    full.Forward(2 * T)
+    want := full.Value(fl)
+    toks := dec.TokenData(dt)
+    for i in range 3 { toks[i] = seq[T + i] }               # the second sequence: its own positions from 0
+    dec.Pos = 0
+    dec.Forward(3)
+    worst F64 = dec.Value(dl).MaxAbsDifference(want.RowRange(T, T + 3)!)!
+    for t in range 3, T {
+        dec.Pos = t
+        toks[0] = seq[T + t]
+        dec.Forward(1)
+        d := dec.Value(dl).MaxAbsDifference(want.RowRange(T + t, T + t + 1)!)!
+        if d > worst: worst = d
+    }
+    assert worst < 1e-12, "decoded logits differ from the whole sequence's"
+    assert want.MaxAbs() > 0.1
+}
+

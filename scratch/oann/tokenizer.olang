@@ -1,0 +1,682 @@
+# tokenizer - byte-level byte-pair encoding (BPE), as GPT-2 has it (Sennrich et al. for BPE, Radford et al. for doing
+# it on bytes): a text is bytes, the 256 byte values are the first 256 tokens, and every token after them is the merge
+# of two earlier ones, learned from a corpus by merging its most frequent adjacent pair again and again. Encoding cuts
+# a text into chunks and applies the merges to each chunk in the order they were learned; decoding writes each token's
+# bytes. Any bytes encode and decode back to themselves - there is no unknown token.
+#
+# Pre-tokenization - the chunks, which merges never cross - is GPT-2's pattern
+#     's|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+
+# read by a hand-written scanner (olang has no regular expressions) with byte classes standing for the Unicode ones: a
+# letter is an ASCII letter or any byte from 0x80 up (so a UTF-8 word stays one chunk), a digit is 0-9, whitespace is
+# space, tab, line feed, vertical tab, form feed and carriage return. On ASCII text this is GPT-2's rule exactly; on
+# other text it differs where GPT-2 splits a non-ASCII symbol or punctuation mark from the letters around it. A space
+# stays at the front of the word after it, so " the" is one token where "the" after a line break is another.
+#
+# Training (Train) counts each distinct chunk once with its number of occurrences, then repeats: the most frequent
+# adjacent pair over all chunks - ties to the smaller pair, its first token's id then its second's (Hugging Face's
+# tokenizers do the same) - becomes the next token and is merged in every chunk holding it. Pair counts are kept up to
+# date incrementally, a heap gives the most frequent, and each pair keeps the list of chunks it occurs in, so a merge
+# costs the chunks it touches, not the corpus. Encoding a chunk applies the merges lowest rank first, leftmost first,
+# with a heap over its positions - O(n log n) in the chunk's length, so a megabyte of one letter is no harder than
+# prose - and remembers each distinct chunk's tokens for the rest of the text, as GPT-2's encoder does.
+#
+# A tokenizer is saved as JSON (Save, Load): its merges as pairs of token ids, and every token's bytes in GPT-2's
+# printable form ("Ġthe" for " the") for a person to read.
+
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/list"
+
+type TokenizerError error {
+    Malformed # not a tokenizer Save wrote: no merges, a merge naming a token not made yet
+    Unknown   # a token id the vocabulary does not have
+}
+
+# a byte-level BPE vocabulary: the 256 bytes, then token 256 + k = the merge of Merges[k]'s pair, (a << 32) | b
+type Tokenizer struct(Merges Array<I64>&) {
+    Merges
+    table Array<I64>& = rankTable(Merges)    # open addressing: slot s, a pair at 2s (-1: empty), its rank at 2s + 1
+    starts Array<I64>& = tokenStarts(Merges) # token t's bytes are bytes[starts[t] ... starts[t + 1] - 1]
+    bytes Array<Char>& = tokenBytes(Merges, starts)
+}
+
+# the number of tokens: 256 bytes and the merges
+fn (t Tokenizer&) Size() I64 {
+    return 256 + t.Merges.Len()
+}
+
+# the pair (a, b) as one number
+fn pairOf(a I64, b I64) I64 {
+    return (a << 32) | b
+}
+
+fn firstOf(pair I64) I64 { return pair >> 32 }
+fn secondOf(pair I64) I64 { return pair & 0xFFFFFFFF }
+
+# a pair's slot in a table of a power-of-two size - Fibonacci hashing, the product's high bits
+fn spread(pair I64, mask I64) I64 {
+    return I64((U64(pair) * 0x9E3779B97F4A7C15) >> 32) & mask
+}
+
+fn rankTable(merges Array<I64>&) Array<I64> {
+    size I64 = 16
+    for size < 2 * merges.Len(): size = 2 * size
+    out mut Array<I64>& = Array<I64>(2 * size, -1)
+    mask I64 = size - 1
+    for k, pair in merges {
+        s := spread(pair, mask)
+        for out[2 * s] >= 0: s = (s + 1) & mask
+        out[2 * s] = pair
+        out[2 * s + 1] = k
+    }
+    return out
+}
+
+# the rank of merging a then b - the token it makes is 256 + the rank - or -1 when they are not merged
+fn (t Tokenizer&) rankOf(a I64, b I64) I64 {
+    pair := pairOf(a, b)
+    mask I64 = t.table.Len() / 2 - 1
+    s := spread(pair, mask)
+    for {
+        k := t.table[2 * s]
+        if k == pair: return t.table[2 * s + 1]
+        if k < 0: return -1
+        s = (s + 1) & mask
+    }
+}
+
+fn tokenStarts(merges Array<I64>&) Array<I64> {
+    n I64 = 256 + merges.Len()
+    out mut Array<I64>& = Array<I64>(n + 1)
+    for t in range 257: out[t] = t
+    for k, pair in merges {
+        a := firstOf(pair)
+        b := secondOf(pair)
+        out[257 + k] = out[256 + k] + (out[a + 1] - out[a]) + (out[b + 1] - out[b])
+    }
+    return out
+}
+
+fn tokenBytes(merges Array<I64>&, starts Array<I64>&) Array<Char> {
+    out mut Array<Char>& = Array<Char>(starts[starts.Len() - 1])
+    for b in range 256: out[b] = Char(U8(b))
+    for k, pair in merges {
+        at := starts[256 + k]
+        for part in Array<I64>[firstOf(pair), secondOf(pair)] {
+            for i in range starts[part], starts[part + 1] {
+                out[at] = out[i]
+                at++
+            }
+        }
+    }
+    return out
+}
+
+# token id's bytes, as text
+fn (t Tokenizer&) Token(id I64) String& {
+    return String(t.bytes[t.starts[id]:t.starts[id + 1]])
+}
+
+# ---- pre-tokenization ----
+
+classSpace I64 = 0
+classLetter I64 = 1
+classDigit I64 = 2
+classOther I64 = 3
+
+# a byte's class in the pattern above
+fn classOf(c Char) I64 {
+    if c == ' ' or c == '\n' or c == '\t' or c == '\r' or U8(c) == 11 or U8(c) == 12: return classSpace
+    if (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or U8(c) >= 128: return classLetter
+    if c >= '0' and c <= '9': return classDigit
+    return classOther
+}
+
+# where the chunk starting at i of t ends: GPT-2's pattern, alternatives tried in its order
+fn ChunkEnd(t String&, i I64) I64 {
+    n := t.Len()
+    c := t[i]
+    if c == '\'' and i + 1 < n {
+        d := t[i + 1]
+        if d == 's' or d == 't' or d == 'm' or d == 'd': return i + 2
+        if i + 2 < n {
+            e := t[i + 2]
+            if (d == 'r' and e == 'e') or (d == 'v' and e == 'e') or (d == 'l' and e == 'l'): return i + 3
+        }
+    }
+    j I64 = i
+    if c == ' ' and i + 1 < n and classOf(t[i + 1]) != classSpace: j = i + 1 # " ?" before a run
+    k := classOf(t[j])
+    e I64 = j + 1
+    if k != classSpace {
+        for e < n and classOf(t[e]) == k: e++
+        return e
+    }
+    for e < n and classOf(t[e]) == classSpace: e++
+    if e < n and e - i > 1 { return e - 1 } # \s+(?!\S): the last space stays with what follows
+    return e
+}
+
+# the chunks of t, as pieces of it
+fn Chunks(t String&) list.List<String&>& {
+    out mut list.List<String&>& = list.List<String&>()
+    i I64 = 0
+    for i < t.Len() {
+        e := ChunkEnd(t, i)
+        out.Push(t[i:e])
+        i = e
+    }
+    return out
+}
+
+# ---- training ----
+
+# a pair's count and the pair, ordered most frequent first and, between equal counts, smaller pair first
+type candidate struct(Count I64, Of I64) {
+    Count
+    Of
+}
+
+fn before(x candidate, y candidate) Bool {
+    return x.Count > y.Count or (x.Count == y.Count and x.Of < y.Of)
+}
+
+# the state of training: a slot per pair seen, with its count, the head of its list of chunks it occurs in (a linked
+# list through occWord and occNext - a chunk can be on it more than once, or no longer hold the pair) and the round it
+# last changed in; the heap of candidates, stale ones discarded when they surface
+type trainer struct() {
+    slots mut Map<I64, I64>& = Map<I64, I64>()
+    pairs mut list.List<I64>& = list.List<I64>()
+    counts mut list.List<I64>& = list.List<I64>()
+    heads mut list.List<I64>& = list.List<I64>()
+    changed mut list.List<I64>& = list.List<I64>()
+    occWord mut list.List<I64>& = list.List<I64>()
+    occNext mut list.List<I64>& = list.List<I64>()
+    touched mut list.List<I64>& = list.List<I64>() # the slots changed this round
+    heap mut list.List<candidate>& = list.List<candidate>()
+}
+
+fn (r mut trainer&) slot(pair I64) I64 {
+    s := try r.slots.Get(pair) catch default -1
+    if s < 0 {
+        s = r.counts.Len()
+        r.slots.Put(pair, s)
+        r.pairs.Push(pair)
+        r.counts.Push(0)
+        r.heads.Push(-1)
+        r.changed.Push(-1)
+    }
+    return s
+}
+
+# adds delta to pair's count in round "round", and puts chunk w on its list when w >= 0
+fn (r mut trainer&) add(pair I64, delta I64, w I64, round I64) {
+    s := r.slot(pair)
+    r.counts[s] += delta
+    if w >= 0 {
+        r.occWord.Push(w)
+        r.occNext.Push(r.heads[s])
+        r.heads[s] = r.occWord.Len() - 1
+    }
+    if r.changed[s] != round {
+        r.changed[s] = round
+        r.touched.Push(s)
+    }
+}
+
+# every slot changed this round back on the heap with its count now
+fn (r mut trainer&) settle() {
+    for s in r.touched {
+        if r.counts[s] > 0: r.push(candidate(r.counts[s], r.pairs[s]))
+    }
+    r.touched.Clear()
+}
+
+fn (r mut trainer&) push(c candidate) {
+    h := r.heap
+    h.Push(c)
+    i I64 = h.Len() - 1
+    for i > 0 {
+        p I64 = (i - 1) / 2
+        if not before(h[i], h[p]): break
+        h[i], h[p] = h[p], h[i]
+        i = p
+    }
+}
+
+fn (r mut trainer&) pop() candidate {
+    h := r.heap
+    top := h[0]
+    last := h.Pop()!
+    n := h.Len()
+    if n == 0: return top
+    h[0] = last
+    i I64 = 0
+    for {
+        best I64 = i
+        for c in Array<I64>[2 * i + 1, 2 * i + 2]: best = c if c < n and before(h[c], h[best]) else best
+        if best == i: break
+        h[i], h[best] = h[best], h[i]
+        i = best
+    }
+    return top
+}
+
+# the most frequent pair still current, or a count of 0 when no pair is left
+fn (r mut trainer&) best() candidate {
+    for r.heap.Len() > 0 {
+        c := r.pop()
+        if r.counts[r.slot(c.Of)] == c.Count: return c
+    }
+    return candidate(0, 0)
+}
+
+# the distinct chunks of a text, the symbols of each - a run of Syms from Starts[w], Lens[w] long, shrinking as pairs
+# are merged in it - and how many times the chunk occurs in the text
+type ChunkSet struct(counts Array<I64>&, starts Array<I64>&, lens mut Array<I64>&, syms mut Array<I64>&) {
+    Counts Array<I64>& = counts
+    Starts Array<I64>& = starts
+    Lens mut Array<I64>& = lens
+    Syms mut Array<I64>& = syms
+}
+
+fn ChunkSet.Of(text String&) ChunkSet {
+    index := Map<String&, I64>()
+    counts := list.List<I64>()
+    first := list.List<I64>() # where its first occurrence starts in text
+    lens := list.List<I64>()
+    i I64 = 0
+    for i < text.Len() {
+        e := ChunkEnd(text, i)
+        piece := text[i:e]
+        w := try index.Get(piece) catch default -1
+        if w < 0 {
+            w = counts.Len()
+            index.Put(piece, w)
+            counts.Push(0)
+            first.Push(i)
+            lens.Push(e - i)
+        }
+        counts[w]++
+        i = e
+    }
+    starts := Array<I64>(counts.Len())
+    total I64 = 0
+    for w in range counts.Len() {
+        starts[w] = total
+        total += lens[w]
+    }
+    syms := Array<I64>(total)
+    for w in range counts.Len() {
+        for j in range lens[w]: syms[starts[w] + j] = I64(U8(text[first[w] + j]))
+    }
+    return ChunkSet(counts.ToArray(), starts, lens.ToArray(), syms)
+}
+
+# whether chunk w holds the pair a, b
+fn (c ChunkSet&) holds(w I64, a I64, b I64) Bool {
+    s := c.Starts[w]
+    for j in range s, s + c.Lens[w] - 1 {
+        if c.Syms[j] == a and c.Syms[j + 1] == b: return true
+    }
+    return false
+}
+
+# the symbols syms[s .. end) with every a, b pair made one symbol "made", written from s on; gives where they now end
+fn replacePair(syms mut Array<I64>&, s I64, end I64, a I64, b I64, made I64) I64 {
+    at I64 = s
+    j I64 = s
+    for j < end {
+        pair := j + 1 < end and syms[j] == a and syms[j + 1] == b
+        syms[at] = made if pair else syms[j]
+        j += 2 if pair else 1
+        at++
+    }
+    return at
+}
+
+# chunk w with its pair a, b merged into token "made" in round k: the counts of the pairs it held taken back, those it
+# holds now added, and the chunk put on the lists of the new pairs
+fn (r mut trainer&) rewrite(c mut ChunkSet&, w I64, a I64, b I64, made I64, k I64) {
+    s := c.Starts[w]
+    n := c.Counts[w]
+    for j in range s, s + c.Lens[w] - 1: r.add(pairOf(c.Syms[j], c.Syms[j + 1]), -n, -1, k)
+    end := replacePair(c.Syms, s, s + c.Lens[w], a, b, made)
+    c.Lens[w] = end - s
+    for q in range s, end - 1 {
+        x := c.Syms[q]
+        y := c.Syms[q + 1]
+        r.add(pairOf(x, y), n, w if x == made or y == made else -1, k)
+    }
+}
+
+# the pair merged into token "made", in round k, in every chunk that still holds it ("stamp" says which this round has
+# done: a chunk is on the pair's list more than once, or no longer holds it)
+fn (r mut trainer&) merge(c mut ChunkSet&, stamp mut Array<I64>&, pair I64, made I64, k I64) {
+    a := firstOf(pair)
+    b := secondOf(pair)
+    node := r.heads[r.slot(pair)]
+    for node >= 0 {
+        w := r.occWord[node]
+        node = r.occNext[node]
+        if stamp[w] == k: continue
+        stamp[w] = k
+        if c.holds(w, a, b): r.rewrite(c, w, a, b, made, k)
+    }
+}
+
+# a vocabulary of "vocab" tokens (256 bytes and vocab - 256 merges, fewer when the text runs out of pairs) learned
+# from text
+fn Tokenizer.Train(text String&, vocab I64) Tokenizer {
+    c mut ChunkSet& = ChunkSet.Of(text)
+    r := trainer()
+    for w in range c.Counts.Len() {
+        s := c.Starts[w]
+        for j in range s, s + c.Lens[w] - 1: r.add(pairOf(c.Syms[j], c.Syms[j + 1]), c.Counts[w], w, -2)
+    }
+    r.settle()
+    stamp := Array<I64>(c.Counts.Len(), -1)
+    merges := list.List<I64>()
+    for k in range vocab - 256 {
+        top := r.best()
+        if top.Count <= 0: break
+        merges.Push(top.Of)
+        r.merge(c, stamp, top.Of, 256 + k, k)
+        r.settle()
+    }
+    learned Array<I64>& = merges.ToArray()
+    return Tokenizer(learned)
+}
+
+# ---- encoding and decoding ----
+
+# the state of encoding: each distinct chunk's tokens, where they start in "made" and how many (the value in seen is
+# an index into firsts and counts; "made" holds them all), and the scratch one chunk is merged in
+type encoder struct() {
+    firsts mut list.List<I64>& = list.List<I64>()
+    counts mut list.List<I64>& = list.List<I64>()
+    made mut list.List<I32>& = list.List<I32>()
+    syms mut list.List<I64>& = list.List<I64>()
+    next mut list.List<I64>& = list.List<I64>()
+    prev mut list.List<I64>& = list.List<I64>()
+    heap mut list.List<I64>& = list.List<I64>() # (rank << 32) | position, smallest first
+}
+
+# a min-heap of I64s
+fn heapPush(h mut list.List<I64>&, v I64) {
+    h.Push(v)
+    i I64 = h.Len() - 1
+    for i > 0 {
+        p I64 = (i - 1) / 2
+        if h[i] >= h[p]: break
+        h[i], h[p] = h[p], h[i]
+        i = p
+    }
+}
+
+fn heapPop(h mut list.List<I64>&) I64 {
+    top := h[0]
+    last := h.Pop()!
+    n := h.Len()
+    if n == 0: return top
+    h[0] = last
+    i I64 = 0
+    for {
+        best I64 = i
+        for c in Array<I64>[2 * i + 1, 2 * i + 2]: best = c if c < n and h[c] < h[best] else best
+        if best == i: break
+        h[i], h[best] = h[best], h[i]
+        i = best
+    }
+    return top
+}
+
+# piece's tokens appended to e.done: its bytes, merged lowest rank first and, between equal ranks, leftmost first -
+# which is GPT-2's "merge every occurrence of the best pair, left to right", since a merge only makes pairs of a later
+# rank. Positions are a linked list; a heap entry is stale once its position is gone or its pair has changed
+fn (t Tokenizer&) encodeChunk(piece String&, e mut encoder&) {
+    n := piece.Len()
+    syms := e.syms
+    next := e.next
+    prev := e.prev
+    heap := e.heap
+    syms.Clear()
+    next.Clear()
+    prev.Clear()
+    heap.Clear()
+    for j in range n {
+        syms.Push(I64(U8(piece[j])))
+        next.Push(j + 1)
+        prev.Push(j - 1)
+    }
+    for j in range n - 1 {
+        k := t.rankOf(syms[j], syms[j + 1])
+        if k >= 0: heapPush(heap, (k << 32) | j)
+    }
+    for heap.Len() > 0 {
+        top := heapPop(heap)
+        k I64 = top >> 32
+        j I64 = top & 0xFFFFFFFF
+        if syms[j] < 0 or next[j] >= n: continue
+        right := next[j]
+        if t.rankOf(syms[j], syms[right]) != k: continue
+        syms[j] = 256 + k
+        syms[right] = -1
+        next[j] = next[right]
+        if next[j] < n: prev[next[j]] = j
+        if prev[j] >= 0 {
+            p := prev[j]
+            kp := t.rankOf(syms[p], syms[j])
+            if kp >= 0: heapPush(heap, (kp << 32) | p)
+        }
+        if next[j] < n {
+            kn := t.rankOf(syms[j], syms[next[j]])
+            if kn >= 0: heapPush(heap, (kn << 32) | j)
+        }
+    }
+    j I64 = 0
+    for j < n {
+        e.made.Push(I32(syms[j]))
+        j = next[j]
+    }
+}
+
+# text's tokens
+fn (t Tokenizer&) Encode(text String&) Array<I32> {
+    e := encoder()
+    seen := Map<String&, I64>()
+    out := Array<I32>(text.Len()) # a token holds at least one byte
+    n I64 = 0
+    i I64 = 0
+    for i < text.Len() {
+        end := ChunkEnd(text, i)
+        piece := text[i:end]
+        c := try seen.Get(piece) catch default -1
+        if c < 0 {
+            c = e.firsts.Len()
+            e.firsts.Push(e.made.Len())
+            t.encodeChunk(piece, e)
+            e.counts.Push(e.made.Len() - e.firsts[c])
+            seen.Put(piece, c)
+        }
+        first := e.firsts[c]
+        for q in range first, first + e.counts[c] {
+            out[n] = e.made[q]
+            n++
+        }
+        i = end
+    }
+    return out[:n]
+}
+
+# the text of ids - an error when one is not a token of this vocabulary
+fn (t Tokenizer&) Decode(ids Array<I32>&) String ? TokenizerError {
+    size I64 = 0
+    for id in ids {
+        if id < 0 or I64(id) >= t.Size(): error TokenizerError.Unknown
+        size += t.starts[I64(id) + 1] - t.starts[I64(id)]
+    }
+    out := Array<Char>(size)
+    at I64 = 0
+    for id in ids {
+        for i in range t.starts[I64(id)], t.starts[I64(id) + 1] {
+            out[at] = t.bytes[i]
+            at++
+        }
+    }
+    return String(out)
+}
+
+# the number of bytes of token id
+fn (t Tokenizer&) Width(id I32) I64 {
+    return t.starts[I64(id) + 1] - t.starts[I64(id)]
+}
+
+# ---- saving and loading ----
+
+# GPT-2's printable form of a byte: the printable bytes are themselves, the others the code points from 256 on, in
+# byte order - so every token is printable text ("Ġ" is a space, "Ċ" a line feed)
+fn printable(b I64) I64 {
+    if (b >= 33 and b <= 126) or (b >= 161 and b <= 172) or b >= 174: return b
+    n I64 = 0
+    for x in range b {
+        if not ((x >= 33 and x <= 126) or (x >= 161 and x <= 172) or x >= 174): n++
+    }
+    return 256 + n
+}
+
+# token id in GPT-2's printable form, as a JSON string
+fn (t Tokenizer&) printed(id I64, sb mut StringBuilder&) {
+    sb.PushChar('"')
+    for i in range t.starts[id], t.starts[id + 1] {
+        cp := printable(I64(U8(t.bytes[i])))
+        if cp == 34 or cp == 92 {
+            sb.PushChar('\\')
+            sb.PushChar(Char(U8(cp)))
+        } else if cp < 128 {
+            sb.PushChar(Char(U8(cp)))
+        } else {
+            sb.PushChar(Char(U8(192 | (cp >> 6))))
+            sb.PushChar(Char(U8(128 | (cp & 63))))
+        }
+    }
+    sb.PushChar('"')
+}
+
+# the tokenizer as JSON text: {"format": "oann-bpe", "version": 1, "pretokenize": "gpt2-ascii", "merges": [[a, b], ...],
+# "vocab": [every token in GPT-2's printable form]} - the merges are what Load reads, the vocabulary is for reading
+fn (t Tokenizer&) ToJson() String {
+    sb := StringBuilder()
+    sb.Push("{\"format\": \"oann-bpe\", \"version\": 1, \"pretokenize\": \"gpt2-ascii\",\n\"merges\": [")
+    for k, pair in t.Merges {
+        if k > 0: sb.Push(", ")
+        if k % 8 == 0: sb.Push("\n")
+        sb.Push("[" + $firstOf(pair) + ", " + $secondOf(pair) + "]")
+    }
+    sb.Push("],\n\"vocab\": [")
+    for id in range t.Size() {
+        if id > 0: sb.Push(", ")
+        if id % 16 == 0: sb.Push("\n")
+        t.printed(id, sb)
+    }
+    sb.Push("]}\n")
+    return sb.ToString()
+}
+
+# the tokenizer written to "path"
+fn (t Tokenizer&) Save(path String&) ? os.Error {
+    try os.WriteFile(path, t.ToJson())
+}
+
+# a tokenizer from JSON text Json() wrote
+fn Tokenizer.Parse(text String&) Tokenizer ? TokenizerError, json.Error {
+    doc := try json.Json.Parse(text)
+    if (try doc["format"].AsStr()) != "oann-bpe": error TokenizerError.Malformed
+    items := try doc["merges"].AsArr()
+    merges mut Array<I64>& = Array<I64>(items.Len())
+    for k, item in items {
+        pair := try item.AsArr()
+        if pair.Len() != 2: error TokenizerError.Malformed
+        a := try pair[0].AsInt()
+        b := try pair[1].AsInt()
+        if a < 0 or b < 0 or a >= 256 + k or b >= 256 + k: error TokenizerError.Malformed
+        merges[k] = pairOf(a, b)
+    }
+    return Tokenizer(merges)
+}
+
+# the tokenizer saved at "path"
+fn Tokenizer.Load(path String&) Tokenizer ? TokenizerError, json.Error, os.Error {
+    text := try os.ReadFile(path)
+    return try Tokenizer.Parse(text)
+}
+
+# ---- tests ----
+
+# the chunks of t joined by "|"
+fn cut(t String&) String {
+    return Chunks(t).Join("|")
+}
+
+test "chunks follow GPT-2's pattern: contractions, a space before a run, the last of several spaces kept apart" {
+    assert cut("Hello world") == "Hello| world"
+    assert cut("I'm here, they'll see") == "I|'m| here|,| they|'ll| see"
+    assert cut("abc   def") == "abc|  | def"
+    assert cut("a\n\nb") == "a|\n|\n|b"
+    assert cut("x  \n") == "x|  \n"
+    assert cut("year 2024!? ok") == "year| 2024|!?| ok"
+    assert cut(" 'tis") == " '|tis"
+    assert cut("") == ""
+}
+
+test "training merges the most frequent pair first, ties to the smaller pair" {
+    t := Tokenizer.Train("aaab aaab aaab", 259)
+    assert t.Size() == 259
+    assert t.Token(256) == "aa"
+    assert t.Merges[0] == pairOf(97, 97)
+    ids := t.Encode("aaab")
+    assert ids.Len() <= 2
+    back := t.Decode(ids)!
+    assert back == "aaab"
+}
+
+test "any bytes encode and decode back to themselves" {
+    corpus := ("First Citizen:\nBefore we proceed any further, hear me speak.\n\nAll:\nSpeak, speak.\n\n" +
+        "First Citizen:\nYou are all resolved rather to die than to famish?\n")
+    t := Tokenizer.Train(corpus, 300)
+    assert t.Size() == 300
+    r := rand.Rand(7)
+    for round in range 50 {
+        n := r.Below(200)
+        s := Array<Char>(n)
+        for i in range n {
+            s[i] = Char(U8(r.Below(256))) if round % 2 == 0 else corpus[r.Below(corpus.Len())]
+        }
+        text := String(s)
+        ids := t.Encode(text)
+        assert t.Decode(ids)! == text, "round trip"
+    }
+    long := Array<Char>(100000, 'a')
+    ids := t.Encode(long)
+    assert t.Decode(ids)! == long
+    assert t.Encode(corpus).Len() < corpus.Len() / 2
+    bad := false
+    try t.Decode(Array<I32>[1, 300]) catch TokenizerError { bad = true }
+    assert bad
+}
+
+test "a tokenizer saved as JSON loads back with the same merges and the same tokens" {
+    corpus := "the cat sat on the mat, the cat ate the rat; that is that.\n"
+    t := Tokenizer.Train(corpus, 280)
+    u := Tokenizer.Parse(t.ToJson())!
+    assert u.Size() == t.Size()
+    for k in range t.Merges.Len(): assert u.Merges[k] == t.Merges[k]
+    a := t.Encode(corpus)
+    b := u.Encode(corpus)
+    assert a.Len() == b.Len()
+    for i in range a.Len(): assert a[i] == b[i]
+    bad := false
+    try Tokenizer.Parse("{\"format\": \"oann-bpe\", \"merges\": [[256, 1]]}") catch TokenizerError { bad = true } catch { }
+    assert bad
+}

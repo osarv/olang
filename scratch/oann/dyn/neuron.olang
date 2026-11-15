@@ -1,0 +1,308 @@
+# dyn/neuron - the neurons of a dynamical system: what a population's units are (Neuron: rate neurons with an
+# activation Rho, leaky integrate-and-fire neurons that spike, or a Custom model), the record of named state each unit
+# holds (a cell: RateCell, LifCell - held as one Columns column per field by the settle), the role a population plays
+# (Role: input, hidden, readout with a Cost) and the per-element work of a sweep over a run of rows: the residual and the
+# step of rate neurons, a time step of spiking ones, a readout's nudge.
+#
+# The model (docs/settling.md 1.2): a rate unit's potential u follows du/dt = -u + total, stepped by forward Euler -
+# r = total - u, u <- u + dt r, s = rho(u) - and a state is settled when every |r| is within the tolerance. A spiking
+# unit (1.2, 4.6) integrates a synaptic current toward its input, leaks toward it, fires at a threshold and loses the
+# threshold; its activity is its spike count per step over a window, so the same settle, phases and nudges run on it.
+#
+# Fields marked @Keep persist across settles (slow state: an adaptive threshold); a cold start resets the rest.
+
+import "../tensor"
+import "../kernels/elem"
+
+# a cell field that persists across settles: Reset leaves it (slow state - traces, thresholds, adaptation)
+type Keep struct() { }
+
+# a rate unit: its potential U and its activity S = rho(U)
+type RateCell<T> struct(U T, S T) { U, S }
+
+# a spiking unit: its membrane potential V, its activity S (spikes per step over the last window), its synaptic current
+# Syn, whether it spiked this step (Spike, 0 or 1), a running mean of its spikes (Trace, what a nudge's force reads),
+# the spikes counted in the window so far (Count) and its threshold's adaptation (Theta, kept across settles)
+type LifCell<T> struct(V T, S T, Syn T, Spike T, Trace T, Count T, @Keep Theta T) { V, S, Syn, Spike, Trace, Count, Theta }
+
+# a rate neuron's activation
+type Rho enum {
+    Linear                              # s = u (tests: the equilibrium has a closed form)
+    Tanh                                # the default: rest at 0, slope at most 1, smooth
+    HardSigmoid                         # clip(u, 0, 1)
+    Relu                                # max(u, 0)
+    LifRate(leak F64, threshold F64)    # the steady firing rate of a Lif neuron under the current u
+}
+
+# a population's neurons: rate neurons, spiking ones - leak, threshold, the synaptic current's rate toward the input,
+# and the window of steps their rates are counted over - or a model of their own
+type Neuron enum {
+    Rate(rho Rho)
+    Lif(leak F64, threshold F64, synapse F64, window I64)
+    Custom(d mut any Dynamics&)
+}
+
+# the usual spiking neuron
+fn Neuron.Spiking(leak F64 = 0.1, threshold F64 = 1, synapse F64 = 0.25, window I64 = 256) Neuron {
+    return Neuron.Lif(leak, threshold, synapse, window)
+}
+
+# a population's update for models beyond the built-in ones: the settle hands it its rows' drive (the total input,
+# rows x size) and takes its activity back after each sweep. Relax moves rows lo .. hi a step dt toward the drive, in
+# its own state, and gives the residual's sup norm over them; it must read only the drive (the sweep is Jacobi: every
+# population reads the activities of the sweep before). RelaxVjp is for implicit gradients
+type Dynamics trait {
+    mut Relax(drive tensor.Tensor<F32>&, dt F64, lo I64, hi I64) F64
+    Activity() tensor.Tensor<F32>
+    mut RelaxVjp(dy tensor.Tensor<F32>&, dx mut tensor.Tensor<F32>&)
+}
+
+# a readout's cost: squared error toward targets, or the softmax cross-entropy of the scaled readout toward a class
+# per group of units (groups of equal size, each its own softmax)
+type Cost enum {
+    Squared
+    CrossEntropy(temperature F64, groups I64)
+}
+
+# softmax cross-entropy at temperature, one class per row
+fn Cost.Classes(temperature F64 = 0.25) Cost { return Cost.CrossEntropy(temperature, 1) }
+
+# what a population is to the system: driven by data and never relaxed (Input), relaxed (Hidden), or relaxed and nudged
+# toward targets by its cost when learning (Readout)
+type Role enum {
+    Input
+    Hidden
+    Readout(cost Cost)
+}
+
+# the largest slope of a model's activation - what turns the incoming mass into the feedback gain; no bound for
+# spiking neurons, LifRate and custom models
+fn Slope(n Neuron) F64 {
+    if n != Neuron.Rate: return Inf
+    return match n.rho {
+        case Rho.LifRate: Inf
+        case _: 1.0
+    }
+}
+
+# the largest slope of a cost's force on its own unit, per unit of beta: onehot - softmax(s / T) falls by
+# p (1 - p) / T <= 1 / (4 T), y - s by 1
+fn ForceSlope(c Cost) F64 {
+    return match c {
+        case Cost.Squared: 1.0
+        case Cost.CrossEntropy(t, _): 0.25 / t
+    }
+}
+
+# the steady firing rate, in spikes per step, of a Lif neuron (leak, threshold) under the constant current x: the time
+# to climb from 0 to the threshold, tau ln(x / (x - threshold)) steps with tau = -1 / ln(1 - leak), at most one a step
+fn LifRateOf(x F64, leak F64, threshold F64) F64 {
+    if x <= threshold: return 0.0
+    tau F64 = -1.0 / (1.0 - leak).Log()
+    period F64 = tau * (x / (x - threshold)).Log()
+    return 1.0 if period <= 1.0 else 1.0 / period
+}
+
+# rho(x)
+fn Activate<T Float>(f Rho, x T) T {
+    return match f {
+        case Rho.Linear: x
+        case Rho.Tanh: elem.FastTanh(x)
+        case Rho.HardSigmoid: clip(x)
+        case Rho.Relu: x.Max(T(0))
+        case Rho.LifRate(leak, threshold): T(LifRateOf(F64(x), leak, threshold))
+    }
+}
+
+fn clip<T Float>(x T) T { return T(0) if x < T(0) else (T(1) if x > T(1) else x) }
+
+# a's sup norm, NaN when one is: the worse of worst and a
+fn Worse<T Float>(worst T, a T) T { return a if a > worst or a != a else worst }
+
+# s[lo .. hi] = rho(u[lo .. hi])
+fn ActivateRun<T Float>(f Rho, u Array<T>&, s mut Array<T>&, lo I64, hi I64) {
+    match f {
+        case Rho.Linear { for i in range lo, hi: s[i] = u[i] }
+        case Rho.Tanh { for i in range lo, hi: s[i] = elem.FastTanh(u[i]) }
+        case Rho.HardSigmoid { for i in range lo, hi: s[i] = clip(u[i]) }
+        case Rho.Relu { for i in range lo, hi: s[i] = u[i].Max(T(0)) }
+        case Rho.LifRate { for i in range lo, hi: s[i] = Activate(f, u[i]) }
+    }
+}
+
+# one sweep of rate units lo .. hi (elements of the columns): the residual r = total - u, its sup norm (given back,
+# NaN when one is), and the step into the other buffer - u2 = u + dt r, s2 = rho(u2)
+fn RateStep<T Float>(f Rho, u Array<T>&, total Array<T>&, u2 mut Array<T>&, s2 mut Array<T>&, lo I64, hi I64, dt T) T {
+    m := T(0).Bits()
+    for i in range lo, hi {
+        r := total[i] - u[i]
+        b := r.Bits() << 1 >> 1             # the sup norm kept as bits (below)
+        m = b if b > m else m
+        u2[i] = u[i] + dt * r
+    }
+    ActivateRun(f, u2, s2, lo, hi)
+    return T.FromBits(m)
+}
+
+# (the sup norm as bits: |r|'s pattern, the sign cleared, orders as an unsigned integer as |r| does, and every NaN
+# above the infinities - so the largest pattern is the largest |r|, a NaN where one is, and the loop's maximum is an
+# integer one, which vectorizes)
+
+# one time step of spiking units lo .. hi, from cell buffer a into b: the synaptic current moves by synapse toward its
+# input (in syn: the transport of the spikes, a's), the potential leaks toward the constant plus the current (the
+# nudge, in nudge where nudged, added; constant from ci for the row lo .. hi), a spike where it reaches the threshold (plus Theta), which it then loses, the trace
+# follows the spikes over about a quarter of a window, and the window's count gains the spike
+fn LifStep<T Float>(a Columns<LifCell<T>>&, b mut Columns<LifCell<T>>&, syn Array<T>&, constant Array<T>&, ci I64, nudge Array<T>&, nudged Bool, lo I64, hi I64, leak T, threshold T, synapse T, follow T) {
+    for i in range lo, hi {
+        y := a.Syn[i] + synapse * (syn[i] - a.Syn[i])
+        drive := constant[ci + i - lo] + y + (nudge[i] if nudged else T(0))
+        v := a.V[i] + leak * (drive - a.V[i])
+        th := threshold + a.Theta[i]
+        fired := v >= th
+        x := T(1) if fired else T(0)
+        b.Syn[i] = y
+        b.V[i] = v - th if fired else v
+        b.Spike[i] = x
+        b.Count[i] = a.Count[i] + x
+        b.Trace[i] = a.Trace[i] + follow * (x - a.Trace[i])
+        b.S[i] = a.S[i]
+        b.Theta[i] = a.Theta[i]
+    }
+}
+
+# the end of a window for spiking units lo .. hi of buffer b: the activities become the window's spike counts per
+# step and the counts start again; gives the largest change of a rate (NaN when one is)
+fn LifWindow<T Float>(b mut Columns<LifCell<T>>&, lo I64, hi I64, window I64) T {
+    per := T(1.0 / F64(window))
+    worst T = T(0)
+    for i in range lo, hi {
+        r := b.Count[i] * per
+        worst = Worse(worst, (r - b.S[i]).Abs())
+        b.S[i] = r
+        b.Count[i] = T(0)
+    }
+    return worst
+}
+
+# total[at ..] += k times a readout's force at the activities s[at ..] for n units, in one row: onehot(class) -
+# softmax(s / T) for each group of a cross-entropy readout (classes the row's labels, one per group), target - s for a
+# squared one (target from target[tat ..])
+fn AddForce<T Float>(c Cost, s Array<T>&, at I64, n I64, total mut Array<T>&, k T, labels Array<I32>&, lat I64, target Array<T>&, tat I64) {
+    match c {
+        case Cost.Squared {
+            for j in range n: total[at + j] += k * (target[tat + j] - s[at + j])
+        }
+        case Cost.CrossEntropy(temperature, groups) {
+            w := n / groups
+            inv := T(1.0 / temperature)
+            for g in range groups: softForce(s, at + g * w, w, total, k, inv, I64(labels[lat + g]))
+        }
+    }
+}
+
+# total[at .. at + w] += k (onehot(y) - softmax(s[at ..] inv))
+fn softForce<T Float>(s Array<T>&, at I64, w I64, total mut Array<T>&, k T, inv T, y I64) {
+    top := s[at]
+    for j in range 1, w: top = top.Max(s[at + j])
+    sum T = T(0)
+    for j in range w: sum += elem.FastExp((s[at + j] - top) * inv)
+    scale := T(1) / sum
+    for j in range w {
+        p := elem.FastExp((s[at + j] - top) * inv) * scale
+        hit := T(1) if j == y else T(0)
+        total[at + j] += k * (hit - p)
+    }
+}
+
+# the cost of one row's readout at the activities s[at ..]: T CE(softmax(s / T), y) summed over the groups, or
+# 1/2 |s - target|^2
+fn CostOf<T Float>(c Cost, s Array<T>&, at I64, n I64, labels Array<I32>&, lat I64, target Array<T>&, tat I64) F64 {
+    total F64 = 0.0
+    match c {
+        case Cost.Squared {
+            for j in range n {
+                d := F64(s[at + j] - target[tat + j])
+                total += 0.5 * d * d
+            }
+        }
+        case Cost.CrossEntropy(temperature, groups) {
+            w := n / groups
+            for g in range groups: total += temperature * crossEntropy(s, at + g * w, w, temperature, I64(labels[lat + g]))
+        }
+    }
+    return total
+}
+
+fn crossEntropy<T Float>(s Array<T>&, at I64, w I64, temperature F64, y I64) F64 {
+    top := F64(s[at])
+    for j in range 1, w: top = top.Max(F64(s[at + j]))
+    sum F64 = 0.0
+    for j in range w: sum += ((F64(s[at + j]) - top) / temperature).Exp()
+    return sum.Log() - (F64(s[at + y]) - top) / temperature
+}
+
+# ---- what must not allocate, decided while compiling (S17a, G42): the per-element work of every sweep ----
+
+fn rateStepOf(u Array<F32>&, s mut Array<F32>&) F32 { return RateStep(Rho.Tanh, u, u, s, s, 0, 1, 1.0) }
+fn lifStepOf(a Columns<LifCell<F32>>&, b mut Columns<LifCell<F32>>&, x Array<F32>&) { LifStep(a, b, x, x, 0, x, true, 0, 1, 0.1, 1.0, 0.25, 0.5) }
+fn lifWindowOf(b mut Columns<LifCell<F32>>&) F32 { return LifWindow(b, 0, 1, 8) }
+fn forceOf(s mut Array<F32>&, y Array<I32>&) { AddForce(Cost.Classes(), s, 0, 1, s, 0.5, y, 0, s, 0) }
+
+assert not rateStepOf.Allocates, "a rate step allocates"
+assert not lifStepOf.Allocates, "a spiking step allocates"
+assert not lifWindowOf.Allocates, "a spiking window's end allocates"
+assert not forceOf.Allocates, "a readout's force allocates"
+
+test LifRateOf "below the threshold nothing fires; far above, one spike a step at most" {
+    assert LifRateOf(0.5, 0.1, 1.0) == 0.0
+    assert LifRateOf(1000.0, 0.1, 1.0) == 1.0
+    r := LifRateOf(2.0, 0.1, 1.0)
+    assert r > 0.0 and r < 1.0
+}
+
+test RateStep "the residual's sup norm, then u moves dt of the way to the total and s follows" {
+    u := Array<F64>[0.0, 1.0, -1.0]
+    total := Array<F64>[0.5, 1.0, 1.0]
+    u2 := Array<F64>(3)
+    s2 := Array<F64>(3)
+    worst := RateStep(Rho.Linear, u, total, u2, s2, 0, 3, 0.5)
+    assert worst == 2.0
+    assert u2[0] == 0.25 and u2[1] == 1.0 and u2[2] == 0.0
+    assert s2[0] == 0.25
+    assert RateStep(Rho.HardSigmoid, u, total, u2, s2, 0, 3, 1.0) == 2.0
+    assert s2[0] == 0.5 and s2[1] == 1.0 and s2[2] == 1.0
+}
+
+test RateStep "a NaN residual is the sup norm" {
+    u := Array<F32>[0.0, F32.NaN, 0.0]
+    total := Array<F32>[1.0, 0.0, 3.0]
+    u2 := Array<F32>(3)
+    s2 := Array<F32>(3)
+    worst := RateStep(Rho.Tanh, u, total, u2, s2, 0, 3, 1.0)
+    assert worst != worst
+}
+
+test AddForce "a cross-entropy force sums to zero over a group and points to the class" {
+    s := Array<F64>[0.1, -0.2, 0.3, 0.0, 0.5, -0.5]
+    total := Array<F64>(6)
+    labels := Array<I32>[2, 0]
+    AddForce(Cost.CrossEntropy(0.25, 2), s, 0, 6, total, 0.5, labels, 0, Array<F64>(0), 0)
+    assert (total[0] + total[1] + total[2]).Abs() < 1e-12
+    assert total[2] > 0.0 and total[0] < 0.0 and total[3] > 0.0
+    sq := Array<F64>(2)
+    AddForce(Cost.Squared, Array<F64>[1.0, 0.0], 0, 2, sq, 2.0, Array<I32>(0), 0, Array<F64>[0.5, 1.0], 0)
+    assert sq[0] == -1.0 and sq[1] == 2.0
+}
+
+test CostOf "the cross-entropy of a confident right answer is small, of a wrong one large" {
+    s := Array<F64>[1.0, -1.0, -1.0]
+    right := CostOf(Cost.Classes(0.25), s, 0, 3, Array<I32>[0], 0, Array<F64>(0), 0)
+    wrong := CostOf(Cost.Classes(0.25), s, 0, 3, Array<I32>[1], 0, Array<F64>(0), 0)
+    assert right < 0.01 and wrong > 0.4
+}
+
+test Slope "rate neurons with a bounded slope have one, others none" {
+    assert Slope(Neuron.Rate(Rho.Tanh)) == 1.0
+    assert Slope(Neuron.Spiking()) == Inf
+    assert ForceSlope(Cost.Classes(0.25)) == 1.0
+}

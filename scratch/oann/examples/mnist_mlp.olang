@@ -1,0 +1,134 @@
+# MNIST with a 784-128-10 perceptron (models/mlp, M1 of docs/redesign.md 4.3): ReLU between the layers, softmax
+# cross-entropy, batches of 128, trained by nn/train's `Epoch` with AdamW, then measured on the test set after every epoch.
+# Arguments, all optional: the epochs (10), the optimizer - adamw (weight decay 0.01), projected (AdamW with the input
+# projection of nn/optim in place of weight decay) or sgd (momentum 0.9) - the seed (1), the threads the products may use
+# (1), and for projected its alpha (1e-3) and whether it is normalized by |x|^2 (0 or 1, 1). A last argument "bf16" trains
+# in mixed precision: BF16 values and gradients, F32 computation and master weights (a `Graph<BF16>`; not for projected).
+# Run from the repository's root: olang build -output build/examples_mnist_mlp examples/mnist_mlp.olang &&
+# build/examples_mnist_mlp 10
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/idx"
+import "../data/loader"
+import "../data/mnist"
+import "../models/mlp"
+import "../nn/optim"
+import "../nn/train"
+
+# the number argument i, or fallback when there are fewer arguments
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError, ParseError, json.Error {
+    all := os.Args()
+    bf16 Bool = all.Len() > 1 and all[all.Len() - 1] == "bf16"
+    args := all[:all.Len() - 1] if bf16 else all
+    if bf16 {
+        g := graph.Graph<BF16>(128, try number(args, 4, 1))
+        try trainIn(g, args)
+    } else {
+        g := graph.Graph<F32>(128, try number(args, 4, 1))
+        try trainIn(g, args)
+    }
+}
+
+fn trainIn<T>(g mut graph.Graph<T>&, args Array<String&>&) ? io.Error, os.Error, mnist.MnistError, idx.IdxError, ParseError, json.Error {
+    epochs := try number(args, 1, 10)
+    names := Array<String&>["adamw", "projected", "sgd"]
+    kind I64 = 0
+    for i, name in names {
+        if args.Len() > 2 and args[2] == name: kind = i
+    }
+    seed := U64(try number(args, 3, 1))
+    alpha F64 = 0.001
+    if args.Len() > 5: alpha = try json.Json.Parse(args[5]).AsNum()
+    normalized Bool = try number(args, 6, 1) == 1
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    m := mlp.Mlp.New(g, mlp.MlpConfig.Mnist())
+    c := m.Task(g)
+    trainSet := loader.Loader(data.Train, g.Batch, seed)
+    testSet := loader.Loader(data.Test, g.Batch, seed, false)
+    if kind == 1 {
+        if g.HasMasters(): unreachable "the input projection is not built for a BF16 graph: use adamw"
+        proj := optim.Projector(g, alpha, normalized)
+        try plan(g, seed, names[kind])
+        o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 0.001)
+        try io.Put(", alpha " + $alpha + $(", normalized by |x|^2" if normalized else "") + "\n")
+        try runProjected(g, c, proj, trainSet, testSet, o, epochs)
+        return
+    }
+    try plan(g, seed, names[kind])
+    try io.Put("\n")
+    match T {
+        case BF16 {
+            if kind == 2 { try run(g, c, trainSet, testSet, optim.Sgd(g.Masters(), g.ParamGrads(), rate = 0.05, momentum = 0.9), epochs) }
+            else { try run(g, c, trainSet, testSet, optim.AdamW(g.Masters(), g.ParamGrads(), rate = 0.001, decay = 0.01, spans = optim.Spans(g)), epochs) }
+        }
+        case _ {
+            if kind == 2 { try run(g, c, trainSet, testSet, optim.Sgd(g.Params(), g.ParamGrads(), rate = 0.05, momentum = 0.9), epochs) }
+            else { try run(g, c, trainSet, testSet, optim.AdamW(g.Params(), g.ParamGrads(), rate = 0.001, decay = 0.01, spans = optim.Spans(g)), epochs) }
+        }
+    }
+}
+
+# the graph planned from seed, and what it is, printed
+fn plan<T>(g mut graph.Graph<T>&, seed U64, optimizer String&) ? io.Error {
+    try g.Plan(rand.Rand(seed)) catch e { unreachable "the perceptron's shapes: " + $e }
+    try io.Put(("784-128-10, " + $g.ParamCount + " parameters, " + $optimizer + ", batches of " + $g.Batch + ", " +
+        $("BF16 with F32 masters" if g.HasMasters() else "F32") + ", an arena of " +
+        $(F64(g.ArenaBytes()) / 1048576.0).Fixed(2) + " MB"))
+}
+
+fn run<T, D, O>(g mut graph.Graph<T>&, c train.Classifier&, trainSet mut loader.Loader<D>&, testSet mut loader.Loader<D>&
+    o mut O&, epochs I64) ? io.Error {
+    total I64 = 0
+    for e in range 1, epochs + 1 {
+        t0 := time.Now()
+        trainLoss := train.Epoch(g, c, trainSet, o)
+        spent := time.Since(t0)
+        total += spent
+        try report(g, c, testSet, e, trainLoss, spent)
+    }
+    try io.Put("mean epoch " + $(F64(total) * 1e-9 / F64(epochs)).Fixed(3) + " s\n")
+}
+
+# an epoch with the input projection after every Backward, as nn/optim's Projector asks, in place of train.Epoch
+fn runProjected<T, D, O>(g mut graph.Graph<T>&, c train.Classifier&, proj mut optim.Projector<T>&, trainSet mut loader.Loader<D>&
+    testSet mut loader.Loader<D>&, o mut O&, epochs I64) ? io.Error {
+    xs := g.Data(c.X).Flat()!
+    ys := g.Ints(c.Y).Flat()!
+    total I64 = 0
+    for e in range 1, epochs + 1 {
+        t0 := time.Now()
+        trainSet.Epoch()
+        sum F64 = 0.0
+        seen I64 = 0
+        for b in range trainSet.Batches() {
+            n := trainSet.Fill(b, xs, ys)
+            g.Forward(n)
+            g.Backward(c.Loss)
+            proj.Project(g)
+            o.Step()
+            g.SyncParams()
+            sum += g.Scalar(c.Loss) * F64(n)
+            seen += n
+        }
+        spent := time.Since(t0)
+        total += spent
+        try report(g, c, testSet, e, sum / F64(seen), spent)
+    }
+    try io.Put("mean epoch " + $(F64(total) * 1e-9 / F64(epochs)).Fixed(3) + " s\n")
+}
+
+fn report<T, D>(g mut graph.Graph<T>&, c train.Classifier&, testSet mut loader.Loader<D>&, e I64, trainLoss F64, spent I64) ? io.Error {
+    testLoss, accuracy := train.Evaluate(g, c, testSet)
+    try io.Put(("epoch " + $e + ": train loss " + $trainLoss.Fixed(4) + ", test loss " + $testLoss.Fixed(4) + ", test accuracy " +
+        $(100.0 * accuracy).Fixed(2) + "%, " + $(F64(spent) * 1e-9).Fixed(3) + " s\n"))
+}

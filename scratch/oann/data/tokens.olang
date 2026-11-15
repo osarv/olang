@@ -1,0 +1,223 @@
+# Tokens - a corpus of token ids in one binary file, streamed: nanoGPT's .bin layout, every id an unsigned little-endian
+# integer of Width bytes (2 for a vocabulary up to 65536, 4 above), one after another and nothing else. The file stays
+# on disk - a corpus of billions of tokens costs a window's bytes of memory - and a batch is read straight from it, a
+# window at a time, into the graph's token and class rows, so that filling a batch allocates nothing: the one buffer a
+# window passes through is made when the file is opened, and every call after reuses it (the test measures resident
+# memory over thousands of batches).
+#
+# A window is ctx + 1 consecutive tokens: its first ctx are a row of the batch's inputs and its last ctx, one place
+# further on, the row's targets (each input's next token). Random draws the windows' places from a generator of the
+# Tokens' own, so one seed repeats a run; At gives them in order, a validation pass the same every time. A Tokens is
+# unique - it owns its file, closed where its holder lets go - and one fill runs at a time on it: the next batch of a
+# training loop is filled on a task (`spawn t.Random(...)`) while the current one trains, into the buffers that batch
+# is not read from. Ids are I32 in a batch, so an id above I32's largest is an error of the file (Range).
+
+import "std/os"
+import "std/rand"
+import unistd "unistd.h"
+
+type TokenError error {
+    Width    # a width other than 2 or 4
+    Short    # the file is not a whole number of ids, or holds fewer than ctx + 1 of them
+    Range    # an id that does not fit the width written with, or an I32 read from the file
+    Cut      # the file ended inside a read: it was shortened while open
+}
+
+# a token file open for reading: Count ids of Width bytes, windows of Ctx + 1
+type Tokens unique struct(fd I32, Count I64, Ctx I64, Width I64, seed U64) {
+    fd
+    Count
+    Ctx
+    Width
+    rng rand.Rand = rand.Rand(seed)
+    raw mut Array<U8>& = Array<U8>((Ctx + 1) * Width)  # the bytes of the window being read
+} destruct {
+    unistd.close(fd)
+}
+
+# the file at "path" as tokens of "width" bytes, windows of "ctx" + 1; "seed" decides Random's places
+fn Tokens.Open(path String&, ctx I64, width I64 = 2, seed U64 = 1) Tokens ? os.Error, TokenError {
+    if width != 2 and width != 4: error TokenError.Width
+    info := try os.FileInfo.Stat(path)
+    if info.Size % width != 0 or info.Size / width < ctx + 1: error TokenError.Short
+    return Tokens(try os.Open(path), info.Size / width, ctx, width, seed)
+}
+
+# how many windows follow one another without overlapping inputs: the length of an ordered pass
+fn (t Tokens&) Windows() I64 {
+    return (t.Count - 1) / t.Ctx
+}
+
+# the window of ctx + 1 ids at token "at", into row b of tokens and targets (ctx each)
+fn (t mut Tokens&) window(at I64, b I64, tokens mut Array<I32>&, targets mut Array<I32>&) ? TokenError {
+    want := t.raw.Len()
+    got I64 = 0
+    for got < want {
+        n := unistd.pread(t.fd, t.raw[got:], U64(want - got), at * t.Width + got)
+        if n <= 0: error TokenError.Cut
+        got += n
+    }
+    prev I64 = id(t.raw, 0, t.Width)
+    for k in range t.Ctx {
+        next := id(t.raw, (k + 1) * t.Width, t.Width)
+        if prev > 0x7FFFFFFF or next > 0x7FFFFFFF: error TokenError.Range
+        tokens[b * t.Ctx + k] = I32(prev)
+        targets[b * t.Ctx + k] = I32(next)
+        prev = next
+    }
+}
+
+# the unsigned little-endian integer of "width" bytes at raw[at:]
+fn id(raw Array<U8>&, at I64, width I64) I64 {
+    v I64 = 0
+    for k in range width: v |= I64(raw[at + k]) << (8 * k)
+    return v
+}
+
+# B windows at random places, into tokens and targets (B * ctx each)
+fn (t mut Tokens&) Random(tokens mut Array<I32>&, targets mut Array<I32>&, B I64) ? TokenError {
+    for b in range B: try t.window(t.rng.Below(t.Count - t.Ctx), b, tokens, targets)
+}
+
+# the windows first ... first + B - 1 of the ordered pass, the one at index i starting at token i * ctx; gives how many
+# there were (fewer at the pass's end, none past it)
+fn (t mut Tokens&) At(first I64, tokens mut Array<I32>&, targets mut Array<I32>&, B I64) I64 ? TokenError {
+    n := B.Min(t.Windows() - first).Max(0)
+    for b in range n: try t.window((first + b) * t.Ctx, b, tokens, targets)
+    return n
+}
+
+# ids written to "path" as tokens of "width" bytes - what Open reads. An id negative or not fitting the width is a Range
+fn Write(path String&, ids Array<I32>&, width I64 = 2) ? os.Error, TokenError {
+    if width != 2 and width != 4: error TokenError.Width
+    if ids.Some(fn(x): return x < 0 or (width == 2 and x > 0xFFFF)): error TokenError.Range
+    out := Array<U8>(ids.Len() * width)
+    for i, x in ids {
+        for k in range width: out[i * width + k] = U8((x >> (8 * k)) & 255)
+    }
+    try os.WriteFile(path, out)
+}
+
+# ---- tests ----
+
+# a file of n ids, id i being i, modulo 60000 for width 2
+fn countingFile(path String&, n I64, width I64) ? os.Error, TokenError {
+    try os.MkDirAll("build/tokens_test")
+    try Write(path, Array<I32>[I32(i % 60000) for i in range n], width)
+}
+
+test Tokens.At "gives each input's next token as its target, in order, either width" {
+    for width in Array<I64>[2, 4] {
+        try countingFile("build/tokens_test/a.bin", 50, width)
+        t := try Tokens.Open("build/tokens_test/a.bin", 4, width)
+        assert t.Count == 50 and t.Windows() == 12
+        tokens := Array<I32>(12)
+        targets := Array<I32>(12)
+        assert try t.At(0, tokens, targets, 3) == 3
+        assert tokens[0] == 0 and tokens[5] == 5 and targets[11] == 12
+        assert try t.At(11, tokens, targets, 3) == 1
+        assert tokens[0] == 44 and targets[3] == 48
+        assert try t.At(12, tokens, targets, 3) == 0 and try t.At(20, tokens, targets, 3) == 0
+    }
+}
+
+test Tokens.Random "draws windows of consecutive ids at places its seed decides" {
+    try countingFile("build/tokens_test/r.bin", 1000, 2)
+    t := try Tokens.Open("build/tokens_test/r.bin", 8, 2, 7)
+    same := try Tokens.Open("build/tokens_test/r.bin", 8, 2, 7)
+    tokens := Array<I32>(32)
+    targets := Array<I32>(32)
+    again := Array<I32>(32)
+    seen := Array<Bool>(1000)
+    for _ in range 50 {
+        try t.Random(tokens, targets, 4)
+        try same.Random(again, targets, 4)
+        for b in range 4 {
+            assert tokens[b * 8] <= 991
+            seen[I64(tokens[b * 8])] = true
+            for k in range 8 {
+                assert targets[b * 8 + k] == tokens[b * 8 + k] + 1
+                assert tokens[b * 8 + k] == tokens[b * 8] + I32(k) and again[b * 8 + k] == tokens[b * 8 + k]
+            }
+        }
+    }
+    assert seen.Count(fn(s): return s) > 100
+}
+
+# whether Open fails with the error word
+fn openFails(path String&, ctx I64, width I64, word TokenError) Bool {
+    try Tokens.Open(path, ctx, width) catch TokenError e { return e == word } catch { }
+    return false
+}
+
+# whether Write fails with the error word
+fn writeFails(ids Array<I32>&, width I64, word TokenError) Bool {
+    try Write("build/tokens_test/w.bin", ids, width) catch TokenError e { return e == word } catch { }
+    return false
+}
+
+test Tokens.Open "refuses what is not a token file of that width, and Write what does not fit it" {
+    try os.MkDirAll("build/tokens_test")
+    try os.WriteFile("build/tokens_test/odd.bin", Array<U8>[1, 0, 2, 0, 3])
+    try os.WriteFile("build/tokens_test/small.bin", Array<U8>[1, 0, 2, 0])
+    assert openFails("build/tokens_test/odd.bin", 1, 2, TokenError.Short)
+    assert openFails("build/tokens_test/small.bin", 2, 2, TokenError.Short)
+    assert not openFails("build/tokens_test/small.bin", 1, 2, TokenError.Short)
+    assert openFails("build/tokens_test/small.bin", 1, 3, TokenError.Width)
+    assert writeFails(Array<I32>[70000], 2, TokenError.Range) and not writeFails(Array<I32>[70000], 4, TokenError.Range)
+    assert writeFails(Array<I32>[-1], 4, TokenError.Range)
+    missing := false
+    try Tokens.Open("build/tokens_test/none.bin", 1) catch os.Error.NotFound { missing = true } catch { }
+    assert missing
+}
+
+test Tokens.Random "an id above I32's largest is a Range, read from a file of width 4" {
+    try os.MkDirAll("build/tokens_test")
+    try os.WriteFile("build/tokens_test/big.bin", Array<U8>[1, 0, 0, 0, 0, 0, 0, 128, 3, 0, 0, 0])
+    t := try Tokens.Open("build/tokens_test/big.bin", 2, 4)
+    tokens := Array<I32>(2)
+    targets := Array<I32>(2)
+    big := false
+    try t.At(0, tokens, targets, 1) catch TokenError.Range { big = true } catch { }
+    assert big
+}
+
+# the resident set, in pages, from /proc
+fn resident() I64 {
+    stat := try os.ReadFile("/proc/self/statm") catch { unreachable }
+    return try stat.Split(" ")[1].ParseInt(10) catch { unreachable }
+}
+
+test Tokens.Random "fills a batch with no allocation: resident memory does not grow over thousands of batches" {
+    n := 2000000
+    try countingFile("build/tokens_test/mem.bin", n, 2)
+    t := try Tokens.Open("build/tokens_test/mem.bin", 256, 2, 3)
+    tokens := Array<I32>(8 * 256)
+    targets := Array<I32>(8 * 256)
+    for _ in range 200: try t.Random(tokens, targets, 8)       # warm: buffers, page cache, pools
+    before := resident()
+    for _ in range 20000: try t.Random(tokens, targets, 8)     # 160000 windows, 40 million tokens read
+    grown := resident() - before
+    assert grown <= 16, "resident memory grew by " + $grown + " pages"
+}
+
+test Tokens.Random "the next batch fills on a task while the current one is read" {
+    try countingFile("build/tokens_test/t.bin", 5000, 2)
+    t := try Tokens.Open("build/tokens_test/t.bin", 16, 2, 5)
+    a := Array<I32>(64)
+    b := Array<I32>(64)
+    ta := Array<I32>(64)
+    tb := Array<I32>(64)
+    try t.Random(a, ta, 4)
+    for _ in range 20 {
+        try join {
+            spawn try t.Random(b, tb, 4)
+            for i in range 64: assert ta[i] == a[i] + 1
+        }
+        for i in range 64: assert tb[i] == b[i] + 1
+        for i in range 64 {
+            a[i] = b[i]
+            ta[i] = tb[i]
+        }
+    }
+}

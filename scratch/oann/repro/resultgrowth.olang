@@ -1,0 +1,59 @@
+# O26a moves a local into the result scope where nothing of it reaches the result, so a function returning a view into
+# a long-lived structure allocates that local in the structure's scope at every call: memory grows without bound. In
+# view below, i - a copy of a List element, a struct of two numbers - is passed to a method of g whose I64 result sizes
+# the returned View; the compiled view allocates i with __olang_scope_alloc_a in its result scope, which lands where g's
+# storage lives, and nothing reclaims it until g's scope closes. Found catching up to olang ada716d: nn.Graph.Value
+# (nd := g.nodes[v], then g.rows(nd)) allocated its 160-byte Node in the graph's scope at every call, so a consolidating
+# agent - whose slow part runs Forward at every moment - grew by about 9 KB a moment (69 MB over 6 000 moments, where
+# olang efdb82c stays at 3.3 MB). It does not grow with a field copy in place of the List element, with a plain function
+# in place of the method, or when the result does not read the call. Worked around in nn (Value and Grad read the
+# node's numbers through a helper, so no node is a local of them).
+# Expected: resident memory about flat over the calls, and "ok". Actual (olang ada716d): it grows by about 16 bytes a
+# call, 64 MB over the 4 000 000 calls, and the assert fails.
+# Status (olang 374c1e3c): FIXED - resident memory stays flat (1720 kB before, 1792 kB after 4 000 000 calls) and it prints ok.
+# Kept as a regression case; the view is made with the Matrix constructor, linalg.View now failing with ShapeError.
+import "../linalg"
+import "std/os"
+import "std/list"
+
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+    infos mut list.List<Info>& = list.List<Info>()
+}
+
+fn (g G&) count(i Info&) I64 { return i.Len }
+
+fn (g G&) view(k I64) linalg.Matrix<F64> {
+    i := g.infos[k]
+    return linalg.Matrix<F64>(1, g.count(i), g.mem[i.Offset:])
+}
+
+# the resident memory in kB, from /proc/self/status
+fn resident() I64 ? {
+    status := try os.ReadFile("/proc/self/status")
+    for line in status.Lines() {
+        if line.StartsWith("VmRSS:"): return try line[6:line.Len() - 3].Trim().ParseInt()
+    }
+    return 0
+}
+
+fn main() ? {
+    g := G(4)
+    g.infos.Push(Info(0, 2))
+    g.mem[0] = 0.5
+    sum F64 = 0.0
+    before := try resident()
+    for _ in range 4000000 {
+        v := g.view(0)
+        sum += v.Data[0]
+    }
+    after := try resident()
+    Println("resident " + $before + " kB before, " + $after + " kB after 4 000 000 calls; sum " + $sum)
+    assert after - before < 4096
+    Println("ok")
+}

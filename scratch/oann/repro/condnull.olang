@@ -1,0 +1,20 @@
+# a conditional of an array reference and null, given as the argument of a generic type's method that expects
+# Array<Bool>?& (a local typed Array<Bool>?& takes it, as does a call of a plain function)
+import "std/io"
+
+type Box<T> struct(n I64) {
+    Seen mut Array<T>& = Array<T>(n)
+}
+
+fn (b mut Box<T>&) Take(obs Array<T>&, terminal Bool = false
+        known Array<Bool>?& = null) I64 ? io.Error {
+    if known == null: return -1
+    return known.Len()
+}
+
+fn main() ? io.Error {
+    b := Box<F32>(3)
+    known mut Array<Bool>& = Array<Bool>(3)
+    lacking := true
+    try io.PutLine($try b.Take(b.Seen, true, known if lacking else null))
+}

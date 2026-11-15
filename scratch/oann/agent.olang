@@ -1,0 +1,1730 @@
+# agent - a life: one settling circuit acting continuously, learning from rewards that arrive after its actions
+# (docs/settling.md 1.5-1.8, 2.6). An Agent is the circuit (circuit.Circuit) with
+# - a Critic, a linear value of the hidden activities learned by TD(lambda);
+# - an eligibility trace over the circuit's parameters (circuit.Eligibility), to which every moment that learns adds
+#   the contrast of the action it took, and which the broadcast TD error turns into the actor's step;
+# - a context Trace, a running mean of the hidden activity fed back as a drive: short-term memory as a stimulus;
+# - a Memory, a fast and a persistent associative matrix from observations to the reward of each action, read as a
+#   drive on the readout;
+# - an Arousal, the gate: an aroused moment samples its action, runs the nudged phases and learns from its outcome;
+#   a calm one settles once, answers greedily and changes nothing that learns.
+# Step(obs, reward) is one moment (1.8). With Settings.Groups above 1 the readout is that many groups of the actions,
+# each its own softmax, and a moment chooses an action in each - a joint action, the product of the groups' policies,
+# its contrast the sum of theirs (circuit's readout groups). With Settings.Consolidate it also has a consolidator
+# (consolidator.olang, docs/settling.md 1.9, 2.14): the moments that learn write their outcomes into its store by day,
+# Sleep() consolidates them between stretches of life, and its recall drives the readout in place of the memories' read
+# (docs/settling.md decision 77). Step's known marks numbers of an observation missing, which Settings.Completion
+# completes from the whole observations learned.
+# Nothing is allocated per moment.
+
+import "std/json"
+import "linalg"
+import "std/os"
+import "std/rand"
+import "circuit"
+import "consolidator"
+import "optim"
+import "std/list"
+import "std/io"
+
+# ---- arousal (1.7) ----
+
+# the gate on learning and memory writes: a leaky running measure of unexpectedness and disappointment, updated once
+# per outcome. Scale tracks |delta| (slowly), Surprise is |delta| relative to it - about 1 on average - Recent and
+# LongRun the reward over about 1 / Fast and 1 / Slow moments, Spread the reward's spread, Want how far recent reward
+# fell below its long-run level in units of the spread (0 to 1): disappointment. Level is a running mean of
+# Surprise + Want; a moment is aroused in the critical period (the first Critical outcomes, before Scale means
+# anything) or when Level is at least Threshold - errors twice the usual, or a full unit of disappointment
+type Arousal struct(Slow F64 = 0.01, Fast F64 = 0.1, Eps F64 = 0.001, Critical I64 = 100, Threshold F64 = 2) {
+    Slow
+    Fast
+    Eps
+    Critical
+    Threshold
+    Scale F64 = 0.0
+    Surprise F64 = 0.0
+    Recent F64 = 0.0
+    LongRun F64 = 0.0
+    Spread F64 = 0.0
+    Want F64 = 0.0
+    Level F64 = 0.0
+    Outcomes I64 = 0                                # the outcomes seen before this one: t
+    Aroused Bool = true
+}
+
+# one outcome: the TD error delta (against the forecast made before acting) and the reward; gives whether the moment
+# it ends is aroused. extra is added to the level's input beside surprise and disappointment (Settings.EntropyGain's
+# uncertainty; 0 as 1.7 specifies)
+fn (a mut Arousal&) Update(delta F64, reward F64, extra F64 = 0) Bool {
+    d F64 = delta.Abs()
+    a.Scale = a.Scale + a.Slow * (d - a.Scale)
+    a.Surprise = d / (a.Scale + a.Eps)
+    a.Recent = a.Recent + a.Fast * (reward - a.Recent)
+    a.LongRun = a.LongRun + a.Slow * (reward - a.LongRun)
+    a.Spread = a.Spread + a.Slow * ((reward - a.LongRun).Abs() - a.Spread)
+    a.Want = ((a.LongRun - a.Recent) / (a.Spread + a.Eps)).Clamp(0.0, 1.0)
+    a.Level = a.Level + a.Fast * (a.Surprise + a.Want + extra - a.Level)
+    a.Aroused = a.Outcomes < a.Critical or a.Level >= a.Threshold
+    a.Outcomes++
+    return a.Aroused
+}
+
+# ---- memory (1.6) ----
+
+# a fast and a persistent associative memory from keys (observations, unit-normalized) to a value per action - the
+# reward each action brought: the linear associator, written by the delta rule (Kohonen; Anderson; Widrow and Hoff),
+# two stores of different speed (complementary learning systems). Both are Keys x Actions. Per moment the fast one
+# decays, F <- Decay F - kept pending, one number, so a moment that writes nothing touches neither matrix. A write at
+# key k for action a with value v:
+#   C[:, a] += min(1, Rate (1 + surprise)) k^T (v - (k C)_a)        persistent: slow, weighted by surprise
+#   F[:, a] += k^T (v - (k (C + F))_a)                              fast: one shot - the read at k becomes v at once
+# and a read gives Gain k (C + F) - a drive on the readout
+type Memory<T> struct(keys I64, actions I64, Decay F64 = 0.95, Rate F64 = 0.02, Gain F64 = 1) {
+    Keys I64 = keys
+    Actions I64 = actions
+    Decay
+    Rate
+    Gain
+    c mut Array<T>& = Array<T>(keys * actions)
+    f mut Array<T>& = Array<T>(keys * actions)
+    Pending F64 = 1.0                               # the fast store is Pending f
+    key mut Array<T>& = Array<T>(keys)              # the unit key of the last read or write
+}
+
+# one moment's decay of the fast store
+fn (m mut Memory<T>&) Fade() {
+    m.Pending = m.Pending * m.Decay
+}
+
+# the key of x: x over its Euclidean norm (zero for a zero x), into the key workspace
+fn (m mut Memory<T>&) unit(x Array<T>&) {
+    sum F64 = 0.0
+    for i in range m.Keys: sum += F64(x[i]) * F64(x[i])
+    like T
+    inv := linalg.Cast(0.0 if sum == 0.0 else 1.0 / sum.Sqrt(), like)
+    for i in range m.Keys: m.key[i] = x[i] * inv
+}
+
+# (k S)_a for the store at s (the persistent one, or the fast one times its pending decay), in F64
+fn (m Memory<T>&) recall(s Array<T>&, scale F64, a I64) F64 {
+    sum F64 = 0.0
+    for i in range m.Keys: sum += F64(m.key[i]) * F64(s[i * m.Actions + a])
+    return sum * scale
+}
+
+# x (C + F), x unit-normalized: the stores' value of every action for x at gain 1, into out (Actions of them)
+fn (m mut Memory<T>&) Values(x Array<T>&, out mut Array<T>&) {
+    m.unit(x)
+    like T
+    for a in range m.Actions: out[a] = linalg.Cast(m.recall(m.c, 1.0, a) + m.recall(m.f, m.Pending, a), like)
+}
+
+# Gain x (C + F), x unit-normalized: the stores' value of every action for x, into out (Actions of them)
+fn (m mut Memory<T>&) Read(x Array<T>&, out mut Array<T>&) {
+    m.unit(x)
+    like T
+    for a in range m.Actions: out[a] = linalg.Cast(m.Gain * (m.recall(m.c, 1.0, a) + m.recall(m.f, m.Pending, a)), like)
+}
+
+# writes value for action a at the key of x, the persistent store's step grown by surprise (|delta|)
+fn (m mut Memory<T>&) Write(x Array<T>&, a I64, value F64, surprise F64) {
+    m.unit(x)
+    like T
+    if m.Pending != 1.0 {
+        k := linalg.Cast(m.Pending, like)
+        for i in range m.f.Len(): m.f[i] = k * m.f[i]
+        m.Pending = 1.0
+    }
+    rate F64 = (m.Rate * (1.0 + surprise)).Min(1.0)
+    slow := linalg.Cast(rate * (value - m.recall(m.c, 1.0, a)), like)
+    for i in range m.Keys: m.c[i * m.Actions + a] = m.c[i * m.Actions + a] + slow * m.key[i]
+    fast := linalg.Cast(value - m.recall(m.c, 1.0, a) - m.recall(m.f, 1.0, a), like)
+    for i in range m.Keys: m.f[i * m.Actions + a] = m.f[i * m.Actions + a] + fast * m.key[i]
+}
+
+# ---- weighing the reads (docs/settling.md open question 15, decision 78: an option, off) ----
+
+# how the readout's drive is shared between the memories' read m and the consolidator's recall c, both values of the
+# actions at gain 1: as G ((1 - Mix) m + Mix c), G the recall's gain (Settings.Weigh, an option: docs/settling.md 5.13
+# measured it level with the recall alone). Mix is the least-squares weight of the recall in a combined forecast of the
+# outcome - Bates and Granger's (1969) combination of forecasts, which for two of them is the regression of the
+# memories' error on the forecasts' difference,
+#   Mix = E[(r - m)(c - m)] / E[(c - m)^2]
+# each expectation a running mean at Rate over the outcomes the memories are written with (the moments that learn),
+# clamped to [0, 1]. Noise the two errors share - the reward's own spread - adds nothing to either mean (the forecasts
+# were made before the outcome), so the weight follows each forecast's bias and its own variance, not the outcome's.
+# Prior is Mix before any evidence and where the forecasts agree: Floor of the squared difference stands for it
+type Weigher struct(prior F64, Rate F64 = 0.1, Floor F64 = 0.001) {
+    Prior F64 = prior
+    Rate
+    Floor
+    Mix F64 = prior
+    DD F64 = 0.0                                    # the running mean of (c - m)^2
+    ED F64 = 0.0                                    # and of (r - m)(c - m)
+}
+
+# one outcome r of an action the memories forecast at m and the recall at c
+fn (w mut Weigher&) Learn(r F64, m F64, c F64) {
+    d F64 = c - m
+    w.DD = w.DD + w.Rate * (d * d - w.DD)
+    w.ED = w.ED + w.Rate * ((r - m) * d - w.ED)
+    w.Mix = ((w.ED + w.Floor * w.Prior) / (w.DD + w.Floor)).Clamp(0.0, 1.0)
+}
+
+# ---- the slow part's guess at unfamiliar observations (docs/settling.md open question 17, decisions 82-84) ----
+
+# how much of the consolidator's slow part the recall takes where the store's days have taught it nothing. With f an
+# action's familiarity at an observation (Store.ReadFamiliar: 0 where no day wrote at the reading's cells, toward 1
+# after writes there) the recall is
+#   store + (f + (1 - f) Guess) slow
+# - where the days wrote, the slow part and the store's residual together, as without familiarity; where they did not,
+# the slow part's generalization at weight Guess: a bet that new surroundings share old answers. With Rate the weight is
+# learned from the outcomes as they come, the least-squares weight of the unfamiliar part z = (1 - f) slow in what the
+# rest leaves of the outcome, r' = r - store - f slow, over sums that forget by 1 - Rate a moment that learns
+# (recursive least squares with a forgetting factor):
+#   Guess = (sum r' z + Floor Prior) / (sum z^2 + Floor),   clamped to [0, 1]
+# so the first outcomes at a new surroundings' observations tell whether its guesses hold there, and a familiar stretch
+# (z = 0) forgets the evidence until Prior, worth Floor of z^2 (one unfamiliar outcome of a guess of 1/2), speaks again
+type Guesser struct(prior F64, Rate F64 = 0.0, Floor F64 = 0.25) {
+    Prior F64 = prior
+    Rate
+    Floor
+    Guess F64 = prior
+    ZZ F64 = 0.0
+    ZR F64 = 0.0
+}
+
+# one outcome r of an action whose recall was store + (f + (1 - f) Guess) slow
+fn (g mut Guesser&) Learn(r F64, store F64, f F64, slow F64) {
+    if g.Rate == 0.0: return
+    z F64 = (1.0 - f) * slow
+    keep F64 = 1.0 - g.Rate
+    g.ZZ = keep * g.ZZ + z * z
+    g.ZR = keep * g.ZR + (r - store - f * slow) * z
+    g.Guess = ((g.ZR + g.Floor * g.Prior) / (g.ZZ + g.Floor)).Clamp(0.0, 1.0)
+}
+
+# ---- pattern completion (docs/settling.md open question 16, decisions 79-81) ----
+
+# an observation with numbers missing completed from the observations learned - a correlation matrix memory of them
+# (Kohonen 1972; Anderson 1972), M the running mean of x x^T, read auto-associatively: the missing numbers u of an
+# observation are the least-squares estimate from the known ones o, the conditional mean of a Gaussian of second
+# moments M,
+#   x_u = M_uo (M_oo + nu I)^-1 x_o ,      nu = Ridge tr(M) / Size
+# and the known numbers stay as they are. An observation in the span of those learned is completed exactly (up to nu),
+# whatever numbers are missing, as long as the known ones tell the directions learned apart; numbers no learned
+# observation relates to the known ones are completed as 0. nu keeps the solve well-posed where the observations span
+# fewer directions than the numbers known. Learn's rate is 1 / (observations learned) until that falls to Rate - a mean
+# of every observation, then a running one. In F64: Size^2 numbers and a Cholesky solve of at most Size
+type Completer struct(size I64, Rate F64 = 0.003, Ridge F64 = 0.01) {
+    Size I64 = size
+    Rate
+    Ridge
+    M mut Array<F64>& = Array<F64>(size * size)     # the running mean of x x^T
+    Count I64 = 0                                   # the observations learned
+    idx mut Array<I64>& = Array<I64>(size)          # the known numbers' indices
+    a mut Array<F64>& = Array<F64>(size * size)     # M_oo + nu I, then its Cholesky factor
+    w mut Array<F64>& = Array<F64>(size)
+}
+
+# x, every number known, into M
+fn (c mut Completer&) Learn<T>(x Array<T>&) {
+    rate F64 = c.Rate.Max(1.0 / F64(c.Count + 1))
+    n := c.Size
+    for i in range n {
+        xi F64 = F64(x[i])
+        for j in range n: c.M[i * n + j] = c.M[i * n + j] + rate * (xi * F64(x[j]) - c.M[i * n + j])
+    }
+    c.Count++
+}
+
+# the numbers of x that known marks false replaced by their completion from the others (0 when nothing is learned or
+# nothing known); the known ones as they are
+fn (c mut Completer&) Complete<T>(x mut Array<T>&, known Array<Bool>&) {
+    n := c.Size
+    o I64 = 0
+    trace F64 = 0.0
+    for i in range n {
+        trace += c.M[i * n + i]
+        if known[i] {
+            c.idx[o] = i
+            o++
+        }
+    }
+    like T
+    if o == n: return
+    if o == 0 or trace <= 0.0 {
+        for i in range n {
+            if not known[i]: x[i] = like
+        }
+        return
+    }
+    nu F64 = c.Ridge * trace / F64(n)
+    for p in range o {
+        for q in range o: c.a[p * o + q] = c.M[c.idx[p] * n + c.idx[q]] + (nu if p == q else 0.0)
+    }
+    # a = L L^T, L in the lower triangle (M_oo + nu I is positive definite)
+    for p in range o {
+        for q in range p + 1 {
+            sum F64 = c.a[p * o + q]
+            for k in range q: sum -= c.a[p * o + k] * c.a[q * o + k]
+            if p == q: c.a[p * o + p] = sum.Max(1e-300).Sqrt()
+            else: c.a[p * o + q] = sum / c.a[q * o + q]
+        }
+    }
+    # (M_oo + nu I) w = x_o: L y = x_o, then L^T w = y
+    for p in range o {
+        sum F64 = F64(x[c.idx[p]])
+        for k in range p: sum -= c.a[p * o + k] * c.w[k]
+        c.w[p] = sum / c.a[p * o + p]
+    }
+    for r in range o {
+        p I64 = o - 1 - r
+        sum F64 = c.w[p]
+        for k in range p + 1, o: sum -= c.a[k * o + p] * c.w[k]
+        c.w[p] = sum / c.a[p * o + p]
+    }
+    for i in range n {
+        if not known[i] {
+            sum F64 = 0.0
+            for p in range o: sum += c.M[i * n + c.idx[p]] * c.w[p]
+            x[i] = linalg.Cast(sum, like)
+        }
+    }
+}
+
+# ---- the context trace (1.6) ----
+
+# short-term memory as a stimulus (Elman): after each action Value <- (1 - Rate) Value + Rate s_hidden, and the next
+# moment's drive on the context region is Gain Value
+type Trace<T> struct(size I64, Rate F64 = 0.3, Gain F64 = 1) {
+    Rate
+    Gain
+    Value mut Array<T>& = Array<T>(size)
+}
+
+# Value <- (1 - Rate) Value + Rate s
+fn (t mut Trace<T>&) Follow(s Array<T>&) {
+    like T
+    k := linalg.Cast(t.Rate, like)
+    for i in range t.Value.Len(): t.Value[i] = t.Value[i] + k * (s[i] - t.Value[i])
+}
+
+# out = Gain Value: the context region's drive
+fn (t Trace<T>&) Drive(out mut Array<T>&) {
+    like T
+    k := linalg.Cast(t.Gain, like)
+    for i in range t.Value.Len(): out[i] = k * t.Value[i]
+}
+
+# a reset: the trace forgets
+fn (t mut Trace<T>&) Clear() {
+    zero T
+    for i in range t.Value.Len(): t.Value[i] = zero
+}
+
+# ---- the critic (1.5) ----
+
+# a linear value of the features phi (the hidden activities): V = w . phi + b, learned by TD(lambda) with its own
+# trace z over [phi, 1] and a step normalized by 1 + |[phi, 1]|^2 (Widrow-Hoff). In F64 - a few numbers
+type Critic<T> struct(features I64, Rate F64 = 0.1) {
+    Rate
+    W mut Array<F64>& = Array<F64>(features)
+    B F64 = 0.0
+    z mut Array<F64>& = Array<F64>(features)
+    zb F64 = 0.0
+}
+
+# V(phi)
+fn (c Critic<T>&) Value(phi Array<T>&) F64 {
+    v F64 = c.B
+    for i in range c.W.Len(): v += c.W[i] * F64(phi[i])
+    return v
+}
+
+# a TD step: z <- decay z + [phi, 1], then [w, b] += Rate delta z / (1 + |[phi, 1]|^2), phi the features of the state
+# whose forecast delta corrects
+fn (c mut Critic<T>&) Learn(delta F64, phi Array<T>&, decay F64) {
+    norm F64 = 1.0
+    for i in range c.W.Len() {
+        x := F64(phi[i])
+        c.z[i] = decay * c.z[i] + x
+        norm += x * x
+    }
+    c.zb = decay * c.zb + 1.0
+    k F64 = c.Rate * delta / (1.0 + norm)
+    for i in range c.W.Len(): c.W[i] = c.W[i] + k * c.z[i]
+    c.B = c.B + k * c.zb
+}
+
+# z <- decay z: a moment that does not learn
+fn (c mut Critic<T>&) Fade(decay F64) {
+    for i in range c.z.Len(): c.z[i] = decay * c.z[i]
+    c.zb = decay * c.zb
+}
+
+# the trace forgets: an episode ended
+fn (c mut Critic<T>&) Clear() {
+    for i in range c.z.Len(): c.z[i] = 0.0
+    c.zb = 0.0
+}
+
+# ---- the agent (1.8) ----
+
+# an agent's settings, oann's defaults (docs/settling.md 1.4-1.7, 1.10): set the fields before making the agent. Four
+# are the end-to-end tasks' tuning of the document's starting values (5.5, decision 21): the actor's rate (0.001
+# there), the persistent memory's c_0 (0.02), arousal's Slow (0.01) and Threshold (2) - with those a noisy bandit's
+# agent turned calm for good within its critical period and never recovered from a reversal
+type Settings struct() {
+    Beta F64 = 0.5                      # an aroused moment's nudged phases
+    Temperature F64 = 0.25              # the policy softmax(s_out / T), and the readout's cost
+    Gamma F64 = 0.99
+    Lambda F64 = 0.9
+    Rate F64 = 0.0003                   # Adam's, for the actor
+    CriticRate F64 = 0.1
+    TraceRate F64 = 0.3                 # the context trace: a_tr
+    TraceGain F64 = 1.0                 # kappa_tr
+    MemoryDecay F64 = 0.95              # phi
+    MemoryRate F64 = 0.2                # c_0
+    MemoryGain F64 = 1.0                # g
+    Slow F64 = 0.003                    # arousal (1.7): alpha_s
+    Fast F64 = 0.1                      # alpha_f
+    Eps F64 = 0.001
+    Critical I64 = 100                  # t_0
+    Threshold F64 = 1.5                 # theta
+    Certified F64 = 0.9                 # the gain the circuit is certified at when made
+    Budget I64 = 128                    # a settle's sweeps, at least
+    Groups I64 = 1                      # the readout's groups: an action chosen in each, together one joint action
+    CalmSamples Bool = false            # a calm moment samples its action from the policy rather than taking the most
+                                        # probable one - exploration without learning (docs/settling.md 6, question 8)
+    EntropyGain F64 = 0.0               # arousal's level also follows the policy's uncertainty, this times its entropy
+                                        # over ln(actions) (0 to 1) - question 8's second remedy; 0: off
+    Consolidate Bool = false            # a consolidator beside the memories (docs/settling.md 2.14, open question 11):
+                                        # what the moments that learn observed goes into its store by day, Sleep()
+                                        # consolidates it, and its recall drives the readout
+    SleepHidden I64 = 16                # its slow part's neurons
+    RecallGain F64 = 2.0                # its recall's weight on the readout (docs/settling.md decision 77: the two
+                                        # reads' gains' former sum, 1 + 1)
+    RecallAlone Bool = true             # with a consolidator, its recall alone drives the readout and the memories'
+                                        # read leaves it (decision 77, open question 15); off, both drive it, the
+                                        # memories' at MemoryGain
+    RecallRate F64 = 0.2                # its store's rate by day - rewards are noisy, so a read is about the mean of the
+                                        # last 1 / rate outcomes; the persistent memory's c_0
+    SleepPasses I64 = 60                # passes over the dreams a night
+    SleepCells I64 = 0                  # its store's cells, and of them active in a code (0: the consolidator's defaults,
+    SleepActive I64 = 0                 # 150 cells per number of its key and 0.5% of them active)
+    RecallHalfLife F64 = 0.0            # its store's half-life in moments: every moment it fades by 0.5^(1 / this), a
+                                        # transient store that only nights keep (docs/settling.md 5.12); 0: it never fades
+    SleepCues I64 = 1024                # the cues its nights replay, at most - a uniform sample of the moments that
+                                        # learned, so a night's cost stops growing with the life (docs/settling.md 5.12,
+                                        # decision 75: about 0.12 ms a cue a night); 0: every one
+    Weigh Bool = false                  # with a consolidator: the readout's drive, RecallGain, shared between the
+                                        # memories' read and the recall by how well each has forecast the outcomes
+                                        # lately (Weigher, from even shares) - measured in docs/settling.md 5.13, not
+                                        # taken (decision 78)
+    WeighRate F64 = 0.1                 # the forecasts' running means' rate, per moment that learns
+    Familiarity Bool = true             # with a consolidator: its recall takes the slow part at weight Guess where its
+                                        # days taught the store nothing (Guesser) - docs/settling.md decision 82
+    Guess F64 = 1.0                     # that weight before any evidence (1: the recall as without familiarity)
+    GuessRate F64 = 0.03                # and its forgetting rate, per moment that learns (0: Guess fixed) - decision 83
+    Completion Bool = true              # an observation given with numbers missing (Step's known) completed from the
+                                        # whole ones the moments that learn acted on (Completer) before anything reads
+                                        # it - decision 79; off, the missing numbers are read as given
+}
+
+# a life of observations observations and actions actions (in each of Config.Groups groups), with hidden regions of the
+# given sizes, everything it draws from its own generator seeded with seed. Its circuit: the observation and the context
+# trace as input regions, one-way into the first hidden region; the hidden regions reciprocal in a chain; the last
+# reciprocal with the readout, one neuron per action of each group, each group's policy softmax(s / T); the memory's
+# read a drive on the readout (a value per action of each group). Step gives the joint action as one number,
+# sum over groups g of Chosen[g] actions^g - the action itself when there is one group
+type Agent<T> struct(observations I64, actions I64, hidden Array<I64>&, seed U64, Config Settings = Settings()) {
+    Observations I64 = observations
+    Actions I64 = actions
+    Config
+    Seed U64 = seed                                     # the seed its life began from (a restore brings the saved one's)
+    rng rand.Rand = rand.Rand(seed)
+    Width I64 = widthOf(hidden)
+    phi mut Array<T>& = Array<T>(Width)                # this moment's hidden activities
+    # the circuit is made by a function rather than recorded here: a constructor pushing onto a List of a field of its
+    # own put the List's storage in its own scope, which closed when it returned (olang ef939ae-9621af3, repro/ctorpush;
+    # fixed by edf8238)
+    Net mut circuit.Circuit<T>& = circuitFor(phi, observations, actions, hidden, Config, rng)
+    Sensors circuit.Region = circuit.Region(0)          # the regions, in the order circuitFor records them
+    Context circuit.Region = circuit.Region(1)
+    Inner circuit.Region = circuit.Region(2)            # the first hidden region; the others follow it
+    Choice circuit.Region = circuit.Region(2 + hidden.Len())
+    Groups I64 = Config.Groups
+    # the consolidator (Settings.Consolidate): its inputs the observation, its outputs a value per action of each group,
+    # one moment a sequence (window 1); its generator its own, so an agent's draws are the same with it or without
+    Sleeper mut consolidator.Consolidator<T>?& = (sleeperFor(phi, observations, actions * Config.Groups, Config, seed)
+        if Config.Consolidate else null)
+    recall mut Array<T>& = Array<T>(actions * Config.Groups)     # the consolidator's recall of this moment
+    dayY mut Array<T>& = Array<T>(actions * Config.Groups)       # a moment's outcome as its day sees it
+    dayKnown mut Array<Bool>& = Array<Bool>(actions * Config.Groups)
+    weighs Bool = Config.Weigh and Config.Consolidate
+    memRead mut Array<T>& = Array<T>(actions * Config.Groups)    # the memories' read at gain 1 (Settings.Weigh)
+    forecastMem mut Array<F64>& = Array<F64>(Config.Groups)     # the last moment's chosen actions as the memories and
+    forecastRecall mut Array<F64>& = Array<F64>(Config.Groups)  # the recall forecast them (Settings.Weigh)
+    familiar Bool = Config.Familiarity and Config.Consolidate
+    # the recall's parts (Settings.Familiarity): the slow part's, the store's, and how familiar the observation is to
+    # the store, per action
+    recallSlow mut Array<T>& = Array<T>(actions * Config.Groups)
+    recallStore mut Array<T>& = Array<T>(actions * Config.Groups)
+    recallFamiliar mut Array<T>& = Array<T>(actions * Config.Groups)
+    forecastSlow mut Array<F64>& = Array<F64>(Config.Groups)     # those of the last moment's chosen actions
+    forecastStore mut Array<F64>& = Array<F64>(Config.Groups)
+    forecastFamiliar mut Array<F64>& = Array<F64>(Config.Groups)
+    Bet Guesser = Guesser(Config.Guess, Config.GuessRate)
+    Seen mut Array<T>& = Array<T>(observations)        # this moment's observation, completed where numbers were missing
+    whole Bool = true                                   # and whether it had every number
+    lastWhole Bool = true                               # the last moment's
+    Fill mut Completer& = Completer(observations if Config.Completion else 0, Config.Slow)
+    Reads Weigher = Weigher(0.5, Config.WeighRate)
+    fading F64 = 0.5.Pow(1.0 / Config.RecallHalfLife) if Config.RecallHalfLife > 0.0 else 1.0
+    Elig mut circuit.Eligibility<T>& = circuit.Eligibility<T>(Net)
+    Opt mut optim.FlatAdamW<T>& = optim.FlatAdamW<T>(Net.ParamCount, Config.Rate)
+    Mem mut Memory<T>& = Memory<T>(observations, actions * Groups, Config.MemoryDecay, Config.MemoryRate, Config.MemoryGain)
+    Ctx mut Trace<T>& = Trace<T>(Width, Config.TraceRate, Config.TraceGain)
+    Judge mut Critic<T>& = Critic<T>(Width, Config.CriticRate)
+    Mood Arousal = Arousal(Config.Slow, Config.Fast, Config.Eps, Config.Critical, Config.Threshold)
+    lastPhi mut Array<T>& = Array<T>(Width)            # the last moment's: its state's features
+    lastKey mut Array<T>& = Array<T>(observations)     # the last moment's observation
+    probs mut Array<F64>& = Array<F64>(actions * Groups)
+    Chosen mut Array<I64>& = Array<I64>(Groups)          # the last moment's action in each group
+    LastAction I64 = -1
+    lastAroused Bool = false                            # the last moment kept a contrast to learn from
+    started Bool = false
+    tolerance F64 = lifeTolerance(Net, Config.Temperature)
+    budget I64 = lifeBudget(Net, Config.Budget, tolerance)
+    LastDelta F64 = 0.0                                 # the last moment's TD error, clipped
+    Draws I64 = 0                                       # numbers drawn for sampling since the generator was made
+    Moments I64 = 0
+    Calm I64 = 0
+    Aroused I64 = 0
+    Sweeps I64 = 0
+    Refused I64 = 0
+}
+
+# an agent that cannot go on - a call out of order: stops with what is wrong
+fn stop(what String&) noreturn {
+    unreachable "oann agent: " + $what
+}
+
+fn widthOf(sizes Array<I64>&) I64 {
+    if sizes.Len() == 0: stop("an agent needs a hidden region")
+    sum I64 = 0
+    for s in sizes: sum += s
+    return sum
+}
+
+# an agent's circuit of T (like's elements), planned and certified: the observation (region 0) and the context (1) as inputs, one-way into the
+# first hidden region (2); the hidden regions, recorded one after another so their activities are one run of
+# columns, reciprocal in a chain; the last reciprocal with the readout (2 + the hidden regions)
+fn circuitFor<T>(like Array<T>&, observations I64, actions I64, hidden Array<I64>&, s Settings, r mut rand.Rand&) mut circuit.Circuit<T>& {
+    c mut circuit.Circuit<T>& = circuit.Circuit<T>(1)
+    sensors := c.Input(observations)
+    context := c.Input(widthOf(hidden))
+    first := c.Hidden(hidden[0])
+    for i in range 1, hidden.Len(): c.Hidden(hidden[i])
+    if s.Groups < 1: stop("an agent's readout has at least one group")
+    choice := c.Readout(actions * s.Groups, circuit.Cost.CrossEntropy(s.Temperature), circuit.Neuron.Rate(circuit.Rho.Tanh), s.Groups)
+    c.Project(sensors, first, circuit.Wiring.OneWay)
+    c.Project(context, first, circuit.Wiring.OneWay)
+    for i in range 1, hidden.Len(): c.Project(circuit.Region(first + i - 1), circuit.Region(first + i))
+    c.Project(circuit.Region(first + hidden.Len() - 1), choice)
+    c.Plan(r)
+    c.Certify(s.Certified)
+    return c
+}
+
+# an agent's consolidator (docs/settling.md 2.14): its inputs an observation, its outputs a value per action, one
+# moment a sequence, a store reading about the last 1 / RecallRate outcomes by day and keyed by the observation alone
+# (the slow part's state, which every night moves, would move the keys too and with them which memories share cells),
+# and a quiet readout - an action never tried reads 0, not the untrained slow part's noise
+fn sleeperFor<T>(like Array<T>&, observations I64, outputs I64, s Settings, seed U64) mut consolidator.Consolidator<T>& {
+    q := consolidator.SleepSettings()
+    q.StoreRate = s.RecallRate
+    q.Passes = s.SleepPasses
+    q.QuietReadout = true
+    q.StateInKey = false
+    q.Cells = s.SleepCells
+    q.Active = s.SleepActive
+    q.Cues = s.SleepCues
+    q.Familiarity = s.Familiarity
+    k mut consolidator.Consolidator<T>& = consolidator.Consolidator<T>(observations, outputs, s.SleepHidden, 1, 16
+        seed ^ U64(0x5EEB5EEB), q)
+    return k
+}
+
+# the life tolerance (docs/settling.md 1.10): every logit of the policy within T / 40 of its equilibrium, so each
+# log-probability within 5%, is a residual of T (1 - kappa) / 40 - kappa held at most 0.9
+fn lifeTolerance<T>(c mut circuit.Circuit<T>&, temperature F64) F64 {
+    return temperature * (1.0 - c.Gain().Min(0.9)) / 40.0
+}
+
+fn lifeBudget<T>(c mut circuit.Circuit<T>&, least I64, tolerance F64) I64 {
+    n := c.Budget(tolerance)
+    return n if n > least else least
+}
+
+# the drives of a moment: the observation, the context trace, and on the readout the memories' read of the observation
+# - or, with a consolidator, its recall of it RecallGain times, alone (Settings.RecallAlone), beside the memories' read,
+# or sharing the drive with it by their forecasts (Settings.Weigh)
+fn (a mut Agent<T>&) drive(obs Array<T>&) {
+    d := a.Net.DriveData(a.Sensors)
+    for i in range a.Observations: d[i] = obs[i]
+    a.Ctx.Drive(a.Net.DriveData(a.Context))
+    c := a.Net.DriveData(a.Choice)
+    sleeper := a.Sleeper
+    if sleeper == null {
+        a.Mem.Read(obs, c)
+        return
+    }
+    a.recallOf(sleeper, obs)
+    like T
+    if a.weighs {
+        a.Mem.Values(obs, a.memRead)
+        mix := a.Reads.Mix
+        for j in range a.recall.Len() {
+            c[j] = linalg.Cast(a.Config.RecallGain * ((1.0 - mix) * F64(a.memRead[j]) + mix * F64(a.recall[j])), like)
+        }
+        return
+    }
+    gain := linalg.Cast(a.Config.RecallGain, like)
+    if a.Config.RecallAlone {
+        for j in range a.recall.Len(): c[j] = gain * a.recall[j]
+        return
+    }
+    a.Mem.Read(obs, c)
+    for j in range a.recall.Len(): c[j] = c[j] + gain * a.recall[j]
+}
+
+# an observation as the agent takes it, into Seen: obs, and with Settings.Completion the numbers known marks false
+# completed from the whole observations learned (Completer); without it, or with every number known, obs itself
+fn (a mut Agent<T>&) Perceive(obs Array<T>&, known Array<Bool>?& = null) {
+    for i in range a.Observations: a.Seen[i] = obs[i]
+    a.whole = known == null or known.Every(fn(k): return k)
+    if not a.whole and a.Config.Completion: a.Fill.Complete(a.Seen, known!)
+}
+
+# the consolidator's recall of obs into recall: slow part and store - with Settings.Familiarity the slow part at
+# f + (1 - f) Guess, f how familiar obs is to the store (Guesser), the parts kept
+fn (a mut Agent<T>&) recallOf(sleeper mut consolidator.Consolidator<T>&, obs Array<T>&) {
+    if not a.familiar {
+        sleeper.Predict(obs, 0, 1, a.recall)
+        return
+    }
+    sleeper.Parts(obs, a.recallSlow, a.recallStore, a.recallFamiliar)
+    like T
+    for j in range a.recall.Len() {
+        f F64 = F64(a.recallFamiliar[j])
+        a.recall[j] = linalg.Cast(F64(a.recallStore[j]) + (f + (1.0 - f) * a.Bet.Guess) * F64(a.recallSlow[j]), like)
+    }
+}
+
+# the last moment's outcome into the consolidator's day: the observation it acted on, and the reward as the value of
+# each group's chosen action - the only values observed, so the only ones written (Day's known)
+fn (a mut Agent<T>&) remember(sleeper mut consolidator.Consolidator<T>&, reward F64) {
+    like T
+    for j in range a.dayY.Len() {
+        a.dayY[j] = like
+        a.dayKnown[j] = false
+    }
+    for g in range a.Groups {
+        a.dayY[g * a.Actions + a.Chosen[g]] = linalg.Cast(reward, like)
+        a.dayKnown[g * a.Actions + a.Chosen[g]] = true
+    }
+    sleeper.Day(a.lastKey, a.dayY, 1, a.dayKnown)
+}
+
+# a night (docs/settling.md 1.9, 2.14) - between stretches of life: the consolidator dreams every observation its days
+# kept, teaches its slow part the dreams and rewrites its store with what the slow part did not absorb. passes 0 is
+# Settings.SleepPasses. Gives the night's last loss. Changes nothing else the agent keeps; its next moment drives the
+# readout with the recall as the night left it
+fn (a mut Agent<T>&) Sleep(passes I64 = 0) F64 {
+    sleeper := a.Sleeper
+    if sleeper == null: stop("Sleep on an agent made without Settings.Consolidate")
+    return sleeper.Sleep(passes)
+}
+
+fn (a mut Agent<T>&) settle(p circuit.Phase) ? circuit.NotSettled {
+    st := try a.Net.Settle(p, a.budget, a.tolerance)
+    a.Sweeps += st.Sweeps
+}
+
+# the hidden activities of the free state, into phi: the critic's features and what the context trace follows
+fn (a mut Agent<T>&) features() {
+    v := a.Net.Value(circuit.Phase.Free)
+    at I64 = a.Observations + a.Width
+    for i in range a.Width: a.phi[i] = v.Get(0, at + i)
+}
+
+# the policy of the free state, softmax(s_out / T) of each group, into probs
+fn (a mut Agent<T>&) policy() {
+    s := a.Net.Activity(circuit.Phase.Free, a.Choice)
+    for g in range a.Groups {
+        at I64 = g * a.Actions
+        top F64 = F64(s.Get(0, at))
+        for j in range 1, a.Actions: top = top.Max(F64(s.Get(0, at + j)))
+        sum F64 = 0.0
+        for j in range a.Actions {
+            a.probs[at + j] = ((F64(s.Get(0, at + j)) - top) / a.Config.Temperature).Exp()
+            sum += a.probs[at + j]
+        }
+        for j in range a.Actions: a.probs[at + j] = a.probs[at + j] / sum
+    }
+}
+
+# the policy's entropy over its largest, ln(actions), averaged over the groups: 0 when certain, 1 when uniform
+fn (a Agent<T>&) entropy() F64 {
+    sum F64 = 0.0
+    for g in range a.Groups {
+        for j in range a.Actions {
+            p := a.probs[g * a.Actions + j]
+            if p > 0.0: sum -= p * p.Log()
+        }
+    }
+    return sum / (F64(a.Groups) * F64(a.Actions).Log())
+}
+
+# an action of group g drawn from its policy, from the agent's generator
+fn (a mut Agent<T>&) sample(g I64) I64 {
+    u := a.rng.Float()
+    a.Draws++
+    acc F64 = 0.0
+    for j in range a.Actions - 1 {
+        acc += a.probs[g * a.Actions + j]
+        if u < acc: return j
+    }
+    return a.Actions - 1
+}
+
+# group g's most probable action
+fn (a Agent<T>&) greedy(g I64) I64 {
+    best I64 = 0
+    for j in range 1, a.Actions {
+        if a.probs[g * a.Actions + j] > a.probs[g * a.Actions + best]: best = j
+    }
+    return best
+}
+
+# the joint action of the groups' choices: sum over g of Chosen[g] Actions^g
+fn (a Agent<T>&) joint() I64 {
+    sum I64 = 0
+    for k in range a.Groups: sum = sum * a.Actions + a.Chosen[a.Groups - 1 - k]
+    return sum
+}
+
+# an aroused moment's nudged phases toward the chosen actions (each group's), +beta and -beta from the free state -
+# what the next moment's contrast reads; whether both qualified
+fn (a mut Agent<T>&) nudge() Bool {
+    for g in range a.Groups: a.Net.LabelData(a.Choice)[g] = I32(a.Chosen[g])
+    for k in range 2 {
+        p := circuit.Phase.Plus if k == 0 else circuit.Phase.Minus
+        a.Net.Warm(p, circuit.Phase.Free)
+        a.Net.Nudge(p, a.Config.Beta if k == 0 else -a.Config.Beta)
+        try a.settle(p) catch circuit.NotSettled {
+            a.Refused++
+            return false
+        }
+    }
+    return true
+}
+
+# the first moment: an observation and no outcome yet. Gives the action
+fn (a mut Agent<T>&) Begin(obs Array<T>&, known Array<Bool>?& = null) I64 ? circuit.NotSettled {
+    if a.started: stop("Begin twice")
+    a.Perceive(obs, known)
+    a.drive(a.Seen)
+    try a.settle(circuit.Phase.Free)
+    a.features()
+    a.started = true
+    return a.act(a.Seen, a.Mood.Aroused)
+}
+
+# one moment (docs/settling.md 1.8): the outcome of the last action - reward, and whether it ended an episode
+# (terminal: the value of what follows is 0, and the eligibility traces forget) - arrives with the next observation.
+# The agent settles on it (warm), measures the TD error and its arousal, learns from the outcome if the last moment
+# was aroused (memory write, the actor's step from delta and the eligibility, the critic's), settles again on the
+# moved weights, and chooses: sampled with the nudged phases when aroused, greedy when calm. Gives the action. Refuses
+# (NotSettled) when the free settle does not qualify, with nothing changed: no action, no write. known, when given,
+# marks the numbers of obs observed (Perceive)
+fn (a mut Agent<T>&) Step(obs Array<T>&, reward F64, terminal Bool = false
+        known Array<Bool>?& = null) I64 ? circuit.NotSettled {
+    if not a.started: stop("Step before Begin")
+    a.Perceive(obs, known)
+    a.drive(a.Seen)
+    try a.settle(circuit.Phase.Free) catch circuit.NotSettled {
+        a.Refused++
+        error circuit.NotSettled.Budget
+    }
+    a.features()
+    next F64 = 0.0 if terminal else a.Config.Gamma * a.Judge.Value(a.phi)
+    delta F64 = (reward + next - a.Judge.Value(a.lastPhi)).Clamp(-1.0, 1.0)
+    a.LastDelta = delta
+    uncertainty F64 = 0.0
+    if a.Config.EntropyGain != 0.0 {
+        a.policy()
+        uncertainty = a.Config.EntropyGain * a.entropy()
+    }
+    aroused := a.Mood.Update(delta, reward, uncertainty)
+    decay F64 = a.Config.Gamma * a.Config.Lambda
+    if a.lastAroused {
+        if a.weighs {
+            for g in range a.Groups: a.Reads.Learn(reward, a.forecastMem[g], a.forecastRecall[g])
+        }
+        if a.familiar {
+            for g in range a.Groups: a.Bet.Learn(reward, a.forecastStore[g], a.forecastFamiliar[g], a.forecastSlow[g])
+        }
+        for g in range a.Groups: a.Mem.Write(a.lastKey, g * a.Actions + a.Chosen[g], reward, delta.Abs())
+        sleeper := a.Sleeper
+        if sleeper != null: a.remember(sleeper, reward)
+        if a.Config.Completion and a.lastWhole: a.Fill.Learn(a.lastKey)
+        a.Net.Contrast(a.Config.Beta)
+        a.Elig.Add(a.Net, decay)
+        a.Elig.Credit(a.Net, delta)
+        a.Opt.Step(a.Net.ParamData(), a.Net.GradData())
+        a.Judge.Learn(delta, a.lastPhi, decay)
+        a.tolerance = lifeTolerance(a.Net, a.Config.Temperature)
+        a.budget = lifeBudget(a.Net, a.Config.Budget, a.tolerance)
+        # the weights moved and the memory changed: settle again, warm (a refusal keeps the state just settled)
+        a.drive(a.Seen)
+        try a.settle(circuit.Phase.Free) catch circuit.NotSettled { a.Refused++ }
+        a.features()
+    } else {
+        a.Elig.Decay(decay)
+        a.Judge.Fade(decay)
+    }
+    if terminal {
+        a.Elig.Clear()
+        a.Judge.Clear()
+    }
+    return a.act(a.Seen, aroused)
+}
+
+# the choice of a moment settled on obs: sampled, with the nudged phases, when aroused; greedy when calm. Then the
+# context trace follows the hidden activity, and what the next moment learns from is kept
+fn (a mut Agent<T>&) act(obs Array<T>&, aroused Bool) I64 {
+    a.policy()
+    if aroused {
+        for g in range a.Groups: a.Chosen[g] = a.sample(g)
+        a.lastAroused = a.nudge()
+        a.Aroused++
+    } else {
+        for g in range a.Groups: a.Chosen[g] = a.sample(g) if a.Config.CalmSamples else a.greedy(g)
+        a.lastAroused = false
+        a.Calm++
+    }
+    action := a.joint()
+    if a.weighs {
+        for g in range a.Groups {
+            a.forecastMem[g] = F64(a.memRead[g * a.Actions + a.Chosen[g]])
+            a.forecastRecall[g] = F64(a.recall[g * a.Actions + a.Chosen[g]])
+        }
+    }
+    if a.familiar {
+        for g in range a.Groups {
+            j I64 = g * a.Actions + a.Chosen[g]
+            a.forecastSlow[g] = F64(a.recallSlow[j])
+            a.forecastStore[g] = F64(a.recallStore[j])
+            a.forecastFamiliar[g] = F64(a.recallFamiliar[j])
+        }
+    }
+    a.Ctx.Follow(a.phi)
+    for i in range a.Observations: a.lastKey[i] = obs[i]
+    a.lastWhole = a.whole
+    for i in range a.Width: a.lastPhi[i] = a.phi[i]
+    a.LastAction = action
+    a.Mem.Fade()
+    sleeper := a.Sleeper
+    if sleeper != null and a.fading < 1.0: sleeper.Fade(a.fading)
+    a.Moments++
+    return action
+}
+
+# settles obs - as Perceive takes it, completed where known marks numbers missing - in the scratch phase, from the free
+# state, with the context trace and the memories as they are, and changes nothing the agent keeps (the drives and Seen
+# are rewritten by the next moment anyway): its answer is a.Net.Activity(circuit.Phase.Scratch, a.Choice)
+fn (a mut Agent<T>&) Imagine(obs Array<T>&, known Array<Bool>?& = null) circuit.Settlement ? circuit.NotSettled {
+    a.Perceive(obs, known)
+    a.drive(a.Seen)
+    a.Net.Warm(circuit.Phase.Scratch, circuit.Phase.Free)
+    a.Net.Nudge(circuit.Phase.Scratch, 0)
+    return try a.Net.Settle(circuit.Phase.Scratch, a.budget, a.tolerance)
+}
+
+# the policy of the last moment's free state (what it chose from): action j's probability - with groups, group
+# j / Actions's action j % Actions
+fn (a Agent<T>&) Policy(j I64) F64 {
+    return a.probs[j]
+}
+
+# ---- checkpoints ----
+
+# a checkpoint that cannot be read back into this agent
+type CheckpointError error {
+    Format                              # not an agent's checkpoint: no header, or a tensor missing or misshapen
+    Mismatch                            # an agent of another shape or seed, or one that has lived already
+}
+
+# a checkpoint as it is written: the header's text (safetensors' JSON) and the tensors' values one after another
+type gathering struct() {
+    header mut StringBuilder& = StringBuilder()
+    Values mut list.List<F64>& = list.List<F64>()
+}
+
+# a tensor of x's elements, as F64 - rows of them (one row when rows is 0)
+fn (g mut gathering&) add<E>(name String&, x Array<E>&, rows I64 = 0) {
+    zero F64 = 0.0
+    start := g.Values.Len()
+    for v in x: g.Values.Push(linalg.Cast(v, zero))
+    shape := $(x.Len()) if rows == 0 else $rows + "," + $(x.Len() / rows)
+    g.header.Push("," + $name + ":{\"dtype\":\"F64\",\"shape\":[" + $shape + "],\"data_offsets\":[" + $(8 * start) + "," + $(8 * g.Values.Len()) + "]}")
+}
+
+# the file: the header's length (8 bytes, little-endian), the header padded with spaces to a multiple of 8, the data
+fn (g mut gathering&) bytes() Array<U8>& {
+    g.header.PushChar('}')
+    for g.header.Len() % 8 != 0: g.header.PushChar(' ')
+    text := g.header.ToString()
+    n := text.Len()
+    out mut Array<U8>& = Array<U8>(8 + n + 8 * g.Values.Len())
+    for k in range 8: out[k] = U8((U64(n) >> U64(8 * k)) & 255)
+    for i in range n: out[8 + i] = U8(text[i])
+    for i in range g.Values.Len() {
+        bits := g.Values[i].Bits()
+        for k in range 8: out[8 + n + 8 * i + k] = U8((bits >> U64(8 * k)) & 255)
+    }
+    return out
+}
+
+# tensor name of a checkpoint (its header doc, its data from base in text) into out, which must be its length
+fn fetch(doc json.Json&, text String&, base I64, name String&, out mut Array<F64>&) ? CheckpointError {
+    entry := try doc[name] catch { error CheckpointError.Format }
+    place := try entry["data_offsets"] catch { error CheckpointError.Format }
+    offsets := try place.AsArr() catch { error CheckpointError.Format }
+    if offsets.Len() != 2: error CheckpointError.Format
+    b := try offsets[0].AsInt() catch { error CheckpointError.Format }
+    e := try offsets[1].AsInt() catch { error CheckpointError.Format }
+    if e - b != 8 * out.Len(): error CheckpointError.Mismatch
+    if b < 0 or base + e > text.Len(): error CheckpointError.Format
+    for i in range out.Len() {
+        bits U64 = 0
+        for k in range 8: bits = bits | (U64(U8(text[base + b + 8 * i + k])) << U64(8 * k))
+        out[i] = F64.FromBits(bits)
+    }
+}
+
+# into's elements from an F64 tensor's values
+fn put<E>(from Array<F64>&, into mut Array<E>&) {
+    zero E
+    for i in range into.Len(): into[i] = linalg.Cast(from[i], zero)
+}
+
+# the scalars a checkpoint keeps, in order - the last ten the seed and the generator's state (std/rand's State: four
+# 64-bit words), each 64-bit word as its two 32-bit halves, which an F64 holds exactly
+fn (a Agent<T>&) scalars() Array<F64>& {
+    state := a.rng.State()
+    out mut Array<F64>& = Array<F64>[a.Elig.Pending, a.Judge.B, a.Judge.zb, a.Mem.Pending, a.Mood.Scale, a.Mood.Surprise
+        a.Mood.Recent, a.Mood.LongRun, a.Mood.Spread, a.Mood.Want, a.Mood.Level, F64(a.Mood.Outcomes)
+        1.0 if a.Mood.Aroused else 0.0, 1.0 if a.lastAroused else 0.0, F64(a.LastAction), 1.0 if a.started else 0.0
+        F64(a.Opt.Steps), F64(a.Draws), F64(a.Moments), F64(a.Calm), F64(a.Aroused), F64(a.Sweeps), F64(a.Refused)
+        a.LastDelta, a.tolerance, F64(a.budget), high(a.Seed), low(a.Seed), high(state[0]), low(state[0]), high(state[1])
+        low(state[1]), high(state[2]), low(state[2]), high(state[3]), low(state[3])]
+    return out
+}
+
+# a 64-bit word's high and low 32 bits, as numbers an F64 holds exactly; and the word made from them again
+fn high(x U64) F64 { return F64(x >> 32) }
+
+fn low(x U64) F64 { return F64(x & U64(0xFFFFFFFF)) }
+
+fn word(hi F64, lo F64) U64 { return (U64(hi) << 32) | U64(lo) }
+
+# writes everything the agent's next moments depend on to path, in the safetensors layout (all tensors F64, so an F32
+# agent's values round trip exactly): the circuit's parameters and its free and nudged states (the next moment's
+# contrast reads them), Adam's moments, the eligibility trace, the critic and its trace, the context trace, both
+# memories, the last moment's observation and features, and the scalars - arousal's statistics, pending decays,
+# counters, the pending action, the seed, and the generator's state (version 2; version 1 kept the numbers drawn and
+# replayed them). An agent that consolidates adds its consolidator: the slow part's weights, the store's table, mean
+# and projection's seed, the cues kept, and its generator's state and counts ("consolidates" in the metadata); one that
+# weighs its reads, its Weigher's means and the last forecasts ("weighs"); one whose recall knows familiarity, the
+# store's familiarity table, its Guesser and the last recall's parts ("familiar"); one that completes observations, its
+# Completer's matrix and count and whether the last observation was whole ("completes")
+fn (a mut Agent<T>&) Save(path String&) ? os.Error {
+    g := gathering()
+    g.header.Push(("{\"__metadata__\":{\"format\":\"oann.agent\",\"version\":\"2\",\"observations\":\"" + $(a.Observations) +
+        "\",\"actions\":\"" + $(a.Actions) + "\",\"width\":\"" + $(a.Width) + "\",\"parameters\":\"" + $(a.Net.ParamCount) +
+        "\",\"consolidates\":\"" + $(1 if a.Sleeper != null else 0) + "\",\"weighs\":\"" + $(1 if a.weighs else 0) +
+        "\",\"familiar\":\"" + $(1 if a.familiar else 0) + "\",\"completes\":\"" + $(1 if a.Config.Completion else 0) + "\"}"))
+    g.add("\"circuit.params\"", a.Net.ParamData())
+    for k in range 4 {
+        p := circuit.Phase.Free if k < 2 else (circuit.Phase.Plus if k == 2 else circuit.Phase.Minus)
+        m := a.Net.Potential(p) if k == 0 else a.Net.Value(p)
+        g.add("\"circuit." + $k + "\"", m.Data[:a.Net.Neurons])
+    }
+    g.add("\"adam.m\"", a.Opt.M)
+    g.add("\"adam.v\"", a.Opt.V)
+    g.add("\"eligibility\"", a.Elig.E)
+    g.add("\"critic.w\"", a.Judge.W)
+    g.add("\"critic.z\"", a.Judge.z)
+    g.add("\"trace\"", a.Ctx.Value)
+    g.add("\"memory.persistent\"", a.Mem.c, a.Observations)
+    g.add("\"memory.fast\"", a.Mem.f, a.Observations)
+    g.add("\"last.key\"", a.lastKey)
+    g.add("\"last.features\"", a.lastPhi)
+    g.add("\"scalars\"", a.scalars())
+    k := a.Sleeper
+    if k != null {
+        k.Fast.Fold()                                   # the store's pending fade into its table: the values it holds
+        slow := k.Slow.Params()                         # named first (repro/fieldofresult)
+        g.add("\"sleep.slow\"", slow.Data)
+        g.add("\"sleep.table\"", k.Fast.Table, k.Fast.N)
+        g.add("\"sleep.mean\"", k.Fast.Mean)
+        g.add("\"sleep.cues\"", k.CueInputs())
+        g.add("\"sleep.scalars\"", sleepScalars(k))
+        if a.familiar: g.add("\"sleep.familiar\"", k.Fast.Familiar, k.Fast.N)
+    }
+    if a.weighs {
+        g.add("\"weigh\"", Array<F64>[a.Reads.Mix, a.Reads.DD, a.Reads.ED])
+        g.add("\"weigh.forecasts\"", a.forecastMem)
+        g.add("\"weigh.recalls\"", a.forecastRecall)
+    }
+    if a.familiar {
+        g.add("\"guess\"", Array<F64>[a.Bet.Guess, a.Bet.ZZ, a.Bet.ZR])
+        g.add("\"guess.slow\"", a.forecastSlow)
+        g.add("\"guess.store\"", a.forecastStore)
+        g.add("\"guess.familiar\"", a.forecastFamiliar)
+    }
+    if a.Config.Completion {
+        g.add("\"completion\"", a.Fill.M, a.Observations)
+        g.add("\"completion.scalars\"", Array<F64>[F64(a.Fill.Count), 1.0 if a.lastWhole else 0.0])
+    }
+    try os.WriteFile(path, g.bytes())
+}
+
+# the consolidator's scalars a checkpoint keeps: its days, nights and store writes, its generator's state as eight
+# 32-bit halves, the seed of its store's projection (the projection is made again from it, not kept), and the sequences
+# its days saw (of which the cues kept are a sample)
+fn sleepScalars<T>(k consolidator.Consolidator<T>&) Array<F64>& {
+    st := k.Generator()
+    out mut Array<F64>& = Array<F64>[F64(k.Days), F64(k.Nights), F64(k.Fast.Writes), high(st[0]), low(st[0]), high(st[1])
+        low(st[1]), high(st[2]), low(st[2]), high(st[3]), low(st[3]), high(k.Fast.Seed), low(k.Fast.Seed), F64(k.Seen)]
+    return out
+}
+
+# reads a checkpoint Save wrote into this agent, which must have the saved one's shape (observations, actions, hidden
+# regions, groups) and settings: afterwards its moments are exactly those the saved agent's would have been - its
+# generator put in the saved state, so whatever seed it was made with and whatever it has lived (a restore into the
+# agent that saved is a roll back)
+fn (a mut Agent<T>&) Restore(path String&) ? os.Error, CheckpointError {
+    text := try os.ReadFile(path)
+    if text.Len() < 8: error CheckpointError.Format
+    n I64 = 0
+    for k in range 8: n = n | (I64(U8(text[k])) << (8 * k))
+    if n < 2 or 8 + n > text.Len(): error CheckpointError.Format
+    doc := try json.Json.Parse(text[8:8 + n]) catch { error CheckpointError.Format }
+    current := try isVersion(doc, "2") catch { error CheckpointError.Format }
+    if not current: error CheckpointError.Format
+    if (consolidates(doc) != (a.Sleeper != null) or flagged(doc, "weighs") != a.weighs
+            or flagged(doc, "familiar") != a.familiar or flagged(doc, "completes") != a.Config.Completion) {
+        error CheckpointError.Mismatch
+    }
+    base I64 = 8 + n
+    params := Array<F64>(a.Net.ParamCount)
+    try fetch(doc, text, base, "circuit.params", params)
+    put(params, a.Net.ParamData())
+    row := Array<F64>(a.Net.Neurons)
+    for k in range 4 {
+        try fetch(doc, text, base, "circuit." + $k, row)
+        p := circuit.Phase.Free if k < 2 else (circuit.Phase.Plus if k == 2 else circuit.Phase.Minus)
+        m := a.Net.Potential(p) if k == 0 else a.Net.Value(p)
+        put(row, m.Data[:a.Net.Neurons])
+    }
+    try fetch(doc, text, base, "adam.m", params)
+    put(params, a.Opt.M)
+    try fetch(doc, text, base, "adam.v", params)
+    put(params, a.Opt.V)
+    try fetch(doc, text, base, "eligibility", params)
+    put(params, a.Elig.E)
+    try fetch(doc, text, base, "critic.w", a.Judge.W)
+    try fetch(doc, text, base, "critic.z", a.Judge.z)
+    width := Array<F64>(a.Width)
+    try fetch(doc, text, base, "trace", width)
+    put(width, a.Ctx.Value)
+    try fetch(doc, text, base, "last.features", width)
+    put(width, a.lastPhi)
+    keys := Array<F64>(a.Observations)
+    try fetch(doc, text, base, "last.key", keys)
+    put(keys, a.lastKey)
+    stores := Array<F64>(a.Observations * a.Actions)
+    try fetch(doc, text, base, "memory.persistent", stores)
+    put(stores, a.Mem.c)
+    try fetch(doc, text, base, "memory.fast", stores)
+    put(stores, a.Mem.f)
+    v := Array<F64>(a.scalars().Len())
+    try fetch(doc, text, base, "scalars", v)
+    a.Elig.Pending = v[0]
+    a.Judge.B = v[1]
+    a.Judge.zb = v[2]
+    a.Mem.Pending = v[3]
+    a.Mood.Scale = v[4]
+    a.Mood.Surprise = v[5]
+    a.Mood.Recent = v[6]
+    a.Mood.LongRun = v[7]
+    a.Mood.Spread = v[8]
+    a.Mood.Want = v[9]
+    a.Mood.Level = v[10]
+    a.Mood.Outcomes = I64(v[11])
+    a.Mood.Aroused = v[12] == 1.0
+    a.lastAroused = v[13] == 1.0
+    a.LastAction = I64(v[14])
+    rest I64 = a.LastAction
+    for g in range a.Groups {
+        a.Chosen[g] = rest % a.Actions if rest >= 0 else -1
+        rest = rest / a.Actions if rest >= 0 else -1
+    }
+    a.started = v[15] == 1.0
+    a.Opt.Steps = I64(v[16])
+    a.Moments = I64(v[18])
+    a.Calm = I64(v[19])
+    a.Aroused = I64(v[20])
+    a.Sweeps = I64(v[21])
+    a.Refused = I64(v[22])
+    a.LastDelta = v[23]
+    a.tolerance = v[24]
+    a.budget = I64(v[25])
+    a.Seed = word(v[26], v[27])
+    state := Array<U64>(4)
+    for k in range 4: state[k] = word(v[28 + 2 * k], v[29 + 2 * k])
+    try a.rng.SetState(state) catch rand.Error { error CheckpointError.Format }
+    a.Draws = I64(v[17])
+    sleeper := a.Sleeper
+    if sleeper != null: try restoreSleeper(sleeper, doc, text, base)
+    if a.familiar {
+        table := Array<F64>(sleeper!.Fast.Familiar.Len())
+        try fetch(doc, text, base, "sleep.familiar", table)
+        put(table, sleeper!.Fast.Familiar)
+        g := Array<F64>(3)
+        try fetch(doc, text, base, "guess", g)
+        a.Bet.Guess = g[0]
+        a.Bet.ZZ = g[1]
+        a.Bet.ZR = g[2]
+        try fetch(doc, text, base, "guess.slow", a.forecastSlow)
+        try fetch(doc, text, base, "guess.store", a.forecastStore)
+        try fetch(doc, text, base, "guess.familiar", a.forecastFamiliar)
+    }
+    if a.weighs {
+        w := Array<F64>(3)
+        try fetch(doc, text, base, "weigh", w)
+        a.Reads.Mix = w[0]
+        a.Reads.DD = w[1]
+        a.Reads.ED = w[2]
+        try fetch(doc, text, base, "weigh.forecasts", a.forecastMem)
+        try fetch(doc, text, base, "weigh.recalls", a.forecastRecall)
+    }
+    if a.Config.Completion {
+        try fetch(doc, text, base, "completion", a.Fill.M)
+        c := Array<F64>(2)
+        try fetch(doc, text, base, "completion.scalars", c)
+        a.Fill.Count = I64(c[0])
+        a.lastWhole = c[1] == 1.0
+    }
+}
+
+# a checkpoint's consolidator into k, which must have its shape
+fn restoreSleeper<T>(k mut consolidator.Consolidator<T>&, doc json.Json&, text String&, base I64) ? CheckpointError {
+    slow := Array<F64>(k.Slow.ParamCount)
+    try fetch(doc, text, base, "sleep.slow", slow)
+    params := k.Slow.Params()                           # named first (repro/fieldofresult)
+    put(slow, params.Data)
+    table := Array<F64>(k.Fast.Table.Len())
+    try fetch(doc, text, base, "sleep.table", table)
+    put(table, k.Fast.Table)
+    mean := Array<F64>(k.Fast.Mean.Len())
+    try fetch(doc, text, base, "sleep.mean", mean)
+    put(mean, k.Fast.Mean)
+    per I64 = k.Window * k.Inputs
+    values := try sizeOf(doc, "sleep.cues")
+    if values % per != 0: error CheckpointError.Mismatch
+    cues := Array<F64>(values)
+    try fetch(doc, text, base, "sleep.cues", cues)
+    held := Array<T>(values)
+    put(cues, held)
+    # the scalars: 13 before cues were sampled (every cue kept: the sequences seen are the cues), 14 since
+    v := Array<F64>(14)
+    if (try sizeOf(doc, "sleep.scalars")) == 13 {
+        try fetch(doc, text, base, "sleep.scalars", v[:13])
+        v[13] = F64(values / per)
+    } else {
+        try fetch(doc, text, base, "sleep.scalars", v)
+    }
+    k.Keep(held, values / per, I64(v[13]))
+    seed := word(v[11], v[12])
+    if seed != k.Fast.Seed: k.Fast.Reseed(seed)
+    k.Days = I64(v[0])
+    k.Nights = I64(v[1])
+    k.Fast.Writes = I64(v[2])
+    state := Array<U64>(4)
+    for i in range 4: state[i] = word(v[3 + 2 * i], v[4 + 2 * i])
+    try k.SetGenerator(state) catch rand.Error { error CheckpointError.Format }
+}
+
+# the number of F64 values a checkpoint's tensor name holds
+fn sizeOf(doc json.Json&, name String&) I64 ? CheckpointError {
+    entry := try doc[name] catch { error CheckpointError.Format }
+    place := try entry["data_offsets"] catch { error CheckpointError.Format }
+    offsets := try place.AsArr() catch { error CheckpointError.Format }
+    if offsets.Len() != 2: error CheckpointError.Format
+    b := try offsets[0].AsInt() catch { error CheckpointError.Format }
+    e := try offsets[1].AsInt() catch { error CheckpointError.Format }
+    if e < b or (e - b) % 8 != 0: error CheckpointError.Format
+    return (e - b) / 8
+}
+
+# whether a checkpoint's agent consolidates: its metadata's "consolidates" (absent, as before consolidators: not)
+fn consolidates(doc json.Json&) Bool {
+    return flagged(doc, "consolidates")
+}
+
+# whether a checkpoint's metadata says name is "1" - absent, as in checkpoints from before the flag: not
+fn flagged(doc json.Json&, name String&) Bool {
+    meta := try doc["__metadata__"] catch { return false }
+    flag := try meta[name] catch { return false }
+    text := try flag.AsStr() catch { return false }
+    return text == "1"
+}
+
+# whether a checkpoint's header names format version v in its metadata
+fn isVersion(doc json.Json&, v String&) Bool ? json.Error {
+    meta := try doc["__metadata__"]
+    return try (try meta["version"]).AsStr() == v
+}
+
+# ---- tests (docs/settling.md 5.3, 5.5) ----
+
+test "arousal follows its recursions: three outcomes computed by hand" {
+    a := Arousal()
+    want := Array<F64>[0.005, 83.33333333333333, 0.1, 0.01, 0.0099, 0.0, 8.333333333333334
+        0.0069500000000000004, 25.157232704402517, 0.09, 0.0099, 0.0099, 0.0, 10.015723270440253
+        0.014880500000000001, 50.37624759925695, -0.019000000000000017, -0.00019899999999999952, 0.01979901
+        0.9039372547058739, 14.14216942879251]
+    outcomes := Array<F64>[0.5, 1.0, -0.2, 0.0, 0.8, -1.0]
+    for k in range 3 {
+        assert a.Update(outcomes[2 * k], outcomes[2 * k + 1])          # the critical period
+        got := Array<F64>[a.Scale, a.Surprise, a.Recent, a.LongRun, a.Spread, a.Want, a.Level]
+        for j in range 7: assert (got[j] - want[7 * k + j]).Abs() <= 1e-12 * want[7 * k + j].Abs().Max(1.0)
+    }
+}
+
+test "arousal: calm once the critical period ends, aroused within a few moments of a change, calm again after" {
+    a := Arousal()
+    first I64 = -1
+    last I64 = -1
+    for k in range 1200 {
+        sign F64 = 1.0 if k % 2 == 1 else -1.0
+        aroused := a.Update(0.1 * sign, 1.0) if k < 600 else a.Update(0.5 * sign, 0.0)
+        if k < 100 { assert aroused }                                    # the critical period
+        if k >= 100 and k < 600: assert not aroused and a.Level < 2.0
+        if k >= 600 and aroused {
+            if first < 0: first = k
+            last = k
+        }
+    }
+    assert first >= 600 and first <= 600 + 10                           # within 1 / Fast moments
+    assert last < 900 and not a.Aroused                                  # and it falls back
+    try io.PutLine("arousal: aroused " + $(first - 600) + " moments after the change, calm again after " + $(last - 600))
+}
+
+test "memory: a read after a write returns the value, orthogonal keys do not interfere, overlapping ones by their dot" {
+    m := Memory<F64>(4, 3)
+    x := Array<F64>[1.0, 2.0, 0.0, 0.0]
+    y := Array<F64>[0.0, 0.0, 3.0, 0.0]
+    q := Array<F64>[1.0, 1.0, 0.0, 0.0]
+    out := Array<F64>(3)
+    m.Write(x, 1, 0.7, 0.0)
+    m.Read(x, out)
+    assert (out[1] - 0.7).Abs() < 1e-15 and out[0] == 0.0 and out[2] == 0.0
+    m.Read(y, out)
+    assert out[0] == 0.0 and out[1] == 0.0 and out[2] == 0.0
+    m.Read(q, out)
+    dot F64 = 3.0 / (5.0.Sqrt() * 2.0.Sqrt())
+    assert (out[1] - 0.7 * dot).Abs() < 1e-15
+    # the fast store fades by Decay a moment; the persistent one does not
+    slow F64 = 0.02 * 0.7
+    for n in range 1, 6 {
+        m.Fade()
+        m.Read(x, out)
+        assert (out[1] - (slow + 0.95.Pow(F64(n)) * (0.7 - slow))).Abs() < 1e-15
+    }
+    # repeated writes move the persistent store toward the value as (1 - c')^n, c' = min(1, c0 (1 + surprise))
+    p := Memory<F64>(4, 3)
+    rate F64 = 0.02 * (1.0 + 0.5)
+    for n in range 1, 30 {
+        p.Write(x, 2, -0.4, 0.5)
+        p.unit(x)
+        assert (p.recall(p.c, 1.0, 2) - (-0.4) * (1.0 - (1.0 - rate).Pow(F64(n)))).Abs() < 1e-14
+    }
+}
+
+test "weighing the reads: the recall's share is the least-squares weight of its forecast, its prior where they agree" {
+    # Rate 1: the means are the last outcome's - the closed form by hand
+    w := Weigher(0.5, 1.0)
+    w.Learn(0.5, 0.0, 1.0)
+    assert w.Mix == (0.5 + 0.001 * 0.5) / (1.0 + 0.001)
+    # the recall right and the memories wrong: the share goes to the recall; the other way round, to the memories
+    right := Weigher(0.5)
+    wrong := Weigher(0.5)
+    for _ in range 200 {
+        right.Learn(0.6, -0.6, 0.6)
+        wrong.Learn(-0.6, -0.6, 0.6)
+    }
+    assert right.Mix > 0.999 and wrong.Mix < 0.001
+    # outcomes as noisy as a reward (+-1 around 0.6), the memories' forecast 0.6, the recall's 0.2: the noise both
+    # errors share cancels, and the share goes to the memories
+    r := rand.Rand(3)
+    noisy := Weigher(0.5, 0.001)
+    for _ in range 5000: noisy.Learn(1.0 if r.Float() < 0.8 else -1.0, 0.6, 0.2)
+    assert noisy.Mix < 0.15
+    # forecasts that agree carry no evidence: the prior stays
+    same := Weigher(0.3)
+    for _ in range 50: same.Learn(0.8, 0.4, 0.4)
+    assert (same.Mix - 0.3).Abs() < 1e-12
+}
+
+test "the slow part's guess: its weight learned from unfamiliar outcomes, held through familiar ones" {
+    wrong := Guesser(1.0, 0.1)
+    right := Guesser(1.0, 0.1)
+    for _ in range 100 {
+        wrong.Learn(-0.6, 0.0, 0.0, 0.6)            # nothing written there: the slow part's guess of 0.6 against -0.6
+        right.Learn(0.6, 0.0, 0.0, 0.6)
+    }
+    assert wrong.Guess == 0.0 and right.Guess == 1.0
+    # by hand: an unfamiliar outcome, then a familiar one (f = 1, nothing to learn) that only forgets both sums
+    g := Guesser(1.0, 0.1)
+    g.Learn(0.3, 0.0, 0.0, 0.6)
+    assert g.Guess == (0.3 * 0.6 + 0.25) / (0.36 + 0.25)
+    g.Learn(0.9, 0.1, 1.0, 0.7)
+    assert g.Guess == (0.9 * (0.3 * 0.6) + 0.25) / (0.9 * 0.36 + 0.25)
+    # half familiar: the store's read and the familiar part of the slow part leave r', the rest is the guess's
+    h := Guesser(0.5, 1.0)
+    h.Learn(0.8, 0.1, 0.5, 0.4)
+    z F64 = 0.5 * 0.4
+    assert h.Guess == ((0.8 - 0.1 - 0.5 * 0.4) * z + 0.25 * 0.5) / (z * z + 0.25)
+    # Rate 0: the weight stays where it was set
+    fixed := Guesser(0.4)
+    fixed.Learn(-1.0, 0.0, 0.0, 1.0)
+    assert fixed.Guess == 0.4
+}
+
+test "pattern completion: an observation in the span of those learned is completed from half its numbers" {
+    c := Completer(6)
+    r := rand.Rand(5)
+    e := Array<F64>(12)
+    for i in range 12: e[i] = r.Normal()
+    x := Array<F64>(6)
+    point := fn(theta F64, out mut Array<F64>&) {
+        for i in range 6: out[i] = theta.Cos() * e[i] + theta.Sin() * e[6 + i]
+    }
+    # nothing learned: the missing numbers are 0, the known ones as they were
+    known := Array<Bool>[true, false, true, false, false, true]
+    point(1.234, x)
+    y := Array<F64>(6)
+    for i in range 6: y[i] = x[i]
+    c.Complete(y, known)
+    for i in range 6: assert y[i] == (x[i] if known[i] else 0.0)
+    for _ in range 64 {
+        point(r.Uniform(0.0, 2.0 * Pi), x)
+        c.Learn(x)
+    }
+    assert c.Count == 64
+    worst F64 = 0.0
+    for _ in range 20 {
+        point(r.Uniform(0.0, 2.0 * Pi), x)                 # a new point of the plane
+        for i in range 6 { y[i] = x[i] if known[i] else 99.0 }  # what stands at the missing numbers is not read
+        c.Complete(y, known)
+        for i in range 6 {
+            if known[i] { assert y[i] == x[i] } else { worst = worst.Max((y[i] - x[i]).Abs()) }
+        }
+    }
+    try io.PutLine("pattern completion: a point of the plane learned, from 3 of its 6 numbers, within " + $worst)
+    assert worst < 0.05
+    # every number known: as it is
+    every := Array<Bool>(6, true)
+    for i in range 6: y[i] = x[i]
+    c.Complete(y, every)
+    for i in range 6: assert y[i] == x[i]
+}
+
+test "the critic: with every outcome an episode's end, V converges to the reward" {
+    c := Critic<F64>(3)
+    phi := Array<F64>[0.5, -0.25, 1.0]
+    for _ in range 200 {
+        delta F64 = 0.8 - c.Value(phi)
+        c.Clear()
+        c.Learn(delta, phi, 0.891)
+    }
+    assert (c.Value(phi) - 0.8).Abs() < 1e-6
+}
+
+# a small life: observations of four, two actions, a hidden region of eight; arousal set by the settings
+fn Agent<F64>.little(s Settings, seed U64) Agent<F64> {
+    a mut Agent<F64>& = Agent<F64>(4, 2, Array<I64>[8], seed, s)
+    return a
+}
+
+test "calm moments change nothing that learns: parameters, optimizer, eligibility, critic and memories as they were" {
+    s := Settings()
+    s.Critical = 0
+    s.Threshold = 1e9                               # never aroused after the first moment
+    a := Agent<F64>.little(s, 3)
+    obs := Array<F64>[0.5, -0.3, 0.8, 0.1]
+    try a.Begin(obs)
+    try a.Step(obs, 1.0)             # learns from the first, aroused, moment
+    try a.Step(obs, 0.5)
+    params := Array<F64>(a.Net.ParamCount)
+    trace := Array<F64>(a.Net.ParamCount)
+    for i in range params.Len() {
+        params[i] = a.Net.ParamData()[i]
+        trace[i] = a.Elig.E[i]
+    }
+    c := Array<F64>(8)
+    f := Array<F64>(8)
+    for i in range 8 {
+        c[i] = a.Mem.c[i]
+        f[i] = a.Mem.f[i]
+    }
+    w := a.Judge.W[3]
+    steps := a.Opt.Steps
+    for k in range 5 {
+        obs[0] = F64(k) * 0.1
+        try a.Step(obs, F64(k))
+        assert a.Mood.Aroused == false
+    }
+    for i in range params.Len(): assert a.Net.ParamData()[i] == params[i] and a.Elig.E[i] == trace[i]
+    for i in range 8: assert a.Mem.c[i] == c[i] and a.Mem.f[i] == f[i]
+    assert a.Judge.W[3] == w and a.Opt.Steps == steps and a.Calm == 7 and a.Aroused == 1
+}
+
+test "Imagine settles an observation and changes nothing the agent keeps" {
+    a := Agent<F64>.little(Settings(), 4)
+    obs := Array<F64>[0.5, -0.3, 0.8, 0.1]
+    try a.Begin(obs)
+    first := try a.Step(obs, 1.0)
+    free := a.Net.Value(circuit.Phase.Free).Clone()
+    context := a.Ctx.Value[2]
+    try a.Imagine(Array<F64>[-1.0, 1.0, 0.0, 0.5])
+    assert try a.Net.Value(circuit.Phase.Free).MaxAbsDifference(free) == 0.0 and a.Ctx.Value[2] == context
+    assert try a.Net.Activity(circuit.Phase.Scratch, a.Choice).MaxAbsDifference(a.Net.Activity(circuit.Phase.Free, a.Choice)) > 0.0
+    assert first >= 0
+}
+
+# a world for the checkpoint's test: moment t's observation, and what action pays at t
+fn scene(t I64, obs mut Array<F64>&) {
+    for j in range obs.Len(): obs[j] = F64(7 * t + 3 * j).Sin()
+}
+
+fn payoff(t I64, action I64) F64 {
+    return 1.0 if action == t % 2 else -1.0
+}
+
+# n moments of a's life from moment t0, its actions into acts
+# n moments from t0 on, as livedFrom, every third observation given with known (the numbers it marks false missing)
+fn partFrom(a mut Agent<F64>&, t0 I64, n I64, acts mut Array<I64>&, known Array<Bool>&) {
+    obs := Array<F64>(4)
+    action := a.LastAction
+    for t in range t0, t0 + n {
+        r := payoff(t, action)
+        scene(t, obs)
+        given Array<Bool>?& = known if t % 3 == 0 else null
+        action = a.Step(obs, r, true, given)!
+        acts[t - t0] = action
+    }
+}
+
+fn livedFrom(a mut Agent<F64>&, t0 I64, n I64, acts mut Array<I64>&) {
+    obs := Array<F64>(4)
+    action := a.LastAction
+    for t in range t0, t0 + n {
+        r := payoff(t, action)
+        scene(t, obs)
+        action = a.Step(obs, r, true)!
+        acts[t - t0] = action
+    }
+}
+
+test "a checkpoint restores a life exactly: the restored agent's moments are the saved one's" {
+    s := Settings()
+    s.Critical = 60
+    s.Threshold = 3.0                               # some moments calm, some aroused
+    a := Agent<F64>.little(s, 5)
+    obs := Array<F64>(4)
+    scene(0, obs)
+    try a.Begin(obs)
+    early := Array<I64>(150)
+    livedFrom(a, 1, 150, early)
+    path := "build/agent_checkpoint_test.safetensors"
+    try a.Save(path)
+    late := Array<I64>(100)
+    livedFrom(a, 151, 100, late)
+    # into a new agent made from another seed: the generator's saved state, not its seed, decides what it draws
+    b := Agent<F64>.little(s, 77)
+    try b.Restore(path)
+    assert b.Seed == 5
+    again := Array<I64>(100)
+    livedFrom(b, 151, 100, again)
+    for i in range 100: assert late[i] == again[i]
+    for i in range a.Net.ParamCount: assert a.Net.ParamData()[i] == b.Net.ParamData()[i] and a.Elig.E[i] == b.Elig.E[i]
+    for i in range a.Mem.c.Len(): assert a.Mem.c[i] == b.Mem.c[i] and a.Mem.f[i] == b.Mem.f[i]
+    assert a.Mood.Level == b.Mood.Level and a.Draws == b.Draws and a.Opt.Steps == b.Opt.Steps and a.Calm == b.Calm
+    sa := a.rng.State()
+    sb := b.rng.State()
+    for k in range 4: assert sa[k] == sb[k]
+    try io.PutLine("checkpoint: " + $(a.Aroused) + " aroused, " + $(a.Calm) + " calm, " + $(a.Draws) + " draws")
+    assert a.Aroused > 1 and a.Calm > 1 and a.Draws > 1             # the stretch held both kinds of moment
+    # into the agent that saved it, 100 moments on: a roll back - it lives the same 100 moments again
+    try a.Restore(path)
+    livedFrom(a, 151, 100, again)
+    for i in range 100: assert late[i] == again[i]
+    # an agent of another shape, a version 1 checkpoint and a file that is no checkpoint are refused
+    wide := Agent<F64>(4, 2, Array<I64>[6], 5, s)
+    refused Bool = false
+    try wide.Restore(path) catch CheckpointError.Mismatch { refused = true }
+    assert refused
+    text := try os.ReadFile(path)
+    old := text.Replace("\"version\":\"2\"", "\"version\":\"1\"")
+    try os.WriteFile(path, old)
+    c := Agent<F64>.little(s, 5)
+    refused = false
+    try c.Restore(path) catch CheckpointError.Format { refused = true }
+    assert refused
+    try os.WriteFile(path, Array<U8>[3, 0, 0, 0, 0, 0, 0, 0, 120, 120, 120])
+    refused = false
+    try c.Restore(path) catch CheckpointError.Format { refused = true }
+    assert refused
+    try os.Remove(path) catch { }
+}
+
+test "a consolidating agent: its days write only the actions taken, a night keeps its recall, a checkpoint restores it" {
+    s := Settings()
+    s.Consolidate = true
+    s.SleepHidden = 4
+    s.Critical = 60
+    s.Threshold = 3.0                               # some moments calm, some aroused
+    a := Agent<F64>.little(s, 13)
+    obs := Array<F64>(4)
+    scene(0, obs)
+    key := Array<F64>(4)
+    for j in range 4: key[j] = obs[j]
+    before := Array<F64>(2)
+    after := Array<F64>(2)
+    a.Sleeper!.Predict(key, 0, 1, before)
+    assert before[0] == 0.0 and before[1] == 0.0    # a quiet readout and an empty store: nothing recalled yet
+    try a.Begin(obs)
+    chosen := a.Chosen[0]
+    assert a.lastAroused                            # the critical period's first moment keeps a contrast to learn from
+    scene(1, obs)
+    try a.Step(obs, 1.0, true)
+    a.Sleeper!.Predict(key, 0, 1, after)
+    # the reward is the chosen action's value, written at RecallRate; the other action, not observed, reads as it did
+    assert (after[chosen] - 0.2).Abs() < 1e-12 and after[1 - chosen] == 0.0 and a.Sleeper!.Days == 1
+    acts := Array<I64>(150)
+    livedFrom(a, 2, 150, acts)
+    assert a.Sleeper!.Days > 1 and a.Sleeper!.Days <= a.Aroused          # a day for each moment that learned
+    # a night: it dreams every cue kept, consolidates, and rewrites the store
+    count := a.Sleeper!.Cues()
+    cues := a.Sleeper!.CueInputs()
+    was := Array<F64>(2 * count)
+    now := Array<F64>(2 * count)
+    a.Sleeper!.PredictAll(cues, count, was, true)
+    a.Sleep()
+    a.Sleeper!.PredictAll(cues, count, now, true)
+    worst F64 = 0.0
+    for i in range was.Len(): worst = worst.Max((now[i] - was[i]).Abs())
+    # the recall at every cue kept is what it was, but for what dawn's store could not hold apart: every cue here is an
+    # observation of its own, more of them than its 600 cells keep apart (a bandit's cues are its few contexts)
+    try io.PutLine(("a consolidating agent: " + $count + " moments that learned kept as cues; a night keeps their recall within " + $worst +
+        " - dawn's reads within " + $(a.Sleeper!.DawnError) + " after " + $(a.Sleeper!.DawnPassesTaken) + " passes"))
+    assert worst <= a.Sleeper!.DawnError + 1e-12 and a.Sleeper!.Nights == 1
+    # a checkpoint after the night, restored into an agent of another seed (its store's projection made again from the
+    # saved one's): the same moments, nights included
+    livedFrom(a, 152, 50, acts)
+    path := "build/agent_sleep_checkpoint_test.safetensors"
+    try a.Save(path)
+    late := Array<I64>(100)
+    livedFrom(a, 202, 50, late)
+    a.Sleep()
+    livedFrom(a, 252, 50, late[50:])
+    b := Agent<F64>.little(s, 31)
+    try b.Restore(path)
+    again := Array<I64>(100)
+    livedFrom(b, 202, 50, again)
+    b.Sleep()
+    livedFrom(b, 252, 50, again[50:])
+    for i in range 100: assert late[i] == again[i]
+    for i in range a.Sleeper!.Slow.ParamCount { assert a.Sleeper!.Slow.Params().Data[i] == b.Sleeper!.Slow.Params().Data[i] }
+    for i in range a.Sleeper!.Fast.Table.Len(): assert a.Sleeper!.Fast.Table[i] == b.Sleeper!.Fast.Table[i]
+    assert a.Sleeper!.Cues() == b.Sleeper!.Cues() and a.Sleeper!.Nights == b.Sleeper!.Nights
+    # an agent that does not consolidate refuses its checkpoint, and it refuses theirs
+    plain := Agent<F64>.little(Settings(), 13)
+    refused Bool = false
+    try plain.Restore(path) catch CheckpointError.Mismatch { refused = true }
+    assert refused
+    try plain.Save(path)
+    refused = false
+    try b.Restore(path) catch CheckpointError.Mismatch { refused = true }
+    assert refused
+    try os.Remove(path) catch { }
+}
+
+test "a transient store and a reservoir of cues: a checkpoint still restores a consolidating life exactly" {
+    s := Settings()
+    s.Consolidate = true
+    s.SleepHidden = 4
+    s.Critical = 60
+    s.Threshold = 3.0
+    s.RecallHalfLife = 40.0                         # the store fades, its pending fade folded at the save
+    s.SleepCues = 12                                # and the nights replay a sample of 12 of the moments that learned
+    a := Agent<F64>.little(s, 17)
+    obs := Array<F64>(4)
+    scene(0, obs)
+    try a.Begin(obs)
+    acts := Array<I64>(200)
+    livedFrom(a, 1, 150, acts)
+    assert a.Sleeper!.Cues() == 12 and a.Sleeper!.Seen > 12
+    a.Sleep()
+    livedFrom(a, 151, 25, acts)                     # the store fading since dawn: a fade pending at the save
+    path := "build/agent_transient_checkpoint_test.safetensors"
+    try a.Save(path)
+    assert a.Sleeper!.Fast.Pending == 1.0
+    late := Array<I64>(100)
+    livedFrom(a, 176, 50, late)
+    a.Sleep()
+    livedFrom(a, 226, 50, late[50:])
+    b := Agent<F64>.little(s, 29)
+    try b.Restore(path)
+    again := Array<I64>(100)
+    livedFrom(b, 176, 50, again)
+    b.Sleep()
+    livedFrom(b, 226, 50, again[50:])
+    for i in range 100: assert late[i] == again[i]
+    assert a.Sleeper!.Seen == b.Sleeper!.Seen and a.Sleeper!.Cues() == b.Sleeper!.Cues()
+    for i in range a.Sleeper!.Fast.Table.Len(): assert a.Sleeper!.Fast.Table[i] == b.Sleeper!.Fast.Table[i]
+    try os.Remove(path) catch { }
+}
+
+test "weighed reads, a familiar recall, completed observations: the drive as stated, a checkpoint restoring the life" {
+    s := Settings()
+    s.Consolidate = true
+    s.SleepHidden = 4
+    s.Critical = 60
+    s.Threshold = 3.0
+    s.Weigh = true
+    s.Familiarity = true
+    s.GuessRate = 0.1
+    s.Completion = true
+    a := Agent<F64>.little(s, 19)
+    obs := Array<F64>(4)
+    known := Array<Bool>[true, false, true, true]          # every third observation lacks its second number
+    scene(0, obs)
+    try a.Begin(obs)
+    acts := Array<I64>(200)
+    partFrom(a, 1, 150, acts, known)
+    a.Sleep()
+    partFrom(a, 151, 50, acts, known)
+    # the readout's drive: (MemoryGain + RecallGain) ((1 - Mix) the memories' read + Mix the recall), the recall the
+    # store's read and the slow part at f + (1 - f) Guess - on the observation completed, its known numbers kept
+    scene(7, obs)
+    try a.Imagine(obs, known)
+    assert a.Seen[0] == obs[0] and a.Seen[2] == obs[2] and a.Seen[3] == obs[3] and a.Fill.Count > 0
+    m := Array<F64>(2)
+    slow := Array<F64>(2)
+    fast := Array<F64>(2)
+    familiar := Array<F64>(2)
+    a.Mem.Values(a.Seen, m)
+    a.Sleeper!.Parts(a.Seen, slow, fast, familiar)
+    c := a.Net.DriveData(a.Choice)
+    for j in range 2 {
+        recall F64 = fast[j] + (familiar[j] + (1.0 - familiar[j]) * a.Bet.Guess) * slow[j]
+        assert (c[j] - 2.0 * ((1.0 - a.Reads.Mix) * m[j] + a.Reads.Mix * recall)).Abs() < 1e-12
+    }
+    try io.PutLine(("weighed reads: the recall's share " + $(a.Reads.Mix) + ", the slow part's guess " + $(a.Bet.Guess) + ", " +
+        $(a.Fill.Count) + " whole observations learned"))
+    # a checkpoint, restored into an agent of another seed: the same moments, partial observations and a night among
+    # them
+    path := "build/agent_reads_checkpoint_test.safetensors"
+    try a.Save(path)
+    late := Array<I64>(100)
+    partFrom(a, 201, 50, late, known)
+    a.Sleep()
+    partFrom(a, 251, 50, late[50:], known)
+    b := Agent<F64>.little(s, 37)
+    try b.Restore(path)
+    again := Array<I64>(100)
+    partFrom(b, 201, 50, again, known)
+    b.Sleep()
+    partFrom(b, 251, 50, again[50:], known)
+    for i in range 100: assert late[i] == again[i]
+    assert a.Reads.Mix == b.Reads.Mix and a.Bet.Guess == b.Bet.Guess and a.Fill.Count == b.Fill.Count
+    # an agent lacking any one of the three refuses the checkpoint
+    for k in range 3 {
+        t Settings = s
+        if k == 0: t.Weigh = false
+        if k == 1: t.Familiarity = false
+        if k == 2: t.Completion = false
+        other := Agent<F64>.little(t, 13)
+        refused Bool = false
+        try other.Restore(path) catch CheckpointError.Mismatch { refused = true }
+        assert refused
+    }
+    try os.Remove(path) catch { }
+}
+
+test "an agent learns a contextual bandit: two contexts, two arms, the right arm paying 1 and the other -1" {
+    a := Agent<F64>.little(Settings(), 9)
+    obs := Array<F64>(4)
+    best := Array<I64>[1, 0]
+    right I64 = 0
+    c I64 = 0
+    obs[0] = 1.0
+    action := try a.Begin(obs)
+    for t in range 1, 1500 {
+        r F64 = 1.0 if action == best[c] else -1.0
+        if t > 1000 and r > 0.0: right++
+        c = (t * 7 + t / 3) % 2
+        obs[0] = 1.0 if c == 0 else 0.0
+        obs[1] = 1.0 - obs[0]
+        action = try a.Step(obs, r, true)
+    }
+    try io.PutLine("bandit: " + $right + " of the last 499 moments right, " + $(a.Calm) + " calm, " + $(a.Aroused) + " aroused")
+    assert right > 450 and a.Calm > a.Aroused
+}
+
+test "an agent with two groups of actions learns both at once: each group's arm by context, one shared reward" {
+    s := Settings()
+    s.Groups = 2
+    a := Agent<F64>(4, 2, Array<I64>[8], 11, s)
+    obs := Array<F64>(4)
+    right := Array<I64>[0, 0]
+    c I64 = 0
+    obs[0] = 1.0
+    action := try a.Begin(obs)
+    for t in range 1, 2500 {
+        # group 0 should answer the context, group 1 its opposite; the reward is the mean of the two groups' +-1
+        g0 I64 = action % 2
+        g1 I64 = action / 2
+        assert g0 == a.Chosen[0] and g1 == a.Chosen[1]
+        r F64 = 0.5 * ((1.0 if g0 == c else -1.0) + (1.0 if g1 == 1 - c else -1.0))
+        if t > 2000 {
+            if g0 == c: right[0] = right[0] + 1
+            if g1 == 1 - c: right[1] = right[1] + 1
+        }
+        c = (t * 7 + t / 3) % 2
+        obs[0] = 1.0 if c == 0 else 0.0
+        obs[1] = 1.0 - obs[0]
+        action = try a.Step(obs, r, true)
+    }
+    try io.PutLine("two groups: " + $(right[0]) + " and " + $(right[1]) + " of the last 499 moments right, " + $(a.Calm) + " calm, " + $(a.Aroused) + " aroused")
+    assert right[0] > 450 and right[1] > 450
+}

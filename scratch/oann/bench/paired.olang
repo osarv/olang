@@ -1,0 +1,93 @@
+# Paired comparison of two runs of the same lives (examples/bandit_settle.olang or examples/nights.olang with
+# perlife=1): every "life K x1 x2 ..." line of each, matched by K, and for each column the mean of A, of B and of B - A
+# life by life, each with the half-width of its 95% interval (1.96 standard errors). Columns are the lives' block
+# regrets, then (nights.olang) the test's answers and recalls on seen, new, noisy and partial observations.
+# build/olang bench/paired.olang A.txt B.txt [block] [columns] [odd|even]  - block (250) labels the block columns by
+# their last moment; columns, as first:last (Python's slice rules: either may be left out or count from the end; ":"
+# for all), picks some; odd or even keeps those lives only
+
+import "std/io"
+import "std/os"
+
+# the pieces of line between runs of spaces
+fn fields(line String&) Array<String&> {
+    out Vec<String&>
+    for p in line.Split(" ") {
+        if p.Len() > 0: out.Push(p)
+    }
+    return out.ToArray()
+}
+
+# each life's numbers, by its number, from the "life K x1 x2 ..." lines of the file
+fn lives(path String&) Map<I64, Array<F64>> ? os.Error, ParseError {
+    out Map<I64, Array<F64>>
+    for line in (try os.ReadFile(path)).Lines() {
+        if not line.StartsWith("life "): continue
+        parts := fields(line)
+        out.Put(try parts[1].ParseInt(), try Array<F64>[x.ParseFloat() for x in parts[2:]])
+    }
+    return out
+}
+
+# the mean of xs and the half-width of its 95% interval
+fn interval(xs Array<F64>&) F64, F64 {
+    n := xs.Len()
+    m := xs.Sum() / F64(n)
+    if n < 2: return m, 0.0
+    sd := (((xs - m) * (xs - m)).Sum() / F64(n - 1)).Sqrt()
+    return m, 1.96 * sd / F64(n).Sqrt()
+}
+
+# x to n places in a field of width w, with a sign when asked
+fn num(x F64, w I64, n I64, sign Bool = false) String {
+    text := x.Fixed(n)
+    return pad("+" + $text if sign and not text.StartsWith("-") else text, w)
+}
+
+# t right-aligned in a field of width w
+fn pad(t String&, w I64) String { return t.PadStart(w) }
+
+# "mean +- half" of the interval of xs
+fn cell(xs Array<F64>&, w I64, sign Bool = false) String {
+    m, h := interval(xs)
+    return $num(m, w, 3, sign) + " +- " + $num(h, 5, 3)
+}
+
+# a slice bound as Python reads it: counted from the end when negative, kept within 0 .. width
+fn bound(text String&, width I64, fallback I64) I64 ? ParseError {
+    if text.Len() == 0: return fallback
+    n := try text.ParseInt()
+    return (n + width if n < 0 else n).Clamp(0, width)
+}
+
+fn main() ? io.Error, os.Error, ParseError {
+    args := os.Args()
+    if args.Len() < 3 {
+        try io.PutErrLine("usage: paired A.txt B.txt [block] [columns first:last] [odd|even]")
+        os.Exit(2)
+    }
+    a := try lives(args[1])
+    b := try lives(args[2])
+    block := try args[3].ParseInt() if args.Len() > 3 else 250
+    keys := Array<I64>[k for k in a.Keys() if b.Has(k)]
+    keys.Sort(fn(x, y): return x < y)
+    if args.Len() > 5: keys = Array<I64>[k for k in keys if k % 2 == (1 if args[5] == "odd" else 0)]
+    if keys.Len() == 0 {
+        Println("0 lives paired")
+        os.Exit(1)
+    }
+    width := keys.Map(fn(k): return a.Ref(k)!.Len().Min(b.Ref(k)!.Len())).Min()!
+    first, last := 0, width
+    if args.Len() > 4 {
+        bounds := args[4].Split(":")
+        first = try bound(bounds[0], width, 0)
+        last = try bound(bounds[1], width, width)
+    }
+    Println($keys.Len() + " lives paired")
+    Println($pad("column", 10) + "  " + $pad("A", 16) + "  " + $pad("B", 16) + "  " + $pad("B - A", 16))
+    for c in range first, last {
+        xa := Array<F64>[a.Ref(k)![c] for k in keys]
+        xb := Array<F64>[b.Ref(k)![c] for k in keys]
+        Println($pad($c, 3) + " " + $pad($((c + 1) * block), 6) + "  " + $cell(xa, 7) + "  " + $cell(xb, 7) + "  " + $cell(xb - xa, 7, true))
+    }
+}

@@ -1,0 +1,36 @@
+# Status: reproduces (new). A method generator walking a Vec of records and yielding one record's enum is refused
+# (D18c, T22a: "this generator yields what 's' refers to ... that outlives no Next call it can be shown to") as soon
+# as the enum has a case whose payload is a reference (here `any Update&`) - even when the case yielded holds none and
+# the caller's loop is inside the receiver's life. The suggested `x.Copy()` does not help (a copy is shallow at a
+# reference). With the reference case replaced by a plain one it builds and prints 1. Expected: the yield accepted
+# where the walk (`for _ in s.Rules(0)`) is within the receiver's scope, as a borrowed element (D18c) is. dyn's
+# System.Rules was this generator; it is now AttachedAt(i), indexed (dyn/system.olang).
+
+type Update trait {
+    mut Apply(x mut Array<F32>&)
+}
+
+type Rule enum {
+    Plain(beta F64)
+    Custom(r mut any Update&)
+}
+
+type rec struct(What Rule, When I64) { What, When }
+
+type Sys struct() {
+    rules mut Vec<rec>& = Vec<rec>()
+}
+
+fn (s Sys&) Rules(c I64) Iterator<Rule> {
+    for g in s.rules {
+        if g.When == c: yield g.What
+    }
+}
+
+fn main() {
+    s := Sys()
+    s.rules.Push(rec(Rule.Plain(1.0), 0))
+    n := 0
+    for _ in s.Rules(0): n++
+    Println($n)
+}

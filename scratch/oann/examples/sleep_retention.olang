@@ -1,0 +1,304 @@
+# Sleep against interference (docs/settling.md 1.9, 5.4, 5.10): a consolidator (consolidator.olang) lives days of
+# sequences of a flip-flop and is measured with and without its nights.
+#
+# The task: each step a symbol - set, reset or hold (probabilities 0.2, 0.2, 0.6) - and a context bit; the target is +1
+# after a set and -1 after a reset in context 0 (task A), the other way round in context 1 (task B), held through the
+# holds, 0 before the first set or reset. The two tasks share their symbols and conflict on them, so only the context
+# tells them apart: learning B by itself pulls the slow weights away from A (catastrophic interference, AB-AC lists).
+# A day shows some new sequences of the day's task, once each (Repeats times as one batch). Accuracy is the fraction of
+# the steps with a target other than 0 whose output has its sign: recall over the sequences seen, generalization over
+# new ones.
+#
+# Modes (the first argument):
+#   nights     - docs/settling.md 5.4.3: days of task A only; after each night, the slow part alone on new sequences,
+#                beside a store alone (no slow learning and no nights) on the same exposures
+#   retention  - days of task A, then days of task B; the A sequences recalled and new A sequences answered at the end
+#                of each phase, by four lives: days only, days with no slow learning by day (the store alone), days and
+#                nights, and nights only (no slow learning by day)
+# Further arguments, all optional: seeds (10), days per phase (4), sequences a day (16), repeats (1), hidden (16),
+# window (12), passes a night (60), the day's first step (0.05; the days of the "days only" and "days and nights"
+# lives), Adam's rate at night (0.01), the store key's alpha and rho (0: the consolidator's defaults), the store's cells
+# and active cells (0: its defaults), the context's numbers (8; 1: one bit), dawn's passes at most (0: the default),
+# and which lives retention runs (15: all four - a bit each, 1 days only, 2 the store alone, 4 days and nights, 8 nights
+# only).
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../consolidator"
+
+fn number(args Array<String&>&, i I64, fallback F64) F64 ? json.Error {
+    if i >= args.Len(): return fallback
+    return try json.Json.Parse(args[i]).AsNum()
+}
+
+# a task's context: Context numbers of +-1 / sqrt(Context), drawn once per life for each of the two tasks - two
+# surroundings that look different, as the tasks of a life do. With Context 1 it is one bit instead: 0 for task A, 1
+# for task B
+Context mut I64 = 8
+
+# which of retention's four lives run: a bit each, 1 days only, 2 the store alone, 4 days and nights, 8 nights only
+lives mut I64 = 15
+
+fn contextOf(r mut rand.Rand&, task I64) Array<F64>& {
+    c mut Array<F64>& = Array<F64>(Context)
+    if Context == 1 {
+        c[0] = F64(task)
+        return c
+    }
+    for j in range Context: c[j] = (1.0 if r.Below(2) == 0 else -1.0) / F64(Context).Sqrt()
+    return c
+}
+
+# n sequences of the task in context ctx (0: task A, 1: task B, whose context is cx), into u (window steps of 3 +
+# Context inputs each) and y (window targets each)
+fn flipFlops(r mut rand.Rand&, n I64, window I64, ctx I64, cx Array<F64>&, u mut Array<F64>&, y mut Array<F64>&) {
+    width I64 = 3 + Context
+    for s in range n {
+        state F64 = 0.0
+        for t in range window {
+            x F64 = r.Float()
+            sym I64 = 0 if x < 0.2 else (1 if x < 0.4 else 2)
+            at I64 = (s * window + t) * width
+            for j in range 3: u[at + j] = 0.0
+            u[at + sym] = 1.0
+            for j in range Context: u[at + 3 + j] = cx[j]
+            sign F64 = 1.0 if ctx == 0 else -1.0
+            if sym == 0: state = sign
+            if sym == 1: state = -sign
+            y[s * window + t] = state
+        }
+    }
+}
+
+# the fraction of the steps with a target other than 0 whose output has the target's sign
+fn agreement(out Array<F64>&, y Array<F64>&) F64 {
+    right I64 = 0
+    counted I64 = 0
+    for i in range y.Len() {
+        if y[i] == 0.0: continue
+        counted++
+        if (out[i] > 0.0) == (y[i] > 0.0): right++
+    }
+    return F64(right) / F64(counted)
+}
+
+# a life's settings
+type Plan struct(days I64, perDay I64, repeats I64, hidden I64, window I64, passes I64, dayRate F64, nightRate F64
+        alpha F64, rho F64, cells I64, active I64, dawn I64) {
+    days
+    perDay
+    repeats
+    hidden
+    window
+    passes
+    dayRate
+    nightRate
+    alpha
+    rho
+    cells
+    active
+    dawn
+}
+
+# accuracies of k on sequences u, y (count of them): slow + store, and the slow part alone
+fn measure(k mut consolidator.Consolidator<F64>&, u Array<F64>&, y Array<F64>&, count I64) F64, F64 {
+    out := Array<F64>(y.Len())
+    k.PredictAll(u, count, out, true)
+    whole := agreement(out, y)
+    k.PredictAll(u, count, out, false)
+    return whole, agreement(out, y)
+}
+
+# the mean of x and the half-width of its 95% confidence interval (1.96 standard errors)
+fn interval(x Array<F64>&) F64, F64 {
+    n F64 = F64(x.Len())
+    mean F64 = 0.0
+    for v in x: mean += v
+    mean = mean / n
+    sq F64 = 0.0
+    for v in x: sq += (v - mean) * (v - mean)
+    return mean, (0.0 if n < 2.0 else 1.96 * (sq / (n - 1.0) / n).Sqrt())
+}
+
+fn show(x Array<F64>&) String {
+    m, h := interval(x)
+    return $(100.0 * m).Fixed(1) + " +- " + $(100.0 * h).Fixed(1)
+}
+
+fn main() ? io.Error, json.Error {
+    args := os.Args()
+    mode := args[1] if args.Len() > 1 else "retention"
+    seeds := I64(try number(args, 2, 10))
+    p := Plan(I64(try number(args, 3, 4)), I64(try number(args, 4, 16)), I64(try number(args, 5, 1))
+        I64(try number(args, 6, 16)), I64(try number(args, 7, 12)), I64(try number(args, 8, 60)), try number(args, 9, 0.05)
+        try number(args, 10, 0.01), try number(args, 11, 0), try number(args, 12, 0), I64(try number(args, 13, 0))
+        I64(try number(args, 14, 0)), I64(try number(args, 16, 0)))
+    Context = I64(try number(args, 15, 8))
+    lives = I64(try number(args, 17, 15))
+    t0 := time.Now()
+    if mode == "nights": try nights(seeds, p)
+    else: try retention(seeds, p)
+    try io.PutLine($(F64(time.Since(t0)) * 1e-9).Fixed(1) + " s")
+}
+
+# 5.4.3: days of task A with nights, the slow part alone measured on new sequences after each night; beside it a store
+# alone on the same days (no slow learning by day, no nights)
+fn nights(seeds I64, p Plan) ? io.Error {
+    held I64 = 512
+    slow := Array<F64>(seeds * p.days)
+    whole := Array<F64>(seeds * p.days)
+    alone := Array<F64>(seeds * p.days)
+    before := Array<F64>(seeds)
+    for k in range seeds {
+        r := rand.Rand(U64(1000 + k))
+        ca := contextOf(r, 0)
+        hu := Array<F64>(held * p.window * (3 + Context))
+        hy := Array<F64>(held * p.window)
+        flipFlops(r, held, p.window, 0, ca, hu, hy)
+        s := consolidator.SleepSettings()
+        s.DayRate = p.dayRate
+        s.NightRate = p.nightRate
+        s.Passes = p.passes
+        s.Alpha = p.alpha
+        s.Rho = p.rho
+        s.Cells = p.cells
+        s.Active = p.active
+        if p.dawn > 0: s.DawnPasses = p.dawn
+        c := consolidator.Consolidator<F64>(3 + Context, 1, p.hidden, p.window, p.perDay, U64(k + 1), s)
+        q := consolidator.SleepSettings()
+        q.DayRate = 0.0
+        q.Alpha = p.alpha
+        q.Rho = p.rho
+        q.Cells = p.cells
+        q.Active = p.active
+        store := consolidator.Consolidator<F64>(3 + Context, 1, p.hidden, p.window, p.perDay, U64(k + 1), q)
+        _, before[k] = measure(c, hu, hy, held)
+        u := Array<F64>(p.perDay * p.window * (3 + Context))
+        y := Array<F64>(p.perDay * p.window)
+        for d in range p.days {
+            flipFlops(r, p.perDay, p.window, 0, ca, u, y)
+            for _ in range p.repeats {
+                c.Day(u, y, p.perDay)
+                store.Day(u, y, p.perDay)
+            }
+            c.Sleep()
+            w, sl := measure(c, hu, hy, held)
+            slow[d * seeds + k] = sl
+            whole[d * seeds + k] = w
+            a, _ := measure(store, hu, hy, held)
+            alone[d * seeds + k] = a
+        }
+    }
+    try io.PutLine(("nights: " + $seeds + " lives of " + $(p.days) + " days of " + $(p.perDay) + " new sequences of task A, " + $(p.window) +
+        " steps, " + $(p.hidden) + " slow neurons; accuracy on 512 new sequences (%), before any day: the slow part " + $show(before)))
+    for d in range p.days {
+        try io.PutLine(("after night " + $(d + 1) + ": the slow part alone " + $show(slow[d * seeds:(d + 1) * seeds]) + ", slow and store " +
+            $show(whole[d * seeds:(d + 1) * seeds]) + "; a store alone, no nights " + $show(alone[d * seeds:(d + 1) * seeds])))
+    }
+}
+
+# a life's measures: A's recall and generalization at the end of phase A and at the end of phase B, B's at the end
+type Scores struct() {
+    RecallA F64 = 0.0
+    NewA F64 = 0.0
+    SlowNewA F64 = 0.0
+    RecallAfter F64 = 0.0
+    NewAfter F64 = 0.0
+    SlowNewAfter F64 = 0.0
+    RecallB F64 = 0.0
+    NewB F64 = 0.0
+}
+
+# one life: phase A's days, then phase B's, with nights when sleeping and slow learning by day at dayRate
+fn Scores.life(seed U64, p Plan, sleeping Bool, dayRate F64) Scores {
+    sc := Scores()
+    r := rand.Rand(seed)
+    ca := contextOf(r, 0)
+    cb := contextOf(r, 1)
+    held I64 = 256
+    hua := Array<F64>(held * p.window * (3 + Context))
+    hya := Array<F64>(held * p.window)
+    flipFlops(r, held, p.window, 0, ca, hua, hya)
+    hub := Array<F64>(held * p.window * (3 + Context))
+    hyb := Array<F64>(held * p.window)
+    flipFlops(r, held, p.window, 1, cb, hub, hyb)
+    s := consolidator.SleepSettings()
+    s.DayRate = dayRate
+    s.NightRate = p.nightRate
+    s.Passes = p.passes
+    s.Alpha = p.alpha
+    s.Rho = p.rho
+    s.Cells = p.cells
+    s.Active = p.active
+    if p.dawn > 0: s.DawnPasses = p.dawn
+    c := consolidator.Consolidator<F64>(3 + Context, 1, p.hidden, p.window, p.perDay, seed + 17, s)
+    seen := p.days * p.perDay
+    ua := Array<F64>(seen * p.window * (3 + Context))
+    ya := Array<F64>(seen * p.window)
+    ub := Array<F64>(seen * p.window * (3 + Context))
+    yb := Array<F64>(seen * p.window)
+    flipFlops(r, seen, p.window, 0, ca, ua, ya)
+    flipFlops(r, seen, p.window, 1, cb, ub, yb)
+    per I64 = p.perDay * p.window
+    for phase in range 2 {
+        u := ua if phase == 0 else ub
+        y := ya if phase == 0 else yb
+        for d in range p.days {
+            for _ in range p.repeats: c.Day(u[d * per * (3 + Context):(d + 1) * per * (3 + Context)], y[d * per:(d + 1) * per], p.perDay)
+            if sleeping: c.Sleep()
+        }
+        recall, _ := measure(c, ua, ya, seen)
+        whole, slow := measure(c, hua, hya, held)
+        if phase == 0 {
+            sc.RecallA = recall
+            sc.NewA = whole
+            sc.SlowNewA = slow
+        } else {
+            sc.RecallAfter = recall
+            sc.NewAfter = whole
+            sc.SlowNewAfter = slow
+            sc.RecallB, _ = measure(c, ub, yb, seen)
+            sc.NewB, _ = measure(c, hub, hyb, held)
+        }
+    }
+    return sc
+}
+
+fn retention(seeds I64, p Plan) ? io.Error {
+    names := Array<String&>["days only", "store alone (no slow learning by day, no nights)", "days and nights"
+        "nights only (no slow learning by day)"]
+    try io.PutLine(("retention: " + $seeds + " lives of " + $(p.days) + " days of task A, then " + $(p.days) + " of task B, " + $(p.perDay) +
+        " new sequences a day shown " + $(p.repeats) + " times, " + $(p.window) + " steps, " + $(p.hidden) + " slow neurons, " +
+        $(p.passes) + " passes a night; accuracy (%) - the A sequences seen (recall), new A sequences (slow and store; the slow part alone)"))
+    for kind in range 4 {
+        if ((lives >> kind) & 1) == 0: continue
+        sleeping Bool = kind >= 2
+        rate F64 = p.dayRate if kind == 0 or kind == 2 else 0.0
+        recallA := Array<F64>(seeds)
+        newA := Array<F64>(seeds)
+        slowA := Array<F64>(seeds)
+        recallAfter := Array<F64>(seeds)
+        newAfter := Array<F64>(seeds)
+        slowAfter := Array<F64>(seeds)
+        recallB := Array<F64>(seeds)
+        newB := Array<F64>(seeds)
+        for k in range seeds {
+            sc := Scores.life(U64(k + 1), p, sleeping, rate)
+            recallA[k] = sc.RecallA
+            newA[k] = sc.NewA
+            slowA[k] = sc.SlowNewA
+            recallAfter[k] = sc.RecallAfter
+            newAfter[k] = sc.NewAfter
+            slowAfter[k] = sc.SlowNewAfter
+            recallB[k] = sc.RecallB
+            newB[k] = sc.NewB
+        }
+        try io.PutLine($names[kind] + ":")
+        try io.PutLine("  after A: recall " + $show(recallA) + ", new A " + $show(newA) + " (slow alone " + $show(slowA) + ")")
+        try io.PutLine(("  after B: recall of A " + $show(recallAfter) + ", new A " + $show(newAfter) + " (slow alone " + $show(slowAfter) +
+            "); B: recall " + $show(recallB) + ", new B " + $show(newB)))
+    }
+}

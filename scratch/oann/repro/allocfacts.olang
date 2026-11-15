@@ -1,0 +1,27 @@
+# repro/allocfacts - function facts (G42) read too coarsely for an allocation-free hot path to be pinned while compiling
+# (S17a), found pinning ad/graph's Forward and Backward:
+# 1. a local fixed array, Array<F32>(8) - laid out in place, which G42's table says does not count - reads Allocates
+#    true (lone below; kernels/elem's eight-lane sums are made of these, so every reduction "allocates");
+# 2. an error carrying a literal text (an error word of a String payload, as tensor.ShapeError.Mismatch is) reads true,
+#    though the text is constant data and the path only ever leaves - so every tensor view taken with `!` "allocates";
+# 3. a method of a generic type's instance, `Box<I64>.Fill.Allocates`, is refused by the self-hosted compiler at build
+#    ("it does not check a generic name as a value yet"), though G42 names the form - so Graph<F32>.Forward cannot be
+#    pinned directly, only through a plain function calling it.
+# Expected: the first two asserts hold. Today each is a compile error.
+#   olang test repro/allocfacts.olang
+
+fn lone(x Array<F32>&) F32 {
+    acc := Array<F32>(8)
+    for j in range 8: acc[j] = x[j]
+    return acc[3]
+}
+
+type Bad error { Mismatch(what String) }
+
+fn checked(x I64) I64 ? Bad {
+    if x < 0: error Bad.Mismatch("negative")
+    return x
+}
+
+assert not lone.Allocates, "a fixed array laid out in place allocates nothing"
+assert not checked.Allocates, "an error carrying a literal text allocates nothing"

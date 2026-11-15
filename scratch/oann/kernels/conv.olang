@@ -1,0 +1,776 @@
+# kernels/conv - two-dimensional convolution and max pooling on images held as rows, as one product of their patches.
+#
+# An image is one row of a batched matrix, its pixels in row-major order with the channels of a pixel together - H x W
+# x C, "channels last" (NHWC for the batch, TensorFlow's default layout). A convolution's weights are PyTorch's,
+# OutC x (C K K) with each output channel's kernel as [C][K][K] - Conv2d.weight flattened - so a checkpoint maps onto
+# PyTorch's one to one; its output rows are again channels last, OutH x OutW x OutC. Images, weights and outputs are
+# `mat.Mat` views of storage S (F32, F64, BF16, F16, F8), their rows contiguous where a kernel reshapes them (the output
+# of n images is n rows of OutH OutW OutC, which a product reads as n OutH OutW rows of OutC).
+#
+# Channels last is what makes a whole batch one product. The patch matrix has a row for every output position of
+# every image, holding the patch it sees - the C K K inputs under the kernel, zero where the kernel hangs over the
+# edge - so it is (n OutH OutW) x (C K K); then
+#     Y = cols W^T + b           (n OutH OutW) x OutC, one product and a bias row
+# and Y's rows, OutC wide, are exactly the n images' output rows one after another - nothing is transposed. The
+# forward never makes the patch matrix: `Patches` is gemm's left operand packed by its own type (GemmLeft), reading
+# the images as the product needs each block of panels, with the bias and an activation added as each block of Y is
+# finished. The backward reads the same matrices the other way:
+#     db = the column sums of dY       dW = dY^T cols       dcols = dY W
+# and col2im adds every patch's gradient back to the pixels it came from (patches overlap, so they add up). There
+# Im2col makes the patches into a workspace - dW reads them as the product's right operand, which GemmLeft does not
+# take - and dcols overwrites them, so a network needs one workspace, its largest convolution's, however many layers it
+# has.
+#
+# Max pooling keeps, for each output, which position of its window held the maximum (the first, when several do -
+# PyTorch's choice), and its backward adds the gradient there.
+#
+# Threads. Im2col, Col2im and the pooling split their images over `threads` tasks (join/spawn): a task writes only its
+# own images, so a result is the same for every thread count. The products take the thread count of their workspace.
+
+import "mat"
+import "gemm"
+import "elem"
+import "std/rand"
+
+# a shape a convolution or a pooling cannot have
+type GeometryError error {
+    Invalid(what String)
+}
+
+# a convolution of C-channel H x W images by OutC kernels of K x K, moved Stride pixels at a time over the images
+# padded with Pad zeros on every side. Made once, where the layer is: a shape that cannot be convolved fails here
+type Shape struct(C I64, H I64, W I64, OutC I64, K I64, Stride I64, Pad I64) ? GeometryError {
+    C
+    H
+    W
+    OutC
+    K
+    Stride
+    Pad
+    if C < 1 or H < 1 or W < 1 or OutC < 1 or K < 1: error GeometryError.Invalid("every size is at least 1")
+    if Stride < 1: error GeometryError.Invalid("the stride is at least 1")
+    if Pad < 0 or Pad >= K: error GeometryError.Invalid("the padding is at least 0 and less than the kernel")
+    if H + 2 * Pad < K or W + 2 * Pad < K: error GeometryError.Invalid("the kernel is larger than the padded image")
+    OutH I64 = (H + 2 * Pad - K) / Stride + 1
+    OutW I64 = (W + 2 * Pad - K) / Stride + 1
+}
+
+# the inputs one output sees: the columns of the im2col matrix, and of the weights
+fn (s Shape&) Patch() I64 { return s.C * s.K * s.K }
+
+# the output positions of one image: the rows of the im2col matrix per image
+fn (s Shape&) Positions() I64 { return s.OutH * s.OutW }
+
+# n images' outputs as the rows of a product: n OutH OutW rows of OutC. y's rows must be contiguous (Ld = OutH OutW OutC)
+fn (s Shape&) Rows<S>(y mat.Mat<S>&) mat.Mat<S> {
+    return mat.Mat<S>(y.Data, y.Off, y.Rows * s.Positions(), s.OutC, s.OutC)
+}
+
+# ---- the patch matrix ----
+
+fn lesser(a I64, b I64) I64 { return a if a < b else b }
+
+# x as a D, rounded or wrapped as a conversion D(x) does - an F8 type through F64, its own way in and out
+fn cast<X, D>(x X, like D) D {
+    match X {
+        case F8E4M3, F8E5M2 { return cast(x.F64(), like) }
+        case _ { }
+    }
+    return match D {
+        case F8E4M3: F8E4M3(F64(x))
+        case F8E5M2: F8E5M2(F64(x))
+        case F16: F16(x)
+        case BF16: BF16(x)
+        case F32: F32(x)
+        case F64: F64(x)
+        case I8: I8(x)
+        case I16: I16(x)
+        case I32: I32(x)
+        case I64: I64(x)
+        case U8: U8(x)
+        case U16: U16(x)
+        case U32: U32(x)
+        case U64: U64(x)
+    }
+}
+
+# the patch matrix of a convolution over images - a row for every output position of every image, (b OutH + oy) OutW +
+# ox, and a column for every input the kernel sees there, (c K + ky) K + kx - as Im2col would make it but never made:
+# gemm's GemmLeft reads it through Pack, panel by panel, as the product needs it
+type Patches<S> struct(images mat.Mat<S>&, geometry Shape&) {
+    Images mat.Mat<S>& = images
+    Geometry Shape& = geometry
+}
+
+# the rows of the patch matrix: every output position of every image
+fn (x Patches<S>&) Rows() I64 { return x.Images.Rows * x.Geometry.Positions() }
+
+# the patch matrix as gemm's left operand: element (w, p) is input p0 + p of output position w0 + w, packed in panels of
+# wr positions - panel q (from dst[q depth]) holding, for each input p, the wr values (w0 + q + w, p0 + p), zeros past
+# the width. A panel's wr positions are gathered together, one input at a time - the input's offset within a window the
+# same for all of them, each window's own first pixel added - with no test per element where every window lies inside
+# the image, as most do. Positions follow one another, so each is found from the last by a step, not by dividing; the
+# geometry is held in locals, read through x it would be read again at every store
+fn (x Patches<S>&) Pack<A>(w0 I64, p0 I64, width I64, depth I64, wr I64, dst mut Array<A>&) {
+    z A
+    s := x.Geometry
+    data := x.Images.Data
+    C, H, W, K, St, P := s.C, s.H, s.W, s.K, s.Stride, s.Pad
+    ow, per, ld, off0 := s.OutW, s.OutH * s.OutW, x.Images.Ld, x.Images.Off
+    kk I64 = K * K
+    hu U64 = U64(H)
+    wu U64 = U64(W)
+    at := Array<I64>(wr)
+    wy := Array<I64>(wr)
+    wx := Array<I64>(wr)
+    # the position w0, and its image, row and column of the output
+    img I64 = w0 / per
+    oy I64 = (w0 - img * per) / ow
+    ox I64 = w0 - img * per - oy * ow
+    for q in range 0, width, wr {
+        base I64 = q * depth
+        n I64 = lesser(wr, width - q)
+        inside Bool = n == wr
+        for w in range wr {
+            if w < n {
+                y0 I64 = oy * St - P
+                x0 I64 = ox * St - P
+                at[w] = off0 + img * ld + (y0 * W + x0) * C
+                wy[w] = y0
+                wx[w] = x0
+                inside = inside and y0 >= 0 and y0 + K <= H and x0 >= 0 and x0 + K <= W
+                ox++
+                if ox == ow {
+                    ox = 0
+                    oy++
+                    if oy == s.OutH {
+                        oy = 0
+                        img++
+                    }
+                }
+            } else {
+                at[w] = 0
+                wy[w] = -H - K # never inside: a position past the panel's last is zeros
+                wx[w] = 0
+            }
+        }
+        c I64 = p0 / kk
+        ky I64 = (p0 - c * kk) / K
+        kx I64 = p0 - c * kk - ky * K
+        step I64 = (ky * W + kx) * C + c
+        for p in range depth {
+            d I64 = base + p * wr
+            if inside {
+                for w in range wr: dst[d + w] = cast(data[at[w] + step], z)
+            } else {
+                for w in range wr {
+                    v A = z
+                    if U64(wy[w] + ky) < hu and U64(wx[w] + kx) < wu: v = cast(data[at[w] + step], z)
+                    dst[d + w] = v
+                }
+            }
+            kx++
+            step = step + C
+            if kx == K {
+                kx = 0
+                ky++
+                step = step + (W - K) * C
+                if ky == K {
+                    ky = 0
+                    c++
+                    step = c
+                }
+            }
+        }
+    }
+}
+
+# the images x (n rows of H W C) as patches into cols (n OutH OutW rows of C K K), split over threads tasks by images'
+# positions. A window inside the image is copied with no test per element: a pixel's channels at a time where the
+# image has as many channels as the kernel is wide, a kernel row's pixels otherwise - the inputs in order, which is
+# three times as fast for one channel, measured
+fn Im2col<S>(cols mut mat.Mat<S>&, x mat.Mat<S>&, s Shape&, threads I64 = 1) {
+    n := x.Rows * s.Positions()
+    tasks := lesser(threads, n / 256)
+    if tasks <= 1 {
+        im2colRows(cols, x, s, 0, n)
+        return
+    }
+    share := (n + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * share
+            hi := lesser(n, lo + share)
+            if lo < hi: spawn im2colRows(cols, x, s, lo, hi)
+        }
+    }
+}
+
+# positions lo .. hi of the patch matrix into cols: with fewer channels than the kernel is wide, each row's inputs in
+# order, their offset in the window kept as they go rather than as loops of the kernel's width - which LLVM would test
+# for overlapping arrays each time round, for three elements - and a pixel's channels at a time otherwise
+fn im2colRows<S>(cols mut mat.Mat<S>&, x mat.Mat<S>&, s Shape&, lo I64, hi I64) {
+    like S
+    z S = cast(0, like)
+    data := x.Data
+    out := cols.Data
+    C, H, W, K, St, P := s.C, s.H, s.W, s.K, s.Stride, s.Pad
+    ow, oh, per, ld, lc := s.OutW, s.OutH, s.OutH * s.OutW, x.Ld, cols.Ld
+    n I64 = C * K * K
+    kk I64 = K * K
+    hu U64 = U64(H)
+    wu U64 = U64(W)
+    img I64 = lo / per
+    oy I64 = (lo - img * per) / ow
+    ox I64 = lo - img * per - oy * ow
+    for pos in range lo, hi {
+        y0 I64 = oy * St - P
+        x0 I64 = ox * St - P
+        at I64 = x.Off + img * ld + (y0 * W + x0) * C
+        row I64 = cols.Off + pos * lc
+        inside Bool = y0 >= 0 and y0 + K <= H and x0 >= 0 and x0 + K <= W
+        if C >= K {
+            # a pixel's channels at a time: a run of C read, written K K apart
+            for ky in range K {
+                for kx in range K {
+                    w I64 = row + ky * K + kx
+                    if inside or (U64(y0 + ky) < hu and U64(x0 + kx) < wu) {
+                        s0 I64 = at + (ky * W + kx) * C
+                        for c in range C: out[w + c * kk] = data[s0 + c]
+                    } else {
+                        for c in range C: out[w + c * kk] = z
+                    }
+                }
+            }
+        } else {
+            # the inputs in order, a pixel's channels apart along a kernel row
+            c, ky, kx, step I64 = 0, 0, 0, 0
+            for i in range n {
+                v S = z
+                if inside or (U64(y0 + ky) < hu and U64(x0 + kx) < wu): v = data[at + step]
+                out[row + i] = v
+                kx++
+                step = step + C
+                if kx == K {
+                    kx = 0
+                    ky++
+                    step = step + (W - K) * C
+                    if ky == K {
+                        ky = 0
+                        c++
+                        step = c
+                    }
+                }
+            }
+        }
+        ox++
+        if ox == ow {
+            ox = 0
+            oy++
+            if oy == oh {
+                oy = 0
+                img++
+            }
+        }
+    }
+}
+
+# the reverse of Im2col: every patch element added back into dx's pixel it was read from (dx = that, when not acc),
+# split over threads tasks by images; sums are made in A, rounded to S as each is stored
+fn Col2im<S, A>(dx mut mat.Mat<S>&, dcols mat.Mat<S>&, s Shape&, acc Bool, threads I64 = 1) {
+    tasks := lesser(threads, dx.Rows)
+    if tasks <= 1 {
+        col2imImages<S, A>(dx, dcols, s, acc, 0, dx.Rows)
+        return
+    }
+    share := (dx.Rows + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * share
+            hi := lesser(dx.Rows, lo + share)
+            if lo < hi: spawn col2imImages<S, A>(dx, dcols, s, acc, lo, hi)
+        }
+    }
+}
+
+fn col2imImages<S, A>(dx mut mat.Mat<S>&, dcols mat.Mat<S>&, s Shape&, acc Bool, lo I64, hi I64) {
+    like S
+    z S = cast(0, like)
+    for b in range lo, hi {
+        if not acc {
+            for i in range dx.Cols: dx[b, i] = z
+        }
+        for oy in range s.OutH {
+            for ox in range s.OutW {
+                row := dcols.Off + ((b * s.OutH + oy) * s.OutW + ox) * dcols.Ld
+                scatterWindow<S, A>(dx, dcols.Data, row, s, b, oy * s.Stride - s.Pad, ox * s.Stride - s.Pad)
+            }
+        }
+    }
+}
+
+# one window's patch (the row of dcols at row) added into image b, what hangs over the edge dropped
+fn scatterWindow<S, A>(dx mut mat.Mat<S>&, patch Array<S>&, row I64, s Shape&, b I64, y0 I64, x0 I64) {
+    like S
+    z A
+    kk I64 = s.K * s.K
+    for ky in range s.K {
+        iy := y0 + ky
+        if iy < 0 or iy >= s.H: continue
+        for kx in range s.K {
+            ix := x0 + kx
+            if ix < 0 or ix >= s.W: continue
+            w0 := row + ky * s.K + kx
+            at := dx.Off + b * dx.Ld + (iy * s.W + ix) * s.C
+            for c in range s.C: dx.Data[at + c] = cast(cast(dx.Data[at + c], z) + cast(patch[w0 + c * kk], z), like)
+        }
+    }
+}
+
+# ---- the convolution ----
+
+# y = act(the convolution of x by w plus a bias): x is n images (n x H W C), w OutC x C K K, y n x OutH OutW OutC (rows
+# contiguous), epi gemm's epilogue - the bias (OutC values) and an activation. One GemmLeft: the product of the patches
+# and w^T, the patches packed straight from the images as the product reads them - never made - so the forward writes no
+# patch matrix and reads the images where im2col and the product's packing read them twice; exactly what Im2col, Gemm
+# and the epilogue give (a test)
+fn Conv2d<S, A>(ws mut gemm.Workspace<A>&, y mut mat.Mat<S>&, x mat.Mat<S>&, w mat.Mat<S>&, s Shape&, epi gemm.Epilogue = gemm.Epilogue.None) {
+    out := s.Rows(y)
+    gemm.GemmLeft(ws, out, Patches<S>(x, s), s.Patch(), w, true, 1, 0, epi)
+}
+
+# the gradients of y = conv(x, w) + b: db the column sums of dy (OutC of them), dw = dy^T cols with the patches made
+# again, then dcols = dy w into the same workspace and col2im into dx - in that order, since dcols overwrites the
+# patches. A gradient with no rows (db with no elements) is one not wanted; acc adds to one instead of writing it. cols
+# is the workspace: n OutH OutW rows of C K K
+fn Conv2dBackward<S, A>(ws mut gemm.Workspace<A>&, dy mat.Mat<S>&, x mat.Mat<S>&, w mat.Mat<S>&, s Shape&, dx mut mat.Mat<S>&, accX Bool, dw mut mat.Mat<S>&, accW Bool, db mut Array<S>&, accB Bool, cols mut mat.Mat<S>&, threads I64 = 1) {
+    like S
+    g := s.Rows(dy)
+    if db.Len() > 0: elem.ColumnSums(db, g, cast(1 if accB else 0, like))
+    if dw.Rows > 0 {
+        Im2col(cols, x, s, threads)
+        gemm.Gemm(ws, dw, g, true, cols, false, 1, 1 if accW else 0)
+    }
+    if dx.Rows > 0 {
+        gemm.Gemm(ws, cols, g, false, w, false, 1, 0)
+        Col2im<S, A>(dx, cols, s, accX, threads)
+    }
+}
+
+# ---- max pooling ----
+
+# max pooling of C-channel H x W images (channels last) over K x K windows moved Stride pixels at a time
+type Pool struct(C I64, H I64, W I64, K I64, Stride I64) ? GeometryError {
+    C
+    H
+    W
+    K
+    Stride
+    if C < 1 or K < 1 or Stride < 1 or H < K or W < K: error GeometryError.Invalid("a window of at least 1 that fits the image, moved at least 1")
+    OutH I64 = (H - K) / Stride + 1
+    OutW I64 = (W - K) / Stride + 1
+}
+
+# y = the maximum of each window, per channel: x n x H W C, y n x OutH OutW C; where keeps, for each output, the window
+# position ky K + kx that held it (the first of equals, in row-major order). The innermost loop is a pixel's channels, in
+# order. Images are split over threads tasks
+fn MaxPool2d<S>(y mut mat.Mat<S>&, where mut mat.Mat<I32>&, x mat.Mat<S>&, p Pool&, threads I64 = 1) {
+    tasks := lesser(threads, x.Rows)
+    if tasks <= 1 {
+        for b in range x.Rows: maxPoolImage(y, where, x, p, b)
+        return
+    }
+    share := (x.Rows + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * share
+            hi := lesser(x.Rows, lo + share)
+            if lo < hi: spawn maxPoolImages(y, where, x, p, lo, hi)
+        }
+    }
+}
+
+fn maxPoolImages<S>(y mut mat.Mat<S>&, where mut mat.Mat<I32>&, x mat.Mat<S>&, p Pool&, lo I64, hi I64) {
+    for b in range lo, hi: maxPoolImage(y, where, x, p, b)
+}
+
+# image b's windows
+fn maxPoolImage<S>(y mut mat.Mat<S>&, where mut mat.Mat<I32>&, x mat.Mat<S>&, p Pool&, b I64) {
+    for oy in range p.OutH {
+        for ox in range p.OutW: maxPoolWindow(y, where, x, p, b, oy, ox)
+    }
+}
+
+# the window of output (oy, ox) of image b: its maximum per channel into y, the position holding it into where
+fn maxPoolWindow<S>(y mut mat.Mat<S>&, where mut mat.Mat<I32>&, x mat.Mat<S>&, p Pool&, b I64, oy I64, ox I64) {
+    C := p.C
+    img := x.Off + b * x.Ld
+    o I64 = (oy * p.OutW + ox) * C
+    first I64 = img + (oy * p.Stride * p.W + ox * p.Stride) * C
+    for c in range C {
+        y[b, o + c] = x.Data[first + c]
+        where[b, o + c] = 0
+    }
+    for ky in range p.K {
+        for kx in range p.K {
+            if ky + kx == 0: continue
+            at I64 = img + ((oy * p.Stride + ky) * p.W + ox * p.Stride + kx) * C
+            place I32 = I32(ky * p.K + kx)
+            for c in range C {
+                v := x.Data[at + c]
+                if not (v > y[b, o + c]): continue
+                y[b, o + c] = v
+                where[b, o + c] = place
+            }
+        }
+    }
+}
+
+# dx = 0 with each output's gradient added at the input its maximum came from (dx += that, when acc), split over threads
+# tasks by images
+fn MaxPool2dBackward<S>(dx mut mat.Mat<S>&, dy mat.Mat<S>&, where mat.Mat<I32>&, p Pool&, acc Bool, threads I64 = 1) {
+    tasks := lesser(threads, dx.Rows)
+    if tasks <= 1 {
+        unpoolImages(dx, dy, where, p, acc, 0, dx.Rows)
+        return
+    }
+    share := (dx.Rows + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * share
+            hi := lesser(dx.Rows, lo + share)
+            if lo < hi: spawn unpoolImages(dx, dy, where, p, acc, lo, hi)
+        }
+    }
+}
+
+# images lo .. hi's output gradients added into dx where each maximum was
+fn unpoolImages<S>(dx mut mat.Mat<S>&, dy mat.Mat<S>&, where mat.Mat<I32>&, p Pool&, acc Bool, lo I64, hi I64) {
+    like S
+    z S = cast(0, like)
+    C := p.C
+    for b in range lo, hi {
+        if not acc {
+            for i in range dx.Cols: dx[b, i] = z
+        }
+        for oy in range p.OutH {
+            for ox in range p.OutW {
+                o I64 = (oy * p.OutW + ox) * C
+                first I64 = (oy * p.Stride * p.W + ox * p.Stride) * C
+                for c in range C {
+                    at := I64(where[b, o + c])
+                    i := first + ((at / p.K) * p.W + at % p.K) * C + c
+                    dx[b, i] = dx[b, i] + dy[b, o + c]
+                }
+            }
+        }
+    }
+}
+
+# ---- tests ----
+
+# a rows x cols matrix in a larger array - two elements before it, three after each row - its elements normal(0, sd), rounded to S
+fn normal<S>(rows I64, cols I64, like S, r mut rand.Rand&, sd F64 = 1.0) mat.Mat<S> {
+    m := mat.Mat<S>(Array<S>(2 + rows * (cols + 3)), 2, rows, cols, cols + 3)
+    for i in range rows {
+        for j in range cols: m[i, j] = cast(r.Normal() * sd, like)
+    }
+    return m
+}
+
+# rows contiguous, as a convolution's output is
+fn plain<S>(rows I64, cols I64, like S) mat.Mat<S> { return mat.Mat<S>(Array<S>(rows * cols), 0, rows, cols, cols) }
+
+# the convolution by its definition, one output at a time, in F64: the bias beside the weights
+fn direct<S>(x mat.Mat<S>&, w mat.Mat<S>&, b Array<F32>&, s Shape&) mat.Mat<F64> {
+    z F64 = 0.0
+    y := plain(x.Rows, s.Positions() * s.OutC, z)
+    for n in range x.Rows {
+        for p in range s.Positions() {
+            for o in range s.OutC: y[n, p * s.OutC + o] = directOne(x, w, b, s, n, p / s.OutW, p % s.OutW, o)
+        }
+    }
+    return y
+}
+
+# output channel o of image n at (oy, ox), summed over its window
+fn directOne<S>(x mat.Mat<S>&, w mat.Mat<S>&, b Array<F32>&, s Shape&, n I64, oy I64, ox I64, o I64) F64 {
+    z F64 = 0.0
+    total F64 = F64(b[o]) if b.Len() > 0 else 0.0
+    for c in range s.C {
+        for ky in range s.K {
+            iy := oy * s.Stride - s.Pad + ky
+            if iy < 0 or iy >= s.H: continue
+            for kx in range s.K {
+                ix := ox * s.Stride - s.Pad + kx
+                if ix < 0 or ix >= s.W: continue
+                total += cast(w[o, (c * s.K + ky) * s.K + kx], z) * cast(x[n, (iy * s.W + ix) * s.C + c], z)
+            }
+        }
+    }
+    return total
+}
+
+# the largest difference between a and b (the same shape)
+fn gap<S, T>(a mat.Mat<S>&, b mat.Mat<T>&) F64 {
+    z F64 = 0.0
+    d F64 = 0.0
+    for i in range a.Rows {
+        for j in range a.Cols: d = d.Max((cast(a[i, j], z) - cast(b[i, j], z)).Abs())
+    }
+    return d
+}
+
+fn sameBits<S>(a mat.Mat<S>&, b mat.Mat<S>&) Bool {
+    for i in range a.Rows {
+        for j in range a.Cols {
+            if a[i, j] != b[i, j]: return false
+        }
+    }
+    return true
+}
+
+# the shapes the tests convolve: a first layer, strided and padded, one the kernel exactly covers, a large kernel
+fn shapes() Array<Shape> {
+    return Array<Shape>[Shape(1, 5, 5, 2, 3, 1, 1)!, Shape(3, 7, 6, 4, 3, 2, 1)!, Shape(2, 4, 4, 3, 2, 1, 0)!, Shape(2, 9, 9, 5, 5, 3, 2)!]
+}
+
+test Shape "a shape no convolution can have fails where it is made, saying why" {
+    seen I64 = 0
+    try Shape(0, 5, 5, 2, 3, 1, 1) catch GeometryError.Invalid { seen++ }
+    try Shape(1, 5, 5, 2, 3, 0, 1) catch GeometryError.Invalid { seen++ }
+    try Shape(1, 5, 5, 2, 3, 1, 3) catch GeometryError.Invalid { seen++ }
+    try Shape(1, 2, 5, 2, 3, 1, 0) catch GeometryError.Invalid { seen++ }
+    try Pool(1, 2, 5, 3, 1) catch GeometryError.Invalid { seen++ }
+    assert seen == 5
+    s := Shape(3, 28, 28, 16, 3, 1, 1)!
+    assert s.OutH == 28 and s.Patch() == 27 and s.Positions() == 784
+}
+
+test Conv2d "a convolution as one product of its patches equals its definition: padding, strides, channels, threads" {
+    r := rand.Rand(61)
+    for shape in shapes() {
+        n I64 = 3
+        x := normal(n, shape.H * shape.W * shape.C, F64(0), r)
+        w := normal(shape.OutC, shape.Patch(), F64(0), r)
+        b := Array<F32>[F32(r.Normal()) for _ in range shape.OutC]
+        want := direct(x, w, b, shape)
+        for threads in Array<I64>[1, 3] {
+            y := plain(n, shape.Positions() * shape.OutC, F64(0))
+            ws := gemm.Workspace<F64>(threads)
+            Conv2d(ws, y, x, w, shape, gemm.Epilogue.Bias(b))
+            # the bias is F32 (gemm's epilogue), added in F64 to the sum: its rounding is the bound
+            assert gap(y, want) < 1e-6
+            yn := plain(n, shape.Positions() * shape.OutC, F64(0))
+            Conv2d(ws, yn, x, w, shape)
+            assert gap(yn, direct(x, w, Array<F32>(0), shape)) < 1e-12
+        }
+    }
+}
+
+# the forward as it was made before GemmLeft: im2col, one product of the patches, the bias
+fn byIm2col<S, A>(ws mut gemm.Workspace<A>&, y mut mat.Mat<S>&, x mat.Mat<S>&, w mat.Mat<S>&, b Array<F32>&, s Shape&) {
+    cols := plain(x.Rows * s.Positions(), s.Patch(), x[0, 0])
+    Im2col(cols, x, s)
+    gemm.Gemm(ws, s.Rows(y), cols, false, w, true, 1, 0, gemm.Epilogue.Bias(b))
+}
+
+fn forwardAgrees<S, A>(like S, acc A, r mut rand.Rand&) {
+    for shape in Array<Shape>[Shape(1, 28, 28, 16, 3, 1, 1)!, Shape(16, 14, 14, 32, 3, 1, 1)!, Shape(3, 7, 6, 4, 3, 2, 1)!, Shape(2, 9, 9, 5, 5, 3, 2)!] {
+        n I64 = 40
+        x := normal(n, shape.H * shape.W * shape.C, like, r)
+        w := normal(shape.OutC, shape.Patch(), like, r, 0.3)
+        b := Array<F32>[F32(r.Normal()) for _ in range shape.OutC]
+        for threads in Array<I64>[1, 4] {
+            ws := gemm.Workspace<A>(threads)
+            want := plain(n, shape.Positions() * shape.OutC, like)
+            byIm2col(ws, want, x, w, b, shape)
+            y := plain(n, shape.Positions() * shape.OutC, like)
+            Conv2d(ws, y, x, w, shape, gemm.Epilogue.Bias(b))
+            assert sameBits(y, want)
+        }
+    }
+}
+
+test Conv2d "the forward through GemmLeft gives exactly what im2col, a product and the bias give, in F32, F64 and BF16" {
+    r := rand.Rand(63)
+    forwardAgrees(F32(0), F32(0), r)
+    forwardAgrees(F64(0), F64(0), r)
+    forwardAgrees(BF16(0), F32(0), r)
+}
+
+test Conv2d "BF16 storage: the forward is the F64 convolution of the same values, to the rounding of its result" {
+    r := rand.Rand(64)
+    s := Shape(3, 9, 9, 5, 3, 1, 1)!
+    x := normal(4, s.H * s.W * s.C, BF16(0), r)
+    w := normal(s.OutC, s.Patch(), BF16(0), r, 0.3)
+    y := plain(4, s.Positions() * s.OutC, BF16(0))
+    ws := gemm.Workspace<F32>(2)
+    Conv2d(ws, y, x, w, s)
+    want := direct(x, w, Array<F32>(0), s)
+    # a BF16 result keeps 8 bits: its error is at most one part in 2^8 of the value, the sum in F32 adds far less
+    for i in range y.Rows {
+        for j in range y.Cols: assert (F64(y[i, j]) - want[i, j]).Abs() <= want[i, j].Abs() / 128.0 + 1e-6
+    }
+}
+
+test Im2col "col2im is im2col's transpose: <im2col(x), c> = <x, col2im(c)>, and threads change nothing" {
+    r := rand.Rand(62)
+    s := Shape(2, 6, 5, 1, 3, 2, 1)!
+    x := normal(2, s.H * s.W * s.C, F64(0), r)
+    c := normal(2 * s.Positions(), s.Patch(), F64(0), r)
+    cols := plain(2 * s.Positions(), s.Patch(), F64(0))
+    Im2col(cols, x, s)
+    back := plain(2, s.H * s.W * s.C, F64(0))
+    Col2im<F64, F64>(back, c, s, false)
+    d F64 = 0.0
+    for i in range cols.Rows {
+        for j in range cols.Cols: d += cols[i, j] * c[i, j]
+    }
+    for i in range 2 {
+        for j in range back.Cols: d -= x[i, j] * back[i, j]
+    }
+    assert d * d < 1e-20
+    # many images at several thread counts: the same patches, the same sums
+    big := Shape(3, 12, 12, 4, 3, 1, 1)!
+    xb := normal(24, big.H * big.W * big.C, F32(0), r)
+    one := plain(24 * big.Positions(), big.Patch(), F32(0))
+    Im2col(one, xb, big)
+    cb := normal(24 * big.Positions(), big.Patch(), F32(0), r)
+    oneBack := plain(24, big.H * big.W * big.C, F32(0))
+    Col2im<F32, F32>(oneBack, cb, big, false)
+    for threads in Array<I64>[2, 5] {
+        many := plain(24 * big.Positions(), big.Patch(), F32(0))
+        Im2col(many, xb, big, threads)
+        assert sameBits(one, many)
+        manyBack := plain(24, big.H * big.W * big.C, F32(0))
+        Col2im<F32, F32>(manyBack, cb, big, false, threads)
+        assert sameBits(oneBack, manyBack)
+    }
+}
+
+# the loss sum(dy y) of a convolution, y computed by definition in F64
+fn loss(x mat.Mat<F64>&, w mat.Mat<F64>&, b Array<F32>&, dy mat.Mat<F64>&, s Shape&) F64 {
+    y := direct(x, w, b, s)
+    total F64 = 0.0
+    for i in range y.Rows {
+        for j in range y.Cols: total += y[i, j] * dy[i, j]
+    }
+    return total
+}
+
+test Conv2dBackward "the gradients against central differences of the definition: dx, dw and db, with and without accumulation" {
+    r := rand.Rand(65)
+    s := Shape(2, 6, 5, 3, 3, 2, 1)!
+    n I64 = 2
+    x := normal(n, s.H * s.W * s.C, F64(0), r)
+    w := normal(s.OutC, s.Patch(), F64(0), r)
+    b := Array<F32>(0)
+    dy := normal(n, s.Positions() * s.OutC, F64(0), r)
+    dyc := plain(n, s.Positions() * s.OutC, F64(0))
+    for i in range n {
+        for j in range dy.Cols: dyc[i, j] = dy[i, j]
+    }
+    dx := plain(n, x.Cols, F64(0))
+    dw := plain(s.OutC, s.Patch(), F64(0))
+    db := Array<F64>(s.OutC)
+    cols := plain(n * s.Positions(), s.Patch(), F64(0))
+    ws := gemm.Workspace<F64>(2)
+    Conv2dBackward(ws, dyc, x, w, s, dx, false, dw, false, db, false, cols, 2)
+    h F64 = 1e-6
+    for k in Array<I64>[0, 7, 19, 33, 50, 58] {
+        i := k / x.Cols
+        j := k % x.Cols
+        keep := x[i, j]
+        x[i, j] = keep + h
+        up := loss(x, w, b, dy, s)
+        x[i, j] = keep - h
+        down := loss(x, w, b, dy, s)
+        x[i, j] = keep
+        assert (dx[i, j] - (up - down) / (2.0 * h)).Abs() < 1e-7
+    }
+    for k in Array<I64>[0, 4, 11, 30, 41, 53] {
+        i := k / s.Patch()
+        j := k % s.Patch()
+        keep := w[i, j]
+        w[i, j] = keep + h
+        up := loss(x, w, b, dy, s)
+        w[i, j] = keep - h
+        down := loss(x, w, b, dy, s)
+        w[i, j] = keep
+        assert (dw[i, j] - (up - down) / (2.0 * h)).Abs() < 1e-7
+    }
+    for o in range s.OutC {
+        sum F64 = 0.0
+        for i in range n {
+            for p in range s.Positions(): sum += dy[i, p * s.OutC + o]
+        }
+        assert (db[o] - sum).Abs() < 1e-12
+    }
+    # accumulated onto what was there: twice the gradient
+    dx0 := Array<F64>[dx.Data[e] for e in range dx.Data.Len()]
+    dw0 := Array<F64>[dw.Data[e] for e in range dw.Data.Len()]
+    db0 := Array<F64>[db[e] for e in range db.Len()]
+    cols2 := plain(n * s.Positions(), s.Patch(), F64(0))
+    Conv2dBackward(ws, dyc, x, w, s, dx, true, dw, true, db, true, cols2, 1)
+    for e in range dx0.Len(): assert (dx.Data[e] - 2.0 * dx0[e]).Abs() < 1e-12
+    for e in range dw0.Len(): assert (dw.Data[e] - 2.0 * dw0[e]).Abs() < 1e-12
+    for e in range db0.Len(): assert (db[e] - 2.0 * db0[e]).Abs() < 1e-12
+    # a gradient not wanted is left alone
+    skip := plain(0, 0, F64(0))
+    Conv2dBackward(ws, dyc, x, w, s, skip, false, skip, false, Array<F64>(0), false, cols2, 1)
+    for e in range dw0.Len(): assert (dw.Data[e] - 2.0 * dw0[e]).Abs() < 1e-12
+}
+
+test Pool "max pooling keeps each window's maximum per channel, and its backward adds the gradient there" {
+    p := Pool(2, 4, 4, 2, 2)!
+    x := plain(1, 32, F64(0))
+    for i in range 32: x[0, i] = F64((i * 7) % 32)
+    y := plain(1, p.OutH * p.OutW * p.C, F64(0))
+    where := plain(1, p.OutH * p.OutW * p.C, I32(0))
+    MaxPool2d(y, where, x, p)
+    for o in range 8 {
+        oy, ox, c := o / 4, o / 2 % 2, o % 2
+        window := Array<F64>[x[0, ((2 * oy + k / 2) * 4 + 2 * ox + k % 2) * 2 + c] for k in range 4]
+        assert try window.Max() == y[0, o]
+    }
+    dy := plain(1, 8, F64(0))
+    for i in range 8: dy[0, i] = F64(i + 1)
+    dx := plain(1, 32, F64(0))
+    MaxPool2dBackward(dx, dy, where, p, false)
+    total F64 = 0.0
+    for i in range 32: total += dx[0, i]
+    assert total == 36.0
+    for i in range 32 {
+        if dx[0, i] != 0.0: assert x[0, i] == y[0, I64(dx[0, i]) - 1]
+    }
+}
+
+test Pool "pooling in tasks and in BF16: the same maxima and places, the first of equal values, at every thread count" {
+    r := rand.Rand(66)
+    p := Pool(3, 9, 9, 3, 2)!
+    x := normal(10, 9 * 9 * 3, BF16(0), r)
+    # ties: a rounded BF16 repeats values
+    one := plain(10, p.OutH * p.OutW * p.C, BF16(0))
+    oneAt := plain(10, p.OutH * p.OutW * p.C, I32(0))
+    MaxPool2d(one, oneAt, x, p)
+    for threads in Array<I64>[2, 4] {
+        y := plain(10, p.OutH * p.OutW * p.C, BF16(0))
+        at := plain(10, p.OutH * p.OutW * p.C, I32(0))
+        MaxPool2d(y, at, x, p, threads)
+        assert sameBits(y, one) and sameBits(at, oneAt)
+    }
+    # every kept value is the window's largest
+    for b in range 10 {
+        for o in range one.Cols {
+            oc := o % 3
+            pos := o / 3
+            oy := pos / p.OutW
+            ox := pos % p.OutW
+            for k in range 9 {
+                v := x[b, ((oy * 2 + k / 3) * 9 + ox * 2 + k % 3) * 3 + oc]
+                assert v <= one[b, o]
+            }
+        }
+    }
+}

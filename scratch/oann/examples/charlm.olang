@@ -1,0 +1,95 @@
+# The character transformer on tiny Shakespeare (M2 and M3, docs/redesign.md 4.3): models/gpt's `GptConfig.Char` - GPT-2's
+# decoder blocks, 4 layers of width 128 with 4 heads over sequences of 64 characters, tied embeddings - in batches of 16
+# sequences, trained by nn/train's `Fit`: AdamW (beta2 0.99, weight decay 0.1) at a rate warmed up over 100 steps and then
+# down a cosine to 1e-4, the gradient clipped to norm 1. The validation loss is measured every 250 steps on the same 10
+# batches of 16 windows of the held-out tenth; at the end the run's checkpoint is data/shakespeare/charlm.ckpt
+# (charlm-bf16.ckpt for BF16) and a sample is generated through the key-value cache; the run's record is
+# build/charlm.jsonl. examples/charlm_sample.olang and charlm_int8.olang read the checkpoint.
+# Arguments, all optional: the steps (2000), the seed (1), the threads (1), the dropout (0), the characters to generate
+# (500), and "bf16" last for mixed precision (BF16 values and gradients, F32 masters). Build and run from the repository's
+# root: olang build -output build/examples_charlm examples/charlm.olang && build/examples_charlm 2000 1 1
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/text"
+import "../nn/generate"
+import "../nn/optim"
+import "../nn/train"
+import "../models/gpt"
+
+sequences I64 = 16
+
+# the number argument i, or fallback when there are fewer arguments
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn main() ? {
+    all := os.Args()
+    bf16 Bool = all.Len() > 1 and all[all.Len() - 1] == "bf16"
+    args := all[:all.Len() - 1] if bf16 else all
+    try os.MkDirAll("data/shakespeare")
+    try text.Fetch("data/shakespeare/input.txt", text.Shakespeare)
+    c := try text.Corpus.Load("data/shakespeare/input.txt")
+    if bf16 {
+        g := graph.Graph<BF16>(sequences, try number(args, 3, 1))
+        cfg := gpt.GptConfig.Char(c.Size(), try dropout(args))
+        m := gpt.Gpt.New(g, cfg)
+        lm := m.Lm(g)
+        try g.Plan(rand.Rand(U64(try number(args, 2, 1))))
+        o := optim.AdamW(g.Masters(), g.ParamGrads(), beta2 = 0.99, decay = 0.1, spans = optim.Spans(g))
+        try run(g, cfg, lm, o, c, args, "data/shakespeare/charlm-bf16.ckpt")
+    } else {
+        g := graph.Graph<F32>(sequences, try number(args, 3, 1))
+        cfg := gpt.GptConfig.Char(c.Size(), try dropout(args))
+        m := gpt.Gpt.New(g, cfg)
+        lm := m.Lm(g)
+        try g.Plan(rand.Rand(U64(try number(args, 2, 1))))
+        o := optim.AdamW(g.Params(), g.ParamGrads(), beta2 = 0.99, decay = 0.1, spans = optim.Spans(g))
+        try run(g, cfg, lm, o, c, args, "data/shakespeare/charlm.ckpt")
+    }
+}
+
+fn dropout(args Array<String&>&) F64 ? json.Error {
+    if args.Len() <= 4: return 0.0
+    return try json.Json.Parse(args[4]).AsNum()
+}
+
+fn run<T, O>(g mut graph.Graph<T>&, cfg gpt.GptConfig&, m train.LanguageModel&, o mut O&, c text.Corpus&, args Array<String&>&, checkpointPath String&) ? {
+    steps := try number(args, 1, 2000)
+    seed := try number(args, 2, 1)
+    count := try number(args, 5, 500)
+    trainSet := text.Windows(c.Train(), cfg.Ctx, U64(seed))
+    valSet := text.Windows(c.Val(), cfg.Ctx)
+    try io.Put(("tiny Shakespeare: " + $(c.Ids.Len()) + " characters, a vocabulary of " + $c.Size() + "; " + $cfg.Layers + " layers of " + $cfg.Dim +
+        ", " + $cfg.Heads + " heads, context " + $cfg.Ctx + ", batches of " + $sequences + " x " + $cfg.Ctx + ", " + $g.ParamCount + " parameters, " +
+        $g.Threads + " threads, " + $("BF16 with F32 masters" if g.HasMasters() else "F32") + ", an arena of " +
+        $(F64(g.ArenaBytes()) / 1048576.0).Fixed(1) + " MB\n"))
+    try io.Put("step 0: validation loss " + $(try train.LmEvaluate(g, m, valSet, 10)).Fixed(4) + "\n")
+    tcfg := train.Config(steps, optim.WarmupCosine(1e-3, 100, steps, 1e-4), Name = "charlm" + $("-bf16" if g.HasMasters() else "")
+        Seed = seed, Checkpoint = checkpointPath, Log = "build/charlm.jsonl")
+    last := try train.Fit(g, m, trainSet, valSet, o, tcfg, fn(p) {
+        io.Put(("step " + $p.Step + ": train loss " + $p.Loss.Fixed(4) + ", gradient norm " + $p.Norm.Fixed(3) + ", rate " + $p.Rate.Fixed(6) +
+            ", " + $(p.Seconds * 1e3 / F64(p.Step)).Fixed(1) + " ms a step" +
+            $((", validation loss " + $p.Validation.Fixed(4)) if p.Validation == p.Validation else "") + "\n"))!
+    })
+    try io.Put(("trained " + $steps + " steps in " + $last.Seconds.Fixed(1) + " s: " + $(last.Seconds * 1e3 / F64(steps)).Fixed(1) +
+        " ms a step, " + $(F64(steps * g.Batch * cfg.Ctx) / last.Seconds).Fixed(0) + " tokens a second\n"))
+
+    # a sample: the same model on an F32 graph for decoding one sequence, its parameters loaded from the checkpoint
+    gen := graph.Graph<F32>(1, 1, graph.Mode.Captured, true)
+    gm := gpt.Gpt.New(gen, cfg).Lm(gen, false)
+    r := rand.Rand(U64(seed))
+    try gen.Plan(r)
+    try gen.Load(checkpointPath)
+    t1 := time.Now()
+    sample := try generate.Cached(gen, gm, c, "\n", count, 0.8, r)
+    s1 := time.Since(t1)
+    try io.Put(("--- " + $count + " characters, temperature 0.8, " + $(F64(count) / (F64(s1) * 1e-9)).Fixed(0) +
+        " characters a second (a key-value cache) ---\n" + $sample + "\n---\n"))
+}

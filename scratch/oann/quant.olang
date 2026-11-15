@@ -1,0 +1,929 @@
+# quant - INT8 post-training quantization for inference: a trained network's dense and convolution layers run as
+# products of 8-bit integers accumulated in 32 bits, dequantized with their bias (and ReLU) as each tile of the result
+# leaves the registers.
+#
+# Weights are quantized once, symmetrically per output channel (PyTorch's and TensorRT's default for weights): row n of
+# W (Out x In, PyTorch's layout) has the scale sw[n] = max |W[n, k]| / 127 and the values q[n, k] = round(W[n, k] /
+# sw[n]) in -127 .. 127. Activations are quantized per tensor, either dynamically - from the batch's own range, each
+# time - or statically, from a range calibrated once over a calibration set (Range). A range [lo, hi] decides an
+# affine map onto U8: a tensor with no negative values (an image's pixels, ReLU's outputs) takes all 256 levels,
+# s = hi / 255 and zero point 0; one with negatives is symmetric about zero, s = max(|lo|, |hi|) / 127 and zero point
+# 128 - so x ~ s (a - zp) with a in 0 .. 255. The product's accumulator holds sum_k a[i, k] q[n, k], and
+#     y[i, n] = s sw[n] (acc[i, n] - zp sum_k q[n, k]) + b[n]
+# the column sums of q being kept with the weights (FBGEMM's and oneDNN's compensation for a zero point).
+#
+# Unsigned activations times signed weights is the shape the hardware's integer dot products take (VNNI's vpdpbusd,
+# NEON's usdot), and it is also the one form LLVM 18 turns into a single multiply-add instruction from plain code: the
+# accumulating step acc + I32(a) I32(q), a zero-extended from 8 bits, becomes vpdpwssd on AVX-512 VNNI - one product
+# per 32-bit lane, eight to a 256-bit instruction (DESIGN.md section 22: what that reaches, and what linalg would
+# need to reach the four-way dot product). The tile follows linalg's for 32-bit elements, sized for the registers
+# that instruction uses - 6 x 32 on AVX-512 and 6 x 16 on AVX, twice the rows for a thin output one vector wide, 4 x 12
+# on SSE. The weights are packed once, by their quantization: column panels of the tile's width, step by step. The
+# activations are quantized row by row - one pass in order, a convolution's patches runs of pixels - and a tile's rows
+# are packed step by step as each product begins them, a byte moved per value for all of the output's columns.
+
+import "linalg"
+import "std/time"
+import "conv"
+
+# ---- the tile ----
+
+# the I32 elements of one vector register of the target
+fn lanes() I64 { return TargetVectorBits / 32 }
+
+# the tile's columns: two vectors (three on SSE), or one for a thin output
+fn wideCols() I64 {
+    if TargetVectorBits >= 512: return 32
+    if TargetVectorBits >= 256: return 16
+    return 12
+}
+
+# the tile's rows for a panel of cols columns: the accumulators, a step's columns of weights and a broadcast activation
+# fill the vector registers - and a thin tile, half as wide, has twice the rows (12 x 16 and 6 x 32 on AVX-512, 12 x 8
+# and 6 x 16 on AVX, 4 x 4 and 4 x 12 on SSE). Measured on AVX-512 (bench/int8): 6 x 32 the faster wide tile by 5-10%
+# over 12 x 16, which is 25% faster for an output of sixteen
+fn tileRows(cols I64) I64 {
+    if TargetVectorBits < 256: return 4
+    return 12 if cols <= lanes() else 6
+}
+
+type wideTile struct() { }
+type thinTile struct() { }
+
+fn colsOf<S>(sh S) I64 {
+    return match S {
+        case wideTile: wideCols()
+        case thinTile: lanes()
+    }
+}
+
+# the accumulators of one tile, kept in registers by the micro-kernel (indexed only at constants) - room for 12 x 32
+type tile struct() {
+    v := Array<I32>(384)
+}
+
+# ---- weights ----
+
+# a dense layer's or a convolution's weights quantized: Out x In, per output channel. The values are kept as the
+# kernel reads them - column panels of Cols outputs (zeros past Out), panel p's step k holding outputs p Cols .. at
+# (p In + k) Cols - with each output's scale and the sum of its quantized values
+type Weights struct(Out I64, In I64) {
+    Out
+    In
+    Cols I64 = wideCols() if Out > lanes() else lanes()
+    Mr I64 = tileRows(Cols)
+    Panels I64 = (Out + Cols - 1) / Cols
+    Q mut Array<I8>& = Array<I8>(Panels * In * Cols)
+    Scale mut Array<F32>& = Array<F32>(Out)
+    Sum mut Array<I32>& = Array<I32>(Out)
+}
+
+# w (Out x In) quantized, symmetrically per row: q = round(w / s) to nearest even, s = max |w| / 127 (1 for a row of
+# zeros)
+fn Weights.Quantize<T>(w linalg.Matrix<T>&) Weights {
+    q mut Weights& = Weights(w.Rows, w.Cols)
+    nr := q.Cols
+    for n in range w.Rows {
+        row := w.Row(n)
+        m F64 = 0.0
+        for k in range row.Len(): m = m.Max(F64(row[k]).Abs())
+        s F64 = m / 127.0 if m > 0.0 else 1.0
+        sum I32 = 0
+        base I64 = (n / nr) * w.Cols * nr + n % nr
+        for k in range row.Len() {
+            v := I8((F64(row[k]) / s).RoundEven().Clamp(-127.0, 127.0))
+            q.Q[base + k * nr] = v
+            sum += I32(v)
+        }
+        q.Scale[n] = F32(s)
+        q.Sum[n] = sum
+    }
+    return q
+}
+
+# a convolution's weights (OutC x C K K, PyTorch's [C][K][K] columns) quantized with their columns in the patches'
+# order, [K][K][C] (Activations.Patches)
+fn Weights.QuantizeConv<T>(w linalg.Matrix<T>&, s conv.Shape&) Weights {
+    assert w.Rows == s.OutC and w.Cols == s.Patch()
+    KK I64 = s.K * s.K
+    p := linalg.Matrix<T>(w.Rows, w.Cols)
+    for n in range w.Rows {
+        for c in range s.C {
+            for j in range KK: p.Set(n, j * s.C + c, w.Get(n, c * KK + j))
+        }
+    }
+    return Weights.Quantize(p)
+}
+
+# the quantized value of W[n, k]
+fn (w Weights&) At(n I64, k I64) I8 {
+    return w.Q[(n / w.Cols) * w.In * w.Cols + k * w.Cols + n % w.Cols]
+}
+
+# the weights as they are represented: q[n, k] sw[n]
+fn (w Weights&) Dequantize() linalg.Matrix<F32> {
+    out mut linalg.Matrix<F32>& = linalg.Matrix<F32>(w.Out, w.In)
+    for n in range w.Out {
+        for k in range w.In: out.Set(n, k, F32(w.At(n, k)) * w.Scale[n])
+    }
+    return out
+}
+
+# the bytes the weights take, scales and sums included (the panels' padding counted)
+fn (w Weights&) Bytes() I64 {
+    return w.Q.Len() + 4 * w.Scale.Len() + 4 * w.Sum.Len()
+}
+
+# ---- activations ----
+
+# the range a tensor is quantized over - observed on a batch (dynamic quantization) or over a calibration set (static)
+type Range struct() {
+    Lo F32 = 0.0
+    Hi F32 = 0.0
+    Seen Bool = false
+}
+
+# sixteen running minima and maxima, combined at the end - what lets a range be observed in vector registers
+type bounds struct() {
+    lo := Array<F32>(16)
+    hi := Array<F32>(16)
+}
+
+# the range widened to take every element of x
+fn (r mut Range&) Observe(x linalg.Matrix<F32>&) {
+    if x.Rows == 0 or x.Cols == 0: return
+    first F32 = r.Lo if r.Seen else x.Get(0, 0)
+    b := bounds()
+    for j in range 16 {
+        b.lo[j] = first
+        b.hi[j] = r.Hi if r.Seen else first
+    }
+    # a matrix whose rows are contiguous is one run
+    runs I64 = 1 if x.Contiguous() else x.Rows
+    n I64 = x.Rows * x.Cols if x.Contiguous() else x.Cols
+    for i in range runs {
+        row := x.Data[i * x.Stride:i * x.Stride + n]
+        whole I64 = row.Len() - row.Len() % 16
+        for k in range 0, whole, 16 {
+            for j in range 16 {
+                v := row[k + j]
+                b.lo[j] = v if v < b.lo[j] else b.lo[j]
+                b.hi[j] = v if v > b.hi[j] else b.hi[j]
+            }
+        }
+        for k in range whole, row.Len() {
+            v := row[k]
+            b.lo[0] = v if v < b.lo[0] else b.lo[0]
+            b.hi[0] = v if v > b.hi[0] else b.hi[0]
+        }
+    }
+    lo F32 = b.lo[0]
+    hi F32 = b.hi[0]
+    for j in range 1, 16 {
+        lo = b.lo[j] if b.lo[j] < lo else lo
+        hi = b.hi[j] if b.hi[j] > hi else hi
+    }
+    r.Lo = lo
+    r.Hi = hi
+    r.Seen = true
+}
+
+# the scale and zero point of a range: all 256 levels for one with no negatives, else symmetric about zero
+fn (r Range&) Scale() F32, I32 {
+    if r.Lo >= 0.0: return (r.Hi / 255.0 if r.Hi > 0.0 else 1.0), 0
+    m F32 = -r.Lo if -r.Lo > r.Hi else r.Hi
+    return m / 127.0, 128
+}
+
+# activations quantized to U8: a Rows x Cols matrix, row by row, x ~ Step (a - Zero) - read by the micro-kernel where
+# they are, a tile's rows at once (linalg's in-place left operand), so quantizing is one pass in order and a
+# convolution's patches are runs of pixels copied. Room for Elements values: the rows and twelve more, which hold the
+# zero point so that a tile reaching past the last row reads values that are never stored. Pixels holds the U8 images
+# a convolution's patches are copied from
+type Activations struct(Elements I64) {
+    Elements
+    Rows I64 = 0
+    Cols I64 = 0
+    Step F32 = 1.0
+    Zero I32 = 0
+    Data mut Array<U8>& = Array<U8>(Elements)
+    Pixels mut Array<U8>& = Array<U8>(0)
+}
+
+# the room a rows x cols matrix takes, a tile's rows past it included
+fn ElementsFor(rows I64, cols I64) I64 {
+    return (rows + 12) * cols
+}
+
+# the shape, and the step and zero point taken from r
+fn (a mut Activations&) begin(rows I64, cols I64, r Range&) {
+    assert (rows + 12) * cols <= a.Elements, "more values than the activations have room for"
+    a.Rows = rows
+    a.Cols = cols
+    s, zp := r.Scale()
+    a.Step = s
+    a.Zero = zp
+}
+
+# the twelve rows past the last filled with the zero point
+fn (a mut Activations&) pad() {
+    z := U8(a.Zero)
+    d := a.Data
+    for i in range a.Rows * a.Cols, (a.Rows + 12) * a.Cols: d[i] = z
+}
+
+# x quantized over the range r: a = clamp(round(x / Step) + Zero, 0, 255), ties to even
+fn (a mut Activations&) Quantize(x linalg.Matrix<F32>&, r Range&) {
+    a.begin(x.Rows, x.Cols, r)
+    K := a.Cols
+    inv F32 = 1.0 / a.Step
+    zp F32 = F32(a.Zero)
+    d := a.Data
+    if x.Contiguous() {
+        xs := x.Data
+        for k in range a.Rows * K: d[k] = quantizeOne(xs[k], inv, zp)
+    } else {
+        for i in range a.Rows {
+            row := x.Row(i)
+            o I64 = i * K
+            for k in range K: d[o + k] = quantizeOne(row[k], inv, zp)
+        }
+    }
+    a.pad()
+}
+
+# x dynamically quantized: over its own range
+fn (a mut Activations&) QuantizeDynamic(x linalg.Matrix<F32>&) {
+    r := Range()
+    r.Observe(x)
+    a.Quantize(x, r)
+}
+
+fn quantizeOne(v F32, inv F32, zp F32) U8 {
+    q F32 = (v * inv).RoundEven() + zp
+    return U8(0.0 if q < 0.0 else (255.0 if q > 255.0 else q))
+}
+
+# the patches of a convolution (conv.Shape s) of the images x (n x H W C), quantized over r: row (b OutH + oy) OutW +
+# ox is the patch of output pixel (oy, ox) of image b, its columns [ky][kx][c] - the order the image holds them in
+# (channels last), so that a window's row of K pixels is one run of K C values - and a pixel off the image the zero
+# point. The weights' columns are in this order too (QuantizeConvWeights). The images are quantized once, into Pixels
+fn (a mut Activations&) Patches(x linalg.Matrix<F32>&, s conv.Shape&, r Range&) {
+    assert x.Cols == s.H * s.W * s.C
+    a.begin(x.Rows * s.Positions(), s.Patch(), r)
+    if a.Pixels.Len() < x.Rows * x.Cols: a.Pixels = Array<U8>(x.Rows * x.Cols)
+    inv F32 = 1.0 / a.Step
+    zp F32 = F32(a.Zero)
+    px := a.Pixels
+    for b in range x.Rows {
+        img := x.Row(b)
+        o I64 = b * x.Cols
+        for k in range x.Cols: px[o + k] = quantizeOne(img[k], inv, zp)
+    }
+    for b in range x.Rows {
+        for p in range s.Positions(): a.patchRow(b * s.Positions() + p, b * x.Cols, p / s.OutW, p % s.OutW, s)
+    }
+    a.pad()
+}
+
+# patch row "row": output pixel (oy, ox) of the image whose quantized pixels start at img in Pixels, a kernel row at a
+# time - one run of K C values where the window's row is on the image, the zero point where it is above or below it
+fn (a mut Activations&) patchRow(row I64, img I64, oy I64, ox I64, s conv.Shape&) {
+    z := U8(a.Zero)
+    d := a.Data
+    px := a.Pixels
+    KC I64 = s.K * s.C
+    y0 I64 = oy * s.Stride - s.Pad
+    x0 I64 = ox * s.Stride - s.Pad
+    inside Bool = x0 >= 0 and x0 + s.K <= s.W
+    for ky in range s.K {
+        iy I64 = y0 + ky
+        t I64 = row * a.Cols + ky * KC
+        if iy < 0 or iy >= s.H {
+            for j in range KC: d[t + j] = z
+        } else if inside {
+            at I64 = img + (iy * s.W + x0) * s.C
+            for j in range KC: d[t + j] = px[at + j]
+        } else {
+            a.patchPixels(t, img, iy, x0, s)
+        }
+    }
+}
+
+# a kernel row of a window hanging over the image's left or right edge, pixel by pixel into the patches at t: the
+# zero point off the image
+fn (a mut Activations&) patchPixels(t I64, img I64, iy I64, x0 I64, s conv.Shape&) {
+    z := U8(a.Zero)
+    d := a.Data
+    px := a.Pixels
+    for kx in range s.K {
+        ix I64 = x0 + kx
+        o I64 = t + kx * s.C
+        if ix < 0 or ix >= s.W {
+            for c in range s.C: d[o + c] = z
+            continue
+        }
+        at I64 = img + (iy * s.W + ix) * s.C
+        for c in range s.C: d[o + c] = px[at + c]
+    }
+}
+
+# ---- the product ----
+
+# y = act(dequantize(a w^T) + bias): y is a.Rows x w.Out, bias one value per output (b's row), act ReLU or none.
+# The tile's rows are the weights' Mr - one, a matrix-vector product per row, for fewer rows than four - and runs of
+# them are split over "threads" tasks
+fn Linear(y mut linalg.Matrix<F32>&, a Activations&, w Weights&, bias Array<F32>&, relu Bool, threads I64 = 1) {
+    assert y.Rows == a.Rows and y.Cols == w.Out
+    LinearInto(y.Data, y.Stride, a, w, bias, relu, threads)
+}
+
+# Linear into a.Rows x w.Out elements of yd, a row every ys - the form for a caller holding y by value
+fn LinearInto(yd mut Array<F32>&, ys I64, a Activations&, w Weights&, bias Array<F32>&, relu Bool, threads I64 = 1) {
+    assert a.Cols == w.In and bias.Len() == w.Out and ys >= w.Out and yd.Len() >= (a.Rows - 1) * ys + w.Out
+    # each output's multiplier and the integer the zero point adds to its accumulator
+    mul := Array<F32>(w.Out)
+    corr := Array<I32>(w.Out)
+    for n in range w.Out {
+        mul[n] = a.Step * w.Scale[n]
+        corr[n] = a.Zero * w.Sum[n]
+    }
+    floor F32 = 0.0 if relu else F32(-Inf)
+    mr I64 = 1 if a.Rows < 4 else w.Mr
+    panels I64 = (a.Rows + mr - 1) / mr
+    linalg.ParallelRows(panels, 1, threads, fn(lo, hi) {
+        # a tile's rows of the activations packed step by step (k mr + i), the order the micro-kernel reads them in
+        pa := Array<U8>(mr * a.Cols)
+        for r in range lo, hi {
+            rows := lesser(mr, a.Rows - r * mr)
+            ao I64 = r * mr * a.Cols
+            if mr > 1 {
+                packRows(pa, a.Data, ao, a.Cols, mr)
+                rowPanel(mr, rows, r * mr, pa, 0, a.Cols, w, yd, ys, mul, corr, bias, floor)
+            } else {
+                rowPanel(mr, rows, r * mr, a.Data, ao, a.Cols, w, yd, ys, mul, corr, bias, floor)
+            }
+        }
+    })
+}
+
+# rows i0 .. i0 + rows of y, their activations' tile at src[so ..], by every column panel of w
+fn rowPanel(mr I64, rows I64, i0 I64, src Array<U8>&, so I64, K I64, w Weights&, yd mut Array<F32>&, ys I64, mul Array<F32>&
+        corr Array<I32>&, bias Array<F32>&, floor F32) {
+    for p in range w.Panels {
+        cols := lesser(w.Cols, w.Out - p * w.Cols)
+        bo I64 = p * w.In * w.Cols
+        yo I64 = i0 * ys + p * w.Cols
+        n0 I64 = p * w.Cols
+        if w.Cols > lanes() {
+            product(mr, K, src, so, w.Q, bo, wideTile(), rows, cols, yd, yo, ys, mul, corr, bias, n0, floor)
+        } else {
+            product(mr, K, src, so, w.Q, bo, thinTile(), rows, cols, yd, yo, ys, mul, corr, bias, n0, floor)
+        }
+    }
+}
+
+# rows o / K .. + mr of a (K wide, row by row) into dst step by step: dst[k mr + i] = a[o + i K + k] - for each of
+# the tile's heights a constant, so that a step's rows are written out in one go. Rows past the activations' last are
+# their padding, the zero point
+type rows12 struct() { }
+type rows6 struct() { }
+type rows4 struct() { }
+
+fn packRows(dst mut Array<U8>&, a Array<U8>&, o I64, K I64, mr I64) {
+    if mr == 12 { packRowsOf(dst, a, o, K, rows12()) } else if mr == 6 { packRowsOf(dst, a, o, K, rows6()) } else { packRowsOf(dst, a, o, K, rows4()) }
+}
+
+fn packRowsOf<H>(dst mut Array<U8>&, a Array<U8>&, o I64, K I64, h H) {
+    mr I64 = match H {
+        case rows12: 12
+        case rows6: 6
+        case rows4: 4
+    }
+    for k in range K {
+        for i in range mr: dst[k * mr + i] = a[o + i * K + k]
+    }
+}
+
+
+fn lesser(a I64, b I64) I64 { return a if a < b else b }
+
+fn product<S>(mr I64, depth I64, ap Array<U8>&, ao I64, bp Array<I8>&, bo I64, sh S, rows I64, cols I64, y mut Array<F32>&, yo I64, ldy I64, mul Array<F32>&, corr Array<I32>&, bias Array<F32>&, n0 I64, floor F32) {
+    if mr == 1: micro1(depth, ap, ao, bp, bo, sh, cols, y, yo, mul, corr, bias, n0, floor)
+    else if mr == 12: micro12(depth, ap, ao, bp, bo, sh, rows, cols, y, yo, ldy, mul, corr, bias, n0, floor)
+    else if mr == 6: micro6(depth, ap, ao, bp, bo, sh, rows, cols, y, yo, ldy, mul, corr, bias, n0, floor)
+    else: micro4(depth, ap, ao, bp, bo, sh, rows, cols, y, yo, ldy, mul, corr, bias, n0, floor)
+}
+
+# one row of the tile for one step: acc[base + j] += a q[j] for the tile's nr columns - a zero-extended U8 times a
+# sign-extended I8 accumulated in I32, the shape LLVM makes one multiply-add of
+fn rowStep(acc mut tile&, base I64, a U8, bp Array<I8>&, b I64, nr I64) {
+    x := I32(a)
+    for j in range nr: acc.v[base + j] = acc.v[base + j] + x * I32(bp[b + j])
+}
+
+# the micro-kernels: the MR x NR tile summed over the depth, each row of a step written out on its own line so that
+# every accumulator's index is a constant (linalg's micro-kernels, for integers), then stored
+fn micro12<S>(depth I64, ap Array<U8>&, ao I64, bp Array<I8>&, bo I64, sh S, rows I64, cols I64, y mut Array<F32>&, yo I64, ldy I64, mul Array<F32>&, corr Array<I32>&, bias Array<F32>&, n0 I64, floor F32) {
+    nr := colsOf(sh)
+    acc := tile()
+    for k in range depth {
+        a I64 = ao + k * 12
+        b I64 = bo + k * nr
+        rowStep(acc, 0, ap[a], bp, b, nr)
+        rowStep(acc, nr, ap[a + 1], bp, b, nr)
+        rowStep(acc, 2 * nr, ap[a + 2], bp, b, nr)
+        rowStep(acc, 3 * nr, ap[a + 3], bp, b, nr)
+        rowStep(acc, 4 * nr, ap[a + 4], bp, b, nr)
+        rowStep(acc, 5 * nr, ap[a + 5], bp, b, nr)
+        rowStep(acc, 6 * nr, ap[a + 6], bp, b, nr)
+        rowStep(acc, 7 * nr, ap[a + 7], bp, b, nr)
+        rowStep(acc, 8 * nr, ap[a + 8], bp, b, nr)
+        rowStep(acc, 9 * nr, ap[a + 9], bp, b, nr)
+        rowStep(acc, 10 * nr, ap[a + 10], bp, b, nr)
+        rowStep(acc, 11 * nr, ap[a + 11], bp, b, nr)
+    }
+    t := tile()
+    for i in range 12 {
+        for j in range nr: t.v[i * nr + j] = acc.v[i * nr + j]
+    }
+    store(t, nr, rows, cols, y, yo, ldy, mul, corr, bias, n0, floor)
+}
+
+fn micro6<S>(depth I64, ap Array<U8>&, ao I64, bp Array<I8>&, bo I64, sh S, rows I64, cols I64, y mut Array<F32>&, yo I64, ldy I64, mul Array<F32>&, corr Array<I32>&, bias Array<F32>&, n0 I64, floor F32) {
+    nr := colsOf(sh)
+    acc := tile()
+    for k in range depth {
+        a I64 = ao + k * 6
+        b I64 = bo + k * nr
+        rowStep(acc, 0, ap[a], bp, b, nr)
+        rowStep(acc, nr, ap[a + 1], bp, b, nr)
+        rowStep(acc, 2 * nr, ap[a + 2], bp, b, nr)
+        rowStep(acc, 3 * nr, ap[a + 3], bp, b, nr)
+        rowStep(acc, 4 * nr, ap[a + 4], bp, b, nr)
+        rowStep(acc, 5 * nr, ap[a + 5], bp, b, nr)
+    }
+    t := tile()
+    for i in range 6 {
+        for j in range nr: t.v[i * nr + j] = acc.v[i * nr + j]
+    }
+    store(t, nr, rows, cols, y, yo, ldy, mul, corr, bias, n0, floor)
+}
+
+fn micro4<S>(depth I64, ap Array<U8>&, ao I64, bp Array<I8>&, bo I64, sh S, rows I64, cols I64, y mut Array<F32>&, yo I64, ldy I64, mul Array<F32>&, corr Array<I32>&, bias Array<F32>&, n0 I64, floor F32) {
+    nr := colsOf(sh)
+    acc := tile()
+    for k in range depth {
+        a I64 = ao + k * 4
+        b I64 = bo + k * nr
+        rowStep(acc, 0, ap[a], bp, b, nr)
+        rowStep(acc, nr, ap[a + 1], bp, b, nr)
+        rowStep(acc, 2 * nr, ap[a + 2], bp, b, nr)
+        rowStep(acc, 3 * nr, ap[a + 3], bp, b, nr)
+    }
+    t := tile()
+    for i in range 4 {
+        for j in range nr: t.v[i * nr + j] = acc.v[i * nr + j]
+    }
+    store(t, nr, rows, cols, y, yo, ldy, mul, corr, bias, n0, floor)
+}
+
+# one row against a column panel: four partial sums over alternate steps, so that consecutive steps' multiply-adds do
+# not wait for each other, added at the end
+fn micro1<S>(depth I64, ap Array<U8>&, ao I64, bp Array<I8>&, bo I64, sh S, cols I64, y mut Array<F32>&, yo I64, mul Array<F32>&, corr Array<I32>&, bias Array<F32>&, n0 I64, floor F32) {
+    nr := colsOf(sh)
+    acc := tile()
+    whole I64 = depth - depth % 4
+    for k in range 0, whole, 4 {
+        b I64 = bo + k * nr
+        rowStep(acc, 0, ap[ao + k], bp, b, nr)
+        rowStep(acc, nr, ap[ao + k + 1], bp, b + nr, nr)
+        rowStep(acc, 2 * nr, ap[ao + k + 2], bp, b + 2 * nr, nr)
+        rowStep(acc, 3 * nr, ap[ao + k + 3], bp, b + 3 * nr, nr)
+    }
+    for k in range whole, depth: rowStep(acc, 0, ap[ao + k], bp, bo + k * nr, nr)
+    t := tile()
+    for j in range nr: t.v[j] = acc.v[j] + acc.v[nr + j] + acc.v[2 * nr + j] + acc.v[3 * nr + j]
+    store(t, nr, 1, cols, y, yo, 0, mul, corr, bias, n0, floor)
+}
+
+# the tile's rows x cols inside the result dequantized: y = max(F32(acc - corr) mul + bias, floor)
+fn store(t tile&, nr I64, rows I64, cols I64, y mut Array<F32>&, yo I64, ldy I64, mul Array<F32>&, corr Array<I32>&, bias Array<F32>&, n0 I64, floor F32) {
+    for i in range rows {
+        o I64 = yo + i * ldy
+        for j in range cols {
+            v F32 = F32(t.v[i * nr + j] - corr[n0 + j]) * mul[n0 + j] + bias[n0 + j]
+            y[o + j] = v if v > floor else floor
+        }
+    }
+}
+
+# ---- a quantized network ----
+#
+# A Model is a trained network's layers in the order they run, each dense layer and convolution quantized (its weights
+# once, by QuantizeWeights; its input on every call), max pooling in F32. Forward runs a batch of samples, one per row,
+# into the caller's matrix, through two buffers of its own sized for the widest layer, so a forward allocates nothing
+# after its first. Its inputs are quantized dynamically - each layer's from its own batch - until Calibrate has seen a
+# calibration set and Static is set, when each layer's input is quantized over the range calibrated for it (values
+# outside it clamped).
+
+# a layer of a quantized network
+type Layer enum {
+    Dense(w Weights&, b Array<F32>&, relu Bool)
+    Conv(w Weights&, b Array<F32>&, s conv.Shape, relu Bool)
+    Pool(p conv.Pool)
+}
+
+# a network of up to Batch samples a call, each a row of Inputs features
+type Model struct(Batch I64, Inputs I64) {
+    Batch
+    Inputs
+    Threads I64 = 1
+    Static Bool = false
+    Profiling Bool = false
+    Times mut list.List<I64>& = list.List<I64>()
+    Layers mut list.List<Layer>& = list.List<Layer>()
+    Ranges mut list.List<Range>& = list.List<Range>()
+    widths mut list.List<I64>& = list.List<I64>()
+    elements I64 = 0
+    pixels I64 = 0
+    acts mut Activations& = Activations(0)
+    front mut Array<F32>& = Array<F32>(0)
+    back mut Array<F32>& = Array<F32>(0)
+}
+
+# the features of a sample after the last layer added
+fn (m Model&) Outputs() I64 {
+    return try m.widths.Last() catch default m.Inputs
+}
+
+fn (m mut Model&) push(l Layer, width I64, elements I64) {
+    m.Layers.Push(l)
+    m.Ranges.Push(Range())
+    m.Times.Push(0)
+    m.Times.Push(0)
+    m.widths.Push(width)
+    if elements > m.elements: m.elements = elements
+}
+
+# a dense layer y = x w^T + b (w Out x In, b 1 x Out), ReLU after it or not
+fn (m mut Model&) Dense<T>(w linalg.Matrix<T>&, b linalg.Matrix<T>&, relu Bool) {
+    assert w.Cols == m.Outputs() and b.Cols == w.Rows
+    bias mut Array<F32>& = Array<F32>(w.Rows)
+    for n in range w.Rows: bias[n] = F32(b.Get(0, n))
+    m.push(Layer.Dense(Weights.Quantize(w), bias, relu), w.Rows, ElementsFor(m.Batch, w.Cols))
+}
+
+# a convolution (conv.Shape s, its weights w OutC x C K K and bias b), ReLU after it or not
+fn (m mut Model&) Conv<T>(w linalg.Matrix<T>&, b linalg.Matrix<T>&, s conv.Shape, relu Bool) {
+    assert s.H * s.W * s.C == m.Outputs() and w.Rows == s.OutC and w.Cols == s.Patch()
+    bias mut Array<F32>& = Array<F32>(w.Rows)
+    for n in range w.Rows: bias[n] = F32(b.Get(0, n))
+    if m.Outputs() * m.Batch > m.pixels: m.pixels = m.Outputs() * m.Batch
+    m.push(Layer.Conv(Weights.QuantizeConv(w, s), bias, s, relu), s.Positions() * s.OutC
+        ElementsFor(m.Batch * s.Positions(), s.Patch()))
+}
+
+# max pooling (conv.Pool p)
+fn (m mut Model&) Pool(p conv.Pool) {
+    assert p.H * p.W * p.C == m.Outputs()
+    m.push(Layer.Pool(p), p.OutH * p.OutW * p.C, 0)
+}
+
+# the bytes the network's parameters take quantized - weights, their scales and sums, the biases in F32 - and as F32
+fn (m Model&) Bytes() I64, I64 {
+    q I64 = 0
+    f I64 = 0
+    for l in m.Layers {
+        match l {
+            case Layer.Dense(w, b, _), Layer.Conv(w, b, _, _) {
+                q += w.Bytes() + 4 * b.Len()
+                f += 4 * (w.Out * w.In + b.Len())
+            }
+            case Layer.Pool(_) { }
+        }
+    }
+    return q, f
+}
+
+# y = the network applied to the samples x (x.Rows <= Batch rows of Inputs; y x.Rows x Outputs())
+fn (m mut Model&) Forward(y mut linalg.Matrix<F32>&, x linalg.Matrix<F32>&) {
+    assert x.Rows <= m.Batch and x.Cols == m.Inputs and y.Rows == x.Rows and y.Cols == m.Outputs()
+    m.prepare()
+    last I64 = m.Layers.Len() - 1
+    for i in range m.Layers.Len() {
+        n := x.Rows
+        if i == last {
+            if i == 0: m.run(i, y, x, false)!
+            else: m.run(i, y, m.buffer(i - 1, n)!, false)!
+        } else {
+            out := m.buffer(i, n)!
+            if i == 0: m.run(i, out, x, false)!
+            else: m.run(i, out, m.buffer(i - 1, n)!, false)!
+        }
+    }
+}
+
+# the calibration batch x run through the network, each quantized layer's input range widened to take it (static
+# quantization then quantizes over these ranges, once Static is set); y as Forward's
+fn (m mut Model&) Calibrate(y mut linalg.Matrix<F32>&, x linalg.Matrix<F32>&) {
+    assert x.Rows <= m.Batch and x.Cols == m.Inputs and y.Rows == x.Rows and y.Cols == m.Outputs()
+    m.prepare()
+    last I64 = m.Layers.Len() - 1
+    for i in range m.Layers.Len() {
+        n := x.Rows
+        if i == last {
+            if i == 0: m.run(i, y, x, true)!
+            else: m.run(i, y, m.buffer(i - 1, n)!, true)!
+        } else {
+            out := m.buffer(i, n)!
+            if i == 0: m.run(i, out, x, true)!
+            else: m.run(i, out, m.buffer(i - 1, n)!, true)!
+        }
+    }
+}
+
+# the buffers and activations sized for the layers added (once, unless layers were added since)
+fn (m mut Model&) prepare() {
+    widest I64 = 0
+    for w in m.widths: widest = w if w > widest else widest
+    if m.front.Len() < widest * m.Batch {
+        m.front = Array<F32>(widest * m.Batch)
+        m.back = Array<F32>(widest * m.Batch)
+    }
+    if m.acts.Elements < m.elements: m.acts = Activations(m.elements)
+    if m.acts.Pixels.Len() < m.pixels: m.acts.Pixels = Array<U8>(m.pixels)
+}
+
+# layer i's output for n samples: one of the two buffers, by turns
+fn (m Model&) buffer(i I64, n I64) mut linalg.Matrix<F32>& ? {
+    data := m.front if i % 2 == 0 else m.back
+    return try linalg.Matrix.View(data, 0, n, m.widths[i])
+}
+
+# layer i applied to x into y; observe: widen its input range by x and quantize over that (calibration). Profiling
+# adds the time its input's quantization took to Times[2 i], the rest's (its product, or its pooling) to Times[2 i + 1]
+fn (m mut Model&) run(i I64, y mut linalg.Matrix<F32>&, x linalg.Matrix<F32>&, observe Bool) ? {
+    t0 := time.Now() if m.Profiling else 0
+    t1 I64 = t0
+    match m.Layers[i] {
+        case Layer.Dense(w, b, relu) {
+            r := m.inputRange(i, x, observe)
+            m.acts.Quantize(x, r)
+            if m.Profiling: t1 = time.Now()
+            Linear(y, m.acts, w, b, relu, m.Threads)
+        }
+        case Layer.Conv(w, b, s, relu) {
+            r := m.inputRange(i, x, observe)
+            m.acts.Patches(x, s, r)
+            if m.Profiling: t1 = time.Now()
+            out mut linalg.Matrix<F32>& = try y.Reshape(y.Rows * s.Positions(), s.OutC)
+            Linear(out, m.acts, w, b, relu, m.Threads)
+        }
+        case Layer.Pool(p): maxPool(y, x, p)
+    }
+    if m.Profiling {
+        m.Times[2 * i] = m.Times[2 * i] + (t1 - t0)
+        m.Times[2 * i + 1] = m.Times[2 * i + 1] + (time.Now() - t1)
+    }
+}
+
+# the range layer i's input is quantized over: calibrated (widened by x first when observing), or x's own
+fn (m mut Model&) inputRange(i I64, x linalg.Matrix<F32>&, observe Bool) Range {
+    if observe {
+        r := m.Ranges[i]
+        r.Observe(x)
+        m.Ranges[i] = r
+        return r
+    }
+    if m.Static: return m.Ranges[i]
+    r := Range()
+    r.Observe(x)
+    return r
+}
+
+# y = the maximum of each window, per channel (conv.MaxPool2d's forward, without the positions its backward keeps)
+fn maxPool(y mut linalg.Matrix<F32>&, x linalg.Matrix<F32>&, p conv.Pool&) {
+    for b in range x.Rows {
+        img := x.Row(b)
+        out := y.Row(b)
+        for q in range p.OutH * p.OutW: windowMax(img, p, q / p.OutW, q % p.OutW, out)
+    }
+}
+
+# the maximum per channel of output pixel (oy, ox)'s window, into out
+fn windowMax(img Array<F32>&, p conv.Pool&, oy I64, ox I64, out mut Array<F32>&) {
+    C := p.C
+    o I64 = (oy * p.OutW + ox) * C
+    first I64 = (oy * p.Stride * p.W + ox * p.Stride) * C
+    for c in range C: out[o + c] = img[first + c]
+    for ky in range p.K {
+        for kx in range p.K {
+            at I64 = ((oy * p.Stride + ky) * p.W + ox * p.Stride + kx) * C
+            for c in range C: out[o + c] = img[at + c] if img[at + c] > out[o + c] else out[o + c]
+        }
+    }
+}
+
+# ---- tests ----
+
+import "std/rand"
+import "std/list"
+
+fn randomMatrix(rows I64, cols I64, r mut rand.Rand&, lo F64, hi F64) linalg.Matrix<F32> {
+    m mut linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, cols)
+    m.FillUniform(r, lo, hi)
+    return m
+}
+
+test "weights quantize per row to within half a step, and dequantize to what they represent" {
+    r := rand.Rand(5)
+    for shape in Array<I64>[3, 37, 17, 64, 40, 9] {
+        out I64 = shape / 10 + 1
+        w := randomMatrix(out, shape, r, -2.0, 2.0)
+        q := Weights.Quantize(w)
+        back := q.Dequantize()
+        for n in range out {
+            s F32 = q.Scale[n]
+            sum I32 = 0
+            for k in range shape {
+                assert (back.Get(n, k) - w.Get(n, k)).Abs() <= 0.5 * s * 1.0001
+                sum += I32(q.At(n, k))
+            }
+            assert sum == q.Sum[n]
+            # the largest weight of a row is exactly +-127 steps
+            big F32 = 0.0
+            for k in range shape: big = big.Max(w.Get(n, k).Abs())
+            assert (s * 127.0 - big).Abs() <= 1e-6 * big
+        }
+    }
+}
+
+test "activations round-trip: unsigned for a tensor with no negatives, symmetric otherwise" {
+    r := rand.Rand(6)
+    x := randomMatrix(5, 33, r, 0.0, 3.0)
+    a := Activations(ElementsFor(8, 33))
+    a.QuantizeDynamic(x)
+    assert a.Zero == 0
+    y := randomMatrix(5, 33, r, -1.0, 2.0)
+    b := Activations(ElementsFor(8, 33))
+    b.QuantizeDynamic(y)
+    assert b.Zero == 128
+    for i in range 5 {
+        for k in range 33 {
+            assert (a.Step * F32(I32(a.Data[i * 33 + k]) - a.Zero) - x.Get(i, k)).Abs() <= 0.5 * a.Step * 1.0001
+            assert (b.Step * F32(I32(b.Data[i * 33 + k]) - b.Zero) - y.Get(i, k)).Abs() <= 0.5 * b.Step * 1.0001
+        }
+    }
+}
+
+# the integer product's result against the F32 product of what both operands represent - equal but for rounding,
+# whatever the shape: rows from one to past a tile, thin and wide outputs, ReLU or not, threads
+test "the INT8 product equals the F32 product of the dequantized operands" {
+    r := rand.Rand(7)
+    for shape in Array<Array<I64>&>[Array<I64>[1, 30, 10], Array<I64>[2, 784, 128], Array<I64>[13, 50, 40], Array<I64>[37, 129, 16], Array<I64>[64, 784, 10]] {
+        m := shape[0]
+        k := shape[1]
+        n := shape[2]
+        x := randomMatrix(m, k, r, -1.0, 1.0)
+        w := randomMatrix(n, k, r, -0.5, 0.5)
+        bias := randomMatrix(1, n, r, -0.1, 0.1)
+        q := Weights.Quantize(w)
+        a := Activations(ElementsFor(m, k))
+        a.QuantizeDynamic(x)
+        for relu in Array<Bool>[false, true] {
+            for threads in Array<I64>[1, 3] {
+                y := linalg.Matrix<F32>(m, n)
+                Linear(y, a, q, bias.Row(0), relu, threads)
+                assert matchesDequantized(y, a, q, bias, relu)
+            }
+        }
+    }
+}
+
+# whether y is the dequantized activations a times the dequantized weights q (in F64), plus the bias, through ReLU
+fn matchesDequantized(y linalg.Matrix<F32>&, a Activations&, q Weights&, bias linalg.Matrix<F32>&, relu Bool) Bool {
+    k := a.Cols
+    for i in range y.Rows {
+        for j in range y.Cols {
+            s F64 = F64(bias.Get(0, j))
+            for p in range k: s += F64(a.Step) * F64(I32(a.Data[i * k + p]) - a.Zero) * F64(q.At(j, p)) * F64(q.Scale[j])
+            if relu and s < 0.0: s = 0.0
+            if not ((F64(y.Get(i, j)) - s).Abs() <= 1e-5 * (1.0 + s.Abs())): return false
+        }
+    }
+    return true
+}
+
+test "the INT8 product is within the quantization's bound of the F32 product" {
+    r := rand.Rand(8)
+    m I64 = 16
+    k I64 = 200
+    n I64 = 24
+    x := randomMatrix(m, k, r, 0.0, 1.0)
+    w := randomMatrix(n, k, r, -0.3, 0.3)
+    bias := randomMatrix(1, n, r, -0.1, 0.1)
+    q := Weights.Quantize(w)
+    a := Activations(ElementsFor(m, k))
+    a.QuantizeDynamic(x)
+    y := linalg.Matrix<F32>(m, n)
+    Linear(y, a, q, bias.Row(0), false)
+    exact := linalg.Matrix<F32>(m, n)
+    try linalg.Gemm(exact, x, false, w, true)
+    for i in range m {
+        for j in range n {
+            # |x w - x' w'| <= sum |x| |w - w'| + |x - x'| |w'|, each error at most half a step
+            bound F64 = 0.0
+            for p in range k {
+                bound += F64(x.Get(i, p).Abs()) * 0.5 * F64(q.Scale[j]) + 0.5 * F64(a.Step) * F64(w.Get(j, p).Abs()) * 1.01
+            }
+            assert (F64(y.Get(i, j)) - F64(exact.Get(i, j) + bias.Get(0, j))).Abs() <= bound + 1e-4
+        }
+    }
+}
+
+test "a convolution's quantized patches are conv.Im2col's patches quantized, columns in the images' order" {
+    r := rand.Rand(9)
+    for s in Array<conv.Shape>[conv.Shape(1, 6, 5, 3, 3, 1, 1), conv.Shape(3, 7, 6, 4, 3, 2, 1), conv.Shape(2, 5, 5, 2, 2, 1, 0)] {
+        x := randomMatrix(2, s.H * s.W * s.C, r, 0.0, 1.0)
+        rng := Range()
+        rng.Observe(x)
+        a := Activations(ElementsFor(2 * s.Positions(), s.Patch()))
+        a.Patches(x, s, rng)
+        cols := linalg.Matrix<F32>(2 * s.Positions(), s.Patch())
+        conv.Im2col(x, s, cols, 1)
+        b := Activations(ElementsFor(2 * s.Positions(), s.Patch()))
+        b.Quantize(cols, rng)
+        assert a.Rows == b.Rows and a.Cols == b.Cols and a.Step == b.Step and a.Zero == b.Zero
+        KK I64 = s.K * s.K
+        for i in range a.Rows {
+            for c in range s.C {
+                for j in range KK: assert a.Data[i * a.Cols + j * s.C + c] == b.Data[i * b.Cols + c * KK + j]
+            }
+        }
+        # the rows past the last are the zero point
+        for i in range a.Rows * a.Cols, (a.Rows + 12) * a.Cols: assert I32(a.Data[i]) == a.Zero
+    }
+}
+
+test "a convolution's quantized weights hold the patches' column order" {
+    r := rand.Rand(11)
+    s := conv.Shape(3, 5, 5, 4, 3, 1, 1)
+    w := randomMatrix(4, s.Patch(), r, -1.0, 1.0)
+    q := Weights.QuantizeConv(w, s)
+    p := Weights.Quantize(w)
+    for n in range 4 {
+        assert q.Scale[n] == p.Scale[n] and q.Sum[n] == p.Sum[n]
+        for c in range 3 {
+            for j in range 9: assert q.At(n, j * 3 + c) == p.At(n, c * 9 + j)
+        }
+    }
+}
+
+# a small network - a convolution with ReLU, max pooling, a dense layer - run quantized against the same network in
+# F32 (conv.Conv2d, conv.MaxPool2d, linalg.Gemm): within a few percent of the largest output, for a full batch, a short
+# one and one sample, dynamically and over calibrated ranges
+test "a quantized network runs what the F32 network runs, dynamically and over calibrated ranges" {
+    r := rand.Rand(10)
+    s := conv.Shape(2, 6, 6, 5, 3, 1, 1)                       # 6 x 6 x 2 -> 6 x 6 x 5
+    p := conv.Pool(5, 6, 6, 2, 2)                              # -> 3 x 3 x 5
+    cw := randomMatrix(5, s.Patch(), r, -0.4, 0.4)
+    cb := randomMatrix(1, 5, r, -0.1, 0.1)
+    dw := randomMatrix(4, 45, r, -0.3, 0.3)
+    db := randomMatrix(1, 4, r, -0.1, 0.1)
+    m := Model(9, 72)
+    m.Conv(cw, cb, s, true)
+    m.Pool(p)
+    m.Dense(dw, db, false)
+    assert m.Outputs() == 4 and m.Layers.Len() == 3
+    q, f := m.Bytes()
+    # each weight a byte, an output's columns padded to the thin tile's width; a scale, a sum and a bias an output
+    assert f == 4 * (5 * 18 + 5 + 4 * 45 + 4) and q == lanes() * (18 + 45) + 12 * (5 + 4)
+    x := randomMatrix(9, 72, r, 0.0, 1.0)
+    # the F32 network
+    ws := linalg.GemmWorkspace<F32>()
+    h := linalg.Matrix<F32>(9, 180)
+    conv.Conv2d(h, x, cw, cb, s, 1, ws)
+    try h.Map(h, fn(v) { return v if v > 0.0 else 0.0 })
+    pooled := linalg.Matrix<F32>(9, 45)
+    where := linalg.Matrix<F32>(9, 45)
+    conv.MaxPool2d(pooled, h, p, where, 1)
+    want := linalg.Matrix<F32>(9, 4)
+    try linalg.Gemm(want, pooled, false, dw, true)
+    try want.AddRow(db)
+    big F32 = want.MaxAbs()
+    for calibrated in Array<Bool>[false, true] {
+        if calibrated {
+            got := linalg.Matrix<F32>(9, 4)
+            m.Calibrate(got, x)
+            m.Static = true
+        }
+        for n in Array<I64>[9, 5, 1] {
+            got := linalg.Matrix<F32>(n, 4)
+            m.Forward(got, try x.RowRange(0, n))
+            for i in range n {
+                for j in range 4: assert (got.Get(i, j) - want.Get(i, j)).Abs() <= 0.03 * big
+            }
+        }
+    }
+}

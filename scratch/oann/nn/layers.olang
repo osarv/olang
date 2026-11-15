@@ -1,0 +1,542 @@
+# nn/layers - the building blocks models are made of. A layer is plain data - a few handles (`graph.Var`) and sizes -
+# made by its `New` on a graph, which registers its parameters (their starting values chosen by an `Init`), and
+# `Apply` records its operations on an input: applying one layer twice shares its parameters, and their gradients add
+# up. A layer's shapes are given once, at construction; `Apply` takes only handles. Layers hold no references to the
+# graph, so they can be kept in arrays, walked by reflection (checkpoint names come from the fields) and copied.
+#
+# Dense, Embedding, Norm, Mlp, Conv - the common ones; SelfAttention, AttentionBlock (a pre-normalized transformer
+# block, with a GELU or a gated SwiGLU perceptron), Transformer (GPT-2's decoder); and the scan-based blocks SsmBlock
+# (Mamba's selective state-space scan) and DeltaBlock (the gated delta rule, DeltaNet), each a residual block over the
+# graph's `SelectiveScan` and `DeltaRule`.
+#
+# Weight decay applies to weights and embeddings, not to biases, gains and the scan blocks' state parameters.
+
+import "../ad/graph"
+import "../kernels/mat"
+import "../kernels/conv"
+
+# ---- starting values ----
+
+# PyTorch nn.Linear's: weights and biases uniform in +-1/sqrt(inputs) - Kaiming's uniform rule with the slope sqrt(5)
+# PyTorch uses, which comes to that bound
+fn fanIn(inputs I64) graph.Init {
+    bound F64 = 1.0 / F64(inputs).Sqrt()
+    return graph.Init.Uniform(-bound, bound)
+}
+
+# GPT-2's: weights and embeddings normal with deviation 0.02
+fn gpt2() graph.Init { return graph.Init.Normal(0.0, 0.02) }
+
+# GPT-2's for the two projections back into the residual stream: 0.02 / sqrt(2 * layers)
+fn gpt2Out(layers I64) graph.Init { return graph.Init.Normal(0.0, 0.02 / F64(2 * layers).Sqrt()) }
+
+# x through dropout, or x itself when p is 0
+fn dropped<T>(g mut graph.Graph<T>&, x graph.Var, p F64) graph.Var {
+    if p > 0.0: return g.Dropout(x, p)
+    return x
+}
+
+# ---- dense, embedding, norm ----
+
+# a dense layer, y = x W^T + B: W is Out x In (PyTorch's layout), B a vector of Out, or None. Plain data - two handles
+# and two sizes
+type Dense struct(W graph.Var, B graph.Var, In I64, Out I64) {
+    W
+    B
+    In
+    Out
+}
+
+# a dense layer of inputs to outputs with PyTorch's starting values, its parameters registered on g: weight decay
+# applies to W and not to B
+fn Dense.New<T>(g mut graph.Graph<T>&, inputs I64, outputs I64, bias Bool = true) Dense {
+    return Dense.With(g, inputs, outputs, fanIn(inputs), fanIn(inputs), bias)
+}
+
+# a dense layer with the given starting values
+fn Dense.With<T>(g mut graph.Graph<T>&, inputs I64, outputs I64, weights graph.Init, biases graph.Init, bias Bool = true) Dense {
+    w := g.Param(weights, true, outputs, inputs)
+    b := g.Param(biases, false, outputs) if bias else graph.None
+    return Dense(w, b, inputs, outputs)
+}
+
+fn (d Dense&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    return g.Linear(x, d.W, d.B)
+}
+
+# a table of Vocab rows of Dim: a token's row. Used against its own transpose it is a tied output head (Logits)
+type Embedding struct(Table graph.Var, Vocab I64, Dim I64) {
+    Table
+    Vocab
+    Dim
+}
+
+fn Embedding.New<T>(g mut graph.Graph<T>&, vocab I64, dim I64, init graph.Init = graph.Init.Normal(0.0, 0.02)) Embedding {
+    return Embedding(g.Param(init, true, vocab, dim), vocab, dim)
+}
+
+# the rows of a Tokens() node: [batch, ctx, Dim]
+fn (e Embedding&) Apply<T>(g mut graph.Graph<T>&, tokens graph.Var) graph.Var {
+    return g.Embedding(tokens, e.Table)
+}
+
+# h [..., Dim] against the table's rows: the score of every token, [..., Vocab]
+fn (e Embedding&) Logits<T>(g mut graph.Graph<T>&, h graph.Var) graph.Var {
+    return g.MatMul(h, e.Table, false, true)
+}
+
+# a row-wise normalization's parameters: a gain (ones) and, for layer normalization, a bias (zeros), vectors of the
+# width, neither decayed. Rms: root-mean-square normalization, which has no bias (Bias is then None)
+type Norm struct(Gain graph.Var, Bias graph.Var, Rms Bool, Eps F64) {
+    Gain
+    Bias
+    Rms
+    Eps
+}
+
+fn Norm.New<T>(g mut graph.Graph<T>&, width I64, rms Bool = false, eps F64 = 1e-5) Norm {
+    gain := g.Param(graph.Init.Constant(1.0), false, width)
+    bias := graph.None if rms else g.Param(graph.Init.Zeros, false, width)
+    return Norm(gain, bias, rms, eps)
+}
+
+fn (n Norm&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    return g.Norm(x, n.Gain, n.Bias, n.Rms, n.Eps)
+}
+
+# ---- perceptrons ----
+
+# a multilayer perceptron: dense layers of the given sizes - sizes[0] inputs, the last the outputs - with the
+# activation between every two of them and none after the last
+type Mlp struct(Act mat.Act, Layers Array<Dense>) {
+    Act
+    Layers
+}
+
+fn Mlp.New<T>(g mut graph.Graph<T>&, sizes Array<I64>&, act mat.Act = mat.Act.Relu) Mlp {
+    layers := Vec<Dense>()
+    for i in range 1, sizes.Len(): layers.Push(Dense.New(g, sizes[i - 1], sizes[i]))
+    return Mlp(act, layers.ToArray())
+}
+
+fn (m Mlp&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    h graph.Var = x
+    last := m.Layers.Len() - 1
+    for i, layer in m.Layers {
+        h = layer.Apply(g, h)
+        if i < last: h = g.Act(h, m.Act)
+    }
+    return h
+}
+
+# the perceptron inside a block, back into the residual stream: GPT-2's Down(gelu(Up(x))), or the gated form
+# (Shazeer's SwiGLU) Down(silu(Gate(x)) * Up(x))
+type Feed enum {
+    Gelu(up Dense, down Dense)
+    Gated(gate Dense, up Dense, down Dense)
+}
+
+# a perceptron of width D with the given hidden width; its projection back has the starting values out. Gated: SwiGLU
+fn Feed.New<T>(g mut graph.Graph<T>&, D I64, hidden I64, out graph.Init, gated Bool = false) Feed {
+    w := gpt2()
+    z := graph.Init.Zeros
+    if not gated {
+        up := Dense.With(g, D, hidden, w, z)
+        return Feed.Gelu(up, Dense.With(g, hidden, D, out, z))
+    }
+    gate := Dense.With(g, D, hidden, w, z, false)
+    up := Dense.With(g, D, hidden, w, z, false)
+    return Feed.Gated(gate, up, Dense.With(g, hidden, D, out, z, false))
+}
+
+fn (f Feed&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    return match f {
+        case Feed.Gelu(up, down): down.Apply(g, g.Act(up.Apply(g, x), mat.Act.GeluTanh))
+        case Feed.Gated(gate, up, down): down.Apply(g, g.Mul(g.Act(gate.Apply(g, x), mat.Act.Silu), up.Apply(g, x)))
+    }
+}
+
+# ---- attention and transformers ----
+
+# multi-head self-attention over [batch, t, D]: the four projections, optionally with rotary positions on queries and
+# keys. Causal: a position attends to those before it and itself
+type SelfAttention struct(Q Dense, K Dense, V Dense, O Dense, Heads I64, Rope Bool, Base F64, Causal Bool) {
+    Q
+    K
+    V
+    O
+    Heads
+    Rope
+    Base
+    Causal
+}
+
+# attention of width D in "heads" heads; "layers", the blocks the network has, scales the starting values of the
+# projection back into the residual stream (GPT-2's 1 / sqrt(2 * layers))
+fn SelfAttention.New<T>(g mut graph.Graph<T>&, D I64, heads I64, layers I64 = 1, rope Bool = false, causal Bool = true
+        base F64 = 10000.0) SelfAttention {
+    w := gpt2()
+    z := graph.Init.Zeros
+    q := Dense.With(g, D, D, w, z)
+    k := Dense.With(g, D, D, w, z)
+    v := Dense.With(g, D, D, w, z)
+    o := Dense.With(g, D, D, gpt2Out(layers), z)
+    return SelfAttention(q, k, v, o, heads, rope, base, causal)
+}
+
+fn (a SelfAttention&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    q := a.Q.Apply(g, x)
+    k := a.K.Apply(g, x)
+    if a.Rope {
+        q = g.Rope(q, a.Heads, a.Base)
+        k = g.Rope(k, a.Heads, a.Base)
+    }
+    return a.O.Apply(g, g.Attention(q, k, a.V.Apply(g, x), a.Heads, a.Causal))
+}
+
+# a transformer block, pre-normalized: h = x + Attn(Norm1(x)); then y = h + Feed(Norm2(h)). With dropout, both branches
+# are dropped out before they are added back
+type AttentionBlock struct(Norm1 Norm, Attn SelfAttention, Norm2 Norm, Ffn Feed, Drop F64) {
+    Norm1
+    Attn
+    Norm2
+    Ffn
+    Drop
+}
+
+# a block of width D with "heads" heads; the perceptron's hidden width is "ffn" (4 D for GELU, 8 D / 3 rounded up to a
+# multiple of 8 for a gated one when 0). "layers" is the blocks the network has
+fn AttentionBlock.New<T>(g mut graph.Graph<T>&, D I64, heads I64, layers I64 = 1, dropout F64 = 0.0, rms Bool = false
+        rope Bool = false, gated Bool = false, ffn I64 = 0) AttentionBlock {
+    hidden := ffn if ffn > 0 else ((8 * D / 3 + 7) / 8 * 8 if gated else 4 * D)
+    n1 := Norm.New(g, D, rms)
+    attn := SelfAttention.New(g, D, heads, layers, rope)
+    n2 := Norm.New(g, D, rms)
+    return AttentionBlock(n1, attn, n2, Feed.New(g, D, hidden, gpt2Out(layers), gated), dropout)
+}
+
+fn (b AttentionBlock&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    h := g.Add(x, dropped(g, b.Attn.Apply(g, b.Norm1.Apply(g, x)), b.Drop))
+    return g.Add(h, dropped(g, b.Ffn.Apply(g, b.Norm2.Apply(g, h)), b.Drop))
+}
+
+# a decoder-only transformer as GPT-2 has it (Radford et al.) over a vocabulary of Vocab tokens, width D: a token
+# embedding plus a learned position (none with rotary positions), the blocks, a final normalization, and the logits over
+# the vocabulary - against the token embedding itself (tied, as GPT-2 does) or a matrix of its own
+type Transformer struct(Embed Embedding, Positions graph.Var, Blocks Array<AttentionBlock>, Final Norm, Head Embedding, Drop F64) {
+    Embed
+    Positions
+    Blocks
+    Final
+    Head
+    Drop
+}
+
+fn Transformer.New<T>(g mut graph.Graph<T>&, vocab I64, ctx I64, D I64, heads I64, layers I64, tied Bool = true
+        dropout F64 = 0.0, rms Bool = false, rope Bool = false, gated Bool = false) Transformer {
+    emb := Embedding.New(g, vocab, D)
+    pos := graph.None if rope else g.Param(gpt2(), true, ctx, D)
+    blocks := Vec<AttentionBlock>()
+    for _ in range layers: blocks.Push(AttentionBlock.New(g, D, heads, layers, dropout, rms, rope, gated))
+    final := Norm.New(g, D, rms)
+    head := emb if tied else Embedding.New(g, vocab, D)
+    return Transformer(emb, pos, blocks.ToArray(), final, head, dropout)
+}
+
+# the logits of each position's next token, from a Tokens() node: [batch, ctx, Vocab]
+fn (t Transformer&) Apply<T>(g mut graph.Graph<T>&, tokens graph.Var) graph.Var {
+    e := t.Embed.Apply(g, tokens)
+    h := dropped(g, e if t.Positions == graph.None else g.Positions(e, t.Positions), t.Drop)
+    for b in t.Blocks: h = b.Apply(g, h)
+    return t.Head.Logits(g, t.Final.Apply(g, h))
+}
+
+# ---- scan-based blocks ----
+
+# a state-space block over [batch, t, D], Mamba's (Gu and Dao 2023) without its short convolution: h = x + Out(y * silu(Z(n)))
+# for n = Norm(x), where y is the selective scan of u = silu(X(n)) - a state of N numbers per channel with its own
+# step delta = softplus(DtUp(DtDown(u))), a state matrix A = -softplus(Alog) (negative, so the state decays), B and C read
+# from u, and a skip D - E = D * expand channels wide. The scan runs the whole sequence from a zero state
+type SsmBlock struct(Pre Norm, X Dense, Z Dense, DtDown Dense, DtUp Dense, B Dense, C Dense, Alog graph.Var, Skip graph.Var, Out Dense) {
+    Pre
+    X
+    Z
+    DtDown
+    DtUp
+    B
+    C
+    Alog
+    Skip
+    Out
+}
+
+# a block of width D, N states per channel and expand * D channels; "layers" scales the output projection as a
+# transformer's
+fn SsmBlock.New<T>(g mut graph.Graph<T>&, D I64, states I64 = 16, expand I64 = 2, layers I64 = 1, rms Bool = true) SsmBlock {
+    E := expand * D
+    rank := (D / 16).Max(1)
+    n := Norm.New(g, D, rms)
+    x := Dense.With(g, D, E, gpt2(), graph.Init.Zeros, false)
+    z := Dense.With(g, D, E, gpt2(), graph.Init.Zeros, false)
+    down := Dense.With(g, E, rank, fanIn(E), graph.Init.Zeros, false)
+    # delta = softplus(bias) starts between 0.001 and 0.1 (log-uniformly, Mamba's)
+    up := Dense.With(g, rank, E, fanIn(rank), graph.Init.Uniform(-6.9, -2.25))
+    b := Dense.With(g, E, states, gpt2(), graph.Init.Zeros, false)
+    c := Dense.With(g, E, states, gpt2(), graph.Init.Zeros, false)
+    alog := g.Param(graph.Init.Uniform(1.0, 16.0), false, states, E)
+    skip := g.Param(graph.Init.Constant(1.0), false, E)
+    out := Dense.With(g, E, D, gpt2Out(layers), graph.Init.Zeros, false)
+    return SsmBlock(n, x, z, down, up, b, c, alog, skip, out)
+}
+
+fn (s SsmBlock&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    n := s.Pre.Apply(g, x)
+    u := g.Act(s.X.Apply(g, n), mat.Act.Silu)
+    delta := g.Act(s.DtUp.Apply(g, s.DtDown.Apply(g, u)), mat.Act.Softplus)
+    a := g.Scale(g.Act(s.Alog, mat.Act.Softplus), -1.0)
+    y := g.SelectiveScan(u, delta, a, s.B.Apply(g, u), s.C.Apply(g, u), s.Skip)
+    gated := g.Mul(y, g.Act(s.Z.Apply(g, n), mat.Act.Silu))
+    return g.Add(x, s.Out.Apply(g, gated))
+}
+
+# the gated delta rule's block over [batch, t, D] (DeltaNet, Yang et al. 2024; its gate, Gated DeltaNet's): H heads
+# each holding a matrix state S of dv x dk, which a position first decays by its gate alpha (a sigmoid) and then
+# corrects toward v along k: S = alpha S (I - beta k k^T) + beta v k^T, the output S q. q and k are normalized per head
+# (RMS norm, a gain starting at 1 / sqrt(dk) so that |q| = |k| = 1 at the start and the rule is stable), beta a sigmoid
+# of the input. h = x + Out(o)
+type DeltaBlock struct(Pre Norm, Q Dense, K Dense, V Dense, Beta Dense, Gate Dense, QGain graph.Var, KGain graph.Var, Out Dense, Heads I64, Dk I64) {
+    Pre
+    Q
+    K
+    V
+    Beta
+    Gate
+    QGain
+    KGain
+    Out
+    Heads
+    Dk
+}
+
+# a block of width D in "heads" heads of D / heads columns for keys and values alike
+fn DeltaBlock.New<T>(g mut graph.Graph<T>&, D I64, heads I64, layers I64 = 1, rms Bool = true) DeltaBlock {
+    dk := D / heads
+    n := Norm.New(g, D, rms)
+    z := graph.Init.Zeros
+    q := Dense.With(g, D, D, gpt2(), z, false)
+    k := Dense.With(g, D, D, gpt2(), z, false)
+    v := Dense.With(g, D, D, gpt2(), z, false)
+    beta := Dense.With(g, D, heads, gpt2(), z)
+    gate := Dense.With(g, D, heads, gpt2(), graph.Init.Constant(4.0))    # sigmoid(4) = 0.98: a long memory at first
+    gain := graph.Init.Constant(1.0 / F64(dk).Sqrt())
+    qg := g.Param(gain, false, dk)
+    kg := g.Param(gain, false, dk)
+    out := Dense.With(g, D, D, gpt2Out(layers), z, false)
+    return DeltaBlock(n, q, k, v, beta, gate, qg, kg, out, heads, dk)
+}
+
+# x [batch, t, heads dk] normalized within each head, then scaled by the gain
+fn (d DeltaBlock&) headNorm<T>(g mut graph.Graph<T>&, x graph.Var, gain graph.Var) graph.Var {
+    t := g.Info(x).Dims[1]
+    h := g.Norm(g.Reshape(x, t, d.Heads, d.Dk), gain, graph.None, true)
+    return g.Reshape(h, t, d.Heads * d.Dk)
+}
+
+fn (d DeltaBlock&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    n := d.Pre.Apply(g, x)
+    q := d.headNorm(g, d.Q.Apply(g, n), d.QGain)
+    k := d.headNorm(g, d.K.Apply(g, n), d.KGain)
+    beta := g.Act(d.Beta.Apply(g, n), mat.Act.Sigmoid)
+    gate := g.Act(d.Gate.Apply(g, n), mat.Act.Sigmoid)
+    o := g.DeltaRule(q, k, d.V.Apply(g, n), beta, gate)
+    return g.Add(x, d.Out.Apply(g, o))
+}
+
+# ---- images ----
+
+# a convolution of C-channel H x W images by OutC kernels (the shape's): W is OutC x (C K K) - PyTorch's Conv2d.weight
+# flattened - and B a vector of OutC. Starting values are PyTorch's Conv2d's: weights and biases uniform in +-1/sqrt(C K K).
+# Weight decay applies to its kernels, not to its bias. Its output images are OutH x OutW x OutC
+type Conv struct(W graph.Var, B graph.Var, Shape conv.Shape) {
+    W
+    B
+    Shape
+}
+
+fn Conv.New<T>(g mut graph.Graph<T>&, s conv.Shape, bias Bool = true) Conv {
+    init := fanIn(s.Patch())
+    w := g.Param(init, true, s.OutC, s.Patch())
+    b := g.Param(init, false, s.OutC) if bias else graph.None
+    return Conv(w, b, s)
+}
+
+fn (c Conv&) Apply<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    return g.Conv2d(x, c.W, c.B, c.Shape)
+}
+
+# the number of features of its output images: OutH OutW OutC
+fn (c Conv&) Outputs() I64 {
+    return c.Shape.OutH * c.Shape.OutW * c.Shape.OutC
+}
+
+# ---- tests ----
+
+import "../tools/gradcheck"
+import "../tensor"
+import "std/rand"
+
+# every parameter moved off its starting value by N(0, sd^2): the starting values are small enough that a block's gradients
+# are all near zero, and a check wants a network that does something
+fn perturb(g mut graph.Graph<F64>&, r mut rand.Rand&, sd F64) {
+    p := g.Params().Flat()!
+    for i in range p.Len(): p[i] = p[i] + sd * r.Normal()
+}
+
+# the worst gradient error of y's weighted sum, planned with seed, the inputs filled, the parameters perturbed: on the
+# full batch and on its first n entries
+fn checked(g mut graph.Graph<F64>&, y graph.Var, seed U64, n I64, sd F64 = 0.3) F64 {
+    loss := gradcheck.Weigh(g, y)
+    r := rand.Rand(seed)
+    try g.Plan(r) catch { unreachable "the block's shapes: " + $g.Info(y).Dims }
+    gradcheck.Fill(g, r)
+    perturb(g, r, sd)
+    return gradcheck.GradientError(g, loss, g.Batch).Max(gradcheck.GradientError(g, loss, n))
+}
+
+test Mlp "registers its layers' parameters in order, with PyTorch's starting values, and records them" {
+    g := graph.Graph<F64>(8)
+    x := g.Input(4)
+    m := Mlp.New(g, Array<I64>[4, 6, 3], mat.Act.Tanh)
+    out := m.Apply(g, x)
+    try g.Plan(rand.Rand(3))
+    assert g.ParamCount == 4 * 6 + 6 + 6 * 3 + 3
+    assert g.Info(out).Dims == tensor.Shape.Of(8, 3)
+    w := g.Value(m.Layers[0].W)
+    bound F64 = 1.0 / 4.0.Sqrt()
+    seen F64 = 0.0
+    for i in range 6 {
+        for j in range 4 {
+            assert w.Get(i, j).Abs() <= bound
+            seen = seen.Max(w.Get(i, j).Abs())
+        }
+    }
+    assert seen > 0.0
+    assert g.Decays(m.Layers[0].W) and not g.Decays(m.Layers[0].B)
+}
+
+test Dense "applied twice shares its parameters and the gradients add up; without a bias it has none" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(3)
+    d := Dense.New(g, 3, 3)
+    n := Dense.New(g, 3, 2, false)
+    y := n.Apply(g, d.Apply(g, d.Apply(g, x)))
+    assert n.B == graph.None and g.Info(y).Dims == tensor.Shape.Of(2, 2)
+    assert checked(g, y, 5, 1) < 1e-6
+    assert g.ParamCount == 3 * 3 + 3 + 3 * 2
+}
+
+test Transformer "gradients agree with central differences: tied and untied, layer norm and RMS, learned and rotary positions, GELU and gated perceptrons, dropout" {
+    for variant in range 4 {
+        g := graph.Graph<F64>(2)
+        tok := g.Tokens(4)
+        y := g.Classes(4)
+        rope := variant == 3
+        t := Transformer.New(g, 7, 4, 8, 2, 2, variant != 1, 0.1 if variant == 2 else 0.0, variant == 1 or rope, rope, rope)
+        loss := g.CrossEntropy(t.Apply(g, tok), y)
+        r := rand.Rand(21)
+        try g.Plan(r)
+        # embeddings 56 + positions 32; per block four 8 x 8 projections with biases, the 8 -> 32 -> 8 perceptron and two
+        # norms; the final norm; variant 1 has a head of its own and no biases in the norms; variant 3 no positions, RMS
+        # norms and a gated 8 -> 24 -> 8 perceptron without biases
+        assert g.ParamCount == Array<I64>[1848, 1864, 1848, 1824][variant]
+        perturb(g, r, 0.3)
+        td := g.Ints(tok).Flat()!
+        yd := g.Ints(y).Flat()!
+        for i in range 8 {
+            td[i] = I32(r.Below(7))
+            yd[i] = I32(r.Below(7))
+        }
+        # a deep network's loss curves more: the central difference's own error bottoms out at 1e-6 to 4e-6 here, against
+        # errors near 1 for a wrong backward
+        assert gradcheck.GradientError(g, loss, 2) < 1e-5
+        assert gradcheck.GradientError(g, loss, 1) < 1e-5
+    }
+}
+
+test SsmBlock "gradients agree with central differences, the input's too; the block adds to its input and keeps its shape" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(6, 8)
+    g.Watch(x)
+    s := SsmBlock.New(g, 8, 4, 2)
+    y := s.Apply(g, s.Apply(g, x))
+    assert g.Info(y).Dims == tensor.Shape.Of(2, 6, 8)
+    assert checked(g, y, 7, 1, 0.3) < 1e-5
+}
+
+test SsmBlock "a state that decays: the output at a position moves little with a position far before it" {
+    g := graph.Graph<F64>(1)
+    x := g.Input(40, 8)
+    s := SsmBlock.New(g, 8, 4, 2)
+    y := s.Apply(g, x)
+    r := rand.Rand(2)
+    try g.Plan(r)
+    perturb(g, r, 0.3)
+    gradcheck.Fill(g, r)
+    g.Forward(1)
+    base := g.Value(y).Clone()
+    xs := g.Data(x)
+    xs.Set(xs.Get(0, 0, 0) + 1.0, 0, 0, 0)
+    g.Forward(1)
+    # position 0 changed; position 39 hardly: A = -softplus(alog) is negative (the state decays), delta up to 0.1
+    near := (g.Value(y).Get(0, 0, 0) - base.Get(0, 0, 0)).Abs()
+    far := (g.Value(y).Get(0, 39, 0) - base.Get(0, 39, 0)).Abs()
+    assert near > 1e-3 and far < near
+}
+
+test DeltaBlock "gradients agree with central differences, the input's too" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(6, 8)
+    g.Watch(x)
+    d := DeltaBlock.New(g, 8, 2, 2)
+    y := d.Apply(g, d.Apply(g, x))
+    assert g.Info(y).Dims == tensor.Shape.Of(2, 6, 8)
+    assert checked(g, y, 8, 1, 0.3) < 1e-5
+}
+
+test DeltaBlock "the state stays bounded over a long sequence: a memory with unit keys cannot blow up" {
+    g := graph.Graph<F64>(1)
+    x := g.Input(256, 8)
+    d := DeltaBlock.New(g, 8, 2)
+    y := d.Apply(g, x)
+    r := rand.Rand(3)
+    try g.Plan(r)
+    perturb(g, r, 0.3)
+    gradcheck.Fill(g, r)
+    g.Forward(1)
+    big F64 = 0.0
+    for t in range 256 {
+        for c in range 8: big = big.Max(g.Value(y).Get(0, t, c).Abs())
+    }
+    assert big < 50.0
+}
+
+test Conv "a convolution layer, the shape's outputs and a gradient check with a bias and padding" {
+    g := graph.Graph<F64>(3)
+    x := g.Input(7, 6, 2)
+    g.Watch(x)
+    c := Conv.New(g, try conv.Shape(2, 7, 6, 3, 3, 1, 1))
+    y := c.Apply(g, x)
+    assert c.Outputs() == 7 * 6 * 3 and g.Info(y).Dims == tensor.Shape.Of(3, 7, 6, 3)
+    assert checked(g, g.Act(y, mat.Act.Tanh), 9, 2, 0.3) < 1e-5
+    assert g.ParamCount == 3 * 18 + 3
+}
+
+test AttentionBlock "a gated perceptron is silu(Gate x) * Up x: the block's parameters and its shape" {
+    g := graph.Graph<F64>(2)
+    x := g.Input(5, 8)
+    plain := AttentionBlock.New(g, 8, 2)
+    gated := AttentionBlock.New(g, 8, 2, 1, 0.0, false, true, true)
+    y := gated.Apply(g, plain.Apply(g, x))
+    assert g.Info(y).Dims == tensor.Shape.Of(2, 5, 8)
+    assert checked(g, y, 11, 1, 0.3) < 1e-5
+}

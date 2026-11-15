@@ -1,0 +1,179 @@
+# MNIST by a settling circuit that the board can run (docs/settling.md 4, 5.6, 5.9): a 784-H-10 circuit, certified and
+# held in the certified set (Restrain after every step - the board runs only certified circuits), taught by equilibrium
+# propagation with its lessons' settles in floating point or on the simulated board engine (board.Engine: the
+# processing system pushes the drives and quantized weights, the engine settles in fixed point, the states come back
+# and the contrast and Adam's step are taken in F32 on the master weights). After every epoch the test set is answered
+# both ways - free settles in F32 and on the board - with the agreement of their answers. Arguments, all optional: the
+# epochs (3), "float" or "board" for where the lessons settle (board), the training samples used (60000), the hidden
+# neurons (128), the batch (32), the seed (1), Adam's rate (0.001), beta (0.5), the readout's temperature
+# (board.Temperature, 0.05), 0 to train without the projection into the certified set (1) - a circuit the certificate
+# does not cover, answered on the board all the same - and a window of steps to make the hidden and readout neurons
+# spiking (0: rate neurons). A
+# spiking circuit is examples/mnist_settle.olang's: Lif neurons (leak 0.1, threshold 1, synapse 0.25), biased at 1, the
+# readout taught by squared error toward 0.2 spikes a step for the class and none for the others, its recurrent weights
+# scaled by 0.3 when drawn, no certificate (spiking neurons have no bounded slope); its settles on the board run the
+# engine's integer Lif neurons. Its own defaults: beta 1, Adam 0.005.
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../board"
+import "../circuit"
+import "../optim"
+import "../datasets/idx"
+import "../datasets/loader"
+import "../datasets/mnist"
+
+fn number(args Array<String&>&, i I64, fallback F64) F64 ? json.Error {
+    if i >= args.Len(): return fallback
+    return try json.Json.Parse(args[i]).AsNum()
+}
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError, json.Error {
+    args := os.Args()
+    epochs := I64(try number(args, 1, 3))
+    onBoard Bool = args.Len() <= 2 or args[2] == "board"
+    samples := I64(try number(args, 3, 60000))
+    hidden := I64(try number(args, 4, 128))
+    batch := I64(try number(args, 5, 32))
+    seed := U64(try number(args, 6, 1))
+    rate := try number(args, 7, 0.001)
+    beta := try number(args, 8, 0.5)
+    temperature := try number(args, 9, board.Temperature)
+    window := I64(try number(args, 11, 0))
+    spiking Bool = window > 0
+    restrain Bool = try number(args, 10, 0 if spiking else 1) == 1.0
+    if spiking and args.Len() <= 7: rate = 0.005
+    if spiking and args.Len() <= 8: beta = 1.0
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    part := loader.Labeled(data.Train.Features[:samples * 784], data.Train.Labels[:samples], 784, 10)
+
+    c := circuit.Circuit<F32>(batch)
+    pixels := c.Input(784)
+    lif := circuit.Neuron.LifNeuron(0.1, 1.0, 0.25, window if spiking else 1)
+    inner := c.Hidden(hidden, lif) if spiking else c.Hidden(hidden)
+    digits := c.Readout(10, circuit.Cost.Squared, lif) if spiking else c.Readout(10, circuit.Cost.CrossEntropy(temperature))
+    c.Project(pixels, inner, circuit.Wiring.OneWay)
+    c.Project(inner, digits)
+    r := rand.Rand(seed)
+    c.Plan(r)
+    if spiking {
+        for j in range hidden: c.Bias(inner)[j] = 1.0
+        for j in range 10: c.Bias(digits)[j] = 1.0
+        c.Weights(circuit.Projection(1)).Scale(0.3)
+    } else {
+        c.Certify(0.9)
+    }
+    e := board.Engine.Board(c)
+    opt := optim.FlatAdamW<F32>(c.ParamCount, rate)
+    lesson := circuit.Lesson(beta)
+    classes := Array<I32>(batch)
+    try io.PutLine(("784-" + $hidden + "-10 settling circuit for the board, " + $(c.ParamCount) + " parameters, lessons settled " + $("on the board" if onBoard else "in F32") +
+        ", batches of " + $batch + ", beta " + $beta + ", " + $("spiking, a window of " + $window + " steps" if spiking else "T " + $temperature) +
+        "; a sweep " + $(e.SweepCycles()) + " cycles and the constant " + $(e.ConstantCycles()) + " at one row on the board"))
+    trainSet := loader.Loader(part, batch, seed)
+    testSet := loader.Loader(data.Test, batch, seed, false)
+    for k in range 1, epochs + 1 {
+        t0 := time.Now()
+        trainSet.Epoch()
+        sweeps I64 = 0
+        refused I64 = 0
+        seen I64 = 0
+        loss F64 = 0.0
+        for b in range trainSet.Batches() {
+            n := trainSet.Fill(b, c.DriveData(pixels), classes)
+            label(c, digits, classes, n, spiking)
+            taught I64 = -1
+            if onBoard {
+                taught = try e.Teach(c, n, lesson) catch circuit.NotSettled { refused++ } default -1
+            } else {
+                taught = try c.Teach(n, lesson) catch circuit.NotSettled { refused++ } default -1
+            }
+            if taught < 0: continue
+            sweeps += taught
+            loss += c.Loss(circuit.Phase.Free) * F64(n)
+            seen += n
+            opt.Step(c.ParamData(), c.GradData())
+            if restrain: c.Restrain(0.9)
+            e.Load(c)
+        }
+        spent F64 = F64(time.Since(t0)) * 1e-9
+        stepsBefore := e.Steps
+        spikesBefore := e.Spikes
+        eventsBefore := e.Events
+        t1 := time.Now()
+        floatRight, boardRight, agree, floatSweeps, boardSweeps := evaluate(c, e, testSet, pixels, digits, c.LessonTolerance(beta))
+        answering F64 = F64(time.Since(t1)) * 1e-9
+        gain := ("gain " + $(c.Gain()).Fixed(2) if not spiking else "per answering step a row " +
+            $(F64(e.Spikes - spikesBefore) / F64(e.Steps - stepsBefore)).Fixed(1) + " spikes and " +
+            $(F64(e.Events - eventsBefore) / F64(e.Steps - stepsBefore)).Fixed(0) + " synaptic events")
+        try io.PutLine(("epoch " + $k + ": train loss " + $(loss / F64(seen)).Fixed(4) + ", " + $(F64(sweeps) / F64(trainSet.Batches() - refused)).Fixed(1) +
+            $(" steps" if spiking else " sweeps") + " a lesson, " + $refused + " refused, " + $spent.Fixed(1) + " s; test accuracy " + $(100.0 * floatRight).Fixed(2) + "% in F32 (" +
+            $floatSweeps.Fixed(1) + "), " + $(100.0 * boardRight).Fixed(2) + "% on the board (" + $boardSweeps.Fixed(1) + "), answers agreeing on " +
+            $(100.0 * agree).Fixed(2) + "% (" + $answering.Fixed(1) + " s); " + $gain + ", constants clipped " + $(100.0 * F64(e.Clipped) / F64(e.Constants)).Fixed(2) +
+            "%, totals or potentials saturated " + $(e.Saturations) + " times"))
+    }
+}
+
+# the batch's classes where the readout learns from them: as they are for a cross-entropy readout, as target rows of
+# 0.2 spikes a step for the class for a spiking one
+fn label(c mut circuit.Circuit<F32>&, digits circuit.Region, classes Array<I32>&, n I64, spiking Bool) {
+    if not spiking {
+        for i in range n: c.LabelData(digits)[i] = classes[i]
+        return
+    }
+    t := c.TargetData(digits)
+    for i in range n {
+        for j in range 10: t[i * 10 + j] = 0.2 if I64(classes[i]) == j else 0.0
+    }
+}
+
+# the test set answered by free settles in F32 and on the board: each one's accuracy, the fraction of samples on which
+# the two answer alike, and each one's mean sweeps an answer (a refused settle counts as wrong)
+fn evaluate<D>(c mut circuit.Circuit<F32>&, e mut board.Engine&, l mut loader.Loader<D>&, pixels circuit.Region, digits circuit.Region
+        tolerance F64) F64, F64, F64, F64, F64 {
+    l.Epoch()
+    classes := Array<I32>(c.Rows)
+    floatAnswers := Array<I32>(c.Rows)
+    boardAnswers := Array<I32>(c.Rows)
+    floatRight I64 = 0
+    boardRight I64 = 0
+    agree I64 = 0
+    seen I64 = 0
+    floatSweeps I64 = 0
+    boardSweeps I64 = 0
+    settles I64 = 0
+    budget := c.Budget(tolerance)
+    c.Nudge(circuit.Phase.Free, 0)
+    e.Nudge(circuit.Phase.Free, 0)
+    for b in range l.Batches() {
+        n := l.Fill(b, c.DriveData(pixels), classes)
+        seen += n
+        c.Use(n)
+        floatOk Bool = true
+        try c.Settle(circuit.Phase.Free, budget, tolerance) catch circuit.NotSettled { floatOk = false }
+        floatSweeps += c.Last.Sweeps
+        c.Predict(circuit.Phase.Free, digits, floatAnswers)
+        e.Inputs(c)
+        boardOk Bool = true
+        try e.Settle(circuit.Phase.Free, budget, tolerance) catch circuit.NotSettled { boardOk = false }
+        boardSweeps += e.Last.Sweeps
+        settles++
+        col := c.ColumnOf(digits)
+        for i in range n {
+            best I64 = 0
+            for j in range 1, 10 {
+                if e.Activity(circuit.Phase.Free, i, col + j) > e.Activity(circuit.Phase.Free, i, col + best): best = j
+            }
+            boardAnswers[i] = I32(best)
+        }
+        for i in range n {
+            if floatOk and floatAnswers[i] == classes[i]: floatRight++
+            if boardOk and boardAnswers[i] == classes[i]: boardRight++
+            if floatOk and boardOk and floatAnswers[i] == boardAnswers[i]: agree++
+        }
+    }
+    return F64(floatRight) / F64(seen), F64(boardRight) / F64(seen), F64(agree) / F64(seen), F64(floatSweeps) / F64(settles), F64(boardSweeps) / F64(settles)
+}

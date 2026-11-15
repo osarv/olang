@@ -1,0 +1,200 @@
+# nn/generate - text from a trained language model, one token at a time: each new token drawn from the softmax of the
+# logits at the last position (divided by a temperature), appended, and the model run again.
+#
+# Rerun runs the whole context through the model for every token - a graph planned for one sequence of ctx tokens,
+# its parameters copied from the trained graph - so a token costs a forward pass of ctx positions. Cached runs each token
+# once, on a graph planned for decoding (`graph.Graph<E>(1, 1, Mode.Captured, true)`): every attention keeps the keys and
+# values of the positions so far in the graph's arena (a key-value cache), so a token costs a forward pass of one position
+# and attention over the positions before it. When the context is full, the last ctx / 2 tokens are run again to start a
+# fresh cache. The model of a generating graph is built without a loss (`LanguageModel.Gpt(..., loss = false)`).
+#
+# A scan-based block (layers.SsmBlock, DeltaBlock) keeps no state between calls, so a model with one is generated with
+# Rerun.
+
+import "std/rand"
+import "../ad/graph"
+import "../data/text"
+import "train"
+
+# a token drawn from the softmax of logits / temperature - the most likely one when temperature is 0
+fn Sample<T>(logits Array<T>&, temperature F64, r mut rand.Rand&) I32 {
+    best I64 = 0
+    for i in range 1, logits.Len() {
+        if logits[i] > logits[best]: best = i
+    }
+    if temperature <= 0.0: return I32(best)
+    top := F64(logits[best])
+    total F64 = 0.0
+    for x in logits: total += ((F64(x) - top) / temperature).Exp()
+    u F64 = r.Float() * total
+    for i in range logits.Len() {
+        u -= ((F64(logits[i]) - top) / temperature).Exp()
+        if u < 0.0: return I32(i)
+    }
+    return I32(best)
+}
+
+# the logits of position j of the last Forward
+fn logitsAt<E>(g graph.Graph<E>&, m train.LanguageModel&, j I64) Array<E>& {
+    z := g.Value(m.Logits).Flat()!
+    width := z.Len() / g.Value(m.Logits).Dim(1)
+    return z[j * width:(j + 1) * width]
+}
+
+# "prompt" and "count" tokens after it, generated on g - a graph of the model planned for one sequence (batch 1), its
+# parameters those of the trained one - running the last ctx tokens (all of them while there are fewer) through it for
+# each new token
+fn RerunTokens<E>(g mut graph.Graph<E>&, m train.LanguageModel&, prompt Array<I32>&, count I64, temperature F64
+        r mut rand.Rand&) Array<I32> {
+    ctx := m.Ctx
+    all := Vec<I32>()
+    for id in prompt: all.Push(id)
+    g.Training = false
+    ids := g.Ints(m.Tokens).Flat()!
+    for _ in range count {
+        n := all.Len()
+        L I64 = n if n < ctx else ctx
+        for t in range ctx: ids[t] = all[n - L + t] if t < L else 0
+        g.Forward(1)
+        all.Push(Sample(logitsAt(g, m, L - 1), temperature, r))
+    }
+    return all.ToArray()
+}
+
+# "prompt" and "count" tokens after it, generated on g - a graph of the model planned for decoding one sequence, its
+# parameters those of the trained one: the prompt (its last ctx tokens) run once, then each new token alone, attending to
+# the cache. A full context starts again from its last ctx / 2 tokens
+fn CachedTokens<E>(g mut graph.Graph<E>&, m train.LanguageModel&, prompt Array<I32>&, count I64, temperature F64
+        r mut rand.Rand&) Array<I32> {
+    ctx := m.Ctx
+    all := Vec<I32>()
+    for id in prompt: all.Push(id)
+    g.Training = false
+    ids := g.Ints(m.Tokens).Flat()!
+    cached := prefill(g, ids, all, ctx if all.Len() > ctx else all.Len())
+    last := cached - 1
+    for _ in range count {
+        next := Sample(logitsAt(g, m, last), temperature, r)
+        all.Push(next)
+        if cached == ctx {
+            cached = prefill(g, ids, all, ctx / 2)
+            last = cached - 1
+        } else {
+            g.Pos = cached
+            ids[0] = next
+            g.Forward(1)
+            cached++
+            last = 0
+        }
+    }
+    g.Pos = 0
+    return all.ToArray()
+}
+
+# the last n tokens of "all" run from position 0, starting the cache again; gives n
+fn prefill<E>(g mut graph.Graph<E>&, ids mut Array<I32>&, all Vec<I32>&, n I64) I64 {
+    g.Pos = 0
+    for t in range n: ids[t] = all[all.Len() - n + t]
+    g.Forward(n)
+    return n
+}
+
+# RerunTokens on text: the prompt encoded by the corpus, the result decoded
+fn Rerun<E>(g mut graph.Graph<E>&, m train.LanguageModel&, c text.Corpus&, prompt String&, count I64, temperature F64
+        r mut rand.Rand&) String ? text.CorpusError {
+    ids := try c.Encode(prompt)
+    return c.Decode(RerunTokens(g, m, ids, count, temperature, r))
+}
+
+# CachedTokens on text
+fn Cached<E>(g mut graph.Graph<E>&, m train.LanguageModel&, c text.Corpus&, prompt String&, count I64, temperature F64
+        r mut rand.Rand&) String ? text.CorpusError {
+    ids := try c.Encode(prompt)
+    return c.Decode(CachedTokens(g, m, ids, count, temperature, r))
+}
+
+# ---- tests ----
+
+# a model of 11 tokens, context 8, width 16 in 4 heads, 2 layers, on a graph of `batch` sequences (decoding one when
+# `decode`), no loss
+fn model<E>(batch I64, decode Bool) graph.Graph<E>, train.LanguageModel {
+    g mut graph.Graph<E>& = graph.Graph<E>(batch, 1, graph.Mode.Captured, decode)
+    m := train.LanguageModel.Gpt(g, 11, 8, 16, 4, 2, 0.0, false)
+    return g, m
+}
+
+# a decoding graph and a rerunning one with the parameters of a trained-looking one: the starting values spread out so
+# that the logits differ between tokens
+fn trained() graph.Graph<F64>, graph.Graph<F64>, graph.Graph<F64>, train.LanguageModel {
+    full, m := model<F64>(2, false)
+    dec, _ := model<F64>(1, true)
+    once, _ := model<F64>(1, false)
+    r := rand.Rand(31)
+    full.Plan(r)!
+    dec.Plan(r)!
+    once.Plan(r)!
+    p := full.Params().Flat()!
+    for i in range p.Len(): p[i] = p[i] * 20.0
+    dec.Params().Convert(full.Params())!
+    once.Params().Convert(full.Params())!
+    return full, dec, once, m
+}
+
+test Sample "is greedy at temperature 0 and draws from the softmax otherwise" {
+    r := rand.Rand(4)
+    logits := Array<F32>[0.5, 2.0, 1.0, -1.0]
+    assert Sample(logits, 0.0, r) == 1 and Sample(logits, -1.0, r) == 1
+    counts := Array<I64>(4)
+    for _ in range 20000: counts[I64(Sample(logits, 1.0, r))]++
+    total F64 = 0.0
+    for x in logits: total += F64(x).Exp()
+    for i in range 4: assert (F64(counts[i]) / 20000.0 - F64(logits[i]).Exp() / total).Abs() < 0.02
+    assert Sample(Array<BF16>[BF16(0.0), BF16(3.0)], 0.0, r) == 1
+}
+
+test CachedTokens "decoding with the cache gives the logits of running the whole sequence, a prefill and then token by token" {
+    full, dec, _, m := trained()
+    seq := full.Ints(m.Tokens).Flat()!
+    r := rand.Rand(5)
+    for i in range 16: seq[i] = I32(r.Below(11))
+    full.Training = false
+    full.Forward(2)
+    want := full.Value(m.Logits)
+    ids := dec.Ints(m.Tokens).Flat()!
+    for i in range 3: ids[i] = seq[8 + i]                    # the second sequence: its own positions from 0
+    dec.Pos = 0
+    dec.Forward(3)
+    worst F64 = 0.0
+    for t in range 3 {
+        for c in range 11: worst = worst.Max((dec.Value(m.Logits).Get(0, t, c) - want.Get(1, t, c)).Abs())
+    }
+    for t in range 3, 8 {
+        dec.Pos = t
+        ids[0] = seq[8 + t]
+        dec.Forward(1)
+        for c in range 11: worst = worst.Max((dec.Value(m.Logits).Get(0, 0, c) - want.Get(1, t, c)).Abs())
+    }
+    assert worst < 1e-12, "decoded logits differ from the whole sequence's by " + $worst
+    assert want.Flat()!.Len() > 0 and (want.Get(1, 0, 0) - want.Get(1, 0, 1)).Abs() > 0.1
+}
+
+test CachedTokens "greedily gives the tokens running the context again gives, while the context is not full, and sampling is seeded" {
+    _, dec, once, m := trained()
+    prompt := Array<I32>[3, 1, 4]
+    a := CachedTokens(dec, m, prompt, 4, 0.0, rand.Rand(1))
+    b := RerunTokens(once, m, prompt, 4, 0.0, rand.Rand(1))
+    assert a.Len() == 7 and a == b and a[:3] == prompt
+    # past a full context the two differ by design: the cache restarts from half of it. Both still run, and a seed repeats a run
+    c := CachedTokens(dec, m, prompt, 30, 0.8, rand.Rand(7))
+    d := CachedTokens(dec, m, prompt, 30, 0.8, rand.Rand(7))
+    assert c.Len() == 33 and c == d
+    assert RerunTokens(once, m, prompt, 30, 0.8, rand.Rand(7)).Len() == 33
+}
+
+test Cached "on text: the prompt encoded by the corpus, the result decoded, and the same as running the context again" {
+    c := text.Corpus("abcdefghij\nbadcfehgji\n", 0.9)           # the model's 11 tokens
+    assert c.Size() == 11
+    _, dec, once, m := trained()
+    out := try Cached(dec, m, c, "ab", 5, 0.0, rand.Rand(1))
+    assert out.Len() == 7 and out == (try Rerun(once, m, c, "ab", 5, 0.0, rand.Rand(1)))
+}

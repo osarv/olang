@@ -1,0 +1,29 @@
+# O17 over-rejects a value captured by a lambda and lent to a callee that only reads it. v is a local V whose reference
+# (d) lives elsewhere than v's own storage; read(v) is accepted as a direct call, but the same call inside a lambda is
+# "the callee can store through it" - read's parameter is read-only (V&), and it only builds a local W holding it, which
+# dies with the call. Found writing bench/gemm.olang (kernels.GemmI8, then quant.Linear, called from lambdas timed in
+# turn); worked around in GemmI8 by keeping slices rather than references to its parameters in its local struct, and
+# in the bench by declaring the captured values references (x T& = ...), as the help says.
+# Expected: builds and prints "0" twice. Actual (olang 374c1e3c): error[O17] at the read(v) inside the lambda.
+
+type V struct(d mut Array<I32>&, n I64) {
+    d
+    n
+}
+
+type W struct(v V&) {
+    v
+}
+
+fn read(v V&) I32 {
+    w := W(v)
+    return w.v.d[0]
+}
+
+fn main() {
+    arr := Array<I32>(4)
+    v := V(arr, 4)
+    f := fn() { Println($read(v)) }
+    f()
+    Println($read(v))
+}

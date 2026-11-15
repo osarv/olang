@@ -1,0 +1,20 @@
+# Status: reproduces (new). Columns<C>.Fields is empty when C's fields are lower case, even in the module declaring
+# C - so a generic over C cannot reach a column by reflection (index 0 is outside the list, which holds 0). With the
+# fields capitalized it holds them. Expected: C's private fields' columns in Columns<C>.Fields where C's fields are
+# readable (M6a, as the prelude's columns.olang header says).
+
+type Cell struct(v F32, s F32) { v, s }
+
+fn clear<C>(c mut Columns<C>&) {
+    for k, f in C.Fields {
+        z f.Type
+        for i in range c.Len(): Columns<C>.Fields[k].Of(c)[i] = z
+    }
+}
+
+fn main() {
+    c := Columns<Cell>(3)
+    c.v[1] = 2.0
+    clear(c)
+    Println($c.v[1])
+}

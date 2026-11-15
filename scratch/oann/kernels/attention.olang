@@ -1,0 +1,621 @@
+# kernels/attention - multi-head scaled dot-product attention (Vaswani et al.), forward and backward, a decoding step
+# against a key/value cache, and rotary position embeddings, over `mat.Mat` operands.
+#
+# q, k, v and the output are n x D, n = sequences x Ctx, and head h of a row is its columns h Dh ... (Dh = D / heads): a
+# strided view of the rows, nothing copied. For each sequence and head the weights are
+#   P = softmax(Q K^T / sqrt(Dh)), causal: row i attends to positions 0 ... i only;    Y = P V
+# and `probs` keeps every P - row (s heads + h) Ctx + i holds row i of sequence s's head h, so Ctx x Ctx numbers per
+# sequence and head, the memory to watch (n heads Ctx rows, Ctx columns, zero above the diagonal where causal).
+#
+# Computed in A (F32, or F64 for F64) from storage S (the scores and weights are stored in S, rounded once each). The
+# work is split by matrix - a matrix is one (sequence, head), index e = s heads + h - and a part of them at a time
+# (attentionEach: as many as keep what the passes over a part go over in the tasks' caches). The six products are
+# gemm.GemmBatch's, one call over each part, its matrices spread over the workspace's tasks; the softmax between them is
+# spread over the same tasks by matrix. A task writes only its own matrices, so the result is the same for every thread
+# count. A causal product computes and reads only what is on and below the diagonal, so causality is exact by
+# construction rather than by zeros. S is the storage, A the workspace's accumulator (F32 for BF16, F16 and F32; F64).
+
+import "mat"
+import "elem"
+import "gemm"
+
+# how a batch of sequences is cut into heads: Count heads of Dh = D / Count columns, sequences of Ctx rows (row r is
+# position r % Ctx of sequence r / Ctx), causal or not
+type Heads struct(Count I64, Ctx I64, Causal Bool = true) {
+    Count
+    Ctx
+    Causal
+}
+
+# the softmax of matrices e0 ... e1 - 1, forward (p the scores, made weights) or backward (d the gradient of the weights, made
+# the gradient of the scores, p the weights), a run of them per task. A named job, not a lambda: a lambda's body ran three
+# times as slowly here (its loops were not vectorized)
+type rowsJob<S, A> struct(d mat.Mat<S>, p mat.Mat<S>, at Heads, scale A, backward Bool) {
+    d
+    p
+    at
+    scale
+    backward
+}
+
+fn (j rowsJob<S, A>&) one(e I64) {
+    if j.backward: softmaxBackward<S, A>(weightsOf(j.d, e, j.at), weightsOf(j.p, e, j.at), j.at.Causal, j.scale)
+    else: softmaxRows<S, A>(weightsOf(j.p, e, j.at), j.at.Causal)
+}
+
+fn (j rowsJob<S, A>&) run(lo I64, hi I64) {
+    for e in range lo, hi: j.one(e)
+}
+
+# the job over matrices e0 ... e1 - 1 in runs, at most `threads` of them; with one run on the calling thread. Runs do not
+# overlap, so a task writes only its own matrices
+fn spread<S, A>(j rowsJob<S, A>&, e0 I64, e1 I64, threads I64) {
+    tasks := threads if threads < e1 - e0 else e1 - e0
+    if tasks <= 1 {
+        for e in range e0, e1: j.one(e)
+        return
+    }
+    share := (e1 - e0 + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := e0 + t * share
+            hi := lo + share if lo + share < e1 else e1
+            if lo < hi: spawn j.run(lo, hi)
+        }
+    }
+}
+
+# ---- the parts ----
+
+# bytes of matrices a task keeps in cache across a part's passes: measured, a non-causal backward at Ctx 256 ran 1.2-1.5
+# times as long as a Gemm per head when every matrix was taken at once, and 0.87-1.02 times in parts of one (DESIGN.md 19)
+attentionCache I64 = 524288
+
+# how many matrices a part takes: as many as fit attentionCache bytes, a matrix `matrix` bytes, for each task
+fn attentionEach(seqs I64, heads I64, threads I64, matrix I64) I64 {
+    per := attentionCache / matrix if attentionCache > matrix else 1
+    each := per * threads if threads > 1 else per
+    return each if each < seqs * heads else seqs * heads
+}
+
+# how many parts of seqs sequences in heads are taken `each` matrices at a time: whole sequences when each reaches
+# heads, else runs of one sequence's heads
+fn attentionParts(seqs I64, heads I64, each I64) I64 {
+    if each >= heads: return (seqs + each / heads - 1) / (each / heads)
+    return seqs * ((heads + each - 1) / each)
+}
+
+# part i as the matrices e0 ... e1 - 1 (e = s heads + h)
+fn attentionPart(i I64, seqs I64, heads I64, each I64) I64, I64 {
+    total := seqs * heads
+    if each >= heads {
+        e0 := i * (each / heads) * heads
+        e1 := e0 + (each / heads) * heads
+        return e0, e1 if e1 < total else total
+    }
+    runs := (heads + each - 1) / each
+    h0 := (i % runs) * each
+    s := i / runs
+    return s * heads + h0, s * heads + (h0 + each if h0 + each < heads else heads)
+}
+
+# ---- views of one matrix ----
+
+# m's block of rows r0 ... and columns c0 ..., a view
+fn block<S>(m mat.Mat<S>&, r0 I64, c0 I64, rows I64, cols I64) mat.Mat<S> {
+    return mat.Mat<S>(m.Data, m.Off + r0 * m.Ld + c0, rows, cols, m.Ld)
+}
+
+# matrix e's weights: Ctx rows of probs
+fn weightsOf<S>(probs mat.Mat<S>&, e I64, at Heads) mat.Mat<S> {
+    return block(probs, e * at.Ctx, 0, at.Ctx, at.Ctx)
+}
+
+# ---- a part as batches ----
+
+# the batches of a part, matrices e0 ... e1 - 1: x's rows and columns it covers, as gemm.Batch.Heads views - whole
+# sequences when the part is (a run of heads of one sequence otherwise)
+fn partOf<S>(x mat.Mat<S>&, e0 I64, e1 I64, at Heads) gemm.Batch<S> {
+    dh := x.Cols / at.Count
+    count := e1 - e0
+    whole := count % at.Count == 0
+    heads := at.Count if whole else count
+    rows := count / at.Count * at.Ctx if whole else at.Ctx
+    return gemm.Batch<S>.Heads(block(x, e0 / at.Count * at.Ctx, e0 % at.Count * dh, rows, heads * dh), at.Ctx, heads)
+}
+
+# the weights of matrices e0 ... e1 - 1 (rows of probs or scratch), stacked
+fn stackOf<S>(p mat.Mat<S>&, e0 I64, e1 I64, at Heads) gemm.Batch<S> {
+    heads := at.Count if (e1 - e0) % at.Count == 0 else e1 - e0
+    return gemm.Batch<S>.Stacked(block(p, e0 * at.Ctx, 0, (e1 - e0) * at.Ctx, at.Ctx), at.Ctx, heads)
+}
+
+# scores and dP are confined to the lower triangle, P and dS (zero above it) are read there only
+fn resultOf(causal Bool) gemm.Triangle {
+    return gemm.Triangle.Result(0) if causal else gemm.Triangle.Full
+}
+
+fn leftOf(causal Bool) gemm.Triangle {
+    return gemm.Triangle.Left(0) if causal else gemm.Triangle.Full
+}
+
+# ---- attention ----
+
+# out = attention(q, k, v) over the sequences and heads `at` names, the weights kept in probs (n heads rows of Ctx
+# columns). out, q, k and v are n x D, any row stride. ws is the products' workspace and fixes the thread count; it grows
+# on the first call and then allocates nothing
+fn Attention<S, A>(ws mut gemm.Workspace<A>&, out mut mat.Mat<S>&, q mat.Mat<S>&, k mat.Mat<S>&, v mat.Mat<S>&, probs mut mat.Mat<S>&, at Heads) {
+    dh := q.Cols / at.Count
+    scale A = 1.0 / A(dh).Sqrt()
+    seqs := q.Rows / at.Ctx
+    each := attentionEach(seqs, at.Count, ws.Threads, at.Ctx * at.Ctx * S.Size)
+    for i in range attentionParts(seqs, at.Count, each) {
+        e0, e1 := attentionPart(i, seqs, at.Count, each)
+        p := stackOf(probs, e0, e1, at)
+        gemm.GemmBatch(ws, p, partOf(q, e0, e1, at), false, partOf(k, e0, e1, at), true, scale, 0.0, resultOf(at.Causal))
+        spread(rowsJob<S, A>(probs, probs, at, scale, false), e0, e1, ws.Threads)
+        gemm.GemmBatch(ws, partOf(out, e0, e1, at), p, false, partOf(v, e0, e1, at), false, 1.0, 0.0, leftOf(at.Causal))
+    }
+}
+
+# each row of the scores p (Ctx x Ctx) replaced by its softmax - over positions 0 ... i in row i when causal, zeros after
+fn softmaxRows<S, A>(p mat.Mat<S>&, causal Bool) {
+    data := p.Data
+    cols := p.Cols
+    for i in range p.Rows {
+        o := p.Off + i * p.Ld
+        last := i + 1 if causal else cols
+        elem.SoftmaxRun<S, A>(data, o, last, 1.0)
+        for j in range last, cols: data[o + j] = S(0.0)
+    }
+}
+
+# dP (in d) made dS = scale P (dP - rowsum(dP P)) row by row - softmax's backward, scaled; causal, row i only up to position
+# i, the rest of d never read
+fn softmaxBackward<S, A>(d mat.Mat<S>&, p mat.Mat<S>&, causal Bool, scale A) {
+    dd := d.Data
+    pd := p.Data
+    for i in range d.Rows {
+        last := i + 1 if causal else d.Cols
+        o := d.Off + i * d.Ld
+        q := p.Off + i * p.Ld
+        dot := elem.DotIn<S, A>(dd, o, pd, q, last)
+        for j in range last: dd[o + j] = S(scale * A(pd[q + j]) * (A(dd[o + j]) - dot))
+    }
+}
+
+# the scratch AttentionGrad needs over `rows` rows of q (n) in `heads` heads of sequences of `ctx` rows: dS, as large as P
+fn AttentionScratch(rows I64, heads I64, ctx I64) I64 {
+    return rows * heads * ctx
+}
+
+# the gradients of attention, with dO = dout's heads and dS = scale P (dO V^T - rowsum(dO V^T P)) (softmax's backward,
+# scaled):  dQ = dS K,  dK = dS^T Q,  dV = P^T dO.
+# probs are the weights Attention kept. A gradient wanted is a matrix with rows, one not wanted an empty one (Rows 0); each
+# is written, or added to what is there where its add flag is set - which is how a node attending to itself (q, k or v the
+# same value) collects the three contributions. scratch holds at least AttentionScratch(n, heads, Ctx) elements
+fn AttentionGrad<S, A>(ws mut gemm.Workspace<A>&, dq mut mat.Mat<S>&, dk mut mat.Mat<S>&, dv mut mat.Mat<S>&, dout mat.Mat<S>&, q mat.Mat<S>&, k mat.Mat<S>&, v mat.Mat<S>&, probs mat.Mat<S>&, scratch mut Array<S>&, at Heads, addQ Bool = false, addK Bool = false, addV Bool = false) {
+    dh := q.Cols / at.Count
+    scale A = 1.0 / A(dh).Sqrt()
+    seqs := q.Rows / at.Ctx
+    each := attentionEach(seqs, at.Count, ws.Threads, 2 * at.Ctx * at.Ctx * S.Size)
+    ds := mat.Mat<S>(scratch, 0, probs.Rows, at.Ctx, at.Ctx)
+    for i in range attentionParts(seqs, at.Count, each) {
+        e0, e1 := attentionPart(i, seqs, at.Count, each)
+        dS := stackOf(ds, e0, e1, at)
+        dO := partOf(dout, e0, e1, at)
+        gemm.GemmBatch(ws, dS, dO, false, partOf(v, e0, e1, at), true, 1.0, 0.0, resultOf(at.Causal))
+        spread(rowsJob<S, A>(ds, probs, at, scale, true), e0, e1, ws.Threads)
+        left := leftOf(at.Causal)
+        if dq.Rows > 0: gemm.GemmBatch(ws, partOf(dq, e0, e1, at), dS, false, partOf(k, e0, e1, at), false, 1.0, 1.0 if addQ else 0.0, left)
+        if dk.Rows > 0: gemm.GemmBatch(ws, partOf(dk, e0, e1, at), dS, true, partOf(q, e0, e1, at), false, 1.0, 1.0 if addK else 0.0, left)
+        if dv.Rows > 0: gemm.GemmBatch(ws, partOf(dv, e0, e1, at), stackOf(probs, e0, e1, at), true, dO, false, 1.0, 1.0 if addV else 0.0, left)
+    }
+}
+
+# ---- decoding ----
+
+# causal attention while decoding: rows r of q, k and v (n of them) are positions first + r of one sequence. Each row's key
+# and value join the cache - keys and values, a row per position, D columns - and the row attends to every position up to
+# its own: the rows of causal Attention over the whole sequence, computed for the new positions only. scores is a run of
+# at least first + n elements in A holding a row's weights, one per position (A is F32, F64 for F64)
+fn AttentionStep<S, A>(out mut mat.Mat<S>&, q mat.Mat<S>&, k mat.Mat<S>&, v mat.Mat<S>&, keys mut mat.Mat<S>&, values mut mat.Mat<S>&, scores mut Array<A>&, first I64, heads I64) {
+    dh := q.Cols / heads
+    scale A = 1.0 / A(dh).Sqrt()
+    for r in range q.Rows {
+        p := first + r
+        for c in range q.Cols {
+            keys.Data[keys.Off + p * keys.Ld + c] = k.Data[k.Off + r * k.Ld + c]
+            values.Data[values.Off + p * values.Ld + c] = v.Data[v.Off + r * v.Ld + c]
+        }
+        for h in range heads: stepHead<S, A>(out, q, keys, values, scores, r, p, h * dh, dh, scale)
+    }
+}
+
+# row r's head at columns c0 ... c0 + dh - 1, attending to positions 0 ... p
+fn stepHead<S, A>(out mut mat.Mat<S>&, q mat.Mat<S>&, keys mat.Mat<S>&, values mat.Mat<S>&, scores mut Array<A>&, r I64, p I64, c0 I64, dh I64, scale A) {
+    qo := q.Off + r * q.Ld + c0
+    top A = scale * elem.DotIn<S, A>(q.Data, qo, keys.Data, keys.Off + c0, dh)
+    scores[0] = top
+    for j in range 1, p + 1 {
+        s := scale * elem.DotIn<S, A>(q.Data, qo, keys.Data, keys.Off + j * keys.Ld + c0, dh)
+        scores[j] = s
+        top = s if s > top else top
+    }
+    total A
+    for j in range p + 1 {
+        scores[j] = elem.FastExp(scores[j] - top)
+        total += scores[j]
+    }
+    acc := Array<A>(64)
+    inv := 1.0 / total
+    for d0 in range 0, dh, 64 {
+        w := 64 if d0 + 64 <= dh else dh - d0
+        for d in range 64: acc[d] = 0.0
+        for j in range p + 1 {
+            x := scores[j] * inv
+            o := values.Off + j * values.Ld + c0 + d0
+            for d in range w: acc[d] += x * A(values.Data[o + d])
+        }
+        for d in range w: out.Data[out.Off + r * out.Ld + c0 + d0 + d] = S(acc[d])
+    }
+}
+
+# ---- rotary position embeddings ----
+
+# x's row r rotated as the position pos + r % Ctx says (Su et al.): in every head of Dh columns, the pair (c, c + Dh / 2)
+# is rotated by the angle position x base^(-2c / Dh), c < Dh / 2. The angles are computed in F64. Rotation keeps the length
+# of each pair, and a dot product of two rotated vectors depends on their positions only through the difference
+fn Rope<T>(x mut mat.Mat<T>&, pos I64, at Heads, base F64) {
+    rotate(x, pos, at, base, 1.0)
+}
+
+# the inverse rotation: the gradient of Rope with respect to its input is the gradient of its output rotated back
+fn RopeBack<T>(x mut mat.Mat<T>&, pos I64, at Heads, base F64) {
+    rotate(x, pos, at, base, -1.0)
+}
+
+fn rotate<T>(x mut mat.Mat<T>&, pos I64, at Heads, base F64, direction F64) {
+    match T {
+        case F64 { rotateIn<T, F64>(x, pos, at, base, direction) }
+        case _ { rotateIn<T, F32>(x, pos, at, base, direction) }
+    }
+}
+
+# the cosines and sines of one row's angles, 128 pairs at a time
+fn rotateIn<S, A>(x mut mat.Mat<S>&, pos I64, at Heads, base F64, direction F64) {
+    dh := x.Cols / at.Count
+    half := dh / 2
+    cs := Array<A>(128)
+    sn := Array<A>(128)
+    for r in range x.Rows {
+        p := F64(pos + r % at.Ctx)
+        for c0 in range 0, half, 128 {
+            w := 128 if c0 + 128 <= half else half - c0
+            for c in range w {
+                angle := direction * p * (-2.0 * F64(c0 + c) / F64(dh) * base.Log()).Exp()
+                cs[c] = A(angle.Cos())
+                sn[c] = A(angle.Sin())
+            }
+            for h in range at.Count: rotatePairs<S, A>(x, r, h * dh + c0, half, w, cs, sn)
+        }
+    }
+}
+
+# row r's pairs (c, c + half) for c = c0 ... c0 + w - 1, rotated by the angles whose cosines and sines are cs and sn
+fn rotatePairs<S, A>(x mut mat.Mat<S>&, r I64, c0 I64, half I64, w I64, cs Array<A>&, sn Array<A>&) {
+    o := x.Off + r * x.Ld + c0
+    for c in range w {
+        a := A(x.Data[o + c])
+        b := A(x.Data[o + half + c])
+        x.Data[o + c] = S(a * cs[c] - b * sn[c])
+        x.Data[o + half + c] = S(a * sn[c] + b * cs[c])
+    }
+}
+
+# ---- tests ----
+
+import "std/rand"
+
+fn fill<T>(a mut Array<T>&, r mut rand.Rand&, sd F64) {
+    for i in range a.Len(): a[i] = T(r.Normal() * sd)
+}
+
+# attention as the definition gives it, in F64 on contiguous n x D arrays; probs row (s heads + h) ctx + i
+fn reference(q Array<F64>&, k Array<F64>&, v Array<F64>&, seqs I64, ctx I64, heads I64, dim I64, causal Bool) Array<F64>, Array<F64> {
+    dh := dim / heads
+    y := Array<F64>(seqs * ctx * dim)
+    p := Array<F64>(seqs * heads * ctx * ctx)
+    for s in range seqs {
+        for h in range heads {
+            for i in range ctx {
+                last := i + 1 if causal else ctx
+                row := Array<F64>(ctx)
+                for j in range last {
+                    for d in range dh: row[j] += q[(s * ctx + i) * dim + h * dh + d] * k[(s * ctx + j) * dim + h * dh + d]
+                    row[j] /= F64(dh).Sqrt()
+                }
+                top := row[0]
+                for j in range last: top = top.Max(row[j])
+                total F64
+                for j in range last {
+                    row[j] = (row[j] - top).Exp()
+                    total += row[j]
+                }
+                for j in range last {
+                    row[j] /= total
+                    p[((s * heads + h) * ctx + i) * ctx + j] = row[j]
+                    for d in range dh: y[(s * ctx + i) * dim + h * dh + d] += row[j] * v[(s * ctx + j) * dim + h * dh + d]
+                }
+            }
+        }
+    }
+    return y, p
+}
+
+fn attentionWithin<T, A>(bound F64, causal Bool, threads I64, r mut rand.Rand&) {
+    seqs := 3
+    ctx := 7
+    heads := 4
+    dim := 16
+    n := seqs * ctx
+    qa := Array<T>(n * dim)
+    ka := Array<T>(n * dim)
+    va := Array<T>(n * dim)
+    fill(qa, r, 1.0)
+    fill(ka, r, 1.0)
+    fill(va, r, 1.0)
+    out := Array<T>(n * dim)
+    pa := Array<T>(n * heads * ctx)
+    at := Heads(heads, ctx, causal)
+    ws := gemm.Workspace<A>(threads)
+    Attention(ws, mat.Mat<T>(out, 0, n, dim, dim), mat.Mat<T>(qa, 0, n, dim, dim), mat.Mat<T>(ka, 0, n, dim, dim), mat.Mat<T>(va, 0, n, dim, dim), mat.Mat<T>(pa, 0, n * heads, ctx, ctx), at)
+    y, p := reference(Array<F64>[F64(x) for x in qa], Array<F64>[F64(x) for x in ka], Array<F64>[F64(x) for x in va], seqs, ctx, heads, dim, causal)
+    for i in range y.Len(): assert (F64(out[i]) - y[i]).Abs() <= bound, "y[" + $i + "] " + $out[i] + " against " + $y[i] + " in " + $T.Name
+    for i in range p.Len(): assert (F64(pa[i]) - p[i]).Abs() <= bound, "probs[" + $i + "] in " + $T.Name
+}
+
+test Attention "equals the naive F64 attention, causal and not, one and three threads: F64 1e-13, F32 2e-6, BF16 3e-2" {
+    r := rand.Rand(7)
+    for causal in Array<Bool>[true, false] {
+        for threads in Array<I64>[1, 3] {
+            attentionWithin<F64, F64>(1.0e-13, causal, threads, r)
+            attentionWithin<F32, F32>(2.0e-6, causal, threads, r)
+            attentionWithin<BF16, F32>(3.0e-2, causal, threads, r)
+        }
+    }
+}
+
+test Attention "on strided views of wider storage, the result is the contiguous one" {
+    r := rand.Rand(8)
+    seqs := 2
+    ctx := 5
+    heads := 2
+    dim := 8
+    n := seqs * ctx
+    qa := Array<F32>(n * dim)
+    ka := Array<F32>(n * dim)
+    va := Array<F32>(n * dim)
+    fill(qa, r, 1.0)
+    fill(ka, r, 1.0)
+    fill(va, r, 1.0)
+    # the same numbers in storage with a row stride of 3 dim and an offset
+    wide := Array<F32>(3 + n * 3 * dim)
+    for i in range n {
+        for c in range dim: wide[3 + i * 3 * dim + dim + c] = qa[i * dim + c]
+    }
+    plain := Array<F32>(n * dim)
+    at := Heads(heads, ctx)
+    probs := Array<F32>(n * heads * ctx)
+    ws := gemm.Workspace<F32>(1)
+    Attention(ws, mat.Mat<F32>(plain, 0, n, dim, dim), mat.Mat<F32>(qa, 0, n, dim, dim), mat.Mat<F32>(ka, 0, n, dim, dim), mat.Mat<F32>(va, 0, n, dim, dim), mat.Mat<F32>(probs, 0, n * heads, ctx, ctx), at)
+    out := Array<F32>(3 + n * 2 * dim)
+    probs2 := Array<F32>(n * heads * ctx)
+    Attention(ws, mat.Mat<F32>(out, 3, n, dim, 2 * dim), mat.Mat<F32>(wide, 3 + dim, n, dim, 3 * dim), mat.Mat<F32>(ka, 0, n, dim, dim), mat.Mat<F32>(va, 0, n, dim, dim), mat.Mat<F32>(probs2, 0, n * heads, ctx, ctx), at)
+    for i in range n {
+        for c in range dim: assert out[3 + i * 2 * dim + c] == plain[i * dim + c]
+    }
+    assert probs == probs2
+}
+
+test attentionPart "the parts cover every (sequence, head) matrix exactly once, whole sequences or runs of one sequence's heads" {
+    for seqs in Array<I64>[1, 2, 5] {
+        for heads in Array<I64>[1, 3, 4] {
+            for each in Array<I64>[1, 2, 3, 4, 7, 12, 100] {
+                total := seqs * heads
+                e := each if each < total else total
+                seen := Array<I64>(total)
+                for i in range attentionParts(seqs, heads, e) {
+                    e0, e1 := attentionPart(i, seqs, heads, e)
+                    assert e0 < e1
+                    for m in range e0, e1: seen[m] += 1
+                }
+                for m in range total: assert seen[m] == 1, "seqs " + $seqs + " heads " + $heads + " each " + $each + " matrix " + $m
+            }
+        }
+    }
+}
+
+# the loss sum(w y) of attention in F64
+fn attentionLoss(q Array<F64>&, k Array<F64>&, v Array<F64>&, w Array<F64>&, seqs I64, ctx I64, heads I64, dim I64, causal Bool) F64 {
+    y, p := reference(q, k, v, seqs, ctx, heads, dim, causal)
+    assert p.Len() > 0
+    loss F64
+    for i in range y.Len(): loss += w[i] * y[i]
+    return loss
+}
+
+test AttentionGrad "dq, dk and dv equal the central differences of sum(w y) in F64, causal and not; add flags add; threads agree" {
+    r := rand.Rand(9)
+    seqs := 2
+    ctx := 4
+    heads := 2
+    dim := 6
+    n := seqs * ctx
+    h := 1.0e-6
+    for causal in Array<Bool>[true, false] {
+        q := Array<F64>(n * dim)
+        k := Array<F64>(n * dim)
+        v := Array<F64>(n * dim)
+        w := Array<F64>(n * dim)
+        fill(q, r, 1.0)
+        fill(k, r, 1.0)
+        fill(v, r, 1.0)
+        fill(w, r, 1.0)
+        out := Array<F64>(n * dim)
+        pr := Array<F64>(n * heads * ctx)
+        at := Heads(heads, ctx, causal)
+        m := fn(a mut Array<F64>&): return mat.Mat<F64>(a, 0, n, dim, dim)
+        ws := gemm.Workspace<F64>(1)
+        Attention(ws, m(out), m(q), m(k), m(v), mat.Mat<F64>(pr, 0, n * heads, ctx, ctx), at)
+        dq := Array<F64>(n * dim)
+        dk := Array<F64>(n * dim)
+        dv := Array<F64>(n * dim)
+        scratch := Array<F64>(AttentionScratch(n, heads, ctx))
+        pm := mat.Mat<F64>(pr, 0, n * heads, ctx, ctx)
+        AttentionGrad(ws, m(dq), m(dk), m(dv), m(w), m(q), m(k), m(v), pm, scratch, at)
+        for i in range n * dim {
+            for which in range 3 {
+                x := Array<Array<F64>>[q.Copy(), k.Copy(), v.Copy()]
+                hi := x.Copy()
+                hi[which][i] += h
+                lo := x.Copy()
+                lo[which][i] -= h
+                want := (attentionLoss(hi[0], hi[1], hi[2], w, seqs, ctx, heads, dim, causal) - attentionLoss(lo[0], lo[1], lo[2], w, seqs, ctx, heads, dim, causal)) / (2.0 * h)
+                got := (dq if which == 0 else (dk if which == 1 else dv))[i]
+                assert (got - want).Abs() <= 1.0e-7 * want.Abs().Max(1.0), "d" + $which + "[" + $i + "] " + $got + " against " + $want
+            }
+        }
+        # added to what is there; three threads and a part of every matrix at once give the very same numbers
+        dq2 := dq.Copy()
+        AttentionGrad(ws, m(dq2), mat.Mat<F64>(dk, 0, 0, dim, dim), mat.Mat<F64>(dv, 0, 0, dim, dim), m(w), m(q), m(k), m(v), pm, scratch, at, true)
+        for i in range n * dim: assert (dq2[i] - 2.0 * dq[i]).Abs() <= 1.0e-12 * dq[i].Abs().Max(1.0)
+        dq3 := Array<F64>(n * dim)
+        dk3 := Array<F64>(n * dim)
+        dv3 := Array<F64>(n * dim)
+        AttentionGrad(gemm.Workspace<F64>(3), m(dq3), m(dk3), m(dv3), m(w), m(q), m(k), m(v), pm, scratch, at)
+        assert dq3 == dq and dk3 == dk and dv3 == dv
+    }
+}
+
+test AttentionStep "decoding position by position, and in one go, gives the rows of causal attention over the whole sequence" {
+    r := rand.Rand(10)
+    ctx := 9
+    heads := 3
+    dim := 12
+    q := Array<F32>(ctx * dim)
+    k := Array<F32>(ctx * dim)
+    v := Array<F32>(ctx * dim)
+    fill(q, r, 1.0)
+    fill(k, r, 1.0)
+    fill(v, r, 1.0)
+    full := Array<F32>(ctx * dim)
+    pr := Array<F32>(heads * ctx * ctx)
+    m := fn(a mut Array<F32>&): return mat.Mat<F32>(a, 0, ctx, dim, dim)
+    ws := gemm.Workspace<F32>(1)
+    Attention(ws, m(full), m(q), m(k), m(v), mat.Mat<F32>(pr, 0, heads * ctx, ctx, ctx), Heads(heads, ctx))
+    keys := Array<F32>(ctx * dim)
+    values := Array<F32>(ctx * dim)
+    scores := Array<F32>(ctx)
+    step := Array<F32>(ctx * dim)
+    for p in range ctx {
+        one := fn(a mut Array<F32>&): return mat.Mat<F32>(a, p * dim, 1, dim, dim)
+        AttentionStep(one(step), one(q), one(k), one(v), m(keys), m(values), scores, p, heads)
+    }
+    for i in range ctx * dim: assert (step[i] - full[i]).Abs() <= 2.0e-6, "step " + $i
+    keys2 := Array<F32>(ctx * dim)
+    values2 := Array<F32>(ctx * dim)
+    batch := Array<F32>(ctx * dim)
+    AttentionStep(m(batch), m(q), m(k), m(v), m(keys2), m(values2), scores, 0, heads)
+    assert batch == step and keys2 == k and values2 == v
+}
+
+test Rope "rotates pairs by position x base^(-2c / Dh): the formula, lengths kept, relative positions only, and RopeBack undoes it" {
+    r := rand.Rand(11)
+    ctx := 6
+    heads := 2
+    dh := 8
+    dim := heads * dh
+    x := Array<F64>(ctx * dim)
+    fill(x, r, 1.0)
+    y := x.Copy()
+    at := Heads(heads, ctx)
+    Rope(mat.Mat<F64>(y, 0, ctx, dim, dim), 3, at, 10000.0)
+    for row in range ctx {
+        for h in range heads {
+            for c in range dh / 2 {
+                angle := F64(3 + row) * (10000.0).Pow(-2.0 * F64(c) / F64(dh))
+                a := x[row * dim + h * dh + c]
+                b := x[row * dim + h * dh + dh / 2 + c]
+                assert (y[row * dim + h * dh + c] - (a * angle.Cos() - b * angle.Sin())).Abs() <= 1.0e-13
+                assert (y[row * dim + h * dh + dh / 2 + c] - (a * angle.Sin() + b * angle.Cos())).Abs() <= 1.0e-13
+            }
+        }
+    }
+    # a dot product of two rotated vectors depends on the difference of their positions: positions (2, 5) and (4, 7)
+    u := Array<F64>[x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7]]
+    w := Array<F64>[x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15]]
+    d1 := (rotated(u, 2) * rotated(w, 5)).Sum()
+    d2 := (rotated(u, 4) * rotated(w, 7)).Sum()
+    assert (d1 - d2).Abs() <= 1.0e-12
+    back := y.Copy()
+    RopeBack(mat.Mat<F64>(back, 0, ctx, dim, dim), 3, at, 10000.0)
+    for i in range x.Len(): assert (back[i] - x[i]).Abs() <= 1.0e-13
+    f := Array<F32>[F32(a) for a in x]
+    Rope(mat.Mat<F32>(f, 0, ctx, dim, dim), 3, at, 10000.0)
+    for i in range x.Len(): assert (F64(f[i]) - y[i]).Abs() <= 2.0e-6
+}
+
+# one head's vector u at position p
+fn rotated(u Array<F64>&, p I64) Array<F64> {
+    c := u.Copy()
+    Rope(mat.Mat<F64>(c, 0, 1, 8, 8), p, Heads(1, 100), 10000.0)
+    return c
+}
+
+# the output and the three gradients of a causal or full attention over 2 sequences of 256 positions, 4 heads, D 32
+fn longRun<S, A>(causal Bool, threads I64) Array<S>, Array<S>, Array<S>, Array<S> {
+    seqs := 2
+    ctx := 256
+    heads := 4
+    dim := 32
+    n := seqs * ctx
+    q := Array<S>(n * dim)
+    k := Array<S>(n * dim)
+    v := Array<S>(n * dim)
+    w := Array<S>(n * dim)
+    rr := rand.Rand(12)
+    fill(q, rr, 1.0)
+    fill(k, rr, 1.0)
+    fill(v, rr, 1.0)
+    fill(w, rr, 1.0)
+    out := Array<S>(n * dim)
+    pr := Array<S>(n * heads * ctx)
+    ws := gemm.Workspace<A>(threads)
+    at := Heads(heads, ctx, causal)
+    pm := mat.Mat<S>(pr, 0, n * heads, ctx, ctx)
+    Attention(ws, mat.Mat<S>(out, 0, n, dim, dim), mat.Mat<S>(q, 0, n, dim, dim), mat.Mat<S>(k, 0, n, dim, dim), mat.Mat<S>(v, 0, n, dim, dim), pm, at)
+    dq := Array<S>(n * dim)
+    dk := Array<S>(n * dim)
+    dv := Array<S>(n * dim)
+    scratch := Array<S>(AttentionScratch(n, heads, ctx))
+    AttentionGrad(ws, mat.Mat<S>(dq, 0, n, dim, dim), mat.Mat<S>(dk, 0, n, dim, dim), mat.Mat<S>(dv, 0, n, dim, dim), mat.Mat<S>(w, 0, n, dim, dim), mat.Mat<S>(q, 0, n, dim, dim), mat.Mat<S>(k, 0, n, dim, dim), mat.Mat<S>(v, 0, n, dim, dim), pm, scratch, at)
+    return out, dq, dk, dv
+}
+
+# a long context, so that a part is smaller than a sequence's heads (an F64 matrix of 256 x 256 is the whole cache budget)
+fn longContext(causal Bool, threads I64) {
+    o64, q64, k64, v64 := longRun<F64, F64>(causal, 1)
+    o32, q32, k32, v32 := longRun<F32, F32>(causal, threads)
+    for i in range o64.Len() {
+        assert (F64(o32[i]) - o64[i]).Abs() <= 1.0e-5, "out[" + $i + "]"
+        assert (F64(q32[i]) - q64[i]).Abs() <= 2.0e-4 * q64[i].Abs().Max(1.0), "dq[" + $i + "]"
+        assert (F64(k32[i]) - k64[i]).Abs() <= 2.0e-4 * k64[i].Abs().Max(1.0), "dk[" + $i + "]"
+        assert (F64(v32[i]) - v64[i]).Abs() <= 2.0e-4 * v64[i].Abs().Max(1.0), "dv[" + $i + "]"
+    }
+}
+
+test Attention "a context of 256, parts smaller than a sequence's heads: F32 forward and backward within 2e-4 of F64's" {
+    longContext(true, 1)
+    longContext(false, 4)
+}

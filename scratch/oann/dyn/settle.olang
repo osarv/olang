@@ -1,0 +1,561 @@
+# dyn/settle - the settle: a system's populations relaxed together, sweep after sweep, until every unit's residual is
+# within the tolerance (docs/settling.md 1.2). The Engine holds what a planned system runs on - its populations with
+# their named state as Columns of cells, its connections, the flat parameter region and every workspace - all laid out
+# once, so a sweep, a settle and a lesson allocate nothing.
+#
+# A sweep (Jacobi). Every population's state is double-buffered: a sweep reads buffer k and writes buffer 1 - k, so
+# every population can relax in a task of its own at once. A sweep is cut into units - one population's rows of one
+# phase, in chunks of at most Chunk rows - and the units go to the system's tasks; a unit computes its rows' totals
+# (the constant, every connection's carry of the activities read, the nudge of a nudged readout), their residual and
+# their step. The chunks do not depend on the thread count and every element's sums run in one order, so a settle is
+# the same, bit for bit, for any number of threads.
+#
+# The constant. Inputs are not relaxed: their state is set from their drive in closed form at the start of a settle,
+# and every connection out of an input is carried once then, into a constant per batch row (drive + bias + the folded
+# carries) that each sweep starts from.
+#
+# Phases side by side. A population's columns are phases x batch x size long: the free phase's rows, then each nudged
+# phase's. The free phase settles first; the nudged phases start from its fixed point and settle together (Nudged), one
+# product per connection per sweep for both. Between settles the committed state is buffer 0 (a settle that ends on
+# buffer 1 copies its rows back).
+#
+# A step is v += dt r, dt the system's (1: plain fixed-point iteration) - smaller, dt / (1 + beta lambda), in a phase
+# nudged toward its targets (settling.md 1.2: the nudge then only damps) - times 1 - Damping. A spiking system's sweep
+# is a time step and its residual the largest change of a rate over a window, measured at the window's end.
+
+import "../tensor"
+import "../kernels/gemm"
+import "../kernels/sparse"
+import "neuron"
+import "conn"
+
+# the rows of a unit of work, at most
+Chunk I64 = 128
+
+# the phases a system holds side by side: free, nudged toward the targets, nudged away (centered EP)
+type Phase enum { Free, Plus, Minus }
+
+fn (p Phase) Index() I64 {
+    return match p {
+        case Phase.Free: 0
+        case Phase.Plus: 1
+        case Phase.Minus: 2
+    }
+}
+
+# what a settle may take: at most Sweeps sweeps (time steps, spiking), stopping when every residual is at most Tol; a
+# step shortened by the factor 1 - Damping
+type Budget struct(Sweeps I64 = 128, Tol F64 = 1.25e-3, Damping F64 = 0) {
+    Sweeps
+    Tol
+    Damping
+}
+
+# how a settle went: the sweeps it took, the residual's sup norm at the end (NaN or infinite where it diverged), and
+# whether it is within the tolerance
+type Settlement struct(Sweeps I64 = 0, Residual F64 = 0, Converged Bool = false) {
+    Sweeps
+    Residual
+    Converged
+}
+
+# whether the settle diverged: a residual that is not finite
+fn (s Settlement&) Diverged() Bool { return not (s.Residual <= F64.Max) }
+
+# ---- a population as the settle runs it ----
+
+# size units of model in role, their state in rows rows (phases x batch): a rate (or custom) population's cells in R0
+# and R1, a spiking one's in L0 and L1; Total its totals, Const its constant per batch row, Drive what was clamped,
+# Target and Labels a readout's, Force a spiking readout's nudge, Alive which units are not retired, Bias where its
+# biases are in the parameter region, Unit where its units are among all of the system's. In, Back and Folds are the
+# connections into it: carried forward, carried back (reciprocal, it their pre side), and folded into the constant
+type Population<T> struct(size I64, model neuron.Neuron, role neuron.Role, rows I64, batch I64) {
+    Size I64 = size
+    Model neuron.Neuron = model
+    Role neuron.Role = role
+    Spiking Bool = model == neuron.Neuron.Lif
+    R0 Columns<neuron.RateCell<T>> = Columns<neuron.RateCell<T>>(0 if Spiking else rows * size)
+    R1 Columns<neuron.RateCell<T>> = Columns<neuron.RateCell<T>>(0 if Spiking else rows * size)
+    L0 Columns<neuron.LifCell<T>> = Columns<neuron.LifCell<T>>(rows * size if Spiking else 0)
+    L1 Columns<neuron.LifCell<T>> = Columns<neuron.LifCell<T>>(rows * size if Spiking else 0)
+    Total mut Array<T>& = Array<T>(rows * size)
+    Const mut Array<T>& = Array<T>(batch * size)
+    Drive mut Array<T>& = Array<T>(batch * size)
+    Target mut Array<T>& = Array<T>(batch * size if role == neuron.Role.Readout else 0)
+    Labels mut Array<I32>& = Array<I32>(batch * GroupsOf(role))
+    Force mut Array<T>& = Array<T>(rows * size if Spiking and role == neuron.Role.Readout else 0)
+    Alive mut Array<Bool>& = Array<Bool>(size, true)
+    Retired I64 = 0
+    Bias I64 = 0
+    Unit I64 = 0
+    In mut Vec<I64>& = Vec<I64>()
+    Back mut Vec<I64>& = Vec<I64>()
+    Folds mut Vec<I64>& = Vec<I64>()
+}
+
+# a readout's groups (one class per group a row), none for other roles
+fn GroupsOf(role neuron.Role) I64 {
+    if role != neuron.Role.Readout: return 0
+    return match role.cost {
+        case neuron.Cost.CrossEntropy(_, groups): groups
+        case neuron.Cost.Squared: 0
+    }
+}
+
+fn (p mut Population<T>&) rate(k I64) mut Columns<neuron.RateCell<T>>& { return p.R0 if k == 0 else p.R1 }
+
+fn (p mut Population<T>&) lif(k I64) mut Columns<neuron.LifCell<T>>& { return p.L0 if k == 0 else p.L1 }
+
+# the activities the connections out of it carry, in buffer k: rate activities, or a spiking population's spikes
+fn (p mut Population<T>&) carried(k I64) mut Array<T>& {
+    if p.Spiking: return p.lif(k).Spike
+    return p.rate(k).S
+}
+
+# its activities in buffer k
+fn (p mut Population<T>&) Activity(k I64) mut Array<T>& {
+    if p.Spiking: return p.lif(k).S
+    return p.rate(k).S
+}
+
+# ---- the engine ----
+
+# a planned system's running part: batch rows a phase, phases of them, sweeps split over threads tasks
+type Engine<T> struct(batch I64, phases I64, threads I64) {
+    Batch I64 = batch
+    Phases I64 = phases
+    Threads I64 = threads if threads > 0 else 1
+    Rows I64 = batch * phases
+    Pops mut Vec<mut Population<T>&>& = Vec<mut Population<T>&>()
+    Links mut Vec<mut conn.Link<T>&>& = Vec<mut conn.Link<T>&>()
+    Params mut Array<T>& = Array<T>(0)
+    Grads mut Array<T>& = Array<T>(0)
+    Beta mut Array<F64>& = Array<F64>(phases)       # each phase's nudge
+    Dt F64 = 1.0                                    # a sweep's step, in (0, 1]
+    Spiking Bool = false
+    Window I64 = 1
+    Units I64 = 0                                   # every population's units
+    TaskWork I64 = 2000000                          # the multiply-adds a sweep needs to be split over tasks
+    Sweeps I64 = 0                                  # every sweep of every settle
+    Last Settlement = Settlement()
+    cur I64 = 0                                     # the buffer a sweep reads
+    sweep I64 = 0                                   # the sweep (time step) running
+    damping F64 = 0.0                               # the running settle's
+    ws mut Vec<mut gemm.Workspace<T>&>& = Vec<mut gemm.Workspace<T>&>()
+    wide mut gemm.Workspace<T>& = gemm.Workspace<T>(threads)   # the constants' products, whole batches, split by gemm
+    wideSc mut conn.Scratch<T>& = conn.Scratch<T>(0, 0, 0)
+    sc mut Vec<mut conn.Scratch<T>&>& = Vec<mut conn.Scratch<T>&>()
+    units mut Array<I64>& = Array<I64>(0)           # a settle's units: population, first row, end row
+    work I64 = 0                                    # a sweep's multiply-adds, about
+    count I64 = 0
+    worst mut Array<T>& = Array<T>(0)               # each unit's residual
+    Mass mut Array<F64>& = Array<F64>(0)             # each unit's incoming mass (the gain)
+}
+
+# the population numbered i, and connection i
+fn (e Engine<T>&) Pop(i I64) mut Population<T>& { return e.Pops[i] }
+
+fn (e Engine<T>&) Link(i I64) mut conn.Link<T>& { return e.Links[i] }
+
+# the work room, once the populations and connections are recorded and laid out: a workspace and a scratch per task,
+# the units a settle can have, the masses
+fn (e mut Engine<T>&) Ready() {
+    widest I64 = 1
+    rank I64 = 1
+    for p in e.Pops: widest = widest.Max(p.Size)
+    for l in e.Links {
+        kind := l.Kind
+        if kind == conn.Wiring.LowRank: rank = rank.Max(kind.rank)
+    }
+    units I64 = 0
+    for p in e.Pops: units += p.Size
+    e.Units = units
+    for _ in range e.Threads {
+        e.ws.Push(gemm.Workspace<T>(1))
+        sc := conn.Scratch<T>(widest, Chunk, rank)
+        for l in e.Links {
+            if l.Kind == conn.Wiring.Events: sc.Ev.Push(sparse.Events(l.PreSize))
+        }
+        e.sc.Push(sc)
+    }
+    e.wideSc = conn.Scratch<T>(widest, e.Batch.Max(Chunk), rank)
+    for l in e.Links {
+        if l.Kind != conn.Wiring.Events: continue
+        l.Index = e.wideSc.Ev.Len()                 # its collector in every scratch
+        e.wideSc.Ev.Push(sparse.Events(l.PreSize))
+    }
+    most := e.Pops.Len() * e.Phases * ((e.Batch + Chunk - 1) / Chunk)
+    e.units = Array<I64>(3 * most)
+    e.worst = Array<T>(most)
+    e.Mass = Array<F64>(units)
+    e.Spiking = false
+    for p in e.Pops {
+        model := p.Model
+        if model != neuron.Neuron.Lif: continue
+        e.Spiking = true
+        e.Window = model.window
+    }
+}
+
+# ---- state between settles ----
+
+# a cell type's columns: rows lo .. hi of every field but the kept ones (@Keep) set to zero
+fn clearRows<C>(c mut Columns<C>&, lo I64, hi I64) {
+    for k, f in C.Fields {
+        if f.HasAttr<neuron.Keep>(): continue
+        z f.Type
+        for i in range lo, hi: Columns<C>.Fields[k].Of(c)[i] = z
+    }
+}
+
+# rows from .. from + n of a's columns into rows to .. of b's, every field
+fn copyRows<C>(a Columns<C>&, b mut Columns<C>&, from I64, to I64, n I64) {
+    for k, _ in C.Fields {
+        for i in range n: Columns<C>.Fields[k].Of(b)[to + i] = Columns<C>.Fields[k].Of(a)[from + i]
+    }
+}
+
+# phase ph's state set to rest (every field but the kept ones zero): a cold start. Inputs are left: a settle sets
+# theirs from their drive
+fn (e mut Engine<T>&) Reset(ph I64) {
+    for p in e.Pops {
+        if p.Role == neuron.Role.Input: continue
+        lo := ph * e.Batch * p.Size
+        hi := lo + e.Batch * p.Size
+        if p.Spiking { clearRows(p.L0, lo, hi) } else { clearRows(p.R0, lo, hi) }
+    }
+}
+
+# phase to's state set to phase from's (a nudged phase starts from the free fixed point). Inputs are left: a settle
+# sets theirs from their drive
+fn (e mut Engine<T>&) Warm(to I64, from I64) {
+    if to == from: return
+    for p in e.Pops {
+        if p.Role == neuron.Role.Input: continue
+        n := e.Batch * p.Size
+        if p.Spiking { copyRows(p.L0, p.L0, from * n, to * n, n) } else { copyRows(p.R0, p.R0, from * n, to * n, n) }
+    }
+}
+
+# rows lo .. hi of buffer 1 copied into buffer 0, every population: where a settle ending on buffer 1 commits
+fn (e mut Engine<T>&) commit(r0 I64, r1 I64) {
+    for p in e.Pops {
+        if p.Role == neuron.Role.Input: continue
+        n := (r1 - r0) * p.Size
+        if p.Spiking { copyRows(p.L1, p.L0, r0 * p.Size, r0 * p.Size, n) } else { copyRows(p.R1, p.R0, r0 * p.Size, r0 * p.Size, n) }
+    }
+}
+
+# ---- the start of a settle ----
+
+# phases lo .. hi made ready: every input's state set from its drive in closed form (in buffer 0: only folded
+# connections, run from there, read an input); every relaxing
+# population's constant made (with fold: its drive, its bias and the folded carries of its inputs); the counts of a
+# spiking population's window cleared; event-driven connections forget what they carried
+fn (e mut Engine<T>&) prepare(lo I64, hi I64, fold Bool) {
+    r0, r1 := lo * e.Batch, hi * e.Batch
+    for p in e.Pops {
+        if p.Role == neuron.Role.Input: e.closedForm(p, r0, r1)
+        if p.Spiking: e.clearCounts(p, r0, r1)
+    }
+    for l in e.Links: l.Forget(r0, r1)
+    if not fold: return
+    for p in e.Pops {
+        if p.Role != neuron.Role.Input: e.constant(e.wide, e.wideSc, p, 0, e.Batch)
+    }
+}
+
+# an input's rows r0 .. r1 (whole phases), in buffer 0: U = drive, S = rho(drive)
+fn (e mut Engine<T>&) closedForm(p mut Population<T>&, r0 I64, r1 I64) {
+    model := p.Model
+    rho := model.rho if model == neuron.Neuron.Rate else neuron.Rho.Linear
+    n := e.Batch * p.Size
+    for at := r0 * p.Size, at < r1 * p.Size, at += n {
+        for i in range n: p.R0.U[at + i] = p.Drive[i]
+        neuron.ActivateRun(rho, p.R0.U, p.R0.S, at, at + n)
+    }
+}
+
+fn (e mut Engine<T>&) clearCounts(p mut Population<T>&, r0 I64, r1 I64) {
+    for i in range r0 * p.Size, r1 * p.Size {
+        p.L0.Count[i] = T(0)
+        p.L1.Count[i] = T(0)
+    }
+}
+
+# ---- units of work ----
+
+# the units of phases lo .. hi: every relaxing population's rows of each, in chunks
+fn (e mut Engine<T>&) plan(lo I64, hi I64) {
+    e.count = 0
+    e.work = 0
+    for i in range e.Pops.Len() {
+        p := e.Pops[i]
+        if p.Role == neuron.Role.Input: continue
+        carried := p.Size
+        for l in p.In: carried += e.Links[l].Count
+        for l in p.Back: carried += e.Links[l].Count
+        e.work += (hi - lo) * e.Batch * carried
+        for ph in range lo, hi {
+            for c0 := 0, c0 < e.Batch, c0 += Chunk {
+                base := ph * e.Batch
+                e.units[3 * e.count] = i
+                e.units[3 * e.count + 1] = base + c0
+                e.units[3 * e.count + 2] = base + (c0 + Chunk).Min(e.Batch)
+                e.count++
+            }
+        }
+    }
+}
+
+# every unit run, on the system's tasks - each task the units t, t + tasks, ... - and their largest residual (NaN
+# when one is). A sweep too small to pay for tasks runs on the calling thread; the units are the same either way
+fn (e mut Engine<T>&) run() T {
+    tasks := e.Threads.Min(e.count)
+    if e.work < e.TaskWork: tasks = 1
+    if tasks <= 1 {
+        e.task(0, 1)
+    } else {
+        join {
+            for t in range tasks: spawn e.task(t, tasks)
+        }
+    }
+    worst T = T(0)
+    for u in range e.count: worst = neuron.Worse(worst, e.worst[u])
+    return worst
+}
+
+fn (e mut Engine<T>&) task(t I64, every I64) {
+    ws := e.ws[t]
+    sc := e.sc[t]
+    for u in range t, e.count, every {
+        p := e.Pops[e.units[3 * u]]
+        r0, r1 := e.units[3 * u + 1], e.units[3 * u + 2]
+        e.totals(ws, sc, p, r0, r1)
+        e.worst[u] = e.lifStep(p, r0, r1) if p.Spiking else e.rateStep(p, r0, r1)
+    }
+}
+
+# batch rows r0 .. r1 of p's constant: drive + bias + every folded connection's carry of its input's activities
+fn (e mut Engine<T>&) constant(ws mut gemm.Workspace<T>&, sc mut conn.Scratch<T>&, p mut Population<T>&, r0 I64, r1 I64) {
+    n := p.Size
+    for r in range r0, r1 {
+        for j in range n: p.Const[r * n + j] = p.Drive[r * n + j] + e.Params[p.Bias + j]
+    }
+    for i in p.Folds {
+        l := e.Links[i]
+        l.Forward(ws, sc, p.Const, e.Pops[l.Pre].R0.S, r0, r1)
+    }
+}
+
+# rows r0 .. r1 of p's totals from buffer cur: the constant (the drive and the folded inputs; nothing for a spiking
+# population, whose constant enters at the membrane), every connection's carry, and a nudged readout's force
+fn (e mut Engine<T>&) totals(ws mut gemm.Workspace<T>&, sc mut conn.Scratch<T>&, p mut Population<T>&, r0 I64, r1 I64) {
+    n := p.Size
+    k := e.cur
+    for r in range r0, r1 {
+        b := r % e.Batch
+        for j in range n: p.Total[r * n + j] = T(0) if p.Spiking else p.Const[b * n + j]
+    }
+    for i in p.In {
+        l := e.Links[i]
+        l.Forward(ws, sc, p.Total, e.Pops[l.Pre].carried(k), r0, r1)
+    }
+    for i in p.Back {
+        l := e.Links[i]
+        l.Backward(ws, sc, p.Total, e.Pops[l.Post].carried(k), r0, r1)
+    }
+    beta := e.Beta[r0 / e.Batch]
+    role := p.Role
+    if beta == 0.0 or role != neuron.Role.Readout: return
+    into := p.Force if p.Spiking else p.Total
+    from := p.lif(k).Trace if p.Spiking else p.rate(k).S
+    for r in range r0, r1 {
+        b := r % e.Batch
+        if p.Spiking { for j in range n: into[r * n + j] = T(0) }
+        neuron.AddForce(role.cost, from, r * n, n, into, T(beta), p.Labels, b * GroupsOf(role), p.Target, b * n)
+    }
+}
+
+# the step of phase ph: the system's, shortened in a phase nudged toward its targets (settling.md 1.2), times
+# 1 - damping
+fn (e Engine<T>&) step(ph I64, damping F64) F64 {
+    beta := e.Beta[ph]
+    dt := e.Dt if beta <= 0.0 else e.Dt / (1.0 + beta * e.ForceSlope())
+    return dt * (1.0 - damping)
+}
+
+# the largest self-slope of a readout's force, per unit of beta
+fn (e Engine<T>&) ForceSlope() F64 {
+    worst F64 = 0.0
+    for p in e.Pops {
+        role := p.Role
+        if role == neuron.Role.Readout: worst = worst.Max(neuron.ForceSlope(role.cost))
+    }
+    return worst
+}
+
+# rows r0 .. r1 of a rate (or custom) population stepped from buffer cur into the other; gives their residual
+fn (e mut Engine<T>&) rateStep(p mut Population<T>&, r0 I64, r1 I64) T {
+    model := p.Model
+    if model != neuron.Neuron.Custom: return e.builtStep(p, r0, r1)
+    b := p.rate(1 - e.cur)
+    if p.Retired > 0: rest(p, p.Total, r0, r1, false)
+    worst := custom(model.d, p, b, r0, r1, e.step(r0 / e.Batch, e.damping))
+    if p.Retired > 0: retire(p, b, r0, r1)
+    return worst
+}
+
+# a built-in rate model's rows: the residual and the step, the retired units held at rest
+fn (e mut Engine<T>&) builtStep(p mut Population<T>&, r0 I64, r1 I64) T {
+    model := p.Model
+    if model != neuron.Neuron.Rate: unreachable "a spiking population steps by lifStep"
+    a := p.rate(e.cur)
+    b := p.rate(1 - e.cur)
+    n := p.Size
+    if p.Retired > 0: rest(p, a.U, r0, r1, true)
+    worst := neuron.RateStep(model.rho, a.U, p.Total, b.U, b.S, r0 * n, r1 * n, T(e.step(r0 / e.Batch, e.damping)))
+    if p.Retired > 0: retire(p, b, r0, r1)
+    return worst
+}
+
+# a custom model's rows: Relax on the drive (the totals), its activity copied into the buffer the sweep writes
+fn custom<T>(d mut any neuron.Dynamics&, p mut Population<T>&, b mut Columns<neuron.RateCell<T>>&, r0 I64, r1 I64, dt F64) T {
+    match T {
+        case F32 {
+            drive := tensor.Tensor<F32>.Over(p.Total, 0, p.Total.Len() / p.Size, p.Size)!
+            worst := d.Relax(drive, dt, r0, r1)
+            act := d.Activity().Flat()!
+            for i in range r0 * p.Size, r1 * p.Size: b.S[i] = act[i]
+            return T(worst)
+        }
+        case _ { unreachable "a custom model runs in a System<F32>" }
+    }
+}
+
+# the retired units of rows r0 .. r1 left out of the residual: their totals set to their potentials (held, built-in
+# models), or to zero (a custom model's drive) - a retired unit is at rest, so it never keeps a settle from converging
+fn rest<T>(p mut Population<T>&, u Array<T>&, r0 I64, r1 I64, held Bool) {
+    for r in range r0, r1 {
+        for j in range p.Size {
+            if p.Alive[j]: continue
+            i := r * p.Size + j
+            p.Total[i] = u[i] if held else T(0)
+        }
+    }
+}
+
+# the retired units of rows r0 .. r1 held at rest
+fn retire<T>(p mut Population<T>&, b mut Columns<neuron.RateCell<T>>&, r0 I64, r1 I64) {
+    for r in range r0, r1 {
+        for j in range p.Size {
+            if p.Alive[j]: continue
+            b.U[r * p.Size + j] = T(0)
+            b.S[r * p.Size + j] = T(0)
+        }
+    }
+}
+
+# rows r0 .. r1 of a spiking population: a time step from buffer cur into the other, and at a window's end the rates
+# and their change (the residual; nothing, zero, before then)
+fn (e mut Engine<T>&) lifStep(p mut Population<T>&, r0 I64, r1 I64) T {
+    a := p.lif(e.cur)
+    b := p.lif(1 - e.cur)
+    lif := p.Model
+    if lif != neuron.Neuron.Lif: unreachable "a rate population steps by rateStep"
+    n := p.Size
+    follow := T((4.0 / F64(lif.window)).Min(1.0))
+    nudged := p.Force.Len() > 0 and e.Beta[r0 / e.Batch] != 0.0
+    for r in range r0, r1 {
+        b0 := (r % e.Batch) * n
+        neuron.LifStep(a, b, p.Total, p.Const, b0, p.Force, nudged, r * n, (r + 1) * n, T(lif.leak), T(lif.threshold), T(lif.synapse), follow)
+        if p.Retired > 0: retireLif(p, b, r)
+    }
+    if (e.sweep + 1) % lif.window != 0: return T(0)
+    return neuron.LifWindow(b, r0 * n, r1 * n, lif.window)
+}
+
+fn retireLif<T>(p mut Population<T>&, b mut Columns<neuron.LifCell<T>>&, r I64) {
+    for j in range p.Size {
+        if p.Alive[j]: continue
+        i := r * p.Size + j
+        b.V[i] = T(0)
+        b.Spike[i] = T(0)
+        b.Count[i] = T(0)
+    }
+}
+
+# ---- the settle ----
+
+# phases lo .. hi settled together from their committed state, within budget: sweeps until every residual is at most
+# b.Tol (a spiking system's: at a window's end), committing the state reached either way. fold: the constants are
+# made afresh (a nudged phase keeps the free phase's)
+fn (e mut Engine<T>&) Settle(lo I64, hi I64, b Budget, fold Bool) Settlement {
+    e.prepare(lo, hi, fold)
+    e.plan(lo, hi)
+    e.damping = b.Damping
+    e.cur = 0
+    out := e.spikes(b) if e.Spiking else e.relax(b)
+    if e.cur == 1: e.commit(lo * e.Batch, hi * e.Batch)
+    e.cur = 0
+    e.Sweeps += out.Sweeps
+    e.Last = out
+    return out
+}
+
+# a rate system's sweeps: the residual of state k measured as the step to k + 1 is made; the first state within the
+# tolerance is the one kept
+fn (e mut Engine<T>&) relax(b Budget) Settlement {
+    for k in range b.Sweeps + 1 {
+        e.sweep = k
+        worst := F64(e.run())
+        out := Settlement(k, worst, worst <= b.Tol)
+        if out.Converged or out.Diverged() or k == b.Sweeps: return out
+        e.cur = 1 - e.cur
+    }
+    unreachable
+}
+
+# a spiking system's time steps, its rates' change measured at the end of each window
+fn (e mut Engine<T>&) spikes(b Budget) Settlement {
+    out := Settlement()
+    steps := b.Sweeps.Max(e.Window)
+    for k in range steps {
+        e.sweep = k
+        worst := F64(e.run())
+        e.cur = 1 - e.cur
+        if (k + 1) % e.Window != 0: continue
+        out = Settlement(k + 1, worst, worst <= b.Tol)
+        if out.Converged or out.Diverged(): return out
+    }
+    return out
+}
+
+# ---- what must not allocate, decided while compiling (S17a, G42) ----
+# Pinned: every step of a population, the state's moves between settles and phases, the units' plan, an input's closed
+# form. Not pinned, and why: a sweep's products go through gemm's Gemm, which grows its workspace's panels on its
+# first products (the fact holds for every call, never "after the first": run -> task -> totals -> conn.Link.Forward
+# -> gemm.Gemm -> Workspace.panelsA); a sparse connection's product holds the kernel's join for its threads; a sweep in
+# tasks holds a join (which keeps ~110 bytes a join: repro/joinleak.olang); a custom model's step is a call through
+# `any Dynamics&`, which no fact sees through. Resident memory over many settles is measured instead (system.olang).
+
+fn builtStepOf(e mut Engine<F32>&, p mut Population<F32>&) F32 { return e.builtStep(p, 0, 1) }
+fn restOf(p mut Population<F32>&) { rest(p, p.Total, 0, 1, true) }
+fn lifStepOf(e mut Engine<F32>&, p mut Population<F32>&) F32 { return e.lifStep(p, 0, 1) }
+fn resetOf(e mut Engine<F32>&) { e.Reset(0) }
+fn warmOf(e mut Engine<F32>&) { e.Warm(1, 0) }
+fn commitOf(e mut Engine<F32>&) { e.commit(0, 1) }
+fn planOf(e mut Engine<F32>&) { e.plan(0, 1) }
+fn closedFormOf(e mut Engine<F32>&, p mut Population<F32>&) {
+    e.closedForm(p, 0, 1)
+    e.clearCounts(p, 0, 1)
+}
+
+assert not builtStepOf.Allocates, "a rate population's step allocates"
+assert not restOf.Allocates, "holding retired units out of the residual allocates"
+assert not lifStepOf.Allocates, "a spiking population's step allocates"
+assert not resetOf.Allocates, "a cold start allocates"
+assert not warmOf.Allocates, "a warm start allocates"
+assert not commitOf.Allocates, "committing a settle allocates"
+assert not planOf.Allocates, "a settle's units allocate"
+assert not closedFormOf.Allocates, "an input's closed form allocates"

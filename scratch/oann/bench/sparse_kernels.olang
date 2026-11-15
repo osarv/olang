@@ -1,0 +1,214 @@
+# kernels/sparse and kernels/conv against dense products and against the modules they replace (M10): a batch through a
+# sparse weight against the same weight dense (Csr and Tiles, new and old, forward and transposed), an event-driven
+# step against a full matrix-vector product at activities of 1-20%, and a convolution's forward and backward against
+# conv.olang's. Interleaved, the median of each over rounds, nanoseconds per call (or per step). Arguments: rounds (7),
+# threads (1) for the dense products and the convolution - the sparse kernels run on one thread throughout. Usage:
+#     olang build -output build/bench_sparse_kernels bench/sparse_kernels.olang && build/bench_sparse_kernels ROUNDS THREADS
+
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../linalg"
+import "../sparse"
+import "../conv"
+import "../kernels/mat"
+import "../kernels/gemm"
+import ks "../kernels/sparse"
+import kc "../kernels/conv"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn median(xs mut Array<F64>&) F64 {
+    xs.Sort(fn(a, b): return a < b)
+    return xs[xs.Len() / 2]
+}
+
+# the repetitions taking about 10 ms
+fn repsFor(f fn&()) I64 {
+    reps I64 = 1
+    for {
+        t0 := time.Now()
+        for _ in range reps: f()
+        if time.Since(t0) > 10000000 or reps > 1000000: return reps
+        reps = reps * 2
+    }
+}
+
+# nanoseconds per call of each of fs, interleaved round by round, medians; the repetitions are chosen for the slowest
+fn timed(fs Array<fn&()>&, rounds I64) Array<F64> {
+    reps I64 = 1
+    for f in fs: reps = reps.Min(repsFor(f)) if reps > 1 else repsFor(f)
+    out := Array<F64>(fs.Len())
+    all := Array<F64>(fs.Len() * rounds)
+    for t in range rounds {
+        for i in range fs.Len() {
+            t0 := time.Now()
+            for _ in range reps: fs[i]()
+            all[i * rounds + t] = F64(time.Since(t0)) / F64(reps)
+        }
+    }
+    for i in range fs.Len(): out[i] = median(all[i * rounds:(i + 1) * rounds])
+    return out
+}
+
+fn two(x F64) F64 { return (x * 100.0).Round() / 100.0 }
+
+fn cell(ns F64, full F64) String { return $ns.Round().Fixed(0).PadStart(9) + " " + $two(full / ns).Fixed(2).PadStart(6) + "x" }
+
+# the weights at a density: a Csr (new and old, the same pattern and values), the dense matrix, and tiles of 16 at the
+# same fraction of tiles
+type Weights struct(n I64, density F64, r mut rand.Rand&) {
+    n
+    csr ks.Csr<F32> = ks.Csr<F32>.Random(n, n, density, r)
+    ptr := Array<I64>[csr.Ptr[i] for i in range n + 1]
+    idx := Array<I32>[csr.Idx[e] for e in range csr.Nnz()]
+    vals := Array<F32>[csr.Values[e] for e in range csr.Nnz()]
+    old sparse.Csr<F32> = sparse.Csr<F32>(n, n, ptr, idx, vals)
+    dense mut Array<F32>& = Array<F32>(n * n)
+    csr.Dense(mat.Mat<F32>(dense, 0, n, n, n))
+    tiles ks.Tiles<F32> = ks.Tiles<F32>.Drawn(n, n, 16, density, r)
+    for e in range tiles.Data.Len(): tiles.Data[e] = F32(r.Uniform(-1.0, 1.0))
+    tdense mut Array<F32>& = Array<F32>(n * n)
+    tiles.Dense(mat.Mat<F32>(tdense, 0, n, n, n))
+}
+
+# a weight times a batch, forward and transposed, the dense one through gemm
+fn products(rounds I64, threads I64, r mut rand.Rand&) {
+    Println("y += W x and y += W^T x, 1024 x 1024 (ns, speed-up over dense gemm; threads for dense " + $threads + ", sparse on one)")
+    Println("  w   d      dense          csr old        csr new      tiles16 (dense of its own)")
+    ws mut gemm.Workspace<F32>& = gemm.Workspace<F32>(threads)
+    n I64 = 1024
+    for width in Array<I64>[1, 32] {
+        for trans in Array<Bool>[false, true] {
+            Println("width " + $width + ", " + $("transposed" if trans else "forward"))
+            for d in Array<F64>[0.05, 0.1, 0.2, 0.5] {
+                k := Weights(n, d, r)
+                xd := Array<F32>[F32(r.Uniform(-1.0, 1.0)) for _ in range n * width]
+                x := mat.Mat<F32>(xd, 0, n, width, width)
+                y mut mat.Mat<F32>& = mat.Mat<F32>(Array<F32>(n * width), 0, n, width, width)
+                dw := mat.Mat<F32>(k.dense, 0, n, n, n)
+                tw := mat.Mat<F32>(k.tdense, 0, n, n, n)
+                yo mut Array<F32>& = Array<F32>(n * width)
+                macs mut ks.Macs& = ks.Macs()
+                fs := Array<fn&()>[fn() { denseProduct(ws, y, dw, x, trans) }, fn() { oldProduct(k.old, xd, yo, width, trans) }
+                    fn() { k.csr.MulAdd(y, x, trans, 1.0, 1, macs) }, fn() { k.tiles.MulAdd(y, x, trans) }
+                    fn() { denseProduct(ws, y, tw, x, trans) }]
+                ns := timed(fs, rounds)
+                Println("  " + $width + " " + $d.Fixed(2) + "  " + $ns[0].Round().Fixed(0).PadStart(9) + "  " + $cell(ns[1], ns[0]) + "  " + $cell(ns[2], ns[0]) + "  " + $cell(ns[3], ns[4]) + " (" + $ns[4].Round() + ")")
+            }
+        }
+    }
+}
+
+fn denseProduct(ws mut gemm.Workspace<F32>&, y mut mat.Mat<F32>&, w mat.Mat<F32>&, x mat.Mat<F32>&, trans Bool) {
+    if x.Cols == 1 {
+        gemm.Gemv(y.Data, w, trans, x.Data, 1.0, 1.0)
+        return
+    }
+    gemm.Gemm(ws, y, w, trans, x, false, 1.0, 1.0)
+}
+
+fn oldProduct(w sparse.Csr<F32>&, x Array<F32>&, y mut Array<F32>&, width I64, trans Bool) {
+    if trans: w.MulAddT(x, 0, width, y, 0, width, width, 1.0)
+    else: w.MulAdd(x, 0, width, y, 0, width, width, 1.0)
+}
+
+# one event-driven step, the units of a fraction of the n moving by more than the threshold: collecting them and adding
+# their rows to the total, against the full product W^T x of the same weights with gemm's Gemv
+fn events(rounds I64, r mut rand.Rand&) {
+    n I64 = 2048
+    Println("")
+    Println("an event-driven step on 2048 -> 2048 (ns: collect + transport, and speed-up over the full dense Gemv W^T x)")
+    Println(" activity | dense Gemv | events, dense rows | events, csr 0.2 | events, tiles16 0.2 | events counted")
+    wd := mat.Mat<F32>(Array<F32>[F32(r.Uniform(-1.0, 1.0)) for _ in range n * n], 0, n, n, n)
+    csr := ks.Csr<F32>.Random(n, n, 0.2, r)
+    tiles := ks.Tiles<F32>.Drawn(n, n, 16, 0.2, r)
+    for e in range tiles.Data.Len(): tiles.Data[e] = F32(r.Uniform(-1.0, 1.0))
+    for a in Array<F64>[0.01, 0.05, 0.1, 0.2] {
+        ev mut ks.Events& = ks.Events(n)
+        x := Array<F32>[F32(r.Uniform(-1.0, 1.0)) for _ in range n]
+        last0 := Array<F32>[x[j] if r.Float() > a else x[j] - 1.0 for j in range n]
+        last mut Array<F32>& = Array<F32>(n)
+        delta mut Array<F32>& = Array<F32>(n)
+        yFull mut Array<F32>& = Array<F32>(n)
+        ys mut Array<F32>& = Array<F32>(n)
+        macs mut ks.Macs& = ks.Macs()
+        reset := fn() { for j in range n: last[j] = last0[j] }
+        fs := Array<fn&()>[fn() { gemm.Gemv(yFull, wd, true, x, 1.0, 1.0) }, fn() { reset() }
+            fn() {
+                reset()
+                ev.Collect(x, last, delta, 0.5)
+                ks.Transport(wd, ys, ev, delta, 1, macs)
+            }
+            fn() {
+                reset()
+                ev.Collect(x, last, delta, 0.5)
+                csr.Transport(ys, ev, delta, macs)
+            }
+            fn() {
+                reset()
+                ev.Collect(x, last, delta, 0.5)
+                tiles.Transport(ys, ev, delta, macs)
+            }]
+        ns := timed(fs, rounds)
+        full := ns[0]
+        Println("   " + $(a * 100.0).Round() + "%  | " + $full.Round().Fixed(0).PadStart(8) + " | " + $cell(ns[2] - ns[1], full) + " | " + $cell(ns[3] - ns[1], full) + " | " + $cell(ns[4] - ns[1], full) + " | " + $ev.Count)
+    }
+}
+
+# a convolution layer: conv.olang's forward and backward (linalg's GemmPatches) against kernels/conv's
+fn convolutions(rounds I64, threads I64, r mut rand.Rand&) {
+    Println("")
+    Println("convolution, 64 images, F32, threads " + $threads + " (ns: conv.olang | kernels/conv, speed-up)")
+    shapes := Array<I64>[1, 28, 28, 16, 3, 1, 1, 16, 14, 14, 32, 3, 1, 1, 3, 32, 32, 16, 3, 2, 1]
+    for s in range 0, shapes.Len(), 7 {
+        C, H, W, OutC, K, St, P := shapes[s], shapes[s + 1], shapes[s + 2], shapes[s + 3], shapes[s + 4], shapes[s + 5], shapes[s + 6]
+        n I64 = 64
+        oldShape conv.Shape& = conv.Shape(C, H, W, OutC, K, St, P)
+        ns kc.Shape& = kc.Shape(C, H, W, OutC, K, St, P)!
+        x mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, H * W * C)
+        x.FillNormal(r, 0.0, 1.0)
+        w mut linalg.Matrix<F32>& = linalg.Matrix<F32>(OutC, ns.Patch())
+        w.FillNormal(r, 0.0, 0.3)
+        b mut linalg.Matrix<F32>& = linalg.Matrix<F32>(1, OutC)
+        b.FillNormal(r, 0.0, 1.0)
+        y mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, ns.Positions() * OutC)
+        dy mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, ns.Positions() * OutC)
+        dy.FillNormal(r, 0.0, 1.0)
+        dx mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, x.Cols)
+        dw mut linalg.Matrix<F32>& = linalg.Matrix<F32>(OutC, ns.Patch())
+        db mut linalg.Matrix<F32>& = linalg.Matrix<F32>(1, OutC)
+        cols mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n * ns.Positions(), ns.Patch())
+        lws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
+        vx mat.Mat<F32>& = mat.Mat<F32>(x.Data, 0, n, x.Cols, x.Cols)
+        vw mat.Mat<F32>& = mat.Mat<F32>(w.Data, 0, OutC, ns.Patch(), ns.Patch())
+        vy mut mat.Mat<F32>& = mat.Mat<F32>(y.Data, 0, n, y.Cols, y.Cols)
+        vdy mat.Mat<F32>& = mat.Mat<F32>(dy.Data, 0, n, y.Cols, y.Cols)
+        vdx mut mat.Mat<F32>& = mat.Mat<F32>(dx.Data, 0, n, x.Cols, x.Cols)
+        vdw mut mat.Mat<F32>& = mat.Mat<F32>(dw.Data, 0, OutC, ns.Patch(), ns.Patch())
+        vcols mut mat.Mat<F32>& = mat.Mat<F32>(cols.Data, 0, cols.Rows, cols.Cols, cols.Cols)
+        kws mut gemm.Workspace<F32>& = gemm.Workspace<F32>(threads)
+        bias Array<F32>& = Array<F32>[b.Data[o] for o in range OutC]
+        dbias mut Array<F32>& = Array<F32>(OutC)
+        fs := Array<fn&()>[fn() { conv.Conv2d(y, x, w, b, oldShape, threads, lws) }
+            fn() { kc.Conv2d(kws, vy, vx, vw, ns, gemm.Epilogue.Bias(bias)) }
+            fn() { conv.Conv2dBackward(dy, x, w, oldShape, dx, false, dw, false, db, false, cols, threads, lws) }
+            fn() { kc.Conv2dBackward(kws, vdy, vx, vw, ns, vdx, false, vdw, false, dbias, false, vcols, threads) }]
+        t := timed(fs, rounds)
+        Println("  " + $C + "x" + $H + "x" + $W + " -> " + $OutC + " k" + $K + " s" + $St + " p" + $P + ": forward " + $cell(t[1], t[0]) + "   backward " + $cell(t[3], t[2]))
+    }
+}
+
+fn main() ? ParseError {
+    args := os.Args()
+    rounds := try number(args, 1, 7)
+    threads := try number(args, 2, 1)
+    r := rand.Rand(1)
+    parts := args[3] if args.Len() > 3 else "pec"
+    if "p" in parts: products(rounds, threads, r)
+    if "e" in parts: events(rounds, r)
+    if "c" in parts: convolutions(rounds, threads, r)
+}

@@ -1,0 +1,56 @@
+type Pop<T> struct(size I64) {
+    Size I64 = size
+    Bias mut Array<T>& = Array<T>(size)
+    Spiking Bool = false
+}
+
+type Engine<T> struct() {
+    Pops mut Vec<mut Pop<T>&>& = Vec<mut Pop<T>&>()
+    Params mut Array<T>& = Array<T>(4)
+}
+
+type System<T> struct() {
+    E mut Engine<T>& = Engine<T>()
+    Planned Bool = true
+}
+
+type LearnError error { Unsupported(what String) }
+
+type Learner<T> struct(s mut System<T>&) ? LearnError {
+    if not s.Planned: error LearnError.Unsupported("not planned")
+    S mut System<T>& = s
+    Lessons I64 = 0
+    n I64 = 2
+    slope mut Array<T>& = Array<T>(4)
+}
+
+fn biases<T>(params mut Array<T>&, bias I64, n I64, target T) {
+    for j in range n: params[bias + j] += target
+}
+
+fn (l mut Learner<T>&) Homeostasis(target F64) {
+    for p in l.S.E.Pops {
+        if p.Spiking: continue
+        biases(l.S.E.Params, 0, p.Size, T(target))
+    }
+}
+
+fn (l mut Learner<T>&) slopes() {
+    for p in l.S.E.Pops {
+        p.Bias[0] = l.slope[0]
+    }
+}
+
+fn use(sys mut System<F32>&) I64 {
+    l := Learner<F32>(sys)!
+    return l.Lessons
+}
+
+fn main() {
+    s := System<F32>()
+    s.E.Pops.Push(Pop<F32>(3))
+    assert use(s) == 0
+    l := Learner<F32>(s)!
+    l.Homeostasis(1.0)
+    l.slopes()
+}

@@ -1,0 +1,1642 @@
+# kernels/sparse - the kernels of sparse and event-driven networks: matrices in compressed sparse row form (Csr), in
+# blocks (Tiles: a mask of tiles, only the live ones stored), the units whose input changed (Events) and the products of
+# each with a batch, a top-k selection, the two products that touch only the k selected rows of a table, and a counter
+# of the multiply-adds a product did against a dense one (Macs).
+#
+# A batch is laid out feature-major, as a `mat.Mat`: element (j, t) of a batch of width columns is x[j, t], so row j holds
+# feature j of every sample, contiguous, and one stored entry of a matrix is one run of width multiply-adds that
+# vectorizes - an entry's index and value are read once for the whole batch. A circuit's state is sample-major and is
+# transposed into this layout once per sweep. With width 1 the products are a matrix-vector product, its transpose and
+# an outer product sampled at the entries. Weights are stored in S (F32, F64, BF16, F16, F8); batches, results and
+# gradients are in the accumulator A, to which a weight is widened as it is read.
+#
+# Threads. A product takes `threads` and splits its output over that many tasks (join/spawn): a matrix-times-batch by
+# runs of rows balanced by their entries, a transpose product by runs of the batch's columns (a transpose scatters into
+# rows any task could name, so the rows cannot be split; a width-one transpose is one task), a sampled product by rows. A task
+# writes only its own part and every sum runs in an order the split does not touch, so a result is the same for every
+# thread count, bit for bit. Work too small to pay for tasks runs on the calling thread.
+#
+# Shapes. A pattern a caller gives (pointers, indices, tiles) is checked once, where the matrix is made, and fails with
+# PatternError; the products check nothing, as every kernel (docs/redesign.md, section 3).
+#
+# Pruning at run time (section 3, decision 3). A weight is pruned in two steps, neither of which allocates:
+#   Mask(keep)  sets the entries not kept to zero in place - immediate, nothing moves, the product costs what it did;
+#   Drop(keep)  removes them in place: later entries move down in the arrays, which keep their length (a Csr's Nnz is the
+#               pointers' last, not the arrays' length), and the product is cheaper at once. Squeeze(a, keep) applies the
+#               same move to any array laid out like the entries (a gradient, an optimizer's moments) - before Drop.
+# A Tiles retires a whole tile the same way (Drop flags it dead and the product skips it; Compact moves the live tiles
+# together). A compaction that rebuilds the whole system is the caller's (the plan records what it laid out).
+#
+# Counting. Every product adds to a Macs when given one: Dense, the multiply-adds a dense product of the same shape does,
+# and Effective, those done - the stored entries (a Tiles' live tiles in full) times the batch's width, an event-driven
+# transport's active columns times the rows.
+
+import "mat"
+import "std/rand"
+import "std/list"
+
+# ---- what a pattern given wrongly says ----
+
+type PatternError error {
+    Pointers(what String)  # the row (or tile-row) pointers are not 0, increasing, and ending at the entries
+    Index(row I64, at I64) # an index outside its matrix, or not above the one before it in its row
+    Length(what String)    # values or flags fewer than the pattern stores
+    Tile                   # a tile is not at least one wide
+}
+
+# ---- the counter ----
+
+# multiply-adds, summed over every product it was given to: Dense what dense products of the same shapes would have done,
+# Effective what was done. Effective / Dense is the work the structure saved
+type Macs struct() {
+    Dense I64
+    Effective I64
+}
+
+fn (m mut Macs&) Add(dense I64, effective I64) {
+    m.Dense += dense
+    m.Effective += effective
+}
+
+fn (m Macs&) Ratio() F64 { return 1.0 if m.Dense == 0 else F64(m.Effective) / F64(m.Dense) }
+
+fn (m mut Macs&) Clear() {
+    m.Dense = 0
+    m.Effective = 0
+}
+
+# ---- small helpers ----
+
+fn lesser(a I64, b I64) I64 { return a if a < b else b }
+
+# x as a D, rounded or wrapped as a conversion D(x) does - an F8 type through F64, its own way in and out
+fn cast<X, D>(x X, like D) D {
+    match X {
+        case F8E4M3, F8E5M2 { return cast(x.F64(), like) }
+        case _ { }
+    }
+    return match D {
+        case F8E4M3: F8E4M3(F64(x))
+        case F8E5M2: F8E5M2(F64(x))
+        case F16: F16(x)
+        case BF16: BF16(x)
+        case F32: F32(x)
+        case F64: F64(x)
+        case I8: I8(x)
+        case I16: I16(x)
+        case I32: I32(x)
+        case I64: I64(x)
+        case U8: U8(x)
+        case U16: U16(x)
+        case U32: U32(x)
+        case U64: U64(x)
+    }
+}
+
+# the tasks a product of work multiply-adds is cut into: one below what pays for a task, else threads
+fn tasksFor(work I64, threads I64) I64 { return 1 if work < 400000 or threads <= 1 else threads }
+
+# the dot product of w[wo .. wo + n) (stored in S) and x[xo .. xo + n), in eight lanes - eight locals, not an array, so
+# that they live in vector registers (a float sum keeps the order it is written in, so one accumulator would not
+# vectorize); combined pairwise at the end
+fn dotRun<S, A>(w Array<S>&, wo I64, x Array<A>&, xo I64, n I64) A {
+    z A
+    a0, a1, a2, a3, a4, a5, a6, a7 A = z, z, z, z, z, z, z, z
+    whole I64 = n - n % 8
+    for t in range 0, whole, 8 {
+        a0 += cast(w[wo + t], z) * x[xo + t]
+        a1 += cast(w[wo + t + 1], z) * x[xo + t + 1]
+        a2 += cast(w[wo + t + 2], z) * x[xo + t + 2]
+        a3 += cast(w[wo + t + 3], z) * x[xo + t + 3]
+        a4 += cast(w[wo + t + 4], z) * x[xo + t + 4]
+        a5 += cast(w[wo + t + 5], z) * x[xo + t + 5]
+        a6 += cast(w[wo + t + 6], z) * x[xo + t + 6]
+        a7 += cast(w[wo + t + 7], z) * x[xo + t + 7]
+    }
+    rest A = z
+    for t in range whole, n: rest += cast(w[wo + t], z) * x[xo + t]
+    return (((a0 + a4) + (a2 + a6)) + ((a1 + a5) + (a3 + a7))) + rest
+}
+
+# the dot product of a[ao .. ao + n) and b[bo .. bo + n) in A, in eight lanes - eight locals, not an array, so that they
+# live in vector registers (a float sum keeps the order it is written in, so one accumulator would not vectorize);
+# combined pairwise at the end
+fn dotAs<A>(a Array<A>&, ao I64, b Array<A>&, bo I64, n I64) A {
+    z A
+    a0, a1, a2, a3, a4, a5, a6, a7 A = z, z, z, z, z, z, z, z
+    whole I64 = n - n % 8
+    for t in range 0, whole, 8 {
+        a0 += a[ao + t] * b[bo + t]
+        a1 += a[ao + t + 1] * b[bo + t + 1]
+        a2 += a[ao + t + 2] * b[bo + t + 2]
+        a3 += a[ao + t + 3] * b[bo + t + 3]
+        a4 += a[ao + t + 4] * b[bo + t + 4]
+        a5 += a[ao + t + 5] * b[bo + t + 5]
+        a6 += a[ao + t + 6] * b[bo + t + 6]
+        a7 += a[ao + t + 7] * b[bo + t + 7]
+    }
+    rest A = z
+    for t in range whole, n: rest += a[ao + t] * b[bo + t]
+    return (((a0 + a4) + (a2 + a6)) + ((a1 + a5) + (a3 + a7))) + rest
+}
+
+# y[yo .. yo + n) += a * w[wo .. wo + n) (w stored in S)
+fn axpyS<S, A>(y mut Array<A>&, yo I64, a A, w Array<S>&, wo I64, n I64) {
+    z A
+    for t in range n: y[yo + t] += a * cast(w[wo + t], z)
+}
+
+# the entries of a, in groups of per, whose group is kept, moved down in place over the others; how many groups were
+# kept. The one move Drop makes of a pattern, and what a companion array laid out like the entries (a gradient, an
+# optimizer's moments) needs before it: Squeeze(g, keep), Squeeze(m, keep), then Drop(keep)
+fn Squeeze<T>(a mut Array<T>&, keep Array<Bool>&, per I64 = 1) I64 {
+    kept I64 = 0
+    for g in range keep.Len() {
+        if not keep[g]: continue
+        if kept != g {
+            for u in range per: a[kept * per + u] = a[g * per + u]
+        }
+        kept++
+    }
+    return kept
+}
+
+# ---- patterns ----
+
+# a random pattern of rows x cols in which each entry is present with probability density, independently of the
+# others: its row starts into ptr (rows + 1 of them, the first 0) and its columns appended to idx. Drawn by geometric
+# gaps between entries along the rows, one after another - a draw per entry, not per position, so a pattern of 10^6
+# entries among 10^9 positions costs 10^6 draws; density 1 is every position, with no draw
+fn DrawPattern(rows I64, cols I64, density F64, r mut rand.Rand&, ptr mut Array<I64>&, idx mut list.List<I32>&) {
+    assert density > 0.0 and density <= 1.0 and ptr.Len() == rows + 1
+    start := idx.Len()
+    total I64 = rows * cols
+    at I64 = -1
+    row I64 = 0
+    ptr[0] = 0
+    lnq F64 = (-density).Log1p() if density < 1.0 else 0.0
+    for {
+        # 1 - Float() is in (0, 1]
+        gap := 0.0 if density >= 1.0 else ((1.0 - r.Float()).Log() / lnq).Floor()
+        if gap >= F64(total): break
+        at += 1 + I64(gap)
+        if at >= total: break
+        for row < at / cols {
+            row++
+            ptr[row] = idx.Len() - start
+        }
+        idx.Push(I32(at % cols))
+    }
+    for row < rows {
+        row++
+        ptr[row] = idx.Len() - start
+    }
+}
+
+# the columns order[lo .. hi) in increasing order (insertion sort: rows are short), none twice
+fn sortRow(order mut Array<I32>&, lo I64, hi I64) {
+    for a in range lo + 1, hi {
+        x := order[a]
+        b I64 = a - 1
+        for b >= lo and order[b] > x {
+            order[b + 1] = order[b]
+            b--
+        }
+        order[b + 1] = x
+    }
+    for a in range lo + 1, hi: assert order[a] != order[a - 1], "a synapse given twice"
+}
+
+# the pattern of the given (row, col) pairs (rows x cols, each pair once): row starts into ptr, columns appended to
+# idx in row order, increasing within a row. A pair out of range or given twice stops with what is wrong
+fn PatternOf(rows I64, cols I64, pairRows Array<I32>&, pairCols Array<I32>&, ptr mut Array<I64>&, idx mut list.List<I32>&) {
+    assert pairRows.Len() == pairCols.Len() and ptr.Len() == rows + 1
+    n := pairRows.Len()
+    count := Array<I64>(rows + 1)
+    for k in range n {
+        i I64 = I64(pairRows[k])
+        j I64 = I64(pairCols[k])
+        assert i >= 0 and i < rows and j >= 0 and j < cols, "a synapse outside its projection's block"
+        count[i + 1]++
+    }
+    for i in range rows: count[i + 1] += count[i]
+    for i in range rows + 1: ptr[i] = count[i]
+    order := Array<I32>(n)
+    fill := Array<I64>(rows)
+    for k in range n {
+        i I64 = I64(pairRows[k])
+        order[count[i] + fill[i]] = pairCols[k]
+        fill[i]++
+    }
+    for i in range rows: sortRow(order, count[i], count[i + 1])
+    for k in range n: idx.Push(order[k])
+}
+
+# whether ptr (rows + 1 of them) and idx describe a rows x cols pattern: starts at 0, never decreases, ends at or below
+# the indices given, every index inside the columns and above the one before it in its row
+fn checkPattern(rows I64, cols I64, ptr Array<I64>&, idx Array<I32>&) ? PatternError {
+    if ptr.Len() != rows + 1: error PatternError.Pointers("a pointer for each of " + $rows + " rows and one more")
+    if ptr[0] != 0 or ptr[rows] > idx.Len(): error PatternError.Pointers("from 0 to at most " + $idx.Len())
+    for i in range rows {
+        if ptr[i + 1] < ptr[i]: error PatternError.Pointers("row " + $i + " ends before it starts")
+    }
+    for i in range rows {
+        for e in range ptr[i], ptr[i + 1] {
+            if idx[e] < 0 or I64(idx[e]) >= cols: error PatternError.Index(i, I64(idx[e]))
+            if e > ptr[i] and idx[e] <= idx[e - 1]: error PatternError.Index(i, I64(idx[e]))
+        }
+    }
+}
+
+# ---- compressed sparse row ----
+
+# a Rows x Cols matrix holding only some entries: row i's are at the columns Idx[Ptr[i] .. Ptr[i + 1]), increasing,
+# with the values Values[Ptr[i] .. Ptr[i + 1]). Ptr has Rows + 1 elements, Ptr[0] = 0, and its last is the entries held
+# (Nnz) - at most what Idx and Values hold, which Drop leaves behind. Values is new zero-filled storage unless given - a
+# circuit gives a view of its parameter region, so an optimizer steps the entries in place. The pattern is checked here,
+# once
+type Csr<S> struct(Rows I64, Cols I64, ptr mut Array<I64>&, idx mut Array<I32>&, values mut Array<S>?& = null) ? PatternError {
+    Rows
+    Cols
+    Ptr mut Array<I64>& = ptr
+    Idx mut Array<I32>& = idx
+    try checkPattern(Rows, Cols, Ptr, Idx)
+    Values mut Array<S>& = values if values != null else Array<S>(idx.Len())
+    if Values.Len() < Ptr[Rows]: error PatternError.Length("values for " + $Ptr[Rows] + " entries")
+}
+
+# the entries it holds
+fn (w Csr<S>&) Nnz() I64 { return w.Ptr[w.Rows] }
+
+# the fraction of its Rows x Cols entries it holds
+fn (w Csr<S>&) Density() F64 {
+    return 0.0 if w.Rows * w.Cols == 0 else F64(w.Nnz()) / F64(w.Rows * w.Cols)
+}
+
+# a random pattern at density with values uniform in [-1, 1), rounded to S
+fn Csr<S>.Random(rows I64, cols I64, density F64, r mut rand.Rand&) Csr<S> {
+    like S
+    ptr mut Array<I64>& = Array<I64>(rows + 1)
+    idx := list.List<I32>()
+    DrawPattern(rows, cols, density, r, ptr, idx)
+    w mut Csr<S>& = Csr<S>(rows, cols, ptr, idx.ToArray())!
+    for e in range w.Nnz(): w.Values[e] = cast(r.Uniform(-1.0, 1.0), like)
+    return w
+}
+
+# the entries of m that are not zero
+fn Csr<S>.Of(m mat.Mat<S>&) Csr<S> {
+    like S
+    z S = cast(0, like)
+    ptr mut Array<I64>& = Array<I64>(m.Rows + 1)
+    idx := list.List<I32>()
+    for i in range m.Rows {
+        for j in range m.Cols {
+            if m[i, j] != z: idx.Push(I32(j))
+        }
+        ptr[i + 1] = idx.Len()
+    }
+    w mut Csr<S>& = Csr<S>(m.Rows, m.Cols, ptr, idx.ToArray())!
+    e I64 = 0
+    for i in range m.Rows {
+        for j in range m.Cols {
+            if m[i, j] == z: continue
+            w.Values[e] = m[i, j]
+            e++
+        }
+    }
+    return w
+}
+
+# the first stored entry of row i whose column is at least lo, found by halving the row - and the row whose entries
+# start at or after target entries: the balance of rows over tasks by what they hold
+fn (w Csr<S>&) rowAt(target I64) I64 {
+    lo I64 = 0
+    hi I64 = w.Rows
+    for lo < hi {
+        mid I64 = lo + (hi - lo) / 2
+        if w.Ptr[mid] < target: lo = mid + 1
+        else: hi = mid
+    }
+    return lo
+}
+
+# row i's entries times the entries of x they name (x[j] at xo + j xs), in eight lanes - the gathers and multiply-adds in
+# vector registers. The lanes are eight locals, not an array: nothing a loop stores through can alias them
+fn (w Csr<S>&) rowDot<A>(i I64, x Array<A>&, xo I64, xs I64) A {
+    z A
+    a0, a1, a2, a3, a4, a5, a6, a7 A = z, z, z, z, z, z, z, z
+    lo := w.Ptr[i]
+    hi := w.Ptr[i + 1]
+    whole I64 = hi - (hi - lo) % 8
+    for e in range lo, whole, 8 {
+        a0 += cast(w.Values[e], z) * x[xo + I64(w.Idx[e]) * xs]
+        a1 += cast(w.Values[e + 1], z) * x[xo + I64(w.Idx[e + 1]) * xs]
+        a2 += cast(w.Values[e + 2], z) * x[xo + I64(w.Idx[e + 2]) * xs]
+        a3 += cast(w.Values[e + 3], z) * x[xo + I64(w.Idx[e + 3]) * xs]
+        a4 += cast(w.Values[e + 4], z) * x[xo + I64(w.Idx[e + 4]) * xs]
+        a5 += cast(w.Values[e + 5], z) * x[xo + I64(w.Idx[e + 5]) * xs]
+        a6 += cast(w.Values[e + 6], z) * x[xo + I64(w.Idx[e + 6]) * xs]
+        a7 += cast(w.Values[e + 7], z) * x[xo + I64(w.Idx[e + 7]) * xs]
+    }
+    rest A = z
+    for e in range whole, hi: rest += cast(w.Values[e], z) * x[xo + I64(w.Idx[e]) * xs]
+    return (((a0 + a4) + (a2 + a6)) + ((a1 + a5) + (a3 + a7))) + rest
+}
+
+# rows lo .. hi of Y += alpha W X: row i of Y gathers the rows of X its entries name (x[j, t] at xo + j xs + t). A batch is
+# taken sixteen columns at a time with the sixteen sums in registers across the whole row - y is read and written once a
+# chunk, not once an entry - and the columns left over one entry at a time
+fn (w Csr<S>&) rowsInto<A>(y mut Array<A>&, yo I64, ys I64, x Array<A>&, xo I64, xs I64, width I64, alpha A, lo I64, hi I64) {
+    z A
+    idx := w.Idx
+    vals := w.Values
+    whole I64 = width - width % 16
+    for i in range lo, hi {
+        yi I64 = yo + i * ys
+        if width == 1 {
+            y[yi] = y[yi] + alpha * w.rowDot(i, x, xo, xs)
+            continue
+        }
+        for t0 in range 0, whole, 16 {
+            acc := Array<A>(16)
+            for e in range w.Ptr[i], w.Ptr[i + 1] {
+                a A = alpha * cast(vals[e], z)
+                xj I64 = xo + I64(idx[e]) * xs + t0
+                for u in range 16: acc[u] += a * x[xj + u]
+            }
+            for u in range 16: y[yi + t0 + u] += acc[u]
+        }
+        if whole == width: continue
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            a A = alpha * cast(vals[e], z)
+            xj I64 = xo + I64(idx[e]) * xs
+            for t in range whole, width: y[yi + t] += a * x[xj + t]
+        }
+    }
+}
+
+# Y[., t0 .. t1) += alpha W^T X[., t0 .. t1): row i of X scattered, scaled, into the rows of Y its entries name
+fn (w Csr<S>&) scatterInto<A>(y mut Array<A>&, yo I64, ys I64, x Array<A>&, xo I64, xs I64, alpha A, t0 I64, t1 I64) {
+    z A
+    for i in range w.Rows {
+        xi I64 = xo + i * xs
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            yj I64 = yo + I64(w.Idx[e]) * ys
+            if t1 - t0 == 1 {
+                y[yj + t0] = y[yj + t0] + alpha * x[xi + t0] * cast(w.Values[e], z)
+                continue
+            }
+            a A = alpha * cast(w.Values[e], z)
+            for t in range t0, t1: y[yj + t] += a * x[xi + t]
+        }
+    }
+}
+
+# Y += alpha W X (trans: Y += alpha W^T X): x is Cols rows of width (Rows when trans), y Rows rows (Cols when trans),
+# width = x.Cols. Adds Dense Rows Cols width and Effective Nnz width to macs
+fn (w Csr<S>&) MulAdd<A>(y mut mat.Mat<A>&, x mat.Mat<A>&, trans Bool = false, alpha A = 1, threads I64 = 1, macs mut Macs?& = null) {
+    width := x.Cols
+    if macs != null: macs.Add(w.Rows * w.Cols * width, w.Nnz() * width)
+    if trans {
+        w.mulAddT(y, x, alpha, threads)
+        return
+    }
+    tasks := tasksFor(w.Nnz() * width, threads)
+    if tasks == 1 {
+        w.rowsInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, width, alpha, 0, w.Rows)
+        return
+    }
+    join {
+        prev I64 = 0
+        for t in range tasks {
+            next := w.rowAt(w.Nnz() * (t + 1) / tasks) if t + 1 < tasks else w.Rows
+            if prev < next: spawn w.rowsInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, width, alpha, prev, next)
+            prev = next
+        }
+    }
+}
+
+# the transpose's product: the batch's columns in runs, a task each (a scatter's rows cannot be split)
+fn (w Csr<S>&) mulAddT<A>(y mut mat.Mat<A>&, x mat.Mat<A>&, alpha A, threads I64) {
+    width := x.Cols
+    tasks := tasksFor(w.Nnz() * width, lesser(threads, width / 8))
+    if tasks <= 1 {
+        w.scatterInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, alpha, 0, width)
+        return
+    }
+    share := (width + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * share
+            hi := lesser(width, lo + share)
+            if lo < hi: spawn w.scatterInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, alpha, lo, hi)
+        }
+    }
+}
+
+# rows lo .. hi's entries of g (g[e] = alpha (A B^T)[i, j] at each entry e = (i, j), plus g[e] when accumulate)
+fn (w Csr<S>&) sampledRows<A>(g mut Array<A>&, a Array<A>&, ao I64, sa I64, b Array<A>&, bo I64, sb I64, width I64, alpha A, accumulate Bool, lo I64, hi I64) {
+    z A
+    for i in range lo, hi {
+        ai I64 = ao + i * sa
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            d := alpha * dotAs(a, ai, b, bo + I64(w.Idx[e]) * sb, width)
+            g[e] = (g[e] if accumulate else z) + d
+        }
+    }
+}
+
+# g[e] = alpha (A B^T)[i, j] (+ g[e] when accumulate), for each entry e = (i, j): the product of two batches sampled at
+# the matrix's entries - a is Rows rows of width, b Cols rows of width - a contrast's sum over the batch of post x pre,
+# computed only where a synapse exists. g holds Nnz entries (or more), in entry order
+fn (w Csr<S>&) Sampled<A>(g mut Array<A>&, a mat.Mat<A>&, b mat.Mat<A>&, alpha A = 1, accumulate Bool = false, threads I64 = 1, macs mut Macs?& = null) {
+    width := a.Cols
+    if macs != null: macs.Add(w.Rows * w.Cols * width, w.Nnz() * width)
+    tasks := tasksFor(w.Nnz() * width, threads)
+    if tasks == 1 {
+        w.sampledRows(g, a.Data, a.Off, a.Ld, b.Data, b.Off, b.Ld, width, alpha, accumulate, 0, w.Rows)
+        return
+    }
+    join {
+        prev I64 = 0
+        for t in range tasks {
+            next := w.rowAt(w.Nnz() * (t + 1) / tasks) if t + 1 < tasks else w.Rows
+            if prev < next: spawn w.sampledRows(g, a.Data, a.Off, a.Ld, b.Data, b.Off, b.Ld, width, alpha, accumulate, prev, next)
+            prev = next
+        }
+    }
+}
+
+# the absolute sums of each row into rows (Rows of them, added to) and of each column into cols (Cols, added to)
+fn (w Csr<S>&) AbsSums<A>(rows mut Array<A>&, cols mut Array<A>&) {
+    z A
+    for i in range w.Rows {
+        acc A = z
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            a A = cast(w.Values[e], z).Abs()
+            acc += a
+            cols[I64(w.Idx[e])] += a
+        }
+        rows[i] += acc
+    }
+}
+
+# the matrix with its absent entries as zeros: Rows x Cols, into out
+fn (w Csr<S>&) Dense(out mut mat.Mat<S>&) {
+    like S
+    z S = cast(0, like)
+    for i in range w.Rows {
+        for j in range w.Cols: out[i, j] = z
+        for e in range w.Ptr[i], w.Ptr[i + 1]: out[i, I64(w.Idx[e])] = w.Values[e]
+    }
+}
+
+# ---- pruning a Csr ----
+
+# keep[e] = whether entry e's magnitude is at least limit, for each of the Nnz entries
+fn (w Csr<S>&) KeepAtLeast<A>(keep mut Array<Bool>&, limit A) {
+    z A
+    for e in range w.Nnz(): keep[e] = cast(w.Values[e], z).Abs() >= limit
+}
+
+# the entries whose keep is false set to zero, in place: the shape, the pattern and the cost of a product unchanged
+fn (w mut Csr<S>&) Mask(keep Array<Bool>&) {
+    like S
+    z S = cast(0, like)
+    for e in range w.Nnz() {
+        if not keep[e]: w.Values[e] = z
+    }
+}
+
+# the entries whose keep is false removed, in place: the others move down in Idx and Values, Ptr counts what is left.
+# Nothing is allocated; the arrays keep their length and what is past Nnz is stale. Squeeze a companion array first
+fn (w mut Csr<S>&) Drop(keep Array<Bool>&) {
+    kept I64 = 0
+    start I64 = 0
+    for i in range w.Rows {
+        end := w.Ptr[i + 1]
+        for e in range start, end {
+            if not keep[e]: continue
+            w.Idx[kept] = w.Idx[e]
+            w.Values[kept] = w.Values[e]
+            kept++
+        }
+        w.Ptr[i + 1] = kept
+        start = end
+    }
+}
+
+# ---- block-sparse: tiles ----
+
+# a Rows x Cols matrix of Tile x Tile blocks, only some of which are stored: the tile grid is TileRows x TileCols (the
+# last tiles clipped to the matrix), tile row r's stored tiles are at the tile columns Col[Ptr[r] .. Ptr[r + 1]),
+# increasing, a stored tile t's elements Data[t Tile Tile ...], row-major. Live[t] says whether tile t counts: a dead tile
+# is skipped by every product and holds zeros. Stored tiles are Ptr[TileRows]. The pattern is checked here, once
+type Tiles<S> struct(Rows I64, Cols I64, Tile I64, ptr mut Array<I64>&, col mut Array<I32>&, data mut Array<S>?& = null) ? PatternError {
+    Rows
+    Cols
+    Tile
+    if Tile < 1: error PatternError.Tile
+    TileRows I64 = (Rows + Tile - 1) / Tile
+    TileCols I64 = (Cols + Tile - 1) / Tile
+    Ptr mut Array<I64>& = ptr
+    Col mut Array<I32>& = col
+    try checkPattern(TileRows, TileCols, Ptr, Col)
+    Data mut Array<S>& = data if data != null else Array<S>(col.Len() * Tile * Tile)
+    if Data.Len() < Ptr[TileRows] * Tile * Tile: error PatternError.Length("values for " + $Ptr[TileRows] + " tiles")
+    Live mut Array<Bool>& = Array<Bool>(col.Len())
+    for e in range Ptr[TileRows]: Live[e] = true
+}
+
+fn (w Tiles<S>&) Stored() I64 { return w.Ptr[w.TileRows] }
+
+# the stored tiles that are alive
+fn (w Tiles<S>&) Alive() I64 {
+    n I64 = 0
+    for e in range w.Stored(): n += 1 if w.Live[e] else 0
+    return n
+}
+
+# the fraction of its Rows x Cols entries its live tiles cover (the edge tiles clipped)
+fn (w Tiles<S>&) Density() F64 {
+    return 0.0 if w.Rows * w.Cols == 0 else F64(w.liveArea(Array<Bool>(0))) / F64(w.Rows * w.Cols)
+}
+
+# the tile row r's rows (the last tile row clipped) and tile column c's columns
+fn (w Tiles<S>&) height(r I64) I64 { return lesser(w.Tile, w.Rows - r * w.Tile) }
+
+fn (w Tiles<S>&) width(c I64) I64 { return lesser(w.Tile, w.Cols - c * w.Tile) }
+
+# the entries covered by the live tiles of the blocks active names (for a product: its x's blocks of Tile rows - w's
+# tile columns, or its tile rows when transposed; empty: all). What a product's Effective is, per column of the batch
+fn (w Tiles<S>&) liveArea(active Array<Bool>&, trans Bool = false) I64 {
+    area I64 = 0
+    for r in range w.TileRows {
+        for e in range w.Ptr[r], w.Ptr[r + 1] {
+            if not w.Live[e]: continue
+            c := I64(w.Col[e])
+            if active.Len() > 0 and not active[r if trans else c]: continue
+            area += w.height(r) * w.width(c)
+        }
+    }
+    return area
+}
+
+# a random tile pattern at density (the fraction of tiles stored), zero-filled
+fn Tiles<S>.Drawn(rows I64, cols I64, tile I64, density F64, r mut rand.Rand&) Tiles<S> {
+    tr := (rows + tile - 1) / tile
+    tc := (cols + tile - 1) / tile
+    ptr mut Array<I64>& = Array<I64>(tr + 1)
+    col := list.List<I32>()
+    DrawPattern(tr, tc, density, r, ptr, col)
+    return Tiles<S>(rows, cols, tile, ptr, col.ToArray())!
+}
+
+# the tiles of m that hold an entry of magnitude above below
+fn Tiles<S>.Of(m mat.Mat<S>&, tile I64, below F64 = 0.0) Tiles<S> {
+    tr := (m.Rows + tile - 1) / tile
+    tc := (m.Cols + tile - 1) / tile
+    ptr mut Array<I64>& = Array<I64>(tr + 1)
+    col := list.List<I32>()
+    for r in range tr {
+        for c in range tc {
+            if tileHolds(m, r, c, tile, below): col.Push(I32(c))
+        }
+        ptr[r + 1] = col.Len()
+    }
+    w mut Tiles<S>& = Tiles<S>(m.Rows, m.Cols, tile, ptr, col.ToArray())!
+    for r in range tr {
+        for e in range ptr[r], ptr[r + 1] {
+            c := I64(w.Col[e])
+            for i in range w.height(r) {
+                for k in range w.width(c): w.Data[e * tile * tile + i * tile + k] = m[r * tile + i, c * tile + k]
+            }
+        }
+    }
+    return w
+}
+
+fn tileHolds<S>(m mat.Mat<S>&, r I64, c I64, tile I64, below F64) Bool {
+    z F64 = 0.0
+    for i in range lesser(tile, m.Rows - r * tile) {
+        for k in range lesser(tile, m.Cols - c * tile) {
+            if cast(m[r * tile + i, c * tile + k], z).Abs() > below: return true
+        }
+    }
+    return false
+}
+
+# the matrix with its absent and dead tiles as zeros: Rows x Cols, into out
+fn (w Tiles<S>&) Dense(out mut mat.Mat<S>&) {
+    like S
+    z S = cast(0, like)
+    for i in range w.Rows {
+        for j in range w.Cols: out[i, j] = z
+    }
+    for r in range w.TileRows {
+        for e in range w.Ptr[r], w.Ptr[r + 1] {
+            if not w.Live[e]: continue
+            c := I64(w.Col[e])
+            for i in range w.height(r) {
+                for k in range w.width(c): out[r * w.Tile + i, c * w.Tile + k] = w.Data[e * w.Tile * w.Tile + i * w.Tile + k]
+            }
+        }
+    }
+}
+
+# the tile row at which the live and stored tiles reach target: the balance of tile rows over tasks
+fn (w Tiles<S>&) rowAt(target I64) I64 {
+    lo I64 = 0
+    hi I64 = w.TileRows
+    for lo < hi {
+        mid I64 = lo + (hi - lo) / 2
+        if w.Ptr[mid] < target: lo = mid + 1
+        else: hi = mid
+    }
+    return lo
+}
+
+# tile rows r0 .. r1 of Y += alpha W X, skipping dead tiles and the blocks of x that active calls quiet. A batch of one
+# (x and y contiguous) dots each row of every live tile with its block of x in eight lanes. A wider batch is taken
+# sixteen columns at a time, each row of Y's sixteen sums held across the whole tile row
+fn (w Tiles<S>&) rowsInto<A>(y mut Array<A>&, yo I64, ys I64, x Array<A>&, xo I64, xs I64, width I64, alpha A, active Array<Bool>&, r0 I64, r1 I64) {
+    whole I64 = width - width % 16
+    for r in range r0, r1 {
+        if width == 1 and xs == 1 and ys == 1 {
+            w.dotRows(y, yo, x, xo, alpha, active, r)
+            continue
+        }
+        for i in range w.height(r) {
+            yi I64 = yo + (r * w.Tile + i) * ys
+            for t0 in range 0, whole, 16 {
+                acc := Array<A>(16)
+                w.addRow(acc, x, xo, xs, t0, 16, alpha, active, r, i)
+                for u in range 16: y[yi + t0 + u] += acc[u]
+            }
+            if whole < width {
+                rest := Array<A>(16)
+                w.addRow(rest, x, xo, xs, whole, width - whole, alpha, active, r, i)
+                for u in range width - whole: y[yi + whole + u] += rest[u]
+            }
+        }
+    }
+}
+
+# acc[u] += alpha W[row i of tile row r, .] X[., t0 + u] for u < n (at most sixteen columns), over the live tiles the
+# active blocks leave
+fn (w Tiles<S>&) addRow<A>(acc mut Array<A>&, x Array<A>&, xo I64, xs I64, t0 I64, n I64, alpha A, active Array<Bool>&, r I64, i I64) {
+    z A
+    tt := w.Tile * w.Tile
+    for e in range w.Ptr[r], w.Ptr[r + 1] {
+        c := I64(w.Col[e])
+        if not w.Live[e] or (active.Len() > 0 and not active[c]): continue
+        for k in range w.width(c) {
+            a A = alpha * cast(w.Data[e * tt + i * w.Tile + k], z)
+            xj I64 = xo + (c * w.Tile + k) * xs + t0
+            for u in range n: acc[u] += a * x[xj + u]
+        }
+    }
+}
+
+# tile row r's rows of Y += alpha W x for one contiguous vector x: each live tile's rows dotted with its block of x
+fn (w Tiles<S>&) dotRows<A>(y mut Array<A>&, yo I64, x Array<A>&, xo I64, alpha A, active Array<Bool>&, r I64) {
+    tt := w.Tile * w.Tile
+    h := w.height(r)
+    for e in range w.Ptr[r], w.Ptr[r + 1] {
+        c := I64(w.Col[e])
+        if not w.Live[e] or (active.Len() > 0 and not active[c]): continue
+        wd := w.width(c)
+        for i in range h: y[yo + r * w.Tile + i] += alpha * dotRun(w.Data, e * tt + i * w.Tile, x, xo + c * w.Tile, wd)
+    }
+}
+
+# Y[., t0 .. t1) += alpha W^T X[., t0 .. t1) over every live tile whose tile row the active blocks of x do not quiet
+fn (w Tiles<S>&) scatterInto<A>(y mut Array<A>&, yo I64, ys I64, x Array<A>&, xo I64, xs I64, alpha A, active Array<Bool>&, t0 I64, t1 I64) {
+    tt := w.Tile * w.Tile
+    flat := t1 - t0 == 1 and ys == 1 and xs == 1
+    for r in range w.TileRows {
+        if active.Len() > 0 and not active[r]: continue
+        h := w.height(r)
+        for e in range w.Ptr[r], w.Ptr[r + 1] {
+            if not w.Live[e]: continue
+            c := I64(w.Col[e])
+            wd := w.width(c)
+            for i in range h {
+                xi I64 = xo + (r * w.Tile + i) * xs
+                if flat {
+                    axpyS(y, yo + c * w.Tile, alpha * x[xi + t0], w.Data, e * tt + i * w.Tile, wd)
+                    continue
+                }
+                for k in range wd {
+                    a := alpha * cast(w.Data[e * tt + i * w.Tile + k], alpha)
+                    yj I64 = yo + (c * w.Tile + k) * ys
+                    for t in range t0, t1: y[yj + t] += a * x[xi + t]
+                }
+            }
+        }
+    }
+}
+
+# Y += alpha W X (trans: Y += alpha W^T X): x is Cols rows of width (Rows when trans), y Rows rows (Cols when trans).
+# active has a flag for each block of Tile rows of x, false where the block is quiet (all but zero) and its tiles are to be
+# skipped - Active makes one; empty: no block is. Adds Dense Rows Cols width and Effective the live tiles' area times width
+fn (w Tiles<S>&) MulAdd<A>(y mut mat.Mat<A>&, x mat.Mat<A>&, trans Bool = false, alpha A = 1, active Array<Bool>& = Array<Bool>(0), threads I64 = 1, macs mut Macs?& = null) {
+    width := x.Cols
+    if macs != null: macs.Add(w.Rows * w.Cols * width, w.liveArea(active, trans) * width)
+    tasks := tasksFor(w.Stored() * w.Tile * w.Tile * width, threads)
+    if trans {
+        tasks = lesser(tasks, width / 8)
+        if tasks <= 1 {
+            w.scatterInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, alpha, active, 0, width)
+            return
+        }
+        share := (width + tasks - 1) / tasks
+        join {
+            for t in range tasks {
+                lo := t * share
+                hi := lesser(width, lo + share)
+                if lo < hi: spawn w.scatterInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, alpha, active, lo, hi)
+            }
+        }
+        return
+    }
+    if tasks == 1 {
+        w.rowsInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, width, alpha, active, 0, w.TileRows)
+        return
+    }
+    join {
+        prev I64 = 0
+        for t in range tasks {
+            next := w.rowAt(w.Stored() * (t + 1) / tasks) if t + 1 < tasks else w.TileRows
+            if prev < next: spawn w.rowsInto(y.Data, y.Off, y.Ld, x.Data, x.Off, x.Ld, width, alpha, active, prev, next)
+            prev = next
+        }
+    }
+}
+
+# g[t Tile Tile + i Tile + k] = alpha (A B^T)[r Tile + i, c Tile + k] (+ g[...] when accumulate) for each live tile t = (r, c):
+# the product of two batches sampled at the tiles - a is Rows rows of width, b Cols rows of width - a contrast's sum over
+# the batch at the tiles that exist; g is laid out like Data, the dead tiles' and the edges' elements untouched. Adds Dense
+# Rows Cols width and Effective the live tiles' area times width
+fn (w Tiles<S>&) Sampled<A>(g mut Array<A>&, a mat.Mat<A>&, b mat.Mat<A>&, alpha A = 1, accumulate Bool = false, macs mut Macs?& = null) {
+    z A
+    width := a.Cols
+    if macs != null: macs.Add(w.Rows * w.Cols * width, w.liveArea(Array<Bool>(0)) * width)
+    tt := w.Tile * w.Tile
+    for r in range w.TileRows {
+        for e in range w.Ptr[r], w.Ptr[r + 1] {
+            if not w.Live[e]: continue
+            c := I64(w.Col[e])
+            for i in range w.height(r) {
+                for k in range w.width(c) {
+                    d := alpha * dotAs(a.Data, a.Off + (r * w.Tile + i) * a.Ld, b.Data, b.Off + (c * w.Tile + k) * b.Ld, width)
+                    at := e * tt + i * w.Tile + k
+                    g[at] = (g[at] if accumulate else z) + d
+                }
+            }
+        }
+    }
+}
+
+# out[b] = whether block b of x (Tile rows of it, the last clipped) holds an entry of magnitude above threshold: the flags
+# Tiles.MulAdd takes to skip what a quiet block of the batch would add. One flag per block
+fn Active<A>(out mut Array<Bool>&, x mat.Mat<A>&, tile I64, threshold A) {
+    for b in range (x.Rows + tile - 1) / tile {
+        loud Bool = false
+        for i in range b * tile, lesser(x.Rows, (b + 1) * tile) {
+            for t in range x.Cols {
+                if x[i, t].Abs() > threshold: loud = true
+            }
+        }
+        out[b] = loud
+    }
+}
+
+# ---- pruning tiles ----
+
+# keep[t] = whether stored tile t holds an entry of magnitude at least limit, for each stored tile
+fn (w Tiles<S>&) KeepAtLeast<A>(keep mut Array<Bool>&, limit A) {
+    z A
+    tt := w.Tile * w.Tile
+    for r in range w.TileRows {
+        for e in range w.Ptr[r], w.Ptr[r + 1] {
+            big Bool = false
+            for u in range tt {
+                if cast(w.Data[e * tt + u], z).Abs() >= limit: big = true
+            }
+            keep[e] = big
+        }
+    }
+}
+
+# the stored tiles whose keep is false retired in place: dead, so that every product skips them, and zeroed. Nothing
+# moves; Compact moves the live ones together
+fn (w mut Tiles<S>&) Drop(keep Array<Bool>&) {
+    like S
+    z S = cast(0, like)
+    tt := w.Tile * w.Tile
+    for e in range w.Stored() {
+        if keep[e] or not w.Live[e]: continue
+        w.Live[e] = false
+        for u in range tt: w.Data[e * tt + u] = z
+    }
+}
+
+# the dead tiles removed, in place: the live ones move down in Col and Data, Ptr counts what is left and every tile is live.
+# Nothing is allocated; the arrays keep their length. Squeeze(g, w.Live, Tile Tile) a companion array first
+fn (w mut Tiles<S>&) Compact() {
+    tt := w.Tile * w.Tile
+    was := w.Stored()
+    kept I64 = 0
+    start I64 = 0
+    for r in range w.TileRows {
+        end := w.Ptr[r + 1]
+        for e in range start, end {
+            if not w.Live[e]: continue
+            w.Col[kept] = w.Col[e]
+            for u in range tt: w.Data[kept * tt + u] = w.Data[e * tt + u]
+            kept++
+        }
+        w.Ptr[r + 1] = kept
+        start = end
+    }
+    for e in range was: w.Live[e] = e < kept
+}
+
+# ---- events ----
+
+# the units whose value changed by more than a threshold since the consumers last heard: the event-driven way to keep a
+# sum W x current when x moves a little at a time - y += W[., active] delta[active], work in the active units, not all of
+# them. Collect finds them; Transport adds their columns (or rows) to a total. At most Capacity are reported a step: if more
+# changed, the Capacity that changed most are, in increasing order of unit, and the rest stay as they were, still pending
+# for the next - nothing is lost, and Over says how many waited
+type Events struct(units I64, capacity I64 = 0) {
+    Units I64 = units
+    Capacity I64 = capacity if capacity > 0 and capacity < units else units
+    Idx mut Array<I32>& = Array<I32>(Capacity) # the reported units, increasing
+    Count I64                                  # how many
+    Over I64                                   # how many changed more than the threshold and were not reported
+    mags mut Array<F64>& = Array<F64>(units if Capacity < units else 0)
+    scratch mut Array<F64>& = Array<F64>(units if Capacity < units else 0)
+}
+
+# the units j with |x[j] - last[j]| > threshold: reported in e.Idx, delta[j] = x[j] - last[j] set for them and last[j]
+# made x[j] (what the consumers now hold). Others untouched. An overflow of Capacity: the largest changes (ties to the
+# earlier unit)
+fn (e mut Events&) Collect<A>(x Array<A>&, last mut Array<A>&, delta mut Array<A>&, threshold A) {
+    above I64 = 0
+    for j in range e.Units: above += 1 if (x[j] - last[j]).Abs() > threshold else 0
+    e.Over = above - lesser(above, e.Capacity)
+    if above <= e.Capacity {
+        n I64 = 0
+        for j in range e.Units {
+            d := x[j] - last[j]
+            if not (d.Abs() > threshold): continue
+            e.Idx[n] = I32(j)
+            delta[j] = d
+            last[j] = x[j]
+            n++
+        }
+        e.Count = n
+        return
+    }
+    for j in range e.Units {
+        d := (x[j] - last[j]).Abs()
+        e.mags[j] = cast(d, 0.0) if d > threshold else -1.0
+    }
+    TopK(e.mags, 0, e.Units, e.Capacity, e.Idx, e.scratch)
+    for k in range e.Capacity {
+        j := I64(e.Idx[k])
+        delta[j] = x[j] - last[j]
+        last[j] = x[j]
+    }
+    e.Count = e.Capacity
+}
+
+# y += delta[j] W[j, .] for each event j: w is stored [from, to] - a row for each unit that can change, as many columns as
+# y has - so an event reads one contiguous row. Adds Dense Rows Cols and Effective Count Cols to macs. threads split y
+fn Transport<S, A>(w mat.Mat<S>&, y mut Array<A>&, e Events&, delta Array<A>&, threads I64 = 1, macs mut Macs?& = null) {
+    if macs != null: macs.Add(w.Rows * w.Cols, e.Count * w.Cols)
+    tasks := lesser(tasksFor(e.Count * w.Cols, threads), w.Cols / 64)
+    if tasks <= 1 {
+        transportInto(w, y, e, delta, 0, w.Cols)
+        return
+    }
+    share := (w.Cols + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * share
+            hi := lesser(w.Cols, lo + share)
+            if lo < hi: spawn transportInto(w, y, e, delta, lo, hi)
+        }
+    }
+}
+
+# y[c0 .. c1) += each event's row's c0 .. c1
+fn transportInto<S, A>(w mat.Mat<S>&, y mut Array<A>&, e Events&, delta Array<A>&, c0 I64, c1 I64) {
+    for k in range e.Count {
+        j := I64(e.Idx[k])
+        axpyS(y, c0, delta[j], w.Data, w.Off + j * w.Ld + c0, c1 - c0)
+    }
+}
+
+# y += delta[j] W[j, .] over the events j, W a Csr whose rows are the units that can change: each event's entries scattered
+# into y. Adds Dense Rows Cols and Effective the entries of the events' rows to macs
+fn (w Csr<S>&) Transport<A>(y mut Array<A>&, e Events&, delta Array<A>&, macs mut Macs?& = null) {
+    z A
+    work I64 = 0
+    for k in range e.Count {
+        j := I64(e.Idx[k])
+        d := delta[j]
+        work += w.Ptr[j + 1] - w.Ptr[j]
+        for p in range w.Ptr[j], w.Ptr[j + 1]: y[I64(w.Idx[p])] += d * cast(w.Values[p], z)
+    }
+    if macs != null: macs.Add(w.Rows * w.Cols, work)
+}
+
+# y += delta[j] W[j, .] over the events j, W a Tiles whose rows are the units that can change: each event's row of every
+# live tile in its tile row. Adds Dense Rows Cols and Effective the tiles' row segments to macs
+fn (w Tiles<S>&) Transport<A>(y mut Array<A>&, e Events&, delta Array<A>&, macs mut Macs?& = null) {
+    tt := w.Tile * w.Tile
+    work I64 = 0
+    for k in range e.Count {
+        j := I64(e.Idx[k])
+        r := j / w.Tile
+        for p in range w.Ptr[r], w.Ptr[r + 1] {
+            if not w.Live[p]: continue
+            c := I64(w.Col[p])
+            wd := w.width(c)
+            axpyS(y, c * w.Tile, delta[j], w.Data, p * tt + (j - r * w.Tile) * w.Tile, wd)
+            work += wd
+        }
+    }
+    if macs != null: macs.Add(w.Rows * w.Cols, work)
+}
+
+# ---- selection and the sparse-code products ----
+
+# the positions of the k largest of x[at .. at + n) into out (k of them, in increasing order of position), ties
+# broken toward the earlier position; work must hold n elements. Linear time on average: a quickselect on a copy in
+# work for the k-th largest value, then one pass counting the larger ones and one collecting
+fn TopK<T>(x Array<T>&, at I64, n I64, k I64, out mut Array<I32>&, work mut Array<T>&) {
+    assert k >= 1 and k <= n and work.Len() >= n and out.Len() >= k
+    for i in range n: work[i] = x[at + i]
+    # the k-th largest is the element at position n - k of the ascending order
+    want I64 = n - k
+    lo I64 = 0
+    hi I64 = n - 1
+    for lo < hi {
+        mid I64 = lo + (hi - lo) / 2
+        # the median of three at lo, mid, hi as the pivot
+        a := work[lo]
+        b := work[mid]
+        c := work[hi]
+        pivot := b if (a <= b) == (b <= c) else (a if (b <= a) == (a <= c) else c)
+        i I64 = lo
+        j I64 = hi
+        for i <= j {
+            for work[i] < pivot: i++
+            for work[j] > pivot: j--
+            if i <= j {
+                work[i], work[j] = work[j], work[i]
+                i++
+                j--
+            }
+        }
+        if want <= j: hi = j
+        else if want >= i: lo = i
+        else: break
+    }
+    threshold := work[want]
+    above I64 = 0
+    for i in range n {
+        if x[at + i] > threshold: above++
+    }
+    equal I64 = k - above
+    m I64 = 0
+    for i in range n {
+        v := x[at + i]
+        if v > threshold or (v == threshold and equal > 0) {
+            if v <= threshold: equal--
+            out[m] = I32(i)
+            m++
+        }
+    }
+}
+
+# row r of x's k largest: their positions into idx[r k ..] (increasing) and values into val[r k ..]; work holds Cols
+# elements for each of the tasks (rows are split over up to threads of them)
+fn RowTopK<T>(idx mut Array<I32>&, val mut Array<T>&, x mat.Mat<T>&, k I64, work mut Array<T>&, threads I64 = 1) {
+    tasks := lesser(tasksFor(x.Rows * x.Cols, threads), x.Rows)
+    if tasks <= 1 {
+        topKRows(idx, val, x, k, work[0:x.Cols], 0, x.Rows)
+        return
+    }
+    share := (x.Rows + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * share
+            hi := lesser(x.Rows, lo + share)
+            if lo < hi: spawn topKRows(idx, val, x, k, work[t * x.Cols:(t + 1) * x.Cols], lo, hi)
+        }
+    }
+}
+
+fn topKRows<T>(idx mut Array<I32>&, val mut Array<T>&, x mat.Mat<T>&, k I64, work mut Array<T>&, r0 I64, r1 I64) {
+    for r in range r0, r1 {
+        TopK(x.Data, x.Off + r * x.Ld, x.Cols, k, idx[r * k:(r + 1) * k], work)
+        for j in range k: val[r * k + j] = x.Data[x.Off + r * x.Ld + I64(idx[r * k + j])]
+    }
+}
+
+# out = sum over j < k of w[j] table[idx[j]] - the read of a sparse code: k rows of a table of rows of width
+# out.Len(), weighted
+fn GatherRowsWeighted<T>(out mut Array<T>&, table Array<T>&, idx Array<I32>&, w Array<T>&, k I64) {
+    z T
+    m := out.Len()
+    for t in range m: out[t] = z
+    for j in range k {
+        row I64 = I64(idx[j]) * m
+        a := w[j]
+        for t in range m: out[t] += a * table[row + t]
+    }
+}
+
+# table[idx[j]] += rate w[j] err for j < k - the delta rule's write at a sparse code's rows: a rank-1 update of k rows
+# of a table of rows of width err.Len()
+fn ScatterRank1<T>(table mut Array<T>&, idx Array<I32>&, w Array<T>&, k I64, err Array<T>&, rate T) {
+    m := err.Len()
+    for j in range k {
+        row I64 = I64(idx[j]) * m
+        a T = rate * w[j]
+        for t in range m: table[row + t] += a * err[t]
+    }
+}
+
+# ---- tests ----
+
+# a rows x cols matrix in a larger array, rows apart by cols + 3, filled with uniform values in [-1, 1) rounded to S
+fn gappy<S>(rows I64, cols I64, like S, r mut rand.Rand&) mat.Mat<S> {
+    m := mat.Mat<S>(Array<S>(2 + rows * (cols + 3)), 2, rows, cols, cols + 3)
+    for i in range rows {
+        for j in range cols: m[i, j] = cast(r.Uniform(-1.0, 1.0), like)
+    }
+    return m
+}
+
+# m as F64 values, rows x cols row-major
+fn exact<S>(m mat.Mat<S>&) Array<F64> {
+    z F64 = 0.0
+    out := Array<F64>(m.Rows * m.Cols)
+    for i in range m.Rows {
+        for j in range m.Cols: out[i * m.Cols + j] = cast(m[i, j], z)
+    }
+    return out
+}
+
+# alpha dense x, with dense a rows x cols in F64 and x cols x width, plus y0 (all in F64)
+fn denseProduct(a Array<F64>&, rows I64, cols I64, x Array<F64>&, width I64, trans Bool, alpha F64) Array<F64> {
+    n I64 = cols if trans else rows
+    out := Array<F64>(n * width)
+    for i in range n {
+        for t in range width {
+            sum F64 = 0.0
+            for j in range (rows if trans else cols): sum += (a[j * cols + i] if trans else a[i * cols + j]) * x[j * width + t]
+            out[i * width + t] = alpha * sum
+        }
+    }
+    return out
+}
+
+# the largest difference between m's elements and the F64 reference want (rows x cols row-major)
+fn worst<A>(m mat.Mat<A>&, want Array<F64>&) F64 {
+    z F64 = 0.0
+    d F64 = 0.0
+    for i in range m.Rows {
+        for j in range m.Cols: d = d.Max((cast(m[i, j], z) - want[i * m.Cols + j]).Abs())
+    }
+    return d
+}
+
+test "a drawn pattern: columns increase along a row, every row's entries are counted, and the density is as asked" {
+    r := rand.Rand(1)
+    for density in Array<F64>[1.0, 0.5, 0.05, 0.003] {
+        ptr := Array<I64>(201)
+        idx := list.List<I32>()
+        DrawPattern(200, 300, density, r, ptr, idx)
+        assert ptr[0] == 0 and ptr[200] == idx.Len()
+        for i in range 200 {
+            assert ptr[i] <= ptr[i + 1]
+            for e in range ptr[i] + 1, ptr[i + 1]: assert idx[e] > idx[e - 1]
+            for e in range ptr[i], ptr[i + 1]: assert idx[e] >= 0 and idx[e] < 300
+        }
+        expect F64 = density * 60000.0
+        sd F64 = (expect * (1.0 - density)).Sqrt()
+        assert (F64(idx.Len()) - expect).Abs() <= 5.0 * sd + 1e-9
+    }
+    # and the same generator state draws the same pattern
+    a := rand.Rand(7)
+    b := rand.Rand(7)
+    pa := Array<I64>(41)
+    pb := Array<I64>(41)
+    ia := list.List<I32>()
+    ib := list.List<I32>()
+    DrawPattern(40, 50, 0.1, a, pa, ia)
+    DrawPattern(40, 50, 0.1, b, pb, ib)
+    assert ia.Len() == ib.Len()
+    for e in range ia.Len(): assert ia[e] == ib[e]
+}
+
+test "a pattern from pairs: sorted into rows, any order in, the same pattern out" {
+    ptr := Array<I64>(4)
+    idx := list.List<I32>()
+    PatternOf(3, 5, Array<I32>[2, 0, 2, 0, 1], Array<I32>[4, 3, 0, 1, 2], ptr, idx)
+    assert ptr[0] == 0 and ptr[1] == 2 and ptr[2] == 3 and ptr[3] == 5
+    want := Array<I32>[1, 3, 2, 0, 4]
+    for e in range 5: assert idx[e] == want[e]
+}
+
+test Csr "a pattern given wrongly fails once, where the matrix is made, saying what" {
+    ptr := Array<I64>[0, 2, 3]
+    good := Array<I32>[0, 2, 1]
+    w := Csr<F64>(2, 3, ptr, good)!
+    assert w.Nnz() == 3 and w.Density() == 0.5
+    # a column out of range, a row not increasing, pointers that fall or stop short, a value array too short, a tile of no width
+    seen I64 = 0
+    try Csr<F64>(2, 3, ptr, Array<I32>[0, 3, 1]) catch PatternError.Index e { seen = e.row * 10 + e.at }
+    assert seen == 3
+    seen = 0
+    try Csr<F64>(2, 3, ptr, Array<I32>[2, 0, 1]) catch PatternError.Index { seen = 1 }
+    assert seen == 1
+    seen = 0
+    try Csr<F64>(2, 3, Array<I64>[0, 3, 2], good) catch PatternError.Pointers { seen = 1 }
+    assert seen == 1
+    seen = 0
+    try Csr<F64>(2, 3, Array<I64>[1, 2, 3], good) catch PatternError.Pointers { seen = 1 }
+    assert seen == 1
+    seen = 0
+    try Csr<F64>(2, 3, ptr, good, Array<F64>(2)) catch PatternError.Length { seen = 1 }
+    assert seen == 1
+    seen = 0
+    try Tiles<F64>(4, 4, 0, Array<I64>[0, 0], Array<I32>(0)) catch PatternError.Tile { seen = 1 }
+    assert seen == 1
+}
+
+test Csr "the products: W X, W^T X and the sampled product agree with the dense matrix's, at width 1 and in a batch" {
+    r := rand.Rand(2)
+    for width in Array<I64>[1, 5, 19] {
+        w := Csr<F64>.Random(7, 9, 0.4, r)
+        dense := Array<F64>(63)
+        wd := mat.Mat<F64>(dense, 0, 7, 9, 9)
+        w.Dense(wd)
+        x := gappy(9, width, F64(0), r)
+        xt := gappy(7, width, F64(0), r)
+        y := gappy(7, width, F64(0), r)
+        yt := gappy(9, width, F64(0), r)
+        y0 := exact(y)
+        yt0 := exact(yt)
+        w.MulAdd(y, x, false, 2.0)
+        w.MulAdd(yt, xt, true, -1.0)
+        want := denseProduct(dense, 7, 9, exact(x), width, false, 2.0)
+        wantT := denseProduct(dense, 7, 9, exact(xt), width, true, -1.0)
+        for e in range want.Len(): want[e] += y0[e]
+        for e in range wantT.Len(): wantT[e] += yt0[e]
+        assert worst(y, want) < 1e-14
+        assert worst(yt, wantT) < 1e-14
+        # the sampled product: (xt x^T)[i, j] at each entry, accumulated onto a first term
+        g := Array<F64>(w.Nnz())
+        w.Sampled(g, xt, x)
+        w.Sampled(g, xt, x, 0.5, true)
+        for i in range 7 {
+            for e in range w.Ptr[i], w.Ptr[i + 1] {
+                sum F64 = 0.0
+                for t in range width: sum += xt[i, t] * x[I64(w.Idx[e]), t]
+                assert (g[e] - 1.5 * sum).Abs() < 1e-14
+            }
+        }
+        rows := Array<F64>(7)
+        cols := Array<F64>(9)
+        w.AbsSums(rows, cols)
+        for i in range 7 {
+            sum F64 = 0.0
+            for j in range 9: sum += dense[i * 9 + j].Abs()
+            assert (rows[i] - sum).Abs() < 1e-14
+        }
+        for j in range 9 {
+            sum F64 = 0.0
+            for i in range 7: sum += dense[i * 9 + j].Abs()
+            assert (cols[j] - sum).Abs() < 1e-14
+        }
+    }
+}
+
+# a Csr of storage S times an F32 batch, against the same weights widened to F64: the error is the F32 sum's
+fn lowPrecision<S>(like S, r mut rand.Rand&) F64 {
+    z F64 = 0.0
+    w := Csr<S>.Random(20, 30, 0.3, r)
+    x := gappy(30, 6, F32(0), r)
+    y := mat.Mat<F32>(Array<F32>(120), 0, 20, 6, 6)
+    w.MulAdd(y, x)
+    dense := Array<F64>(600)
+    for i in range 20 {
+        for e in range w.Ptr[i], w.Ptr[i + 1]: dense[i * 30 + I64(w.Idx[e])] = cast(w.Values[e], z)
+    }
+    return worst(y, denseProduct(dense, 20, 30, exact(x), 6, false, 1.0))
+}
+
+test Csr "storage in low precision, a batch in the accumulator: BF16, F16 and F8 weights widened as they are read" {
+    r := rand.Rand(3)
+    assert lowPrecision(BF16(0), r) < 1e-5
+    assert lowPrecision(F16(0), r) < 1e-5
+    assert lowPrecision(F8E4M3(0), r) < 1e-5
+    assert lowPrecision(F8E5M2(0), r) < 1e-5
+    assert lowPrecision(F32(0), r) < 1e-5
+}
+
+test Csr "tasks: a product is the same, bit for bit, at every thread count" {
+    r := rand.Rand(4)
+    w := Csr<F32>.Random(300, 400, 0.4, r)
+    x := gappy(400, 16, F32(0), r)
+    xt := gappy(300, 16, F32(0), r)
+    one := Array<F32>(300 * 16)
+    oneT := Array<F32>(400 * 16)
+    oneG := Array<F32>(w.Nnz())
+    for threads in Array<I64>[1, 2, 3, 8] {
+        d := Array<F32>(300 * 16)
+        dt := Array<F32>(400 * 16)
+        g := Array<F32>(w.Nnz())
+        w.MulAdd(mat.Mat<F32>(d, 0, 300, 16, 16), x, false, 1.0, threads)
+        w.MulAdd(mat.Mat<F32>(dt, 0, 400, 16, 16), xt, true, 1.0, threads)
+        w.Sampled(g, xt, x, 1.0, false, threads)
+        if threads == 1 {
+            for e in range d.Len(): one[e] = d[e]
+            for e in range dt.Len(): oneT[e] = dt[e]
+            for e in range g.Len(): oneG[e] = g[e]
+            continue
+        }
+        assert d == one and dt == oneT and g == oneG
+    }
+}
+
+test Csr "pruning in place: Mask zeroes entries, Drop removes them (companions squeezed first) in arrays that keep their length" {
+    r := rand.Rand(5)
+    w := Csr<F64>.Random(30, 40, 0.3, r)
+    n := w.Nnz()
+    keep := Array<Bool>(n)
+    w.KeepAtLeast(keep, 0.4)
+    kept I64 = 0
+    for e in range n: kept += 1 if keep[e] else 0
+    assert kept > 0 and kept < n
+    # the dense matrix with the dropped entries zeroed, and a gradient laid out like the entries, to follow them
+    dense := Array<F64>(1200)
+    w.Dense(mat.Mat<F64>(dense, 0, 30, 40, 40))
+    grad := Array<F64>(n)
+    for e in range n: grad[e] = F64(e)
+    for i in range 30 {
+        for e in range w.Ptr[i], w.Ptr[i + 1] {
+            if not keep[e]: dense[i * 40 + I64(w.Idx[e])] = 0.0
+        }
+    }
+    x := gappy(40, 3, F64(0), r)
+    want := denseProduct(dense, 30, 40, exact(x), 3, false, 1.0)
+    # masked: the same pattern, the same cost, the dropped entries zero
+    ptr := Array<I64>[w.Ptr[i] for i in range 31]
+    idx := Array<I32>[w.Idx[e] for e in range n]
+    vals := Array<F64>[w.Values[e] for e in range n]
+    m := Csr<F64>(30, 40, ptr, idx, vals)!
+    m.Mask(keep)
+    y := gappy(30, 3, F64(0), r)
+    for i in range 30 {
+        for t in range 3: y[i, t] = 0.0
+    }
+    m.MulAdd(y, x)
+    assert worst(y, want) < 1e-13 and m.Nnz() == n
+    # dropped: fewer entries, the arrays as long as they were, the gradient moved with them
+    capacity := w.Idx.Len()
+    assert Squeeze(grad, keep) == kept
+    w.Drop(keep)
+    assert w.Nnz() == kept and w.Idx.Len() == capacity and w.Values.Len() == capacity
+    for i in range 30 {
+        for t in range 3: y[i, t] = 0.0
+    }
+    w.MulAdd(y, x)
+    assert worst(y, want) < 1e-13
+    # entry e of the dropped matrix is the old entry whose gradient it carries
+    for e in range kept: assert w.Values[e] == vals[I64(grad[e])] and keep[I64(grad[e])]
+    for i in range 30 {
+        for e in range w.Ptr[i] + 1, w.Ptr[i + 1]: assert w.Idx[e] > w.Idx[e - 1]
+    }
+}
+
+# a rows x cols matrix with some of its tile-sized blocks zero, as Tiles.Of finds them
+fn blocky(rows I64, cols I64, tile I64, density F64, r mut rand.Rand&) mat.Mat<F64> {
+    m := gappy(rows, cols, F64(0), r)
+    for bi in range (rows + tile - 1) / tile {
+        for bj in range (cols + tile - 1) / tile {
+            if r.Float() < density: continue
+            for i in range bi * tile, lesser(rows, (bi + 1) * tile) {
+                for j in range bj * tile, lesser(cols, (bj + 1) * tile): m[i, j] = 0.0
+            }
+        }
+    }
+    return m
+}
+
+test Tiles "the products equal the dense ones, with ragged edges, every width, strided and not, and quiet blocks skipped" {
+    r := rand.Rand(6)
+    for tile in Array<I64>[4, 16, 32] {
+        m := blocky(50, 70, tile, 0.4, r)
+        w := Tiles<F64>.Of(m, tile)
+        assert w.Stored() <= w.TileRows * w.TileCols and w.Stored() == w.Alive()
+        dense := Array<F64>(50 * 70)
+        w.Dense(mat.Mat<F64>(dense, 0, 50, 70, 70))
+        want0 := exact(m)
+        for e in range dense.Len(): assert dense[e] == want0[e]
+        for width in Array<I64>[1, 5, 21] {
+            for flat in Array<Bool>[true, false] {
+                x := mat.Mat<F64>(Array<F64>(70 * width), 0, 70, width, width)
+                xt := mat.Mat<F64>(Array<F64>(50 * width), 0, 50, width, width)
+                if not flat {
+                    x = gappy(70, width, F64(0), r)
+                    xt = gappy(50, width, F64(0), r)
+                } else {
+                    for e in range x.Data.Len(): x.Data[e] = r.Uniform(-1.0, 1.0)
+                    for e in range xt.Data.Len(): xt.Data[e] = r.Uniform(-1.0, 1.0)
+                }
+                # blocks of x that are exactly zero are quiet at threshold 0
+                for i in range tile, lesser(70, 2 * tile) {
+                    for t in range width: x[i, t] = 0.0
+                }
+                for i in range 0, lesser(50, tile) {
+                    for t in range width: xt[i, t] = 0.0
+                }
+                y := mat.Mat<F64>(Array<F64>(50 * width), 0, 50, width, width)
+                yt := mat.Mat<F64>(Array<F64>(70 * width), 0, 70, width, width)
+                if not flat {
+                    y = gappy(50, width, F64(0), r)
+                    yt = gappy(70, width, F64(0), r)
+                }
+                y0 := exact(y)
+                yt0 := exact(yt)
+                act := Array<Bool>((70 + tile - 1) / tile)
+                actT := Array<Bool>((50 + tile - 1) / tile)
+                Active(act, x, tile, 0.0)
+                Active(actT, xt, tile, 0.0)
+                assert not act[1] and act[0] and not actT[0]
+                w.MulAdd(y, x, false, 1.5, act)
+                w.MulAdd(yt, xt, true, -0.5, actT)
+                want := denseProduct(dense, 50, 70, exact(x), width, false, 1.5)
+                wantT := denseProduct(dense, 50, 70, exact(xt), width, true, -0.5)
+                for e in range want.Len(): want[e] += y0[e]
+                for e in range wantT.Len(): wantT[e] += yt0[e]
+                assert worst(y, want) < 1e-13
+                assert worst(yt, wantT) < 1e-13
+            }
+        }
+    }
+}
+
+test Tiles "tasks: a tile product is the same, bit for bit, at every thread count" {
+    r := rand.Rand(7)
+    m := blocky(256, 320, 16, 0.5, r)
+    w := Tiles<F64>.Of(m, 16)
+    x := gappy(320, 16, F64(0), r)
+    xt := gappy(256, 16, F64(0), r)
+    one := Array<F64>(256 * 16)
+    oneT := Array<F64>(320 * 16)
+    for threads in Array<I64>[1, 2, 3, 8] {
+        d := Array<F64>(256 * 16)
+        dt := Array<F64>(320 * 16)
+        w.MulAdd(mat.Mat<F64>(d, 0, 256, 16, 16), x, false, 1.0, Array<Bool>(0), threads)
+        w.MulAdd(mat.Mat<F64>(dt, 0, 320, 16, 16), xt, true, 1.0, Array<Bool>(0), threads)
+        if threads == 1 {
+            for e in range d.Len(): one[e] = d[e]
+            for e in range dt.Len(): oneT[e] = dt[e]
+            continue
+        }
+        assert d == one and dt == oneT
+    }
+}
+
+test Tiles "retiring tiles in place: Drop skips them at once, Compact moves the live ones together, the product is the dense one's" {
+    r := rand.Rand(8)
+    m := blocky(48, 64, 16, 0.7, r)
+    w := Tiles<F64>.Of(m, 16)
+    n := w.Stored()
+    keep := Array<Bool>[e % 3 != 1 for e in range n]
+    kept I64 = 0
+    for e in range n: kept += 1 if keep[e] else 0
+    assert kept > 0 and kept < n
+    # a tile is kept by its largest entry: scaled down, the first tile is the one a threshold drops
+    for u in range 256: w.Data[u] = w.Data[u] * 0.01
+    small := Array<Bool>(n)
+    w.KeepAtLeast(small, 0.5)
+    assert not small[0] and small[1]
+    # a gradient laid out like the tiles' data follows them
+    grad := Array<F64>(w.Data.Len())
+    for e in range grad.Len(): grad[e] = F64(e)
+    was := Array<F64>[w.Data[e] for e in range w.Data.Len()]
+    dense := Array<F64>(48 * 64)
+    w.Drop(keep)
+    assert w.Alive() == kept and w.Stored() == n
+    w.Dense(mat.Mat<F64>(dense, 0, 48, 64, 64))
+    x := gappy(64, 4, F64(0), r)
+    y := mat.Mat<F64>(Array<F64>(48 * 4), 0, 48, 4, 4)
+    macs := Macs()
+    w.MulAdd(y, x, false, 1.0, Array<Bool>(0), 1, macs)
+    want := denseProduct(dense, 48, 64, exact(x), 4, false, 1.0)
+    assert worst(y, want) < 1e-13
+    # the live tiles' area is what was done, out of the whole matrix
+    assert macs.Dense == 48 * 64 * 4 and macs.Effective == kept * 256 * 4
+    # compacted: fewer tiles stored, all live, the same product, the arrays as long as before, the gradient moved along
+    length := w.Data.Len()
+    assert Squeeze(grad, w.Live, 256) == kept
+    w.Compact()
+    assert w.Stored() == kept and w.Alive() == kept and w.Data.Len() == length
+    y2 := mat.Mat<F64>(Array<F64>(48 * 4), 0, 48, 4, 4)
+    w.MulAdd(y2, x)
+    assert worst(y2, want) < 1e-13
+    for e in range kept * 256: assert w.Data[e] == was[I64(grad[e])]
+    for rr in range w.TileRows {
+        for e in range w.Ptr[rr] + 1, w.Ptr[rr + 1]: assert w.Col[e] > w.Col[e - 1]
+    }
+}
+
+test Macs "counters: every product adds what a dense one would have done and what it did" {
+    r := rand.Rand(9)
+    w := Csr<F64>.Random(40, 50, 0.1, r)
+    x := gappy(50, 6, F64(0), r)
+    xt := gappy(40, 6, F64(0), r)
+    macs := Macs()
+    w.MulAdd(mat.Mat<F64>(Array<F64>(240), 0, 40, 6, 6), x, false, 1.0, 1, macs)
+    assert macs.Dense == 40 * 50 * 6 and macs.Effective == w.Nnz() * 6
+    w.MulAdd(mat.Mat<F64>(Array<F64>(300), 0, 50, 6, 6), xt, true, 1.0, 1, macs)
+    g := Array<F64>(w.Nnz())
+    w.Sampled(g, xt, x, 1.0, false, 1, macs)
+    assert macs.Dense == 3 * 40 * 50 * 6 and macs.Effective == 3 * w.Nnz() * 6
+    assert (macs.Ratio() - w.Density()).Abs() < 1e-12
+    macs.Clear()
+    assert macs.Dense == 0 and macs.Effective == 0 and macs.Ratio() == 1.0
+}
+
+test Events "only the units that moved are reported and transported, and the total stays W^T of what the consumers hold" {
+    r := rand.Rand(10)
+    m := blocky(64, 40, 8, 0.6, r)
+    csr := Csr<F64>.Of(m)
+    tiles := Tiles<F64>.Of(m, 8)
+    dense := exact(m)
+    e := Events(64)
+    x := Array<F64>(64)
+    last := Array<F64>(64)
+    delta := Array<F64>(64)
+    yd := Array<F64>(40)
+    ys := Array<F64>(40)
+    yt := Array<F64>(40)
+    macs := Macs()
+    for step in range 6 {
+        # about a fifth of the units move by a lot, the rest drift by less than the threshold
+        moved I64 = 0
+        for j in range 64 {
+            if r.Float() < 0.2 {
+                x[j] += r.Uniform(0.5, 1.0)
+                moved++
+            } else {
+                x[j] += r.Uniform(-0.01, 0.01)
+            }
+        }
+        e.Collect(x, last, delta, 0.1)
+        assert e.Count >= moved - 1 and e.Over == 0
+        for k in range e.Count: assert e.Idx[k] >= 0 and (k == 0 or e.Idx[k] > e.Idx[k - 1])
+        before := macs.Effective
+        Transport(m, yd, e, delta, 1, macs)
+        csr.Transport(ys, e, delta)
+        tiles.Transport(yt, e, delta)
+        assert macs.Effective - before == e.Count * 40 and macs.Dense == (step + 1) * 64 * 40
+        # y holds sum over j of W[j, .] last[j]
+        for c in range 40 {
+            want F64 = 0.0
+            for j in range 64: want += dense[j * 40 + c] * last[j]
+            assert (yd[c] - want).Abs() < 1e-12 and (ys[c] - want).Abs() < 1e-12 and (yt[c] - want).Abs() < 1e-12
+        }
+        # what was reported is what the consumers hold; the quiet units' drift is below the threshold
+        for j in range 64: assert (x[j] - last[j]).Abs() <= 0.1
+    }
+}
+
+test Events "more changes than the capacity - the largest are reported, the rest wait and are not lost" {
+    r := rand.Rand(11)
+    e := Events(50, 5)
+    x := Array<F64>[r.Uniform(1.0, 2.0) for _ in range 50]
+    last := Array<F64>(50)
+    delta := Array<F64>(50)
+    e.Collect(x, last, delta, 0.1)
+    assert e.Count == 5 and e.Over == 45
+    # the five largest, in increasing order of unit
+    for k in range 5 {
+        j := I64(e.Idx[k])
+        beaten I64 = 0
+        for q in range 50 {
+            if x[q] > x[j] or (x[q] == x[j] and q < j): beaten++
+        }
+        assert beaten < 5 and last[j] == x[j] and delta[j] == x[j]
+        assert k == 0 or e.Idx[k] > e.Idx[k - 1]
+    }
+    # the others still differ from what is held, and come in the next steps: ten steps in all caught up
+    held I64 = 0
+    for j in range 50: held += 1 if last[j] == x[j] else 0
+    assert held == 5
+    for _ in range 9: e.Collect(x, last, delta, 0.1)
+    for j in range 50: assert last[j] == x[j]
+    e.Collect(x, last, delta, 0.1)
+    assert e.Count == 0 and e.Over == 0
+}
+
+test TopK "the k largest positions, ties to the earlier, in increasing order, per row and in tasks" {
+    r := rand.Rand(3)
+    work := Array<F64>(500)
+    out := Array<I32>(500)
+    for trial in range 40 {
+        n I64 = 1 + r.Below(500)
+        k I64 = 1 + r.Below(n)
+        x := Array<F64>(n)
+        for i in range n: x[i] = F64(r.Below(30)) if trial % 2 == 0 else r.Uniform(-1.0, 1.0) # with many ties, then none
+        TopK(x, 0, n, k, out, work)
+        # the reference: a position is chosen when fewer than k elements beat it (larger, or equal and earlier)
+        m I64 = 0
+        for i in range n {
+            beaten I64 = 0
+            for j in range n {
+                if x[j] > x[i] or (x[j] == x[i] and j < i): beaten++
+            }
+            if beaten < k {
+                assert out[m] == I32(i)
+                m++
+            }
+        }
+        assert m == k
+    }
+    # a sorted and a reversed input, the quickselect's classic worst shapes
+    x := Array<F64>(300)
+    for i in range 300: x[i] = F64(i)
+    TopK(x, 0, 300, 10, out, work)
+    for j in range 10: assert out[j] == I32(290 + j)
+    for i in range 300: x[i] = F64(300 - i)
+    TopK(x, 0, 300, 10, out, work)
+    for j in range 10: assert out[j] == I32(j)
+    # rows of a matrix: the same selection per row, the values read back, the same for every task count
+    m := gappy(300, 200, F64(0), r)
+    one := Array<I32>(300 * 7)
+    for threads in Array<I64>[1, 4] {
+        idx := Array<I32>(300 * 7)
+        val := Array<F64>(300 * 7)
+        RowTopK(idx, val, m, 7, Array<F64>(200 * threads), threads)
+        for row in range 300 {
+            TopK(m.Data, m.Off + row * m.Ld, 200, 7, out, work)
+            for j in range 7: assert idx[row * 7 + j] == out[j] and val[row * 7 + j] == m[row, I64(out[j])]
+        }
+        if threads == 1 {
+            for e in range idx.Len(): one[e] = idx[e]
+        } else {
+            assert idx == one
+        }
+    }
+}
+
+test "the sparse-code products: a weighted gather of k rows, and a rank-1 write to them" {
+    table := Array<F64>(6 * 3)
+    for i in range table.Len(): table[i] = F64(i)
+    idx := Array<I32>[4, 1]
+    w := Array<F64>[0.5, -2.0]
+    out := Array<F64>(3)
+    GatherRowsWeighted(out, table, idx, w, 2)
+    for t in range 3: assert out[t] == 0.5 * F64(12 + t) - 2.0 * F64(3 + t)
+    err := Array<F64>[1.0, 0.0, -1.0]
+    ScatterRank1(table, idx, w, 2, err, 0.1)
+    assert table[12] == 12.0 + 0.05 and table[14] == 14.0 - 0.05 and table[3] == 3.0 - 0.2 and table[0] == 0.0
+}
+
+test Tiles "the sampled product at the tiles is the dense contrast read at them, and counts the live tiles' area" {
+    r := rand.Rand(12)
+    m := blocky(40, 50, 16, 0.5, r)
+    w := Tiles<F64>.Of(m, 16)
+    a := gappy(40, 7, F64(0), r)
+    b := gappy(50, 7, F64(0), r)
+    g := Array<F64>(w.Data.Len())
+    macs := Macs()
+    w.Sampled(g, a, b, 1.0, false, macs)
+    w.Sampled(g, a, b, 0.5, true)
+    assert macs.Dense == 40 * 50 * 7 and macs.Effective == w.liveArea(Array<Bool>(0)) * 7
+    for rr in range w.TileRows {
+        for e in range w.Ptr[rr], w.Ptr[rr + 1] {
+            c := I64(w.Col[e])
+            for i in range w.height(rr) {
+                for k in range w.width(c) {
+                    sum F64 = 0.0
+                    for t in range 7: sum += a[rr * 16 + i, t] * b[c * 16 + k, t]
+                    assert (g[e * 256 + i * 16 + k] - 1.5 * sum).Abs() < 1e-13
+                }
+            }
+        }
+    }
+}

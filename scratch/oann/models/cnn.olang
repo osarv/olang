@@ -1,0 +1,235 @@
+# models/cnn - the convolutional classifier: stages of a 3x3 convolution (padding 1), ReLU and 2x2 max pooling, then one
+# dense layer from the last stage's features to the classes. The reference model of the CNN number (docs/redesign.md
+# 4.3; DESIGN 16): MNIST with 16 and 32 channels, 20 490 parameters, AdamW at 1e-3, batches of 128 - 96.97, 97.78, 98.44%
+# on the test set after epochs 1 to 3 and 98.8% after ten.
+#
+# Images are [batch, side, side, channels] (channels last), as the graph's `Conv2d` takes them; a loader's rows of
+# side x side x channels values fill that as they are.
+
+import "../ad/graph"
+import "../kernels/conv"
+import "../kernels/mat"
+import "../nn/layers"
+import "../nn/quant"
+import "../nn/train"
+
+# images of side x side pixels in "channels" channels, a stage for each of Stages' widths (each halves the side), and
+# the classes the dense layer ends in
+type CnnConfig struct(Side I64, Channels I64, Stages Array<I64>, Classes I64 = 10) {
+    Side
+    Channels
+    Stages
+    Classes
+}
+
+# MNIST's: 28 x 28 grey images, convolutions of c1 and c2 channels
+fn CnnConfig.Mnist(c1 I64 = 16, c2 I64 = 32) CnnConfig {
+    return CnnConfig(28, 1, Array<I64>[c1, c2])
+}
+
+# the pixels of an image: its Side x Side x Channels values
+fn (c CnnConfig&) Inputs() I64 { return c.Side * c.Side * c.Channels }
+
+# the side of the images the dense layer reads: each stage halves it
+fn (c CnnConfig&) FinalSide() I64 {
+    side := c.Side
+    for _ in c.Stages: side /= 2
+    return side
+}
+
+# the features the dense layer reads
+fn (c CnnConfig&) Features() I64 {
+    return c.FinalSide() * c.FinalSide() * c.Stages[c.Stages.Len() - 1]
+}
+
+# the parameters of the whole network: each convolution's kernels and bias, the dense layer's weights and bias
+fn (c CnnConfig&) Params() I64 {
+    total I64 = 0
+    inC := c.Channels
+    for outC in c.Stages {
+        total += outC * inC * 9 + outC
+        inC = outC
+    }
+    return total + c.Features() * c.Classes + c.Classes
+}
+
+type Cnn struct(Config CnnConfig, Convs Array<layers.Conv>, Pools Array<conv.Pool>, Head layers.Dense) {
+    Config
+    Convs
+    Pools
+    Head
+}
+
+# the stages and the head on g, PyTorch's starting values. A side the stages cannot halve evenly is an error
+fn Cnn.New<T>(g mut graph.Graph<T>&, c CnnConfig) Cnn ? conv.GeometryError {
+    if c.Side % (1 << c.Stages.Len()) != 0: error conv.GeometryError.Invalid("the side is halved by every stage: " + $c.Side + " cannot be")
+    convs := Vec<layers.Conv>()
+    pools := Vec<conv.Pool>()
+    side := c.Side
+    inC := c.Channels
+    for outC in c.Stages {
+        convs.Push(layers.Conv.New(g, try conv.Shape(inC, side, side, outC, 3, 1, 1)))
+        pools.Push(try conv.Pool(outC, side, side, 2, 2))
+        side /= 2
+        inC = outC
+    }
+    return Cnn(c, convs.ToArray(), pools.ToArray(), layers.Dense.New(g, c.Features(), c.Classes))
+}
+
+# the logits of images x [batch, side, side, channels]
+fn (m Cnn&) Logits<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    h := x
+    for i, c in m.Convs: h = g.MaxPool2d(g.Act(c.Apply(g, h), mat.Act.Relu), m.Pools[i])
+    return m.Head.Apply(g, g.Reshape(h, m.Config.Features()))
+}
+
+# a classifier's input, classes, logits (kept) and loss
+fn (m Cnn&) Task<T>(g mut graph.Graph<T>&) train.Classifier {
+    x := g.Input(m.Config.Side, m.Config.Side, m.Config.Channels)
+    y := g.Classes()
+    return train.Classifier.On(g, x, y, m.Logits(g, x))
+}
+
+# the trained network as an INT8 model (nn/quant) of up to "batch" images a call: each convolution with ReLU and pooling
+# after it, and the dense layer
+fn (m Cnn&) Int8<T>(g graph.Graph<T>&, batch I64, threads I64 = 1) quant.Model {
+    q := quant.Model(batch, m.Config.Inputs(), threads)
+    for i, c in m.Convs {
+        q.Conv(g, c, true)
+        q.Pool(m.Pools[i])
+    }
+    q.Dense(g, m.Head, false)
+    return q
+}
+
+# ---- tests ----
+
+import "std/rand"
+import "../data/loader"
+import "../nn/optim"
+import "../tensor"
+import "../tools/gradcheck"
+
+# n images of 8 x 8: class c (of 4) lights the quadrant c, with noise
+fn quadrants(n I64, seed U64) loader.Labeled {
+    r := rand.Rand(seed)
+    pixels mut Array<U8>& = Array<U8>(n * 64)
+    labels mut Array<U8>& = Array<U8>(n)
+    for i in range n {
+        labels[i] = U8(i % 4)
+        for y in range 8 {
+            for x in range 8 {
+                lit := (y / 4) * 2 + x / 4 == i % 4
+                pixels[i * 64 + y * 8 + x] = U8(r.Below(70)) + (U8(150) if lit else U8(0))
+            }
+        }
+    }
+    return loader.Labeled(pixels, labels, 64, 4)
+}
+
+# a network for 8 x 8 images in four classes, for tests
+fn CnnConfig.Tiny() CnnConfig { return CnnConfig(8, 1, Array<I64>[4, 6], 4) }
+
+test Cnn "MNIST's network has 20 490 parameters, 1 568 features and the images' shapes through its stages" {
+    c := CnnConfig.Mnist()
+    assert c.Params() == 160 + 4640 + 15690 and c.Features() == 1568 and c.Inputs() == 784
+    g := graph.Graph<F32>(128)
+    m := try Cnn.New(g, c)
+    t := m.Task(g)
+    try g.Plan(rand.Rand(1))
+    assert g.ParamCount == c.Params() and g.ParamCount == 20490
+    assert g.Info(t.Logits).Dims == tensor.Shape.Of(128, 10)
+    assert g.Info(t.X).Dims == tensor.Shape.Of(128, 28, 28, 1)
+    assert m.Convs[1].Shape.OutH == 14 and m.Pools[1].OutH == 7
+}
+
+test Cnn "a side the stages cannot halve is an error naming it" {
+    g := graph.Graph<F32>(2)
+    try Cnn.New(g, CnnConfig(10, 1, Array<I64>[4, 4], 3)) catch conv.GeometryError { return }
+    assert false, "a side of 10 through two stages is not halved evenly"
+}
+
+test Cnn "gradients agree with central differences, the input's too" {
+    g := graph.Graph<F64>(3)
+    m := try Cnn.New(g, CnnConfig.Tiny())
+    x := g.Input(8, 8, 1)
+    g.Watch(x)
+    loss := gradcheck.Weigh(g, m.Logits(g, x))
+    r := rand.Rand(4)
+    try g.Plan(r)
+    gradcheck.Fill(g, r)
+    p := g.Params().Flat()!
+    for i in range p.Len(): p[i] = p[i] + 0.3 * r.Normal()
+    assert gradcheck.GradientError(g, loss, 3) < 1e-5
+    assert gradcheck.GradientError(g, loss, 1) < 1e-5
+}
+
+# the network trained for 12 epochs on the quadrants: the first epoch's loss, the last's, and the accuracy on held-out
+fn learn<T>() F64, F64, F64 {
+    g mut graph.Graph<T>& = graph.Graph<T>(8)
+    m := Cnn.New(g, CnnConfig.Tiny())!
+    c := m.Task(g)
+    g.Plan(rand.Rand(3))!
+    match T {
+        case BF16 {
+            o := optim.AdamW(g.Masters(), g.ParamGrads(), rate = 0.01, spans = optim.Spans(g))
+            return fit(g, c, o)
+        }
+        case _ {
+            o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 0.01, spans = optim.Spans(g))
+            return fit(g, c, o)
+        }
+    }
+}
+
+fn fit<T, O>(g mut graph.Graph<T>&, c train.Classifier&, o mut O&) F64, F64, F64 {
+    l := loader.Loader(quadrants(64, 1), 8, 5)
+    first := train.Epoch(g, c, l, o)
+    last F64 = first
+    for _ in range 11: last = train.Epoch(g, c, l, o)
+    _, right := train.Evaluate(g, c, loader.Loader(quadrants(40, 2), 8, 1, false))
+    return first, last, right
+}
+
+test Cnn "learns to find the lit quadrant: F32 and BF16, and a run repeats bit for bit" {
+    first, last, right := learn<F32>()
+    assert last < first * 0.4 and right > 0.95
+    again, last2, right2 := learn<F32>()
+    assert again == first and last2 == last and right2 == right
+    bfirst, blast, bright := learn<BF16>()
+    assert blast < bfirst * 0.5 and bright > 0.9
+}
+
+test Cnn "its INT8 model gives the graph's classes, within the quantization's bound on the logits" {
+    g mut graph.Graph<F32>& = graph.Graph<F32>(8)
+    m := Cnn.New(g, CnnConfig.Tiny())!
+    c := m.Task(g)
+    g.Plan(rand.Rand(3))!
+    o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 0.01, spans = optim.Spans(g))
+    l := loader.Loader(quadrants(64, 1), 8, 5)
+    for _ in range 12: train.Epoch(g, c, l, o)
+    held := loader.Loader(quadrants(40, 2), 8, 1, false)
+    q := m.Int8(g, 8)
+    held.Epoch()
+    xs := g.Data(c.X).Flat()!
+    ys := g.Ints(c.Y).Flat()!
+    agree I64 = 0
+    for b in range held.Batches() {
+        n := held.Fill(b, xs, ys)
+        g.Forward(n)
+        got := Array<F32>(n * 4)
+        q.Forward(n, xs, got)
+        z := g.Value(c.Logits)
+        for i in range n {
+            best I64 = 0
+            top I64 = 0
+            for k in range 4 {
+                if got[i * 4 + k] > got[i * 4 + best]: best = k
+                if z.Get(i, k) > z.Get(i, top): top = k
+                assert (got[i * 4 + k] - z.Get(i, k)).Abs() < 0.1
+            }
+            if best == top: agree++
+        }
+    }
+    assert agree == 40
+}

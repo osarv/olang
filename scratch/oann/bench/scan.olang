@@ -1,0 +1,199 @@
+# kernels/scan: the sequential and chunked forms of each recurrence, forward and backward, in milliseconds per call (the
+# median of the rounds, the two forms interleaved), on the shapes a model of a few million parameters runs. Arguments:
+# rounds (5), threads (1)
+
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../kernels/mat"
+import sc "../kernels/scan"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn median(xs mut Array<F64>&) F64 {
+    xs.Sort(fn(a, b): return a < b)
+    return xs[xs.Len() / 2]
+}
+
+# the milliseconds since t0, as sample i of xs
+fn sample(xs mut Array<F64>&, i I64, t0 I64) { xs[i] = F64(time.Since(t0)) / 1.0e6 }
+
+fn fill<T>(a mut Array<T>&, r mut rand.Rand&, sd F64) {
+    for i in range a.Len(): a[i] = T(r.Normal() * sd)
+}
+
+fn m<S>(a mut Array<S>&, rows I64, cols I64) mat.Mat<S> { return mat.Mat<S>(a, 0, rows, cols, cols) }
+
+fn chunks(len I64, chunk I64) I64 { return (len + chunk - 1) / chunk }
+
+fn row(name String&, sequential mut Array<F64>&, chunked mut Array<F64>&, tokens I64) {
+    s := median(sequential)
+    c := median(chunked)
+    Println($name + " | sequential " + $s + " ms | chunked " + $c + " ms | x" + $(s / c) + " | " + $(F64(tokens) / c / 1000.0) + " Mtokens/s chunked")
+}
+
+fn gated<S, A>(label String&, seqs I64, len I64, cols I64, chunk I64, threads I64, rounds I64, r mut rand.Rand&) {
+    n := seqs * len
+    x := Array<S>(n * cols)
+    a := Array<S>(n * cols)
+    b := Array<S>(n * cols)
+    h := Array<S>(n * cols)
+    dh := Array<S>(n * cols)
+    dx := Array<S>(n * cols)
+    da := Array<S>(n * cols)
+    db := Array<S>(n * cols)
+    fill(x, r, 1.0)
+    for i in range n * cols {
+        a[i] = S(0.8 + 0.2 * r.Float())
+        b[i] = S(r.Normal() * 0.5)
+    }
+    fill(dh, r, 1.0)
+    state := Array<A>(seqs * cols)
+    ds := Array<A>(seqs * cols)
+    ws := sc.Work<A>(threads)
+    at := sc.Seq(len, chunk)
+    fs := Array<F64>(rounds)
+    fc := Array<F64>(rounds)
+    bs := Array<F64>(rounds)
+    bc := Array<F64>(rounds)
+    for t in range rounds + 1 {
+        i := t - 1 if t > 0 else 0
+        t0 := time.Now()
+        sc.GatedScan(ws, m(h, n, cols), m(state, seqs, cols), m(x, n, cols), m(a, n, cols), m(b, n, cols), at)
+        sample(fs, i, t0)
+        t0 = time.Now()
+        sc.GatedScanChunked(ws, m(h, n, cols), m(state, seqs, cols), m(x, n, cols), m(a, n, cols), m(b, n, cols), at)
+        sample(fc, i, t0)
+        t0 = time.Now()
+        sc.GatedScanGrad(ws, m(dx, n, cols), m(da, n, cols), m(db, n, cols), m(ds, seqs, cols), m(dh, n, cols), m(h, n, cols), m(state, seqs, cols), m(x, n, cols), m(a, n, cols), m(b, n, cols), at)
+        sample(bs, i, t0)
+        t0 = time.Now()
+        sc.GatedScanGradChunked(ws, m(dx, n, cols), m(da, n, cols), m(db, n, cols), m(ds, seqs, cols), m(dh, n, cols), m(h, n, cols), m(state, seqs, cols), m(x, n, cols), m(a, n, cols), m(b, n, cols), at)
+        sample(bc, i, t0)
+    }
+    row("GatedScan " + $label + " forward " + $seqs + "x" + $len + "x" + $cols + " chunk " + $chunk, fs, fc, n)
+    row("GatedScan " + $label + " backward", bs, bc, n)
+}
+
+fn selective<S, A>(label String&, seqs I64, len I64, cols I64, states I64, chunk I64, threads I64, rounds I64, r mut rand.Rand&) {
+    n := seqs * len
+    x := Array<S>(n * cols)
+    delta := Array<S>(n * cols)
+    a := Array<S>(states * cols)
+    b := Array<S>(n * states)
+    c := Array<S>(n * states)
+    skip := Array<S>(cols)
+    y := Array<S>(n * cols)
+    fill(x, r, 1.0)
+    for i in range n * cols: delta[i] = S(0.05 + 0.5 * r.Float())
+    for i in range states * cols: a[i] = S(-0.1 - 2.0 * r.Float())
+    fill(b, r, 1.0)
+    fill(c, r, 1.0)
+    fill(skip, r, 1.0)
+    state := Array<A>(seqs * states * cols)
+    ws := sc.Work<A>(threads)
+    at := sc.Seq(len, chunk)
+    keep := Array<A>(seqs * chunks(len, chunk) * states * cols)
+    dx := Array<S>(n * cols)
+    dd := Array<S>(n * cols)
+    da := Array<S>(states * cols)
+    db := Array<S>(n * states)
+    dc := Array<S>(n * states)
+    dskip := Array<S>(cols)
+    ds := Array<A>(seqs * states * cols)
+    dy := Array<S>(n * cols)
+    fill(dy, r, 1.0)
+    fs := Array<F64>(rounds)
+    fc := Array<F64>(rounds)
+    bs := Array<F64>(rounds)
+    sc.SelectiveScanChunked(ws, m(y, n, cols), m(state, seqs * states, cols), m(x, n, cols), m(delta, n, cols), m(a, states, cols), m(b, n, states), m(c, n, states), skip, at, keep)
+    for t in range rounds + 1 {
+        i := t - 1 if t > 0 else 0
+        t0 := time.Now()
+        sc.SelectiveScan(ws, m(y, n, cols), m(state, seqs * states, cols), m(x, n, cols), m(delta, n, cols), m(a, states, cols), m(b, n, states), m(c, n, states), skip, at)
+        sample(fs, i, t0)
+        t0 = time.Now()
+        sc.SelectiveScanChunked(ws, m(y, n, cols), m(state, seqs * states, cols), m(x, n, cols), m(delta, n, cols), m(a, states, cols), m(b, n, states), m(c, n, states), skip, at)
+        sample(fc, i, t0)
+        t0 = time.Now()
+        sc.SelectiveScanGrad(ws, m(dx, n, cols), m(dd, n, cols), m(da, states, cols), m(db, n, states), m(dc, n, states), dskip, m(ds, seqs * states, cols), m(dy, n, cols), m(x, n, cols), m(delta, n, cols), m(a, states, cols), m(b, n, states), m(c, n, states), skip, keep, at)
+        sample(bs, i, t0)
+    }
+    row("SelectiveScan " + $label + " forward " + $seqs + "x" + $len + "x" + $cols + "x" + $states + " chunk " + $chunk, fs, fc, n)
+    Println("SelectiveScan " + $label + " backward (sequential in time) " + $median(bs) + " ms | " + $(F64(n) / median(bs) / 1000.0) + " Mtokens/s")
+}
+
+fn deltaRule<S, A>(label String&, seqs I64, len I64, heads I64, dim I64, chunk I64, threads I64, rounds I64, r mut rand.Rand&) {
+    n := seqs * len
+    q := Array<S>(n * heads * dim)
+    k := Array<S>(n * heads * dim)
+    v := Array<S>(n * heads * dim)
+    beta := Array<S>(n * heads)
+    gate := Array<S>(n * heads)
+    out := Array<S>(n * heads * dim)
+    fill(q, r, 0.3)
+    fill(v, r, 1.0)
+    fill(k, r, 1.0)
+    for i in range n * heads {
+        norm := 0.0
+        for c in range dim: norm += F64(k[i * dim + c]) * F64(k[i * dim + c])
+        for c in range dim: k[i * dim + c] = S(F64(k[i * dim + c]) / norm.Sqrt())
+        beta[i] = S(0.1 + 0.9 * r.Float())
+        gate[i] = S(0.9 + 0.1 * r.Float())
+    }
+    state := Array<A>(seqs * heads * dim * dim)
+    ws := sc.Work<A>(threads)
+    at := sc.Seq(len, chunk, heads)
+    keep := Array<A>(seqs * heads * chunks(len, chunk) * dim * dim)
+    dq := Array<S>(n * heads * dim)
+    dk := Array<S>(n * heads * dim)
+    dv := Array<S>(n * heads * dim)
+    db := Array<S>(n * heads)
+    dg := Array<S>(n * heads)
+    dout := Array<S>(n * heads * dim)
+    fill(dout, r, 1.0)
+    ds := Array<A>(seqs * heads * dim * dim)
+    sc.DeltaRuleChunked(ws, m(out, n, heads * dim), m(state, seqs * heads * dim, dim), m(q, n, heads * dim), m(k, n, heads * dim), m(v, n, heads * dim), m(beta, n, heads), m(gate, n, heads), at, keep)
+    fs := Array<F64>(rounds)
+    fc := Array<F64>(rounds)
+    bs := Array<F64>(rounds)
+    bc := Array<F64>(rounds)
+    for t in range rounds + 1 {
+        i := t - 1 if t > 0 else 0
+        t0 := time.Now()
+        sc.DeltaRule(ws, m(out, n, heads * dim), m(state, seqs * heads * dim, dim), m(q, n, heads * dim), m(k, n, heads * dim), m(v, n, heads * dim), m(beta, n, heads), m(gate, n, heads), at)
+        sample(fs, i, t0)
+        t0 = time.Now()
+        sc.DeltaRuleChunked(ws, m(out, n, heads * dim), m(state, seqs * heads * dim, dim), m(q, n, heads * dim), m(k, n, heads * dim), m(v, n, heads * dim), m(beta, n, heads), m(gate, n, heads), at)
+        sample(fc, i, t0)
+        t0 = time.Now()
+        sc.DeltaRuleGrad(ws, m(dq, n, heads * dim), m(dk, n, heads * dim), m(dv, n, heads * dim), m(db, n, heads), m(dg, n, heads), m(ds, seqs * heads * dim, dim), m(dout, n, heads * dim), m(q, n, heads * dim), m(k, n, heads * dim), m(v, n, heads * dim), m(beta, n, heads), m(gate, n, heads), keep, at)
+        sample(bs, i, t0)
+        t0 = time.Now()
+        sc.DeltaRuleGradChunked(ws, m(dq, n, heads * dim), m(dk, n, heads * dim), m(dv, n, heads * dim), m(db, n, heads), m(dg, n, heads), m(ds, seqs * heads * dim, dim), m(dout, n, heads * dim), m(q, n, heads * dim), m(k, n, heads * dim), m(v, n, heads * dim), m(beta, n, heads), m(gate, n, heads), keep, at)
+        sample(bc, i, t0)
+    }
+    row("DeltaRule " + $label + " forward " + $seqs + "x" + $len + " heads " + $heads + " dim " + $dim + " chunk " + $chunk, fs, fc, n)
+    row("DeltaRule " + $label + " backward", bs, bc, n)
+}
+
+fn main() ? ParseError {
+    args := os.Args()
+    rounds := try number(args, 1, 5)
+    threads := try number(args, 2, 1)
+    r := rand.Rand(1)
+    Println("kernels/scan, ms per call, threads " + $threads + ", rounds " + $rounds)
+    gated<F32, F32>("F32", 4, 2048, 1024, 64, threads, rounds, r)
+    gated<F32, F32>("F32", 1, 8192, 256, 64, threads, rounds, r)
+    gated<BF16, F32>("BF16", 4, 2048, 1024, 64, threads, rounds, r)
+    selective<F32, F32>("F32", 4, 1024, 512, 16, 64, threads, rounds, r)
+    selective<F32, F32>("F32", 1, 4096, 256, 16, 64, threads, rounds, r)
+    for chunk in Array<I64>[32, 64] {
+        deltaRule<F32, F32>("F32", 4, 1024, 4, 64, chunk, threads, rounds, r)
+        deltaRule<BF16, F32>("BF16", 4, 1024, 4, 64, chunk, threads, rounds, r)
+    }
+    deltaRule<F32, F32>("F32", 1, 4096, 8, 128, 64, threads, rounds, r)
+}

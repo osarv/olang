@@ -1,0 +1,103 @@
+# vision - layers for images. An image is a row of H x W pixels with the C channels of a pixel together (channels
+# last, conv.olang); a layer's image shapes are given once, at construction, as a dense layer's sizes are, and Apply
+# takes only handles. Starting values are PyTorch's Conv2d's: weights and biases uniform in +-1/sqrt(C K K).
+
+import "nn"
+
+# a convolution of InC-channel InH x InW images by OutC kernels of K x K, moved Stride pixels at a time over the
+# images padded with Pad zeros: W is OutC x (InC K K) - PyTorch's Conv2d.weight flattened - and B 1 x OutC. Its
+# output images are OutH x OutW x OutC
+type Conv struct(W nn.Var, B nn.Var, InC I64, InH I64, InW I64, OutC I64, K I64, Stride I64, Pad I64) {
+    W
+    B
+    InC
+    InH
+    InW
+    OutC
+    K
+    Stride
+    Pad
+    OutH I64 = (InH + 2 * Pad - K) / Stride + 1
+    OutW I64 = (InW + 2 * Pad - K) / Stride + 1
+}
+
+# a convolution layer on g: weight decay applies to its kernels, not to its bias
+fn Conv.New<T>(g mut nn.Graph<T>&, inC I64, outC I64, kernel I64, H I64, W I64, stride I64 = 1
+        padding I64 = 0) Conv {
+    bound F64 = 1.0 / F64(inC * kernel * kernel).Sqrt()
+    w := g.Param(outC, inC * kernel * kernel, nn.Init.Uniform(-bound, bound), true)
+    b := g.Param(1, outC, nn.Init.Uniform(-bound, bound), false)
+    return Conv(w, b, inC, H, W, outC, kernel, stride, padding)
+}
+
+fn (c Conv&) Apply<T>(g mut nn.Graph<T>&, x nn.Var) nn.Var {
+    return g.Conv2d(x, c.W, c.B, c.InC, c.OutC, c.K, c.Stride, c.Pad, c.InH, c.InW)
+}
+
+# the number of features of its output images: OutH OutW OutC
+fn (c Conv&) Outputs() I64 {
+    return c.OutH * c.OutW * c.OutC
+}
+
+# ---- tests ----
+
+import "std/rand"
+
+fn normal(g mut nn.Graph<F64>&, rows I64, cols I64) nn.Var {
+    return g.Param(rows, cols, nn.Init.Normal(0.0, 0.5), true)
+}
+
+test "convolution and max pooling agree with central differences: padding, strides, channels, overlapping windows" {
+    g := nn.Graph<F64>(3)
+    x := g.Input(7 * 6 * 2)                                     # 7 x 6 images of 2 channels
+    y := g.Classes()
+    c1 := Conv.New(g, 2, 3, 3, 7, 6, 1, 1)                        # 7 x 6 x 3
+    h := g.Tanh(c1.Apply(g, x))
+    p := g.MaxPool2d(h, 3, 7, 6, 3, 2)                          # overlapping 3 x 3 windows, stride 2: 3 x 2 x 3
+    c2 := Conv.New(g, 3, 4, 2, 3, 2, 1, 0)                        # 2 x 1 x 4
+    a := c2.Apply(g, p)
+    c3 := Conv.New(g, 3, 2, 3, 3, 2, 2, 1)                        # stride 2, padding 1: 2 x 1 x 2, reading p again
+    b := c3.Apply(g, p)
+    shared := c1.Apply(g, x)                                    # c1 applied twice: its gradients add up
+    z := g.Linear(g.Tanh(a), normal(g, 3, 8), normal(g, 1, 3))
+    w := g.Linear(b, normal(g, 3, 4), normal(g, 1, 3))
+    q := g.Linear(g.Tanh(g.MaxPool2d(shared, 3, 7, 6, 2, 2)), normal(g, 3, 27), normal(g, 1, 3))
+    loss := g.SoftmaxCrossEntropy(g.Add(g.Add(z, w), q), y)
+    r := rand.Rand(71)
+    g.Plan(r)
+    params := g.Params()
+    for i in range params.Cols: params.Data[i] = params.Data[i] * 3.0
+    xd := g.InputData(x)
+    for i in range xd.Len(): xd[i] = r.Normal()
+    yd := g.ClassData(y)
+    for i in range 3: yd[i] = I32(r.Below(3))
+    assert nn.GradientError(g, loss, 3) < 1e-6
+    assert nn.GradientError(g, loss, 2) < 1e-6                  # a short batch
+}
+
+test "a convolution's input gradient agrees: images that are parameters, unbatched, of three channels and of one" {
+    g := nn.Graph<F64>(1)
+    images := normal(g, 2, 5 * 5 * 3)
+    c := Conv.New(g, 3, 2, 3, 5, 5, 2, 1)                         # 3 x 3 x 2
+    out := g.Tanh(c.Apply(g, images))
+    grey := normal(g, 2, 6 * 6)                                 # one channel: fewer than the kernel is wide
+    d := Conv.New(g, 1, 2, 3, 6, 6, 1, 1)                         # 6 x 6 x 2
+    pooled := g.MaxPool2d(g.Tanh(d.Apply(g, grey)), 2, 6, 6, 3, 3) # 2 x 2 x 2: windows that do not overlap
+    loss := g.Add(g.Mse(out, g.Param(2, 18, nn.Init.Normal(0.0, 1.0), false))
+        g.Mse(pooled, g.Param(2, 8, nn.Init.Normal(0.0, 1.0), false)))
+    r := rand.Rand(72)
+    g.Plan(r)
+    assert nn.GradientError(g, loss, 1) < 1e-6
+}
+
+test "a convolution layer starts as PyTorch's, and the graph checks its shapes" {
+    g := nn.Graph<F32>(4)
+    x := g.Input(28 * 28)
+    c := Conv.New(g, 1, 8, 5, 28, 28)
+    out := c.Apply(g, x)
+    r := rand.Rand(73)
+    g.Plan(r)
+    assert c.OutH == 24 and c.Outputs() == 24 * 24 * 8 and g.Info(out).Cols == c.Outputs()
+    w := g.Value(c.W)
+    assert w.Rows == 8 and w.Cols == 25 and w.MaxAbs() <= 0.2 and w.MaxAbs() > 0.1
+}

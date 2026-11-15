@@ -1,0 +1,74 @@
+# Times an epoch of the 784-128-10 perceptron's training on MNIST: oann (on 1 and 4 threads, built for this machine -
+# olang's default, B12 - and on 1 thread built for baseline x86-64, the target olang built for before) against the same
+# training in C over OpenBLAS (bench/ref/mlp.c, on 1 and 4 threads). Each runs EPOCHS epochs (default 3) and reports
+# its mean epoch; the variants run interleaved, ROUNDS times (default 3), and the median of the rounds is printed. Run
+# from the repository's root, after "make data": OLANG=olang build/olang bench/epoch.olang (OLANG is the compiler, which
+# is "olang" unless set).
+
+import "std/io"
+import "std/os"
+import "std/regex"
+
+Variants Array<String&> = Array<String&>["olang-1T", "olang-4T", "olang-x86-64-1T", "openblas-1T", "openblas-4T"]
+
+# an environment variable, or fallback when it is not set
+fn setting(name String&, fallback String&) String& {
+    return try os.Env(name) catch default fallback
+}
+
+# what a program that must run says on failing: its standard error, then the program ends with its status
+fn succeed(out os.Output&) ? io.Error {
+    if out.Status == 0: return
+    try io.PutErr(out.Stderr)
+    os.Exit(out.Status)
+}
+
+# the command line the variant runs as, and the directory it runs in
+fn command(variant String&, epochs String&) Array<String&> {
+    match variant {
+        case "olang-1T": return Array<String&>["./build/examples_mnist_mlp", epochs, "adamw", "1", "1"]
+        case "olang-4T": return Array<String&>["./build/examples_mnist_mlp", epochs, "adamw", "1", "4"]
+        case "olang-x86-64-1T": return Array<String&>["./build/baseline/mnist_mlp", epochs, "adamw", "1", "1"]
+        case "openblas-1T": return Array<String&>["./build/ref_mlp", epochs, "1", "1"]
+        case _: return Array<String&>["./build/ref_mlp", epochs, "1", "4"]
+    }
+}
+
+# the mean epoch time, in the text the program printed it in, of one run of the variant
+fn epoch(variant String&, epochs String&) String& ? io.Error, os.Error, regex.SyntaxError, regex.NotFound {
+    out := try os.Output.Exec(...command(variant, epochs))
+    try succeed(out)
+    re := try regex.Regex.Compile("(?m)^mean epoch ([0-9.]+) s$")
+    return try (try re.Find(out.Stdout)).Group(1)
+}
+
+# the middle of the times, as sort -n and the middle line pick it: the lower one of two
+fn median(times Vec<String&>&) String& {
+    sorted := times.ToArray()
+    sorted.Sort(fn(x, y): return x.ParseFloat()! < y.ParseFloat()!)
+    return sorted[(sorted.Len() + 1) / 2 - 1]
+}
+
+fn main() ? io.Error, os.Error, regex.SyntaxError, regex.NotFound, ParseError {
+    olang := setting("OLANG", "olang")
+    epochs := setting("EPOCHS", "3")
+    rounds := try setting("ROUNDS", "3").ParseInt()
+    try succeed(os.Output.Exec(olang, "build", "examples/mnist_mlp.olang"))
+    # the same program built for baseline x86-64, under a name of its own so that the two executables do not share one
+    try succeed(os.Output.Exec("mkdir", "-p", "build/baseline"))
+    try succeed(os.Output.Exec(olang, "build", "-target", "x86-64", "-output", "build/baseline/mnist_mlp", "examples/mnist_mlp.olang"))
+    try succeed(os.Output.Exec("clang", "-O3", "-o", "build/ref_mlp", "bench/ref/mlp.c", "-lopenblas", "-lm"))
+    times := Array<Vec<String&>>(Variants.Len())
+    sb := StringBuilder()
+    for _ in range rounds {
+        for v in range Variants.Len() {
+            t := try epoch(Variants[v], epochs)
+            times[v].Push(t)
+            sb.Push($Variants[v] + " " + $t + "\n")
+        }
+    }
+    try os.WriteFile("build/epoch.txt", sb.ToString())
+    load := (try os.ReadFile("/proc/loadavg")).Split(" ")
+    Println("seconds an epoch (median of " + $rounds + " rounds of " + $epochs + " epochs), load average " + $load[0] + " " + $load[1] + " " + $load[2] + ":")
+    for v in range Variants.Len(): Println($Variants[v].PadEnd(16) + " " + $median(times[v]))
+}

@@ -1,0 +1,44 @@
+# the first steps of examples/charlm.olang's model and training, each step's loss and gradient norm printed to compare
+# with bench/ref/charlm.py - the same model in numpy, from the same parameters and windows. Arguments: the steps (10),
+# the seed (1), and the model as layers, width, heads, context and sequences (4 128 4 64 16)
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "../nn"
+import "../layers"
+import "../optim"
+import "../train"
+import "../datasets/text"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn main() ? io.Error, os.Error, text.CorpusError, ParseError {
+    args := os.Args()
+    steps := try number(args, 1, 10)
+    seed := U64(try number(args, 2, 1))
+    depth := try number(args, 3, 4)
+    width := try number(args, 4, 128)
+    heads := try number(args, 5, 4)
+    context := try number(args, 6, 64)
+    sequences := try number(args, 7, 16)
+    c := try text.Corpus.Load("data/shakespeare/input.txt")
+    g := nn.Graph<F32>(sequences * context, 1)
+    tok := g.Tokens()
+    y := g.Classes()
+    t := layers.Transformer.New(g, c.Size(), context, width, heads, depth)
+    logits := t.Apply(g, tok)
+    m := train.LanguageModel(tok, y, logits, g.SoftmaxCrossEntropy(logits, y), context)
+    r := rand.Rand(seed)
+    g.Plan(r)
+    o mut optim.AdamW<F32>& = optim.AdamW<F32>(g, 1e-3, 0.9, 0.99, 1e-8, optim.Regularizer.WeightDecay(0.1))
+    rate := optim.WarmupCosine(1e-3, 100, steps, 1e-4)
+    w := text.Windows(c.Train(), context, seed)
+    for step in range steps {
+        loss, norm := train.LmStep(g, m, w, o, rate(step), 1.0)
+        try io.Put("step " + $(step + 1) + " loss " + $loss.Fixed(6) + " norm " + $norm.Fixed(6) + "\n")
+    }
+}

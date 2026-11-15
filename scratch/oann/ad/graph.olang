@@ -1,0 +1,2641 @@
+# ad/graph - the recorded graph: a network as a list of operations on N-d tensors, run forward and backward by
+# reverse-mode autodiff with hand-written vector-Jacobian products (ad/ops.olang).
+#
+# Building a network records it: each operation - g.Linear(x, w, b), g.Act(h, Act.Relu), g.CrossEntropy(z, y) -
+# appends a node and gives back its handle, a Var, which later operations take as input. A node is plain data (an
+# operation and its inputs' handles, its shape, where its value, gradient and kept matrices are), so the graph holds no
+# references between nodes and can be walked, planned, written out or baked while compiling as an array can. The
+# operations are a closed enum dispatched by match; Custom(any Function&) opens it for operations defined outside.
+#
+# Axis 0 of a batched node is the batch: an Input, a Tokens or a Classes is batched, a Param or a Constant is not, and
+# an operation is batched where its first operand is. A step may run on fewer than the planned batch (an epoch's short
+# last batch): every batched node is then the view of its first n entries.
+#
+# One description runs two ways (the third, a plan baked while compiling, is C4's):
+# - Captured (the default): record once, Plan, then Forward and Backward every step with nothing allocated. Plan lays
+#   everything out in one arena: the parameters, contiguous in the order they were made (an optimizer's one flat region,
+#   and a checkpoint's), their gradients laid out the same, the inputs, and then one ACTIVATION region in which every
+#   value, gradient, kept matrix and scratch is placed by its lifetime over a step - forward at time i for node i,
+#   backward at 2n - 1 - i - so two buffers never alive at once share storage (greedy by size, the largest first, each at
+#   the lowest offset free over its lifetime). A value lives until the last forward or backward reading it; a node no
+#   operation reads (an output), a loss, and a node given to Keep live to the step's end, so they can be read after it;
+#   any other intermediate value or gradient is valid only within the step. Reuse = false before Plan lays every buffer
+#   out apart, for comparison.
+# - Eager: each operation runs as it is recorded, on storage of its own - for exploring and debugging. Plan(r) is
+#   called first, before anything is recorded (it draws the parameters as Captured's Plan does, as they are made); an
+#   input is filled before the operations reading it are recorded; Forward and Backward then run as Captured's do. The
+#   kernels and their order are the same, so eager and captured runs agree bit for bit. A parameter has storage of its
+#   own, so Params() and ParamGrads() (one flat region) are Captured's alone.
+#
+# Views - Reshape, Permute, Slice, Expand - copy nothing: their value reads their base's storage through their own
+# strides. An operation whose kernel needs its operand laid out as rows (the last axis contiguous, the rest folding) is
+# given a Contiguous copy where a view is not, recorded for it.
+#
+# Gradients. A gradient is written by the first operation contributing to it and added to by the rest, so nothing is
+# zeroed between steps; a node's gradient exists where it depends on a parameter (or an input given to Watch).
+#
+# Mixed precision: a Graph<BF16> (or F16) holds values and gradients in BF16 - half an F32 graph's arena - and computes
+# in F32 (each kernel widens what it reads and rounds what it writes once). Its parameters' F32 masters live beside the
+# arena: Plan draws the starting values into them, an optimizer steps them and SyncParams rounds them into the arena; a
+# checkpoint is them. A loss's value is kept in F64 (Scalar) whatever the element type. A Graph<F64> is the gradient
+# checks' (tools/gradcheck.olang).
+#
+# Shapes. A shape the caller gives that does not fit is recorded as the graph's problem and reported by Plan as a
+# ShapeError (decision 1 of docs/redesign.md section 3) - in eager mode by Check(); operations recorded after it run
+# nothing. Inside a planned graph a shape is the graph's own invariant.
+#
+# Decoding (decode = true): a graph of one sequence (batch 1) run forward only, a few positions at a time - Forward(n)
+# computes positions Pos ... Pos + n - 1 (axis 1 of every batched node holding n of them) and each Attention keeps the
+# keys and values of every position so far in a cache: generation without running the context again.
+
+import "../tensor"
+import "../kernels/mat"
+import "../kernels/gemm"
+import "../kernels/scan"
+import "../kernels/conv"
+import "../io/checkpoint"
+import "ops"
+import "std/rand"
+import "std/time"
+import "std/list"
+import "std/os"
+
+# a node's handle: an index into the graph's nodes
+type Var I64
+
+# a handle no operation gives: an absent bias or gain
+None := Var(-1)
+
+# how a graph runs: each operation as it is recorded, or recorded once and replayed
+type Mode enum {
+    Eager
+    Captured
+}
+
+# how a parameter starts
+type Init enum {
+    Zeros
+    Constant(v F64)
+    Uniform(lo F64, hi F64)
+    Normal(mean F64, sd F64)
+}
+
+# an operation defined outside oann (the settle of dyn/bridge.olang): its output's shape from its inputs' (batch axis
+# included), its forward, and its backward - the gradients of its inputs (written, each of its input's shape) from its
+# output's. F32 only
+type Function trait {
+    Shape(inputs Array<tensor.Shape>&) tensor.Shape
+    mut Forward(out mut tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&)
+    mut Backward(dout tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&, dinputs mut Array<tensor.Tensor<F32>>&)
+}
+
+# what a node computes
+type Op enum {
+    Input                                           # a batch the caller fills before each Forward
+    Tokens                                          # I32 per position, filled by the caller
+    Classes                                         # I32 per entry, negative ignored by the loss
+    Constant                                        # a tensor the caller sets, not trained
+    Param(init Init, decay Bool)                    # trainable; decay: weight decay applies to it
+    Linear(x Var, w Var, b Var)                     # x w^T + b over the last axis
+    MatMul(a Var, b Var, ta Bool, tb Bool)          # op(a) op(b), batched over leading axes
+    Add(a Var, b Var)
+    Sub(a Var, b Var)
+    Mul(a Var, b Var)                               # element by element
+    Scale(x Var, k F64)
+    Act(x Var, a mat.Act)                           # Relu Gelu GeluTanh Silu Sigmoid Tanh Softplus
+    LeakyRelu(x Var, slope F64)
+    Softmax(x Var)                                  # over the last axis
+    LogSoftmax(x Var)
+    Norm(x Var, gain Var, bias Var, rms Bool, eps F64)   # layer or RMS normalization over the last axis
+    Embedding(tokens Var, table Var)                # a table row per token
+    Positions(x Var, table Var)                     # x plus a learned position: the table's row Pos + t
+    Rope(x Var, heads I64, base F64)                # rotary positions (Su et al.)
+    Attention(q Var, k Var, v Var, heads I64, causal Bool)
+    Dropout(x Var, p F64)                           # while Training, each element zeroed with probability p
+    CrossEntropy(logits Var, classes Var)           # the mean over the entries counted: a scalar
+    Mse(a Var, b Var)                               # the mean of the squared differences: a scalar
+    Conv2d(x Var, w Var, b Var, s conv.Shape)       # images [n, H, W, C], channels last
+    MaxPool2d(x Var, p conv.Pool)
+    Scan(x Var, a Var, b Var)                       # h_t = a_t h_{t-1} + b_t x_t per channel
+    SelectiveScan(x Var, delta Var, a Var, b Var, c Var, skip Var)   # Mamba's (kernels/scan)
+    DeltaRule(q Var, k Var, v Var, beta Var, gate Var)              # (gated) DeltaNet's, heads from beta
+    Reshape(x Var)                                  # views: nothing copied
+    Permute(x Var)
+    Slice(x Var, axis I64, lo I64)
+    Expand(x Var)
+    Contiguous(x Var)                               # a view's elements copied, laid out as rows
+    Sum(x Var, mean Bool)                           # over the last axis (its mean where mean)
+    Custom(f mut any Function&, first I64, count I64)   # inputs: Graph.customIn[first ...]
+}
+
+# ---- profiling ----
+
+# the kinds of operation, by name: KindOf numbers an operation as its position here
+KindNames := Array<String&>[
+    "Input", "Tokens", "Classes", "Constant", "Param", "Linear", "MatMul", "Add", "Sub", "Mul", "Scale", "Act"
+    "LeakyRelu", "Softmax", "LogSoftmax", "Norm", "Embedding", "Positions", "Rope", "Attention", "Dropout"
+    "CrossEntropy", "Mse", "Conv2d", "MaxPool2d", "Scan", "SelectiveScan", "DeltaRule", "Reshape", "Permute", "Slice"
+    "Expand", "Contiguous", "Sum", "Custom"
+]
+
+fn KindOf(k Op) I64 {
+    return match k {
+        case Op.Input: 0
+        case Op.Tokens: 1
+        case Op.Classes: 2
+        case Op.Constant: 3
+        case Op.Param(_, _): 4
+        case Op.Linear(_, _, _): 5
+        case Op.MatMul(_, _, _, _): 6
+        case Op.Add(_, _): 7
+        case Op.Sub(_, _): 8
+        case Op.Mul(_, _): 9
+        case Op.Scale(_, _): 10
+        case Op.Act(_, _): 11
+        case Op.LeakyRelu(_, _): 12
+        case Op.Softmax(_): 13
+        case Op.LogSoftmax(_): 14
+        case Op.Norm(_, _, _, _, _): 15
+        case Op.Embedding(_, _): 16
+        case Op.Positions(_, _): 17
+        case Op.Rope(_, _, _): 18
+        case Op.Attention(_, _, _, _, _): 19
+        case Op.Dropout(_, _): 20
+        case Op.CrossEntropy(_, _): 21
+        case Op.Mse(_, _): 22
+        case Op.Conv2d(_, _, _, _): 23
+        case Op.MaxPool2d(_, _): 24
+        case Op.Scan(_, _, _): 25
+        case Op.SelectiveScan(_, _, _, _, _, _): 26
+        case Op.DeltaRule(_, _, _, _, _): 27
+        case Op.Reshape(_): 28
+        case Op.Permute(_): 29
+        case Op.Slice(_, _, _): 30
+        case Op.Expand(_): 31
+        case Op.Contiguous(_): 32
+        case Op.Sum(_, _): 33
+        case Op.Custom(_, _, _): 34
+    }
+}
+
+# ---- nodes ----
+
+# a recorded operation: its shape (axis 0 the planned batch where Batched) and strides (a view's over its base's
+# storage), and where its value, gradient, kept tensors and scratch are (-1: nowhere). A view's value is its Base's
+# storage at Offset; every other buffer is the node's own
+type Node struct(Kind Op, Dims tensor.Shape, Batched Bool) {
+    Kind
+    Dims
+    Batched
+    Strides tensor.Shape = rowMajor(Dims)
+    Base I64 = -1               # a view: the node whose storage it reads
+    Offset I64 = -1             # its value (a view: in its base's storage)
+    GradOffset I64 = -1
+    SavedOffset I64 = -1        # what its backward keeps: a loss's softmax, a norm's statistics, attention's weights
+    ScratchOffset I64 = -1      # what its backward works in
+    IntOffset I64 = -1          # I32s: tokens, classes, pooling's places
+    AccOffset I64 = -1          # elements in the type computed in: scan states, what a scan keeps, decoding's scores
+    Keep Bool = false           # its value and gradient kept to the step's end
+    Watch Bool = false          # its gradient wanted though it depends on no parameter (an input's)
+}
+
+# the row-major strides of dims
+fn rowMajor(dims tensor.Shape&) tensor.Shape {
+    st := Array<I64>(6)
+    n I64 = 1
+    for a := dims.Rank - 1, a >= 0, a-- {
+        st[a] = n
+        n *= dims[a]
+    }
+    return tensor.Shape.Of(...st[0:dims.Rank])
+}
+
+# the dimensions b, dims...
+fn batchOf(b I64, dims Array<I64>&) tensor.Shape {
+    d := Array<I64>(6)
+    d[0] = b
+    for i in range dims.Len(): d[i + 1] = dims[i]
+    return tensor.Shape.Of(...d[0:dims.Len() + 1])
+}
+
+# dims with axis a of size n
+fn withAxis(dims tensor.Shape&, a I64, n I64) tensor.Shape {
+    d := Array<I64>(6)
+    for i in range dims.Rank: d[i] = dims[i]
+    d[a] = n
+    return tensor.Shape.Of(...d[0:dims.Rank])
+}
+
+# dims without the last axis (a scalar's: one axis of 1)
+fn dropLast(dims tensor.Shape&) tensor.Shape {
+    if dims.Rank <= 1: return tensor.Shape.Of(1)
+    d := Array<I64>(6)
+    for i in range dims.Rank - 1: d[i] = dims[i]
+    return tensor.Shape.Of(...d[0:dims.Rank - 1])
+}
+
+# dims with the last axis of size n
+fn lastTo(dims tensor.Shape&, n I64) tensor.Shape { return withAxis(dims, dims.Rank - 1, n) }
+
+# the inputs of an operation, by handle, in order (at most six; a Custom's are the graph's)
+fn inputsOf(k Op) Array<I64> {
+    out := Array<I64>(6)
+    for i in range 6: out[i] = -1
+    match k {
+        case Op.Linear(x, w, b): set3(out, x, w, b)
+        case Op.MatMul(a, b, _, _), Op.Add(a, b), Op.Sub(a, b), Op.Mul(a, b), Op.Mse(a, b): set3(out, a, b, None)
+        case Op.Embedding(a, b), Op.Positions(a, b), Op.CrossEntropy(a, b): set3(out, a, b, None)
+        case Op.Scale(x, _), Op.Act(x, _), Op.LeakyRelu(x, _), Op.Softmax(x), Op.LogSoftmax(x): out[0] = x
+        case Op.Rope(x, _, _), Op.Dropout(x, _), Op.MaxPool2d(x, _), Op.Sum(x, _): out[0] = x
+        case Op.Reshape(x), Op.Permute(x), Op.Slice(x, _, _), Op.Expand(x), Op.Contiguous(x): out[0] = x
+        case Op.Norm(x, g, b, _, _), Op.Attention(x, g, b, _, _), Op.Conv2d(x, g, b, _), Op.Scan(x, g, b): set3(out, x, g, b)
+        case Op.SelectiveScan(x, d, a, b, c, s) {
+            set3(out, x, d, a)
+            out[3] = b
+            out[4] = c
+            out[5] = s
+        }
+        case Op.DeltaRule(q, kk, v, b, g) {
+            set3(out, q, kk, v)
+            out[3] = b
+            out[4] = g
+        }
+        case _ { }
+    }
+    return out
+}
+
+fn set3(out mut Array<I64>&, a Var, b Var, c Var) {
+    out[0] = a
+    out[1] = b
+    out[2] = c
+}
+
+# whether an operation is a view of its first input
+fn isView(k Op) Bool {
+    return match k {
+        case Op.Reshape(_), Op.Permute(_), Op.Slice(_, _, _), Op.Expand(_): true
+        case _: false
+    }
+}
+
+# whether a node is a leaf: filled by the caller or a parameter
+fn isLeaf(k Op) Bool {
+    return match k {
+        case Op.Input, Op.Tokens, Op.Classes, Op.Constant, Op.Param(_, _): true
+        case _: false
+    }
+}
+
+# whether an operation's backward reads its inputs' values
+fn readsInputs(k Op) Bool {
+    return match k {
+        case Op.Add(_, _), Op.Sub(_, _), Op.Scale(_, _), Op.Softmax(_), Op.LogSoftmax(_), Op.CrossEntropy(_, _): false
+        case Op.Embedding(_, _), Op.Positions(_, _), Op.Rope(_, _, _), Op.Dropout(_, _), Op.MaxPool2d(_, _): false
+        case Op.Sum(_, _), Op.Reshape(_), Op.Permute(_), Op.Slice(_, _, _), Op.Expand(_), Op.Contiguous(_): false
+        case _: true
+    }
+}
+
+# whether an operation's backward reads its own value
+fn readsOwn(k Op) Bool {
+    return match k {
+        case Op.Softmax(_), Op.LogSoftmax(_), Op.Scan(_, _, _), Op.Custom(_, _, _): true
+        case _: false
+    }
+}
+
+# the storage a node's buffers live in: the arena (Captured), or the node's own (Eager); a view's is its base's
+type slot<E> struct(mem mut Array<E>&) {
+    mem
+}
+
+# what a node needs besides its value and gradient: kept elements, backward scratch, I32s, elements in the type
+# computed in
+type extras struct(saved I64, scratch I64, ints I64, acc I64) {
+    saved
+    scratch
+    ints
+    acc
+}
+
+# ---- the graph ----
+
+# a network of T elements, planned for batches of up to `batch`; its products and scans split over `threads` tasks
+type Graph<T> struct(batch I64, threads I64 = 1, mode Mode = Mode.Captured, decode Bool = false) {
+    Batch I64 = batch
+    Threads I64 = threads if threads > 0 else 1
+    Eager Bool = mode == Mode.Eager
+    Decode Bool = decode
+    nodes mut list.List<Node>& = list.List<Node>()
+    customIn mut list.List<Var>& = list.List<Var>()
+    vals mut list.List<slot<T>>& = list.List<slot<T>>()
+    ints mut list.List<slot<I32>>& = list.List<slot<I32>>()
+    accs32 mut list.List<slot<F32>>& = list.List<slot<F32>>()
+    accs64 mut list.List<slot<F64>>& = list.List<slot<F64>>()
+    mem mut Array<T>& = Array<T>(0)
+    intMem mut Array<I32>& = Array<I32>(0)
+    acc32 mut Array<F32>& = Array<F32>(0)
+    acc64 mut Array<F64>& = Array<F64>(0)
+    masters mut Array<F32>& = Array<F32>(0)     # a BF16 or F16 graph's parameters in F32, laid out as Params()
+    losses mut Array<F64>& = Array<F64>(0)      # each loss node's last value, in F64
+    written mut Array<Bool>& = Array<Bool>(0)
+    needs mut Array<Bool>& = Array<Bool>(0)
+    ws32 mut gemm.Workspace<F32>& = gemm.Workspace<F32>(threads)
+    ws64 mut gemm.Workspace<F64>& = gemm.Workspace<F64>(threads)
+    sw32 mut scan.Work<F32>& = scan.Work<F32>(threads)
+    sw64 mut scan.Work<F64>& = scan.Work<F64>(threads)
+    ParamCount I64 = 0              # the parameters' elements: the arena's first region
+    ActivationSize I64 = 0          # the activation region's elements, after reuse
+    Reuse Bool = true               # set false before Plan: every activation buffer apart
+    N I64 = batch                   # the batch entries in use: those the last Forward ran on
+    Training Bool = true            # dropout acts only while training
+    Pos I64 = 0                     # the first position of the step (Positions, Rope; decoding)
+    Rng rand.Rand = rand.Rand(0)    # dropout's generator, seeded from the one Plan is given
+    draw rand.Rand = rand.Rand(0)   # an eager graph's parameters' generator
+    Profiling Bool = false          # with it set, Times collects where Forward and Backward spend their time:
+    Times mut Array<I64>& = Array<I64>(2 * KindNames.Len())   # ns, Times[2 k] forward, Times[2 k + 1] backward
+    Int8 Bool = false               # once QuantizeLinear has run: every Linear's product in 8-bit integers
+    q8 mut list.List<q8Weights>& = list.List<q8Weights>()   # each Linear's weights quantized (QuantizeLinear)
+    q8At mut list.List<I64>& = list.List<I64>()             # by node: its weights' index in q8, or -1
+    q8Acts mut Array<U8>& = Array<U8>(0)        # a Linear's input quantized
+    q8Sums mut Array<I32>& = Array<I32>(0)      # its integer products
+    q8Scale mut Array<F32>& = Array<F32>(0)     # its dequantization, per output
+    wsI8 mut gemm.Workspace<I32>& = gemm.Workspace<I32>(threads)
+    problem String = ""             # the first shape that did not fit, "" while every one has
+    planned Bool = false
+}
+
+# ---- recording ----
+
+# a shape that does not fit: the first is kept and reported by Plan (or Check), and nothing recorded after it runs
+fn (g mut Graph<T>&) fail(what String&) {
+    if g.problem == "": g.problem = what
+}
+
+# the problem a caller's shapes have, as Plan reports it - for an eager graph, where nothing else does
+fn (g Graph<T>&) Check() ? tensor.ShapeError {
+    if g.problem != "": error tensor.ShapeError.Mismatch(g.problem)
+}
+
+fn (g mut Graph<T>&) add(kind Op, dims tensor.Shape, batched Bool) Var {
+    if g.planned and not g.Eager: unreachable "oann: operations are recorded before Plan"
+    g.nodes.Push(Node(kind, dims, batched))
+    v := Var(g.nodes.Len() - 1)
+    if g.Eager: g.eagerNode(v)
+    return v
+}
+
+fn (g Graph<T>&) dims(v Var) tensor.Shape { return g.nodes[v].Dims }
+
+fn (g Graph<T>&) batched(v Var) Bool { return g.nodes[v].Batched }
+
+fn (g Graph<T>&) shape(v Var) String { return $g.nodes[v].Dims }
+
+# whether v is a handle of this graph
+fn (g mut Graph<T>&) known(name String&, v Var) Bool {
+    if v >= 0 and v < g.nodes.Len(): return true
+    g.fail($name + " of a handle the graph has not given: " + $v)
+    return false
+}
+
+# the node behind v
+fn (g Graph<T>&) Info(v Var) Node { return g.nodes[v] }
+
+# how many nodes the graph has
+fn (g Graph<T>&) Size() I64 { return g.nodes.Len() }
+
+# a batch input: dims after the batch axis
+fn (g mut Graph<T>&) Input(dims ...I64) Var { return g.add(Op.Input, batchOf(g.Batch, dims), true) }
+
+# a batch of sequences of ctx tokens (I32)
+fn (g mut Graph<T>&) Tokens(ctx I64) Var { return g.add(Op.Tokens, tensor.Shape.Of(g.Batch, ctx), true) }
+
+# a class per entry of a batch of these dims (I32; a negative class is ignored by the loss)
+fn (g mut Graph<T>&) Classes(dims ...I64) Var { return g.add(Op.Classes, batchOf(g.Batch, dims), true) }
+
+# a tensor the caller sets and nothing trains - a target, a mask, a fixed table
+fn (g mut Graph<T>&) Constant(dims ...I64) Var { return g.add(Op.Constant, tensor.Shape.Of(...dims), false) }
+
+# a trainable tensor, set by init when the graph is planned; weight decay applies to it where decay
+fn (g mut Graph<T>&) Param(init Init, decay Bool, dims ...I64) Var {
+    return g.add(Op.Param(init, decay), tensor.Shape.Of(...dims), false)
+}
+
+# v's gradient wanted though it depends on no parameter (an input's), and kept to the step's end
+fn (g mut Graph<T>&) Watch(v Var) {
+    if not g.known("Watch", v): return
+    nd := g.nodes[v]
+    nd.Watch = true
+    nd.Keep = true
+    g.nodes[v] = nd
+}
+
+# v's value (and gradient) kept to the step's end, to be read after it
+fn (g mut Graph<T>&) Keep(v Var) {
+    if not g.known("Keep", v): return
+    nd := g.nodes[v]
+    nd.Keep = true
+    g.nodes[v] = nd
+}
+
+# x where its layout is rows (contiguous), else a Contiguous copy of it recorded
+fn (g mut Graph<T>&) dense(x Var) Var {
+    nd := g.nodes[x]
+    if nd.Base < 0 or nd.Strides == rowMajor(nd.Dims): return x
+    return g.add(Op.Contiguous(x), nd.Dims, nd.Batched)
+}
+
+# two operands of one shape
+fn (g mut Graph<T>&) same(name String&, a Var, b Var) Bool {
+    if not g.known(name, a) or not g.known(name, b): return false
+    if g.dims(a) == g.dims(b) and g.batched(a) == g.batched(b): return true
+    g.fail($name + " of " + $g.shape(a) + " and " + $g.shape(b) + ": the shapes differ")
+    return false
+}
+
+# a 1-D tensor of n elements, or None where allowed
+fn (g mut Graph<T>&) vector(name String&, v Var, n I64, optional Bool) Bool {
+    if v == None: return optional
+    if not g.known(name, v): return false
+    d := g.dims(v)
+    if d.Rank == 1 and d[0] == n and not g.batched(v): return true
+    g.fail($name + ": " + $g.shape(v) + " where " + $n + " numbers are wanted")
+    return false
+}
+
+# x w^T + b over the last axis: x [..., in], w [out, in], b [out] or None
+fn (g mut Graph<T>&) Linear(x Var, w Var, b Var = None) Var {
+    if not g.known("Linear", x) or not g.known("Linear", w): return x
+    xd := g.dims(x)
+    wd := g.dims(w)
+    if wd.Rank != 2 or g.batched(w) or xd[xd.Rank - 1] != wd[1] {
+        g.fail("Linear of " + $g.shape(x) + " by weights " + $g.shape(w) + ": the weights are [out, in]")
+        return x
+    }
+    if not g.vector("Linear's bias", b, wd[0], true): return x
+    d := g.dense(x)
+    return g.add(Op.Linear(d, g.lastContiguous(w), b), lastTo(xd, wd[0]), g.batched(x))
+}
+
+# op(a) op(b), op(m) being m or its last two axes' transpose: rank 2 operands, or batched over the leading axes (one or
+# two of them, any strides - a permuted view of heads), b perhaps rank 2 and shared by the batch
+fn (g mut Graph<T>&) MatMul(a Var, b Var, ta Bool = false, tb Bool = false) Var {
+    if not g.known("MatMul", a) or not g.known("MatMul", b): return a
+    ad := g.dims(a)
+    bd := g.dims(b)
+    ra := ad.Rank
+    rb := bd.Rank
+    m I64 = ad[ra - 1] if ta else ad[ra - 2]
+    k I64 = ad[ra - 2] if ta else ad[ra - 1]
+    kb I64 = bd[rb - 1] if tb else bd[rb - 2]
+    n I64 = bd[rb - 2] if tb else bd[rb - 1]
+    fits := ra >= 2 and rb >= 2 and ra <= 4 and k == kb and (rb == 2 or rb == ra)
+    for i in range ra - 2 {
+        if rb == ra and bd[i] != ad[i]: fits = false
+    }
+    if fits and rb == 2 and ra > 2 and ta: fits = false
+    if not fits {
+        g.fail("MatMul of " + $g.shape(a) + " and " + $g.shape(b) + ": the inner dimensions or the batch axes differ")
+        return a
+    }
+    x := g.lastContiguous(a)
+    y := g.lastContiguous(b)
+    return g.add(Op.MatMul(x, y, ta, tb), withAxis(lastTo(ad, n), ra - 2, m), g.batched(a))
+}
+
+# x where its last axis is contiguous (a product reads it as rows of any leading strides), else a copy
+fn (g mut Graph<T>&) lastContiguous(x Var) Var {
+    nd := g.nodes[x]
+    if nd.Base < 0 or nd.Strides[nd.Dims.Rank - 1] == 1: return x
+    return g.add(Op.Contiguous(x), nd.Dims, nd.Batched)
+}
+
+fn (g mut Graph<T>&) Add(a Var, b Var) Var {
+    if not g.same("Add", a, b): return a
+    return g.add(Op.Add(g.dense(a), g.dense(b)), g.dims(a), g.batched(a))
+}
+
+fn (g mut Graph<T>&) Sub(a Var, b Var) Var {
+    if not g.same("Sub", a, b): return a
+    return g.add(Op.Sub(g.dense(a), g.dense(b)), g.dims(a), g.batched(a))
+}
+
+# a b, element by element
+fn (g mut Graph<T>&) Mul(a Var, b Var) Var {
+    if not g.same("Mul", a, b): return a
+    return g.add(Op.Mul(g.dense(a), g.dense(b)), g.dims(a), g.batched(a))
+}
+
+fn (g mut Graph<T>&) Scale(x Var, k F64) Var {
+    if not g.known("Scale", x): return x
+    return g.add(Op.Scale(g.dense(x), k), g.dims(x), g.batched(x))
+}
+
+# an operation giving a tensor of x's shape
+fn (g mut Graph<T>&) like(name String&, x Var, kind fn&(d Var) Op) Var {
+    if not g.known(name, x): return x
+    d := g.dense(x)
+    return g.add(kind(d), g.dims(x), g.batched(x))
+}
+
+fn (g mut Graph<T>&) Act(x Var, a mat.Act) Var { return g.like("Act", x, fn(d): return Op.Act(d, a)) }
+
+fn (g mut Graph<T>&) LeakyRelu(x Var, slope F64) Var { return g.like("LeakyRelu", x, fn(d): return Op.LeakyRelu(d, slope)) }
+
+fn (g mut Graph<T>&) Softmax(x Var) Var { return g.like("Softmax", x, fn(d): return Op.Softmax(d)) }
+
+fn (g mut Graph<T>&) LogSoftmax(x Var) Var { return g.like("LogSoftmax", x, fn(d): return Op.LogSoftmax(d)) }
+
+# layer normalization (Ba et al.) over the last axis, gain and bias [D] - PyTorch's LayerNorm; with rms, root-mean-square
+# normalization (Zhang and Sennrich), the mean not taken out and bias None
+fn (g mut Graph<T>&) Norm(x Var, gain Var, bias Var = None, rms Bool = false, eps F64 = 1e-5) Var {
+    if not g.known("Norm", x): return x
+    xd := g.dims(x)
+    w := xd[xd.Rank - 1]
+    if not g.vector("Norm's gain", gain, w, false) or not g.vector("Norm's bias", bias, w, true): return x
+    if rms and bias != None {
+        g.fail("Norm: RMS normalization takes no bias")
+        return x
+    }
+    return g.add(Op.Norm(g.dense(x), gain, bias, rms, eps), xd, g.batched(x))
+}
+
+# each token's row of table [vocabulary, D]: tokens [b, t] give [b, t, D]
+fn (g mut Graph<T>&) Embedding(tokens Var, table Var) Var {
+    if not g.known("Embedding", tokens) or not g.known("Embedding", table): return table
+    t := g.nodes[tokens]
+    wd := g.dims(table)
+    if t.Kind != Op.Tokens or wd.Rank != 2 or g.batched(table) {
+        g.fail("Embedding by " + $g.shape(table) + ": the tokens a Tokens(), the table [vocabulary, width]")
+        return table
+    }
+    return g.add(Op.Embedding(tokens, table), tensor.Shape.Of(t.Dims[0], t.Dims[1], wd[1]), true)
+}
+
+# x [b, t, D] plus a learned position: the table's row (Pos + t) mod T at position t, table [T, D]
+fn (g mut Graph<T>&) Positions(x Var, table Var) Var {
+    if not g.known("Positions", x) or not g.known("Positions", table): return x
+    xd := g.dims(x)
+    td := g.dims(table)
+    if xd.Rank != 3 or td.Rank != 2 or td[1] != xd[2] or td[0] < xd[1] {
+        g.fail("Positions of " + $g.shape(x) + " and " + $g.shape(table) + ": [b, t, D] and a table of at least t rows of D")
+        return x
+    }
+    return g.add(Op.Positions(g.dense(x), table), xd, true)
+}
+
+# rotary position embeddings (Su et al.) of x [b, t, D] in heads of D / heads columns, at positions Pos + t
+fn (g mut Graph<T>&) Rope(x Var, heads I64, base F64 = 10000) Var {
+    if not g.known("Rope", x): return x
+    xd := g.dims(x)
+    if xd.Rank != 3 or heads < 1 or xd[2] % heads != 0 or xd[2] / heads % 2 != 0 {
+        g.fail("Rope of " + $g.shape(x) + " in " + $heads + " heads: [b, t, D], heads of an even width")
+        return x
+    }
+    return g.add(Op.Rope(g.dense(x), heads, base), xd, true)
+}
+
+# multi-head attention of q, k, v [b, t, D] in heads of D / heads columns; causal: position i attends to 0 ... i
+fn (g mut Graph<T>&) Attention(q Var, k Var, v Var, heads I64, causal Bool) Var {
+    if not g.same("Attention", q, k) or not g.same("Attention", q, v): return q
+    qd := g.dims(q)
+    if qd.Rank != 3 or not g.batched(q) or heads < 1 or qd[2] % heads != 0 {
+        g.fail("Attention of " + $g.shape(q) + " in " + $heads + " heads: [b, t, D], heads dividing D")
+        return q
+    }
+    if g.Decode and not causal {
+        g.fail("Attention while decoding is causal")
+        return q
+    }
+    return g.add(Op.Attention(g.dense(q), g.dense(k), g.dense(v), heads, causal), qd, true)
+}
+
+# x with each element zeroed with probability p and the rest scaled by 1 / (1 - p) while the graph is Training; x
+# itself otherwise
+fn (g mut Graph<T>&) Dropout(x Var, p F64) Var {
+    if p < 0.0 or p >= 1.0 {
+        g.fail("Dropout with p = " + $p + ": p in [0, 1)")
+        return x
+    }
+    return g.like("Dropout", x, fn(d): return Op.Dropout(d, p))
+}
+
+# the mean over the entries whose class is not negative of -log softmax(logits)[class]: logits [..., C], classes [...]
+fn (g mut Graph<T>&) CrossEntropy(logits Var, classes Var) Var {
+    if not g.known("CrossEntropy", logits) or not g.known("CrossEntropy", classes): return logits
+    c := g.nodes[classes]
+    zd := g.dims(logits)
+    if c.Kind != Op.Classes or dropLast(zd) != c.Dims or not g.batched(logits) {
+        g.fail("CrossEntropy of " + $g.shape(logits) + " against " + $g.shape(classes) + ": a Classes() of the logits' leading axes")
+        return logits
+    }
+    return g.add(Op.CrossEntropy(g.dense(logits), classes), tensor.Shape.Of(1), false)
+}
+
+# the mean of (a - b)^2
+fn (g mut Graph<T>&) Mse(a Var, b Var) Var {
+    if not g.same("Mse", a, b): return a
+    return g.add(Op.Mse(g.dense(a), g.dense(b)), tensor.Shape.Of(1), false)
+}
+
+# a convolution of images x [n, H, W, C] (channels last) by w [OutC, C K K] (PyTorch's weight flattened) and b [OutC] or
+# None: [n, OutH, OutW, OutC]
+fn (g mut Graph<T>&) Conv2d(x Var, w Var, b Var, s conv.Shape) Var {
+    if not g.known("Conv2d", x) or not g.known("Conv2d", w): return x
+    xd := g.dims(x)
+    wd := g.dims(w)
+    images := xd.Rank == 4 and xd[1] == s.H and xd[2] == s.W and xd[3] == s.C
+    if not images or wd.Rank != 2 or wd[0] != s.OutC or wd[1] != s.Patch() or g.batched(w) {
+        g.fail("Conv2d of " + $g.shape(x) + " by " + $g.shape(w) + ": images [n, " + $s.H + ", " + $s.W + ", " + $s.C + "], weights [" + $s.OutC + ", " + $s.Patch() + "]")
+        return x
+    }
+    if not g.vector("Conv2d's bias", b, s.OutC, true): return x
+    return g.add(Op.Conv2d(g.dense(x), w, b, s), tensor.Shape.Of(xd[0], s.OutH, s.OutW, s.OutC), g.batched(x))
+}
+
+# max pooling of images x [n, H, W, C] over K x K windows: [n, OutH, OutW, C]
+fn (g mut Graph<T>&) MaxPool2d(x Var, p conv.Pool) Var {
+    if not g.known("MaxPool2d", x): return x
+    xd := g.dims(x)
+    if xd.Rank != 4 or xd[1] != p.H or xd[2] != p.W or xd[3] != p.C {
+        g.fail("MaxPool2d of " + $g.shape(x) + ": images [n, " + $p.H + ", " + $p.W + ", " + $p.C + "]")
+        return x
+    }
+    return g.add(Op.MaxPool2d(g.dense(x), p), tensor.Shape.Of(xd[0], p.OutH, p.OutW, p.C), g.batched(x))
+}
+
+# the gated linear recurrence h_t = a_t h_{t-1} + b_t x_t of x, a, b [n, t, D], from a zero state (a state-space model
+# after discretization)
+fn (g mut Graph<T>&) Scan(x Var, a Var, b Var) Var {
+    if not g.same("Scan", x, a) or not g.same("Scan", x, b): return x
+    if g.dims(x).Rank != 3 {
+        g.fail("Scan of " + $g.shape(x) + ": [n, t, D]")
+        return x
+    }
+    return g.add(Op.Scan(g.dense(x), g.dense(a), g.dense(b)), g.dims(x), g.batched(x))
+}
+
+# Mamba's selective scan (kernels/scan): x and delta [n, t, D] (delta already through its softplus), a [N, D] (negative
+# for a decaying state), b and c [n, t, N], skip [D] or None
+fn (g mut Graph<T>&) SelectiveScan(x Var, delta Var, a Var, b Var, c Var, skip Var = None) Var {
+    if not g.same("SelectiveScan", x, delta) or not g.same("SelectiveScan", b, c) or not g.known("SelectiveScan", a): return x
+    xd := g.dims(x)
+    ad := g.dims(a)
+    bd := g.dims(b)
+    if xd.Rank != 3 or ad.Rank != 2 or ad[1] != xd[2] or bd.Rank != 3 or bd[0] != xd[0] or bd[1] != xd[1] or bd[2] != ad[0] {
+        g.fail("SelectiveScan of x " + $g.shape(x) + ", A " + $g.shape(a) + " and B " + $g.shape(b) + ": [n, t, D], [N, D], [n, t, N]")
+        return x
+    }
+    if not g.vector("SelectiveScan's skip", skip, xd[2], true): return x
+    return g.add(Op.SelectiveScan(g.dense(x), g.dense(delta), g.dense(a), g.dense(b), g.dense(c), skip), xd, g.batched(x))
+}
+
+# the delta rule (DeltaNet; Gated DeltaNet with a gate other than ones): q, k [n, t, H dk], v [n, t, H dv], beta and gate
+# [n, t, H] - H heads, from beta's last axis. q scaled and k normalized before, as the kernel wants
+fn (g mut Graph<T>&) DeltaRule(q Var, k Var, v Var, beta Var, gate Var) Var {
+    if not g.same("DeltaRule", q, k) or not g.same("DeltaRule", beta, gate) or not g.known("DeltaRule", v): return q
+    qd := g.dims(q)
+    vd := g.dims(v)
+    bd := g.dims(beta)
+    h := bd[bd.Rank - 1]
+    if qd.Rank != 3 or vd.Rank != 3 or bd.Rank != 3 or vd[0] != qd[0] or vd[1] != qd[1] or bd[1] != qd[1] or qd[2] % h != 0 or vd[2] % h != 0 {
+        g.fail("DeltaRule of q " + $g.shape(q) + ", v " + $g.shape(v) + " and beta " + $g.shape(beta) + ": [n, t, H dk], [n, t, H dv], [n, t, H]")
+        return q
+    }
+    return g.add(Op.DeltaRule(g.dense(q), g.dense(k), g.dense(v), g.dense(beta), g.dense(gate)), vd, g.batched(q))
+}
+
+# the sum over the last axis (the axis gone; a rank 1 tensor's sum is a scalar)
+fn (g mut Graph<T>&) Sum(x Var) Var {
+    if not g.known("Sum", x): return x
+    return g.add(Op.Sum(g.dense(x), false), dropLast(g.dims(x)), g.batched(x) and g.dims(x).Rank > 1)
+}
+
+# the mean over the last axis
+fn (g mut Graph<T>&) Mean(x Var) Var {
+    if not g.known("Mean", x): return x
+    return g.add(Op.Sum(g.dense(x), true), dropLast(g.dims(x)), g.batched(x) and g.dims(x).Rank > 1)
+}
+
+# an operation defined outside oann, of these inputs (F32 graphs)
+fn (g mut Graph<T>&) Custom(f mut any Function&, inputs ...Var) Var {
+    match T {
+        case F32 { }
+        case _ {
+            g.fail("Custom operations run in a Graph<F32>")
+            return inputs[0]
+        }
+    }
+    shapes := Array<tensor.Shape>[g.dims(x) for x in inputs]
+    first := g.customIn.Len()
+    for x in inputs: g.customIn.Push(g.dense(x))
+    out := f.Shape(shapes)
+    return g.add(Op.Custom(f, first, inputs.Len()), out, inputs.Len() > 0 and g.batched(inputs[0]))
+}
+
+# ---- views ----
+
+# a view of x's storage: these dims and strides from offset (relative to x's own first element)
+fn (g mut Graph<T>&) view(kind Op, x Var, dims tensor.Shape, strides tensor.Shape, offset I64) Var {
+    nd := g.nodes[x]
+    base := nd.Base if nd.Base >= 0 else I64(x)
+    at := (nd.Offset if nd.Base >= 0 else 0) + offset
+    v := g.add(kind, dims, nd.Batched)
+    w := g.nodes[v]
+    w.Base = base
+    w.Strides = strides
+    w.Offset = at
+    g.nodes[v] = w
+    if g.Eager: g.refreshView(v)
+    return v
+}
+
+# x's elements as dims after the batch axis (all of them where x is not batched); x is copied first where its
+# elements are not one run
+fn (g mut Graph<T>&) Reshape(x Var, dims ...I64) Var {
+    if not g.known("Reshape", x): return x
+    d := g.dense(x)
+    nd := g.nodes[d]
+    s := batchOf(nd.Dims[0], dims) if nd.Batched else tensor.Shape.Of(...dims)
+    if s.Count() != nd.Dims.Count() {
+        g.fail("Reshape of " + $nd.Dims + " to " + $s + ": the counts differ")
+        return x
+    }
+    return g.view(Op.Reshape(d), d, s, rowMajor(s), 0)
+}
+
+# the same elements, result axis k being x's axis axes[k]: strides only. A batched x keeps axis 0 first
+fn (g mut Graph<T>&) Permute(x Var, axes ...I64) Var {
+    if not g.known("Permute", x): return x
+    nd := g.nodes[x]
+    r := nd.Dims.Rank
+    seen := Array<Bool>(6)
+    fits := axes.Len() == r and (not nd.Batched or axes[0] == 0)
+    for a in axes {
+        if a < 0 or a >= r or seen[a] { fits = false } else { seen[a] = true }
+    }
+    if not fits {
+        g.fail("Permute of " + $nd.Dims + " by " + $axes.Len() + " axes: each axis once, a batch first")
+        return x
+    }
+    d := Array<I64>(6)
+    st := Array<I64>(6)
+    for k, a in axes {
+        d[k] = nd.Dims[a]
+        st[k] = nd.Strides[a]
+    }
+    return g.view(Op.Permute(x), x, tensor.Shape.Of(...d[0:r]), tensor.Shape.Of(...st[0:r]), 0)
+}
+
+# indices lo ... hi - 1 of axis `axis` (not a batch's)
+fn (g mut Graph<T>&) Slice(x Var, axis I64, lo I64, hi I64) Var {
+    if not g.known("Slice", x): return x
+    nd := g.nodes[x]
+    if axis < 0 or axis >= nd.Dims.Rank or (nd.Batched and axis == 0) or lo < 0 or lo >= hi or hi > nd.Dims[axis] {
+        g.fail("Slice of " + $nd.Dims + ": axis " + $axis + " from " + $lo + " to " + $hi)
+        return x
+    }
+    return g.view(Op.Slice(x, axis, lo), x, withAxis(nd.Dims, axis, hi - lo), nd.Strides, lo * nd.Strides[axis])
+}
+
+# x read as these dims after the batch axis (all of them where x is not batched): a size-1 axis, or a new leading one,
+# read at every index (stride 0) - a broadcast written out. Its gradient is summed over what was broadcast
+fn (g mut Graph<T>&) Expand(x Var, dims ...I64) Var {
+    if not g.known("Expand", x): return x
+    nd := g.nodes[x]
+    s := batchOf(nd.Dims[0], dims) if nd.Batched else tensor.Shape.Of(...dims)
+    lead := s.Rank - nd.Dims.Rank
+    fits := lead >= 0 and (not nd.Batched or lead == 0)
+    st := Array<I64>(6)
+    for k in range nd.Dims.Rank {
+        if not fits: break
+        have := nd.Dims[k]
+        if have == s[lead + k] { st[lead + k] = nd.Strides[k] } else if have != 1 { fits = false }
+    }
+    if not fits {
+        g.fail("Expand of " + $nd.Dims + " to " + $s)
+        return x
+    }
+    return g.view(Op.Expand(x), x, s, tensor.Shape.Of(...st[0:s.Rank]), 0)
+}
+
+# ---- what each node needs ----
+
+# a node's kept elements, backward scratch, I32s and accumulator elements, for the planned batch
+fn (g Graph<T>&) extrasOf(i I64) extras {
+    nd := g.nodes[i]
+    n := nd.Dims.Count()
+    rows := n / nd.Dims[nd.Dims.Rank - 1] if n > 0 else 0
+    return match nd.Kind {
+        case Op.Tokens, Op.Classes: extras(0, 0, n, 0)
+        case Op.Norm(_, _, _, _, _): extras(2 * rows, 0, 0, 0)
+        case Op.CrossEntropy(z, _): extras(g.nodes[z].Dims.Count(), 0, 0, 0)
+        case Op.Rope(_, _, _): extras(0, n, 0, 0)
+        case Op.Dropout(_, _): extras(n, 0, 0, 0)
+        case Op.MaxPool2d(_, _): extras(0, 0, n, 0)
+        case Op.Conv2d(_, _, _, s): extras(0, nd.Dims[0] * s.Positions() * s.Patch(), 0, 0)
+        case Op.Attention(_, _, _, heads, _): g.attentionExtras(nd, heads)
+        case Op.Scan(_, _, _): extras(0, 3 * n, 0, 2 * nd.Dims[0] * nd.Dims[2])
+        case Op.SelectiveScan(_, _, a, _, _, _): g.selectiveExtras(nd, g.nodes[a].Dims[0])
+        case Op.DeltaRule(q, _, _, beta, _): g.deltaExtras(nd, g.nodes[q].Dims[2], g.nodes[beta].Dims[2])
+        case Op.Custom(_, first, count): extras(0, g.customScratch(first, count), 0, 0)
+        case _: extras(0, 0, 0, 0)
+    }
+}
+
+# attention keeps its weights (rows heads x t) and works in a dS as large; decoding keeps the cache of keys and values
+# and a row of scores
+fn (g Graph<T>&) attentionExtras(nd Node&, heads I64) extras {
+    t := nd.Dims[1]
+    if g.Decode: return extras(2 * t * nd.Dims[2], 0, 0, t)
+    p := nd.Dims[0] * t * heads * t
+    return extras(p, p, 0, 0)
+}
+
+# the selective scan keeps the state at each chunk's start, and works in a state and its gradient; its backward gets
+# scratch for the gradients not wanted (six, the largest of each)
+fn (g Graph<T>&) selectiveExtras(nd Node&, states I64) extras {
+    seqs := nd.Dims[0]
+    chunks := (nd.Dims[1] + 63) / 64
+    d := nd.Dims[2]
+    each := nd.Dims.Count() + seqs * nd.Dims[1] * states + states * d + d
+    return extras(0, 2 * each, 0, seqs * chunks * states * d + 2 * seqs * states * d)
+}
+
+# the delta rule keeps the state at each chunk's start (seqs H chunks dk dv), and works in a state's gradient; its
+# backward gets scratch for the gradients not wanted
+fn (g Graph<T>&) deltaExtras(nd Node&, qw I64, heads I64) extras {
+    seqs := nd.Dims[0]
+    chunks := (nd.Dims[1] + 63) / 64
+    dk := qw / heads
+    dv := nd.Dims[2] / heads
+    each := 2 * seqs * nd.Dims[1] * qw + nd.Dims.Count() + 2 * seqs * nd.Dims[1] * heads
+    return extras(0, each, 0, seqs * heads * chunks * dk * dv + 2 * seqs * heads * dk * dv)
+}
+
+fn (g Graph<T>&) customScratch(first I64, count I64) I64 {
+    n I64 = 0
+    for j in range count: n += g.nodes[g.customIn[first + j]].Dims.Count()
+    return n
+}
+
+# whether each node's gradient is wanted: it depends on a parameter or a watched node (never while decoding)
+fn (g Graph<T>&) wants() Array<Bool> {
+    count := g.nodes.Len()
+    out := Array<Bool>(count)
+    if g.Decode: return out
+    for i in range count {
+        nd := g.nodes[i]
+        if nd.Kind == Op.Param or nd.Watch {
+            out[i] = true
+            continue
+        }
+        for x in g.inputsOfNode(i) {
+            if x >= 0 and out[x]: out[i] = true
+        }
+    }
+    return out
+}
+
+# a node's inputs: an operation's, or a Custom's from the graph's list
+fn (g Graph<T>&) inputsOfNode(i I64) Array<I64> {
+    match g.nodes[i].Kind {
+        case Op.Custom(_, first, count) {
+            out := Array<I64>(count)
+            for j in range count: out[j] = g.customIn[first + j]
+            return out
+        }
+        case _: return inputsOf(g.nodes[i].Kind)
+    }
+}
+
+# ---- planning ----
+
+# a buffer of the activation region: whose (node) and which (0 value, 1 gradient, 2 kept, 3 scratch), its elements,
+# and the times it is alive over a step, both included
+type buffer struct(node I64, what I64, size I64, start I64, end I64) {
+    node
+    what
+    size
+    start
+    end
+    at I64 = 0
+}
+
+# activation buffers are laid out a multiple of 16 elements apart (64 bytes of F32), so each starts aligned for vectors
+fn padded(n I64) I64 { return (n + 15) / 16 * 16 }
+
+# where every node's buffers are and how big the arena is: the whole of what Plan decides from the recorded graph, plain
+# data, so it can be computed while compiling and baked (`comptime`, PlanBaked). Offsets are in elements of the graph's
+# type (IntOffset in I32s, AccOffset in the accumulator's type)
+type Placed struct(Offset I64, GradOffset I64, SavedOffset I64, ScratchOffset I64, IntOffset I64, AccOffset I64) {
+    Offset
+    GradOffset
+    SavedOffset
+    ScratchOffset
+    IntOffset
+    AccOffset
+}
+
+type Layout struct(nodes Array<Placed>, needs Array<Bool>, ParamCount I64, ActivationSize I64, Size I64, Ints I64, Accs I64) {
+    nodes
+    needs
+    ParamCount
+    ActivationSize
+    Size
+    Ints
+    Accs
+}
+
+# the arena laid out for the recorded graph, nothing allocated and nothing drawn: what Plan decides. A graph that is
+# laid out is not planned; Plan or PlanBaked follow on a graph recorded the same way. A shape that does not fit is
+# reported as Plan does
+fn (g mut Graph<T>&) Lay() Layout ? tensor.ShapeError {
+    try g.Check()
+    if g.Eager: unreachable "oann: an eager graph has no layout"
+    g.needs = g.wants()
+    params := g.placeParams()
+    fixed := g.placeFixed(2 * params)
+    acts := g.lifetimes()
+    size := place(acts, g.Reuse)
+    for b in acts: g.setOffset(b, fixed + b.at)
+    ints, accs := g.layoutSides()
+    return Layout(g.placed(), g.needs, params, size, fixed + size, ints, accs)
+}
+
+# every node's places, as the layout holds them
+fn (g Graph<T>&) placed() Array<Placed> {
+    out := Array<Placed>(g.nodes.Len())
+    for i in range out.Len() {
+        nd := g.nodes[i]
+        out[i] = Placed(nd.Offset, nd.GradOffset, nd.SavedOffset, nd.ScratchOffset, nd.IntOffset, nd.AccOffset)
+    }
+    return out
+}
+
+# the layout of a planned graph, as Plan decided it
+fn (g Graph<T>&) Layout() Layout {
+    if not g.planned or g.Eager: unreachable "oann: only a planned, captured graph has a layout"
+    return Layout(g.placed(), g.needs, g.ParamCount, g.ActivationSize, g.mem.Len(), g.intMem.Len(), g.accLen())
+}
+
+fn (g Graph<T>&) accLen() I64 {
+    match T {
+        case F64: return g.acc64.Len()
+        case _: return g.acc32.Len()
+    }
+}
+
+# lays the arena out, allocates it, and draws the parameters' starting values from r - after which the graph runs. A
+# shape the caller gave that does not fit is reported here. An eager graph is planned before anything is recorded: r
+# is kept to draw each parameter as it is made, in the order a captured graph draws them
+fn (g mut Graph<T>&) Plan(r mut rand.Rand&) ? tensor.ShapeError {
+    try g.Check()
+    if g.planned: unreachable "oann: a graph is planned once"
+    if g.Eager {
+        g.begin(r)
+        return
+    }
+    l := try g.Lay()
+    g.begin(r)
+    g.arrange(l, r)
+}
+
+# Plan with the layout computed beforehand - baked while compiling, `PlanBaked(r, comptime layoutOf())` - or taken from
+# another graph recorded the same way: nothing is laid out here. A layout that does not fit the graph (another node
+# count, another size) is an error of the program
+fn (g mut Graph<T>&) PlanBaked(r mut rand.Rand&, l Layout&) ? tensor.ShapeError {
+    try g.Check()
+    if g.planned: unreachable "oann: a graph is planned once"
+    if g.Eager: unreachable "oann: an eager graph has no layout"
+    if l.nodes.Len() != g.nodes.Len(): unreachable "oann: the baked layout is of another graph"
+    g.needs = l.needs.Copy()
+    for i in range l.nodes.Len() {
+        p := l.nodes[i]
+        nd := g.nodes[i]
+        nd.Offset = p.Offset
+        nd.GradOffset = p.GradOffset
+        nd.SavedOffset = p.SavedOffset
+        nd.ScratchOffset = p.ScratchOffset
+        nd.IntOffset = p.IntOffset
+        nd.AccOffset = p.AccOffset
+        g.nodes[i] = nd
+    }
+    g.begin(r)
+    g.arrange(l, r)
+}
+
+# the planned state: the dropout generator drawn from r, the whole batch in use; an eager graph keeps r
+fn (g mut Graph<T>&) begin(r mut rand.Rand&) {
+    g.Rng = rand.Rand(r.Next())
+    g.planned = true
+    g.N = g.Batch
+    if not g.Eager: return
+    if g.nodes.Len() > 0 or g.Decode: unreachable "oann: an eager graph is planned first, and does not decode"
+    g.draw = r
+}
+
+# the storage a layout asks for, and the parameters' starting values
+fn (g mut Graph<T>&) arrange(l Layout&, r mut rand.Rand&) {
+    g.mem = Array<T>(l.Size)
+    g.intMem = Array<I32>(l.Ints)
+    match T {
+        case F64: g.acc64 = Array<F64>(l.Accs)
+        case _: g.acc32 = Array<F32>(l.Accs)
+    }
+    g.ActivationSize = l.ActivationSize
+    g.ParamCount = l.ParamCount
+    count := g.nodes.Len()
+    g.losses = Array<F64>(count)
+    g.written = Array<Bool>(count)
+    if g.HasMasters(): g.masters = Array<F32>(l.ParamCount)
+    for _ in range count {
+        g.vals.Push(slot<T>(g.mem))
+        g.ints.Push(slot<I32>(g.intMem))
+        g.accs32.Push(slot<F32>(g.acc32))
+        g.accs64.Push(slot<F64>(g.acc64))
+    }
+    for i in range count: g.initParam(i, r)
+    g.SyncParams()
+}
+
+# each parameter's place, in the order made, and its gradient's ParamCount after: the parameters' count
+fn (g mut Graph<T>&) placeParams() I64 {
+    params I64 = 0
+    for i in range g.nodes.Len() {
+        nd := g.nodes[i]
+        if nd.Kind != Op.Param: continue
+        nd.Offset = params
+        params += nd.Dims.Count()
+        g.nodes[i] = nd
+    }
+    for i in range g.nodes.Len() {
+        nd := g.nodes[i]
+        if nd.Kind != Op.Param: continue
+        nd.GradOffset = params + nd.Offset
+        g.nodes[i] = nd
+    }
+    return params
+}
+
+# what stays whatever the step: the inputs and constants, a watched input's gradient, decoding's caches - from at; the
+# end of the region
+fn (g mut Graph<T>&) placeFixed(from I64) I64 {
+    at := from
+    for i in range g.nodes.Len() {
+        nd := g.nodes[i]
+        fixed := nd.Kind == Op.Input or nd.Kind == Op.Constant
+        if fixed {
+            nd.Offset = at
+            at += padded(nd.Dims.Count())
+            if g.needs[i] {
+                nd.GradOffset = at
+                at += padded(nd.Dims.Count())
+            }
+        }
+        if g.Decode and nd.Kind == Op.Attention {
+            nd.SavedOffset = at
+            at += padded(g.extrasOf(i).saved)
+        }
+        g.nodes[i] = nd
+    }
+    return at
+}
+
+# the times over a step: node i's forward runs at i, its backward at 2n - 1 - i, and the step ends at 2n
+fn (g Graph<T>&) back(i I64) I64 { return 2 * g.nodes.Len() - 1 - i }
+
+# every activation buffer with its lifetime: values from their forward to the last forward or backward reading them
+# (outputs, losses and kept nodes to the step's end), gradients from the first backward adding to them to their own
+# backward, kept tensors to the backward, scratch at the backward alone
+fn (g Graph<T>&) lifetimes() list.List<buffer> {
+    count := g.nodes.Len()
+    end := 2 * count
+    last := Array<I64>(count)
+    first := Array<I64>(count)
+    used := Array<Bool>(count)
+    for i in range count {
+        last[i] = i
+        first[i] = end
+    }
+    for c in range count {
+        nd := g.nodes[c]
+        for x in g.inputsOfNode(c) {
+            if x < 0: continue
+            used[x] = true
+            root := g.rootOf(x)
+            last[root] = last[root].Max(c)
+            if g.needs[c] and readsInputs(nd.Kind): last[root] = last[root].Max(g.back(c))
+            if g.needs[c]: first[x] = first[x].Min(g.back(c))
+        }
+        if g.needs[c] and readsOwn(nd.Kind): last[c] = last[c].Max(g.back(c))
+    }
+    for i in range count {
+        nd := g.nodes[i]
+        if not used[i] or nd.Keep or nd.Dims.Count() == 1: last[g.rootOf(i)] = end
+    }
+    out := list.List<buffer>()
+    for i in range count: g.buffersOf(i, last[i], first[i], out)
+    return out
+}
+
+# the node whose storage v's value is
+fn (g Graph<T>&) rootOf(v I64) I64 {
+    b := g.nodes[v].Base
+    return b if b >= 0 else v
+}
+
+fn (g Graph<T>&) buffersOf(i I64, last I64, first I64, out mut list.List<buffer>&) {
+    nd := g.nodes[i]
+    if isLeaf(nd.Kind): return
+    end := 2 * g.nodes.Len()
+    n := nd.Dims.Count()
+    wanted := g.needs[i]
+    if not isView(nd.Kind): out.Push(buffer(i, 0, n, i, last))
+    if wanted {
+        from := g.nodes.Len() if n == 1 else first.Min(g.back(i))
+        out.Push(buffer(i, 1, n, from, end if nd.Keep else g.back(i)))
+    }
+    e := g.extrasOf(i)
+    if e.saved > 0 and not (g.Decode and nd.Kind == Op.Attention): out.Push(buffer(i, 2, e.saved, i, g.back(i) if wanted else i))
+    if e.scratch > 0 and wanted: out.Push(buffer(i, 3, e.scratch, g.back(i), g.back(i)))
+}
+
+# the buffers placed in the activation region, the largest first, each at the lowest offset free over its lifetime
+# (with reuse) or one after another: the region's size
+fn place(bufs mut list.List<buffer>&, reuse Bool) I64 {
+    count := bufs.Len()
+    if not reuse {
+        at I64 = 0
+        for i in range count {
+            b := bufs[i]
+            b.at = at
+            at += padded(b.size)
+            bufs[i] = b
+        }
+        return at
+    }
+    order := bySize(bufs)
+    placed := list.List<I64>()
+    top I64 = 0
+    for k in range count {
+        i := order[k]
+        b := bufs[i]
+        b.at = lowestFree(bufs, placed, b)
+        bufs[i] = b
+        insertByOffset(bufs, placed, i)
+        top = top.Max(b.at + padded(b.size))
+    }
+    return top
+}
+
+# the buffers' indices, the largest first (ties in the order recorded)
+fn bySize(bufs list.List<buffer>&) Array<I64> {
+    count := bufs.Len()
+    order := Array<I64>(count)
+    for i in range count {
+        j := i
+        for j > 0 and bufs[order[j - 1]].size < bufs[i].size {
+            order[j] = order[j - 1]
+            j--
+        }
+        order[j] = i
+    }
+    return order
+}
+
+# the lowest offset at which b fits among the placed buffers alive at once with it (placed: by offset)
+fn lowestFree(bufs list.List<buffer>&, placed list.List<I64>&, b buffer&) I64 {
+    at I64 = 0
+    size := padded(b.size)
+    for k in range placed.Len() {
+        o := bufs[placed[k]]
+        if o.end < b.start or o.start > b.end: continue
+        if at + size <= o.at: return at
+        at = at.Max(o.at + padded(o.size))
+    }
+    return at
+}
+
+fn insertByOffset(bufs list.List<buffer>&, placed mut list.List<I64>&, i I64) {
+    placed.Push(i)
+    j := placed.Len() - 1
+    for j > 0 and bufs[placed[j - 1]].at > bufs[i].at {
+        placed[j] = placed[j - 1]
+        j--
+    }
+    placed[j] = i
+}
+
+fn (g mut Graph<T>&) setOffset(b buffer&, at I64) {
+    nd := g.nodes[b.node]
+    match b.what {
+        case 0: nd.Offset = at
+        case 1: nd.GradOffset = at
+        case 2: nd.SavedOffset = at
+        case _: nd.ScratchOffset = at
+    }
+    g.nodes[b.node] = nd
+}
+
+# the I32 region (tokens, classes, pooling's places) and the accumulator's (scan states), one after another
+fn (g mut Graph<T>&) layoutSides() I64, I64 {
+    ints I64 = 0
+    accs I64 = 0
+    for i in range g.nodes.Len() {
+        nd := g.nodes[i]
+        e := g.extrasOf(i)
+        if e.ints > 0 {
+            nd.IntOffset = ints
+            ints += e.ints
+        }
+        if e.acc > 0 {
+            nd.AccOffset = accs
+            accs += e.acc
+        }
+        g.nodes[i] = nd
+    }
+    return ints, accs
+}
+
+# p set as init says, from r: into the F32 masters where the graph keeps them
+fn (g mut Graph<T>&) initParam(i I64, r mut rand.Rand&) {
+    nd := g.nodes[i]
+    match nd.Kind {
+        case Op.Param(init, _) {
+            if g.HasMasters() {
+                m := g.Master(Var(i))
+                initialize(m, init, r)
+            } else {
+                p := g.Value(Var(i))
+                initialize(p, init, r)
+            }
+        }
+        case _ { }
+    }
+}
+
+fn initialize<E>(p mut tensor.Tensor<E>&, init Init, r mut rand.Rand&) {
+    like E
+    match init {
+        case Init.Zeros: p.Fill(tensor.Cast(0.0, like))
+        case Init.Constant(v): p.Fill(tensor.Cast(v, like))
+        case Init.Uniform(lo, hi): p.FillUniform(r, lo, hi)
+        case Init.Normal(mean, sd): p.FillNormal(r, mean, sd)
+    }
+}
+
+# ---- eager ----
+
+# node v laid out on storage of its own - value, gradient where wanted, what it keeps, its scratch - and run
+fn (g mut Graph<T>&) eagerNode(v Var) {
+    if not g.planned: unreachable "oann: an eager graph is planned (seeded) before anything is recorded"
+    i := I64(v)
+    nd := g.nodes[i]
+    wanted := g.wantedNow(i)
+    e := g.extrasOf(i)
+    at I64 = 0
+    if not isView(nd.Kind) {
+        nd.Offset = 0
+        at = nd.Dims.Count()
+    }
+    if wanted {
+        nd.GradOffset = at
+        at += nd.Dims.Count()
+    }
+    nd.SavedOffset = at
+    at += e.saved
+    nd.ScratchOffset = at
+    at += e.scratch
+    nd.IntOffset = 0
+    nd.AccOffset = 0
+    g.nodes[i] = nd
+    g.vals.Push(slot<T>(Array<T>(at)))
+    g.ints.Push(slot<I32>(Array<I32>(e.ints)))
+    match T {
+        case F64 {
+            g.accs64.Push(slot<F64>(Array<F64>(e.acc)))
+            g.accs32.Push(slot<F32>(g.acc32))
+        }
+        case _ {
+            g.accs32.Push(slot<F32>(Array<F32>(e.acc)))
+            g.accs64.Push(slot<F64>(g.acc64))
+        }
+    }
+    g.grow(i)
+    if nd.Kind == Op.Param: g.initParam(i, g.draw)
+    if g.problem == "" and not isLeaf(nd.Kind): g.forwardNode(i)
+}
+
+# the per-node arrays grown to hold node i
+fn (g mut Graph<T>&) grow(i I64) {
+    if g.written.Len() > i: return
+    w := Array<Bool>(i + 64)
+    l := Array<F64>(i + 64)
+    for k in range g.written.Len() {
+        w[k] = g.written[k]
+        l[k] = g.losses[k]
+    }
+    g.written = w
+    g.losses = l
+}
+
+# whether node i's gradient is wanted, from what is recorded so far
+fn (g Graph<T>&) wantedNow(i I64) Bool {
+    nd := g.nodes[i]
+    if g.Decode: return false
+    if nd.Kind == Op.Param or nd.Watch: return true
+    for x in g.inputsOfNode(i) {
+        if x >= 0 and g.nodes[x].GradOffset >= 0: return true
+    }
+    return false
+}
+
+# an eager view's storage: its base's
+fn (g mut Graph<T>&) refreshView(v Var) {
+    root := g.nodes[v].Base
+    g.vals[v] = g.vals[root]
+}
+
+# a tensor over storage, its dims and strides taken by value: given straight to Strided's references, a temporary was
+# allocated at every call where the storage lives, never reclaimed (repro/tempref.olang)
+fn over<E>(data mut Array<E>&, at I64, dims tensor.Shape, strides tensor.Shape) tensor.Tensor<E> {
+    return tensor.Tensor<E>.Strided(data, at, dims, strides)!
+}
+
+# ---- mixed precision ----
+
+# whether the graph keeps its parameters' masters in F32 beside the arena: a BF16 or F16 graph does
+fn (g Graph<T>&) HasMasters() Bool {
+    return match T {
+        case BF16, F16: true
+        case _: false
+    }
+}
+
+# a BF16 graph's parameters in F32, laid out as Params() is - what an optimizer steps and a checkpoint keeps
+fn (g Graph<T>&) Masters() tensor.Tensor<F32> { return tensor.Tensor<F32>.Over(g.masters, 0, g.ParamCount)! }
+
+# parameter v's master, a view of Masters()
+fn (g Graph<T>&) Master(v Var) tensor.Tensor<F32> {
+    nd := g.nodes[v]
+    return over<F32>(g.masters, nd.Offset, nd.Dims, rowMajor(nd.Dims))
+}
+
+# the parameters in the arena set from their masters, each rounded to nearest even - after the masters change (an
+# optimizer's step, a checkpoint loaded); nothing for a graph without masters
+fn (g mut Graph<T>&) SyncParams() {
+    if not g.HasMasters(): return
+    mem := g.mem
+    masters := g.masters
+    for i in range g.ParamCount: mem[i] = T(masters[i])
+}
+
+# ---- reading and writing values ----
+
+# a batched node's dims for the entries in use: axis 0 the batch in use (decoding: axis 1 the positions)
+fn (g Graph<T>&) inUse(nd Node&) tensor.Shape {
+    if not nd.Batched: return nd.Dims
+    if g.Decode and nd.Dims.Rank >= 2: return withAxis(nd.Dims, 1, g.N)
+    return withAxis(nd.Dims, 0, g.N)
+}
+
+# v's value, a view of its storage: writing it writes the graph. Valid until a later operation of the step reuses the
+# storage, unless v is an input, a parameter, an output, a loss or kept (Keep)
+fn (g Graph<T>&) Value(v Var) tensor.Tensor<T> {
+    nd := g.nodes[v]
+    root := g.rootOf(v)
+    at := nd.Offset + (g.nodes[root].Offset if nd.Base >= 0 else 0)
+    return over<T>(g.vals[root].mem, at, g.inUse(nd), nd.Strides)
+}
+
+# v's gradient, laid out row-major in v's shape - for a node that has one (a parameter, or anything depending on one)
+fn (g Graph<T>&) Grad(v Var) tensor.Tensor<T> {
+    nd := g.nodes[v]
+    if nd.GradOffset < 0: unreachable "oann: the gradient of a node that depends on no parameter"
+    d := g.inUse(nd)
+    return over<T>(g.vals[v].mem, nd.GradOffset, d, rowMajor(d))
+}
+
+# v's gradient to contribute to, or an empty tensor where v has none
+fn (g Graph<T>&) gradOf(v I64) tensor.Tensor<T> {
+    if v < 0 or g.nodes[v].GradOffset < 0: return g.empty()
+    return g.Grad(Var(v))
+}
+
+fn (g Graph<T>&) empty() tensor.Tensor<T> {
+    return over<T>(g.vals[0].mem, 0, tensor.Shape.Of(0), tensor.Shape.Of(1))
+}
+
+# v's value, or an empty tensor for None
+fn (g Graph<T>&) opt(v Var) tensor.Tensor<T> { return g.empty() if v < 0 else g.Value(v) }
+
+# whether a contribution to v's gradient adds to one made already in this backward - and from now on, one has been
+fn (g mut Graph<T>&) acc(v I64) Bool {
+    if v < 0: return false
+    was := g.written[v]
+    g.written[v] = true
+    return was
+}
+
+# an input's whole planned batch, whatever the last Forward ran on: where the caller puts the next step's (Value is the
+# entries in use)
+fn (g Graph<T>&) Data(v Var) tensor.Tensor<T> {
+    nd := g.nodes[v]
+    return over<T>(g.vals[v].mem, nd.Offset, nd.Dims, nd.Strides)
+}
+
+# the tokens or classes of v (Tokens, Classes), the whole planned batch: where the caller puts a batch's
+fn (g Graph<T>&) Ints(v Var) tensor.Tensor<I32> {
+    nd := g.nodes[v]
+    if nd.IntOffset < 0: unreachable "oann: Ints of a node holding no tokens or classes"
+    return over<I32>(g.ints[v].mem, nd.IntOffset, nd.Dims, rowMajor(nd.Dims))
+}
+
+fn (g Graph<T>&) intsOf(v I64) mut Array<I32>& {
+    nd := g.nodes[v]
+    n := nd.Dims.Count() if not nd.Batched else withAxis(nd.Dims, 1 if g.Decode and nd.Dims.Rank >= 2 else 0, g.N).Count()
+    return g.ints[v].mem[nd.IntOffset:nd.IntOffset + n]
+}
+
+# what node i keeps for its backward, from its place to the end of what was planned for it
+fn (g Graph<T>&) saved(i I64) mut Array<T>& {
+    nd := g.nodes[i]
+    return g.vals[i].mem[nd.SavedOffset:nd.SavedOffset + g.extrasOf(i).saved]
+}
+
+# node i's backward scratch, from start, n elements
+fn (g Graph<T>&) scratch(i I64, start I64, n I64) mut Array<T>& {
+    o := g.nodes[i].ScratchOffset + start
+    return g.vals[i].mem[o:o + n]
+}
+
+# node i's scratch from start as a tensor of these dims
+fn (g Graph<T>&) scratchTensor(i I64, start I64, d tensor.Shape) tensor.Tensor<T> {
+    return over<T>(g.vals[i].mem, g.nodes[i].ScratchOffset + start, d, rowMajor(d))
+}
+
+# node i's elements in the accumulator A
+fn (g Graph<T>&) accOf<A>(i I64) mut Array<A>& {
+    o := g.nodes[i].AccOffset
+    return match A {
+        case F64: g.accs64[i].mem[o:]
+        case _: g.accs32[i].mem[o:]
+    }
+}
+
+# a loss's value in F64, or any one-element node's element
+fn (g Graph<T>&) Scalar(v Var) F64 {
+    nd := g.nodes[v]
+    return match nd.Kind {
+        case Op.CrossEntropy(_, _), Op.Mse(_, _): g.losses[v]
+        case _: F64(g.Value(v).Get(0))
+    }
+}
+
+# every parameter, one after another, as one tensor - what an optimizer updates (a captured graph's)
+fn (g Graph<T>&) Params() tensor.Tensor<T> { return tensor.Tensor<T>.Over(g.mem, 0, g.ParamCount)! }
+
+# every parameter's gradient, laid out as Params() is
+fn (g Graph<T>&) ParamGrads() tensor.Tensor<T> { return tensor.Tensor<T>.Over(g.mem, g.ParamCount, g.ParamCount)! }
+
+# whether weight decay applies to parameter v
+fn (g Graph<T>&) Decays(v Var) Bool {
+    return match g.nodes[v].Kind {
+        case Op.Param(_, decay): decay
+        case _: false
+    }
+}
+
+# the bytes the arena takes, with a BF16 graph's F32 masters and the I32 and accumulator regions
+fn (g Graph<T>&) ArenaBytes() I64 {
+    return T.Size * g.mem.Len() + 4 * (g.masters.Len() + g.intMem.Len() + g.acc32.Len()) + 8 * g.acc64.Len()
+}
+
+# ---- checkpoints ----
+# The parameters as a safetensors file (io/checkpoint), "param.k" the k-th parameter made, in F32 - a BF16 graph's
+# masters, so that its checkpoint is an F32 graph's - or F64 for an F64 graph. A graph built the same way loads it back
+# whatever its batch; a parameter missing or of another shape is an error naming it.
+
+fn (g Graph<T>&) Save(path String&) ? os.Error, checkpoint.SafetensorsError {
+    w := checkpoint.Writer()
+    k I64 = 0
+    for i in range g.nodes.Len() {
+        if g.nodes[i].Kind != Op.Param: continue
+        if g.HasMasters() { try w.Add("param." + $k, g.Master(Var(i))) } else { try w.Add("param." + $k, g.Value(Var(i))) }
+        k++
+    }
+    try w.Save(path)
+}
+
+fn (g mut Graph<T>&) Load(path String&) ? os.Error, checkpoint.SafetensorsError, tensor.ShapeError {
+    f := try checkpoint.File.Load(path)
+    k I64 = 0
+    for i in range g.nodes.Len() {
+        if g.nodes[i].Kind != Op.Param: continue
+        if g.HasMasters() {
+            m := g.Master(Var(i))
+            try f.Read("param." + $k, m)
+        } else {
+            p := g.Value(Var(i))
+            try f.Read("param." + $k, p)
+        }
+        k++
+    }
+    g.SyncParams()
+}
+
+# ---- INT8 inference ----
+#
+# QuantizeLinear quantizes every Linear's weights as they are now - symmetric per output row, w ~ scale[o] q, q in I8 -
+# and with Int8 set Forward runs those products as kernels/gemm's GemmI8: each input quantized over its own range
+# (asymmetric, U8 with a zero point, made per step), the integer products dequantized per output and the bias added.
+# Inference only, an F32 graph only: the quantized weights are a copy, so a graph trained further is quantized again.
+
+# a Linear's weights in 8 bits: out rows of width, a scale per row
+type q8Weights struct(out I64, width I64) {
+    out
+    width
+    q mut Array<I8>& = Array<I8>(out * width)
+    scale mut Array<F32>& = Array<F32>(out)
+    sum mut Array<I32>& = Array<I32>(out)       # each row's sum of q: the zero point's correction
+}
+
+fn (g mut Graph<T>&) QuantizeLinear() {
+    match T {
+        case F32 { }
+        case _: unreachable "oann: INT8 inference is for a Graph<F32>"
+    }
+    g.q8 = list.List<q8Weights>()
+    g.q8At = list.List<I64>()
+    rows I64 = 0
+    wide I64 = 0
+    outs I64 = 0
+    for i in range g.nodes.Len() {
+        match g.nodes[i].Kind {
+            case Op.Linear(x, w, _) {
+                g.q8At.Push(g.q8.Len())
+                g.q8.Push(q8Weights.quantize(g.Value(w)))
+                d := g.nodes[x].Dims
+                rows = rows.Max(d.Count() / d[d.Rank - 1])
+                wide = wide.Max(d[d.Rank - 1])
+                outs = outs.Max(g.nodes[w].Dims[0])
+            }
+            case _: g.q8At.Push(-1)
+        }
+    }
+    g.q8Acts = Array<U8>(rows * wide)
+    g.q8Sums = Array<I32>(rows * outs)
+    g.q8Scale = Array<F32>(outs)
+}
+
+# w [out, in] quantized row by row: scale = the row's largest magnitude / 127
+fn q8Weights.quantize<T>(w tensor.Tensor<T>) q8Weights {
+    m := w.Mat()!
+    q := q8Weights(m.Rows, m.Cols)
+    for o in range m.Rows {
+        top F64 = 0.0
+        for c in range m.Cols: top = top.Max(F64(m[o, c]).Abs())
+        s := top / 127.0 if top > 0.0 else 1.0
+        q.scale[o] = F32(s)
+        sum I32 = 0
+        for c in range m.Cols {
+            v := I8((F64(m[o, c]) / s).Round())
+            q.q[o * m.Cols + c] = v
+            sum += I32(v)
+        }
+        q.sum[o] = sum
+    }
+    return q
+}
+
+# node i, a Linear of x (bias b), in INT8: x quantized over its range, the product, the dequantization and the bias
+fn (g mut Graph<T>&) linearInt8(i I64, x Var, b Var) {
+    match T {
+        case F32 {
+            w := g.q8[g.q8At[i]]
+            xm := g.Value(x).Mat()!
+            n := xm.Rows
+            lo F32 = 0.0
+            hi F32 = 0.0
+            for r in range n {
+                for c in range xm.Cols {
+                    v := F32(xm[r, c])
+                    lo = lo.Min(v)
+                    hi = hi.Max(v)
+                }
+            }
+            sa := (hi - lo) / 255.0 if hi > lo else F32(1.0)
+            zero := I32((-lo / sa).Round())
+            acts := g.q8Acts
+            for r in range n {
+                for c in range xm.Cols: acts[r * xm.Cols + c] = U8((F32(xm[r, c]) / sa).Round() + F32(zero))
+            }
+            scale := g.q8Scale
+            for o in range w.out: scale[o] = sa * w.scale[o]
+            am := mat.Mat<U8>(acts, 0, n, xm.Cols, xm.Cols)
+            bm := mat.Mat<I8>(w.q, 0, w.out, w.width, w.width)
+            cm := mat.Mat<I32>(g.q8Sums, 0, n, w.out, w.out)
+            y := g.Value(Var(i))
+            ym := y.Mat()!
+            om := mat.Mat<F32>(ym.Data, ym.Off, ym.Rows, ym.Cols, ym.Ld)
+            gemm.GemmI8(g.wsI8, cm, am, bm, scale[0:w.out], om, zero, w.sum)
+            if b < 0: return
+            bd := g.Value(b).Flat()!
+            for r in range n {
+                for o in range w.out: om.Data[om.Off + r * om.Ld + o] = om.Data[om.Off + r * om.Ld + o] + F32(bd[o])
+            }
+        }
+        case _ { }
+    }
+}
+
+# ---- running ----
+
+# runs every node in the order recorded, on the first n entries of the batch (decoding: positions Pos ... Pos + n - 1)
+fn (g mut Graph<T>&) Forward(n I64) {
+    if not g.planned or g.problem != "": unreachable "oann: Forward of a graph not planned, or with a shape that did not fit: " + $g.problem
+    limit := g.nodes[0].Dims[1] if g.Decode else g.Batch
+    if n < 1 or n > g.Batch and not g.Decode: unreachable "oann: Forward on " + $n + " entries of a graph planned for " + $g.Batch
+    if g.Decode and g.Pos + n > limit: unreachable "oann: decoding positions " + $g.Pos + " ... " + $(g.Pos + n - 1) + " of " + $limit
+    g.N = n
+    for i in range g.nodes.Len() {
+        if isLeaf(g.nodes[i].Kind): continue
+        if not g.Profiling {
+            g.forwardNode(i)
+            continue
+        }
+        t0 := time.Now()
+        g.forwardNode(i)
+        g.Times[2 * KindOf(g.nodes[i].Kind)] += time.Since(t0)
+    }
+}
+
+# node i's forward, computed in F64 for an F64 graph and in F32 otherwise
+fn (g mut Graph<T>&) forwardNode(i I64) {
+    match T {
+        case F64: g.forwardIn<F64>(i, g.ws64, g.sw64)
+        case _: g.forwardIn<F32>(i, g.ws32, g.sw32)
+    }
+}
+
+fn (g mut Graph<T>&) forwardIn<A>(i I64, ws mut gemm.Workspace<A>&, sw mut scan.Work<A>&) {
+    nd := g.nodes[i]
+    y := g.Value(Var(i))
+    match nd.Kind {
+        case Op.Linear(x, w, b) {
+            if g.Int8 { g.linearInt8(i, x, b) } else { ops.Linear<T, A>(ws, y, g.Value(x), g.Value(w), g.opt(b)) }
+        }
+        case Op.MatMul(a, b, ta, tb): ops.MatMul<T, A>(ws, y, g.Value(a), ta, g.Value(b), tb)
+        case Op.Add(a, b): ops.Combine<T, A>(y, g.Value(a), g.Value(b), A(1.0))
+        case Op.Sub(a, b): ops.Combine<T, A>(y, g.Value(a), g.Value(b), A(-1.0))
+        case Op.Mul(a, b): ops.Mul<T, A>(y, g.Value(a), g.Value(b))
+        case Op.Scale(x, k): ops.Scale<T, A>(y, g.Value(x), A(k))
+        case Op.Act(x, a): ops.Act(y, g.Value(x), a)
+        case Op.LeakyRelu(x, slope): ops.LeakyRelu<T, A>(y, g.Value(x), A(slope))
+        case Op.Softmax(x): ops.Softmax(y, g.Value(x))
+        case Op.LogSoftmax(x): ops.LogSoftmax<T, A>(y, g.Value(x))
+        case Op.Norm(x, gain, b, rms, eps): ops.Norm(y, g.Value(x), g.Value(gain), g.opt(b), rms, eps, g.saved(i))
+        case Op.Embedding(t, w): ops.Embedding(y, g.intsOf(t), g.Value(w))
+        case Op.Positions(x, w): ops.Positions<T, A>(y, g.Value(x), g.Value(w), nd.Dims[1], g.Pos)
+        case Op.Rope(x, heads, base): ops.Rope(y, g.Value(x), heads, nd.Dims[1], g.Pos, base)
+        case Op.Attention(q, k, v, heads, causal) {
+            if g.Decode {
+                ops.AttentionStep<T, A>(y, g.Value(q), g.Value(k), g.Value(v), g.saved(i), nd.Dims[1], g.accOf<A>(i), g.Pos, heads)
+            } else {
+                ops.Attention<T, A>(ws, y, g.Value(q), g.Value(k), g.Value(v), g.saved(i), heads, nd.Dims[1], causal)
+            }
+        }
+        case Op.Dropout(x, p) {
+            if g.Training: ops.Dropout<T, A>(y, g.Value(x), g.saved(i), p, g.Rng)
+            else: try y.Convert(g.Value(x)) catch { unreachable }
+        }
+        case Op.CrossEntropy(z, c) {
+            probs := g.savedLike(i, g.inUse(g.nodes[z]))
+            g.losses[i] = ops.CrossEntropy<T, A>(g.Value(z), g.intsOf(c), probs)
+            y.Set(T(g.losses[i]), 0)
+        }
+        case Op.Mse(a, b) {
+            g.losses[i] = ops.Mse<T, A>(g.Value(a), g.Value(b))
+            y.Set(T(g.losses[i]), 0)
+        }
+        case Op.Conv2d(x, w, b, s): ops.Conv2d<T, A>(ws, y, g.Value(x), g.Value(w), g.opt(b), s)
+        case Op.MaxPool2d(x, p): ops.MaxPool2d(y, g.intsOf(i), g.Value(x), p, g.Threads)
+        case Op.Scan(x, a, b) {
+            state := g.accMat<A>(i, 0, g.inUse(nd)[0], nd.Dims[2])
+            ops.Scan<T, A>(sw, y, state, g.Value(x), g.Value(a), g.Value(b), nd.Dims[1])
+        }
+        case Op.SelectiveScan(x, d, a, b, c, skip) {
+            k := g.selectiveKeep(i)
+            state := g.accMat<A>(i, k, g.inUse(nd)[0] * g.nodes[a].Dims[0], nd.Dims[2])
+            keep := g.accOf<A>(i)[0:k]
+            ops.SelectiveScan<T, A>(sw, y, state, g.Value(x), g.Value(d), g.Value(a), g.Value(b), g.Value(c), g.opt(skip), nd.Dims[1], keep)
+        }
+        case Op.DeltaRule(q, k, v, beta, gate) {
+            heads := g.nodes[beta].Dims[2]
+            kk := g.deltaKeep(i)
+            dk := g.nodes[q].Dims[2] / heads
+            state := g.accMat<A>(i, kk, g.inUse(nd)[0] * heads * dk, nd.Dims[2] / heads)
+            keep := g.accOf<A>(i)[0:kk]
+            ops.DeltaRule<T, A>(sw, y, state, g.Value(q), g.Value(k), g.Value(v), g.Value(beta), g.Value(gate), nd.Dims[1], heads, keep)
+        }
+        case Op.Contiguous(x): try y.Convert(g.Value(x)) catch { unreachable }
+        case Op.Sum(x, mean): ops.SumLast<T, A>(y, g.Value(x), mean)
+        case Op.Custom(f, first, count): g.customForward(i, f, first, count)
+        case _ { }
+    }
+}
+
+# node i's kept elements as a tensor of these dims
+fn (g Graph<T>&) savedLike(i I64, d tensor.Shape) tensor.Tensor<T> {
+    return over<T>(g.vals[i].mem, g.nodes[i].SavedOffset, d, rowMajor(d))
+}
+
+# rows x cols of node i's accumulator elements from start, a matrix
+fn (g Graph<T>&) accMat<A>(i I64, start I64, rows I64, cols I64) mat.Mat<A> {
+    return mat.Mat<A>(g.accOf<A>(i), start, rows, cols, cols)
+}
+
+# the elements a selective scan keeps (the state at each chunk's start), before its states
+fn (g Graph<T>&) selectiveKeep(i I64) I64 {
+    nd := g.nodes[i]
+    states := match nd.Kind {
+        case Op.SelectiveScan(_, _, a, _, _, _): g.nodes[a].Dims[0]
+        case _: 0
+    }
+    return nd.Dims[0] * ((nd.Dims[1] + 63) / 64) * states * nd.Dims[2]
+}
+
+fn (g Graph<T>&) deltaKeep(i I64) I64 {
+    nd := g.nodes[i]
+    match nd.Kind {
+        case Op.DeltaRule(q, _, _, beta, _) {
+            heads := g.nodes[beta].Dims[2]
+            return nd.Dims[0] * heads * ((nd.Dims[1] + 63) / 64) * (g.nodes[q].Dims[2] / heads) * (nd.Dims[2] / heads)
+        }
+        case _: return 0
+    }
+}
+
+# a Custom's forward: its operands gathered (into its block's arena, reclaimed as it returns) and the function run
+fn (g mut Graph<T>&) customForward(i I64, f mut any Function&, first I64, count I64) {
+    match T {
+        case F32 {
+            ins := g.customIns(first, count)
+            out := g.Value(Var(i))
+            f.Forward(out, ins.View())
+        }
+        case _ { }
+    }
+}
+
+fn (g Graph<T>&) customIns(first I64, count I64) Vec<tensor.Tensor<T>> {
+    ins := Vec<tensor.Tensor<T>>()
+    for j in range count: ins.Push(g.Value(g.customIn[first + j]))
+    return ins
+}
+
+# the gradients of loss - a one-element node - with respect to every node it depends on, parameters included, after a
+# Forward. A parameter's gradient is written afresh (zero where the loss does not depend on it); with accumulate set it
+# is added to the one already there instead, summing several batches' gradients before one update
+fn (g mut Graph<T>&) Backward(loss Var, accumulate Bool = false) {
+    top := g.nodes[loss]
+    if g.Decode or top.Dims.Count() != 1 or top.GradOffset < 0 {
+        unreachable "oann: Backward from a node that is no scalar depending on a parameter, or while decoding"
+    }
+    count := g.nodes.Len()
+    for i in range count: g.written[i] = accumulate and g.nodes[i].Kind == Op.Param
+    one := g.Grad(loss)
+    one.Fill(T(1.0))
+    g.written[loss] = true
+    for k in range I64(loss) + 1 {
+        i := I64(loss) - k
+        nd := g.nodes[i]
+        if nd.GradOffset < 0 or not g.written[i] or isLeaf(nd.Kind): continue
+        if not g.Profiling {
+            g.backwardNode(i)
+            continue
+        }
+        t0 := time.Now()
+        g.backwardNode(i)
+        g.Times[2 * KindOf(nd.Kind) + 1] += time.Since(t0)
+    }
+    for i in range count {
+        if g.nodes[i].Kind == Op.Param and not g.written[i] {
+            p := g.Grad(Var(i))
+            p.Fill(T(0.0))
+        }
+    }
+}
+
+fn (g mut Graph<T>&) backwardNode(i I64) {
+    match T {
+        case F64: g.backwardIn<F64>(i, g.ws64, g.sw64)
+        case _: g.backwardIn<F32>(i, g.ws32, g.sw32)
+    }
+}
+
+# node i's backward: its inputs' gradients from its own, computed in A
+fn (g mut Graph<T>&) backwardIn<A>(i I64, ws mut gemm.Workspace<A>&, sw mut scan.Work<A>&) {
+    nd := g.nodes[i]
+    dy := g.Grad(Var(i))
+    match nd.Kind {
+        case Op.Linear(x, w, b) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            dw := g.gradOf(w)
+            aw := g.acc(w)
+            db := g.gradOf(b)
+            ab := g.acc(b)
+            ops.LinearBackward<T, A>(ws, dy, g.Value(x), g.Value(w), dx, ax, dw, aw, db, ab)
+        }
+        case Op.MatMul(a, b, ta, tb) {
+            da := g.gradOf(a)
+            aa := g.acc(a)
+            db := g.gradOf(b)
+            ab := g.acc(b)
+            ops.MatMulBackward<T, A>(ws, dy, g.Value(a), ta, g.Value(b), tb, da, aa, db, ab)
+        }
+        case Op.Add(a, b): g.combineBack<A>(dy, a, b, A(1.0))
+        case Op.Sub(a, b): g.combineBack<A>(dy, a, b, A(-1.0))
+        case Op.Mul(a, b) {
+            da := g.gradOf(a)
+            aa := g.acc(a)
+            db := g.gradOf(b)
+            ab := g.acc(b)
+            ops.MulBackward<T, A>(dy, g.Value(a), g.Value(b), da, aa, db, ab)
+        }
+        case Op.Scale(x, k) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.Put<T, A>(dx.Flat()!, dy.Flat()!, A(k), ax)
+        }
+        case Op.Act(x, a) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.ActBackward(dy, g.Value(x), a, dx, ax)
+        }
+        case Op.LeakyRelu(x, slope) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.LeakyReluBackward<T, A>(dy, g.Value(x), A(slope), dx, ax)
+        }
+        case Op.Softmax(x) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.SoftmaxBackward<T, A>(dy, g.Value(Var(i)), dx, ax)
+        }
+        case Op.LogSoftmax(x) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.LogSoftmaxBackward<T, A>(dy, g.Value(Var(i)), dx, ax)
+        }
+        case Op.Norm(x, gain, b, rms, _) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            dg := g.gradOf(gain)
+            ag := g.acc(gain)
+            db := g.gradOf(b)
+            ab := g.acc(b)
+            ops.NormBackward(dy, g.Value(x), g.Value(gain), rms, g.saved(i), dx, ax, dg, ag, db, ab)
+        }
+        case Op.Embedding(t, w) {
+            dw := g.gradOf(w)
+            aw := g.acc(w)
+            if ops.Wanted(dw): ops.EmbeddingBackward<T, A>(dy, g.intsOf(t), dw, aw)
+        }
+        case Op.Positions(x, w) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            dw := g.gradOf(w)
+            aw := g.acc(w)
+            ops.PositionsBackward<T, A>(dy, nd.Dims[1], g.Pos, dx, ax, dw, aw)
+        }
+        case Op.Rope(x, heads, base) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            tmp := g.scratchTensor(i, 0, dy.Dims)
+            if ops.Wanted(dx): ops.RopeBackward<T, A>(dy, heads, nd.Dims[1], g.Pos, base, dx, ax, tmp)
+        }
+        case Op.Attention(q, k, v, heads, causal) {
+            dq := g.gradOf(q)
+            aq := g.acc(q)
+            dk := g.gradOf(k)
+            ak := g.acc(k)
+            dv := g.gradOf(v)
+            av := g.acc(v)
+            sc := g.scratch(i, 0, g.extrasOf(i).scratch)
+            ops.AttentionBackward<T, A>(ws, dy, g.Value(q), g.Value(k), g.Value(v), g.saved(i), sc, heads, nd.Dims[1], causal, dq, aq, dk, ak, dv, av)
+        }
+        case Op.Dropout(x, p) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if not ops.Wanted(dx): return
+            if g.Training: ops.DropoutBackward<T, A>(dy, g.saved(i), p, dx, ax)
+            else: ops.Put<T, A>(dx.Flat()!, dy.Flat()!, A(1.0), ax)
+        }
+        case Op.CrossEntropy(z, c) {
+            dz := g.gradOf(z)
+            az := g.acc(z)
+            probs := g.savedLike(i, g.inUse(g.nodes[z]))
+            if ops.Wanted(dz): ops.CrossEntropyBackward<T, A>(A(dy.Get(0)), g.intsOf(c), probs, dz, az)
+        }
+        case Op.Mse(a, b) {
+            da := g.gradOf(a)
+            aa := g.acc(a)
+            db := g.gradOf(b)
+            ab := g.acc(b)
+            ops.MseBackward<T, A>(A(dy.Get(0)), g.Value(a), g.Value(b), da, aa, db, ab)
+        }
+        case Op.Conv2d(x, w, b, s) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            dw := g.gradOf(w)
+            aw := g.acc(w)
+            db := g.gradOf(b)
+            ab := g.acc(b)
+            cols := g.scratch(i, 0, g.extrasOf(i).scratch)
+            ops.Conv2dBackward<T, A>(ws, dy, g.Value(x), g.Value(w), s, cols, g.Threads, dx, ax, dw, aw, db, ab)
+        }
+        case Op.MaxPool2d(x, p) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.MaxPool2dBackward(dy, g.intsOf(i), p, g.Threads, dx, ax)
+        }
+        case Op.Scan(x, a, b): g.scanBack<A>(i, sw, dy, x, a, b)
+        case Op.SelectiveScan(x, d, a, b, c, skip): g.selectiveBack<A>(i, sw, dy, x, d, a, b, c, skip)
+        case Op.DeltaRule(q, k, v, beta, gate): g.deltaBack<A>(i, sw, dy, q, k, v, beta, gate)
+        case Op.Reshape(x), Op.Contiguous(x) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.Put<T, A>(dx.Flat()!, dy.Flat()!, A(1.0), ax)
+        }
+        case Op.Permute(x), Op.Slice(x, _, _), Op.Expand(x): g.viewBack<A>(i, dy, x)
+        case Op.Sum(x, mean) {
+            dx := g.gradOf(x)
+            ax := g.acc(x)
+            if ops.Wanted(dx): ops.SumLastBackward<T, A>(dy, mean, dx, ax)
+        }
+        case Op.Custom(f, first, count): g.customBack<A>(i, f, first, count)
+        case _ { }
+    }
+}
+
+fn (g mut Graph<T>&) combineBack<A>(dy tensor.Tensor<T>&, a Var, b Var, k A) {
+    da := g.gradOf(a)
+    aa := g.acc(a)
+    db := g.gradOf(b)
+    ab := g.acc(b)
+    ops.CombineBackward<T, A>(dy, k, da, aa, db, ab)
+}
+
+# a view's backward: dy added into x's gradient through the view's strides (relative to x's own layout, dense) - zeroed
+# first where this is the first contribution, since a slice or a broadcast reaches only part of it, or parts many times
+fn (g mut Graph<T>&) viewBack<A>(i I64, dy tensor.Tensor<T>&, x Var) {
+    dx := g.gradOf(x)
+    ax := g.acc(x)
+    if not ops.Wanted(dx): return
+    nd := g.nodes[i]
+    xn := g.nodes[x]
+    xd := g.inUse(xn)
+    st := rowMajor(xd)
+    off := nd.Offset - (xn.Offset if xn.Base >= 0 else 0)
+    target := match nd.Kind {
+        case Op.Permute(_): permuted(dx, nd, xn, st)
+        case Op.Slice(_, axis, _): over<T>(dx.Flat()!, off / xn.Strides[axis] * st[axis], dy.Dims, st)
+        case _: expanded(dx, nd, xn, dy.Dims, st)
+    }
+    if not ax: dx.Fill(T(0.0))
+    ops.AddInto<T, A>(dx.Flat()!, target, dy, true)
+}
+
+# x's gradient seen through a permutation: the view's axis k reads x's axis axes[k], found by matching strides
+fn permuted<T>(dx tensor.Tensor<T>&, nd Node&, xn Node&, st tensor.Shape&) tensor.Tensor<T> {
+    s := Array<I64>(6)
+    r := nd.Dims.Rank
+    for k in range r {
+        for a in range r {
+            if xn.Strides[a] == nd.Strides[k] and xn.Dims[a] == nd.Dims[k]: s[k] = st[a]
+        }
+    }
+    return over<T>(dx.Flat()!, 0, withAxis(nd.Dims, 0, dx.Dims[0]) if nd.Batched else nd.Dims, tensor.Shape.Of(...s[0:r]))
+}
+
+# x's gradient seen through an Expand: an axis of the view x has (aligned to the last) at x's stride, a new or
+# broadcast one at 0
+fn expanded<T>(dx tensor.Tensor<T>&, nd Node&, xn Node&, d tensor.Shape&, st tensor.Shape&) tensor.Tensor<T> {
+    s := Array<I64>(6)
+    lead := nd.Dims.Rank - xn.Dims.Rank
+    for k in range xn.Dims.Rank {
+        if xn.Dims[k] == nd.Dims[lead + k]: s[lead + k] = st[k]
+    }
+    return over<T>(dx.Flat()!, 0, d, tensor.Shape.Of(...s[0:d.Rank]))
+}
+
+# where the next piece of a node's scratch starts
+type cursor struct(at I64) {
+    at
+}
+
+# a gradient to give a kernel that writes every gradient: the real one, or (not wanted) scratch of x's shape from c
+fn (g Graph<T>&) gradOrScratch(i I64, x Var, c mut cursor&) tensor.Tensor<T> {
+    if x >= 0 and g.nodes[x].GradOffset >= 0: return g.Grad(x)
+    d := g.inUse(g.nodes[x])
+    t := g.scratchTensor(i, c.at, d)
+    c.at += d.Count()
+    return t
+}
+
+# whether a contribution to x's gradient adds (acc), false where x has none
+fn (g mut Graph<T>&) accIf(x Var) Bool { return x >= 0 and g.nodes[x].GradOffset >= 0 and g.acc(x) }
+
+fn (g mut Graph<T>&) scanBack<A>(i I64, sw mut scan.Work<A>&, dy tensor.Tensor<T>&, x Var, a Var, b Var) {
+    nd := g.nodes[i]
+    at := cursor(0)
+    dx := g.gradOrScratch(i, x, at)
+    ax := g.accIf(x)
+    da := g.gradOrScratch(i, a, at)
+    aa := g.accIf(a)
+    db := g.gradOrScratch(i, b, at)
+    ab := g.accIf(b)
+    seqs := g.inUse(nd)[0]
+    init := g.accMat<A>(i, 0, seqs, nd.Dims[2])
+    ds := g.accMat<A>(i, seqs * nd.Dims[2], seqs, nd.Dims[2])
+    ops.ScanBackward<T, A>(sw, dy, g.Value(Var(i)), g.Value(x), g.Value(a), g.Value(b), nd.Dims[1], init, ds, dx, ax, da, aa, db, ab)
+}
+
+fn (g mut Graph<T>&) selectiveBack<A>(i I64, sw mut scan.Work<A>&, dy tensor.Tensor<T>&, x Var, d Var, a Var, b Var, c Var, skip Var) {
+    nd := g.nodes[i]
+    at := cursor(0)
+    dx := g.gradOrScratch(i, x, at)
+    ax := g.accIf(x)
+    dd := g.gradOrScratch(i, d, at)
+    ad := g.accIf(d)
+    da := g.gradOrScratch(i, a, at)
+    aa := g.accIf(a)
+    db := g.gradOrScratch(i, b, at)
+    ab := g.accIf(b)
+    dc := g.gradOrScratch(i, c, at)
+    ac := g.accIf(c)
+    ds := g.gradOrScratch(i, skip, at) if skip >= 0 else g.empty()
+    sa := g.accIf(skip)
+    k := g.selectiveKeep(i)
+    n := g.nodes[a].Dims[0]
+    seqs := g.inUse(nd)[0]
+    dstate := g.accMat<A>(i, k + seqs * n * nd.Dims[2], seqs * n, nd.Dims[2])
+    keep := g.accOf<A>(i)[0:k]
+    ops.SelectiveScanBackward<T, A>(sw, dy, g.Value(x), g.Value(d), g.Value(a), g.Value(b), g.Value(c), g.opt(skip), nd.Dims[1], keep, dstate, dx, ax, dd, ad, da, aa, db, ab, dc, ac, ds, sa)
+}
+
+fn (g mut Graph<T>&) deltaBack<A>(i I64, sw mut scan.Work<A>&, dy tensor.Tensor<T>&, q Var, k Var, v Var, beta Var, gate Var) {
+    nd := g.nodes[i]
+    at := cursor(0)
+    dq := g.gradOrScratch(i, q, at)
+    aq := g.accIf(q)
+    dk := g.gradOrScratch(i, k, at)
+    ak := g.accIf(k)
+    dv := g.gradOrScratch(i, v, at)
+    av := g.accIf(v)
+    db := g.gradOrScratch(i, beta, at)
+    ab := g.accIf(beta)
+    dg := g.gradOrScratch(i, gate, at)
+    ag := g.accIf(gate)
+    heads := g.nodes[beta].Dims[2]
+    kk := g.deltaKeep(i)
+    dkw := g.nodes[q].Dims[2] / heads
+    seqs := g.inUse(nd)[0]
+    rows := seqs * heads * dkw
+    dstate := g.accMat<A>(i, kk + rows * (nd.Dims[2] / heads), rows, nd.Dims[2] / heads)
+    keep := g.accOf<A>(i)[0:kk]
+    ops.DeltaRuleBackward<T, A>(sw, dy, g.Value(q), g.Value(k), g.Value(v), g.Value(beta), g.Value(gate), nd.Dims[1], heads, keep, dstate, dq, aq, dk, ak, dv, av, db, ab, dg, ag)
+}
+
+# a Custom's backward: the function writes each input's gradient into scratch, which is then added where it goes. Its
+# own tensors are made here: given to an `any`, which may keep anything, a tensor is built where the graph lives at every
+# call, so a step through a Custom allocates (a little) where no other does
+fn (g mut Graph<T>&) customBack<A>(i I64, f mut any Function&, first I64, count I64) {
+    match T {
+        case F32 {
+            dy := g.Grad(Var(i))
+            ins := g.customIns(first, count)
+            dins := Vec<tensor.Tensor<T>>()
+            at I64 = 0
+            for j in range count {
+                d := g.inUse(g.nodes[g.customIn[first + j]])
+                dins.Push(g.scratchTensor(i, at, d))
+                at += d.Count()
+            }
+            f.Backward(dy, ins.View(), dins.ViewMut())
+            for j in range count {
+                x := g.customIn[first + j]
+                dx := g.gradOf(x)
+                ax := g.acc(x)
+                if ops.Wanted(dx): ops.Put<T, A>(dx.Flat()!, dins[j].Flat()!, A(1.0), ax)
+            }
+        }
+        case _ { }
+    }
+}
+
+# ---- tests ----
+
+test Graph.QuantizeLinear "a graph's linear layers in INT8: within 2% of the F32 outputs' range, and F32 again when Int8 is off" {
+    g := Graph<F32>(16)
+    x := g.Input(40)
+    w1 := g.Param(Init.Normal(0.0, 0.2), true, 24, 40)
+    b1 := g.Param(Init.Normal(0.0, 0.1), false, 24)
+    w2 := g.Param(Init.Normal(0.0, 0.2), true, 8, 24)
+    b2 := g.Param(Init.Normal(0.0, 0.1), false, 8)
+    out := g.Linear(g.Act(g.Linear(x, w1, b1), mat.Act.Relu), w2, b2)
+    r := rand.Rand(5)
+    try g.Plan(r)
+    xd := g.Value(x).Flat()!
+    for i in range xd.Len(): xd[i] = F32(r.Normal())
+    g.Forward(16)
+    exact := g.Value(out).Clone()
+    g.QuantizeLinear()
+    g.Int8 = true
+    g.Forward(16)
+    got := g.Value(out).Flat()!
+    want := exact.Flat()!
+    scale F32 = 0.0
+    worst F32 = 0.0
+    for i in range 16 * 8 {
+        scale = scale.Max(want[i].Abs())
+        worst = worst.Max((got[i] - want[i]).Abs())
+    }
+    assert worst > 0.0 and worst < 0.02 * scale, "worst " + $worst + " of " + $scale
+    g.Int8 = false
+    g.Forward(16)
+    assert g.Value(out) == exact
+}
+
+test Graph "records, plans and runs a small network" {
+    g := Graph<F64>(4)
+    x := g.Input(3)
+    y := g.Classes()
+    w := g.Param(Init.Constant(0.5), true, 2, 3)
+    b := g.Param(Init.Zeros, false, 2)
+    h := g.Act(g.Linear(x, w, b), mat.Act.Relu)
+    loss := g.CrossEntropy(h, y)
+    r := rand.Rand(1)
+    try g.Plan(r)
+    assert g.ParamCount == 8
+    xd := g.Value(x).Flat()!
+    for i in range 12: xd[i] = F64(i)
+    yd := g.Ints(y).Flat()!
+    for i in range 4: yd[i] = I32(i % 2)
+    g.Forward(4)
+    assert g.Value(h).Get(1, 0) == 6.0
+    g.Backward(loss)
+    assert g.Grad(w).Get(0, 0) != 0.0
+}
+
+test Graph "the kernels compute what they say: ReLU, a product, a linear layer, softmax cross-entropy" {
+    g := Graph<F64>(2)
+    a := g.Input(3)
+    b := g.Input(3)
+    w := g.Constant(4, 3)
+    bias := g.Constant(4)
+    y := g.Classes()
+    relu := g.Act(a, mat.Act.Relu)
+    prod := g.Mul(a, b)
+    out := g.Linear(a, w, bias)
+    g.Keep(out)
+    loss := g.CrossEntropy(out, y)
+    try g.Plan(rand.Rand(1))
+    set(g, a, Array<F64>[1, -2, 3, -4, 5, -6])
+    set(g, b, Array<F64>[0.5, 1, 1.5, 2, 2.5, 3])
+    set(g, w, Array<F64>[1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1])
+    set(g, bias, Array<F64>[10, 20, 30, 40])
+    c := g.Ints(y).Flat()!
+    c[0] = 3
+    c[1] = 1
+    g.Forward(2)
+    r := g.Value(relu)
+    assert r.Get(0, 0) == 1.0 and r.Get(0, 1) == 0.0 and r.Get(1, 2) == 0.0
+    assert g.Value(prod).Get(1, 1) == 12.5
+    o := g.Value(out)
+    assert o.Get(0, 0) == 11.0 and o.Get(0, 3) == 42.0 and o.Get(1, 1) == 25.0
+    assert g.Scalar(loss) > 0.0
+}
+
+fn set<T>(g mut Graph<T>&, v Var, values Array<F64>&) {
+    d := g.Value(v).Flat()!
+    for i in range values.Len(): d[i] = T(values[i])
+}
+
+# a small transformer-like network on g: a dense layer, GELU, layer normalization, causal attention in two heads, RMS
+# normalization, another dense layer and softmax cross-entropy over sequences of 8 - every kind of kernel a model runs.
+# An eager graph's inputs are filled (from seed) as they are made, a captured one's by fillMixed after Plan
+fn mixedNet<T>(g mut Graph<T>&, seed U64, dropout F64 = 0.0) Var, Var, Var {
+    x := g.Input(8, 8)
+    y := g.Classes(8)
+    if g.Eager: fillMixed(g, x, y, seed)
+    w1 := g.Param(Init.Normal(0.0, 0.4), true, 16, 8)
+    b1 := g.Param(Init.Normal(0.0, 0.1), false, 16)
+    h := g.Act(g.Linear(x, w1, b1), mat.Act.GeluTanh)
+    n := g.Norm(h, g.Param(Init.Constant(1.0), false, 16), g.Param(Init.Zeros, false, 16))
+    wq := g.Param(Init.Normal(0.0, 0.25), true, 16, 16)
+    a := g.Attention(g.Linear(n, wq), n, n, 2, true)
+    r := g.Norm(g.Dropout(g.Add(a, n), dropout), g.Param(Init.Constant(1.0), false, 16), None, true)
+    logits := g.Linear(r, g.Param(Init.Normal(0.0, 0.25), true, 5, 16), g.Param(Init.Zeros, false, 5))
+    return x, y, g.CrossEntropy(logits, y)
+}
+
+fn fillMixed<T>(g mut Graph<T>&, x Var, y Var, seed U64) {
+    r := rand.Rand(seed)
+    xd := g.Value(x).Flat()!
+    for i in range xd.Len(): xd[i] = T(F32(r.Normal()))
+    yd := g.Ints(y).Flat()!
+    for i in range yd.Len(): yd[i] = I32(r.Below(5))
+}
+
+test Graph "eager equals captured bit for bit: the loss and every parameter's gradient, with dropout and without" {
+    for dropout in Array<F64>[0.0, 0.2] {
+        c := Graph<F32>(2)
+        cx, cy, closs := mixedNet(c, 3, dropout)
+        try c.Plan(rand.Rand(21))
+        fillMixed(c, cx, cy, 3)
+        c.Forward(2)
+        c.Backward(closs)
+        e := Graph<F32>(2, 1, Mode.Eager)
+        try e.Plan(rand.Rand(21))
+        _, _, eloss := mixedNet(e, 3, dropout)
+        try e.Check()
+        e.Backward(eloss)
+        assert e.Scalar(eloss) == c.Scalar(closs)
+        for i in range c.Size() {
+            v := Var(i)
+            if c.Info(v).Kind != Op.Param: continue
+            assert e.Value(v) == c.Value(v) and e.Grad(v) == c.Grad(v), "parameter " + $i
+        }
+        # and a second step of each, on a short batch
+        c.Forward(1)
+        c.Backward(closs)
+        e.Forward(1)
+        e.Backward(eloss)
+        assert e.Scalar(eloss) == c.Scalar(closs)
+    }
+}
+
+test Graph "liveness reuse: a smaller arena, and every number the same as with each buffer apart" {
+    a := Graph<F32>(2)
+    ax, ay, aloss := mixedNet(a, 4)
+    b := Graph<F32>(2)
+    bx, by, bloss := mixedNet(b, 4)
+    b.Reuse = false
+    try a.Plan(rand.Rand(5))
+    try b.Plan(rand.Rand(5))
+    fillMixed(a, ax, ay, 4)
+    fillMixed(b, bx, by, 4)
+    for step in range 2 {
+        a.Forward(2 - step)
+        a.Backward(aloss)
+        b.Forward(2 - step)
+        b.Backward(bloss)
+        assert a.Scalar(aloss) == b.Scalar(bloss) and a.ParamGrads() == b.ParamGrads()
+    }
+    assert a.ActivationSize < b.ActivationSize * 2 / 3, "reused " + $a.ActivationSize + " of " + $b.ActivationSize
+}
+
+test Graph "Backward with accumulate adds to the gradients already there" {
+    g := Graph<F64>(2)
+    w := g.Param(Init.Normal(0.0, 1.0), true, 2, 2)
+    target := g.Param(Init.Normal(0.0, 1.0), true, 2, 2)
+    loss := g.Mse(w, target)
+    try g.Plan(rand.Rand(2))
+    g.Forward(2)
+    g.Backward(loss)
+    once := g.Grad(w).Get(0, 1)
+    g.Backward(loss, true)
+    assert (g.Grad(w).Get(0, 1) - 2.0 * once).Abs() < 1e-12
+    g.Backward(loss)
+    assert g.Grad(w).Get(0, 1) == once
+}
+
+test Graph "causal attention: a position's output depends on no later position" {
+    g := Graph<F64>(1)
+    x := g.Input(32, 8)
+    w := g.Param(Init.Normal(0.0, 0.5), true, 8, 8)
+    q := g.Linear(x, w)
+    a := g.Attention(q, q, x, 2, true)
+    g.Keep(a)
+    g.Mse(a, g.Input(32, 8))
+    r := rand.Rand(13)
+    try g.Plan(r)
+    xd := g.Value(x).Flat()!
+    for i in range xd.Len(): xd[i] = r.Normal()
+    g.Forward(1)
+    early := g.Value(a).Slice(1, 0, 20)!.Clone()
+    later := g.Value(a).Get(0, 25, 0)
+    for c in range 8: xd[25 * 8 + c] = 7.0
+    g.Forward(1)
+    assert g.Value(a).Slice(1, 0, 20)! == early
+    assert g.Value(a).Get(0, 25, 0) != later
+}
+
+test Graph "GELU through tanh is within 1e-3 of the exact GELU" {
+    g := Graph<F64>(1)
+    w := g.Param(Init.Normal(0.0, 2.0), true, 4, 8)
+    a := g.Act(w, mat.Act.GeluTanh)
+    b := g.Act(w, mat.Act.Gelu)
+    try g.Plan(rand.Rand(15))
+    g.Forward(1)
+    worst F64 = 0.0
+    for i in range 32: worst = worst.Max((g.Value(a).Flat()![i] - g.Value(b).Flat()![i]).Abs())
+    assert worst < 1e-3 and worst > 0.0
+}
+
+test Graph "a checkpoint saves the parameters and loads them back into a graph built the same way, whatever its batch" {
+    a := Graph<F32>(4)
+    wa := a.Param(Init.Normal(0.0, 1.0), true, 3, 5)
+    a.Param(Init.Uniform(-1.0, 1.0), false, 5)
+    r := rand.Rand(16)
+    try a.Plan(r)
+    try a.Save("build/ad_checkpoint.safetensors")
+    b := Graph<F32>(8)
+    wb := b.Param(Init.Zeros, true, 3, 5)
+    b.Param(Init.Zeros, false, 5)
+    try b.Plan(r)
+    try b.Load("build/ad_checkpoint.safetensors")
+    assert b.Params() == a.Params() and b.Value(wb).Get(2, 4) == a.Value(wa).Get(2, 4)
+    c := Graph<F32>(4)
+    c.Param(Init.Zeros, true, 3, 4)
+    try c.Plan(r)
+    bad := false
+    try c.Load("build/ad_checkpoint.safetensors") catch tensor.ShapeError { bad = true } catch { }
+    assert bad
+}
+
+test Graph "a step split over tasks gives exactly what one task gives, forward and backward" {
+    want := Vec<F64>()
+    wantLoss F64 = 0.0
+    for threads in Array<I64>[1, 3] {
+        g := Graph<F64>(8, threads)
+        x := g.Input(64, 64)
+        q := g.Linear(x, g.Param(Init.Normal(0.0, 0.1), true, 64, 64))
+        a := g.Attention(q, x, x, 2, true)
+        loss := g.Mse(g.Linear(a, g.Param(Init.Normal(0.0, 0.1), true, 64, 64)), g.Input(64, 64))
+        try g.Plan(rand.Rand(17))
+        xd := g.Value(x).Flat()!
+        for i in range xd.Len(): xd[i] = F64(i % 7) * 0.25 - 0.5
+        g.Forward(8)
+        g.Backward(loss)
+        got := g.ParamGrads().Flat()!
+        if threads == 1 {
+            for v in got: want.Push(v)
+            wantLoss = g.Scalar(loss)
+            continue
+        }
+        assert g.Scalar(loss) == wantLoss
+        for i in range got.Len(): assert got[i] == want[i]
+    }
+}
+
+test Graph "a BF16 graph keeps F32 masters drawn as an F32 graph's, and computes as the F64 graph does to BF16's precision" {
+    a := Graph<F64>(2)
+    ax, ay, aloss := mixedNet(a, 3)
+    b := Graph<BF16>(2)
+    bx, by, bloss := mixedNet(b, 3)
+    c := Graph<F32>(2)
+    mixedNet(c, 3)
+    try a.Plan(rand.Rand(21))
+    try b.Plan(rand.Rand(21))
+    try c.Plan(rand.Rand(21))
+    assert b.Masters() == c.Params()
+    p := b.Params().Flat()!
+    m := b.Masters().Flat()!
+    for i in range b.ParamCount: assert p[i] == BF16(m[i])
+    pa := a.Params()
+    try pa.Convert(b.Params())
+    fillMixed(a, ax, ay, 3)
+    fillMixed(b, bx, by, 3)
+    for n in Array<I64>[2, 1] {
+        a.Forward(n)
+        a.Backward(aloss)
+        b.Forward(n)
+        b.Backward(bloss)
+        assert (b.Scalar(bloss) - a.Scalar(aloss)).Abs() < 1e-3 * a.Scalar(aloss)
+        ga := a.ParamGrads().Flat()!
+        gb := b.ParamGrads().Flat()!
+        diff F64 = 0.0
+        norm F64 = 0.0
+        for i in range a.ParamCount {
+            d := F64(gb[i]) - ga[i]
+            diff += d * d
+            norm += ga[i] * ga[i]
+        }
+        assert (diff / norm).Sqrt() < 2e-2, "relative " + $(diff / norm).Sqrt()
+    }
+}
+
+test Graph "a BF16 graph's checkpoint is its F32 masters, and loads into an F32 graph or a BF16 one exactly" {
+    b := Graph<BF16>(2)
+    mixedNet(b, 1)
+    try b.Plan(rand.Rand(22))
+    m := b.Masters().Flat()!
+    for i in range b.ParamCount: m[i] = m[i] + 1e-4
+    b.SyncParams()
+    try b.Save("build/ad_mixed.safetensors")
+    c := Graph<F32>(1)
+    mixedNet(c, 1)
+    try c.Plan(rand.Rand(1))
+    try c.Load("build/ad_mixed.safetensors")
+    assert c.Params() == b.Masters()
+    d := Graph<BF16>(2)
+    mixedNet(d, 1)
+    try d.Plan(rand.Rand(1))
+    try d.Load("build/ad_mixed.safetensors")
+    assert d.Masters() == b.Masters() and d.Params() == b.Params()
+}
+
+test Graph.Plan "a shape that does not fit is reported by Plan, naming it, and nothing after it runs" {
+    g := Graph<F32>(4)
+    x := g.Input(3)
+    w := g.Param(Init.Zeros, true, 2, 4)
+    g.Act(g.Linear(x, w), mat.Act.Relu)
+    said := ""
+    try g.Plan(rand.Rand(1)) catch tensor.ShapeError e { said = $e }
+    assert said.Contains("Linear")
+    e := Graph<F32>(2, 1, Mode.Eager)
+    try e.Plan(rand.Rand(1))
+    y := e.Input(3)
+    e.MatMul(y, e.Param(Init.Zeros, true, 2, 2))
+    failed := false
+    try e.Check() catch tensor.ShapeError { failed = true }
+    assert failed
+}
+
+# x squared, element by element: a Custom operation for the test below
+type square struct() { }
+
+fn (s square&) Shape(inputs Array<tensor.Shape>&) tensor.Shape { return inputs[0] }
+
+fn (s mut square&) Forward(out mut tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&) {
+    try out.Map(inputs[0], fn(v): return v * v) catch { unreachable }
+}
+
+fn (s mut square&) Backward(dout tensor.Tensor<F32>&, inputs Array<tensor.Tensor<F32>>&, dinputs mut Array<tensor.Tensor<F32>>&) {
+    d := dinputs[0]
+    try d.Map2(dout, inputs[0], fn(g, v): return 2.0 * g * v) catch { unreachable }
+}
+
+test Graph.Custom "an operation defined outside runs forward and backward as the graph's own: x^2 as Mul(x, x)" {
+    f := square()
+    for eager in Array<Bool>[false, true] {
+        a := Graph<F32>(3, 1, Mode.Eager if eager else Mode.Captured)
+        b := Graph<F32>(3)
+        if eager: try a.Plan(rand.Rand(4))
+        wa := a.Param(Init.Normal(0.0, 1.0), true, 4, 4)
+        wb := b.Param(Init.Normal(0.0, 1.0), true, 4, 4)
+        la := a.Mse(a.Custom(f, a.Act(wa, mat.Act.Tanh)), a.Param(Init.Normal(0.0, 1.0), true, 4, 4))
+        tb := b.Act(wb, mat.Act.Tanh)
+        lb := b.Mse(b.Mul(tb, tb), b.Param(Init.Normal(0.0, 1.0), true, 4, 4))
+        if not eager: try a.Plan(rand.Rand(4))
+        try b.Plan(rand.Rand(4))
+        a.Forward(3)
+        a.Backward(la)
+        b.Forward(3)
+        b.Backward(lb)
+        assert a.Scalar(la) == b.Scalar(lb)
+        ga := a.Grad(wa).Flat()!
+        gb := b.Grad(wb).Flat()!
+        for i in range 16: assert (ga[i] - gb[i]).Abs() < 1e-6
+    }
+}
+
+# a causal language model's layers: embedding, learned and rotary positions, causal attention, a norm, tied logits
+fn tinyLm<T>(g mut Graph<T>&, ctx I64) Var, Var {
+    tok := g.Tokens(ctx)
+    table := g.Param(Init.Normal(0.0, 0.5), true, 11, 8)
+    e := g.Positions(g.Embedding(tok, table), g.Param(Init.Normal(0.0, 0.1), true, ctx, 8))
+    q := g.Rope(g.Linear(e, g.Param(Init.Normal(0.0, 0.3), true, 8, 8)), 2)
+    k := g.Rope(g.Linear(e, g.Param(Init.Normal(0.0, 0.3), true, 8, 8)), 2)
+    a := g.Attention(q, k, g.Linear(e, g.Param(Init.Normal(0.0, 0.3), true, 8, 8)), 2, true)
+    h := g.Norm(g.Add(a, e), g.Param(Init.Constant(1.0), false, 8), None, true)
+    return tok, g.Linear(h, table)
+}
+
+test Graph "decoding with a cache of keys and values equals the full forward, a position at a time or several" {
+    ctx I64 = 12
+    full := Graph<F64>(1)
+    ft, fl := tinyLm(full, ctx)
+    try full.Plan(rand.Rand(30))
+    tokens := Array<I32>[3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8]
+    fd := full.Ints(ft).Flat()!
+    for i in range ctx: fd[i] = tokens[i]
+    full.Forward(1)
+    want := full.Value(fl)
+    for steps in Array<I64>[1, 3] {
+        d := Graph<F64>(1, 1, Mode.Captured, true)
+        dt, dl := tinyLm(d, ctx)
+        try d.Plan(rand.Rand(1))
+        dp := d.Params()
+        try dp.Convert(full.Params())
+        for pos in range 0, ctx, steps {
+            d.Pos = pos
+            td := d.Ints(dt).Flat()!
+            for j in range steps: td[j] = tokens[pos + j]
+            d.Forward(steps)
+            got := d.Value(dl)
+            for j in range steps {
+                for c in range 11: assert (got.Get(0, j, c) - want.Get(0, pos + j, c)).Abs() < 1e-12, "position " + $(pos + j)
+            }
+        }
+    }
+}
+
+# this process's resident memory in kB (VmRSS, Linux)
+fn resident() I64 {
+    text := try os.ReadFile("/proc/self/status") catch { return 0 }
+    for line in text.Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        kb := try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+        return kb
+    }
+    return 0
+}
+
+test Graph "a step allocates nothing: the resident memory does not grow over 20 steps after the first, F32 and BF16" {
+    a := Graph<F32>(2)
+    ax, ay, aloss := mixedNet(a, 5, 0.1)
+    b := Graph<BF16>(2)
+    bx, by, bloss := mixedNet(b, 5, 0.1)
+    try a.Plan(rand.Rand(6))
+    try b.Plan(rand.Rand(6))
+    fillMixed(a, ax, ay, 5)
+    fillMixed(b, bx, by, 5)
+    a.Forward(2)
+    a.Backward(aloss)
+    b.Forward(2)
+    b.Backward(bloss)
+    before := resident()
+    for step in range 20 {
+        a.Forward(2 - step % 2)
+        a.Backward(aloss)
+        b.Forward(2 - step % 2)
+        b.Backward(bloss)
+    }
+    assert resident() == before, "grew by " + $(resident() - before) + " kB"
+}
+
+# ---- baked plans (C4) ----
+
+# the 784-128-10 perceptron of the MNIST example's shape, recorded: the graph whose plan is baked below
+fn recordMlp(g mut Graph<F32>&) {
+    x := g.Input(784)
+    y := g.Classes()
+    w1 := g.Param(Init.Normal(0.0, 0.05), true, 128, 784)
+    b1 := g.Param(Init.Zeros, false, 128)
+    w2 := g.Param(Init.Normal(0.0, 0.05), true, 10, 128)
+    b2 := g.Param(Init.Zeros, false, 10)
+    z := g.Linear(g.Act(g.Linear(x, w1, b1), mat.Act.Relu), w2, b2)
+    g.CrossEntropy(z, y)
+}
+
+# the plan of the perceptron, computed while compiling
+mlpBaked Layout = comptime Layout.Mlp()
+
+fn Layout.Mlp() Layout {
+    g := Graph<F32>(64)
+    recordMlp(g)
+    return g.Lay()!
+}
+
+# a batch for the perceptron: inputs from a pattern, the classes in turn
+fn feedMlp(g mut Graph<F32>&) {
+    xs := g.Data(Var(0)).Flat()!
+    for i in range xs.Len(): xs[i] = F32(i % 17) / 17.0
+    ys := g.Ints(Var(1)).Flat()!
+    for i in range ys.Len(): ys[i] = I32(i % 10)
+    g.Forward(64)
+}
+
+test Graph.Lay "the perceptron's plan baked while compiling equals the plan captured at run time" {
+    g := Graph<F32>(64)
+    recordMlp(g)
+    try g.Plan(rand.Rand(3))
+    got := g.Layout()
+    assert got.nodes.Len() == mlpBaked.nodes.Len()
+    assert got.needs == mlpBaked.needs
+    assert got.ParamCount == mlpBaked.ParamCount and got.ParamCount == 784 * 128 + 128 + 10 * 128 + 10
+    assert got.ActivationSize == mlpBaked.ActivationSize and got.Size == mlpBaked.Size
+    assert got.Ints == mlpBaked.Ints and got.Accs == mlpBaked.Accs
+    for i in range got.nodes.Len(): assert got.nodes[i] == mlpBaked.nodes[i], "node " + $i
+}
+
+test Graph.PlanBaked "a graph planned from the baked layout runs as the one that laid itself out" {
+    a := Graph<F32>(64)
+    b := Graph<F32>(64)
+    recordMlp(a)
+    recordMlp(b)
+    try a.Plan(rand.Rand(4))
+    try b.PlanBaked(rand.Rand(4), mlpBaked)
+    assert a.Params() == b.Params()
+    feedMlp(a)
+    feedMlp(b)
+    last := Var(a.nodes.Len() - 1)
+    assert a.Value(last).Flat()![0] == b.Value(last).Flat()![0]
+}

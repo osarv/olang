@@ -1,0 +1,136 @@
+# models/mlp - the perceptron classifier: dense layers with an activation between every two of them, softmax
+# cross-entropy on the last. The reference model of M1 (docs/redesign.md 4.3): 784-128-10 on MNIST, ReLU, AdamW at 1e-3
+# (weight decay 0.01 on the weights), batches of 128 - about 97.7% on the test set after ten epochs.
+#
+# `Mlp.New` registers the layers on a graph; `Task` records the input, the classes, the logits and the loss and gives
+# the handles nn/train's `Epoch` and `Evaluate` run. Both are before `Plan`.
+
+import "../ad/graph"
+import "../kernels/mat"
+import "../nn/layers"
+import "../nn/quant"
+import "../nn/train"
+
+# the layers' sizes - the first the inputs, the last the classes - and the activation between them
+type MlpConfig struct(Sizes Array<I64>, Act mat.Act = mat.Act.Relu) {
+    Sizes
+    Act
+}
+
+# MNIST's: 784 pixels, one hidden layer of "hidden", ten classes
+fn MlpConfig.Mnist(hidden I64 = 128) MlpConfig {
+    return MlpConfig(Array<I64>[784, hidden, 10])
+}
+
+# the inputs a sample has
+fn (c MlpConfig&) Inputs() I64 { return c.Sizes[0] }
+
+# the classes it is told apart into
+fn (c MlpConfig&) Classes() I64 { return c.Sizes[c.Sizes.Len() - 1] }
+
+# the parameters of the whole network, weights and biases
+fn (c MlpConfig&) Params() I64 {
+    total I64 = 0
+    for i in range 1, c.Sizes.Len(): total += c.Sizes[i - 1] * c.Sizes[i] + c.Sizes[i]
+    return total
+}
+
+type Mlp struct(Config MlpConfig, Net layers.Mlp) {
+    Config
+    Net
+}
+
+# the network's layers on g, PyTorch's starting values
+fn Mlp.New<T>(g mut graph.Graph<T>&, c MlpConfig) Mlp {
+    return Mlp(c, layers.Mlp.New(g, c.Sizes, c.Act))
+}
+
+# the logits of x [batch, Inputs]
+fn (m Mlp&) Logits<T>(g mut graph.Graph<T>&, x graph.Var) graph.Var {
+    return m.Net.Apply(g, x)
+}
+
+# a classifier's input, classes, logits (kept to the step's end, to be read) and loss
+fn (m Mlp&) Task<T>(g mut graph.Graph<T>&) train.Classifier {
+    x := g.Input(m.Config.Inputs())
+    y := g.Classes()
+    return train.Classifier.On(g, x, y, m.Logits(g, x))
+}
+
+# the trained network as an INT8 model (nn/quant) of up to "batch" samples a call; the activation must be ReLU
+fn (m Mlp&) Int8<T>(g graph.Graph<T>&, batch I64, threads I64 = 1) quant.Model {
+    return quant.Model.Mlp(batch, g, m.Net, threads)
+}
+
+# ---- tests ----
+
+import "std/rand"
+import "../data/loader"
+import "../nn/optim"
+import "../tensor"
+
+# n samples of 6 features: class c lights features 2c and 2c + 1
+fn lit(n I64, seed U64) loader.Labeled {
+    r := rand.Rand(seed)
+    features mut Array<U8>& = Array<U8>(n * 6)
+    labels mut Array<U8>& = Array<U8>(n)
+    for i in range n {
+        labels[i] = U8(i % 3)
+        for j in range 6: features[i * 6 + j] = U8(r.Below(60)) + (U8(180) if j / 2 == i % 3 else U8(0))
+    }
+    return loader.Labeled(features, labels, 6, 3)
+}
+
+# a perceptron on the lit features, trained for 16 epochs: the loss of the first epoch, of the last, and the accuracy on
+# held-out samples
+fn learn<T>() F64, F64, F64 {
+    g mut graph.Graph<T>& = graph.Graph<T>(8)
+    m := Mlp.New(g, MlpConfig(Array<I64>[6, 5, 3]))
+    c := m.Task(g)
+    g.Plan(rand.Rand(3))!
+    match T {
+        case BF16 {
+            o := optim.AdamW(g.Masters(), g.ParamGrads(), rate = 0.02, spans = optim.Spans(g))
+            return fit(g, c, o)
+        }
+        case _ {
+            o := optim.AdamW(g.Params(), g.ParamGrads(), rate = 0.02, spans = optim.Spans(g))
+            return fit(g, c, o)
+        }
+    }
+}
+
+fn fit<T, O>(g mut graph.Graph<T>&, c train.Classifier&, o mut O&) F64, F64, F64 {
+    l := loader.Loader(lit(60, 1), 8, 5)
+    first := train.Epoch(g, c, l, o)
+    last F64 = first
+    for _ in range 15: last = train.Epoch(g, c, l, o)
+    _, right := train.Evaluate(g, c, loader.Loader(lit(45, 2), 8, 1, false))
+    return first, last, right
+}
+
+test Mlp "MNIST's perceptron has 101 770 parameters, in the layers' order, with PyTorch's starting values" {
+    c := MlpConfig.Mnist()
+    assert c.Params() == 784 * 128 + 128 + 128 * 10 + 10 and c.Inputs() == 784 and c.Classes() == 10
+    g := graph.Graph<F32>(128)
+    m := Mlp.New(g, c)
+    t := m.Task(g)
+    try g.Plan(rand.Rand(1))
+    assert g.ParamCount == c.Params() and g.ParamCount == 101770
+    assert g.Info(t.Logits).Dims == tensor.Shape.Of(128, 10)
+    assert g.Decays(m.Net.Layers[0].W) and not g.Decays(m.Net.Layers[1].B)
+    bound F64 = 1.0 / 784.0.Sqrt()
+    w := g.Value(m.Net.Layers[0].W)
+    for i in range 128 {
+        for j in range 784: assert w.Get(i, j).Abs() <= bound
+    }
+}
+
+test Mlp "learns to classify: the loss falls and held-out samples are classified right, F32 and BF16, and a run repeats bit for bit" {
+    first, last, right := learn<F32>()
+    assert last < first * 0.5 and right > 0.95
+    again, last2, right2 := learn<F32>()
+    assert again == first and last2 == last and right2 == right
+    bfirst, blast, bright := learn<BF16>()
+    assert blast < bfirst * 0.6 and bright > 0.9
+}

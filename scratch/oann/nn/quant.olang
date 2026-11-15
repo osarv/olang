@@ -1,0 +1,697 @@
+# nn/quant - INT8 post-training quantization for inference, on the autodiff graph: a trained network's dense layers and
+# convolutions run as products of 8-bit integers accumulated in 32 bits (kernels/gemm's `GemmI8`), dequantized with their
+# bias (and ReLU) after.
+#
+# Weights are quantized once, symmetrically per output channel (PyTorch's and TensorRT's default for weights): row n of
+# W (Out x In, the graph's layout) has the scale sw[n] = max |W[n, k]| / 127 and the values q[n, k] = round(W[n, k] /
+# sw[n]) in -127 .. 127. Activations are quantized per tensor, either dynamically - from the batch's own range, each
+# time - or statically, from a range calibrated once over a calibration set (`Calibrate`). A range [lo, hi] decides an
+# affine map onto U8: a tensor with no negative values (an image's pixels, ReLU's outputs) takes all 256 levels,
+# s = hi / 255 and zero point 0; one with negatives is symmetric about zero, s = max(|lo|, |hi|) / 127 and zero point
+# 128 - so x ~ s (a - zp) with a in 0 .. 255. The product's accumulator holds sum_k a[i, k] q[n, k], and
+#     y[i, n] = s sw[n] (acc[i, n] - zp sum_k q[n, k]) + b[n]
+# (GemmI8 takes zp and the weights' row sums; the compensation is FBGEMM's and oneDNN's).
+#
+# Two ways in:
+# - `Model` is a sequence of dense layers, convolutions and max pooling read from a trained graph's values (`Dense`,
+#   `Conv`, `Pool`, one layer at a time or `Model.Mlp`), run on plain arrays of samples by `Forward` through buffers of
+#   its own - nothing allocated after the first call; `Calibrate` and `Static` for ranges calibrated once; `Bytes`.
+# - `Quantize(g)` turns every `Linear` node of a graph into an INT8 product in place (the graph's own hook,
+#   `g.QuantizeLinear()`): its attention projections and perceptrons, so a transformer and its key-value decoding run
+#   unchanged. The tied head and attention's own products stay in F32. Inference of an F32 graph only.
+
+import "std/list"
+import "../ad/graph"
+import "../kernels/conv"
+import "../kernels/gemm"
+import "../kernels/mat"
+import "../tensor"
+import "layers"
+
+# ---- weights ----
+
+# a dense layer's or a convolution's weights quantized: Out rows of In values - the layout GemmI8 reads - with each
+# output's scale and the sum of its quantized values
+type Weights struct(Out I64, In I64) {
+    Out
+    In
+    Q mut Array<I8>& = Array<I8>(Out * In)
+    Scale mut Array<F32>& = Array<F32>(Out)
+    Sum mut Array<I32>& = Array<I32>(Out)
+}
+
+# w (Out x In) quantized, symmetrically per row: q = round(w / s) to nearest even, s = max |w| / 127 (1 for a row of
+# zeros)
+fn Weights.Quantize<T>(w tensor.Tensor<T>&) Weights {
+    m := w.Mat()!
+    q := Weights(m.Rows, m.Cols)
+    for n in range m.Rows {
+        top F64 = 0.0
+        for k in range m.Cols: top = top.Max(F64(m[n, k]).Abs())
+        s F64 = top / 127.0 if top > 0.0 else 1.0
+        sum I32 = 0
+        for k in range m.Cols {
+            v := I8((F64(m[n, k]) / s).RoundEven().Clamp(-127.0, 127.0))
+            q.Q[n * m.Cols + k] = v
+            sum += I32(v)
+        }
+        q.Scale[n] = F32(s)
+        q.Sum[n] = sum
+    }
+    return q
+}
+
+# a convolution's weights (OutC x C K K, the graph's [C][K][K] columns) quantized with their columns in the patches'
+# order, [K][K][C]: the images' own, so a window's row is a run of K C values
+fn Weights.QuantizeConv<T>(w tensor.Tensor<T>&, s conv.Shape&) Weights {
+    m := w.Mat()!
+    KK I64 = s.K * s.K
+    p := tensor.Tensor<T>.Zeros(m.Rows, m.Cols)
+    for n in range m.Rows {
+        for c in range s.C {
+            for j in range KK: p.Set(m[n, c * KK + j], n, j * s.C + c)
+        }
+    }
+    return Weights.Quantize(p)
+}
+
+# the quantized value of W[n, k]
+fn (w Weights&) At(n I64, k I64) I8 { return w.Q[n * w.In + k] }
+
+# the weights as they are represented: q[n, k] sw[n], Out x In
+fn (w Weights&) Dequantize() tensor.Tensor<F32> {
+    out := tensor.Tensor<F32>.Zeros(w.Out, w.In)
+    for n in range w.Out {
+        for k in range w.In: out.Set(F32(w.At(n, k)) * w.Scale[n], n, k)
+    }
+    return out
+}
+
+# the bytes the weights take, scales and sums included
+fn (w Weights&) Bytes() I64 {
+    return w.Q.Len() + 4 * w.Scale.Len() + 4 * w.Sum.Len()
+}
+
+# ---- activations ----
+
+# the range a tensor is quantized over - observed on a batch (dynamic quantization) or over a calibration set (static)
+type Range struct() {
+    Lo F32 = 0.0
+    Hi F32 = 0.0
+    Seen Bool = false
+}
+
+# sixteen running minima and maxima, combined at the end - what lets a range be observed in vector registers
+type bounds struct() {
+    lo := Array<F32>(16)
+    hi := Array<F32>(16)
+}
+
+# the range widened to take the first n values of x
+fn (r mut Range&) Observe(x Array<F32>&, n I64) {
+    if n == 0: return
+    first F32 = r.Lo if r.Seen else x[0]
+    b := bounds()
+    for j in range 16 {
+        b.lo[j] = first
+        b.hi[j] = r.Hi if r.Seen else first
+    }
+    whole I64 = n - n % 16
+    for k in range 0, whole, 16 {
+        for j in range 16 {
+            v := x[k + j]
+            b.lo[j] = v if v < b.lo[j] else b.lo[j]
+            b.hi[j] = v if v > b.hi[j] else b.hi[j]
+        }
+    }
+    for k in range whole, n {
+        v := x[k]
+        b.lo[0] = v if v < b.lo[0] else b.lo[0]
+        b.hi[0] = v if v > b.hi[0] else b.hi[0]
+    }
+    lo F32 = b.lo[0]
+    hi F32 = b.hi[0]
+    for j in range 1, 16 {
+        lo = b.lo[j] if b.lo[j] < lo else lo
+        hi = b.hi[j] if b.hi[j] > hi else hi
+    }
+    r.Lo = lo
+    r.Hi = hi
+    r.Seen = true
+}
+
+# the scale and zero point of a range: all 256 levels for one with no negatives, else symmetric about zero
+fn (r Range&) Scale() F32, I32 {
+    if r.Lo >= 0.0: return (r.Hi / 255.0 if r.Hi > 0.0 else 1.0), 0
+    m F32 = -r.Lo if -r.Lo > r.Hi else r.Hi
+    return m / 127.0, 128
+}
+
+# a = clamp(round(v / step) + zero, 0, 255), ties to even
+fn quantizeOne(v F32, inv F32, zp F32) U8 {
+    q F32 = (v * inv).RoundEven() + zp
+    return U8(0.0 if q < 0.0 else (255.0 if q > 255.0 else q))
+}
+
+# the first n values of x quantized with the step and zero point, into dst
+fn quantize(dst mut Array<U8>&, x Array<F32>&, n I64, step F32, zero I32) {
+    inv F32 = 1.0 / step
+    zp F32 = F32(zero)
+    for k in range n: dst[k] = quantizeOne(x[k], inv, zp)
+}
+
+# ---- the model ----
+
+# a layer of a quantized network: its weights and biases (F32), and whether ReLU follows
+type Layer enum {
+    Dense(w Weights&, b Array<F32>&, relu Bool)
+    Conv(w Weights&, b Array<F32>&, s conv.Shape, relu Bool)
+    Pool(p conv.Pool)
+}
+
+# a network of up to Batch samples a call, each a row of Inputs features, run on Threads tasks
+type Model struct(Batch I64, Inputs I64, Threads I64 = 1) {
+    Batch
+    Inputs
+    Threads
+    Static Bool = false
+    Layers mut list.List<Layer>& = list.List<Layer>()
+    Ranges mut list.List<Range>& = list.List<Range>()
+    widths mut list.List<I64>& = list.List<I64>()
+    cells I64 = 0    # the most values of activations a layer quantizes
+    sumCells I64 = 0 # the most integer products a layer makes
+    outs I64 = 0     # the widest output of a quantized layer
+    pixels I64 = 0   # the most image values a convolution quantizes
+    ws mut gemm.Workspace<I32>& = gemm.Workspace<I32>(Threads)
+    acts mut Array<U8>& = Array<U8>(0)
+    image mut Array<U8>& = Array<U8>(0)
+    sums mut Array<I32>& = Array<I32>(0)
+    scales mut Array<F32>& = Array<F32>(0)
+    front mut Array<F32>& = Array<F32>(0)
+    back mut Array<F32>& = Array<F32>(0)
+}
+
+# the features of a sample after the last layer added
+fn (m Model&) Outputs() I64 {
+    return m.widths[m.widths.Len() - 1] if m.widths.Len() > 0 else m.Inputs
+}
+
+fn (m mut Model&) push(l Layer, width I64, rows I64, cols I64, outs I64) {
+    m.Layers.Push(l)
+    m.Ranges.Push(Range())
+    m.widths.Push(width)
+    m.cells = m.cells.Max(rows * cols)
+    m.sumCells = m.sumCells.Max(rows * outs)
+    m.outs = m.outs.Max(outs)
+    m.acts = Array<U8>(0) # re-made by the next call, sized for the layers now
+}
+
+# a vector of the graph's values as F32
+fn vector<T>(g graph.Graph<T>&, v graph.Var, n I64) Array<F32> {
+    out := Array<F32>(n)
+    if v == graph.None: return out
+    d := g.Value(v).Flat()!
+    for i in range n: out[i] = F32(d[i])
+    return out
+}
+
+# a dense layer of a trained graph, read from its values: y = x w^T + b, ReLU after it or not
+fn (m mut Model&) Dense<T>(g graph.Graph<T>&, d layers.Dense&, relu Bool) {
+    m.DenseOf(g.Value(d.W), vector(g, d.B, d.Out), relu)
+}
+
+# a dense layer of weights w (Out x In) and biases b (Out values, or none), ReLU after it or not
+fn (m mut Model&) DenseOf<T>(w tensor.Tensor<T>&, b Array<F32>&, relu Bool) {
+    assert w.Dim(1) == m.Outputs(), "a dense layer reads " + $w.Dim(1) + " features, the layer before gives " + $m.Outputs()
+    m.push(Layer.Dense(Weights.Quantize(w), b, relu), w.Dim(0), m.Batch, w.Dim(1), w.Dim(0))
+}
+
+# a convolution of a trained graph, ReLU after it or not
+fn (m mut Model&) Conv<T>(g graph.Graph<T>&, c layers.Conv&, relu Bool) {
+    s := c.Shape
+    assert s.H * s.W * s.C == m.Outputs(), "a convolution reads " + $(s.H * s.W * s.C) + " features, the layer before gives " + $m.Outputs()
+    m.pixels = m.pixels.Max(m.Batch * m.Outputs())
+    m.push(Layer.Conv(Weights.QuantizeConv(g.Value(c.W), s), vector(g, c.B, s.OutC), s, relu), s.Positions() * s.OutC
+        m.Batch * s.Positions(), s.Patch(), s.OutC)
+}
+
+# max pooling (conv.Pool p)
+fn (m mut Model&) Pool(p conv.Pool) {
+    assert p.H * p.W * p.C == m.Outputs(), "a pooling reads " + $(p.H * p.W * p.C) + " features, the layer before gives " + $m.Outputs()
+    m.push(Layer.Pool(p), p.OutH * p.OutW * p.C, 0, 0, 0)
+}
+
+# a perceptron of a trained graph: its dense layers in order, ReLU between them and none after the last. The graph's
+# activation must be ReLU
+fn Model.Mlp<T>(batch I64, g graph.Graph<T>&, net layers.Mlp&, threads I64 = 1) Model {
+    assert net.Act == mat.Act.Relu, "INT8 networks have ReLU between their layers"
+    m := Model(batch, net.Layers[0].In, threads)
+    for i, d in net.Layers: m.Dense(g, d, i < net.Layers.Len() - 1)
+    return m
+}
+
+# the bytes the network's parameters take quantized - weights, their scales and sums, the biases in F32 - and as F32
+fn (m Model&) Bytes() I64, I64 {
+    q I64 = 0
+    f I64 = 0
+    for l in m.Layers {
+        match l {
+            case Layer.Dense(w, b, _), Layer.Conv(w, b, _, _) {
+                q += w.Bytes() + 4 * b.Len()
+                f += 4 * (w.Out * w.In + b.Len())
+            }
+            case Layer.Pool(_) { }
+        }
+    }
+    return q, f
+}
+
+# y = the network applied to the first n samples of x (n rows of Inputs; y gets n rows of Outputs())
+fn (m mut Model&) Forward(n I64, x Array<F32>&, y mut Array<F32>&) {
+    m.go(n, x, y, false)
+}
+
+# the calibration batch x run through the network, each quantized layer's input range widened to take it (static
+# quantization then quantizes over these ranges, once Static is set); y as Forward's
+fn (m mut Model&) Calibrate(n I64, x Array<F32>&, y mut Array<F32>&) {
+    m.go(n, x, y, true)
+}
+
+fn (m mut Model&) go(n I64, x Array<F32>&, y mut Array<F32>&, observe Bool) {
+    assert n >= 1 and n <= m.Batch and x.Len() >= n * m.Inputs and y.Len() >= n * m.Outputs(), "the samples do not fit the model"
+    m.prepare()
+    last := m.Layers.Len() - 1
+    for i in range m.Layers.Len() {
+        src := x if i == 0 else (m.front if i % 2 == 0 else m.back)
+        dst := y if i == last else (m.front if i % 2 == 1 else m.back)
+        m.run(i, n, src, dst, observe)
+    }
+}
+
+# the buffers sized for the layers added (once, unless layers were added since)
+fn (m mut Model&) prepare() {
+    if m.acts.Len() >= m.cells and m.acts.Len() > 0: return
+    widest I64 = 0
+    for w in m.widths: widest = widest.Max(w)
+    m.front = Array<F32>(widest * m.Batch)
+    m.back = Array<F32>(widest * m.Batch)
+    m.acts = Array<U8>(m.cells)
+    m.image = Array<U8>(m.pixels)
+    m.sums = Array<I32>(m.sumCells)
+    m.scales = Array<F32>(m.outs)
+}
+
+# layer i applied to the n samples of x, into y; observe: widen its input range by x and quantize over that
+fn (m mut Model&) run(i I64, n I64, x Array<F32>&, y mut Array<F32>&, observe Bool) {
+    match m.Layers[i] {
+        case Layer.Dense(w, b, relu) {
+            step, zero := m.stepOf(i, x, n * w.In, observe)
+            quantize(m.acts, x, n * w.In, step, zero)
+            m.product(n, w, step, zero, b, relu, y)
+        }
+        case Layer.Conv(w, b, s, relu) {
+            step, zero := m.stepOf(i, x, n * s.H * s.W * s.C, observe)
+            m.patches(n, x, s, step, zero)
+            m.product(n * s.Positions(), w, step, zero, b, relu, y)
+        }
+        case Layer.Pool(p): maxPool(n, y, x, p)
+    }
+}
+
+# the step and zero point layer i's input is quantized with: calibrated (widened by x first when observing), or x's own
+fn (m mut Model&) stepOf(i I64, x Array<F32>&, count I64, observe Bool) F32, I32 {
+    if observe {
+        r := m.Ranges[i]
+        r.Observe(x, count)
+        m.Ranges[i] = r
+        return r.Scale()
+    }
+    if m.Static: return m.Ranges[i].Scale()
+    r := Range()
+    r.Observe(x, count)
+    return r.Scale()
+}
+
+# y = dequantize(acts w^T) + bias, ReLU or not: acts rows x w.In quantized with the step and zero point
+fn (m mut Model&) product(rows I64, w Weights&, step F32, zero I32, b Array<F32>&, relu Bool, y mut Array<F32>&) {
+    for o in range w.Out: m.scales[o] = step * w.Scale[o]
+    a := mat.Mat<U8>(m.acts, 0, rows, w.In, w.In)
+    q := mat.Mat<I8>(w.Q, 0, w.Out, w.In, w.In)
+    c := mat.Mat<I32>(m.sums, 0, rows, w.Out, w.Out)
+    out := mat.Mat<F32>(y, 0, rows, w.Out, w.Out)
+    gemm.GemmI8(m.ws, c, a, q, m.scales[0:w.Out], out, zero, w.Sum)
+    for r in range rows {
+        base := r * w.Out
+        if relu { for o in range w.Out: y[base + o] = (y[base + o] + b[o]).Max(0.0) }
+        else { for o in range w.Out: y[base + o] = y[base + o] + b[o] }
+    }
+}
+
+# the patches of a convolution (conv.Shape s) of the n images x, quantized: the images are quantized once, then row
+# (b OutH + oy) OutW + ox of the patch matrix is the patch of output pixel (oy, ox) of image b, its columns [ky][kx][c]
+# - the order the image holds them in, so a window's row of K pixels is one run of K C values - and a pixel off the
+# image the zero point
+fn (m mut Model&) patches(n I64, x Array<F32>&, s conv.Shape&, step F32, zero I32) {
+    per I64 = s.H * s.W * s.C
+    quantize(m.image, x, n * per, step, zero)
+    for b in range n {
+        for p in range s.Positions(): m.patchRow(b * s.Positions() + p, b * per, p / s.OutW, p % s.OutW, s, U8(zero))
+    }
+}
+
+# patch row "row": output pixel (oy, ox) of the image whose quantized pixels start at img, a kernel row at a time - one
+# run of K C values where the window's row is on the image, the zero point where it is above or below it
+fn (m mut Model&) patchRow(row I64, img I64, oy I64, ox I64, s conv.Shape&, z U8) {
+    d := m.acts
+    px := m.image
+    KC I64 = s.K * s.C
+    y0 I64 = oy * s.Stride - s.Pad
+    x0 I64 = ox * s.Stride - s.Pad
+    inside Bool = x0 >= 0 and x0 + s.K <= s.W
+    for ky in range s.K {
+        iy := y0 + ky
+        t := row * s.Patch() + ky * KC
+        if iy < 0 or iy >= s.H {
+            for j in range KC: d[t + j] = z
+        } else if inside {
+            at := img + (iy * s.W + x0) * s.C
+            for j in range KC: d[t + j] = px[at + j]
+        } else {
+            m.patchPixels(t, img, iy, x0, s, z)
+        }
+    }
+}
+
+# a kernel row of a window hanging over the image's left or right edge, pixel by pixel into the patches at t
+fn (m mut Model&) patchPixels(t I64, img I64, iy I64, x0 I64, s conv.Shape&, z U8) {
+    d := m.acts
+    px := m.image
+    for kx in range s.K {
+        ix := x0 + kx
+        o := t + kx * s.C
+        if ix < 0 or ix >= s.W {
+            for c in range s.C: d[o + c] = z
+            continue
+        }
+        at := img + (iy * s.W + ix) * s.C
+        for c in range s.C: d[o + c] = px[at + c]
+    }
+}
+
+# y = the maximum of each window, per channel (kernels/conv's MaxPool2d forward, without the positions its backward keeps)
+fn maxPool(n I64, y mut Array<F32>&, x Array<F32>&, p conv.Pool&) {
+    wide := p.H * p.W * p.C
+    out := p.OutH * p.OutW * p.C
+    for b in range n {
+        for q in range p.OutH * p.OutW: windowMax(x, b * wide, p, q / p.OutW, q % p.OutW, y, b * out)
+    }
+}
+
+# the maximum per channel of output pixel (oy, ox)'s window of the image at img, into out at o
+fn windowMax(x Array<F32>&, img I64, p conv.Pool&, oy I64, ox I64, y mut Array<F32>&, base I64) {
+    C := p.C
+    o := base + (oy * p.OutW + ox) * C
+    first := img + (oy * p.Stride * p.W + ox * p.Stride) * C
+    for c in range C: y[o + c] = x[first + c]
+    for ky in range p.K {
+        for kx in range p.K {
+            at := img + ((oy * p.Stride + ky) * p.W + ox * p.Stride + kx) * C
+            for c in range C: y[o + c] = x[at + c] if x[at + c] > y[o + c] else y[o + c]
+        }
+    }
+}
+
+# ---- a graph's own Linear layers ----
+
+# every Linear node of the graph's inference run as an INT8 product, from now on: the weights quantized as they are now
+# (a graph trained further is quantized again), each input quantized over its own batch's range. The attention's own
+# products, the tied head (a MatMul) and convolutions stay F32. An F32 graph only
+fn Quantize<T>(g mut graph.Graph<T>&) {
+    g.QuantizeLinear()
+    g.Int8 = true
+}
+
+# the Linear layers back in F32
+fn Dequantize<T>(g mut graph.Graph<T>&) { g.Int8 = false }
+
+# the bytes the graph's Linear weights take as INT8 (the weights and a scale per output) and as F32
+fn LinearBytes<T>(g graph.Graph<T>&) I64, I64 {
+    q I64 = 0
+    f I64 = 0
+    for i in range g.Size() {
+        match g.Info(graph.Var(i)).Kind {
+            case graph.Op.Linear(_, w, _) {
+                d := g.Info(w).Dims
+                q += d[0] * d[1] + 4 * d[0]
+                f += 4 * d[0] * d[1]
+            }
+            case _ { }
+        }
+    }
+    return q, f
+}
+
+# ---- tests ----
+
+import "std/os"
+import "std/rand"
+
+# n samples of "width" values in [lo, hi)
+fn samples(n I64, width I64, r mut rand.Rand&, lo F64, hi F64) Array<F32> {
+    return Array<F32>[F32(lo + (hi - lo) * r.Float()) for _ in range n * width]
+}
+
+# a convolution, ReLU, pooling and a dense layer on a graph of 9 images of 6 x 6 x 2, its parameters drawn from seed
+# (weights larger than the starting values, so that outputs are not all near zero): the graph, its input and logits
+fn convNet(seed U64) graph.Graph<F32>, graph.Var, graph.Var, Model {
+    g mut graph.Graph<F32>& = graph.Graph<F32>(9)
+    x := g.Input(6, 6, 2)
+    s := conv.Shape(2, 6, 6, 5, 3, 1, 1)!
+    p := conv.Pool(5, 6, 6, 2, 2)!
+    c := layers.Conv.New(g, s)
+    d := layers.Dense.New(g, 45, 4)
+    y := d.Apply(g, g.Reshape(g.MaxPool2d(g.Act(c.Apply(g, x), mat.Act.Relu), p), 45))
+    g.Keep(y)
+    r := rand.Rand(seed)
+    g.Plan(r)!
+    w := g.Params().Flat()!
+    for i in range w.Len(): w[i] = w[i] * 4.0
+    m := Model(9, 72)
+    m.Conv(g, c, true)
+    m.Pool(p)
+    m.Dense(g, d, false)
+    return g, x, y, m
+}
+
+test Weights "are quantized per row to within half a step, and dequantize to what they represent; a convolution's columns are in the patches' order" {
+    r := rand.Rand(2)
+    w := tensor.Tensor<F32>.Zeros(5, 12)
+    w.FillUniform(r, -0.5, 0.5)
+    w.Set(0.0, 3, 0)
+    for k in range 12: w.Set(0.0, 4, k)
+    q := Weights.Quantize(w)
+    assert q.Out == 5 and q.In == 12 and q.Bytes() == 60 + 4 * 5 + 4 * 5
+    d := q.Dequantize()
+    for n in range 5 {
+        top F32 = 0.0
+        sum I32 = 0
+        for k in range 12 {
+            top = top.Max(w.Get(n, k).Abs())
+            sum += I32(q.At(n, k))
+            assert (d.Get(n, k) - w.Get(n, k)).Abs() <= 0.5 * q.Scale[n] * 1.0001
+        }
+        assert sum == q.Sum[n]
+        assert (q.Scale[n] - top / 127.0).Abs() <= 1e-7 or top == 0.0
+    }
+    assert q.Scale[4] == 1.0 and q.Sum[4] == 0
+    # 2 channels, 2 x 2 kernels: column [c][ky][kx] goes to [ky][kx][c]
+    s := conv.Shape(2, 4, 4, 3, 2, 1, 0)!
+    k := tensor.Tensor<F32>.Zeros(3, 8)
+    for n in range 3 {
+        for j in range 8: k.Set(F32(n + 1) * (F32(j) + 1.0), n, j)
+    }
+    c := Weights.QuantizeConv(k, s)
+    for n in range 3 {
+        for ch in range 2 {
+            for j in range 4: assert (F32(c.At(n, j * 2 + ch)) * c.Scale[n] - k.Get(n, ch * 4 + j)).Abs() <= c.Scale[n]
+        }
+    }
+}
+
+test Range "takes all 256 levels for a tensor with no negatives, and is symmetric with zero point 128 otherwise" {
+    r := rand.Rand(3)
+    x := samples(5, 37, r, 0.0, 2.0)
+    a := Range()
+    a.Observe(x, x.Len())
+    s, z := a.Scale()
+    assert z == 0 and (s - a.Hi / 255.0).Abs() < 1e-9 and a.Lo >= 0.0
+    y := samples(5, 37, r, -1.0, 3.0)
+    y[100] = -2.5
+    b := Range()
+    b.Observe(y, y.Len())
+    bs, bz := b.Scale()
+    assert bz == 128 and b.Lo == -2.5 and (bs - b.Hi / 127.0).Abs() < 1e-9
+    # the range only widens, and the first n values alone are seen
+    b.Observe(x, 3)
+    assert b.Lo == -2.5
+    c := Range()
+    c.Observe(y, 0)
+    assert not c.Seen
+    q := Array<U8>(37)
+    quantize(q, y, 37, bs, bz)
+    for k in range 37: assert (bs * (F32(q[k]) - 128.0) - y[k].Clamp(-127.0 * bs, 127.0 * bs)).Abs() <= 0.5 * bs * 1.0001
+}
+
+test Model "a dense layer is the F32 product of the dequantized operands, with negatives (zero point 128) and without, any batch" {
+    r := rand.Rand(4)
+    for signed in Array<Bool>[false, true] {
+        g := graph.Graph<F32>(4)
+        x := g.Input(33)
+        d := layers.Dense.New(g, 33, 21)
+        g.Keep(d.Apply(g, x))
+        try g.Plan(r)
+        m := Model(4, 33)
+        m.Dense(g, d, true)
+        q := Weights.Quantize(g.Value(d.W))
+        for n in Array<I64>[4, 3, 1] {
+            xs := samples(n, 33, r, -1.0 if signed else 0.0, 1.0)
+            got := Array<F32>(n * 21)
+            m.Forward(n, xs, got)
+            seen := Range()
+            seen.Observe(xs, xs.Len())
+            step, zero := seen.Scale()
+            for i in range n {
+                for o in range 21 {
+                    acc F64 = 0.0
+                    for k in range 33 {
+                        a := quantizeOne(xs[i * 33 + k], 1.0 / step, F32(zero))
+                        acc += F64(step) * F64(F32(a) - F32(zero)) * F64(q.At(o, k)) * F64(q.Scale[o])
+                    }
+                    want := (acc + F64(g.Value(d.B).Get(o))).Max(0.0)
+                    assert (F64(got[i * 21 + o]) - want).Abs() < 1e-4, "sample " + $i + ", output " + $o + ": " + $got[i * 21 + o] + " against " + $want
+                }
+            }
+        }
+    }
+}
+
+test Model "a quantized convolution network runs what the F32 graph runs, dynamically and over calibrated ranges, any batch" {
+    g, x, y, m := convNet(10)
+    assert m.Outputs() == 4 and m.Layers.Len() == 3
+    r := rand.Rand(5)
+    xs := samples(9, 72, r, 0.0, 1.0)
+    copy := g.Data(x).Flat()!
+    for i in range 648: copy[i] = xs[i]
+    g.Forward(9)
+    want := g.Value(y).Flat()!
+    big F32 = 0.0
+    for v in want: big = big.Max(v.Abs())
+    for calibrated in Array<Bool>[false, true] {
+        if calibrated {
+            m.Calibrate(9, xs, Array<F32>(9 * 4))
+            m.Static = true
+        }
+        for n in Array<I64>[9, 5, 1] {
+            got := Array<F32>(n * 4)
+            m.Forward(n, xs, got)
+            for i in range n * 4: assert (got[i] - want[i]).Abs() <= 0.03 * big, "n " + $n + ", " + $i + ": " + $got[i] + " against " + $want[i]
+        }
+    }
+    q, f := m.Bytes()
+    # each weight a byte; a scale, a sum and a bias an output: the F32 form is four bytes a weight and a bias
+    assert f == 4 * (5 * 18 + 5 + 4 * 45 + 4) and q == 5 * 18 + 4 * 45 + 12 * (5 + 4)
+}
+
+test Model "a perceptron of a graph, threads or not, gives the same logits and the same classes as the graph" {
+    g := graph.Graph<F32>(16)
+    x := g.Input(20)
+    net := layers.Mlp.New(g, Array<I64>[20, 30, 10])
+    y := net.Apply(g, x)
+    g.Keep(y)
+    try g.Plan(rand.Rand(6))
+    w := g.Params().Flat()!
+    for i in range w.Len(): w[i] = w[i] * 3.0
+    r := rand.Rand(7)
+    xs := samples(16, 20, r, 0.0, 1.0)
+    copy := g.Data(x).Flat()!
+    for i in range 320: copy[i] = xs[i]
+    g.Forward(16)
+    one := Model.Mlp(16, g, net)
+    four := Model.Mlp(16, g, net, 4)
+    a := Array<F32>(160)
+    b := Array<F32>(160)
+    one.Forward(16, xs, a)
+    four.Forward(16, xs, b)
+    assert a == b
+    right I64 = 0
+    for i in range 16 {
+        best I64 = 0
+        want I64 = 0
+        for k in range 10 {
+            if a[i * 10 + k] > a[i * 10 + best]: best = k
+            if g.Value(y).Get(i, k) > g.Value(y).Get(i, want): want = k
+        }
+        if best == want: right++
+    }
+    assert right >= 15
+}
+
+test Quantize "a graph's Linear layers in INT8 and back: close to F32, F32 again after Dequantize, a quarter of the weights' bytes" {
+    g := graph.Graph<F32>(4)
+    x := g.Input(12)
+    net := layers.Mlp.New(g, Array<I64>[12, 16, 5])
+    y := net.Apply(g, x)
+    g.Keep(y)
+    try g.Plan(rand.Rand(8))
+    r := rand.Rand(9)
+    xs := g.Data(x).Flat()!
+    for i in range 48: xs[i] = F32(r.Float())
+    g.Forward(4)
+    want := g.Value(y).Clone()
+    Quantize(g)
+    g.Forward(4)
+    big F32 = 0.0
+    for v in want.Flat()!: big = big.Max(v.Abs())
+    worst F32 = 0.0
+    for i in range 20: worst = worst.Max((g.Value(y).Flat()![i] - want.Flat()![i]).Abs())
+    assert worst > 0.0 and worst < 0.02 * big
+    Dequantize(g)
+    g.Forward(4)
+    assert g.Value(y).Flat()! == want.Flat()!
+    q, f := LinearBytes(g)
+    assert f == 4 * (12 * 16 + 16 * 5) and q == 12 * 16 + 16 * 5 + 4 * (16 + 5)
+}
+
+# this process's resident memory in kB (VmRSS, Linux)
+fn resident() I64 {
+    status := try os.ReadFile("/proc/self/status") catch { return 0 }
+    for line in status.Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        return try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+    }
+    return 0
+}
+
+test Model "allocates nothing per call: the resident memory grows by no more than two pages over 400 calls after 40, dynamic and static" {
+    g, _, _, m := convNet(11)
+    r := rand.Rand(12)
+    xs := samples(9, 72, r, 0.0, 1.0)
+    out := Array<F32>(36)
+    m.Forward(9, xs, out)
+    m.Calibrate(9, xs, out)
+    for static in Array<Bool>[false, true] {
+        m.Static = static
+        for _ in range 40 {
+            m.Forward(9, xs, out)
+            m.Forward(1, xs, out)
+        }
+        before := resident()
+        for _ in range 400 {
+            m.Forward(9, xs, out)
+            m.Forward(1, xs, out)
+        }
+        # a page or two is the process's own (a thread's stack, the allocator's bookkeeping): a byte a call would be 800
+        assert resident() <= before + 8, "grew by " + $(resident() - before) + " kB"
+    }
+    assert g.Size() > 0
+}

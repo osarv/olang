@@ -1,0 +1,563 @@
+# dyn/conn - connections between populations as objects: each holds its weights (a view of the system's flat parameter
+# region, so an optimizer steps them in place), its sparse structure where it has one, an active mask for pruning, and
+# the state an event-driven one keeps between sweeps; it knows how to carry the pre-synaptic activities into the
+# post-synaptic totals (Forward) and, when reciprocal, back (Backward), how to sum its absolute weights into each
+# unit's incoming mass (the feedback gain) and how to prune and compact itself in place.
+#
+# Wirings: Dense (a post x pre block, one-way), Symmetric (a dense block read both ways - s_pre W^T into post, s_post W
+# into pre - one weight per pair, so the effective weights are symmetric by construction), Csr (compressed sparse rows
+# at a density, kernels/sparse), Tiles (block-sparse: only the live tiles stored), Events (event-driven: each sweep
+# carries only the pre-synaptic units whose activity changed by more than a threshold since they were last carried; the
+# weights stored pre x post, a row per unit that can change) and LowRank (W = A B, A post x rank, B rank x pre). Csr,
+# Tiles and LowRank may be reciprocal; Events is one-way.
+#
+# A product reads the state as it is laid out - sample-major rows (phase, batch) of units - through gemm's products for
+# the dense forms; the sparse kernels read feature-major batches, so a sweep transposes the rows it works on into the
+# task's scratch (Scratch) and back. Nothing allocates after Plan: the scratch, the event state and the masks are made
+# once, sized for the system.
+#
+# Pruning at run time (docs/redesign.md, section 3, decision 3): Prune(keep) masks weights in place - zeroed, their
+# mask cleared, a product costs what it did - and Compact drops a sparse form's masked entries in place, after which
+# its products are cheaper. A dense block's mask stays a mask until the system is re-planned.
+
+import "std/list"
+import "std/rand"
+import "../kernels/mat"
+import "../kernels/gemm"
+import "../kernels/sparse"
+
+# how a connection is laid out and carried
+type Wiring enum {
+    Dense
+    Symmetric
+    Tiles(tile I64, density F64)
+    Csr(density F64)
+    Events(threshold F64)
+    LowRank(rank I64)
+}
+
+# what a connection given wrongly says, at Plan
+type WiringError error {
+    Invalid(what String)
+}
+
+# a task's room for the sparse products: a chunk of rows transposed into feature-major (x), the product's result there
+# (y), a low-rank product's middle (mid), and an event collector per event-driven connection
+type Scratch<T> struct(units I64, rows I64, rank I64) {
+    X mut Array<T>& = Array<T>(units * rows)
+    Y mut Array<T>& = Array<T>(units * rows)
+    Mid mut Array<T>& = Array<T>(rows * rank)
+    Ev mut Vec<mut sparse.Events&>& = Vec<mut sparse.Events&>()
+}
+
+# a connection from the population numbered Pre (PreSize units) to Post (PostSize), as Plan lays it out
+type Link<T> struct(pre I64, post I64, preSize I64, postSize I64, wiring Wiring, both Bool, frozen Bool) {
+    Pre I64 = pre
+    Post I64 = post
+    PreSize I64 = preSize
+    PostSize I64 = postSize
+    Kind Wiring = wiring
+    Both Bool = both or wiring == Wiring.Symmetric        # reciprocal: read in both directions
+    Frozen Bool = frozen                                  # learning leaves it
+    Folded Bool = false                                   # its source is an input: carried once per settle
+    Off I64 = 0                                           # its parameters in the system's region
+    Count I64 = 0                                         # how many
+    W mat.Mat<T> = mat.Mat<T>(Array<T>(0), 0, 0, 0, 0)   # dense: post x pre; events: pre x post; low rank: A
+    B mat.Mat<T> = mat.Mat<T>(Array<T>(0), 0, 0, 0, 0)   # low rank: B, rank x pre
+    Csr mut sparse.Csr<T>?& = null
+    Tiles mut sparse.Tiles<T>?& = null
+    Keep mut Array<Bool>& = Array<Bool>(0)                # the active mask, a flag per parameter (per tile: Tiles)
+    Pruned I64 = 0                                        # parameters (tiles) masked since the last compaction
+    Index I64 = 0                                         # its place among the event-driven connections
+    last mut Array<T>& = Array<T>(0)                      # events: what the post side last heard, rows x pre
+    acc mut Array<T>& = Array<T>(0)                       # and the sum it holds, rows x post
+    delta mut Array<T>& = Array<T>(0)                     # a sweep's changes, rows x pre
+    ptr mut Array<I64>& = Array<I64>(0)                   # a sparse form's pattern, until Lay
+    idx mut Array<I32>& = Array<I32>(0)
+}
+
+# the parameters a connection of this wiring holds, before a sparse pattern is drawn (an upper bound for those)
+fn (l Link<T>&) Params() I64 {
+    return match l.Kind {
+        case Wiring.LowRank(rank): rank * (l.PostSize + l.PreSize)
+        case _: l.PostSize * l.PreSize
+    }
+}
+
+# the checks of a connection's own shape: what Plan refuses
+fn (l Link<T>&) Check() ? WiringError {
+    match l.Kind {
+        case Wiring.Events { if l.Both: error WiringError.Invalid("an event-driven connection is one-way") }
+        case Wiring.LowRank(rank) { if rank < 1: error WiringError.Invalid("a low-rank connection has rank at least 1") }
+        case Wiring.Tiles(tile, density) { if tile < 1 or density <= 0.0 or density > 1.0: error WiringError.Invalid("tiles of at least 1 at a density in (0, 1]") }
+        case Wiring.Csr(density) { if density <= 0.0 or density > 1.0: error WiringError.Invalid("a density in (0, 1]") }
+        case _ { }
+    }
+}
+
+# a sparse form's pattern drawn from r (rows of the entries, tile rows of the tiles, at its density), and the
+# parameters it takes counted: what Plan does before it lays the region out
+fn (l mut Link<T>&) Draw(r mut rand.Rand&) {
+    l.Count = l.Params()
+    match l.Kind {
+        case Wiring.Csr(density) {
+            l.ptr = Array<I64>(l.PostSize + 1)
+            idx := list.List<I32>()
+            sparse.DrawPattern(l.PostSize, l.PreSize, density, r, l.ptr, idx)
+            l.idx = idx.ToArray()
+            l.Count = l.idx.Len()
+        }
+        case Wiring.Tiles(tile, density) {
+            l.ptr = Array<I64>((l.PostSize + tile - 1) / tile + 1)
+            col := list.List<I32>()
+            sparse.DrawPattern((l.PostSize + tile - 1) / tile, (l.PreSize + tile - 1) / tile, density, r, l.ptr, col)
+            l.idx = col.ToArray()
+            l.Count = l.idx.Len() * tile * tile
+        }
+        case _ { }
+    }
+}
+
+# the connection laid out over params[off .. off + Count] (Draw first): its views, its weights drawn from r
+# (Glorot-uniform over the entries a unit receives), an event-driven one's state for rows rows (phases x batch)
+fn (l mut Link<T>&) Lay(params mut Array<T>&, off I64, rows I64, r mut rand.Rand&) {
+    l.Off = off
+    post, pre := l.PostSize, l.PreSize
+    match l.Kind {
+        case Wiring.Csr(density) {
+            l.Csr = sparse.Csr<T>(post, pre, l.ptr, l.idx, params[off:off + l.Count])!
+            uniform(params, off, l.Count, (6.0 / (density * F64(post + pre))).Sqrt(), r)
+        }
+        case Wiring.Tiles(tile, density) {
+            l.Tiles = sparse.Tiles<T>(post, pre, tile, l.ptr, l.idx, params[off:off + l.Count])!
+            uniform(params, off, l.Count, (6.0 / (density * F64(post + pre))).Sqrt(), r)
+            zeroEdges(l.Tiles!, params, off)
+        }
+        case Wiring.LowRank(rank) {
+            l.W = mat.Mat<T>(params, off, post, rank, rank)
+            l.B = mat.Mat<T>(params, off + post * rank, rank, pre, pre)
+            uniform(params, off, post * rank, (6.0 / F64(post + rank)).Sqrt(), r)
+            uniform(params, off + post * rank, rank * pre, (6.0 / F64(rank + pre)).Sqrt(), r)
+        }
+        case Wiring.Events {
+            l.W = mat.Mat<T>(params, off, pre, post, post)
+            uniform(params, off, l.Count, (6.0 / F64(post + pre)).Sqrt(), r)
+            l.last = Array<T>(rows * pre)
+            l.acc = Array<T>(rows * post)
+            l.delta = Array<T>(rows * pre)
+        }
+        case _ {
+            l.W = mat.Mat<T>(params, off, post, pre, pre)
+            uniform(params, off, l.Count, (6.0 / F64(post + pre)).Sqrt(), r)
+        }
+    }
+    l.Keep = Array<Bool>(l.Tiles!.Stored() if l.Tiles != null else l.Count, true)
+}
+
+# the elements of a stored edge tile past the matrix: zero, so that sums of absolute weights see only real ones
+fn zeroEdges<T>(w sparse.Tiles<T>&, params mut Array<T>&, off I64) {
+    tt := w.Tile * w.Tile
+    for r in range w.TileRows {
+        for e in range w.Ptr[r], w.Ptr[r + 1] {
+            c := I64(w.Col[e])
+            for i in range w.Tile {
+                for k in range w.Tile {
+                    if r * w.Tile + i >= w.Rows or c * w.Tile + k >= w.Cols: params[off + e * tt + i * w.Tile + k] = T(0)
+                }
+            }
+        }
+    }
+}
+
+fn uniform<T>(a mut Array<T>&, off I64, n I64, limit F64, r mut rand.Rand&) {
+    for i in range n: a[off + i] = T(r.Uniform(-limit, limit))
+}
+
+# ---- carrying activities ----
+
+# total[r0 .. r1, post] += s[r0 .. r1, pre] W^T: the pre-synaptic activities of rows r0 .. r1 (sample-major, PreSize a
+# row) into the post-synaptic totals (PostSize a row)
+fn (l mut Link<T>&) Forward(ws mut gemm.Workspace<T>&, sc mut Scratch<T>&, total mut Array<T>&, s mut Array<T>&, r0 I64, r1 I64) {
+    post, pre := l.PostSize, l.PreSize
+    n := r1 - r0
+    to := mat.Mat<T>(total, r0 * post, n, post, post)
+    from := mat.Mat<T>(s, r0 * pre, n, pre, pre)
+    match l.Kind {
+        case Wiring.Dense, Wiring.Symmetric { gemm.Gemm(ws, to, from, false, l.W, true, T(1), T(1)) }
+        case Wiring.LowRank(rank) {
+            mid := mat.Mat<T>(sc.Mid, 0, n, rank, rank)
+            gemm.Gemm(ws, mid, from, false, l.B, true, T(1), T(0))
+            gemm.Gemm(ws, to, mid, false, l.W, true, T(1), T(1))
+        }
+        case Wiring.Events(threshold) {
+            if l.Folded { gemm.Gemm(ws, to, from, false, l.W, false, T(1), T(1)) } else { l.events(sc, total, s, r0, r1, T(threshold)) }
+        }
+        case _ { l.sparseProduct(sc, total, post, s, pre, r0, r1, false) }
+    }
+}
+
+# total[r0 .. r1, pre] += s[r0 .. r1, post] W: a reciprocal connection's post-synaptic activities back into the
+# pre-synaptic totals
+fn (l mut Link<T>&) Backward(ws mut gemm.Workspace<T>&, sc mut Scratch<T>&, total mut Array<T>&, s mut Array<T>&, r0 I64, r1 I64) {
+    post, pre := l.PostSize, l.PreSize
+    n := r1 - r0
+    to := mat.Mat<T>(total, r0 * pre, n, pre, pre)
+    from := mat.Mat<T>(s, r0 * post, n, post, post)
+    match l.Kind {
+        case Wiring.Dense, Wiring.Symmetric { gemm.Gemm(ws, to, from, false, l.W, false, T(1), T(1)) }
+        case Wiring.LowRank(rank) {
+            mid := mat.Mat<T>(sc.Mid, 0, n, rank, rank)
+            gemm.Gemm(ws, mid, from, false, l.W, false, T(1), T(0))
+            gemm.Gemm(ws, to, mid, false, l.B, false, T(1), T(1))
+        }
+        case _ { l.sparseProduct(sc, total, pre, s, post, r0, r1, true) }
+    }
+}
+
+# a sparse form's product on rows r0 .. r1: the rows of s (width in a row) transposed into the scratch, the kernel's
+# feature-major product there, and its result added back into total's rows (out in a row)
+fn (l mut Link<T>&) sparseProduct(sc mut Scratch<T>&, total mut Array<T>&, out I64, s Array<T>&, width I64, r0 I64, r1 I64, trans Bool) {
+    n := r1 - r0
+    for r in range n {
+        for j in range width: sc.X[j * n + r] = s[(r0 + r) * width + j]
+    }
+    for e in range out * n: sc.Y[e] = T(0)
+    x := mat.Mat<T>(sc.X, 0, width, n, n)
+    y := mat.Mat<T>(sc.Y, 0, out, n, n)
+    if l.Csr != null { l.Csr!.MulAdd(y, x, trans) } else { l.Tiles!.MulAdd(y, x, trans) }
+    for r in range n {
+        for j in range out: total[(r0 + r) * out + j] += sc.Y[j * n + r]
+    }
+}
+
+# an event-driven connection's rows r0 .. r1: each row's units whose activity moved by more than threshold since they
+# were last carried are carried now (their change times their row of W into the row's sum), and the sum is added to
+# the row's totals
+fn (l mut Link<T>&) events(sc mut Scratch<T>&, total mut Array<T>&, s Array<T>&, r0 I64, r1 I64, threshold T) {
+    post, pre := l.PostSize, l.PreSize
+    ev := sc.Ev[l.Index]
+    for r in range r0, r1 {
+        ev.Collect(s[r * pre:(r + 1) * pre], l.last[r * pre:(r + 1) * pre], l.delta[r * pre:(r + 1) * pre], threshold)
+        sparse.Transport(l.W, l.acc[r * post:(r + 1) * post], ev, l.delta[r * pre:(r + 1) * pre])
+        for j in range post: total[r * post + j] += l.acc[r * post + j]
+    }
+}
+
+# an event-driven connection's rows r0 .. r1 forget what was carried: the next sweep carries every unit that is not at
+# rest - the start of a settle
+fn (l mut Link<T>&) Forget(r0 I64, r1 I64) {
+    if l.Kind != Wiring.Events: return
+    for i in range r0 * l.PreSize, r1 * l.PreSize: l.last[i] = T(0)
+    for i in range r0 * l.PostSize, r1 * l.PostSize: l.acc[i] = T(0)
+}
+
+# ---- the feedback gain ----
+
+# mass[postAt + i] += the absolute weights into post unit i, and for a reciprocal connection mass[preAt + j] += those
+# into pre unit j (the columns): each unit's incoming mass, whose largest is the gain's bound
+fn (l Link<T>&) AddMass(params Array<T>&, mass mut Array<F64>&, postAt I64, preAt I64) {
+    post, pre := l.PostSize, l.PreSize
+    match l.Kind {
+        case Wiring.LowRank(rank) { l.lowRankMass(params, mass, postAt, preAt, rank) }
+        case Wiring.Events {
+            for j in range pre {
+                for i in range post: mass[postAt + i] += F64(params[l.Off + j * post + i]).Abs()
+            }
+        }
+        case Wiring.Csr {
+            w := l.Csr!
+            for i in range post {
+                for e in range w.Ptr[i], w.Ptr[i + 1] {
+                    a := F64(w.Values[e]).Abs()
+                    mass[postAt + i] += a
+                    if l.Both: mass[preAt + I64(w.Idx[e])] += a
+                }
+            }
+        }
+        case Wiring.Tiles { l.tileMass(mass, postAt, preAt) }
+        case _ {
+            for i in range post {
+                for j in range pre: l.addOne(mass, postAt + i, preAt + j, F64(params[l.Off + i * pre + j]).Abs())
+            }
+        }
+    }
+}
+
+fn (l Link<T>&) addOne(mass mut Array<F64>&, i I64, j I64, a F64) {
+    mass[i] += a
+    if l.Both: mass[j] += a
+}
+
+# W = A B formed one row at a time: its absolute entries
+fn (l Link<T>&) lowRankMass(params Array<T>&, mass mut Array<F64>&, postAt I64, preAt I64, rank I64) {
+    for i in range l.PostSize {
+        for j in range l.PreSize {
+            w F64 = 0.0
+            for k in range rank: w += F64(l.W[i, k]) * F64(l.B[k, j])
+            l.addOne(mass, postAt + i, preAt + j, w.Abs())
+        }
+    }
+}
+
+fn (l Link<T>&) tileMass(mass mut Array<F64>&, postAt I64, preAt I64) {
+    w := l.Tiles!
+    tt := w.Tile * w.Tile
+    for r in range w.TileRows {
+        for e in range w.Ptr[r], w.Ptr[r + 1] {
+            if not w.Live[e]: continue
+            c := I64(w.Col[e])
+            for i in range w.Tile {
+                for k in range w.Tile {
+                    if r * w.Tile + i >= w.Rows or c * w.Tile + k >= w.Cols: continue
+                    l.addOne(mass, postAt + r * w.Tile + i, preAt + c * w.Tile + k, F64(w.Data[e * tt + i * w.Tile + k]).Abs())
+                }
+            }
+        }
+    }
+}
+
+# every weight times f: W scales by f (a low-rank one through A alone)
+fn (l Link<T>&) Scale(params mut Array<T>&, f F64) {
+    kind := l.Kind
+    n := l.PostSize * kind.rank if kind == Wiring.LowRank else l.Count
+    for i in range l.Off, l.Off + n: params[i] = T(F64(params[i]) * f)
+}
+
+# ---- pruning ----
+
+# the parameters (a Tiles' stored tiles) whose keep is false masked in place: zeroed in params and grads, their mask
+# cleared - a product costs what it did until Compact
+fn (l mut Link<T>&) Prune(keep Array<Bool>&, params mut Array<T>&, grads mut Array<T>&) {
+    if l.Tiles != null {
+        l.Tiles!.Drop(keep)
+        for e in range keep.Len() {
+            if not keep[e] and l.Keep[e]: l.Pruned++
+            l.Keep[e] = l.Keep[e] and keep[e]
+        }
+        return
+    }
+    for e in range l.Count {
+        if keep[e] or not l.Keep[e]: continue
+        l.Keep[e] = false
+        l.Pruned++
+        params[l.Off + e] = T(0)
+        grads[l.Off + e] = T(0)
+    }
+}
+
+# a gradient where the mask holds, zero where it does not: what learning writes after its contrast
+fn (l Link<T>&) MaskGrads(grads mut Array<T>&) {
+    if l.Pruned == 0 or l.Tiles != null: return
+    for e in range l.Count {
+        if not l.Keep[e]: grads[l.Off + e] = T(0)
+    }
+}
+
+# the masked entries of a sparse form removed in place (their gradients moved with them; what is left past them is
+# zero), every mask set again: its products are cheaper from now on. A dense form keeps its mask. Gives the entries
+# (tiles) removed
+fn (l mut Link<T>&) Compact(params mut Array<T>&, grads mut Array<T>&) I64 {
+    if l.Pruned == 0: return 0
+    removed := l.Pruned
+    if l.Csr != null {
+        sparse.Squeeze(grads[l.Off:l.Off + l.Count], l.Keep)
+        l.Csr!.Drop(l.Keep)
+        clearPast(params, grads, l.Off + l.Csr!.Nnz(), l.Off + l.Count)
+    } else if l.Tiles != null {
+        tt := l.Tiles!.Tile * l.Tiles!.Tile
+        sparse.Squeeze(grads[l.Off:l.Off + l.Count], l.Tiles!.Live, tt)
+        l.Tiles!.Compact()
+        clearPast(params, grads, l.Off + l.Tiles!.Stored() * tt, l.Off + l.Count)
+    } else {
+        return 0
+    }
+    for e in range l.Keep.Len(): l.Keep[e] = true
+    l.Pruned = 0
+    return removed
+}
+
+fn clearPast<T>(params mut Array<T>&, grads mut Array<T>&, lo I64, hi I64) {
+    for i in range lo, hi {
+        params[i] = T(0)
+        grads[i] = T(0)
+    }
+}
+
+# ---- what must not allocate, decided while compiling (S17a, G42): pruning in place, an event-driven connection's
+# carry and reset, the gain's sums. The products are not pinned: gemm's Gemm grows its workspace's panels on its first products
+# (a fact holds for every call, not "after the first"), and the sparse kernels' products hold a join for their threads ----
+
+fn pruneOf(l mut Link<F32>&, k Array<Bool>&, a mut Array<F32>&) { l.Prune(k, a, a) }
+fn compactOf(l mut Link<F32>&, a mut Array<F32>&) { l.Compact(a, a) }
+fn maskOf(l mut Link<F32>&, a mut Array<F32>&) { l.MaskGrads(a) }
+fn forgetOf(l mut Link<F32>&) { l.Forget(0, 1) }
+fn massOf(l Link<F32>&, a Array<F32>&, m mut Array<F64>&) { l.AddMass(a, m, 0, 0) }
+fn scaleOf(l Link<F32>&, a mut Array<F32>&) { l.Scale(a, 0.5) }
+fn eventsOf(l mut Link<F32>&, sc mut Scratch<F32>&, a mut Array<F32>&) { l.events(sc, a, a, 0, 1, 0.0) }
+
+assert not pruneOf.Allocates, "pruning allocates"
+assert not compactOf.Allocates, "compacting allocates"
+assert not maskOf.Allocates, "masking gradients allocates"
+assert not forgetOf.Allocates, "an event-driven connection's reset allocates"
+assert not massOf.Allocates, "the incoming mass allocates"
+assert not scaleOf.Allocates, "scaling allocates"
+assert not eventsOf.Allocates, "an event-driven carry allocates"
+
+# ---- tests ----
+
+# a connection laid out alone over its own parameters, rows rows of state
+fn Link<T>.lone(wiring Wiring, post I64, pre I64, both Bool, rows I64, r mut rand.Rand&) Link<T> {
+    l := Link<T>(0, 1, pre, post, wiring, both, false)
+    l.Draw(r)
+    params := Array<T>(l.Count)
+    l.Lay(params, 0, rows, r)
+    return l
+}
+
+# the dense W (post x pre) a connection stands for
+fn dense(l Link<F64>&, params Array<F64>&) Array<F64> {
+    post, pre := l.PostSize, l.PreSize
+    w := Array<F64>(post * pre)
+    match l.Kind {
+        case Wiring.Csr {
+            c := l.Csr!
+            for i in range post {
+                for e in range c.Ptr[i], c.Ptr[i + 1]: w[i * pre + I64(c.Idx[e])] = c.Values[e]
+            }
+        }
+        case Wiring.Tiles { l.Tiles!.Dense(mat.Mat<F64>(w, 0, post, pre, pre)) }
+        case Wiring.Events {
+            for j in range pre {
+                for i in range post: w[i * pre + j] = params[j * post + i]
+            }
+        }
+        case Wiring.LowRank(rank) {
+            for i in range post {
+                for j in range pre {
+                    for k in range rank: w[i * pre + j] += l.W[i, k] * l.B[k, j]
+                }
+            }
+        }
+        case _ { for e in range post * pre: w[e] = params[e] }
+    }
+    return w
+}
+
+fn noise(n I64, r mut rand.Rand&) Array<F64> {
+    a := Array<F64>(n)
+    for i in range n: a[i] = r.Uniform(-1.0, 1.0)
+    return a
+}
+
+# the largest difference of Forward (and Backward) from the dense product, over rows 1 .. 4 of five
+fn carried(wiring Wiring, both Bool, seed U64) F64 {
+    r := rand.Rand(seed)
+    post, pre, rows := 13, 9, 5
+    l := Link<F64>.lone(wiring, post, pre, both, rows, r)
+    params := l.W.Data if l.Csr == null and l.Tiles == null else (l.Csr!.Values if l.Csr != null else l.Tiles!.Data)
+    w := dense(l, params)
+    ws := gemm.Workspace<F64>(1)
+    sc := Scratch<F64>(post, rows, 8)
+    sc.Ev.Push(sparse.Events(pre))
+    s := noise(rows * pre, r)
+    total := noise(rows * post, r)
+    want := total.Copy()
+    l.Forward(ws, sc, total, s, 1, 5)
+    worst F64 = 0.0
+    for b in range 1, 5 {
+        for i in range post {
+            for j in range pre: want[b * post + i] += w[i * pre + j] * s[b * pre + j]
+            worst = worst.Max((want[b * post + i] - total[b * post + i]).Abs())
+        }
+    }
+    if not both: return worst
+    sp := noise(rows * post, r)
+    back := Array<F64>(rows * pre)
+    l.Backward(ws, sc, back, sp, 0, 5)
+    for b in range 5 {
+        for j in range pre {
+            d F64 = 0.0
+            for i in range post: d += w[i * pre + j] * sp[b * post + i]
+            worst = worst.Max((d - back[b * pre + j]).Abs())
+        }
+    }
+    return worst
+}
+
+test Link.Forward "every wiring carries what its dense matrix does, forward and back" {
+    assert carried(Wiring.Dense, false, 1) < 1e-12
+    assert carried(Wiring.Symmetric, true, 2) < 1e-12
+    assert carried(Wiring.Csr(0.3), true, 3) < 1e-12
+    assert carried(Wiring.Tiles(4, 0.5), true, 4) < 1e-12
+    assert carried(Wiring.LowRank(3), true, 5) < 1e-12
+    assert carried(Wiring.Events(0.0), false, 6) < 1e-12
+}
+
+test Link.Forward "an event-driven connection carries only changes above its threshold, and catches up when they add up" {
+    r := rand.Rand(7)
+    l := Link<F64>.lone(Wiring.Events(0.1), 3, 4, false, 1, r)
+    ws := gemm.Workspace<F64>(1)
+    sc := Scratch<F64>(4, 1, 1)
+    sc.Ev.Push(sparse.Events(4))
+    s := Array<F64>[1.0, 0.0, 0.0, 0.0]
+    total := Array<F64>(3)
+    l.Forward(ws, sc, total, s, 0, 1)
+    assert total[0] == l.W[0, 0] and total[2] == l.W[0, 2]
+    s[1] = 0.05
+    for i in range 3: total[i] = 0.0
+    l.Forward(ws, sc, total, s, 0, 1)
+    assert total[0] == l.W[0, 0]                    # 0.05 is below the threshold: not carried
+    s[1] = 0.15
+    for i in range 3: total[i] = 0.0
+    l.Forward(ws, sc, total, s, 0, 1)
+    assert (total[1] - (l.W[0, 1] + 0.15 * l.W[1, 1])).Abs() < 1e-12
+}
+
+test Link.AddMass "a unit's incoming mass is its row's absolute sum, and a reciprocal connection adds its columns to the other side" {
+    r := rand.Rand(8)
+    for wiring in Array<Wiring>[Wiring.Symmetric, Wiring.Csr(0.4), Wiring.Tiles(3, 0.6), Wiring.LowRank(2)] {
+        l := Link<F64>.lone(wiring, 7, 5, true, 1, r)
+        params := l.W.Data if l.Csr == null and l.Tiles == null else (l.Csr!.Values if l.Csr != null else l.Tiles!.Data)
+        w := dense(l, params)
+        mass := Array<F64>(12)
+        l.AddMass(params, mass, 0, 7)
+        for i in range 7 {
+            m F64 = 0.0
+            for j in range 5: m += w[i * 5 + j].Abs()
+            assert (m - mass[i]).Abs() < 1e-12
+        }
+        for j in range 5 {
+            m F64 = 0.0
+            for i in range 7: m += w[i * 5 + j].Abs()
+            assert (m - mass[7 + j]).Abs() < 1e-12
+        }
+    }
+}
+
+test Link.Prune "pruning masks in place, and compacting a sparse form drops the entries without changing its product" {
+    r := rand.Rand(9)
+    l := Link<F64>.lone(Wiring.Csr(0.5), 8, 8, false, 2, r)
+    params := l.Csr!.Values
+    grads := Array<F64>(params.Len())
+    for e in range grads.Len(): grads[e] = F64(e)
+    nnz := l.Csr!.Nnz()
+    keep := Array<Bool>(l.Count, true)
+    for e in range 0, nnz, 3: keep[e] = false
+    l.Prune(keep, params, grads)
+    assert l.Pruned == (nnz + 2) / 3 and params[0] == 0.0 and grads[0] == 0.0
+    before := dense(l, params)
+    removed := l.Compact(params, grads)
+    assert removed == (nnz + 2) / 3 and l.Csr!.Nnz() == nnz - removed and l.Pruned == 0
+    assert dense(l, params) == before
+    assert grads[0] == 1.0                           # entry 1 moved to the front with its gradient
+    d := Link<F64>.lone(Wiring.Dense, 3, 3, false, 1, r)
+    dp := d.W.Data
+    dg := Array<F64>(9, 1.0)
+    dk := Array<Bool>(9, true)
+    dk[4] = false
+    d.Prune(dk, dp, dg)
+    assert dp[4] == 0.0 and dg[4] == 0.0 and not d.Keep[4]
+    dg[4] = 2.0
+    d.MaskGrads(dg)
+    assert dg[4] == 0.0 and dg[3] == 1.0
+}

@@ -1,0 +1,117 @@
+# where a step of the character-level transformer (examples/charlm.olang's model) goes: the time in each kind of
+# operation, forward and backward, gathered by the graph's own profiling, then clipping and the optimizer - over a
+# number of steps after a few to warm up - and whether the process grows while it trains. Arguments: the steps (20),
+# the threads (1), and the model as layers, width, heads, context and sequences (4 128 4 64 16); a last argument
+# "bf16" runs it in mixed precision (nn's Graph<BF16>)
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../nn"
+import "../layers"
+import "../optim"
+import "../train"
+import "../datasets/text"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+# the process's resident memory, kB
+fn rss() I64 {
+    t := try os.ReadFile("/proc/self/status") catch default ""
+    i := try t.Find("VmRSS:") catch default 0
+    rest := t[i + 6:]
+    j := try rest.Find("kB") catch default 0
+    return try rest[:j].Trim().ParseInt() catch default -1
+}
+
+fn ms(ns I64, steps I64) String {
+    return $(F64(ns) * 1e-6 / F64(steps)).Fixed(2)
+}
+
+fn main() ? io.Error, os.Error, text.CorpusError, ParseError {
+    all := os.Args()
+    bf16 Bool = all.Len() > 1 and all[all.Len() - 1] == "bf16"
+    args := all[:all.Len() - 1] if bf16 else all
+    if bf16 {
+        like BF16 = 0.0
+        try run(args, like)
+    } else {
+        like F32 = 0.0
+        try run(args, like)
+    }
+}
+
+fn run<E>(args Array<String&>&, like E) ? io.Error, os.Error, text.CorpusError, ParseError {
+    steps := try number(args, 1, 20)
+    threads := try number(args, 2, 1)
+    depth := try number(args, 3, 4)
+    width := try number(args, 4, 128)
+    heads := try number(args, 5, 4)
+    context := try number(args, 6, 64)
+    sequences := try number(args, 7, 16)
+    try os.MkDirAll("data/shakespeare")
+    try text.Fetch("data/shakespeare/input.txt", text.Shakespeare)
+    c := try text.Corpus.Load("data/shakespeare/input.txt")
+    g := nn.Graph<E>(sequences * context, threads)
+    tok := g.Tokens()
+    y := g.Classes()
+    t := layers.Transformer.New(g, c.Size(), context, width, heads, depth)
+    logits := t.Apply(g, tok)
+    m := train.LanguageModel(tok, y, logits, g.SoftmaxCrossEntropy(logits, y), context)
+    r := rand.Rand(1)
+    g.Plan(r)
+    o mut optim.AdamW<E>& = optim.AdamW<E>(g, 1e-3, 0.9, 0.99, 1e-8, optim.Regularizer.WeightDecay(0.1))
+    w := text.Windows(c.Train(), context, 1)
+    try io.Put(($depth + " layers of " + $width + ", " + $heads + " heads, context " + $context + ", " + $sequences + " sequences, " +
+        $g.ParamCount + " parameters, " + $threads + " threads, " + $(g.Size()) + " nodes, an arena of " +
+        $(F64(g.ArenaBytes()) / 1048576.0).Fixed(1) + " MB" + $(" and F32 masters" if g.HasMasters() else "") + "\n"))
+    for _ in range 3: train.LmStep(g, m, w, o, 1e-3, 1.0)
+    before := rss()
+    g.Profiling = true
+    filling I64 = 0
+    clipping I64 = 0
+    stepping I64 = 0
+    t0 := time.Now()
+    for _ in range steps {
+        a := time.Now()
+        w.Random(g.TokenData(m.Tokens), g.ClassData(m.Targets), sequences)
+        b := time.Now()
+        g.Forward(g.Batch)
+        g.Backward(m.Loss)
+        d := time.Now()
+        optim.ClipGradNorm(g, 1.0)
+        e := time.Now()
+        o.Step(g)
+        f := time.Now()
+        filling += b - a
+        clipping += e - d
+        stepping += f - e
+    }
+    total := time.Since(t0)
+    after := rss()
+    try io.Put("operation              forward ms  backward ms   (a step)\n")
+    gemm I64 = 0
+    attention I64 = 0
+    rest I64 = 0
+    for k in range nn.KindNames.Len() {
+        fw := g.Times[2 * k]
+        bw := g.Times[2 * k + 1]
+        if fw + bw == 0: continue
+        name := nn.KindNames[k]
+        pad := " ".Repeat(22 - name.Len())
+        try io.Put($name + $pad + " " + $ms(fw, steps) + "        " + $ms(bw, steps) + "\n")
+        if name == "Linear" or name == "MatMul": gemm += fw + bw
+        else if name == "Attention": attention += fw + bw
+        else: rest += fw + bw
+    }
+    try io.Put(("filling the batch      " + $ms(filling, steps) + "\nclipping               " + $ms(clipping, steps) +
+        "\noptimizer              " + $ms(stepping, steps) + "\n"))
+    try io.Put(("products " + $ms(gemm, steps) + " ms, attention " + $ms(attention, steps) + " ms, the rest of the graph " +
+        $ms(rest, steps) + " ms, clipping and optimizer " + $ms(clipping + stepping, steps) + " ms\n"))
+    try io.Put(("a step " + $ms(total, steps) + " ms, " + $(F64(steps * g.Batch) / (F64(total) * 1e-9)).Fixed(0) +
+        " tokens a second; resident memory grew " + $(after - before) + " kB over " + $steps + " steps\n"))
+}

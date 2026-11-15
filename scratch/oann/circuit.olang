@@ -1,0 +1,2756 @@
+# circuit - settling networks: networks of reciprocally connected regions whose neurons' potentials iterate to an
+# equilibrium, taught by contrasting settlings (equilibrium propagation) instead of differentiating through the
+# iterations. docs/settling.md is the design - section 1 the model, section 2 how it is built here.
+#
+# A Circuit<T> is recorded, planned, then run with nothing allocated, as nn's Graph is. Recording names regions -
+# Input (driven by data, no synapses into it), Hidden and Readout (nudged when learning, read as the answer), each a
+# contiguous range of the columns of one rows x neurons state - and projections between them: one [post, pre] block
+# of weights each, one-way or reciprocal, a reciprocal block read in both directions (s_pre W^T into post, s_post W
+# into pre), which is what keeps the weights symmetric by construction. Plan lays out one arena - the parameters (the
+# blocks, then a bias per neuron), their gradients in the same layout, each region's drive, the readouts' targets,
+# the state of four phases and the workspace - and draws the weights. A block whose source is an Input region is
+# folded into a constant once per settle; the rest are recurrent and run every sweep.
+#
+# A phase (Free, Plus, Minus, Scratch) has two slots: the committed state and a candidate a settle runs in, so a
+# refused settle changes nothing. A settle sweeps: the total input of every neuron from the current state, the
+# residual r = total - v and each row's largest |r|, a stop when every row is within the tolerance (the state
+# QUALIFIES and is committed), else the step v += dt r, s = rho(v) (dt smaller in a phase nudged toward its targets,
+# StepFor). No qualified state within the budget is a refusal, NotSettled. Certify scales the recurrent weights so that
+# the feedback gain kappa (the largest incoming absolute weight sum times the activation's largest slope) is below 1,
+# which makes a sweep a contraction: one equilibrium, approached at the rate q = 1 - dt (1 - kappa).
+#
+# Teach: settle free; from there settle twice more, nudged toward the targets with +beta and -beta (a cost's force
+# added to the readout's total); the contrast of the two nudged states is minus the gradient of the cost at the free
+# equilibrium, to O(beta^2), and is written into the gradient region for an optimizer (optim's FlatAdamW or FlatSgd,
+# stepping ParamData() from GradData()) - or, for learning from a reward that comes later, added to an eligibility
+# trace (Eligibility, below) that a broadcast error turns into a step.
+#
+# A projection's block is dense - a [post, pre] matrix, through std/linalg's products - or, for large sparse wiring,
+# compressed sparse rows (sparse.Csr): only its synapses are stored, stepped and multiplied (Layout; Auto chooses by
+# density). A readout may be split into groups of equal size, each its own softmax: several classes, or several
+# actions chosen at once.
+#
+# The neuron model is a closed enum. Rate neurons: tanh (the default), the hard sigmoid, linear (tests), and LifRate -
+# the steady firing rate of a leaky integrate-and-fire neuron, the rate model of the spiking one. Lif neurons spike:
+# a sweep is a time step, their activity is their spike count over a window, and the same settle, phases, nudges and
+# contrast run on those rates - so nothing above the neuron changes when spikes arrive.
+
+import "linalg"
+import "std/io"
+import "std/rand"
+import "optim"
+import "sparse"
+import "std/list"
+
+# a region's handle and a projection's: indices into the circuit's records
+type Region I64
+type Projection I64
+
+# what a region is for
+type Role enum {
+    Input                                   # driven by data; nothing projects into it; its state is rho(drive)
+    Hidden
+    Readout                                 # nudged when learning; read as the answer
+}
+
+# a rate neuron's activation s = rho(v)
+type Rho enum {
+    Tanh                                    # Hopfield's graded response - the default
+    HardSigmoid                             # clip(v, 0, 1)
+    Linear                                  # v - for tests: an equilibrium then has a closed form
+    LifRate(leak F64, threshold F64)        # the steady firing rate of a Lif neuron under the constant drive v
+}
+
+# a neuron model: a rate neuron, or a leaky integrate-and-fire one. A Lif neuron's potential u moves by leak (the
+# time step over its time constant) toward its input current each step, spikes when it reaches threshold and then
+# loses threshold (reset by subtraction); its input current is the constant part plus a synaptic current that
+# follows the spikes arriving with the rate synapse; its activity is spikes per step over a window of steps
+type Neuron enum {
+    Rate(rho Rho)
+    Lif(leak F64, threshold F64, synapse F64, window I64)
+}
+
+# a Lif neuron with oann's defaults: a time constant of about 10 steps (leak 0.1), threshold 1, a synaptic current
+# with a time constant of about 4 steps, rates counted over windows of 256 steps
+fn Neuron.LifNeuron(leak F64 = 0.1, threshold F64 = 1, synapse F64 = 0.25, window I64 = 256) Neuron {
+    return Neuron.Lif(leak, threshold, synapse, window)
+}
+
+# what a readout is taught by: the cost C its nudge is the force -dC/ds of
+type Cost enum {
+    CrossEntropy(temperature F64)           # T CE(softmax(s / T), class): force onehot(class) - softmax(s / T)
+    Squared                                 # 1/2 |s - y|^2 against a target row: force y - s
+}
+
+# how a projection carries activity
+type Wiring enum {
+    OneWay                                  # pre into post only
+    Reciprocal                              # both ways, through one block of weights: symmetric
+}
+
+# how a projection's synapses are stored
+type Layout enum {
+    Auto                                    # Sparse at a density of at most SparseBelow, else Dense
+    Dense                                   # a [post, pre] block, absent synapses as zeros (masked)
+    Sparse                                  # compressed sparse rows: the synapses alone
+}
+
+# the four states a circuit keeps
+type Phase enum {
+    Free                                    # the answer to the drive
+    Plus                                    # nudged toward the targets
+    Minus                                   # nudged away from them (the centered estimate)
+    Scratch                                 # anything else: a trial, a trajectory
+}
+
+# a settle that did not qualify: nothing was committed
+type NotSettled error {
+    Budget                                  # the sweeps ran out before every row met the tolerance
+    Nonfinite                               # a residual became infinite or NaN
+}
+
+# how a settle went: the sweeps it took (time steps for a spiking circuit), the largest residual of the state it
+# ended on, whether that state qualified (and was committed), and the dt of its last sweep
+type Settlement struct(Sweeps I64 = 0, Residual F64 = 0, Qualified Bool = false, Dt F64 = 1) {
+    Sweeps
+    Residual
+    Qualified
+    Dt
+}
+
+# a lesson's settings: the nudge beta, centered (two nudged phases, +beta and -beta) or not (+beta against the free
+# state); the tolerance and the budget of its settles, derived from the certificate when 0 (LessonTolerance, Budget)
+type Lesson struct(Beta F64 = 0.5, Tolerance F64 = 0, Budget I64 = 0, Centered Bool = true) {
+    Beta
+    Tolerance
+    Budget
+    Centered
+}
+
+# ---- records ----
+
+type regionRec struct(Kind Role, Size I64, Model Neuron, Fit Cost, Groups I64 = 1) {
+    Kind
+    Size
+    Model
+    Fit
+    Groups                                  # a readout's softmax groups, Size / Groups neurons each
+    Col I64 = 0                             # its first column of the state
+    Drive I64 = 0                           # where its drive starts in the arena: Rows rows of Size
+    Target I64 = -1                         # a Squared readout's targets in the arena, Rows rows of Size
+    Labels I64 = -1                         # a CrossEntropy readout's classes in labels, Groups per row
+}
+
+type projectionRec struct(Pre Region, Post Region, Kind Wiring, Density F64, Frozen Bool, Store Layout
+        Pairs I64 = -1, PairCount I64 = 0) {
+    Pre
+    Post
+    Kind
+    Density
+    Frozen
+    Store
+    Pairs                                   # a wired projection's (post, pre) pairs in wiredPost/wiredPre; -1 drawn
+    PairCount
+    Offset I64 = 0                          # its weights in the parameter region: [post, pre], or its Nnz entries
+    Mask I64 = -1                           # a dense block's [post, pre] connectivity in masks; -1 when complete
+    Folded Bool = false                     # its source is an Input region: part of the per-settle constant
+    Sparse Bool = false                     # stored as compressed sparse rows
+    Ptr I64 = -1                            # its pattern's row starts in ptrs (post + 1); -1 when complete
+    Idx I64 = 0                             # its pattern's columns in idx
+    Nnz I64 = 0                             # its synapses
+}
+
+# a settling circuit of T elements, run on up to Rows rows at a time (a batch, or several streams)
+type Circuit<T> struct(Rows I64) {
+    Rows
+    regions mut list.List<regionRec>& = list.List<regionRec>()
+    projections mut list.List<projectionRec>& = list.List<projectionRec>()
+    mem mut Array<T>& = Array<T>(0)
+    labels mut Array<I32>& = Array<I32>(0)
+    masks mut Array<U8>& = Array<U8>(0)
+    ptrs mut Array<I64>& = Array<I64>(0)        # the sparse patterns' row starts, projection after projection
+    idx mut Array<I32>& = Array<I32>(0)         # and their columns
+    wiredPost mut list.List<I32>& = list.List<I32>()      # wired projections' synapses, (post, pre) pairs, until Plan
+    wiredPre mut list.List<I32>& = list.List<I32>()
+    current mut Array<I64>& = Array<I64>(4)     # each phase's committed slot, 0 or 1
+    nudges mut Array<F64>& = Array<F64>(4)      # each phase's nudge strength (+beta, -beta, 0)
+    N I64 = Rows                                # the rows in use
+    Neurons I64 = 0                             # every region's neurons, inputs included
+    ParamCount I64 = 0                          # the weights and biases: the first region of the arena
+    Dt F64 = 1.0                                # the step of a sweep, in (0, 1]
+    Attempts I64 = 1                            # damping: a settle's budget split into this many parts, dt halved each
+    Spiking Bool = false                        # its Hidden and Readout neurons are Lif
+    Last Settlement = Settlement()              # the last settle's, refused or not
+    Sweeps I64 = 0                              # every sweep (or step) of every committed settle
+    planned Bool = false
+    window I64 = 1                              # a spiking circuit's window
+    arrays I64 = 2                              # arrays per slot: v and s; for Lif also synaptic currents, spikes, rate traces
+    bias I64 = 0                                # where things are in the arena
+    state I64 = 0
+    constant I64 = 0
+    total I64 = 0
+    count I64 = 0
+    diff I64 = 0
+    residual I64 = 0
+    lastResidual I64 = 0
+    mass I64 = 0
+    feature I64 = -1                            # three Neurons x Rows batches, feature-major, for sparse blocks
+    sparseBlocks I64 = 0
+    ws linalg.GemmWorkspace<T> = linalg.GemmWorkspace<T>()      # the products' packing panels, grown once
+}
+
+# a circuit that is wrong - a shape, a role, an order of calls: stops with what is wrong
+fn wrong(what String&) noreturn {
+    unreachable "oann circuit: " + $what
+}
+
+# ---- recording ----
+
+fn (c mut Circuit<T>&) region(kind Role, size I64, model Neuron, fit Cost, groups I64 = 1) Region {
+    if c.planned: wrong("the circuit is planned already - regions are recorded before Plan")
+    if size < 1: wrong("a region needs at least one neuron")
+    if groups < 1 or size % groups != 0: wrong("a readout's groups divide its neurons evenly")
+    c.regions.Push(regionRec(kind, size, model, fit, groups))
+    return Region(c.regions.Len() - 1)
+}
+
+# a region of size neurons driven by data (DriveData): no synapses reach it, and its state is rho(drive) - linear by
+# default, so the drive is the activity
+fn (c mut Circuit<T>&) Input(size I64, model Neuron = Neuron.Rate(Rho.Linear)) Region {
+    if not (model == Neuron.Rate): wrong("an Input region's neurons are rate neurons: their state is rho(drive)")
+    return c.region(Role.Input, size, model, Cost.Squared)
+}
+
+# a region of size neurons between the inputs and the readouts
+fn (c mut Circuit<T>&) Hidden(size I64, model Neuron = Neuron.Rate(Rho.Tanh)) Region {
+    return c.region(Role.Hidden, size, model, Cost.Squared)
+}
+
+# a region of size neurons read as the answer and nudged toward its targets by fit when learning: a class per row
+# (LabelData) for CrossEntropy, a target row (TargetData) for Squared. Split into groups of size / groups neurons, it
+# is that many softmaxes side by side - a class per group per row, each group's cost and force its own: several
+# answers at once, an agent's several actions
+fn (c mut Circuit<T>&) Readout(size I64, fit Cost = Cost.CrossEntropy(0.25), model Neuron = Neuron.Rate(Rho.Tanh)
+        groups I64 = 1) Region {
+    return c.region(Role.Readout, size, model, fit, groups)
+}
+
+# a region's softmax groups (1 unless a readout was split)
+fn (c Circuit<T>&) Groups(reg Region) I64 {
+    return c.regions[reg].Groups
+}
+
+# ---- what a circuit is made of, for those who read it: an exporter, the board engine (board.olang) ----
+
+# the regions recorded: Region(0) .. Region(Regions() - 1)
+fn (c Circuit<T>&) Regions() I64 { return c.regions.Len() }
+
+fn (c Circuit<T>&) RoleOf(reg Region) Role { return c.regions[reg].Kind }
+
+fn (c Circuit<T>&) SizeOf(reg Region) I64 { return c.regions[reg].Size }
+
+# its first column of the state (Plan numbers the neurons region by region)
+fn (c Circuit<T>&) ColumnOf(reg Region) I64 { return c.regions[reg].Col }
+
+fn (c Circuit<T>&) ModelOf(reg Region) Neuron { return c.regions[reg].Model }
+
+fn (c Circuit<T>&) FitOf(reg Region) Cost { return c.regions[reg].Fit }
+
+# the projections recorded: Projection(0) .. Projection(Projections() - 1)
+fn (c Circuit<T>&) Projections() I64 { return c.projections.Len() }
+
+fn (c Circuit<T>&) PreOf(p Projection) Region { return c.projections[p].Pre }
+
+fn (c Circuit<T>&) PostOf(p Projection) Region { return c.projections[p].Post }
+
+fn (c Circuit<T>&) WiringOf(p Projection) Wiring { return c.projections[p].Kind }
+
+# whether its source is an Input region, so that it is part of the per-settle constant (Plan decides it)
+fn (c Circuit<T>&) IsFolded(p Projection) Bool { return c.projections[p].Folded }
+
+fn (c Circuit<T>&) IsFrozen(p Projection) Bool { return c.projections[p].Frozen }
+
+# the strength of phase p's nudge (Nudge set it)
+fn (c Circuit<T>&) NudgeOf(p Phase) F64 { return c.nudges[phaseIndex(p)] }
+
+# synapses from every neuron of pre to every neuron of post (or, with density below 1, to a random fraction density
+# of them - each pair independently), one-way or reciprocal; frozen synapses keep their weights. A reciprocal
+# projection of a region to itself is a lateral block: its effective weights are W + W^T. store says how the block is
+# kept: Auto is Sparse (compressed sparse rows) when the density is at most SparseBelow, Dense otherwise
+fn (c mut Circuit<T>&) Project(pre Region, post Region, kind Wiring = Wiring.Reciprocal, density F64 = 1
+        frozen Bool = false, store Layout = Layout.Auto) Projection {
+    c.checkProjection(pre, post, kind)
+    if density <= 0.0 or density > 1.0: wrong("Project: a density is in (0, 1]")
+    c.projections.Push(projectionRec(pre, post, kind, density, frozen, store))
+    return Projection(c.projections.Len() - 1)
+}
+
+# synapses between the given pairs only - post neuron posts[k] receiving from pre neuron pres[k], numbered within the
+# regions, each pair once: a wiring diagram brought in from elsewhere. Kept Sparse unless store says Dense (or Auto
+# finds it dense enough)
+fn (c mut Circuit<T>&) ProjectWired(pre Region, post Region, posts Array<I32>&, pres Array<I32>&
+        kind Wiring = Wiring.Reciprocal, frozen Bool = false, store Layout = Layout.Auto) Projection {
+    c.checkProjection(pre, post, kind)
+    if posts.Len() != pres.Len() or posts.Len() == 0: wrong("ProjectWired: as many posts as pres, at least one")
+    at := c.wiredPost.Len()
+    for k in range posts.Len() {
+        c.wiredPost.Push(posts[k])
+        c.wiredPre.Push(pres[k])
+    }
+    density F64 = F64(posts.Len()) / F64(c.regions[pre].Size * c.regions[post].Size)
+    if density > 1.0: wrong("ProjectWired: more pairs than the block has synapses")
+    c.projections.Push(projectionRec(pre, post, kind, density, frozen, store, at, posts.Len()))
+    return Projection(c.projections.Len() - 1)
+}
+
+fn (c Circuit<T>&) checkProjection(pre Region, post Region, kind Wiring) {
+    if c.planned: wrong("the circuit is planned already - projections are recorded before Plan")
+    if pre < 0 or pre >= c.regions.Len() or post < 0 or post >= c.regions.Len(): wrong("Project: no such region")
+    if c.regions[post].Kind == Role.Input: wrong("Project into an Input region: nothing projects into an input")
+    if c.regions[pre].Kind == Role.Input and kind == Wiring.Reciprocal {
+        wrong("a projection from an Input region is one-way: an input has no synapses into it")
+    }
+}
+
+# the density at or below which Auto keeps a projection's synapses as compressed sparse rows: well inside where the
+# sparse products beat the dense ones (measured, docs/settling.md 5.9) - a dense block reads every position, a sparse
+# one only its synapses, at an index each. A transport's crossover is near half the positions at one row and at 32; a
+# contrast's (a product sampled at the synapses, against dense products at the processor's peak) near a sixth at 32
+# rows and a quarter at one, and a lesson runs several transports to its one contrast: at 0.25 a lesson is 1.6-2x and
+# a settle 2.3x as fast sparse
+SparseBelow F64 = 0.25
+
+# ---- planning ----
+
+# lays the arena out, allocates it and draws the weights from r: each block Glorot-uniform (+-sqrt(6 / (pre + post))),
+# biases at 0. A projection that is not complete - a density below 1, wired pairs, or stored Sparse - first gets its
+# pattern (drawn by sparse.DrawPattern, every pair at the density independently, before any weight is drawn), then a
+# weight per synapse in row order, Glorot over the expected fan-in and fan-out (+-sqrt(6 / (density (pre + post)))) -
+# the same weights whichever way it is stored, and at density 1 the same as a complete block's. Certify then scales the
+# recurrent weights
+fn (c mut Circuit<T>&) Plan(r mut rand.Rand&) {
+    if c.planned: wrong("Plan twice")
+    rows := c.Rows
+    n I64 = 0
+    rates I64 = 0
+    lifs I64 = 0
+    window I64 = 0
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        rg.Col = n
+        n += rg.Size
+        if not (rg.Kind == Role.Input) {
+            match rg.Model {
+                case Neuron.Lif(_, _, _, w) {
+                    lifs++
+                    if window != 0 and w != window: wrong("every Lif region of a circuit counts over one window")
+                    if w < 1: wrong("a Lif window is at least one step")
+                    window = w
+                }
+                case Neuron.Rate(_) { rates++ }
+            }
+        }
+        c.regions[i] = rg
+    }
+    if lifs > 0 and rates > 0: wrong("a circuit's Hidden and Readout neurons are all Lif or all rate neurons")
+    if lifs + rates == 0: wrong("a circuit needs a Hidden or a Readout region")
+    c.Spiking = lifs > 0
+    c.window = window if window > 0 else 1
+    c.Neurons = n
+    # the patterns, compressed sparse rows whatever the layout (a dense block's mask is made from its pattern)
+    ptrCount I64 = 0
+    for i in range c.projections.Len() {
+        p := c.projections[i]
+        if p.Density < 1.0 or p.Pairs >= 0 or p.Store == Layout.Sparse: ptrCount += c.regions[p.Post].Size + 1
+    }
+    c.ptrs = Array<I64>(ptrCount)
+    cols := list.List<I32>()
+    posts := c.wiredPost.ToArray()
+    pres := c.wiredPre.ToArray()
+    ptrAt I64 = 0
+    for i in range c.projections.Len() {
+        p := c.projections[i]
+        post I64 = c.regions[p.Post].Size
+        pre I64 = c.regions[p.Pre].Size
+        p.Nnz = post * pre
+        if p.Density < 1.0 or p.Pairs >= 0 or p.Store == Layout.Sparse {
+            p.Ptr = ptrAt
+            p.Idx = cols.Len()
+            if p.Pairs >= 0 {
+                sparse.PatternOf(post, pre, posts[p.Pairs:p.Pairs + p.PairCount], pres[p.Pairs:p.Pairs + p.PairCount]
+                    c.ptrs[ptrAt:ptrAt + post + 1], cols)
+            } else {
+                sparse.DrawPattern(post, pre, p.Density, r, c.ptrs[ptrAt:ptrAt + post + 1], cols)
+            }
+            p.Nnz = cols.Len() - p.Idx
+            ptrAt += post + 1
+            p.Sparse = p.Store == Layout.Sparse or (p.Store == Layout.Auto and p.Density <= SparseBelow)
+        }
+        c.projections[i] = p
+    }
+    c.idx = cols.ToArray()
+    at I64 = 0
+    maskAt I64 = 0
+    for i in range c.projections.Len() {
+        p := c.projections[i]
+        size I64 = c.regions[p.Post].Size * c.regions[p.Pre].Size
+        p.Offset = at
+        at += p.Nnz if p.Sparse else size
+        p.Folded = c.regions[p.Pre].Kind == Role.Input
+        if p.Sparse: c.sparseBlocks++
+        if not p.Sparse and p.Nnz < size {
+            p.Mask = maskAt
+            maskAt += size
+        }
+        c.projections[i] = p
+    }
+    c.bias = at
+    at += n
+    c.ParamCount = at
+    at += c.ParamCount                                  # the gradients
+    labelAt I64 = 0
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        rg.Drive = at
+        at += rows * rg.Size
+        if rg.Kind == Role.Readout {
+            match rg.Fit {
+                case Cost.CrossEntropy(_) {
+                    rg.Labels = labelAt
+                    labelAt += rows * rg.Groups
+                }
+                case Cost.Squared {
+                    rg.Target = at
+                    at += rows * rg.Size
+                }
+            }
+        }
+        c.regions[i] = rg
+    }
+    whole I64 = rows * n
+    c.arrays = 5 if c.Spiking else 2
+    c.state = at
+    at += 8 * c.arrays * whole                          # four phases, two slots each
+    c.constant = at
+    at += whole
+    c.total = at
+    at += whole
+    c.count = at
+    at += whole if c.Spiking else 0
+    c.diff = at
+    at += whole
+    c.residual = at
+    at += rows
+    c.lastResidual = at
+    at += 4 * rows
+    c.mass = at
+    at += n
+    if c.sparseBlocks > 0 {
+        c.feature = at
+        at += 3 * whole
+    }
+    c.mem = Array<T>(at)
+    c.labels = Array<I32>(labelAt)
+    c.masks = Array<U8>(maskAt)
+    c.planned = true
+    like T
+    for i in range c.projections.Len() {
+        p := c.projections[i]
+        post I64 = c.regions[p.Post].Size
+        pre I64 = c.regions[p.Pre].Size
+        if p.Ptr < 0 {
+            w := c.Weights(Projection(i))
+            limit F64 = (6.0 / F64(w.Rows + w.Cols)).Sqrt()
+            w.FillUniform(r, -limit, limit)
+            continue
+        }
+        limit F64 = (6.0 / (p.Density * F64(post + pre))).Sqrt()
+        for row in range post {
+            for e in range c.ptrs[p.Ptr + row], c.ptrs[p.Ptr + row + 1] {
+                x := linalg.Cast(r.Uniform(-limit, limit), like)
+                if p.Sparse {
+                    c.mem[p.Offset + e] = x
+                } else {
+                    at2 I64 = row * pre + I64(c.idx[p.Idx + e])
+                    c.mem[p.Offset + at2] = x
+                    if p.Mask >= 0: c.masks[p.Mask + at2] = 1
+                }
+            }
+        }
+    }
+}
+
+# ---- parameters, data and state ----
+
+# a dense projection's weights, post x pre, as a view of the arena
+fn (c Circuit<T>&) Weights(p Projection) linalg.Matrix<T> {
+    pr := c.projections[p]
+    if pr.Sparse: wrong("Weights of a sparse projection - its synapses are SparseWeights")
+    return linalg.Matrix.View(c.mem, pr.Offset, c.regions[pr.Post].Size, c.regions[pr.Pre].Size)!
+}
+
+# a dense projection's gradient (the last Contrast's), laid out as its weights
+fn (c Circuit<T>&) WeightGrads(p Projection) linalg.Matrix<T> {
+    pr := c.projections[p]
+    if pr.Sparse: wrong("WeightGrads of a sparse projection - its gradients are SparseWeightGrads")
+    return linalg.Matrix.View(c.mem, c.ParamCount + pr.Offset, c.regions[pr.Post].Size, c.regions[pr.Pre].Size)!
+}
+
+# whether a projection is stored as compressed sparse rows (Plan decides it, by its Layout)
+fn (c Circuit<T>&) IsSparse(p Projection) Bool {
+    return c.projections[p].Sparse
+}
+
+# a projection's synapses: post x pre for a complete block, fewer for one with a pattern
+fn (c Circuit<T>&) Synapses(p Projection) I64 {
+    return c.projections[p].Nnz
+}
+
+# a sparse projection's synapses, post x pre in compressed sparse rows, their values a view of the parameters
+fn (c Circuit<T>&) SparseWeights(p Projection) sparse.Csr<T> {
+    return c.csr(p, 0)
+}
+
+# a sparse projection's gradients, laid out as its synapses (the pattern is the same)
+fn (c Circuit<T>&) SparseWeightGrads(p Projection) sparse.Csr<T> {
+    return c.csr(p, c.ParamCount)
+}
+
+fn (c Circuit<T>&) csr(p Projection, from I64) sparse.Csr<T> {
+    pr := c.projections[p]
+    if not pr.Sparse: wrong("SparseWeights of a dense projection - its weights are Weights")
+    post := c.regions[pr.Post].Size
+    at I64 = from + pr.Offset
+    return sparse.Csr<T>(post, c.regions[pr.Pre].Size, c.ptrs[pr.Ptr:pr.Ptr + post + 1], c.idx[pr.Idx:pr.Idx + pr.Nnz]
+        c.mem[at:at + pr.Nnz])
+}
+
+# a projection's weights scaled by f, every synapse alike
+fn (c mut Circuit<T>&) scaleBlock(i I64, f T) {
+    pr := c.projections[i]
+    if not pr.Sparse {
+        c.Weights(Projection(i)).Scale(f)
+        return
+    }
+    for e in range pr.Nnz: c.mem[pr.Offset + e] = c.mem[pr.Offset + e] * f
+}
+
+# a region's biases (an Input region's are not used: its state is rho(drive))
+fn (c Circuit<T>&) Bias(reg Region) mut Array<T>& {
+    rg := c.regions[reg]
+    return c.mem[c.bias + rg.Col:c.bias + rg.Col + rg.Size]
+}
+
+# a region's bias gradients
+fn (c Circuit<T>&) BiasGrads(reg Region) mut Array<T>& {
+    rg := c.regions[reg]
+    at I64 = c.ParamCount + c.bias + rg.Col
+    return c.mem[at:at + rg.Size]
+}
+
+# every parameter, one after another, as a 1 x ParamCount matrix - what an optimizer updates
+fn (c Circuit<T>&) Params() linalg.Matrix<T> {
+    return linalg.Matrix.View(c.mem, 0, 1, c.ParamCount)!
+}
+
+# every parameter's gradient, laid out as Params()
+fn (c Circuit<T>&) Grads() linalg.Matrix<T> {
+    return linalg.Matrix.View(c.mem, c.ParamCount, 1, c.ParamCount)!
+}
+
+# every parameter as one array, and their gradients as another: what optim's flat optimizers step -
+# opt.Step(c.ParamData(), c.GradData())
+fn (c Circuit<T>&) ParamData() mut Array<T>& {
+    return c.mem[0:c.ParamCount]
+}
+
+fn (c Circuit<T>&) GradData() mut Array<T>& {
+    return c.mem[c.ParamCount:2 * c.ParamCount]
+}
+
+# where the caller puts a region's drive: Rows rows of its neurons, one after another. An input's drive is its
+# activity's argument; any other region's is added to its neurons' totals (a memory read, an encoder's output)
+fn (c Circuit<T>&) DriveData(reg Region) mut Array<T>& {
+    rg := c.regions[reg]
+    return c.mem[rg.Drive:rg.Drive + c.Rows * rg.Size]
+}
+
+# where the caller puts a CrossEntropy readout's classes, one per row - one per group per row, row after row, for a
+# readout split into groups (each group's class numbered within it)
+fn (c Circuit<T>&) LabelData(reg Region) mut Array<I32>& {
+    rg := c.regions[reg]
+    if rg.Labels < 0: wrong("LabelData of a region that is no CrossEntropy readout")
+    return c.labels[rg.Labels:rg.Labels + c.Rows * rg.Groups]
+}
+
+# where the caller puts a Squared readout's targets, Rows rows of its neurons
+fn (c Circuit<T>&) TargetData(reg Region) mut Array<T>& {
+    rg := c.regions[reg]
+    if rg.Target < 0: wrong("TargetData of a region that is no Squared readout")
+    return c.mem[rg.Target:rg.Target + c.Rows * rg.Size]
+}
+
+# the rows the next settles run on (at most Rows; a short batch)
+fn (c mut Circuit<T>&) Use(n I64) {
+    if n < 1 or n > c.Rows: wrong("Use " + $n + " rows of a circuit of " + $(c.Rows))
+    c.N = n
+}
+
+fn phaseIndex(p Phase) I64 {
+    return match p {
+        case Phase.Free: 0
+        case Phase.Plus: 1
+        case Phase.Minus: 2
+        case Phase.Scratch: 3
+    }
+}
+
+# where array k (0 the potentials v, 1 the activities s, 2 synaptic currents, 3 spikes, 4 rate traces) of phase pi's
+# slot starts
+fn (c Circuit<T>&) slotAt(pi I64, slot I64, k I64) I64 {
+    return c.state + ((pi * 2 + slot) * c.arrays + k) * c.Rows * c.Neurons
+}
+
+fn (c Circuit<T>&) committed(pi I64, k I64) I64 {
+    return c.slotAt(pi, c.current[pi], k)
+}
+
+fn (c Circuit<T>&) candidate(pi I64, k I64) I64 {
+    return c.slotAt(pi, 1 - c.current[pi], k)
+}
+
+# phase p's activities s, the rows in use by every neuron, as a view of its committed state (writing it writes it)
+fn (c Circuit<T>&) Value(p Phase) linalg.Matrix<T> {
+    return linalg.Matrix.View(c.mem, c.committed(phaseIndex(p), 1), c.N, c.Neurons)!
+}
+
+# phase p's potentials v (a spiking circuit's membrane potentials)
+fn (c Circuit<T>&) Potential(p Phase) linalg.Matrix<T> {
+    return linalg.Matrix.View(c.mem, c.committed(phaseIndex(p), 0), c.N, c.Neurons)!
+}
+
+# one region's columns of phase p's activities
+fn (c Circuit<T>&) Activity(p Phase, reg Region) linalg.Matrix<T> {
+    rg := c.regions[reg]
+    return linalg.Matrix.View(c.mem, c.committed(phaseIndex(p), 1) + rg.Col, c.N, rg.Size, c.Neurons)!
+}
+
+# array k of phase p's committed state, the rows in use by every neuron, as a view (writing it writes it): 0 the
+# potentials, 1 the activities, and for a spiking circuit 2 the synaptic currents, 3 the last step's spikes (0 or 1),
+# 4 the rate traces - what a settle goes on from, for those that run a circuit's settles elsewhere (board.olang)
+fn (c Circuit<T>&) StateOf(p Phase, k I64) linalg.Matrix<T> {
+    if k < 0 or k >= c.arrays: wrong("StateOf: a phase's state has arrays 0 .. " + $(c.arrays - 1))
+    return linalg.Matrix.View(c.mem, c.committed(phaseIndex(p), k), c.N, c.Neurons)!
+}
+
+# the class each row in use answers on a readout in phase p: the neuron most active - for a readout split into
+# groups, each group's (numbered within it), Groups per row
+fn (c Circuit<T>&) Predict(p Phase, reg Region, out mut Array<I32>&) {
+    rg := c.regions[reg]
+    if rg.Groups == 1 {
+        c.Activity(p, reg).ArgMaxRows(out[:c.N])!
+        return
+    }
+    s := c.committed(phaseIndex(p), 1)
+    w I64 = rg.Size / rg.Groups
+    for b in range c.N {
+        for g in range rg.Groups {
+            at I64 = s + b * c.Neurons + rg.Col + g * w
+            best I64 = 0
+            for j in range 1, w {
+                if c.mem[at + j] > c.mem[at + best]: best = j
+            }
+            out[b * rg.Groups + g] = I32(best)
+        }
+    }
+}
+
+# from[at .. at + n] to to[..]: within the arena
+fn (c mut Circuit<T>&) copyRun(from I64, to I64, n I64) {
+    for i in range n: c.mem[to + i] = c.mem[from + i]
+}
+
+fn (c mut Circuit<T>&) zeroRun(at I64, n I64) {
+    zero T
+    for i in range n: c.mem[at + i] = zero
+}
+
+# phase p's committed state set to from's (every row): a nudged phase starts from the free state
+fn (c mut Circuit<T>&) Warm(p Phase, from Phase) {
+    pi := phaseIndex(p)
+    fi := phaseIndex(from)
+    if pi == fi: return
+    for k in range c.arrays: c.copyRun(c.committed(fi, k), c.committed(pi, k), c.Rows * c.Neurons)
+}
+
+# phase p's committed state set to zero: a cold start
+fn (c mut Circuit<T>&) Reset(p Phase) {
+    pi := phaseIndex(p)
+    for k in range c.arrays: c.zeroRun(c.committed(pi, k), c.Rows * c.Neurons)
+}
+
+# the strength of phase p's nudge: its readouts' totals gain beta times their cost's force (0: none)
+fn (c mut Circuit<T>&) Nudge(p Phase, beta F64) {
+    c.nudges[phaseIndex(p)] = beta
+}
+
+# ---- the neurons ----
+
+# the steady firing rate, in spikes per step, of a Lif neuron (leak, threshold) under the constant input current x,
+# without the discreteness of steps: the time to climb from 0 to the threshold, tau ln(x / (x - threshold)) steps with
+# tau = -1 / ln(1 - leak), once x is above the threshold - and at most one spike a step
+fn LifRateOf(x F64, leak F64, threshold F64) F64 {
+    if x <= threshold: return 0.0
+    tau F64 = -1.0 / (1.0 - leak).Log()
+    period F64 = tau * (x / (x - threshold)).Log()
+    return 1.0 if period <= 1.0 else 1.0 / period
+}
+
+# the largest slope of an activation: what turns the incoming mass into a gain (no bound for LifRate, whose slope is
+# unbounded at the threshold)
+fn slopeOf(model Neuron) F64 {
+    match model {
+        case Neuron.Rate(f) {
+            return match f {
+                case Rho.Tanh: 1.0
+                case Rho.HardSigmoid: 1.0
+                case Rho.Linear: 1.0
+                case Rho.LifRate(_, _): Inf
+            }
+        }
+        case Neuron.Lif(_, _, _, _) { return Inf }
+    }
+}
+
+# s = rho(v) for n elements at vAt, written at sAt
+fn (c mut Circuit<T>&) activate(model Neuron, vAt I64, sAt I64, n I64) {
+    like T
+    match model {
+        case Neuron.Rate(f) {
+            match f {
+                case Rho.Tanh {
+                    for i in range n: c.mem[sAt + i] = linalg.FastTanh(c.mem[vAt + i])
+                }
+                case Rho.HardSigmoid {
+                    for i in range n {
+                        x T = c.mem[vAt + i]
+                        c.mem[sAt + i] = 0.0 if x < 0.0 else (1.0 if x > 1.0 else x)
+                    }
+                }
+                case Rho.Linear { c.copyRun(vAt, sAt, n) }
+                case Rho.LifRate(leak, threshold) {
+                    for i in range n { c.mem[sAt + i] = linalg.Cast(LifRateOf(F64(c.mem[vAt + i]), leak, threshold), like) }
+                }
+            }
+        }
+        case Neuron.Lif(_, _, _, _) { wrong("a Lif neuron has no activation of its potential") }
+    }
+}
+
+# v += dt (total - v), s = rho(v): one sweep's step for n elements of a rate region
+fn (c mut Circuit<T>&) stepRun(f Rho, vAt I64, sAt I64, tAt I64, n I64, h T) {
+    like T
+    match f {
+        case Rho.Tanh {
+            for i in range n {
+                x T = c.mem[vAt + i] + h * (c.mem[tAt + i] - c.mem[vAt + i])
+                c.mem[vAt + i] = x
+                c.mem[sAt + i] = linalg.FastTanh(x)
+            }
+        }
+        case Rho.HardSigmoid {
+            for i in range n {
+                x T = c.mem[vAt + i] + h * (c.mem[tAt + i] - c.mem[vAt + i])
+                c.mem[vAt + i] = x
+                c.mem[sAt + i] = 0.0 if x < 0.0 else (1.0 if x > 1.0 else x)
+            }
+        }
+        case Rho.Linear {
+            for i in range n {
+                x T = c.mem[vAt + i] + h * (c.mem[tAt + i] - c.mem[vAt + i])
+                c.mem[vAt + i] = x
+                c.mem[sAt + i] = x
+            }
+        }
+        case Rho.LifRate(leak, threshold) {
+            for i in range n {
+                x T = c.mem[vAt + i] + h * (c.mem[tAt + i] - c.mem[vAt + i])
+                c.mem[vAt + i] = x
+                c.mem[sAt + i] = linalg.Cast(LifRateOf(F64(x), leak, threshold), like)
+            }
+        }
+    }
+}
+
+# ---- one sweep ----
+
+# the per-settle part, into the slot whose potentials and activities start at v and s: every input region's state in
+# closed form (v = drive, s = rho(drive)), and the constant d + b + the folded blocks' input for every other neuron
+fn (c mut Circuit<T>&) prepare(v I64, s I64) {
+    n := c.Neurons
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        for b in range c.N {
+            d I64 = rg.Drive + b * rg.Size
+            k I64 = c.constant + b * n + rg.Col
+            if rg.Kind == Role.Input {
+                c.copyRun(d, k, rg.Size)
+                c.copyRun(d, v + b * n + rg.Col, rg.Size)
+                c.activate(rg.Model, d, s + b * n + rg.Col, rg.Size)
+            } else {
+                at I64 = c.bias + rg.Col
+                for j in range rg.Size: c.mem[k + j] = c.mem[d + j] + c.mem[at + j]
+            }
+        }
+    }
+    like T
+    one := linalg.Cast(1.0, like)
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if not pr.Folded: continue
+        pre := c.regions[pr.Pre]
+        post := c.regions[pr.Post]
+        if pr.Sparse {
+            sw := c.SparseWeights(Projection(i))
+            for b in range c.N { sw.MulAdd(c.mem, s + b * n + pre.Col, 1, c.mem, c.constant + b * n + post.Col, 1, 1, one) }
+            continue
+        }
+        w := c.Weights(Projection(i))
+        to := linalg.Matrix.View(c.mem, c.constant + post.Col, c.N, post.Size, n)!
+        from := linalg.Matrix.View(c.mem, s + pre.Col, c.N, pre.Size, n)!
+        c.ws.Gemm(to, from, false, w, true, 1, 1)!
+    }
+}
+
+# total = the constant (or zero) + every recurrent block's transport of the activities at x: s_pre W^T into post, and
+# for a reciprocal block s_post W into pre - one product per block and direction, the batch's rows together
+fn (c mut Circuit<T>&) transport(x I64, withConstant Bool) {
+    n := c.Neurons
+    if withConstant { c.copyRun(c.constant, c.total, c.N * n) } else { c.zeroRun(c.total, c.N * n) }
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if pr.Folded or pr.Sparse: continue
+        w := c.Weights(Projection(i))
+        pre := c.regions[pr.Pre]
+        post := c.regions[pr.Post]
+        to := linalg.Matrix.View(c.mem, c.total + post.Col, c.N, post.Size, n)!
+        from := linalg.Matrix.View(c.mem, x + pre.Col, c.N, pre.Size, n)!
+        c.ws.Gemm(to, from, false, w, true, 1, 1)!
+        if pr.Kind == Wiring.Reciprocal {
+            back := linalg.Matrix.View(c.mem, c.total + pre.Col, c.N, pre.Size, n)!
+            at := linalg.Matrix.View(c.mem, x + post.Col, c.N, post.Size, n)!
+            c.ws.Gemm(back, at, false, w, false, 1, 1)!
+        }
+    }
+    if c.sparseBlocks > 0: c.sparseTransport(x)
+}
+
+# every sparse recurrent block's transport of the activities at x, added to the totals: for one row on the state as
+# it is (a row is a feature-major batch of width 1); for several, the activities transposed into feature-major, the
+# products there, and their sums transposed back - so each synapse is read once for the whole batch
+fn (c mut Circuit<T>&) sparseTransport(x I64) {
+    n := c.Neurons
+    like T
+    one := linalg.Cast(1.0, like)
+    if c.N == 1 {
+        for i in range c.projections.Len() {
+            pr := c.projections[i]
+            if not pr.Sparse or pr.Folded: continue
+            w := c.SparseWeights(Projection(i))
+            pre := c.regions[pr.Pre]
+            post := c.regions[pr.Post]
+            w.MulAdd(c.mem, x + pre.Col, 1, c.mem, c.total + post.Col, 1, 1, one)
+            if pr.Kind == Wiring.Reciprocal: w.MulAddT(c.mem, x + post.Col, 1, c.mem, c.total + pre.Col, 1, 1, one)
+        }
+        return
+    }
+    rows := c.Rows
+    xt := c.feature
+    tt := c.feature + n * rows
+    c.toFeatures(x, xt)
+    c.zeroRun(tt, n * rows)
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if not pr.Sparse or pr.Folded: continue
+        w := c.SparseWeights(Projection(i))
+        pre := c.regions[pr.Pre]
+        post := c.regions[pr.Post]
+        w.MulAdd(c.mem, xt + pre.Col * rows, rows, c.mem, tt + post.Col * rows, rows, c.N, one)
+        if pr.Kind == Wiring.Reciprocal {
+            w.MulAddT(c.mem, xt + post.Col * rows, rows, c.mem, tt + pre.Col * rows, rows, c.N, one)
+        }
+    }
+    for b in range c.N {
+        for j in range n: c.mem[c.total + b * n + j] = c.mem[c.total + b * n + j] + c.mem[tt + j * rows + b]
+    }
+}
+
+# the rows in use of the sample-major state at x (N x Neurons) into feature-major at to (Neurons x Rows)
+fn (c mut Circuit<T>&) toFeatures(x I64, to I64) {
+    n := c.Neurons
+    rows := c.Rows
+    for b in range c.N {
+        for j in range n: c.mem[to + j * rows + b] = c.mem[x + b * n + j]
+    }
+}
+
+# total += beta times each readout's force at the activities s: onehot(class) - softmax(s / T) for a CrossEntropy
+# readout, target - s for a Squared one
+fn (c mut Circuit<T>&) addNudge(s I64, beta F64) {
+    n := c.Neurons
+    like T
+    k := linalg.Cast(beta, like)
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if not (rg.Kind == Role.Readout): continue
+        for b in range c.N {
+            at I64 = s + b * n + rg.Col
+            to I64 = c.total + b * n + rg.Col
+            match rg.Fit {
+                case Cost.CrossEntropy(temperature) {
+                    inv := linalg.Cast(1.0 / temperature, like)
+                    w I64 = rg.Size / rg.Groups
+                    for g in range rg.Groups {
+                        y I64 = I64(c.labels[rg.Labels + b * rg.Groups + g])
+                        ga I64 = at + g * w
+                        gt I64 = to + g * w
+                        top T = c.mem[ga]
+                        for j in range 1, w: top = top.Max(c.mem[ga + j])
+                        sum T = 0.0
+                        for j in range w: sum = sum + linalg.FastExp((c.mem[ga + j] - top) * inv)
+                        scale T = 1.0 / sum
+                        for j in range w {
+                            p T = linalg.FastExp((c.mem[ga + j] - top) * inv) * scale
+                            target T = 1.0 if j == y else 0.0
+                            c.mem[gt + j] = c.mem[gt + j] + k * (target - p)
+                        }
+                    }
+                }
+                case Cost.Squared {
+                    g I64 = rg.Target + b * rg.Size
+                    for j in range rg.Size: c.mem[to + j] = c.mem[to + j] + k * (c.mem[g + j] - c.mem[at + j])
+                }
+            }
+        }
+    }
+}
+
+# each row's largest |total - v| over the neurons that relax (every region but the inputs), into the residual
+# workspace; gives the largest of the rows (NaN when one is)
+fn (c mut Circuit<T>&) measure(v I64) F64 {
+    n := c.Neurons
+    worst F64 = 0.0
+    zero T
+    for b in range c.N {
+        best T = zero
+        for i in range c.regions.Len() {
+            rg := c.regions[i]
+            if rg.Kind == Role.Input: continue
+            at I64 = b * n + rg.Col
+            for j in range rg.Size: best = best.Max((c.mem[c.total + at + j] - c.mem[v + at + j]).Abs())
+        }
+        c.mem[c.residual + b] = best
+        worst = worst.Max(F64(best))
+    }
+    return worst
+}
+
+# one sweep's step for every row in use: v += dt (total - v), s = rho(v)
+fn (c mut Circuit<T>&) step(v I64, s I64, dt F64) {
+    n := c.Neurons
+    like T
+    h := linalg.Cast(dt, like)
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if rg.Kind == Role.Input: continue
+        match rg.Model {
+            case Neuron.Rate(f) {
+                for b in range c.N {
+                    at I64 = b * n + rg.Col
+                    c.stepRun(f, v + at, s + at, c.total + at, rg.Size, h)
+                }
+            }
+            case Neuron.Lif(_, _, _, _) { wrong("step on a spiking circuit") }
+        }
+    }
+}
+
+# ---- settling ----
+
+# the candidate slot of phase pi set to its committed state - where a settle runs
+fn (c mut Circuit<T>&) begin(pi I64) {
+    for k in range c.arrays: c.copyRun(c.committed(pi, k), c.candidate(pi, k), c.N * c.Neurons)
+}
+
+# the candidate becomes phase pi's committed state
+fn (c mut Circuit<T>&) commit(pi I64) {
+    c.current[pi] = 1 - c.current[pi]
+    c.copyRun(c.residual, c.lastResidual + pi * c.Rows, c.N)
+}
+
+# settles phase p from its committed state: sweeps until every row's residual is at most tolerance, then commits;
+# the budget is the most sweeps (time steps, for a spiking circuit) it may take. Refuses with NotSettled otherwise,
+# committing nothing. c.Last tells how it went either way
+fn (c mut Circuit<T>&) Settle(p Phase, budget I64, tolerance F64) Settlement ? NotSettled {
+    return try c.settle(p, budget, tolerance, true)
+}
+
+# Settle, with the input states and the constant made afresh (fresh) or kept from the last settle - a nudged phase of
+# a lesson, which has the free phase's drive and weights
+fn (c mut Circuit<T>&) settle(p Phase, budget I64, tolerance F64, fresh Bool) Settlement ? NotSettled {
+    if not c.planned: wrong("Settle before Plan")
+    pi := phaseIndex(p)
+    c.begin(pi)
+    if fresh: c.prepare(c.candidate(pi, 0), c.candidate(pi, 1))
+    if c.Spiking: return try c.spikes(pi, budget, tolerance, true)
+    return try c.relax(pi, budget, tolerance, true)
+}
+
+# the sweeps of a rate circuit's settle, in phase pi's candidate slot: with check, the residual of every state is
+# measured and the first that qualifies is committed (a refusal when none does within budget); without, budget
+# sweeps run and the state reached is committed, its residual reported. The step is StepFor(the phase's nudge).
+# Damping: with Attempts above 1 the budget is split into that many parts, the step halved in each - the residual
+# tested is always the undamped one
+fn (c mut Circuit<T>&) relax(pi I64, budget I64, tolerance F64, check Bool) Settlement ? NotSettled {
+    v := c.candidate(pi, 0)
+    s := c.candidate(pi, 1)
+    beta := c.nudges[pi]
+    parts I64 = c.Attempts if c.Attempts > 1 else 1
+    base := c.StepFor(beta)
+    dt F64 = base
+    for k in range budget + 1 {
+        if check or k == budget {
+            c.transport(s, true)
+            if beta != 0.0: c.addNudge(s, beta)
+            worst := c.measure(v)
+            if check and not (worst <= 1e300) {
+                c.Last = Settlement(k, worst, false, dt)
+                error NotSettled.Nonfinite
+            }
+            if not check or worst <= tolerance {
+                c.commit(pi)
+                c.Sweeps += k
+                c.Last = Settlement(k, worst, worst <= tolerance, dt)
+                return c.Last
+            }
+            if k == budget {
+                c.Last = Settlement(k, worst, false, dt)
+                error NotSettled.Budget
+            }
+        } else {
+            c.transport(s, true)
+            if beta != 0.0: c.addNudge(s, beta)
+        }
+        dt = base / F64(I64(1) << (k * parts / budget))
+        c.step(v, s, dt)
+    }
+    unreachable
+}
+
+# runs phase p for sweeps sweeps from its committed state (for a spiking circuit, whole windows of steps, at least
+# one) with no stopping test, and commits the state reached, reporting its residual - a finite phase, or one step of
+# a trajectory
+fn (c mut Circuit<T>&) Run(p Phase, sweeps I64) Settlement {
+    if not c.planned: wrong("Run before Plan")
+    pi := phaseIndex(p)
+    c.begin(pi)
+    c.prepare(c.candidate(pi, 0), c.candidate(pi, 1))
+    if c.Spiking { return try c.spikes(pi, sweeps, 0.0, false) catch { unreachable } }
+    return try c.relax(pi, sweeps, 0.0, false) catch { unreachable }
+}
+
+# the totals of phase p's committed state - every neuron's input from the state, with its phase's nudge - for the
+# rows in use, as a view of the workspace (valid until the next settle); the residual is Totals - Potential
+fn (c mut Circuit<T>&) Totals(p Phase) linalg.Matrix<T> {
+    if c.Spiking: wrong("Totals of a spiking circuit")
+    pi := phaseIndex(p)
+    v := c.committed(pi, 0)
+    s := c.committed(pi, 1)
+    c.prepare(v, s)
+    c.transport(s, true)
+    beta := c.nudges[pi]
+    if beta != 0.0: c.addNudge(s, beta)
+    return linalg.Matrix.View(c.mem, c.total, c.N, c.Neurons)!
+}
+
+# each row's residual max |total - v| at phase p's committed state, into out (N of them), without settling; gives the
+# largest. For a spiking circuit, the residuals its last settle ended on
+fn (c mut Circuit<T>&) Residual(p Phase, out mut Array<T>&) F64 {
+    pi := phaseIndex(p)
+    worst F64 = 0.0
+    if c.Spiking {
+        for b in range c.N {
+            out[b] = c.mem[c.lastResidual + pi * c.Rows + b]
+            worst = worst.Max(F64(out[b]))
+        }
+        return worst
+    }
+    c.Totals(p)
+    worst = c.measure(c.committed(pi, 0))
+    for b in range c.N: out[b] = c.mem[c.residual + b]
+    return worst
+}
+
+# ---- spiking ----
+
+# the steps of a spiking circuit's settle, in phase pi's candidate slot, a window at a time: each step the synaptic
+# currents follow the spikes of the step before (through the same transport as rates), a nudged readout's current
+# gains beta times its cost's force at its neurons' rate traces, every Lif neuron integrates its current and spikes;
+# at a window's end the activities become its spike counts per step, and a row's residual is
+# the largest change of a rate since the window before. With check the first window whose change is within tolerance
+# in every row is committed; without, the windows run and the last is committed
+fn (c mut Circuit<T>&) spikes(pi I64, budget I64, tolerance F64, check Bool) Settlement ? NotSettled {
+    v := c.candidate(pi, 0)
+    s := c.candidate(pi, 1)
+    syn := c.candidate(pi, 2)
+    spk := c.candidate(pi, 3)
+    trace := c.candidate(pi, 4)
+    beta := c.nudges[pi]
+    w := c.window
+    windows I64 = budget / w if budget >= w else 1
+    steps I64 = 0
+    for k in range windows {
+        c.zeroRun(c.count, c.N * c.Neurons)
+        for _ in range w {
+            c.transport(spk, false)
+            c.currents(syn)
+            if beta != 0.0: c.addNudge(trace, beta)
+            c.fire(v, spk, trace)
+        }
+        steps += w
+        worst := c.rates(s)
+        if check and not (worst <= 1e300) {
+            c.Last = Settlement(steps, worst, false, 1)
+            error NotSettled.Nonfinite
+        }
+        if (check and worst <= tolerance) or k == windows - 1 {
+            if check and worst > tolerance {
+                c.Last = Settlement(steps, worst, false, 1)
+                error NotSettled.Budget
+            }
+            c.commit(pi)
+            c.Sweeps += steps
+            c.Last = Settlement(steps, worst, worst <= tolerance, 1)
+            return c.Last
+        }
+    }
+    unreachable
+}
+
+# a step's input currents: each synaptic current moves by its rate toward the transport just computed (in total),
+# and total becomes the constant plus the synaptic current
+fn (c mut Circuit<T>&) currents(syn I64) {
+    n := c.Neurons
+    like T
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if rg.Kind == Role.Input: continue
+        match rg.Model {
+            case Neuron.Lif(_, _, synapse, _) {
+                k := linalg.Cast(synapse, like)
+                for b in range c.N {
+                    at I64 = b * n + rg.Col
+                    for j in range rg.Size {
+                        y T = c.mem[syn + at + j] + k * (c.mem[c.total + at + j] - c.mem[syn + at + j])
+                        c.mem[syn + at + j] = y
+                        c.mem[c.total + at + j] = c.mem[c.constant + at + j] + y
+                    }
+                }
+            }
+            case Neuron.Rate(_) { }
+        }
+    }
+}
+
+# a step of every Lif neuron: u += leak (current - u); a spike when u reaches the threshold, which u then loses; and
+# its rate trace, a running mean of its spikes over about a quarter of a window - what a nudge's force reads, so that
+# the force follows the spikes step by step rather than jumping once a window (which, where the rate curve is steep,
+# swings from window to window)
+fn (c mut Circuit<T>&) fire(v I64, spk I64, trace I64) {
+    n := c.Neurons
+    like T
+    one := linalg.Cast(1.0, like)
+    follow := linalg.Cast((4.0 / F64(c.window)).Min(1.0), like)
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if rg.Kind == Role.Input: continue
+        match rg.Model {
+            case Neuron.Lif(leak, threshold, _, _) {
+                k := linalg.Cast(leak, like)
+                th := linalg.Cast(threshold, like)
+                for b in range c.N {
+                    at I64 = b * n + rg.Col
+                    for j in range rg.Size {
+                        u T = c.mem[v + at + j] + k * (c.mem[c.total + at + j] - c.mem[v + at + j])
+                        fired Bool = u >= th
+                        c.mem[v + at + j] = u - th if fired else u
+                        x T = one if fired else like
+                        c.mem[spk + at + j] = x
+                        c.mem[c.count + at + j] = c.mem[c.count + at + j] + x
+                        c.mem[trace + at + j] = c.mem[trace + at + j] + follow * (x - c.mem[trace + at + j])
+                    }
+                }
+            }
+            case Neuron.Rate(_) { }
+        }
+    }
+}
+
+# the window's end: the activities become its spike counts per step, each row's residual the largest change of a
+# rate; gives the largest of the rows
+fn (c mut Circuit<T>&) rates(s I64) F64 {
+    n := c.Neurons
+    like T
+    per := linalg.Cast(1.0 / F64(c.window), like)
+    worst F64 = 0.0
+    for b in range c.N {
+        best T = like
+        for i in range c.regions.Len() {
+            rg := c.regions[i]
+            if rg.Kind == Role.Input: continue
+            at I64 = b * n + rg.Col
+            for j in range rg.Size {
+                r T = c.mem[c.count + at + j] * per
+                best = best.Max((r - c.mem[s + at + j]).Abs())
+                c.mem[s + at + j] = r
+            }
+        }
+        c.mem[c.residual + b] = best
+        worst = worst.Max(F64(best))
+    }
+    return worst
+}
+
+# ---- the certificate ----
+
+# every neuron's incoming mass, into the mass workspace: the absolute weights of the recurrent synapses into it (a
+# folded block's source is constant, so it is not counted) - a reciprocal block's rows into post and its columns into
+# pre (a lateral block's both, a bound on |W + W^T|)
+fn (c mut Circuit<T>&) masses() {
+    n := c.Neurons
+    zero T
+    for i in range n: c.mem[c.mass + i] = zero
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if pr.Folded: continue
+        post := c.regions[pr.Post]
+        pre := c.regions[pr.Pre]
+        if pr.Sparse {
+            sw := c.SparseWeights(Projection(i))
+            for r in range sw.Rows {
+                row T = zero
+                for e in range sw.Ptr[r], sw.Ptr[r + 1] {
+                    a T = sw.Values[e].Abs()
+                    row = row + a
+                    if pr.Kind == Wiring.Reciprocal {
+                        j I64 = c.mass + pre.Col + I64(sw.Idx[e])
+                        c.mem[j] = c.mem[j] + a
+                    }
+                }
+                c.mem[c.mass + post.Col + r] = c.mem[c.mass + post.Col + r] + row
+            }
+            continue
+        }
+        w := c.Weights(Projection(i))
+        for r in range w.Rows {
+            row T = zero
+            for j in range w.Cols {
+                a T = w.Data[r * w.Stride + j].Abs()
+                row = row + a
+                if pr.Kind == Wiring.Reciprocal: c.mem[c.mass + pre.Col + j] = c.mem[c.mass + pre.Col + j] + a
+            }
+            c.mem[c.mass + post.Col + r] = c.mem[c.mass + post.Col + r] + row
+        }
+    }
+}
+
+# the largest slope of the activations that relax
+fn (c Circuit<T>&) slope() F64 {
+    worst F64 = 0.0
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if not (rg.Kind == Role.Input): worst = worst.Max(slopeOf(rg.Model))
+    }
+    return worst
+}
+
+# the feedback gain kappa: the largest incoming mass times the activations' largest slope. Below 1, a sweep (at
+# dt = 1) is a contraction in the largest-element norm with this factor - one equilibrium, and every bound of the
+# certificate; infinite for neurons with no bounded slope (Lif, LifRate)
+fn (c mut Circuit<T>&) Gain() F64 {
+    if not c.planned: wrong("Gain before Plan")
+    c.masses()
+    most F64 = 0.0
+    for i in range c.Neurons: most = most.Max(F64(c.mem[c.mass + i]))
+    l := c.slope()
+    return 0.0 if most == 0.0 else most * l
+}
+
+# the largest slope of a nudge's force on its own neuron, per unit of beta: a CrossEntropy readout's force
+# onehot - softmax(s / T) falls by p (1 - p) / T <= 1 / (4 T) as s rises, a Squared one's y - s by 1
+fn (c Circuit<T>&) forceSlope() F64 {
+    worst F64 = 0.0
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if not (rg.Kind == Role.Readout): continue
+        match rg.Fit {
+            case Cost.CrossEntropy(temperature) { worst = worst.Max(0.25 / temperature) }
+            case Cost.Squared { worst = worst.Max(1.0) }
+        }
+    }
+    return worst
+}
+
+# the step of a sweep in a phase nudged with beta: Dt, and Dt / (1 + beta lambda) when beta > 0, lambda the force's
+# largest self-slope. A positive nudge pulls each readout neuron back toward its target, a negative feedback of up to
+# beta lambda on itself; at a full step it overshoots and swings (a period-2 cycle where beta lambda nears 1). The
+# smaller step keeps every diagonal entry of the sweep's Jacobian nonnegative, so the nudge then only damps and the
+# sweep contracts at 1 - dt (1 - kappa) as a free one does (exactly for Squared; for CrossEntropy the force's
+# off-diagonal terms, which cancel its diagonal ones while the readout's slopes are equal, may add up to
+# beta / (4 T) (1 - rho') more). A negative nudge pushes away and needs no smaller step
+fn (c Circuit<T>&) StepFor(beta F64) F64 {
+    return c.Dt if beta <= 0.0 else c.Dt / (1.0 + beta * c.forceSlope())
+}
+
+# the certified rate q = 1 - dt (1 - kappa) at which a sweep shrinks the residual - of a free phase, or of one nudged
+# with beta (at its step) - or 1 where nothing is certified
+fn (c mut Circuit<T>&) Rate(beta F64 = 0) F64 {
+    k := c.Gain()
+    return 1.0 if k >= 1.0 else 1.0 - c.StepFor(beta) * (1.0 - k)
+}
+
+# scales every recurrent block by one factor so that the gain is target - all of them alike, which keeps a
+# reciprocal block symmetric and the circuit's shape; a circuit with no recurrent synapses is left as it is
+fn (c mut Circuit<T>&) Certify(target F64 = 0.9) {
+    k := c.Gain()
+    if k == 0.0: return
+    if not (k <= 1e300): wrong("Certify: these neurons have no bounded slope, so no gain to certify")
+    like T
+    f := linalg.Cast(target / k, like)
+    for i in range c.projections.Len() {
+        if not c.projections[i].Folded: c.scaleBlock(i, f)
+    }
+}
+
+# projects the weights back into the certified set: each recurrent block whose neurons' gain exceeds target is scaled
+# by the factor the worst of them needs (computed before any block is scaled, so every neuron's gain ends at most
+# target) - the optional step after a training step
+fn (c mut Circuit<T>&) Restrain(target F64 = 0.9) {
+    if not c.planned: wrong("Restrain before Plan")
+    c.masses()
+    l := c.slope()
+    if not (l <= 1e300): wrong("Restrain: these neurons have no bounded slope, so no gain to restrain")
+    like T
+    factors := Array<F64>(c.projections.Len())
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        factors[i] = 1.0
+        if pr.Folded: continue
+        post := c.regions[pr.Post]
+        for j in range post.Size {
+            m F64 = l * F64(c.mem[c.mass + post.Col + j])
+            if m > target: factors[i] = factors[i].Min(target / m)
+        }
+        if pr.Kind == Wiring.Reciprocal {
+            pre := c.regions[pr.Pre]
+            for j in range pre.Size {
+                m F64 = l * F64(c.mem[c.mass + pre.Col + j])
+                if m > target: factors[i] = factors[i].Min(target / m)
+            }
+        }
+    }
+    for i in range c.projections.Len() {
+        if factors[i] < 1.0: c.scaleBlock(i, linalg.Cast(factors[i], like))
+    }
+}
+
+# the unit roundoff of T
+fn roundoff<T>(like T) F64 {
+    return match T {
+        case F32: 5.960464477539063e-8
+        case F64: 1.1102230246251565e-16
+    }
+}
+
+# the training tolerance rule (docs/settling.md 1.4): phases solved to it add an error to the contrast no larger than
+# its O(beta^2) bias - max(beta^3 (1 - kappa) / 10, 100 u), kappa held at most 0.9 so that a circuit trained out of
+# the certified region still gets a tolerance. A spiking circuit's: two spikes a window
+fn (c mut Circuit<T>&) LessonTolerance(beta F64) F64 {
+    if c.Spiking: return 2.0 / F64(c.window)
+    like T
+    kappa F64 = c.Gain().Min(0.9)
+    return (beta * beta * beta * (1.0 - kappa) / 10.0).Max(100.0 * roundoff(like))
+}
+
+# the sweeps a settle to tolerance gets, free or nudged with beta: twice what the certificate says a cold start needs
+# (ln tolerance / ln q, q held at most 0.95 when nothing is certified), and at least 128. A spiking circuit's: 32
+# windows
+fn (c mut Circuit<T>&) Budget(tolerance F64, beta F64 = 0) I64 {
+    if c.Spiking: return 32 * c.window
+    q F64 = c.Rate(beta).Min(0.95)
+    need F64 = 2.0 * tolerance.Log() / q.Log()
+    return I64(need.Ceil().Max(128.0))
+}
+
+# ---- learning ----
+
+# the contrast of the nudged phases, written into the gradient region as the gradient estimate G = -contrast,
+# averaged over the rows in use: for a block, G = -(dS_post^T S+_pre + S-_post^T dS_pre) / (2 beta N), dS = S+ - S-,
+# the rank-2 form that never subtracts two large products; for a bias, -sum(dS) / (2 beta N). Uncentered (centered
+# false), the free state stands for S- and beta for 2 beta. Frozen blocks and absent synapses get 0
+fn (c mut Circuit<T>&) Contrast(beta F64, centered Bool = true) {
+    if not c.planned: wrong("Contrast before Plan")
+    plus := c.committed(1, 1)
+    minus := c.committed(2 if centered else 0, 1)
+    scale F64 = -1.0 / ((2.0 * beta if centered else beta) * F64(c.N))
+    n := c.Neurons
+    zero T
+    for i in range c.N * n: c.mem[c.diff + i] = c.mem[plus + i] - c.mem[minus + i]
+    like T
+    k := linalg.Cast(scale, like)
+    if c.sparseBlocks > 0: c.sparseContrast(plus, minus, k)
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if pr.Sparse: continue
+        g := c.WeightGrads(Projection(i))
+        g.Fill(zero)
+        if pr.Frozen: continue
+        pre := c.regions[pr.Pre]
+        post := c.regions[pr.Post]
+        # a row of the block at a time, summed over the batch's rows: the row stays in the first-level cache while
+        # the batch's activities stream past it (a sum over rows of rank-2 updates of the whole block would stream
+        # the block through the cache once per row)
+        # (four rows of the batch per pass over the row, so it is loaded and stored once for four of them)
+        quads I64 = c.N - c.N % 4
+        for r in range post.Size {
+            at I64 = c.ParamCount + pr.Offset + r * pre.Size
+            d I64 = c.diff + post.Col + r
+            for b in range 0, quads, 4 {
+                s0 I64 = plus + b * n + pre.Col
+                p0 T = k * c.mem[d + b * n]
+                p1 T = k * c.mem[d + (b + 1) * n]
+                p2 T = k * c.mem[d + (b + 2) * n]
+                p3 T = k * c.mem[d + (b + 3) * n]
+                if pr.Folded {
+                    for j in range pre.Size {
+                        c.mem[at + j] = c.mem[at + j] + ((p0 * c.mem[s0 + j] + p1 * c.mem[s0 + n + j]) + (p2 * c.mem[s0 + 2 * n + j] + p3 * c.mem[s0 + 3 * n + j]))
+                    }
+                } else {
+                    m I64 = minus + post.Col + r
+                    q0 T = k * c.mem[m + b * n]
+                    q1 T = k * c.mem[m + (b + 1) * n]
+                    q2 T = k * c.mem[m + (b + 2) * n]
+                    q3 T = k * c.mem[m + (b + 3) * n]
+                    e0 I64 = c.diff + b * n + pre.Col
+                    for j in range pre.Size {
+                        c.mem[at + j] = c.mem[at + j] + (((p0 * c.mem[s0 + j] + q0 * c.mem[e0 + j]) + (p1 * c.mem[s0 + n + j] + q1 * c.mem[e0 + n + j]))
+                            + ((p2 * c.mem[s0 + 2 * n + j] + q2 * c.mem[e0 + 2 * n + j]) + (p3 * c.mem[s0 + 3 * n + j] + q3 * c.mem[e0 + 3 * n + j])))
+                    }
+                }
+            }
+            for b in range quads, c.N {
+                row I64 = b * n
+                sPre I64 = plus + row + pre.Col
+                p T = k * c.mem[d + row]
+                if pr.Folded {
+                    for j in range pre.Size: c.mem[at + j] = c.mem[at + j] + p * c.mem[sPre + j]
+                } else {
+                    q T = k * c.mem[minus + row + post.Col + r]
+                    dPre I64 = c.diff + row + pre.Col
+                    for j in range pre.Size: c.mem[at + j] = c.mem[at + j] + (p * c.mem[sPre + j] + q * c.mem[dPre + j])
+                }
+            }
+        }
+        if pr.Mask >= 0 {
+            for e in range g.Rows * g.Cols {
+                if c.masks[pr.Mask + e] == 0: g.Data[e] = zero
+            }
+        }
+    }
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        at I64 = c.ParamCount + c.bias + rg.Col
+        for j in range rg.Size: c.mem[at + j] = zero
+        if rg.Kind == Role.Input: continue
+        for b in range c.N {
+            from I64 = c.diff + b * n + rg.Col
+            for j in range rg.Size: c.mem[at + j] = c.mem[at + j] + k * c.mem[from + j]
+        }
+    }
+}
+
+# the sparse blocks' part of Contrast: at each synapse only, k (sum over the rows of dS_post S+_pre + S-_post dS_pre) -
+# the products of the batches sampled at the pattern's entries, on the rows in use transposed into feature-major (for
+# one row, the state as it is); a folded block's dS_pre is 0
+fn (c mut Circuit<T>&) sparseContrast(plus I64, minus I64, k T) {
+    n := c.Neurons
+    rows := c.Rows
+    d I64 = c.diff
+    p I64 = plus
+    m I64 = minus
+    stride I64 = 1
+    if c.N > 1 {
+        d = c.feature
+        p = c.feature + n * rows
+        m = c.feature + 2 * n * rows
+        c.toFeatures(c.diff, d)
+        c.toFeatures(plus, p)
+        c.toFeatures(minus, m)
+        stride = rows
+    }
+    width I64 = c.N
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if not pr.Sparse: continue
+        g I64 = c.ParamCount + pr.Offset
+        c.zeroRun(g, pr.Nnz)
+        if pr.Frozen: continue
+        w := c.SparseWeights(Projection(i))
+        pre := c.regions[pr.Pre]
+        post := c.regions[pr.Post]
+        # element (j, t) of a batch at x is x + j * stride + t for feature-major, x + t * n + j for one row
+        w.Sampled(c.mem, g, c.mem, d + post.Col * stride, stride, c.mem, p + pre.Col * stride, stride, width, k, false)
+        if not pr.Folded {
+            w.Sampled(c.mem, g, c.mem, m + post.Col * stride, stride, c.mem, d + pre.Col * stride, stride, width, k, true)
+        }
+    }
+}
+
+# the gradient of the mean cost with respect to a region's drive, per row in use, into out (N rows of its neurons),
+# from the nudged phases as Contrast reads them: -(s+ - s-) / (2 beta N) on a relaxing neuron (its drive is added to
+# its total), and for an input region through the folded blocks it feeds, -rho'(d) (dS_post W) / (2 beta N) - the
+# gradient an encoder feeding the circuit needs ("settling inside, backprop outside")
+fn (c mut Circuit<T>&) DriveGrad(reg Region, out mut Array<T>&, beta F64, centered Bool = true) {
+    rg := c.regions[reg]
+    plus := c.committed(1, 1)
+    minus := c.committed(2 if centered else 0, 1)
+    scale F64 = -1.0 / ((2.0 * beta if centered else beta) * F64(c.N))
+    n := c.Neurons
+    like T
+    k := linalg.Cast(scale, like)
+    zero T
+    if not (rg.Kind == Role.Input) {
+        for b in range c.N {
+            at I64 = b * n + rg.Col
+            for j in range rg.Size: out[b * rg.Size + j] = k * (c.mem[plus + at + j] - c.mem[minus + at + j])
+        }
+        return
+    }
+    for i in range c.N * n: c.mem[c.diff + i] = c.mem[plus + i] - c.mem[minus + i]
+    for i in range c.N * rg.Size: out[i] = zero
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if pr.Pre != reg: continue
+        post := c.regions[pr.Post]
+        if pr.Sparse {
+            sw := c.SparseWeights(Projection(i))
+            for b in range c.N: sw.MulAddT(c.mem, c.diff + b * n + post.Col, 1, out, b * rg.Size, 1, 1, k)
+            continue
+        }
+        w := c.Weights(Projection(i))
+        for b in range c.N {
+            d I64 = c.diff + b * n + post.Col
+            linalg.Gemv(out[b * rg.Size:(b + 1) * rg.Size], w, true, c.mem[d:d + post.Size], scale, 1)!
+        }
+    }
+    # times rho'(d), from the input's activity s = rho(d)
+    match rg.Model {
+        case Neuron.Rate(f) {
+            if f == Rho.LifRate: wrong("DriveGrad through a LifRate input: its slope is not kept")
+            for b in range c.N {
+                at I64 = plus + b * n + rg.Col
+                d I64 = rg.Drive + b * rg.Size
+                for j in range rg.Size {
+                    x T = c.mem[at + j]
+                    slope T = match f {
+                        case Rho.Tanh: 1.0 - x * x
+                        case Rho.HardSigmoid: 1.0 if c.mem[d + j] > 0.0 and c.mem[d + j] < 1.0 else 0.0
+                        case Rho.Linear: 1.0
+                        case Rho.LifRate(_, _): 0.0
+                    }
+                    out[b * rg.Size + j] = out[b * rg.Size + j] * slope
+                }
+            }
+        }
+        case Neuron.Lif(_, _, _, _) { }
+    }
+}
+
+# one lesson on the first n rows: settle free (from the free phase's last state), then nudged by +beta and (centered)
+# -beta from the free state, and the contrast into the gradient region - for an optimizer's step. Gives the sweeps
+# the three settles took; refuses (NotSettled) when one does not qualify, leaving the gradient region as it was
+fn (c mut Circuit<T>&) Teach(n I64, l Lesson) I64 ? NotSettled {
+    c.Use(n)
+    tolerance F64 = l.Tolerance if l.Tolerance > 0.0 else c.LessonTolerance(l.Beta)
+    budget I64 = l.Budget if l.Budget > 0 else c.Budget(tolerance, l.Beta)
+    c.Nudge(Phase.Free, 0)
+    free := try c.settle(Phase.Free, budget, tolerance, true)
+    sweeps I64 = free.Sweeps
+    c.Warm(Phase.Plus, Phase.Free)
+    c.Nudge(Phase.Plus, l.Beta)
+    plus := try c.settle(Phase.Plus, budget, tolerance, false)
+    sweeps += plus.Sweeps
+    if l.Centered {
+        c.Warm(Phase.Minus, Phase.Free)
+        c.Nudge(Phase.Minus, -l.Beta)
+        minus := try c.settle(Phase.Minus, budget, tolerance, false)
+        sweeps += minus.Sweeps
+    }
+    c.Contrast(l.Beta, l.Centered)
+    return sweeps
+}
+
+# the mean cost of phase p's state over the rows in use: T (logsumexp(s / T) - s_class / T) for a CrossEntropy
+# readout (each group's, summed), 1/2 |s - y|^2 for a Squared one, summed over the readouts
+fn (c Circuit<T>&) Loss(p Phase) F64 {
+    s := c.committed(phaseIndex(p), 1)
+    n := c.Neurons
+    sum F64 = 0.0
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if not (rg.Kind == Role.Readout): continue
+        for b in range c.N {
+            at I64 = s + b * n + rg.Col
+            match rg.Fit {
+                case Cost.CrossEntropy(temperature) {
+                    w I64 = rg.Size / rg.Groups
+                    for g in range rg.Groups {
+                        ga I64 = at + g * w
+                        top F64 = F64(c.mem[ga])
+                        for j in range 1, w: top = top.Max(F64(c.mem[ga + j]))
+                        e F64 = 0.0
+                        for j in range w: e += ((F64(c.mem[ga + j]) - top) / temperature).Exp()
+                        y I64 = I64(c.labels[rg.Labels + b * rg.Groups + g])
+                        sum += top + temperature * e.Log() - F64(c.mem[ga + y])
+                    }
+                }
+                case Cost.Squared {
+                    g I64 = rg.Target + b * rg.Size
+                    for j in range rg.Size {
+                        d F64 = F64(c.mem[at + j]) - F64(c.mem[g + j])
+                        sum += 0.5 * d * d
+                    }
+                }
+            }
+        }
+    }
+    return sum / F64(c.N)
+}
+
+# log cosh x without overflow
+fn logCosh(x F64) F64 {
+    a F64 = x.Abs()
+    return a + (-2.0 * a).Exp().Log1p() - 0.6931471805599453
+}
+
+# the energy (docs/settling.md 1.2) of phase p's potentials in one row - for a rate circuit whose recurrent
+# projections are all reciprocal, so that it has one:
+#   E = sum_i int_0^v_i u rho'(u) du - sum over blocks of sum_ij W_ij s_post_i s_pre_j - sum_i h_i s_i,
+# h = drive + bias + the folded blocks' input, s = rho(v), over every neuron but the inputs. A sweep at small dt
+# descends it, and its stationary points are the equilibria: dE/dv_i = -rho'(v_i) r_i
+fn (c mut Circuit<T>&) Energy(p Phase, row I64) F64 {
+    if c.Spiking: wrong("a spiking circuit has no energy")
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if not pr.Folded and pr.Kind == Wiring.OneWay: wrong("Energy needs every recurrent projection reciprocal")
+    }
+    pi := phaseIndex(p)
+    v := c.committed(pi, 0)
+    c.prepare(v, c.committed(pi, 1))
+    n := c.Neurons
+    base I64 = row * n
+    act I64 = c.diff + base                         # s = rho(v), afresh, in the workspace
+    e F64 = 0.0
+    for i in range c.regions.Len() {
+        rg := c.regions[i]
+        if rg.Kind == Role.Input: continue
+        c.activate(rg.Model, v + base + rg.Col, act + rg.Col, rg.Size)
+        match rg.Model {
+            case Neuron.Rate(f) {
+                for j in range rg.Size {
+                    x F64 = F64(c.mem[v + base + rg.Col + j])
+                    integral F64 = 0.0
+                    match f {
+                        case Rho.Tanh { integral = x * x.Tanh() - logCosh(x) }
+                        case Rho.Linear { integral = 0.5 * x * x }
+                        case Rho.HardSigmoid {
+                            u F64 = x.Clamp(0.0, 1.0)
+                            integral = 0.5 * u * u
+                        }
+                        case Rho.LifRate(_, _) { wrong("LifRate neurons have no energy here") }
+                    }
+                    e += integral - F64(c.mem[c.constant + base + rg.Col + j]) * F64(c.mem[act + rg.Col + j])
+                }
+            }
+            case Neuron.Lif(_, _, _, _) { }
+        }
+    }
+    for i in range c.projections.Len() {
+        pr := c.projections[i]
+        if pr.Folded: continue
+        post := c.regions[pr.Post]
+        pre := c.regions[pr.Pre]
+        if pr.Sparse {
+            sw := c.SparseWeights(Projection(i))
+            for r in range sw.Rows {
+                sr F64 = F64(c.mem[act + post.Col + r])
+                for k in range sw.Ptr[r], sw.Ptr[r + 1] {
+                    e -= F64(sw.Values[k]) * sr * F64(c.mem[act + pre.Col + I64(sw.Idx[k])])
+                }
+            }
+            continue
+        }
+        w := c.Weights(Projection(i))
+        for r in range w.Rows {
+            sr F64 = F64(c.mem[act + post.Col + r])
+            for j in range w.Cols: e -= F64(w.Data[r * w.Stride + j]) * sr * F64(c.mem[act + pre.Col + j])
+        }
+    }
+    return e
+}
+
+# ---- the eligibility trace ----
+
+# an eligibility trace over the circuit's parameters, for one stream (docs/settling.md 1.5, 2.5): E <- g E + contrast
+# at a moment that learns, E <- g E at a calm one - g being gamma lambda. A calm moment's decay is kept pending, one
+# number, and folded in at the next moment that learns, in the same pass that adds its contrast: a calm moment touches
+# no synapse. The actor's step is G = -delta E, from the broadcast error delta, for an optimizer
+type Eligibility<T> struct(c mut Circuit<T>&) {
+    E mut Array<T>& = Array<T>(c.ParamCount)
+    Pending F64 = 1.0                               # the decay not yet applied to E: the trace is Pending E
+}
+
+# a calm moment: E <- decay E, pending
+fn (t mut Eligibility<T>&) Decay(decay F64) {
+    t.Pending = t.Pending * decay
+}
+
+# a moment that learns: E <- decay E + the contrast the last Contrast (or Teach) left - read from the gradient region,
+# which holds -contrast - with the pending decay folded in, one pass over the parameters
+fn (t mut Eligibility<T>&) Add(c mut Circuit<T>&, decay F64) {
+    like T
+    k := linalg.Cast(t.Pending * decay, like)
+    at := c.ParamCount
+    for i in range c.ParamCount: t.E[i] = k * t.E[i] - c.mem[at + i]
+    t.Pending = 1.0
+}
+
+# the trace forgets: an episode ended
+fn (t mut Eligibility<T>&) Clear() {
+    zero T
+    for i in range t.E.Len(): t.E[i] = zero
+    t.Pending = 1.0
+}
+
+# the trace's value of parameter i
+fn (t Eligibility<T>&) At(i I64) T {
+    like T
+    return linalg.Cast(t.Pending, like) * t.E[i]
+}
+
+# the actor's step from the broadcast error delta: G = -delta E, written into the gradient region
+fn (t Eligibility<T>&) Credit(c mut Circuit<T>&, delta F64) {
+    like T
+    k := linalg.Cast(-delta * t.Pending, like)
+    at := c.ParamCount
+    for i in range c.ParamCount: c.mem[at + i] = k * t.E[i]
+}
+
+# ---- tests (docs/settling.md section 5), in F64 ----
+
+# every relaxing region's biases, and every region's drives, uniform in [-a, a)
+fn randomize(c mut Circuit<F64>&, r mut rand.Rand&, a F64) {
+    for i in range c.regions.Len() {
+        reg := Region(i)
+        if not (c.regions[i].Kind == Role.Input) {
+            b := c.Bias(reg)
+            for j in range b.Len(): b[j] = r.Uniform(-a, a)
+        }
+        d := c.DriveData(reg)
+        for j in range d.Len(): d[j] = r.Uniform(-a, a)
+    }
+}
+
+# the root of v = w tanh(v) + d, by bisection: v - w tanh(v) - d increases when |w| < 1
+fn bisect(w F64, d F64) F64 {
+    lo F64 = -100.0
+    hi F64 = 100.0
+    for _ in range 200 {
+        mid F64 = 0.5 * (lo + hi)
+        if mid - w * mid.Tanh() - d > 0.0 { hi = mid } else { lo = mid }
+    }
+    return 0.5 * (lo + hi)
+}
+
+test "a single neuron settles to the root of v = w tanh(v) + d" {
+    ds := Array<F64>[0.3, -1.2, 2.0, 0.0]
+    c := Circuit<F64>(4)
+    h := c.Hidden(1)
+    lateral := c.Project(h, h)                      # a lateral block of one: the effective weight is 2 W
+    r := rand.Rand(1)
+    c.Plan(r)
+    for b in range 4: c.DriveData(h)[b] = ds[b]
+    for w in Array<F64>[0.5, -0.8, 0.9, -0.3] {
+        c.Weights(lateral).Data[0] = 0.5 * w
+        assert (c.Gain() - w.Abs()).Abs() < 1e-15
+        try c.Settle(Phase.Free, 2000, 1e-14)
+        for b in range 4: assert (c.Potential(Phase.Free).Get(b, 0) - bisect(w, ds[b])).Abs() < 1e-12
+    }
+}
+
+test "linear neurons settle to the solution of (I - W) v = d + b + the folded input" {
+    c := Circuit<F64>(3)
+    x := c.Input(2)
+    h := c.Hidden(4, Neuron.Rate(Rho.Linear))
+    o := c.Readout(3, Cost.Squared, Neuron.Rate(Rho.Linear))
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, h)
+    c.Project(h, o)
+    c.Project(o, o)
+    r := rand.Rand(2)
+    c.Plan(r)
+    c.Certify(0.8)
+    randomize(c, r, 1.0)
+    try c.Settle(Phase.Free, 4000, 1e-14)
+    # the effective weights between the 7 relaxing neurons (columns 2..8), built from the blocks here
+    m I64 = 7
+    a := linalg.Matrix<F64>(m, m)
+    a.SetIdentity()
+    rhs := linalg.Matrix<F64>(m, 3)
+    for b in range 3 {
+        for i in range m { rhs.Set(i, b, c.DriveData(Region(i / 4 + 1))[b * (4 if i < 4 else 3) + i % 4] + c.mem[c.bias + 2 + i]) }
+    }
+    for k in range c.projections.Len() {
+        pr := c.projections[k]
+        w := c.Weights(Projection(k))
+        post := c.regions[pr.Post]
+        pre := c.regions[pr.Pre]
+        for i in range w.Rows {
+            for j in range w.Cols {
+                if pr.Folded {
+                    for b in range 3 { rhs.Set(post.Col - 2 + i, b, rhs.Get(post.Col - 2 + i, b) + w.Get(i, j) * c.DriveData(x)[b * 2 + j]) }
+                    continue
+                }
+                a.Set(post.Col - 2 + i, pre.Col - 2 + j, a.Get(post.Col - 2 + i, pre.Col - 2 + j) - w.Get(i, j))
+                a.Set(pre.Col - 2 + j, post.Col - 2 + i, a.Get(pre.Col - 2 + j, post.Col - 2 + i) - w.Get(i, j))
+            }
+        }
+    }
+    v := try linalg.Solve(a, rhs)
+    for b in range 3 {
+        for i in range m: assert (c.Potential(Phase.Free).Get(b, 2 + i) - v.Get(i, b)).Abs() < 1e-12
+    }
+}
+
+# a circuit for the certificate's and the energy's tests: three inputs, five hidden neurons with a lateral block, two
+# readout neurons, every recurrent block reciprocal, certified at kappa
+fn certified(c mut Circuit<F64>&, r mut rand.Rand&, kappa F64) {
+    x := c.Input(3)
+    h := c.Hidden(5)
+    o := c.Readout(2)
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, h)
+    c.Project(h, o)
+    c.Project(o, o)
+    c.Plan(r)
+    c.Certify(kappa)
+    randomize(c, r, 1.0)
+    for b in range c.Rows: c.LabelData(o)[b] = I32(b % 2)
+}
+
+# a phase's committed state set to a random one, s = rho(v) consistently
+fn scramble(c mut Circuit<F64>&, p Phase, r mut rand.Rand&, a F64) {
+    pot := c.Potential(p)
+    act := c.Value(p)
+    for b in range c.N {
+        for j in range c.Neurons {
+            v F64 = r.Uniform(-a, a)
+            pot.Set(b, j, v)
+            act.Set(b, j, linalg.FastTanh(v))
+        }
+    }
+}
+
+test "the certificate: one equilibrium from any start, and its bounds hold sweep by sweep" {
+    c := Circuit<F64>(2)
+    r := rand.Rand(3)
+    certified(c, r, 0.8)
+    kappa := c.Gain()
+    q := c.Rate()
+    assert (kappa - 0.8).Abs() < 1e-12 and (q - 0.8).Abs() < 1e-12
+    try c.Settle(Phase.Free, 4000, 1e-14)
+    star := c.Potential(Phase.Free).Clone()
+    # (i) the same equilibrium from other starts
+    for _ in range 3 {
+        scramble(c, Phase.Scratch, r, 3.0)
+        try c.Settle(Phase.Scratch, 4000, 1e-14)
+        assert try c.Potential(Phase.Scratch).MaxAbsDifference(star) < 1e-12
+    }
+    # (ii) the distance to the equilibrium and (iii) the residual, sweep by sweep from a cold start
+    res := Array<F64>(2)
+    c.Reset(Phase.Scratch)
+    r0 := c.Residual(Phase.Scratch, res)
+    v0 := c.Potential(Phase.Scratch).Clone()
+    c.Run(Phase.Scratch, 1)
+    d1 := try c.Potential(Phase.Scratch).MaxAbsDifference(v0)
+    qk F64 = 1.0
+    for _ in range 1, 80 {
+        qk = qk * q
+        assert try c.Potential(Phase.Scratch).MaxAbsDifference(star) <= qk / (1.0 - q) * d1 + 1e-13
+        assert c.Residual(Phase.Scratch, res) <= qk * r0 + 1e-13
+        c.Run(Phase.Scratch, 1)
+    }
+    # (iv) the distance at the stopping rule, and (v) the sweeps it took against the bound
+    for tau in Array<F64>[1e-3, 1e-6, 1e-9] {
+        c.Reset(Phase.Scratch)
+        r0 = c.Residual(Phase.Scratch, res)
+        st := try c.Settle(Phase.Scratch, 4000, tau)
+        assert st.Qualified and st.Residual <= tau
+        assert try c.Potential(Phase.Scratch).MaxAbsDifference(star) <= tau / (1.0 - kappa) + 1e-13
+        assert F64(st.Sweeps) <= ((tau / r0).Log() / q.Log()).Ceil()
+    }
+}
+
+test "a nudged phase steps at Dt / (1 + beta lambda) and contracts at the certified rate" {
+    c := Circuit<F64>(2)
+    x := c.Input(3)
+    h := c.Hidden(5)
+    o := c.Readout(2, Cost.Squared)
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, h)
+    c.Project(h, o)
+    r := rand.Rand(8)
+    c.Plan(r)
+    c.Certify(0.8)
+    randomize(c, r, 1.0)
+    t := c.TargetData(o)
+    for j in range t.Len(): t[j] = r.Uniform(-1.0, 1.0)
+    try c.Settle(Phase.Free, 4000, 1e-12)
+    beta F64 = 1.0
+    assert c.StepFor(beta) == 0.5 and c.StepFor(-beta) == 1.0
+    q := c.Rate(beta)
+    assert (q - 0.9).Abs() < 1e-12
+    res := Array<F64>(2)
+    c.Warm(Phase.Plus, Phase.Free)
+    c.Nudge(Phase.Plus, beta)
+    r0 := c.Residual(Phase.Plus, res)
+    assert r0 > 0.1
+    qk F64 = 1.0
+    for _ in range 1, 60 {
+        c.Run(Phase.Plus, 1)
+        qk = qk * q
+        assert c.Residual(Phase.Plus, res) <= qk * r0 + 1e-13
+    }
+    c.Warm(Phase.Plus, Phase.Free)
+    st := try c.Settle(Phase.Plus, 4000, 1e-9)
+    assert st.Dt == 0.5 and F64(st.Sweeps) <= ((1e-9 / r0).Log() / q.Log()).Ceil()
+}
+
+test "with strong positive feedback a settle qualifies or refuses - never a state that does not qualify" {
+    c := Circuit<F64>(3)
+    h := c.Hidden(4)
+    lateral := c.Project(h, h)
+    r := rand.Rand(4)
+    c.Plan(r)
+    c.Weights(lateral).Fill(0.75)                   # effective weights 1.5: bistable, kappa 6
+    assert c.Gain() > 5.0 and c.Rate() == 1.0
+    res := Array<F64>(3)
+    accepted I64 = 0
+    refused I64 = 0
+    for trial in range 30 {
+        d := c.DriveData(h)
+        for j in range d.Len(): d[j] = r.Uniform(-0.5, 0.5)
+        scramble(c, Phase.Free, r, 0.3)
+        before := c.Potential(Phase.Free).Clone()
+        ok Bool = true
+        try c.Settle(Phase.Free, trial, 1e-8) catch NotSettled {
+            ok = false
+            refused++
+            assert try c.Potential(Phase.Free).MaxAbsDifference(before) == 0.0     # nothing committed
+            assert not c.Last.Qualified and c.Last.Residual > 1e-8
+        }
+        if ok {
+            accepted++
+            assert c.Residual(Phase.Free, res) <= 1e-8
+        }
+    }
+    assert accepted > 0 and refused > 0
+}
+
+test "the energy: its gradient is -rho'(v) r, small sweeps descend it, an equilibrium is stationary" {
+    c := Circuit<F64>(1)
+    r := rand.Rand(5)
+    certified(c, r, 0.9)
+    scramble(c, Phase.Scratch, r, 2.0)
+    t := c.Totals(Phase.Scratch)
+    n := c.Neurons
+    force := Array<F64>(n)                          # -rho'(v) r
+    pot := c.Potential(Phase.Scratch)
+    for j in range 3, n {
+        s F64 = linalg.FastTanh(pot.Get(0, j))
+        force[j] = -(1.0 - s * s) * (t.Get(0, j) - pot.Get(0, j))
+    }
+    h F64 = 1e-5
+    for j in range 3, n {
+        old := pot.Get(0, j)
+        pot.Set(0, j, old + h)
+        up := c.Energy(Phase.Scratch, 0)
+        pot.Set(0, j, old - h)
+        down := c.Energy(Phase.Scratch, 0)
+        pot.Set(0, j, old)
+        assert ((up - down) / (2.0 * h) - force[j]).Abs() < 1e-8
+    }
+    # forward Euler at a small dt descends it
+    c.Dt = 0.05
+    e F64 = c.Energy(Phase.Scratch, 0)
+    for _ in range 200 {
+        c.Run(Phase.Scratch, 1)
+        next := c.Energy(Phase.Scratch, 0)
+        assert next <= e + 1e-14
+        e = next
+    }
+    # and its equilibrium is a stationary point
+    c.Dt = 1.0
+    try c.Settle(Phase.Scratch, 4000, 1e-14)
+    for j in range 3, n {
+        old := pot.Get(0, j)
+        pot.Set(0, j, old + h)
+        up := c.Energy(Phase.Scratch, 0)
+        pot.Set(0, j, old - h)
+        down := c.Energy(Phase.Scratch, 0)
+        pot.Set(0, j, old)
+        assert ((up - down) / (2.0 * h)).Abs() < 1e-9
+    }
+}
+
+test "input regions in closed form settle where relaxing them as ordinary regions does" {
+    a := Circuit<F64>(2)
+    xa := a.Input(3, Neuron.Rate(Rho.Tanh))
+    ha := a.Hidden(4)
+    oa := a.Readout(2)
+    a.Project(xa, ha, Wiring.OneWay)
+    a.Project(ha, oa)
+    b := Circuit<F64>(2)
+    xb := b.Hidden(3)                               # the same neurons, relaxing: v -> d + 0, s = tanh(v)
+    hb := b.Hidden(4)
+    ob := b.Readout(2)
+    b.Project(xb, hb, Wiring.OneWay)
+    b.Project(hb, ob)
+    ra := rand.Rand(6)
+    a.Plan(ra)
+    rb := rand.Rand(6)
+    b.Plan(rb)                                      # the same draws: the same shapes in the same order
+    a.Weights(Projection(1)).Scale(0.4)
+    b.Weights(Projection(1)).Scale(0.4)
+    for j in range 6 {
+        d F64 = 0.3 * F64(j) - 0.8
+        a.DriveData(xa)[j] = d
+        b.DriveData(xb)[j] = d
+    }
+    try a.Settle(Phase.Free, 4000, 1e-14)
+    try b.Settle(Phase.Free, 4000, 1e-14)
+    assert try a.Potential(Phase.Free).MaxAbsDifference(b.Potential(Phase.Free)) < 1e-12
+    assert try a.Value(Phase.Free).MaxAbsDifference(b.Value(Phase.Free)) < 1e-12
+}
+
+test "damping changes the path, not the equilibrium, and removes a period-2 cycle" {
+    c := Circuit<F64>(2)
+    r := rand.Rand(7)
+    certified(c, r, 0.9)
+    try c.Settle(Phase.Free, 4000, 1e-13)
+    star := c.Potential(Phase.Free).Clone()
+    c.Dt = 0.5
+    c.Attempts = 3
+    st := try c.Settle(Phase.Scratch, 4000, 1e-13)
+    assert st.Dt <= 0.5 and try c.Potential(Phase.Scratch).MaxAbsDifference(star) < 2e-12
+    # a linear neuron feeding itself with weight -1: v <- d - v swings between 0 and d at dt = 1, with a residual
+    # that never shrinks; damped to dt = 1/2 it lands on d / 2 at once
+    k := Circuit<F64>(1)
+    h := k.Hidden(1, Neuron.Rate(Rho.Linear))
+    lateral := k.Project(h, h)
+    k.Plan(r)
+    k.Weights(lateral).Data[0] = -0.5
+    k.DriveData(h)[0] = 1.0
+    refused Bool = false
+    try k.Settle(Phase.Free, 100, 1e-10) catch NotSettled.Budget { refused = true }
+    assert refused and k.Potential(Phase.Free).Get(0, 0) == 0.0 and k.Last.Residual == 1.0
+    k.Attempts = 2
+    s := try k.Settle(Phase.Free, 100, 1e-10)
+    assert s.Qualified and s.Dt == 0.5 and (k.Potential(Phase.Free).Get(0, 0) - 0.5).Abs() < 1e-12
+}
+
+# the free equilibrium's mean cost, settled tightly
+fn freeLoss(c mut Circuit<F64>&) F64 {
+    c.Nudge(Phase.Free, 0)
+    c.Settle(Phase.Free, 20000, 1e-14)!
+    return c.Loss(Phase.Free)
+}
+
+# the central difference, step h, of the free equilibrium's cost in every parameter
+fn lossGradient(c mut Circuit<F64>&, out mut Array<F64>&, h F64) {
+    p := c.Params()
+    for i in range c.ParamCount {
+        old := p.Data[i]
+        p.Data[i] = old + h
+        up := freeLoss(c)
+        p.Data[i] = old - h
+        down := freeLoss(c)
+        p.Data[i] = old
+        out[i] = (up - down) / (2.0 * h)
+    }
+}
+
+# the largest difference between the gradient estimate of a lesson and the reference, relative to the reference's
+# largest element
+fn estimateError(c mut Circuit<F64>&, reference Array<F64>&, l Lesson) F64 {
+    c.Teach(c.N, l)!
+    g := c.Grads()
+    worst F64 = 0.0
+    top F64 = 0.0
+    for i in range c.ParamCount {
+        worst = worst.Max((g.Data[i] - reference[i]).Abs())
+        top = top.Max(reference[i].Abs())
+    }
+    return worst / top
+}
+
+# a circuit for the gradient checks: three tanh inputs, four hidden neurons with a lateral block, three readout
+# neurons (cross-entropy at T = 0.25); every recurrent block reciprocal unless oneWay, where the feedback is a block of
+# its own
+fn gradientCircuit(c mut Circuit<F64>&, r mut rand.Rand&, oneWay Bool) {
+    x := c.Input(3, Neuron.Rate(Rho.Tanh))
+    h := c.Hidden(4)
+    o := c.Readout(3)
+    c.Project(x, h, Wiring.OneWay)
+    if oneWay {
+        c.Project(h, o, Wiring.OneWay)
+        c.Project(o, h, Wiring.OneWay)
+    } else {
+        c.Project(h, h)
+        c.Project(h, o)
+    }
+    c.Plan(r)
+    for i in range c.projections.Len() {
+        if not c.projections[i].Folded { c.Weights(Projection(i)).Scale(3.0) }   # feedback worth having
+    }
+    c.Certify(0.9)
+    randomize(c, r, 1.0)
+    for b in range c.Rows: c.LabelData(o)[b] = I32(r.Below(3))
+}
+
+test "the contrast written is its definition, mean over the rows of (s+_pre s+_post - s-_pre s-_post) / (2 beta)" {
+    c := Circuit<F64>(7)
+    x := c.Input(5)
+    h := c.Hidden(6)
+    o := c.Readout(3)
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, h)
+    c.Project(h, o)
+    c.Project(o, h, Wiring.OneWay, 0.5)              # masked, one-way
+    frozen := c.Project(x, o, Wiring.OneWay, 1, true)
+    r := rand.Rand(15)
+    c.Plan(r)
+    for p in Array<Phase>[Phase.Free, Phase.Plus, Phase.Minus] {
+        v := c.Value(p)
+        for b in range 7 {
+            for j in range c.Neurons: v.Set(b, j, r.Uniform(-1.0, 1.0))
+            for j in range 5 { v.Set(b, j, c.Value(Phase.Free).Get(b, j)) }    # the inputs: one drive
+        }
+    }
+    beta F64 = 0.3
+    for centered in Array<Bool>[true, false] {
+        c.Contrast(beta, centered)
+        minus := Phase.Minus if centered else Phase.Free
+        sp := c.Value(Phase.Plus)
+        sm := c.Value(minus)
+        worst F64 = 0.0
+        for k in range c.projections.Len() {
+            pr := c.projections[k]
+            g := c.WeightGrads(Projection(k))
+            post := c.regions[pr.Post]
+            pre := c.regions[pr.Pre]
+            for i in range post.Size {
+                for j in range pre.Size {
+                    sum F64 = 0.0
+                    for b in range 7 {
+                        sum += sp.Get(b, pre.Col + j) * sp.Get(b, post.Col + i) - sm.Get(b, pre.Col + j) * sm.Get(b, post.Col + i)
+                    }
+                    want F64 = -sum / ((2.0 * beta if centered else beta) * 7.0)
+                    if pr.Frozen or (pr.Mask >= 0 and c.masks[pr.Mask + i * pre.Size + j] == 0): want = 0.0
+                    worst = worst.Max((g.Get(i, j) - want).Abs())
+                }
+            }
+        }
+        for k in range 1, 3 {
+            rg := c.regions[k]
+            gb := c.BiasGrads(Region(k))
+            for j in range rg.Size {
+                sum F64 = 0.0
+                for b in range 7: sum += sp.Get(b, rg.Col + j) - sm.Get(b, rg.Col + j)
+                worst = worst.Max((gb[j] + sum / ((2.0 * beta if centered else beta) * 7.0)).Abs())
+            }
+        }
+        assert worst < 1e-14
+    }
+    assert c.WeightGrads(frozen).MaxAbs() == 0.0 and c.BiasGrads(x)[0] == 0.0
+}
+
+test "the centered contrast is the gradient of the cost at the free equilibrium, to O(beta^2)" {
+    c := Circuit<F64>(2)
+    r := rand.Rand(11)
+    gradientCircuit(c, r, false)
+    reference := Array<F64>(c.ParamCount)
+    lossGradient(c, reference, 1e-5)
+    centered := Array<F64>(3)
+    plain := Array<F64>(3)
+    for i, beta in Array<F64>[0.1, 0.01, 0.001] {
+        centered[i] = estimateError(c, reference, Lesson(beta, 1e-13, 20000, true))
+        plain[i] = estimateError(c, reference, Lesson(beta, 1e-13, 20000, false))
+        try io.PutLine("beta " + $beta + ": centered " + $centered[i] + ", uncentered " + $plain[i])
+    }
+    # slope 2 on log-log for the centered estimate, 1 for the uncentered
+    assert centered[0] / centered[1] > 50.0 and centered[1] / centered[2] > 50.0
+    assert plain[0] / plain[1] > 5.0 and plain[0] / plain[1] < 20.0 and plain[1] / plain[2] > 5.0
+    assert centered[2] < 1e-5
+    # the default lesson tolerance, from the rule, keeps the phases' error at or below the bias
+    rule := estimateError(c, reference, Lesson(0.001))
+    try io.PutLine("beta 0.001 at the rule's tolerance " + $(c.LessonTolerance(0.001)) + ": " + $rule)
+    assert rule < 1e-5
+}
+
+test "the drive's gradient: -(s+ - s-) / (2 beta) on a free neuron, and through a source projection" {
+    c := Circuit<F64>(2)
+    r := rand.Rand(12)
+    gradientCircuit(c, r, false)
+    try c.Teach(2, Lesson(0.001, 1e-13, 20000))
+    h F64 = 1e-5
+    for k in range 2 {
+        reg := Region(k)                            # the inputs, then the hidden region
+        size I64 = c.regions[k].Size
+        estimate := Array<F64>(2 * size)
+        c.DriveGrad(reg, estimate, 0.001)
+        d := c.DriveData(reg)
+        worst F64 = 0.0
+        top F64 = 0.0
+        for j in range 2 * size {
+            old := d[j]
+            d[j] = old + h
+            up := freeLoss(c)
+            d[j] = old - h
+            down := freeLoss(c)
+            d[j] = old
+            numeric F64 = (up - down) / (2.0 * h)
+            worst = worst.Max((numeric - estimate[j]).Abs())
+            top = top.Max(numeric.Abs())
+        }
+        try io.PutLine("drive of region " + $k + ": relative error " + $(worst / top))
+        assert top > 1e-3 and worst / top < 1e-5
+    }
+}
+
+# the free equilibrium's policy pi = softmax(s_out / T) in row 0, into pi (the readout is region 2)
+fn policy(c mut Circuit<F64>&, pi mut Array<F64>&, temperature F64) {
+    c.Nudge(Phase.Free, 0)
+    c.Settle(Phase.Free, 20000, 1e-14)!
+    a := c.Activity(Phase.Free, Region(2))
+    top F64 = a.Get(0, 0)
+    for j in range 1, pi.Len(): top = top.Max(a.Get(0, j))
+    sum F64 = 0.0
+    for j in range pi.Len() {
+        pi[j] = ((a.Get(0, j) - top) / temperature).Exp()
+        sum += pi[j]
+    }
+    for j in range pi.Len(): pi[j] = pi[j] / sum
+}
+
+# every action's contrast: the gradient estimate of a lesson nudging toward action a, for each a, into scores (K rows of
+# the parameters)
+fn actionScores(c mut Circuit<F64>&, scores mut Array<F64>&, actions I64, beta F64) {
+    for a in range actions {
+        c.LabelData(Region(2))[0] = I32(a)
+        c.Teach(1, Lesson(beta, 1e-13, 20000))!
+        g := c.Grads()
+        for i in range c.ParamCount { scores[a * c.ParamCount + i] = -g.Data[i] }    # the contrast: -G
+    }
+}
+
+test "the policy score: an action's contrast is T grad log pi(a), and their mean under pi vanishes" {
+    c := Circuit<F64>(1)
+    r := rand.Rand(16)
+    gradientCircuit(c, r, false)
+    k I64 = 3
+    temperature F64 = 0.25
+    scores := Array<F64>(k * c.ParamCount)
+    actionScores(c, scores, k, 0.001)
+    pi := Array<F64>(k)
+    policy(c, pi, temperature)
+    # their mean under pi vanishes: sum_a pi(a) T grad log pi(a) = T grad sum_a pi(a) = 0
+    top F64 = 0.0
+    mean F64 = 0.0
+    for i in range c.ParamCount {
+        m F64 = 0.0
+        for a in range k {
+            m += pi[a] * scores[a * c.ParamCount + i]
+            top = top.Max(scores[a * c.ParamCount + i].Abs())
+        }
+        mean = mean.Max(m.Abs())
+    }
+    # the first action's against central differences of T log pi(0)
+    worst F64 = 0.0
+    p := c.Params()
+    h F64 = 1e-5
+    for i in range c.ParamCount {
+        old := p.Data[i]
+        p.Data[i] = old + h
+        policy(c, pi, temperature)
+        up F64 = temperature * pi[0].Log()
+        p.Data[i] = old - h
+        policy(c, pi, temperature)
+        down F64 = temperature * pi[0].Log()
+        p.Data[i] = old
+        worst = worst.Max(((up - down) / (2.0 * h) - scores[i]).Abs())
+    }
+    try io.PutLine("policy score: mean under pi " + $(mean / top) + ", against T log pi " + $(worst / top) + " of the largest")
+    assert mean / top < 1e-5 and worst / top < 1e-5
+}
+
+test "three factors: the expected actor update with an exact baseline is T grad J, J the expected reward" {
+    c := Circuit<F64>(1)
+    r := rand.Rand(17)
+    gradientCircuit(c, r, false)
+    k I64 = 3
+    temperature F64 = 0.25
+    rewards := Array<F64>[1.0, -0.5, 0.25]
+    scores := Array<F64>(k * c.ParamCount)
+    actionScores(c, scores, k, 0.001)
+    pi0 := Array<F64>(k)                            # the policy at the parameters as they are
+    policy(c, pi0, temperature)
+    pi := Array<F64>(k)
+    baseline F64 = 0.0                              # V = J, the critic frozen at the exact mean reward
+    for a in range k: baseline += pi0[a] * rewards[a]
+    p := c.Params()
+    h F64 = 1e-5
+    worst F64 = 0.0
+    top F64 = 0.0
+    for i in range c.ParamCount {
+        expected F64 = 0.0                          # sum_a pi(a) (r_a - V) contrast_a
+        for a in range k: expected += pi0[a] * (rewards[a] - baseline) * scores[a * c.ParamCount + i]
+        old := p.Data[i]
+        p.Data[i] = old + h
+        policy(c, pi, temperature)
+        up F64 = 0.0
+        for a in range k: up += pi[a] * rewards[a]
+        p.Data[i] = old - h
+        policy(c, pi, temperature)
+        down F64 = 0.0
+        for a in range k: down += pi[a] * rewards[a]
+        p.Data[i] = old
+        numeric F64 = temperature * (up - down) / (2.0 * h)
+        worst = worst.Max((expected - numeric).Abs())
+        top = top.Max(numeric.Abs())
+    }
+    try io.PutLine("three factors: relative error " + $(worst / top) + " (largest element " + $top + ")")
+    assert top > 1e-4 and worst / top < 1e-5
+}
+
+test "the eligibility trace: the lazy, fused pass is the explicit sum of past contrasts weighted by (gamma lambda)^age" {
+    c := Circuit<F64>(1)
+    r := rand.Rand(18)
+    gradientCircuit(c, r, false)
+    gl F64 = 0.891
+    lazy := Eligibility<F64>(c)
+    eager := Eligibility<F64>(c)
+    learns := Array<Bool>[true, false, false, true, false, true, true, false, false, false, true]
+    moments I64 = learns.Len()
+    history := Array<F64>(moments * c.ParamCount)   # each moment's contrast (0 at a calm one)
+    for m in range moments {
+        if learns[m] {
+            c.LabelData(Region(2))[0] = I32(m % 3)
+            try c.Teach(1, Lesson(0.5))
+            for i in range c.ParamCount: history[m * c.ParamCount + i] = -c.Grads().Data[i]
+            lazy.Add(c, gl)
+            eager.Add(c, gl)
+        } else {
+            lazy.Decay(gl)
+            eager.Decay(gl)
+            for i in range c.ParamCount { eager.E[i] = eager.Pending * eager.E[i] }  # applied at once
+            eager.Pending = 1.0
+        }
+    }
+    worst F64 = 0.0
+    gap F64 = 0.0
+    for i in range c.ParamCount {
+        explicit F64 = 0.0
+        for m in range moments: explicit += gl.Pow(F64(moments - 1 - m)) * history[m * c.ParamCount + i]
+        worst = worst.Max((lazy.At(i) - explicit).Abs())
+        gap = gap.Max((lazy.At(i) - eager.At(i)).Abs())
+    }
+    assert worst < 1e-14 and gap < 1e-15
+    # and the actor's step is -delta E
+    lazy.Credit(c, 0.3)
+    for i in range c.ParamCount: assert (c.Grads().Data[i] + 0.3 * lazy.At(i)).Abs() < 1e-16
+}
+
+test "with asymmetric feedback the contrast is no gradient: the theorem's symmetry is needed" {
+    c := Circuit<F64>(2)
+    r := rand.Rand(13)
+    gradientCircuit(c, r, true)
+    reference := Array<F64>(c.ParamCount)
+    lossGradient(c, reference, 1e-5)
+    e := estimateError(c, reference, Lesson(0.001, 1e-13, 20000))
+    try io.PutLine("one-way feedback: relative error " + $e)
+    assert e > 0.1
+}
+
+test "a Lif neuron under a constant drive fires at the rate the analytic formula gives" {
+    window I64 = 4000
+    leak F64 = 0.05
+    c := Circuit<F64>(6)
+    h := c.Hidden(1, Neuron.LifNeuron(leak, 1.0, 1.0, window))
+    r := rand.Rand(14)
+    c.Plan(r)
+    drives := Array<F64>[0.5, 0.98, 1.05, 1.5, 2.5, 6.0]
+    for b in range 6: c.DriveData(h)[b] = drives[b]
+    st := try c.Settle(Phase.Free, 40 * window, 2.0 / F64(window))
+    assert st.Qualified and st.Sweeps >= 2 * window
+    for b in range 6 {
+        rate := c.Value(Phase.Free).Get(b, 0)
+        f := LifRateOf(drives[b], leak, 1.0)
+        try io.PutLine("drive " + $drives[b] + ": " + $rate + " spikes a step, analytic " + $f)
+        # every interval between spikes is within one step of the continuous-time period 1 / f, so the rate is
+        # within f^2 / (1 - f) of f - and the count over a window within one spike
+        if f == 0.0 { assert rate == 0.0 } else { assert (rate - f).Abs() <= f * f / (1.0 - f) + 1.0 / F64(window) }
+    }
+}
+
+# a circuit for comparing spiking neurons with their rate model: two inputs, five hidden neurons, two readout neurons
+# taught by squared error, the hidden and readout reciprocal; every relaxing neuron biased above its threshold
+fn lifCircuit(c mut Circuit<F64>&, model Neuron, r mut rand.Rand&) {
+    x := c.Input(2)
+    h := c.Hidden(5, model)
+    o := c.Readout(2, Cost.Squared, model)
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, o)
+    c.Plan(r)
+    c.Weights(Projection(1)).Scale(2.0)
+    for j in range 5: c.Bias(h)[j] = 1.3 + 0.1 * F64(j)
+    for j in range 2: c.Bias(o)[j] = 1.5
+    d := c.DriveData(x)
+    for j in range d.Len(): d[j] = r.Uniform(0.0, 1.0)
+    t := c.TargetData(o)
+    t[0] = 0.15
+    t[1] = 0.02
+    t[2] = 0.02
+    t[3] = 0.15
+}
+
+test "a spiking circuit settles to its rate model's equilibrium, and its spike-count contrast has the same signs" {
+    lif := Neuron.LifNeuron(0.1, 1.0, 0.1, 20000)
+    a := Circuit<F64>(2)
+    ra := rand.Rand(21)
+    lifCircuit(a, lif, ra)
+    b := Circuit<F64>(2)                            # the same circuit of rate neurons with the Lif rate curve
+    rb := rand.Rand(21)
+    lifCircuit(b, Neuron.Rate(Rho.LifRate(0.1, 1.0)), rb)
+    b.Attempts = 4
+    try a.Settle(Phase.Free, 40 * 20000, 2.0 / 20000.0)
+    try b.Settle(Phase.Free, 20000, 1e-12)
+    meanField F64 = try a.Value(Phase.Free).MaxAbsDifference(b.Value(Phase.Free))
+    sweeps := try a.Teach(2, Lesson(1.0))
+    try b.Teach(2, Lesson(1.0, 1e-12, 20000))
+    ga := a.Grads()
+    gb := b.Grads()
+    top F64 = gb.MaxAbs()
+    agree I64 = 0
+    large I64 = 0
+    for i in range a.ParamCount {
+        if gb.Data[i].Abs() > 0.1 * top {
+            large++
+            if (ga.Data[i] > 0.0) == (gb.Data[i] > 0.0): agree++
+        }
+    }
+    spread F64 = try ga.MaxAbsDifference(gb) / top
+    try io.PutLine(("spiking against its rate model: rates within " + $meanField + ", a lesson of " + $sweeps + " steps, signs agree on " +
+        $agree + " of the " + $large + " larger entries, largest difference " + $spread + " of the largest entry"))
+    assert meanField < 0.015 and agree == large and large >= 8 and spread < 0.35
+}
+
+test "a settling circuit learns XOR by equilibrium propagation" {
+    c := Circuit<F64>(4)
+    x := c.Input(2)
+    h := c.Hidden(8)
+    o := c.Readout(2)
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, o)
+    r := rand.Rand(1)
+    c.Plan(r)
+    c.Certify(0.9)
+    d := c.DriveData(x)
+    classes := c.LabelData(o)
+    for b in range 4 {
+        p I64 = b / 2
+        q I64 = b % 2
+        d[2 * b] = 1.0 if p == 1 else -1.0
+        d[2 * b + 1] = 1.0 if q == 1 else -1.0
+        classes[b] = I32(p ^ q)
+    }
+    opt := optim.FlatAdamW<F64>(c.ParamCount, 0.05)
+    sweeps I64 = 0
+    for _ in range 400 {
+        sweeps += try c.Teach(4, Lesson())
+        opt.Step(c.ParamData(), c.GradData())
+    }
+    try c.Settle(Phase.Free, 1000, 1e-6)
+    predicted := Array<I32>(4)
+    c.Predict(Phase.Free, o, predicted)
+    for b in range 4: assert predicted[b] == classes[b]
+    assert c.Loss(Phase.Free) < 0.01
+    try io.PutLine("XOR: loss " + $(c.Loss(Phase.Free)) + " after 400 lessons, " + $(F64(sweeps) / 400.0) + " sweeps a lesson")
+}
+
+test "a spiking circuit learns XOR from spike-count contrasts" {
+    lif := Neuron.LifNeuron(0.1, 1.0, 0.25, 256)
+    c := Circuit<F64>(4)
+    x := c.Input(2)
+    h := c.Hidden(8, lif)
+    o := c.Readout(2, Cost.Squared, lif)
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, o)
+    r := rand.Rand(1)
+    c.Plan(r)
+    for j in range 8: c.Bias(h)[j] = 1.2
+    for j in range 2: c.Bias(o)[j] = 1.0
+    d := c.DriveData(x)
+    t := c.TargetData(o)
+    for b in range 4 {
+        p I64 = b / 2
+        q I64 = b % 2
+        d[2 * b] = 1.0 if p == 1 else -1.0
+        d[2 * b + 1] = 1.0 if q == 1 else -1.0
+        t[2 * b + (p ^ q)] = 0.2                    # spikes a step for the class, none for the other
+    }
+    opt := optim.FlatAdamW<F64>(c.ParamCount, 0.02)
+    steps I64 = 0
+    for _ in range 200 {
+        steps += try c.Teach(4, Lesson(1.0))
+        opt.Step(c.ParamData(), c.GradData())
+    }
+    predicted := Array<I32>(4)
+    c.Predict(Phase.Free, o, predicted)
+    for b in range 4: assert I64(predicted[b]) == ((b / 2) ^ (b % 2))
+    assert c.Loss(Phase.Free) < 1e-3
+    try io.PutLine("spiking XOR: loss " + $(c.Loss(Phase.Free)) + " after 200 lessons, " + $(F64(steps) / 200.0) + " steps a lesson")
+}
+
+# a circuit with every kind of block on a pattern, stored as store: tanh inputs one-way into a hidden region (folded),
+# the hidden region's lateral block and its reciprocal and one-way blocks with the readout - each at density 0.4 but
+# the folded one at 0.3 - certified at 0.8
+fn patterned(c mut Circuit<F64>&, r mut rand.Rand&, store Layout) {
+    x := c.Input(6, Neuron.Rate(Rho.Tanh))
+    h := c.Hidden(9)
+    o := c.Readout(4)
+    c.Project(x, h, Wiring.OneWay, 0.3, false, store)
+    c.Project(h, h, Wiring.Reciprocal, 0.4, false, store)
+    c.Project(h, o, Wiring.Reciprocal, 0.4, false, store)
+    c.Project(o, h, Wiring.OneWay, 0.4, false, store)
+    c.Plan(r)
+    c.Certify(0.8)
+    randomize(c, r, 1.0)
+    for b in range c.Rows: c.LabelData(o)[b] = I32(r.Below(4))
+}
+
+# a projection's gradient at synapse (i, j) whichever way it is stored, or 0 where there is none
+fn gradAt(c mut Circuit<F64>&, p Projection, i I64, j I64) F64 {
+    if not c.IsSparse(p): return c.WeightGrads(p).Get(i, j)
+    g := c.SparseWeightGrads(p)
+    for e in range g.Ptr[i], g.Ptr[i + 1] {
+        if I64(g.Idx[e]) == j: return g.Values[e]
+    }
+    return 0.0
+}
+
+test "a sparse projection is the masked dense one: the same weights, equilibrium, contrast and drive gradient" {
+    for rows in Array<I64>[1, 3] {
+        a := Circuit<F64>(rows)
+        ra := rand.Rand(31)
+        patterned(a, ra, Layout.Dense)
+        b := Circuit<F64>(rows)
+        rb := rand.Rand(31)
+        patterned(b, rb, Layout.Sparse)
+        assert b.IsSparse(Projection(1)) and not a.IsSparse(Projection(1)) and b.Synapses(Projection(1)) == a.Synapses(Projection(1))
+        assert b.Synapses(Projection(0)) < 54 and b.ParamCount < a.ParamCount
+        # the same synapses with the same weights
+        for k in range 4 {
+            w := b.SparseWeights(Projection(k))
+            dense := Array<F64>(w.Rows * w.Cols)
+            w.Dense(dense)
+            assert a.Weights(Projection(k)).Data.Len() >= dense.Len()
+            for e in range dense.Len(): assert dense[e] == a.Weights(Projection(k)).Data[e]
+        }
+        assert (a.Gain() - b.Gain()).Abs() < 1e-14
+        try a.Settle(Phase.Free, 4000, 1e-13)
+        try b.Settle(Phase.Free, 4000, 1e-13)
+        assert try a.Potential(Phase.Free).MaxAbsDifference(b.Potential(Phase.Free)) < 1e-12
+        try a.Teach(rows, Lesson(0.3, 1e-12, 4000))
+        try b.Teach(rows, Lesson(0.3, 1e-12, 4000))
+        worst F64 = 0.0
+        for k in range 4 {
+            p := Projection(k)
+            g := a.WeightGrads(p)
+            for i in range g.Rows {
+                for j in range g.Cols: worst = worst.Max((g.Get(i, j) - gradAt(b, p, i, j)).Abs())
+            }
+        }
+        for j in range a.Neurons { worst = worst.Max((a.GradData()[a.ParamCount - a.Neurons + j] - b.GradData()[b.ParamCount - b.Neurons + j]).Abs()) }
+        assert worst < 1e-10
+        da := Array<F64>(rows * 6)
+        db := Array<F64>(rows * 6)
+        a.DriveGrad(Region(0), da, 0.3)
+        b.DriveGrad(Region(0), db, 0.3)
+        for j in range da.Len(): assert (da[j] - db[j]).Abs() < 1e-10
+        # and Restrain treats the stored synapses alike
+        a.Weights(Projection(2)).Scale(4.0)
+        b.scaleBlock(2, 4.0)
+        a.Restrain(0.7)
+        b.Restrain(0.7)
+        assert (a.Gain() - b.Gain()).Abs() < 1e-14 and a.Gain() <= 0.7 + 1e-12
+    }
+}
+
+test "a wired projection holds the synapses it is given, and Auto keeps a sparse wiring sparse" {
+    c := Circuit<F64>(2)
+    x := c.Input(8)
+    h := c.Hidden(6)
+    posts := Array<I32>[3, 0, 5, 0]
+    pres := Array<I32>[2, 7, 0, 0]
+    p := c.ProjectWired(x, h, posts, pres, Wiring.OneWay)
+    q := c.Project(h, h, Wiring.Reciprocal, 1, false, Layout.Sparse)
+    r := rand.Rand(32)
+    c.Plan(r)
+    assert c.IsSparse(p) and c.Synapses(p) == 4 and c.IsSparse(q) and c.Synapses(q) == 36
+    w := c.SparseWeights(p)
+    dense := Array<F64>(48)
+    w.Dense(dense)
+    for i in range 6 {
+        for j in range 8 {
+            wired Bool = false
+            for k in range 4 {
+                if I64(posts[k]) == i and I64(pres[k]) == j: wired = true
+            }
+            assert (dense[i * 8 + j] != 0.0) == wired
+        }
+    }
+    # the folded constant is the wired product: settle a circuit with no feedback and read it
+    for j in range 16: c.DriveData(x)[j] = 0.125 * F64(j + 1)
+    for e in range 36: c.SparseWeights(q).Values[e] = 0.0
+    try c.Settle(Phase.Free, 100, 1e-14)
+    for b in range 2 {
+        for i in range 6 {
+            want F64 = 0.0
+            for j in range 8: want += dense[i * 8 + j] * c.DriveData(x)[b * 8 + j]
+            assert (c.Potential(Phase.Free).Get(b, 8 + i) - want).Abs() < 1e-14
+        }
+    }
+}
+
+# a circuit for the grouped readout's checks: three tanh inputs, four hidden neurons with a lateral block, a readout of
+# two groups of three (cross-entropy at T = 0.25, each group its own softmax)
+fn groupedCircuit(c mut Circuit<F64>&, r mut rand.Rand&) {
+    x := c.Input(3, Neuron.Rate(Rho.Tanh))
+    h := c.Hidden(4)
+    o := c.Readout(6, Cost.CrossEntropy(0.25), Neuron.Rate(Rho.Tanh), 2)
+    c.Project(x, h, Wiring.OneWay)
+    c.Project(h, h)
+    c.Project(h, o)
+    c.Plan(r)
+    for i in range c.projections.Len() {
+        if not c.projections[i].Folded: c.Weights(Projection(i)).Scale(3.0)
+    }
+    c.Certify(0.9)
+    randomize(c, r, 1.0)
+    for j in range c.LabelData(o).Len(): c.LabelData(o)[j] = I32(r.Below(3))
+}
+
+test "a readout split into groups: each group's cost and force its own, and the contrast is the gradient of their sum" {
+    c := Circuit<F64>(2)
+    r := rand.Rand(33)
+    groupedCircuit(c, r)
+    o := Region(2)
+    assert c.Groups(o) == 2 and c.LabelData(o).Len() == 4
+    # the loss is the two groups' cross-entropies, each over its own three neurons
+    try c.Settle(Phase.Free, 20000, 1e-14)
+    s := c.Activity(Phase.Free, o)
+    want F64 = 0.0
+    for b in range 2 {
+        for g in range 2 {
+            top F64 = -2.0
+            for j in range 3: top = top.Max(s.Get(b, 3 * g + j))
+            e F64 = 0.0
+            for j in range 3: e += ((s.Get(b, 3 * g + j) - top) / 0.25).Exp()
+            want += top + 0.25 * e.Log() - s.Get(b, 3 * g + I64(c.LabelData(o)[2 * b + g]))
+        }
+    }
+    assert (c.Loss(Phase.Free) - want / 2.0).Abs() < 1e-14
+    predicted := Array<I32>(4)
+    c.Predict(Phase.Free, o, predicted)
+    for b in range 2 {
+        for g in range 2 {
+            best I64 = 0
+            for j in range 1, 3 {
+                if s.Get(b, 3 * g + j) > s.Get(b, 3 * g + best): best = j
+            }
+            assert predicted[2 * b + g] == I32(best)
+        }
+    }
+    reference := Array<F64>(c.ParamCount)
+    lossGradient(c, reference, 1e-5)
+    e := estimateError(c, reference, Lesson(0.001, 1e-13, 20000))
+    try io.PutLine("two readout groups: the centered estimate against central differences " + $e + " of the largest element")
+    assert e < 1e-5
+}
+
+test "the policy score with two groups: a joint action's contrast is T grad log pi(a), pi the groups' product" {
+    c := Circuit<F64>(1)
+    r := rand.Rand(34)
+    groupedCircuit(c, r)
+    o := Region(2)
+    labels := c.LabelData(o)
+    labels[0] = 2
+    labels[1] = 0
+    try c.Teach(1, Lesson(0.001, 1e-13, 20000))
+    score := Array<F64>(c.ParamCount)
+    for i in range c.ParamCount: score[i] = -c.GradData()[i]
+    p := c.Params()
+    h F64 = 1e-5
+    worst F64 = 0.0
+    top F64 = 0.0
+    for i in range c.ParamCount {
+        old := p.Data[i]
+        p.Data[i] = old + h
+        up := 0.25 * jointLogPolicy(c, o)
+        p.Data[i] = old - h
+        down := 0.25 * jointLogPolicy(c, o)
+        p.Data[i] = old
+        numeric F64 = (up - down) / (2.0 * h)
+        worst = worst.Max((numeric - score[i]).Abs())
+        top = top.Max(numeric.Abs())
+    }
+    try io.PutLine("two groups' policy score: against T log pi(a) " + $(worst / top) + " of the largest")
+    assert worst / top < 1e-5
+}
+
+# log pi(a) of the joint action in row 0, the label of each group: the sum of the groups' log-probabilities
+fn jointLogPolicy(c mut Circuit<F64>&, o Region) F64 {
+    c.Nudge(Phase.Free, 0)
+    c.Settle(Phase.Free, 20000, 1e-14)!
+    s := c.Activity(Phase.Free, o)
+    sum F64 = 0.0
+    for g in range 2 {
+        top F64 = -2.0
+        for j in range 3: top = top.Max(s.Get(0, 3 * g + j))
+        e F64 = 0.0
+        for j in range 3: e += ((s.Get(0, 3 * g + j) - top) / 0.25).Exp()
+        sum += (s.Get(0, 3 * g + I64(c.LabelData(o)[g])) - top) / 0.25 - e.Log()
+    }
+    return sum
+}

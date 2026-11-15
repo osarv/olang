@@ -1,0 +1,143 @@
+# the settle of dyn (dyn/system, dyn/settle) against circuit.olang's, side by side (docs/redesign.md 4.3, M7): the
+# 784-128-10 settling network of docs/settling.md 5.7 - 784 inputs folded into 128 tanh units, reciprocal with 10
+# readouts (cross-entropy at T = 0.25) - built in both with the same weights, certified at kappa 0.9, given the same
+# random inputs and labels (MNIST-like: a fifth of the pixels lit, at 0.5 to 1); at batch 1 and 128. Interleaved: every round times each variant once, the medians printed.
+# A free settle from cold (sweeps, ms, us a sweep), and a lesson's settles - dyn: free, then both nudged phases side by
+# side (Nudged); circuit: Teach, its three settles and its contrast. At its Glorot draw the network settles in a few
+# sweeps (random signs contract far faster than kappa says), so the same is timed with a lateral block at the hidden
+# units (reciprocal, 128 x 128) of positive weights, certified alike - the certificate's worst case, whose cold
+# settle takes the tens of sweeps of settling.md 1.2 and shows the time a sweep takes. Also: the largest difference of the two free
+# equilibria, and dyn's free settle in tasks against one thread.
+# Arguments: rounds (7), threads for dyn's tasked run (4), the lesson tolerance's beta (0.5).
+
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../circuit"
+import "../dyn/system"
+import "../dyn/neuron"
+import "../dyn/conn"
+import "../dyn/settle"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt(10) catch { unreachable "a number: " + $args[i] }
+}
+
+fn median(x mut Array<F64>&) F64 {
+    x.Sort(fn(a, b): return a < b)
+    return x[x.Len() / 2]
+}
+
+fn ms(t0 I64, t1 I64) F64 { return F64(t1 - t0) / 1e6 }
+
+# a circuit of batch rows, certified, with random inputs and labels
+fn circuitOf(batch I64, lateral Bool, r mut rand.Rand&) circuit.Circuit<F32> {
+    c := circuit.Circuit<F32>(batch)
+    pixels := c.Input(784)
+    inner := c.Hidden(128)
+    digits := c.Readout(10)
+    c.Project(pixels, inner, circuit.Wiring.OneWay)
+    c.Project(inner, digits)
+    if lateral: c.Project(inner, inner)
+    c.Plan(r)
+    if lateral {
+        w := c.Weights(circuit.Projection(2))
+        for i in range w.Rows {
+            for j in range w.Cols: w.Data[i * w.Stride + j] = w.Data[i * w.Stride + j].Abs()
+        }
+    }
+    c.Certify(0.9)
+    for i in range batch * 784: c.DriveData(pixels)[i] = F32(r.Uniform(0.5, 1.0)) if r.Uniform(0.0, 1.0) < 0.19 else 0.0
+    for b in range batch: c.LabelData(digits)[b] = I32(r.Below(10))
+    return c
+}
+
+# the system of the same shape, holding the circuit's weights, drives and labels
+fn systemOf(c circuit.Circuit<F32>&, batch I64, lateral Bool, threads I64, r mut rand.Rand&) system.System<F32> {
+    s := system.System<F32>(batch, threads)
+    root := s.Root()
+    x := s.Population(root, "x", 784, neuron.Neuron.Rate(neuron.Rho.Linear), neuron.Role.Input)
+    h := s.Population(root, "h", 128, neuron.Neuron.Rate(neuron.Rho.Tanh))
+    y := s.Population(root, "y", 10, neuron.Neuron.Rate(neuron.Rho.Tanh), neuron.Role.Readout(neuron.Cost.Classes(0.25)))
+    s.Connect(x, h, conn.Wiring.Dense)
+    s.Connect(h, y, conn.Wiring.Symmetric)
+    if lateral: s.Connect(h, h, conn.Wiring.Symmetric)
+    s.Plan(r)!
+    for p in range 3 if lateral else 2 {
+        w := c.Weights(circuit.Projection(p))
+        to := s.Weights(system.Conn(p)).Flat()!
+        for i in range w.Rows {
+            for j in range w.Cols: to[i * w.Cols + j] = w.Get(i, j)
+        }
+    }
+    for i in range batch * 784: s.Pop(x).Drive[i] = c.DriveData(circuit.Region(0))[i]
+    for b in range batch: s.Pop(y).Labels[b] = c.LabelData(circuit.Region(2))[b]
+    return s
+}
+
+# the largest difference of the free equilibria's activities, hidden and readout
+fn gap(c circuit.Circuit<F32>&, s system.System<F32>&, batch I64) F64 {
+    worst F64 = 0.0
+    v := c.Value(circuit.Phase.Free)
+    for b in range batch {
+        for j in range 138 {
+            mine := s.Activity(settle.Phase.Free, system.Pop(1 if j < 128 else 2)).Get(b, j if j < 128 else j - 128)
+            worst = worst.Max(F64(v.Get(b, 784 + j) - mine).Abs())
+        }
+    }
+    return worst
+}
+
+fn main() {
+    args := os.Args()
+    rounds := number(args, 1, 7)
+    threads := number(args, 2, 4)
+    beta F64 = F64(number(args, 3, 50)) / 100.0
+    for run in range 4 {
+        batch := 1 if run % 2 == 0 else 128
+        lateral := run >= 2
+        r := rand.Rand(1)
+        c := circuitOf(batch, lateral, r)
+        s := systemOf(c, batch, lateral, 1, r)
+        t := systemOf(c, batch, lateral, threads, r)
+        tol := c.LessonTolerance(beta)
+        budget := c.Budget(tol, beta)
+        b := settle.Budget(budget, tol)
+        lesson := circuit.Lesson(beta, tol, budget)
+        Println("784-128-10" + $(", a positive lateral block at the hidden units" if lateral else "") + " at batch " + $batch + ": kappa " + $s.Gain() + " (circuit " + $c.Gain() + "), tolerance " + $tol + ", budget " + $budget)
+        cf, sf, tf, cl, sl := Array<F64>(rounds), Array<F64>(rounds), Array<F64>(rounds), Array<F64>(rounds), Array<F64>(rounds)
+        csw, ssw, tsw, clw, slw := 0, 0, 0, 0, 0
+        for k in range rounds {
+            c.Reset(circuit.Phase.Free)
+            t0 := time.Now()
+            got := try c.Settle(circuit.Phase.Free, budget, tol) catch { unreachable "the circuit refused" }
+            t1 := time.Now()
+            s.Reset(settle.Phase.Free)
+            mine := s.Settle(settle.Phase.Free, b)
+            t2 := time.Now()
+            t.Reset(settle.Phase.Free)
+            tasked := t.Settle(settle.Phase.Free, b)
+            c.Reset(circuit.Phase.Free)
+            t3 := time.Now()
+            taught := try c.Teach(batch, lesson) catch { unreachable "the circuit refused a lesson" }
+            t4 := time.Now()
+            s.Reset(settle.Phase.Free)
+            free := s.Settle(settle.Phase.Free, b)
+            nudged := s.Nudged(b, beta)
+            t5 := time.Now()
+            cf[k], sf[k], tf[k], cl[k], sl[k] = ms(t0, t1), ms(t1, t2), ms(t2, t3), ms(t3, t4), ms(t4, t5)
+            csw, ssw, tsw, clw, slw = got.Sweeps, mine.Sweeps, tasked.Sweeps, taught, free.Sweeps + 2 * nudged.Sweeps
+        }
+        c.Reset(circuit.Phase.Free)
+        try c.Settle(circuit.Phase.Free, budget, tol) catch { unreachable }
+        s.Reset(settle.Phase.Free)
+        s.Settle(settle.Phase.Free, b)
+        cfm, sfm, tfm := median(cf), median(sf), median(tf)
+        Println(("  free settle, cold: circuit " + $csw + " sweeps " + $cfm + " ms (" + $(cfm * 1000.0 / F64(csw)) + " us a sweep); dyn " + $ssw + " sweeps " +
+            $sfm + " ms (" + $(sfm * 1000.0 / F64(ssw)) + " us a sweep); dyn in " + $threads + " tasks " + $tsw + " sweeps " + $tfm + " ms (" +
+            $(tfm * 1000.0 / F64(tsw)) + " us a sweep)"))
+        Println("  a lesson's settles: circuit Teach " + $clw + " sweeps " + $median(cl) + " ms (its contrast included); dyn free + Nudged " + $slw + " sweep-phases " + $median(sl) + " ms")
+        Println("  the free equilibria differ by at most " + $gap(c, s, batch) + " (the tolerance over 1 - kappa: " + $(tol / 0.1) + ")")
+    }
+}

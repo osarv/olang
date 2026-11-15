@@ -1,0 +1,137 @@
+# The transformer of examples/charlm.olang trained on byte-level BPE tokens instead of characters: the same model (4
+# layers of width 128, 4 heads, a context of 64 tokens, batches of 16 sequences, tied embeddings), the same AdamW,
+# schedule and clipping, the same steps - only the vocabulary differs, 512 tokens learned from the training part
+# (tokenizer.Train) where the character model has the 65 characters of the text.
+#
+# Losses are nats per token; per character they are the total over the predicted tokens divided by the characters
+# those tokens hold - which is what compares with the character model. At the end the whole validation part is
+# evaluated, and so is the character model's checkpoint (data/shakespeare/charlm.ckpt, from examples/charlm.olang)
+# when it is there, on the same text; the parameters are saved to data/shakespeare/bpelm.ckpt and a sample is generated.
+# Arguments, all optional: the steps (2000), the seed (1), the threads (1), the vocabulary (512), the tokens to
+# generate (250).
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/text"
+import "../io/checkpoint"
+import "../models/gpt"
+import "../nn/generate"
+import "../nn/optim"
+import "../nn/train"
+import "../tensor"
+import "../tokenizer"
+
+sequences I64 = 16
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+# the characters the targets of the first n windows of an ordered pass over ids hold: window i's targets are tokens
+# i * T + 1 ... i * T + T
+fn targetChars(tk tokenizer.Tokenizer&, ids Array<I32>&, n I64, T I64) I64 {
+    total I64 = 0
+    for i in range n {
+        for t in range 1, T + 1: total += tk.Width(ids[i * T + t])
+    }
+    return total
+}
+
+# the loss over the first "batches" batches of w's ordered pass (all of it when there are fewer), in nats per token and
+# per character
+fn perChar(g mut graph.Graph<F32>&, m train.LanguageModel&, w mut text.Windows&, tk tokenizer.Tokenizer&, ids Array<I32>&
+    batches I64) F64, F64 {
+    perToken := train.LmEvaluate(g, m, w, batches)
+    n I64 = batches * g.Batch
+    if n > w.Count(): n = w.Count()
+    return perToken, perToken * F64(n * m.Ctx) / F64(targetChars(tk, ids, n, m.Ctx))
+}
+
+fn main() ? io.Error, os.Error, text.CorpusError, ParseError, tokenizer.TokenizerError, checkpoint.SafetensorsError, tensor.ShapeError {
+    args := os.Args()
+    steps := try number(args, 1, 2000)
+    seed := U64(try number(args, 2, 1))
+    threads := try number(args, 3, 1)
+    vocab := try number(args, 4, 512)
+    count := try number(args, 5, 250)
+
+    try os.MkDirAll("data/shakespeare")
+    try text.Fetch("data/shakespeare/input.txt", text.Shakespeare)
+    all := try os.ReadFile("data/shakespeare/input.txt")
+    split I64 = I64(F64(all.Len()) * 0.9) # the character model's split: the same text on each side
+    t0 := time.Now()
+    tk := tokenizer.Tokenizer.Train(all[:split], vocab)
+    learnNs := time.Since(t0)
+    trainIds := tk.Encode(all[:split])
+    valIds := tk.Encode(all[split:])
+    try io.Put(("tiny Shakespeare: a BPE vocabulary of " + $tk.Size() + " learned in " + $(F64(learnNs) * 1e-6).Fixed(0) +
+        " ms; " + $trainIds.Len() + " training tokens (" + $(F64(split) / F64(trainIds.Len())).Fixed(3) +
+        " characters a token), " + $valIds.Len() + " validation tokens (" +
+        $(F64(all.Len() - split) / F64(valIds.Len())).Fixed(3) + ")\n"))
+
+    cfg := gpt.GptConfig.Char(tk.Size())
+    g := graph.Graph<F32>(sequences, threads)
+    m := gpt.Gpt.New(g, cfg).Lm(g)
+    r := rand.Rand(seed)
+    try g.Plan(r)
+    o := optim.AdamW(g.Params(), g.ParamGrads(), beta2 = 0.99, decay = 0.1, spans = optim.Spans(g))
+    rate := optim.WarmupCosine(1e-3, 100, steps, 1e-4)
+    trainSet := text.Windows(trainIds, cfg.Ctx, seed)
+    valSet := text.Windows(valIds, cfg.Ctx)
+    try io.Put(($cfg.Layers + " layers of " + $cfg.Dim + ", " + $cfg.Heads + " heads, context " + $cfg.Ctx + ", batches of " + $sequences + " x " +
+        $cfg.Ctx + ", " + $g.ParamCount + " parameters, " + $threads + " threads\n"))
+    v0, c0 := perChar(g, m, valSet, tk, valIds, 10)
+    try io.Put("step 0: validation loss " + $v0.Fixed(4) + " a token, " + $c0.Fixed(4) + " a character\n")
+    spent I64 = 0
+    windowLoss F64 = 0.0
+    for step in range steps {
+        t1 := time.Now()
+        loss, norm := train.LmStep(g, m, trainSet, o, rate(step), 1.0)
+        spent += time.Since(t1)
+        windowLoss += loss
+        if (step + 1) % 50 == 0 {
+            try io.Put(("step " + $(step + 1) + ": train loss " + $(windowLoss / 50.0).Fixed(4) + ", gradient norm " +
+                $norm.Fixed(3) + ", " + $(F64(spent) * 1e-6 / F64(step + 1)).Fixed(1) + " ms a step\n"))
+            windowLoss = 0.0
+        }
+        if (step + 1) % 250 == 0 or step + 1 == steps {
+            v, c := perChar(g, m, valSet, tk, valIds, 10)
+            try io.Put("step " + $(step + 1) + ": validation loss " + $v.Fixed(4) + " a token, " + $c.Fixed(4) + " a character\n")
+        }
+    }
+    seconds F64 = F64(spent) * 1e-9
+    try io.Put(("trained " + $steps + " steps in " + $seconds.Fixed(1) + " s: " + $(seconds * 1e3 / F64(steps)).Fixed(1) +
+        " ms a step, " + $(F64(steps * g.Batch * cfg.Ctx) / seconds).Fixed(0) + " tokens a second\n"))
+    vt, vc := perChar(g, m, valSet, tk, valIds, 1000000)
+    try io.Put("the whole validation part: " + $vt.Fixed(4) + " nats a token, " + $vc.Fixed(4) + " a character\n")
+    try g.Save("data/shakespeare/bpelm.ckpt")
+
+    # the character model on the same validation text, when its checkpoint is there
+    if os.Exists("data/shakespeare/charlm.ckpt") {
+        c := try text.Corpus.Load("data/shakespeare/input.txt")
+        ccfg := gpt.GptConfig.Char(c.Size())
+        cg := graph.Graph<F32>(sequences)
+        cm := gpt.Gpt.New(cg, ccfg).Lm(cg)
+        try cg.Plan(r)
+        try cg.Load("data/shakespeare/charlm.ckpt")
+        cv := text.Windows(c.Val(), ccfg.Ctx)
+        try io.Put(("the character model (data/shakespeare/charlm.ckpt) on the same text: " +
+            $train.LmEvaluate(cg, cm, cv, 10).Fixed(4) + " a character over the first 10 batches, " +
+            $train.LmEvaluate(cg, cm, cv, 1000000).Fixed(4) + " over the whole validation part\n"))
+    }
+
+    gen := graph.Graph<F32>(1, 1, graph.Mode.Captured, true)
+    gm := gpt.Gpt.New(gen, cfg).Lm(gen, false)
+    try gen.Plan(r)
+    try gen.Params().Convert(g.Params())
+    t2 := time.Now()
+    ids := generate.CachedTokens(gen, gm, tk.Encode("\n"), count, 0.8, r)
+    s2 := time.Since(t2)
+    sample := try tk.Decode(ids)
+    try io.Put(("--- " + $count + " tokens, " + $sample.Len() + " characters, temperature 0.8, " +
+        $(F64(count) / (F64(s2) * 1e-9)).Fixed(0) + " tokens a second (a key-value cache) ---\n" + $sample + "\n---\n"))
+}

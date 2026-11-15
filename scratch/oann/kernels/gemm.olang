@@ -1,0 +1,1830 @@
+# gemm - the matrix products every layer, attention head and settle runs on: Gemm (Goto's blocked GEMM with the
+# target's tile), GemmBatch (a product per matrix of a batch, triangles skipped), GemmLeft (a left operand packed by its
+# own type, a convolution's patches), Gemv (one vector, no packing), Ger2 (a decayed rank-2 update) and GemmI8 (8-bit
+# integers accumulated in 32 bits, for quantized inference).
+#
+# Storage and accumulation. Every product is generic over the storage type S of its matrices and the accumulator A
+# its sums are kept in, which is the type of its workspace: F32 x F32, F64 x F64, and the low-precision storage
+# BF16, F16, F8E4M3 and F8E5M2 x F32 - widened to A as the operands are packed, every sum kept in A, rounded to S once
+# as the result is stored. Integer types accumulate in themselves, wrapping (E6c).
+#
+# The algorithm is BLIS's (Goto's). C is computed in blocks sized for the caches - kc steps of the depth by nc columns
+# of op(B) packed into one contiguous panel (L3), mc rows of op(A) by kc into another (L2) - and every block by a
+# micro-kernel holding an MR x NR tile of C in vector registers, one rank-1 update per step of the depth. Packing is
+# where the transposes are applied and where storage is widened to A, so the micro-kernel sees contiguous panels of A
+# only. The tile is the target's (B12): 12 x 32 four-byte lanes on AVX-512, 6 x 16 on AVX, 4 x 12 on SSE, half the
+# columns for eight-byte ones - the accumulators, a step's B vectors and one broadcast filling the registers - and each
+# multiply-add is fused where the target has FMA (TargetHasFma), so a product computed for two targets may differ in
+# its last bits; for one target it is the same in the program, under interpret and while compiling.
+#
+# Four refinements, each where the plain algorithm wastes work: a result narrower than two vectors gets a tile one
+# vector wide (thin); one whose rows cover the tile badly is computed as its transpose (exchanged); a result one or two
+# tiles wide reads A where it is instead of packing it; a triangular product skips the tiles above a triangular
+# result's diagonal and the zeros of a triangular left operand. Small products and products of up to four rows (or
+# one column) skip packing altogether. The epilogue - a bias and an activation - runs on each block of rows as soon as
+# it is summed, while it is in the cache.
+#
+# Threads. The workspace fixes the thread count. A product large enough is split by runs of its output's tile rows
+# over that many tasks (join/spawn), GemmBatch by runs of its matrices; no element's sum depends on the split, so a
+# result is the same for every thread count, bit for bit.
+#
+# Shapes are checked by the callers, once (docs/redesign.md, section 3, decision 1): nothing here checks a shape, and a
+# product given operands that do not fit reads and writes outside them as an index out of range does (E16).
+
+import "mat"
+import "std/rand"
+import unistd "unistd.h"
+
+# ---- what a product is given ----
+
+# what a product does to each element of its result once it is summed: nothing; a bias added (one value per column of
+# C); a bias added and an activation applied to the sum - an empty b adds no bias. Computed in the accumulator, rounded
+# once
+type Epilogue enum {
+    None
+    Bias(b Array<F32>&)
+    BiasAct(b Array<F32>&, act mat.Act)
+}
+
+# which part of a product a triangle confines it to - causal attention has both kinds. Result(d): only C's lower
+# triangle, C[i, j] for j <= i + d, is computed, and the rest of C is neither written nor scaled by beta (MKL's gemmt).
+# Left(d): A is lower-triangular, A[r, s] for s <= r + d read and the rest taken as zero and never read - so op(A) is
+# lower-triangular, upper where transposed (BLAS's trmm). d > 0 lets row i reach column i + d: queries d positions
+# after the keys' first, decoding with a cache
+type Triangle enum {
+    Full
+    Result(d I64)
+    Left(d I64)
+}
+
+# Groups x Members matrices of one shape in one storage: matrix (g, m) is Rows x Cols, rows Ld apart, its first element
+# Data[Off + g GroupStride + m MemberStride] - every sequence's every head of attention. A view, as a Mat is; b[g, m] is
+# matrix (g, m)
+type Batch<S> struct(Data mut Array<S>&, Off I64, Rows I64, Cols I64, Ld I64, Groups I64, GroupStride I64, Members I64, MemberStride I64) {
+    Data
+    Off
+    Rows
+    Cols
+    Ld
+    Groups
+    GroupStride
+    Members
+    MemberStride
+}
+
+# matrix (g, m), a view
+fn (b Batch<S>&) At(g I64, m I64) mat.Mat<S> {
+    return mat.Mat<S>(b.Data, b.Off + g * b.GroupStride + m * b.MemberStride, b.Rows, b.Cols, b.Ld)
+}
+
+# m's rows in runs of rows (the groups: sequences) and its columns in heads equal blocks (the members): matrix (s, h) is
+# rows s rows .. and columns h w .., w = Cols / heads - attention's queries, keys, values and outputs. Unchecked: rows
+# divides m.Rows and heads m.Cols
+fn Batch<S>.Heads(m mat.Mat<S>&, rows I64, heads I64) Batch<S> {
+    w I64 = m.Cols / heads
+    return Batch<S>(m.Data, m.Off, rows, w, m.Ld, m.Rows / rows, rows * m.Ld, heads, w)
+}
+
+# m's rows in runs of rows, run r being matrix (r / members, r % members): attention's T x T matrices of every sequence
+# and head, stacked. Unchecked: rows members divides m.Rows
+fn Batch<S>.Stacked(m mat.Mat<S>&, rows I64, members I64 = 1) Batch<S> {
+    return Batch<S>(m.Data, m.Off, rows, m.Cols, m.Ld, m.Rows / (rows * members), rows * members * m.Ld, members, rows * m.Ld)
+}
+
+# The panels a product packs its operands into, and its thread count. Workspace<F32>(4) is empty; it grows where it
+# lives, on the first products, to what the largest needs, and never shrinks - so a loop of products (a step, a settle)
+# allocates nothing after its first. A panel too small is replaced by one at least twice its size, so products growing
+# a step at a time replace it a logarithmic number of times. It holds no result: one workspace serves products of any
+# shape, one at a time (two at once from two tasks would write the same panels, a data race)
+type Workspace<A> struct(threads I64) {
+    Threads I64 = threads if threads > 0 else 1
+    a mut Array<A>& = Array<A>(0)               # op(A)'s panels, one per task
+    b mut Array<A>& = Array<A>(0)               # op(B)'s panel (GemmBatch: one per task)
+    c mut Array<A>& = Array<A>(0)               # a result in the accumulator, where storage is narrower
+    qa mut Array<U8>& = Array<U8>(0)            # GemmI8's row tiles, one per task
+    qb mut Array<I8>& = Array<I8>(0)            # GemmI8's weight panels
+    corr mut Array<I32>& = Array<I32>(0)        # GemmI8's zero-point corrections
+}
+
+fn (ws mut Workspace<A>&) panelsA(n I64) mut Array<A>& {
+    if ws.a.Len() < n: ws.a = Array<A>(grown(ws.a.Len(), n))
+    return ws.a
+}
+
+fn (ws mut Workspace<A>&) panelsB(n I64) mut Array<A>& {
+    if ws.b.Len() < n: ws.b = Array<A>(grown(ws.b.Len(), n))
+    return ws.b
+}
+
+fn (ws mut Workspace<A>&) wideC(n I64) mut Array<A>& {
+    if ws.c.Len() < n: ws.c = Array<A>(grown(ws.c.Len(), n))
+    return ws.c
+}
+
+fn (ws mut Workspace<A>&) bytesA(n I64) mut Array<U8>& {
+    if ws.qa.Len() < n: ws.qa = Array<U8>(grown(ws.qa.Len(), n))
+    return ws.qa
+}
+
+fn (ws mut Workspace<A>&) bytesB(n I64) mut Array<I8>& {
+    if ws.qb.Len() < n: ws.qb = Array<I8>(grown(ws.qb.Len(), n))
+    return ws.qb
+}
+
+fn (ws mut Workspace<A>&) corrections(n I64) mut Array<I32>& {
+    if ws.corr.Len() < n: ws.corr = Array<I32>(grown(ws.corr.Len(), n))
+    return ws.corr
+}
+
+# the length a panel holding have elements is replaced by when a product needs n: n, or twice have when that is more
+fn grown(have I64, n I64) I64 { return n if n > have * 2 else have * 2 }
+
+# the number of cores online (84 is glibc's _SC_NPROCESSORS_ONLN on Linux) - the usual thread count
+fn Cores() I64 {
+    n := unistd.sysconf(84)
+    return n if n > 0 else 1
+}
+
+# ---- the products ----
+
+# c = alpha op(a) op(b) + beta c, then the epilogue: op(x) is x, or its transpose where its flag is set - read where x
+# is, never transposed in memory. beta = 0 never reads c, so c may hold anything (BLAS's rule); c must not overlap a or
+# b. Packs into ws, split over ws.Threads tasks when large enough
+fn Gemm<S, A>(ws mut Workspace<A>&, c mut mat.Mat<S>&, a mat.Mat<S>&, ta Bool, b mat.Mat<S>&, tb Bool, alpha A = 1, beta A = 0, epi Epilogue = Epilogue.None) {
+    m, n := c.Rows, c.Cols
+    k I64 = a.Rows if ta else a.Cols
+    if m == 0 or n == 0: return
+    oa := operand<S>.of(a)
+    ob := operand<S>.of(b)
+    cd := c.Data[c.Off:]
+    if k > 0 and unpacked(m, n, k, ta, tb, cd, alpha) {
+        unpackedProduct(m, n, k, oa, ta, ob, tb, alpha, beta, cd, c.Ld)
+        finish(cd, c.Ld, 0, m, 0, n, epi, alpha)
+        return
+    }
+    product(m, n, k, oa, ta, ob, tb, alpha, beta, cd, c.Ld, ws, epi, true)
+}
+
+# Gemm whose left operand is not a matrix but read by its own type as it is packed - a convolution's patches, never
+# made. op(a) is c.Rows x k; L needs Pack<A>(w0 I64, p0 I64, width I64, depth I64, wr I64, dst mut Array<A>&), which
+# fills dst with op(a)'s rows w0 .. w0 + width and depth p0 .. p0 + depth in panels wr rows wide: panel q (from
+# dst[q depth]) holding, for each step p, the wr values (w0 + q + w, p0 + p), zeros past the width. Never exchanged
+fn GemmLeft<L, S, A>(ws mut Workspace<A>&, c mut mat.Mat<S>&, a L, k I64, b mat.Mat<S>&, tb Bool, alpha A = 1, beta A = 0, epi Epilogue = Epilogue.None) {
+    if c.Rows == 0 or c.Cols == 0: return
+    product(c.Rows, c.Cols, k, foreign<L>(a), false, operand<S>.of(b), tb, alpha, beta, c.Data[c.Off:], c.Ld, ws, epi, false)
+}
+
+# c[g, m] = alpha op(a[g, m]) op(b[g, m]) + beta c[g, m] for every matrix of the batches (one Groups and Members), each
+# by Gemm's blocked algorithm, confined to tri's triangle (about half the work). Runs of the matrices go to ws.Threads
+# tasks. Causal attention, B sequences of T positions, heads blocks of q, k, v (n x D) and p (B heads T x T):
+#     GemmBatch(ws, Batch.Stacked(p, T, heads), Batch.Heads(q, T, heads), false, Batch.Heads(k, T, heads), true, scale, 0, Triangle.Result(0))
+#     (the softmax of each row over its first i + 1 columns, then)
+#     GemmBatch(ws, Batch.Heads(y, T, heads), Batch.Stacked(p, T, heads), false, Batch.Heads(v, T, heads), false, 1, 0, Triangle.Left(0))
+fn GemmBatch<S, A>(ws mut Workspace<A>&, c mut Batch<S>&, a Batch<S>&, ta Bool, b Batch<S>&, tb Bool, alpha A = 1, beta A = 0, tri Triangle = Triangle.Full) {
+    m, n := c.Rows, c.Cols
+    k I64 = a.Rows if ta else a.Cols
+    count I64 = c.Groups * c.Members
+    if m == 0 or n == 0 or count == 0: return
+    cf := confine.of(tri)
+    lower, result, diag := cf.lower, cf.result, cf.diag
+    if k == 0 {
+        for e in range count: emptyProduct(m, n, beta, c.Data[c.Off + c.GroupStride * (e / c.Members) + c.MemberStride * (e % c.Members):], c.Ld, Epilogue.None, result, diag)
+        return
+    }
+    z A
+    thin := tiling.choose(m, n, microRows, tileCols(z), vectorLanes(z), false).thin
+    nr I64 = vectorLanes(z) if thin else tileCols(z)
+    depthMax I64 = lesser(k, kc)
+    bsize I64 = depthMax * lesser((n + nr - 1) / nr * nr, blockCols(z))
+    asize I64 = depthMax * lesser((m + microRows - 1) / microRows * microRows, blockRows(z))
+    tasks I64 = 1 if count * m * n * k < 2000000 else lesser(ws.Threads, count)
+    bp := ws.panelsB(tasks * bsize)
+    ap := ws.panelsA(tasks * asize)
+    wsize I64 = 0 if k <= kc or sameType(c.Data, z) else m * n
+    wd := ws.wideC(tasks * wsize)
+    share I64 = (count + tasks - 1) / tasks
+    run := batchRun<S, A>(c.Data[c.Off:], strides.of(c), a.Data[a.Off:], strides.of(a), ta, b.Data[b.Off:], strides.of(b), tb, m, n, k, alpha, beta, thin, lower, result, diag)
+    if tasks <= 1 {
+        run.go(0, count, ap, bp, wd)
+        return
+    }
+    join {
+        for t in range tasks {
+            lo I64 = t * share
+            hi I64 = lesser(count, lo + share)
+            if lo < hi: spawn run.go(lo, hi, ap[t * asize:(t + 1) * asize], bp[t * bsize:(t + 1) * bsize], wd[t * wsize:(t + 1) * wsize])
+        }
+    }
+}
+
+# y = alpha op(a) x + beta y for vectors x and y: a's rows dotted with x (trans false) or a's columns (trans true), in
+# the accumulator - no packing, no tasks, nothing allocated; beta = 0 never reads y. The settle's blocks (64 x 64 to
+# 256 x 512) and a batch of up to four rows through Gemm take this path
+fn Gemv<S, A>(y mut Array<A>&, a mat.Mat<S>&, trans Bool, x Array<A>&, alpha A = 1, beta A = 0) {
+    rows I64 = a.Cols if trans else a.Rows
+    len I64 = a.Rows if trans else a.Cols
+    if trans: gemvColumns(rows, len, alpha, a.Data, a.Off, a.Ld, x, 1, beta, y, 1)
+    else: gemvRows(rows, len, alpha, a.Data, a.Off, a.Ld, x, 1, beta, y, 1)
+}
+
+# a = decay a + alpha (x1 y1^T + x2 y2^T), x's a.Rows long and y's a.Cols: a decayed rank-2 update in one pass, in the
+# accumulator, with no outer product made - an eligibility trace, a contrastive rule's two phases
+fn Ger2<S, A>(a mut mat.Mat<S>&, x1 Array<A>&, y1 Array<A>&, x2 Array<A>&, y2 Array<A>&, alpha A, decay A) {
+    like S
+    for r in range a.Rows {
+        d I64 = a.Off + r * a.Ld
+        p A = alpha * x1[r]
+        q A = alpha * x2[r]
+        for j in range a.Cols: a.Data[d + j] = cast(decay * cast(a.Data[d + j], p) + (p * y1[j] + q * y2[j]), like)
+    }
+}
+
+# ---- the operands as packing reads them ----
+
+# a matrix as a product reads it: its storage from its first element, and its row stride
+type operand<S> struct(d Array<S>&, ld I64) {
+    d
+    ld
+}
+
+fn operand<S>.of(m mat.Mat<S>&) operand<S> { return operand<S>(m.Data[m.Off:], m.Ld) }
+
+# a left operand of another type, packed by its own Pack (GemmLeft)
+type foreign<L> struct(x L) {
+    x
+}
+
+# whether an operand is a matrix - only a matrix is exchanged or read in place
+fn (x operand<S>&) isMatrix() Bool { return true }
+fn (x foreign<L>&) isMatrix() Bool { return false }
+
+# the panels' two roles: the left operand's, as wide as the tile's rows, and the right one's, as wide as its columns -
+# a constant either way, so that copying a whole panel's step is unrolled
+type aPanel struct() { }
+type bPanel struct() { }
+
+fn panelWidth<A, R, H>(z A, role R, sh H) I64 {
+    return match R {
+        case aPanel: microRows
+        case bPanel: tileColsOf(z, sh)
+    }
+}
+
+fn (f foreign<L>&) pack<R, H, A>(trans Bool, w0 I64, p0 I64, width I64, depth I64, role R, sh H, lower Bool, diag I64, dst mut Array<A>&) {
+    z A
+    f.x.Pack(w0, p0, width, depth, panelWidth(z, role, sh), dst)
+}
+
+# op(x)'s block of width w0 .. w0 + width and depth p0 .. p0 + depth into panels of wr - panel q holding, for each step
+# p, the wr values (w0 + q + w, p0 + p), zeros past the width. For the left operand the width is op(a)'s rows, for the
+# right one op(b)'s columns - the same read the other way, so trans says which way x is stored: element (w, p) is
+# x[w, p], or x[p, w] when trans. lower: x is lower-triangular, x[r, s] zero for s > r + diag and never read
+fn (x operand<S>&) pack<R, H, A>(trans Bool, w0 I64, p0 I64, width I64, depth I64, role R, sh H, lower Bool, diag I64, dst mut Array<A>&) {
+    z A
+    wr := panelWidth(z, role, sh)
+    for q in range 0, width, wr {
+        n I64 = lesser(wr, width - q)
+        if trans: x.packAcross(w0 + q, p0, n, depth, role, sh, lower, diag, dst, q * depth)
+        else if n == wr and not lower: x.packDown(w0 + q, p0, depth, role, sh, dst, q * depth)
+        else: x.packRows(w0 + q, p0, n, depth, role, sh, lower, diag, dst, q * depth)
+    }
+}
+
+# a whole panel of x's rows w0 .. w0 + wr, a step at a time - its wr rows read together
+fn (x operand<S>&) packDown<R, H, A>(w0 I64, p0 I64, depth I64, role R, sh H, dst mut Array<A>&, base I64) {
+    z A
+    wr := panelWidth(z, role, sh)
+    s I64 = w0 * x.ld + p0
+    for p in range depth {
+        for w in range wr: dst[base + p * wr + w] = cast(x.d[s + w * x.ld + p], z)
+    }
+}
+
+# the last n rows (fewer than a panel), or a triangular x's: each row a run of the depth, written wr apart, zeros below
+# and past the triangle
+fn (x operand<S>&) packRows<R, H, A>(w0 I64, p0 I64, n I64, depth I64, role R, sh H, lower Bool, diag I64, dst mut Array<A>&, base I64) {
+    z A
+    wr := panelWidth(z, role, sh)
+    for w in range n {
+        s I64 = (w0 + w) * x.ld + p0
+        m I64 = clampI(w0 + w + diag - p0 + 1, 0, depth) if lower else depth
+        for p in range m: dst[base + p * wr + w] = cast(x.d[s + p], z)
+        for p in range m, depth: dst[base + p * wr + w] = z
+    }
+    for w in range n, wr {
+        for p in range depth: dst[base + p * wr + w] = z
+    }
+}
+
+# element (w, p) is x[p0 + p, w0 + w]: each step of the panel a run of x's row. Of a triangular x the steps before pAny
+# are zeros, those from pFull on read whole, and only those between - fewer than wr - are cut
+fn (x operand<S>&) packAcross<R, H, A>(w0 I64, p0 I64, n I64, depth I64, role R, sh H, lower Bool, diag I64, dst mut Array<A>&, base I64) {
+    z A
+    wr := panelWidth(z, role, sh)
+    pAny I64 = clampI(w0 - diag - p0, 0, depth) if lower else 0
+    pFull I64 = clampI(w0 + n - 1 - diag - p0, pAny, depth) if lower else 0
+    for p in range pAny {
+        for w in range wr: dst[base + p * wr + w] = z
+    }
+    for p in range pAny, pFull {
+        s I64 = (p0 + p) * x.ld + w0
+        m I64 = clampI(p0 + p + diag - w0 + 1, 0, n)
+        for w in range m: dst[base + p * wr + w] = cast(x.d[s + w], z)
+        for w in range m, wr: dst[base + p * wr + w] = z
+    }
+    if n == wr {
+        for p in range pFull, depth {
+            s I64 = (p0 + p) * x.ld + w0
+            for w in range wr: dst[base + p * wr + w] = cast(x.d[s + w], z)
+        }
+        return
+    }
+    for p in range pFull, depth {
+        s I64 = (p0 + p) * x.ld + w0
+        for w in range n: dst[base + p * wr + w] = cast(x.d[s + w], z)
+        for w in range n, wr: dst[base + p * wr + w] = z
+    }
+}
+
+# ---- the target's tile ----
+
+# the tile's rows: AVX-512's 32 registers take 12 x 32 four-byte accumulators (24 registers), AVX's 16 take 6 x 16,
+# SSE's 4 x 12 - a build constant, so the micro-kernel's rows are unrolled while compiling (comptime for)
+microRows I64 = 12 if TargetVectorBits >= 512 else (6 if TargetVectorBits >= 256 else 4)
+
+# the elements of accumulator A in one vector register
+fn vectorLanes<A>(z A) I64 {
+    return match A {
+        case F64, I64, U64: TargetVectorBits / 64
+        case _: TargetVectorBits / 32
+    }
+}
+
+# the tile's columns: two vectors (three on SSE), half as many eight-byte elements
+fn tileCols<A>(z A) I64 {
+    wide I64 = match A {
+        case F64, I64, U64: 2
+        case _: 1
+    }
+    if TargetVectorBits >= 512: return 32 / wide
+    if TargetVectorBits >= 256: return 16 / wide
+    return 12 / wide
+}
+
+# the two tile shapes: two vectors of columns - the usual one - and one, for a product too narrow to fill two (a
+# convolution's sixteen output channels, a classifier's ten)
+type wideTile struct() { }
+type thinTile struct() { }
+
+fn tileColsOf<A, H>(z A, sh H) I64 {
+    return match H {
+        case wideTile: tileCols(z)
+        case thinTile: vectorLanes(z)
+    }
+}
+
+# a tile of accumulators, kept in registers by the micro-kernel (an inline array, indexed only at constants) - room for
+# the largest, 12 x 32
+type tile<A> struct() {
+    v := Array<A>(384)
+}
+
+# Goto's blocking around the tile: kc the depth of a packed panel, mc the rows of op(A) packed per block (its panel in
+# L2), nc the columns of op(B) (its panel in L3)
+kc I64 = 256
+
+fn blockRows<A>(z A) I64 { return 128 / microRows * microRows }
+
+fn blockCols<A>(z A) I64 {
+    nr := tileCols(z)
+    return 2048 / nr * nr
+}
+
+# the fraction of the tiles' work inside an m x n result, the rest being padding
+fn coverage(m I64, n I64, mr I64, nr I64) F64 {
+    return F64(m) / F64((m + mr - 1) / mr * mr) * (F64(n) / F64((n + nr - 1) / nr * nr))
+}
+
+# the tile for an m x n result: thin where it covers the result by 15% more than the wide one, and the transpose of the
+# result computed instead (C^T = op(b)^T op(a)^T) where that covers it by 25% more still. Neither changes any sum
+type tiling struct(thin Bool, exchanged Bool) {
+    thin
+    exchanged
+}
+
+fn tiling.choose(m I64, n I64, mr I64, wideCols I64, thinCols I64, mayExchange Bool) tiling {
+    w := coverage(m, n, mr, wideCols)
+    t := coverage(m, n, mr, thinCols)
+    thin Bool = t > 1.15 * w
+    best F64 = t if thin else w
+    if not mayExchange: return tiling(thin, false)
+    we := coverage(n, m, mr, wideCols)
+    te := coverage(n, m, mr, thinCols)
+    thinE Bool = te > 1.15 * we
+    if (te if thinE else we) > 1.25 * best: return tiling(thinE, true)
+    return tiling(thin, false)
+}
+
+# ---- the micro-kernel ----
+
+# where it reads op(A): a packed panel (element (i, k) at k MR + i), or the operand where it is, by rows (i ld + k)
+type packedA struct() { }
+type rowsA struct() { }
+
+# the steps between the elements of one step's rows, and between one step's and the next's
+fn aSteps<A, L>(z A, lay L, ld I64) I64, I64 {
+    match L {
+        case packedA: return 1, microRows
+        case rowsA: return ld, 1
+    }
+}
+
+# C = alpha (the sum over the depth of A(i, k) bp[k][j]) + beta C for one MR x NR tile, stored by storeTile
+# (storeTileT where exchanged). A is read d1 steps as lay says from a1[o1], then d2 steps from the packed panel a2[o2]
+# - a triangular operand's part where the tile's rows end at different places, packed with its zeros. Each row of a
+# step is a copy of comptime for, so every accumulator's index is a constant and LLVM keeps them in registers
+fn micro<A, L, H, S>(d1 I64, a1 Array<A>&, o1 I64, ld1 I64, lay L, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh H, alpha A, beta A, c mut Array<S>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+    z A
+    nr := tileColsOf(z, sh)
+    si, sk := aSteps(z, lay, ld1)
+    acc := tile<A>()
+    for k in range d1 {
+        a I64 = o1 + k * sk
+        b I64 = bo + k * nr
+        comptime for i in range microRows { rowStep(acc, i * nr, a1[a + i * si], bp, b, nr) }
+    }
+    for k in range d2 {
+        a I64 = o2 + k * microRows
+        b I64 = bo + (d1 + k) * nr
+        comptime for i in range microRows { rowStep(acc, i * nr, a2[a + i], bp, b, nr) }
+    }
+    # the accumulators leave the registers in row order, which lets the vectorizer group them by rows
+    t := tile<A>()
+    for i in range microRows {
+        for j in range nr: t.v[i * nr + j] = acc.v[i * nr + j]
+    }
+    if exchanged: storeTileT(t, nr, alpha, beta, c, co, ldc, rows, cols)
+    else: storeTile(t, nr, alpha, beta, c, co, ldc, rows, cols, lim)
+}
+
+# one row of the tile for one step: acc[base + j] += x bp[b + j] for the tile's nr columns
+fn rowStep<A>(acc mut tile<A>&, base I64, x A, bp Array<A>&, b I64, nr I64) {
+    for j in range nr: acc.v[base + j] = mulAdd(x, bp[b + j], acc.v[base + j])
+}
+
+# a b + c, rounded once by the target's fused multiply-add where it has one and A is a float
+fn mulAdd<A>(a A, b A, c A) A {
+    match A {
+        case F32, F64 {
+            if TargetHasFma: return a.Fma(b, c)
+        }
+        case _ { }
+    }
+    return a * b + c
+}
+
+# C[i, j] = alpha acc[i, j] + beta C[i, j] for the rows x cols part of the tile inside the product, C's (i, j) at
+# c[co + i ldc + j] - of row i only its first lim + i columns (a triangular result's diagonal). beta 0 never reads C
+fn storeTile<A, S>(acc tile<A>&, nr I64, alpha A, beta A, c mut Array<S>&, co I64, ldc I64, rows I64, cols I64, lim I64) {
+    like S
+    if beta == 0 {
+        for i in range rows {
+            o I64 = co + i * ldc
+            for j in range clampI(lim + i, 0, cols): c[o + j] = cast(alpha * acc.v[i * nr + j], like)
+        }
+        return
+    }
+    for i in range rows {
+        o I64 = co + i * ldc
+        for j in range clampI(lim + i, 0, cols): c[o + j] = cast(alpha * acc.v[i * nr + j] + beta * cast(c[o + j], alpha), like)
+    }
+}
+
+# the tile of C^T computed where a product is exchanged: C[j, i] = alpha acc[i, j] + beta C[j, i], at c[co + j ldc + i]
+fn storeTileT<A, S>(acc tile<A>&, nr I64, alpha A, beta A, c mut Array<S>&, co I64, ldc I64, rows I64, cols I64) {
+    like S
+    for j in range cols {
+        o I64 = co + j * ldc
+        for i in range rows: c[o + i] = cast(alpha * acc.v[i * nr + j], like) if beta == 0 else cast(alpha * acc.v[i * nr + j] + beta * cast(c[o + i], alpha), like)
+    }
+}
+
+# ---- the blocked product ----
+
+# whether a left operand is read where it is rather than packed: a matrix already in the accumulator, read by rows (a
+# transposed one strides across its rows, which the caches do not prefetch - packing it measured 1.5x as fast)
+fn readsInPlace<SA, A>(sa SA, ta Bool, z A) Bool {
+    return match SA {
+        case operand<A>: not ta
+        case _: false
+    }
+}
+
+# a tile of rows ti .. ti + tr of x and the depth ks .. ke of this block (from p0), read where x is - the last rows,
+# fewer than the tile's, packed into ap with zeros below them. A lower-triangular x is read in place up to the depth
+# where its triangle begins, and the triangle's part is packed with its zeros
+fn tileInPlace<A, H, S>(x operand<A>&, ti I64, tr I64, p0 I64, ks I64, ke I64, lower Bool, diag I64, ap mut Array<A>&, bp Array<A>&, bo I64, sh H, alpha A, beta A, c mut Array<S>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+    z A
+    nr := tileColsOf(z, sh)
+    if tr < microRows {
+        x.pack(false, ti, p0 + ks, tr, ke - ks, aPanel(), sh, lower, diag, ap)
+        micro(ke - ks, ap, 0, 0, packedA(), 0, ap, 0, bp, bo + ks * nr, sh, alpha, beta, c, co, ldc, rows, cols, lim, exchanged)
+        return
+    }
+    full I64 = clampI(ti + diag + 1 - p0, ks, ke) if lower else ke
+    if full < ke: x.pack(false, ti, p0 + full, microRows, ke - full, aPanel(), sh, true, diag, ap)
+    micro(full - ks, x.d, ti * x.ld + p0 + ks, x.ld, rowsA(), ke - full, ap, 0, bp, bo + ks * nr, sh, alpha, beta, c, co, ldc, rows, cols, lim, exchanged)
+}
+
+# what a block of rows needs besides its operands: the panels, the block of op(B) and the triangle
+type block<A> struct(p0 I64, depth I64, k I64, cols I64, j0 I64, bp Array<A>&, alpha A, beta A, lower Bool, result Bool, diag I64, exchanged Bool) {
+    p0
+    depth
+    k
+    cols
+    j0
+    bp
+    alpha
+    beta
+    lower
+    result
+    diag
+    exchanged
+}
+
+# rows i0 .. i1 of the result for one packed block of op(B): op(A)'s rows packed mc at a time into ap (or read in
+# place), every tile computed by the micro-kernel and stored, then the epilogue on those rows while they are in the
+# cache. A triangular result skips the tiles past the diagonal, a triangular left operand the depth it reads as zeros
+fn gemmRows<SA, A, S, H>(sa SA, ta Bool, i0 I64, i1 I64, bk block<A>&, ap mut Array<A>&, c mut Array<S>&, ldc I64, sh H, ep Epilogue) {
+    z A
+    mc := blockRows(z)
+    inPlace Bool = readsInPlace(sa, ta, z) and bk.cols <= 2 * tileColsOf(z, sh)
+    last Bool = bk.p0 + bk.depth == bk.k
+    for ic in range i0, i1, mc {
+        rows I64 = lesser(mc, i1 - ic)
+        # a triangular result: rows whose every column in this block is past the diagonal compute nothing
+        if bk.result and ic + rows - 1 + bk.diag < bk.j0: continue
+        lo, hi := triangleDepth(bk.lower, ta, ic, rows, bk.p0, bk.depth, bk.diag)
+        if not inPlace and lo < hi: sa.pack(ta, ic, bk.p0 + lo, rows, hi - lo, aPanel(), sh, bk.lower, bk.diag, ap)
+        tilesOf(sa, ta, inPlace, ic, rows, lo, hi, bk, ap, c, ldc, sh)
+        if not last or ep == Epilogue.None: continue
+        if bk.exchanged: finish(c, ldc, bk.j0, bk.j0 + bk.cols, ic, ic + rows, ep, z)
+        else: finish(c, ldc, ic, ic + rows, bk.j0, bk.j0 + bk.cols, ep, z)
+    }
+}
+
+# every tile of a block's rows ic .. ic + rows (op(A)'s panel holding the depth lo .. hi)
+fn tilesOf<SA, A, S, H>(sa SA, ta Bool, inPlace Bool, ic I64, rows I64, lo I64, hi I64, bk block<A>&, ap mut Array<A>&, c mut Array<S>&, ldc I64, sh H) {
+    z A
+    nr := tileColsOf(z, sh)
+    for jr in range 0, bk.cols, nr {
+        for ir in range 0, rows, microRows {
+            ti I64 = ic + ir
+            tj I64 = bk.j0 + jr
+            tr I64 = lesser(microRows, rows - ir)
+            tc I64 = lesser(nr, bk.cols - jr)
+            lim I64 = ti + bk.diag - tj + 1 if bk.result else tc
+            if bk.result and lim + tr <= 1: continue            # every element past the diagonal
+            ks, ke := tileDepth(bk, ta, ti, tr)
+            if ks < 0: continue                                 # nothing to add: the first block applied beta
+            co I64 = tj * ldc + ti if bk.exchanged else ti * ldc + tj
+            computeTile(sa, inPlace, ti, tr, bk.p0, ks, ke, bk.lower, bk.diag, ap, ir * (hi - lo) - lo * microRows, bk.bp, jr * bk.depth, sh, bk.alpha, bk.beta, c, co, ldc, tr, tc, lim, bk.exchanged)
+        }
+    }
+}
+
+# the depth a tile reads of this block: all of it, or what a triangular left operand leaves - nothing (-1, -1) where it
+# leaves nothing and an earlier block has already applied beta
+fn tileDepth<A>(bk block<A>&, ta Bool, ti I64, tr I64) I64, I64 {
+    if not bk.lower: return 0, bk.depth
+    ks, ke := triangleDepth(true, ta, ti, tr, bk.p0, bk.depth, bk.diag)
+    if ks < ke: return ks, ke
+    if bk.p0 > 0: return -1, -1
+    return 0, 0
+}
+
+# a tile computed and stored: by tileInPlace where op(A) is read in place, from the packed panel otherwise - its rows
+# from ao, the depth from ks
+fn computeTile<SA, A, H, S>(sa SA, inPlace Bool, ti I64, tr I64, p0 I64, ks I64, ke I64, lower Bool, diag I64, ap mut Array<A>&, ao I64, bp Array<A>&, bo I64, sh H, alpha A, beta A, c mut Array<S>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+    z A
+    match SA {
+        case operand<A> {
+            if inPlace {
+                tileInPlace(sa, ti, tr, p0, ks, ke, lower, diag, ap, bp, bo, sh, alpha, beta, c, co, ldc, rows, cols, lim, exchanged)
+                return
+            }
+        }
+        case _ { }
+    }
+    micro(ke - ks, ap, ao + ks * microRows, 0, packedA(), 0, ap, 0, bp, bo + ks * tileColsOf(z, sh), sh, alpha, beta, c, co, ldc, rows, cols, lim, exchanged)
+}
+
+# the part of this block's depth (0 .. depth, from p0) that rows ti .. ti + tr of a triangular left operand read: of a
+# lower-triangular x[r, s], zero for s > r + diag, p <= i + diag - or p >= i - diag where it is transposed (ta)
+fn triangleDepth(lower Bool, ta Bool, ti I64, tr I64, p0 I64, depth I64, diag I64) I64, I64 {
+    if not lower: return 0, depth
+    if ta: return clampI(ti - diag - p0, 0, depth), depth
+    return 0, clampI(ti + tr + diag - p0, 0, depth)
+}
+
+# the m x n x k product from sa and sb (as packing reads them: ta and tb its trans), one packed block of op(B) at a
+# time into bp, rows in runs of share over tasks (one: the calling thread), each task packing its rows of op(A) into
+# its own panel of ap (panel elements)
+fn gemmBlocks<SA, SB, A, S, H>(m I64, n I64, k I64, sa SA, ta Bool, sb SB, tb Bool, al A, be A, c mut Array<S>&, ldc I64, share I64, ap mut Array<A>&, panel I64, bp mut Array<A>&, sh H, exchanged Bool, lower Bool, result Bool, diag I64, ep Epilogue) {
+    nc := blockCols(al)
+    tasks I64 = (m + share - 1) / share
+    for jc in range 0, n, nc {
+        cols I64 = lesser(nc, n - jc)
+        for pc in range 0, k, kc {
+            depth I64 = lesser(kc, k - pc)
+            sb.pack(tb, jc, pc, cols, depth, bPanel(), sh, false, 0, bp)
+            bk := block<A>(pc, depth, k, cols, jc, bp, al, be if pc == 0 else 1, lower, result, diag, exchanged)
+            if tasks <= 1: gemmRows(sa, ta, 0, m, bk, ap, c, ldc, sh, ep)
+            else: rowsInTasks(sa, ta, m, share, tasks, bk, ap, panel, c, ldc, sh, ep)
+        }
+    }
+}
+
+# one block's rows in runs of share, a task each, each packing into its own panel of ap
+fn rowsInTasks<SA, A, S, H>(sa SA, ta Bool, m I64, share I64, tasks I64, bk block<A>&, ap mut Array<A>&, panel I64, c mut Array<S>&, ldc I64, sh H, ep Epilogue) {
+    join {
+        for t in range tasks {
+            lo I64 = t * share
+            hi I64 = lesser(m, lo + share)
+            if lo < hi: spawn gemmRows(sa, ta, lo, hi, bk, ap[t * panel:(t + 1) * panel], c, ldc, sh, ep)
+        }
+    }
+}
+
+# C = act(beta C + bias) where there is nothing to sum (k = 0) - of a triangular result its lower triangle only
+fn emptyProduct<A, S>(m I64, n I64, be A, c mut Array<S>&, ldc I64, ep Epilogue, result Bool, diag I64) {
+    like S
+    for i in range m {
+        w I64 = clampI(i + diag + 1, 0, n) if result else n
+        for j in range w: c[i * ldc + j] = cast(be * cast(c[i * ldc + j], be), like) if be != 0 else cast(be, like)
+    }
+    finish(c, ldc, 0, m, 0, n, ep, be)
+}
+
+# the packed product: op(B)'s one panel and op(A)'s one per task from ws - a product large enough split over up to
+# ws.Threads tasks by rows of the result, a multiple of the tile's rows each. Thin and exchanged as tiling.choose says
+fn product<SA, SB, S, A>(m I64, n I64, k I64, sa SA, ta Bool, sb SB, tb Bool, al A, be A, c mut Array<S>&, ldc I64, ws mut Workspace<A>&, ep Epilogue, mayExchange Bool) {
+    if k == 0 {
+        emptyProduct(m, n, be, c, ldc, ep, false, 0)
+        return
+    }
+    if k > kc and not sameType(c, al) {
+        # a depth of several blocks into storage narrower than the accumulator: the partial sums are kept in the
+        # accumulator, in ws, and C rounded once at the end
+        wide := ws.wideC(m * n)
+        if be != 0: copyInto(wide, n, c, ldc, m, n, al, n)
+        product(m, n, k, sa, ta, sb, tb, al, be, wide, n, ws, ep, mayExchange)
+        copyInto(c, ldc, wide, n, m, n, c[0], n)
+        return
+    }
+    choice := tiling.choose(m, n, microRows, tileCols(al), vectorLanes(al), mayExchange)
+    if choice.exchanged: packedProduct(n, m, k, sb, not tb, sa, ta, al, be, c, ldc, ws, choice.thin, true, ep)
+    else: packedProduct(m, n, k, sa, ta, sb, not tb, al, be, c, ldc, ws, choice.thin, false, ep)
+}
+
+fn packedProduct<SA, SB, A, S>(m I64, n I64, k I64, sa SA, ta Bool, sb SB, tb Bool, al A, be A, c mut Array<S>&, ldc I64, ws mut Workspace<A>&, thin Bool, exchanged Bool, ep Epilogue) {
+    nr I64 = vectorLanes(al) if thin else tileCols(al)
+    depthMax I64 = lesser(k, kc)
+    bp := ws.panelsB(depthMax * lesser((n + nr - 1) / nr * nr, blockCols(al)))
+    tasks I64 = 1 if m * n * k < 2000000 else lesser(ws.Threads, (m + microRows - 1) / microRows)
+    share I64 = ((m + tasks - 1) / tasks + microRows - 1) / microRows * microRows
+    panel I64 = lesser(blockRows(al), share) * depthMax
+    ap := ws.panelsA(tasks * panel)
+    if thin: gemmBlocks(m, n, k, sa, ta, sb, tb, al, be, c, ldc, share, ap, panel, bp, thinTile(), exchanged, false, false, 0, ep)
+    else: gemmBlocks(m, n, k, sa, ta, sb, tb, al, be, c, ldc, share, ap, panel, bp, wideTile(), exchanged, false, false, 0, ep)
+}
+
+# a triangle as the blocked product reads it: a lower-triangular left operand, a triangular result, the diagonal
+type confine struct(lower Bool, result Bool, diag I64) {
+    lower
+    result
+    diag
+}
+
+fn confine.of(t Triangle) confine {
+    return match t {
+        case Triangle.Full: confine(false, false, 0)
+        case Triangle.Result(d): confine(false, true, d)
+        case Triangle.Left(d): confine(true, false, d)
+    }
+}
+
+# GemmBatch's products lo .. hi, in order, each on one thread into its own panels
+type batchRun<S, A> struct(cd mut Array<S>&, cst strides, ad Array<S>&, ast strides, ta Bool, bd Array<S>&, bst strides, tb Bool, m I64, n I64, k I64, al A, be A, thin Bool, lower Bool, result Bool, diag I64) {
+    cd
+    cst
+    ad
+    ast
+    ta
+    bd
+    bst
+    tb
+    m
+    n
+    k
+    al
+    be
+    thin
+    lower
+    result
+    diag
+}
+
+# a batch's strides: its rows', its groups' and its members' (its storage kept apart, as a slice)
+type strides struct(ld I64, gs I64, ms I64, members I64) {
+    ld
+    gs
+    ms
+    members
+}
+
+fn strides.of<S>(b Batch<S>&) strides { return strides(b.Ld, b.GroupStride, b.MemberStride, b.Members) }
+
+# where matrix e of a batch begins in its storage
+fn (s strides&) at(e I64) I64 { return e / s.members * s.gs + e % s.members * s.ms }
+
+fn (r batchRun<S, A>&) go(lo I64, hi I64, ap mut Array<A>&, bp mut Array<A>&, wide mut Array<A>&) {
+    for e in range lo, hi {
+        sa := operand<S>(r.ad[r.ast.at(e):], r.ast.ld)
+        sb := operand<S>(r.bd[r.bst.at(e):], r.bst.ld)
+        cd := r.cd[r.cst.at(e):]
+        if r.k <= kc or sameType(cd, r.al) {
+            r.blocks(sa, sb, cd, r.cst.ld, ap, bp)
+            continue
+        }
+        # a depth of several blocks into narrower storage: the partial sums kept in the accumulator (see product)
+        if r.be != 0: copyInto(wide, r.n, cd, r.cst.ld, r.m, r.n, r.al, r.diag + 1 if r.result else r.n)
+        r.blocks(sa, sb, wide, r.n, ap, bp)
+        copyInto(cd, r.cst.ld, wide, r.n, r.m, r.n, cd[0], r.diag + 1 if r.result else r.n)
+    }
+}
+
+fn (r batchRun<S, A>&) blocks<T>(sa operand<S>&, sb operand<S>&, cd mut Array<T>&, ldc I64, ap mut Array<A>&, bp mut Array<A>&) {
+    if r.thin: gemmBlocks(r.m, r.n, r.k, sa, r.ta, sb, not r.tb, r.al, r.be, cd, ldc, r.m, ap, 0, bp, thinTile(), false, r.lower, r.result, r.diag, Epilogue.None)
+    else: gemmBlocks(r.m, r.n, r.k, sa, r.ta, sb, not r.tb, r.al, r.be, cd, ldc, r.m, ap, 0, bp, wideTile(), false, r.lower, r.result, r.diag, Epilogue.None)
+}
+
+# dst = src for an m x n matrix, converted - of row i its first i + reach columns (a triangular result: reach d + 1)
+fn copyInto<D, X>(dst mut Array<D>&, ldd I64, src Array<X>&, lds I64, m I64, n I64, like D, reach I64) {
+    for i in range m {
+        for j in range clampI(i + reach, 0, n): dst[i * ldd + j] = cast(src[i * lds + j], like)
+    }
+}
+
+# whether storage S is the accumulator itself
+fn sameType<S, A>(c Array<S>&, z A) Bool {
+    return match S {
+        case A: true
+        case _: false
+    }
+}
+
+# ---- products that skip packing ----
+
+# whether a product is computed without packing: storage that is its own accumulator, and up to four rows (a
+# vector-matrix product each), one column (a matrix-vector product), or so small that packing would cost more than it
+# saves - at most smallProduct multiply-adds, or fewer than twelve rows each at least four vectors long against an
+# op(B) that stays in the cache (measured against the packed path on AVX-512, AVX2 and SSE: linalg's bench). Narrower
+# storage takes only the paths summing each element in A and storing it once: rows of op(b) dotted, a column of a
+smallProduct I64 = 1024
+
+fn unpacked<S, A>(m I64, n I64, k I64, ta Bool, tb Bool, c Array<S>&, z A) Bool {
+    return match S {
+        case A: m <= 4 or n == 1 or (not tb and (m * n * k <= smallProduct or (m < 12 and n >= 4 * vectorLanes(z) and k * n <= 65536)))
+        case _: (m <= 4 and tb) or (n == 1 and not ta)          # dot products, each summed in A and stored once
+    }
+}
+
+# the unpacked product: a vector-matrix product per row of up to four, a matrix-vector product for one column, and the
+# i-k-j loop otherwise (S being A; narrower storage only takes the dot products, gemvRows)
+fn unpackedProduct<S, A>(m I64, n I64, k I64, a operand<S>&, ta Bool, b operand<S>&, tb Bool, alpha A, beta A, c mut Array<S>&, ldc I64) {
+    if m <= 4 {
+        # c's row i = alpha (a's row i, or column where ta) op(b) + beta c's row i
+        for i in range m {
+            xo I64 = i if ta else i * a.ld
+            xs I64 = a.ld if ta else 1
+            if tb: gemvRows(n, k, alpha, b.d, 0, b.ld, a.d[xo:], xs, beta, c[i * ldc:], 1)
+            else: gemvColumns(n, k, alpha, b.d, 0, b.ld, a.d[xo:], xs, beta, c[i * ldc:], 1)
+        }
+        return
+    }
+    if n == 1 {
+        ys I64 = 1 if tb else b.ld
+        if ta: gemvColumns(m, k, alpha, a.d, 0, a.ld, b.d, ys, beta, c, ldc)
+        else: gemvRows(m, k, alpha, a.d, 0, a.ld, b.d, ys, beta, c, ldc)
+        return
+    }
+    gemmDirect(ta, m, n, k, alpha, a.d, a.ld, b.d, b.ld, beta, c, ldc)
+}
+
+# a small product in A without packing: each row of C updated from rows of B, the i-k-j loop vectorized along the rows
+fn gemmDirect<S, A>(ta Bool, m I64, n I64, k I64, alpha A, a Array<S>&, lda I64, b Array<S>&, ldb I64, beta A, c mut Array<S>&, ldc I64) {
+    like S
+    for i in range m {
+        ci I64 = i * ldc
+        for j in range n: c[ci + j] = cast(beta * cast(c[ci + j], alpha), like) if beta != 0 else cast(beta, like)
+        for p in range k {
+            aip A = alpha * cast(a[p * lda + i] if ta else a[i * lda + p], alpha)
+            bp I64 = p * ldb
+            for j in range n: c[ci + j] = cast(mulAdd(aip, cast(b[bp + j], alpha), cast(c[ci + j], alpha)), like)
+        }
+    }
+}
+
+# out[i os] = alpha (the sum over p < len of M(i, p) v[p vs]) + beta out[i os] for i < rows, M(i, p) at mat[mo + i ld
+# + p]: a's rows dotted with v, four rows at a time against one read of v, each in two vectors of partial sums
+fn gemvRows<M, V, O, A>(rows I64, len I64, alpha A, mx Array<M>&, mo I64, ld I64, vec Array<V>&, vs I64, beta A, out mut Array<O>&, os I64) {
+    like O
+    z A
+    if vs != 1 or os != 1 {
+        # strided vectors (a column of a matrix): one row at a time
+        for i in range rows {
+            s A = z
+            for p in range len: s = mulAdd(cast(mx[mo + i * ld + p], z), cast(vec[p * vs], z), s)
+            out[i * os] = gemvOut(s, alpha, beta, out[i * os], like)
+        }
+        return
+    }
+    two I64 = rows - rows % 2
+    for i in range 0, two, 2: dot2(mx, mo + i * ld, ld, vec, len, alpha, beta, out, i)
+    if two < rows: out[two] = gemvOut(dot1(mx, mo + two * ld, vec, len, z), alpha, beta, out[two], like)
+}
+
+# alpha s + beta o, beta 0 never reading o
+fn gemvOut<A, O>(s A, alpha A, beta A, o O, like O) O {
+    return cast(alpha * s, like) if beta == 0 else cast(alpha * s + beta * cast(o, s), like)
+}
+
+# the partial sums of a dot product, a vector of them (measured: one vector per row, two rows against one read of the
+# vector, is what LLVM keeps in registers - more rows or wider lanes it splits into 128-bit pieces and spills)
+type lanes<A> struct() {
+    v := Array<A>(16)
+}
+
+# out[i] and out[i + 1] from the dot products of rows o and o + ld of mx with vec (contiguous), each in a vector of
+# partial sums added pairwise at the end, the rest of len one at a time
+fn dot2<M, V, A, O>(mx Array<M>&, o I64, ld I64, vec Array<V>&, len I64, alpha A, beta A, out mut Array<O>&, i I64) {
+    z A
+    like O
+    w I64 = vectorLanes(z)
+    acc := lanes<A>()
+    acc2 := lanes<A>()
+    whole I64 = len - len % w
+    for p in range 0, whole, w {
+        dotStep(acc, mx, o + p, vec, p, w)
+        dotStep(acc2, mx, o + ld + p, vec, p, w)
+    }
+    s A = laneSum(acc, w)
+    t A = laneSum(acc2, w)
+    for p in range whole, len {
+        s = mulAdd(cast(mx[o + p], z), cast(vec[p], z), s)
+        t = mulAdd(cast(mx[o + ld + p], z), cast(vec[p], z), t)
+    }
+    out[i] = gemvOut(s, alpha, beta, out[i], like)
+    out[i + 1] = gemvOut(t, alpha, beta, out[i + 1], like)
+}
+
+fn dot1<M, V, A>(mx Array<M>&, o I64, vec Array<V>&, len I64, z A) A {
+    w I64 = vectorLanes(z)
+    acc := lanes<A>()
+    whole I64 = len - len % w
+    for p in range 0, whole, w: dotStep(acc, mx, o + p, vec, p, w)
+    s A = laneSum(acc, w)
+    for p in range whole, len: s = mulAdd(cast(mx[o + p], z), cast(vec[p], z), s)
+    return s
+}
+
+fn dotStep<M, V, A>(acc mut lanes<A>&, mx Array<M>&, mo I64, vec Array<V>&, p I64, w I64) {
+    z A
+    for j in range w: acc.v[j] = mulAdd(cast(mx[mo + j], z), cast(vec[p + j], z), acc.v[j])
+}
+
+# acc.v[0 .. w] added in order - every index a constant once w is, which keeps the partial sums in a register (added
+# pairwise in place, they are kept in memory and the dot product's loop is not vectorized)
+fn laneSum<A>(acc lanes<A>&, w I64) A {
+    s A = acc.v[0]
+    for j in range 1, w: s = s + acc.v[j]
+    return s
+}
+
+# out[i os] = alpha (the sum over p < len of M(p, i) v[p vs]) + beta out[i os] for i < rows, M(p, i) at mat[mo + p ld
+# + i]: a's columns, added in scaled, four of them per pass over out
+fn gemvColumns<M, V, O, A>(rows I64, len I64, alpha A, mx Array<M>&, mo I64, ld I64, vec Array<V>&, vs I64, beta A, out mut Array<O>&, os I64) {
+    like O
+    z A
+    for i in range rows: out[i * os] = cast(beta * cast(out[i * os], z), like) if beta != 0 else cast(z, like)
+    if os != 1 {
+        # a strided result (a column of a matrix): one column of a at a time
+        for p in range len {
+            vp A = alpha * cast(vec[p * vs], z)
+            for i in range rows: out[i * os] = cast(mulAdd(vp, cast(mx[mo + p * ld + i], z), cast(out[i * os], z)), like)
+        }
+        return
+    }
+    four I64 = len - len % 4
+    for p in range 0, four, 4: columns4(rows, alpha, mx, mo + p * ld, ld, vec, p, vs, out)
+    for p in range four, len {
+        vp A = alpha * cast(vec[p * vs], z)
+        for i in range rows: out[i] = cast(mulAdd(vp, cast(mx[mo + p * ld + i], z), cast(out[i], z)), like)
+    }
+}
+
+# out += alpha (v[p] a's row r + .. + v[p + 3] row r + 3 ld), out contiguous
+fn columns4<M, V, O, A>(rows I64, alpha A, mx Array<M>&, r I64, ld I64, vec Array<V>&, p I64, vs I64, out mut Array<O>&) {
+    like O
+    v0, v1 := alpha * cast(vec[p * vs], alpha), alpha * cast(vec[(p + 1) * vs], alpha)
+    v2, v3 := alpha * cast(vec[(p + 2) * vs], alpha), alpha * cast(vec[(p + 3) * vs], alpha)
+    for i in range rows {
+        s A = mulAdd(v0, cast(mx[r + i], alpha), cast(out[i], alpha))
+        s = mulAdd(v1, cast(mx[r + ld + i], alpha), s)
+        s = mulAdd(v2, cast(mx[r + 2 * ld + i], alpha), s)
+        out[i] = cast(mulAdd(v3, cast(mx[r + 3 * ld + i], alpha), s), like)
+    }
+}
+
+# ---- the epilogue ----
+
+# the epilogue on rows r0 .. r1, columns c0 .. c1 of C (row stride ldc): C = act(C + bias[column]) in the accumulator
+# - one loop per activation, its function inlined
+fn finish<S, A>(c mut Array<S>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64, ep Epilogue, z A) {
+    match ep {
+        case Epilogue.None { }
+        case Epilogue.Bias(b) { finishAs(c, ldc, r0, r1, c0, c1, b, z, noAct()) }
+        case Epilogue.BiasAct(b, act) { finishAct(c, ldc, r0, r1, c0, c1, b, act, z) }
+    }
+}
+
+fn finishAct<S, A>(c mut Array<S>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64, b Array<F32>&, act mat.Act, z A) {
+    match act {
+        case mat.Act.Relu { finishAs(c, ldc, r0, r1, c0, c1, b, z, reluAct()) }
+        case mat.Act.Gelu { finishAs(c, ldc, r0, r1, c0, c1, b, z, geluAct()) }
+        case mat.Act.GeluTanh { finishAs(c, ldc, r0, r1, c0, c1, b, z, geluTanhAct()) }
+        case mat.Act.Silu { finishAs(c, ldc, r0, r1, c0, c1, b, z, siluAct()) }
+        case mat.Act.Sigmoid { finishAs(c, ldc, r0, r1, c0, c1, b, z, sigmoidAct()) }
+        case mat.Act.Tanh { finishAs(c, ldc, r0, r1, c0, c1, b, z, tanhAct()) }
+        case mat.Act.Softplus { finishAs(c, ldc, r0, r1, c0, c1, b, z, softplusAct()) }
+    }
+}
+
+fn finishAs<S, A, K>(c mut Array<S>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64, bias Array<F32>&, z A, kind K) {
+    like S
+    if bias.Len() == 0 {
+        for r in range r0, r1 {
+            for j in range c0, c1: c[r * ldc + j] = cast(actAs(cast(c[r * ldc + j], z), kind), like)
+        }
+        return
+    }
+    for r in range r0, r1 {
+        for j in range c0, c1: c[r * ldc + j] = cast(actAs(cast(c[r * ldc + j], z) + cast(bias[j], z), kind), like)
+    }
+}
+
+# the activations as types, so that each epilogue is compiled with its own inlined
+type noAct struct() { }
+type reluAct struct() { }
+type geluAct struct() { }
+type geluTanhAct struct() { }
+type siluAct struct() { }
+type sigmoidAct struct() { }
+type tanhAct struct() { }
+type softplusAct struct() { }
+
+# act(x) in A - a float in itself, an integer through F64. The C library's forms, exact to its precision (elem's fast
+# ones are for its own kernels): ReLU keeps a NaN, softplus is max(x, 0) + log1p(exp(-|x|))
+fn actAs<A, K>(x A, kind K) A {
+    return match A {
+        case F32, F64: actOf(x, kind)
+        case _: cast(actOf(cast(x, F64(0)), kind), x)
+    }
+}
+
+fn actOf<A, K>(x A, kind K) A {
+    return match K {
+        case noAct: x
+        case reluAct: 0.0 if x < 0.0 else x
+        case geluAct: 0.5 * x * (1.0 + (x * 0.7071067811865476).Erf())
+        case geluTanhAct: 0.5 * x * (1.0 + (0.7978845608028654 * (x + 0.044715 * x * x * x)).Tanh())
+        case siluAct: x / (1.0 + (-x).Exp())
+        case sigmoidAct: 1.0 / (1.0 + (-x).Exp())
+        case tanhAct: x.Tanh()
+        case softplusAct: (0.0 if x < 0.0 else x) + (-x.Abs()).Exp().Log1p()
+    }
+}
+
+# ---- INT8 ----
+
+# out = scale[j] (c - zero colsum(b)[j]) where c = a b^T, in I32 (the sums of b's rows come from `sums` where the caller
+# has them - quantized weights keep theirs - and are not needed when zero is 0): unsigned activations a (m x k, quantized
+# with zero point zero) times signed weights b (n x k, a row per output, as PyTorch keeps a Linear's), the accumulators c (m x n)
+# kept and dequantized per output column into out. The step acc + I32(a) I32(q) is the one form LLVM makes the target's
+# integer multiply-add of (vpdpwssd on AVX-512 VNNI). The weights are packed into ws in column panels of the tile's
+# width; a tile's rows of activations are packed step by step as its products begin them. Fewer than four rows take
+# dot products along the rows with nothing packed - the decoding step, a single sample
+fn GemmI8(ws mut Workspace<I32>&, c mut mat.Mat<I32>&, a mat.Mat<U8>&, b mat.Mat<I8>&, scale Array<F32>&, out mut mat.Mat<F32>&, zero I32 = 0
+        sums Array<I32>& = Array<I32>(0)) {
+    m, n, k := a.Rows, b.Rows, a.Cols
+    if m == 0 or n == 0: return
+    corr := ws.corrections(n)
+    if zero == 0 { for j in range n: corr[j] = 0 }
+    else if sums.Len() >= n { for j in range n: corr[j] = zero * sums[j] }
+    else { for j in range n: corr[j] = zero * rowSum(b, j) }
+    q := quant(operand<U8>.of(a), operand<I8>.of(b), m, n, k, scale, corr, c.Data[c.Off:], c.Ld, out.Data[out.Off:], out.Ld)
+    if m < 4 {
+        for i in range m: q.rowI8(i)
+        return
+    }
+    if n > i8Lanes: q.blocked(ws, wideI8())
+    else: q.blocked(ws, thinI8())
+}
+
+# a GemmI8's operands and results, as its tasks read them
+type quant struct(a operand<U8>, b operand<I8>, m I64, n I64, k I64, scale Array<F32>&, corr Array<I32>&, c mut Array<I32>&, ldc I64, out mut Array<F32>&, ldo I64) {
+    a
+    b
+    m
+    n
+    k
+    scale
+    corr
+    c
+    ldc
+    out
+    ldo
+}
+
+# the INT8 tiles: the I32 lanes of a vector; a wide tile two vectors (three on SSE) by 6 rows, a thin one a vector by 12
+# (4 x 12 and 4 x 4 on SSE) - measured on AVX-512 (oann's bench/int8): 6 x 32 the faster wide tile, 12 x 16 25% faster
+# for an output of sixteen
+i8Lanes I64 = TargetVectorBits / 32
+i8WideCols I64 = 32 if TargetVectorBits >= 512 else (16 if TargetVectorBits >= 256 else 12)
+i8WideRows I64 = 6 if TargetVectorBits >= 256 else 4
+i8ThinRows I64 = 12 if TargetVectorBits >= 256 else 4
+
+type wideI8 struct() { }
+type thinI8 struct() { }
+
+fn i8Shape<H>(sh H) I64, I64 {
+    match H {
+        case wideI8: return i8WideRows, i8WideCols
+        case thinI8: return i8ThinRows, i8Lanes
+    }
+}
+
+# the packed product: b in column panels of nr (zeros past n) into ws, then runs of the row tiles over ws.Threads tasks
+fn (q quant&) blocked<H>(ws mut Workspace<I32>&, sh H) {
+    mr, nr := i8Shape(sh)
+    m, n, k := q.m, q.n, q.k
+    panels I64 = (n + nr - 1) / nr
+    qb := ws.bytesB(panels * k * nr)
+    for p in range panels: packI8(q.b, k, p * nr, lesser(nr, n - p * nr), nr, qb, p * k * nr)
+    tiles I64 = (m + mr - 1) / mr
+    tasks I64 = 1 if m * n * k < 2000000 else lesser(ws.Threads, tiles)
+    share I64 = (tiles + tasks - 1) / tasks
+    qa := ws.bytesA(tasks * mr * k)
+    if tasks <= 1 {
+        q.tilesI8(0, tiles, qa, qb, sh)
+        return
+    }
+    join {
+        for t in range tasks {
+            lo I64 = t * share
+            hi I64 = lesser(tiles, lo + share)
+            if lo < hi: spawn q.tilesI8(lo, hi, qa[t * mr * k:(t + 1) * mr * k], qb, sh)
+        }
+    }
+}
+
+# outputs j0 .. j0 + cols of b into a panel nr wide: dst[o + p nr + j] = b[j0 + j, p], zeros past cols
+fn packI8(b operand<I8>&, k I64, j0 I64, cols I64, nr I64, dst mut Array<I8>&, o I64) {
+    for j in range cols {
+        s I64 = (j0 + j) * b.ld
+        for p in range k: dst[o + p * nr + j] = b.d[s + p]
+    }
+    for j in range cols, nr {
+        for p in range k: dst[o + p * nr + j] = 0
+    }
+}
+
+# row tiles lo .. hi: each tile's rows packed step by step into pa (k mr + i, zeros below the last row), then its product
+# with every panel
+fn (q quant&) tilesI8<H>(lo I64, hi I64, pa mut Array<U8>&, qb Array<I8>&, sh H) {
+    mr, nr := i8Shape(sh)
+    m, n, k := q.m, q.n, q.k
+    for r in range lo, hi {
+        rows I64 = lesser(mr, m - r * mr)
+        for i in range rows {
+            s I64 = (r * mr + i) * q.a.ld
+            for p in range k: pa[p * mr + i] = q.a.d[s + p]
+        }
+        for i in range rows, mr {
+            for p in range k: pa[p * mr + i] = 0
+        }
+        for p in range 0, n, nr: q.tileI8(r * mr, rows, p, lesser(nr, n - p), pa, qb, sh)
+    }
+}
+
+# the tile of rows i0 .. i0 + rows and outputs j0 .. j0 + cols, summed over the depth then stored
+fn (q quant&) tileI8<H>(i0 I64, rows I64, j0 I64, cols I64, pa Array<U8>&, qb Array<I8>&, sh H) {
+    _, nr := i8Shape(sh)
+    k I64 = q.k
+    t := tile<I32>()
+    match H {
+        case wideI8 { microI8Wide(k, pa, qb, j0 * k, t) }
+        case thinI8 { microI8Thin(k, pa, qb, j0 * k, t) }
+    }
+    for i in range rows {
+        for j in range cols: q.store1(i0 + i, j0 + j, t.v[i * nr + j])
+    }
+}
+
+# c[i, j] = s and out[i, j] = scale[j] (s - corr[j])
+fn (q quant&) store1(i I64, j I64, s I32) {
+    q.c[i * q.ldc + j] = s
+    q.out[i * q.ldo + j] = F32(s - q.corr[j]) * q.scale[j]
+}
+
+# the micro-kernels: rows of a step written out by comptime for, every accumulator at a constant index
+fn microI8Wide(depth I64, pa Array<U8>&, qb Array<I8>&, bo I64, t mut tile<I32>&) {
+    acc := tile<I32>()
+    for p in range depth {
+        b I64 = bo + p * i8WideCols
+        comptime for i in range i8WideRows { stepI8(acc, i * i8WideCols, pa[p * i8WideRows + i], qb, b, i8WideCols) }
+    }
+    for i in range i8WideRows * i8WideCols: t.v[i] = acc.v[i]
+}
+
+fn microI8Thin(depth I64, pa Array<U8>&, qb Array<I8>&, bo I64, t mut tile<I32>&) {
+    acc := tile<I32>()
+    for p in range depth {
+        b I64 = bo + p * i8Lanes
+        comptime for i in range i8ThinRows { stepI8(acc, i * i8Lanes, pa[p * i8ThinRows + i], qb, b, i8Lanes) }
+    }
+    for i in range i8ThinRows * i8Lanes: t.v[i] = acc.v[i]
+}
+
+# acc[base + j] += a q[j]: a zero-extended U8 times a sign-extended I8, accumulated in I32
+fn stepI8(acc mut tile<I32>&, base I64, a U8, qb Array<I8>&, b I64, nr I64) {
+    x := I32(a)
+    for j in range nr: acc.v[base + j] = acc.v[base + j] + x * I32(qb[b + j])
+}
+
+# row i of the result, dot products of a's row i with four of b's rows at a time against one read of it
+fn (q quant&) rowI8(i I64) {
+    four I64 = q.n - q.n % 4
+    for j in range 0, four, 4: q.dot4I8(i, j)
+    for j in range four, q.n: q.store1(i, j, dotI8(q.a.d, i * q.a.ld, q.b.d, j * q.b.ld, q.k))
+}
+
+fn (q quant&) dot4I8(i I64, j I64) {
+    a0, b0, ld := i * q.a.ld, j * q.b.ld, q.b.ld
+    s0, s1, s2, s3 := lanes<I32>(), lanes<I32>(), lanes<I32>(), lanes<I32>()
+    whole I64 = q.k - q.k % 16
+    for p in range 0, whole, 16 {
+        stepDotI8(s0, q.a.d, a0 + p, q.b.d, b0 + p)
+        stepDotI8(s1, q.a.d, a0 + p, q.b.d, b0 + ld + p)
+        stepDotI8(s2, q.a.d, a0 + p, q.b.d, b0 + 2 * ld + p)
+        stepDotI8(s3, q.a.d, a0 + p, q.b.d, b0 + 3 * ld + p)
+    }
+    comptime for r in range 4 {
+        t I32 = laneSum(s0 if r == 0 else (s1 if r == 1 else (s2 if r == 2 else s3)), 16)
+        for p in range whole, q.k: t = t + I32(q.a.d[a0 + p]) * I32(q.b.d[b0 + r * ld + p])
+        q.store1(i, j + r, t)
+    }
+}
+
+fn stepDotI8(acc mut lanes<I32>&, a Array<U8>&, ao I64, b Array<I8>&, bo I64) {
+    for j in range 16: acc.v[j] = acc.v[j] + I32(a[ao + j]) * I32(b[bo + j])
+}
+
+# the sum of a[ao ..] b[bo ..] over k: 16 lanes of partial sums, added in order
+fn dotI8(a Array<U8>&, ao I64, b Array<I8>&, bo I64, k I64) I32 {
+    acc := lanes<I32>()
+    whole I64 = k - k % 16
+    for p in range 0, whole, 16 {
+        for j in range 16: acc.v[j] = acc.v[j] + I32(a[ao + p + j]) * I32(b[bo + p + j])
+    }
+    s I32 = laneSum(acc, 16)
+    for p in range whole, k: s = s + I32(a[ao + p]) * I32(b[bo + p])
+    return s
+}
+
+# the sum of row j of b
+fn rowSum(b mat.Mat<I8>&, j I64) I32 {
+    s I32 = 0
+    for p in range b.Cols: s = s + I32(b.Data[b.Off + j * b.Ld + p])
+    return s
+}
+
+# ---- small helpers ----
+
+fn lesser(a I64, b I64) I64 { return a if a < b else b }
+
+fn clampI(x I64, lo I64, hi I64) I64 { return lo if x < lo else (hi if x > hi else x) }
+
+# x as a D, rounded or wrapped as a conversion D(x) does - from or to an F8 type through F64, its own way in and out
+fn cast<X, D>(x X, like D) D {
+    match X {
+        case F8E4M3, F8E5M2 { return cast(x.F64(), like) }
+        case _ { }
+    }
+    return match D {
+        case F8E4M3: F8E4M3(F64(x))
+        case F8E5M2: F8E5M2(F64(x))
+        case F16: F16(x)
+        case BF16: BF16(x)
+        case F32: F32(x)
+        case F64: F64(x)
+        case I8: I8(x)
+        case I16: I16(x)
+        case I32: I32(x)
+        case I64: I64(x)
+        case U8: U8(x)
+        case U16: U16(x)
+        case U32: U32(x)
+        case U64: U64(x)
+    }
+}
+
+# ---- tests ----
+
+# a new rows x cols matrix of zeros with a gap: two elements before it and three after each row, so that every test
+# runs on a strided view
+fn gappy<S>(rows I64, cols I64, like S) mat.Mat<S> {
+    return mat.Mat<S>(Array<S>(2 + rows * (cols + 3)), 2, rows, cols, cols + 3)
+}
+
+# m filled with uniform values in [lo, hi], rounded to S
+fn uniform<S>(rows I64, cols I64, like S, r mut rand.Rand&, lo F64 = -1.0, hi F64 = 1.0) mat.Mat<S> {
+    m := gappy(rows, cols, like)
+    for i in range rows {
+        for j in range cols: m[i, j] = cast(r.Uniform(lo, hi), like)
+    }
+    return m
+}
+
+# op(a) op(b) summed in F64 from the stored values, and the sum of their magnitudes (the scale of its rounding error)
+fn reference<S>(a mat.Mat<S>&, ta Bool, b mat.Mat<S>&, tb Bool) mat.Mat<F64>, mat.Mat<F64> {
+    m I64 = a.Cols if ta else a.Rows
+    k I64 = a.Rows if ta else a.Cols
+    n I64 = b.Rows if tb else b.Cols
+    out := gappy(m, n, F64(0))
+    mag := gappy(m, n, F64(0))
+    for i in range m {
+        for j in range n {
+            for p in range k {
+                x F64 = cast(a[p, i] if ta else a[i, p], F64(0)) * cast(b[j, p] if tb else b[p, j], F64(0))
+                out[i, j] = out[i, j] + x
+                mag[i, j] = mag[i, j] + x.Abs()
+            }
+        }
+    }
+    return out, mag
+}
+
+# the largest |c - (alpha want + beta)| over c's elements
+fn maxDiff<S>(c mat.Mat<S>&, want mat.Mat<F64>&, alpha F64 = 1.0, beta F64 = 0.0) F64 {
+    d F64 = 0.0
+    for i in range c.Rows {
+        for j in range c.Cols: d = d.Max((cast(c[i, j], F64(0)) - (alpha * want[i, j] + beta)).Abs())
+    }
+    return d
+}
+
+fn sameBits<S>(x mat.Mat<S>&, y mat.Mat<S>&) Bool {
+    for i in range x.Rows {
+        for j in range x.Cols {
+            if x[i, j] != y[i, j]: return false
+        }
+    }
+    return true
+}
+
+fn fill<S>(m mut mat.Mat<S>&, v S) {
+    for i in range m.Rows {
+        for j in range m.Cols: m[i, j] = v
+    }
+}
+
+fn productCase(m I64, n I64, k I64, form I64, r mut rand.Rand&) {
+    ta, tb := form % 2 == 1, form >= 2
+    z F64 = 0.0
+    a := uniform(k, m, z, r) if ta else uniform(m, k, z, r)
+    b := uniform(n, k, z, r) if tb else uniform(k, n, z, r)
+    want, _ := reference(a, ta, b, tb)
+    ws := Workspace<F64>(1)
+    c := gappy(m, n, z)
+    Gemm(ws, c, a, ta, b, tb)
+    assert maxDiff(c, want) < 1e-12 * F64(k), $m + "x" + $n + "x" + $k + " form " + $form
+    # beta 1 accumulates, beta 0 never reads what is there, alpha scales
+    fill(c, 1.0)
+    Gemm(ws, c, a, ta, b, tb, 2.0, 1.0)
+    assert maxDiff(c, want, 2.0, 1.0) < 1e-12 * F64(k)
+    fill(c, NaN)
+    Gemm(ws, c, a, ta, b, tb)
+    assert maxDiff(c, want) < 1e-12 * F64(k)
+    # threads change nothing, bit for bit
+    four := Workspace<F64>(4)
+    d := gappy(m, n, z)
+    Gemm(four, d, a, ta, b, tb)
+    assert sameBits(c, d)
+}
+
+test Gemm "against the plain sum: every transpose, alpha and beta, across block boundaries, any thread count" {
+    r := rand.Rand(5)
+    sizes := Array<I64>[3, 5, 7, 37, 29, 41, 300, 270, 517, 1, 700, 3, 130, 1, 64, 600, 9, 16]
+    for s in range sizes.Len() / 3 {
+        for form in range 4: productCase(sizes[3 * s], sizes[3 * s + 1], sizes[3 * s + 2], form, r)
+    }
+}
+
+# the shapes either side of each bound of the unpacked paths, every element a small integer so that every path's sums
+# are exact and so equal
+fn exactCase<S>(m I64, n I64, k I64, ta Bool, like S) {
+    a := gappy(k, m, like) if ta else gappy(m, k, like)
+    b := gappy(k, n, like)
+    for i in range a.Rows {
+        for j in range a.Cols: a[i, j] = cast((i * a.Cols + j) * 5 % 7 - 3, like)
+    }
+    for i in range k {
+        for j in range n: b[i, j] = cast((i * n + j) * 3 % 5 - 2, like)
+    }
+    want, _ := reference(a, ta, b, false)
+    c := gappy(m, n, like)
+    ws := Workspace<S>(2)
+    Gemm(ws, c, a, ta, b, false)
+    assert maxDiff(c, want) == 0.0, "the product " + $m + "x" + $k + "x" + $n
+}
+
+test Gemm "products either side of the unpacked paths' bounds are exact, in F32 and in I32" {
+    shapes := Array<I64>[8, 8, 8, 10, 10, 10, 11, 11, 11, 5, 64, 64, 11, 64, 64, 12, 64, 64, 8, 32, 32, 64, 32, 64, 5, 1024, 64
+                         5, 1025, 64, 7, 64, 3, 4, 33, 17, 40, 1, 33]
+    for s in range shapes.Len() / 3 {
+        m, k, n := shapes[3 * s], shapes[3 * s + 1], shapes[3 * s + 2]
+        for ta in Array<Bool>[false, true] {
+            exactCase(m, n, k, ta, F32(0))
+            exactCase(m, n, k, ta, I32(0))
+        }
+    }
+}
+
+# the rounding of storage S, relative: half its last place
+fn halfUlp<S>(like S) F64 {
+    return match S {
+        case F16: 1.0 / 2048.0
+        case BF16: 1.0 / 256.0
+        case F8E4M3: 1.0 / 16.0
+        case F8E5M2: 1.0 / 8.0
+        case _: 1.0 / 16777216.0
+    }
+}
+
+# storage S accumulated in F32 against the exact sum of the stored values: within S's rounding of the result, plus the
+# F32 sum's error
+fn mixedCase<S>(m I64, n I64, k I64, form I64, like S, r mut rand.Rand&) {
+    ta, tb := form % 2 == 1, form >= 2
+    a := uniform(k, m, like, r) if ta else uniform(m, k, like, r)
+    b := uniform(n, k, like, r) if tb else uniform(k, n, like, r)
+    want, mag := reference(a, ta, b, tb)
+    ws := Workspace<F32>(3)
+    c := gappy(m, n, like)
+    Gemm(ws, c, a, ta, b, tb)
+    for i in range m {
+        for j in range n {
+            err F64 = (cast(c[i, j], F64(0)) - want[i, j]).Abs()
+            assert err <= halfUlp(like) * want[i, j].Abs() + F64(k) * 1.2e-7 * mag[i, j] + 1.0 / 512.0, $m + "x" + $n + "x" + $k + " (" + $i + ", " + $j + "): " + $err + " " + $c[i, j] + " " + $want[i, j] + " form " + $form + " " + $halfUlp(like)
+        }
+    }
+}
+
+test Gemm "low-precision storage accumulated in F32 is the exact sum rounded once: BF16, F16, F8E4M3, F8E5M2" {
+    r := rand.Rand(7)
+    sizes := Array<I64>[37, 29, 41, 130, 45, 300, 2, 70, 30]
+    for s in range sizes.Len() / 3 {
+        m, n, k := sizes[3 * s], sizes[3 * s + 1], sizes[3 * s + 2]
+        for form in range 4 {
+            mixedCase(m, n, k, form, BF16(0), r)
+            mixedCase(m, n, k, form, F16(0), r)
+            mixedCase(m, n, k, form, F8E4M3(0.0), r)
+            mixedCase(m, n, k, form, F8E5M2(0.0), r)
+        }
+    }
+    # an F16 sum many times beyond F16's own precision: F16 alone stalls at 2048
+    ones := gappy(1, 4096, F16(0))
+    fill(ones, F16(1.0))
+    col := gappy(4096, 1, F16(0))
+    fill(col, F16(1.0))
+    c := gappy(1, 1, F16(0))
+    ws := Workspace<F32>(1)
+    Gemm(ws, c, ones, false, col, false)
+    assert c[0, 0] == F16(4096.0)
+}
+
+# B12c: (1 + 2^-12)^2 needs 25 bits, so the second step of this product - [1, x] times [-(1 + 2^-11), x] - leaves
+# 2^-24 where the multiply-add is fused and 0 where its product is rounded first. one is read from a mutable global at
+# run time, so that product is the running program's
+fusedOne mut F32 = 1.0
+
+fn fusedProduct(one F32) F32 {
+    x F32 = one + one / 4096.0
+    a := gappy(1, 2, F32(0))
+    b := gappy(2, 1, F32(0))
+    a[0, 0] = one
+    a[0, 1] = x
+    b[0, 0] = -(one + one / 2048.0)
+    b[1, 0] = x
+    c := gappy(1, 1, F32(0))
+    ws := Workspace<F32>(1)
+    Gemm(ws, c, a, false, b, false)
+    return c[0, 0]
+}
+
+test Gemm "a product's multiply-adds are fused exactly where the target has fused multiply-add" {
+    want F32 = 1.0 / 16777216.0 if TargetHasFma else 0.0
+    assert fusedProduct(1.0) == want and fusedProduct(fusedOne) == want
+}
+
+# the small computations below are made while compiling (K2): a product on the unpacked path, one packed and one
+# triangular batch are evaluable, so these globals are data in the program - checked against the run time's
+fn bakedSums() F64 {
+    r := rand.Rand(3)
+    ws := Workspace<F64>(2)
+    a := uniform(20, 24, F64(0), r)
+    b := uniform(24, 30, F64(0), r)
+    c := gappy(20, 30, F64(0))
+    Gemm(ws, c, a, false, b, false)
+    d := gappy(3, 30, F64(0))
+    Gemm(ws, d, uniform(3, 24, F64(0), r), false, b, false, 1.0, 0.0, Epilogue.BiasAct(Array<F32>[0.5 for _ in range 30], mat.Act.Relu))
+    q := uniform(24, 24, F64(0), r)
+    p := gappy(24, 12, F64(0))
+    GemmBatch(ws, Batch.Stacked(p, 12), Batch.Stacked(q, 12), false, Batch.Stacked(q, 12), true, 1.0, 0.0, Triangle.Result(0))
+    s F64 = 0.0
+    for i in range 20 {
+        for j in range 30: s = s + c[i, j] * F64(i + 2 * j)
+    }
+    for i in range 24: s = s + p[i, i % 12]
+    return s + d[2, 0]
+}
+
+baked F64 = bakedSums()
+
+test Gemm "a product computed while compiling is the run time's" {
+    assert baked == bakedSums()
+}
+
+test Workspace "keeps its panels from one product to the next, and they at least double as products grow" {
+    r := rand.Rand(11)
+    ws := Workspace<F64>(1)
+    a := uniform(300, 517, F64(0), r)
+    b := uniform(517, 270, F64(0), r)
+    c := gappy(300, 270, F64(0))
+    Gemm(ws, c, a, false, b, false)
+    big, bigA := ws.b, ws.a
+    small := gappy(37, 29, F64(0))
+    Gemm(ws, small, uniform(37, 41, F64(0), r), false, uniform(41, 29, F64(0), r), false)
+    Gemm(ws, c, a, false, b, false)
+    assert ws.b == big and ws.a == bigA
+    # attention over a growing context: B's panel is replaced a logarithmic number of times, not once a step
+    grow := Workspace<F32>(1)
+    q := gappy(64, 64, F32(0))
+    fill(q, 1.0)
+    replaced I64 = 0
+    for t in range 64, 1600, 16 {
+        k := gappy(t, 64, F32(0))
+        fill(k, 0.5)
+        sc := gappy(64, t, F32(0))
+        before := grow.b.Len()
+        Gemm(grow, sc, q, false, k, true)
+        assert sc[63, t - 1] == 32.0
+        if grow.b.Len() != before: replaced++
+    }
+    assert replaced <= 7, $replaced + " replacements"
+}
+
+# a batch of groups x members matrices, rows x cols each, in one gappy storage - members' matrices side by side,
+# filled uniformly
+fn Batch<S>.random(rows I64, cols I64, groups I64, members I64, like S, r mut rand.Rand&) Batch<S> {
+    m := uniform(groups * rows, members * (cols + 1), like, r)
+    return Batch<S>(m.Data, m.Off, rows, cols, m.Ld, groups, rows * m.Ld, members, cols + 1)
+}
+
+fn batchCase(m I64, n I64, k I64, form I64, r mut rand.Rand&) {
+    ta, tb := form % 2 == 1, form >= 2
+    z F64 = 0.0
+    a := Batch<F64>.random(k, m, 3, 2, z, r) if ta else Batch<F64>.random(m, k, 3, 2, z, r)
+    b := Batch<F64>.random(n, k, 3, 2, z, r) if tb else Batch<F64>.random(k, n, 3, 2, z, r)
+    c := Batch<F64>.random(m, n, 3, 2, z, r)
+    c0 := Array<F64>(c.Data.Len())
+    for e in range c0.Len(): c0[e] = c.Data[e]
+    ws := Workspace<F64>(1)
+    GemmBatch(ws, c, a, ta, b, tb, 2.0, 0.5)
+    old := Batch<F64>(c0, c.Off, c.Rows, c.Cols, c.Ld, c.Groups, c.GroupStride, c.Members, c.MemberStride)
+    for e in range 6 {
+        g, h := e / 2, e % 2
+        want, _ := reference(a[g, h], ta, b[g, h], tb)
+        for i in range m {
+            for j in range n: assert (c[g, h][i, j] - (2.0 * want[i, j] + 0.5 * old[g, h][i, j])).Abs() < 1e-12 * F64(k)
+        }
+    }
+    # the gaps between the matrices are untouched, and threads change nothing
+    d := Array<F64>(c0.Len())
+    for e in range d.Len(): d[e] = c0[e]
+    dc := Batch<F64>(d, c.Off, c.Rows, c.Cols, c.Ld, c.Groups, c.GroupStride, c.Members, c.MemberStride)
+    four := Workspace<F64>(4)
+    GemmBatch(four, dc, a, ta, b, tb, 2.0, 0.5)
+    for e in range d.Len(): assert d[e] == c.Data[e] or (c0[e] == c.Data[e] and d[e] == c0[e])
+}
+
+test GemmBatch "a Gemm per matrix: every transpose, alpha and beta, strided storage, threads" {
+    r := rand.Rand(21)
+    sizes := Array<I64>[37, 29, 41, 130, 45, 300]
+    for s in range 2 {
+        for form in range 4: batchCase(sizes[3 * s], sizes[3 * s + 1], sizes[3 * s + 2], form, r)
+    }
+}
+
+# m's element (i, j) above the diagonal (j > i + d) set to v
+fn aboveDiagonal<S>(m mut mat.Mat<S>&, d I64, v S) {
+    for i in range m.Rows {
+        for j in range i + d + 1, m.Cols: m[i, j] = v
+    }
+}
+
+fn resultCase(T I64, first I64, d I64, r mut rand.Rand&) {
+    z F64 = 0.0
+    q := uniform(2 * T, 26, z, r)
+    k := uniform(2 * (T + first), 26, z, r)
+    s := gappy(4 * T, T + first, z)
+    fill(s, NaN)
+    S, Q, K := Batch.Stacked(s, T, 2), Batch.Heads(q, T, 2), Batch.Heads(k, T + first, 2)
+    ws := Workspace<F64>(2)
+    GemmBatch(ws, S, Q, false, K, true, 0.5, 0.0, Triangle.Result(d))
+    GemmBatch(ws, S, Q, false, K, true, 0.5, 1.0, Triangle.Result(d))
+    for e in range 4 {
+        want, _ := reference(Q[e / 2, e % 2], false, K[e / 2, e % 2], true)
+        got := S[e / 2, e % 2]
+        for i in range T {
+            for j in range T + first: assert (got[i, j] - want[i, j]).Abs() < 1e-12 * F64(T) if j <= i + d else got[i, j].IsNan()
+        }
+    }
+}
+
+test GemmBatch "a triangular result is computed below its diagonal only, and nothing above it is touched" {
+    r := rand.Rand(5)
+    for size in range 3 {
+        T, first := Array<I64>[37, 300, 9][size], Array<I64>[0, 0, 40][size]
+        for diag in range -2, 4, 3: resultCase(T, first, diag + first, r)
+    }
+}
+
+fn leftCase(T I64, d I64, ta Bool, r mut rand.Rand&) {
+    z F64 = 0.0
+    p := uniform(3 * T, T, z, r, 0.0, 1.0)
+    clean := gappy(3 * T, T, z)
+    for i in range 3 * T {
+        for j in range T: clean[i, j] = p[i, j]
+    }
+    P, C := Batch.Stacked(p, T), Batch.Stacked(clean, T)
+    for g in range 3 {
+        aboveDiagonal(C[g, 0], d, 0.0)
+        aboveDiagonal(P[g, 0], d, NaN)          # never read
+    }
+    v := uniform(3 * T, 19, z, r)
+    y := gappy(3 * T, 19, z)
+    fill(y, 1.0)
+    ws := Workspace<F64>(1)
+    GemmBatch(ws, Batch.Stacked(y, T), P, ta, Batch.Stacked(v, T), false, 1.0, 2.0, Triangle.Left(d))
+    for g in range 3 {
+        want, _ := reference(C[g, 0], ta, Batch.Stacked(v, T)[g, 0], false)
+        assert maxDiff(Batch.Stacked(y, T)[g, 0], want, 1.0, 2.0) < 1e-12 * F64(T)
+    }
+}
+
+test GemmBatch "a triangular left operand is read in its lower triangle only, transposed or not" {
+    r := rand.Rand(6)
+    for T in Array<I64>[37, 300] {
+        for diag in range -2, 4, 3 {
+            leftCase(T, diag, false, r)
+            leftCase(T, diag, true, r)
+        }
+    }
+}
+
+fn gemvCase(rows I64, cols I64, r mut rand.Rand&) {
+    a := uniform(rows, cols, F64(0), r)
+    x := uniform(1, cols, F64(0), r)
+    u := uniform(1, rows, F64(0), r)
+    want, _ := reference(a, false, x, true)
+    y := Array<F64>(rows, NaN)
+    Gemv(y, a, false, x.Data[x.Off:x.Off + cols])
+    for i in range rows: assert (y[i] - want[i, 0]).Abs() < 1e-13 * F64(cols)
+    # a's columns: y = 2 a^T u + y
+    wantT, _ := reference(a, true, u, true)
+    yt := Array<F64>(cols, 1.0)
+    Gemv(yt, a, true, u.Data[u.Off:u.Off + rows], 2.0, 1.0)
+    for j in range cols: assert (yt[j] - (2.0 * wantT[j, 0] + 1.0)).Abs() < 1e-13 * F64(rows)
+    # mixed: BF16 storage, F32 vectors
+    ab := uniform(rows, cols, BF16(0), r)
+    xf := Array<F32>(cols)
+    for j in range cols: xf[j] = F32(x[0, j])
+    yf := Array<F32>(rows)
+    Gemv(yf, ab, false, xf)
+    for i in range rows {
+        s F64 = 0.0
+        for j in range cols: s = s + F64(ab[i, j]) * F64(xf[j])
+        assert (F64(yf[i]) - s).Abs() < 1e-6 * F64(cols)
+    }
+}
+
+test Gemv "matrix-vector products both ways round, of strided views, F64 and BF16 x F32" {
+    r := rand.Rand(7)
+    for s in range 5: gemvCase(Array<I64>[64, 256, 3, 7, 128][s], Array<I64>[64, 512, 5, 130, 128][s], r)
+}
+
+test Gemm "one to four rows and one column take the vector paths, every transpose" {
+    r := rand.Rand(8)
+    for m in Array<I64>[1, 2, 3, 4, 300] {
+        for form in range 4 {
+            ta, tb := form % 2 == 1, form >= 2
+            n I64 = 1 if m == 300 else 29
+            a := uniform(37, m, F32(0), r) if ta else uniform(m, 37, F32(0), r)
+            b := uniform(n, 37, F32(0), r) if tb else uniform(37, n, F32(0), r)
+            c := gappy(m, n, F32(0))
+            fill(c, 1.0)
+            ws := Workspace<F32>(1)
+            Gemm(ws, c, a, ta, b, tb, 1.0, 1.0)
+            want, _ := reference(a, ta, b, tb)
+            assert maxDiff(c, want, 1.0, 1.0) < 1e-5
+        }
+    }
+}
+
+fn epilogueCase(m I64, n I64, k I64, act mat.Act, r mut rand.Rand&) {
+    a := uniform(m, k, F32(0), r)
+    b := uniform(k, n, F32(0), r)
+    bias := Array<F32>(n)
+    for j in range n: bias[j] = F32(r.Uniform(-1.0, 1.0))
+    want, mag := reference(a, false, b, false)
+    c := gappy(m, n, F32(0))
+    ws := Workspace<F32>(4)
+    Gemm(ws, c, a, false, b, false, 1.0, 0.0, Epilogue.BiasAct(bias, act))
+    kind := actKind(act)
+    for i in range m {
+        for j in range n: assert (F64(c[i, j]) - kind(want[i, j] + F64(bias[j]))).Abs() < 2e-7 * F64(k) * mag[i, j] + 1e-6, $act + " " + $m + "x" + $n + "x" + $k
+    }
+    plain := gappy(m, n, F32(0))
+    Gemm(ws, plain, a, false, b, false, 1.0, 0.0, Epilogue.Bias(bias))
+    for i in range m {
+        for j in range n: assert (F64(plain[i, j]) - (want[i, j] + F64(bias[j]))).Abs() < 2e-7 * F64(k) * mag[i, j] + 1e-6
+    }
+}
+
+# act in F64, as the epilogue computes it
+fn actKind(act mat.Act) fn&(x F64) F64 {
+    return match act {
+        case mat.Act.Relu: fn(x F64) F64: return actOf(x, reluAct())
+        case mat.Act.Gelu: fn(x F64) F64: return actOf(x, geluAct())
+        case mat.Act.GeluTanh: fn(x F64) F64: return actOf(x, geluTanhAct())
+        case mat.Act.Silu: fn(x F64) F64: return actOf(x, siluAct())
+        case mat.Act.Sigmoid: fn(x F64) F64: return actOf(x, sigmoidAct())
+        case mat.Act.Tanh: fn(x F64) F64: return actOf(x, tanhAct())
+        case mat.Act.Softplus: fn(x F64) F64: return actOf(x, softplusAct())
+    }
+}
+
+test Epilogue "a bias and an activation on the summed result: every activation, unpacked, packed and exchanged" {
+    r := rand.Rand(12)
+    acts := Array<mat.Act>[mat.Act.Relu, mat.Act.Gelu, mat.Act.GeluTanh, mat.Act.Silu, mat.Act.Sigmoid, mat.Act.Tanh, mat.Act.Softplus]
+    for act in acts {
+        epilogueCase(3, 40, 17, act, r)
+        epilogueCase(130, 70, 300, act, r)
+        epilogueCase(10, 300, 64, act, r)
+    }
+    assert actOf(-2.0, softplusAct()) - (1.0 + (-2.0).Exp()).Log() < 1e-15 and actOf(NaN, reluAct()).IsNan()
+}
+
+# a left operand of its own type, for GemmLeft: a matrix read through Pack
+type rowsOf struct(m mat.Mat<F64>&) {
+    m
+}
+
+fn (x rowsOf&) Pack<A>(w0 I64, p0 I64, width I64, depth I64, wr I64, dst mut Array<A>&) {
+    for q in range 0, width, wr {
+        for p in range depth {
+            for w in range wr: dst[q * depth + p * wr + w] = x.m[w0 + q + w, p0 + p] if q + w < width else 0.0
+        }
+    }
+}
+
+test GemmLeft "a left operand packed by its own type is the matrix it reads" {
+    r := rand.Rand(13)
+    a := uniform(300, 517, F64(0), r)
+    b := uniform(270, 517, F64(0), r)
+    want, _ := reference(a, false, b, true)
+    c := gappy(300, 270, F64(0))
+    ws := Workspace<F64>(4)
+    GemmLeft(ws, c, rowsOf(a), 517, b, true, 1.0, 0.0, Epilogue.Bias(Array<F32>(270)))
+    assert maxDiff(c, want) < 1e-12 * 517.0
+}
+
+fn i8Case(m I64, n I64, k I64, zero I32, r mut rand.Rand&) {
+    a := gappy(m, k, U8(0))
+    b := gappy(n, k, I8(0))
+    for i in range m {
+        for p in range k: a[i, p] = U8(r.Below(256))
+    }
+    for j in range n {
+        for p in range k: b[j, p] = I8(r.Below(255) - 127)
+    }
+    scale := Array<F32>(n)
+    for j in range n: scale[j] = F32(r.Uniform(0.001, 0.01))
+    c := gappy(m, n, I32(0))
+    out := gappy(m, n, F32(0))
+    ws := Workspace<I32>(1)
+    GemmI8(ws, c, a, b, scale, out, zero)
+    for i in range m {
+        for j in range n {
+            s I32 = 0
+            sb I32 = 0
+            for p in range k {
+                s = s + I32(a[i, p]) * I32(b[j, p])
+                sb = sb + I32(b[j, p])
+            }
+            assert c[i, j] == s and out[i, j] == F32(s - zero * sb) * scale[j], $m + "x" + $n + "x" + $k
+        }
+    }
+    four := Workspace<I32>(4)
+    out4 := gappy(m, n, F32(0))
+    GemmI8(four, gappy(m, n, I32(0)), a, b, scale, out4, zero)
+    assert sameBits(out, out4)
+    # the rows' sums given, as quantized weights keep them: the same result
+    sums := Array<I32>[rowSum(b, j) for j in range n]
+    given := gappy(m, n, F32(0))
+    GemmI8(ws, gappy(m, n, I32(0)), a, b, scale, given, zero, sums)
+    assert sameBits(out, given)
+}
+
+test GemmI8 "INT8 products are the integer sums, dequantized per output, wide and thin tiles, any thread count" {
+    r := rand.Rand(14)
+    sizes := Array<I64>[1, 10, 300, 3, 70, 5, 7, 16, 41, 64, 128, 784, 300, 70, 300, 13, 40, 9]
+    for s in range sizes.Len() / 3 {
+        i8Case(sizes[3 * s], sizes[3 * s + 1], sizes[3 * s + 2], 0, r)
+        i8Case(sizes[3 * s], sizes[3 * s + 1], sizes[3 * s + 2], 128, r)
+    }
+}
+
+test Ger2 "a decayed rank-2 update" {
+    a := gappy(2, 3, F32(0))
+    fill(a, 2.0)
+    Ger2(a, Array<F32>[1.0, 2.0], Array<F32>[3.0, 4.0, 5.0], Array<F32>[1.0, 0.0], Array<F32>[1.0, 1.0, 1.0], F32(0.5), F32(0.25))
+    assert a[0, 0] == 0.5 + 0.5 * (3.0 + 1.0) and a[1, 2] == 0.5 + 0.5 * 10.0
+}
+
+test GemmBatch "BF16 storage over a depth of several blocks is summed in F32 and rounded once, triangles kept" {
+    r := rand.Rand(15)
+    z := BF16(0)
+    a := Batch<BF16>.random(20, 300, 2, 2, z, r)
+    b := Batch<BF16>.random(20, 300, 2, 2, z, r)
+    c := Batch<BF16>.random(20, 20, 2, 2, z, r)
+    before := c[1, 1][0, 5]
+    ws := Workspace<F32>(2)
+    GemmBatch(ws, c, a, false, b, true, F32(1), F32(0), Triangle.Result(0))
+    for e in range 4 {
+        want, mag := reference(a[e / 2, e % 2], false, b[e / 2, e % 2], true)
+        for i in range 20 {
+            for j in range i + 1: assert (F64(c[e / 2, e % 2][i, j]) - want[i, j]).Abs() <= want[i, j].Abs() / 256.0 + 300.0 * 1.2e-7 * mag[i, j]
+        }
+    }
+    assert c[1, 1][0, 5] == before
+}
+
+test Gemm "BF16 storage's one to four rows and one column are dot products summed in F32" {
+    r := rand.Rand(16)
+    for m in Array<I64>[1, 4, 300] {
+        n I64 = 1 if m == 300 else 70
+        a := uniform(m, 300, BF16(0), r)
+        b := uniform(n, 300, BF16(0), r)
+        want, mag := reference(a, false, b, true)
+        c := gappy(m, n, BF16(0))
+        ws := Workspace<F32>(1)
+        Gemm(ws, c, a, false, b, true)
+        for i in range m {
+            for j in range n: assert (F64(c[i, j]) - want[i, j]).Abs() <= want[i, j].Abs() / 256.0 + 300.0 * 1.2e-7 * mag[i, j]
+        }
+    }
+}
+
+test Gemm "thin products and exchanged ones: a convolution's sixteen channels, its weights' gradient, ten classes" {
+    z F32 = 0
+    assert tiling.choose(500, 16, microRows, tileCols(z), vectorLanes(z), true).thin or TargetVectorBits < 512
+    assert tiling.choose(16, 9, microRows, tileCols(z), vectorLanes(z), true).exchanged or TargetVectorBits < 512
+    r := rand.Rand(9)
+    sizes := Array<I64>[500, 16, 9, 16, 9, 3000, 64, 10, 128, 7, 300, 70, 300, 3, 20]
+    for s in range sizes.Len() / 3 {
+        for form in range 4: productCase(sizes[3 * s], sizes[3 * s + 1], sizes[3 * s + 2], form, r)
+    }
+}

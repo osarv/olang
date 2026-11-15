@@ -1,0 +1,110 @@
+# safetensors checked by a reader oann does not share code with (bench/ref/safetensors_check.py, numpy):
+#     safetensors write DIR - an F32 graph saved as F32, F16 and BF16 and an F64 graph as F64 (DIR/oann_*.safetensors),
+#                             with every parameter's values as exact decimals (DIR/oann_values.json) for the reader to
+#                             round itself and compare bit by bit
+#     safetensors read DIR  - DIR/py.safetensors, written by numpy, loaded into an F64 graph and compared with the
+#                             values numpy stored (DIR/py_values.json), exactly
+# make safetensors runs the three steps.
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "../nn"
+import "../checkpoint"
+
+# values at the edges of the narrow types: zeros of both signs, a subnormal F32, F16's largest and the first value
+# past it, an F16 underflow, near F32's largest, a value BF16 rounds - then random ones over many scales
+fn edgeValue(i I64, r mut rand.Rand&) F64 {
+    edges := Array<F64>[0.0, -0.0, 1e-40, 65504.0, 65519.0, 65520.0, 1e-30, 3.0e38, -2.5, 1.00390625, 0.1, 1.0 / 3.0]
+    if i < edges.Len(): return edges[i]
+    return r.Normal() * Array<F64>[1e-3, 1.0, 1e3, 1e-6][i % 4]
+}
+
+fn values<T>(g nn.Graph<T>&, vars Array<nn.Var>&, called Array<String&>&, sb mut StringBuilder&) {
+    for k in range vars.Len() {
+        if k > 0: sb.Push(",\n")
+        sb.Push("\"" + $called[k] + "\": [")
+        m := g.Value(vars[k])
+        for i in range m.Rows * m.Cols {
+            if i > 0: sb.Push(", ")
+            sb.Push($F64(m.Data[i]))
+        }
+        sb.Push("]")
+    }
+}
+
+fn write(dir String&) ? io.Error, os.Error, checkpoint.SafetensorsError {
+    called := Array<String&>["layer.weight", "layer.bias", "emb.weight"]
+    g := nn.Graph<F32>(1)
+    h := nn.Graph<F64>(1)
+    z := nn.Init.Zeros
+    gv := Array<nn.Var>[g.Param(3, 6, z, true), g.Param(1, 6, z, false), g.Param(4, 3, z, true)]
+    hv := Array<nn.Var>[h.Param(3, 6, z, true), h.Param(1, 6, z, false), h.Param(4, 3, z, true)]
+    r := rand.Rand(51)
+    g.Plan(r)
+    h.Plan(r)
+    gp := g.Params()
+    hp := h.Params()
+    for i in range gp.Cols {
+        v := edgeValue(i, r)
+        gp.Data[i] = F32(v)
+        hp.Data[i] = v
+    }
+    gn := checkpoint.Names()
+    hn := checkpoint.Names()
+    for k in range 3 {
+        gn.Add(gv[k], called[k])
+        hn.Add(hv[k], called[k])
+    }
+    try checkpoint.Save(g, $dir + "/oann_f32.safetensors", gn)
+    try checkpoint.Save(g, $dir + "/oann_f16.safetensors", gn, checkpoint.Dtype.F16)
+    try checkpoint.Save(g, $dir + "/oann_bf16.safetensors", gn, checkpoint.Dtype.BF16)
+    try checkpoint.Save(h, $dir + "/oann_f64.safetensors", hn)
+    sb := StringBuilder()
+    sb.Push("{\"f32\": {\n")
+    values(g, gv, called, sb)
+    sb.Push("},\n\"f64\": {\n")
+    values(h, hv, called, sb)
+    sb.Push("}}\n")
+    try os.WriteFile($dir + "/oann_values.json", sb.ToString())
+    try io.Put("wrote " + $dir + "/oann_{f32,f16,bf16,f64}.safetensors and oann_values.json\n")
+}
+
+fn read(dir String&) ? io.Error, os.Error, checkpoint.SafetensorsError, json.Error {
+    called := Array<String&>["a", "b", "c", "d"]
+    g := nn.Graph<F64>(1)
+    vars := Array<nn.Var>[g.Param(3, 4, nn.Init.Zeros, true), g.Param(1, 5, nn.Init.Zeros, false)
+        g.Param(2, 3, nn.Init.Zeros, true), g.Param(2, 2, nn.Init.Zeros, true)]
+    r := rand.Rand(52)
+    g.Plan(r)
+    names := checkpoint.Names()
+    for k in range 4: names.Add(vars[k], called[k])
+    try checkpoint.Load(g, $dir + "/py.safetensors", names)
+    doc := try json.Json.Parse(try os.ReadFile($dir + "/py_values.json"))
+    wrong I64 = 0
+    total I64 = 0
+    for k in range 4 {
+        name := called[k]
+        want := try (try doc[name]).AsArr()
+        m := g.Value(vars[k])
+        for i in range m.Rows * m.Cols {
+            if m.Data[i].Bits() != (try want[i].AsNum()).Bits(): wrong++
+            total++
+        }
+    }
+    try io.Put(("loaded " + $dir + "/py.safetensors (F32, F16, BF16, F64; a vector for a one-row parameter; written by " +
+        "numpy): " + $(total - wrong) + " of " + $total + " values exactly as numpy stored them\n"))
+    assert not wrong > 0
+}
+
+fn main() ? io.Error, os.Error, checkpoint.SafetensorsError, json.Error {
+    args := os.Args()
+    if args.Len() != 3 {
+        try io.PutErr("usage: safetensors write|read DIR\n")
+        os.Exit(1)
+    }
+    try os.MkDirAll(args[2])
+    if args[1] == "write": try write(args[2])
+    else: try read(args[2])
+}

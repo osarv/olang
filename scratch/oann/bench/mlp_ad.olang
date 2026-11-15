@@ -1,0 +1,163 @@
+# bench/mlp_ad - M1 (docs/redesign.md 4.3): the 784-128-10 perceptron on MNIST through ad/graph - ReLU between the
+# layers, softmax cross-entropy, batches of 128, AdamW (rate 1e-3, weight decay 0.01 on the weights, PyTorch's) - each
+# epoch timed (training only) and the test set measured after it. examples/mnist_mlp.olang is the same network on the old
+# nn module, the yardstick. Arguments, all optional: epochs (10), threads (1), seed (1), and "bf16" last for a Graph<BF16>
+# (F32 masters stepped, BF16 values and gradients). Build and run from the repository's root:
+#   olang build -output build/bench_mlp_ad bench/mlp_ad.olang && build/bench_mlp_ad 10 1
+
+import "std/io"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../kernels/mat"
+import "../data/loader"
+import "../data/mnist"
+import "../data/idx"
+
+# argument i as a number, or fallback
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn main() ? io.Error, os.Error, mnist.MnistError, idx.IdxError, ParseError {
+    all := os.Args()
+    bf16 := all.Len() > 1 and all[all.Len() - 1] == "bf16"
+    args := all[:all.Len() - 1] if bf16 else all
+    epochs := try number(args, 1, 10)
+    threads := try number(args, 2, 1)
+    seed := U64(try number(args, 3, 1))
+    data := try mnist.Mnist.Load("data/mnist", mnist.Source)
+    if bf16 {
+        g := graph.Graph<BF16>(128, threads)
+        try run(g, data, epochs, seed)
+    } else {
+        g := graph.Graph<F32>(128, threads)
+        try run(g, data, epochs, seed)
+    }
+}
+
+fn run<T>(g mut graph.Graph<T>&, data mnist.Mnist&, epochs I64, seed U64) ? io.Error {
+    x := g.Input(784)
+    y := g.Classes()
+    h := g.Act(dense(g, x, 784, 128), mat.Act.Relu)
+    logits := dense(g, h, 128, 10)
+    g.Keep(logits)
+    loss := g.CrossEntropy(logits, y)
+    try g.Plan(rand.Rand(seed)) catch { unreachable }
+    opt := AdamW(g.ParamCount)
+    trainSet := loader.Loader(data.Train, 128, seed)
+    testSet := loader.Loader(data.Test, 128, seed, false)
+    try io.Put("784-128-10 on ad/graph, " + $g.ParamCount + " parameters, " + $T.Name + ", " + $g.Threads + " threads, an arena of " + $(F64(g.ArenaBytes()) / 1048576.0).Fixed(2) + " MB\n")
+    total I64 = 0
+    for e in range 1, epochs + 1 {
+        t0 := time.Now()
+        trainLoss := epoch(g, x, y, loss, trainSet, opt)
+        spent := time.Since(t0)
+        total += spent
+        accuracy := evaluate(g, x, y, logits, testSet)
+        try io.Put("epoch " + $e + ": train loss " + $trainLoss.Fixed(4) + ", test accuracy " + $(100.0 * accuracy).Fixed(2) + "%, " + $(F64(spent) * 1e-9).Fixed(3) + " s\n")
+    }
+    try io.Put("mean epoch " + $(F64(total) * 1e-9 / F64(epochs)).Fixed(3) + " s\n")
+}
+
+# a dense layer: weights and bias drawn as PyTorch's Linear draws them, U(-1/sqrt(in), 1/sqrt(in))
+fn dense<T>(g mut graph.Graph<T>&, x graph.Var, inputs I64, outputs I64) graph.Var {
+    bound := 1.0 / F64(inputs).Sqrt()
+    w := g.Param(graph.Init.Uniform(-bound, bound), true, outputs, inputs)
+    b := g.Param(graph.Init.Uniform(-bound, bound), false, outputs)
+    return g.Linear(x, w, b)
+}
+
+fn epoch<T, D>(g mut graph.Graph<T>&, x graph.Var, y graph.Var, loss graph.Var, l mut loader.Loader<D>&, opt mut AdamW&) F64 {
+    l.Epoch()
+    total F64 = 0.0
+    seen I64 = 0
+    xs := g.Data(x).Flat()!
+    ys := g.Ints(y).Flat()!
+    for b in range l.Batches() {
+        n := l.Fill(b, xs, ys)
+        g.Forward(n)
+        g.Backward(loss)
+        opt.Step(g)
+        total += g.Scalar(loss) * F64(n)
+        seen += n
+    }
+    return total / F64(seen)
+}
+
+# the fraction of l classified right
+fn evaluate<T, D>(g mut graph.Graph<T>&, x graph.Var, y graph.Var, logits graph.Var, l mut loader.Loader<D>&) F64 {
+    l.Epoch()
+    right I64 = 0
+    seen I64 = 0
+    xs := g.Data(x).Flat()!
+    ys := g.Ints(y).Flat()!
+    for b in range l.Batches() {
+        n := l.Fill(b, xs, ys)
+        g.Forward(n)
+        z := g.Value(logits)
+        for i in range n {
+            best I64 = 0
+            for c in range 1, 10 {
+                if F64(z.Get(i, c)) > F64(z.Get(i, best)): best = c
+            }
+            if best == I64(ys[i]): right++
+        }
+        seen += n
+    }
+    return F64(right) / F64(seen)
+}
+
+# AdamW over a graph's flat parameters (its F32 masters where it keeps them), PyTorch's: decay 0.01 on the parameters
+# made with decay. A stand-in for nn/optim (B3), enough to train the benchmark
+type AdamW struct(count I64, Rate F64 = 1e-3, Beta1 F64 = 0.9, Beta2 F64 = 0.999, Eps F64 = 1e-8, Decay F64 = 0.01) {
+    Rate
+    Beta1
+    Beta2
+    Eps
+    Decay
+    steps I64 = 0
+    m mut Array<F32>& = Array<F32>(count)
+    v mut Array<F32>& = Array<F32>(count)
+}
+
+fn (o mut AdamW&) Step<T>(g mut graph.Graph<T>&) {
+    o.steps++
+    grads := g.ParamGrads().Flat()!
+    if g.HasMasters() {
+        o.stepIn(g, g.Masters().Flat()!, grads)
+        g.SyncParams()
+        return
+    }
+    match T {
+        case F32: o.stepIn(g, g.Params().Flat()!, grads)
+        case _ { }
+    }
+}
+
+fn (o mut AdamW&) stepIn<T>(g graph.Graph<T>&, p mut Array<F32>&, gr Array<T>&) {
+    corr1 := 1.0 - o.Beta1.Pow(F64(o.steps))
+    corr2 := 1.0 - o.Beta2.Pow(F64(o.steps))
+    step := F32(o.Rate / corr1)
+    root := F32(1.0 / corr2.Sqrt())
+    b1 := F32(o.Beta1)
+    b2 := F32(o.Beta2)
+    eps := F32(o.Eps)
+    m := o.m
+    v := o.v
+    for i in range g.Size() {
+        nd := g.Info(graph.Var(i))
+        if nd.Kind != graph.Op.Param: continue
+        keep := F32(1.0 - o.Rate * o.Decay) if g.Decays(graph.Var(i)) else F32(1.0)
+        for k in range nd.Offset, nd.Offset + nd.Dims.Count() {
+            gk := F32(gr[k])
+            mk := b1 * m[k] + (1.0 - b1) * gk
+            vk := b2 * v[k] + (1.0 - b2) * gk * gk
+            m[k] = mk
+            v[k] = vk
+            p[k] = keep * p[k] - step * mk / (vk.Sqrt() * root + eps)
+        }
+    }
+}

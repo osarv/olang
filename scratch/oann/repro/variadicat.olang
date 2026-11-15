@@ -1,0 +1,20 @@
+# E31: a variadic At (`fn (t X<T>&) At(idx ...I64) T`) is the operator for `x[i]` only - with one index; `x[i, j]` on it
+# is "E31: X declares SetAt but not At" (or "cannot be indexed" with no SetAt). Written for an N-d tensor, whose rank
+# is run-time data: one At for every rank would need it, so tensor.olang has no `t[i, j]` and reads with
+# `t.Get(i, j)` and writes with `t.Set(v, i, j)`. A defaulted trailing index (`At(i I64, j I64 = 0)`) is no operator
+# either ("cannot be indexed").
+# Expected: `x[1, 2]` calls At with two indices (spec E31: "one operand per index").
+# Actual: error[E31] on x[1, 2].
+# Status (olang 374c1e3c): reproduces.
+type X<T> struct(d mut Array<T>&) {
+    d
+}
+
+fn (t X<T>&) At(i ...I64) T { return t.d[i[0] + i[1]] }
+fn (t mut X<T>&) SetAt(i I64, j I64, v T) { t.d[i + j] = v }
+
+test "a variadic At takes several indices" {
+    x := X<F32>(Array<F32>(4))
+    x[1, 1] = 3.0
+    assert x[1, 1] == 3.0
+}

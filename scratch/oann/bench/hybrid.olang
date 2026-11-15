@@ -1,0 +1,128 @@
+# bench/hybrid - M14 (docs/redesign.md 4.3): the sweeps a settle takes with and without an amortizer, in models/hybrid's
+# transformer with a settle block, trained on tiny Shakespeare characters. Two runs from the same seed - every settle
+# from rest, then every settle from the amortizer's guess - each reporting, every "every" steps, the training loss, the
+# validation loss and the sweeps a settle takes on the same 10 validation batches (the weights fixed while they are
+# measured), the forward sweeps a settle over the steps since the last report, the backward's adjoint sweeps, the
+# amortizer's loss and the time a step; then the table of both side by side.
+# Arguments, all optional: the steps (1000), the seed (1), the settle block's units (128), the gradient (exact, jfb or
+# ep), the forward settle's tolerance (1e-3), the gain it is certified at (0.9), the report interval (100). Build and run
+# from the repository's root: make hybridbench ARGS="1000 1 128 exact"
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/text"
+import "../dyn/system"
+import "../dyn/bridge"
+import "../models/hybrid"
+import "../nn/optim"
+import "../nn/train"
+
+width I64 = 64
+depth I64 = 2
+heads I64 = 4
+context I64 = 64
+sequences I64 = 16
+
+fn number(args Array<String&>&, i I64, fallback F64) F64 ? json.Error {
+    if i >= args.Len(): return fallback
+    return try json.Json.Parse(args[i]).AsNum()
+}
+
+fn implicit(args Array<String&>&) system.Implicit {
+    word := args[4] if args.Len() > 4 else "exact"
+    if word == "jfb": return system.Implicit.Jfb
+    if word == "ep": return system.Implicit.Ep(0.05)
+    return system.Implicit.Exact(1e-3, 400)
+}
+
+# a report: the step, the losses, validation sweeps a settle, training sweeps a settle and adjoint sweeps a backward
+# since the last report, the amortizer's loss, ms a step
+type Row struct(Step I64, Train F64, Valid F64, ValidSweeps F64, Sweeps F64, Adjoint F64, Fit F64, Ms F64) {
+    Step
+    Train
+    Valid
+    ValidSweeps
+    Sweeps
+    Adjoint
+    Fit
+    Ms
+}
+
+fn main() ? {
+    args := os.Args()
+    steps := I64(try number(args, 1, 1000))
+    seed := U64(try number(args, 2, 1))
+    units := I64(try number(args, 3, 128))
+    tol := try number(args, 5, 1e-3)
+    kappa := try number(args, 6, 0.9)
+    every := I64(try number(args, 7, 100))
+    try os.MkDirAll("data/shakespeare")
+    try text.Fetch("data/shakespeare/input.txt", text.Shakespeare)
+    c := try text.Corpus.Load("data/shakespeare/input.txt")
+    cfg := hybrid.HybridConfig(c.Size(), width, depth, heads, context, units, false, implicit(args), kappa, tol)
+    try io.Put(("tiny Shakespeare: a vocabulary of " + $c.Size() + "; " + $depth + " layers of " + $width + ", " + $heads + " heads, context " +
+        $context + ", batches of " + $sequences + "; a settle block of " + $units + " units at kappa " + $kappa + ", tolerance " + $tol + ", " +
+        $cfg.How + "\n"))
+    cold := try run(cfg, c, steps, seed, every)
+    cfg.Amortize = true
+    warm := try run(cfg, c, steps, seed, every)
+    try io.Put("\n| step | valid loss, cold | valid loss, amortized | sweeps a settle, cold | amortized | train sweeps, cold | amortized | adjoint sweeps, cold | amortized | ms a step, cold | amortized |\n")
+    try io.Put("|---|---|---|---|---|---|---|---|---|---|---|\n")
+    for i, a in cold {
+        w := warm[i]
+        try io.Put(("| " + $a.Step + " | " + $a.Valid.Fixed(4) + " | " + $w.Valid.Fixed(4) + " | " + $a.ValidSweeps.Fixed(1) + " | " + $w.ValidSweeps.Fixed(1) +
+            " | " + $a.Sweeps.Fixed(1) + " | " + $w.Sweeps.Fixed(1) + " | " + $a.Adjoint.Fixed(1) + " | " + $w.Adjoint.Fixed(1) +
+            " | " + $a.Ms.Fixed(0) + " | " + $w.Ms.Fixed(0) + " |\n"))
+    }
+}
+
+# one run of cfg: its reports
+fn run(cfg hybrid.HybridConfig, c text.Corpus&, steps I64, seed U64, every I64) Vec<Row> ? {
+    r := rand.Rand(seed)
+    sys := cfg.System(sequences, r)
+    b := cfg.Bridge(sys)
+    fixed := bridge.Settled<F32>(b)
+    cut := bridge.Detach()
+    g := graph.Graph<F32>(sequences)
+    m := hybrid.Hybrid.New(g, cfg, b, fixed, cut)
+    try g.Plan(r)
+    o := optim.AdamW(g.Params(), g.ParamGrads(), beta2 = 0.99, decay = 0.1, spans = optim.Spans(g))
+    so := optim.AdamW(sys.Params(), sys.ParamGrads(), beta2 = 0.99)
+    rate := optim.WarmupCosine(1e-3, 100, steps, 1e-4)
+    src := text.Windows(c.Train(), context, seed)
+    valid := text.Windows(c.Val(), context)
+    try io.Put(("\n" + $("amortized" if cfg.Amortize else "cold") + ": " + $g.ParamCount + " graph parameters, " + $sys.Params().Count() +
+        " in the system, " + $b.StateSize + " units settling\n"))
+    rows := Vec<Row>()
+    train0 F64 = 0.0
+    fit F64 = 0.0
+    s0, w0, a0, k0 := b.Settles, b.Sweeps, b.AdjointSweeps, b.Backs
+    t0 := time.Now()
+    for step in range steps + 1 {
+        if step % every == 0 {
+            spent := F64(time.Since(t0)) * 1e-6
+            settles, sweeps, adjoint, backs := b.Settles - s0, b.Sweeps - w0, b.AdjointSweeps - a0, b.Backs - k0
+            v0, vs0 := b.Settles, b.Sweeps
+            loss := train.LmEvaluate(g, m.Lm, valid, 10)
+            row := Row(step, train0 / F64(every.Min(step).Max(1)), loss, F64(b.Sweeps - vs0) / F64(b.Settles - v0)
+                F64(sweeps) / F64(settles.Max(1)), F64(adjoint) / F64(backs.Max(1)), fit / F64(every.Min(step).Max(1))
+                spent / F64(backs.Max(1)))
+            rows.Push(row)
+            try io.Put(("step " + $step + ": train " + $row.Train.Fixed(4) + ", valid " + $row.Valid.Fixed(4) + ", sweeps a settle " +
+                $row.ValidSweeps.Fixed(1) + " (valid) " + $row.Sweeps.Fixed(1) + " (train), adjoint " + $row.Adjoint.Fixed(1) +
+                ", amortizer's loss " + $row.Fit.Fixed(5) + ", " + $row.Ms.Fixed(0) + " ms a step; unsettled " + $b.Unsettled +
+                ", refused " + $b.Refused + "\n"))
+            train0, fit = 0.0, 0.0
+            s0, w0, a0, k0 = b.Settles, b.Sweeps, b.AdjointSweeps, b.Backs
+            t0 = time.Now()
+        }
+        if step == steps: break
+        train0 += hybrid.Step(g, m, sys, src, o, so, rate(step), 1.0)
+        if cfg.Amortize: fit += g.Scalar(m.Fit)
+    }
+    return rows
+}

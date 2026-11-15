@@ -1,0 +1,131 @@
+# kernels - the small kernels linalg.olang does not export: dot products, sums and updates over runs of arrays at any
+# offset (decoding's attention, the normalizations), a sum of squares accumulated in F64, and the two conversions every
+# kernel of a mixed-precision graph is written with - Up, a stored element into the type computed in, and Down, a
+# computed value rounded to the type stored.
+#
+# Every matrix product goes through linalg.olang (a GemmWorkspace the caller keeps, so a step allocates nothing).
+
+import "linalg"
+
+# ---- storage and computation types ----
+# A graph of F32 or F64 computes in its own type; one of BF16 stores its values in 16 bits and computes every
+# operation in F32 (DESIGN.md section 18). A kernel takes the type it computes in as a value, z <A> - read for its type
+# only - reads each stored element up into it, and rounds each result it stores down once, so for a graph computing in
+# its own type both are nothing and the loops are what they were.
+
+# x in the type of z, exactly when z's type holds x's (BF16 or F32 into F32, anything into F64)
+fn Up<S, A>(x S, z A) A {
+    return linalg.Cast(x, z)
+}
+
+# x rounded to the type of like, to nearest and ties to even. (Until olang db2af5d, an F32 was rounded into BF16 by its
+# bits here, the conversion being a call into the C library per element; it is inline and vectorized now, and as fast)
+fn Down<A, T>(x A, like T) T {
+    return linalg.Cast(x, like)
+}
+
+# eight partial sums, combined pairwise at the end - what lets a sum of floats run in vector registers
+type lanes<A> struct() {
+    v := Array<A>(8)
+}
+
+fn (l lanes<A>&) total() A {
+    out := lanes<A>()
+    for i in range 8: out.v[i] = l.v[i]
+    for h in Array<I64>[4, 2, 1] {
+        for i in range h: out.v[i] += out.v[i + h]
+    }
+    return out.v[0]
+}
+
+# the sum of x[xf + i] * y[yf + i] for i < n, in eight lanes
+fn Dot<T>(x Array<T>&, xf I64, y Array<T>&, yf I64, n I64) T {
+    acc := lanes<T>()
+    whole I64 = n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc.v[j] += x[xf + i + j] * y[yf + i + j]
+    }
+    rest T
+    for i in range whole, n: rest += x[xf + i] * y[yf + i]
+    return acc.total() + rest
+}
+
+# the sum of x[from + i] for i < n, in eight lanes
+fn Sum<T>(x Array<T>&, from I64, n I64) T {
+    acc := lanes<T>()
+    whole I64 = n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc.v[j] += x[from + i + j]
+    }
+    rest T
+    for i in range whole, n: rest += x[from + i]
+    return acc.total() + rest
+}
+
+# the sum of x[from + i] for i < n in the type of z, in eight lanes - an F32 sum of BF16 elements
+fn SumIn<T, A>(x Array<T>&, from I64, n I64, z A) A {
+    acc := lanes<A>()
+    whole I64 = n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc.v[j] += Up(x[from + i + j], z)
+    }
+    rest A = linalg.Cast(0, z)
+    for i in range whole, n: rest += Up(x[from + i], z)
+    return acc.total() + rest
+}
+
+# the sum of x[xf + i] * y[yf + i] for i < n in the type of z, in eight lanes
+fn DotIn<T, A>(x Array<T>&, xf I64, y Array<T>&, yf I64, n I64, z A) A {
+    acc := lanes<A>()
+    whole I64 = n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc.v[j] += Up(x[xf + i + j], z) * Up(y[yf + i + j], z)
+    }
+    rest A = linalg.Cast(0, z)
+    for i in range whole, n: rest += Up(x[xf + i], z) * Up(y[yf + i], z)
+    return acc.total() + rest
+}
+
+# the sum of the squares of x's elements, in F64 and eight lanes: a long sum of small terms in F32 drops their low bits
+# and comes out low (by 3.5e-5 of a transformer's gradient norm, measured against numpy)
+fn SquaresF64<T>(x Array<T>&) F64 {
+    acc := lanes<F64>()
+    n := x.Len()
+    whole I64 = n - n % 8
+    for i in range 0, whole, 8 {
+        for j in range 8: acc.v[j] += F64(x[i + j]) * F64(x[i + j])
+    }
+    rest F64 = 0.0
+    for i in range whole, n: rest += F64(x[i]) * F64(x[i])
+    return acc.total() + rest
+}
+
+# y[yf + i] = y[yf + i] + alpha * x[xf + i] for i < n - BLAS's axpy on two runs
+fn Axpy<T>(y mut Array<T>&, yf I64, alpha T, x Array<T>&, xf I64, n I64) {
+    for i in range n: y[yf + i] += alpha * x[xf + i]
+}
+
+# ---- tests ----
+
+test "Dot and Axpy" {
+    x := Array<F64>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    y := Array<F64>(11, 2.0)
+    assert Dot(x, 1, y, 0, 10) == 2.0 * 65.0
+    Axpy(y, 0, 3.0, x, 0, 11)
+    assert y[10] == 35.0
+}
+
+test "Down rounds an F32 to the nearest BF16 as the conversion does, and Up gives it back exactly" {
+    z F32 = 0.0
+    like BF16 = 0.0
+    nan F32 = 0.0 / 0.0
+    for x in Array<F32>[0.0, -0.0, 1.0, 1.00390625, 1.01171875, -3.3895314e38, 3.4028235e38, 1e-40, 1e-45, 0.1, -2.5e-30] {
+        assert Down(x, like).Bits() == BF16(x).Bits()
+        assert Up(Down(x, like), z) == F32(BF16(x))
+    }
+    assert Down(nan, like) != Down(nan, like)
+    assert Down(F32(1.0) / 0.0, like) == BF16(F32(1.0) / 0.0)
+    a := Array<F32>[1.5, 2.25, -0.75, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5]
+    b := Array<BF16>[Down(v, like) for v in a]
+    assert SumIn(b, 0, 10, z) == 11.5 and DotIn(b, 0, b, 0, 3, z) == 1.5 * 1.5 + 2.25 * 2.25 + 0.75 * 0.75
+}

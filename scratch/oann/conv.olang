@@ -1,0 +1,421 @@
+# conv - two-dimensional convolution and max pooling on images held as rows, as one product of their patches.
+#
+# An image is one row of a batched matrix, its pixels in row-major order with the channels of a pixel together - H x W
+# x C, "channels last" (NHWC for the batch, TensorFlow's default layout). A convolution's weights are PyTorch's,
+# OutC x (C K K) with each output channel's kernel as [C][K][K] - Conv2d.weight flattened - so a checkpoint maps onto
+# PyTorch's one to one; its output rows are again channels last, OutH x OutW x OutC.
+#
+# Channels last is what makes a whole batch one product. The patch matrix has a row for every output position of
+# every image, holding the patch it sees - the C K K inputs under the kernel, zero where the kernel hangs over the
+# edge - so it is (n OutH OutW) x (C K K); then
+#     Y = cols W^T + b           (n OutH OutW) x OutC, one product and a bias row
+# and Y's rows, OutC wide, are exactly the n images' output rows one after another - nothing is transposed. The
+# forward never makes the patch matrix: linalg's GemmPatches packs it straight from the images as the product
+# reads it, the bias added as each block of Y is finished. The backward reads the same matrices the other way:
+#     db = the column sums of dY       dW = dY^T cols       dcols = dY W
+# and col2im adds every patch's gradient back to the pixels it came from (patches overlap, so they add up). There
+# im2col makes the patches into a workspace - dW reads them as the product's right operand, which GemmPatches does not
+# take - and dcols overwrites them, so a network needs one workspace, its largest convolution's, however many layers it
+# has.
+#
+# Max pooling keeps, for each output, which position of its window held the maximum (the first, when several do -
+# PyTorch's choice), and its backward adds the gradient there.
+
+import "linalg"
+
+# a convolution of C-channel H x W images by OutC kernels of K x K, moved Stride pixels at a time over the images
+# padded with Pad zeros on every side
+type Shape struct(C I64, H I64, W I64, OutC I64, K I64, Stride I64, Pad I64) {
+    C
+    H
+    W
+    OutC
+    K
+    Stride
+    Pad
+    OutH I64 = (H + 2 * Pad - K) / Stride + 1
+    OutW I64 = (W + 2 * Pad - K) / Stride + 1
+}
+
+# the inputs one output sees: the columns of the im2col matrix, and of the weights
+fn (s Shape&) Patch() I64 { return s.C * s.K * s.K }
+
+# the output positions of one image: the rows of the im2col matrix per image
+fn (s Shape&) Positions() I64 { return s.OutH * s.OutW }
+
+# whether the shape is one a convolution can have
+fn (s Shape&) Valid() Bool {
+    return s.C > 0 and s.H > 0 and s.W > 0 and s.OutC > 0 and s.K > 0 and s.Stride > 0 and s.Pad >= 0 and
+        s.Pad < s.K and s.OutH > 0 and s.OutW > 0
+}
+
+# the images x (n rows of H W C) as patches: row (b OutH + oy) OutW + ox of cols, (c K + ky) K + kx its column, is
+# pixel (oy Stride - Pad + ky, ox Stride - Pad + kx) channel c of image b, or 0 off the image. Images are split over
+# "threads" tasks. The innermost loop is a pixel's channels, read in order - unless there are fewer channels than the
+# kernel is wide (an image's first layer), when it is a kernel row's pixels, written in order, for every window inside
+# the image: three times as fast for one channel, measured
+fn Im2col<T>(x linalg.Matrix<T>&, s Shape&, cols linalg.Matrix<T>&, threads I64) {
+    assert cols.Cols == s.Patch() and cols.Rows == x.Rows * s.Positions() and x.Cols == s.H * s.W * s.C
+    linalg.ParallelRows(x.Rows, 1, threads, fn(lo, hi) {
+        for b in range lo, hi: im2colImage(x.Row(b), s, cols, b)
+    })
+}
+
+# whether the K x K window at (y0, x0) lies wholly inside the image
+fn (s Shape&) inside(y0 I64, x0 I64) Bool { return y0 >= 0 and y0 + s.K <= s.H and x0 >= 0 and x0 + s.K <= s.W }
+
+# image b's patches, into its rows of cols
+fn im2colImage<T>(img Array<T>&, s Shape&, cols linalg.Matrix<T>&, b I64) {
+    for oy in range s.OutH {
+        for ox in range s.OutW {
+            row := cols.Row((b * s.OutH + oy) * s.OutW + ox)
+            y0 I64 = oy * s.Stride - s.Pad
+            x0 I64 = ox * s.Stride - s.Pad
+            if s.C < s.K and s.inside(y0, x0): gatherInside(img, s, y0, x0, row)
+            else: gatherEdge(img, s, y0, x0, row)
+        }
+    }
+}
+
+# the patch of a window inside the image, a kernel row's pixels read in order (fewer channels than the kernel is wide)
+fn gatherInside<T>(img Array<T>&, s Shape&, y0 I64, x0 I64, row mut Array<T>&) {
+    q I64 = 0
+    for c in range s.C {
+        for ky in range s.K {
+            at I64 = ((y0 + ky) * s.W + x0) * s.C + c
+            for kx in range s.K {
+                row[q] = img[at + kx * s.C]
+                q++
+            }
+        }
+    }
+}
+
+# the patch of any window, a pixel's channels read in order, 0 off the image
+fn gatherEdge<T>(img Array<T>&, s Shape&, y0 I64, x0 I64, row mut Array<T>&) {
+    z T
+    KK I64 = s.K * s.K
+    for ky in range s.K {
+        iy I64 = y0 + ky
+        for kx in range s.K {
+            ix I64 = x0 + kx
+            w0 I64 = ky * s.K + kx
+            if iy < 0 or iy >= s.H or ix < 0 or ix >= s.W {
+                for c in range s.C: row[w0 + c * KK] = z
+                continue
+            }
+            at I64 = (iy * s.W + ix) * s.C
+            for c in range s.C: row[w0 + c * KK] = img[at + c]
+        }
+    }
+}
+
+# the reverse of Im2col: every patch element added back into dx's pixel it was read from (dx = that, when not acc)
+fn Col2im<T>(dcols linalg.Matrix<T>&, s Shape&, dx linalg.Matrix<T>&, acc Bool, threads I64) {
+    linalg.ParallelRows(dx.Rows, 1, threads, fn(lo, hi) {
+        z T
+        for b in range lo, hi {
+            img := dx.Row(b)
+            if not acc { for i in range img.Len(): img[i] = z }
+            col2imImage(dcols, s, b, img)
+        }
+    })
+}
+
+# image b's patches of dcols, added into img
+fn col2imImage<T>(dcols linalg.Matrix<T>&, s Shape&, b I64, img mut Array<T>&) {
+    for oy in range s.OutH {
+        for ox in range s.OutW {
+            row := dcols.Row((b * s.OutH + oy) * s.OutW + ox)
+            y0 I64 = oy * s.Stride - s.Pad
+            x0 I64 = ox * s.Stride - s.Pad
+            if s.C < s.K and s.inside(y0, x0): scatterInside(row, s, y0, x0, img)
+            else: scatterEdge(row, s, y0, x0, img)
+        }
+    }
+}
+
+# gatherInside's reverse: a window's patch added back, a kernel row's pixels in order
+fn scatterInside<T>(row Array<T>&, s Shape&, y0 I64, x0 I64, img mut Array<T>&) {
+    q I64 = 0
+    for c in range s.C {
+        for ky in range s.K {
+            at I64 = ((y0 + ky) * s.W + x0) * s.C + c
+            for kx in range s.K {
+                img[at + kx * s.C] += row[q]
+                q++
+            }
+        }
+    }
+}
+
+# gatherEdge's reverse: a window's patch added back, what hangs over the edge dropped
+fn scatterEdge<T>(row Array<T>&, s Shape&, y0 I64, x0 I64, img mut Array<T>&) {
+    KK I64 = s.K * s.K
+    for ky in range s.K {
+        iy I64 = y0 + ky
+        if iy < 0 or iy >= s.H: continue
+        for kx in range s.K {
+            ix I64 = x0 + kx
+            if ix < 0 or ix >= s.W: continue
+            w0 I64 = ky * s.K + kx
+            at I64 = (iy * s.W + ix) * s.C
+            for c in range s.C: img[at + c] += row[w0 + c * KK]
+        }
+    }
+}
+
+# y = the convolution of x by w plus b: x is n images (n x H W C), w OutC x C K K, b 1 x OutC, y n x OutH OutW OutC;
+# ws the product's packing workspace. One linalg GemmPatches: the product of the patches and w^T with the bias
+# added, the patches packed straight from the images as the product reads them - never made - so the forward writes
+# no patch matrix and reads the images where im2col and the product's packing read them twice; exactly what Im2col,
+# Gemm and AddRow give (a test)
+fn Conv2d<T>(y linalg.Matrix<T>&, x linalg.Matrix<T>&, w linalg.Matrix<T>&, b linalg.Matrix<T>&, s Shape&, threads I64
+        ws mut linalg.GemmWorkspace<T>&) {
+    out := y.Reshape(y.Rows * s.Positions(), s.OutC)!
+    patches := linalg.Patches<T>(x, s.C, s.H, s.W, s.K, s.Stride, s.Pad)!
+    ws.GemmPatches(out, patches, w, true, b, linalg.Activation.Identity, 1, 0, threads)!
+}
+
+# the gradients of y = conv(x, w) + b: db the column sums of dy (as OutC-wide rows), dw = dy^T cols with the patches
+# built again, then dcols = dy w into the same workspace and col2im into dx - in that order, since dcols overwrites
+# the patches. An empty gradient matrix is one not wanted; acc adds to one instead of writing it
+fn Conv2dBackward<T>(dy linalg.Matrix<T>&, x linalg.Matrix<T>&, w linalg.Matrix<T>&, s Shape&
+        dx linalg.Matrix<T>&, accX Bool, dw mut linalg.Matrix<T>&, accW Bool, db mut linalg.Matrix<T>&, accB Bool
+        cols mut linalg.Matrix<T>&, threads I64, ws mut linalg.GemmWorkspace<T>&) {
+    g := dy.Reshape(dy.Rows * s.Positions(), s.OutC)!
+    if db.Rows > 0: g.ColumnSums(db, 1.0 if accB else 0.0)!
+    if dw.Rows > 0 {
+        Im2col(x, s, cols, threads)
+        ws.Gemm(dw, g, true, cols, false, 1, 1.0 if accW else 0.0, threads)!
+    }
+    if dx.Rows > 0 {
+        ws.Gemm(cols, g, false, w, false, 1, 0, threads)!
+        Col2im(cols, s, dx, accX, threads)
+    }
+}
+
+# ---- max pooling ----
+
+# max pooling of C-channel H x W images (channels last) over K x K windows moved Stride pixels at a time
+type Pool struct(C I64, H I64, W I64, K I64, Stride I64) {
+    C
+    H
+    W
+    K
+    Stride
+    OutH I64 = (H - K) / Stride + 1
+    OutW I64 = (W - K) / Stride + 1
+}
+
+fn (p Pool&) Valid() Bool {
+    return p.C > 0 and p.K > 0 and p.Stride > 0 and p.H >= p.K and p.W >= p.K
+}
+
+# y = the maximum of each window, per channel: x n x H W C, y n x OutH OutW C; where keeps, for each output, the
+# window position ky K + kx that held it (the first of equals, in row-major order). The innermost loop is a pixel's
+# channels, in order
+fn MaxPool2d<T>(y linalg.Matrix<T>&, x linalg.Matrix<T>&, p Pool&, where linalg.Matrix<T>&, threads I64) {
+    linalg.ParallelRows(x.Rows, 1, threads, fn(lo, hi) {
+        for b in range lo, hi: maxPoolImage(x.Row(b), p, y.Row(b), where.Row(b))
+    })
+}
+
+# one image's windows
+fn maxPoolImage<T>(img Array<T>&, p Pool&, out mut Array<T>&, arg mut Array<T>&) {
+    for oy in range p.OutH {
+        for ox in range p.OutW: maxPoolWindow(img, p, oy, ox, out, arg)
+    }
+}
+
+# the window of output (oy, ox): its maximum per channel into out, the position holding it into arg
+fn maxPoolWindow<T>(img Array<T>&, p Pool&, oy I64, ox I64, out mut Array<T>&, arg mut Array<T>&) {
+    like T
+    z T
+    C := p.C
+    o I64 = (oy * p.OutW + ox) * C
+    first I64 = (oy * p.Stride * p.W + ox * p.Stride) * C
+    for c in range C {
+        out[o + c] = img[first + c]
+        arg[o + c] = z
+    }
+    for ky in range p.K {
+        for kx in range p.K {
+            if ky + kx == 0: continue
+            at I64 = ((oy * p.Stride + ky) * p.W + ox * p.Stride + kx) * C
+            place T = linalg.Cast(ky * p.K + kx, like)
+            for c in range C {
+                v := img[at + c]
+                if not (v > out[o + c]): continue
+                out[o + c] = v
+                arg[o + c] = place
+            }
+        }
+    }
+}
+
+# dx = 0 with each output's gradient added at the input its maximum came from (dx += that, when acc)
+fn MaxPool2dBackward<T>(dy linalg.Matrix<T>&, where linalg.Matrix<T>&, p Pool&, dx linalg.Matrix<T>&, acc Bool
+        threads I64) {
+    linalg.ParallelRows(dx.Rows, 1, threads, fn(lo, hi) {
+        z T
+        for b in range lo, hi {
+            img := dx.Row(b)
+            if not acc { for i in range img.Len(): img[i] = z }
+            unpoolImage(dy.Row(b), where.Row(b), p, img)
+        }
+    })
+}
+
+# one image's output gradients g added into img where arg says each maximum was
+fn unpoolImage<T>(g Array<T>&, arg Array<T>&, p Pool&, img mut Array<T>&) {
+    C := p.C
+    for oy in range p.OutH {
+        for ox in range p.OutW {
+            o I64 = (oy * p.OutW + ox) * C
+            first I64 = (oy * p.Stride * p.W + ox * p.Stride) * C
+            for c in range C {
+                at := I64(arg[o + c])
+                img[first + ((at / p.K) * p.W + at % p.K) * C + c] += g[o + c]
+            }
+        }
+    }
+}
+
+# ---- tests ----
+
+import "std/rand"
+
+# the convolution by its definition, one output at a time
+fn direct(x linalg.Matrix<F64>&, w linalg.Matrix<F64>&, b linalg.Matrix<F64>&, s Shape&) linalg.Matrix<F64> {
+    y mut linalg.Matrix<F64>& = linalg.Matrix<F64>(x.Rows, s.Positions() * s.OutC)
+    for n in range x.Rows {
+        for p in range s.Positions() {
+            for o in range s.OutC: y.Set(n, p * s.OutC + o, directOne(x, w, b, s, n, p / s.OutW, p % s.OutW, o))
+        }
+    }
+    return y
+}
+
+# output channel o of image n at (oy, ox), summed over its window
+fn directOne(x linalg.Matrix<F64>&, w linalg.Matrix<F64>&, b linalg.Matrix<F64>&, s Shape&, n I64, oy I64, ox I64
+        o I64) F64 {
+    total F64 = b.Get(0, o)
+    for c in range s.C {
+        for ky in range s.K {
+            iy I64 = oy * s.Stride - s.Pad + ky
+            if iy < 0 or iy >= s.H: continue
+            for kx in range s.K {
+                ix I64 = ox * s.Stride - s.Pad + kx
+                if ix < 0 or ix >= s.W: continue
+                total += w.Get(o, (c * s.K + ky) * s.K + kx) * x.Get(n, (iy * s.W + ix) * s.C + c)
+            }
+        }
+    }
+    return total
+}
+
+test "a convolution as one product of its patches equals its definition: padding, strides, channels, threads" {
+    r := rand.Rand(61)
+    for shape in Array<Shape>[Shape(1, 5, 5, 2, 3, 1, 1), Shape(3, 7, 6, 4, 3, 2, 1), Shape(2, 4, 4, 3, 2, 1, 0)
+            Shape(2, 9, 9, 5, 5, 3, 2)] {
+        assert shape.Valid()
+        n I64 = 3
+        x := linalg.Matrix<F64>(n, shape.H * shape.W * shape.C)
+        x.FillNormal(r, 0.0, 1.0)
+        w := linalg.Matrix<F64>(shape.OutC, shape.Patch())
+        w.FillNormal(r, 0.0, 1.0)
+        b := linalg.Matrix<F64>(1, shape.OutC)
+        b.FillNormal(r, 0.0, 1.0)
+        want := direct(x, w, b, shape)
+        for threads in range 1, 4, 2 {
+            y := linalg.Matrix<F64>(n, shape.Positions() * shape.OutC)
+            ws := linalg.GemmWorkspace<F64>()
+            Conv2d(y, x, w, b, shape, threads, ws)
+            assert y.MaxAbsDifference(want)! < 1e-12
+        }
+    }
+}
+
+# the forward as it was made before GemmPatches: im2col, one product of the patches, the bias
+fn byIm2col<T>(y linalg.Matrix<T>&, x linalg.Matrix<T>&, w linalg.Matrix<T>&, b linalg.Matrix<T>&, s Shape&
+        threads I64) {
+    cols := linalg.Matrix<T>(x.Rows * s.Positions(), s.Patch())
+    Im2col(x, s, cols, threads)
+    out := y.Reshape(y.Rows * s.Positions(), s.OutC)!
+    ws := linalg.GemmWorkspace<T>()
+    ws.Gemm(out, cols, false, w, true, 1, 0, threads)!
+    out.AddRow(b)!
+}
+
+test "the forward through GemmPatches gives exactly what im2col, a product and the bias give, in F32 and F64" {
+    r := rand.Rand(63)
+    # the CNN example's two convolutions on a batch larger than a product's block of rows, and smaller shapes
+    for shape in Array<Shape>[Shape(1, 28, 28, 16, 3, 1, 1), Shape(16, 14, 14, 32, 3, 1, 1), Shape(3, 7, 6, 4, 3, 2, 1)
+            Shape(2, 9, 9, 5, 5, 3, 2)] {
+        n I64 = 40
+        x := linalg.Matrix<F32>(n, shape.H * shape.W * shape.C)
+        x.FillNormal(r, 0.0, 1.0)
+        w := linalg.Matrix<F32>(shape.OutC, shape.Patch())
+        w.FillNormal(r, 0.0, 0.3)
+        b := linalg.Matrix<F32>(1, shape.OutC)
+        b.FillNormal(r, 0.0, 1.0)
+        x64 := linalg.Matrix<F64>(n, x.Cols)
+        w64 := linalg.Matrix<F64>(w.Rows, w.Cols)
+        b64 := linalg.Matrix<F64>(1, b.Cols)
+        x64.Convert(x)!
+        w64.Convert(w)!
+        b64.Convert(b)!
+        for threads in range 1, 4, 2 {
+            want := linalg.Matrix<F32>(n, shape.Positions() * shape.OutC)
+            byIm2col(want, x, w, b, shape, threads)
+            y := linalg.Matrix<F32>(n, shape.Positions() * shape.OutC)
+            ws := linalg.GemmWorkspace<F32>()
+            Conv2d(y, x, w, b, shape, threads, ws)
+            assert y == want
+            want64 := linalg.Matrix<F64>(n, shape.Positions() * shape.OutC)
+            byIm2col(want64, x64, w64, b64, shape, threads)
+            y64 := linalg.Matrix<F64>(n, shape.Positions() * shape.OutC)
+            ws64 := linalg.GemmWorkspace<F64>()
+            Conv2d(y64, x64, w64, b64, shape, threads, ws64)
+            assert y64 == want64
+        }
+    }
+}
+
+test "col2im is im2col's transpose: <im2col(x), c> = <x, col2im(c)>" {
+    r := rand.Rand(62)
+    s := Shape(2, 6, 5, 1, 3, 2, 1)
+    x := linalg.Matrix<F64>(2, s.H * s.W * s.C)
+    x.FillNormal(r, 0.0, 1.0)
+    c := linalg.Matrix<F64>(2 * s.Positions(), s.Patch())
+    c.FillNormal(r, 0.0, 1.0)
+    cols := linalg.Matrix<F64>(2 * s.Positions(), s.Patch())
+    Im2col(x, s, cols, 1)
+    back := linalg.Matrix<F64>(2, s.H * s.W * s.C)
+    Col2im(c, s, back, false, 1)
+    d F64 = cols.Dot(c)! - x.Dot(back)!
+    assert d * d < 1e-20
+}
+
+test "max pooling keeps each window's maximum per channel, and its backward adds the gradient there" {
+    p := Pool(2, 4, 4, 2, 2)
+    x := linalg.Matrix<F64>(1, 32)
+    for i in range 32: x.Data[i] = F64((i * 7) % 32)
+    y := linalg.Matrix<F64>(1, p.OutH * p.OutW * p.C)
+    where := linalg.Matrix<F64>(1, p.OutH * p.OutW * p.C)
+    MaxPool2d(y, x, p, where, 1)
+    for o in range 8 {
+        oy, ox, c := o / 4, o / 2 % 2, o % 2
+        window := Array<F64>[x.Data[((2 * oy + k / 2) * 4 + 2 * ox + k % 2) * 2 + c] for k in range 4]
+        assert try window.Max() == y.Data[o]
+    }
+    dy := linalg.Matrix<F64>(1, 8)
+    for i in range 8: dy.Data[i] = F64(i + 1)
+    dx := linalg.Matrix<F64>(1, 32)
+    MaxPool2dBackward(dy, where, p, dx, false, 1)
+    assert dx.Sum() == 36.0
+    for i in range 32 {
+        if dx.Data[i] != 0.0: assert x.Data[i] == y.Data[I64(dx.Data[i]) - 1]
+    }
+}

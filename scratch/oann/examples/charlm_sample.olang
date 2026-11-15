@@ -1,0 +1,54 @@
+# text from the model examples/charlm.olang trained, loaded from data/shakespeare/charlm.ckpt: generated twice from one
+# seed - with a key-value cache (each token run once) and running the context again for each token - timed, and the
+# two compared: greedily (temperature 0) they must agree for as long as the context is not full. Arguments: the
+# characters (500), the temperature (0.8), the seed (1)
+
+import "std/io"
+import "std/json"
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../ad/graph"
+import "../data/text"
+import "../io/checkpoint"
+import "../models/gpt"
+import "../nn/generate"
+import "../tensor"
+
+fn main() ? io.Error, os.Error, text.CorpusError, ParseError, json.Error, checkpoint.SafetensorsError, tensor.ShapeError {
+    args := os.Args()
+    count I64 = 500
+    if args.Len() > 1: count = try args[1].ParseInt()
+    temperature F64 = 0.8
+    if args.Len() > 2: temperature = try json.Json.Parse(args[2]).AsNum()
+    seed U64 = 1
+    if args.Len() > 3: seed = U64(try args[3].ParseInt())
+    c := try text.Corpus.Load("data/shakespeare/input.txt")
+    cfg := gpt.GptConfig.Char(c.Size())
+    r := rand.Rand(seed)
+    dec := graph.Graph<F32>(1, 1, graph.Mode.Captured, true)
+    dm := gpt.Gpt.New(dec, cfg).Lm(dec, false)
+    try dec.Plan(r)
+    try dec.Load("data/shakespeare/charlm.ckpt")
+    full := graph.Graph<F32>(1)
+    fm := gpt.Gpt.New(full, cfg).Lm(full, false)
+    try full.Plan(r)
+    try full.Load("data/shakespeare/charlm.ckpt")
+
+    greedyCached := try generate.Cached(dec, dm, c, "ROMEO:", cfg.Ctx - 6, 0.0, r)
+    greedyRerun := try generate.Rerun(full, fm, c, "ROMEO:", cfg.Ctx - 6, 0.0, r)
+    verdict := "agree" if greedyCached == greedyRerun else "DIFFER"
+    try io.Put("greedy, " + $cfg.Ctx + " characters: the cache and the rerun " + $verdict + "\n")
+
+    ra := rand.Rand(seed)
+    t0 := time.Now()
+    sample := try generate.Cached(dec, dm, c, "\n", count, temperature, ra)
+    cachedNs := time.Since(t0)
+    rb := rand.Rand(seed)
+    t1 := time.Now()
+    again := try generate.Rerun(full, fm, c, "\n", count, temperature, rb)
+    rerunNs := time.Since(t1)
+    try io.Put(($count + " characters at temperature " + $temperature + ": " + $(F64(count) / (F64(cachedNs) * 1e-9)).Fixed(0) +
+        " a second with the cache, " + $(F64(count) / (F64(rerunNs) * 1e-9)).Fixed(0) + " running the context again\n"))
+    try io.Put("--- with the cache ---\n" + $sample + "\n--- running the context again ---\n" + $again + "\n---\n")
+}

@@ -1,0 +1,155 @@
+# Text - a corpus for character-level language models: a text, its vocabulary (the distinct bytes it holds, in byte
+# order, so the same text always gives the same ids) and the text as token ids, split into a part to train on and a
+# part to validate on; and the batches a model trains on - windows of consecutive tokens, the inputs and, one place
+# further on, the targets. Filling a batch allocates nothing: it writes straight into the graph's token and class
+# rows.
+
+import "std/os"
+import "std/rand"
+
+type CorpusError error {
+    Download # curl could not fetch the text
+    Unknown  # a character the vocabulary does not have
+}
+
+# where tiny Shakespeare is fetched from: Karpathy's char-rnn corpus, 1.1MB of the plays
+Shakespeare := "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+
+# a text as tokens: Vocab holds each token's character, Ids the text's tokens, the first Split of them for training
+# and the rest for validation (nanoGPT's 90 / 10)
+type Corpus struct(text String&, fraction F64 = 0.9) {
+    Vocab Array<Char>& = vocabulary(text)
+    index Array<I32>& = indexOf(Vocab)
+    Ids Array<I32>& = encodeWith(index, text)
+    Split I64 = I64(F64(Ids.Len()) * fraction)
+}
+
+# the distinct characters of t, in byte order
+fn vocabulary(t String&) Array<Char> {
+    seen := Array<Bool>(256)
+    for c in t: seen[I64(U8(c))] = true
+    return Array<Char>[Char(U8(b)) for b in range 256 if seen[b]]
+}
+
+# for each byte, its token, or -1 when the vocabulary does not have it
+fn indexOf(vocab Array<Char>&) Array<I32> {
+    out mut Array<I32>& = Array<I32>(256, -1)
+    for i, c in vocab: out[I64(U8(c))] = I32(i)
+    return out
+}
+
+fn encodeWith(index Array<I32>&, t String&) Array<I32> {
+    return Array<I32>[index[I64(U8(c))] for c in t]
+}
+
+# the number of tokens
+fn (c Corpus&) Size() I64 {
+    return c.Vocab.Len()
+}
+
+# t as tokens - an error when it holds a character the corpus never had
+fn (c Corpus&) Encode(t String&) Array<I32> ? CorpusError {
+    out Array<I32>& = encodeWith(c.index, t)
+    if out.Some(fn(id): return id < 0): error CorpusError.Unknown
+    return out
+}
+
+# tokens as text
+fn (c Corpus&) Decode(ids Array<I32>&) String {
+    return String(Array<Char>[c.Vocab[I64(id)] for id in ids])
+}
+
+# the training part's tokens, and the validation part's
+fn (c Corpus&) Train() Array<I32>& {
+    return c.Ids[:c.Split]
+}
+
+fn (c Corpus&) Val() Array<I32>& {
+    return c.Ids[c.Split:]
+}
+
+# the text of the file at "path"
+fn Corpus.Load(path String&) Corpus ? os.Error {
+    t String& = try os.ReadFile(path)
+    return Corpus(t)
+}
+
+# "path" fetched from "url" with curl, unless it is there already: written to a file of its own and renamed into
+# place once whole, so an interrupted download never looks done
+fn Fetch(path String&, url String&) ? CorpusError, os.Error {
+    if os.Exists(path): return
+    part := $path + ".part"
+    if os.Run("curl -fsSL --retry 3 -o " + $os.Quote(part) + " " + $os.Quote(url)) != 0: error CorpusError.Download
+    try os.Rename(part, path)
+}
+
+# windows of T + 1 consecutive tokens of ids: a batch of B of them gives B * T input tokens (each window's first T)
+# and B * T targets (its last T: each input's next token). Random fills them at offsets drawn uniformly from a
+# generator of its own, as nanoGPT's get_batch does; At fills them in order, for a validation pass that is the same
+# every time
+type Windows struct(ids Array<I32>&, T I64, seed U64 = 1) {
+    ids
+    T
+    rng rand.Rand = rand.Rand(seed)
+}
+
+# how many windows of T + 1 tokens follow one another without overlapping inputs: the length of an ordered pass
+fn (w Windows&) Count() I64 {
+    return (w.ids.Len() - 1) / w.T
+}
+
+# B windows at random offsets into tokens and targets, B * T each
+fn (w mut Windows&) Random(tokens mut Array<I32>&, targets mut Array<I32>&, B I64) {
+    for b in range B: w.copy(w.rng.Below(w.ids.Len() - w.T), b, tokens, targets)
+}
+
+# the windows first ... first + B - 1 of the ordered pass, the one at index i starting at i * T; gives how many there
+# were (fewer at the pass's end)
+fn (w Windows&) At(first I64, tokens mut Array<I32>&, targets mut Array<I32>&, B I64) I64 {
+    n := B.Min(w.Count() - first).Max(0) # past the end: none, not a negative count
+    for b in range n: w.copy((first + b) * w.T, b, tokens, targets)
+    return n
+}
+
+fn (w Windows&) copy(at I64, b I64, tokens mut Array<I32>&, targets mut Array<I32>&) {
+    for t in range w.T {
+        tokens[b * w.T + t] = w.ids[at + t]
+        targets[b * w.T + t] = w.ids[at + t + 1]
+    }
+}
+
+# ---- tests ----
+
+test "a corpus's vocabulary is its characters in byte order, and its tokens decode back to it" {
+    c := Corpus("hello, world\n", 0.5)
+    assert c.Size() == 10 # "\n ,dehlorw"
+    assert c.Vocab[0] == '\n' and c.Vocab[1] == ' ' and c.Vocab[9] == 'w'
+    assert c.Ids[0] == 5 and c.Ids[1] == 4 and c.Ids[2] == 6 and c.Ids[3] == 6
+    assert c.Decode(c.Ids) == "hello, world\n"
+    assert c.Split == 6 and c.Train().Len() == 6 and c.Val().Len() == 7
+    ids := try c.Encode("lower")
+    assert c.Decode(ids) == "lower"
+    bad := false
+    try c.Encode("help!") catch CorpusError { bad = true }
+    assert bad
+}
+
+test "windows give each input's next token as its target, in order or at random offsets" {
+    ids := Array<I32>[I32(i) for i in range 50]
+    w := Windows(ids, 4, 3)
+    assert w.Count() == 12
+    tokens := Array<I32>(12)
+    targets := Array<I32>(12)
+    assert w.At(0, tokens, targets, 3) == 3
+    assert tokens[0] == 0 and tokens[5] == 5 and targets[11] == 12
+    assert w.At(11, tokens, targets, 3) == 1 and tokens[0] == 44 and targets[3] == 48
+    assert w.At(12, tokens, targets, 3) == 0 and w.At(20, tokens, targets, 3) == 0
+    for _ in range 20 {
+        w.Random(tokens, targets, 3)
+        for i in range 12: assert targets[i] == tokens[i] + 1
+        for b in range 3 {
+            assert tokens[b * 4] <= 45
+            for t in range 1, 4: assert tokens[b * 4 + t] == tokens[b * 4] + I32(t)
+        }
+    }
+}

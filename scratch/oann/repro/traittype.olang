@@ -1,0 +1,23 @@
+# Status: reproduces (new). A trait method's signature naming a type that is not in scope (here Tensor, whose module
+# is not imported) is not reported by the checker; a generic using an `any` of the trait then fails in the compiler's
+# lowering: "it does not lower an unknown type (a check error or gap): a local". Expected: M22 (unknown type) at the
+# trait's signature.
+
+type Shows trait {
+    Value() Tensor<F32>
+}
+
+fn first<T>(d any Shows?&) T {
+    if d == null: return T(0)
+    match T {
+        case F32 {
+            v := d.Value()
+            return T(v.Count())
+        }
+        case _ { unreachable }
+    }
+}
+
+fn main() {
+    Println($first<F32>(null))
+}

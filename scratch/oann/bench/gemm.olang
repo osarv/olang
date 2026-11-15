@@ -1,0 +1,149 @@
+# kernels/gemm against linalg's products on the shapes of oann's networks (M4) and Gemv on a settle's blocks (M5) -
+# interleaved, the median of each over rounds, in GFLOPS (GOPS for INT8) or nanoseconds. Arguments: rounds (7),
+# threads (1)
+
+import "std/os"
+import "std/rand"
+import "std/time"
+import "../linalg"
+import "../quant"
+import "../kernels/mat"
+import "../kernels/gemm"
+
+fn number(args Array<String&>&, i I64, fallback I64) I64 ? ParseError {
+    if i >= args.Len(): return fallback
+    return try args[i].ParseInt()
+}
+
+fn median(xs mut Array<F64>&) F64 {
+    xs.Sort(fn(a, b): return a < b)
+    return xs[xs.Len() / 2]
+}
+
+# the repetitions taking about 20 ms
+fn repsFor(f fn&()) I64 {
+    reps I64 = 1
+    for {
+        t0 := time.Now()
+        for _ in range reps: f()
+        if time.Since(t0) > 20000000 or reps > 1000000: return reps
+        reps = reps * 2
+    }
+}
+
+# nanoseconds per call of each of fs, interleaved round by round, medians
+fn timed(fs Array<fn&()>&, rounds I64) Array<F64> {
+    reps := repsFor(fs[0])
+    out := Array<F64>(fs.Len())
+    all := Array<F64>(fs.Len() * rounds)
+    for t in range rounds {
+        for i in range fs.Len() {
+            t0 := time.Now()
+            for _ in range reps: fs[i]()
+            all[i * rounds + t] = F64(time.Since(t0)) / F64(reps)
+        }
+    }
+    for i in range fs.Len(): out[i] = median(all[i * rounds:(i + 1) * rounds])
+    return out
+}
+
+fn one(x F64) F64 { return (x * 10.0).Round() / 10.0 }
+
+fn view<S>(m linalg.Matrix<S>&) mat.Mat<S> { return mat.Mat<S>(m.Data, 0, m.Rows, m.Cols, m.Stride) }
+
+# M4: m x k x n, op(a) and op(b) as the flags say, F32 and BF16 storage, linalg's product against kernels'
+Shapes Array<I64> = Array<I64>[128, 784, 128, 0, 1, 128, 128, 10, 0, 1, 128, 128, 784, 0, 0, 128, 128, 784, 1, 0
+    1024, 128, 512, 0, 0, 1024, 512, 128, 0, 0, 1024, 128, 384, 0, 1, 512, 1024, 128, 1, 0, 64, 32, 64, 0, 1, 512, 512, 512, 0, 0
+    1, 784, 128, 0, 1]
+
+fn products(rounds I64, threads I64, r mut rand.Rand&) {
+    Println("m x k x n (ta tb) | linalg F32 | kernels F32 | linalg BF16 | kernels BF16   (GFLOPS, threads " + $threads + ")")
+    lws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
+    lwb mut linalg.GemmWorkspace<BF16>& = linalg.GemmWorkspace<BF16>()
+    kws mut gemm.Workspace<F32>& = gemm.Workspace<F32>(threads)
+    for s in range 0, Shapes.Len(), 5 {
+        m, k, n, ta, tb := Shapes[s], Shapes[s + 1], Shapes[s + 2], Shapes[s + 3] == 1, Shapes[s + 4] == 1
+        a := linalg.Matrix<F32>(k, m) if ta else linalg.Matrix<F32>(m, k)
+        b := linalg.Matrix<F32>(n, k) if tb else linalg.Matrix<F32>(k, n)
+        a.FillUniform(r, -1.0, 1.0)
+        b.FillUniform(r, -1.0, 1.0)
+        c mut linalg.Matrix<F32>& = linalg.Matrix<F32>(m, n)
+        a16, b16 := a.ToBF16(), b.ToBF16()
+        c16 mut linalg.Matrix<BF16>& = linalg.Matrix<BF16>(m, n)
+        va, vb := view(a), view(b)
+        vc mut mat.Mat<F32>& = view(c)
+        va16, vb16 := view(a16), view(b16)
+        vc16 mut mat.Mat<BF16>& = view(c16)
+        fs := Array<fn&()>[fn() { lws.Gemm(c, a, ta, b, tb, 1, 0, threads)! }, fn() { gemm.Gemm(kws, vc, va, ta, vb, tb) }
+            fn() { lwb.Gemm(c16, a16, ta, b16, tb, 1, 0, threads)! }, fn() { gemm.Gemm(kws, vc16, va16, ta, vb16, tb) }]
+        ns := timed(fs, rounds)
+        flop F64 = 2.0 * F64(m) * F64(n) * F64(k)
+        Println($m + " x " + $k + " x " + $n + " (" + $ta + " " + $tb + ") | " + $one(flop / ns[0]) + " | " + $one(flop / ns[1]) + " | " + $one(flop / ns[2]) + " | " + $one(flop / ns[3]))
+    }
+}
+
+# M5: the settle's blocks, y = a x and y = a^T x: kernels' Gemv, kernels' Gemm of one column (the same path through
+# Gemm's dispatch) and linalg's Gemv, nanoseconds
+fn vectors(rounds I64, r mut rand.Rand&) {
+    Println("rows x cols | Gemv | Gemm n=1 | linalg Gemv | Gemv^T | linalg Gemv^T   (ns)")
+    blocks := Array<I64>[64, 64, 128, 128, 256, 512, 512, 256]
+    kws mut gemm.Workspace<F32>& = gemm.Workspace<F32>(1)
+    for s in range 0, blocks.Len(), 2 {
+        rows, cols := blocks[s], blocks[s + 1]
+        a := linalg.Matrix<F32>(rows, cols)
+        a.FillUniform(r, -1.0, 1.0)
+        x := linalg.Matrix<F32>(cols, 1)
+        x.FillUniform(r, -1.0, 1.0)
+        u := linalg.Matrix<F32>(rows, 1)
+        u.FillUniform(r, -1.0, 1.0)
+        y mut linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, 1)
+        yt mut linalg.Matrix<F32>& = linalg.Matrix<F32>(cols, 1)
+        va, vx := view(a), view(x)
+        vy mut mat.Mat<F32>& = view(y)
+        fs := Array<fn&()>[fn() { gemm.Gemv(y.Data, va, false, x.Data) }, fn() { gemm.Gemm(kws, vy, va, false, vx, false) }
+            fn() { linalg.Gemv(y.Data, a, false, x.Data)! }, fn() { gemm.Gemv(yt.Data, va, true, u.Data) }
+            fn() { linalg.Gemv(yt.Data, a, true, u.Data)! }]
+        ns := timed(fs, rounds)
+        Println($rows + " x " + $cols + " | " + $ns[0].Round() + " | " + $ns[1].Round() + " | " + $ns[2].Round() + " | " + $ns[3].Round() + " | " + $ns[4].Round())
+    }
+}
+
+# INT8: GemmI8 (weights packed each call) against quant.Linear (packed once), activations already quantized, GOPS
+fn int8(rounds I64, threads I64, r mut rand.Rand&) {
+    Println("m x k x n | quant.Linear | GemmI8   (GOPS, threads " + $threads + ")")
+    shapes := Array<I64>[1, 784, 128, 128, 784, 128, 1024, 128, 512, 1024, 512, 128, 512, 512, 512]
+    kws mut gemm.Workspace<I32>& = gemm.Workspace<I32>(threads)
+    for s in range 0, shapes.Len(), 3 {
+        m, k, n := shapes[s], shapes[s + 1], shapes[s + 2]
+        x := linalg.Matrix<F32>(m, k)
+        x.FillUniform(r, 0.0, 1.0)
+        w := linalg.Matrix<F32>(n, k)
+        w.FillUniform(r, -0.2, 0.2)
+        bias := Array<F32>(n)
+        q quant.Weights& = quant.Weights.Quantize(w)
+        acts mut quant.Activations& = quant.Activations(quant.ElementsFor(m, k))
+        acts.QuantizeDynamic(x)
+        y mut linalg.Matrix<F32>& = linalg.Matrix<F32>(m, n)
+        a := mat.Mat<U8>(acts.Data, 0, m, k, k)
+        b := mat.Mat<I8>(Array<I8>(n * k), 0, n, k, k)
+        for j in range n {
+            for p in range k: b[j, p] = q.At(j, p)
+        }
+        c mut mat.Mat<I32>& = mat.Mat<I32>(Array<I32>(m * n), 0, m, n, n)
+        out mut mat.Mat<F32>& = view(y)
+        fs := Array<fn&()>[fn() { quant.Linear(y, acts, q, bias, false, threads) }, fn() { gemm.GemmI8(kws, c, a, b, q.Scale, out, acts.Zero) }]
+        ns := timed(fs, rounds)
+        ops F64 = 2.0 * F64(m) * F64(n) * F64(k)
+        Println($m + " x " + $k + " x " + $n + " | " + $one(ops / ns[0]) + " | " + $one(ops / ns[1]))
+    }
+}
+
+fn main() ? ParseError {
+    args := os.Args()
+    rounds := try number(args, 1, 7)
+    threads := try number(args, 2, 1)
+    r := rand.Rand(1)
+    products(rounds, threads, r)
+    if threads == 1: vectors(rounds, r)
+    int8(rounds, threads, r)
+}

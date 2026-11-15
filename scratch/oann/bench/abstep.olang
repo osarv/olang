@@ -1,0 +1,66 @@
+# Two builds of bench/lm.olang run in alternation - A then B, then B then A, ... - and the medians (with the range) of
+# each one's step, attention forward and backward, products and the rest of the graph, in ms a step: an A/B that
+# a machine shared with other work does not tilt toward whichever build ran during a quiet spell.
+# build/olang bench/abstep.olang ROUNDS STEPS THREADS BUILD_A BUILD_B [the model: layers width heads context sequences]
+# A build may carry arguments of its own after commas, put after the model's: build/bench_lm,bf16
+
+import "std/io"
+import "std/os"
+import "std/regex"
+import "std/stats"
+
+Keys Array<String&> = Array<String&>["step", "attention forward", "attention backward", "products", "rest"]
+
+# what the numbers of the first match of pattern in text are, one per group
+fn numbers(pattern String&, text String&) Array<F64> ? regex.SyntaxError, regex.NotFound, ParseError {
+    re := try regex.Regex.Compile(pattern)
+    m := try re.Find(text)
+    return try Array<F64>[m.Group(g).ParseFloat() for g in range 1, re.Groups() + 1]
+}
+
+# one run of a build ("path" and the arguments of its own after commas) over steps steps on threads threads of the
+# model: the five times of Keys, in ms a step
+fn run(build String&, steps String&, threads String&, model Array<String&>&) Array<F64> ? os.Error, regex.SyntaxError, regex.NotFound, ParseError {
+    parts := build.Split(",")
+    argv Vec<String&>
+    argv.Push(parts[0])
+    argv.Push(steps)
+    argv.Push(threads)
+    for m in model: argv.Push(m)
+    for own in parts[1:]: argv.Push(own)
+    out := (try os.Output.Exec(...argv.ToArray())).Stdout
+    step := try numbers("a step ([\\d.]+) ms", out)
+    attention := try numbers("(?m)^Attention\\s+([\\d.]+)\\s+([\\d.]+)", out)
+    rest := try numbers("products ([\\d.]+) ms, attention [\\d.]+ ms, the rest of the graph ([\\d.]+) ms", out)
+    return Array<F64>[step[0], attention[0], attention[1], rest[0], rest[1]]
+}
+
+# "key median (least-greatest)" for each of Keys, over samples[first ...] - the build's samples, one list per key
+fn summary(samples Array<Vec<F64>>&, first I64) String {
+    sb := StringBuilder()
+    for k in range Keys.Len() {
+        v := samples[first + k].ToArray()
+        if k > 0: sb.Push(", ")
+        sb.Push($Keys[k] + " " + $stats.Median(v)!.Fixed(1) + " (" + $v.Min()!.Fixed(1) + "-" + $v.Max()!.Fixed(1) + ")")
+    }
+    return sb.ToString()
+}
+
+fn main() ? io.Error, os.Error, regex.SyntaxError, regex.NotFound, ParseError {
+    args := os.Args()
+    if args.Len() < 6 {
+        try io.PutErrLine("usage: abstep ROUNDS STEPS THREADS BUILD_A BUILD_B [layers width heads context sequences]")
+        os.Exit(2)
+    }
+    rounds := try args[1].ParseInt()
+    builds := args[4:6]
+    model := args[6:]
+    samples := Array<Vec<F64>>(2 * Keys.Len())          # the samples of build b's key k at b * 5 + k
+    for r in range rounds {
+        for b in (Array<I64>[0, 1] if r % 2 == 0 else Array<I64>[1, 0]) {
+            times := try run(builds[b], args[2], args[3], model)
+            for k in range Keys.Len(): samples[b * Keys.Len() + k].Push(times[k])
+        }
+    }
+    for b in range 2: Println($builds[b] + ": " + $summary(samples, b * Keys.Len()))
+}
