@@ -34,6 +34,16 @@ type ViewGenerator<T ? E> struct(next (fn&() T& ? E, Exhausted)) {
 
 fn (g mut ViewGenerator<T ? E>&) Next() T& ? E, Exhausted { return try g.next() }
 
+# what a generator whose elements are values holding views gives (D18c): one whose result is Iterator<T ? E>, T a value
+# type holding references, and whose yields hand back what one reference parameter refers to - a copy of an element of
+# it, a part of one. Its Next gives a value of its own, built per value, whose references live where the generator does,
+# at least: no shorter than what Next is called on
+type HoldingGenerator<T ? E> struct(next (fn&() T ? E, Exhausted)) {
+    next
+}
+
+fn (g mut HoldingGenerator<T ? E>&) Next() T ? E, Exhausted { return try g.next() }
+
 # what every iterator can do, declared once here (M19e): defaults, each a method of every type satisfying Iterator -
 # "l.Iter().Count(f)", "m.Iter().Some(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
 # Each walks the iterator onward from where it stands. Each fails with what the iterator and its callbacks fail with

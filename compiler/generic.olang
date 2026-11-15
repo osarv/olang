@@ -708,6 +708,42 @@ fn genElemOf(fd ast.Func&) I64 {
     return r.TrailingZeros()
 }
 
+# D18c: the parameter a generator's by-value elements hold views of - every yield's value a copy of, or a part of, what one
+# reference parameter refers to (genRoots, as genElemOf reads it) - GenPerTurn for any other (a reference element, one a
+# yield builds, one of the walk's own storage, of several parameters')
+fn heldElemOf(fd ast.Func&) I64 {
+    if fd.S.Results.Len() != 1: return GenPerTurn
+    match fd.S.Results[0] {
+        case ast.TypeRef.Named(_, _, args) { if args.Len() == 0 or refElem(args[0]): return GenPerTurn }
+        case _: return GenPerTurn
+    }
+    ns Vec<source.NameId>
+    bv Vec<Bool>
+    if fd.Recv != null {
+        ns.Push(fd.Recv!.Name)
+        bv.Push(byValueParam(fd.Recv!))
+    }
+    for prm in fd.S.Params {
+        ns.Push(prm.Name)
+        bv.Push(byValueParam(prm))
+    }
+    g := genRoots(ns.ToArray(), bv.ToArray())
+    g.stmts(fd.Body)
+    g.stmts(fd.Body)
+    r := g.yields
+    if r == 0 or (r & GenLocalBit) != 0 or r.PopCount() != 1: return GenPerTurn
+    return r.TrailingZeros()
+}
+
+# D18c: the HoldingGenerator<T ? E> a generator whose by-value elements hold views stands for, its result written t an
+# Iterator<T ? E>: Unknown where its element is a reference or holds none
+fn (p mut Program&) holdingGeneratorOf(t types.TypeId) types.TypeId {
+    g := try p.FindDecl("std/prelude/iterator", "HoldingGenerator") catch { return types.UnknownT }
+    args := p.T.Items(p.T.Args(t))
+    if args.Len() == 0 or p.T.KindOf(args[0]) == types.Kind.Ref or not p.T.HoldsRefs(args[0]) { return types.UnknownT }
+    return p.Instance(g, p.T.Args(t))
+}
+
 # D18c: the ViewGenerator<T ? E> a generator whose elements are borrowed stands for, its result written t an
 # Iterator<T& ? E>: T the elements' referent; Unknown where its element is no reference
 fn (p mut Program&) viewGeneratorOf(t types.TypeId) types.TypeId {
@@ -1411,7 +1447,8 @@ fn (p mut Program&) flagBans(c Context&, s ast.Sig&, sig types.TypeId, recv Bool
     }
 }
 
-# D18c: whether a function is the prelude's ViewGenerator.Next - the one result borrowed from its receiver no body says
+# D18c: whether a function is the prelude's ViewGenerator.Next or HoldingGenerator.Next - the one result borrowed (or
+# whose references are handed back) from its receiver no body says
 # (its walk's elements live where the generator does, what its function value gives cannot tell): nothing is written
 # (QCB), so the compiler knows it, as it knows the generator it stands for
 fn (p mut Program&) viewNext(row fnRow&) Bool {
@@ -1425,7 +1462,7 @@ fn (p mut Program&) viewNext(row fnRow&) Bool {
 fn viewGenTy(p Program&, t ast.TypeRef&) Bool {
     return match t {
         case ast.TypeRef.Ref(_, of, _, _): viewGenTy(p, of)
-        case ast.TypeRef.Named(_, path, _): path.Len() == 1 and p.L.Names.Text(path[0]) == "ViewGenerator"
+        case ast.TypeRef.Named(_, path, _): path.Len() == 1 and (p.L.Names.Text(path[0]) == "ViewGenerator" or p.L.Names.Text(path[0]) == "HoldingGenerator")
         case _: false
     }
 }
@@ -3452,6 +3489,16 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
                 if vg != types.UnknownT {
                     g = vg
                     p.genElems.Put(f, el)
+                }
+            }
+            # ... and one whose elements are values holding views of one parameter's referent, a HoldingGenerator<T ? E>
+            # (its Next's result's references handed back from its receiver, its storage per value)
+            hel := heldElemOf(row.F)
+            if el == GenPerTurn and hel >= 0 {
+                hg := p.holdingGeneratorOf(p.T.Result(sig))
+                if hg != types.UnknownT {
+                    g = hg
+                    p.genElems.Put(f, hel)
                 }
             }
             sig = p.T.Func(p.T.Params(sig), g, types.ListId(0), p.T.ScopesOf(sig))

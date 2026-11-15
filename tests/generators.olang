@@ -429,6 +429,61 @@ test "D18c: a generator's elements kept by its walk live where the generator doe
     assert LabelTotal == 21 and labelTotal(2) == 14 # decided while compiling (S18c)
 }
 
+# D18c's values holding views (oann's genref): a method walking a Vec of records, yielding each matching record's enum,
+# whose case may hold a reference - a HoldingGenerator, each value its own, its references where the receiver's are
+type Mark enum {
+    Plain(n I64)
+    At(p Pt&)
+}
+
+type marked struct(What Mark, When I64) {
+    What
+    When
+}
+
+type Marks struct() {
+    all mut Vec<marked>& = Vec<marked>()
+}
+
+fn (m Marks&) On(c I64) Iterator<Mark> {
+    for g in m.all {
+        if g.When == c: yield g.What
+    }
+}
+
+fn markTotal(n I64) I64 {
+    m := Marks()
+    for i in range n: m.all.Push(marked(Mark.At(Pt(i * 10)) if i % 2 == 0 else Mark.Plain(i), i % 2))
+    t I64 = 0
+    for k in m.On(0) {
+        if k == Mark.At: t += k.p.x
+    }
+    for k in m.On(1) {
+        if k == Mark.Plain: t += k.n
+    }
+    return t
+}
+
+MarkTotal := markTotal(5) # baked while compiling (K2)
+
+test Marks.On "D18c: a generator's elements holding views of what it was given live as long as that does" {
+    m := Marks()
+    for i in range 4: m.all.Push(marked(Mark.At(Pt(i + 1)), 0))
+    g := m.On(0)
+    a := try g.Next() catch default Mark.Plain(0)
+    churnText()
+    kept := Vec<Mark>()
+    for k in m.On(0) {
+        churnText()
+        kept.Push(k)
+    }
+    churnText()
+    assert a == Mark.At and a.p.x == 1
+    last := kept[3]
+    assert kept.Len() == 4 and last == Mark.At and last.p.x == 4
+    assert MarkTotal == 64 and markTotal(5) == 64
+}
+
 # holds a value with a destructor in its frame, given constant text - which lives in the program's scope
 fn holding(t String&) Iterator<I64> {
     r := Res(t.Len())
