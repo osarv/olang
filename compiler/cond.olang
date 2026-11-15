@@ -113,6 +113,12 @@ fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I6
     c.add("TestBuild", Value.bool(testBuild), true, false, true)
 }
 
+# a built-in Bool constant's value set again: a test file built a second time, for the race detector (B3a, P7)
+fn (c mut Consts&) SetBool(name String&, v Bool) {
+    i := try c.find(name) catch default -1
+    if i >= 0 { c.values[i] = Value.bool(v) }
+}
+
 # what is wrong with a -D flag (B10, B10a)
 type DefineError error {
     Shape

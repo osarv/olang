@@ -6053,6 +6053,18 @@ finds nothing about code that did not execute and nothing about an interleaving 
 it does not do is give false positives on correctly synchronised code — a program that guards its shared
 state with a mutex is not flagged.
 
+**P7a (races in tests).** `test` (B3a) builds the tests that can start a task a second time, with `-race`, and runs
+only them in that build; the others run in the ordinary test build. A test **can start a task** where its body, or
+anything it may call, holds a `spawn` (the function fact `Spawns`, G42; a call through a function value or an `any`
+that is not followed counts for nothing here). The two builds hold the same program: `RaceBuild` (B10a) is true in
+the second only, and a file whose tests start none is built once, as before. The file's tests run the ordinary build's
+first, then the race build's, each test's `ok - NAME` or `FAIL - NAME` line as it ends, and one line `N passed, M failed`
+for both. A data race ThreadSanitizer reports while a test runs fails that test, `FAIL - NAME: data race`, the report
+on the standard error before it. `test -race` (P7) builds and runs every test of the file in the race build, as before.
+`test` makes no second build where the build is for another machine, is `-sanitize`, `-fuzz` or `-bench`, or clang's
+ThreadSanitizer runtime (`libclang_rt.tsan`) is not installed - said once, the tests then all running in the ordinary
+build; `OLANG_AUTORACE=0` turns it off.
+
 It sees a program's synchronisation because it **intercepts the C library**: the same `pthread_create`
 and `pthread_join` §6.8 is implemented with, and whatever a program itself reaches through `extern fn`
 (§11) — a mutex taken that way is as visible as one the language provided. The one other source of
@@ -8233,7 +8245,7 @@ prevent the others from being checked and run, and the exit status is nonzero wh
 failed a test. The files are built and run one at a time, in the order listed, and what one file's build holds is
 released before the next begins: a list needs the memory of its largest file, not of the whole list. Each test's
 result is written out as the test ends, and a file whose tests' process is ended by a signal - a crash - is reported as
-such, so what ran before it is never lost. After the files, words that name no file and end in no `.olang` pick the
+such, so what ran before it is never lost. Tests that can start a task run in a build of the race detector (P7a). After the files, words that name no file and end in no `.olang` pick the
 tests to run in each: a test runs when it names a target (B7a) a word is, or whose type a word is (`Map` runs `Map`'s
 tests and `Map.Get`'s), or when its description holds a word as text; with no words every test runs. Words that name
 none of a file's tests fail that file's run, its line naming the words and, where one is near (an edit distance of

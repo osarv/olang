@@ -114,6 +114,11 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # found - how many tests the word named, their names where several did, the fuzzed test's saved inputs' directory
     Fuzz String& = ""
     TestWords Vec<String&>          # B7a: each test's target and description, for the driver's "did you mean"
+    # B3a, P7: a test build run in two parts - TestPart 1 the tests that do not start a task, 2 those that do (SpawnIds,
+    # their bodies); 0 every test. Race: the build is -race, so the harness fails a test a data race was reported in
+    TestPart I64 = 0
+    SpawnIds Map<I64, Bool>
+    Race Bool = false
     FuzzCache String& = "build/fuzz"
     FuzzPicked I64 = 0
     FuzzErr String& = ""
@@ -568,7 +573,7 @@ fn (e mut Emitter&) emitAll() {
     if e.Module {
         # its own bodies only, wanted above
     } else if e.Tests {
-        for t in tests { e.want(mir.FnKey.Body(typed.BodyId(I32(t)))) }
+        for t in tests { if e.InPart(t) { e.want(mir.FnKey.Body(typed.BodyId(I32(t)))) } }
     } else if mainBody >= 0 {
         e.want(mir.FnKey.Body(typed.BodyId(I32(mainBody))))
     }
@@ -7837,11 +7842,18 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         tg, ds := e.testParts(id)
         if tg != "" { e.TestWords.Push($tg) }
         e.TestWords.Push($ds)
-        fnp := $"ptr @" + $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
-        ts.Push($"{ ptr, ptr, ptr, ptr } { " + $fnp + ", ptr " + $e.cstr(e.testName(id)) + ", ptr " + $e.cstr(tg) + ", ptr " + $e.cstr(ds) + " }")
+        if not e.InPart(id) { continue }
+        fnp := $"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
+        ts.Push($"{ ptr, ptr, ptr, ptr } { " $fnp ", ptr " $e.cstr(e.testName(id)) ", ptr " $e.cstr(tg) ", ptr " $e.cstr(ds) " }")
     }
     b := StringBuilder()
-    if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" + $gs.Len() + " x ptr] [" + $gs.Join(", ") + "]\n") }
+    # P7: ThreadSanitizer calls this, if the program has it, with each report it makes; the harness counts them, and
+    # is itself not instrumented (a call made inside the reporting runtime)
+    if e.Race {
+        b.Push("@olang.race.reports = internal global i32 0\n")
+        b.Push("define void @__tsan_on_report(ptr %r) nounwind {\nentry:\n  atomicrmw add ptr @olang.race.reports, i32 1 monotonic\n  ret void\n}\n")
+    }
+    if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" $gs.Len() " x ptr] [" $gs.Join(", ") "]\n") }
     if ts.Len() > 0 {
         b.Push($"@olang.harness.tests = private constant [" + $ts.Len() + " x { ptr, ptr, ptr, ptr }] [" + $ts.Join(", ") + "]\n")
         e.declare("strcmp", "i32 @strcmp(ptr, ptr)")
@@ -7902,7 +7914,17 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push($"  %tnp = getelementptr " + $tt + ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 1\n")
         b.Push("  %tf = load ptr, ptr %tfp\n  %tn = load ptr, ptr %tnp\n")
         b.Push("  %tz = icmp eq i32 %tj, 0\n  br i1 %tz, label %trun, label %tbad\ntrun:\n")
-        b.Push("  store ptr %tn, ptr @__olang_test_name\n  call void %tf()\n")
+        b.Push("  store ptr %tn, ptr @__olang_test_name\n")
+        # P7: under -race, a report made while the test ran fails it, the report itself on the standard error
+        if e.Race { b.Push("  %rr0 = load atomic i32, ptr @olang.race.reports monotonic, align 4\n") }
+        b.Push("  call void %tf()\n")
+        if e.Race {
+            b.Push("  %rr1 = load atomic i32, ptr @olang.race.reports monotonic, align 4\n  %raced = icmp ne i32 %rr1, %rr0\n")
+            b.Push("  br i1 %raced, label %trace, label %tpass\ntrace:\n")
+            b.Push("  %rf = load volatile i32, ptr %fail\n  %rff = add i32 %rf, 1\n  store volatile i32 %rff, ptr %fail\n")
+            b.Push($"  call i32 (ptr, ...) @printf(ptr " $e.cstr("FAIL - %s: data race\n") ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
+            b.Push("  br label %tnext\ntpass:\n")
+        }
         b.Push("  %p = load volatile i32, ptr %pass\n  %pp = add i32 %p, 1\n  store volatile i32 %pp, ptr %pass\n")
         b.Push($"  call i32 (ptr, ...) @printf(ptr " + $e.cstr("ok - %s\n") + ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
         b.Push("  br label %tnext\ntbad:\n  %f = load volatile i32, ptr %fail\n  %ff = add i32 %f, 1\n")
@@ -7916,9 +7938,29 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     b.Push("  %unmatched = and i1 %none, %words\n  br i1 %unmatched, label %nomatch, label %counts\nnomatch:\n")
     b.Push("  ret i32 3\ncounts:\n")
     b.Push("  %np = load volatile i32, ptr %pass\n  %nf = load volatile i32, ptr %fail\n")
-    b.Push("  call i32 (ptr, ...) @printf(ptr " + $e.cstr("%d passed, %d failed\n") + ", i32 %np, i32 %nf)\n")
+    if e.TestPart != 0 {
+        # B3a: a part's counts go to the file the driver names, which adds the parts' up and says them once
+        e.declare("getenv", "ptr @getenv(ptr)")
+        e.declare("fopen", "ptr @fopen(ptr, ptr)")
+        e.declare("fclose", "i32 @fclose(ptr)")
+        e.declare("fprintf", "i32 @fprintf(ptr, ptr, ...)")
+        b.Push($"  %cf = call ptr @getenv(ptr " $e.cstr("OLANG_TEST_COUNTS") ")\n  %hascf = icmp ne ptr %cf, null\n")
+        b.Push("  br i1 %hascf, label %tofile, label %say\ntofile:\n")
+        b.Push($"  %fh = call ptr @fopen(ptr %cf, ptr " $e.cstr("w") ")\n  %fhok = icmp ne ptr %fh, null\n")
+        b.Push("  br i1 %fhok, label %wrote, label %say\nwrote:\n")
+        b.Push($"  call i32 (ptr, ...) @fprintf(ptr %fh, ptr " $e.cstr("%d %d\n") ", i32 %np, i32 %nf)\n")
+        b.Push("  call i32 @fclose(ptr %fh)\n  br label %fin\nsay:\n")
+    }
+    b.Push("  call i32 (ptr, ...) @printf(ptr " $e.cstr("%d passed, %d failed\n") ", i32 %np, i32 %nf)\n")
+    if e.TestPart != 0 { b.Push("  br label %fin\nfin:\n") }
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
     e.item("main", e.P.L.Root, b.ToString())
+}
+
+# B3a, P7: whether a test is in the part of the file's tests this build runs
+fn (e Emitter&) InPart(id I64) Bool {
+    if e.TestPart == 0 { return true }
+    return e.SpawnIds.Has(id) == (e.TestPart == 2)
 }
 
 # B19: the globals through which the harness names the running test and its file to std/fuzz, and hands it the input

@@ -123,7 +123,7 @@ ModeWhat Array<String&> = Array<String&>[
     "builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)"
     "builds one program, FILE.olang its root module, into build/ (B3)"
     "compiles one module to an object, linking nothing (B2)"
-    "runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)"
+    "runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)"
     "builds the program as build does, into build/ (B3), and runs it with the arguments after the file (B3e)"
     "rewrites each file in olang's one layout (B13)"
     "prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)"
@@ -152,7 +152,7 @@ OptModes Array<I64> = Array<I64>[77846, 31, 31, 31, 1887, 108383, 108383, 2080, 
 OptWhat Array<String&> = Array<String&>[
     "writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)"
     "builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)"
-    "builds with the data race detector (B2b)"
+    "builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)"
     "builds with the scope sanitizer (B2f)"
     "builds for another machine (B12)"
     "defines a build constant (B10)"
@@ -466,6 +466,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push("  OLANG_CLANG=PATH   names the clang a build uses (B12d)\n")
         b.Push("  OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)\n")
         b.Push("  OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)\n")
+        b.Push("  OLANG_AUTORACE=0   test builds no race-detector build of the tests that start a task (P7a)\n")
         return b.ToString()
     }
     m := Run if cl.Word == "file" else modeNumber(cl.Word)
@@ -716,6 +717,13 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.FuzzCorpus = e.FuzzCorpus
     }
     for w in e.TestWords { prog.TestWords.Push(w) }
+    if tests and cfg.TestPart != 0 {
+        # B3a, P7: which tests start a task, and how many this build runs
+        for k, id in testBodies(c) {
+            if e.SpawnIds.Has(id) { prog.Spawning.Push(k) }
+            if e.InPart(id) { prog.PartTests++ }
+        }
+    }
     # D9h: value results handed over as views (a -memory build lowers every module)
     if cfg.Memory {
         for line in lw.CopyLog { try io.PutLine(line) catch io.Error { } }
@@ -849,6 +857,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Lines = cfg.Profile or cfg.Listing
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
+    e.Race = cfg.Race
     # (a cell, B22, starts as a library does - its globals set by its start, which the cell worker calls)
     e.Library = (cfg.Library or cfg.Cell) and kind == build.Kind.Program
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
@@ -856,9 +865,37 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     if tests {
         e.Fuzz = cfg.Fuzz
-        e.FuzzCache = $cfg.Dir + "/fuzz"
+        e.FuzzCache = $cfg.Dir "/fuzz"
+        e.TestPart = cfg.TestPart
+        if cfg.TestPart != 0 { partOf(c, cfg, e) }
     }
     return e
+}
+
+# B3a, P7: the bodies of the root's tests, in the order the harness lists them (their place among them is their number)
+fn testBodies(c typecheck.Checker&) Vec<I64> {
+    out Vec<I64>
+    for i in range c.Bodies.Len() {
+        match c.Bodies[i].Of {
+            case typed.BodyOf.Test(_) { if c.Bodies[i].Root != null { out.Push(i) } }
+            case _ { }
+        }
+    }
+    return out
+}
+
+# B3a, P7: which of the root's tests a test build in two parts runs in its own - e.SpawnIds the ones that start a task: in
+# the build of the other part (cfg.TestPart 1) read off the facts (G42's Spawns, which a call through a function value or an
+# "any" not followed does not count for), in the race build (2) the numbers the first gave (the same program under RaceBuild
+# may not decide the same facts)
+fn partOf(c mut typecheck.Checker&, cfg build.Config&, e mut emit.Emitter&) {
+    bodies := testBodies(c)
+    if cfg.TestPart == 2 {
+        for k in cfg.SpawnTests { if k < bodies.Len() { e.SpawnIds.Put(bodies[k], true) } }
+        return
+    }
+    fx := c.Effects()
+    for id in bodies { if fx.Of(id).Spawns { e.SpawnIds.Put(id, true) } }
 }
 
 # ---- objects reused (B3i) ----

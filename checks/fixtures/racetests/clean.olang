@@ -1,0 +1,5 @@
+# B3a, P7a: no test starts a task, so the file is built once, in the ordinary build
+
+test "adds" {
+    assert 1 + 1 == 2
+}

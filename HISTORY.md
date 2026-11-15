@@ -37624,3 +37624,47 @@ Implementation: `nullNarrow`, `narrowed` and `errNarrow` are keyed by path; `cal
 built: `callOf` but for helpers, `callOfBody`, `callBody`, and at a `yield`) ends the field paths' narrowings; the
 checks case `t2cfieldnarrow` now has a call between its test and its read. The evaluator reads the typed program the
 checker makes and needed nothing (tests/fieldnarrow.olang bakes a global from it and decides a top-level assert).
+
+## `olang test` runs the tests that start a task under the race detector (P7a, B3a, 2026-11-15)
+
+The user, 2026-11-15: make `olang test` catch data races by itself, "do it only for calls that actually use spawn, not the other
+calls in files that use spawn". Built so:
+
+- **Which tests.** A test's body is asked for `Spawns` (G42, `effects.Effects.Of(body).Spawns`): a `spawn` in it or in anything it
+  may call. `Unknown` (a call through a function value or an `any` the effects do not follow) is deliberately not read: it
+  would put every test calling a callback in the slow build for a task it may never start (a `Holds(Spawns)` reading is one
+  line in `olang.olang` `partOf` if it is ever wanted). Of the 166 test files of the corpus and std, 15 have such tests
+  (tests/any, drops, errdata, facts, reads, reclaimtasks, shared; std/cancel, chan, json, net, os, sync, prelude array and vec).
+- **Two builds, one process, one stream.** `build.TestFile` analyzes the file with `Config.TestPart = 1` (the harness holds only
+  the tests that start no task; `Program.Spawning` says which do, by their number among the file's tests); if any do, it
+  analyzes it again with `-race`, `RaceBuild` true (a program may decide its facts otherwise there, so the second build is told the
+  numbers rather than asking), `TestPart = 2` and `SpawnTests`; both are built before any runs. The plain binary runs first,
+  then the race one, each `ok - NAME` as the test ends. Each binary writes its counts to the file `OLANG_TEST_COUNTS` names
+  (the driver runs it under `env`), and the driver says one `N passed, M failed`; with words, the file fails with status 3 only
+  if neither build has a test they name. A file whose tests start no task is built once (the plain harness is the old one).
+  Tests run in the two builds' order, not the file's.
+- **A race fails its test.** The race harness defines `__tsan_on_report` (uninstrumented, counting reports in an atomic) and
+  compares the count around each test: `FAIL - NAME: data race`, ThreadSanitizer's report on the standard error before it. The
+  process then also exits nonzero (TSan's own).
+- **Off and unavailable.** `OLANG_AUTORACE=0`; not with `-race` (which keeps meaning everything under it), `-sanitize`, `-fuzz`,
+  `-bench`, another target, `-evaluate`. Without clang's `libclang_rt.tsan-ARCH.a` (`target.HasRaceRuntime`, asked each time) the
+  note is said once for a run of tests (by `TestFiles` for several files, which tells its children `OLANG_AUTORACE=0`) and
+  everything runs plain.
+- **Order-coupled tests.** A test that reads a global an earlier test set must be in the same build as that test. Two sets
+  in the corpus did: `tests/shared.olang`'s "a test left early still waits for its tasks" and the test after it (the second now
+  starts a task too, with a comment), and the checks fixture `testends/ends.olang` (the scenario runs it with
+  `OLANG_AUTORACE=0`: its want file holds file order, which the evaluator's run keeps too). Every other file passes unchanged.
+- **The corpus's one intentional race is gone.** `tests/shared.olang`'s "several tasks may be handed the same instance" had a task
+  add with plain stores while another read - the race `make race` was documented to report once. It now has two tasks add atomically
+  (`AtomicAdd`); `make race` reports none and fails on any.
+- **Cost, measured** (4 cores shared with other jobs at load 6-27, so indicative; plain = `OLANG_AUTORACE=0`): over the 15 files,
+  first run 110 s plain, 149 s with the race build (the race objects of std and the program made then); warm 52.7 s against
+  69.6 s, about one second a file - a second front-end pass (0.7 s for a small file, 3.5 s for tests/any.olang, which imports
+  tests/shared.olang), the race binary's link and its run under ThreadSanitizer. Over all 166 files 391 s plain, 398 s with
+  (the other 151 have no such test and pay a clang query of 10 ms for the runtime). Memory: the second analysis's lives beside the
+  first's in the process (tests/shared.olang: 1.34 GB peak, 2.34 GB with); each file is still its own process.
+- Bugs found: the makefile's `race` target and its comment documented the one intentional report (now none, and no `-` prefix);
+  `checks.olang`'s "test -output" scenario expected a message from before `run` was added (master's drift, left), and
+  `compiler/target.olang`'s test of an aarch64 mistake is false on this machine's clang (left).
+- Goldens captured again: drv (help lines; the golden of `explain B1` had drifted before), tokens, ast, layout (the Emitter's new
+  fields). Fixed point: the compiler built by the new one is byte for byte equal to the one built by that.
