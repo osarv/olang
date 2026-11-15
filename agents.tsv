@@ -152,3 +152,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	nocontracts	opus	medium	running
 2026-11-15	oanncut	sonnet	medium	running
 2026-11-15	freeing4	opus	medium	running
+2026-11-15	sect8	opus	high	running
+2026-11-15	facts2	opus	medium	running
