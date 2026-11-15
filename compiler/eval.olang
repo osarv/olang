@@ -195,6 +195,7 @@ type scope struct() {
     DRegs I64 = -1       # a region's registrations, newest first, through their RNext - also in its owner's list
     Slots Bool = false   # a slot scope (mir.Rvalue.Slots): each allocation in a region of its own inside it, as the
                          # built program puts each back on its class list alone (ReleaseSlot)
+    Part Bool = false    # a part region (mir.Rvalue.Part, O8f): what ReleasePart releases, an owner's anchor's home
 }
 
 # a registration in a scope, run when it closes: a destructor of a type for the instance at P; or a generator living in
@@ -1411,7 +1412,7 @@ fn (m mut Machine&) newScope(kind I64) I64 {
     s := m.scopes[slot]
     s.Live, s.Kind, s.Allocs, s.Regs, s.Parent, s.Child, s.Sibling = true, kind, 0, -1, 0, 0, 0
     s.Buf, s.BufLen, s.Tasks, s.TasksEnd, s.Kept, s.Errors = 0, 0, -1, -1, 0, 0
-    s.Owner, s.DRegs, s.Slots = 0, -1, false
+    s.Owner, s.DRegs, s.Slots, s.Part = 0, -1, false, false
     m.scopes[slot] = s
     return s.Gen << slotBits | slot
 }
@@ -1545,18 +1546,24 @@ fn (m mut Machine&) stepClose() {
 # O8d: the reference at p, of type ty, let go of: the region its object was built in closed - none for null or constant
 # data - and p left null. A read through the reference afterwards finds its allocation freed and stops (K1): the
 # evaluator's own check of an early free
-fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId) {
+# A part release (O8f) closes only a part region, and none for an empty array: an array built anywhere else stays where
+# it was built
+fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId, part Bool = false) {
+    empty := part and m.rd(p, 8) == 0
     region := m.regionOfObject(m.objectAt(p, ty)) if m.T.IsRef(ty) or m.T.OwnedPart(ty) else m.anchorRegion(p, ty)
+    if empty: region = 0
     if m.halted { return }
     m.zero(p, m.size(ty))
     if region == 0 { return }
+    if part and not m.scopes[region & slotMask].Part { return }
     m.closeRegion(region)
 }
 
 # O8d: the region an owner's value at p (types.Anchors) is built in - the first live one of its anchors' - else 0
 fn (m mut Machine&) anchorRegion(p Ptr, ty types.TypeId) I64 {
     anchors := m.T.Anchors(ty)
-    if m.T.OwnedPart(ty) { anchors.Push(Array<I64>(0)) }   # (an array place's value: its own one anchor)
+    home := not m.T.OwnedPart(ty)
+    if not home { anchors.Push(Array<I64>(0)) }   # (an array place's value: its own one anchor)
     for path in anchors {
         q := p
         qt := ty
@@ -1566,9 +1573,21 @@ fn (m mut Machine&) anchorRegion(p Ptr, ty types.TypeId) I64 {
         }
         r := m.regionOfObject(m.objectAt(q, qt))
         if m.halted: return 0
-        if r != 0: return r
+        if r != 0: return m.regionHomeOf(r) if home else r
     }
     return 0
+}
+
+# O8f: the region an owner's anchor in region r is part of - r, or, for a part region (an array it grew while it was
+# built), the region it is a kid of, up to one that is no part region (as __olang_region_home)
+fn (m mut Machine&) regionHomeOf(r I64) I64 {
+    c := r
+    for m.scopes[c & slotMask].Part {
+        p := m.scopes[c & slotMask].Parent
+        if p == 0 or not m.live(p) or m.scopes[p & slotMask].Kind != sRegion: return c
+        c = p
+    }
+    return c
 }
 
 # O8d: the region an owner's value at p was built in (h) closed where none of its anchors names it - nothing reaches it
@@ -2202,11 +2221,12 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
         case mir.Rvalue.Text(b, into, _) { m.text(fi, dst, b, into) }
         # (a slot scope is a region here: what is built there is released with the value, which the release reads as
         # the built program's slot put back - the evaluator's dead-region mode the stricter oracle)
-        case mir.Rvalue.Region(s), mir.Rvalue.Slots(s) {
+        case mir.Rvalue.Region(s), mir.Rvalue.Part(s), mir.Rvalue.Slots(s) {
             parent := m.buildScope(fi, s)
             if m.halted { return }
             id := m.region(parent)
             m.scopes[id & slotMask].Slots = rv == mir.Rvalue.Slots
+            m.scopes[id & slotMask].Part = rv == mir.Rvalue.Part
             m.wr(dst, 8, id)
         }
         case mir.Rvalue.RegionOr(x, s) {
@@ -4037,11 +4057,11 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             m.addReg(sc, gDtor, I64(ty), p)
             if sc == m.program and m.initGlobal >= 0: m.globals[m.initGlobal].Dtors = true
         }
-        case mir.Stmt.Release(sp, p), mir.Stmt.ReleaseSlot(sp, p) {
+        case mir.Stmt.Release(sp, p), mir.Stmt.ReleaseSlot(sp, p), mir.Stmt.ReleasePart(sp, p) {
             m.atK(fk, sp)
             slot, pty := m.place(fi, p)
             n := m.closing.Len()
-            m.releaseHeld(slot, pty)
+            m.releaseHeld(slot, pty, m.cf[fk].Stmts[i] == mir.Stmt.ReleasePart)
             if m.closing.Len() > n {
                 m.fs[fi].Pending = true
                 return

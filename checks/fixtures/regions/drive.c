@@ -1,7 +1,9 @@
 /* drives the runtime's regions (std/runtime/runtime.ll, docs/memory.md 3.4) directly: a region made in a scope, what
    is built there - small and large - each object naming its region in the word before it, its destructors run once as
    it is released, regions left in their scope closed with it, constant data and null naming none, and a million regions
-   nested in one another closed with constant stack. Linked with the runtime object "olang build -debug stub.olang"
+   nested in one another closed with constant stack; and part regions (O8f): an array place's value released only
+   where it is in one, found from its address - nothing for one built in a scope or another region, or an empty one -
+   and an owner's anchor in one read as part of the region it is a kid of. Linked with the runtime object "olang build -debug stub.olang"
    builds, so the regions keep working apart from the analysis that has lowering make them (compiler/free.olang) */
 #include <stdint.h>
 #include <stdio.h>
@@ -10,6 +12,9 @@
 void *__olang_region_make(void *parent);
 void *__olang_region_or(void *obj, void *fallback);
 void __olang_region_release(void *obj);
+void *__olang_region_make_part(void *parent);
+void __olang_region_release_part(void *obj, int64_t n);
+void *__olang_region_home(void *r);
 void *__olang_scope_alloc_a(void *scope, int64_t size, int64_t align);
 void __olang_scope_register_dtor(void *scope, void *instance, void *fn);
 void __olang_scope_close(void *scope);
@@ -76,6 +81,29 @@ int main(int argc, char **argv) {
             parent = r;
         }
         __olang_region_release(first);
+    } else if (!strcmp(mode, "part")) {
+        void *p = __olang_region_make_part(&s);
+        __olang_region_release_part(made(p, 64, 8, 1), 8); /* a part region's array, released: its destructor runs */
+        void *pl = __olang_region_make_part(&s);
+        __olang_region_release_part(made(pl, 1 << 22, 64, 1), 1 << 19); /* a large one, found in the large table */
+        if (dtors != 2) bad++;
+        int64_t *plain = __olang_scope_alloc_a(&s, 64, 8); /* built in a scope: left where it is */
+        plain[0] = 42;
+        __olang_scope_register_dtor(&s, plain, (void *)counted);
+        __olang_region_release_part(plain, 8);
+        void *owner = __olang_region_make(&s); /* an owner's value region: no part region, left where it is */
+        int64_t *o = made(owner, 64, 8, 1);
+        __olang_region_release_part(o, 8);
+        __olang_region_release_part(o, 0); /* an empty array: nothing at all */
+        if (dtors != 2 || o[0] != 42) bad++;
+        void *g = __olang_region_make_part(owner); /* the owner's array grown: its home the owner's region */
+        made(g, 512, 8, 1);
+        void *g2 = __olang_region_make_part(&s); /* one grown in a scope: its own home */
+        made(g2, 512, 8, 1);
+        if (__olang_region_home(g) != owner || __olang_region_home(owner) != owner || __olang_region_home(g2) != g2) bad++;
+        if (__olang_region_home(NULL) != NULL) bad++;
+        __olang_region_release(o); /* the owner's value released: its region and the part region in it */
+        if (dtors != 4) bad++;
     }
     __olang_scope_close(&s);
     printf("%s %lld %lld\n", mode, (long long)dtors, (long long)bad);

@@ -576,7 +576,11 @@ declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)
 ;  kids - the regions made in this scope (O8d, docs/memory.md 3.4): closed with it, after its destructors, unless
 ;         released first; a list through each region's own header (%olang.region)
 %olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr, ptr }
-%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr, ptr, ptr }
+; a region (O8d): its scope, its inner scope (what is built there), prev and next among its parent's kids, its parent,
+; its destructors' chain, its owner (the parent where that is no region), and whether it is a PART region - one made
+; for an array a value holds by value (a Vec's buffer, a Map's slots: O8f), which a growth releases and an owner's
+; release reads as part of the region holding it (__olang_region_home)
+%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr, ptr, ptr, i64 }
 ; P1: a thread's pool is thread_local, so two threads never take from or give to the same one. A scope belongs to
 ; exactly one thread, and so do the chunks it takes and gives back, which is what makes a per-thread pool
 ; correct rather than merely faster
@@ -3206,7 +3210,7 @@ reuse:
   store i64 %n1, ptr @__olang_rfree_nhdr
   ret ptr %h
 fresh:
-  %r = call ptr @malloc(i64 152)
+  %r = call ptr @malloc(i64 160)
   call void @__olang_alloc_check(ptr %r)
   ret ptr %r
 }
@@ -3298,6 +3302,9 @@ init:
 fresh:
   %m = call ptr @aligned_alloc(i64 64, i64 %bbytes)
   call void @__olang_alloc_check(ptr %m)
+  ; (entered in the large table, as a chunk from aligned_alloc is, so that its region is found from an address in it
+  ; - O29, and a part region's release, O8f; such a block is kept for the next region, never given back)
+  call void @__olang_large_add(ptr %m, i64 %bbytes)
   ret ptr %m
 }
 
@@ -3368,7 +3375,7 @@ done:
 define ptr @__olang_region_make(ptr %parent) noinline {
 entry:
   %r = call ptr @__olang_region_hdr_new()
-  call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 152, i1 false)
+  call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 160, i1 false)
   store ptr @__olang_region_chunk, ptr %r
   %tailp = getelementptr %olang.scope, ptr %r, i32 0, i32 2
   store ptr %r, ptr %tailp
@@ -3495,6 +3502,78 @@ drop:
   br label %done
 done:
   ret void
+}
+
+; O8f: a part region, a kid of parent - one an array place's value is built in (a Vec's buffer, a Map's slots)
+define ptr @__olang_region_make_part(ptr %parent) noinline {
+entry:
+  %r = call ptr @__olang_region_make(ptr %parent)
+  %fp = getelementptr %olang.region, ptr %r, i32 0, i32 7
+  store i64 1, ptr %fp
+  ret ptr %r
+}
+
+; O8f: an array place's value let go of (a growth replacing a Vec's buffer, an element given another Vec): the part
+; region it was built in released - found from its address (O29), not from a word before it, so that an array built
+; anywhere else (in the region of the value holding it, in a scope: a copy's) is left where it is, reclaimed with that.
+; Nothing for null, constant data or an empty array (n elements): what an empty array names may be storage given back
+; since - none was ever built for it in a part region (a value built there holding nothing is settled at once)
+define void @__olang_region_release_part(ptr %obj, i64 %n) noinline {
+entry:
+  %empty = icmp eq i64 %n, 0
+  br i1 %empty, label %done, label %find
+find:
+  %h = call ptr @__olang_chunk_of(ptr %obj)
+  %noh = icmp eq ptr %h, null
+  br i1 %noh, label %done, label %owner
+owner:
+  %op = getelementptr %olang.chunk, ptr %h, i32 0, i32 6
+  %o = load ptr, ptr %op
+  %noo = icmp eq ptr %o, null
+  br i1 %noo, label %done, label %kind
+kind:
+  %ohp = getelementptr %olang.scope, ptr %o, i32 0, i32 0
+  %oh = load ptr, ptr %ohp
+  %isreg = icmp eq ptr %oh, @__olang_region_chunk
+  br i1 %isreg, label %flag, label %done
+flag:
+  %fp = getelementptr %olang.region, ptr %o, i32 0, i32 7
+  %f = load i64, ptr %fp
+  %part = icmp ne i64 %f, 0
+  br i1 %part, label %drop, label %done
+drop:
+  tail call void @__olang_region_drop(ptr %o)
+  br label %done
+done:
+  ret void
+}
+
+; O8f: the region a value whose anchor is in region r is built in - r, or, for a part region (an array of the value grown
+; while it was built), the region it is a kid of, up to one that is no part region; a part region whose parent is no
+; region is its own. Null for null
+define ptr @__olang_region_home(ptr %r) {
+entry:
+  br label %up
+up:
+  %c = phi ptr [ %r, %entry ], [ %p, %region ]
+  %none = icmp eq ptr %c, null
+  br i1 %none, label %out, label %flag
+flag:
+  %fp = getelementptr %olang.region, ptr %c, i32 0, i32 7
+  %f = load i64, ptr %fp
+  %part = icmp ne i64 %f, 0
+  br i1 %part, label %parent, label %out
+parent:
+  %pp = getelementptr %olang.region, ptr %c, i32 0, i32 4
+  %p = load ptr, ptr %pp
+  %php = getelementptr %olang.scope, ptr %p, i32 0, i32 0
+  %ph = load ptr, ptr %php
+  %isreg = icmp eq ptr %ph, @__olang_region_chunk
+  br i1 %isreg, label %region, label %out
+region:
+  br label %up
+out:
+  ret ptr %c
 }
 
 ; region r released - taken out of its parent's kids and closed, with its own kids - nothing for null
