@@ -13924,7 +13924,9 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             p := readPlace(rx)
             if p == null { p = typed.Lvalue.Temp(x.Span(), rt, rx, c.site(typed.SiteKind.Temp, x.Span())) }
             fp := c.field(sp, nsp, p!, n)
-            if fp != null { return c.callValue(sp, nsp, c.read(source.Span(x.Span().Start, nsp.End), fp), args) }
+            # S8e: a function value a field path holds, called where a test says it is not null
+            fsp := source.Span(x.Span().Start, nsp.End)
+            if fp != null { return c.callValue(sp, nsp, c.read(fsp, c.narrowedPlace(fsp, x, n, fp)), args) }
         }
         if c.isNamed(dt) and c.declKind(dt) == types.DeclKind.Trait {
             # a trait as a value's type was said where it is written (T30)

@@ -4793,9 +4793,8 @@ test "T2a: null is all-zero bits, so the two-word shapes read as empty" {
 test "T2a: a null field is an ordinary field" {
     h mut Held3& = Held3(null)
     assert h.held == null
-    h.held = Crate2(9)
-    assert h.held != null
-    assert h.held!.v == 9
+    h.held = Crate2(9)                          # known not to be null from here (S8e)
+    assert h.held!.v == 9 and h.held.v == 9
 }
 
 # "x := null" is a compile error and so can only be named here: null is the one literal that writes no

@@ -117,7 +117,8 @@ test press "a function value that may be null is called once a test says it is n
     on = fn(e): return e.n                       # narrowed by the assignment (S8e)
     assert on(Event(4)) == 4
     b := Button("c", fn(e): return e.n + 1)
-    assert b.on!(Event(5)) == 6                  # a field never narrows: "!" unwraps it
+    assert b.on!(Event(5)) == 6                  # a field no test narrowed: "!" unwraps it
+    if b.on != null: assert b.on(Event(5)) == 6  # a field path narrowed by a test (S8d)
 }
 
 test longest "an array that may be null: null distinct from empty, read once narrowed" {
