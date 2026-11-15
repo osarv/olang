@@ -804,7 +804,7 @@ per field of `T` - a **column** - rather than one array of `T`, and `ColumnVec<T
 `Vec<T>` are two, so are these.
 
 - **The rows' type** is a **record**: a struct whose constructor declares exactly its fields, each a parameter written
-  bare (C4: `type P struct(X F32, Y F32) { X, Y }`) - no other statement, no condition (D17), no destructor (C7), at
+  bare (C4: `type P struct(X F32, Y F32) { X, Y }`) - no other statement, no error set, no destructor (C7), at
   least one field, and a zero value (D13c: no never-null reference field, T2c), which an empty table starts as. Any other type argument - a number, an enum, a struct whose constructor computes a field or checks
   what it is given - is a compile-time error where the instance is asked for, naming why: a column is written element
   by element, so nothing would keep such a type's rows as its constructor made them. So is a field named like a method
@@ -1724,7 +1724,7 @@ spelled in terms of a type not yet declared, and it is a compile-time error at t
 array (`type Nest struct(kids Array<Nest&>&)`) is how a value holds others of its own type.
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
-constructor, written after the type on the same line: `type Percent I32(v I32) [contract] [? errors] { ... }` (D17).
+constructor, written after the type on the same line: `type Percent I32(v I32) [? errors] { ... }` (its checks D17).
 It takes exactly **one** parameter, of the primitive it is declared over: the value being constructed. The
 body is an ordinary block that may check it (failing through its own error list, so the call is then written
 with `try`) or change it, and the parameter's final value is the result; `return` is rejected in it, as in any
@@ -2092,9 +2092,8 @@ through an `any`: no field, no method `R` does not declare, no operator but `==`
 calls a function or a function value (P1), never through a table: `spawn s.M()` is a compile-time error naming
 `spawn fn() { s.M() }`.
 
-A call through an `any` is held to the **contract `R` writes on the method** (D17f): its conditions are checked before
-the dispatch, failing with `ArgumentError.Invalid`, and then the method the instance's type supplies - its own, or a
-default's - checks its own on entry, as every call of it does.
+A trait's method states no requirement (D17): the method the instance's type supplies - its own, or a default's -
+checks its own, as every call of it does.
 
 **T32c (an `any` satisfies its trait).** The type `any R&` satisfies `R`, and every trait `R` extends (T30a), and
 nothing else, whatever its instance's type does: a type variable constrained by such a trait may be bound to it (G19),
@@ -2228,8 +2227,7 @@ ahead of those in the parameter list, and is in every other respect an ordinary 
 reference marker and a scope tag read exactly as they do there. A declaration without a receiver is never
 a method, whatever its first parameter's type.
 
-**D8.** `func-sig ::= "(" param-list ")" [ contract ] ( [ ret-type ] [ "?" [ error-list ] ] | "noreturn" )`, where
-`contract` is specified in §3.4.1 (D17) and:
+**D8.** `func-sig ::= "(" param-list ")" ( [ ret-type ] [ "?" [ error-list ] ] | "noreturn" )`, where:
 
 ```
 param-list      ::= list(param)                         (L18a)
@@ -2360,70 +2358,47 @@ function fits a function type of either form (T22). A constructor, an enum case'
 variable arguments are C's `...`, X21) have none - a compile-time error naming an array parameter. `explain`, `doc` and
 `$` of a function type write it `...T`.
 
-### 3.4.1 Contracts
+### 3.4.1 Requirements
 
-**D17 (contracts).** A function, a method or a constructor may state what it **requires** of its callers in one
-bracketed block, its **contract**, written right after its parameter list - before its results, its error set, or the
-body:
-
-```
-contract       ::= "[" list(expr) "]"                    (L18a)
-```
+**D17 (requirements).** What a function, a method or a constructor **requires** of its callers is read off its body:
+the asserts and **checks** its body begins with, up to the first statement that is neither, are its **requirements**.
+A check is an `if` with no `else` whose branch does nothing but raise the prelude's `ArgumentError` (§7.6), in either
+form (S1b):
 
 ```
-fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { return y - x }
-fn between(lo I64, hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool { return x - lo < hi - x }
-type Percent struct(v I64) [v >= 0 and v <= 100] { v }
+fn pick(x I32, y I32) I32 ? {
+    if not y > x: error ArgumentError.Invalid("pick: y > x")
+    return y - x
+}
+fn half(n I64) I64 {
+    assert n % 2 == 0
+    return n / 2
+}
+type Percent struct(v I64) ? {
+    if v < 0 or v > 100: error ArgumentError.Invalid("Percent: v in 0..100")
+    v
+}
 ```
 
-Items follow the listing rule (L18a): `,` between items on one line, a line's end between lines. A scope relation is
-never written (QCB): what a body needs of its parameters' scopes is inferred from it (§8 O10b).
+An assert's requirement is its condition; a check's is its condition false - `if not C` requires `C`, `if C` requires
+`not C`. Nothing is written for a requirement besides the statement itself, and it means nothing more than the
+statement does: the body checks it at run time as it checks any statement, in every build, an assert failing as S17
+says and a check raising its error as any `error` statement does (R3, its `ArgumentError.Invalid` carrying the text it
+was given, T19b). A function whose check raises `ArgumentError` can fail, so it writes `?` (R1d), and a written set
+lists it (R3). `olang explain`, `olang doc` and the language server show each requirement under its function as
+`# requires: C` (B11b), and `olang api` compares them (B21). A scope relation is never a requirement: what a body
+needs of its parameters' scopes is inferred from it (§8 O10b) and held at every call (O10c).
 
-**D17a (conditions).** Every item is a **condition**: an expression of type `Bool` over the
-receiver, the parameters and anything a function body reads at its top level (globals, constants, functions) - a call
-in it, a fallible one, a lambda among its arguments included. It writes nothing: the parameters are read-only in it.
-Each condition is checked **on entry**, in every build, in the order written, before the body runs: a false one makes
-the call fail with the prelude's `ArgumentError.Invalid(what String)` (§7.6), carrying the function and the condition
-as written, `"pick: y > x"`, as its payload (T19b) - so `$e`, a `!`'s message (E35) and an error escaping `main` (B5)
-say it (`ArgumentError.Invalid("pick: y > x")`), and its trace (S18d) names it too. A call in a condition that fails leaves the function with its
-own error, as a call in the body would (R6), and the conditions after it are not evaluated. The call has taken its
-arguments by then: a by-value parameter holding a value with a destructor lets go of it as the failing call leaves
-(O15), as on any other way out.
-
-**D17b (the error set).** A function with conditions can fail with `ArgumentError`, so it writes `?` (R1d): a bare
-`?` (R1a) infers it with the rest, and a written set must list `ArgumentError` - a compile-time error naming it
-otherwise; a function with conditions writing no `?` is a compile-time error naming `?`. A trait's method with
-conditions lists `ArgumentError` in its set (R1b). Every call is then handled as any
-fallible call is (R8): `try`, a `catch`, or `!`.
-
-**D17c (constructors).** A constructor's contract follows its parameter list (`type Percent struct(v I64) [v >= 0] {
-v }`, a declared primitive's too, T29d) and is checked before its body, so an instance a constructor makes always met
-it. A literal running a constructor (T29d) and a zero value made by one (D13c) are decided while compiling: a false
-condition there is a compile-time error.
-
-**D17d (scope relations).** A contract states no scope relation: a function's scope obligations are inferred from its
-body (§8 O10b) and held at every call (O10c); `olang explain` shows them (B11b).
-
-**D17e (deciding a contract while compiling).** At a call whose arguments are all values the evaluator computes -
-literals, constants, immutable globals, calls of such - and no local, each condition is decided while compiling (K1):
-a false one is a compile-time error at the call naming the condition, with a note at it - unless a `catch` at the call
-takes its `ArgumentError` (`try pick(5, 3) catch ArgumentError { }`, an item-less `catch` among them, a clause of an
-enclosing `try` of the same body too), when the call fails at run time as written: a test of the failure path is such a
-call. Where the evaluator runs a call itself - a global it bakes (K2), an assert it decides (S18c) - the conditions
-are checked as at run time, failing the same way. A condition the evaluator cannot decide is checked at run time.
-
-**D17f (contracts and function values).** A function with conditions may be made a function value (T21); its type's
-error set holds `ArgumentError`, and a call through the value checks the conditions on entry as a direct call does.
-One whose scope obligations are more than its type says is a value only where the inference follows it (T22a). Lambdas, `extern fn`s and destructors take no contract. A trait's
-method may take one, written after its parameter list as a function's is (`mut Withdraw(n I64) [n > 0] I64`), reading
-the parameters alone: a call through an `any` of the trait (T32b) checks it before the
-dispatch, and then the method the instance's type supplies checks its own on entry. A call through generic code (G19)
-is a direct call of the method the type argument supplies, held to that method's contract.
-
-**D17g (conversions).** A conversion to a number type `T(x)` (E26) whose argument the evaluator computes - a constant,
-an immutable global, a call of such - and whose value does not fit `T` is a compile-time error at the conversion
-naming `x.Narrow<T>()`; elsewhere it is unchecked, wrapping or undefined as E26 and E26a say. `try x.Narrow<T>()`
-(E26b) checks it at run time.
+**D17e (deciding a requirement while compiling).** At a call whose arguments are all values the evaluator computes -
+literals, constants, immutable globals, calls of such - and no local, each requirement of the function called, of a
+function or a constructor (a generator's are its first `Next()`'s, D18, which no call runs), is decided while
+compiling (K1), in order: a false one is a compile-time error at the call naming the requirement, with a note at its
+condition - unless it is a check's and a `catch` at the call takes its `ArgumentError` (`try pick(5, 3) catch
+ArgumentError { }`, an item-less `catch` among them, a clause of an enclosing `try` of the same body too), when the
+call fails at run time as written: a test of the failure path is such a call. An assert's false requirement is an
+error whatever catches the call, as nothing takes what an assert does. Where the evaluator runs a call itself - a global
+it bakes (K2), an assert it decides (S18c) - the body checks its requirements as at run time, failing the same way. A
+requirement the evaluator cannot decide, or one whose condition does not check on its own, is the run time's.
 
 **D9a (arrays by value).** A parameter whose type is an array may take it **by value** (`a Array<F32>`, a declared
 array type such as `s String` among them) or by reference (`a Array<F32>&`, T24). A by-value array parameter is the
@@ -2648,11 +2623,10 @@ Its errors are its `Next()`'s: `E`, written in its result (`Iterator<String ? io
 a `try` in its body lets out ends it as its end does, `Exhausted` among them, so `a := try it.Next()` in a generator
 over another iterator ends the walk where that one ends. A `?` after its result is a compile-time error naming
 `Iterator<T ? E>`. Its parameters are its own locals from its first `Next()` on: set from the arguments when it is
-called, written as a function's are. Its contract's requirements (D17) are checked as its first `Next()` begins, before
-its body runs - the call making it checks nothing, and D17e decides nothing at it - so a false one is that `Next()`'s
-`ArgumentError.Invalid`, every `Next()` after it failing with `Exhausted` (D18a): `E` lists `ArgumentError`, as D17b
-asks of a written set, a compile-time error naming it otherwise (`fn evens(n I64) [n >= 0] Iterator<I64 ?
-ArgumentError>`). A function whose result is written `Iterator<T ? E>` and whose body does not yield is T30's error: a
+called, written as a function's are. Its requirements (D17) are checked as its first `Next()` begins, its body's first
+statements - the call making it checks nothing, and D17e decides nothing at it - so a false check is that `Next()`'s
+`ArgumentError.Invalid`, every `Next()` after it failing with `Exhausted` (D18a), and `E` lists `ArgumentError` (R3).
+A function whose result is written `Iterator<T ? E>` and whose body does not yield is T30's error: a
 trait is no type.
 
 **D18a (how a generator ends).** Its body's end, and a `return` - which takes no value, a `return v` being a
@@ -4477,7 +4451,7 @@ An integer converted to a float type is **rounded once**, from its exact value, 
 round twice; an integer literal adapting to a float type (T6) is rounded the same way.
 Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
 conversion cannot itself produce an error (`try x.Narrow<T>()`, E26b, is the form that can). A value the evaluator
-computes that does not fit (D17g) - `U8(300)`, `I32(G)` with `G` an immutable global beyond `I32` - is a compile-time error; one computed at run
+computes that does not fit (E26c) - `U8(300)`, `I32(G)` with `G` an immutable global beyond `I32` - is a compile-time error; one computed at run
 time that does not is unchecked, an integer narrowing wrapping (T6), the same well-defined, unchecked behavior this
 language accepts at every other point a value can silently lose information, such as E16's own unchecked array
 indexing.
@@ -4496,6 +4470,11 @@ not fit `T` - an integer out of `T`'s range (a sign change between types of one 
 value truncated toward zero is out of an integer type's range, a finite value made infinite by a narrower float type -
 and with `NumberError.Invalid` for a NaN or an infinity made an integer; otherwise it gives `T(x)`. It is ordinary
 olang (written over `T(x)` and E36's limits), so the compile-time evaluator computes it as the program does.
+
+**E26c (conversions decided while compiling).** A conversion to a number type `T(x)` (E26) whose argument the evaluator
+computes - a constant, an immutable global, a call of such - and whose value does not fit `T` is a compile-time error at
+the conversion naming `x.Narrow<T>()`; elsewhere it is unchecked, wrapping or undefined as E26 and E26a say. `try
+x.Narrow<T>()` (E26b) checks it at run time.
 
 ### 5.12 Comprehensions
 
@@ -4818,8 +4797,8 @@ declares a `Get` that fails, as arrays, `List` and `Vec` have one.
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
 result and errors fit the function type as a function value's would (T22: the same, but for a read-only reference
 parameter where the type passes a writable one, or a writable result where it gives a read-only one; its errors the
-type's, in the same order - a `Call` is no named function, whose codes R1b re-encodes - so a `Call` with a requirement
-block, failing with `ArgumentError` (D17b), is no value of an infallible function type), and a generic
+type's, in the same order - a `Call` is no named function, whose codes R1b re-encodes - so a `Call` whose check
+raises `ArgumentError` (D17) is no value of an infallible function type), and a generic
 function type's variables are inferred from them:
 the function value calls that very instance's `Call`, so the instance must outlive it as a reference to it would -
 passed, stored or returned (O14: a function's own instance is not a value it may hand back) - and
@@ -5803,19 +5782,18 @@ at the global, K2), adds none of its own. An assert in a `test` block is judged 
 build that runs it.
 
 **S18d (the error return trace).** A test build (`test`) and a debug build (`-debug`, §10) keep, for each thread, a trace of
-where the error being returned went - its last 32 places: an `error` statement (R3), an `as` that does not hold (E32) or a
-requirement that is false (D17) **raises** an error and starts the trace again; a `try` that passes an error on to its caller, or a `join` passing
+where the error being returned went - its last 32 places: an `error` statement (R3) or an `as` that does not hold (E32)
+**raises** an error and starts the trace again; a `try` that passes an error on to its caller, or a `join` passing
 on a task's error (P4b), adds its place; a clause that takes an error clears it. Nothing is recorded where nothing fails,
 and a build of any other kind records nothing at all. The trace is printed, oldest first, one `FILE:LINE: what` line per
 place - `raised here`, `try passed it on`, `a task failed, and its join passed it on`, `left the test` - preceded by
-`(N earlier places not kept)` when more than 32 were recorded; a false requirement's place reads `FILE:LINE: f: cond`, the
-function and the condition as written, at the condition:
+`(N earlier places not kept)` when more than 32 were recorded:
 - when an error leaves a test body (S16), after the test's `FAIL - NAME: TypeName.WORD` line;
 - when an error escapes `main` (B5), after `unhandled error: TypeName.WORD`;
 - when a `!` takes an error (E35), after its `FILE:LINE: TypeName.WORD` line.
 
 In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead (a false
-requirement's condition is said there all the same: it is its error's payload, D17a). A program run
+check's requirement is said there all the same where its error carries it, D17). A program run
 run as a file (B3g) under `-checked` prints the trace as a debug build does.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
@@ -6432,7 +6410,7 @@ function can fail with, in any order (T22) - its codes are re-encoded for the ty
 method meets a trait's method (T31) on the same terms.
 
 **R1d (a function that can fail says so).** A function, a method or a constructor that can fail - its body raising
-an error (R3), letting through what a `try` covers (R9, R13), or having conditions (D17) - writes `?` after its result:
+an error (R3), its checks among them (D17), or letting through what a `try` covers (R9, R13) - writes `?` after its result:
 bare to infer its set (R1a), or the set as a promise (R1). One that writes no `?` cannot fail, and anything in it that
 would let an error out is a compile-time error naming `?` - `main` included (B4). A lambda (D16b) and a generator
 (D18, whose errors its result writes) are not declarations of their own set and write none.
@@ -6697,7 +6675,7 @@ This section specifies scopes, the scope a reference-shaped value lives in (dist
 type-level effect, §2.9), the allocation model for reference-shaped values, and the static compile-time check
 that constrains how a scope tag may flow from one place to another.
 
-A scope is **never named and never written**: no marker, call or contract says where a reference lives. The compiler
+A scope is **never named and never written**: no marker or call says where a reference lives. The compiler
 places every value in the shortest-lived scope every use of it allows (O28) - the rules below are what that placement
 must satisfy, and a program they cannot be satisfied for is refused with an error naming what to write instead.
 Every scope a function can relate to is reached through one of its own parameters or through its result.
@@ -7872,11 +7850,11 @@ compiler-recognized blocks a struct type can declare; its methods are ordinary f
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ contract ] [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
 ```
 
-`param-list`, `error-list` and `contract` are as in a function declaration
-(§3 D8, D17), the error set carrying the same leading `?` it does there —
+`param-list` and `error-list` are as in a function declaration
+(§3 D8), the error set carrying the same leading `?` it does there —
 a constructor has no `ret-type` slot for the marker to disambiguate against, but it is written all the
 same, so that one spelling of an error set holds everywhere in the language.
 
@@ -8762,12 +8740,12 @@ error.
 **B11b.** `explain FILE NAME` prints one top-level item of `FILE` as the compiler sees it, once the program `FILE` is the
 root of has checked: nothing is built, and a program with errors reports them instead. `NAME` is a function, a type, an
 error type, a global, `Type.Method` or `Type.Builder` (D19). A function is printed with its whole signature - its receiver, parameters with
-their types, results, and its error set, an inferred one (`?` alone, R1a) written out - then its contract's
-conditions (D17), each a line `[cond]` as written, and its scope
+their types, results, and its error set, an inferred one (`?` alone, R1a) written out - then its requirements (D17),
+each a line `# requires: cond`, and its scope
 obligations (O10b), each a line `# scopes: a outlives b`, `return` standing for its result scope; a generic one is printed as
 declared, then each instance the program made with its own errors and obligations. A struct is printed with its
 constructor's signature, its fields, its builders (D19, B14), its methods and the traits with no type parameters it meets; an enum with its
-cases, an error type with its words, a trait with its methods; a constructor's contract follows its signature. A
+cases, an error type with its words, a trait with its methods; a constructor's requirements follow its signature. A
 function's or a type's attributes (G39) are printed as written on the lines above it, a field's and a case's before
 its name (a pun's being its parameter's). A global is printed with its type and, where it is baked
 (K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
@@ -8977,7 +8955,7 @@ empty input, then on each file under `testdata/fuzz/SLUG/` for the running test,
 replaying PATH` to the standard error before each - so an input a fuzzer found fails the test it found it in from then
 on. std/prop's `prop.Check(f, cases = 100)` checks a property over generated values: `f` is called on values made for
 its parameters' types through compile-time reflection (G32-G38) - numbers, `Bool`, `Char`, `String`, arrays, `Vec`s,
-structs built through their constructors (a value the constructor refuses, its contract included, drops the case) and
+structs built through their constructors (a value the constructor refuses, its checks included, drops the case) and
 enums, a case and its fields - each drawn from a run of bytes, fewer and smaller bytes giving smaller values and a byte
 of 0 the least. Each case runs in a child process, a copy of the test's, so a failed check ends the case and not the
 test; the bytes come from a generator seeded by the test's name, so a run is the same every time. A failing case's
@@ -9087,7 +9065,9 @@ is); an enum's case, an error type's word or a trait's method added (S13a, R14, 
 allocates, blocks, can call itself) or a relation it gains (it now keeps an argument, borrows from one more parameter)
 breaks, and one it gains or loses the other way does not. A function type written in a function's signature: a parameter's
 type gaining an effect word or `borrows`, or losing a `keeps`, breaks (an importer's functions must do less); a result's,
-the other way round; a declared function type's or a field's words changing either way breaks. What does
+the other way round; a declared function type's or a field's words changing either way breaks. A function's or
+constructor's requirements (D17, its `# requires:` lines) are compared as a set: one it did not have before breaks (a
+call meeting the old ones may now fail), and only dropping some does not. What does
 not: a name added - a function, a type, a method, a field, a global; an error set narrowed; a global's value changed; a
 trait newly met.
 
@@ -10016,8 +9996,8 @@ fn total(a Array<I64>) I64 {
 **G31 (a function's asserts on lengths).** A rule about the lengths a function's by-value arrays may have is an
 `assert` (§6.7) in its body: one reading those lengths and otherwise only what K1 can evaluate is decided in each
 instance (S18c), a false one a compile-time error at the call that asked for the instance. A rule a function's callers
-are held to, about any argument, is a requirement of its contract (D17), decided at each call whose arguments the
-evaluator computes (D17e) and checked on entry everywhere else (D17a).
+are held to, about any argument, is a requirement (D17): an assert or check its body begins with, decided at each
+call whose arguments the evaluator computes (D17e) and checked by the body everywhere else.
 
 ### 12.8 Compile-time reflection
 
@@ -10346,9 +10326,8 @@ buffer - the old elements' plain data, the ones owning storage emptied (M19d) - 
 under the evaluator (B3e) the program stops there.
 
 A length known while compiling (T7c) is a constant whatever holds it, so reading it - `a.Len()` on a by-value
-parameter in an instance (G29), say - reads nothing that varies and can always be evaluated. A contract's conditions
-are evaluated as a function's body is (D17e): decided at a call whose arguments are computed, and checked on entry at
-every call the evaluator runs.
+parameter in an instance (G29), say - reads nothing that varies and can always be evaluated. A function's requirements
+are decided at a call whose arguments are computed (D17e), and checked by its body at every call the evaluator runs.
 
 Under the evaluator (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused - tasks run one after another at their join, as while compiling (B3e).
