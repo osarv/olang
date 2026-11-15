@@ -6976,7 +6976,7 @@ KtViaRef I32 = ktViaRef(3)
 KtOddSum I64 = ktSumTo(100)
 KtCaught I32 = try SafeDiv(1, 0) catch default -7
 KtRatio F32 = F32(KtFib20) / 2
-KtWrapped U8 = ktWrap(300)        # D17g: a constant 300 does not fit U8, so the wrap is a run-time value's
+KtWrapped U8 = ktWrap(300)        # E26c: a constant 300 does not fit U8, so the wrap is a run-time value's
 
 
 # this one cannot be computed at compile time - it reads a mutable global - and is set at startup as before
@@ -18102,7 +18102,7 @@ type dkRing struct(cap I64) ? {
 type dkNode struct(v I64) { v }
 fn dkLink(a mut dkNode&, b dkNode&) { }
 fn dkChain(a mut dkNode&, b mut dkNode&, c dkNode&) { }
-# a call in a condition that fails leaves the function as itself (D17a); its set is inferred, ArgumentError in it
+# a call in a check that fails leaves the function with its own error (D17); its set is inferred, ArgumentError in it
 fn dkParsed(t String&) I64 ? {
     if not (try t.ParseInt() > 0): error ArgumentError.Invalid("dkParsed: try t.ParseInt() > 0")
     return try t.ParseInt()

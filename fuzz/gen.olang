@@ -646,7 +646,7 @@ fn (g mut Gen&) checkedInt(t I32, d I64) String& {
     }
     if p == 4 {
         op String& = "ShiftLeft" if g.chance(50) else "ShiftRight"
-        # the count masked before it narrows to I64, so a U64 the evaluator computes never fails D17g's fit
+        # the count masked before it narrows to I64, so a U64 the evaluator computes never fails E26c's fit
         return "(try arith." + $op + "(" + $g.solid(t, d - 1) + ", I64((" + $g.solid(g.intT(), d - 1) + ") & 255)) catch default " + $dflt + ")"
     }
     if p == 5 { return "(try arith.Neg(" + $g.solid(t, d - 1) + ") catch default " + $dflt + ")" }
@@ -2031,11 +2031,11 @@ fn (g mut Gen&) viewElement(t I32, d I64) String& {
     return "(try " + $g.use(a) + ".SliceOf(0, " + $n + ").Get(" + $g.solid(g.idxT(), d - 1) + ") catch default " + $g.lit(t) + ")"
 }
 
-# a conversion to t of x - of a literal, which a conversion requires fits (D17g), a literal of t in its place
+# a conversion to t of x - of a literal, which a conversion requires fits (E26c), a literal of t in its place
 fn (g mut Gen&) conv(t I32, s I32, x String&) String& {
     if constOnly(x) { return g.lit(t) }
     if lossless(s, t) { return $Prims[t] + "(" + $x + ")" }
-    # a conversion that may not hold its value is a contract (D17g): decided while compiling where the value is - an
+    # a conversion that may not hold its value is decided (E26c): decided while compiling where the value is - an
     # error where it does not fit - so only a value read from a variable (x0, x1 ...), not a fixed array's length, is
     # converted plainly, wrapping at run time; anything else is narrowed with a check (E26b)
     if readsVar(x) and not x.Contains(".Len()") { return $Prims[t] + "(" + $x + ")" }
