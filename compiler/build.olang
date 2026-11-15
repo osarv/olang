@@ -1152,6 +1152,7 @@ RunCacheCap := 1 << 30
 # what goes is built again where it is wanted
 fn prune(dir String&, keep String&, cap I64) {
     os.Run("touch " $os.Quote(keep) " 2> /dev/null")
+    restamp(keep)
     names := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
     infos Vec<Aged>
     total := 0
@@ -1169,6 +1170,17 @@ fn prune(dir String&, keep String&, cap I64) {
         try os.RemoveAll(path) catch os.Error { continue }
         total -= p.Size
     }
+}
+
+# the link stamp of bin (linkCurrent's) said again with bin's time as touching left it, so touching a binary to mark it
+# used never makes its next run link it again
+fn restamp(bin String&) {
+    stamp := $bin ".link"
+    text := try os.ReadFile(stamp) catch os.Error { return }
+    info := try os.FileInfo.Stat(bin) catch os.Error { return }
+    words := text.Trim().Split(" ")
+    if words.Len() != 3: return
+    try os.WriteFile(stamp, $words[0] " " $info.Size " " $info.ModTime "\n") catch os.Error { }
 }
 
 # where olang keeps what it builds for itself from one run to the next - interpret's programs ("run"), the prompt's

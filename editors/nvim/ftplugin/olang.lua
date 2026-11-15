@@ -10,9 +10,11 @@ vim.bo.tabstop = 4
 vim.bo.commentstring = "# %s"
 vim.bo.comments = ":#"
 vim.bo.keywordprg = "olang explain"
+-- the sign column always there, so a diagnostic's sign appearing never shifts the text sideways (and rewraps it)
+vim.wo.signcolumn = "yes"
 vim.cmd("compiler olang")
 
 local olang = require("olang")
 olang.attach(0)
 olang.commands(0)
-vim.b.undo_ftplugin = "setlocal et< sw< sts< ts< cms< com< kp< makeprg< errorformat<"
+vim.b.undo_ftplugin = "setlocal et< sw< sts< ts< cms< com< kp< makeprg< errorformat< signcolumn<"

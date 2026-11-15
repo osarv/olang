@@ -1347,7 +1347,7 @@ fn spinner(r mut report&) ? Failed {
     os.Run("for d in on off pipe; do mkdir " $os.Quote(dir) "/$d && printf 'fn main() { Println(\"hi\") }\n' > " $os.Quote(dir) "/$d/hello.olang; done")
     run := """TERM=xterm NO_COLOR=1 script -qfec "$OLANG build hello.olang" /dev/null > ../out.txt 2>&1"""
     try r.expect(sh($dir "/on", run) == 0, "the build on a terminal did not end with 0", dir)
-    try r.expect(sh(dir, "grep -aq 'compiling' out.txt && grep -aq \"$(printf '\\342\\240\\203')\" out.txt") == 0, "the spinner was not drawn on a terminal", dir)
+    try r.expect(sh(dir, "grep -aq 'compiling' out.txt && grep -aq \"$(printf '\\342\\240\\206')\" out.txt") == 0, "the spinner was not drawn on a terminal", dir)
     try r.expect(sh(dir, "grep -aqP '\\r\\x1b\\[Kbuilt ' out.txt") == 0, "the spinner was not erased right before the build's line", dir)
     try r.expect(sh($dir "/off", "OLANG_SPINNER=0 " $run) == 0, "the build with OLANG_SPINNER=0 did not end with 0", dir)
     try r.expect(sh(dir, "! grep -aq \"$(printf '\\342\\240')\" out.txt") == 0, "OLANG_SPINNER=0 still drew the spinner", dir)
@@ -1472,8 +1472,8 @@ fn interpbuilt(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "interpret printed what the -debug build did not", dir)
     try r.expect(sh(dir, "test ! -e build && ls cache/olang/run/prog_olang-*.checked > /dev/null") == 0
                  "interpret left its build beside the program, or not in the cache", dir)
-    try r.expect(sh(dir, "stat -c '%n %.9Y' cache/olang/run/prog_olang-* > a.txt && " $run "prog.olang > out.txt 2>&1; " $
-                    "stat -c '%n %.9Y' cache/olang/run/prog_olang-* | cmp -s a.txt -") == 0, "an unchanged program built again", dir)
+    try r.expect(sh(dir, "stat -c '%n %i' cache/olang/run/prog_olang-*.checked > a.txt && " $run "prog.olang > out.txt 2>&1; " $
+                    "stat -c '%n %i' cache/olang/run/prog_olang-*.checked | cmp -s a.txt -") == 0, "an unchanged program built again", dir)
     try r.expect(sh(dir, $run "untidy.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n", "interpret untidy.olang", dir)
     warned := try os.ReadFile($dir "/err.txt") catch default ""
     try r.expect(warned.Contains("untidy.olang:2:8: warning[M5a]: ") and warned.Contains("untidy.olang:5:5: warning[D3b]: ")
