@@ -109,7 +109,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | every `olang MODE -option` written in a README, SPEC.md or `editors/` **[checked]** | an unknown option or one the mode does not take is reported |
 | `compiler/doc.olang` (`Deprecation`, `DeprecatedNames`) / `api.olang` / `session.olang` (`DeprecatedUses`, `AddDep`) / `lsp.olang` | the `Deprecated:` doc-comment convention (L4b): doc's mark, hover, completion tag, use hints, api's `deprecated` row; SPEC L4b/B14/B15/B21, `checks` scenario `apicaps` |
 | `compiler/mcp.olang` / `lsp.olang` / `session.olang` | when the mode runs the analysis (`-target`, `-define`, `-update` pass through) |
-| `compiler/build.olang`, `target.olang` | the option's effect; the object-name hash if it changes code (`.quick`, `.debug`, `.checked`, B4); `-quick` and `-checked` apply to build, compile, running a file, interpret, the prompt, jupyter, notebook (`compiler/cells.olang` `Config`, `jupyter.olang` `Install`) |
+| `compiler/build.olang`, `target.olang` | the option's effect; `-bench`/`-runs` (B19b): `Config.Timed`/`Runs`, `Interpret`, `RunProgram`, `TestFile` (`runTests`), `TestFiles` and `compiler/measure.olang` (the line), `OptModes`/`OptWords`/`OptWhat` in `olang.olang` (help), SPEC B19b and the option table; the object-name hash if it changes code (`.quick`, `.debug`, `.checked`, B4); `-quick` and `-checked` apply to build, compile, running a file, interpret, the prompt, jupyter, notebook (`compiler/cells.olang` `Config`, `jupyter.olang` `Install`) |
 | `tools/cli_words.olang` | rewrites old spellings; add to it only if an option is renamed |
 | `compiler/goldens/drv.txt` (`make drvgold`), `compiler/tools/drvdiff.olang` | the driver's command-line behaviour |
 | `compiler/prompt.olang` (`Session`, `pieces`, `HelpText`), `checks/fixtures/prompt/session.want`, `interp.want` | the prompt (B22): what a cell may hold, its commands, and the session the checks scenario `prompt` replays - a change to the build's diagnostics or `$` renderings changes `session.want` (and `interp.want`, its interpreted cells) |
@@ -120,6 +120,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `compiler/olang.olang` `Passes.Interpret`, `build.olang` `Interpret`, `InterpretTests` | running a file (B3g) builds as `build` does into `build.CacheDir("run")` (`-checked`: `Config.Checked`, the Lowerer's checks, the emitter's trace, the record key and the `.checked` name); `run` (B3e) is `build` plus running; `OLANG_EVALUATE` (read in `CommandLine.Parse`) runs the evaluator; the checks scenarios `interp` (the evaluator) and `interpbuilt` |
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |
+| the test runner's two builds (P7a): `build.olang` (`TestFile`, `testBinary`, `raceBinary`, `runParts`, `racesSpawners`, `TestFiles`), `olang.olang` (`partOf`, `testBodies`, `emitter`), `emit.olang` (`harness`, `InPart`, the race hook), `target.olang` (`HasRaceRuntime`), `cond.olang` (`SetBool`) | which tests start a task (`effects.Facts.Spawns`), how the harness counts a part (`OLANG_TEST_COUNTS`) and fails a test a race was reported in; SPEC P7a, B3a; `docs/settled.md` "Concurrency"; the checks scenario `racetests` (`checks/fixtures/racetests/`); `makefile` `race`; tests of a file that read what an earlier test left in a global must start a task as it does (`tests/shared.olang`'s pair) |
 
 ## An environment variable the compiler reads
 
@@ -131,6 +132,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `SPEC.md` (B3j, B3m, B12d) | the normative text |
 | `compiler/olang.olang` `help` ("environment:"), `compiler/goldens/drv.txt` (`make drvgold`) | `olang help` lists the build's variables |
 | `README.md`, `docs/install.md`, `makefile` (the bootstrap sets `OLANG_TIMES`) | where users are told of it |
+| `OLANG_AUTORACE`: `compiler/build.olang` (`racesSpawners`), `olang.olang` `help` ("environment:"), SPEC P7a, `checks/checks.olang` (`racetests`) | `olang test`'s race build of the tests that start a task, turned off by 0 |
 | `OLANG_SPINNER`: `compiler/spin.olang` (`Enabled`), `makefile` (`bootstrap`'s loop around clang), `checks/checks.olang` (the prompt's pty scenario sets it to 0; the `spinner` scenario drives it) | the busy indicator (B25) |
 
 The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s `bootstrap` loop repeats them (a shell cannot import them).
@@ -236,6 +238,14 @@ A change to the diagnostic row format, a mode name used there, or a keyword touc
 `editors/` as is (`makefile` `release`). `make install` (`install-editors`) copies `editors/nvim` whole as a Neovim
 package and its `syntax/olang.vim` and `compiler/olang.vim` for Vim, with a filetype rule of its own that follows
 `ftdetect/olang.lua`'s: a new Vimscript file, or a change to what ftdetect recognises, changes it.
+
+`editors/debug/olang_lldb.py` and `olang_gdb.py` read the layouts `-debug` describes (compiler/emit.olang, "debug
+information": a run-time array's `{len, data}`, an enum's `{case, payload}` union, `Vec`'s `data`/`n`, `Map`'s
+`ents`/`next`/`buckets`/`n`, MapEntry's `Key`/`Value`, the `olang.table.` symbol of an `any`): a change to one of them,
+or to those prelude types' fields, changes the formatters and the `dwarf` check (checks/fixtures/dwarf).
+`editors/nvim/lua/olang/debug.lua` finds `olang_lldb.py` beside the plugin or beside the `olang` on PATH (`make install`
+copies `editors/debug` there) and builds into the name `olang build -debug` gives (`build/NAME.debug`) and `olang test
+-debug`'s binary (`build/NAME_test.debug`).
 
 olang's palette is one: `compiler/paint.olang`'s shades (the prompt, 24-bit and 256-colour) and
 `editors/nvim/syntax/olang.vim`'s `s:palette` hold the same colours for the same kinds of token and the diagnostics' error and warning words (the plugin's olangDiag groups); a colour changed in one

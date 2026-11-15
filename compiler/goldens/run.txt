@@ -27,12 +27,12 @@
 | ok - M21: Eq and Hash of one instance are not another's
 | ok - T7b, E25: a scoped call's array of plain data is copied where it is returned or boxed
 | ok - O26a, T7b: a returned array local something else names is copied at its return
-| ok - E25, P1g: a spawn target set by a call given a scope argument
-| ok - P1g, T11b: a spawn target holding an array by value is stored as its assignment
 | ok - O26a, T7b: a callee sharing a parameter's scope keeps it, so the returned local is copied
 | ok - T29a: a conversion of a place to a type over characters names its storage
 | ok - T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time
 | ok - E25, O25a: a local a scoped call declares lives where the argument puts it
+| ok - E25, P1g: a spawn target set by a call given a scope argument
+| ok - P1g, T11b: a spawn target holding an array by value is stored as its assignment
 === test tests/arraypat.olang
 | status 0
 | ok - S13h: an array pattern's literals compare, its names bind, its rest is a view
@@ -158,7 +158,6 @@
 | ok - a reference to a by-value variable is no holder
 | ok - a holder declaring Copy is no unique type: each copy its own, ended by its own holder
 | ok - a constructor failing part way ends the fields it built, the last first
-| ok - seenBy: reads a join block's holder while its task runs, ended after the wait
 | ok - Res.mkRef: ends a holder whose storage flowed out where that storage lives
 | ok - handOver: ends a value handed on to a call that is never made
 | ok - guarded: ends what a failed requirement's call was given
@@ -181,6 +180,7 @@
 | ok - registeredHeld: ends a registered holder before a value registered before it
 | ok - deferPush: hands its by-value parameter on from deferred code, once
 | ok - Viewed: is ended where the storage a view of it is kept in lives
+| ok - seenBy: reads a join block's holder while its task runs, ended after the wait
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
@@ -191,16 +191,16 @@
 | ok - error e raises the payload it holds
 | ok - a value kept outlives the clause and the scopes after it
 | ok - values compare and hash by word and payload
-| ok - a payload rides from a task to its join, the earliest-spawned failure's kept
 | ok - a loop raising and taking payloads stays flat
 | ok - an error raised by name carries what its raise names
 | ok - an error type's methods read what it carries
 | ok - a false requirement's ArgumentError carries the condition
 | ok - a payload is matched by position and by name
-| ok - a join block's own error leaves with its own payload, the tasks' dropped
 | ok - a narrowed payload's array field is indexed in place
 | ok - text inside a payload's structs, enums, arrays and errors is its own
 | ok - the first raise in source order settles a raised error's fields
+| ok - a payload rides from a task to its join, the earliest-spawned failure's kept
+| ok - a join block's own error leaves with its own payload, the tasks' dropped
 === test tests/errsetparams.olang
 | status 0
 | ok - G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail
@@ -231,8 +231,13 @@
 | ok - error values equal across sets hash alike
 === test tests/facts.olang
 | status 0
-| ok - facts are constants the running program reads too
 | ok - facts through function values: what is called through a parameter is what each call gives it
+| ok - facts are constants the running program reads too
+=== test tests/fieldnarrow.olang
+| status 0
+| ok - a field path narrows by a null test, at depth one and two, and in a call's arguments
+| ok - a field path narrows by a case test and an error-value test
+| ok - a field path narrows through loops, stores and an else
 === test tests/filtered.olang
 | status 0
 | ok - a filtered comprehension's result is an array of its own
@@ -460,8 +465,8 @@
 | ok - moved: hands a local to a constructor at its last use, and copies it where it is used again
 | ok - walk: is the value the evaluator baked
 | ok - peek: copies a by-value argument the same call also lends
-| ok - slowRead: gives each spawned task its own argument
 | ok - Pt.pinned: reads a returned local's storage where the result went
+| ok - slowRead: gives each spawned task its own argument
 === test tests/reclaim.olang
 | status 0
 | ok - PushBack: removed nodes' slots reused: weak places to them read null
@@ -596,19 +601,8 @@
 | ok - methods work on a named primitive and on a struct alike
 | ok - a method receiver may be a member-access chain of any depth
 | ok - every combination of value/reference argument and value/reference parameter
-| ok - two tasks run concurrently and are joined before the block ends
-| ok - several tasks may be handed the same instance
-| ok - the same instance may be shared read-only by several tasks
-| ok - join blocks nest
-| ok - sibling join blocks
-| ok - a callee's join is entirely its own
-| ok - a test left early still waits for its tasks
-| ok - ...and the task really had finished before the next test began
 | ok - a test left early runs the destructors of every scope it abandons
 | ok - ...all three of them ran
-| ok - P1g: a spawned call's result is bound to a target
-| ok - P1g: one slot per task is parallel map
-| ok - P1g: the plain form is unchanged
 | ok - O2c: a local declared in a loop does not grow the stack
 | ok - O2c: and a temporary in a loop does not either
 | ok - E11a: every built-in rendering
@@ -659,23 +653,8 @@
 | ok - G8a: a variable introduced inside type-args
 | ok - G8b: a variable is written bare after its introduction
 | ok - P9: the five atomic methods, and what each returns
-| ok - P9: an atomic counter across two tasks is exact
 | ok - P9: U8 and I64 targets
 | ok - P9: atomic methods on every integer type, an extending type, a field and an element
-| ok - P8: a task sees everything the spawner did before the spawn
-| ok - P8: the spawner sees what a task did, after the join
-| ok - P8: ordering composes across two join blocks
-| ok - leaving a join block by return still waits for its tasks
-| ok - leaving a join block by continue still waits for its tasks
-| ok - a spawn nested in an if inside a join still binds to that join
-| ok - leaving a join block by break still waits for its tasks
-| ok - a helper's fan-out overlaps the caller's own work with no signature effect
-| ok - a join block runs ordinary code between its spawns
-| ok - a loop inside a join starts one task per iteration
-| ok - two tasks may allocate into one scope
-| ok - a value a task allocates into the caller's scope survives the join
-| ok - a task that allocates repeatedly does not accumulate memory
-| ok - destructors registered on a task thread run when the spawner's scope closes
 | ok - G12: big<I64> names one instance, called or as a value
 | ok - G12: x.M<T>(...) names a method's own type arguments
 | ok - E31c: 2.0 * v calls v.Mul(2.0), operands still left first
@@ -801,7 +780,6 @@
 | ok - a trait constrains generic code, compiled per type with direct calls
 | ok - a mut trait method writes through to the very instance
 | ok - a fallible trait method propagates through generic code
-| ok - a generic call runs as a spawned task
 | ok - a collection of mixed types is an enum of them
 | ok - an enum case carries a payload, and match binds it
 | ok - an enum value is created by naming a case, and nothing else
@@ -855,7 +833,6 @@
 | ok - D8c: several results, destructured
 | ok - D8c: with try, scopes, generics, methods and interfaces
 | ok - L18c: a function type of several results grouped whole in a list
-| ok - D8c: spawn binds several results
 | ok - D8d: several results passed as a call's arguments
 | ok - D8d: a spread reference lives where the outer result lands
 | ok - O14a: a function value passes back through a function
@@ -978,9 +955,7 @@
 | ok - D16, S1b: a lambda's one-line body
 | ok - D16c: a lambda captures values by copy and references by reference
 | ok - T21: a function value is one value in fields, elements and copies, and compares by code and captures
-| ok - D16e: a spawned lambda captures its loop's variables per task
 | ok - D16b: a lambda called where it is written
-| ok - D16e: a lambda called where it is spawned keeps its captures until the join
 | ok - T29e: String and a program's own array type inherit the array methods
 | ok - T7b: a captured array is borrowed, and a destructured array result is taken, not copied
 | ok - T25b: writable and read-only references, by type
@@ -1008,7 +983,6 @@
 | ok - E5: the bitwise operators bind tighter than the comparisons
 | ok - T17e: raw values
 | ok - S19: deferred code runs on every way out of its block, while compiling and at run time
-| ok - S19e: errdefer runs only on an error's way out, in the defers' order, while compiling and at run time
 | ok - errdefer pending in a test body is not run when the test passes
 | ok - ...and was not run
 | ok - S19a: deferred code runs before its block's scope closes
@@ -1021,8 +995,6 @@
 | ok - a decimal literal above I64's maximum is a U64
 | ok - a long text literal is not truncated
 | ok - a block inside a match value closes at its own brace
-| ok - a big struct is passed and returned through memory, with value semantics
-| ok - a spawned constructor and a spawned computed call run as their calls do
 | ok - O18b: List.Push of a temporary in a loop builds it where the list lives
 | ok - O18b: a temporary pushed from a doubly nested block, and text pushed in a loop
 | ok - O10b: a method, a function and a generic declared after their caller
@@ -1032,8 +1004,6 @@
 | ok - O18b/O23a: the same pushes computed while compiling and at run time
 | ok - T7b: an array or text value returned from a local is built in the result scope, before the callee's scopes close
 | ok - O1b: what a function assigns to a global, or into one, is built in the program's scope
-| ok - P2/O1b: tasks building into the program's scope at once each build into their own stand-in for it
-| ok - P2/P1g: what a task builds lives where its call bound it, not in the join block
 | ok - R9a: a catch default is built where the call's result lives
 | ok - O18a: a value local's references live in its own block - a loop body's are reclaimed with the iteration
 | ok - T7b/R9a: the same results computed while compiling and at run time
@@ -1076,7 +1046,6 @@
 | ok - K1: a function holding unreachable is evaluated until it reaches one
 | ok - K1/S13a: a function with an exhaustive match over an enum reference is evaluated while compiling
 | ok - K1/P9: atomic operations are evaluated while compiling, and agree with the run time
-| ok - K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time
 | ok - R10: a try statement's clauses do not take an error raised by its call's arguments
 | ok - E10, T2c: a reference to an array with no storage renders as the empty array
 | ok - G8a: a field after a generic self-reference is reached through the instantiation's elements
@@ -1173,7 +1142,6 @@
 | ok - T22: a read-only reference parameter fits a function type whose parameter is writable
 | ok - T22a: a function whose parameters' scopes relate, called directly, links what it is given where it is kept
 | ok - O17: a callee storing what it reads through the lent value's references may be lent a split value
-| ok - P2: a task calls a function value read out of storage that lasts until the join
 | ok - E16: try on a constant index known to be out of range compiles, and fails where it runs
 | ok - O26a: a number computed from a local carries nothing into the result
 | ok - O26a: a local a returned value borrows lives in the result scope
@@ -1195,10 +1163,8 @@
 | ok - E11c: a Str walking a Map and a List of its receiver renders the same after the arena churned
 | ok - C11/O16: a constructor call's instance is destructed once wherever it is used
 | ok - T25c: a generic's read-only parameter gives copies as writable as its argument
-| ok - P2: spawned lambdas building through what they captured each build into a stand-in of their own
 | ok - C2g: a constructor's nested blocks build through its fields into the instance's scope
 | ok - O25h: copies of a local enum's payload build where the enum's references live
-| ok - P2: a task keeps the closure it was handed, and one it made over a scope it was handed, past the join
 | ok - O25h: a payload copied out of a conditional builds where the arms' references live
 | ok - E11a: a declared type over Char renders as a character, extends or not, alone and inside another value
 | ok - E11a/E21: an array of arrays writes each element as an array of its own, its element type whole
@@ -1223,33 +1189,15 @@
 | ok - E10/K1: a slice of an empty fixed array is empty, not null, while compiling and at run time
 | ok - S4c: a parallel assignment builds a global reference field's temporary where the global lives
 | ok - O26a: a copy handed to a method lives where the result goes only where the method can keep it
-| ok - O18c/O20: a field of a call's value result passed on, through a reference parameter
 | ok - O18c: a field or a payload read off a call's result, and a walk of a read-only copy's reference
 | ok - O4b: a Map whose values hold Maps of themselves
 | ok - C2d/E25: a constructor with a scope argument, declared with ':='
-| ok - P4: a join's tasks that fail - evaluated while compiling
-| ok - P4: ...and the same at run time
-| ok - P4b: the join fails with the task spawned earliest among those that failed
-| ok - P4a: a task's clause runs on its thread and counts what it takes
-| ok - P4a: a task with several targets gives each a default
-| ok - P4a: defaults holding references outlive the join
-| ok - P1g: array values tasks give their targets outlive the join
-| ok - P4b: a failed join replaces a return, a break and a continue, but not an error already leaving
-| ok - P4b: a failed join's deferred code runs, then the clause
-| ok - P4: a spawned lambda fails, and nested joins pass a failure out
-| ok - R1a/P4c: an inferred set through a join
-| ok - D10a/P4c: a function may end in a join that leaves
-| ok - P4b: a return inside a failing join is replaced by the join's failure
 | ok - O18c/O20: a store through an element At, Get, First or Last hands back is judged where the collection lives
 | ok - E28/O12: a conditional of references from different scopes, each value fitting the store
-| ok - C9a/P2: what a destructor's task builds is destructed with the scope being closed
 | ok - C10: a destructor calls a method on a field it reads bare
 | ok - S4c: several parallel assignments in one function, while compiling too
 | ok - S4c: several parallel assignments in one function
-| ok - E31a: try on a fallible Call
 | ok - O1b/S4c: a parallel assignment builds a whole global value's references where the global lives
-| ok - P4a/D16d: a task's default holding a lambda, while compiling and at run time
-| ok - P4a/D16d: a task's default may hold a lambda capturing only values
 | ok - O15/O16: a chain of 300,000 nodes in a block destructs once each, in reverse construction order, as the block closes
 | ok - O15: a tree's nodes destruct in reverse construction order - each node after the nodes it holds were built
 | ok - R1a, R1b: an inferred set is what the body can fail with, through cycles and function values
@@ -1286,6 +1234,63 @@
 | ok - S6: text lent writably as an Array<Char> where it may be written
 | ok - E31b: a mutating call through x[i] is made on the element in place, as the evaluator makes it
 | ok - S4c, E31: a parallel assignment of elements stores through SetAt
+| ok - two tasks run concurrently and are joined before the block ends
+| ok - several tasks may be handed the same instance
+| ok - the same instance may be shared read-only by several tasks
+| ok - join blocks nest
+| ok - sibling join blocks
+| ok - a callee's join is entirely its own
+| ok - a test left early still waits for its tasks
+| ok - ...and the task really had finished before the next test began
+| ok - P1g: a spawned call's result is bound to a target
+| ok - P1g: one slot per task is parallel map
+| ok - P1g: the plain form is unchanged
+| ok - P9: an atomic counter across two tasks is exact
+| ok - P8: a task sees everything the spawner did before the spawn
+| ok - P8: the spawner sees what a task did, after the join
+| ok - P8: ordering composes across two join blocks
+| ok - leaving a join block by return still waits for its tasks
+| ok - leaving a join block by continue still waits for its tasks
+| ok - a spawn nested in an if inside a join still binds to that join
+| ok - leaving a join block by break still waits for its tasks
+| ok - a helper's fan-out overlaps the caller's own work with no signature effect
+| ok - a join block runs ordinary code between its spawns
+| ok - a loop inside a join starts one task per iteration
+| ok - two tasks may allocate into one scope
+| ok - a value a task allocates into the caller's scope survives the join
+| ok - a task that allocates repeatedly does not accumulate memory
+| ok - destructors registered on a task thread run when the spawner's scope closes
+| ok - a generic call runs as a spawned task
+| ok - D8c: spawn binds several results
+| ok - D16e: a spawned lambda captures its loop's variables per task
+| ok - D16e: a lambda called where it is spawned keeps its captures until the join
+| ok - S19e: errdefer runs only on an error's way out, in the defers' order, while compiling and at run time
+| ok - a big struct is passed and returned through memory, with value semantics
+| ok - a spawned constructor and a spawned computed call run as their calls do
+| ok - P2/O1b: tasks building into the program's scope at once each build into their own stand-in for it
+| ok - P2/P1g: what a task builds lives where its call bound it, not in the join block
+| ok - K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time
+| ok - P2: a task calls a function value read out of storage that lasts until the join
+| ok - P2: spawned lambdas building through what they captured each build into a stand-in of their own
+| ok - P2: a task keeps the closure it was handed, and one it made over a scope it was handed, past the join
+| ok - O18c/O20: a field of a call's value result passed on, through a reference parameter
+| ok - P4: a join's tasks that fail - evaluated while compiling
+| ok - P4: ...and the same at run time
+| ok - P4b: the join fails with the task spawned earliest among those that failed
+| ok - P4a: a task's clause runs on its thread and counts what it takes
+| ok - P4a: a task with several targets gives each a default
+| ok - P4a: defaults holding references outlive the join
+| ok - P1g: array values tasks give their targets outlive the join
+| ok - P4b: a failed join replaces a return, a break and a continue, but not an error already leaving
+| ok - P4b: a failed join's deferred code runs, then the clause
+| ok - P4: a spawned lambda fails, and nested joins pass a failure out
+| ok - R1a/P4c: an inferred set through a join
+| ok - D10a/P4c: a function may end in a join that leaves
+| ok - P4b: a return inside a failing join is replaced by the join's failure
+| ok - C9a/P2: what a destructor's task builds is destructed with the scope being closed
+| ok - E31a: try on a fallible Call
+| ok - P4a/D16d: a task's default holding a lambda, while compiling and at run time
+| ok - P4a/D16d: a task's default may hold a lambda capturing only values
 === test tests/structpat.olang
 | status 0
 | ok - Point: S13i: struct patterns take a struct apart by its fields, at run time and while compiling
@@ -1395,6 +1400,17 @@
 | ok - Measurement.Of: fails as the work does, at once
 | ok - nextOps: grows by the last round's pace, within Go's bounds
 | ok - Measurement.Str: writes what one call cost, leaving out what was not counted
+| ok - Median: the middle, from any order
+| ok - Spread: the median absolute deviation, which one outlier does not move
+| ok - Series.Str: writes the median, its spread and the typical run's counts
+| ok - Series.Line: scales the unit and writes the runs and calls
+| ok - Series.taken: makes the runs it is given, each of the calls it is given
+| ok - Series.Of: makes the runs asked for
+| ok - Comparison.interleave: alternates a and b run by run
+| ok - Comparison: the ratio is the median of the pairs' b/a
+| ok - Time: measures in any build and gives the median back
+| ok - Compare: measures both and gives the ratio
+| ok - Series.Display: is a table in a notebook
 | ok - Keep: keeps a value of any type
 === test std/bitset.olang
 | status 0
@@ -1414,21 +1430,21 @@
 | ok - a deferred Cancel lets a join block's tasks stop, on an error too
 === test std/chan.olang
 | status 0
-| ok - a bounded channel carries values between two tasks
 | ok - the ring buffer wraps
 | ok - a wait with a token returns what is there, and gives up when the deadline passes
+| ok - a closed channel gives what it holds, then fails with CLOSED
+| ok - a channel's capacity is an I64
+| ok - Ready.Select: times out on time.After, on the virtual clock in no time
+| ok - Ready.Select: fails with CLOSED once a channel it receives from is closed and drained
+| ok - a bounded channel carries values between two tasks
 | ok - Cancel wakes a task blocked in a wait
 | ok - P4: a task cancelled in RecvUntil fails into its join, or takes its own default
 | ok - a channel carries any element type
 | ok - a channel of capacity 0 is a rendezvous
-| ok - a closed channel gives what it holds, then fails with CLOSED
 | ok - for v in c receives until the channel is closed and drained
 | ok - Close wakes every task waiting to receive, and RecvUntil sees it before its deadline
-| ok - a channel's capacity is an I64
 | ok - Ready.Select: takes the first case ready, in order
 | ok - Ready.Select: sends through SendOf, a rendezvous handing its value to a waiting receiver
-| ok - Ready.Select: times out on time.After, on the virtual clock in no time
-| ok - Ready.Select: fails with CLOSED once a channel it receives from is closed and drained
 === test std/crc32.olang
 | status 0
 | ok - the CRC-32 check value, and pieces
@@ -1597,10 +1613,10 @@
 | ok - Readable: says which sockets have something to read
 | ok - Error: an address refused carries the text, a name not found the name
 | ok - names are resolved through the C library, numbers read as they are
-| ok - a TCP connection over loopback carries bytes both ways
 | ok - dialing where nothing listens is refused, and a taken address is in use
 | ok - a read times out
 | ok - UDP datagrams travel over loopback
+| ok - a TCP connection over loopback carries bytes both ways
 === test std/order.olang
 | status 0
 | ok - ByFields: orders a struct by its fields in order
@@ -1745,8 +1761,8 @@
 | ok - Sort evaluated while compiling as at run time
 | ok - Chunks cuts an array into consecutive pieces, the last holding what is left
 | ok - a size computed while running is a ChunkSize, refused below one
-| ok - tasks each write their own piece of an array, read back after the join
 | ok - Argsort: the order that sorts, stable; running sums; even spacing; ranges by a step
+| ok - tasks each write their own piece of an array, read back after the join
 === test std/prelude/tests/columns.olang
 | status 0
 | ok - Columns: rows are read and written through the columns
@@ -1869,8 +1885,6 @@
 | ok - Vec: one lent writably is pushed to, one passed by value is the callee's copy
 | ok - Vec: held in a List, a Map and a Vec - a type argument like any other, each holding its own
 | ok - Vec: a lambda capturing one holds it as it was when made, one capturing a reference reads it when called
-| ok - Vec: filled by tasks, one each, read after the join
-| ok - Vec: its view cut into Chunks, each piece written by a task of its own
 | ok - Vec: references kept in one, read back after a churn and after the Vec is replaced
 | ok - Vec: room made up front, Reserve, Cap, Remove and Join
 | ok - Vec: texts held by value joined, while compiling and at run time
@@ -1883,6 +1897,8 @@
 | ok - Vec: a Vec local that is returned, its text read back after the arena churns
 | ok - Vec: removals empty what they no longer use and shifts move, evaluated while compiling as at run time
 | ok - Vec: an empty one equals its copy and hashes alike - while compiling and at run time
+| ok - Vec: filled by tasks, one each, read after the join
+| ok - Vec: its view cut into Chunks, each piece written by a task of its own
 === run 2digitname.olang
 | status 0
 === run anyenumpayload.olang

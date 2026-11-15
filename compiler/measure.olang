@@ -1,0 +1,122 @@
+# measure - what -bench reports of a whole run (B19b): the time a program's or a test file's run took and what it used.
+# The run is as without -bench - the same program, arguments and output - but started here and waited for with wait4, so
+# its user and system time and its peak resident memory are the kernel's own, and one line follows on the standard error:
+#
+#     bench: built in 0.42 s, ran in 1.24 s (1.20 s user, 0.03 s sys, 182 MB peak)
+#
+# -runs N runs it N times, the first as usual and the others with their standard output discarded (the standard error is
+# kept, so a failure shows), and gives the run time as the median of the runs with its spread:
+#
+#     bench: built in 0.42 s, ran in 1.24 s ± 0.02 s (median of 9 runs; 1.20 s user, 0.03 s sys, 182 MB peak)
+#
+# The statistics are std/bench's (Median, and Spread: the median absolute deviation).
+
+import "std/io"
+import "std/os"
+import "std/time"
+import "std/bench"
+import fcntl "fcntl.h"
+import unistd "unistd.h"
+
+extern {
+    fn wait4(pid I32, status Array<I32>, options I32, usage Array<I64>) I32
+    fn getrusage(who I32, usage Array<I64>) I32
+    fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+}
+
+# one run: its wall time, user and system time (nanoseconds), the peak resident memory (kilobytes), and its status
+# (128 and the signal where a signal ended it)
+type Sample struct(Wall I64, User I64, Sys I64, PeakKb I64, Status I64) { Wall, User, Sys, PeakKb, Status }
+
+# argv run, its standard output going to out (-1: this process's own), and waited for; fails where it cannot be started
+fn Sample.Of(argv Array<String&>&, out I32) Sample ? os.Error {
+    size := 0
+    for a in argv: size += a.Len() + 1
+    line := Array<U8>(size)
+    at := 0
+    for a in argv {
+        for c in a {
+            line[at] = c
+            at++
+        }
+        at++
+    }
+    start := time.Now()
+    pid := __olang_spawn(line, argv.Len(), -1, out, -1, "\0")
+    if pid < 0: error os.Error.Failed(argv[0])
+    waited := Array<I32>(1)
+    ru := Array<I64>(18) # struct rusage: two timevals (seconds, microseconds), then the peak in kilobytes
+    if wait4(pid, waited, 0, ru) < 0: error os.Error.Failed(argv[0])
+    wall := time.Now() - start
+    code := I64(waited[0])
+    status := (code >> 8) & 255 if code & 127 == 0 else 128 + (code & 127)
+    return Sample(wall, ru[0] * 1000000000 + ru[1] * 1000, ru[2] * 1000000000 + ru[3] * 1000, ru[4], status)
+}
+
+# seconds as the line writes them: 1.24 s from a tenth of a second up, else bench's units; nothing is 0 s
+fn secs(ns F64) String {
+    if ns < 1.0: return "0 s"
+    return $(ns / 1e9).Fixed(2) + " s" if ns >= 1e8 else bench.Human(ns, 0.0)
+}
+
+# a time and its spread
+fn secsSpread(ns F64, spread F64) String { return secs(ns) if spread == 0.0 else $secs(ns) + " ± " + $secs(spread) }
+
+# "built in 0.42 s, ran in 1.24 s (1.20 s user, 0.03 s sys, 182 MB peak)", or with more than one run "ran in 1.24 s ± 0.02 s
+# (median of 9 runs; 1.20 s user, ...)"; built is the nanoseconds the build took
+fn Line(built I64, runs Array<Sample>&) String {
+    walls := Array<F64>[F64(r.Wall) for r in runs]
+    users := Array<F64>[F64(r.User) for r in runs]
+    syss := Array<F64>[F64(r.Sys) for r in runs]
+    peak := 0
+    for r in runs: peak = peak.Max(r.PeakKb)
+    n := runs.Len()
+    ran := $secsSpread(bench.Median(walls), bench.Spread(walls)) + " (median of " + $n + " runs; " if n > 1 else $secs(bench.Median(walls)) + " ("
+    return $"built in " + $secs(F64(built)) + ", ran in " + $ran + $secs(bench.Median(users)) + " user, " + $secs(bench.Median(syss)) + " sys, " + $(peak / 1024) + " MB peak)"
+}
+
+# argv run - once, or wanted times - and the line written to the standard error, built the nanoseconds the build took.
+# The program's output is its own: the first run's is shown, a later one's is discarded. Gives the status of the first
+# run that did not succeed (the others are not made, and the line is of the runs made), else 0, or 1 where it cannot be started
+fn Measure(argv Array<String&>&, built I64, wanted I64 = 1) I32 {
+    nowhere := fcntl.open("/dev/null\0", 1)
+    defer unistd.close(nowhere)
+    runs Vec<Sample>
+    status I64 = 0
+    for i in range wanted.Max(1) {
+        s := try Sample.Of(argv, -1 if i == 0 else nowhere) catch os.Error {
+            try io.PutErr($"bench: " + $argv[0] + " could not be started\n") catch io.Error { }
+            return 1
+        }
+        runs.Push(s)
+        status = s.Status
+        if status != 0: break
+    }
+    try io.PutErr($"bench: " + $Line(built, runs.ToArray()) + "\n") catch io.Error { }
+    return I32(status)
+}
+
+# the line of several files' runs: how many, how long they took together from the first one's start, and what the
+# children this process waited for used - read from the kernel, so the sum of their own (and their children's)
+fn Total(files I64, wall I64) String {
+    ru := Array<I64>(18)
+    getrusage(-1, ru) # RUSAGE_CHILDREN
+    return $"bench: " + $files + " files in " + $secs(F64(wall)) + " (" + $secs(F64(ru[0] * 1000000000 + ru[1] * 1000)) + " user, " + $secs(F64(ru[2] * 1000000000 + ru[3] * 1000)) + " sys, " + $(ru[4] / 1024) + " MB peak)"
+}
+
+test Line "writes one run, and the median with its spread of several" {
+    one := Array<Sample>[Sample(1240000000, 1200000000, 30000000, 186368, 0)]
+    assert Line(420000000, one) == "built in 0.42 s, ran in 1.24 s (1.20 s user, 30.0 ms sys, 182 MB peak)"
+    many := Array<Sample>[Sample(1230000000, 1200000000, 30000000, 186368, 0), Sample(1250000000, 1200000000, 30000000, 100, 0), Sample(1240000000, 1200000000, 30000000, 100, 0)]
+    assert Line(420000000, many) == "built in 0.42 s, ran in 1.24 s ± 10.0 ms (median of 3 runs; 1.20 s user, 30.0 ms sys, 182 MB peak)"
+}
+
+test Sample.Of "runs a program, waits for it and reads what it used" {
+    s := try Sample.Of(Array<String&>["/bin/sh", "-c", "exit 3"], -1) catch os.Error { unreachable }
+    assert s.Status == 3 and s.Wall > 0 and s.PeakKb > 0
+}
+
+test Measure "gives the first failing status and the line of the runs made" {
+    assert Measure(Array<String&>["/bin/sh", "-c", "exit 4"], 1000, 3) == 4
+    assert Measure(Array<String&>["/bin/sh", "-c", "exit 0"], 1000, 2) == 0
+}

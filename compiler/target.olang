@@ -328,6 +328,16 @@ fn canCompileBf16(clang String&, triple String&) Bool {
     return out.Status == 0
 }
 
+# B3a, P7: whether clang can build for the race detector for this machine's architecture: its ThreadSanitizer runtime is
+# installed (clang prints the path of a library it finds, else the bare name). Asked every time, never kept - the answer
+# changes when a package is installed
+fn HasRaceRuntime(clang String&, arch String&) Bool {
+    if clang == "": return false
+    name := $"libclang_rt.tsan-" + $arch + ".a"
+    out := try ClangSays(Array<String&>[$clang, $"-print-file-name=" + $name], "", false) catch os.Error { return false }
+    return out.Status == 0 and out.Stdout.Contains("/")
+}
+
 # ---- what clang says, kept ----
 
 # what clang says run with args on input - its status and standard output - kept, so that a build need not ask again:

@@ -39,7 +39,7 @@ fn workers() I64 {
 # the last check to finish is a short one. A scenario is a function reporting into a report (r.expect(ok, what, dir) for
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
-Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
+Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "bench", "benchrun", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "interpbuilt", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
@@ -47,7 +47,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
-                     "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline"]
+                     "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline", "racetests", "dwarf"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -419,6 +419,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "fix" { try fixing(r) }
         case "twolists" { try twolists(r) }
         case "clones" { try clones(r) }
+        case "dwarf" { try dwarf(r) }
         case "sidebyside" { try sidebyside(r) }
         case "remote" { try remote(r) }
         case "remotebad" { try remotebad(r) }
@@ -477,6 +478,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "fuzz" { try fuzz(r) }
         case "latermodule" { try latermodule(r) }
         case "bench" { try benchmarks(r) }
+        case "benchrun" { try benchrun(r) }
         case "chunkpool" { try chunkpool(r) }
         case "cinterop" { try cinterop(r) }
         case "target" { try target(r) }
@@ -501,6 +503,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "testends" { try testends(r) }
         case "checkedbuild" { try checkedbuild(r) }
         case "linkinline": try linkinline(r)
+        case "racetests": try racetests(r)
         case _ {
             r.text = "check FAIL: no scenario is named " + $name + "\n"
             error Failed.Check
@@ -1828,6 +1831,37 @@ fn clones(r mut report&) ? Failed {
                  "a -debug build has clones", dir)
 }
 
+# B2e: a -debug build's values read back by lldb and gdb - a struct's fields by name, an enum's case and payload, a
+# fixed array, text, a Vec, a Map, a declared type by its name, an arena-homed local, a loop's locals only in the loop -
+# through editors/debug's formatters. Each debugger is checked where it is installed
+test "a -debug build shows olang values in lldb and gdb" { assert passed("dwarf") }
+
+fn dwarf(r mut report&) ? Failed {
+    dir := fresh("dwarf")
+    os.Run("cp checks/fixtures/dwarf/* " + $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build -debug vals.olang > out.txt 2>&1") == 0, "build -debug", dir)
+    py := $root() + "/editors/debug/"
+    if sh(dir, "command -v lldb > /dev/null") == 0 {
+        lldb := "lldb --batch -o " + $os.Quote($"command script import " + $py + "olang_lldb.py") + " -s lldb.txt build/vals.debug > out.txt 2>&1"
+        try r.expect(sh(dir, lldb) == 0, "lldb", dir)
+        for want in Array<String&>["(I64) inner = 0", "(Point) p = Point(x = 3, y = 4)", "(Shape) s = Shape.Rect(w = 5, h = 6)"
+                                   "(Shape) e = Shape.Empty", "(Color) col = Green", "(I64[3]) fixed = [1, 2, 3]"
+                                   "(String) t = \"hello\"", "(Vec<I64>) v = [10, 20, 30]", "(Map<String, I64>) m = [\"a\": 1]"
+                                   "(Meters) d = 12", "&Point(x = 7, y = 8)", "render Shape.Rect(w = 5, h = 6)"] {
+            try r.expect(outOf(dir).Contains(want), $"lldb shows " + $want, dir)
+        }
+        # the loop's locals belong to its lexical block: past the loop, not shown
+        try r.expect(not outOf(dir).Contains("inner = 10"), "lldb shows a loop's local after the loop", dir)
+    }
+    if sh(dir, "command -v gdb > /dev/null") != 0: return
+    gdb := "gdb -batch -x " + $os.Quote($py + "olang_gdb.py") + " -x gdb.txt build/vals.debug > out.txt 2>&1"
+    try r.expect(sh(dir, gdb) == 0, "gdb", dir)
+    for want in Array<String&>["p = {x = 3, y = 4}", "s = Rect = {w = 5, h = 6}", "e = Empty", "col = Green", "fixed = {1, 2, 3}"
+                               "t = \"hello\"", "v = len = 3 = {10, 20, 30}", "m = len = 1 = {[\"a\"] = 1}", "d = 12"] {
+        try r.expect(outOf(dir).Contains(want), $"gdb shows " + $want, dir)
+    }
+}
+
 # T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is
 # writable, still gets a copy of its own
 test "a literal reaching a read-only reference is static data" { assert passed("static") }
@@ -2424,6 +2458,28 @@ fn benchmarks(r mut report&) ? Failed {
     try r.expect(n >= 10, "bench/ holds no programs", dir)
 }
 
+# B19b: -bench measures what runs - a program built and run once as usual, then the line of its build time, run time,
+# user and system time and peak memory on the standard error; -runs N the median of N runs with the spread, the later
+# runs' output discarded; test, one such line a file and a total line for several
+test "-bench reports the time and use of a run (B19b)" { assert passed("benchrun") }
+
+fn benchrun(r mut report&) ? Failed {
+    dir := fresh("benchrun")
+    os.Run("cp checks/fixtures/benchrun/* " + $os.Quote(dir))
+    once := "^bench: built in [0-9.]+ [a-zµ]+, ran in [0-9.]+ [a-zµ]+ \\([0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$"
+    many := "^bench: built in [0-9.]+ [a-zµ]+, ran in [0-9.]+ [a-zµ]+ ± [0-9.]+ [a-zµ]+ \\(median of 3 runs; [0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$"
+    try r.expect(sh(dir, "\"$OLANG\" -bench m.olang x y > out.txt 2> err.txt") == 3, "status is the program's", dir)
+    try r.expect(outOf(dir) == "3\n", "output untouched", dir)
+    try r.expect(sh(dir, "grep -Eq '" + $once + "' err.txt && test $(wc -l < err.txt) = 1") == 0, "one run's line", dir)
+    try r.expect(sh(dir, "\"$OLANG\" run -bench -runs 3 m.olang > out.txt 2> err.txt") == 0, "run -runs status", dir)
+    try r.expect(outOf(dir) == "1\n", "only the first run's output", dir)
+    try r.expect(sh(dir, "grep -Eq '" + $many + "' err.txt") == 0, "median line", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -runs 3 m.olang > out.txt 2>&1") != 0 and outOf(dir).Contains("B19b"), "-runs alone", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -bench t.olang u.olang > out.txt 2> err.txt") == 0, "test -bench", dir)
+    try r.expect(sh(dir, "test $(grep -Ec '" + $once + "' err.txt) = 2 && grep -Eq '^bench: 2 files in [0-9.]+ [a-zµ]+ \\([0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$' err.txt") == 0
+        "a line a file, a total", dir)
+}
+
 fn latermodule(r mut report&) ? Failed {
     dir := fresh("latermodule")
     os.Run("cp checks/fixtures/latermodule/* " + $os.Quote(dir))
@@ -3006,7 +3062,9 @@ test "tests that fail on purpose, and where an error went" { assert passed("test
 fn testends(r mut report&) ? Failed {
     dir := fresh("testends")
     os.Run("cp checks/fixtures/testends/* " + $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
+    # (OLANG_AUTORACE=0: some of these tests read what the one before left in a global - one that starts a task and the next - and
+    # the evaluator's run below keeps the file's order, which the want file holds; the race build is the racetests scenario's, P7a)
+    try r.expect(sh(dir, "OLANG_AUTORACE=0 \"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
     # B3e, P1d: test -evaluate leaves them as their binary does (bulk review 8: it had run no destructor, joined no task)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends -evaluate", dir)
@@ -3024,6 +3082,36 @@ fn testends(r mut report&) ? Failed {
         try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" " + $n + ".olang > i.txt 2>&1; grep -v '^Aborted' i.txt | cmp -s - " + $n + ".d.want") == 0
                      $n + " -i", dir)
     }
+}
+
+# B3a, P7a: the tests of a file that start a task - directly or through a call - run in a build of the race detector, the
+# others in the ordinary one; a race fails the test it was reported in, the report printed; the counts are said once; words
+# pick tests from either build; -race puts every test in the race build, OLANG_AUTORACE=0 none; a file whose tests start no
+# task is built once
+test "tests that start a task run under the race detector, the others do not" { assert passed("racetests") }
+
+fn racetests(r mut report&) ? Failed {
+    dir := fresh("racetests")
+    os.Run("cp checks/fixtures/racetests/* " + $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" test race.olang > out.txt 2>&1") == 1, "a race fails the file", dir)
+    out := outOf(dir)
+    try r.expect(out.Contains("plain: race build false\nok - plain\n") and out.Contains("after: race build false\nok - after the race\n")
+                 "the others in the ordinary build", dir)
+    try r.expect(out.Contains("own: race build true\nok - tasks writing counters of their own\n") and
+                 out.Contains("through a call: race build true\nok - a call reaching a task\n"), "those that start a task, in the race build", dir)
+    try r.expect(out.Contains("racing: race build true\n") and out.Contains("WARNING: ThreadSanitizer: data race") and
+                 out.Contains("FAIL - two tasks writing one counter: data race\n"), "a race reported and failing its test", dir)
+    try r.expect(out.EndsWith("4 passed, 1 failed\n") and out.Split("passed,").Len() == 2, "one count line", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test race.olang plain own > out.txt 2>&1") == 0 and outOf(dir).EndsWith("2 passed, 0 failed\n") and
+                 not outOf(dir).Contains("ThreadSanitizer"), "words naming tests of both builds, a clean race build passing", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test race.olang nosuch > out.txt 2>&1") == 3 and outOf(dir).Contains("no test is named by 'nosuch'")
+                 "words naming none", dir)
+    try r.expect(sh(dir, "OLANG_AUTORACE=0 \"$OLANG\" test race.olang > out.txt 2>&1") == 0 and not outOf(dir).Contains("race build true")
+                 "OLANG_AUTORACE=0", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -race race.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("plain: race build true\n")
+                 "-race: every test", dir)
+    try r.expect(sh(dir, "rm -f build/*_test.race; \"$OLANG\" test clean.olang > out.txt 2>&1") == 0 and outOf(dir).EndsWith("1 passed, 0 failed\n") and
+                 sh(dir, "ls build/clean_test.race > /dev/null 2>&1") != 0, "a file starting no task is built once", dir)
 }
 
 # B3g: a file written where the mode would stand is built and run - its arguments after it, an option's spelling

@@ -17,12 +17,52 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
   `:OlangRepl` opens plain `olang`, the interactive prompt, in a terminal split; `:OlangFormatOnSave [on|off]`
   toggles format on save (no argument) or sets it, and remembers the choice (`stdpath("state")/olang/format_on_save`),
   which then wins over the default and `setup()`.
-  Keymaps under `<localleader>` - `r` run, `b` build, `t` test, `f` format, `F` format on save, `e` explain, `i` repl - are set where
+  Keymaps under `<localleader>` - `r` run, `b` build, `t` test, `f` format, `F` format on save, `e` explain, `i` repl, `d` debug - are set where
 - `gf` on an import opens the module's file (`std/...` in the standard library, found through `OLANG_STD` or beside the `olang` on the PATH; anything else beside the importing file), and `[i`/`[I` follow imports too.
 - `gd` on a bracket jumps to its partner (as `%`), anywhere else to the definition; signs are drawn in the line-number column (an `E` replaces that line's number), so a diagnostic appearing never adds a column or shifts and rewraps the text.
   nothing is mapped already; `vim.g.olang_no_maps = 1` turns them off.
 
 Everything but the last works without the server; all of it needs `olang` on `PATH`.
+
+## Debugging
+
+With [nvim-dap](https://github.com/mfussenegger/nvim-dap) and `lldb-dap` installed (LLVM 18 and later; `lldb-vscode`
+before; Ubuntu's `lldb-18` package ships `lldb-dap-18`, which is found too):
+
+- `:OlangDebug [args]` saves the buffer, builds it with `olang build -debug -output build/NAME.debug FILE` (errors into
+  the quickfix list) and starts it under the debugger with the arguments;
+- `:OlangDebugTest [words]` saves it, builds and runs its tests with `olang test -debug FILE words` (a failing test is
+  no reason to stop), then starts the test binary, `build/NAME_test.debug`, under the debugger running the tests the
+  words name - each test is a function of its own, `test TARGET: DESCRIPTION` in the call stack;
+- `<localleader>d` is `:OlangDebug`; nvim-dap's own commands do the rest (`:DapToggleBreakpoint`, `:DapContinue`,
+  `:DapStepOver`, `:DapStepInto`, `:DapStepOut`, `:DapTerminate`, `require("dap.ui.widgets")` for scopes).
+
+Values show as olang writes them - `Point(x = 3, y = 4)`, `Shape.Rect(w = 5, h = 6)`, `"hello"`, `[10, 20, 30]` for a
+`Vec`, `["a": 1]` for a `Map`, each expandable - through `editors/debug/olang_lldb.py`, which the adapter loads (found
+beside this plugin in a checkout, else beside the `olang` on `PATH`, where `make install` puts it). Breakpoints and the
+line stopped at are drawn in the line-number column, as diagnostics are: `●` a breakpoint, `◆` a conditional one, `◇` a
+log point, `○` one the debugger refused, `▶` the line stopped at (highlighted as `CursorLine`), coloured through the
+groups `DapBreakpoint`, `DapStopped`, ... linked to the diagnostic signs' colours - signs you defined yourself are kept.
+Nothing of this loads without nvim-dap. The plugin sets up an adapter named `olang` and, unless you made one, a
+configuration for olang buffers (`:DapContinue` builds and runs the file). Another adapter is one line:
+
+```lua
+require("olang").setup({ debug = { adapter = { "/path/to/lldb-dap" } } })
+```
+
+Keymaps many nvim-dap users add:
+
+```lua
+local dap = require("dap")
+vim.keymap.set("n", "<F5>", dap.continue)
+vim.keymap.set("n", "<F9>", dap.toggle_breakpoint)
+vim.keymap.set("n", "<F10>", dap.step_over)
+vim.keymap.set("n", "<F11>", dap.step_into)
+vim.keymap.set("n", "<F12>", dap.step_out)
+```
+
+Without Neovim: `lldb build/NAME.debug` with `command script import editors/debug/olang_lldb.py`, or `gdb -x
+editors/debug/olang_gdb.py build/NAME.debug` (editors/debug/README.md).
 
 ## Installing
 

@@ -37592,3 +37592,140 @@ files, 8112 joins, 24347 `+` written, 5 joins parenthesized; programs written in
 generators, checks.olang's scenarios, drvdiff's, the prompt's and cells' templates) by hand and by a scratch pass.
 Bootstrapped in three steps: the old compiler built the new one from the old-syntax source, which built the migrated
 source, which built itself to the fixed point; the seed was written again.
+## Field paths narrow (S8d, S8e, T20, 2026-11-15)
+The user, on the compiler's own `if recv != null and recv.Ty != null { p.receiverVars(recv.Ty!, false) }`: "yes this is
+normal narrowing rules". Until now only locals and parameters narrowed - a field "may change under a call" - so every
+tested field was read again through `!` or copied into a local first. The rule now: a **field path** - a local or a
+parameter followed by field reads, `x.f`, `x.f.g` (no call, index or slice in it) - narrows exactly as a local does, by
+the one narrowing walk: a null test, a case test (its payload fields copied where the narrowing begins, `x.f.r` read off
+the copy, a payload written whole read as `x.f`), an error-value test (`x.e == ReadError.Bad`, then `x.e.line`), through
+`and`/`or`/`not`, conditionals, asserts, leaving `if`s and loops on the test, and a store of a value never null
+(`x.f = Node(1)`). It ends where a local's would - a statement assigning the path or a path it starts with (`x = y`,
+`x.f = y` end `x.f.g`; `x.f.g.v = 3` does not) - and besides at **any call** after the test: a function, a method, an
+operator's method, a constructor, a function value, a spawned call, and a `yield`, since what is called may write the
+field through another reference (whether the path is read writably or read-only makes no difference). A call's arguments
+are evaluated before it, so `use(r.Ty)` right after the test reads it narrowed.
+
+Decided (mine) on the way, as the rule's consequences: a call later in the same condition (`x.f != null and ready(x)`)
+leaves nothing said of `x.f` past it - the checker keeps, per frame, the count of calls checked when each field-path
+test, `and` and `or` was, and a test's narrowing is made only where no call came after it in its condition; a call in an
+`if`'s block is none in its `else` (what it ended holds again there, and is ended after the `if`); a loop is judged as
+a whole - a field path narrowed before a loop whose condition, body or post clause calls is not known inside it, a read
+there being a new error (S8d, "narrowed by a test before the loop around this read"), since the loop's calls come before
+its next turn; a loop's own condition still narrows its body, and its post clause only where the body calls nothing;
+deferred code is checked under no field path's narrowing; a weak field (T2d) never narrows - its referent is let go
+with no call or store to it; `x.f!` reads the path at its declared type and unwraps it, so the compiler's many `!`s stay
+valid (a later cleanup may drop them). What did change: a local declared `:=` from a narrowed path is now never null,
+as one declared from a narrowed local always was, so a `!` on it is E35's error and a null test of it T2c's - seven
+`c!` in compiler/session.olang (`c := a.C` after `a.C == null` returned) and one `assert h.held != null` after a store
+in tests/shared.olang were all the repository held. The messages say why a narrowing that held no longer does: T2c's "may be null",
+S8d's "is an enum" and T19b's "has no field" get a `note:` naming the assignment or the call since the test.
+Implementation: `nullNarrow`, `narrowed` and `errNarrow` are keyed by path; `calledNow` (called where every call is
+built: `callOf` but for helpers, `callOfBody`, `callBody`, and at a `yield`) ends the field paths' narrowings; the
+checks case `t2cfieldnarrow` now has a call between its test and its read. The evaluator reads the typed program the
+checker makes and needed nothing (tests/fieldnarrow.olang bakes a global from it and decides a top-level assert).
+Found at the merge onto master: the checks case `vec146deepok` (a field path 70 deep) no longer compiled - the
+checker went past 12 GB. `errPath`, asked at every member read whether the path before it holds an error value, found
+that path's place, and the read then found it again, so each level doubled the work. Whether a path holds an error value
+is now kept per span in the checker's frame (`errPaths`), found once; the case builds in 113 MB. And `matchholdcall`'s
+`o!` is now `o`: `s.cur` was narrowed by its assignment, so the match gives a never-null `Hold&` (E35's "nothing here
+can fail").
+
+## `olang test` runs the tests that start a task under the race detector (P7a, B3a, 2026-11-15)
+
+The user, 2026-11-15: make `olang test` catch data races by itself, "do it only for calls that actually use spawn, not the other
+calls in files that use spawn". Built so:
+
+- **Which tests.** A test's body is asked for `Spawns` (G42, `effects.Effects.Of(body).Spawns`): a `spawn` in it or in anything it
+  may call. `Unknown` (a call through a function value or an `any` the effects do not follow) is deliberately not read: it
+  would put every test calling a callback in the slow build for a task it may never start (a `Holds(Spawns)` reading is one
+  line in `olang.olang` `partOf` if it is ever wanted). Of the 166 test files of the corpus and std, 15 have such tests
+  (tests/any, drops, errdata, facts, reads, reclaimtasks, shared; std/cancel, chan, json, net, os, sync, prelude array and vec).
+- **Two builds, one process, one stream.** `build.TestFile` analyzes the file with `Config.TestPart = 1` (the harness holds only
+  the tests that start no task; `Program.Spawning` says which do, by their number among the file's tests); if any do, it
+  analyzes it again with `-race`, `RaceBuild` true (a program may decide its facts otherwise there, so the second build is told the
+  numbers rather than asking), `TestPart = 2` and `SpawnTests`; both are built before any runs. The plain binary runs first,
+  then the race one, each `ok - NAME` as the test ends. Each binary writes its counts to the file `OLANG_TEST_COUNTS` names
+  (the driver runs it under `env`), and the driver says one `N passed, M failed`; with words, the file fails with status 3 only
+  if neither build has a test they name. A file whose tests start no task is built once (the plain harness is the old one).
+  Tests run in the two builds' order, not the file's.
+- **A race fails its test.** The race harness defines `__tsan_on_report` (uninstrumented, counting reports in an atomic) and
+  compares the count around each test: `FAIL - NAME: data race`, ThreadSanitizer's report on the standard error before it. The
+  process then also exits nonzero (TSan's own).
+- **Off and unavailable.** `OLANG_AUTORACE=0`; not with `-race` (which keeps meaning everything under it), `-sanitize`, `-fuzz`,
+  `-bench`, another target, `-evaluate`. Without clang's `libclang_rt.tsan-ARCH.a` (`target.HasRaceRuntime`, asked each time) the
+  note is said once for a run of tests (by `TestFiles` for several files, which tells its children `OLANG_AUTORACE=0`) and
+  everything runs plain.
+- **Order-coupled tests.** A test that reads a global an earlier test set must be in the same build as that test. Two sets
+  in the corpus did: `tests/shared.olang`'s "a test left early still waits for its tasks" and the test after it (the second now
+  starts a task too, with a comment), and the checks fixture `testends/ends.olang` (the scenario runs it with
+  `OLANG_AUTORACE=0`: its want file holds file order, which the evaluator's run keeps too). Every other file passes unchanged.
+- **The corpus's one intentional race is gone.** `tests/shared.olang`'s "several tasks may be handed the same instance" had a task
+  add with plain stores while another read - the race `make race` was documented to report once. It now has two tasks add atomically
+  (`AtomicAdd`); `make race` reports none and fails on any.
+- **Cost, measured** (4 cores shared with other jobs at load 6-27, so indicative; plain = `OLANG_AUTORACE=0`): over the 15 files,
+  first run 110 s plain, 149 s with the race build (the race objects of std and the program made then); warm 52.7 s against
+  69.6 s, about one second a file - a second front-end pass (0.7 s for a small file, 3.5 s for tests/any.olang, which imports
+  tests/shared.olang), the race binary's link and its run under ThreadSanitizer. Over all 166 files 391 s plain, 398 s with
+  (the other 151 have no such test and pay a clang query of 10 ms for the runtime). Memory: the second analysis's lives beside the
+  first's in the process (tests/shared.olang: 1.34 GB peak, 2.34 GB with); each file is still its own process.
+- Bugs found: the makefile's `race` target and its comment documented the one intentional report (now none, and no `-` prefix);
+  `checks.olang`'s "test -output" scenario expected a message from before `run` was added (master's drift, left), and
+  `compiler/target.olang`'s test of an aarch64 mistake is false on this machine's clang (left).
+- Goldens captured again: drv (help lines; the golden of `explain B1` had drifted before), tokens, ast, layout (the Emitter's new
+  fields). Fixed point: the compiler built by the new one is byte for byte equal to the one built by that.
+## Debugging from Neovim: DWARF that shows olang values, formatters, nvim-dap (B2e, 2026-11-15)
+The user asked to debug olang programs from Neovim. `-debug` already carried line tables, functions, parameters and
+locals; what a debugger showed was C's picture of them. Now (compiler/emit.olang, "debug information"):
+- Types carry olang's names: each number type is a typedef of its basic type (lldb showed `long` for `I64`), a declared
+  type over another (T29) a typedef of its base (`String`, `Char`, `Meters`), a reference a typedef of its pointer
+  (`Node?&`), and composite names are written as profiles write them, the module left off (`Map<String, I64>`, not
+  `Map<std/prelude/text:String, I64>`).
+- An enum carrying a payload is `{case, payload}` with the payload a union of one member per case, named as the case,
+  holding the case's fields by name (before: the payload's raw words). DWARF variant parts were tried first: gdb 15
+  shows them perfectly, lldb 18 shows an empty `{}`, so the union, which both show, is the form; the formatters pick the
+  case the value is.
+- Error values (T20) are an enumeration of their codes (`Bad.Oops`, `null`); an `any` is `{instance, table}`.
+- Each block, loop body and join is a DILexicalBlock, and a local's dbg.declare carries a location in its block - LLVM
+  reads the variable's scope off that location, not off the variable, which first left every local at the function's
+  scope. A loop's locals are no longer shown after the loop.
+- A local homed in an arena (O26a) is described through its slot with DW_OP_deref (null until its Live).
+- A test's function is named `test TARGET: DESCRIPTION`, so a backtrace says which test (the plan's "a lexical block
+  per test" gap was older: tests have had functions of their own since the harness was split).
+- Bug found on the way, fixed: a default argument written in another file (D8a, `Println`'s `Place.Here`) was lowered
+  with that file's offsets, which this function's file then read as its own lines - every `Println` in a loop made a
+  phantom line, and a breakpoint on that line number stopped inside the loop. Lowering now places a default argument's
+  statements at the call leaving it off (`mir.StmtAt`/`TermAt`, `lowering.away`), which also corrects the place an
+  error trace or a failed check inside such a default names; and `locate` ignores a span outside its function.
+- `editors/debug/olang_lldb.py` and `olang_gdb.py` (debugger plug-ins, so Python - lldb and gdb run no other language):
+  run-time arrays and text, payload cases, `Vec` and `Map` shown as `$` writes them; the lldb module's `render(value)` is
+  reusable by a program driving lldb. editors/nvim gets `:OlangDebug [args]` (build -debug into build/NAME.debug, then
+  nvim-dap with lldb-dap, or lldb-vscode) and `:OlangDebugTest [words]` (`olang test -debug`, then the test binary
+  run with the words); the adapter is named in one place (`require("olang.debug").adapter`, overridable by `setup`), and
+  nvim-dap's signs are given one-character texts for the number column. `make install` copies `editors/debug` beside
+  the compiler. Checked by the `dwarf` scenario (lldb and gdb, each where installed) and by driving lldb-dap through
+  nvim-dap headless. Only `-debug` builds change, but for the default argument's lines.
+## std/bench as a timeit framework; `-bench` of a run (B19b, 2026-11-15)
+The user's timeit idea. (1) A benchmark is a **series** of runs, not one round: `bench.Run` makes `runs` runs (seven), the
+first grown to a seventh of the budget by `Measurement.Of`, the others repeating its call count; `olang test -bench` writes
+`487113 ± 2104 ns/op (7 runs)`, the median with the spread, and the allocation, byte and instruction counts of the run nearest the median. The
+spread is the **median absolute deviation** (unscaled), chosen over the inter-quartile range because with seven runs it
+is stable and one load spike moves neither median nor spread; `Measurement` and `Measurement.Of` are unchanged
+(`Measurement.Str`'s text too). The empty-array statistics are 0. (2) `bench.Time(f)` writes a `%timeit` line in any build
+(units ns/µs/ms/s by the median) and gives the median nanoseconds; (3) `bench.Compare(a, b, labels)` alternates a and b run
+by run (`Comparison.interleave`, tested with counters in the order a a b a a b ...) and writes both lines and the b/a ratio
+with its spread over the pairs' ratios. D19a refused `Time` and `Compare` returning the module's own `Series` and
+`Comparison`, so they give the median and the ratio as `F64`, and `Series.Of` and `Comparison.Of` (builders) give the runs.
+A `Series` has `Display()` (a Markdown table in a notebook, B23). Found along the way: `Run`'s own test asserted one call
+and so failed under `-bench`; it now accepts a benchmark build. (4) The user then asked for a way to time whole runs and,
+after a first design with a separate `-timeit`, for one option ("I dont like how similar it is to -bench, can we merge
+them"): `-bench` means "measure what runs". Given to running a file or `run`, it builds as without it, runs the program
+once with its output untouched and writes `bench: built in 0.42 s, ran in 1.24 s (1.20 s user, 0.03 s sys, 182 MB peak)`
+to the standard error (compiler/measure.olang: the child started with `__olang_spawn` and waited for with `wait4`, so
+user/sys time and peak memory are the kernel's; `wait4` and `getrusage` are declared as externs over `Array<I64>` because
+glibc's `struct rusage` has anonymous unions the C import does not translate); `-runs N` runs it N times, the first's output
+shown and the later ones' discarded, and gives the median with its spread; a failing run ends the series and its status is
+the command's. Under `test`, `-bench` also writes that line per file (build through link, then the run of the test binary) and
+a `bench: N files in ...` line for several files, whose user/sys/peak come from `getrusage(RUSAGE_CHILDREN)`. Cost: the program's
+`argv[0]` is the built binary under `-bench` (a spawn takes its path as its argv[0]; `ExecInPlace` could give another). The
+interactive prompt's and Jupyter's use of `bench.Time` needs no option.

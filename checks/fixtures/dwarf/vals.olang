@@ -1,0 +1,28 @@
+# B2e: values a -debug build describes, each read back by lldb and gdb (checks.olang, dwarf)
+type Point struct(x I64, y I64) { x, y }
+type Shape enum { Circle(r F64), Rect(w I64, h I64), Empty }
+type Color enum { Red, Green, Blue }
+type Meters I32
+
+fn Point.Kept() Point& {
+    k := Point(7, 8)
+    return k
+}
+
+fn main() {
+    p := Point(3, 4)
+    s := Shape.Rect(5, 6)
+    e := Shape.Empty
+    col := Color.Green
+    fixed := Array<I64>[1, 2, 3]
+    t := "hello"
+    v := Vec<I64>[10, 20, 30]
+    m := Map<String, I64>["a": 1]
+    d := Meters(12)
+    kp := Point.Kept()
+    for i in range 2 {
+        inner := i * 10
+        Println($inner)
+    }
+    Println($p.x + $s + $e + $col + $fixed.Len() + $t + $v.Len() + $m.Len() + $d + $kp.x)
+}

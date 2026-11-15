@@ -1731,15 +1731,19 @@ test "two tasks run concurrently and are joined before the block ends" {
 # times. So a program that spawns owns its own data races, beside extern (X1a) and out-of-range indexing
 # (E16e). What is still guaranteed is structural rather than checked: every task is joined before the
 # block ends, and a task's arguments cannot outlive it.
+fn addAtomically(t mut Tally&, times I32) {
+    for _ in range times { t.val.AtomicAdd(1) }
+}
+
 test "several tasks may be handed the same instance" {
     a mut Tally& = Tally(0)
     join {
-        spawn addUp(a, 1000)
-        spawn readOut(a)
+        spawn addAtomically(a, 1000)
+        spawn addAtomically(a, 1000)
     }
-        # no claim about a.val here - one task writes it while another reads. That is the program's business
-        # now, and the point of the test is that it compiles and runs rather than what it computes.
-    assert a.val >= 0
+        # two tasks writing one instance: the program's business now, as the checker no longer says (the test once had
+        # one add with plain stores while another read - a race, which `olang test` now catches, P7a)
+    assert a.val == 2000
 }
 
 test "the same instance may be shared read-only by several tasks" {
@@ -1838,6 +1842,10 @@ test "a test left early still waits for its tasks" {
 }
 
 test "...and the task really had finished before the next test began" {
+    # (P7a: this reads what the test before left in a global, so it starts a task as that one does - the tests that do
+    # run in one build, the others in another process, where the global was never set)
+    t Tally& = Tally(0)
+    join { spawn readOut(t) }
     assert finishedEarly == 1
 }
 
@@ -4793,9 +4801,8 @@ test "T2a: null is all-zero bits, so the two-word shapes read as empty" {
 test "T2a: a null field is an ordinary field" {
     h mut Held3& = Held3(null)
     assert h.held == null
-    h.held = Crate2(9)
-    assert h.held != null
-    assert h.held!.v == 9
+    h.held = Crate2(9)                          # known not to be null from here (S8e)
+    assert h.held!.v == 9 and h.held.v == 9
 }
 
 # "x := null" is a compile error and so can only be named here: null is the one literal that writes no

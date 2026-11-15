@@ -470,6 +470,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     holdDest mir.LocalId = mir.NoLocal
     holdOld mir.LocalId = mir.NoLocal
     file I64 = 0
+    awayN I64 = 0           # D8a: how deep in default arguments from another file, and the call the outermost is at
+    awayAt source.Span = source.Span(I32(0), I32(0))
     rdepth mir.Operand = mir.Operand.None   # in a Render helper, how many references were followed to reach it (E11a)
     cur mir.BlockId = mir.BlockId(0)
     dead Bool = false
@@ -732,7 +734,7 @@ fn (ln mut lowering&) instance() mir.ScopeRef {
 fn (ln mut lowering&) emit(s mir.Stmt&) {
     if ln.dead: return
     if ln.counted(s): return
-    ln.F.Add(ln.cur, s)
+    ln.F.Add(ln.cur, mir.StmtAt(s, ln.awayAt) if ln.awayN > 0 else s)
     # (O23a, B3i: a value registered with a scope is ended by its destructor's thunk, which passes its derived scopes
     # null - their count read as a fact)
     if s == mir.Stmt.RegisterDtor: ln.readDtor(s.t)
@@ -750,7 +752,7 @@ fn (ln mut lowering&) end(t mir.Term) {
         case mir.Term.Call(_, c) { ln.holdResult(ln.F.Calls[I64(c)]) }
         case _ { }
     }
-    ln.F.End(ln.cur, t)
+    ln.F.End(ln.cur, mir.TermAt(t, ln.awayAt) if ln.awayN > 0 else t)
     ln.dead = true
 }
 
@@ -3495,7 +3497,7 @@ fn (ln mut lowering&) value(x typed.Expr&) mir.Operand {
         case typed.Expr.Try(sp, _, tr): ln.try(x, tr, sp)
         case typed.Expr.Fn(sp, ft, fv): ln.fnVal(fv, ft, sp)
         case typed.Expr.Text(sp, tt, tx): ln.text(tx, tt, sp)
-        case typed.Expr.Away(_, file, y): ln.away(file, y)
+        case typed.Expr.Away(sp, file, y): ln.away(sp, file, y)
     }
 }
 
@@ -3611,11 +3613,15 @@ fn (ln mut lowering&) innermost() mir.ScopeRef {
     return mir.ScopeRef.Program
 }
 
-fn (ln mut lowering&) away(file I64, y typed.Expr&) mir.Operand {
-    was := ln.file
+# a default argument written in another file (D8a): lowered in that file's terms, its statements placed at the call (sp)
+fn (ln mut lowering&) away(sp source.Span, file I64, y typed.Expr&) mir.Operand {
+    was, wasAt := ln.file, ln.awayAt
     ln.file = file
+    if ln.awayN == 0: ln.awayAt = sp
+    ln.awayN++
     v := ln.val(y)
-    ln.file = was
+    ln.awayN--
+    ln.file, ln.awayAt = was, wasAt
     return v
 }
 

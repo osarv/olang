@@ -1,0 +1,3 @@
+break vals.olang:27
+run
+info locals

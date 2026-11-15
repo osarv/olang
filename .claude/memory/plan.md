@@ -43,7 +43,6 @@ MNIST first, NLP and robotics later; genetic algorithms are allowed. Done in oan
   shared internals.
 - `spawns` signature effect (deferred, purely additive); `select` over channels and a bound on parallelism.
 - Cross-compilation: TargetOs/TargetArch are the host's from uname.
-- DWARF for by-value aggregates, and a lexical block per test (tests share the harness's main).
 - Compile-time evaluation: constant contexts inside function bodies (callee bodies checked on demand); S8c fixed
   locals for aggregates and references; baking the globals destructors write (simulating startup); a payload enum
   holding an address baked as data; K2c's exemption narrowed to a global's own frame.

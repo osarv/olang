@@ -114,6 +114,11 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # found - how many tests the word named, their names where several did, the fuzzed test's saved inputs' directory
     Fuzz String& = ""
     TestWords Vec<String&>          # B7a: each test's target and description, for the driver's "did you mean"
+    # B3a, P7: a test build run in two parts - TestPart 1 the tests that do not start a task, 2 those that do (SpawnIds,
+    # their bodies); 0 every test. Race: the build is -race, so the harness fails a test a data race was reported in
+    TestPart I64 = 0
+    SpawnIds Map<I64, Bool>
+    Race Bool = false
     FuzzCache String& = "build/fuzz"
     FuzzPicked I64 = 0
     FuzzErr String& = ""
@@ -568,7 +573,7 @@ fn (e mut Emitter&) emitAll() {
     if e.Module {
         # its own bodies only, wanted above
     } else if e.Tests {
-        for t in tests { e.want(mir.FnKey.Body(typed.BodyId(I32(t)))) }
+        for t in tests { if e.InPart(t) { e.want(mir.FnKey.Body(typed.BodyId(I32(t)))) } }
     } else if mainBody >= 0 {
         e.want(mir.FnKey.Body(typed.BodyId(I32(mainBody))))
     }
@@ -1509,29 +1514,39 @@ fn (e mut Emitter&) dbgSubTy() I64 {
 fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     t := e.T
     r := t.Repr(ty)
+    # T29: a declared type over another is its base's description under its own name (String, Char, Meters)
+    if ty != r and t.KindOf(ty) == types.Kind.Named: return e.dbgTypedef(ty, t.Base(ty))
+    if t.KindOf(ty) == types.Kind.ErrVal and not t.ErrCarries(ty): return e.dbgErrVal(ty)
     if r >= types.BoolT and r <= types.TypeId(14) or t.KindOf(r) == types.Kind.Int {
         if e.dbgBasics.Has(I64(r)) { return try e.dbgBasics.Get(I64(r)) catch default -1 }
+        # the basic type under a typedef of the same name, so that a debugger shows "I64", never C's "long"
+        b := e.dbgNew()
         n := e.dbgNew()
         e.dbgBasics.Put(I64(r), n)
+        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" + $t.Canon(r) + "\", baseType: !" + $b + ")")
         enc := "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
         # a byte as a character, as C's unsigned char, so that text's elements print as text
         if t.Bits(r) == 8 and t.IsUnsigned(r) { enc = "DW_ATE_unsigned_char" }
         bits := 8 if r == types.BoolT else (t.Bits(r) + 7) / 8 * 8     # T4a: an odd width the bytes its store writes
-        e.dbgShared(n, $"!DIBasicType(name: \"" + $t.Canon(r) + "\", size: " + $bits + ", encoding: " + $enc + ")")
+        e.dbgShared(b, $"!DIBasicType(name: \"" + $t.Canon(r) + "\", size: " + $bits + ", encoding: " + $enc + ")")
         return n
     }
     if e.dbgTypes.Has(I64(r)) { return try e.dbgTypes.Get(I64(r)) catch default -1 }
     k := t.KindOf(r)
     if k == types.Kind.Ref {
         rt := t.Referent(r)
+        if t.KindOf(t.Repr(rt)) == types.Kind.Any { return e.dbgPair(r, "instance", types.UnknownT, "table", types.UnknownT) }
         if e.ty(r) != "ptr" { return e.dbgPair(r, "len", t.Prim("I64"), "data", t.Elem(t.Repr(rt))) }
-        n := e.dbgNew()
+        # a pointer, under a typedef named as olang writes the reference ("Node?&")
+        n, pn := e.dbgNew(), e.dbgNew()
         e.dbgTypes.Put(I64(r), n)
         b := e.dbgType(rt)
-        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " + $("!" + $b if b >= 0 else "null") + ", size: 64)")
+        e.dbgShared(pn, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " + $("!" + $b if b >= 0 else "null") + ", size: 64)")
+        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" + $escape(e.dbgTypeName(r)) + "\", baseType: !" + $pn + ")")
         return n
     }
     if k == types.Kind.Func { return e.dbgPair(r, "code", types.UnknownT, "env", types.UnknownT) }
+    if k == types.Kind.Any { return e.dbgPair(r, "instance", types.UnknownT, "table", types.UnknownT) }    # T32
     e.P.Layout(r)
     size := t.Size(r) * 8
     if k == types.Kind.Array {
@@ -1573,7 +1588,7 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     if isEnum {
         n := e.dbgNew()
         e.dbgTypes.Put(I64(r), n)
-        cn := t.CaseNames(r) if k == types.Kind.Named else Array<source.NameId>(0)
+        cn := t.CaseNames(r) if k == types.Kind.Named else t.ShapeNames(r)
         cs := t.Items(t.ShapeCases(r) if k == types.Kind.AnonEnum else t.Cases(r))
         es StringBuilder
         for i in range cs.Len() {
@@ -1587,26 +1602,116 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         e.dbgShared(el, $"!{" + $es.ToString() + "}")
         words := e.enumWords(r)
         tag := n if not words else e.dbgNew()
-        tbase := e.dbgType(t.Prim("I64") if words else t.Prim("I32"))
+        tbase := e.dbgBasic(t.Prim("I64") if words else t.Prim("I32"))
         e.dbgShared(tag, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" + $escape(e.dbgTypeName(r)) + "\", size: " + $
                     (64 if words else 32) + ", baseType: !" + $tbase + ", elements: !" + $el + ")")
         if not words { return n }
-        # the case, then the payload's words (its fields share them, by case)
-        w := t.PayloadSize(r) / 8
-        pw := e.dbgNew()
-        sub := e.dbgNew()
-        e.dbgShared(sub, $"!{!DISubrange(count: " + $w + ")}")
-        e.dbgShared(pw, $"!DICompositeType(tag: DW_TAG_array_type, baseType: !" + $e.dbgType(t.Prim("I64")) + ", size: " + $(w * 64) + $
-                    ", elements: !" + $sub + ")")
+        # the case, then the payload as a union of each case's fields by name and offset (gdb and lldb show every case
+        # of it; editors/debug's formatters show the case the value is)
         m0, m1, ml := e.dbgNew(), e.dbgNew(), e.dbgNew()
+        pu := e.dbgPayload(r, cs, cn)
         e.dbgShared(m0, $"!DIDerivedType(tag: DW_TAG_member, name: \"case\", baseType: !" + $tag + ", size: 64, offset: 0)")
-        e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"payload\", baseType: !" + $pw + ", size: " + $(w * 64) + ", offset: 64)")
+        e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"payload\", baseType: !" + $pu + ", size: " + $
+                    (t.PayloadSize(r) * 8) + ", offset: 64)")
         e.dbgShared(ml, $"!{!" + $m0 + ", !" + $m1 + "}")
         e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" + $escape(e.dbgTypeName(r)) + "\", size: " + $size + $
                     ", elements: !" + $ml + ")")
         return n
     }
     return -1
+}
+
+# a number type's basic type itself, under the typedef dbgType gives (made just before it)
+fn (e mut Emitter&) dbgBasic(ty types.TypeId) I64 { return e.dbgType(ty) - 1 }
+
+# an enum's payload (T17): a union with a member per case carrying one, named as the case - its fields by name at their
+# offsets in the payload, or the one type a case carries whole
+fn (e mut Emitter&) dbgPayload(r types.TypeId, cs Array<types.TypeId>&, cn Array<source.NameId>&) I64 {
+    t := e.T
+    ms StringBuilder
+    for i in range cs.Len() {
+        if cs[i] == types.TypeId(0) { continue }
+        e.P.Layout(cs[i])
+        name := e.text(cn[i]) if i < cn.Len() else $i
+        ct := e.dbgType(cs[i]) if t.KindOf(cs[i]) != types.Kind.Record else e.dbgCase(r, i, cs[i], name)
+        if ct < 0 { continue }
+        m := e.dbgNew()
+        e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" + $escape(name) + "\", baseType: !" + $ct + ", size: " + $
+                    (t.Size(cs[i]) * 8) + ", offset: 0)")
+        if ms.Len() > 0: ms.Push(", ")
+        ms.Push($"!" + $m)
+    }
+    el := e.dbgNew()
+    e.dbgShared(el, $"!{" + $ms.ToString() + "}")
+    n := e.dbgNew()
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_union_type, size: " + $(t.PayloadSize(r) * 8) + ", elements: !" + $el + ")")
+    return n
+}
+
+# one case's payload fields as a struct named "Enum.Case": by the names its case declares, else by position
+fn (e mut Emitter&) dbgCase(r types.TypeId, k I64, ct types.TypeId, name String&) I64 {
+    t := e.T
+    fs := t.Items(t.Parts(ct))
+    names := e.P.CaseFieldNames(r, k) if t.KindOf(r) == types.Kind.Named else Array<source.NameId>(0)
+    offs := t.Offsets(ct)
+    ms StringBuilder
+    for i in range fs.Len() {
+        e.P.Layout(fs[i])
+        mt := e.dbgType(fs[i])
+        if mt < 0: mt = e.dbgBytes()
+        m := e.dbgNew()
+        fname := e.text(names[i]) if i < names.Len() else $i
+        e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" + $escape(fname) + "\", baseType: !" + $mt + ", size: " + $
+                    (t.Size(fs[i]) * 8) + ", offset: " + $(offs[i] * 8) + ")")
+        if i > 0: ms.Push(", ")
+        ms.Push($"!" + $m)
+    }
+    el := e.dbgNew()
+    e.dbgShared(el, $"!{" + $ms.ToString() + "}")
+    n := e.dbgNew()
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" + $escape(e.dbgTypeName(r)) + "." + $escape(name) + $
+                "\", size: " + $(t.Size(ct) * 8) + ", elements: !" + $el + ")")
+    return n
+}
+
+# an error value (T20) as an enumeration of its code: null, and each word of its set as "Type.Word"
+fn (e mut Emitter&) dbgErrVal(ty types.TypeId) I64 {
+    if e.dbgTypes.Has(I64(ty)) { return try e.dbgTypes.Get(I64(ty)) catch default -1 }
+    t := e.T
+    n := e.dbgNew()
+    e.dbgTypes.Put(I64(ty), n)
+    es StringBuilder
+    z := e.dbgNew()
+    e.dbgShared(z, "!DIEnumerator(name: \"null\", value: 0)")
+    es.Push($"!" + $z)
+    items := t.Items(t.ErrValItems(ty))
+    for i in range items.Len() {
+        et := t.ErrOf(items[i])
+        ws := e.P.ErrorWords(t.DeclOf(et))
+        for j in range ws.Len() {
+            if ((t.ErrMask(items[i]) >> U64(j)) & U64(1)) == U64(0): continue
+            m := e.dbgNew()
+            name := $e.errQualifier(et) + $e.P.ErrorWordName(t.DeclOf(et), j)
+            e.dbgShared(m, $"!DIEnumerator(name: \"" + $escape(name) + "\", value: " + $(((i + 1) << 16) | j) + ")")
+            es.Push($", !" + $m)
+        }
+    }
+    el := e.dbgNew()
+    e.dbgShared(el, $"!{" + $es.ToString() + "}")
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" + $escape(e.dbgTypeName(ty)) + "\", size: 32, baseType: !" + $
+                e.dbgBasic(t.Prim("I32")) + ", elements: !" + $el + ")")
+    return n
+}
+
+# a declared type over another (T29) as a typedef of its base, by its own name
+fn (e mut Emitter&) dbgTypedef(ty types.TypeId, base types.TypeId) I64 {
+    if e.dbgTypes.Has(I64(ty)) { return try e.dbgTypes.Get(I64(ty)) catch default -1 }
+    b := e.dbgType(base)
+    if b < 0: return -1
+    n := e.dbgNew()
+    e.dbgTypes.Put(I64(ty), n)
+    e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" + $escape(e.dbgTypeName(ty)) + "\", baseType: !" + $b + ")")
+    return n
 }
 
 # the pair a run-time array or a function value is: two words, the second a pointer to b's description (the first a
@@ -1643,11 +1748,7 @@ fn (e mut Emitter&) dbgVoidPtr() I64 {
 fn (e mut Emitter&) dbgBytes() I64 { return e.dbgType(e.T.Prim("U8")) }
 
 # a type's name as a debugger shows it: as the program writes it, its module left off
-fn (e mut Emitter&) dbgTypeName(r types.TypeId) String {
-    c := e.T.Canon(r)
-    k := try c.Find(":") catch default -1
-    return $c[k + 1:] if k >= 0 and not c.StartsWith("Array<") else $c
-}
+fn (e mut Emitter&) dbgTypeName(r types.TypeId) String { return e.readableTypes(e.T.Canon(r)) }
 
 # a struct's field names in order, from its constructor's field declarations (C2); a tuple's or a record's by position
 fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
@@ -1680,7 +1781,7 @@ fn (e mut Emitter&) dbgName(k mir.FnKey) String {
                 case typed.BodyOf.Ctor(ty, _): $t.Canon(ty)
                 case typed.BodyOf.Dtor(ty): $t.Canon(ty) + ".dtor"
                 case typed.BodyOf.Lambda(_): "lambda"
-                case typed.BodyOf.Test(_): "test"
+                case typed.BodyOf.Test(_): $"test " + $e.testName(I64(id))
                 case typed.BodyOf.Global(_, n): $e.text(n) + ".init"
                 case _: e.sym(k)
             }
@@ -1757,7 +1858,7 @@ fn (e mut Emitter&) readableTypes(text String&) String {
 }
 
 # what may stand before a type in a canonical text
-fn typeDelim(ch Char) Bool { return ch == '<' or ch == ',' or ch == ' ' or ch == '(' or ch == '[' or ch == '&' or ch == '?' }
+fn typeDelim(ch Char) Bool { return ch == '<' or ch == '{' or ch == ',' or ch == ' ' or ch == '(' or ch == '[' or ch == '&' or ch == '?' }
 
 # the function's subprogram, where it has source to point at
 fn (fe mut fnEm&) subprogram() {
@@ -1771,15 +1872,60 @@ fn (fe mut fnEm&) subprogram() {
     fe.dbgMeta.Push($"!" + $fe.dbgSp + " = distinct !DISubprogram(name: \"" + $escape(name) + "\", scope: !" + $file + $
                     ", file: !" + $file + ", line: " + $line + ", type: !" + $e.dbgSubTy() + ", scopeLine: " + $line + $
                     ", spFlags: DISPFlagDefinition, unit: !" + $e.dbgCu() + ")\n")
+    if not e.Debug: return
+    # a lexical block per block, loop body and join it opens, so a debugger shows a local only where it is in scope
+    for _ in range f.Scopes.Len(): fe.dbgBlocks.Push(-2)
+    for i in range f.Scopes.Len(): fe.dbgBlockOf(i, file)
 }
 
-# the location of a line of this function, made once
-fn (fe mut fnEm&) dbgLine(line I64) String {
-    n := try fe.dbgLocs.Get(line) catch default -1
+# the lexical block scope i of this function is shown as (made once, inside its parent's): its own for a block, a loop's
+# body or a join written in the source, its parent's for any other; the subprogram for none (-1)
+fn (fe mut fnEm&) dbgBlockOf(i I64, file I64) I64 {
+    if i < 0 or i >= fe.dbgBlocks.Len(): return fe.dbgSp
+    if fe.dbgBlocks[i] != -2: return fe.dbgBlocks[i]
+    sc := fe.F.Scopes[i]
+    up := fe.dbgBlockOf(I64(sc.Parent), file)
+    if not fe.lexical(i) {
+        fe.dbgBlocks[i] = up
+        return up
+    }
+    n := fe.E.dbgNew()
+    fe.dbgBlocks[i] = n
+    line := fe.E.D.LineAt(fe.F.File, I64(sc.Sp.Start))
+    fe.dbgMeta.Push($"!" + $n + " = distinct !DILexicalBlock(scope: !" + $up + ", file: !" + $file + ", line: " + $line + ")\n")
+    return n
+}
+
+# whether scope i stands for a block, a loop's body or a join written in the source
+fn (fe mut fnEm&) lexical(i I64) Bool {
+    sc := fe.F.Scopes[i]
+    if sc.Sp.Start == I32(0) and sc.Sp.End == I32(0): return false
+    if sc.Sp.Start == fe.F.Sp.Start and sc.Sp.End == fe.F.Sp.End: return false
+    return sc.Kind == mir.ScopeKind.Block or sc.Kind == mir.ScopeKind.Loop or sc.Kind == mir.ScopeKind.Join
+}
+
+# the innermost lexical scope holding source offset at (-1: the function's own)
+fn (fe mut fnEm&) scopeAt(at I32) I64 {
+    best I64 = -1
+    width := I32.Max
+    for i in range fe.dbgBlocks.Len() {
+        sp := fe.F.Scopes[i].Sp
+        if at < sp.Start or at >= sp.End or sp.End - sp.Start >= width or not fe.lexical(i): continue
+        best = i
+        width = sp.End - sp.Start
+    }
+    return best
+}
+
+# the location of a line of this function, in scope i's lexical block (-1: the function's own), made once
+fn (fe mut fnEm&) dbgLine(line I64, i I64 = -1) String {
+    key := line * 1048576 + i + 1
+    n := try fe.dbgLocs.Get(key) catch default -1
     if n < 0 {
         n = fe.E.dbgNew()
-        fe.dbgLocs.Put(line, n)
-        fe.dbgMeta.Push($"!" + $n + " = !DILocation(line: " + $line + ", column: 1, scope: !" + $fe.dbgSp + ")\n")
+        fe.dbgLocs.Put(key, n)
+        sc := fe.dbgSp if i < 0 else fe.dbgBlocks[i]
+        fe.dbgMeta.Push($"!" + $n + " = !DILocation(line: " + $line + ", column: 1, scope: !" + $sc + ")\n")
     }
     return ", !dbg !" + $n
 }
@@ -1796,7 +1942,10 @@ fn (fe mut fnEm&) dbgEntry() String {
 fn (fe mut fnEm&) locate(sp source.Span) {
     if sp.Start == I32(0) and sp.End == I32(0) { return }
     if sp.Start == fe.F.Sp.Start and sp.End == fe.F.Sp.End { return }
-    fe.dbgLoc = fe.dbgLine(fe.E.D.LineAt(fe.F.File, I64(sp.Start)))
+    # a span outside the function's is no line of it: a default argument written where its function is declared (D8a),
+    # perhaps in another file, keeps the call's line
+    if fe.F.Sp.End > fe.F.Sp.Start and (sp.Start < fe.F.Sp.Start or sp.Start >= fe.F.Sp.End): return
+    fe.dbgLoc = fe.dbgLine(fe.E.D.LineAt(fe.F.File, I64(sp.Start)), fe.scopeAt(sp.Start))
 }
 
 # each named parameter and local in a frame slot, described where the debugger can show it (info args, info locals)
@@ -1809,7 +1958,7 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
         l := f.Locals[i]
         if l.Kind == mir.LocalKind.Param { arg++ }
         if l.Kind != mir.LocalKind.Param and l.Kind != mir.LocalKind.Var { continue }
-        if l.Name == source.NameId(0) or not fe.isFrame(l.Home) { continue }
+        if l.Name == source.NameId(0) { continue }
         name := e.text(l.Name)
         if name == "" or name.StartsWith("$") { continue }
         if fe.size(l.Ty) > 65536 { continue }
@@ -1818,11 +1967,20 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
         n := e.dbgNew()
         line := e.D.LineAt(f.File, I64(l.Sp.Start)) if l.Sp.Start != I32(0) else e.D.LineAt(f.File, I64(f.Sp.Start))
         argText := ", arg: " + $arg if l.Kind == mir.LocalKind.Param else ""
-        fe.dbgMeta.Push($"!" + $n + " = !DILocalVariable(name: \"" + $escape(name) + "\"" + $argText + ", scope: !" + $fe.dbgSp + $
+        # a local in its block's lexical block - which LLVM reads off the location its declare carries
+        si := -1 if l.Kind == mir.LocalKind.Param else fe.scopeAt(l.Sp.Start)
+        sc := fe.dbgBlockOf(si, file)
+        fe.dbgMeta.Push($"!" + $n + " = !DILocalVariable(name: \"" + $escape(name) + "\"" + $argText + ", scope: !" + $sc + $
                         ", file: !" + $file + ", line: " + $line + ", type: !" + $dt + ")\n")
         e.declare("llvm.dbg.declare", "void @llvm.dbg.declare(metadata, metadata, metadata)")
-        b.Push("  call void @llvm.dbg.declare(metadata ptr %l" + $i + ", metadata !" + $n + ", metadata !DIExpression())" + $
-               fe.dbgEntry() + "\n")
+        # a local whose storage is in an arena (O26a): its slot holds where, null until its Live makes it
+        slot, expr := $"%l" + $i, $"!DIExpression()"
+        if not fe.isFrame(l.Home) {
+            slot, expr = $"%lp" + $i, $"!DIExpression(DW_OP_deref)"
+            b.Push("  store ptr null, ptr %lp" + $i + "\n")
+        }
+        b.Push("  call void @llvm.dbg.declare(metadata ptr " + $slot + ", metadata !" + $n + ", metadata " + $expr + ")" + $
+               fe.dbgLine(e.D.LineAt(f.File, I64(f.Sp.Start)), si) + "\n")
     }
 }
 
@@ -2195,6 +2353,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     dbgSp I64 = -1
     dbgLoc String& = ""
     dbgLocs Map<I64, I64>
+    dbgBlocks Vec<I64>      # by scope: its lexical block (-2 not made yet; a scope standing for none its parent's)
     dbgMeta StringBuilder
     sites Map<I32, I64>     # S18d: where this function's calls (1) and joins (2) are, by the start of their span
     sited Bool = false
@@ -7837,10 +7996,17 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         tg, ds := e.testParts(id)
         if tg != "" { e.TestWords.Push($tg) }
         e.TestWords.Push($ds)
+        if not e.InPart(id) { continue }
         fnp := $"ptr @" + $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
         ts.Push($"{ ptr, ptr, ptr, ptr } { " + $fnp + ", ptr " + $e.cstr(e.testName(id)) + ", ptr " + $e.cstr(tg) + ", ptr " + $e.cstr(ds) + " }")
     }
     b := StringBuilder()
+    # P7: ThreadSanitizer calls this, if the program has it, with each report it makes; the harness counts them, and
+    # is itself not instrumented (a call made inside the reporting runtime)
+    if e.Race {
+        b.Push("@olang.race.reports = internal global i32 0\n")
+        b.Push("define void @__tsan_on_report(ptr %r) nounwind {\nentry:\n  atomicrmw add ptr @olang.race.reports, i32 1 monotonic\n  ret void\n}\n")
+    }
     if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" + $gs.Len() + " x ptr] [" + $gs.Join(", ") + "]\n") }
     if ts.Len() > 0 {
         b.Push($"@olang.harness.tests = private constant [" + $ts.Len() + " x { ptr, ptr, ptr, ptr }] [" + $ts.Join(", ") + "]\n")
@@ -7902,7 +8068,17 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push($"  %tnp = getelementptr " + $tt + ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 1\n")
         b.Push("  %tf = load ptr, ptr %tfp\n  %tn = load ptr, ptr %tnp\n")
         b.Push("  %tz = icmp eq i32 %tj, 0\n  br i1 %tz, label %trun, label %tbad\ntrun:\n")
-        b.Push("  store ptr %tn, ptr @__olang_test_name\n  call void %tf()\n")
+        b.Push("  store ptr %tn, ptr @__olang_test_name\n")
+        # P7: under -race, a report made while the test ran fails it, the report itself on the standard error
+        if e.Race { b.Push("  %rr0 = load atomic i32, ptr @olang.race.reports monotonic, align 4\n") }
+        b.Push("  call void %tf()\n")
+        if e.Race {
+            b.Push("  %rr1 = load atomic i32, ptr @olang.race.reports monotonic, align 4\n  %raced = icmp ne i32 %rr1, %rr0\n")
+            b.Push("  br i1 %raced, label %trace, label %tpass\ntrace:\n")
+            b.Push("  %rf = load volatile i32, ptr %fail\n  %rff = add i32 %rf, 1\n  store volatile i32 %rff, ptr %fail\n")
+            b.Push($"  call i32 (ptr, ...) @printf(ptr " + $e.cstr("FAIL - %s: data race\n") + ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
+            b.Push("  br label %tnext\ntpass:\n")
+        }
         b.Push("  %p = load volatile i32, ptr %pass\n  %pp = add i32 %p, 1\n  store volatile i32 %pp, ptr %pass\n")
         b.Push($"  call i32 (ptr, ...) @printf(ptr " + $e.cstr("ok - %s\n") + ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
         b.Push("  br label %tnext\ntbad:\n  %f = load volatile i32, ptr %fail\n  %ff = add i32 %f, 1\n")
@@ -7916,9 +8092,29 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     b.Push("  %unmatched = and i1 %none, %words\n  br i1 %unmatched, label %nomatch, label %counts\nnomatch:\n")
     b.Push("  ret i32 3\ncounts:\n")
     b.Push("  %np = load volatile i32, ptr %pass\n  %nf = load volatile i32, ptr %fail\n")
+    if e.TestPart != 0 {
+        # B3a: a part's counts go to the file the driver names, which adds the parts' up and says them once
+        e.declare("getenv", "ptr @getenv(ptr)")
+        e.declare("fopen", "ptr @fopen(ptr, ptr)")
+        e.declare("fclose", "i32 @fclose(ptr)")
+        e.declare("fprintf", "i32 @fprintf(ptr, ptr, ...)")
+        b.Push($"  %cf = call ptr @getenv(ptr " + $e.cstr("OLANG_TEST_COUNTS") + ")\n  %hascf = icmp ne ptr %cf, null\n")
+        b.Push("  br i1 %hascf, label %tofile, label %say\ntofile:\n")
+        b.Push($"  %fh = call ptr @fopen(ptr %cf, ptr " + $e.cstr("w") + ")\n  %fhok = icmp ne ptr %fh, null\n")
+        b.Push("  br i1 %fhok, label %wrote, label %say\nwrote:\n")
+        b.Push($"  call i32 (ptr, ...) @fprintf(ptr %fh, ptr " + $e.cstr("%d %d\n") + ", i32 %np, i32 %nf)\n")
+        b.Push("  call i32 @fclose(ptr %fh)\n  br label %fin\nsay:\n")
+    }
     b.Push("  call i32 (ptr, ...) @printf(ptr " + $e.cstr("%d passed, %d failed\n") + ", i32 %np, i32 %nf)\n")
+    if e.TestPart != 0 { b.Push("  br label %fin\nfin:\n") }
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
     e.item("main", e.P.L.Root, b.ToString())
+}
+
+# B3a, P7: whether a test is in the part of the file's tests this build runs
+fn (e Emitter&) InPart(id I64) Bool {
+    if e.TestPart == 0 { return true }
+    return e.SpawnIds.Has(id) == (e.TestPart == 2)
 }
 
 # B19: the globals through which the harness names the running test and its file to std/fuzz, and hands it the input

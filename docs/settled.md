@@ -172,7 +172,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   any part. After a case test a local or parameter is narrowed so `e.r` reads the payload field; a field read where
   nothing narrows is S8d's error. **One narrowing walk (2026-10-26, the user's "Do narrowing")** serves case, null and
   error-value tests: `and`/`or`/`not`, conditionals, after an assert, loops on the test; a narrowing holds until a
-  statement assigns the local. Only locals and parameters narrow, never fields.
+  statement assigns the local. **Field paths narrow too (S8d, the user's "yes this is normal narrowing rules",
+  2026-11-15)**: `x.f`, `x.f.g` (x a local or parameter, each step a field) narrow as a local does, until an assignment
+  to the path or a prefix, or any call (or `yield`) after the test - a call's arguments are read before it; a call in
+  an `if`'s block is none in its `else`; a path narrowed before a loop that calls is not known inside it (an error);
+  weak fields never narrow; `x.f!` stays allowed.
 - **Comprehensions `[e for x in c if p]` (E27, the user's design)** - the type in front optional as for any literal
   (the user, 2026-11-13), brackets; `[k: v for ...]` makes entries; an array's reserved up front from a known length,
   else 100 and doubling (the user's numbers).
@@ -434,7 +438,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Benchmarks are tests (B19b, QCX 4, the user's "sure" 2026-11-07; built 2026-11-08).** `bench.Run(fn() { ... })` in
   a test runs the work once in every build; `olang test -bench FILE [WORD...]` grows the calls to a second (Go's rule)
   and writes ns/op, allocs/op, B/op (counted only in that build) and instr/op where a counter exists. `bench.Keep(v)`
-  defeats dead-code elimination; `bench.Measurement.Of(f)` measures in any build.
+  defeats dead-code elimination; `bench.Measurement.Of(f)` measures in any build. **Repeats, `bench.Time`, `bench.Compare` and
+  `-bench` of a run (the user's timeit idea, 2026-11-15; one option, "I dont like how similar it is to -bench, can we merge
+  them").** A measurement is seven runs (each grown to a seventh of the budget): `487113 ± 2104 ns/op (7 runs)`, the median
+  and the median absolute deviation. `bench.Time(f)` prints `487 µs ± 3 µs per call (median of 7 runs × 2048 calls)` in any
+  build; `bench.Compare(a, b, labels)` alternates the runs of a and b and prints the ratio b/a with its spread; `Series`
+  and `Comparison` hold the runs. `olang -bench FILE` / `olang run -bench FILE` builds and runs a program once as normal and
+  writes `bench: built in 0.42 s, ran in 1.24 s (1.20 s user, 0.03 s sys, 182 MB peak)` to stderr (`-runs N`: N runs, later
+  ones' stdout discarded, the median with its spread); `test -bench` adds that line per file and a total for several.
 - **`olang profile FILE [ARGS]` (B20, QBL, the user's decision 2026-10-26).** A built-in sampling profiler; prints
   self/total by function, hot lines and callers, and writes an SVG flame graph. docs/profiling.md.
 - **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
@@ -828,6 +839,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`join { }` with `spawn` calls inside (P1-P1b).** Binding is lexical, one level; the join waits on every way out; a
   task's arguments must outlive the join block (P2), storage declared inside it built at its level (R4). P3/P5 (no shared writes) were withdrawn - a spawning program owns
   its races, which `-race` (ThreadSanitizer, P7) detects - Go's position.
+- **`olang test` catches data races by itself (P7a, B3a, the user's decision 2026-11-15: "do it only for calls that
+  actually use spawn, not the other calls in files that use spawn").** The tests whose bodies can reach a `spawn` -
+  the function fact `Spawns` (G42) of the test's body, through anything it calls - run in a `-race` build of the file;
+  the others in the ordinary test build, as before. A file with such a test is built twice, each binary's harness
+  holding only its share of the tests (`Config.TestPart`: 1 the others, found by the facts; 2 the spawning ones, named
+  by their numbers among the file's tests - `RaceBuild` being true in the second, the facts could differ); the driver
+  runs the first, then the second, and says one `N passed, M failed` (each binary writes its counts to the file
+  `OLANG_TEST_COUNTS` names). A race ThreadSanitizer reports fails the test it was reported in (`FAIL - NAME: data
+  race`, counted by a `__tsan_on_report` the race harness defines). A file whose tests start no task is built once.
+  Without clang's TSan runtime (`libclang_rt.tsan-ARCH.a`) the note is said once and everything runs plain;
+  `OLANG_AUTORACE=0` turns it off; `-race`, `-sanitize`, `-fuzz`, `-bench`, another target and `-evaluate` leave it
+  alone (`test -race` still means everything under `-race`). A call through a function value or an `any` the effects
+  do not follow does not make a test one that spawns (`Unknown` is not read), so a task started only behind one is
+  not looked at. Tests run plain-first, then race-build, not in file order.
 - **`spawn x = f()` binds a result (P1g)**; parallel map is `spawn out[i] = f(i)`.
 - **A spawned call may fail (P4-P4d, decision 50, the user approved).** `spawn try f()`, clauses run on the task's
   thread; `try join { } catch ...` fails with the earliest-spawned failure; a failing task's target is unwritten.
@@ -881,7 +906,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); under full
   LTO a module's own compile neither vectorizes nor unrolls a loop by a factor, so the link inlines across modules before
   it vectorizes (2026-11-15);
-  `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
+  `-debug` is `-O0` with DWARF describing olang's values (types by olang's names, payload cases by name, lexical blocks;
+  `editors/debug`'s lldb and gdb formatters, Neovim through nvim-dap and lldb-dap: `:OlangDebug`, `:OlangDebugTest`,
+  the user's request 2026-11-15); `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
 - **Compiles at once and the bootstrap (B3m, the user's approval 2026-11-14, before v1.0.0).** A build runs
   `OLANG_JOBS` compiles at once, else one per core but no more than `MemAvailable` holds at 512 MB each (at least
   one); a ThinLTO link's back ends as many. `OLANG_TIMES` says each phase with its time and the compiler's memory, and

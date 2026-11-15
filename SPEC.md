@@ -515,8 +515,7 @@ scope without a containment check. Whether a reference holds none is asked with 
 only a null (E10).
 
 **T2b (memory safety).** A reference is null only where its type says it may be (T2c), and the compiler holds every
-read through one to a test; a narrowing of a field path can still meet a null that a call stored there since the test
-(S8e). Reading or writing a field or element through a null reference **traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
+read through one to a test (S8e) - of a field path, too, ended by any call after it (S8d). Reading or writing a field or element through a null reference **traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
 writing `os.OnCrash`'s message first if one is set (std/os) - and nothing after the access runs. It costs nothing
 per access: null is the all-zero representation and the lowest addresses are never mapped, so the access itself
 faults, and the compiler never assumes that a reference it sees read through is not null, so it never deletes or
@@ -533,7 +532,8 @@ global, or an element or type argument a type stores (`Array<weak Node?&>`, `Vec
 Node?&>`) - at any depth of a type argument, wherever the type it is an argument of is written. A place of that type is
 a **weak place**: it holds its referent without keeping it - it is no owning place (O8e). Reading it gives an ordinary
 `T?&`: the referent while some owning place holds it, `null` from the moment none does (O8e) - narrowed by a test of a
-local (S8e) as any other; while compiling, a read that would give `null` is not evaluated (K1). In
+local (S8e)
+as any other - a weak field is no field path that narrows (S8d), its referent let go with no call or store to it; while compiling, a read that would give `null` is not evaluated (K1). In
 everything else it is a `T?&`: it is given any `T&` or `T?&`, compared by `==` (E10), rendered by `$`, its permission
 the reference's (T25b). The referent's type becomes generational (T13d). Compile-time errors: `weak` before a reference
 that is never null (`weak Node&`) or before no reference, naming `?&`; on a local, a parameter, a receiver, a result or
@@ -1278,7 +1278,8 @@ took (R11b), and it is used in these ways and no others:
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
 - narrowing (S8d): where a condition `e == X` holds (an `if`'s block, the right of `and`, after `assert`, after `if e
   != X { leave }` - every place S8d lists) `e` holds what of `X` it can be; where it fails, its set less `X`; a test for
-  `null` narrows as it does a reference (S8e). Only a local or a parameter narrows, until a statement assigns it;
+  `null` narrows as it does a reference (S8e). A local, a parameter or a field path of one narrows, until a statement
+  assigns it, a field path until a call too (S8d);
 - `match e` (S12, S13): each case's items words, types, named sets or `null`, tried in order; without an unguarded `case _`
   the cases must cover every error `e` can be, and `null` where it can be null. A case naming nothing `e` can be is a
   compile-time error, `case null` where `e` holds an error included - a catch clause's name, a word written, a value a
@@ -3878,7 +3879,7 @@ negation, `null == x` and `null != x` the same tests, and `not x == null` the sa
 null, whatever the type declares. The null test of an `x` that cannot be null - a number, a `Bool`, a struct or enum
 value, an array not marked `?&` (T2c), a reference or a function value never null (T2c, T21), an error value a test
 or a word written says holds one (T20) - and `null == null` are compile-time errors. Where it holds, or fails, it
-narrows a local or a parameter (S8e).
+narrows a local, a parameter or a field path of one (S8e, S8d).
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
 `==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
@@ -5265,7 +5266,9 @@ payloads) declared with an initializer, and nothing anywhere in its function wri
 assignment, `++`/`--`, atomic operation or spawn target names it. Such a local holds its initializer's value
 wherever it can be read, so a condition reading it reads that value. A parameter is never fixed.
 
-**S8d (narrowing).** A condition says things of the locals and parameters it tests: `e == Shape.Circle` (a case
+**S8d (narrowing).** A condition says things of the **paths** it tests - a local or a parameter, and a **field path** of
+one: the local followed by one or more field reads, `x.f`, `x.f.g` (each step a field; a call, an index or a slice
+anywhere in it makes it no path, and a weak field, T2d, is none): `e == Shape.Circle` (a case
 written, E32, `e` on either side) that `e` holds that case; `p != null` that `p` is not null (S8e); an error
 value compared with a word, a type or a set what of its set it holds (R11b, T20). `e != Shape.Circle` and `p == null`
 say the same where the condition is false; `not` turns a condition round; `a and b` says what both say where it holds, `a or b` what both
@@ -5283,12 +5286,22 @@ three, so they hold in the same places. What a condition says holds:
   post clause where the body assigns the local nowhere;
 - after a loop whose condition it is and which holds no `break`, where it fails (`for p == null { p = next() }`): it is
   left only by that condition failing;
-- and, for null alone, after a statement assigning the local a value never null (`p = Node(1)`, S8e).
-It holds from there until a statement assigns the local (an assignment, a compound one, an increment, a target - `p =
-p.next` reading `p.next` before the store), and so inside a loop only up to where the loop assigns it; never inside a
-lambda written there. Deferred code (S19, S19e) runs as its block closes, after the block's later statements: it is
-checked under a narrowing only where no statement after it in its block assigns the local. Only a local or a parameter narrows - a field never does, a call may change it: a field is tested
-through a local (`n := s.head; if n != null { n.v }`) or unwrapped (`s.head!.v`).
+- and, for null alone, after a statement assigning the path a value never null (`p = Node(1)`, `s.head = Node(1)`, S8e).
+It holds from there until a statement assigns the path or a path it starts with (an assignment, a compound one, an
+increment, a target - `p = p.next` reading `p.next` before the store; `x = y` and `x.f = y` both end what `x.f.g` was
+known to be, `x.f.g.v = 3` does not), and so inside a loop only up to where the loop assigns it; never inside a lambda
+written there. Deferred code (S19, S19e) runs as its block closes, after the block's later statements: it is checked
+under a narrowing only where no statement after it in its block assigns the path, and never under a field path's.
+
+A field path's narrowing ends besides at **any call** after its test - of a function, a method, an operator's method
+(E31), a constructor, a function value, a spawned call (P1) - and at a `yield` (S20), since what is called may write
+the field through another reference; reading through a writable or a read-only reference changes nothing. A call's
+arguments are evaluated before it is made, so they are read under the narrowing (`if r.Ty != null { use(r.Ty) }`); a
+call in a condition after the test (`x.f != null and ready(x)`) leaves nothing said of `x.f` past it; a call in an
+`if`'s block is none in its `else`. Inside a loop, a field path narrowed before the loop is known only where nothing
+in the loop - its condition, body and post clause - calls: else a read of it there is a compile-time error, the loop's
+calls coming before its next turn's reads (test it inside the loop, or read it into a local before). A `!` after a
+narrowed field path (`s.head!.v`, E35) reads it at its declared type and unwraps it, unneeded but no error.
 
 Where `e` is known to hold a case, `e.r` reads the payload field `r`. Where the case's payload is one type written whole
 (T17a, `Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The payload's
@@ -5298,10 +5311,11 @@ of them writably (`e.Grow()` with a `mut` receiver, `e.c` or `e` given to a `mut
 error naming the whole-value assignment and a match's binding, a copy of its own. A field of a case the local is not known to hold is no member of an enum,
 and a compile-time error.
 
-**S8e (null narrowing).** A local or a parameter holding a `T?&` known not to be null (S8d) reads as a `T&` (T2c) - an
+**S8e (null narrowing).** A local, a parameter or a field path of one (S8d) holding a `T?&` known not to be null
+(S8d) reads as a `T&` (T2c) - an
 `Array<T>?&` as an `Array<T>&`, a `fn?&(...)` as a `fn&(...)` (T21);
 besides the tests S8d reads, a statement assigning it a value never null (`p = Node(1)`) makes it known not to be null
-from there.
+from there. A written target is of its declared type: `s.head = null` stores a null, as `p = null` does.
 
 **S8b.** A condition the **build decides** — one S8a describes, except that it does read a build constant —
 makes the `if` conditional compilation, exactly as at the top level (B9): only the branch it chooses is
@@ -6038,6 +6052,18 @@ It is a **detector, not a proof**. It reports races that actually happen on the 
 finds nothing about code that did not execute and nothing about an interleaving that did not occur. What
 it does not do is give false positives on correctly synchronised code — a program that guards its shared
 state with a mutex is not flagged.
+
+**P7a (races in tests).** `test` (B3a) builds the tests that can start a task a second time, with `-race`, and runs
+only them in that build; the others run in the ordinary test build. A test **can start a task** where its body, or
+anything it may call, holds a `spawn` (the function fact `Spawns`, G42; a call through a function value or an `any`
+that is not followed counts for nothing here). The two builds hold the same program: `RaceBuild` (B10a) is true in
+the second only, and a file whose tests start none is built once, as before. The file's tests run the ordinary build's
+first, then the race build's, each test's `ok - NAME` or `FAIL - NAME` line as it ends, and one line `N passed, M failed`
+for both. A data race ThreadSanitizer reports while a test runs fails that test, `FAIL - NAME: data race`, the report
+on the standard error before it. `test -race` (P7) builds and runs every test of the file in the race build, as before.
+`test` makes no second build where the build is for another machine, is `-sanitize`, `-fuzz` or `-bench`, or clang's
+ThreadSanitizer runtime (`libclang_rt.tsan`) is not installed - said once, the tests then all running in the ordinary
+build; `OLANG_AUTORACE=0` turns it off.
 
 It sees a program's synchronisation because it **intercepts the C library**: the same `pthread_create`
 and `pthread_join` §6.8 is implemented with, and whatever a program itself reaches through `extern fn`
@@ -8061,7 +8087,7 @@ mode-word ::= "build" | "compile" | "test" | "run" | "format" | "explain" | "hel
             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-install" | "-continue"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -8085,7 +8111,8 @@ beginning with `-` that is no option is an error:
 | `-library` | build | §11 X14 |
 | `-memory` | running a file, build, test, run | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| `-bench` | test | B19b |
+| `-bench` | running a file, test, run | B19b |
+| `-runs COUNT` | running a file, run | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 | `-install` | jupyter | B23 |
@@ -8128,14 +8155,18 @@ do, so it is a compile-time error beside either of them. Running a file (B3g), `
 `.quick`. Nothing else changes: the program means what it means in the default build.
 
 **B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
-of the program has a source location and its own name, every statement a line, and every parameter and local
-its name and value - a number, a `Bool`, a reference (a pointer to what it names), a struct, a tuple or a record
-(its fields by name), a fixed array (its elements), a run-time-length array or text (its length and a pointer to
-its elements), an enum (its case, and the words of its payload where one carries a payload) and a function value
-(its code and environment). A debugger can therefore break on a function or a `file:line`, step by statement,
-show arguments and locals, and print a backtrace in source terms. A local held in an arena (over 64KB, T7c, or
-homed in a scope variable, O26a) is not described, and a test build's `test` blocks share one function scope.
-Outside `-debug` no debug information is emitted.
+of the program has a source location and its own name (a test `test TARGET: DESCRIPTION`), every statement a line -
+code built for a default argument (D8a) the line of the call leaving it off - and every parameter and local its name,
+its type by the name the program writes it (`I64`, `String`, `Point&`, a declared type's own name) and its value:
+a number, a `Bool`, a reference (a pointer to what it names), a struct, a tuple or a record (its fields by name), a
+fixed array (its elements), a run-time-length array or text (its length and a pointer to its elements), an enum (its
+case, and where one carries a payload each case's fields by name), an error value (its word, or `null`), an `any`
+(its instance and table) and a function value (its code and environment). A local held in an arena (homed in a scope
+variable, O26a) is described where its storage is. Each block, loop body and `join` written in the source is a
+lexical block, so a local is shown only where it is in scope. A debugger can therefore break on a function or a
+`file:line`, step by statement, show arguments and locals, and print a backtrace in source terms; the formatters of
+`editors/debug` (lldb, gdb) show run-time arrays, text, payload cases, `Vec` and `Map` as `$` writes them. A local over
+64KB (T7c) is not described. Outside `-debug` no debug information is emitted.
 
 A debug object is a distinct artifact from an optimized one and is named accordingly (B4) — without that,
 a `-debug` build would silently reuse optimized objects and be exactly what was not asked for.
@@ -8219,7 +8250,7 @@ prevent the others from being checked and run, and the exit status is nonzero wh
 failed a test. The files are built and run one at a time, in the order listed, and what one file's build holds is
 released before the next begins: a list needs the memory of its largest file, not of the whole list. Each test's
 result is written out as the test ends, and a file whose tests' process is ended by a signal - a crash - is reported as
-such, so what ran before it is never lost. After the files, words that name no file and end in no `.olang` pick the
+such, so what ran before it is never lost. Tests that can start a task run in a build of the race detector (P7a). After the files, words that name no file and end in no `.olang` pick the
 tests to run in each: a test runs when it names a target (B7a) a word is, or whose type a word is (`Map` runs `Map`'s
 tests and `Map.Get`'s), or when its description holds a word as text; with no words every test runs. Words that name
 none of a file's tests fail that file's run, its line naming the words and, where one is near (an edit distance of
@@ -8920,12 +8951,12 @@ fuzzer's input is the bytes of one case, run in the test's own process.
 a function of no parameters that may fail. `test -bench FILE [WORD...]` builds the file's tests as `test` does (B3a,
 the words choosing which run) into a **benchmark build** - distinct objects (B4, named with `.bench`) whose allocator
 counts, per thread, the allocations the program's scopes make and their bytes - and in it each `bench.Run(f)` calls `f`
-in rounds on the test's thread: one call, then each round as many calls as the last round's pace says would take the
+in runs on the test's thread: `Run` takes `runs` (seven unless given another) and a `budget` (a second), and each run is made as `Measurement.Of` makes one over a `runs`th of the budget: one call, then each round as many calls as the last round's pace says would take the
 budget (one second unless `Run` is given another) and a fifth more, at most a hundred times the last round's and at
-least one more, until a round's calls take the budget together or make 10^9. The last round is written to the
-standard output before the test's own line, `bench NAME  N ops  T ns/op  A allocs/op  B B/op`, NAME the test's name as
+least one more, until a round's calls take the budget together or make 10^9; the later runs make as many calls as the first settled on. The runs are written to the
+standard output before the test's own line, `bench NAME  N ops  T ± S ns/op (R runs)  A allocs/op  B B/op`, NAME the test's name as
 its run reports it and `/LABEL` after it where `Run` is given a label, T the nanoseconds of one call on the monotonic
-clock, A and B the allocations and bytes of one call rounded down, and `  I instr/op` after them where the machine and
+clock (the median of the runs) and S their spread, A and B the allocations and bytes of one call rounded down, and `  I instr/op` after them where the machine and
 the kernel give a counter of the instructions the thread retires. What the test does outside `f` is not measured. In
 every other build, and under the evaluator (where `-bench` is an error, B3e), `Run` calls `f` once and writes nothing,
 so a benchmark is a test as well; no other build counts allocations or holds the counting code. `bench.Keep(v)` hands
@@ -8935,6 +8966,26 @@ or `Bool` by its bits, any other value through its `Hash` (whose cost the measur
 outside a benchmark build, its instructions -1 where no counter is given. A call of `f` that fails ends the
 measurement with its error at once. `-bench` beside `-fuzz` is an error. The evaluator (K1) evaluates no benchmark
 build: there `Run` calls `f` once.
+
+A measurement of several runs is a `Series` (`Series.Of(f, budget, runs)`, in any build): its runs' times per call have a
+**median**, a **minimum** and a **spread**, the median absolute deviation from the median (unscaled; a run that met a load
+spike does not move it), and the counts of allocations, bytes and instructions written are the run nearest the median's.
+`bench.Time(f)` measures so in any build, writes `487 µs ± 3 µs per call (median of 7 runs × 2048 calls)` (the unit is ns,
+µs, ms or s, the one the median reads best in) to the standard output and gives the median in nanoseconds;
+`bench.Compare(a, b, labels)` makes the runs of `a` and `b` alternately (a, b, a, b, ...), writes both lines and `b/a 1.67 ±
+0.02 (median of 7 paired runs)` - the median and spread of each pair's ratio - and gives the ratio; `Comparison.Of` gives the
+runs. A `Series` renders as a table in a notebook (`Display`, B23).
+
+**What runs, measured (`-bench` of a run).** Given to running a file (B3g) or `run` (B3e), `-bench` builds the program as
+without it, then runs it once, as it would run, its output its own and its status the command's; the build and the run are
+timed apart, and one line is written to the standard error after it, `bench: built in 0.42 s, ran in 1.24 s (1.20 s user,
+0.03 s sys, 182 MB peak)`: the monotonic clock's wall time of each, and the child's user and system time and peak resident
+memory as the kernel reports them (`wait4`). `-runs N` (with `-bench`, else an error) runs it N times - the first as usual,
+the later ones with their standard output discarded - and gives the run time as the median with its spread, `ran in 1.24 s ±
+0.02 s (median of 9 runs; ...)`, the user and system times their medians and the memory the largest; a run that does not end
+with status 0 ends the series, and its status is the command's. The program's `argv[0]` is the built binary's path. Under
+`test`, `-bench` gives each file's run (its build and run time, as above, once the benchmarks in it have written theirs) and,
+when several files ran, one line `bench: N files in 12.3 s (U s user, S s sys, M MB peak)` of the whole command.
 
 ### 10.10 Profiling
 

@@ -1,0 +1,52 @@
+# B3a, P7: a test that starts a task runs in a build of the race detector, the others in the ordinary one. Each test says
+# which it ran in (RaceBuild is decided by the build, so no assert of it could hold in both)
+
+type Counter struct(n I64) { n }
+
+fn bump(c mut Counter&, times I64) {
+    for _ in range times: c.n = c.n + 1
+}
+
+fn says(what String&) {
+    Println($what + ": race build " + $RaceBuild)
+}
+
+test "plain" {
+    says("plain")
+}
+
+test "tasks writing counters of their own" {
+    says("own")
+    a mut Counter& = Counter(0)
+    b mut Counter& = Counter(0)
+    join {
+        spawn bump(a, 100000)
+        spawn bump(b, 100000)
+    }
+    assert a.n == 100000 and b.n == 100000
+}
+
+test "a call reaching a task" {
+    says("through a call")
+    assert tasked() == 1
+}
+
+fn tasked() I64 {
+    a mut Counter& = Counter(0)
+    join { spawn bump(a, 1) }
+    return a.n
+}
+
+test "two tasks writing one counter" {
+    says("racing")
+    a mut Counter& = Counter(0)
+    join {
+        spawn bump(a, 100000)
+        spawn bump(a, 100000)
+    }
+    assert a.n > 0
+}
+
+test "after the race" {
+    says("after")
+}

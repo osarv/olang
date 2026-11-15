@@ -55,7 +55,7 @@
 | status 1
 === olang build -bench main.olang
 | stdout:
-| olang: error[B1]: -bench applies to test, not to build
+| olang: error[B1]: -bench applies to running a file, test and run, not to build
 | stderr:
 | status 1
 === olang test -bench -fuzz x main.olang
@@ -273,7 +273,7 @@
 |   FILE.olang  builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)
 |   build       builds one program, FILE.olang its root module, into build/ (B3)
 |   compile     compiles one module to an object, linking nothing (B2)
-|   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
+|   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)
 |   run         builds the program as build does, into build/ (B3), and runs it with the arguments after the file (B3e)
 |   format      rewrites each file in olang's one layout (B13)
 |   explain     prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)
@@ -298,6 +298,7 @@
 |   OLANG_CLANG=PATH   names the clang a build uses (B12d)
 |   OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)
 |   OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)
+|   OLANG_AUTORACE=0   test builds no race-detector build of the tests that start a task (P7a)
 | stderr:
 | status 0
 === olang help build
@@ -308,7 +309,7 @@
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -326,14 +327,16 @@
 | 
 | options:
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
+|   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
+|   -runs COUNT        with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)
 | stderr:
 | status 0
 === olang help compile
@@ -344,7 +347,7 @@
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -356,11 +359,11 @@
 === olang help test
 | stdout:
 | usage: olang test [OPTION...] FILE.olang...
-| runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
+| runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)
 | 
 | options:
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -369,7 +372,7 @@
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
 |   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
-|   -bench             measures the benchmarks the tests run (std/bench): time, allocations and bytes per call (B19b)
+|   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 | stderr:
 | status 0
@@ -381,14 +384,16 @@
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
+|   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
+|   -runs COUNT        with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)
 | stderr:
 | status 0
 === olang help format
@@ -490,7 +495,7 @@
 |             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-install" | "-continue"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -505,8 +510,8 @@
 | |---|---|---|
 | | `-output PATH` | build, compile, run, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
 | | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test, run | B2c, B2b, B2f |
-| | `-quick` | running a file, build, compile, test, profile, explain, run, the prompt, jupyter, notebook | B2g, B20, B11d |
-| | `-checked` | running a file, build, compile, test, run, the prompt, jupyter, notebook | E16g |
+| | `-quick` | running a file, build, compile, test, profile, explain, run, jupyter, notebook | B2g, B20, B11d |
+| | `-checked` | running a file, build, compile, test, run, jupyter, notebook | E16g |
 | | `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
 | | `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
 | | `-check` | format, fix | B13, B17 |
@@ -514,7 +519,8 @@
 | | `-library` | build | §11 X14 |
 | | `-memory` | running a file, build, test, run | B18 |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| | `-bench` | test | B19b |
+| | `-bench` | running a file, test, run | B19b |
+| | `-runs COUNT` | running a file, run | B19b |
 | | `-caps` | explain | B11c |
 | | `-asm`, `-ir` | explain | B11d |
 | | `-install` | jupyter | B23 |
