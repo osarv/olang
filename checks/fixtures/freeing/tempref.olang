@@ -1,0 +1,63 @@
+# O18b, O8f (docs/freeing.md gap 12, oann's repro/tempref): a temporary given to a '&' parameter of a function whose
+# result copies it into a struct also holding a reference, that result itself a temporary passed on by reference, is
+# built in the block of the call - not where the result lands (o's scope), where every call's stayed (5,580 kB over
+# 100,000 calls before). Flat is under 1 MB over N calls each way
+import "std/io"
+import "std/os"
+
+type Dims struct(Rank I64) {
+    Rank
+    d Array<I64> = Array<I64>(6)
+}
+
+type View struct(Shape Dims, data mut Array<F64>&) {
+    Shape
+    data
+}
+
+type Bad error { Range(at I64) }
+
+fn View.Make(data mut Array<F64>&, s Dims&) View ? Bad {
+    if s.Rank > data.Len(): error Bad.Range(s.Rank)
+    return View(s, data)
+}
+
+type Owner struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+}
+
+fn (o Owner&) View() View { return View.Make(o.mem, Dims(4))! }
+
+fn read(v View&) F64 { return v.data[v.Shape.Rank] }
+
+fn temporary(o Owner&) F64 { return read(o.View()) }
+
+fn bound(o Owner&) F64 {
+    v := o.View()
+    return read(v)
+}
+
+fn resident() I64 ? os.Error {
+    for line in (try os.ReadFile("/proc/self/status")).Lines() {
+        if not line.StartsWith("VmRSS:"): continue
+        kb := try line[6:].Trim().Split(" ")[0].ParseInt() catch { return 0 }
+        return kb
+    }
+    return 0
+}
+
+N I64 = 100000
+
+fn flat(kb I64) String { return "flat" if kb < 1024 else "grew by " + $kb + " kB" }
+
+fn main() ? io.Error, os.Error {
+    o := Owner(16)
+    t F64 = 0.0
+    for _ in range 1000 { t += temporary(o) }
+    a := try resident()
+    for _ in range N { t += temporary(o) }
+    b := try resident()
+    for _ in range N { t += bound(o) }
+    c := try resident()
+    try io.Put(flat(b - a) + " " + flat(c - b) + " " + $t + "\n")
+}

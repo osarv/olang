@@ -43,6 +43,7 @@ import "typed"
 import "mir"
 import "check"
 import "free"
+import "effects"
 
 # a construct met and not lowered yet: where, and what
 type Gap struct(File I64, Sp source.Span, What String&) {
@@ -56,6 +57,8 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     P
     Bodies
     Plans Vec<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
+    fx mut effects.Effects?& = null    # P2: what a task's callee may do (buildsFact), made when first asked
+    buildsDecided Map<I64, Bool>       # ...the bodies whose fact is decided
     # T22c: by twin (scope.twinTab), its plan, and whether it has code of its own (else a call of it reaches the body's)
     TwinPlans Vec<typed.Plan>
     TwinOwn Vec<Bool>
@@ -307,6 +310,27 @@ fn (lw Lowerer&) derivedFact(id I64) String {
         case typed.BodyOf.Dtor(t): $"O23a dtor " + $lw.P.T.Canon(t)
         case _: ""
     }
+}
+
+# P2, O8f: the fact naming whether body id, through all it may call, builds nothing anywhere and starts no task ("none",
+# else "builds") - read by a spawner's code (taskPassed); "" for a body no fact names
+fn (lw mut Lowerer&) buildsFact(id I64) String {
+    name := match lw.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): $"P2 " + $lw.P.InstanceName(inst)
+        case _: ""
+    }
+    if name == "" or lw.buildsDecided.Has(id): return name
+    lw.buildsDecided.Put(id, true)
+    if lw.fx == null: lw.fx = effects.Effects(lw.P, lw.Bodies)
+    f := lw.fx!.Of(id)
+    quiet := not f.Holds(effects.Fact.Allocates) and not f.Holds(effects.Fact.Spawns)
+    lw.P.Facts.Decide(name, "none" if quiet else "builds", false)
+    return name
+}
+
+# ...decided for every body a task calls, before any module's code is reused (B3i)
+fn (lw mut Lowerer&) DecideBuilds(spawned Vec<I64>&) {
+    for b in spawned { lw.buildsFact(b) }
 }
 
 # ...decided for every body, once the scope pass has placed them
@@ -862,6 +886,27 @@ fn (ln mut lowering&) passed(n I64, site typed.SiteId = typed.SiteId(-1)) mir.Ra
     return ln.F.ScopeRefs(xs)
 }
 
+# P2, O8f: the scopes a task is given - each a stand-in the spawner makes in the scope it stands for, held as long as that
+# scope (a closure the task makes may hold it past the join) - none for a callee that builds nothing anywhere, nor
+# starts a task, through anything it may call (effects.Fact.Allocates, Spawns): it is given the program's (null), which
+# it never builds into, so a join of such tasks in a loop keeps nothing (oann's joinleak: two stand-ins of 56 bytes
+# kept in the spawner's scope per join). A whole-program fact (B3i): the caller's code reads it through the table
+fn (ln mut lowering&) taskPassed(callee mir.Callee, fty types.TypeId, site typed.SiteId) mir.Range {
+    n := mir.PassedCount(ln.T, callee, fty)
+    b := match callee {
+        case mir.Callee.Fn(k, _): match k {
+            case mir.FnKey.Body(id): I64(id)
+            case _: -1
+        }
+        case _: -1
+    }
+    if n == 0 or b < 0: return ln.passed(n, site)
+    name := ln.L.buildsFact(b)
+    if name == "": return ln.passed(n, site)
+    v := try ln.L.P.Facts.Read(ln.B.File, name) catch default "builds"
+    return ln.passed(n) if v == "none" else ln.passed(n, site)
+}
+
 # what a call passes (passed), and after it, for a callee that is a body taking derived scopes, what the call knows of
 # each (O23a, C1): the scope its argument's field refers into, or null where it knows none
 fn (ln mut lowering&) passedFor(callee mir.Callee, fty types.TypeId, site typed.SiteId) mir.Range {
@@ -1405,7 +1450,10 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             # a fixed array widened is made where the local keeps it, the local's own (T7b, T7c)
             v := ln.fitAt(init, ty, sp, ln.storageOf(l))
             ln.walkSite = typed.SiteId(-1)
-            if ln.copiesArray(init, ty) and not ln.fits(init, ty) and not ln.widens(init, ty) and not ln.dead and not ln.noLetCopy.Has(I64(l)) {
+            # (O8d: a sole immut array local's constant value is the constant itself - nothing writes it - so its first
+            # let-go releases no storage that is not a region's)
+            constHeld := ln.freeing and ln.L.Free!.ConstLocal(I64(ln.B.Id), I64(l), init)
+            if ln.copiesArray(init, ty) and not ln.fits(init, ty) and not ln.widens(init, ty) and not ln.dead and not ln.noLetCopy.Has(I64(l)) and not constHeld {
                 n := ln.slotLen(l, init)
                 v = ln.slotCopy(v, ty, n, sp) if n >= 0 else ln.arrayCopy(v, ty, sp, ln.storageOf(l))
             }
@@ -1423,9 +1471,10 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             }
             # (QCE: a part holding an array by value takes the copy check made, or the new storage
             # it is given, as it is - never written over in place, since the part may be room a Vec has not filled)
+            # (T13a: an immut array is replaced whole, never written into - a view of its old value keeps it, and a
+            # sole local's old value is released, O8d)
             if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) {
-                copies := ln.copiesArray(value, target.Type())
-                ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
+                ln.valueArrayStore(target, ln.mk(p), v, value, sp)
             } else {
                 # O8d: a sole place given another value releases what it held, once it holds the new one
                 rel := ln.releases(target, true)
@@ -1748,6 +1797,55 @@ fn (ln mut lowering&) arrayStore(dst mir.Lvalue, v mir.Operand, ty types.TypeId,
     ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
     ln.goto(after)
     ln.start(after)
+}
+
+# a value array place given another value (T7b): an immut one (T13a) is replaced whole - the new value's storage taken,
+# or a copy of existing storage made where the place keeps it - never written into, so a view of the old value still
+# reads it; a sole local place (O8d) is replaced too, nothing reaching its old value, which it releases once it holds
+# the new; any other is written in place where the lengths agree (arrayStore)
+fn (ln mut lowering&) valueArrayStore(target typed.Lvalue&, dst mir.Lvalue, v mir.Operand, value typed.Expr&, sp source.Span) {
+    ty := target.Type()
+    rel := ln.releases(target, true)
+    fixed := ln.L.P.Immut(ty)
+    if fixed or (rel.Len() > 0 and rel[0].At < 0) {
+        ln.replaceStore(target, dst, v, value, rel, sp)
+        return
+    }
+    copies := ln.copiesArray(value, ty)
+    if rel.Len() == 0 {
+        ln.arrayStore(dst, v, ty, copies, sp, ln.placeStorage(target))
+        return
+    }
+    # (decided where the program is linked: both ways, the sole one releasing as decided here)
+    g := ln.temp(types.BoolT, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(g), mir.Rvalue.Sole(rel[0].At)))
+    yes, no, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(mir.Operand.Copy(mir.Lvalue.L(g)), yes, no))
+    ln.start(yes)
+    decided Vec<relPath>
+    for r in rel { decided.Push(relPath(-1, r.Path, r.Slot)) }
+    ln.replaceStore(target, dst, v, value, decided, sp)
+    ln.joinAt(after)
+    ln.start(no)
+    ln.arrayStore(dst, v, ty, copies, sp, ln.placeStorage(target))
+    ln.joinAt(after)
+}
+
+# the store of a value array replaced whole: what the place held released at rel once it holds the new value, constant
+# text an immut local place is given held as it is (free.ConstLocal: nothing writes it)
+fn (ln mut lowering&) replaceStore(target typed.Lvalue&, dst mir.Lvalue, v mir.Operand, value typed.Expr&, rel Vec<relPath>&
+    sp source.Span) {
+    ty := target.Type()
+    old := mir.NoLocal
+    if rel.Len() > 0 {
+        old = ln.temp(ty, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(old), mir.Rvalue.Use(mir.Operand.Copy(dst))))
+    }
+    w := v
+    keepConst := rel.Len() > 0 and ln.L.P.Immut(ty) and free.ConstRead(value)
+    if ln.copiesArray(value, ty) and not keepConst: w = ln.arrayCopy(v, ty, sp, ln.placeStorage(target))
+    ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
+    if old != mir.NoLocal: ln.releaseAt(old, rel, sp)
 }
 
 fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {
@@ -2215,7 +2313,7 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             # a target holding an array by value is stored as the assignment it is judged as (P1g, T11b): a copy where
             # that assignment copies, made where the target's storage is
             cps := ln.targetCopies(sw, task) if ln.valueTargets(sw) else mir.Range(0, 0)
-            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty), c.Site), places, cls, ends
+            k := ln.F.AddTask(callee, args, ln.taskPassed(callee, ty, c.Site), places, cls, ends
                               sw.Task.Span(), cps)
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }

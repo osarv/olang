@@ -352,6 +352,9 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # owner locals (keyField -3): a local holding an owner by value (ownerCand) - a Vec, a Map - given another value
     # somewhere in its body, a place of its own: by (body, local), and by body whether it has one
     ownLocalOf Map<pair.Pair<I64, I64>, I64>
+    spawned Vec<I64>          # the bodies a task calls directly (Spawned)
+    gapRows Vec<String&>      # O8f: the report's rows for let-goes early freeing does not follow (gap)
+    Gaps I64 = 0              # ...how many the report printed - with -check, a failed build (B18)
     olBody Vec<I64>           # by place: an owner local's body and local, -1 for any other place
     olLocal Vec<I64>
     olIn Vec<Bool>
@@ -1984,9 +1987,11 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
             # (one declared with no value, D13d, holds nothing written before its first assignment - no old value)
             loc := f.Bodies[f.curBody].Locals[I64(l)]
             if f.ownLocalOf.Has(key) or loc.Kind != typed.LocalKind.Var or loc.Unset: return
-            if not f.ownerCand(ty): return
+            ow := f.ownerCand(ty)
+            if not ow and not f.arrayCand(ty): return
             k := f.newPlace(ty, -3, false, ty, false)
-            f.owner[k] = true
+            f.owner[k] = ow
+            f.arr[k] = not ow
             f.olBody[k] = f.curBody
             f.olLocal[k] = I64(l)
             f.ownLocalOf.Put(key, k)
@@ -2011,9 +2016,11 @@ fn (f mut Free&) globalCand(p typed.Lvalue&) {
             }
             ow := f.ownerCand(ty)
             hd := not ow and f.handleCand(ty)
-            if not ow and not hd and not f.refCand(ty): return
+            ar := not ow and not hd and f.arrayCand(ty)
+            if not ow and not hd and not ar and not f.refCand(ty): return
             k := f.newPlace(ty, -4, hd, ty, false)
             f.owner[k] = ow
+            f.arr[k] = ar
             f.glModule[k] = m
             f.glName[k] = I64(n)
             f.globalOf.Put(key, k)
@@ -2086,6 +2093,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     cur I64 = 0
     ends Vec<I64>             # by statement number: the last number inside it
     loopAt Vec<I64>           # each loop's first and last statement numbers
+    declLoops Map<I64, I64>   # O8f: by local, how many loops enclose its declaration (turnLocal)
     loopEnd Vec<I64>
     thenFrom Vec<I64>         # each if's branches: the then's first and last, the else's first and last
     thenTo Vec<I64>
@@ -2269,6 +2277,7 @@ fn (w mut walker&) reset() {
     w.cur = 0
     w.ends.Clear()
     w.loopAt.Clear()
+    w.declLoops.Clear()
     w.lastAt.Clear()
     w.loopEnd.Clear()
     w.thenFrom.Clear()
@@ -2390,6 +2399,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
     w.stmtSp = st.Span()
     match st {
         case typed.Stmt.Let(sp, l, x) {
+            w.declLoops.Put(I64(l), w.loops)
             w.declAt[I64(l)] = n
             w.declLet[I64(l)] = true
             w.declSp[I64(l)] = x.Span()
@@ -2487,6 +2497,8 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Spawn(_, s) {
             w.F.taskAt[w.Id] = true
+            tc := typed.Call.Of(taskCall(s.Task))
+            if tc != null and typed.CalleeBody(tc) >= 0: addTo(w.F.spawned, typed.CalleeBody(tc))
             w.expr(s.Task)
             for c in s.Clauses {
                 if c.Handler != null: w.expr(c.Handler!)
@@ -2520,6 +2532,7 @@ fn (w mut walker&) result(o Vec<I64>&) {
 }
 
 fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+    w.unfollowed(sp, p)
     w.targets.Push(p)
     c0 := typed.Call.Of(x)
     outer := w.exemptSite
@@ -3083,6 +3096,42 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     f.goes.Push(letGo(k, w.Id, w.body().File, w.stmtSp, sp, kind, recv, callee, w.loops > 0 or w.runsAgain()))
 }
 
+# O8f: a let-go in the program's own code that runs again which early freeing does not follow - kept until its scope
+# closes for no condition of the rule's: a row of the report (gapRows), which -check fails on (B18)
+fn (w mut walker&) gap(sp source.Span, what String&) {
+    f := w.F
+    if not w.Final or w.quiet > 0 or not f.programCode[w.Id] or not (w.loops > 0 or w.runsAgain()): return
+    row := $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + ": memory: '" + $w.text(sp) + "' " + $what + " - kept until its scope closes: a let-go early freeing does not follow (O8f)\n"
+    if row not in f.gapRows: f.gapRows.Push(row)
+}
+
+# whether a value of type ty owns storage a let-go of it could reclaim: an array of a run-time length held by value, or
+# a value holding one (QCE)
+fn (w mut walker&) ownsStorage(ty types.TypeId) Bool {
+    t := w.T()
+    return t.OwnedPart(ty) or t.OwnsParts(ty)
+}
+
+# O8f: an assignment's let-go no place follows - a local, a global or a field that is no candidate place, an element
+fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&) {
+    if not w.ownsStorage(p.Type()): return
+    match p {
+        case typed.Lvalue.Local(_, _, l) {
+            if w.ownLocal(I64(l)) < 0 and not w.turnLocal(I64(l)): w.gap(p.Span(), "lets go of what it held")
+        }
+        case typed.Lvalue.Global(_, _, _, _) { if w.F.placeOfPlace(p) < 0: w.gap(p.Span(), "lets go of what it held") }
+        case typed.Lvalue.Field(_, ty, _, _) {
+            if w.F.placeOfPlace(p) < 0 and w.F.leaves(ty).Len() == 0: w.gap(p.Span(), "lets go of what it held")
+        }
+        case typed.Lvalue.Elem(_, _, _) { w.gap(p.Span(), "lets go of what the element held") }
+        case _ { }
+    }
+}
+
+# whether local l is declared inside the innermost loop being walked (or outside any, where none is): what an
+# assignment of it lets go of goes with the turn, or the call
+fn (w mut walker&) turnLocal(l I64) Bool { return (try w.declLoops.Get(l) catch default 0) >= w.loops }
+
 # whether the body can run more than once: any function but main - not a global's initializer, a test, a contract's
 # condition run with its function
 fn (w mut walker&) runsAgain() Bool {
@@ -3552,6 +3601,11 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         case typed.Callee.Body(id) {
             b2 = I64(id)
             unknown = f.Bodies[b2].Root == null and not f.isCase(b2)
+            # (O8f: a collection's element given a value owning storage - x[i] = v through SetAt - lets go of the old
+            # one in the library's code, where an element store never lets go)
+            if c.Args.Len() > 0 and not f.programCode[b2] and f.fnName(b2) == "SetAt" and w.ownsStorage(c.Args[c.Args.Len() - 1].Type()) {
+                w.gap(sp, "lets go of what the element held")
+            }
             if w.Final and f.genOn and w.quiet == 0 {
                 w.gcStmt.Push(w.cur)
                 w.gcSp.Push(sp)
@@ -4268,6 +4322,11 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     of := -1
     site := -1
     why := ""
+    # (constant text an immut array local is given: held as it is, ConstLocal)
+    if f.isNamed(k) and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(x) {
+        f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
+        return
+    }
     match x {
         case typed.Expr.Lit(_, _, _) { kind = SOk }
         case typed.Expr.Data(_, _, _, _) { kind = SOk }
@@ -5567,6 +5626,39 @@ fn (f Free&) SplitPath(b I64, site I64) Array<I64> {
     return try f.splitAt.Get(pair.Pair(b, site)) catch default Array<I64>(0)
 }
 
+# whether x is constant data (a text literal, T25d) read whole, through conversions: what an immut array local given it
+# holds as it is - nothing writes it (T13a) - so it is no storage made for the place, and its let-go releases nothing
+fn ConstRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Away(_, _, y): ConstRead(y)
+        case typed.Expr.Prim(_, _, op, _, args): isConversion(op, args) and ConstRead(args[0])
+        case typed.Expr.Read(_, _, p, _): match p {
+            case typed.Lvalue.Deref(_, _, r): ConstRead(r)
+            case _: false
+        }
+        case _: false
+    }
+}
+
+# whether local l of body b is an immut array local place (an own local holding text) declared with constant data:
+# lowering leaves the constant uncopied (in every program alike: no decision is read)
+fn (f mut Free&) ConstLocal(b I64, l I64, init typed.Expr&) Bool {
+    k := f.LocalPlaceOf(b, l)
+    return k >= 0 and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(init)
+}
+
+# a task's call, its "!" taken off (E35)
+fn taskCall(x typed.Expr&) typed.Expr& {
+    return match x {
+        case typed.Expr.Try(_, _, t): t.X! if t.Ends and t.X != null else x
+        case _: x
+    }
+}
+
+# the bodies a task calls directly, for the spawners' stand-in facts (lowering's buildsFact)
+fn (f Free&) Spawned() Vec<I64> { return f.spawned }
+
 # the owner local place local l of body b is, -1 for none
 fn (f mut Free&) LocalPlaceOf(b I64, l I64) I64 {
     if not f.Done or b < 0 or b >= f.olIn.Len() or not f.olIn[b] { return -1 }
@@ -5685,15 +5777,30 @@ fn (f mut Free&) Report() String {
         why := r.Text
         if f.whyKind[k] == RNone { why = "it is let go of only inside calls that may let go of any place" }
         where := $d.Locate(r.File, I64(r.Sp.Start)) if r.File >= 0 else $d.Locate(g.File, at)
+        # (O8f: a value changed in place, or a holder copied, keeps for no condition of the rule's - a gap)
+        gapped := f.whyKind[k] == RInPlace or f.whyKind[k] == RCopied
+        if gapped: what = $what + ": a let-go early freeing does not follow (O8f)"
         # one row a cause: places let go of together, kept for one reason, are one row
         text := $d.Locate(g.File, at) + ": memory: " + $what + "\n" + $where + ": note: " + $why + "\n"
         if text not in rows {
             rows.Push(text)
             b.Push(text)
+            if gapped: f.Gaps++
         }
+    }
+    for row in f.libraryGaps() {
+        if row in rows: continue
+        rows.Push(row)
+        b.Push(row)
+        f.Gaps++
+    }
+    for row in f.gapRows {
+        b.Push(row)
+        f.Gaps++
     }
     b.Push(f.holderRows())
     if f.genOn: b.Push(f.genRows())
+    if f.Gaps > 0: b.Push($"memory: " + $f.Gaps + " let-go" + $("" if f.Gaps == 1 else "es") + " early freeing does not follow (above, O8f)\n")
     if places == 0 {
         b.Push("memory: no place lets go of storage in code that runs again\n")
         return b.ToString()
@@ -5701,6 +5808,29 @@ fn (f mut Free&) Report() String {
     frees := places - kept
     b.Push($"memory: " + $places + " place" + $("" if places == 1 else "s") + " let" + $("s" if places == 1 else "") + " go of storage in code that runs again - " + $frees + " free" + $("s" if frees == 1 else "") + " it at once, " + $kept + " keep" + $("s" if kept == 1 else "") + " it" + $(" (above)" if kept > 0 else "") + "\n")
     return b.ToString()
+}
+
+# O8f: the rows for a library's place (a Map entry's value, a collection's element) the program's own call lets go of in
+# code that runs again - a removal, a Put replacing a value, a SetAt - kept for a reason of the library's own code, no
+# condition the program can see or change (a view, a task, a destructor, a reference the program stores): a gap
+GapCalls Array<String&> = Array<String&>["Put", "SetAt"]
+
+fn (f mut Free&) libraryGaps() Vec<String&> {
+    out Vec<String&>
+    d := f.P.L.Diags
+    for g in f.goes {
+        k := g.PlaceId
+        if k < 0 or not g.Again or g.Kind != LCall or g.Callee < 0 or not f.programCode[g.Body] or f.programCode[g.Callee]: continue
+        if f.IsSole(k) or (f.P.Gens.Len() > 0 and f.genPlace(k)): continue
+        nm := f.fnName(g.Callee)
+        if nm not in RemovalNames and nm not in GapCalls: continue
+        wk := f.whyKind[k]
+        if wk == RView or wk == RTask or wk == RDtor: continue
+        r := f.why[k]
+        if r.File >= 0 and not d.Locate(r.File, 0).Contains("/std/"): continue
+        out.Push($d.Locate(g.File, I64(g.At.Start)) + ": memory: '" + $f.textOf(g.File, g.Sp) + "' keeps what it lets go of until its collection's scope closes: a let-go early freeing does not follow (O8f)\n")
+    }
+    return out
 }
 
 # whether place k is what a collection holds: vacated by the library's code

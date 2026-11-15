@@ -112,6 +112,7 @@ type Config struct() {
     Race Bool = false
     San Bool = false
     Memory Bool = false # -memory: the early-free report printed after the build (B18)
+    MemoryCheck Bool = false    # -check beside -memory: a let-go early freeing does not follow fails the build (B18a)
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
     Cell Bool = false       # B22: a session's cell - a shared object the cell worker loads, without the runtime (cells.olang)
     Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none

@@ -45,7 +45,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
+                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "freeing", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
                      "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline", "racetests", "dwarf"]
 
@@ -416,6 +416,7 @@ fn scenario(r mut report&, name String&) ? Failed {
     match name {
         case "landing" { try landing(r) }
         case "earlyfree" { try earlyfree(r) }
+        case "freeing": try freeing(r)
         case "fix" { try fixing(r) }
         case "twolists" { try twolists(r) }
         case "clones" { try clones(r) }
@@ -557,6 +558,48 @@ fn earlyfree(r mut report&) ? Failed {
         try r.expect(outOf(dir) == part[i], $p + " interpreted output", dir)
         try split(r, dir, p, full[i])
     }
+}
+
+# O8f (docs/freeing.md): the freeing guarantee - each program of the gap list closed frees at every let-go it makes:
+# built, it runs flat (under 8 MB of address space, or reading its own growth where it has threads); interpreted at a
+# smaller size, the evaluator, which stops on a read of a freed region, prints what the built program prints there. B18a:
+# each of them and every earlyfree program but mapkeys (a split entry's key text, a gap) builds under -memory -check,
+# and a program with a gap (an element given new text) fails it naming the element
+test "every let-go the freeing guarantee names frees, and -memory -check proves it" { assert passed("freeing") }
+
+fn freeing(r mut report&) ? Failed {
+    dir := fresh("freeing")
+    os.Run("cp checks/fixtures/freeing/* checks/fixtures/earlyfree/*.olang " + $os.Quote(dir))
+    limited := Array<String&>["append", "global", "arrays"]
+    full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n"]
+    part := Array<String&>["490 490 148890\n", "490\n", "220494\n"]
+    for i in range limited.Len() {
+        p := limited[i]
+        try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
+        try r.expect(sh(dir, "(ulimit -v 8192 && ./build/" + $p + ") > out.txt 2>&1") == 0, $p + " under 8 MB", dir)
+        try r.expect(outOf(dir) == full[i], $p + " output", dir)
+        try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 " + $p + ".olang > out.txt 2>&1") == 0, $p + " interpreted", dir)
+        try r.expect(outOf(dir) == part[i], $p + " interpreted output", dir)
+    }
+    # (threads reserve address space of their own: these read their own growth, or their peak)
+    try r.expect(sh(dir, "\"$OLANG\" -check joins.olang > out.txt 2>&1") == 0, "joins", dir)
+    try r.expect(outOf(dir).EndsWith("flat 200000\n"), "joins kept what its joins made", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=20 joins.olang > out.txt 2>&1") == 0, "joins interpreted", dir)
+    try r.expect(outOf(dir) == "flat 200\n", "joins interpreted output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -check tempref.olang > out.txt 2>&1") == 0, "tempref", dir)
+    try r.expect(outOf(dir).EndsWith("flat flat 0\n"), "tempref kept its calls' temporaries", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=100 tempref.olang > out.txt 2>&1") == 0, "tempref interpreted", dir)
+    try r.expect(outOf(dir) == "flat flat 0\n", "tempref interpreted output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -check texts.olang > out.txt 2>&1") == 0, "texts", dir)
+    try r.expect(outOf(dir).EndsWith("flat 3097784\n"), "texts kept what its tasks built", dir)
+    for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"
+                            "vecreassign", "dropvec", "exportquiet", "maptake", "mapput", "mapdrop", "globals", "fieldfeed", "getread"] {
+        try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
+    }
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps.olang > out.txt 2>&1") == 1, "gaps passed -memory -check", dir)
+    o := outOf(dir)
+    try r.expect(o.Contains("gaps.olang:6:27: memory: 'names[i % 10]' lets go of what the element held - kept until its scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
+    try r.expect(o.Contains("error[B18]: 1 let-go early freeing does not follow (O8f)"), "no B18 error", dir)
 }
 
 # wholeprog 2.1: an earlyfree program's code as a module of its own (splitlib, its main named Run), the root only

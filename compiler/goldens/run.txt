@@ -325,6 +325,8 @@
 | status 0
 | ok - an immut value is read, held and replaced whole, never changed
 | ok - an Array<Char> lent as a writable Array<U8>& is written in place
+| ok - a String given a value of its own length leaves a slice of the old one as it was
+| ok - text built by reassignment holds what it was given, its old values freed
 === test tests/inplace.olang
 | status 0
 | ok - letters: reads Split's pieces and walks over them where they stand

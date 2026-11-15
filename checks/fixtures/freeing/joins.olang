@@ -1,0 +1,35 @@
+import "std/io"
+import "std/os"
+
+# O8f (docs/freeing.md gap 13): a join of tasks that build nothing keeps nothing (oann's joinleak: two stand-ins of 56
+# bytes a join, kept for the run - 22 MB here). The growth is measured over a second half, after a first that settles
+# the pools: flat is under 400 KB
+N I64 = 20000
+
+fn resident() I64 {
+    stat := try os.ReadFile("/proc/self/statm") catch default ""
+    return try stat.Split(" ")[1].ParseInt(10) catch default 0
+}
+
+fn work(xs mut Array<F64>&, t I64, tasks I64) {
+    for i in range t, xs.Len(), tasks: xs[i] += 1.0
+}
+
+fn sweeps(xs mut Array<F64>&, n I64) {
+    for _ in range n {
+        join {
+            for t in range 2: spawn work(xs, t, 2)
+        }
+    }
+}
+
+fn flat(pages I64, most I64) String { return "flat" if pages < most else "grew by " + $pages + " pages" }
+
+fn main() {
+    xs := Array<F64>(1000)
+    sweeps(xs, N * 5)
+    r0 := resident()
+    sweeps(xs, N * 5)
+    r1 := resident()
+    io.PutLine($flat(r1 - r0, 100) + " " + $xs[0])!
+}
