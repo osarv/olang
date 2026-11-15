@@ -37807,3 +37807,7 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   value (Allocates true) and every top-level `assert not f.Allocates`, in the module and in those it imports, was said
   false: 36 spurious errors behind one unneeded `try`. Asserts are no longer decided where facts were read in a program
   with other errors (`Checker.FactsUnsettled`), as D3b says nothing there; checks case s17afactcascade.
+- **An unknown type in a trait method's signature went unreported (T4).** No body checks a trait method's signature,
+  so `Value() Tensor<F32>` with Tensor unknown was said nowhere, and a generic calling it through an `any` failed in
+  lowering ("it does not lower an unknown type"; oann's repro/traittype). traitSets now checks the types each method
+  writes, in the trait's context; checks case traitunknowntype.

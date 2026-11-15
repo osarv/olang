@@ -2728,16 +2728,20 @@ fn (c mut Checker&) reachesTrait(d types.DeclId, tr types.TypeId, depth I64) Boo
     return false
 }
 
-# R1b: a trait's method writes its error set - no body says what it is
+# R1b: a trait's method writes its error set - no body says what it is; and the types its signature writes are ones
+# the trait's module knows (M22, T4: no body checks a trait method's signature, so an unknown one was said nowhere)
 fn (c mut Checker&) traitSets(mi I64, td ast.TypeDecl?&) {
     if td == null or td.Body == null { return }
     match td.Body {
         case ast.TypeBody.Trait(ms, _, _) {
-            c.push(-1, mi, types.VoidT, types.ListId(0))
+            fr := c.push(-1, mi, types.VoidT, types.ListId(0))
+            ei := c.P.TypeEntry(mi, td.Name)
+            if ei >= 0: fr.Ctx = c.P.DeclContext(c.P.DeclFor(mi, ei))
             for m in ms {
                 if m.S.HasErrors and m.S.Errors.Len() == 0 {
                     c.err(source.Span(m.Sp.Start, m.Sp.Start + I32(c.text(m.Name).Len())), msgs.TraitErrsUnwritten())
                 }
+                if ei >= 0 and m.TypeParams.Len() == 0: c.sigWritten(m.S)
             }
             c.pop()
         }
