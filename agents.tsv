@@ -99,3 +99,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	msgfix	sonnet	medium	done				targeted		TextForLength/CharsForText/BuilderForText helps; t.Bytes()
 2026-11-14	checked	opus	medium	merged, master 52c3ff94 (verify: stale interp case fixed, 2 OOM kills pass alone)						checked builds: index/div/shift checks in test/debug/interpret
 2026-11-14	cells	opus	high	merged, master 52c3ff94 (verify: stale interp case fixed, 2 OOM kills pass alone)						compiled notebook/prompt cells
+2026-11-14	testmem	opus	medium	merged, master 374c1e3c (verify passed on the tip)						test-build memory peaks before v1
