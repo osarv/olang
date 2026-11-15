@@ -12857,6 +12857,8 @@ fn (c mut Checker&) boundParam(ps Array<types.TypeId>&, k I64, b generic.Binding
         if c.isNamed(r) and c.P.Body(r) and c.P.T.Destructs(r) { return t }
         # T32a: an "any" is wanted as itself - each value of a conditional made one
         if c.P.T.IsAny(t) { return t }
+        # T2c, E28: a reference that may be null is wanted as itself - a conditional of a reference and null is one
+        if c.P.T.IsNullable(t) { return t }
     }
     return c.deref(t)
 }
