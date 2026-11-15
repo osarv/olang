@@ -37847,3 +37847,19 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   zmtp). No module or edge left a graph and no graph was lost, so it was captured again (`make modgold`).
 - **Goldens moved by the batch:** tokens and trees of the 23 files it edited, and the tree of compiler/api.olang, which
   it did not edit - its `catch default line.Len() - open` is now one default (R9a, above).
+- **Left: oann's genref (D18c, T22a).** A method generator yielding an enum read from its receiver's Vec, once the enum
+  has a reference-holding case, is a GenPerTurn generator (genElemOf: its element is no reference), so its Next is a
+  lambda whose result's references live where the captured receiver's referent does, and the Generator's field type
+  `fn&() T ? E, Exhausted` says nothing of that (T22a's boundary). It is not a false refusal of the judging but a form
+  the generator types cannot state: a by-value element holding views of a parameter needs a third kind beside
+  Generator and ViewGenerator - its Next's result's references in the receiver's scope (as viewNext gives
+  ViewGenerator), its own storage per turn - and the walk's element handling (walkElem) taught it. Section-8 design,
+  left for a round of its own.
+- **Left: oann's learnerarg (C2d), diagnosed.** Not a cross-module effect: copied into one module with the method
+  instances it uses it fails the same way. Learner's field `S` is promoted (bound to its constructor's parameter) by
+  the field inference, then given back for good (giveBackDecl) by `Homeostasis`, whose `for p in l.S.E.Pops` calls
+  `Vec<mut Population<T>&>.At` with the relation hi = Block (where the element reference lands, the loop's block) over
+  lo = Derived(l, S) (the elements' scope, a field of l's referent): FailsBlock, so dischargeRels gives Learner back.
+  With `S` bare again the instance in `use` is placed in the argument's scope and C2d is said there. The fault is the
+  landing: a writable reference element read through a derived scope should land in a version holding that scope
+  (O25i), not the loop's block. In scope.olang's call discharge, beside the freeing work; left for a round of its own.
