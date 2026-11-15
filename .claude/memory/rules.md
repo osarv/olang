@@ -138,6 +138,7 @@ slimming of 2026-11-08").
   design decision ("fix everything you think might be a problem that doesn't require design decisions, always").
 - **Optimizations are mine to decide**: one that changes no meaning is never a question - measure, queue, build, report
   in a line. Only one needing a language change, a new visible cost or a trade against a principle goes to the user.
+- **Free when we can, provably (the user, 2026-11-15: "It's important that we do actually free when we can, and I want this to be provably the case"; no free or destroy keyword or method: "I don't want to add a free or destroy keyword if we can avoid it")**: early freeing is a stated guarantee, not a best effort - the spec states when storage is reclaimed before its scope closes, the gaps are closed, and a checking mode proves each build keeps nothing the rule says goes; hot loops pinned allocation-free with top-level `assert not f.Allocates`.
 - **The memory model may grow, without run-time cost**: compile-time-only additions that let refused programs work or
   free memory earlier are welcome; reference counting only with a really good case, and asked first.
 
