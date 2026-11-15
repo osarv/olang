@@ -2810,9 +2810,9 @@ fn crashes(r mut report&) ? Failed {
     d := crashRun(dir, "./build/crash deep")
     try r.expect(d.Status == 0 and d.Stdout == "deep 1000000\n", "RunOnStack deep: status " + $d.Status + ", " + $d.Stdout, dir)
     compiler := olang()
-    i := crashRun(dir, "OLANG_EVALUATE=1 " + $os.Quote(compiler) + " crash.olang deep 20000")
+    i := crashRun(dir, "env OLANG_EVALUATE=1 " + $os.Quote(compiler) + " crash.olang deep 20000")
     try r.expect(i.Status == 0 and i.Stdout == "deep 20000\n", "RunOnStack -i: " + $i.Stdout + $i.Stderr, dir)
-    f := crashRun(dir, "OLANG_EVALUATE=1 " + $os.Quote(compiler) + " foreign.olang")
+    f := crashRun(dir, "env OLANG_EVALUATE=1 " + $os.Quote(compiler) + " foreign.olang")
     try r.expect(f.Status == 139 and f.Stderr.StartsWith("foreign.olang crashed\nolang: internal compiler error") and
                  f.Stderr.Contains("while interpreting"), "OnCrash -i: status " + $f.Status + ", " + $f.Stderr, dir)
     # T2c, E35: "x!" on a null ends the program where it is written, optimized (where the optimizer can see the null)
@@ -2824,7 +2824,7 @@ fn crashes(r mut report&) ? Failed {
         try r.expect(n.Status == 134 and n.Stdout == "start\nafter a push: 4\n" and n.Stderr == "nullpeek.olang:22: null reached\nnullpeek crashed\n"
                      "nullpeek " + $flags + ": status " + $n.Status + ", " + $n.Stdout + $n.Stderr, dir)
     }
-    ni := crashRun(dir, "OLANG_EVALUATE=1 " + $os.Quote(compiler) + " nullpeek.olang")
+    ni := crashRun(dir, "env OLANG_EVALUATE=1 " + $os.Quote(compiler) + " nullpeek.olang")
     try r.expect(ni.Status == 134 and ni.Stdout == "start\nafter a push: 4\n" and ni.Stderr.StartsWith("nullpeek.olang:22: null reached")
                  "nullpeek -i: status " + $ni.Status + ", " + $ni.Stderr, dir)
     # std/chan: a Send on a closed channel fails with chan.Error.Closed, here escaping main
@@ -3037,13 +3037,13 @@ fn runfile(r mut report&) ? Failed {
            " " + $os.Quote($dir + "/bin/olang")))
     try r.expect(sh(dir, "\"$OLANG\" script.olang a -debug --x > out.txt 2>&1") == 0, "olang script.olang", dir)
     try r.expect(outOf(dir) == "script.olang\na\n-debug\n--x\n", "the program's arguments", dir)
-    # B3g: built as -quick builds it, unless -debug or -race says otherwise
-    try r.expect(sh(dir, "test -x build/script.quick && test ! -e build/script") == 0, "olang script.olang built -quick", dir)
+    # B3g: built as build builds it, into the cache - nothing left beside the program
+    try r.expect(sh(dir, "test ! -e build") == 0, "olang script.olang left a build beside the program", dir)
     try r.expect(sh(dir, "\"$OLANG\" script.olang seven > out.txt 2>&1") == 7, "the program's status", dir)
     try r.expect(sh(dir, "chmod +x script.olang && PATH=\"$PWD/bin:$PATH\" ./script.olang b > out.txt 2>&1") == 0
                  "./script.olang", dir)
     try r.expect(outOf(dir) == "./script.olang\nb\n", "the script's arguments", dir)
-    try r.expect(sh(dir, "\"$OLANG\" -debug script.olang c > out.txt 2>&1 && test -x build/script.debug") == 0
+    try r.expect(sh(dir, "\"$OLANG\" -debug script.olang c > out.txt 2>&1 && test ! -e build") == 0
                  "olang -debug script.olang", dir)
     try r.expect(outOf(dir) == "script.olang\nc\n", "-debug: the program's arguments", dir)
     try r.expect(sh(dir, "\"$OLANG\" bad.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("bad.olang:3:") and
@@ -3068,7 +3068,7 @@ fn output(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -output out prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("is a directory"), "a directory", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -output out/t prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build, compile, bindgen, profile and notebook, not to test"), "test -output", dir)
+                 outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to test"), "test -output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output out/q prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("not to running a file"), "running a file with -output", dir)
 }
