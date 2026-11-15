@@ -160,7 +160,7 @@ function M.commands(bufnr)
   local function gd()
     local col = vim.fn.col(".")
     if vim.fn.getline("."):sub(col, col):match("[%(%)%[%]{}]") then return vim.cmd("normal! %") end
-    if #vim.lsp.get_clients({ bufnr = 0 }) > 0 then return vim.lsp.buf.definition() end
+    if #(vim.lsp.get_clients or vim.lsp.get_active_clients)({ bufnr = 0 }) > 0 then return vim.lsp.buf.definition() end
     vim.cmd("normal! gd")
   end
   local function mapgd() vim.keymap.set("n", "gd", gd, { buffer = bufnr, desc = "olang: matching bracket, else definition" }) end
