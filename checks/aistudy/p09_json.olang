@@ -1,0 +1,18 @@
+# spec: parse a JSON order list, sum price*qty over items, print item names; handle missing key
+import "std/json"
+
+fn main() ? {
+    text := "{\"items\": [{\"name\": \"pen\", \"price\": 1.5, \"qty\": 4}, {\"name\": \"book\", \"price\": 12, \"qty\": 2}], \"note\": null}"
+    doc := try json.Json.Parse(text)
+    items := try doc["items"]
+    total := 0.0
+    i := 0
+    for {
+        it := try items[i] catch { break }
+        total += try it["price"].AsNum() * it["qty"].AsNum()
+        Println($(try it["name"]))
+        i++
+    }
+    Println($total)
+    Println($(try doc["missing"]))
+}

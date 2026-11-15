@@ -1,0 +1,30 @@
+# spec: parse CSV text "name,age,city" lines (with header), print average age and the oldest person
+type Person struct(name String, age I64, city String) { name, age, city }
+
+fn Person.parseLine(line String&) Person ? ParseError {
+    f := line.Split(",")
+    return Person(f[0], try f[1].ParseInt(), f[2])
+}
+
+fn main() ? {
+    data := "name,age,city\nAnn,31,Oslo\nBo,45,Rome\nCy,27,Lima\n"
+    people := Vec<Person>[]
+    first := true
+    for line in data.Lines() {
+        if first {
+            first = false
+            continue
+        }
+        if line == "" { continue }
+        people.Push(try Person.parseLine(line))
+    }
+    total := 0
+    oldest := people[0]
+    for p in people {
+        total += p.age
+        if p.age > oldest.age { oldest = p }
+    }
+    Println("avg " $(total / people.Len()) " oldest " $oldest.name)
+    empty := Vec<Person>[]
+    Println("avg of none " $(total / empty.Len()))
+}

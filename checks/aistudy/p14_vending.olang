@@ -1,0 +1,37 @@
+# spec: vending machine state machine: Idle -> HasMoney(cents) -> Dispensing -> Idle; events coin, select, cancel
+type State enum {
+    Idle
+    HasMoney(cents I64)
+    Done
+}
+type Event enum {
+    Coin(cents I64)
+    Select
+    Cancel
+}
+
+fn step(s State, e Event) State {
+    match s {
+        case State.Idle {
+            if e == Event.Coin { return State.HasMoney(e.cents) }
+            return s
+        }
+        case State.HasMoney(c) {
+            match e {
+                case Event.Coin(n): return State.HasMoney(c + n)
+                case Event.Select: return State.Done if c >= 150 else s
+                case Event.Cancel: return State.Idle
+            }
+        }
+        case State.Done: return State.Idle
+    }
+}
+
+fn main() {
+    s := State.Idle
+    evs := [Event.Coin(100), Event.Select, Event.Coin(50), Event.Select, Event.Cancel]
+    for e in evs {
+        s = step(s, e)
+        Println($s)
+    }
+}

@@ -1,0 +1,27 @@
+# spec: write lines to a temp file, append more, read back, count lines and words, delete the file; missing file -> error
+import "std/os"
+
+fn countFile(path String&) I64, I64 ? os.Error {
+    text := try os.ReadFile(path)
+    lines := 0
+    words := 0
+    for line in text.Lines() {
+        lines++
+        words += line.Split(" ").Len()
+    }
+    return lines, words
+}
+
+fn main() ? {
+    dir := try os.MkTemp()
+    path := $dir "/a.txt"
+    try os.WriteFile(path, "hello world\nsecond line here\n")
+    old := try os.ReadFile(path)
+    try os.WriteFile(path, $old "third\n")
+    l, w := try countFile(path)
+    Println("lines " $l " words " $w)
+    try os.Remove(path)
+    l2, w2 := try countFile(path) catch os.Error default 0, 0
+    Println($l2 " " $w2)
+    Println($os.Exists(path))
+}

@@ -1,0 +1,13 @@
+# spec: 4 tasks each increment a shared counter 1000 times; print total (expect 4000)
+Hits mut I64 = 0
+
+fn work() {
+    for _ in range 1000 { Hits += 1 }
+}
+
+fn main() {
+    join {
+        for _ in range 4 { spawn work() }
+    }
+    Println($Hits)
+}
