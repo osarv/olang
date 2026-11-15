@@ -185,7 +185,7 @@ Prelude := (
     "    for i in range 200 {\n" +
     "        a := Array<I64>(64, -7)\n" +
     "        t += a[3]\n" +
-    "        s := $i $i $i \"-\" $(i * 7)\n" +
+    "        s := $i + $i + $i + \"-\" + $(i * 7)\n" +
     "        t += s.Len()\n" +
     "    }\n" +
     "    return t + I64(getpid() * 0)\n" +
@@ -234,19 +234,19 @@ Prelude := (
     "}\n" +
     "fn Node.mkNode(v I64) mut Node& { return Node(v) }\n" +
     "# a call's result built where it lands (O18a)\n" +
-    "fn mkText(v I64) String { return \"t\" $v \"-\" $(v * 3) }\n" +
-    "fn putRet(p mut Node&, v I64) String {\n    p.next = Node.mkNode(v)\n    return \"r\" $v\n}\n" +
-    "fn stashLab(l mut list.List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText(v)))\n    return \"r\" $v\n}\n" +
+    "fn mkText(v I64) String { return \"t\" + $v + \"-\" + $(v * 3) }\n" +
+    "fn putRet(p mut Node&, v I64) String {\n    p.next = Node.mkNode(v)\n    return \"r\" + $v\n}\n" +
+    "fn stashLab(l mut list.List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText(v)))\n    return \"r\" + $v\n}\n" +
     "# for text scenarios (the fourth any review's A): arrays of plain data a scope argument puts elsewhere, returned on\n" +
     "fn mkNums(v I64) Array<I64> { return Array<I64>[v, v * 2, v * 3] }\n" +
     "fn retAt(p String&, v I64) String { return mkText(v) }\n" +
     "fn retAtChain(p String&, v I64) String { return retAt(p, v) }\n" +
     "fn retNumsAt(p String&, v I64) Array<I64> { return mkNums(v) }\n" +
-    "fn retLocal(v I64) String {\n    t := \"loc\" $v\n    r := mkText(t.Len() + v)\n    return r\n}\n" +
-    "fn retDirect(v I64) String {\n    t := \"dir\" $v\n    return mkText(t.Len() + v)\n}\n" +
-    "fn retTup(v I64) String, I64 {\n    t := \"tup\" $v\n    return mkText(t.Len() + v), v\n}\n" +
+    "fn retLocal(v I64) String {\n    t := \"loc\" + $v\n    r := mkText(t.Len() + v)\n    return r\n}\n" +
+    "fn retDirect(v I64) String {\n    t := \"dir\" + $v\n    return mkText(t.Len() + v)\n}\n" +
+    "fn retTup(v I64) String, I64 {\n    t := \"tup\" + $v\n    return mkText(t.Len() + v), v\n}\n" +
     "fn retCond(p String&, v I64) String { return mkText(v) if Run > 0 else mkText(v) }\n" +
-    "fn retTry(v I64) String {\n    t := \"try\" $v\n    return try textFail(t.Len() + v) catch default mkText(v + 1)\n}\n" +
+    "fn retTry(v I64) String {\n    t := \"try\" + $v\n    return try textFail(t.Len() + v) catch default mkText(v + 1)\n}\n" +
     "fn hashNums(a Array<I64>&) I64 {\n    t I64 = 0\n    for x in a { t = t * 31 + x }\n    return t\n}\n" +
     "# for second-name scenarios (the fourth any review's B): a returned text local something else names - text that is\n" +
     "# written, characters (a String never changes, T13a)\n" +
@@ -258,10 +258,10 @@ Prelude := (
     "fn (h mut TH&) Add(x Tx&) I64 {\n    h.l.Push(x)\n    return 1\n}\n" +
     "fn (x Tx&) AddTo(h mut TH&) I64 {\n    h.l.Push(x)\n    return 3\n}\n" +
     "fn tieTo(l mut list.List<Tx&>&, x Tx&) I64 {\n    l.Push(x)\n    return 2\n}\n" +
-    "fn Tx.txNo(v I64) Tx ? {\n    if v < 1000000 { error SgErr.E }\n    return Tx(\"never\" $v)\n}\n" +
+    "fn Tx.txNo(v I64) Tx ? {\n    if v < 1000000 { error SgErr.E }\n    return Tx(\"never\" + $v)\n}\n" +
     "# conversions of a place to a type over characters (T29a), returned\n" +
-    "fn Lab.retConv(v I64) Lab {\n    s := \"cv\" $v\n    return Lab(s)\n}\n" +
-    "fn Lab.retConvCond(v I64) Lab {\n    s := \"cc\" $v\n    u := \"cu\" $v\n    return Lab(s) if Run > 0 else Lab(u)\n}\n" +
+    "fn Lab.retConv(v I64) Lab {\n    s := \"cv\" + $v\n    return Lab(s)\n}\n" +
+    "fn Lab.retConvCond(v I64) Lab {\n    s := \"cc\" + $v\n    u := \"cu\" + $v\n    return Lab(s) if Run > 0 else Lab(u)\n}\n" +
     "fn Node.mkChain(v I64) mut Node& {\n" +
     "    n := Node(v)\n" +
     "    n.next = Node(v + 1)\n" +
@@ -320,7 +320,7 @@ Prelude := (
     "}\n" +
     "fn textFail(v I64) String ? {\n" +
     "    if Run > 0 { error SgErr.E }\n" +
-    "    return \"never\" $v\n" +
+    "    return \"never\" + $v\n" +
     "}\n" +
     "fn Node.mkFail(v I64) mut Node& ? {\n" +
     "    if Run > 0 { error SgErr.E }\n" +
@@ -488,10 +488,10 @@ fn (g mut SG&) scopeArgNode(a String&, ind String&) String& {
     v := g.val()
     t := g.name("t")
     k := g.r(4)
-    if k == 0 { return $ind + "{\n" + $ind + "    " + $t + " := \"in\" $" + $v + "\n" + $ind + "    " + $a + ".next = Node.mkNode(" + $t + ".Len() + " + $v + ")\n" + $ind + "}\n" }
+    if k == 0 { return $ind + "{\n" + $ind + "    " + $t + " := \"in\" + $" + $v + "\n" + $ind + "    " + $a + ".next = Node.mkNode(" + $t + ".Len() + " + $v + ")\n" + $ind + "}\n" }
     if k == 1 {
         q := g.name("q")
-        return ($ind + "{\n" + $ind + "    " + $t + " := \"in\" $" + $v + "\n" + $ind + "    " + $q + " := Node.mkNode(" + $t + ".Len() + " + $v + ")\n" + $ind + "    churn()\n" +
+        return ($ind + "{\n" + $ind + "    " + $t + " := \"in\" + $" + $v + "\n" + $ind + "    " + $q + " := Node.mkNode(" + $t + ".Len() + " + $v + ")\n" + $ind + "    churn()\n" +
                 $ind + "    " + $a + ".next = " + $q + "\n" + $ind + "}\n")
     }
     if k == 2 {
@@ -499,7 +499,7 @@ fn (g mut SG&) scopeArgNode(a String&, ind String&) String& {
         r := g.name("r")
         return $ind + "for " + $i + " in range 2 {\n" + $ind + "    " + $r + " := putRet(" + $a + ", " + $v + " + " + $i + ")\n" + $ind + "}\n"
     }
-    return $ind + $t + " := \"out\" $" + $v + "\n" + $ind + $a + ".next = Node.mkNode(" + $t + ".Len() + " + $v + ")\n"
+    return $ind + $t + " := \"out\" + $" + $v + "\n" + $ind + $a + ".next = Node.mkNode(" + $t + ".Len() + " + $v + ")\n"
 }
 
 # a statement storing a conditional or a match of references through the node a - values from different scopes: one
@@ -655,7 +655,7 @@ fn (g mut SG&) listOp(l String&, ind String&) String& {
     if g.chance(8) {    # E25: a node a scope argument places in an inner block, pushed outward (refused)
         t := g.name("t")
         v := g.val()
-        return $ind + "{\n" + $ind + "    " + $t + " := \"in\" $" + $v + "\n" + $ind + "    " + $l + ".Push(Node.mkNode(" + $t + ".Len() + " + $v + "))\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $t + " := \"in\" + $" + $v + "\n" + $ind + "    " + $l + ".Push(Node.mkNode(" + $t + ".Len() + " + $v + "))\n" + $ind + "}\n"
     }
     k := g.r(9)
     v := g.val()
@@ -840,11 +840,11 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
         }
         item := $"Lab(mkText(" + $t + ".Len() + " + $v + "))" if k == 20 else $"mkText(" + $t + ".Len() + " + $v + ")"
         list := ".anys" if k == 20 else ".szs"
-        return $ind + "{\n" + $ind + "    " + $t + " := \"in\" $" + $v + "\n" + $ind + "    " + $b + $list + ".Push(" + $item + ")\n" + $ind + "    churn()\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $t + " := \"in\" + $" + $v + "\n" + $ind + "    " + $b + $list + ".Push(" + $item + ")\n" + $ind + "    churn()\n" + $ind + "}\n"
     }
     if k >= 16 {    # an inner block's text chosen by a conditional, a match or a catch default: copied into the box (T32a)
         q2 := g.name("q")
-        texts := $ind + "{\n" + $ind + "    " + $q + " := \"t\" $" + $v + " \"-\" $(" + $v + " * 3)\n" + $ind + "    " + $q2 + " := \"o\" $" + $v + "\n"
+        texts := $ind + "{\n" + $ind + "    " + $q + " := \"t\" + $" + $v + " + \"-\" + $(" + $v + " * 3)\n" + $ind + "    " + $q2 + " := \"o\" + $" + $v + "\n"
         item := ""
         if k == 16 { item = $"Lab(" + $q + " if Run > 0 else " + $q2 + ")" }
         if k == 17 { item = $"Lab(match Run { case 0: " + $q2 + " case _: " + $q + " })" }
@@ -861,13 +861,13 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
                 $b + ".szs.Push(" + $q + ")\n" + $ind + "}\n")
     }
     if k == 13 {    # an inner block's text converted to a type over String: copied into the box (T32a, T29a)
-        return $ind + "{\n" + $ind + "    " + $q + " := \"t\" $" + $v + " \"-\" $(" + $v + " * 3)\n" + $ind + "    " + $b + ".anys.Push(Lab(" + $q + "))\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $q + " := \"t\" + $" + $v + " + \"-\" + $(" + $v + " * 3)\n" + $ind + "    " + $b + ".anys.Push(Lab(" + $q + "))\n" + $ind + "}\n"
     }
     if k == 14 {    # an inner block's array of nodes converted: copied, its nodes held where the any lands - refused
         return $ind + "{\n" + $ind + "    " + $q + " := Array<mut Node&>(1, Node(" + $v + "))\n" + $ind + "    " + $b + ".anys.Push(Ns(" + $q + "))\n" + $ind + "}\n"
     }
     if k == 15 {    # an inner block's text copied into an any
-        return $ind + "{\n" + $ind + "    " + $q + " := \"u\" $" + $v + "\n" + $ind + "    churn()\n" + $ind + "    " + $b + ".szs.Push(" + $q + ")\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $q + " := \"u\" + $" + $v + "\n" + $ind + "    churn()\n" + $ind + "    " + $b + ".szs.Push(" + $q + ")\n" + $ind + "}\n"
     }
     if k == 1 { return $ind + $b + ".anys.Push(Cnt(" + $v + "))\n" }
     if k == 2 { return $ind + $b + ".anys.Push(Box())\n" }
@@ -934,27 +934,27 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     mkh := g.name("csh")
     hh := g.name("hh")
     tt := g.name("tt")
-    field := "    y String& = $n \"-new-text-in-p\"\n"
+    field := "    y String& = $n + \"-new-text-in-p\"\n"
     if k == 2 { field = "    y := " + $mkt + "(n)\n" }
-    if k == 4 { field = "    y String& = $n \"-new-text-in-the-instance\"\n" }
-    if k == 5 { field = "    y String& = (p if n >= 0 else $n \"-new-text-in-the-instance\")\n" }
+    if k == 4 { field = "    y String& = $n + \"-new-text-in-the-instance\"\n" }
+    if k == 5 { field = "    y String& = (p if n >= 0 else $n + \"-new-text-in-the-instance\")\n" }
     if k == 6 {
-        field = "    y String& = match n >= 0 {\n        case true: p\n        case false: $n \"-new-text-in-the-instance\"\n    }\n"
+        field = "    y String& = match n >= 0 {\n        case true: p\n        case false: $n + \"-new-text-in-the-instance\"\n    }\n"
     }
     if k >= 7 {
-        field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn&() I64 = fn() I64 { return p.Len() + I64(p[0]) + y.Len() }\n"
-        if k == 8 { field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn&() I64 = fn() I64 { return y.Len() + I64(y[0]) }\n" }
+        field = "    y String& = $n + \"-new-text-in-the-instance\"\n    f fn&() I64 = fn() I64 { return p.Len() + I64(p[0]) + y.Len() }\n"
+        if k == 8 { field = "    y String& = $n + \"-new-text-in-the-instance\"\n    f fn&() I64 = fn() I64 { return y.Len() + I64(y[0]) }\n" }
     }
-    g.addHelper(("fn " + $mkt + "(n I64) String& { return $n \"-made-in-p\" }\ntype " + $ty + " struct(p String&, n I64) {\n" + $field +
+    g.addHelper(("fn " + $mkt + "(n I64) String& { return $n + \"-made-in-p\" }\ntype " + $ty + " struct(p String&, n I64) {\n" + $field +
                 "}\nfn " + $ty + "." + $mkh + "(p String&, n I64) " + $ty + " { return " + $ty + "(p, n) }\n"))
     make := $ty + "(" + $tt + ", " + $v + " + i)" if k != 1 else $ty + "." + $mkh + "(" + $tt + ", " + $v + " + i)"
     read := $hh + ".y.Len() + I64(" + $hh + ".y[0])" if k < 7 else $hh + ".f()"
     use := $ind + $a + ".next = Node(" + $read + ")\n"
     if k == 3 or k == 9 {    # the legal side: read where the argument lives
-        return ($ind + "for i in range 2 {\n" + $ind + "    " + $tt + " := $i \"-inner-text\"\n" + $ind + "    " + $hh + " := " + $make + "\n" + $ind +
+        return ($ind + "for i in range 2 {\n" + $ind + "    " + $tt + " := $i + \"-inner-text\"\n" + $ind + "    " + $hh + " := " + $make + "\n" + $ind +
                 "    churn()\n" + $ind + "    " + $a + ".next = Node(" + $read + ")\n" + $ind + "}\n")
     }
-    return ($ind + "{\n" + $ind + $hh + " := " + $ty + "(\"outer\", " + $v + ")\n" + $ind + "for i in range 2 {\n" + $ind + "    " + $tt + " := $i \"-inner-text\"\n" +
+    return ($ind + "{\n" + $ind + $hh + " := " + $ty + "(\"outer\", " + $v + ")\n" + $ind + "for i in range 2 {\n" + $ind + "    " + $tt + " := $i + \"-inner-text\"\n" +
             $ind + "    " + $hh + " = " + $make + "\n" + $ind + "}\n" + $ind + "churn()\n" + $use + $ind + "}\n")
 }
 
@@ -980,12 +980,12 @@ fn (g mut SG&) ctorChoiceArgOp(a String&, ind String&, k I64) String& {
         rt = wt
         body = "    e := " + $wt + "(" + $ty + "(" + $choice + ", n), n)\n    return e\n"
     }
-    g.addHelper(("fn " + $mk + "(t String&, n I64) String { return $t \"-\" $n }\ntype " + $ty + " struct(p String&, n I64) {\n    p\n    n\n}\n" +
+    g.addHelper(("fn " + $mk + "(t String&, n I64) String { return $t + \"-\" + $n }\ntype " + $ty + " struct(p String&, n I64) {\n    p\n    n\n}\n" +
                 "type " + $wt + " struct(q " + $ty + ", n I64) {\n    q\n    n\n}\n" +
                 "fn " + $rt + "." + $mkh + "(t String&, n I64) " + $rt + " {\n" + $body + "}\n"))
     pp := $hh + ".q.p" if k == 12 else $hh + ".p"
     init := $wt + "(" + $ty + "(\"outer\", 0), 0)" if k == 12 else $ty + "(\"outer\", 0)"
-    return ($ind + "{\n" + $ind + $hh + " := " + $init + "\n" + $ind + "for i in range 2 {\n" + $ind + "    " + $tt + " := $i \"-inner-text\"\n" +
+    return ($ind + "{\n" + $ind + $hh + " := " + $init + "\n" + $ind + "for i in range 2 {\n" + $ind + "    " + $tt + " := $i + \"-inner-text\"\n" +
             $ind + "    " + $hh + " = " + $rt + "." + $mkh + "(" + $tt + ", " + $v + " + i)\n" + $ind + "}\n" + $ind + "churn()\n" +
             $ind + $a + ".next = Node(" + $pp + ".Len() + I64(" + $pp + "[0]))\n" + $ind + "}\n")
 }
@@ -1016,7 +1016,7 @@ fn (g mut SG&) strOp(ind String&) String& {
             return ($ind + $q + " := Node(" + $v + ")\n" + $ind + $q + ".next = Node(r.n.v)\n" + $ind + $tl + " := list.List<I64>()\n" + $ind + $tl + ".Push(chain(" +
                     $q + "))\n" + $ind + "acc += " + $tl + "[0]\n")
         }
-        if k == 8 { return $ind + $q + " := $r.n.v \"x\" $chain(r.n)\n" + $ind + "acc += " + $q + ".Len()\n" }
+        if k == 8 { return $ind + $q + " := $r.n.v + \"x\" + $chain(r.n)\n" + $ind + "acc += " + $q + ".Len()\n" }
         if k == 9 { return $ind + "acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)\n" }
         if k == 10 {    # a conditional of references, read
             return $ind + $q + " := r.n if Run > 0 else r.l[0]\n" + $ind + "acc += " + $q + ".v\n"
@@ -1086,9 +1086,9 @@ fn (g mut SG&) strBody(ind String&, d I64) String& {
 fn (g mut SG&) strScenario(k I64) String& {
     t := "R" + $k
     body := g.strBody("    ", 2)
-    rd := Array<String&>["$r", "\"<\" $r \">\"", "$r $r", "$r.n.v $r"][g.r(4)]
+    rd := Array<String&>["$r", "\"<\" + $r + \">\"", "$r + $r", "$r.n.v + $r"][g.r(4)]
     return ("type " + $t + " struct(n mut Node&, l list.List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {\n    n\n    l\n    m\n" +
-            "    a\n}\n" + "fn (r " + $t + "&) Str() String {\n    acc I64 = 0\n" + $body + "    return \"r\" $acc \":\" $chain(r.n)\n}\n" +
+            "    a\n}\n" + "fn (r " + $t + "&) Str() String {\n    acc I64 = 0\n" + $body + "    return \"r\" + $acc + \":\" + $chain(r.n)\n}\n" +
             "fn s" + $k + "() I64 {\n    x := Node(1)\n    x.next = Node(2)\n    l := list.List<mut Node&>()\n    l.Push(Node(3))\n" +
             "    m := Map<I64, mut Node&>()\n    m.Put(3, Node(4))\n    a := Array<mut Node&>(4, Node(5))\n    a[0] = Node(5)\n" +
             "    r := " + $t + "(x, l, m, a)\n    h I64 = 0\n    for i in range 3 {\n        s := " + $rd + "\n" +
@@ -1105,7 +1105,7 @@ fn (g mut SG&) textScenario(k I64) String& {
     g.after = ""
     body String& = ""
     for _ in range 2 + g.r(4) { body = $body + $g.textOp("        ") }
-    return ("fn s" + $k + "() I64 {\n    bag := Bag()\n    acc I64 = 0\n" + $g.outer + "    for i in range 3 {\n        t := \"in\" $i\n" + $body +
+    return ("fn s" + $k + "() I64 {\n    bag := Bag()\n    acc I64 = 0\n" + $g.outer + "    for i in range 3 {\n        t := \"in\" + $i\n" + $body +
             "        churn()\n    }\n    churn()\n" + $g.after + "    return acc * 7 + sumAg(bag.anys) * 3 + sumSz(bag.szs)\n}\n")
 }
 
@@ -1157,13 +1157,13 @@ fn (g mut SG&) genScenario(k I64) String& {
     gm := "gm" + $k
     tr := "    r := Tracker()\n" if g.dtors else ""
     head := ("fn " + $gn + "(v I64, n I64, t String&) Iterator<String> {\n    x := Node(v)\n    x.next = Node(v + 1)\n" + $tr +
-             "    for i in range n {\n        s := $t \"-\" $i \"-\" $chain(x)\n        yield s\n        x.next = Node(v + i)\n    }\n}\n" +
-             "fn " + $gm + "(v I64, n I64) Iterator<I64> {\n    mm := \"m\" $v\n    for s in " + $gn + "(v, n, mm) { yield s.Len() * 3 + v }\n}\n" +
-             "fn rt" + $k + "(n I64, stop I64) I64 {\n    acc I64 = 0\n    for p in range 3 {\n        rr := \"r\" $p\n        for s in " + $gn +
+             "    for i in range n {\n        s := $t + \"-\" + $i + \"-\" + $chain(x)\n        yield s\n        x.next = Node(v + i)\n    }\n}\n" +
+             "fn " + $gm + "(v I64, n I64) Iterator<I64> {\n    mm := \"m\" + $v\n    for s in " + $gn + "(v, n, mm) { yield s.Len() * 3 + v }\n}\n" +
+             "fn rt" + $k + "(n I64, stop I64) I64 {\n    acc I64 = 0\n    for p in range 3 {\n        rr := \"r\" + $p\n        for s in " + $gn +
              "(p, n, rr) {\n" +
              "            acc = acc * 31 + s.Hash()\n            if acc % 5 == stop {\n                return acc\n            }\n" +
              "        }\n    }\n    return acc\n}\n" +
-             "fn er" + $k + "(n I64) I64 ? SgErr {\n    acc I64 = 0\n    ee := \"e\" $n\n    for s in " + $gn + "(n, n, ee) {\n" +
+             "fn er" + $k + "(n I64) I64 ? SgErr {\n    acc I64 = 0\n    ee := \"e\" + $n\n    for s in " + $gn + "(n, n, ee) {\n" +
              "        if s.Len() > 6 + Run {\n            error SgErr.E\n        }\n        acc = acc * 31 + s.Hash()\n    }\n" +
              "    return acc\n}\n" +
              # D18c: views borrowed from what it was given, and views kept by the walk - a text and a node each turn,
@@ -1171,8 +1171,8 @@ fn (g mut SG&) genScenario(k I64) String& {
              "fn bw" + $k + "(t String&, n I64) Iterator<String&> {\n    x := Node(n)\n" + $tr + "    for i in range n {\n" +
              "        a := i % (t.Len() + 1)\n        yield t[a:]\n        x.next = Node(i)\n    }\n}\n" +
              "fn fw" + $k + "(v I64, n I64) Iterator<String&> {\n    all mut list.List<String&>& = list.List<String&>()\n" + $tr +
-             "    for i in range n {\n        s String& = $\"f\" $v \"-\" $i\n        all.Push(s)\n        yield s\n" +
-             "        junk := $i \"j\"\n    }\n    for s in all {\n        yield s\n    }\n}\n" +
+             "    for i in range n {\n        s String& = $\"f\" + $v + \"-\" + $i\n        all.Push(s)\n        yield s\n" +
+             "        junk := $i + \"j\"\n    }\n    for s in all {\n        yield s\n    }\n}\n" +
              "fn nw" + $k + "(v I64, n I64) Iterator<Node&> {\n    for i in range n {\n        x mut Node& = Node(v + i)\n" +
              "        x.next = Node(i)\n        yield x\n    }\n}\n")
     body String& = ""
@@ -1246,7 +1246,7 @@ fn (g mut SG&) genScenario(k I64) String& {
                     $ind + "    }\n" + $ind + "    acc = acc * 31 + x.v\n" + $ind + "}\n")
         }
     }
-    return ($head + "fn s" + $k + "() I64 {\n    acc I64 = 0\n    kept := list.List<String&>()\n    for p in range 3 {\n        t := \"in\" $p\n" +
+    return ($head + "fn s" + $k + "() I64 {\n    acc I64 = 0\n    kept := list.List<String&>()\n    for p in range 3 {\n        t := \"in\" + $p\n" +
             "        kb := list.List<String&>()\n" + $body + "        churn()\n        for s in kb { acc = acc * 31 + s.Hash() }\n    }\n    churn()\n    for s in kept { acc = acc * 31 + s.Hash() }\n    return acc\n}\n")
 }
 
@@ -1259,17 +1259,17 @@ fn (g mut SG&) secondScenario(k I64) String& {
     b := "sb" + $k
     v := g.val()
     kind := g.r(13)
-    sbody String& = "    s := Tx(\"abc\" $i)\n"
+    sbody String& = "    s := Tx(\"abc\" + $i)\n"
     head String& = ""
     probe String& = ""
     if kind == 0 or kind == 1 {
         par String& = "lst mut list.List<Tx&>&" if kind == 0 else "lst list.List<Tx&>"
         head = "fn " + $f + "(" + $par + ", i I64) Tx {\n" + $sbody + "    l := lst\n    l.Push(s)\n    return s\n}\n"
-        probe = "    lst := list.List<Tx&>()\n    x := " + $f + "(lst, i)\n    x[0] = 'Q'\n    return $lst \" \" $x\n"
+        probe = "    lst := list.List<Tx&>()\n    x := " + $f + "(lst, i)\n    x[0] = 'Q'\n    return $lst + \" \" + $x\n"
     } else if kind == 2 {
         head = "fn " + $f + "(ks mut list.List<mut TK&>&, i I64) Tx {\n" + $sbody + "    ks[0].Set(s)\n    return s\n}\n"
         probe = ("    ks := list.List<mut TK&>()\n    ks.Push(TK(\"k\"))\n    x := " + $f + "(ks, i)\n    x[0] = 'Q'\n" +
-                 "    return $ks[0].s \" \" $x\n")
+                 "    return $ks[0].s + \" \" + $x\n")
     } else if kind == 3 or kind == 5 {
         n := 2 + g.r(9)
         refs String& = ""
@@ -1283,29 +1283,29 @@ fn (g mut SG&) secondScenario(k I64) String& {
             loop = "    k.s = s\n"
         }
         head = "fn " + $f + "(k mut TK&, i I64) Tx {\n" + $sbody + $refs + $loop + "    return s\n}\n"
-        probe = "    k := TK(\"c\")\n    x := " + $f + "(k, i)\n    x[0] = 'Q'\n    return $k.s \" \" $x\n"
+        probe = "    k := TK(\"c\")\n    x := " + $f + "(k, i)\n    x[0] = 'Q'\n    return $k.s + \" \" + $x\n"
     } else if kind == 7 or kind == 8 or kind == 9 {
         # a callee one of whose parameters - its receiver too - shares the borrow's scope (the fifth review's 2)
         use String& = Array<String&>["    h.Add(s)\n", "    h.Add(s[0:2])\n", "    s.AddTo(h)\n"][kind - 7]
         head = "fn " + $f + "(h mut TH&, i I64) Tx {\n" + $sbody + $use + "    return s\n}\n"
         probe = ("    keep := list.List<Tx&>()\n    h := TH(keep)\n    x := " + $f + "(h, i)\n    x[0] = 'Q'\n" +
-                 "    return $keep \" \" $x\n")
+                 "    return $keep + \" \" + $x\n")
     } else if kind == 10 {
         head = "fn " + $f + "(keep mut list.List<Tx&>&, i I64) Tx {\n" + $sbody + "    tieTo(keep, s)\n    return s\n}\n"
-        probe = "    keep := list.List<Tx&>()\n    x := " + $f + "(keep, i)\n    x[0] = 'Q'\n    return $keep \" \" $x\n"
+        probe = "    keep := list.List<Tx&>()\n    x := " + $f + "(keep, i)\n    x[0] = 'Q'\n    return $keep + \" \" + $x\n"
     } else if kind == 11 {
         # a returned conditional, match or catch default of a parameter's text (the fifth review's 4)
         ret String& = Array<String&>["p if i > 0 else q", "match i { case 0: p case _: q }", "try Tx.txNo(i) catch default q"][g.r(3)]
         head = "fn " + $f + "(p Tx&, q Tx&, i I64) Tx { return " + $ret + " }\n"
-        probe = ("    s := Tx(\"abc\" $i)\n    u := Tx(\"def\" $i)\n    x := " + $f + "(s, u, i)\n    x[0] = 'Q'\n" +
-                 "    return $s \" \" $u \" \" $x\n")
+        probe = ("    s := Tx(\"abc\" + $i)\n    u := Tx(\"def\" + $i)\n    x := " + $f + "(s, u, i)\n    x[0] = 'Q'\n" +
+                 "    return $s + \" \" + $u + \" \" + $x\n")
     } else if kind == 12 {
         # a conversion of a place to a type over characters, returned and written (the fifth review's 3)
         head = "fn " + $f + "(i I64) Lab {\n" + $sbody + "    return Lab(s)\n}\n"
-        probe = "    s := Tx(\"ghi\" $i)\n    y := Lab(s)\n    y[0] = 'Q'\n    x := " + $f + "(i)\n    x[0] = 'R'\n    return $s \" \" $y \" \" $x\n"
+        probe = "    s := Tx(\"ghi\" + $i)\n    y := Lab(s)\n    y[0] = 'Q'\n    x := " + $f + "(i)\n    x[0] = 'R'\n    return $s + \" \" + $y + \" \" + $x\n"
     } else if kind == 4 {
         head = "fn " + $f + "(fs mut list.List<fn&() I64>&, i I64) Tx {\n" + $sbody + "    fs.Push(fn() I64 { return I64(U8(s[0])) })\n    return s\n}\n"
-        probe = "    fs := list.List<fn&() I64>()\n    x := " + $f + "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() \" \" $x\n"
+        probe = "    fs := list.List<fn&() I64>()\n    x := " + $f + "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() + \" \" + $x\n"
     } else {
         # a destructor of the helper's block writes what it holds as the scopes close - after the result was computed;
         # no global (a destructor is never run while compiling): the caller checks its own value instead
@@ -1315,7 +1315,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
                 "    if x[0] != 'a' { say(\"BAD dtor " + $k + ": \" $x) }\n    return x.Hash()\n}\n")
     }
     return ($head + "fn " + $b + "(i I64) String {\n" + $probe + "}\n" + "B" + $k + " String = " + $b + "(" + $v + ")\n" + "fn s" + $k + "() I64 {\n    w := " + $b +
-            "(Run + " + $(v - 1) + ")\n    if w != B" + $k + " { say(\"BAD baked " + $k + ": \" $w \" / \" $B" + $k + ") }\n    churn()\n" +
+            "(Run + " + $(v - 1) + ")\n    if w != B" + $k + " { say(\"BAD baked " + $k + ": \" + $w + \" / \" + $B" + $k + ") }\n    churn()\n" +
             "    return w.Hash()\n}\n")
 }
 
@@ -1386,7 +1386,7 @@ fn (g mut SG&) viewScenario(k I64) String& {
     body := $g.viewStmts(k, 2, "    ") + $g.viewStmts(k, 2, "    ")
     return ("fn vw" + $k + "(t String&) Iterator<String&> {\n    s := 0\n    for i in range t.Len() {\n        if t[i] == ' ' {\n" +
             "            yield t[s:i]\n            s = i + 1\n        }\n    }\n    yield t[s:]\n}\n" +
-            "fn vh" + $k + "(n I64) String& {\n    t := $n \"-held\"\n    return t[0:2]\n}\n" +
+            "fn vh" + $k + "(n I64) String& {\n    t := $n + \"-held\"\n    return t[0:2]\n}\n" +
             "fn s" + $k + "() I64 {\n    keep := Vec<String&>()\n    fs := Vec<fn&() I64>()\n" + $body + "    churn()\n    acc I64 = 0\n" +
             "    for w in keep { acc = acc * 31 % 1000000007 + w.Len() + I64(w[0]) }\n    for f in fs { acc += f() }\n" +
             "    return acc\n}\n")
@@ -1571,7 +1571,7 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     for k in range n {
         if keep.Len() == 0 or keep[k] { b.Push("    say(\"" + $k + ": \" $s" + $k + "())\n") }
     }
-    if HasDtors(seed) { b.Push("    say(\"dtors \" $(Made - Dropped))\n") }
+    if HasDtors(seed) { b.Push("    say(\"dtors \" + $(Made - Dropped))\n") }
     b.Push("}\n")
     return b.ToString()
 }
@@ -1609,7 +1609,7 @@ fn weakHelpers(k I64) String& {
             "    w weak " + $n + "?& = n\n" +
             "}\n" +
             "fn (l mut " + $l + "&) push(v I64) {\n" +
-            "    nd := " + $n + "(v, $\"k\" $v)\n" +
+            "    nd := " + $n + "(v, $\"k\" + $v)\n" +
             "    t := l.tail\n" +
             "    if t == null { l.head = nd } else {\n" +
             "        t.next = nd\n" +
@@ -1724,7 +1724,7 @@ FreePrelude := (
     "    for i in range 200 {\n" +
     "        a := Array<I64>(64, -7)\n" +
     "        t += a[3]\n" +
-    "        s := $i $i $i \"-\" $(i * 7)\n" +
+    "        s := $i + $i + $i + \"-\" + $(i * 7)\n" +
     "        t += s.Len()\n" +
     "    }\n" +
     "    return t + I64(getpid() * 0)\n" +
@@ -1748,7 +1748,7 @@ FreePrelude := (
     "Ends mut I64 = 0\n" +
     "type Res unique struct(n I64) {\n" +
     "    n\n" +
-    "    t String& = $\"res \" $n \" - text it holds\"\n" +
+    "    t String& = $\"res \" + $n + \" - text it holds\"\n" +
     "} destruct {\n" +
     "    Ends = Ends * 7 + n + t.Len()\n" +
     "}\n"
@@ -1771,7 +1771,7 @@ fn freeHolder(k I64) String& {
             "}\n" +
             "# lets go of h's text and node: a call that lets go, which a view held across it makes the places keep\n" +
             "fn reset" + $k + "(h mut " + $h + "&, i I64) {\n" +
-            "    h.t = \"r\" $i\n" +
+            "    h.t = \"r\" + $i\n" +
             "    h.n = Node(i * 3)\n" +
             "}\n" +
             "fn grow" + $k + "(h mut " + $h + "&, i I64) { h.n.next = Node.mkChain(i, 2) }\n" +
@@ -1903,7 +1903,7 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
     kk := g.k
     k := g.r(31)
     for clean and k in FreeKeeps { k = g.r(31) }
-    if k == 0 { return $ind + $h + ".t = \"t\" $i \"-" + $v + "\"\n" }
+    if k == 0 { return $ind + $h + ".t = \"t\" + $i + \"-" + $v + "\"\n" }
     if k == 1 { return $ind + $h + ".n = Node(i + " + $v + ")\n" }
     if k == 2 { return $ind + $h + ".n = Node.mkChain(i, " + $(1 + g.r(3)) + ")\n" }
     if k == 3 { return $ind + $h + ".l.Push(Node(i * " + $v + "))\n" }

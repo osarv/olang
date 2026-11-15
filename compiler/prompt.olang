@@ -402,7 +402,7 @@ SayShown String& = """
 CellEntry String& = """
     fn olangEntry<OlangEntryType>() {
         try olangCell() catch e {
-            olangFailed := "unhandled error: " $e "\n"
+            olangFailed := "unhandled error: " + $e + "\n"
             olang_cell_say(2, olangFailed, olangFailed.Len())
         }
     }

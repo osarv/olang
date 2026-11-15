@@ -698,7 +698,7 @@ fn (w mut walker&) expr(x ast.Expr?&) {
             w.expr(lo)
             w.expr(hi)
         }
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Range(_, items) {
             w.exprs(items)
         }
         case ast.Expr.Compr(_, c) {

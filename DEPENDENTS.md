@@ -62,7 +62,9 @@ As a keyword, minus `Keyword`/session/nvim (those carry words only), plus: `Tok.
 precedence table (Pratt) and statement-ending rules (`token.olang` `EndsStatement`, L18 in SPEC); the
 operator method name (E31 in SPEC; `std/prelude` declares it for the built-ins; `check.olang` elaboration); the lane
 operators (E39) if it applies to arrays; `eval.olang` and `emit.olang` for the computation, including the 128-bit and
-odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if precedence moves.
+odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if precedence moves. `+` on text is
+E11b's join (`check.olang` `textPlus`/`opAst`, `String.Plus` in `std/prelude/text.olang`); the parser's `Adjacent` reading
+stays for `tools/textjoin_migrate.olang`, so a change to how `$` or a literal is read keeps it reading the old joins.
 
 ## A literal form (E19-E21, E27, S13h)
 

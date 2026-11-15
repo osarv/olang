@@ -794,7 +794,7 @@ fn (g mut Gen&) exStr(d I64) String& {
     n I64 = 1 + g.r(3)
     b := StringBuilder()
     for i in range n {
-        if i > 0 { b.Push(" \" \" ") }
+        if i > 0 { b.Push(" + \" \" + ") }
         b.Push(g.piece(d))
     }
     return b.ToString()
@@ -2501,11 +2501,11 @@ fn (g mut Gen&) digest() String& {
         if t >= 0 and g.chance(35) {
             x := g.use(k)
             if isList(t) {
-                b.Push(" \" \" $(" + $x + ".ToArray())")
+                b.Push(" + \" \" + $(" + $x + ".ToArray())")
             } else if isMap(t) {
-                b.Push(" \" \" $(" + $x + ".Keys().ToVec().ToArray()) $(" + $x + ".Values().ToVec().ToArray())")
+                b.Push(" + \" \" + $(" + $x + ".Keys().ToVec().ToArray()) + $(" + $x + ".Values().ToVec().ToArray())")
             } else {
-                b.Push(" \" \" $(" + $x + ")")
+                b.Push(" + \" \" + $(" + $x + ")")
             }
         }
     }
@@ -2560,7 +2560,7 @@ fn (g mut Gen&) newStruct() String& {
         hashes = true
     }
     g.shash[k] = hashes
-    if g.chance(20) { b.Push("fn (a " + $sn + "&) Str() String { return \"<\" $a.f0 \">\" }\n") }
+    if g.chance(20) { b.Push("fn (a " + $sn + "&) Str() String { return \"<\" + $a.f0 + \">\" }\n") }
     return b.ToString()
 }
 
@@ -2688,7 +2688,7 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
             if ci < has.Len() and has[ci] {
                 prints.Push("    assert $" + $c + "(" + $g.lits + ") == " + $quoted(expect[ci]) + "\n")
             }
-            prints.Push("    try io.Put(\"" + $ci + ": \" $K" + $ci + " \" | \" $" + $c + "(" + $g.vars + ") \"\\n\")\n")
+            prints.Push("    try io.Put(\"" + $ci + ": \" + $K" + $ci + " + \" | \" + $" + $c + "(" + $g.vars + ") + \"\\n\")\n")
         }
     }
     b.Push("fn main() ? io.Error {\n    if os.Args().Len() > 1000 {\n")

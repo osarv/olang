@@ -16531,7 +16531,7 @@ if TestBuild {
                         "    out := String(Array<Char>(n, 'a'))\n" +
                         "    return out\n" +
                         "}\n" +
-                        "fn label(n I64) String { return $n \"!\" }\n" +
+                        "fn label(n I64) String { return $n + \"!\" }\n" +
                         "fn pickArm(n I64, c Bool) String {\n" +
                         "    if n > 0 {\n" +
                         "        both := label(n)\n" +

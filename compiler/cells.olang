@@ -495,9 +495,9 @@ WorkerSource String& = """
 
     fn ending(raw I32) String {
         sig := raw & 127
-        if sig == 0: return $"exited " $((raw >> 8) & 255)
+        if sig == 0: return $"exited " + $((raw >> 8) & 255)
         if sig == 2 or sig == 9: return "interrupted"
-        return $"signal " $sig
+        return $"signal " + $sig
     }
 
     fn cell(path String&) {
@@ -507,7 +507,7 @@ WorkerSource String& = """
         h := dlfcn.dlopen(path.ToC(), 258)
         if h == null {
             e := dlfcn.dlerror()
-            say(2, $"the cell cannot be loaded: " $(String.FromC(e, 400) if e != null else path) "\n")
+            say(2, $"the cell cannot be loaded: " + $(String.FromC(e, 400) if e != null else path) + "\n")
             say(11, "")
             return
         }

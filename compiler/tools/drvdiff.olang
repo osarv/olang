@@ -121,7 +121,7 @@ Cases Array<String&> = Array<String&>[
 ProgramNames Array<String&> = Array<String&>["hello.olang", "args.olang", "exit.olang", "fails.olang", "tests.olang"
     "bad.olang", "defs.olang", "ugly.olang"]
 ProgramTexts Array<String&> = Array<String&>[
-    "import \"std/io\"\n\nfn main() {\n    io.PutLine(\"hello \" $(40 + 2))!\n}\n"
+    "import \"std/io\"\n\nfn main() {\n    io.PutLine(\"hello \" + $(40 + 2))!\n}\n"
     ("import \"std/io\"\nimport \"std/os\"\n\nfn main() {\n    for a in os.Args() { io.PutLine(a)! }\n}\n")
     "import \"std/os\"\n\nfn main() {\n    os.Exit(3)\n}\n"
     "type E error {\n    Bad\n}\n\nfn main() ? E {\n    error E.Bad\n}\n"

@@ -889,7 +889,7 @@ fn manymods(r mut report&) ? Failed {
     }
     app.Push("fn main() ? io.Error {\n    s := 0\n")
     for i in range 40 { app.Push("    s = s + m" + $i + ".F()\n") }
-    app.Push("    try io.Put($s \"\\n\")\n}\n")
+    app.Push("    try io.Put($s + \"\\n\")\n}\n")
     try os.WriteFile($dir + "/app.olang", app.ToString()) catch { try r.failed("writing app.olang", dir) }
     try r.expect(sh(dir, "\"$OLANG\" build app.olang > out.txt 2>&1 && ./build/app > out.txt") == 0, "many modules", dir)
     try r.expect(outOf(dir) == "780\n", "many modules output", dir)
@@ -987,7 +987,7 @@ fn reuse(r mut report&) ? Failed {
     # built - its slot is the root's, so the reused object of anylib still reaches the default (it reached an
     # "unreachable" when the slot was in anylib's object)
     try r.expect(sh(dir, "\"$OLANG\" build anyapp.olang > out.txt 2>&1 && ./build/anyapp > run.txt") == 0, "anyapp's build", dir)
-    try r.expect(sh(dir, "sed -i 's/^}$/    try io.PutLine(\"count \" $anylib.Make(5).Count(fn(x I64) Bool { return x > 2 })) " + $
+    try r.expect(sh(dir, "sed -i 's/^}$/    try io.PutLine(\"count \" + $anylib.Make(5).Count(fn(x I64) Bool { return x > 2 })) " + $
                     "catch { }\\n}/' anyapp.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build anyapp.olang > out.txt 2>&1 && " + $
                     "./build/anyapp > run.txt") == 0, "anyapp's build calling Count through the any", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'count 3' run.txt") == 0, "anyapp's run calling Count", dir)
@@ -1485,7 +1485,7 @@ fn interpbuilt(r mut report&) ? Failed {
         fn main() ? io.Error {
             for a in os.Args(): try io.PutLine(a)
             lines := io.Lines(io.Stdin)
-            for { try io.PutLine($"in: " $(try lines.Next() catch Exhausted { break })) }
+            for { try io.PutLine($"in: " + $(try lines.Next() catch Exhausted { break })) }
             os.Exit(7)
         }
         """

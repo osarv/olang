@@ -60,7 +60,7 @@ test "'+=' on a String" {
 test "a long chain - one join" {
     a, b, c, d, e := "one", "two", "three", "four", "five"
     long := a + " " + b + " " + c + " " + d + " " + e + " " + $a.Len() + $b.Len() + $c.Len() + $d.Len() + $e.Len()
-    assert long == "one two three four five 33545"
+    assert long == "one two three four five 33544"
     assert long.Len() == 29
 }
 

@@ -1949,7 +1949,7 @@ fn AssertFalseWritten(text String&) r.Msg { return r.Msg(Diag.AssertFalseWritten
 fn AssertMsgReturns(text String&) r.Msg { return r.Msg(Diag.AssertMsgReturns, "S17", $text + " message may not return - it is evaluated only where it is used, and gives text") }
 fn AssertMsgError(text String&) r.Msg { return r.Msg(Diag.AssertMsgError, "S17", "an error may not leave " + $text + " message - catch it here") }
 fn AssertMsgLoopJump(tok String&, text String&) r.Msg { return r.Msg(Diag.AssertMsgLoopJump, "S17", $tok + " may not leave " + $text + " message", "it is evaluated only where it is used") }
-fn AssertMessageNotText(ty String&, text String&) r.Msg { return r.Msg(Diag.AssertMessageNotText, "S18a", $text + " message is text, found " + $ty + " - write it as text: \"x is \" $x") }
+fn AssertMessageNotText(ty String&, text String&) r.Msg { return r.Msg(Diag.AssertMessageNotText, "S18a", $text + " message is text, found " + $ty + " - write it as text: \"x is \" + $x") }
 fn AssertAborts(text String&) r.Msg { return r.Msg(Diag.AssertAborts, "S18c", "this assertion aborts the program, evaluated while compiling", $text) }
 fn GlobalAborts(text String&) r.Msg { return r.Msg(Diag.GlobalAborts, "K2", "this global's initializer aborts the program, evaluated while compiling", $text) }
 fn VecViewStale(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.VecViewStale, "M19g", "'" + $text1 + "' holds a view of '" + $text2 + "' taken before '" + $text3 + "' may have grown") }
