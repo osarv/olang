@@ -151,11 +151,9 @@ fn (p Plot&) Show() ? os.Error {
     distro := try os.Env("WSL_DISTRO_NAME") catch default ""
     interop := os.Exists("/proc/sys/fs/binfmt_misc/WSLInterop")
     viewer := try viewerFor(TargetOs, wsl, interop, distro, found("wslview"), found("explorer.exe"), found("open"), found("xdg-open"), path)
-    target := path
-    if viewer == "explorer.exe" {
-        out := try os.Output.Exec("wslpath", "-w", path)
-        target = $out.Stdout.Trim()
-    }
+    # on WSL the viewer is given the Windows path: wslview hands a Linux one to cmd's start as it is, which reads
+    # "/tmp/..." as an option ("Parameter format not correct")
+    target := $(try os.Output.Exec("wslpath", "-w", path)).Stdout.Trim() if wsl else $path
     try os.Process.Start(viewer, target, capture = false)
 }
 
