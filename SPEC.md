@@ -8087,7 +8087,7 @@ mode-word ::= "build" | "compile" | "test" | "run" | "format" | "explain" | "hel
             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-install" | "-continue"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -8111,7 +8111,8 @@ beginning with `-` that is no option is an error:
 | `-library` | build | §11 X14 |
 | `-memory` | running a file, build, test, run | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| `-bench` | test | B19b |
+| `-bench` | running a file, test, run | B19b |
+| `-runs COUNT` | running a file, run (with `-bench`) | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 | `-install` | jupyter | B23 |
@@ -8950,12 +8951,12 @@ fuzzer's input is the bytes of one case, run in the test's own process.
 a function of no parameters that may fail. `test -bench FILE [WORD...]` builds the file's tests as `test` does (B3a,
 the words choosing which run) into a **benchmark build** - distinct objects (B4, named with `.bench`) whose allocator
 counts, per thread, the allocations the program's scopes make and their bytes - and in it each `bench.Run(f)` calls `f`
-in rounds on the test's thread: one call, then each round as many calls as the last round's pace says would take the
+in runs on the test's thread: `Run` takes `runs` (seven unless given another) and a `budget` (a second), and each run is made as `Measurement.Of` makes one over a `runs`th of the budget: one call, then each round as many calls as the last round's pace says would take the
 budget (one second unless `Run` is given another) and a fifth more, at most a hundred times the last round's and at
-least one more, until a round's calls take the budget together or make 10^9. The last round is written to the
-standard output before the test's own line, `bench NAME  N ops  T ns/op  A allocs/op  B B/op`, NAME the test's name as
+least one more, until a round's calls take the budget together or make 10^9; the later runs make as many calls as the first settled on. The runs are written to the
+standard output before the test's own line, `bench NAME  N ops  T ± S ns/op (R runs)  A allocs/op  B B/op`, NAME the test's name as
 its run reports it and `/LABEL` after it where `Run` is given a label, T the nanoseconds of one call on the monotonic
-clock, A and B the allocations and bytes of one call rounded down, and `  I instr/op` after them where the machine and
+clock (the median of the runs) and S their spread, A and B the allocations and bytes of one call rounded down, and `  I instr/op` after them where the machine and
 the kernel give a counter of the instructions the thread retires. What the test does outside `f` is not measured. In
 every other build, and under the evaluator (where `-bench` is an error, B3e), `Run` calls `f` once and writes nothing,
 so a benchmark is a test as well; no other build counts allocations or holds the counting code. `bench.Keep(v)` hands
@@ -8965,6 +8966,26 @@ or `Bool` by its bits, any other value through its `Hash` (whose cost the measur
 outside a benchmark build, its instructions -1 where no counter is given. A call of `f` that fails ends the
 measurement with its error at once. `-bench` beside `-fuzz` is an error. The evaluator (K1) evaluates no benchmark
 build: there `Run` calls `f` once.
+
+A measurement of several runs is a `Series` (`Series.Of(f, budget, runs)`, in any build): its runs' times per call have a
+**median**, a **minimum** and a **spread**, the median absolute deviation from the median (unscaled; a run that met a load
+spike does not move it), and the counts of allocations, bytes and instructions written are the run nearest the median's.
+`bench.Time(f)` measures so in any build, writes `487 µs ± 3 µs per call (median of 7 runs × 2048 calls)` (the unit is ns,
+µs, ms or s, the one the median reads best in) to the standard output and gives the median in nanoseconds;
+`bench.Compare(a, b, labels)` makes the runs of `a` and `b` alternately (a, b, a, b, ...), writes both lines and `b/a 1.67 ±
+0.02 (median of 7 paired runs)` - the median and spread of each pair's ratio - and gives the ratio; `Comparison.Of` gives the
+runs. A `Series` renders as a table in a notebook (`Display`, B23).
+
+**What runs, measured (`-bench` of a run).** Given to running a file (B3g) or `run` (B3e), `-bench` builds the program as
+without it, then runs it once, as it would run, its output its own and its status the command's; the build and the run are
+timed apart, and one line is written to the standard error after it, `bench: built in 0.42 s, ran in 1.24 s (1.20 s user,
+0.03 s sys, 182 MB peak)`: the monotonic clock's wall time of each, and the child's user and system time and peak resident
+memory as the kernel reports them (`wait4`). `-runs N` (with `-bench`, else an error) runs it N times - the first as usual,
+the later ones with their standard output discarded - and gives the run time as the median with its spread, `ran in 1.24 s ±
+0.02 s (median of 9 runs; ...)`, the user and system times their medians and the memory the largest; a run that does not end
+with status 0 ends the series, and its status is the command's. The program's `argv[0]` is the built binary's path. Under
+`test`, `-bench` gives each file's run (its build and run time, as above, once the benchmarks in it have written theirs) and,
+when several files ran, one line `bench: N files in 12.3 s (U s user, S s sys, M MB peak)` of the whole command.
 
 ### 10.10 Profiling
 

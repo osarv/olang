@@ -10,14 +10,21 @@
 # Under "olang test -bench" Run calls the work N times, N grown until the N calls take the budget (a second unless
 # said), and writes what one call cost to the standard output, before the test's own "ok" line:
 #
-#     bench Sum: a million numbers  2048 ops  487113 ns/op  0 allocs/op  0 B/op  1500213 instr/op
+#     bench Sum: a million numbers  2048 ops  487113 ± 2104 ns/op (7 runs)  0 allocs/op  0 B/op  1500213 instr/op
 #
-# - the time, the allocations and their bytes counted by the runtime's allocator (only a benchmark build counts them,
+# - the time (the median of seven runs, each grown to a seventh of the budget, and the spread of the runs: their median
+# absolute deviation from that median), the allocations and their bytes counted by the runtime's allocator (only a benchmark build counts them,
 # so no other build pays for it), and the instructions the test's thread retired where the machine and the kernel
 # give a counter. What the test does outside the work (building xs above) is not measured. Keep hands a value to
 # nothing the optimizer can see through, so work whose result is otherwise unused is still done. Every other run of
 # the test - a plain "olang test", "olang test -evaluate" - calls the work once and measures nothing, so a benchmark
-# is a test as well. Measurement.Of gives the numbers to a program, in any build.
+# is a test as well. Measurement.Of gives one run's numbers to a program, in any build, Series.Of the repeated runs.
+#
+# For the prompt, a notebook and scripts, where no test is running, Time measures in any build and writes one line,
+# like Python's %timeit, and Compare measures two pieces of work against each other, their runs interleaved:
+#
+#     bench.Time(fn() { bench.Keep(Sum(xs)) })
+#     487 µs ± 3 µs per call (median of 7 runs × 2048 calls)
 
 import "std/io"
 import "std/time"
@@ -61,10 +68,13 @@ fn (m Measurement&) BytesPerOp() I64 { return -1 if m.Bytes < 0 else m.Bytes / m
 fn (m Measurement&) InstructionsPerOp() I64 { return -1 if m.Instructions < 0 else m.Instructions / m.Ops.Max(1) }
 
 # "2048 ops  487113 ns/op  0 allocs/op  0 B/op  1500213 instr/op": what is not counted is left out
-fn (m Measurement&) Str() String {
-    t := $m.Ops + " ops  " + $nanos(m.NanosPerOp()) + " ns/op"
-    if m.Allocs >= 0: t = $t + "  " + $m.AllocsPerOp() + " allocs/op  " + $m.BytesPerOp() + " B/op"
-    if m.Instructions >= 0: t = $t + "  " + $m.InstructionsPerOp() + " instr/op"
+fn (m Measurement&) Str() String { return $m.Ops " ops  " $nanos(m.NanosPerOp()) " ns/op" $m.counts() }
+
+# "  0 allocs/op  0 B/op  1500213 instr/op", each part left out where it is not counted
+fn (m Measurement&) counts() String {
+    t := ""
+    if m.Allocs >= 0: t = $"  " $m.AllocsPerOp() " allocs/op  " $m.BytesPerOp() " B/op"
+    if m.Instructions >= 0: t = $t "  " $m.InstructionsPerOp() " instr/op"
     return t
 }
 
@@ -124,17 +134,156 @@ fn Measurement.Of<? E>(body fn&() ? E, budget time.Duration = DefaultBudget) Mea
     return m
 }
 
-# the benchmark the running test makes of body: in a benchmark build body measured (Measurement.Of) and "bench NAME  ..." written
-# to the standard output, NAME the running test's name and "/label" after it where a label is given (for a test
-# measuring several pieces of work); in every other build body called once. Fails with what body fails with
-fn Run<? E>(body fn&() ? E, label String& = "", budget time.Duration = DefaultBudget) ? E {
+# the benchmark the running test makes of body: in a benchmark build body measured (Series.Of: runs runs, each grown to
+# budget / runs) and "bench NAME  ..." written to the standard output, NAME the running test's name and "/label" after
+# it where a label is given (for a test measuring several pieces of work); in every other build body called once.
+# Fails with what body fails with
+fn Run<? E>(body fn&() ? E, label String& = "", budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) ? E {
     if not On() {
         try body()
         return
     }
-    m := try Measurement.Of(body, budget)
-    name := $running() + $("/" if label != "" else "") + $label
-    try io.PutLine($"bench " + $name + "  " + $m) catch io.Error { }
+    s := try Series.Of(body, budget, runs)
+    name := $running() $("/" if label != "" else "") $label
+    try io.PutLine($"bench " $name "  " $s) catch io.Error { }
+}
+
+# the runs a measurement is made of unless said
+DefaultRuns I64 = 7
+
+# the middle of xs: the middle one of an odd count, the mean of the two middle ones of an even count, 0 of none
+fn Median(xs Array<F64>&) F64 {
+    n := xs.Len()
+    if n == 0: return 0.0
+    sorted := xs.Copy()
+    sorted.Sort(fn(a F64, b F64): return a < b)
+    return sorted[n / 2] if n % 2 == 1 else (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+}
+
+# how far xs lie from their median, as their median absolute deviation (unscaled): robust where one run met a load
+# spike, which a standard deviation would blow up on; 0 of none
+fn Spread(xs Array<F64>&) F64 {
+    m := Median(xs)
+    return Median(Array<F64>[(x - m).Abs() for x in xs])
+}
+
+# several runs of one piece of work, each a Measurement of as many calls as the first run settled on
+type Series struct(Runs Array<Measurement>) { Runs }
+
+# body measured in runs runs: the first (Measurement.Of) grows the calls to budget / runs, the others make as many calls
+# as it settled on. Fails with what body fails with
+fn Series.Of<? E>(body fn&() ? E, budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) Series ? E {
+    n := runs.Max(1)
+    first := try Measurement.Of(body, time.Duration(I64(budget) / n))
+    return try Series.taken(body, first.Ops, n, first)
+}
+
+# body measured in runs runs of ops calls each; first, where given a run already made, is the first of them
+fn Series.taken<? E>(body fn&() ? E, ops I64, runs I64, first Measurement& = Measurement(0, 0, -1, -1, -1)) Series ? E {
+    all mut Vec<Measurement>& = Vec<Measurement>()
+    if first.Ops > 0: all.Push(first)
+    for _ in range runs - all.Len(): all.Push(try Measurement.taken(body, ops))
+    return Series(all.ToArray())
+}
+
+# the nanoseconds one call took, in each run
+fn (s Series&) PerOp() Array<F64> { return Array<F64>[m.NanosPerOp() for m in s.Runs] }
+
+# the median of the runs' time per call
+fn (s Series&) Median() F64 { return Median(s.PerOp()) }
+
+# the fastest run's time per call
+fn (s Series&) Min() F64 { return try s.PerOp().Min() catch default 0.0 }
+
+# the spread of the runs' time per call: Spread
+fn (s Series&) Spread() F64 { return Spread(s.PerOp()) }
+
+# the run closest to the median, whose counts (calls, allocations, instructions) stand for the series
+fn (s Series&) Typical() Measurement {
+    m := s.Median()
+    best := 0
+    for i, r in s.Runs {
+        if (r.NanosPerOp() - m).Abs() < (s.Runs[best].NanosPerOp() - m).Abs(): best = i
+    }
+    return s.Runs[best]
+}
+
+# "2048 ops  487113 ± 2104 ns/op (7 runs)  0 allocs/op  0 B/op  1500213 instr/op": the typical run's counts
+fn (s Series&) Str() String {
+    m := s.Typical()
+    return $m.Ops " ops  " $nanos(s.Median()) " ± " $nanos(s.Spread()) " ns/op (" $s.Runs.Len() " runs)" $m.counts()
+}
+
+# "487 µs ± 3 µs per call (median of 7 runs × 2048 calls)": the median and spread in the unit the median reads best in
+fn (s Series&) Line() String {
+    m := s.Typical()
+    return $Human(s.Median(), s.Spread()) " per call (median of " $s.Runs.Len() " runs × " $m.Ops " calls)"
+}
+
+# a notebook shows a series as a small table
+fn (s Series&) Display() Display {
+    m := s.Typical()
+    return Display.Markdown($"| median | spread | min | runs | calls per run |\n|---|---|---|---|---|\n| " $Human(s.Median(), s.Spread()) " | | " $Human(s.Min(), 0.0) " | " $s.Runs.Len() " | " $m.Ops " |")
+}
+
+# "487 µs ± 3 µs": ns and its spread in ns, ns's unit, as many decimals as three digits of ns need
+fn Human(ns F64, spread F64) String {
+    unit, div := "ns", 1.0
+    if ns >= 1e9 { unit, div = "s", 1e9 }
+    else if ns >= 1e6 { unit, div = "ms", 1e6 }
+    else if ns >= 1e3 { unit, div = "µs", 1e3 }
+    decimals := 0 if ns / div >= 100.0 else 1 if ns / div >= 10.0 else 2
+    shown := $(ns / div).Fixed(decimals) " " $unit
+    return shown if spread == 0.0 else $shown " ± " $(spread / div).Fixed(decimals) " " $unit
+}
+
+# body measured (Series.Of) in any build, and one line written to the standard output (Series.Line); gives the median
+# time of a call in nanoseconds (Series.Of gives all the runs, where they are wanted)
+fn Time<? E>(body fn&() ? E, budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) F64 ? E {
+    s := try Series.Of(body, budget, runs)
+    try io.PutLine(s.Line()) catch io.Error { }
+    return s.Median()
+}
+
+# two pieces of work measured against each other: their runs, and the b/a ratio of each pair of runs
+type Comparison struct(A Series, B Series, Ratios Array<F64>) { A, B, Ratios }
+
+# how many times as long b took as a, the median of the pairs' ratios
+fn (c Comparison&) Ratio() F64 { return Median(c.Ratios) }
+
+# the spread of the pairs' ratios: Spread
+fn (c Comparison&) RatioSpread() F64 { return Spread(c.Ratios) }
+
+# a and b measured against each other: each is grown to budget / runs as Series.Of does, then the runs are made
+# alternately (a, b, a, b, ...) so that a change in the machine's load meets both. Fails with what a or b fails with
+fn Comparison.Of<? E>(a fn&() ? E, b fn&() ? E, budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) Comparison ? E {
+    n := runs.Max(1)
+    each := time.Duration(I64(budget) / (2 * n))
+    opsA, opsB := (try Measurement.Of(a, each)).Ops, (try Measurement.Of(b, each)).Ops
+    return try Comparison.interleave(a, b, opsA, opsB, n)
+}
+
+# Comparison.Of, and both lines and the ratio written to the standard output ("b/a 1.67 ± 0.02 (median of 7 paired
+# runs)"), labels naming the two; gives the ratio
+fn Compare<? E>(a fn&() ? E, b fn&() ? E, labels Array<String&> = Array<String&>["a", "b"]
+    budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) F64 ? E {
+    c := try Comparison.Of(a, b, budget, runs)
+    la, lb := labels[0], labels[1]
+    try io.PutLine($la ": " $c.A.Line()) catch io.Error { }
+    try io.PutLine($lb ": " $c.B.Line()) catch io.Error { }
+    try io.PutLine($lb "/" $la " " $c.Ratio().Fixed(2) " ± " $c.RatioSpread().Fixed(2) " (median of " $c.Ratios.Len() " paired runs)") catch io.Error { }
+    return c.Ratio()
+}
+
+# runs pairs of runs: a's run of opsA calls, then b's of opsB, each pair after the one before
+fn Comparison.interleave<? E>(a fn&() ? E, b fn&() ? E, opsA I64, opsB I64, runs I64) Comparison ? E {
+    xs, bs := Vec<Measurement>(), Vec<Measurement>()
+    for _ in range runs {
+        xs.Push(try Measurement.taken(a, opsA))
+        bs.Push(try Measurement.taken(b, opsB))
+    }
+    ratios := Array<F64>[bs[i].NanosPerOp() / xs[i].NanosPerOp().Max(1e-9) for i in range runs]
+    return Comparison(Series(xs.ToArray()), Series(bs.ToArray()), ratios)
 }
 
 # the running test's name, as its run reports it ("Sum: a million numbers"), "" outside a test
@@ -150,7 +299,7 @@ test Run "outside -bench, calls the work once" {
     calls mut Vec<I64>& = Vec<I64>()
     Run(fn() { calls.Push(calls.Len()) })
     Run(fn() { calls.Push(calls.Len()) }, label = "again")
-    assert calls.ToArray() == Array<I64>[0, 1]
+    assert On() or calls.ToArray() == Array<I64>[0, 1] # in a benchmark build Run measures instead
 }
 
 test Measurement.Of "grows the calls to the budget" {
@@ -181,6 +330,68 @@ test Measurement.Str "writes what one call cost, leaving out what was not counte
     assert $Measurement(4, 1000, 8, 640, -1) == "4 ops  250 ns/op  2 allocs/op  160 B/op"
     assert $Measurement(1000, 1234, -1, -1, 9000) == "1000 ops  1.23 ns/op  9 instr/op"
     assert nanos(12.34) == "12.3" and nanos(0.1234) == "0.123"
+}
+
+test Median "the middle, from any order" {
+    assert Median(Array<F64>[5.0, 1.0, 3.0]) == 3.0
+    assert Median(Array<F64>[1.0, 2.0, 3.0, 10.0]) == 2.5
+    assert Median(Array<F64>[]) == 0.0
+}
+
+test Spread "the median absolute deviation, which one outlier does not move" {
+    assert Spread(Array<F64>[1.0, 2.0, 3.0, 4.0, 100.0]) == 1.0
+    assert Spread(Array<F64>[7.0, 7.0, 7.0]) == 0.0
+}
+
+test Series.Str "writes the median, its spread and the typical run's counts" {
+    s := Series(Array<Measurement>[Measurement(10, 1000, 0, 0, -1), Measurement(10, 1200, 20, 640, -1), Measurement(10, 2000, 0, 0, -1)])
+    assert s.Median() == 120.0 and s.Min() == 100.0 and s.Spread() == 20.0
+    assert $s == "10 ops  120 ± 20.0 ns/op (3 runs)  2 allocs/op  64 B/op"
+}
+
+test Series.Line "scales the unit and writes the runs and calls" {
+    s := Series(Array<Measurement>[Measurement(2048, 487000 * 2048, -1, -1, -1), Measurement(2048, 490000 * 2048, -1, -1, -1), Measurement(2048, 484000 * 2048, -1, -1, -1)])
+    assert s.Line() == "487 µs ± 3 µs per call (median of 3 runs × 2048 calls)"
+    assert Human(1500000000.0, 0.0) == "1.50 s" and Human(12.0, 0.0) == "12.0 ns" and Human(2500000.0, 500000.0) == "2.50 ms ± 0.50 ms"
+}
+
+test Series.taken "makes the runs it is given, each of the calls it is given" {
+    calls mut Vec<I64>& = Vec<I64>[0]
+    s := Series.taken(fn() { calls[0] += 1 }, 5, 4)
+    assert s.Runs.Len() == 4 and calls[0] == 20 and s.Runs[3].Ops == 5
+}
+
+test Series.Of "makes the runs asked for" {
+    s := Series.Of(fn() { Keep(1) }, budget = time.Duration.Millis(7), runs = 3)
+    assert s.Runs.Len() == 3 and s.Runs[0].Ops == s.Runs[2].Ops
+}
+
+test Comparison.interleave "alternates a and b run by run" {
+    log mut Vec<I64>& = Vec<I64>()
+    c := Comparison.interleave(fn() { log.Push(1) }, fn() { log.Push(2) }, 2, 1, 3)
+    assert log.ToArray() == Array<I64>[1, 1, 2, 1, 1, 2, 1, 1, 2]
+    assert c.A.Runs.Len() == 3 and c.B.Runs[0].Ops == 1 and c.Ratios.Len() == 3
+}
+
+test Comparison "the ratio is the median of the pairs' b/a" {
+    c := Comparison(Series(Array<Measurement>[]), Series(Array<Measurement>[]), Array<F64>[1.0, 2.0, 3.0, 2.0, 50.0])
+    assert c.Ratio() == 2.0 and c.RatioSpread() == 1.0
+}
+
+test Time "measures in any build and gives the median back" {
+    assert Time(fn() { Keep(2) }, budget = time.Duration.Millis(7), runs = 3) > 0.0
+}
+
+test Compare "measures both and gives the ratio" {
+    r := Compare(fn() { Keep(1) }, fn() { Keep(Array<I64>[1, 2].Hash()) }, Array<String&>["one", "hash"], budget = time.Duration.Millis(10), runs = 3)
+    assert r > 0.0
+    c := Comparison.Of(fn() { Keep(1) }, fn() { Keep(2) }, budget = time.Duration.Millis(10), runs = 3)
+    assert c.A.Runs.Len() == 3 and c.B.Runs.Len() == 3
+}
+
+test Series.Display "is a table in a notebook" {
+    s := Series(Array<Measurement>[Measurement(10, 1000, -1, -1, -1)])
+    assert s.Display().Mime() == "text/markdown"
 }
 
 test Keep "keeps a value of any type" {

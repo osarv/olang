@@ -119,6 +119,8 @@ type Diag enum {
     FuzzTimeNotNumber
     FuzzTimeAlone
     BenchFuzz
+    RunsNotNumber
+    RunsAlone
     FuzzNoTest
     FuzzManyTests
     NotASource
@@ -1071,6 +1073,8 @@ fn OptionNeedsValue(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.Opti
 fn QuickAlone(text String&) r.Msg { return r.Msg(Diag.QuickAlone, "B2g", "-quick and " + $text + " each say how much to optimize - give one") }
 fn FuzzTimeNotNumber(text String&) r.Msg { return r.Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" + $text + "' is none") }
 fn FuzzTimeAlone() r.Msg { return r.Msg(Diag.FuzzTimeAlone, "B19", "-fuzztime says how long -fuzz runs - give -fuzz NAME with it") }
+fn RunsNotNumber(text String&) r.Msg { return r.Msg(Diag.RunsNotNumber, "B19b", "-runs takes a whole number of runs, at least 1, and '" $text "' is none") }
+fn RunsAlone() r.Msg { return r.Msg(Diag.RunsAlone, "B19b", "-runs says how many times -bench runs the program - give -bench with it") }
 fn BenchFuzz() r.Msg { return r.Msg(Diag.BenchFuzz, "B19b", "-bench and -fuzz are given together", "-bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs", "give one") }
 fn FuzzNoTest(word String&) r.Msg { return r.Msg(Diag.FuzzNoTest, "B19", "-fuzz " + $word + " names no test of this file", "", "give a test's target, its target's type or a word of its description") }
 fn FuzzManyTests(word String&, names String&) r.Msg { return r.Msg(Diag.FuzzManyTests, "B19", "-fuzz " + $word + " names several tests (" + $names + ") - give a word that names one") }

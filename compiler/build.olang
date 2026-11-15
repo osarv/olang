@@ -19,6 +19,7 @@ import "target"
 import "std/io"
 import "std/time"
 import "spin"
+import "measure"
 import "std/filepath"
 import unistd "unistd.h"
 
@@ -117,6 +118,8 @@ type Config struct() {
     FuzzTime I64 = 0    # -fuzztime SECONDS: how long it runs, 0 until a failure is found or it is stopped
     Profile Bool = false    # olang profile: frame pointers, line tables and the runtime's sampler (B20)
     Bench Bool = false      # test -bench: the runtime counting allocations, std/bench measuring (B19b)
+    Timed Bool = false    # -bench: the run's time and use reported, compiler/measure.olang (B19b)
+    Runs I64 = 0          # -runs N: the program run N times, 0 for once
     Listing Bool = false    # explain -asm/-ir: line tables, LLVM's optimization remarks kept beside each object (B11d)
     ListName String& = ""   # and the function it shows, the front end giving its code's symbols (Program.Named)
     Update Bool = false
@@ -939,10 +942,18 @@ fn LibName(file String&) String {
 # written) and ARGS as its command line - its status, a signal's included, the program's own (B3g)
 fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     c.Quiet = true
+    began := time.Now()
     status := BuildProgram(fe, c, file, d)
     spin.End()
     if status != 0 { return status }
     run := try c.runner(d) catch Failed { return finish(d) }
+    if c.Timed {
+        shown Vec<String&>
+        for w in run { shown.Push(w) }
+        shown.Push(Shown(c.Built))
+        for a in args { shown.Push(a) }
+        return measure.Measure(shown.ToArray(), time.Now() - began, c.Runs.Max(1))
+    }
     av Vec<String&>
     # B12a: another architecture's program runs in an emulator, given the program's path
     for w in run { av.Push(w) }
@@ -959,7 +970,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
 # where the build has modes of its own to give them (-race, -sanitize, -fuzz, the benchmark), is for another machine or
 # evaluated, or OLANG_AUTORACE=0 turns it off
 fn (c Config&) racesSpawners() Bool {
-    if c.Race or c.San or c.Fuzz != "" or c.Bench or c.Evaluated or c.Memory or c.Listing or c.Profile or c.Target.Foreign: return false
+    if c.Race or c.San or c.Fuzz != "" or c.Bench or c.Timed or c.Evaluated or c.Memory or c.Listing or c.Profile or c.Target.Foreign: return false
     return (try os.Env("OLANG_AUTORACE") catch default "") != "0"
 }
 
@@ -996,8 +1007,9 @@ fn (c mut Config&) testBinary<F Frontend>(fe mut F&, file String&, d mut diag.Di
 
 # the test binary bin run, its output straight to this process's: its status, with 0 for a pass, 1 for what failed (a
 # signal said) and 3 where the words name none of its tests. counts names the file its counts of passed and failed tests go to
-# instead of the line they are said in ("" for the line)
-fn (c Config&) runTests(run Array<String&>&, bin String&, file String&, filters Array<String&>&, counts String&) I32 {
+# instead of the line they are said in ("" for the line); built is the nanoseconds the build before it took (-bench, B19b)
+fn (c Config&) runTests(run Array<String&>&, bin String&, file String&, filters Array<String&>&, counts String&
+    built I64 = 0) I32 {
     cmd Vec<String&>
     if counts != "" {
         try os.Remove(counts) catch os.Error { }
@@ -1008,14 +1020,25 @@ fn (c Config&) runTests(run Array<String&>&, bin String&, file String&, filters 
     cmd.Push(Shown(bin))
     # B7a: the words naming the tests to run, read by the test binary's harness
     for w in filters { cmd.Push(w) }
-    out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
-    if out.Status > 128: sayln(c.paint("31", $file + ": the tests ended by a signal (" + $SignalName(out.Status - 128) + ")"))
-    if out.Status == 3 and filters.Len() > 0 { return 3 }
-    return 0 if out.Status == 0 else 1
+    ended := execTests(c, cmd.ToArray(), built)
+    if ended < 0 { return 1 }
+    if ended > 128: sayln(c.paint("31", $file + ": the tests ended by a signal (" + $SignalName(ended - 128) + ")"))
+    if ended == 3 and filters.Len() > 0 { return 3 }
+    return 0 if ended == 0 else 1
+}
+
+# the command cmd run with the output left alone, and its status, -1 where it cannot be started; under -bench (B19b)
+# it is waited for by compiler/measure.olang, which writes the line of how long the build before it took, built, and the
+# run used
+fn execTests(c Config&, cmd Array<String&>&, built I64) I32 {
+    if c.Timed { return measure.Measure(cmd, built) }
+    out := try os.Output.Exec(...cmd, capture = false) catch os.Error { return -1 }
+    return out.Status
 }
 
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
 fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&, filters Array<String&>& = Array<String&>(0)) I32 {
+    began := time.Now()
     info := try os.FileInfo.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
@@ -1044,7 +1067,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
         cmd.Push(Shown(bin))
         return c.fuzzRun(cmd, prog)
     }
-    if not split { return c.testsEnded(c.runTests(run, bin, file, filters, ""), file, filters, prog.TestWords) }
+    if not split { return c.testsEnded(c.runTests(run, bin, file, filters, "", time.Now() - began), file, filters, prog.TestWords) }
     return c.runParts(run, bin, race, file, filters, prog.TestWords)
 }
 
@@ -1178,6 +1201,7 @@ fn (c Config&) skipped(file String&, d mut diag.Diagnostics&) I32 {
 # process's output as it goes. A file whose compiler ended by a signal is said to have; 0 when every file passed (B3a)
 fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&>&, filters Array<String&>& = Array<String&>(0)) I32 {
     spin.End()         # each file's own build draws its spinner (the children's standard error is this one's)
+    began := time.Now()
     failed := false
     named := false     # B3a: some listed file has a test the words name (its run did not end with 3)
     # P7: without the race detector's runtime, said once here, each file's own run then not saying it again
@@ -1205,6 +1229,7 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
         if out.Status != 3 { named = true }
         if out.Status != 0 and out.Status != 3 { failed = true }
     }
+    if c.Timed and files.Len() > 1 { sayErr($measure.Total(files.Len(), time.Now() - began) "\n") }
     if not named and filters.Len() > 0 {
         quoted Vec<String&>
         for w in filters { quoted.Push($"'" + $w + "'") }
@@ -1250,10 +1275,18 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     where.Push(real)
     where.Push(try os.Cwd() catch default "")
     c.Output = $c.Dir + "/" + $Readable(filepath.Base(file)) + "-" + $HashOf(where)[:16] + $c.modeSuffix()
+    began := time.Now()
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
     sayErr(d.Warnings())
     prune(c.Dir, c.Built, RunCacheCap)
+    if c.Timed {
+        spin.End()
+        argv Vec<String&>
+        argv.Push(c.Built)
+        for a in args[1:] { argv.Push(a) }
+        return measure.Measure(argv.ToArray(), time.Now() - began, c.Runs.Max(1))
+    }
     try os.ExecInPlace(c.Built, ...args) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
