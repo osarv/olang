@@ -1,5 +1,5 @@
 # evaldiff - the evaluator held to the built programs: each file of tests of the corpus and std run by "$OLANG test
-# -evaluate" (B3e) and each checks case that must run ("# check: run") by "$OLANG interpret -evaluate", compared with the built
+# OLANG_EVALUATE=1" (B3e) and each checks case that must run ("# check: run") by "OLANG_EVALUATE=1 $OLANG FILE", compared with the built
 # program's run as compiler/goldens/run.txt stores it (captured by compiler/tools/rungold.olang, make rungold).
 #
 #     evaldiff [-v] [FILE...]
@@ -137,7 +137,7 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
     a := outcomes(toolkit.Rows(s0.Out))
     skip := skipped(f, a)
     args := Vec<String&>()
-    for w in Array<String&>["timeout", limit(), olang, "test", "-evaluate", f] { args.Push(w) }
+    for w in Array<String&>["timeout", limit(), "env", "OLANG_EVALUATE=1", olang, "test", f] { args.Push(w) }
     if skip.Len() > 0 {
         # the file's other tests named, each by its whole name and by what follows its target (B7a's words)
         for name in a.Keys() {
@@ -196,7 +196,7 @@ fn result.program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     text := toolkit.Read(f)
     toolkit.Write($dir "/" $name, text)
     args := Vec<String&>()
-    for a in Array<String&>["timeout", limit(), olang, "interpret", "-evaluate"] { args.Push(a) }
+    for a in Array<String&>["timeout", limit(), "env", "OLANG_EVALUATE=1", olang] { args.Push(a) }
     flags := toolkit.Fields(headerLine(text, "# flags: "))
     for i in range flags.Len() {
         if (flags[i] == "-define" or flags[i] == "-target") and i + 1 < flags.Len() {

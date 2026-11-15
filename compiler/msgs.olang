@@ -116,7 +116,6 @@ type Diag enum {
     OptionNotForMode
     OptionNeedsValue
     QuickAlone
-    InterpretBuilds
     FuzzTimeNotNumber
     FuzzTimeAlone
     BenchFuzz
@@ -1061,14 +1060,13 @@ fn ReflFnList(what String&) r.Msg { return r.Msg(Diag.ReflFnList, "G41", $what, 
 fn ReflFnCall(name String&, want I64, have I64) r.Msg { return r.Msg(Diag.ReflFnCall, "G41", $"'" $name "' is called with " $want " arguments (a method's receiver first), found " $have) }
 fn ReflMatchSubject() r.Msg { return r.Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling", "", "match a type variable, or a type a reflected member names") }
 fn Usage() r.Msg { return r.Msg(Diag.Usage, "B1", "nothing to do", "", "write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
-fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode", "the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run") }
+fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode", "the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run") }
 fn ModeOneFile(text String&) r.Msg { return r.Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
 fn ModeNeedsFile(text String&) r.Msg { return r.Msg(Diag.ModeNeedsFile, "B1", $text " needs a file") }
 fn UnknownFlag(text1 String&, text2 String&, hint String&) r.Msg { return r.Msg(Diag.UnknownFlag, "B1", "unknown option '" $text1 "'" $hint " - 'olang help' lists the options of " $text2) }
 fn OptionNotForMode(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.OptionNotForMode, "B1", $text1 " applies to " $text2 ", not to " $text3) }
 fn OptionNeedsValue(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.OptionNeedsValue, "B1", $text1 " needs a value after it: " $text2) }
 fn QuickAlone(text String&) r.Msg { return r.Msg(Diag.QuickAlone, "B2g", "-quick and " $text " each say how much to optimize - give one") }
-fn InterpretBuilds(text String&) r.Msg { return r.Msg(Diag.InterpretBuilds, "B3e", "-evaluate builds nothing, and " $text " says how to build - give one") }
 fn FuzzTimeNotNumber(text String&) r.Msg { return r.Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" $text "' is none") }
 fn FuzzTimeAlone() r.Msg { return r.Msg(Diag.FuzzTimeAlone, "B19", "-fuzztime says how long -fuzz runs - give -fuzz NAME with it") }
 fn BenchFuzz() r.Msg { return r.Msg(Diag.BenchFuzz, "B19b", "-bench and -fuzz are given together", "-bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs", "give one") }
@@ -1087,7 +1085,7 @@ fn TargetMissing() r.Msg { return r.Msg(Diag.TargetMissing, "B12", "-target need
 fn TargetUnknown(text String&) r.Msg { return r.Msg(Diag.TargetUnknown, "B12", "unknown target '" $text "'", "", "write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted") }
 fn TargetUnsupported(text String&) r.Msg { return r.Msg(Diag.TargetUnsupported, "B12", "olang does not build for '" $text "'", "it builds for x86_64 and aarch64 Linux with the GNU C library") }
 fn TargetNativeForeign(text String&) r.Msg { return r.Msg(Diag.TargetNativeForeign, "B12", "'-target " $text "' names native with another architecture's CPU", "native is this machine's CPU", "name the other architecture's CPU after ':', or none for its default") }
-fn TargetForeignMode(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.TargetForeignMode, "B12a", $text1 " runs on this machine, not on '-target " $text2 "'", "'-target " $text2 "' is another architecture or system", "build, compile and test build for it") }
+fn TargetForeignMode(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.TargetForeignMode, "B12a", $text1 " runs on this machine, not on '-target " $text2 "'", "'-target " $text2 "' is another architecture or system", "build, compile, test and run build for it") }
 fn TargetNoBackend(text String&) r.Msg { return r.Msg(Diag.TargetNoBackend, "B12a", "this clang cannot build for '" $text "'", "its back end for that architecture cannot generate the BF16 code the runtime holds", "use clang 19 or newer (OLANG_CLANG names the one to use)") }
 fn TargetNoClang(text String&) r.Msg { return r.Msg(Diag.TargetNoClang, "B12", "clang not found on PATH - it is what builds the program, and what says what target '" $text "' is") }
 fn TargetNoEmulator(text String&) r.Msg { return r.Msg(Diag.TargetNoEmulator, "B12a", "nothing here runs " $text " programs", "", "install qemu-user (qemu-" $text "), or name an emulator with OLANG_EMULATOR") }

@@ -37457,3 +37457,42 @@ compiler before B2d and with this one, interleaved, load average 17-24): INT8 pr
 80. olang's bench/ against C, before and after (`OLANG_CLANG` a wrapper restoring the old flags): every olang/C ratio the
 same within the noise. Targeted runs: the bootstrap's fixed point, build.olang's tests, the `linkinline`, `listing`,
 `objnames` and `target` scenarios.
+## The run cache is bounded (B3e, 2026-11-15)
+`$XDG_CACHE_HOME/olang/run` grew by a root's objects with every edit of an interpreted program and was never pruned. After
+a successful build `interpret` now touches the program's binary and `prune`s the directory to a cap of 1 GiB
+(`RunCacheCap`): the files written longest ago go first, never the program just built. The cache stays a cache - an
+object that goes is built again where wanted. The B3i module store (`Config.Store`) is not pruned by this; it has no cap.
+
+## interpret, the prompt, the kernel and running a file build as build does; `-checked` and `-quick` are options (E16g, B3e, B3g, B22, 2026-11-15)
+The user: "I want checked and quick as options but not as default. there should be no real difference in performance to the
+build run" (then: "make running a file build like build"; `-checked` on `build` and `compile` too). Reversed: B3g's "running a
+file compiles quick" (2026-11-13) and E16g's list naming `interpret`, the prompt and the kernel as checked builds (2026-11-14).
+All of them now build as `build` does (unchecked, -O3, link-time optimization). `-quick` (B2g) and the new `-checked` (E16g) are
+options of build, compile, running a file, interpret, the prompt (`olang -checked`, `olang -quick` with no file), `jupyter` and
+`notebook` (cells.Config takes both from the session's configuration; `jupyter -install -checked` writes them into the kernelspec's
+argv); `-checked` beside `-debug` or on `test` is allowed and redundant. A checked build stays the default of `test`, `-debug`, and the
+evaluator's runs (`interpret -evaluate`, `test -evaluate`). The interpret checks scenarios now pass `-checked`.
+
+## `interpret` merged into running a file; `run` builds into build/; the evaluator is internal (B1, B3e, B3g, 2026-11-15)
+The user: "merge them. we dont need to reach the interpreter from CLI its more an internal compilation thing after all. make
+olang FILE not create a build directory and then olang run FILE builds and runs". So: `olang FILE args...` is what
+`olang interpret FILE` was - built as `build` builds (unchecked, -O3, LTO; `-quick`/`-checked` options), into
+`$XDG_CACHE_HOME/olang/run`, nothing in the working directory, D3b/M5a warnings, the cache bounded to 1 GiB - and the new mode
+`olang run FILE args...` is what running a file was: built exactly as `build` does into `build/` (`-output` allowed) and run (B12a's
+emulator included; running a file is for this machine only). The `interpret` mode and the options `-evaluate` and
+`test -evaluate` are removed (no diagnostic kept). The evaluator stays, reached by the testing tools through the environment
+variable `OLANG_EVALUATE=1` (read in `CommandLine.Parse`, for running a file and `test` only; the options saying how to build are
+ignored under it, so `buildWord` and `InterpretBuilds` went): compiler/tools/evaldiff.olang, the fuzzers and the checks scenarios
+set it. `olang help file` shows running a file's options (formerly `help run`). Measured (4 cores, loaded by other jobs, so
+indicative): hello world through `olang FILE` 1.6-2.0 s cold cache, 0.24 s cached, 0.4-0.55 s after an edit (before, as -quick: 1.6 s,
+0.2 s, 0.35-0.9 s); `olang run FILE` 2.2 s first, 0.06 s unchanged, 0.35 s after an edit. A prompt of five small cells took 6.0 s
+cold and 1.7 s on the warm cache, with or without `-quick` and (before) with it unconditionally: link-time optimization costs
+the small cells nothing measurable.
+
+## The prompt's newline after a cell's output (B22, 2026-11-15)
+`Print("hello")` at the terminal prompt showed nothing: the line editor's redraw (`\r\x1b[J>>> `) erased the unfinished line.
+On a terminal the session's worker output is now relayed through this process (`Worker.Relay`, as the kernel's is), which
+remembers whether a cell wrote anything (`Worker.Printed`); the prompt then writes one newline before the next `>>>`, whatever
+the output ended with (the user: `Print(5)` shows `5` and the prompt on the next line, `Println(5)` shows `5`, an empty line, and
+the prompt). A cell that wrote nothing adds nothing. Checked in the `promptkeys` scenario with `Print("hello")` and `Println("hi")`.
+Cells interpreted through `OLANG_CELLS=interpret` write in this process and are not covered.
