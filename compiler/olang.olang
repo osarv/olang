@@ -148,7 +148,7 @@ OptValues Array<String&> = Array<String&>["PATH", "", "", "", "NAME", "Name=valu
     ""
     ""
     ""]
-OptModes Array<I64> = Array<I64>[77846, 31, 31, 31, 1887, 108383, 108383, 2080, 106591, 256, 2, 27, 8, 8, 64, 64, 64, 8, 32768, 65536, 98335]
+OptModes Array<I64> = Array<I64>[77846, 31, 31, 31, 1887, 108383, 108383, 2107, 106591, 256, 2, 27, 8, 8, 64, 64, 64, 8, 32768, 65536, 98335]
 OptWhat Array<String&> = Array<String&>[
     "writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)"
     "builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)"
@@ -276,7 +276,10 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if o == 4 { cl.Spec = $v }
             if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.Usage } }
             if o == 6 { c.Update = true }
-            if o == 7 { cl.Check = true }
+            if o == 7 {
+                cl.Check = true
+                c.MemoryCheck = true
+            }
             if o == 8 { c.Quick = true }
             if o == 9 { cl.Html = $v }
             if o == 10 { c.Library = true }
@@ -684,6 +687,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0: spin.Say(io.Stdout, $fr.Report() + $weakRows(c) + $fr.Sc.PlacedReport())
+    # B18a: -memory -check fails where early freeing does not follow a let-go (O8f)
+    if cfg.Memory and cfg.MemoryCheck and fr.Gaps > 0 and d.Errors() == 0: d.Error(diag.Where.Nowhere, msgs.MemoryGaps(fr.Gaps))
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PutErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)

@@ -120,6 +120,7 @@ type Diag enum {
     FuzzTimeAlone
     BenchFuzz
     FuzzNoTest
+    MemoryGaps
     FuzzManyTests
     NotASource
     ModeFirst
@@ -1072,6 +1073,7 @@ fn FuzzTimeNotNumber(text String&) r.Msg { return r.Msg(Diag.FuzzTimeNotNumber, 
 fn FuzzTimeAlone() r.Msg { return r.Msg(Diag.FuzzTimeAlone, "B19", "-fuzztime says how long -fuzz runs - give -fuzz NAME with it") }
 fn BenchFuzz() r.Msg { return r.Msg(Diag.BenchFuzz, "B19b", "-bench and -fuzz are given together", "-bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs", "give one") }
 fn FuzzNoTest(word String&) r.Msg { return r.Msg(Diag.FuzzNoTest, "B19", "-fuzz " + $word + " names no test of this file", "", "give a test's target, its target's type or a word of its description") }
+fn MemoryGaps(n I64) r.Msg { return r.Msg(Diag.MemoryGaps, "B18", $n + " let-go" + $("" if n == 1 else "es") + " early freeing does not follow (O8f) - the report above names each", "", "keep what is let go of in a place early freeing follows: a local, a field, a global") }
 fn FuzzManyTests(word String&, names String&) r.Msg { return r.Msg(Diag.FuzzManyTests, "B19", "-fuzz " + $word + " names several tests (" + $names + ") - give a word that names one") }
 fn NotASource(text String&) r.Msg { return r.Msg(Diag.NotASource, "B1", "'" + $text + "' is no olang file to run - a file's name ends in .olang") }
 fn ModeFirst(text String&) r.Msg { return r.Msg(Diag.ModeFirst, "B1", "the mode comes first: 'olang " + $text + "' and then its options") }
