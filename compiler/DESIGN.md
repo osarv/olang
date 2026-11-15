@@ -908,14 +908,14 @@ golden dumps in `lower`'s tests stand in for round trips.
   IR exist:
   - `build.olang`: a `Frontend` trait (`Analyze` fills a `Program` - each object's IR by module identity and what it
     holds: a module, the root with `main` or the test harness, or the instances - plus the runtime's and the dynamic
-    call's IR; `Interpret` runs `interpret`), the `Config` of a build, SHA-256 in olang, objects named
+    call's IR; `Interpret` runs `interpret -evaluate`), the `Config` of a build, SHA-256 in olang, objects named
     `IDENTITY.HASH[.main|.test|.inst][.race][.debug][.san].o` (HASH 16 hex digits of the IR, the clang flags and
     clang's version), compiled side by side by `RunAll` (workers over a channel, one per core), each written to a
     temporary and renamed into place, the link skipped when its stamp (`BIN.link`: a hash of every argument and
     clang's version, with the binary's size and time) says the binary is the one it would make, and the modes
     (`Compile`, `BuildProgram`, `TestFile`, `TestFiles`, `Interpret`) over any front end;
   - `target.olang`: B12's resolution (clang asked for its attributes, B12a's capability probe, B12c's features taken
-    out, without clang for `interpret`) and the target's build constants;
+    out, without clang for `interpret -evaluate`) and the target's build constants;
   - `olang.olang`: the command line in words, as stage 0 reads it (B1: the modes `build compile test interpret format
     explain help`, a bare `FILE.olang` built and run, the options `-output -debug -race -sanitize -target -define
     -update -check` each for its modes, `help` and `help MODE` written as stage 0 writes them), the built-in constants,
@@ -951,8 +951,8 @@ golden dumps in `lower`'s tests stand in for round trips.
 ### 1.12 Cells run compiled (`cells`, `prompt`; B22-B24, 2026-11-14)
 
 The prompt, the Jupyter kernel and `notebook run` build each cell as the run form builds a program (B3g: `-quick`, no
-LTO, release semantics) and run it in a long-lived worker process; `interpret` stays for `interpret`, `test
--interpret`, compile-time evaluation and `OLANG_CELLS=interpret` (or where no cell can be built: no clang, another
+LTO, release semantics) and run it in a long-lived worker process; `interpret` stays for `interpret -evaluate`, `test
+-evaluate`, compile-time evaluation and `OLANG_CELLS=interpret` (or where no cell can be built: no clang, another
 machine's target).
 
 - **A cell is a shared object, the runtime is the worker's.** The session's program (prompt.olang writes it as before:
@@ -992,6 +992,13 @@ machine's target).
   hand-loop matrix product: 11 ms in its cell against 19 s interpreted. The compiler stays at ~90 MB over 120 cells,
   the worker at 2-3 MB. Left to gain: the root's object cut so that the instances only modules reach are objects of
   their own the cache keeps (B3d's groups) while the root keeps those it calls, inlinable.
+- **`interpret` (B3e, 2026-11-15) takes the ordinary build path, not the cells'.** A program has no session and no
+  values to keep, so `build.Interpret` is a file run (B3g) with three settings: `Config.Checked` (the Lowerer's E16g
+  checks and the emitter's S18d trace, both part of the record key and the `.checked` object names), the directory
+  `build.CacheDir("run")` (shared with no build/ beside the program; objects by content hash, the binary named by the
+  file's real path and the working directory), and the diagnostics' leniency (D3b, M5a warnings, written before the
+  exec). Start-up is the front end plus whatever the cache lacks: ~75 ms for an unchanged hello world, a cold cache
+  ~1.2 s (std's objects once). `-evaluate` keeps the evaluator for the suite's agreement checks.
 
 ## 2. The thirteen grammar points
 

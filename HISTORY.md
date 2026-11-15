@@ -37357,3 +37357,30 @@ and reads `is` by its text. The checks cases about `is` itself (`a is b`, `x is 
 that asserted `== null` was an error became run cases; new: `e10cnevernull` (a never-null reference), `isname` (`is` as
 a local's name), `tests/nulltest.olang` (never Eq, either side, error and function values, narrowing; a baked global
 and a top-level assert the evaluator decides). PRINCIPLES.md no longer lists `x is null` among the word forms.
+
+## 2026-11-15: B3e - `interpret` builds and runs; the evaluator is `-evaluate`
+
+The user, 2026-11-15: "make olang interpret fast as well, we might run some data science work in it." `olang interpret
+FILE` ran `main` through the compile-time evaluator, about a hundred times slower than the built program on work-heavy
+loops, while the prompt and the kernel already ran each cell compiled (B22). Now `interpret` takes the ordinary build
+path, not the cells' (a program keeps no values from one run to the next, so the worker, the shared object and the
+fork buy it nothing): `build.Interpret` builds as a file run does (B3g, -quick) with `Config.Checked` - the Lowerer's
+E16g checks (they were tied to `tests or Debug`) and the emitter's S18d trace (`Emitter.Traced`), both in the record
+key and the `.checked` object names - into `build.CacheDir("run")` (`$XDG_CACHE_HOME/olang/run`, the cells' cache
+helper moved beside it), the binary named by the file's real path and the working directory so two programs of one
+name never share it; D3b/M5a stay warnings, written before the program is exec'd in the compiler's place, its
+arguments (B3f), streams and status its own. What interpret said before holds: a failed check aborts with the built
+text (134), an error escaping main prints a `-debug` build's trace, `os.Exit`'s status is the program's (the checks
+scenario `interpbuilt`; drvdiff's whole-build interpret rows unchanged).
+
+The evaluator stays as `olang interpret -evaluate FILE` and `olang test -evaluate` (the option renamed from `test
+-interpret`, now applying to test and interpret), so the suite's agreement checks keep exercising it: evaldiff
+(interp@FILE, interp@casesK), the fuzzers, and every checks scenario that ran `interpret` now run `-evaluate`. What
+only the evaluator does - stopping, named, on undefined behaviour the checked build does not catch (a conversion out of
+range, a null read), on tasks waiting for each other, on recursion deeper than its stack - is now said of `-evaluate`
+in SPEC (B3e, and its mentions in E16, M19f, E10, S21, X6, X20, K1). The no-clang fallback the brief anticipated does not
+exist: the prelude's own C imports (math.h, unistd.h) need clang, so no program ran under the old interpret without one
+either. Measured (4 cores, lightly loaded): a 1e8-iteration float loop 55.9 s -> 0.50 s; a 200x200 hand matmul 11.4 s ->
+0.09 s (0.29 s with its root rebuilt); hello world 0.05 s -> 0.07 s unchanged, 0.26 s after an edit, 0.84 s on an empty
+cache (std's objects once). Left: the cache is never pruned (as build/ is not), and E16g's list names the prompt and
+kernel as checked builds while B22's cells are built release (-quick, unchecked) - an older disagreement, not changed here.

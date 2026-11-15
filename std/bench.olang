@@ -16,7 +16,7 @@
 # so no other build pays for it), and the instructions the test's thread retired where the machine and the kernel
 # give a counter. What the test does outside the work (building xs above) is not measured. Keep hands a value to
 # nothing the optimizer can see through, so work whose result is otherwise unused is still done. Every other run of
-# the test - a plain "olang test", "olang test -interpret" - calls the work once and measures nothing, so a benchmark
+# the test - a plain "olang test", "olang test -evaluate" - calls the work once and measures nothing, so a benchmark
 # is a test as well. Measurement.Of gives the numbers to a program, in any build.
 
 import "std/io"

@@ -28,7 +28,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   loop. **A lambda's body too (D16, the user's decision 2026-10-24):** `xs.Count(fn(x): return x > 3)`.
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
   test interpret format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
-  -define -update -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir -interpret -bench`, each checked against
+  -define -update -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir -evaluate -bench`, each checked against
   the modes it applies to; old flags are gone.
 - **`-quick` (B2g, the user's call 2026-10-24).** `-O2` without link-time optimization; an error beside `-debug` or
   `-race`. The default stays `-O3` + LTO (B2c).
@@ -93,7 +93,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   too").** A read is any appearance but as an assignment target (Go's rule); a place never read is written `_`.
   Exempt: parameters, constructor fields, catch names, destructor-typed locals, names in branches the build leaves out.
   Said only of a program with no other error. **Under `interpret` both are warnings (`warning[D3b]: ...` on the
-  standard error) and the program runs (B3e, 2026-11-13, the user's ease items)**; `test -interpret` keeps them errors.
+  standard error) and the program runs (B3e, 2026-11-13, the user's ease items)**; `test -evaluate` keeps them errors.
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
   once. Assignment to a reference repoints (S4a). Parallel assignment `a, b = b, a` evaluates every value first;
   `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call); `x[i] = v` on a type declaring
@@ -271,7 +271,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `ArrayError.OutOfRange`. An out-of-range index, a wrong `extern` prototype and a data race are the three unchecked
   holes, stated.
 - **Checked builds (E16g, the user's decision 2026-11-14; built 2026-11-14).** `test`, `-debug`, `interpret`, `test
-  -interpret`, the prompt and the notebook kernel stop, as a failed assert does, on an index, an integer `/` or `%`
+  -evaluate`, the prompt and the notebook kernel stop, as a failed assert does, on an index, an integer `/` or `%`
   (a zero divisor, the least value by -1) and a shift (amount outside the width) the program wrote, printing
   `FILE:LINE:COLUMN: index out of range` (`division by zero`, `division overflows: the least value by -1`, `shift
   amount outside the width`). Indexes the language makes (for-in walks, comprehensions, lanes, patterns) and lane
@@ -831,7 +831,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   pkg` takes the newest same-major version and records it in olang.lock; `-update` moves all; `pkg@v1.2` pins.
 - **Separate compilation; facts with readers (B1-B8, B3i; the user's decision 2026-11-08 evening, docs/wholeprog.md:
   "If we are going to do it eventually, just do it now").** `compile` one module, `build` build and link, `test` each
-  file's tests in a process of its own (B3a), `interpret` through the evaluator (B3e). Imports are resolved from source;
+  file's tests in a process of its own (B3a), `interpret` built checked into the cache and run (B3e). Imports are resolved from source;
   globals initialize imports first, then in dependency order (B5a). No interface file: records are a cache of what
   the source says. **Decided, being built** (docs/wholeprog.md section 10): facts with readers replace "one module at a
   time" - the front end may use whole-program facts, each recording the modules that read it, reaching code as a
@@ -909,8 +909,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   endings, undefined behaviour, destructor-bearing values outside a global's own frame (K2c), anything past the step
   and 256MB budgets; tasks run in sequence at the join. Every disagreement with the run time is a bug fixed in the
   evaluator. Tests the evaluator runs sit beside run-time tests for every language change (the checklist above).
-- **`interpret` runs programs as built, and `test -interpret` their tests (B3e, M8; compared in the suite
-  2026-11-07).** Scopes reclaimed as they close, destructors run where holders let go; tasks run one after another at
+- **`interpret` builds and runs; `-evaluate` runs the evaluator (B3e, the user 2026-11-15: "make olang interpret fast
+  as well, we might run some data science work in it"; built 2026-11-15).** `olang interpret FILE` builds as a file run
+  does (-quick) but checked (E16g) with the error trace (S18d), into `$XDG_CACHE_HOME/olang/run` (objects reused, B3i;
+  nothing beside the program), D3b/M5a warnings, then execs it: a 1e8-iteration loop 56 s -> 0.5 s, a 200x200 matmul
+  11.4 s -> 0.09 s; hello world 0.05 s -> 0.08 s cached, ~1.2 s on a cold cache. Mine: no fallback without clang (the
+  prelude's C imports need it either way); interpret's options stay -target/-define/-update. **`interpret -evaluate`
+  and `test -evaluate` (formerly `test -interpret`)** run programs and tests through the evaluator as before (M8;
+  compared in the suite 2026-11-07, interp@FILE). Scopes reclaimed as they close, destructors run where holders let go; tasks run one after another at
   their join. Every test file and the checks' run cases are compared with the built runs; listed differences only
   (std/chan's waits for a task, std/net's getaddrinfo, memory-measuring cases, an export fn handed to C).
 - **The prompt (B22, QCX 6, the user 2026-11-07 and 2026-11-13 "as easy to use as python"; built 2026-11-14).** Plain
@@ -1049,7 +1055,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   bootstrap`, with clang alone - the user, 2026-10-18). The compiler is `build/olang`. No splitting files for size (the
   user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
-  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`, LLVM
+  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret -evaluate`, LLVM
   IR emission per module (`compiler/DESIGN.md`). Acceptance is the test suite plus stage 1 rebuilding itself. Compile
   speed is a first-class goal (the user, 2026-10-23). The port builds itself (stage 1 == 2 == 3).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Closed prelude traits

@@ -47,6 +47,7 @@ fn main() {
 ```
 build/olang hello.olang       # builds the program quickly (-quick) and runs it; an unchanged one is not built again
 build/olang test hello.olang  # runs the file's tests
+build/olang interpret hello.olang  # the same, checked (indexes, divisions, shifts), built into ~/.cache/olang/run
 build/olang help              # every mode and option
 build/olang                   # the prompt: each entry runs as you type it
 make install                  # installs olang into ~/.local, so `olang` runs from anywhere

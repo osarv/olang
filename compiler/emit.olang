@@ -44,6 +44,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     T
     Tests Bool = false              # a test build: the harness runs the root's tests
     Debug Bool = false              # a -debug build: the error return trace kept (S18d), as in a test build
+    Traced Bool = false             # interpret's build (B3e): the trace kept as a -debug build keeps it
     # B20: a build olang profile makes - main starting the runtime's sampler - and (Lines, set with it) one explain -asm
     # or -ir makes (B11d): line tables and each function's readable name in its debug information
     Prof Bool = false
@@ -172,8 +173,8 @@ type Reused struct(Module I64) {
     From I64 = -1
 }
 
-# whether the error return trace is kept (S18d): test and -debug builds
-fn (e Emitter&) traced() Bool { return e.Tests or e.Debug }
+# whether the error return trace is kept (S18d): test and -debug builds, and interpret's (B3e)
+fn (e Emitter&) traced() Bool { return e.Tests or e.Debug or e.Traced }
 
 # whether functions carry debug information: all of it under -debug (B2e), their lines and names in a profile build
 # (B20) or a listing build (B11d)

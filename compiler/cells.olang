@@ -29,13 +29,7 @@ type BuildFn fn(r String&, t String&, sh Array<String&>&, ps Array<String&>&, ls
 Builder mut BuildFn?& = null
 
 # where sessions keep their objects, from one session to the next: $XDG_CACHE_HOME/olang/cells, else ~/.cache's
-fn CacheDir() String {
-    x := try os.Env("XDG_CACHE_HOME") catch os.Error default ""
-    if x != "": return $x "/olang/cells"
-    h := try os.Env("HOME") catch os.Error default ""
-    if h != "": return $h "/.cache/olang/cells"
-    return $"/tmp/olang-cells-" $unistd.getuid()
-}
+fn CacheDir() String { return build.CacheDir("cells") }
 
 # the build of a session's cells, from the session's own configuration: -quick, a shared object, in the cache
 fn Config(from build.Config&) build.Config {
