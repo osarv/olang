@@ -3055,10 +3055,6 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         }
         case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap
              typed.PrimOp.AtomicCompareSwap { return m.atomic(fi, op, args, at) }
-        case typed.PrimOp.Holds {
-            m.refuse(WhyNotModelled)
-            return 0
-        }
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap
              typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
             n I64 = 0

@@ -442,7 +442,7 @@ fn decideTopAsserts(c mut typecheck.Checker&, x mut Exec&) I64 {
     return n
 }
 
-# ---- contracts decided while compiling (D17e, D17g) ----
+# ---- requirements decided while compiling (D17e, E26c) ----
 
 # the requirements c met at calls whose arguments the evaluator computes, and the conversions of such values (each a
 # body giving the condition's value): a false one an error at the call naming the condition, with a note at it; one
@@ -453,7 +453,7 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
     n I64 = 0
     for ai in range c.ContractAsks.Len() {
         a := c.ContractAsks[ai]
-        # a call whose ArgumentError a clause takes fails at run time, as written (D17e)
+        # a call whose ArgumentError a clause takes fails at run time, as written (D17e) - an assert's requirement never
         if c.ContractHandled.Has(ai) { continue }
         key := pair.Pair(a.File, (I64(a.At.Start) << 32) | I64(a.CondSp.Start))
         # one false requirement is said at a call: the first, as the call checks them in order on entry

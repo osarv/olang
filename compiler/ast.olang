@@ -48,16 +48,14 @@ type Attr struct(Sp source.Span, X Expr&, Global source.NameId) {
 
 # a signature: parameters, results (none, one or several), and the error set - HasErrors with no names is an inferred
 # set ("?" alone, R1a); NoReturn for "noreturn" where a result would stand (D8e)
-# a declaration's contract, null for none (D17)
 type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false
-                Contract ContractBlock?& = null, Commutes Bool = false, Variadic Bool = false
+                Commutes Bool = false, Variadic Bool = false
                 Promises Array<Promise&>& = Array<Promise&>(0)) {
     Params
     Results
     HasErrors
     Errors
     NoReturn
-    Contract
     Commutes   # "commutes" after an operator method's result (E31c): the operator applies with its operands swapped too
     Variadic   # "..." after an extern's parameters (X17): C's variable arguments
     Promises   # the words after a function type's signature (T21c), as written
@@ -73,11 +71,8 @@ type Promise struct(Sp source.Span, Word token.Tok, Names Array<source.NameId>&)
 
 # s with its promises (T21c)
 fn (s Sig&) WithPromises(ps Array<Promise&>&) Sig& {
-    return Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, s.Contract, s.Commutes, s.Variadic, ps)
+    return Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, s.Commutes, s.Variadic, ps)
 }
-
-# a contract (D17): its bracketed block's span and its conditions as statements - each an Assert with no message
-type ContractBlock struct(Sp source.Span, Items Array<Stmt&>&) { Sp, Items }
 
 # a dotted name: alias.Type.word - an error set's or a catch clause's item, an error statement's word
 type Path struct(Sp source.Span, Parts Array<source.NameId>&) {
@@ -732,3 +727,64 @@ fn TestLabel(d Decl&, text String&, names source.Names&) String {
     if t.Len() == 0 { return TestDesc(d, text) }
     return $t + ": " + $TestDesc(d, text)
 }
+
+# ---- requirements (D17) ----
+
+# a requirement of a function, method or constructor (D17): the condition of one of the statements its body begins
+# with - an assert's, or a check's, "if C: error ArgumentError.Invalid(...)", which requires C false (Negated)
+type Req struct(Sp source.Span, Cond Expr&, Negated Bool) {
+    Sp         # the statement's
+    Cond
+    Negated
+}
+
+# the requirements a body begins with: its leading asserts and checks, up to the first statement that is neither
+fn Requirements(body Array<Stmt&>&, names source.Names&) Array<Req&>& {
+    out mut Vec<Req&>& = Vec<Req&>()
+    for st in body {
+        match st {
+            case Stmt.Assert(sp, k, _): out.Push(Req(sp, k, false))
+            case Stmt.If(sp, i) {
+                if not isCheck(i, names): return out.ToArray()
+                out.Push(Req(sp, i.Cond!, true))
+            }
+            case _: return out.ToArray()
+        }
+    }
+    return out.ToArray()
+}
+
+# whether an if is a check (D17): a condition, no else, and a branch raising ArgumentError and doing nothing else
+fn isCheck(i If&, names source.Names&) Bool {
+    if i.Cond == null or i.Else != null or i.Then == null or i.Then!.Body.Len() != 1: return false
+    match i.Then!.Body[0] {
+        case Stmt.Raise(_, word, _) {
+            if word == null or word.Parts.Len() == 0: return false
+            return $names.Text(word.Parts[0]) == "ArgumentError"
+        }
+        case _: return false
+    }
+}
+
+# a requirement as the program says it, from its file's text: an assert's condition as written; a check's negated -
+# "if not (y > x)" requires "y > x", "if n < 0" requires "not n < 0"
+fn ReqText(r Req&, text String&) String {
+    if not r.Negated: return $exprText(r.Cond, text)
+    match r.Cond {
+        case Expr.Unary(_, op, x) if op == token.Tok.Not: return $exprText(unparen(x), text)
+        case Expr.Binary(_, op, _, _) if op == token.Tok.And or op == token.Tok.Or or op == token.Tok.Xor {
+            return "not (" + $exprText(r.Cond, text) + ")"
+        }
+        case Expr.Cond(_, _, _, _): return "not (" + $exprText(r.Cond, text) + ")"
+        case _: return "not " + $exprText(r.Cond, text)
+    }
+}
+
+fn unparen(x Expr&) Expr& {
+    match x {
+        case Expr.Paren(_, y): return unparen(y)
+        case _: return x
+    }
+}
+
+fn exprText(x Expr&, text String&) String& { return text[I64(x.Span().Start):I64(x.Span().End)] }
