@@ -1,0 +1,15 @@
+import "std/io"
+
+# O8f (docs/freeing.md gaps 8-9): an array's element and a Vec's element given new text, in place and through SetAt,
+# free what each held: text elements are a place, every value built in a slot of its own (102 MB at 3,200,000 turns
+# before)
+N I64 = 320000
+
+fn main() {
+    names := Array<String>(10)
+    for i in range N { names[i % 10] = "name " + $i }
+    v Vec<String>
+    for _ in range 10: v.Push("")
+    for i in range N { v[i % 10] = "value " + $i }
+    io.PutLine(names[3] + " " + v[3])!
+}

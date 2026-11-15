@@ -82,14 +82,15 @@ Measured 2026-11-15 on master e6232af1 (peak resident memory, KB; baseline ~13 M
 | 3 | a call's new text into a local each turn, `x = mk(i)` | 108 MB at 20,000x10 | one text | as 1 (decided sole, never released) | **fixed** |
 | 4 | a mutable array local given new arrays, `a = mk(n)` | 700 MB at 80,000 | one array | as 1 | **fixed** |
 | 5 | a mutable global text, `Log = Log + $i` | 2.2 GB at 32,000 | one text | a global place only for owners and references | **fixed**: 13 MB |
-| 6 | a text field replaced, `d.text = d.text + $i` (local struct, or through `mut Doc&`) | 2.2 GB | one text | the struct's constructor value is copied into the local (RCopied): its fields' first values not taken as made for them | open |
-| 7 | an owner field replaced, `m.w = step(m.w)` | 258 MB at 32,000 | one tensor | as 6 | open |
-| 8 | an array's element given new text, `names[i % 10] = ...` | grows (42 MB at 320,000) | ten texts | element stores never let go (docs/memory.md 2.6 item 7) | open |
-| 9 | a `Vec`'s element given new text, `v[i] = ...` | grows | ten texts | as 8, through `SetAt` | open |
-| 10 | a `Map`'s value replaced by `Put` (`Map<String, String>`) | grows | one text per key | `Put` is no let-go; a text value beside a text key no slot | open |
-| 11 | a `Vec` local growing | 2x its final size | old buffer freed at each growth | an array place only for a Vec held in a sole place | open - outside O8f as written (growth is a let-go only of a collection held by a place that reclaims its value whole, or by a field) |
-| 15 | a `Map` entry's text key beside a `Vec` value, at a removal (earlyfree's mapkeys) | the key's text kept | freed with the entry | a split entry's key is built where the map lives, not in a slot | open (a `-memory -check` gap) |
-| 16 | a local declared with no value (D13d) given new text in a loop | kept | one text | an unset local is no place (its storage holds nothing written before its first assignment) | open (a `-memory -check` gap) |
+| 6 | a text field replaced, `d.text = d.text + $i` (local struct, or through `mut Doc&`) | 2.2 GB | one text | the struct's constructor value is copied into the local (RCopied): its fields' first values not taken as made for them | **fixed**: 1.7 GB to 13 MB (freeing's fields, 20,000 turns) - the copy D9h makes of a constructor's instance a struct local is declared with is built for its candidate parts (free.olang letCtorOf, viewCtor) |
+| 7 | an owner field replaced, `m.w = step(m.w)` | 258 MB at 32,000 | one tensor | as 6 | **fixed**: 85 MB to 13 MB (`Model(v)`, `Model(fill(n))`); a struct holding the Model by value in a constructor's field keeps per declaration (condition 2, 2.6 item 1) |
+| 8 | an array's element given new text, `names[i % 10] = ...` | grows (42 MB at 320,000) | ten texts | element stores never let go (docs/memory.md 2.6 item 7) | **fixed**: 102 MB to 13 MB at 3,200,000 (with 9) - an array's text elements are a place, each value built in a slot, the assignment a let-go |
+| 9 | a `Vec`'s element given new text, `v[i] = ...` | grows | ten texts | as 8, through `SetAt` | **fixed** with 8 (the buffer's elements are the same place) |
+| 10 | a `Map`'s value replaced by `Put` (`Map<String, String>`) | grows | one text per key | `Put` is no let-go; a text value beside a text key no slot | **fixed**: 52 MB to 13 MB at 400,000 (with 15) - an entry whose text parts are all it owns is copied into slots whole, each part freed alone |
+| 11 | a `Vec` local growing | 2x its final size | old buffer freed at each growth | an array place only for a Vec held in a sole place | open - see 2.1: the old buffer is freed where `Vec<T>`'s buffer place is sole (a program's growth alone: 66 MB peak for 33 MB); it keeps per type where an owner place holds a `Vec<T>` whole or a copy of one is made (98 MB) |
+| 15 | a `Map` entry's text key beside a `Vec` value, at a removal (earlyfree's mapkeys) | the key's text kept | freed with the entry | a split entry's key is built where the map lives, not in a slot | **fixed** with 10 - the split copy builds the key in a slot of the region's parent (free.SlotParts, lower.splitCopy); mapkeys passes `-memory -check` |
+| 16 | a local declared with no value (D13d) given new text in a loop | kept | one text | an unset local is no place (its storage holds nothing written before its first assignment) | **fixed**: 274 MB to 13 MB (a Vec and a struct) - lowering writes zero bits for a local place declared with no value, its first release a no-op |
+| 17 | an element owning storage that is not text, `rows[i] = mk(i)` (`Array<Vec<I64>>`) | kept | one Vec per element | only text elements are a place (a region per Vec element would cost ~400 bytes each) | open (a `-memory -check` gap: checks' gaps.olang) |
 | 12 | oann's tempref: a temporary given to a `&` parameter whose callee copies it into a struct holding a reference | +5,580 kB over 100,000 calls | nothing kept | a scope variable no argument and no obligation determines was bound where the call's result lands (`scope.olang` bindRest): `View.Make(o.mem, Dims(4))`'s `Dims` built in the result's scope, which `read(o.View())` lands in o's | **fixed**: +72 kB (bound to the block where the callee builds nothing into it, names it in no relation, and its result views no parameter of it - onlyForCall) |
 | 13 | oann's joinleak: a `join` with spawns | +110 B per join | nothing kept | every task given a stand-in per scope variable, made in the spawner's caller's scope (56 B each) - for a callee building nothing | **fixed**: flat (98 pages at 200,000 and 800,000 joins) |
 | 14 | text a task builds into a loop turn's local (g09) | +8 KB per turn | nothing kept | the task's chunks are folded into the joiner's pool (O8b), workers ask the OS for new ones | **fixed**: the joiner shares its pool beyond a batch at each join, 160 MB to 13 MB |
@@ -99,6 +100,23 @@ turn's array (`a = b`), loop-turn locals and closures, `Pop`/`Remove` of maps an
 
 Found on the way: an immut array assigned a value of the same length was written in place, so a slice of its old value
 read the new text (`v := s[0:2]; s = "x" + $2` printed `x2`): T13a says an immut value is replaced whole. Fixed with 1.
+
+### 2.1 A Vec's growth (gap 11), measured 2026-11-15
+
+`Vec<T>`'s buffer is one place for every `Vec<T>` of the program (keyed by the type, 2.6 item 1 of docs/memory.md). Where
+it is decided sole each growth builds the new buffer in a region of its own and releases the old (the `retire()` left
+out): a local growing to 4,000,000 elements peaks at 66 MB for a 33 MB buffer - the old and the new side by side at the
+last doubling, the least a doubling can do. It keeps for the whole program where:
+- an owner place holds a `Vec<T>` whole (a local or field given new Vecs, `a = mk(i)`) - "owners win" (free.decide):
+  the owner's value is one region, released through its first anchor, so a buffer in a region of its own would leave
+  the owner's other storage behind; or a reference into a buffer is stored with the owner's value (RStore);
+- a copy of a `Vec<T>` is made with no store into the place (`m.Get(k)`, a by-value argument copied, D9h): its buffer is
+  built where the copy lands, outside any region, so a growth of the copy could not release it.
+Then the same program peaks at 98 MB. Closing it needs a buffer's region to be found and released at run time apart
+from its owner's - a growth region kept outside the owner's (its parent the owner's parent, so Settle and the owner's
+release each drop only their own), the owner's release dropping every region its anchors name, and the copies' buffers
+built in regions of their own (a region per copy, ~400 bytes) - a design of its own, not started: see the report of
+2026-11-15 (the decision asked).
 
 ## 3. Order of work (phase 2)
 
@@ -114,8 +132,9 @@ A gap row (B18a) at: an assignment, in code that runs again, of a place holding 
 declared outside the loop that is no candidate, a global or field of a kind not followed, any element - gaps 8, 16); a
 `SetAt` giving an element owning storage (gap 9); a B18 place kept for a copy of its holder or a change in place
 (RCopied, RInPlace - gaps 6, 7); a program's call - a removal, `Put`, `SetAt` - whose library place keeps for a reason in
-the library's code (gaps 10, 15). Every earlyfree fixture but mapkeys passes; `checks/fixtures/freeing/gaps.olang`
-fails naming its element.
+the library's code (gaps 10, 15). Every earlyfree fixture passes; `checks/fixtures/freeing/gaps.olang` fails naming its
+element (an `Array<Vec<I64>>`'s, gap 17). A text element place is reported where the program's own code gives an element
+another value; its removals are the collection's.
 
 ## PROGRESS
 
@@ -137,3 +156,9 @@ fails naming its element.
   checks case; the scenarios earlyfree, freeing, memoryplaced, regions, landing, chunkpool, scopefind, fieldset, twins,
   scopesan, weakmods; tests/*.olang under `-debug -sanitize` (1232 passed); scopefuzz seed 7, 150 programs, 0 findings;
   the corpus and std tests built (tests/shared.olang's T11b expectation updated: an immut String is replaced whole).
+- 2026-11-15, round 2 (wt-freeing2): gaps 6-10, 15 and 16 closed - a struct local's constructor copy built for its parts
+  (free.olang letCtorOf), a local declared with no value a place holding zero bits (lower.olang's Let), a Map entry's
+  text parts in slots (free.olang slotWhole/slotSplit, lower.olang splitCopy, the evaluator's slot scope giving each
+  allocation a region of its own), an array's text elements a place in slots (free.olang placeKey, SlotPlace). Gap 11
+  analysed (2.1), left for a decision; gap 17 found (an element owning storage that is not text). Fixtures: checks'
+  freeing fields, elements, mapvalues, unset; mapkeys under `-memory -check`.

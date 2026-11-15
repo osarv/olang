@@ -193,6 +193,8 @@ type scope struct() {
     Early Bool = false   # a region a release closed (O8d): what it held is recorded in dead-region mode
     Owner I64 = 0        # a region's: its parent where that is no region, whose list its registrations go in (C9b)
     DRegs I64 = -1       # a region's registrations, newest first, through their RNext - also in its owner's list
+    Slots Bool = false   # a slot scope (mir.Rvalue.Slots): each allocation in a region of its own inside it, as the
+                         # built program puts each back on its class list alone (ReleaseSlot)
 }
 
 # a registration in a scope, run when it closes: a destructor of a type for the instance at P; or a generator living in
@@ -1086,9 +1088,19 @@ fn (m mut Machine&) grow(need I64) {
     for i in range (m.top + 7) / 8 { m.prov[i] = oldp[i] }
 }
 
-# a new allocation of n bytes in scope s, zeroed: its id at offset 0; null, stopped, past the memory budget
-fn (m mut Machine&) allocate(n I64, kind I64, s I64) Ptr {
+# a region of its own, a kid of scope parent
+fn (m mut Machine&) region(parent I64) I64 {
+    id := m.newScope(sRegion)
+    m.adopt(id, parent)
+    if m.scopes[parent & slotMask].Kind != sRegion { m.scopes[id & slotMask].Owner = parent }
+    return id
+}
+
+# a new allocation of n bytes in scope s, zeroed: its id at offset 0; null, stopped, past the memory budget - in a slot
+# scope, in a region of its own inside it
+fn (m mut Machine&) allocate(n I64, kind I64, s0 I64) Ptr {
     if m.halted { return NullPtr }
+    s := m.region(s0) if s0 != 0 and m.live(s0) and m.scopes[s0 & slotMask].Slots else s0
     if n < 0 or n > (1 << 40) {
         m.refuse(WhyLong)
         return NullPtr
@@ -1399,7 +1411,7 @@ fn (m mut Machine&) newScope(kind I64) I64 {
     s := m.scopes[slot]
     s.Live, s.Kind, s.Allocs, s.Regs, s.Parent, s.Child, s.Sibling = true, kind, 0, -1, 0, 0, 0
     s.Buf, s.BufLen, s.Tasks, s.TasksEnd, s.Kept, s.Errors = 0, 0, -1, -1, 0, 0
-    s.Owner, s.DRegs = 0, -1
+    s.Owner, s.DRegs, s.Slots = 0, -1, false
     m.scopes[slot] = s
     return s.Gen << slotBits | slot
 }
@@ -2193,9 +2205,8 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
         case mir.Rvalue.Region(s), mir.Rvalue.Slots(s) {
             parent := m.buildScope(fi, s)
             if m.halted { return }
-            id := m.newScope(sRegion)
-            m.adopt(id, parent)
-            if m.scopes[parent & slotMask].Kind != sRegion { m.scopes[id & slotMask].Owner = parent }
+            id := m.region(parent)
+            m.scopes[id & slotMask].Slots = rv == mir.Rvalue.Slots
             m.wr(dst, 8, id)
         }
         case mir.Rvalue.RegionOr(x, s) {

@@ -95,8 +95,10 @@ A `-memory` row (B18) is said in one place and read in two: early freeing's in `
 change to one: SPEC B18's quoted text, the `checks` scenarios `memoryplaced` (its `tail.olang` for S21) and the
 earlyfree fixtures that grep it. A gap row (O8f, B18a: `free.olang`'s `gap`, `unfollowed`, `libraryGaps`, counted in
 `Gaps`, which `olang.olang` turns into `msgs.MemoryGaps` under `-check`): SPEC O8f and B18a, docs/freeing.md's gap
-table, the `checks` scenario `freeing` (its `gaps.olang` greps the row; every earlyfree fixture but mapkeys must stay
-gap-free).
+table, the `checks` scenario `freeing` (its `gaps.olang` greps the row; every earlyfree fixture must stay gap-free). A
+part built in slots (a `Map` entry's text, an array's text element: `free.olang` SlotPlace, SlotParts) is released by
+`mir.Stmt.ReleaseSlot` and modelled by the evaluator's slot scope (`eval.olang`, each allocation a region of its own):
+a change to one changes the other.
 
 A function's hidden scope arguments (`types.ScopeVarsOf`) are read off its type alone; a role that adds one (`RoleTail`,
 S21's tail scope, given in `scope.olang`'s `giveTails` before any body is judged) changes every call's: the scope pass
