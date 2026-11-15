@@ -16140,7 +16140,6 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
         nodes := typed.Nodes() if d.Plans[i].EndsWith(" ||") else typed.Nodes.Of(s.Bodies[b])
         pl := try typed.Plan.Read(s.Bodies[b], d.Plans[i], nodes, fn(c String&) types.TypeId { return s.typeOfCanon(c) }, twins) catch typed.Unwritable {
             s.why("plan")
-            if s.whyN.Len() < 6 { s.TraceLog.Push($"plan unread: " + $d.Plans[i]) }
             return null
         }
         sm := try s.sumOfText(d.Sums[i]) catch typed.Unwritable {

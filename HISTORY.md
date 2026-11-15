@@ -37784,3 +37784,11 @@ into it, names it in no relation, and its result views no parameter of it (D9h's
 onlyForCall. A first version that asked only for no requirement (`requiredBy`) bound json.Parse's temporary text to the
 block, which the parsed tree holds (C2d), and the compiler no longer built itself; with the relations asked too it
 does, to the fixed point, and every checks case passes. 5,580 kB to 72 kB over 100,000 calls.
+
+## 2026-11-15: a batch of compiler bugs (wt-bugs1)
+
+Found by oann's work and by the suite; each fixed with a test or checks case that failed before.
+
+- **A stray trace line (scope.olang).** `takeDisk` pushed `plan unread: ...` into the scope pass's trace log whenever a
+  kept plan could not be read back, so a build printed it to the standard error; its twin `sum unread:` went with the
+  earlyfree merge. Removed: the reason is still counted in `whyN` (`OLANG_SCOPESTATS`).
