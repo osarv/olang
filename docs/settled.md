@@ -1056,7 +1056,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   bootstrap`, with clang alone - the user, 2026-10-18). The compiler is `build/olang`. No splitting files for size (the
   user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
-  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret -evaluate`, LLVM
+  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and the evaluator, LLVM
   IR emission per module (`compiler/DESIGN.md`). Acceptance is the test suite plus stage 1 rebuilding itself. Compile
   speed is a first-class goal (the user, 2026-10-23). The port builds itself (stage 1 == 2 == 3).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Closed prelude traits

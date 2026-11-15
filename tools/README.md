@@ -5,7 +5,7 @@ kept so other code (a branch, oann) can be migrated the same way. They edit file
 
 They are olang programs (they were Python scripts; the ports give the same edits and the same output). Build one with
 `build/olang build tools/NAME.olang` (from the repository root), which writes `build/tools_NAME`, and run that with the
-arguments below. `build/olang interpret tools/NAME.olang ARGS` builds one into olang's cache, checked, and runs it, leaving nothing in `build/`.
+arguments below. `build/olang tools/NAME.olang ARGS` builds one into olang's cache and runs it, leaving nothing in `build/`.
 `srcmask.olang` is the module they share: telling code from comments and literals, reading files as Python's text mode
 did, walking a directory for `.olang` files; `diagedit.olang` is what the two driven by the compiler's diagnostics share
 (reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/olang test

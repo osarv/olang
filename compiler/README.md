@@ -11,7 +11,7 @@ typed core and the MIR are written as contracts. Checking (`check.olang`), the s
 (`lower.olang`, which reads the scope pass's placement where it is given, else a stand-in) are in progress, and so is
 emission (`emit.olang`): the pipeline writes one LLVM object per module (and one for the root's instances), which
 clang compiles and links with the runtime the port fills in (`make emitdiff` compares whole programs with stage 0's); and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
-while compiling (B9c, S8b, S18c) and as `olang interpret -evaluate` (`make evaldiff`); `olang interpret` itself builds the program checked into the cache and runs it (B3e). The driver (`olang.olang`,
+while compiling (B9c, S8b, S18c) and as `OLANG_EVALUATE=1 olang FILE` (`make evaldiff`, the testing tools' route, not an option); `olang FILE` itself builds the program into the cache as `build` does and runs it (B3g). The driver (`olang.olang`,
 `build/compiler_olang`) builds, runs, tests, compiles and interprets through the pipeline, with the runtime filled in
 by `runtime.olang`; built by the C compiler first, it builds itself (`build/compiler_olang build -output build/stage1
 compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but the seed, its own IR
@@ -85,7 +85,7 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
   and whole builds against stage 0's), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
   for the placement of before the scope pass), `emitdump.olang` (a program written as LLVM IR), `emitdiff.olang`
   (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldiff.olang` (the built runs
-  against `olang test -evaluate`'s and `olang interpret -evaluate`'s, the interpreter's known differences listed by name - in
+  against `OLANG_EVALUATE=1 olang test`'s and `OLANG_EVALUATE=1 olang FILE`'s, the interpreter's known differences listed by name - in
   `make verify`, a file a target: `interp@FILE`),
   `consistency.olang` (the parts that must agree, held to each other: `make consistency`, DEPENDENTS.md), `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`, `nesting.olang` (every function of compiler/ with its deepest block nesting and its length, worst first: `build/olang build compiler/tools/nesting.olang && build/compiler_tools_nesting [-n N] [FILE...]`), `memgate.olang` (the suite's memory gate: a command started once the machine has the memory its last run peaked at - `peaks.txt` the committed figures, `-table` the measured ones; docs/testmem.md).
 - `goldens/` - what stage 0 gave, captured: `drv.txt` (the driver's command lines and whole builds), `run.txt` (the

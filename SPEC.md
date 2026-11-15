@@ -8040,8 +8040,8 @@ beginning with `-` that is no option is an error:
 |---|---|---|
 | `-output PATH` | build, compile, run, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
 | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test, run | B2c, B2b, B2f |
-| `-quick` | running a file, build, compile, test, profile, explain, run, the prompt, jupyter, notebook | B2g, B20, B11d |
-| `-checked` | running a file, build, compile, test, run, the prompt, jupyter, notebook | E16g |
+| `-quick` | running a file, build, compile, test, profile, explain, run, jupyter, notebook | B2g, B20, B11d |
+| `-checked` | running a file, build, compile, test, run, jupyter, notebook | E16g |
 | `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
 | `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
