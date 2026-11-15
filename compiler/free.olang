@@ -446,6 +446,9 @@ fn (f mut Free&) heldPlaces(ty types.TypeId) Vec<I64> {
     k := t.KindOf(r)
     if k == types.Kind.Array {
         out = f.heldPlaces(t.Elem(r))
+        # (a copy of an array holding text elements makes values of their place with no store into it)
+        q := f.placeKey(r, -1)
+        if q >= 0 and f.arr[q]: addTo(out, q)
     } else if k == types.Kind.Named and t.HasBody(r) {
         dk := t.DeclKindOf(t.DeclOf(r))
         if dk == types.DeclKind.Struct {
@@ -558,6 +561,11 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
             if not cand and f.dtorCand(vt) {
                 cand = true
                 dt = true
+            }
+            # (O8f: text elements - each value built in slots, freed alone where an element is given another)
+            if not cand and f.arrayCand(vt) and f.slotText(vt) {
+                cand = true
+                ar = true
             }
         }
     } else if t.KindOf(r) == types.Kind.Named and t.HasBody(r) and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
@@ -800,6 +808,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     f.tasks = f.reachedTasks()
     f.genKeeps()
     f.decide()
+    if f.Debug: f.dumpPlaces()
     f.classifyHolders()
     if f.genOn: f.genDecide()
     f.Done = true
@@ -809,6 +818,16 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
 }
 
 # a line of the analysis' account, where it is asked for (f.Debug)
+# OLANG_FREEDUMP: each candidate place, decided sole or why it keeps
+fn (f mut Free&) dumpPlaces() {
+    d := f.P.L.Diags
+    for k in range f.keyTy.Len() {
+        r := f.why[k]
+        at := $d.Locate(r.File, I64(r.Sp.Start)) if r.File >= 0 else ""
+        f.debugOut($"place " + $k + " " + $f.P.T.Canon(f.keyTy[k]) + " field " + $f.keyField[k] + $(" sole" if f.Sole[k] else " keeps (" + $f.whyKind[k] + ") " + $at + " " + $r.Text) + "\n")
+    }
+}
+
 fn (f Free&) debugOut(t String&) {
     try io.PutErr(t) catch io.Error { }
 }
@@ -2623,12 +2642,14 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             }
         }
         case typed.Lvalue.Elem(_, _, _) {
-            # an element given a value: never a let-go - the program's own copies between elements are not known
-            # positions (2.6 item 7) - but a store into the element place
+            # an element given a value: a store into the element place - a let-go only of text elements (O8f), each
+            # value its own slot; a reference element's never: the program's own copies between elements are not known
+            # positions (2.6 item 7)
             if k >= 0 {
                 w.store(k, x, o, sp, w.text(p.Span()), fr >= 0)
                 w.storeWithin = -1
                 w.storeInside = -1
+                if w.F.arr[k]: w.go(k, LAssign, p.Span(), source.Span(0, 0), -1)
                 return
             }
             lvs := w.F.leaves(p.Type())
@@ -3223,7 +3244,10 @@ fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&) {
         case typed.Lvalue.Field(_, ty, _, _) {
             if w.F.placeOfPlace(p) < 0 and w.F.leaves(ty).Len() == 0: w.gap(p.Span(), "lets go of what it held")
         }
-        case typed.Lvalue.Elem(_, _, _) { w.gap(p.Span(), "lets go of what the element held") }
+        case typed.Lvalue.Elem(_, _, _) {
+            k := w.F.placeOfPlace(p)
+            if k < 0 or not w.F.arr[k]: w.gap(p.Span(), "lets go of what the element held")
+        }
         case _ { }
     }
 }
@@ -3615,7 +3639,9 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
     if m.Kind == typed.MakeKind.Copy { out = w.F.unowned(out) }
     exempt := m.Kind == typed.MakeKind.Copy and w.copyExempt >= 0 and I64(m.Site) == w.copyExempt
-    if (m.Kind == typed.MakeKind.Copy or m.Kind == typed.MakeKind.Fill) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
+    # (a fill of the zero value, D13c, makes nothing: no storage of any place)
+    filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() > 0
+    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
     w.makeStores(m, ty, sp)
     return out
 }
@@ -3704,7 +3730,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
             # (O8f: a collection's element given a value owning storage - x[i] = v through SetAt - lets go of the old
             # one in the library's code, where an element store never lets go)
             if c.Args.Len() > 0 and not f.programCode[b2] and f.fnName(b2) == "SetAt" and w.ownsStorage(c.Args[c.Args.Len() - 1].Type()) {
-                w.gap(sp, "lets go of what the element held")
+                et := c.Args[c.Args.Len() - 1].Type()
+                q := f.placeKey(w.T().Array(et, types.TypeId(0)), -1)
+                if q < 0 or not f.arr[q]: w.gap(sp, "lets go of what the element held")
             }
             if w.Final and f.genOn and w.quiet == 0 {
                 w.gcStmt.Push(w.cur)
@@ -5804,7 +5832,9 @@ fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.own
 # first block are some 400 bytes. A property of the place's type alone, so every module builds and releases its values
 # alike
 fn (f mut Free&) SlotPlace(k I64) Bool {
-    if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or f.owner[k] or f.handle[k]: return false
+    if k < 0 or k >= f.keyField.Len() or f.keyField[k] < -1 or not f.arr[k] or f.owner[k] or f.handle[k]: return false
+    # (an array's text elements: by their type alone, every array of it)
+    if f.keyField[k] == -1: return f.slotText(f.valTy[k])
     t := f.T()
     r := t.Plain(t.Repr(f.keyTy[k]))
     if t.KindOf(r) != types.Kind.Named: return false
@@ -5812,6 +5842,15 @@ fn (f mut Free&) SlotPlace(k I64) Bool {
     if m < 0 or m >= f.P.L.Mods.Len() or not f.P.L.Mods[m].Identity.StartsWith("std/prelude"): return false
     el := t.Elem(t.Repr(f.valTy[k]))
     return f.P.Immut(f.valTy[k]) and not t.HoldsRefs(el) and not t.OwnsParts(el)
+}
+
+# whether a value of type ty is text a slot holds: an immut array of plain elements (a String)
+fn (f mut Free&) slotText(ty types.TypeId) Bool {
+    t := f.T()
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Array or not t.OwnedPart(ty): return false
+    el := t.Elem(r)
+    return f.P.Immut(ty) and not t.HoldsRefs(el) and not t.OwnsParts(el)
 }
 
 # the place a dropped call's result is a value moved out of - what lowering releases after the statement where it is
@@ -5874,7 +5913,7 @@ fn (f mut Free&) Report() String {
         # a row at a call - one that may let go of anything too - says the place as its own let-go writes it
         if g.Kind == LCall and f.goes[first].Kind != LCall { g = f.goes[first] }
         what := ""
-        if (f.keyField[k] < 0 and not f.isNamed(k)) or f.isContents(k) {
+        if ((f.keyField[k] < 0 and not f.isNamed(k)) or f.isContents(k)) and g.Kind != LAssign {
             what = $"removed elements of '" + $f.collection(k, g.Body, g) + "' are kept until " + $f.scopeName(g, k) + " closes"
         } else {
             what = $"'" + $f.placeName(g) + "' keeps what it lets go of until " + $f.scopeName(g, k) + " closes"
@@ -5960,6 +5999,7 @@ fn (f mut Free&) reported(k I64) Bool {
     if not owns { return false }
     if f.isContents(k) { return true }
     if f.isOwnLocal(k) { return true }
+    if f.keyField[k] == -1 and f.arr[k] { return true }
     if f.isGlobal(k) {
         m := f.glModule[k]
         return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")

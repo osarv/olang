@@ -1135,15 +1135,11 @@ type relPath struct(At I64, Path Array<I64>, Slot Bool = false) {
 fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath> {
     out Vec<relPath>
     if not ln.freeing { return out }
-    # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
-    # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does
-    if assign {
-        match p {
-            case typed.Lvalue.Elem(_, _, _) { return out }
-            case _ { }
-        }
-    }
     fr := ln.L.Free!
+    # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
+    # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does; but
+    # text elements, each value its own slot (O8f)
+    if assign and p == typed.Lvalue.Elem and not fr.SlotPlace(fr.PlaceOf(p)): return out
     k := fr.PlaceOf(p)
     # (an owner local given another value: its place's old value, held whole)
     if p == typed.Lvalue.Local and assign { k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id)) }
