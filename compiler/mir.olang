@@ -3430,3 +3430,44 @@ fn StmtSpan(s Stmt&) source.Span {
         case Stmt.Holders(sp, _, _), Stmt.Reclaim(sp, _, _, _): sp
     }
 }
+
+# s at the span at: a statement lowered from a default argument written in another file (D8a), placed at the call
+# leaving it off - its own span, an offset in that file, names nothing in this function's
+fn StmtAt(s Stmt, at source.Span) Stmt {
+    return match s {
+        case Stmt.Assign(_, p, v): Stmt.Assign(at, p, v)
+        case Stmt.Live(_, l): Stmt.Live(at, l)
+        case Stmt.Dead(_, l): Stmt.Dead(at, l)
+        case Stmt.Open(_, x): Stmt.Open(at, x)
+        case Stmt.Close(_, x): Stmt.Close(at, x)
+        case Stmt.RegisterDtor(_, x, t, o): Stmt.RegisterDtor(at, x, t, o)
+        case Stmt.Release(_, p): Stmt.Release(at, p)
+        case Stmt.ReleaseSlot(_, p): Stmt.ReleaseSlot(at, p)
+        case Stmt.Settle(_, h, p): Stmt.Settle(at, h, p)
+        case Stmt.Write(_, b, how, x): Stmt.Write(at, b, how, x)
+        case Stmt.CopyElems(_, d, src, n): Stmt.CopyElems(at, d, src, n)
+        case Stmt.Spawn(_, j, task): Stmt.Spawn(at, j, task)
+        case Stmt.Raised(_): Stmt.Raised(at)
+        case Stmt.ErrSet(_, x): Stmt.ErrSet(at, x)
+        case Stmt.ErrPop(_): Stmt.ErrPop(at)
+        case Stmt.Holders(_, x, by): Stmt.Holders(at, x, by)
+        case Stmt.Reclaim(_, x, ty, h): Stmt.Reclaim(at, x, ty, h)
+        case Stmt.Deferred(_, x, entry): Stmt.Deferred(at, x, entry)
+    }
+}
+
+# t at the span at, as StmtAt
+fn TermAt(t Term, at source.Span) Term {
+    return match t {
+        case Term.Call(_, c): Term.Call(at, c)
+        case Term.Return(_, x): Term.Return(at, x)
+        case Term.Tail(_, c): Term.Tail(at, c)
+        case Term.Raise(_, code): Term.Raise(at, code)
+        case Term.Wait(_, j, ok, code, failed): Term.Wait(at, j, ok, code, failed)
+        case Term.Exit(_, kind, msg): Term.Exit(at, kind, msg)
+        case Term.Resume(_): Term.Resume(at)
+        case Term.Suspend(_, x, resume, held, drop): Term.Suspend(at, x, resume, held, drop)
+        case Term.Dropped(_): Term.Dropped(at)
+        case _: t
+    }
+}
