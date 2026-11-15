@@ -2,7 +2,7 @@
 
 A plugin directory: put it on the runtime path and `.olang` files (and scripts beginning `#!/usr/bin/env olang`) get
 
-- syntax highlighting (`syntax/olang.vim`) - keywords, types, literals, `#` and `## ... ##` comments, rule names;
+- syntax highlighting (`syntax/olang.vim`) - keywords, types, literals, `#` and `## ... ##` comments, rule names; its own colours, readable on a dark background with no dark blue or black (`let g:olang_palette = 0` keeps your colorscheme's);
 - indentation as `olang format` writes it (four spaces), `#` comments for `gc`;
 - `:make` through the compiler (`compiler/olang.vim`: `olang compile %` and an `errorformat` for its one-row
   diagnostics, `path:line:col: error[RULE]: headline`, with their `note:` and `help:` rows), so `:copen` lists them;

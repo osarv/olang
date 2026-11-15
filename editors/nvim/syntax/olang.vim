@@ -60,4 +60,36 @@ hi def link olangBlockComment Comment
 hi def link olangTodo Todo
 hi def link olangRule Underlined
 
+" Colours readable on a dark background, with no dark blue and no black. They replace the colorscheme's for olang's
+" groups; `let g:olang_palette = 0` keeps the links above instead. Re-applied after every :colorscheme.
+let s:palette = {
+  \ 'olangKeyword': 'guifg=#c792ea ctermfg=177', 'olangStatement': 'guifg=#c792ea ctermfg=177',
+  \ 'olangConditional': 'guifg=#c792ea ctermfg=177', 'olangRepeat': 'guifg=#c792ea ctermfg=177',
+  \ 'olangException': 'guifg=#ff9cac ctermfg=217', 'olangOperator': 'guifg=#89ddff ctermfg=117',
+  \ 'olangStorage': 'guifg=#c792ea ctermfg=177', 'olangBoolean': 'guifg=#f78c6c ctermfg=209',
+  \ 'olangConstant': 'guifg=#f78c6c ctermfg=209', 'olangType': 'guifg=#ffcb6b ctermfg=221',
+  \ 'olangTypeName': 'guifg=#ffcb6b ctermfg=221', 'olangFunction': 'guifg=#7fdbca ctermfg=116',
+  \ 'olangNumber': 'guifg=#f78c6c ctermfg=209', 'olangString': 'guifg=#c3e88d ctermfg=150',
+  \ 'olangRawString': 'guifg=#c3e88d ctermfg=150', 'olangChar': 'guifg=#c3e88d ctermfg=150',
+  \ 'olangEscape': 'guifg=#ff9cac ctermfg=217', 'olangRender': 'guifg=#ff9cac ctermfg=217',
+  \ 'olangComment': 'guifg=#a6accd ctermfg=250 gui=italic cterm=italic',
+  \ 'olangBlockComment': 'guifg=#a6accd ctermfg=250 gui=italic cterm=italic',
+  \ 'olangTodo': 'guifg=#ffcb6b ctermfg=221 gui=bold cterm=bold guibg=NONE ctermbg=NONE',
+  \ 'olangRule': 'guifg=#89ddff ctermfg=117 gui=underline cterm=underline'}
+
+function! s:OlangPalette() abort
+  if !get(g:, 'olang_palette', 1)
+    return
+  endif
+  for [group, spec] in items(s:palette)
+    exe 'hi! link ' . group . ' NONE'
+    exe 'hi ' . group . ' ' . spec
+  endfor
+endfunction
+call s:OlangPalette()
+augroup olangPalette
+  autocmd!
+  autocmd ColorScheme * call s:OlangPalette()
+augroup END
+
 let b:current_syntax = "olang"
