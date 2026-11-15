@@ -236,5 +236,5 @@ package and its `syntax/olang.vim` and `compiler/olang.vim` for Vim, with a file
 `ftdetect/olang.lua`'s: a new Vimscript file, or a change to what ftdetect recognises, changes it.
 
 olang's palette is one: `compiler/paint.olang`'s shades (the prompt, 24-bit and 256-colour) and
-`editors/nvim/syntax/olang.vim`'s `s:palette` hold the same colours for the same kinds of token; a colour changed in one
+`editors/nvim/syntax/olang.vim`'s `s:palette` hold the same colours for the same kinds of token and the diagnostics' error and warning words (the plugin's olangDiag groups); a colour changed in one
 changes in the other.

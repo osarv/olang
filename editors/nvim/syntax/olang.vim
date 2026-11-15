@@ -61,7 +61,9 @@ hi def link olangTodo Todo
 hi def link olangRule Underlined
 
 " olang's own palette, the same as the interpreter's (compiler/paint.olang; DEPENDENTS.md): colours readable on a dark
-" background, none dark blue or black. It replaces the colorscheme's for olang's groups; `let g:olang_palette = 0`
+"" background, none dark blue or black - diagnostics too, red errors and yellow warnings as the terminal shows them (the
+" olangDiag groups, put in place of Neovim's Diagnostic groups in olang windows by the ftplugin). It replaces the
+" colorscheme's for olang's groups; `let g:olang_palette = 0`
 " keeps the links above instead. Re-applied after every :colorscheme.
 let s:purple = 'guifg=#c792ea ctermfg=177'
 let s:yellow = 'guifg=#ffcb6b ctermfg=221'
@@ -77,7 +79,13 @@ let s:palette = {
   \ 'olangFunction': s:teal, 'olangNumber': s:orange, 'olangString': s:green, 'olangRawString': s:green,
   \ 'olangChar': s:green, 'olangEscape': s:green, 'olangComment': s:grey, 'olangBlockComment': s:grey,
   \ 'olangTodo': s:yellow . ' gui=bold cterm=bold guibg=NONE ctermbg=NONE',
-  \ 'olangRule': s:cyan . ' gui=underline cterm=underline'}
+  \ 'olangRule': s:cyan . ' gui=underline cterm=underline',
+  \ 'olangDiagError': 'guifg=#ff5370 ctermfg=203',
+  \ 'olangDiagWarn': 'guifg=#ffcb6b ctermfg=221',
+  \ 'olangDiagSignError': 'guifg=#ff5370 ctermfg=203 gui=bold cterm=bold',
+  \ 'olangDiagSignWarn': 'guifg=#ffcb6b ctermfg=221 gui=bold cterm=bold',
+  \ 'olangDiagUnderlineError': 'gui=undercurl cterm=underline guisp=#ff5370',
+  \ 'olangDiagUnderlineWarn': 'gui=undercurl cterm=underline guisp=#ffcb6b'}
 
 function! s:OlangPalette() abort
   if !get(g:, 'olang_palette', 1)
